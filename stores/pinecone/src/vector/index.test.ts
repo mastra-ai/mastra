@@ -2,6 +2,7 @@ import dotenv from 'dotenv';
 import { describe, it, expect, beforeAll, afterAll, beforeEach, vi, afterEach } from 'vitest';
 
 import { PineconeVector } from './';
+import type { QueryResult } from '@mastra/core/vector';
 
 dotenv.config();
 
@@ -125,6 +126,153 @@ describe.skip('PineconeVector Integration Tests', () => {
       expect(results?.[0]?.vector).toBeDefined();
       expect(results?.[0]?.vector).toHaveLength(dimension);
     }, 500000);
+
+    describe('vector update operations', () => {
+      const testVectors = [
+        [1, 2, 3],
+        [4, 5, 6],
+        [7, 8, 9],
+      ];
+
+      it('should update the vector by id', async () => {
+        const ids = await vectorDB.upsert({ indexName: testIndexName, vectors: testVectors });
+        expect(ids).toHaveLength(3);
+
+        const idToBeUpdated = ids[0];
+        const newVector = [1, 2, 4];
+        const newMetaData = {
+          test: 'updates',
+        };
+
+        const update = {
+          vector: newVector,
+          metadata: newMetaData,
+        };
+
+        await vectorDB.updateIndexById(testIndexName, idToBeUpdated, update);
+
+        await new Promise(resolve => setTimeout(resolve, 3000));
+
+        const results: QueryResult[] = await vectorDB.query({
+          indexName: testIndexName,
+          queryVector: newVector,
+          topK: 10,
+          includeVector: true,
+        });
+
+        expect(results[0]?.id).toBe(idToBeUpdated);
+        expect(results[0]?.vector).toEqual(newVector);
+        expect(results[0]?.metadata).toEqual(newMetaData);
+      }, 500000);
+
+      it('should only update the metadata by id', async () => {
+        const ids = await vectorDB.upsert({ indexName: testIndexName, vectors: testVectors });
+        expect(ids).toHaveLength(3);
+
+        const idToBeUpdated = ids[0];
+        const newMetaData = {
+          test: 'updates',
+        };
+
+        const update = {
+          metadata: newMetaData,
+        };
+
+        await vectorDB.updateIndexById(testIndexName, idToBeUpdated, update);
+
+        await new Promise(resolve => setTimeout(resolve, 3000));
+
+        const results: QueryResult[] = await vectorDB.query({
+          indexName: testIndexName,
+          queryVector: testVectors[0],
+          topK: 2,
+          includeVector: true,
+        });
+
+        expect(results[0]?.id).toBe(idToBeUpdated);
+        expect(results[0]?.vector).toEqual(testVectors[0]);
+        expect(results[0]?.metadata).toEqual(newMetaData);
+      }, 500000);
+
+      it('should only update vector embeddings by id', async () => {
+        const ids = await vectorDB.upsert({ indexName: testIndexName, vectors: testVectors });
+        await new Promise(resolve => setTimeout(resolve, 3000));
+
+        expect(ids).toHaveLength(3);
+
+        const idToBeUpdated = ids[0];
+        const newVector = [1, 2, 3];
+
+        const update = {
+          vector: newVector,
+        };
+
+        await vectorDB.updateIndexById(testIndexName, idToBeUpdated, update);
+
+        await new Promise(resolve => setTimeout(resolve, 5000));
+
+        const results: QueryResult[] = await vectorDB.query({
+          indexName: testIndexName,
+          queryVector: newVector,
+          topK: 10,
+          includeVector: true,
+          filter: { ids: [idToBeUpdated] },
+        });
+
+        const resultIds = results.map(res => res.id);
+        const resultVectors = results.map(res => res.vector);
+        expect(resultIds).toContain(idToBeUpdated);
+        expect(resultVectors).toContain(newVector);
+      }, 500000);
+
+      it('should throw exception when no updates are given', () => {
+        expect(vectorDB.updateIndexById(testIndexName, 'id', {})).rejects.toThrow('No updates provided');
+      });
+
+      it('should throw error for non-existent index', async () => {
+        const nonExistentIndex = 'non-existent-index';
+        await expect(vectorDB.updateIndexById(nonExistentIndex, 'test-id', { vector: [1, 2, 3] })).rejects.toThrow();
+      });
+
+      it('should throw error for invalid vector dimension', async () => {
+        const [id] = await vectorDB.upsert({
+          indexName: testIndexName,
+          vectors: [[1, 2, 3]],
+          metadata: [{ test: 'initial' }],
+        });
+
+        await expect(
+          vectorDB.updateIndexById(testIndexName, id, { vector: [1, 2] }), // Wrong dimension
+        ).rejects.toThrow();
+      }, 500000);
+    });
+
+    describe('vector delete operations', () => {
+      const testVectors = [
+        [1, 2, 3],
+        [4, 5, 6],
+        [7, 8, 9],
+      ];
+
+      it('should delete the vector by id', async () => {
+        const ids = await vectorDB.upsert({ indexName: testIndexName, vectors: testVectors });
+        expect(ids).toHaveLength(3);
+        const idToBeDeleted = ids[0];
+
+        await vectorDB.deleteIndexById(testIndexName, idToBeDeleted);
+
+        // Query all vectors similar to the deleted one
+        const results: QueryResult[] = await vectorDB.query({
+          indexName: testIndexName,
+          queryVector: testVectors[0],
+          topK: 3,
+          includeVector: true,
+        });
+
+        const resultIds = results.map(r => r.id);
+        expect(resultIds).not.toContain(idToBeDeleted);
+      }, 500000);
+    });
   });
 
   describe('Error Handling', () => {
