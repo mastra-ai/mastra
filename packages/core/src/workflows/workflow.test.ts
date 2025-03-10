@@ -2310,7 +2310,7 @@ describe('Workflow', async () => {
       });
     });
 
-    it.only('should handle basic event based resume flow', async () => {
+    it('should handle basic event based resume flow', async () => {
       const getUserInputAction = vi.fn().mockResolvedValue({ userInput: 'test input' });
       const promptAgentAction = vi
         .fn()
