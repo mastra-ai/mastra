@@ -1,5 +1,13 @@
 # @mastra/evals
 
+## 0.1.8-alpha.10
+
+### Patch Changes
+
+- 9d31a36: Update hallucination eval
+- Updated dependencies [a910463]
+  - @mastra/core@0.5.0-alpha.10
+
 ## 0.1.8-alpha.9
 
 ### Patch Changes
