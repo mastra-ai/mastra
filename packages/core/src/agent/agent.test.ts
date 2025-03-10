@@ -12,6 +12,7 @@ import { createTool } from '../tools';
 import { CompositeVoice, MastraVoice } from '../voice';
 
 import { Agent } from './index';
+import { CoreMessage } from 'ai';
 
 config();
 
@@ -279,6 +280,39 @@ describe('agent', () => {
     expect(sanitizedMessages).not.toContainEqual(toolCallThree);
     expect(sanitizedMessages).toHaveLength(2);
   });
+
+  it('should properly trim context to specified maxContextLength', async () => {
+    const electionAgent = new Agent({
+      name: 'US Election agent',
+      instructions: 'You know about the past US elections',
+      model: openai('gpt-4o'),
+      maxContextLength: 3,
+    });
+
+    const mastra = new Mastra({
+      agents: { electionAgent },
+    });
+
+    const agentOne = mastra.getAgent('electionAgent');
+
+    // 118 tokens if all are included
+    const context: CoreMessage[] = [
+      { role: 'user', content: 'Who won the 2016 US presidential election?' },
+      { role: 'assistant', content: 'Donald Trump won the 2016 US presidential election.' },
+      { role: 'user', content: 'Who won the 2012 US presidential election?' },
+      { role: 'assistant', content: 'Barack Obama won the 2012 US presidential election.' },
+      { role: 'user', content: 'Who won the 2008 US presidential election?' },
+      { role: 'assistant', content: 'Barack Obama won the 2008 US presidential election.' },
+    ];
+
+    const response = await agentOne.generate('Who won the 2016 US presidential election?', { context });
+
+    const {
+      usage: { promptTokens },
+    } = response;
+
+    expect(promptTokens).toBeLessThan(80);
+  }, 500000);
 
   it('should use telemetry options when generating a response', async () => {
     const electionAgent = new Agent({
