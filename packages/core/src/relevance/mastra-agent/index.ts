@@ -1,6 +1,5 @@
-import type { LanguageModelV1 } from 'ai';
-
 import { Agent } from '../../agent';
+import type { MastraLanguageModel } from '../../agent';
 import { createSimilarityPrompt } from '../relevance-score-provider';
 import type { RelevanceScoreProvider } from '../relevance-score-provider';
 
@@ -8,7 +7,7 @@ import type { RelevanceScoreProvider } from '../relevance-score-provider';
 export class MastraAgentRelevanceScorer implements RelevanceScoreProvider {
   private agent: Agent;
 
-  constructor(name: string, model: LanguageModelV1) {
+  constructor(name: string, model: MastraLanguageModel) {
     this.agent = new Agent({
       name: `Relevance Scorer ${name}`,
       instructions: `You are a specialized agent for evaluating the relevance of text to queries.

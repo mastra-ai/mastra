@@ -33,7 +33,14 @@ import type { CoreTool } from '../tools/types';
 import { makeCoreTool, createMastraProxy, ensureToolProperties } from '../utils';
 import type { CompositeVoice } from '../voice';
 
-import type { AgentConfig, AgentGenerateOptions, AgentStreamOptions, ToolsetsInput, ToolsInput } from './types';
+import type {
+  AgentConfig,
+  AgentGenerateOptions,
+  AgentStreamOptions,
+  MastraLanguageModel,
+  ToolsetsInput,
+  ToolsInput,
+} from './types';
 
 export * from './types';
 
@@ -48,7 +55,7 @@ export class Agent<
   public name: string;
   readonly llm: MastraLLMBase;
   instructions: string;
-  readonly model?: LanguageModelV1;
+  readonly model?: MastraLanguageModel;
   #mastra?: Mastra;
   #memory?: MastraMemory;
   tools: TTools;
