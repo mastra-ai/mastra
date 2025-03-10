@@ -53,4 +53,23 @@ describe('AzureVoice', () => {
       if (err) throw err;
     });
   });
+
+  it('should transcribe audio (STT)', async () => {
+    // We'll assume you have a small sample audio file that says "Hello from Azure" or similar
+    const azureVoice = new AzureVoice({
+      listeningModel: { apiKey: subscriptionKey, region },
+    });
+
+    // Provide an actual audio file. This must be a short WAV or MP3 that Azure can handle
+    const filePath = join(__dirname, 'test-data', 'hello.wav');
+    const readable = createReadStream(filePath);
+
+    const transcript = await azureVoice.listen(readable, { filetype: 'wav' });
+    expect(typeof transcript).toBe('string');
+    expect(transcript.length).toBeGreaterThan(0);
+
+    // Possibly check if transcript includes expected words:
+    // e.g. "Hello from Azure"
+    expect(transcript.toLowerCase()).toContain('hello');
+  });
 });
