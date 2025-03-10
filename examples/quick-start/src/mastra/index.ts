@@ -15,7 +15,7 @@ export const mastra = new Mastra({
   workflows: { logCatWorkflow },
   logger: createLogger({
     name: 'Mastra',
-    level: 'debug',
+    level: 'info',
   }),
   storage,
 });

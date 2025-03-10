@@ -1,38 +1,29 @@
 import { z } from 'zod';
 
-import { mastra, storage } from './mastra';
+import { mastra } from './mastra';
+
+const specieSchema = z.object({
+  species: z.string(),
+});
 
 const main = async () => {
-  // setTimeout(() => {}, 30e3);
-  await storage.init();
+  const agentCat = mastra.getAgent('catOne');
+
   try {
-    const wf = mastra.getWorkflow('logCatWorkflow');
-    const { start, runId } = wf.createRun();
-
-    const initialResults = await start({ triggerData: { name: 'yello' } });
-    console.log('initial results', initialResults);
-
-    // const finalResults = await wf.resumeWithEvent(initialResults.runId, 'cat-event', { catName: 'Fluffy' });
-    await new Promise(resolve => setTimeout(resolve, 1000));
-    const finalResults = await wf.resume({
-      runId,
-      // stepId: 'lol2',
-      stepId: 'logCatName',
-      // stepId: 'suspendStep',
-      context: { catName: 'Fluffy' },
+    const result = await agentCat.generate('What is the most popular cat species?', {
+      output: specieSchema,
     });
-    await new Promise(resolve => setTimeout(resolve, 10000));
 
-    console.log('final results', finalResults);
+    const res = specieSchema.parse(result?.object);
+
+    console.log(res.species);
+
+    const { start } = mastra.getWorkflow('logCatWorkflow').createRun();
+
+    await start({ triggerData: { name: res.species } });
   } catch (err) {
-    console.error('=====ERROR=====', err);
+    console.error(err);
   }
 };
 
-main()
-  .then(() => {
-    console.log('done');
-  })
-  .catch(e => {
-    console.log('ERR', e);
-  });
+main();
