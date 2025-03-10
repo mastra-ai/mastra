@@ -365,7 +365,7 @@ export class Machine<
           mastraProxy = createMastraProxy({ mastra: this.#mastra, logger });
         }
         const result = await stepNode.config.handler({
-          input: this.#input,
+          resumeData: this.#input.resumeData,
           context: resolvedData,
           suspend: async (payload?: any) => {
             await this.#workflowInstance.suspend(stepNode.step.id, this);

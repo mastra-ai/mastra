@@ -418,14 +418,11 @@ export class Workflow<
     const eventStepKey = `__${eventName}_event`;
     const eventStep = new Step({
       id: eventStepKey,
-      execute: async ({ context, suspend, input: { resumeData } }) => {
-        console.log('event step', eventStepKey, context);
+      execute: async ({ context, suspend, resumeData }) => {
         if (resumeData?.resumedEvent) {
-          console.log('got event data', resumeData?.resumedEvent);
           return { executed: true, resumedEvent: resumeData?.resumedEvent };
         }
 
-        console.log('suspending');
         await suspend();
         return { executed: false };
       },

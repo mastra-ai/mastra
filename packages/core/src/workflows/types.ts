@@ -18,9 +18,7 @@ export interface StepExecutionContext<
   TSchemaIn extends z.ZodSchema | undefined = undefined,
   TContext extends WorkflowContext = WorkflowContext,
 > extends IExecutionContext<TSchemaIn> {
-  input: {
-    resumeData?: any; // TODO: once we have a resume schema plug that in here
-  };
+  resumeData?: any; // TODO: once we have a resume schema plug that in here
   context: TSchemaIn extends z.ZodSchema ? z.infer<TSchemaIn> & TContext : TContext;
   suspend: (payload?: unknown) => Promise<void>;
   runId: string;
