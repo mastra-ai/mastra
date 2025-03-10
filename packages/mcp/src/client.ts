@@ -74,7 +74,6 @@ export class MastraMCPClient extends MastraBase {
           originalOnClose();
         }
       };
-      await this.client.setLoggingLevel(`critical`);
       asyncExitHook(
         async () => {
           this.logger.debug(`Disconnecting ${this.name} MCP server`);
