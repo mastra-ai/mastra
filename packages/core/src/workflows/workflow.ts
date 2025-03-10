@@ -418,9 +418,8 @@ export class Workflow<
     const eventStepKey = `__${eventName}_event`;
     const eventStep = new Step({
       id: eventStepKey,
-      execute: async ({ context, suspend }) => {
+      execute: async ({ context, suspend, input: { resumeData } }) => {
         console.log('event step', eventStepKey, context);
-        const resumeData: any = context.getStepResult(eventStepKey);
         if (resumeData?.resumedEvent) {
           console.log('got event data', resumeData?.resumedEvent);
           return { executed: true, resumedEvent: resumeData?.resumedEvent };
@@ -778,6 +777,7 @@ export class Workflow<
     return run?.execute({
       snapshot: parsedSnapshot,
       stepId,
+      resumeData: resumeContext,
     });
   }
 
@@ -789,7 +789,6 @@ export class Workflow<
 
     console.log('resuming', runId, `__${eventName}_event`, data);
     const results = await this.resume({ runId, stepId: `__${eventName}_event`, context: { resumedEvent: data } });
-    console.log('rs', results);
     return results;
   }
 

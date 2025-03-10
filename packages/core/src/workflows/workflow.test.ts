@@ -2341,7 +2341,7 @@ describe('Workflow', async () => {
         },
       });
 
-      promptEvalWorkflow.step(getUserInput).afterEvent('testev').then(promptAgent).commit();
+      promptEvalWorkflow.step(getUserInput).afterEvent('testev').step(promptAgent).commit();
 
       const mastra = new Mastra({
         logger,
@@ -2368,11 +2368,20 @@ describe('Workflow', async () => {
         throw new Error('Resume failed to return a result');
       }
 
+      console.log('firstResumeResult', firstResumeResult);
       expect(firstResumeResult.activePaths.size).toBe(1);
       expect(firstResumeResult.results).toEqual({
         getUserInput: { status: 'success', output: { userInput: 'test input' } },
         promptAgent: { status: 'success', output: { modelOutput: 'test output' } },
-        __testev_event: { status: 'success' },
+        __testev_event: {
+          status: 'success',
+          output: {
+            executed: true,
+            resumedEvent: {
+              catName: 'test input for resumption',
+            },
+          },
+        },
       });
     });
   });

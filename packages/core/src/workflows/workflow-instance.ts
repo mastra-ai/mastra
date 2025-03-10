@@ -120,10 +120,12 @@ export class WorkflowInstance<TSteps extends Step<any, any, any>[] = any, TTrigg
     triggerData,
     snapshot,
     stepId,
+    resumeData,
   }: {
     stepId?: string;
     triggerData?: z.infer<TTriggerSchema>;
     snapshot?: Snapshot<any>;
+    resumeData?: any; // TODO: once we have a resume schema plug that in here
   } = {}): Promise<Omit<WorkflowRunResult<TTriggerSchema, TSteps>, 'runId'>> {
     this.#executionSpan = this.#mastra?.getTelemetry()?.tracer.startSpan(`workflow.${this.name}.execute`, {
       attributes: { componentName: this.name, runId: this.runId },
@@ -170,6 +172,9 @@ export class WorkflowInstance<TSteps extends Step<any, any, any>[] = any, TTrigg
       stepGraph,
       executionSpan: this.#executionSpan,
       startStepId,
+      input: {
+        resumeData,
+      },
     });
 
     this.#machines[startStepId] = defaultMachine;

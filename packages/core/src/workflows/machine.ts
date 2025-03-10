@@ -46,6 +46,10 @@ export class Machine<
   TSteps extends Step<any, any, any>[] = any,
   TTriggerSchema extends z.ZodObject<any> = any,
 > extends EventEmitter {
+  #input: {
+    resumeData?: any; // TODO: once we have a resume schema plug that in here
+  };
+
   logger: Logger;
   #mastra?: Mastra;
   #workflowInstance: WorkflowInstance;
@@ -72,6 +76,7 @@ export class Machine<
     stepGraph,
     retryConfig,
     startStepId,
+    input,
   }: {
     logger: Logger;
     mastra?: Mastra;
@@ -83,8 +88,13 @@ export class Machine<
     stepGraph: StepGraph;
     retryConfig?: RetryConfig;
     startStepId: string;
+    input?: {
+      resumeData?: any; // TODO: once we have a resume schema plug that in here
+    };
   }) {
     super();
+
+    this.#input = input ?? {};
 
     this.#mastra = mastra;
     this.#workflowInstance = workflowInstance;
@@ -345,6 +355,7 @@ export class Machine<
           mastraProxy = createMastraProxy({ mastra: this.#mastra, logger });
         }
         const result = await stepNode.config.handler({
+          input: this.#input,
           context: resolvedData,
           suspend: async (payload?: any) => {
             await this.#workflowInstance.suspend(stepNode.step.id, this);
