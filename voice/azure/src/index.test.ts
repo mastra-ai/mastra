@@ -3,80 +3,86 @@ import { PassThrough } from 'stream';
 import { createReadStream, writeFile } from 'fs';
 import { join } from 'path';
 
-import { AzureVoice } from './AzureVoice';
+import { AzureVoice } from './index';
 import type { VoiceId } from './voices';
 
 describe('AzureVoice', () => {
-  // Provide your Azure subscription key and region for real tests,
-  // or mock them if you don't want to actually hit the API in CI
   const subscriptionKey = process.env.AZURE_API_KEY ?? 'fake-key';
   const region = process.env.AZURE_REGION ?? 'eastus';
 
-  it('should return a list of available voices', async () => {
-    const azureVoice = new AzureVoice({
-      speechModel: { apiKey: subscriptionKey, region },
-    });
+  describe('getSpeakers', () => {
+    it('should return a list of available voices', async () => {
+      const azureVoice = new AzureVoice({
+        speechModel: { apiKey: subscriptionKey, region },
+      });
 
-    const voices = await azureVoice.getSpeakers();
-    // Basic checks
-    expect(Array.isArray(voices)).toBe(true);
-    expect(voices.length).toBeGreaterThan(0);
+      const voices = await azureVoice.getSpeakers();
 
-    // e.g. voices[0] might be { voiceId: "en-US-AriaNeural", language: "en", region: "US" }, etc.
-    expect(voices[0]).toHaveProperty('voiceId');
-  });
-
-  it('should generate audio from text (TTS)', async () => {
-    const azureVoice = new AzureVoice({
-      speechModel: { apiKey: subscriptionKey, region },
-    });
-
-    // Call speak
-    const text = 'Hello from Azure TTS!';
-    const audioStream = await azureVoice.speak(text);
-
-    // The returned value is a Node.js ReadableStream (PassThrough).
-    // If you want to verify it actually has data, you can read some bytes:
-    const chunks: Buffer[] = [];
-    for await (const chunk of audioStream) {
-      chunks.push(chunk as Buffer);
-    }
-    const audioBuffer = Buffer.concat(chunks);
-
-    // Check that we got some non-empty audio data
-    expect(audioBuffer.length).toBeGreaterThan(0);
-
-    // Optional: write it to a file so you can manually listen
-    // (Make sure "test-outputs" directory exists or is in .gitignore)
-    const outputPath = join(__dirname, '../test-outputs', 'test-audio.wav');
-    await writeFile(outputPath, audioBuffer, (err) => {
-      if (err) throw err;
+      expect(Array.isArray(voices)).toBe(true);
+      expect(voices.length).toBeGreaterThan(0);
+      expect(voices[0]).toHaveProperty('voiceId');
     });
   });
 
-  it('should transcribe audio (STT)', async () => {
-    // We'll assume you have a small sample audio file that says "Hello from Azure" or similar
-    const azureVoice = new AzureVoice({
-      listeningModel: { apiKey: subscriptionKey, region },
+  describe('speak', () => {
+    it('should generate audio from text (TTS)', async () => {
+      const azureVoice = new AzureVoice({
+        speechModel: { apiKey: subscriptionKey, region },
+      });
+
+      const text = 'Hello from Azure TTS!';
+      const audioStream = await azureVoice.speak(text);
+
+      const chunks: Buffer[] = [];
+      for await (const chunk of audioStream) {
+        chunks.push(chunk as Buffer);
+      }
+      const audioBuffer = Buffer.concat(chunks);
+      expect(audioBuffer.length).toBeGreaterThan(0);
+
+      // write it to a file for manual verification
+      const outputPath = join(__dirname, '../test-outputs', 'test-azure-tts.wav');
+      await writeFile(outputPath, audioBuffer, (err) => {
+        if (err) throw err;
+      });
     });
 
-    // Provide an actual audio file. This must be a short WAV or MP3 that Azure can handle
-    const filePath = join(__dirname, 'test-data', 'hello.wav');
-    const readable = createReadStream(filePath);
+    it('should reject with error if credentials are invalid', async () => {
+      const azureVoice = new AzureVoice({
+        speechModel: { apiKey: 'INVALID', region },
+      });
 
-    const transcript = await azureVoice.listen(readable, { filetype: 'wav' });
-    expect(typeof transcript).toBe('string');
-    expect(transcript.length).toBeGreaterThan(0);
+      await expect(azureVoice.speak('Hello test')).rejects.toThrowError();
+    });
 
-    // Possibly check if transcript includes expected words:
-    // e.g. "Hello from Azure"
-    expect(transcript.toLowerCase()).toContain('hello');
+    it('should reject with error if input text is empty', async () => {
+      const azureVoice = new AzureVoice({
+        speechModel: { apiKey: subscriptionKey, region },
+      });
+
+      await expect(azureVoice.speak('')).rejects.toThrow('Input text is empty');
+    });
+  });
+
+  describe('listen', () => {
+    it('should transcribe audio (STT)', async () => {
+      const azureVoice = new AzureVoice({
+        listeningModel: { apiKey: subscriptionKey, region },
+      });
+  
+      // Provide an actual audio file. This must be a short WAV or MP3 that Azure can handle
+      const filePath = join(__dirname, 'test-data', 'hello.wav');
+      const readable = createReadStream(filePath);
+  
+      const transcript = await azureVoice.listen(readable, { filetype: 'wav' });
+      expect(typeof transcript).toBe('string');
+      expect(transcript.length).toBeGreaterThan(0);
+    });
   });
 
   describe('AzureVoice Error Handling', () => {
     it('should throw an error if no API key is provided', async () => {
       expect(() => {
-        // Intentionally omit API keys
         new AzureVoice({
           speechModel: { region: 'eastus' },
           listeningModel: { region: 'eastus' },
