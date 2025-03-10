@@ -58,7 +58,7 @@ To fix this you have three different options:
     }
   }
 
-  public async getConnectedTools() {
+  public async getTools() {
     this.addToInstanceCache();
     const connectedTools: Record<string, any> = {}; // <- any because we don't have proper tool schemas
 
@@ -71,7 +71,7 @@ To fix this you have three different options:
     return connectedTools;
   }
 
-  public async getConnectedToolsets() {
+  public async getToolsets() {
     this.addToInstanceCache();
     const connectedToolsets: Record<string, Record<string, any>> = {}; // <- any because we don't have proper tool schemas
 

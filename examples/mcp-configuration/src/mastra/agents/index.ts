@@ -25,5 +25,5 @@ export const stockWeatherAgent = new Agent({
   instructions:
     'You are a helpful assistant that provides current stock prices. When asked about a stock, use the stock price tool to fetch the stock price. You also love to check the weather when your stock market buddies ask you what the weather is.',
   model: openai('gpt-4o'),
-  tools: await mcp.getConnectedTools(),
+  tools: await mcp.getTools(),
 });

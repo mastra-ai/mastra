@@ -76,7 +76,7 @@ describe('MCPConfiguration', () => {
   });
 
   it('should get connected tools with namespaced tool names', async () => {
-    const connectedTools = await mcp.getConnectedTools();
+    const connectedTools = await mcp.getTools();
 
     // Each tool should be namespaced with its server name
     expect(connectedTools).toHaveProperty('stockPrice_getStockPrice');
@@ -84,7 +84,7 @@ describe('MCPConfiguration', () => {
   });
 
   it('should get connected toolsets grouped by server', async () => {
-    const connectedToolsets = await mcp.getConnectedToolsets();
+    const connectedToolsets = await mcp.getToolsets();
 
     expect(connectedToolsets).toHaveProperty('stockPrice');
     expect(connectedToolsets).toHaveProperty('weather');
@@ -102,7 +102,7 @@ describe('MCPConfiguration', () => {
       },
     });
 
-    await expect(badConfig.getConnectedTools()).rejects.toThrow();
+    await expect(badConfig.getTools()).rejects.toThrow();
     await badConfig.disconnect();
   });
 

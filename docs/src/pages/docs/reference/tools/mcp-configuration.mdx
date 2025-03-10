@@ -49,27 +49,25 @@ constructor({
   ]}
 />
 
-
-
 ## Methods
 
-### getConnectedTools()
+### getTools()
 
 Retrieves all tools from all configured servers, with tool names namespaced by their server name (in the format `serverName_toolName`) to prevent conflicts.
 Intended to be passed onto an Agent definition.
 
 ```ts
-new Agent({ tools: await mcp.getConnectedTools() });
+new Agent({ tools: await mcp.getTools() });
 ```
 
-### getConnectedToolsets()
+### getToolsets()
 
 Returns an object mapping namespaced tool names (in the format `serverName.toolName`) to their tool implementations.
 Intended to be passed dynamically into the generate or stream method.
 
 ```typescript
 const res = await agent.stream(prompt, {
-  toolsets: await mcp.getConnectedToolsets(),
+  toolsets: await mcp.getToolsets(),
 });
 ```
 
@@ -102,7 +100,7 @@ const agent = new Agent({
   name: "Multi-tool Agent",
   instructions: "You have access to multiple tool servers.",
   model: openai("gpt-4"),
-  tools: await mcp.getConnectedTools(),
+  tools: await mcp.getTools(),
 });
 ```
 
@@ -110,7 +108,7 @@ const agent = new Agent({
 
 ```typescript
 // Get tools grouped by server
-const toolsets = await mcp.getConnectedToolsets();
+const toolsets = await mcp.getToolsets();
 
 // Access tools for a specific server
 const weatherTools = toolsets.weather;
@@ -164,7 +162,7 @@ const mcp = new MCPConfiguration({
 const response = await agent.stream(
   "How is AAPL doing and what is the weather?",
   {
-    toolsets: await mcp.getConnectedToolsets(),
+    toolsets: await mcp.getToolsets(),
   },
 );
 ```
@@ -183,25 +181,33 @@ For example, if you try to create multiple instances with the same configuration
 ```typescript
 // First instance - OK
 const mcp1 = new MCPConfiguration({
-  servers: { /* ... */ }
+  servers: {
+    /* ... */
+  },
 });
 
 // Second instance with same config - Will throw an error
 const mcp2 = new MCPConfiguration({
-  servers: { /* ... */ }
+  servers: {
+    /* ... */
+  },
 });
 
 // To fix, either:
 // 1. Add unique IDs
 const mcp3 = new MCPConfiguration({
   id: "instance-1",
-  servers: { /* ... */ }
+  servers: {
+    /* ... */
+  },
 });
 
 // 2. Or disconnect before recreating
 await mcp1.disconnect();
 const mcp4 = new MCPConfiguration({
-  servers: { /* ... */ }
+  servers: {
+    /* ... */
+  },
 });
 ```
 
@@ -217,4 +223,3 @@ MCPConfiguration handles server connections gracefully:
 
 - For details about individual MCP client configuration, see the [MastraMCPClient documentation](./client)
 - For more about the Model Context Protocol, see the [@modelcontextprotocol/sdk documentation](https://github.com/modelcontextprotocol/typescript-sdk)
-

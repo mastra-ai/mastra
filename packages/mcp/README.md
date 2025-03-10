@@ -78,17 +78,17 @@ const mcp = new MCPConfiguration({
 });
 
 // Get all tools from all configured servers namespaced with the server name
-const tools = await mcp.getConnectedTools();
+const tools = await mcp.getTools();
 
 // Get tools grouped into a toolset object per-server
-const toolsets = await mcp.getConnectedToolsets();
+const toolsets = await mcp.getToolsets();
 ```
 
 ### Tools vs Toolsets
 
 The MCPConfiguration class provides two ways to access MCP tools:
 
-#### Tools (`getConnectedTools()`)
+#### Tools (`getTools()`)
 
 Use this when:
 
@@ -102,11 +102,11 @@ const agent = new Agent({
   name: 'CLI Assistant',
   instructions: 'You help users with CLI tasks',
   model: openai('gpt-4'),
-  tools: await mcp.getConnectedTools(), // Tools are fixed at agent creation
+  tools: await mcp.getTools(), // Tools are fixed at agent creation
 });
 ```
 
-#### Toolsets (`getConnectedToolsets()`)
+#### Toolsets (`getToolsets()`)
 
 Use this when:
 
@@ -144,7 +144,7 @@ const mcp = new MCPConfiguration({
 });
 
 // Get the current toolsets configured for this user
-const toolsets = await mcp.getConnectedToolsets();
+const toolsets = await mcp.getToolsets();
 
 // Use the agent with user-specific tool configurations
 const response = await agent.generate('What is the weather in London?', {
