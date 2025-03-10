@@ -4,6 +4,7 @@ import type { z } from 'zod';
 import type { IAction, IExecutionContext, MastraUnion } from '../action';
 import type { BaseLogMessage, RegisteredLogger } from '../logger';
 import type { Mastra } from '../mastra';
+import type { Step } from './step';
 
 export interface WorkflowOptions<TTriggerSchema extends z.ZodObject<any> = any> {
   name: string;
@@ -181,7 +182,10 @@ export interface WorkflowContext<TTrigger extends z.ZodObject<any> = any> {
   steps: Record<string, StepResult<any>>;
   triggerData: z.infer<TTrigger>;
   attempts: Record<string, number>;
-  getStepResult: <T = unknown>(stepId: string) => T | undefined;
+  getStepResult<T>(stepId: string): T;
+  getStepResult<T extends Step<any, any, any, any>>(
+    stepId: T,
+  ): T['outputSchema'] extends undefined ? unknown : z.infer<NonNullable<T['outputSchema']>>;
 }
 
 export interface WorkflowLogMessage extends BaseLogMessage {
