@@ -31,10 +31,12 @@ export const createVectorQueryTool = ({
     topK: z.coerce.number().describe(topKDescription),
   };
   const inputSchema = enableFilter
-    ? z.object({
-        ...baseSchema,
-        filter: z.coerce.string().describe(filterDescription),
-      })
+    ? z
+        .object({
+          ...baseSchema,
+          filter: z.coerce.string().describe(filterDescription),
+        })
+        .strict()
     : z.object(baseSchema).strict();
   return createTool({
     id: toolId,

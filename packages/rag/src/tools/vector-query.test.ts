@@ -112,6 +112,43 @@ describe('createVectorQueryTool', () => {
         expect(typeof result.filter).toBe('string');
       });
     });
+
+    it('should reject unexpected properties in both modes', () => {
+      // Test with enableFilter false
+      const toolWithoutFilter = createVectorQueryTool({
+        vectorStoreName: 'testStore',
+        indexName: 'testIndex',
+        model: mockModel,
+        enableFilter: false,
+      });
+
+      // Should reject unexpected property
+      expect(() =>
+        toolWithoutFilter.__inputSchema.parse({
+          queryText: 'test query',
+          topK: 5,
+          unexpectedProp: 'value',
+        }),
+      ).toThrow();
+
+      // Test with enableFilter true
+      const toolWithFilter = createVectorQueryTool({
+        vectorStoreName: 'testStore',
+        indexName: 'testIndex',
+        model: mockModel,
+        enableFilter: true,
+      });
+
+      // Should reject unexpected property even with valid filter
+      expect(() =>
+        toolWithFilter.__inputSchema.parse({
+          queryText: 'test query',
+          topK: 5,
+          filter: '{}',
+          unexpectedProp: 'value',
+        }),
+      ).toThrow();
+    });
   });
 
   describe('execute function', () => {
