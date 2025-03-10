@@ -148,7 +148,7 @@ pnpm dlx mastra@latest init
   </Tabs.Tab>
 </Tabs>
 
-This will set up Mastra in your Next.js project. For more details and init configuration options, see our [mastra init reference](/docs/reference/cli/init).
+This will set up Mastra in your Next.js project. For more details about init and other configuration options, see our [mastra init reference](/docs/reference/cli/init).
 
 ### Configure Next.js
 
@@ -163,8 +163,6 @@ const nextConfig = {
 
 module.exports = nextConfig
 ```
-
-### Implementation Examples
 
 #### Server Actions Example
 
@@ -229,3 +227,12 @@ When using direct integration, your Mastra instance will be deployed alongside y
 - Implement proper error handling for production use
 - Monitor your AI agent's performance and costs
 </Steps>
+
+## Observability
+
+Mastra provides built-in observability features to help you monitor, debug, and optimize your AI operations. This includes:
+- Tracing of AI operations and their performance
+- Logging of prompts, completions, and errors
+- Integration with observability platforms like Langfuse and LangSmith
+
+For detailed setup instructions and configuration options specific to Next.js local development, see our [Next.js Observability Configuration Guide](/docs/deployment/logging-and-tracing#nextjs-configuration).

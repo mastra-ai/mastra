@@ -1,6 +1,6 @@
 {
   "name": "@mastra/core",
-  "version": "0.5.0-alpha.4",
+  "version": "0.5.0-alpha.9",
   "license": "ISC",
   "type": "module",
   "main": "dist/index.js",
@@ -122,6 +122,7 @@
     "dotenv": "^16.4.7",
     "fastembed": "^1.14.1",
     "json-schema": "^0.4.0",
+    "json-schema-to-zod": "^2.5.0",
     "node_modules-path": "^2.0.8",
     "pino": "^9.6.0",
     "pino-pretty": "^13.0.0",

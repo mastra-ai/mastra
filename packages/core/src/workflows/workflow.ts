@@ -24,8 +24,9 @@ import { WhenConditionReturnValue } from './types';
 import { isVariableReference, updateStepInHierarchy } from './utils';
 import type { WorkflowResultReturn } from './workflow-instance';
 import { WorkflowInstance } from './workflow-instance';
+
 export class Workflow<
-  TSteps extends Step<any, any, any>[] = any,
+  TSteps extends Step<string, any, any>[] = Step<string, any, any>[],
   TTriggerSchema extends z.ZodObject<any> = any,
 > extends MastraBase {
   name: string;
@@ -56,7 +57,11 @@ export class Workflow<
     this.triggerSchema = triggerSchema;
 
     if (mastra) {
-      this.__registerPrimitives(mastra);
+      this.__registerPrimitives({
+        telemetry: mastra.getTelemetry(),
+        logger: mastra.getLogger(),
+      });
+      this.#mastra = mastra;
     }
   }
 
@@ -169,7 +174,7 @@ export class Workflow<
     VarStep extends StepVariableType<any, any, any, any>,
   >(
     applyOperator: (op: string, value: any, target: any) => { status: string },
-    condition: StepConfig<FallbackStep, CondStep, VarStep, TTriggerSchema>['when'],
+    condition: StepConfig<FallbackStep, CondStep, VarStep, TTriggerSchema, TSteps>['when'],
     fallbackStep: FallbackStep,
     loopType?: 'while' | 'until',
   ) {
@@ -300,7 +305,10 @@ export class Workflow<
     FallbackStep extends StepAction<any, any, any, any>,
     CondStep extends StepVariableType<any, any, any, any>,
     VarStep extends StepVariableType<any, any, any, any>,
-  >(condition: StepConfig<FallbackStep, CondStep, VarStep, TTriggerSchema>['when'], fallbackStep: FallbackStep) {
+  >(
+    condition: StepConfig<FallbackStep, CondStep, VarStep, TTriggerSchema, TSteps>['when'],
+    fallbackStep: FallbackStep,
+  ) {
     const applyOperator = (operator: string, value: any, target: any) => {
       switch (operator) {
         case '$eq':
@@ -371,7 +379,7 @@ export class Workflow<
                 const result = await activeCondition.condition(payload);
                 return !result;
               }
-            : () => Promise.resolve(false),
+            : { not: activeCondition.condition },
       },
     );
 
@@ -401,8 +409,8 @@ export class Workflow<
    * @throws Error if trigger schema validation fails
    */
 
-  createRun(): WorkflowResultReturn<TTriggerSchema> {
-    const run = new WorkflowInstance({
+  createRun(): WorkflowResultReturn<TTriggerSchema, TSteps> {
+    const run = new WorkflowInstance<TSteps, TTriggerSchema>({
       logger: this.logger,
       name: this.name,
       mastra: this.#mastra,
@@ -486,11 +494,14 @@ export class Workflow<
         return await otlpContext.with(
           trace.setSpan(otlpContext.active(), this.getExecutionSpan(attributes?.runId ?? data?.runId) as Span),
           async () => {
-            // @ts-ignore
-            return this.#mastra.telemetry.traceMethod(handler, {
-              spanName,
-              attributes,
-            })(data);
+            if (this?.telemetry) {
+              return this.telemetry.traceMethod(handler, {
+                spanName,
+                attributes,
+              })(data);
+            } else {
+              return handler(data);
+            }
           },
         );
       };
@@ -512,7 +523,7 @@ export class Workflow<
       };
 
       // Only trace if telemetry is available and action exists
-      const finalAction = this.#mastra?.getTelemetry()
+      const finalAction = this.telemetry
         ? executeStep(execute, `workflow.${this.name}.action.${stepId}`, {
             componentName: this.name,
             runId: rest.runId as string,

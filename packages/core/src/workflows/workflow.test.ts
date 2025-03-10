@@ -6,6 +6,7 @@ import { z } from 'zod';
 import { createLogger } from '../logger';
 import { Mastra } from '../mastra';
 import { DefaultStorage } from '../storage/libsql';
+import { Telemetry } from '../telemetry';
 import { createTool } from '../tools';
 
 import { Step } from './step';
@@ -254,7 +255,8 @@ describe('Workflow', async () => {
         .step(step1)
         .then(step2, {
           when: async ({ context }) => {
-            const step1Result = context.getStepResult<{ count: number }>('step1');
+            const step1Result = context.getStepResult(step1);
+
             return step1Result ? step1Result.count > 3 : false;
           },
         })
@@ -672,16 +674,20 @@ describe('Workflow', async () => {
         execute: increment,
       });
 
-      const final = vi.fn().mockImplementation(async ({ context }) => {
-        return { finalValue: context.getStepResult('increment')?.newValue };
-      });
+      const final = vi
+        .fn()
+        .mockImplementation(
+          async ({ context }: { context: WorkflowContext<any, [typeof incrementStep, typeof finalStep]> }) => {
+            return { finalValue: context.getStepResult(incrementStep).newValue };
+          },
+        );
       const finalStep = new Step({
         id: 'final',
         description: 'Final step that prints the result',
         execute: final,
       });
 
-      const counterWorkflow = new Workflow({
+      const counterWorkflow = new Workflow<[typeof incrementStep, typeof finalStep]>({
         name: 'counter-workflow',
         triggerSchema: z.object({
           target: z.number(),
@@ -692,7 +698,7 @@ describe('Workflow', async () => {
       counterWorkflow
         .step(incrementStep)
         .until(async ({ context }) => {
-          const res = context.getStepResult<{ newValue: number }>('increment');
+          const res = context.getStepResult('increment');
           return (res?.newValue ?? 0) >= 12;
         }, incrementStep)
         .then(finalStep)
@@ -730,7 +736,7 @@ describe('Workflow', async () => {
       });
 
       const final = vi.fn().mockImplementation(async ({ context }) => {
-        return { finalValue: context.getStepResult('increment')?.newValue };
+        return { finalValue: context.getStepResult(incrementStep).newValue };
       });
       const finalStep = new Step({
         id: 'final',
@@ -951,6 +957,80 @@ describe('Workflow', async () => {
         .if(async ({ context }) => {
           const current = context.getStepResult<{ newValue: number }>('start')?.newValue;
           return !current || current < 5;
+        })
+        .then(finalStep)
+        .else()
+        .then(otherStep)
+        .then(finalStep)
+        .commit();
+
+      const run = counterWorkflow.createRun();
+      const { results } = await run.start({ triggerData: { startValue: 6 } });
+
+      expect(start).toHaveBeenCalledTimes(1);
+      expect(other).toHaveBeenCalledTimes(1);
+      expect(final).toHaveBeenCalledTimes(1);
+      // @ts-ignore
+      expect(results.start.output).toEqual({ newValue: 7 });
+      // @ts-ignore
+      expect(results.other.output).toEqual({ other: 26 });
+
+      // @ts-ignore
+      expect(results.final.output).toEqual({ finalValue: 26 + 7 });
+    });
+
+    it('should run the else branch (when query)', async () => {
+      const start = vi.fn().mockImplementation(async ({ context }) => {
+        // Get the current value (either from trigger or previous increment)
+        const currentValue =
+          context.getStepResult('start')?.newValue || context.getStepResult('trigger')?.startValue || 0;
+
+        // Increment the value
+        const newValue = currentValue + 1;
+
+        return { newValue };
+      });
+      const startStep = new Step({
+        id: 'start',
+        description: 'Increments the current value by 1',
+        outputSchema: z.object({
+          newValue: z.number(),
+        }),
+        execute: start,
+      });
+
+      const other = vi.fn().mockImplementation(async ({ context }) => {
+        return { other: 26 };
+      });
+      const otherStep = new Step({
+        id: 'other',
+        description: 'Other step',
+        execute: other,
+      });
+
+      const final = vi.fn().mockImplementation(async ({ context }) => {
+        const startVal = context.getStepResult('start')?.newValue ?? 0;
+        const otherVal = context.getStepResult('other')?.other ?? 0;
+        return { finalValue: startVal + otherVal };
+      });
+      const finalStep = new Step({
+        id: 'final',
+        description: 'Final step that prints the result',
+        execute: final,
+      });
+
+      const counterWorkflow = new Workflow({
+        name: 'counter-workflow',
+        triggerSchema: z.object({
+          startValue: z.number(),
+        }),
+      });
+
+      counterWorkflow
+        .step(startStep)
+        .if({
+          ref: { step: startStep, path: 'newValue' },
+          query: { $lt: 5 },
         })
         .then(finalStep)
         .else()
@@ -1291,15 +1371,17 @@ describe('Workflow', async () => {
       const step1 = new Step({ id: 'step1', execute: vi.fn<any>().mockResolvedValue({ result: 'success' }) });
       const step2 = new Step({ id: 'step2', execute: vi.fn<any>().mockResolvedValue({ result: 'success 2' }) });
 
+      const mastra = new Mastra({
+        logger: createLogger({
+          name: 'Workflow',
+        }),
+      });
+
       const workflow = new Workflow({
         name: 'test-workflow',
 
         retryConfig: { attempts: 3, delay: 10 },
-        mastra: {
-          logger: createLogger({
-            name: 'Workflow',
-          }),
-        },
+        mastra,
       });
 
       workflow
@@ -2226,6 +2308,77 @@ describe('Workflow', async () => {
           output: { toneScore: { score: 0.9 }, completenessScore: { score: 0.8 } },
         },
       });
+    });
+  });
+
+  describe('Accessing Mastra', () => {
+    it('should be able to access the deprecatedmastra primitives', async () => {
+      let telemetry: Telemetry | undefined;
+      const step1 = new Step({
+        id: 'step1',
+        execute: async ({ mastra }) => {
+          console.log({ mastra });
+          telemetry = mastra?.telemetry;
+        },
+      });
+
+      const workflow = new Workflow({ name: 'test-workflow' });
+      workflow.step(step1).commit();
+
+      const loggerSpy = vi.spyOn(logger, 'warn');
+
+      const mastra = new Mastra({
+        logger,
+        workflows: { 'test-workflow': workflow },
+      });
+
+      const wf = mastra.getWorkflow('test-workflow');
+
+      expect(mastra?.getLogger()).toBe(logger);
+
+      // Access new instance properties directly - should work without warning
+      const run = wf.createRun();
+      await run.start();
+
+      expect(loggerSpy).toHaveBeenCalledWith(`Please use 'getTelemetry' instead, telemetry is deprecated`);
+      expect(telemetry).toBeDefined();
+      expect(telemetry).toBeInstanceOf(Telemetry);
+
+      loggerSpy.mockClear();
+    });
+
+    it('should be able to access the new Mastra primitives', async () => {
+      let telemetry: Telemetry | undefined;
+      const step1 = new Step({
+        id: 'step1',
+        execute: async ({ mastra }) => {
+          telemetry = mastra?.getTelemetry();
+        },
+      });
+
+      const workflow = new Workflow({ name: 'test-workflow' });
+      workflow.step(step1).commit();
+
+      const loggerSpy = vi.spyOn(logger, 'warn');
+
+      const mastra = new Mastra({
+        logger,
+        workflows: { 'test-workflow': workflow },
+      });
+
+      const wf = mastra.getWorkflow('test-workflow');
+
+      expect(mastra?.getLogger()).toBe(logger);
+
+      // Access new instance properties directly - should work without warning
+      const run = wf.createRun();
+      await run.start();
+
+      expect(loggerSpy).not.toHaveBeenCalledWith(`Please use 'getTelemetry' instead, telemetry is deprecated`);
+      expect(telemetry).toBeDefined();
+      expect(telemetry).toBeInstanceOf(Telemetry);
+
+      loggerSpy.mockClear();
     });
   });
 });

@@ -98,6 +98,49 @@ main();
 
 The agent will use the `weatherInfo` tool to get the current weather in New York City and respond accordingly.
 
+
+## Vercel AI SDK Tool Format
+
+Mastra supports tools created using the Vercel AI SDK format. You can import and use these tools directly:
+
+```typescript filename="src/mastra/tools/vercelTool.ts" copy
+import { tool } from 'ai';
+import { z } from 'zod';
+
+export const weatherInfo = tool({
+  description: "Fetches the current weather information for a given city",
+  parameters: z.object({
+    city: z.string().describe("The city to get weather for")
+  }),
+  execute: async ({ city }) => {
+    // Replace with actual API call
+    const data = await fetch(`https://api.example.com/weather?city=${city}`);
+    return data.json();
+  }
+});
+```
+
+You can use Vercel tools alongside Mastra tools in your agents:
+
+```typescript filename="src/mastra/agents/weatherAgent.ts"
+import { Agent } from "@mastra/core/agent";
+import { openai } from "@ai-sdk/openai";
+import { weatherInfo } from "../tools/vercelTool";
+import * as mastraTools from "../tools/mastraTools";
+
+export const weatherAgent = new Agent({
+  name: "Weather Agent",
+  instructions: "You are a helpful assistant that provides weather information.",
+  model: openai("gpt-4"),
+  tools: {
+    weatherInfo,  // Vercel tool
+    ...mastraTools  // Mastra tools
+  },
+});
+```
+
+Both tool formats will work seamlessly within your agent's workflow.
+
 ## Tool Design Best Practices
 
 When creating tools for your agents, following these guidelines will help ensure reliable and intuitive tool usage:
