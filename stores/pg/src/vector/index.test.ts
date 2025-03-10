@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach, vi } from 'vitest';
 
 import { PgVector } from '.';
+import { type QueryResult } from '@mastra/core';
 
 describe('PgVector', () => {
   let vectorDB: PgVector;
@@ -229,6 +230,136 @@ describe('PgVector', () => {
       it('should throw error if vector dimensions dont match', async () => {
         const vectors = [[1, 2, 3, 4]]; // 4D vector for 3D index
         await expect(vectorDB.upsert({ indexName: testIndexName, vectors })).rejects.toThrow();
+      });
+    });
+
+    describe('updates', () => {
+      const testVectors = [
+        [1, 2, 3],
+        [4, 5, 6],
+        [7, 8, 9],
+      ];
+
+      beforeEach(async () => {
+        await vectorDB.createIndex({ indexName: testIndexName, dimension: 3 });
+      });
+
+      afterEach(async () => {
+        await vectorDB.deleteIndex(testIndexName);
+      });
+
+      it('should update the vector by id', async () => {
+        const ids = await vectorDB.upsert({ indexName: testIndexName, vectors: testVectors });
+        expect(ids).toHaveLength(3);
+
+        const idToBeUpdated = ids[0];
+        const newVector = [1, 2, 3];
+        const newMetaData = {
+          test: 'updates',
+        };
+
+        const update = {
+          vector: newVector,
+          metadata: newMetaData,
+        };
+
+        await vectorDB.updateIndexById(testIndexName, idToBeUpdated, update);
+
+        const results: QueryResult[] = await vectorDB.query({
+          indexName: testIndexName,
+          queryVector: newVector,
+          topK: 2,
+          includeVector: true,
+        });
+        expect(results[0]?.id).toBe(idToBeUpdated);
+        expect(results[0]?.vector).toEqual(newVector);
+        expect(results[0]?.metadata).toEqual(newMetaData);
+      });
+
+      it('should only update the metadata by id', async () => {
+        const ids = await vectorDB.upsert({ indexName: testIndexName, vectors: testVectors });
+        expect(ids).toHaveLength(3);
+
+        const idToBeUpdated = ids[0];
+        const newMetaData = {
+          test: 'updates',
+        };
+
+        const update = {
+          metadata: newMetaData,
+        };
+
+        await vectorDB.updateIndexById(testIndexName, idToBeUpdated, update);
+
+        const results: QueryResult[] = await vectorDB.query({
+          indexName: testIndexName,
+          queryVector: testVectors[0],
+          topK: 2,
+          includeVector: true,
+        });
+        expect(results[0]?.id).toBe(idToBeUpdated);
+        expect(results[0]?.vector).toEqual(testVectors[0]);
+        expect(results[0]?.metadata).toEqual(newMetaData);
+      });
+
+      it('should only update vector embeddings by id', async () => {
+        const ids = await vectorDB.upsert({ indexName: testIndexName, vectors: testVectors });
+        expect(ids).toHaveLength(3);
+
+        const idToBeUpdated = ids[0];
+        const newVector = [1, 2, 3];
+
+        const update = {
+          vector: newVector,
+        };
+
+        await vectorDB.updateIndexById(testIndexName, idToBeUpdated, update);
+
+        const results: QueryResult[] = await vectorDB.query({
+          indexName: testIndexName,
+          queryVector: newVector,
+          topK: 2,
+          includeVector: true,
+        });
+        expect(results[0]?.id).toBe(idToBeUpdated);
+        expect(results[0]?.vector).toEqual(newVector);
+      });
+
+      it('should throw exception when no updates are given', () => {
+        expect(vectorDB.updateIndexById(testIndexName, 'id', {})).rejects.toThrow('No updates provided');
+      });
+    });
+
+    describe('deletes', () => {
+      const testVectors = [
+        [1, 2, 3],
+        [4, 5, 6],
+        [7, 8, 9],
+      ];
+
+      beforeEach(async () => {
+        await vectorDB.createIndex({ indexName: testIndexName, dimension: 3 });
+      });
+
+      afterEach(async () => {
+        await vectorDB.deleteIndex(testIndexName);
+      });
+
+      it('should delete the vector by id', async () => {
+        const ids = await vectorDB.upsert({ indexName: testIndexName, vectors: testVectors });
+        expect(ids).toHaveLength(3);
+        const idToBeDeleted = ids[0];
+
+        await vectorDB.deleteIndexById(testIndexName, idToBeDeleted);
+
+        const results: QueryResult[] = await vectorDB.query({
+          indexName: testIndexName,
+          queryVector: [1.0, 0.0, 0.0],
+          topK: 2,
+        });
+
+        expect(results).toHaveLength(2);
+        expect(results.map(res => res.id)).not.toContain(idToBeDeleted);
       });
     });
 
