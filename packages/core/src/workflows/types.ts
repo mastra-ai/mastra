@@ -141,12 +141,13 @@ export interface StepConfig<
   CondStep extends StepVariableType<any, any, any, any>,
   VarStep extends StepVariableType<any, any, any, any>,
   TTriggerSchema extends z.ZodObject<any>,
+  TSteps extends Step<string, any, any, any>[] = Step<string, any, any, any>[],
 > {
   snapshotOnTimeout?: boolean;
   when?:
     | Condition<CondStep, TTriggerSchema>
     | ((args: {
-        context: WorkflowContext<TTriggerSchema>;
+        context: WorkflowContext<TTriggerSchema, TSteps>;
         mastra?: Mastra;
       }) => Promise<boolean | WhenConditionReturnValue>);
   variables?: StepInputType<TStep, 'inputSchema'> extends never
@@ -196,15 +197,43 @@ export interface WorkflowRunResult<
 }
 
 // Update WorkflowContext
-export interface WorkflowContext<TTrigger extends z.ZodObject<any> = any> {
+export interface WorkflowContext<
+  TTrigger extends z.ZodObject<any> = any,
+  TSteps extends Step<string, any, any, any>[] = Step<string, any, any, any>[],
+> {
   mastra?: MastraUnion;
-  steps: Record<string, StepResult<any>>;
+  steps: {
+    [K in keyof StepsRecord<TSteps>]: StepsRecord<TSteps>[K]['outputSchema'] extends undefined
+      ? StepResult<unknown>
+      : StepResult<z.infer<NonNullable<StepsRecord<TSteps>[K]['outputSchema']>>>;
+  };
   triggerData: z.infer<TTrigger>;
   attempts: Record<string, number>;
-  getStepResult<T>(stepId: string): T;
+  getStepResult<T extends keyof StepsRecord<TSteps> | unknown>(
+    stepId: T extends keyof StepsRecord<TSteps> ? T : string,
+  ): T extends keyof StepsRecord<TSteps>
+    ? StepsRecord<TSteps>[T]['outputSchema'] extends undefined
+      ? unknown
+      : z.infer<NonNullable<StepsRecord<TSteps>[T]['outputSchema']>>
+    : T;
   getStepResult<T extends Step<any, any, any, any>>(
     stepId: T,
   ): T['outputSchema'] extends undefined ? unknown : z.infer<NonNullable<T['outputSchema']>>;
+}
+
+export interface WorkflowContext2<
+  TTrigger extends z.ZodObject<any> = any,
+  TSteps extends StepAction<string, any, any, any>[] = StepAction<string, any, any, any>[],
+> {
+  mastra?: MastraUnion;
+  steps: StepsRecord<TSteps>;
+  triggerData: z.infer<TTrigger>;
+  attempts: Record<string, number>;
+  // getStepResult<T>(stepId: string): T;
+  getStepResult<T extends keyof StepsRecord<TSteps>>(stepId: T): z.infer<StepsRecord<TSteps>[T]['outputSchema']>;
+  // getStepResult<T extends Step<any, any, any, any>>(
+  //   stepId: T,
+  // ): T['outputSchema'] extends undefined ? unknown : z.infer<NonNullable<T['outputSchema']>>;
 }
 
 export interface WorkflowLogMessage extends BaseLogMessage {

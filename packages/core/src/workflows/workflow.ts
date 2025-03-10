@@ -174,7 +174,7 @@ export class Workflow<
     VarStep extends StepVariableType<any, any, any, any>,
   >(
     applyOperator: (op: string, value: any, target: any) => { status: string },
-    condition: StepConfig<FallbackStep, CondStep, VarStep, TTriggerSchema>['when'],
+    condition: StepConfig<FallbackStep, CondStep, VarStep, TTriggerSchema, TSteps>['when'],
     fallbackStep: FallbackStep,
     loopType?: 'while' | 'until',
   ) {
@@ -305,7 +305,10 @@ export class Workflow<
     FallbackStep extends StepAction<any, any, any, any>,
     CondStep extends StepVariableType<any, any, any, any>,
     VarStep extends StepVariableType<any, any, any, any>,
-  >(condition: StepConfig<FallbackStep, CondStep, VarStep, TTriggerSchema>['when'], fallbackStep: FallbackStep) {
+  >(
+    condition: StepConfig<FallbackStep, CondStep, VarStep, TTriggerSchema, TSteps>['when'],
+    fallbackStep: FallbackStep,
+  ) {
     const applyOperator = (operator: string, value: any, target: any) => {
       switch (operator) {
         case '$eq':

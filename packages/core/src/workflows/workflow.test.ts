@@ -694,7 +694,7 @@ describe('Workflow', async () => {
       counterWorkflow
         .step(incrementStep)
         .until(async ({ context }) => {
-          const res = context.getStepResult<{ newValue: number }>('increment');
+          const res = context.getStepResult('increment');
           return (res?.newValue ?? 0) >= 12;
         }, incrementStep)
         .then(finalStep)
