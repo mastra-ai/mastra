@@ -13,6 +13,7 @@ Creates a new instance of the MCPConfiguration class.
 
 ```typescript
 constructor({
+    id?: string;
     servers: Record<string, MastraMCPServerDefinition>
 }: {
     servers: {
@@ -34,6 +35,12 @@ constructor({
 <PropertiesTable
   content={[
     {
+      name: "id",
+      type: "string",
+      description:
+        "Optional unique identifier for the configuration instance. Use this to prevent memory leaks when creating multiple instances with identical configurations.",
+    },
+    {
       name: "servers",
       type: "Record<string, MastraMCPServerDefinition>",
       description:
@@ -41,6 +48,8 @@ constructor({
     },
   ]}
 />
+
+
 
 ## Methods
 
@@ -159,6 +168,50 @@ const response = await agent.stream(
   },
 );
 ```
+
+## Resource Management
+
+The `MCPConfiguration` class includes built-in memory leak prevention for managing multiple instances:
+
+1. Creating multiple instances with identical configurations without an `id` will throw an error to prevent memory leaks
+2. If you need multiple instances with identical configurations, provide a unique `id` for each instance
+3. Call `await configuration.disconnect()` before recreating an instance with the same configuration
+4. If you only need one instance, consider moving the configuration to a higher scope to avoid recreation
+
+For example, if you try to create multiple instances with the same configuration without an `id`:
+
+```typescript
+// First instance - OK
+const mcp1 = new MCPConfiguration({
+  servers: { /* ... */ }
+});
+
+// Second instance with same config - Will throw an error
+const mcp2 = new MCPConfiguration({
+  servers: { /* ... */ }
+});
+
+// To fix, either:
+// 1. Add unique IDs
+const mcp3 = new MCPConfiguration({
+  id: "instance-1",
+  servers: { /* ... */ }
+});
+
+// 2. Or disconnect before recreating
+await mcp1.disconnect();
+const mcp4 = new MCPConfiguration({
+  servers: { /* ... */ }
+});
+```
+
+## Server Lifecycle
+
+MCPConfiguration handles server connections gracefully:
+
+1. Automatic connection management for multiple servers
+2. Graceful server shutdown to prevent error messages during development
+3. Proper cleanup of resources when disconnecting
 
 ## Related Information
 
