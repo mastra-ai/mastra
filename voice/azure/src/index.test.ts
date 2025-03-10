@@ -25,4 +25,32 @@ describe('AzureVoice', () => {
     // e.g. voices[0] might be { voiceId: "en-US-AriaNeural", language: "en", region: "US" }, etc.
     expect(voices[0]).toHaveProperty('voiceId');
   });
+
+  it('should generate audio from text (TTS)', async () => {
+    const azureVoice = new AzureVoice({
+      speechModel: { apiKey: subscriptionKey, region },
+    });
+
+    // Call speak
+    const text = 'Hello from Azure TTS!';
+    const audioStream = await azureVoice.speak(text);
+
+    // The returned value is a Node.js ReadableStream (PassThrough).
+    // If you want to verify it actually has data, you can read some bytes:
+    const chunks: Buffer[] = [];
+    for await (const chunk of audioStream) {
+      chunks.push(chunk as Buffer);
+    }
+    const audioBuffer = Buffer.concat(chunks);
+
+    // Check that we got some non-empty audio data
+    expect(audioBuffer.length).toBeGreaterThan(0);
+
+    // Optional: write it to a file so you can manually listen
+    // (Make sure "test-outputs" directory exists or is in .gitignore)
+    const outputPath = join(__dirname, '../test-outputs', 'test-audio.wav');
+    await writeFile(outputPath, audioBuffer, (err) => {
+      if (err) throw err;
+    });
+  });
 });
