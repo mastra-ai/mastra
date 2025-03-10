@@ -6,6 +6,7 @@ import { z } from 'zod';
 import { createLogger } from '../logger';
 import { Mastra } from '../mastra';
 import { DefaultStorage } from '../storage/libsql';
+import { Telemetry } from '../telemetry';
 import { createTool } from '../tools';
 
 import { Step } from './step';
@@ -254,7 +255,8 @@ describe('Workflow', async () => {
         .step(step1)
         .then(step2, {
           when: async ({ context }) => {
-            const step1Result = context.getStepResult<{ count: number }>('step1');
+            const step1Result = context.getStepResult(step1);
+
             return step1Result ? step1Result.count > 3 : false;
           },
         })
@@ -672,16 +674,20 @@ describe('Workflow', async () => {
         execute: increment,
       });
 
-      const final = vi.fn().mockImplementation(async ({ context }) => {
-        return { finalValue: context.getStepResult('increment')?.newValue };
-      });
+      const final = vi
+        .fn()
+        .mockImplementation(
+          async ({ context }: { context: WorkflowContext<any, [typeof incrementStep, typeof finalStep]> }) => {
+            return { finalValue: context.getStepResult(incrementStep).newValue };
+          },
+        );
       const finalStep = new Step({
         id: 'final',
         description: 'Final step that prints the result',
         execute: final,
       });
 
-      const counterWorkflow = new Workflow({
+      const counterWorkflow = new Workflow<[typeof incrementStep, typeof finalStep]>({
         name: 'counter-workflow',
         triggerSchema: z.object({
           target: z.number(),
@@ -692,7 +698,7 @@ describe('Workflow', async () => {
       counterWorkflow
         .step(incrementStep)
         .until(async ({ context }) => {
-          const res = context.getStepResult<{ newValue: number }>('increment');
+          const res = context.getStepResult('increment');
           return (res?.newValue ?? 0) >= 12;
         }, incrementStep)
         .then(finalStep)
@@ -730,7 +736,7 @@ describe('Workflow', async () => {
       });
 
       const final = vi.fn().mockImplementation(async ({ context }) => {
-        return { finalValue: context.getStepResult('increment')?.newValue };
+        return { finalValue: context.getStepResult(incrementStep).newValue };
       });
       const finalStep = new Step({
         id: 'final',
@@ -2368,6 +2374,77 @@ describe('Workflow', async () => {
         promptAgent: { status: 'success', output: { modelOutput: 'test output' } },
         __testev_event: { status: 'success' },
       });
+    });
+  });
+
+  describe('Accessing Mastra', () => {
+    it('should be able to access the deprecatedmastra primitives', async () => {
+      let telemetry: Telemetry | undefined;
+      const step1 = new Step({
+        id: 'step1',
+        execute: async ({ mastra }) => {
+          console.log({ mastra });
+          telemetry = mastra?.telemetry;
+        },
+      });
+
+      const workflow = new Workflow({ name: 'test-workflow' });
+      workflow.step(step1).commit();
+
+      const loggerSpy = vi.spyOn(logger, 'warn');
+
+      const mastra = new Mastra({
+        logger,
+        workflows: { 'test-workflow': workflow },
+      });
+
+      const wf = mastra.getWorkflow('test-workflow');
+
+      expect(mastra?.getLogger()).toBe(logger);
+
+      // Access new instance properties directly - should work without warning
+      const run = wf.createRun();
+      await run.start();
+
+      expect(loggerSpy).toHaveBeenCalledWith(`Please use 'getTelemetry' instead, telemetry is deprecated`);
+      expect(telemetry).toBeDefined();
+      expect(telemetry).toBeInstanceOf(Telemetry);
+
+      loggerSpy.mockClear();
+    });
+
+    it('should be able to access the new Mastra primitives', async () => {
+      let telemetry: Telemetry | undefined;
+      const step1 = new Step({
+        id: 'step1',
+        execute: async ({ mastra }) => {
+          telemetry = mastra?.getTelemetry();
+        },
+      });
+
+      const workflow = new Workflow({ name: 'test-workflow' });
+      workflow.step(step1).commit();
+
+      const loggerSpy = vi.spyOn(logger, 'warn');
+
+      const mastra = new Mastra({
+        logger,
+        workflows: { 'test-workflow': workflow },
+      });
+
+      const wf = mastra.getWorkflow('test-workflow');
+
+      expect(mastra?.getLogger()).toBe(logger);
+
+      // Access new instance properties directly - should work without warning
+      const run = wf.createRun();
+      await run.start();
+
+      expect(loggerSpy).not.toHaveBeenCalledWith(`Please use 'getTelemetry' instead, telemetry is deprecated`);
+      expect(telemetry).toBeDefined();
+      expect(telemetry).toBeInstanceOf(Telemetry);
+
+      loggerSpy.mockClear();
     });
   });
 });

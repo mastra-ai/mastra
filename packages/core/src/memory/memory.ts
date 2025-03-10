@@ -137,10 +137,12 @@ export abstract class MastraMemory extends MastraBase {
 
   abstract rememberMessages({
     threadId,
+    resourceId,
     vectorMessageSearch,
     config,
   }: {
     threadId: string;
+    resourceId?: string;
     vectorMessageSearch?: string;
     config?: MemoryConfig;
   }): Promise<{
@@ -297,6 +299,7 @@ export abstract class MastraMemory extends MastraBase {
    */
   abstract query({
     threadId,
+    resourceId,
     selectBy,
   }: StorageGetMessagesArg): Promise<{ messages: CoreMessage[]; uiMessages: AiMessageType[] }>;
 
