@@ -60,7 +60,7 @@ function Agents() {
                       }}
                     >
                       <span className="text-mastra-el-5 text-sm flex items-center gap-2">
-                        <span>{row.original.modelId}</span> 
+                        <span>{row.original.modelId}</span>
                       </span>
                     </button>
                   ),

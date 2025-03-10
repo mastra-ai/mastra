@@ -34,6 +34,7 @@
   "license": "ISC",
   "dependencies": {
     "@assistant-ui/react": "^0.7.90",
+    "@assistant-ui/react-ai-sdk": "^0.8.0",
     "@assistant-ui/react-markdown": "^0.7.21",
     "@assistant-ui/react-syntax-highlighter": "^0.7.10",
     "@codemirror/lang-json": "^6.0.1",
@@ -54,13 +55,13 @@
     "date-fns": "^4.1.0",
     "motion": "^12.4.2",
     "prism-react-renderer": "^2.4.0",
+    "react-markdown": "^9.0.1",
+    "react-resizable-panels": "^2.1.7",
+    "react-syntax-highlighter": "^15.6.1",
     "rehype-stringify": "^10.0.1",
     "remark-gfm": "^4.0.1",
     "remark-parse": "^11.0.0",
     "remark-rehype": "^11.1.1",
-    "react-markdown": "^9.0.1",
-    "react-resizable-panels": "^2.1.7",
-    "react-syntax-highlighter": "^15.6.1",
     "remeda": "^2.20.1",
     "shiki": "^1.24.2",
     "sonner": "^2.0.1",
@@ -70,11 +71,11 @@
     "zustand": "^5.0.3"
   },
   "peerDependencies": {
+    "@mastra/core": "workspace:^",
     "lucide-react": "^0.474.0",
     "react": ">=19.0.0",
     "react-dom": ">=19.0.0",
-    "tailwindcss": "^3.0.0",
-    "@mastra/core": "workspace:^"
+    "tailwindcss": "^3.0.0"
   },
   "devDependencies": {
     "@types/node": "^22.13.1",

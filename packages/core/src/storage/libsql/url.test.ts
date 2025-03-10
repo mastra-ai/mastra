@@ -157,4 +157,3 @@ describe('LibSQLStore URL rewriting', () => {
     });
   });
 });
-

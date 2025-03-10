@@ -40,7 +40,6 @@ export function registerHook(hook: `${AvailableHooks}`, action: Handler<any>): v
 
 export function executeHook(hook: AvailableHooks.ON_EVALUATION, action: EvaluationHookData): void;
 export function executeHook(hook: AvailableHooks.ON_GENERATION, action: GenerationHookData): void;
-
 export function executeHook(hook: `${AvailableHooks}`, data: unknown): void {
   // do not block the main thread
   setImmediate(() => {

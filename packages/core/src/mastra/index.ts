@@ -3,6 +3,7 @@ import type { MastraDeployer } from '../deployer';
 import { LogLevel, createLogger, noopLogger } from '../logger';
 import type { Logger } from '../logger';
 import type { MastraMemory } from '../memory/memory';
+import type { AgentNetwork } from '../network';
 import type { MastraStorage } from '../storage';
 import { DefaultStorage } from '../storage/libsql';
 import { InstrumentClass, OTLPStorageExporter, Telemetry } from '../telemetry';
@@ -17,8 +18,10 @@ export interface Config<
   TVectors extends Record<string, MastraVector> = Record<string, MastraVector>,
   TTTS extends Record<string, MastraTTS> = Record<string, MastraTTS>,
   TLogger extends Logger = Logger,
+  TNetworks extends Record<string, AgentNetwork> = Record<string, AgentNetwork>,
 > {
   agents?: TAgents;
+  networks?: TNetworks;
   storage?: MastraStorage;
   vectors?: TVectors;
   logger?: TLogger | false;
@@ -41,6 +44,7 @@ export class Mastra<
   TVectors extends Record<string, MastraVector> = Record<string, MastraVector>,
   TTTS extends Record<string, MastraTTS> = Record<string, MastraTTS>,
   TLogger extends Logger = Logger,
+  TNetworks extends Record<string, AgentNetwork> = Record<string, AgentNetwork>,
 > {
   #vectors?: TVectors;
   #agents: TAgents;
@@ -51,10 +55,11 @@ export class Mastra<
   #deployer?: MastraDeployer;
   storage?: MastraStorage;
   memory?: MastraMemory;
+  #networks?: TNetworks;
 
-  constructor(config?: Config<TAgents, TWorkflows, TVectors, TTTS, TLogger>) {
+  constructor(config?: Config<TAgents, TWorkflows, TVectors, TTTS, TLogger, TNetworks>) {
     /*
-      Logger
+      Lsogger
     */
 
     let logger: TLogger;
@@ -215,6 +220,19 @@ This is a warning for now, but will throw an error in the future
     this.#agents = agents as TAgents;
 
     /*
+    Networks
+    */
+    this.#networks = {} as TNetworks;
+
+    if (config?.networks) {
+      Object.entries(config.networks).forEach(([key, network]) => {
+        network.__registerMastra(this);
+        // @ts-ignore
+        this.#networks[key] = network;
+      });
+    }
+
+    /*
     Workflows
     */
     this.#workflows = {} as TWorkflows;
@@ -292,6 +310,18 @@ This is a warning for now, but will throw an error in the future
       }, {});
     }
     return this.#workflows;
+  }
+
+  public getNetwork<TNetworkName extends keyof TNetworks>(name: TNetworkName): TNetworks[TNetworkName] {
+    const network = this.#networks?.[name];
+    if (!network) {
+      throw new Error(`Network with name ${String(name)} not found`);
+    }
+    return network;
+  }
+
+  public getNetworks() {
+    return this.#networks;
   }
 
   public setStorage(storage: MastraStorage) {

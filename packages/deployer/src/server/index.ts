@@ -14,13 +14,13 @@ import { logger } from 'hono/logger';
 import { describeRoute, openAPISpecs } from 'hono-openapi';
 
 import {
-  generateHandler,
+  generateHandler as agentGenerateHandler,
   getAgentByIdHandler,
   getAgentsHandler,
   getEvalsByAgentIdHandler,
   getLiveEvalsByAgentIdHandler,
   setAgentInstructionsHandler,
-  streamGenerateHandler,
+  streamGenerateHandler as agentStreamGenerateHandler,
 } from './handlers/agents.js';
 import { handleClientsRefresh, handleTriggerClientsRefresh } from './handlers/client.js';
 import { errorHandler } from './handlers/error.js';
@@ -35,6 +35,12 @@ import {
   saveMessagesHandler,
   updateThreadHandler,
 } from './handlers/memory.js';
+import {
+  getNetworksHandler,
+  getNetworkByIdHandler,
+  generateHandler as networkGenerateHandler,
+  streamGenerateHandler as networkStreamGenerateHandler,
+} from './handlers/networks.js';
 import { generateSystemPromptHandler } from './handlers/prompt.js';
 import { rootHandler } from './handlers/root.js';
 import { getTelemetryHandler } from './handlers/telemetry.js';
@@ -270,7 +276,7 @@ export async function createHonoServer(
         },
       },
     }),
-    generateHandler,
+    agentGenerateHandler,
   );
 
   app.post(
@@ -322,7 +328,7 @@ export async function createHonoServer(
         },
       },
     }),
-    streamGenerateHandler,
+    agentStreamGenerateHandler,
   );
 
   app.post(
@@ -658,6 +664,151 @@ export async function createHonoServer(
       },
     }),
     executeAgentToolHandler,
+  );
+
+  // Network routes
+  app.get(
+    '/api/networks',
+    describeRoute({
+      description: 'Get all available networks',
+      tags: ['networks'],
+      responses: {
+        200: {
+          description: 'List of all networks',
+        },
+      },
+    }),
+    getNetworksHandler,
+  );
+
+  app.get(
+    '/api/networks/:networkId',
+    describeRoute({
+      description: 'Get network by ID',
+      tags: ['networks'],
+      parameters: [
+        {
+          name: 'networkId',
+          in: 'path',
+          required: true,
+          schema: { type: 'string' },
+        },
+      ],
+      responses: {
+        200: {
+          description: 'Network details',
+        },
+        404: {
+          description: 'Network not found',
+        },
+      },
+    }),
+    getNetworkByIdHandler,
+  );
+
+  app.post(
+    '/api/networks/:networkId/generate',
+    bodyLimit(bodyLimitOptions),
+    describeRoute({
+      description: 'Generate a response from a network',
+      tags: ['networks'],
+      parameters: [
+        {
+          name: 'networkId',
+          in: 'path',
+          required: true,
+          schema: { type: 'string' },
+        },
+      ],
+      requestBody: {
+        required: true,
+        content: {
+          'application/json': {
+            schema: {
+              type: 'object',
+              properties: {
+                input: {
+                  oneOf: [
+                    { type: 'string' },
+                    {
+                      type: 'array',
+                      items: { type: 'object' },
+                    },
+                  ],
+                  description: 'Input for the network, can be a string or an array of CoreMessage objects',
+                },
+              },
+              required: ['input'],
+            },
+          },
+        },
+      },
+      responses: {
+        200: {
+          description: 'Generated response',
+        },
+        404: {
+          description: 'Network not found',
+        },
+      },
+    }),
+    networkGenerateHandler,
+  );
+
+  app.post(
+    '/api/networks/:networkId/stream',
+    bodyLimit(bodyLimitOptions),
+    describeRoute({
+      description: 'Stream a response from a network',
+      tags: ['networks'],
+      parameters: [
+        {
+          name: 'networkId',
+          in: 'path',
+          required: true,
+          schema: { type: 'string' },
+        },
+      ],
+      requestBody: {
+        required: true,
+        content: {
+          'application/json': {
+            schema: {
+              type: 'object',
+              properties: {
+                input: {
+                  oneOf: [
+                    { type: 'string' },
+                    {
+                      type: 'array',
+                      items: { type: 'object' },
+                    },
+                  ],
+                  description: 'Input for the network, can be a string or an array of CoreMessage objects',
+                },
+              },
+              required: ['input'],
+            },
+          },
+        },
+      },
+      responses: {
+        200: {
+          description: 'Streamed response',
+          content: {
+            'text/event-stream': {
+              schema: {
+                type: 'string',
+              },
+            },
+          },
+        },
+        404: {
+          description: 'Network not found',
+        },
+      },
+    }),
+    networkStreamGenerateHandler,
   );
 
   // Memory routes

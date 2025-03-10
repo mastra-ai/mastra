@@ -1,0 +1,105 @@
+---
+title: "Creating and Using Agent Networks | Network Documentation | Mastra"
+description: Overview of agent networks in Mastra, detailing how to create, configure, and use networks of specialized agents that work together to solve complex tasks.
+---
+
+# Creating and Using Agent Networks
+
+Agent Networks in Mastra allow you to create and orchestrate networks of specialized agents that work together to solve complex tasks. Each agent in the network can focus on a specific aspect of a problem, with an AI-powered router determining which agent to call next based on the current state and previous results.
+
+Networks are ideal for complex workflows where different specialized skills are needed at different stages of a task, or when you want the AI to dynamically determine the best path through your agents to solve a problem.
+
+> **Important:** Agent Networks are inherently undeterministic since they rely on an LLM to decide which agent to call next. This provides flexibility and adaptability, but may result in different execution paths for the same input. If you need deterministic, predictable execution flows with explicit control over which agent is called when, use [Workflows](../workflows/00-overview.mdx) instead.
+
+## 1. Creating a Network
+
+To create an agent network in Mastra, you use the `AgentNetwork` class and define its properties:
+
+```ts showLineNumbers filename="src/mastra/networks/index.ts" copy
+import { AgentNetwork } from "@mastra/core/network";
+import { Agent } from "@mastra/core/agent";
+import { openai } from "@ai-sdk/openai";
+
+// Create specialized agents
+const researchAgent = new Agent({
+  name: "Research",
+  instructions: "You search for and gather information on topics",
+  model: openai("gpt-4o"),
+});
+
+const summaryAgent = new Agent({
+  name: "Summary",
+  instructions: "You summarize information into concise points",
+  model: openai("gpt-4o"),
+});
+
+// Create a network with LLM-based routing
+export const researchNetwork = new AgentNetwork({
+  name: "Research Assistant",
+  instructions: "This network researches topics and provides summarized information.",
+  agents: [researchAgent, summaryAgent],
+  routingModel: openai("gpt-4o"),
+});
+```
+
+**Note:** Ensure that you have set the necessary environment variables, such as your OpenAI API key, in your `.env` file:
+
+```.env filename=".env" copy
+OPENAI_API_KEY=your_openai_api_key
+```
+
+Also, make sure you have the `@mastra/core` package installed:
+
+```bash npm2yarn copy
+npm install @mastra/core
+```
+
+### Registering the Network
+
+Register your network with Mastra to enable logging and access to configured tools and integrations:
+
+```ts showLineNumbers filename="src/mastra/index.ts" copy
+import { Mastra } from "@mastra/core";
+import { researchNetwork } from "./networks";
+
+export const mastra = new Mastra({
+  networks: { researchNetwork },
+});
+```
+
+## 2. Using a Network
+
+Once you've created a network, you can use it to generate responses:
+
+```ts showLineNumbers copy
+import { mastra } from "./mastra";
+
+const researchNetwork = mastra.getNetwork('researchNetwork');
+
+// Basic usage with a string input
+const result = await researchNetwork.generate("What are the latest advancements in quantum computing?");
+console.log(result.soutput); // The final output from the network
+
+const streamResult = await researchNetwork.stream("Tell me about machine learning algorithms");
+for await (const chunk of streamResult.textStream) {
+    process.stdout.write(chunk);
+}
+```
+
+## 3. Best Practices
+
+- **Specialized Agents**: Design each agent with a specific role and clear instructions
+- **Clear Network Instructions**: Provide detailed instructions to guide the LLM router in determining which agent to use
+- **Complementary Agent Skills**: Create agents with distinct but complementary capabilities
+- **State Management**: Use state to share information between agents
+- **Timeout Management**: Set appropriate `maxSteps` to prevent infinite loops
+
+## When to Use Networks vs. Workflows
+
+- **Use Agent Networks** when you want the AI to dynamically determine the best path through your agents
+- **Use Workflows** when you need explicit control over execution paths and agent selection
+
+## Next Steps
+
+- Explore [State Management](./02-state-management.mdx) to share data between agents
+- Discover [Streaming](./03-streaming.mdx) for real-time updates during network execution

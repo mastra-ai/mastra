@@ -7,7 +7,8 @@
   "version": "0.0.1",
   "scripts": {
     "start-deployed": "npx bun src/with-deployed.ts",
-    "start": "npx bun src/index.ts"
+    "start": "npx bun src/index.ts",
+    "deep-research": "npx bun src/deep-research.ts"
   },
   "keywords": [],
   "author": "",
@@ -15,7 +16,10 @@
   "dependencies": {
     "@ai-sdk/openai": "latest",
     "@mastra/core": "workspace:*",
+    "@inquirer/prompts": "^7.2.1",
     "ai": "latest",
+    "chalk": "^5.3.0",
+    "tinycolor2": "^1.6.0",
     "zod": "^3.24.0"
   }
 }

@@ -164,4 +164,3 @@ describe('LibSQLVector URL rewriting', () => {
     expect(existsSync(join(parentDir, 'test.db'))).toBe(false);
   });
 });
-
