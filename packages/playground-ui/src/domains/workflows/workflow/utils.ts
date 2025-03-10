@@ -3,18 +3,26 @@ import type { StepCondition } from '@mastra/core/workflows';
 import type { Node, Edge } from '@xyflow/react';
 import { MarkerType } from '@xyflow/react';
 
-export type Condition = {
-  ref: {
-    step:
-      | {
-          id: string;
-        }
-      | 'trigger';
-    path: string;
-  };
-  query: Record<string, any>;
-  conj?: 'and' | 'or';
-};
+export type Condition =
+  | {
+      ref: {
+        step:
+          | {
+              id: string;
+            }
+          | 'trigger';
+        path: string;
+      };
+      query: Record<string, any>;
+      conj?: 'and' | 'or';
+      fnString?: never;
+    }
+  | {
+      fnString: string;
+      ref?: never;
+      query?: never;
+      conj?: never;
+    };
 
 export const pathAlphabet = 'abcdefghijklmnopqrstuvwxyz'.toUpperCase().split('');
 
@@ -23,40 +31,44 @@ export function extractConditions(group?: StepCondition<any, any>) {
   if (!group) return result;
 
   function recurse(group: StepCondition<any, any>, conj?: 'and' | 'or') {
-    const simpleCondition = Object.entries(group).find(([key]) => key.includes('.'));
-    if (simpleCondition) {
-      const [key, queryValue] = simpleCondition;
-      const [stepId, ...pathParts] = key.split('.');
-      const ref = {
-        step: {
-          id: stepId,
-        },
-        path: pathParts.join('.'),
-      };
-      result.push({
-        ref,
-        query: { [queryValue === true || queryValue === false ? 'is' : 'eq']: String(queryValue) },
-        conj,
-      });
-    }
-    if ('ref' in group) {
-      const { ref, query } = group;
-      result.push({ ref, query, conj });
-    }
-    if ('and' in group) {
-      for (const subGroup of group.and) {
-        recurse({ ...subGroup }, 'and');
+    if (typeof group === 'string') {
+      result.push({ fnString: group });
+    } else {
+      const simpleCondition = Object.entries(group).find(([key]) => key.includes('.'));
+      if (simpleCondition) {
+        const [key, queryValue] = simpleCondition;
+        const [stepId, ...pathParts] = key.split('.');
+        const ref = {
+          step: {
+            id: stepId,
+          },
+          path: pathParts.join('.'),
+        };
+        result.push({
+          ref,
+          query: { [queryValue === true || queryValue === false ? 'is' : 'eq']: String(queryValue) },
+          conj,
+        });
       }
-    }
-    if ('or' in group) {
-      for (const subGroup of group.or) {
-        recurse({ ...subGroup }, 'or');
+      if ('ref' in group) {
+        const { ref, query } = group;
+        result.push({ ref, query, conj });
+      }
+      if ('and' in group) {
+        for (const subGroup of group.and) {
+          recurse({ ...subGroup }, 'and');
+        }
+      }
+      if ('or' in group) {
+        for (const subGroup of group.or) {
+          recurse({ ...subGroup }, 'or');
+        }
       }
     }
   }
 
   recurse(group);
-  return result;
+  return result.reverse();
 }
 
 const getLayoutedElements = (nodes: Node[], edges: Edge[]) => {
@@ -68,7 +80,7 @@ const getLayoutedElements = (nodes: Node[], edges: Edge[]) => {
     g.setNode(node.id, {
       ...node,
       width: node.measured?.width ?? 274,
-      height: node.measured?.height ?? 100,
+      height: node.measured?.height ?? (node?.data?.isLarge ? 260 : 100),
     }),
   );
 
@@ -80,7 +92,7 @@ const getLayoutedElements = (nodes: Node[], edges: Edge[]) => {
       // We are shifting the dagre node position (anchor=center center) to the top left
       // so it matches the React Flow node anchor point (top left).
       const x = position.x - (node.measured?.width ?? 274) / 2;
-      const y = position.y - (node.measured?.height ?? 100) / 2;
+      const y = position.y - (node.measured?.height ?? (node?.data?.isLarge ? 260 : 100)) / 2;
 
       return { ...node, position: { x, y } };
     }),
@@ -126,12 +138,13 @@ export const contructNodesAndEdges = ({
         type: 'default-node',
         id: nodes.some(node => node.id === step.step.id) ? `${step.step.id}-${i}` : step.step.id,
       };
-      if (step.config?.when) {
-        const conditions = extractConditions(step.config.when);
+      if (step.config?._when) {
+        const conditions = extractConditions(step.config._when);
         const conditionStep = {
           id: crypto.randomUUID(),
           conditions,
           type: 'condition-node',
+          isLarge: conditions?.length > 1 || conditions.some(({ fnString }) => !!fnString),
         };
 
         acc.push(conditionStep);
@@ -152,6 +165,7 @@ export const contructNodesAndEdges = ({
           description: step.description,
           withoutTopHandle: subscriberGraph?.[step.id] ? false : index === 0,
           withoutBottomHandle: subscriberGraph ? false : index === steps.length - 1,
+          isLarge: step.isLarge,
         },
       };
     });
@@ -190,12 +204,13 @@ export const contructNodesAndEdges = ({
             type: 'default-node',
             id: nodes.some(node => node.id === step.step.id) ? `${step.step.id}-${i}` : step.step.id,
           };
-          if (step.config?.when) {
-            const conditions = extractConditions(step.config.when);
+          if (step.config?._when) {
+            const conditions = extractConditions(step.config._when);
             const conditionStep = {
               id: crypto.randomUUID(),
               conditions,
               type: 'condition-node',
+              isLarge: conditions?.length > 1 || conditions.some(({ fnString }) => !!fnString),
             };
 
             acc.push(conditionStep);
@@ -219,6 +234,7 @@ export const contructNodesAndEdges = ({
                 originalSteps.some(({ id }) => id === step.label && id !== step.id) || subscriberGraph
                   ? false
                   : index === steps.length - 1,
+              isLarge: step.isLarge,
             },
           };
         });
