@@ -1,6 +1,6 @@
 import { Handle, Position } from '@xyflow/react';
 import type { NodeProps, Node } from '@xyflow/react';
-import { Fragment } from 'react';
+import { Fragment, useState } from 'react';
 
 import { Text } from '@/components/ui/text';
 
@@ -8,6 +8,8 @@ import { cn } from '@/lib/utils';
 
 import type { Condition } from './utils';
 import { Highlight, themes } from 'prism-react-renderer';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
+import { ChevronDown } from 'lucide-react';
 
 export type ConditionNode = Node<
   {
@@ -18,66 +20,80 @@ export type ConditionNode = Node<
 
 export function WorkflowConditionNode({ data }: NodeProps<ConditionNode>) {
   const { conditions } = data;
+  const [open, setOpen] = useState(true);
+  const isCollapsible = conditions.some(condition => condition.fnString) || conditions?.length > 1;
   return (
-    <div className={cn('bg-mastra-bg-3 rounded-md min-w-[154.23px] max-w-[274px] flex flex-col p-2 gap-2')}>
+    <Collapsible
+      open={!isCollapsible ? true : open}
+      onOpenChange={setOpen}
+      disabled={!isCollapsible}
+      className={cn('bg-mastra-bg-3 rounded-md w-[274px] flex flex-col p-2 gap-2')}
+    >
       <Handle type="target" position={Position.Top} style={{ visibility: 'hidden' }} />
-      {conditions.map((condition, index) => {
-        return condition.fnString ? (
-          <Fragment key={`${condition.fnString}-${index}`}>
-            <Text
-              size={'xs'}
-              weight="medium"
-              className="text-mastra-el-3 bg-mastra-bg-11 my-auto block rounded-[0.125rem] px-2 py-1 text-[10px] w-fit"
-            >
-              WHEN
-            </Text>
-            <Highlight theme={themes.oneDark} code={String(condition.fnString).trim()} language="javascript">
-              {({ className, style, tokens, getLineProps, getTokenProps }) => (
-                <pre
-                  className={`${className} relative font-mono text-sm overflow-x-auto p-3 w-full rounded-lg mt-2 dark:bg-zinc-800`}
-                  style={{ ...style, maxHeight: '9.62rem' }}
-                >
-                  {tokens.map((line, i) => (
-                    <div key={i} {...getLineProps({ line })}>
-                      <span className="inline-block mr-2 text-muted-foreground">{i + 1}</span>
-                      {line.map((token, key) => (
-                        <span key={key} {...getTokenProps({ token })} />
-                      ))}
-                    </div>
-                  ))}
-                </pre>
-              )}
-            </Highlight>
-          </Fragment>
-        ) : (
-          <Fragment key={`${condition.ref?.path}-${index}`}>
-            {condition.ref?.step ? (
-              <div className="flex items-center gap-1">
-                <Text
-                  size={'xs'}
-                  weight="medium"
-                  className="text-mastra-el-3 bg-mastra-bg-11 my-auto block rounded-[0.125rem] px-2 py-1 text-[10px]"
-                >
-                  {index === 0 ? 'WHEN' : condition.conj?.toLocaleUpperCase() || 'WHEN'}
-                </Text>
 
-                <Text size={'xs'} className=" text-mastra-el-3">
-                  {(condition.ref.step as any).id || condition.ref.step}'s {condition.ref.path}{' '}
-                  {Object.entries(condition.query).map(([key, value]) => (
-                    <span className="flex items-center gap-0.5" key={`${key}-${value}`}>
-                      <Text size={'xs'} className="lowercase">
-                        {key}
-                      </Text>
-                      <Text size={'xs'}>{String(value)}</Text>
-                    </span>
-                  ))}
-                </Text>
-              </div>
-            ) : null}
-          </Fragment>
-        );
-      })}
+      <CollapsibleTrigger className="flex items-center justify-between w-full">
+        <Text
+          size={'xs'}
+          weight="medium"
+          className="text-mastra-el-3 bg-mastra-bg-11 my-auto block rounded-[0.125rem] px-2 py-1 text-[10px] w-fit"
+        >
+          WHEN
+        </Text>
+        {isCollapsible && (
+          <ChevronDown
+            className={cn('w-4 h-4 transition-transform', {
+              'transform rotate-180': open,
+            })}
+          />
+        )}
+      </CollapsibleTrigger>
+      <CollapsibleContent className="flex flex-col gap-2">
+        {conditions.map((condition, index) => {
+          return condition.fnString ? (
+            <Fragment key={`${condition.fnString}-${index}`}>
+              <Highlight theme={themes.oneDark} code={String(condition.fnString).trim()} language="javascript">
+                {({ className, style, tokens, getLineProps, getTokenProps }) => (
+                  <pre
+                    className={`${className} relative font-mono text-sm overflow-x-auto p-3 w-full rounded-lg mt-2 dark:bg-zinc-800`}
+                    style={{ ...style, maxHeight: '9.62rem' }}
+                  >
+                    {tokens.map((line, i) => (
+                      <div key={i} {...getLineProps({ line })}>
+                        <span className="inline-block mr-2 text-muted-foreground">{i + 1}</span>
+                        {line.map((token, key) => (
+                          <span key={key} {...getTokenProps({ token })} />
+                        ))}
+                      </div>
+                    ))}
+                  </pre>
+                )}
+              </Highlight>
+            </Fragment>
+          ) : (
+            <Fragment key={`${condition.ref?.path}-${index}`}>
+              {condition.ref?.step ? (
+                <div className="flex items-center gap-1">
+                  {index === 0 ? null : (
+                    <Text
+                      size={'xs'}
+                      weight="medium"
+                      className="text-mastra-el-3 bg-mastra-bg-11 my-auto block rounded-[0.125rem] px-2 py-1 text-[10px]"
+                    >
+                      {condition.conj?.toLocaleUpperCase() || 'WHEN'}
+                    </Text>
+                  )}
+
+                  <Text size={'xs'} className=" text-mastra-el-3 flex-1">
+                    {(condition.ref.step as any).id || condition.ref.step}'s {condition.ref.path}{' '}
+                    {Object.entries(condition.query).map(([key, value]) => `${key} ${String(value)}`)}
+                  </Text>
+                </div>
+              ) : null}
+            </Fragment>
+          );
+        })}
+      </CollapsibleContent>
       <Handle type="source" position={Position.Bottom} style={{ visibility: 'hidden' }} />
-    </div>
+    </Collapsible>
   );
 }
