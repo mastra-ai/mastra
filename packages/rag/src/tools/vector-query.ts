@@ -25,13 +25,20 @@ export const createVectorQueryTool = ({
 }): ReturnType<typeof createTool> => {
   const toolId = id || `VectorQuery ${vectorStoreName} ${indexName} Tool`;
   const toolDescription = description || defaultVectorQueryDescription();
+  // Create base schema with required fields
+  const baseSchema = {
+    queryText: z.string().describe('The text query to search for in the vector database'),
+    topK: z.coerce.number().describe(topKDescription),
+  };
+  const inputSchema = enableFilter
+    ? z.object({
+        ...baseSchema,
+        filter: z.coerce.string().describe(filterDescription),
+      })
+    : z.object(baseSchema);
   return createTool({
     id: toolId,
-    inputSchema: z.object({
-      queryText: z.string().describe('The text query to search for in the vector database'),
-      topK: z.number().describe(topKDescription),
-      filter: z.string().describe(filterDescription),
-    }),
+    inputSchema,
     outputSchema: z.object({
       relevantContext: z.any(),
     }),
@@ -42,16 +49,14 @@ export const createVectorQueryTool = ({
       // Get relevant chunks from the vector database
       if (vectorStore) {
         let queryFilter = {};
-        if (enableFilter) {
-          queryFilter = filter
-            ? (() => {
-                try {
-                  return JSON.parse(filter);
-                } catch {
-                  return filter;
-                }
-              })()
-            : filter;
+        if (enableFilter && filter) {
+          queryFilter = (() => {
+            try {
+              return JSON.parse(filter);
+            } catch {
+              return filter;
+            }
+          })();
         }
         if (mastra.logger) {
           mastra.logger.debug('Using this filter and topK:', { queryFilter, topK });
