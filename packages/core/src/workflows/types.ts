@@ -221,21 +221,6 @@ export interface WorkflowContext<
   ): T['outputSchema'] extends undefined ? unknown : z.infer<NonNullable<T['outputSchema']>>;
 }
 
-export interface WorkflowContext2<
-  TTrigger extends z.ZodObject<any> = any,
-  TSteps extends StepAction<string, any, any, any>[] = StepAction<string, any, any, any>[],
-> {
-  mastra?: MastraUnion;
-  steps: StepsRecord<TSteps>;
-  triggerData: z.infer<TTrigger>;
-  attempts: Record<string, number>;
-  // getStepResult<T>(stepId: string): T;
-  getStepResult<T extends keyof StepsRecord<TSteps>>(stepId: T): z.infer<StepsRecord<TSteps>[T]['outputSchema']>;
-  // getStepResult<T extends Step<any, any, any, any>>(
-  //   stepId: T,
-  // ): T['outputSchema'] extends undefined ? unknown : z.infer<NonNullable<T['outputSchema']>>;
-}
-
 export interface WorkflowLogMessage extends BaseLogMessage {
   type: typeof RegisteredLogger.WORKFLOW;
   workflowName: string;
