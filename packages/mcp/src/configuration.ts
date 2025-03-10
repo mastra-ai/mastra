@@ -107,7 +107,7 @@ To fix this you have three different options:
       await mcpClient.connect();
     } catch (e) {
       this.mcpClientsById.delete(name);
-      this.logger.error(`MCPConfiguraiton errored connecting to MCP server ${name}`);
+      this.logger.error(`MCPConfiguration errored connecting to MCP server ${name}`);
       throw e;
     }
 
