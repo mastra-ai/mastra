@@ -770,7 +770,6 @@ export class Workflow<
 
     run.setState(origSnapshot?.value);
     this.#runs.set(run.runId, run);
-    console.log('resuming', { runId: run.runId, stepId, parsedSnapshot, startStepId });
     return run?.execute({
       snapshot: parsedSnapshot,
       stepId,
@@ -784,7 +783,6 @@ export class Workflow<
       throw new Error(`Event ${eventName} not found`);
     }
 
-    console.log('resuming', runId, `__${eventName}_event`, data);
     const results = await this.resume({ runId, stepId: `__${eventName}_event`, context: { resumedEvent: data } });
     return results;
   }

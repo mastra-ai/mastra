@@ -195,9 +195,7 @@ export class WorkflowInstance<TSteps extends Step<any, any, any>[] = any, TTrigg
 
     defaultMachine.on('state-update', stateUpdateHandler);
 
-    console.log('machine execute', { snapshot, stepId, input: machineInput });
     const { results, activePaths } = await defaultMachine.execute({ snapshot, stepId, input: machineInput });
-    console.log('machine executed', results);
 
     await this.persistWorkflowSnapshot();
 
@@ -205,7 +203,6 @@ export class WorkflowInstance<TSteps extends Step<any, any, any>[] = any, TTrigg
   }
 
   async runMachine(parentStepId: string, input: any) {
-    console.log('runMachine', { parentStepId, input });
     const stepStatus = input.steps[parentStepId]?.status;
 
     // get all keys from this.#stepSubscriberGraph that include the parentStepId after the &&
