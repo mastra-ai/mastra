@@ -56,7 +56,7 @@ import { MastraClient } from './client';
 
 //     const workflow = client.getWorkflow(workflowId);
 
-//     const {runId} = await workflow.createRun({
+//     const {runId} = await workflow.startRun({
 //       city: 'New York',
 //     });
 
@@ -65,5 +65,7 @@ import { MastraClient } from './client';
 //     }
 //   }catch(e){
 //     console.log(e);
+//   }finally{
+//     console.log('Done')
 //   }
 // })();

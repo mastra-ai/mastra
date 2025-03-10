@@ -66,7 +66,7 @@ export async function getWorkflowByIdHandler(c: Context) {
   }
 }
 
-export async function createWorkflowRun(c: Context) {
+export async function startWorkflowRunHandler(c: Context) {
   const mastra: Mastra = c.get('mastra');
   const workflowId = c.req.param('workflowId');
   const workflow = mastra.getWorkflow(workflowId);

@@ -31,12 +31,12 @@ export class Workflow extends BaseResource {
   }
 
   /**
-   * Creates a new workflow run instance without executing it
+   * Creates a new workflow run instance and starts it
    * @param params - Parameters required for the workflow run
    * @returns Promise containing the generated run ID
    */
-  createRun(params: Record<string, any>): Promise<{ runId: string }> {
-    return this.request(`/api/workflows/${this.workflowId}/createRun`, {
+  startRun(params: Record<string, any>): Promise<{ runId: string }> {
+    return this.request(`/api/workflows/${this.workflowId}/startRun`, {
       method: 'POST',
       body: params,
     });
@@ -110,6 +110,14 @@ export class Workflow extends BaseResource {
             try {
               // Assuming the records are JSON strings
               const parsedRecord = JSON.parse(record);
+
+              //Check to see if all steps are completed and cancel reader
+              const isWorkflowCompleted = parsedRecord?.activePaths?.every(
+                (path: any) => path.status === 'completed' || path.status === 'suspended' || path.status === 'failed',
+              );
+              if (isWorkflowCompleted) {
+                reader.cancel();
+              }
               yield parsedRecord;
             } catch (e) {
               throw new Error(`Could not parse record: ${record}`);
@@ -118,7 +126,7 @@ export class Workflow extends BaseResource {
         }
       }
     } finally {
-      reader.releaseLock();
+      reader.cancel();
     }
   }
 

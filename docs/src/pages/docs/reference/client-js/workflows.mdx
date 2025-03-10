@@ -30,7 +30,7 @@ const details = await workflow.details();
 
 ### Execute Workflow
 
-Execute a workflow with input parameters:
+Execute a workflow with input parameters and wait for full results on completion:
 
 ```typescript
 const result = await workflow.execute({
@@ -58,24 +58,37 @@ const result = await workflow.resume({
 Watch workflow transitions in real-time using an async iterator:
 
 ```typescript
-// Get workflow instance
-const workflow = client.getWorkflow("workflow-id");
+try{
+  // Get workflow instance
+  const workflow = client.getWorkflow("workflow-id");
 
-const workflowWatch = workflow.watch()
-
-// Execute workflow
-workflow.execute()
-
-// Watch for workflow transitions
-for await (const record of workflowWatch) {
-  // Each record contains workflow transition data
-  console.log({
-    activePaths: record.activePaths,
-    context: record.context,
-    timestamp: record.timestamp
-    runId: record.runId
+  // Start a new workflow run
+  const {runId} = await workflow.startRun({
+    input: {
+      param1: "value1",
+      param2: "value2",
+    },
   });
-}
+
+  // Watch for workflow run
+  const workflowWatch = workflow.watch({runId})
+
+  // Watch for workflow transitions
+  for await (const record of workflowWatch) {
+    // Each record is the latest transition state of the workflow run
+    console.log({
+      activePaths: record.activePaths,
+      context: record.context,
+      timestamp: record.timestamp,
+      runId: record.runId
+    });
+  }
+
+}catch(e){
+  console.error(e);
+}finally{
+  console.log('Workflow done');
+} 
 
 
 ```

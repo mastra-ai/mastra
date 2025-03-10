@@ -28,7 +28,7 @@ interface WorkflowPath {
 export function WorkflowTrigger({ workflowId, setRunId }: { workflowId: string; setRunId: (runId: string) => void }) {
   const { result, setResult, payload, setPayload } = useContext(WorkflowRunContext);
   const { isLoading, workflow } = useWorkflow(workflowId);
-  const { createWorkflowRun, isExecutingWorkflow } = useExecuteWorkflow();
+  const { createWorkflowRun } = useExecuteWorkflow();
   const { watchWorkflow, watchResult, isWatchingWorkflow } = useWatchWorkflow();
   const { resumeWorkflow, isResumingWorkflow } = useResumeWorkflow();
   const [suspendedSteps, setSuspendedSteps] = useState<SuspendedStep[]>([]);
@@ -47,16 +47,16 @@ export function WorkflowTrigger({ workflowId, setRunId }: { workflowId: string; 
   const handleResumeWorkflow = async (step: SuspendedStep & { context: any }) => {
     if (!workflow) return;
 
-    // should we watch here
     const { stepId, runId, context } = step;
-    const result = await resumeWorkflow({
+
+    resumeWorkflow({
       stepId,
       runId,
       context,
       workflowId,
     });
 
-    setResult(result);
+    watchWorkflow({ workflowId, runId });
   };
 
   const workflowActivePaths = watchResult?.activePaths ?? [];
@@ -97,8 +97,8 @@ export function WorkflowTrigger({ workflowId, setRunId }: { workflowId: string; 
       <ScrollArea className="h-[calc(100vh-126px)] pt-2 px-4 pb-4 text-xs w-[400px]">
         <div className="space-y-4">
           <div className="space-y-4 px-4">
-            <Button className="w-full" disabled={isExecutingWorkflow} onClick={() => handleExecuteWorkflow(null)}>
-              {isExecutingWorkflow ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Trigger'}
+            <Button className="w-full" disabled={isWatchingWorkflow} onClick={() => handleExecuteWorkflow(null)}>
+              {isWatchingWorkflow ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Trigger'}
             </Button>
           </div>
 
@@ -168,7 +168,7 @@ export function WorkflowTrigger({ workflowId, setRunId }: { workflowId: string; 
           <DynamicForm
             schema={zodInputSchema}
             defaultValues={payload}
-            isSubmitLoading={isExecutingWorkflow}
+            isSubmitLoading={isWatchingWorkflow}
             onSubmit={data => {
               setPayload(data);
               handleExecuteWorkflow(data);

@@ -49,7 +49,7 @@ import {
 } from './handlers/vector.js';
 import { getSpeakersHandler, speakHandler, listenHandler } from './handlers/voice.js';
 import {
-  createWorkflowRun,
+  startWorkflowRunHandler,
   executeWorkflowHandler,
   getWorkflowByIdHandler,
   getWorkflowsHandler,
@@ -1053,9 +1053,9 @@ export async function createHonoServer(
   );
 
   app.post(
-    '/api/workflows/:workflowId/createRun',
+    '/api/workflows/:workflowId/startRun',
     describeRoute({
-      description: 'Create a new workflow run',
+      description: 'Create and start a new workflow run',
       tags: ['workflows'],
       parameters: [
         {
@@ -1067,14 +1067,14 @@ export async function createHonoServer(
       ],
       responses: {
         200: {
-          description: 'New workflow run created',
+          description: 'New workflow run created and started',
         },
         404: {
           description: 'Workflow not found',
         },
       },
     }),
-    createWorkflowRun,
+    startWorkflowRunHandler,
   );
 
   app.get(
