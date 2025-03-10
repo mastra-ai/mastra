@@ -1,0 +1,130 @@
+:root {
+    --color-background: #0a0a0a;
+    --color-text: #e4e4e4;
+    --color-text-aside: #a3a3a3;
+    --color-link: #ffffff;
+    --color-menu-divider: #2d2d2d;
+    --color-background-secondary: #141415;
+    --color-background-warning: #333;
+    --color-card-background: #252525;
+    --color-card-border: #2d2d2d;
+}
+
+body {
+    background: var(--color-background);
+    color: var(--color-text);
+    font-size: 14px;
+}
+
+/* Navigation */
+.tsd-navigation.primary {
+    padding: 8px 16px;
+    background: var(--color-background-secondary);
+    border-radius: 0.375rem;
+    margin-bottom: 1rem;
+    font-size: 14px;
+}
+
+.tsd-navigation.primary a {
+    color: var(--color-text);
+    font-weight: 400;
+    padding: 8px 16px;
+}
+
+.tsd-navigation.primary li.current > a {
+    color: var(--color-link);
+    border-radius: 0.375rem;
+}
+
+/* Header */
+.tsd-page-toolbar {
+    background: var(--color-background);
+    border-bottom: none;
+}
+
+.tsd-page-toolbar .tsd-toolbar-contents {
+    border-bottom: 1px solid var(--color-menu-divider);
+}
+
+/* Content */
+.tsd-panel {
+    background: var(--color-background-secondary);
+    border: 1px solid var(--color-card-border);
+    border-radius: 0.375rem;
+    margin-bottom: 1rem;
+}
+
+.tsd-panel h1,
+.tsd-panel h2,
+.tsd-panel h3,
+.tsd-panel h4 {
+    color: #ffffff;
+    font-weight: 500;
+    border-bottom: none;
+}
+
+/* Code blocks */
+.tsd-signature {
+    background: var(--color-background);
+    border: 1px solid var(--color-card-border);
+    border-radius: 0.375rem;
+    font-size: 13px;
+}
+
+pre {
+    background: var(--color-background);
+    border-radius: 0.375rem;
+    font-size: 13px;
+}
+
+code {
+    background: var(--color-background);
+    border-radius: 0.375rem;
+    padding: 0.2em 0.4em;
+    font-size: 13px;
+}
+
+/* Links and hover states */
+a {
+    color: #ffffff;
+    text-decoration: none;
+    background: transparent !important;
+}
+
+a:hover {
+    text-decoration: none;
+    color: #5ca9ff;
+}
+
+/* Search box */
+#tsd-search .field input {
+    background: var(--color-background-secondary);
+    color: var(--color-text);
+    border: 1px solid var(--color-card-border);
+    border-radius: 0.375rem;
+}
+
+/* Member signatures */
+.tsd-signatures .tsd-signature {
+    background: var(--color-background);
+}
+
+/* Tables */
+.tsd-parameters {
+    background: var(--color-background-secondary);
+    border-radius: 0.375rem;
+}
+
+.tsd-parameters th {
+    color: var(--color-text);
+    border-bottom: 0.5px solid hsl(0, 0%, 20%);
+}
+
+.tsd-parameters td {
+    border-bottom: 0.5px solid hsl(0, 0%, 20%);
+}
+
+/* Member icons */
+.tsd-kind-icon {
+    filter: invert(1);
+} 
