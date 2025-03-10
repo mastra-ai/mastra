@@ -79,7 +79,7 @@ export class Machine<
     executionSpan?: Span;
     name: string;
     runId: string;
-    steps: Record<string, IAction<any, any, any, any>>;
+    steps: Record<string, StepAction<any, any, any, any>>;
     stepGraph: StepGraph;
     retryConfig?: RetryConfig;
     startStepId: string;
