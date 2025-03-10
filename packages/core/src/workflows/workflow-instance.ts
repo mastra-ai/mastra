@@ -153,6 +153,8 @@ export class WorkflowInstance<TSteps extends Step<any, any, any>[] = any, TTrigg
         startStepId = runState.suspendedSteps[stepId];
         stepGraph = this.#stepSubscriberGraph[startStepId] ?? this.#stepGraph;
         machineInput = runState.context;
+        // @ts-ignore
+        machineInput.resumeData = resumeData;
       }
     }
 
@@ -166,9 +168,6 @@ export class WorkflowInstance<TSteps extends Step<any, any, any>[] = any, TTrigg
       stepGraph,
       executionSpan: this.#executionSpan,
       startStepId,
-      input: {
-        resumeData,
-      },
     });
 
     this.#machines[startStepId] = defaultMachine;

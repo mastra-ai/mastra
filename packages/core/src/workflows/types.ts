@@ -18,7 +18,6 @@ export interface StepExecutionContext<
   TSchemaIn extends z.ZodSchema | undefined = undefined,
   TContext extends WorkflowContext = WorkflowContext,
 > extends IExecutionContext<TSchemaIn> {
-  resumeData?: any; // TODO: once we have a resume schema plug that in here
   context: TSchemaIn extends z.ZodSchema ? z.infer<TSchemaIn> & TContext : TContext;
   suspend: (payload?: unknown) => Promise<void>;
   runId: string;
@@ -210,6 +209,7 @@ export interface WorkflowContext<
       : StepResult<z.infer<NonNullable<StepsRecord<TSteps>[K]['outputSchema']>>>;
   };
   triggerData: z.infer<TTrigger>;
+  resumeData?: any; // TODO: once we have a resume schema plug that in here
   attempts: Record<string, number>;
   getStepResult<T extends keyof StepsRecord<TSteps> | unknown>(
     stepId: T extends keyof StepsRecord<TSteps> ? T : string,
