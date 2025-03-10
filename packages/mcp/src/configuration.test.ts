@@ -106,3 +106,76 @@ describe('MCPConfiguration', () => {
     await badConfig.disconnect();
   });
 
+  describe('Instance Management', () => {
+    it('should allow multiple instances with different IDs', async () => {
+      const config2 = new MCPConfiguration({
+        id: 'custom-id',
+        servers: {
+          stockPrice: {
+            command: 'npx',
+            args: ['-y', 'tsx', path.join(__dirname, '__fixtures__/stock-price.ts')],
+            env: {
+              FAKE_CREDS: 'test',
+            },
+          },
+        },
+      });
+
+      expect(config2).not.toBe(mcp);
+      await config2.disconnect();
+    });
+
+    it('should allow reuse of configuration after closing', async () => {
+      await mcp.disconnect();
+
+      const config2 = new MCPConfiguration({
+        servers: {
+          stockPrice: {
+            command: 'npx',
+            args: ['-y', 'tsx', path.join(__dirname, '__fixtures__/stock-price.ts')],
+            env: {
+              FAKE_CREDS: 'test',
+            },
+          },
+          weather: {
+            url: new URL('http://localhost:60808/sse'),
+          },
+        },
+      });
+
+      expect(config2).not.toBe(mcp);
+      await config2.disconnect();
+    });
+
+    it('should throw error when creating duplicate instance without ID', async () => {
+      const existingConfig = new MCPConfiguration({
+        servers: {
+          stockPrice: {
+            command: 'npx',
+            args: ['-y', 'tsx', path.join(__dirname, '__fixtures__/stock-price.ts')],
+            env: {
+              FAKE_CREDS: 'test',
+            },
+          },
+        },
+      });
+
+      expect(
+        () =>
+          new MCPConfiguration({
+            servers: {
+              stockPrice: {
+                command: 'npx',
+                args: ['-y', 'tsx', path.join(__dirname, '__fixtures__/stock-price.ts')],
+                env: {
+                  FAKE_CREDS: 'test',
+                },
+              },
+            },
+          }),
+      ).toThrow(/MCPConfiguration was initialized multiple times/);
+
+      await existingConfig.disconnect();
+    });
+  });
+});
