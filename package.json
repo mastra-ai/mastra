@@ -12,6 +12,7 @@
     "prettier": "^3.3.3",
     "prettier-plugin-tailwindcss": "^0.6.6",
     "turbo": "^2.1.3",
+    "typedoc": "^0.27.9",
     "typescript": "^5.7.3",
     "vitest": "^3.0.4"
   },
@@ -50,7 +51,9 @@
     "typecheck": "pnpm -r typecheck",
     "dev:services:up": "docker compose -f .dev/docker-compose.yaml up -d",
     "dev:services:down": "docker compose -f .dev/docker-compose.yaml down",
-    "setup": "pnpm install --ignore-scripts && pnpm run build:cli && pnpm install --shamefully-hoist"
+    "setup": "pnpm install --ignore-scripts && pnpm run build:cli && pnpm install --shamefully-hoist",
+    "generate:raw-api-docs": "tsx typedoc/scripts/generate-docs.ts",
+    "raw-api-docs:serve": "pnpm dlx http-server typedoc/generated"
   },
   "lint-staged": {
     "*.{js,ts,tsx,md,json,graphql,gql}": [

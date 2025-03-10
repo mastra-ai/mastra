@@ -28,3 +28,5 @@ memory.db
 
 # Test output directories
 voice/**/test-output*/
+
+typedoc/generated/
