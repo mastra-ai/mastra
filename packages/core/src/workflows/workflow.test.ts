@@ -683,7 +683,7 @@ describe('Workflow', async () => {
         execute: final,
       });
 
-      const counterWorkflow = new Workflow({
+      const counterWorkflow = new Workflow<[typeof incrementStep, typeof finalStep]>({
         name: 'counter-workflow',
         triggerSchema: z.object({
           target: z.number(),
@@ -702,6 +702,8 @@ describe('Workflow', async () => {
 
       const run = counterWorkflow.createRun();
       const { results } = await run.start({ triggerData: { target: 10, startValue: 0 } });
+
+      results;
 
       expect(increment).toHaveBeenCalledTimes(12);
       expect(final).toHaveBeenCalledTimes(1);
