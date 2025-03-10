@@ -299,7 +299,7 @@ mkdir -p src/mastra/agents && touch src/mastra/agents/weather.ts
 
 Then, add the following code to `src/mastra/agents/weather.ts`:
 
-```ts filename="src/mastra/agents/weather.ts" showLineNumbers
+```ts filename="src/mastra/agents/weather.ts" showLineNumbers copy
 import { openai } from "@ai-sdk/openai";
 import { Agent } from "@mastra/core/agent";
 import { weatherTool } from "../tools/weather-tool";
@@ -323,7 +323,7 @@ Use the weatherTool to fetch current weather data.`,
 
 Finally, create the Mastra entry point in `src/mastra/index.ts` and register agent:
 
-```ts filename="src/mastra/index.ts" showLineNumbers
+```ts filename="src/mastra/index.ts" showLineNumbers copy
 import { Mastra } from "@mastra/core";
 
 import { weatherAgent } from "./agents/weather";
@@ -402,7 +402,7 @@ fetch('http://localhost:4111/api/agents/weatherAgent/generate', {
 
 If you'd like to directly call agents from the command line, you can create a script to get an agent and call it:
 
-```ts filename="src/index.ts" showLineNumbers
+```ts filename="src/index.ts" showLineNumbers copy
 import { mastra } from "./mastra";
 
 async function main() {
