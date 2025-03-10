@@ -159,6 +159,7 @@ export class WorkflowInstance<TSteps extends Step<any, any, any>[] = any, TTrigg
       if (stepId && runState?.suspendedSteps?.[stepId]) {
         startStepId = runState.suspendedSteps[stepId];
         stepGraph = this.#stepSubscriberGraph[startStepId] ?? this.#stepGraph;
+        console.log('hmm wat', stepGraph.initial, stepId, startStepId);
         if (stepGraph?.initial[0]?.step?.id === stepId) {
           // we should not supply a snapshot if we are resuming the first step of a stepGraph, as that will halt execution
           snapshot = undefined;
