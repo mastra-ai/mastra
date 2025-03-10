@@ -29,7 +29,7 @@ export function WorkflowTrigger({ workflowId, setRunId }: { workflowId: string; 
   const { result, setResult, payload, setPayload } = useContext(WorkflowRunContext);
   const { isLoading, workflow } = useWorkflow(workflowId);
   const { executeWorkflow, isExecutingWorkflow } = useExecuteWorkflow();
-  const { watchWorkflow, watchResult } = useWatchWorkflow();
+  const { watchWorkflow, watchResult, isWatchingWorkflow } = useWatchWorkflow();
   const { resumeWorkflow, isResumingWorkflow } = useResumeWorkflow();
   const [suspendedSteps, setSuspendedSteps] = useState<SuspendedStep[]>([]);
 
@@ -62,6 +62,8 @@ export function WorkflowTrigger({ workflowId, setRunId }: { workflowId: string; 
 
     setResult(result);
   };
+
+  const workflowActivePaths = watchResult?.activePaths ?? [];
 
   useEffect(() => {
     if (!watchResult?.activePaths || !result?.runId) return;
@@ -173,8 +175,58 @@ export function WorkflowTrigger({ workflowId, setRunId }: { workflowId: string; 
             }}
           />
         </div>
+        <div className="flex flex-col gap-2">
+          <Text variant="secondary" className="text-mastra-el-3  px-4" size="xs">
+            Status
+          </Text>
+          {workflowActivePaths.length > 0 && (
+            <div className="px-4">
+              {workflowActivePaths?.map((activePath: any, idx: number) => {
+                return (
+                  <div key={idx} className="flex flex-col mt-2 border  overflow-hidden">
+                    {activePath?.stepPath?.map((sp: any, idx: number) => {
+                      const status =
+                        activePath?.status === 'completed'
+                          ? 'Completed'
+                          : sp === activePath?.stepId
+                            ? activePath?.status.charAt(0).toUpperCase() + activePath?.status.slice(1)
+                            : 'Completed';
 
-        <div>
+                      const statusIcon =
+                        status === 'Completed' ? (
+                          <div className="w-2 h-2 bg-green-500 rounded-full" />
+                        ) : (
+                          <div className="w-2 h-2 bg-yellow-500 animate-pulse rounded-full" />
+                        );
+
+                      return (
+                        <div
+                          key={idx}
+                          className={`
+                            flex items-center justify-between p-3
+                            ${idx !== activePath.stepPath.length - 1 ? 'border-b' : ''}
+                            bg-white/5
+                          `}
+                        >
+                          <Text variant="secondary" className="text-mastra-el-3" size="xs">
+                            {sp.charAt(0).toUpperCase() + sp.slice(1)}
+                          </Text>
+                          <span className="flex items-center gap-2">
+                            <Text variant="secondary" className="text-mastra-el-3" size="xs">
+                              {statusIcon}
+                            </Text>
+                            {status}
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+        <div className="flex flex-col gap-2">
           <Text variant="secondary" className="text-mastra-el-3  px-4" size="xs">
             Output
           </Text>
