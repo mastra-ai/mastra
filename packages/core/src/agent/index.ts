@@ -469,16 +469,28 @@ export class Agent<
     });
 
     return messagesBySanitizedContent.filter(message => {
-      if (message.role === `assistant`) {
-        if (Array.isArray(message.content)) {
-          for (const part of message.content) {
-            if (part.type === `tool-call` && dupeToolCalls.has(part.toolCallId)) {
-              dupeToolCalls.delete(part.toolCallId);
-              return false;
-            }
+      if (typeof message.content === `string`) {
+        return message.content !== '';
+      }
+
+      if (Array.isArray(message.content)) {
+        for (const part of message.content) {
+          if (part.type === `tool-call` && dupeToolCalls.has(part.toolCallId)) {
+            dupeToolCalls.delete(part.toolCallId);
+            return false;
           }
         }
+        return (
+          message.content.length &&
+          message.content.every(c => {
+            if (c.type === `text`) {
+              return c.text && c.text !== '';
+            }
+            return true;
+          })
+        );
       }
+
       return true;
     }) as Array<CoreMessage>;
   }
