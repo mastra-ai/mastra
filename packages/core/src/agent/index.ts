@@ -1113,7 +1113,7 @@ export class Agent<
       speaker?: string;
       [key: string]: any;
     },
-  ): Promise<NodeJS.ReadableStream> {
+  ): Promise<NodeJS.ReadableStream | void> {
     if (!this.voice) {
       throw new Error('No voice provider configured');
     }
@@ -1138,7 +1138,7 @@ export class Agent<
     options?: {
       [key: string]: any;
     },
-  ): Promise<string | NodeJS.ReadableStream> {
+  ): Promise<string | NodeJS.ReadableStream | void> {
     if (!this.voice) {
       throw new Error('No voice provider configured');
     }

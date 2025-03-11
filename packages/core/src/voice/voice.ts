@@ -16,7 +16,6 @@ export interface VoiceEventMap {
 }
 
 interface BuiltInModelConfig {
-  provider: string;
   name: string;
   apiKey?: string;
 }
