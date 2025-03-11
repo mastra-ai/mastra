@@ -61,6 +61,13 @@ The Mastra class is the core entry point for your application. It manages agents
       isOptional: true,
       defaultValue: "{}",
     },
+    {
+      name: "serverMiddleware",
+      type: "Array<{ handler: (c: any, next: () => Promise<void>) => Promise<Response | void>; path?: string; }>",
+      description: "Server middleware functions to be applied to API routes. Each middleware can specify a path pattern (defaults to '/api/*').",
+      isOptional: true,
+      defaultValue: "[]",
+    },
   ]}
 />
 
