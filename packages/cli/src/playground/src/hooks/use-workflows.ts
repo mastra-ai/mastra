@@ -1,7 +1,7 @@
 import type { Workflow } from '@mastra/core/workflows';
 import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
-import { MastraClient, GetWorkflowResponse, GetWorkflowWatchResponse } from '@mastra/client-js';
+import { MastraClient, GetWorkflowResponse, WorkflowRunResult } from '@mastra/client-js';
 
 const mastra = new MastraClient({
   baseUrl: 'http://localhost:4111',
@@ -86,21 +86,31 @@ export const useExecuteWorkflow = () => {
     }
   };
 
-  return { executeWorkflow, isExecutingWorkflow };
+  const createWorkflowRun = async ({ workflowId, input }: { workflowId: string; input: any }) => {
+    try {
+      const response = await mastra.getWorkflow(workflowId).startRun(input || {});
+      return response;
+    } catch (error) {
+      console.error('Error creating workflow run:', error);
+      throw error;
+    }
+  };
+
+  return { executeWorkflow, createWorkflowRun, isExecutingWorkflow };
 };
 
 export const useWatchWorkflow = () => {
   const [isWatchingWorkflow, setIsWatchingWorkflow] = useState(false);
-  const [watchResult, setWatchResult] = useState<GetWorkflowWatchResponse | null>(null);
+  const [watchResult, setWatchResult] = useState<WorkflowRunResult | null>(null);
 
-  const watchWorkflow = async ({ workflowId }: { workflowId: string }) => {
+  const watchWorkflow = async ({ workflowId, runId }: { workflowId: string; runId: string }) => {
     try {
       setIsWatchingWorkflow(true);
       const client = new MastraClient({
         baseUrl: 'http://localhost:4111',
       });
 
-      const watchSubscription = client.getWorkflow(workflowId).watch();
+      const watchSubscription = client.getWorkflow(workflowId).watch({ runId });
 
       if (!watchSubscription) {
         throw new Error('Error watching workflow');
@@ -111,7 +121,6 @@ export const useWatchWorkflow = () => {
       }
     } catch (error) {
       console.error('Error watching workflow:', error);
-
       throw error;
     } finally {
       setIsWatchingWorkflow(false);
@@ -137,21 +146,8 @@ export const useResumeWorkflow = () => {
   }) => {
     try {
       setIsResumingWorkflow(true);
-      const response = await fetch(`/api/workflows/${workflowId}/resume`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ stepId, runId, context }),
-      });
-
-      if (!response.ok) {
-        const error = await response.json();
-        toast.error(error?.error || 'Error resuming workflow');
-        return;
-      }
-
-      return await response.json();
+      const response = await mastra.getWorkflow(workflowId).resume({ stepId, runId, context });
+      return response;
     } catch (error) {
       console.error('Error resuming workflow:', error);
       throw error;
