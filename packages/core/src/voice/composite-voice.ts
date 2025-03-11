@@ -54,39 +54,39 @@ export class CompositeVoice extends MastraVoice<unknown, unknown, unknown, Tools
     return this.speakProvider.getSpeakers();
   }
 
-  updateConfig(config: Record<string, unknown>): void {
+  updateConfig(options: Record<string, unknown>): void {
     if (!this.realtimeProvider) {
       throw new Error('No realtime provider configured');
     }
-    this.realtimeProvider.updateConfig(config);
+    this.realtimeProvider.updateConfig(options);
   }
 
   /**
    * Initializes a WebSocket or WebRTC connection for real-time communication
    * @returns Promise that resolves when the connection is established
    */
-  connect(config?: Record<string, unknown>): Promise<void> {
+  connect(options?: Record<string, unknown>): Promise<void> {
     if (!this.realtimeProvider) {
       throw new Error('No realtime provider configured');
     }
-    return this.realtimeProvider.connect(config);
+    return this.realtimeProvider.connect(options);
   }
 
   /**
    * Relay audio data to the voice provider for real-time processing
-   * @param audioData Audio data to relay
+   * @param audioData Audio data to send
    */
-  relay(audioData: NodeJS.ReadableStream | Int16Array): Promise<void> {
+  send(audioData: NodeJS.ReadableStream | Int16Array): Promise<void> {
     if (!this.realtimeProvider) {
       throw new Error('No realtime provider configured');
     }
-    return this.realtimeProvider.relay(audioData);
+    return this.realtimeProvider.send(audioData);
   }
 
   /**
    * Trigger voice providers to respond
    */
-  answer(): Promise<void> {
+  answer(options?: Record<string, unknown>): Promise<void> {
     if (!this.realtimeProvider) {
       throw new Error('No realtime provider configured');
     }

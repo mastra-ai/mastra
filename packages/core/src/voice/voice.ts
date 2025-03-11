@@ -109,7 +109,7 @@ export abstract class MastraVoice<
     options?: TListenOptions,
   ): Promise<string | NodeJS.ReadableStream | void>;
 
-  updateConfig(_config: Record<string, unknown>): void {
+  updateConfig(_options: Record<string, unknown>): void {
     this.logger.warn('updateConfig not implemented by this voice provider');
   }
 
@@ -117,7 +117,7 @@ export abstract class MastraVoice<
    * Initializes a WebSocket or WebRTC connection for real-time communication
    * @returns Promise that resolves when the connection is established
    */
-  connect(_config?: Record<string, unknown>): Promise<void> {
+  connect(_options?: Record<string, unknown>): Promise<void> {
     // Default implementation - voice providers can override if they support this feature
     this.logger.warn('connect not implemented by this voice provider');
     return Promise.resolve();
@@ -127,7 +127,7 @@ export abstract class MastraVoice<
    * Relay audio data to the voice provider for real-time processing
    * @param audioData Audio data to relay
    */
-  relay(_audioData: NodeJS.ReadableStream | Int16Array): Promise<void> {
+  send(_audioData: NodeJS.ReadableStream | Int16Array): Promise<void> {
     // Default implementation - voice providers can override if they support this feature
     this.logger.warn('relay not implemented by this voice provider');
     return Promise.resolve();
@@ -136,7 +136,7 @@ export abstract class MastraVoice<
   /**
    * Trigger voice providers to respond
    */
-  answer(): Promise<void> {
+  answer(_options?: Record<string, unknown>): Promise<void> {
     this.logger.warn('answer not implemented by this voice provider');
     return Promise.resolve();
   }
