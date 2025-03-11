@@ -169,7 +169,7 @@ jobs:
           git pull
           pnpm changeset pre enter alpha
           git add -A
-          git commit -m 'chore: version - enter prerelease mode'
+          git commit -m 'chore: version - enter prerelease mode' --no-verify
 
       - name: Push prerelease changes
         if: ${{ !inputs.dry_run }}
