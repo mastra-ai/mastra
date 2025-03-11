@@ -108,8 +108,8 @@ export class Agent<
 
     if (config.voice) {
       this.voice = config.voice;
-      this.voice?.equip(this.tools);
-      this.voice?.tune({ instructions: config.instructions });
+      this.voice?.addTools(this.tools);
+      this.voice?.updateConfig({ instructions: config.instructions });
     }
   }
 
@@ -1115,6 +1115,7 @@ export class Agent<
    * @param input Text or text stream to convert to speech
    * @param options Speech options including speaker and provider-specific options
    * @returns Audio stream
+   * @deprecated Use agent.voice.speak() instead
    */
   async speak(
     input: string | NodeJS.ReadableStream,
@@ -1126,6 +1127,9 @@ export class Agent<
     if (!this.voice) {
       throw new Error('No voice provider configured');
     }
+
+    console.warn('Warning: agent.speak() is deprecated. Please use agent.voice.speak() instead.');
+
     try {
       return this.voice.speak(input, options);
     } catch (e) {
@@ -1141,6 +1145,7 @@ export class Agent<
    * @param audioStream Audio stream to transcribe
    * @param options Provider-specific transcription options
    * @returns Text or text stream
+   * @deprecated Use agent.voice.listen() instead
    */
   async listen(
     audioStream: NodeJS.ReadableStream,
@@ -1151,6 +1156,9 @@ export class Agent<
     if (!this.voice) {
       throw new Error('No voice provider configured');
     }
+
+    console.warn('Warning: agent.listen() is deprecated. Please use agent.voice.listen() instead');
+
     try {
       return this.voice.listen(audioStream, options);
     } catch (e) {
@@ -1161,74 +1169,18 @@ export class Agent<
     }
   }
 
-  tune(config: Record<string, unknown>): void {
-    if (!this.voice) {
-      throw new Error('No voice provider configured');
-    }
-    this.voice.tune(config);
-  }
-
-  huddle(config?: Record<string, unknown>): Promise<void> {
-    if (!this.voice) {
-      throw new Error('No voice provider configured');
-    }
-    return this.voice.huddle(config);
-  }
-
-  /**
-   * Relay audio data to the voice provider for real-time processing
-   * @param audioData Audio data to relay
-   */
-  relay(audioData: NodeJS.ReadableStream | Int16Array): Promise<void> {
-    if (!this.voice) {
-      throw new Error('No voice provider configured');
-    }
-    return this.voice.relay(audioData);
-  }
-
-  /**
-   * Disconnect from the voice provider
-   */
-  leave(): void {
-    if (!this.voice) {
-      throw new Error('No voice provider configured');
-    }
-    this.voice.leave();
-  }
-
-  /**
-   * Register an event listener with the voice provider
-   * @param event Event name
-   * @param callback Callback function
-   */
-  on(event: string, callback: (...args: any[]) => void): void {
-    if (!this.voice) {
-      throw new Error('No voice provider configured');
-    }
-    this.voice.on(event, callback);
-  }
-
-  /**
-   * Remove an event listener from the voice provider
-   * @param event Event name
-   * @param callback Callback function to remove
-   */
-  off(event: string, callback: (...args: any[]) => void): void {
-    if (!this.voice) {
-      throw new Error('No voice provider configured');
-    }
-    this.voice.off(event, callback);
-  }
-
   /**
    * Get a list of available speakers from the configured voice provider
    * @throws {Error} If no voice provider is configured
    * @returns {Promise<Array<{voiceId: string}>>} List of available speakers
+   * @deprecated Use agent.voice.getSpeakers() instead
    */
   async getSpeakers() {
     if (!this.voice) {
       throw new Error('No voice provider configured');
     }
+
+    console.warn('Warning: agent.getSpeakers() is deprecated. Please use agent.voice.getSpeakers() instead.');
 
     try {
       return await this.voice.getSpeakers();

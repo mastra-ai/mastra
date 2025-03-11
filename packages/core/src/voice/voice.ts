@@ -109,17 +109,17 @@ export abstract class MastraVoice<
     options?: TListenOptions,
   ): Promise<string | NodeJS.ReadableStream | void>;
 
-  tune(_config: Record<string, unknown>): void {
-    this.logger.warn('tune not implemented by this voice provider');
+  updateConfig(_config: Record<string, unknown>): void {
+    this.logger.warn('updateConfig not implemented by this voice provider');
   }
 
   /**
    * Initializes a WebSocket or WebRTC connection for real-time communication
    * @returns Promise that resolves when the connection is established
    */
-  huddle(_config?: Record<string, unknown>): Promise<void> {
+  connect(_config?: Record<string, unknown>): Promise<void> {
     // Default implementation - voice providers can override if they support this feature
-    this.logger.warn('huddle not implemented by this voice provider');
+    this.logger.warn('connect not implemented by this voice provider');
     return Promise.resolve();
   }
 
@@ -143,19 +143,19 @@ export abstract class MastraVoice<
 
   /**
    * Equip the voice provider with tools
-   * @param tools Array of tools to equip
+   * @param tools Array of tools to add
    */
-  equip(_tools: TTools): void {
+  addTools(_tools: TTools): void {
     // Default implementation - voice providers can override if they support this feature
-    this.logger.warn('equip not implemented by this voice provider');
+    this.logger.warn('addTools not implemented by this voice provider');
   }
 
   /**
    * Disconnect from the WebSocket or WebRTC connection
    */
-  leave(): void {
+  close(): void {
     // Default implementation - voice providers can override if they support this feature
-    this.logger.warn('leave not implemented by this voice provider');
+    this.logger.warn('close not implemented by this voice provider');
   }
 
   /**
