@@ -53,6 +53,114 @@ const tools = await client.tools();
 await client.disconnect();
 ```
 
+## Managing Multiple MCP Servers
+
+For applications that need to interact with multiple MCP servers, the `MCPConfiguration` class provides a convenient way to manage multiple server connections and their tools:
+
+```typescript
+import { MCPConfiguration } from '@mastra/mcp';
+
+const mcp = new MCPConfiguration({
+  servers: {
+    // Stdio-based server
+    stockPrice: {
+      command: 'npx',
+      args: ['tsx', 'stock-price.ts'],
+      env: {
+        API_KEY: 'your-api-key',
+      },
+    },
+    // SSE-based server
+    weather: {
+      url: new URL('http://localhost:8080/sse'),
+    },
+  },
+});
+
+// Get all tools from all configured servers namespaced with the server name
+const tools = await mcp.getTools();
+
+// Get tools grouped into a toolset object per-server
+const toolsets = await mcp.getToolsets();
+```
+
+### Tools vs Toolsets
+
+The MCPConfiguration class provides two ways to access MCP tools:
+
+#### Tools (`getTools()`)
+
+Use this when:
+
+- You have a single MCP connection
+- The tools are used by a single user/context (CLI tools, automation scripts, etc)
+- Tool configuration (API keys, credentials) remains constant
+- You want to initialize an Agent with a fixed set of tools
+
+```typescript
+const agent = new Agent({
+  name: 'CLI Assistant',
+  instructions: 'You help users with CLI tasks',
+  model: openai('gpt-4'),
+  tools: await mcp.getTools(), // Tools are fixed at agent creation
+});
+```
+
+#### Toolsets (`getToolsets()`)
+
+Use this when:
+
+- You need per-request tool configuration
+- Tools need different credentials per user
+- Running in a multi-user environment (web app, API, etc)
+- Tool configuration needs to change dynamically
+
+```typescript
+import { MCPConfiguration } from '@mastra/mcp';
+import { Agent } from '@mastra/core/agent';
+import { openai } from '@ai-sdk/openai';
+
+// Configure MCP servers with user-specific settings before getting toolsets
+const mcp = new MCPConfiguration({
+  servers: {
+    stockPrice: {
+      command: 'npx',
+      args: ['tsx', 'weather-mcp.ts'],
+      env: {
+        // These would be different per user
+        API_KEY: 'user-1-api-key',
+      },
+    },
+    weather: {
+      url: new URL('http://localhost:8080/sse'),
+      requestInit: {
+        headers: {
+          // These would be different per user
+          Authorization: 'Bearer user-1-token',
+        },
+      },
+    },
+  },
+});
+
+// Get the current toolsets configured for this user
+const toolsets = await mcp.getToolsets();
+
+// Use the agent with user-specific tool configurations
+const response = await agent.generate('What is the weather in London?', {
+  toolsets,
+});
+
+console.log(response.text);
+```
+
+The `MCPConfiguration` class automatically:
+
+- Manages connections to multiple MCP servers
+- Namespaces tools to prevent naming conflicts
+- Handles connection lifecycle and cleanup
+- Provides both flat and grouped access to tools
+
 ## Configuration
 
 ### Required Parameters

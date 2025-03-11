@@ -1,5 +1,12 @@
 # @mastra/voice-murf
 
+## 0.1.3-alpha.10
+
+### Patch Changes
+
+- Updated dependencies [a910463]
+  - @mastra/core@0.5.0-alpha.10
+
 ## 0.1.3-alpha.9
 
 ### Patch Changes
