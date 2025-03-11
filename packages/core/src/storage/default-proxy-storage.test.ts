@@ -1,4 +1,4 @@
-import { DefaultProxyStorage } from './defaultProxyStorage';
+import { DefaultProxyStorage } from './default-proxy-storage';
 import { createTestSuite } from './test-utils/storage';
 
 // Test database configuration
