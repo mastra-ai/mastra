@@ -87,7 +87,7 @@ const VOICES = ['alloy', 'ash', 'ballad', 'coral', 'echo', 'sage', 'shimmer', 'v
  *   }
  * });
  *
- * await voice.huddle();
+ * await voice.open();
  * voice.on('speaking', (audioData) => {
  *   // Handle audio data
  * });
@@ -97,7 +97,7 @@ const VOICES = ['alloy', 'ash', 'ballad', 'coral', 'echo', 'sage', 'shimmer', 'v
  */
 export class OpenAIRealtimeVoice extends MastraVoice {
   private client: RealtimeClient;
-  private state: 'leave' | 'huddle';
+  private state: 'close' | 'open';
   private events: EventMap;
   tools?: TTools;
 
@@ -158,7 +158,7 @@ export class OpenAIRealtimeVoice extends MastraVoice {
       },
     });
 
-    this.state = 'leave';
+    this.state = 'close';
     this.events = {} as EventMap;
     this.setupEventListeners();
 
@@ -188,20 +188,20 @@ export class OpenAIRealtimeVoice extends MastraVoice {
    *
    * @example
    * ```typescript
-   * voice.leave(); // Disconnects and cleans up
+   * voice.close(); // Disconnects and cleans up
    * ```
    */
-  leave() {
+  close() {
     if (!this.client) return;
     this.client.disconnect();
-    this.state = 'leave';
+    this.state = 'close';
   }
 
   /**
    * Equips the voice instance with a set of tools.
    * Tools allow the model to perform additional actions during conversations.
    *
-   * @param tools - Optional tools configuration to equip
+   * @param tools - Optional tools configuration to addTools
    * @returns Transformed tools configuration ready for use with the model
    *
    * @example
@@ -210,10 +210,10 @@ export class OpenAIRealtimeVoice extends MastraVoice {
    *   search: async (query: string) => { ... },
    *   calculate: (expression: string) => { ... }
    * };
-   * voice.equip(tools);
+   * voice.addTools(tools);
    * ```
    */
-  equip(tools?: TTools) {
+  addTools(tools?: TTools) {
     const transformedTools = transformTools(tools);
     for (const tool of transformedTools) {
       this.client.addTool(tool.openaiTool, tool.execute);
@@ -272,7 +272,7 @@ export class OpenAIRealtimeVoice extends MastraVoice {
    *
    * @example
    * ```typescript
-   * voice.tune({
+   * voice.updateConfig({
    *   voice: 'echo',
    *   turn_detection: {
    *     type: 'server_vad',
@@ -282,7 +282,7 @@ export class OpenAIRealtimeVoice extends MastraVoice {
    * });
    * ```
    */
-  tune(sessionConfig: Realtime.SessionConfig): void {
+  updateConfig(sessionConfig: Realtime.SessionConfig): void {
     this.client.updateSession(sessionConfig);
   }
 
@@ -348,20 +348,20 @@ export class OpenAIRealtimeVoice extends MastraVoice {
    *
    * @example
    * ```typescript
-   * await voice.huddle();
+   * await voice.open();
    * // Now ready for voice interactions
    * ```
    */
-  async huddle() {
+  async connect() {
     await this.client.connect();
     await this.client.waitForSessionCreated();
-    this.state = 'huddle';
+    this.state = 'open';
   }
 
   /**
    * Streams audio data in real-time to the OpenAI service.
    * Useful for continuous audio streaming scenarios like live microphone input.
-   * Must be in 'huddle' state before calling this method.
+   * Must be in 'open' state before calling this method.
    *
    * @param audioData - Readable stream of audio data to relay
    * @throws {Error} If audio format is not supported
@@ -369,7 +369,7 @@ export class OpenAIRealtimeVoice extends MastraVoice {
    * @example
    * ```typescript
    * // First connect
-   * await voice.huddle();
+   * await voice.open();
    *
    * // Then relay audio
    * const micStream = getMicrophoneStream();
@@ -377,8 +377,8 @@ export class OpenAIRealtimeVoice extends MastraVoice {
    * ```
    */
   async relay(audioData: NodeJS.ReadableStream): Promise<void> {
-    if (!this.state || this.state !== 'huddle') {
-      console.warn('Cannot relay audio when not huddle. Call huddle() first.');
+    if (!this.state || this.state !== 'open') {
+      console.warn('Cannot relay audio when not open. Call open() first.');
       return;
     }
 
@@ -397,6 +397,28 @@ export class OpenAIRealtimeVoice extends MastraVoice {
       this.emit('error', new Error('Unsupported audio data format'));
     }
   }
+
+  /**
+   * Sends a response to the OpenAI Realtime API.
+   *
+   * Trigger a response to the real-time session.
+   *
+   * @param {Object} params - The parameters object
+   * @param {Realtime.ResponseConfig} params.options - Configuration options for the response
+   * @returns {Promise<void>} A promise that resolves when the response has been sent
+   *
+   * @example
+   * // Send a simple text response
+   * await realtimeVoice.answer({
+   *   options: {
+   *     content: "Hello, how can I help you today?",
+   *     voice: "alloy"
+   *   }
+   * });
+   */
+  // async answer({ options }: { options?: Realtime.ResponseConfig }) {
+  //   this.client.realtime.send('response.create', { response: options ?? {} });
+  // }
 
   /**
    * Registers an event listener for voice events.
