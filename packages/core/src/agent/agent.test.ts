@@ -354,14 +354,14 @@ describe('agent', () => {
 
     describe('getSpeakers', () => {
       it('should list available voices', async () => {
-        const speakers = await voiceAgent.getSpeakers();
+        const speakers = await voiceAgent.voice?.getSpeakers();
         expect(speakers).toEqual([{ voiceId: 'mock-voice' }]);
       });
     });
 
     describe('speak', () => {
       it('should generate audio stream from text', async () => {
-        const audioStream = await voiceAgent.speak('Hello World', {
+        const audioStream = await voiceAgent.voice?.speak('Hello World', {
           speaker: 'mock-voice',
         });
 
@@ -380,7 +380,7 @@ describe('agent', () => {
       });
 
       it('should work with different parameters', async () => {
-        const audioStream = await voiceAgent.speak('Test with parameters', {
+        const audioStream = await voiceAgent.voice?.speak('Test with parameters', {
           speaker: 'mock-voice',
           speed: 0.5,
         });
@@ -405,7 +405,7 @@ describe('agent', () => {
         const audioStream = new PassThrough();
         audioStream.end('test audio data');
 
-        const text = await voiceAgent.listen(audioStream);
+        const text = await voiceAgent.voice?.listen(audioStream);
         expect(text).toBe('mock transcription');
       });
 
@@ -413,7 +413,7 @@ describe('agent', () => {
         const audioStream = new PassThrough();
         audioStream.end('test audio data');
 
-        const text = await voiceAgent.listen(audioStream, {
+        const text = await voiceAgent.voice?.listen(audioStream, {
           language: 'en',
         });
         expect(text).toBe('mock transcription');
