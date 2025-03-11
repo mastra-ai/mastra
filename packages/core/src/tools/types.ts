@@ -23,7 +23,7 @@ export interface ToolAction<
   TOptions extends unknown = unknown,
 > extends IAction<string, TSchemaIn, TSchemaOut, TContext, TOptions> {
   description: string;
-  execute: (
+  execute?: (
     context: TContext,
     options?: TOptions,
   ) => Promise<TSchemaOut extends z.ZodSchema ? z.infer<TSchemaOut> : unknown>;
