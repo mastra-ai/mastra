@@ -101,6 +101,8 @@ export class Agent<
 
     if (config.voice) {
       this.voice = config.voice;
+      this.voice?.equip(this.tools);
+      this.voice?.tune({ instructions: config.instructions });
     }
   }
 
