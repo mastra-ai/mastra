@@ -1,5 +1,11 @@
 # create-mastra
 
+## 0.1.9-alpha.0
+
+### Patch Changes
+
+- d3d6fae: Deprecate mastra dev --env flag
+
 ## 0.1.8
 
 ### Patch Changes

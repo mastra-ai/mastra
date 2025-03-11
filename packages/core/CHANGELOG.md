@@ -1,5 +1,11 @@
 # @mastra/core
 
+## 0.5.1-alpha.0
+
+### Patch Changes
+
+- 3729dbd: Fixed a bug where useChat with client side tool calling and Memory would not work. Added docs for using Memory with useChat()
+
 ## 0.5.0
 
 ### Minor Changes
