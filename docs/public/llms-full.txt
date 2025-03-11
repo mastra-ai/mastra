@@ -5873,7 +5873,7 @@ The Deployer class includes built-in support for environment file management thr
 
 ```typescript
 getEnvFiles(): Promise<string[]> {
-  const possibleFiles = ['.env.production', '.env'];
+  const possibleFiles = ['.env.production', '.env.local', '.env'];
 
   try {
     const fileService = new FileService();

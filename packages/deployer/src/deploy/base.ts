@@ -14,7 +14,7 @@ export abstract class Deployer extends Bundler implements IDeployer {
   }
 
   getEnvFiles(): Promise<string[]> {
-    const possibleFiles = ['.env.production', '.env'];
+    const possibleFiles = ['.env.production', '.env.local', '.env'];
 
     try {
       const fileService = new FileService();
