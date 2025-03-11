@@ -417,7 +417,7 @@ export class Agent<
   sanitizeResponseMessages(messages: Array<CoreMessage>): Array<CoreMessage> {
     let toolResultIds: Array<string> = [];
     let toolCallIds: Array<string> = [];
-    let dupeToolCalls: Array<string> = [];
+    let dupeToolCalls = new Set<string>();
 
     for (const message of messages) {
       if (!Array.isArray(message.content)) continue;
@@ -433,7 +433,7 @@ export class Agent<
           if (typeof content !== `string`) {
             if (content.type === `tool-call`) {
               if (toolCallIds.includes(content.toolCallId)) {
-                dupeToolCalls.push(content.toolCallId);
+                dupeToolCalls.add(content.toolCallId);
               }
               toolCallIds.push(content.toolCallId);
             }
@@ -469,27 +469,11 @@ export class Agent<
     });
 
     return messagesBySanitizedContent.filter(message => {
-      // if (typeof message.content === `string`) {
-      //   return message.content !== '';
-      // }
-
-      // if (Array.isArray(message.content)) {
-      //   return (
-      //     message.content.length &&
-      //     message.content.every(c => {
-      //       if (c.type === `text`) {
-      //         return c.text && c.text !== '';
-      //       }
-      //       return true;
-      //     })
-      //   );
-      // }
-
       if (message.role === `assistant`) {
         if (Array.isArray(message.content)) {
           for (const part of message.content) {
-            if (part.type === `tool-call` && dupeToolCalls.includes(part.toolCallId)) {
-              dupeToolCalls = dupeToolCalls.filter(id => id !== part.toolCallId);
+            if (part.type === `tool-call` && dupeToolCalls.has(part.toolCallId)) {
+              dupeToolCalls.delete(part.toolCallId);
               return false;
             }
           }
