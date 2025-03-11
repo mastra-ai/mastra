@@ -1,5 +1,23 @@
 # mastra
 
+## 0.3.0-alpha.11
+
+### Patch Changes
+
+- dbd9f2d: Handle different condition types on workflow graph
+- 8deb34c: Better workflow watch api + watch workflow by runId
+- 36d970e: Make tools discovery work in mastra dev
+- fd4a1d7: Update cjs bundling to make sure files are split
+- Updated dependencies [7a7a547]
+- Updated dependencies [c93798b]
+- Updated dependencies [dbd9f2d]
+- Updated dependencies [8deb34c]
+- Updated dependencies [5d41958]
+- Updated dependencies [a171b37]
+- Updated dependencies [fd4a1d7]
+  - @mastra/deployer@0.1.8-alpha.11
+  - @mastra/core@0.5.0-alpha.11
+
 ## 0.3.0-alpha.10
 
 ### Minor Changes
