@@ -1,5 +1,50 @@
 # @mastra/composio
 
+## 0.1.8
+
+### Patch Changes
+
+- 52e0418: Split up action types between tools and workflows
+- fd4a1d7: Update cjs bundling to make sure files are split
+- Updated dependencies [a910463]
+- Updated dependencies [59df7b6]
+- Updated dependencies [22643eb]
+- Updated dependencies [6feb23f]
+- Updated dependencies [f2d6727]
+- Updated dependencies [7a7a547]
+- Updated dependencies [29f3a82]
+- Updated dependencies [3d0e290]
+- Updated dependencies [e9fbac5]
+- Updated dependencies [301e4ee]
+- Updated dependencies [ee667a2]
+- Updated dependencies [dfbe4e9]
+- Updated dependencies [dab255b]
+- Updated dependencies [1e8bcbc]
+- Updated dependencies [f6678e4]
+- Updated dependencies [9e81f35]
+- Updated dependencies [c93798b]
+- Updated dependencies [a85ab24]
+- Updated dependencies [dbd9f2d]
+- Updated dependencies [59df7b6]
+- Updated dependencies [caefaa2]
+- Updated dependencies [c151ae6]
+- Updated dependencies [52e0418]
+- Updated dependencies [d79aedf]
+- Updated dependencies [03236ec]
+- Updated dependencies [3764e71]
+- Updated dependencies [df982db]
+- Updated dependencies [a171b37]
+- Updated dependencies [506f1d5]
+- Updated dependencies [02ffb7b]
+- Updated dependencies [0461849]
+- Updated dependencies [2259379]
+- Updated dependencies [aeb5e36]
+- Updated dependencies [f2301de]
+- Updated dependencies [358f069]
+- Updated dependencies [fd4a1d7]
+- Updated dependencies [c139344]
+  - @mastra/core@0.5.0
+
 ## 0.1.8-alpha.12
 
 ### Patch Changes

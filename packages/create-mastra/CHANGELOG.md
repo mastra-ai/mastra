@@ -1,5 +1,25 @@
 # create-mastra
 
+## 0.1.8
+
+### Patch Changes
+
+- 5fae49e: Configurable timeout on npm create mastra
+- 91d2e30: Fix init in non npm project
+- 960690d: Improve client-js workflow watch dx
+- dbd9f2d: Handle different condition types on workflow graph
+- 07a7470: Move WorkflowTrigger to playground-ui package and use in dev playground
+- a80bdaf: persist data in run tab in dev
+- e5149bb: Fix playground-ui agent-evals tab-content
+- 8deb34c: Better workflow watch api + watch workflow by runId
+- 36d970e: Make tools discovery work in mastra dev
+- 144b3d5: Update traces table UI, agent Chat UI
+  Fix get workflows breaking
+- 62565c1: --no-timeout npm create mastra flag
+- 9035565: Update tools dev playground inputs for different fieldtypes
+- af7466e: fix playground issues
+- fd4a1d7: Update cjs bundling to make sure files are split
+
 ## 0.1.8-alpha.5
 
 ### Patch Changes
