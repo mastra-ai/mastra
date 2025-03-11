@@ -55,14 +55,23 @@ export class Mastra<
   #agents: TAgents;
   #logger: TLogger;
   #workflows: TWorkflows;
-  #telemetry?: Telemetry;
   #tts?: TTTS;
   #deployer?: MastraDeployer;
   #serverMiddleware: Array<{
     handler: (c: any, next: () => Promise<void>) => Promise<Response | void>;
     path: string;
   }> = [];
+  /**
+   * @deprecated use getTelemetry() instead
+   */
+  telemetry?: Telemetry;
+  /**
+   * @deprecated use getStorage() instead
+   */
   storage?: MastraStorage;
+  /**
+   * @deprecated use getMemory() instead
+   */
   memory?: MastraMemory;
 
   constructor(config?: Config<TAgents, TWorkflows, TVectors, TTTS, TLogger>) {
@@ -422,6 +431,14 @@ This is a warning for now, but will throw an error in the future
 
   public getTelemetry() {
     return this.#telemetry;
+  }
+
+  public getMemory() {
+    return this.memory;
+  }
+
+  public getStorage() {
+    return this.storage;
   }
 
   public getServerMiddleware() {
