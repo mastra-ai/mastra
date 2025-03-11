@@ -4,8 +4,8 @@ import { LogLevel, createLogger, noopLogger } from '../logger';
 import type { Logger } from '../logger';
 import type { MastraMemory } from '../memory/memory';
 import type { MastraStorage } from '../storage';
-import { DefaultStorage } from '../storage/libsql';
-import { InstrumentClass, OTLPStorageExporter, Telemetry } from '../telemetry';
+import { DefaultProxyStorage } from '../storage/defaultProxyStorage';
+import { InstrumentClass, Telemetry } from '../telemetry';
 import type { OtelConfig } from '../telemetry';
 import type { MastraTTS } from '../tts';
 import type { MastraVector } from '../vector';
@@ -106,7 +106,7 @@ export class Mastra<
 
     let storage = config?.storage;
     if (!storage) {
-      storage = new DefaultStorage({
+      storage = new DefaultProxyStorage({
         config: {
           url: process.env.MASTRA_DEFAULT_STORAGE_URL || `:memory:`,
         },
@@ -116,34 +116,8 @@ export class Mastra<
     /*
     Telemetry
     */
-    // if storage is a libsql instance, we need to default the telemetry exporter to OTLPStorageExporter
-    if (storage instanceof DefaultStorage && config?.telemetry?.export?.type !== 'custom') {
-      const newTelemetry = {
-        ...(config?.telemetry || {}),
-        export: {
-          type: 'custom',
-          exporter: new OTLPStorageExporter({
-            logger: this.getLogger(),
-            storage,
-          }),
-        },
-      };
-      this.#telemetry = Telemetry.init(newTelemetry as OtelConfig);
-    } else if (config?.telemetry) {
+    if (config?.telemetry) {
       this.#telemetry = Telemetry.init(config?.telemetry);
-    }
-
-    /**
-     * Deployer
-     **/
-    if (config?.deployer) {
-      this.#deployer = config.deployer;
-      if (this.#telemetry) {
-        this.#deployer = this.#telemetry.traceClass(config.deployer, {
-          excludeMethods: ['__setTelemetry', '__getTelemetry'],
-        });
-        this.#deployer.__setTelemetry(this.#telemetry);
-      }
     }
 
     /*
