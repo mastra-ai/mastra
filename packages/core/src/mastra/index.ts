@@ -61,10 +61,7 @@ export class Mastra<
     handler: (c: any, next: () => Promise<void>) => Promise<Response | void>;
     path: string;
   }> = [];
-  /**
-   * @deprecated use getTelemetry() instead
-   */
-  telemetry?: Telemetry;
+  #telemetry?: Telemetry;
   /**
    * @deprecated use getStorage() instead
    */
@@ -73,6 +70,13 @@ export class Mastra<
    * @deprecated use getMemory() instead
    */
   memory?: MastraMemory;
+
+  /**
+   * @deprecated use getTelemetry() instead
+   */
+  get telemetry() {
+    return this.#telemetry;
+  }
 
   constructor(config?: Config<TAgents, TWorkflows, TVectors, TTTS, TLogger>) {
     // Store server middleware with default path
