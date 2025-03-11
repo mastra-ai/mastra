@@ -46,6 +46,8 @@ export function WorkflowTrigger({
   const handleExecuteWorkflow = async (data: any) => {
     if (!workflow) return;
 
+    setResult(null);
+
     const { runId } = await createWorkflowRun({ workflowId, input: data });
     setRunId?.(runId);
 
@@ -67,22 +69,26 @@ export function WorkflowTrigger({
     watchWorkflow({ workflowId, runId });
   };
 
-  const workflowActivePaths = watchResult?.activePaths ?? [];
+  const watchResultToUse = result ?? watchResult;
+
+  const workflowActivePaths = watchResultToUse?.activePaths ?? [];
 
   useEffect(() => {
-    if (!watchResult?.activePaths || !result?.runId) return;
+    if (!watchResultToUse?.activePaths || !result?.runId) return;
 
-    const suspended = watchResult.activePaths
-      .filter((path: WorkflowPath) => watchResult.context?.steps?.[path.stepId]?.status === 'suspended')
+    const suspended = watchResultToUse.activePaths
+      .filter((path: WorkflowPath) => watchResultToUse.context?.steps?.[path.stepId]?.status === 'suspended')
       .map((path: WorkflowPath) => ({
         stepId: path.stepId,
         runId: result.runId,
       }));
     setSuspendedSteps(suspended);
-  }, [watchResult, result]);
+  }, [watchResultToUse, result]);
 
   useEffect(() => {
-    setResult(watchResult);
+    if (watchResult) {
+      setResult(watchResult);
+    }
   }, [watchResult]);
 
   if (isLoading) {
