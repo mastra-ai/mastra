@@ -135,7 +135,7 @@
     "@ai-sdk/openai": "^1.2.1",
     "@babel/core": "^7.26.9",
     "@internal/lint": "workspace:*",
-    "@microsoft/api-extractor": "^7.51.1",
+    "@microsoft/api-extractor": "^7.52.1",
     "@size-limit/preset-small-lib": "^11.2.0",
     "@types/babel__core": "^7.20.5",
     "@types/json-schema": "^7.0.15",

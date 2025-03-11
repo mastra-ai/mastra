@@ -29,7 +29,7 @@
   "license": "ISC",
   "dependencies": {
     "@mastra/core": "workspace:^",
-    "@modelcontextprotocol/sdk": "^1.6.1",
+    "@modelcontextprotocol/sdk": "^1.7.0",
     "date-fns": "^4.1.0",
     "exit-hook": "^4.0.0",
     "uuid": "^11.1.0"
@@ -37,10 +37,10 @@
   "devDependencies": {
     "@ai-sdk/anthropic": "^1.1.15",
     "@internal/lint": "workspace:*",
-    "@microsoft/api-extractor": "^7.51.1",
+    "@microsoft/api-extractor": "^7.52.1",
     "@types/node": "^22.13.10",
     "eslint": "^9.22.0",
-    "fastmcp": "^1.20.3",
+    "fastmcp": "^1.20.4",
     "tsup": "^8.4.0",
     "typescript": "^5.8.2",
     "vitest": "^3.0.8",

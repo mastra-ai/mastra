@@ -16,7 +16,7 @@
     "@mastra/core": "workspace:^",
     "@mastra/memory": "workspace:^",
     "@mastra/pg": "workspace:^",
-    "@next/env": "^15.2.1",
+    "@next/env": "^15.2.2",
     "@radix-ui/react-alert-dialog": "^1.1.6",
     "@radix-ui/react-dialog": "^1.1.6",
     "@radix-ui/react-dropdown-menu": "^2.1.6",

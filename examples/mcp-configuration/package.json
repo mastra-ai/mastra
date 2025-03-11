@@ -18,7 +18,7 @@
     "@mastra/mcp": "workspace:*",
     "@mastra/memory": "workspace:*",
     "chalk": "^5.4.1",
-    "fastmcp": "^1.20.3",
+    "fastmcp": "^1.20.4",
     "zod": "^3.24.2"
   },
   "devDependencies": {
