@@ -426,4 +426,64 @@ export class PgVector extends MastraVector {
   async disconnect() {
     await this.pool.end();
   }
+
+  async updateIndexById(
+    indexName: string,
+    id: string,
+    update: {
+      vector?: number[];
+      metadata?: Record<string, any>;
+    },
+  ): Promise<void> {
+    if (!update.vector && !update.metadata) {
+      throw new Error('No updates provided');
+    }
+
+    const client = await this.pool.connect();
+    try {
+      let updateParts = [];
+      let values = [id];
+      let valueIndex = 2;
+
+      if (update.vector) {
+        updateParts.push(`embedding = $${valueIndex}::vector`);
+        values.push(`[${update.vector.join(',')}]`);
+        valueIndex++;
+      }
+
+      if (update.metadata) {
+        updateParts.push(`metadata = $${valueIndex}::jsonb`);
+        values.push(JSON.stringify(update.metadata));
+      }
+
+      if (updateParts.length === 0) {
+        return;
+      }
+
+      // query looks like this:
+      // UPDATE table SET embedding = $2::vector, metadata = $3::jsonb WHERE id = $1
+      const query = `
+        UPDATE ${indexName}
+        SET ${updateParts.join(', ')}
+        WHERE vector_id = $1
+      `;
+
+      await client.query(query, values);
+    } finally {
+      client.release();
+    }
+  }
+
+  async deleteIndexById(indexName: string, id: string): Promise<void> {
+    const client = await this.pool.connect();
+    try {
+      const query = `
+        DELETE FROM ${indexName}
+        WHERE vector_id = $1
+      `;
+      await client.query(query, [id]);
+    } finally {
+      client.release();
+    }
+  }
 }
