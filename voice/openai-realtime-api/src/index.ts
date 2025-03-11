@@ -376,7 +376,7 @@ export class OpenAIRealtimeVoice extends MastraVoice {
    * await voice.relay(micStream);
    * ```
    */
-  async relay(audioData: NodeJS.ReadableStream): Promise<void> {
+  async send(audioData: NodeJS.ReadableStream): Promise<void> {
     if (!this.state || this.state !== 'open') {
       console.warn('Cannot relay audio when not open. Call open() first.');
       return;

@@ -70,7 +70,7 @@ await voice.listen(audioData);
 
 // Process audio input
 const microphoneStream = getMicrophoneStream();
-await voice.listen(microphoneStream);
+await voice.send(microphoneStream);
 
 // Clean up
 voice.close();
