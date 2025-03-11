@@ -1,5 +1,6 @@
 import { useState } from 'react';
 
+// import { WorkflowTrigger } from '@mastra/playground-ui';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
 import { WorkflowEndpoints } from './workflow-endpoints';

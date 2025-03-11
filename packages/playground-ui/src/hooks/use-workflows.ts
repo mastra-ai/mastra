@@ -1,7 +1,7 @@
 import type { Workflow } from '@mastra/core/workflows';
 import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
-import { GetWorkflowWatchResponse, MastraClient } from '@mastra/client-js';
+import { WorkflowRunResult, MastraClient } from '@mastra/client-js';
 
 export const useWorkflow = (workflowId: string, baseUrl: string) => {
   const [workflow, setWorkflow] = useState<Workflow | null>(null);
@@ -46,13 +46,13 @@ export const useWorkflow = (workflowId: string, baseUrl: string) => {
 export const useExecuteWorkflow = (baseUrl: string) => {
   const [isExecutingWorkflow, setIsExecutingWorkflow] = useState(false);
 
+  const client = new MastraClient({
+    baseUrl: baseUrl || '',
+  });
+
   const executeWorkflow = async ({ workflowId, input }: { workflowId: string; input: any }) => {
     try {
       setIsExecutingWorkflow(true);
-      const client = new MastraClient({
-        baseUrl: baseUrl || '',
-      });
-
       const response = await client.getWorkflow(workflowId).execute(input || {});
       return response;
     } catch (error) {
@@ -63,21 +63,31 @@ export const useExecuteWorkflow = (baseUrl: string) => {
     }
   };
 
-  return { executeWorkflow, isExecutingWorkflow };
+  const createWorkflowRun = async ({ workflowId, input }: { workflowId: string; input: any }) => {
+    try {
+      const response = await client.getWorkflow(workflowId).startRun(input || {});
+      return response;
+    } catch (error) {
+      console.error('Error creating workflow run:', error);
+      throw error;
+    }
+  };
+
+  return { executeWorkflow, createWorkflowRun, isExecutingWorkflow };
 };
 
 export const useWatchWorkflow = (baseUrl: string) => {
   const [isWatchingWorkflow, setIsWatchingWorkflow] = useState(false);
-  const [watchResult, setWatchResult] = useState<GetWorkflowWatchResponse | null>(null);
+  const [watchResult, setWatchResult] = useState<WorkflowRunResult | null>(null);
 
-  const watchWorkflow = async ({ workflowId }: { workflowId: string }) => {
+  const watchWorkflow = async ({ workflowId, runId }: { workflowId: string; runId: string }) => {
     try {
       setIsWatchingWorkflow(true);
       const client = new MastraClient({
         baseUrl,
       });
 
-      const watchSubscription = client.getWorkflow(workflowId).watch();
+      const watchSubscription = client.getWorkflow(workflowId).watch({ runId });
 
       if (!watchSubscription) {
         throw new Error('Error watching workflow');
