@@ -365,6 +365,11 @@ describe('agent', () => {
           speaker: 'mock-voice',
         });
 
+        if (!audioStream) {
+          expect(audioStream).toBeDefined();
+          return;
+        }
+
         const chunks: Buffer[] = [];
         for await (const chunk of audioStream) {
           chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
@@ -379,6 +384,11 @@ describe('agent', () => {
           speaker: 'mock-voice',
           speed: 0.5,
         });
+
+        if (!audioStream) {
+          expect(audioStream).toBeDefined();
+          return;
+        }
 
         const chunks: Buffer[] = [];
         for await (const chunk of audioStream) {

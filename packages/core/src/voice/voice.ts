@@ -91,7 +91,6 @@ export abstract class MastraVoice<
     input: string | NodeJS.ReadableStream,
     options?: {
       speaker?: string;
-      chatMode?: boolean; // Indicates if this is being used in chat mode
     } & TSpeakOptions,
   ): Promise<NodeJS.ReadableStream | void>;
 
@@ -109,9 +108,7 @@ export abstract class MastraVoice<
    */
   abstract listen(
     audioStream: NodeJS.ReadableStream | unknown, // Allow other audio input types for OpenAI realtime API
-    options?: {
-      chatMode?: boolean; // Indicates if this is being used in chat mode
-    } & TListenOptions,
+    options?: TListenOptions,
   ): Promise<string | NodeJS.ReadableStream | void>;
 
   tune(_config: Record<string, unknown>): void {
