@@ -6,7 +6,7 @@ import type { MachineContext, Snapshot } from 'xstate';
 import { assign, createActor, fromPromise, setup } from 'xstate';
 import type { z } from 'zod';
 
-import type { IAction, MastraUnion } from '../action';
+import type { MastraUnion } from '../action';
 import type { Logger } from '../logger';
 
 import type { Mastra } from '../mastra';
@@ -80,7 +80,7 @@ export class Machine<
     executionSpan?: Span;
     name: string;
     runId: string;
-    steps: Record<string, IAction<any, any, any, any>>;
+    steps: Record<string, TSteps[0]>;
     stepGraph: StepGraph;
     retryConfig?: RetryConfig;
     startStepId: string;
