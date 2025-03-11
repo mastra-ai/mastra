@@ -1,5 +1,20 @@
 # @mastra/playground-ui
 
+## 1.0.0-alpha.11
+
+### Patch Changes
+
+- dbd9f2d: Handle different condition types on workflow graph
+- fd4a1d7: Update cjs bundling to make sure files are split
+- Updated dependencies [7a7a547]
+- Updated dependencies [c93798b]
+- Updated dependencies [dbd9f2d]
+- Updated dependencies [8deb34c]
+- Updated dependencies [a171b37]
+- Updated dependencies [fd4a1d7]
+  - @mastra/core@0.5.0-alpha.11
+  - @mastra/client-js@0.1.7-alpha.11
+
 ## 1.0.0-alpha.10
 
 ### Patch Changes

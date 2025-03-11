@@ -1,6 +1,6 @@
 {
   "name": "@mastra/speech-deepgram",
-  "version": "0.1.7-alpha.10",
+  "version": "0.1.7-alpha.11",
   "description": "Mastra Deepgram speech integration (DEPRECATED - use @mastra/voice-deepgram instead)",
   "type": "module",
   "main": "dist/index.js",
