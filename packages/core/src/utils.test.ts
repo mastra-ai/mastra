@@ -186,6 +186,23 @@ describe('makeCoreTool', () => {
     expect(result).toEqual({ result: 'success' });
   });
 
+  it('should convert a Vercel tool with zod parameters correctly', async () => {
+    const vercelTool = {
+      name: 'test',
+      description: 'Test description',
+      parameters: z.object({ name: z.string() }),
+      execute: async () => ({ result: 'success' }),
+    };
+
+    const coreTool = makeCoreTool(vercelTool, mockOptions);
+
+    expect(coreTool.description).toBe('Test description');
+    expect(coreTool.parameters).toBeDefined();
+    expect(typeof coreTool.execute).toBe('function');
+    const result = await coreTool.execute?.({ name: 'test' }, { toolCallId: 'test-id', messages: [] });
+    expect(result).toEqual({ result: 'success' });
+  });
+
   it('should convert a Mastra tool correctly', async () => {
     const mastraTool = createTool({
       id: 'test',
@@ -239,6 +256,37 @@ describe('makeCoreTool', () => {
 
     const coreTool = makeCoreTool(vercelTool, mockOptions);
     expect(coreTool.execute).toBeUndefined();
+  });
+
+  it('should have default parameters if no parameters are provided for Vercel tool', () => {
+    const coreTool = makeCoreTool(
+      {
+        description: 'test',
+        parameters: undefined,
+        execute: async () => ({}),
+      },
+      mockOptions,
+    );
+
+    // Test the schema behavior instead of structure
+    expect(() => coreTool.parameters.parse({})).not.toThrow();
+    expect(() => coreTool.parameters.parse({ extra: 'field' })).not.toThrow();
+  });
+
+  it('should have default parameters if no parameters are provided for Mastra tool', () => {
+    const coreTool = makeCoreTool(
+      {
+        id: 'test',
+        description: 'test',
+        inputSchema: undefined,
+        execute: async () => ({}),
+      },
+      mockOptions,
+    );
+
+    // Test the schema behavior instead of structure
+    expect(() => coreTool.parameters.parse({})).not.toThrow();
+    expect(() => coreTool.parameters.parse({ extra: 'field' })).not.toThrow();
   });
 });
 

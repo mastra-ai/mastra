@@ -1,5 +1,125 @@
 # mastra
 
+## 0.3.0
+
+### Minor Changes
+
+- dd7a09a: Added new MCPConfiguration class for managing multiple MCP server tools/toolsets. Fixed a bug where MCPClient env would overwrite PATH env var. Fixed a bug where MCP servers would be killed non-gracefully leading to printing huge errors on every code save when running mastra dev
+
+### Patch Changes
+
+- 5fae49e: Configurable timeout on npm create mastra
+- 91d2e30: Fix init in non npm project
+- 960690d: Improve client-js workflow watch dx
+- af7466e: fixes in playground ui
+- dbd9f2d: Handle different condition types on workflow graph
+- 07a7470: Move WorkflowTrigger to playground-ui package and use in dev playground
+- 52e0418: Split up action types between tools and workflows
+- a80bdaf: persist data in run tab in dev
+- e5149bb: Fix playground-ui agent-evals tab-content
+- 8deb34c: Better workflow watch api + watch workflow by runId
+- 36d970e: Make tools discovery work in mastra dev
+- 144b3d5: Update traces table UI, agent Chat UI
+  Fix get workflows breaking
+- 62565c1: --no-timeout npm create mastra flag
+- 9035565: Update tools dev playground inputs for different fieldtypes
+- fd4a1d7: Update cjs bundling to make sure files are split
+- Updated dependencies [a910463]
+- Updated dependencies [59df7b6]
+- Updated dependencies [22643eb]
+- Updated dependencies [6feb23f]
+- Updated dependencies [f2d6727]
+- Updated dependencies [7a7a547]
+- Updated dependencies [29f3a82]
+- Updated dependencies [3d0e290]
+- Updated dependencies [e9fbac5]
+- Updated dependencies [301e4ee]
+- Updated dependencies [ee667a2]
+- Updated dependencies [dfbe4e9]
+- Updated dependencies [dab255b]
+- Updated dependencies [1e8bcbc]
+- Updated dependencies [f6678e4]
+- Updated dependencies [9e81f35]
+- Updated dependencies [c93798b]
+- Updated dependencies [a85ab24]
+- Updated dependencies [dbd9f2d]
+- Updated dependencies [59df7b6]
+- Updated dependencies [caefaa2]
+- Updated dependencies [c151ae6]
+- Updated dependencies [52e0418]
+- Updated dependencies [d79aedf]
+- Updated dependencies [8deb34c]
+- Updated dependencies [c2dde91]
+- Updated dependencies [5d41958]
+- Updated dependencies [144b3d5]
+- Updated dependencies [03236ec]
+- Updated dependencies [3764e71]
+- Updated dependencies [df982db]
+- Updated dependencies [a171b37]
+- Updated dependencies [506f1d5]
+- Updated dependencies [02ffb7b]
+- Updated dependencies [731dd8a]
+- Updated dependencies [0461849]
+- Updated dependencies [2259379]
+- Updated dependencies [aeb5e36]
+- Updated dependencies [f2301de]
+- Updated dependencies [358f069]
+- Updated dependencies [fd4a1d7]
+- Updated dependencies [960690d]
+- Updated dependencies [c139344]
+  - @mastra/core@0.5.0
+  - @mastra/deployer@0.1.8
+
+## 0.3.0-alpha.12
+
+### Patch Changes
+
+- 07a7470: Move WorkflowTrigger to playground-ui package and use in dev playground
+- Updated dependencies [a85ab24]
+  - @mastra/core@0.5.0-alpha.12
+  - @mastra/deployer@0.1.8-alpha.12
+
+## 0.3.0-alpha.11
+
+### Patch Changes
+
+- dbd9f2d: Handle different condition types on workflow graph
+- 8deb34c: Better workflow watch api + watch workflow by runId
+- 36d970e: Make tools discovery work in mastra dev
+- fd4a1d7: Update cjs bundling to make sure files are split
+- Updated dependencies [7a7a547]
+- Updated dependencies [c93798b]
+- Updated dependencies [dbd9f2d]
+- Updated dependencies [8deb34c]
+- Updated dependencies [5d41958]
+- Updated dependencies [a171b37]
+- Updated dependencies [fd4a1d7]
+  - @mastra/deployer@0.1.8-alpha.11
+  - @mastra/core@0.5.0-alpha.11
+
+## 0.3.0-alpha.10
+
+### Minor Changes
+
+- dd7a09a: Added new MCPConfiguration class for managing multiple MCP server tools/toolsets. Fixed a bug where MCPClient env would overwrite PATH env var. Fixed a bug where MCP servers would be killed non-gracefully leading to printing huge errors on every code save when running mastra dev
+
+### Patch Changes
+
+- Updated dependencies [a910463]
+  - @mastra/core@0.5.0-alpha.10
+  - @mastra/deployer@0.1.8-alpha.10
+
+## 0.2.9-alpha.9
+
+### Patch Changes
+
+- Updated dependencies [e9fbac5]
+- Updated dependencies [1e8bcbc]
+- Updated dependencies [aeb5e36]
+- Updated dependencies [f2301de]
+  - @mastra/deployer@0.1.8-alpha.9
+  - @mastra/core@0.5.0-alpha.9
+
 ## 0.2.9-alpha.8
 
 ### Patch Changes

@@ -27,6 +27,15 @@ export interface Config<
   telemetry?: OtelConfig;
   deployer?: MastraDeployer;
 
+  /**
+   * Server middleware functions to be applied to API routes
+   * Each middleware can specify a path pattern (defaults to '/api/*')
+   */
+  serverMiddleware?: Array<{
+    handler: (c: any, next: () => Promise<void>) => Promise<Response | void>;
+    path?: string;
+  }>;
+
   // @deprecated add memory to your Agent directly instead
   memory?: MastraMemory;
 }
@@ -46,13 +55,38 @@ export class Mastra<
   #agents: TAgents;
   #logger: TLogger;
   #workflows: TWorkflows;
-  #telemetry?: Telemetry;
   #tts?: TTTS;
   #deployer?: MastraDeployer;
+  #serverMiddleware: Array<{
+    handler: (c: any, next: () => Promise<void>) => Promise<Response | void>;
+    path: string;
+  }> = [];
+  #telemetry?: Telemetry;
+  /**
+   * @deprecated use getStorage() instead
+   */
   storage?: MastraStorage;
+  /**
+   * @deprecated use getMemory() instead
+   */
   memory?: MastraMemory;
 
+  /**
+   * @deprecated use getTelemetry() instead
+   */
+  get telemetry() {
+    return this.#telemetry;
+  }
+
   constructor(config?: Config<TAgents, TWorkflows, TVectors, TTTS, TLogger>) {
+    // Store server middleware with default path
+    if (config?.serverMiddleware) {
+      this.#serverMiddleware = config.serverMiddleware.map(m => ({
+        handler: m.handler,
+        path: m.path || '/api/*',
+      }));
+    }
+
     /*
       Logger
     */
@@ -401,6 +435,18 @@ This is a warning for now, but will throw an error in the future
 
   public getTelemetry() {
     return this.#telemetry;
+  }
+
+  public getMemory() {
+    return this.memory;
+  }
+
+  public getStorage() {
+    return this.storage;
+  }
+
+  public getServerMiddleware() {
+    return this.#serverMiddleware;
   }
 
   public async getLogsByRunId({ runId, transportId }: { runId: string; transportId: string }) {

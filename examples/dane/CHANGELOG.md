@@ -1,5 +1,130 @@
 # @mastra/dane
 
+## 0.0.5
+
+### Patch Changes
+
+- fd4a1d7: Update cjs bundling to make sure files are split
+- Updated dependencies [a910463]
+- Updated dependencies [59df7b6]
+- Updated dependencies [22643eb]
+- Updated dependencies [6feb23f]
+- Updated dependencies [f2d6727]
+- Updated dependencies [7a7a547]
+- Updated dependencies [29f3a82]
+- Updated dependencies [3d0e290]
+- Updated dependencies [e9fbac5]
+- Updated dependencies [301e4ee]
+- Updated dependencies [ee667a2]
+- Updated dependencies [dfbe4e9]
+- Updated dependencies [dab255b]
+- Updated dependencies [1e8bcbc]
+- Updated dependencies [f2e8e5f]
+- Updated dependencies [f6678e4]
+- Updated dependencies [9e81f35]
+- Updated dependencies [c93798b]
+- Updated dependencies [9e0f2c9]
+- Updated dependencies [a85ab24]
+- Updated dependencies [dbd9f2d]
+- Updated dependencies [59df7b6]
+- Updated dependencies [caefaa2]
+- Updated dependencies [c151ae6]
+- Updated dependencies [52e0418]
+- Updated dependencies [d79aedf]
+- Updated dependencies [03236ec]
+- Updated dependencies [3764e71]
+- Updated dependencies [df982db]
+- Updated dependencies [7848663]
+- Updated dependencies [a171b37]
+- Updated dependencies [506f1d5]
+- Updated dependencies [02ffb7b]
+- Updated dependencies [dd7a09a]
+- Updated dependencies [0461849]
+- Updated dependencies [aec08af]
+- Updated dependencies [2259379]
+- Updated dependencies [aeb5e36]
+- Updated dependencies [f2301de]
+- Updated dependencies [358f069]
+- Updated dependencies [fd4a1d7]
+- Updated dependencies [c139344]
+  - @mastra/core@0.5.0
+  - @mastra/memory@0.2.0
+  - @mastra/rag@0.1.8
+  - @mastra/github@1.1.8
+  - @mastra/mcp@0.3.0
+  - @mastra/stabilityai@1.1.8
+  - @mastra/upstash@0.1.8
+
+## 0.0.5-alpha.13
+
+### Patch Changes
+
+- Updated dependencies [a85ab24]
+  - @mastra/core@0.5.0-alpha.12
+  - @mastra/github@1.1.8-alpha.12
+  - @mastra/stabilityai@1.1.8-alpha.12
+  - @mastra/mcp@0.3.0-alpha.13
+  - @mastra/memory@0.2.0-alpha.12
+  - @mastra/rag@0.1.8-alpha.13
+  - @mastra/upstash@0.1.8-alpha.12
+
+## 0.0.5-alpha.12
+
+### Patch Changes
+
+- fd4a1d7: Update cjs bundling to make sure files are split
+- Updated dependencies [7a7a547]
+- Updated dependencies [c93798b]
+- Updated dependencies [dbd9f2d]
+- Updated dependencies [a171b37]
+- Updated dependencies [fd4a1d7]
+  - @mastra/core@0.5.0-alpha.11
+  - @mastra/rag@0.1.8-alpha.12
+  - @mastra/stabilityai@1.1.8-alpha.11
+  - @mastra/github@1.1.8-alpha.11
+  - @mastra/memory@0.2.0-alpha.11
+  - @mastra/upstash@0.1.8-alpha.11
+  - @mastra/mcp@0.3.0-alpha.12
+
+## 0.0.5-alpha.11
+
+### Patch Changes
+
+- Updated dependencies [7848663]
+- Updated dependencies [aec08af]
+  - @mastra/mcp@0.3.0-alpha.11
+  - @mastra/rag@0.1.8-alpha.11
+
+## 0.0.5-alpha.10
+
+### Patch Changes
+
+- Updated dependencies [a910463]
+- Updated dependencies [dd7a09a]
+  - @mastra/core@0.5.0-alpha.10
+  - @mastra/mcp@0.3.0-alpha.10
+  - @mastra/github@1.1.8-alpha.10
+  - @mastra/stabilityai@1.1.8-alpha.10
+  - @mastra/memory@0.2.0-alpha.10
+  - @mastra/rag@0.1.8-alpha.10
+  - @mastra/upstash@0.1.8-alpha.10
+
+## 0.0.5-alpha.9
+
+### Patch Changes
+
+- Updated dependencies [e9fbac5]
+- Updated dependencies [1e8bcbc]
+- Updated dependencies [aeb5e36]
+- Updated dependencies [f2301de]
+  - @mastra/core@0.5.0-alpha.9
+  - @mastra/memory@0.2.0-alpha.9
+  - @mastra/github@1.1.8-alpha.9
+  - @mastra/stabilityai@1.1.8-alpha.9
+  - @mastra/mcp@0.2.7-alpha.9
+  - @mastra/rag@0.1.8-alpha.9
+  - @mastra/upstash@0.1.8-alpha.9
+
 ## 0.0.5-alpha.8
 
 ### Patch Changes
