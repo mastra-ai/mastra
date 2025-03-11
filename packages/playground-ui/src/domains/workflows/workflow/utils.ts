@@ -5,6 +5,7 @@ import { MarkerType } from '@xyflow/react';
 
 export type Condition =
   | {
+      type: 'if' | 'else' | 'when';
       ref: {
         step:
           | {
@@ -18,6 +19,7 @@ export type Condition =
       fnString?: never;
     }
   | {
+      type: 'if' | 'else' | 'when';
       fnString: string;
       ref?: never;
       query?: never;
@@ -26,13 +28,13 @@ export type Condition =
 
 export const pathAlphabet = 'abcdefghijklmnopqrstuvwxyz'.toUpperCase().split('');
 
-export function extractConditions(group?: StepCondition<any, any>) {
+export function extractConditions(group: StepCondition<any, any>, type: 'if' | 'else' | 'when') {
   let result: Condition[] = [];
   if (!group) return result;
 
   function recurse(group: StepCondition<any, any>, conj?: 'and' | 'or') {
     if (typeof group === 'string') {
-      result.push({ fnString: group });
+      result.push({ type, fnString: group });
     } else {
       const simpleCondition = Object.entries(group).find(([key]) => key.includes('.'));
       if (simpleCondition) {
@@ -45,6 +47,7 @@ export function extractConditions(group?: StepCondition<any, any>) {
           path: pathParts.join('.'),
         };
         result.push({
+          type,
           ref,
           query: { [queryValue === true || queryValue === false ? 'is' : 'eq']: String(queryValue) },
           conj,
@@ -52,7 +55,7 @@ export function extractConditions(group?: StepCondition<any, any>) {
       }
       if ('ref' in group) {
         const { ref, query } = group;
-        result.push({ ref, query, conj });
+        result.push({ type, ref, query, conj });
       }
       if ('and' in group) {
         for (const subGroup of group.and) {
@@ -138,18 +141,23 @@ export const contructNodesAndEdges = ({
         type: 'default-node',
         id: nodes.some(node => node.id === step.step.id) ? `${step.step.id}-${i}` : step.step.id,
       };
+      let conditionType: 'if' | 'else' | 'when' = 'when';
       if (step.config?.serializedWhen) {
-        const conditions = extractConditions(step.config.serializedWhen);
+        conditionType = step.step.id === '__start_if' ? 'if' : step.step.id === '__start_else' ? 'else' : 'when';
+        const conditions = extractConditions(step.config.serializedWhen, conditionType);
         const conditionStep = {
           id: crypto.randomUUID(),
           conditions,
           type: 'condition-node',
-          isLarge: conditions?.length > 1 || conditions.some(({ fnString }) => !!fnString),
+          isLarge:
+            (conditions?.length > 1 || conditions.some(({ fnString }) => !!fnString)) && conditionType !== 'else',
         };
 
         acc.push(conditionStep);
       }
-      acc.push(newStep);
+      if (conditionType === 'when') {
+        acc.push(newStep);
+      }
       return acc;
     }, []);
 
@@ -204,19 +212,23 @@ export const contructNodesAndEdges = ({
             type: 'default-node',
             id: nodes.some(node => node.id === step.step.id) ? `${step.step.id}-${i}` : step.step.id,
           };
+          let conditionType: 'if' | 'else' | 'when' = 'when';
           if (step.config?.serializedWhen) {
-            const conditions = extractConditions(step.config.serializedWhen);
+            conditionType = step.step.id === '__start_if' ? 'if' : step.step.id === '__start_else' ? 'else' : 'when';
+            const conditions = extractConditions(step.config.serializedWhen, conditionType);
             const conditionStep = {
               id: crypto.randomUUID(),
               conditions,
               type: 'condition-node',
-              isLarge: conditions?.length > 1 || conditions.some(({ fnString }) => !!fnString),
+              isLarge:
+                (conditions?.length > 1 || conditions.some(({ fnString }) => !!fnString)) && conditionType !== 'else',
             };
 
             acc.push(conditionStep);
           }
-
-          acc.push(newStep);
+          if (conditionType === 'when') {
+            acc.push(newStep);
+          }
           return acc;
         }, []);
 

@@ -21,12 +21,16 @@ export type ConditionNode = Node<
 export function WorkflowConditionNode({ data }: NodeProps<ConditionNode>) {
   const { conditions } = data;
   const [open, setOpen] = useState(true);
-  const isCollapsible = conditions.some(condition => condition.fnString) || conditions?.length > 1;
+  const type = conditions[0]?.type;
+  const isCollapsible = (conditions.some(condition => condition.fnString) || conditions?.length > 1) && type !== 'else';
   return (
     <Collapsible
       open={!isCollapsible ? true : open}
-      onOpenChange={setOpen}
-      disabled={!isCollapsible}
+      onOpenChange={_open => {
+        if (isCollapsible) {
+          setOpen(_open);
+        }
+      }}
       className={cn('bg-mastra-bg-3 rounded-md w-[274px] flex flex-col p-2 gap-2')}
     >
       <Handle type="target" position={Position.Top} style={{ visibility: 'hidden' }} />
@@ -37,7 +41,7 @@ export function WorkflowConditionNode({ data }: NodeProps<ConditionNode>) {
           weight="medium"
           className="text-mastra-el-3 bg-mastra-bg-11 my-auto block rounded-[0.125rem] px-2 py-1 text-[10px] w-fit"
         >
-          WHEN
+          {type.toUpperCase()}
         </Text>
         {isCollapsible && (
           <ChevronDown
@@ -47,52 +51,54 @@ export function WorkflowConditionNode({ data }: NodeProps<ConditionNode>) {
           />
         )}
       </CollapsibleTrigger>
-      <CollapsibleContent className="flex flex-col gap-2">
-        {conditions.map((condition, index) => {
-          return condition.fnString ? (
-            <Fragment key={`${condition.fnString}-${index}`}>
-              <Highlight theme={themes.oneDark} code={String(condition.fnString).trim()} language="javascript">
-                {({ className, style, tokens, getLineProps, getTokenProps }) => (
-                  <pre
-                    className={`${className} relative font-mono text-sm overflow-x-auto p-3 w-full rounded-lg mt-2 dark:bg-zinc-800`}
-                    style={{ ...style, maxHeight: '9.62rem' }}
-                  >
-                    {tokens.map((line, i) => (
-                      <div key={i} {...getLineProps({ line })}>
-                        <span className="inline-block mr-2 text-muted-foreground">{i + 1}</span>
-                        {line.map((token, key) => (
-                          <span key={key} {...getTokenProps({ token })} />
-                        ))}
-                      </div>
-                    ))}
-                  </pre>
-                )}
-              </Highlight>
-            </Fragment>
-          ) : (
-            <Fragment key={`${condition.ref?.path}-${index}`}>
-              {condition.ref?.step ? (
-                <div className="flex items-center gap-1">
-                  {index === 0 ? null : (
-                    <Text
-                      size={'xs'}
-                      weight="medium"
-                      className="text-mastra-el-3 bg-mastra-bg-11 my-auto block rounded-[0.125rem] px-2 py-1 text-[10px]"
+      {type === 'else' ? null : (
+        <CollapsibleContent className="flex flex-col gap-2">
+          {conditions.map((condition, index) => {
+            return condition.fnString ? (
+              <Fragment key={`${condition.fnString}-${index}`}>
+                <Highlight theme={themes.oneDark} code={String(condition.fnString).trim()} language="javascript">
+                  {({ className, style, tokens, getLineProps, getTokenProps }) => (
+                    <pre
+                      className={`${className} relative font-mono text-sm overflow-x-auto p-3 w-full rounded-lg mt-2 dark:bg-zinc-800`}
+                      style={{ ...style, maxHeight: '9.62rem' }}
                     >
-                      {condition.conj?.toLocaleUpperCase() || 'WHEN'}
-                    </Text>
+                      {tokens.map((line, i) => (
+                        <div key={i} {...getLineProps({ line })}>
+                          <span className="inline-block mr-2 text-muted-foreground">{i + 1}</span>
+                          {line.map((token, key) => (
+                            <span key={key} {...getTokenProps({ token })} />
+                          ))}
+                        </div>
+                      ))}
+                    </pre>
                   )}
+                </Highlight>
+              </Fragment>
+            ) : (
+              <Fragment key={`${condition.ref?.path}-${index}`}>
+                {condition.ref?.step ? (
+                  <div className="flex items-center gap-1">
+                    {index === 0 ? null : (
+                      <Text
+                        size={'xs'}
+                        weight="medium"
+                        className="text-mastra-el-3 bg-mastra-bg-11 my-auto block rounded-[0.125rem] px-2 py-1 text-[10px]"
+                      >
+                        {condition.conj?.toLocaleUpperCase() || 'WHEN'}
+                      </Text>
+                    )}
 
-                  <Text size={'xs'} className=" text-mastra-el-3 flex-1">
-                    {(condition.ref.step as any).id || condition.ref.step}'s {condition.ref.path}{' '}
-                    {Object.entries(condition.query).map(([key, value]) => `${key} ${String(value)}`)}
-                  </Text>
-                </div>
-              ) : null}
-            </Fragment>
-          );
-        })}
-      </CollapsibleContent>
+                    <Text size={'xs'} className=" text-mastra-el-3 flex-1">
+                      {(condition.ref.step as any).id || condition.ref.step}'s {condition.ref.path}{' '}
+                      {Object.entries(condition.query).map(([key, value]) => `${key} ${String(value)}`)}
+                    </Text>
+                  </div>
+                ) : null}
+              </Fragment>
+            );
+          })}
+        </CollapsibleContent>
+      )}
       <Handle type="source" position={Position.Bottom} style={{ visibility: 'hidden' }} />
     </Collapsible>
   );
