@@ -106,7 +106,7 @@ The voice instance emits several events:
 - `writing`: Emitted when speech is transcribed to text
 - `error`: Emitted when an error occurs
 
-You can also listen to OpenAI Realtime events by prefixing with 'openAIRealtime:', such as:
+You can also listen to OpenAI Realtime [sdk utility events](https://github.com/openai/openai-realtime-api-beta/tree/main?tab=readme-ov-file#reference-client-utility-events) by prefixing with 'openAIRealtime:', such as:
 
 - `openAIRealtime:conversation.item.completed`
 - `openAIRealtime:conversation.updated`

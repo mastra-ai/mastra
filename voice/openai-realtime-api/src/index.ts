@@ -502,7 +502,7 @@ export class OpenAIRealtimeVoice extends MastraVoice {
       }
 
       if (item.formatted.transcript) {
-        this.emit('listening', { text: item.formatted.transcript, role: item.role });
+        this.emit('writing', { text: item.formatted.transcript, role: item.role });
       }
 
       this.emit('openAIRealtime:conversation.item.completed', { item, delta });
