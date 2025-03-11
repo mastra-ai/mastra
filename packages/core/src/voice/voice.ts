@@ -7,7 +7,7 @@ export type VoiceEventType = 'speaking' | 'writing' | 'error' | string;
 
 // Define event data structure for each event type
 export interface VoiceEventMap {
-  speaking: { text: string; audioStream?: NodeJS.ReadableStream };
+  speaking: { audio?: NodeJS.ReadableStream };
   writing: { text: string; role: 'assistant' | 'user' };
   error: { message: string; code?: string; details?: unknown };
   [key: string]: unknown; // Allow for custom events
