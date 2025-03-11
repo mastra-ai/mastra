@@ -7,6 +7,8 @@ Mastra agents can be enhanced with voice capabilities, allowing them to speak re
 The simplest way to add voice to an agent is to use a single provider for both speaking and listening:
 
 ```typescript
+import { createReadStream } from 'fs';
+import path from 'path';
 import { Agent } from "@mastra/core/agent";
 import { OpenAIVoice } from "@mastra/voice-openai";
 
@@ -16,7 +18,7 @@ const voice = new OpenAIVoice();
 // Create an agent with voice capabilities
 export const agent = new Agent({
   name: 'Agent',
-  instructions: `You are a helpful assistant with both STT and TTS capabilities.`,
+  instructions: `You are a helpful assistan t with both STT and TTS capabilities.`,
   model: openai('gpt-4o'),
   voice
 });
@@ -25,8 +27,8 @@ export const agent = new Agent({
 await agent.speak("Hello, I'm your AI assistant!");
 
 // Read audio file and transcribe
-const audioFilePath = path.join(process.cwd(), '/audio.mp3');
-const audioStream = createReadStream(audioFilePath);
+const audioFilePath = path.join(process.cwd(), '/audio.m4a');
+const audioStream = createReadStream(audioFilePath, { filetype: 'm4a' });
 
 try {
   const transcription = await agent.listen(audioStream);
@@ -88,8 +90,8 @@ import { createReadStream } from 'fs';
 import path from 'path';
 
 // Read audio file and transcribe
-const audioFilePath = path.join(process.cwd(), '/agent.mp3');
-const audioStream = createReadStream(audioFilePath);
+const audioFilePath = path.join(process.cwd(), '/agent.m4a');
+const audioStream = createReadStream(audioFilePath, { filetype: 'm4a' });
 
 try {
   console.log('Transcribing audio file...');
