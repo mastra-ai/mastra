@@ -49,7 +49,6 @@
   "author": "",
   "dependencies": {
     "@clack/prompts": "^0.8.2",
-    "@dagrejs/dagre": "^1.1.4",
     "@lukeed/uuid": "^2.0.1",
     "@mastra/core": "workspace:^",
     "@mastra/deployer": "workspace:^",

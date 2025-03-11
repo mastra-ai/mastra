@@ -14,7 +14,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Text } from '@/components/ui/text';
 
 import { useExecuteWorkflow, useWatchWorkflow, useResumeWorkflow, useWorkflow } from '@/hooks/use-workflows';
-import { WorkflowRunContext } from './workflow-run-context';
+import { WorkflowRunContext } from '../context/workflow-run-context';
 
 interface SuspendedStep {
   stepId: string;
@@ -25,12 +25,20 @@ interface WorkflowPath {
   stepId: string;
 }
 
-export function WorkflowTrigger({ workflowId, setRunId }: { workflowId: string; setRunId: (runId: string) => void }) {
+export function WorkflowTrigger({
+  workflowId,
+  baseUrl,
+  setRunId,
+}: {
+  workflowId: string;
+  baseUrl: string;
+  setRunId?: (runId: string) => void;
+}) {
   const { result, setResult, payload, setPayload } = useContext(WorkflowRunContext);
-  const { isLoading, workflow } = useWorkflow(workflowId);
-  const { createWorkflowRun } = useExecuteWorkflow();
-  const { watchWorkflow, watchResult, isWatchingWorkflow } = useWatchWorkflow();
-  const { resumeWorkflow, isResumingWorkflow } = useResumeWorkflow();
+  const { isLoading, workflow } = useWorkflow(workflowId, baseUrl);
+  const { createWorkflowRun } = useExecuteWorkflow(baseUrl);
+  const { watchWorkflow, watchResult, isWatchingWorkflow } = useWatchWorkflow(baseUrl);
+  const { resumeWorkflow, isResumingWorkflow } = useResumeWorkflow(baseUrl);
   const [suspendedSteps, setSuspendedSteps] = useState<SuspendedStep[]>([]);
 
   const triggerSchema = workflow?.triggerSchema;
@@ -38,8 +46,10 @@ export function WorkflowTrigger({ workflowId, setRunId }: { workflowId: string; 
   const handleExecuteWorkflow = async (data: any) => {
     if (!workflow) return;
 
+    setResult(null);
+
     const { runId } = await createWorkflowRun({ workflowId, input: data });
-    setRunId(runId);
+    setRunId?.(runId);
 
     watchWorkflow({ workflowId, runId });
   };
@@ -59,22 +69,26 @@ export function WorkflowTrigger({ workflowId, setRunId }: { workflowId: string; 
     watchWorkflow({ workflowId, runId });
   };
 
-  const workflowActivePaths = watchResult?.activePaths ?? [];
+  const watchResultToUse = result ?? watchResult;
+
+  const workflowActivePaths = watchResultToUse?.activePaths ?? [];
 
   useEffect(() => {
-    if (!watchResult?.activePaths || !result?.runId) return;
+    if (!watchResultToUse?.activePaths || !result?.runId) return;
 
-    const suspended = watchResult.activePaths
-      .filter((path: WorkflowPath) => watchResult.context?.steps?.[path.stepId]?.status === 'suspended')
+    const suspended = watchResultToUse.activePaths
+      .filter((path: WorkflowPath) => watchResultToUse.context?.steps?.[path.stepId]?.status === 'suspended')
       .map((path: WorkflowPath) => ({
         stepId: path.stepId,
         runId: result.runId,
       }));
     setSuspendedSteps(suspended);
-  }, [watchResult, result]);
+  }, [watchResultToUse, result]);
 
   useEffect(() => {
-    setResult(watchResult);
+    if (watchResult) {
+      setResult(watchResult);
+    }
   }, [watchResult]);
 
   if (isLoading) {

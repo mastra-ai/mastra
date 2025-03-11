@@ -271,8 +271,6 @@ export type StepResolverOutput =
   | { type: 'STEP_FAILED'; error: string }
   | { type: 'STEP_WAITING' };
 
-
-
 export type WorkflowActors = {
   resolverFunction: {
     input: ResolverFunctionInput;
