@@ -5,7 +5,9 @@ import { expect, beforeAll, it } from 'vitest';
 
 const spawn = (cmd: string, args: ReadonlyArray<string>) =>
   new Promise((resolve, reject) => {
-    const cp = spwn(cmd, args);
+    const cp = spwn(cmd, args, {
+      shell: true,
+    });
     const error: string[] = [];
     const stdout: string[] = [];
     cp.stdout.on('data', data => {
