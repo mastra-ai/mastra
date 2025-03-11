@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.1.3-alpha.11
+
+### Patch Changes
+
+- fd4a1d7: Update cjs bundling to make sure files are split
+- Updated dependencies [7a7a547]
+- Updated dependencies [c93798b]
+- Updated dependencies [dbd9f2d]
+- Updated dependencies [a171b37]
+- Updated dependencies [fd4a1d7]
+  - @mastra/core@0.5.0-alpha.11
+
 ## 0.1.3-alpha.10
 
 ### Patch Changes
