@@ -1,18 +1,40 @@
 {
-  "name": "azure",
-  "version": "1.0.0",
-  "main": "index.js",
-  "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+  "name": "@mastra/voice-azure",
+  "version": "0.1.0-alpha.0",
+  "description": "Mastra Azure speech integration",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      },
+      "require": {
+        "types": "./dist/index.d.cts",
+        "default": "./dist/index.cjs"
+      }
+    },
+    "./package.json": "./package.json"
   },
-  "author": "",
-  "license": "ISC",
-  "description": "",
+  "scripts": {
+    "build": "tsup src/index.ts --format esm,cjs --experimental-dts --clean --treeshake",
+    "build:watch": "pnpm build --watch",
+    "test": "vitest run",
+    "lint": "eslint ."
+  },
   "dependencies": {
-    "@mastra/core": "^0.4.4",
+    "@mastra/core": "workspace:^",
     "microsoft-cognitiveservices-speech-sdk": "^1.42.0"
   },
   "devDependencies": {
-    "vitest": "^3.0.8"
+    "@microsoft/api-extractor": "^7.49.2",
+    "@types/node": "^22.13.1",
+    "tsup": "^8.3.6",
+    "typescript": "^5.7.3",
+    "vitest": "^2.1.8",
+    "@internal/lint": "workspace:*",
+    "eslint": "^9.20.1"
   }
 }
