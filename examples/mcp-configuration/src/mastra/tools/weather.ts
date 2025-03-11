@@ -1,4 +1,4 @@
-import { FastMCP } from "fastmcp";
+import { FastMCP } from 'fastmcp';
 import { z } from 'zod';
 
 interface WeatherResponse {
@@ -75,17 +75,17 @@ function getWeatherCondition(code: number): string {
 }
 
 const server = new FastMCP({
-  name: "Weather Server",
-  version: "1.0.0",
+  name: 'Weather Server',
+  version: '1.0.0',
 });
 
 server.addTool({
-  name: "getWeather",
-  description: "Get current weather for a location",
+  name: 'getWeather',
+  description: 'Get current weather for a location',
   parameters: z.object({
     location: z.string().describe('City name'),
   }),
-  execute: async (args) => {
+  execute: async args => {
     try {
       const weatherData = await getWeather(args.location);
       return JSON.stringify(weatherData);
@@ -100,9 +100,9 @@ server.addTool({
 
 // Start the server with SSE support
 server.start({
-  transportType: "sse",
+  transportType: 'sse',
   sse: {
-    endpoint: "/sse",
+    endpoint: '/sse',
     port: 8080,
   },
 });
