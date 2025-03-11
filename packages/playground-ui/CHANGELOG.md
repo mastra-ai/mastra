@@ -1,5 +1,14 @@
 # @mastra/playground-ui
 
+## 1.0.0-alpha.12
+
+### Patch Changes
+
+- 07a7470: Move WorkflowTrigger to playground-ui package and use in dev playground
+- Updated dependencies [a85ab24]
+  - @mastra/core@0.5.0-alpha.12
+  - @mastra/client-js@0.1.7-alpha.12
+
 ## 1.0.0-alpha.11
 
 ### Patch Changes
