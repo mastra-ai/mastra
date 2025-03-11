@@ -1,6 +1,6 @@
 {
   "name": "@mastra/astra",
-  "version": "0.2.0",
+  "version": "0.2.1-alpha.0",
   "description": "Astra DB provider for Mastra - includes vector store capabilities",
   "type": "module",
   "main": "dist/index.js",
