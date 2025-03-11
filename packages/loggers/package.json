@@ -3,6 +3,9 @@
   "version": "0.1.8-alpha.10",
   "description": "",
   "type": "module",
+  "files": [
+    "dist"
+  ],
   "types": "./dist/index.d.ts",
   "main": "./dist/index.js",
   "exports": {
