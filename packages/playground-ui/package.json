@@ -41,7 +41,7 @@
     "@hookform/resolvers": "^3.9.0",
     "@lezer/highlight": "^1.2.1",
     "@lukeed/uuid": "^2.0.1",
-    "@mastra/client-js": "workspace:0.1.7-alpha.10",
+    "@mastra/client-js": "workspace:^",
     "@radix-ui/react-avatar": "^1.1.3",
     "@radix-ui/react-collapsible": "^1.1.3",
     "@radix-ui/react-dialog": "^1.1.6",
