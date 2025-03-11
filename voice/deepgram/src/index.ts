@@ -86,7 +86,11 @@ export class DeepgramVoice extends MastraVoice {
     if (typeof input !== 'string') {
       const chunks: Buffer[] = [];
       for await (const chunk of input) {
-        chunks.push(Buffer.from(chunk));
+        if (typeof chunk === 'string') {
+          chunks.push(Buffer.from(chunk));
+        } else {
+          chunks.push(chunk);
+        }
       }
       text = Buffer.concat(chunks).toString('utf-8');
     } else {
@@ -160,7 +164,11 @@ export class DeepgramVoice extends MastraVoice {
 
     const chunks: Buffer[] = [];
     for await (const chunk of audioStream) {
-      chunks.push(Buffer.from(chunk));
+      if (typeof chunk === 'string') {
+        chunks.push(Buffer.from(chunk));
+      } else {
+        chunks.push(chunk);
+      }
     }
     const buffer = Buffer.concat(chunks);
 

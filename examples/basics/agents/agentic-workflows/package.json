@@ -8,8 +8,8 @@
   },
   "dependencies": {
     "@ai-sdk/openai": "latest",
-    "ai": "latest",
     "@mastra/core": "workspace:*",
-    "zod": "^3.24.1"
+    "ai": "latest",
+    "zod": "^3.24.2"
   }
 }

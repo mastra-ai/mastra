@@ -12,7 +12,7 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
-    "@ai-sdk/openai": "^1.1.9",
+    "@ai-sdk/openai": "^1.2.1",
     "@mastra/core": "workspace:*",
     "@mastra/memory": "workspace:*"
   },
