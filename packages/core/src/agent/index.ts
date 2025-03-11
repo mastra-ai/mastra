@@ -417,6 +417,7 @@ export class Agent<
   sanitizeResponseMessages(messages: Array<CoreMessage>): Array<CoreMessage> {
     let toolResultIds: Array<string> = [];
     let toolCallIds: Array<string> = [];
+    let dupeToolCalls: Array<string> = [];
 
     for (const message of messages) {
       if (!Array.isArray(message.content)) continue;
@@ -431,6 +432,9 @@ export class Agent<
         for (const content of message.content) {
           if (typeof content !== `string`) {
             if (content.type === `tool-call`) {
+              if (toolCallIds.includes(content.toolCallId)) {
+                dupeToolCalls.push(content.toolCallId);
+              }
               toolCallIds.push(content.toolCallId);
             }
           }
@@ -465,22 +469,32 @@ export class Agent<
     });
 
     return messagesBySanitizedContent.filter(message => {
-      if (typeof message.content === `string`) {
-        return message.content !== '';
-      }
+      // if (typeof message.content === `string`) {
+      //   return message.content !== '';
+      // }
 
-      if (Array.isArray(message.content)) {
-        return (
-          message.content.length &&
-          message.content.every(c => {
-            if (c.type === `text`) {
-              return c.text && c.text !== '';
+      // if (Array.isArray(message.content)) {
+      //   return (
+      //     message.content.length &&
+      //     message.content.every(c => {
+      //       if (c.type === `text`) {
+      //         return c.text && c.text !== '';
+      //       }
+      //       return true;
+      //     })
+      //   );
+      // }
+
+      if (message.role === `assistant`) {
+        if (Array.isArray(message.content)) {
+          for (const part of message.content) {
+            if (part.type === `tool-call` && dupeToolCalls.includes(part.toolCallId)) {
+              dupeToolCalls = dupeToolCalls.filter(id => id !== part.toolCallId);
+              return false;
             }
-            return true;
-          })
-        );
+          }
+        }
       }
-
       return true;
     }) as Array<CoreMessage>;
   }
