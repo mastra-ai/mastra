@@ -1563,8 +1563,6 @@ describe('Workflow', async () => {
       const run = workflow.createRun();
       const result = await run.start();
 
-      console.log({ result });
-
       expect(step1Action).toHaveBeenCalled();
       expect(step2Action).toHaveBeenCalled();
       expect(step3Action).toHaveBeenCalled();

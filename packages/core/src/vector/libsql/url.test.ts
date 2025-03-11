@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, rmSync } from 'fs';
+import { existsSync, mkdirSync } from 'fs';
 import { stat, mkdir, rm } from 'fs/promises';
 import { tmpdir } from 'os';
 import { join } from 'path';
@@ -11,7 +11,29 @@ describe('LibSQLVector URL rewriting', () => {
   let parentDir: string;
 
   beforeEach(async () => {
-    tmpDir = join(tmpdir(), 'mastra-test-libsql-vector-url');
+    tmpDir = join(tmpdir(), await mkdtemp('mastra-test-libsql-vector-url'));
+    try {
+      if (await stat(tmpDir)) {
+        await rm(tmpDir, { recursive: true, force: true });
+      }
+    } catch {
+      // ignore
+    }
+
+    try {
+      await mkdir(tmpDir, { recursive: true });
+    } catch {
+      // ignore
+    }
+
+    originalCwd = process.cwd();
+    process.chdir(tmpDir);
+    parentDir = join(tmpDir, '..');
+  });
+
+  afterEach(async () => {
+    process.chdir(originalCwd);
+
     try {
       if (await stat(tmpDir)) {
         await rm(tmpDir, { recursive: true, force: true });
@@ -19,16 +41,6 @@ describe('LibSQLVector URL rewriting', () => {
       await mkdir(tmpDir, { recursive: true });
     } catch {
       // ignore
-    }
-    originalCwd = process.cwd();
-    process.chdir(tmpDir);
-    parentDir = join(tmpDir, '..');
-  });
-
-  afterEach(() => {
-    process.chdir(originalCwd);
-    if (existsSync(tmpDir)) {
-      rmSync(tmpDir, { recursive: true, force: true });
     }
   });
 

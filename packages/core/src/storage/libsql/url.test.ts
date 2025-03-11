@@ -32,7 +32,12 @@ describe('LibSQLStore URL rewriting', () => {
       // ignore
     }
 
-    await mkdir(tmpDir, { recursive: true });
+    try {
+      await mkdir(tmpDir, { recursive: true });
+    } catch {
+      // ignore
+    }
+
     originalCwd = process.cwd();
     process.chdir(tmpDir);
     parentDir = join(tmpDir, '..');
