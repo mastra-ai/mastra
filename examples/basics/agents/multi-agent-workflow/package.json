@@ -6,10 +6,10 @@
     "start": "pnpx tsx index.ts"
   },
   "dependencies": {
-    "@ai-sdk/openai": "latest",
     "@ai-sdk/anthropic": "latest",
+    "@ai-sdk/openai": "latest",
     "@mastra/core": "workspace:*",
-    "zod": "^3.24.1"
+    "zod": "^3.24.2"
   },
   "version": "0.0.1"
 }

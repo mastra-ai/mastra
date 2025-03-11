@@ -18,14 +18,14 @@
     "@mastra/mcp": "workspace:*",
     "@mastra/memory": "workspace:*",
     "chalk": "^5.4.1",
-    "fastmcp": "^1.20.2",
-    "zod": "^3.24.0"
+    "fastmcp": "^1.20.3",
+    "zod": "^3.24.2"
   },
   "devDependencies": {
     "@jest/globals": "^29.7.0",
     "jest": "^29.7.0",
     "mastra": "workspace:*",
-    "ts-jest": "^29.2.5",
+    "ts-jest": "^29.2.6",
     "tsx": "^4.19.3"
   },
   "version": "0.0.1"
