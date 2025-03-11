@@ -18,7 +18,7 @@ const voice = new OpenAIVoice();
 // Create an agent with voice capabilities
 export const agent = new Agent({
   name: 'Agent',
-  instructions: `You are a helpful assistan t with both STT and TTS capabilities.`,
+  instructions: `You are a helpful assistant with both STT and TTS capabilities.`,
   model: openai('gpt-4o'),
   voice
 });
