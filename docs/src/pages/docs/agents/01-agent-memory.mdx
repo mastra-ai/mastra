@@ -317,6 +317,50 @@ The memory system will automatically:
 3. Inject relevant historical context into new conversations
 4. Maintain conversation threads and context
 
+## useChat()
+
+When using `useChat` from the AI SDK, you must send only the latest message or you will encounter message ordering bugs.
+
+If the `useChat()` implementation for your framework supports `experimental_prepareRequestBody`, you can do the following:
+
+```ts
+const { messages } = useChat({
+  api: "api/chat",
+  experimental_prepareRequestBody({ messages, id }) {
+    return { message: messages.at(-1), id };
+  },
+});
+```
+
+This will only ever send the latest message to the server.
+In your chat server endpoint you can then pass a threadId and resourceId when calling stream or generate and the agent will have access to the memory thread messages:
+
+```ts
+const { messages } = await request.json();
+
+const stream = await myAgent.stream(messages, {
+  threadId,
+  resourceId,
+});
+
+return stream.toDataStreamResponse();
+```
+
+If the `useChat()` for your framework (svelte for example) doesn't support `experimental_prepareRequestBody`, you can pick and use the last message before calling stream or generate:
+
+```ts
+const { messages } = await request.json();
+
+const stream = await myAgent.stream([messages.at(-1)], {
+  threadId,
+  resourceId,
+});
+
+return stream.toDataStreamResponse();
+```
+
+See the [AI SDK documentation on message persistence](https://sdk.vercel.ai/docs/ai-sdk-ui/chatbot-message-persistence) for more information.
+
 ## Manually Managing Threads
 
 While threads are automatically managed when using agent methods, you can also manually manage threads using the memory API directly. This is useful for advanced use cases like:

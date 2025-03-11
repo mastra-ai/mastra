@@ -842,7 +842,7 @@ export class Agent<
           content: messages,
         },
       ];
-    } else {
+    } else if (Array.isArray(messages)) {
       messagesToUse = messages.map(message => {
         if (typeof message === `string`) {
           return {
@@ -852,6 +852,8 @@ export class Agent<
         }
         return message;
       });
+    } else {
+      messagesToUse = [messages];
     }
 
     const runIdToUse = runId || randomUUID();
