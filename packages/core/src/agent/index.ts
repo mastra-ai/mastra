@@ -417,7 +417,6 @@ export class Agent<
   sanitizeResponseMessages(messages: Array<CoreMessage>): Array<CoreMessage> {
     let toolResultIds: Array<string> = [];
     let toolCallIds: Array<string> = [];
-    let dupeToolCalls = new Set<string>();
 
     for (const message of messages) {
       if (!Array.isArray(message.content)) continue;
@@ -432,9 +431,6 @@ export class Agent<
         for (const content of message.content) {
           if (typeof content !== `string`) {
             if (content.type === `tool-call`) {
-              if (toolCallIds.includes(content.toolCallId)) {
-                dupeToolCalls.add(content.toolCallId);
-              }
               toolCallIds.push(content.toolCallId);
             }
           }
@@ -474,12 +470,6 @@ export class Agent<
       }
 
       if (Array.isArray(message.content)) {
-        for (const part of message.content) {
-          if (part.type === `tool-call` && dupeToolCalls.has(part.toolCallId)) {
-            dupeToolCalls.delete(part.toolCallId);
-            return false;
-          }
-        }
         return (
           message.content.length &&
           message.content.every(c => {
