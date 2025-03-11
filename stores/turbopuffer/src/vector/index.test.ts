@@ -1,6 +1,9 @@
+import dotenv from 'dotenv';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { TurbopufferVector } from './';
+
+dotenv.config();
 
 // Check if we have a valid API key
 const TURBOPUFFER_API_KEY = process.env.TURBOPUFFER_API_KEY;
