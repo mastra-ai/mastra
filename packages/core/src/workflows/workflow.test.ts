@@ -15,7 +15,7 @@ import { Workflow } from './workflow';
 
 const storage = new DefaultStorage({
   config: {
-    url: 'file::memory:',
+    url: 'file::memory:?cache=shared',
   },
 });
 
