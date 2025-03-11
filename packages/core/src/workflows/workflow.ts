@@ -88,7 +88,7 @@ export class Workflow<
       config: {
         ...this.#makeStepDef(stepKey),
         ...config,
-        _when: typeof config?.when === 'function' ? config.when.toString() : config?.when,
+        serializedWhen: typeof config?.when === 'function' ? config.when.toString() : config?.when,
         data: requiredData,
       },
     };
@@ -145,7 +145,7 @@ export class Workflow<
       config: {
         ...this.#makeStepDef(stepKey),
         ...config,
-        _when: typeof config?.when === 'function' ? config.when.toString() : config?.when,
+        serializedWhen: typeof config?.when === 'function' ? config.when.toString() : config?.when,
         data: requiredData,
       },
     };

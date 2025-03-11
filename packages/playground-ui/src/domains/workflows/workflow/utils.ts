@@ -138,8 +138,8 @@ export const contructNodesAndEdges = ({
         type: 'default-node',
         id: nodes.some(node => node.id === step.step.id) ? `${step.step.id}-${i}` : step.step.id,
       };
-      if (step.config?._when) {
-        const conditions = extractConditions(step.config._when);
+      if (step.config?.serializedWhen) {
+        const conditions = extractConditions(step.config.serializedWhen);
         const conditionStep = {
           id: crypto.randomUUID(),
           conditions,
@@ -204,8 +204,8 @@ export const contructNodesAndEdges = ({
             type: 'default-node',
             id: nodes.some(node => node.id === step.step.id) ? `${step.step.id}-${i}` : step.step.id,
           };
-          if (step.config?._when) {
-            const conditions = extractConditions(step.config._when);
+          if (step.config?.serializedWhen) {
+            const conditions = extractConditions(step.config.serializedWhen);
             const conditionStep = {
               id: crypto.randomUUID(),
               conditions,
