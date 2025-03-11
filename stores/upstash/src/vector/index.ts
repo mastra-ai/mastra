@@ -106,31 +106,33 @@ export class UpstashVector extends MastraVector {
       metadata?: Record<string, any>;
     },
   ): Promise<void> {
-    try {
-      if (!update.vector && !update.metadata) {
-        throw new Error('No update data provided');
-      }
-
-      const updatePayload: any = { id: id };
-      if (update.vector) {
-        updatePayload.vector = update.vector;
-      }
-      if (update.metadata) {
-        updatePayload.metadata = update.metadata;
-      }
-
-      const points = {
-        id: updatePayload.id,
-        vector: updatePayload.vector,
-        metadata: updatePayload.metadata,
-      };
-
-      await this.client.upsert(points, {
-        namespace: indexName,
-      });
-    } catch (error) {
-      console.error('Failed to update index by ID:', error);
+    if (!update.vector && !update.metadata) {
+      throw new Error('No update data provided');
     }
+
+    // The upstash client throws an exception as: 'This index requires dense vectors' when
+    // only metadata is present in the update object.
+    if (!update.vector && update.metadata) {
+      throw new Error('Both vector and metadata must be provided for an update');
+    }
+
+    const updatePayload: any = { id: id };
+    if (update.vector) {
+      updatePayload.vector = update.vector;
+    }
+    if (update.metadata) {
+      updatePayload.metadata = update.metadata;
+    }
+
+    const points = {
+      id: updatePayload.id,
+      vector: updatePayload.vector,
+      metadata: updatePayload.metadata,
+    };
+
+    await this.client.upsert(points, {
+      namespace: indexName,
+    });
   }
 
   async deleteIndexById(indexName: string, id: string): Promise<void> {

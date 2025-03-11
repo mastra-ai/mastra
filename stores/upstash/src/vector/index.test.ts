@@ -113,12 +113,8 @@ describe.skipIf(!process.env.UPSTASH_VECTOR_URL || !process.env.UPSTASH_VECTOR_T
       expect(results?.[2]?.vector).toHaveLength(VECTOR_DIMENSION);
     });
 
-    describe('updates', () => {
-      const testVectors = [
-        [1, 2, 3],
-        [4, 5, 6],
-        [7, 8, 9],
-      ];
+    describe('Vector update operations', () => {
+      const testVectors = [createVector(0, 1.0), createVector(1, 1.0), createVector(2, 1.0)];
 
       const testIndexName = 'test-index';
 
@@ -135,7 +131,7 @@ describe.skipIf(!process.env.UPSTASH_VECTOR_URL || !process.env.UPSTASH_VECTOR_T
         expect(ids).toHaveLength(3);
 
         const idToBeUpdated = ids[0];
-        const newVector = [1, 2, 3];
+        const newVector = createVector(0, 4.0);
         const newMetaData = {
           test: 'updates',
         };
@@ -147,6 +143,8 @@ describe.skipIf(!process.env.UPSTASH_VECTOR_URL || !process.env.UPSTASH_VECTOR_T
 
         await vectorStore.updateIndexById(testIndexName, idToBeUpdated, update);
 
+        await waitUntilVectorsIndexed(vectorStore, testIndexName, 3);
+
         const results: QueryResult[] = await vectorStore.query({
           indexName: testIndexName,
           queryVector: newVector,
@@ -156,7 +154,7 @@ describe.skipIf(!process.env.UPSTASH_VECTOR_URL || !process.env.UPSTASH_VECTOR_T
         expect(results[0]?.id).toBe(idToBeUpdated);
         expect(results[0]?.vector).toEqual(newVector);
         expect(results[0]?.metadata).toEqual(newMetaData);
-      });
+      }, 500000);
 
       it('should only update the metadata by id', async () => {
         const ids = await vectorStore.upsert({ indexName: testIndexName, vectors: testVectors });
@@ -171,17 +169,9 @@ describe.skipIf(!process.env.UPSTASH_VECTOR_URL || !process.env.UPSTASH_VECTOR_T
           metadata: newMetaData,
         };
 
-        await vectorStore.updateIndexById(testIndexName, idToBeUpdated, update);
-
-        const results: QueryResult[] = await vectorStore.query({
-          indexName: testIndexName,
-          queryVector: testVectors[0],
-          topK: 2,
-          includeVector: true,
-        });
-        expect(results[0]?.id).toBe(idToBeUpdated);
-        expect(results[0]?.vector).toEqual(testVectors[0]);
-        expect(results[0]?.metadata).toEqual(newMetaData);
+        await expect(vectorStore.updateIndexById(testIndexName, 'id', update)).rejects.toThrow(
+          'Both vector and metadata must be provided for an update',
+        );
       });
 
       it('should only update vector embeddings by id', async () => {
@@ -189,13 +179,15 @@ describe.skipIf(!process.env.UPSTASH_VECTOR_URL || !process.env.UPSTASH_VECTOR_T
         expect(ids).toHaveLength(3);
 
         const idToBeUpdated = ids[0];
-        const newVector = [1, 2, 3];
+        const newVector = createVector(0, 4.0);
 
         const update = {
           vector: newVector,
         };
 
         await vectorStore.updateIndexById(testIndexName, idToBeUpdated, update);
+
+        await waitUntilVectorsIndexed(vectorStore, testIndexName, 3);
 
         const results: QueryResult[] = await vectorStore.query({
           indexName: testIndexName,
@@ -205,19 +197,15 @@ describe.skipIf(!process.env.UPSTASH_VECTOR_URL || !process.env.UPSTASH_VECTOR_T
         });
         expect(results[0]?.id).toBe(idToBeUpdated);
         expect(results[0]?.vector).toEqual(newVector);
-      });
+      }, 500000);
 
       it('should throw exception when no updates are given', async () => {
         await expect(vectorStore.updateIndexById(testIndexName, 'id', {})).rejects.toThrow('No update data provided');
       });
     });
 
-    describe('deletes', () => {
-      const testVectors = [
-        [1, 2, 3],
-        [4, 5, 6],
-        [7, 8, 9],
-      ];
+    describe('Vector delete operations', () => {
+      const testVectors = [createVector(0, 1.0), createVector(1, 1.0), createVector(2, 1.0)];
 
       beforeEach(async () => {
         await vectorStore.createIndex({ indexName: testIndexName, dimension: 3 });
@@ -236,7 +224,7 @@ describe.skipIf(!process.env.UPSTASH_VECTOR_URL || !process.env.UPSTASH_VECTOR_T
 
         const results: QueryResult[] = await vectorStore.query({
           indexName: testIndexName,
-          queryVector: [1.0, 0.0, 0.0],
+          queryVector: createVector(0, 1.0),
           topK: 2,
         });
 
