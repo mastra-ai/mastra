@@ -1,5 +1,11 @@
 # @mastra/core
 
+## 0.5.0-alpha.12
+
+### Patch Changes
+
+- a85ab24: make execute optional for create tool
+
 ## 0.5.0-alpha.11
 
 ### Patch Changes
