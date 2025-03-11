@@ -416,9 +416,9 @@ export class OpenAIRealtimeVoice extends MastraVoice {
    *   }
    * });
    */
-  // async answer({ options }: { options?: Realtime.ResponseConfig }) {
-  //   this.client.realtime.send('response.create', { response: options ?? {} });
-  // }
+  async answer({ options }: { options?: Realtime.ResponseConfig }) {
+    this.client.realtime.send('response.create', { response: options ?? {} });
+  }
 
   /**
    * Registers an event listener for voice events.
@@ -504,8 +504,10 @@ export class OpenAIRealtimeVoice extends MastraVoice {
       this.emit('openAIRealtime:conversation.interrupted');
     });
 
-    this.client.on('conversation.updated', ({ item, delta }) => {
-      this.emit('openAIRealtime:conversation.updated', { item, delta });
+    this.client.on('conversation.updated', ({ delta }) => {
+      if (delta?.audio) {
+        this.emit('speaking', { audio: delta.audio });
+      }
     });
 
     this.client.on('conversation.item.appended', item => {
@@ -513,16 +515,6 @@ export class OpenAIRealtimeVoice extends MastraVoice {
     });
 
     this.client.on('conversation.item.completed', ({ item, delta }) => {
-      if (
-        item.formatted &&
-        item.formatted.audio &&
-        item.formatted.audio.length > 0 &&
-        item.type === 'message' &&
-        item.role === 'assistant'
-      ) {
-        this.emit('speaking', { audio: item.formatted.audio });
-      }
-
       if (item.formatted.transcript) {
         this.emit('writing', { text: item.formatted.transcript, role: item.role });
       }
