@@ -48,6 +48,7 @@ export class Agent<
   public name: string;
   readonly llm: MastraLLMBase;
   instructions: string;
+  maxContextLength?: number;
   readonly model?: LanguageModelV1;
   #mastra?: Mastra;
   #memory?: MastraMemory;
@@ -62,6 +63,7 @@ export class Agent<
 
     this.name = config.name;
     this.instructions = config.instructions;
+    this.maxContextLength = config.maxContextLength;
 
     if (!config.model) {
       throw new Error(`LanguageModel is required to create an Agent. Please provide the 'model'.`);
@@ -114,6 +116,14 @@ export class Agent<
   __updateInstructions(newInstructions: string) {
     this.instructions = newInstructions;
     this.logger.debug(`[Agents:${this.name}] Instructions updated.`, { model: this.model, name: this.name });
+  }
+
+  __updateMaxContextLength(newMaxContextLength: number) {
+    this.maxContextLength = newMaxContextLength;
+    this.logger.debug(`[Agents:${this.name}] Max context length updated.`, {
+      model: this.model,
+      name: this.name,
+    });
   }
 
   __registerPrimitives(p: MastraPrimitives) {
@@ -719,7 +729,9 @@ export class Agent<
           });
         }
 
-        const messageObjects = [systemMessage, ...(context || []), ...coreMessages];
+        const contextToSend = this.maxContextLength ? context?.slice(-this.maxContextLength) : context;
+
+        const messageObjects = [systemMessage, ...(contextToSend ?? []), ...coreMessages];
 
         return { messageObjects, convertedTools, threadId: threadIdToUse as string };
       },
