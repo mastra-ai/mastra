@@ -1,0 +1,8 @@
+{
+  "extends": "../../../../tsconfig.node.json",
+  "compilerOptions": {
+    "lib": ["dom", "dom.iterable"]
+  },
+  "include": ["./*"],
+  "exclude": ["**/*.test.ts"]
+}

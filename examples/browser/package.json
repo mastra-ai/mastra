@@ -1,0 +1,24 @@
+{
+  "name": "example-browser",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "dev": "mastra dev",
+    "build": "mastra build"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "packageManager": "pnpm@10.4.1",
+  "dependencies": {
+    "@ai-sdk/openai": "^1.2.1",
+    "@mastra/browser": "workspace:^",
+    "@mastra/core": "workspace:^",
+    "playwright": "^1.49.1",
+    "zod": "^3.24.2"
+  },
+  "devDependencies": {
+    "mastra": "workspace:^"
+  }
+}

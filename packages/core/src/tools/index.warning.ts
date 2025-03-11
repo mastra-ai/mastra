@@ -6,7 +6,7 @@ import type { ToolAction, ToolExecutionContext } from './types';
 export * from './tool';
 
 export class Tool<
-  TSchemaIn extends z.ZodSchema | undefined = undefined,
+  TSchemaIn extends z.ZodSchema,
   TSchemaOut extends z.ZodSchema | undefined = undefined,
   TContext extends ToolExecutionContext<TSchemaIn> = ToolExecutionContext<TSchemaIn>,
 > extends BaseTool<TSchemaIn, TSchemaOut, TContext> {

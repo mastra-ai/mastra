@@ -17,12 +17,13 @@ export interface ToolExecutionContext<TSchemaIn extends z.ZodSchema | undefined 
 }
 
 export interface ToolAction<
-  TSchemaIn extends z.ZodSchema | undefined = undefined,
+  TSchemaIn extends z.ZodSchema,
   TSchemaOut extends z.ZodSchema | undefined = undefined,
   TContext extends ToolExecutionContext<TSchemaIn> = ToolExecutionContext<TSchemaIn>,
   TOptions extends unknown = unknown,
 > extends IAction<string, TSchemaIn, TSchemaOut, TContext, TOptions> {
   description: string;
+  inputSchema: TSchemaIn;
   execute: (
     context: TContext,
     options?: TOptions,

@@ -17,6 +17,7 @@ dist/
 
 openapi-ts-error*
 
+.tsup
 .mastra
 memory.db
 

@@ -2,9 +2,8 @@ import type { z } from 'zod';
 
 import type { Mastra } from '../mastra';
 import type { ToolAction, ToolExecutionContext } from './types';
-
 export class Tool<
-  TSchemaIn extends z.ZodSchema | undefined = undefined,
+  TSchemaIn extends z.ZodSchema,
   TSchemaOut extends z.ZodSchema | undefined = undefined,
   TContext extends ToolExecutionContext<TSchemaIn> = ToolExecutionContext<TSchemaIn>,
   TOptions extends unknown = unknown,
@@ -12,7 +11,7 @@ export class Tool<
 {
   id: string;
   description: string;
-  inputSchema?: TSchemaIn;
+  inputSchema: TSchemaIn;
   outputSchema?: TSchemaOut;
   execute: (
     context: TContext,
@@ -31,7 +30,7 @@ export class Tool<
 }
 
 export function createTool<
-  TSchemaIn extends z.ZodSchema | undefined = undefined,
+  TSchemaIn extends z.ZodSchema,
   TSchemaOut extends z.ZodSchema | undefined = undefined,
   TContext extends ToolExecutionContext<TSchemaIn> = ToolExecutionContext<TSchemaIn>,
 >(opts: ToolAction<TSchemaIn, TSchemaOut, TContext>) {
