@@ -2,7 +2,7 @@ import { DefaultProxyStorage } from './defaultProxyStorage';
 import { createTestSuite } from './test-utils/storage';
 
 // Test database configuration
-const TEST_DB_URL = 'file::memory:?cache=shared'; // Use in-memory SQLite for tests
+const TEST_DB_URL = 'file::memory:'; // Use in-memory SQLite for tests
 
 createTestSuite(
   new DefaultProxyStorage({

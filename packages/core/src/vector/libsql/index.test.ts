@@ -9,7 +9,7 @@ describe('DefaultVectorDB', () => {
 
   beforeAll(async () => {
     vectorDB = new DefaultVectorDB({
-      connectionUrl: 'file::memory:?cache=shared',
+      connectionUrl: 'file::memory:',
     });
   });
 
