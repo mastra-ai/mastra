@@ -1152,6 +1152,65 @@ export class Agent<
     }
   }
 
+  voiceTune(config: Record<string, unknown>): void {
+    if (!this.voice) {
+      throw new Error('No voice provider configured');
+    }
+    this.voice.tune(config);
+  }
+
+  huddle(config?: Record<string, unknown>): Promise<void> {
+    if (!this.voice) {
+      throw new Error('No voice provider configured');
+    }
+    return this.voice.huddle(config);
+  }
+
+  /**
+   * Relay audio data to the voice provider for real-time processing
+   * @param audioData Audio data to relay
+   */
+  relay(audioData: NodeJS.ReadableStream | Int16Array): Promise<void> {
+    if (!this.voice) {
+      throw new Error('No voice provider configured');
+    }
+    return this.voice.relay(audioData);
+  }
+
+  /**
+   * Disconnect from the voice provider
+   */
+  leave(): void {
+    if (!this.voice) {
+      throw new Error('No voice provider configured');
+    }
+    this.voice.leave();
+  }
+
+  /**
+   * Register an event listener with the voice provider
+   * @param event Event name
+   * @param callback Callback function
+   */
+  on(event: string, callback: (...args: any[]) => void): void {
+    if (!this.voice) {
+      throw new Error('No voice provider configured');
+    }
+    this.voice.on(event, callback);
+  }
+
+  /**
+   * Remove an event listener from the voice provider
+   * @param event Event name
+   * @param callback Callback function to remove
+   */
+  off(event: string, callback: (...args: any[]) => void): void {
+    if (!this.voice) {
+      throw new Error('No voice provider configured');
+    }
+    this.voice.off(event, callback);
+  }
+
   /**
    * Get a list of available speakers from the configured voice provider
    * @throws {Error} If no voice provider is configured

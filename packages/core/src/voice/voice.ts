@@ -40,8 +40,6 @@ export abstract class MastraVoice<
   TOptions = unknown,
   TSpeakOptions = unknown,
   TListenOptions = unknown,
-  TTuneConfig = unknown,
-  THuddleConfig = unknown,
   TTools extends ToolsInput = ToolsInput,
   TEventArgs extends VoiceEventMap = VoiceEventMap,
   TSpeakerMetadata = unknown,
@@ -116,7 +114,7 @@ export abstract class MastraVoice<
     } & TListenOptions,
   ): Promise<string | NodeJS.ReadableStream | void>;
 
-  tune(_config: TTuneConfig): void {
+  tune(_config: Record<string, unknown>): void {
     this.logger.warn('tune not implemented by this voice provider');
   }
 
@@ -124,7 +122,7 @@ export abstract class MastraVoice<
    * Initializes a WebSocket or WebRTC connection for real-time communication
    * @returns Promise that resolves when the connection is established
    */
-  huddle(_config?: THuddleConfig): Promise<void> {
+  huddle(_config?: Record<string, unknown>): Promise<void> {
     // Default implementation - voice providers can override if they support this feature
     this.logger.warn('huddle not implemented by this voice provider');
     return Promise.resolve();
