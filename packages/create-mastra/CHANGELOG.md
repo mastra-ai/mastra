@@ -1,5 +1,14 @@
 # create-mastra
 
+## 0.1.8-alpha.4
+
+### Patch Changes
+
+- dbd9f2d: Handle different condition types on workflow graph
+- 8deb34c: Better workflow watch api + watch workflow by runId
+- 36d970e: Make tools discovery work in mastra dev
+- fd4a1d7: Update cjs bundling to make sure files are split
+
 ## 0.1.8-alpha.3
 
 ### Patch Changes

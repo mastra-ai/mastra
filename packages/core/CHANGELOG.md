@@ -1,5 +1,15 @@
 # @mastra/core
 
+## 0.5.0-alpha.11
+
+### Patch Changes
+
+- 7a7a547: Fix telemetry getter in hono server
+- c93798b: Added MastraLanguageModel which extends LanguageModelV1
+- dbd9f2d: Handle different condition types on workflow graph
+- a171b37: Better retry mechanisms
+- fd4a1d7: Update cjs bundling to make sure files are split
+
 ## 0.5.0-alpha.10
 
 ### Patch Changes
