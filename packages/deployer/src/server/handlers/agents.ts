@@ -109,7 +109,7 @@ export async function getLiveEvalsByAgentIdHandler(c: Context) {
 
 export async function generateHandler(c: Context) {
   try {
-    const mastra = c.get('mastra');
+    const mastra: Mastra = c.get('mastra');
     const agentId = c.req.param('agentId');
     const agent = mastra.getAgent(agentId);
 
@@ -119,10 +119,6 @@ export async function generateHandler(c: Context) {
 
     const { messages, threadId, resourceid, resourceId, output, runId, ...rest } = await c.req.json();
     validateBody({ messages });
-
-    if (!Array.isArray(messages)) {
-      throw new HTTPException(400, { message: 'Messages should be an array' });
-    }
 
     // Use resourceId if provided, fall back to resourceid (deprecated)
     const finalResourceId = resourceId ?? resourceid;
@@ -148,10 +144,6 @@ export async function streamGenerateHandler(c: Context): Promise<Response | unde
     const { messages, threadId, resourceid, resourceId, output, runId, ...rest } = await c.req.json();
 
     validateBody({ messages });
-
-    if (!Array.isArray(messages)) {
-      throw new HTTPException(400, { message: 'Messages should be an array' });
-    }
 
     // Use resourceId if provided, fall back to resourceid (deprecated)
     const finalResourceId = resourceId ?? resourceid;

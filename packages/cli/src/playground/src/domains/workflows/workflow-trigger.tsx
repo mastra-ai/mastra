@@ -28,7 +28,7 @@ interface WorkflowPath {
 export function WorkflowTrigger({ workflowId, setRunId }: { workflowId: string; setRunId: (runId: string) => void }) {
   const { result, setResult, payload, setPayload } = useContext(WorkflowRunContext);
   const { isLoading, workflow } = useWorkflow(workflowId);
-  const { executeWorkflow, isExecutingWorkflow } = useExecuteWorkflow();
+  const { createWorkflowRun } = useExecuteWorkflow();
   const { watchWorkflow, watchResult, isWatchingWorkflow } = useWatchWorkflow();
   const { resumeWorkflow, isResumingWorkflow } = useResumeWorkflow();
   const [suspendedSteps, setSuspendedSteps] = useState<SuspendedStep[]>([]);
@@ -38,29 +38,25 @@ export function WorkflowTrigger({ workflowId, setRunId }: { workflowId: string; 
   const handleExecuteWorkflow = async (data: any) => {
     if (!workflow) return;
 
-    watchWorkflow({ workflowId });
+    const { runId } = await createWorkflowRun({ workflowId, input: data });
+    setRunId(runId);
 
-    const result = await executeWorkflow({
-      workflowId,
-      input: data,
-    });
-
-    setResult(result);
-    setRunId(result.runId);
+    watchWorkflow({ workflowId, runId });
   };
 
   const handleResumeWorkflow = async (step: SuspendedStep & { context: any }) => {
     if (!workflow) return;
 
     const { stepId, runId, context } = step;
-    const result = await resumeWorkflow({
+
+    resumeWorkflow({
       stepId,
       runId,
       context,
       workflowId,
     });
 
-    setResult(result);
+    watchWorkflow({ workflowId, runId });
   };
 
   const workflowActivePaths = watchResult?.activePaths ?? [];
@@ -76,6 +72,10 @@ export function WorkflowTrigger({ workflowId, setRunId }: { workflowId: string; 
       }));
     setSuspendedSteps(suspended);
   }, [watchResult, result]);
+
+  useEffect(() => {
+    setResult(watchResult);
+  }, [watchResult]);
 
   if (isLoading) {
     return (
@@ -97,8 +97,8 @@ export function WorkflowTrigger({ workflowId, setRunId }: { workflowId: string; 
       <ScrollArea className="h-[calc(100vh-126px)] pt-2 px-4 pb-4 text-xs w-[400px]">
         <div className="space-y-4">
           <div className="space-y-4 px-4">
-            <Button className="w-full" disabled={isExecutingWorkflow} onClick={() => handleExecuteWorkflow(null)}>
-              {isExecutingWorkflow ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Trigger'}
+            <Button className="w-full" disabled={isWatchingWorkflow} onClick={() => handleExecuteWorkflow(null)}>
+              {isWatchingWorkflow ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Trigger'}
             </Button>
           </div>
 
@@ -168,18 +168,18 @@ export function WorkflowTrigger({ workflowId, setRunId }: { workflowId: string; 
           <DynamicForm
             schema={zodInputSchema}
             defaultValues={payload}
-            isSubmitLoading={isExecutingWorkflow}
+            isSubmitLoading={isWatchingWorkflow}
             onSubmit={data => {
               setPayload(data);
               handleExecuteWorkflow(data);
             }}
           />
         </div>
-        <div className="flex flex-col gap-2">
-          <Text variant="secondary" className="text-mastra-el-3  px-4" size="xs">
-            Status
-          </Text>
-          {workflowActivePaths.length > 0 && (
+        {workflowActivePaths.length > 0 && (
+          <div className="flex flex-col gap-2">
+            <Text variant="secondary" className="text-mastra-el-3  px-4" size="xs">
+              Status
+            </Text>
             <div className="px-4">
               {workflowActivePaths?.map((activePath: any, idx: number) => {
                 return (
@@ -224,24 +224,26 @@ export function WorkflowTrigger({ workflowId, setRunId }: { workflowId: string; 
                 );
               })}
             </div>
-          )}
-        </div>
-        <div className="flex flex-col gap-2">
-          <Text variant="secondary" className="text-mastra-el-3  px-4" size="xs">
-            Output
-          </Text>
+          </div>
+        )}
+        {result && (
           <div className="flex flex-col gap-2">
-            <CopyButton
-              classname="absolute z-40 top-4 right-4 w-8 h-8 p-0 opacity-0 group-hover:opacity-100 transition-opacity duration-150 ease-in-out"
-              content={JSON.stringify(result ?? {}, null, 2)}
+            <Text variant="secondary" className="text-mastra-el-3  px-4" size="xs">
+              Output
+            </Text>
+            <div className="flex flex-col gap-2">
+              <CopyButton
+                classname="absolute z-40 top-4 right-4 w-8 h-8 p-0 opacity-0 group-hover:opacity-100 transition-opacity duration-150 ease-in-out"
+                content={JSON.stringify(result, null, 2)}
+              />
+            </div>
+            <CodeBlockDemo
+              className="w-[368px] overflow-x-auto"
+              code={JSON.stringify(result, null, 2)}
+              language="json"
             />
           </div>
-          <CodeBlockDemo
-            className="w-[368px] overflow-x-auto"
-            code={JSON.stringify(result ?? {}, null, 2)}
-            language="json"
-          />
-        </div>
+        )}
       </div>
     </ScrollArea>
   );

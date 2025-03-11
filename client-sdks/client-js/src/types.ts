@@ -69,7 +69,7 @@ export interface GetWorkflowResponse {
   stepSubscriberGraph: Record<string, StepGraph>;
 }
 
-export type GetWorkflowWatchResponse = {
+export type WorkflowRunResult = {
   activePaths: Array<{
     stepId: string;
     stepPath: string[];

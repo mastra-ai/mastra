@@ -1,4 +1,4 @@
-import type { GetWorkflowResponse, ClientOptions, GetWorkflowWatchResponse } from '../types';
+import type { GetWorkflowResponse, ClientOptions, WorkflowRunResult } from '../types';
 
 import { BaseResource } from './base';
 
@@ -23,8 +23,20 @@ export class Workflow extends BaseResource {
    * @param params - Parameters required for workflow execution
    * @returns Promise containing the workflow execution results
    */
-  execute(params: Record<string, any>): Promise<Record<string, any>> {
+  execute(params: Record<string, any>): Promise<WorkflowRunResult> {
     return this.request(`/api/workflows/${this.workflowId}/execute`, {
+      method: 'POST',
+      body: params,
+    });
+  }
+
+  /**
+   * Creates a new workflow run instance and starts it
+   * @param params - Parameters required for the workflow run
+   * @returns Promise containing the generated run ID
+   */
+  startRun(params: Record<string, any>): Promise<{ runId: string }> {
+    return this.request(`/api/workflows/${this.workflowId}/startRun`, {
       method: 'POST',
       body: params,
     });
@@ -46,11 +58,10 @@ export class Workflow extends BaseResource {
     runId: string;
     context: Record<string, any>;
   }): Promise<Record<string, any>> {
-    return this.request(`/api/workflows/${this.workflowId}/resume`, {
+    return this.request(`/api/workflows/${this.workflowId}/resume?runId=${runId}`, {
       method: 'POST',
       body: {
         stepId,
-        runId,
         context,
       },
     });
@@ -63,7 +74,7 @@ export class Workflow extends BaseResource {
    * @param stream - The readable stream to process
    * @returns An async generator that yields parsed records
    */
-  private async *streamProcessor(stream: ReadableStream): AsyncGenerator<GetWorkflowWatchResponse, void, unknown> {
+  private async *streamProcessor(stream: ReadableStream): AsyncGenerator<WorkflowRunResult, void, unknown> {
     const reader = stream.getReader();
     let buffer = '';
 
@@ -99,6 +110,14 @@ export class Workflow extends BaseResource {
             try {
               // Assuming the records are JSON strings
               const parsedRecord = JSON.parse(record);
+
+              //Check to see if all steps are completed and cancel reader
+              const isWorkflowCompleted = parsedRecord?.activePaths?.every(
+                (path: any) => path.status === 'completed' || path.status === 'suspended' || path.status === 'failed',
+              );
+              if (isWorkflowCompleted) {
+                reader.cancel();
+              }
               yield parsedRecord;
             } catch (e) {
               throw new Error(`Could not parse record: ${record}`);
@@ -107,16 +126,17 @@ export class Workflow extends BaseResource {
         }
       }
     } finally {
-      reader.releaseLock();
+      reader.cancel();
     }
   }
 
   /**
    * Watches workflow transitions in real-time
+   * @param runId - Optional run ID to filter the watch stream
    * @returns AsyncGenerator that yields parsed records from the workflow watch stream
    */
-  async *watch() {
-    const response: Response = await this.request(`/api/workflows/${this.workflowId}/watch`, {
+  async *watch({ runId }: { runId?: string }) {
+    const response: Response = await this.request(`/api/workflows/${this.workflowId}/watch?runId=${runId}`, {
       stream: true,
     });
 
