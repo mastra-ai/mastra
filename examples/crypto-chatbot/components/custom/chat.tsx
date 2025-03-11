@@ -1,7 +1,7 @@
 'use client';
 
 import { Attachment, Message } from 'ai';
-import { useChat } from 'ai/react';
+import { useChat } from '@ai-sdk/react';
 import { AnimatePresence } from 'framer-motion';
 import { useState } from 'react';
 import useSWR, { useSWRConfig } from 'swr';
@@ -35,8 +35,8 @@ export function Chat({
     input,
     setInput,
     append,
-    isLoading,
     stop,
+    status,
     data: streamingData,
   } = useChat({
     body: { id, modelId: selectedModelId },
@@ -45,6 +45,8 @@ export function Chat({
       mutate('/api/history');
     },
   });
+
+  const isLoading = status === 'submitted';
 
   const { width: windowWidth = 1920, height: windowHeight = 1080 } =
     useWindowSize();

@@ -79,7 +79,7 @@ export class ComposioIntegration extends Integration<ComposioToolsetParams> {
       filterByAvailableApps: !apps?.length,
     });
 
-    const tools: Record<string, ToolAction<any, any, any, any>> = {};
+    const tools: Record<string, ToolAction<any, any, any>> = {};
 
     actionsList.items?.forEach(actionSchema => {
       tools[actionSchema.name!] = this.generateTool(actionSchema);

@@ -1,0 +1,97 @@
+---
+title: "Vercel Deployer"
+description: "Documentation for the VercelDeployer class, which deploys Mastra applications to Vercel."
+---
+
+# VercelDeployer
+
+The VercelDeployer deploys Mastra applications to Vercel, handling configuration, environment variable synchronization, and deployment processes. It extends the abstract Deployer class to provide Vercel-specific deployment functionality.
+
+## Usage Example
+
+```typescript
+import { Mastra } from '@mastra/core';
+import { VercelDeployer } from '@mastra/deployer-vercel';
+
+const mastra = new Mastra({
+  deployer: new VercelDeployer({
+    teamId: 'your-team-id',
+    projectName: 'your-project-name',
+    token: 'your-vercel-token'
+  }),
+  // ... other Mastra configuration options
+});
+```
+
+## Parameters
+
+### Constructor Parameters
+
+<PropertiesTable
+  content={[
+    {
+      name: "teamId",
+      type: "string",
+      description: "Your Vercel team ID.",
+      isOptional: false,
+    },
+    {
+      name: "projectName",
+      type: "string",
+      description: "Name of your Vercel project (will be created if it doesn't exist).",
+      isOptional: false,
+    },
+    {
+      name: "token",
+      type: "string",
+      description: "Your Vercel authentication token.",
+      isOptional: false,
+    },
+  ]}
+/>
+
+### Vercel Configuration
+
+The VercelDeployer automatically generates a `vercel.json` configuration file with the following settings:
+
+```json
+{
+  "version": 2,
+  "installCommand": "npm install --omit=dev",
+  "builds": [
+    {
+      "src": "index.mjs",
+      "use": "@vercel/node",
+      "config": {
+        "includeFiles": ["**"]
+      }
+    }
+  ],
+  "routes": [
+    {
+      "src": "/(.*)",
+      "dest": "index.mjs"
+    }
+  ]
+}
+```
+
+### Environment Variables
+
+The VercelDeployer handles environment variables from multiple sources:
+
+1. **Environment Files**: Variables from `.env.production` and `.env` files.
+2. **Configuration**: Variables passed through the Mastra configuration.
+3. **Vercel Dashboard**: Variables can also be managed through Vercel's web interface.
+
+The deployer automatically synchronizes environment variables between your local development environment and Vercel's environment variable system, ensuring consistency across all deployment environments (production, preview, and development).
+
+### Project Structure
+
+The deployer creates the following structure in your output directory:
+
+```
+output-directory/
+├── vercel.json     # Deployment configuration
+└── index.mjs       # Application entry point with Hono server integration
+```

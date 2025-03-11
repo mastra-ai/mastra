@@ -139,6 +139,14 @@ const agent = new Agent({
       defaultValue:
         "{ enabled: false, template: '<user><first_name></first_name><last_name></last_name>...</user>', use: 'text-stream' }",
     },
+    {
+      name: "threads",
+      type: "{ generateTitle?: boolean }",
+      description:
+        "Settings related to memory thread creation. `generateTitle` will cause the thread.title to be generated from an llm summary of the users first message.",
+      isOptional: true,
+      defaultValue: "{ generateTitle: true }",
+    },
   ]}
 />
 
@@ -166,7 +174,7 @@ const memory = new Memory({
 });
 ```
 
-If no template is provided, the Memory class uses a default template that includes fields for user details, preferences, goals, and other contextual information. See the [Agent Memory Guide](/docs/agents/agent-memory#working-memory) for detailed usage examples and best practices.
+If no template is provided, the Memory class uses a default template that includes fields for user details, preferences, goals, and other contextual information. See the [Agent Memory Guide](/docs/agents/01-agent-memory#working-memory) for detailed usage examples and best practices.
 
 ### embedder
 

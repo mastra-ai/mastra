@@ -8,7 +8,7 @@ export * from './index';
 
 export class Workflow<
   TSteps extends Step<any, any, any>[] = any,
-  TTriggerSchema extends z.ZodType<any> = any,
+  TTriggerSchema extends z.ZodObject<any> = any,
 > extends BaseWorkflow<TSteps, TTriggerSchema> {
   constructor(args: WorkflowOptions<TTriggerSchema>) {
     super(args);

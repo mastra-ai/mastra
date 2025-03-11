@@ -6,7 +6,7 @@ description: Documentation for the PgVector class in Mastra, which provides vect
 # PG Vector Store
 
 The PgVector class provides vector search using [PostgreSQL](https://www.postgresql.org/) with [pgvector](https://github.com/pgvector/pgvector) extension.
-It provides robust vector similarity search capabilities within your existing PostgreSQL database. 
+It provides robust vector similarity search capabilities within your existing PostgreSQL database.
 
 ## Constructor Options
 
@@ -76,17 +76,20 @@ It provides robust vector similarity search capabilities within your existing Po
             {
               name: "flat",
               type: "flat",
-              description: "Sequential scan (no index) that performs exhaustive search.",
+              description:
+                "Sequential scan (no index) that performs exhaustive search.",
             },
             {
               name: "ivfflat",
               type: "ivfflat",
-              description: "Clusters vectors into lists for approximate search.",
+              description:
+                "Clusters vectors into lists for approximate search.",
             },
             {
               name: "hnsw",
               type: "hnsw",
-              description: "Graph-based index offering fast search times and high recall.",
+              description:
+                "Graph-based index offering fast search times and high recall.",
             },
           ],
         },
@@ -104,9 +107,10 @@ It provides robust vector similarity search capabilities within your existing Po
             {
               name: "lists",
               type: "number",
-              description: "Number of lists. If not specified, automatically calculated based on dataset size. (Minimum 100, Maximum 4000)",
+              description:
+                "Number of lists. If not specified, automatically calculated based on dataset size. (Minimum 100, Maximum 4000)",
               isOptional: true,
-            }
+            },
           ],
         },
       ],
@@ -123,7 +127,8 @@ It provides robust vector similarity search capabilities within your existing Po
             {
               name: "m",
               type: "number",
-              description: "Maximum number of connections per node (default: 8)",
+              description:
+                "Maximum number of connections per node (default: 8)",
               isOptional: true,
             },
             {
@@ -134,7 +139,7 @@ It provides robust vector similarity search capabilities within your existing Po
             },
           ],
         },
-      ]
+      ],
     },
   ]}
 />
@@ -142,6 +147,7 @@ It provides robust vector similarity search capabilities within your existing Po
 #### Memory Requirements
 
 HNSW indexes require significant shared memory during construction. For 100K vectors:
+
 - Small dimensions (64d): ~60MB with default settings
 - Medium dimensions (256d): ~180MB with default settings
 - Large dimensions (384d+): ~250MB+ with default settings
@@ -291,6 +297,90 @@ interface PGIndexStats {
   ]}
 />
 
+### updateIndexById()
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "Name of the index containing the vector",
+    },
+    {
+      name: "id",
+      type: "string",
+      description: "ID of the vector to update",
+    },
+    {
+      name: "update",
+      type: "object",
+      description: "Update parameters",
+      properties: [
+        {
+          type: "object",
+          parameters: [
+            {
+              name: "vector",
+              type: "number[]",
+              description: "New vector values",
+              isOptional: true,
+            },
+            {
+              name: "metadata",
+              type: "Record<string, any>",
+              description: "New metadata values",
+              isOptional: true,
+            },
+          ],
+        },
+      ],
+    },
+  ]}
+/>
+
+Updates an existing vector by ID. At least one of vector or metadata must be provided.
+
+```typescript copy
+// Update just the vector
+await pgVector.updateIndexById("my_vectors", "vector123", {
+  vector: [0.1, 0.2, 0.3],
+});
+
+// Update just the metadata
+await pgVector.updateIndexById("my_vectors", "vector123", {
+  metadata: { label: "updated" },
+});
+
+// Update both vector and metadata
+await pgVector.updateIndexById("my_vectors", "vector123", {
+  vector: [0.1, 0.2, 0.3],
+  metadata: { label: "updated" },
+});
+```
+
+### deleteIndexById()
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "Name of the index containing the vector",
+    },
+    {
+      name: "id",
+      type: "string",
+      description: "ID of the vector to delete",
+    },
+  ]}
+/>
+
+Deletes a single vector by ID from the specified index.
+
+```typescript copy
+await pgVector.deleteIndexById("my_vectors", "vector123");
+```
+
 ### disconnect()
 
 Closes the database connection pool. Should be called when done using the store.
@@ -327,21 +417,21 @@ await pgVector.buildIndex("my_vectors", "cosine", {
   type: "hnsw",
   hnsw: {
     m: 8,
-    efConstruction: 32
-  }
+    efConstruction: 32,
+  },
 });
 
 // Define IVF index
 await pgVector.buildIndex("my_vectors", "cosine", {
   type: "ivfflat",
   ivf: {
-    lists: 100, 
-  }
+    lists: 100,
+  },
 });
 
 // Define flat index
 await pgVector.buildIndex("my_vectors", "cosine", {
-  type: "flat" 
+  type: "flat",
 });
 ```
 
@@ -383,4 +473,5 @@ try {
 - Rebuild indexes periodically to maintain efficiency, especially after significant data changes.
 
 ### Related
+
 - [Metadata Filters](./metadata-filters)

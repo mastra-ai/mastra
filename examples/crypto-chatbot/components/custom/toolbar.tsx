@@ -8,7 +8,15 @@ import {
   useMotionValue,
   useTransform,
 } from 'framer-motion';
-import { Dispatch, SetStateAction, useEffect, useRef, useState } from 'react';
+import {
+  Dispatch,
+  JSX,
+  RefObject,
+  SetStateAction,
+  useEffect,
+  useRef,
+  useState,
+} from 'react';
 import { useOnClickOutside } from 'usehooks-ts';
 
 import {
@@ -335,13 +343,13 @@ export const Toolbar = ({
   stop: () => void;
   setMessages: Dispatch<SetStateAction<Message[]>>;
 }) => {
-  const toolbarRef = useRef<HTMLDivElement>(null);
-  const timeoutRef = useRef<NodeJS.Timeout>();
+  const toolbarRef = useRef<HTMLElement>(null);
+  const timeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   const [selectedTool, setSelectedTool] = useState<string | null>(null);
   const [isAnimating, setIsAnimating] = useState(false);
 
-  useOnClickOutside(toolbarRef, () => {
+  useOnClickOutside(toolbarRef as RefObject<HTMLElement>, () => {
     setIsToolbarVisible(false);
     setSelectedTool(null);
   });
@@ -420,7 +428,7 @@ export const Toolbar = ({
         onAnimationComplete={() => {
           setIsAnimating(false);
         }}
-        ref={toolbarRef}
+        ref={toolbarRef as RefObject<HTMLDivElement>}
       >
         {isLoading ? (
           <motion.div

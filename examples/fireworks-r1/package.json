@@ -1,0 +1,33 @@
+{
+  "name": "fireworks-r1",
+  "version": "0.0.1",
+  "type": "module",
+  "private": true,
+  "main": "index.js",
+  "scripts": {
+    "chat": "bun run --watch src/chat.ts"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "@ai-sdk/anthropic": "^1.1.15",
+    "@ai-sdk/fireworks": "^0.1.14",
+    "@mastra/core": "workspace:*",
+    "@mastra/mcp": "workspace:*",
+    "@mastra/memory": "workspace:*",
+    "@types/tinycolor2": "^1.4.6",
+    "chalk": "^5.4.1",
+    "gradient-string": "^3.0.0",
+    "ora": "^8.2.0",
+    "tinycolor2": "^1.6.0",
+    "zod": "^3.24.2"
+  },
+  "devDependencies": {
+    "@types/node": "^22.13.10",
+    "dotenv": "^16.4.7",
+    "mastra": "workspace:*",
+    "tsx": "^4.19.3",
+    "typescript": "^5.8.2"
+  }
+}

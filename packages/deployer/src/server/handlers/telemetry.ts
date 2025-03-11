@@ -9,8 +9,8 @@ import { handleError } from './error';
 export async function getTelemetryHandler(c: Context) {
   try {
     const mastra = c.get('mastra');
-    const telemetry: Telemetry = mastra.telemetry;
-    const storage: MastraStorage = mastra.storage;
+    const telemetry: Telemetry = mastra.getTelemetry();
+    const storage: MastraStorage = mastra.getStorage();
 
     const { name, scope, page, perPage } = c.req.query();
     const attribute = c.req.queries('attribute');

@@ -424,4 +424,46 @@ describe('agent', () => {
       });
     });
   });
+
+  describe('agent tool handling', () => {
+    it('should accept and execute both Mastra and Vercel tools in Agent constructor', async () => {
+      const mastraExecute = vi.fn().mockResolvedValue({ result: 'mastra' });
+      const vercelExecute = vi.fn().mockResolvedValue({ result: 'vercel' });
+
+      const agent = new Agent({
+        name: 'test',
+        instructions: 'test agent instructions',
+        model: openai('gpt-4'),
+        tools: {
+          mastraTool: createTool({
+            id: 'test',
+            description: 'test',
+            inputSchema: z.object({ name: z.string() }),
+            execute: mastraExecute,
+          }),
+          vercelTool: {
+            description: 'test',
+            parameters: {
+              type: 'object',
+              properties: {
+                name: { type: 'string' },
+              },
+            },
+            execute: vercelExecute,
+          },
+        },
+      });
+
+      // Verify tools exist
+      expect(agent.tools.mastraTool).toBeDefined();
+      expect(agent.tools.vercelTool).toBeDefined();
+
+      // Verify both tools can be executed
+      await agent.tools.mastraTool.execute?.({ name: 'test' });
+      await agent.tools.vercelTool.execute?.({ name: 'test' });
+
+      expect(mastraExecute).toHaveBeenCalled();
+      expect(vercelExecute).toHaveBeenCalled();
+    });
+  });
 });

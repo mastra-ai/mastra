@@ -3,20 +3,20 @@ import { Meta } from "nextra";
 const meta: Meta = {
   index: {
     title: "Overview",
-    
   },
   core: "Core",
   cli: "CLI",
-  memory: "Memory",
-  rag: "RAG",
-  tools: "Tools",
-  storage: "Storage",
   agents: "Agents",
+  tools: "Tools",
   workflows: "Workflows",
-  observability: "Observability",
+  memory: "Memory",
+  storage: "Storage",
+  rag: "RAG",
   evals: "Evals",
-  "client-js": "Client SDK - JS",
   voice: "Voice",
-  };
+  observability: "Observability",
+  "client-js": "Client SDK - JS",
+  deployer: "Deployer",
+};
 
 export default meta;

@@ -58,7 +58,7 @@ describe('Logger', () => {
       const logs = await memoryStream.getLogs();
 
       expect(logs[0]).toMatchObject({
-        level: 30, // info level
+        level: 'info',
         msg: 'test info message',
       });
     });
@@ -87,7 +87,7 @@ describe('Logger', () => {
 
       expect(logs[0]).toMatchObject({
         msg: testData,
-        level: 30, // info level
+        level: 'info',
       });
     });
   });
@@ -157,7 +157,7 @@ describe('createLogger', () => {
     const logs = await customStream.getLogs();
 
     expect(logs[0]).toMatchObject({
-      level: 20,
+      level: 'debug',
       msg: 'test message',
       name: 'custom',
     });

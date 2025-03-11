@@ -1,7 +1,10 @@
 import { NextConfig } from "next";
+import path from "path";
 
 /** @type {import('next').NextConfig} */
 const nextConfig: NextConfig = {
+  serverExternalPackages: ["@mastra/*"],
+
   images: {
     remotePatterns: [
       {

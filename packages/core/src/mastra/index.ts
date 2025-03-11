@@ -27,6 +27,15 @@ export interface Config<
   telemetry?: OtelConfig;
   deployer?: MastraDeployer;
 
+  /**
+   * Server middleware functions to be applied to API routes
+   * Each middleware can specify a path pattern (defaults to '/api/*')
+   */
+  serverMiddleware?: Array<{
+    handler: (c: any, next: () => Promise<void>) => Promise<Response | void>;
+    path?: string;
+  }>;
+
   // @deprecated add memory to your Agent directly instead
   memory?: MastraMemory;
 }
@@ -42,17 +51,42 @@ export class Mastra<
   TTTS extends Record<string, MastraTTS> = Record<string, MastraTTS>,
   TLogger extends Logger = Logger,
 > {
-  private vectors?: TVectors;
-  private agents: TAgents;
-  private logger: TLogger;
-  private workflows: TWorkflows;
-  private telemetry?: Telemetry;
-  private tts?: TTTS;
-  private deployer?: MastraDeployer;
+  #vectors?: TVectors;
+  #agents: TAgents;
+  #logger: TLogger;
+  #workflows: TWorkflows;
+  #tts?: TTTS;
+  #deployer?: MastraDeployer;
+  #serverMiddleware: Array<{
+    handler: (c: any, next: () => Promise<void>) => Promise<Response | void>;
+    path: string;
+  }> = [];
+  #telemetry?: Telemetry;
+  /**
+   * @deprecated use getStorage() instead
+   */
   storage?: MastraStorage;
+  /**
+   * @deprecated use getMemory() instead
+   */
   memory?: MastraMemory;
 
+  /**
+   * @deprecated use getTelemetry() instead
+   */
+  get telemetry() {
+    return this.#telemetry;
+  }
+
   constructor(config?: Config<TAgents, TWorkflows, TVectors, TTTS, TLogger>) {
+    // Store server middleware with default path
+    if (config?.serverMiddleware) {
+      this.#serverMiddleware = config.serverMiddleware.map(m => ({
+        handler: m.handler,
+        path: m.path || '/api/*',
+      }));
+    }
+
     /*
       Logger
     */
@@ -68,7 +102,7 @@ export class Mastra<
         logger = createLogger({ name: 'Mastra', level: levleOnEnv }) as unknown as TLogger;
       }
     }
-    this.logger = logger;
+    this.#logger = logger;
 
     let storage = config?.storage;
     if (!storage) {
@@ -94,32 +128,32 @@ export class Mastra<
           }),
         },
       };
-      this.telemetry = Telemetry.init(newTelemetry as OtelConfig);
+      this.#telemetry = Telemetry.init(newTelemetry as OtelConfig);
     } else if (config?.telemetry) {
-      this.telemetry = Telemetry.init(config?.telemetry);
+      this.#telemetry = Telemetry.init(config?.telemetry);
     }
 
     /**
      * Deployer
      **/
     if (config?.deployer) {
-      this.deployer = config.deployer;
-      if (this.telemetry) {
-        this.deployer = this.telemetry.traceClass(config.deployer, {
+      this.#deployer = config.deployer;
+      if (this.#telemetry) {
+        this.#deployer = this.#telemetry.traceClass(config.deployer, {
           excludeMethods: ['__setTelemetry', '__getTelemetry'],
         });
-        this.deployer.__setTelemetry(this.telemetry);
+        this.#deployer.__setTelemetry(this.#telemetry);
       }
     }
 
     /*
       Storage
     */
-    if (this.telemetry) {
-      this.storage = this.telemetry.traceClass(storage, {
+    if (this.#telemetry) {
+      this.storage = this.#telemetry.traceClass(storage, {
         excludeMethods: ['__setTelemetry', '__getTelemetry'],
       });
-      this.storage.__setTelemetry(this.telemetry);
+      this.storage.__setTelemetry(this.#telemetry);
     } else {
       this.storage = storage;
     }
@@ -130,35 +164,35 @@ export class Mastra<
     if (config?.vectors) {
       let vectors: Record<string, MastraVector> = {};
       Object.entries(config.vectors).forEach(([key, vector]) => {
-        if (this.telemetry) {
-          vectors[key] = this.telemetry.traceClass(vector, {
+        if (this.#telemetry) {
+          vectors[key] = this.#telemetry.traceClass(vector, {
             excludeMethods: ['__setTelemetry', '__getTelemetry'],
           });
-          vectors[key].__setTelemetry(this.telemetry);
+          vectors[key].__setTelemetry(this.#telemetry);
         } else {
           vectors[key] = vector;
         }
       });
 
-      this.vectors = vectors as TVectors;
+      this.#vectors = vectors as TVectors;
     }
 
     if (config?.vectors) {
-      this.vectors = config.vectors;
+      this.#vectors = config.vectors;
     }
 
     if (config?.memory) {
       this.memory = config.memory;
-      if (this.telemetry) {
-        this.memory = this.telemetry.traceClass(config.memory, {
+      if (this.#telemetry) {
+        this.memory = this.#telemetry.traceClass(config.memory, {
           excludeMethods: ['__setTelemetry', '__getTelemetry'],
         });
-        this.memory.__setTelemetry(this.telemetry);
+        this.memory.__setTelemetry(this.#telemetry);
       }
     }
 
     if (config && `memory` in config) {
-      this.logger.warn(`
+      this.#logger.warn(`
   Memory should be added to Agents, not to Mastra.
 
 Instead of:
@@ -172,15 +206,15 @@ This is a warning for now, but will throw an error in the future
     }
 
     if (config?.tts) {
-      this.tts = config.tts;
-      Object.entries(this.tts).forEach(([key, ttsCl]) => {
-        if (this.tts?.[key]) {
-          if (this.telemetry) {
+      this.#tts = config.tts;
+      Object.entries(this.#tts).forEach(([key, ttsCl]) => {
+        if (this.#tts?.[key]) {
+          if (this.#telemetry) {
             // @ts-ignore
-            this.tts[key] = this.telemetry.traceClass(ttsCl, {
+            this.#tts[key] = this.#telemetry.traceClass(ttsCl, {
               excludeMethods: ['__setTelemetry', '__getTelemetry'],
             });
-            this.tts[key].__setTelemetry(this.telemetry);
+            this.#tts[key].__setTelemetry(this.#telemetry);
           }
         }
       });
@@ -198,58 +232,60 @@ This is a warning for now, but will throw an error in the future
 
         agent.__registerPrimitives({
           logger: this.getLogger(),
-          telemetry: this.telemetry,
+          telemetry: this.#telemetry,
           storage: this.storage,
           memory: this.memory,
           agents: agents,
-          tts: this.tts,
-          vectors: this.vectors,
+          tts: this.#tts,
+          vectors: this.#vectors,
         });
+
+        agent.__registerMastra(this);
 
         agents[key] = agent;
       });
     }
 
-    this.agents = agents as TAgents;
+    this.#agents = agents as TAgents;
 
     /*
     Workflows
     */
-    this.workflows = {} as TWorkflows;
+    this.#workflows = {} as TWorkflows;
 
     if (config?.workflows) {
       Object.entries(config.workflows).forEach(([key, workflow]) => {
+        workflow.__registerMastra(this);
         workflow.__registerPrimitives({
           logger: this.getLogger(),
-          telemetry: this.telemetry,
+          telemetry: this.#telemetry,
           storage: this.storage,
           memory: this.memory,
-          agents: this.agents,
-          tts: this.tts,
-          vectors: this.vectors,
+          agents: agents,
+          tts: this.#tts,
+          vectors: this.#vectors,
         });
-
         // @ts-ignore
-        this.workflows[key] = workflow;
+        this.#workflows[key] = workflow;
       });
     }
     this.setLogger({ logger });
   }
 
   public getAgent<TAgentName extends keyof TAgents>(name: TAgentName): TAgents[TAgentName] {
-    const agent = this.agents?.[name];
+    const agent = this.#agents?.[name];
     if (!agent) {
       throw new Error(`Agent with name ${String(name)} not found`);
     }
-    return this.agents[name];
+    return this.#agents[name];
   }
 
   public getAgents() {
-    return this.agents;
+    return this.#agents;
   }
 
   public getVector<TVectorName extends keyof TVectors>(name: TVectorName): TVectors[TVectorName] {
-    const vector = this.vectors?.[name];
+    const vector = this.#vectors?.[name];
     if (!vector) {
       throw new Error(`Vector with name ${String(name)} not found`);
     }
@@ -257,18 +293,18 @@ This is a warning for now, but will throw an error in the future
   }
 
   public getVectors() {
-    return this.vectors;
+    return this.#vectors;
   }
 
   public getDeployer() {
-    return this.deployer;
+    return this.#deployer;
   }
 
   public getWorkflow<TWorkflowId extends keyof TWorkflows>(
     id: TWorkflowId,
     { serialized }: { serialized?: boolean } = {},
   ): TWorkflows[TWorkflowId] {
-    const workflow = this.workflows?.[id];
+    const workflow = this.#workflows?.[id];
     if (!workflow) {
       throw new Error(`Workflow with ID ${String(id)} not found`);
     }
@@ -282,14 +318,14 @@ This is a warning for now, but will throw an error in the future
 
   public getWorkflows(props: { serialized?: boolean } = {}): Record<string, Workflow> {
     if (props.serialized) {
-      return Object.entries(this.workflows).reduce((acc, [k, v]) => {
+      return Object.entries(this.#workflows).reduce((acc, [k, v]) => {
         return {
           ...acc,
           [k]: { name: v.name },
         };
       }, {});
     }
-    return this.workflows;
+    return this.#workflows;
   }
 
   public setStorage(storage: MastraStorage) {
@@ -297,131 +333,133 @@ This is a warning for now, but will throw an error in the future
   }
 
   public setLogger({ logger }: { logger: TLogger }) {
-    this.logger = logger;
+    this.#logger = logger;
 
-    if (this.agents) {
-      Object.keys(this.agents).forEach(key => {
-        this.agents?.[key]?.__setLogger(this.logger);
-      });
-    }
-
-    if (this.workflows) {
-      Object.keys(this.workflows).forEach(key => {
-        this.workflows?.[key]?.__setLogger(this.logger);
+    if (this.#agents) {
+      Object.keys(this.#agents).forEach(key => {
+        this.#agents?.[key]?.__setLogger(this.#logger);
       });
     }
 
     if (this.memory) {
-      this.memory.__setLogger(this.logger);
+      this.memory.__setLogger(this.#logger);
     }
 
-    if (this.deployer) {
-      this.deployer.__setLogger(this.logger);
+    if (this.#deployer) {
+      this.#deployer.__setLogger(this.#logger);
     }
 
-    if (this.tts) {
-      Object.keys(this.tts).forEach(key => {
-        this.tts?.[key]?.__setLogger(this.logger);
+    if (this.#tts) {
+      Object.keys(this.#tts).forEach(key => {
+        this.#tts?.[key]?.__setLogger(this.#logger);
       });
     }
 
     if (this.storage) {
-      this.storage.__setLogger(this.logger);
+      this.storage.__setLogger(this.#logger);
     }
 
-    if (this.vectors) {
-      Object.keys(this.vectors).forEach(key => {
-        this.vectors?.[key]?.__setLogger(this.logger);
+    if (this.#vectors) {
+      Object.keys(this.#vectors).forEach(key => {
+        this.#vectors?.[key]?.__setLogger(this.#logger);
       });
     }
   }
 
   public setTelemetry(telemetry: OtelConfig) {
-    this.telemetry = Telemetry.init(telemetry);
+    this.#telemetry = Telemetry.init(telemetry);
 
-    if (this.agents) {
-      Object.keys(this.agents).forEach(key => {
-        if (this.telemetry) {
-          this.agents?.[key]?.__setTelemetry(this.telemetry);
-        }
-      });
-    }
-
-    if (this.workflows) {
-      Object.keys(this.workflows).forEach(key => {
-        if (this.telemetry) {
-          this.workflows?.[key]?.__setTelemetry(this.telemetry);
+    if (this.#agents) {
+      Object.keys(this.#agents).forEach(key => {
+        if (this.#telemetry) {
+          this.#agents?.[key]?.__setTelemetry(this.#telemetry);
         }
       });
     }
 
     if (this.memory) {
-      this.memory = this.telemetry.traceClass(this.memory, {
+      this.memory = this.#telemetry.traceClass(this.memory, {
         excludeMethods: ['__setTelemetry', '__getTelemetry'],
       });
-      this.memory.__setTelemetry(this.telemetry);
+      this.memory.__setTelemetry(this.#telemetry);
     }
 
-    if (this.deployer) {
-      this.deployer = this.telemetry.traceClass(this.deployer, {
+    if (this.#deployer) {
+      this.#deployer = this.#telemetry.traceClass(this.#deployer, {
         excludeMethods: ['__setTelemetry', '__getTelemetry'],
       });
-      this.deployer.__setTelemetry(this.telemetry);
+      this.#deployer.__setTelemetry(this.#telemetry);
     }
 
-    if (this.tts) {
+    if (this.#tts) {
       let tts = {} as Record<string, MastraTTS>;
-      Object.entries(this.tts).forEach(([key, ttsCl]) => {
-        if (this.telemetry) {
-          tts[key] = this.telemetry.traceClass(ttsCl, {
+      Object.entries(this.#tts).forEach(([key, ttsCl]) => {
+        if (this.#telemetry) {
+          tts[key] = this.#telemetry.traceClass(ttsCl, {
             excludeMethods: ['__setTelemetry', '__getTelemetry'],
           });
-          tts[key].__setTelemetry(this.telemetry);
+          tts[key].__setTelemetry(this.#telemetry);
         }
       });
-      this.tts = tts as TTTS;
+      this.#tts = tts as TTTS;
     }
 
     if (this.storage) {
-      this.storage = this.telemetry.traceClass(this.storage, {
+      this.storage = this.#telemetry.traceClass(this.storage, {
         excludeMethods: ['__setTelemetry', '__getTelemetry'],
       });
-      this.storage.__setTelemetry(this.telemetry);
+      this.storage.__setTelemetry(this.#telemetry);
     }
 
-    if (this.vectors) {
+    if (this.#vectors) {
       let vectors = {} as Record<string, MastraVector>;
-      Object.entries(this.vectors).forEach(([key, vector]) => {
-        if (this.telemetry) {
-          vectors[key] = this.telemetry.traceClass(vector, {
+      Object.entries(this.#vectors).forEach(([key, vector]) => {
+        if (this.#telemetry) {
+          vectors[key] = this.#telemetry.traceClass(vector, {
             excludeMethods: ['__setTelemetry', '__getTelemetry'],
           });
-          vectors[key].__setTelemetry(this.telemetry);
+          vectors[key].__setTelemetry(this.#telemetry);
         }
       });
-      this.vectors = vectors as TVectors;
+      this.#vectors = vectors as TVectors;
     }
+  }
+
+  public getTTS() {
+    return this.#tts;
   }
 
   public getLogger() {
-    return this.logger;
+    return this.#logger;
   }
 
   public getTelemetry() {
-    return this.telemetry;
+    return this.#telemetry;
+  }
+
+  public getMemory() {
+    return this.memory;
+  }
+
+  public getStorage() {
+    return this.storage;
+  }
+
+  public getServerMiddleware() {
+    return this.#serverMiddleware;
   }
 
   public async getLogsByRunId({ runId, transportId }: { runId: string; transportId: string }) {
     if (!transportId) {
       throw new Error('Transport ID is required');
     }
-    return await this.logger.getLogsByRunId({ runId, transportId });
+    return await this.#logger.getLogsByRunId({ runId, transportId });
   }
 
   public async getLogs(transportId: string) {
     if (!transportId) {
       throw new Error('Transport ID is required');
     }
-    return await this.logger.getLogs(transportId);
+    return await this.#logger.getLogs(transportId);
   }
 }

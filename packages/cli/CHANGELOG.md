@@ -1,5 +1,97 @@
 # mastra
 
+## 0.3.0-alpha.11
+
+### Patch Changes
+
+- dbd9f2d: Handle different condition types on workflow graph
+- 8deb34c: Better workflow watch api + watch workflow by runId
+- 36d970e: Make tools discovery work in mastra dev
+- fd4a1d7: Update cjs bundling to make sure files are split
+- Updated dependencies [7a7a547]
+- Updated dependencies [c93798b]
+- Updated dependencies [dbd9f2d]
+- Updated dependencies [8deb34c]
+- Updated dependencies [5d41958]
+- Updated dependencies [a171b37]
+- Updated dependencies [fd4a1d7]
+  - @mastra/deployer@0.1.8-alpha.11
+  - @mastra/core@0.5.0-alpha.11
+
+## 0.3.0-alpha.10
+
+### Minor Changes
+
+- dd7a09a: Added new MCPConfiguration class for managing multiple MCP server tools/toolsets. Fixed a bug where MCPClient env would overwrite PATH env var. Fixed a bug where MCP servers would be killed non-gracefully leading to printing huge errors on every code save when running mastra dev
+
+### Patch Changes
+
+- Updated dependencies [a910463]
+  - @mastra/core@0.5.0-alpha.10
+  - @mastra/deployer@0.1.8-alpha.10
+
+## 0.2.9-alpha.9
+
+### Patch Changes
+
+- Updated dependencies [e9fbac5]
+- Updated dependencies [1e8bcbc]
+- Updated dependencies [aeb5e36]
+- Updated dependencies [f2301de]
+  - @mastra/deployer@0.1.8-alpha.9
+  - @mastra/core@0.5.0-alpha.9
+
+## 0.2.9-alpha.8
+
+### Patch Changes
+
+- Updated dependencies [506f1d5]
+  - @mastra/core@0.5.0-alpha.8
+  - @mastra/deployer@0.1.8-alpha.8
+
+## 0.2.9-alpha.7
+
+### Patch Changes
+
+- Updated dependencies [ee667a2]
+  - @mastra/core@0.5.0-alpha.7
+  - @mastra/deployer@0.1.8-alpha.7
+
+## 0.2.9-alpha.6
+
+### Patch Changes
+
+- Updated dependencies [f6678e4]
+  - @mastra/core@0.5.0-alpha.6
+  - @mastra/deployer@0.1.8-alpha.6
+
+## 0.2.9-alpha.5
+
+### Patch Changes
+
+- 91d2e30: Fix init in non npm project
+- af7466e: fixes in playground ui
+- 52e0418: Split up action types between tools and workflows
+- a80bdaf: persist data in run tab in dev
+- 9035565: Update tools dev playground inputs for different fieldtypes
+- Updated dependencies [22643eb]
+- Updated dependencies [6feb23f]
+- Updated dependencies [f2d6727]
+- Updated dependencies [301e4ee]
+- Updated dependencies [dfbe4e9]
+- Updated dependencies [9e81f35]
+- Updated dependencies [caefaa2]
+- Updated dependencies [c151ae6]
+- Updated dependencies [52e0418]
+- Updated dependencies [03236ec]
+- Updated dependencies [3764e71]
+- Updated dependencies [df982db]
+- Updated dependencies [0461849]
+- Updated dependencies [2259379]
+- Updated dependencies [358f069]
+  - @mastra/core@0.5.0-alpha.5
+  - @mastra/deployer@0.1.8-alpha.5
+
 ## 0.2.9-alpha.4
 
 ### Patch Changes

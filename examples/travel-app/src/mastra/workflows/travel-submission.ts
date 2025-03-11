@@ -84,7 +84,10 @@ function createArrangementStep({
         checkOut: travelForm.endDate,
         placeId: travelForm.arrivalAttractionId,
         place: travelForm.arrivalAttractionId,
-        payload: steps?.airbnbLocationSelection,
+        payload:
+          steps.airbnbLocationSelection.status === "success"
+            ? steps.airbnbLocationSelection.output
+            : undefined,
       });
 
       if (!items || items?.length === 0) {
@@ -125,7 +128,9 @@ function createArrangementStep({
         });
 
         const typeSelection = items?.filter((item: Record<string, unknown>) => {
-          return result?.object?.ids?.includes(item?.id || item?.flightNumber);
+          return result?.object?.ids?.includes(
+            (item?.id as string) || (item?.flightNumber as string),
+          );
         });
         console.log(type, typeSelection);
         return {

@@ -136,6 +136,7 @@ program
       port: args?.port ? parseInt(args.port) : 4111,
       dir: args?.dir,
       root: args?.root,
+      tools: args?.tools ? args.tools.split(',') : [],
     }).catch(err => {
       logger.error(err.message);
     });

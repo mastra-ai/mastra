@@ -39,8 +39,9 @@ const mastra = new Mastra({
 
 ### Constructor Options
 
-- `scope` (required): Your Vercel team ID or username
+- `teamId` (required): Your Vercel team ID or username
 - `projectName`: Name of your Vercel project (will be created if it doesn't exist)
+- `token`: Your Vercel API token (required for authentication)
 
 ## Project Structure
 
