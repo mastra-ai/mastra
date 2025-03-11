@@ -11,13 +11,13 @@
   "author": "",
   "license": "ISC",
   "devDependencies": {
-    "@types/node": "^22.10.1",
-    "tsx": "^4.19.2",
-    "typescript": "^5.7.3",
+    "@types/node": "^22.13.10",
+    "tsx": "^4.19.3",
+    "typescript": "^5.8.2",
     "zod": "^3.24.2"
   },
   "dependencies": {
-    "@ai-sdk/anthropic": "^1.1.9",
+    "@ai-sdk/anthropic": "^1.1.15",
     "@ai-sdk/groq": "latest",
     "@ai-sdk/openai": "latest",
     "@mastra/core": "workspace:*",

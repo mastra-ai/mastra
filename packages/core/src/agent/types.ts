@@ -23,13 +23,15 @@ export type ToolsInput = Record<string, ToolAction<any, any, any> | VercelTool>;
 
 export type ToolsetsInput = Record<string, ToolsInput>;
 
+export type MastraLanguageModel = LanguageModelV1;
+
 export interface AgentConfig<
   TTools extends ToolsInput = ToolsInput,
   TMetrics extends Record<string, Metric> = Record<string, Metric>,
 > {
   name: string;
   instructions: string;
-  model: LanguageModelV1;
+  model: MastraLanguageModel;
   tools?: TTools;
   mastra?: Mastra;
   /** @deprecated This property is deprecated. Use evals instead to add evaluation metrics. */

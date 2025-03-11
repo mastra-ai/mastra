@@ -7,10 +7,10 @@
   },
   "dependencies": {
     "@ai-sdk/openai": "latest",
-    "@mastra/rag": "workspace:*",
     "@mastra/pg": "workspace:*",
+    "@mastra/rag": "workspace:*",
     "ai": "latest",
-    "zod": "^3.24.1"
+    "zod": "^3.24.2"
   },
   "version": "0.0.1"
 }
