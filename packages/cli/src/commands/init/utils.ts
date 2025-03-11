@@ -14,7 +14,7 @@ import { logger } from '../../utils/logger';
 
 const exec = util.promisify(child_process.exec);
 
-export type LLMProvider = 'openai' | 'anthropic' | 'groq';
+export type LLMProvider = 'openai' | 'anthropic' | 'groq' | 'google';
 export type Components = 'agents' | 'workflows' | 'tools';
 
 export const getAISDKPackage = (llmProvider: LLMProvider) => {
@@ -25,6 +25,8 @@ export const getAISDKPackage = (llmProvider: LLMProvider) => {
       return '@ai-sdk/anthropic';
     case 'groq':
       return '@ai-sdk/groq';
+    case 'google':
+      return '@ai-sdk/google';
     default:
       return '@ai-sdk/openai';
   }
@@ -43,6 +45,9 @@ export const getProviderImportAndModelItem = (llmProvider: LLMProvider) => {
   } else if (llmProvider === 'groq') {
     providerImport = `import { groq } from '${getAISDKPackage(llmProvider)}';`;
     modelItem = `groq('llama3-groq-70b-8192-tool-use-preview')`;
+  } else if (llmProvider === 'google') {
+    providerImport = `import { google } from '${getAISDKPackage(llmProvider)}';`;
+    modelItem = `google('gemini-1.5-pro-latest')`;
   }
 
   return { providerImport, modelItem };
@@ -419,6 +424,9 @@ export const getAPIKey = async (provider: LLMProvider) => {
     case 'groq':
       key = 'GROQ_API_KEY';
       return key;
+    case 'google':
+      key = 'GOOGLE_GENERATIVE_AI_API_KEY';
+      return key;
     default:
       return key;
   }
@@ -499,6 +507,7 @@ export const interactivePrompt = async () => {
             { value: 'openai', label: 'OpenAI', hint: 'recommended' },
             { value: 'anthropic', label: 'Anthropic' },
             { value: 'groq', label: 'Groq' },
+            { value: 'google', label: 'Google' },
           ],
         }),
       llmApiKey: async ({ results: { llmProvider } }) => {
