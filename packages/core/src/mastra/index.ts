@@ -4,7 +4,7 @@ import { LogLevel, createLogger, noopLogger } from '../logger';
 import type { Logger } from '../logger';
 import type { MastraMemory } from '../memory/memory';
 import type { MastraStorage } from '../storage';
-import { DefaultProxyStorage } from '../storage/defaultProxyStorage';
+import { DefaultProxyStorage } from '../storage/default-proxy-storage';
 import { InstrumentClass, Telemetry } from '../telemetry';
 import type { OtelConfig } from '../telemetry';
 import type { MastraTTS } from '../tts';

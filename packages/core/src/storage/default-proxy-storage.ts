@@ -10,16 +10,26 @@ import type { EvalRow, StorageColumn, StorageGetMessagesArg } from './types';
 export class DefaultProxyStorage extends MastraStorage {
   private storage: DefaultStorage | null = null;
   private storageConfig: LibSQLConfig;
+  private isInitializingPromise: Promise<void> | null = null;
 
   constructor({ config }: { config: LibSQLConfig }) {
     super({ name: 'DefaultStorage' });
     this.storageConfig = config;
   }
 
-  private async setupStorage() {
-    const { DefaultStorage } = await import('./libsql');
+  private setupStorage() {
+    if (!this.isInitializingPromise) {
+      this.isInitializingPromise = new Promise((resolve, reject) => {
+        import('./libsql')
+          .then(({ DefaultStorage }) => {
+            this.storage = new DefaultStorage({ config: this.storageConfig });
+            resolve();
+          })
+          .catch(reject);
+      });
+    }
 
-    this.storage = new DefaultStorage({ config: this.storageConfig });
+    return this.isInitializingPromise;
   }
 
   async createTable({

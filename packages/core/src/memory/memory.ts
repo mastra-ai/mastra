@@ -12,7 +12,7 @@ import type {
 
 import { MastraBase } from '../base';
 import type { MastraStorage, StorageGetMessagesArg } from '../storage';
-import { DefaultProxyStorage } from '../storage/defaultProxyStorage';
+import { DefaultProxyStorage } from '../storage/default-proxy-storage';
 import type { CoreTool } from '../tools';
 import { deepMerge } from '../utils';
 import type { MastraVector } from '../vector';
