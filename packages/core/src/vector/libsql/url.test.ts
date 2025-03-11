@@ -1,4 +1,5 @@
 import { existsSync, mkdirSync, rmSync } from 'fs';
+import { stat, mkdir, rm } from 'fs/promises';
 import { tmpdir } from 'os';
 import { join } from 'path';
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
@@ -9,12 +10,16 @@ describe('LibSQLVector URL rewriting', () => {
   let originalCwd: string;
   let parentDir: string;
 
-  beforeEach(() => {
+  beforeEach(async () => {
     tmpDir = join(tmpdir(), 'mastra-test-libsql-vector-url');
-    if (existsSync(tmpDir)) {
-      rmSync(tmpDir, { recursive: true, force: true });
+    try {
+      if (await stat(tmpDir)) {
+        await rm(tmpDir, { recursive: true, force: true });
+      }
+      await mkdir(tmpDir, { recursive: true });
+    } catch {
+      // ignore
     }
-    mkdirSync(tmpDir);
     originalCwd = process.cwd();
     process.chdir(tmpDir);
     parentDir = join(tmpDir, '..');
@@ -164,4 +169,3 @@ describe('LibSQLVector URL rewriting', () => {
     expect(existsSync(join(parentDir, 'test.db'))).toBe(false);
   });
 });
-
