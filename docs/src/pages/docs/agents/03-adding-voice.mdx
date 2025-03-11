@@ -28,10 +28,10 @@ await agent.speak("Hello, I'm your AI assistant!");
 
 // Read audio file and transcribe
 const audioFilePath = path.join(process.cwd(), '/audio.m4a');
-const audioStream = createReadStream(audioFilePath, { filetype: 'm4a' });
+const audioStream = createReadStream(audioFilePath);
 
 try {
-  const transcription = await agent.listen(audioStream);
+  const transcription = await agent.listen(audioStream, { filetype: 'm4a' });
 } catch (error) {
   console.error('Error transcribing audio:', error);
 }
@@ -91,11 +91,11 @@ import path from 'path';
 
 // Read audio file and transcribe
 const audioFilePath = path.join(process.cwd(), '/agent.m4a');
-const audioStream = createReadStream(audioFilePath, { filetype: 'm4a' });
+const audioStream = createReadStream(audioFilePath);
 
 try {
   console.log('Transcribing audio file...');
-  const transcription = await agent.listen(audioStream);
+  const transcription = await agent.listen(audioStream, { filetype: 'm4a' });
   console.log('Transcription:', transcription);
 } catch (error) {
   console.error('Error transcribing audio:', error);
