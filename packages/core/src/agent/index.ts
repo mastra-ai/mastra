@@ -1154,7 +1154,7 @@ export class Agent<
     }
   }
 
-  voiceTune(config: Record<string, unknown>): void {
+  tune(config: Record<string, unknown>): void {
     if (!this.voice) {
       throw new Error('No voice provider configured');
     }
