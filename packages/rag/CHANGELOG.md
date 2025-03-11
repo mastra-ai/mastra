@@ -1,5 +1,11 @@
 # @mastra/rag
 
+## 0.1.8-alpha.11
+
+### Patch Changes
+
+- aec08af: Update vector query tool to change input schema depending on filter enabled
+
 ## 0.1.8-alpha.10
 
 ### Patch Changes

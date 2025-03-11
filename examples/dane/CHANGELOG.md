@@ -1,5 +1,14 @@
 # @mastra/dane
 
+## 0.0.5-alpha.11
+
+### Patch Changes
+
+- Updated dependencies [7848663]
+- Updated dependencies [aec08af]
+  - @mastra/mcp@0.3.0-alpha.11
+  - @mastra/rag@0.1.8-alpha.11
+
 ## 0.0.5-alpha.10
 
 ### Patch Changes
