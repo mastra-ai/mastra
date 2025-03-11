@@ -85,7 +85,7 @@ async function rebundleAndRestart(dotMastraPath: string, port: number, bundler: 
     // If current server process is running, stop it
     if (currentServerProcess) {
       logger.debug('Stopping current server...');
-      currentServerProcess.kill('SIGKILL');
+      currentServerProcess.kill('SIGINT');
     }
 
     const env = await bundler.loadEnvVars();

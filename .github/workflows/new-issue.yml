@@ -5,6 +5,8 @@ on:
 
 jobs:
   issue_created:
+    # Only run on the main repository, not on forks
+    if: ${{ github.repository == 'mastra-ai/mastra' }}
     runs-on: ubuntu-latest
     permissions:
       issues: write
