@@ -1,6 +1,6 @@
 {
   "name": "@mastra/speech-google",
-  "version": "0.1.8-alpha.11",
+  "version": "0.1.8",
   "description": "Mastra Google speech integration (DEPRECATED - use @mastra/voice-google instead)",
   "type": "module",
   "main": "dist/index.js",
