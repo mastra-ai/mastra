@@ -16,8 +16,5 @@
     "@ai-sdk/openai": "latest",
     "@mastra/core": "workspace:*",
     "zod": "^3.24.2"
-  },
-  "devDependencies": {
-    "ai": "^4.1.54"
   }
 }

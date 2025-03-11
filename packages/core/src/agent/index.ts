@@ -872,8 +872,6 @@ export class Agent<
 
     const { threadId, messageObjects, convertedTools } = await before();
 
-    console.log(messageObjects);
-
     if (!output && experimental_output) {
       const result = await this.llm.__text({
         messages: messageObjects,
@@ -1016,8 +1014,6 @@ export class Agent<
     });
 
     const { threadId, messageObjects, convertedTools } = await before();
-
-    console.log(messageObjects);
 
     if (!output && experimental_output) {
       this.logger.debug(`Starting agent ${this.name} llm stream call`, {
