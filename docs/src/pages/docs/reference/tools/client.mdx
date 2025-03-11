@@ -30,28 +30,29 @@ constructor({
 <PropertiesTable
   content={[
     {
-      name: 'name',
-      type: 'string',
-      description: 'The name identifier for this client instance.',
+      name: "name",
+      type: "string",
+      description: "The name identifier for this client instance.",
     },
     {
-      name: 'version',
-      type: 'string',
+      name: "version",
+      type: "string",
       isOptional: true,
-      defaultValue: '1.0.0',
-      description: 'The version of the client.',
+      defaultValue: "1.0.0",
+      description: "The version of the client.",
     },
     {
-      name: 'server',
-      type: 'StdioServerParameters | SSEClientParameters',
-      description: 'Configuration parameters for either a stdio server connection or an SSE server connection.',
+      name: "server",
+      type: "StdioServerParameters | SSEClientParameters",
+      description:
+        "Configuration parameters for either a stdio server connection or an SSE server connection.",
     },
     {
-      name: 'capabilities',
-      type: 'ClientCapabilities',
+      name: "capabilities",
+      type: "ClientCapabilities",
       isOptional: true,
-      defaultValue: '{}',
-      description: 'Optional capabilities configuration for the client.',
+      defaultValue: "{}",
+      description: "Optional capabilities configuration for the client.",
     },
   ]}
 />
@@ -163,9 +164,9 @@ const sseClient = new MastraMCPClient({
     // Optional fetch request configuration
     requestInit: {
       headers: {
-        "Authorization": "Bearer your-token"
-      }
-    }
+        Authorization: "Bearer your-token",
+      },
+    },
   },
 });
 
@@ -174,4 +175,6 @@ const sseClient = new MastraMCPClient({
 
 ## Related Information
 
+- For managing multiple MCP servers in your application, see the [MCPConfiguration documentation](./configuration)
 - For more details about the Model Context Protocol, see the [@modelcontextprotocol/sdk documentation](https://github.com/modelcontextprotocol/typescript-sdk).
+

@@ -1,5 +1,22 @@
 # @mastra/mcp
 
+## 0.3.0-alpha.11
+
+### Patch Changes
+
+- 7848663: Fixed an error in the @mastra/mcp alpha release where client.setLoggingLevel led to errors in clients that don't support it
+
+## 0.3.0-alpha.10
+
+### Minor Changes
+
+- dd7a09a: Added new MCPConfiguration class for managing multiple MCP server tools/toolsets. Fixed a bug where MCPClient env would overwrite PATH env var. Fixed a bug where MCP servers would be killed non-gracefully leading to printing huge errors on every code save when running mastra dev
+
+### Patch Changes
+
+- Updated dependencies [a910463]
+  - @mastra/core@0.5.0-alpha.10
+
 ## 0.2.7-alpha.9
 
 ### Patch Changes

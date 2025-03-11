@@ -84,7 +84,10 @@ function createArrangementStep({
         checkOut: travelForm.endDate,
         placeId: travelForm.arrivalAttractionId,
         place: travelForm.arrivalAttractionId,
-        payload: steps?.airbnbLocationSelection,
+        payload:
+          steps.airbnbLocationSelection.status === "success"
+            ? steps.airbnbLocationSelection.output
+            : undefined,
       });
 
       if (!items || items?.length === 0) {
