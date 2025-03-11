@@ -163,7 +163,7 @@ export class OpenAIRealtimeVoice extends MastraVoice {
     this.setupEventListeners();
 
     if (chatModel?.tools) {
-      this.equip(chatModel.tools);
+      this.addTools(chatModel.tools);
     }
   }
 
