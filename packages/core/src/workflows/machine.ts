@@ -652,7 +652,7 @@ export class Machine<
                     attempts: ({ context, event }) => {
                       if (event.output.type !== 'SUSPENDED') return context.attempts;
                       // if the step is suspended, reset the attempt count
-                      return { ...context.attempts, [stepNode.step.id]: stepNode.step.retryConfig?.attempts || 1 };
+                      return { ...context.attempts, [stepNode.step.id]: stepNode.step.retryConfig?.attempts || 0 };
                     },
                   }),
                 ],
