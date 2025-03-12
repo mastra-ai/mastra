@@ -14,7 +14,7 @@ import { logger } from '../../utils/logger';
 
 const exec = util.promisify(child_process.exec);
 
-export type LLMProvider = 'openai' | 'anthropic' | 'groq';
+export type LLMProvider = 'openai' | 'anthropic' | 'groq' | 'cerebras';
 export type Components = 'agents' | 'workflows' | 'tools';
 
 export const getAISDKPackage = (llmProvider: LLMProvider) => {
@@ -25,6 +25,8 @@ export const getAISDKPackage = (llmProvider: LLMProvider) => {
       return '@ai-sdk/anthropic';
     case 'groq':
       return '@ai-sdk/groq';
+    case 'cerebras':
+      return '@ai-sdk/cerebras'
     default:
       return '@ai-sdk/openai';
   }
@@ -43,6 +45,9 @@ export const getProviderImportAndModelItem = (llmProvider: LLMProvider) => {
   } else if (llmProvider === 'groq') {
     providerImport = `import { groq } from '${getAISDKPackage(llmProvider)}';`;
     modelItem = `groq('llama3-groq-70b-8192-tool-use-preview')`;
+  } else if (llmProvider === 'cerebras') {
+    providerImport = `import { cerebras } from '${getAISDKPackage(llmProvider)}';`;
+    modelItem = `cerebras('llama-3.3-70b')`;
   }
 
   return { providerImport, modelItem };
@@ -418,6 +423,9 @@ export const getAPIKey = async (provider: LLMProvider) => {
       return key;
     case 'groq':
       key = 'GROQ_API_KEY';
+      return key;
+    case 'cerebras':
+      key = 'CEREBRAS_API_KEY';
       return key;
     default:
       return key;
