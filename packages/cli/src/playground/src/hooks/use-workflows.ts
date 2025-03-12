@@ -4,7 +4,7 @@ import { toast } from 'sonner';
 import { MastraClient, GetWorkflowResponse, WorkflowRunResult } from '@mastra/client-js';
 
 const mastra = new MastraClient({
-  baseUrl: 'http://localhost:4111',
+  baseUrl: '',
 });
 
 export const useWorkflows = () => {
@@ -107,7 +107,7 @@ export const useWatchWorkflow = () => {
     try {
       setIsWatchingWorkflow(true);
       const client = new MastraClient({
-        baseUrl: 'http://localhost:4111',
+        baseUrl: '',
       });
 
       const watchSubscription = client.getWorkflow(workflowId).watch({ runId });
