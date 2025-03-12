@@ -2438,7 +2438,7 @@ describe('Workflow', async () => {
       expect(telemetry).toBeInstanceOf(Telemetry);
     });
 
-    it.only('should be able to access the new Mastra primitives', async () => {
+    it('should be able to access the new Mastra primitives', async () => {
       let telemetry: Telemetry | undefined;
       const step1 = new Step({
         id: 'step1',
