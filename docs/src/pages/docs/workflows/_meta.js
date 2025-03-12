@@ -5,6 +5,7 @@ const meta = {
   "data-flow": "Data Flow",
   variables: "Variables",
   "suspend-and-resume": "Suspend & Resume",
+  "dynamic-workflows": "Dynamic Workflows",
 };
 
 export default meta;
