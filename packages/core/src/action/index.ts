@@ -19,15 +19,17 @@ export type MastraPrimitives = {
   memory?: MastraMemory;
 };
 
-type MastraUnion = Mastra | MastraPrimitives;
+export type MastraUnion = {
+  [K in keyof Mastra]: Mastra[K];
+} & MastraPrimitives;
 
 export interface IExecutionContext<TSchemaIn extends z.ZodSchema | undefined = undefined> {
   context: TSchemaIn extends z.ZodSchema ? z.infer<TSchemaIn> : {};
   runId?: string;
-  mastra?: MastraUnion;
   threadId?: string;
   resourceId?: string;
 }
+
 export interface IAction<
   TId extends string,
   TSchemaIn extends z.ZodSchema | undefined,
@@ -39,9 +41,9 @@ export interface IAction<
   description?: string;
   inputSchema?: TSchemaIn;
   outputSchema?: TSchemaOut;
-  mastra?: Mastra;
-  payload?: TSchemaIn extends z.ZodSchema ? Partial<z.infer<TSchemaIn>> : unknown;
-  execute: (
+  // execute must remain optional because ITools extends IAction and tools may need execute to be optional
+  // when forwarding tool calls to the client or to a queue instead of executing them in the same process
+  execute?: (
     context: TContext,
     options?: TOptions,
   ) => Promise<TSchemaOut extends z.ZodSchema ? z.infer<TSchemaOut> : unknown>;

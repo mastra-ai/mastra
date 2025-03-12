@@ -7,7 +7,7 @@ import type { MastraPrimitives } from '../action';
 import { MastraBase } from '../base';
 
 import type { Mastra } from '../mastra';
-import type { Step } from './step';
+import { Step } from './step';
 import type {
   ActionContext,
   RetryConfig,
@@ -24,12 +24,14 @@ import { WhenConditionReturnValue } from './types';
 import { isVariableReference, updateStepInHierarchy } from './utils';
 import type { WorkflowResultReturn } from './workflow-instance';
 import { WorkflowInstance } from './workflow-instance';
+
 export class Workflow<
-  TSteps extends Step<any, any, any>[] = any,
+  TSteps extends Step<string, any, any>[] = Step<string, any, any>[],
   TTriggerSchema extends z.ZodObject<any> = any,
 > extends MastraBase {
   name: string;
   triggerSchema?: TTriggerSchema;
+  events?: Record<string, { schema: z.ZodObject<any> }>;
   #retryConfig?: RetryConfig;
   #mastra?: Mastra;
   #runs: Map<string, WorkflowInstance<TSteps, TTriggerSchema>> = new Map();
@@ -48,15 +50,20 @@ export class Workflow<
    * @param name - Identifier for the workflow (not necessarily unique)
    * @param logger - Optional logger instance
    */
-  constructor({ name, triggerSchema, retryConfig, mastra }: WorkflowOptions<TTriggerSchema>) {
+  constructor({ name, triggerSchema, retryConfig, mastra, events }: WorkflowOptions<TTriggerSchema>) {
     super({ component: 'WORKFLOW', name });
 
     this.name = name;
     this.#retryConfig = retryConfig;
     this.triggerSchema = triggerSchema;
+    this.events = events;
 
     if (mastra) {
-      this.__registerPrimitives(mastra);
+      this.__registerPrimitives({
+        telemetry: mastra.getTelemetry(),
+        logger: mastra.getLogger(),
+      });
+      this.#mastra = mastra;
     }
   }
 
@@ -83,6 +90,7 @@ export class Workflow<
       config: {
         ...this.#makeStepDef(stepKey),
         ...config,
+        serializedWhen: typeof config?.when === 'function' ? config.when.toString() : config?.when,
         data: requiredData,
       },
     };
@@ -139,6 +147,7 @@ export class Workflow<
       config: {
         ...this.#makeStepDef(stepKey),
         ...config,
+        serializedWhen: typeof config?.when === 'function' ? config.when.toString() : config?.when,
         data: requiredData,
       },
     };
@@ -169,7 +178,7 @@ export class Workflow<
     VarStep extends StepVariableType<any, any, any, any>,
   >(
     applyOperator: (op: string, value: any, target: any) => { status: string },
-    condition: StepConfig<FallbackStep, CondStep, VarStep, TTriggerSchema>['when'],
+    condition: StepConfig<FallbackStep, CondStep, VarStep, TTriggerSchema, TSteps>['when'],
     fallbackStep: FallbackStep,
     loopType?: 'while' | 'until',
   ) {
@@ -300,7 +309,10 @@ export class Workflow<
     FallbackStep extends StepAction<any, any, any, any>,
     CondStep extends StepVariableType<any, any, any, any>,
     VarStep extends StepVariableType<any, any, any, any>,
-  >(condition: StepConfig<FallbackStep, CondStep, VarStep, TTriggerSchema>['when'], fallbackStep: FallbackStep) {
+  >(
+    condition: StepConfig<FallbackStep, CondStep, VarStep, TTriggerSchema, TSteps>['when'],
+    fallbackStep: FallbackStep,
+  ) {
     const applyOperator = (operator: string, value: any, target: any) => {
       switch (operator) {
         case '$eq':
@@ -371,7 +383,7 @@ export class Workflow<
                 const result = await activeCondition.condition(payload);
                 return !result;
               }
-            : () => Promise.resolve(false),
+            : { not: activeCondition.condition },
       },
     );
 
@@ -394,6 +406,35 @@ export class Workflow<
     return this as Omit<typeof this, 'then' | 'after'>;
   }
 
+  afterEvent(eventName: string) {
+    const event = this.events?.[eventName];
+    if (!event) {
+      throw new Error(`Event ${eventName} not found`);
+    }
+
+    const lastStep = this.#steps[this.#lastStepStack[this.#lastStepStack.length - 1] ?? ''];
+    if (!lastStep) {
+      throw new Error('Condition requires a step to be executed after');
+    }
+
+    const eventStepKey = `__${eventName}_event`;
+    const eventStep = new Step({
+      id: eventStepKey,
+      execute: async ({ context, suspend }) => {
+        if (context.resumeData?.resumedEvent) {
+          return { executed: true, resumedEvent: context.resumeData?.resumedEvent };
+        }
+
+        await suspend();
+        return { executed: false };
+      },
+    });
+
+    this.after(lastStep).step(eventStep).after(eventStep);
+
+    return this;
+  }
+
   /**
    * Executes the workflow with the given trigger data
    * @param triggerData - Initial data to start the workflow with
@@ -401,8 +442,8 @@ export class Workflow<
    * @throws Error if trigger schema validation fails
    */
 
-  createRun(): WorkflowResultReturn<TTriggerSchema> {
-    const run = new WorkflowInstance({
+  createRun(): WorkflowResultReturn<TTriggerSchema, TSteps> {
+    const run = new WorkflowInstance<TSteps, TTriggerSchema>({
       logger: this.logger,
       name: this.name,
       mastra: this.#mastra,
@@ -486,11 +527,14 @@ export class Workflow<
         return await otlpContext.with(
           trace.setSpan(otlpContext.active(), this.getExecutionSpan(attributes?.runId ?? data?.runId) as Span),
           async () => {
-            // @ts-ignore
-            return this.#mastra.telemetry.traceMethod(handler, {
-              spanName,
-              attributes,
-            })(data);
+            if (this?.telemetry) {
+              return this.telemetry.traceMethod(handler, {
+                spanName,
+                attributes,
+              })(data);
+            } else {
+              return handler(data);
+            }
           },
         );
       };
@@ -512,7 +556,7 @@ export class Workflow<
       };
 
       // Only trace if telemetry is available and action exists
-      const finalAction = this.#mastra?.getTelemetry()
+      const finalAction = this.telemetry
         ? executeStep(execute, `workflow.${this.name}.action.${stepId}`, {
             componentName: this.name,
             runId: rest.runId as string,
@@ -731,7 +775,18 @@ export class Workflow<
     return run?.execute({
       snapshot: parsedSnapshot,
       stepId,
+      resumeData: resumeContext,
     });
+  }
+
+  async resumeWithEvent(runId: string, eventName: string, data: any) {
+    const event = this.events?.[eventName];
+    if (!event) {
+      throw new Error(`Event ${eventName} not found`);
+    }
+
+    const results = await this.resume({ runId, stepId: `__${eventName}_event`, context: { resumedEvent: data } });
+    return results;
   }
 
   __registerMastra(mastra: Mastra) {

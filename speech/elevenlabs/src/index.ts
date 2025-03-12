@@ -43,7 +43,11 @@ export class ElevenLabsTTS extends MastraTTS {
       const chunks: Buffer[] = [];
 
       for await (const chunk of audio) {
-        chunks.push(Buffer.from(chunk));
+        if (typeof chunk === 'string') {
+          chunks.push(Buffer.from(chunk));
+        } else {
+          chunks.push(chunk);
+        }
       }
 
       const audioBuffer = Buffer.concat(chunks);
