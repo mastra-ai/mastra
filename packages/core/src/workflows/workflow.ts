@@ -244,11 +244,14 @@ export class Workflow<
         return { success: true };
       },
     };
-    this.#steps[checkStepKey] = checkStep;
+    this.#steps[loopFinishedStepKey] = loopFinishedStep;
 
     // First add the check step after the last step
     this.then(checkStep);
 
+    // Check if we're inside an if branch by looking for the pattern "__*_if" in the step graph
+    const isInIfBranch = lastStepKey.includes('__') && lastStepKey.endsWith('_if');
+    
     // Then create a branch after the check step that loops back to the fallback step
     this.after(checkStep)
       .step(fallbackStep, {
@@ -259,6 +262,12 @@ export class Workflow<
           }
 
           const status = checkStepResult?.output?.status;
+          
+          // If we're in an if branch and the condition is complete, we should allow the else branch to execute
+          if (isInIfBranch && status === 'complete') {
+            return WhenConditionReturnValue.CONTINUE_FAILED;
+          }
+          
           return status === 'continue' ? WhenConditionReturnValue.CONTINUE : WhenConditionReturnValue.CONTINUE_FAILED;
         },
       })
@@ -271,6 +280,12 @@ export class Workflow<
           }
 
           const status = checkStepResult?.output?.status;
+          
+          // If we're in an if branch and the loop condition is not met, we should allow the else branch to execute
+          if (isInIfBranch && status === 'continue') {
+            return WhenConditionReturnValue.CONTINUE_FAILED;
+          }
+          
           return status === 'complete' ? WhenConditionReturnValue.CONTINUE : WhenConditionReturnValue.CONTINUE_FAILED;
         },
       });
@@ -347,7 +362,7 @@ export class Workflow<
     this.step(
       {
         id: ifStepKey,
-        execute: async ({ context }) => {
+        execute: async ({ context }: any) => {
           return { executed: true };
         },
       },
@@ -371,7 +386,7 @@ export class Workflow<
     this.step(
       {
         id: activeCondition.elseStepKey,
-        execute: async ({ context }) => {
+        execute: async ({ context }: any) => {
           return { executed: true };
         },
       },
@@ -381,6 +396,16 @@ export class Workflow<
             ? async payload => {
                 // @ts-ignore
                 const result = await activeCondition.condition(payload);
+                
+                // Check if the corresponding if step was skipped
+                const ifStepKey = activeCondition.elseStepKey.replace('_else', '_if');
+                const ifStepResult = payload.context.steps?.[ifStepKey];
+                
+                // If the if step was skipped, we should execute the else branch
+                if (ifStepResult && ifStepResult.status === 'skipped') {
+                  return true;
+                }
+                
                 return !result;
               }
             : { not: activeCondition.condition },
@@ -420,7 +445,7 @@ export class Workflow<
     const eventStepKey = `__${eventName}_event`;
     const eventStep = new Step({
       id: eventStepKey,
-      execute: async ({ context, suspend }) => {
+      execute: async ({ context, suspend }: any) => {
         if (context.resumeData?.resumedEvent) {
           return { executed: true, resumedEvent: context.resumeData?.resumedEvent };
         }

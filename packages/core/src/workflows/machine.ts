@@ -448,6 +448,24 @@ export class Machine<
           if (conditionMet === WhenConditionReturnValue.ABORT) {
             conditionMet = false;
           } else if (conditionMet === WhenConditionReturnValue.CONTINUE_FAILED) {
+            // Special handling for else branches after if conditions with until loops
+            // Check if this is an else step (has the pattern "__*_else")
+            if (stepNode.step.id.includes('__') && stepNode.step.id.endsWith('_else')) {
+              // Find the corresponding if step
+              const ifStepId = stepNode.step.id.replace('_else', '_if');
+              const ifStepResult = context.steps[ifStepId];
+              
+              // If the if step was skipped, we should execute the else branch
+              if (ifStepResult && ifStepResult.status === 'skipped') {
+                this.logger.debug(`Else branch condition met for step ${stepNode.step.id} after if step ${ifStepId} was skipped`, {
+                  stepId: stepNode.step.id,
+                  ifStepId,
+                  runId: this.#runId,
+                });
+                return { type: 'CONDITIONS_MET' as const };
+              }
+            }
+            
             // TODO: send another kind of event instead
             return { type: 'CONDITIONS_SKIPPED' as const };
           } else if (conditionMet === WhenConditionReturnValue.LIMBO) {
