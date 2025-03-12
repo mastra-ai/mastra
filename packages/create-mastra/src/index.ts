@@ -36,7 +36,7 @@ program
   .description('Create a new Mastra project')
   .option('--default', 'Quick start with defaults(src, OpenAI, no examples)')
   .option('-c, --components <components>', 'Comma-separated list of components (agents, tools, workflows)')
-  .option('-l, --llm <model-provider>', 'Default model provider (openai, anthropic, or groq)')
+  .option('-l, --llm <model-provider>', 'Default model provider (openai, anthropic, groq, or cerebras)')
   .option('-k, --llm-api-key <api-key>', 'API key for the model provider')
   .option('-e, --example', 'Include example code')
   .option('-t, --timeout [timeout]', 'Configurable timeout for package installation, defaults to 60000 ms')

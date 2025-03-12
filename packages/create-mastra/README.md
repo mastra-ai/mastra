@@ -32,7 +32,7 @@ pnpm create mastra
 
 - `--default` - Quick start with defaults (src directory, OpenAI, no examples)
 - `-c, --components <components>` - Comma-separated list of components (agents, tools, workflows)
-- `-l, --llm <model-provider>` - Default model provider (openai, anthropic, or groq)
+- `-l, --llm <model-provider>` - Default model provider (openai, anthropic, groq, or cerebras)
 - `-e, --example` - Include example code
 
 ## Examples
