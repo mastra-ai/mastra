@@ -11,17 +11,8 @@ describe('LibSQLVector URL rewriting', () => {
   let parentDir: string;
 
   beforeEach(async () => {
-    tmpDir = join(tmpdir(), await mkdtemp('mastra-test-libsql-vector-url'));
     try {
-      if (await stat(tmpDir)) {
-        await rm(tmpDir, { recursive: true, force: true });
-      }
-    } catch {
-      // ignore
-    }
-
-    try {
-      await mkdir(tmpDir, { recursive: true });
+      tmpDir = await mkdtemp(join(tmpdir(), 'mastra-test-libsql-'));
     } catch {
       // ignore
     }
@@ -38,7 +29,6 @@ describe('LibSQLVector URL rewriting', () => {
       if (await stat(tmpDir)) {
         await rm(tmpDir, { recursive: true, force: true });
       }
-      await mkdir(tmpDir, { recursive: true });
     } catch {
       // ignore
     }
