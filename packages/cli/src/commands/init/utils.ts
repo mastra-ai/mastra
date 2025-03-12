@@ -507,6 +507,7 @@ export const interactivePrompt = async () => {
             { value: 'openai', label: 'OpenAI', hint: 'recommended' },
             { value: 'anthropic', label: 'Anthropic' },
             { value: 'groq', label: 'Groq' },
+            { value: 'cerebras', label: 'Cerebras' },
           ],
         }),
       llmApiKey: async ({ results: { llmProvider } }) => {
