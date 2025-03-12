@@ -7,10 +7,7 @@ import { rollup, type InputOptions, type OutputOptions } from 'rollup';
 import esbuild from 'rollup-plugin-esbuild';
 
 import type { analyzeBundle } from './analyze';
-import { libSqlFix } from './plugins/fix-libsql';
 import { removeDeployer } from './plugins/remove-deployer';
-import { telemetryFix } from './plugins/telemetry-fix';
-
 export async function getInputOptions(
   entryFile: string,
   analyzedBundleInfo: Awaited<ReturnType<typeof analyzeBundle>>,
@@ -33,12 +30,10 @@ export async function getInputOptions(
   const externals = Array.from(analyzedBundleInfo.externalDependencies).concat(['@mastra/core/hooks']);
   return {
     logLevel: process.env.MASTRA_BUNDLER_DEBUG === 'true' ? 'debug' : 'silent',
-    treeshake: true,
+    treeshake: 'smallest',
     preserveSymlinks: true,
     external: externals,
     plugins: [
-      telemetryFix(),
-      libSqlFix(),
       {
         name: 'alias-optimized-deps',
         // @ts-ignore

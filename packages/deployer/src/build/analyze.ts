@@ -152,7 +152,7 @@ async function bundleExternals(depsToOptimize: Map<string, string[]>, outputDir:
     ),
     // this dependency breaks the build, so we need to exclude it
     // TODO actually fix this so we don't need to exclude it
-    external: ['jsdom'],
+    external: ['jsdom', '@libsql/client'],
     treeshake: 'smallest',
     preserveSymlinks: true,
     plugins: [
@@ -215,6 +215,8 @@ async function validateOutput(
     dependencies: new Map<string, string>(),
     externalDependencies: new Set<string>(),
   };
+
+  result.externalDependencies.add('@libsql/client');
 
   //const internalFiles = new Set<string>(output.map(file => file.fileName));
 
