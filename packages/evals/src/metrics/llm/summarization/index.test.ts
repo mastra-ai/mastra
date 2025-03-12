@@ -262,7 +262,6 @@ describe('SummarizationMetric', () => {
   it('should handle repetitive summary', async () => {
     const testCase = testCases[13]!;
     const result = await metric.measure(testCase.input, testCase.output);
-    console.log(result.score, testCase.expectedResult.score);
     expect(isCloserTo(result.score, testCase.expectedResult.score, 1)).toBe(true);
   });
 

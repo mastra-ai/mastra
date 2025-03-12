@@ -1,11 +1,17 @@
 import { spawn as spwn } from 'child_process';
+import path, { dirname, join } from 'path';
+import { fileURLToPath } from 'url';
 import type { RollupOutput } from 'rollup';
 import { rollup } from 'rollup';
 import { expect, beforeAll, it } from 'vitest';
 
+const _dirname = dirname(fileURLToPath(import.meta.url));
 const spawn = (cmd: string, args: ReadonlyArray<string>) =>
   new Promise((resolve, reject) => {
-    const cp = spwn(cmd, args);
+    const cp = spwn(cmd, args, {
+      shell: true,
+      cwd: join(_dirname, '..', '..'),
+    });
     const error: string[] = [];
     const stdout: string[] = [];
     cp.stdout.on('data', data => {
@@ -31,7 +37,7 @@ beforeAll(async () => {
 
   const bundler = await rollup({
     logLevel: 'silent',
-    input: 'dist/storage/index.js',
+    input: join(_dirname, '..', '..', 'dist', 'storage', 'index.js'),
     preserveSymlinks: true,
   });
   const { output: bundlerOutput } = await bundler.generate({
