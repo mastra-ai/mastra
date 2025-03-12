@@ -119,7 +119,7 @@ export function WorkflowTrigger({
 
   if (!triggerSchema) {
     return (
-      <ScrollArea className="h-[calc(100vh-126px)] pt-2 px-4 pb-4 text-xs w-[400px]">
+      <ScrollArea className="h-[calc(100vh-126px)] pt-2 px-4 pb-4 text-xs w-full">
         <div className="space-y-4">
           <div className="space-y-4 px-4">
             <Button className="w-full" disabled={isRunning} onClick={() => handleExecuteWorkflow(null)}>
@@ -151,7 +151,7 @@ export function WorkflowTrigger({
   const zodInputSchema = resolveSerializedZodOutput(jsonSchemaToZod(parse(triggerSchema)));
 
   return (
-    <ScrollArea className="h-[calc(100vh-126px)] pt-2 px-4 pb-4 text-xs w-[400px]">
+    <ScrollArea className="h-[calc(100vh-126px)] pt-2 px-4 pb-4 text-xs w-full">
       <div className="space-y-4">
         <div>
           {suspendedSteps.length > 0 ? (
