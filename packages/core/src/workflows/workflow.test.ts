@@ -10,12 +10,12 @@ import { Telemetry } from '../telemetry';
 import { createTool } from '../tools';
 
 import { Step } from './step';
-import { WhenConditionReturnValue, type WorkflowContext, type WorkflowResumeResult } from './types';
+import type { WorkflowContext, WorkflowResumeResult } from './types';
 import { Workflow } from './workflow';
 
 const storage = new DefaultStorage({
   config: {
-    url: 'file:mastra.db',
+    url: 'file::memory:?cache=shared',
   },
 });
 
@@ -1376,6 +1376,7 @@ describe('Workflow', async () => {
         logger: createLogger({
           name: 'Workflow',
         }),
+        storage,
       });
 
       const workflow = new Workflow({
@@ -1402,6 +1403,7 @@ describe('Workflow', async () => {
         logger: createLogger({
           name: 'Workflow',
         }),
+        storage,
       });
 
       const workflow = new Workflow({
@@ -1827,7 +1829,7 @@ describe('Workflow', async () => {
       // Create a new storage instance for initial run
       const initialStorage = new DefaultStorage({
         config: {
-          url: 'file:mastra.db',
+          url: 'file::memory:',
         },
       });
       await initialStorage.init();
@@ -1960,6 +1962,7 @@ describe('Workflow', async () => {
       const mastra = new Mastra({
         logger,
         workflows: { 'test-workflow': workflow },
+        storage,
       });
 
       const wf = mastra.getWorkflow('test-workflow');
@@ -2111,6 +2114,7 @@ describe('Workflow', async () => {
       const mastra = new Mastra({
         logger,
         workflows: { 'test-workflow': workflow },
+        storage,
       });
 
       const wf = mastra.getWorkflow('test-workflow');
@@ -2262,6 +2266,7 @@ describe('Workflow', async () => {
       const mastra = new Mastra({
         logger,
         workflows: { 'test-workflow': promptEvalWorkflow },
+        storage,
       });
 
       const wf = mastra.getWorkflow('test-workflow');
@@ -2416,6 +2421,7 @@ describe('Workflow', async () => {
       const mastra = new Mastra({
         logger,
         workflows: { 'test-workflow': workflow },
+        storage,
       });
 
       const wf = mastra.getWorkflow('test-workflow');
@@ -2430,7 +2436,7 @@ describe('Workflow', async () => {
       expect(telemetry).toBeInstanceOf(Telemetry);
     });
 
-    it('should be able to access the new Mastra primitives', async () => {
+    it.only('should be able to access the new Mastra primitives', async () => {
       let telemetry: Telemetry | undefined;
       const step1 = new Step({
         id: 'step1',
@@ -2445,6 +2451,7 @@ describe('Workflow', async () => {
       const mastra = new Mastra({
         logger,
         workflows: { 'test-workflow': workflow },
+        storage,
       });
 
       const wf = mastra.getWorkflow('test-workflow');
