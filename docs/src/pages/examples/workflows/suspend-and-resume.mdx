@@ -16,6 +16,90 @@ import { Mastra } from '@mastra/core';
 import { Step, Workflow } from '@mastra/core/workflows';
 import { z } from 'zod';
 
+const stepOne = new Step({
+  id: 'stepOne',
+  outputSchema: z.object({
+    doubledValue: z.number(),
+  }),
+  execute: async ({ context }) => {
+    const doubledValue = context.triggerData.inputValue * 2;
+    return { doubledValue };
+  },
+});
+
+const stepTwo = new Step({
+  id: 'stepTwo',
+  outputSchema: z.object({
+    incrementedValue: z.number(),
+  }),
+  execute: async ({ context, suspend }) => {
+
+    const secondValue = context.resumeData?.secondValue ?? 0;
+    const doubledValue = context.getStepResult(stepOne)?.doubledValue ?? 0;
+
+    const incrementedValue = doubledValue + secondValue;
+
+    if (incrementedValue < 100) {
+      await suspend();
+      return { incrementedValue: 0 };
+    }
+    return { incrementedValue };
+  },
+});
+
+// Build the workflow
+const myWorkflow = new Workflow({
+  name: 'my-workflow',
+  triggerSchema: z.object({
+    inputValue: z.number(),
+  }),
+});
+
+// run workflows in parallel
+myWorkflow
+  .step(stepOne)
+  .then(stepTwo)
+  .commit();
+
+// Register the workflow
+export const mastra = new Mastra({
+  workflows: { registeredWorkflow: myWorkflow },
+})
+
+// Get registered workflow from Mastra
+const registeredWorkflow = mastra.getWorkflow('registeredWorkflow');
+const { runId, start } = registeredWorkflow.createRun();
+
+// Start watching the workflow before executing it
+myWorkflow.watch(async ({ context, activePaths }) => {
+  for (const _path of activePaths) {
+    const stepTwoStatus = context.steps?.stepTwo?.status;
+    if (stepTwoStatus === 'suspended') {
+      console.log("Workflow suspended, resuming with new value");
+
+      // Resume the workflow with new context
+      await myWorkflow.resume({
+        runId,
+        stepId: 'stepTwo',
+        context: { secondValue: 100 },
+      });
+    }
+  }
+})
+
+// Start the workflow execution
+await start({ triggerData: { inputValue: 45 } });
+```
+
+## Advanced Example with Multiple Suspension Points Using async/await pattern and suspend payloads
+
+This example demonstrates a more complex workflow with multiple suspension points using the async/await pattern. It simulates a content generation workflow that requires human intervention at different stages.
+
+```ts showLineNumbers copy
+import { Mastra } from '@mastra/core';
+import { Step, Workflow } from '@mastra/core/workflows';
+import { z } from 'zod';
+
 // Step 1: Get user input
 const getUserInput = new Step({
   id: 'getUserInput',
