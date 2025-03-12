@@ -125,7 +125,6 @@ program
   .description('Start mastra server')
   .option('-d, --dir <dir>', 'Path to your mastra folder')
   .option('-r, --root <root>', 'Path to your root folder')
-  .option('-e, --env <env>', 'Environment File to use (defaults to .env.development)')
   .option('-t, --tools <toolsDirs>', 'Comma-separated list of paths to tool files to include')
   .option('-p, --port <port>', 'Port number for the development server (defaults to 4111)')
   .action(args => {

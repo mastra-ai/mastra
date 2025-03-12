@@ -31,6 +31,7 @@ export interface StepAction<
 > extends IAction<TId, TSchemaIn, TSchemaOut, TContext> {
   mastra?: Mastra;
   payload?: TSchemaIn extends z.ZodSchema ? Partial<z.infer<TSchemaIn>> : unknown;
+  execute: (context: TContext) => Promise<TSchemaOut extends z.ZodSchema ? z.infer<TSchemaOut> : unknown>;
   retryConfig?: RetryConfig;
 }
 
@@ -269,8 +270,6 @@ export type StepResolverOutput =
   | { type: 'STEP_SUCCESS'; output: unknown }
   | { type: 'STEP_FAILED'; error: string }
   | { type: 'STEP_WAITING' };
-
-
 
 export type WorkflowActors = {
   resolverFunction: {

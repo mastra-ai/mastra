@@ -104,25 +104,6 @@ const agent = new Agent({
 });
 ```
 
-### Using Server-Specific Tools
-
-```typescript
-// Get tools grouped by server
-const toolsets = await mcp.getToolsets();
-
-// Access tools for a specific server
-const weatherTools = toolsets.weather;
-const stockTools = toolsets.stockPrice;
-
-// Create an agent with weather tools only
-const weatherAgent = new Agent({
-  name: "Weather Agent",
-  instructions: "You are a weather specialist.",
-  model: openai("gpt-4"),
-  tools: weatherTools,
-});
-```
-
 ### Using Toolsets in generate() or stream()
 
 ```typescript

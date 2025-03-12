@@ -1,12 +1,13 @@
 import { useParams } from 'react-router';
 
+import { WorkflowRunProvider } from '@mastra/playground-ui';
+
 import { Header } from '@/components/ui/header';
 import { Skeleton } from '@/components/ui/skeleton';
 
 import { useWorkflow } from '@/hooks/use-workflows';
 
 import { WorkflowHeader } from './workflow-header';
-import { WorkflowRunProvider } from './workflow-run-context';
 
 export const WorkflowLayout = ({ children }: { children: React.ReactNode }) => {
   const { workflowId } = useParams();

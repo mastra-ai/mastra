@@ -1383,10 +1383,7 @@ describe('Workflow', async () => {
         mastra,
       });
 
-      workflow
-        .step(step1)
-        .then(step2)
-        .commit();
+      workflow.step(step1).then(step2).commit();
 
       const run = workflow.createRun();
       const result = await run.start();
@@ -1413,10 +1410,7 @@ describe('Workflow', async () => {
         retryConfig: { attempts: 5, delay: 200 },
       });
 
-      workflow
-        .step(step1)
-        .then(step2)
-        .commit();
+      workflow.step(step1).then(step2).commit();
 
       const run = workflow.createRun();
       const result = await run.start();
