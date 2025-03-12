@@ -1,0 +1,17 @@
+version: '3.8'
+
+services:
+  qdrant:
+    image: qdrant/qdrant:latest
+    ports:
+      - '6333:6333' # REST API port
+      - '6334:6334' # gRPC port
+    volumes:
+      - qdrant_data:/qdrant/storage
+    environment:
+      - QDRANT_LOG_LEVEL=INFO
+    restart: always
+
+volumes:
+  qdrant_data:
+    driver: local
