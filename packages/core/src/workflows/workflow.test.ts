@@ -2250,7 +2250,9 @@ describe('Workflow', async () => {
         }),
       });
 
-      const promptEvalWorkflow = new Workflow({
+      const promptEvalWorkflow = new Workflow<
+        [typeof getUserInput, typeof promptAgent, typeof evaluateTone, typeof improveResponse, typeof evaluateImproved]
+      >({
         name: 'test-workflow',
         triggerSchema: z.object({ input: z.string() }),
       });
