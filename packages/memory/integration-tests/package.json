@@ -13,18 +13,18 @@
     "test:libsql": "vitest run ./src/with-libsql-storage.test.ts"
   },
   "dependencies": {
-    "@ai-sdk/openai": "^1.1.9",
+    "@ai-sdk/openai": "^1.2.1",
     "@mastra/core": "workspace:*",
     "@mastra/memory": "workspace:*",
     "@mastra/pg": "workspace:*",
     "@mastra/upstash": "workspace:*",
-    "dotenv": "^16.0.0"
+    "dotenv": "^16.4.7"
   },
   "devDependencies": {
-    "@microsoft/api-extractor": "^7.49.2",
-    "@types/node": "^22.13.1",
-    "@vitest/coverage-v8": "^1.0.0",
-    "typescript": "^5.7.3",
-    "vitest": "^1.0.0"
+    "@microsoft/api-extractor": "^7.52.1",
+    "@types/node": "^22.13.10",
+    "@vitest/coverage-v8": "^1.6.1",
+    "typescript": "^5.8.2",
+    "vitest": "^1.6.1"
   }
 }

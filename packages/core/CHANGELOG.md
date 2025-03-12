@@ -1,5 +1,73 @@
 # @mastra/core
 
+## 0.5.1-alpha.0
+
+### Patch Changes
+
+- 3729dbd: Fixed a bug where useChat with client side tool calling and Memory would not work. Added docs for using Memory with useChat()
+
+## 0.5.0
+
+### Minor Changes
+
+- 59df7b6: Added a new option to use tool-calls for saving working memory: new Memory({ workingMemory: { enabled: true, use: "tool-call" } }). This is to support response methods like toDataStream where masking working memory chunks would be more resource intensive and complex.
+  To support this `memory` is now passed into tool execute args.
+- dfbe4e9: Added new looping constructs with while/until and optional enum-based cyclical condition execution
+- 3764e71: Workflow trigger data should only accept object types
+- 02ffb7b: Added updateIndexById and deleteIndexById methods in the MastraVector inteface
+- 358f069: Experimental if-else branching in between steps
+
+### Patch Changes
+
+- a910463: Improve typinges for getStepResult and workflow results
+- 22643eb: Replace MastraPrimitives with direct Mastra instance
+- 6feb23f: Fix for else condition with ref/query syntax
+- f2d6727: Support for compound `.after` syntax
+- 7a7a547: Fix telemetry getter in hono server
+- 29f3a82: Improve agent generate,stream returnTypes
+- 3d0e290: Fixed an issue where messages that were numbers weren't being stored as strings. Fixed incorrect array access when retrieving memory messages
+- e9fbac5: Update Vercel tools to have id and update deployer
+- 301e4ee: Fix log level showing number in core logger
+- ee667a2: Fixed a serialization bug for thread IDs and dates in memory
+- dab255b: Fixed bug where using an in memory libsql db (config.url = ":memory:) for memory would throw errors about missing tables
+- 1e8bcbc: Fix suspend types
+- f6678e4: Fixed an issue where we were using a non-windows-friendly absolute path check for libsql file urls
+- 9e81f35: Fix query filter for vector search and rerank
+- c93798b: Added MastraLanguageModel which extends LanguageModelV1
+- a85ab24: make execute optional for create tool
+- dbd9f2d: Handle different condition types on workflow graph
+- 59df7b6: Keep default memory db in .mastra/mastra.db, not .mastra/output/memory.db for consistency
+- caefaa2: Added optional chaining to a memory function call that may not exist
+- c151ae6: Fixed an issue where models that don't support structured output would error when generating a thread title. Added an option to disable thread title llm generation `new Memory({ threads: { generateTitle: false }})`
+- 52e0418: Split up action types between tools and workflows
+- d79aedf: Fix import/require paths in these package.json
+- 03236ec: Added GRPC Exporter for Laminar and updated dodcs for Observability Providers
+- df982db: Updated Agent tool input to accept vercel tool format
+- a171b37: Better retry mechanisms
+- 506f1d5: Properly serialize any date object when inserting into libsql
+- 0461849: Fixed a bug where mastra.db file location was inconsistently created when running mastra dev vs running a file directly (tsx src/index.ts for ex)
+- 2259379: Add documentation for workflow looping APIs
+- aeb5e36: Adds default schema for tool when not provided
+- f2301de: Added the ability to ensure the accessed thread in memory.query() is for the right resource id. ex memory.query({ threadId, resourceId }). If the resourceId doesn't own the thread it will throw an error.
+- fd4a1d7: Update cjs bundling to make sure files are split
+- c139344: When converting JSON schemas to Zod schemas, we were sometimes marking optional fields as nullable instead, making them required with a null value, even if the schema didn't mark them as required
+
+## 0.5.0-alpha.12
+
+### Patch Changes
+
+- a85ab24: make execute optional for create tool
+
+## 0.5.0-alpha.11
+
+### Patch Changes
+
+- 7a7a547: Fix telemetry getter in hono server
+- c93798b: Added MastraLanguageModel which extends LanguageModelV1
+- dbd9f2d: Handle different condition types on workflow graph
+- a171b37: Better retry mechanisms
+- fd4a1d7: Update cjs bundling to make sure files are split
+
 ## 0.5.0-alpha.10
 
 ### Patch Changes

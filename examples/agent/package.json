@@ -16,6 +16,6 @@
     "@ai-sdk/openai": "latest",
     "@mastra/core": "workspace:*",
     "ai": "latest",
-    "zod": "^3.24.0"
+    "zod": "^3.24.2"
   }
 }

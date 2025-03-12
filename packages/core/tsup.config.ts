@@ -52,6 +52,7 @@ export default defineConfig({
   format: ['esm', 'cjs'],
   clean: true,
   dts: true,
+  splitting: true,
   treeshake: {
     preset: 'smallest',
   },
