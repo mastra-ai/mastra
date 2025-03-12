@@ -2250,7 +2250,9 @@ describe('Workflow', async () => {
         }),
       });
 
-      const promptEvalWorkflow = new Workflow({
+      const promptEvalWorkflow = new Workflow<
+        [typeof getUserInput, typeof promptAgent, typeof evaluateTone, typeof improveResponse, typeof evaluateImproved]
+      >({
         name: 'test-workflow',
         triggerSchema: z.object({ input: z.string() }),
       });
@@ -2436,7 +2438,7 @@ describe('Workflow', async () => {
       expect(telemetry).toBeInstanceOf(Telemetry);
     });
 
-    it.only('should be able to access the new Mastra primitives', async () => {
+    it('should be able to access the new Mastra primitives', async () => {
       let telemetry: Telemetry | undefined;
       const step1 = new Step({
         id: 'step1',
