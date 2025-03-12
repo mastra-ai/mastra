@@ -15,6 +15,7 @@ import { Text } from '@/components/ui/text';
 
 import { useExecuteWorkflow, useWatchWorkflow, useResumeWorkflow, useWorkflow } from '@/hooks/use-workflows';
 import { WorkflowRunContext } from '../context/workflow-run-context';
+import { toast } from 'sonner';
 
 interface SuspendedStep {
   stepId: string;
@@ -40,18 +41,24 @@ export function WorkflowTrigger({
   const { watchWorkflow, watchResult, isWatchingWorkflow } = useWatchWorkflow(baseUrl);
   const { resumeWorkflow, isResumingWorkflow } = useResumeWorkflow(baseUrl);
   const [suspendedSteps, setSuspendedSteps] = useState<SuspendedStep[]>([]);
-
+  const [isRunning, setIsRunning] = useState(false);
   const triggerSchema = workflow?.triggerSchema;
 
   const handleExecuteWorkflow = async (data: any) => {
-    if (!workflow) return;
+    try {
+      if (!workflow) return;
+      setIsRunning(true);
 
-    setResult(null);
+      setResult(null);
 
-    const { runId } = await createWorkflowRun({ workflowId, input: data });
-    setRunId?.(runId);
+      const { runId } = await createWorkflowRun({ workflowId, input: data });
+      setRunId?.(runId);
 
-    watchWorkflow({ workflowId, runId });
+      watchWorkflow({ workflowId, runId });
+    } catch (err) {
+      setIsRunning(false);
+      toast.error('Error executing workflow');
+    }
   };
 
   const handleResumeWorkflow = async (step: SuspendedStep & { context: any }) => {
@@ -72,6 +79,10 @@ export function WorkflowTrigger({
   const watchResultToUse = result ?? watchResult;
 
   const workflowActivePaths = watchResultToUse?.activePaths ?? [];
+
+  useEffect(() => {
+    setIsRunning(isWatchingWorkflow);
+  }, [isWatchingWorkflow]);
 
   useEffect(() => {
     if (!watchResultToUse?.activePaths || !result?.runId) return;
@@ -111,8 +122,8 @@ export function WorkflowTrigger({
       <ScrollArea className="h-[calc(100vh-126px)] pt-2 px-4 pb-4 text-xs w-[400px]">
         <div className="space-y-4">
           <div className="space-y-4 px-4">
-            <Button className="w-full" disabled={isWatchingWorkflow} onClick={() => handleExecuteWorkflow(null)}>
-              {isWatchingWorkflow ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Trigger'}
+            <Button className="w-full" disabled={isRunning} onClick={() => handleExecuteWorkflow(null)}>
+              {isRunning ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Trigger'}
             </Button>
           </div>
 
@@ -182,7 +193,7 @@ export function WorkflowTrigger({
           <DynamicForm
             schema={zodInputSchema}
             defaultValues={payload}
-            isSubmitLoading={isWatchingWorkflow}
+            isSubmitLoading={isRunning}
             onSubmit={data => {
               setPayload(data);
               handleExecuteWorkflow(data);
