@@ -1,5 +1,17 @@
 # @mastra/memory
 
+## 0.2.1
+
+### Patch Changes
+
+- 3729dbd: Fixed a bug where useChat with client side tool calling and Memory would not work. Added docs for using Memory with useChat()
+- Updated dependencies [16b98d9]
+- Updated dependencies [1c8cda4]
+- Updated dependencies [95b4144]
+- Updated dependencies [3729dbd]
+- Updated dependencies [c2144f4]
+  - @mastra/core@0.6.0
+
 ## 0.2.1-alpha.1
 
 ### Patch Changes

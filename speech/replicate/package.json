@@ -1,6 +1,6 @@
 {
   "name": "@mastra/speech-replicate",
-  "version": "0.1.9-alpha.1",
+  "version": "0.1.9",
   "description": "Mastra Replicate speech integration",
   "type": "module",
   "main": "dist/index.js",

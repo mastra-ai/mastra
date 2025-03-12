@@ -1,5 +1,20 @@
 # @mastra/qdrant
 
+## 0.2.0
+
+### Minor Changes
+
+- 6cbf6bb: Added new operation implementations for MastraVector in qdrant store
+
+### Patch Changes
+
+- Updated dependencies [16b98d9]
+- Updated dependencies [1c8cda4]
+- Updated dependencies [95b4144]
+- Updated dependencies [3729dbd]
+- Updated dependencies [c2144f4]
+  - @mastra/core@0.6.0
+
 ## 0.2.0-alpha.1
 
 ### Minor Changes
