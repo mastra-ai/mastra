@@ -208,7 +208,8 @@ workflow
 
 ## Workflow-Level Type Safety
 
-For comprehensive type safety across your entire workflow, you can define types for all steps and pass them to the Workflow:
+For comprehensive type safety across your entire workflow, you can define types for all steps and pass them to the Workflow
+This allows you to get type safety for the context object on conditions, and step results on the final workflow output.
 
 ```typescript showLineNumbers filename="src/mastra/workflows/workflow-typing.ts" copy
 import { Step, Workflow } from "@mastra/core/workflows";
@@ -298,6 +299,70 @@ const workflow = new Workflow({
 workflow
   .step(processOrderStep)
   .commit();
+```
+
+## Accessing Workflow Results
+
+You can get typed access to the results of a workflow by injecting the step types into the `Workflow` type params:
+
+```typescript showLineNumbers filename="src/mastra/workflows/get-results.ts" copy
+import { Workflow } from "@mastra/core/workflows";
+
+const fetchUserStep = new Step({
+  id: "fetchUser",
+  outputSchema: z.object({
+    userId: z.string(),
+    name: z.string(),
+    email: z.string(),
+  }),
+  execute: async () => {
+    return {
+      userId: "user123",
+      name: "John Doe",
+      email: "john@example.com"
+    };
+  },
+});
+
+const processOrderStep = new Step({
+  id: "processOrder",
+  outputSchema: z.object({
+    orderId: z.string(),
+    status: z.string(),
+  }),
+  execute: async ({ context }) => {
+    const userData = context.getStepResult(fetchUserStep);
+    return {
+      orderId: "order123",
+      status: "processing"
+    };
+  },
+});
+
+const workflow = new Workflow<[typeof fetchUserStep, typeof processOrderStep]>({
+  name: "typed-workflow",
+});
+
+workflow
+  .step(fetchUserStep)
+  .then(processOrderStep)
+  .commit();
+
+const run = workflow.createRun();
+const result = await run.start();
+
+// The result is a discriminated union of the step results
+// So it needs to be narrowed down via status checks
+if (result.results.processOrder.status === 'success') {
+  // TypeScript will know the shape of the results
+  const orderId = result.results.processOrder.output.orderId;
+  console.log({orderId});
+}
+
+if (result.results.fetchUser.status === 'success') {
+  const userId = result.results.fetchUser.output.userId;
+  console.log({userId});
+}
 ```
 
 ## Best Practices for Data Flow
