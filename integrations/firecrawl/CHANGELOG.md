@@ -1,5 +1,17 @@
 # @mastra/firecrawl
 
+## 1.1.9-alpha.1
+
+### Patch Changes
+
+- Updated dependencies [16b98d9]
+- Updated dependencies [1c8cda4]
+- Updated dependencies [f14c830]
+- Updated dependencies [95b4144]
+- Updated dependencies [c2144f4]
+  - @mastra/core@0.6.0-alpha.1
+  - @mastra/rag@0.1.9-alpha.1
+
 ## 1.1.9-alpha.0
 
 ### Patch Changes
