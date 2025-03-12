@@ -137,7 +137,7 @@ export class WorkflowInstance<TSteps extends Step<any, any, any>[] = any, TTrigg
       triggerData: triggerData || {},
       attempts: Object.keys(this.#steps).reduce(
         (acc, stepKey) => {
-          acc[stepKey] = this.#steps[stepKey]?.retryConfig?.attempts || this.#retryConfig?.attempts || 3;
+          acc[stepKey] = this.#steps[stepKey]?.retryConfig?.attempts || this.#retryConfig?.attempts || 0;
           return acc;
         },
         {} as Record<string, number>,

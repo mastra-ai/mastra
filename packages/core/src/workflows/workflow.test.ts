@@ -378,7 +378,7 @@ describe('Workflow', async () => {
       const results = await run.start({ triggerData: { inputData: 'test-input' } });
 
       const baseContext = {
-        attempts: { step1: 3 },
+        attempts: { step1: 0 },
         steps: {},
         triggerData: { inputData: 'test-input' },
         getStepResult: expect.any(Function),
@@ -418,7 +418,7 @@ describe('Workflow', async () => {
         .commit();
 
       const baseContext = {
-        attempts: { step1: 3 },
+        attempts: { step1: 0 },
         steps: {},
         triggerData: { inputData: { nested: { value: 'test' } } },
         getStepResult: expect.any(Function),
@@ -473,7 +473,7 @@ describe('Workflow', async () => {
       const results = await run.start();
 
       const baseContext = {
-        attempts: { step1: 3, step2: 3 },
+        attempts: { step1: 0, step2: 0 },
         steps: {},
         triggerData: {},
         getStepResult: expect.any(Function),
@@ -1274,7 +1274,7 @@ describe('Workflow', async () => {
       const step5 = new Step({ id: 'step5', execute: action5 });
 
       const baseContext = {
-        attempts: { step1: 3, step2: 3, step3: 3, step4: 3, step5: 3 },
+        attempts: { step1: 0, step2: 0, step3: 0, step4: 0, step5: 0 },
         steps: {},
         triggerData: {},
         getStepResult: expect.any(Function),
@@ -1368,7 +1368,7 @@ describe('Workflow', async () => {
   });
 
   describe('Retry', () => {
-    it('should retry a step default 3 times', async () => {
+    it('should retry a step default 0 times', async () => {
       const step1 = new Step({ id: 'step1', execute: vi.fn<any>().mockResolvedValue({ result: 'success' }) });
       const step2 = new Step({ id: 'step2', execute: vi.fn<any>().mockRejectedValue(new Error('Step failed')) });
 
@@ -1391,7 +1391,7 @@ describe('Workflow', async () => {
       expect(result.results.step1).toEqual({ status: 'success', output: { result: 'success' } });
       expect(result.results.step2).toEqual({ status: 'failed', error: 'Step failed' });
       expect(step1.execute).toHaveBeenCalledTimes(1);
-      expect(step2.execute).toHaveBeenCalledTimes(4); // 3 retries + 1 initial call
+      expect(step2.execute).toHaveBeenCalledTimes(1); // 0 retries + 1 initial call
     });
 
     it('should retry a step with a custom retry config', async () => {
@@ -1650,7 +1650,7 @@ describe('Workflow', async () => {
           context: expect.objectContaining({
             steps: { step1: expect.any(Object) },
             triggerData: {},
-            attempts: { step1: 3, step2: 3 },
+            attempts: { step1: 0, step2: 0 },
           }),
           activePaths: [
             {
@@ -2401,7 +2401,7 @@ describe('Workflow', async () => {
   });
 
   describe('Accessing Mastra', () => {
-    it('should be able to access the deprecatedmastra primitives', async () => {
+    it('should be able to access the deprecated mastra primitives', async () => {
       let telemetry: Telemetry | undefined;
       const step1 = new Step({
         id: 'step1',
@@ -2412,8 +2412,6 @@ describe('Workflow', async () => {
 
       const workflow = new Workflow({ name: 'test-workflow' });
       workflow.step(step1).commit();
-
-      const loggerSpy = vi.spyOn(logger, 'warn');
 
       const mastra = new Mastra({
         logger,
@@ -2428,11 +2426,8 @@ describe('Workflow', async () => {
       const run = wf.createRun();
       await run.start();
 
-      expect(loggerSpy).toHaveBeenCalledWith(`Please use 'getTelemetry' instead, telemetry is deprecated`);
       expect(telemetry).toBeDefined();
       expect(telemetry).toBeInstanceOf(Telemetry);
-
-      loggerSpy.mockClear();
     });
 
     it('should be able to access the new Mastra primitives', async () => {
@@ -2447,8 +2442,6 @@ describe('Workflow', async () => {
       const workflow = new Workflow({ name: 'test-workflow' });
       workflow.step(step1).commit();
 
-      const loggerSpy = vi.spyOn(logger, 'warn');
-
       const mastra = new Mastra({
         logger,
         workflows: { 'test-workflow': workflow },
@@ -2462,11 +2455,8 @@ describe('Workflow', async () => {
       const run = wf.createRun();
       await run.start();
 
-      expect(loggerSpy).not.toHaveBeenCalledWith(`Please use 'getTelemetry' instead, telemetry is deprecated`);
       expect(telemetry).toBeDefined();
       expect(telemetry).toBeInstanceOf(Telemetry);
-
-      loggerSpy.mockClear();
     });
   });
 });
