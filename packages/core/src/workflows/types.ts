@@ -213,6 +213,7 @@ export interface WorkflowContext<
   };
   triggerData: z.infer<TTrigger>;
   attempts: Record<string, number>;
+  getStepResult(stepId: 'trigger'): z.infer<TTrigger>;
   getStepResult<T extends keyof StepsRecord<TSteps> | unknown>(
     stepId: T extends keyof StepsRecord<TSteps> ? T : string,
   ): T extends keyof StepsRecord<TSteps>
@@ -269,8 +270,6 @@ export type StepResolverOutput =
   | { type: 'STEP_SUCCESS'; output: unknown }
   | { type: 'STEP_FAILED'; error: string }
   | { type: 'STEP_WAITING' };
-
-
 
 export type WorkflowActors = {
   resolverFunction: {
