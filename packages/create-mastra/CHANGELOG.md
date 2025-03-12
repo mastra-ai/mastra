@@ -1,5 +1,11 @@
 # create-mastra
 
+## 0.1.9-alpha.1
+
+### Patch Changes
+
+- c49f798: remove hardcoded localhost url in playground
+
 ## 0.1.9-alpha.0
 
 ### Patch Changes
