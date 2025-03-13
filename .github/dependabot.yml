@@ -1,0 +1,61 @@
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: daily
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: daily
+    groups:
+      ai:
+        patterns:
+          - '@ai-sdk/*'
+          - 'ai'
+      assistant-ui:
+        patterns:
+          - '@assistant-ui/*'
+      babel:
+        patterns:
+          - '@babel/*'
+          - '@types/babel__*'
+      eslint:
+        patterns:
+          - 'eslint'
+          - '@eslint/*'
+          - 'eslint-*'
+      jest:
+        patterns:
+          - 'jest'
+          - '@jest/*'
+          - 'ts-jest'
+          - '@types/jest'
+      opentelemetry:
+        patterns:
+          - '@opentelemetry/*'
+      prosemirror:
+        patterns:
+          - 'prosemirror-*'
+      radix:
+        patterns:
+          - '@radix-ui/*'
+      react:
+        patterns:
+          - 'react'
+          - 'react-dom'
+          - '@types/react'
+          - '@types/react-dom'
+      tailwind:
+        patterns:
+          - 'tailwindcss'
+          - '@tailwindcss/*'
+          - 'tailwindcss-animate'
+          - 'tailwind-merge'
+      upstash:
+        patterns:
+          - '@upstash/*'
+      vitest:
+        patterns:
+          - 'vitest'
+          - '@vitest/*'
