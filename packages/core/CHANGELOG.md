@@ -1,5 +1,36 @@
 # @mastra/core
 
+## 0.6.1-alpha.0
+
+### Patch Changes
+
+- 7bcfaee: Remove node_modules-path dir which calls \_\_dirname at the top level and breaks some esm runtimes
+
+## 0.6.0
+
+### Minor Changes
+
+- 1c8cda4: Experimental .afterEvent() support. Fixed suspend/resume in first workflow or .after() branch step. Changed suspend metadata to be in context.resumeData instead of resumed step output.
+- 95b4144: Added server middleware to apply custom functionality in API endpoints like auth
+
+### Patch Changes
+
+- 16b98d9: Reduce default step retry attempts
+- 3729dbd: Fixed a bug where useChat with client side tool calling and Memory would not work. Added docs for using Memory with useChat()
+- c2144f4: Enable dynamic import of default-storage to reduce runtime/bundle size when not using default storage
+
+## 0.6.0-alpha.1
+
+### Minor Changes
+
+- 1c8cda4: Experimental .afterEvent() support. Fixed suspend/resume in first workflow or .after() branch step. Changed suspend metadata to be in context.resumeData instead of resumed step output.
+- 95b4144: Added server middleware to apply custom functionality in API endpoints like auth
+
+### Patch Changes
+
+- 16b98d9: Reduce default step retry attempts
+- c2144f4: Enable dynamic import of default-storage to reduce runtime/bundle size when not using default storage
+
 ## 0.5.1-alpha.0
 
 ### Patch Changes

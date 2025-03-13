@@ -1,5 +1,41 @@
 # @mastra/deployer
 
+## 0.2.1-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [7bcfaee]
+  - @mastra/core@0.6.1-alpha.0
+
+## 0.2.0
+
+### Minor Changes
+
+- 95b4144: Added server middleware to apply custom functionality in API endpoints like auth
+
+### Patch Changes
+
+- Updated dependencies [16b98d9]
+- Updated dependencies [1c8cda4]
+- Updated dependencies [95b4144]
+- Updated dependencies [3729dbd]
+- Updated dependencies [c2144f4]
+  - @mastra/core@0.6.0
+
+## 0.2.0-alpha.1
+
+### Minor Changes
+
+- 95b4144: Added server middleware to apply custom functionality in API endpoints like auth
+
+### Patch Changes
+
+- Updated dependencies [16b98d9]
+- Updated dependencies [1c8cda4]
+- Updated dependencies [95b4144]
+- Updated dependencies [c2144f4]
+  - @mastra/core@0.6.0-alpha.1
+
 ## 0.1.9-alpha.0
 
 ### Patch Changes
