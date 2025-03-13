@@ -1214,6 +1214,84 @@ describe('Workflow', async () => {
       // @ts-ignore
       expect(results.final.output).toEqual({ finalValue: 26 + 2 });
     });
+
+    it('should run an until loop inside an if-then branch', async () => {
+      const increment = vi.fn().mockImplementation(async ({ context }) => {
+        // Get the current value (either from trigger or previous increment)
+        const currentValue =
+          context.getStepResult('increment')?.newValue || context.getStepResult('trigger')?.startValue || 0;
+
+        // Increment the value
+        const newValue = currentValue + 1;
+
+        return { newValue };
+      });
+      const other = vi.fn().mockImplementation(async ({ context }) => {
+        return { other: 26 };
+      });
+      const incrementStep = new Step({
+        id: 'increment',
+        description: 'Increments the current value by 1',
+        outputSchema: z.object({
+          newValue: z.number(),
+        }),
+        execute: increment,
+      });
+
+      const otherStep = new Step({
+        id: 'other',
+        description: 'Other step',
+        execute: other,
+      });
+
+      const final = vi
+        .fn()
+        .mockImplementation(
+          async ({ context }: { context: WorkflowContext<any, [typeof incrementStep, typeof finalStep]> }) => {
+            return { finalValue: context.getStepResult(incrementStep).newValue };
+          },
+        );
+      const finalStep = new Step({
+        id: 'final',
+        description: 'Final step that prints the result',
+        execute: final,
+      });
+
+      const counterWorkflow = new Workflow<[typeof incrementStep, typeof finalStep]>({
+        name: 'counter-workflow',
+        triggerSchema: z.object({
+          target: z.number(),
+          startValue: z.number(),
+        }),
+      });
+
+      counterWorkflow
+        .step(incrementStep)
+        .if(async ({ context }) => {
+          return false;
+        })
+        .then(incrementStep)
+        .until(async ({ context }) => {
+          const res = context.getStepResult('increment');
+          return (res?.newValue ?? 0) >= 12;
+        }, incrementStep)
+        .then(finalStep)
+        .else()
+        .then(otherStep)
+        .then(finalStep)
+        .commit();
+
+      const run = counterWorkflow.createRun();
+      const { results } = await run.start({ triggerData: { target: 10, startValue: 0 } });
+
+      expect(increment).toHaveBeenCalledTimes(1);
+      expect(other).toHaveBeenCalledTimes(1);
+      expect(final).toHaveBeenCalledTimes(1);
+      // @ts-ignore
+      expect(results.final.output).toEqual({ finalValue: 1 });
+      // @ts-ignore
+      expect(results.increment.output).toEqual({ newValue: 1 });
+    });
   });
 
   describe('Schema Validation', () => {
