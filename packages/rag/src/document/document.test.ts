@@ -342,6 +342,36 @@ describe('MDocument', () => {
         expect(currentStart.length).toBeLessThanOrEqual(overlap);
       }
     });
+    it('should not create tiny chunks at the end', async () => {
+      const text = 'ABCDEFGHIJ'; // 10 characters
+      const chunkSize = 4;
+      const overlap = 2;
+
+      const doc = MDocument.fromText(text);
+      const chunks = await doc.chunk({
+        strategy: 'character',
+        size: chunkSize,
+        overlap,
+      });
+
+      // Verify we don't have tiny chunks
+      chunks.forEach(chunk => {
+        // Each chunk should be either:
+        // 1. Full size (chunkSize)
+        // 2. Or at least half the chunk size if it's the last chunk
+        const minSize = chunk === chunks[chunks.length - 1] ? Math.floor(chunkSize / 2) : chunkSize;
+        expect(chunk.text.length).toBeGreaterThanOrEqual(minSize);
+      });
+
+      // Verify overlaps are maintained
+      for (let i = 1; i < chunks.length; i++) {
+        const prevChunk = chunks[i - 1]!;
+        const currentChunk = chunks[i]!;
+        const actualOverlap = currentChunk.text.slice(0, overlap);
+        const expectedOverlap = prevChunk.text.slice(-overlap);
+        expect(actualOverlap).toBe(expectedOverlap);
+      }
+    });
   });
 
   describe('text transformer overlap', () => {
