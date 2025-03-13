@@ -87,6 +87,7 @@
     "esbuild": "^0.25.1",
     "fs-extra": "^11.3.0",
     "hono": "^4.7.4",
+    "resolve-from": "^5.0.0",
     "rollup": "^4.35.0",
     "rollup-plugin-esbuild": "^6.2.1",
     "rollup-plugin-node-externals": "^8.0.0",
