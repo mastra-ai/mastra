@@ -5,7 +5,7 @@
 	"type": "module",
 	"dependencies": {
 		"@ai-sdk/openai": "^1.1.15",
-		"@mastra/core": "^0.4.2",
+		"@mastra/core": "workspace:*",
 		"@mastra/mcp-configuration": "workspace:*",
 		"@mcp/registry": "workspace:*",
 		"chalk": "^5.4.1"
