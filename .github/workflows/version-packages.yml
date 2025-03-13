@@ -49,7 +49,8 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}
           # husky precommit runs linting and typechecking - those are handled by other GH actions already
-          HUSKY_SKIP_HOOKS: "1"
+          HUSKY_SKIP_HOOKS: 1
+          HUSKY: 0
         with:
           title: 'chore: version packages'
           commit: 'chore: version packages'
