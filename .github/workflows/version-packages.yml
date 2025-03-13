@@ -50,7 +50,7 @@ jobs:
       - name: Create Release Pull Request
         uses: changesets/action@v1
         env:
-          token: ${{ steps.app-token.outputs.token }}
+          GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}
         with:
           title: 'chore: version packages'
           commit: 'chore: version packages'
