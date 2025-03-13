@@ -24,6 +24,6 @@ openapi-ts-error*
 .netlify
 .npmrc
 
-# Test output directories
-voice/**/test-output*/
-voice/azure/test-data/hello.wav
+# Test directories
+voice/**/test-outputs/
+voice/**/test-data/

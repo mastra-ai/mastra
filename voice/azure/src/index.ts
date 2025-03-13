@@ -1,4 +1,4 @@
-import { PassThrough } from 'stream';
+import { Readable } from 'stream';
 import { MastraVoice } from '@mastra/core/voice';
 import * as Azure from 'microsoft-cognitiveservices-speech-sdk';
 import { AZURE_VOICES } from './voices';
@@ -7,19 +7,24 @@ import type { VoiceId } from './voices';
 interface AzureVoiceConfig {
   apiKey?: string;
   region?: string;
-  voiceName?: string;   // e.g., "en-US-AriaNeural" for TTS
-  language?: string;    // e.g., "en-US" for STT
+  voiceName?: string;
+  language?: string;
 }
 
-// If you already have a type for your speaker:
-// type VoiceId = string; // im importing this from voices.ts file
-
 export class AzureVoice extends MastraVoice {
-  speechConfig?: Azure.SpeechConfig;        // for TTS
-  listeningConfig?: Azure.SpeechConfig;     // for STT
-  speechSynthesizer?: Azure.SpeechSynthesizer; // TTS
-  speechRecognizer?: Azure.SpeechRecognizer; // STT
+  private speechConfig?: Azure.SpeechConfig;
+  private listeningConfig?: Azure.SpeechConfig;
+  private speechSynthesizer?: Azure.SpeechSynthesizer;
+  private speechRecognizer?: Azure.SpeechRecognizer;
 
+  /**
+   * Creates a new instance of AzureVoice for text-to-speech and speech-to-text services.
+   *
+   * @param {Object} config - Configuration options
+   * @param {AzureVoiceConfig} [config.speechModel] - Configuration for text-to-speech
+   * @param {AzureVoiceConfig} [config.listeningModel] - Configuration for speech-to-text
+   * @param {VoiceId} [config.speaker] - Default voice ID for speech synthesis
+   */
   constructor({
     speechModel,
     listeningModel,
@@ -38,42 +43,46 @@ export class AzureVoice extends MastraVoice {
         name: '',
         apiKey: listeningModel?.apiKey ?? process.env.AZURE_API_KEY,
       },
-      speaker: speaker
+      speaker
     });
 
-    const speechApiKey = speechModel?.apiKey ?? process.env.AZURE_API_KEY;
-    const speechRegion = speechModel?.region ?? process.env.AZURE_REGION;
+    const envApiKey = process.env.AZURE_API_KEY;
+    const envRegion = process.env.AZURE_REGION;
 
-    const listeningApiKey = listeningModel?.apiKey ?? process.env.AZURE_API_KEY;
-    const listeningRegion = listeningModel?.region ?? process.env.AZURE_REGION;
+    // Configure speech synthesis
+    if (speechModel) {
+      const apiKey = speechModel.apiKey ?? envApiKey;
+      const region = speechModel.region ?? envRegion;
 
-    if (!speechApiKey && !listeningApiKey) {
-      throw new Error('No Azure API key provided for either speech or listening model.');
-    }
-    
-    if (speechApiKey && speechRegion) {
-      this.speechConfig = Azure.SpeechConfig.fromSubscription(speechApiKey, speechRegion);
+      if (!apiKey) throw new Error('No Azure API key provided for speech model');
+      if (!region) throw new Error('No region provided for speech model');
 
-      const defaultVoiceName = speechModel?.voiceName || speaker || 'en-US-AriaNeural';
-      this.speechConfig.speechSynthesisVoiceName = defaultVoiceName;
+      this.speechConfig = Azure.SpeechConfig.fromSubscription(apiKey, region);
+      this.speechConfig.speechSynthesisVoiceName = speechModel.voiceName || speaker || 'en-US-AriaNeural';
       this.speechSynthesizer = new Azure.SpeechSynthesizer(this.speechConfig);
-    } else {
-      throw new Error('AZURE_REGION is not set (for the speech model).');
     }
 
-    if (listeningApiKey && listeningRegion) {
-      this.listeningConfig = Azure.SpeechConfig.fromSubscription(listeningApiKey, listeningRegion);
+    // Configure speech recognition
+    if (listeningModel) {
+      const apiKey = listeningModel.apiKey ?? envApiKey;
+      const region = listeningModel.region ?? envRegion;
 
-      if (listeningModel?.language) {
+      if (!apiKey) throw new Error('No Azure API key provided for listening model');
+      if (!region) throw new Error('No region provided for listening model');
+
+      this.listeningConfig = Azure.SpeechConfig.fromSubscription(apiKey, region);
+      if (listeningModel.language) {
         this.listeningConfig.speechRecognitionLanguage = listeningModel.language;
       }
-
       this.speechRecognizer = new Azure.SpeechRecognizer(this.listeningConfig);
-    } else{
-      throw new Error('AZURE_REGION is not set (for the listening model).');
     }
   }
 
+  /**
+   * Gets a list of available voices for speech synthesis.
+   * 
+   * @returns {Promise<Array<{ voiceId: string; language: string; region: string; }>>} List of available voices
+   */
   async getSpeakers() {
     return this.traced(async () => {
       return AZURE_VOICES.map(voice => ({
@@ -84,6 +93,15 @@ export class AzureVoice extends MastraVoice {
     }, 'voice.azure.voices')();
   }
   
+  /**
+   * Converts text to speech using Azure's Text-to-Speech service.
+   * 
+   * @param {string | NodeJS.ReadableStream} input - Text to convert to speech
+   * @param {Object} [options] - Optional parameters
+   * @param {string} [options.speaker] - Voice ID to use for synthesis
+   * @returns {Promise<NodeJS.ReadableStream>} Stream containing the synthesized audio
+   * @throws {Error} If speech model is not configured or synthesis fails
+   */
   async speak(
     input: string | NodeJS.ReadableStream,
     options?: {
@@ -95,54 +113,60 @@ export class AzureVoice extends MastraVoice {
       throw new Error('Speech model (Azure) not configured');
     }
 
+    // Convert stream input to string if needed
     if (typeof input !== 'string') {
       const chunks: Buffer[] = [];
-      for await (const chunk of input) {
-        chunks.push(chunk as Buffer);
+      try {
+        for await (const chunk of input) {
+          chunks.push(chunk as Buffer);
+        }
+        input = Buffer.concat(chunks).toString('utf-8');
+      } catch (error) {
+        throw new Error(`Failed to read input stream: ${error instanceof Error ? error.message : String(error)}`);
       }
-      input = Buffer.concat(chunks).toString('utf-8');
     }
 
-    if (!input.trim()) {
+    if (!input?.trim()) {
       throw new Error('Input text is empty');
     }
 
-    const pushStream = Azure.AudioOutputStream.createPushStream();
-    const passThrough = new PassThrough();
-
-    pushStream.write = (buffer: ArrayBuffer) => {
-      passThrough.write(Buffer.from(buffer));
-      return true;
-    };
-    pushStream.onDetached = () => passThrough.end();
-
-    const audioConfig = Azure.AudioConfig.fromStreamOutput(pushStream);
+    // Update voice if specified
     if (options?.speaker) {
       this.speechConfig.speechSynthesisVoiceName = options.speaker;
     }
+    
+    const synthesizer = new Azure.SpeechSynthesizer(this.speechConfig);
+    
+    try {
+      const timeoutPromise = new Promise<never>((_, reject) => {
+        setTimeout(() => reject(new Error('Speech synthesis timed out')), 5000);
+      });
 
-    const synthesizer = new Azure.SpeechSynthesizer(this.speechConfig, audioConfig);
-
-    await this.traced(
-      () =>
-        new Promise<void>((resolve, reject) => {
+      const synthesisPromise = this.traced(
+        () => new Promise<Azure.SpeechSynthesisResult>((resolve, reject) => {
           synthesizer.speakTextAsync(
             input,
-            (result) => {
-              synthesizer.close();
-              result.reason === Azure.ResultReason.SynthesizingAudioCompleted
-                ? resolve()
-                : reject(new Error(`Speech synthesis failed. Reason: ${result.reason}`));
-            },
-            (error) => {
-              synthesizer.close();
-              reject(error);
-            },
+            result => result.errorDetails
+              ? reject(new Error(`Speech synthesis failed: ${result.errorDetails}`))
+              : resolve(result),
+            error => reject(new Error(`Speech synthesis error: ${String(error)}`)),
           );
         }),
-      'voice.azure.speak'
-    )();
-    return passThrough;
+        'voice.azure.speak'
+      )();
+
+      const result = await Promise.race([synthesisPromise, timeoutPromise]);
+      synthesizer.close();
+      
+      if (result.reason !== Azure.ResultReason.SynthesizingAudioCompleted) {
+        throw new Error(`Speech synthesis failed: ${result.errorDetails || result.reason}`);
+      }
+      
+      return Readable.from([Buffer.from(result.audioData)]);
+    } catch (error) {
+      synthesizer.close();
+      throw error instanceof Error ? error : new Error(String(error));
+    }
   }
 
   /**
@@ -160,48 +184,55 @@ export class AzureVoice extends MastraVoice {
       [key: string]: any;
     },
   ): Promise<string> {
-    if (!this.listeningConfig) {
+    if (!this.listeningConfig || !this.speechRecognizer) {
       throw new Error('Listening model (Azure) not configured');
     }
 
+    const chunks: Buffer[] = [];
+    for await (const chunk of audioStream) {
+      chunks.push(chunk as Buffer);
+    }
+    const audioData = Buffer.concat(chunks);
+
     const pushStream = Azure.AudioInputStream.createPushStream();
-
-    (async () => {
-      for await (const chunk of audioStream) {
-        pushStream.write(chunk as Buffer);
-      }
-      pushStream.close();
-    })().catch((err) => {
-      console.error('Error piping audio to Azure STT pushStream:', err);
-      pushStream.close();
-    });
-
     const audioConfig = Azure.AudioConfig.fromStreamInput(pushStream);
     const recognizer = new Azure.SpeechRecognizer(this.listeningConfig, audioConfig);
 
-    const text = await this.traced(
-      () =>
-        new Promise<string>((resolve, reject) => {
-          recognizer.recognizeOnceAsync(
-            (result) => {
-              recognizer.close();
-              if (result.reason === Azure.ResultReason.RecognizedSpeech) {
-                resolve(result.text);
-              } else {
-                reject(
-                  new Error(`Azure STT failed. Reason: ${result.reason} - ${result.errorDetails || ''}`)
-                );
-              }
-            },
-            (error) => {
-              recognizer.close();
-              reject(error);
-            },
-          );
-        }),
-      'voice.azure.listen'
-    )();
+    try {
+      const recognitionPromise = new Promise<string>((resolve, reject) => {
+        recognizer.recognizeOnceAsync(
+          (result) => {
+            if (result.reason === Azure.ResultReason.RecognizedSpeech) {
+              resolve(result.text);
+            } else {
+              const reason = Azure.ResultReason[result.reason] || result.reason;
+              reject(new Error(`Speech recognition failed: ${reason} - ${result.errorDetails || ''}`));
+            }
+          },
+          (error) => reject(new Error(`Speech recognition error: ${String(error)}`))
+        );
+      });
 
-    return text;
+      const chunkSize = 4096;
+      for (let i = 0; i < audioData.length; i += chunkSize) {
+        const chunk = audioData.slice(i, i + chunkSize);
+        pushStream.write(chunk);
+      }
+      pushStream.close();
+
+      const text = await this.traced(
+        () => recognitionPromise,
+        'voice.azure.listen'
+      )();
+
+      return text;
+    } catch (error: unknown) {
+      if (error instanceof Error) {
+        throw error;
+      }
+      throw new Error(String(error));
+    } finally {
+      recognizer.close();
+    }
   }
 }

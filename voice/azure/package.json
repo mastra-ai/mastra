@@ -29,12 +29,12 @@
     "microsoft-cognitiveservices-speech-sdk": "^1.42.0"
   },
   "devDependencies": {
+    "@internal/lint": "workspace:*",
     "@microsoft/api-extractor": "^7.49.2",
     "@types/node": "^22.13.1",
+    "eslint": "^9.20.1",
     "tsup": "^8.3.6",
     "typescript": "^5.7.3",
-    "vitest": "^2.1.8",
-    "@internal/lint": "workspace:*",
-    "eslint": "^9.20.1"
+    "vitest": "^2.1.8"
   }
 }
