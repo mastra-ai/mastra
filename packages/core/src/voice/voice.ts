@@ -1,5 +1,4 @@
 import type { ToolsInput } from '../agent';
-import type { ToolsInput } from '../agent';
 import { MastraBase } from '../base';
 import { InstrumentClass } from '../telemetry';
 
