@@ -26,3 +26,4 @@ openapi-ts-error*
 
 # Test output directories
 voice/**/test-output*/
+voice/azure/test-data/hello.wav
