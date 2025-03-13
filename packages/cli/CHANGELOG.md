@@ -1,5 +1,14 @@
 # mastra
 
+## 0.3.2-alpha.0
+
+### Patch Changes
+
+- 1405e46: update the Groq model the create-mastra@latest sets
+- Updated dependencies [7bcfaee]
+  - @mastra/core@0.6.1-alpha.0
+  - @mastra/deployer@0.2.1-alpha.0
+
 ## 0.3.1
 
 ### Patch Changes
