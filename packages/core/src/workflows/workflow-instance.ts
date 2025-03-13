@@ -7,21 +7,16 @@ import type { Logger } from '../logger';
 import type { Mastra } from '../mastra';
 import { Machine } from './machine';
 import type { Step } from './step';
-import type { RetryConfig, StepAction, StepGraph, StepResult, WorkflowContext, WorkflowRunState } from './types';
+import type { RetryConfig, StepAction, StepGraph, WorkflowContext, WorkflowRunResult, WorkflowRunState } from './types';
 import { getActivePathsAndStatus, mergeChildValue } from './utils';
 
-export interface WorkflowResultReturn<T extends z.ZodType<any>> {
+export interface WorkflowResultReturn<T extends z.ZodType<any>, TSteps extends Step<any, any, any>[]> {
   runId: string;
-  start: (props?: { triggerData?: z.infer<T> } | undefined) => Promise<{
-    triggerData?: z.infer<T>;
-    results: Record<string, StepResult<any>>;
-    runId: string;
-    activePaths: Map<string, { status: string; suspendPayload?: any }>;
-  }>;
+  start: (props?: { triggerData?: z.infer<T> } | undefined) => Promise<WorkflowRunResult<T, TSteps>>;
 }
 
 export class WorkflowInstance<TSteps extends Step<any, any, any>[] = any, TTriggerSchema extends z.ZodObject<any> = any>
-  implements WorkflowResultReturn<TTriggerSchema>
+  implements WorkflowResultReturn<TTriggerSchema, TSteps>
 {
   name: string;
   #mastra?: Mastra;
@@ -125,15 +120,13 @@ export class WorkflowInstance<TSteps extends Step<any, any, any>[] = any, TTrigg
     triggerData,
     snapshot,
     stepId,
+    resumeData,
   }: {
     stepId?: string;
     triggerData?: z.infer<TTriggerSchema>;
     snapshot?: Snapshot<any>;
-  } = {}): Promise<{
-    triggerData?: z.infer<TTriggerSchema>;
-    results: Record<string, StepResult<any>>;
-    activePaths: Map<string, { status: string; suspendPayload?: any }>;
-  }> {
+    resumeData?: any; // TODO: once we have a resume schema plug that in here
+  } = {}): Promise<Omit<WorkflowRunResult<TTriggerSchema, TSteps>, 'runId'>> {
     this.#executionSpan = this.#mastra?.getTelemetry()?.tracer.startSpan(`workflow.${this.name}.execute`, {
       attributes: { componentName: this.name, runId: this.runId },
     });
@@ -144,7 +137,7 @@ export class WorkflowInstance<TSteps extends Step<any, any, any>[] = any, TTrigg
       triggerData: triggerData || {},
       attempts: Object.keys(this.#steps).reduce(
         (acc, stepKey) => {
-          acc[stepKey] = this.#steps[stepKey]?.retryConfig?.attempts || this.#retryConfig?.attempts || 3;
+          acc[stepKey] = this.#steps[stepKey]?.retryConfig?.attempts || this.#retryConfig?.attempts || 0;
           return acc;
         },
         {} as Record<string, number>,
@@ -155,10 +148,13 @@ export class WorkflowInstance<TSteps extends Step<any, any, any>[] = any, TTrigg
 
     if (snapshot) {
       const runState = snapshot as unknown as WorkflowRunState;
-      machineInput = runState.context;
+
       if (stepId && runState?.suspendedSteps?.[stepId]) {
         startStepId = runState.suspendedSteps[stepId];
         stepGraph = this.#stepSubscriberGraph[startStepId] ?? this.#stepGraph;
+        machineInput = runState.context;
+        // @ts-ignore
+        machineInput.resumeData = resumeData;
       }
     }
 
@@ -172,6 +168,7 @@ export class WorkflowInstance<TSteps extends Step<any, any, any>[] = any, TTrigg
       stepGraph,
       executionSpan: this.#executionSpan,
       startStepId,
+      retryConfig: this.#retryConfig,
     });
 
     this.#machines[startStepId] = defaultMachine;
@@ -206,6 +203,10 @@ export class WorkflowInstance<TSteps extends Step<any, any, any>[] = any, TTrigg
     return { results, activePaths };
   }
 
+  hasSubscribers(stepId: string) {
+    return Object.keys(this.#stepSubscriberGraph).some(key => key.split('&&').includes(stepId));
+  }
+
   async runMachine(parentStepId: string, input: any) {
     const stepStatus = input.steps[parentStepId]?.status;
 
@@ -213,7 +214,7 @@ export class WorkflowInstance<TSteps extends Step<any, any, any>[] = any, TTrigg
     const subscriberKeys = Object.keys(this.#stepSubscriberGraph).filter(key => key.split('&&').includes(parentStepId));
 
     subscriberKeys.forEach(key => {
-      if (['success', 'failure'].includes(stepStatus) && this.#isCompoundKey(key)) {
+      if (['success', 'failure', 'skipped'].includes(stepStatus) && this.#isCompoundKey(key)) {
         this.#compoundDependencies[key]![parentStepId] = true;
       }
     });

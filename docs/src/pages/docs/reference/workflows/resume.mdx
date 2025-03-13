@@ -5,14 +5,14 @@ description: Documentation for the `.resume()` method in workflows, which contin
 
 # Workflow.resume()
 
-The `.resume()` method continues execution of a suspended workflow step, optionally providing new context data that will be merged with existing step results.
+The `.resume()` method continues execution of a suspended workflow step, optionally providing new context data that can be accessed by the step on the resumeData property.
 
 ## Usage
 
 ```typescript copy showLineNumbers
 await workflow.resume({
   runId: "abc-123",
-  stepId: "stepTwo", 
+  stepId: "stepTwo",
   context: {
     secondValue: 100
   }
@@ -38,7 +38,7 @@ await workflow.resume({
   content={[
     {
       name: "runId",
-      type: "string", 
+      type: "string",
       description: "Unique identifier of the workflow run to resume",
       isOptional: false
     },
@@ -69,6 +69,54 @@ await workflow.resume({
   ]}
 />
 
+## Async/Await Flow
+
+When a workflow is resumed, execution continues from the point immediately after the `suspend()` call in the step's execution function. This creates a natural flow in your code:
+
+```typescript
+// Step definition with suspend point
+const reviewStep = new Step({
+  id: "review",
+  execute: async ({ context, suspend }) => {
+    // First part of execution
+    const initialAnalysis = analyzeData(context.data);
+
+    if (initialAnalysis.needsReview) {
+      // Suspend execution here
+      await suspend({ analysis: initialAnalysis });
+
+      // This code runs after resume() is called
+      // context now contains any data provided during resume
+      return {
+        reviewedData: enhanceWithFeedback(initialAnalysis, context.feedback)
+      };
+    }
+
+    return { reviewedData: initialAnalysis };
+  }
+});
+
+// Later, resume the workflow
+const result = await workflow.resume({
+  runId: "workflow-123",
+  stepId: "review",
+  context: {
+    // This data will be available in `context.resumeData`
+    feedback: "Looks good, but improve section 3"
+  }
+});
+```
+
+### Execution Flow
+
+1. The workflow runs until it hits `await suspend()` in the `review` step
+2. The workflow state is persisted and execution pauses
+3. Later, `workflow.resume()` is called with new context data
+4. Execution continues from the point after `suspend()` in the `review` step
+5. The new context data (`feedback`) is available to the step
+6. The step completes and returns its result
+7. The workflow continues with subsequent steps
+
 ## Error Handling
 
 The resume function may throw several types of errors:
@@ -92,8 +140,8 @@ try {
 
 ## Related
 
-- [Suspend and Resume](../../../examples/workflows/suspend-and-resume.mdx)
-{/*- [`suspend` Reference](./suspend.mdx)*/}
+- [Suspend and Resume](../../workflows/suspend-and-resume.mdx)
+- [`suspend` Reference](./suspend.mdx)
 - [`watch` Reference](./watch.mdx)
 - [Workflow Class Reference](./workflow.mdx)
 ```

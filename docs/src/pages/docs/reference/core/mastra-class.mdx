@@ -27,17 +27,9 @@ The Mastra class is the core entry point for your application. It manages agents
       defaultValue: "{}",
     },
     {
-      name: "integrations",
-      type: "Integration[]",
-      description:
-        "Array of Mastra integrations to register. Will be used by agents, workflows, and tools.",
-      isOptional: true,
-      defaultValue: "[]",
-    },
-    {
-      name: "engine",
-      type: "MastraEngine",
-      description: "Database engine instance",
+      name: "storage",
+      type: "MastraStorage",
+      description: "Storage engine instance for persisting data",
       isOptional: true,
     },
     {
@@ -60,6 +52,13 @@ The Mastra class is the core entry point for your application. It manages agents
       description: "Workflows to register. Structured as a key-value pair, with keys being the workflow name and values being the workflow instance.",
       isOptional: true,
       defaultValue: "{}",
+    },
+    {
+      name: "serverMiddleware",
+      type: "Array<{ handler: (c: any, next: () => Promise<void>) => Promise<Response | void>; path?: string; }>",
+      description: "Server middleware functions to be applied to API routes. Each middleware can specify a path pattern (defaults to '/api/*').",
+      isOptional: true,
+      defaultValue: "[]",
     },
   ]}
 />
@@ -84,7 +83,7 @@ export const mastra = new Mastra({
     name: "My Project",
     level: "info",
   }),
-  engine: {},
+  storage: {},
   tools: {},
   vectors: {},
 });
@@ -104,18 +103,116 @@ You can think of the `Mastra` class as a top-level registry. When you register t
       example: 'const agent = mastra.getAgent("agentOne");',
     },
     {
-      name: "setLogger({ key, logger })",
-      type: "void",
+      name: "getAgents()",
+      type: "Record<string, Agent>",
       description:
-        "Sets a logger for a specific component (AGENT | WORKFLOW). Advanced use case.",
-      example: 'mastra.setLogger({ key: "AGENT", logger });',
+        "Returns all registered agents as a key-value object.",
+      example: 'const agents = mastra.getAgents();',
     },
     {
-      name: "getLogger(key)",
-      type: "Logger | undefined",
+      name: "getWorkflow(id, { serialized })",
+      type: "Workflow",
       description:
-        "Gets the logger for a specific component. Advanced use case.",
-      example: 'const logger = mastra.getLogger("AGENT");',
+        "Returns a workflow instance by id. The serialized option (default: false) returns a simplified representation with just the name.",
+      example: 'const workflow = mastra.getWorkflow("myWorkflow");',
+    },
+    {
+      name: "getWorkflows({ serialized })",
+      type: "Record<string, Workflow>",
+      description:
+        "Returns all registered workflows. The serialized option (default: false) returns simplified representations.",
+      example: 'const workflows = mastra.getWorkflows();',
+    },
+    {
+      name: "getVector(name)",
+      type: "MastraVector",
+      description:
+        "Returns a vector store instance by name. Throws if not found.",
+      example: 'const vectorStore = mastra.getVector("myVectorStore");',
+    },
+    {
+      name: "getVectors()",
+      type: "Record<string, MastraVector>",
+      description:
+        "Returns all registered vector stores as a key-value object.",
+      example: 'const vectorStores = mastra.getVectors();',
+    },
+    {
+      name: "getDeployer()",
+      type: "MastraDeployer | undefined",
+      description:
+        "Returns the configured deployer instance, if any.",
+      example: 'const deployer = mastra.getDeployer();',
+    },
+    {
+      name: "getStorage()",
+      type: "MastraStorage | undefined",
+      description:
+        "Returns the configured storage instance.",
+      example: 'const storage = mastra.getStorage();',
+    },
+    {
+      name: "getMemory()",
+      type: "MastraMemory | undefined",
+      description:
+        "Returns the configured memory instance. Note: This is deprecated, memory should be added to agents directly.",
+      example: 'const memory = mastra.getMemory();',
+    },
+    {
+      name: "getServerMiddleware()",
+      type: "Array<{ handler: Function; path: string; }>",
+      description:
+        "Returns the configured server middleware functions.",
+      example: 'const middleware = mastra.getServerMiddleware();',
+    },
+    {
+      name: "setStorage(storage)",
+      type: "void",
+      description:
+        "Sets the storage instance for the Mastra instance.",
+      example: 'mastra.setStorage(new DefaultStorage());',
+    },
+    {
+      name: "setLogger({ logger })",
+      type: "void",
+      description:
+        "Sets the logger for all components (agents, workflows, etc.).",
+      example: 'mastra.setLogger({ logger: createLogger({ name: "MyLogger" }) });',
+    },
+    {
+      name: "setTelemetry(telemetry)",
+      type: "void",
+      description:
+        "Sets the telemetry configuration for all components.",
+      example: 'mastra.setTelemetry({ export: { type: "console" } });',
+    },
+    {
+      name: "getLogger()",
+      type: "Logger",
+      description:
+        "Gets the configured logger instance.",
+      example: 'const logger = mastra.getLogger();',
+    },
+    {
+      name: "getTelemetry()",
+      type: "Telemetry | undefined",
+      description:
+        "Gets the configured telemetry instance.",
+      example: 'const telemetry = mastra.getTelemetry();',
+    },
+    {
+      name: "getLogsByRunId({ runId, transportId })",
+      type: "Promise<any>",
+      description:
+        "Retrieves logs for a specific run ID and transport ID.",
+      example: 'const logs = await mastra.getLogsByRunId({ runId: "123", transportId: "456" });',
+    },
+    {
+      name: "getLogs(transportId)",
+      type: "Promise<any>",
+      description:
+        "Retrieves all logs for a specific transport ID.",
+      example: 'const logs = await mastra.getLogs("transportId");',
     },
   ]}
 />

@@ -30,10 +30,17 @@ import type { MastraMemory } from '../memory/memory';
 import type { MemoryConfig, StorageThreadType } from '../memory/types';
 import { InstrumentClass } from '../telemetry';
 import type { CoreTool } from '../tools/types';
-import { makeCoreTool, createMastraProxy } from '../utils';
+import { makeCoreTool, createMastraProxy, ensureToolProperties } from '../utils';
 import type { CompositeVoice } from '../voice';
 
-import type { AgentConfig, AgentGenerateOptions, AgentStreamOptions, ToolsetsInput, ToolsInput } from './types';
+import type {
+  AgentConfig,
+  AgentGenerateOptions,
+  AgentStreamOptions,
+  MastraLanguageModel,
+  ToolsetsInput,
+  ToolsInput,
+} from './types';
 
 export * from './types';
 
@@ -48,7 +55,7 @@ export class Agent<
   public name: string;
   readonly llm: MastraLLMBase;
   instructions: string;
-  readonly model?: LanguageModelV1;
+  readonly model?: MastraLanguageModel;
   #mastra?: Mastra;
   #memory?: MastraMemory;
   tools: TTools;
@@ -75,7 +82,7 @@ export class Agent<
     this.evals = {} as TMetrics;
 
     if (config.tools) {
-      this.tools = config.tools;
+      this.tools = ensureToolProperties(config.tools) as TTools;
     }
 
     if (config.mastra) {
@@ -835,7 +842,7 @@ export class Agent<
           content: messages,
         },
       ];
-    } else {
+    } else if (Array.isArray(messages)) {
       messagesToUse = messages.map(message => {
         if (typeof message === `string`) {
           return {
@@ -845,6 +852,8 @@ export class Agent<
         }
         return message;
       });
+    } else {
+      messagesToUse = [messages];
     }
 
     const runIdToUse = runId || randomUUID();

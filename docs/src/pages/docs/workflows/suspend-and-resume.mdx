@@ -7,7 +7,10 @@ description: "Suspend and resume in Mastra workflows allows you to pause executi
 
 Complex workflows often need to pause execution while waiting for external input or resources.
 
-Mastra's suspend and resume features let you pause workflow execution at any step, persist the workflow state, and continue when ready.
+Mastra's suspend and resume features let you pause workflow execution at any step, persist the workflow snapshot to storage, and resume execution from the saved snapshot when ready.
+This entire process is automatically managed by Mastra. No config needed, or manual step required from the user.
+
+Storing the workflow snapshot to storage (libsql by default) means that the workflow state is permanently preserved across sessions even if the workflow is suspended for a long time.
 
 ## When to Use Suspend/Resume
 
@@ -43,6 +46,119 @@ const stepTwo = new Step({
   },
 });
 ```
+
+## Async/Await Based Flow
+
+The suspend and resume mechanism in Mastra uses an async/await pattern that makes it intuitive to implement complex workflows with suspension points. The code structure naturally reflects the execution flow.
+
+### How It Works
+
+1. A step's execution function receives a `suspend` function in its parameters
+2. When called with `await suspend()`, the workflow pauses at that point
+3. The workflow state is persisted
+4. Later, the workflow can be resumed by calling `workflow.resume()` with the appropriate parameters
+5. Execution continues from the point after the `suspend()` call
+
+### Example with Multiple Suspension Points
+
+Here's an example of a workflow with multiple steps that can suspend:
+
+```typescript
+// Define steps with suspend capability
+const promptAgentStep = new Step({
+  id: 'promptAgent',
+  execute: async ({ context, suspend }) => {
+    // Some condition that determines if we need to suspend
+    if (needHumanInput) {
+      // Optionally pass payload data that will be stored with suspended state
+      await suspend({ requestReason: 'Need human input for prompt' });
+      // Code after suspend() will execute when the step is resumed
+      return { modelOutput: context.userInput };
+    }
+    return { modelOutput: 'AI generated output' };
+  },
+  outputSchema: z.object({ modelOutput: z.string() }),
+});
+
+const improveResponseStep = new Step({
+  id: 'improveResponse',
+  execute: async ({ context, suspend }) => {
+    // Another condition for suspension
+    if (needFurtherRefinement) {
+      await suspend();
+      return { improvedOutput: context.refinedOutput };
+    }
+    return { improvedOutput: 'Improved output' };
+  },
+  outputSchema: z.object({ improvedOutput: z.string() }),
+});
+
+// Build the workflow
+const workflow = new Workflow({
+  name: 'multi-suspend-workflow',
+  triggerSchema: z.object({ input: z.string() }),
+});
+
+workflow
+  .step(getUserInput)
+  .then(promptAgentStep)
+  .then(evaluateTone)
+  .then(improveResponseStep)
+  .then(evaluateImproved)
+  .commit();
+```
+
+### Starting and Resuming the Workflow
+
+```typescript
+// Get the workflow and create a run
+const wf = mastra.getWorkflow('multi-suspend-workflow');
+const run = wf.createRun();
+
+// Start the workflow
+const initialResult = await run.start({ triggerData: { input: 'initial input' } });
+
+let promptAgentStepResult = initialResult.activePaths.get('promptAgent');
+let promptAgentResumeResult = undefined;
+
+// Check if a step is suspended
+if (promptAgentStepResult?.status === 'suspended') {
+  console.log('Workflow suspended at promptAgent step');
+
+  // Resume the workflow with new context
+  const resumeResult = await wf.resume({
+    runId: run.runId,
+    stepId: 'promptAgent',
+    context: { userInput: 'Human provided input' }
+  });
+
+  promptAgentResumeResult = resumeResult;
+}
+
+const improveResponseStepResult = promptAgentResumeResult?.activePaths.get('improveResponse');
+
+if (improveResponseStepResult?.status === 'suspended') {
+  console.log('Workflow suspended at improveResponse step');
+
+  // Resume again with different context
+  const finalResult = await wf.resume({
+    runId: run.runId,
+    stepId: 'improveResponse',
+    context: { refinedOutput: 'Human refined output' }
+  });
+
+  console.log('Workflow completed:', finalResult?.results);
+}
+```
+
+### Key Points About Suspend and Resume
+
+- The `suspend()` function can optionally take a payload object that will be stored with the suspended state
+- Code after the `await suspend()` call will not execute until the step is resumed
+- When a step is suspended, its status becomes `'suspended'` in the workflow results
+- When resumed, the step's status changes from `'suspended'` to `'success'` once completed
+- The `resume()` method requires the `runId` and `stepId` to identify which suspended step to resume
+- You can provide new context data when resuming that will be merged with existing step results
 
 ## Watching and Resuming
 

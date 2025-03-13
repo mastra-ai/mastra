@@ -29,6 +29,7 @@ export interface IExecutionContext<TSchemaIn extends z.ZodSchema | undefined = u
   threadId?: string;
   resourceId?: string;
 }
+
 export interface IAction<
   TId extends string,
   TSchemaIn extends z.ZodSchema | undefined,
@@ -40,7 +41,9 @@ export interface IAction<
   description?: string;
   inputSchema?: TSchemaIn;
   outputSchema?: TSchemaOut;
-  execute: (
+  // execute must remain optional because ITools extends IAction and tools may need execute to be optional
+  // when forwarding tool calls to the client or to a queue instead of executing them in the same process
+  execute?: (
     context: TContext,
     options?: TOptions,
   ) => Promise<TSchemaOut extends z.ZodSchema ? z.infer<TSchemaOut> : unknown>;

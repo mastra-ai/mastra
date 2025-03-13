@@ -7,23 +7,35 @@ Mastra agents can be enhanced with voice capabilities, allowing them to speak re
 The simplest way to add voice to an agent is to use a single provider for both speaking and listening:
 
 ```typescript
+import { createReadStream } from "fs";
+import path from "path";
 import { Agent } from "@mastra/core/agent";
 import { OpenAIVoice } from "@mastra/voice-openai";
+import { openai } from "@ai-sdk/openai";
 
 // Initialize the voice provider with default settings
 const voice = new OpenAIVoice();
 
 // Create an agent with voice capabilities
 export const agent = new Agent({
-  name: 'Agent',
+  name: "Agent",
   instructions: `You are a helpful assistant with both STT and TTS capabilities.`,
-  model: openai('gpt-4o'),
-  voice
+  model: openai("gpt-4o"),
+  voice,
 });
 
 // The agent can now use voice for interaction
 await agent.speak("Hello, I'm your AI assistant!");
-const userInput = await agent.listen();
+
+// Read audio file and transcribe
+const audioFilePath = path.join(process.cwd(), "/audio.m4a");
+const audioStream = createReadStream(audioFilePath);
+
+try {
+  const transcription = await agent.listen(audioStream, { filetype: "m4a" });
+} catch (error) {
+  console.error("Error transcribing audio:", error);
+}
 ```
 
 ## Using Multiple Providers
@@ -35,11 +47,12 @@ import { Agent } from "@mastra/core/agent";
 import { CompositeVoice } from "@mastra/core/voice";
 import { OpenAIVoice } from "@mastra/voice-openai";
 import { PlayAIVoice } from "@mastra/voice-playai";
+import { openai } from "@ai-sdk/openai";
 
 export const agent = new Agent({
-  name: 'Agent',
+  name: "Agent",
   instructions: `You are a helpful assistant with both STT and TTS capabilities.`,
-  model: openai('gpt-4o'),
+  model: openai("gpt-4o"),
 
   // Create a composite voice using OpenAI for listening and PlayAI for speaking
   voice: new CompositeVoice({
@@ -56,37 +69,37 @@ The `speak()` and `listen()` methods work with Node.js streams. Here's how to sa
 ### Saving Speech Output
 
 ```typescript
-import { createWriteStream } from 'fs';
-import path from 'path';
+import { createWriteStream } from "fs";
+import path from "path";
 
 // Generate speech and save to file
-const audio = await agent.speak('Hello, World!');
-const filePath = path.join(process.cwd(), 'agent.mp3');
+const audio = await agent.speak("Hello, World!");
+const filePath = path.join(process.cwd(), "agent.mp3");
 const writer = createWriteStream(filePath);
 
 audio.pipe(writer);
 
 await new Promise<void>((resolve, reject) => {
-  writer.on('finish', () => resolve());
-  writer.on('error', reject);
+  writer.on("finish", () => resolve());
+  writer.on("error", reject);
 });
 ```
 
 ### Transcribing Audio Input
 
 ```typescript
-import { createReadStream } from 'fs';
-import path from 'path';
+import { createReadStream } from "fs";
+import path from "path";
 
 // Read audio file and transcribe
-const audioFilePath = path.join(process.cwd(), '/agent.mp3');
+const audioFilePath = path.join(process.cwd(), "/agent.m4a");
 const audioStream = createReadStream(audioFilePath);
 
 try {
-  console.log('Transcribing audio file...');
-  const transcription = await agent.listen(audioStream);
-  console.log('Transcription:', transcription);
+  console.log("Transcribing audio file...");
+  const transcription = await agent.listen(audioStream, { filetype: "m4a" });
+  console.log("Transcription:", transcription);
 } catch (error) {
-  console.error('Error transcribing audio:', error);
+  console.error("Error transcribing audio:", error);
 }
 ```

@@ -1,7 +1,9 @@
+import { createHash } from 'crypto';
 import jsonSchemaToZod from 'json-schema-to-zod';
 import { z } from 'zod';
 import type { ZodObject } from 'zod';
 import type { MastraPrimitives } from './action';
+import type { ToolsInput } from './agent';
 import type { Logger } from './logger';
 import type { Mastra } from './mastra';
 import type { MastraMemory } from './memory';
@@ -334,7 +336,8 @@ function createLogMessageOptions({ agentName, toolName, tool, type }: LogOptions
 }
 
 function createExecute(tool: ToolToConvert, options: ToolOptions, logType?: 'tool' | 'toolset') {
-  const { logger, ...rest } = options;
+  // dont't add memory or mastra to logging
+  const { logger, mastra: _mastra, memory: _memory, ...rest } = options;
 
   const { start, error } = createLogMessageOptions({
     agentName: options.agentName,
@@ -374,6 +377,76 @@ function createExecute(tool: ToolToConvert, options: ToolOptions, logType?: 'too
 }
 
 /**
+ * Checks if a value is a Zod type
+ * @param value - The value to check
+ * @returns True if the value is a Zod type, false otherwise
+ */
+function isZodType(value: unknown): value is z.ZodType {
+  // Check if it's a Zod schema by looking for common Zod properties and methods
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    '_def' in value &&
+    'parse' in value &&
+    typeof (value as any).parse === 'function' &&
+    'safeParse' in value &&
+    typeof (value as any).safeParse === 'function'
+  );
+}
+
+// Helper function to create a deterministic hash
+function createDeterministicId(input: string): string {
+  return createHash('sha256').update(input).digest('hex').slice(0, 8); // Take first 8 characters for a shorter but still unique ID
+}
+
+/**
+ * Sets the properties for a Vercel Tool, including an ID and inputSchema
+ * @param tool - The tool to set the properties for
+ * @returns The tool with the properties set
+ */
+function setVercelToolProperties(tool: VercelTool) {
+  const inputSchema = convertVercelToolParameters(tool);
+  const toolId = !('id' in tool)
+    ? tool.description
+      ? `tool-${createDeterministicId(tool.description)}`
+      : `tool-${Math.random().toString(36).substring(2, 9)}`
+    : tool.id;
+  return {
+    ...tool,
+    id: toolId,
+    inputSchema,
+  };
+}
+
+/**
+ * Ensures a tool has an ID and inputSchema by generating one if not present
+ * @param tool - The tool to ensure has an ID and inputSchema
+ * @returns The tool with an ID and inputSchema
+ */
+export function ensureToolProperties(tools: ToolsInput): ToolsInput {
+  const toolsWithProperties = Object.keys(tools).reduce<ToolsInput>((acc, key) => {
+    const tool = tools?.[key];
+    if (tool) {
+      if (isVercelTool(tool)) {
+        acc[key] = setVercelToolProperties(tool) as VercelTool;
+      } else {
+        acc[key] = tool;
+      }
+    }
+    return acc;
+  }, {});
+
+  return toolsWithProperties;
+}
+
+function convertVercelToolParameters(tool: VercelTool): z.ZodType {
+  // If the tool is a Vercel Tool, check if the parameters are already a zod object
+  // If not, convert the parameters to a zod object using jsonSchemaToZod
+  const schema = tool.parameters ?? z.object({});
+  return isZodType(schema) ? schema : resolveSerializedZodOutput(jsonSchemaToZod(schema));
+}
+
+/**
  * Converts a Vercel Tool or Mastra Tool into a CoreTool format
  * @param tool - The tool to convert (either VercelTool or ToolAction)
  * @param options - Tool options including Mastra-specific settings
@@ -384,14 +457,10 @@ export function makeCoreTool(tool: ToolToConvert, options: ToolOptions, logType?
   // Helper to get parameters based on tool type
   const getParameters = () => {
     if (isVercelTool(tool)) {
-      // If the tool is a Vercel Tool, check if the parameters are already a zod object
-      // If not, convert the parameters to a zod object using jsonSchemaToZod
-      return tool.parameters instanceof z.ZodType
-        ? tool.parameters
-        : resolveSerializedZodOutput(jsonSchemaToZod(tool.parameters));
+      return convertVercelToolParameters(tool);
     }
     // If the tool is a Mastra Tool, return the inputSchema
-    return tool.inputSchema;
+    return tool.inputSchema ?? z.object({});
   };
 
   return {
