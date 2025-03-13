@@ -1,5 +1,5 @@
-import type { Span } from '@opentelemetry/api';
 import EventEmitter from 'node:events';
+import type { Span } from '@opentelemetry/api';
 import { get } from 'radash';
 import sift from 'sift';
 import type { MachineContext, Snapshot } from 'xstate';
