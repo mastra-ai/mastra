@@ -30,7 +30,7 @@ const details = await workflow.details();
 
 ### Execute Workflow
 
-Execute a workflow with input parameters:
+Execute a workflow with input parameters and wait for full results on completion:
 
 ```typescript
 const result = await workflow.execute({
@@ -58,32 +58,48 @@ const result = await workflow.resume({
 Watch workflow transitions in real-time using an async iterator:
 
 ```typescript
-// Get workflow instance
-const workflow = client.getWorkflow("workflow-id");
+try{
+  // Get workflow instance
+  const workflow = client.getWorkflow("workflow-id");
 
-const workflowWatch = workflow.watch()
-
-// Execute workflow
-workflow.execute()
-
-// Watch for workflow transitions
-for await (const record of workflowWatch) {
-  // Each record contains workflow transition data
-  console.log({
-    activePaths: record.activePaths,
-    context: record.context,
-    timestamp: record.timestamp
-    runId: record.runId
+  // Start a new workflow run
+  const {runId} = await workflow.startRun({
+    input: {
+      param1: "value1",
+      param2: "value2",
+    },
   });
-}
+
+  // Watch for workflow run
+  const workflowWatch = workflow.watch({runId})
+
+  // Watch for workflow transitions
+  for await (const record of workflowWatch) {
+    // Every new record is the latest transition state of the workflow run
+    console.log({
+      activePaths: record.activePaths,
+      context: record.context,
+      timestamp: record.timestamp,
+      runId: record.runId
+    });
+  }
+
+}catch(e){
+  console.error(e);
+}finally{
+  console.log('Workflow done');
+} 
 
 
 ```
+The `watch()` method returns an AsyncGenerator that yields workflow transition records (`WorkflowRunResult`). Each record contains:
 
-The `watch()` method returns an AsyncGenerator that yields workflow transition records. Each record contains:
-- `activePaths`: Currently active paths in the workflow
-- `context`: Current workflow context data
-- `timestamp`: Timestamp of the transition
-- `runId`: Uniqe Identifier for workflow run
+| Field | Type | Description |
+|-------|------|-------------|
+| `activePaths` | `Array<{ stepId: string; stepPath: string[]; status: 'completed' \| 'suspended' \| 'pending' }>` | Currently active paths in the workflow with their execution status |
+| `context` | `{ steps: Record<string, { status: 'completed' \| 'suspended' \| 'running'; [key: string]: any }> }` | Current workflow context including step statuses and additional step data |
+| `timestamp` | `number` | Unix timestamp of when this transition occurred |
+| `runId` | `string` | Unique identifier for this workflow run instance |
+| `suspendedSteps` | `Record<string, any>` | Map of currently suspended steps and their suspension data |
 
-This makes it easy to process workflow transitions in real-time using a simple for-await loop.
+This makes it easy to process workflow transitions in real-time using a simple for-await loop. The generator will automatically close when all steps in the workflow have reached a terminal state (`completed`, `suspended`, or `failed`).

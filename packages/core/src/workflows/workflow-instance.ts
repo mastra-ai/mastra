@@ -163,6 +163,7 @@ export class WorkflowInstance<TSteps extends Step<any, any, any>[] = any, TTrigg
       stepGraph,
       executionSpan: this.#executionSpan,
       startStepId,
+      retryConfig: this.#retryConfig,
     });
 
     this.#machines[startStepId] = defaultMachine;
@@ -204,7 +205,7 @@ export class WorkflowInstance<TSteps extends Step<any, any, any>[] = any, TTrigg
     const subscriberKeys = Object.keys(this.#stepSubscriberGraph).filter(key => key.split('&&').includes(parentStepId));
 
     subscriberKeys.forEach(key => {
-      if (['success', 'failure'].includes(stepStatus) && this.#isCompoundKey(key)) {
+      if (['success', 'failure', 'skipped'].includes(stepStatus) && this.#isCompoundKey(key)) {
         this.#compoundDependencies[key]![parentStepId] = true;
       }
     });

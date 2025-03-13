@@ -8,7 +8,7 @@ export default {
     './src/pages/**/*.{js,ts,jsx,tsx,mdx}',
     './src/components/**/*.{js,ts,jsx,tsx,mdx}',
     './src/**/*.{js,ts,jsx,tsx,html}',
-    './node_modules/@mastra/playground/**/*.{js,ts,jsx,tsx}',
+    './node_modules/@mastra/playground-ui/**/*.{js,ts,jsx,tsx}',
   ],
   theme: {
     container: {

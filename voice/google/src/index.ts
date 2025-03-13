@@ -93,7 +93,11 @@ export class GoogleVoice extends MastraVoice {
   private async streamToString(stream: NodeJS.ReadableStream): Promise<string> {
     const chunks: Buffer[] = [];
     for await (const chunk of stream) {
-      chunks.push(Buffer.from(chunk));
+      if (typeof chunk === 'string') {
+        chunks.push(Buffer.from(chunk));
+      } else {
+        chunks.push(chunk);
+      }
     }
     return Buffer.concat(chunks).toString('utf-8');
   }
@@ -157,7 +161,11 @@ export class GoogleVoice extends MastraVoice {
     return this.traced(async () => {
       const chunks: Buffer[] = [];
       for await (const chunk of audioStream) {
-        chunks.push(Buffer.from(chunk));
+        if (typeof chunk === 'string') {
+          chunks.push(Buffer.from(chunk));
+        } else {
+          chunks.push(chunk);
+        }
       }
       const buffer = Buffer.concat(chunks);
 

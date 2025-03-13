@@ -1,0 +1,32 @@
+{
+  "name": "examples-mcp-configuration",
+  "type": "module",
+  "private": true,
+  "main": "index.js",
+  "scripts": {
+    "start": "npx bun src/index.ts",
+    "dev": "mastra dev",
+    "test": "cross-env NODE_OPTIONS='--experimental-vm-modules --max-old-space-size=8192' jest"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "description": "",
+  "dependencies": {
+    "@ai-sdk/openai": "latest",
+    "@mastra/core": "workspace:*",
+    "@mastra/mcp": "workspace:*",
+    "@mastra/memory": "workspace:*",
+    "chalk": "^5.4.1",
+    "fastmcp": "^1.20.4",
+    "zod": "^3.24.2"
+  },
+  "devDependencies": {
+    "@jest/globals": "^29.7.0",
+    "jest": "^29.7.0",
+    "mastra": "workspace:*",
+    "ts-jest": "^29.2.6",
+    "tsx": "^4.19.3"
+  },
+  "version": "0.0.1"
+}

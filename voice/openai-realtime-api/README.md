@@ -43,7 +43,7 @@ const voice = new OpenAIRealtimeVoice({
 });
 
 // Connect to the realtime service
-await voice.huddle();
+await voice.open();
 
 // Audio data from voice provider
 voice.on('speaking', (audioData: Int16Array) => {
@@ -70,10 +70,10 @@ await voice.listen(audioData);
 
 // Process audio input
 const microphoneStream = getMicrophoneStream();
-await voice.listen(microphoneStream);
+await voice.send(microphoneStream);
 
 // Clean up
-voice.leave();
+voice.close();
 ```
 
 ## Features
@@ -106,7 +106,7 @@ The voice instance emits several events:
 - `writing`: Emitted when speech is transcribed to text
 - `error`: Emitted when an error occurs
 
-You can also listen to [OpenAI Realtime utility events](https://github.com/openai/openai-realtime-api-beta/tree/main?tab=readme-ov-file#reference-client-utility-events) by prefixing with 'openAIRealtime:', such as:
+You can also listen to OpenAI Realtime [sdk utility events](https://github.com/openai/openai-realtime-api-beta/tree/main?tab=readme-ov-file#reference-client-utility-events) by prefixing with 'openAIRealtime:', such as:
 
 - `openAIRealtime:conversation.item.completed`
 - `openAIRealtime:conversation.updated`
@@ -116,7 +116,7 @@ You can also listen to [OpenAI Realtime utility events](https://github.com/opena
 The realtime voice integration includes server-side VAD (Voice Activity Detection) with configurable parameters:
 
 ```typescript
-voice.tune({
+voice.updateConfig({
   voice: 'echo',
   turn_detection: {
     type: 'server_vad',
@@ -129,7 +129,7 @@ voice.tune({
 
 ## Tool Integration
 
-You can equip the voice instance with tools that extend its capabilities:
+You can add tools to the voice instance with tools that extend its capabilities:
 
 ```typescript
 export const menuTool = createTool({
@@ -145,7 +145,7 @@ export const menuTool = createTool({
   },
 });
 
-voice.equip(menuTool);
+voice.addTools(menuTool);
 ```
 
 ## API Reference
