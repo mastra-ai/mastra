@@ -199,7 +199,7 @@ export interface WorkflowRunResult<
       : StepResult<z.infer<NonNullable<StepsRecord<TSteps>[K]['outputSchema']>>>;
   };
   runId: string;
-  activePaths: Map<string, { status: string; suspendPayload?: any }>;
+  activePaths: Map<keyof StepsRecord<TSteps>, { status: string; suspendPayload?: any }>;
 }
 
 // Update WorkflowContext
@@ -264,6 +264,7 @@ export type SubscriberFunctionOutput = {
 export type DependencyCheckOutput =
   | { type: 'CONDITIONS_MET' }
   | { type: 'CONDITIONS_SKIPPED' }
+  | { type: 'CONDITIONS_SKIP_TO_COMPLETED' }
   | { type: 'CONDITION_FAILED'; error: string }
   | { type: 'SUSPENDED' }
   | { type: 'WAITING' }
