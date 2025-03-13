@@ -230,13 +230,10 @@ importers:
     dependencies:
       '@ai-sdk/openai':
         specifier: latest
-        version: 1.2.1(zod@3.24.2)
+        version: 1.2.2(zod@3.24.2)
       '@mastra/core':
         specifier: workspace:*
         version: link:../../packages/core
-      ai:
-        specifier: latest
-        version: 4.1.54(react@19.0.0)(zod@3.24.2)
       zod:
         specifier: ^3.24.2
         version: 3.24.2
@@ -294,7 +291,7 @@ importers:
     dependencies:
       '@ai-sdk/openai':
         specifier: latest
-        version: 1.2.1(zod@3.24.2)
+        version: 1.2.2(zod@3.24.2)
       '@assistant-ui/react':
         specifier: 0.7.85
         version: 0.7.85(@types/react-dom@19.0.4(@types/react@19.0.10))(@types/react@19.0.10)(react-dom@19.0.0(react@19.0.0))(react@19.0.0)(use-sync-external-store@1.4.0(react@19.0.0))
@@ -352,7 +349,7 @@ importers:
     dependencies:
       '@ai-sdk/openai':
         specifier: latest
-        version: 1.2.1(zod@3.24.2)
+        version: 1.2.2(zod@3.24.2)
       '@mastra/core':
         specifier: workspace:*
         version: link:../../../../packages/core
@@ -382,7 +379,7 @@ importers:
         version: 1.1.15(zod@3.24.2)
       '@ai-sdk/openai':
         specifier: latest
-        version: 1.2.1(zod@3.24.2)
+        version: 1.2.2(zod@3.24.2)
       '@mastra/core':
         specifier: workspace:*
         version: link:../../../../packages/core
@@ -397,7 +394,7 @@ importers:
         version: 1.1.15(zod@3.24.2)
       '@ai-sdk/openai':
         specifier: latest
-        version: 1.2.1(zod@3.24.2)
+        version: 1.2.2(zod@3.24.2)
       '@mastra/core':
         specifier: workspace:*
         version: link:../../../../packages/core
@@ -409,7 +406,7 @@ importers:
     dependencies:
       '@ai-sdk/openai':
         specifier: latest
-        version: 1.2.1(zod@3.24.2)
+        version: 1.2.2(zod@3.24.2)
       '@mastra/core':
         specifier: workspace:*
         version: link:../../../../packages/core
@@ -421,7 +418,7 @@ importers:
     dependencies:
       '@ai-sdk/openai':
         specifier: latest
-        version: 1.2.1(zod@3.24.2)
+        version: 1.2.2(zod@3.24.2)
       '@mastra/core':
         specifier: workspace:*
         version: link:../../../../packages/core
@@ -467,7 +464,7 @@ importers:
     dependencies:
       '@ai-sdk/openai':
         specifier: latest
-        version: 1.2.1(zod@3.24.2)
+        version: 1.2.2(zod@3.24.2)
       '@mastra/evals':
         specifier: workspace:^
         version: link:../../../../packages/evals
@@ -480,7 +477,7 @@ importers:
     dependencies:
       '@ai-sdk/openai':
         specifier: latest
-        version: 1.2.1(zod@3.24.2)
+        version: 1.2.2(zod@3.24.2)
       '@mastra/evals':
         specifier: workspace:^
         version: link:../../../../packages/evals
@@ -513,7 +510,7 @@ importers:
     dependencies:
       '@ai-sdk/openai':
         specifier: latest
-        version: 1.2.1(zod@3.24.2)
+        version: 1.2.2(zod@3.24.2)
       '@mastra/evals':
         specifier: workspace:^
         version: link:../../../../packages/evals
@@ -526,7 +523,7 @@ importers:
     dependencies:
       '@ai-sdk/openai':
         specifier: latest
-        version: 1.2.1(zod@3.24.2)
+        version: 1.2.2(zod@3.24.2)
       '@mastra/evals':
         specifier: workspace:^
         version: link:../../../../packages/evals
@@ -539,7 +536,7 @@ importers:
     dependencies:
       '@ai-sdk/openai':
         specifier: latest
-        version: 1.2.1(zod@3.24.2)
+        version: 1.2.2(zod@3.24.2)
       '@mastra/evals':
         specifier: workspace:^
         version: link:../../../../packages/evals
@@ -552,7 +549,7 @@ importers:
     dependencies:
       '@ai-sdk/openai':
         specifier: latest
-        version: 1.2.1(zod@3.24.2)
+        version: 1.2.2(zod@3.24.2)
       '@mastra/evals':
         specifier: workspace:^
         version: link:../../../../packages/evals
@@ -565,7 +562,7 @@ importers:
     dependencies:
       '@ai-sdk/openai':
         specifier: latest
-        version: 1.2.1(zod@3.24.2)
+        version: 1.2.2(zod@3.24.2)
       '@mastra/core':
         specifier: workspace:^
         version: link:../../../../packages/core
@@ -584,7 +581,7 @@ importers:
     dependencies:
       '@ai-sdk/openai':
         specifier: latest
-        version: 1.2.1(zod@3.24.2)
+        version: 1.2.2(zod@3.24.2)
       '@mastra/evals':
         specifier: workspace:^
         version: link:../../../../packages/evals
@@ -597,7 +594,7 @@ importers:
     dependencies:
       '@ai-sdk/openai':
         specifier: latest
-        version: 1.2.1(zod@3.24.2)
+        version: 1.2.2(zod@3.24.2)
       '@mastra/evals':
         specifier: workspace:^
         version: link:../../../../packages/evals
@@ -620,7 +617,7 @@ importers:
     dependencies:
       '@ai-sdk/openai':
         specifier: latest
-        version: 1.2.1(zod@3.24.2)
+        version: 1.2.2(zod@3.24.2)
       '@mastra/evals':
         specifier: workspace:^
         version: link:../../../../packages/evals
@@ -633,7 +630,7 @@ importers:
     dependencies:
       '@ai-sdk/openai':
         specifier: latest
-        version: 1.2.1(zod@3.24.2)
+        version: 1.2.2(zod@3.24.2)
       '@mastra/evals':
         specifier: workspace:^
         version: link:../../../../packages/evals
@@ -666,7 +663,7 @@ importers:
     dependencies:
       '@ai-sdk/openai':
         specifier: latest
-        version: 1.2.1(zod@3.24.2)
+        version: 1.2.2(zod@3.24.2)
       '@mastra/evals':
         specifier: workspace:^
         version: link:../../../../packages/evals
@@ -691,7 +688,7 @@ importers:
     dependencies:
       '@ai-sdk/openai':
         specifier: latest
-        version: 1.2.1(zod@3.24.2)
+        version: 1.2.2(zod@3.24.2)
       '@mastra/pg':
         specifier: workspace:*
         version: link:../../../../stores/pg
@@ -734,7 +731,7 @@ importers:
     dependencies:
       '@ai-sdk/openai':
         specifier: latest
-        version: 1.2.1(zod@3.24.2)
+        version: 1.2.2(zod@3.24.2)
       '@mastra/pg':
         specifier: workspace:*
         version: link:../../../../stores/pg
@@ -753,7 +750,7 @@ importers:
     dependencies:
       '@ai-sdk/openai':
         specifier: latest
-        version: 1.2.1(zod@3.24.2)
+        version: 1.2.2(zod@3.24.2)
       '@mastra/pg':
         specifier: workspace:*
         version: link:../../../../stores/pg
@@ -772,7 +769,7 @@ importers:
     dependencies:
       '@ai-sdk/openai':
         specifier: latest
-        version: 1.2.1(zod@3.24.2)
+        version: 1.2.2(zod@3.24.2)
       '@mastra/pg':
         specifier: workspace:*
         version: link:../../../../stores/pg
@@ -790,7 +787,7 @@ importers:
     dependencies:
       '@ai-sdk/openai':
         specifier: latest
-        version: 1.2.1(zod@3.24.2)
+        version: 1.2.2(zod@3.24.2)
       '@mastra/rag':
         specifier: workspace:*
         version: link:../../../../packages/rag
@@ -802,7 +799,7 @@ importers:
     dependencies:
       '@ai-sdk/openai':
         specifier: latest
-        version: 1.2.1(zod@3.24.2)
+        version: 1.2.2(zod@3.24.2)
       '@mastra/rag':
         specifier: workspace:*
         version: link:../../../../packages/rag
@@ -826,7 +823,7 @@ importers:
     dependencies:
       '@ai-sdk/openai':
         specifier: latest
-        version: 1.2.1(zod@3.24.2)
+        version: 1.2.2(zod@3.24.2)
       '@mastra/core':
         specifier: workspace:*
         version: link:../../../../packages/core
@@ -848,7 +845,7 @@ importers:
     dependencies:
       '@ai-sdk/openai':
         specifier: latest
-        version: 1.2.1(zod@3.24.2)
+        version: 1.2.2(zod@3.24.2)
       '@mastra/core':
         specifier: workspace:*
         version: link:../../../../packages/core
@@ -870,7 +867,7 @@ importers:
     dependencies:
       '@ai-sdk/openai':
         specifier: latest
-        version: 1.2.1(zod@3.24.2)
+        version: 1.2.2(zod@3.24.2)
       '@mastra/pg':
         specifier: workspace:*
         version: link:../../../../stores/pg
@@ -889,7 +886,7 @@ importers:
     dependencies:
       '@ai-sdk/openai':
         specifier: latest
-        version: 1.2.1(zod@3.24.2)
+        version: 1.2.2(zod@3.24.2)
       '@mastra/chroma':
         specifier: workspace:*
         version: link:../../../../stores/chroma
@@ -904,7 +901,7 @@ importers:
     dependencies:
       '@ai-sdk/openai':
         specifier: latest
-        version: 1.2.1(zod@3.24.2)
+        version: 1.2.2(zod@3.24.2)
       '@mastra/core':
         specifier: workspace:*
         version: link:../../../../packages/core
@@ -919,7 +916,7 @@ importers:
     dependencies:
       '@ai-sdk/openai':
         specifier: latest
-        version: 1.2.1(zod@3.24.2)
+        version: 1.2.2(zod@3.24.2)
       '@mastra/pg':
         specifier: workspace:*
         version: link:../../../../stores/pg
@@ -934,7 +931,7 @@ importers:
     dependencies:
       '@ai-sdk/openai':
         specifier: latest
-        version: 1.2.1(zod@3.24.2)
+        version: 1.2.2(zod@3.24.2)
       '@mastra/pinecone':
         specifier: workspace:*
         version: link:../../../../stores/pinecone
@@ -959,7 +956,7 @@ importers:
     dependencies:
       '@ai-sdk/openai':
         specifier: latest
-        version: 1.2.1(zod@3.24.2)
+        version: 1.2.2(zod@3.24.2)
       '@mastra/pg':
         specifier: workspace:*
         version: link:../../../../stores/pg
@@ -978,7 +975,7 @@ importers:
     dependencies:
       '@ai-sdk/openai':
         specifier: latest
-        version: 1.2.1(zod@3.24.2)
+        version: 1.2.2(zod@3.24.2)
       '@mastra/pg':
         specifier: workspace:*
         version: link:../../../../stores/pg
@@ -997,7 +994,7 @@ importers:
     dependencies:
       '@ai-sdk/openai':
         specifier: latest
-        version: 1.2.1(zod@3.24.2)
+        version: 1.2.2(zod@3.24.2)
       '@mastra/pinecone':
         specifier: workspace:*
         version: link:../../../../stores/pinecone
@@ -1012,7 +1009,7 @@ importers:
     dependencies:
       '@ai-sdk/openai':
         specifier: latest
-        version: 1.2.1(zod@3.24.2)
+        version: 1.2.2(zod@3.24.2)
       '@mastra/core':
         specifier: workspace:*
         version: link:../../../../packages/core
@@ -1264,7 +1261,7 @@ importers:
     dependencies:
       '@ai-sdk/openai':
         specifier: latest
-        version: 1.2.1(zod@3.24.2)
+        version: 1.2.2(zod@3.24.2)
       '@ai-sdk/react':
         specifier: ^1.1.21
         version: 1.1.21(react@19.0.0-rc-45804af1-20241021)(zod@3.24.2)
@@ -1661,7 +1658,7 @@ importers:
     dependencies:
       '@ai-sdk/openai':
         specifier: latest
-        version: 1.2.1(zod@3.24.2)
+        version: 1.2.2(zod@3.24.2)
       '@mastra/core':
         specifier: workspace:*
         version: link:../../packages/core
@@ -1701,7 +1698,7 @@ importers:
     dependencies:
       '@ai-sdk/openai':
         specifier: latest
-        version: 1.2.1(zod@3.24.2)
+        version: 1.2.2(zod@3.24.2)
       '@mastra/core':
         specifier: workspace:*
         version: link:../../packages/core
@@ -1752,7 +1749,7 @@ importers:
     dependencies:
       '@ai-sdk/openai':
         specifier: latest
-        version: 1.2.1(zod@3.24.2)
+        version: 1.2.2(zod@3.24.2)
       '@mastra/core':
         specifier: workspace:*
         version: link:../../packages/core
@@ -1774,7 +1771,7 @@ importers:
     dependencies:
       '@ai-sdk/openai':
         specifier: latest
-        version: 1.2.1(zod@3.24.2)
+        version: 1.2.2(zod@3.24.2)
       '@mastra/core':
         specifier: workspace:*
         version: link:../../packages/core
@@ -1902,7 +1899,7 @@ importers:
         version: 1.1.12(zod@3.24.2)
       '@ai-sdk/openai':
         specifier: latest
-        version: 1.2.1(zod@3.24.2)
+        version: 1.2.2(zod@3.24.2)
       '@mastra/core':
         specifier: workspace:*
         version: link:../../packages/core
@@ -1933,7 +1930,7 @@ importers:
     dependencies:
       '@ai-sdk/openai':
         specifier: latest
-        version: 1.2.1(zod@3.24.2)
+        version: 1.2.2(zod@3.24.2)
       '@mastra/core':
         specifier: workspace:*
         version: link:../../packages/core
@@ -2097,7 +2094,7 @@ importers:
     dependencies:
       '@ai-sdk/openai':
         specifier: latest
-        version: 1.2.1(zod@3.24.2)
+        version: 1.2.2(zod@3.24.2)
       '@mastra/core':
         specifier: workspace:^
         version: link:../../packages/core
@@ -2109,7 +2106,7 @@ importers:
     dependencies:
       '@ai-sdk/openai':
         specifier: latest
-        version: 1.2.1(zod@3.24.2)
+        version: 1.2.2(zod@3.24.2)
       '@mastra/core':
         specifier: workspace:^
         version: link:../../packages/core
@@ -2159,7 +2156,7 @@ importers:
     dependencies:
       '@ai-sdk/openai':
         specifier: latest
-        version: 1.2.1(zod@3.24.2)
+        version: 1.2.2(zod@3.24.2)
       '@mastra/core':
         specifier: workspace:*
         version: link:../../packages/core
@@ -2219,7 +2216,7 @@ importers:
     devDependencies:
       '@ai-sdk/openai':
         specifier: latest
-        version: 1.2.1(zod@3.24.2)
+        version: 1.2.2(zod@3.24.2)
       '@types/node':
         specifier: ^22.13.10
         version: 22.13.10
@@ -3217,7 +3214,7 @@ importers:
     devDependencies:
       '@ai-sdk/openai':
         specifier: latest
-        version: 1.2.1(zod@3.24.2)
+        version: 1.2.2(zod@3.24.2)
       '@internal/lint':
         specifier: workspace:*
         version: link:../_config
@@ -3670,7 +3667,7 @@ importers:
         version: 1.1.13(zod@3.24.2)
       '@ai-sdk/openai':
         specifier: latest
-        version: 1.2.1(zod@3.24.2)
+        version: 1.2.2(zod@3.24.2)
       '@internal/lint':
         specifier: workspace:*
         version: link:../_config
@@ -4556,6 +4553,12 @@ packages:
 
   '@ai-sdk/openai@1.2.1':
     resolution: {integrity: sha512-UtVDNrmrKzb3b4T9bnpduXs4FKpWGn+sH5qaFP1mtxOPeYGUF9OoJfGilH3CNfqGAE4QdZh/LT3IV6GHacooGg==}
+    engines: {node: '>=18'}
+    peerDependencies:
+      zod: ^3.0.0
+
+  '@ai-sdk/openai@1.2.2':
+    resolution: {integrity: sha512-5355FLtSOH8sz9N9fsSwWpTaEgfqKOPMMHgSs1j4Aih5kQc9PhJ/oAPZuH308c/ktrbx6GcCW/hVrITimYsQhQ==}
     engines: {node: '>=18'}
     peerDependencies:
       zod: ^3.0.0
@@ -21349,6 +21352,12 @@ snapshots:
       '@ai-sdk/provider-utils': 2.1.11(zod@3.24.2)
       zod: 3.24.2
 
+  '@ai-sdk/openai@1.2.2(zod@3.24.2)':
+    dependencies:
+      '@ai-sdk/provider': 1.0.10
+      '@ai-sdk/provider-utils': 2.1.11(zod@3.24.2)
+      zod: 3.24.2
+
   '@ai-sdk/provider-utils@1.0.2(zod@3.24.2)':
     dependencies:
       '@ai-sdk/provider': 0.0.12
@@ -33787,7 +33796,7 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  eslint-module-utils@2.12.0(@typescript-eslint/parser@7.2.0(eslint@8.57.1)(typescript@5.7.3))(eslint-import-resolver-node@0.3.9)(eslint-import-resolver-typescript@3.8.4)(eslint@8.57.1):
+  eslint-module-utils@2.12.0(@typescript-eslint/parser@7.2.0(eslint@8.57.1)(typescript@5.7.3))(eslint-import-resolver-node@0.3.9)(eslint-import-resolver-typescript@3.8.4(eslint-plugin-import-x@4.6.1(eslint@8.57.1)(typescript@5.7.3))(eslint-plugin-import@2.31.0)(eslint@8.57.1))(eslint@8.57.1):
     dependencies:
       debug: 3.2.7
     optionalDependencies:
@@ -33798,7 +33807,7 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  eslint-module-utils@2.12.0(@typescript-eslint/parser@8.24.1(eslint@8.57.1)(typescript@5.7.3))(eslint-import-resolver-node@0.3.9)(eslint-import-resolver-typescript@3.8.2)(eslint@8.57.1):
+  eslint-module-utils@2.12.0(@typescript-eslint/parser@8.24.1(eslint@8.57.1)(typescript@5.7.3))(eslint-import-resolver-node@0.3.9)(eslint-import-resolver-typescript@3.8.2(eslint-plugin-import-x@4.6.1(eslint@8.57.1)(typescript@5.7.3))(eslint-plugin-import@2.31.0)(eslint@8.57.1))(eslint@8.57.1):
     dependencies:
       debug: 3.2.7
     optionalDependencies:
@@ -33809,7 +33818,7 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  eslint-module-utils@2.12.0(@typescript-eslint/parser@8.24.1(eslint@9.22.0(jiti@2.4.2))(typescript@5.7.3))(eslint-import-resolver-node@0.3.9)(eslint-import-resolver-typescript@3.8.2)(eslint@9.22.0(jiti@2.4.2)):
+  eslint-module-utils@2.12.0(@typescript-eslint/parser@8.24.1(eslint@9.22.0(jiti@2.4.2))(typescript@5.7.3))(eslint-import-resolver-node@0.3.9)(eslint-import-resolver-typescript@3.8.2(eslint-plugin-import-x@4.6.1(eslint@9.22.0(jiti@2.4.2))(typescript@5.7.3))(eslint-plugin-import@2.31.0)(eslint@9.22.0(jiti@2.4.2)))(eslint@9.22.0(jiti@2.4.2)):
     dependencies:
       debug: 3.2.7
     optionalDependencies:
@@ -33909,7 +33918,7 @@ snapshots:
       doctrine: 2.1.0
       eslint: 8.57.1
       eslint-import-resolver-node: 0.3.9
-      eslint-module-utils: 2.12.0(@typescript-eslint/parser@7.2.0(eslint@8.57.1)(typescript@5.7.3))(eslint-import-resolver-node@0.3.9)(eslint-import-resolver-typescript@3.8.4)(eslint@8.57.1)
+      eslint-module-utils: 2.12.0(@typescript-eslint/parser@7.2.0(eslint@8.57.1)(typescript@5.7.3))(eslint-import-resolver-node@0.3.9)(eslint-import-resolver-typescript@3.8.4(eslint-plugin-import-x@4.6.1(eslint@8.57.1)(typescript@5.7.3))(eslint-plugin-import@2.31.0)(eslint@8.57.1))(eslint@8.57.1)
       hasown: 2.0.2
       is-core-module: 2.16.1
       is-glob: 4.0.3
@@ -33938,7 +33947,7 @@ snapshots:
       doctrine: 2.1.0
       eslint: 8.57.1
       eslint-import-resolver-node: 0.3.9
-      eslint-module-utils: 2.12.0(@typescript-eslint/parser@8.24.1(eslint@8.57.1)(typescript@5.7.3))(eslint-import-resolver-node@0.3.9)(eslint-import-resolver-typescript@3.8.2)(eslint@8.57.1)
+      eslint-module-utils: 2.12.0(@typescript-eslint/parser@8.24.1(eslint@8.57.1)(typescript@5.7.3))(eslint-import-resolver-node@0.3.9)(eslint-import-resolver-typescript@3.8.2(eslint-plugin-import-x@4.6.1(eslint@8.57.1)(typescript@5.7.3))(eslint-plugin-import@2.31.0)(eslint@8.57.1))(eslint@8.57.1)
       hasown: 2.0.2
       is-core-module: 2.16.1
       is-glob: 4.0.3
@@ -33967,7 +33976,7 @@ snapshots:
       doctrine: 2.1.0
       eslint: 9.22.0(jiti@2.4.2)
       eslint-import-resolver-node: 0.3.9
-      eslint-module-utils: 2.12.0(@typescript-eslint/parser@8.24.1(eslint@9.22.0(jiti@2.4.2))(typescript@5.7.3))(eslint-import-resolver-node@0.3.9)(eslint-import-resolver-typescript@3.8.2)(eslint@9.22.0(jiti@2.4.2))
+      eslint-module-utils: 2.12.0(@typescript-eslint/parser@8.24.1(eslint@9.22.0(jiti@2.4.2))(typescript@5.7.3))(eslint-import-resolver-node@0.3.9)(eslint-import-resolver-typescript@3.8.2(eslint-plugin-import-x@4.6.1(eslint@9.22.0(jiti@2.4.2))(typescript@5.7.3))(eslint-plugin-import@2.31.0)(eslint@9.22.0(jiti@2.4.2)))(eslint@9.22.0(jiti@2.4.2))
       hasown: 2.0.2
       is-core-module: 2.16.1
       is-glob: 4.0.3
