@@ -1,6 +1,6 @@
 {
   "name": "@mastra/memory",
-  "version": "0.2.0-alpha.9",
+  "version": "0.2.0",
   "description": "",
   "type": "module",
   "main": "./dist/index.js",
@@ -40,7 +40,7 @@
   },
   "scripts": {
     "check": "tsc --noEmit",
-    "build": "pnpm run check && tsup src/index.ts --format esm,cjs --experimental-dts --clean --treeshake",
+    "build": "pnpm run check && tsup src/index.ts --format esm,cjs --experimental-dts --clean --treeshake=smallest --splitting",
     "build:watch": "pnpm build --watch",
     "test:integration": "cd integration-tests && pnpm run test",
     "test": "pnpm test:integration",
@@ -51,23 +51,23 @@
   "license": "ISC",
   "dependencies": {
     "@mastra/core": "workspace:^",
-    "@upstash/redis": "^1.34.3",
-    "ai": "^4.0.12",
-    "pg": "^8.13.1",
-    "pg-pool": "^3.7.0",
+    "@upstash/redis": "^1.34.5",
+    "ai": "^4.1.54",
+    "pg": "^8.13.3",
+    "pg-pool": "^3.7.1",
     "postgres": "^3.4.5",
     "redis": "^4.7.0",
-    "zod": "^3.24.1"
+    "zod": "^3.24.2"
   },
   "devDependencies": {
     "@internal/lint": "workspace:*",
-    "@microsoft/api-extractor": "^7.49.2",
-    "@types/node": "^22.13.1",
-    "@types/pg": "^8.11.10",
-    "eslint": "^9.20.1",
-    "tsup": "^8.0.1",
-    "typescript": "^5.7.3",
-    "typescript-eslint": "^8.20.0",
-    "vitest": "^3.0.4"
+    "@microsoft/api-extractor": "^7.52.1",
+    "@types/node": "^22.13.10",
+    "@types/pg": "^8.11.11",
+    "eslint": "^9.22.0",
+    "tsup": "^8.4.0",
+    "typescript": "^5.8.2",
+    "typescript-eslint": "^8.26.1",
+    "vitest": "^3.0.8"
   }
 }

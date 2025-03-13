@@ -1,3 +1,4 @@
+import type { ToolsInput } from '../agent';
 import { MastraBase } from '../base';
 import { InstrumentClass } from '../telemetry';
 
@@ -6,16 +7,13 @@ export type VoiceEventType = 'speaking' | 'writing' | 'error' | string;
 
 // Define event data structure for each event type
 export interface VoiceEventMap {
-  speaking: { text: string; audioStream?: NodeJS.ReadableStream };
-  writing: { text: string };
+  speaking: { audio?: NodeJS.ReadableStream };
+  writing: { text: string; role: 'assistant' | 'user' };
   error: { message: string; code?: string; details?: unknown };
-  thinking: { prompt?: string };
-  listening: { audioStream?: NodeJS.ReadableStream };
   [key: string]: unknown; // Allow for custom events
 }
 
 interface BuiltInModelConfig {
-  provider: string;
   name: string;
   apiKey?: string;
 }
@@ -40,9 +38,7 @@ export abstract class MastraVoice<
   TOptions = unknown,
   TSpeakOptions = unknown,
   TListenOptions = unknown,
-  TTuneConfig = unknown,
-  THuddleConfig = unknown,
-  TTools = unknown,
+  TTools extends ToolsInput = ToolsInput,
   TEventArgs extends VoiceEventMap = VoiceEventMap,
   TSpeakerMetadata = unknown,
 > extends MastraBase {
@@ -93,7 +89,6 @@ export abstract class MastraVoice<
     input: string | NodeJS.ReadableStream,
     options?: {
       speaker?: string;
-      chatMode?: boolean; // Indicates if this is being used in chat mode
     } & TSpeakOptions,
   ): Promise<NodeJS.ReadableStream | void>;
 
@@ -111,22 +106,20 @@ export abstract class MastraVoice<
    */
   abstract listen(
     audioStream: NodeJS.ReadableStream | unknown, // Allow other audio input types for OpenAI realtime API
-    options?: {
-      chatMode?: boolean; // Indicates if this is being used in chat mode
-    } & TListenOptions,
+    options?: TListenOptions,
   ): Promise<string | NodeJS.ReadableStream | void>;
 
-  tune(_config: TTuneConfig): void {
-    this.logger.warn('tune not implemented by this voice provider');
+  updateConfig(_options: Record<string, unknown>): void {
+    this.logger.warn('updateConfig not implemented by this voice provider');
   }
 
   /**
    * Initializes a WebSocket or WebRTC connection for real-time communication
    * @returns Promise that resolves when the connection is established
    */
-  huddle(_config?: THuddleConfig): Promise<void> {
+  connect(_options?: Record<string, unknown>): Promise<void> {
     // Default implementation - voice providers can override if they support this feature
-    this.logger.warn('huddle not implemented by this voice provider');
+    this.logger.warn('connect not implemented by this voice provider');
     return Promise.resolve();
   }
 
@@ -134,7 +127,7 @@ export abstract class MastraVoice<
    * Relay audio data to the voice provider for real-time processing
    * @param audioData Audio data to relay
    */
-  relay(_audioData: NodeJS.ReadableStream | Int16Array): Promise<void> {
+  send(_audioData: NodeJS.ReadableStream | Int16Array): Promise<void> {
     // Default implementation - voice providers can override if they support this feature
     this.logger.warn('relay not implemented by this voice provider');
     return Promise.resolve();
@@ -143,26 +136,26 @@ export abstract class MastraVoice<
   /**
    * Trigger voice providers to respond
    */
-  answer(): Promise<void> {
+  answer(_options?: Record<string, unknown>): Promise<void> {
     this.logger.warn('answer not implemented by this voice provider');
     return Promise.resolve();
   }
 
   /**
    * Equip the voice provider with tools
-   * @param tools Array of tools to equip
+   * @param tools Array of tools to add
    */
-  equip(tools: Array<TTools>): void {
+  addTools(_tools: TTools): void {
     // Default implementation - voice providers can override if they support this feature
-    this.logger.warn('equip not implemented by this voice provider');
+    this.logger.warn('addTools not implemented by this voice provider');
   }
 
   /**
    * Disconnect from the WebSocket or WebRTC connection
    */
-  leave(): void {
+  close(): void {
     // Default implementation - voice providers can override if they support this feature
-    this.logger.warn('leave not implemented by this voice provider');
+    this.logger.warn('close not implemented by this voice provider');
   }
 
   /**

@@ -1,5 +1,89 @@
 # @mastra/deployer
 
+## 0.1.8
+
+### Patch Changes
+
+- 7a7a547: Fix telemetry getter in hono server
+- e9fbac5: Update Vercel tools to have id and update deployer
+- 8deb34c: Better workflow watch api + watch workflow by runId
+- c2dde91: Return full workflow details in api/workflows endpoint
+- 5d41958: Remove redundant mastra server agent stream, generate messages validation
+- 144b3d5: Update traces table UI, agent Chat UI
+  Fix get workflows breaking
+- 03236ec: Added GRPC Exporter for Laminar and updated dodcs for Observability Providers
+- 731dd8a: Removed useless logging that showed up when user selected log drains tab on the playground
+- 0461849: Fixed a bug where mastra.db file location was inconsistently created when running mastra dev vs running a file directly (tsx src/index.ts for ex)
+- fd4a1d7: Update cjs bundling to make sure files are split
+- 960690d: return runId from server on workflow watch
+- Updated dependencies [a910463]
+- Updated dependencies [59df7b6]
+- Updated dependencies [22643eb]
+- Updated dependencies [6feb23f]
+- Updated dependencies [f2d6727]
+- Updated dependencies [7a7a547]
+- Updated dependencies [29f3a82]
+- Updated dependencies [3d0e290]
+- Updated dependencies [e9fbac5]
+- Updated dependencies [301e4ee]
+- Updated dependencies [ee667a2]
+- Updated dependencies [dfbe4e9]
+- Updated dependencies [dab255b]
+- Updated dependencies [1e8bcbc]
+- Updated dependencies [f6678e4]
+- Updated dependencies [9e81f35]
+- Updated dependencies [c93798b]
+- Updated dependencies [a85ab24]
+- Updated dependencies [dbd9f2d]
+- Updated dependencies [59df7b6]
+- Updated dependencies [caefaa2]
+- Updated dependencies [c151ae6]
+- Updated dependencies [52e0418]
+- Updated dependencies [d79aedf]
+- Updated dependencies [03236ec]
+- Updated dependencies [3764e71]
+- Updated dependencies [df982db]
+- Updated dependencies [a171b37]
+- Updated dependencies [506f1d5]
+- Updated dependencies [02ffb7b]
+- Updated dependencies [0461849]
+- Updated dependencies [2259379]
+- Updated dependencies [aeb5e36]
+- Updated dependencies [f2301de]
+- Updated dependencies [358f069]
+- Updated dependencies [fd4a1d7]
+- Updated dependencies [c139344]
+  - @mastra/core@0.5.0
+
+## 0.1.8-alpha.12
+
+### Patch Changes
+
+- Updated dependencies [a85ab24]
+  - @mastra/core@0.5.0-alpha.12
+
+## 0.1.8-alpha.11
+
+### Patch Changes
+
+- 7a7a547: Fix telemetry getter in hono server
+- 8deb34c: Better workflow watch api + watch workflow by runId
+- 5d41958: Remove redundant mastra server agent stream, generate messages validation
+- fd4a1d7: Update cjs bundling to make sure files are split
+- Updated dependencies [7a7a547]
+- Updated dependencies [c93798b]
+- Updated dependencies [dbd9f2d]
+- Updated dependencies [a171b37]
+- Updated dependencies [fd4a1d7]
+  - @mastra/core@0.5.0-alpha.11
+
+## 0.1.8-alpha.10
+
+### Patch Changes
+
+- Updated dependencies [a910463]
+  - @mastra/core@0.5.0-alpha.10
+
 ## 0.1.8-alpha.9
 
 ### Patch Changes

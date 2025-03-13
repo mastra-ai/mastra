@@ -47,6 +47,10 @@ export function isFinalState(status: string): boolean {
   return ['completed', 'failed'].includes(status);
 }
 
+export function isLimboState(status: string): boolean {
+  return status === 'limbo';
+}
+
 export function recursivelyCheckForFinalState({
   value,
   suspendedPaths,
@@ -57,8 +61,8 @@ export function recursivelyCheckForFinalState({
   path: string;
 }): boolean {
   if (typeof value === 'string') {
-    // if the value is a final state or it has previouslyreached a suspended state, return true
-    return isFinalState(value) || suspendedPaths.has(path);
+    // if the value is a final state or limbo state or it has previously reached a suspended state, return true
+    return isFinalState(value) || isLimboState(value) || suspendedPaths.has(path);
   }
   return Object.keys(value).every(key =>
     recursivelyCheckForFinalState({ value: value[key]!, suspendedPaths, path: path ? `${path}.${key}` : key }),
