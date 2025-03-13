@@ -1,5 +1,5 @@
-import type { Span } from '@opentelemetry/api';
 import EventEmitter from 'node:events';
+import type { Span } from '@opentelemetry/api';
 import { get } from 'radash';
 import sift from 'sift';
 import type { MachineContext, Snapshot } from 'xstate';
@@ -449,7 +449,7 @@ export class Machine<
             conditionMet = false;
           } else if (conditionMet === WhenConditionReturnValue.CONTINUE_FAILED) {
             // TODO: send another kind of event instead
-            return { type: 'CONDITIONS_SKIPPED' as const };
+            return { type: 'CONDITIONS_SKIP_TO_COMPLETED' as const };
           } else if (conditionMet === WhenConditionReturnValue.LIMBO) {
             return { type: 'CONDITIONS_LIMBO' as const };
           } else if (conditionMet) {
@@ -459,7 +459,9 @@ export class Machine<
             });
             return { type: 'CONDITIONS_MET' as const };
           }
-          return { type: 'CONDITIONS_LIMBO' as const };
+          return this.#workflowInstance.hasSubscribers(stepNode.step.id)
+            ? { type: 'CONDITIONS_SKIPPED' as const }
+            : { type: 'CONDITIONS_LIMBO' as const };
         } else {
           const conditionMet = this.#evaluateCondition(stepConfig.when, context);
           if (!conditionMet) {
@@ -685,9 +687,33 @@ export class Machine<
               },
               {
                 guard: ({ event }: { event: { output: DependencyCheckOutput } }) => {
-                  return event.output.type === 'CONDITIONS_SKIPPED';
+                  return event.output.type === 'CONDITIONS_SKIP_TO_COMPLETED';
                 },
                 target: 'completed',
+              },
+              {
+                guard: ({ event }: { event: { output: DependencyCheckOutput } }) => {
+                  return event.output.type === 'CONDITIONS_SKIPPED';
+                },
+                actions: assign({
+                  steps: ({ context }) => {
+                    const newStep = {
+                      ...context.steps,
+                      [stepNode.step.id]: {
+                        status: 'skipped',
+                      },
+                    };
+
+                    this.logger.debug(`Step ${stepNode.step.id} skipped`, {
+                      stepId: stepNode.step.id,
+                      runId: this.#runId,
+                    });
+
+                    return newStep;
+                  },
+                }),
+
+                target: 'runningSubscribers',
               },
               {
                 guard: ({ event }: { event: { output: DependencyCheckOutput } }) => {
