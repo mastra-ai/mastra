@@ -5,7 +5,7 @@ description: Documentation for integrating Qdrant with Mastra, a vector similari
 
 # Qdrant Vector Store
 
-The QdrantVector class provides vector search using [Qdrant](https://qdrant.tech/), a vector similarity search engine. 
+The QdrantVector class provides vector search using [Qdrant](https://qdrant.tech/), a vector similarity search engine.
 It provides a production-ready service with a convenient API to store, search, and manage vectors with additional payload and extended filtering support.
 
 ## Constructor Options
@@ -113,7 +113,7 @@ It provides a production-ready service with a convenient API to store, search, a
       name: "includeVector",
       type: "boolean",
       isOptional: true,
-      defaultValue: "false", 
+      defaultValue: "false",
       description: "Whether to include vectors in the results",
     },
   ]}
@@ -157,6 +157,49 @@ interface IndexStats {
   ]}
 />
 
+### updateIndexById()
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "Name of the index to update",
+    },
+    {
+      name: "id",
+      type: "string",
+      description: "ID of the vector to update",
+    },
+    {
+      name: "update",
+      type: "{ vector?: number[]; metadata?: Record<string, any>; }",
+      description: "Object containing the vector and/or metadata to update",
+    },
+  ]}
+/>
+
+Updates a vector and/or its metadata in the specified index. If both vector and metadata are provided, both will be updated. If only one is provided, only that will be updated.
+
+### deleteIndexById()
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "Name of the index from which to delete the vector",
+    },
+    {
+      name: "id",
+      type: "string",
+      description: "ID of the vector to delete",
+    },
+  ]}
+/>
+
+Deletes a vector from the specified index by its ID.
+
 ## Response Types
 
 Query results are returned in this format:
@@ -187,5 +230,7 @@ try {
   }
 }
 ```
+
 ### Related
+
 - [Metadata Filters](./metadata-filters)

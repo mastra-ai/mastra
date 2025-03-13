@@ -120,10 +120,12 @@ export class WorkflowInstance<TSteps extends Step<any, any, any>[] = any, TTrigg
     triggerData,
     snapshot,
     stepId,
+    resumeData,
   }: {
     stepId?: string;
     triggerData?: z.infer<TTriggerSchema>;
     snapshot?: Snapshot<any>;
+    resumeData?: any; // TODO: once we have a resume schema plug that in here
   } = {}): Promise<Omit<WorkflowRunResult<TTriggerSchema, TSteps>, 'runId'>> {
     this.#executionSpan = this.#mastra?.getTelemetry()?.tracer.startSpan(`workflow.${this.name}.execute`, {
       attributes: { componentName: this.name, runId: this.runId },
@@ -135,7 +137,7 @@ export class WorkflowInstance<TSteps extends Step<any, any, any>[] = any, TTrigg
       triggerData: triggerData || {},
       attempts: Object.keys(this.#steps).reduce(
         (acc, stepKey) => {
-          acc[stepKey] = this.#steps[stepKey]?.retryConfig?.attempts || this.#retryConfig?.attempts || 3;
+          acc[stepKey] = this.#steps[stepKey]?.retryConfig?.attempts || this.#retryConfig?.attempts || 0;
           return acc;
         },
         {} as Record<string, number>,
@@ -146,10 +148,13 @@ export class WorkflowInstance<TSteps extends Step<any, any, any>[] = any, TTrigg
 
     if (snapshot) {
       const runState = snapshot as unknown as WorkflowRunState;
-      machineInput = runState.context;
+
       if (stepId && runState?.suspendedSteps?.[stepId]) {
         startStepId = runState.suspendedSteps[stepId];
         stepGraph = this.#stepSubscriberGraph[startStepId] ?? this.#stepGraph;
+        machineInput = runState.context;
+        // @ts-ignore
+        machineInput.resumeData = resumeData;
       }
     }
 
@@ -196,6 +201,10 @@ export class WorkflowInstance<TSteps extends Step<any, any, any>[] = any, TTrigg
     await this.persistWorkflowSnapshot();
 
     return { results, activePaths };
+  }
+
+  hasSubscribers(stepId: string) {
+    return Object.keys(this.#stepSubscriberGraph).some(key => key.split('&&').includes(stepId));
   }
 
   async runMachine(parentStepId: string, input: any) {

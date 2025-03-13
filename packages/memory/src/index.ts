@@ -71,7 +71,7 @@ export class Memory extends MastraMemory {
             messageRange: config?.semanticRecall?.messageRange ?? { before: 2, after: 2 },
           };
 
-    if (config?.semanticRecall && selectBy?.vectorSearchString && this.vector) {
+    if (config?.semanticRecall && selectBy?.vectorSearchString && this.vector && !!selectBy.vectorSearchString) {
       const { embedding } = await embed({
         value: selectBy.vectorSearchString,
         model: this.embedder,
@@ -239,7 +239,7 @@ export class Memory extends MastraMemory {
       const { indexName } = await this.createEmbeddingIndex();
 
       for (const message of messages) {
-        if (typeof message.content !== `string`) continue;
+        if (typeof message.content !== `string` || message.content === '') continue;
         const { embedding } = await embed({ value: message.content, model: this.embedder, maxRetries: 3 });
         await this.vector.upsert({
           indexName,

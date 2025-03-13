@@ -44,8 +44,6 @@ describe.skip('MastraMCPClient', () => {
       },
     });
 
-    console.log(response.text);
-
     expect(Object.keys(tools).length).toBeGreaterThan(0);
   }, 50000);
 });
