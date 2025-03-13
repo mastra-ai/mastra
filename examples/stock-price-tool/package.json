@@ -4,7 +4,7 @@
   "private": true,
   "main": "index.js",
   "scripts": {
-    "start": "npx bun src/mastra/index.ts",
+    "dev": "mastra dev",
     "test": "cross-env NODE_OPTIONS='--experimental-vm-modules --max-old-space-size=8192' jest"
   },
   "keywords": [],
@@ -14,12 +14,13 @@
   "dependencies": {
     "@ai-sdk/openai": "latest",
     "@mastra/core": "workspace:*",
-    "zod": "^3.24.0"
+    "zod": "^3.24.2"
   },
   "devDependencies": {
     "@jest/globals": "^29.7.0",
     "jest": "^29.7.0",
-    "ts-jest": "^29.2.5"
+    "mastra": "workspace:*",
+    "ts-jest": "^29.2.6"
   },
   "version": "0.0.1"
 }

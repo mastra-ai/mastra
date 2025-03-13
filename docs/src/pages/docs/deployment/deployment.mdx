@@ -22,9 +22,9 @@ Before you begin, ensure you have:
 ## Direct Platform Deployment
 
 Platform-specific deployers handle configuration and deployment for:
-- **Cloudflare Workers**
-- **Vercel**
-- **Netlify**
+- **[Cloudflare Workers](/docs/reference/deployer/cloudflare)**
+- **[Vercel](/docs/reference/deployer/vercel)**
+- **[Netlify](/docs/reference/deployer/netlify)**
 
 ### Installing Deployers
 
@@ -53,38 +53,51 @@ export const mastra = new Mastra({
   deployer: new CloudflareDeployer({
     scope: 'your-cloudflare-scope',
     projectName: 'your-project-name',
+    // See complete configuration options in the reference docs
   }),
 });
 ```
 
 ### Deployer Configuration
 
+Each deployer has specific configuration options. Below are basic examples, but refer to the reference documentation for complete details.
+
 #### Cloudflare Deployer
 
 ```typescript copy showLineNumbers
 new CloudflareDeployer({
-  scope: 'your-cloudflare-scope',
+  scope: 'your-cloudflare-account-id',
   projectName: 'your-project-name',
+  // For complete configuration options, see the reference documentation
 })
 ```
+
+[View Cloudflare Deployer Reference →](/docs/reference/deployer/cloudflare)
 
 #### Vercel Deployer
 
 ```typescript copy showLineNumbers
 new VercelDeployer({
-  scope: 'your-vercel-scope',
+  teamId: 'your-vercel-team-id',
   projectName: 'your-project-name',
+  token: 'your-vercel-token'
+  // For complete configuration options, see the reference documentation
 })
 ```
+
+[View Vercel Deployer Reference →](/docs/reference/deployer/vercel)
 
 #### Netlify Deployer
 
 ```typescript copy showLineNumbers
 new NetlifyDeployer({
-  scope: 'your-netlify-scope',
+  scope: 'your-netlify-team-slug',
   projectName: 'your-project-name',
+  token: 'your-netlify-token'
 })
 ```
+
+[View Netlify Deployer Reference →](/docs/reference/deployer/netlify)
 
 ## Universal Deployment
 

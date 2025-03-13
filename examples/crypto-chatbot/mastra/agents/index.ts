@@ -15,6 +15,9 @@ const memory = new Memory({
   storage: new PostgresStore({
     connectionString,
   }),
+  options: {
+    semanticRecall: false,
+  },
 });
 
 export const createCryptoAgent = (modelProvider: any, modelName: any) => {

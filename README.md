@@ -1,6 +1,6 @@
 # Mastra <img align="cener" alt="Project Status: Beta" src="https://img.shields.io/badge/beta-status-blue"> <img align="cener" alt="Project Status: Alpha" src="https://img.shields.io/badge/Y%20Combinator-W25-orange?style=flat-square">
 
-Mastra is an opinionated Typescript framework that helps you build AI applications and features quickly. It gives you the set of primitives you need: workflows, agents, RAG, integrations and evals. You can run Mastra on your local machine, or deploy to a serverless cloud.
+Mastra is an opinionated TypeScript framework that helps you build AI applications and features quickly. It gives you the set of primitives you need: workflows, agents, RAG, integrations and evals. You can run Mastra on your local machine, or deploy to a serverless cloud.
 
 The main Mastra features are:
 
@@ -27,6 +27,7 @@ If you don't have an API key for an LLM provider, you can get one from the follo
 - [OpenAI](https://platform.openai.com/)
 - [Anthropic](https://console.anthropic.com/settings/keys)
 - [Google Gemini](https://ai.google.dev/gemini-api/docs)
+- [Groq](https://console.groq.com/docs/overview)
 
 If you don't have an account with these providers, you can sign up and get an API key. Anthropic require a credit card to get an API key. Some OpenAI models and Gemini do not and have a generous free tier for its API.
 

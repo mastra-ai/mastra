@@ -20,7 +20,7 @@ export class CloudflareVector extends MastraVector {
     this.accountId = accountId;
 
     this.client = new Cloudflare({
-      apiKey: apiToken,
+      apiToken: apiToken,
     });
   }
 

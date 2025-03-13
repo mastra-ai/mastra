@@ -15,10 +15,9 @@ import type {
   UserContent,
 } from 'ai';
 import type { JSONSchema7 } from 'json-schema';
-import type { ZodSchema } from 'zod';
-import { z } from 'zod';
+import type { ZodSchema, z } from 'zod';
 
-import type { MastraPrimitives } from '../action';
+import type { MastraPrimitives, MastraUnion } from '../action';
 import { MastraBase } from '../base';
 import type { Metric } from '../eval';
 import { AvailableHooks, executeHook } from '../hooks';
@@ -26,13 +25,22 @@ import type { GenerateReturn, StreamReturn } from '../llm';
 import type { MastraLLMBase } from '../llm/model';
 import { MastraLLM } from '../llm/model';
 import { RegisteredLogger } from '../logger';
+import type { Mastra } from '../mastra';
 import type { MastraMemory } from '../memory/memory';
 import type { MemoryConfig, StorageThreadType } from '../memory/types';
 import { InstrumentClass } from '../telemetry';
-import type { CoreTool, ToolAction } from '../tools/types';
+import type { CoreTool } from '../tools/types';
+import { makeCoreTool, createMastraProxy, ensureToolProperties } from '../utils';
 import type { CompositeVoice } from '../voice';
 
-import type { AgentConfig, AgentGenerateOptions, AgentStreamOptions, ToolsetsInput } from './types';
+import type {
+  AgentConfig,
+  AgentGenerateOptions,
+  AgentStreamOptions,
+  MastraLanguageModel,
+  ToolsetsInput,
+  ToolsInput,
+} from './types';
 
 export * from './types';
 
@@ -41,14 +49,14 @@ export * from './types';
   excludeMethods: ['__setTools', '__setLogger', '__setTelemetry', 'log'],
 })
 export class Agent<
-  TTools extends Record<string, ToolAction<any, any, any>> = Record<string, ToolAction<any, any, any>>,
+  TTools extends ToolsInput = ToolsInput,
   TMetrics extends Record<string, Metric> = Record<string, Metric>,
 > extends MastraBase {
   public name: string;
   readonly llm: MastraLLMBase;
   instructions: string;
-  readonly model?: LanguageModelV1;
-  #mastra?: MastraPrimitives;
+  readonly model?: MastraLanguageModel;
+  #mastra?: Mastra;
   #memory?: MastraMemory;
   tools: TTools;
   /** @deprecated This property is deprecated. Use evals instead. */
@@ -74,11 +82,14 @@ export class Agent<
     this.evals = {} as TMetrics;
 
     if (config.tools) {
-      this.tools = config.tools;
+      this.tools = ensureToolProperties(config.tools) as TTools;
     }
 
     if (config.mastra) {
-      this.#mastra = config.mastra;
+      this.__registerPrimitives({
+        telemetry: config.mastra.getTelemetry(),
+        logger: config.mastra.getLogger(),
+      });
     }
 
     if (config.metrics) {
@@ -123,9 +134,11 @@ export class Agent<
 
     this.llm.__registerPrimitives(p);
 
-    this.#mastra = p;
-
     this.logger.debug(`[Agents:${this.name}] initialized.`, { model: this.model, name: this.name });
+  }
+
+  __registerMastra(mastra: Mastra) {
+    this.#mastra = mastra;
   }
 
   /**
@@ -252,6 +265,7 @@ export class Agent<
             ? (
                 await memory.rememberMessages({
                   threadId,
+                  resourceId,
                   config: memoryConfig,
                   vectorMessageSearch: messages
                     .slice(-1)
@@ -486,7 +500,13 @@ export class Agent<
 
     // Get memory tools if available
     const memory = this.getMemory();
-    const memoryTools = memory?.getTools();
+    const memoryTools = memory?.getTools?.();
+
+    let mastraProxy = undefined;
+    const logger = this.logger;
+    if (this.#mastra) {
+      mastraProxy = createMastraProxy({ mastra: this.#mastra, logger });
+    }
 
     const converted = Object.entries(this.tools || {}).reduce(
       (memo, value) => {
@@ -494,46 +514,17 @@ export class Agent<
         const tool = this.tools[k];
 
         if (tool) {
-          memo[k] = {
-            description: tool.description,
-            parameters: tool.inputSchema,
-            execute:
-              typeof tool?.execute === 'function'
-                ? async (args, options) => {
-                    try {
-                      this.logger.debug(`[Agent:${this.name}] - Executing tool ${k}`, {
-                        name: k,
-                        description: tool.description,
-                        args,
-                        runId,
-                        threadId,
-                        resourceId,
-                      });
-                      return (
-                        tool?.execute?.(
-                          {
-                            context: args,
-                            mastra: this.#mastra,
-                            memory,
-                            runId,
-                            threadId,
-                            resourceId,
-                          },
-                          options,
-                        ) ?? undefined
-                      );
-                    } catch (err) {
-                      this.logger.error(`[Agent:${this.name}] - Failed execution`, {
-                        error: err,
-                        runId,
-                        threadId,
-                        resourceId,
-                      });
-                      throw err;
-                    }
-                  }
-                : undefined,
+          const options = {
+            name: k,
+            runId,
+            threadId,
+            resourceId,
+            logger: this.logger,
+            mastra: mastraProxy as MastraUnion | undefined,
+            memory,
+            agentName: this.name,
           };
+          memo[k] = makeCoreTool(tool, options);
         }
         return memo;
       },
@@ -563,7 +554,7 @@ export class Agent<
                           tool?.execute?.(
                             {
                               context: args,
-                              mastra: this.#mastra,
+                              mastra: mastraProxy as MastraUnion | undefined,
                               memory,
                               runId,
                               threadId,
@@ -604,44 +595,15 @@ export class Agent<
       toolsFromToolsets.forEach(toolset => {
         Object.entries(toolset).forEach(([toolName, tool]) => {
           const toolObj = tool;
-          toolsFromToolsetsConverted[toolName] = {
-            description: toolObj.description || '',
-            parameters: toolObj.inputSchema,
-            execute:
-              typeof toolObj?.execute === 'function'
-                ? async (args, options) => {
-                    try {
-                      this.logger.debug(`[Agent:${this.name}] - Executing tool ${toolName}`, {
-                        name: toolName,
-                        description: toolObj.description,
-                        args,
-                        runId,
-                        threadId,
-                        resourceId,
-                      });
-                      return (
-                        toolObj?.execute?.(
-                          {
-                            context: args,
-                            runId,
-                            threadId,
-                            resourceId,
-                          },
-                          options,
-                        ) ?? undefined
-                      );
-                    } catch (error) {
-                      this.logger.error(`[Agent:${this.name}] - Failed toolset execution`, {
-                        error,
-                        runId,
-                        threadId,
-                        resourceId,
-                      });
-                      throw error;
-                    }
-                  }
-                : undefined,
+          const options = {
+            name: toolName,
+            runId,
+            threadId,
+            resourceId,
+            logger: this.logger,
+            agentName: this.name,
           };
+          toolsFromToolsetsConverted[toolName] = makeCoreTool(toolObj, options, 'toolset');
         });
       });
     }
@@ -880,7 +842,7 @@ export class Agent<
           content: messages,
         },
       ];
-    } else {
+    } else if (Array.isArray(messages)) {
       messagesToUse = messages.map(message => {
         if (typeof message === `string`) {
           return {
@@ -890,6 +852,8 @@ export class Agent<
         }
         return message;
       });
+    } else {
+      messagesToUse = [messages];
     }
 
     const runIdToUse = runId || randomUUID();

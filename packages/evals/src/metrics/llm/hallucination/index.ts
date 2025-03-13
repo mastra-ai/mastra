@@ -26,6 +26,7 @@ export class HallucinationMetric extends Metric {
 
   async measure(input: string, output: string): Promise<MetricResultWithReason> {
     const verdicts = await this.judge.evaluate(output, this.context);
+    console.log('verdicts', verdicts);
     const score = this.calculateScore(verdicts);
     const reason = await this.judge.getReason({
       input,

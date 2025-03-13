@@ -2,20 +2,15 @@ name: Quality assurance
 
 on:
   pull_request:
+    types: [opened, synchronize, reopened]
     branches: [main]
-    paths:
-      - 'packages/**'
-      - 'deployers/**'
-      - 'integrations/**'
-      - 'speech/**'
-      - 'stores/**'
-      - 'voice/**'
-      - '.github/workflows/lint.yml'
 
 jobs:
   lint:
     name: Lint
     runs-on: ubuntu-latest
+    # Run on main repository or for trusted bot PRs
+    if: ${{ github.repository == 'mastra-ai/mastra' }} && ${{ !contains(github.event.pull_request.files.*.path, 'examples/') && !contains(github.event.pull_request.files.*.path, 'docs/') && !contains(github.event.pull_request.files.*.path, '.changeset/') && !contains(github.event.pull_request.files.*.path, 'generated-changesets/') }}
     env:
       TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
       TURBO_TEAM: ${{ secrets.TURBO_TEAM }}
@@ -45,6 +40,8 @@ jobs:
   check-bundle:
     name: Validate build outputs
     runs-on: ubuntu-latest
+    # Run on main repository or for trusted bot PRs
+    if: ${{ github.repository == 'mastra-ai/mastra' }} && ${{ !contains(github.event.pull_request.files.*.path, 'examples/') && !contains(github.event.pull_request.files.*.path, 'docs/') && !contains(github.event.pull_request.files.*.path, '.changeset/') && !contains(github.event.pull_request.files.*.path, 'generated-changesets/') }}
     env:
       TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
       TURBO_TEAM: ${{ secrets.TURBO_TEAM }}

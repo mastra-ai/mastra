@@ -1,16 +1,19 @@
-import { createLogger } from '@mastra/core/logger'
-import { LibSQLStore } from '@mastra/core/storage/libsql'
-import { OTLPStorageExporter } from '@mastra/core/telemetry'
+import { createLogger } from '@mastra/core/logger';
+import { LibSQLStore } from '@mastra/core/storage/libsql';
+import { OTLPStorageExporter } from '@mastra/core/telemetry';
 import {
-  NodeSDK, getNodeAutoInstrumentations, ATTR_SERVICE_NAME, Resource,
+  NodeSDK,
+  getNodeAutoInstrumentations,
+  ATTR_SERVICE_NAME,
+  Resource,
   ParentBasedSampler,
   TraceIdRatioBasedSampler,
   AlwaysOnSampler,
   AlwaysOffSampler,
   OTLPHttpExporter,
+  OTLPGrpcExporter,
 } from '@mastra/core/telemetry/otel-vendor';
-import { telemetry } from './telemetry-config.mjs'
-
+import { telemetry } from './telemetry-config.mjs';
 
 function getSampler(config) {
   if (!config.sampling) {
@@ -34,25 +37,29 @@ function getSampler(config) {
     default:
       return new AlwaysOnSampler();
   }
-
 }
 
 async function getExporter(config) {
   if (config.export?.type === 'otlp') {
+    if(config.export?.protocol === "grpc") {
+      return new OTLPGrpcExporter({
+        url: config.export.endpoint,
+        headers: config.export.headers,
+      })
+    }
     return new OTLPHttpExporter({
       url: config.export.endpoint,
       headers: config.export.headers,
-    })
+    });
   } else if (config.export?.type === 'custom') {
-    return config.export.exporter
+    return config.export.exporter;
   } else {
     const storage = new LibSQLStore({
       config: {
-        // file lives in ./.mastra/output, and we need to write to ./.mastra/mastra.db
-        url: "file:../mastra.db",
+        url: 'file:.mastra/mastra.db',
       },
-    })
-    await storage.init()
+    });
+    await storage.init();
 
     return new OTLPStorageExporter({
       logger: createLogger({
@@ -60,7 +67,7 @@ async function getExporter(config) {
         level: 'silent',
       }),
       storage,
-    })
+    });
   }
 }
 
@@ -82,5 +89,6 @@ sdk.start();
 process.on('SIGTERM', () => {
   sdk.shutdown().catch(() => {
     // do nothing
-  })
+  });
 });
+

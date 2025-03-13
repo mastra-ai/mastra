@@ -147,7 +147,7 @@ const stepA1 = new Step({
             - Performance optimizations
           `;
 
-          const agent = mastra?.agents?.daneChangeLog;
+          const agent = mastra?.getAgent('daneChangeLog');
 
           if (!agent) {
             throw new Error('LLM not found');
@@ -203,7 +203,7 @@ const stepA2 = new Step({
       throw new Error('Message not found');
     }
 
-    const agent = mastra?.agents?.daneChangeLog;
+    const agent = mastra?.getAgent('daneChangeLog');
 
     if (!agent) {
       throw new Error('LLM not found');

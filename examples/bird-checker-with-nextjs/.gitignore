@@ -44,3 +44,4 @@ next-env.d.ts
 # mastra
 .mastra/admin/node_modules
 .mastra/admin/.next
+.env*.local
