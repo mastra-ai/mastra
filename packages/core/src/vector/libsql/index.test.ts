@@ -5,7 +5,7 @@ import { DefaultVectorDB } from './index.js';
 describe('DefaultVectorDB', () => {
   let vectorDB: DefaultVectorDB;
   const testIndexName = 'test_vectors';
-  const testIndexName2 = 'test_vectors1';
+  // const testIndexName2 = 'test_vectors1';
 
   beforeAll(async () => {
     vectorDB = new DefaultVectorDB({
@@ -21,10 +21,6 @@ describe('DefaultVectorDB', () => {
   // Index Management Tests
   describe('Index Management', () => {
     describe('createIndex', () => {
-      afterAll(async () => {
-        await vectorDB.deleteIndex(testIndexName2);
-      });
-
       it('should create a new vector table with specified dimensions', async () => {
         await vectorDB.createIndex({ indexName: testIndexName, dimension: 3 });
 

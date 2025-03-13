@@ -120,6 +120,15 @@ export class Machine<
       this.logger.debug(`Workflow snapshot received`, { runId: this.#runId, snapshot });
     }
 
+    const origSteps = input.steps;
+    const isResumedInitialStep = this.#stepGraph?.initial[0]?.step?.id === stepId;
+
+    if (isResumedInitialStep) {
+      // we should not supply a snapshot if we are resuming the first step of a stepGraph, as that will halt execution
+      snapshot = undefined;
+      input.steps = {};
+    }
+
     this.logger.debug(`Machine input prepared`, { runId: this.#runId, input });
 
     const actorSnapshot = snapshot
@@ -158,6 +167,7 @@ export class Machine<
 
     return new Promise((resolve, reject) => {
       if (!this.#actor) {
+        this.logger.error('Actor not initialized', { runId: this.#runId });
         const e = new Error('Actor not initialized');
         this.#executionSpan?.recordException(e);
         this.#executionSpan?.end();
@@ -190,15 +200,23 @@ export class Machine<
         });
 
         // Check if all parallel states are in a final state
-        if (!allStatesComplete) return;
+        if (!allStatesComplete) {
+          this.logger.debug('Not all states complete', {
+            allStatesComplete,
+            suspendedPaths: Array.from(suspendedPaths),
+            runId: this.#runId,
+          });
+          return;
+        }
 
         try {
           // Then cleanup and resolve
+          this.logger.debug('All states complete', { runId: this.#runId });
           await this.#workflowInstance.persistWorkflowSnapshot();
           this.#cleanup();
           this.#executionSpan?.end();
           resolve({
-            results: state.context.steps,
+            results: isResumedInitialStep ? { ...origSteps, ...state.context.steps } : state.context.steps,
             activePaths: getResultActivePaths(
               state as unknown as { value: Record<string, string>; context: { steps: Record<string, any> } },
             ),
@@ -211,7 +229,7 @@ export class Machine<
           this.#cleanup();
           this.#executionSpan?.end();
           resolve({
-            results: state.context.steps,
+            results: isResumedInitialStep ? { ...origSteps, ...state.context.steps } : state.context.steps,
             activePaths: getResultActivePaths(
               state as unknown as { value: Record<string, string>; context: { steps: Record<string, any> } },
             ),
@@ -634,7 +652,7 @@ export class Machine<
                     attempts: ({ context, event }) => {
                       if (event.output.type !== 'SUSPENDED') return context.attempts;
                       // if the step is suspended, reset the attempt count
-                      return { ...context.attempts, [stepNode.step.id]: stepNode.step.retryConfig?.attempts || 3 };
+                      return { ...context.attempts, [stepNode.step.id]: stepNode.step.retryConfig?.attempts || 0 };
                     },
                   }),
                 ],

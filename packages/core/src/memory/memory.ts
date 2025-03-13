@@ -12,7 +12,7 @@ import type {
 
 import { MastraBase } from '../base';
 import type { MastraStorage, StorageGetMessagesArg } from '../storage';
-import { DefaultStorage } from '../storage/libsql';
+import { DefaultProxyStorage } from '../storage/default-proxy-storage';
 import type { CoreTool } from '../tools';
 import { deepMerge } from '../utils';
 import type { MastraVector } from '../vector';
@@ -45,7 +45,7 @@ export abstract class MastraMemory extends MastraBase {
 
     this.storage =
       config.storage ||
-      new DefaultStorage({
+      new DefaultProxyStorage({
         config: {
           url: 'file:memory.db',
         },

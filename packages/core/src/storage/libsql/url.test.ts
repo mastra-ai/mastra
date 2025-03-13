@@ -1,4 +1,5 @@
-import { rmSync, mkdirSync, existsSync } from 'node:fs';
+import { existsSync } from 'node:fs';
+import { rm, stat, mkdir, mkdtemp } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -20,21 +21,27 @@ describe('LibSQLStore URL rewriting', () => {
   let originalCwd: string;
   let parentDir: string;
 
-  beforeEach(() => {
-    tmpDir = join(tmpdir(), 'mastra-test-libsql-store-url');
-    if (existsSync(tmpDir)) {
-      rmSync(tmpDir, { recursive: true, force: true });
+  beforeEach(async () => {
+    try {
+      tmpDir = await mkdtemp(join(tmpdir(), 'mastra-test-libsql-'));
+    } catch {
+      // ignore
     }
-    mkdirSync(tmpDir);
+
     originalCwd = process.cwd();
     process.chdir(tmpDir);
     parentDir = join(tmpDir, '..');
   });
 
-  afterEach(() => {
+  afterEach(async () => {
     process.chdir(originalCwd);
-    if (existsSync(tmpDir)) {
-      rmSync(tmpDir, { recursive: true, force: true });
+
+    try {
+      if (await stat(tmpDir)) {
+        await rm(tmpDir, { recursive: true, force: true });
+      }
+    } catch {
+      // ignore
     }
   });
 
@@ -42,6 +49,7 @@ describe('LibSQLStore URL rewriting', () => {
     it('should create db file in project root when running from project root', async () => {
       const store = new LibSQLStore({ config: { url: 'file:test.db' } });
       await store.init();
+
       expect(existsSync(join(tmpDir, 'test.db'))).toBe(true);
       expect(existsSync(join(tmpDir, '.mastra', 'test.db'))).toBe(false);
       expect(existsSync(join(tmpDir, '.mastra', 'output', 'test.db'))).toBe(false);
@@ -50,7 +58,7 @@ describe('LibSQLStore URL rewriting', () => {
 
     it('should create db file in project root when running from .mastra/output', async () => {
       const mastraOutputDir = join(tmpDir, '.mastra', 'output');
-      mkdirSync(mastraOutputDir, { recursive: true });
+      await mkdir(mastraOutputDir, { recursive: true });
       process.chdir(mastraOutputDir);
       const store = new LibSQLStore({ config: { url: 'file:test.db' } });
       await store.init();
@@ -62,7 +70,7 @@ describe('LibSQLStore URL rewriting', () => {
 
     it('should create db file in .mastra directory when explicitly specified', async () => {
       const mastraDir = join(tmpDir, '.mastra');
-      mkdirSync(mastraDir, { recursive: true });
+      await mkdir(mastraDir, { recursive: true });
       const store = new LibSQLStore({ config: { url: 'file:.mastra/test.db' } });
       await store.init();
       expect(existsSync(join(tmpDir, 'test.db'))).toBe(false);
@@ -74,7 +82,7 @@ describe('LibSQLStore URL rewriting', () => {
     it('should create db file in .mastra directory when explicitly specified and running from .mastra/output', async () => {
       const mastraDir = join(tmpDir, '.mastra');
       const mastraOutputDir = join(mastraDir, 'output');
-      mkdirSync(mastraOutputDir, { recursive: true });
+      await mkdir(mastraOutputDir, { recursive: true });
       process.chdir(mastraOutputDir);
       const store = new LibSQLStore({ config: { url: 'file:.mastra/test.db' } });
       await store.init();
@@ -107,7 +115,7 @@ describe('LibSQLStore URL rewriting', () => {
 
       // Switch to .mastra/output and write another record
       const mastraOutputDir = join(tmpDir, '.mastra', 'output');
-      mkdirSync(mastraOutputDir, { recursive: true });
+      await mkdir(mastraOutputDir, { recursive: true });
       process.chdir(mastraOutputDir);
 
       const store2 = new LibSQLStore({ config: { url: 'file:test.db' } });
@@ -157,4 +165,3 @@ describe('LibSQLStore URL rewriting', () => {
     });
   });
 });
-
