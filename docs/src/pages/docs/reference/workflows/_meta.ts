@@ -8,6 +8,8 @@ const meta = {
   then: ".then()",
   until: ".until()",
   while: ".while()",
+  if: ".if()",
+  else: ".else()",
   createRun: ".createRun()",
   start: ".start()",
   execute: ".execute()",

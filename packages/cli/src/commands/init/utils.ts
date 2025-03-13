@@ -44,7 +44,7 @@ export const getProviderImportAndModelItem = (llmProvider: LLMProvider) => {
     modelItem = `anthropic('claude-3-5-sonnet-20241022')`;
   } else if (llmProvider === 'groq') {
     providerImport = `import { groq } from '${getAISDKPackage(llmProvider)}';`;
-    modelItem = `groq('llama3-groq-70b-8192-tool-use-preview')`;
+    modelItem = `groq('llama-3.3-70b-versatile`;
   } else if (llmProvider === 'google') {
     providerImport = `import { google } from '${getAISDKPackage(llmProvider)}';`;
     modelItem = `google('gemini-1.5-pro-latest')`;
