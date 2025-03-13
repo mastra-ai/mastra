@@ -9,9 +9,7 @@ import { isReadableStream, transformTools } from './utils';
  */
 type VoiceEventType =
   | 'speak' // Emitted when starting to speak
-  | 'speaking' // Emitted while speaking with audio data
-  | 'silence' // Emitted when silence is detected
-  | 'listen' // Emitted when starting to listen
+  | 'writing' // Emitted while speaking with audio data
   | 'error'; // Emitted when an error occurs
 
 /**
@@ -247,7 +245,7 @@ export class OpenAIRealtimeVoice extends MastraVoice {
     if (typeof input !== 'string') {
       const chunks: Buffer[] = [];
       for await (const chunk of input) {
-        chunks.push(Buffer.from(chunk));
+        chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(String(chunk)));
       }
       input = Buffer.concat(chunks).toString('utf-8');
     }
@@ -376,7 +374,7 @@ export class OpenAIRealtimeVoice extends MastraVoice {
    * await voice.relay(micStream);
    * ```
    */
-  async send(audioData: NodeJS.ReadableStream): Promise<void> {
+  async send(audioData: NodeJS.ReadableStream | Int16Array): Promise<void> {
     if (!this.state || this.state !== 'open') {
       console.warn('Cannot relay audio when not open. Call open() first.');
       return;
@@ -393,6 +391,12 @@ export class OpenAIRealtimeVoice extends MastraVoice {
           this.emit('error', err);
         }
       });
+    } else if (audioData instanceof Int16Array) {
+      try {
+        this.client.appendInputAudio(audioData);
+      } catch (err) {
+        this.emit('error', err);
+      }
     } else {
       this.emit('error', new Error('Unsupported audio data format'));
     }
