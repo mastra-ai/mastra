@@ -21,42 +21,48 @@ export class CompositeVoice extends MastraVoice<unknown, unknown, unknown, Tools
     this.realtimeProvider = realtimeProvider;
   }
 
-  async speak(input: string | NodeJS.ReadableStream, options?: any) {
-    if (!this.speakProvider || !this.realtimeProvider) {
-      throw new Error('No speak provider or realtime provider configured');
-    }
-
+  /**
+   * Convert text to speech using the configured provider
+   * @param input Text or text stream to convert to speech
+   * @param options Speech options including speaker and provider-specific options
+   * @returns Audio stream or void if in realtime mode
+   */
+  async speak(
+    input: string | NodeJS.ReadableStream,
+    options?: { speaker?: string } & any,
+  ): Promise<NodeJS.ReadableStream | void> {
     if (this.realtimeProvider) {
-      await this.realtimeProvider.speak(input, options);
-      return;
+      return this.realtimeProvider.speak(input, options);
+    } else if (this.speakProvider) {
+      return this.speakProvider.speak(input, options);
     }
 
-    return this.speakProvider.speak(input, options);
+    throw new Error('No speak provider or realtime provider configured');
   }
 
   async listen(audioStream: NodeJS.ReadableStream, options?: any) {
-    if (!this.listenProvider || !this.realtimeProvider) {
-      throw new Error('No listen provider or realtime provider configured');
-    }
-
     if (this.realtimeProvider) {
-      await this.realtimeProvider.listen(audioStream, options);
-      return;
+      return await this.realtimeProvider.listen(audioStream, options);
+    } else if (this.listenProvider) {
+      return await this.listenProvider.listen(audioStream, options);
     }
 
-    return this.listenProvider.listen(audioStream, options);
+    throw new Error('No listen provider or realtime provider configured');
   }
 
   async getSpeakers() {
-    if (!this.speakProvider) {
-      throw new Error('No speak provider configured');
+    if (this.realtimeProvider) {
+      return this.realtimeProvider.getSpeakers();
+    } else if (this.speakProvider) {
+      return this.speakProvider.getSpeakers();
     }
-    return this.speakProvider.getSpeakers();
+
+    throw new Error('No speak provider or realtime provider configured');
   }
 
   updateConfig(options: Record<string, unknown>): void {
     if (!this.realtimeProvider) {
-      throw new Error('No realtime provider configured');
+      return;
     }
     this.realtimeProvider.updateConfig(options);
   }
@@ -99,7 +105,7 @@ export class CompositeVoice extends MastraVoice<unknown, unknown, unknown, Tools
    */
   addTools(tools: ToolsInput): void {
     if (!this.realtimeProvider) {
-      throw new Error('No realtime provider configured');
+      return;
     }
     this.realtimeProvider.addTools(tools);
   }
