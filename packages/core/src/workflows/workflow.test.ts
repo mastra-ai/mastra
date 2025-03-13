@@ -1281,9 +1281,6 @@ describe('Workflow', async () => {
         .then(finalStep)
         .commit();
 
-      counterWorkflow.watch(state => {
-        console.log('state', JSON.stringify(state, null, 2));
-      });
       const run = counterWorkflow.createRun();
       const { results } = await run.start({ triggerData: { target: 10, startValue: 0 } });
 
