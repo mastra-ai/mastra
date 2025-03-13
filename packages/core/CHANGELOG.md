@@ -1,5 +1,11 @@
 # @mastra/core
 
+## 0.6.1-alpha.0
+
+### Patch Changes
+
+- 7bcfaee: Remove node_modules-path dir which calls \_\_dirname at the top level and breaks some esm runtimes
+
 ## 0.6.0
 
 ### Minor Changes

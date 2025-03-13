@@ -1,5 +1,11 @@
 # create-mastra
 
+## 0.1.10-alpha.0
+
+### Patch Changes
+
+- 0f24546: Add google as a new LLM provider option in project creation
+
 ## 0.1.9
 
 ### Patch Changes
