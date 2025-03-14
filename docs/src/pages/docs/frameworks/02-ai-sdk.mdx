@@ -35,7 +35,6 @@ const agent = new Agent({
   model: openai("gpt-4-turbo"), // Model comes directly from AI SDK
 });
 
-// Use the agent
 const result = await agent.generate("What is the weather like?");
 ```
 
@@ -48,7 +47,7 @@ Mastra is compatible with AI SDK's hooks for seamless frontend integration:
 The `useChat` hook enables real-time chat interactions in your frontend application
 
 - Works with agent data streams i.e. `.toDataStreamResponse()`
-- The useChat API defaults to /api/chat
+- The useChat `api` defaults to `/api/chat`
 - Works with the Mastra REST API agent stream endpoint `{MASTRA_BASE_URL}/agents/:agentId/stream` for data streams,
 i.e. no structured output is defined. 
 
@@ -100,7 +99,7 @@ export function ChatComponent() {
 For single-turn completions, use the `useCompletion` hook:
 
 - Works with agent data streams i.e. `.toDataStreamResponse()`
-- The useCompletion API defaults to /api/completion
+- The useCompletion `api` defaults to `/api/completion`
 - Works with the Mastra REST API agent stream endpoint `{MASTRA_BASE_URL}/agents/:agentId/stream` for data streams,
 i.e. no structured output is defined. 
 
@@ -154,7 +153,7 @@ export function CompletionComponent() {
 For consuming text streams that represent JSON objects and parsing them into a complete object based on a schema.
 
 - Works with agent text streams i.e. `.toTextStreamResponse()`
-- The useObject API defaults to /api/completion
+- The useObject `api` defaults to `/api/completion`
 - Works with the Mastra REST API agent stream endpoint `{MASTRA_BASE_URL}/agents/:agentId/stream` for text streams,
 i.e. structured output is defined. 
 
@@ -193,5 +192,26 @@ export default function Page() {
     </div>
   );
 }
-
 ```
+
+## Tool Calling
+
+### AI SDK Tool Format
+
+Mastra  supports tools created using the AI SDK format, so you can use
+them directly with Mastra agents. See our tools doc on [Vercel AI SDK Tool Format
+](/docs/agents/02-adding-tools#vercel-ai-sdk-tool-format) for more details.
+
+
+### Client-side tool calling
+
+Mastra leverages AI SDK's tool calling, so what applies in AI SDK applies here still. 
+[Agent Tools](/docs/agents/02-adding-tools) in Mastra are 100% percent compatible with AI SDK tools.
+
+Mastra tools also expose an optional `execute` async function. It is optional because you might want to forward tool calls to the client or to a queue instead of executing them in the same process.
+
+One way to then leverage client-side tool calling is to use the `@ai-sdk/react` `useChat` hook's `onToolCall` property for
+client-side tool execution
+
+
+
