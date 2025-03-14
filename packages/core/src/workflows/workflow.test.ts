@@ -1689,7 +1689,7 @@ describe('Workflow', async () => {
       expect(result.results.step5).toEqual({ status: 'success', output: { result: 'success5' } });
     });
 
-    it.only('should run compound subscribers on a loop', async () => {
+    it('should run compound subscribers on a loop', async () => {
       const increment = vi.fn().mockImplementation(async ({ context }) => {
         // Get the current value (either from trigger or previous increment)
         const currentValue =
