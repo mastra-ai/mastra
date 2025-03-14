@@ -10,7 +10,7 @@ import { Telemetry } from '../telemetry';
 import { createTool } from '../tools';
 
 import { Step } from './step';
-import type { WorkflowContext, WorkflowResumeResult } from './types';
+import { WhenConditionReturnValue, type WorkflowContext, type WorkflowResumeResult } from './types';
 import { Workflow } from './workflow';
 
 const storage = new DefaultStorage({
@@ -1689,7 +1689,7 @@ describe('Workflow', async () => {
       expect(result.results.step5).toEqual({ status: 'success', output: { result: 'success5' } });
     });
 
-    it.skip('should run compound subscribers on a while loop', async () => {
+    it.only('should run compound subscribers on a loop', async () => {
       const increment = vi.fn().mockImplementation(async ({ context }) => {
         // Get the current value (either from trigger or previous increment)
         const currentValue =
@@ -1715,28 +1715,42 @@ describe('Workflow', async () => {
       const finalStep = new Step({
         id: 'final',
         description: 'Final step that prints the result',
-        execute: final,
+        execute: async (...rest) => {
+          console.log('calling final');
+          return final(...rest);
+        },
       });
 
       const mockAction = vi.fn<any>().mockResolvedValue({ result: 'success' });
       const dummyStep = new Step({
         id: 'dummy',
         description: 'Dummy step',
-        execute: mockAction,
+        execute: async (...rest) => {
+          console.log('calling dummyStep');
+          return mockAction(...rest);
+        },
       });
 
       const mockAction2 = vi.fn<any>().mockResolvedValue({ result: 'success' });
       const dummyStep2 = new Step({
         id: 'dummy2',
         description: 'Dummy step',
-        execute: mockAction2,
+        execute: async (...rest) => {
+          console.log('calling dummyStep2');
+          return mockAction2(...rest);
+        },
       });
 
       const mockAction3 = vi.fn<any>().mockResolvedValue({ result: 'success' });
       const dummyStep3 = new Step({
         id: 'dummy3',
         description: 'Dummy step',
-        execute: mockAction3,
+        execute: async (...rest) => {
+          console.log({ rest: rest[0].context.steps['increment'] }, '=======');
+          console.log(rest[0].context.getStepResult('increment'));
+          console.log('calling dummyStep3');
+          return mockAction3(...rest);
+        },
       });
 
       const counterWorkflow = new Workflow({
@@ -1755,14 +1769,23 @@ describe('Workflow', async () => {
         .step(dummyStep2)
         .after([dummyStep, dummyStep2])
         .step(dummyStep3)
-        .while(
-          {
-            ref: { step: incrementStep, path: 'newValue' },
-            query: { $lt: 10 },
+        .after(dummyStep3)
+        .step(incrementStep, {
+          when: async ({ context }) => {
+            const isPassed = context.getStepResult(incrementStep)?.newValue < 10;
+            if (isPassed) {
+              return true;
+            } else {
+              return WhenConditionReturnValue.LIMBO;
+            }
           },
-          incrementStep,
-        )
-        .then(finalStep)
+        })
+        .step(finalStep, {
+          when: async ({ context }) => {
+            const isPassed = context.getStepResult(incrementStep)?.newValue >= 10;
+            return isPassed;
+          },
+        })
         .commit();
 
       const run = counterWorkflow.createRun();
