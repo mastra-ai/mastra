@@ -1683,7 +1683,7 @@ describe('Workflow', async () => {
       expect(step5Action).toHaveBeenCalledTimes(2);
       expect(step6Action).toHaveBeenCalled();
       expect(step7Action).toHaveBeenCalled();
-      expect(step8Action).toHaveBeenCalledTimes(2);
+      expect(step8Action).toHaveBeenCalledTimes(3);
       expect(result.results.step1).toEqual({ status: 'success', output: { result: 'success1' } });
       expect(result.results.step2).toEqual({ status: 'success', output: { result: 'success2' } });
       expect(result.results.step5).toEqual({ status: 'success', output: { result: 'success5' } });
