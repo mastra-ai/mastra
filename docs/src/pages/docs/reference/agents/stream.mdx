@@ -33,6 +33,12 @@ An optional object that can include configuration for output structure, memory m
 <PropertiesTable
   content={[
     {
+      name: "instructions",
+      type: "string",
+      isOptional: true,
+      description: "Custom instructions that override the agent's default instructions for this specific generation. Useful for dynamically modifying agent behavior without creating a new agent instance.",
+    },
+    {
       name: "output",
       type: "Zod schema | JsonSchema7",
       isOptional: true,

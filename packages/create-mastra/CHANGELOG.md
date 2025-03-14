@@ -1,5 +1,30 @@
 # create-mastra
 
+## 0.1.10-alpha.0
+
+### Patch Changes
+
+- 0f24546: Add google as a new LLM provider option in project creation
+
+## 0.1.9
+
+### Patch Changes
+
+- c49f798: remove hardcoded localhost url in playground
+- d3d6fae: Deprecate mastra dev --env flag
+
+## 0.1.9-alpha.1
+
+### Patch Changes
+
+- c49f798: remove hardcoded localhost url in playground
+
+## 0.1.9-alpha.0
+
+### Patch Changes
+
+- d3d6fae: Deprecate mastra dev --env flag
+
 ## 0.1.8
 
 ### Patch Changes

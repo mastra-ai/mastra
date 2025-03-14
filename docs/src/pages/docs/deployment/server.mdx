@@ -1,0 +1,114 @@
+---
+title: "MastraServer"
+description: "Configure and customize the Mastra server with middleware and other options"
+---
+
+# Mastra Server
+
+When you deploy a Mastra application, it runs as an HTTP server that exposes your agents, workflows, and other functionality as API endpoints. This page explains how to configure and customize the server behavior.
+
+## Server Architecture
+
+Mastra uses [Hono](https://hono.dev) as its underlying HTTP server framework. When you build a Mastra application using `mastra build`, it generates a Hono-based HTTP server in the `.mastra` directory.
+
+The server provides:
+- API endpoints for all registered agents
+- API endpoints for all registered workflows
+- Custom middleware support
+
+## Server Middleware
+
+Mastra allows you to configure custom middleware functions that will be applied to API routes. This is useful for adding authentication, logging, CORS, or other HTTP-level functionality to your API endpoints.
+
+```typescript copy showLineNumbers
+import { Mastra } from '@mastra/core';
+
+export const mastra = new Mastra({
+  // Other configuration options
+  serverMiddleware: [
+    {
+      handler: async (c, next) => {
+        // Example: Add authentication check
+        const authHeader = c.req.header('Authorization');
+        if (!authHeader) {
+          return new Response('Unauthorized', { status: 401 });
+        }
+        
+        // Continue to the next middleware or route handler
+        await next();
+      },
+      path: '/api/*', // Optional: defaults to '/api/*' if not specified
+    },
+    {
+      handler: async (c, next) => {
+        // Example: Add request logging
+        console.log(`${c.req.method} ${c.req.url}`);
+        await next();
+      },
+      // This middleware will apply to all routes since no path is specified
+    }
+  ]
+});
+```
+
+### Middleware Behavior
+
+Each middleware function:
+- Receives a Hono context object (`c`) and a `next` function
+- Can return a `Response` to short-circuit the request handling
+- Can call `next()` to continue to the next middleware or route handler
+- Can optionally specify a path pattern (defaults to '/api/*')
+
+### Common Middleware Use Cases
+
+#### Authentication
+
+```typescript copy
+{
+  handler: async (c, next) => {
+    const authHeader = c.req.header('Authorization');
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      return new Response('Unauthorized', { status: 401 });
+    }
+    
+    const token = authHeader.split(' ')[1];
+    // Validate token here
+    
+    await next();
+  },
+  path: '/api/*',
+}
+```
+
+#### CORS Support
+
+```typescript copy
+{
+  handler: async (c, next) => {
+    // Add CORS headers
+    c.header('Access-Control-Allow-Origin', '*');
+    c.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+    c.header('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+    
+    // Handle preflight requests
+    if (c.req.method === 'OPTIONS') {
+      return new Response(null, { status: 204 });
+    }
+    
+    await next();
+  }
+}
+```
+
+#### Request Logging
+
+```typescript copy
+{
+  handler: async (c, next) => {
+    const start = Date.now();
+    await next();
+    const duration = Date.now() - start;
+    console.log(`${c.req.method} ${c.req.url} - ${duration}ms`);
+  }
+}
+```

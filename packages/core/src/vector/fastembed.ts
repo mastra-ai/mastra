@@ -1,18 +1,12 @@
-import path from 'path';
+import fsp from 'node:fs/promises';
+import os from 'node:os';
+import path from 'node:path';
 import { experimental_customProvider } from 'ai';
-// @ts-ignore no types for this package
-import node_modulesPath from 'node_modules-path';
 
-let cachedPath: false | string = false;
-function getModelCachePath() {
-  if (cachedPath) return cachedPath;
-
-  // TODO: we can set this somewhere for cloud to drop models there in advance
-  // for now it's in node_modules/.fastembed-model-cache
-  const firstNodeModules = node_modulesPath().split('node_modules')[0];
-  cachedPath = path.join(firstNodeModules, 'node_modules', '.fastembed-model-cache');
-
-  return cachedPath;
+async function getModelCachePath() {
+  const cachePath = path.join(os.homedir(), '.cache', 'mastra', 'fastembed-models');
+  await fsp.mkdir(cachePath, { recursive: true });
+  return cachePath;
 }
 
 function unbundleableImport(name: string) {
@@ -87,7 +81,7 @@ const memory = new Memory({
 
     const model = await FlagEmbedding.init({
       model: EmbeddingModel[modelType],
-      cacheDir: getModelCachePath(),
+      cacheDir: await getModelCachePath(),
     });
 
     // model.embed() returns an AsyncGenerator that processes texts in batches (default size 256)

@@ -1,5 +1,6 @@
 import type { ToolsInput } from '../agent';
-import { MastraVoice, type VoiceEventType, type VoiceEventMap } from '.';
+import { MastraVoice } from '.';
+import type { VoiceEventType, VoiceEventMap } from '.';
 
 export class CompositeVoice extends MastraVoice<unknown, unknown, unknown, ToolsInput, VoiceEventMap> {
   protected speakProvider?: MastraVoice;
@@ -96,7 +97,7 @@ export class CompositeVoice extends MastraVoice<unknown, unknown, unknown, Tools
     if (!this.realtimeProvider) {
       throw new Error('No realtime provider configured');
     }
-    return this.realtimeProvider.answer();
+    return this.realtimeProvider.answer(options);
   }
 
   /**

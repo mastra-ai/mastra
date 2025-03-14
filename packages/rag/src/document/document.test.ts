@@ -224,6 +224,187 @@ describe('MDocument', () => {
         expect(chunks.join('')).toBe(text);
       });
     });
+    it('should properly implement overlap in character chunking', async () => {
+      // Test basic overlap functionality
+      const text = 'a'.repeat(500) + 'b'.repeat(500) + 'c'.repeat(500);
+      const chunkSize = 600;
+      const overlap = 100;
+      const doc = MDocument.fromText(text);
+
+      const result = await doc.chunk({
+        strategy: 'character',
+        size: chunkSize,
+        overlap,
+      });
+
+      // Verify overlap between chunks
+      for (let i = 1; i < result.length; i++) {
+        const prevChunk = result[i - 1]?.text;
+        const currentChunk = result[i]?.text;
+
+        if (prevChunk && currentChunk) {
+          // Get the end of the previous chunk and start of current chunk
+          const prevEnd = prevChunk.slice(-overlap);
+          const currentStart = currentChunk.slice(0, overlap);
+
+          // There should be a common substring of length >= min(overlap, chunk length)
+          const commonSubstring = findCommonSubstring(prevEnd, currentStart);
+          expect(commonSubstring.length).toBeGreaterThan(0);
+        }
+      }
+    });
+
+    it('should ensure character chunks never exceed size limit', async () => {
+      // Create text with varying content to test size limits
+      const text = 'a'.repeat(50) + 'b'.repeat(100) + 'c'.repeat(30);
+      const chunkSize = 50;
+      const overlap = 10;
+
+      const doc = MDocument.fromText(text);
+      const chunks = await doc.chunk({
+        strategy: 'character',
+        size: chunkSize,
+        overlap,
+      });
+
+      chunks.forEach((chunk, i) => {
+        if (i > 0) {
+          const prevChunk = chunks[i - 1]?.text;
+          const actualOverlap = chunk.text.slice(0, overlap);
+          const expectedOverlap = prevChunk?.slice(-overlap);
+          expect(actualOverlap).toBe(expectedOverlap);
+        }
+      });
+
+      // Verify each chunk's size
+      let allChunksValid = true;
+      for (const chunk of chunks) {
+        if (chunk.text.length > chunkSize) {
+          allChunksValid = false;
+        }
+      }
+      expect(allChunksValid).toBe(true);
+
+      // Verify overlaps between consecutive chunks
+      for (let i = 1; i < chunks.length; i++) {
+        const prevChunk = chunks[i - 1]!;
+        const currentChunk = chunks[i]!;
+
+        // The end of the previous chunk should match the start of the current chunk
+        const prevEnd = prevChunk.text.slice(-overlap);
+        const currentStart = currentChunk.text.slice(0, overlap);
+
+        expect(currentStart).toBe(prevEnd);
+        expect(currentStart.length).toBeLessThanOrEqual(overlap);
+      }
+    });
+
+    it('should handle end chunks properly in character chunking', async () => {
+      const text = 'This is a test document that needs to be split into chunks with proper handling of the end.';
+      const chunkSize = 20;
+      const overlap = 5;
+
+      const testDoc = MDocument.fromText(text);
+      const chunks = await testDoc.chunk({
+        strategy: 'character',
+        size: chunkSize,
+        overlap,
+      });
+
+      // Verify no tiny fragments at the end
+      const lastChunk = chunks[chunks.length - 1]?.text;
+      expect(lastChunk?.length).toBeGreaterThan(5);
+
+      // Verify each chunk respects size limit
+      let allChunksValid = true;
+      for (const chunk of chunks) {
+        if (chunk.text.length > chunkSize) {
+          allChunksValid = false;
+        }
+      }
+      expect(allChunksValid).toBe(true);
+
+      // Verify each chunk size explicitly
+      for (const chunk of chunks) {
+        expect(chunk.text.length).toBeLessThanOrEqual(chunkSize);
+      }
+
+      // Verify overlaps between consecutive chunks
+      for (let i = 1; i < chunks.length; i++) {
+        const prevChunk = chunks[i - 1]!;
+        const currentChunk = chunks[i]!;
+
+        // The end of the previous chunk should match the start of the current chunk
+        const prevEnd = prevChunk.text.slice(-overlap);
+        const currentStart = currentChunk.text.slice(0, overlap);
+
+        expect(currentStart).toBe(prevEnd);
+        expect(currentStart.length).toBeLessThanOrEqual(overlap);
+      }
+    });
+    it('should not create tiny chunks at the end', async () => {
+      const text = 'ABCDEFGHIJ'; // 10 characters
+      const chunkSize = 4;
+      const overlap = 2;
+
+      const doc = MDocument.fromText(text);
+      const chunks = await doc.chunk({
+        strategy: 'character',
+        size: chunkSize,
+        overlap,
+      });
+
+      // Verify we don't have tiny chunks
+      chunks.forEach(chunk => {
+        // Each chunk should be either:
+        // 1. Full size (chunkSize)
+        // 2. Or at least half the chunk size if it's the last chunk
+        const minSize = chunk === chunks[chunks.length - 1] ? Math.floor(chunkSize / 2) : chunkSize;
+        expect(chunk.text.length).toBeGreaterThanOrEqual(minSize);
+      });
+
+      // Verify overlaps are maintained
+      for (let i = 1; i < chunks.length; i++) {
+        const prevChunk = chunks[i - 1]!;
+        const currentChunk = chunks[i]!;
+        const actualOverlap = currentChunk.text.slice(0, overlap);
+        const expectedOverlap = prevChunk.text.slice(-overlap);
+        expect(actualOverlap).toBe(expectedOverlap);
+      }
+    });
+  });
+
+  describe('text transformer overlap', () => {
+    it('should properly implement overlap in text splitting', async () => {
+      // Create a text with distinct sections that will be split
+      const text = 'Section1'.repeat(100) + '\n\n' + 'Section2'.repeat(100) + '\n\n' + 'Section3'.repeat(100);
+      const size = 300;
+      const overlapSize = 50;
+      const doc = MDocument.fromText(text, { meta: 'data' });
+
+      await doc.chunk({
+        strategy: 'recursive',
+        size,
+        overlap: overlapSize,
+        separator: '\n\n', // Split on double newlines
+      });
+
+      const docs = doc.getDocs();
+      expect(docs.length).toBeGreaterThan(1); // Should create multiple chunks
+
+      for (let i = 1; i < docs.length; i++) {
+        const prevChunk = docs[i - 1]?.text;
+        const currentChunk = docs[i]?.text;
+
+        if (prevChunk && currentChunk) {
+          // Check if there's some overlap between chunks
+          // We should find some common text between the end of the previous chunk
+          // and the beginning of the current chunk
+          const commonText = findCommonSubstring(prevChunk, currentChunk);
+          expect(commonText.length).toBeGreaterThan(0);
+        }
+      }
+    });
   });
 
   describe('chunkRecursive', () => {
@@ -286,18 +467,76 @@ describe('MDocument', () => {
     });
 
     it('should maintain context with overlap', async () => {
-      const text = 'This is a test.\nIt has multiple lines.\nEach line should be handled properly.';
+      // Create a longer text that will definitely be split into multiple chunks
+      const text =
+        'This is a test paragraph. '.repeat(50) +
+        '\n\n' +
+        'This is a second paragraph with different content. '.repeat(50) +
+        '\n\n' +
+        'This is a third paragraph with more unique content. '.repeat(50);
+      const doc = MDocument.fromText(text, { meta: 'data' });
+      const overlapSize = 20; // Explicit overlap size
+
+      await doc.chunk({
+        strategy: 'recursive',
+        size: 500, // Smaller chunk size to ensure multiple chunks
+        overlap: overlapSize,
+      });
+
+      const docs = doc.getDocs();
+
+      // Ensure we have multiple chunks to test overlap
+      expect(docs.length).toBeGreaterThan(1);
+
+      for (let i = 1; i < docs.length; i++) {
+        const prevChunk = docs[i - 1]?.text;
+        const currentChunk = docs[i]?.text;
+
+        if (prevChunk && currentChunk) {
+          // Test using two methods:
+
+          // 1. Check for shared words (original test)
+          const hasWordOverlap = prevChunk.split(' ').some(word => word.length > 1 && currentChunk.includes(word));
+
+          // 2. Check for shared character sequences
+          const commonText = findCommonSubstring(prevChunk, currentChunk);
+
+          // At least one of these overlap detection methods should succeed
+          expect(hasWordOverlap || commonText.length > 5).toBe(true);
+        }
+      }
+    });
+
+    it('should respect the specified overlap size', async () => {
+      const text = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.repeat(10); // Long repeating text
+      const chunkSize = 50;
+      const overlapSize = 20;
       const doc = MDocument.fromText(text, { meta: 'data' });
 
-      await doc.chunk();
+      await doc.chunk({
+        strategy: 'recursive',
+        size: chunkSize,
+        overlap: overlapSize,
+      });
 
-      for (let i = 1; i < doc.getDocs().length; i++) {
-        const prevChunk = doc.getDocs()[i - 1]?.text;
-        const currentChunk = doc.getDocs()?.[i]?.text;
+      const docs = doc.getDocs();
+      // Skip first chunk as it doesn't have a previous chunk to overlap with
+      for (let i = 1; i < docs.length; i++) {
+        const prevChunk = docs[i - 1]?.text;
+        const currentChunk = docs[i]?.text;
 
-        const hasOverlap = prevChunk?.split(' ').some(word => currentChunk?.includes(word));
+        if (prevChunk && currentChunk) {
+          // Get the end of the previous chunk
+          const prevEnd = prevChunk.slice(-overlapSize);
+          // Get the start of the current chunk
+          const currentStart = currentChunk.slice(0, overlapSize);
 
-        expect(hasOverlap).toBe(true);
+          // There should be some overlap between the end of the previous chunk
+          // and the start of the current chunk
+          expect(prevEnd).toContain(currentStart.slice(0, 5));
+          // The overlap shouldn't be the entire chunk
+          expect(prevChunk).not.toBe(currentChunk);
+        }
       }
     });
   });
@@ -1400,3 +1639,20 @@ describe('MDocument', () => {
     });
   });
 });
+
+// Helper function to find the longest common substring between two strings
+function findCommonSubstring(str1: string, str2: string): string {
+  let longest = '';
+
+  // Check for substrings of str1 in str2
+  for (let i = 0; i < str1.length; i++) {
+    for (let j = i + 1; j <= str1.length; j++) {
+      const substring = str1.substring(i, j);
+      if (substring.length > longest.length && str2.includes(substring)) {
+        longest = substring;
+      }
+    }
+  }
+
+  return longest;
+}

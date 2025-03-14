@@ -57,8 +57,8 @@ import { Memory } from '@mastra/memory';
 const memory = new Memory({
   options: {
     lastMessages: 10,
-    semanticRecall: true
-  }
+    semanticRecall: true,
+  },
 });
 ```
 
@@ -70,7 +70,7 @@ import { DefaultStorage } from '@mastra/core/storage';
 const storage = new DefaultStorage({
   name: 'my-storage',
   config: {
-    url: 'file:my-database.db', // or 'file:memory:' for in-memory
+    url: 'file:my-database.db', // or 'file::memory:' for in-memory
   },
 });
 

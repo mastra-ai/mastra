@@ -1,5 +1,5 @@
-import type { Span } from '@opentelemetry/api';
 import EventEmitter from 'node:events';
+import type { Span } from '@opentelemetry/api';
 import { get } from 'radash';
 import sift from 'sift';
 import type { MachineContext, Snapshot } from 'xstate';
@@ -120,6 +120,15 @@ export class Machine<
       this.logger.debug(`Workflow snapshot received`, { runId: this.#runId, snapshot });
     }
 
+    const origSteps = input.steps;
+    const isResumedInitialStep = this.#stepGraph?.initial[0]?.step?.id === stepId;
+
+    if (isResumedInitialStep) {
+      // we should not supply a snapshot if we are resuming the first step of a stepGraph, as that will halt execution
+      snapshot = undefined;
+      input.steps = {};
+    }
+
     this.logger.debug(`Machine input prepared`, { runId: this.#runId, input });
 
     const actorSnapshot = snapshot
@@ -158,6 +167,7 @@ export class Machine<
 
     return new Promise((resolve, reject) => {
       if (!this.#actor) {
+        this.logger.error('Actor not initialized', { runId: this.#runId });
         const e = new Error('Actor not initialized');
         this.#executionSpan?.recordException(e);
         this.#executionSpan?.end();
@@ -190,15 +200,23 @@ export class Machine<
         });
 
         // Check if all parallel states are in a final state
-        if (!allStatesComplete) return;
+        if (!allStatesComplete) {
+          this.logger.debug('Not all states complete', {
+            allStatesComplete,
+            suspendedPaths: Array.from(suspendedPaths),
+            runId: this.#runId,
+          });
+          return;
+        }
 
         try {
           // Then cleanup and resolve
+          this.logger.debug('All states complete', { runId: this.#runId });
           await this.#workflowInstance.persistWorkflowSnapshot();
           this.#cleanup();
           this.#executionSpan?.end();
           resolve({
-            results: state.context.steps,
+            results: isResumedInitialStep ? { ...origSteps, ...state.context.steps } : state.context.steps,
             activePaths: getResultActivePaths(
               state as unknown as { value: Record<string, string>; context: { steps: Record<string, any> } },
             ),
@@ -211,7 +229,7 @@ export class Machine<
           this.#cleanup();
           this.#executionSpan?.end();
           resolve({
-            results: state.context.steps,
+            results: isResumedInitialStep ? { ...origSteps, ...state.context.steps } : state.context.steps,
             activePaths: getResultActivePaths(
               state as unknown as { value: Record<string, string>; context: { steps: Record<string, any> } },
             ),
@@ -431,7 +449,7 @@ export class Machine<
             conditionMet = false;
           } else if (conditionMet === WhenConditionReturnValue.CONTINUE_FAILED) {
             // TODO: send another kind of event instead
-            return { type: 'CONDITIONS_SKIPPED' as const };
+            return { type: 'CONDITIONS_SKIP_TO_COMPLETED' as const };
           } else if (conditionMet === WhenConditionReturnValue.LIMBO) {
             return { type: 'CONDITIONS_LIMBO' as const };
           } else if (conditionMet) {
@@ -441,7 +459,9 @@ export class Machine<
             });
             return { type: 'CONDITIONS_MET' as const };
           }
-          return { type: 'CONDITIONS_LIMBO' as const };
+          return this.#workflowInstance.hasSubscribers(stepNode.step.id)
+            ? { type: 'CONDITIONS_SKIPPED' as const }
+            : { type: 'CONDITIONS_LIMBO' as const };
         } else {
           const conditionMet = this.#evaluateCondition(stepConfig.when, context);
           if (!conditionMet) {
@@ -634,7 +654,7 @@ export class Machine<
                     attempts: ({ context, event }) => {
                       if (event.output.type !== 'SUSPENDED') return context.attempts;
                       // if the step is suspended, reset the attempt count
-                      return { ...context.attempts, [stepNode.step.id]: stepNode.step.retryConfig?.attempts || 3 };
+                      return { ...context.attempts, [stepNode.step.id]: stepNode.step.retryConfig?.attempts || 0 };
                     },
                   }),
                 ],
@@ -667,9 +687,33 @@ export class Machine<
               },
               {
                 guard: ({ event }: { event: { output: DependencyCheckOutput } }) => {
-                  return event.output.type === 'CONDITIONS_SKIPPED';
+                  return event.output.type === 'CONDITIONS_SKIP_TO_COMPLETED';
                 },
                 target: 'completed',
+              },
+              {
+                guard: ({ event }: { event: { output: DependencyCheckOutput } }) => {
+                  return event.output.type === 'CONDITIONS_SKIPPED';
+                },
+                actions: assign({
+                  steps: ({ context }) => {
+                    const newStep = {
+                      ...context.steps,
+                      [stepNode.step.id]: {
+                        status: 'skipped',
+                      },
+                    };
+
+                    this.logger.debug(`Step ${stepNode.step.id} skipped`, {
+                      stepId: stepNode.step.id,
+                      runId: this.#runId,
+                    });
+
+                    return newStep;
+                  },
+                }),
+
+                target: 'runningSubscribers',
               },
               {
                 guard: ({ event }: { event: { output: DependencyCheckOutput } }) => {

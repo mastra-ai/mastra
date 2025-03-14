@@ -33,15 +33,11 @@ const stepTwo = new Step({
     incrementedValue: z.number(),
   }),
   execute: async ({ context, suspend }) => {
-    let stepValue = 0;
-    if (context.steps?.stepTwo?.status === 'success') {
-      stepValue = context.steps.stepTwo?.output.secondValue
-    }
 
-    let incrementedValue = 0;
-    if (context.steps?.stepOne?.status === 'success') {
-      incrementedValue = context.steps.stepOne.output.doubledValue + stepValue
-    }
+    const secondValue = context.resumeData?.secondValue ?? 0;
+    const doubledValue = context.getStepResult(stepOne)?.doubledValue ?? 0;
+
+    const incrementedValue = doubledValue + secondValue;
 
     if (incrementedValue < 100) {
       await suspend();
@@ -118,13 +114,15 @@ const getUserInput = new Step({
 const promptAgent = new Step({
   id: 'promptAgent',
   inputSchema: z.object({
-    guidance: z.string(),
+    resumeData: z.object({
+      guidance: z.string(),
+    }),
   }),
   execute: async ({ context, suspend }) => {
-    const userInput = context.getStepResult<{ userInput: string }>('getUserInput')?.userInput;
+    const userInput = context.getStepResult(getUserInput)?.userInput;
     console.log(`Generating content based on: ${userInput}`);
 
-    const guidance = context.getStepResult<{ guidance: string }>('promptAgent')?.guidance;
+    const guidance = context.resumeData?.guidance;
 
     // Simulate AI generating content
     const initialDraft = generateInitialDraft(userInput);
@@ -134,7 +132,7 @@ const promptAgent = new Step({
       return { modelOutput: initialDraft.content };
     }
 
-    console.log('Low confidence in generated content, suspending for human guidance');
+    console.log('Low confidence in generated content, suspending for human guidance', {guidance});
 
     // If confidence is low, suspend for human guidance
     if (!guidance) {
@@ -158,7 +156,7 @@ const promptAgent = new Step({
 const evaluateTone = new Step({
   id: 'evaluateToneConsistency',
   execute: async ({ context }) => {
-    const content = context.getStepResult<{ modelOutput: string }>('promptAgent')?.modelOutput;
+    const content = context.getStepResult(promptAgent)?.modelOutput;
 
     // Simulate evaluation
     return {
@@ -176,25 +174,27 @@ const evaluateTone = new Step({
 const improveResponse = new Step({
   id: 'improveResponse',
   inputSchema: z.object({
-    improvedContent: z.string(),
+    resumeData: z.object({
+      improvedContent: z.string(),
+      resumeAttempts: z.number(),
+    }),
   }),
   execute: async ({ context, suspend }) => {
-    const content = context.getStepResult<{ modelOutput: string }>('promptAgent')?.modelOutput;
+    const content = context.getStepResult(promptAgent)?.modelOutput;
     const toneScore =
-      context.getStepResult<{ toneScore: { score: number } }>('evaluateToneConsistency')?.toneScore.score ?? 0;
+      context.getStepResult(evaluateTone)?.toneScore.score ?? 0;
     const completenessScore =
-      context.getStepResult<{ completenessScore: { score: number } }>('evaluateToneConsistency')?.completenessScore
-        .score ?? 0;
+      context.getStepResult(evaluateTone)?.completenessScore.score ?? 0;
 
-    const improvedContent = context.getStepResult<{ improvedContent: string }>('improveResponse')?.improvedContent;
-    const resumeAttempts = context.getStepResult<{ resumeAttempts: number }>('improveResponse')?.resumeAttempts ?? 0;
+    const improvedContent = context.resumeData?.improvedContent;
+    const resumeAttempts = context.resumeData?.resumeAttempts ?? 0;
 
     // If scores are above threshold, make minor improvements
     if (toneScore > 0.8 && completenessScore > 0.8) {
       return { improvedOutput: makeMinorImprovements(content) };
     }
 
-    console.log('Content quality below threshold, suspending for human intervention');
+    console.log('Content quality below threshold, suspending for human intervention', {improvedContent, resumeAttempts});
 
     if (!improvedContent) {
       // Suspend with payload containing content and resume attempts
@@ -217,7 +217,7 @@ const improveResponse = new Step({
 const evaluateImproved = new Step({
   id: 'evaluateImprovedResponse',
   execute: async ({ context }) => {
-    const improvedContent = context.getStepResult<{ improvedOutput: string }>('improveResponse')?.improvedOutput;
+    const improvedContent = context.getStepResult(improveResponse)?.improvedOutput;
 
     // Simulate final evaluation
     return {
@@ -330,7 +330,8 @@ async function runWorkflow() {
         },
       });
 
-      improveResponseResumeAttempts = finalResult?.activePaths.get('improveResponse')?.suspendPayload?.resumeAttempts ?? 0;
+      improveResponseResumeAttempts =
+        finalResult?.activePaths.get('improveResponse')?.suspendPayload?.resumeAttempts ?? 0;
       improveResponseStatus = finalResult?.activePaths.get('improveResponse')?.status;
 
       console.log('Improved response result:', finalResult?.results);
@@ -343,7 +344,6 @@ async function runWorkflow() {
 const result = await runWorkflow();
 console.log('Workflow completed');
 console.log('Final workflow result:', result);
-
 ```
 
 <br />
