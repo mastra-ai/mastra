@@ -8,7 +8,7 @@ import {
   defaultGraphRagDescription,
   filterDescription,
   topKDescription,
-  queryDescription,
+  queryTextDescription,
 } from '../utils';
 
 export const createGraphRAGTool = ({
@@ -45,7 +45,7 @@ export const createGraphRAGTool = ({
   let isInitialized = false;
 
   const baseSchema = {
-    queryText: z.string().describe(queryDescription),
+    queryText: z.string().describe(queryTextDescription),
     topK: z.any().describe(topKDescription),
   };
   const inputSchema = enableFilter

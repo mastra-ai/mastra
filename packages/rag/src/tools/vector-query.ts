@@ -9,7 +9,7 @@ import {
   defaultVectorQueryDescription,
   filterDescription,
   topKDescription,
-  queryDescription,
+  queryTextDescription,
 } from '../utils';
 
 export const createVectorQueryTool = ({
@@ -33,7 +33,7 @@ export const createVectorQueryTool = ({
   const toolDescription = description || defaultVectorQueryDescription();
   // Create base schema with required fields
   const baseSchema = {
-    queryText: z.string().describe(queryDescription),
+    queryText: z.string().describe(queryTextDescription),
     topK: z.any().describe(topKDescription),
   };
   const inputSchema = enableFilter

@@ -4,7 +4,7 @@ export const defaultVectorQueryDescription = () =>
 export const defaultGraphRagDescription = () =>
   `Access and analyze relationships between information in the knowledge base to answer complex questions about connections and patterns.`;
 
-export const queryDescription = `The text query to search for in the vector database.
+export const queryTextDescription = `The text query to search for in the vector database.
 - ALWAYS provide a non-empty query string
 - Must contain the user's question or search terms
 - Example: "market data" or "financial reports"
