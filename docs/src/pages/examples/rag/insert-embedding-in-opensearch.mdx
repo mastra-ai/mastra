@@ -1,0 +1,50 @@
+---
+title: "Example: Insert Embeddings in OpenSearch | RAG | Mastra Docs"
+description: Example of using Mastra to store embeddings in OpenSearch for similarity search.
+---
+
+import { GithubLink } from "../../../components/github-link";
+
+# Insert Embedding in OpenSearch
+
+After generating embeddings, you need to store them in a vector database for similarity search. The `OpenSearchVector` class provides methods to create indexes and insert embeddings into OpenSearch, an open-source search engine. This example shows how to store embeddings in OpenSearch for later retrieval.
+
+```tsx copy
+import { openai } from "@ai-sdk/openai";
+import { OpenSearchVector } from "@mastra/opensearch";
+import { MDocument } from "@mastra/rag";
+import { embedMany } from "ai";
+
+const doc = MDocument.fromText("Your text content...");
+
+const chunks = await doc.chunk();
+
+const { embeddings } = await embedMany({
+  values: chunks.map((chunk) => chunk.text),
+  model: openai.embedding("text-embedding-3-small"),
+});
+
+const opensearch = new OpenSearchVector(process.env.OPENSEARCH_URL);
+
+await opensearch.createIndex({
+  indexName: "test_collection",
+  dimension: 1536,
+});
+
+await opensearch.upsert({
+  indexName: "test_collection",
+  vectors: embeddings,
+  metadata: chunks.map((chunk) => ({ text: chunk.text })),
+});
+```
+
+<br />
+<br />
+<hr className="dark:border-[#404040] border-gray-300" />
+<br />
+<br />
+<GithubLink
+  link={
+    "https://github.com/mastra-ai/mastra/blob/main/examples/basics/rag/insert-embedding-in-opensearch"
+  }
+/>
