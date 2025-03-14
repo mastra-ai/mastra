@@ -246,7 +246,7 @@ export class WorkflowInstance<TSteps extends Step<any, any, any>[] = any, TTrigg
           return;
         }
 
-        delete this.#compoundDependencies[key];
+        this.#initializeCompoundDependencies();
 
         const machine = new Machine({
           logger: this.logger,
