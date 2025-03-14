@@ -1194,7 +1194,7 @@ importers:
         version: link:../../packages/core
       braintrust:
         specifier: ^0.0.168
-        version: 0.0.168(@aws-sdk/credential-provider-web-identity@3.750.0)(openai@4.86.2(encoding@0.1.13)(ws@8.18.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))(zod@3.24.2))(react@19.0.0-rc-02c0e824-20241028)(sswr@2.1.0(svelte@5.20.2))(svelte@5.20.2)(vue@3.5.13(typescript@5.7.3))(zod@3.24.2)
+        version: 0.0.168(@aws-sdk/credential-provider-web-identity@3.750.0)(openai@4.87.3(encoding@0.1.13)(ws@8.18.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))(zod@3.24.2))(react@19.0.0-rc-02c0e824-20241028)(sswr@2.1.0(svelte@5.20.2))(svelte@5.20.2)(vue@3.5.13(typescript@5.7.3))(zod@3.24.2)
       class-variance-authority:
         specifier: ^0.7.1
         version: 0.7.1
@@ -2090,6 +2090,40 @@ importers:
         specifier: ^5.7.3
         version: 5.7.3
 
+  examples/voice-agent:
+    dependencies:
+      '@ai-sdk/openai':
+        specifier: ^1.2.1
+        version: 1.2.5(zod@3.24.2)
+      '@mastra/core':
+        specifier: workspace:*
+        version: link:../../packages/core
+      '@mastra/voice-openai-realtime':
+        specifier: workspace:*
+        version: link:../../voice/openai-realtime-api
+      '@yujohnnattrass/speaker-no-underflow-logs':
+        specifier: 0.5.6
+        version: 0.5.6
+      mastra:
+        specifier: workspace:*
+        version: link:../../packages/cli
+      node-mic:
+        specifier: ^1.0.1
+        version: 1.0.1
+      tsx:
+        specifier: ^4.19.3
+        version: 4.19.3
+      zod:
+        specifier: ^3.24.2
+        version: 3.24.2
+    devDependencies:
+      '@types/node':
+        specifier: ^22.13.9
+        version: 22.13.10
+      dotenv:
+        specifier: ^16.4.7
+        version: 16.4.7
+
   examples/weather-agent:
     dependencies:
       '@ai-sdk/openai':
@@ -2237,7 +2271,7 @@ importers:
         version: link:../../packages/core
       composio-core:
         specifier: ^0.3.3
-        version: 0.3.3(@aws-sdk/credential-provider-node@3.750.0)(@notionhq/client@2.2.16(encoding@0.1.13))(@pinecone-database/pinecone@4.1.0)(@swc/core@1.11.8(@swc/helpers@0.5.15))(@types/node@22.13.10)(assemblyai@4.9.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))(bufferutil@4.0.9)(chromadb@1.10.5(cohere-ai@7.16.0(encoding@0.1.13))(encoding@0.1.13)(ollama@0.5.13)(openai@4.86.2(encoding@0.1.13)(ws@8.18.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))(zod@3.24.2)))(d3-dsv@3.0.1)(encoding@0.1.13)(fast-xml-parser@4.4.1)(html-to-text@9.0.5)(ignore@5.3.2)(jsdom@20.0.3(bufferutil@4.0.9)(canvas@2.11.2(encoding@0.1.13))(utf-8-validate@6.0.5))(mammoth@1.9.0)(mongodb@6.13.0(@aws-sdk/credential-providers@3.750.0)(socks@2.8.4))(pdf-parse@1.1.1)(playwright@1.51.0)(react@19.0.0)(redis@4.7.0)(sswr@2.1.0(svelte@5.20.2))(svelte@5.20.2)(typescript@5.7.3)(utf-8-validate@6.0.5)(vue@3.5.13(typescript@5.7.3))(ws@8.18.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))
+        version: 0.3.3(@aws-sdk/credential-provider-node@3.750.0)(@notionhq/client@2.2.16(encoding@0.1.13))(@pinecone-database/pinecone@4.1.0)(@swc/core@1.11.8(@swc/helpers@0.5.15))(@types/node@22.13.10)(assemblyai@4.9.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))(bufferutil@4.0.9)(chromadb@1.10.5(cohere-ai@7.16.0(encoding@0.1.13))(encoding@0.1.13)(ollama@0.5.13)(openai@4.87.3(encoding@0.1.13)(ws@8.18.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))(zod@3.24.2)))(d3-dsv@3.0.1)(encoding@0.1.13)(fast-xml-parser@4.4.1)(html-to-text@9.0.5)(ignore@5.3.2)(jsdom@20.0.3(bufferutil@4.0.9)(canvas@2.11.2(encoding@0.1.13))(utf-8-validate@6.0.5))(mammoth@1.9.0)(mongodb@6.13.0(@aws-sdk/credential-providers@3.750.0)(socks@2.8.4))(pdf-parse@1.1.1)(playwright@1.51.0)(react@19.0.0)(redis@4.7.0)(sswr@2.1.0(svelte@5.20.2))(svelte@5.20.2)(typescript@5.7.3)(utf-8-validate@6.0.5)(vue@3.5.13(typescript@5.7.3))(ws@8.18.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))
       zod:
         specifier: ^3.24.2
         version: 3.24.2
@@ -3651,7 +3685,7 @@ importers:
         version: 1.0.19
       llamaindex:
         specifier: ^0.8.37
-        version: 0.8.37(@aws-crypto/sha256-js@5.2.0)(@aws-sdk/credential-providers@3.750.0)(@edge-runtime/vm@3.2.0)(@huggingface/transformers@3.3.3)(bufferutil@4.0.9)(cohere-ai@7.16.0(encoding@0.1.13))(encoding@0.1.13)(js-tiktoken@1.0.19)(jsdom@20.0.3(bufferutil@4.0.9)(canvas@2.11.2(encoding@0.1.13))(utf-8-validate@6.0.5))(openai@4.86.2(encoding@0.1.13)(ws@8.18.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))(zod@3.24.2))(pathe@2.0.3)(pg-query-stream@4.7.1(pg@8.13.3))(pg@8.13.3)(socks@2.8.4)(terser@5.39.0)(tree-sitter@0.22.4)(typescript@5.7.3)(utf-8-validate@6.0.5)(web-tree-sitter@0.24.7)(ws@8.18.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))(zod@3.24.2)
+        version: 0.8.37(@aws-crypto/sha256-js@5.2.0)(@aws-sdk/credential-providers@3.750.0)(@edge-runtime/vm@3.2.0)(@huggingface/transformers@3.3.3)(bufferutil@4.0.9)(cohere-ai@7.16.0(encoding@0.1.13))(encoding@0.1.13)(js-tiktoken@1.0.19)(jsdom@20.0.3(bufferutil@4.0.9)(canvas@2.11.2(encoding@0.1.13))(utf-8-validate@6.0.5))(openai@4.87.3(encoding@0.1.13)(ws@8.18.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))(zod@3.24.2))(pathe@2.0.3)(pg-query-stream@4.7.1(pg@8.13.3))(pg@8.13.3)(socks@2.8.4)(terser@5.39.0)(tree-sitter@0.22.4)(typescript@5.7.3)(utf-8-validate@6.0.5)(web-tree-sitter@0.24.7)(ws@8.18.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))(zod@3.24.2)
       node-html-better-parser:
         specifier: ^1.4.7
         version: 1.4.7
@@ -3898,7 +3932,7 @@ importers:
         version: link:../../packages/core
       openai:
         specifier: ^4.86.2
-        version: 4.86.2(encoding@0.1.13)(ws@8.18.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))(zod@3.24.2)
+        version: 4.87.3(encoding@0.1.13)(ws@8.18.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))(zod@3.24.2)
       zod:
         specifier: ^3.24.2
         version: 3.24.2
@@ -4053,7 +4087,7 @@ importers:
         version: link:../../packages/core
       chromadb:
         specifier: ^1.10.5
-        version: 1.10.5(cohere-ai@7.16.0(encoding@0.1.13))(encoding@0.1.13)(ollama@0.5.13)(openai@4.86.2(encoding@0.1.13)(ws@8.18.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))(zod@3.24.2))
+        version: 1.10.5(cohere-ai@7.16.0(encoding@0.1.13))(encoding@0.1.13)(ollama@0.5.13)(openai@4.87.3(encoding@0.1.13)(ws@8.18.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))(zod@3.24.2))
     devDependencies:
       '@internal/lint':
         specifier: workspace:*
@@ -4421,7 +4455,7 @@ importers:
         version: link:../../packages/core
       openai:
         specifier: ^4.86.2
-        version: 4.86.2(encoding@0.1.13)(ws@8.18.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))(zod@3.24.2)
+        version: 4.87.3(encoding@0.1.13)(ws@8.18.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))(zod@3.24.2)
       zod:
         specifier: ^3.24.2
         version: 3.24.2
@@ -4597,6 +4631,12 @@ packages:
     peerDependencies:
       zod: ^3.0.0
 
+  '@ai-sdk/openai@1.2.5':
+    resolution: {integrity: sha512-COK7LzspgQQh5Yq070xfDdVMvp8WX592rXRaMaYNNqu1xpzahxDcM24aF9xgKYWuYH0UMoOw4UmWGwGxr6ygIg==}
+    engines: {node: '>=18'}
+    peerDependencies:
+      zod: ^3.0.0
+
   '@ai-sdk/provider-utils@1.0.2':
     resolution: {integrity: sha512-57f6O4OFVNEpI8Z8o+K40tIB3YQiTw+VCql/qrAO9Utq7Ti1o6+X9tvm177DlZJL7ft0Rwzvgy48S9YhrEKgmA==}
     engines: {node: '>=18'}
@@ -4624,6 +4664,15 @@ packages:
       zod:
         optional: true
 
+  '@ai-sdk/provider-utils@2.1.13':
+    resolution: {integrity: sha512-kLjqsfOdONr6DGcGEntFYM1niXz1H05vyZNf9OAzK+KKKc64izyP4/q/9HX7W4+6g8hm6BnmKxu8vkr6FSOqDg==}
+    engines: {node: '>=18'}
+    peerDependencies:
+      zod: ^3.0.0
+    peerDependenciesMeta:
+      zod:
+        optional: true
+
   '@ai-sdk/provider@0.0.11':
     resolution: {integrity: sha512-VTipPQ92Moa5Ovg/nZIc8yNoIFfukZjUHZcQMduJbiUh3CLQyrBAKTEV9AwjPy8wgVxj3+GZjon0yyOJKhfp5g==}
     engines: {node: '>=18'}
@@ -4638,6 +4687,10 @@ packages:
 
   '@ai-sdk/provider@1.0.10':
     resolution: {integrity: sha512-pco8Zl9U0xwXI+nCLc0woMtxbvjU8hRmGTseAUiPHFLYAAL8trRPCukg69IDeinOvIeo1SmXxAIdWWPZOLb4Cg==}
+    engines: {node: '>=18'}
+
+  '@ai-sdk/provider@1.0.11':
+    resolution: {integrity: sha512-CPyImHGiT3svyfmvPvAFTianZzWFtm0qK82XjwlQIA1C3IQ2iku/PMQXi7aFyrX0TyMh3VTkJPB03tjU2VXVrw==}
     engines: {node: '>=18'}
 
   '@ai-sdk/provider@1.0.8':
@@ -11577,6 +11630,10 @@ packages:
   '@xyflow/system@0.0.52':
     resolution: {integrity: sha512-pJBMaoh/GEebIABWEIxAai0yf57dm+kH7J/Br+LnLFPuJL87Fhcmm4KFWd/bCUy/kCWUg+2/yFAGY0AUHRPOnQ==}
 
+  '@yujohnnattrass/speaker-no-underflow-logs@0.5.6':
+    resolution: {integrity: sha512-lX6x4SxeEPJG83MRXxB9UxbbSUT4vMOJWdKfcldtbap86JoZmr/HasyQ5Y9jSASy6nbQiXNXtTtACedVo5slrA==}
+    engines: {node: '>=8.6'}
+
   '@zilliz/milvus2-sdk-node@2.5.5':
     resolution: {integrity: sha512-vKDbNu6auOTV0PZSvjKhdXR4wEs+ldREmYA3Ffll2kqJxaljAXmTcDXCw7arFa+/n+xDsg+nP1KTpuZATYDZ8g==}
 
@@ -12218,6 +12275,12 @@ packages:
     engines: {node: '>=16.20.1'}
     deprecated: a critical bug affecting only useBigInt64=true deserialization usage is fixed in bson@6.10.3
 
+  buffer-alloc-unsafe@1.1.0:
+    resolution: {integrity: sha512-TEM2iMIEQdJ2yjPJoSIsldnleVaAk1oW3DBVUykyOLsEsFmEc9kn+SFFPz+gl54KQNxlDnAwCXosOS9Okx2xAg==}
+
+  buffer-alloc@1.2.0:
+    resolution: {integrity: sha512-CFsHQgjtW1UChdXgbyJGtnm+O/uLQeZdtbDo8mfUgYXCHSM1wgrVxXm6bSyrUuErEb+4sYVGCzASBRot7zyrow==}
+
   buffer-crc32@0.2.13:
     resolution: {integrity: sha512-VO9Ht/+p3SN7SKWqcrgEzjGbRSJYTx+Q1pTQC0wrWqHx0vpJraQ6GtHx8tvcg1rlK1byhU5gccxgOgj7B0TDkQ==}
 
@@ -12227,6 +12290,9 @@ packages:
 
   buffer-equal-constant-time@1.0.1:
     resolution: {integrity: sha512-zRpUiDwd/xk6ADqPMATG8vc9VPrkck7T07OIx0gnjmJAnHnTVXNQG3vfvWNuiZIkwu9KrKdA1iJKfsfTVxE6NA==}
+
+  buffer-fill@1.0.0:
+    resolution: {integrity: sha512-T7zexNBwiiaCOGDg9xNX9PBmjrubblRkENuptryuI64URkXDFum9il/JGL8Lm8wYfAXpredVXXZz7eMHilimiQ==}
 
   buffer-from@1.1.2:
     resolution: {integrity: sha512-E+XQCRwSbaaiChtv6k6Dwgc+bx+Bs6vuKJHHl5kox/BaKbhiXzqQOwK4cO22yElGp2OCmjwVhT3HmxgyPGnJfQ==}
@@ -14444,6 +14510,9 @@ packages:
   fetch-h2@3.0.2:
     resolution: {integrity: sha512-Lo6UPdMKKc9Ond7yjG2vq0mnocspOLh1oV6+XZdtfdexacvMSz5xm3WoQhTAdoR2+UqPlyMNqcqfecipoD+l/A==}
     engines: {node: '>=12'}
+
+  fflate@0.7.4:
+    resolution: {integrity: sha512-5u2V/CDW15QM1XbbgS+0DfPxVB+jUKhWEKuuFuHncbk3tEEqzmoXL+2KyOFuKGqOnmdIy0/davWF1CkuwtibCw==}
 
   fflate@0.8.2:
     resolution: {integrity: sha512-cPJU47OaAoCbg0pBvzsgpTPhmhqI5eJjh/JIu8tPj5q+T7iLvW/JAYUqmE7KOB4R1ZyEhzBaIQpQpardBF5z8A==}
@@ -17495,6 +17564,9 @@ packages:
   node-int64@0.4.0:
     resolution: {integrity: sha512-O5lz91xSOeoXP6DulyHfllpq+Eg00MWitZIbtPfoSEvqIHdl5gfcY6hYzDWnj0qD5tz52PI08u9qUvSVeUBeHw==}
 
+  node-mic@1.0.1:
+    resolution: {integrity: sha512-awbDq2ZletamHog1Wa0WEwRQAgrMHg28nb7KR/9ZrClT2PGUcqh0ykhKxw2nU1lPJozXboeY9PEmGSToUBDA2g==}
+
   node-mock-http@1.0.0:
     resolution: {integrity: sha512-0uGYQ1WQL1M5kKvGRXWQ3uZCHtLTO8hln3oBjIusM75WoesZ909uQJs/Hb946i2SS+Gsrhkaa6iAO17jRIv6DQ==}
 
@@ -17800,8 +17872,8 @@ packages:
     resolution: {integrity: sha512-mA5Ha0Ut1A2QB/2rNO0jedTeC/PJ6EJndXEv5N8I8SQKgpRAqhT0z2sshYAZMNMXN0gOJrVdykdVa+p1pXsAag==}
     engines: {node: '>=18'}
 
-  openai@4.86.2:
-    resolution: {integrity: sha512-nvYeFjmjdSu6/msld+22JoUlCICNk/lUFpSMmc6KNhpeNLpqL70TqbD/8Vura/tFmYqHKW0trcjgPwUpKSPwaA==}
+  openai@4.87.3:
+    resolution: {integrity: sha512-d2D54fzMuBYTxMW8wcNmhT1rYKcTfMJ8t+4KjH2KtvYenygITiGBgHoIrzHwnDQWW+C5oCA+ikIR2jgPCFqcKQ==}
     hasBin: true
     peerDependencies:
       ws: ^8.18.0
@@ -21565,6 +21637,12 @@ snapshots:
       '@ai-sdk/provider-utils': 2.1.11(zod@3.24.2)
       zod: 3.24.2
 
+  '@ai-sdk/openai@1.2.5(zod@3.24.2)':
+    dependencies:
+      '@ai-sdk/provider': 1.0.11
+      '@ai-sdk/provider-utils': 2.1.13(zod@3.24.2)
+      zod: 3.24.2
+
   '@ai-sdk/provider-utils@1.0.2(zod@3.24.2)':
     dependencies:
       '@ai-sdk/provider': 0.0.12
@@ -21592,6 +21670,15 @@ snapshots:
     optionalDependencies:
       zod: 3.24.2
 
+  '@ai-sdk/provider-utils@2.1.13(zod@3.24.2)':
+    dependencies:
+      '@ai-sdk/provider': 1.0.11
+      eventsource-parser: 3.0.0
+      nanoid: 3.3.8
+      secure-json-parse: 2.7.0
+    optionalDependencies:
+      zod: 3.24.2
+
   '@ai-sdk/provider@0.0.11':
     dependencies:
       json-schema: 0.4.0
@@ -21605,6 +21692,10 @@ snapshots:
       json-schema: 0.4.0
 
   '@ai-sdk/provider@1.0.10':
+    dependencies:
+      json-schema: 0.4.0
+
+  '@ai-sdk/provider@1.0.11':
     dependencies:
       json-schema: 0.4.0
 
@@ -25226,13 +25317,13 @@ snapshots:
 
   '@kwsites/promise-deferred@1.1.1': {}
 
-  '@langchain/core@0.2.36(openai@4.86.2(encoding@0.1.13)(ws@8.18.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))(zod@3.24.2))':
+  '@langchain/core@0.2.36(openai@4.87.3(encoding@0.1.13)(ws@8.18.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))(zod@3.24.2))':
     dependencies:
       ansi-styles: 5.2.0
       camelcase: 6.3.0
       decamelize: 1.2.0
       js-tiktoken: 1.0.19
-      langsmith: 0.1.68(openai@4.86.2(encoding@0.1.13)(ws@8.18.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))(zod@3.24.2))
+      langsmith: 0.1.68(openai@4.87.3(encoding@0.1.13)(ws@8.18.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))(zod@3.24.2))
       mustache: 4.2.0
       p-queue: 6.6.2
       p-retry: 4.6.2
@@ -25244,18 +25335,18 @@ snapshots:
 
   '@langchain/openai@0.2.11(encoding@0.1.13)(ws@8.18.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))':
     dependencies:
-      '@langchain/core': 0.2.36(openai@4.86.2(encoding@0.1.13)(ws@8.18.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))(zod@3.24.2))
+      '@langchain/core': 0.2.36(openai@4.87.3(encoding@0.1.13)(ws@8.18.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))(zod@3.24.2))
       js-tiktoken: 1.0.19
-      openai: 4.86.2(encoding@0.1.13)(ws@8.18.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))(zod@3.24.2)
+      openai: 4.87.3(encoding@0.1.13)(ws@8.18.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))(zod@3.24.2)
       zod: 3.24.2
       zod-to-json-schema: 3.24.3(zod@3.24.2)
     transitivePeerDependencies:
       - encoding
       - ws
 
-  '@langchain/textsplitters@0.0.3(openai@4.86.2(encoding@0.1.13)(ws@8.18.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))(zod@3.24.2))':
+  '@langchain/textsplitters@0.0.3(openai@4.87.3(encoding@0.1.13)(ws@8.18.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))(zod@3.24.2))':
     dependencies:
-      '@langchain/core': 0.2.36(openai@4.86.2(encoding@0.1.13)(ws@8.18.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))(zod@3.24.2))
+      '@langchain/core': 0.2.36(openai@4.87.3(encoding@0.1.13)(ws@8.18.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))(zod@3.24.2))
       js-tiktoken: 1.0.19
     transitivePeerDependencies:
       - openai
@@ -25400,11 +25491,11 @@ snapshots:
       - supports-color
       - tiktoken
 
-  '@llamaindex/chroma@0.0.4(@aws-crypto/sha256-js@5.2.0)(@huggingface/transformers@3.3.3)(cohere-ai@7.16.0(encoding@0.1.13))(encoding@0.1.13)(gpt-tokenizer@2.8.1)(js-tiktoken@1.0.19)(openai@4.86.2(encoding@0.1.13)(ws@8.18.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))(zod@3.24.2))(pathe@2.0.3)':
+  '@llamaindex/chroma@0.0.4(@aws-crypto/sha256-js@5.2.0)(@huggingface/transformers@3.3.3)(cohere-ai@7.16.0(encoding@0.1.13))(encoding@0.1.13)(gpt-tokenizer@2.8.1)(js-tiktoken@1.0.19)(openai@4.87.3(encoding@0.1.13)(ws@8.18.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))(zod@3.24.2))(pathe@2.0.3)':
     dependencies:
       '@llamaindex/core': 0.4.23(@aws-crypto/sha256-js@5.2.0)(@huggingface/transformers@3.3.3)(gpt-tokenizer@2.8.1)(js-tiktoken@1.0.19)(pathe@2.0.3)
       '@llamaindex/env': 0.1.27(@aws-crypto/sha256-js@5.2.0)(@huggingface/transformers@3.3.3)(gpt-tokenizer@2.8.1)(js-tiktoken@1.0.19)(pathe@2.0.3)
-      chromadb: 1.10.3(cohere-ai@7.16.0(encoding@0.1.13))(encoding@0.1.13)(openai@4.86.2(encoding@0.1.13)(ws@8.18.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))(zod@3.24.2))
+      chromadb: 1.10.3(cohere-ai@7.16.0(encoding@0.1.13))(encoding@0.1.13)(openai@4.87.3(encoding@0.1.13)(ws@8.18.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))(zod@3.24.2))
       chromadb-default-embed: 2.13.2
     transitivePeerDependencies:
       - '@aws-crypto/sha256-js'
@@ -25642,7 +25733,7 @@ snapshots:
     dependencies:
       '@llamaindex/core': 0.4.23(@aws-crypto/sha256-js@5.2.0)(@huggingface/transformers@3.3.3)(gpt-tokenizer@2.8.1)(js-tiktoken@1.0.19)(pathe@2.0.3)
       '@llamaindex/env': 0.1.27(@aws-crypto/sha256-js@5.2.0)(@huggingface/transformers@3.3.3)(gpt-tokenizer@2.8.1)(js-tiktoken@1.0.19)(pathe@2.0.3)
-      openai: 4.86.2(encoding@0.1.13)(ws@8.18.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))(zod@3.24.2)
+      openai: 4.87.3(encoding@0.1.13)(ws@8.18.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))(zod@3.24.2)
     transitivePeerDependencies:
       - '@aws-crypto/sha256-js'
       - '@huggingface/transformers'
@@ -31029,6 +31120,14 @@ snapshots:
       d3-selection: 3.0.0
       d3-zoom: 3.0.0
 
+  '@yujohnnattrass/speaker-no-underflow-logs@0.5.6':
+    dependencies:
+      bindings: 1.5.0
+      buffer-alloc: 1.2.0
+      debug: 4.4.0(supports-color@8.1.1)
+    transitivePeerDependencies:
+      - supports-color
+
   '@zilliz/milvus2-sdk-node@2.5.5':
     dependencies:
       '@grpc/grpc-js': 1.12.6
@@ -31122,7 +31221,7 @@ snapshots:
       clean-stack: 4.2.0
       indent-string: 5.0.0
 
-  ai@3.4.33(openai@4.86.2(encoding@0.1.13)(ws@8.18.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))(zod@3.24.2))(react@19.0.0)(sswr@2.1.0(svelte@5.20.2))(svelte@5.20.2)(vue@3.5.13(typescript@5.7.3))(zod@3.24.2):
+  ai@3.4.33(openai@4.87.3(encoding@0.1.13)(ws@8.18.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))(zod@3.24.2))(react@19.0.0)(sswr@2.1.0(svelte@5.20.2))(svelte@5.20.2)(vue@3.5.13(typescript@5.7.3))(zod@3.24.2):
     dependencies:
       '@ai-sdk/provider': 0.0.26
       '@ai-sdk/provider-utils': 1.0.22(zod@3.24.2)
@@ -31138,7 +31237,7 @@ snapshots:
       secure-json-parse: 2.7.0
       zod-to-json-schema: 3.24.3(zod@3.24.2)
     optionalDependencies:
-      openai: 4.86.2(encoding@0.1.13)(ws@8.18.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))(zod@3.24.2)
+      openai: 4.87.3(encoding@0.1.13)(ws@8.18.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))(zod@3.24.2)
       react: 19.0.0
       sswr: 2.1.0(svelte@5.20.2)
       svelte: 5.20.2
@@ -31147,7 +31246,7 @@ snapshots:
       - solid-js
       - vue
 
-  ai@3.4.33(openai@4.86.2(encoding@0.1.13)(ws@8.18.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))(zod@3.24.2))(react@19.0.0-rc-02c0e824-20241028)(sswr@2.1.0(svelte@5.20.2))(svelte@5.20.2)(vue@3.5.13(typescript@5.7.3))(zod@3.24.2):
+  ai@3.4.33(openai@4.87.3(encoding@0.1.13)(ws@8.18.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))(zod@3.24.2))(react@19.0.0-rc-02c0e824-20241028)(sswr@2.1.0(svelte@5.20.2))(svelte@5.20.2)(vue@3.5.13(typescript@5.7.3))(zod@3.24.2):
     dependencies:
       '@ai-sdk/provider': 0.0.26
       '@ai-sdk/provider-utils': 1.0.22(zod@3.24.2)
@@ -31163,7 +31262,7 @@ snapshots:
       secure-json-parse: 2.7.0
       zod-to-json-schema: 3.24.3(zod@3.24.2)
     optionalDependencies:
-      openai: 4.86.2(encoding@0.1.13)(ws@8.18.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))(zod@3.24.2)
+      openai: 4.87.3(encoding@0.1.13)(ws@8.18.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))(zod@3.24.2)
       react: 19.0.0-rc-02c0e824-20241028
       sswr: 2.1.0(svelte@5.20.2)
       svelte: 5.20.2
@@ -31779,13 +31878,13 @@ snapshots:
     dependencies:
       fill-range: 7.1.1
 
-  braintrust@0.0.168(@aws-sdk/credential-provider-web-identity@3.750.0)(openai@4.86.2(encoding@0.1.13)(ws@8.18.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))(zod@3.24.2))(react@19.0.0-rc-02c0e824-20241028)(sswr@2.1.0(svelte@5.20.2))(svelte@5.20.2)(vue@3.5.13(typescript@5.7.3))(zod@3.24.2):
+  braintrust@0.0.168(@aws-sdk/credential-provider-web-identity@3.750.0)(openai@4.87.3(encoding@0.1.13)(ws@8.18.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))(zod@3.24.2))(react@19.0.0-rc-02c0e824-20241028)(sswr@2.1.0(svelte@5.20.2))(svelte@5.20.2)(vue@3.5.13(typescript@5.7.3))(zod@3.24.2):
     dependencies:
       '@ai-sdk/provider': 0.0.11
       '@braintrust/core': 0.0.64
       '@next/env': 14.2.24
       '@vercel/functions': 1.6.0(@aws-sdk/credential-provider-web-identity@3.750.0)
-      ai: 3.4.33(openai@4.86.2(encoding@0.1.13)(ws@8.18.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))(zod@3.24.2))(react@19.0.0-rc-02c0e824-20241028)(sswr@2.1.0(svelte@5.20.2))(svelte@5.20.2)(vue@3.5.13(typescript@5.7.3))(zod@3.24.2)
+      ai: 3.4.33(openai@4.87.3(encoding@0.1.13)(ws@8.18.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))(zod@3.24.2))(react@19.0.0-rc-02c0e824-20241028)(sswr@2.1.0(svelte@5.20.2))(svelte@5.20.2)(vue@3.5.13(typescript@5.7.3))(zod@3.24.2)
       argparse: 2.0.1
       chalk: 4.1.2
       cli-progress: 3.12.0
@@ -31829,11 +31928,20 @@ snapshots:
 
   bson@6.10.2: {}
 
+  buffer-alloc-unsafe@1.1.0: {}
+
+  buffer-alloc@1.2.0:
+    dependencies:
+      buffer-alloc-unsafe: 1.1.0
+      buffer-fill: 1.0.0
+
   buffer-crc32@0.2.13: {}
 
   buffer-crc32@1.0.0: {}
 
   buffer-equal-constant-time@1.0.1: {}
+
+  buffer-fill@1.0.0: {}
 
   buffer-from@1.1.2: {}
 
@@ -32065,24 +32173,24 @@ snapshots:
     transitivePeerDependencies:
       - bare-buffer
 
-  chromadb@1.10.3(cohere-ai@7.16.0(encoding@0.1.13))(encoding@0.1.13)(openai@4.86.2(encoding@0.1.13)(ws@8.18.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))(zod@3.24.2)):
+  chromadb@1.10.3(cohere-ai@7.16.0(encoding@0.1.13))(encoding@0.1.13)(openai@4.87.3(encoding@0.1.13)(ws@8.18.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))(zod@3.24.2)):
     dependencies:
       cliui: 8.0.1
       isomorphic-fetch: 3.0.0(encoding@0.1.13)
     optionalDependencies:
       cohere-ai: 7.16.0(encoding@0.1.13)
-      openai: 4.86.2(encoding@0.1.13)(ws@8.18.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))(zod@3.24.2)
+      openai: 4.87.3(encoding@0.1.13)(ws@8.18.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))(zod@3.24.2)
     transitivePeerDependencies:
       - encoding
 
-  chromadb@1.10.5(cohere-ai@7.16.0(encoding@0.1.13))(encoding@0.1.13)(ollama@0.5.13)(openai@4.86.2(encoding@0.1.13)(ws@8.18.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))(zod@3.24.2)):
+  chromadb@1.10.5(cohere-ai@7.16.0(encoding@0.1.13))(encoding@0.1.13)(ollama@0.5.13)(openai@4.87.3(encoding@0.1.13)(ws@8.18.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))(zod@3.24.2)):
     dependencies:
       cliui: 8.0.1
       isomorphic-fetch: 3.0.0(encoding@0.1.13)
     optionalDependencies:
       cohere-ai: 7.16.0(encoding@0.1.13)
       ollama: 0.5.13
-      openai: 4.86.2(encoding@0.1.13)(ws@8.18.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))(zod@3.24.2)
+      openai: 4.87.3(encoding@0.1.13)(ws@8.18.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))(zod@3.24.2)
     transitivePeerDependencies:
       - encoding
 
@@ -32355,7 +32463,7 @@ snapshots:
 
   commondir@1.0.1: {}
 
-  composio-core@0.3.3(@aws-sdk/credential-provider-node@3.750.0)(@notionhq/client@2.2.16(encoding@0.1.13))(@pinecone-database/pinecone@4.1.0)(@swc/core@1.11.8(@swc/helpers@0.5.15))(@types/node@22.13.10)(assemblyai@4.9.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))(bufferutil@4.0.9)(chromadb@1.10.5(cohere-ai@7.16.0(encoding@0.1.13))(encoding@0.1.13)(ollama@0.5.13)(openai@4.86.2(encoding@0.1.13)(ws@8.18.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))(zod@3.24.2)))(d3-dsv@3.0.1)(encoding@0.1.13)(fast-xml-parser@4.4.1)(html-to-text@9.0.5)(ignore@5.3.2)(jsdom@20.0.3(bufferutil@4.0.9)(canvas@2.11.2(encoding@0.1.13))(utf-8-validate@6.0.5))(mammoth@1.9.0)(mongodb@6.13.0(@aws-sdk/credential-providers@3.750.0)(socks@2.8.4))(pdf-parse@1.1.1)(playwright@1.51.0)(react@19.0.0)(redis@4.7.0)(sswr@2.1.0(svelte@5.20.2))(svelte@5.20.2)(typescript@5.7.3)(utf-8-validate@6.0.5)(vue@3.5.13(typescript@5.7.3))(ws@8.18.0(bufferutil@4.0.9)(utf-8-validate@6.0.5)):
+  composio-core@0.3.3(@aws-sdk/credential-provider-node@3.750.0)(@notionhq/client@2.2.16(encoding@0.1.13))(@pinecone-database/pinecone@4.1.0)(@swc/core@1.11.8(@swc/helpers@0.5.15))(@types/node@22.13.10)(assemblyai@4.9.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))(bufferutil@4.0.9)(chromadb@1.10.5(cohere-ai@7.16.0(encoding@0.1.13))(encoding@0.1.13)(ollama@0.5.13)(openai@4.87.3(encoding@0.1.13)(ws@8.18.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))(zod@3.24.2)))(d3-dsv@3.0.1)(encoding@0.1.13)(fast-xml-parser@4.4.1)(html-to-text@9.0.5)(ignore@5.3.2)(jsdom@20.0.3(bufferutil@4.0.9)(canvas@2.11.2(encoding@0.1.13))(utf-8-validate@6.0.5))(mammoth@1.9.0)(mongodb@6.13.0(@aws-sdk/credential-providers@3.750.0)(socks@2.8.4))(pdf-parse@1.1.1)(playwright@1.51.0)(react@19.0.0)(redis@4.7.0)(sswr@2.1.0(svelte@5.20.2))(svelte@5.20.2)(typescript@5.7.3)(utf-8-validate@6.0.5)(vue@3.5.13(typescript@5.7.3))(ws@8.18.0(bufferutil@4.0.9)(utf-8-validate@6.0.5)):
     dependencies:
       '@ai-sdk/openai': 0.0.36(zod@3.24.2)
       '@e2b/code-interpreter': 0.0.8(bufferutil@4.0.9)(utf-8-validate@6.0.5)
@@ -32363,9 +32471,9 @@ snapshots:
       '@faker-js/faker': 8.4.1
       '@hey-api/client-axios': 0.2.12(axios@1.8.2)
       '@hono/node-server': 1.13.8(hono@4.7.4)
-      '@langchain/core': 0.2.36(openai@4.86.2(encoding@0.1.13)(ws@8.18.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))(zod@3.24.2))
+      '@langchain/core': 0.2.36(openai@4.87.3(encoding@0.1.13)(ws@8.18.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))(zod@3.24.2))
       '@langchain/openai': 0.2.11(encoding@0.1.13)(ws@8.18.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))
-      ai: 3.4.33(openai@4.86.2(encoding@0.1.13)(ws@8.18.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))(zod@3.24.2))(react@19.0.0)(sswr@2.1.0(svelte@5.20.2))(svelte@5.20.2)(vue@3.5.13(typescript@5.7.3))(zod@3.24.2)
+      ai: 3.4.33(openai@4.87.3(encoding@0.1.13)(ws@8.18.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))(zod@3.24.2))(react@19.0.0)(sswr@2.1.0(svelte@5.20.2))(svelte@5.20.2)(vue@3.5.13(typescript@5.7.3))(zod@3.24.2)
       axios: 1.8.2(debug@4.4.0)
       chalk: 4.1.2
       cli-progress: 3.12.0
@@ -32376,9 +32484,9 @@ snapshots:
       enumify: 2.0.0
       hono: 4.7.4
       inquirer: 10.2.2
-      langchain: 0.2.20(@aws-sdk/credential-provider-node@3.750.0)(@notionhq/client@2.2.16(encoding@0.1.13))(@pinecone-database/pinecone@4.1.0)(assemblyai@4.9.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))(axios@1.8.2)(chromadb@1.10.5(cohere-ai@7.16.0(encoding@0.1.13))(encoding@0.1.13)(ollama@0.5.13)(openai@4.86.2(encoding@0.1.13)(ws@8.18.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))(zod@3.24.2)))(d3-dsv@3.0.1)(encoding@0.1.13)(fast-xml-parser@4.4.1)(html-to-text@9.0.5)(ignore@5.3.2)(jsdom@20.0.3(bufferutil@4.0.9)(canvas@2.11.2(encoding@0.1.13))(utf-8-validate@6.0.5))(mammoth@1.9.0)(mongodb@6.13.0(@aws-sdk/credential-providers@3.750.0)(socks@2.8.4))(openai@4.86.2(encoding@0.1.13)(ws@8.18.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))(zod@3.24.2))(pdf-parse@1.1.1)(playwright@1.51.0)(redis@4.7.0)(ws@8.18.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))
+      langchain: 0.2.20(@aws-sdk/credential-provider-node@3.750.0)(@notionhq/client@2.2.16(encoding@0.1.13))(@pinecone-database/pinecone@4.1.0)(assemblyai@4.9.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))(axios@1.8.2)(chromadb@1.10.5(cohere-ai@7.16.0(encoding@0.1.13))(encoding@0.1.13)(ollama@0.5.13)(openai@4.87.3(encoding@0.1.13)(ws@8.18.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))(zod@3.24.2)))(d3-dsv@3.0.1)(encoding@0.1.13)(fast-xml-parser@4.4.1)(html-to-text@9.0.5)(ignore@5.3.2)(jsdom@20.0.3(bufferutil@4.0.9)(canvas@2.11.2(encoding@0.1.13))(utf-8-validate@6.0.5))(mammoth@1.9.0)(mongodb@6.13.0(@aws-sdk/credential-providers@3.750.0)(socks@2.8.4))(openai@4.87.3(encoding@0.1.13)(ws@8.18.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))(zod@3.24.2))(pdf-parse@1.1.1)(playwright@1.51.0)(redis@4.7.0)(ws@8.18.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))
       open: 8.4.2
-      openai: 4.86.2(encoding@0.1.13)(ws@8.18.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))(zod@3.24.2)
+      openai: 4.87.3(encoding@0.1.13)(ws@8.18.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))(zod@3.24.2)
       pusher-js: 8.4.0-rc2
       resolve-package-path: 4.0.3
       ts-node: 10.9.2(@swc/core@1.11.8(@swc/helpers@0.5.15))(@types/node@22.13.10)(typescript@5.7.3)
@@ -35024,6 +35132,8 @@ snapshots:
       to-arraybuffer: 1.0.1
       tough-cookie: 4.1.4
 
+  fflate@0.7.4: {}
+
   fflate@0.8.2: {}
 
   figlet@1.8.0: {}
@@ -37352,16 +37462,16 @@ snapshots:
       dotenv: 16.4.7
       winston: 3.17.0
 
-  langchain@0.2.20(@aws-sdk/credential-provider-node@3.750.0)(@notionhq/client@2.2.16(encoding@0.1.13))(@pinecone-database/pinecone@4.1.0)(assemblyai@4.9.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))(axios@1.8.2)(chromadb@1.10.5(cohere-ai@7.16.0(encoding@0.1.13))(encoding@0.1.13)(ollama@0.5.13)(openai@4.86.2(encoding@0.1.13)(ws@8.18.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))(zod@3.24.2)))(d3-dsv@3.0.1)(encoding@0.1.13)(fast-xml-parser@4.4.1)(html-to-text@9.0.5)(ignore@5.3.2)(jsdom@20.0.3(bufferutil@4.0.9)(canvas@2.11.2(encoding@0.1.13))(utf-8-validate@6.0.5))(mammoth@1.9.0)(mongodb@6.13.0(@aws-sdk/credential-providers@3.750.0)(socks@2.8.4))(openai@4.86.2(encoding@0.1.13)(ws@8.18.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))(zod@3.24.2))(pdf-parse@1.1.1)(playwright@1.51.0)(redis@4.7.0)(ws@8.18.0(bufferutil@4.0.9)(utf-8-validate@6.0.5)):
+  langchain@0.2.20(@aws-sdk/credential-provider-node@3.750.0)(@notionhq/client@2.2.16(encoding@0.1.13))(@pinecone-database/pinecone@4.1.0)(assemblyai@4.9.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))(axios@1.8.2)(chromadb@1.10.5(cohere-ai@7.16.0(encoding@0.1.13))(encoding@0.1.13)(ollama@0.5.13)(openai@4.87.3(encoding@0.1.13)(ws@8.18.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))(zod@3.24.2)))(d3-dsv@3.0.1)(encoding@0.1.13)(fast-xml-parser@4.4.1)(html-to-text@9.0.5)(ignore@5.3.2)(jsdom@20.0.3(bufferutil@4.0.9)(canvas@2.11.2(encoding@0.1.13))(utf-8-validate@6.0.5))(mammoth@1.9.0)(mongodb@6.13.0(@aws-sdk/credential-providers@3.750.0)(socks@2.8.4))(openai@4.87.3(encoding@0.1.13)(ws@8.18.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))(zod@3.24.2))(pdf-parse@1.1.1)(playwright@1.51.0)(redis@4.7.0)(ws@8.18.0(bufferutil@4.0.9)(utf-8-validate@6.0.5)):
     dependencies:
-      '@langchain/core': 0.2.36(openai@4.86.2(encoding@0.1.13)(ws@8.18.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))(zod@3.24.2))
+      '@langchain/core': 0.2.36(openai@4.87.3(encoding@0.1.13)(ws@8.18.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))(zod@3.24.2))
       '@langchain/openai': 0.2.11(encoding@0.1.13)(ws@8.18.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))
-      '@langchain/textsplitters': 0.0.3(openai@4.86.2(encoding@0.1.13)(ws@8.18.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))(zod@3.24.2))
+      '@langchain/textsplitters': 0.0.3(openai@4.87.3(encoding@0.1.13)(ws@8.18.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))(zod@3.24.2))
       binary-extensions: 2.3.0
       js-tiktoken: 1.0.19
       js-yaml: 4.1.0
       jsonpointer: 5.0.1
-      langsmith: 0.1.68(openai@4.86.2(encoding@0.1.13)(ws@8.18.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))(zod@3.24.2))
+      langsmith: 0.1.68(openai@4.87.3(encoding@0.1.13)(ws@8.18.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))(zod@3.24.2))
       openapi-types: 12.1.3
       p-retry: 4.6.2
       uuid: 10.0.0
@@ -37374,7 +37484,7 @@ snapshots:
       '@pinecone-database/pinecone': 4.1.0
       assemblyai: 4.9.0(bufferutil@4.0.9)(utf-8-validate@6.0.5)
       axios: 1.8.2(debug@4.4.0)
-      chromadb: 1.10.5(cohere-ai@7.16.0(encoding@0.1.13))(encoding@0.1.13)(ollama@0.5.13)(openai@4.86.2(encoding@0.1.13)(ws@8.18.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))(zod@3.24.2))
+      chromadb: 1.10.5(cohere-ai@7.16.0(encoding@0.1.13))(encoding@0.1.13)(ollama@0.5.13)(openai@4.87.3(encoding@0.1.13)(ws@8.18.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))(zod@3.24.2))
       d3-dsv: 3.0.1
       fast-xml-parser: 4.4.1
       html-to-text: 9.0.5
@@ -37390,7 +37500,7 @@ snapshots:
       - encoding
       - openai
 
-  langsmith@0.1.68(openai@4.86.2(encoding@0.1.13)(ws@8.18.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))(zod@3.24.2)):
+  langsmith@0.1.68(openai@4.87.3(encoding@0.1.13)(ws@8.18.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))(zod@3.24.2)):
     dependencies:
       '@types/uuid': 10.0.0
       commander: 10.0.1
@@ -37399,7 +37509,7 @@ snapshots:
       semver: 7.7.1
       uuid: 10.0.0
     optionalDependencies:
-      openai: 4.86.2(encoding@0.1.13)(ws@8.18.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))(zod@3.24.2)
+      openai: 4.87.3(encoding@0.1.13)(ws@8.18.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))(zod@3.24.2)
 
   language-subtag-registry@0.3.23: {}
 
@@ -37500,12 +37610,12 @@ snapshots:
       rfdc: 1.4.1
       wrap-ansi: 9.0.0
 
-  llamaindex@0.8.37(@aws-crypto/sha256-js@5.2.0)(@aws-sdk/credential-providers@3.750.0)(@edge-runtime/vm@3.2.0)(@huggingface/transformers@3.3.3)(bufferutil@4.0.9)(cohere-ai@7.16.0(encoding@0.1.13))(encoding@0.1.13)(js-tiktoken@1.0.19)(jsdom@20.0.3(bufferutil@4.0.9)(canvas@2.11.2(encoding@0.1.13))(utf-8-validate@6.0.5))(openai@4.86.2(encoding@0.1.13)(ws@8.18.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))(zod@3.24.2))(pathe@2.0.3)(pg-query-stream@4.7.1(pg@8.13.3))(pg@8.13.3)(socks@2.8.4)(terser@5.39.0)(tree-sitter@0.22.4)(typescript@5.7.3)(utf-8-validate@6.0.5)(web-tree-sitter@0.24.7)(ws@8.18.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))(zod@3.24.2):
+  llamaindex@0.8.37(@aws-crypto/sha256-js@5.2.0)(@aws-sdk/credential-providers@3.750.0)(@edge-runtime/vm@3.2.0)(@huggingface/transformers@3.3.3)(bufferutil@4.0.9)(cohere-ai@7.16.0(encoding@0.1.13))(encoding@0.1.13)(js-tiktoken@1.0.19)(jsdom@20.0.3(bufferutil@4.0.9)(canvas@2.11.2(encoding@0.1.13))(utf-8-validate@6.0.5))(openai@4.87.3(encoding@0.1.13)(ws@8.18.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))(zod@3.24.2))(pathe@2.0.3)(pg-query-stream@4.7.1(pg@8.13.3))(pg@8.13.3)(socks@2.8.4)(terser@5.39.0)(tree-sitter@0.22.4)(typescript@5.7.3)(utf-8-validate@6.0.5)(web-tree-sitter@0.24.7)(ws@8.18.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))(zod@3.24.2):
     dependencies:
       '@llamaindex/anthropic': 0.0.33(@aws-crypto/sha256-js@5.2.0)(@edge-runtime/vm@3.2.0)(@huggingface/transformers@3.3.3)(@types/node@22.13.10)(encoding@0.1.13)(gpt-tokenizer@2.8.1)(js-tiktoken@1.0.19)(jsdom@20.0.3(bufferutil@4.0.9)(canvas@2.11.2(encoding@0.1.13))(utf-8-validate@6.0.5))(pathe@2.0.3)(terser@5.39.0)
       '@llamaindex/astra': 0.0.4(@aws-crypto/sha256-js@5.2.0)(@huggingface/transformers@3.3.3)(gpt-tokenizer@2.8.1)(js-tiktoken@1.0.19)(pathe@2.0.3)
       '@llamaindex/azure': 0.0.4(@aws-crypto/sha256-js@5.2.0)(@aws-sdk/credential-providers@3.750.0)(@huggingface/transformers@3.3.3)(gpt-tokenizer@2.8.1)(js-tiktoken@1.0.19)(pathe@2.0.3)(socks@2.8.4)
-      '@llamaindex/chroma': 0.0.4(@aws-crypto/sha256-js@5.2.0)(@huggingface/transformers@3.3.3)(cohere-ai@7.16.0(encoding@0.1.13))(encoding@0.1.13)(gpt-tokenizer@2.8.1)(js-tiktoken@1.0.19)(openai@4.86.2(encoding@0.1.13)(ws@8.18.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))(zod@3.24.2))(pathe@2.0.3)
+      '@llamaindex/chroma': 0.0.4(@aws-crypto/sha256-js@5.2.0)(@huggingface/transformers@3.3.3)(cohere-ai@7.16.0(encoding@0.1.13))(encoding@0.1.13)(gpt-tokenizer@2.8.1)(js-tiktoken@1.0.19)(openai@4.87.3(encoding@0.1.13)(ws@8.18.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))(zod@3.24.2))(pathe@2.0.3)
       '@llamaindex/clip': 0.0.35(@aws-crypto/sha256-js@5.2.0)(@huggingface/transformers@3.3.3)(encoding@0.1.13)(gpt-tokenizer@2.8.1)(js-tiktoken@1.0.19)(pathe@2.0.3)(ws@8.18.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))(zod@3.24.2)
       '@llamaindex/cloud': 2.0.24(@llamaindex/core@0.4.23(@aws-crypto/sha256-js@5.2.0)(@huggingface/transformers@3.3.3)(gpt-tokenizer@2.8.1)(js-tiktoken@1.0.19)(pathe@2.0.3))(@llamaindex/env@0.1.27(@aws-crypto/sha256-js@5.2.0)(@huggingface/transformers@3.3.3)(gpt-tokenizer@2.8.1)(js-tiktoken@1.0.19)(pathe@2.0.3))
       '@llamaindex/cohere': 0.0.4(@aws-crypto/sha256-js@5.2.0)(@huggingface/transformers@3.3.3)(encoding@0.1.13)(gpt-tokenizer@2.8.1)(js-tiktoken@1.0.19)(pathe@2.0.3)
@@ -38974,6 +39084,12 @@ snapshots:
 
   node-int64@0.4.0: {}
 
+  node-mic@1.0.1:
+    dependencies:
+      fflate: 0.7.4
+      node-fetch: 3.3.2
+      shelljs: 0.8.5
+
   node-mock-http@1.0.0: {}
 
   node-releases@2.0.19: {}
@@ -39303,7 +39419,7 @@ snapshots:
       - bufferutil
       - utf-8-validate
 
-  openai@4.86.2(encoding@0.1.13)(ws@8.18.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))(zod@3.24.2):
+  openai@4.87.3(encoding@0.1.13)(ws@8.18.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))(zod@3.24.2):
     dependencies:
       '@types/node': 18.19.76
       '@types/node-fetch': 2.6.12

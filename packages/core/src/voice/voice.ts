@@ -5,7 +5,7 @@ import { InstrumentClass } from '../telemetry';
 export type VoiceEventType = 'speaking' | 'writing' | 'error' | string;
 
 export interface VoiceEventMap {
-  speaking: { audio?: NodeJS.ReadableStream };
+  speaking: { audio?: NodeJS.ReadableStream | Int16Array };
   writing: { text: string; role: 'assistant' | 'user' };
   error: { message: string; code?: string; details?: unknown };
   [key: string]: unknown;
