@@ -135,9 +135,9 @@ export class SarvamVoice extends MastraVoice {
 
   //Todo: Implement the listen method
   async listen(
-    audioStream: NodeJS.ReadableStream,
-    options?: { [key: string]: any },
+    _input: NodeJS.ReadableStream,
+    _options?: Record<string, unknown>,
   ): Promise<string | NodeJS.ReadableStream> {
-    throw new Error('Method not implemented.');
+    throw new Error('Listening method coming soon.');
   }
 }
