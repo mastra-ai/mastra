@@ -2,15 +2,13 @@ import type { ToolsInput } from '../agent';
 import { MastraBase } from '../base';
 import { InstrumentClass } from '../telemetry';
 
-// Define standard voice events
 export type VoiceEventType = 'speaking' | 'writing' | 'error' | string;
 
-// Define event data structure for each event type
 export interface VoiceEventMap {
-  speaking: { audio?: NodeJS.ReadableStream | Int16Array };
+  speaking: { audio?: NodeJS.ReadableStream };
   writing: { text: string; role: 'assistant' | 'user' };
   error: { message: string; code?: string; details?: unknown };
-  [key: string]: unknown; // Allow for custom events
+  [key: string]: unknown;
 }
 
 interface BuiltInModelConfig {

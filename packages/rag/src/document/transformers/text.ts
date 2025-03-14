@@ -96,39 +96,63 @@ export abstract class TextTransformer implements Transformer {
   }
 
   protected mergeSplits(splits: string[], separator: string): string[] {
-    const separatorLen = this.lengthFunction(separator);
     const docs: string[] = [];
     let currentDoc: string[] = [];
     let total = 0;
 
-    splits.forEach(d => {
+    for (const d of splits) {
       const len = this.lengthFunction(d);
+      const separatorLen = separator ? this.lengthFunction(separator) : 0;
+
       if (total + len + (currentDoc.length > 0 ? separatorLen : 0) > this.size) {
         if (total > this.size) {
-          console.warn(`Created a chunk of size ${total}, ` + `which is longer than the specified ${this.size}`);
+          console.warn(`Created a chunk of size ${total}, which is longer than the specified ${this.size}`);
         }
+
         if (currentDoc.length > 0) {
           const doc = this.joinDocs(currentDoc, separator);
           if (doc !== null) {
             docs.push(doc);
           }
-          while (
-            total > this.overlap ||
-            (total + len + (currentDoc.length > 0 ? separatorLen : 0) > this.size && total > 0)
-          ) {
-            total -= this.lengthFunction(currentDoc?.[0]!) + (currentDoc.length > 1 ? separatorLen : 0);
-            currentDoc = currentDoc.slice(1);
+
+          // Handle overlap: keep enough content from the end of current chunk
+          if (this.overlap > 0) {
+            let overlapContent: string[] = [];
+            let overlapSize = 0;
+
+            // Work backwards through currentDoc until we have enough overlap
+            for (let i = currentDoc.length - 1; i >= 0; i--) {
+              const piece = currentDoc[i]!;
+              const pieceLen = this.lengthFunction(piece);
+
+              if (overlapSize + pieceLen > this.overlap) {
+                break;
+              }
+
+              overlapContent.unshift(piece);
+              overlapSize += pieceLen + (overlapContent.length > 1 ? separatorLen : 0);
+            }
+
+            currentDoc = overlapContent;
+            total = overlapSize;
+          } else {
+            currentDoc = [];
+            total = 0;
           }
         }
       }
+
       currentDoc.push(d);
       total += len + (currentDoc.length > 1 ? separatorLen : 0);
-    });
-
-    const doc = this.joinDocs(currentDoc, separator);
-    if (doc !== null) {
-      docs.push(doc);
     }
+
+    if (currentDoc.length > 0) {
+      const doc = this.joinDocs(currentDoc, separator);
+      if (doc !== null) {
+        docs.push(doc);
+      }
+    }
+
     return docs;
   }
 }

@@ -643,6 +643,7 @@ export class Agent<
   }
 
   __primitive({
+    instructions,
     messages,
     context,
     threadId,
@@ -651,6 +652,7 @@ export class Agent<
     runId,
     toolsets,
   }: {
+    instructions?: string;
     toolsets?: ToolsetsInput;
     resourceId?: string;
     threadId?: string;
@@ -667,7 +669,7 @@ export class Agent<
 
         const systemMessage: CoreMessage = {
           role: 'system',
-          content: `${this.instructions}.`,
+          content: instructions || `${this.instructions}.`,
         };
 
         let coreMessages = messages;
@@ -796,7 +798,7 @@ export class Agent<
               runId: runIdToUse,
               metric,
               agentName: this.name,
-              instructions: this.instructions,
+              instructions: instructions || this.instructions,
             });
           }
         }
@@ -816,6 +818,7 @@ export class Agent<
   async generate<Z extends ZodSchema | JSONSchema7 | undefined = undefined>(
     messages: string | string[] | CoreMessage[],
     {
+      instructions,
       context,
       threadId: threadIdInFn,
       memoryOptions,
@@ -844,7 +847,7 @@ export class Agent<
           content: messages,
         },
       ];
-    } else {
+    } else if (Array.isArray(messages)) {
       messagesToUse = messages.map(message => {
         if (typeof message === `string`) {
           return {
@@ -854,11 +857,14 @@ export class Agent<
         }
         return message;
       });
+    } else {
+      messagesToUse = [messages];
     }
 
     const runIdToUse = runId || randomUUID();
 
     const { before, after } = this.__primitive({
+      instructions,
       messages: messagesToUse,
       context,
       threadId: threadIdInFn,
@@ -956,6 +962,7 @@ export class Agent<
   async stream<Z extends ZodSchema | JSONSchema7 | undefined = undefined>(
     messages: string | string[] | CoreMessage[],
     {
+      instructions,
       context,
       threadId: threadIdInFn,
       memoryOptions,
@@ -1000,6 +1007,7 @@ export class Agent<
     }
 
     const { before, after } = this.__primitive({
+      instructions,
       messages: messagesToUse,
       context,
       threadId: threadIdInFn,

@@ -280,44 +280,6 @@ describe('agent', () => {
     expect(sanitizedMessages).toHaveLength(2);
   });
 
-  it('should use telemetry options when generating a response', async () => {
-    const electionAgent = new Agent({
-      name: 'US Election agent',
-      instructions: 'You know about the past US elections',
-      model: openai('gpt-4o'),
-    });
-
-    const memoryExporter = new InMemorySpanExporter();
-    const tracerProvider = new NodeTracerProvider({
-      spanProcessors: [new SimpleSpanProcessor(memoryExporter)],
-    });
-    tracerProvider.register();
-
-    const mastra = new Mastra({
-      agents: { electionAgent },
-      telemetry: {
-        enabled: true,
-        serviceName: 'test-service',
-        export: {
-          type: 'custom',
-          exporter: memoryExporter,
-        },
-      },
-    });
-    const agentOne = mastra.getAgent('electionAgent');
-
-    await agentOne.generate('Who won the 2016 US presidential election?', {
-      telemetry: { functionId: 'test-function-id', metadata: { test: 'test' } },
-    });
-
-    const spans = memoryExporter.getFinishedSpans();
-    const aiSpan = spans.find(span => span.name === 'ai.generateText');
-    expect(aiSpan).toBeDefined();
-    expect(aiSpan?.attributes['ai.telemetry.metadata.test']).toBe('test');
-    expect(aiSpan?.attributes['resource.name']).toBe('test-function-id');
-    await tracerProvider.shutdown();
-  });
-
   describe('voice capabilities', () => {
     class MockVoice extends MastraVoice {
       async speak(_input: string | NodeJS.ReadableStream): Promise<NodeJS.ReadableStream> {

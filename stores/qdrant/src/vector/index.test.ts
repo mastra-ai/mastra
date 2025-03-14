@@ -3,6 +3,7 @@
 import { describe, it, expect, beforeAll, afterAll, afterEach, vi, beforeEach } from 'vitest';
 
 import { QdrantVector } from './index';
+import type { QueryResult } from '@mastra/core';
 
 const dimension = 3;
 
@@ -85,6 +86,157 @@ describe('QdrantVector', () => {
       expect(results).toHaveLength(1);
       expect(results?.[0]?.metadata?.label).toBe('y-axis');
     }, 50000);
+  });
+
+  describe('Vector update operations', () => {
+    const testVectors = [
+      [1, 2, 3],
+      [4, 5, 6],
+      [7, 8, 9],
+    ];
+
+    beforeEach(async () => {
+      await qdrant.createIndex({ indexName: testCollectionName, dimension: 3 });
+    });
+
+    afterEach(async () => {
+      await qdrant.deleteIndex(testCollectionName);
+    });
+
+    it('should update the vector by id', async () => {
+      const ids = await qdrant.upsert({ indexName: testCollectionName, vectors: testVectors });
+      expect(ids).toHaveLength(3);
+
+      const idToBeUpdated = ids[0];
+      const newVector = [1, 2, 3];
+      const newMetaData = {
+        test: 'updates',
+      };
+
+      const update = {
+        vector: newVector,
+        metadata: newMetaData,
+      };
+
+      await qdrant.updateIndexById(testCollectionName, idToBeUpdated, update);
+
+      const results: QueryResult[] = await qdrant.query({
+        indexName: testCollectionName,
+        queryVector: newVector,
+        topK: 2,
+        includeVector: true,
+      });
+      console.log(results);
+      expect(results[0]?.id).toBe(idToBeUpdated);
+      // not matching the vector in results list because, the stored vector is stored in a normalized form inside qdrant
+      // expect(results[0]?.vector).toEqual(newVector);
+      expect(results[0]?.metadata).toEqual(newMetaData);
+    });
+
+    it('should only update the metadata by id', async () => {
+      const ids = await qdrant.upsert({ indexName: testCollectionName, vectors: testVectors });
+      expect(ids).toHaveLength(3);
+
+      const idToBeUpdated = ids[0];
+      const newMetaData = {
+        test: 'updates',
+      };
+
+      const update = {
+        metadata: newMetaData,
+      };
+
+      await qdrant.updateIndexById(testCollectionName, idToBeUpdated, update);
+
+      const results: QueryResult[] = await qdrant.query({
+        indexName: testCollectionName,
+        queryVector: testVectors[0],
+        topK: 2,
+        includeVector: true,
+      });
+      expect(results[0]?.id).toBe(idToBeUpdated);
+      // not matching the vector in results list because, the stored vector is stored in a normalized form inside qdrant
+      // expect(results[0]?.vector).toEqual(testVectors[0]);
+      expect(results[0]?.metadata).toEqual(newMetaData);
+    });
+
+    it('should only update vector embeddings by id', async () => {
+      const ids = await qdrant.upsert({ indexName: testCollectionName, vectors: testVectors });
+      expect(ids).toHaveLength(3);
+
+      const idToBeUpdated = ids[0];
+      const newVector = [1, 2, 3];
+
+      const update = {
+        vector: newVector,
+      };
+
+      await qdrant.updateIndexById(testCollectionName, idToBeUpdated, update);
+
+      const results: QueryResult[] = await qdrant.query({
+        indexName: testCollectionName,
+        queryVector: newVector,
+        topK: 2,
+        includeVector: true,
+      });
+      expect(results[0]?.id).toBe(idToBeUpdated);
+      // not matching the vector in results list because, the stored vector is stored in a normalized form inside qdrant
+      // expect(results[0]?.vector).toEqual(newVector);
+    });
+
+    it('should throw exception when no updates are given', () => {
+      expect(qdrant.updateIndexById(testCollectionName, 'id', {})).rejects.toThrow('No updates provided');
+    });
+
+    it('should throw error for non-existent index', async () => {
+      const nonExistentIndex = 'non-existent-index';
+      await expect(qdrant.updateIndexById(nonExistentIndex, 'test-id', { vector: [1, 2, 3] })).rejects.toThrow();
+    });
+
+    it('should throw error for invalid vector dimension', async () => {
+      const [id] = await qdrant.upsert({
+        indexName: testCollectionName,
+        vectors: [[1, 2, 3]],
+        metadata: [{ test: 'initial' }],
+      });
+
+      await expect(
+        qdrant.updateIndexById(testCollectionName, id, { vector: [1, 2] }), // Wrong dimension
+      ).rejects.toThrow();
+    });
+  });
+
+  describe('Vector delete operations', () => {
+    const testVectors = [
+      [1, 2, 3],
+      [4, 5, 6],
+      [7, 8, 9],
+    ];
+
+    beforeEach(async () => {
+      await qdrant.createIndex({ indexName: testCollectionName, dimension: 3 });
+    });
+
+    afterEach(async () => {
+      await qdrant.deleteIndex(testCollectionName);
+    });
+
+    it('should delete the vector by id', async () => {
+      const ids = await qdrant.upsert({ indexName: testCollectionName, vectors: testVectors });
+      expect(ids).toHaveLength(3);
+      const idToBeDeleted = ids[0];
+
+      await qdrant.deleteIndexById(testCollectionName, idToBeDeleted);
+
+      const results: QueryResult[] = await qdrant.query({
+        indexName: testCollectionName,
+        queryVector: [1.0, 0.0, 0.0],
+        topK: 2,
+      });
+
+      expect(results).toHaveLength(2);
+      expect(results.map(res => res.id)).not.toContain(idToBeDeleted);
+    });
   });
 
   describe('Filter Queries', () => {
