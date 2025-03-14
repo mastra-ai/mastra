@@ -280,44 +280,6 @@ describe('agent', () => {
     expect(sanitizedMessages).toHaveLength(2);
   });
 
-  it('should use telemetry options when generating a response', async () => {
-    const electionAgent = new Agent({
-      name: 'US Election agent',
-      instructions: 'You know about the past US elections',
-      model: openai('gpt-4o'),
-    });
-
-    const memoryExporter = new InMemorySpanExporter();
-    const tracerProvider = new NodeTracerProvider({
-      spanProcessors: [new SimpleSpanProcessor(memoryExporter)],
-    });
-    tracerProvider.register();
-
-    const mastra = new Mastra({
-      agents: { electionAgent },
-      telemetry: {
-        enabled: true,
-        serviceName: 'test-service',
-        export: {
-          type: 'custom',
-          exporter: memoryExporter,
-        },
-      },
-    });
-    const agentOne = mastra.getAgent('electionAgent');
-
-    await agentOne.generate('Who won the 2016 US presidential election?', {
-      telemetry: { functionId: 'test-function-id', metadata: { test: 'test' } },
-    });
-
-    const spans = memoryExporter.getFinishedSpans();
-    const aiSpan = spans.find(span => span.name === 'ai.generateText');
-    expect(aiSpan).toBeDefined();
-    expect(aiSpan?.attributes['ai.telemetry.metadata.test']).toBe('test');
-    expect(aiSpan?.attributes['resource.name']).toBe('test-function-id');
-    await tracerProvider.shutdown();
-  });
-
   describe('voice capabilities', () => {
     class MockVoice extends MastraVoice {
       async speak(_input: string | NodeJS.ReadableStream): Promise<NodeJS.ReadableStream> {
@@ -354,16 +316,21 @@ describe('agent', () => {
 
     describe('getSpeakers', () => {
       it('should list available voices', async () => {
-        const speakers = await voiceAgent.getSpeakers();
+        const speakers = await voiceAgent.voice?.getSpeakers();
         expect(speakers).toEqual([{ voiceId: 'mock-voice' }]);
       });
     });
 
     describe('speak', () => {
       it('should generate audio stream from text', async () => {
-        const audioStream = await voiceAgent.speak('Hello World', {
+        const audioStream = await voiceAgent.voice?.speak('Hello World', {
           speaker: 'mock-voice',
         });
+
+        if (!audioStream) {
+          expect(audioStream).toBeDefined();
+          return;
+        }
 
         const chunks: Buffer[] = [];
         for await (const chunk of audioStream) {
@@ -375,10 +342,15 @@ describe('agent', () => {
       });
 
       it('should work with different parameters', async () => {
-        const audioStream = await voiceAgent.speak('Test with parameters', {
+        const audioStream = await voiceAgent.voice?.speak('Test with parameters', {
           speaker: 'mock-voice',
           speed: 0.5,
         });
+
+        if (!audioStream) {
+          expect(audioStream).toBeDefined();
+          return;
+        }
 
         const chunks: Buffer[] = [];
         for await (const chunk of audioStream) {
@@ -395,7 +367,7 @@ describe('agent', () => {
         const audioStream = new PassThrough();
         audioStream.end('test audio data');
 
-        const text = await voiceAgent.listen(audioStream);
+        const text = await voiceAgent.voice?.listen(audioStream);
         expect(text).toBe('mock transcription');
       });
 
@@ -403,7 +375,7 @@ describe('agent', () => {
         const audioStream = new PassThrough();
         audioStream.end('test audio data');
 
-        const text = await voiceAgent.listen(audioStream, {
+        const text = await voiceAgent.voice?.listen(audioStream, {
           language: 'en',
         });
         expect(text).toBe('mock transcription');

@@ -1,5 +1,40 @@
 # @mastra/stabilityai
 
+## 1.1.10-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [7bcfaee]
+  - @mastra/core@0.6.1-alpha.0
+
+## 1.1.9
+
+### Patch Changes
+
+- Updated dependencies [16b98d9]
+- Updated dependencies [1c8cda4]
+- Updated dependencies [95b4144]
+- Updated dependencies [3729dbd]
+- Updated dependencies [c2144f4]
+  - @mastra/core@0.6.0
+
+## 1.1.9-alpha.1
+
+### Patch Changes
+
+- Updated dependencies [16b98d9]
+- Updated dependencies [1c8cda4]
+- Updated dependencies [95b4144]
+- Updated dependencies [c2144f4]
+  - @mastra/core@0.6.0-alpha.1
+
+## 1.1.9-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [3729dbd]
+  - @mastra/core@0.5.1-alpha.0
+
 ## 1.1.8
 
 ### Patch Changes

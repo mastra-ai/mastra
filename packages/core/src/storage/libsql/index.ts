@@ -29,7 +29,7 @@ export class LibSQLStore extends MastraStorage {
     super({ name: `LibSQLStore` });
 
     // need to re-init every time for in memory dbs or the tables might not exist
-    if (config.url === ':memory:') {
+    if (config.url === ':memory:' || config.url.startsWith('file::memory:')) {
       this.shouldCacheInit = false;
     }
 
@@ -51,7 +51,7 @@ export class LibSQLStore extends MastraStorage {
   // this means `file:` urls are always relative to project root
   // TODO: can we make this easier via bundling? https://github.com/mastra-ai/mastra/pull/2783#pullrequestreview-2662444241
   protected rewriteDbUrl(url: string): string {
-    if (url.startsWith('file:')) {
+    if (url.startsWith('file:') && url !== 'file::memory:') {
       const pathPart = url.slice('file:'.length);
 
       if (isAbsolute(pathPart)) {

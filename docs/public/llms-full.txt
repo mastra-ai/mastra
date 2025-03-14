@@ -4662,13 +4662,6 @@ The `mastra dev` command starts a development server that exposes REST endpoints
       isOptional: true,
     },
     {
-      name: "--env",
-      type: "string",
-      description:
-        "Specifies which environment file to load. Defaults to `.env.development`, falling back to `.env` if not found.",
-      isOptional: true,
-    },
-    {
       name: "--tools",
       type: "string",
       description:
@@ -5880,7 +5873,7 @@ The Deployer class includes built-in support for environment file management thr
 
 ```typescript
 getEnvFiles(): Promise<string[]> {
-  const possibleFiles = ['.env.production', '.env'];
+  const possibleFiles = ['.env.production', '.env.local', '.env'];
 
   try {
     const fileService = new FileService();

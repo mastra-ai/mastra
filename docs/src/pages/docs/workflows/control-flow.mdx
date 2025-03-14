@@ -99,9 +99,13 @@ myWorkflow
   .step(finalStep)
 ```
 
-## Cyclical Dependencies
+## Cyclical Dependencies and Loops
 
-You can loop back to earlier steps based on conditions, allowing you to repeat tasks until certain results are achieved. The code below shows a workflow that repeats fetchData when a status is "retry":
+Workflows often need to repeat steps until certain conditions are met. Mastra provides two powerful methods for creating loops: `until` and `while`. These methods offer an intuitive way to implement repetitive tasks.
+
+### Using Manual Cyclical Dependencies (Legacy Approach)
+
+In earlier versions, you could create loops by manually defining cyclical dependencies with conditions:
 
 ```typescript
 myWorkflow
@@ -116,15 +120,9 @@ myWorkflow
   });
 ```
 
-If processData returns "success," finalizeData runs. If it returns "retry," the workflow loops back to fetchData.
+While this approach still works, the newer `until` and `while` methods provide a cleaner and more maintainable way to create loops.
 
-See the [Cyclical Dependencies](../../examples/workflows/cyclical-dependencies.mdx) example for more details.
-
-## Loop Control with `until` and `while`
-
-Mastra provides dedicated methods for creating loops in workflows: `until` and `while`. These methods offer a more intuitive way to implement repetitive tasks compared to manual cyclical dependencies.
-
-### Using `until`
+### Using `until` for Condition-Based Loops
 
 The `until` method repeats a step until a specified condition becomes true. It takes two arguments:
 1. A condition that determines when to stop looping
@@ -135,7 +133,7 @@ workflow
   .step(incrementStep)
   .until(async ({ context }) => {
     // Stop when the value reaches or exceeds 10
-    const result = context.getStepResult<{ value: number }>('increment');
+    const result = context.getStepResult(incrementStep);
     return (result?.value ?? 0) >= 10;
   }, incrementStep)
   .then(finalStep);
@@ -156,7 +154,7 @@ workflow
   .then(finalStep);
 ```
 
-### Using `while`
+### Using `while` for Condition-Based Loops
 
 The `while` method repeats a step as long as a specified condition remains true. It takes the same arguments as `until`:
 1. A condition that determines when to continue looping
@@ -167,7 +165,7 @@ workflow
   .step(incrementStep)
   .while(async ({ context }) => {
     // Continue as long as the value is less than 10
-    const result = context.getStepResult<{ value: number }>('increment');
+    const result = context.getStepResult(incrementStep);
     return (result?.value ?? 0) < 10;
   }, incrementStep)
   .then(finalStep);
@@ -188,7 +186,7 @@ workflow
   .then(finalStep);
 ```
 
-### Comparison Operators
+### Comparison Operators for Reference Conditions
 
 When using reference-based conditions, you can use these comparison operators:
 
@@ -200,6 +198,8 @@ When using reference-based conditions, you can use these comparison operators:
 | `$gte`   | Greater than or equal to |
 | `$lt`    | Less than |
 | `$lte`   | Less than or equal to |
+
+See the [Loop Control](../../examples/workflows/loop-control.mdx) example for more details.
 
 ## Conditions
 

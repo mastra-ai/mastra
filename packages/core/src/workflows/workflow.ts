@@ -7,7 +7,7 @@ import type { MastraPrimitives } from '../action';
 import { MastraBase } from '../base';
 
 import type { Mastra } from '../mastra';
-import type { Step } from './step';
+import { Step } from './step';
 import type {
   ActionContext,
   RetryConfig,
@@ -31,6 +31,7 @@ export class Workflow<
 > extends MastraBase {
   name: string;
   triggerSchema?: TTriggerSchema;
+  events?: Record<string, { schema: z.ZodObject<any> }>;
   #retryConfig?: RetryConfig;
   #mastra?: Mastra;
   #runs: Map<string, WorkflowInstance<TSteps, TTriggerSchema>> = new Map();
@@ -38,7 +39,11 @@ export class Workflow<
   // registers stepIds on `after` calls
   #afterStepStack: string[] = [];
   #lastStepStack: string[] = [];
-  #ifStack: { condition: StepConfig<any, any, any, TTriggerSchema>['when']; elseStepKey: string }[] = [];
+  #ifStack: {
+    condition: StepConfig<any, any, any, TTriggerSchema>['when'];
+    elseStepKey: string;
+    condStep: StepAction<any, any, any, any>;
+  }[] = [];
   #stepGraph: StepGraph = { initial: [] };
   #stepSubscriberGraph: Record<string, StepGraph> = {};
   #steps: Record<string, StepAction<any, any, any, any>> = {};
@@ -49,12 +54,13 @@ export class Workflow<
    * @param name - Identifier for the workflow (not necessarily unique)
    * @param logger - Optional logger instance
    */
-  constructor({ name, triggerSchema, retryConfig, mastra }: WorkflowOptions<TTriggerSchema>) {
+  constructor({ name, triggerSchema, retryConfig, mastra, events }: WorkflowOptions<TTriggerSchema>) {
     super({ component: 'WORKFLOW', name });
 
     this.name = name;
     this.#retryConfig = retryConfig;
     this.triggerSchema = triggerSchema;
+    this.events = events;
 
     if (mastra) {
       this.__registerPrimitives({
@@ -355,7 +361,7 @@ export class Workflow<
     );
 
     const elseStepKey = `__${lastStep.id}_else`;
-    this.#ifStack.push({ condition, elseStepKey });
+    this.#ifStack.push({ condition, elseStepKey, condStep: lastStep });
 
     return this;
   }
@@ -366,7 +372,7 @@ export class Workflow<
       throw new Error('No active condition found');
     }
 
-    this.step(
+    this.after(activeCondition.condStep).step(
       {
         id: activeCondition.elseStepKey,
         execute: async ({ context }) => {
@@ -402,6 +408,35 @@ export class Workflow<
     }
 
     return this as Omit<typeof this, 'then' | 'after'>;
+  }
+
+  afterEvent(eventName: string) {
+    const event = this.events?.[eventName];
+    if (!event) {
+      throw new Error(`Event ${eventName} not found`);
+    }
+
+    const lastStep = this.#steps[this.#lastStepStack[this.#lastStepStack.length - 1] ?? ''];
+    if (!lastStep) {
+      throw new Error('Condition requires a step to be executed after');
+    }
+
+    const eventStepKey = `__${eventName}_event`;
+    const eventStep = new Step({
+      id: eventStepKey,
+      execute: async ({ context, suspend }) => {
+        if (context.resumeData?.resumedEvent) {
+          return { executed: true, resumedEvent: context.resumeData?.resumedEvent };
+        }
+
+        await suspend();
+        return { executed: false };
+      },
+    });
+
+    this.after(lastStep).step(eventStep).after(eventStep);
+
+    return this;
   }
 
   /**
@@ -711,7 +746,7 @@ export class Workflow<
     // Reset attempt count
     if (parsedSnapshot.context?.attempts) {
       parsedSnapshot.context.attempts[stepId] =
-        this.#steps[stepId]?.retryConfig?.attempts || this.#retryConfig?.attempts || 3;
+        this.#steps[stepId]?.retryConfig?.attempts || this.#retryConfig?.attempts || 0;
     }
 
     this.logger.debug('Resuming workflow with updated snapshot', {
@@ -744,7 +779,18 @@ export class Workflow<
     return run?.execute({
       snapshot: parsedSnapshot,
       stepId,
+      resumeData: resumeContext,
     });
+  }
+
+  async resumeWithEvent(runId: string, eventName: string, data: any) {
+    const event = this.events?.[eventName];
+    if (!event) {
+      throw new Error(`Event ${eventName} not found`);
+    }
+
+    const results = await this.resume({ runId, stepId: `__${eventName}_event`, context: { resumedEvent: data } });
+    return results;
   }
 
   __registerMastra(mastra: Mastra) {
