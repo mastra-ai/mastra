@@ -4,11 +4,11 @@ description: "Learn how Mastra leverages the AI SDK library and how you can leve
 ---
 
 # AI SDK
- Mastra Levrages AI SDK's model routing (a unified interface on top of OpenAI, Anthropic, etc), structured output, and tool calling. 
+ Mastra Leverages AI SDK's model routing (a unified interface on top of OpenAI, Anthropic, etc), structured output, and tool calling. 
 We explain this in greater detail in [this blog post](https://mastra.ai/blog/using-ai-sdk-with-mastra)
 
 ## Mastra + AI SDK
-Mastra as a layer on top of AI SDK to help teams productionize their proof-of-concepts quickly and easily.
+Mastra acts as a layer on top of AI SDK to help teams productionize their proof-of-concepts quickly and easily.
 
 <img
   src="/docs/mastra-ai-sdk.png"
@@ -47,10 +47,10 @@ Mastra is compatible with AI SDK's hooks for seamless frontend integration:
 
 The `useChat` hook enables real-time chat interactions in your frontend application
 
-- Works with agent data streams i.e `.toDataStreamResponse()`
-- The useChat api defaults to /api/chat
-- Works with the Mastra REST API agent stream endpoint `{MASTRA_BASE_URL}/agents/:agentId/stream` for data streams
-i.e no structured output is defined. 
+- Works with agent data streams i.e. `.toDataStreamResponse()`
+- The useChat API defaults to /api/chat
+- Works with the Mastra REST API agent stream endpoint `{MASTRA_BASE_URL}/agents/:agentId/stream` for data streams,
+i.e. no structured output is defined. 
 
 ```typescript filename="app/api/chat/route.ts" copy
 
@@ -99,10 +99,10 @@ export function ChatComponent() {
 
 For single-turn completions, use the `useCompletion` hook:
 
-- Works with agent data streams i.e `.toDataStreamResponse()`
-- The useCompletion api defaults to /api/completion
-- Works with the Mastra REST API agent stream endpoint `{MASTRA_BASE_URL}/agents/:agentId/stream` for data streams
-i.e no structured output is defined. 
+- Works with agent data streams i.e. `.toDataStreamResponse()`
+- The useCompletion API defaults to /api/completion
+- Works with the Mastra REST API agent stream endpoint `{MASTRA_BASE_URL}/agents/:agentId/stream` for data streams,
+i.e. no structured output is defined. 
 
 ```typescript filename="app/api/completion/route.ts" copy
 
@@ -151,12 +151,12 @@ export function CompletionComponent() {
 
 ### useObject
 
-For consuming text streams that represent JSON objects then parse them into a complete object based on a schema.
+For consuming text streams that represent JSON objects and parsing them into a complete object based on a schema.
 
-- Works with agent text streams i.e `.toTextStreamResponse()`
-- The useObject api defaults to /api/completion
-- Works with the Mastra REST API agent stream endpoint `{MASTRA_BASE_URL}/agents/:agentId/stream` for text streams
-i.e structured output is defined. 
+- Works with agent text streams i.e. `.toTextStreamResponse()`
+- The useObject API defaults to /api/completion
+- Works with the Mastra REST API agent stream endpoint `{MASTRA_BASE_URL}/agents/:agentId/stream` for text streams,
+i.e. structured output is defined. 
 
 ```typescript filename="app/api/use-object/route.ts" copy
 
