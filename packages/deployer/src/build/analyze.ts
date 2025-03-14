@@ -238,11 +238,9 @@ async function validateOutput(
         await validate(join(outputDir, file.fileName));
       }
     } catch (err) {
-      if (!file.isDynamicEntry) {
-        result.invalidChunks.add(file.fileName);
-        if (file.isEntry && reverseVirtualReferenceMap.has(file.name)) {
-          result.externalDependencies.add(reverseVirtualReferenceMap.get(file.name)!);
-        }
+      result.invalidChunks.add(file.fileName);
+      if (file.isEntry && reverseVirtualReferenceMap.has(file.name)) {
+        result.externalDependencies.add(reverseVirtualReferenceMap.get(file.name)!);
       }
 
       // we might need this on other projects but not sure so let's keep it commented out for now

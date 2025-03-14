@@ -27,11 +27,21 @@ export async function getInputOptions(
           browser: true,
         });
 
-  const externals = Array.from(analyzedBundleInfo.externalDependencies);
-  // if @mastra/core is in the external, make all core files external
-  if (analyzedBundleInfo.externalDependencies.has('@mastra/core')) {
-    externals.push('@mastra/core/*');
+  const externalsCopy = new Set<string>();
+
+  // make all nested imports external from the same package
+  for (const external of analyzedBundleInfo.externalDependencies) {
+    if (external.startsWith('@')) {
+      const [scope, name] = external.split('/', 3);
+      externalsCopy.add(`${scope}/${name}`);
+      externalsCopy.add(`${scope}/${name}/*`);
+    } else {
+      externalsCopy.add(external);
+      externalsCopy.add(`${external}/*`);
+    }
   }
+
+  const externals = Array.from(externalsCopy);
 
   const normalizedEntryFile = entryFile.replaceAll('\\', '/');
   return {
