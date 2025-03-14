@@ -27,7 +27,13 @@ export async function getInputOptions(
           browser: true,
         });
 
-  const externals = Array.from(analyzedBundleInfo.externalDependencies).concat(['@mastra/core/hooks']);
+  const externals = Array.from(analyzedBundleInfo.externalDependencies);
+  // if @mastra/core is in the external, make all core files external
+  if (analyzedBundleInfo.externalDependencies.has('@mastra/core')) {
+    externals.push('@mastra/core/*');
+  }
+
+  const normalizedEntryFile = entryFile.replaceAll('\\', '/');
   return {
     logLevel: process.env.MASTRA_BUNDLER_DEBUG === 'true' ? 'debug' : 'silent',
     treeshake: 'smallest',
@@ -62,7 +68,7 @@ export async function getInputOptions(
             find: /^\#server$/,
             replacement: fileURLToPath(import.meta.resolve('@mastra/deployer/server')).replaceAll('\\', '/'),
           },
-          { find: /^\#mastra$/, replacement: entryFile.replaceAll('\\', '/') },
+          { find: /^\#mastra$/, replacement: normalizedEntryFile },
         ],
       }),
       esbuild({

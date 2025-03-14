@@ -29,7 +29,6 @@ export function pino() {
 
     async resolveId(id, importee) {
       if (workerFiles.some(file => file.id === id)) {
-        console.log('returning external', id);
         return {
           id,
           external: true,
@@ -62,8 +61,6 @@ export function pino() {
           );
         }
       }
-
-      console.log({ id, importee });
     },
     renderChunk(code, chunk) {
       debugger;

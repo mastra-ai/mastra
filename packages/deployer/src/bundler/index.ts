@@ -114,7 +114,7 @@ export abstract class Bundler extends MastraBundler {
         const pkgPath = resolveFrom(mastraEntryFile, `${dep}/package.json`);
         const pkg = await readJSON(pkgPath);
         dependenciesToInstall.set(dep, pkg.version);
-      } catch (e) {
+      } catch {
         dependenciesToInstall.set(dep, 'latest');
       }
     }
