@@ -1,4 +1,4 @@
-import { mkdirSync } from 'fs';
+import { createWriteStream, mkdirSync } from 'fs';
 import { writeFile } from 'fs/promises';
 import path from 'path';
 import { Readable } from 'stream';
@@ -38,6 +38,33 @@ describe('Sarvam AI Voice Integration Tests', () => {
     expect(speakers[0]).toHaveProperty('voiceId');
     expect(speakers[0].voiceId).toBe(SARVAM_VOICES[0]);
   });
+
+  it('should allow immediate playback while streaming', async () => {
+    const longText = 'This is a longer text that will be streamed. '.repeat(5);
+
+    const audioStream = await voice.speak(longText, { speaker: voiceId });
+
+    const outputPath = path.join(outputDir, 'sarvam-streaming-output.mp3');
+    const writeStream = createWriteStream(outputPath);
+
+    let firstChunkTime: number | null = null;
+    let lastChunkTime: number | null = null;
+    let totalChunks = 0;
+
+    for await (const chunk of audioStream) {
+      if (!firstChunkTime) {
+        firstChunkTime = Date.now();
+      }
+      lastChunkTime = Date.now();
+      totalChunks++;
+      writeStream.write(chunk);
+    }
+
+    writeStream.end();
+    expect(firstChunkTime).toBeDefined();
+    expect(lastChunkTime).toBeDefined();
+    console.log(`Total streaming time: ${lastChunkTime! - firstChunkTime!}ms for ${totalChunks} chunks`);
+  }, 30000);
 
   it('should test speak method', async () => {
     const audioStream = await voice.speak('Hello from Sarvam AI!', {
