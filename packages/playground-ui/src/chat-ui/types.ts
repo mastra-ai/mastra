@@ -13,3 +13,12 @@ export interface ChatProps {
   memory?: boolean;
   buildUrl?: string;
 }
+
+export interface NetworkChatProps {
+  networkId: string;
+  networkName?: string;
+  threadId?: string;
+  initialMessages?: Message[];
+  memory?: boolean;
+  buildUrl?: string;
+}

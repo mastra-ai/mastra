@@ -15,6 +15,9 @@ import Tool from './pages/tools/tool';
 import Workflows from './pages/workflows';
 import Workflow from './pages/workflows/workflow';
 import WorkflowTracesPage from './pages/workflows/workflow/traces';
+import Networks from './pages/networks';
+import Network from './pages/networks/network';
+import { NetworkLayout } from './domains/agents/network-layout';
 
 function App() {
   return (
@@ -27,6 +30,18 @@ function App() {
             </Layout>
           }
         >
+          <Route path="/networks" element={<Networks />} />
+          <Route path="/networks/:networkId" element={<Navigate to="/networks/:networkId/chat" />} />
+          <Route
+            path="/networks/:networkId"
+            element={
+              <NetworkLayout>
+                <Outlet />
+              </NetworkLayout>
+            }
+          >
+            <Route path="chat" element={<Network />} />
+          </Route>
           <Route path="/agents" element={<Agents />} />
           <Route path="/agents/:agentId" element={<Navigate to="/agents/:agentId/chat" />} />
           <Route

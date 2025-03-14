@@ -125,6 +125,47 @@ const workflow = new Workflow({
 
 [More workflows documentation →](https://mastra.ai/docs/reference/workflows/overview)
 
+### Networks (`/network`)
+
+Networks enable orchestration of multiple agents working together to solve complex tasks. They support both synchronous execution and real-time streaming of agent interactions.
+
+```typescript
+import { AgentNetwork } from '@mastra/core/network';
+import { Agent } from '@mastra/core/agent';
+import { openai } from '@ai-sdk/openai';
+
+// Create agents
+const agent1 = new Agent({
+  name: 'Agent1',
+  instructions: 'Your instructions here',
+  model: openai('gpt-4o'),
+});
+
+// Create a network
+const network = new AgentNetwork({
+  name: 'MyNetwork',
+  agents: [agent1, agent2],
+  routingModel: openai('gpt-4o'),
+});
+
+// Generate a response
+const result = await network.generate('Your input here');
+
+// Or stream the response in real-time
+const streamResult = await network.stream('Your input here', {
+  onStepStart: (agent, step) => console.log(`Starting step ${step} with ${agent.name}`),
+  onStepFinish: result => console.log(`Finished step with output: ${result.output}`),
+});
+
+// Process the stream
+for await (const chunk of streamResult.stream) {
+  // Handle different chunk types (stepStart, agentChunk, stepFinish, etc.)
+  console.log(chunk);
+}
+```
+
+[More networks documentation →](https://mastra.ai/docs/reference/networks/overview)
+
 ### Tools (`/tools`)
 
 Tools are functions that agents can use to interact with external systems or perform specific tasks. Each tool has a clear description and schema, making it easy for AI to understand and use them effectively.

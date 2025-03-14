@@ -7,6 +7,7 @@ export interface Message {
 
 export interface ChatProps {
   agentId: string;
+  type?: 'agent' | 'network';
   agentName?: string;
   threadId?: string;
   initialMessages?: Message[];

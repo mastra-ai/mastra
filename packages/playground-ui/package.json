@@ -34,6 +34,7 @@
   "license": "ISC",
   "dependencies": {
     "@assistant-ui/react": "^0.7.91",
+    "@assistant-ui/react-ai-sdk": "^0.8.0",
     "@assistant-ui/react-markdown": "^0.7.21",
     "@assistant-ui/react-syntax-highlighter": "^0.7.10",
     "@codemirror/lang-json": "^6.0.1",
@@ -63,6 +64,9 @@
     "json-schema-to-zod": "^2.5.0",
     "motion": "^12.4.2",
     "prism-react-renderer": "^2.4.0",
+    "react-markdown": "^9.0.1",
+    "react-resizable-panels": "^2.1.7",
+    "react-syntax-highlighter": "^15.6.1",
     "react-code-block": "1.1.1",
     "react-day-picker": "^9.6.1",
     "react-hook-form": "^7.53.0",

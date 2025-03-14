@@ -45,6 +45,39 @@ import type { WorkflowRunResult } from './types';
 //   }
 // })();
 
+// Network
+
+// (async () => {
+//   const client = new MastraClient({
+//     baseUrl: 'http://localhost:4111',
+//   });
+
+//   try {
+//     // Get all networks
+//     const networks = await client.getNetworks();
+//     console.log('Available networks:', Object.keys(networks));
+
+//     // Get a specific network
+//     const network = client.getNetwork('myNetwork');
+
+//     // Generate a response
+//     const response = await network.generate({
+//       input: 'What is the weather like today?',
+//     });
+//     console.log('Network response:', response);
+
+//     // Stream a response
+//     console.log('Streaming response:');
+//     for await (const chunk of network.streamReader({
+//       input: 'Tell me about climate change',
+//     })) {
+//       console.log(chunk);
+//     }
+//   } catch (error) {
+//     console.error('Error:', error);
+//   }
+// })();
+
 // Workflow
 
 // (async () => {
