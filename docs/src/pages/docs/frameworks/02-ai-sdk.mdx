@@ -1,0 +1,197 @@
+---
+title: "AI SDK"
+description: "Learn how Mastra leverages the AI SDK library and how you can leverage it further with Mastra"
+---
+
+# AI SDK
+ Mastra Levrages AI SDK's model routing (a unified interface on top of OpenAI, Anthropic, etc), structured output, and tool calling. 
+We explain this in greater detail in [this blog post](https://mastra.ai/blog/using-ai-sdk-with-mastra)
+
+## Mastra + AI SDK
+Mastra as a layer on top of AI SDK to help teams productionize their proof-of-concepts quickly and easily.
+
+<img
+  src="/docs/mastra-ai-sdk.png"
+  alt="Agent interaction trace showing spans, LLM calls, and tool executions"
+  style={{ maxWidth: "800px", width: "100%", margin: "8px 0" }}
+  className="nextra-image rounded-md py-8"
+  data-zoom
+  width={800}
+  height={400}
+/>
+
+
+## Model routing
+
+When creating agents in Mastra, you can specify any AI SDK-supported model:
+
+```typescript
+import { openai } from "@ai-sdk/openai";
+import { Agent } from "@mastra/core/agent";
+
+const agent = new Agent({
+  name: "WeatherAgent",
+  instructions: "Instructions for the agent...",
+  model: openai("gpt-4-turbo"), // Model comes directly from AI SDK
+});
+
+// Use the agent
+const result = await agent.generate("What is the weather like?");
+```
+
+## AI SDK Hooks
+
+Mastra is compatible with AI SDK's hooks for seamless frontend integration:
+
+### useChat
+
+The `useChat` hook enables real-time chat interactions in your frontend application
+
+- Works with agent data streams i.e `.toDataStreamResponse()`
+- The useChat api defaults to /api/chat
+- Works with the Mastra REST API agent stream endpoint `{MASTRA_BASE_URL}/agents/:agentId/stream` for data streams
+i.e no structured output is defined. 
+
+```typescript filename="app/api/chat/route.ts" copy
+
+import { mastra } from '@/src/mastra';
+
+export async function POST(req: Request) {
+  const { messages } = await req.json();
+  const myAgent = mastra.getAgent('weatherAgent');
+  const stream = await myAgent.stream(messages);
+
+  return stream.toDataStreamResponse();
+}
+
+```
+
+```typescript copy
+import { useChat } from '@ai-sdk/react';
+
+export function ChatComponent() {
+  const { messages, input, handleInputChange, handleSubmit } = useChat({
+    api: '/path-to-your-agent-stream-api-endpoint'
+  });
+
+  return (
+    <div>
+      {messages.map(m => (
+        <div key={m.id}>
+          {m.role}: {m.content}
+        </div>
+      ))}
+      <form onSubmit={handleSubmit}>
+        <input
+          value={input}
+          onChange={handleInputChange}
+          placeholder="Say something..."
+        />
+      </form>
+    </div>
+  );
+}
+```
+
+> **Gotcha**: When using `useChat` with agent memory functionality, make sure to check out the [Agent Memory section](/docs/agents/01-agent-memory#usechat) for important implementation details.
+
+### useCompletion
+
+For single-turn completions, use the `useCompletion` hook:
+
+- Works with agent data streams i.e `.toDataStreamResponse()`
+- The useCompletion api defaults to /api/completion
+- Works with the Mastra REST API agent stream endpoint `{MASTRA_BASE_URL}/agents/:agentId/stream` for data streams
+i.e no structured output is defined. 
+
+```typescript filename="app/api/completion/route.ts" copy
+
+import { mastra } from '@/src/mastra';
+
+export async function POST(req: Request) {
+  const { messages } = await req.json();
+  const myAgent = mastra.getAgent('weatherAgent');
+  const stream = await myAgent.stream(messages);
+
+  return stream.toDataStreamResponse();
+}
+
+```
+
+```typescript
+import { useCompletion } from "@ai-sdk/react";
+
+export function CompletionComponent() {
+  const {
+    completion,
+    input,
+    handleInputChange,
+    handleSubmit,
+  } = useCompletion({
+  api: '/path-to-your-agent-stream-api-endpoint'
+  });
+
+  return (
+    <div>
+      <form onSubmit={handleSubmit}>
+        <input
+          value={input}
+          onChange={handleInputChange}
+          placeholder="Enter a prompt..."
+        />
+      </form>
+      <p>Completion result: {completion}</p>
+    </div>
+  );
+}
+```
+
+
+
+
+### useObject
+
+For consuming text streams that represent JSON objects then parse them into a complete object based on a schema.
+
+- Works with agent text streams i.e `.toTextStreamResponse()`
+- The useObject api defaults to /api/completion
+- Works with the Mastra REST API agent stream endpoint `{MASTRA_BASE_URL}/agents/:agentId/stream` for text streams
+i.e structured output is defined. 
+
+```typescript filename="app/api/use-object/route.ts" copy
+
+import { mastra } from '@/src/mastra';
+
+export async function POST(req: Request) {
+  const { messages } = await req.json();
+  const myAgent = mastra.getAgent('weatherAgent');
+  const stream = await myAgent.stream(messages, {
+    output: z.object({
+      weather: z.string(),
+    }),
+  });
+
+  return stream.toTextStreamResponse();
+}
+```
+
+```typescript
+import { experimental_useObject as useObject } from '@ai-sdk/react';
+
+export default function Page() {
+  const { object, submit } = useObject({
+    api: '/api/use-object',
+    schema: z.object({
+      weather: z.string(),
+    }),
+  });
+
+  return (
+    <div>
+      <button onClick={() => submit('example input')}>Generate</button>
+      {object?.content && <p>{object.content}</p>}
+    </div>
+  );
+}
+
+```
