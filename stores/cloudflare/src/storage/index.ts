@@ -230,8 +230,6 @@ export class CloudflareStore extends MastraStorage {
     return order.map(item => item.id);
   }
 
-  //////////////////////////////////////////
-
   private getKey(tableName: TABLE_NAMES, keys: Record<string, any>): string {
     const keyParts = Object.entries(keys).map(([key, value]) => `${key}:${value}`);
     return `${tableName}:${keyParts.join(':')}`;
