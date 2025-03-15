@@ -2377,7 +2377,7 @@ Then, initialize a TypeScript project including the `@mastra/core` package:
 ```bash copy
 npm init -y
 npm install typescript tsx @types/node mastra --save-dev
-npm install @mastra/core zod
+npm install @mastra/core zod @ai-sdk/openai
 npx tsc --init
 ```
   </Tabs.Tab>
@@ -3065,7 +3065,7 @@ Initialize a new Node.js project and install the required dependencies:
 
 ```bash
 npm init -y
-npm install @mastra/core zod
+npm install @mastra/core zod @ai-sdk/openai
 ```
 
 Set Up Environment Variables
