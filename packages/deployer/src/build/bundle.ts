@@ -9,9 +9,7 @@ import esbuild from 'rollup-plugin-esbuild';
 import { fileURLToPath } from 'url';
 
 import { FileService } from './fs';
-import { libSqlFix } from './plugins/fix-libsql';
 import { removeDeployer } from './plugins/remove-deployer';
-import { telemetryFix } from './plugins/telemetry-fix';
 
 type NormalizedInputOptions = Omit<Partial<InputOptions>, 'plugins' | 'input' | 'external'> & {
   plugins?: Plugin[];
@@ -45,7 +43,7 @@ function getOptions(inputOptions: NormalizedInputOptions, platform: 'node' | 'br
   return {
     logLevel: 'silent',
     ...inputOptions,
-    treeshake: false,
+    treeshake: 'smallest',
     preserveSymlinks: true,
     external: [
       ...nodeBuiltins,
@@ -54,7 +52,6 @@ function getOptions(inputOptions: NormalizedInputOptions, platform: 'node' | 'br
     ],
     plugins: [
       ...(inputOptions.plugins ?? []),
-      telemetryFix(),
       alias({
         entries: [
           {
@@ -81,7 +78,6 @@ function getOptions(inputOptions: NormalizedInputOptions, platform: 'node' | 'br
         transformMixedEsModules: true,
         // dynamicRequireTargets: ['node_modules/**/@libsql+win32-*/*'],
       }),
-      libSqlFix(),
       // for debugging
       // {
       //   name: 'logger',

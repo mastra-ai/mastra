@@ -28,6 +28,14 @@ export function pino() {
     name: 'rollup-plugin-pino',
 
     async resolveId(id, importee) {
+      if (workerFiles.some(file => file.id === id)) {
+        return {
+          id,
+          external: true,
+          moduleSideEffects: false,
+        };
+      }
+
       if (id === 'pino') {
         // resolve pino first
         const resolvedPino = await this.resolve(id, importee);
@@ -45,6 +53,7 @@ export function pino() {
                 type: 'chunk',
                 id: resolvedEntry.id,
                 name: `${file.file}`,
+                importer: resolvedPino.id,
               });
 
               fileReferences.set(file.id, reference);
@@ -54,6 +63,7 @@ export function pino() {
       }
     },
     renderChunk(code, chunk) {
+      debugger;
       if (chunk.type === 'chunk' && (chunk as OutputChunk).isEntry && fileReferences.size && chunk.name === 'index') {
         const importRegex = /^(?:import(?:["'\s]*[\w*${}\n\r\t, ]+from\s*)?["'\s].+[;"'\s]*)$/gm;
 

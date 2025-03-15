@@ -1,0 +1,69 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`getTelemetryConfig > should be able to extract the telemetry config from ./__fixtures__/no-telemetry.js 1`] = `
+"const telemetry = {};
+
+export { telemetry };
+"
+`;
+
+exports[`getTelemetryConfig > should be able to extract the telemetry config from ./plugins/__fixtures__/basic.js 1`] = `
+"const telemetry = {
+  enabled: true,
+  serviceName: "my-app",
+  export: {
+    type: "otlp",
+    endpoint: "http://localhost:4318"
+    // SigNoz local endpoint
+  }
+};
+
+export { telemetry };
+"
+`;
+
+exports[`getTelemetryConfig > should be able to extract the telemetry config from ./plugins/__fixtures__/basic-with-const.js 1`] = `
+"import { TestDeployer } from '@mastra/deployer/test';
+
+new TestDeployer();
+const _telemetry = {
+  enabled: true,
+  serviceName: "my-app",
+  export: {
+    type: "otlp",
+    endpoint: "http://localhost:4318"
+    // SigNoz local endpoint
+  }
+};
+const telemetry = _telemetry;
+
+export { telemetry };
+"
+`;
+
+exports[`getTelemetryConfig > should be able to extract the telemetry config from ./plugins/__fixtures__/basic-with-function.js 1`] = `
+"function getTelemetryConfig() {
+  return {
+    enabled: true,
+    serviceName: "my-app",
+    export: {
+      type: "otlp",
+      endpoint: "http://localhost:4318"
+      // SigNoz local endpoint
+    }
+  };
+}
+const telemetry = getTelemetryConfig();
+
+export { telemetry };
+"
+`;
+
+exports[`getTelemetryConfig > should be able to extract the telemetry config from ./plugins/__fixtures__/basic-with-import.js 1`] = `
+"import { telemetryConfig } from '@/telemetry';
+
+const telemetry = telemetryConfig;
+
+export { telemetry };
+"
+`;

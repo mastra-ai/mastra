@@ -6,8 +6,9 @@ import esbuild from 'rollup-plugin-esbuild';
 import { removeAllExceptDeployer } from './babel/get-deployer';
 import commonjs from '@rollup/plugin-commonjs';
 
-export async function getDeployer(entryFile: string, outputDir: string) {
-  const bundle = await rollup({
+export function getDeployerBundler(entryFile: string) {
+  return rollup({
+    logLevel: 'silent',
     input: {
       deployer: entryFile,
     },
@@ -63,6 +64,10 @@ export async function getDeployer(entryFile: string, outputDir: string) {
       }),
     ],
   });
+}
+
+export async function getDeployer(entryFile: string, outputDir: string) {
+  const bundle = await getDeployerBundler(entryFile);
 
   await bundle.write({
     dir: outputDir,
