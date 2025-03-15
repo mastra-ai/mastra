@@ -12,7 +12,7 @@ One reason to use `.createRun()` vs `.execute()` is to get a unique run ID for t
 ## Usage
 
 ```typescript
-const { runId, start } = workflow.createRun();
+const { runId, start, watch } = workflow.createRun();
 
 const result = await start();
 ```
@@ -31,6 +31,21 @@ const result = await start();
       type: "() => Promise<WorkflowResult>",
       description: "Function that begins workflow execution when called",
     },
+    {
+      name: "watch",
+      type: "(callback: (record: WorkflowRunState) => void) => () => void",
+      description: "Function that accepts a callback function that will be called with each transition of the workflow run",
+    },
+    {
+      name: "resume",
+      type: "({stepId: string, context: Record<string, any>}) => Promise<WorkflowResult>",
+      description: "Function that resumes a workflow run from a given step ID and context",
+    },
+    {
+      name: "resumeWithEvent",
+      type: "(eventName: string, data: any) => Promise<WorkflowResult>",
+      description: "Function that resumes a workflow run from a given event name and data",
+    },
   ]}
 />
 
@@ -40,7 +55,7 @@ The start function may throw validation errors if the workflow configuration is 
 
 ```typescript
 try {
-  const { runId, start } = workflow.createRun();
+  const { runId, start, watch, resume, resumeWithEvent } = workflow.createRun();
   await start({ triggerData: data });
 } catch (error) {
   if (error instanceof ValidationError) {

@@ -50,11 +50,13 @@ import {
 import { getSpeakersHandler, speakHandler, listenHandler } from './handlers/voice.js';
 import {
   startWorkflowRunHandler,
-  executeWorkflowHandler,
+  resumeAsyncWorkflowHandler,
+  startAsyncWorkflowHandler,
   getWorkflowByIdHandler,
   getWorkflowsHandler,
   resumeWorkflowHandler,
   watchWorkflowHandler,
+  createRunHandler,
 } from './handlers/workflows.js';
 import { html } from './welcome.js';
 
@@ -986,45 +988,6 @@ export async function createHonoServer(
   );
 
   app.post(
-    '/api/workflows/:workflowId/execute',
-    bodyLimit(bodyLimitOptions),
-    describeRoute({
-      description: 'Execute/Start a workflow',
-      tags: ['workflows'],
-      parameters: [
-        {
-          name: 'workflowId',
-          in: 'path',
-          required: true,
-          schema: { type: 'string' },
-        },
-      ],
-      requestBody: {
-        required: true,
-        content: {
-          'application/json': {
-            schema: {
-              type: 'object',
-              properties: {
-                input: { type: 'object' },
-              },
-            },
-          },
-        },
-      },
-      responses: {
-        200: {
-          description: 'Workflow execution result',
-        },
-        404: {
-          description: 'Workflow not found',
-        },
-      },
-    }),
-    executeWorkflowHandler,
-  );
-
-  app.post(
     '/api/workflows/:workflowId/resume',
     describeRoute({
       description: 'Resume a suspended workflow step',
@@ -1062,7 +1025,118 @@ export async function createHonoServer(
   );
 
   app.post(
-    '/api/workflows/:workflowId/startRun',
+    '/api/workflows/:workflowId/resumeAsync',
+    bodyLimit(bodyLimitOptions),
+    describeRoute({
+      description: 'Resume a suspended workflow step',
+      tags: ['workflows'],
+      parameters: [
+        {
+          name: 'workflowId',
+          in: 'path',
+          required: true,
+          schema: { type: 'string' },
+        },
+        {
+          name: 'runId',
+          in: 'query',
+          required: true,
+          schema: { type: 'string' },
+        },
+      ],
+      requestBody: {
+        required: true,
+        content: {
+          'application/json': {
+            schema: {
+              type: 'object',
+              properties: {
+                stepId: { type: 'string' },
+                context: { type: 'object' },
+              },
+            },
+          },
+        },
+      },
+    }),
+    resumeAsyncWorkflowHandler,
+  );
+
+  app.post(
+    '/api/workflows/:workflowId/createRun',
+    describeRoute({
+      description: 'Create a new workflow run',
+      tags: ['workflows'],
+      parameters: [
+        {
+          name: 'workflowId',
+          in: 'path',
+          required: true,
+          schema: { type: 'string' },
+        },
+        {
+          name: 'runId',
+          in: 'query',
+          required: false,
+          schema: { type: 'string' },
+        },
+      ],
+      responses: {
+        200: {
+          description: 'New workflow run created',
+        },
+      },
+    }),
+    createRunHandler,
+  );
+
+  app.post(
+    '/api/workflows/:workflowId/startAsync',
+    bodyLimit(bodyLimitOptions),
+    describeRoute({
+      description: 'Execute/Start a workflow',
+      tags: ['workflows'],
+      parameters: [
+        {
+          name: 'workflowId',
+          in: 'path',
+          required: true,
+          schema: { type: 'string' },
+        },
+        {
+          name: 'runId',
+          in: 'query',
+          required: false,
+          schema: { type: 'string' },
+        },
+      ],
+      requestBody: {
+        required: true,
+        content: {
+          'application/json': {
+            schema: {
+              type: 'object',
+              properties: {
+                input: { type: 'object' },
+              },
+            },
+          },
+        },
+      },
+      responses: {
+        200: {
+          description: 'Workflow execution result',
+        },
+        404: {
+          description: 'Workflow not found',
+        },
+      },
+    }),
+    startAsyncWorkflowHandler,
+  );
+
+  app.post(
+    '/api/workflows/:workflowId/start',
     describeRoute({
       description: 'Create and start a new workflow run',
       tags: ['workflows'],
@@ -1073,10 +1147,16 @@ export async function createHonoServer(
           required: true,
           schema: { type: 'string' },
         },
+        {
+          name: 'runId',
+          in: 'query',
+          required: true,
+          schema: { type: 'string' },
+        },
       ],
       responses: {
         200: {
-          description: 'New workflow run created and started',
+          description: 'Workflow run started',
         },
         404: {
           description: 'Workflow not found',

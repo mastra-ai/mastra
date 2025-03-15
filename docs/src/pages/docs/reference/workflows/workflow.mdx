@@ -137,7 +137,7 @@ A workflow's status indicates its current execution state. The possible values a
     },
     {
       name: "RUNNING",
-      type: "string", 
+      type: "string",
       description: "Workflow is actively executing steps"
     },
     {
@@ -161,9 +161,9 @@ A workflow's status indicates its current execution state. The possible values a
 ### Example: Handling Different Statuses
 
 ```typescript showLineNumbers copy
-const { runId, start } = workflow.createRun();
+const { runId, start, watch } = workflow.createRun();
 
-workflow.watch(runId, async ({ status }) => {
+watch(async ({ status }) => {
   switch (status) {
     case "SUSPENDED":
       // Handle suspended state
@@ -184,7 +184,7 @@ await start({ triggerData: data });
 
 ```ts showLineNumbers copy
 try {
-  const { runId, start } = workflow.createRun();
+  const { runId, start, watch, resume } = workflow.createRun();
   await start({ triggerData: data });
 } catch (error) {
   if (error instanceof ValidationError) {

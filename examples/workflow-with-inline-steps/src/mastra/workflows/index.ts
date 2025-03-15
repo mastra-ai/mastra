@@ -41,6 +41,22 @@ myWorkflow
         return { incrementedValue: 0 };
       },
     }),
+  )
+  .then(
+    new Step({
+      id: 'stepThree',
+      execute: async ({ context, suspend }) => {
+        if (context?.resumeData?.confirm !== 'true') {
+          return suspend({
+            message: 'Do you accept?',
+          });
+        }
+
+        return {
+          message: 'Thank you for accepting',
+        };
+      },
+    }),
   );
 
 myWorkflow.commit();

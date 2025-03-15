@@ -31,19 +31,35 @@ export class Workflow extends BaseResource {
   }
 
   /**
-   * Creates a new workflow run instance and starts it
-   * @param params - Parameters required for the workflow run
+   * Creates a new workflow run
    * @returns Promise containing the generated run ID
    */
-  startRun(params: Record<string, any>): Promise<{ runId: string }> {
-    return this.request(`/api/workflows/${this.workflowId}/startRun`, {
+  createRun(params?: { runId?: string }): Promise<{ runId: string }> {
+    const searchParams = new URLSearchParams();
+
+    if (!!params?.runId) {
+      searchParams.set('runId', params.runId);
+    }
+
+    return this.request(`/api/workflows/${this.workflowId}/createRun?${searchParams.toString()}`, {
       method: 'POST',
-      body: params,
     });
   }
 
   /**
-   * Resumes a suspended workflow step
+   * Starts a workflow run synchronously without waiting for the workflow to complete
+   * @param params - Object containing the runId and triggerData
+   * @returns Promise containing success message
+   */
+  start(params: { runId: string; triggerData: Record<string, any> }): Promise<{ message: string }> {
+    return this.request(`/api/workflows/${this.workflowId}/start?runId=${params.runId}`, {
+      method: 'POST',
+      body: params?.triggerData,
+    });
+  }
+
+  /**
+   * Resumes a suspended workflow step synchronously without waiting for the workflow to complete
    * @param stepId - ID of the step to resume
    * @param runId - ID of the workflow run
    * @param context - Context to resume the workflow with
@@ -57,12 +73,39 @@ export class Workflow extends BaseResource {
     stepId: string;
     runId: string;
     context: Record<string, any>;
-  }): Promise<Record<string, any>> {
+  }): Promise<{ message: string }> {
     return this.request(`/api/workflows/${this.workflowId}/resume?runId=${runId}`, {
       method: 'POST',
       body: {
         stepId,
         context,
+      },
+    });
+  }
+
+  /**
+   * Starts a workflow run asynchronously and returns a promise that resolves when the workflow is complete
+   * @param params - Object containing the runId and triggerData
+   * @returns Promise containing the workflow execution results
+   */
+  startAsync(params: { runId: string; triggerData: Record<string, any> }): Promise<WorkflowRunResult> {
+    return this.request(`/api/workflows/${this.workflowId}/startAsync?runId=${params.runId}`, {
+      method: 'POST',
+      body: params?.triggerData,
+    });
+  }
+
+  /**
+   * Resumes a suspended workflow step asynchronously and returns a promise that resolves when the workflow is complete
+   * @param params - Object containing the runId, stepId, and context
+   * @returns Promise containing the workflow resume results
+   */
+  resumeAsync(params: { runId: string; stepId: string; context: Record<string, any> }): Promise<WorkflowRunResult> {
+    return this.request(`/api/workflows/${this.workflowId}/resumeAsync?runId=${params.runId}`, {
+      method: 'POST',
+      body: {
+        stepId: params.stepId,
+        context: params.context,
       },
     });
   }
@@ -113,7 +156,11 @@ export class Workflow extends BaseResource {
 
               //Check to see if all steps are completed and cancel reader
               const isWorkflowCompleted = parsedRecord?.activePaths?.every(
-                (path: any) => path.status === 'completed' || path.status === 'suspended' || path.status === 'failed',
+                (path: any) =>
+                  path.status === 'completed' ||
+                  path.status === 'suspended' ||
+                  path.status === 'failed' ||
+                  path.status === 'skipped',
               );
               if (isWorkflowCompleted) {
                 reader.cancel();
@@ -135,7 +182,7 @@ export class Workflow extends BaseResource {
    * @param runId - Optional run ID to filter the watch stream
    * @returns AsyncGenerator that yields parsed records from the workflow watch stream
    */
-  async *watch({ runId }: { runId?: string }) {
+  async watch({ runId }: { runId?: string }, onRecord: (record: WorkflowRunResult) => void) {
     const response: Response = await this.request(`/api/workflows/${this.workflowId}/watch?runId=${runId}`, {
       stream: true,
     });
@@ -148,6 +195,8 @@ export class Workflow extends BaseResource {
       throw new Error('Response body is null');
     }
 
-    yield* this.streamProcessor(response.body);
+    for await (const record of this.streamProcessor(response.body)) {
+      onRecord(record);
+    }
   }
 }
