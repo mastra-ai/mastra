@@ -94,7 +94,7 @@ const retryUntil = async <T>(
   throw new Error('Timeout waiting for condition');
 };
 
-describe('CloudflareStore', () => {
+describe.skip('CloudflareStore Workers Binding', () => {
   // Expose private methods for testing
   const getThreadMessagesKey = (threadId: string) => `${TABLE_MESSAGES}:${threadId}:messages`;
 
@@ -119,6 +119,13 @@ describe('CloudflareStore', () => {
     }
     store = new CloudflareStore(TEST_CONFIG);
   });
+
+  //   beforeAll(() => {
+  //     // Configure store with Workers binding
+  //     store = new CloudflareStore({
+  //       // Worker binding configuration will go here
+  //     });
+  //   });
 
   // Helper to clean up KV namespaces
   const cleanupNamespaces = async () => {
@@ -147,6 +154,71 @@ describe('CloudflareStore', () => {
 
   afterAll(async () => {
     await cleanupNamespaces();
+  });
+
+  describe('Atomic Operations', () => {
+    it('should handle concurrent message updates atomically', async () => {
+      const thread = createSampleThread();
+      await store.__saveThread({ thread });
+
+      // Create messages with sequential timestamps
+      const now = Date.now();
+      const messages = Array.from({ length: 5 }, (_, i) => ({
+        ...createSampleMessage(thread.id),
+        createdAt: new Date(now + i * 1000),
+      }));
+
+      // Save messages in parallel - should be atomic with Workers
+      await Promise.all(messages.map(msg => store.__saveMessages({ messages: [msg] })));
+
+      // Order should be immediately consistent
+      const orderKey = store.__getThreadMessagesKey(thread.id);
+      const order = await store.__getFullOrder(TABLE_MESSAGES, orderKey);
+
+      // Verify correct timestamp-based ordering
+      const expectedOrder = messages
+        .slice()
+        .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime())
+        .map(m => m.id);
+
+      expect(order).toEqual(expectedOrder);
+    });
+
+    it('should maintain order with concurrent score updates', async () => {
+      const thread = createSampleThread();
+      await store.__saveThread({ thread });
+
+      // Create initial messages
+      const messages = Array.from({ length: 3 }, () => createSampleMessage(thread.id));
+      await store.__saveMessages({ messages });
+
+      const orderKey = store.__getThreadMessagesKey(thread.id);
+
+      // Perform multiple concurrent score updates
+      await Promise.all([
+        store.__updateSortedOrder(
+          TABLE_MESSAGES,
+          orderKey,
+          messages.map((msg, i) => ({ id: msg.id, score: i })),
+        ),
+        store.__updateSortedOrder(
+          TABLE_MESSAGES,
+          orderKey,
+          messages.map((msg, i) => ({ id: msg.id, score: messages.length - 1 - i })),
+        ),
+      ]);
+
+      // Order should be immediately consistent
+      const order = await store.__getFullOrder(TABLE_MESSAGES, orderKey);
+
+      // With atomic operations, the last write should win consistently
+      const expectedOrder = messages
+        .slice()
+        .reverse()
+        .map(m => m.id);
+
+      expect(order).toEqual(expectedOrder);
+    });
   });
 
   describe('Table Operations', () => {
@@ -518,7 +590,7 @@ describe('CloudflareStore', () => {
       expect(order).toEqual(messages.map(m => m.id));
     });
 
-    it.only('should maintain order when messages are added out of sequence', async () => {
+    it('should maintain order when messages are added out of sequence', async () => {
       const thread = createSampleThread();
       await store.__saveThread({ thread });
 
@@ -971,7 +1043,7 @@ describe('CloudflareStore', () => {
   });
 
   describe('Error Handling', () => {
-    it.only('should handle race conditions in getSortedOrder', async () => {
+    it('should handle race conditions in getSortedOrder', async () => {
       const thread = createSampleThread();
       await store.__saveThread({ thread });
 

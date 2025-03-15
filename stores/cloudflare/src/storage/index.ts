@@ -251,27 +251,15 @@ export class CloudflareStore extends MastraStorage {
     tableName: TABLE_NAMES,
     orderKey: string,
   ): Promise<Array<{ id: string; score: number }>> {
-    // Add retries for race conditions
-    let retries = 3;
-    while (retries > 0) {
-      const raw = await this.getKV(tableName, orderKey);
-      if (!raw) {
-        retries--;
-        if (retries > 0) {
-          await new Promise(resolve => setTimeout(resolve, 100)); // Wait 100ms between retries
-          continue;
-        }
-        return [];
-      }
-      try {
-        const arr = JSON.parse(typeof raw === 'string' ? raw : JSON.stringify(raw));
-        return Array.isArray(arr) ? arr : [];
-      } catch (e) {
-        console.error(`Error parsing order data for key ${orderKey}:`, e);
-        return [];
-      }
+    const raw = await this.getKV(tableName, orderKey);
+    if (!raw) return [];
+    try {
+      const arr = JSON.parse(typeof raw === 'string' ? raw : JSON.stringify(raw));
+      return Array.isArray(arr) ? arr : [];
+    } catch (e) {
+      console.error(`Error parsing order data for key ${orderKey}:`, e);
+      return [];
     }
-    return [];
   }
 
   private async updateSorting(threadMessages: (MessageType & { _index?: number })[]) {
