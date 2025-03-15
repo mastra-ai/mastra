@@ -13,7 +13,6 @@ import type {
 import { MastraBase } from '../base';
 import type { MastraStorage, StorageGetMessagesArg } from '../storage';
 import { DefaultProxyStorage } from '../storage/default-proxy-storage';
-import { InMemoryStorage } from '../storage/in-memory-storage';
 import type { CoreTool } from '../tools';
 import { deepMerge } from '../utils';
 import type { MastraVector } from '../vector';
@@ -45,15 +44,7 @@ export abstract class MastraMemory extends MastraBase {
   constructor(config: { name: string } & SharedMemoryConfig) {
     super({ component: 'MEMORY', name: config.name });
 
-    this.storage =
-      config.storage ||
-      (process.env.MASTRA_DEFAULT_STORAGE_URL
-        ? new DefaultProxyStorage({
-            config: {
-              url: process.env.MASTRA_DEFAULT_STORAGE_URL,
-            },
-          })
-        : new InMemoryStorage());
+    this.storage = config.storage || new DefaultProxyStorage({});
 
     if (config.vector) {
       this.vector = config.vector;
