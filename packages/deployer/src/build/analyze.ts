@@ -233,7 +233,7 @@ async function validateOutput(
         result.dependencies.set(reverseVirtualReferenceMap.get(file.name)!, file.fileName);
       }
 
-      if (!file.isDynamicEntry) {
+      if (!file.isDynamicEntry && file.isEntry) {
         // validate if the chunk is actually valid, a failsafe to make sure bundling didn't make any mistakes
         await validate(join(outputDir, file.fileName));
       }

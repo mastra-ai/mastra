@@ -9,7 +9,7 @@ import type { SpawnOptions } from 'node:child_process';
  * @param options - Spawn options
  * @returns Promise that resolves with the exit code when the process completes
  */
-function spawn(command: string, args: string[] = [], options: SpawnOptions = {}): Promise<number> {
+function spawn(command: string, args: string[] = [], options: SpawnOptions = {}): Promise<void> {
   return new Promise((resolve, reject) => {
     const childProcess = nodeSpawn(command, args, {
       // stdio: 'inherit',
@@ -20,11 +20,16 @@ function spawn(command: string, args: string[] = [], options: SpawnOptions = {})
       reject(error);
     });
 
+    let stderr = '';
+    childProcess.stderr?.on('data', message => {
+      stderr += message;
+    });
+
     childProcess.on('close', code => {
-      if (code === null) {
-        reject(new Error(`Command ${command} exited with null code`));
+      if (code === 0) {
+        resolve();
       } else {
-        resolve(code);
+        reject(new Error(stderr));
       }
     });
   });
