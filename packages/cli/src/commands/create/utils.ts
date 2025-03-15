@@ -40,19 +40,23 @@ const execWithTimeout = async (command: string, timeoutMs?: number) => {
 };
 
 export const createMastraProject = async ({
+  projectName: name,
   createVersionTag,
   timeout,
 }: {
+  projectName?: string;
   createVersionTag?: string;
   timeout?: number;
 }) => {
   p.intro(color.inverse('Mastra Create'));
 
-  const projectName = await p.text({
-    message: 'What do you want to name your project?',
-    placeholder: 'my-mastra-app',
-    defaultValue: 'my-mastra-app',
-  });
+  const projectName =
+    name ??
+    (await p.text({
+      message: 'What do you want to name your project?',
+      placeholder: 'my-mastra-app',
+      defaultValue: 'my-mastra-app',
+    }));
 
   if (p.isCancel(projectName)) {
     p.cancel('Operation cancelled');

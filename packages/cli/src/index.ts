@@ -45,6 +45,10 @@ program
   .option('-k, --llm-api-key <api-key>', 'API key for the model provider')
   .option('-e, --example', 'Include example code')
   .option('-t, --timeout [timeout]', 'Configurable timeout for package installation, defaults to 60000 ms')
+  .option(
+    '-p, --project-name <string>',
+    'Project name that will be used in package.json and as the project directory name.',
+  )
   .action(async args => {
     await analytics.trackCommandExecution({
       command: 'create',
@@ -66,6 +70,7 @@ program
           addExample: args.example,
           llmApiKey: args['llm-api-key'],
           timeout,
+          projectName: args.projectName,
         });
       },
     });
