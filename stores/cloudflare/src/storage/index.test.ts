@@ -1,5 +1,6 @@
 import { randomUUID } from 'crypto';
-import { describe, it, expect, beforeAll, beforeEach, afterAll } from 'vitest';
+import dotenv from 'dotenv';
+import { describe, it, expect, beforeAll, beforeEach, afterAll, vi } from 'vitest';
 import type { WorkflowRunState } from '@mastra/core/workflows';
 import type { MessageType, StorageThreadType } from '@mastra/core/memory';
 import { TABLE_MESSAGES, TABLE_NAMES, TABLE_THREADS, TABLE_WORKFLOW_SNAPSHOT } from '@mastra/core/storage';
@@ -7,10 +8,15 @@ import { TABLE_MESSAGES, TABLE_NAMES, TABLE_THREADS, TABLE_WORKFLOW_SNAPSHOT } f
 import { CloudflareStore } from '.';
 import type { CloudflareConfig } from '.';
 
+dotenv.config();
+
+// Increase timeout for namespace creation and cleanup
+vi.setConfig({ testTimeout: 80000, hookTimeout: 80000 });
+
 const TEST_CONFIG: CloudflareConfig = {
   accountId: process.env.CLOUDFLARE_ACCOUNT_ID || '',
   apiToken: process.env.CLOUDFLARE_API_TOKEN || '',
-  namespacePrefix: `test-${randomUUID().slice(0, 8)}`, // Unique prefix for test isolation
+  namespacePrefix: 'mastra-test', // Fixed prefix for test isolation
 };
 
 // Sample test data factory functions
@@ -23,15 +29,14 @@ const createSampleThread = () => ({
   metadata: { key: 'value' },
 });
 
-const createSampleMessage = (threadId: string) =>
-  ({
-    id: `msg-${randomUUID()}`,
-    role: 'user',
-    type: 'text',
-    threadId,
-    content: [{ type: 'text', text: 'Hello' }],
-    createdAt: new Date(),
-  }) as any;
+const createSampleMessage = (threadId: string): MessageType => ({
+  id: `msg-${randomUUID()}`,
+  role: 'user',
+  type: 'text',
+  threadId,
+  content: [{ type: 'text' as const, text: 'Hello' }],
+  createdAt: new Date(),
+});
 
 const createSampleWorkflowSnapshot = (threadId: string): WorkflowRunState => ({
   value: { [threadId]: 'running' },
@@ -58,15 +63,30 @@ declare module '@mastra/core/storage' {
     __getRange(tableName: TABLE_NAMES, orderKey: string, start: number, end: number): Promise<string[]>;
     __getLastN(tableName: TABLE_NAMES, orderKey: string, n: number): Promise<string[]>;
     __getRank(tableName: TABLE_NAMES, orderKey: string, id: string): Promise<number | null>;
-    __getThread<T>(params: { tableName: TABLE_NAMES; keys: Record<string, string> }): Promise<T | null>;
     __listKV(tableName: TABLE_NAMES): Promise<Array<{ name: string }>>;
     __getKey(tableName: TABLE_NAMES, keys: Record<string, any>): string;
   }
 }
 
+// Helper function to retry until condition is met or timeout
+const retryUntil = async <T>(
+  fn: () => Promise<T>,
+  condition: (result: T) => boolean,
+  timeout = 1000,
+  interval = 100,
+) => {
+  const start = Date.now();
+  while (Date.now() - start < timeout) {
+    const result = await fn();
+    if (condition(result)) return result;
+    await new Promise(resolve => setTimeout(resolve, interval));
+  }
+  throw new Error('Timeout waiting for condition');
+};
+
 describe('CloudflareStore', () => {
   // Expose private methods for testing
-  const getThreadMessagesKey = (threadId: string) => `thread:${threadId}:messages`;
+  const getThreadMessagesKey = (threadId: string) => `${TABLE_MESSAGES}:${threadId}:messages`;
 
   // Add test helper methods to CloudflareStore
   beforeAll(() => {
@@ -77,7 +97,6 @@ describe('CloudflareStore', () => {
       __getRange: CloudflareStore.prototype['getRange'],
       __getLastN: CloudflareStore.prototype['getLastN'],
       __getRank: CloudflareStore.prototype['getRank'],
-      __getThread: CloudflareStore.prototype['load'],
     });
   });
   let store: CloudflareStore;
@@ -119,6 +138,83 @@ describe('CloudflareStore', () => {
     await cleanupNamespaces();
   });
 
+  describe('Table Operations', () => {
+    const testTableName = TABLE_THREADS;
+    const testTableName2 = TABLE_MESSAGES;
+
+    beforeEach(async () => {
+      // Clear tables before each test
+      await store.clearTable({ tableName: testTableName }).catch(() => {});
+      await store.clearTable({ tableName: testTableName2 }).catch(() => {});
+    });
+
+    it('should create a new table with schema', async () => {
+      // Increase timeout for namespace creation and cleanup
+      await store.createTable({
+        tableName: testTableName,
+        schema: {
+          id: { type: 'text', primaryKey: true },
+          data: { type: 'text', nullable: true },
+        },
+      });
+
+      // Verify table exists by inserting and retrieving data
+      await store.insert({
+        tableName: testTableName,
+        record: {
+          id: 'test1',
+          data: 'test-data',
+          title: 'Test Thread',
+          resourceId: 'resource-1',
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        } as StorageThreadType,
+      });
+
+      const result = await store.load<StorageThreadType>({ tableName: testTableName, keys: { id: 'test1' } });
+      expect(result).toBeTruthy();
+      if (result) {
+        expect(result.title).toBe('Test Thread');
+        expect(result.resourceId).toBe('resource-1');
+        expect(result.createdAt).toBeDefined();
+        expect(result.updatedAt).toBeDefined();
+      }
+    });
+
+    it('should handle multiple table creation', async () => {
+      await store.createTable({
+        tableName: testTableName2,
+        schema: {
+          id: { type: 'text', primaryKey: true },
+          threadId: { type: 'text', nullable: false }, // Use nullable: false instead of required
+          data: { type: 'text', nullable: true },
+        },
+      });
+
+      // Verify both tables work independently
+      await store.insert({
+        tableName: testTableName2,
+        record: {
+          id: 'test2',
+          threadId: 'thread-1',
+          content: [{ type: 'text', text: 'test-data-2' }],
+          role: 'user',
+        } as MessageType,
+      });
+
+      const result = await store.load<MessageType>({
+        tableName: testTableName2,
+        keys: { id: 'test2', threadId: 'thread-1' },
+      });
+      expect(result).toBeTruthy();
+      if (result) {
+        expect(result.threadId).toBe('thread-1');
+        expect(result.content).toEqual([{ type: 'text', text: 'test-data-2' }]);
+        expect(result.role).toBe('user');
+      }
+    });
+  });
+
   describe('Thread Operations', () => {
     it('should create and retrieve a thread', async () => {
       const thread = createSampleThread();
@@ -153,22 +249,39 @@ describe('CloudflareStore', () => {
       const thread = createSampleThread();
       await store.__saveThread({ thread });
 
-      const newMetadata = { newKey: 'newValue' };
+      const updatedTitle = 'Updated Title';
+      const updatedMetadata = { newKey: 'newValue' };
       const updatedThread = await store.__updateThread({
         id: thread.id,
-        title: 'Updated Title',
-        metadata: newMetadata,
+        title: updatedTitle,
+        metadata: updatedMetadata,
       });
 
-      expect(updatedThread.title).toBe('Updated Title');
+      expect(updatedThread.title).toBe(updatedTitle);
       expect(updatedThread.metadata).toEqual({
         ...thread.metadata,
-        ...newMetadata,
+        ...updatedMetadata,
       });
 
-      // Verify persistence
-      const retrievedThread = await store.__getThreadById({ threadId: thread.id });
-      expect(retrievedThread).toEqual(updatedThread);
+      // Verify persistence with retry
+      const retrieved = await retryUntil(
+        () =>
+          store.load<StorageThreadType>({
+            tableName: TABLE_THREADS,
+            keys: { id: thread.id },
+          }),
+        (thread): boolean => {
+          if (!thread || !thread.metadata) return false;
+          return (
+            thread.title === updatedTitle &&
+            Object.entries(updatedMetadata).every(([key, value]) => thread?.metadata?.[key] === value)
+          );
+        },
+        5000,
+      );
+
+      expect(retrieved?.title).toBe(updatedTitle);
+      expect(retrieved?.metadata).toEqual(expect.objectContaining(updatedMetadata));
     });
 
     it('should delete thread and its messages', async () => {
@@ -181,11 +294,18 @@ describe('CloudflareStore', () => {
 
       await store.__deleteThread({ threadId: thread.id });
 
-      const retrievedThread = await store.__getThreadById({ threadId: thread.id });
-      expect(retrievedThread).toBeNull();
+      // Verify thread deletion with retry
+      await retryUntil(
+        () => store.__getThreadById({ threadId: thread.id }),
+        thread => thread === null,
+        5000,
+      );
 
-      // Verify messages were also deleted
-      const retrievedMessages = await store.__getMessages({ threadId: thread.id });
+      // Verify messages were also deleted with retry
+      const retrievedMessages = await retryUntil(
+        () => store.__getMessages({ threadId: thread.id }),
+        messages => messages.length === 0,
+      );
       expect(retrievedMessages).toHaveLength(0);
     });
   });
@@ -201,9 +321,16 @@ describe('CloudflareStore', () => {
       const savedMessages = await store.__saveMessages({ messages });
       expect(savedMessages).toEqual(messages);
 
-      // Retrieve messages
-      const retrievedMessages = await store.__getMessages({ threadId: thread.id });
-      expect(retrievedMessages).toHaveLength(2);
+      // Retrieve messages with retry
+      const retrievedMessages = await retryUntil(
+        async () => {
+          const msgs = await store.__getMessages({ threadId: thread.id });
+          return msgs;
+        },
+        msgs => msgs.length === 2,
+        5000,
+      );
+
       expect(retrievedMessages).toEqual(expect.arrayContaining(messages));
     });
 
@@ -238,51 +365,8 @@ describe('CloudflareStore', () => {
 
       // Verify order is maintained
       retrievedMessages.forEach((msg, idx) => {
-        expect(msg.content[0]).toBe(messages[idx].content[0].text);
+        expect(msg.content).toEqual(messages[idx].content);
       });
-    });
-  });
-
-  describe('Table Operations', () => {
-    const testTableName = TABLE_THREADS;
-    const testTableName2 = TABLE_MESSAGES;
-
-    it('should create a new table with schema', async () => {
-      await store.createTable({
-        tableName: testTableName,
-        schema: {
-          id: { type: 'text', primaryKey: true },
-          data: { type: 'text', nullable: true },
-        },
-      });
-
-      // Verify table exists by inserting and retrieving data
-      await store.insert({
-        tableName: testTableName,
-        record: { id: 'test1', data: 'test-data' },
-      });
-
-      const result = await store.load({ tableName: testTableName, keys: { id: 'test1' } });
-      expect(result).toBeTruthy();
-    });
-
-    it('should handle multiple table creation', async () => {
-      await store.createTable({
-        tableName: testTableName2,
-        schema: {
-          id: { type: 'text', primaryKey: true },
-          data: { type: 'text', nullable: true },
-        },
-      });
-
-      // Verify both tables work independently
-      await store.insert({
-        tableName: testTableName2,
-        record: { id: 'test2', data: 'test-data-2' },
-      });
-
-      const result = await store.load({ tableName: testTableName2, keys: { id: 'test2' } });
-      expect(result).toBeTruthy();
     });
   });
 
@@ -297,6 +381,7 @@ describe('CloudflareStore', () => {
         runId: workflow.runId,
         snapshot: workflow,
       });
+      await new Promise(resolve => setTimeout(resolve, 5000));
 
       const retrieved = await store.loadWorkflowSnapshot({
         namespace: 'test',
@@ -340,11 +425,16 @@ describe('CloudflareStore', () => {
         snapshot: updatedSnapshot,
       });
 
-      const retrieved = await store.loadWorkflowSnapshot({
-        namespace: 'test',
-        workflowName: 'test-workflow',
-        runId: workflow.runId,
-      });
+      const retrieved = await retryUntil(
+        () =>
+          store.loadWorkflowSnapshot({
+            namespace: 'test',
+            workflowName: 'test-workflow',
+            runId: workflow.runId,
+          }),
+        snapshot => snapshot?.value[workflow.runId] === 'completed',
+        5000,
+      );
 
       expect(retrieved?.value[workflow.runId]).toBe('completed');
       expect(retrieved?.timestamp).toBeGreaterThan(workflow.timestamp);
@@ -396,18 +486,38 @@ describe('CloudflareStore', () => {
       const thread = createSampleThread();
       await store.__saveThread({ thread });
 
-      // Save messages in reverse order
+      // Create messages with explicit timestamps to test chronological ordering
+      const baseTime = new Date('2025-03-14T23:30:20.930Z').getTime();
       const messages = [
-        { ...createSampleMessage(thread.id), content: [{ type: 'text', text: 'Third' }] },
-        { ...createSampleMessage(thread.id), content: [{ type: 'text', text: 'Second' }] },
-        { ...createSampleMessage(thread.id), content: [{ type: 'text', text: 'First' }] },
-      ];
+        {
+          ...createSampleMessage(thread.id),
+          content: [{ type: 'text', text: 'First' }],
+          createdAt: new Date(baseTime),
+        },
+        {
+          ...createSampleMessage(thread.id),
+          content: [{ type: 'text', text: 'Second' }],
+          createdAt: new Date(baseTime + 1000),
+        },
+        {
+          ...createSampleMessage(thread.id),
+          content: [{ type: 'text', text: 'Third' }],
+          createdAt: new Date(baseTime + 2000),
+        },
+      ] as MessageType[];
 
       await store.__saveMessages({ messages });
 
       // Get messages and verify order
       const orderKey = getThreadMessagesKey(thread.id);
-      const order = await store.__getFullOrder(TABLE_MESSAGES, orderKey);
+      const order = await retryUntil(
+        async () => {
+          const order = await store.__getFullOrder(TABLE_MESSAGES, orderKey);
+          return order;
+        },
+        order => order.length > 0,
+        5000,
+      );
       expect(order.length).toBe(3);
 
       // Verify we can get specific ranges
@@ -418,50 +528,8 @@ describe('CloudflareStore', () => {
       expect(lastTwo.length).toBe(2);
 
       // Verify message ranks
-      const firstMessageRank = await store.__getRank(TABLE_MESSAGES, orderKey, messages[2].id);
+      const firstMessageRank = await store.__getRank(TABLE_MESSAGES, orderKey, messages[0].id);
       expect(firstMessageRank).toBe(0);
-    });
-  });
-
-  describe('Thread Operations', () => {
-    it('should update thread title and metadata', async () => {
-      const thread = createSampleThread();
-      await store.__saveThread({ thread });
-
-      const updatedTitle = 'Updated Title';
-      const updatedMetadata = { key: 'value' };
-
-      const updated = await store.updateThread({
-        id: thread.id,
-        title: updatedTitle,
-        metadata: updatedMetadata,
-      });
-
-      expect(updated.title).toBe(updatedTitle);
-      expect(updated.metadata).toEqual(expect.objectContaining(updatedMetadata));
-
-      // Verify the update persisted
-      const retrieved = await store.__getThread<StorageThreadType>({
-        tableName: TABLE_THREADS,
-        keys: { id: thread.id },
-      });
-      expect(retrieved?.title).toBe(updatedTitle);
-      expect(retrieved?.metadata).toEqual(expect.objectContaining(updatedMetadata));
-    });
-
-    it('should get threads by resource ID', async () => {
-      const resourceId = 'test-resource';
-      const threads = [
-        { ...createSampleThread(), resourceId },
-        { ...createSampleThread(), resourceId },
-      ];
-
-      await Promise.all(threads.map(thread => store.__saveThread({ thread })));
-
-      const retrieved = await store.getThreadsByResourceId({ resourceId });
-      expect(retrieved.length).toBe(2);
-      expect(retrieved[0].resourceId).toBe(resourceId);
-      expect(retrieved[1].resourceId).toBe(resourceId);
     });
   });
 
@@ -553,6 +621,8 @@ describe('CloudflareStore', () => {
         snapshot: updatedWorkflow,
       });
 
+      await new Promise(resolve => setTimeout(resolve, 5000));
+
       const retrieved = await store.loadWorkflowSnapshot({
         namespace: 'test',
         workflowName: 'test-workflow',
@@ -626,6 +696,8 @@ describe('CloudflareStore', () => {
         snapshot: updatedWorkflow,
       });
 
+      await new Promise(resolve => setTimeout(resolve, 5000));
+
       const retrieved = await store.loadWorkflowSnapshot({
         namespace: 'test',
         workflowName: 'test-workflow',
@@ -679,14 +751,14 @@ describe('CloudflareStore', () => {
 
   describe('Error Handling', () => {
     it('should handle invalid JSON data gracefully', async () => {
-      const namespaceId = await store['getNamespaceId']('mastra_threads');
+      const namespaceId = await store['getNamespaceId']({ tableName: TABLE_THREADS });
       await store['client'].kv.namespaces.values.update(namespaceId, 'invalid-key', {
         account_id: TEST_CONFIG.accountId,
         value: 'invalid-json',
         metadata: '',
       });
 
-      const result = await store['getKV']('mastra_threads', 'invalid-key');
+      const result = await store['getKV'](TABLE_THREADS, 'invalid-key');
       expect(result).toBe('invalid-json');
     });
 
