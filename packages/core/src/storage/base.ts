@@ -106,11 +106,11 @@ export abstract class MastraStorage extends MastraBase {
     return this.deleteThread({ threadId });
   }
 
-  abstract getMessages<T extends MessageType[]>({
+  abstract getMessages<T extends MessageType>({
     threadId,
     selectBy,
     threadConfig,
-  }: StorageGetMessagesArg): Promise<T>;
+  }: StorageGetMessagesArg): Promise<T[]>;
 
   async __getMessages({ threadId, selectBy, threadConfig }: StorageGetMessagesArg): Promise<MessageType[]> {
     await this.init();

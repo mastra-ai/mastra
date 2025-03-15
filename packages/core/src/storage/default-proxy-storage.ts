@@ -104,7 +104,7 @@ export class DefaultProxyStorage extends MastraStorage {
     return this.storage!.deleteThread({ threadId });
   }
 
-  async getMessages<T extends MessageType[]>({ threadId, selectBy }: StorageGetMessagesArg): Promise<T> {
+  async getMessages<T extends MessageType>({ threadId, selectBy }: StorageGetMessagesArg): Promise<T[]> {
     await this.setupStorage();
     return this.storage!.getMessages<T>({ threadId, selectBy });
   }

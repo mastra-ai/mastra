@@ -308,7 +308,7 @@ export class LibSQLStore extends MastraStorage {
     } as MessageType;
   }
 
-  async getMessages<T extends MessageType[]>({ threadId, selectBy }: StorageGetMessagesArg): Promise<T> {
+  async getMessages<T extends MessageType>({ threadId, selectBy }: StorageGetMessagesArg): Promise<T[]> {
     try {
       const messages: MessageType[] = [];
       const limit = typeof selectBy?.last === `number` ? selectBy.last : 40;
@@ -383,7 +383,7 @@ export class LibSQLStore extends MastraStorage {
       // Sort all messages by creation date
       messages.sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
 
-      return messages as T;
+      return messages as T[];
     } catch (error) {
       this.logger.error('Error getting messages:', error as Error);
       throw error;
