@@ -5,7 +5,7 @@ description: Documentation for the `.resume()` method in workflows, which contin
 
 # Workflow.resume()
 
-The `.resume()` method continues execution of a suspended workflow step, optionally providing new context data that can be accessed by the step on the resumeData property.
+The `.resume()` method continues execution of a suspended workflow step, optionally providing new context data that can be accessed by the step on the inputData property.
 
 ## Usage
 
@@ -101,7 +101,7 @@ const result = await workflow.resume({
   runId: "workflow-123",
   stepId: "review",
   context: {
-    // This data will be available in `context.resumeData`
+    // This data will be available in `context.inputData`
     feedback: "Looks good, but improve section 3"
   }
 });

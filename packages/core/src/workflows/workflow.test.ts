@@ -431,8 +431,10 @@ describe('Workflow', async () => {
         expect.objectContaining({
           context: {
             ...baseContext,
+            inputData: {
+              tData: { inputData: { nested: { value: 'test' } } },
+            },
             triggerData: { inputData: { nested: { value: 'test' } } },
-            tData: { inputData: { nested: { value: 'test' } } },
           },
           runId: expect.any(String),
         }),
@@ -493,7 +495,9 @@ describe('Workflow', async () => {
                 status: 'success',
               },
             },
-            previousValue: 'step1-data',
+            inputData: {
+              previousValue: 'step1-data',
+            },
           }),
           runId: results.runId,
         }),
@@ -1354,6 +1358,7 @@ describe('Workflow', async () => {
       const baseContext = {
         attempts: { step1: 0, step2: 0, step3: 0, step4: 0, step5: 0 },
         steps: {},
+        inputData: {},
         triggerData: {},
         getStepResult: expect.any(Function),
       };
