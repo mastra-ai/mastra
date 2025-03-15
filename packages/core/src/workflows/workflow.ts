@@ -45,7 +45,9 @@ export class Workflow<
     condStep: StepAction<any, any, any, any>;
   }[] = [];
   #stepGraph: StepGraph = { initial: [] };
+  #serializedStepGraph: StepGraph = { initial: [] };
   #stepSubscriberGraph: Record<string, StepGraph> = {};
+  #serializedStepSubscriberGraph: Record<string, StepGraph> = {};
   #steps: Record<string, StepAction<any, any, any, any>> = {};
   #onStepTransition: Set<(state: WorkflowRunState) => void | Promise<void>> = new Set();
 
@@ -88,13 +90,16 @@ export class Workflow<
     }
 
     const stepKey = this.#makeStepKey(step);
+    const when = config?.['#internal']?.when || config?.when;
 
     const graphEntry: StepNode = {
       step,
       config: {
         ...this.#makeStepDef(stepKey),
         ...config,
-        serializedWhen: typeof config?.when === 'function' ? config.when.toString() : config?.when,
+        loopLabel: config?.['#internal']?.loopLabel,
+        loopType: config?.['#internal']?.loopType,
+        serializedWhen: typeof when === 'function' ? when.toString() : when,
         data: requiredData,
       },
     };
@@ -103,19 +108,23 @@ export class Workflow<
 
     const parentStepKey = this.#afterStepStack[this.#afterStepStack.length - 1];
     const stepGraph = this.#stepSubscriberGraph[parentStepKey || ''];
+    const serializedStepGraph = this.#serializedStepSubscriberGraph[parentStepKey || ''];
 
     // if we are in an after chain and we have a stepGraph
     if (parentStepKey && stepGraph) {
       // if the stepGraph has an initial, but it doesn't contain the current step, add it to the initial
       if (!stepGraph.initial.some(step => step.step.id === stepKey)) {
         stepGraph.initial.push(graphEntry);
+        if (serializedStepGraph) serializedStepGraph.initial.push(graphEntry);
       }
       // add the current step to the stepGraph
       stepGraph[stepKey] = [];
+      if (serializedStepGraph) serializedStepGraph[stepKey] = [];
     } else {
       // Normal step addition to main graph
       if (!this.#stepGraph[stepKey]) this.#stepGraph[stepKey] = [];
       this.#stepGraph.initial.push(graphEntry);
+      this.#serializedStepGraph.initial.push(graphEntry);
     }
     this.#lastStepStack.push(stepKey);
 
@@ -145,13 +154,16 @@ export class Workflow<
 
     const lastStepKey = this.#lastStepStack[this.#lastStepStack.length - 1];
     const stepKey = this.#makeStepKey(step);
+    const when = config?.['#internal']?.when || config?.when;
 
     const graphEntry: StepNode = {
       step,
       config: {
         ...this.#makeStepDef(stepKey),
         ...config,
-        serializedWhen: typeof config?.when === 'function' ? config.when.toString() : config?.when,
+        loopLabel: config?.['#internal']?.loopLabel,
+        loopType: config?.['#internal']?.loopType,
+        serializedWhen: typeof when === 'function' ? when.toString() : when,
         data: requiredData,
       },
     };
@@ -162,15 +174,19 @@ export class Workflow<
 
     const parentStepKey = this.#afterStepStack[this.#afterStepStack.length - 1];
     const stepGraph = this.#stepSubscriberGraph[parentStepKey || ''];
+    const serializedStepGraph = this.#serializedStepSubscriberGraph[parentStepKey || ''];
 
     if (parentStepKey && stepGraph && stepGraph[lastStepKey]) {
       stepGraph[lastStepKey].push(graphEntry);
+      if (serializedStepGraph && serializedStepGraph[lastStepKey]) serializedStepGraph[lastStepKey].push(graphEntry);
     } else {
       // add the step to the graph if not already there.. it should be there though, unless magic
       if (!this.#stepGraph[lastStepKey]) this.#stepGraph[lastStepKey] = [];
+      if (!this.#serializedStepGraph[lastStepKey]) this.#serializedStepGraph[lastStepKey] = [];
 
       // add the step to the graph
       this.#stepGraph[lastStepKey].push(graphEntry);
+      this.#serializedStepGraph[lastStepKey].push(graphEntry);
     }
 
     return this;
@@ -196,7 +212,7 @@ export class Workflow<
     this.#steps[fallbackStepKey] = fallbackStep;
 
     // Create a check step that evaluates the condition
-    const checkStepKey = `__${fallbackStepKey}_check`;
+    const checkStepKey = `__${fallbackStepKey}_${loopType}_loop_check`;
     const checkStep = {
       id: checkStepKey,
       execute: async ({ context }: any) => {
@@ -241,7 +257,7 @@ export class Workflow<
     this.#steps[checkStepKey] = checkStep;
 
     // Loop finished step
-    const loopFinishedStepKey = `__${fallbackStepKey}_loop_finished`;
+    const loopFinishedStepKey = `__${fallbackStepKey}_${loopType}_loop_finished`;
     const loopFinishedStep = {
       id: loopFinishedStepKey,
       execute: async ({ context }: any) => {
@@ -251,7 +267,11 @@ export class Workflow<
     this.#steps[checkStepKey] = checkStep;
 
     // First add the check step after the last step
-    this.then(checkStep);
+    this.then(checkStep, {
+      '#internal': {
+        loopLabel: `${fallbackStepKey} ${loopType} loop check`,
+      },
+    });
 
     // Then create a branch after the check step that loops back to the fallback step
     this.after(checkStep)
@@ -265,8 +285,18 @@ export class Workflow<
           const status = checkStepResult?.output?.status;
           return status === 'continue' ? WhenConditionReturnValue.CONTINUE : WhenConditionReturnValue.CONTINUE_FAILED;
         },
+        '#internal': {
+          //@ts-ignore
+          when: condition,
+          //@ts-ignore
+          loopType,
+        },
       })
-      .then(checkStep)
+      .then(checkStep, {
+        '#internal': {
+          loopLabel: `${fallbackStepKey} ${loopType} loop check`,
+        },
+      })
       .step(loopFinishedStep, {
         when: async ({ context }) => {
           const checkStepResult = context.steps?.[checkStepKey];
@@ -276,6 +306,11 @@ export class Workflow<
 
           const status = checkStepResult?.output?.status;
           return status === 'complete' ? WhenConditionReturnValue.CONTINUE : WhenConditionReturnValue.CONTINUE_FAILED;
+        },
+        '#internal': {
+          loopLabel: `${fallbackStepKey} ${loopType} loop finished`,
+          //@ts-ignore
+          loopType,
         },
       });
 
@@ -405,6 +440,7 @@ export class Workflow<
     // Initialize subscriber array for this compound step if it doesn't exist
     if (!this.#stepSubscriberGraph[compoundKey]) {
       this.#stepSubscriberGraph[compoundKey] = { initial: [] };
+      this.#serializedStepSubscriberGraph[compoundKey] = { initial: [] };
     }
 
     return this as Omit<typeof this, 'then' | 'after'>;
@@ -813,6 +849,14 @@ export class Workflow<
 
   get stepSubscriberGraph() {
     return this.#stepSubscriberGraph;
+  }
+
+  get serializedStepGraph() {
+    return this.#serializedStepGraph;
+  }
+
+  get serializedStepSubscriberGraph() {
+    return this.#serializedStepSubscriberGraph;
   }
 
   get steps() {
