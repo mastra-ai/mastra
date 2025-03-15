@@ -1,7 +1,6 @@
 import type { MessageType, StorageThreadType } from '../memory/types';
 import { MastraStorage } from './base';
 import type { TABLE_NAMES } from './constants';
-import { InMemoryStorage } from './in-memory-storage';
 import type { EvalRow, LibSQLConfig, StorageColumn, StorageGetMessagesArg } from './types';
 
 /**
@@ -19,13 +18,6 @@ export class DefaultProxyStorage extends MastraStorage {
   }
 
   private setupStorage() {
-    if (this.storageConfig?.url === ':memory:') {
-      if (!this.storage) {
-        this.storage = new InMemoryStorage();
-      }
-      return this.storage;
-    }
-
     if (!this.isInitializingPromise) {
       this.isInitializingPromise = new Promise((resolve, reject) => {
         import('./libsql')
