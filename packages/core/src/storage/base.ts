@@ -1,6 +1,6 @@
 import { MastraBase } from '../base';
 import type { MessageType, StorageThreadType } from '../memory/types';
-import type { WorkflowRunState } from '../workflows';
+import type { WorkflowRunState } from '../workflows/types';
 
 import { TABLE_WORKFLOW_SNAPSHOT, TABLE_EVALS, TABLE_MESSAGES, TABLE_THREADS, TABLE_TRACES } from './constants';
 import type { TABLE_NAMES } from './constants';
