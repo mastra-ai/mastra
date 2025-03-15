@@ -6,6 +6,7 @@ import color from 'picocolors';
 import { DepsService } from '../../services/service.deps';
 import { getPackageManagerInstallCommand } from '../utils';
 
+import { installMastraDocsMCPServer } from './mcp-docs-server-install';
 import {
   createComponentsDir,
   createMastraDir,
@@ -27,12 +28,14 @@ export const init = async ({
   components,
   llmProvider = 'openai',
   llmApiKey,
+  configureEditorWithDocsMCP,
 }: {
   directory: string;
   components: string[];
   llmProvider: LLMProvider;
   addExample: boolean;
   llmApiKey?: string;
+  configureEditorWithDocsMCP?: undefined | 'windsurf' | 'cursor';
 }) => {
   s.start('Initializing Mastra');
 
@@ -72,6 +75,13 @@ export const init = async ({
     const pm = depsService.packageManager;
     const installCommand = getPackageManagerInstallCommand(pm);
     await exec(`${pm} ${installCommand} ${aiSdkPackage}`);
+
+    if (configureEditorWithDocsMCP) {
+      await installMastraDocsMCPServer({
+        editor: configureEditorWithDocsMCP,
+        directory: process.cwd(),
+      });
+    }
 
     s.stop();
     if (!llmApiKey) {
