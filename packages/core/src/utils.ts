@@ -4,7 +4,7 @@ import { z } from 'zod';
 import type { ZodObject } from 'zod';
 import type { MastraPrimitives } from './action';
 import type { ToolsInput } from './agent';
-import type { Logger } from './logger';
+import type { BaseLogger } from './logger/base-logger';
 import type { Mastra } from './mastra';
 import type { MastraMemory } from './memory';
 import { Tool } from './tools';
@@ -295,7 +295,7 @@ interface ToolOptions {
   runId?: string;
   threadId?: string;
   resourceId?: string;
-  logger: Logger;
+  logger: BaseLogger;
   description?: string;
   mastra?: (Mastra & MastraPrimitives) | MastraPrimitives;
   memory?: MastraMemory;
@@ -497,7 +497,7 @@ export function makeCoreTool(tool: ToolToConvert, options: ToolOptions, logType?
  * @param logger - The logger to use for warnings
  * @returns A proxy for the Mastra instance
  */
-export function createMastraProxy({ mastra, logger }: { mastra: Mastra; logger: Logger }) {
+export function createMastraProxy({ mastra, logger }: { mastra: Mastra; logger: BaseLogger }) {
   return new Proxy(mastra, {
     get(target, prop) {
       const hasProp = Reflect.has(target, prop);

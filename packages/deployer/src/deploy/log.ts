@@ -1,8 +1,8 @@
 import { spawn } from 'child_process';
 import { Transform } from 'stream';
-import type { Logger } from '@mastra/core/logger';
+import type { BaseLogger } from '@mastra/core/logger';
 
-export const createPinoStream = (logger: Logger) => {
+export const createPinoStream = (logger: BaseLogger) => {
   return new Transform({
     transform(chunk, _encoding, callback) {
       // Convert Buffer/string to string and trim whitespace
@@ -20,7 +20,7 @@ export const createPinoStream = (logger: Logger) => {
   });
 };
 
-export function createChildProcessLogger({ logger, root }: { logger: Logger; root: string }) {
+export function createChildProcessLogger({ logger, root }: { logger: BaseLogger; root: string }) {
   const pinoStream = createPinoStream(logger);
   return async ({ cmd, args, env }: { cmd: string; args: string[]; env: Record<string, string> }) => {
     try {

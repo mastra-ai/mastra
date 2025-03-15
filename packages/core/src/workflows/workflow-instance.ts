@@ -2,7 +2,7 @@ import type { Span } from '@opentelemetry/api';
 import type { Snapshot } from 'xstate';
 import type { z } from 'zod';
 
-import type { Logger } from '../logger';
+import type { BaseLogger } from '../logger/base-logger';
 
 import type { Mastra } from '../mastra';
 import { Machine } from './machine';
@@ -22,7 +22,7 @@ export class WorkflowInstance<TSteps extends Step<any, any, any>[] = any, TTrigg
   #mastra?: Mastra;
   #machines: Record<string, Machine<TSteps, TTriggerSchema>> = {};
 
-  logger: Logger;
+  logger: BaseLogger;
 
   #steps: Record<string, StepAction<any, any, any, any>> = {};
   #stepGraph: StepGraph;
@@ -55,7 +55,7 @@ export class WorkflowInstance<TSteps extends Step<any, any, any>[] = any, TTrigg
     onFinish,
   }: {
     name: string;
-    logger: Logger;
+    logger: BaseLogger;
     steps: Record<string, StepAction<any, any, any, any>>;
     mastra?: Mastra;
     retryConfig?: RetryConfig;

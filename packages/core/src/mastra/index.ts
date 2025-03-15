@@ -1,7 +1,7 @@
 import type { Agent } from '../agent';
 import type { MastraDeployer } from '../deployer';
-import { LogLevel, createLogger, noopLogger } from '../logger';
-import type { Logger } from '../logger';
+import type { BaseLogger } from '../logger/base-logger';
+import { noopLogger } from '../logger/no-op-logger';
 import type { MastraMemory } from '../memory/memory';
 import type { MastraStorage } from '../storage';
 import { DefaultProxyStorage } from '../storage/default-proxy-storage';
@@ -16,7 +16,7 @@ export interface Config<
   TWorkflows extends Record<string, Workflow> = Record<string, Workflow>,
   TVectors extends Record<string, MastraVector> = Record<string, MastraVector>,
   TTTS extends Record<string, MastraTTS> = Record<string, MastraTTS>,
-  TLogger extends Logger = Logger,
+  TLogger extends BaseLogger = BaseLogger,
 > {
   agents?: TAgents;
   storage?: MastraStorage;
@@ -49,7 +49,7 @@ export class Mastra<
   TWorkflows extends Record<string, Workflow> = Record<string, Workflow>,
   TVectors extends Record<string, MastraVector> = Record<string, MastraVector>,
   TTTS extends Record<string, MastraTTS> = Record<string, MastraTTS>,
-  TLogger extends Logger = Logger,
+  TLogger extends BaseLogger = BaseLogger,
 > {
   #vectors?: TVectors;
   #agents: TAgents;
@@ -98,19 +98,11 @@ export class Mastra<
     /*
       Logger
     */
-
-    let logger: TLogger;
-    if (config?.logger === false) {
-      logger = noopLogger as unknown as TLogger;
+    if (config?.logger) {
+      this.#logger = config.logger;
     } else {
-      if (config?.logger) {
-        logger = config.logger;
-      } else {
-        const levleOnEnv = process.env.NODE_ENV === 'production' ? LogLevel.WARN : LogLevel.INFO;
-        logger = createLogger({ name: 'Mastra', level: levleOnEnv }) as unknown as TLogger;
-      }
+      this.#logger = noopLogger as TLogger;
     }
-    this.#logger = logger;
 
     let storage = config?.storage;
     if (!storage) {
@@ -249,7 +241,7 @@ This is a warning for now, but will throw an error in the future
         this.#workflows[key] = workflow;
       });
     }
-    this.setLogger({ logger });
+    this.setLogger({ logger: this.#logger });
   }
 
   public getAgent<TAgentName extends keyof TAgents>(name: TAgentName): TAgents[TAgentName] {
@@ -433,6 +425,7 @@ This is a warning for now, but will throw an error in the future
     if (!transportId) {
       throw new Error('Transport ID is required');
     }
+
     return await this.#logger.getLogsByRunId({ runId, transportId });
   }
 

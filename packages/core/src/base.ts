@@ -1,24 +1,34 @@
-import type { Logger } from './logger';
-import { createLogger, RegisteredLogger } from './logger';
+import type { BaseLogger } from './logger/base-logger';
+import { noopLogger } from './logger/no-op-logger';
+import type { LogLevel } from './logger/types';
+import { RegisteredLogger } from './logger/types';
 import type { Telemetry } from './telemetry';
 
-export class MastraBase {
-  component: RegisteredLogger = RegisteredLogger.LLM;
-  protected logger: Logger;
+export abstract class MastraBase {
+  protected logger: BaseLogger;
+  component: RegisteredLogger;
   name?: string;
   telemetry?: Telemetry;
 
-  constructor({ component, name }: { component?: RegisteredLogger; name?: string }) {
+  constructor({
+    component,
+    name,
+    createLogger,
+  }: {
+    component?: RegisteredLogger;
+    name?: string;
+    createLogger?: (options: { name?: string; level?: LogLevel }) => BaseLogger;
+  }) {
     this.component = component || RegisteredLogger.LLM;
     this.name = name;
-    this.logger = createLogger({ name: `${this.component} - ${this.name}` });
+    this.logger = createLogger ? createLogger({ name: `${this.component} - ${this.name}` }) : noopLogger;
   }
 
   /**
    * Set the logger for the agent
    * @param logger
    */
-  __setLogger(logger: Logger) {
+  __setLogger(logger: BaseLogger) {
     this.logger = logger;
     this.logger.debug(`Logger updated [component=${this.component}] [name=${this.name}]`);
   }

@@ -2,7 +2,7 @@ import type { Query } from 'sift';
 import type { z } from 'zod';
 
 import type { IAction, IExecutionContext, MastraUnion } from '../action';
-import type { BaseLogMessage, RegisteredLogger } from '../logger';
+import type { BaseLogMessage, RegisteredLogger } from '../logger/types';
 import type { Mastra } from '../mastra';
 import type { Step } from './step';
 

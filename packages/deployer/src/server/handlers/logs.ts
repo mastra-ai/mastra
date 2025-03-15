@@ -1,4 +1,5 @@
-import type { Mastra } from '@mastra/core';
+import type { Logger } from '@mastra/core/logger';
+import type { Mastra } from '@mastra/core/mastra';
 import type { Context } from 'hono';
 
 import { HTTPException } from 'hono/http-exception';
@@ -42,10 +43,17 @@ export async function getLogTransports(c: Context) {
   try {
     const mastra: Mastra = c.get('mastra');
     const logger = mastra.getLogger();
-    const transports = logger.transports;
-    return c.json({
-      transports: Object.keys(transports),
-    });
+
+    if ((logger as Logger).transports) {
+      const transports = (logger as Logger).transports;
+      return c.json({
+        transports: Object.keys(transports),
+      });
+    } else {
+      return c.json({
+        transports: [],
+      });
+    }
   } catch (e) {
     return handleError(e, 'Error getting log Transports ');
   }

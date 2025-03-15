@@ -1,4 +1,4 @@
-import type { Logger } from '@mastra/core';
+import type { BaseLogger } from '@mastra/core/logger';
 import commonjs from '@rollup/plugin-commonjs';
 import json from '@rollup/plugin-json';
 import nodeResolve from '@rollup/plugin-node-resolve';
@@ -29,7 +29,7 @@ async function analyze(
   mastraEntry: string,
   isVirtualFile: boolean,
   platform: 'node' | 'browser',
-  logger: Logger,
+  logger: BaseLogger,
 ) {
   logger.info('Analyzing dependencies...');
   let virtualPlugin = null;
@@ -105,7 +105,7 @@ async function analyze(
  * @param logger - Logger instance for debugging
  * @returns Object containing bundle output and reference map for validation
  */
-async function bundleExternals(depsToOptimize: Map<string, string[]>, outputDir: string, logger: Logger) {
+async function bundleExternals(depsToOptimize: Map<string, string[]>, outputDir: string, logger: BaseLogger) {
   logger.info('Optimizing dependencies...');
   logger.debug(
     `${Array.from(depsToOptimize.keys())
@@ -179,6 +179,11 @@ async function bundleExternals(depsToOptimize: Map<string, string[]>, outputDir:
       // hono is imported from deployer, so we need to resolve from here instead of the project root
       aliasHono(),
       json(),
+      esbuild({
+        target: 'node20',
+        platform: 'node',
+        minify: false,
+      }),
     ].filter(Boolean),
   });
 
@@ -208,7 +213,7 @@ async function validateOutput(
   output: any[],
   reverseVirtualReferenceMap: Map<string, string>,
   outputDir: string,
-  logger: Logger,
+  logger: BaseLogger,
 ) {
   const result = {
     invalidChunks: new Set<string>(),
@@ -233,11 +238,16 @@ async function validateOutput(
     } catch (err) {
       result.invalidChunks.add(file.fileName);
       if (file.isEntry && reverseVirtualReferenceMap.has(file.name)) {
-        result.externalDependencies.add(reverseVirtualReferenceMap.get(file.name)!);
-      }
+        const [pkgOrg, pkgName] = reverseVirtualReferenceMap.get(file.name)!.split('/', 2);
 
+        if (pkgOrg?.startsWith('@')) {
+          result.externalDependencies.add(`${pkgOrg}/${pkgName}`);
+        } else {
+          result.externalDependencies.add(pkgOrg!);
+        }
+        // console.log(file.fileName, file.isEntry, file.isDynamicEntry, err);
+      }
       // we might need this on other projects but not sure so let's keep it commented out for now
-      // console.log(file.fileName, file.isEntry, file.isDynamicEntry, err);
       // result.invalidChunks.add(file.fileName);
       // const externalImports = excludeInternalDeps(file.imports.filter(file => !internalFiles.has(file)));
       // externalImports.push(...excludeInternalDeps(file.dynamicImports.filter(file => !internalFiles.has(file))));
@@ -267,7 +277,7 @@ export async function analyzeBundle(
   mastraEntry: string,
   outputDir: string,
   platform: 'node' | 'browser',
-  logger: Logger,
+  logger: BaseLogger,
 ) {
   const isVirtualFile = entry.includes('\n') || !existsSync(entry);
 
