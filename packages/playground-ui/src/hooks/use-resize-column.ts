@@ -6,14 +6,16 @@ export const useResizeColumn = ({
   defaultWidth,
   minimumWidth,
   maximumWidth,
+  setCurrentWidth,
 }: {
   defaultWidth: number;
   minimumWidth: number;
   maximumWidth: number;
+  setCurrentWidth?: (width: number) => void;
 }) => {
   const [isDragging, setIsDragging] = useState(false);
   const [sidebarWidth, setSidebarWidth] = useState<number>(defaultWidth);
-  const { isOpen } = useContext(TraceContext);
+  // const { isOpen } = useContext(TraceContext);
   const containerRef = useRef<HTMLDivElement>(null);
   const dragStartXRef = useRef(0);
   const initialWidthRef = useRef(0);
@@ -26,10 +28,9 @@ export const useResizeColumn = ({
   };
 
   useEffect(() => {
-    if (!isOpen) {
-      setSidebarWidth(defaultWidth);
-    }
-  }, [isOpen]);
+    setSidebarWidth(defaultWidth);
+    setCurrentWidth?.(defaultWidth);
+  }, [defaultWidth]);
 
   useEffect(() => {
     const handleMouseMove = (e: MouseEvent) => {
@@ -42,6 +43,7 @@ export const useResizeColumn = ({
       // Calculate new width percentage
       const newWidth = Math.min(Math.max(initialWidthRef.current + deltaPercentage, minimumWidth), maximumWidth);
       setSidebarWidth(newWidth);
+      setCurrentWidth?.(newWidth);
     };
 
     const handleMouseUp = () => {

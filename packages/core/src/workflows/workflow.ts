@@ -39,7 +39,11 @@ export class Workflow<
   // registers stepIds on `after` calls
   #afterStepStack: string[] = [];
   #lastStepStack: string[] = [];
-  #ifStack: { condition: StepConfig<any, any, any, TTriggerSchema>['when']; elseStepKey: string }[] = [];
+  #ifStack: {
+    condition: StepConfig<any, any, any, TTriggerSchema>['when'];
+    elseStepKey: string;
+    condStep: StepAction<any, any, any, any>;
+  }[] = [];
   #stepGraph: StepGraph = { initial: [] };
   #stepSubscriberGraph: Record<string, StepGraph> = {};
   #steps: Record<string, StepAction<any, any, any, any>> = {};
@@ -357,7 +361,7 @@ export class Workflow<
     );
 
     const elseStepKey = `__${lastStep.id}_else`;
-    this.#ifStack.push({ condition, elseStepKey });
+    this.#ifStack.push({ condition, elseStepKey, condStep: lastStep });
 
     return this;
   }
@@ -368,7 +372,7 @@ export class Workflow<
       throw new Error('No active condition found');
     }
 
-    this.step(
+    this.after(activeCondition.condStep).step(
       {
         id: activeCondition.elseStepKey,
         execute: async ({ context }) => {

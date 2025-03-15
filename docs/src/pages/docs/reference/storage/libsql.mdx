@@ -20,12 +20,16 @@ import { LibSQLStore } from "@mastra/core/storage/libsql";
 
 // File database (development)
 const storage = new LibSQLStore({
-  url: "file:storage.db",
+    config: {
+        url: 'file:storage.db',
+    }
 });
 
 // Persistent database (production)
 const storage = new LibSQLStore({
-  url: process.env.DATABASE_URL,
+    config: {
+        url: process.env.DATABASE_URL,
+    }
 });
 ```
 

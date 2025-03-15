@@ -57,11 +57,12 @@ const stepOne = new Step({
 const stepTwo = new Step({
   id: "stepTwo",
   execute: async ({ context }) => {
-    if (context.steps.stepOne.status !== "success") {
+    const doubledValue = context.getStepResult(stepOne)?.doubledValue;
+    if (!doubledValue) {
       return { incrementedValue: 0 };
     }
     return {
-      incrementedValue: context.steps.stepOne.output.doubledValue + 1,
+      incrementedValue: doubledValue + 1,
     };
   },
 });
@@ -87,6 +88,19 @@ import { Mastra } from "@mastra/core";
 
 export const mastra = new Mastra({
   workflows: { myWorkflow },
+});
+```
+
+The workflow can also have the mastra instance injected into the context in the case where you need to create dynamic workflows:
+
+```ts filename="src/mastra/workflow/index.ts"
+import { Mastra } from "@mastra/core";
+
+const mastra = new Mastra();
+
+const myWorkflow = new Workflow({
+  name: 'my-workflow',
+  mastra,
 });
 ```
 

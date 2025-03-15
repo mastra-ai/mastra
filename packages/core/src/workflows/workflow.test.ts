@@ -10,7 +10,7 @@ import { Telemetry } from '../telemetry';
 import { createTool } from '../tools';
 
 import { Step } from './step';
-import type { WorkflowContext, WorkflowResumeResult } from './types';
+import { WhenConditionReturnValue, type WorkflowContext, type WorkflowResumeResult } from './types';
 import { Workflow } from './workflow';
 
 const storage = new DefaultStorage({
@@ -1214,6 +1214,84 @@ describe('Workflow', async () => {
       // @ts-ignore
       expect(results.final.output).toEqual({ finalValue: 26 + 2 });
     });
+
+    it('should run an until loop inside an if-then branch', async () => {
+      const increment = vi.fn().mockImplementation(async ({ context }) => {
+        // Get the current value (either from trigger or previous increment)
+        const currentValue =
+          context.getStepResult('increment')?.newValue || context.getStepResult('trigger')?.startValue || 0;
+
+        // Increment the value
+        const newValue = currentValue + 1;
+
+        return { newValue };
+      });
+      const other = vi.fn().mockImplementation(async ({ context }) => {
+        return { other: 26 };
+      });
+      const incrementStep = new Step({
+        id: 'increment',
+        description: 'Increments the current value by 1',
+        outputSchema: z.object({
+          newValue: z.number(),
+        }),
+        execute: increment,
+      });
+
+      const otherStep = new Step({
+        id: 'other',
+        description: 'Other step',
+        execute: other,
+      });
+
+      const final = vi
+        .fn()
+        .mockImplementation(
+          async ({ context }: { context: WorkflowContext<any, [typeof incrementStep, typeof finalStep]> }) => {
+            return { finalValue: context.getStepResult(incrementStep).newValue };
+          },
+        );
+      const finalStep = new Step({
+        id: 'final',
+        description: 'Final step that prints the result',
+        execute: final,
+      });
+
+      const counterWorkflow = new Workflow<[typeof incrementStep, typeof finalStep]>({
+        name: 'counter-workflow',
+        triggerSchema: z.object({
+          target: z.number(),
+          startValue: z.number(),
+        }),
+      });
+
+      counterWorkflow
+        .step(incrementStep)
+        .if(async ({ context }) => {
+          return false;
+        })
+        .then(incrementStep)
+        .until(async ({ context }) => {
+          const res = context.getStepResult('increment');
+          return (res?.newValue ?? 0) >= 12;
+        }, incrementStep)
+        .then(finalStep)
+        .else()
+        .then(otherStep)
+        .then(finalStep)
+        .commit();
+
+      const run = counterWorkflow.createRun();
+      const { results } = await run.start({ triggerData: { target: 10, startValue: 0 } });
+
+      expect(increment).toHaveBeenCalledTimes(1);
+      expect(other).toHaveBeenCalledTimes(1);
+      expect(final).toHaveBeenCalledTimes(1);
+      // @ts-ignore
+      expect(results.final.output).toEqual({ finalValue: 1 });
+      // @ts-ignore
+      expect(results.increment.output).toEqual({ newValue: 1 });
+    });
   });
 
   describe('Schema Validation', () => {
@@ -1524,6 +1602,41 @@ describe('Workflow', async () => {
       expect(result.results.step5).toEqual({ status: 'success', output: { result: 'success5' } });
     });
 
+    it('should run compount subscribers with when conditions', async () => {
+      const step1Action = vi.fn<any>().mockResolvedValue({ result: 'success1' });
+      const step2Action = vi.fn<any>().mockResolvedValue({ result: 'success2' });
+      const step3Action = vi.fn<any>().mockResolvedValue({ result: 'success3' });
+      const step4Action = vi.fn<any>().mockResolvedValue({ result: 'success4' });
+      const step5Action = vi.fn<any>().mockResolvedValue({ result: 'success5' });
+
+      const step1 = new Step({ id: 'step1', execute: step1Action, outputSchema: z.object({ status: z.string() }) });
+      const step2 = new Step({ id: 'step2', execute: step2Action });
+      const step3 = new Step({ id: 'step3', execute: step3Action });
+      const step4 = new Step({ id: 'step4', execute: step4Action });
+      const step5 = new Step({ id: 'step5', execute: step5Action });
+      const workflow = new Workflow({ name: 'test-workflow' });
+      workflow
+        .step(step1, { when: async () => true })
+        .then(step2, { when: async () => false })
+        .after([step1, step2])
+        .step(step3)
+        .then(step4)
+        .then(step5)
+        .commit();
+
+      const run = workflow.createRun();
+      const result = await run.start();
+
+      expect(step1Action).toHaveBeenCalled();
+      expect(step2Action).not.toHaveBeenCalled();
+      expect(step3Action).toHaveBeenCalled();
+      expect(step4Action).toHaveBeenCalled();
+      expect(step5Action).toHaveBeenCalledTimes(1);
+      expect(result.results.step1).toEqual({ status: 'success', output: { result: 'success1' } });
+      expect(result.results.step2).toEqual({ status: 'skipped' });
+      expect(result.results.step5).toEqual({ status: 'success', output: { result: 'success5' } });
+    });
+
     it('should run complex compound subscribers', async () => {
       const step1Action = vi.fn<any>().mockResolvedValue({ result: 'success1' });
       const step2Action = vi.fn<any>().mockResolvedValue({ result: 'success2' });
@@ -1570,14 +1683,123 @@ describe('Workflow', async () => {
       expect(step5Action).toHaveBeenCalledTimes(2);
       expect(step6Action).toHaveBeenCalled();
       expect(step7Action).toHaveBeenCalled();
-      expect(step8Action).toHaveBeenCalledTimes(2);
+      expect(step8Action).toHaveBeenCalledTimes(3);
       expect(result.results.step1).toEqual({ status: 'success', output: { result: 'success1' } });
       expect(result.results.step2).toEqual({ status: 'success', output: { result: 'success2' } });
       expect(result.results.step5).toEqual({ status: 'success', output: { result: 'success5' } });
     });
 
+    it('should run compound subscribers on a loop', async () => {
+      const increment = vi.fn().mockImplementation(async ({ context }) => {
+        // Get the current value (either from trigger or previous increment)
+        const currentValue =
+          context.getStepResult('increment')?.newValue || context.getStepResult('trigger')?.startValue || 0;
+
+        // Increment the value
+        const newValue = currentValue + 1;
+
+        return { newValue };
+      });
+      const incrementStep = new Step({
+        id: 'increment',
+        description: 'Increments the current value by 1',
+        outputSchema: z.object({
+          newValue: z.number(),
+        }),
+        execute: increment,
+      });
+
+      const final = vi.fn().mockImplementation(async ({ context }) => {
+        return { finalValue: context.getStepResult(incrementStep).newValue };
+      });
+      const finalStep = new Step({
+        id: 'final',
+        description: 'Final step that prints the result',
+        execute: async (...rest) => {
+          console.log('calling final');
+          return final(...rest);
+        },
+      });
+
+      const mockAction = vi.fn<any>().mockResolvedValue({ result: 'success' });
+      const dummyStep = new Step({
+        id: 'dummy',
+        description: 'Dummy step',
+        execute: async (...rest) => {
+          console.log('calling dummyStep');
+          return mockAction(...rest);
+        },
+      });
+
+      const mockAction2 = vi.fn<any>().mockResolvedValue({ result: 'success' });
+      const dummyStep2 = new Step({
+        id: 'dummy2',
+        description: 'Dummy step',
+        execute: async (...rest) => {
+          console.log('calling dummyStep2');
+          return mockAction2(...rest);
+        },
+      });
+
+      const mockAction3 = vi.fn<any>().mockResolvedValue({ result: 'success' });
+      const dummyStep3 = new Step({
+        id: 'dummy3',
+        description: 'Dummy step',
+        execute: async (...rest) => {
+          console.log({ rest: rest[0].context.steps['increment'] }, '=======');
+          console.log(rest[0].context.getStepResult('increment'));
+          console.log('calling dummyStep3');
+          return mockAction3(...rest);
+        },
+      });
+
+      const counterWorkflow = new Workflow({
+        name: 'counter-workflow',
+        triggerSchema: z.object({
+          target: z.number(),
+          startValue: z.number(),
+        }),
+      });
+
+      counterWorkflow
+        .step(incrementStep)
+        .after(incrementStep)
+        .step(dummyStep)
+        .after(incrementStep)
+        .step(dummyStep2)
+        .after([dummyStep, dummyStep2])
+        .step(dummyStep3)
+        .after(dummyStep3)
+        .step(incrementStep, {
+          when: async ({ context }) => {
+            const isPassed = context.getStepResult(incrementStep)?.newValue < 10;
+            if (isPassed) {
+              return true;
+            } else {
+              return WhenConditionReturnValue.LIMBO;
+            }
+          },
+        })
+        .step(finalStep, {
+          when: async ({ context }) => {
+            const isPassed = context.getStepResult(incrementStep)?.newValue >= 10;
+            return isPassed;
+          },
+        })
+        .commit();
+
+      const run = counterWorkflow.createRun();
+      await run.start({ triggerData: { target: 10, startValue: 0 } });
+
+      expect(increment).toHaveBeenCalledTimes(10);
+      expect(mockAction).toHaveBeenCalledTimes(10);
+      expect(mockAction2).toHaveBeenCalledTimes(10);
+      expect(mockAction3).toHaveBeenCalledTimes(10);
+      expect(final).toHaveBeenCalledTimes(1);
+    });
+
     // don't unskip this please.. actually unskip it 😈
-    it.skip('should spawn cyclic subscribers for each step', async () => {
+    it.skip('should spawn cyclic subscribers for each step (legacy)', async () => {
       const step1Action = vi.fn<any>().mockResolvedValue({ result: 'success1' });
       const step3Action = vi.fn<any>().mockResolvedValue({ result: 'success3' });
 

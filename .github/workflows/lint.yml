@@ -2,6 +2,7 @@ name: Quality assurance
 
 on:
   pull_request:
+    types: [opened, synchronize, reopened]
     branches: [main]
 
 jobs:
@@ -9,114 +10,68 @@ jobs:
     name: Lint
     runs-on: ubuntu-latest
     # Run on main repository or for trusted bot PRs
-    if: ${{ github.repository == 'mastra-ai/mastra' || github.actor == 'github-actions[bot]' }}
+    if: ${{ github.repository == 'mastra-ai/mastra' }} && ${{ !contains(github.event.pull_request.files.*.path, 'examples/') && !contains(github.event.pull_request.files.*.path, 'docs/') && !contains(github.event.pull_request.files.*.path, '.changeset/') && !contains(github.event.pull_request.files.*.path, 'generated-changesets/') }}
     env:
       TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
       TURBO_TEAM: ${{ secrets.TURBO_TEAM }}
       TURBO_REMOTE_ONLY: true
 
     steps:
-      - name: Check if workflow should run
-        id: check
-        run: |
-          if [[ ${{ contains(github.event.pull_request.files.*.path, 'examples/') || 
-                   contains(github.event.pull_request.files.*.path, 'docs/') || 
-                   contains(github.event.pull_request.files.*.path, '.changeset/') || 
-                   contains(github.event.pull_request.files.*.path, 'generated-changesets/') }} == 'true' ]]; then
-            echo "Skip workflow as changes are only in excluded directories"
-            echo "should_skip=true" >> $GITHUB_OUTPUT
-          fi
-          echo "should_skip=false" >> $GITHUB_OUTPUT
-
-      - name: Early success
-        if: steps.check.outputs.should_skip == 'true'
-        run: |
-          echo "Skipping workflow as changes are only in excluded directories"
-
       - name: Checkout repo
-        if: steps.check.outputs.should_skip != 'true'
         uses: actions/checkout@v4
 
       - uses: pnpm/action-setup@v4
-        if: steps.check.outputs.should_skip != 'true'
         name: Install pnpm
         with:
           run_install: false
 
       - name: Setup Node.js 20.x
-        if: steps.check.outputs.should_skip != 'true'
         uses: actions/setup-node@v4
         with:
           node-version: 20.x
           cache: 'pnpm'
 
       - name: Install dependencies
-        if: steps.check.outputs.should_skip != 'true'
         run: pnpm install
 
       - name: Lint
-        if: steps.check.outputs.should_skip != 'true'
         run: pnpm turbo --filter "!./examples/*" --filter "!./docs/*" --filter "!./integrations/*" --filter "!@mastra/playground" lint
 
   check-bundle:
     name: Validate build outputs
     runs-on: ubuntu-latest
     # Run on main repository or for trusted bot PRs
-    if: ${{ github.repository == 'mastra-ai/mastra' || github.actor == 'github-actions[bot]' }}
+    if: ${{ github.repository == 'mastra-ai/mastra' }} && ${{ !contains(github.event.pull_request.files.*.path, 'examples/') && !contains(github.event.pull_request.files.*.path, 'docs/') && !contains(github.event.pull_request.files.*.path, '.changeset/') && !contains(github.event.pull_request.files.*.path, 'generated-changesets/') }}
     env:
       TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
       TURBO_TEAM: ${{ secrets.TURBO_TEAM }}
       TURBO_REMOTE_ONLY: true
 
     steps:
-      - name: Check if workflow should run
-        id: check
-        run: |
-          if [[ ${{ contains(github.event.pull_request.files.*.path, 'examples/') || 
-                   contains(github.event.pull_request.files.*.path, 'docs/') || 
-                   contains(github.event.pull_request.files.*.path, '.changeset/') || 
-                   contains(github.event.pull_request.files.*.path, 'generated-changesets/') }} == 'true' ]]; then
-            echo "Skip workflow as changes are only in excluded directories"
-            echo "should_skip=true" >> $GITHUB_OUTPUT
-          fi
-          echo "should_skip=false" >> $GITHUB_OUTPUT
-
-      - name: Early success
-        if: steps.check.outputs.should_skip == 'true'
-        run: |
-          echo "Skipping workflow as changes are only in excluded directories"
-
       - name: Checkout repo
-        if: steps.check.outputs.should_skip != 'true'
         uses: actions/checkout@v4
 
       - uses: pnpm/action-setup@v4
-        if: steps.check.outputs.should_skip != 'true'
         name: Install pnpm
         with:
           run_install: false
 
       - name: Setup Node.js 20.x
-        if: steps.check.outputs.should_skip != 'true'
         uses: actions/setup-node@v4
         with:
           node-version: 20.x
           cache: 'pnpm'
 
       - name: Install dependencies
-        if: steps.check.outputs.should_skip != 'true'
         run: pnpm install
 
       - name: Build
-        if: steps.check.outputs.should_skip != 'true'
         run: pnpm turbo --filter "!./examples/*" --filter "!./docs" build
 
       - name: Install test dependencies
-        if: steps.check.outputs.should_skip != 'true'
         working-directory: ./e2e-tests/pkg-outputs
         run: pnpm install --ignore-workspace
 
       - name: Check bundles
-        if: steps.check.outputs.should_skip != 'true'
         working-directory: ./e2e-tests/pkg-outputs
         run: pnpm test

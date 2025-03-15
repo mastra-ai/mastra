@@ -6,11 +6,24 @@ import type { Mastra } from '../mastra';
 
 export type VercelTool = Tool;
 
+// Define CoreTool as a discriminated union to match the AI SDK's Tool type
 export type CoreTool = {
+  id?: string;
   description?: string;
   parameters: ZodSchema;
   execute?: (params: any, options: ToolExecutionOptions) => Promise<any>;
-};
+} & (
+  | {
+      type?: 'function' | undefined;
+      id?: string;
+    }
+  | {
+      type: 'provider-defined';
+      id: `${string}.${string}`;
+      args: Record<string, unknown>;
+    }
+);
+
 export interface ToolExecutionContext<TSchemaIn extends z.ZodSchema | undefined = undefined>
   extends IExecutionContext<TSchemaIn> {
   mastra?: MastraUnion;

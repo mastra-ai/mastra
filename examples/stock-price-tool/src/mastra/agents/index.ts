@@ -1,7 +1,7 @@
 import { openai } from '@ai-sdk/openai';
 import { Agent } from '@mastra/core/agent';
 
-import { stockPrices } from '../tools';
+import { stockPrices } from '../tools/stock-price';
 
 export const stockAgent = new Agent({
   name: 'Stock Agent',

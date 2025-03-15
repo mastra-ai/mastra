@@ -21,17 +21,17 @@ export async function writeTelemetryConfig(
     },
     treeshake: 'smallest',
     plugins: [
-      commonjs({
-        extensions: ['.js', '.ts'],
-        strictRequires: 'strict',
-        transformMixedEsModules: true,
-        ignoreTryCatch: false,
-      }),
       // transpile typescript to something we understand
       esbuild({
         target: 'node20',
         platform: 'node',
         minify: false,
+      }),
+      commonjs({
+        extensions: ['.js', '.ts'],
+        strictRequires: 'strict',
+        transformMixedEsModules: true,
+        ignoreTryCatch: false,
       }),
       {
         name: 'get-telemetry-config',

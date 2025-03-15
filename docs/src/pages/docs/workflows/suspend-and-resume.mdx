@@ -7,7 +7,10 @@ description: "Suspend and resume in Mastra workflows allows you to pause executi
 
 Complex workflows often need to pause execution while waiting for external input or resources.
 
-Mastra's suspend and resume features let you pause workflow execution at any step, persist the workflow state, and continue when ready.
+Mastra's suspend and resume features let you pause workflow execution at any step, persist the workflow snapshot to storage, and resume execution from the saved snapshot when ready.
+This entire process is automatically managed by Mastra. No config needed, or manual step required from the user.
+
+Storing the workflow snapshot to storage (libsql by default) means that the workflow state is permanently preserved across sessions even if the workflow is suspended for a long time.
 
 ## When to Use Suspend/Resume
 
