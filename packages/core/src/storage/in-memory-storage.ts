@@ -39,7 +39,8 @@ export class InMemoryStorage extends MastraStorage {
     this.tables[tableName] = [];
   }
 
-  async insert({ tableName, record }: { tableName: TABLE_NAMES; record: Record<string, any> }) {
+  // We make this a non-async function so all inserts can happen transactionally
+  _insert(tableName: TABLE_NAMES, record: Record<string, any>) {
     if (this.primaryKeys[tableName]) {
       const primaryKey = record[this.primaryKeys[tableName]!];
       const index = this.tables[tableName].findIndex(record => record[this.primaryKeys[tableName]!] === primaryKey);
@@ -53,8 +54,12 @@ export class InMemoryStorage extends MastraStorage {
     }
   }
 
+  async insert({ tableName, record }: { tableName: TABLE_NAMES; record: Record<string, any> }) {
+    this._insert(tableName, record);
+  }
+
   async batchInsert({ tableName, records }: { tableName: TABLE_NAMES; records: Record<string, any>[] }) {
-    records.forEach(record => this.insert({ tableName, record }));
+    records.forEach(record => this._insert(tableName, record));
   }
 
   async load<R>({ tableName, keys }: { tableName: TABLE_NAMES; keys: Record<string, string> }): Promise<R | null> {
@@ -72,7 +77,7 @@ export class InMemoryStorage extends MastraStorage {
   }
 
   async saveThread({ thread }: { thread: StorageThreadType }): Promise<StorageThreadType> {
-    await this.insert({ tableName: TABLE_THREADS, record: thread });
+    this._insert(TABLE_THREADS, thread);
     return thread;
   }
 
@@ -131,19 +136,16 @@ export class InMemoryStorage extends MastraStorage {
 
   async saveMessages({ messages }: { messages: MessageType[] }): Promise<MessageType[]> {
     messages.forEach(message =>
-      this.insert({
-        tableName: TABLE_MESSAGES,
-        record: {
-          id: message.id,
-          threadId: message.threadId,
-          content: typeof message.content === 'object' ? JSON.stringify(message.content) : message.content,
-          role: message.role,
-          type: message.type,
-          createdAt:
-            message.createdAt instanceof Date
-              ? message.createdAt.toISOString()
-              : message.createdAt || new Date().toISOString(),
-        },
+      this._insert(TABLE_MESSAGES, {
+        id: message.id,
+        threadId: message.threadId,
+        content: typeof message.content === 'object' ? JSON.stringify(message.content) : message.content,
+        role: message.role,
+        type: message.type,
+        createdAt:
+          message.createdAt instanceof Date
+            ? message.createdAt.toISOString()
+            : message.createdAt || new Date().toISOString(),
       }),
     );
     return messages;
