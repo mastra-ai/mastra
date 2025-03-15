@@ -1,6 +1,6 @@
 import { MastraBase } from '../base';
 import type { MessageType, StorageThreadType } from '../memory/types';
-import type { WorkflowRunState } from '../workflows';
+import type { WorkflowRunState } from '../workflows/types';
 
 import { TABLE_WORKFLOW_SNAPSHOT, TABLE_EVALS, TABLE_MESSAGES, TABLE_THREADS, TABLE_TRACES } from './constants';
 import type { TABLE_NAMES } from './constants';
@@ -106,7 +106,11 @@ export abstract class MastraStorage extends MastraBase {
     return this.deleteThread({ threadId });
   }
 
-  abstract getMessages({ threadId, selectBy, threadConfig }: StorageGetMessagesArg): Promise<MessageType[]>;
+  abstract getMessages<T extends MessageType>({
+    threadId,
+    selectBy,
+    threadConfig,
+  }: StorageGetMessagesArg): Promise<T[]>;
 
   async __getMessages({ threadId, selectBy, threadConfig }: StorageGetMessagesArg): Promise<MessageType[]> {
     await this.init();

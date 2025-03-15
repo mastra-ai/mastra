@@ -1,14 +1,14 @@
 import type { MessageType, StorageThreadType } from '../memory/types';
 import { MastraStorage } from './base';
 import type { TABLE_NAMES } from './constants';
-import type { DefaultStorage, type LibSQLConfig } from './libsql';
-import type { EvalRow, StorageColumn, StorageGetMessagesArg } from './types';
+import type { EvalRow, LibSQLConfig, StorageColumn, StorageGetMessagesArg } from './types';
 
 /**
  * A proxy for the DefaultStorage (LibSQLStore) to allow for dynamically loading the storage in a constructor
+ * If the storage is in-memory, it will use the InMemoryStorage.
  */
 export class DefaultProxyStorage extends MastraStorage {
-  private storage: DefaultStorage | null = null;
+  private storage: MastraStorage | null = null;
   private storageConfig: LibSQLConfig;
   private isInitializingPromise: Promise<void> | null = null;
 
@@ -20,7 +20,7 @@ export class DefaultProxyStorage extends MastraStorage {
   private setupStorage() {
     if (!this.isInitializingPromise) {
       this.isInitializingPromise = new Promise((resolve, reject) => {
-        import('./libsql')
+        import(['./', 'libsql'].join('')) // avoid automatic bundling
           .then(({ DefaultStorage }) => {
             this.storage = new DefaultStorage({ config: this.storageConfig });
             resolve();
@@ -96,7 +96,7 @@ export class DefaultProxyStorage extends MastraStorage {
     return this.storage!.deleteThread({ threadId });
   }
 
-  async getMessages<T extends MessageType[]>({ threadId, selectBy }: StorageGetMessagesArg): Promise<T> {
+  async getMessages<T extends MessageType>({ threadId, selectBy }: StorageGetMessagesArg): Promise<T[]> {
     await this.setupStorage();
     return this.storage!.getMessages<T>({ threadId, selectBy });
   }
@@ -119,6 +119,6 @@ export class DefaultProxyStorage extends MastraStorage {
     attributes?: Record<string, string>;
   }): Promise<any[]> {
     await this.setupStorage();
-    return this.storage!.getTraces(options);
+    return this.storage!.getTraces(options ?? { page: 0, perPage: 100 });
   }
 }

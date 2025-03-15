@@ -210,13 +210,13 @@ export class UpstashStore extends MastraStorage {
     return messages;
   }
 
-  async getMessages<T = unknown>({ threadId, selectBy }: StorageGetMessagesArg): Promise<T[]> {
+  async getMessages<T extends MessageType>({ threadId, selectBy }: StorageGetMessagesArg): Promise<T[]> {
     const limit = typeof selectBy?.last === `number` ? selectBy.last : 40;
     const messageIds = new Set<string>();
     const threadMessagesKey = this.getThreadMessagesKey(threadId);
 
     if (limit === 0 && !selectBy?.include) {
-      return [];
+      return [] as T[];
     }
 
     // First, get specifically included messages and their context
@@ -253,17 +253,17 @@ export class UpstashStore extends MastraStorage {
     const messages = (
       await Promise.all(
         Array.from(messageIds).map(async id =>
-          this.redis.get<MessageType & { _index?: number }>(this.getMessageKey(threadId, id)),
+          this.redis.get<T & { _index?: number }>(this.getMessageKey(threadId, id)),
         ),
       )
-    ).filter(msg => msg !== null) as (MessageType & { _index?: number })[];
+    ).filter(msg => msg !== null) as (T & { _index?: number })[];
 
     // Sort messages by their position in the sorted set
     const messageOrder = await this.redis.zrange(threadMessagesKey, 0, -1);
     messages.sort((a, b) => messageOrder.indexOf(a!.id) - messageOrder.indexOf(b!.id));
 
     // Remove _index before returning
-    return messages.map(({ _index, ...message }) => message as unknown as T);
+    return messages.map(({ _index, ...message }) => message) as T[];
   }
 
   async persistWorkflowSnapshot(params: {
