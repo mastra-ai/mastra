@@ -691,13 +691,15 @@ describe('CloudflareStore REST API', () => {
         snapshot: updatedWorkflow,
       });
 
-      await new Promise(resolve => setTimeout(resolve, 10000));
-
-      const retrieved = await store.loadWorkflowSnapshot({
-        namespace: 'test',
-        workflowName: 'test-workflow',
-        runId: workflow.runId,
-      });
+      const retrieved = await retryUntil(
+        () =>
+          store.loadWorkflowSnapshot({
+            namespace: 'test',
+            workflowName: 'test-workflow',
+            runId: workflow.runId,
+          }),
+        snapshot => snapshot?.value[workflow.runId] === 'completed',
+      );
 
       expect(retrieved?.value[workflow.runId]).toBe('completed');
 
