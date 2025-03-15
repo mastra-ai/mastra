@@ -15,7 +15,7 @@ After generating embeddings, you need to store them in a database that supports 
 
 Best for teams already using PostgreSQL who want to minimize infrastructure complexity:
 
-<Tabs items={['Pg Vector', 'Pinecone', 'Qdrant', 'Chroma', 'Astra', 'LibSQL', 'Upstash', 'Cloudflare']}>
+<Tabs items={['Pg Vector', 'Pinecone', 'Qdrant', 'Chroma', 'Astra', 'LibSQL', 'Upstash', 'Cloudflare', 'OpenSearch']}>
   <Tabs.Tab>
   ```ts filename="vector-store.ts" showLineNumbers copy
   import { PgVector } from '@mastra/pg';
@@ -162,6 +162,22 @@ import { LibSQLVector } from "@mastra/core/vector/libsql";
   });
   ```
 </Tabs.Tab>
+<Tabs.Tab>
+```ts filename="vector-store.ts" showLineNumbers copy
+  import { OpenSearchVector } from '@mastra/opensearch'
+
+  const store = new OpenSearchVector(process.env.OPENSEARCH_URL)
+  await store.createIndex({
+    indexName: "my-collection",
+    dimension: 1536,
+  });
+  await store.upsert({
+    indexName: "my-collection",
+    vectors: embeddings,
+    metadata: chunks.map(chunk => ({ text: chunk.text })),
+  });
+```
+</Tabs.Tab>
 </Tabs>
 
 ## Using Vector Storage
@@ -268,4 +284,5 @@ For complete examples of different vector store implementations, see:
 - [Insert Embedding in LibSQL](../../examples/rag/insert-embedding-in-libsql.mdx)
 - [Insert Embedding in Upstash](../../examples/rag/insert-embedding-in-upstash.mdx)
 - [Insert Embedding in Cloudflare Vectorize](../../examples/rag/insert-embedding-in-vectorize.mdx)
+- [Insert Embedding in OpenSearch](../../examples/rag/insert-embedding-in-opensearch.mdx)
 - [Basic RAG with Vector Storage](../../examples/rag/basic-rag.mdx)
