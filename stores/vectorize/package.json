@@ -29,7 +29,8 @@
   },
   "dependencies": {
     "@mastra/core": "workspace:^",
-    "cloudflare": "^4.1.0"
+    "cloudflare": "^4.1.0",
+    "dotenv": "^16.4.7"
   },
   "devDependencies": {
     "@internal/lint": "workspace:*",
