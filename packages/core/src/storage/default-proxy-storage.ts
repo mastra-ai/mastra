@@ -20,7 +20,7 @@ export class DefaultProxyStorage extends MastraStorage {
   private setupStorage() {
     if (!this.isInitializingPromise) {
       this.isInitializingPromise = new Promise((resolve, reject) => {
-        import('./libsql')
+        import(['./', 'libsql'].join('')) // avoid automatic bundling
           .then(({ DefaultStorage }) => {
             this.storage = new DefaultStorage({ config: this.storageConfig });
             resolve();

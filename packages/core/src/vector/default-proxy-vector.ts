@@ -34,10 +34,10 @@ export class DefaultProxyVector extends MastraVector {
   private setupVector() {
     if (!this.isInitializingPromise) {
       this.isInitializingPromise = new Promise<MastraVector>((resolve, reject) => {
-        import('./libsql')
+        import(['./', 'libsql'].join('')) // avoid automatic bundling
           .then(({ DefaultVectorDB }) => {
             this.vectorDB = new DefaultVectorDB(this.vectorConfig);
-            resolve(this.vectorDB);
+            resolve(this.vectorDB!);
           })
           .catch(reject);
       });
