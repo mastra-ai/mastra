@@ -7,7 +7,7 @@ import type { MessageType, StorageThreadType } from '../../memory/types';
 import { MastraStorage } from '../base';
 import { TABLE_EVALS, TABLE_MESSAGES, TABLE_THREADS, TABLE_TRACES, TABLE_WORKFLOW_SNAPSHOT } from '../constants';
 import type { TABLE_NAMES } from '../constants';
-import type { StorageColumn, StorageGetMessagesArg, EvalRow } from '../types';
+import type { StorageColumn, StorageGetMessagesArg, EvalRow, LibSQLConfig } from '../types';
 
 function safelyParseJSON(jsonString: string): any {
   try {
@@ -15,11 +15,6 @@ function safelyParseJSON(jsonString: string): any {
   } catch {
     return {};
   }
-}
-
-export interface LibSQLConfig {
-  url: string;
-  authToken?: string;
 }
 
 export class LibSQLStore extends MastraStorage {
