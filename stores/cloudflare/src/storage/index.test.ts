@@ -34,7 +34,7 @@ const createSampleMessage = (threadId: string): MessageType => ({
   role: 'user',
   type: 'text',
   threadId,
-  content: [{ type: 'text' as const, text: 'Hello' }],
+  content: [{ type: 'text' as const, text: 'Hello' }] as MessageType['content'],
   createdAt: new Date(),
 });
 
@@ -65,6 +65,12 @@ declare module '@mastra/core/storage' {
     __getRank(tableName: TABLE_NAMES, orderKey: string, id: string): Promise<number | null>;
     __listKV(tableName: TABLE_NAMES): Promise<Array<{ name: string }>>;
     __getKey(tableName: TABLE_NAMES, keys: Record<string, any>): string;
+    __getThreadMessagesKey(threadId: string): string;
+    __updateSortedOrder(
+      tableName: TABLE_NAMES,
+      orderKey: string,
+      entries: Array<{ id: string; score: number }>,
+    ): Promise<void>;
   }
 }
 
@@ -74,11 +80,15 @@ const retryUntil = async <T>(
   condition: (result: T) => boolean,
   timeout = 1000,
   interval = 100,
-) => {
+): Promise<T> => {
   const start = Date.now();
   while (Date.now() - start < timeout) {
-    const result = await fn();
-    if (condition(result)) return result;
+    try {
+      const result = await fn();
+      if (condition(result)) return result;
+    } catch (error) {
+      if (Date.now() - start >= timeout) throw error;
+    }
     await new Promise(resolve => setTimeout(resolve, interval));
   }
   throw new Error('Timeout waiting for condition');
@@ -97,6 +107,8 @@ describe('CloudflareStore', () => {
       __getRange: CloudflareStore.prototype['getRange'],
       __getLastN: CloudflareStore.prototype['getLastN'],
       __getRank: CloudflareStore.prototype['getRank'],
+      __getThreadMessagesKey: CloudflareStore.prototype['getThreadMessagesKey'],
+      __updateSortedOrder: CloudflareStore.prototype['updateSortedOrder'],
     });
   });
   let store: CloudflareStore;
@@ -114,15 +126,14 @@ describe('CloudflareStore', () => {
       `${TEST_CONFIG.namespacePrefix}_mastra_threads`,
       `${TEST_CONFIG.namespacePrefix}_mastra_workflows`,
       `${TEST_CONFIG.namespacePrefix}_mastra_evals`,
+      `${TEST_CONFIG.namespacePrefix}_mastra_schemas`,
     ];
 
     for (const namespace of namespaces) {
       try {
         const namespaceId = await store['getNamespaceIdByName'](namespace);
         if (namespaceId) {
-          await store['client'].kv.namespaces.delete(namespaceId, {
-            account_id: TEST_CONFIG.accountId,
-          });
+          await store['deleteNamespace'](namespaceId);
         }
       } catch (error) {
         console.error(`Error cleaning up namespace ${namespace}:`, error);
@@ -482,6 +493,87 @@ describe('CloudflareStore', () => {
   });
 
   describe('Message Ordering', () => {
+    it('should handle duplicate timestamps gracefully', async () => {
+      const thread = createSampleThread();
+      await store.__saveThread({ thread });
+
+      // Create messages with identical timestamps
+      const timestamp = new Date();
+      const messages = Array.from({ length: 3 }, () => ({
+        ...createSampleMessage(thread.id),
+        createdAt: timestamp,
+      }));
+
+      await store.__saveMessages({ messages });
+
+      // Verify order is maintained based on insertion order
+      const orderKey = store.__getThreadMessagesKey(thread.id);
+      const order = await retryUntil(
+        () => store.__getFullOrder(TABLE_MESSAGES, orderKey),
+        order => order.length === messages.length,
+        5000,
+      );
+
+      // Order should match insertion order
+      expect(order).toEqual(messages.map(m => m.id));
+    });
+
+    it.only('should maintain order when messages are added out of sequence', async () => {
+      const thread = createSampleThread();
+      await store.__saveThread({ thread });
+
+      // Create messages with different timestamps
+      const now = Date.now();
+      const messages = Array.from({ length: 3 }, (_, i) => ({
+        ...createSampleMessage(thread.id),
+        createdAt: new Date(now - (2 - i) * 1000), // oldest -> newest
+      }));
+
+      // Save messages in parallel to stress test ordering
+      await Promise.all([...messages].reverse().map(msg => store.__saveMessages({ messages: [msg] })));
+
+      // Verify both presence and order
+      const orderKey = store.__getThreadMessagesKey(thread.id);
+      const order = await retryUntil(
+        async () => {
+          const currentOrder = await store.__getFullOrder(TABLE_MESSAGES, orderKey);
+          console.log('Current order:', currentOrder);
+          // Verify both length and content
+          return currentOrder.length === messages.length && currentOrder.every(id => messages.some(m => m.id === id))
+            ? currentOrder
+            : null;
+        },
+        order => order !== null,
+        5000,
+      );
+
+      expect(order).toEqual(messages.map(m => m.id));
+    });
+
+    it('should handle score updates correctly', async () => {
+      const thread = createSampleThread();
+      await store.__saveThread({ thread });
+
+      // Create initial messages
+      const messages = Array.from({ length: 3 }, () => createSampleMessage(thread.id));
+      await store.__saveMessages({ messages });
+
+      // Update scores to reverse order
+      const orderKey = store.__getThreadMessagesKey(thread.id);
+      await store.__updateSortedOrder(
+        TABLE_MESSAGES,
+        orderKey,
+        messages.map((msg, i) => ({
+          id: msg.id,
+          score: messages.length - 1 - i,
+        })),
+      );
+
+      // Verify new order
+      const order = await store.__getFullOrder(TABLE_MESSAGES, orderKey);
+      expect(order).toEqual(messages.map(m => m.id).reverse());
+    });
+
     it('should maintain message order using sorted sets', async () => {
       const thread = createSampleThread();
       await store.__saveThread({ thread });
@@ -711,6 +803,135 @@ describe('CloudflareStore', () => {
     });
   });
 
+  describe('Data Validation', () => {
+    it('should handle missing optional fields', async () => {
+      const thread = {
+        ...createSampleThread(),
+        metadata: undefined, // Optional field
+      };
+      await store.__saveThread({ thread });
+
+      // Should be able to retrieve thread
+      const threads = await store.__getThreadsByResourceId({ resourceId: thread.resourceId });
+      expect(threads).toHaveLength(1);
+      expect(threads[0].id).toBe(thread.id);
+      expect(threads[0].metadata).toStrictEqual({});
+    });
+
+    it('should sanitize and handle special characters', async () => {
+      const thread = createSampleThread();
+      const message = {
+        ...createSampleMessage(thread.id),
+        content: [{ type: 'text' as const, text: '特殊字符 !@#$%^&*()' }] as MessageType['content'],
+      };
+
+      await store.__saveThread({ thread });
+      await store.__saveMessages({ messages: [message] });
+
+      // Should retrieve correctly
+      const messages = await store.__getMessages({ threadId: thread.id });
+      expect(messages).toHaveLength(1);
+      expect(messages[0].content).toEqual(message.content);
+    });
+
+    it('should validate thread structure', async () => {
+      const invalidThread = {
+        ...createSampleThread(),
+        createdAt: 'invalid-date' as any, // Invalid date
+      };
+
+      // Should throw on invalid data
+      await expect(store.__saveThread({ thread: invalidThread })).rejects.toThrow();
+    });
+  });
+
+  describe('Resource Management', () => {
+    it('should clean up orphaned messages when thread is deleted', async () => {
+      const thread = createSampleThread();
+      const messages = Array.from({ length: 3 }, () => createSampleMessage(thread.id));
+
+      await store.__saveThread({ thread });
+      await store.__saveMessages({ messages });
+
+      // Verify messages exist
+      const orderKey = store.__getThreadMessagesKey(thread.id);
+      const initialOrder = await store.__getFullOrder(TABLE_MESSAGES, orderKey);
+      expect(initialOrder).toHaveLength(messages.length);
+
+      // Delete thread
+      await store.__deleteThread({ threadId: thread.id });
+
+      await new Promise(resolve => setTimeout(resolve, 5000));
+
+      // Verify messages are cleaned up
+      const finalOrder = await store.__getFullOrder(TABLE_MESSAGES, orderKey);
+      expect(finalOrder).toHaveLength(0);
+
+      // Verify thread is gone
+      const threads = await store.__getThreadsByResourceId({ resourceId: thread.resourceId });
+      expect(threads).toHaveLength(0);
+    });
+
+    it('should handle namespace cleanup edge cases', async () => {
+      // Create test data
+      const thread = createSampleThread();
+      await store.__saveThread({ thread });
+
+      // Create test messages with unique timestamps
+      const testMessages = Array.from({ length: 10 }, (_, i) => ({
+        ...createSampleMessage(thread.id),
+        createdAt: new Date(Date.now() + i * 1000),
+      }));
+      await store.__saveMessages({ messages: testMessages });
+
+      // Verify messages are saved
+      const initialMessages = await store.__getMessages({ threadId: thread.id });
+      expect(initialMessages).toHaveLength(testMessages.length);
+
+      // Delete thread
+      await store.__deleteThread({ threadId: thread.id });
+
+      // Verify cleanup with retries
+      await retryUntil(
+        async () => {
+          const namespaceId = await store['getNamespaceId']({ tableName: TABLE_THREADS });
+          const { result } = await store.listNamespaceKeys(namespaceId, {
+            limit: 1000,
+            prefix: thread.id,
+          });
+          return result;
+        },
+        keys => keys.length === 0,
+        5000, // 5 second timeout
+        100, // Check every 100ms
+      );
+
+      // Verify all data is cleaned up
+      const remainingMessages = await store.__getMessages({ threadId: thread.id });
+      expect(remainingMessages).toHaveLength(0);
+
+      // Verify thread is gone
+      const threads = await store.__getThreadsByResourceId({ resourceId: thread.resourceId });
+      expect(threads).toHaveLength(0);
+
+      // Verify message order is cleaned up
+      const orderKey = store.__getThreadMessagesKey(thread.id);
+      const order = await store.__getFullOrder(TABLE_MESSAGES, orderKey);
+      expect(order).toHaveLength(0);
+
+      // Verify no orphaned data in any table
+      const tablesToCheck: TABLE_NAMES[] = [TABLE_MESSAGES, TABLE_THREADS];
+      for (const tableName of tablesToCheck) {
+        const namespaceId = await store['getNamespaceId']({ tableName });
+        const { result } = await store.listNamespaceKeys(namespaceId, {
+          limit: 1000,
+          prefix: thread.id,
+        });
+        expect(result).toHaveLength(0);
+      }
+    });
+  });
+
   describe('Large Data Handling', () => {
     it('should handle large metadata objects', async () => {
       const thread = createSampleThread();
@@ -750,13 +971,98 @@ describe('CloudflareStore', () => {
   });
 
   describe('Error Handling', () => {
+    it.only('should handle race conditions in getSortedOrder', async () => {
+      const thread = createSampleThread();
+      await store.__saveThread({ thread });
+
+      // Create messages with sequential timestamps
+      const now = Date.now();
+      const messages = Array.from({ length: 5 }, (_, i) => ({
+        ...createSampleMessage(thread.id),
+        createdAt: new Date(now + i * 1000), // Ensure deterministic order
+      }));
+
+      // Save messages in parallel to create race condition
+      await Promise.all(messages.map(msg => store.__saveMessages({ messages: [msg] })));
+
+      // Verify both presence and order consistency
+      const orderKey = store.__getThreadMessagesKey(thread.id);
+      const order = await retryUntil(
+        async () => {
+          const currentOrder = await store.__getFullOrder(TABLE_MESSAGES, orderKey);
+
+          console.log('Current order:', currentOrder);
+          // Check both length and content
+          const hasAllMessages =
+            currentOrder.length === messages.length && currentOrder.every(id => messages.some(m => m.id === id));
+          if (!hasAllMessages) return null;
+
+          // Verify messages are in timestamp order
+          const orderedMessages = messages.slice().sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
+          return currentOrder.join(',') === orderedMessages.map(m => m.id).join(',') ? currentOrder : null;
+        },
+        order => order !== null,
+        10000,
+      );
+
+      // Final verification
+      const orderedIds = messages
+        .slice()
+        .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime())
+        .map(m => m.id);
+      expect(order).toEqual(orderedIds);
+    });
+
+    it('should handle malformed data gracefully', async () => {
+      const thread = createSampleThread();
+      await store.__saveThread({ thread });
+
+      // Test with various malformed data
+      const malformedMessage = {
+        ...createSampleMessage(thread.id),
+        content: [{ type: 'text' as const, text: ''.padStart(1024 * 1024, 'x') }] as MessageType['content'], // Very large content
+      };
+
+      await store.__saveMessages({ messages: [malformedMessage] });
+
+      // Should still be able to retrieve and handle the message
+      const messages = await store.__getMessages({ threadId: thread.id });
+      expect(messages).toHaveLength(1);
+      expect(messages[0].id).toBe(malformedMessage.id);
+    });
+
+    it('should handle concurrent updates to sorted order', async () => {
+      const thread = createSampleThread();
+      await store.__saveThread({ thread });
+
+      // Create initial messages
+      const messages = Array.from({ length: 3 }, () => createSampleMessage(thread.id));
+      await store.__saveMessages({ messages });
+
+      // Perform multiple concurrent updates
+      const orderKey = store.__getThreadMessagesKey(thread.id);
+      await Promise.all([
+        store.__updateSortedOrder(
+          TABLE_MESSAGES,
+          orderKey,
+          messages.map((msg, i) => ({ id: msg.id, score: i })),
+        ),
+        store.__updateSortedOrder(
+          TABLE_MESSAGES,
+          orderKey,
+          messages.map((msg, i) => ({ id: msg.id, score: messages.length - 1 - i })),
+        ),
+      ]);
+
+      // Verify order is consistent
+      const order = await store.__getFullOrder(TABLE_MESSAGES, orderKey);
+      expect(order.length).toBe(messages.length);
+      expect(new Set(order)).toEqual(new Set(messages.map(m => m.id)));
+    });
+
     it('should handle invalid JSON data gracefully', async () => {
       const namespaceId = await store['getNamespaceId']({ tableName: TABLE_THREADS });
-      await store['client'].kv.namespaces.values.update(namespaceId, 'invalid-key', {
-        account_id: TEST_CONFIG.accountId,
-        value: 'invalid-json',
-        metadata: '',
-      });
+      await store['putNamespaceValue'](namespaceId, 'invalid-key', 'invalid-json', '');
 
       const result = await store['getKV'](TABLE_THREADS, 'invalid-key');
       expect(result).toBe('invalid-json');

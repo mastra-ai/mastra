@@ -40,16 +40,61 @@ export class CloudflareStore extends MastraStorage {
     });
   }
 
+  private async listNamespaces() {
+    return await this.client.kv.namespaces.list({ account_id: this.accountId });
+  }
+
+  private async getNamespaceValue(namespaceId: string, key: string) {
+    return await this.client.kv.namespaces.values.get(namespaceId, key, {
+      account_id: this.accountId,
+    });
+  }
+
+  private async deleteNamespace(namespaceId: string) {
+    await this.client.kv.namespaces.delete(namespaceId, {
+      account_id: this.accountId,
+    });
+  }
+
+  private async putNamespaceValue(namespaceId: string, key: string, value: string, metadata?: string) {
+    await this.client.kv.namespaces.values.update(namespaceId, key, {
+      account_id: this.accountId,
+      value,
+      metadata: metadata || '',
+    });
+  }
+
+  private async deleteNamespaceValue(namespaceId: string, key: string) {
+    await this.client.kv.namespaces.values.delete(namespaceId, key, {
+      account_id: this.accountId,
+    });
+  }
+
+  async listNamespaceKeys(namespaceId: string, options?: { limit?: number; prefix?: string }) {
+    return await this.client.kv.namespaces.keys.list(namespaceId, {
+      account_id: this.accountId,
+      limit: options?.limit || 1000,
+      prefix: options?.prefix,
+    });
+  }
+
+  private async createNamespaceById(title: string) {
+    return await this.client.kv.namespaces.create({
+      account_id: this.accountId,
+      title,
+    });
+  }
+
   private async getNamespaceIdByName(namespaceName: string): Promise<string | null> {
     try {
-      const response = await this.client.kv.namespaces.list({ account_id: this.accountId });
+      const response = await this.listNamespaces();
       const namespace = response.result.find(ns => ns.title === namespaceName);
       return namespace ? namespace.id : null;
     } catch (error: any) {
       console.error('Error fetching namespace ID:', error);
       try {
         // List all namespaces and log them to help debug
-        const allNamespaces = await this.client.kv.namespaces.list({ account_id: this.accountId });
+        const allNamespaces = await this.listNamespaces();
         console.log(
           'Available namespaces:',
           allNamespaces.result.map(ns => ({ title: ns.title, id: ns.id })),
@@ -63,16 +108,13 @@ export class CloudflareStore extends MastraStorage {
 
   private async createNamespace(namespaceName: string): Promise<string> {
     try {
-      const response = await this.client.kv.namespaces.create({
-        account_id: this.accountId,
-        title: namespaceName,
-      });
+      const response = await this.createNamespaceById(namespaceName);
       return response.id;
     } catch (error: any) {
       // Check if the error is because it already exists
       if (error.message && error.message.includes('already exists')) {
         // Try to get it again since we know it exists
-        const namespaces = await this.client.kv.namespaces.list({ account_id: this.accountId });
+        const namespaces = await this.listNamespaces();
         const namespace = namespaces.result.find(ns => ns.title === namespaceName);
         if (namespace) return namespace.id;
       }
@@ -114,6 +156,29 @@ export class CloudflareStore extends MastraStorage {
     }
   }
 
+  /**
+   * Helper to safely serialize data for KV storage
+   */
+  private safeSerialize(data: any): string {
+    return typeof data === 'string' ? data : JSON.stringify(data);
+  }
+
+  /**
+   * Helper to safely parse data from KV storage
+   */
+  private safeParse(text: string): any {
+    try {
+      const data = JSON.parse(text);
+      // If we got an object with a value property that's a string, try to parse that too
+      if (data && typeof data === 'object' && 'value' in data && typeof data.value === 'string') {
+        return this.safeParse(data.value);
+      }
+      return data;
+    } catch {
+      return text;
+    }
+  }
+
   private async putKV({
     tableName,
     key,
@@ -129,51 +194,23 @@ export class CloudflareStore extends MastraStorage {
   }): Promise<void> {
     try {
       const namespaceId = await this.getNamespaceId({ tableName, schema });
-      // Ensure value is properly serialized
-      const serializedValue = typeof value === 'string' ? value : JSON.stringify(value);
-
-      await this.client.kv.namespaces.values.update(namespaceId, key, {
-        account_id: this.accountId,
-        value: serializedValue,
-        metadata: metadata ? JSON.stringify(metadata) : '',
-      });
+      // Ensure consistent serialization
+      const serializedValue = this.safeSerialize(value);
+      const serializedMetadata = metadata ? this.safeSerialize(metadata) : undefined;
+      await this.putNamespaceValue(namespaceId, key, serializedValue, serializedMetadata);
     } catch (error: any) {
-      console.error('Error putting KV:', error);
-      throw new Error(`Failed to put KV for table ${tableName}, key ${key}: ${error.message}`);
+      console.error(`Error putting KV for table ${tableName}, key ${key}:`, error);
+      throw new Error(`Failed to put KV: ${error.message}`);
     }
   }
 
   private async getKV(tableName: TABLE_NAMES, key: string): Promise<any> {
     try {
       const namespaceId = await this.getNamespaceId({ tableName });
-      const response = await this.client.kv.namespaces.values.get(namespaceId, key, {
-        account_id: this.accountId,
-      });
-
-      // Handle empty response
+      const response = await this.getNamespaceValue(namespaceId, key);
       const text = await response.text();
-      if (!text) {
-        return null;
-      }
-
-      // Helper to safely parse JSON
-      const safeJsonParse = (str: string) => {
-        try {
-          return JSON.parse(str);
-        } catch {
-          return str;
-        }
-      };
-
-      // First try to parse the response
-      const data = safeJsonParse(text);
-
-      // If we got an object with a value property that's a string, try to parse that too
-      if (data && typeof data === 'object' && 'value' in data && typeof data.value === 'string') {
-        return safeJsonParse(data.value);
-      }
-
-      return data;
+      if (!text) return null;
+      return this.safeParse(text);
     } catch (error: any) {
       if (error.status === 404 && (process.env.NODE_ENV === 'test' || process.env.VITEST === 'true')) {
         return null;
@@ -187,26 +224,21 @@ export class CloudflareStore extends MastraStorage {
   private async deleteKV(tableName: TABLE_NAMES, key: string): Promise<void> {
     try {
       const namespaceId = await this.getNamespaceId({ tableName });
-      await this.client.kv.namespaces.values.delete(namespaceId, key, {
-        account_id: this.accountId,
-      });
+      await this.deleteNamespaceValue(namespaceId, key);
     } catch (error: any) {
-      console.error('Error deleting KV:', error);
-      throw new Error(`Failed to delete KV for table ${tableName}, key ${key}: ${error.message}`);
+      console.error(`Error deleting KV for table ${tableName}, key ${key}:`, error);
+      throw new Error(`Failed to delete KV: ${error.message}`);
     }
   }
 
   private async listKV(tableName: TABLE_NAMES): Promise<Array<{ name: string }>> {
     try {
       const namespaceId = await this.getNamespaceId({ tableName });
-      const response = await this.client.kv.namespaces.keys.list(namespaceId, {
-        account_id: this.accountId,
-        limit: 1000,
-      });
+      const response = await this.listNamespaceKeys(namespaceId);
       return response.result.map(item => ({ name: item.name }));
     } catch (error: any) {
-      console.error('Error listing KV:', error);
-      throw new Error(`Failed to list KV for table ${tableName}: ${error.message}`);
+      console.error(`Error listing KV for table ${tableName}:`, error);
+      throw new Error(`Failed to list KV: ${error.message}`);
     }
   }
 
@@ -242,18 +274,18 @@ export class CloudflareStore extends MastraStorage {
     return [];
   }
 
-  private async updateSorting(threadMessages: MessageType[]) {
-    // Sort messages by _index or timestamp, ensuring stable order
+  private async updateSorting(threadMessages: (MessageType & { _index?: number })[]) {
+    // Sort messages by index or timestamp
     return threadMessages
-      .map((msg, defaultIndex) => ({
+      .map(msg => ({
         message: msg,
-        // Use _index if available, otherwise timestamp, with defaultIndex as tiebreaker
-        sortKey: ((msg as MessageType & { _index?: number })._index ?? msg.createdAt.getTime()) * 1000 + defaultIndex,
+        // Use _index if available, otherwise timestamp, matching Upstash
+        score: msg._index !== undefined ? msg._index : msg.createdAt.getTime(),
       }))
-      .sort((a, b) => a.sortKey - b.sortKey)
-      .map((item, index) => ({
+      .sort((a, b) => a.score - b.score)
+      .map(item => ({
         id: item.message.id,
-        score: index, // Use array index as score for stable ordering
+        score: item.score,
       }));
   }
 
@@ -362,9 +394,9 @@ export class CloudflareStore extends MastraStorage {
 
   private async getRange(tableName: TABLE_NAMES, orderKey: string, start: number, end: number): Promise<string[]> {
     const order = await this.getSortedOrder(tableName, orderKey);
-    // If end is negative, treat it as offset from the end (like slice)
-    const actualEnd = end < 0 ? order.length + end : end;
-    const sliced = order.slice(start, actualEnd + 1);
+    const actualStart = start < 0 ? Math.max(0, order.length + start) : start;
+    const actualEnd = end < 0 ? order.length + end : Math.min(end, order.length - 1);
+    const sliced = order.slice(actualStart, actualEnd + 1);
     return sliced.map(item => item.id);
   }
 
@@ -374,7 +406,7 @@ export class CloudflareStore extends MastraStorage {
   }
 
   private async getFullOrder(tableName: TABLE_NAMES, orderKey: string): Promise<string[]> {
-    // Get the full range by using 0 to -1 (end)
+    // Get the full range in ascending order (oldest to newest)
     return this.getRange(tableName, orderKey, 0, -1);
   }
 
@@ -621,20 +653,19 @@ export class CloudflareStore extends MastraStorage {
         throw new Error(`Thread ${threadId} not found`);
       }
 
-      // Delete all messages for this thread first
+      // Get all message keys for this thread first
       const messageKeys = await this.listKV(TABLE_MESSAGES);
       const threadMessageKeys = messageKeys.filter(key => key.name.startsWith(`${TABLE_MESSAGES}:${threadId}:`));
 
+      // Delete all messages and their order atomically
       await Promise.all([
-        // Delete individual messages
-        ...threadMessageKeys.map(key => this.deleteKV(TABLE_MESSAGES, key.name)),
         // Delete message order
-        this.deleteKV(TABLE_MESSAGES, `${TABLE_MESSAGES}:${threadId}:messages`),
+        this.deleteKV(TABLE_MESSAGES, this.getThreadMessagesKey(threadId)),
+        // Delete all messages
+        ...threadMessageKeys.map(key => this.deleteKV(TABLE_MESSAGES, key.name)),
+        // Delete thread
+        this.deleteKV(TABLE_THREADS, this.getKey(TABLE_THREADS, { id: threadId })),
       ]);
-
-      // Delete thread after messages are deleted
-      const key = this.getKey(TABLE_THREADS, { id: threadId });
-      await this.deleteKV(TABLE_THREADS, key);
     } catch (error) {
       console.error(`Error deleting thread ${threadId}:`, error);
       throw error;
@@ -667,9 +698,9 @@ export class CloudflareStore extends MastraStorage {
 
         return {
           ...message,
-          _index: index,
           createdAt: this.ensureDate(message.createdAt)!,
           type: message.type || 'text',
+          _index: index,
         };
       });
 
@@ -678,9 +709,9 @@ export class CloudflareStore extends MastraStorage {
         if (!acc.has(message.threadId)) {
           acc.set(message.threadId, []);
         }
-        acc.get(message.threadId)!.push(message);
+        acc.get(message.threadId)!.push(message as MessageType & { _index?: number });
         return acc;
-      }, new Map<string, MessageType[]>());
+      }, new Map<string, (MessageType & { _index?: number })[]>());
 
       // Process each thread's messages
       await Promise.all(
@@ -696,9 +727,11 @@ export class CloudflareStore extends MastraStorage {
             await Promise.all(
               threadMessages.map(async message => {
                 const key = await this.getMessageKey(threadId, message.id);
+                // Strip _index and serialize dates before saving
+                const { _index, ...cleanMessage } = message;
                 const serializedMessage = {
-                  ...message,
-                  createdAt: this.serializeDate(message.createdAt),
+                  ...cleanMessage,
+                  createdAt: this.serializeDate(cleanMessage.createdAt),
                 };
                 await this.putKV({ tableName: TABLE_MESSAGES, key, value: serializedMessage });
               }),
@@ -764,8 +797,7 @@ export class CloudflareStore extends MastraStorage {
           const indexA = orderMap.get(a.id);
           const indexB = orderMap.get(b.id);
 
-          if (indexA !== undefined && indexB !== undefined) return indexA - indexB;
-          if (a._index !== undefined && b._index !== undefined) return a._index - b._index;
+          if (indexA !== undefined && indexB !== undefined) return orderMap.get(a.id)! - orderMap.get(b.id)!;
           return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
         });
       } catch (error) {
@@ -774,10 +806,11 @@ export class CloudflareStore extends MastraStorage {
         messages.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
       }
 
-      // Return formatted messages
-      return messages.map(
-        ({ _index, ...message }) => ({ ...message, createdAt: this.ensureDate(message.createdAt)! }) as T,
-      );
+      // Remove _index and ensure dates before returning, just like Upstash
+      return messages.map(({ _index, ...message }) => ({
+        ...message,
+        createdAt: this.ensureDate(message.createdAt)!,
+      })) as T[];
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
       console.error(`Error retrieving messages for thread ${threadId}: ${errorMessage}`);
