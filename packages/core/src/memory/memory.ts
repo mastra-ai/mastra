@@ -19,6 +19,7 @@ import { deepMerge } from '../utils';
 import type { MastraVector } from '../vector';
 import { DefaultProxyVector } from '../vector/default-proxy-vector';
 import { defaultEmbedder } from '../vector/fastembed';
+import { InMemoryVector } from '../vector/in-memory-vector';
 
 import type { MessageType, SharedMemoryConfig, StorageThreadType, MemoryConfig, AiMessageType } from './types';
 
@@ -65,15 +66,19 @@ export abstract class MastraMemory extends MastraBase {
       const hasOldDb = existsSync(join(process.cwd(), oldDb)) || existsSync(join(process.cwd(), '.mastra', oldDb));
       const newDb = 'memory.db';
       const hasNewDb = existsSync(join(process.cwd(), newDb)) || existsSync(join(process.cwd(), '.mastra', newDb));
-      if (hasOldDb) {
-        this.logger.warn(
-          `Found deprecated Memory vector db file ${oldDb} this db is now merged with the default ${newDb} file. Delete the old one to use the new one. You will need to migrate any data if that's important to you. For now the deprecated path will be used but in a future breaking change we will only use the new db file path.`,
-        );
-      }
+      const connectionUrl =
+        (hasOldDb && `file:${oldDb}`) || (hasNewDb && `file:${newDb}`) || process.env.MASTRA_DEFAULT_VECTOR_URL;
+      if (connectionUrl) {
+        if (hasOldDb) {
+          this.logger.warn(
+            `Found deprecated Memory vector db file ${oldDb} this db is now merged with the default ${newDb} file. Delete the old one to use the new one. You will need to migrate any data if that's important to you. For now the deprecated path will be used but in a future breaking change we will only use the new db file path.`,
+          );
+        }
 
-      this.vector = new DefaultProxyVector({
-        connectionUrl: hasOldDb ? `file:${oldDb}` : hasNewDb ? `file:${newDb}` : process.env.MASTRA_DEFAULT_VECTOR_URL!,
-      });
+        this.vector = new DefaultProxyVector({ connectionUrl });
+      } else {
+        this.vector = new InMemoryVector();
+      }
     }
 
     if (config.embedder) {
