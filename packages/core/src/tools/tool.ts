@@ -1,3 +1,4 @@
+import type { ToolExecutionOptions } from 'ai';
 import type { z } from 'zod';
 
 import type { Mastra } from '../mastra';
@@ -7,7 +8,7 @@ export class Tool<
   TSchemaIn extends z.ZodSchema | undefined = undefined,
   TSchemaOut extends z.ZodSchema | undefined = undefined,
   TContext extends ToolExecutionContext<TSchemaIn> = ToolExecutionContext<TSchemaIn>,
-  TOptions extends unknown = unknown,
+  TOptions extends ToolExecutionOptions | undefined = ToolExecutionOptions,
 > implements ToolAction<TSchemaIn, TSchemaOut, TContext, TOptions>
 {
   id: string;
@@ -20,7 +21,7 @@ export class Tool<
   ) => Promise<TSchemaOut extends z.ZodSchema ? z.infer<TSchemaOut> : unknown>;
   mastra?: Mastra;
 
-  constructor(opts: ToolAction<TSchemaIn, TSchemaOut, TContext>) {
+  constructor(opts: ToolAction<TSchemaIn, TSchemaOut, TContext, TOptions>) {
     this.id = opts.id;
     this.description = opts.description;
     this.inputSchema = opts.inputSchema;
@@ -34,6 +35,6 @@ export function createTool<
   TSchemaIn extends z.ZodSchema | undefined = undefined,
   TSchemaOut extends z.ZodSchema | undefined = undefined,
   TContext extends ToolExecutionContext<TSchemaIn> = ToolExecutionContext<TSchemaIn>,
->(opts: ToolAction<TSchemaIn, TSchemaOut, TContext>) {
+>(opts: ToolAction<TSchemaIn, TSchemaOut, TContext, ToolExecutionOptions>) {
   return new Tool(opts);
 }
