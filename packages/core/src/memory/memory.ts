@@ -18,7 +18,7 @@ import type { CoreTool } from '../tools';
 import { deepMerge } from '../utils';
 import type { MastraVector } from '../vector';
 import { defaultEmbedder } from '../vector/fastembed';
-import { DefaultVectorDB } from '../vector/libsql';
+import { DefaultProxyVector } from '../vector/default-proxy-vector';
 
 import type { MessageType, SharedMemoryConfig, StorageThreadType, MemoryConfig, AiMessageType } from './types';
 
@@ -71,7 +71,7 @@ export abstract class MastraMemory extends MastraBase {
         );
       }
 
-      this.vector = new DefaultVectorDB({
+      this.vector = new DefaultProxyVector({
         connectionUrl: hasOldDb ? `file:${oldDb}` : `file:${newDb}`,
       });
     }
