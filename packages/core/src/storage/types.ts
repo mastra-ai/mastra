@@ -1,7 +1,7 @@
 import type { MetricResult } from '../eval/metric';
 import type { TestInfo } from '../eval/types';
 import type { MemoryConfig } from '../memory/types';
-import type { WorkflowRunState } from '../workflows/types';
+import type { WorkflowRunState } from '../workflows';
 
 export interface StorageColumn {
   type: 'text' | 'timestamp' | 'uuid' | 'jsonb' | 'integer' | 'bigint';
