@@ -112,8 +112,12 @@ export class AgentNetwork extends MastraBase {
     });
   }
 
-  #getAgentHistory(agentId: string) {
+  getAgentHistory(agentId: string) {
     return this.#agentHistory[agentId] || [];
+  }
+
+  #clearNetworkHistoryBeforeRun() {
+    this.#agentHistory = {};
   }
 
   /**
@@ -353,6 +357,7 @@ export class AgentNetwork extends MastraBase {
     | GenerateTextResult<any, Z extends ZodSchema ? z.infer<Z> : unknown>
     | GenerateObjectResult<Z extends ZodSchema ? z.infer<Z> : unknown>
   > {
+    this.#clearNetworkHistoryBeforeRun();
     console.log(`AgentNetwork: Starting generation with ${this.#agents.length} available agents`);
 
     const ops = {
@@ -392,6 +397,7 @@ export class AgentNetwork extends MastraBase {
     | StreamTextResult<any, Z extends ZodSchema ? z.infer<Z> : unknown>
     | StreamObjectResult<any, Z extends ZodSchema ? z.infer<Z> : unknown, any>
   > {
+    this.#clearNetworkHistoryBeforeRun();
     console.log(`AgentNetwork: Starting generation with ${this.#agents.length} available agents`);
 
     const ops = {
