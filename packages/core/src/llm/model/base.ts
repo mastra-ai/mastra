@@ -21,7 +21,7 @@ import type {
 } from '../';
 import type { MastraPrimitives } from '../../action';
 import { MastraBase } from '../../base';
-import { RegisteredLogger } from '../../logger';
+import { RegisteredLogger } from '../../logger/types';
 
 export class MastraLLMBase extends MastraBase {
   // @ts-ignore

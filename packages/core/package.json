@@ -29,6 +29,26 @@
         "default": "./dist/*/index.cjs"
       }
     },
+    "./logger/base": {
+      "import": {
+        "types": "./dist/logger/base-logger.d.ts",
+        "default": "./dist/logger/base-logger.js"
+      },
+      "require": {
+        "types": "./dist/logger/base-logger.d.cts",
+        "default": "./dist/logger/base-logger.cjs"
+      }
+    },
+    "./logger/transform": {
+      "import": {
+        "types": "./dist/logger/transform.d.ts",
+        "default": "./dist/logger/transform.js"
+      },
+      "require": {
+        "types": "./dist/logger/transform.d.cts",
+        "default": "./dist/logger/transform.cjs"
+      }
+    },
     "./storage/libsql": {
       "import": {
         "types": "./dist/storage/libsql/index.d.ts",

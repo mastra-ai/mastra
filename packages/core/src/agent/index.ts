@@ -24,7 +24,7 @@ import { AvailableHooks, executeHook } from '../hooks';
 import type { GenerateReturn, StreamReturn } from '../llm';
 import type { MastraLLMBase } from '../llm/model';
 import { MastraLLM } from '../llm/model';
-import { RegisteredLogger } from '../logger';
+import { RegisteredLogger } from '../logger/types';
 import type { Mastra } from '../mastra';
 import type { MastraMemory } from '../memory/memory';
 import type { MemoryConfig, StorageThreadType } from '../memory/types';

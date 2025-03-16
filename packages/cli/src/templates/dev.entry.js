@@ -1,5 +1,4 @@
 // @ts-ignore
-// @ts-ignore
 import { evaluate } from '@mastra/core/eval';
 import { AvailableHooks, registerHook } from '@mastra/core/hooks';
 import { TABLE_EVALS } from '@mastra/core/storage';

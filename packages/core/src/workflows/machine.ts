@@ -7,7 +7,7 @@ import { assign, createActor, fromPromise, setup } from 'xstate';
 import type { z } from 'zod';
 
 import type { MastraUnion } from '../action';
-import type { Logger } from '../logger';
+import type { BaseLogger } from '../logger/base-logger';
 
 import type { Mastra } from '../mastra';
 import { createMastraProxy } from '../utils';
@@ -47,7 +47,7 @@ export class Machine<
   TSteps extends Step<any, any, any>[] = any,
   TTriggerSchema extends z.ZodObject<any> = any,
 > extends EventEmitter {
-  logger: Logger;
+  logger: BaseLogger;
   #mastra?: Mastra;
   #workflowInstance: WorkflowInstance;
   #executionSpan?: Span | undefined;
@@ -74,7 +74,7 @@ export class Machine<
     retryConfig,
     startStepId,
   }: {
-    logger: Logger;
+    logger: BaseLogger;
     mastra?: Mastra;
     workflowInstance: WorkflowInstance;
     executionSpan?: Span;

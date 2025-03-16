@@ -30,7 +30,12 @@ export async function getInputOptions(
           browser: true,
         });
 
-  const externals = Array.from(analyzedBundleInfo.externalDependencies).concat(['@mastra/core/hooks']);
+  const externals = Array.from(analyzedBundleInfo.externalDependencies);
+  // we need to make sure that none of the core packages are bundled when one of them is external
+  if (analyzedBundleInfo.externalDependencies.has('@mastra/core')) {
+    externals.push('@mastra/core/*');
+  }
+
   return {
     logLevel: process.env.MASTRA_BUNDLER_DEBUG === 'true' ? 'debug' : 'silent',
     treeshake: true,
