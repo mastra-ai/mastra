@@ -143,6 +143,45 @@ const tool = new ToolAction({
 
 [More tools documentation →](https://mastra.ai/docs/reference/tools/overview)
 
+### Networks (`/network`)
+
+Networks enable orchestration of multiple agents working together to solve complex tasks. They support both synchronous execution and real-time streaming of agent interactions.
+
+```typescript
+import { AgentNetwork } from '@mastra/core/network';
+import { Agent } from '@mastra/core/agent';
+import { openai } from '@ai-sdk/openai';
+
+// Create agents
+const agent1 = new Agent({
+  name: 'Agent1',
+  instructions: 'Your instructions here',
+  model: openai('gpt-4o'),
+});
+
+// Create a network
+const network = new AgentNetwork({
+  name: 'MyNetwork',
+  agents: [agent1, agent2],
+  routingModel: openai('gpt-4o'),
+});
+
+// Generate a response
+const result = await network.generate('Your input here');
+
+// Or stream the response in real-time
+const streamResult = await network.stream('Your input here', {
+  onStepStart: (agent, step) => console.log(`Starting step ${step} with ${agent.name}`),
+  onStepFinish: result => console.log(`Finished step with output: ${result.output}`),
+});
+
+// Process the stream
+for await (const chunk of streamResult.stream) {
+  // Handle different chunk types (stepStart, agentChunk, stepFinish, etc.)
+  console.log(chunk);
+}
+```
+
 ### Logger (`/logger`)
 
 The logging system provides structured, leveled logging with multiple transport options. It supports debug information, performance monitoring, and error tracking across your AI applications.
