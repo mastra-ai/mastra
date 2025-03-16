@@ -48,8 +48,3 @@ export type EvalRow = {
   globalRunId: string;
   testInfo?: TestInfo;
 };
-
-export interface LibSQLConfig {
-  url: string;
-  authToken?: string;
-}
