@@ -1,5 +1,4 @@
-import type { MetricResult } from '../eval/metric';
-import type { TestInfo } from '../eval/types';
+import type { MetricResult, TestInfo } from '../eval';
 import type { MemoryConfig } from '../memory/types';
 import type { WorkflowRunState } from '../workflows';
 
