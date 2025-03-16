@@ -53,15 +53,17 @@ export abstract class MastraMemory extends MastraBase {
       // We used to need two separate DBs because we would get schema errors
       // Creating a new index for each vector dimension size fixed that, so we no longer need a separate sqlite db
       const oldDb = 'memory-vector.db';
-      const newDb = 'memory.db';
       const hasOldDb = existsSync(join(process.cwd(), oldDb)) || existsSync(join(process.cwd(), '.mastra', oldDb));
-      const connectionUrl = (hasOldDb && `file:${oldDb}`) || config.defaultVectorUrl || `file:${newDb}`;
+      const newDb = 'memory.db';
+
       if (hasOldDb) {
         this.logger.warn(
           `Found deprecated Memory vector db file ${oldDb} this db is now merged with the default ${newDb} file. Delete the old one to use the new one. You will need to migrate any data if that's important to you. For now the deprecated path will be used but in a future breaking change we will only use the new db file path.`,
         );
       }
-      this.vector = new DefaultProxyVector({ connectionUrl });
+      this.vector = new DefaultProxyVector({
+        connectionUrl: (hasOldDb && `file:${oldDb}`) || config.defaultVectorUrl || `file:${newDb}`,
+      });
     }
 
     if (config.embedder) {
