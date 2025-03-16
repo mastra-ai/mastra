@@ -2,7 +2,7 @@ import type { MessageType, StorageThreadType } from '../memory/types';
 import { MastraStorage } from './base';
 import type { TABLE_NAMES } from './constants';
 import { InMemoryStorage } from './in-memory-storage';
-import type { EvalRow, LibSQLConfig, StorageColumn, StorageGetMessagesArg } from './types';
+import type { EvalRow, StorageColumn, StorageGetMessagesArg } from './types';
 
 /**
  * A proxy for the DefaultStorage (LibSQLStore) to allow for dynamically loading the storage in a constructor
@@ -11,9 +11,9 @@ import type { EvalRow, LibSQLConfig, StorageColumn, StorageGetMessagesArg } from
 export class DefaultProxyStorage extends MastraStorage {
   private storage: Promise<MastraStorage>;
 
-  constructor({ config }: { config?: LibSQLConfig }) {
+  constructor({ config }: { config: { url?: string; authToken?: string } }) {
     super({ name: 'DefaultStorage' });
-    const url = config?.url || process.env.MASTRA_DEFAULT_STORAGE_URL;
+    const url = config?.url;
     if (!url || url === ':memory:') {
       this.storage = Promise.resolve(new InMemoryStorage());
     } else {
