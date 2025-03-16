@@ -47,13 +47,18 @@ export class CloudflareStore extends MastraStorage {
 
   private async listNamespaces() {
     if (this.bindings) {
-      // For Workers API, we already have the namespaces bound
+      // For Workers API, return a response matching REST API format
       return {
         result: Object.keys(this.bindings).map(name => ({
           id: name,
           title: name,
-          // Other fields that REST API returns but we don't need
+          created_on: new Date().toISOString(), // Current time as creation date
+          modified_on: new Date().toISOString(),
+          supports_url_encoding: true, // Match REST API behavior
         })),
+        success: true,
+        errors: [],
+        messages: [],
       };
     }
     // For REST API
@@ -67,7 +72,7 @@ export class CloudflareStore extends MastraStorage {
       if (!result) return null;
       return JSON.stringify(result);
     } else {
-      const namespaceId = await this.getNamespaceId({ tableName });
+      const namespaceId = await this.getNamespaceId(tableName);
       const response = await this.client!.kv.namespaces.values.get(namespaceId, key, {
         account_id: this.accountId!,
       });
@@ -81,7 +86,7 @@ export class CloudflareStore extends MastraStorage {
       // Instead, clear all keys in the namespace
       await this.clearTable({ tableName });
     } else {
-      const namespaceId = await this.getNamespaceId({ tableName });
+      const namespaceId = await this.getNamespaceId(tableName);
       await this.client!.kv.namespaces.delete(namespaceId, {
         account_id: this.accountId!,
       });
@@ -93,20 +98,24 @@ export class CloudflareStore extends MastraStorage {
     key,
     value,
     metadata,
-    schema,
   }: {
     tableName: TABLE_NAMES;
     key: string;
     value: string;
     metadata?: string;
-    schema?: boolean;
   }) {
     // Ensure consistent serialization
     const serializedValue = this.safeSerialize(value);
     const serializedMetadata = metadata ? this.safeSerialize(metadata) : undefined;
     if (this.bindings) {
+      const binding = this.getBinding(tableName);
+      if (serializedMetadata) {
+        await binding.put(key, serializedValue, { metadata: serializedMetadata });
+      } else {
+        await binding.put(key, serializedValue);
+      }
     } else {
-      const namespaceId = await this.getNamespaceId({ tableName, schema });
+      const namespaceId = await this.getNamespaceId(tableName);
       await this.client!.kv.namespaces.values.update(namespaceId, key, {
         account_id: this.accountId!,
         value: serializedValue,
@@ -120,7 +129,7 @@ export class CloudflareStore extends MastraStorage {
       const binding = this.getBinding(tableName);
       await binding.delete(key);
     } else {
-      const namespaceId = await this.getNamespaceId({ tableName });
+      const namespaceId = await this.getNamespaceId(tableName);
       await this.client!.kv.namespaces.values.delete(namespaceId, key, {
         account_id: this.accountId!,
       });
@@ -128,24 +137,29 @@ export class CloudflareStore extends MastraStorage {
   }
 
   async listNamespaceKeys(tableName: TABLE_NAMES, options?: { limit?: number; prefix?: string }) {
-    if (this.bindings) {
-      const binding = this.getBinding(tableName);
-      const response = await binding.list({
-        limit: options?.limit || 1000,
-        prefix: options?.prefix,
-      });
+    try {
+      if (this.bindings) {
+        const binding = this.getBinding(tableName);
+        const response = await binding.list({
+          limit: options?.limit || 1000,
+          prefix: options?.prefix,
+        });
 
-      // Convert Workers API response to match REST API format
-      return response.keys;
-    } else {
-      const namespaceId = await this.getNamespaceId({ tableName });
-      // Use REST API
-      const response = await this.client!.kv.namespaces.keys.list(namespaceId, {
-        account_id: this.accountId!,
-        limit: options?.limit || 1000,
-        prefix: options?.prefix,
-      });
-      return response.result;
+        // Convert Workers API response to match REST API format
+        return response.keys;
+      } else {
+        const namespaceId = await this.getNamespaceId(tableName);
+        // Use REST API
+        const response = await this.client!.kv.namespaces.keys.list(namespaceId, {
+          account_id: this.accountId!,
+          limit: options?.limit || 1000,
+          prefix: options?.prefix,
+        });
+        return response.result;
+      }
+    } catch (error: any) {
+      console.error(`Error listing keys for namespace ${tableName}:`, error);
+      throw new Error(`Failed to list namespace keys: ${error.message}`);
     }
   }
 
@@ -154,8 +168,10 @@ export class CloudflareStore extends MastraStorage {
       // For Workers API, namespaces are created at deploy time
       // Return a mock response that matches REST API shape
       return {
-        id: title, // Use title as ID since that's what we need
-        title: title,
+        result: {
+          id: title, // Use title as ID since that's what we need
+          title: title,
+        },
       };
     }
     return await this.client!.kv.namespaces.create({
@@ -188,6 +204,10 @@ export class CloudflareStore extends MastraStorage {
   private async createNamespace(namespaceName: string): Promise<string> {
     try {
       const response = await this.createNamespaceById(namespaceName);
+      // Handle both REST API and Workers API response shapes
+      if ('result' in response) {
+        return response.result.id;
+      }
       return response.id;
     } catch (error: any) {
       // Check if the error is because it already exists
@@ -210,19 +230,11 @@ export class CloudflareStore extends MastraStorage {
     return namespaceId;
   }
 
-  private async getNamespaceId({
-    tableName,
-    schema = false,
-  }: {
-    tableName: TABLE_NAMES;
-    schema?: boolean;
-  }): Promise<string> {
+  private async getNamespaceId(tableName: TABLE_NAMES): Promise<string> {
     const prefix = this.namespacePrefix;
 
     try {
-      if (schema) {
-        return await this.getOrCreateNamespaceId(`${prefix}_mastra_schemas`);
-      } else if (tableName === TABLE_MESSAGES || tableName === TABLE_THREADS) {
+      if (tableName === TABLE_MESSAGES || tableName === TABLE_THREADS) {
         return await this.getOrCreateNamespaceId(`${prefix}_mastra_threads`);
       } else if (tableName === TABLE_WORKFLOW_SNAPSHOT) {
         return await this.getOrCreateNamespaceId(`${prefix}_mastra_workflows`);
@@ -263,16 +275,14 @@ export class CloudflareStore extends MastraStorage {
     key,
     value,
     metadata,
-    schema,
   }: {
     tableName: TABLE_NAMES;
     key: string;
     value: any;
     metadata?: any;
-    schema?: boolean;
   }): Promise<void> {
     try {
-      await this.putNamespaceValue({ tableName, key, value, metadata, schema });
+      await this.putNamespaceValue({ tableName, key, value, metadata });
     } catch (error: any) {
       console.error(`Error putting KV for table ${tableName}, key ${key}:`, error);
       throw new Error(`Failed to put KV: ${error.message}`);
@@ -551,7 +561,7 @@ export class CloudflareStore extends MastraStorage {
         tableName,
         createdAt: new Date().toISOString(),
       };
-      await this.putKV({ tableName, key: schemaKey, value: schema, metadata, schema: true });
+      await this.putKV({ tableName, key: schemaKey, value: schema, metadata });
     } catch (error) {
       const errorMessage = `Failed to store schema for table ${tableName}`;
       console.error(errorMessage, error);

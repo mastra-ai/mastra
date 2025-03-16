@@ -126,7 +126,6 @@ describe('CloudflareStore REST API', () => {
       `${TEST_CONFIG.namespacePrefix}_mastra_threads`,
       `${TEST_CONFIG.namespacePrefix}_mastra_workflows`,
       `${TEST_CONFIG.namespacePrefix}_mastra_evals`,
-      `${TEST_CONFIG.namespacePrefix}_mastra_schemas`,
     ];
 
     for (const namespace of namespaces) {
