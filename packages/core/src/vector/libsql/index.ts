@@ -1,6 +1,6 @@
 import { join, resolve, isAbsolute } from 'path';
-import { createClient } from '@libsql/client/web';
-import type { Client as TursoClient, InValue } from '@libsql/client/web';
+import { createClient } from '@libsql/client';
+import type { Client as TursoClient, InValue } from '@libsql/client';
 
 import type { VectorFilter } from '../filter';
 import { MastraVector } from '../index';
