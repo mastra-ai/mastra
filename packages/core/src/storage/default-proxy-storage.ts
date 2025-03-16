@@ -21,8 +21,7 @@ export class DefaultProxyStorage extends MastraStorage {
         try {
           import(['./', 'libsql'].join('')) // avoid automatic bundling
             .then(({ DefaultStorage }) => {
-              this.storage = new DefaultStorage({ config: { url, authToken: config?.authToken } });
-              resolve(this.storage);
+              resolve(new DefaultStorage({ config: { url, authToken: config?.authToken } }));
             })
             .catch(reject);
         } catch (error) {
