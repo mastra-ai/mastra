@@ -485,14 +485,67 @@ export class CloudflareStore extends MastraStorage {
     }
   }
 
-  private validateRecord<T extends TABLE_NAMES>(record: unknown, tableName: T): asserts record is RecordTypes[T] {
+  private validateColumnValue(value: unknown, column: StorageColumn): boolean {
+    if (value === undefined || value === null) {
+      return column.nullable ?? false;
+    }
+
+    switch (column.type) {
+      case 'text':
+      case 'uuid':
+        return typeof value === 'string';
+      case 'integer':
+      case 'bigint':
+        return typeof value === 'number';
+      case 'timestamp':
+        return value instanceof Date || (typeof value === 'string' && !isNaN(Date.parse(value)));
+      case 'jsonb':
+        if (typeof value !== 'object') return false;
+        try {
+          JSON.stringify(value);
+          return true;
+        } catch {
+          return false;
+        }
+      default:
+        return false;
+    }
+  }
+
+  private async validateAgainstSchema(
+    record: Record<string, unknown>,
+    schema: Record<string, StorageColumn>,
+  ): Promise<void> {
+    for (const [columnName, column] of Object.entries(schema)) {
+      const value = record[columnName];
+
+      // Check primary key presence
+      if (column.primaryKey && (value === undefined || value === null)) {
+        throw new Error(`Missing primary key value for column ${columnName}`);
+      }
+
+      if (!this.validateColumnValue(value, column)) {
+        const valueType = value === null ? 'null' : typeof value;
+        throw new Error(`Invalid value for column ${columnName}: expected ${column.type}, got ${valueType}`);
+      }
+    }
+  }
+
+  private async validateRecord<T extends TABLE_NAMES>(record: unknown, tableName: T): Promise<void> {
     if (!record || typeof record !== 'object') {
       throw new Error('Record must be an object');
     }
 
-    // Type guard to ensure record has required fields based on table type
     const recordTyped = record as Record<string, unknown>;
+    const schema = await this.getTableSchema(tableName);
 
+    // If schema exists, validate against it
+    if (schema) {
+      await this.validateAgainstSchema(recordTyped, schema);
+      return;
+    }
+
+    // Fallback validation if no schema found
     switch (tableName) {
       case TABLE_THREADS:
         if (!('id' in recordTyped) || !('resourceId' in recordTyped) || !('title' in recordTyped)) {
