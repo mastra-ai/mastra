@@ -1127,7 +1127,6 @@ describe.skip('CloudflareStore Workers Binding', () => {
     });
 
     it('should handle invalid JSON data gracefully', async () => {
-      const namespaceId = await store['getNamespaceId']({ tableName: TABLE_THREADS });
       await store['putNamespaceValue']({
         tableName: TABLE_THREADS,
         key: 'invalid-key',

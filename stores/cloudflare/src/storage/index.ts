@@ -45,23 +45,18 @@ export class CloudflareStore extends MastraStorage {
     return binding;
   }
 
-  private async listNamespaces() {
+  private async listNamespaces(): Promise<{
+    result: Array<{ id: string; title: string; supports_url_encoding?: boolean }>;
+  }> {
     if (this.bindings) {
-      // For Workers API, return a response matching REST API format
       return {
         result: Object.keys(this.bindings).map(name => ({
           id: name,
           title: name,
-          created_on: new Date().toISOString(), // Current time as creation date
-          modified_on: new Date().toISOString(),
-          supports_url_encoding: true, // Match REST API behavior
+          supports_url_encoding: true,
         })),
-        success: true,
-        errors: [],
-        messages: [],
       };
     }
-    // For REST API
     return await this.client!.kv.namespaces.list({ account_id: this.accountId! });
   }
 
@@ -109,11 +104,7 @@ export class CloudflareStore extends MastraStorage {
     const serializedMetadata = metadata ? this.safeSerialize(metadata) : undefined;
     if (this.bindings) {
       const binding = this.getBinding(tableName);
-      if (serializedMetadata) {
-        await binding.put(key, serializedValue, { metadata: serializedMetadata });
-      } else {
-        await binding.put(key, serializedValue);
-      }
+      await binding.put(key, serializedValue, { metadata: serializedMetadata || '' });
     } else {
       const namespaceId = await this.getNamespaceId(tableName);
       await this.client!.kv.namespaces.values.update(namespaceId, key, {
@@ -166,12 +157,11 @@ export class CloudflareStore extends MastraStorage {
   private async createNamespaceById(title: string) {
     if (this.bindings) {
       // For Workers API, namespaces are created at deploy time
-      // Return a mock response that matches REST API shape
+      // Return a mock response matching REST API shape
       return {
-        result: {
-          id: title, // Use title as ID since that's what we need
-          title: title,
-        },
+        id: title, // Use title as ID since that's what we need
+        title: title,
+        supports_url_encoding: true,
       };
     }
     return await this.client!.kv.namespaces.create({
@@ -204,10 +194,6 @@ export class CloudflareStore extends MastraStorage {
   private async createNamespace(namespaceName: string): Promise<string> {
     try {
       const response = await this.createNamespaceById(namespaceName);
-      // Handle both REST API and Workers API response shapes
-      if ('result' in response) {
-        return response.result.id;
-      }
       return response.id;
     } catch (error: any) {
       // Check if the error is because it already exists
