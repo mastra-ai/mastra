@@ -340,6 +340,10 @@ export class AgentNetwork extends MastraBase {
     return this.#routingAgent;
   }
 
+  getAgents() {
+    return this.#agents;
+  }
+
   async generate<Z extends ZodSchema | JSONSchema7 | undefined = undefined>(
     messages: string | string[] | CoreMessage[],
     args?: AgentGenerateOptions<Z> & { output?: never; experimental_output?: never },
