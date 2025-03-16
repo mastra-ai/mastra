@@ -1,19 +1,9 @@
-import { useNetwork } from '@/hooks/use-networks';
 import { Badge } from '@/components/ui/badge';
 import { Brain } from 'lucide-react';
 import { Agent } from '@/components/ui/agent-logo';
+import { GetNetworkResponse } from '@mastra/client-js';
 
-export function NetworkDetails({ networkId }: { networkId: string }) {
-  const { network, isLoading } = useNetwork(networkId);
-
-  if (isLoading || !network) {
-    return (
-      <div className="p-4">
-        <p className="text-sm text-mastra-el-4">Loading network details...</p>
-      </div>
-    );
-  }
-
+export function NetworkDetails({ network }: { network: GetNetworkResponse }) {
   return (
     <div className="p-4 space-y-4">
       <div>

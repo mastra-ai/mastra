@@ -31,14 +31,14 @@ export function NetworkHeader({ networkName, networkId }: { networkName: string;
       >
         Chat
       </Button>
-      <Button
-        variant={isTracesPage ? 'secondary' : 'outline'}
-        size="slim"
-        onClick={() => navigate(`/networks/${networkId}/traces`)}
-        className="rounded-[0.125rem] px-2"
-      >
-        Traces
-      </Button>
+      {/* <Button
+                variant={isTracesPage ? 'secondary' : 'outline'}
+                size="slim"
+                onClick={() => navigate(`/networks/${networkId}/traces`)}
+                className="rounded-[0.125rem] px-2"
+            >
+                Traces
+            </Button> */}
       {/* <Button
                 variant={isEvalsPage ? 'secondary' : 'outline'}
                 size="slim"

@@ -34,6 +34,7 @@
   "license": "ISC",
   "dependencies": {
     "@assistant-ui/react": "^0.7.91",
+    "@assistant-ui/react-ai-sdk": "^0.8.0",
     "@assistant-ui/react-markdown": "^0.7.21",
     "@assistant-ui/react-syntax-highlighter": "^0.7.10",
     "@codemirror/lang-json": "^6.0.1",
