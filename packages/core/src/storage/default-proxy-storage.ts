@@ -18,19 +18,11 @@ export class DefaultProxyStorage extends MastraStorage {
       this.storage = Promise.resolve(new InMemoryStorage());
     } else {
       this.storage = new Promise((resolve, reject) => {
-        try {
-          import(['./', 'libsql'].join('')) // avoid automatic bundling
-            .then(({ DefaultStorage }) => {
-              resolve(new DefaultStorage({ config: { url, authToken: config?.authToken } }));
-            })
-            .catch(reject);
-        } catch (error) {
-          console.error(
-            'To use DefaultProxyStorage for a remote database, you need to install the @libsql/client package',
-            error,
-          );
-          reject(error);
-        }
+        import('./libsql')
+          .then(({ DefaultStorage }) => {
+            resolve(new DefaultStorage({ config: { url, authToken: config?.authToken } }));
+          })
+          .catch(reject);
       });
     }
   }
