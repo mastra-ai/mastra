@@ -78,8 +78,8 @@ declare module '@mastra/core/storage' {
 const retryUntil = async <T>(
   fn: () => Promise<T>,
   condition: (result: T) => boolean,
-  timeout = 5000, // Increased default timeout for KV eventual consistency
-  interval = 500, // Increased interval to reduce load
+  timeout = 10000, // Increased default timeout for KV eventual consistency
+  interval = 1000, // Increased interval to reduce load
 ): Promise<T> => {
   const start = Date.now();
   while (Date.now() - start < timeout) {

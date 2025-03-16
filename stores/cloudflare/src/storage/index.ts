@@ -118,9 +118,12 @@ export class CloudflareStore extends MastraStorage {
         });
         return await response.text();
       }
-    } catch (error) {
-      this.logger.error(`Failed to get value for ${tableName}/${key}:`, { error });
-      return null;
+    } catch (error: any) {
+      if (error.message && error.message.includes('key not found')) {
+        return null;
+      }
+      this.logger.error(`Failed to get value for ${tableName} ${key}:`, { error });
+      throw error;
     }
   }
 
@@ -146,26 +149,26 @@ export class CloudflareStore extends MastraStorage {
     tableName: TABLE_NAMES;
     key: string;
     value: string;
-    metadata?: string;
+    metadata?: any;
   }) {
     try {
       // Ensure consistent serialization
       const serializedValue = this.safeSerialize(value);
-      const serializedMetadata = metadata ? this.safeSerialize(metadata) : undefined;
+      const serializedMetadata = metadata ? this.safeSerialize(metadata) : '';
 
       if (this.bindings) {
         const binding = this.getBinding(tableName);
-        await binding.put(key, serializedValue, { metadata: serializedMetadata || '' });
+        await binding.put(key, serializedValue, { metadata: serializedMetadata });
       } else {
         const namespaceId = await this.getNamespaceId(tableName);
         await this.client!.kv.namespaces.values.update(namespaceId, key, {
           account_id: this.accountId!,
           value: serializedValue,
-          metadata: serializedMetadata || '',
+          metadata: serializedMetadata,
         });
       }
     } catch (error) {
-      this.logger.error(`Failed to put value for ${tableName}/${key}:`, { error });
+      this.logger.error(`Failed to put value for ${tableName} ${key}:`, { error });
       throw error;
     }
   }
@@ -315,7 +318,7 @@ export class CloudflareStore extends MastraStorage {
     try {
       await this.putNamespaceValue({ tableName, key, value, metadata });
     } catch (error: any) {
-      this.logger.error(`Failed to put KV value for ${tableName}/${key}:`, error);
+      this.logger.error(`Failed to put KV value for ${tableName}:${key}:`, error);
       throw new Error(`Failed to put KV value: ${error.message}`);
     }
   }
@@ -326,11 +329,8 @@ export class CloudflareStore extends MastraStorage {
       if (!text) return null;
       return this.safeParse(text);
     } catch (error: any) {
-      if (error.status === 404 && (process.env.NODE_ENV === 'test' || process.env.VITEST === 'true')) {
-        return null;
-      }
-      this.logger.error(`Failed to get KV value for ${tableName}/${key}:`, error);
-      return null;
+      this.logger.error(`Failed to get KV value for ${tableName}:${key}:`, error);
+      throw new Error(`Failed to get KV value: ${error.message}`);
     }
   }
 
@@ -338,7 +338,7 @@ export class CloudflareStore extends MastraStorage {
     try {
       await this.deleteNamespaceValue(tableName, key);
     } catch (error: any) {
-      this.logger.error(`Failed to delete KV value for ${tableName}/${key}:`, error);
+      this.logger.error(`Failed to delete KV value for ${tableName}:${key}:`, error);
       throw new Error(`Failed to delete KV value: ${error.message}`);
     }
   }
@@ -534,8 +534,8 @@ export class CloudflareStore extends MastraStorage {
     try {
       const schemaKey = this.getSchemaKey(tableName);
       return await this.getKV(tableName, schemaKey);
-    } catch (error: any) {
-      this.logger.error(`Failed to get schema for ${tableName}:`, error);
+    } catch (error) {
+      this.logger.error(`Failed to get schema for ${tableName}:`, { error });
       return null;
     }
   }
@@ -673,9 +673,6 @@ export class CloudflareStore extends MastraStorage {
 
   async insert<T extends TABLE_NAMES>({ tableName, record }: { tableName: T; record: RecordTypes[T] }): Promise<void> {
     try {
-      // Validate record type
-      this.validateRecord(record, tableName);
-
       const key = this.getKey(tableName, record);
 
       // Process dates and metadata
@@ -683,11 +680,13 @@ export class CloudflareStore extends MastraStorage {
         ...record,
         createdAt: record.createdAt ? this.serializeDate(record.createdAt) : undefined,
         updatedAt: record.updatedAt ? this.serializeDate(record.updatedAt) : undefined,
-        metadata: record.metadata ? JSON.stringify(record.metadata) : undefined,
+        metadata: record.metadata ? JSON.stringify(record.metadata) : '',
       } as RecordTypes[T];
 
+      // Validate record type
+      this.validateRecord(processedRecord, tableName);
       await this.putKV({ tableName, key, value: processedRecord });
-    } catch (error: any) {
+    } catch (error) {
       this.logger.error(`Failed to insert record for ${tableName}:`, { error });
       throw error;
     }
