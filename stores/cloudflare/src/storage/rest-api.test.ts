@@ -988,6 +988,7 @@ describe('CloudflareStore REST API', () => {
         }),
       ).rejects.toThrow();
     });
+
     it('should handle malformed data gracefully', async () => {
       const thread = createSampleThread();
       await store.__saveThread({ thread });

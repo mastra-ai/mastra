@@ -78,8 +78,8 @@ declare module '@mastra/core/storage' {
 const retryUntil = async <T>(
   fn: () => Promise<T>,
   condition: (result: T) => boolean,
-  timeout = 1000,
-  interval = 100,
+  timeout = 5000, // Increased default timeout for KV eventual consistency
+  interval = 500, // Increased interval to reduce load
 ): Promise<T> => {
   const start = Date.now();
   while (Date.now() - start < timeout) {
@@ -356,7 +356,6 @@ describe.skip('CloudflareStore Workers Binding', () => {
             Object.entries(updatedMetadata).every(([key, value]) => thread?.metadata?.[key] === value)
           );
         },
-        5000,
       );
 
       expect(retrieved?.title).toBe(updatedTitle);
@@ -377,7 +376,6 @@ describe.skip('CloudflareStore Workers Binding', () => {
       await retryUntil(
         () => store.__getThreadById({ threadId: thread.id }),
         thread => thread === null,
-        5000,
       );
 
       // Verify messages were also deleted with retry
@@ -407,7 +405,6 @@ describe.skip('CloudflareStore Workers Binding', () => {
           return msgs;
         },
         msgs => msgs.length === 2,
-        5000,
       );
 
       expect(retrievedMessages).toEqual(expect.arrayContaining(messages));
@@ -439,7 +436,10 @@ describe.skip('CloudflareStore Workers Binding', () => {
 
       await store.__saveMessages({ messages });
 
-      const retrievedMessages = await store.__getMessages({ threadId: thread.id });
+      const retrievedMessages = await retryUntil(
+        async () => await store.__getMessages({ threadId: thread.id }),
+        messages => messages.length > 0,
+      );
       expect(retrievedMessages).toHaveLength(3);
 
       // Verify order is maintained
@@ -512,7 +512,6 @@ describe.skip('CloudflareStore Workers Binding', () => {
             runId: workflow.runId,
           }),
         snapshot => snapshot?.value[workflow.runId] === 'completed',
-        5000,
       );
 
       expect(retrieved?.value[workflow.runId]).toBe('completed');
@@ -579,7 +578,6 @@ describe.skip('CloudflareStore Workers Binding', () => {
       const order = await retryUntil(
         () => store.__getFullOrder(TABLE_MESSAGES, orderKey),
         order => order.length === messages.length,
-        5000,
       );
 
       // Order should match insertion order
@@ -638,7 +636,10 @@ describe.skip('CloudflareStore Workers Binding', () => {
       );
 
       // Verify new order
-      const order = await store.__getFullOrder(TABLE_MESSAGES, orderKey);
+      const order = await retryUntil(
+        async () => await store.__getFullOrder(TABLE_MESSAGES, orderKey),
+        order => order[0] === messages?.[messages.length - 1]?.id,
+      );
       expect(order).toEqual(messages.map(m => m.id).reverse());
     });
 
@@ -676,19 +677,28 @@ describe.skip('CloudflareStore Workers Binding', () => {
           return order;
         },
         order => order.length > 0,
-        5000,
       );
       expect(order.length).toBe(3);
 
       // Verify we can get specific ranges
-      const firstTwo = await store.__getRange(TABLE_MESSAGES, orderKey, 0, 1);
+      const firstTwo = await retryUntil(
+        async () => await store.__getRange(TABLE_MESSAGES, orderKey, 0, 1),
+        order => order.length > 0,
+      );
+
       expect(firstTwo.length).toBe(2);
 
-      const lastTwo = await store.__getLastN(TABLE_MESSAGES, orderKey, 2);
+      const lastTwo = await retryUntil(
+        async () => await store.__getLastN(TABLE_MESSAGES, orderKey, 2),
+        order => order.length > 0,
+      );
       expect(lastTwo.length).toBe(2);
 
       // Verify message ranks
-      const firstMessageRank = await store.__getRank(TABLE_MESSAGES, orderKey, messages[0].id);
+      const firstMessageRank = await retryUntil(
+        async () => await store.__getRank(TABLE_MESSAGES, orderKey, messages[0].id),
+        order => order !== null,
+      );
       expect(firstMessageRank).toBe(0);
     });
   });
@@ -781,13 +791,15 @@ describe.skip('CloudflareStore Workers Binding', () => {
         snapshot: updatedWorkflow,
       });
 
-      await new Promise(resolve => setTimeout(resolve, 5000));
-
-      const retrieved = await store.loadWorkflowSnapshot({
-        namespace: 'test',
-        workflowName: 'test-workflow',
-        runId: workflow.runId,
-      });
+      const retrieved = await retryUntil(
+        () =>
+          store.loadWorkflowSnapshot({
+            namespace: 'test',
+            workflowName: 'test-workflow',
+            runId: workflow.runId,
+          }),
+        snapshot => snapshot?.value[workflow.runId] === 'completed',
+      );
 
       expect(retrieved?.value[workflow.runId]).toBe('completed');
 
@@ -832,6 +844,8 @@ describe.skip('CloudflareStore Workers Binding', () => {
         runId: workflow.runId,
         snapshot: workflow,
       });
+
+      await new Promise(resolve => setTimeout(resolve, 5000));
 
       // Update step-1 status to completed
       const updatedWorkflow = {
@@ -923,7 +937,10 @@ describe.skip('CloudflareStore Workers Binding', () => {
 
       // Verify messages exist
       const orderKey = store.__getThreadMessagesKey(thread.id);
-      const initialOrder = await store.__getFullOrder(TABLE_MESSAGES, orderKey);
+      const initialOrder = await retryUntil(
+        async () => await store.__getFullOrder(TABLE_MESSAGES, orderKey),
+        messages => messages.length > 0,
+      );
       expect(initialOrder).toHaveLength(messages.length);
 
       // Delete thread
@@ -932,7 +949,10 @@ describe.skip('CloudflareStore Workers Binding', () => {
       await new Promise(resolve => setTimeout(resolve, 5000));
 
       // Verify messages are cleaned up
-      const finalOrder = await store.__getFullOrder(TABLE_MESSAGES, orderKey);
+      const finalOrder = await retryUntil(
+        () => store.__getFullOrder(TABLE_MESSAGES, orderKey),
+        order => order.length === 0,
+      );
       expect(finalOrder).toHaveLength(0);
 
       // Verify thread is gone
@@ -953,7 +973,10 @@ describe.skip('CloudflareStore Workers Binding', () => {
       await store.__saveMessages({ messages: testMessages });
 
       // Verify messages are saved
-      const initialMessages = await store.__getMessages({ threadId: thread.id });
+      const initialMessages = await retryUntil(
+        async () => await store.__getMessages({ threadId: thread.id }),
+        messages => messages.length === testMessages.length,
+      );
       expect(initialMessages).toHaveLength(testMessages.length);
 
       // Delete thread
@@ -969,21 +992,28 @@ describe.skip('CloudflareStore Workers Binding', () => {
           return keys;
         },
         keys => keys.length === 0,
-        5000, // 5 second timeout
-        100, // Check every 100ms
       );
 
       // Verify all data is cleaned up
-      const remainingMessages = await store.__getMessages({ threadId: thread.id });
+      const remainingMessages = await retryUntil(
+        async () => await store.__getMessages({ threadId: thread.id }),
+        messages => messages.length === 0,
+      );
       expect(remainingMessages).toHaveLength(0);
 
       // Verify thread is gone
-      const threads = await store.__getThreadsByResourceId({ resourceId: thread.resourceId });
+      const threads = await retryUntil(
+        async () => await store.__getThreadsByResourceId({ resourceId: thread.resourceId }),
+        threads => threads.length === 0,
+      );
       expect(threads).toHaveLength(0);
 
       // Verify message order is cleaned up
       const orderKey = store.__getThreadMessagesKey(thread.id);
-      const order = await store.__getFullOrder(TABLE_MESSAGES, orderKey);
+      const order = await retryUntil(
+        () => store.__getFullOrder(TABLE_MESSAGES, orderKey),
+        order => order.length === 0,
+      );
       expect(order).toHaveLength(0);
 
       // Verify no orphaned data in any table
@@ -1079,6 +1109,32 @@ describe.skip('CloudflareStore Workers Binding', () => {
       expect(order).toEqual(orderedIds);
     });
 
+    it('should handle invalid message data', async () => {
+      const thread = createSampleThread();
+      await store.__saveThread({ thread });
+
+      // Try to save invalid message
+      const invalidMessage = {
+        ...createSampleMessage(thread.id),
+        content: undefined,
+      };
+
+      await expect(
+        store.__saveMessages({
+          messages: [invalidMessage as any],
+        }),
+      ).rejects.toThrow();
+    });
+
+    it('should handle missing thread gracefully', async () => {
+      const message = createSampleMessage('non-existent-thread');
+      await expect(
+        store.__saveMessages({
+          messages: [message],
+        }),
+      ).rejects.toThrow();
+    });
+
     it('should handle malformed data gracefully', async () => {
       const thread = createSampleThread();
       await store.__saveThread({ thread });
@@ -1092,7 +1148,10 @@ describe.skip('CloudflareStore Workers Binding', () => {
       await store.__saveMessages({ messages: [malformedMessage] });
 
       // Should still be able to retrieve and handle the message
-      const messages = await store.__getMessages({ threadId: thread.id });
+      const messages = await retryUntil(
+        async () => await store.__getMessages({ threadId: thread.id }),
+        messages => messages.length === 1,
+      );
       expect(messages).toHaveLength(1);
       expect(messages[0].id).toBe(malformedMessage.id);
     });
@@ -1121,7 +1180,10 @@ describe.skip('CloudflareStore Workers Binding', () => {
       ]);
 
       // Verify order is consistent
-      const order = await store.__getFullOrder(TABLE_MESSAGES, orderKey);
+      const order = await retryUntil(
+        () => store.__getFullOrder(TABLE_MESSAGES, orderKey),
+        order => order.length === messages.length,
+      );
       expect(order.length).toBe(messages.length);
       expect(new Set(order)).toEqual(new Set(messages.map(m => m.id)));
     });
