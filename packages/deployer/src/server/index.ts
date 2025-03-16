@@ -59,6 +59,7 @@ import {
   createRunHandler,
 } from './handlers/workflows.js';
 import { html } from './welcome.js';
+import { getNetworkByIdHandler, getNetworksHandler } from './handlers/network.js';
 
 type Bindings = {};
 
@@ -162,6 +163,46 @@ export async function createHonoServer(
       },
     }),
     getAgentsHandler,
+  );
+
+  // Network routes
+  app.get(
+    '/api/networks',
+    describeRoute({
+      description: 'Get all available networks',
+      tags: ['networks'],
+      responses: {
+        200: {
+          description: 'List of all networks',
+        },
+      },
+    }),
+    getNetworksHandler,
+  );
+
+  app.get(
+    '/api/networks/:networkId',
+    describeRoute({
+      description: 'Get network by ID',
+      tags: ['networks'],
+      parameters: [
+        {
+          name: 'networkId',
+          in: 'path',
+          required: true,
+          schema: { type: 'string' },
+        },
+      ],
+      responses: {
+        200: {
+          description: 'Network details',
+        },
+        404: {
+          description: 'Network not found',
+        },
+      },
+    }),
+    getNetworkByIdHandler,
   );
 
   app.get(

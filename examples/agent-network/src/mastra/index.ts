@@ -1,10 +1,11 @@
 import { Mastra } from '@mastra/core';
 import { createLogger } from '@mastra/core/logger';
-
-import { chefAgent, chefAgentResponses } from './agents/index';
+import { researchNetwork } from './network';
 
 export const mastra = new Mastra({
-  agents: { chefAgent, chefAgentResponses },
+  networks: {
+    researchNetwork,
+  },
   logger: createLogger({ name: 'Chef', level: 'info' }),
   serverMiddleware: [
     {
