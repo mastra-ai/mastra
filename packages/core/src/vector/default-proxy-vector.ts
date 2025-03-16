@@ -32,20 +32,11 @@ export class DefaultProxyVector extends MastraVector {
       this.vectorDB = Promise.resolve(new InMemoryVector());
     } else {
       this.vectorDB = new Promise((resolve, reject) => {
-        try {
-          import(['./', 'libsql'].join('')) // avoid automatic bundling
-            .then(({ DefaultVectorDB }) => {
-              this.vectorDB = new DefaultVectorDB({ ...config, connectionUrl });
-              resolve(this.vectorDB!);
-            })
-            .catch(reject);
-        } catch (error) {
-          console.error(
-            'To use DefaultProxyVector for a remote database, you need to install the @libsql/client package',
-            error,
-          );
-          reject(error);
-        }
+        import('./libsql')
+          .then(({ DefaultVectorDB }) => {
+            resolve(new DefaultVectorDB({ ...config, connectionUrl }));
+          })
+          .catch(reject);
       });
     }
   }
