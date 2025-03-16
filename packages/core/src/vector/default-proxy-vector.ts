@@ -27,7 +27,7 @@ export class DefaultProxyVector extends MastraVector {
 
   constructor(config: VectorConfig) {
     super();
-    const connectionUrl = config.connectionUrl || process.env.MASTRA_DEFAULT_VECTOR_URL;
+    const connectionUrl = config.connectionUrl;
     if (!connectionUrl || connectionUrl === ':memory:') {
       this.vectorDB = Promise.resolve(new InMemoryVector());
     } else {

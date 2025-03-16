@@ -12,7 +12,12 @@ import { updateWorkingMemoryTool } from './tools/working-memory';
  */
 export class Memory extends MastraMemory {
   constructor(config: SharedMemoryConfig = {}) {
-    super({ name: 'Memory', ...config });
+    super({
+      name: 'Memory',
+      defaultStorageUrl: process.env.MASTRA_DEFAULT_STORAGE_URL,
+      defaultVectorUrl: process.env.MASTRA_DEFAULT_VECTOR_URL,
+      ...config,
+    });
 
     const mergedConfig = this.getMergedThreadConfig({
       workingMemory: config.options?.workingMemory || {
