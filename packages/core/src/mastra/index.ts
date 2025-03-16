@@ -451,6 +451,19 @@ This is a warning for now, but will throw an error in the future
     return Object.values(this.#networks || {});
   }
 
+  /**
+   * Get a specific network by ID
+   * @param networkId - The ID of the network to retrieve
+   * @returns The network with the specified ID, or undefined if not found
+   */
+  public getNetwork(networkId: string): AgentNetwork | undefined {
+    const networks = this.getNetworks();
+    return networks.find(network => {
+      const routingAgent = network.getRoutingAgent();
+      return network.formatAgentId(routingAgent.name) === networkId;
+    });
+  }
+
   public async getLogsByRunId({ runId, transportId }: { runId: string; transportId: string }) {
     if (!transportId) {
       throw new Error('Transport ID is required');

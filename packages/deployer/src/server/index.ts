@@ -35,6 +35,12 @@ import {
   saveMessagesHandler,
   updateThreadHandler,
 } from './handlers/memory.js';
+import {
+  getNetworkByIdHandler,
+  getNetworksHandler,
+  generateHandler as generateNetworkHandler,
+  streamGenerateHandler as streamGenerateNetworkHandler,
+} from './handlers/network.js';
 import { generateSystemPromptHandler } from './handlers/prompt.js';
 import { rootHandler } from './handlers/root.js';
 import { getTelemetryHandler } from './handlers/telemetry.js';
@@ -57,7 +63,6 @@ import {
   watchWorkflowHandler,
 } from './handlers/workflows.js';
 import { html } from './welcome.js';
-import { getNetworkByIdHandler, getNetworksHandler } from './handlers/network.js';
 
 type Bindings = {};
 
@@ -201,6 +206,159 @@ export async function createHonoServer(
       },
     }),
     getNetworkByIdHandler,
+  );
+
+  app.post(
+    '/api/networks/:networkId/generate',
+    bodyLimit(bodyLimitOptions),
+    describeRoute({
+      description: 'Generate a response from a network',
+      tags: ['networks'],
+      parameters: [
+        {
+          name: 'networkId',
+          in: 'path',
+          required: true,
+          schema: { type: 'string' },
+        },
+      ],
+      requestBody: {
+        required: true,
+        content: {
+          'application/json': {
+            schema: {
+              type: 'object',
+              required: ['messages'],
+              properties: {
+                messages: {
+                  type: 'array',
+                  items: {
+                    type: 'object',
+                    required: ['role', 'content'],
+                    properties: {
+                      role: { type: 'string', enum: ['user', 'assistant', 'system'] },
+                      content: { type: 'string' },
+                    },
+                  },
+                },
+                threadId: { type: 'string' },
+                resourceId: { type: 'string' },
+                output: { type: 'string', enum: ['text', 'json'] },
+                runId: { type: 'string' },
+              },
+            },
+          },
+        },
+      },
+      responses: {
+        200: {
+          description: 'Success',
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                properties: {
+                  message: { type: 'string' },
+                  usage: {
+                    type: 'object',
+                    properties: {
+                      promptTokens: { type: 'number' },
+                      completionTokens: { type: 'number' },
+                      totalTokens: { type: 'number' },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+        404: {
+          description: 'Network not found',
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                properties: {
+                  error: { type: 'string' },
+                },
+              },
+            },
+          },
+        },
+      },
+    }),
+    generateNetworkHandler,
+  );
+
+  app.post(
+    '/api/networks/:networkId/stream',
+    bodyLimit(bodyLimitOptions),
+    describeRoute({
+      description: 'Stream a response from a network',
+      tags: ['networks'],
+      parameters: [
+        {
+          name: 'networkId',
+          in: 'path',
+          required: true,
+          schema: { type: 'string' },
+        },
+      ],
+      requestBody: {
+        required: true,
+        content: {
+          'application/json': {
+            schema: {
+              type: 'object',
+              required: ['messages'],
+              properties: {
+                messages: {
+                  type: 'array',
+                  items: {
+                    type: 'object',
+                    required: ['role', 'content'],
+                    properties: {
+                      role: { type: 'string', enum: ['user', 'assistant', 'system'] },
+                      content: { type: 'string' },
+                    },
+                  },
+                },
+                threadId: { type: 'string' },
+                resourceId: { type: 'string' },
+                output: { type: 'string', enum: ['text', 'json'] },
+                runId: { type: 'string' },
+              },
+            },
+          },
+        },
+      },
+      responses: {
+        200: {
+          description: 'Success',
+          content: {
+            'text/event-stream': {
+              schema: {
+                type: 'string',
+              },
+            },
+          },
+        },
+        404: {
+          description: 'Network not found',
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                properties: {
+                  error: { type: 'string' },
+                },
+              },
+            },
+          },
+        },
+      },
+    }),
+    streamGenerateNetworkHandler,
   );
 
   app.get(
