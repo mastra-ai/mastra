@@ -394,6 +394,7 @@ describe('CloudflareStore REST API', () => {
         runId: workflow.runId,
         snapshot: workflow,
       });
+      await new Promise(resolve => setTimeout(resolve, 5000));
 
       const retrieved = await retryUntil(
         async () =>
