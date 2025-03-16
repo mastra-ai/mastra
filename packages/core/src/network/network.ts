@@ -15,6 +15,7 @@ import type { AgentGenerateOptions, AgentStreamOptions } from '../agent';
 import { MastraBase } from '../base';
 
 import { RegisteredLogger } from '../logger';
+import type { Mastra } from '../mastra';
 import { createTool } from '../tools';
 import type { AgentNetworkConfig } from './types';
 
@@ -22,6 +23,7 @@ export class AgentNetwork extends MastraBase {
   #instructions: string;
   #agents: Agent[];
   #model: LanguageModelV1;
+  #mastra?: Mastra;
   #routingAgent: Agent;
   #agentHistory: Record<
     string,
@@ -415,5 +417,15 @@ export class AgentNetwork extends MastraBase {
     );
 
     return result;
+  }
+
+  __registerMastra(p: Mastra) {
+    this.#routingAgent.__registerMastra(p);
+    // Register primitives for each agent in the network
+    for (const agent of this.#agents) {
+      if (typeof agent.__registerMastra === 'function') {
+        agent.__registerMastra(p);
+      }
+    }
   }
 }
