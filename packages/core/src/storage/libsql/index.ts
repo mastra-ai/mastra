@@ -1,5 +1,6 @@
 import { join, resolve, isAbsolute } from 'node:path';
-import type { Client, InValue } from '@libsql/client';
+import { createClient } from '@libsql/client/web';
+import type { Client, InValue } from '@libsql/client/web';
 
 import type { MetricResult, TestInfo } from '../../eval';
 import type { MessageType, StorageThreadType } from '../../memory/types';
@@ -22,7 +23,7 @@ export interface LibSQLConfig {
 }
 
 export class LibSQLStore extends MastraStorage {
-  private client: Promise<Client>;
+  private client: Client;
 
   constructor({ config }: { config: LibSQLConfig }) {
     super({ name: `LibSQLStore` });
@@ -32,17 +33,9 @@ export class LibSQLStore extends MastraStorage {
       this.shouldCacheInit = false;
     }
 
-    this.client = new Promise((resolve, reject) => {
-      import('@libsql/client')
-        .then(({ createClient }) => {
-          resolve(
-            createClient({
-              url: this.rewriteDbUrl(config.url),
-              authToken: config.authToken,
-            }),
-          );
-        })
-        .catch(reject);
+    this.client = createClient({
+      url: this.rewriteDbUrl(config.url),
+      authToken: config.authToken,
     });
   }
 
@@ -118,7 +111,7 @@ export class LibSQLStore extends MastraStorage {
     try {
       this.logger.debug(`Creating database table`, { tableName, operation: 'schema init' });
       const sql = this.getCreateTableSQL(tableName, schema);
-      await (await this.client).execute(sql);
+      await this.client.execute(sql);
     } catch (error) {
       this.logger.error(`Error creating table ${tableName}: ${error}`);
       throw error;
@@ -127,7 +120,7 @@ export class LibSQLStore extends MastraStorage {
 
   async clearTable({ tableName }: { tableName: TABLE_NAMES }): Promise<void> {
     try {
-      await (await this.client).execute(`DELETE FROM ${tableName}`);
+      await this.client.execute(`DELETE FROM ${tableName}`);
     } catch (e) {
       if (e instanceof Error) {
         this.logger.error(e.message);
@@ -160,9 +153,7 @@ export class LibSQLStore extends MastraStorage {
 
   async insert({ tableName, record }: { tableName: TABLE_NAMES; record: Record<string, any> }): Promise<void> {
     try {
-      await (
-        await this.client
-      ).execute(
+      await this.client.execute(
         this.prepareStatement({
           tableName,
           record,
@@ -179,7 +170,7 @@ export class LibSQLStore extends MastraStorage {
 
     try {
       const batchStatements = records.map(r => this.prepareStatement({ tableName, record: r }));
-      await (await this.client).batch(batchStatements, 'write');
+      await this.client.batch(batchStatements, 'write');
     } catch (error) {
       this.logger.error(`Error upserting into table ${tableName}: ${error}`);
       throw error;
@@ -192,9 +183,7 @@ export class LibSQLStore extends MastraStorage {
       .join(' AND ');
     const values = Object.values(keys);
 
-    const result = await (
-      await this.client
-    ).execute({
+    const result = await this.client.execute({
       sql: `SELECT * FROM ${tableName} WHERE ${conditions} ORDER BY createdAt DESC LIMIT 1`,
       args: values,
     });
@@ -237,9 +226,7 @@ export class LibSQLStore extends MastraStorage {
   }
 
   async getThreadsByResourceId({ resourceId }: { resourceId: string }): Promise<StorageThreadType[]> {
-    const result = await (
-      await this.client
-    ).execute({
+    const result = await this.client.execute({
       sql: `SELECT * FROM ${TABLE_THREADS} WHERE resourceId = ?`,
       args: [resourceId],
     });
@@ -293,9 +280,7 @@ export class LibSQLStore extends MastraStorage {
       },
     };
 
-    await (
-      await this.client
-    ).execute({
+    await this.client.execute({
       sql: `UPDATE ${TABLE_THREADS} SET title = ?, metadata = ? WHERE id = ?`,
       args: [title, JSON.stringify(updatedThread.metadata), id],
     });
@@ -304,9 +289,7 @@ export class LibSQLStore extends MastraStorage {
   }
 
   async deleteThread({ threadId }: { threadId: string }): Promise<void> {
-    await (
-      await this.client
-    ).execute({
+    await this.client.execute({
       sql: `DELETE FROM ${TABLE_THREADS} WHERE id = ?`,
       args: [threadId],
     });
@@ -330,7 +313,7 @@ export class LibSQLStore extends MastraStorage {
     } as MessageType;
   }
 
-  async getMessages<T extends MessageType>({ threadId, selectBy }: StorageGetMessagesArg): Promise<T[]> {
+  async getMessages<T extends MessageType[]>({ threadId, selectBy }: StorageGetMessagesArg): Promise<T> {
     try {
       const messages: MessageType[] = [];
       const limit = typeof selectBy?.last === `number` ? selectBy.last : 40;
@@ -342,12 +325,10 @@ export class LibSQLStore extends MastraStorage {
         const maxNext = Math.max(...selectBy.include.map(i => i.withNextMessages || 0));
 
         // Get messages around all specified IDs in one query using row numbers
-        const includeResult = await (
-          await this.client
-        ).execute({
+        const includeResult = await this.client.execute({
           sql: `
             WITH numbered_messages AS (
-              SELECT
+              SELECT 
                 id,
                 content,
                 role,
@@ -380,12 +361,12 @@ export class LibSQLStore extends MastraStorage {
       // Get remaining messages, excluding already fetched IDs
       const excludeIds = messages.map(m => m.id);
       const remainingSql = `
-        SELECT
-          id,
-          content,
-          role,
+        SELECT 
+          id, 
+          content, 
+          role, 
           type,
-          "createdAt",
+          "createdAt", 
           thread_id
         FROM "${TABLE_MESSAGES}"
         WHERE thread_id = ?
@@ -395,9 +376,7 @@ export class LibSQLStore extends MastraStorage {
       `;
       const remainingArgs = [threadId, ...(excludeIds.length ? excludeIds : []), limit];
 
-      const remainingResult = await (
-        await this.client
-      ).execute({
+      const remainingResult = await this.client.execute({
         sql: remainingSql,
         args: remainingArgs,
       });
@@ -409,7 +388,7 @@ export class LibSQLStore extends MastraStorage {
       // Sort all messages by creation date
       messages.sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
 
-      return messages as T[];
+      return messages as T;
     } catch (error) {
       this.logger.error('Error getting messages:', error as Error);
       throw error;
@@ -419,7 +398,7 @@ export class LibSQLStore extends MastraStorage {
   async saveMessages({ messages }: { messages: MessageType[] }): Promise<MessageType[]> {
     if (messages.length === 0) return messages;
 
-    const tx = await (await this.client).transaction('write');
+    const tx = await this.client.transaction('write');
 
     try {
       const threadId = messages[0]?.threadId;
@@ -430,7 +409,7 @@ export class LibSQLStore extends MastraStorage {
       for (const message of messages) {
         const time = message.createdAt || new Date();
         await tx.execute({
-          sql: `INSERT INTO ${TABLE_MESSAGES} (id, thread_id, content, role, type, createdAt)
+          sql: `INSERT INTO ${TABLE_MESSAGES} (id, thread_id, content, role, type, createdAt) 
                               VALUES (?, ?, ?, ?, ?, ?)`,
           args: [
             message.id,
@@ -485,9 +464,7 @@ export class LibSQLStore extends MastraStorage {
             ? " AND (test_info IS NULL OR test_info->>'testPath' IS NULL)"
             : '';
 
-      const result = await (
-        await this.client
-      ).execute({
+      const result = await this.client.execute({
         sql: `${baseQuery}${typeCondition} ORDER BY created_at DESC`,
         args: [agentName],
       });
@@ -552,9 +529,7 @@ export class LibSQLStore extends MastraStorage {
 
     args.push(limit, offset);
 
-    const result = await (
-      await this.client
-    ).execute({
+    const result = await this.client.execute({
       sql: `SELECT * FROM ${TABLE_TRACES} ${whereClause} ORDER BY "startTime" DESC LIMIT ? OFFSET ?`,
       args,
     });
