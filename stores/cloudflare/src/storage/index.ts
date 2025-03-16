@@ -1,5 +1,12 @@
 import type { StorageThreadType, MessageType } from '@mastra/core/memory';
-import { MastraStorage, TABLE_MESSAGES, TABLE_THREADS, TABLE_WORKFLOW_SNAPSHOT } from '@mastra/core/storage';
+import {
+  MastraStorage,
+  TABLE_MESSAGES,
+  TABLE_THREADS,
+  TABLE_WORKFLOW_SNAPSHOT,
+  TABLE_EVALS,
+  TABLE_TRACES,
+} from '@mastra/core/storage';
 import type { TABLE_NAMES, StorageColumn, StorageGetMessagesArg, EvalRow } from '@mastra/core/storage';
 import type { WorkflowRunState } from '@mastra/core/workflows';
 import type { KVNamespace } from '@cloudflare/workers-types';
@@ -12,33 +19,70 @@ export class CloudflareStore extends MastraStorage {
   private namespacePrefix: string;
   private bindings?: Record<TABLE_NAMES, KVNamespace>;
 
+  private validateWorkersConfig(
+    config: CloudflareStoreConfig,
+  ): asserts config is { bindings: Record<TABLE_NAMES, KVNamespace>; keyPrefix?: string } {
+    if (!isWorkersConfig(config)) {
+      throw new Error('Invalid Workers API configuration');
+    }
+    if (!config.bindings) {
+      throw new Error('KV bindings are required when using Workers Binding API');
+    }
+
+    // Validate all required table bindings exist
+    const requiredTables = [TABLE_THREADS, TABLE_MESSAGES, TABLE_WORKFLOW_SNAPSHOT, TABLE_EVALS, TABLE_TRACES] as const;
+
+    for (const table of requiredTables) {
+      if (!(table in config.bindings)) {
+        throw new Error(`Missing KV binding for table: ${table}`);
+      }
+    }
+  }
+
+  private validateRestConfig(
+    config: CloudflareStoreConfig,
+  ): asserts config is { accountId: string; apiToken: string; namespacePrefix: string } {
+    if (isWorkersConfig(config)) {
+      throw new Error('Invalid REST API configuration');
+    }
+    if (!config.accountId?.trim()) {
+      throw new Error('accountId is required for REST API');
+    }
+    if (!config.apiToken?.trim()) {
+      throw new Error('apiToken is required for REST API');
+    }
+    if (!config.namespacePrefix?.trim()) {
+      throw new Error('namespacePrefix is required for REST API');
+    }
+  }
+
   constructor(config: CloudflareStoreConfig) {
     super({ name: 'Cloudflare' });
 
-    if (isWorkersConfig(config)) {
-      if (!config.bindings) {
-        throw new Error('KV bindings are required when using Workers Binding API');
+    try {
+      if (isWorkersConfig(config)) {
+        this.validateWorkersConfig(config);
+        this.bindings = config.bindings;
+        this.namespacePrefix = config.keyPrefix?.trim() || '';
+        this.logger.info('Using Cloudflare KV Workers Binding API');
+      } else {
+        this.validateRestConfig(config);
+        this.accountId = config.accountId.trim();
+        this.namespacePrefix = config.namespacePrefix.trim();
+        this.client = new Cloudflare({
+          apiToken: config.apiToken.trim(),
+        });
+        this.logger.info('Using Cloudflare KV REST API');
       }
-      this.bindings = config.bindings;
-      this.namespacePrefix = config.keyPrefix || '';
-      this.logger.info('Using Cloudflare KV Workers Binding API');
-    } else {
-      if (!config.accountId || !config.apiToken || !config.namespacePrefix) {
-        throw new Error('accountId, apiToken, and namespacePrefix are required when using REST API');
-      }
-      // REST API setup
-      this.accountId = config.accountId;
-      this.namespacePrefix = config.namespacePrefix;
-      this.client = new Cloudflare({
-        apiToken: config.apiToken,
-      });
-      this.logger.info('Using Cloudflare KV REST API');
+    } catch (error) {
+      this.logger.error('Failed to initialize CloudflareStore:', { error });
+      throw error;
     }
   }
 
   private getBinding(tableName: TABLE_NAMES) {
     if (!this.bindings) {
-      throw new Error('Missing bindings configuration');
+      throw new Error(`Cannot use Workers API binding for ${tableName}: Store initialized with REST API configuration`);
     }
     const binding = this.bindings[tableName];
     if (!binding) throw new Error(`No binding found for namespace ${tableName}`);
@@ -61,17 +105,22 @@ export class CloudflareStore extends MastraStorage {
   }
 
   private async getNamespaceValue(tableName: TABLE_NAMES, key: string) {
-    if (this.bindings) {
-      const binding = this.getBinding(tableName);
-      const result = await binding.getWithMetadata(key, 'text');
-      if (!result) return null;
-      return JSON.stringify(result);
-    } else {
-      const namespaceId = await this.getNamespaceId(tableName);
-      const response = await this.client!.kv.namespaces.values.get(namespaceId, key, {
-        account_id: this.accountId!,
-      });
-      return await response.text();
+    try {
+      if (this.bindings) {
+        const binding = this.getBinding(tableName);
+        const result = await binding.getWithMetadata(key, 'text');
+        if (!result) return null;
+        return JSON.stringify(result);
+      } else {
+        const namespaceId = await this.getNamespaceId(tableName);
+        const response = await this.client!.kv.namespaces.values.get(namespaceId, key, {
+          account_id: this.accountId!,
+        });
+        return await response.text();
+      }
+    } catch (error) {
+      this.logger.error(`Failed to get value for ${tableName}/${key}:`, { error });
+      return null;
     }
   }
 
@@ -99,19 +148,25 @@ export class CloudflareStore extends MastraStorage {
     value: string;
     metadata?: string;
   }) {
-    // Ensure consistent serialization
-    const serializedValue = this.safeSerialize(value);
-    const serializedMetadata = metadata ? this.safeSerialize(metadata) : undefined;
-    if (this.bindings) {
-      const binding = this.getBinding(tableName);
-      await binding.put(key, serializedValue, { metadata: serializedMetadata || '' });
-    } else {
-      const namespaceId = await this.getNamespaceId(tableName);
-      await this.client!.kv.namespaces.values.update(namespaceId, key, {
-        account_id: this.accountId!,
-        value: serializedValue,
-        metadata: serializedMetadata || '',
-      });
+    try {
+      // Ensure consistent serialization
+      const serializedValue = this.safeSerialize(value);
+      const serializedMetadata = metadata ? this.safeSerialize(metadata) : undefined;
+
+      if (this.bindings) {
+        const binding = this.getBinding(tableName);
+        await binding.put(key, serializedValue, { metadata: serializedMetadata || '' });
+      } else {
+        const namespaceId = await this.getNamespaceId(tableName);
+        await this.client!.kv.namespaces.values.update(namespaceId, key, {
+          account_id: this.accountId!,
+          value: serializedValue,
+          metadata: serializedMetadata || '',
+        });
+      }
+    } catch (error) {
+      this.logger.error(`Failed to put value for ${tableName}/${key}:`, { error });
+      throw error;
     }
   }
 
