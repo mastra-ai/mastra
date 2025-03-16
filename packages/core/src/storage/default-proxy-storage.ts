@@ -14,7 +14,7 @@ export class DefaultProxyStorage extends MastraStorage {
   constructor({ config }: { config: { url?: string; authToken?: string } }) {
     super({ name: 'DefaultStorage' });
     const url = config?.url;
-    if (!url || url === ':memory:') {
+    if (!url || url === ':memory:' || url.startsWith('file::memory:')) {
       this.storage = Promise.resolve(new InMemoryStorage());
     } else {
       this.storage = new Promise((resolve, reject) => {
