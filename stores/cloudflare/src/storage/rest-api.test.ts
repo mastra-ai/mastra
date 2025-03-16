@@ -6,14 +6,14 @@ import type { MessageType, StorageThreadType } from '@mastra/core/memory';
 import { TABLE_MESSAGES, TABLE_NAMES, TABLE_THREADS, TABLE_WORKFLOW_SNAPSHOT } from '@mastra/core/storage';
 
 import { CloudflareStore } from '.';
-import type { CloudflareConfig } from '.';
+import type { CloudflareStoreConfig } from './types';
 
 dotenv.config();
 
 // Increase timeout for namespace creation and cleanup
 vi.setConfig({ testTimeout: 80000, hookTimeout: 80000 });
 
-const TEST_CONFIG: CloudflareConfig = {
+const TEST_CONFIG: CloudflareStoreConfig = {
   accountId: process.env.CLOUDFLARE_ACCOUNT_ID || '',
   apiToken: process.env.CLOUDFLARE_API_TOKEN || '',
   namespacePrefix: 'mastra-test', // Fixed prefix for test isolation
@@ -131,10 +131,7 @@ describe('CloudflareStore REST API', () => {
 
     for (const namespace of namespaces) {
       try {
-        const namespaceId = await store['getNamespaceIdByName'](namespace);
-        if (namespaceId) {
-          await store['deleteNamespace'](namespaceId);
-        }
+        await store['deleteNamespace'](namespace as any);
       } catch (error) {
         console.error(`Error cleaning up namespace ${namespace}:`, error);
       }
@@ -885,12 +882,11 @@ describe('CloudflareStore REST API', () => {
       // Verify cleanup with retries
       await retryUntil(
         async () => {
-          const namespaceId = await store['getNamespaceId']({ tableName: TABLE_THREADS });
-          const { result } = await store.listNamespaceKeys(namespaceId, {
+          const keys = await store.listNamespaceKeys(TABLE_THREADS, {
             limit: 1000,
             prefix: thread.id,
           });
-          return result;
+          return keys;
         },
         keys => keys.length === 0,
       );
@@ -920,12 +916,11 @@ describe('CloudflareStore REST API', () => {
       // Verify no orphaned data in any table
       const tablesToCheck: TABLE_NAMES[] = [TABLE_MESSAGES, TABLE_THREADS];
       for (const tableName of tablesToCheck) {
-        const namespaceId = await store['getNamespaceId']({ tableName });
-        const { result } = await store.listNamespaceKeys(namespaceId, {
+        const keys = await store.listNamespaceKeys(tableName, {
           limit: 1000,
           prefix: thread.id,
         });
-        expect(result).toHaveLength(0);
+        expect(keys).toHaveLength(0);
       }
     });
   });
@@ -1048,8 +1043,12 @@ describe('CloudflareStore REST API', () => {
     });
 
     it('should handle invalid JSON data gracefully', async () => {
-      const namespaceId = await store['getNamespaceId']({ tableName: TABLE_THREADS });
-      await store['putNamespaceValue'](namespaceId, 'invalid-key', 'invalid-json', '');
+      await store['putNamespaceValue']({
+        tableName: TABLE_THREADS,
+        key: 'invalid-key',
+        value: 'invalid-json',
+        metadata: '',
+      });
 
       const result = await store['getKV'](TABLE_THREADS, 'invalid-key');
       expect(result).toBe('invalid-json');

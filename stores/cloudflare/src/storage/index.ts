@@ -1,86 +1,165 @@
 import type { StorageThreadType, MessageType } from '@mastra/core/memory';
-import {
-  MastraStorage,
-  TABLE_MESSAGES,
-  TABLE_THREADS,
-  TABLE_WORKFLOW_SNAPSHOT,
-  TABLE_EVALS,
-  TABLE_TRACES,
-} from '@mastra/core/storage';
+import { MastraStorage, TABLE_MESSAGES, TABLE_THREADS, TABLE_WORKFLOW_SNAPSHOT } from '@mastra/core/storage';
 import type { TABLE_NAMES, StorageColumn, StorageGetMessagesArg, EvalRow } from '@mastra/core/storage';
 import type { WorkflowRunState } from '@mastra/core/workflows';
+import type { KVNamespace } from '@cloudflare/workers-types';
 import Cloudflare from 'cloudflare';
-
-export type RecordTypes = {
-  [TABLE_THREADS]: StorageThreadType;
-  [TABLE_MESSAGES]: MessageType;
-  [TABLE_WORKFLOW_SNAPSHOT]: WorkflowRunState;
-  [TABLE_EVALS]: EvalRow;
-  [TABLE_TRACES]: any;
-};
-
-export interface CloudflareConfig {
-  accountId: string;
-  apiToken: string;
-  namespacePrefix: string;
-}
+import { type CloudflareStoreConfig, isWorkersConfig, type RecordTypes } from './types';
 
 export class CloudflareStore extends MastraStorage {
-  private client: Cloudflare;
-  private accountId: string;
+  private client?: Cloudflare;
+  private accountId?: string;
   private namespacePrefix: string;
+  private bindings?: Record<TABLE_NAMES, KVNamespace>;
 
-  constructor(config: CloudflareConfig) {
+  constructor(config: CloudflareStoreConfig) {
     super({ name: 'Cloudflare' });
-    this.accountId = config.accountId;
-    this.namespacePrefix = config.namespacePrefix;
 
-    this.client = new Cloudflare({
-      apiToken: config.apiToken,
-    });
+    if (isWorkersConfig(config)) {
+      if (!config.bindings) {
+        throw new Error('KV bindings are required when using Workers Binding API');
+      }
+      this.bindings = config.bindings;
+      this.namespacePrefix = config.keyPrefix || '';
+      this.logger.info('Using Cloudflare KV Workers Binding API');
+    } else {
+      if (!config.accountId || !config.apiToken || !config.namespacePrefix) {
+        throw new Error('accountId, apiToken, and namespacePrefix are required when using REST API');
+      }
+      // REST API setup
+      this.accountId = config.accountId;
+      this.namespacePrefix = config.namespacePrefix;
+      this.client = new Cloudflare({
+        apiToken: config.apiToken,
+      });
+      this.logger.info('Using Cloudflare KV REST API');
+    }
+  }
+
+  private getBinding(tableName: TABLE_NAMES) {
+    if (!this.bindings) {
+      throw new Error('Missing bindings configuration');
+    }
+    const binding = this.bindings[tableName];
+    if (!binding) throw new Error(`No binding found for namespace ${tableName}`);
+    return binding;
   }
 
   private async listNamespaces() {
-    return await this.client.kv.namespaces.list({ account_id: this.accountId });
+    if (this.bindings) {
+      // For Workers API, we already have the namespaces bound
+      return {
+        result: Object.keys(this.bindings).map(name => ({
+          id: name,
+          title: name,
+          // Other fields that REST API returns but we don't need
+        })),
+      };
+    }
+    // For REST API
+    return await this.client!.kv.namespaces.list({ account_id: this.accountId! });
   }
 
-  private async getNamespaceValue(namespaceId: string, key: string) {
-    return await this.client.kv.namespaces.values.get(namespaceId, key, {
-      account_id: this.accountId,
-    });
+  private async getNamespaceValue(tableName: TABLE_NAMES, key: string) {
+    if (this.bindings) {
+      const binding = this.getBinding(tableName);
+      const result = await binding.getWithMetadata(key, 'text');
+      if (!result) return null;
+      return JSON.stringify(result);
+    } else {
+      const namespaceId = await this.getNamespaceId({ tableName });
+      const response = await this.client!.kv.namespaces.values.get(namespaceId, key, {
+        account_id: this.accountId!,
+      });
+      return await response.text();
+    }
   }
 
-  private async deleteNamespace(namespaceId: string) {
-    await this.client.kv.namespaces.delete(namespaceId, {
-      account_id: this.accountId,
-    });
+  private async deleteNamespace(tableName: TABLE_NAMES) {
+    if (this.bindings) {
+      // For Workers API, we can't delete the namespace as it's bound at deploy time
+      // Instead, clear all keys in the namespace
+      await this.clearTable({ tableName });
+    } else {
+      const namespaceId = await this.getNamespaceId({ tableName });
+      await this.client!.kv.namespaces.delete(namespaceId, {
+        account_id: this.accountId!,
+      });
+    }
   }
 
-  private async putNamespaceValue(namespaceId: string, key: string, value: string, metadata?: string) {
-    await this.client.kv.namespaces.values.update(namespaceId, key, {
-      account_id: this.accountId,
-      value,
-      metadata: metadata || '',
-    });
+  private async putNamespaceValue({
+    tableName,
+    key,
+    value,
+    metadata,
+    schema,
+  }: {
+    tableName: TABLE_NAMES;
+    key: string;
+    value: string;
+    metadata?: string;
+    schema?: boolean;
+  }) {
+    // Ensure consistent serialization
+    const serializedValue = this.safeSerialize(value);
+    const serializedMetadata = metadata ? this.safeSerialize(metadata) : undefined;
+    if (this.bindings) {
+    } else {
+      const namespaceId = await this.getNamespaceId({ tableName, schema });
+      await this.client!.kv.namespaces.values.update(namespaceId, key, {
+        account_id: this.accountId!,
+        value: serializedValue,
+        metadata: serializedMetadata || '',
+      });
+    }
   }
 
-  private async deleteNamespaceValue(namespaceId: string, key: string) {
-    await this.client.kv.namespaces.values.delete(namespaceId, key, {
-      account_id: this.accountId,
-    });
+  private async deleteNamespaceValue(tableName: TABLE_NAMES, key: string) {
+    if (this.bindings) {
+      const binding = this.getBinding(tableName);
+      await binding.delete(key);
+    } else {
+      const namespaceId = await this.getNamespaceId({ tableName });
+      await this.client!.kv.namespaces.values.delete(namespaceId, key, {
+        account_id: this.accountId!,
+      });
+    }
   }
 
-  async listNamespaceKeys(namespaceId: string, options?: { limit?: number; prefix?: string }) {
-    return await this.client.kv.namespaces.keys.list(namespaceId, {
-      account_id: this.accountId,
-      limit: options?.limit || 1000,
-      prefix: options?.prefix,
-    });
+  async listNamespaceKeys(tableName: TABLE_NAMES, options?: { limit?: number; prefix?: string }) {
+    if (this.bindings) {
+      const binding = this.getBinding(tableName);
+      const response = await binding.list({
+        limit: options?.limit || 1000,
+        prefix: options?.prefix,
+      });
+
+      // Convert Workers API response to match REST API format
+      return response.keys;
+    } else {
+      const namespaceId = await this.getNamespaceId({ tableName });
+      // Use REST API
+      const response = await this.client!.kv.namespaces.keys.list(namespaceId, {
+        account_id: this.accountId!,
+        limit: options?.limit || 1000,
+        prefix: options?.prefix,
+      });
+      return response.result;
+    }
   }
 
   private async createNamespaceById(title: string) {
-    return await this.client.kv.namespaces.create({
-      account_id: this.accountId,
+    if (this.bindings) {
+      // For Workers API, namespaces are created at deploy time
+      // Return a mock response that matches REST API shape
+      return {
+        id: title, // Use title as ID since that's what we need
+        title: title,
+      };
+    }
+    return await this.client!.kv.namespaces.create({
+      account_id: this.accountId!,
       title,
     });
   }
@@ -193,11 +272,7 @@ export class CloudflareStore extends MastraStorage {
     schema?: boolean;
   }): Promise<void> {
     try {
-      const namespaceId = await this.getNamespaceId({ tableName, schema });
-      // Ensure consistent serialization
-      const serializedValue = this.safeSerialize(value);
-      const serializedMetadata = metadata ? this.safeSerialize(metadata) : undefined;
-      await this.putNamespaceValue(namespaceId, key, serializedValue, serializedMetadata);
+      await this.putNamespaceValue({ tableName, key, value, metadata, schema });
     } catch (error: any) {
       console.error(`Error putting KV for table ${tableName}, key ${key}:`, error);
       throw new Error(`Failed to put KV: ${error.message}`);
@@ -206,9 +281,7 @@ export class CloudflareStore extends MastraStorage {
 
   private async getKV(tableName: TABLE_NAMES, key: string): Promise<any> {
     try {
-      const namespaceId = await this.getNamespaceId({ tableName });
-      const response = await this.getNamespaceValue(namespaceId, key);
-      const text = await response.text();
+      const text = await this.getNamespaceValue(tableName, key);
       if (!text) return null;
       return this.safeParse(text);
     } catch (error: any) {
@@ -223,8 +296,7 @@ export class CloudflareStore extends MastraStorage {
 
   private async deleteKV(tableName: TABLE_NAMES, key: string): Promise<void> {
     try {
-      const namespaceId = await this.getNamespaceId({ tableName });
-      await this.deleteNamespaceValue(namespaceId, key);
+      await this.deleteNamespaceValue(tableName, key);
     } catch (error: any) {
       console.error(`Error deleting KV for table ${tableName}, key ${key}:`, error);
       throw new Error(`Failed to delete KV: ${error.message}`);
@@ -233,9 +305,7 @@ export class CloudflareStore extends MastraStorage {
 
   private async listKV(tableName: TABLE_NAMES): Promise<Array<{ name: string }>> {
     try {
-      const namespaceId = await this.getNamespaceId({ tableName });
-      const response = await this.listNamespaceKeys(namespaceId);
-      return response.result.map(item => ({ name: item.name }));
+      return await this.listNamespaceKeys(tableName);
     } catch (error: any) {
       console.error(`Error listing KV for table ${tableName}:`, error);
       throw new Error(`Failed to list KV: ${error.message}`);
