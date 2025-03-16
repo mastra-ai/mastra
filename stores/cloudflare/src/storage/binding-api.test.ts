@@ -1,22 +1,46 @@
 import { randomUUID } from 'crypto';
 import dotenv from 'dotenv';
+import { Miniflare } from 'miniflare';
 import { describe, it, expect, beforeAll, beforeEach, afterAll, vi } from 'vitest';
 import type { WorkflowRunState } from '@mastra/core/workflows';
 import type { MessageType, StorageThreadType } from '@mastra/core/memory';
-import { TABLE_MESSAGES, TABLE_NAMES, TABLE_THREADS, TABLE_WORKFLOW_SNAPSHOT } from '@mastra/core/storage';
+import {
+  TABLE_MESSAGES,
+  TABLE_NAMES,
+  TABLE_THREADS,
+  TABLE_WORKFLOW_SNAPSHOT,
+  TABLE_EVALS,
+  TABLE_TRACES,
+} from '@mastra/core/storage';
+import type { KVNamespace } from '@cloudflare/workers-types';
 
 import { CloudflareStore } from '.';
 import type { CloudflareStoreConfig } from './types';
 
-dotenv.config();
+export interface Env {
+  [TABLE_THREADS]: KVNamespace;
+  [TABLE_MESSAGES]: KVNamespace;
+  [TABLE_WORKFLOW_SNAPSHOT]: KVNamespace;
+  [TABLE_EVALS]: KVNamespace;
+  [TABLE_TRACES]: KVNamespace;
+}
 
+dotenv.config();
 // Increase timeout for namespace creation and cleanup
 vi.setConfig({ testTimeout: 80000, hookTimeout: 80000 });
 
+// Initialize Miniflare with minimal worker
+const mf = new Miniflare({
+  script: 'export default {};',
+  modules: true,
+  kvNamespaces: [TABLE_THREADS, TABLE_MESSAGES, TABLE_WORKFLOW_SNAPSHOT, TABLE_EVALS, TABLE_TRACES],
+});
+
+// Get KV namespaces
+let bindings: Env;
+
 const TEST_CONFIG: CloudflareStoreConfig = {
-  accountId: process.env.CLOUDFLARE_ACCOUNT_ID || '',
-  apiToken: process.env.CLOUDFLARE_API_TOKEN || '',
-  namespacePrefix: 'mastra-test', // Fixed prefix for test isolation
+  bindings: {} as Env, // Will be populated in beforeAll
 };
 
 // Sample test data factory functions
@@ -94,12 +118,26 @@ const retryUntil = async <T>(
   throw new Error('Timeout waiting for condition');
 };
 
-describe.skip('CloudflareStore Workers Binding', () => {
+describe('CloudflareStore Workers Binding', () => {
   // Expose private methods for testing
   const getThreadMessagesKey = (threadId: string) => `${TABLE_MESSAGES}:${threadId}:messages`;
 
-  // Add test helper methods to CloudflareStore
-  beforeAll(() => {
+  // Add test helper methods to CloudflareStore and set up bindings
+  beforeAll(async () => {
+    // Get KV namespaces from Miniflare
+    const kvBindings = {
+      [TABLE_THREADS]: (await mf.getKVNamespace(TABLE_THREADS)) as KVNamespace,
+      [TABLE_MESSAGES]: (await mf.getKVNamespace(TABLE_MESSAGES)) as KVNamespace,
+      [TABLE_WORKFLOW_SNAPSHOT]: (await mf.getKVNamespace(TABLE_WORKFLOW_SNAPSHOT)) as KVNamespace,
+      [TABLE_EVALS]: (await mf.getKVNamespace(TABLE_EVALS)) as KVNamespace,
+      [TABLE_TRACES]: (await mf.getKVNamespace(TABLE_TRACES)) as KVNamespace,
+    };
+
+    // Set bindings in test config
+    TEST_CONFIG.bindings = kvBindings;
+    bindings = kvBindings;
+
+    // Add test helper methods
     Object.assign(CloudflareStore.prototype, {
       __getFullOrder: CloudflareStore.prototype['getFullOrder'],
       __listKV: CloudflareStore.prototype['listKV'],
@@ -113,43 +151,30 @@ describe.skip('CloudflareStore Workers Binding', () => {
   });
   let store: CloudflareStore;
 
-  beforeAll(async () => {
-    if (!TEST_CONFIG.accountId || !TEST_CONFIG.apiToken) {
-      throw new Error('Cloudflare credentials not provided');
-    }
-    store = new CloudflareStore(TEST_CONFIG);
+  beforeAll(() => {
+    store = new CloudflareStore({
+      bindings,
+    });
   });
 
-  //   beforeAll(() => {
-  //     // Configure store with Workers binding
-  //     store = new CloudflareStore({
-  //       // Worker binding configuration will go here
-  //     });
-  //   });
+  // Helper to clean up KV data between tests
+  const cleanupKVData = async () => {
+    // List and delete all keys in each namespace
+    const tables = [TABLE_THREADS, TABLE_MESSAGES, TABLE_WORKFLOW_SNAPSHOT, TABLE_EVALS, TABLE_TRACES] as TABLE_NAMES[];
 
-  // Helper to clean up KV namespaces
-  const cleanupNamespaces = async () => {
-    const namespaces = [
-      `${TEST_CONFIG.namespacePrefix}_mastra_threads`,
-      `${TEST_CONFIG.namespacePrefix}_mastra_workflows`,
-      `${TEST_CONFIG.namespacePrefix}_mastra_evals`,
-    ];
-
-    for (const namespace of namespaces) {
-      try {
-        await store['deleteNamespace'](namespace as any);
-      } catch (error) {
-        console.error(`Error cleaning up namespace ${namespace}:`, error);
-      }
+    for (const table of tables) {
+      const kv = bindings[table];
+      const keys = await kv.list();
+      await Promise.all(keys.keys.map(key => kv.delete(key.name)));
     }
   };
 
   beforeEach(async () => {
-    await cleanupNamespaces();
+    await cleanupKVData();
   });
 
   afterAll(async () => {
-    await cleanupNamespaces();
+    await cleanupKVData();
   });
 
   describe('Atomic Operations', () => {
