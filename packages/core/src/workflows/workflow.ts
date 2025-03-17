@@ -714,116 +714,14 @@ export class Workflow<
     stepId: string;
     context?: Record<string, any>;
   }) {
-    // NOTE: setTimeout(0) makes sure that if the workflow is still running
-    // we'll wait for any state changes to be applied before resuming
-    await setTimeout(0);
-    return this._resume({ runId, stepId, context: resumeContext });
-  }
+    this.logger.warn(`Please use 'resume' on the 'createRun' call instead, resume is deprecated`);
 
-  async _resume({
-    runId,
-    stepId,
-    context: resumeContext,
-  }: {
-    runId: string;
-    stepId: string;
-    context?: Record<string, any>;
-  }) {
-    const snapshot = await this.#loadWorkflowSnapshot(runId);
-
-    if (!snapshot) {
-      throw new Error(`No snapshot found for workflow run ${runId}`);
+    const activeRun = this.#runs.get(runId);
+    if (activeRun) {
+      return activeRun.resume({ stepId, context: resumeContext });
     }
 
-    let parsedSnapshot;
-    try {
-      parsedSnapshot = typeof snapshot === 'string' ? JSON.parse(snapshot as unknown as string) : snapshot;
-    } catch (error) {
-      this.logger.debug('Failed to parse workflow snapshot for resume', { error, runId });
-      throw new Error('Failed to parse workflow snapshot');
-    }
-
-    const origSnapshot = parsedSnapshot;
-    const startStepId = parsedSnapshot.suspendedSteps?.[stepId];
-    if (!startStepId) {
-      return;
-    }
-    parsedSnapshot =
-      startStepId === 'trigger'
-        ? parsedSnapshot
-        : { ...parsedSnapshot?.childStates?.[startStepId], ...{ suspendedSteps: parsedSnapshot.suspendedSteps } };
-    if (!parsedSnapshot) {
-      throw new Error(`No snapshot found for step: ${stepId} starting at ${startStepId}`);
-    }
-
-    // Update context if provided
-
-    if (resumeContext) {
-      parsedSnapshot.context.steps[stepId] = {
-        status: 'success',
-        output: {
-          ...(parsedSnapshot?.context?.steps?.[stepId]?.output || {}),
-          ...resumeContext,
-        },
-      };
-    }
-
-    // Reattach the step handler
-    // TODO: need types
-    if (parsedSnapshot.children) {
-      Object.entries(parsedSnapshot.children).forEach(([_childId, child]: [string, any]) => {
-        if (child.snapshot?.input?.stepNode) {
-          // Reattach handler
-          const stepDef = this.#makeStepDef(child.snapshot.input.stepNode.step.id);
-          child.snapshot.input.stepNode.config = {
-            ...child.snapshot.input.stepNode.config,
-            ...stepDef,
-          };
-
-          // Sync the context
-          child.snapshot.input.context = parsedSnapshot.context;
-        }
-      });
-    }
-
-    parsedSnapshot.value = updateStepInHierarchy(parsedSnapshot.value, stepId);
-
-    // Reset attempt count
-    if (parsedSnapshot.context?.attempts) {
-      parsedSnapshot.context.attempts[stepId] =
-        this.#steps[stepId]?.retryConfig?.attempts || this.#retryConfig?.attempts || 0;
-    }
-
-    this.logger.debug('Resuming workflow with updated snapshot', {
-      updatedSnapshot: parsedSnapshot,
-      runId,
-      stepId,
-    });
-
-    const run =
-      this.#runs.get(runId) ??
-      new WorkflowInstance({
-        logger: this.logger,
-        name: this.name,
-        mastra: this.#mastra,
-        retryConfig: this.#retryConfig,
-        steps: this.#steps,
-        stepGraph: this.#stepGraph,
-        stepSubscriberGraph: this.#stepSubscriberGraph,
-        onStepTransition: this.#onStepTransition,
-        runId,
-        onFinish: () => {
-          this.#runs.delete(run.runId);
-        },
-      });
-
-    run.setState(origSnapshot?.value);
-    this.#runs.set(run.runId, run);
-    return run?.execute({
-      snapshot: parsedSnapshot,
-      stepId,
-      resumeData: resumeContext,
-    });
+    throw new Error(`Workflow run ${runId} not found`);
   }
 
   watch(onTransition: (state: WorkflowRunState) => void): () => void {
