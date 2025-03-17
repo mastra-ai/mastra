@@ -57,29 +57,30 @@ While automated evals are valuable, high-performing AI teams often combine them 
 2. **Human Review**: Regular review of production data and traces
 3. **Continuous Monitoring**: Track eval metrics over time to detect regressions
 
-## Interpreting Results
+## Understanding Eval Results
 
-Eval scores provide quantifiable feedback for improving agent performance:
+Each eval metric measures a specific aspect of your agent's output. Here's how to interpret and improve your results:
 
-### Low Scores (< 0.6)
-If you see low scores:
+### Understanding Scores
+For any metric:
+1. Check the metric documentation to understand the scoring process
+2. Look for patterns in when scores change
+3. Compare scores across different inputs and contexts
+4. Track changes over time to spot trends
+
+### Improving Results
+When scores aren't meeting your targets:
 1. Check your instructions - Are they clear? Try making them more specific
 2. Look at your context - Is it giving the agent what it needs?
 3. Simplify your prompts - Break complex tasks into smaller steps
+4. Add guardrails - Include specific rules for tricky cases
 
-### Medium Scores (0.6 - 0.8)
-You're on the right track. To improve:
-1. Find patterns - Which types of inputs cause lower scores?
-2. Experiment with prompts - Try different ways of asking
-3. Add guardrails - Include specific rules for tricky cases
-4. Test more scenarios - Add examples that cover edge cases
-
-### High Scores (> 0.8)
-Your agent is doing well. Next steps:
-1. Watch for changes - Do scores stay high over time?
-2. Raise the bar - Try increasing your quality targets
-3. Save what works - Keep notes on successful approaches
-4. Fine-tune - Look for small ways to improve speed or efficiency
+### Maintaining Quality
+Once you're hitting your targets:
+1. Monitor stability - Do scores remain consistent?
+2. Document what works - Keep notes on successful approaches
+3. Test edge cases - Add examples that cover unusual scenarios
+4. Fine-tune - Look for ways to improve efficiency
 
 ## Next Steps
 
