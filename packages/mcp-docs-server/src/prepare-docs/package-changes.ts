@@ -1,6 +1,6 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import { fromPackageRoot, fromRepoRoot, log } from '../utils';
+import { fromPackageRoot, fromRepoRoot, log } from '../utils.js';
 
 // Define all source directories to scan
 const SOURCE_DIRS = ['packages', 'speech', 'stores', 'voice', 'integrations', 'deployers', 'client-sdks'].map(
@@ -99,4 +99,3 @@ export async function preparePackageChanges() {
     }
   }
 }
-
