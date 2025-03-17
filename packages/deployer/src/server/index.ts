@@ -228,62 +228,29 @@ export async function createHonoServer(
           'application/json': {
             schema: {
               type: 'object',
-              required: ['messages'],
               properties: {
-                messages: {
-                  type: 'array',
-                  items: {
-                    type: 'object',
-                    required: ['role', 'content'],
-                    properties: {
-                      role: { type: 'string', enum: ['user', 'assistant', 'system'] },
-                      content: { type: 'string' },
+                input: {
+                  oneOf: [
+                    { type: 'string' },
+                    {
+                      type: 'array',
+                      items: { type: 'object' },
                     },
-                  },
+                  ],
+                  description: 'Input for the network, can be a string or an array of CoreMessage objects',
                 },
-                threadId: { type: 'string' },
-                resourceId: { type: 'string' },
-                output: { type: 'string', enum: ['text', 'json'] },
-                runId: { type: 'string' },
               },
+              required: ['input'],
             },
           },
         },
       },
       responses: {
         200: {
-          description: 'Success',
-          content: {
-            'application/json': {
-              schema: {
-                type: 'object',
-                properties: {
-                  message: { type: 'string' },
-                  usage: {
-                    type: 'object',
-                    properties: {
-                      promptTokens: { type: 'number' },
-                      completionTokens: { type: 'number' },
-                      totalTokens: { type: 'number' },
-                    },
-                  },
-                },
-              },
-            },
-          },
+          description: 'Generated response',
         },
         404: {
           description: 'Network not found',
-          content: {
-            'application/json': {
-              schema: {
-                type: 'object',
-                properties: {
-                  error: { type: 'string' },
-                },
-              },
-            },
-          },
         },
       },
     }),
@@ -294,7 +261,7 @@ export async function createHonoServer(
     '/api/networks/:networkId/stream',
     bodyLimit(bodyLimitOptions),
     describeRoute({
-      description: 'Stream a response from a network',
+      description: 'Generate a response from a network',
       tags: ['networks'],
       parameters: [
         {
@@ -310,51 +277,29 @@ export async function createHonoServer(
           'application/json': {
             schema: {
               type: 'object',
-              required: ['messages'],
               properties: {
-                messages: {
-                  type: 'array',
-                  items: {
-                    type: 'object',
-                    required: ['role', 'content'],
-                    properties: {
-                      role: { type: 'string', enum: ['user', 'assistant', 'system'] },
-                      content: { type: 'string' },
+                input: {
+                  oneOf: [
+                    { type: 'string' },
+                    {
+                      type: 'array',
+                      items: { type: 'object' },
                     },
-                  },
+                  ],
+                  description: 'Input for the network, can be a string or an array of CoreMessage objects',
                 },
-                threadId: { type: 'string' },
-                resourceId: { type: 'string' },
-                output: { type: 'string', enum: ['text', 'json'] },
-                runId: { type: 'string' },
               },
+              required: ['input'],
             },
           },
         },
       },
       responses: {
         200: {
-          description: 'Success',
-          content: {
-            'text/event-stream': {
-              schema: {
-                type: 'string',
-              },
-            },
-          },
+          description: 'Generated response',
         },
         404: {
           description: 'Network not found',
-          content: {
-            'application/json': {
-              schema: {
-                type: 'object',
-                properties: {
-                  error: { type: 'string' },
-                },
-              },
-            },
-          },
         },
       },
     }),

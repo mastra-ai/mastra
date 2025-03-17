@@ -1,6 +1,12 @@
-import { researchNetwork } from './mastra/network';
+import { mastra } from './mastra';
 
 async function main() {
+  const researchNetwork = mastra.getNetwork('Research_Network');
+
+  if (!researchNetwork) {
+    throw new Error('Research network not found');
+  }
+
   console.log('🔍 Starting research on Napoleon Bonaparte...\n');
 
   // Generate a report using the research network

@@ -41,7 +41,6 @@ function App() {
             }
           >
             <Route path="chat" element={<Network />} />
-            <Route path="traces" element={<NetworkTracesPage />} />
           </Route>
         </Route>
 

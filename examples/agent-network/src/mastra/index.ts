@@ -1,8 +1,13 @@
 import { Mastra } from '@mastra/core';
 import { createLogger } from '@mastra/core/logger';
 import { researchNetwork } from './network';
+import { webSearchAgent } from './agents';
 
 export const mastra = new Mastra({
+  agents: {
+    webSearchAgent,
+    routingAgent: researchNetwork.getRoutingAgent(),
+  },
   networks: {
     researchNetwork,
   },

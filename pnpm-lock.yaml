@@ -242,8 +242,11 @@ importers:
   examples/agent-network:
     dependencies:
       '@ai-sdk/openai':
-        specifier: latest
+        specifier: ^1.2.5
         version: 1.2.5(zod@3.24.2)
+      '@mastra/client-js':
+        specifier: workspace:*
+        version: link:../../client-sdks/client-js
       '@mastra/core':
         specifier: workspace:*
         version: link:../../packages/core
@@ -3436,6 +3439,9 @@ importers:
 
   packages/playground-ui:
     dependencies:
+      '@ai-sdk/ui-utils':
+        specifier: ^1.1.19
+        version: 1.1.19(zod@3.24.2)
       '@assistant-ui/react':
         specifier: ^0.7.91
         version: 0.7.91(@types/react-dom@19.0.4(@types/react@19.0.10))(@types/react@19.0.10)(react-dom@19.0.0(react@19.0.0))(react@19.0.0)(use-sync-external-store@1.4.0(react@19.0.0))
@@ -21842,7 +21848,7 @@ snapshots:
   '@assistant-ui/react-ai-sdk@0.8.0(@assistant-ui/react@0.7.91(@types/react-dom@19.0.4(@types/react@19.0.10))(@types/react@19.0.10)(react-dom@19.0.0(react@19.0.0))(react@19.0.0)(use-sync-external-store@1.4.0(react@19.0.0)))(@types/react@19.0.10)(react@19.0.0)(use-sync-external-store@1.4.0(react@19.0.0))':
     dependencies:
       '@ai-sdk/react': 1.1.21(react@19.0.0)(zod@3.24.2)
-      '@ai-sdk/ui-utils': 1.1.17(zod@3.24.2)
+      '@ai-sdk/ui-utils': 1.1.19(zod@3.24.2)
       '@assistant-ui/react': 0.7.91(@types/react-dom@19.0.4(@types/react@19.0.10))(@types/react@19.0.10)(react-dom@19.0.0(react@19.0.0))(react@19.0.0)(use-sync-external-store@1.4.0(react@19.0.0))
       '@radix-ui/react-use-callback-ref': 1.1.0(@types/react@19.0.10)(react@19.0.0)
       react: 19.0.0
@@ -33256,7 +33262,7 @@ snapshots:
       eslint-config-prettier: 8.10.0(eslint@8.57.1)
       eslint-plugin-flowtype: 8.0.3(@babel/plugin-syntax-flow@7.26.0(@babel/core@7.26.9))(@babel/plugin-transform-react-jsx@7.25.9(@babel/core@7.26.9))(eslint@8.57.1)
       eslint-plugin-import: 2.31.0(@typescript-eslint/parser@5.62.0(eslint@9.22.0(jiti@2.4.2))(typescript@5.7.3))(eslint@8.57.1)
-      eslint-plugin-jest: 27.9.0(@typescript-eslint/eslint-plugin@5.62.0(@typescript-eslint/parser@5.62.0(eslint@8.57.1)(typescript@5.7.3))(eslint@8.57.1)(typescript@5.7.3))(eslint@8.57.1)(jest@29.7.0(@types/node@20.17.24)(babel-plugin-macros@3.1.0)(ts-node@10.9.2(@swc/core@1.11.8(@swc/helpers@0.5.15))(@types/node@20.17.24)(typescript@5.7.3)))(typescript@5.7.3)
+      eslint-plugin-jest: 27.9.0(@typescript-eslint/eslint-plugin@5.62.0(@typescript-eslint/parser@5.62.0(eslint@9.22.0(jiti@2.4.2))(typescript@5.7.3))(eslint@8.57.1)(typescript@5.7.3))(eslint@8.57.1)(jest@29.7.0(@types/node@20.17.24)(babel-plugin-macros@3.1.0)(ts-node@10.9.2(@swc/core@1.11.8(@swc/helpers@0.5.15))(@types/node@20.17.24)(typescript@5.7.3)))(typescript@5.7.3)
       eslint-plugin-jsx-a11y: 6.10.2(eslint@8.57.1)
       eslint-plugin-prettier: 4.2.1(eslint-config-prettier@8.10.0(eslint@8.57.1))(eslint@8.57.1)(prettier@2.8.8)
       eslint-plugin-react: 7.37.4(eslint@8.57.1)
@@ -34352,6 +34358,17 @@ snapshots:
       - supports-color
 
   eslint-plugin-jest@27.9.0(@typescript-eslint/eslint-plugin@5.62.0(@typescript-eslint/parser@5.62.0(eslint@8.57.1)(typescript@5.7.3))(eslint@8.57.1)(typescript@5.7.3))(eslint@8.57.1)(jest@29.7.0(@types/node@20.17.24)(babel-plugin-macros@3.1.0)(ts-node@10.9.2(@swc/core@1.11.8(@swc/helpers@0.5.15))(@types/node@20.17.24)(typescript@5.7.3)))(typescript@5.7.3):
+    dependencies:
+      '@typescript-eslint/utils': 5.62.0(eslint@8.57.1)(typescript@5.7.3)
+      eslint: 8.57.1
+    optionalDependencies:
+      '@typescript-eslint/eslint-plugin': 5.62.0(@typescript-eslint/parser@5.62.0(eslint@8.57.1)(typescript@5.7.3))(eslint@8.57.1)(typescript@5.7.3)
+      jest: 29.7.0(@types/node@20.17.24)(babel-plugin-macros@3.1.0)(ts-node@10.9.2(@swc/core@1.11.8(@swc/helpers@0.5.15))(@types/node@20.17.24)(typescript@5.7.3))
+    transitivePeerDependencies:
+      - supports-color
+      - typescript
+
+  eslint-plugin-jest@27.9.0(@typescript-eslint/eslint-plugin@5.62.0(@typescript-eslint/parser@5.62.0(eslint@9.22.0(jiti@2.4.2))(typescript@5.7.3))(eslint@8.57.1)(typescript@5.7.3))(eslint@8.57.1)(jest@29.7.0(@types/node@20.17.24)(babel-plugin-macros@3.1.0)(ts-node@10.9.2(@swc/core@1.11.8(@swc/helpers@0.5.15))(@types/node@20.17.24)(typescript@5.7.3)))(typescript@5.7.3):
     dependencies:
       '@typescript-eslint/utils': 5.62.0(eslint@8.57.1)(typescript@5.7.3)
       eslint: 8.57.1
