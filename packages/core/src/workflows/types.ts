@@ -8,11 +8,12 @@ import type { Step } from './step';
 import type { Workflow } from './workflow';
 
 export interface WorkflowOptions<
+  TWorkflowName extends string = string,
   TSteps extends Step<string, any, any, any>[] = Step<string, any, any, any>[],
   TTriggerSchema extends z.ZodObject<any> = any,
   TResultSchema extends z.ZodObject<any> = any,
 > {
-  name: string;
+  name: TWorkflowName;
   triggerSchema?: TTriggerSchema;
   result?: {
     schema: TResultSchema;
@@ -215,7 +216,7 @@ export type StepsRecord<T extends readonly Step<any, any, z.ZodType<any> | undef
 };
 
 export interface WorkflowRunResult<
-  T extends z.ZodType<any>,
+  T extends z.ZodObject<any>,
   TSteps extends Step<string, any, z.ZodType<any> | undefined>[],
   TResult extends z.ZodType<any>,
 > {

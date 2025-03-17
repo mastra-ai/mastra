@@ -3740,7 +3740,7 @@ describe('Workflow', async () => {
           execute: final,
         });
 
-        const wfA = new Workflow({
+        const wfA = new Workflow<[typeof startStep, typeof otherStep, typeof finalStep]>({
           name: 'nested-workflow-a',
           result: {
             schema: z.object({
@@ -3759,7 +3759,7 @@ describe('Workflow', async () => {
           .then(finalStep)
           .commit();
 
-        const counterWorkflow = new Workflow({
+        const counterWorkflow = new Workflow<[ReturnType<typeof wfA.toStep>]>({
           name: 'counter-workflow',
           triggerSchema: z.object({
             startValue: z.number(),

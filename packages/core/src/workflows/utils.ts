@@ -1,9 +1,10 @@
 import type { z } from 'zod';
 import type { Logger } from '../logger';
 import type { Step } from './step';
-import type { StepAction, StepDef, StepResult, VariableReference, WorkflowContext } from './types';
+import type { StepAction, StepDef, StepResult, VariableReference, WorkflowContext, WorkflowRunResult } from './types';
 import type { Workflow } from './workflow';
 import { get } from 'radash';
+import type { WorkflowResultReturn } from './workflow-instance';
 
 export function isErrorEvent(stateEvent: any): stateEvent is {
   type: `xstate.error.actor.${string}`;
@@ -222,7 +223,14 @@ export function resolveVariables<TSteps extends Step<any, any, any>[]>({
   return resolvedData;
 }
 
-export function workflowToStep(workflow: Workflow): StepAction<any, any, any, any> {
+export function workflowToStep<
+  TSteps extends Step<string, any, any, any>[],
+  TStepId extends string,
+  TTriggerSchema extends z.ZodObject<any>,
+  TResultSchema extends z.ZodObject<any>,
+>(
+  workflow: Workflow<TSteps, TStepId, TTriggerSchema, TResultSchema>,
+): StepAction<TStepId, TTriggerSchema, z.ZodType<WorkflowRunResult<TTriggerSchema, TSteps, TResultSchema>>, any> {
   workflow.setNested(true);
   return {
     id: workflow.name,

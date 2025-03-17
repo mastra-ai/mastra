@@ -27,10 +27,11 @@ import { WorkflowInstance } from './workflow-instance';
 
 export class Workflow<
   TSteps extends Step<string, any, any>[] = Step<string, any, any>[],
+  TStepId extends string = any,
   TTriggerSchema extends z.ZodObject<any> = any,
   TResultSchema extends z.ZodObject<any> = any,
 > extends MastraBase {
-  name: string;
+  name: TStepId;
   triggerSchema?: TTriggerSchema;
   resultSchema?: TResultSchema;
   resultMapping?: Record<string, { step: StepAction<any, any, any, any>; path: string }>;
@@ -66,7 +67,7 @@ export class Workflow<
     retryConfig,
     mastra,
     events,
-  }: WorkflowOptions<TSteps, TTriggerSchema, TResultSchema>) {
+  }: WorkflowOptions<TStepId, TSteps, TTriggerSchema, TResultSchema>) {
     super({ component: 'WORKFLOW', name });
 
     this.name = name;
@@ -90,7 +91,7 @@ export class Workflow<
     CondStep extends StepVariableType<any, any, any, any>,
     VarStep extends StepVariableType<any, any, any, any>,
   >(
-    next: TStep | Workflow<TSteps, TTriggerSchema> | (TStep | Workflow<TSteps, TTriggerSchema>)[],
+    next: TStep | Workflow<TStepId, TSteps, TTriggerSchema> | (TStep | Workflow<TStepId, TSteps, TTriggerSchema>)[],
     config?: StepConfig<TStep, CondStep, VarStep, TTriggerSchema>,
   ) {
     if (Array.isArray(next)) {
@@ -908,5 +909,9 @@ export class Workflow<
 
   get isNested() {
     return this.#isNested;
+  }
+
+  toStep(): Step<TStepId, TTriggerSchema, z.ZodType<WorkflowRunResult<TTriggerSchema, TSteps, TResultSchema>>, any> {
+    return new Step(workflowToStep(this));
   }
 }
