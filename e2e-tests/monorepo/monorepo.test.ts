@@ -1,4 +1,4 @@
-import { it, describe, expect, afterAll } from 'vitest';
+import { it, describe, expect, beforeAll, afterAll } from 'vitest';
 import { rollup } from 'rollup';
 import { join } from 'path';
 import { setupMonorepo } from './setup';
