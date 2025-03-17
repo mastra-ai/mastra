@@ -1,5 +1,5 @@
 import { existsSync } from 'node:fs';
-import { writeFile } from 'node:fs/promises';
+import { stat, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { MastraBundler } from '@mastra/core/bundler';
@@ -90,6 +90,18 @@ export abstract class Bundler extends MastraBundler {
     await deps.install({ dir: join(outputDirectory, this.outputDir) });
   }
 
+  protected async copyPublic(mastraDir: string, outputDirectory: string) {
+    const publicDir = join(mastraDir, 'public');
+
+    try {
+      await stat(publicDir);
+    } catch {
+      return;
+    }
+
+    await copy(publicDir, join(outputDirectory, this.outputDir));
+  }
+
   protected async _bundle(
     serverFile: string,
     mastraEntryFile: string,
@@ -141,6 +153,10 @@ export abstract class Bundler extends MastraBundler {
 
     await bundler.write();
     this.logger.info('Bundling Mastra done');
+
+    this.logger.info('Copying public files');
+    await this.copyPublic(dirname(mastraEntryFile), outputDirectory);
+    this.logger.info('Done copying public files');
 
     this.logger.info('Installing dependencies');
     await this.installDependencies(outputDirectory);
