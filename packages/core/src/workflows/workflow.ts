@@ -1,4 +1,3 @@
-import { setTimeout } from 'node:timers/promises';
 import type { Span } from '@opentelemetry/api';
 import { context as otlpContext, trace } from '@opentelemetry/api';
 import type { z } from 'zod';
@@ -21,7 +20,7 @@ import type {
   WorkflowRunState,
 } from './types';
 import { WhenConditionReturnValue } from './types';
-import { isVariableReference, updateStepInHierarchy } from './utils';
+import { isVariableReference } from './utils';
 import type { WorkflowResultReturn } from './workflow-instance';
 import { WorkflowInstance } from './workflow-instance';
 
@@ -35,15 +34,20 @@ export class Workflow<
   #retryConfig?: RetryConfig;
   #mastra?: Mastra;
   #runs: Map<string, WorkflowInstance<TSteps, TTriggerSchema>> = new Map();
-
+  #onStepTransition: Set<(state: WorkflowRunState) => void | Promise<void>> = new Set();
   // registers stepIds on `after` calls
   #afterStepStack: string[] = [];
   #lastStepStack: string[] = [];
-  #ifStack: { condition: StepConfig<any, any, any, TTriggerSchema>['when']; elseStepKey: string }[] = [];
+  #ifStack: {
+    condition: StepConfig<any, any, any, TTriggerSchema>['when'];
+    elseStepKey: string;
+    condStep: StepAction<any, any, any, any>;
+  }[] = [];
   #stepGraph: StepGraph = { initial: [] };
+  #serializedStepGraph: StepGraph = { initial: [] };
   #stepSubscriberGraph: Record<string, StepGraph> = {};
+  #serializedStepSubscriberGraph: Record<string, StepGraph> = {};
   #steps: Record<string, StepAction<any, any, any, any>> = {};
-  #onStepTransition: Set<(state: WorkflowRunState) => void | Promise<void>> = new Set();
 
   /**
    * Creates a new Workflow instance
@@ -84,13 +88,16 @@ export class Workflow<
     }
 
     const stepKey = this.#makeStepKey(step);
+    const when = config?.['#internal']?.when || config?.when;
 
     const graphEntry: StepNode = {
       step,
       config: {
         ...this.#makeStepDef(stepKey),
         ...config,
-        serializedWhen: typeof config?.when === 'function' ? config.when.toString() : config?.when,
+        loopLabel: config?.['#internal']?.loopLabel,
+        loopType: config?.['#internal']?.loopType,
+        serializedWhen: typeof when === 'function' ? when.toString() : when,
         data: requiredData,
       },
     };
@@ -99,19 +106,23 @@ export class Workflow<
 
     const parentStepKey = this.#afterStepStack[this.#afterStepStack.length - 1];
     const stepGraph = this.#stepSubscriberGraph[parentStepKey || ''];
+    const serializedStepGraph = this.#serializedStepSubscriberGraph[parentStepKey || ''];
 
     // if we are in an after chain and we have a stepGraph
     if (parentStepKey && stepGraph) {
       // if the stepGraph has an initial, but it doesn't contain the current step, add it to the initial
       if (!stepGraph.initial.some(step => step.step.id === stepKey)) {
         stepGraph.initial.push(graphEntry);
+        if (serializedStepGraph) serializedStepGraph.initial.push(graphEntry);
       }
       // add the current step to the stepGraph
       stepGraph[stepKey] = [];
+      if (serializedStepGraph) serializedStepGraph[stepKey] = [];
     } else {
       // Normal step addition to main graph
       if (!this.#stepGraph[stepKey]) this.#stepGraph[stepKey] = [];
       this.#stepGraph.initial.push(graphEntry);
+      this.#serializedStepGraph.initial.push(graphEntry);
     }
     this.#lastStepStack.push(stepKey);
 
@@ -141,13 +152,16 @@ export class Workflow<
 
     const lastStepKey = this.#lastStepStack[this.#lastStepStack.length - 1];
     const stepKey = this.#makeStepKey(step);
+    const when = config?.['#internal']?.when || config?.when;
 
     const graphEntry: StepNode = {
       step,
       config: {
         ...this.#makeStepDef(stepKey),
         ...config,
-        serializedWhen: typeof config?.when === 'function' ? config.when.toString() : config?.when,
+        loopLabel: config?.['#internal']?.loopLabel,
+        loopType: config?.['#internal']?.loopType,
+        serializedWhen: typeof when === 'function' ? when.toString() : when,
         data: requiredData,
       },
     };
@@ -158,15 +172,19 @@ export class Workflow<
 
     const parentStepKey = this.#afterStepStack[this.#afterStepStack.length - 1];
     const stepGraph = this.#stepSubscriberGraph[parentStepKey || ''];
+    const serializedStepGraph = this.#serializedStepSubscriberGraph[parentStepKey || ''];
 
     if (parentStepKey && stepGraph && stepGraph[lastStepKey]) {
       stepGraph[lastStepKey].push(graphEntry);
+      if (serializedStepGraph && serializedStepGraph[lastStepKey]) serializedStepGraph[lastStepKey].push(graphEntry);
     } else {
       // add the step to the graph if not already there.. it should be there though, unless magic
       if (!this.#stepGraph[lastStepKey]) this.#stepGraph[lastStepKey] = [];
+      if (!this.#serializedStepGraph[lastStepKey]) this.#serializedStepGraph[lastStepKey] = [];
 
       // add the step to the graph
       this.#stepGraph[lastStepKey].push(graphEntry);
+      this.#serializedStepGraph[lastStepKey].push(graphEntry);
     }
 
     return this;
@@ -192,7 +210,7 @@ export class Workflow<
     this.#steps[fallbackStepKey] = fallbackStep;
 
     // Create a check step that evaluates the condition
-    const checkStepKey = `__${fallbackStepKey}_check`;
+    const checkStepKey = `__${fallbackStepKey}_${loopType}_loop_check`;
     const checkStep = {
       id: checkStepKey,
       execute: async ({ context }: any) => {
@@ -237,7 +255,7 @@ export class Workflow<
     this.#steps[checkStepKey] = checkStep;
 
     // Loop finished step
-    const loopFinishedStepKey = `__${fallbackStepKey}_loop_finished`;
+    const loopFinishedStepKey = `__${fallbackStepKey}_${loopType}_loop_finished`;
     const loopFinishedStep = {
       id: loopFinishedStepKey,
       execute: async ({ context }: any) => {
@@ -247,7 +265,11 @@ export class Workflow<
     this.#steps[checkStepKey] = checkStep;
 
     // First add the check step after the last step
-    this.then(checkStep);
+    this.then(checkStep, {
+      '#internal': {
+        loopLabel: `${fallbackStepKey} ${loopType} loop check`,
+      },
+    });
 
     // Then create a branch after the check step that loops back to the fallback step
     this.after(checkStep)
@@ -261,8 +283,18 @@ export class Workflow<
           const status = checkStepResult?.output?.status;
           return status === 'continue' ? WhenConditionReturnValue.CONTINUE : WhenConditionReturnValue.CONTINUE_FAILED;
         },
+        '#internal': {
+          //@ts-ignore
+          when: condition,
+          //@ts-ignore
+          loopType,
+        },
       })
-      .then(checkStep)
+      .then(checkStep, {
+        '#internal': {
+          loopLabel: `${fallbackStepKey} ${loopType} loop check`,
+        },
+      })
       .step(loopFinishedStep, {
         when: async ({ context }) => {
           const checkStepResult = context.steps?.[checkStepKey];
@@ -272,6 +304,11 @@ export class Workflow<
 
           const status = checkStepResult?.output?.status;
           return status === 'complete' ? WhenConditionReturnValue.CONTINUE : WhenConditionReturnValue.CONTINUE_FAILED;
+        },
+        '#internal': {
+          loopLabel: `${fallbackStepKey} ${loopType} loop finished`,
+          //@ts-ignore
+          loopType,
         },
       });
 
@@ -357,7 +394,7 @@ export class Workflow<
     );
 
     const elseStepKey = `__${lastStep.id}_else`;
-    this.#ifStack.push({ condition, elseStepKey });
+    this.#ifStack.push({ condition, elseStepKey, condStep: lastStep });
 
     return this;
   }
@@ -368,7 +405,7 @@ export class Workflow<
       throw new Error('No active condition found');
     }
 
-    this.step(
+    this.after(activeCondition.condStep).step(
       {
         id: activeCondition.elseStepKey,
         execute: async ({ context }) => {
@@ -401,6 +438,7 @@ export class Workflow<
     // Initialize subscriber array for this compound step if it doesn't exist
     if (!this.#stepSubscriberGraph[compoundKey]) {
       this.#stepSubscriberGraph[compoundKey] = { initial: [] };
+      this.#serializedStepSubscriberGraph[compoundKey] = { initial: [] };
     }
 
     return this as Omit<typeof this, 'then' | 'after'>;
@@ -421,8 +459,8 @@ export class Workflow<
     const eventStep = new Step({
       id: eventStepKey,
       execute: async ({ context, suspend }) => {
-        if (context.resumeData?.resumedEvent) {
-          return { executed: true, resumedEvent: context.resumeData?.resumedEvent };
+        if (context.inputData?.resumedEvent) {
+          return { executed: true, resumedEvent: context.inputData?.resumedEvent };
         }
 
         await suspend();
@@ -442,27 +480,45 @@ export class Workflow<
    * @throws Error if trigger schema validation fails
    */
 
-  createRun(): WorkflowResultReturn<TTriggerSchema, TSteps> {
+  createRun({
+    runId,
+    events,
+  }: { runId?: string; events?: Record<string, { schema: z.ZodObject<any> }> } = {}): WorkflowResultReturn<
+    TTriggerSchema,
+    TSteps
+  > {
     const run = new WorkflowInstance<TSteps, TTriggerSchema>({
       logger: this.logger,
       name: this.name,
       mastra: this.#mastra,
       retryConfig: this.#retryConfig,
-
       steps: this.#steps,
+      runId,
       stepGraph: this.#stepGraph,
       stepSubscriberGraph: this.#stepSubscriberGraph,
-
       onStepTransition: this.#onStepTransition,
       onFinish: () => {
         this.#runs.delete(run.runId);
       },
+      events,
     });
     this.#runs.set(run.runId, run);
     return {
       start: run.start.bind(run),
       runId: run.runId,
+      watch: run.watch.bind(run),
+      resume: run.resume.bind(run),
+      resumeWithEvent: run.resumeWithEvent.bind(run),
     };
+  }
+
+  /**
+   * Gets a workflow run instance by ID
+   * @param runId - ID of the run to retrieve
+   * @returns The workflow run instance if found, undefined otherwise
+   */
+  getRun(runId: string) {
+    return this.#runs.get(runId);
   }
 
   /**
@@ -550,10 +606,6 @@ export class Workflow<
 
       // Merge static payload with dynamically resolved variables
       // Variables take precedence over payload values
-      const mergedData = {
-        ...(payload as {}),
-        ...context,
-      };
 
       // Only trace if telemetry is available and action exists
       const finalAction = this.telemetry
@@ -563,7 +615,12 @@ export class Workflow<
           })
         : execute;
 
-      return finalAction ? await finalAction({ context: mergedData, ...rest }) : {};
+      return finalAction
+        ? await finalAction({
+            context: { ...context, inputData: { ...(context?.inputData || {}), ...(payload as {}) } },
+            ...rest,
+          })
+        : {};
     };
 
     // Only trace handler if telemetry is available
@@ -648,14 +705,6 @@ export class Workflow<
     return null;
   }
 
-  watch(onTransition: (state: WorkflowRunState) => void): () => void {
-    this.#onStepTransition.add(onTransition);
-
-    return () => {
-      this.#onStepTransition.delete(onTransition);
-    };
-  }
-
   async resume({
     runId,
     stepId,
@@ -665,121 +714,27 @@ export class Workflow<
     stepId: string;
     context?: Record<string, any>;
   }) {
-    // NOTE: setTimeout(0) makes sure that if the workflow is still running
-    // we'll wait for any state changes to be applied before resuming
-    await setTimeout(0);
-    return this._resume({ runId, stepId, context: resumeContext });
+    this.logger.warn(`Please use 'resume' on the 'createRun' call instead, resume is deprecated`);
+
+    const activeRun = this.#runs.get(runId);
+    if (activeRun) {
+      return activeRun.resume({ stepId, context: resumeContext });
+    }
+
+    throw new Error(`Workflow run ${runId} not found`);
   }
 
-  async _resume({
-    runId,
-    stepId,
-    context: resumeContext,
-  }: {
-    runId: string;
-    stepId: string;
-    context?: Record<string, any>;
-  }) {
-    const snapshot = await this.#loadWorkflowSnapshot(runId);
+  watch(onTransition: (state: WorkflowRunState) => void): () => void {
+    this.logger.warn(`Please use 'watch' on the 'createRun' call instead, watch is deprecated`);
+    this.#onStepTransition.add(onTransition);
 
-    if (!snapshot) {
-      throw new Error(`No snapshot found for workflow run ${runId}`);
-    }
-
-    let parsedSnapshot;
-    try {
-      parsedSnapshot = typeof snapshot === 'string' ? JSON.parse(snapshot as unknown as string) : snapshot;
-    } catch (error) {
-      this.logger.debug('Failed to parse workflow snapshot for resume', { error, runId });
-      throw new Error('Failed to parse workflow snapshot');
-    }
-
-    const origSnapshot = parsedSnapshot;
-    const startStepId = parsedSnapshot.suspendedSteps?.[stepId];
-    if (!startStepId) {
-      return;
-    }
-    parsedSnapshot =
-      startStepId === 'trigger'
-        ? parsedSnapshot
-        : { ...parsedSnapshot?.childStates?.[startStepId], ...{ suspendedSteps: parsedSnapshot.suspendedSteps } };
-    if (!parsedSnapshot) {
-      throw new Error(`No snapshot found for step: ${stepId} starting at ${startStepId}`);
-    }
-
-    // Update context if provided
-
-    if (resumeContext) {
-      parsedSnapshot.context.steps[stepId] = {
-        status: 'success',
-        output: {
-          ...(parsedSnapshot?.context?.steps?.[stepId]?.output || {}),
-          ...resumeContext,
-        },
-      };
-    }
-
-    // Reattach the step handler
-    // TODO: need types
-    if (parsedSnapshot.children) {
-      Object.entries(parsedSnapshot.children).forEach(([_childId, child]: [string, any]) => {
-        if (child.snapshot?.input?.stepNode) {
-          // Reattach handler
-          const stepDef = this.#makeStepDef(child.snapshot.input.stepNode.step.id);
-          child.snapshot.input.stepNode.config = {
-            ...child.snapshot.input.stepNode.config,
-            ...stepDef,
-          };
-
-          // Sync the context
-          child.snapshot.input.context = parsedSnapshot.context;
-        }
-      });
-    }
-
-    parsedSnapshot.value = updateStepInHierarchy(parsedSnapshot.value, stepId);
-
-    // Reset attempt count
-    if (parsedSnapshot.context?.attempts) {
-      parsedSnapshot.context.attempts[stepId] =
-        this.#steps[stepId]?.retryConfig?.attempts || this.#retryConfig?.attempts || 0;
-    }
-
-    this.logger.debug('Resuming workflow with updated snapshot', {
-      updatedSnapshot: parsedSnapshot,
-      runId,
-      stepId,
-    });
-
-    const run =
-      this.#runs.get(runId) ??
-      new WorkflowInstance({
-        logger: this.logger,
-        name: this.name,
-        mastra: this.#mastra,
-        retryConfig: this.#retryConfig,
-
-        steps: this.#steps,
-        stepGraph: this.#stepGraph,
-        stepSubscriberGraph: this.#stepSubscriberGraph,
-
-        onStepTransition: this.#onStepTransition,
-        runId,
-        onFinish: () => {
-          this.#runs.delete(run.runId);
-        },
-      });
-
-    run.setState(origSnapshot?.value);
-    this.#runs.set(run.runId, run);
-    return run?.execute({
-      snapshot: parsedSnapshot,
-      stepId,
-      resumeData: resumeContext,
-    });
+    return () => {
+      this.#onStepTransition.delete(onTransition);
+    };
   }
 
   async resumeWithEvent(runId: string, eventName: string, data: any) {
+    this.logger.warn(`Please use 'resumeWithEvent' on the 'createRun' call instead, resumeWithEvent is deprecated`);
     const event = this.events?.[eventName];
     if (!event) {
       throw new Error(`Event ${eventName} not found`);
@@ -809,6 +764,14 @@ export class Workflow<
 
   get stepSubscriberGraph() {
     return this.#stepSubscriberGraph;
+  }
+
+  get serializedStepGraph() {
+    return this.#serializedStepGraph;
+  }
+
+  get serializedStepSubscriberGraph() {
+    return this.#serializedStepSubscriberGraph;
   }
 
   get steps() {

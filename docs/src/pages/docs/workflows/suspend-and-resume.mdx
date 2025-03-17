@@ -7,7 +7,10 @@ description: "Suspend and resume in Mastra workflows allows you to pause executi
 
 Complex workflows often need to pause execution while waiting for external input or resources.
 
-Mastra's suspend and resume features let you pause workflow execution at any step, persist the workflow state, and continue when ready.
+Mastra's suspend and resume features let you pause workflow execution at any step, persist the workflow snapshot to storage, and resume execution from the saved snapshot when ready.
+This entire process is automatically managed by Mastra. No config needed, or manual step required from the user.
+
+Storing the workflow snapshot to storage (libsql by default) means that the workflow state is permanently preserved across sessions even if the workflow is suspended for a long time.
 
 ## When to Use Suspend/Resume
 
@@ -123,8 +126,7 @@ if (promptAgentStepResult?.status === 'suspended') {
   console.log('Workflow suspended at promptAgent step');
 
   // Resume the workflow with new context
-  const resumeResult = await wf.resume({
-    runId: run.runId,
+  const resumeResult = await run.resume({
     stepId: 'promptAgent',
     context: { userInput: 'Human provided input' }
   });
@@ -138,8 +140,7 @@ if (improveResponseStepResult?.status === 'suspended') {
   console.log('Workflow suspended at improveResponse step');
 
   // Resume again with different context
-  const finalResult = await wf.resume({
-    runId: run.runId,
+  const finalResult = await run.resume({
     stepId: 'improveResponse',
     context: { refinedOutput: 'Human refined output' }
   });
@@ -154,30 +155,29 @@ if (improveResponseStepResult?.status === 'suspended') {
 - Code after the `await suspend()` call will not execute until the step is resumed
 - When a step is suspended, its status becomes `'suspended'` in the workflow results
 - When resumed, the step's status changes from `'suspended'` to `'success'` once completed
-- The `resume()` method requires the `runId` and `stepId` to identify which suspended step to resume
+- The `resume()` method requires the `stepId` to identify which suspended step to resume
 - You can provide new context data when resuming that will be merged with existing step results
 
 ## Watching and Resuming
 
-To handle suspended workflows, use the `watch` method to monitor workflow status and `resume` to continue execution:
+To handle suspended workflows, use the `watch` method to monitor workflow status per run and `resume` to continue execution:
 
 ```typescript
 import { mastra } from "./index";
 
 // Get the workflow
 const myWorkflow = mastra.getWorkflow('myWorkflow');
-const { runId, start } = myWorkflow.createRun();
+const { start, watch, resume } = myWorkflow.createRun();
 
 // Start watching the workflow before executing it
-myWorkflow.watch(async ({ context, activePaths }) => {
+watch(async ({ context, activePaths }) => {
   for (const _path of activePaths) {
     const stepTwoStatus = context.steps?.stepTwo?.status;
     if (stepTwoStatus === 'suspended') {
       console.log("Workflow suspended, resuming with new value");
 
       // Resume the workflow with new context
-      await myWorkflow.resume({
-        runId,
+      await resume({
         stepId: 'stepTwo',
         context: { secondValue: 100 },
       });

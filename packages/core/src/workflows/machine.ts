@@ -1,5 +1,5 @@
-import type { Span } from '@opentelemetry/api';
 import EventEmitter from 'node:events';
+import type { Span } from '@opentelemetry/api';
 import { get } from 'radash';
 import sift from 'sift';
 import type { MachineContext, Snapshot } from 'xstate';
@@ -110,10 +110,12 @@ export class Machine<
     stepId,
     input,
     snapshot,
+    resumeData,
   }: {
     stepId?: string;
     input?: any;
     snapshot?: Snapshot<any>;
+    resumeData?: any;
   } = {}): Promise<Pick<WorkflowRunResult<TTriggerSchema, TSteps>, 'results' | 'activePaths'>> {
     if (snapshot) {
       // First, let's log the incoming snapshot for debugging
@@ -134,7 +136,7 @@ export class Machine<
     const actorSnapshot = snapshot
       ? {
           ...snapshot,
-          context: input,
+          context: { ...input, inputData: { ...((snapshot as any)?.context?.inputData || {}), ...resumeData } },
         }
       : undefined;
 
@@ -153,7 +155,10 @@ export class Machine<
           runId: this.#runId,
         });
       },
-      input,
+      input: {
+        ...input,
+        inputData: { ...((snapshot as any)?.context?.inputData || {}), ...resumeData },
+      },
       snapshot: actorSnapshot,
     });
 
@@ -352,7 +357,22 @@ export class Machine<
 
         try {
           result = await stepNode.config.handler({
-            context: resolvedData,
+            context: {
+              ...context,
+              inputData: { ...(context?.inputData || {}), ...resolvedData },
+              getStepResult: ((stepId: string | Step<any, any, any, any>) => {
+                const resolvedStepId = typeof stepId === 'string' ? stepId : stepId.id;
+
+                if (resolvedStepId === 'trigger') {
+                  return context.triggerData;
+                }
+                const result = context.steps[resolvedStepId];
+                if (result && result.status === 'success') {
+                  return result.output;
+                }
+                return undefined;
+              }) satisfies WorkflowContext<TTriggerSchema>['getStepResult'],
+            } as WorkflowContext,
             suspend: async (payload?: any) => {
               await this.#workflowInstance.suspend(stepNode.step.id, this);
               if (this.#actor) {
@@ -449,7 +469,7 @@ export class Machine<
             conditionMet = false;
           } else if (conditionMet === WhenConditionReturnValue.CONTINUE_FAILED) {
             // TODO: send another kind of event instead
-            return { type: 'CONDITIONS_SKIPPED' as const };
+            return { type: 'CONDITIONS_SKIP_TO_COMPLETED' as const };
           } else if (conditionMet === WhenConditionReturnValue.LIMBO) {
             return { type: 'CONDITIONS_LIMBO' as const };
           } else if (conditionMet) {
@@ -459,7 +479,9 @@ export class Machine<
             });
             return { type: 'CONDITIONS_MET' as const };
           }
-          return { type: 'CONDITIONS_LIMBO' as const };
+          return this.#workflowInstance.hasSubscribers(stepNode.step.id)
+            ? { type: 'CONDITIONS_SKIPPED' as const }
+            : { type: 'CONDITIONS_LIMBO' as const };
         } else {
           const conditionMet = this.#evaluateCondition(stepConfig.when, context);
           if (!conditionMet) {
@@ -510,21 +532,7 @@ export class Machine<
       runId: this.#runId,
     });
 
-    const resolvedData: Record<string, any> = {
-      ...context,
-      getStepResult: ((stepId: string | Step<any, any, any, any>) => {
-        const resolvedStepId = typeof stepId === 'string' ? stepId : stepId.id;
-
-        if (resolvedStepId === 'trigger') {
-          return context.triggerData;
-        }
-        const result = context.steps[resolvedStepId];
-        if (result && result.status === 'success') {
-          return result.output;
-        }
-        return undefined;
-      }) satisfies WorkflowContext<TTriggerSchema>['getStepResult'],
-    };
+    const resolvedData: Record<string, any> = {};
 
     for (const [key, variable] of Object.entries(stepConfig.data)) {
       // Check if variable comes from trigger data or a previous step's result
@@ -685,9 +693,33 @@ export class Machine<
               },
               {
                 guard: ({ event }: { event: { output: DependencyCheckOutput } }) => {
-                  return event.output.type === 'CONDITIONS_SKIPPED';
+                  return event.output.type === 'CONDITIONS_SKIP_TO_COMPLETED';
                 },
                 target: 'completed',
+              },
+              {
+                guard: ({ event }: { event: { output: DependencyCheckOutput } }) => {
+                  return event.output.type === 'CONDITIONS_SKIPPED';
+                },
+                actions: assign({
+                  steps: ({ context }) => {
+                    const newStep = {
+                      ...context.steps,
+                      [stepNode.step.id]: {
+                        status: 'skipped',
+                      },
+                    };
+
+                    this.logger.debug(`Step ${stepNode.step.id} skipped`, {
+                      stepId: stepNode.step.id,
+                      runId: this.#runId,
+                    });
+
+                    return newStep;
+                  },
+                }),
+
+                target: 'runningSubscribers',
               },
               {
                 guard: ({ event }: { event: { output: DependencyCheckOutput } }) => {

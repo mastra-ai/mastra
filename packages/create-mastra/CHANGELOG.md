@@ -1,5 +1,35 @@
 # create-mastra
 
+## 0.2.0-alpha.1
+
+### Minor Changes
+
+- f9b6ab5: add Cerebras as a llm provider to create-mastra@latest
+
+### Patch Changes
+
+- 1291e89: Add resizable-panel to playground-ui and use in agent and workflow sidebars
+- 9ba1e97: update playground ui for mastra and create-mastra
+
+## 0.1.10-alpha.0
+
+### Patch Changes
+
+- 0f24546: Add google as a new LLM provider option in project creation
+
+## 0.1.9
+
+### Patch Changes
+
+- c49f798: remove hardcoded localhost url in playground
+- d3d6fae: Deprecate mastra dev --env flag
+
+## 0.1.9-alpha.1
+
+### Patch Changes
+
+- c49f798: remove hardcoded localhost url in playground
+
 ## 0.1.9-alpha.0
 
 ### Patch Changes

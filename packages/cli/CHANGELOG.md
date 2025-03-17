@@ -1,5 +1,62 @@
 # mastra
 
+## 0.4.0-alpha.1
+
+### Minor Changes
+
+- f9b6ab5: add Cerebras as a llm provider to create-mastra@latest
+
+### Patch Changes
+
+- 5052613: Added a new `mastra create --project-name <string>` flag so coder agents can create new Mastra projects with a one line command.
+- 1291e89: Add resizable-panel to playground-ui and use in agent and workflow sidebars
+- 9ba1e97: update playground ui for mastra and create-mastra
+- Updated dependencies [f4854ee]
+- Updated dependencies [afaf73f]
+- Updated dependencies [44631b1]
+- Updated dependencies [6e559a0]
+- Updated dependencies [5f43505]
+- Updated dependencies [61ad5a4]
+  - @mastra/core@0.6.1-alpha.1
+  - @mastra/deployer@0.2.1-alpha.1
+
+## 0.3.2-alpha.0
+
+### Patch Changes
+
+- 1405e46: update the Groq model the create-mastra@latest sets
+- Updated dependencies [7bcfaee]
+  - @mastra/core@0.6.1-alpha.0
+  - @mastra/deployer@0.2.1-alpha.0
+
+## 0.3.1
+
+### Patch Changes
+
+- c49f798: remove hardcoded localhost url in playground
+- 63cebd4: Fixed a bug with the new tool discovery feature where a missing tools/index.ts would crash the process
+- d3d6fae: Deprecate mastra dev --env flag
+- Updated dependencies [16b98d9]
+- Updated dependencies [1c8cda4]
+- Updated dependencies [95b4144]
+- Updated dependencies [3729dbd]
+- Updated dependencies [c2144f4]
+  - @mastra/core@0.6.0
+  - @mastra/deployer@0.2.0
+
+## 0.3.1-alpha.1
+
+### Patch Changes
+
+- c49f798: remove hardcoded localhost url in playground
+- 63cebd4: Fixed a bug with the new tool discovery feature where a missing tools/index.ts would crash the process
+- Updated dependencies [16b98d9]
+- Updated dependencies [1c8cda4]
+- Updated dependencies [95b4144]
+- Updated dependencies [c2144f4]
+  - @mastra/core@0.6.0-alpha.1
+  - @mastra/deployer@0.2.0-alpha.1
+
 ## 0.3.1-alpha.0
 
 ### Patch Changes

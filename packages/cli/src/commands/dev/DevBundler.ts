@@ -1,3 +1,4 @@
+import { stat } from 'node:fs/promises';
 import { basename, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { FileService } from '@mastra/deployer';
@@ -73,7 +74,8 @@ export class DevBundler extends Bundler {
             toolPath, // if toolPath itself is a file
           ]);
 
-          if (!entryFile) {
+          // if it doesn't exist or is a dir skip it. using a dir as a tool will crash the process
+          if (!entryFile || (await stat(entryFile)).isDirectory()) {
             this.logger.warn(`No entry file found in ${toolPath}, skipping...`);
             continue;
           }
