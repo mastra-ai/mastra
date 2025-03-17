@@ -109,8 +109,6 @@ export async function streamGenerateHandler(c: Context): Promise<Response | unde
 
     const { messages, threadId, resourceid, resourceId, output, runId, ...rest } = await c.req.json();
 
-    console.log(JSON.stringify(messages, null, 2), threadId, resourceid, resourceId, output, runId, rest, '###');
-
     validateBody({ messages });
 
     // Use resourceId if provided, fall back to resourceid (deprecated)
