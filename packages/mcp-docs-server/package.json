@@ -6,6 +6,11 @@
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "bin": "dist/stdio.js",
+  "files": [
+    "dist",
+    ".docs",
+    "README.md"
+  ],
   "exports": {
     ".": {
       "import": {
