@@ -57,4 +57,33 @@ While automated evals are valuable, high-performing AI teams often combine them 
 2. **Human Review**: Regular review of production data and traces
 3. **Continuous Monitoring**: Track eval metrics over time to detect regressions
 
-For running evals in your CI pipeline, see the [Running in CI](/docs/evals/03-running-in-ci) guide.
+## Interpreting Results
+
+Eval scores provide quantifiable feedback for improving agent performance:
+
+### Low Scores (< 0.6)
+If you see low scores:
+1. Check your instructions - Are they clear? Try making them more specific
+2. Look at your context - Is it giving the agent what it needs?
+3. Simplify your prompts - Break complex tasks into smaller steps
+
+### Medium Scores (0.6 - 0.8)
+You're on the right track. To improve:
+1. Find patterns - Which types of inputs cause lower scores?
+2. Experiment with prompts - Try different ways of asking
+3. Add guardrails - Include specific rules for tricky cases
+4. Test more scenarios - Add examples that cover edge cases
+
+### High Scores (> 0.8)
+Your agent is doing well. Next steps:
+1. Watch for changes - Do scores stay high over time?
+2. Raise the bar - Try increasing your quality targets
+3. Save what works - Keep notes on successful approaches
+4. Fine-tune - Look for small ways to improve speed or efficiency
+
+## Next Steps
+
+1. See [Textual Evals](/docs/evals/textual-evals) for more examples of what evals can do
+2. See [Custom Evals](/docs/evals/02-custom-eval) for more info on how to create your own evals
+
+For running evals in your CI pipeline, see the [Running in CI](/docs/evals/running-in-ci) guide.
