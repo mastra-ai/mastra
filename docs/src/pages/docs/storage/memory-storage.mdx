@@ -1,0 +1,212 @@
+---
+title: Storage as Memory | Mastra Docs
+description: Technical guide on using storage systems for memory management in Mastra, including configuration and optimization.
+---
+
+# Storage as Memory
+
+Mastra's storage system integrates deeply with its memory management capabilities, providing persistent storage for conversation history and contextual information.
+
+## Memory Storage Integration
+
+### Default Configuration
+
+By default, Memory uses LibSQL for both message storage and vector operations:
+
+```ts showLineNumbers copy
+import { Memory } from '@mastra/core/memory';
+
+// Uses default LibSQL storage
+const memory = new Memory({
+  name: 'my-memory',
+  options: {
+    lastMessages: 40,
+    semanticRecall: true,
+  },
+});
+```
+
+### Custom Storage Configuration
+
+You can configure Memory to use any storage implementation:
+
+```ts showLineNumbers copy
+import { Memory } from '@mastra/core/memory';
+import { DefaultStorage } from '@mastra/core/storage';
+
+const storage = new DefaultStorage({
+  name: 'custom-storage',
+  config: {
+    url: 'file:memory.db',
+  },
+});
+
+const memory = new Memory({
+  name: 'my-memory',
+  storage,
+  options: {
+    lastMessages: 40,
+    semanticRecall: true,
+  },
+});
+```
+
+## Storage Operations
+
+### Message Storage
+
+The storage system handles message persistence:
+
+```ts showLineNumbers copy
+// Store new messages
+await storage.saveMessages({
+  messages: [{
+    threadId: 'thread-123',
+    role: 'user',
+    content: 'Message content',
+    createdAt: new Date(),
+    metadata: {
+      source: 'chat',
+      language: 'en',
+    },
+  }],
+});
+
+// Retrieve messages with memory config
+const messages = await storage.getMessages({
+  threadId: 'thread-123',
+  selectBy: {
+    limit: 40,
+    before: new Date(),
+  },
+  threadConfig: {
+    lastMessages: 40,
+    semanticRecall: true,
+  },
+});
+```
+
+### Thread Management
+
+Threads organize conversations and maintain context:
+
+```ts showLineNumbers copy
+// Create thread
+const thread = await storage.saveThread({
+  thread: {
+    resourceId: 'user-123',
+    title: 'Support Chat',
+    metadata: {
+      category: 'support',
+      priority: 'high',
+    },
+  },
+});
+
+// Update thread metadata
+await storage.updateThread({
+  id: thread.id,
+  title: 'Resolved: Support Chat',
+  metadata: {
+    status: 'resolved',
+    resolvedAt: new Date(),
+  },
+});
+```
+
+## Memory Optimization
+
+### Process Isolation
+
+When using `:memory:` storage:
+
+```ts showLineNumbers copy
+// Test environment - isolated memory
+const testStorage = new DefaultStorage({
+  name: 'test-storage',
+  config: { url: ':memory:' },
+});
+
+// Development server - separate memory
+const devStorage = new DefaultStorage({
+  name: 'dev-storage',
+  config: { url: ':memory:' },
+});
+```
+
+Benefits:
+- Clean test environment
+- No data pollution
+- Automatic cleanup
+
+### Persistent Storage
+
+For production use:
+
+```ts showLineNumbers copy
+const prodStorage = new DefaultStorage({
+  name: 'prod-storage',
+  config: { url: 'file:prod.db' },
+});
+```
+
+Benefits:
+- Data persistence
+- Cross-process sharing
+- Backup support
+
+## Memory Configuration Options
+
+### Basic Settings
+
+```ts showLineNumbers copy
+const memory = new Memory({
+  storage,
+  options: {
+    // Recent message handling
+    lastMessages: 40,
+    
+    // Semantic search configuration
+    semanticRecall: {
+      topK: 5,
+      messageRange: 2,
+    },
+    
+    // Thread options
+    threads: {
+      generateTitle: true,
+    },
+  },
+});
+```
+
+### Use Case Configurations
+
+```ts showLineNumbers copy
+// Chat support - minimal context
+const supportMemory = new Memory({
+  storage,
+  options: {
+    lastMessages: 10,
+    semanticRecall: false,
+  },
+});
+
+// Project management - extensive context
+const projectMemory = new Memory({
+  storage,
+  options: {
+    lastMessages: 50,
+    semanticRecall: {
+      topK: 10,
+      messageRange: 3,
+    },
+  },
+});
+```
+
+## Next Steps
+
+- Learn about [Vector Storage](./vector-storage.mdx)
+- Configure [Storage Telemetry](./storage-telemetry.mdx)
+- See [Memory Examples](../../examples/memory/)

@@ -1,0 +1,202 @@
+---
+title: Vector Storage | Mastra Docs
+description: Guide on using vector storage in Mastra for efficient similarity search and embedding storage.
+---
+
+# Vector Storage
+
+Mastra provides a unified interface for vector storage across different databases, enabling efficient similarity search and embedding storage for AI applications.
+
+## Supported Vector Databases
+
+Mastra supports multiple vector databases, each with its own strengths:
+
+### Built-in Support
+
+```ts showLineNumbers copy
+// LibSQL - Default, embedded vector storage
+import { LibSQLVector } from '@mastra/core/vector/libsql';
+
+const store = new LibSQLVector({
+  connectionUrl: process.env.DATABASE_URL,
+  authToken: process.env.DATABASE_AUTH_TOKEN, // Optional: for Turso cloud
+});
+```
+
+### External Databases
+
+```ts showLineNumbers copy
+// PostgreSQL with pgvector
+import { PgVector } from '@mastra/pg';
+
+const store = new PgVector(
+  process.env.POSTGRES_CONNECTION_STRING
+);
+
+// Pinecone
+import { PineconeVector } from '@mastra/pinecone';
+
+const store = new PineconeVector(
+  process.env.PINECONE_API_KEY
+);
+
+// Qdrant
+import { QdrantVector } from '@mastra/qdrant';
+
+const store = new QdrantVector({
+  url: process.env.QDRANT_URL,
+  apiKey: process.env.QDRANT_API_KEY
+});
+```
+
+## Core Operations
+
+### Creating Indexes
+
+Before storing vectors, create an index with the appropriate dimension:
+
+```ts showLineNumbers copy
+await store.createIndex({
+  indexName: 'my-collection',
+  dimension: 1536, // For OpenAI text-embedding-3-small
+});
+
+// Common dimension sizes:
+// - OpenAI text-embedding-3-small: 1536
+// - OpenAI text-embedding-3-large: 3072
+// - Cohere embed-multilingual-v3: 1024
+```
+
+### Storing Embeddings
+
+Store embeddings with metadata:
+
+```ts showLineNumbers copy
+await store.upsert({
+  indexName: 'my-collection',
+  vectors: embeddings,
+  metadata: chunks.map(chunk => ({
+    text: chunk.text,
+    source: chunk.source,
+    timestamp: new Date(),
+  })),
+});
+```
+
+### Similarity Search
+
+Query vectors by similarity:
+
+```ts showLineNumbers copy
+const results = await store.search({
+  indexName: 'my-collection',
+  vector: queryEmbedding,
+  topK: 5,
+  filter: {
+    source: 'documentation',
+  },
+});
+```
+
+## Integration with Memory
+
+### Default Configuration
+
+Mastra's Memory system uses LibSQL vector storage by default:
+
+```ts showLineNumbers copy
+import { Memory } from '@mastra/core/memory';
+
+const memory = new Memory({
+  // Uses LibSQL vector storage
+  options: {
+    semanticRecall: {
+      topK: 5,
+      messageRange: 2,
+    },
+  },
+});
+```
+
+### Custom Vector Storage
+
+Configure Memory with custom vector storage:
+
+```ts showLineNumbers copy
+import { Memory } from '@mastra/core/memory';
+import { PgVector } from '@mastra/pg';
+
+const memory = new Memory({
+  vector: new PgVector(process.env.POSTGRES_URL),
+  options: {
+    semanticRecall: {
+      topK: 5,
+      messageRange: 2,
+    },
+  },
+});
+```
+
+## Performance Optimization
+
+### Index Configuration
+
+Optimize index settings for your use case:
+
+```ts showLineNumbers copy
+await store.createIndex({
+  indexName: 'my-collection',
+  dimension: 1536,
+  config: {
+    // PostgreSQL specific
+    indexType: 'ivfflat',
+    lists: 100,
+    probes: 10,
+  },
+});
+```
+
+### Batch Operations
+
+Use batch operations for better performance:
+
+```ts showLineNumbers copy
+// Batch upsert
+await store.upsert({
+  indexName: 'my-collection',
+  vectors: batchEmbeddings,
+  metadata: batchMetadata,
+  batchSize: 1000,
+});
+
+// Batch search
+const results = await store.search({
+  indexName: 'my-collection',
+  vectors: batchQueryEmbeddings,
+  topK: 5,
+});
+```
+
+### Filtering
+
+Use metadata filters to improve search efficiency:
+
+```ts showLineNumbers copy
+const results = await store.search({
+  indexName: 'my-collection',
+  vector: queryEmbedding,
+  topK: 5,
+  filter: {
+    // Filter by metadata
+    timestamp: { $gt: new Date('2024-01-01') },
+    source: { $in: ['docs', 'chat'] },
+    status: 'active',
+  },
+});
+```
+
+## Next Steps
+
+- Learn about [Storage as Memory](./memory-storage.mdx)
+- Configure [Storage Telemetry](./storage-telemetry.mdx)
+- See [Vector Storage Examples](../../examples/vector-storage/)

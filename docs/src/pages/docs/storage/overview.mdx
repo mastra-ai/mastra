@@ -1,0 +1,391 @@
+---
+title: Storage in Mastra | Mastra Docs
+description: Technical overview of Mastra's storage system, detailing its integration with memory and data persistence capabilities.
+---
+
+# Storage in Mastra
+
+Storage in Mastra operates at three levels:
+
+1. **Core Storage Layer**: Handles raw data persistence through the `MastraStorage` interface
+2. **Memory Integration**: Provides data access and caching for the memory system
+3. **Mastra Class Integration**: Coordinates storage access across the application
+
+This layered approach enables:
+- Persistent storage of conversations, workflows, and evaluations
+- Efficient data retrieval for memory operations
+- Consistent data access patterns across the application
+- Flexible storage configurations for different environments
+
+## Core Storage Layer
+
+### Storage Interface
+
+The `MastraStorage` abstract class forms the foundation of Mastra's storage system. It defines a consistent interface for data operations, ensuring that all storage implementations provide the same capabilities:
+
+```ts showLineNumbers copy
+import { DefaultStorage } from '@mastra/core/storage';
+
+const storage = new DefaultStorage({
+  name: 'my-storage',
+  config: {
+    url: 'file:my-database.db',  // or ':memory:' for in-memory
+  },
+});
+```
+
+Key responsibilities:
+
+1. **Data Operations**
+   - Thread creation and management
+   - Message storage and retrieval
+   - Workflow state persistence
+   - Evaluation data handling
+
+2. **Table Management**
+   - Automatic table creation
+   - Schema initialization
+   - Data migration support
+
+3. **Transaction Handling**
+   - Atomic operations when supported
+   - Data consistency maintenance
+   - Error recovery
+```
+
+### Data Structure
+
+The storage system organizes data into four interconnected tables, each serving a specific purpose:
+
+1. **Workflow Snapshots** (`workflow_snapshot`)
+   - Captures the state of running workflows
+   - Enables workflow resumption after interruptions
+   - Schema:
+     ```sql
+     workflow_name TEXT,
+     run_id TEXT,
+     snapshot TEXT,        -- JSON serialized state
+     createdAt TIMESTAMP,
+     updatedAt TIMESTAMP
+     ```
+
+2. **Messages** (`messages`)
+   - Records all conversation interactions
+   - Maintains conversational context
+   - Schema:
+     ```sql
+     id TEXT PRIMARY KEY,
+     thread_id TEXT,
+     role TEXT,           -- user/assistant/system
+     content TEXT,        -- message content
+     createdAt TIMESTAMP
+     ```
+
+3. **Threads** (`threads`)
+   - Groups related messages into conversations
+   - Enables conversation management
+   - Schema:
+     ```sql
+     id TEXT PRIMARY KEY,
+     resource_id TEXT,    -- external reference
+     title TEXT,
+     metadata TEXT,       -- JSON metadata
+     createdAt TIMESTAMP,
+     updatedAt TIMESTAMP
+     ```
+
+4. **Evaluations** (`evals`)
+   - Stores agent evaluation results
+   - Enables performance analysis
+   - Schema:
+     ```sql
+     input TEXT,
+     output TEXT,
+     result JSONB,        -- evaluation metrics
+     agent_name TEXT,
+     metric_name TEXT,
+     test_info TEXT       -- test metadata
+     ```
+
+## Memory System Integration
+
+The storage layer plays a crucial role in Mastra's memory system by providing persistent storage for conversation history and context.
+
+### Memory Storage Patterns
+
+1. **Default Memory Storage**
+   - Automatically initializes storage if none provided
+   - Uses in-memory SQLite for development
+   - Provides immediate data access
+
+```ts showLineNumbers copy
+import { Memory } from '@mastra/core/memory';
+
+// Automatic storage initialization
+const memory = new Memory({
+  name: 'my-memory',
+  options: {
+    lastMessages: 40,     // Number of messages to retain
+    semanticRecall: true, // Enable semantic search
+    threads: {
+      generateTitle: true // Auto-generate thread titles
+    }
+  },
+});
+```
+
+2. **Custom Storage Configuration**
+   - Allows specific storage implementation
+   - Enables persistent data storage
+   - Supports custom database configuration
+
+```ts showLineNumbers copy
+import { Memory } from '@mastra/core/memory';
+import { DefaultStorage } from '@mastra/core/storage';
+
+// Custom storage setup
+const storage = new DefaultStorage({
+  name: 'my-storage',
+  config: { url: 'file:custom.db' },
+});
+
+// Memory with custom storage
+const memory = new Memory({
+  name: 'my-memory',
+  storage,  // Use custom storage
+  options: {
+    lastMessages: 40,
+    semanticRecall: true,
+  }
+});
+```
+
+### Memory-Storage Interaction
+
+1. **Message Retrieval**
+   - Storage provides raw message data
+   - Memory system processes and filters messages
+   - Combines with semantic search when enabled
+
+2. **Thread Management**
+   - Storage maintains thread structure
+   - Memory uses threads for context organization
+   - Enables efficient conversation retrieval
+
+3. **Data Persistence**
+   - Storage ensures message durability
+   - Memory caches frequent access patterns
+   - Balances performance and reliability
+```
+
+## Storage Configuration
+
+Mastra's storage system supports two primary modes of operation, each suited for different use cases:
+
+### In-Memory Storage
+
+Using `:memory:` creates an isolated SQLite database in memory:
+
+```ts showLineNumbers copy
+const storage = new DefaultStorage({
+  name: 'dev-storage',
+  config: { url: ':memory:' }
+});
+```
+
+Characteristics:
+- **Process Isolation**: Each process gets its own storage instance
+- **Test Environment**: Test processes use isolated storage
+- **Development Server**: Dev server maintains separate storage
+- **Data Lifecycle**: Data exists only during process lifetime
+- **Performance**: Fast access but no persistence
+
+Best for:
+- Development environments
+- Testing scenarios
+- CI/CD pipelines
+- Rapid prototyping
+
+### Persistent Storage
+
+Using file-based storage creates a durable SQLite database:
+
+```ts showLineNumbers copy
+const storage = new DefaultStorage({
+  name: 'prod-storage',
+  config: { url: 'file:database.db' }
+});
+```
+
+Characteristics:
+- **Data Durability**: Information survives process restarts
+- **State Sharing**: Multiple processes can access same data
+- **Production Ready**: Suitable for deployed applications
+- **Backup Support**: File can be backed up and restored
+- **Migration**: Supports schema and data migrations
+
+Best for:
+- Production deployments
+- Multi-process applications
+- Systems requiring data persistence
+- Applications with backup requirements
+
+## Mastra Class Integration
+
+The Mastra class serves as the central coordinator for storage operations:
+
+### Storage Configuration
+
+```ts showLineNumbers copy
+import { Mastra } from '@mastra/core';
+import { DefaultStorage } from '@mastra/core/storage';
+
+// Initialize storage
+const storage = new DefaultStorage({
+  name: 'app-storage',
+  config: { url: 'file:app.db' },
+});
+
+// Configure Mastra instance
+const mastra = new Mastra({
+  storage,      // Storage instance
+  agents: {},   // Agent configurations
+  vectors: {},  // Vector store configs
+  logger: true, // Enable logging
+});
+```
+
+### Storage Responsibilities
+
+1. **Central Configuration**
+   - Manages storage instance lifecycle
+   - Coordinates access across components
+   - Handles initialization and shutdown
+
+2. **Component Integration**
+   - Provides storage to agents when needed
+   - Coordinates with vector stores
+   - Manages workflow persistence
+
+3. **Operational Control**
+   - Monitors storage operations
+   - Handles error conditions
+   - Provides telemetry data
+
+### Important Notes
+
+1. **Memory Configuration**
+   - Memory should be configured on Agent instances
+   - Deprecated: Setting memory on Mastra class
+   - Each agent can have its own memory config
+
+2. **Storage Lifecycle**
+   - Storage initialized with Mastra
+   - Shared across all components
+   - Cleanup handled by Mastra instance
+```
+
+## Common Operations
+
+The storage system provides a comprehensive API for data operations:
+
+### Thread Management
+
+Threads organize conversations and maintain context:
+
+```ts showLineNumbers copy
+// Create new thread
+const thread = await storage.saveThread({
+  thread: {
+    resourceId: 'resource-123',  // External reference
+    title: 'Thread Title',       // Display name
+    metadata: {                  // Custom metadata
+      category: 'support',
+      priority: 'high'
+    },
+  },
+});
+
+// Update existing thread
+await storage.updateThread({
+  id: thread.id,
+  title: 'Updated Title',
+  metadata: {
+    status: 'resolved',
+    closedAt: new Date()
+  },
+});
+
+// Retrieve thread
+const existingThread = await storage.getThreadById({
+  threadId: thread.id
+});
+
+// Find threads by resource
+const threads = await storage.getThreadsByResourceId({
+  resourceId: 'resource-123'
+});
+```
+
+### Message Operations
+
+Messages represent individual interactions within threads:
+
+```ts showLineNumbers copy
+// Save new messages
+await storage.saveMessages({
+  messages: [{
+    threadId: thread.id,
+    role: 'user',           // user/assistant/system
+    content: 'Query text',  // Message content
+    createdAt: new Date(),  // Timestamp
+    metadata: {             // Optional metadata
+      source: 'web',
+      language: 'en'
+    }
+  }],
+});
+
+// Retrieve messages
+const messages = await storage.getMessages({
+  threadId: thread.id,
+  selectBy: {
+    limit: 10,            // Message count
+    before: new Date(),    // Time filter
+    roles: ['user']        // Role filter
+  },
+  threadConfig: {          // Memory config
+    lastMessages: 40,
+    semanticRecall: true
+  }
+});
+```
+
+### Workflow Operations
+
+Manage workflow state and execution data:
+
+```ts showLineNumbers copy
+// Save workflow snapshot
+await storage.persistWorkflowSnapshot({
+  workflowName: 'data-processing',
+  runId: 'run-123',
+  snapshot: {
+    state: 'processing',
+    progress: 75,
+    lastStep: 'validate'
+  }
+});
+
+// Load workflow state
+const snapshot = await storage.loadWorkflowSnapshot({
+  workflowName: 'data-processing',
+  runId: 'run-123'
+});
+```
+
+## Next Steps
+
+- Learn about [Memory Management](../agents/01-agent-memory.mdx)
+- See [Storage Configuration](../reference/storage/config.mdx)
+- View [Storage Examples](../../examples/storage/)

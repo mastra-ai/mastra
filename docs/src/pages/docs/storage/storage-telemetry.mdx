@@ -1,0 +1,223 @@
+---
+title: Using Storage with Telemetry | Mastra Docs
+description: Guide on integrating OpenTelemetry with Mastra's storage system for monitoring and tracing.
+---
+
+# Using Storage with Telemetry
+
+Mastra integrates with OpenTelemetry to provide comprehensive monitoring and tracing capabilities for storage operations. This helps you understand performance, diagnose issues, and optimize your application.
+
+## Storage Telemetry Setup
+
+### Basic Configuration
+
+```ts showLineNumbers copy
+import { DefaultStorage } from '@mastra/core/storage';
+import { TelemetryConfig } from '@mastra/core/telemetry';
+
+const storage = new DefaultStorage({
+  name: 'my-storage',
+  config: {
+    url: 'file:app.db',
+  },
+  telemetry: new TelemetryConfig({
+    serviceName: 'my-service',
+    enabled: true,
+  }),
+});
+```
+
+### Custom Exporter
+
+Configure a custom trace exporter:
+
+```ts showLineNumbers copy
+import { DefaultStorage } from '@mastra/core/storage';
+import { OTLPTraceExporter } from '@mastra/core/telemetry';
+
+const storage = new DefaultStorage({
+  name: 'my-storage',
+  config: {
+    url: 'file:app.db',
+  },
+  telemetry: {
+    exporter: new OTLPTraceExporter({
+      url: 'http://localhost:4318/v1/traces',
+    }),
+  },
+});
+```
+
+## Trace Operations
+
+### Storage Operations
+
+Mastra automatically traces key storage operations:
+
+```ts showLineNumbers copy
+// These operations are automatically traced
+await storage.saveMessages({
+  messages: [{
+    threadId: 'thread-123',
+    content: 'Hello',
+  }],
+}); // Generates trace: storage.saveMessages
+
+await storage.getMessages({
+  threadId: 'thread-123',
+}); // Generates trace: storage.getMessages
+
+await storage.saveThread({
+  thread: {
+    resourceId: 'user-123',
+  },
+}); // Generates trace: storage.saveThread
+```
+
+### Vector Operations
+
+Vector operations are also traced:
+
+```ts showLineNumbers copy
+// Vector operations generate traces
+await store.createIndex({
+  indexName: 'my-collection',
+  dimension: 1536,
+}); // Generates trace: vector.createIndex
+
+await store.upsert({
+  indexName: 'my-collection',
+  vectors: embeddings,
+}); // Generates trace: vector.upsert
+
+await store.search({
+  indexName: 'my-collection',
+  vector: queryVector,
+}); // Generates trace: vector.search
+```
+
+## Trace Analysis
+
+### Span Structure
+
+Each trace includes detailed information:
+
+```ts showLineNumbers copy
+{
+  id: 'span-123',
+  parentSpanId: 'parent-span-123',
+  traceId: 'trace-123',
+  name: 'storage.saveMessages',
+  scope: 'mastra-storage',
+  kind: 'internal',
+  attributes: {
+    'db.system': 'libsql',
+    'db.operation': 'insert',
+    'thread.id': 'thread-123',
+    'message.count': 1,
+  },
+  startTime: 1647523600000,
+  endTime: 1647523601000,
+}
+```
+
+### Performance Metrics
+
+Key metrics tracked:
+
+- Operation latency
+- Success/failure rates
+- Batch sizes
+- Resource usage
+
+## Telemetry Integration
+
+### Memory Integration
+
+Tracing memory operations:
+
+```ts showLineNumbers copy
+import { Memory } from '@mastra/core/memory';
+
+const memory = new Memory({
+  storage,
+  telemetry: {
+    enabled: true,
+    serviceName: 'memory-service',
+  },
+});
+
+// Memory operations are traced
+await memory.remember({
+  threadId: 'thread-123',
+  messages: messages,
+}); // Generates trace: memory.remember
+```
+
+### Agent Integration
+
+Tracing agent operations:
+
+```ts showLineNumbers copy
+import { Agent } from '@mastra/core/agent';
+
+const agent = new Agent({
+  memory,
+  telemetry: {
+    enabled: true,
+    serviceName: 'agent-service',
+  },
+});
+
+// Agent operations create traces
+await agent.stream('Hello', {
+  threadId: 'thread-123',
+}); // Generates traces: agent.stream -> memory.remember -> storage.saveMessages
+```
+
+## Best Practices
+
+### Configuration
+
+```ts showLineNumbers copy
+const telemetry = new TelemetryConfig({
+  // Enable only in production
+  enabled: process.env.NODE_ENV === 'production',
+  
+  // Set appropriate sampling rate
+  samplingRatio: 0.1, // 10% of traces
+  
+  // Configure batch processing
+  batchSize: 100,
+  batchTimeout: 5000, // 5 seconds
+  
+  // Add custom attributes
+  defaultAttributes: {
+    'service.version': '1.0.0',
+    'deployment.environment': 'production',
+  },
+});
+```
+
+### Error Handling
+
+```ts showLineNumbers copy
+const storage = new DefaultStorage({
+  telemetry: {
+    enabled: true,
+    onError: (error) => {
+      // Handle telemetry errors
+      console.error('Telemetry error:', error);
+      
+      // Optionally disable telemetry
+      storage.disableTelemetry();
+    },
+  },
+});
+```
+
+## Next Steps
+
+- Learn about [Storage as Memory](./memory-storage.mdx)
+- Explore [Vector Storage](./vector-storage.mdx)
+- See [Telemetry Examples](../../examples/telemetry/)
