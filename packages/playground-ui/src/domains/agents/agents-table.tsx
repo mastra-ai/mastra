@@ -17,6 +17,7 @@ export const AgentsTable = ({
 }) => {
   return (
     <DataTable
+      emptyText="Agents"
       title={title}
       isLoading={isLoading}
       withoutBorder
