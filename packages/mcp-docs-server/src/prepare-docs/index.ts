@@ -1,4 +1,4 @@
-import { prepare } from './prepare';
+import { prepare } from './prepare.js';
 
 try {
   await prepare();
