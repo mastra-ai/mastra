@@ -1,11 +1,11 @@
 import { existsSync } from 'node:fs';
-import { writeFile } from 'node:fs/promises';
+import { stat, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { MastraBundler } from '@mastra/core/bundler';
 import virtual from '@rollup/plugin-virtual';
-import { copy, ensureDir } from 'fs-extra';
-import fsExtra from 'fs-extra/esm';
+import { copy, ensureDir, readJSON, emptyDir } from 'fs-extra/esm';
+import resolveFrom from 'resolve-from';
 import type { InputOptions, OutputOptions } from 'rollup';
 
 import { analyzeBundle } from '../build/analyze';
@@ -23,7 +23,7 @@ export abstract class Bundler extends MastraBundler {
 
   async prepare(outputDirectory: string): Promise<void> {
     // Clean up the output directory first
-    await fsExtra.emptyDir(outputDirectory);
+    await emptyDir(outputDirectory);
 
     await ensureDir(join(outputDirectory, this.analyzeOutputDir));
     await ensureDir(join(outputDirectory, this.outputDir));
@@ -90,6 +90,18 @@ export abstract class Bundler extends MastraBundler {
     await deps.install({ dir: join(outputDirectory, this.outputDir) });
   }
 
+  protected async copyPublic(mastraDir: string, outputDirectory: string) {
+    const publicDir = join(mastraDir, 'public');
+
+    try {
+      await stat(publicDir);
+    } catch {
+      return;
+    }
+
+    await copy(publicDir, join(outputDirectory, this.outputDir));
+  }
+
   protected async _bundle(
     serverFile: string,
     mastraEntryFile: string,
@@ -108,11 +120,16 @@ export abstract class Bundler extends MastraBundler {
     );
 
     await writeTelemetryConfig(mastraEntryFile, join(outputDirectory, this.outputDir));
-
-    const dependenciesToInstall = Array.from(analyzedBundleInfo.externalDependencies).reduce((acc, dep) => {
-      acc.set(dep, 'latest');
-      return acc;
-    }, new Map<string, string>());
+    const dependenciesToInstall = new Map<string, string>();
+    for (const dep of analyzedBundleInfo.externalDependencies) {
+      try {
+        const pkgPath = resolveFrom(mastraEntryFile, `${dep}/package.json`);
+        const pkg = await readJSON(pkgPath);
+        dependenciesToInstall.set(dep, pkg.version);
+      } catch {
+        dependenciesToInstall.set(dep, 'latest');
+      }
+    }
 
     await this.writePackageJson(join(outputDirectory, this.outputDir), dependenciesToInstall);
     await this.writeInstrumentationFile(join(outputDirectory, this.outputDir));
@@ -136,6 +153,10 @@ export abstract class Bundler extends MastraBundler {
 
     await bundler.write();
     this.logger.info('Bundling Mastra done');
+
+    this.logger.info('Copying public files');
+    await this.copyPublic(dirname(mastraEntryFile), outputDirectory);
+    this.logger.info('Done copying public files');
 
     this.logger.info('Installing dependencies');
     await this.installDependencies(outputDirectory);

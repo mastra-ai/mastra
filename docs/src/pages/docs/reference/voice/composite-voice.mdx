@@ -81,7 +81,7 @@ Converts text to speech using the configured speaking provider.
   ]}
 />
 
-#### Notes
+Notes:
 - If no speaking provider is configured, this method will throw an error
 - Options are passed through to the configured speaking provider
 - Returns a stream of audio data
@@ -107,7 +107,7 @@ Converts speech to text using the configured listening provider.
   ]}
 />
 
-#### Notes
+Notes:
 - If no listening provider is configured, this method will throw an error
 - Options are passed through to the configured listening provider
 - Returns either a string or a stream of transcribed text, depending on the provider
@@ -133,15 +133,8 @@ Returns a list of available voices from the speaking provider, where each node c
   ]}
 />
 
-#### Notes
+Notes:
 - Returns voices from the speaking provider only
 - If no speaking provider is configured, returns an empty array
 - Each voice object will have at least a voiceId property
 - Additional voice properties depend on the speaking provider
-
-## Notes
-
-- CompositeVoice implements the MastraVoice interface
-- Each provider maintains its own configuration and state
-- Error handling should consider both providers' potential failure modes
-- Ideal for scenarios where different providers excel at different operations
