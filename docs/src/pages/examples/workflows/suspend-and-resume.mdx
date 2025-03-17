@@ -182,8 +182,8 @@ const improveResponse = new Step({
     const completenessScore =
       context.getStepResult(evaluateTone)?.completenessScore.score ?? 0;
 
-    const improvedContent = context.inputData?.improvedContent;
-    const resumeAttempts = context.inputData?.resumeAttempts ?? 0;
+    const improvedContent = context.inputData.improvedContent;
+    const resumeAttempts = context.inputData.resumeAttempts ?? 0;
 
     // If scores are above threshold, make minor improvements
     if (toneScore > 0.8 && completenessScore > 0.8) {

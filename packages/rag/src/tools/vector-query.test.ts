@@ -176,12 +176,14 @@ describe('createVectorQueryTool', () => {
       });
 
       // Execute with no filter
-      await tool.execute({
+      await tool.execute?.({
         context: {
-          queryText: 'test query',
-          topK: 5,
+          inputData: {
+            queryText: 'test query',
+            topK: 5,
+          },
         },
-        mastra: mockMastra,
+        mastra: mockMastra as any,
       });
 
       // Check that vectorQuerySearch was called with undefined queryFilter
@@ -204,13 +206,15 @@ describe('createVectorQueryTool', () => {
       const filterJson = '{"field": "value"}';
 
       // Execute with filter
-      await tool.execute({
+      await tool.execute?.({
         context: {
-          queryText: 'test query',
-          topK: 5,
-          filter: filterJson,
+          inputData: {
+            queryText: 'test query',
+            topK: 5,
+            filter: filterJson,
+          },
         },
-        mastra: mockMastra,
+        mastra: mockMastra as any,
       });
 
       // Check that vectorQuerySearch was called with the parsed filter
@@ -233,13 +237,15 @@ describe('createVectorQueryTool', () => {
       const stringFilter = 'string-filter';
 
       // Execute with string filter
-      await tool.execute({
+      await tool.execute?.({
         context: {
-          queryText: 'test query',
-          topK: 5,
-          filter: stringFilter,
+          inputData: {
+            queryText: 'test query',
+            topK: 5,
+            filter: stringFilter,
+          },
         },
-        mastra: mockMastra,
+        mastra: mockMastra as any,
       });
 
       // Since this is not a valid filter, it should be ignored
