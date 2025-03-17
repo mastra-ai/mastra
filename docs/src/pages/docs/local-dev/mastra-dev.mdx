@@ -20,9 +20,57 @@ By default, the server runs at http://localhost:4111, but you can change the por
 
 ## Dev Playground
 
-`mastra dev` serves a UI with an agent chat interface, a workflow visualizer and a tool playground.
+`mastra dev` serves a playground UI for interacting with your agents, workflows and tools. The playground provides dedicated interfaces for testing each component of your Mastra application during development.
 
 {/* TODO: Record a quick tour video here */}
+
+### Agent playground
+
+The Agent playground provides an interactive chat interface where you can test and debug your agents during development. Key features include:
+
+- **Chat Interface**: Directly interact with your agents to test their responses and behavior
+- **Prompt CMS**: Experiment with different system instructions for your agent:
+  - A/B test different prompt versions
+  - Track performance metrics for each variant
+  - Select and deploy the most effective prompt version
+- **Agent Traces**: View detailed execution traces to understand how your agent processes requests, including:
+  - Prompt construction
+  - Tool usage
+  - Decision making steps
+  - Response generation
+- **Agent Evals**: When you've set up [agent evaluation metrics](/docs/evals/00-overview), you can:
+  - Run evaluations directly from the playground
+  - View evaluation results and metrics
+  - Compare agent performance across different test cases
+
+### Workflow playground
+
+The Workflow playground helps you visualize and test your workflow implementations:
+
+- **Workflow Visualization**: Workflow graph visualization
+
+- **Run Workflows**:
+  - Trigger test workflow runs with custom input data
+  - Debug workflow logic and conditions
+  - Simulate different execution paths
+  - View detailed execution logs for each step
+
+- **Workflow Traces**: Examine detailed execution traces that show:
+  - Step-by-step workflow progression
+  - State transitions and data flow
+  - Tool invocations and their results
+  - Decision points and branching logic
+  - Error handling and recovery paths
+
+### Tools playground
+
+The Tools playground allows you to test your custom tools in isolation:
+
+- Test individual tools without running a full agent or workflow
+- Input test data and view tool responses
+- Debug tool implementation and error handling
+- Verify tool input/output schemas
+- Monitor tool performance and execution time
 
 
 
