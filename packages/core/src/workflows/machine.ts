@@ -353,6 +353,10 @@ export class Machine<
         try {
           result = await stepNode.config.handler({
             context: resolvedData,
+            emit: (event: string, ...args: any[]) => {
+              // console.log(this.#workflowInstance.name, 'emitting', event, ...args);
+              this.emit(event, ...args);
+            },
             suspend: async (payload?: any) => {
               await this.#workflowInstance.suspend(stepNode.step.id, this);
               if (this.#actor) {

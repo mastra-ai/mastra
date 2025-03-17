@@ -81,8 +81,14 @@ export class Workflow<
     config?: StepConfig<TStep, CondStep, VarStep, TTriggerSchema>,
   ) {
     if (Array.isArray(next)) {
-      next.forEach(step => this.step(step, config));
-      this.after(next);
+      const nextSteps = next.map(step => {
+        if (isWorkflow(step)) {
+          return workflowToStep(step);
+        }
+        return step;
+      });
+      nextSteps.forEach(step => this.step(step, config));
+      this.after(nextSteps);
       this.step(
         new Step({
           // @ts-ignore
@@ -92,6 +98,7 @@ export class Workflow<
           },
         }),
       );
+      return this;
     }
 
     const { variables = {} } = config || {};
@@ -165,7 +172,13 @@ export class Workflow<
       }
 
       this.after(lastStep);
-      next.forEach(step => this.step(step, config));
+      const nextSteps = next.map(step => {
+        if (isWorkflow(step)) {
+          return workflowToStep(step);
+        }
+        return step;
+      });
+      nextSteps.forEach(step => this.step(step, config));
       this.step(
         new Step({
           // @ts-ignore

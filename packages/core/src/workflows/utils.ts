@@ -175,9 +175,14 @@ export function workflowToStep(workflow: Workflow): StepAction<any, any, any, an
   return {
     id: workflow.name,
     workflow,
-    execute: async ({ context, suspend }) => {
+    execute: async ({ context, suspend, emit }) => {
       const run = workflow.createRun();
+      const unwatch = workflow.watch(state => {
+        emit('state-update', workflow.name, state.value, { ...context, ...{ [workflow.name]: state.context } });
+      });
+
       const { results, activePaths } = await run.start();
+      unwatch();
       if (activePaths?.size > 0) {
         const suspendedStep = [...activePaths.entries()].find(([stepId, { status }]) => {
           return status === 'suspended';

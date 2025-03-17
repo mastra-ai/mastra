@@ -22,6 +22,7 @@ export interface StepExecutionContext<
   context: TSchemaIn extends z.ZodSchema ? z.infer<TSchemaIn> & TContext : TContext;
   suspend: (payload?: unknown) => Promise<void>;
   runId: string;
+  emit: (event: string, data: any) => void;
   mastra?: MastraUnion;
 }
 
