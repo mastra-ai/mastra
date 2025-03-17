@@ -114,6 +114,10 @@ jobs:
       - name: Build
         run: pnpm turbo --filter "./packages/core" --filter "./packages/cli" build
 
+      - name: Install e2e test dependencies
+        working-directory: ./e2e-tests/monorepo
+        run: pnpm install --ignore-workspace
+
       - name: Test
         working-directory: ./e2e-tests/monorepo
         run: pnpm test
