@@ -1,0 +1,29 @@
+---
+title: "Creating a new Project | Mastra Local Development Docs"
+description: "Create new Mastra projects or add Mastra to existing Node.js applications using the CLI"
+---
+
+# Creating a new project
+
+You can create a new project using the `create-mastra` package:
+
+```bash npm2yarn copy
+npm create mastra@latest 
+```
+
+You can also create a new project by using the `mastra` CLI directly:
+
+```bash npm2yarn copy
+npm install -g mastra@latest 
+mastra create
+```
+
+Generated project structure:
+```
+my-project/
+├── src/
+│   └── mastra/
+│       └── index.ts    # Mastra entry point
+├── package.json
+└── tsconfig.json
+```

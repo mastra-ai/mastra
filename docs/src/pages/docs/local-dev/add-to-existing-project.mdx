@@ -1,0 +1,38 @@
+---
+title: "Adding to an Existing Project | Mastra Local Development Docs"
+description: "Add Mastra to your existing Node.js applications"
+---
+
+# Adding to an Existing Project
+
+You can add Mastra to an existing project using the CLI:
+
+```bash npm2yarn copy
+npm install -g mastra@latest 
+mastra init
+```
+
+Changes made to project:
+1. Creates `src/mastra` directory with entry point
+2. Adds required dependencies
+3. Configures TypeScript compiler options
+
+## Command Arguments
+
+```bash
+Arguments:
+  --components     Specify components: agents, memory, storage
+  --llm-provider   LLM provider: openai, anthropic
+  --add-example   Include example implementation
+  --llm-api-key   Provider API key
+```
+
+## Interactive Setup
+
+Running commands without arguments starts a CLI prompt for:
+1. Component selection
+2. LLM provider configuration
+3. API key setup
+4. Example code inclusion
+
+
