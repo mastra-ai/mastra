@@ -1,5 +1,38 @@
 # mastra
 
+## 0.4.0
+
+### Minor Changes
+
+- f9b6ab5: add Cerebras as a llm provider to create-mastra@latest
+
+### Patch Changes
+
+- 5052613: Added a new `mastra create --project-name <string>` flag so coder agents can create new Mastra projects with a one line command.
+- 1291e89: Add resizable-panel to playground-ui and use in agent and workflow sidebars
+- 1405e46: update the Groq model the create-mastra@latest sets
+- da8d9bb: Enable public dir copying if it exists
+- 9ba1e97: update playground ui for mastra and create-mastra
+- 5baf1ec: animate new traces
+- 65f2a4c: Add Mastra Docs MCP to the pnpm create mastra TUI with the option to install in Cursor or Windsurf
+- 9116d70: Handle the different workflow methods in workflow graph
+- 0709d99: add prop for dynamic empty text
+- Updated dependencies [cc7f392]
+- Updated dependencies [fc2f89c]
+- Updated dependencies [dfbb131]
+- Updated dependencies [f4854ee]
+- Updated dependencies [afaf73f]
+- Updated dependencies [0850b4c]
+- Updated dependencies [7bcfaee]
+- Updated dependencies [da8d9bb]
+- Updated dependencies [44631b1]
+- Updated dependencies [9116d70]
+- Updated dependencies [6e559a0]
+- Updated dependencies [5f43505]
+- Updated dependencies [61ad5a4]
+  - @mastra/deployer@0.2.1
+  - @mastra/core@0.6.1
+
 ## 0.4.0-alpha.2
 
 ### Patch Changes
