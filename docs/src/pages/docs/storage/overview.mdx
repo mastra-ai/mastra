@@ -5,65 +5,56 @@ description: Overview of Mastra's storage system and data persistence capabiliti
 
 # Storage System
 
-Mastra's storage system provides a unified interface for managing conversation data, workflow states, and evaluation metrics. The system abstracts away database implementation details, allowing you to focus on your application logic.
+Mastra's storage system provides a unified interface for managing conversation data, workflow states, and evaluation metrics. The system defines a common interface for different database implementations.
 
 ## Core Concepts
 
-### 1. Storage Abstraction
+### 1. Storage Interface
 
-The storage system provides a consistent interface regardless of the underlying database:
+The storage system implements a standard interface for all database types:
 
-- Write code once, run anywhere
-- Switch databases without code changes
-- Same behavior across environments
+- Common operations across databases
+- Database-independent implementation
+- Consistent behavior between environments
 
-[DIAGRAM SUGGESTION 1: Storage Abstraction Layer
+[DIAGRAM SUGGESTION 1: Interface Layer
 Show application code at the top, connecting to a "Storage Interface" layer in the middle, which then connects to different database implementations (LibSQL, PostgreSQL, Redis) at the bottom]
 
-### 2. Process Isolation
+### 2. Process Management
 
-Storage automatically handles process isolation:
+The storage system isolates data between processes:
 
-- Tests run in isolated memory
-- Development server has separate storage
-- Production shares a database
+- Test processes use isolated storage instances
+- Development processes use separate storage
+- Production processes share storage instances
 
 [DIAGRAM SUGGESTION 2: Process Isolation
 Show multiple processes (Test Runner, Dev Server, Production Server) each with their own storage instance, and how they interact with the databases]
 
 ### 3. Data Model
 
-The system manages four core types of data:
+The storage system defines four data structures:
 
-1. **Messages** - Conversation content
-2. **Threads** - Group related messages
-3. **Workflows** - Track execution state
-4. **Evaluations** - Store metrics
+1. **Messages**: Individual conversation entries and metadata
+2. **Threads**: Message collections and relationships
+3. **Workflows**: Process execution states
+4. **Evaluations**: Performance measurements
 
 [DIAGRAM SUGGESTION 3: Data Model
 Entity relationship diagram showing how Messages belong to Threads, how Workflows track state, and how Evaluations connect to everything]
 
-## Storage Providers
+## Storage Capabilities
 
-Choose the right storage for your needs:
+The storage system supports different database implementations for various environments:
 
-### Development (LibSQL)
-- In-memory for tests
-- File-based for persistence
-- SQLite compatibility
+### Database Operations
+- Data persistence and retrieval
+- Process-specific isolation
+- Transaction management
+- Concurrent access handling
 
-### Production (PostgreSQL)
-- Cloud-native deployments
-- ACID compliance
-- Connection pooling
-
-### Optional (Redis)
-- High-performance cache
-- Real-time operations
-- Distributed setups
-
-[DIAGRAM SUGGESTION 4: Provider Characteristics
-Compare the three providers across key metrics like Performance, Scalability, Development Experience, etc.]
+### Environment Support
+The same code works across environments. For example, you can use LibSQL's in-memory mode for testing, file-based mode for development, or PostgreSQL and Upstash Redis for production deployments.
 
 ## Data Schema
 
@@ -126,3 +117,10 @@ const mastra = new Mastra({
   },
 });
 ```
+
+## Next Steps
+
+For more details on specific storage implementations:
+- [LibSQL Storage](../reference/storage/libsql.mdx)
+- [PostgreSQL Storage](../reference/storage/postgresql.mdx)
+- [Upstash Storage](../reference/storage/upstash.mdx)
