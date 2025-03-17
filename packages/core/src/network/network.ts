@@ -23,7 +23,6 @@ export class AgentNetwork extends MastraBase {
   #instructions: string;
   #agents: Agent[];
   #model: LanguageModelV1;
-  #mastra?: Mastra;
   #routingAgent: Agent;
   #agentHistory: Record<
     string,
@@ -75,12 +74,16 @@ export class AgentNetwork extends MastraBase {
             // Extract the actions from the context
             const actions = context.actions;
 
+            console.log(`Executing ${actions.length} specialized agents`);
+
             // Execute each agent in parallel and collect results
             const results = await Promise.all(
               actions.map(action =>
                 this.executeAgent(action.agent, [{ role: 'user', content: action.input }], action.includeHistory),
               ),
             );
+
+            console.log(results);
 
             // Store the results in the agent history for future reference
             actions.forEach((action, index) => {
@@ -237,6 +240,8 @@ export class AgentNetwork extends MastraBase {
 
       // Generate a response from the agent
       const result = await agent.generate(messagesWithContext);
+
+      console.log(result);
 
       return result.text;
     } catch (err) {
