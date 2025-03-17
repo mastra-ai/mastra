@@ -1,5 +1,14 @@
 # @mastra/core
 
+## 0.6.1-alpha.2
+
+### Patch Changes
+
+- fc2f89c: Insert static payload into inputData
+- dfbb131: Fix after method on multiple passes
+- 0850b4c: Watch and resume per run
+- 9116d70: Handle the different workflow methods in workflow graph
+
 ## 0.6.1-alpha.1
 
 ### Patch Changes

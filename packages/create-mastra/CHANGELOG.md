@@ -1,5 +1,13 @@
 # create-mastra
 
+## 0.2.0-alpha.2
+
+### Patch Changes
+
+- 5baf1ec: animate new traces
+- 9116d70: Handle the different workflow methods in workflow graph
+- 0709d99: add prop for dynamic empty text
+
 ## 0.2.0-alpha.1
 
 ### Minor Changes
