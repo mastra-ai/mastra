@@ -75,3 +75,38 @@ jobs:
       - name: Check bundles
         working-directory: ./e2e-tests/pkg-outputs
         run: pnpm test
+
+  e2e-monorepo:
+    name: E2E monorepo
+    runs-on: ubuntu-latest
+    # Run on main repository or for trusted bot PRs
+    if: ${{ github.repository == 'mastra-ai/mastra' }} && ${{ !contains(github.event.pull_request.files.*.path, 'examples/') && !contains(github.event.pull_request.files.*.path, 'docs/') && !contains(github.event.pull_request.files.*.path, '.changeset/') && !contains(github.event.pull_request.files.*.path, 'generated-changesets/') }}
+    env:
+      TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
+      TURBO_TEAM: ${{ secrets.TURBO_TEAM }}
+      TURBO_REMOTE_ONLY: true
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        name: Install pnpm
+        with:
+          run_install: false
+
+      - name: Setup Node.js 20.x
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20.x
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install
+
+      - name: Build
+        run: pnpm turbo --filter "packages/core" --filter "packages/cli" build
+
+      - name: Test
+        working-directory: ./e2e-tests/monorepo
+        run: pnpm test

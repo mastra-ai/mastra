@@ -1,11 +1,18 @@
 import { it, describe, expect, afterAll } from 'vitest';
 import { rollup } from 'rollup';
 import { join } from 'path';
-import { fixturePath } from './scripts';
-import { existsSync } from 'fs';
-import { rm } from 'fs/promises';
+import { setupMonorepo } from './setup';
+import { mkdtemp, rm } from 'fs/promises';
+import { tmpdir } from 'os';
 
 describe('tsconfig paths', () => {
+  let fixturePath: string;
+
+  beforeAll(async () => {
+    fixturePath = await mkdtemp(join(tmpdir(), 'mastra-monorepo-test-'));
+    await setupMonorepo(fixturePath);
+  });
+
   afterAll(async () => {
     try {
       await rm(fixturePath, {
@@ -26,7 +33,8 @@ describe('tsconfig paths', () => {
     });
     let hasMappedPkg = false;
     for (const output of Object.values(result.output)) {
-      hasMappedPkg = hasMappedPkg || output.imports.includes('@/agents');
+      // @ts-expect-error - dont want to narrow the type
+      hasMappedPkg = hasMappedPkg || output.imports?.includes('@/agents');
     }
 
     expect(hasMappedPkg).toBeFalsy();
