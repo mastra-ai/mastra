@@ -44,7 +44,11 @@ jobs:
       - name: Install dependencies
         run: pnpm install
 
-      - name: Bump docs prerelease version
+      - name: Bump mcp-docs-server prerelease version
+        env:
+          GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}
+          # husky precommit runs linting and typechecking - those are handled by other GH actions already
+          HUSKY: 0
         run: |
           cd packages/mcp-docs-server
           pnpm version prerelease --preid alpha --no-git-tag-version
