@@ -350,11 +350,8 @@ export class CloudflareStore extends MastraStorage {
     We store an array of objects { id, score } as JSON under a dedicated key.
   ---------------------------------------------------------------------------*/
 
-  private async getSortedOrder(
-    tableName: TABLE_NAMES,
-    orderKey: string,
-  ): Promise<Array<{ id: string; score: number }>> {
-    const raw = await this.getKV(tableName, orderKey);
+  private async getSortedMessages(orderKey: string): Promise<Array<{ id: string; score: number }>> {
+    const raw = await this.getKV(TABLE_MESSAGES, orderKey);
     if (!raw) return [];
     try {
       const arr = JSON.parse(typeof raw === 'string' ? raw : JSON.stringify(raw));
@@ -391,12 +388,11 @@ export class CloudflareStore extends MastraStorage {
         messageIds.add(item.id);
         if (!item.withPreviousMessages && !item.withNextMessages) return;
 
-        const rank = await this.getRank(TABLE_MESSAGES, threadMessagesKey, item.id);
+        const rank = await this.getRank(threadMessagesKey, item.id);
         if (rank === null) return;
 
         if (item.withPreviousMessages) {
           const prevIds = await this.getRange(
-            TABLE_MESSAGES,
             threadMessagesKey,
             Math.max(0, rank - item.withPreviousMessages),
             rank - 1,
@@ -405,12 +401,7 @@ export class CloudflareStore extends MastraStorage {
         }
 
         if (item.withNextMessages) {
-          const nextIds = await this.getRange(
-            TABLE_MESSAGES,
-            threadMessagesKey,
-            rank + 1,
-            rank + item.withNextMessages,
-          );
+          const nextIds = await this.getRange(threadMessagesKey, rank + 1, rank + item.withNextMessages);
           nextIds.forEach(id => messageIds.add(id));
         }
       }),
@@ -422,7 +413,7 @@ export class CloudflareStore extends MastraStorage {
 
     try {
       const threadMessagesKey = this.getThreadMessagesKey(threadId);
-      const latestIds = await this.getLastN(TABLE_MESSAGES, threadMessagesKey, limit);
+      const latestIds = await this.getLastN(threadMessagesKey, limit);
       latestIds.forEach(id => messageIds.add(id));
     } catch (error) {
       console.log(`No message order found for thread ${threadId}, skipping latest messages`);
@@ -449,56 +440,94 @@ export class CloudflareStore extends MastraStorage {
     return messages.filter((msg): msg is MessageType & { _index?: number } => msg !== null);
   }
 
-  private async updateSortedOrder(
-    tableName: TABLE_NAMES,
+  /**
+   * Updates the sorted order for a given key. This operation is eventually consistent.
+   * Changes will be immediately visible at the Cloudflare location where they are made,
+   * but may take up to 60 seconds to propagate to other locations.
+   *
+   * Note: If you need true atomic operations or transaction support, consider using
+   * Durable Objects instead of KV storage.
+   */
+  // Queue for serializing sorted order updates
+  private updateQueue = new Map<string, Promise<void>>();
+
+  /**
+   * Updates the sorted order for a given key. This operation is eventually consistent.
+   * Changes will be immediately visible at the Cloudflare location where they are made,
+   * but may take up to 60 seconds to propagate to other locations.
+   *
+   * Note: Operations on the same orderKey are serialized using a queue to prevent
+   * concurrent updates from conflicting with each other.
+   */
+  private async updateSortedMessages(
     orderKey: string,
     newEntries: Array<{ id: string; score: number }>,
   ): Promise<void> {
-    try {
-      const currentOrder = await this.getSortedOrder(tableName, orderKey);
+    // Get the current promise chain or create a new one
+    const currentPromise = this.updateQueue.get(orderKey) || Promise.resolve();
 
-      // Create a map for faster lookups
-      const orderMap = new Map(currentOrder.map(entry => [entry.id, entry]));
+    // Create the next promise in the chain
+    const nextPromise = currentPromise.then(async () => {
+      try {
+        const currentOrder = await this.getSortedMessages(orderKey);
 
-      // Update or add new entries
-      for (const entry of newEntries) {
-        orderMap.set(entry.id, entry);
+        // Create a map for faster lookups
+        const orderMap = new Map(currentOrder.map(entry => [entry.id, entry]));
+
+        // Update or add new entries
+        for (const entry of newEntries) {
+          orderMap.set(entry.id, entry);
+        }
+
+        // Convert back to array and sort
+        const updatedOrder = Array.from(orderMap.values()).sort((a, b) => a.score - b.score);
+
+        // Use putKV for consistent serialization across both APIs
+        await this.putKV({
+          tableName: TABLE_MESSAGES,
+          key: orderKey,
+          value: JSON.stringify(updatedOrder),
+        });
+      } catch (error) {
+        this.logger.error(`Error updating sorted order for key ${orderKey}:`, { error });
+        throw error; // Let caller handle the error
+      } finally {
+        // Clean up the queue if this was the last operation
+        if (this.updateQueue.get(orderKey) === nextPromise) {
+          this.updateQueue.delete(orderKey);
+        }
       }
+    });
 
-      // Convert back to array and sort
-      const updatedOrder = Array.from(orderMap.values()).sort((a, b) => a.score - b.score);
+    // Update the queue with the new promise
+    this.updateQueue.set(orderKey, nextPromise);
 
-      // Store sorted order
-      await this.putKV({ tableName, key: orderKey, value: JSON.stringify(updatedOrder) });
-    } catch (error) {
-      this.logger.error(`Error updating sorted order for key ${orderKey}:`, { error });
-      // Create a new sorted order if it doesn't exist
-      await this.putKV({ tableName, key: orderKey, value: JSON.stringify(newEntries) });
-    }
+    // Wait for our turn and handle any errors
+    return nextPromise;
   }
 
-  private async getRank(tableName: TABLE_NAMES, orderKey: string, id: string): Promise<number | null> {
-    const order = await this.getSortedOrder(tableName, orderKey);
+  private async getRank(orderKey: string, id: string): Promise<number | null> {
+    const order = await this.getSortedMessages(orderKey);
     const index = order.findIndex(item => item.id === id);
     return index >= 0 ? index : null;
   }
 
-  private async getRange(tableName: TABLE_NAMES, orderKey: string, start: number, end: number): Promise<string[]> {
-    const order = await this.getSortedOrder(tableName, orderKey);
+  private async getRange(orderKey: string, start: number, end: number): Promise<string[]> {
+    const order = await this.getSortedMessages(orderKey);
     const actualStart = start < 0 ? Math.max(0, order.length + start) : start;
     const actualEnd = end < 0 ? order.length + end : Math.min(end, order.length - 1);
     const sliced = order.slice(actualStart, actualEnd + 1);
     return sliced.map(item => item.id);
   }
 
-  private async getLastN(tableName: TABLE_NAMES, orderKey: string, n: number): Promise<string[]> {
+  private async getLastN(orderKey: string, n: number): Promise<string[]> {
     // Reuse getRange with negative indexing
-    return this.getRange(tableName, orderKey, -n, -1);
+    return this.getRange(orderKey, -n, -1);
   }
 
-  private async getFullOrder(tableName: TABLE_NAMES, orderKey: string): Promise<string[]> {
+  private async getFullOrder(orderKey: string): Promise<string[]> {
     // Get the full range in ascending order (oldest to newest)
-    return this.getRange(tableName, orderKey, 0, -1);
+    return this.getRange(orderKey, 0, -1);
   }
 
   private getKey<T extends TABLE_NAMES>(tableName: T, record: Record<string, string>): string {
@@ -827,7 +856,7 @@ export class CloudflareStore extends MastraStorage {
 
       // Get all message keys for this thread first
       const messageKeys = await this.listKV(TABLE_MESSAGES);
-      const threadMessageKeys = messageKeys.filter(key => key.name.startsWith(`${TABLE_MESSAGES}:${threadId}:`));
+      const threadMessageKeys = messageKeys.filter(key => key.name.includes(`${TABLE_MESSAGES}:${threadId}:`));
 
       // Delete all messages and their order atomically
       await Promise.all([
@@ -922,7 +951,7 @@ export class CloudflareStore extends MastraStorage {
             // Update message order using _index or timestamps
             const orderKey = this.getThreadMessagesKey(threadId);
             const entries = await this.updateSorting(threadMessages);
-            await this.updateSortedOrder(TABLE_MESSAGES, orderKey, entries);
+            await this.updateSortedMessages(orderKey, entries);
           } catch (error) {
             const errorMessage = error instanceof Error ? error.message : String(error);
             this.logger.error(`Error processing messages for thread ${threadId}: ${errorMessage}`);
@@ -972,7 +1001,7 @@ export class CloudflareStore extends MastraStorage {
       // Sort messages
       try {
         const threadMessagesKey = this.getThreadMessagesKey(threadId);
-        const messageOrder = await this.getFullOrder(TABLE_MESSAGES, threadMessagesKey);
+        const messageOrder = await this.getFullOrder(threadMessagesKey);
         const orderMap = new Map(messageOrder.map((id, index) => [id, index]));
 
         messages.sort((a, b) => {

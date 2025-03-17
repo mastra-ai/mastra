@@ -532,7 +532,7 @@ describe('CloudflareStore Workers Binding', () => {
       // Verify order is maintained based on insertion order
       const orderKey = store['getThreadMessagesKey'](thread.id);
       const order = await retryUntil(
-        async () => await store['getFullOrder'](TABLE_MESSAGES, orderKey),
+        async () => await store['getFullOrder'](orderKey),
         order => order.length === messages.length,
       );
 
@@ -558,7 +558,7 @@ describe('CloudflareStore Workers Binding', () => {
       const orderKey = store['getThreadMessagesKey'](thread.id);
       const order = await retryUntil(
         async () => {
-          const currentOrder = await store['getFullOrder'](TABLE_MESSAGES, orderKey);
+          const currentOrder = await store['getFullOrder'](orderKey);
           console.log('Current order:', currentOrder);
           // Verify both length and content
           return currentOrder.length === messages.length && currentOrder.every(id => messages.some(m => m.id === id))
@@ -582,8 +582,7 @@ describe('CloudflareStore Workers Binding', () => {
 
       // Update scores to reverse order
       const orderKey = store['getThreadMessagesKey'](thread.id);
-      await store['updateSortedOrder'](
-        TABLE_MESSAGES,
+      await store['updateSortedMessages'](
         orderKey,
         messages.map((msg, i) => ({
           id: msg.id,
@@ -593,7 +592,7 @@ describe('CloudflareStore Workers Binding', () => {
 
       // Verify new order
       const order = await retryUntil(
-        async () => await store['getFullOrder'](TABLE_MESSAGES, orderKey),
+        async () => await store['getFullOrder'](orderKey),
         order => order[0] === messages?.[messages.length - 1]?.id,
       );
       expect(order).toEqual(messages.map(m => m.id).reverse());
@@ -631,7 +630,7 @@ describe('CloudflareStore Workers Binding', () => {
       const orderKey = store['getThreadMessagesKey'](thread.id);
       const order = await retryUntil(
         async () => {
-          const order = await store['getFullOrder'](TABLE_MESSAGES, orderKey);
+          const order = await store['getFullOrder'](orderKey);
           return order;
         },
         order => order.length > 0,
@@ -640,21 +639,21 @@ describe('CloudflareStore Workers Binding', () => {
 
       // Verify we can get specific ranges
       const firstTwo = await retryUntil(
-        async () => await store['getRange'](TABLE_MESSAGES, orderKey, 0, 1),
+        async () => await store['getRange'](orderKey, 0, 1),
         order => order.length > 0,
       );
 
       expect(firstTwo.length).toBe(2);
 
       const lastTwo = await retryUntil(
-        async () => await store['getLastN'](TABLE_MESSAGES, orderKey, 2),
+        async () => await store['getLastN'](orderKey, 2),
         order => order.length > 0,
       );
       expect(lastTwo.length).toBe(2);
 
       // Verify message ranks
       const firstMessageRank = await retryUntil(
-        async () => await store['getRank'](TABLE_MESSAGES, orderKey, messages[0].id),
+        async () => await store['getRank'](orderKey, messages[0].id),
         order => order !== null,
       );
       expect(firstMessageRank).toBe(0);
@@ -980,7 +979,7 @@ describe('CloudflareStore Workers Binding', () => {
 
       // Order should be immediately consistent
       const orderKey = store['getThreadMessagesKey'](thread.id);
-      const order = await store['getFullOrder'](TABLE_MESSAGES, orderKey);
+      const order = await store['getFullOrder'](orderKey);
 
       // Verify correct timestamp-based ordering
       const expectedOrder = messages
@@ -1003,20 +1002,18 @@ describe('CloudflareStore Workers Binding', () => {
 
       // Perform multiple concurrent score updates
       await Promise.all([
-        store['updateSortedOrder'](
-          TABLE_MESSAGES,
+        store['updateSortedMessages'](
           orderKey,
           messages.map((msg, i) => ({ id: msg.id, score: i })),
         ),
-        store['updateSortedOrder'](
-          TABLE_MESSAGES,
+        store['updateSortedMessages'](
           orderKey,
           messages.map((msg, i) => ({ id: msg.id, score: messages.length - 1 - i })),
         ),
       ]);
 
       // Order should be immediately consistent
-      const order = await store['getFullOrder'](TABLE_MESSAGES, orderKey);
+      const order = await store['getFullOrder'](orderKey);
 
       // With atomic operations, the last write should win consistently
       const expectedOrder = messages
@@ -1039,7 +1036,7 @@ describe('CloudflareStore Workers Binding', () => {
       // Verify messages exist
       const orderKey = store['getThreadMessagesKey'](thread.id);
       const initialOrder = await retryUntil(
-        async () => await store['getFullOrder'](TABLE_MESSAGES, orderKey),
+        async () => await store['getFullOrder'](orderKey),
         messages => messages.length > 0,
       );
       expect(initialOrder).toHaveLength(messages.length);
@@ -1051,7 +1048,7 @@ describe('CloudflareStore Workers Binding', () => {
 
       // Verify messages are cleaned up
       const finalOrder = await retryUntil(
-        async () => await store['getFullOrder'](TABLE_MESSAGES, orderKey),
+        async () => await store['getFullOrder'](orderKey),
         order => order.length === 0,
       );
       expect(finalOrder).toHaveLength(0);
@@ -1112,7 +1109,7 @@ describe('CloudflareStore Workers Binding', () => {
       // Verify message order is cleaned up
       const orderKey = store['getThreadMessagesKey'](thread.id);
       const order = await retryUntil(
-        async () => await store['getFullOrder'](TABLE_MESSAGES, orderKey),
+        async () => await store['getFullOrder'](orderKey),
         order => order.length === 0,
       );
       expect(order).toHaveLength(0);
@@ -1189,7 +1186,7 @@ describe('CloudflareStore Workers Binding', () => {
       const orderKey = store['getThreadMessagesKey'](thread.id);
       const order = await retryUntil(
         async () => {
-          const currentOrder = await store['getFullOrder'](TABLE_MESSAGES, orderKey);
+          const currentOrder = await store['getFullOrder'](orderKey);
 
           console.log('Current order:', currentOrder);
           // Check both length and content
@@ -1271,13 +1268,11 @@ describe('CloudflareStore Workers Binding', () => {
       // Perform multiple concurrent updates
       const orderKey = store['getThreadMessagesKey'](thread.id);
       await Promise.all([
-        store['updateSortedOrder'](
-          TABLE_MESSAGES,
+        store['updateSortedMessages'](
           orderKey,
           messages.map((msg, i) => ({ id: msg.id, score: i })),
         ),
-        store['updateSortedOrder'](
-          TABLE_MESSAGES,
+        store['updateSortedMessages'](
           orderKey,
           messages.map((msg, i) => ({ id: msg.id, score: messages.length - 1 - i })),
         ),
@@ -1285,7 +1280,7 @@ describe('CloudflareStore Workers Binding', () => {
 
       // Verify order is consistent
       const order = await retryUntil(
-        async () => await store['getFullOrder'](TABLE_MESSAGES, orderKey),
+        async () => await store['getFullOrder'](orderKey),
         order => order.length === messages.length,
       );
       expect(order.length).toBe(messages.length);
