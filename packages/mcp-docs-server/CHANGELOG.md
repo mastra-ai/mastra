@@ -1,5 +1,11 @@
 # @mastra/mcp-docs-server
 
+## 0.0.1-alpha.3
+
+### Patch Changes
+
+- 328924e: Fixed esm imports
+
 ## 0.0.1-alpha.2
 
 ### Patch Changes
