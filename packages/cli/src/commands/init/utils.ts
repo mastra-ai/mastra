@@ -14,7 +14,7 @@ import { logger } from '../../utils/logger';
 
 const exec = util.promisify(child_process.exec);
 
-export type LLMProvider = 'openai' | 'anthropic' | 'groq' | 'google';
+export type LLMProvider = 'openai' | 'anthropic' | 'groq' | 'google' | 'cerebras';
 export type Components = 'agents' | 'workflows' | 'tools';
 
 export const getAISDKPackage = (llmProvider: LLMProvider) => {
@@ -27,6 +27,8 @@ export const getAISDKPackage = (llmProvider: LLMProvider) => {
       return '@ai-sdk/groq';
     case 'google':
       return '@ai-sdk/google';
+    case 'cerebras':
+      return '@ai-sdk/cerebras';
     default:
       return '@ai-sdk/openai';
   }
@@ -44,12 +46,14 @@ export const getProviderImportAndModelItem = (llmProvider: LLMProvider) => {
     modelItem = `anthropic('claude-3-5-sonnet-20241022')`;
   } else if (llmProvider === 'groq') {
     providerImport = `import { groq } from '${getAISDKPackage(llmProvider)}';`;
-    modelItem = `groq('llama-3.3-70b-versatile`;
+    modelItem = `groq('llama-3.3-70b-versatile')`;
   } else if (llmProvider === 'google') {
     providerImport = `import { google } from '${getAISDKPackage(llmProvider)}';`;
     modelItem = `google('gemini-1.5-pro-latest')`;
+  } else if (llmProvider === 'cerebras') {
+    providerImport = `import { cerebras } from '${getAISDKPackage(llmProvider)}';`;
+    modelItem = `cerebras('llama-3.3-70b')`;
   }
-
   return { providerImport, modelItem };
 };
 
@@ -427,6 +431,9 @@ export const getAPIKey = async (provider: LLMProvider) => {
     case 'google':
       key = 'GOOGLE_GENERATIVE_AI_API_KEY';
       return key;
+    case 'cerebras':
+      key = 'CEREBRAS_API_KEY';
+      return key;
     default:
       return key;
   }
@@ -508,6 +515,7 @@ export const interactivePrompt = async () => {
             { value: 'anthropic', label: 'Anthropic' },
             { value: 'groq', label: 'Groq' },
             { value: 'google', label: 'Google' },
+            { value: 'cerebras', label: 'Cerebras' },
           ],
         }),
       llmApiKey: async ({ results: { llmProvider } }) => {

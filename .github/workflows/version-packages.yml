@@ -44,13 +44,12 @@ jobs:
       - name: Install dependencies
         run: pnpm install
 
-      - name: Build
-        run: pnpm build:packages
-
       - name: Create Release Pull Request
         uses: changesets/action@v1
         env:
           GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}
+          # husky precommit runs linting and typechecking - those are handled by other GH actions already
+          HUSKY: 0
         with:
           title: 'chore: version packages'
           commit: 'chore: version packages'

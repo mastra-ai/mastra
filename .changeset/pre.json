@@ -129,12 +129,28 @@
     "@mastra/voice-murf": "0.1.4",
     "@mastra/voice-openai": "0.1.5",
     "@mastra/voice-playai": "0.1.4",
-    "@mastra/voice-speechify": "0.1.4"
+    "@mastra/voice-speechify": "0.1.4",
+    "@mastra/voice-openai-realtime": "0.0.1-alpha.1"
   },
   "changesets": [
+    "brave-parrots-knock",
+    "common-lines-taste",
     "cool-papers-check",
+    "deep-waves-remain",
+    "long-lions-stare",
     "loud-needles-dress",
+    "loud-webs-march",
+    "lovely-toes-stare",
     "purple-roses-retire",
-    "seven-stars-mate"
+    "ready-signs-buy",
+    "real-moments-win",
+    "seven-stars-mate",
+    "shy-chicken-retire",
+    "slimy-laws-attack",
+    "tender-paws-heal",
+    "twelve-geese-fail",
+    "vast-corners-deny",
+    "violet-spoons-stop",
+    "young-wasps-flash"
   ]
 }

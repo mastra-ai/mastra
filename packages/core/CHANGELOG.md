@@ -1,5 +1,16 @@
 # @mastra/core
 
+## 0.6.1-alpha.1
+
+### Patch Changes
+
+- f4854ee: Fix else branch execution when if-branch has loops
+- afaf73f: Add fix for vercel tools and optional instructions
+- 44631b1: Fix after usage with skipped conditions on the awaited steps
+- 6e559a0: Update Voice for realtime providers
+- 5f43505: feat: OpenAI realtime voice provider for speech to speech communication
+  Update voice speaking event type
+
 ## 0.6.1-alpha.0
 
 ### Patch Changes

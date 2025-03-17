@@ -108,6 +108,8 @@ export class Agent<
 
     if (config.voice) {
       this.voice = config.voice;
+      this.voice?.addTools(this.tools);
+      this.voice?.updateConfig({ instructions: config.instructions });
     }
   }
 
@@ -641,6 +643,7 @@ export class Agent<
   }
 
   __primitive({
+    instructions,
     messages,
     context,
     threadId,
@@ -649,6 +652,7 @@ export class Agent<
     runId,
     toolsets,
   }: {
+    instructions?: string;
     toolsets?: ToolsetsInput;
     resourceId?: string;
     threadId?: string;
@@ -665,7 +669,7 @@ export class Agent<
 
         const systemMessage: CoreMessage = {
           role: 'system',
-          content: `${this.instructions}.`,
+          content: instructions || `${this.instructions}.`,
         };
 
         let coreMessages = messages;
@@ -794,7 +798,7 @@ export class Agent<
               runId: runIdToUse,
               metric,
               agentName: this.name,
-              instructions: this.instructions,
+              instructions: instructions || this.instructions,
             });
           }
         }
@@ -814,6 +818,7 @@ export class Agent<
   async generate<Z extends ZodSchema | JSONSchema7 | undefined = undefined>(
     messages: string | string[] | CoreMessage[],
     {
+      instructions,
       context,
       threadId: threadIdInFn,
       memoryOptions,
@@ -859,6 +864,7 @@ export class Agent<
     const runIdToUse = runId || randomUUID();
 
     const { before, after } = this.__primitive({
+      instructions,
       messages: messagesToUse,
       context,
       threadId: threadIdInFn,
@@ -956,6 +962,7 @@ export class Agent<
   async stream<Z extends ZodSchema | JSONSchema7 | undefined = undefined>(
     messages: string | string[] | CoreMessage[],
     {
+      instructions,
       context,
       threadId: threadIdInFn,
       memoryOptions,
@@ -1000,6 +1007,7 @@ export class Agent<
     }
 
     const { before, after } = this.__primitive({
+      instructions,
       messages: messagesToUse,
       context,
       threadId: threadIdInFn,
@@ -1115,6 +1123,7 @@ export class Agent<
    * @param input Text or text stream to convert to speech
    * @param options Speech options including speaker and provider-specific options
    * @returns Audio stream
+   * @deprecated Use agent.voice.speak() instead
    */
   async speak(
     input: string | NodeJS.ReadableStream,
@@ -1122,10 +1131,13 @@ export class Agent<
       speaker?: string;
       [key: string]: any;
     },
-  ): Promise<NodeJS.ReadableStream> {
+  ): Promise<NodeJS.ReadableStream | void> {
     if (!this.voice) {
       throw new Error('No voice provider configured');
     }
+
+    this.logger.warn('Warning: agent.speak() is deprecated. Please use agent.voice.speak() instead.');
+
     try {
       return this.voice.speak(input, options);
     } catch (e) {
@@ -1141,16 +1153,20 @@ export class Agent<
    * @param audioStream Audio stream to transcribe
    * @param options Provider-specific transcription options
    * @returns Text or text stream
+   * @deprecated Use agent.voice.listen() instead
    */
   async listen(
     audioStream: NodeJS.ReadableStream,
     options?: {
       [key: string]: any;
     },
-  ): Promise<string | NodeJS.ReadableStream> {
+  ): Promise<string | NodeJS.ReadableStream | void> {
     if (!this.voice) {
       throw new Error('No voice provider configured');
     }
+
+    this.logger.warn('Warning: agent.listen() is deprecated. Please use agent.voice.listen() instead');
+
     try {
       return this.voice.listen(audioStream, options);
     } catch (e) {
@@ -1165,11 +1181,14 @@ export class Agent<
    * Get a list of available speakers from the configured voice provider
    * @throws {Error} If no voice provider is configured
    * @returns {Promise<Array<{voiceId: string}>>} List of available speakers
+   * @deprecated Use agent.voice.getSpeakers() instead
    */
   async getSpeakers() {
     if (!this.voice) {
       throw new Error('No voice provider configured');
     }
+
+    this.logger.warn('Warning: agent.getSpeakers() is deprecated. Please use agent.voice.getSpeakers() instead.');
 
     try {
       return await this.voice.getSpeakers();
