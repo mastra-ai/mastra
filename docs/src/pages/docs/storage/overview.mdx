@@ -3,15 +3,15 @@ title: Storage in Mastra | Mastra Docs
 description: Overview of Mastra's storage system and data persistence capabilities.
 ---
 
-# Storage System
+# Mastra Storage
 
-Mastra's storage system provides a unified interface for managing conversation data, workflow states, and evaluation metrics. The system defines a common interface for different database implementations.
+Mastra's storage system provides a unified interface for managing conversation data, workflow states, traces, and evaluation datasets. Mastra defines a common interface for different database providers.
 
 ## Core Concepts
 
 ### 1. Storage Interface
 
-The storage system implements a standard interface for all database types:
+Mastra storage implements a standard interface for interacting with database types:
 
 - Common operations across databases
 - Database-independent implementation
@@ -102,7 +102,7 @@ CREATE TABLE evaluations (
 );
 ```
 
-[DIAGRAM SUGGESTION 5: Schema Relationships
+[DIAGRAM SUGGESTION 4: Schema Relationships
 Visual representation of the database schema showing relationships between tables]
 
 ## Configuration
