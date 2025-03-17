@@ -13,16 +13,25 @@ import '@xyflow/react/dist/style.css';
 import { contructNodesAndEdges } from './utils';
 import { WorkflowConditionNode } from './workflow-condition-node';
 import { WorkflowDefaultNode } from './workflow-default-node';
+import { WorkflowAfterNode } from './workflow-after-node';
+import { WorkflowLoopResultNode } from './workflow-loop-result-node';
 
 export function WorkflowGraphInner({ workflow }: { workflow: Workflow }) {
-  const { nodes: initialNodes, edges: initialEdges } = contructNodesAndEdges(workflow);
+  const { nodes: initialNodes, edges: initialEdges } = contructNodesAndEdges({
+    stepGraph: workflow.serializedStepGraph,
+    stepSubscriberGraph: workflow.serializedStepSubscriberGraph,
+  });
   const [nodes, _, onNodesChange] = useNodesState(initialNodes);
   const [edges] = useEdgesState(initialEdges);
 
   const nodeTypes = {
     'default-node': WorkflowDefaultNode,
     'condition-node': WorkflowConditionNode,
+    'after-node': WorkflowAfterNode,
+    'loop-result-node': WorkflowLoopResultNode,
   };
+
+  console.log('nodes===>', nodes);
 
   return (
     <div className="w-full h-full">
