@@ -1389,7 +1389,9 @@ describe('Workflow', async () => {
               step1: { status: 'success', output: { result: 'success1' } },
               step4: { status: 'success', output: { result: 'success4' } },
             },
-            name: 'Dero Israel',
+            inputData: {
+              name: 'Dero Israel',
+            },
           },
           suspend: expect.any(Function),
           runId: expect.any(String),
