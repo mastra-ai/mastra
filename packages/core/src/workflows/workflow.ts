@@ -493,8 +493,6 @@ export class Workflow<
       name: this.name,
       mastra: this.#mastra,
       retryConfig: this.#retryConfig,
-      loadWorkflowSnapshot: this.#loadWorkflowSnapshot.bind(this),
-      makeStepDef: this.#makeStepDef.bind(this),
       steps: this.#steps,
       runId,
       stepGraph: this.#stepGraph,
@@ -813,8 +811,6 @@ export class Workflow<
         stepGraph: this.#stepGraph,
         stepSubscriberGraph: this.#stepSubscriberGraph,
         onStepTransition: this.#onStepTransition,
-        makeStepDef: this.#makeStepDef.bind(this),
-        loadWorkflowSnapshot: this.#loadWorkflowSnapshot.bind(this),
         runId,
         onFinish: () => {
           this.#runs.delete(run.runId);
