@@ -1,4 +1,5 @@
 import type { Span } from '@opentelemetry/api';
+import { context as otlpContext, trace } from '@opentelemetry/api';
 import type { Snapshot } from 'xstate';
 import type { z } from 'zod';
 
@@ -7,12 +8,27 @@ import type { Logger } from '../logger';
 import type { Mastra } from '../mastra';
 import { Machine } from './machine';
 import type { Step } from './step';
-import type { RetryConfig, StepAction, StepGraph, WorkflowContext, WorkflowRunResult, WorkflowRunState } from './types';
-import { getActivePathsAndStatus, mergeChildValue } from './utils';
+import type {
+  ActionContext,
+  RetryConfig,
+  StepAction,
+  StepDef,
+  StepGraph,
+  WorkflowContext,
+  WorkflowRunResult,
+  WorkflowRunState,
+} from './types';
+import { getActivePathsAndStatus, mergeChildValue, updateStepInHierarchy } from './utils';
 
 export interface WorkflowResultReturn<T extends z.ZodType<any>, TSteps extends Step<any, any, any>[]> {
   runId: string;
   start: (props?: { triggerData?: z.infer<T> } | undefined) => Promise<WorkflowRunResult<T, TSteps>>;
+  watch: (onTransition: (state: WorkflowRunState) => void) => () => void;
+  resume: (props: {
+    stepId: string;
+    context?: Record<string, any>;
+  }) => Promise<Omit<WorkflowRunResult<T, TSteps>, 'runId'> | undefined>;
+  resumeWithEvent: (eventName: string, data: any) => Promise<Omit<WorkflowRunResult<T, TSteps>, 'runId'> | undefined>;
 }
 
 export class WorkflowInstance<TSteps extends Step<any, any, any>[] = any, TTriggerSchema extends z.ZodObject<any> = any>
@@ -29,6 +45,7 @@ export class WorkflowInstance<TSteps extends Step<any, any, any>[] = any, TTrigg
   #stepSubscriberGraph: Record<string, StepGraph> = {};
 
   #retryConfig?: RetryConfig;
+  events?: Record<string, { schema: z.ZodObject<any> }>;
 
   #runId: string;
   #state: any | null = null;
@@ -51,8 +68,9 @@ export class WorkflowInstance<TSteps extends Step<any, any, any>[] = any, TTrigg
     mastra,
     stepGraph,
     stepSubscriberGraph,
-    onStepTransition,
     onFinish,
+    onStepTransition,
+    events,
   }: {
     name: string;
     logger: Logger;
@@ -62,8 +80,9 @@ export class WorkflowInstance<TSteps extends Step<any, any, any>[] = any, TTrigg
     runId?: string;
     stepGraph: StepGraph;
     stepSubscriberGraph: Record<string, StepGraph>;
-    onStepTransition: Set<(state: WorkflowRunState) => void | Promise<void>>;
     onFinish?: () => void;
+    onStepTransition?: Set<(state: WorkflowRunState) => void | Promise<void>>;
+    events?: Record<string, { schema: z.ZodObject<any> }>;
   }) {
     this.name = name;
     this.logger = logger;
@@ -76,9 +95,11 @@ export class WorkflowInstance<TSteps extends Step<any, any, any>[] = any, TTrigg
     this.#mastra = mastra;
 
     this.#runId = runId ?? crypto.randomUUID();
-    this.#onStepTransition = onStepTransition;
+
     this.#onFinish = onFinish;
 
+    this.events = events;
+    onStepTransition?.forEach(handler => this.#onStepTransition.add(handler));
     this.#initializeCompoundDependencies();
   }
 
@@ -92,6 +113,14 @@ export class WorkflowInstance<TSteps extends Step<any, any, any>[] = any, TTrigg
 
   get executionSpan() {
     return this.#executionSpan;
+  }
+
+  watch(onTransition: (state: WorkflowRunState) => void): () => void {
+    this.#onStepTransition.add(onTransition);
+
+    return () => {
+      this.#onStepTransition.delete(onTransition);
+    };
   }
 
   async start({ triggerData }: { triggerData?: z.infer<TTriggerSchema> } = {}) {
@@ -400,6 +429,113 @@ export class WorkflowInstance<TSteps extends Step<any, any, any>[] = any, TTrigg
     };
   }
 
+  async resumeWithEvent(eventName: string, data: any) {
+    const event = this.events?.[eventName];
+    if (!event) {
+      throw new Error(`Event ${eventName} not found`);
+    }
+
+    const results = await this.resume({ stepId: `__${eventName}_event`, context: { resumedEvent: data } });
+    return results;
+  }
+
+  async resume({ stepId, context: resumeContext }: { stepId: string; context?: Record<string, any> }) {
+    // NOTE: setTimeout(0) makes sure that if the workflow is still running
+    // we'll wait for any state changes to be applied before resuming
+    await new Promise(resolve => setTimeout(resolve, 0));
+    return this._resume({ stepId, context: resumeContext });
+  }
+
+  async #loadWorkflowSnapshot(runId: string) {
+    if (!this.#mastra?.storage) {
+      this.logger.debug('Snapshot cannot be loaded. Mastra engine is not initialized', { runId });
+      return;
+    }
+
+    await this.persistWorkflowSnapshot();
+
+    return this.#mastra.getStorage()?.loadWorkflowSnapshot({ runId, workflowName: this.name });
+  }
+
+  async _resume({ stepId, context: resumeContext }: { stepId: string; context?: Record<string, any> }) {
+    const snapshot = await this.#loadWorkflowSnapshot(this.runId);
+
+    if (!snapshot) {
+      throw new Error(`No snapshot found for workflow run ${this.runId}`);
+    }
+
+    let parsedSnapshot;
+    try {
+      parsedSnapshot = typeof snapshot === 'string' ? JSON.parse(snapshot as unknown as string) : snapshot;
+    } catch (error) {
+      this.logger.debug('Failed to parse workflow snapshot for resume', { error, runId: this.runId });
+      throw new Error('Failed to parse workflow snapshot');
+    }
+
+    const origSnapshot = parsedSnapshot;
+    const startStepId = parsedSnapshot.suspendedSteps?.[stepId];
+    if (!startStepId) {
+      return;
+    }
+    parsedSnapshot =
+      startStepId === 'trigger'
+        ? parsedSnapshot
+        : { ...parsedSnapshot?.childStates?.[startStepId], ...{ suspendedSteps: parsedSnapshot.suspendedSteps } };
+    if (!parsedSnapshot) {
+      throw new Error(`No snapshot found for step: ${stepId} starting at ${startStepId}`);
+    }
+
+    // Update context if provided
+
+    if (resumeContext) {
+      parsedSnapshot.context.steps[stepId] = {
+        status: 'success',
+        output: {
+          ...(parsedSnapshot?.context?.steps?.[stepId]?.output || {}),
+          ...resumeContext,
+        },
+      };
+    }
+
+    // Reattach the step handler
+    // TODO: need types
+    if (parsedSnapshot.children) {
+      Object.entries(parsedSnapshot.children).forEach(([_childId, child]: [string, any]) => {
+        if (child.snapshot?.input?.stepNode) {
+          // Reattach handler
+          const stepDef = this.#makeStepDef(child.snapshot.input.stepNode.step.id);
+          child.snapshot.input.stepNode.config = {
+            ...child.snapshot.input.stepNode.config,
+            ...stepDef,
+          };
+
+          // Sync the context
+          child.snapshot.input.context = parsedSnapshot.context;
+        }
+      });
+    }
+
+    parsedSnapshot.value = updateStepInHierarchy(parsedSnapshot.value, stepId);
+
+    // Reset attempt count
+    if (parsedSnapshot.context?.attempts) {
+      parsedSnapshot.context.attempts[stepId] =
+        this.#steps[stepId]?.retryConfig?.attempts || this.#retryConfig?.attempts || 0;
+    }
+
+    this.logger.debug('Resuming workflow with updated snapshot', {
+      updatedSnapshot: parsedSnapshot,
+      runId: this.runId,
+      stepId,
+    });
+
+    return this.execute({
+      snapshot: parsedSnapshot,
+      stepId,
+      resumeData: resumeContext,
+    });
+  }
+
   #initializeCompoundDependencies() {
     Object.keys(this.#stepSubscriberGraph).forEach(stepKey => {
       if (this.#isCompoundKey(stepKey)) {
@@ -413,6 +549,73 @@ export class WorkflowInstance<TSteps extends Step<any, any, any>[] = any, TTrigg
         );
       }
     });
+  }
+
+  #makeStepDef<TStepId extends TSteps[number]['id'], TSteps extends Step<any, any, any>[]>(
+    stepId: TStepId,
+  ): StepDef<TStepId, TSteps, any, any>[TStepId] {
+    const executeStep = (
+      handler: (data: any) => Promise<(data: any) => void>,
+      spanName: string,
+      attributes?: Record<string, string>,
+    ) => {
+      return async (data: any) => {
+        return await otlpContext.with(trace.setSpan(otlpContext.active(), this.#executionSpan as Span), async () => {
+          if (this.#mastra?.getTelemetry()) {
+            return this.#mastra.getTelemetry()?.traceMethod(handler, {
+              spanName,
+              attributes,
+            })(data);
+          } else {
+            return handler(data);
+          }
+        });
+      };
+    };
+
+    // NOTE: destructuring rest breaks some injected runtime fields, like runId
+    // TODO: investigate why that is exactly
+    const handler = async ({ context, ...rest }: ActionContext<TSteps[number]['inputSchema']>) => {
+      const targetStep = this.#steps[stepId];
+      if (!targetStep) throw new Error(`Step not found`);
+
+      const { payload = {}, execute = async () => {} } = targetStep;
+
+      // Merge static payload with dynamically resolved variables
+      // Variables take precedence over payload values
+      const mergedData = {
+        ...(payload as {}),
+        ...context,
+      };
+
+      // Only trace if telemetry is available and action exists
+      const finalAction = this.#mastra?.getTelemetry()
+        ? executeStep(execute, `workflow.${this.name}.action.${stepId}`, {
+            componentName: this.name,
+            runId: rest.runId as string,
+          })
+        : execute;
+
+      return finalAction ? await finalAction({ context: mergedData, ...rest }) : {};
+    };
+
+    // Only trace handler if telemetry is available
+
+    const finalHandler = ({ context, ...rest }: ActionContext<TSteps[number]['inputSchema']>) => {
+      if (this.#executionSpan) {
+        return executeStep(handler, `workflow.${this.name}.step.${stepId}`, {
+          componentName: this.name,
+          runId: rest?.runId as string,
+        })({ context, ...rest });
+      }
+
+      return handler({ context, ...rest });
+    };
+
+    return {
+      handler: finalHandler,
+      data: {},
+    };
   }
 
   #isCompoundKey(key: string) {

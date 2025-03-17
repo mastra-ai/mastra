@@ -1,4 +1,3 @@
-import { setTimeout } from 'node:timers/promises';
 import type { Span } from '@opentelemetry/api';
 import { context as otlpContext, trace } from '@opentelemetry/api';
 import type { z } from 'zod';
@@ -37,7 +36,7 @@ export class Workflow<
   #mastra?: Mastra;
   #runs: Map<string, WorkflowInstance<TSteps, TTriggerSchema>> = new Map();
   #isNested: boolean = false;
-
+  #onStepTransition: Set<(state: WorkflowRunState) => void | Promise<void>> = new Set();
   // registers stepIds on `after` calls
   #afterStepStack: string[] = [];
   #lastStepStack: string[] = [];
@@ -51,7 +50,6 @@ export class Workflow<
   #stepSubscriberGraph: Record<string, StepGraph> = {};
   #serializedStepSubscriberGraph: Record<string, StepGraph> = {};
   #steps: Record<string, StepAction<any, any, any, any>> = {};
-  #onStepTransition: Set<(state: WorkflowRunState) => void | Promise<void>> = new Set();
 
   /**
    * Creates a new Workflow instance
@@ -596,27 +594,45 @@ export class Workflow<
    * @throws Error if trigger schema validation fails
    */
 
-  createRun(): WorkflowResultReturn<TTriggerSchema, TSteps> {
+  createRun({
+    runId,
+    events,
+  }: { runId?: string; events?: Record<string, { schema: z.ZodObject<any> }> } = {}): WorkflowResultReturn<
+    TTriggerSchema,
+    TSteps
+  > {
     const run = new WorkflowInstance<TSteps, TTriggerSchema>({
       logger: this.logger,
       name: this.name,
       mastra: this.#mastra,
       retryConfig: this.#retryConfig,
-
       steps: this.#steps,
+      runId,
       stepGraph: this.#stepGraph,
       stepSubscriberGraph: this.#stepSubscriberGraph,
-
       onStepTransition: this.#onStepTransition,
       onFinish: () => {
         this.#runs.delete(run.runId);
       },
+      events,
     });
     this.#runs.set(run.runId, run);
     return {
       start: run.start.bind(run),
       runId: run.runId,
+      watch: run.watch.bind(run),
+      resume: run.resume.bind(run),
+      resumeWithEvent: run.resumeWithEvent.bind(run),
     };
+  }
+
+  /**
+   * Gets a workflow run instance by ID
+   * @param runId - ID of the run to retrieve
+   * @returns The workflow run instance if found, undefined otherwise
+   */
+  getRun(runId: string) {
+    return this.#runs.get(runId);
   }
 
   /**
@@ -704,10 +720,6 @@ export class Workflow<
 
       // Merge static payload with dynamically resolved variables
       // Variables take precedence over payload values
-      const mergedData = {
-        ...(payload as {}),
-        ...context,
-      };
 
       // Only trace if telemetry is available and action exists
       const finalAction = this.telemetry
@@ -717,7 +729,12 @@ export class Workflow<
           })
         : execute;
 
-      return finalAction ? await finalAction({ context: mergedData, ...rest }) : {};
+      return finalAction
+        ? await finalAction({
+            context: { ...context, inputData: { ...(context?.inputData || {}), ...(payload as {}) } },
+            ...rest,
+          })
+        : {};
     };
 
     // Only trace handler if telemetry is available
@@ -802,14 +819,6 @@ export class Workflow<
     return null;
   }
 
-  watch(onTransition: (state: WorkflowRunState) => void): () => void {
-    this.#onStepTransition.add(onTransition);
-
-    return () => {
-      this.#onStepTransition.delete(onTransition);
-    };
-  }
-
   async resume({
     runId,
     stepId,
@@ -819,121 +828,27 @@ export class Workflow<
     stepId: string;
     context?: Record<string, any>;
   }) {
-    // NOTE: setTimeout(0) makes sure that if the workflow is still running
-    // we'll wait for any state changes to be applied before resuming
-    await setTimeout(0);
-    return this._resume({ runId, stepId, context: resumeContext });
+    this.logger.warn(`Please use 'resume' on the 'createRun' call instead, resume is deprecated`);
+
+    const activeRun = this.#runs.get(runId);
+    if (activeRun) {
+      return activeRun.resume({ stepId, context: resumeContext });
+    }
+
+    throw new Error(`Workflow run ${runId} not found`);
   }
 
-  async _resume({
-    runId,
-    stepId,
-    context: resumeContext,
-  }: {
-    runId: string;
-    stepId: string;
-    context?: Record<string, any>;
-  }) {
-    const snapshot = await this.#loadWorkflowSnapshot(runId);
+  watch(onTransition: (state: WorkflowRunState) => void): () => void {
+    this.logger.warn(`Please use 'watch' on the 'createRun' call instead, watch is deprecated`);
+    this.#onStepTransition.add(onTransition);
 
-    if (!snapshot) {
-      throw new Error(`No snapshot found for workflow run ${runId}`);
-    }
-
-    let parsedSnapshot;
-    try {
-      parsedSnapshot = typeof snapshot === 'string' ? JSON.parse(snapshot as unknown as string) : snapshot;
-    } catch (error) {
-      this.logger.debug('Failed to parse workflow snapshot for resume', { error, runId });
-      throw new Error('Failed to parse workflow snapshot');
-    }
-
-    const origSnapshot = parsedSnapshot;
-    const startStepId = parsedSnapshot.suspendedSteps?.[stepId];
-    if (!startStepId) {
-      return;
-    }
-    parsedSnapshot =
-      startStepId === 'trigger'
-        ? parsedSnapshot
-        : { ...parsedSnapshot?.childStates?.[startStepId], ...{ suspendedSteps: parsedSnapshot.suspendedSteps } };
-    if (!parsedSnapshot) {
-      throw new Error(`No snapshot found for step: ${stepId} starting at ${startStepId}`);
-    }
-
-    // Update context if provided
-
-    if (resumeContext) {
-      parsedSnapshot.context.steps[stepId] = {
-        status: 'success',
-        output: {
-          ...(parsedSnapshot?.context?.steps?.[stepId]?.output || {}),
-          ...resumeContext,
-        },
-      };
-    }
-
-    // Reattach the step handler
-    // TODO: need types
-    if (parsedSnapshot.children) {
-      Object.entries(parsedSnapshot.children).forEach(([_childId, child]: [string, any]) => {
-        if (child.snapshot?.input?.stepNode) {
-          // Reattach handler
-          const stepDef = this.#makeStepDef(child.snapshot.input.stepNode.step.id);
-          child.snapshot.input.stepNode.config = {
-            ...child.snapshot.input.stepNode.config,
-            ...stepDef,
-          };
-
-          // Sync the context
-          child.snapshot.input.context = parsedSnapshot.context;
-        }
-      });
-    }
-
-    parsedSnapshot.value = updateStepInHierarchy(parsedSnapshot.value, stepId);
-
-    // Reset attempt count
-    if (parsedSnapshot.context?.attempts) {
-      parsedSnapshot.context.attempts[stepId] =
-        this.#steps[stepId]?.retryConfig?.attempts || this.#retryConfig?.attempts || 0;
-    }
-
-    this.logger.debug('Resuming workflow with updated snapshot', {
-      updatedSnapshot: parsedSnapshot,
-      runId,
-      stepId,
-    });
-
-    const run =
-      this.#runs.get(runId) ??
-      new WorkflowInstance({
-        logger: this.logger,
-        name: this.name,
-        mastra: this.#mastra,
-        retryConfig: this.#retryConfig,
-
-        steps: this.#steps,
-        stepGraph: this.#stepGraph,
-        stepSubscriberGraph: this.#stepSubscriberGraph,
-
-        onStepTransition: this.#onStepTransition,
-        runId,
-        onFinish: () => {
-          this.#runs.delete(run.runId);
-        },
-      });
-
-    run.setState(origSnapshot?.value);
-    this.#runs.set(run.runId, run);
-    return run?.execute({
-      snapshot: parsedSnapshot,
-      stepId,
-      resumeData: resumeContext,
-    });
+    return () => {
+      this.#onStepTransition.delete(onTransition);
+    };
   }
 
   async resumeWithEvent(runId: string, eventName: string, data: any) {
+    this.logger.warn(`Please use 'resumeWithEvent' on the 'createRun' call instead, resumeWithEvent is deprecated`);
     const event = this.events?.[eventName];
     if (!event) {
       throw new Error(`Event ${eventName} not found`);

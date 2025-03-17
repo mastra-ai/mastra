@@ -174,7 +174,6 @@ const improveResponse = new Step({
   inputSchema: z.object({
     improvedContent: z.string(),
     resumeAttempts: z.number(),
-
   }),
   execute: async ({ context, suspend }) => {
     const content = context.getStepResult(promptAgent)?.modelOutput;
