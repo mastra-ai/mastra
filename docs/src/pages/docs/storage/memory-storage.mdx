@@ -16,14 +16,23 @@ By default, Memory uses LibSQL for both message storage and vector operations:
 ```ts showLineNumbers copy
 import { Memory } from '@mastra/core/memory';
 
-// Uses default LibSQL storage
+// Initialize memory with default LibSQL storage
 const memory = new Memory({
-  name: 'my-memory',
+  name: 'my-memory',  // Used for logging and identification
   options: {
-    lastMessages: 40,
-    semanticRecall: true,
+    // Configure message retention
+    lastMessages: 40,  // Keep last 40 messages for context window
+    
+    // Enable semantic search with default FastEmbed
+    semanticRecall: true,  // Uses bge-small-en-v1.5 embeddings
   },
 });
+
+// This setup will:
+// 1. Create an in-memory SQLite database
+// 2. Initialize FastEmbed for vector operations
+// 3. Set up default tables for messages and threads
+// 4. Configure automatic cleanup of old messages
 ```
 
 ### Custom Storage Configuration
@@ -58,32 +67,48 @@ const memory = new Memory({
 The storage system handles message persistence:
 
 ```ts showLineNumbers copy
-// Store new messages
+// Store new messages in a thread
 await storage.saveMessages({
   messages: [{
-    threadId: 'thread-123',
-    role: 'user',
+    threadId: 'thread-123',  // Links message to a conversation
+    role: 'user',           // Message source (user/assistant/system)
     content: 'Message content',
-    createdAt: new Date(),
+    createdAt: new Date(),  // Timestamp for ordering
     metadata: {
-      source: 'chat',
-      language: 'en',
+      source: 'chat',      // Origin of the message
+      language: 'en',      // Content language
+      // Add custom metadata for filtering
+      priority: 'high',
+      category: 'support',
     },
   }],
 });
 
-// Retrieve messages with memory config
+// Retrieve messages with memory configuration
 const messages = await storage.getMessages({
-  threadId: 'thread-123',
+  threadId: 'thread-123',  // Get messages from this thread
   selectBy: {
-    limit: 40,
-    before: new Date(),
+    limit: 40,            // Maximum messages to return
+    before: new Date(),    // Get messages before this time
+    // Optional filters
+    filter: {
+      role: ['user', 'assistant'],  // Only these roles
+      metadata: {
+        priority: 'high',   // Filter by metadata
+      },
+    },
   },
   threadConfig: {
-    lastMessages: 40,
-    semanticRecall: true,
+    lastMessages: 40,       // Recent message window
+    semanticRecall: true,   // Include similar messages
   },
 });
+
+// Messages are returned with:
+// 1. Chronological ordering
+// 2. Metadata preserved
+// 3. Vector similarity scores (if semanticRecall)
+// 4. Thread context
 ```
 
 ### Thread Management
@@ -121,17 +146,36 @@ await storage.updateThread({
 When using `:memory:` storage:
 
 ```ts showLineNumbers copy
-// Test environment - isolated memory
+// Test environment with isolated memory
 const testStorage = new DefaultStorage({
   name: 'test-storage',
-  config: { url: ':memory:' },
+  config: { 
+    url: ':memory:',  // Creates new SQLite database in memory
+    // Perfect for testing because:
+    // 1. Each test gets clean state
+    // 2. No file system interaction needed
+    // 3. Fast setup and teardown
+    // 4. No cleanup required
+  },
 });
 
-// Development server - separate memory
+// Development server with separate memory
 const devStorage = new DefaultStorage({
   name: 'dev-storage',
-  config: { url: ':memory:' },
+  config: { 
+    url: ':memory:',  // Different process = different database
+    // Benefits for development:
+    // 1. No test data pollution
+    // 2. Quick restarts (no file locks)
+    // 3. Easy state reset
+    // 4. Parallel development instances
+  },
 });
+
+// Each process gets its own isolated database:
+// - Test runner process → clean test database
+// - Dev server process → separate dev database
+// - CI/CD process → isolated CI database
 ```
 
 Benefits:

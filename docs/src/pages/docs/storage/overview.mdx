@@ -5,6 +5,174 @@ description: Technical overview of Mastra's storage system, detailing its integr
 
 # Storage in Mastra
 
+Mastra's storage system provides a robust SQL-based foundation for managing conversation history, workflow state, and agent evaluations. Built on modern SQL databases like LibSQL and PostgreSQL, it offers a consistent interface with prepared statements, proper JSON handling, and efficient sorted queries, making it both powerful for production use and simple for development.
+
+## Overview
+
+At its core, Mastra's storage system is built around four key tables:
+
+1. **Messages**: Store conversation content with proper ordering
+2. **Threads**: Organize messages into coherent conversations
+3. **Workflow Snapshots**: Persist state for long-running operations
+4. **Evaluations**: Track and analyze agent performance
+
+All operations use prepared statements for security and efficiency, with proper JSON serialization for complex data types. The system maintains consistency through SQL transactions and provides robust error handling for all database operations.
+
+## Key Features
+
+### 1. SQL-First Design
+- **Prepared Statements**: All operations use SQL prepared statements for security
+- **JSON Handling**: Proper serialization and deserialization of complex data
+- **Sorted Queries**: Efficient implementation of ordered operations
+- **Multiple Backends**: Support for SQLite, PostgreSQL, and cloud databases
+
+### 2. Memory Integration
+- **Seamless Memory Management**: Direct integration with Mastra's memory system
+- **Semantic Search**: Built-in vector storage for similarity search
+- **Efficient Caching**: Smart caching for frequently accessed data
+
+### 3. Development Experience
+- **Process Isolation**: Clean separation between test and development data
+- **Zero Configuration**: Works out of the box with sensible defaults
+- **Easy Migration**: Simple path from development to production
+
+### 4. Production Ready
+- **Transaction Support**: ACID compliance for data integrity
+- **Performance Monitoring**: Built-in telemetry and tracing
+- **Error Recovery**: Robust error handling and recovery mechanisms
+
+## When to Use What
+
+### In-Memory Storage (`:memory:`)
+- ✅ Unit testing with isolated test data
+- ✅ Clean development environment
+- ✅ Automatic cleanup after tests
+- ✅ Process-specific storage (dev server, tests, CI)
+- ❌ Cross-process data sharing
+- ❌ Production deployments
+
+### File-Based Storage (`file:*.db`)
+- ✅ Cross-process data persistence
+- ✅ Development environments
+- ✅ Small to medium deployments
+- ✅ Data backup and migration
+- ❌ High-concurrency workloads
+- ❌ Distributed systems
+
+### Production Storage (PostgreSQL, etc)
+- ✅ Production deployments
+- ✅ High-concurrency workloads
+- ✅ Distributed systems
+- ✅ Enterprise applications
+- ✅ Cloud deployments
+
+## Implementation Details
+
+### SQL Implementation
+Mastra's storage system is built on a robust SQL foundation with several key design principles:
+
+1. **Prepared Statements**
+   - All SQL operations use prepared statements
+   - Prevents SQL injection vulnerabilities
+   - Improves query performance through statement caching
+
+2. **JSON Handling**
+   - Native JSON column types for complex data
+   - Automatic serialization/deserialization
+   - Efficient JSON querying capabilities
+
+3. **Sorted Operations**
+   - SQL-based implementation of sorted sets
+   - Efficient ordering and pagination
+   - Index-optimized query patterns
+
+### Process Isolation
+When using `:memory:` storage, each process gets its own isolated database instance:
+
+1. **Test Environment**
+   - Dedicated in-memory database per test run
+   - Automatic cleanup after test completion
+   - No cross-contamination between tests
+
+2. **Development Server**
+   - Separate memory storage for dev server
+   - Clean development environment
+   - No test data pollution
+
+3. **Data Persistence**
+   - Use file storage for cross-process data sharing
+   - Perfect for development and small deployments
+   - Enables data backup and migration
+
+## Getting Started
+
+### Quick Start
+
+Here's a simple example to get started with Mastra's storage system:
+
+```ts showLineNumbers copy
+import { DefaultStorage } from '@mastra/core/storage';
+
+// Create a storage instance
+const storage = new DefaultStorage({
+  name: 'quickstart',
+  config: {
+    // Use in-memory storage for development
+    url: ':memory:',
+    // Or file-based storage for persistence
+    // url: 'file:app.db',
+  },
+});
+
+// Create a thread for conversation
+const thread = await storage.saveThread({
+  thread: {
+    resourceId: 'user-123',
+    title: 'First Chat',
+  },
+});
+
+// Save messages to the thread
+await storage.saveMessages({
+  messages: [{
+    threadId: thread.id,
+    role: 'user',
+    content: 'Hello Mastra!',
+  }],
+});
+
+// Retrieve messages
+const messages = await storage.getMessages({
+  threadId: thread.id,
+});
+```
+
+This example demonstrates:
+- Creating a storage instance
+- Starting a conversation thread
+- Saving and retrieving messages
+- Basic storage configuration
+
+### Installation
+
+```bash
+# Install core package
+npm install @mastra/core
+
+# Optional: Install additional storage providers
+npm install @mastra/pg     # PostgreSQL support
+npm install @mastra/vector # Vector storage
+```
+
+### Basic Concepts
+
+1. **Storage Instance**: Central point for data operations
+2. **Threads**: Group related messages and maintain context
+3. **Messages**: Store conversation content and metadata
+4. **Workflows**: Persist state for long-running operations
+
+## Architecture Overview
+
 Storage in Mastra operates at three levels:
 
 1. **Core Storage Layer**: Handles raw data persistence through the `MastraStorage` interface
@@ -26,12 +194,28 @@ The `MastraStorage` abstract class forms the foundation of Mastra's storage syst
 ```ts showLineNumbers copy
 import { DefaultStorage } from '@mastra/core/storage';
 
+// Initialize storage with a name and configuration
 const storage = new DefaultStorage({
-  name: 'my-storage',
+  name: 'my-storage',  // Used for logging and telemetry
   config: {
-    url: 'file:my-database.db',  // or ':memory:' for in-memory
+    // Choose storage type:
+    // - 'file:my-database.db' for persistent storage
+    // - ':memory:' for temporary, in-memory storage
+    url: 'file:my-database.db',
+    
+    // Optional: Configure connection pool
+    pool: {
+      min: 2,   // Minimum connections
+      max: 10,  // Maximum connections
+    },
   },
 });
+
+// Storage is now ready for:
+// - Thread management
+// - Message persistence
+// - Workflow state handling
+// - Evaluation storage
 ```
 
 Key responsibilities:
@@ -121,17 +305,30 @@ The storage layer plays a crucial role in Mastra's memory system by providing pe
 ```ts showLineNumbers copy
 import { Memory } from '@mastra/core/memory';
 
-// Automatic storage initialization
+// Initialize memory with automatic storage setup
 const memory = new Memory({
   name: 'my-memory',
   options: {
-    lastMessages: 40,     // Number of messages to retain
-    semanticRecall: true, // Enable semantic search
+    // Configure message retention
+    lastMessages: 40,     // Keep last 40 messages in context
+    
+    // Enable semantic search for relevant context
+    semanticRecall: true, // Uses vector similarity search
+    
+    // Thread management options
     threads: {
-      generateTitle: true // Auto-generate thread titles
-    }
+      generateTitle: true, // AI generates thread titles
+      titleModel: 'gpt-3.5-turbo', // Model for title generation
+      maxTitleLength: 100, // Maximum title length
+    },
   },
 });
+
+// Memory will:
+// 1. Create SQLite storage if none provided
+// 2. Initialize vector storage for semantic search
+// 3. Set up thread management
+// 4. Configure message retention
 ```
 
 2. **Custom Storage Configuration**
@@ -187,10 +384,23 @@ Mastra's storage system supports two primary modes of operation, each suited for
 Using `:memory:` creates an isolated SQLite database in memory:
 
 ```ts showLineNumbers copy
+// Development configuration with in-memory storage
 const storage = new DefaultStorage({
   name: 'dev-storage',
-  config: { url: ':memory:' }
+  config: { 
+    url: ':memory:',  // Creates isolated SQLite database
+    // Each process gets its own instance:
+    // - Test process: Clean test environment
+    // - Dev server: Separate development data
+    // - CI/CD: Isolated testing environment
+  },
 });
+
+// Benefits:
+// 1. Fast setup and teardown
+// 2. No file system interaction
+// 3. Perfect for testing and development
+// 4. Automatic cleanup on process exit
 ```
 
 Characteristics:

@@ -17,10 +17,33 @@ Mastra supports multiple vector databases, each with its own strengths:
 // LibSQL - Default, embedded vector storage
 import { LibSQLVector } from '@mastra/core/vector/libsql';
 
+// Initialize LibSQL vector storage
 const store = new LibSQLVector({
+  // Connection options:
+  // - SQLite file: 'file:vectors.db'
+  // - In-memory: ':memory:'
+  // - Turso: 'libsql://...' 
   connectionUrl: process.env.DATABASE_URL,
-  authToken: process.env.DATABASE_AUTH_TOKEN, // Optional: for Turso cloud
+  
+  // Only needed for Turso cloud databases
+  authToken: process.env.DATABASE_AUTH_TOKEN,
+  
+  // Optional configuration
+  config: {
+    // Table customization
+    tableName: 'embeddings',  // Default table name
+    
+    // Performance tuning
+    batchSize: 1000,  // Batch size for operations
+    timeout: 30000,   // Operation timeout (ms)
+  },
 });
+
+// Benefits of LibSQL:
+// 1. Zero-dependency vector search
+// 2. Embedded or cloud deployment
+// 3. Automatic schema management
+// 4. Transaction support
 ```
 
 ### External Databases
@@ -56,15 +79,37 @@ const store = new QdrantVector({
 Before storing vectors, create an index with the appropriate dimension:
 
 ```ts showLineNumbers copy
+// Create an index for storing embeddings
 await store.createIndex({
+  // Unique name for this collection
   indexName: 'my-collection',
-  dimension: 1536, // For OpenAI text-embedding-3-small
+  
+  // Vector dimension must match your embedding model:
+  dimension: 1536,  // For OpenAI text-embedding-3-small
+  
+  // Optional index configuration
+  config: {
+    // Distance metric for similarity
+    metric: 'cosine',  // or 'euclidean', 'dot'
+    
+    // Index type (PostgreSQL specific)
+    indexType: 'hnsw',  // or 'ivfflat'
+    
+    // HNSW parameters
+    m: 16,       // Max connections per node
+    efConstruction: 100,  // Build-time search depth
+  },
 });
 
-// Common dimension sizes:
-// - OpenAI text-embedding-3-small: 1536
-// - OpenAI text-embedding-3-large: 3072
-// - Cohere embed-multilingual-v3: 1024
+// Common model dimensions:
+// - OpenAI text-embedding-3-small: 1536d
+//   Best for: General purpose, good quality/speed balance
+//
+// - OpenAI text-embedding-3-large: 3072d
+//   Best for: High accuracy, multilingual content
+//
+// - Cohere embed-multilingual-v3: 1024d
+//   Best for: Efficient multilingual embeddings
 ```
 
 ### Storing Embeddings
@@ -72,15 +117,41 @@ await store.createIndex({
 Store embeddings with metadata:
 
 ```ts showLineNumbers copy
+// Store embeddings with their metadata
 await store.upsert({
+  // Target index for storage
   indexName: 'my-collection',
-  vectors: embeddings,
+  
+  // Vector embeddings to store
+  vectors: embeddings,  // Array of float32 arrays
+  
+  // Associated metadata for each vector
   metadata: chunks.map(chunk => ({
-    text: chunk.text,
-    source: chunk.source,
-    timestamp: new Date(),
+    // Original text for reconstruction
+    text: chunk.text,       // Content that was embedded
+    
+    // Metadata for filtering and organization
+    source: chunk.source,   // Where the text came from
+    timestamp: new Date(),  // When it was embedded
+    
+    // Optional: Custom metadata for your use case
+    category: chunk.category,
+    language: chunk.language,
+    version: chunk.version,
   })),
+  
+  // Optional: Performance settings
+  batchSize: 1000,  // Vectors per batch
+  onProgress: (progress) => {
+    console.log(`Stored ${progress.completed}/${progress.total} vectors`);
+  },
 });
+
+// The upsert operation:
+// 1. Creates or updates vectors
+// 2. Preserves all metadata
+// 3. Maintains index consistency
+// 4. Supports batch processing
 ```
 
 ### Similarity Search
@@ -88,14 +159,45 @@ await store.upsert({
 Query vectors by similarity:
 
 ```ts showLineNumbers copy
+// Search for similar vectors with filtering
 const results = await store.search({
+  // Target index to search
   indexName: 'my-collection',
-  vector: queryEmbedding,
-  topK: 5,
+  
+  // Query vector (must match dimension)
+  vector: queryEmbedding,  // float32 array
+  
+  // Number of results to return
+  topK: 5,  // Returns 5 closest matches
+  
+  // Filter results by metadata
   filter: {
+    // Simple equality filter
     source: 'documentation',
+    
+    // Advanced filtering
+    timestamp: { 
+      $gt: new Date('2024-01-01'),  // After date
+    },
+    category: { 
+      $in: ['guide', 'tutorial'],    // Multiple values
+    },
+    language: 'en',                   // Exact match
+  },
+  
+  // Optional: Search configuration
+  config: {
+    minScore: 0.8,    // Minimum similarity score
+    efSearch: 100,     // Search depth (HNSW)
+    nprobe: 10,        // Probes (IVF)
   },
 });
+
+// Results include:
+// 1. Vector matches with scores
+// 2. Associated metadata
+// 3. Distance/similarity metrics
+// 4. Original vector IDs
 ```
 
 ## Integration with Memory
@@ -107,15 +209,36 @@ Mastra's Memory system uses LibSQL vector storage by default:
 ```ts showLineNumbers copy
 import { Memory } from '@mastra/core/memory';
 
+// Initialize memory with vector storage
 const memory = new Memory({
-  // Uses LibSQL vector storage
+  // Uses built-in LibSQL vector storage
   options: {
+    // Configure semantic search
     semanticRecall: {
-      topK: 5,
-      messageRange: 2,
+      topK: 5,           // Number of similar messages
+      messageRange: 2,   // Context window around matches
+      
+      // Advanced vector options
+      vector: {
+        dimension: 1536,   // Embedding dimension
+        metric: 'cosine',  // Similarity metric
+        minScore: 0.7,     // Minimum relevance
+      },
+      
+      // Embedding configuration
+      embedder: {
+        model: 'bge-small-en-v1.5',  // Default model
+        batchSize: 32,  // Embeddings per batch
+      },
     },
   },
 });
+
+// This setup:
+// 1. Creates vector tables
+// 2. Initializes embedder
+// 3. Configures similarity search
+// 4. Sets up message retrieval
 ```
 
 ### Custom Vector Storage

@@ -15,16 +15,41 @@ Mastra integrates with OpenTelemetry to provide comprehensive monitoring and tra
 import { DefaultStorage } from '@mastra/core/storage';
 import { TelemetryConfig } from '@mastra/core/telemetry';
 
+// Initialize storage with telemetry
 const storage = new DefaultStorage({
-  name: 'my-storage',
+  name: 'my-storage',  // Used in telemetry spans
   config: {
-    url: 'file:app.db',
+    // Database configuration
+    url: 'file:app.db',  // SQLite database path
+    
+    // Connection settings
+    pool: {
+      min: 2,    // Minimum connections
+      max: 10,   // Maximum connections
+    },
   },
+  
+  // Telemetry configuration
   telemetry: new TelemetryConfig({
-    serviceName: 'my-service',
-    enabled: true,
+    // Service identification
+    serviceName: 'my-service',  // For trace grouping
+    serviceVersion: '1.0.0',    // For version tracking
+    
+    // Feature flags
+    enabled: true,        // Enable telemetry
+    debug: false,         // Debug logging
+    
+    // Trace configuration
+    samplingRatio: 1.0,   // Sample all traces
+    propagation: true,    // Trace context propagation
   }),
 });
+
+// This setup enables:
+// 1. SQL operation tracing
+// 2. Performance monitoring
+// 3. Error tracking
+// 4. Resource usage metrics
 ```
 
 ### Custom Exporter
@@ -55,23 +80,52 @@ const storage = new DefaultStorage({
 Mastra automatically traces key storage operations:
 
 ```ts showLineNumbers copy
-// These operations are automatically traced
+// Storage operations are automatically traced
+
+// 1. Save messages with prepared statements
 await storage.saveMessages({
   messages: [{
     threadId: 'thread-123',
     content: 'Hello',
   }],
-}); // Generates trace: storage.saveMessages
+}); // Trace: storage.saveMessages
+// - SQL preparation
+// - Parameter binding
+// - Execution time
+// - Row count
 
+// 2. Retrieve messages with filters
 await storage.getMessages({
   threadId: 'thread-123',
-}); // Generates trace: storage.getMessages
+  selectBy: {
+    limit: 10,
+    order: 'desc',
+  },
+}); // Trace: storage.getMessages
+// - Query planning
+// - Index usage
+// - Result size
+// - Cache hits
 
+// 3. Thread management operations
 await storage.saveThread({
   thread: {
     resourceId: 'user-123',
+    metadata: {
+      category: 'support',
+    },
   },
-}); // Generates trace: storage.saveThread
+}); // Trace: storage.saveThread
+// - JSON serialization
+// - Transaction timing
+// - Constraint checks
+// - Index updates
+
+// Each operation generates spans with:
+// 1. SQL operation details
+// 2. Parameter values (sanitized)
+// 3. Execution metrics
+// 4. Error context if failed
 ```
 
 ### Vector Operations
@@ -103,21 +157,62 @@ await store.search({
 Each trace includes detailed information:
 
 ```ts showLineNumbers copy
+// Example trace span for a storage operation
 {
-  id: 'span-123',
-  parentSpanId: 'parent-span-123',
-  traceId: 'trace-123',
-  name: 'storage.saveMessages',
-  scope: 'mastra-storage',
-  kind: 'internal',
+  // Span identification
+  id: 'span-123',           // Unique span ID
+  parentSpanId: 'parent-span-123',  // Parent operation
+  traceId: 'trace-123',     // Trace grouping
+  
+  // Operation details
+  name: 'storage.saveMessages',  // Operation name
+  scope: 'mastra-storage',      // Component scope
+  kind: 'internal',             // Operation type
+  
+  // Database attributes
   attributes: {
-    'db.system': 'libsql',
-    'db.operation': 'insert',
-    'thread.id': 'thread-123',
-    'message.count': 1,
+    // Database information
+    'db.system': 'libsql',     // Database type
+    'db.name': 'app.db',       // Database name
+    'db.operation': 'insert',   // SQL operation
+    'db.statement': '/* Prepared */',  // Sanitized SQL
+    
+    // Operation context
+    'thread.id': 'thread-123',  // Thread context
+    'message.count': 1,         // Operation size
+    
+    // Performance metrics
+    'db.connection_id': 'conn-1',  // Connection used
+    'db.rows_affected': 1,      // Operation impact
+    'db.execution_time_ms': 50, // SQL execution time
+    
+    // Error handling
+    'error.type': null,         // Error if failed
+    'error.message': null,      // Error details
   },
-  startTime: 1647523600000,
-  endTime: 1647523601000,
+  
+  // Timing information
+  startTime: 1647523600000,  // Operation start
+  endTime: 1647523601000,    // Operation end
+  
+  // Additional context
+  events: [
+    {
+      name: 'db.prepare',
+      timestamp: 1647523600010,
+    },
+    {
+      name: 'db.execute',
+      timestamp: 1647523600500,
+    },
+  ],
+  
+  // Resource information
+  resource: {
+    'service.name': 'my-service',
+    'service.version': '1.0.0',
+    'host.name': 'server-1',
+  },
 }
 ```
 
@@ -180,40 +275,136 @@ await agent.stream('Hello', {
 ### Configuration
 
 ```ts showLineNumbers copy
+// Configure telemetry with best practices
 const telemetry = new TelemetryConfig({
-  // Enable only in production
-  enabled: process.env.NODE_ENV === 'production',
+  // Environment-based configuration
+  enabled: process.env.NODE_ENV === 'production',  // Production only
+  debug: process.env.NODE_ENV === 'development',   // Debug in dev
   
-  // Set appropriate sampling rate
-  samplingRatio: 0.1, // 10% of traces
+  // Sampling configuration
+  samplingRatio: 0.1,  // Sample 10% of traces
+  samplingRules: [
+    // Always trace errors
+    { target: 'error', sample: 1.0 },
+    // Sample slow operations more
+    { target: 'duration > 1s', sample: 0.5 },
+  ],
   
-  // Configure batch processing
-  batchSize: 100,
-  batchTimeout: 5000, // 5 seconds
+  // Batch processing for efficiency
+  batchSize: 100,         // Traces per batch
+  batchTimeout: 5000,     // Flush after 5s
+  maxQueueSize: 1000,     // Maximum queued traces
   
-  // Add custom attributes
+  // Default context attributes
   defaultAttributes: {
+    // Service identification
+    'service.name': 'my-service',
     'service.version': '1.0.0',
+    
+    // Deployment context
     'deployment.environment': 'production',
+    'deployment.region': 'us-west-2',
+    
+    // Application context
+    'app.name': 'mastra-api',
+    'app.version': '2.1.0',
+  },
+  
+  // Resource limits
+  limits: {
+    eventSize: 256 * 1024,    // Max event size
+    attributeCount: 128,       // Max attributes
+    attributeLength: 4096,     // Max attribute length
+    spanAttributeCount: 32,    // Max span attributes
+  },
+  
+  // Error handling
+  onError: (error) => {
+    console.error('Telemetry error:', error);
+    // Alert monitoring system
+    alertMonitoring(error);
   },
 });
+
+// This configuration:
+// 1. Optimizes trace collection
+// 2. Manages resource usage
+// 3. Provides error context
+// 4. Scales with application
 ```
 
 ### Error Handling
 
 ```ts showLineNumbers copy
+// Configure storage with robust error handling
 const storage = new DefaultStorage({
   telemetry: {
     enabled: true,
+    
+    // Comprehensive error handling
     onError: (error) => {
-      // Handle telemetry errors
-      console.error('Telemetry error:', error);
+      // 1. Log error details
+      console.error('Telemetry error:', {
+        error: error.message,
+        type: error.name,
+        stack: error.stack,
+        context: error.context,
+      });
       
-      // Optionally disable telemetry
-      storage.disableTelemetry();
+      // 2. Handle specific error types
+      switch (error.name) {
+        case 'ConnectionError':
+          // Retry with exponential backoff
+          retryWithBackoff(() => {
+            return storage.reconnect();
+          });
+          break;
+          
+        case 'QuotaExceededError':
+          // Reduce sampling rate
+          storage.updateTelemetry({
+            samplingRatio: 0.01,  // 1% sampling
+          });
+          break;
+          
+        case 'ConfigurationError':
+          // Fallback to default config
+          storage.resetTelemetry();
+          break;
+          
+        default:
+          // Disable problematic features
+          storage.disableTelemetry();
+      }
+      
+      // 3. Alert monitoring systems
+      alertMonitoring({
+        service: 'storage-telemetry',
+        error: error,
+        severity: 'high',
+      });
+      
+      // 4. Record error metrics
+      recordMetric('telemetry.errors', 1, {
+        type: error.name,
+        handled: true,
+      });
+    },
+    
+    // Recovery configuration
+    recovery: {
+      maxRetries: 3,
+      backoffMs: 1000,
+      timeout: 30000,
     },
   },
 });
+
+// This setup provides:
+// 1. Detailed error tracking
+// 2. Automatic recovery
+// 3. Graceful degradation
+// 4. Monitoring integration
 ```
 
 ## Next Steps
