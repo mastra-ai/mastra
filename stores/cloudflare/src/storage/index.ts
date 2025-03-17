@@ -124,19 +124,6 @@ export class CloudflareStore extends MastraStorage {
     }
   }
 
-  private async deleteNamespace(tableName: TABLE_NAMES) {
-    if (this.bindings) {
-      // For Workers API, we can't delete the namespace as it's bound at deploy time
-      // Instead, clear all keys in the namespace
-      await this.clearTable({ tableName });
-    } else {
-      const namespaceId = await this.getNamespaceId(tableName);
-      await this.client!.kv.namespaces.delete(namespaceId, {
-        account_id: this.accountId!,
-      });
-    }
-  }
-
   private async putNamespaceValue({
     tableName,
     key,
@@ -288,16 +275,26 @@ export class CloudflareStore extends MastraStorage {
   /**
    * Helper to safely parse data from KV storage
    */
-  private safeParse(text: string): any {
+  private safeParse(text: string | null): any {
+    if (!text) return null;
     try {
       const data = JSON.parse(text);
       // If we got an object with a value property that's a string, try to parse that too
-      if (data && typeof data === 'object' && 'value' in data && typeof data.value === 'string') {
-        return this.safeParse(data.value);
+      if (data && typeof data === 'object' && 'value' in data) {
+        if (typeof data.value === 'string') {
+          try {
+            return JSON.parse(data.value);
+          } catch {
+            // If value is a string but not JSON, return as is
+            return data.value;
+          }
+        }
+        return null;
       }
       return data;
-    } catch {
-      return text;
+    } catch (error) {
+      this.logger.error('Failed to parse text:', { error, text });
+      return null;
     }
   }
 
@@ -323,7 +320,6 @@ export class CloudflareStore extends MastraStorage {
   private async getKV(tableName: TABLE_NAMES, key: string): Promise<any> {
     try {
       const text = await this.getNamespaceValue(tableName, key);
-      if (!text) return null;
       return this.safeParse(text);
     } catch (error: any) {
       this.logger.error(`Failed to get KV value for ${tableName}:${key}:`, error);
@@ -573,6 +569,9 @@ export class CloudflareStore extends MastraStorage {
     schema: Record<string, StorageColumn>,
   ): Promise<void> {
     try {
+      if (!schema || typeof schema !== 'object' || schema.value === null) {
+        throw new Error('Invalid schema format');
+      }
       for (const [columnName, column] of Object.entries(schema)) {
         const value = record[columnName];
 

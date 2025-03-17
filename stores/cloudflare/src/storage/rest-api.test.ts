@@ -9,6 +9,8 @@ import {
   TABLE_THREADS,
   TABLE_WORKFLOW_SNAPSHOT,
   StorageColumn,
+  TABLE_EVALS,
+  TABLE_TRACES,
 } from '@mastra/core/storage';
 
 import { CloudflareStore } from '.';
@@ -62,26 +64,6 @@ const createSampleWorkflowSnapshot = (threadId: string): WorkflowRunState => ({
   timestamp: Date.now(),
 });
 
-// Extend CloudflareStore type for testing
-declare module '@mastra/core/storage' {
-  interface MastraStorage {
-    __getFullOrder(tableName: TABLE_NAMES, orderKey: string): Promise<string[]>;
-    __getRange(tableName: TABLE_NAMES, orderKey: string, start: number, end: number): Promise<string[]>;
-    __getLastN(tableName: TABLE_NAMES, orderKey: string, n: number): Promise<string[]>;
-    __getRank(tableName: TABLE_NAMES, orderKey: string, id: string): Promise<number | null>;
-    __listKV(tableName: TABLE_NAMES): Promise<Array<{ name: string }>>;
-    __getKey(tableName: TABLE_NAMES, keys: Record<string, any>): string;
-    __getSchemaKey(tableName: TABLE_NAMES): string;
-    __getThreadMessagesKey(threadId: string): string;
-    __getTableSchema(tableName: TABLE_NAMES): Promise<Record<string, StorageColumn> | null>;
-    __updateSortedOrder(
-      tableName: TABLE_NAMES,
-      orderKey: string,
-      entries: Array<{ id: string; score: number }>,
-    ): Promise<void>;
-  }
-}
-
 // Helper function to retry until condition is met or timeout
 const retryUntil = async <T>(
   fn: () => Promise<T>,
@@ -103,21 +85,6 @@ const retryUntil = async <T>(
 };
 
 describe('CloudflareStore REST API', () => {
-  // Add test helper methods to CloudflareStore
-  beforeAll(() => {
-    Object.assign(CloudflareStore.prototype, {
-      __getFullOrder: CloudflareStore.prototype['getFullOrder'],
-      __listKV: CloudflareStore.prototype['listKV'],
-      __getKey: CloudflareStore.prototype['getKey'],
-      __getRange: CloudflareStore.prototype['getRange'],
-      __getLastN: CloudflareStore.prototype['getLastN'],
-      __getRank: CloudflareStore.prototype['getRank'],
-      __getThreadMessagesKey: CloudflareStore.prototype['getThreadMessagesKey'],
-      __updateSortedOrder: CloudflareStore.prototype['updateSortedOrder'],
-      __getTableSchema: CloudflareStore.prototype['getTableSchema'],
-      __getSchemaKey: CloudflareStore.prototype['getSchemaKey'],
-    });
-  });
   let store: CloudflareStore;
 
   beforeAll(async () => {
@@ -129,20 +96,45 @@ describe('CloudflareStore REST API', () => {
 
   // Helper to clean up KV namespaces
   const cleanupNamespaces = async () => {
-    const prefix = TEST_CONFIG.namespacePrefix;
-    const namespaces = [`${prefix}_mastra_threads`, `${prefix}_mastra_workflows`, `${prefix}_mastra_evals`];
+    const tables = [TABLE_THREADS, TABLE_MESSAGES, TABLE_WORKFLOW_SNAPSHOT, TABLE_EVALS, TABLE_TRACES] as TABLE_NAMES[];
 
-    for (const namespace of namespaces) {
+    for (const table of tables) {
       try {
-        await store['deleteNamespace'](namespace as any);
+        const namespaceId = await store['getNamespaceId'](table);
+        await store['client']!.kv.namespaces.delete(namespaceId, {
+          account_id: store['accountId']!,
+        });
       } catch (error) {
-        console.error(`Error cleaning up namespace ${namespace}:`, error);
+        console.error(`Error cleaning up namespace ${table}:`, error);
+      }
+    }
+  };
+
+  const cleanupKVData = async () => {
+    // List and delete all keys in each namespace
+    const tables = [TABLE_THREADS, TABLE_MESSAGES, TABLE_WORKFLOW_SNAPSHOT, TABLE_EVALS, TABLE_TRACES] as TABLE_NAMES[];
+    for (const table of tables) {
+      try {
+        await clearTableExceptSchema(store, table);
+      } catch (error) {
+        console.error(`Error cleaning up namespace ${table}:`, error);
+      }
+    }
+  };
+
+  const clearTableExceptSchema = async (store: CloudflareStore, tableName: TABLE_NAMES) => {
+    const keys = await store['listKV'](tableName);
+    if (keys.length > 0) {
+      const schemaPrefix = store['namespacePrefix'] ? `${store['namespacePrefix']}:schema:` : 'schema:';
+      const nonSchemaKeys = keys.filter(keyObj => !keyObj.name.startsWith(schemaPrefix));
+      if (nonSchemaKeys.length > 0) {
+        await Promise.all(nonSchemaKeys.map(keyObj => store['deleteKV'](tableName, keyObj.name)));
       }
     }
   };
 
   beforeEach(async () => {
-    await cleanupNamespaces();
+    await cleanupKVData();
   });
 
   afterAll(async () => {
@@ -155,8 +147,8 @@ describe('CloudflareStore REST API', () => {
 
     beforeEach(async () => {
       // Clear tables before each test
-      await store.clearTable({ tableName: testTableName }).catch(() => {});
-      await store.clearTable({ tableName: testTableName2 }).catch(() => {});
+      await clearTableExceptSchema(store, testTableName).catch(() => {});
+      await clearTableExceptSchema(store, testTableName2).catch(() => {});
     });
 
     it('should create a new table with schema', async () => {
@@ -169,12 +161,12 @@ describe('CloudflareStore REST API', () => {
       });
 
       // Verify schema key format
-      const schemaKey = store.__getSchemaKey(testTableName);
+      const schemaKey = store['getSchemaKey'](testTableName);
       const expectedSchemaKey = `${TEST_CONFIG.namespacePrefix}:schema:${testTableName}`;
       expect(schemaKey).toBe(expectedSchemaKey);
 
       // Verify schema exists
-      const schema = await store.__getTableSchema(testTableName);
+      const schema = await store['getTableSchema'](testTableName);
       expect(schema).toBeTruthy();
       expect(schema?.id?.type).toBe('text');
       expect(schema?.id?.primaryKey).toBe(true);
@@ -532,9 +524,9 @@ describe('CloudflareStore REST API', () => {
       await store.__saveMessages({ messages });
 
       // Verify order is maintained based on insertion order
-      const orderKey = store.__getThreadMessagesKey(thread.id);
+      const orderKey = store['getThreadMessagesKey'](thread.id);
       const order = await retryUntil(
-        async () => await store.__getFullOrder(TABLE_MESSAGES, orderKey),
+        async () => await store['getFullOrder'](TABLE_MESSAGES, orderKey),
         order => order.length === messages.length,
       );
 
@@ -551,8 +543,8 @@ describe('CloudflareStore REST API', () => {
       await store.__saveMessages({ messages });
 
       // Update scores to reverse order
-      const orderKey = store.__getThreadMessagesKey(thread.id);
-      await store.__updateSortedOrder(
+      const orderKey = store['getThreadMessagesKey'](thread.id);
+      await store['updateSortedOrder'](
         TABLE_MESSAGES,
         orderKey,
         messages.map((msg, i) => ({
@@ -563,7 +555,7 @@ describe('CloudflareStore REST API', () => {
 
       // Verify new order
       const order = await retryUntil(
-        async () => await store.__getFullOrder(TABLE_MESSAGES, orderKey),
+        async () => await store['getFullOrder'](TABLE_MESSAGES, orderKey),
         order => order[0] === messages?.[messages.length - 1]?.id,
       );
       expect(order).toEqual(messages.map(m => m.id).reverse());
@@ -598,10 +590,10 @@ describe('CloudflareStore REST API', () => {
       await new Promise(resolve => setTimeout(resolve, 5000));
 
       // Get messages and verify order
-      const orderKey = store.__getThreadMessagesKey(thread.id);
+      const orderKey = store['getThreadMessagesKey'](thread.id);
       const order = await retryUntil(
         async () => {
-          const order = await store.__getFullOrder(TABLE_MESSAGES, orderKey);
+          const order = await store['getFullOrder'](TABLE_MESSAGES, orderKey);
           return order;
         },
         order => order.length > 0,
@@ -610,21 +602,21 @@ describe('CloudflareStore REST API', () => {
 
       // Verify we can get specific ranges
       const firstTwo = await retryUntil(
-        async () => await store.__getRange(TABLE_MESSAGES, orderKey, 0, 1),
+        async () => await store['getRange'](TABLE_MESSAGES, orderKey, 0, 1),
         order => order.length > 0,
       );
 
       expect(firstTwo.length).toBe(2);
 
       const lastTwo = await retryUntil(
-        async () => await store.__getLastN(TABLE_MESSAGES, orderKey, 2),
+        async () => await store['getLastN'](TABLE_MESSAGES, orderKey, 2),
         order => order.length > 0,
       );
       expect(lastTwo.length).toBe(2);
 
       // Verify message ranks
       const firstMessageRank = await retryUntil(
-        async () => await store.__getRank(TABLE_MESSAGES, orderKey, messages[0].id),
+        async () => await store['getRank'](TABLE_MESSAGES, orderKey, messages[0].id),
         order => order !== null,
       );
       expect(firstMessageRank).toBe(0);
@@ -736,8 +728,8 @@ describe('CloudflareStore REST API', () => {
       expect(retrieved?.value[workflow.runId]).toBe('completed');
 
       // Verify the workflow is stored in the correct namespace
-      const keys = await store.__listKV(TABLE_WORKFLOW_SNAPSHOT);
-      const key = store.__getKey(TABLE_WORKFLOW_SNAPSHOT, {
+      const keys = await store['listKV'](TABLE_WORKFLOW_SNAPSHOT);
+      const key = store['getKey'](TABLE_WORKFLOW_SNAPSHOT, {
         namespace: 'test',
         workflow_name: 'test-workflow',
         run_id: workflow.runId,
@@ -874,8 +866,8 @@ describe('CloudflareStore REST API', () => {
       });
 
       // Regular key generation
-      expect(storeNoPrefix.__getKey(TABLE_THREADS, { id: 'test1' })).toBe(`${TABLE_THREADS}:test1`);
-      expect(storeNoPrefix.__getKey(TABLE_MESSAGES, { threadId: 'thread1', id: 'msg1' })).toBe(
+      expect(storeNoPrefix['getKey'](TABLE_THREADS, { id: 'test1' })).toBe(`${TABLE_THREADS}:test1`);
+      expect(storeNoPrefix['getKey'](TABLE_MESSAGES, { threadId: 'thread1', id: 'msg1' })).toBe(
         `${TABLE_MESSAGES}:thread1:msg1`,
       );
 
@@ -887,17 +879,17 @@ describe('CloudflareStore REST API', () => {
       });
 
       // Regular key generation with prefix
-      expect(storeWithPrefix.__getKey(TABLE_THREADS, { id: 'test1' })).toBe(`${prefix}:${TABLE_THREADS}:test1`);
-      expect(storeWithPrefix.__getKey(TABLE_MESSAGES, { threadId: 'thread1', id: 'msg1' })).toBe(
+      expect(storeWithPrefix['getKey'](TABLE_THREADS, { id: 'test1' })).toBe(`${prefix}:${TABLE_THREADS}:test1`);
+      expect(storeWithPrefix['getKey'](TABLE_MESSAGES, { threadId: 'thread1', id: 'msg1' })).toBe(
         `${prefix}:${TABLE_MESSAGES}:thread1:msg1`,
       );
 
       // Schema key generation
-      const schemaKey = storeWithPrefix.__getSchemaKey(TABLE_THREADS);
+      const schemaKey = storeWithPrefix['getSchemaKey'](TABLE_THREADS);
       expect(schemaKey).toBe(`${prefix}:schema:${TABLE_THREADS}`);
 
       // Message ordering key
-      const orderKey = storeWithPrefix.__getThreadMessagesKey('thread1');
+      const orderKey = storeWithPrefix['getThreadMessagesKey']('thread1');
       expect(orderKey).toBe(`${prefix}:${TABLE_MESSAGES}:thread1:messages`);
     });
 
@@ -910,12 +902,12 @@ describe('CloudflareStore REST API', () => {
       await store.__saveMessages({ messages: [message] });
 
       // Verify message key format
-      const msgKey = store.__getKey(TABLE_MESSAGES, { threadId: thread.id, id: message.id });
+      const msgKey = store['getKey'](TABLE_MESSAGES, { threadId: thread.id, id: message.id });
       const expectedMsgKey = `${TEST_CONFIG.namespacePrefix}:${TABLE_MESSAGES}:${thread.id}:${message.id}`;
       expect(msgKey).toBe(expectedMsgKey);
 
       // Verify key format in KV storage
-      const kvList = await store.__listKV(TABLE_THREADS);
+      const kvList = await store['listKV'](TABLE_THREADS);
       const threadKeys = kvList.map(item => item.name);
       const prefix = TEST_CONFIG.namespacePrefix;
 
@@ -924,9 +916,9 @@ describe('CloudflareStore REST API', () => {
       expect(threadKeys).toContain(expectedThreadKey);
 
       // Message key should have correct prefix
-      const threadMsgsKey = store.__getThreadMessagesKey(thread.id);
+      const threadMsgsKey = store['getThreadMessagesKey'](thread.id);
       const messageOrder = await retryUntil(
-        async () => await store.__getFullOrder(TABLE_MESSAGES, threadMsgsKey),
+        async () => await store['getFullOrder'](TABLE_MESSAGES, threadMsgsKey),
         messages => messages.length > 0,
       );
       expect(messageOrder).toContain(message.id);
@@ -942,9 +934,9 @@ describe('CloudflareStore REST API', () => {
       await store.__saveMessages({ messages });
 
       // Verify messages exist
-      const orderKey = store.__getThreadMessagesKey(thread.id);
+      const orderKey = store['getThreadMessagesKey'](thread.id);
       const initialOrder = await retryUntil(
-        async () => await store.__getFullOrder(TABLE_MESSAGES, orderKey),
+        async () => await store['getFullOrder'](TABLE_MESSAGES, orderKey),
         messages => messages.length > 0,
       );
       expect(initialOrder).toHaveLength(messages.length);
@@ -956,7 +948,7 @@ describe('CloudflareStore REST API', () => {
 
       // Verify messages are cleaned up
       const finalOrder = await retryUntil(
-        async () => await store.__getFullOrder(TABLE_MESSAGES, orderKey),
+        async () => await store['getFullOrder'](TABLE_MESSAGES, orderKey),
         order => order.length === 0,
       );
       expect(finalOrder).toHaveLength(0);
@@ -1015,9 +1007,9 @@ describe('CloudflareStore REST API', () => {
       expect(threads).toHaveLength(0);
 
       // Verify message order is cleaned up
-      const orderKey = store.__getThreadMessagesKey(thread.id);
+      const orderKey = store['getThreadMessagesKey'](thread.id);
       const order = await retryUntil(
-        async () => await store.__getFullOrder(TABLE_MESSAGES, orderKey),
+        async () => await store['getFullOrder'](TABLE_MESSAGES, orderKey),
         order => order.length === 0,
       );
       expect(order).toHaveLength(0);
@@ -1132,14 +1124,14 @@ describe('CloudflareStore REST API', () => {
       await store.__saveMessages({ messages });
 
       // Perform multiple concurrent updates
-      const orderKey = store.__getThreadMessagesKey(thread.id);
+      const orderKey = store['getThreadMessagesKey'](thread.id);
       await Promise.all([
-        store.__updateSortedOrder(
+        store['updateSortedOrder'](
           TABLE_MESSAGES,
           orderKey,
           messages.map((msg, i) => ({ id: msg.id, score: i })),
         ),
-        store.__updateSortedOrder(
+        store['updateSortedOrder'](
           TABLE_MESSAGES,
           orderKey,
           messages.map((msg, i) => ({ id: msg.id, score: messages.length - 1 - i })),
@@ -1148,7 +1140,7 @@ describe('CloudflareStore REST API', () => {
 
       // Verify order is consistent
       const order = await retryUntil(
-        async () => await store.__getFullOrder(TABLE_MESSAGES, orderKey),
+        async () => await store['getFullOrder'](TABLE_MESSAGES, orderKey),
         order => order.length === messages.length,
       );
       expect(order.length).toBe(messages.length);
