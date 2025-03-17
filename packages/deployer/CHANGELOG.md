@@ -1,5 +1,19 @@
 # @mastra/deployer
 
+## 0.2.1-alpha.2
+
+### Patch Changes
+
+- cc7f392: Fix babel transformation in deployer
+- 0850b4c: Watch and resume per run
+- da8d9bb: Enable public dir copying if it exists
+- 9116d70: Handle the different workflow methods in workflow graph
+- Updated dependencies [fc2f89c]
+- Updated dependencies [dfbb131]
+- Updated dependencies [0850b4c]
+- Updated dependencies [9116d70]
+  - @mastra/core@0.6.1-alpha.2
+
 ## 0.2.1-alpha.1
 
 ### Patch Changes
