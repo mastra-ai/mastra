@@ -35,6 +35,7 @@ export class Workflow<
   #retryConfig?: RetryConfig;
   #mastra?: Mastra;
   #runs: Map<string, WorkflowInstance<TSteps, TTriggerSchema>> = new Map();
+  #isNested: boolean = false;
 
   // registers stepIds on `after` calls
   #afterStepStack: string[] = [];
@@ -910,5 +911,13 @@ export class Workflow<
 
   get steps() {
     return this.#steps;
+  }
+
+  setNested(isNested: boolean) {
+    this.#isNested = isNested;
+  }
+
+  get isNested() {
+    return this.#isNested;
   }
 }

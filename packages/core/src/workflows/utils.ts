@@ -171,13 +171,21 @@ export function isWorkflow(step: any): step is Workflow {
 }
 
 export function workflowToStep(workflow: Workflow): StepAction<any, any, any, any> {
+  workflow.setNested(true);
   return {
     id: workflow.name,
+    workflow,
     execute: async ({ context, suspend }) => {
       const run = workflow.createRun();
       const { results, activePaths } = await run.start();
-      if (activePaths.size > 0) {
-        // TODO: check and suspend
+      if (activePaths?.size > 0) {
+        const suspendedStep = [...activePaths.entries()].find(([stepId, { status }]) => {
+          return status === 'suspended';
+        });
+
+        if (suspendedStep) {
+          await suspend(suspendedStep[1].suspendPayload);
+        }
       }
 
       return results;

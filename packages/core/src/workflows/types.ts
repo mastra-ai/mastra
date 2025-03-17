@@ -5,6 +5,7 @@ import type { IAction, IExecutionContext, MastraUnion } from '../action';
 import type { BaseLogMessage, RegisteredLogger } from '../logger';
 import type { Mastra } from '../mastra';
 import type { Step } from './step';
+import type { Workflow } from './workflow';
 
 export interface WorkflowOptions<TTriggerSchema extends z.ZodObject<any> = any> {
   name: string;
@@ -34,6 +35,7 @@ export interface StepAction<
   payload?: TSchemaIn extends z.ZodSchema ? Partial<z.infer<TSchemaIn>> : unknown;
   execute: (context: TContext) => Promise<TSchemaOut extends z.ZodSchema ? z.infer<TSchemaOut> : unknown>;
   retryConfig?: RetryConfig;
+  workflow?: Workflow;
 }
 
 // For the simple key-value condition
