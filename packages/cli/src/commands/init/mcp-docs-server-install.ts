@@ -16,7 +16,7 @@ export function installMastraDocsMCPServer({
   if (editor === `windsurf`) return installWindsurfMCP();
 }
 
-const args = ['-y', '@mastra/mcp-docs-server'];
+const args = ['-y', '@mastra/mcp-docs-server@latest'];
 const mcpConfig = {
   mcpServers: {
     mastra:
