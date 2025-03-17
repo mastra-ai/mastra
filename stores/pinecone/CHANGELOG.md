@@ -1,5 +1,20 @@
 # @mastra/pinecone
 
+## 0.2.0-alpha.1
+
+### Minor Changes
+
+- 2ee56ad: Added new operation implementations for MastraVector in pinecone store
+
+### Patch Changes
+
+- Updated dependencies [f4854ee]
+- Updated dependencies [afaf73f]
+- Updated dependencies [44631b1]
+- Updated dependencies [6e559a0]
+- Updated dependencies [5f43505]
+  - @mastra/core@0.6.1-alpha.1
+
 ## 0.1.10-alpha.0
 
 ### Patch Changes

@@ -36,6 +36,7 @@ const meta = {
     title: "Evals",
     collapsed: false,
   },
+  faq: "FAQ",
   reference: "Reference",
 };
 

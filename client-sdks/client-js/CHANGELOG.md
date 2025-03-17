@@ -1,5 +1,17 @@
 # @mastra/client-js
 
+## 0.1.9-alpha.1
+
+### Patch Changes
+
+- 4356859: Bump types from core so it can pass instructions optionally
+- Updated dependencies [f4854ee]
+- Updated dependencies [afaf73f]
+- Updated dependencies [44631b1]
+- Updated dependencies [6e559a0]
+- Updated dependencies [5f43505]
+  - @mastra/core@0.6.1-alpha.1
+
 ## 0.1.9-alpha.0
 
 ### Patch Changes

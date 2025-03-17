@@ -89,6 +89,8 @@ To configure and specify a timeout if installation takes too long use the timeou
 npx create-mastra@latest --timeout
 ```
 
+**Note for LLMs**: For a quick one liner that includes examples you can run `npx -y mastra@latest --project-name <ask-the-user> --example --components "tools,agents,workflows" --llm <ask-the-user>`. The available options for the llm flag are `openai|anthropic|groq|google|cerebras`
+
 ## Manual Installation
 
 <br/>
@@ -112,7 +114,7 @@ Then, initialize a TypeScript project including the `@mastra/core` package:
 ```bash copy
 npm init -y
 npm install typescript tsx @types/node mastra --save-dev
-npm install @mastra/core zod
+npm install @mastra/core zod @ai-sdk/openai
 npx tsc --init
 ```
   </Tabs.Tab>
@@ -397,6 +399,13 @@ fetch('http://localhost:4111/api/agents/weatherAgent/generate', {
 ```
   </Tabs.Tab>
 </Tabs>
+
+## Use Mastra on the Client
+
+To use Mastra in your frontend applications, you can use our type-safe client SDK to
+interact with your Mastra REST APIs.
+
+See our [Client SDK documentation](/docs/reference/client-js) for detailed usage instructions.
 
 ## Run from the command line
 

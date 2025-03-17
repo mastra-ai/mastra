@@ -28,7 +28,7 @@ export const getAISDKPackage = (llmProvider: LLMProvider) => {
     case 'google':
       return '@ai-sdk/google';
     case 'cerebras':
-      return '@ai-sdk/cerebras'
+      return '@ai-sdk/cerebras';
     default:
       return '@ai-sdk/openai';
   }

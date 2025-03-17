@@ -9,6 +9,7 @@ import type {
 } from '@mastra/core/vector';
 import type { VectorFilter } from '@mastra/core/vector/filter';
 import { Pinecone } from '@pinecone-database/pinecone';
+import type { UpdateOptions } from '@pinecone-database/pinecone';
 
 import { PineconeFilterTranslator } from './filter';
 
@@ -135,5 +136,37 @@ export class PineconeVector extends MastraVector {
     } catch (error: any) {
       throw new Error(`Failed to delete Pinecone index: ${error.message}`);
     }
+  }
+
+  async updateIndexById(
+    indexName: string,
+    id: string,
+    update: {
+      vector?: number[];
+      metadata?: Record<string, any>;
+    },
+  ): Promise<void> {
+    if (!update.vector && !update.metadata) {
+      throw new Error('No updates provided');
+    }
+
+    const index = this.client.Index(indexName);
+
+    const updateObj: UpdateOptions = { id };
+
+    if (update.vector) {
+      updateObj.values = update.vector;
+    }
+
+    if (update.metadata) {
+      updateObj.metadata = update.metadata;
+    }
+
+    await index.update(updateObj);
+  }
+
+  async deleteIndexById(indexName: string, id: string): Promise<void> {
+    const index = this.client.Index(indexName);
+    await index.deleteOne(id);
   }
 }
