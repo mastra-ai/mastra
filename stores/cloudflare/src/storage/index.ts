@@ -441,21 +441,13 @@ export class CloudflareStore extends MastraStorage {
   }
 
   /**
+   * Queue for serializing sorted order updates.
    * Updates the sorted order for a given key. This operation is eventually consistent.
-   * Changes will be immediately visible at the Cloudflare location where they are made,
-   * but may take up to 60 seconds to propagate to other locations.
-   *
-   * Note: If you need true atomic operations or transaction support, consider using
-   * Durable Objects instead of KV storage.
    */
-  // Queue for serializing sorted order updates
   private updateQueue = new Map<string, Promise<void>>();
 
   /**
    * Updates the sorted order for a given key. This operation is eventually consistent.
-   * Changes will be immediately visible at the Cloudflare location where they are made,
-   * but may take up to 60 seconds to propagate to other locations.
-   *
    * Note: Operations on the same orderKey are serialized using a queue to prevent
    * concurrent updates from conflicting with each other.
    */
