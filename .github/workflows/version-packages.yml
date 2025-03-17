@@ -44,6 +44,16 @@ jobs:
       - name: Install dependencies
         run: pnpm install
 
+      - name: Bump docs prerelease version
+        run: |
+          cd packages/mcp-docs-server
+          pnpm version prerelease --preid alpha --no-git-tag-version
+          cd ../..
+          git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git config --global user.name "github-actions[bot]"
+          git add packages/mcp-docs-server/package.json
+          git commit -m "chore: bump @mastra/mcp-docs-server prerelease version"
+
       - name: Create Release Pull Request
         uses: changesets/action@v1
         env:
