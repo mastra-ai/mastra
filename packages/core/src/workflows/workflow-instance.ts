@@ -1,7 +1,7 @@
 import type { Span } from '@opentelemetry/api';
+import { context as otlpContext, trace } from '@opentelemetry/api';
 import type { Snapshot } from 'xstate';
 import type { z } from 'zod';
-import { context as otlpContext, trace } from '@opentelemetry/api';
 
 import type { Logger } from '../logger';
 
@@ -19,7 +19,6 @@ import type {
   WorkflowRunState,
 } from './types';
 import { getActivePathsAndStatus, mergeChildValue, updateStepInHierarchy } from './utils';
-import type { Workflow } from './workflow';
 
 export interface WorkflowResultReturn<T extends z.ZodType<any>, TSteps extends Step<any, any, any>[]> {
   runId: string;

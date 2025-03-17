@@ -1,4 +1,3 @@
-import { setTimeout } from 'node:timers/promises';
 import type { Span } from '@opentelemetry/api';
 import { context as otlpContext, trace } from '@opentelemetry/api';
 import type { z } from 'zod';
@@ -21,7 +20,7 @@ import type {
   WorkflowRunState,
 } from './types';
 import { WhenConditionReturnValue } from './types';
-import { isVariableReference, updateStepInHierarchy } from './utils';
+import { isVariableReference } from './utils';
 import type { WorkflowResultReturn } from './workflow-instance';
 import { WorkflowInstance } from './workflow-instance';
 
