@@ -1,7 +1,7 @@
-import { log } from '../utils';
-import { prepareCodeExamples } from './code-examples';
-import { copyRaw } from './copy-raw';
-import { preparePackageChanges } from './package-changes';
+import { log } from '../utils.js';
+import { prepareCodeExamples } from './code-examples.js';
+import { copyRaw } from './copy-raw.js';
+import { preparePackageChanges } from './package-changes.js';
 
 export async function prepare() {
   log('Preparing documentation...');

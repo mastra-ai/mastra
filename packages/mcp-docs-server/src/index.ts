@@ -2,11 +2,11 @@ import fs from 'node:fs/promises';
 
 import { FastMCP } from 'tylerbarnes-fastmcp-fix';
 
-import { blogTool } from './tools/blog';
-import { changesTool } from './tools/changes';
-import { docsTool } from './tools/docs';
-import { examplesTool } from './tools/examples';
-import { fromPackageRoot } from './utils';
+import { blogTool } from './tools/blog.js';
+import { changesTool } from './tools/changes.js';
+import { docsTool } from './tools/docs.js';
+import { examplesTool } from './tools/examples.js';
+import { fromPackageRoot } from './utils.js';
 
 // console.error('Starting Mastra Documentation Server...');
 // console.error('Docs base dir:', path.join(__dirname, '../.docs/raw/'));

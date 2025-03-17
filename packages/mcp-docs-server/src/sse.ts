@@ -1,4 +1,4 @@
-import { server } from './index';
+import { server } from './index.js';
 
 // console.error('Starting server...');
 void server.start({
