@@ -23,7 +23,9 @@ Each section contains detailed markdown files that provide comprehensive informa
 - [Overview](https://mastra.ai/docs/evals/00-overview): Mastra evals help you measure LLM output quality with metrics for relevance, bias, hallucination, and more.
 - [Supported evals](https://mastra.ai/docs/evals/01-supported-evals): Mastra provides several default evals for assessing Agent outputs.
 - [Create your own Eval](https://mastra.ai/docs/evals/02-custom-eval): Mastra allows so create your own evals, here is how.
+- [Licensing](https://mastra.ai/docs/faq): Mastra License
 - [Getting started with Mastra and NextJS | Mastra Guides](https://mastra.ai/docs/frameworks/01-next-js): Guide on integrating Mastra with NextJS.
+- [AI SDK](https://mastra.ai/docs/frameworks/02-ai-sdk): Learn how Mastra leverages the AI SDK library and how you can leverage it further with Mastra
 - [Installing Mastra Locally | Getting Started | Mastra Docs](https://mastra.ai/docs/getting-started/installation): Guide on installing Mastra and setting up the necessary prerequisites for running it with various LLM providers.
 - [Local Project Structure | Getting Started | Mastra Docs](https://mastra.ai/docs/getting-started/project-structure): Guide on organizing folders and files in Mastra, including best practices and recommended structures.
 - [Building an AI Chef Assistant | Mastra Agent Guides](https://mastra.ai/docs/guides/01-chef-michel): Guide on creating a Chef Assistant agent in Mastra to help users cook meals with available ingredients.
