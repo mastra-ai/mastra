@@ -28,6 +28,7 @@ import { WorkflowInstance } from './workflow-instance';
 export class Workflow<
   TSteps extends Step<string, any, any>[] = Step<string, any, any>[],
   TTriggerSchema extends z.ZodObject<any> = any,
+  TResultSchema extends z.ZodObject<any> = any,
 > extends MastraBase {
   name: string;
   triggerSchema?: TTriggerSchema;
@@ -57,7 +58,7 @@ export class Workflow<
    * @param name - Identifier for the workflow (not necessarily unique)
    * @param logger - Optional logger instance
    */
-  constructor({ name, triggerSchema, retryConfig, mastra, events }: WorkflowOptions<TTriggerSchema>) {
+  constructor({ name, triggerSchema, retryConfig, mastra, events }: WorkflowOptions<TTriggerSchema, TResultSchema>) {
     super({ component: 'WORKFLOW', name });
 
     this.name = name;

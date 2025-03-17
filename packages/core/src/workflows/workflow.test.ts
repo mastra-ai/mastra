@@ -3604,6 +3604,11 @@ describe('Workflow', async () => {
           triggerSchema: z.object({
             startValue: z.number(),
           }),
+          result: {
+            schema: z.object({
+              finalValue: z.number(),
+            }),
+          },
         });
 
         const wfA = new Workflow({ name: 'nested-workflow-a' })

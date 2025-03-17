@@ -7,9 +7,15 @@ import type { Mastra } from '../mastra';
 import type { Step } from './step';
 import type { Workflow } from './workflow';
 
-export interface WorkflowOptions<TTriggerSchema extends z.ZodObject<any> = any> {
+export interface WorkflowOptions<
+  TTriggerSchema extends z.ZodObject<any> = any,
+  TResultSchema extends z.ZodObject<any> = any,
+> {
   name: string;
   triggerSchema?: TTriggerSchema;
+  result?: {
+    schema: TResultSchema;
+  };
   events?: Record<string, { schema: z.ZodObject<any> }>;
   retryConfig?: RetryConfig;
   mastra?: Mastra;
