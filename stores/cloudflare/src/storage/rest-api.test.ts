@@ -3,7 +3,13 @@ import dotenv from 'dotenv';
 import { describe, it, expect, beforeAll, beforeEach, afterAll, vi } from 'vitest';
 import type { WorkflowRunState } from '@mastra/core/workflows';
 import type { MessageType, StorageThreadType } from '@mastra/core/memory';
-import { TABLE_MESSAGES, TABLE_NAMES, TABLE_THREADS, TABLE_WORKFLOW_SNAPSHOT } from '@mastra/core/storage';
+import {
+  TABLE_MESSAGES,
+  TABLE_NAMES,
+  TABLE_THREADS,
+  TABLE_WORKFLOW_SNAPSHOT,
+  StorageColumn,
+} from '@mastra/core/storage';
 
 import { CloudflareStore } from '.';
 import type { CloudflareStoreConfig } from './types';
@@ -65,7 +71,9 @@ declare module '@mastra/core/storage' {
     __getRank(tableName: TABLE_NAMES, orderKey: string, id: string): Promise<number | null>;
     __listKV(tableName: TABLE_NAMES): Promise<Array<{ name: string }>>;
     __getKey(tableName: TABLE_NAMES, keys: Record<string, any>): string;
+    __getSchemaKey(tableName: TABLE_NAMES): string;
     __getThreadMessagesKey(threadId: string): string;
+    __getTableSchema(tableName: TABLE_NAMES): Promise<Record<string, StorageColumn> | null>;
     __updateSortedOrder(
       tableName: TABLE_NAMES,
       orderKey: string,
@@ -95,9 +103,6 @@ const retryUntil = async <T>(
 };
 
 describe('CloudflareStore REST API', () => {
-  // Expose private methods for testing
-  const getThreadMessagesKey = (threadId: string) => `${TABLE_MESSAGES}:${threadId}:messages`;
-
   // Add test helper methods to CloudflareStore
   beforeAll(() => {
     Object.assign(CloudflareStore.prototype, {
@@ -109,6 +114,8 @@ describe('CloudflareStore REST API', () => {
       __getRank: CloudflareStore.prototype['getRank'],
       __getThreadMessagesKey: CloudflareStore.prototype['getThreadMessagesKey'],
       __updateSortedOrder: CloudflareStore.prototype['updateSortedOrder'],
+      __getTableSchema: CloudflareStore.prototype['getTableSchema'],
+      __getSchemaKey: CloudflareStore.prototype['getSchemaKey'],
     });
   });
   let store: CloudflareStore;
@@ -122,11 +129,8 @@ describe('CloudflareStore REST API', () => {
 
   // Helper to clean up KV namespaces
   const cleanupNamespaces = async () => {
-    const namespaces = [
-      `${TEST_CONFIG.namespacePrefix}_mastra_threads`,
-      `${TEST_CONFIG.namespacePrefix}_mastra_workflows`,
-      `${TEST_CONFIG.namespacePrefix}_mastra_evals`,
-    ];
+    const prefix = TEST_CONFIG.namespacePrefix;
+    const namespaces = [`${prefix}_mastra_threads`, `${prefix}_mastra_workflows`, `${prefix}_mastra_evals`];
 
     for (const namespace of namespaces) {
       try {
@@ -156,7 +160,6 @@ describe('CloudflareStore REST API', () => {
     });
 
     it('should create a new table with schema', async () => {
-      // Increase timeout for namespace creation and cleanup
       await store.createTable({
         tableName: testTableName,
         schema: {
@@ -164,6 +167,17 @@ describe('CloudflareStore REST API', () => {
           data: { type: 'text', nullable: true },
         },
       });
+
+      // Verify schema key format
+      const schemaKey = store.__getSchemaKey(testTableName);
+      const expectedSchemaKey = `${TEST_CONFIG.namespacePrefix}:schema:${testTableName}`;
+      expect(schemaKey).toBe(expectedSchemaKey);
+
+      // Verify schema exists
+      const schema = await store.__getTableSchema(testTableName);
+      expect(schema).toBeTruthy();
+      expect(schema?.id?.type).toBe('text');
+      expect(schema?.id?.primaryKey).toBe(true);
 
       // Verify table exists by inserting and retrieving data
       await store.insert({
@@ -584,7 +598,7 @@ describe('CloudflareStore REST API', () => {
       await new Promise(resolve => setTimeout(resolve, 5000));
 
       // Get messages and verify order
-      const orderKey = getThreadMessagesKey(thread.id);
+      const orderKey = store.__getThreadMessagesKey(thread.id);
       const order = await retryUntil(
         async () => {
           const order = await store.__getFullOrder(TABLE_MESSAGES, orderKey);
@@ -848,6 +862,74 @@ describe('CloudflareStore REST API', () => {
 
       // Should throw on invalid data
       await expect(store.__saveThread({ thread: invalidThread })).rejects.toThrow();
+    });
+  });
+
+  describe('Key Generation', () => {
+    it('should generate correct keys with and without prefix', async () => {
+      // Test without prefix
+      const storeNoPrefix = new CloudflareStore({
+        ...TEST_CONFIG,
+        namespacePrefix: '',
+      });
+
+      // Regular key generation
+      expect(storeNoPrefix.__getKey(TABLE_THREADS, { id: 'test1' })).toBe(`${TABLE_THREADS}:test1`);
+      expect(storeNoPrefix.__getKey(TABLE_MESSAGES, { threadId: 'thread1', id: 'msg1' })).toBe(
+        `${TABLE_MESSAGES}:thread1:msg1`,
+      );
+
+      // Test with prefix
+      const prefix = 'test-prefix';
+      const storeWithPrefix = new CloudflareStore({
+        ...TEST_CONFIG,
+        namespacePrefix: prefix,
+      });
+
+      // Regular key generation with prefix
+      expect(storeWithPrefix.__getKey(TABLE_THREADS, { id: 'test1' })).toBe(`${prefix}:${TABLE_THREADS}:test1`);
+      expect(storeWithPrefix.__getKey(TABLE_MESSAGES, { threadId: 'thread1', id: 'msg1' })).toBe(
+        `${prefix}:${TABLE_MESSAGES}:thread1:msg1`,
+      );
+
+      // Schema key generation
+      const schemaKey = storeWithPrefix.__getSchemaKey(TABLE_THREADS);
+      expect(schemaKey).toBe(`${prefix}:schema:${TABLE_THREADS}`);
+
+      // Message ordering key
+      const orderKey = storeWithPrefix.__getThreadMessagesKey('thread1');
+      expect(orderKey).toBe(`${prefix}:${TABLE_MESSAGES}:thread1:messages`);
+    });
+
+    it('should maintain consistent key format across operations', async () => {
+      const thread = createSampleThread();
+      const message = createSampleMessage(thread.id);
+
+      // Save thread and message
+      await store.__saveThread({ thread });
+      await store.__saveMessages({ messages: [message] });
+
+      // Verify message key format
+      const msgKey = store.__getKey(TABLE_MESSAGES, { threadId: thread.id, id: message.id });
+      const expectedMsgKey = `${TEST_CONFIG.namespacePrefix}:${TABLE_MESSAGES}:${thread.id}:${message.id}`;
+      expect(msgKey).toBe(expectedMsgKey);
+
+      // Verify key format in KV storage
+      const kvList = await store.__listKV(TABLE_THREADS);
+      const threadKeys = kvList.map(item => item.name);
+      const prefix = TEST_CONFIG.namespacePrefix;
+
+      // Thread key should have correct prefix
+      const expectedThreadKey = prefix ? `${prefix}:${TABLE_THREADS}:${thread.id}` : `${TABLE_THREADS}:${thread.id}`;
+      expect(threadKeys).toContain(expectedThreadKey);
+
+      // Message key should have correct prefix
+      const threadMsgsKey = store.__getThreadMessagesKey(thread.id);
+      const messageOrder = await retryUntil(
+        async () => await store.__getFullOrder(TABLE_MESSAGES, threadMsgsKey),
+        messages => messages.length > 0,
+      );
+      expect(messageOrder).toContain(message.id);
     });
   });
 

@@ -18,8 +18,12 @@ export interface CloudflareRestConfig {
   accountId: string;
   /** Cloudflare API token with KV access */
   apiToken: string;
-  /** Prefix for KV namespace names */
-  namespacePrefix: string;
+  /**
+   * Prefix for KV namespace names.
+   * Recommended for production use to ensure data isolation between different instances.
+   * If not provided, no prefix will be used
+   */
+  namespacePrefix?: string;
 }
 
 /**

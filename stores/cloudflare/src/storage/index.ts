@@ -41,7 +41,7 @@ export class CloudflareStore extends MastraStorage {
 
   private validateRestConfig(
     config: CloudflareStoreConfig,
-  ): asserts config is { accountId: string; apiToken: string; namespacePrefix: string } {
+  ): asserts config is { accountId: string; apiToken: string; namespacePrefix?: string } {
     if (isWorkersConfig(config)) {
       throw new Error('Invalid REST API configuration');
     }
@@ -50,9 +50,6 @@ export class CloudflareStore extends MastraStorage {
     }
     if (!config.apiToken?.trim()) {
       throw new Error('apiToken is required for REST API');
-    }
-    if (!config.namespacePrefix?.trim()) {
-      throw new Error('namespacePrefix is required for REST API');
     }
   }
 
@@ -68,7 +65,7 @@ export class CloudflareStore extends MastraStorage {
       } else {
         this.validateRestConfig(config);
         this.accountId = config.accountId.trim();
-        this.namespacePrefix = config.namespacePrefix.trim();
+        this.namespacePrefix = config.namespacePrefix?.trim() || '';
         this.client = new Cloudflare({
           apiToken: config.apiToken.trim(),
         });
@@ -265,15 +262,15 @@ export class CloudflareStore extends MastraStorage {
   }
 
   private async getNamespaceId(tableName: TABLE_NAMES): Promise<string> {
-    const prefix = this.namespacePrefix;
+    const prefix = this.namespacePrefix ? `${this.namespacePrefix}_` : '';
 
     try {
       if (tableName === TABLE_MESSAGES || tableName === TABLE_THREADS) {
-        return await this.getOrCreateNamespaceId(`${prefix}_mastra_threads`);
+        return await this.getOrCreateNamespaceId(`${prefix}mastra_threads`);
       } else if (tableName === TABLE_WORKFLOW_SNAPSHOT) {
-        return await this.getOrCreateNamespaceId(`${prefix}_mastra_workflows`);
+        return await this.getOrCreateNamespaceId(`${prefix}mastra_workflows`);
       } else {
-        return await this.getOrCreateNamespaceId(`${prefix}_mastra_evals`);
+        return await this.getOrCreateNamespaceId(`${prefix}mastra_evals`);
       }
     } catch (error: any) {
       this.logger.error('Error fetching namespace ID:', error);
@@ -509,25 +506,29 @@ export class CloudflareStore extends MastraStorage {
   }
 
   private getKey<T extends TABLE_NAMES>(tableName: T, record: Record<string, string>): string {
+    // Add namespace prefix if configured
+    const prefix = this.namespacePrefix ? `${this.namespacePrefix}:` : '';
     switch (tableName) {
       case TABLE_THREADS:
         if (!record.id) throw new Error('Thread ID is required');
-        return `${tableName}:${record.id}`;
+        return `${prefix}${tableName}:${record.id}`;
       case TABLE_MESSAGES:
         if (!record.threadId || !record.id) throw new Error('Thread ID and Message ID are required');
-        return `${tableName}:${record.threadId}:${record.id}`;
+        return `${prefix}${tableName}:${record.threadId}:${record.id}`;
       case TABLE_WORKFLOW_SNAPSHOT:
         if (!record.namespace || !record.workflow_name || !record.run_id) {
           throw new Error('Namespace, workflow name, and run ID are required');
         }
-        return `${tableName}:${record.namespace}:${record.workflow_name}:${record.run_id}`;
+        return `${prefix}${tableName}:${record.namespace}:${record.workflow_name}:${record.run_id}`;
       default:
         throw new Error(`Unsupported table: ${tableName}`);
     }
   }
 
   private getSchemaKey(tableName: TABLE_NAMES): string {
-    return `schema:${tableName}`;
+    // Add namespace prefix if configured
+    const prefix = this.namespacePrefix ? `${this.namespacePrefix}:` : '';
+    return `${prefix}schema:${tableName}`;
   }
 
   private async getTableSchema(tableName: TABLE_NAMES): Promise<Record<string, StorageColumn> | null> {
@@ -571,59 +572,69 @@ export class CloudflareStore extends MastraStorage {
     record: Record<string, unknown>,
     schema: Record<string, StorageColumn>,
   ): Promise<void> {
-    for (const [columnName, column] of Object.entries(schema)) {
-      const value = record[columnName];
+    try {
+      for (const [columnName, column] of Object.entries(schema)) {
+        const value = record[columnName];
 
-      // Check primary key presence
-      if (column.primaryKey && (value === undefined || value === null)) {
-        throw new Error(`Missing primary key value for column ${columnName}`);
-      }
+        // Check primary key presence
+        if (column.primaryKey && (value === undefined || value === null)) {
+          throw new Error(`Missing primary key value for column ${columnName}`);
+        }
 
-      if (!this.validateColumnValue(value, column)) {
-        const valueType = value === null ? 'null' : typeof value;
-        throw new Error(`Invalid value for column ${columnName}: expected ${column.type}, got ${valueType}`);
+        if (!this.validateColumnValue(value, column)) {
+          const valueType = value === null ? 'null' : typeof value;
+          throw new Error(`Invalid value for column ${columnName}: expected ${column.type}, got ${valueType}`);
+        }
       }
+    } catch (error) {
+      this.logger.error(`Error validating record against schema:`, { error, record, schema });
+      throw error;
     }
   }
 
   private async validateRecord<T extends TABLE_NAMES>(record: unknown, tableName: T): Promise<void> {
-    if (!record || typeof record !== 'object') {
-      throw new Error('Record must be an object');
-    }
+    try {
+      if (!record || typeof record !== 'object') {
+        throw new Error('Record must be an object');
+      }
 
-    const recordTyped = record as Record<string, unknown>;
-    const schema = await this.getTableSchema(tableName);
+      const recordTyped = record as Record<string, unknown>;
+      const schema = await this.getTableSchema(tableName);
 
-    // If schema exists, validate against it
-    if (schema) {
-      await this.validateAgainstSchema(recordTyped, schema);
-      return;
-    }
+      // If schema exists, validate against it
+      if (schema) {
+        await this.validateAgainstSchema(recordTyped, schema);
+        return;
+      }
 
-    // Fallback validation if no schema found
-    switch (tableName) {
-      case TABLE_THREADS:
-        if (!('id' in recordTyped) || !('resourceId' in recordTyped) || !('title' in recordTyped)) {
-          throw new Error('Thread record missing required fields');
-        }
-        break;
-      case TABLE_MESSAGES:
-        if (
-          !('id' in recordTyped) ||
-          !('threadId' in recordTyped) ||
-          !('content' in recordTyped) ||
-          !('role' in recordTyped)
-        ) {
-          throw new Error('Message record missing required fields');
-        }
-        break;
-      case TABLE_WORKFLOW_SNAPSHOT:
-        if (!('namespace' in recordTyped) || !('workflowName' in recordTyped) || !('runId' in recordTyped)) {
-          throw new Error('Workflow record missing required fields');
-        }
-        break;
-      default:
-        throw new Error(`Unknown table type: ${tableName}`);
+      // Fallback validation if no schema found
+      switch (tableName) {
+        case TABLE_THREADS:
+          if (!('id' in recordTyped) || !('resourceId' in recordTyped) || !('title' in recordTyped)) {
+            throw new Error('Thread record missing required fields');
+          }
+          break;
+        case TABLE_MESSAGES:
+          if (
+            !('id' in recordTyped) ||
+            !('threadId' in recordTyped) ||
+            !('content' in recordTyped) ||
+            !('role' in recordTyped)
+          ) {
+            throw new Error('Message record missing required fields');
+          }
+          break;
+        case TABLE_WORKFLOW_SNAPSHOT:
+          if (!('namespace' in recordTyped) || !('workflowName' in recordTyped) || !('runId' in recordTyped)) {
+            throw new Error('Workflow record missing required fields');
+          }
+          break;
+        default:
+          throw new Error(`Unknown table type: ${tableName}`);
+      }
+    } catch (error) {
+      this.logger.error(`Failed to validate record for ${tableName}:`, { error, record });
+      throw error;
     }
   }
 
@@ -835,10 +846,20 @@ export class CloudflareStore extends MastraStorage {
   }
 
   private getMessageKey(threadId: string, messageId: string): string {
-    return this.getKey(TABLE_MESSAGES, { threadId, id: messageId });
+    try {
+      return this.getKey(TABLE_MESSAGES, { threadId, id: messageId });
+    } catch (error) {
+      this.logger.error(`Error getting message key for thread ${threadId} and message ${messageId}:`, { error });
+      throw error;
+    }
   }
   private getThreadMessagesKey(threadId: string): string {
-    return this.getKey(TABLE_MESSAGES, { threadId, id: 'messages' });
+    try {
+      return this.getKey(TABLE_MESSAGES, { threadId, id: 'messages' });
+    } catch (error) {
+      this.logger.error(`Error getting thread messages key for thread ${threadId}:`, { error });
+      throw error;
+    }
   }
 
   async saveMessages({ messages }: { messages: MessageType[] }): Promise<MessageType[]> {
