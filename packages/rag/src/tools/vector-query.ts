@@ -4,7 +4,13 @@ import { z } from 'zod';
 
 import { rerank } from '../rerank';
 import type { RerankConfig } from '../rerank';
-import { vectorQuerySearch, defaultVectorQueryDescription, filterDescription, topKDescription } from '../utils';
+import {
+  vectorQuerySearch,
+  defaultVectorQueryDescription,
+  filterDescription,
+  topKDescription,
+  queryTextDescription,
+} from '../utils';
 
 export const createVectorQueryTool = ({
   vectorStoreName,
@@ -27,17 +33,17 @@ export const createVectorQueryTool = ({
   const toolDescription = description || defaultVectorQueryDescription();
   // Create base schema with required fields
   const baseSchema = {
-    queryText: z.string().describe('The text query to search for in the vector database'),
-    topK: z.coerce.number().describe(topKDescription),
+    queryText: z.string().describe(queryTextDescription),
+    topK: z.any().describe(topKDescription),
   };
   const inputSchema = enableFilter
     ? z
         .object({
           ...baseSchema,
-          filter: z.coerce.string().describe(filterDescription),
+          filter: z.string().describe(filterDescription),
         })
-        .strict()
-    : z.object(baseSchema).strict();
+        .passthrough()
+    : z.object(baseSchema).passthrough();
   return createTool({
     id: toolId,
     inputSchema,
@@ -51,6 +57,13 @@ export const createVectorQueryTool = ({
       },
       mastra,
     }) => {
+      const topKValue =
+        typeof topK === 'number' && !isNaN(topK)
+          ? topK
+          : typeof topK === 'string' && !isNaN(Number(topK))
+            ? Number(topK)
+            : 10;
+
       const vectorStore = mastra?.vectors?.[vectorStoreName];
 
       // Get relevant chunks from the vector database
@@ -59,14 +72,18 @@ export const createVectorQueryTool = ({
         if (enableFilter && filter) {
           queryFilter = (() => {
             try {
-              return JSON.parse(filter);
-            } catch {
-              return filter;
+              return typeof filter === 'string' ? JSON.parse(filter) : filter;
+            } catch (error) {
+              // Log the error and use empty object
+              if (mastra.logger) {
+                mastra.logger.warn('Failed to parse filter as JSON, using empty filter', { filter, error });
+              }
+              return {};
             }
           })();
         }
         if (mastra.logger) {
-          mastra.logger.debug('Using this filter and topK:', { queryFilter, topK });
+          mastra.logger.debug('Using this filter and topK:', { queryFilter, topK: topKValue });
         }
 
         const { results } = await vectorQuerySearch({
@@ -75,24 +92,22 @@ export const createVectorQueryTool = ({
           queryText,
           model,
           queryFilter: Object.keys(queryFilter || {}).length > 0 ? queryFilter : undefined,
-          topK,
+          topK: topKValue,
         });
         if (reranker) {
           const rerankedResults = await rerank(results, queryText, reranker.model, {
             ...reranker.options,
-            topK: reranker.options?.topK || topK,
+            topK: reranker.options?.topK || topKValue,
           });
           const relevantChunks = rerankedResults.map(({ result }) => result?.metadata);
           return { relevantContext: relevantChunks };
         }
 
         const relevantChunks = results.map(result => result?.metadata);
-
         return {
           relevantContext: relevantChunks,
         };
       }
-
       return {
         relevantContext: [],
       };

@@ -15,6 +15,7 @@ vi.mock('@mastra/core/tools', () => ({
 vi.mock('../utils', () => ({
   vectorQuerySearch: vi.fn().mockResolvedValue({ results: [] }),
   defaultVectorQueryDescription: () => 'Default vector query description',
+  queryTextDescription: 'Query text description',
   filterDescription: 'Filter description',
   topKDescription: 'Top K description',
 }));
@@ -29,6 +30,8 @@ describe('createVectorQueryTool', () => {
     },
     logger: {
       debug: vi.fn(),
+      warn: vi.fn(),
+      info: vi.fn(),
     },
   };
 
@@ -37,7 +40,7 @@ describe('createVectorQueryTool', () => {
   });
 
   describe('input schema validation', () => {
-    it('should make filter invalid when enableFilter is false', () => {
+    it('should handle filter permissively when enableFilter is false', () => {
       // Create tool with enableFilter set to false
       const tool = createVectorQueryTool({
         vectorStoreName: 'testStore',
@@ -61,10 +64,10 @@ describe('createVectorQueryTool', () => {
         ...validInput,
         filter: '{"field": "value"}',
       };
-      expect(() => schema.parse(inputWithFilter)).toThrow();
+      expect(() => schema.parse(inputWithFilter)).not.toThrow();
     });
 
-    it('should handle filter permissively when enableFilter is true', () => {
+    it('should handle filter when enableFilter is true', () => {
       const tool = createVectorQueryTool({
         vectorStoreName: 'testStore',
         indexName: 'testIndex',
@@ -81,13 +84,14 @@ describe('createVectorQueryTool', () => {
         { filter: '{"field": "value"}' },
         { filter: '{}' },
         { filter: 'simple-string' },
-        // Object inputs (should be coerced to strings)
+        // Empty
+        { filter: '' },
+      ];
+
+      const invalidTestCases = [
         { filter: { field: 'value' } },
         { filter: {} },
-        // Numbers (should be coerced)
         { filter: 123 },
-        // Empty/null values (should be coerced)
-        { filter: '' },
         { filter: null },
         { filter: undefined },
       ];
@@ -102,6 +106,16 @@ describe('createVectorQueryTool', () => {
         ).not.toThrow();
       });
 
+      invalidTestCases.forEach(({ filter }) => {
+        expect(() =>
+          schema.parse({
+            queryText: 'test query',
+            topK: 5,
+            filter,
+          }),
+        ).toThrow();
+      });
+
       // Verify that all parsed values are strings
       testCases.forEach(({ filter }) => {
         const result = schema.parse({
@@ -113,7 +127,7 @@ describe('createVectorQueryTool', () => {
       });
     });
 
-    it('should reject unexpected properties in both modes', () => {
+    it('should not reject unexpected properties in both modes', () => {
       // Test with enableFilter false
       const toolWithoutFilter = createVectorQueryTool({
         vectorStoreName: 'testStore',
@@ -129,7 +143,7 @@ describe('createVectorQueryTool', () => {
           topK: 5,
           unexpectedProp: 'value',
         }),
-      ).toThrow();
+      ).not.toThrow();
 
       // Test with enableFilter true
       const toolWithFilter = createVectorQueryTool({
@@ -147,7 +161,7 @@ describe('createVectorQueryTool', () => {
           filter: '{}',
           unexpectedProp: 'value',
         }),
-      ).toThrow();
+      ).not.toThrow();
     });
   });
 
@@ -234,10 +248,10 @@ describe('createVectorQueryTool', () => {
         mastra: mockMastra as any,
       });
 
-      // Check that vectorQuerySearch was called with the string filter
+      // Since this is not a valid filter, it should be ignored
       expect(vectorQuerySearch).toHaveBeenCalledWith(
         expect.objectContaining({
-          queryFilter: 'string-filter',
+          queryFilter: undefined,
         }),
       );
     });

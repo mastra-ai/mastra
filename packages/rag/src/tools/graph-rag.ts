@@ -3,7 +3,13 @@ import type { EmbeddingModel } from 'ai';
 import { z } from 'zod';
 
 import { GraphRAG } from '../graph-rag';
-import { vectorQuerySearch, defaultGraphRagDescription, filterDescription, topKDescription } from '../utils';
+import {
+  vectorQuerySearch,
+  defaultGraphRagDescription,
+  filterDescription,
+  topKDescription,
+  queryTextDescription,
+} from '../utils';
 
 export const createGraphRAGTool = ({
   vectorStoreName,
@@ -38,13 +44,21 @@ export const createGraphRAGTool = ({
   const graphRag = new GraphRAG(graphOptions.dimension, graphOptions.threshold);
   let isInitialized = false;
 
+  const baseSchema = {
+    queryText: z.string().describe(queryTextDescription),
+    topK: z.any().describe(topKDescription),
+  };
+  const inputSchema = enableFilter
+    ? z
+        .object({
+          ...baseSchema,
+          filter: z.string().describe(filterDescription),
+        })
+        .passthrough()
+    : z.object(baseSchema).passthrough();
   return createTool({
     id: toolId,
-    inputSchema: z.object({
-      queryText: z.string().describe('The text query to search for in the vector database'),
-      topK: z.number().describe(topKDescription),
-      filter: z.string().describe(filterDescription),
-    }),
+    inputSchema,
     outputSchema: z.object({
       relevantContext: z.any(),
     }),
@@ -55,23 +69,31 @@ export const createGraphRAGTool = ({
       },
       mastra,
     }) => {
+      const topKValue =
+        typeof topK === 'number' && !isNaN(topK)
+          ? topK
+          : typeof topK === 'string' && !isNaN(Number(topK))
+            ? Number(topK)
+            : 10;
       const vectorStore = mastra?.vectors?.[vectorStoreName];
 
       if (vectorStore) {
         let queryFilter = {};
         if (enableFilter) {
-          queryFilter = filter
-            ? (() => {
-                try {
-                  return JSON.parse(filter);
-                } catch {
-                  return filter;
-                }
-              })()
-            : filter;
+          queryFilter = (() => {
+            try {
+              return typeof filter === 'string' ? JSON.parse(filter) : filter;
+            } catch (error) {
+              // Log the error and use empty object
+              if (mastra.logger) {
+                mastra.logger.warn('Failed to parse filter as JSON, using empty filter', { filter, error });
+              }
+              return {};
+            }
+          })();
         }
         if (mastra.logger) {
-          mastra.logger.debug('Using this filter and topK:', { queryFilter, topK });
+          mastra.logger.debug('Using this filter and topK:', { queryFilter, topK: topKValue });
         }
         const { results, queryEmbedding } = await vectorQuerySearch({
           indexName,
@@ -79,7 +101,7 @@ export const createGraphRAGTool = ({
           queryText,
           model,
           queryFilter: Object.keys(queryFilter || {}).length > 0 ? queryFilter : undefined,
-          topK,
+          topK: topKValue,
           includeVectors: true,
         });
 
@@ -101,7 +123,7 @@ export const createGraphRAGTool = ({
         // Get reranked results using GraphRAG
         const rerankedResults = graphRag.query({
           query: queryEmbedding,
-          topK,
+          topK: topKValue,
           randomWalkSteps: graphOptions.randomWalkSteps,
           restartProb: graphOptions.restartProb,
         });
@@ -112,7 +134,6 @@ export const createGraphRAGTool = ({
           relevantContext: relevantChunks,
         };
       }
-
       return {
         relevantContext: [],
       };

@@ -33,6 +33,24 @@ An optional object that can include configuration for output structure, memory m
 <PropertiesTable
   content={[
     {
+      name: "abortSignal",
+      type: "AbortSignal",
+      isOptional: true,
+      description: "Signal object that allows you to abort the agent's execution. When the signal is aborted, all ongoing operations will be terminated.",
+    },
+    {
+      name: "context",
+      type: "CoreMessage[]",
+      isOptional: true,
+      description: "Additional context messages to provide to the agent.",
+    },
+    {
+      name: "experimental_output",
+      type: "Zod schema | JsonSchema7",
+      isOptional: true,
+      description: "Enables structured output generation alongside text generation and tool calls. The model will generate responses that conform to the provided schema.",
+    },
+    {
       name: "instructions",
       type: "string",
       isOptional: true,
@@ -45,22 +63,47 @@ An optional object that can include configuration for output structure, memory m
       description: "Defines the expected structure of the output. Can be a JSON Schema object or a Zod schema.",
     },
     {
-      name: "experimental_output",
-      type: "Zod schema | JsonSchema7",
+      name: "maxSteps",
+      type: "number",
       isOptional: true,
-      description: "Enables structured output generation alongside text generation and tool calls. The model will generate responses that conform to the provided schema.",
-    },
-    {
-      name: "context",
-      type: "CoreMessage[]",
-      isOptional: true,
-      description: "Additional context messages to provide to the agent.",
+      defaultValue: "5",
+      description: "Maximum number of execution steps allowed.",
     },
     {
       name: "memoryOptions",
       type: "MemoryConfig",
       isOptional: true,
       description: "Configuration options for memory management. See MemoryConfig section below for details.",
+    },
+    {
+      name: "onStepFinish",
+      type: "(step: string) => void",
+      isOptional: true,
+      description: "Callback function called after each execution step. Receives step details as a JSON string.",
+    },
+    {
+      name: "resourceId",
+      type: "string",
+      isOptional: true,
+      description: "Identifier for the user or resource interacting with the agent. Must be provided if threadId is provided.",
+    },
+    {
+      name: "telemetry",
+      type: "TelemetrySettings",
+      isOptional: true,
+      description: "Settings for telemetry collection during generation. See TelemetrySettings section below for details.",
+    },
+    {
+      name: "temperature",
+      type: "number",
+      isOptional: true,
+      description: "Controls randomness in the model's output. Higher values (e.g., 0.8) make the output more random, lower values (e.g., 0.2) make it more focused and deterministic.",
+    },
+    {
+      name: "threadId",
+      type: "string",
+      isOptional: true,
+      description: "Identifier for the conversation thread. Allows for maintaining context across multiple interactions. Must be provided if resourceId is provided.",
     },
     {
       name: "toolChoice",
@@ -70,48 +113,11 @@ An optional object that can include configuration for output structure, memory m
       description: "Controls how the agent uses tools during generation.",
     },
     {
-      name: "telemetry",
-      type: "TelemetrySettings",
-      isOptional: true,
-      description: "Settings for telemetry collection during generation. See TelemetrySettings section below for details.",
-    },
-    {
-      name: "threadId",
-      type: "string",
-      isOptional: true,
-      description: "Identifier for the conversation thread. Allows for maintaining context across multiple interactions. Must be provided if resourceId is provided.",
-    },
-    {
-      name: "resourceId",
-      type: "string",
-      isOptional: true,
-      description: "Identifier for the user or resource interacting with the agent. Must be provided if threadId is provided.",
-    },
-    {
-      name: "onStepFinish",
-      type: "(step: string) => void",
-      isOptional: true,
-      description: "Callback function called after each execution step. Receives step details as a JSON string.",
-    },
-    {
-      name: "maxSteps",
-      type: "number",
-      isOptional: true,
-      defaultValue: "5",
-      description: "Maximum number of execution steps allowed.",
-    },
-    {
       name: "toolsets",
       type: "ToolsetsInput",
       isOptional: true,
       description: "Additional toolsets to make available to the agent during generation.",
     },
-    {
-      name: "temperature",
-      type: "number",
-      isOptional: true,
-      description: "Controls randomness in the model's output. Higher values (e.g., 0.8) make the output more random, lower values (e.g., 0.2) make it more focused and deterministic.",
-    }
   ]}
 />
 
