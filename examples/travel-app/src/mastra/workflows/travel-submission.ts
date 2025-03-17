@@ -71,7 +71,10 @@ function createArrangementStep({
       }),
     }),
     execute: async ({
-      context: { travelForm, userId, sessionId, steps },
+      context: {
+        inputData: { travelForm, userId, sessionId },
+        steps,
+      },
       runId,
     }) => {
       const items = await booking[method]({

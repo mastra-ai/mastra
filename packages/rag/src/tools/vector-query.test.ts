@@ -178,10 +178,8 @@ describe('createVectorQueryTool', () => {
       // Execute with no filter
       await tool.execute?.({
         context: {
-          inputData: {
-            queryText: 'test query',
-            topK: 5,
-          },
+          queryText: 'test query',
+          topK: 5,
         },
         mastra: mockMastra as any,
       });
@@ -208,11 +206,9 @@ describe('createVectorQueryTool', () => {
       // Execute with filter
       await tool.execute?.({
         context: {
-          inputData: {
-            queryText: 'test query',
-            topK: 5,
-            filter: filterJson,
-          },
+          queryText: 'test query',
+          topK: 5,
+          filter: filterJson,
         },
         mastra: mockMastra as any,
       });
@@ -239,11 +235,9 @@ describe('createVectorQueryTool', () => {
       // Execute with string filter
       await tool.execute?.({
         context: {
-          inputData: {
-            queryText: 'test query',
-            topK: 5,
-            filter: stringFilter,
-          },
+          queryText: 'test query',
+          topK: 5,
+          filter: stringFilter,
         },
         mastra: mockMastra as any,
       });
