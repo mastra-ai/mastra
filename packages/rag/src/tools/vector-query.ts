@@ -51,7 +51,12 @@ export const createVectorQueryTool = ({
       relevantContext: z.any(),
     }),
     description: toolDescription,
-    execute: async ({ context: { queryText, topK, filter }, mastra }) => {
+    execute: async ({
+      context: {
+        inputData: { queryText, topK, filter },
+      },
+      mastra,
+    }) => {
       const topKValue =
         typeof topK === 'number' && !isNaN(topK)
           ? topK

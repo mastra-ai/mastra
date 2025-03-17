@@ -112,6 +112,7 @@ workflow
 
 Variable mapping is an explicit way to define data flow between steps.
 This approach makes dependencies clear and provides good type safety.
+The data injected into the step is available in the `context.inputData` object, and typed based on the `inputSchema` of the step.
 
 ```typescript showLineNumbers filename="src/mastra/workflows/variable-mapping.ts" copy
 import { Step, Workflow } from "@mastra/core/workflows";
@@ -140,7 +141,7 @@ const sendEmailStep = new Step({
     recipientName: z.string(),
   }),
   execute: async ({ context }) => {
-    const { recipientEmail, recipientName } = context;
+    const { recipientEmail, recipientName } = context.inputData;
 
     // Send email logic here
     return {
@@ -299,6 +300,56 @@ const workflow = new Workflow({
 workflow
   .step(processOrderStep)
   .commit();
+```
+
+### Accessing Resume Data
+
+The data injected into the step is available in the `context.inputData` object, and typed based on the `inputSchema` of the step.
+
+```typescript showLineNumbers filename="src/mastra/workflows/resume-data.ts" copy
+import { Step, Workflow } from "@mastra/core/workflows";
+import { z } from "zod";
+
+const processOrderStep = new Step({
+  id: "processOrder",
+  inputSchema: z.object({
+    orderId: z.string(),
+  }),
+  execute: async ({ context, suspend }) => {
+    const { orderId } = context.inputData;
+
+    if (!orderId) {
+      await suspend();
+      return;
+    }
+
+    return {
+      orderId,
+      status: "processed"
+    };
+  },
+});
+
+const workflow = new Workflow({
+  name: "order-workflow",
+});
+
+workflow
+  .step(processOrderStep)
+  .commit();
+
+const run = workflow.createRun();
+const result = await run.start();
+
+const resumedResult = await workflow.resume({
+  runId: result.runId,
+  stepId: 'processOrder',
+  inputData: {
+    orderId: '123',
+  },
+});
+
+console.log({resumedResult});
 ```
 
 ## Accessing Workflow Results

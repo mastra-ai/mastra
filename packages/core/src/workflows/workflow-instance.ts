@@ -153,8 +153,6 @@ export class WorkflowInstance<TSteps extends Step<any, any, any>[] = any, TTrigg
         startStepId = runState.suspendedSteps[stepId];
         stepGraph = this.#stepSubscriberGraph[startStepId] ?? this.#stepGraph;
         machineInput = runState.context;
-        // @ts-ignore
-        machineInput.resumeData = resumeData;
       }
     }
 
@@ -196,7 +194,12 @@ export class WorkflowInstance<TSteps extends Step<any, any, any>[] = any, TTrigg
 
     defaultMachine.on('state-update', stateUpdateHandler);
 
-    const { results, activePaths } = await defaultMachine.execute({ snapshot, stepId, input: machineInput });
+    const { results, activePaths } = await defaultMachine.execute({
+      snapshot,
+      stepId,
+      input: machineInput,
+      resumeData,
+    });
 
     await this.persistWorkflowSnapshot();
 
