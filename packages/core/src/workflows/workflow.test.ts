@@ -3596,6 +3596,9 @@ describe('Workflow', async () => {
         const finalStep = new Step({
           id: 'final',
           description: 'Final step that prints the result',
+          outputSchema: z.object({
+            finalValue: z.number(),
+          }),
           execute: final,
         });
 
@@ -3608,6 +3611,12 @@ describe('Workflow', async () => {
             schema: z.object({
               finalValue: z.number(),
             }),
+            mapping: {
+              finalValue: {
+                step: finalStep,
+                path: 'finalValue',
+              },
+            },
           },
         });
 

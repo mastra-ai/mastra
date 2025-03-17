@@ -58,7 +58,13 @@ export class Workflow<
    * @param name - Identifier for the workflow (not necessarily unique)
    * @param logger - Optional logger instance
    */
-  constructor({ name, triggerSchema, retryConfig, mastra, events }: WorkflowOptions<TTriggerSchema, TResultSchema>) {
+  constructor({
+    name,
+    triggerSchema,
+    retryConfig,
+    mastra,
+    events,
+  }: WorkflowOptions<TSteps, TTriggerSchema, TResultSchema>) {
     super({ component: 'WORKFLOW', name });
 
     this.name = name;

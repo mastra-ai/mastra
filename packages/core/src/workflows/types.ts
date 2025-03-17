@@ -8,6 +8,7 @@ import type { Step } from './step';
 import type { Workflow } from './workflow';
 
 export interface WorkflowOptions<
+  TSteps extends Step<string, any, any, any>[] = Step<string, any, any, any>[],
   TTriggerSchema extends z.ZodObject<any> = any,
   TResultSchema extends z.ZodObject<any> = any,
 > {
@@ -15,6 +16,10 @@ export interface WorkflowOptions<
   triggerSchema?: TTriggerSchema;
   result?: {
     schema: TResultSchema;
+    mapping?: {
+      // TODO: fix types
+      [K in keyof z.infer<TResultSchema>]?: any; // VariableReference<VarStep, TTriggerSchema>;
+    };
   };
   events?: Record<string, { schema: z.ZodObject<any> }>;
   retryConfig?: RetryConfig;
