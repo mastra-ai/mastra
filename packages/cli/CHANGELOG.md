@@ -1,5 +1,23 @@
 # mastra
 
+## 0.4.0-alpha.2
+
+### Patch Changes
+
+- da8d9bb: Enable public dir copying if it exists
+- 5baf1ec: animate new traces
+- 65f2a4c: Add Mastra Docs MCP to the pnpm create mastra TUI with the option to install in Cursor or Windsurf
+- 9116d70: Handle the different workflow methods in workflow graph
+- 0709d99: add prop for dynamic empty text
+- Updated dependencies [cc7f392]
+- Updated dependencies [fc2f89c]
+- Updated dependencies [dfbb131]
+- Updated dependencies [0850b4c]
+- Updated dependencies [da8d9bb]
+- Updated dependencies [9116d70]
+  - @mastra/deployer@0.2.1-alpha.2
+  - @mastra/core@0.6.1-alpha.2
+
 ## 0.4.0-alpha.1
 
 ### Minor Changes

@@ -13,6 +13,8 @@ export interface PollingOptions<TData, TError = Error> {
   onError?: (error: TError) => void;
   /** Function to determine if polling should continue */
   shouldContinue?: (data: TData) => boolean;
+  /** Restarts the polling when true */
+  restartPolling?: boolean;
 }
 
 export interface PollingResult<TData, TError> {
@@ -30,6 +32,9 @@ export interface PollingResult<TData, TError> {
   startPolling: () => void;
   /** Function to stop polling */
   stopPolling: () => void;
+
+  /** Refetch the data on demand with/without polling. default is false */
+  refetch: (withPolling?: boolean) => void;
 }
 
 export function usePolling<TData, TError = Error>({
@@ -39,6 +44,7 @@ export function usePolling<TData, TError = Error>({
   onSuccess,
   onError,
   shouldContinue = () => true,
+  restartPolling = false,
 }: PollingOptions<TData, TError>): PollingResult<TData, TError> {
   const [isPolling, setIsPolling] = useState(enabled);
   const [error, setError] = useState<TError | null>(null);
@@ -47,6 +53,7 @@ export function usePolling<TData, TError = Error>({
   const [firstCallLoading, setFirstCallLoading] = useState(false);
   const timeoutRef = useRef<NodeJS.Timeout | null>(null);
   const mountedRef = useRef(true);
+  const [restart, setRestart] = useState(restartPolling);
 
   const cleanup = useCallback(() => {
     console.log('cleanup');
@@ -69,11 +76,10 @@ export function usePolling<TData, TError = Error>({
   }, []);
 
   const executePoll = useCallback(
-    async (fistCall: boolean = false) => {
+    async (refetch: boolean = true) => {
       // Check if component is still mounted
       if (!mountedRef.current) return;
       setIsLoading(true);
-      setFirstCallLoading(fistCall);
 
       try {
         const result = await fetchFn();
@@ -81,10 +87,9 @@ export function usePolling<TData, TError = Error>({
         setData(result);
         setError(null);
         onSuccess?.(result);
-        setFirstCallLoading(false);
 
         // Check if we should continue polling
-        if (shouldContinue(result)) {
+        if (shouldContinue(result) && refetch) {
           timeoutRef.current = setTimeout(executePoll, interval);
         } else {
           stopPolling();
@@ -104,6 +109,19 @@ export function usePolling<TData, TError = Error>({
     [fetchFn, interval, onSuccess, onError, shouldContinue, stopPolling],
   );
 
+  const refetch = useCallback(
+    (withPolling: boolean = false) => {
+      console.log('refetch', { withPolling });
+      if (withPolling) {
+        setIsPolling(true);
+      } else {
+        executePoll(false);
+      }
+      setError(null);
+    },
+    [executePoll],
+  );
+
   useEffect(() => {
     mountedRef.current = true;
 
@@ -118,6 +136,19 @@ export function usePolling<TData, TError = Error>({
     };
   }, [enabled, isPolling, executePoll, cleanup]);
 
+  useEffect(() => {
+    setRestart(restartPolling);
+  }, [restartPolling]);
+
+  useEffect(() => {
+    if (restart && !isPolling) {
+      setIsPolling(true);
+      executePoll();
+      setRestart(false);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [restart]);
+
   return {
     isPolling,
     isLoading,
@@ -126,6 +157,7 @@ export function usePolling<TData, TError = Error>({
     startPolling,
     stopPolling,
     firstCallLoading,
+    refetch,
   };
 }
 

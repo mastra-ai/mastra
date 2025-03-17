@@ -4,7 +4,6 @@
   "type": "module",
   "devDependencies": {
     "@changesets/cli": "^2.28.1",
-    "@trivago/prettier-plugin-sort-imports": "^4.3.0",
     "@types/node": "^20.17.24",
     "husky": "^9.1.7",
     "lint-staged": "^15.4.3",
@@ -27,6 +26,7 @@
     "build:core": "pnpm turbo build --filter ./packages/core",
     "build:rag": "pnpm turbo build --filter ./packages/rag",
     "build:memory": "pnpm turbo build --filter ./packages/memory",
+    "build:docs-mcp": "pnpm turbo build --filter ./packages/mcp-docs-server",
     "build:evals": "pnpm turbo build --filter ./packages/evals",
     "build:clients": "pnpm turbo build --filter \"./client-sdks/*\"",
     "generate:integration": "pnpx tsx ./integration-generator/index.ts",
@@ -38,6 +38,7 @@
     "test:clients": "pnpm --filter \"./client-sdks/*\" test",
     "test:combined-stores": "pnpm --filter \"./stores/*\" test",
     "test:memory": "pnpm --filter ./packages/memory test",
+    "test:docs-mcp": "pnpm --filter ./packages/mcp-docs-server test",
     "test:evals": "pnpm --filter ./packages/evals test",
     "test:evals:nlp": "pnpm --filter ./packages/evals test src/metrics/nlp",
     "test:evals:llm": "pnpm --filter ./packages/evals test src/metrics/llm",

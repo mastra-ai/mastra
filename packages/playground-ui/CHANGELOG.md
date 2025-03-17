@@ -1,5 +1,20 @@
 # @mastra/playground-ui
 
+## 2.0.1-alpha.2
+
+### Patch Changes
+
+- 0850b4c: Watch and resume per run
+- 5baf1ec: animate new traces
+- 9116d70: Handle the different workflow methods in workflow graph
+- 0709d99: add prop for dynamic empty text
+- Updated dependencies [fc2f89c]
+- Updated dependencies [dfbb131]
+- Updated dependencies [0850b4c]
+- Updated dependencies [9116d70]
+  - @mastra/core@0.6.1-alpha.2
+  - @mastra/client-js@0.1.9-alpha.2
+
 ## 2.0.1-alpha.1
 
 ### Patch Changes

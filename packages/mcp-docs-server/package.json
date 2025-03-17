@@ -1,0 +1,66 @@
+{
+  "name": "@mastra/mcp-docs-server",
+  "version": "0.0.1-alpha.1",
+  "description": "MCP server for accessing Mastra.ai documentation, changelogs, and news.",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "bin": "dist/stdio.js",
+  "files": [
+    "dist",
+    ".docs",
+    "README.md"
+  ],
+  "exports": {
+    ".": {
+      "import": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      },
+      "require": {
+        "types": "./dist/index.d.cts",
+        "default": "./dist/index.cjs"
+      }
+    },
+    "./package.json": "./package.json"
+  },
+  "scripts": {
+    "prepare-docs": "tsx src/prepare-docs/index.ts",
+    "prebuild": "pnpm prepare-docs",
+    "build": "tsc && chmod +x dist/stdio.js",
+    "predev": "pnpm prepare-docs",
+    "dev": "fastmcp dev src/index.ts",
+    "inspect": "fastmcp inspect src/index.ts",
+    "build:watch": "pnpm build --watch",
+    "pretest": "pnpm build",
+    "test": "vitest run",
+    "lint": "eslint ."
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "@mastra/core": "workspace:^",
+    "@modelcontextprotocol/sdk": "^1.7.0",
+    "date-fns": "^4.1.0",
+    "exit-hook": "^4.0.0",
+    "fastmcp": "^1.20.4",
+    "jsdom": "^26.0.0",
+    "turndown": "^7.1.2",
+    "tylerbarnes-fastmcp-fix": "^1.0.0",
+    "uuid": "^11.1.0",
+    "zod": "^3.22.4"
+  },
+  "devDependencies": {
+    "@internal/lint": "workspace:*",
+    "@types/jsdom": "^21.1.7",
+    "@types/node": "^20.11.24",
+    "@types/turndown": "^5.0.5",
+    "@wong2/mcp-cli": "^1.6.0",
+    "eslint": "^9.22.0",
+    "tsup": "^8.4.0",
+    "tsx": "^4.7.1",
+    "typescript": "^5.3.3",
+    "vitest": "^3.0.8"
+  }
+}
