@@ -15,6 +15,8 @@ jobs:
       TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
       TURBO_TEAM: ${{ secrets.TURBO_TEAM }}
       TURBO_REMOTE_ONLY: true
+    permissions:
+      pull-requests: read
 
     steps:
       - name: Checkout repo
@@ -46,6 +48,8 @@ jobs:
       TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
       TURBO_TEAM: ${{ secrets.TURBO_TEAM }}
       TURBO_REMOTE_ONLY: true
+    permissions:
+      pull-requests: read
 
     steps:
       - name: Checkout repo
@@ -86,6 +90,9 @@ jobs:
       TURBO_TEAM: ${{ secrets.TURBO_TEAM }}
       TURBO_REMOTE_ONLY: true
 
+    permissions:
+      pull-requests: read
+
     steps:
       - name: Checkout repo
         uses: actions/checkout@v4
@@ -105,7 +112,7 @@ jobs:
         run: pnpm install
 
       - name: Build
-        run: pnpm turbo --filter "packages/core" --filter "packages/cli" build
+        run: pnpm turbo --filter "./packages/core" --filter "./packages/cli" build
 
       - name: Test
         working-directory: ./e2e-tests/monorepo
