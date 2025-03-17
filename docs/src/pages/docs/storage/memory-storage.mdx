@@ -5,51 +5,90 @@ description: Technical guide on using storage systems for memory management in M
 
 # Storage as Memory
 
-Mastra's storage system integrates deeply with its memory management capabilities, providing persistent storage for conversation history and contextual information.
+Mastra's memory system provides persistent storage for conversation history and contextual information. This guide shows you how to configure and optimize memory storage for your application.
 
-## Memory Storage Integration
+## Overview
 
-### Default Configuration
+Mastra's memory system manages three types of data:
 
-By default, Memory uses LibSQL for both message storage and vector operations:
+1. **Messages**: Conversation entries with metadata and ordering
+2. **Threads**: Organized message groups with shared context
+3. **Vectors**: Semantic embeddings for similarity search
+
+Key features:
+- Unified storage interface
+- Multiple backend support
+- Process isolation
+- Automatic cleanup
+
+## Quick Start
 
 ```ts showLineNumbers copy
 import { Memory } from '@mastra/core/memory';
 
-// Initialize memory with default LibSQL storage
+// Initialize memory with default settings
 const memory = new Memory({
-  name: 'my-memory',  // Used for logging and identification
+  name: 'my-memory',
   options: {
-    // Configure message retention
-    lastMessages: 40,  // Keep last 40 messages for context window
+    // Message retention
+    lastMessages: 40,
     
-    // Enable semantic search with default FastEmbed
-    semanticRecall: true,  // Uses bge-small-en-v1.5 embeddings
+    // Enable semantic search
+    semanticRecall: true,
   },
 });
 
-// This setup will:
-// 1. Create an in-memory SQLite database
-// 2. Initialize FastEmbed for vector operations
-// 3. Set up default tables for messages and threads
-// 4. Configure automatic cleanup of old messages
+// Start using memory
+const thread = await memory.saveThread({
+  thread: {
+    resourceId: 'user-123',
+    title: 'First Chat',
+  },
+});
+
+await memory.saveMessages({
+  messages: [{
+    threadId: thread.id,
+    role: 'user',
+    content: 'Hello!',
+  }],
+});
+
+## Storage Configuration
+
+### 1. Default Storage
+```ts showLineNumbers copy
+// Uses LibSQL with sensible defaults
+const memory = new Memory({
+  name: 'my-memory',
+  options: {
+    // Optional: Override storage settings
+    storage: {
+      url: 'file:memory.db',  // Default: ':memory:'
+      tableName: 'messages',   // Default: 'mastra_messages'
+    },
+  },
+});
 ```
 
-### Custom Storage Configuration
-
-You can configure Memory to use any storage implementation:
-
+### 2. Custom Storage
 ```ts showLineNumbers copy
 import { Memory } from '@mastra/core/memory';
 import { DefaultStorage } from '@mastra/core/storage';
 
+// Configure custom storage backend
 const storage = new DefaultStorage({
   name: 'custom-storage',
   config: {
     url: 'file:memory.db',
+    pool: {
+      min: 2,
+      max: 10,
+    },
   },
 });
 
+// Use custom storage with memory
 const memory = new Memory({
   name: 'my-memory',
   storage,
@@ -60,64 +99,54 @@ const memory = new Memory({
 });
 ```
 
-## Storage Operations
+## Core Operations
 
-### Message Storage
-
-The storage system handles message persistence:
+### 1. Message Management
 
 ```ts showLineNumbers copy
-// Store new messages in a thread
-await storage.saveMessages({
+// Save messages to a thread
+await memory.saveMessages({
   messages: [{
-    threadId: 'thread-123',  // Links message to a conversation
-    role: 'user',           // Message source (user/assistant/system)
-    content: 'Message content',
-    createdAt: new Date(),  // Timestamp for ordering
+    threadId: 'thread-123',
+    role: 'user',
+    content: 'Hello Mastra!',
     metadata: {
-      source: 'chat',      // Origin of the message
-      language: 'en',      // Content language
-      // Add custom metadata for filtering
+      source: 'chat',
+      language: 'en',
       priority: 'high',
-      category: 'support',
     },
   }],
 });
 
-// Retrieve messages with memory configuration
-const messages = await storage.getMessages({
-  threadId: 'thread-123',  // Get messages from this thread
+// Retrieve messages with filters
+const messages = await memory.getMessages({
+  threadId: 'thread-123',
   selectBy: {
-    limit: 40,            // Maximum messages to return
-    before: new Date(),    // Get messages before this time
-    // Optional filters
+    // Basic filters
+    limit: 40,
+    before: new Date(),
+    
+    // Advanced filters
     filter: {
-      role: ['user', 'assistant'],  // Only these roles
+      role: ['user', 'assistant'],
       metadata: {
-        priority: 'high',   // Filter by metadata
+        priority: 'high',
       },
     },
   },
-  threadConfig: {
-    lastMessages: 40,       // Recent message window
-    semanticRecall: true,   // Include similar messages
-  },
 });
 
-// Messages are returned with:
-// 1. Chronological ordering
-// 2. Metadata preserved
-// 3. Vector similarity scores (if semanticRecall)
-// 4. Thread context
-```
+// Messages include:
+// - Chronological order
+// - Full metadata
+// - Similarity scores
+// - Thread context
 
-### Thread Management
-
-Threads organize conversations and maintain context:
+### 2. Thread Operations
 
 ```ts showLineNumbers copy
-// Create thread
-const thread = await storage.saveThread({
+// Create a new thread
+const thread = await memory.saveThread({
   thread: {
     resourceId: 'user-123',
     title: 'Support Chat',
@@ -128,8 +157,8 @@ const thread = await storage.saveThread({
   },
 });
 
-// Update thread metadata
-await storage.updateThread({
+// Update thread details
+await memory.updateThread({
   id: thread.id,
   title: 'Resolved: Support Chat',
   metadata: {
@@ -137,69 +166,238 @@ await storage.updateThread({
     resolvedAt: new Date(),
   },
 });
+
+// Thread features:
+// - Unique identification
+// - Custom metadata
+// - Status tracking
+// - Message grouping
 ```
 
-## Memory Optimization
+## Storage Types
 
-### Process Isolation
-
-When using `:memory:` storage:
+### 1. In-Memory Storage
 
 ```ts showLineNumbers copy
-// Test environment with isolated memory
-const testStorage = new DefaultStorage({
-  name: 'test-storage',
-  config: { 
-    url: ':memory:',  // Creates new SQLite database in memory
-    // Perfect for testing because:
-    // 1. Each test gets clean state
-    // 2. No file system interaction needed
-    // 3. Fast setup and teardown
-    // 4. No cleanup required
+// Test environment
+const testMemory = new Memory({
+  name: 'test-memory',
+  options: {
+    storage: { url: ':memory:' },
   },
 });
 
-// Development server with separate memory
-const devStorage = new DefaultStorage({
-  name: 'dev-storage',
-  config: { 
-    url: ':memory:',  // Different process = different database
-    // Benefits for development:
-    // 1. No test data pollution
-    // 2. Quick restarts (no file locks)
-    // 3. Easy state reset
-    // 4. Parallel development instances
+// Development server
+const devMemory = new Memory({
+  name: 'dev-memory',
+  options: {
+    storage: { url: ':memory:' },
   },
 });
 
-// Each process gets its own isolated database:
-// - Test runner process → clean test database
-// - Dev server process → separate dev database
-// - CI/CD process → isolated CI database
+// Benefits:
+// - Clean test state
+// - Fast setup/teardown
+// - Process isolation
+// - No cleanup needed
 ```
 
-Benefits:
-- Clean test environment
-- No data pollution
-- Automatic cleanup
-
-### Persistent Storage
-
-For production use:
+### 2. File Storage
 
 ```ts showLineNumbers copy
-const prodStorage = new DefaultStorage({
-  name: 'prod-storage',
-  config: { url: 'file:prod.db' },
+// Local development
+const fileMemory = new Memory({
+  name: 'file-memory',
+  options: {
+    storage: { url: 'file:memory.db' },
+  },
+});
+
+// Benefits:
+// - Data persistence
+// - Easy backups
+// - Cross-process sharing
+// - Simple debugging
+```
+
+### 3. Production Storage
+
+```ts showLineNumbers copy
+// Production setup
+const prodMemory = new Memory({
+  name: 'prod-memory',
+  options: {
+    storage: {
+      url: process.env.DATABASE_URL,
+      pool: {
+        min: 2,
+        max: 10,
+      },
+    },
+  },
+});
+
+// Benefits:
+// - High availability
+// - Connection pooling
+// - Cloud deployment
+// - Monitoring support
+
+## Performance Tuning
+
+### 1. Connection Pooling
+```ts showLineNumbers copy
+// Configure connection pool for high throughput
+const memory = new Memory({
+  name: 'optimized-memory',
+  options: {
+    storage: {
+      pool: {
+        min: 5,     // Minimum connections
+        max: 20,    // Maximum connections
+        timeout: 30000,  // Connection timeout (ms)
+      },
+    },
+  },
 });
 ```
 
-Benefits:
-- Data persistence
-- Cross-process sharing
-- Backup support
+### 2. Batch Operations
+```ts showLineNumbers copy
+// Use batch operations for better performance
+await memory.saveMessages({
+  messages: messages,  // Array of messages
+  options: {
+    batchSize: 1000,   // Messages per batch
+    ordered: false,    // Allow parallel processing
+  },
+});
+```
 
-## Memory Configuration Options
+### 3. Index Optimization
+```ts showLineNumbers copy
+// Configure vector index for memory system
+const memory = new Memory({
+  name: 'vector-memory',
+  options: {
+    semanticRecall: {
+      enabled: true,
+      indexConfig: {
+        m: 16,              // Max connections per node
+        efConstruction: 200, // Build-time search depth
+        efSearch: 100,      // Query-time search depth
+      },
+    },
+  },
+});
+```
+
+## Backend Features
+
+### 1. LibSQL (Default)
+```ts showLineNumbers copy
+// In-memory SQLite for development
+const memory = new Memory({
+  name: 'libsql-memory',
+  options: {
+    storage: { url: ':memory:' },
+  },
+});
+
+// Features:
+// - Zero-dependency setup
+// - Automatic schema management
+// - JSON column support
+// - Prepared statements
+```
+
+### 2. PostgreSQL
+```ts showLineNumbers copy
+// Production-ready PostgreSQL setup
+import { PgStorage } from '@mastra/pg';
+
+const memory = new Memory({
+  name: 'pg-memory',
+  storage: new PgStorage({
+    url: process.env.DATABASE_URL,
+    pool: {
+      min: 2,
+      max: 10,
+    },
+  }),
+});
+
+// Features:
+// - ACID compliance
+// - Advanced querying
+// - Cloud deployment
+// - High availability
+```
+
+### 3. Upstash Redis
+```ts showLineNumbers copy
+// Real-time Redis storage
+import { UpstashStorage } from '@mastra/upstash';
+
+const memory = new Memory({
+  name: 'redis-memory',
+  storage: new UpstashStorage({
+    url: process.env.UPSTASH_URL,
+    token: process.env.UPSTASH_TOKEN,
+  }),
+});
+
+// Features:
+// - High performance
+// - JSON data types
+// - Atomic operations
+// - Real-time support
+```
+
+## Error Handling
+
+### 1. Connection Errors
+```ts showLineNumbers copy
+try {
+  const memory = new Memory({
+    name: 'my-memory',
+    options: {
+      storage: { url: process.env.DATABASE_URL },
+    },
+  });
+} catch (error) {
+  if (error instanceof StorageConnectionError) {
+    console.error('Failed to connect:', error.message);
+    // Handle connection failure
+  }
+}
+```
+
+### 2. Operation Errors
+```ts showLineNumbers copy
+try {
+  await memory.saveMessages({
+    messages: messages,
+    options: { ordered: true },
+  });
+} catch (error) {
+  if (error instanceof StorageOperationError) {
+    // Handle specific errors
+    switch (error.code) {
+      case 'CONSTRAINT_ERROR':
+        // Handle constraint violation
+        break;
+      case 'TIMEOUT_ERROR':
+        // Handle operation timeout
+        break;
+      default:
+        // Handle other errors
+    }
+  }
+}
+```
+
+## Configuration Reference
 
 ### Basic Settings
 

@@ -5,11 +5,20 @@ description: Guide on integrating OpenTelemetry with Mastra's storage system for
 
 # Using Storage with Telemetry
 
-Mastra integrates with OpenTelemetry to provide comprehensive monitoring and tracing capabilities for storage operations. This helps you understand performance, diagnose issues, and optimize your application.
+Mastra provides built-in telemetry support for monitoring storage operations. This guide shows you how to set up telemetry and use it to optimize your application.
 
-## Storage Telemetry Setup
+## Overview
 
-### Basic Configuration
+Mastra's telemetry system tracks:
+
+1. **Storage Operations**: Database queries and transactions
+2. **Performance Metrics**: Execution time and resource usage
+3. **Error Events**: Connection and query failures
+4. **Resource Usage**: Connection pools and cache hits
+
+## Quick Start
+
+### Basic Setup
 
 ```ts showLineNumbers copy
 import { DefaultStorage } from '@mastra/core/storage';
@@ -52,25 +61,42 @@ const storage = new DefaultStorage({
 // 4. Resource usage metrics
 ```
 
-### Custom Exporter
-
-Configure a custom trace exporter:
+### Production Setup
 
 ```ts showLineNumbers copy
 import { DefaultStorage } from '@mastra/core/storage';
 import { OTLPTraceExporter } from '@mastra/core/telemetry';
 
+// Configure storage with production telemetry
 const storage = new DefaultStorage({
   name: 'my-storage',
   config: {
-    url: 'file:app.db',
+    url: process.env.DATABASE_URL,
   },
   telemetry: {
+    // Service identification
+    serviceName: 'my-service',
+    serviceVersion: '1.0.0',
+    
+    // Trace configuration
+    samplingRatio: 0.1,  // Sample 10% of traces
+    propagation: true,   // Enable context propagation
+    
+    // Custom exporter
     exporter: new OTLPTraceExporter({
-      url: 'http://localhost:4318/v1/traces',
+      url: process.env.OTLP_ENDPOINT,
+      headers: {
+        'api-key': process.env.OTLP_API_KEY,
+      },
     }),
   },
 });
+
+// Benefits:
+// - Production monitoring
+// - Performance tracking
+// - Error detection
+// - Resource optimization
 ```
 
 ## Trace Operations

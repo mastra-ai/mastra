@@ -5,111 +5,158 @@ description: Guide on using vector storage in Mastra for efficient similarity se
 
 # Vector Storage
 
-Mastra provides a unified interface for vector storage across different databases, enabling efficient similarity search and embedding storage for AI applications.
+Mastra provides vector storage capabilities for semantic search and embedding management. This guide shows you how to use vector storage in your application.
 
-## Supported Vector Databases
+## Overview
 
-Mastra supports multiple vector databases, each with its own strengths:
+Mastra's vector storage system handles:
 
-### Built-in Support
+1. **Embeddings**: High-dimensional vector data
+2. **Indexes**: Efficient similarity search structures
+3. **Metadata**: Associated data for filtering and organization
+
+Key features:
+- Multiple database support
+- Automatic index management
+- Efficient similarity search
+- Rich metadata filtering
+
+## Quick Start
 
 ```ts showLineNumbers copy
-// LibSQL - Default, embedded vector storage
 import { LibSQLVector } from '@mastra/core/vector/libsql';
 
-// Initialize LibSQL vector storage
+// Initialize vector storage
 const store = new LibSQLVector({
-  // Connection options:
-  // - SQLite file: 'file:vectors.db'
-  // - In-memory: ':memory:'
-  // - Turso: 'libsql://...' 
-  connectionUrl: process.env.DATABASE_URL,
-  
-  // Only needed for Turso cloud databases
-  authToken: process.env.DATABASE_AUTH_TOKEN,
+  // Basic setup
+  url: ':memory:',  // In-memory for development
   
   // Optional configuration
   config: {
-    // Table customization
-    tableName: 'embeddings',  // Default table name
-    
-    // Performance tuning
-    batchSize: 1000,  // Batch size for operations
-    timeout: 30000,   // Operation timeout (ms)
+    tableName: 'embeddings',
+    batchSize: 1000,
   },
 });
 
-// Benefits of LibSQL:
-// 1. Zero-dependency vector search
-// 2. Embedded or cloud deployment
-// 3. Automatic schema management
-// 4. Transaction support
+// Create an index
+await store.createIndex({
+  indexName: 'my-vectors',
+  dimension: 1536,  // OpenAI text-embedding-3-small
+});
+
+// Store embeddings
+await store.upsert({
+  indexName: 'my-vectors',
+  vectors: embeddings,
+  metadata: chunks.map(chunk => ({
+    text: chunk.text,
+    source: chunk.source,
+  })),
+});
+
+// Search similar vectors
+const results = await store.search({
+  indexName: 'my-vectors',
+  vector: queryEmbedding,
+  topK: 5,
+});
 ```
 
-### External Databases
+## Storage Options
+
+### 1. LibSQL (Default)
 
 ```ts showLineNumbers copy
-// PostgreSQL with pgvector
+// In-memory or file-based vector storage
+const store = new LibSQLVector({
+  url: ':memory:',  // or 'file:vectors.db'
+  config: {
+    tableName: 'embeddings',
+    batchSize: 1000,
+  },
+});
+
+// Features:
+// - Zero-dependency setup
+// - Automatic schema management
+// - Transaction support
+// - Local development
+```
+
+### 2. PostgreSQL
+```ts showLineNumbers copy
 import { PgVector } from '@mastra/pg';
 
-const store = new PgVector(
-  process.env.POSTGRES_CONNECTION_STRING
-);
-
-// Pinecone
-import { PineconeVector } from '@mastra/pinecone';
-
-const store = new PineconeVector(
-  process.env.PINECONE_API_KEY
-);
-
-// Qdrant
-import { QdrantVector } from '@mastra/qdrant';
-
-const store = new QdrantVector({
-  url: process.env.QDRANT_URL,
-  apiKey: process.env.QDRANT_API_KEY
+// Production vector storage
+const store = new PgVector({
+  url: process.env.DATABASE_URL,
+  pool: {
+    min: 2,
+    max: 10,
+  },
+  config: {
+    // Index configuration
+    indexType: 'hnsw',  // or 'ivfflat'
+    m: 16,             // Max connections per node
+    efConstruction: 100, // Build-time search depth
+  },
 });
+
+// Features:
+// - Production-grade storage
+// - Advanced indexing
+// - Cloud deployment
+// - High availability
 ```
 
 ## Core Operations
 
-### Creating Indexes
-
-Before storing vectors, create an index with the appropriate dimension:
-
+### 1. Index Management
 ```ts showLineNumbers copy
-// Create an index for storing embeddings
+// Create vector index
 await store.createIndex({
-  // Unique name for this collection
   indexName: 'my-collection',
-  
-  // Vector dimension must match your embedding model:
-  dimension: 1536,  // For OpenAI text-embedding-3-small
-  
-  // Optional index configuration
+  dimension: 1536,  // text-embedding-3-small
   config: {
-    // Distance metric for similarity
-    metric: 'cosine',  // or 'euclidean', 'dot'
-    
-    // Index type (PostgreSQL specific)
-    indexType: 'hnsw',  // or 'ivfflat'
-    
-    // HNSW parameters
-    m: 16,       // Max connections per node
-    efConstruction: 100,  // Build-time search depth
+    metric: 'cosine',
+    indexType: 'hnsw',
+    m: 16,
+    efConstruction: 100,
   },
 });
 
-// Common model dimensions:
-// - OpenAI text-embedding-3-small: 1536d
-//   Best for: General purpose, good quality/speed balance
-//
-// - OpenAI text-embedding-3-large: 3072d
-//   Best for: High accuracy, multilingual content
-//
-// - Cohere embed-multilingual-v3: 1024d
-//   Best for: Efficient multilingual embeddings
+// Delete index
+await store.deleteIndex({
+  indexName: 'my-collection',
+});
+
+// List indexes
+const indexes = await store.listIndexes();
+```
+
+### 2. Vector Operations
+```ts showLineNumbers copy
+// Store vectors with metadata
+await store.upsert({
+  indexName: 'my-collection',
+  vectors: embeddings,
+  metadata: chunks.map(chunk => ({
+    text: chunk.text,
+    source: chunk.source,
+    timestamp: new Date(),
+  })),
+});
+
+// Search similar vectors
+const results = await store.search({
+  indexName: 'my-collection',
+  vector: queryVector,
+  topK: 5,
+  filter: {
+    source: 'documentation',
+    timestamp: { $gt: new Date('2024-01-01') },
+  },
+});
 ```
 
 ### Storing Embeddings
