@@ -7,103 +7,44 @@ description: Overview of Mastra's storage system and data persistence capabiliti
 
 Mastra's storage system provides a unified interface for managing conversation data, workflow states, traces, and evaluation datasets. Mastra defines a common interface for different database providers.
 
-## Core Concepts
-
-### 1. Storage Interface
-
-Mastra storage implements a standard interface for interacting with database types:
-
-- Common operations across databases
-- Database-independent implementation
-- Consistent behavior between environments
-
-[DIAGRAM SUGGESTION 1: Interface Layer
-Show application code at the top, connecting to a "Storage Interface" layer in the middle, which then connects to different database implementations (LibSQL, PostgreSQL, Redis) at the bottom]
-
-### 2. Process Management
-
-The storage system isolates data between processes:
-
-- Test processes use isolated storage instances
-- Development processes use separate storage
-- Production processes share storage instances
-
-[DIAGRAM SUGGESTION 2: Process Isolation
-Show multiple processes (Test Runner, Dev Server, Production Server) each with their own storage instance, and how they interact with the databases]
-
-### 3. Data Model
-
-The storage system defines four data structures:
-
-1. **Messages**: Individual conversation entries and metadata
-2. **Threads**: Message collections and relationships
-3. **Workflows**: Process execution states
-4. **Evaluations**: Performance measurements
-
-[DIAGRAM SUGGESTION 3: Data Model
-Entity relationship diagram showing how Messages belong to Threads, how Workflows track state, and how Evaluations connect to everything]
-
-## Storage Capabilities
-
-The storage system supports different database implementations for various environments:
-
-### Database Operations
-- Data persistence and retrieval
-- Process-specific isolation
-- Transaction management
-- Concurrent access handling
-
-### Environment Support
-The same code works across environments. For example, you can use LibSQL's in-memory mode for testing, file-based mode for development, or PostgreSQL and Upstash Redis for production deployments.
-
 ## Data Schema
 
-All providers use the same schema:
+All storage implementations use these core features:
 
-### Core Tables
+### Messages
+Stores conversation messages with their content and metadata:
+- Thread association
+- Message role (user/assistant/system)
+- Content
+- Creation timestamp
 
-```sql
--- Threads: Group related messages
-CREATE TABLE threads (
-  id TEXT PRIMARY KEY,
-  resource_id TEXT,    -- External reference
-  title TEXT,
-  metadata JSONB,      -- Custom attributes
-  created_at TIMESTAMP,
-  updated_at TIMESTAMP
-);
+### Threads
+Groups related messages together:
+- Resource identifier
+- Title
+- Custom metadata
+- Creation/update timestamps
 
--- Messages: Conversation content
-CREATE TABLE messages (
-  id TEXT PRIMARY KEY,
-  thread_id TEXT,
-  role TEXT,          -- user/assistant/system
-  content TEXT,
-  created_at TIMESTAMP,
-  FOREIGN KEY (thread_id) REFERENCES threads(id)
-);
+### Workflow Snapshots
+Preserves workflow execution states:
+- Workflow name
+- Run identifier
+- State snapshot
+- Creation/update timestamps
 
--- Workflows: Execution state
-CREATE TABLE workflows (
-  id TEXT PRIMARY KEY,
-  name TEXT,
-  state JSONB,        -- Current state
-  created_at TIMESTAMP,
-  updated_at TIMESTAMP
-);
+### Evaluations
+Stores agent evaluation results:
+- Input/output pairs
+- Test information
+- Result metrics
+- Agent and metric names
 
--- Evaluations: Quality metrics
-CREATE TABLE evaluations (
-  id TEXT PRIMARY KEY,
-  input TEXT,
-  output TEXT,
-  metrics JSONB,      -- Performance data
-  created_at TIMESTAMP
-);
-```
-
-[DIAGRAM SUGGESTION 4: Schema Relationships
-Visual representation of the database schema showing relationships between tables]
+### Traces
+Captures execution traces:
+- Span information (name, parent, trace ID)
+- Scope and kind
+- Timing data
+- Attributes and events
 
 ## Configuration
 
