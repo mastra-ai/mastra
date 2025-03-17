@@ -590,10 +590,6 @@ export class Workflow<
 
       // Merge static payload with dynamically resolved variables
       // Variables take precedence over payload values
-      const mergedData = {
-        ...(payload as {}),
-        ...context,
-      };
 
       // Only trace if telemetry is available and action exists
       const finalAction = this.telemetry
@@ -603,7 +599,12 @@ export class Workflow<
           })
         : execute;
 
-      return finalAction ? await finalAction({ context: mergedData, ...rest }) : {};
+      return finalAction
+        ? await finalAction({
+            context: { ...context, inputData: { ...(context?.inputData || {}), ...(payload as {}) } },
+            ...rest,
+          })
+        : {};
     };
 
     // Only trace handler if telemetry is available
