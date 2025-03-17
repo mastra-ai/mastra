@@ -6,7 +6,6 @@ import { webSearchAgent } from './agents';
 export const mastra = new Mastra({
   agents: {
     webSearchAgent,
-    routingAgent: researchNetwork.getRoutingAgent(),
   },
   networks: {
     researchNetwork,
