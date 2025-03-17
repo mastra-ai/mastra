@@ -92,6 +92,27 @@ mastra also provides a [Mastra Client](/docs/deployment/client) SDK that allows 
 
 `mastra dev` provides an OpenAPI spec at http://localhost:4111/openapi.json
 
+## Local Development Environment Architecture
+
+The local development server is designed to run without any external dependencies or containerization. This is achieved through:
+
+- **HTTP Server Framework**: Uses [Hono](https://hono.dev) as the underlying framework to power the [Mastra Server](/docs/deployment/server).
+
+- **In-Memory Storage**: Uses [LibSQL](https://libsql.org/) memory adapters for:
+  - Agent memory management
+  - Trace storage
+  - Evals storage
+  - Workflow snapshots
+
+- **Vector Storage**: Uses [FastEmbed](https://github.com/qdrant/fastembed) for:
+  - Default embedding generation
+  - Vector storage and retrieval
+  - Semantic search capabilities
+
+
+This architecture allows you to start developing immediately without setting up databases or vector stores, while still maintaining production-like behavior in your local environment.
+
+
 ## Summary
 
 `mastra dev` makes it easy to develop, debug, and iterate on your AI logic in a self-contained environment before deploying to production.
