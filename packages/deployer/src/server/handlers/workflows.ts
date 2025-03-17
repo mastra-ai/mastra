@@ -15,6 +15,8 @@ export async function getWorkflowsHandler(c: Context) {
       acc[key] = {
         stepGraph: workflow.stepGraph,
         stepSubscriberGraph: workflow.stepSubscriberGraph,
+        serializedStepGraph: workflow.serializedStepGraph,
+        serializedStepSubscriberGraph: workflow.serializedStepSubscriberGraph,
         name: workflow.name,
         triggerSchema: workflow.triggerSchema ? stringify(zodToJsonSchema(workflow.triggerSchema)) : undefined,
         steps: Object.entries(workflow.steps).reduce<any>((acc, [key, step]) => {
@@ -44,6 +46,8 @@ export async function getWorkflowByIdHandler(c: Context) {
     const triggerSchema = workflow?.triggerSchema;
     const stepGraph = workflow.stepGraph;
     const stepSubscriberGraph = workflow.stepSubscriberGraph;
+    const serializedStepGraph = workflow.serializedStepGraph;
+    const serializedStepSubscriberGraph = workflow.serializedStepSubscriberGraph;
     const serializedSteps = Object.entries(workflow.steps).reduce<any>((acc, [key, step]) => {
       const _step = step as any;
       acc[key] = {
@@ -60,6 +64,8 @@ export async function getWorkflowByIdHandler(c: Context) {
       steps: serializedSteps,
       stepGraph,
       stepSubscriberGraph,
+      serializedStepGraph,
+      serializedStepSubscriberGraph,
     });
   } catch (error) {
     return handleError(error, 'Error getting workflow');

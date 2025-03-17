@@ -110,10 +110,12 @@ export class Machine<
     stepId,
     input,
     snapshot,
+    resumeData,
   }: {
     stepId?: string;
     input?: any;
     snapshot?: Snapshot<any>;
+    resumeData?: any;
   } = {}): Promise<Pick<WorkflowRunResult<TTriggerSchema, TSteps>, 'results' | 'activePaths'>> {
     if (snapshot) {
       // First, let's log the incoming snapshot for debugging
@@ -134,7 +136,7 @@ export class Machine<
     const actorSnapshot = snapshot
       ? {
           ...snapshot,
-          context: input,
+          context: { ...input, inputData: { ...((snapshot as any)?.context?.inputData || {}), ...resumeData } },
         }
       : undefined;
 
@@ -153,7 +155,10 @@ export class Machine<
           runId: this.#runId,
         });
       },
-      input,
+      input: {
+        ...input,
+        inputData: { ...((snapshot as any)?.context?.inputData || {}), ...resumeData },
+      },
       snapshot: actorSnapshot,
     });
 
@@ -352,7 +357,22 @@ export class Machine<
 
         try {
           result = await stepNode.config.handler({
-            context: resolvedData,
+            context: {
+              ...context,
+              inputData: { ...(context?.inputData || {}), ...resolvedData },
+              getStepResult: ((stepId: string | Step<any, any, any, any>) => {
+                const resolvedStepId = typeof stepId === 'string' ? stepId : stepId.id;
+
+                if (resolvedStepId === 'trigger') {
+                  return context.triggerData;
+                }
+                const result = context.steps[resolvedStepId];
+                if (result && result.status === 'success') {
+                  return result.output;
+                }
+                return undefined;
+              }) satisfies WorkflowContext<TTriggerSchema>['getStepResult'],
+            } as WorkflowContext,
             emit: (event: string, ...args: any[]) => {
               // console.log(this.#workflowInstance.name, 'emitting', event, ...args);
               this.emit(event, ...args);
@@ -516,21 +536,7 @@ export class Machine<
       runId: this.#runId,
     });
 
-    const resolvedData: Record<string, any> = {
-      ...context,
-      getStepResult: ((stepId: string | Step<any, any, any, any>) => {
-        const resolvedStepId = typeof stepId === 'string' ? stepId : stepId.id;
-
-        if (resolvedStepId === 'trigger') {
-          return context.triggerData;
-        }
-        const result = context.steps[resolvedStepId];
-        if (result && result.status === 'success') {
-          return result.output;
-        }
-        return undefined;
-      }) satisfies WorkflowContext<TTriggerSchema>['getStepResult'],
-    };
+    const resolvedData: Record<string, any> = {};
 
     for (const [key, variable] of Object.entries(stepConfig.data)) {
       // Check if variable comes from trigger data or a previous step's result

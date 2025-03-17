@@ -19,7 +19,7 @@ export interface StepExecutionContext<
   TSchemaIn extends z.ZodSchema | undefined = undefined,
   TContext extends WorkflowContext = WorkflowContext,
 > extends IExecutionContext<TSchemaIn> {
-  context: TSchemaIn extends z.ZodSchema ? z.infer<TSchemaIn> & TContext : TContext;
+  context: TSchemaIn extends z.ZodSchema ? { inputData: z.infer<TSchemaIn> } & TContext : TContext;
   suspend: (payload?: unknown) => Promise<void>;
   runId: string;
   emit: (event: string, data: any) => void;
@@ -120,6 +120,8 @@ export type StepDef<
       | Condition<any, any>
       | ((args: { context: WorkflowContext; mastra?: Mastra }) => Promise<boolean | WhenConditionReturnValue>);
     serializedWhen?: Condition<any, any> | string;
+    loopLabel?: string;
+    loopType?: 'when' | 'until';
     data: TSchemaIn;
     handler: (args: ActionContext<TSchemaIn>) => Promise<z.infer<TSchemaOut>>;
   }
@@ -160,6 +162,16 @@ export interface StepConfig<
     : {
         [K in keyof StepInputType<TStep, 'inputSchema'>]?: VariableReference<VarStep, TTriggerSchema>;
       };
+  '#internal'?: {
+    when?:
+      | Condition<CondStep, TTriggerSchema>
+      | ((args: {
+          context: WorkflowContext<TTriggerSchema, TSteps>;
+          mastra?: Mastra;
+        }) => Promise<boolean | WhenConditionReturnValue>);
+    loopLabel?: string;
+    loopType?: 'when' | 'until';
+  };
 }
 
 type StepSuccess<T> = {
@@ -209,6 +221,7 @@ export interface WorkflowRunResult<
 export interface WorkflowContext<
   TTrigger extends z.ZodObject<any> = any,
   TSteps extends Step<string, any, any, any>[] = Step<string, any, any, any>[],
+  TInputData extends Record<string, any> = Record<string, any>,
 > {
   mastra?: MastraUnion;
   steps: {
@@ -217,7 +230,7 @@ export interface WorkflowContext<
       : StepResult<z.infer<NonNullable<StepsRecord<TSteps>[K]['outputSchema']>>>;
   };
   triggerData: z.infer<TTrigger>;
-  resumeData?: any; // TODO: once we have a resume schema plug that in here
+  inputData: TInputData;
   attempts: Record<string, number>;
   getStepResult(stepId: 'trigger'): z.infer<TTrigger>;
   getStepResult<T extends keyof StepsRecord<TSteps> | unknown>(
