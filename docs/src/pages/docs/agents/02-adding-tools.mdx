@@ -71,6 +71,36 @@ export const mastra = new Mastra({
 
 This registers your agent with Mastra, making it available for use.
 
+## Abort Signals
+The abort signals from `generate` and `stream` (text generation) are forwarded to the tool execution. You can access them in the second parameter of the execute function and e.g. abort long-running computations or forward them to fetch calls inside tools.
+
+```typescript
+import { Agent } from "@mastra/core/agent";
+import { createTool } from "@mastra/core/tools";
+import { z } from "zod";
+
+const agent = new Agent({
+  name: "Weather agent",
+  tools: {
+    weather: createTool({
+      id: "Get Weather Information",
+      description: 'Get the weather in a location',
+      inputSchema: z.object({ location: z.string() }),
+      execute: async ({ context: { location } }, { abortSignal }) => {
+        return fetch(
+          `https://api.weatherapi.com/v1/current.json?q=${location}`,
+          { signal: abortSignal }, // forward the abort signal to fetch
+        );
+      },
+    }),
+  }
+})
+
+const result = await agent.generate('What is the weather in San Francisco?', {
+  abortSignal: myAbortSignal, // signal that will be forwarded to tools
+});
+```
+
 ## Debugging Tools
 
 You can test tools using Vitest or any other testing framework. Writing unit tests for your tools ensures they behave as expected and helps catch errors early.

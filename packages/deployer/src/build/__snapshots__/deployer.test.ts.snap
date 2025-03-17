@@ -1,0 +1,41 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`getDeployer > should be able to extract the deployer from ./plugins/__fixtures__/basic.js 1`] = `
+"import { TestDeployer } from '@mastra/deployer/test';
+
+const deployer = new TestDeployer();
+
+export { deployer };
+"
+`;
+
+exports[`getDeployer > should be able to extract the deployer from ./plugins/__fixtures__/basic-with-const.js 1`] = `
+"import { TestDeployer } from '@mastra/deployer/test';
+
+const testDeployer = new TestDeployer();
+const deployer = testDeployer;
+
+export { deployer };
+"
+`;
+
+exports[`getDeployer > should be able to extract the deployer from ./plugins/__fixtures__/basic-with-function.js 1`] = `
+"import { testDeployer } from '@mastra/deployer/test';
+
+function getDeployer() {
+  return testDeployer;
+}
+const deployer = getDeployer();
+
+export { deployer };
+"
+`;
+
+exports[`getDeployer > should be able to extract the deployer from ./plugins/__fixtures__/basic-with-import.js 1`] = `
+"import { testDeployer } from '@mastra/deployer/test';
+
+const deployer = testDeployer;
+
+export { deployer };
+"
+`;

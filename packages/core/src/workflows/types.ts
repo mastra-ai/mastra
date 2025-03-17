@@ -117,6 +117,8 @@ export type StepDef<
       | Condition<any, any>
       | ((args: { context: WorkflowContext; mastra?: Mastra }) => Promise<boolean | WhenConditionReturnValue>);
     serializedWhen?: Condition<any, any> | string;
+    loopLabel?: string;
+    loopType?: 'when' | 'until';
     data: TSchemaIn;
     handler: (args: ActionContext<TSchemaIn>) => Promise<z.infer<TSchemaOut>>;
   }
@@ -157,6 +159,16 @@ export interface StepConfig<
     : {
         [K in keyof StepInputType<TStep, 'inputSchema'>]?: VariableReference<VarStep, TTriggerSchema>;
       };
+  '#internal'?: {
+    when?:
+      | Condition<CondStep, TTriggerSchema>
+      | ((args: {
+          context: WorkflowContext<TTriggerSchema, TSteps>;
+          mastra?: Mastra;
+        }) => Promise<boolean | WhenConditionReturnValue>);
+    loopLabel?: string;
+    loopType?: 'when' | 'until';
+  };
 }
 
 type StepSuccess<T> = {
