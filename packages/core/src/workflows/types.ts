@@ -217,8 +217,10 @@ export type StepsRecord<T extends readonly Step<any, any, z.ZodType<any> | undef
 export interface WorkflowRunResult<
   T extends z.ZodType<any>,
   TSteps extends Step<string, any, z.ZodType<any> | undefined>[],
+  TResult extends z.ZodType<any>,
 > {
   triggerData?: z.infer<T>;
+  result?: z.infer<TResult>;
   results: {
     [K in keyof StepsRecord<TSteps>]: StepsRecord<TSteps>[K]['outputSchema'] extends undefined
       ? StepResult<unknown>

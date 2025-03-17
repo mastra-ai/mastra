@@ -17,6 +17,7 @@ import type {
   StepNode,
   StepVariableType,
   WorkflowOptions,
+  WorkflowRunResult,
   WorkflowRunState,
 } from './types';
 import { WhenConditionReturnValue } from './types';
@@ -31,6 +32,8 @@ export class Workflow<
 > extends MastraBase {
   name: string;
   triggerSchema?: TTriggerSchema;
+  resultSchema?: TResultSchema;
+  resultMapping?: Record<string, { step: StepAction<any, any, any, any>; path: string }>;
   events?: Record<string, { schema: z.ZodObject<any> }>;
   #retryConfig?: RetryConfig;
   #mastra?: Mastra;
@@ -59,6 +62,7 @@ export class Workflow<
   constructor({
     name,
     triggerSchema,
+    result,
     retryConfig,
     mastra,
     events,
@@ -68,6 +72,8 @@ export class Workflow<
     this.name = name;
     this.#retryConfig = retryConfig;
     this.triggerSchema = triggerSchema;
+    this.resultSchema = result?.schema;
+    this.resultMapping = result?.mapping;
     this.events = events;
 
     if (mastra) {
@@ -598,10 +604,11 @@ export class Workflow<
     runId,
     events,
   }: { runId?: string; events?: Record<string, { schema: z.ZodObject<any> }> } = {}): WorkflowResultReturn<
+    TResultSchema,
     TTriggerSchema,
     TSteps
   > {
-    const run = new WorkflowInstance<TSteps, TTriggerSchema>({
+    const run = new WorkflowInstance<TSteps, TTriggerSchema, TResultSchema>({
       logger: this.logger,
       name: this.name,
       mastra: this.#mastra,
@@ -611,6 +618,7 @@ export class Workflow<
       stepGraph: this.#stepGraph,
       stepSubscriberGraph: this.#stepSubscriberGraph,
       onStepTransition: this.#onStepTransition,
+      resultMapping: this.resultMapping,
       onFinish: () => {
         this.#runs.delete(run.runId);
       },
@@ -618,7 +626,9 @@ export class Workflow<
     });
     this.#runs.set(run.runId, run);
     return {
-      start: run.start.bind(run),
+      start: run.start.bind(run) as (
+        props?: { triggerData?: z.infer<TTriggerSchema> } | undefined,
+      ) => Promise<WorkflowRunResult<TTriggerSchema, TSteps, TResultSchema>>,
       runId: run.runId,
       watch: run.watch.bind(run),
       resume: run.resume.bind(run),

@@ -1,5 +1,9 @@
-import type { StepAction, StepResult, VariableReference } from './types';
+import type { z } from 'zod';
+import type { Logger } from '../logger';
+import type { Step } from './step';
+import type { StepAction, StepDef, StepResult, VariableReference, WorkflowContext } from './types';
 import type { Workflow } from './workflow';
+import { get } from 'radash';
 
 export function isErrorEvent(stateEvent: any): stateEvent is {
   type: `xstate.error.actor.${string}`;
@@ -170,6 +174,52 @@ export function isWorkflow(step: any): step is Workflow {
   return !!step?.name;
 }
 
+export function resolveVariables<TSteps extends Step<any, any, any>[]>({
+  runId,
+  logger,
+  variables,
+  context,
+}: {
+  runId: string;
+  logger: Logger;
+  variables: Record<string, VariableReference<any, any>>;
+  context: WorkflowContext;
+}): Record<string, any> {
+  const resolvedData: Record<string, any> = {};
+
+  for (const [key, variable] of Object.entries(variables)) {
+    // Check if variable comes from trigger data or a previous step's result
+    const sourceData =
+      variable.step === 'trigger' ? context.triggerData : getStepResult(context.steps[variable.step.id]);
+
+    logger.debug(
+      `Got source data for ${key} variable from ${variable.step === 'trigger' ? 'trigger' : variable.step.id}`,
+      {
+        sourceData,
+        path: variable.path,
+        runId: runId,
+      },
+    );
+
+    if (!sourceData && variable.step !== 'trigger') {
+      resolvedData[key] = undefined;
+      continue;
+    }
+
+    // If path is empty or '.', return the entire source data
+    const value = variable.path === '' || variable.path === '.' ? sourceData : get(sourceData, variable.path);
+
+    logger.debug(`Resolved variable ${key}`, {
+      value,
+      runId: runId,
+    });
+
+    resolvedData[key] = value;
+  }
+
+  return resolvedData;
+}
+
 export function workflowToStep(workflow: Workflow): StepAction<any, any, any, any> {
   workflow.setNested(true);
   return {
@@ -182,10 +232,10 @@ export function workflowToStep(workflow: Workflow): StepAction<any, any, any, an
         emit('state-update', workflow.name, state.value, { ...context, ...{ [workflow.name]: state.context } });
       });
 
-      const { results, activePaths } = await run.start();
+      const awaitedResult = await run.start();
       unwatch();
-      if (activePaths?.size > 0) {
-        const suspendedStep = [...activePaths.entries()].find(([stepId, { status }]) => {
+      if (awaitedResult.activePaths?.size > 0) {
+        const suspendedStep = [...awaitedResult.activePaths.entries()].find(([stepId, { status }]) => {
           return status === 'suspended';
         });
 
@@ -194,7 +244,7 @@ export function workflowToStep(workflow: Workflow): StepAction<any, any, any, an
         }
       }
 
-      return results;
+      return awaitedResult;
     },
   };
 }
