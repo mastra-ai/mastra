@@ -3,8 +3,8 @@ import { writeFile } from 'fs/promises';
 import path from 'path';
 import { Readable } from 'stream';
 import { describe, it, expect, beforeEach } from 'vitest';
-
-import { SARVAM_VOICES, SarvamVoiceId } from './voices';
+import { SARVAM_VOICES } from './voices';
+import type { SarvamVoiceId } from './voices';
 import { SarvamVoice } from './index';
 
 describe('Sarvam AI Voice Integration Tests', () => {
