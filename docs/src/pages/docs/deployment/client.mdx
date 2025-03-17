@@ -118,15 +118,3 @@ try {
 }
 ```
 
-```typescript
-// Example with error handling and logging
-try {
-  const agent = client.getAgent("dev-agent-id");
-  const response = await agent.generate({
-    messages: [{ role: "user", content: "Test message" }]
-  });
-  console.log("Response:", response);
-} catch (error) {
-  console.error("Development error:", error);
-}
-```
