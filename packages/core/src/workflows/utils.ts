@@ -190,10 +190,12 @@ export function resolveVariables<TSteps extends Step<any, any, any>[]>({
   for (const [key, variable] of Object.entries(variables)) {
     // Check if variable comes from trigger data or a previous step's result
     const sourceData =
-      variable.step === 'trigger' ? context.triggerData : getStepResult(context.steps[variable.step.id]);
+      variable.step === 'trigger'
+        ? context.triggerData
+        : getStepResult(context.steps[variable.step.id ?? variable.step.name]);
 
     logger.debug(
-      `Got source data for ${key} variable from ${variable.step === 'trigger' ? 'trigger' : variable.step.id}`,
+      `Got source data for ${key} variable from ${variable.step === 'trigger' ? 'trigger' : (variable.step.id ?? variable.step.name)}`,
       {
         sourceData,
         path: variable.path,

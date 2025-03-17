@@ -3771,7 +3771,7 @@ describe('Workflow', async () => {
             mapping: {
               finalValue: {
                 step: wfA,
-                path: 'output.result.finalValue',
+                path: 'result.finalValue',
               },
             },
           },
