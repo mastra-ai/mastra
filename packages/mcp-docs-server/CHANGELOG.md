@@ -1,5 +1,11 @@
 # @mastra/mcp-docs-server
 
+## 0.0.1-alpha.2
+
+### Patch Changes
+
+- 98cdf08: Made stdio.js bin executable by node
+
 ## 0.0.1-alpha.1
 
 ### Patch Changes
