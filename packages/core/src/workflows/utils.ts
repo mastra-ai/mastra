@@ -176,7 +176,7 @@ export function workflowToStep(workflow: Workflow): StepAction<any, any, any, an
     id: workflow.name,
     workflow,
     execute: async ({ context, suspend, emit }) => {
-      // TODO: pass runId here to match current runId for resume to work
+      // TODO: how do I add the metadata of this runId to the main snapshot and how do I make it resume the right workflow run Id and all that
       const run = workflow.createRun();
       const unwatch = workflow.watch(state => {
         emit('state-update', workflow.name, state.value, { ...context, ...{ [workflow.name]: state.context } });
