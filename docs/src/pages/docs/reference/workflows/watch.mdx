@@ -1,11 +1,11 @@
 ---
-title: "Reference: Workflow.watch() | Workflows | Mastra Docs"
+title: "Reference: run.watch() | Workflows | Mastra Docs"
 description: Documentation for the `.watch()` method in workflows, which monitors the status of a workflow run.
 ---
 
-# Workflow.watch()
+# run.watch()
 
-The `.watch()` function subscribes to state changes in a Mastra workflow, allowing you to monitor execution progress and react to state updates.
+The `.watch()` function subscribes to state changes on a mastra run, allowing you to monitor execution progress and react to state updates.
 
 ## Usage Example
 
@@ -16,14 +16,16 @@ const workflow = new Workflow({
   name: "document-processor"
 });
 
+const run = workflow.createRun();
+
 // Subscribe to state changes
-const unsubscribe = workflow.watch((state) => {
+const unsubscribe = run.watch((state) => {
   console.log('Current step:', state.currentStep);
   console.log('Step outputs:', state.stepOutputs);
 });
 
 // Run the workflow
-await workflow.run({
+await run.start({
   input: { text: "Process this document" }
 });
 
@@ -92,7 +94,7 @@ unsubscribe();
 Monitor specific step completion:
 
 ```typescript
-workflow.watch((state) => {
+run.watch((state) => {
   if (state.currentStep === 'processDocument') {
     console.log('Document processing output:', state.stepOutputs.processDocument);
   }
@@ -102,7 +104,7 @@ workflow.watch((state) => {
 Error handling:
 
 ```typescript
-workflow.watch((state) => {
+run.watch((state) => {
   if (state.status === 'failed') {
     console.error('Workflow failed:', state.error);
     // Implement error recovery logic

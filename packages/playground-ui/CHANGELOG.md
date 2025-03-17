@@ -1,5 +1,20 @@
 # @mastra/playground-ui
 
+## 2.0.1-alpha.1
+
+### Patch Changes
+
+- 1291e89: Add resizable-panel to playground-ui and use in agent and workflow sidebars
+- 9ba1e97: fix loading state for evals page
+- Updated dependencies [f4854ee]
+- Updated dependencies [afaf73f]
+- Updated dependencies [4356859]
+- Updated dependencies [44631b1]
+- Updated dependencies [6e559a0]
+- Updated dependencies [5f43505]
+  - @mastra/core@0.6.1-alpha.1
+  - @mastra/client-js@0.1.9-alpha.1
+
 ## 2.0.1-alpha.0
 
 ### Patch Changes

@@ -84,7 +84,7 @@ When a workflow executes, Mastra resolves variables at runtime by:
 1. Identifying the source step specified in the `step` property
 2. Retrieving the output from that step
 3. Navigating to the specified property using the `path`
-4. Injecting the resolved value into the target step's context
+4. Injecting the resolved value into the target step's context as the `inputData` property
 
 ## Examples
 
@@ -101,7 +101,7 @@ const processUserInput = new Step({
   id: "processUserInput",
   execute: async ({ context }) => {
     // The inputData will be available in context because of the variable mapping
-    const { inputData } = context;
+    const { inputData } = context.inputData;
 
     return {
       processedData: `Processed: ${inputData}`
@@ -160,7 +160,7 @@ const processData = new Step({
   }),
   execute: async ({ context }) => {
     // previousValue will be available because of the variable mapping
-    const { previousValue } = context;
+    const { previousValue } = context.inputData;
 
     return {
       result: `Processed: ${previousValue}`
