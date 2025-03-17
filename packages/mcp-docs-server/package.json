@@ -27,7 +27,7 @@
   "scripts": {
     "prepare-docs": "tsx src/prepare-docs/index.ts",
     "prebuild": "pnpm prepare-docs",
-    "build": "tsc",
+    "build": "tsc && chmod +x dist/stdio.js",
     "predev": "pnpm prepare-docs",
     "dev": "fastmcp dev src/index.ts",
     "inspect": "fastmcp inspect src/index.ts",
