@@ -25,6 +25,7 @@
     "build": "tsup src/index.ts --format esm,cjs --experimental-dts --clean --treeshake=smallest --splitting",
     "build:watch": "pnpm build --watch",
     "test": "vitest run",
+    "test:watch": "vitest watch",
     "lint": "eslint ."
   },
   "dependencies": {

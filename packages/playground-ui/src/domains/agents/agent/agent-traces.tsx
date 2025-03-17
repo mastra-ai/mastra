@@ -1,18 +1,17 @@
 import { Braces } from 'lucide-react';
-import { MouseEvent as ReactMouseEvent, ReactNode, useContext, useState } from 'react';
+import { ReactNode, useContext, useState } from 'react';
 
 import { Skeleton } from '@/components/ui/skeleton';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 
 import { cn } from '@/lib/utils';
 
+import { MastraResizablePanel } from '@/domains/resizable-panel';
 import { Traces } from '@/domains/traces';
 import { TraceContext, TraceProvider } from '@/domains/traces/context/trace-context';
 import { TraceDetails } from '@/domains/traces/trace-details';
 import { SpanDetail } from '@/domains/traces/trace-span-details';
-import { useResizeColumn } from '@/hooks/use-resize-column';
 import { useTraces } from '@/hooks/use-traces';
-import { MastraResizablePanel } from '@/domains/resizable-panel';
 
 export function AgentTraces({
   agentName,

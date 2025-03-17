@@ -10,7 +10,7 @@ import { Telemetry } from '../telemetry';
 import { createTool } from '../tools';
 
 import { Step } from './step';
-import type { WorkflowContext, WorkflowResumeResult } from './types';
+import { WhenConditionReturnValue, type WorkflowContext, type WorkflowResumeResult } from './types';
 import { Workflow } from './workflow';
 
 const storage = new DefaultStorage({
@@ -431,8 +431,10 @@ describe('Workflow', async () => {
         expect.objectContaining({
           context: {
             ...baseContext,
+            inputData: {
+              tData: { inputData: { nested: { value: 'test' } } },
+            },
             triggerData: { inputData: { nested: { value: 'test' } } },
-            tData: { inputData: { nested: { value: 'test' } } },
           },
           runId: expect.any(String),
         }),
@@ -493,7 +495,9 @@ describe('Workflow', async () => {
                 status: 'success',
               },
             },
-            previousValue: 'step1-data',
+            inputData: {
+              previousValue: 'step1-data',
+            },
           }),
           runId: results.runId,
         }),
@@ -1354,6 +1358,7 @@ describe('Workflow', async () => {
       const baseContext = {
         attempts: { step1: 0, step2: 0, step3: 0, step4: 0, step5: 0 },
         steps: {},
+        inputData: {},
         triggerData: {},
         getStepResult: expect.any(Function),
       };
@@ -1384,7 +1389,9 @@ describe('Workflow', async () => {
               step1: { status: 'success', output: { result: 'success1' } },
               step4: { status: 'success', output: { result: 'success4' } },
             },
-            name: 'Dero Israel',
+            inputData: {
+              name: 'Dero Israel',
+            },
           },
           suspend: expect.any(Function),
           runId: expect.any(String),
@@ -1683,14 +1690,123 @@ describe('Workflow', async () => {
       expect(step5Action).toHaveBeenCalledTimes(2);
       expect(step6Action).toHaveBeenCalled();
       expect(step7Action).toHaveBeenCalled();
-      expect(step8Action).toHaveBeenCalledTimes(2);
+      expect(step8Action).toHaveBeenCalledTimes(3);
       expect(result.results.step1).toEqual({ status: 'success', output: { result: 'success1' } });
       expect(result.results.step2).toEqual({ status: 'success', output: { result: 'success2' } });
       expect(result.results.step5).toEqual({ status: 'success', output: { result: 'success5' } });
     });
 
+    it('should run compound subscribers on a loop', async () => {
+      const increment = vi.fn().mockImplementation(async ({ context }) => {
+        // Get the current value (either from trigger or previous increment)
+        const currentValue =
+          context.getStepResult('increment')?.newValue || context.getStepResult('trigger')?.startValue || 0;
+
+        // Increment the value
+        const newValue = currentValue + 1;
+
+        return { newValue };
+      });
+      const incrementStep = new Step({
+        id: 'increment',
+        description: 'Increments the current value by 1',
+        outputSchema: z.object({
+          newValue: z.number(),
+        }),
+        execute: increment,
+      });
+
+      const final = vi.fn().mockImplementation(async ({ context }) => {
+        return { finalValue: context.getStepResult(incrementStep).newValue };
+      });
+      const finalStep = new Step({
+        id: 'final',
+        description: 'Final step that prints the result',
+        execute: async (...rest) => {
+          console.log('calling final');
+          return final(...rest);
+        },
+      });
+
+      const mockAction = vi.fn<any>().mockResolvedValue({ result: 'success' });
+      const dummyStep = new Step({
+        id: 'dummy',
+        description: 'Dummy step',
+        execute: async (...rest) => {
+          console.log('calling dummyStep');
+          return mockAction(...rest);
+        },
+      });
+
+      const mockAction2 = vi.fn<any>().mockResolvedValue({ result: 'success' });
+      const dummyStep2 = new Step({
+        id: 'dummy2',
+        description: 'Dummy step',
+        execute: async (...rest) => {
+          console.log('calling dummyStep2');
+          return mockAction2(...rest);
+        },
+      });
+
+      const mockAction3 = vi.fn<any>().mockResolvedValue({ result: 'success' });
+      const dummyStep3 = new Step({
+        id: 'dummy3',
+        description: 'Dummy step',
+        execute: async (...rest) => {
+          console.log({ rest: rest[0].context.steps['increment'] }, '=======');
+          console.log(rest[0].context.getStepResult('increment'));
+          console.log('calling dummyStep3');
+          return mockAction3(...rest);
+        },
+      });
+
+      const counterWorkflow = new Workflow({
+        name: 'counter-workflow',
+        triggerSchema: z.object({
+          target: z.number(),
+          startValue: z.number(),
+        }),
+      });
+
+      counterWorkflow
+        .step(incrementStep)
+        .after(incrementStep)
+        .step(dummyStep)
+        .after(incrementStep)
+        .step(dummyStep2)
+        .after([dummyStep, dummyStep2])
+        .step(dummyStep3)
+        .after(dummyStep3)
+        .step(incrementStep, {
+          when: async ({ context }) => {
+            const isPassed = context.getStepResult(incrementStep)?.newValue < 10;
+            if (isPassed) {
+              return true;
+            } else {
+              return WhenConditionReturnValue.LIMBO;
+            }
+          },
+        })
+        .step(finalStep, {
+          when: async ({ context }) => {
+            const isPassed = context.getStepResult(incrementStep)?.newValue >= 10;
+            return isPassed;
+          },
+        })
+        .commit();
+
+      const run = counterWorkflow.createRun();
+      await run.start({ triggerData: { target: 10, startValue: 0 } });
+
+      expect(increment).toHaveBeenCalledTimes(10);
+      expect(mockAction).toHaveBeenCalledTimes(10);
+      expect(mockAction2).toHaveBeenCalledTimes(10);
+      expect(mockAction3).toHaveBeenCalledTimes(10);
+      expect(final).toHaveBeenCalledTimes(1);
+    });
+
     // don't unskip this please.. actually unskip it 😈
-    it.skip('should spawn cyclic subscribers for each step', async () => {
+    it.skip('should spawn cyclic subscribers for each step (legacy)', async () => {
       const step1Action = vi.fn<any>().mockResolvedValue({ result: 'success1' });
       const step3Action = vi.fn<any>().mockResolvedValue({ result: 'success3' });
 
@@ -1753,7 +1869,7 @@ describe('Workflow', async () => {
       const run = workflow.createRun();
 
       // Start watching the workflow
-      workflow.watch(onTransition);
+      run.watch(onTransition);
 
       const executionResult = await run.start();
 
@@ -1804,28 +1920,30 @@ describe('Workflow', async () => {
 
       const run = workflow.createRun();
 
-      const unwatch = workflow.watch(onTransition);
-      const unwatch2 = workflow.watch(onTransition2);
+      run.watch(onTransition);
+      run.watch(onTransition2);
 
       await run.start();
 
       expect(onTransition).toHaveBeenCalledTimes(6);
       expect(onTransition2).toHaveBeenCalledTimes(6);
 
-      unwatch();
-
       const run2 = workflow.createRun();
+
+      run2.watch(onTransition2);
+
       await run2.start();
 
       expect(onTransition).toHaveBeenCalledTimes(6);
       expect(onTransition2).toHaveBeenCalledTimes(12);
 
-      unwatch2();
-
       const run3 = workflow.createRun();
+
+      run3.watch(onTransition);
+
       await run3.start();
 
-      expect(onTransition).toHaveBeenCalledTimes(6);
+      expect(onTransition).toHaveBeenCalledTimes(12);
       expect(onTransition2).toHaveBeenCalledTimes(12);
     });
 
@@ -1843,7 +1961,7 @@ describe('Workflow', async () => {
 
       const run = workflow.createRun();
 
-      workflow.watch(onTransition);
+      run.watch(onTransition);
 
       await run.start();
 
@@ -1874,6 +1992,15 @@ describe('Workflow', async () => {
       if (fs.existsSync(pathToDb)) {
         fs.rmSync(pathToDb);
       }
+    });
+    it('should return the correct runId', async () => {
+      const workflow = new Workflow({ name: 'test-workflow' });
+      const run = workflow.createRun();
+      const run2 = workflow.createRun({ runId: run.runId });
+
+      expect(run.runId).toBeDefined();
+      expect(run2.runId).toBeDefined();
+      expect(run.runId).toBe(run2.runId);
     });
     it('should handle basic suspend and resume flow', async () => {
       const getUserInputAction = vi.fn().mockResolvedValue({ userInput: 'test input' });
@@ -1962,7 +2089,7 @@ describe('Workflow', async () => {
         resolveWorkflowSuspended = resolve;
       });
 
-      wf.watch(data => {
+      run.watch(data => {
         const suspended = data.activePaths.find(p => p.status === 'suspended');
         if (suspended?.stepId === 'promptAgent') {
           const newCtx = {
@@ -1972,7 +2099,7 @@ describe('Workflow', async () => {
           newCtx.steps.getUserInput.output = {
             userInput: 'test input for resumption',
           };
-          resolveWorkflowSuspended({ runId: run.runId, stepId: suspended.stepId, context: newCtx });
+          resolveWorkflowSuspended({ stepId: suspended.stepId, context: newCtx });
         }
       });
 
@@ -1982,8 +2109,7 @@ describe('Workflow', async () => {
 
       // Wait for the workflow to be ready to resume
       const resumeData = await workflowSuspended;
-      const resumeWf = mastra.getWorkflow('test-workflow');
-      const resumeResult = await resumeWf.resume(resumeData as any);
+      const resumeResult = await run.resume(resumeData as any);
 
       if (!resumeResult) {
         throw new Error('Resume failed to return a result');
@@ -2085,7 +2211,7 @@ describe('Workflow', async () => {
 
       const result = await new Promise<WorkflowResumeResult<any>>((resolve, reject) => {
         let hasResumed = false;
-        wf.watch(async data => {
+        run.watch(async data => {
           const suspended = data.activePaths.find(p => p.status === 'suspended');
           if (suspended?.stepId === 'humanIntervention') {
             const newCtx = {
@@ -2096,8 +2222,7 @@ describe('Workflow', async () => {
               hasResumed = true;
 
               try {
-                const resumed = await wf.resume({
-                  runId: run.runId,
+                const resumed = await run.resume({
                   stepId: suspended.stepId,
                   context: newCtx,
                 });
@@ -2237,7 +2362,7 @@ describe('Workflow', async () => {
 
       const result = await new Promise<WorkflowResumeResult<any>>((resolve, reject) => {
         let hasResumed = false;
-        wf.watch(async data => {
+        run.watch(async data => {
           const suspended = data.activePaths.find(p => p.status === 'suspended');
 
           if (suspended?.stepId === 'humanIntervention') {
@@ -2249,8 +2374,7 @@ describe('Workflow', async () => {
               hasResumed = true;
 
               try {
-                const resumed = await wf.resume({
-                  runId: run.runId,
+                const resumed = await run.resume({
                   stepId: suspended.stepId,
                   context: newCtx,
                 });
@@ -2260,8 +2384,7 @@ describe('Workflow', async () => {
               }
             }
           } else if (suspended?.stepId === 'improveResponse') {
-            const resumed = wf.resume({
-              runId: run.runId,
+            const resumed = run.resume({
               stepId: suspended.stepId,
               context: {
                 ...data.context,
@@ -2405,7 +2528,7 @@ describe('Workflow', async () => {
       expect(initialResult.results.promptAgent.status).toBe('suspended');
       expect(promptAgentAction).toHaveBeenCalledTimes(1);
 
-      const firstResumeResult = await wf.resume({ runId: run.runId, stepId: 'promptAgent', context: newCtx });
+      const firstResumeResult = await run.resume({ stepId: 'promptAgent', context: newCtx });
 
       if (!firstResumeResult) {
         throw new Error('Resume failed to return a result');
@@ -2426,7 +2549,7 @@ describe('Workflow', async () => {
         improveResponse: { status: 'suspended' },
       });
 
-      const secondResumeResult = await wf.resume({ runId: run.runId, stepId: 'improveResponse', context: newCtx });
+      const secondResumeResult = await run.resume({ stepId: 'improveResponse', context: newCtx });
       if (!secondResumeResult) {
         throw new Error('Resume failed to return a result');
       }
@@ -2485,7 +2608,15 @@ describe('Workflow', async () => {
       });
 
       const wf = mastra.getWorkflow('test-workflow');
-      const run = wf.createRun();
+      const run = wf.createRun({
+        events: {
+          testev: {
+            schema: z.object({
+              catName: z.string(),
+            }),
+          },
+        },
+      });
 
       const initialResult = await run.start({ triggerData: { input: 'test' } });
       expect(initialResult.activePaths.size).toBe(1);
@@ -2495,7 +2626,7 @@ describe('Workflow', async () => {
       });
       expect(getUserInputAction).toHaveBeenCalledTimes(1);
 
-      const firstResumeResult = await wf.resumeWithEvent(run.runId, 'testev', {
+      const firstResumeResult = await run.resumeWithEvent('testev', {
         catName: 'test input for resumption',
       });
 
@@ -2575,6 +2706,7 @@ describe('Workflow', async () => {
 
       // Access new instance properties directly - should work without warning
       const run = wf.createRun();
+      run.watch(data => {});
       await run.start();
 
       expect(telemetry).toBeDefined();
