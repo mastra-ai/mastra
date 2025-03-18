@@ -1,0 +1,136 @@
+---
+title: "Using MCP With Mastra | Agents | Mastra Docs"
+description: "Use MCP in Mastra to integrate third party tools and resources in your AI agents."
+---
+
+# Using MCP With Mastra
+
+[Model Context Protocol (MCP)](https://modelcontextprotocol.io/introduction) is a standardized way for AI models to discover and interact with external tools and resources.
+
+## Overview
+
+MCP in Mastra provides a standardized way to connect to tool servers and supports both stdio and SSE-based connections.
+
+## Installation
+
+Using pnpm:
+```bash
+pnpm add @mastra/mcp@latest
+```
+
+Using npm:
+```bash
+npm install @mastra/mcp@latest
+```
+
+## Using MCP in Your Code
+
+The `MCPConfiguration` class provides a clean way to manage multiple tool servers in your Mastra applications. You can configure both stdio-based and SSE-based servers:
+
+```typescript
+import { MCPConfiguration } from "@mastra/mcp";
+import { Agent } from "@mastra/core/agent";
+import { openai } from "@ai-sdk/openai";
+
+const mcp = new MCPConfiguration({
+  servers: {
+    // stdio example
+    stockPrice: {
+      command: "npx",
+      args: ["tsx", "stock-price.ts"],
+      env: {
+        API_KEY: "your-api-key",
+      },
+    },
+    // SSE example
+    weather: {
+      url: new URL("http://localhost:8080/sse"),
+      requestInit: {
+        headers: {
+          Authorization: "Bearer your-token",
+        },
+      },
+    },
+  },
+});
+```
+
+### Tools vs Toolsets
+
+The `MCPConfiguration` class provides two ways to access MCP tools, each suited for different use cases:
+
+#### Using Tools (`getTools()`)
+
+Use this approach when:
+- You have a single MCP connection
+- The tools are used by a single user/context
+- Tool configuration (API keys, credentials) remains constant
+- You want to initialize an Agent with a fixed set of tools
+
+```typescript
+const agent = new Agent({
+  name: "CLI Assistant",
+  instructions: "You help users with CLI tasks",
+  model: openai("gpt-4o-mini"),
+  tools: await mcp.getTools(), // Tools are fixed at agent creation
+});
+```
+
+#### Using Toolsets (`getToolsets()`)
+
+Use this approach when:
+- You need per-request tool configuration
+- Tools need different credentials per user
+- Running in a multi-user environment (web app, API, etc)
+- Tool configuration needs to change dynamically
+
+```typescript
+const mcp = new MCPConfiguration({
+  servers: {
+    stockPrice: {
+      command: "npx",
+      args: ["tsx", "stock-price.ts"],
+      env: {
+        API_KEY: "your-api-key",
+      },
+    },
+  },
+});
+
+// Get the current toolsets configured for this user
+const toolsets = await mcp.getToolsets();
+
+// Use the agent with user-specific tool configurations
+const response = await agent.stream(
+  "What's new in Mastra and how's the weather?",
+  {
+    toolsets,
+  },
+);
+```
+
+## Best Practices
+
+1. **Resource Management**
+   - Use unique IDs when creating multiple instances with identical configurations
+   - Consider moving configuration to a higher scope to avoid recreation
+   - Always handle connection lifecycle properly
+
+2. **Error Handling**
+   - Wrap MCP operations in try/catch blocks
+   - Handle connection errors gracefully
+   - Implement proper cleanup in finally blocks
+
+3. **Performance**
+   - Reuse MCP configurations when possible
+   - Use toolsets for dynamic tool access
+   - Configure connection timeouts appropriately
+
+## Using the Mastra Documentation Server
+
+Looking to use Mastra's documentation server in your IDE? Check out our [Documentation Server guide](/docs/getting-started/docs-server) to get started.
+
+## Next Steps
+
+- Learn more about [MCPConfiguration](/docs/reference/tools/mcp-configuration)
+- Check out our [example projects](/examples) that use MCP
