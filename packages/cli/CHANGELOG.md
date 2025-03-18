@@ -1,5 +1,18 @@
 # mastra
 
+## 0.4.1
+
+### Patch Changes
+
+- aede1ea: Add non english support to weather example
+- 2f6a8b6: Update port handling in dev command to ensure CLI port takes precedence over environment variables and add warning when overriding PORT environment variable.
+- 010fc45: Fix storage init stuck
+- Updated dependencies [4e6732b]
+- Updated dependencies [beaf1c2]
+- Updated dependencies [3084e13]
+  - @mastra/deployer@0.2.2
+  - @mastra/core@0.6.2
+
 ## 0.4.1-alpha.2
 
 ### Patch Changes
