@@ -1,5 +1,13 @@
 # @mastra/speech-playai
 
+## 0.1.11-alpha.0
+
+### Patch Changes
+
+- 404640e: AgentNetwork changeset
+- Updated dependencies [404640e]
+  - @mastra/core@0.6.3-alpha.0
+
 ## 0.1.10
 
 ### Patch Changes

@@ -1,5 +1,11 @@
 # create-mastra
 
+## 0.2.1-alpha.0
+
+### Patch Changes
+
+- 404640e: AgentNetwork changeset
+
 ## 0.2.0
 
 ### Minor Changes

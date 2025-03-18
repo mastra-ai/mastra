@@ -1,5 +1,14 @@
 # @mastra/deployer-netlify
 
+## 0.1.12-alpha.0
+
+### Patch Changes
+
+- 404640e: AgentNetwork changeset
+- Updated dependencies [404640e]
+  - @mastra/deployer@0.2.3-alpha.0
+  - @mastra/core@0.6.3-alpha.0
+
 ## 0.1.11
 
 ### Patch Changes

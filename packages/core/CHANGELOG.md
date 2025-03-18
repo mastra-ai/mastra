@@ -1,5 +1,11 @@
 # @mastra/core
 
+## 0.6.3-alpha.0
+
+### Patch Changes
+
+- 404640e: AgentNetwork changeset
+
 ## 0.6.2
 
 ### Patch Changes
