@@ -209,6 +209,7 @@ This is a warning for now, but will throw an error in the future
         if (agents[key]) {
           throw new Error(`Agent with name ID:${key} already exists`);
         }
+        agent.__registerMastra(this);
 
         agent.__registerPrimitives({
           logger: this.getLogger(),
@@ -219,8 +220,6 @@ This is a warning for now, but will throw an error in the future
           tts: this.#tts,
           vectors: this.#vectors,
         });
-
-        agent.__registerMastra(this);
 
         agents[key] = agent;
       });
