@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.1.6
+
+### Patch Changes
+
+- Updated dependencies [beaf1c2]
+- Updated dependencies [3084e13]
+  - @mastra/core@0.6.2
+
+## 0.1.6-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [beaf1c2]
+- Updated dependencies [3084e13]
+  - @mastra/core@0.6.2-alpha.0
+
 ## 0.1.5
 
 ### Patch Changes
