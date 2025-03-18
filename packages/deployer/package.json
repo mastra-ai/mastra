@@ -1,6 +1,6 @@
 {
   "name": "@mastra/deployer",
-  "version": "0.2.1-alpha.1",
+  "version": "0.2.2-alpha.0",
   "description": "",
   "type": "module",
   "files": [
@@ -101,6 +101,7 @@
     "rollup": "^4.35.0",
     "rollup-plugin-esbuild": "^6.2.1",
     "rollup-plugin-node-externals": "^8.0.0",
+    "typescript-paths": "^1.5.1",
     "zod": "^3.24.2"
   },
   "devDependencies": {
