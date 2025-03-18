@@ -3,10 +3,11 @@ import { DocsThemeConfig, useConfig } from "nextra-theme-docs";
 
 import { useRouter } from "next/router";
 
+import { Footer } from "@/components/footer";
+import { GithubStarCount } from "@/components/github-star-count";
 import { OperatorsTable } from "./src/components/operators-table";
 import { PropertiesTable } from "./src/components/properties-table";
 import { TableOfContents } from "./src/components/toc";
-import { GithubStarCount } from "@/components/github-star-count";
 
 const logo = (
   <svg
@@ -123,7 +124,7 @@ const docs: DocsThemeConfig = {
     component: TableOfContents,
   },
   footer: {
-    component: null,
+    component: Footer,
   },
 };
 
