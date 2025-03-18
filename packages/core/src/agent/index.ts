@@ -196,7 +196,7 @@ export class Agent<
     return title;
   }
 
-  async saveMemory({
+  async fetchMemory({
     threadId,
     memoryConfig,
     resourceId,
@@ -204,68 +204,40 @@ export class Agent<
     runId,
   }: {
     resourceId: string;
-    threadId?: string;
+    threadId: string;
     memoryConfig?: MemoryConfig;
     userMessages: CoreMessage[];
     time?: Date;
     keyword?: string;
     runId?: string;
   }) {
-    const userMessage = this.getMostRecentUserMessage(userMessages);
     const memory = this.getMemory();
     if (memory) {
-      const config = memory.getMergedThreadConfig(memoryConfig);
-      let thread: StorageThreadType | null;
-
-      if (!threadId) {
-        this.logger.debug(`No threadId, creating new thread for agent ${this.name}`, {
-          runId: runId || this.name,
-        });
-        const title = config?.threads?.generateTitle ? await this.genTitle(userMessage) : undefined;
-
-        thread = await memory.createThread({
-          threadId,
-          resourceId,
-          memoryConfig,
-          title,
-        });
-      } else {
-        thread = await memory.getThreadById({ threadId });
-        if (!thread) {
-          this.logger.debug(`Thread with id ${threadId} not found, creating new thread for agent ${this.name}`, {
-            runId: runId || this.name,
-          });
-
-          const title = config?.threads?.generateTitle ? await this.genTitle(userMessage) : undefined;
-
-          thread = await memory.createThread({
-            threadId,
-            resourceId,
-            title,
-            memoryConfig,
-          });
-        }
+      const thread = await memory.getThreadById({ threadId });
+      if (!thread) {
+        return { threadId: threadId || '', messages: userMessages };
       }
 
+      const userMessage = this.getMostRecentUserMessage(userMessages);
       const newMessages = userMessage ? [userMessage] : userMessages;
 
-      if (thread) {
-        const messages = newMessages.map(u => {
-          return {
-            id: this.getMemory()?.generateId()!,
-            createdAt: new Date(),
-            threadId: thread.id,
-            ...u,
-            content: u.content as UserContent | AssistantContent,
-            role: u.role as 'user' | 'assistant',
-            type: 'text' as 'text' | 'tool-call' | 'tool-result',
-          };
-        });
+      const messages = newMessages.map(u => {
+        return {
+          id: this.getMemory()?.generateId()!,
+          createdAt: new Date(),
+          threadId: threadId,
+          ...u,
+          content: u.content as UserContent | AssistantContent,
+          role: u.role as 'user' | 'assistant',
+          type: 'text' as 'text' | 'tool-call' | 'tool-result',
+        };
+      });
 
-        const memoryMessages =
-          threadId && memory
-            ? (
-                await memory.rememberMessages({
+      const [memoryMessages, memorySystemMessage] =
+        threadId && memory
+          ? await Promise.all([
+              memory
+                .rememberMessages({
                   threadId,
                   resourceId,
                   config: memoryConfig,
@@ -279,39 +251,28 @@ export class Agent<
                     })
                     .join(`\n`),
                 })
-              ).messages
-            : [];
+                .then(r => r.messages),
+              memory.getSystemMessage({ threadId, memoryConfig }),
+            ])
+          : [[], null];
 
-        if (memory) {
-          await memory.saveMessages({ messages, memoryConfig });
-        }
-
-        this.logger.debug('Saved messages to memory', {
-          threadId: thread.id,
-          runId,
-        });
-
-        const memorySystemMessage =
-          memory && threadId ? await memory.getSystemMessage({ threadId, memoryConfig }) : null;
-
-        return {
-          threadId: thread.id,
-          messages: [
-            memorySystemMessage
-              ? {
-                  role: 'system' as const,
-                  content: memorySystemMessage,
-                }
-              : null,
-            ...this.sanitizeResponseMessages(memoryMessages),
-            ...newMessages,
-          ].filter((message): message is NonNullable<typeof message> => Boolean(message)),
-        };
-      }
+      this.logger.debug('Saved messages to memory', {
+        threadId,
+        runId,
+      });
 
       return {
-        threadId: (thread as StorageThreadType)?.id || threadId || '',
-        messages: userMessages,
+        threadId: thread.id,
+        messages: [
+          memorySystemMessage
+            ? {
+                role: 'system' as const,
+                content: memorySystemMessage,
+              }
+            : null,
+          ...this.sanitizeResponseMessages(memoryMessages),
+          ...newMessages,
+        ].filter((message): message is NonNullable<typeof message> => Boolean(message)),
       };
     }
 
@@ -621,7 +582,7 @@ export class Agent<
     messages,
   }: {
     runId?: string;
-    threadId?: string;
+    threadId: string;
     memoryConfig?: MemoryConfig;
     messages: CoreMessage[];
     resourceId: string;
@@ -630,7 +591,7 @@ export class Agent<
     let threadIdToUse = threadId;
 
     this.logger.debug(`Saving user messages in memory for agent ${this.name}`, { runId });
-    const saveMessageResponse = await this.saveMemory({
+    const saveMessageResponse = await this.fetchMemory({
       threadId,
       resourceId,
       userMessages: messages,
@@ -693,6 +654,17 @@ export class Agent<
               memoryStore: this.getMemory()?.constructor.name,
             },
           );
+
+          let thread = threadIdToUse ? await memory.getThreadById({ threadId: threadIdToUse }) : undefined;
+          if (!thread) {
+            thread = await memory.createThread({
+              threadId: threadIdToUse,
+              resourceId,
+              memoryConfig,
+            });
+          }
+          threadIdToUse = thread.id;
+
           const preExecuteResult = await this.preExecute({
             resourceId,
             runId,
@@ -769,15 +741,54 @@ export class Agent<
           result: resToLog,
           threadId,
         });
-        if (this.getMemory() && resourceId) {
+        const memory = this.getMemory();
+        const thread = await memory?.getThreadById({ threadId });
+        if (memory && resourceId && thread) {
           try {
-            await this.saveResponse({
-              result,
-              threadId,
-              resourceId,
-              memoryConfig,
-              runId,
+            const userMessage = this.getMostRecentUserMessage(messages);
+            const newMessages = userMessage ? [userMessage] : messages;
+            const threadMessages = newMessages.map(u => {
+              return {
+                id: this.getMemory()?.generateId()!,
+                createdAt: new Date(),
+                threadId: thread.id,
+                ...u,
+                content: u.content as UserContent | AssistantContent,
+                role: u.role as 'user' | 'assistant',
+                type: 'text' as 'text' | 'tool-call' | 'tool-result',
+              };
             });
+
+            await Promise.all([
+              (async () => {
+                await memory.saveMessages({ messages: threadMessages, memoryConfig });
+                await this.saveResponse({
+                  result,
+                  threadId,
+                  resourceId,
+                  memoryConfig,
+                  runId,
+                });
+              })(),
+              (async () => {
+                if (!thread.title?.startsWith('New Thread')) {
+                  return;
+                }
+
+                const config = memory.getMergedThreadConfig(memoryConfig);
+                const title = config?.threads?.generateTitle ? await this.genTitle(userMessage) : undefined;
+                if (!title) {
+                  return;
+                }
+
+                return memory.createThread({
+                  threadId: thread.id,
+                  resourceId,
+                  memoryConfig,
+                  title,
+                });
+              })(),
+            ]);
           } catch (e) {
             this.logger.error('Error saving response', {
               error: e,
