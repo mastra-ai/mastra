@@ -33,7 +33,12 @@ export function MastraRuntimeProvider({
   const [currentThreadId, setCurrentThreadId] = useState<string | undefined>(threadId);
 
   useEffect(() => {
-    if (messages.length === 0 || currentThreadId !== threadId) {
+    const hasNewInitialMessages = initialMessages && initialMessages?.length > messages?.length;
+    if (
+      messages.length === 0 ||
+      currentThreadId !== threadId ||
+      (hasNewInitialMessages && currentThreadId === threadId)
+    ) {
       if (initialMessages && threadId && memory) {
         setMessages(initialMessages);
         setCurrentThreadId(threadId);
@@ -110,6 +115,12 @@ export function MastraRuntimeProvider({
                 role: 'assistant',
                 content: [{ type: 'text', text: assistantMessage }],
               };
+              const lastMessage = currentConversation[currentConversation.length - 1];
+              if (lastMessage.id) {
+                // messages not coming from the db shouldn't have id yet,
+                // and any from the db shouldn't be getting updated in the stream
+                return currentConversation;
+              }
 
               if (!assistantMessageAdded) {
                 assistantMessageAdded = true;
