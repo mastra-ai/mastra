@@ -1,7 +1,7 @@
 import { createHash } from 'crypto';
 import jsonSchemaToZod from 'json-schema-to-zod';
+import type { ZodObject, ZodSchema } from 'zod';
 import { z } from 'zod';
-import type { ZodObject } from 'zod';
 import type { MastraPrimitives } from './action';
 import type { ToolsInput } from './agent';
 import type { Logger } from './logger';
@@ -377,11 +377,84 @@ function createExecute(tool: ToolToConvert, options: ToolOptions, logType?: 'too
 }
 
 /**
- * Checks if a value is a Zod type
- * @param value - The value to check
- * @returns True if the value is a Zod type, false otherwise
+ * The type of dependencies that can be used in a tool.
  */
-function isZodType(value: unknown): value is z.ZodType {
+export type DependenciesType<TSchema extends ZodSchema | undefined> = InferZodType<TSchema, Record<string, unknown>>;
+
+/**
+ * Creates an empty dependencies object.
+ *
+ * @template TSchema - The Zod schema to validate against.
+ * @returns The empty dependencies object.
+ */
+export function createEmptyDependencies<TSchema extends ZodSchema | undefined>(): DependenciesType<TSchema> {
+  return {} as DependenciesType<TSchema>;
+}
+
+/**
+ * Creates a dependencies object from an existing object.
+ *
+ * @template TSchema - The Zod schema to validate against.
+ * @param fromValue - The object to create the dependencies from.
+ * @returns The dependencies object.
+ */
+export function createDependenciesFrom<TSchema extends ZodSchema | undefined>(
+  fromValue?: DependenciesType<TSchema>,
+): DependenciesType<TSchema> {
+  return fromValue ?? createEmptyDependencies<TSchema>();
+}
+
+/**
+ * Validates the provided dependencies against an optional Zod schema.
+ *
+ * If a schema is provided, dependencies are validated against it. Without a schema,
+ * dependencies are returned directly if they're a non-null object, otherwise `{}`.
+ *
+ * @param schema - Optional Zod schema defining the structure of the dependencies.
+ * @param dependencies - Optional dependencies object to validate.
+ * @returns Validated dependencies matching the schema, or original/empty object when schema isn't provided.
+ *
+ * @throws Error if validation fails or the schema isn't a valid Zod schema.
+ */
+export function validateDependencies<TSchema extends ZodSchema | undefined>(
+  schema?: TSchema,
+  dependencies?: DependenciesType<TSchema>,
+): DependenciesType<TSchema> {
+  if (!schema) {
+    if (typeof dependencies === 'object' && dependencies !== null) {
+      return dependencies;
+    }
+
+    return createEmptyDependencies<TSchema>();
+  }
+
+  try {
+    if (isZodType(schema)) {
+      return schema.parse(dependencies);
+    } else {
+      throw new Error('Dependencies schema is not a Zod schema');
+    }
+  } catch (error) {
+    throw new Error(`Dependencies validation failed: ${error}`);
+  }
+}
+
+/**
+ * Infers the type from a ZodSchema if provided, otherwise returns unknown.
+ *
+ * @template T - The input type which might be a ZodSchema.
+ * @template Default - The default type to return if the input is not a ZodSchema.
+ * @returns The inferred type from the ZodSchema or Default.
+ */
+export type InferZodType<T, Default> = T extends z.ZodSchema ? z.infer<T> : Default;
+
+/**
+ * Checks if a value is a Zod type.
+ *
+ * @param value - The value to check.
+ * @returns True if the value is a Zod type, false otherwise.
+ */
+export function isZodType(value: unknown): value is z.ZodType {
   // Check if it's a Zod schema by looking for common Zod properties and methods
   return (
     typeof value === 'object' &&
