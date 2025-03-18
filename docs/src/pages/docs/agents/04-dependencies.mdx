@@ -1,0 +1,421 @@
+---
+title: "Agent Dependencies | Agent Documentation | Mastra"
+description: Learn how to use Mastra's dependency injection system to provide runtime configuration to agents and tools in a type-safe manner.
+---
+
+# Agent Dependencies
+
+Mastra's Agent class supports a powerful dependency injection system that allows you to securely pass runtime configuration to both agents and their tools. With strong type safety through Zod schemas, you can ensure your agents have everything they need at runtime.
+
+## Overview
+
+The dependency system allows you to:
+
+1. Define a schema for dependencies using Zod
+2. Pass dependencies to the agent at runtime
+3. Access those dependencies in dynamic instructions and tools
+
+The type and runtime systems work together to ensure:
+
+- The type system helps you define the correct shape of dependencies, but doesn't strictly enforce their presence
+- If you define a dependencies schema but don't provide dependencies when calling `generate()`, `stream()`, or `resolveInstructions()`, you'll get runtime validation errors
+- Dependencies you provide must match the schema you defined
+- Dependencies are properly passed to tools and are validated against each tool's own schema at runtime
+
+This approach gives you flexibility while still providing validation where it matters most - when the agent is actually executing.
+
+## Basic Usage
+
+### 1. Define a dependencies schema
+
+```typescript
+import { z } from "zod";
+
+export const weatherDepsSchema = z.object({
+  apiKey: z.string(),
+  userId: z.number(),
+  temperatureUnit: z.enum(['celsius', 'fahrenheit']),
+});
+```
+
+### 2. Create an agent with the schema
+
+```typescript
+import { Agent } from "@mastra/core/agent";
+import { openai } from "@ai-sdk/openai";
+import { weatherDepsSchema } from "../schemas/dependencies";
+
+export const weatherAgent = new Agent({
+  name: "WeatherAgent",
+  instructions: "You are a helpful agent that provides weather information",
+  model: openai("gpt-4o"),
+  dependenciesSchema: weatherDepsSchema,
+});
+```
+
+### 3. Provide dependencies when generating responses
+
+```typescript
+const agent = mastra.getAgent("weatherAgent");
+
+// TypeScript enforces that the provided dependencies match the schema
+const response = await agent.generate("What's the weather like today?", {
+  dependencies: {
+    apiKey: process.env.WEATHER_API_KEY,
+    userId: 123,
+    temperatureUnit: 'celsius',
+  },
+});
+
+console.log(response.text);
+```
+
+> ⚠️ Validation Errors: If dependencies are missing or incorrect, Mastra throws clear validation errors at runtime.
+
+## Dynamic Instructions with Dependencies
+
+You can create dynamic instructions that use dependencies:
+
+```typescript
+import { Agent } from "@mastra/core/agent";
+import { openai } from "@ai-sdk/openai";
+import { weatherDepsSchema } from "../schemas/dependencies";
+
+export const dynamicWeatherAgent = new Agent({
+  name: "DynamicWeatherAgent",
+  // Instructions can be a function that receives dependencies
+  instructions: ({ dependencies }) => {
+    return `You are a weather assistant for user #${dependencies.userId}.
+    Always report temperatures in ${dependencies.temperatureUnit}.`;
+  },
+  model: openai("gpt-4o"),
+  dependenciesSchema: weatherDepsSchema,
+});
+```
+
+## Creating Tools with Dependencies
+
+Tools can also access the dependencies:
+
+```typescript
+import { createTool } from "@mastra/core/tools";
+import { z } from "zod";
+import { weatherDepsSchema } from "../schemas/dependencies";
+
+export const weatherTool = createTool({
+  id: "getWeather",
+  description: "Get the current weather for a location",
+  inputSchema: z.object({
+    location: z.string().describe("The location to get weather for"),
+  }),
+  dependenciesSchema: weatherDepsSchema, // Same schema as the agent
+  execute: async ({ context, dependencies }) => {
+    const { apiKey, userId, temperatureUnit } = dependencies;
+
+    console.log(`User ${userId} requested weather for ${context.location}`);
+
+    const weather = await fetchWeather(context.location, {
+      apiKey, 
+      temperatureUnit
+    });
+    
+    return { result: weather, };
+  },
+});
+
+async function fetchWeather(
+  location: string,
+  { apiKey, temperatureUnit }: { apiKey: string; temperatureUnit: string }
+) {
+  // Implementation would use the apiKey to call a weather API
+  return {
+    location,
+    temperature: "72°F",
+    conditions: "Sunny",
+    unit: temperatureUnit
+  };
+}
+```
+
+## Type Safety Examples
+
+### With Dependencies Schema
+
+```typescript
+// Agent with dependencies schema
+const agentWithDeps = new Agent({
+  name: "WeatherAgent",
+  instructions: "You are an agent that can fetch weather information",
+  model: openai("gpt-4o"),
+  dependenciesSchema: weatherDepsSchema,
+});
+
+// CORRECT: Providing required dependencies
+await agentWithDeps.generate("What is the weather?", {
+  dependencies: {
+    apiKey: process.env.WEATHER_API_KEY,
+    userId: 123,
+    temperatureUnit: 'celsius',
+  },
+});
+
+// ERROR: Missing required dependencies
+await agentWithDeps.generate("What is the weather?");
+// ⚠️ Will throw: "Dependencies validation failed"
+
+// ERROR: Wrong dependency structure
+await agentWithDeps.generate("What is the weather?", {
+  dependencies: {
+    key: process.env.WEATHER_API_KEY, // Wrong property name
+    id: 123, // Wrong property name
+    unit: 'celsius', // Wrong property name
+  },
+});
+// ⚠️ Will throw: "Dependencies validation failed"
+```
+
+### Dynamic Instructions with Dependencies Schema
+
+```typescript
+const agent = new Agent({
+  name: "DynamicAgent",
+  instructions: ({ dependencies }) => {
+    return `You are a weather assistant for user ${dependencies.userId}. 
+    Always use ${dependencies.temperatureUnit} for temperature.`;
+  },
+  model: openai("gpt-4o"),
+  dependenciesSchema: weatherDepsSchema,
+});
+
+// CORRECT: Valid dependencies
+const instructions = await agent.resolveInstructions({
+  apiKey: process.env.WEATHER_API_KEY,
+  userId: 123,
+  temperatureUnit: "celsius",
+});
+// returns: "You are a weather assistant for user 123. Always use celsius for temperature."
+
+// ERROR: Missing or invalid dependencies
+await agent.resolveInstructions();
+// ⚠️ Will throw: "Dependencies validation failed"
+```
+
+## Full Example
+
+```typescript
+import { openai } from '@ai-sdk/openai';
+import { Agent } from '@mastra/core/agent';
+import { createTool } from '@mastra/core/tools';
+import { config } from 'dotenv';
+import { z } from 'zod';
+
+config();
+
+// Step 1: Define your dependencies schema
+const depsSchema = z.object({
+  weatherApiKey: z.string(),
+  temperatureUnit: z.enum(['celsius', 'fahrenheit']),
+  userName: z.string().optional(),
+});
+
+type DependenciesType = z.infer<typeof depsSchema>;
+
+// Step 2: Define a function to fetch real weather data using OpenWeatherMap API
+async function fetchWeather(
+  location: string,
+  { weatherApiKey, temperatureUnit }: { weatherApiKey: string; temperatureUnit: 'celsius' | 'fahrenheit' },
+) {
+  const units = temperatureUnit === 'celsius' ? 'metric' : 'imperial';
+  const loc = encodeURIComponent(location);
+  const url = `https://api.openweathermap.org/data/2.5/weather?q=${loc}&appid=${weatherApiKey}&units=${units}`;
+
+  const response = await fetch(url);
+  if (!response.ok) {
+    throw new Error(`Error fetching weather: ${response.statusText}`);
+  }
+
+  const dataSchema = z.object({
+    name: z.string(),
+    main: z.object({
+      temp: z.number(),
+      humidity: z.number(),
+    }),
+    weather: z.array(
+      z.object({
+        description: z.string(),
+      }),
+    ),
+  });
+
+  const data = dataSchema.parse(await response.json());
+
+  return {
+    location: data.name,
+    temperature: data.main.temp,
+    conditions: data.weather[0]?.description ?? 'unknown',
+    humidity: `${data.main.humidity}%`,
+    unit: temperatureUnit,
+  };
+}
+
+// Step 3: Create a tool to get the weather forecast
+const weatherTool = createTool({
+  id: 'getWeatherForecast',
+  description: 'Get the current weather forecast for a location',
+  inputSchema: z.object({
+    location: z.string().describe('The city or location to get weather for'),
+  }),
+  dependenciesSchema: depsSchema,
+  execute: async ({ context, dependencies }) => {
+    return await fetchWeather(context.location, {
+      weatherApiKey: dependencies.weatherApiKey,
+      temperatureUnit: dependencies.temperatureUnit,
+    });
+  },
+});
+
+// Step 4: Build instructions for the agent
+async function buildInstructions(context: { dependencies: DependenciesType }) {
+  return `You are an agent that can fetch weather information. User name: ${context.dependencies.userName}.
+Greet the user with their name before fetching the weather.
+Always display temperatures in ${context.dependencies.temperatureUnit}.`;
+}
+
+// Step 5: Create an agent
+const agent = new Agent({
+  name: 'WeatherAgent',
+  instructions: buildInstructions,
+  model: openai('gpt-4o'),
+  dependenciesSchema: depsSchema,
+  tools: { weatherTool },
+});
+
+// Step 6: Run the agent with provided dependencies
+async function main() {
+  const apiKey = process.env.WEATHER_API_KEY;
+  if (!apiKey) {
+    throw new Error('Missing WEATHER_API_KEY environment variable');
+  }
+
+  const dependencies = {
+    weatherApiKey: apiKey,
+    temperatureUnit: 'fahrenheit' as const,
+    userName: 'John',
+  };
+
+  console.log('Getting weather in Fahrenheit:');
+  try {
+    const result = await agent.generate('What is the weather in San Francisco?', {
+      dependencies,
+    });
+    console.log(result.text);
+  } catch (error) {
+    console.error('Error:', error);
+  }
+}
+
+void main();
+```
+
+Output Example:
+
+```
+Getting weather in Fahrenheit:
+The current weather in San Francisco is 45.9°F with a few clouds and a humidity of 72%.
+```
+
+## Advanced Topics
+
+### Behavior Without a Schema
+
+If you create an agent without a dependencies schema:
+
+```typescript
+const agent = new Agent({
+  name: "SimpleAgent",
+  instructions: "You are a simple agent",
+  model: openai("gpt-4o"),
+  // No dependenciesSchema defined
+});
+```
+
+At runtime:
+
+1. If you pass dependencies, they will be passed through to dynamic instructions and tools
+2. No validation is performed when no schema is defined
+3. If you don't pass dependencies or pass undefined/null, an empty object `{}` will be provided instead
+
+However, at the compile-time level:
+
+```typescript
+// This is allowed when no schema is defined
+await agent.generate("Tell me a joke", {
+  dependencies: {
+    someValue: "some-data", // Works in runtime but may not be type-safe
+  },
+});
+
+// TypeScript WILL produce errors when you try to use tools that expect a specific schema
+const toolWithSchema = createTool({
+  id: "toolWithSchema",
+  dependenciesSchema: z.object({
+    apiKey: z.string(),
+  }),
+  // ... other properties
+});
+
+// This causes TypeScript errors even though runtime works
+const agentWithoutSchema = new Agent({
+  name: "NoSchemaAgent",
+  tools: {
+    toolWithSchema, // Error: Tool expects schema that agent doesn't provide
+  },
+  model: openai("gpt-4o"),
+});
+```
+
+### Tools with Different Dependency Schemas
+
+At the compile-time level, Mastra enforces that agent and tools have matching dependency schemas. However, there are two runtime nuances:
+
+1. **Subset Schemas**: If a tool's schema is a subset of the agent's schema, it will work properly at runtime.
+
+2. **Incompatible Schemas**: If a tool's schema is completely different from the agent's schema, it will fail at runtime.
+
+For tools with different schemas, you may need to use type casting, but **this approach is not recommended** and should be used with caution:
+
+```typescript
+// This type casting lets TypeScript compile but may fail at runtime
+const agent = new Agent({
+  tools: {
+    differentTool: differentTool as any, // Not recommended
+  },
+  dependenciesSchema: agentDepsSchema,
+});
+```
+
+## Runtime Validation
+
+Mastra performs runtime validation of dependencies using the Zod schema:
+
+1. Agent-level validation when the agent has a dependencies schema
+2. Tool-level validation when a tool has its own dependencies schema
+3. Custom validation inside tools (e.g., checking value ranges)
+
+## Best Practices
+
+1. **Define clear schemas**: Make your dependency schemas clear and specific
+
+2. **Use dynamic instructions**: Take advantage of dynamic instructions to customize agent behavior
+
+3. **Match agent and tool schemas**: Tools should generally use the exact same dependency schema as the agent they'll be registered with. This ensures full type safety and prevents runtime errors.
+
+4. **Use caution with subset schemas**: While it's technically possible to use subset schemas for tools, this approach is error-prone and requires explicit type casting. Only use this approach when absolutely necessary, and carefully test for runtime errors.
+
+5. **Avoid type casting when possible**: Type casting (especially using `as any`) bypasses TypeScript's safety checks and can lead to runtime errors. When a tool truly needs different dependencies, consider creating a wrapper that properly maps agent dependencies to tool dependencies.
+
+6. **Test error cases**: Ensure your code handles validation failures gracefully
+
+7. **Document dependencies**: Clearly document what each dependency is for and which tools require which dependencies
+
+8. **Use consistent naming**: Use consistent naming conventions across your application to avoid confusion when dependencies are passed between components
