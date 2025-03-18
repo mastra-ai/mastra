@@ -120,7 +120,7 @@ export const SubscribeForm = ({
       <form
         onSubmit={form.handleSubmit(onSubmit)}
         className={cn(
-          "mt-16 items-end flex flex-col md:flex-row w-full gap-2 ",
+          "mt-8 items-end flex flex-col md:flex-row w-full gap-2 ",
           className,
         )}
       >
