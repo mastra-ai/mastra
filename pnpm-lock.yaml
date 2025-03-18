@@ -2654,6 +2654,12 @@ importers:
       '@internal/lint':
         specifier: workspace:*
         version: link:../_config
+      '@mastra/client-js':
+        specifier: workspace:*
+        version: link:../../client-sdks/client-js
+      '@mastra/playground-ui':
+        specifier: workspace:*
+        version: link:../playground-ui
       '@microsoft/api-extractor':
         specifier: ^7.52.1
         version: 7.52.1(@types/node@20.17.24)
