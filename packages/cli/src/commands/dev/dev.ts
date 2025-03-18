@@ -22,8 +22,8 @@ const startServer = async (dotMastraPath: string, port: number, env: Map<string,
       {
         cwd: dotMastraPath,
         env: {
-          PORT: port.toString() || '4111',
           ...Object.fromEntries(env),
+          PORT: port.toString() || process.env.PORT || '4111',
           MASTRA_DEFAULT_STORAGE_URL: `file:${join(dotMastraPath, '..', 'mastra.db')}`,
           MASTRA_DEFAULT_VECTOR_URL: `file:${join(dotMastraPath, '..', 'memory.db')}`,
         },
@@ -118,7 +118,7 @@ export async function dev({ port, dir, root, tools }: { dir?: string; root?: str
 
   await startServer(join(dotMastraPath, 'output'), port, env);
 
-  watcher.on('event', event => {
+  watcher.on('event', (event: { code: string }) => {
     if (event.code === 'BUNDLE_END') {
       logger.info('[Mastra Dev] - Bundling finished, restarting server...');
       // eslint-disable-next-line @typescript-eslint/no-floating-promises
@@ -132,7 +132,6 @@ export async function dev({ port, dir, root, tools }: { dir?: string; root?: str
       currentServerProcess.kill();
     }
 
-    // eslint-disable-next-line @typescript-eslint/no-floating-promises
     watcher.close();
     process.exit(0);
   });

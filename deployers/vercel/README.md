@@ -25,8 +25,9 @@ import { Mastra } from '@mastra/core';
 import { VercelDeployer } from '@mastra/deployer-vercel';
 
 const deployer = new VercelDeployer({
-  scope: 'your-team-id',
+  teamId: 'your-team-id',
   projectName: 'your-project-name',
+  token: 'your-vercel-token',
 });
 
 const mastra = new Mastra({

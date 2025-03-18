@@ -1,5 +1,55 @@
 # @mastra/core
 
+## 0.6.2
+
+### Patch Changes
+
+- beaf1c2: createTool type fixes
+- 3084e13: More parallel memory operations
+
+## 0.6.2-alpha.0
+
+### Patch Changes
+
+- beaf1c2: createTool type fixes
+- 3084e13: More parallel memory operations
+
+## 0.6.1
+
+### Patch Changes
+
+- fc2f89c: Insert static payload into inputData
+- dfbb131: Fix after method on multiple passes
+- f4854ee: Fix else branch execution when if-branch has loops
+- afaf73f: Add fix for vercel tools and optional instructions
+- 0850b4c: Watch and resume per run
+- 7bcfaee: Remove node_modules-path dir which calls \_\_dirname at the top level and breaks some esm runtimes
+- 44631b1: Fix after usage with skipped conditions on the awaited steps
+- 9116d70: Handle the different workflow methods in workflow graph
+- 6e559a0: Update Voice for realtime providers
+- 5f43505: feat: OpenAI realtime voice provider for speech to speech communication
+  Update voice speaking event type
+
+## 0.6.1-alpha.2
+
+### Patch Changes
+
+- fc2f89c: Insert static payload into inputData
+- dfbb131: Fix after method on multiple passes
+- 0850b4c: Watch and resume per run
+- 9116d70: Handle the different workflow methods in workflow graph
+
+## 0.6.1-alpha.1
+
+### Patch Changes
+
+- f4854ee: Fix else branch execution when if-branch has loops
+- afaf73f: Add fix for vercel tools and optional instructions
+- 44631b1: Fix after usage with skipped conditions on the awaited steps
+- 6e559a0: Update Voice for realtime providers
+- 5f43505: feat: OpenAI realtime voice provider for speech to speech communication
+  Update voice speaking event type
+
 ## 0.6.1-alpha.0
 
 ### Patch Changes

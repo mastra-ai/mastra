@@ -25,6 +25,7 @@ export interface ClientOptions {
   maxBackoffMs?: number;
   /** Custom headers to include with requests */
   headers?: Record<string, string>;
+  /** Abort signal for request */
 }
 
 export interface RequestOptions {
@@ -32,6 +33,7 @@ export interface RequestOptions {
   headers?: Record<string, string>;
   body?: any;
   stream?: boolean;
+  signal?: AbortSignal;
 }
 
 export interface GetAgentResponse {
@@ -78,10 +80,20 @@ export type WorkflowRunResult = {
   context: {
     steps: Record<
       string,
-      {
-        status: 'completed' | 'suspended' | 'running';
-        [key: string]: any;
-      }
+      | {
+          status: 'success';
+          output: any;
+          [key: string]: any;
+        }
+      | {
+          status: 'pending';
+          [key: string]: any;
+        }
+      | {
+          status: 'suspended';
+          suspendPayload: any;
+          [key: string]: any;
+        }
     >;
   };
   timestamp: number;
