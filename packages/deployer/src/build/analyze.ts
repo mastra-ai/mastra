@@ -12,6 +12,7 @@ import { aliasHono } from './plugins/hono-alias';
 import { removeDeployer } from './plugins/remove-deployer';
 import { join } from 'node:path';
 import { validate } from '../validator/validate';
+import { tsConfigPaths } from './plugins/tsconfig-paths';
 
 const globalExternals = ['pino', 'pino-pretty', '@libsql/client'];
 
@@ -50,6 +51,7 @@ async function analyze(
     preserveSymlinks: true,
     plugins: [
       virtualPlugin,
+      tsConfigPaths(),
       {
         name: 'custom-alias-resolver',
         resolveId(id: string) {
