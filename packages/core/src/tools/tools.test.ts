@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 
 import { createTool } from './tool';
@@ -27,8 +27,9 @@ describe('createTool', () => {
   });
 
   it('should call mockFindUser', async () => {
-    await testTool.execute({
+    await testTool.execute?.({
       context: { name: 'Dero Israel' },
+      dependencies: {},
     });
 
     expect(mockFindUser).toHaveBeenCalledTimes(1);
@@ -36,16 +37,18 @@ describe('createTool', () => {
   });
 
   it("should return an object containing 'Dero Israel' as name and 'dero@mail.com' as email", async () => {
-    const user = await testTool.execute({
+    const user = await testTool.execute?.({
       context: { name: 'Dero Israel' },
+      dependencies: {},
     });
 
     expect(user).toStrictEqual({ name: 'Dero Israel', email: 'dero@mail.com' });
   });
 
   it("should return an object containing 'User not found' message", async () => {
-    const user = await testTool.execute({
+    const user = await testTool.execute?.({
       context: { name: 'Taofeeq Oluderu' },
+      dependencies: {},
     });
     expect(user).toStrictEqual({ message: 'User not found' });
   });
