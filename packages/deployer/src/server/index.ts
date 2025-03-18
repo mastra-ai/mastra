@@ -657,6 +657,11 @@ export async function createHonoServer(
                       type: 'string',
                       description: 'Speaker ID to use for speech generation',
                     },
+                    options: {
+                      type: 'object',
+                      description: 'Provider-specific options for speech generation',
+                      additionalProperties: true,
+                    },
                   },
                   additionalProperties: true,
                 },
@@ -780,11 +785,23 @@ export async function createHonoServer(
       requestBody: {
         required: true,
         content: {
-          'audio/mpeg': {
+          'multipart/form-data': {
             schema: {
-              format: 'binary',
-              description:
-                'Audio data stream to transcribe (supports various formats depending on provider like mp3, wav, webm, flac)',
+              type: 'object',
+              required: ['audio'],
+              properties: {
+                audio: {
+                  type: 'string',
+                  format: 'binary',
+                  description:
+                    'Audio data stream to transcribe (supports various formats depending on provider like mp3, wav, webm, flac)',
+                },
+                options: {
+                  type: 'object',
+                  description: 'Provider-specific options for speech-to-text',
+                  additionalProperties: true,
+                },
+              },
             },
           },
         },
