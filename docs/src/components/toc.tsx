@@ -4,6 +4,7 @@ import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { useEffect, useState } from "react";
 import { SubscribeForm } from "./subscribe-form";
+import { toast } from "sonner";
 
 interface TOCItem {
   value: string;
