@@ -114,7 +114,11 @@ export class Mastra<
 
     let storage = config?.storage;
     if (!storage) {
-      storage = new DefaultProxyStorage({ config: { url: process.env.MASTRA_DEFAULT_STORAGE_URL } });
+      storage = new DefaultProxyStorage({
+        config: {
+          url: process.env.MASTRA_DEFAULT_STORAGE_URL || `:memory:`,
+        },
+      });
     }
 
     /*

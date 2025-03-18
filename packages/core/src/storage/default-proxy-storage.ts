@@ -1,7 +1,7 @@
 import type { MessageType, StorageThreadType } from '../memory/types';
 import { MastraStorage } from './base';
 import type { TABLE_NAMES } from './constants';
-import { InMemoryStorage } from './in-memory-storage';
+import type { LibSQLConfig } from './libsql';
 import type { EvalRow, StorageColumn, StorageGetMessagesArg } from './types';
 
 /**
@@ -11,20 +11,15 @@ import type { EvalRow, StorageColumn, StorageGetMessagesArg } from './types';
 export class DefaultProxyStorage extends MastraStorage {
   private storage: Promise<MastraStorage>;
 
-  constructor({ config }: { config: { url?: string; authToken?: string } }) {
+  constructor({ config }: { config: LibSQLConfig }) {
     super({ name: 'DefaultStorage' });
-    const url = config?.url;
-    if (!url || url === ':memory:' || url.startsWith('file::memory:')) {
-      this.storage = Promise.resolve(new InMemoryStorage());
-    } else {
-      this.storage = new Promise((resolve, reject) => {
-        import('./libsql')
-          .then(({ DefaultStorage }) => {
-            resolve(new DefaultStorage({ config: { url, authToken: config?.authToken } }));
-          })
-          .catch(reject);
-      });
-    }
+    this.storage = new Promise((resolve, reject) => {
+      import('./libsql')
+        .then(({ DefaultStorage }) => {
+          resolve(new DefaultStorage({ config }));
+        })
+        .catch(reject);
+    });
   }
 
   async createTable(args: { tableName: TABLE_NAMES; schema: Record<string, StorageColumn> }): Promise<void> {

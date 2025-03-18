@@ -39,11 +39,11 @@ export abstract class MastraMemory extends MastraBase {
       generateTitle: true, // TODO: should we disable this by default to reduce latency?
     },
   };
-
   constructor(config: { name: string; defaultVectorUrl?: string; defaultStorageUrl?: string } & SharedMemoryConfig) {
     super({ component: 'MEMORY', name: config.name });
 
-    this.storage = config.storage || new DefaultProxyStorage({ config: { url: config.defaultStorageUrl } });
+    this.storage =
+      config.storage || new DefaultProxyStorage({ config: { url: config.defaultStorageUrl || 'file:memory.db' } });
 
     if (config.vector) {
       this.vector = config.vector;

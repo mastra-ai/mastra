@@ -1,4 +1,4 @@
-import { InMemoryVector } from './in-memory-vector';
+import type { LibSQLVectorConfig } from './libsql';
 import type {
   CreateIndexParams,
   UpsertVectorParams,
@@ -12,12 +12,6 @@ import type {
 } from './types';
 import { MastraVector } from './vector';
 
-type VectorConfig = {
-  connectionUrl?: string;
-  authToken?: string;
-  syncUrl?: string;
-  syncInterval?: number;
-};
 /**
  * A proxy for the DefaultVector (LibSQLStore) to allow for dynamically loading the vectorDB in a constructor
  * If the vectorDB is in-memory, it will use the InMemoryVector.
@@ -25,20 +19,15 @@ type VectorConfig = {
 export class DefaultProxyVector extends MastraVector {
   private vectorDB: Promise<MastraVector>;
 
-  constructor(config: VectorConfig) {
+  constructor(config: LibSQLVectorConfig) {
     super();
-    const connectionUrl = config.connectionUrl;
-    if (!connectionUrl || connectionUrl === ':memory:') {
-      this.vectorDB = Promise.resolve(new InMemoryVector());
-    } else {
-      this.vectorDB = new Promise((resolve, reject) => {
-        import('./libsql')
-          .then(({ DefaultVectorDB }) => {
-            resolve(new DefaultVectorDB({ ...config, connectionUrl }));
-          })
-          .catch(reject);
-      });
-    }
+    this.vectorDB = new Promise((resolve, reject) => {
+      import('./libsql')
+        .then(({ DefaultVectorDB }) => {
+          resolve(new DefaultVectorDB(config));
+        })
+        .catch(reject);
+    });
   }
 
   async query<E extends QueryVectorArgs = QueryVectorArgs>(
