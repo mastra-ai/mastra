@@ -36,9 +36,7 @@ export class UpstashStore extends MastraStorage {
   }
 
   private getKey(tableName: TABLE_NAMES, keys: Record<string, any>): string {
-    const keyParts = Object.entries(keys)
-      .filter(([_, value]) => value !== undefined)
-      .map(([key, value]) => `${key}:${value}`);
+    const keyParts = Object.entries(keys).map(([key, value]) => `${key}:${value}`);
     return `${tableName}:${keyParts.join(':')}`;
   }
 
@@ -274,7 +272,7 @@ export class UpstashStore extends MastraStorage {
     runId: string;
     snapshot: WorkflowRunState;
   }): Promise<void> {
-    const { namespace, workflowName, runId, snapshot } = params;
+    const { namespace = 'workflows', workflowName, runId, snapshot } = params;
     const key = this.getKey(MastraStorage.TABLE_WORKFLOW_SNAPSHOT, {
       namespace,
       workflow_name: workflowName,
@@ -288,7 +286,7 @@ export class UpstashStore extends MastraStorage {
     workflowName: string;
     runId: string;
   }): Promise<WorkflowRunState | null> {
-    const { namespace, workflowName, runId } = params;
+    const { namespace = 'workflows', workflowName, runId } = params;
     const key = this.getKey(MastraStorage.TABLE_WORKFLOW_SNAPSHOT, {
       namespace,
       workflow_name: workflowName,
