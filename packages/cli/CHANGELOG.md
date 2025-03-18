@@ -1,5 +1,13 @@
 # mastra
 
+## 0.4.1-alpha.0
+
+### Patch Changes
+
+- aede1ea: Add non english support to weather example
+- Updated dependencies [4e6732b]
+  - @mastra/deployer@0.2.2-alpha.0
+
 ## 0.4.0
 
 ### Minor Changes

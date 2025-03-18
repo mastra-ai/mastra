@@ -132,7 +132,12 @@
     "@mastra/voice-openai-realtime": "0.0.1",
     "@mastra/voice-playai": "0.1.5",
     "@mastra/voice-sarvam": "0.1.0",
-    "@mastra/voice-speechify": "0.1.5"
+    "@mastra/voice-speechify": "0.1.5",
+    "examples-word-inclusion": "0.0.0"
   },
-  "changesets": []
+  "changesets": [
+    "cool-papers-check",
+    "dirty-walls-do",
+    "fruity-parts-shake"
+  ]
 }
