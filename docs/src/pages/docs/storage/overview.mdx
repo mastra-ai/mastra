@@ -3,65 +3,452 @@ title: Storage in Mastra | Mastra Docs
 description: Overview of Mastra's storage system and data persistence capabilities.
 ---
 
-# Mastra Storage
+import { PropertiesTable } from '@/components/properties-table'
 
-Mastra's storage system provides a unified interface for managing conversation data, workflow states, traces, and evaluation datasets. Mastra defines a common interface for different database providers.
+# MastraStorage
+
+MastraStorage provides a unified interface for managing
+
+- Workflow Tracking, allowing users to suspend and resume workflow runs.
+- Memory, threads and messages per resourceId in your application
+- Traces - OpenTelemetry traces from all components of Mastra
+- Evaluation Datasets - as evaluations are run, the scores and reasons are stored in datasets.
 
 ## Data Schema
 
-All storage implementations use these core features:
+### Memory
 
-### Messages
-Stores conversation messages with their content and metadata:
-- Thread association
-- Message role (user/assistant/system)
-- Content
-- Creation timestamp
+**Messages**
 
-### Threads
-Groups related messages together:
-- Resource identifier
-- Title
-- Custom metadata
-- Creation/update timestamps
+Stores conversation messages and their metadata. Each message belongs to a thread and contains the actual content along with metadata about the sender role and message type:
 
-### Workflow Snapshots
-Preserves workflow execution states:
-- Workflow name
-- Run identifier
-- State snapshot
-- Creation/update timestamps
+<PropertiesTable content={[
+  {
+    name: "id",
+    type: "text",
+    description: "Primary key - Unique identifier for the message",
+    properties: [{
+      type: "Constraints",
+      parameters: [
+        { name: "nullable", type: "false", description: "Cannot be null" },
+        { name: "primaryKey", type: "true", description: "Primary key for the table" }
+      ]
+    }]
+  },
+  {
+    name: "thread_id",
+    type: "text",
+    description: "Foreign key reference to the parent thread",
+    properties: [{
+      type: "Constraints",
+      parameters: [{ name: "nullable", type: "false", description: "Cannot be null" }]
+    }]
+  },
+  {
+    name: "content",
+    type: "text",
+    description: "The actual message content",
+    properties: [{
+      type: "Constraints",
+      parameters: [{ name: "nullable", type: "false", description: "Cannot be null" }]
+    }]
+  },
+  {
+    name: "role",
+    type: "text",
+    description: "Message sender role (user/assistant/system)",
+    properties: [{
+      type: "Constraints",
+      parameters: [{ name: "nullable", type: "false", description: "Cannot be null" }]
+    }]
+  },
+  {
+    name: "type",
+    type: "text",
+    description: "Message type identifier",
+    properties: [{
+      type: "Constraints",
+      parameters: [{ name: "nullable", type: "false", description: "Cannot be null" }]
+    }]
+  },
+  {
+    name: "createdAt",
+    type: "timestamp",
+    description: "When the message was created",
+    properties: [{
+      type: "Constraints",
+      parameters: [{ name: "nullable", type: "false", description: "Cannot be null" }]
+    }]
+  }
+]} />
 
-### Evaluations
-Stores agent evaluation results:
-- Input/output pairs
-- Test information
-- Result metrics
-- Agent and metric names
+**Threads**
+
+Groups related messages together and associates them with a resource. Contains metadata about the conversation:
+
+<PropertiesTable content={[
+  {
+    name: "id",
+    type: "text",
+    description: "Primary key - Unique identifier for the thread",
+    properties: [{
+      type: "Constraints",
+      parameters: [
+        { name: "nullable", type: "false", description: "Cannot be null" },
+        { name: "primaryKey", type: "true", description: "Primary key for the table" }
+      ]
+    }]
+  },
+  {
+    name: "resourceId",
+    type: "text",
+    description: "Identifier for the associated resource",
+    properties: [{
+      type: "Constraints",
+      parameters: [{ name: "nullable", type: "false", description: "Cannot be null" }]
+    }]
+  },
+  {
+    name: "title",
+    type: "text",
+    description: "Title of the conversation thread",
+    properties: [{
+      type: "Constraints",
+      parameters: [{ name: "nullable", type: "false", description: "Cannot be null" }]
+    }]
+  },
+  {
+    name: "metadata",
+    type: "text",
+    description: "Additional custom metadata for the thread",
+    properties: [{
+      type: "Constraints",
+      parameters: [{ name: "nullable", type: "true", description: "Can be null" }]
+    }]
+  },
+  {
+    name: "createdAt",
+    type: "timestamp",
+    description: "When the thread was created",
+    properties: [{
+      type: "Constraints",
+      parameters: [{ name: "nullable", type: "false", description: "Cannot be null" }]
+    }]
+  },
+  {
+    name: "updatedAt",
+    type: "timestamp",
+    description: "When the thread was last modified",
+    properties: [{
+      type: "Constraints",
+      parameters: [{ name: "nullable", type: "false", description: "Cannot be null" }]
+    }]
+  }
+]} />
+
+## Workflows
+
+Preserves workflow execution states and enables resuming workflows:
+
+<PropertiesTable content={[
+  {
+    name: "workflow_name",
+    type: "text",
+    description: "Name of the workflow",
+    properties: [{
+      type: "Constraints",
+      parameters: [{ name: "nullable", type: "false", description: "Cannot be null" }]
+    }]
+  },
+  {
+    name: "run_id",
+    type: "text",
+    description: "Unique identifier for this workflow run",
+    properties: [{
+      type: "Constraints",
+      parameters: [{ name: "nullable", type: "false", description: "Cannot be null" }]
+    }]
+  },
+  {
+    name: "snapshot",
+    type: "text",
+    description: "Serialized workflow state data",
+    properties: [{
+      type: "Constraints",
+      parameters: [{ name: "nullable", type: "false", description: "Cannot be null" }]
+    }]
+  },
+  {
+    name: "createdAt",
+    type: "timestamp",
+    description: "When the workflow state was first saved",
+    properties: [{
+      type: "Constraints",
+      parameters: [{ name: "nullable", type: "false", description: "Cannot be null" }]
+    }]
+  },
+  {
+    name: "updatedAt",
+    type: "timestamp",
+    description: "When the workflow state was last modified",
+    properties: [{
+      type: "Constraints",
+      parameters: [{ name: "nullable", type: "false", description: "Cannot be null" }]
+    }]
+  }
+]} />
+
+### Evaluation Datasets
+
+Stores evaluation results from running metrics against agent outputs:
+
+<PropertiesTable content={[
+  {
+    name: "input",
+    type: "text",
+    description: "Input provided to the agent",
+    properties: [{
+      type: "Constraints",
+      parameters: [{ name: "nullable", type: "false", description: "Cannot be null" }]
+    }]
+  },
+  {
+    name: "output",
+    type: "text",
+    description: "Output generated by the agent",
+    properties: [{
+      type: "Constraints",
+      parameters: [{ name: "nullable", type: "false", description: "Cannot be null" }]
+    }]
+  },
+  {
+    name: "result",
+    type: "jsonb",
+    description: "Metric evaluation result data (score and details)",
+    properties: [{
+      type: "Constraints",
+      parameters: [{ name: "nullable", type: "false", description: "Cannot be null" }]
+    }]
+  },
+  {
+    name: "agent_name",
+    type: "text",
+    description: "Name of the evaluated agent",
+    properties: [{
+      type: "Constraints",
+      parameters: [{ name: "nullable", type: "false", description: "Cannot be null" }]
+    }]
+  },
+  {
+    name: "metric_name",
+    type: "text",
+    description: "Name of the evaluation metric",
+    properties: [{
+      type: "Constraints",
+      parameters: [{ name: "nullable", type: "false", description: "Cannot be null" }]
+    }]
+  },
+  {
+    name: "instructions",
+    type: "text",
+    description: "Agent instructions used during evaluation",
+    properties: [{
+      type: "Constraints",
+      parameters: [{ name: "nullable", type: "false", description: "Cannot be null" }]
+    }]
+  },
+  {
+    name: "test_info",
+    type: "jsonb",
+    description: "Additional test metadata and configuration",
+    properties: [{
+      type: "Constraints",
+      parameters: [{ name: "nullable", type: "true", description: "Can be null" }]
+    }]
+  },
+  {
+    name: "global_run_id",
+    type: "text",
+    description: "Identifier for the global evaluation run",
+    properties: [{
+      type: "Constraints",
+      parameters: [{ name: "nullable", type: "false", description: "Cannot be null" }]
+    }]
+  },
+  {
+    name: "run_id",
+    type: "text",
+    description: "Identifier for this specific evaluation",
+    properties: [{
+      type: "Constraints",
+      parameters: [{ name: "nullable", type: "false", description: "Cannot be null" }]
+    }]
+  },
+  {
+    name: "created_at",
+    type: "timestamp",
+    description: "When the evaluation was performed",
+    properties: [{
+      type: "Constraints",
+      parameters: [{ name: "nullable", type: "false", description: "Cannot be null" }]
+    }]
+  }
+]} />
 
 ### Traces
-Captures execution traces:
-- Span information (name, parent, trace ID)
-- Scope and kind
-- Timing data
-- Attributes and events
+
+Captures OpenTelemetry traces for monitoring and debugging:
+
+<PropertiesTable content={[
+  {
+    name: "id",
+    type: "text",
+    description: "Primary key - Unique identifier for the trace",
+    properties: [{
+      type: "Constraints",
+      parameters: [
+        { name: "nullable", type: "false", description: "Cannot be null" },
+        { name: "primaryKey", type: "true", description: "Primary key for the table" }
+      ]
+    }]
+  },
+  {
+    name: "parentSpanId",
+    type: "text",
+    description: "ID of the parent span if this is a child span",
+    properties: [{
+      type: "Constraints",
+      parameters: [{ name: "nullable", type: "true", description: "Can be null" }]
+    }]
+  },
+  {
+    name: "name",
+    type: "text",
+    description: "Name of the traced operation",
+    properties: [{
+      type: "Constraints",
+      parameters: [{ name: "nullable", type: "false", description: "Cannot be null" }]
+    }]
+  },
+  {
+    name: "traceId",
+    type: "text",
+    description: "ID of the full trace this span belongs to",
+    properties: [{
+      type: "Constraints",
+      parameters: [{ name: "nullable", type: "false", description: "Cannot be null" }]
+    }]
+  },
+  {
+    name: "scope",
+    type: "text",
+    description: "Scope of the traced operation",
+    properties: [{
+      type: "Constraints",
+      parameters: [{ name: "nullable", type: "false", description: "Cannot be null" }]
+    }]
+  },
+  {
+    name: "kind",
+    type: "integer",
+    description: "Type of span (e.g., client, server)",
+    properties: [{
+      type: "Constraints",
+      parameters: [{ name: "nullable", type: "false", description: "Cannot be null" }]
+    }]
+  },
+  {
+    name: "attributes",
+    type: "jsonb",
+    description: "Key-value pairs with span metadata",
+    properties: [{
+      type: "Constraints",
+      parameters: [{ name: "nullable", type: "true", description: "Can be null" }]
+    }]
+  },
+  {
+    name: "status",
+    type: "jsonb",
+    description: "Status information about the span",
+    properties: [{
+      type: "Constraints",
+      parameters: [{ name: "nullable", type: "true", description: "Can be null" }]
+    }]
+  },
+  {
+    name: "events",
+    type: "jsonb",
+    description: "Time-stamped events that occurred during the span",
+    properties: [{
+      type: "Constraints",
+      parameters: [{ name: "nullable", type: "true", description: "Can be null" }]
+    }]
+  },
+  {
+    name: "links",
+    type: "jsonb",
+    description: "Links to other related spans",
+    properties: [{
+      type: "Constraints",
+      parameters: [{ name: "nullable", type: "true", description: "Can be null" }]
+    }]
+  },
+  {
+    name: "other",
+    type: "text",
+    description: "Additional span data",
+    properties: [{
+      type: "Constraints",
+      parameters: [{ name: "nullable", type: "true", description: "Can be null" }]
+    }]
+  },
+  {
+    name: "startTime",
+    type: "bigint",
+    description: "When the span started (nanoseconds)",
+    properties: [{
+      type: "Constraints",
+      parameters: [{ name: "nullable", type: "false", description: "Cannot be null" }]
+    }]
+  },
+  {
+    name: "endTime",
+    type: "bigint",
+    description: "When the span ended (nanoseconds)",
+    properties: [{
+      type: "Constraints",
+      parameters: [{ name: "nullable", type: "false", description: "Cannot be null" }]
+    }]
+  },
+  {
+    name: "createdAt",
+    type: "timestamp",
+    description: "When this trace record was created",
+    properties: [{
+      type: "Constraints",
+      parameters: [{ name: "nullable", type: "false", description: "Cannot be null" }]
+    }]
+  }
+]} />
 
 ## Configuration
 
-Configure storage when initializing Mastra:
+Mastra can be configured with a default storage option:
 
 ```typescript
+import { Mastra } from '@mastra/core/mastra';
+import { DefaultStorage } from '@mastra/core/storage/libsql';
+
 const mastra = new Mastra({
-  storage: {
-    url: process.env.DATABASE_URL,  // Connection string
-    type: 'postgres',               // Provider type
-  },
+  storage: new DefaultStorage({
+    config: {
+      url: "file:storage.db",
+    }
+  }),
 });
 ```
 
-## Next Steps
-
-For more details on specific storage implementations:
+## If you want to use other storage, check out the following providers:
 - [LibSQL Storage](../reference/storage/libsql.mdx)
 - [PostgreSQL Storage](../reference/storage/postgresql.mdx)
 - [Upstash Storage](../reference/storage/upstash.mdx)
