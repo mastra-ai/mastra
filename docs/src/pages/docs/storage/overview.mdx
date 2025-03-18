@@ -318,7 +318,7 @@ import { DefaultStorage } from '@mastra/core/storage/libsql';
 const mastra = new Mastra({
   storage: new DefaultStorage({
     config: {
-      url: ":memory:",
+      url: "file:storage.db",
     }
   }),
 });
