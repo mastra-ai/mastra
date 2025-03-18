@@ -42,6 +42,9 @@ const results = await pgVector.query({
   queryVector: embedding,
   topK: 10,
 });
+
+// Display results
+console.log(results);
 ```
 
 Results include both the text content and a similarity score:
