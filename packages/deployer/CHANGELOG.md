@@ -1,5 +1,14 @@
 # @mastra/deployer
 
+## 0.2.2
+
+### Patch Changes
+
+- 4e6732b: Add support for tsconfig paths aliases
+- Updated dependencies [beaf1c2]
+- Updated dependencies [3084e13]
+  - @mastra/core@0.6.2
+
 ## 0.2.2-alpha.1
 
 ### Patch Changes
