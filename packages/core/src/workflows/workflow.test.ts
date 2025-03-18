@@ -10,7 +10,7 @@ import { Telemetry } from '../telemetry';
 import { createTool } from '../tools';
 
 import { Step } from './step';
-import { WhenConditionReturnValue, type WorkflowContext, type WorkflowResumeResult } from './types';
+import { StepConfig, WhenConditionReturnValue, type WorkflowContext, type WorkflowResumeResult } from './types';
 import { Workflow } from './workflow';
 
 const storage = new DefaultStorage({
@@ -3777,6 +3777,39 @@ describe('Workflow', async () => {
             },
           },
         });
+
+        const myStep = new Step({
+          id: 'my-step',
+          inputSchema: z.object({
+            input: z.string(),
+          }),
+          outputSchema: z.object({
+            output: z.string(),
+          }),
+          description: 'My step',
+          execute: async ({ context }) => {
+            return { output: 'lolo' };
+          },
+        });
+        const x = new Workflow<[typeof myStep]>({ name: 'lolo', triggerSchema: z.object({ input: z.string() }) });
+        x.step(myStep).commit();
+        const xt = x.toStep();
+        type X = typeof xt;
+        type Y = StepConfig<X, any, any, any, [ReturnType<(typeof x)['toStep']>]>;
+        type Z = Y['when'];
+        const y: Z = async ({ context }) => {
+          context.steps;
+          return true;
+        };
+
+        const at = myStep;
+        type A = typeof at;
+        type B = StepConfig<A, any, any, any, [typeof myStep]>;
+        type C = B['when'];
+        const b: C = async ({ context }) => {
+          context.steps;
+          return true;
+        };
 
         counterWorkflow
           .step(wfA)

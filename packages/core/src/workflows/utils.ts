@@ -170,7 +170,9 @@ export function getResultActivePaths(state: {
   }, new Map<string, { status: string; suspendPayload?: any }>());
 }
 
-export function isWorkflow(step: any): step is Workflow {
+export function isWorkflow(
+  step: Step<any, any, any, any> | Workflow<any, any, any, any>,
+): step is Workflow<any, any, any, any> {
   // @ts-ignore
   return !!step?.name;
 }

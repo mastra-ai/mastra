@@ -133,7 +133,7 @@ export type StepDef<
       | ((args: { context: WorkflowContext; mastra?: Mastra }) => Promise<boolean | WhenConditionReturnValue>);
     serializedWhen?: Condition<any, any> | string;
     loopLabel?: string;
-    loopType?: 'when' | 'until';
+    loopType?: 'while' | 'until';
     data: TSchemaIn;
     handler: (args: ActionContext<TSchemaIn>) => Promise<z.infer<TSchemaOut>>;
   }
@@ -182,7 +182,7 @@ export interface StepConfig<
           mastra?: Mastra;
         }) => Promise<boolean | WhenConditionReturnValue>);
     loopLabel?: string;
-    loopType?: 'when' | 'until';
+    loopType?: 'while' | 'until' | undefined;
   };
 }
 

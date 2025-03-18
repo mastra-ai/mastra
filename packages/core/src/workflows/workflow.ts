@@ -34,7 +34,7 @@ export class Workflow<
   name: TStepId;
   triggerSchema?: TTriggerSchema;
   resultSchema?: TResultSchema;
-  resultMapping?: Record<string, { step: StepAction<any, any, any, any>; path: string }>;
+  resultMapping?: Record<string, { step: StepAction<string, any, any, any>; path: string }>;
   events?: Record<string, { schema: z.ZodObject<any> }>;
   #retryConfig?: RetryConfig;
   #mastra?: Mastra;
@@ -47,13 +47,13 @@ export class Workflow<
   #ifStack: {
     condition: StepConfig<any, any, any, TTriggerSchema>['when'];
     elseStepKey: string;
-    condStep: StepAction<any, any, any, any>;
+    condStep: StepAction<string, any, any, any>;
   }[] = [];
   #stepGraph: StepGraph = { initial: [] };
   #serializedStepGraph: StepGraph = { initial: [] };
   #stepSubscriberGraph: Record<string, StepGraph> = {};
   #serializedStepSubscriberGraph: Record<string, StepGraph> = {};
-  #steps: Record<string, StepAction<any, any, any, any>> = {};
+  #steps: Record<string, StepAction<string, any, any, any>> = {};
 
   /**
    * Creates a new Workflow instance
@@ -87,32 +87,46 @@ export class Workflow<
   }
 
   step<
-    TWorkflow extends Workflow<any, any, any, any>,
+    TSteps extends StepAction<any, any, any, any>[],
+    TWorkflow extends Workflow<TSteps, any, any, any>,
     CondStep extends StepVariableType<any, any, any, any>,
     VarStep extends StepVariableType<any, any, any, any>,
-  >(
-    next: TWorkflow | Workflow[],
-    config?: StepConfig<StepAction<any, any, any, any>, CondStep, VarStep, TTriggerSchema>,
-  ): this;
+  >(next: TWorkflow, config?: StepConfig<ReturnType<TWorkflow['toStep']>, CondStep, VarStep, TTriggerSchema>): this;
   step<
     TStep extends StepAction<any, any, any, any>,
     CondStep extends StepVariableType<any, any, any, any>,
     VarStep extends StepVariableType<any, any, any, any>,
-  >(next: TStep | TStep[], config?: StepConfig<TStep, CondStep, VarStep, TTriggerSchema>): this;
+  >(step: TStep, config?: StepConfig<TStep, CondStep, VarStep, TTriggerSchema>): this;
   step<
-    TStep extends StepAction<any, any, any, any>,
+    TStep extends StepAction<string, any, any, any> | Workflow<any, any, any, any>,
     CondStep extends StepVariableType<any, any, any, any>,
     VarStep extends StepVariableType<any, any, any, any>,
   >(
-    next: TStep | Workflow | (TStep | Workflow)[],
-    config?: StepConfig<TStep, CondStep, VarStep, TTriggerSchema>,
+    next: TStep extends StepAction<string, any, any, any> ? TStep : Workflow<any, any, any, any>,
+    config?: StepConfig<
+      TStep extends StepAction<string, any, any, any>
+        ? TStep
+        : TStep extends Workflow<any, any, any, any>
+          ? ReturnType<TStep['toStep']>
+          : never,
+      CondStep,
+      VarStep,
+      TTriggerSchema
+    >,
   ): this {
+    // step<
+    //   TStep extends StepAction<any, any, any, any>,
+    //   CondStep extends StepVariableType<any, any, any, any>,
+    //   VarStep extends StepVariableType<any, any, any, any>,
+    // >(next: TStep, config?: StepConfig<TStep, CondStep, VarStep, TTriggerSchema>): this {
     if (Array.isArray(next)) {
-      const nextSteps = next.map(step => {
+      const nextSteps: StepAction<string, any, any, any>[] = next.map(step => {
         if (isWorkflow(step)) {
-          return workflowToStep(step);
+          const asStep = step.toStep();
+          return asStep;
+        } else {
+          return step as StepAction<string, any, any, any>;
         }
-        return step;
       });
       nextSteps.forEach(step => this.step(step, config));
       this.after(nextSteps);
@@ -139,9 +153,9 @@ export class Workflow<
       }
     }
 
-    const step: StepAction<any, any, any, any> = isWorkflow(next)
+    const step: StepAction<string, any, any, any> = isWorkflow(next)
       ? workflowToStep(next)
-      : (next as StepAction<any, any, any, any>);
+      : (next as StepAction<string, any, any, any>);
 
     const stepKey = this.#makeStepKey(step);
     const when = config?.['#internal']?.when || config?.when;
@@ -192,10 +206,23 @@ export class Workflow<
   }
 
   then<
-    TStep extends StepAction<any, any, any, any>,
+    TStep extends StepAction<string, any, any, any>,
     CondStep extends StepVariableType<any, any, any, any>,
     VarStep extends StepVariableType<any, any, any, any>,
-  >(next: TStep | Workflow | (TStep | Workflow)[], config?: StepConfig<TStep, CondStep, VarStep, TTriggerSchema>) {
+  >(next: TStep | TStep[], config?: StepConfig<TStep, CondStep, VarStep, TTriggerSchema>): this;
+  then<
+    TWorkflow extends Workflow<any, any, any, any>,
+    CondStep extends StepVariableType<any, any, any, any>,
+    VarStep extends StepVariableType<any, any, any, any>,
+  >(
+    next: TWorkflow | TWorkflow[],
+    config?: StepConfig<StepAction<string, any, any, any>, CondStep, VarStep, TTriggerSchema>,
+  ): this;
+  then<
+    TStep extends StepAction<string, any, any, any> | Workflow<any, any, any, any>,
+    CondStep extends StepVariableType<any, any, any, any>,
+    VarStep extends StepVariableType<any, any, any, any>,
+  >(next: TStep | TStep[], config?: StepConfig<StepAction<string, any, any, any>, CondStep, VarStep, TTriggerSchema>) {
     if (Array.isArray(next)) {
       const lastStep = this.#steps[this.#lastStepStack[this.#lastStepStack.length - 1] ?? ''];
       if (!lastStep) {
@@ -236,9 +263,9 @@ export class Workflow<
 
     const lastStepKey = this.#lastStepStack[this.#lastStepStack.length - 1];
 
-    const step: StepAction<any, any, any, any> = isWorkflow(next)
+    const step: StepAction<string, any, any, any> = isWorkflow(next)
       ? workflowToStep(next)
-      : (next as StepAction<any, any, any, any>);
+      : (next as StepAction<string, any, any, any>);
 
     const stepKey = this.#makeStepKey(step);
     const when = config?.['#internal']?.when || config?.when;
@@ -280,7 +307,7 @@ export class Workflow<
   }
 
   private loop<
-    FallbackStep extends StepAction<any, any, any, any>,
+    FallbackStep extends StepAction<string, any, any, any>,
     CondStep extends StepVariableType<any, any, any, any>,
     VarStep extends StepVariableType<any, any, any, any>,
   >(
@@ -373,10 +400,9 @@ export class Workflow<
           return status === 'continue' ? WhenConditionReturnValue.CONTINUE : WhenConditionReturnValue.CONTINUE_FAILED;
         },
         '#internal': {
-          //@ts-ignore
-          when: condition,
-          //@ts-ignore
-          loopType,
+          // @ts-ignore
+          when: condition!,
+          loopType: loopType!,
         },
       })
       .then(checkStep, {
@@ -405,7 +431,7 @@ export class Workflow<
   }
 
   while<
-    FallbackStep extends StepAction<any, any, any, any>,
+    FallbackStep extends StepAction<string, any, any, any>,
     CondStep extends StepVariableType<any, any, any, any>,
     VarStep extends StepVariableType<any, any, any, any>,
   >(condition: StepConfig<FallbackStep, CondStep, VarStep, TTriggerSchema>['when'], fallbackStep: FallbackStep) {
@@ -432,7 +458,7 @@ export class Workflow<
   }
 
   until<
-    FallbackStep extends StepAction<any, any, any, any>,
+    FallbackStep extends StepAction<string, any, any, any>,
     CondStep extends StepVariableType<any, any, any, any>,
     VarStep extends StepVariableType<any, any, any, any>,
   >(
@@ -461,7 +487,7 @@ export class Workflow<
     return this.loop(applyOperator, condition, fallbackStep, 'until');
   }
 
-  if<TStep extends StepAction<any, any, any, any>>(
+  if<TStep extends StepAction<string, any, any, any>>(
     condition: StepConfig<TStep, any, any, TTriggerSchema>['when'],
     ifStep?: TStep | Workflow,
     elseStep?: TStep | Workflow,
@@ -558,7 +584,13 @@ export class Workflow<
     return this;
   }
 
-  after<TStep extends StepAction<any, any, any, any>>(steps: TStep | Workflow | (TStep | Workflow)[]) {
+  after<TStep extends StepAction<string, any, any, any>>(steps: TStep | TStep[]): Omit<typeof this, 'then' | 'after'>;
+  after<TWorkflow extends Workflow<any, any, any, any>>(
+    steps: TWorkflow | TWorkflow[],
+  ): Omit<typeof this, 'then' | 'after'>;
+  after<TStep extends StepAction<string, any, any, any> | Workflow<any, any, any, any>>(
+    steps: TStep | Workflow | (TStep | Workflow)[],
+  ): Omit<typeof this, 'then' | 'after'> {
     const stepsArray = Array.isArray(steps) ? steps : [steps];
     const stepKeys = stepsArray.map(step => this.#makeStepKey(step));
 
@@ -922,6 +954,7 @@ export class Workflow<
   }
 
   toStep(): Step<TStepId, TTriggerSchema, z.ZodType<WorkflowRunResult<TTriggerSchema, TSteps, TResultSchema>>, any> {
-    return new Step(workflowToStep<TSteps, TStepId, TTriggerSchema, TResultSchema>(this));
+    const x = workflowToStep<TSteps, TStepId, TTriggerSchema, TResultSchema>(this);
+    return new Step(x);
   }
 }
