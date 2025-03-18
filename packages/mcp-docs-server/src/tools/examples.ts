@@ -72,4 +72,3 @@ export const examplesTool: Tool<any, typeof examplesSchema> = {
     return content;
   },
 };
-
