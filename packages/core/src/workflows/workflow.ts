@@ -87,10 +87,26 @@ export class Workflow<
   }
 
   step<
+    TWorkflow extends Workflow<any, any, any, any>,
+    CondStep extends StepVariableType<any, any, any, any>,
+    VarStep extends StepVariableType<any, any, any, any>,
+  >(
+    next: TWorkflow | Workflow[],
+    config?: StepConfig<StepAction<any, any, any, any>, CondStep, VarStep, TTriggerSchema>,
+  ): this;
+  step<
     TStep extends StepAction<any, any, any, any>,
     CondStep extends StepVariableType<any, any, any, any>,
     VarStep extends StepVariableType<any, any, any, any>,
-  >(next: TStep | Workflow | (TStep | Workflow)[], config?: StepConfig<TStep, CondStep, VarStep, TTriggerSchema>) {
+  >(next: TStep | TStep[], config?: StepConfig<TStep, CondStep, VarStep, TTriggerSchema>): this;
+  step<
+    TStep extends StepAction<any, any, any, any>,
+    CondStep extends StepVariableType<any, any, any, any>,
+    VarStep extends StepVariableType<any, any, any, any>,
+  >(
+    next: TStep | Workflow | (TStep | Workflow)[],
+    config?: StepConfig<TStep, CondStep, VarStep, TTriggerSchema>,
+  ): this {
     if (Array.isArray(next)) {
       const nextSteps = next.map(step => {
         if (isWorkflow(step)) {
