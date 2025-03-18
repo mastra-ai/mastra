@@ -26,7 +26,7 @@ import { MastraLLM } from '../llm/model';
 import { RegisteredLogger } from '../logger';
 import type { Mastra } from '../mastra';
 import type { MastraMemory } from '../memory/memory';
-import type { MemoryConfig, StorageThreadType } from '../memory/types';
+import type { MemoryConfig } from '../memory/types';
 import { InstrumentClass } from '../telemetry';
 import type { CoreTool, ToolExecutionContext } from '../tools/types';
 import type { DependenciesType } from '../utils';
@@ -131,9 +131,14 @@ export class Agent<
    * Resolve instructions with dependencies.
    *
    * @param dependencies Dependencies to use when evaluating dynamic instructions.
+   * @param instructions Optional instructions to override the agent's instructions.
    * @returns Promise<string> The resolved instructions with dependencies applied.
    */
-  async resolveInstructions(dependencies?: DependenciesType<TSchemaDeps>): Promise<string> {
+  async resolveInstructions(dependencies?: DependenciesType<TSchemaDeps>, instructions?: string): Promise<string> {
+    if (instructions) {
+      return instructions;
+    }
+
     if (typeof this.#instructions === 'function') {
       return await this.#instructions({
         dependencies: validateDependencies(this.#dependenciesSchema, dependencies),
@@ -670,8 +675,7 @@ export class Agent<
           createDependenciesFrom(dependencies),
         );
 
-        // TODO: pass instructions to resolveInstructions
-        const resolvedInstructions = await this.resolveInstructions(this.#currentDependencies);
+        const resolvedInstructions = await this.resolveInstructions(this.#currentDependencies, instructions);
         const systemMessage: CoreMessage = {
           role: 'system',
           content: `${resolvedInstructions}.`,
@@ -847,7 +851,7 @@ export class Agent<
         if (Object.keys(this.evals || {}).length > 0) {
           const input = messages.map(message => message.content).join('\n');
           const runIdToUse = runId || crypto.randomUUID();
-          const instructions = await this.resolveInstructions(this.#currentDependencies);
+          const resolvedInstructions = await this.resolveInstructions(this.#currentDependencies, instructions);
           for (const metric of Object.values(this.evals || {})) {
             executeHook(AvailableHooks.ON_GENERATION, {
               input,
@@ -855,7 +859,7 @@ export class Agent<
               runId: runIdToUse,
               metric,
               agentName: this.name,
-              instructions: instructions || this.instructions,
+              instructions: resolvedInstructions,
             });
           }
         }
