@@ -1,5 +1,11 @@
 # mastra
 
+## 0.4.1-alpha.2
+
+### Patch Changes
+
+- 010fc45: Fix storage init stuck
+
 ## 0.4.1-alpha.1
 
 ### Patch Changes
