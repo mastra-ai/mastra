@@ -22,7 +22,7 @@ import { getActivePathsAndStatus, mergeChildValue, resolveVariables, updateStepI
 
 export interface WorkflowResultReturn<
   TResult extends z.ZodType<any>,
-  T extends z.ZodType<any>,
+  T extends z.ZodObject<any>,
   TSteps extends Step<any, any, any>[],
 > {
   runId: string;

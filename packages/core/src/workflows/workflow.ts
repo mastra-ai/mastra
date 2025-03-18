@@ -90,10 +90,7 @@ export class Workflow<
     TStep extends StepAction<any, any, any, any>,
     CondStep extends StepVariableType<any, any, any, any>,
     VarStep extends StepVariableType<any, any, any, any>,
-  >(
-    next: TStep | Workflow<TStepId, TSteps, TTriggerSchema> | (TStep | Workflow<TStepId, TSteps, TTriggerSchema>)[],
-    config?: StepConfig<TStep, CondStep, VarStep, TTriggerSchema>,
-  ) {
+  >(next: TStep | Workflow | (TStep | Workflow)[], config?: StepConfig<TStep, CondStep, VarStep, TTriggerSchema>) {
     if (Array.isArray(next)) {
       const nextSteps = next.map(step => {
         if (isWorkflow(step)) {
@@ -182,10 +179,7 @@ export class Workflow<
     TStep extends StepAction<any, any, any, any>,
     CondStep extends StepVariableType<any, any, any, any>,
     VarStep extends StepVariableType<any, any, any, any>,
-  >(
-    next: TStep | Workflow<any, any> | (TStep | Workflow<any, any>)[],
-    config?: StepConfig<TStep, CondStep, VarStep, TTriggerSchema>,
-  ) {
+  >(next: TStep | Workflow | (TStep | Workflow)[], config?: StepConfig<TStep, CondStep, VarStep, TTriggerSchema>) {
     if (Array.isArray(next)) {
       const lastStep = this.#steps[this.#lastStepStack[this.#lastStepStack.length - 1] ?? ''];
       if (!lastStep) {
@@ -912,6 +906,6 @@ export class Workflow<
   }
 
   toStep(): Step<TStepId, TTriggerSchema, z.ZodType<WorkflowRunResult<TTriggerSchema, TSteps, TResultSchema>>, any> {
-    return new Step(workflowToStep(this));
+    return new Step(workflowToStep<TSteps, TStepId, TTriggerSchema, TResultSchema>(this));
   }
 }

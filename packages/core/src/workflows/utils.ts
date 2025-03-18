@@ -224,10 +224,10 @@ export function resolveVariables<TSteps extends Step<any, any, any>[]>({
 }
 
 export function workflowToStep<
-  TSteps extends Step<string, any, any, any>[],
-  TStepId extends string,
-  TTriggerSchema extends z.ZodObject<any>,
-  TResultSchema extends z.ZodObject<any>,
+  TSteps extends Step<any, any, any, any>[],
+  TStepId extends string = any,
+  TTriggerSchema extends z.ZodObject<any> = any,
+  TResultSchema extends z.ZodObject<any> = any,
 >(
   workflow: Workflow<TSteps, TStepId, TTriggerSchema, TResultSchema>,
 ): StepAction<TStepId, TTriggerSchema, z.ZodType<WorkflowRunResult<TTriggerSchema, TSteps, TResultSchema>>, any> {

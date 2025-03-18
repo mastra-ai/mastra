@@ -46,6 +46,7 @@ import type { WorkflowInstance } from './workflow-instance';
 export class Machine<
   TSteps extends Step<any, any, any>[] = any,
   TTriggerSchema extends z.ZodObject<any> = any,
+  TResultSchema extends z.ZodObject<any> = any,
 > extends EventEmitter {
   logger: Logger;
   #mastra?: Mastra;
@@ -116,7 +117,7 @@ export class Machine<
     input?: any;
     snapshot?: Snapshot<any>;
     resumeData?: any;
-  } = {}): Promise<Pick<WorkflowRunResult<TTriggerSchema, TSteps>, 'results' | 'activePaths'>> {
+  } = {}): Promise<Pick<WorkflowRunResult<TTriggerSchema, TSteps, TResultSchema>, 'results' | 'activePaths'>> {
     if (snapshot) {
       // First, let's log the incoming snapshot for debugging
       this.logger.debug(`Workflow snapshot received`, { runId: this.#runId, snapshot });

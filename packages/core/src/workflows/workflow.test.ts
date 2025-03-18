@@ -3759,6 +3759,7 @@ describe('Workflow', async () => {
           .then(finalStep)
           .commit();
 
+        const t = wfA.toStep();
         const counterWorkflow = new Workflow<[ReturnType<typeof wfA.toStep>]>({
           name: 'counter-workflow',
           triggerSchema: z.object({
