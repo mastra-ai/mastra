@@ -212,6 +212,8 @@ The upsert operation:
 - Creates new vectors if they don't exist
 - Automatically handles batching for large datasets
 
+For complete examples of upserting embeddings in different vector stores, see the [Upsert Embeddings](../../examples/rag/upsert/upsert-embeddings.mdx) guide.
+
 ## Adding Metadata
 
 Vector stores support rich metadata for advanced filtering and organization. You can add any JSON-serializable fields that will help with retrieval.
@@ -256,16 +258,3 @@ Key metadata considerations:
 - Only store metadata you'll query against
 - Match embedding dimensions to your model (e.g., 1536 for `text-embedding-3-small`)
 
-## Examples
-
-For complete examples of different vector store implementations, see:
-
-- [Insert Embedding in PgVector](../../examples/rag/insert-embedding-in-pgvector.mdx)
-- [Insert Embedding in Pinecone](../../examples/rag/insert-embedding-in-pinecone.mdx)
-- [Insert Embedding in Qdrant](../../examples/rag/insert-embedding-in-qdrant.mdx)
-- [Insert Embedding in Chroma](../../examples/rag/insert-embedding-in-chroma.mdx)
-- [Insert Embedding in Astra DB](../../examples/rag/insert-embedding-in-astra.mdx)
-- [Insert Embedding in LibSQL](../../examples/rag/insert-embedding-in-libsql.mdx)
-- [Insert Embedding in Upstash](../../examples/rag/insert-embedding-in-upstash.mdx)
-- [Insert Embedding in Cloudflare Vectorize](../../examples/rag/insert-embedding-in-vectorize.mdx)
-- [Basic RAG with Vector Storage](../../examples/rag/basic-rag.mdx)
