@@ -17,6 +17,7 @@ export const WorkflowsTable = ({
 }) => {
   return (
     <DataTable
+      emptyText="Workflows"
       title={title}
       withoutBorder
       withoutRadius
