@@ -212,7 +212,7 @@ export async function createHonoServer(
   );
 
   app.get(
-    '/api/agents/:agentId/evals/live',
+  '/api/agents/:agentId/evals/live',
     describeRoute({
       description: 'Get live evals by agent ID',
       tags: ['agents'],
