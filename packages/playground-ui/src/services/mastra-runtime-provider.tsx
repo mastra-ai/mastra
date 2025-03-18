@@ -126,7 +126,7 @@ export function MastraRuntimeProvider({
         refreshThreadList?.();
       }
     } catch (error) {
-      console.error('Error occured in MastraRuntimeProvider', error);
+      console.error('Error occurred in MastraRuntimeProvider', error);
       setIsRunning(false);
     }
   };

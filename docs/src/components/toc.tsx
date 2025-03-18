@@ -1,8 +1,9 @@
 "use client";
 
-import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
+import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
+import { SubscribeForm } from "./subscribe-form";
 
 interface TOCItem {
   value: string;
@@ -36,8 +37,8 @@ export function TableOfContents(props: TOCProps) {
   }, [pathname]);
 
   return (
-    <div className="fixed top-[4rem] w-64 hidden xl:block h-[calc(100vh-4rem)]">
-      <div className="h-full overflow-y-auto px-4 py-8 flex flex-col">
+    <div className="sticky top-[4rem] w-64 hidden xl:block h-[calc(100vh-4rem)]">
+      <div className="overflow-y-auto px-4 py-8 flex flex-col">
         <div>
           <h3 className="text-xs font-semibold mb-2 pl-4 text-[#6b7280] dark:text-white">
             On This Page
@@ -98,6 +99,17 @@ export function TableOfContents(props: TOCProps) {
             Edit this page
           </a>
         </div>
+      </div>
+      <div className="p-4 border dark:border-[0.5px] rounded-md dark:border-neutral-700">
+        <h3 className="text-xl font-semibold">
+          Subscribe to the Weekly changelog
+        </h3>
+        <SubscribeForm
+          className="md:flex-col md:items-start"
+          inputClassName="md:w-full md:min-w-full pl-2 truncate"
+          buttonClassName="md:w-full md:min-w-full"
+          showLabel={false}
+        />
       </div>
     </div>
   );

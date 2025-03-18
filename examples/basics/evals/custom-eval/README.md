@@ -1,12 +1,12 @@
 # Custom Eval Metric Example
 
-This example demonstrates how to create custom evaluation metrics in Mastra, from simple string matching to LLM-based evaluation.
+This example demonstrates how to create a custom LLM-based evaluation metric in Mastra to check recipes for gluten content.
 
 ## Prerequisites
 
 - Node.js v20.0+
 - pnpm (recommended) or npm
-- OpenAI API key (for LLM-based metric)
+- OpenAI API key (required for LLM-based evaluation)
 
 ## Getting Started
 
@@ -43,39 +43,54 @@ This example demonstrates how to create custom evaluation metrics in Mastra, fro
 
 ## Overview
 
-This example demonstrates how to create custom evaluation metrics. It evaluates:
+This example shows how to create a custom LLM-based metric to evaluate recipes for gluten content. It demonstrates:
 
-- Custom metric implementation
-- Integration with Mastra's core
-- Metric result formatting
-- LLM-based evaluation
+- Using a custom metric with an agent
+- Evaluating recipe responses
+- Identifying gluten sources
+- Providing detailed feedback
 
 ## Example Structure
 
-The example includes three scenarios:
+The example includes two scenarios:
 
-1. Simple Metric: Testing keyword matching (basic string comparison)
-2. Complex Metric: Testing dietary preferences (LLM-based analysis)
-3. Mixed Case: Testing compliant recipe (edge case handling)
+1. Recipe with gluten (pasta recipe)
+2. Gluten-free recipe (rice and beans)
 
-Each scenario demonstrates:
+Each evaluation provides:
 
-- Setting up custom metric classes
-- Implementing measure() method
-- Handling different input types
-- Interpreting the results with detailed reasoning
+- A binary score (1 for gluten-free, 0 for contains gluten)
+- List of identified gluten sources
+- Detailed reasoning for the verdict
 
 ## Expected Output
 
 The example will output:
 
-- The input and output for each scenario
-- The metric score (0-1)
-- Detailed analysis results
-- Custom metric-specific information
+```
+Example 1 - Recipe with Gluten:
+Input: "Can you give me a simple pasta recipe with exact measurements and timing?"
+Agent Response: [Recipe details...]
+Metric Result: {
+  score: 0,
+  glutenSources: ["pasta (wheat)"],
+  reason: "The recipe contains gluten from wheat-based pasta."
+}
+
+Example 2 - Gluten-Free Recipe:
+Input: "What is a quick way to make rice and beans?"
+Agent Response: [Recipe details...]
+Metric Result: {
+  score: 1,
+  glutenSources: [],
+  reason: "The recipe is gluten-free as rice and beans do not contain gluten."
+}
+```
 
 ## Key Components
 
-- `KeywordMatchMetric`: Simple string-based metric example
-- `DietaryPreferencesMetric`: Complex LLM-based metric example
-- Configuration options vary by metric type
+- `GlutenCheckerMetric`: LLM-based metric for evaluating gluten content in recipes
+- Integration with Chef Michel agent for recipe generation
+- Simple binary scoring system:
+  - 0: Recipe contains gluten
+  - 1: Recipe is gluten-free

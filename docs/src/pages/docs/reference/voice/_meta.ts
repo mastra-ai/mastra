@@ -6,6 +6,7 @@ const meta = {
   google: "Google",
   murf: "Murf",
   openai: "OpenAI",
+  "openai-realtime": "OpenAI Realtime",
   playai: "PlayAI",
   speechify: "Speechify",
 };

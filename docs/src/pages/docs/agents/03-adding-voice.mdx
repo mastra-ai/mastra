@@ -103,3 +103,68 @@ try {
   console.error("Error transcribing audio:", error);
 }
 ```
+
+## Real-time Voice Interactions
+
+For more dynamic and interactive voice experiences, you can use real-time voice providers that support speech-to-speech capabilities:
+
+```typescript
+import { Agent } from "@mastra/core/agent";
+import { OpenAIRealtimeVoice } from "@mastra/voice-openai-realtime";
+import { search, calculate } from "../tools";
+
+// Initialize the realtime voice provider
+const voice = new OpenAIRealtimeVoice({
+  chatModel: {
+    apiKey: process.env.OPENAI_API_KEY,
+    model: 'gpt-4o-mini-realtime',
+  },
+  speaker: 'alloy'
+});
+
+// Create an agent with speech-to-speech voice capabilities
+export const agent = new Agent({
+  name: 'Agent',
+  instructions: `You are a helpful assistant with speech-to-speech capabilities.`,
+  model: openai('gpt-4o'),
+  tools: { // Tools configured on Agent are passed to voice provider
+    search,
+    calculate
+  },
+  voice
+});
+
+// Establish a WebSocket connection
+await voice.connect();
+
+// Start a conversation
+await voice.speak("Hello, I'm your AI assistant!");
+
+// Stream audio from a microphone
+const microphoneStream = getMicrophoneStream();
+await voice.send(microphoneStream);
+
+// When done with the conversation
+voice.close();
+```
+
+### Event System
+
+The realtime voice provider emits several events you can listen for:
+
+```typescript
+// Listen for speech audio data sent from voice provider
+voice.on('speaking', ({ audio }) => {
+  // audio contains ReadableStream or Int16Array audio data
+});
+
+// Listen for transcribed text sent from both voice provider and user
+voice.on('writing', ({ text, role }) => {
+  console.log(`${role} said: ${text}`);
+});
+
+// Listen for errors
+voice.on('error', (error) => {
+  console.error('Voice error:', error);
+});
+```

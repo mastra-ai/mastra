@@ -152,7 +152,7 @@ export function AppSidebar() {
   const pathname = location.pathname;
 
   return (
-    <Sidebar collapsible="icon" className="px-2">
+    <Sidebar collapsible="icon">
       <SidebarHeader className="w-full pb-4 pl-1 pt-4">
         <span className="flex shrink-0">
           {state === 'collapsed' ? (
@@ -196,7 +196,11 @@ export function AppSidebar() {
           <SidebarGroupContent>
             <SidebarMenu>
               <SidebarMenuItem>
-                <SidebarMenuButton tooltip="Docs" asChild>
+                <SidebarMenuButton
+                  className="group-[data-collapsible='icon']:!px-[0.35rem] group-data-[collapsible='icon']:!px-[0.35rem]"
+                  tooltip="Docs"
+                  asChild
+                >
                   {state === 'collapsed' ? (
                     <a
                       href="https://mastra.ai/docs"
@@ -220,13 +224,17 @@ export function AppSidebar() {
               </SidebarMenuItem>
 
               <SidebarMenuItem>
-                <SidebarMenuButton tooltip="GitHub" asChild>
+                <SidebarMenuButton
+                  className="group-[data-collapsible='icon']:!px-[0.35rem] group-data-[collapsible='icon']:!px-[0.35rem]"
+                  tooltip="GitHub"
+                  asChild
+                >
                   {state === 'collapsed' ? (
                     <a
                       href="https://github.com/mastra-ai/mastra"
                       target="_blank"
                       rel="noopener"
-                      className="text-sm text-gray-300/60 hover:text-gray-100"
+                      className="text-sm text-gray-300/60  hover:text-gray-100"
                     >
                       GH
                     </a>

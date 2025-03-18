@@ -51,6 +51,7 @@ export type AgentGenerateOptions<
   Z extends ZodSchema | JSONSchema7 | undefined = undefined,
   TSchemaDeps extends ZodSchema | undefined = undefined,
 > = {
+  instructions?: string;
   toolsets?: ToolsetsInput<TSchemaDeps>;
   context?: CoreMessage[];
   memoryOptions?: MemoryConfig;
@@ -69,6 +70,7 @@ export type AgentStreamOptions<
   Z extends ZodSchema | JSONSchema7 | undefined = undefined,
   TSchemaDeps extends ZodSchema | undefined = undefined,
 > = {
+  instructions?: string;
   toolsets?: ToolsetsInput<TSchemaDeps>;
   context?: CoreMessage[];
   memoryOptions?: MemoryConfig;

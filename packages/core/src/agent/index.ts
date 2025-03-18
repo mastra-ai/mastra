@@ -118,6 +118,8 @@ export class Agent<
 
     if (config.voice) {
       this.voice = config.voice;
+      this.voice?.addTools(this.tools);
+      this.voice?.updateConfig({ instructions: config.instructions });
     }
 
     if (config.dependenciesSchema) {
@@ -224,7 +226,7 @@ export class Agent<
     return title;
   }
 
-  async saveMemory({
+  async fetchMemory({
     threadId,
     memoryConfig,
     resourceId,
@@ -232,68 +234,40 @@ export class Agent<
     runId,
   }: {
     resourceId: string;
-    threadId?: string;
+    threadId: string;
     memoryConfig?: MemoryConfig;
     userMessages: CoreMessage[];
     time?: Date;
     keyword?: string;
     runId?: string;
   }) {
-    const userMessage = this.getMostRecentUserMessage(userMessages);
     const memory = this.getMemory();
     if (memory) {
-      const config = memory.getMergedThreadConfig(memoryConfig);
-      let thread: StorageThreadType | null;
-
-      if (!threadId) {
-        this.logger.debug(`No threadId, creating new thread for agent ${this.name}`, {
-          runId: runId || this.name,
-        });
-        const title = config?.threads?.generateTitle ? await this.genTitle(userMessage) : undefined;
-
-        thread = await memory.createThread({
-          threadId,
-          resourceId,
-          memoryConfig,
-          title,
-        });
-      } else {
-        thread = await memory.getThreadById({ threadId });
-        if (!thread) {
-          this.logger.debug(`Thread with id ${threadId} not found, creating new thread for agent ${this.name}`, {
-            runId: runId || this.name,
-          });
-
-          const title = config?.threads?.generateTitle ? await this.genTitle(userMessage) : undefined;
-
-          thread = await memory.createThread({
-            threadId,
-            resourceId,
-            title,
-            memoryConfig,
-          });
-        }
+      const thread = await memory.getThreadById({ threadId });
+      if (!thread) {
+        return { threadId: threadId || '', messages: userMessages };
       }
 
+      const userMessage = this.getMostRecentUserMessage(userMessages);
       const newMessages = userMessage ? [userMessage] : userMessages;
 
-      if (thread) {
-        const messages = newMessages.map(u => {
-          return {
-            id: this.getMemory()?.generateId()!,
-            createdAt: new Date(),
-            threadId: thread.id,
-            ...u,
-            content: u.content as UserContent | AssistantContent,
-            role: u.role as 'user' | 'assistant',
-            type: 'text' as 'text' | 'tool-call' | 'tool-result',
-          };
-        });
+      const messages = newMessages.map(u => {
+        return {
+          id: this.getMemory()?.generateId()!,
+          createdAt: new Date(),
+          threadId: threadId,
+          ...u,
+          content: u.content as UserContent | AssistantContent,
+          role: u.role as 'user' | 'assistant',
+          type: 'text' as 'text' | 'tool-call' | 'tool-result',
+        };
+      });
 
-        const memoryMessages =
-          threadId && memory
-            ? (
-                await memory.rememberMessages({
+      const [memoryMessages, memorySystemMessage] =
+        threadId && memory
+          ? await Promise.all([
+              memory
+                .rememberMessages({
                   threadId,
                   resourceId,
                   config: memoryConfig,
@@ -307,37 +281,29 @@ export class Agent<
                     })
                     .join(`\n`),
                 })
-              ).messages
-            : [];
+                .then(r => r.messages),
+              memory.getSystemMessage({ threadId, memoryConfig }),
+            ])
+          : [[], null];
 
-        if (memory) {
-          await memory.saveMessages({ messages, memoryConfig });
-        }
+      this.logger.debug('Saved messages to memory', {
+        threadId,
+        runId,
+      });
 
-        this.logger.debug('Saved messages to memory', {
-          threadId: thread.id,
-          runId,
-        });
-
-        const memorySystemMessage =
-          memory && threadId ? await memory.getSystemMessage({ threadId, memoryConfig }) : null;
-
-        return {
-          threadId: thread.id,
-          messages: [
-            memorySystemMessage
-              ? {
-                  role: 'system' as const,
-                  content: memorySystemMessage,
-                }
-              : null,
-            ...this.sanitizeResponseMessages(memoryMessages),
-            ...newMessages,
-          ].filter((message): message is NonNullable<typeof message> => Boolean(message)),
-        };
-      }
-
-      return { threadId: threadId || '', messages: userMessages };
+      return {
+        threadId: thread.id,
+        messages: [
+          memorySystemMessage
+            ? {
+                role: 'system' as const,
+                content: memorySystemMessage,
+              }
+            : null,
+          ...this.sanitizeResponseMessages(memoryMessages),
+          ...newMessages,
+        ].filter((message): message is NonNullable<typeof message> => Boolean(message)),
+      };
     }
 
     return { threadId: threadId || '', messages: userMessages };
@@ -651,7 +617,7 @@ export class Agent<
     messages,
   }: {
     runId?: string;
-    threadId?: string;
+    threadId: string;
     memoryConfig?: MemoryConfig;
     messages: CoreMessage[];
     resourceId: string;
@@ -660,7 +626,7 @@ export class Agent<
     let threadIdToUse = threadId;
 
     this.logger.debug(`Saving user messages in memory for agent ${this.name}`, { runId });
-    const saveMessageResponse = await this.saveMemory({
+    const saveMessageResponse = await this.fetchMemory({
       threadId,
       resourceId,
       userMessages: messages,
@@ -673,6 +639,7 @@ export class Agent<
   }
 
   __primitive({
+    instructions,
     messages,
     context,
     threadId,
@@ -682,6 +649,7 @@ export class Agent<
     toolsets,
     dependencies,
   }: {
+    instructions?: string;
     toolsets?: ToolsetsInput<TSchemaDeps>;
     resourceId?: string;
     threadId?: string;
@@ -702,6 +670,7 @@ export class Agent<
           createDependenciesFrom(dependencies),
         );
 
+        // TODO: pass instructions to resolveInstructions
         const resolvedInstructions = await this.resolveInstructions(this.#currentDependencies);
         const systemMessage: CoreMessage = {
           role: 'system',
@@ -729,6 +698,17 @@ export class Agent<
               memoryStore: this.getMemory()?.constructor.name,
             },
           );
+
+          let thread = threadIdToUse ? await memory.getThreadById({ threadId: threadIdToUse }) : undefined;
+          if (!thread) {
+            thread = await memory.createThread({
+              threadId: threadIdToUse,
+              resourceId,
+              memoryConfig,
+            });
+          }
+          threadIdToUse = thread.id;
+
           const preExecuteResult = await this.preExecute({
             resourceId,
             runId,
@@ -806,15 +786,54 @@ export class Agent<
           result: resToLog,
           threadId,
         });
-        if (this.getMemory() && resourceId) {
+        const memory = this.getMemory();
+        const thread = await memory?.getThreadById({ threadId });
+        if (memory && resourceId && thread) {
           try {
-            await this.saveResponse({
-              result,
-              threadId,
-              resourceId,
-              memoryConfig,
-              runId,
+            const userMessage = this.getMostRecentUserMessage(messages);
+            const newMessages = userMessage ? [userMessage] : messages;
+            const threadMessages = newMessages.map(u => {
+              return {
+                id: this.getMemory()?.generateId()!,
+                createdAt: new Date(),
+                threadId: thread.id,
+                ...u,
+                content: u.content as UserContent | AssistantContent,
+                role: u.role as 'user' | 'assistant',
+                type: 'text' as 'text' | 'tool-call' | 'tool-result',
+              };
             });
+
+            await Promise.all([
+              (async () => {
+                await memory.saveMessages({ messages: threadMessages, memoryConfig });
+                await this.saveResponse({
+                  result,
+                  threadId,
+                  resourceId,
+                  memoryConfig,
+                  runId,
+                });
+              })(),
+              (async () => {
+                if (!thread.title?.startsWith('New Thread')) {
+                  return;
+                }
+
+                const config = memory.getMergedThreadConfig(memoryConfig);
+                const title = config?.threads?.generateTitle ? await this.genTitle(userMessage) : undefined;
+                if (!title) {
+                  return;
+                }
+
+                return memory.createThread({
+                  threadId: thread.id,
+                  resourceId,
+                  memoryConfig,
+                  title,
+                });
+              })(),
+            ]);
           } catch (e) {
             this.logger.error('Error saving response', {
               error: e,
@@ -836,7 +855,7 @@ export class Agent<
               runId: runIdToUse,
               metric,
               agentName: this.name,
-              instructions,
+              instructions: instructions || this.instructions,
             });
           }
         }
@@ -856,6 +875,7 @@ export class Agent<
   async generate<Z extends ZodSchema | JSONSchema7 | undefined = undefined>(
     messages: string | string[] | CoreMessage[],
     {
+      instructions,
       context,
       threadId: threadIdInFn,
       memoryOptions,
@@ -902,6 +922,7 @@ export class Agent<
     const runIdToUse = runId || randomUUID();
 
     const { before, after } = this.__primitive({
+      instructions,
       messages: messagesToUse,
       context,
       threadId: threadIdInFn,
@@ -1003,6 +1024,7 @@ export class Agent<
   async stream<Z extends ZodSchema | JSONSchema7 | undefined = undefined>(
     messages: string | string[] | CoreMessage[],
     {
+      instructions,
       context,
       threadId: threadIdInFn,
       memoryOptions,
@@ -1048,6 +1070,7 @@ export class Agent<
     }
 
     const { before, after } = this.__primitive({
+      instructions,
       messages: messagesToUse,
       context,
       threadId: threadIdInFn,
@@ -1167,6 +1190,7 @@ export class Agent<
    * @param input Text or text stream to convert to speech
    * @param options Speech options including speaker and provider-specific options
    * @returns Audio stream
+   * @deprecated Use agent.voice.speak() instead
    */
   async speak(
     input: string | NodeJS.ReadableStream,
@@ -1174,10 +1198,13 @@ export class Agent<
       speaker?: string;
       [key: string]: any;
     },
-  ): Promise<NodeJS.ReadableStream> {
+  ): Promise<NodeJS.ReadableStream | void> {
     if (!this.voice) {
       throw new Error('No voice provider configured');
     }
+
+    this.logger.warn('Warning: agent.speak() is deprecated. Please use agent.voice.speak() instead.');
+
     try {
       return this.voice.speak(input, options);
     } catch (e) {
@@ -1193,16 +1220,20 @@ export class Agent<
    * @param audioStream Audio stream to transcribe
    * @param options Provider-specific transcription options
    * @returns Text or text stream
+   * @deprecated Use agent.voice.listen() instead
    */
   async listen(
     audioStream: NodeJS.ReadableStream,
     options?: {
       [key: string]: any;
     },
-  ): Promise<string | NodeJS.ReadableStream> {
+  ): Promise<string | NodeJS.ReadableStream | void> {
     if (!this.voice) {
       throw new Error('No voice provider configured');
     }
+
+    this.logger.warn('Warning: agent.listen() is deprecated. Please use agent.voice.listen() instead');
+
     try {
       return this.voice.listen(audioStream, options);
     } catch (e) {
@@ -1217,11 +1248,14 @@ export class Agent<
    * Get a list of available speakers from the configured voice provider
    * @throws {Error} If no voice provider is configured
    * @returns {Promise<Array<{voiceId: string}>>} List of available speakers
+   * @deprecated Use agent.voice.getSpeakers() instead
    */
   async getSpeakers() {
     if (!this.voice) {
       throw new Error('No voice provider configured');
     }
+
+    this.logger.warn('Warning: agent.getSpeakers() is deprecated. Please use agent.voice.getSpeakers() instead.');
 
     try {
       return await this.voice.getSpeakers();

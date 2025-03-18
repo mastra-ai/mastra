@@ -23,6 +23,7 @@ export function WorkflowConditionNode({ data }: NodeProps<ConditionNode>) {
   const [open, setOpen] = useState(true);
   const type = conditions[0]?.type;
   const isCollapsible = (conditions.some(condition => condition.fnString) || conditions?.length > 1) && type !== 'else';
+
   return (
     <Collapsible
       open={!isCollapsible ? true : open}
@@ -41,7 +42,7 @@ export function WorkflowConditionNode({ data }: NodeProps<ConditionNode>) {
           weight="medium"
           className="text-mastra-el-3 bg-mastra-bg-11 my-auto block rounded-[0.125rem] px-2 py-1 text-[10px] w-fit"
         >
-          {type.toUpperCase()}
+          {type?.toUpperCase()}
         </Text>
         {isCollapsible && (
           <ChevronDown

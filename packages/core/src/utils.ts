@@ -1,7 +1,9 @@
 import { createHash } from 'crypto';
+import type { ToolExecutionOptions } from 'ai';
 import jsonSchemaToZod from 'json-schema-to-zod';
 import type { ZodObject, ZodSchema } from 'zod';
 import { z } from 'zod';
+
 import type { MastraPrimitives } from './action';
 import type { ToolsInput } from './agent';
 import type { Logger } from './logger';
@@ -349,7 +351,7 @@ function createExecute(tool: ToolToConvert, options: ToolOptions, logType?: 'too
     type: logType,
   });
 
-  const execFunction = async (args: any, execOptions: any) => {
+  const execFunction = async (args: any, execOptions: ToolExecutionOptions) => {
     if (isVercelTool(tool)) {
       return tool?.execute?.(args, execOptions) ?? undefined;
     }
@@ -545,11 +547,32 @@ export function makeCoreTool(tool: ToolToConvert, options: ToolOptions, logType?
     if (isVercelTool(tool)) {
       return convertVercelToolParameters(tool);
     }
-    // If the tool is a Mastra Tool, return the inputSchema
     return tool.inputSchema ?? z.object({});
   };
 
+  // Check if this is a provider-defined tool
+  const isProviderDefined =
+    'type' in tool &&
+    tool.type === 'provider-defined' &&
+    'id' in tool &&
+    typeof tool.id === 'string' &&
+    tool.id.includes('.');
+
+  // For provider-defined tools, we need to include all required properties
+  if (isProviderDefined) {
+    return {
+      type: 'provider-defined' as const,
+      id: tool.id as `${string}.${string}`,
+      args: ('args' in tool ? tool.args : {}) as Record<string, unknown>,
+      description: tool.description!,
+      parameters: getParameters(),
+      execute: tool.execute ? createExecute(tool, { ...options, description: tool.description }, logType) : undefined,
+    };
+  }
+
+  // For function tools
   return {
+    type: 'function' as const,
     description: tool.description!,
     parameters: getParameters(),
     execute: tool.execute ? createExecute(tool, { ...options, description: tool.description }, logType) : undefined,
