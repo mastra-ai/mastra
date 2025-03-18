@@ -376,7 +376,7 @@ describe('MastraClient Resources', () => {
       mockFetchResponse(mockAudioStream, { isStream: true });
 
       const result = await agent.voice.speak('test');
-      console.log(`result`, result);
+
       expect(result).toBeInstanceOf(Response);
       expect(result.body).toBeInstanceOf(ReadableStream);
       expect(global.fetch).toHaveBeenCalledWith(

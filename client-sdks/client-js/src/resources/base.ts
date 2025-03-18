@@ -25,7 +25,6 @@ export class BaseResource {
           options.body instanceof FormData
             ? {} // Let browser set correct Content-Type for FormData which is required for audio
             : { 'Content-Type': 'application/json' };
-        console.log(`REQUESTING`, `${baseUrl}${path}`);
         const response = await fetch(`${baseUrl}${path}`, {
           ...options,
           headers: {
