@@ -16,5 +16,6 @@ const meta = {
   "textual-difference": "Textual Difference",
   "tone-consistency": "Tone Consistency",
   toxicity: "Toxicity",
+  "word-inclusion": "Word Inclusion",
 };
 export default meta;

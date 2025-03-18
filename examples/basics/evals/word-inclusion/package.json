@@ -1,5 +1,5 @@
 {
-  "name": "examples-custom-eval",
+  "name": "examples-word-inclusion",
   "private": true,
   "version": "0.0.0",
   "type": "module",
@@ -7,10 +7,8 @@
     "start": "pnpx tsx --env-file .env index.ts"
   },
   "dependencies": {
-    "@ai-sdk/openai": "latest",
     "@mastra/core": "workspace:^",
-    "@mastra/evals": "workspace:^",
-    "zod": "latest"
+    "@mastra/evals": "workspace:^"
   },
   "devDependencies": {
     "dotenv": "^16.4.7"
