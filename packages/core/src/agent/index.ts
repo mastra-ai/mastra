@@ -233,32 +233,33 @@ export class Agent<
         };
       });
 
-      const memoryMessages =
+      const [memoryMessages, memorySystemMessage] =
         threadId && memory
-          ? (
-              await memory.rememberMessages({
-                threadId,
-                resourceId,
-                config: memoryConfig,
-                vectorMessageSearch: messages
-                  .slice(-1)
-                  .map(m => {
-                    if (typeof m === `string`) {
-                      return m;
-                    }
-                    return m?.content || ``;
-                  })
-                  .join(`\n`),
-              })
-            ).messages
-          : [];
+          ? await Promise.all([
+              memory
+                .rememberMessages({
+                  threadId,
+                  resourceId,
+                  config: memoryConfig,
+                  vectorMessageSearch: messages
+                    .slice(-1)
+                    .map(m => {
+                      if (typeof m === `string`) {
+                        return m;
+                      }
+                      return m?.content || ``;
+                    })
+                    .join(`\n`),
+                })
+                .then(r => r.messages),
+              memory.getSystemMessage({ threadId, memoryConfig }),
+            ])
+          : [[], null];
 
       this.logger.debug('Saved messages to memory', {
         threadId,
         runId,
       });
-
-      const memorySystemMessage = memory && threadId ? await memory.getSystemMessage({ threadId, memoryConfig }) : null;
 
       return {
         threadId: thread.id,
