@@ -4,7 +4,7 @@ import type { ZodSchema, z } from 'zod';
 import type { IAction, IExecutionContext, MastraUnion } from '../action';
 import type { Mastra } from '../mastra';
 import type { MastraMemory } from '../memory';
-import type { DependenciesType } from '../utils';
+import type { DependenciesType, InferZodType } from '../utils';
 
 export type VercelTool = Tool;
 
@@ -31,10 +31,6 @@ export interface ToolExecutionContext<
 > extends IExecutionContext<TSchemaIn> {
   dependencies: DependenciesType<TSchemaDeps>;
   memory?: MastraMemory;
-}
-
-export interface ToolExecutionContext<TSchemaIn extends z.ZodSchema | undefined = undefined>
-  extends IExecutionContext<TSchemaIn> {
   mastra?: MastraUnion;
 }
 
@@ -46,10 +42,7 @@ export interface ToolAction<
 > extends IAction<string, TSchemaIn, TSchemaOut, TContext, ToolExecutionOptions> {
   description: string;
   dependenciesSchema?: TSchemaDeps;
-  execute?: (
-    context: TContext,
-    options?: ToolExecutionOptions,
-  ) => Promise<TSchemaOut extends z.ZodSchema ? z.infer<TSchemaOut> : unknown>;
+  execute?: (context: TContext, options?: ToolExecutionOptions) => Promise<InferZodType<TSchemaOut, unknown>>;
   mastra?: Mastra;
 }
 
