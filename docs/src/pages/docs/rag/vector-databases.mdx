@@ -216,13 +216,13 @@ For complete examples of upserting embeddings in different vector stores, see th
 
 ## Adding Metadata
 
-Vector stores support rich metadata for advanced filtering and organization. You can add any JSON-serializable fields that will help with retrieval.
+Vector stores support rich metadata (any JSON-serializable fields) for filtering and organization. Since metadata is stored with no fixed schema, use consistent field naming to avoid unexpected query results.
 
-**Reminder:** Metadata is stored as a JSON field with no fixed schema, so you'll want to name your fields consistently and apply a consistent schema, or your queries will return unexpected results.
+**Important**: Metadata is crucial for vector storage - without it, you'd only have numerical embeddings with no way to return the original text or filter results. Always store at least the source text as metadata.
 
 ```ts showLineNumbers copy
 // Store embeddings with rich metadata for better organization and filtering
-await vectorStore.upsert({
+await store.upsert({
   indexName: "embeddings",
   vectors: embeddings,
   metadata: chunks.map((chunk) => ({
