@@ -3,11 +3,12 @@ import { DocsThemeConfig, useConfig } from "nextra-theme-docs";
 
 import { useRouter } from "next/router";
 
-import { Footer, logo } from "@/components/footer";
+import { Footer } from "@/components/footer";
 import { GithubStarCount } from "@/components/github-star-count";
 import { OperatorsTable } from "./src/components/operators-table";
 import { PropertiesTable } from "./src/components/properties-table";
 import { TableOfContents } from "./src/components/toc";
+import { logo } from "@/components/logo";
 
 const docs: DocsThemeConfig = {
   logo,
