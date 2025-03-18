@@ -4887,140 +4887,162 @@ description: Documentation for the createTool function in Mastra, which creates 
 # `createTool()`
 Source: https://mastra.ai/docs/reference/agents/createTool
 
-Tools are typed functions that can be executed by agents or workflows, with built-in integration access and parameter validation. Each tool has a schema that defines its inputs, an executor function that implements its logic, and access to configured integrations.
+The `createTool()` function creates typed tools that can be executed by agents or workflows. Tools have built-in schema validation, execution context, and integration with the Mastra ecosystem.
 
-```ts filename="src/mastra/tools/index.ts" showLineNumbers copy
-import { createTool } from "@mastra/core/logger";
+## Overview
+
+Tools are a fundamental building block in Mastra that allow agents to interact with external systems, perform computations, and access data. Each tool has:
+
+- A unique identifier
+- A description that helps the AI understand when and how to use the tool
+- Optional input and output schemas for validation
+- An execution function that implements the tool's logic
+
+## Example Usage
+
+```ts filename="src/tools/stock-tools.ts" showLineNumbers copy
+import { createTool } from "@mastra/core/tools";
 import { z } from "zod";
 
+// Helper function to fetch stock data
 const getStockPrice = async (symbol: string) => {
-  const data = await fetch(
-    `https://mastra-stock-data.vercel.app/api/stock-data?symbol=${symbol}`,
-  ).then((r) => r.json());
+  const response = await fetch(
+    `https://mastra-stock-data.vercel.app/api/stock-data?symbol=${symbol}`
+  );
+  const data = await response.json();
   return data.prices["4. close"];
 };
 
-export const stockPrices = createTool({
-  id: "Get Stock Price",
+// Create a tool to get stock prices
+export const stockPriceTool = createTool({
+  id: "getStockPrice",
+  description: "Fetches the current stock price for a given ticker symbol",
   inputSchema: z.object({
-    symbol: z.string(),
+    symbol: z.string().describe("The stock ticker symbol (e.g., AAPL, MSFT)")
   }),
-  description: `Fetches the last day's closing stock price for a given symbol`,
+  outputSchema: z.object({
+    symbol: z.string(),
+    price: z.number(),
+    currency: z.string(),
+    timestamp: z.string()
+  }),
   execute: async ({ context }) => {
-    console.log("Using tool to fetch stock price for", context.symbol);
+    const price = await getStockPrice(context.symbol);
+    
     return {
       symbol: context.symbol,
-      currentPrice: await getStockPrice(context.symbol),
+      price: parseFloat(price),
+      currency: "USD",
+      timestamp: new Date().toISOString()
     };
-  },
+  }
 });
 
-export const threadInfo = createTool({
-  id: "Get Thread Info",
+// Create a tool that uses the thread context
+export const threadInfoTool = createTool({
+  id: "getThreadInfo",
+  description: "Returns information about the current conversation thread",
   inputSchema: z.object({
-    includeResource: z.boolean().optional(),
+    includeResource: z.boolean().optional().default(false)
   }),
-  description: `Gets information about the current conversation thread`,
   execute: async ({ context, threadId, resourceId }) => {
-    console.log("Current thread:", threadId);
-    console.log("Current resource:", resourceId);
-
     return {
       threadId,
       resourceId: context.includeResource ? resourceId : undefined,
+      timestamp: new Date().toISOString()
     };
-  },
+  }
 });
 ```
 
-## API Signature
+## API Reference
 
 ### Parameters
+
+`createTool()` accepts a single object with the following properties:
 
 <PropertiesTable
   content={[
     {
-      name: "label",
+      name: "id",
       type: "string",
       required: true,
-      description: 'Name of the tool (e.g., "Get Stock Prices")',
-    },
-    {
-      name: "schema",
-      type: "ZodSchema",
-      required: true,
-      description: "Zod schema for validating inputs",
+      description: "Unique identifier for the tool. This should be descriptive of the tool's function."
     },
     {
       name: "description",
       type: "string",
       required: true,
-      description: "Clear explanation of what market data the tool provides",
+      description: "Detailed description of what the tool does, when it should be used, and what inputs it requires. This helps the AI understand how to use the tool effectively."
     },
     {
-      name: "executor",
-      type: "(params: ExecutorParams) => Promise<any>",
-      required: true,
-      description: "Async function that fetches the requested market data",
+      name: "execute",
+      type: "(context: ToolExecutionContext, options?: any) => Promise<any>",
+      required: false,
+      description: "Async function that implements the tool's logic. Receives the execution context and optional configuration.",
       properties: [
         {
-          type: "ExecutorParams",
+          type: "ToolExecutionContext",
           parameters: [
             {
-              name: "data",
+              name: "context",
               type: "object",
-              description: "The validated input data (in this case, symbol)",
-            },
-            {
-              name: "integrationsRegistry",
-              type: "function",
-              description: "Function to get connected integrations",
-            },
-            {
-              name: "runId",
-              type: "string",
-              isOptional: true,
-              description: "The runId of the current run",
+              description: "The validated input data that matches the inputSchema"
             },
             {
               name: "threadId",
               type: "string",
               isOptional: true,
-              description:
-                "Identifier for the conversation thread. Allows for maintaining context across multiple interactions.",
+              description: "Identifier for the conversation thread, if available"
             },
             {
               name: "resourceId",
               type: "string",
               isOptional: true,
-              description:
-                "Identifier for the user or resource interacting with the tool.",
+              description: "Identifier for the user or resource interacting with the tool"
             },
             {
-              name: "agents",
-              type: "Map<string, Agent<any>>",
-              description: "Map of registered agents",
-            },
-            {
-              name: "engine",
+              name: "mastra",
+              type: "Mastra",
               isOptional: true,
-              type: "MastraEngine",
-              description: "Mastra engine instance",
+              description: "Reference to the Mastra instance, if available"
+            },
+          ]
+        },
+        {
+          type: "ToolOptions",
+          parameters: [
+            {
+              name: "toolCallId",
+              type: "string",
+              description: "The ID of the tool call. You can use it e.g. when sending tool-call related information with stream data."
             },
             {
-              name: "llm",
-              type: "LLM",
-              description: "LLM instance",
+              name: "messages",
+              type: "CoreMessage[]",
+              description: "Messages that were sent to the language model to initiate the response that contained the tool call. The messages do not include the system prompt nor the assistant response that contained the tool call."
             },
-          ],
-        },
-      ],
+            {
+              name: "abortSignal",
+              type: "AbortSignal",
+              isOptional: true,
+              description: "An optional abort signal that indicates that the overall operation should be aborted."
+            },
+          ]
+        }
+      ]
+    },
+    {
+      name: "inputSchema",
+      type: "ZodSchema",
+      required: false,
+      description: "Zod schema that defines and validates the tool's input parameters. If not provided, the tool will accept any input."
     },
     {
       name: "outputSchema",
       type: "ZodSchema",
-      isOptional: true,
-      description: "Zod schema for validating outputs",
+      required: false,
+      description: "Zod schema that defines and validates the tool's output. Helps ensure the tool returns data in the expected format."
     },
   ]}
 />
@@ -5030,46 +5052,63 @@ export const threadInfo = createTool({
 <PropertiesTable
   content={[
     {
-      name: "ToolApi",
-      type: "object",
-      description:
-        "The tool API object that includes the schema, label, description, and executor function.",
+      name: "Tool",
+      type: "Tool<TSchemaIn, TSchemaOut>",
+      description: "A Tool instance that can be used with agents, workflows, or directly executed.",
       properties: [
         {
-          type: "ToolApi",
+          type: "Tool",
           parameters: [
             {
-              name: "schema",
-              type: "ZodSchema<IN>",
-              description: "Zod schema for validating inputs.",
-            },
-            {
-              name: "label",
+              name: "id",
               type: "string",
-              description: "Name of the tool.",
+              description: "The tool's unique identifier"
             },
             {
               name: "description",
               type: "string",
-              description: "Description of the tool's functionality.",
+              description: "Description of the tool's functionality"
+            },
+            {
+              name: "inputSchema",
+              type: "ZodSchema | undefined",
+              description: "Schema for validating inputs"
             },
             {
               name: "outputSchema",
-              type: "ZodSchema<OUT>",
-              isOptional: true,
-              description: "Zod schema for validating outputs.",
+              type: "ZodSchema | undefined",
+              description: "Schema for validating outputs"
             },
             {
               name: "execute",
-              type: "(params: IntegrationApiExcutorParams<IN>) => Promise<OUT>",
-              description: "Async function that executes the tool's logic.",
-            },
-          ],
-        },
-      ],
-    },
+              type: "Function",
+              description: "The tool's execution function"
+            }
+          ]
+        }
+      ]
+    }
   ]}
 />
+
+## Type Safety
+
+The `createTool()` function provides full type safety through TypeScript generics:
+
+- Input types are inferred from the `inputSchema`
+- Output types are inferred from the `outputSchema`
+- The execution context is properly typed based on the input schema
+
+This ensures that your tools are type-safe throughout your application.
+
+## Best Practices
+
+1. **Descriptive IDs**: Use clear, action-oriented IDs like `getWeatherForecast` or `searchDatabase`
+2. **Detailed Descriptions**: Provide comprehensive descriptions that explain when and how to use the tool
+3. **Input Validation**: Use Zod schemas to validate inputs and provide helpful error messages
+4. **Error Handling**: Implement proper error handling in your execute function
+5. **Idempotency**: When possible, make your tools idempotent (same input always produces same output)
+6. **Performance**: Keep tools lightweight and fast to execute
 
 
 ---
@@ -5701,23 +5740,11 @@ Settings for telemetry collection during streaming:
 <PropertiesTable
   content={[
     {
-      name: "functionId",
-      type: "string",
-      isOptional: true,
-      description: "Identifier for this function. Used to group telemetry data by function.",
-    },
-    {
       name: "isEnabled",
       type: "boolean",
       isOptional: true,
       defaultValue: "false",
       description: "Enable or disable telemetry. Disabled by default while experimental.",
-    },
-    {
-      name: "metadata",
-      type: "Record<string, AttributeValue>",
-      isOptional: true,
-      description: "Additional information to include in the telemetry data. AttributeValue can be string, number, boolean, array of these types, or null.",
     },
     {
       name: "recordInputs",
@@ -5732,6 +5759,18 @@ Settings for telemetry collection during streaming:
       isOptional: true,
       defaultValue: "true",
       description: "Enable or disable output recording. You might want to disable this to avoid recording sensitive information, reduce data transfers, or increase performance.",
+    },
+    {
+      name: "functionId",
+      type: "string",
+      isOptional: true,
+      description: "Identifier for this function. Used to group telemetry data by function.",
+    },
+    {
+      name: "metadata",
+      type: "Record<string, AttributeValue>",
+      isOptional: true,
+      description: "Additional information to include in the telemetry data. AttributeValue can be string, number, boolean, array of these types, or null.",
     },
     {
       name: "tracer",
@@ -5751,10 +5790,10 @@ The return value of the `stream()` method depends on the options provided, speci
 <PropertiesTable
   content={[
     {
-      name: "object",
-      type: "Promise<object>",
+      name: "textStream",
+      type: "AsyncIterable<string>",
       isOptional: true,
-      description: "Promise that resolves to the final structured output. Present when using either `output` or `experimental_output` options.",
+      description: "Stream of text chunks. Present when output is 'text' (no schema provided) or when using `experimental_output`.",
     },
     {
       name: "objectStream",
@@ -5769,10 +5808,10 @@ The return value of the `stream()` method depends on the options provided, speci
       description: "Stream of structured data. Present only when using `experimental_output` option.",
     },
     {
-      name: "textStream",
-      type: "AsyncIterable<string>",
+      name: "object",
+      type: "Promise<object>",
       isOptional: true,
-      description: "Stream of text chunks. Present when output is 'text' (no schema provided) or when using `experimental_output`.",
+      description: "Promise that resolves to the final structured output. Present when using either `output` or `experimental_output` options.",
     }
   ]}
 />
@@ -5821,6 +5860,7 @@ console.log("Final structured result:", result);
 ```
 
 The key difference between Agent's `stream()` and LLM's `stream()` is that Agents maintain conversation context through `threadId`, can access tools, and integrate with the agent's memory system.
+
 
 
 ---

@@ -1,5 +1,5 @@
 import { Analytics } from "@vercel/analytics/next";
-
+import { Toaster } from "@/components/ui/toaster";
 import localFont from "next/font/local";
 
 import "../global.css";
@@ -27,6 +27,7 @@ export default function Nextra({ Component, pageProps }) {
         className={`${geistSans.variable} ${commitMono.variable} font-sans`}
       >
         <Component {...pageProps} />
+        <Toaster />
       </main>
       <Analytics />
     </>
