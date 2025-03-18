@@ -700,6 +700,9 @@ importers:
       '@ai-sdk/openai':
         specifier: latest
         version: 1.2.5(zod@3.24.2)
+      '@mastra/core':
+        specifier: workspace:*
+        version: link:../../../../packages/core
       '@mastra/pg':
         specifier: workspace:*
         version: link:../../../../stores/pg
@@ -743,6 +746,9 @@ importers:
       '@ai-sdk/openai':
         specifier: latest
         version: 1.2.5(zod@3.24.2)
+      '@mastra/core':
+        specifier: workspace:*
+        version: link:../../../../packages/core
       '@mastra/pg':
         specifier: workspace:*
         version: link:../../../../stores/pg
@@ -762,6 +768,9 @@ importers:
       '@ai-sdk/openai':
         specifier: latest
         version: 1.2.5(zod@3.24.2)
+      '@mastra/core':
+        specifier: workspace:*
+        version: link:../../../../packages/core
       '@mastra/pg':
         specifier: workspace:*
         version: link:../../../../stores/pg
@@ -781,6 +790,9 @@ importers:
       '@ai-sdk/openai':
         specifier: latest
         version: 1.2.5(zod@3.24.2)
+      '@mastra/core':
+        specifier: workspace:*
+        version: link:../../../../packages/core
       '@mastra/pg':
         specifier: workspace:*
         version: link:../../../../stores/pg
@@ -987,6 +999,9 @@ importers:
       '@ai-sdk/openai':
         specifier: latest
         version: 1.2.5(zod@3.24.2)
+      '@mastra/core':
+        specifier: workspace:*
+        version: link:../../../../packages/core
       '@mastra/pg':
         specifier: workspace:*
         version: link:../../../../stores/pg

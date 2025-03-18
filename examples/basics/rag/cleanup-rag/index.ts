@@ -11,12 +11,6 @@ const vectorQueryTool = createVectorQueryTool({
   model: openai.embedding('text-embedding-3-small'),
 });
 
-const cleanedVectorQueryTool = createVectorQueryTool({
-  vectorStoreName: 'pgVector',
-  indexName: 'cleanedEmbeddings',
-  model: openai.embedding('text-embedding-3-small'),
-});
-
 const doc =
   MDocument.fromText(`The Future of Space Exploration and Human Settlement in the Modern Era of Technology and Innovation
 
@@ -39,12 +33,9 @@ Ion engines, as previously stated, are revolutionizing how we think about space 
 Mars Colonization Plans and Initiatives
 Several organizations are developing plans for Mars colonization, with projected timelines spanning the next 20 years. 
 Initial settlements will require advanced life support systems and radiation protection. 
-The history of Mars observation dates back to ancient Egyptian astronomers. 
-Life support systems, as previously stated, are crucial for Mars colonization. 
-Did you know that the average temperature on Mars is -63°C? The first person to observe Mars through a telescope was Galileo Galilei in 1610. 
+Did you know that the average temperature on Mars is -63°C? 
 Speaking of Mars colonization, as mentioned before, radiation protection will be essential for settler survival. 
-The Great Wall of China is not actually visible from space, contrary to popular belief. Life support systems and radiation protection, which we discussed earlier, will be fundamental to Mars settlement success. 
-Mars has two moons, and the temperature there is -63°C, as we mentioned before.
+The Great Wall of China is not actually visible from space, contrary to popular belief.
 
 Resource Utilization and Sustainability Practices
 Future space settlements will need to implement:
@@ -69,6 +60,14 @@ The first submarine was invented in 1620. Space-based economies, which we discus
 The Empire State Building was built in just 410 days. Multi-planetary species survival, as previously stated, is a key goal of space settlement. Did you know that the first pizza was made in Naples, Italy?
 `);
 
+const queries = [
+  'What is the average temperature on Mars?',
+  'What technologies are used in modern spacecraft?',
+  'What are all the requirements for space settlements?',
+  'What are all the dates mentioned related to space stations?',
+  'What are all the mentions of sustainability in space settlements?',
+];
+
 const documentChunkerTool = createDocumentChunkerTool({
   doc,
   params: {
@@ -80,7 +79,7 @@ const documentChunkerTool = createDocumentChunkerTool({
 });
 
 export const ragAgentOne = new Agent({
-  name: 'RAG Agent One',
+  name: 'RAG Agent',
   instructions:
     'You are a helpful assistant that answers questions based on the provided context. Keep your answers concise and relevant.',
   model: openai('gpt-4o-mini'),
@@ -90,17 +89,7 @@ export const ragAgentOne = new Agent({
 });
 
 export const ragAgentTwo = new Agent({
-  name: 'RAG Agent Two',
-  instructions:
-    'You are a helpful assistant that answers questions based on the provided context. Keep your answers concise and relevant.',
-  model: openai('gpt-4o-mini'),
-  tools: {
-    cleanedVectorQueryTool,
-  },
-});
-
-export const ragAgentThree = new Agent({
-  name: 'RAG Agent Three',
+  name: 'Cleanup Agent',
   instructions: 'You are a helpful assistant that processes, cleans, and labels data before storage.',
   model: openai('gpt-4o-mini'),
   tools: { documentChunkerTool },
@@ -109,28 +98,14 @@ export const ragAgentThree = new Agent({
 const pgVector = new PgVector(process.env.POSTGRES_CONNECTION_STRING!);
 
 export const mastra = new Mastra({
-  agents: { ragAgentOne, ragAgentTwo, ragAgentThree },
+  agents: { ragAgentOne, ragAgentTwo },
   vectors: { pgVector },
 });
-const dataAgentOne = mastra.getAgent('ragAgentOne');
-const dataAgentTwo = mastra.getAgent('ragAgentTwo');
-const processAgent = mastra.getAgent('ragAgentThree');
+const ragAgent = mastra.getAgent('ragAgentOne');
+const cleanupAgent = mastra.getAgent('ragAgentTwo');
 
 // Set to 256 to get more chunks
 const chunks = await doc.chunk({
-  strategy: 'recursive',
-  size: 256,
-  overlap: 50,
-  separator: '\n',
-});
-
-const chunkPrompt = `Take the chunks returned from the tool and clean them up according to the instructions provided. Make sure to filter out irrelevant information that is not space related and remove duplicates.`;
-
-const newChunks = await processAgent.generate(chunkPrompt);
-
-const updatedDoc = MDocument.fromText(newChunks.text);
-
-const updatedChunks = await updatedDoc.chunk({
   strategy: 'recursive',
   size: 256,
   overlap: 50,
@@ -142,30 +117,52 @@ const { embeddings } = await embedMany({
   values: chunks.map(chunk => chunk.text),
 });
 
-const { embeddings: cleanedEmbeddings } = await embedMany({
-  model: openai.embedding('text-embedding-3-small'),
-  values: updatedChunks.map(chunk => chunk.text),
-});
-
 const vectorStore = mastra.getVector('pgVector');
 await vectorStore.createIndex({
   indexName: 'embeddings',
   dimension: 1536,
 });
-await vectorStore.createIndex({
-  indexName: 'cleanedEmbeddings',
-  dimension: 1536,
-});
+
 await vectorStore.upsert({
   indexName: 'embeddings',
   vectors: embeddings,
   metadata: chunks?.map((chunk: any) => ({ text: chunk.text })),
 });
+
+// Generate responses using the original embeddings
+await answerQueries(queries, ragAgent);
+
+const chunkPrompt = `Take the chunks returned from the tool and clean them up according to the instructions provided. Make sure to filter out irrelevant information that is not space related and remove duplicates.`;
+
+const newChunks = await cleanupAgent.generate(chunkPrompt);
+
+const updatedDoc = MDocument.fromText(newChunks.text);
+
+const updatedChunks = await updatedDoc.chunk({
+  strategy: 'recursive',
+  size: 256,
+  overlap: 50,
+  separator: '\n',
+});
+
+const { embeddings: cleanedEmbeddings } = await embedMany({
+  model: openai.embedding('text-embedding-3-small'),
+  values: updatedChunks.map(chunk => chunk.text),
+});
+await vectorStore.deleteIndex('embeddings');
+await vectorStore.createIndex({
+  indexName: 'embeddings',
+  dimension: 1536,
+});
+
 await vectorStore.upsert({
-  indexName: 'cleanedEmbeddings',
+  indexName: 'embeddings',
   vectors: cleanedEmbeddings,
   metadata: updatedChunks?.map((chunk: any) => ({ text: chunk.text })),
 });
+
+// Generate responses using the cleaned embeddings
+await answerQueries(queries, ragAgent);
 
 async function generateResponse(query: string, agent: Agent) {
   // Create a prompt that includes both context and query
@@ -194,15 +191,3 @@ async function answerQueries(queries: string[], agent: Agent) {
     }
   }
 }
-
-const queries = [
-  'What is the average temperature on Mars?',
-  'What technologies are used in modern spacecraft?',
-  'What are all the requirements for space settlements?',
-  'What are all the dates mentioned related to space stations?',
-  'What are all the mentions of sustainability in space settlements?',
-];
-
-await answerQueries(queries, dataAgentOne);
-
-await answerQueries(queries, dataAgentTwo);
