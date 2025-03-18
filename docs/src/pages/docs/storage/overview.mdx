@@ -6,7 +6,7 @@ description: Overview of Mastra's storage system and data persistence capabiliti
 # Mastra Storage
 
 Mastra's storage system provides a unified interface for managing conversation data, workflow states, traces, and evaluation datasets. Mastra defines a common interface for different database providers.
-
+Mastra provides different storage providers, but you can treat them as interchangeable. Eg, you could use libsql in development but postgres in production, and your code will work the same both ways.
 ## Data Schema
 
 All storage implementations use these core features:
