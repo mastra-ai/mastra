@@ -10,7 +10,8 @@ import { Telemetry } from '../telemetry';
 import { createTool } from '../tools';
 
 import { Step } from './step';
-import { WhenConditionReturnValue, type WorkflowContext, type WorkflowResumeResult } from './types';
+import type { WorkflowContext, WorkflowResumeResult } from './types';
+import { WhenConditionReturnValue } from './types';
 import { Workflow } from './workflow';
 
 const storage = new DefaultStorage({
@@ -1230,7 +1231,7 @@ describe('Workflow', async () => {
 
         return { newValue };
       });
-      const other = vi.fn().mockImplementation(async ({ context }) => {
+      const other = vi.fn().mockImplementation(async () => {
         return { other: 26 };
       });
       const incrementStep = new Step({
@@ -1271,7 +1272,7 @@ describe('Workflow', async () => {
 
       counterWorkflow
         .step(incrementStep)
-        .if(async ({ context }) => {
+        .if(async () => {
           return false;
         })
         .then(incrementStep)
@@ -2706,7 +2707,7 @@ describe('Workflow', async () => {
 
       // Access new instance properties directly - should work without warning
       const run = wf.createRun();
-      run.watch(data => {});
+      run.watch(_ => {});
       await run.start();
 
       expect(telemetry).toBeDefined();
