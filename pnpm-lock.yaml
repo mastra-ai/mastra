@@ -3699,7 +3699,11 @@ importers:
         specifier: ^7.53.0
         version: 7.54.2(react@19.0.0)
       react-markdown:
+<<<<<<< HEAD
         specifier: ^9.0.1
+=======
+        specifier: ^9.1.0
+>>>>>>> 4631b2a5d (Fix markdown renderer)
         version: 9.1.0(@types/react@19.0.10)(react@19.0.0)
       react-resizable-panels:
         specifier: ^2.1.7
