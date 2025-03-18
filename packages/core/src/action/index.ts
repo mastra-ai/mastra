@@ -7,6 +7,7 @@ import type { MastraMemory } from '../memory';
 import type { MastraStorage } from '../storage';
 import type { Telemetry } from '../telemetry';
 import type { MastraTTS } from '../tts';
+import type { InferZodType } from '../utils';
 import type { MastraVector } from '../vector';
 
 export type MastraPrimitives = {
@@ -24,7 +25,7 @@ export type MastraUnion = {
 } & MastraPrimitives;
 
 export interface IExecutionContext<TSchemaIn extends z.ZodSchema | undefined = undefined> {
-  context: TSchemaIn extends z.ZodSchema ? z.infer<TSchemaIn> : {};
+  context: InferZodType<TSchemaIn, {}>;
   runId?: string;
   threadId?: string;
   resourceId?: string;
@@ -43,8 +44,5 @@ export interface IAction<
   outputSchema?: TSchemaOut;
   // execute must remain optional because ITools extends IAction and tools may need execute to be optional
   // when forwarding tool calls to the client or to a queue instead of executing them in the same process
-  execute?: (
-    context: TContext,
-    options?: TOptions,
-  ) => Promise<TSchemaOut extends z.ZodSchema ? z.infer<TSchemaOut> : unknown>;
+  execute?: (context: TContext, options?: TOptions) => Promise<InferZodType<TSchemaOut, unknown>>;
 }
