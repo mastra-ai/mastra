@@ -145,9 +145,10 @@ export interface TagMaskOptions {
 
 /**
  * Transforms a stream by masking content between XML tags.
- * @param stream Input stream to transform
- * @param tag Tag name to mask between (e.g. for <foo>...</foo>, use 'foo')
- * @param options Optional configuration for masking behavior
+ *
+ * @param stream - Input stream to transform.
+ * @param tag - Tag name to mask between (e.g. for <foo>...</foo>, use 'foo').
+ * @param options - Optional configuration for masking behavior.
  */
 export async function* maskStreamTags(
   stream: AsyncIterable<string>,
@@ -270,8 +271,8 @@ export async function* maskStreamTags(
  * Resolve serialized zod output - This function takes the string output ot the `jsonSchemaToZod` function
  * and instantiates the zod object correctly.
  *
- * @param schema - serialized zod object
- * @returns resolved zod object
+ * @param schema - Serialized zod object.
+ * @returns Resolved zod object.
  */
 export function resolveSerializedZodOutput(schema: string): z.ZodType {
   // Creates and immediately executes a new function that takes 'z' as a parameter
@@ -281,9 +282,10 @@ export function resolveSerializedZodOutput(schema: string): z.ZodType {
 }
 
 /**
- * Checks if a tool is a Vercel Tool
- * @param tool - The tool to check
- * @returns True if the tool is a Vercel Tool, false otherwise
+ * Checks if a tool is a Vercel Tool.
+ *
+ * @param tool - The tool to check.
+ * @returns True if the tool is a Vercel Tool, false otherwise.
  */
 export function isVercelTool(tool?: ToolToConvert): tool is VercelTool {
   // Checks if this tool is not an instance of Tool
@@ -473,9 +475,10 @@ function createDeterministicId(input: string): string {
 }
 
 /**
- * Sets the properties for a Vercel Tool, including an ID and inputSchema
- * @param tool - The tool to set the properties for
- * @returns The tool with the properties set
+ * Sets the properties for a Vercel Tool, including an ID and inputSchema.
+ *
+ * @param tool - The tool to set the properties for.
+ * @returns The tool with the properties set.
  */
 function setVercelToolProperties(tool: VercelTool) {
   const inputSchema = convertVercelToolParameters(tool);
@@ -492,12 +495,15 @@ function setVercelToolProperties(tool: VercelTool) {
 }
 
 /**
- * Ensures a tool has an ID and inputSchema by generating one if not present
- * @param tool - The tool to ensure has an ID and inputSchema
- * @returns The tool with an ID and inputSchema
+ * Ensures a tool has an ID and inputSchema by generating one if not present.
+ *
+ * @param tool - The tool to ensure has an ID and inputSchema.
+ * @returns The tool with an ID and inputSchema.
  */
-export function ensureToolProperties(tools: ToolsInput): ToolsInput {
-  const toolsWithProperties = Object.keys(tools).reduce<ToolsInput>((acc, key) => {
+export function ensureToolProperties<TSchemaDeps extends ZodSchema | undefined = undefined>(
+  tools: ToolsInput<TSchemaDeps>,
+): ToolsInput<TSchemaDeps> {
+  const toolsWithProperties = Object.keys(tools).reduce<ToolsInput<TSchemaDeps>>((acc, key) => {
     const tool = tools?.[key];
     if (tool) {
       if (isVercelTool(tool)) {
@@ -520,11 +526,12 @@ function convertVercelToolParameters(tool: VercelTool): z.ZodType {
 }
 
 /**
- * Converts a Vercel Tool or Mastra Tool into a CoreTool format
- * @param tool - The tool to convert (either VercelTool or ToolAction)
- * @param options - Tool options including Mastra-specific settings
- * @param logType - Type of tool to log (tool or toolset)
- * @returns A CoreTool that can be used by the system
+ * Converts a Vercel Tool or Mastra Tool into a CoreTool format.
+ *
+ * @param tool - The tool to convert (either VercelTool or ToolAction).
+ * @param options - Tool options including Mastra-specific settings.
+ * @param logType - Type of tool to log (tool or toolset).
+ * @returns A CoreTool that can be used by the system.
  */
 export function makeCoreTool(tool: ToolToConvert, options: ToolOptions, logType?: 'tool' | 'toolset'): CoreTool {
   // Helper to get parameters based on tool type
@@ -544,10 +551,11 @@ export function makeCoreTool(tool: ToolToConvert, options: ToolOptions, logType?
 }
 
 /**
- * Creates a proxy for a Mastra instance to handle deprecated properties
- * @param mastra - The Mastra instance to proxy
- * @param logger - The logger to use for warnings
- * @returns A proxy for the Mastra instance
+ * Creates a proxy for a Mastra instance to handle deprecated properties.
+ *
+ * @param mastra - The Mastra instance to proxy.
+ * @param logger - The logger to use for warnings.
+ * @returns A proxy for the Mastra instance.
  */
 export function createMastraProxy({ mastra, logger }: { mastra: Mastra; logger: Logger }) {
   return new Proxy(mastra, {
