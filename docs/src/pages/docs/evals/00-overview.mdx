@@ -13,7 +13,7 @@ Evals can be run in the cloud, capturing real-time results. But evals can also b
 
 ## Types of Evals
 
-There are different kinds of evals, each serving a specific purpose:
+There are different kinds of evals, each serving a specific purpose. Here are some common types:
 
 1. **Textual Evals**: Evaluate accuracy, reliability, and context understanding of agent responses
 2. **Classification Evals**: Measure accuracy in categorizing data based on predefined categories
@@ -22,7 +22,7 @@ There are different kinds of evals, each serving a specific purpose:
 
 ## Getting Started
 
-Evals need to be added to an agent. Here's how to use the default metrics:
+Evals need to be added to an agent. Here's an example using the faithfulness, content similarity, and hallucination metrics:
 
 ```typescript copy showLineNumbers filename="src/mastra/agents/index.ts"
 import { Agent } from "@mastra/core/agent";
@@ -81,7 +81,6 @@ Once you're hitting your targets:
 2. Document what works - Keep notes on successful approaches
 3. Test edge cases - Add examples that cover unusual scenarios
 4. Fine-tune - Look for ways to improve efficiency
-
 
 See [Textual Evals](/docs/evals/textual-evals) for more info on what evals can do.
 
