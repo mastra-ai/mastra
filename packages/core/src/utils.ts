@@ -304,7 +304,7 @@ interface ToolOptions {
   agentName?: string;
 }
 
-type ToolToConvert = VercelTool | ToolAction<any, any, any, any>;
+type ToolToConvert = VercelTool | ToolAction<any, any, any>;
 
 interface LogOptions {
   agentName?: string;
