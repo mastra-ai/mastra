@@ -1,5 +1,12 @@
 # @mastra/core
 
+## 0.6.2-alpha.0
+
+### Patch Changes
+
+- beaf1c2: createTool type fixes
+- 3084e13: More parallel memory operations
+
 ## 0.6.1
 
 ### Patch Changes

@@ -1,5 +1,15 @@
 # mastra
 
+## 0.4.1-alpha.1
+
+### Patch Changes
+
+- 2f6a8b6: Update port handling in dev command to ensure CLI port takes precedence over environment variables and add warning when overriding PORT environment variable.
+- Updated dependencies [beaf1c2]
+- Updated dependencies [3084e13]
+  - @mastra/core@0.6.2-alpha.0
+  - @mastra/deployer@0.2.2-alpha.1
+
 ## 0.4.1-alpha.0
 
 ### Patch Changes
