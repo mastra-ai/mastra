@@ -2893,6 +2893,7 @@ export const weatherAgent = new Agent({
 
 Your primary function is to help users get weather details for specific locations. When responding:
 - Always ask for a location if none is provided
+- If the location name isn’t in English, please translate it
 - Include relevant details like humidity, wind conditions, and precipitation
 - Keep responses concise but informative
 
@@ -2986,7 +2987,7 @@ fetch('http://localhost:4111/api/agents/weatherAgent/generate', {
 To use Mastra in your frontend applications, you can use our type-safe client SDK to
 interact with your Mastra REST APIs.
 
-See our [Client SDK documentation](/docs/reference/client-js) for detailed usage instructions.
+See our [Client SDK documentation](/docs/deployment/client) for detailed usage instructions.
 
 ## Run from the command line
 
@@ -3722,13 +3723,13 @@ You've just built a workflow to parse a resume and decide which question to ask 
 
 ---
 title: "Introduction | Mastra Docs"
-description: "Mastra is a Typescript agent framework. It helps you build AI applications and features quickly. It gives you the set of primitives you need: workflows, agents, RAG, integrations, syncs and evals."
+description: "Mastra is a TypeScript agent framework. It helps you build AI applications and features quickly. It gives you the set of primitives you need: workflows, agents, RAG, integrations, syncs and evals."
 ---
 
 # About Mastra
 Source: https://mastra.ai/docs
 
-Mastra is an open-source Typescript agent framework. 
+Mastra is an open-source TypeScript agent framework. 
 
 It's designed to give you the primitives you need to build AI applications and features. 
 
@@ -3976,7 +3977,7 @@ By default, the server runs at http://localhost:4111, but you can change the por
 
 ## Using the Client SDK
 
-The easiest way to interact with your local Mastra server is through our [TypeScript/JavaScript Client SDK](/docs/reference/client-js). Install it with:
+The easiest way to interact with your local Mastra server is through our [TypeScript/JavaScript Client SDK](/docs/deployment/client). Install it with:
 
 ```bash
 npm install @mastra/client-js
@@ -4017,7 +4018,7 @@ The client SDK provides type-safe wrappers for all API endpoints, making it much
 `mastra dev` makes it easy to develop, debug, and iterate on your AI logic in a self-contained environment before deploying to production.
 
 - [Mastra Dev reference](../reference/cli/dev.mdx)
-- [Client SDK documentation](/docs/reference/client-js)
+- [Client SDK documentation](/docs/deployment/client)
 
 
 ---
@@ -6224,7 +6225,7 @@ description: "A simple and type-safe interface to interact with Mastra REST APIs
 ---
 
 # Mastra Client SDK
-Source: https://mastra.ai/docs/reference/client-js
+Source: https://mastra.ai/docs/deployment/client
 
 The Mastra Client SDK provides a simple and type-safe interface to interact with Mastra REST APIs from TypeScript and JavaScript applications. It offers comprehensive support for all Mastra features including agents, vectors, memory, tools, and workflows.
 
@@ -23683,6 +23684,7 @@ const weatherAgent = new Agent({
   instructions: `You are a helpful weather assistant that provides accurate weather information.
 Your primary function is to help users get weather details for specific locations. When responding:
 - Always ask for a location if none is provided
+- If the location name isn’t in English, please translate it
 - Include relevant details like humidity, wind conditions, and precipitation
 - Keep responses concise but informative
 Use the weatherTool to fetch current weather data.`,
