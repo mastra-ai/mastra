@@ -1,13 +1,8 @@
+import { MarkdownRenderer } from '../../components/ui/markdown-renderer';
 import { ToolCallContentPartComponent } from '@assistant-ui/react';
-import { MarkdownRenderer } from '@/chat-ui/markdown-renderer';
 import { CheckIcon, ChevronDownIcon, ChevronUpIcon, LoaderCircle, ExternalLinkIcon } from 'lucide-react';
 import { useState } from 'react';
 import { cn } from '@/lib/utils';
-
-interface ToolCallAction {
-  agent: string;
-  input: string;
-}
 
 // Define custom color classes with improved contrast
 const purpleClasses = {
@@ -66,7 +61,7 @@ export const ToolFallback: ToolCallContentPartComponent = props => {
                   )}
                 </div>
                 <div>
-                  <p className="font-medium text-sm text-gray-100">{action.agent?.replace('_', ' ')}</p>
+                  <p className="font-medium text-sm text-gray-100">{action.agent?.replaceAll('_', ' ')}</p>
                 </div>
               </div>
               <div className="flex items-center gap-2">
