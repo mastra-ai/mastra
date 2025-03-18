@@ -6,46 +6,48 @@ description: "Learn how to use the Mastra MCP documentation server in your IDE t
 # Mastra Tools for your agentic IDE
 
 `@mastra/mcp-docs-server` provides direct access to Mastra's complete knowledge base in Cursor, Windsurf, Cline, or any other IDE that supports MCP.
-It has documentation, code examples, technical blog posts / feature announcements, and package changelogs which your IDE can read to help you build with Mastra.
 
-## How it works
+It has access to documentation, code examples, technical blog posts / feature announcements, and package changelogs which your IDE can read to help you build with Mastra.
 
 The MCP server tools have been designed to allow an agent to query the specific information it needs to complete a Mastra related task - for example: adding a Mastra feature to an agent, scaffolding a new project, or helping you understand how something works.
 
-Once it's installed you can send the agent prompts and assume in understands Mastra.
+## How it works
 
-Add features:
+Once it's installed in your IDE you can write prompts and assume the agent will understand everything about Mastra.
+
+### Add features
 
 - "Add evals to my agent and write tests"
-- "Write me a workflow that does the following [...]"
-- "Make a new tool that allows my agent to [...]"
+- "Write me a workflow that does the following `[task]`"
+- "Make a new tool that allows my agent to access `[3rd party API]`"
 
-Ask about integrations:
+### Ask about integrations
 
-- "Does Mastra work with the AI SDK? How can I use it in my [React/Svelte/etc] project?"
+- "Does Mastra work with the AI SDK?
+  How can I use it in my `[React/Svelte/etc]` project?"
 - "What's the latest Mastra news around MCP?"
-- "Does Mastra support [provider]'s speech and voice API? Show me an example in my code of how I can use it."
+- "Does Mastra support `[provider]` speech and voice APIs? Show me an example in my code of how I can use it."
 
-Debug or updating existing code:
+### Debug or updating existing code
 
 - "I'm running into a bug with agent memory, have there been any related changes or bug fixes recently?"
-- "How does working memory behave in Mastra and how can I use it to do [task]?"
-- "I saw there are new workflow features, explain them to me and then update [workflow] to use them."
+- "How does working memory behave in Mastra and how can I use it to do `[task]`? It doesn't seem to work the way I expect."
+- "I saw there are new workflow features, explain them to me and then update `[workflow]` to use them."
 
-And more - if you have a question, try asking your IDE and let it look it up for you.
+**And more** - if you have a question, try asking your IDE and let it look it up for you.
 
 ## Automatic Installation
 
 Run `pnpm create mastra@latest` and select Cursor or Windsurf when prompted to install the MCP server. For other IDEs, or if you already have a Mastra project, install the MCP server by following the instructions below.
 
-## Installation
+## Manual Installation
 
 - **Cursor**: Edit `.cursor/mcp.json` in your project root, or `~/.cursor/mcp.json` for global configuration
 - **Windsurf**: Edit `~/.codeium/windsurf/mcp_config.json` (only supports global configuration)
 
 Add the following configuration:
 
-MacOS/Linux:
+### MacOS/Linux
 
 ```json
 {
@@ -58,7 +60,7 @@ MacOS/Linux:
 }
 ```
 
-Windows:
+### Windows
 
 ```json
 {
@@ -71,16 +73,16 @@ Windows:
 }
 ```
 
-## After adding the configuration
+## After Configuration
 
-In Cursor:
+### Cursor
 
 1. Open Cursor settings
 2. Navigate to MCP settings
 3. Click "enable" on the Mastra MCP server
 4. If you have an agent chat open, you'll need to re-open it or start a new chat to use the MCP server
 
-In Windsurf:
+### Windsurf
 
 1. Fully quit and re-open Windsurf
 2. If tool calls start failing, go to Windsurfs MCP settings and re-start the MCP server. This is a common Windsurf MCP issue and isn't related to Mastra. Right now Cursor's MCP server is more stable than Windsurfs is.

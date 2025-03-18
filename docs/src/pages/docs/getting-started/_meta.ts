@@ -1,7 +1,7 @@
 const meta = {
   installation: "Installation",
   "project-structure": "Project Structure",
-  "mcp-docs-server": "Mastra tools for Cursor and Windsurf",
+  "mcp-docs-server": "Agent Code Editor Tools",
 };
 
 export default meta;
