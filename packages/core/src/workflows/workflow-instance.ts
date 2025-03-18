@@ -472,7 +472,6 @@ export class WorkflowInstance<TSteps extends Step<any, any, any>[] = any, TTrigg
       throw new Error('Failed to parse workflow snapshot');
     }
 
-    const origSnapshot = parsedSnapshot;
     const startStepId = parsedSnapshot.suspendedSteps?.[stepId];
     if (!startStepId) {
       return;
