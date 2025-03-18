@@ -76,7 +76,7 @@ const text = await voice.listen(audioStream);
 
 ## Features
 
-- High-quality both Text-to-Speech and Speech-to-Text synthesis
+- High-quality Text-to-Speech and Speech-to-Text synthesis
 - Support for 10+ Indian languages
 - Choice of 10+ diverse speakers
 - Advanced voice customization options
