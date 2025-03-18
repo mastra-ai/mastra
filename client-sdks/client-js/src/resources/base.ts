@@ -21,14 +21,20 @@ export class BaseResource {
 
     for (let attempt = 0; attempt <= retries; attempt++) {
       try {
+        const defaultHeaders: Record<string, string> =
+          options.body instanceof FormData
+            ? {} // Let browser set correct Content-Type for FormData which is required for audio
+            : { 'Content-Type': 'application/json' };
+        console.log(`REQUESTING`, `${baseUrl}${path}`);
         const response = await fetch(`${baseUrl}${path}`, {
           ...options,
           headers: {
-            'Content-Type': 'application/json',
+            ...defaultHeaders,
             ...headers,
             ...options.headers,
           },
-          body: options.body ? JSON.stringify(options.body) : undefined,
+          body:
+            options.body instanceof FormData ? options.body : options.body ? JSON.stringify(options.body) : undefined,
         });
 
         if (!response.ok) {
