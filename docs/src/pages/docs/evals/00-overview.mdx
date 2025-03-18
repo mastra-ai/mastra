@@ -22,28 +22,27 @@ There are different kinds of evals, each serving a specific purpose. Here are so
 
 ## Getting Started
 
-Evals need to be added to an agent. Here's an example using the faithfulness, content similarity, and hallucination metrics:
+Evals need to be added to an agent. Here's an example using the summarization, content similarity, and tone consistency metrics:
 
 ```typescript copy showLineNumbers filename="src/mastra/agents/index.ts"
 import { Agent } from "@mastra/core/agent";
 import { openai } from "@ai-sdk/openai";
 import { 
-  FaithfulnessMetric,
-  ContentSimilarityMetric,
-  HallucinationMetric 
-} from "@mastra/evals/nlp";
+  SummarizationMetric,
+} from "@mastra/evals/llm";
+import { ContentSimilarityMetric, ToneConsistencyMetric } from "@mastra/evals/nlp";
+
+const model = openai("gpt-4o");
  
 export const myAgent = new Agent({
   name: "ContentWriter",
   instructions: "You are a content writer that creates accurate summaries",
-  model: openai("gpt-4o"),
-  evals: [
-    new FaithfulnessMetric(),     // Checks if output matches source material
-    new ContentSimilarityMetric({
-      threshold: 0.8              // Require 80% similarity with expected output
-    }),
-    new HallucinationMetric()
-  ]
+  model,
+  evals: {
+    summarization: new SummarizationMetric(model),
+    contentSimilarity: new ContentSimilarityMetric(),
+    tone: new ToneConsistencyMetric()
+  }
 });
 ```
 
