@@ -50,7 +50,7 @@ export async function speakHandler(c: Context) {
     const { input, options } = await c.req.json();
     await validateBody({ input });
 
-    const audioStream = await agent.speak(input, options);
+    const audioStream = await agent.voice.speak(input, options);
 
     c.header('Content-Type', `audio/${options.filetype ?? 'mp3'}`);
     c.header('Transfer-Encoding', 'chunked');
@@ -69,6 +69,7 @@ export async function listenHandler(c: Context) {
     const mastra: Mastra = c.get('mastra');
     const agentId = c.req.param('agentId');
     const agent = mastra.getAgent(agentId);
+    const logger = mastra.getLogger();
 
     if (!agent) {
       throw new HTTPException(404, { message: 'Agent not found' });
@@ -78,13 +79,30 @@ export async function listenHandler(c: Context) {
       throw new HTTPException(400, { message: 'Agent does not have voice capabilities' });
     }
 
-    const audioData = await c.req.arrayBuffer();
+    const formData = await c.req.formData();
+    const audioFile = formData.get('audio');
+    const options = formData.get('options');
+
+    if (!audioFile || !(audioFile instanceof File)) {
+      throw new HTTPException(400, { message: 'Audio file is required' });
+    }
+
+    const audioData = await audioFile.arrayBuffer();
     const audioStream = new Readable();
     audioStream.push(Buffer.from(audioData));
     audioStream.push(null);
 
-    const options = c.req.query();
-    const transcription = await agent.listen(audioStream, options);
+    let parsedOptions;
+    try {
+      parsedOptions = options ? JSON.parse(options as string) : {};
+    } catch (error) {
+      if (error instanceof SyntaxError) {
+        logger.error('Invalid JSON in options:', error);
+      }
+      parsedOptions = {};
+    }
+
+    const transcription = await agent.voice.listen(audioStream, parsedOptions);
     return c.json({ text: transcription });
   } catch (error) {
     return handleError(error, 'Error transcribing speech');
