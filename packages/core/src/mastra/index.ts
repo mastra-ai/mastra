@@ -3,6 +3,7 @@ import type { MastraDeployer } from '../deployer';
 import { LogLevel, createLogger, noopLogger } from '../logger';
 import type { Logger } from '../logger';
 import type { MastraMemory } from '../memory/memory';
+import type { AgentNetwork } from '../network';
 import type { MastraStorage } from '../storage';
 import { DefaultProxyStorage } from '../storage/default-proxy-storage';
 import { InstrumentClass, Telemetry } from '../telemetry';
@@ -17,8 +18,10 @@ export interface Config<
   TVectors extends Record<string, MastraVector> = Record<string, MastraVector>,
   TTTS extends Record<string, MastraTTS> = Record<string, MastraTTS>,
   TLogger extends Logger = Logger,
+  TNetworks extends Record<string, AgentNetwork> = Record<string, AgentNetwork>,
 > {
   agents?: TAgents;
+  networks?: TNetworks;
   storage?: MastraStorage;
   vectors?: TVectors;
   logger?: TLogger | false;
@@ -50,6 +53,7 @@ export class Mastra<
   TVectors extends Record<string, MastraVector> = Record<string, MastraVector>,
   TTTS extends Record<string, MastraTTS> = Record<string, MastraTTS>,
   TLogger extends Logger = Logger,
+  TNetworks extends Record<string, AgentNetwork> = Record<string, AgentNetwork>,
 > {
   #vectors?: TVectors;
   #agents: TAgents;
@@ -64,6 +68,7 @@ export class Mastra<
   #telemetry?: Telemetry;
   #storage?: MastraStorage;
   #memory?: MastraMemory;
+  #networks?: TNetworks;
 
   /**
    * @deprecated use getTelemetry() instead
@@ -227,6 +232,19 @@ This is a warning for now, but will throw an error in the future
     }
 
     this.#agents = agents as TAgents;
+
+    /*
+    Networks
+    */
+    this.#networks = {} as TNetworks;
+
+    if (config?.networks) {
+      Object.entries(config.networks).forEach(([key, network]) => {
+        network.__registerMastra(this);
+        // @ts-ignore
+        this.#networks[key] = network;
+      });
+    }
 
     /*
     Workflows
@@ -427,6 +445,23 @@ This is a warning for now, but will throw an error in the future
 
   public getServerMiddleware() {
     return this.#serverMiddleware;
+  }
+
+  public getNetworks() {
+    return Object.values(this.#networks || {});
+  }
+
+  /**
+   * Get a specific network by ID
+   * @param networkId - The ID of the network to retrieve
+   * @returns The network with the specified ID, or undefined if not found
+   */
+  public getNetwork(networkId: string): AgentNetwork | undefined {
+    const networks = this.getNetworks();
+    return networks.find(network => {
+      const routingAgent = network.getRoutingAgent();
+      return network.formatAgentId(routingAgent.name) === networkId;
+    });
   }
 
   public async getLogsByRunId({ runId, transportId }: { runId: string; transportId: string }) {
