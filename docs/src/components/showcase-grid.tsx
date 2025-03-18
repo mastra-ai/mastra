@@ -46,37 +46,34 @@ const ShowcaseCard = ({
 
 export const ShowcaseGrid = () => {
   const showcaseItems: ShowcaseCardProps[] = [
-     {
+    {
       title: "NotebookLM-Mastra",
-      description: "NotebookLM is an AI-powered assistant that creates podcasts from the sources you upload",
+      description:
+        "NotebookLM is an AI-powered assistant that creates podcasts from the sources you upload",
       image: "/showcase/notebook-lm.png",
       link: "https://notebooklm-mastra.vercel.app/",
     },
-    // {
-    //   title: "Audiofeed",
-    //   description: "Audiofeed repurposes your content into audio and video.",
-    //   image: "/showcase/audio-feed.png",
-    //   link: "https://audiofeed.ai",
-    // },
-    // {
-    //   title: "Bird Checker",
-    //   description: "Bird Checker is a bird identification app.",
-    //   image: "/showcase/bird-checker.png",
-    //   link: "https://bird-checker.vercel.app",
-    // },
-    // {
-    //   title: "OpenAPI Spec Writer",
-    //   description: "Generate an open api spec from your documentation url.",
-    //   image: "/showcase/open-api-spec-writer.png",
-    //   link: "https://openapi-spec-writer.vercel.app",
-    // },
-    // {
-    //   title: "Crypto Chatbot",
-    //   description:
-    //     "You can ask about current crypto prices and trends in the cryptocurrency market.",
-    //   image: "/showcase/crypto-chatbot.png",
-    //   link: "https://crypto-chatbot-xi.vercel.app/",
-    // },
+    {
+      title: "AI Beats Lab",
+      description:
+        "The AI Beats Laboratory is an interactive web application that generates musical beats and melodies using AI agents.",
+      image: "/showcase/ai-beats-lab.png",
+      link: "https://ai-beat-lab.lovable.app/",
+    },
+    {
+      title: "TravelAI",
+      description:
+        "TravelAI is a travel assistant that helps you plan your next trip.",
+      image: "/showcase/travel-ai.png",
+      link: "https://mastra-eight.vercel.app/",
+    },
+    {
+      title: "Excalidraw app",
+      description:
+        "a tool that converts whiteboard images into editable Excalidraw diagrams",
+      image: "/showcase/excalidraw-app.png",
+      link: "https://excalidraw-app.vercel.app/",
+    },
   ];
 
   return (
