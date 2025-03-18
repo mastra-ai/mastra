@@ -36,17 +36,17 @@ npx create-mastra@latest
   </Tabs.Tab>
   <Tabs.Tab>
 ```bash copy
-npm create mastra
+npm create mastra@latest
 ```
   </Tabs.Tab>
   <Tabs.Tab>
 ```bash copy
-yarn create mastra
+yarn create mastra@latest
 ```
 </Tabs.Tab>
   <Tabs.Tab>
 ```bash copy
-pnpm create mastra
+pnpm create mastra@latest
 ```
 </Tabs.Tab>
 </Tabs>
@@ -64,9 +64,20 @@ Select default provider:
   ◯ Anthropic
   ◯ Groq
 Would you like to include example code? No / Yes
+Turn your IDE into a Mastra expert? (Installs MCP server)
+  ◯ Skip for now
+  ◯ Cursor
+  ◯ Windsurf
 ```
 
-After the prompts, `create-mastra` will set up your project directory with TypeScript, install dependencies, and configure your selected components and LLM provider.
+After the prompts, `create-mastra` will:
+
+1. Set up your project directory with TypeScript
+2. Install dependencies
+3. Configure your selected components and LLM provider
+4. Configure the MCP server in your IDE (if selected) for instant access to docs, examples, and help while you code
+
+**MCP Note:** If you're using a different IDE, you can install the MCP server manually by following the instructions in the [MCP server docs](/docs/getting-started/mcp-docs-server). **Also** note that there are additional steps for [Cursor and Windsurf](/docs/getting-started/mcp-docs-server#after-configuration) to activate the MCP server.
 
 ### Set Up your API Key
 
