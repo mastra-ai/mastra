@@ -77,20 +77,17 @@ await vectorStore.upsert({
   metadata: chunks?.map((chunk: any) => ({ text: chunk.text })),
 });
 
-const queries = [
-  'explain technical trading analysis',
-  'explain trading card valuation',
-  'how do you analyze market resistance',
-];
-
-const answerOne = await agent.generate('explain technical trading analysis');
-console.log('\nQuery:', 'explain technical trading analysis');
+const queryOne = 'explain technical trading analysis';
+const answerOne = await agent.generate(queryOne);
+console.log('\nQuery:', queryOne);
 console.log('Response:', answerOne.text);
 
-const answerTwo = await agent.generate('explain trading card valuation');
-console.log('\nQuery:', 'explain trading card valuation');
+const queryTwo = 'explain trading card valuation';
+const answerTwo = await agent.generate(queryTwo);
+console.log('\nQuery:', queryTwo);
 console.log('Response:', answerTwo.text);
 
-const answerThree = await agent.generate('how do you analyze market resistance');
-console.log('\nQuery:', 'how do you analyze market resistance');
+const queryThree = 'how do you analyze market resistance';
+const answerThree = await agent.generate(queryThree);
+console.log('\nQuery:', queryThree);
 console.log('Response:', answerThree.text);

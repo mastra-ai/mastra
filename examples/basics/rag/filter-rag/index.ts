@@ -106,21 +106,17 @@ await vectorStore.upsert({
   metadata: chunkMetadata,
 });
 
-const answerOne = await agent.generate('What are the adaptation strategies mentioned?');
-console.log('\nQuery:', 'What are the adaptation strategies mentioned?');
+const queryOne = 'What are the adaptation strategies mentioned?';
+const answerOne = await agent.generate(queryOne);
+console.log('\nQuery:', queryOne);
 console.log('Response:', answerOne.text);
 
-const answerTwo = await agent.generate(
-  'Show me recent sections. Check the "nested.id" field and return values that are greater than 2.',
-);
-console.log(
-  '\nQuery:',
-  'Show me recent sections. Check the "nested.id" field and return values that are greater than 2.',
-);
+const queryTwo = 'Show me recent sections. Check the "nested.id" field and return values that are greater than 2.';
+const answerTwo = await agent.generate(queryTwo);
+console.log('\nQuery:', queryTwo);
 console.log('Response:', answerTwo.text);
 
-const answerThree = await agent.generate(
-  'Search the "text" field using regex operator to find sections containing "temperature".',
-);
-console.log('\nQuery:', 'Search the "text" field using regex operator to find sections containing "temperature".');
+const queryThree = 'Search the "text" field using regex operator to find sections containing "temperature".';
+const answerThree = await agent.generate(queryThree);
+console.log('\nQuery:', queryThree);
 console.log('Response:', answerThree.text);

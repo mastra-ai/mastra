@@ -97,20 +97,26 @@ await vectorStore.upsert({
   metadata: chunks?.map((chunk: any) => ({ text: chunk.text })),
 });
 
-const answerOne = await ragAgent.generate(
-  "What are the direct and indirect effects of early railway decisions on Riverdale Heights' current state?",
-);
-console.log(
-  '\nQuery:',
-  "What are the direct and indirect effects of early railway decisions on Riverdale Heights' current state?",
-);
+const queryOne =
+  "What are the direct and indirect effects of early railway decisions on Riverdale Heights' current state?";
+const answerOne = await ragAgent.generate(queryOne);
+console.log('\nQuery:', queryOne);
 console.log('Response:', answerOne.text);
 
-const answerTwo = await ragAgent.generate(
-  'How have changes in transportation infrastructure affected different generations of local businesses and community spaces?',
-);
-console.log(
-  '\nQuery:',
-  'How have changes in transportation infrastructure affected different generations of local businesses and community spaces?',
-);
+const queryTwo =
+  'How have changes in transportation infrastructure affected different generations of local businesses and community spaces?';
+const answerTwo = await ragAgent.generate(queryTwo);
+console.log('\nQuery:', queryTwo);
 console.log('Response:', answerTwo.text);
+
+const queryThree =
+  'Compare how the Rossi family business and Thompson Steel Works responded to major infrastructure changes, and how their responses affected the community.';
+const answerThree = await ragAgent.generate(queryThree);
+console.log('\nQuery:', queryThree);
+console.log('Response:', answerThree.text);
+
+const queryFour =
+  'Trace how the transformation of the Thompson Steel Works site has influenced surrounding businesses and cultural spaces from 1932 to present.';
+const answerFour = await ragAgent.generate(queryFour);
+console.log('\nQuery:', queryFour);
+console.log('Response:', answerFour.text);
