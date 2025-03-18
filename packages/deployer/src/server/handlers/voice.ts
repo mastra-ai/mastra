@@ -69,6 +69,7 @@ export async function listenHandler(c: Context) {
     const mastra: Mastra = c.get('mastra');
     const agentId = c.req.param('agentId');
     const agent = mastra.getAgent(agentId);
+    const logger = mastra.getLogger();
 
     if (!agent) {
       throw new HTTPException(404, { message: 'Agent not found' });
@@ -95,6 +96,9 @@ export async function listenHandler(c: Context) {
     try {
       parsedOptions = options ? JSON.parse(options as string) : {};
     } catch (error) {
+      if (error instanceof SyntaxError) {
+        logger.error('Invalid JSON in options:', error);
+      }
       parsedOptions = {};
     }
 
