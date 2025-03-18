@@ -70,9 +70,15 @@ export const ShowcaseGrid = () => {
     {
       title: "Excalidraw app",
       description:
-        "a tool that converts whiteboard images into editable Excalidraw diagrams",
+        "A tool that converts whiteboard images into editable Excalidraw diagrams",
       image: "/showcase/excalidraw-app.png",
       link: "https://excalidraw-app.vercel.app/",
+    },
+    {
+      title: "Ecommerce RAG",
+      description: "An RAG application for an ecommerce website",
+      image: "/showcase/ecommerce-rag.png",
+      link: "https://nextjs-commerce-nu-eight-83.vercel.app/",
     },
   ];
 
