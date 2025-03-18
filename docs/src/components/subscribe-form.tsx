@@ -70,15 +70,7 @@ export const SubscribeForm = ({
 
   const onSubmit = async (values: z.infer<typeof formSchema>) => {
     if (buttonState === "success") return;
-    await new Promise((resolve) => setTimeout(resolve, 1000));
-    setButtonState("loading");
-    await new Promise((resolve) => setTimeout(resolve, 1000));
-    setButtonState("success");
-    console.log(values);
-    await new Promise((resolve) => setTimeout(resolve, 1000));
-    setButtonState("idle");
 
-    return;
     const sanitizedEmail = values.email.trim();
     if (!sanitizedEmail) {
       return toast.error("Please enter an email");

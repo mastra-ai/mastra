@@ -18,7 +18,7 @@ const links = [
   },
   {
     text: "llms-full.txt",
-    url: "/llms.txt",
+    url: "/llms-full.txt",
   },
 ];
 
