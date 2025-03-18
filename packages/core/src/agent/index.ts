@@ -196,7 +196,7 @@ export class Agent<
     return title;
   }
 
-  async saveMemory({
+  async fetchMemory({
     threadId,
     memoryConfig,
     resourceId,
@@ -590,7 +590,7 @@ export class Agent<
     let threadIdToUse = threadId;
 
     this.logger.debug(`Saving user messages in memory for agent ${this.name}`, { runId });
-    const saveMessageResponse = await this.saveMemory({
+    const saveMessageResponse = await this.fetchMemory({
       threadId,
       resourceId,
       userMessages: messages,
