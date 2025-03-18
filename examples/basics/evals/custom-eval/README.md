@@ -1,6 +1,6 @@
 # Custom Eval Metric Example
 
-This example demonstrates how to create a custom LLM-based evaluation metric in Mastra to assess recipe completeness.
+This example demonstrates how to create a custom LLM-based evaluation metric in Mastra to check recipes for gluten content.
 
 ## Prerequisites
 
@@ -43,48 +43,54 @@ This example demonstrates how to create a custom LLM-based evaluation metric in 
 
 ## Overview
 
-This example shows how to create a custom LLM-based metric to evaluate recipe completeness. It demonstrates:
+This example shows how to create a custom LLM-based metric to evaluate recipes for gluten content. It demonstrates:
 
-- Creating a custom LLM judge
-- Implementing a metric using the judge
-- Handling evaluation results
+- Using a custom metric with an agent
+- Evaluating recipe responses
+- Identifying gluten sources
 - Providing detailed feedback
 
 ## Example Structure
 
-The example evaluates recipe completeness by checking:
+The example includes two scenarios:
 
-1. Required ingredients are listed
-2. Cooking steps are clear and complete
-3. Important details (time, temperature, etc.) are included
+1. Recipe with gluten (pasta recipe)
+2. Gluten-free recipe (rice and beans)
 
 Each evaluation provides:
 
-- A binary completeness verdict (complete/incomplete)
-- List of missing information
-- Detailed reasoning for the score
+- A binary score (1 for gluten-free, 0 for contains gluten)
+- List of identified gluten sources
+- Detailed reasoning for the verdict
 
 ## Expected Output
 
 The example will output:
 
 ```
-Recipe Evaluation:
-Input: "How do I make pasta?"
-Output: "Boil water and add pasta."
-Result: {
+Example 1 - Recipe with Gluten:
+Input: "Can you give me a simple pasta recipe with exact measurements and timing?"
+Agent Response: [Recipe details...]
+Metric Result: {
   score: 0,
-  info: {
-    missing: ["cooking time", "salt", "pasta quantity", "water quantity"],
-    reason: "The recipe is incomplete. It's missing essential details like quantities, cooking time, and seasoning."
-  }
+  glutenSources: ["pasta (wheat)"],
+  reason: "The recipe contains gluten from wheat-based pasta."
+}
+
+Example 2 - Gluten-Free Recipe:
+Input: "What is a quick way to make rice and beans?"
+Agent Response: [Recipe details...]
+Metric Result: {
+  score: 1,
+  glutenSources: [],
+  reason: "The recipe is gluten-free as rice and beans do not contain gluten."
 }
 ```
 
 ## Key Components
 
-- `RecipeCompletenessJudge`: LLM-based judge for evaluating recipe completeness
-- `RecipeCompletenessMetric`: Main metric class implementing the evaluation logic
-- Configuration options:
-  - `scale`: Adjusts the score range (default: 0-1)
-  - Custom prompts for recipe evaluation
+- `GlutenCheckerMetric`: LLM-based metric for evaluating gluten content in recipes
+- Integration with Chef Michel agent for recipe generation
+- Simple binary scoring system:
+  - 0: Recipe contains gluten
+  - 1: Recipe is gluten-free
