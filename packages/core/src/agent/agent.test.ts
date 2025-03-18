@@ -395,7 +395,7 @@ describe('agent', () => {
       const agent = new Agent({
         name: 'test',
         instructions: 'test agent instructions',
-        model: openai('gpt-4'),
+        model: openai('gpt-4o'),
         tools: {
           mastraTool: createTool({
             id: 'test',
