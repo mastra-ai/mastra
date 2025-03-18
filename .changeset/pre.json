@@ -133,7 +133,11 @@
     "@mastra/voice-openai-realtime": "0.0.2",
     "@mastra/voice-playai": "0.1.6",
     "@mastra/voice-sarvam": "0.1.1",
-    "@mastra/voice-speechify": "0.1.6"
+    "@mastra/voice-speechify": "0.1.6",
+    "examples-agent-network": "0.0.1"
   },
-  "changesets": []
+  "changesets": [
+    "cool-papers-check",
+    "icy-hornets-mate"
+  ]
 }

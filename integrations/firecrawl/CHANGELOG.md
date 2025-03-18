@@ -1,5 +1,14 @@
 # @mastra/firecrawl
 
+## 1.1.12-alpha.0
+
+### Patch Changes
+
+- 404640e: AgentNetwork changeset
+- Updated dependencies [404640e]
+  - @mastra/core@0.6.3-alpha.0
+  - @mastra/rag@0.1.12-alpha.0
+
 ## 1.1.11
 
 ### Patch Changes

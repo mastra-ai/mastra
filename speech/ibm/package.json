@@ -1,6 +1,6 @@
 {
   "name": "@mastra/speech-ibm",
-  "version": "0.1.11",
+  "version": "0.1.12-alpha.0",
   "description": "Mastra IBM speech integration",
   "type": "module",
   "main": "dist/index.js",
