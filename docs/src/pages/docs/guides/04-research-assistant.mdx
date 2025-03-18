@@ -31,7 +31,7 @@ research-assistant/
 ```
 
 <Steps>
-### 1. Initialize Project and Install Dependencies
+### Initialize Project and Install Dependencies
 
 First, create a new directory for your project and navigate into it:
 
@@ -61,11 +61,11 @@ mkdir -p src/agents
 touch src/agents/researchAgent.ts src/index.ts
 ```
 
-### 2. Create the Research Assistant Agent
+### Create the Research Assistant Agent
 
 Now we'll create our RAG-enabled research assistant. The agent uses:
 - A vector query tool to search our paper database
-- GPT-4 for understanding queries and generating responses
+- GPT-4o-mini for understanding queries and generating responses
 - Custom instructions for academic paper analysis
 
 ```typescript copy showLineNumbers filename="src/agents/researchAgent.ts"
@@ -89,13 +89,7 @@ export const researchAgent = new Agent({
 });
 ```
 
-### 3. Load and Process the Paper
-
-This step handles the initial document processing. We:
-1. Set up our Mastra instance with the agent and vector store
-2. Fetch the research paper from its URL
-3. Convert it into a document object
-4. Split it into smaller, manageable chunks for better processing
+### Set Up the Mastra Instance and Vector Store
 
 ```typescript copy showLineNumbers filename="src/index.ts"
 import { MDocument } from '@mastra/rag';
@@ -105,13 +99,21 @@ import { embedMany } from 'ai';
 
 import { researchAgent } from './agents/researchAgent';
 
-// Initialize Mastra and PgVector
 const pgVector = new PgVector(process.env.POSTGRES_CONNECTION_STRING!);
 export const mastra = new Mastra({
   agents: { researchAgent },
   vectors: { pgVector },
 });
+```
 
+### Load and Process the Paper
+
+This step handles the initial document processing. We:
+1. Fetch the research paper from its URL
+2. Convert it into a document object
+3. Split it into smaller, manageable chunks for better processing
+
+```typescript copy showLineNumbers{14} filename="src/index.ts"
 // Load the paper
 const paperUrl = "https://arxiv.org/pdf/2005.14165.pdf";
 const response = await fetch(paperUrl);
@@ -127,7 +129,7 @@ const chunks = await doc.chunk({
 });
 ```
 
-### 4. Create and Store Embeddings
+### Create and Store Embeddings
 
 Finally, we'll prepare our content for RAG by:
 1. Generating embeddings for each chunk of text
@@ -135,15 +137,17 @@ Finally, we'll prepare our content for RAG by:
 3. Storing both the embeddings and their associated text
 This allows our agent to efficiently search and retrieve relevant information.
 
-```typescript copy showLineNumbers{29} filename="src/index.ts"
+```typescript copy showLineNumbers{28} filename="src/index.ts"
 // Generate embeddings
 const { embeddings } = await embedMany({
   model: openai.embedding('text-embedding-3-small'),
   values: chunks.map(chunk => chunk.text),
 });
 
-// Initialize vector store
+// Get the vector store instance from Mastra
 const vectorStore = mastra.getVector('pgVector');
+
+// Create an index for our paper chunks
 await vectorStore.createIndex({
   indexName: 'papers',
   dimension: 1536,
@@ -166,7 +170,7 @@ This will:
 3. Generate embeddings for each chunk
 4. Store both the embeddings and text in our vector database
 
-### 5. Test the Assistant
+### Test the Assistant
 
 Let's test our research assistant with different types of queries:
 
@@ -227,7 +231,7 @@ and the model's potential to amplify these biases. They also acknowledged limita
 methodology and the need for more robust testing frameworks.
 ```
 
-### 6. Serve the Application
+### Serve the Application
 
 Start the Mastra server to expose your research assistant via API:
 
