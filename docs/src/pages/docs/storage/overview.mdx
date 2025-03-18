@@ -1,0 +1,68 @@
+---
+title: Storage in Mastra | Mastra Docs
+description: Overview of Mastra's storage system and data persistence capabilities.
+---
+
+# Mastra Storage
+
+Mastra's storage system provides a unified interface for managing conversation data, workflow states, traces, and evaluation datasets. Mastra defines a common interface for different database providers.
+
+Mastra provides different storage providers, but you can treat them as interchangeable. Eg, you could use libsql in development but postgres in production, and your code will work the same both ways.
+## Data Schema
+
+All storage implementations use these core features:
+
+### Messages
+Stores conversation messages with their content and metadata:
+- Thread association
+- Message role (user/assistant/system)
+- Content
+- Creation timestamp
+
+### Threads
+Groups related messages together:
+- Resource identifier
+- Title
+- Custom metadata
+- Creation/update timestamps
+
+### Workflow Snapshots
+Preserves workflow execution states:
+- Workflow name
+- Run identifier
+- State snapshot
+- Creation/update timestamps
+
+### Evaluations
+Stores agent evaluation results:
+- Input/output pairs
+- Test information
+- Result metrics
+- Agent and metric names
+
+### Traces
+Captures execution traces:
+- Span information (name, parent, trace ID)
+- Scope and kind
+- Timing data
+- Attributes and events
+
+## Configuration
+
+Configure storage when initializing Mastra:
+
+```typescript
+const mastra = new Mastra({
+  storage: {
+    url: process.env.DATABASE_URL,  // Connection string
+    type: 'postgres',               // Provider type
+  },
+});
+```
+
+## Next Steps
+
+For more details on specific storage implementations:
+- [LibSQL Storage](../reference/storage/libsql.mdx)
+- [PostgreSQL Storage](../reference/storage/postgresql.mdx)
+- [Upstash Storage](../reference/storage/upstash.mdx)
