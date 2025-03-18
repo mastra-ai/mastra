@@ -1,0 +1,14 @@
+{
+    "mcpServers": {
+      "mastra": {
+        "command": "pnpx",
+        "args": [
+          "tsx",
+          "./packages/mcp-docs-server/src/stdio.ts"
+        ],
+        "env": {
+          "REBUILD_DOCS_ON_START": "true"
+       }
+      }
+    }
+  }

@@ -16,6 +16,10 @@ const meta = {
     title: "Agents",
     collapsed: false,
   },
+  storage: {
+    title: "Storage",
+    collapsed: false,
+  },
   workflows: {
     title: "Workflows",
     collapsed: false,
@@ -36,6 +40,7 @@ const meta = {
     title: "Evals",
     collapsed: false,
   },
+  integrations: "Integrations",
   faq: "FAQ",
   reference: "Reference",
 };
