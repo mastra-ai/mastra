@@ -7,8 +7,8 @@ import type { ToolsInput } from './agent';
 import type { Logger } from './logger';
 import type { Mastra } from './mastra';
 import type { MastraMemory } from './memory';
+import type { AnyToolAction, CoreTool, VercelTool } from './tools';
 import { Tool } from './tools';
-import type { CoreTool, ToolAction, VercelTool } from './tools';
 
 export const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
@@ -292,7 +292,7 @@ export function isVercelTool(tool?: ToolToConvert): tool is VercelTool {
   return !(tool instanceof Tool);
 }
 
-interface ToolOptions {
+interface ToolOptions<TSchemaDeps extends ZodSchema | undefined = undefined> {
   name: string;
   runId?: string;
   threadId?: string;
@@ -302,9 +302,10 @@ interface ToolOptions {
   mastra?: (Mastra & MastraPrimitives) | MastraPrimitives;
   memory?: MastraMemory;
   agentName?: string;
+  dependencies?: DependenciesType<TSchemaDeps>;
 }
 
-type ToolToConvert = VercelTool | ToolAction<any, any, any, any>;
+type ToolToConvert = VercelTool | AnyToolAction;
 
 interface LogOptions {
   agentName?: string;
@@ -352,10 +353,15 @@ function createExecute(tool: ToolToConvert, options: ToolOptions, logType?: 'too
     if (isVercelTool(tool)) {
       return tool?.execute?.(args, execOptions) ?? undefined;
     }
+
+    const context = args;
+    const dependencies = validateDependencies(tool.dependenciesSchema, options.dependencies);
+
     return (
       tool?.execute?.(
         {
-          context: args,
+          context,
+          dependencies,
           threadId: options.threadId,
           resourceId: options.resourceId,
           mastra: options.mastra,
