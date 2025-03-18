@@ -1,7 +1,7 @@
 import type { Workflow } from '@mastra/core/workflows';
 import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
-import { WorkflowRunResult, MastraClient } from '@mastra/client-js';
+import { WorkflowRunResult, MastraClient } from '@mastra/client';
 
 export const useWorkflow = (workflowId: string, baseUrl: string) => {
   const [workflow, setWorkflow] = useState<Workflow | null>(null);

@@ -1,4 +1,4 @@
-import { MastraClient } from '@mastra/client-js';
+import { MastraClient } from '@mastra/client';
 import type { BaseLogMessage } from '@mastra/core';
 import { useEffect, useState } from 'react';
 import { toast } from 'sonner';

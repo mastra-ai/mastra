@@ -2171,17 +2171,17 @@ For detailed setup instructions, see our [installation guide](/docs/getting-star
 <Tabs items={["npm", "yarn", "pnpm"]}>
   <Tabs.Tab>
 ```bash copy
-npm install @mastra/client-js
+npm install @mastra/client
 ```
   </Tabs.Tab>
   <Tabs.Tab>
 ```bash copy
-yarn add @mastra/client-js
+yarn add @mastra/client
 ```
   </Tabs.Tab>
   <Tabs.Tab>
 ```bash copy
-pnpm add @mastra/client-js
+pnpm add @mastra/client
 ```
   </Tabs.Tab>
 </Tabs>
@@ -2191,7 +2191,7 @@ pnpm add @mastra/client-js
 Create a client instance and use it in your Next.js application:
 
 ```typescript filename="lib/mastra.ts" copy
-import { MastraClient } from '@mastra/client-js';
+import { MastraClient } from '@mastra/client';
 
 // Initialize the client
 export const mastraClient = new MastraClient({
@@ -3980,13 +3980,13 @@ By default, the server runs at http://localhost:4111, but you can change the por
 The easiest way to interact with your local Mastra server is through our [TypeScript/JavaScript Client SDK](/docs/deployment/client). Install it with:
 
 ```bash
-npm install @mastra/client-js
+npm install @mastra/client
 ```
 
 Then configure it to point to your local server:
 
 ```typescript
-import { MastraClient } from "@mastra/client-js";
+import { MastraClient } from "@mastra/client";
 
 const client = new MastraClient({
   baseUrl: "http://localhost:4111",
@@ -6237,18 +6237,18 @@ import { Tabs } from "nextra/components";
   <Tabs.Tab>
 
 ```bash copy
-npm install @mastra/client-js
+npm install @mastra/client
 ```
 
   </Tabs.Tab>
   <Tabs.Tab>
 ```bash copy
-yarn add @mastra/client-js
+yarn add @mastra/client
 ```
   </Tabs.Tab>
   <Tabs.Tab>
 ```bash copy
-pnpm add @mastra/client-js 
+pnpm add @mastra/client 
 ```
 </Tabs.Tab>
 </Tabs>
@@ -6276,7 +6276,7 @@ For more information about local development, see the [Local Development Guide](
 The minimal configuration requires only the `baseUrl` of your Mastra API endpoint:
 
 ```typescript
-import { MastraClient } from "@mastra/client-js";
+import { MastraClient } from "@mastra/client";
 
 const client = new MastraClient({
   baseUrl: "http://localhost:4111",

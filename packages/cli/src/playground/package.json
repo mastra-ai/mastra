@@ -14,7 +14,7 @@
     "@codemirror/lang-json": "^6.0.1",
     "@hookform/resolvers": "^3.10.0",
     "@lezer/highlight": "^1.2.1",
-    "@mastra/client-js": "workspace:*",
+    "@mastra/client": "workspace:*",
     "@mastra/playground-ui": "workspace:^",
     "@radix-ui/react-alert-dialog": "^1.1.6",
     "@radix-ui/react-checkbox": "^1.1.4",

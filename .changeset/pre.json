@@ -2,7 +2,7 @@
   "mode": "pre",
   "tag": "alpha",
   "initialVersions": {
-    "@mastra/client-js": "0.1.9",
+    "@mastra/client": "0.1.9",
     "@mastra/deployer-cloudflare": "0.1.10",
     "@mastra/deployer-netlify": "0.1.10",
     "@mastra/deployer-vercel": "0.1.10",

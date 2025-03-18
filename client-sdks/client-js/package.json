@@ -1,5 +1,5 @@
 {
-  "name": "@mastra/client-js",
+  "name": "@mastra/client",
   "version": "0.1.9",
   "description": "The official TypeScript library for the Mastra Client API",
   "author": "",

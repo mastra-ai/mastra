@@ -50,17 +50,17 @@ For detailed setup instructions, see our [installation guide](/docs/getting-star
 <Tabs items={["npm", "yarn", "pnpm"]}>
   <Tabs.Tab>
 ```bash copy
-npm install @mastra/client-js
+npm install @mastra/client
 ```
   </Tabs.Tab>
   <Tabs.Tab>
 ```bash copy
-yarn add @mastra/client-js
+yarn add @mastra/client
 ```
   </Tabs.Tab>
   <Tabs.Tab>
 ```bash copy
-pnpm add @mastra/client-js
+pnpm add @mastra/client
 ```
   </Tabs.Tab>
 </Tabs>
@@ -70,7 +70,7 @@ pnpm add @mastra/client-js
 Create a client instance and use it in your Next.js application:
 
 ```typescript filename="lib/mastra.ts" copy
-import { MastraClient } from '@mastra/client-js';
+import { MastraClient } from '@mastra/client';
 
 // Initialize the client
 export const mastraClient = new MastraClient({

@@ -299,7 +299,7 @@ importers:
       '@assistant-ui/react-ui':
         specifier: ^0.1.8
         version: 0.1.8(@assistant-ui/react-markdown@0.7.21(@assistant-ui/react@0.7.85(@types/react-dom@19.0.4(@types/react@19.0.10))(@types/react@19.0.10)(react-dom@19.0.0(react@19.0.0))(react@19.0.0)(use-sync-external-store@1.4.0(react@19.0.0)))(@types/react-dom@19.0.4(@types/react@19.0.10))(@types/react@19.0.10)(react-dom@19.0.0(react@19.0.0))(react@19.0.0))(@assistant-ui/react@0.7.85(@types/react-dom@19.0.4(@types/react@19.0.10))(@types/react@19.0.10)(react-dom@19.0.0(react@19.0.0))(react@19.0.0)(use-sync-external-store@1.4.0(react@19.0.0)))(@types/react-dom@19.0.4(@types/react@19.0.10))(@types/react@19.0.10)(react-dom@19.0.0(react@19.0.0))(react@19.0.0)(use-sync-external-store@1.4.0(react@19.0.0))
-      '@mastra/client-js':
+      '@mastra/client':
         specifier: workspace:*
         version: link:../../client-sdks/client-js
       next:
@@ -2717,7 +2717,7 @@ importers:
       '@lezer/highlight':
         specifier: ^1.2.1
         version: 1.2.1
-      '@mastra/client-js':
+      '@mastra/client':
         specifier: workspace:*
         version: link:../../../../client-sdks/client-js
       '@mastra/playground-ui':
@@ -3534,7 +3534,7 @@ importers:
       '@lukeed/uuid':
         specifier: ^2.0.1
         version: 2.0.1
-      '@mastra/client-js':
+      '@mastra/client':
         specifier: workspace:^
         version: link:../../client-sdks/client-js
       '@mastra/core':

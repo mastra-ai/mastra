@@ -12,7 +12,7 @@
     "@assistant-ui/react": "0.7.85",
     "@assistant-ui/react-markdown": "^0.7.21",
     "@assistant-ui/react-ui": "^0.1.8",
-    "@mastra/client-js": "workspace:*",
+    "@mastra/client": "workspace:*",
     "next": "15.0.3",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",

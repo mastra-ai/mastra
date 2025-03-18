@@ -2,7 +2,7 @@ import type { TestInfo, MetricResult } from '@mastra/core/eval';
 import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
 
-import { MastraClient } from '@mastra/client-js';
+import { MastraClient } from '@mastra/client';
 
 export type Evals = {
   input: string;

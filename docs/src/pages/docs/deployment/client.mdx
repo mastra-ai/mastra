@@ -23,17 +23,17 @@ import { Tabs } from "nextra/components";
 <Tabs items={["npm", "yarn", "pnpm"]}>
   <Tabs.Tab>
 ```bash copy
-npm install @mastra/client-js
+npm install @mastra/client
 ```
   </Tabs.Tab>
   <Tabs.Tab>
 ```bash copy
-yarn add @mastra/client-js
+yarn add @mastra/client
 ```
   </Tabs.Tab>
   <Tabs.Tab>
 ```bash copy
-pnpm add @mastra/client-js
+pnpm add @mastra/client
 ```
   </Tabs.Tab>
 </Tabs>
@@ -43,7 +43,7 @@ pnpm add @mastra/client-js
 To get started you'll need to initialize your MastraClient with necessary parameters:
 
 ```typescript
-import { MastraClient } from "@mastra/client-js";
+import { MastraClient } from "@mastra/client";
 
 const client = new MastraClient({
   baseUrl: "http://localhost:4111", // Default Mastra development server port

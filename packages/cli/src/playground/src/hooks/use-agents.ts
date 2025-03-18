@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
-import { GetAgentResponse, MastraClient } from '@mastra/client-js';
+import { GetAgentResponse, MastraClient } from '@mastra/client';
 
 export const useAgents = () => {
   const [agents, setAgents] = useState<Record<string, GetAgentResponse>>({});

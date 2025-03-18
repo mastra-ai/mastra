@@ -1,7 +1,7 @@
 import type { Workflow } from '@mastra/core/workflows';
 import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
-import { MastraClient, GetWorkflowResponse, WorkflowRunResult } from '@mastra/client-js';
+import { MastraClient, GetWorkflowResponse, WorkflowRunResult } from '@mastra/client';
 
 const mastra = new MastraClient({
   baseUrl: '',

@@ -2,7 +2,7 @@ import { useCallback, useMemo, useState } from 'react';
 import { toast } from 'sonner';
 
 import usePolling from '@/lib/polls';
-import { MastraClient } from '@mastra/client-js';
+import { MastraClient } from '@mastra/client';
 
 import type { RefinedTrace } from '@/domains/traces/types';
 import { refineTraces } from '@/domains/traces/utils';

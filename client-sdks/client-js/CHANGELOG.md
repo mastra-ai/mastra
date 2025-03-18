@@ -1,4 +1,4 @@
-# @mastra/client-js
+# @mastra/client
 
 ## 0.1.9
 

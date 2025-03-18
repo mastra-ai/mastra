@@ -1,4 +1,4 @@
-import { WorkflowRunResult } from '@mastra/client-js';
+import { WorkflowRunResult } from '@mastra/client';
 import { createContext, useState } from 'react';
 
 type WorkflowRunContextType = {

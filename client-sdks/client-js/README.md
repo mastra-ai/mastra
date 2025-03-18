@@ -5,7 +5,7 @@ JavaScript/TypeScript client library for the [Mastra AI](https://mastra.ai) fram
 ## Installation
 
 ```bash
-npm install @mastra/client-js
+npm install @mastra/client
 ```
 
 ## Quick Start
