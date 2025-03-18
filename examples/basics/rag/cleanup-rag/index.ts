@@ -61,48 +61,40 @@ The Empire State Building was built in just 410 days. Multi-planetary species su
 `);
 
 const queries = [
-  'What is the average temperature on Mars?',
-  'What technologies are used in modern spacecraft?',
   'What are all the requirements for space settlements?',
-  'What are all the dates mentioned related to space stations?',
-  'What are all the mentions of sustainability in space settlements?',
+  'What are all the technologies mentioned for space exploration?"',
+  'How do settlements handle resource management and sustainability?',
 ];
 
 const documentChunkerTool = createDocumentChunkerTool({
   doc,
   params: {
     strategy: 'recursive',
-    size: 256,
-    overlap: 50,
+    size: 512,
+    overlap: 25,
     separator: '\n',
   },
 });
 
-export const ragAgentOne = new Agent({
+const ragAgent = new Agent({
   name: 'RAG Agent',
-  instructions:
-    'You are a helpful assistant that answers questions based on the provided context. Keep your answers concise and relevant.',
+  instructions: `You are a helpful assistant that handles both querying and cleaning documents.
+    When cleaning: Process, clean, and label data, remove irrelevant information and deduplicate content while preserving key facts.
+    When querying: Provide answers based on the available context. Keep your answers concise and relevant.`,
   model: openai('gpt-4o-mini'),
   tools: {
     vectorQueryTool,
+    documentChunkerTool,
   },
-});
-
-export const ragAgentTwo = new Agent({
-  name: 'Cleanup Agent',
-  instructions: 'You are a helpful assistant that processes, cleans, and labels data before storage.',
-  model: openai('gpt-4o-mini'),
-  tools: { documentChunkerTool },
 });
 
 const pgVector = new PgVector(process.env.POSTGRES_CONNECTION_STRING!);
 
 export const mastra = new Mastra({
-  agents: { ragAgentOne, ragAgentTwo },
+  agents: { ragAgent },
   vectors: { pgVector },
 });
-const ragAgent = mastra.getAgent('ragAgentOne');
-const cleanupAgent = mastra.getAgent('ragAgentTwo');
+const agent = mastra.getAgent('ragAgent');
 
 // Set to 256 to get more chunks
 const chunks = await doc.chunk({
@@ -130,11 +122,11 @@ await vectorStore.upsert({
 });
 
 // Generate responses using the original embeddings
-await answerQueries(queries, ragAgent);
+await answerQueries(queries, agent);
 
-const chunkPrompt = `Take the chunks returned from the tool and clean them up according to the instructions provided. Make sure to filter out irrelevant information that is not space related and remove duplicates.`;
+const chunkPrompt = `Use the tool provided to clean the chunks. Make sure to filter out irrelevant information that is not space related and remove duplicates.`;
 
-const newChunks = await cleanupAgent.generate(chunkPrompt);
+const newChunks = await agent.generate(chunkPrompt);
 
 const updatedDoc = MDocument.fromText(newChunks.text);
 
@@ -162,30 +154,21 @@ await vectorStore.upsert({
 });
 
 // Generate responses using the cleaned embeddings
-await answerQueries(queries, ragAgent);
+await answerQueries(queries, agent);
 
-async function generateResponse(query: string, agent: Agent) {
-  // Create a prompt that includes both context and query
-  const prompt = `
+async function answerQueries(queries: string[], agent: Agent) {
+  for (const query of queries) {
+    try {
+      const prompt = `
       Please answer the following question:
       ${query}
 
       Please base your answer only on the context provided in the tool. If the context doesn't contain enough information to fully answer the question, please state that explicitly. 
       `;
-
-  // Call the agent to generate a response
-  const completion = await agent.generate(prompt);
-
-  return completion.text;
-}
-
-async function answerQueries(queries: string[], agent: Agent) {
-  for (const query of queries) {
-    try {
       // Generate and log the response
-      const answer = await generateResponse(query, agent);
+      const answer = await agent.generate(prompt);
       console.log('\nQuery:', query);
-      console.log('Response:', answer);
+      console.log('Response:', answer.text);
     } catch (error) {
       console.error(`Error processing query "${query}":`, error);
     }
