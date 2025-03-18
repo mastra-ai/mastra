@@ -1,12 +1,12 @@
 # Custom Eval Metric Example
 
-This example demonstrates how to create custom evaluation metrics in Mastra, from simple string matching to LLM-based evaluation.
+This example demonstrates how to create a custom LLM-based evaluation metric in Mastra to assess recipe completeness.
 
 ## Prerequisites
 
 - Node.js v20.0+
 - pnpm (recommended) or npm
-- OpenAI API key (for LLM-based metric)
+- OpenAI API key (required for LLM-based evaluation)
 
 ## Getting Started
 
@@ -43,39 +43,48 @@ This example demonstrates how to create custom evaluation metrics in Mastra, fro
 
 ## Overview
 
-This example demonstrates how to create custom evaluation metrics. It evaluates:
+This example shows how to create a custom LLM-based metric to evaluate recipe completeness. It demonstrates:
 
-- Custom metric implementation
-- Integration with Mastra's core
-- Metric result formatting
-- LLM-based evaluation
+- Creating a custom LLM judge
+- Implementing a metric using the judge
+- Handling evaluation results
+- Providing detailed feedback
 
 ## Example Structure
 
-The example includes three scenarios:
+The example evaluates recipe completeness by checking:
 
-1. Simple Metric: Testing keyword matching (basic string comparison)
-2. Complex Metric: Testing dietary preferences (LLM-based analysis)
-3. Mixed Case: Testing compliant recipe (edge case handling)
+1. Required ingredients are listed
+2. Cooking steps are clear and complete
+3. Important details (time, temperature, etc.) are included
 
-Each scenario demonstrates:
+Each evaluation provides:
 
-- Setting up custom metric classes
-- Implementing measure() method
-- Handling different input types
-- Interpreting the results with detailed reasoning
+- A binary completeness verdict (complete/incomplete)
+- List of missing information
+- Detailed reasoning for the score
 
 ## Expected Output
 
 The example will output:
 
-- The input and output for each scenario
-- The metric score (0-1)
-- Detailed analysis results
-- Custom metric-specific information
+```
+Recipe Evaluation:
+Input: "How do I make pasta?"
+Output: "Boil water and add pasta."
+Result: {
+  score: 0,
+  info: {
+    missing: ["cooking time", "salt", "pasta quantity", "water quantity"],
+    reason: "The recipe is incomplete. It's missing essential details like quantities, cooking time, and seasoning."
+  }
+}
+```
 
 ## Key Components
 
-- `KeywordMatchMetric`: Simple string-based metric example
-- `DietaryPreferencesMetric`: Complex LLM-based metric example
-- Configuration options vary by metric type
+- `RecipeCompletenessJudge`: LLM-based judge for evaluating recipe completeness
+- `RecipeCompletenessMetric`: Main metric class implementing the evaluation logic
+- Configuration options:
+  - `scale`: Adjusts the score range (default: 0-1)
+  - Custom prompts for recipe evaluation

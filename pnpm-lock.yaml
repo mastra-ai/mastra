@@ -575,29 +575,6 @@ importers:
         specifier: ^16.4.7
         version: 16.4.7
 
-  examples/basics/evals/custom/llm-as-judge:
-    dependencies:
-      '@ai-sdk/openai':
-        specifier: latest
-        version: 1.2.5(zod@3.24.2)
-      '@mastra/evals':
-        specifier: workspace:^
-        version: link:../../../../../packages/evals
-    devDependencies:
-      dotenv:
-        specifier: ^16.4.7
-        version: 16.4.7
-
-  examples/basics/evals/custom/word-inclusion:
-    dependencies:
-      '@mastra/evals':
-        specifier: workspace:^
-        version: link:../../../../../packages/evals
-    devDependencies:
-      dotenv:
-        specifier: ^16.4.7
-        version: 16.4.7
-
   examples/basics/evals/faithfulness:
     dependencies:
       '@ai-sdk/openai':
@@ -685,6 +662,19 @@ importers:
       '@ai-sdk/openai':
         specifier: latest
         version: 1.2.5(zod@3.24.2)
+      '@mastra/evals':
+        specifier: workspace:^
+        version: link:../../../../packages/evals
+    devDependencies:
+      dotenv:
+        specifier: ^16.4.7
+        version: 16.4.7
+
+  examples/basics/evals/word-inclusion:
+    dependencies:
+      '@mastra/core':
+        specifier: workspace:^
+        version: link:../../../../packages/core
       '@mastra/evals':
         specifier: workspace:^
         version: link:../../../../packages/evals
