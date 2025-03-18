@@ -13,10 +13,28 @@ We'll use the GPT-3 paper [Language Models are Few-Shot Learners](https://arxiv.
 
 ## Understanding RAG Components
 
-RAG consists of three main parts:
-1. Document Processing: Loading and chunking papers
-2. Vector Storage: Creating and storing embeddings
-3. Retrieval Process: Finding and using relevant content
+Let's understand how RAG works and how we'll implement each component:
+
+1. Knowledge Store/Index
+   - Converting text into vector representations
+   - Creating numerical representations of content
+   - Implementation: We'll use OpenAI's text-embedding-3-small to create embeddings and store them in PgVector
+
+2. Retriever
+   - Finding relevant content via similarity search
+   - Matching query embeddings with stored vectors
+   - Implementation: We'll use PgVector to perform similarity searches on our stored embeddings
+
+3. Generator
+   - Processing retrieved content with an LLM
+   - Creating contextually informed responses
+   - Implementation: We'll use GPT-4o-mini to generate answers based on retrieved content
+
+Our implementation will:
+1. Process the GPT-3 paper into embeddings
+2. Store them in PgVector for quick retrieval
+3. Use similarity search to find relevant sections
+4. Generate accurate responses using retrieved context
 
 ## Project Structure
 
@@ -64,15 +82,16 @@ touch src/agents/researchAgent.ts src/index.ts
 ### Create the Research Assistant Agent
 
 Now we'll create our RAG-enabled research assistant. The agent uses:
-- A vector query tool to search our paper database
+- A [Vector Query Tool](/docs/reference/tools/vector-query-tool) for performing semantic search over our vector store to find relevant content in our papers.
 - GPT-4o-mini for understanding queries and generating responses
-- Custom instructions for academic paper analysis
+- Custom instructions that guide the agent on how to analyze papers, use retrieved content effectively, and acknowledge limitations
 
 ```typescript copy showLineNumbers filename="src/agents/researchAgent.ts"
 import { Agent } from '@mastra/core/agent';
 import { openai } from '@ai-sdk/openai';
 import { createVectorQueryTool } from '@mastra/rag';
 
+// Create a tool for semantic search over our paper embeddings
 const vectorQueryTool = createVectorQueryTool({
   vectorStoreName: 'pgVector',
   indexName: 'papers',
@@ -81,7 +100,11 @@ const vectorQueryTool = createVectorQueryTool({
 
 export const researchAgent = new Agent({
   name: 'Research Assistant',
-  instructions: 'You are a helpful research assistant that analyzes academic papers...',
+  instructions: 
+    `You are a helpful research assistant that analyzes academic papers. 
+    Use the tool provided to find relevant information from papers, 
+    and provide accurate, well-supported answers based on the retrieved content. 
+    If the available content does not fully address a question, acknowledge this limitation.`,
   model: openai('gpt-4o-mini'),
   tools: {
     vectorQueryTool,
@@ -134,7 +157,10 @@ const chunks = await doc.chunk({
 Finally, we'll prepare our content for RAG by:
 1. Generating embeddings for each chunk of text
 2. Creating a vector store index to hold our embeddings
-3. Storing both the embeddings and their associated text
+3. Storing both the embeddings and metadata (original text and source information) in our vector database
+
+> **Note**: This metadata is crucial as it allows us to return the actual content when the vector store finds relevant matches.
+
 This allows our agent to efficiently search and retrieve relevant information.
 
 ```typescript copy showLineNumbers{28} filename="src/index.ts"
@@ -255,17 +281,12 @@ curl -X POST http://localhost:4111/api/agents/researchAgent/generate \
     ]
   }'
 ```
-
-### Next Steps
-
-After completing this guide, explore:
-- Filter RAG for handling paper metadata
-- Cleanup RAG for better academic text chunks
-- Chain of Thought RAG for complex research queries
 </Steps>
 
-## Additional Resources
+## Advanced RAG Examples
 
-- [Advanced RAG Techniques](link-to-advanced-rag)
-- [Paper Analysis Best Practices](link-to-best-practices)
-- [Research Assistant Examples](link-to-examples)
+Explore these examples for more advanced RAG techniques:
+- [Filter RAG](/examples/rag/filter-rag) for filtering results using metadata
+- [Cleanup RAG](/examples/rag/cleanup-rag) for optimizing information density
+- [Chain of Thought RAG](/examples/rag/cot-rag) for complex reasoning queries
+- [Rerank RAG](/examples/rag/rerank/rerank-rag) for improved result relevance
