@@ -1,6 +1,6 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import { fromPackageRoot, fromRepoRoot, log } from '../utils';
+import { fromPackageRoot, fromRepoRoot, log } from '../utils.js';
 
 const EXAMPLES_SOURCE = fromRepoRoot('examples');
 const OUTPUT_DIR = fromPackageRoot('.docs/organized/code-examples');

@@ -1,2 +1,1 @@
-export * from './keyword-custom';
-export * from './recipe-completeness';
+export * from './gluten-checker';
