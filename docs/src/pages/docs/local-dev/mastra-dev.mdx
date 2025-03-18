@@ -96,11 +96,11 @@ mastra also provides a [Mastra Client](/docs/deployment/client) SDK that allows 
 
 `mastra dev` provides an OpenAPI spec at http://localhost:4111/openapi.json
 
-## Local Development Environment Architecture
+## Local Dev Architecture
 
 The local development server is designed to run without any external dependencies or containerization. This is achieved through:
 
-- **HTTP Server Framework**: Uses [Hono](https://hono.dev) as the underlying framework to power the [Mastra Server](/docs/deployment/server).
+- **Dev Server**: Uses [Hono](https://hono.dev) as the underlying framework to power the [Mastra Server](/docs/deployment/server).
 
 - **In-Memory Storage**: Uses [LibSQL](https://libsql.org/) memory adapters for:
   - Agent memory management

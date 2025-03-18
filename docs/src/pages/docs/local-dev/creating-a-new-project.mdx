@@ -18,6 +18,31 @@ npm install -g mastra@latest
 mastra create
 ```
 
+## Interactive Setup
+
+Running commands without arguments starts a CLI prompt for:
+
+1. Project name
+1. Component selection
+2. LLM provider configuration
+3. API key setup
+4. Example code inclusion
+
+## Non-Interactive Setup
+
+To initialize mastra in non-interactive mode use the following command arguments:
+
+```bash
+Arguments:
+  --components     Specify components: agents, tools, workflows
+  --llm-provider   LLM provider: openai, anthropic, groq, google, or cerebras
+  --add-example    Include example implementation
+  --llm-api-key    Provider API key
+  --project-name   Project name that will be used in package.json and as the project directory name
+```
+
+
+
 Generated project structure:
 ```
 my-project/
