@@ -855,7 +855,7 @@ describe('Workflow', async () => {
         execute: start,
       });
 
-      const other = vi.fn().mockImplementation(async ({ context }) => {
+      const other = vi.fn().mockImplementation(async () => {
         return { other: 26 };
       });
       const otherStep = new Step({
@@ -926,7 +926,7 @@ describe('Workflow', async () => {
         execute: start,
       });
 
-      const other = vi.fn().mockImplementation(async ({ context }) => {
+      const other = vi.fn().mockImplementation(async () => {
         return { other: 26 };
       });
       const otherStep = new Step({
@@ -1000,7 +1000,7 @@ describe('Workflow', async () => {
         execute: start,
       });
 
-      const other = vi.fn().mockImplementation(async ({ context }) => {
+      const other = vi.fn().mockImplementation(async () => {
         return { other: 26 };
       });
       const otherStep = new Step({
@@ -1074,7 +1074,7 @@ describe('Workflow', async () => {
         execute: start,
       });
 
-      const other = vi.fn().mockImplementation(async ({ context }) => {
+      const other = vi.fn().mockImplementation(async () => {
         return { other: 26 };
       });
       const otherStep = new Step({
@@ -1154,7 +1154,7 @@ describe('Workflow', async () => {
         execute: start,
       });
 
-      const other = vi.fn().mockImplementation(async ({ context }) => {
+      const other = vi.fn().mockImplementation(async () => {
         return { other: 26 };
       });
       const otherStep = new Step({
@@ -2337,7 +2337,7 @@ describe('Workflow', async () => {
       const getUserInputAction = vi.fn().mockResolvedValue({ userInput: 'test input' });
       const promptAgentAction = vi
         .fn()
-        .mockImplementationOnce(async ({ suspend }) => {
+        .mockImplementationOnce(async () => {
           return { test: 'yes' };
         })
         .mockImplementationOnce(() => ({ modelOutput: 'test output' }));

@@ -1,9 +1,9 @@
 import { spawn as spwn } from 'child_process';
-import path, { dirname, join } from 'path';
+import { dirname, join } from 'path';
 import { fileURLToPath } from 'url';
 import type { RollupOutput } from 'rollup';
 import { rollup } from 'rollup';
-import { expect, beforeAll, it } from 'vitest';
+import { beforeAll, expect, it } from 'vitest';
 
 const _dirname = dirname(fileURLToPath(import.meta.url));
 const spawn = (cmd: string, args: ReadonlyArray<string>) =>
