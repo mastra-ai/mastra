@@ -16,8 +16,9 @@ const vectorQueryTool = createVectorQueryTool({
 
 export const ragAgent = new Agent({
   name: 'RAG Agent',
-  instructions:
-    'You are a helpful assistant that answers questions based on the provided context. Keep your answers concise and relevant.',
+  instructions: `You are a helpful assistant that answers questions based on the provided context. Keep your answers concise and relevant.
+    Important: When asked to answer a question, please base your answer only on the context provided in the tool. 
+    If the context doesn't contain enough information to fully answer the question, please state that explicitly.`,
   model: openai('gpt-4o-mini'),
   tools: {
     vectorQueryTool,
@@ -76,37 +77,20 @@ await vectorStore.upsert({
   metadata: chunks?.map((chunk: any) => ({ text: chunk.text })),
 });
 
-async function generateResponse(query: string) {
-  const prompt = `
-      Please answer the following question:
-      ${query}
-
-      Please base your answer only on the context provided in the tool. If the context doesn't contain enough information to fully answer the question, please state that explicitly.
-      `;
-
-  // Call the agent to generate a response
-  const completion = await agent.generate(prompt);
-
-  return completion.text;
-}
-
-async function answerQueries(queries: string[]) {
-  for (const query of queries) {
-    try {
-      // Generate and log the response
-      const answer = await generateResponse(query);
-      console.log('\nQuery:', query);
-      console.log('Response:', answer);
-    } catch (error) {
-      console.error(`Error processing query "${query}":`, error);
-    }
-  }
-}
-
 const queries = [
   'explain technical trading analysis',
   'explain trading card valuation',
   'how do you analyze market resistance',
 ];
 
-await answerQueries(queries);
+const answerOne = await agent.generate('explain technical trading analysis');
+console.log('\nQuery:', 'explain technical trading analysis');
+console.log('Response:', answerOne.text);
+
+const answerTwo = await agent.generate('explain trading card valuation');
+console.log('\nQuery:', 'explain trading card valuation');
+console.log('Response:', answerTwo.text);
+
+const answerThree = await agent.generate('how do you analyze market resistance');
+console.log('\nQuery:', 'how do you analyze market resistance');
+console.log('Response:', answerThree.text);

@@ -60,12 +60,6 @@ The first submarine was invented in 1620. Space-based economies, which we discus
 The Empire State Building was built in just 410 days. Multi-planetary species survival, as previously stated, is a key goal of space settlement. Did you know that the first pizza was made in Naples, Italy?
 `);
 
-const queries = [
-  'What are all the requirements for space settlements?',
-  'What are all the technologies mentioned for space exploration?"',
-  'How do settlements handle resource management and sustainability?',
-];
-
 const documentChunkerTool = createDocumentChunkerTool({
   doc,
   params: {
@@ -80,7 +74,10 @@ const ragAgent = new Agent({
   name: 'RAG Agent',
   instructions: `You are a helpful assistant that handles both querying and cleaning documents.
     When cleaning: Process, clean, and label data, remove irrelevant information and deduplicate content while preserving key facts.
-    When querying: Provide answers based on the available context. Keep your answers concise and relevant.`,
+    When querying: Provide answers based on the available context. Keep your answers concise and relevant.
+    
+    Important: When asked to answer a question, please base your answer only on the context provided in the tool. If the context doesn't contain enough information to fully answer the question, please state that explicitly.
+    `,
   model: openai('gpt-4o-mini'),
   tools: {
     vectorQueryTool,
@@ -121,8 +118,11 @@ await vectorStore.upsert({
   metadata: chunks?.map((chunk: any) => ({ text: chunk.text })),
 });
 
-// Generate responses using the original embeddings
-await answerQueries(queries, agent);
+// Generate response using the original embeddings
+const query = 'What are all the technologies mentioned for space exploration?';
+const originalResponse = await agent.generate(query);
+console.log('\nQuery:', query);
+console.log('Response:', originalResponse.text);
 
 const chunkPrompt = `Use the tool provided to clean the chunks. Make sure to filter out irrelevant information that is not space related and remove duplicates.`;
 
@@ -153,24 +153,7 @@ await vectorStore.upsert({
   metadata: updatedChunks?.map((chunk: any) => ({ text: chunk.text })),
 });
 
-// Generate responses using the cleaned embeddings
-await answerQueries(queries, agent);
-
-async function answerQueries(queries: string[], agent: Agent) {
-  for (const query of queries) {
-    try {
-      const prompt = `
-      Please answer the following question:
-      ${query}
-
-      Please base your answer only on the context provided in the tool. If the context doesn't contain enough information to fully answer the question, please state that explicitly. 
-      `;
-      // Generate and log the response
-      const answer = await agent.generate(prompt);
-      console.log('\nQuery:', query);
-      console.log('Response:', answer.text);
-    } catch (error) {
-      console.error(`Error processing query "${query}":`, error);
-    }
-  }
-}
+// Generate response using the cleaned embeddings using the same query
+const cleanedResponse = await agent.generate(query);
+console.log('\nQuery:', query);
+console.log('Response:', cleanedResponse.text);

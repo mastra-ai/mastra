@@ -75,6 +75,9 @@ export const ragAgent = new Agent({
   }
 
   ${PGVECTOR_PROMPT}
+
+  Important: When asked to answer a question, please base your answer only on the context provided in the tool. 
+  If the context doesn't contain enough information to fully answer the question, please state that explicitly.
   `,
   tools: { vectorQueryTool },
 });
@@ -103,38 +106,21 @@ await vectorStore.upsert({
   metadata: chunkMetadata,
 });
 
-async function generateResponse(query: string) {
-  const prompt = `
-      Please answer the following question:
-      ${query}
+const answerOne = await agent.generate('What are the adaptation strategies mentioned?');
+console.log('\nQuery:', 'What are the adaptation strategies mentioned?');
+console.log('Response:', answerOne.text);
 
-    Please base your answer only on the context provided.
-    If the context doesn't contain enough information to fully answer the question, please state that explicitly.
-      `;
+const answerTwo = await agent.generate(
+  'Show me recent sections. Check the "nested.id" field and return values that are greater than 2.',
+);
+console.log(
+  '\nQuery:',
+  'Show me recent sections. Check the "nested.id" field and return values that are greater than 2.',
+);
+console.log('Response:', answerTwo.text);
 
-  // Call the agent to generate a response
-  const completion = await agent.generate(prompt);
-
-  return completion.text;
-}
-
-const queries = [
-  "What adaptation strategies are mentioned? Use regex to search for the word 'adaptation' in the 'nested.keywords' field.",
-  "Show me recent sections. Check the 'nested.id' field and return values that are greater than 2.",
-  "Search the 'text' field using regex operator to find sections containing 'temperature'.",
-];
-
-async function answerQueries() {
-  for (const query of queries) {
-    try {
-      // Generate and log the response
-      const answer = await generateResponse(query);
-      console.log('\nQuery:', query);
-      console.log('Response:', answer);
-    } catch (error) {
-      console.error(`Error processing query "${query}":`, error);
-    }
-  }
-}
-
-await answerQueries();
+const answerThree = await agent.generate(
+  'Search the "text" field using regex operator to find sections containing "temperature".',
+);
+console.log('\nQuery:', 'Search the "text" field using regex operator to find sections containing "temperature".');
+console.log('Response:', answerThree.text);

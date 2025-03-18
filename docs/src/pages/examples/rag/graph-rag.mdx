@@ -162,7 +162,17 @@ async function generateResponse(query: string) {
 ## Example Usage
 
 ```typescript copy showLineNumbers{82} filename="src/mastra/index.ts"
-async function answerQueries(queries: string[]) {
+const queries = [
+  "What are the direct and indirect effects of early railway decisions on Riverdale Heights' current state?",
+
+  "How have changes in transportation infrastructure affected different generations of local businesses and community spaces?",
+
+  "Compare how the Rossi family business and Thompson Steel Works responded to major infrastructure changes, and how their responses affected the community.",
+
+  "Trace how the transformation of the Thompson Steel Works site has influenced surrounding businesses and cultural spaces from 1932 to present.",
+];
+
+async function answerQueries() {
   for (const query of queries) {
     try {
       const answer = await generateResponse(query);
@@ -174,17 +184,7 @@ async function answerQueries(queries: string[]) {
   }
 }
 
-const queries = [
-  "What are the direct and indirect effects of early railway decisions on Riverdale Heights' current state?",
-
-  "How have changes in transportation infrastructure affected different generations of local businesses and community spaces?",
-
-  "Compare how the Rossi family business and Thompson Steel Works responded to major infrastructure changes, and how their responses affected the community.",
-
-  "Trace how the transformation of the Thompson Steel Works site has influenced surrounding businesses and cultural spaces from 1932 to present.",
-];
-
-await answerQueries(queries);
+await answerQueries();
 ```
 
 <br />

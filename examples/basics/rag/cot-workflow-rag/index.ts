@@ -204,31 +204,24 @@ await vectorStore.upsert({
   metadata: chunks?.map((chunk: any) => ({ text: chunk.text })),
 });
 
-// Updated generateResponse function to use workflow
-async function generateResponse(query: string) {
-  const prompt = `
+const query = 'What are the main adaptation strategies for farmers?';
+
+console.log('\nQuery:', query);
+const prompt = `
     Please answer the following question:
     ${query}
 
     Please base your answer only on the context provided in the tool. If the context doesn't contain enough information to fully answer the question, please state that explicitly.
     `;
 
-  const { runId, start } = ragWorkflow.createRun();
+const { runId, start } = ragWorkflow.createRun();
 
-  console.log('Run:', runId);
+console.log('Run:', runId);
 
-  const workflowResult = await start({
-    triggerData: {
-      query: prompt,
-    },
-  });
-
-  return workflowResult;
-}
-
-const query = 'What are the main adaptation strategies for farmers?';
-
-console.log('\nQuery:', query);
-const result = await generateResponse(query);
+const workflowResult = await start({
+  triggerData: {
+    query: prompt,
+  },
+});
 console.log('\nThought Process:');
-console.log(result.results);
+console.log(workflowResult.results);

@@ -29,7 +29,11 @@ THOUGHT PROCESS:
 - Step 3: [Reasoning based on chunks]
 
 FINAL ANSWER:
-[Your concise answer based on the retrieved context]`,
+[Your concise answer based on the retrieved context]
+
+Important: When asked to answer a question, please base your answer only on the context provided in the tool. 
+If the context doesn't contain enough information to fully answer the question, please state that explicitly.
+`,
   model: openai('gpt-4o-mini'),
   tools: { vectorQueryTool },
 });
@@ -85,39 +89,14 @@ await vectorStore.upsert({
   metadata: chunks?.map((chunk: any) => ({ text: chunk.text })),
 });
 
-async function generateResponse(query: string) {
-  const prompt = `
-    Please answer the following question using chain-of-thought reasoning:
-    ${query}
+const answerOne = await agent.generate('What are the main adaptation strategies for farmers?');
+console.log('\nQuery:', 'What are the main adaptation strategies for farmers?');
+console.log('Response:', answerOne.text);
 
-    Please base your answer only on the context provided in the tool. If the context doesn't contain enough information to fully answer the question, please state that explicitly.
-    Remember: Explain how you're using the retrieved information to reach your conclusions.
-    `;
+const answerTwo = await agent.generate('Analyze how temperature affects crop yields.');
+console.log('\nQuery:', 'Analyze how temperature affects crop yields.');
+console.log('Response:', answerTwo.text);
 
-  const completion = await agent.generate(prompt);
-  return completion.text;
-}
-
-async function answerQueries(queries: string[]) {
-  for (const query of queries) {
-    try {
-      const answer = await generateResponse(query);
-      console.log('\nQuery:', query);
-      console.log('\nReasoning Chain + Retrieved Context Response:');
-      console.log(answer);
-      console.log('\n-------------------');
-    } catch (error) {
-      console.error(`Error processing query "${query}":`, error);
-    }
-  }
-}
-
-const queries = [
-  'What are the main adaptation strategies for farmers?',
-  'Analyze how temperature affects crop yields.',
-  'What connections can you draw between climate change and food security?',
-  'How are farmers implementing solutions to address climate challenges?',
-  'What future implications are discussed for agriculture?',
-];
-
-await answerQueries(queries);
+const answerThree = await agent.generate('What connections can you draw between climate change and food security?');
+console.log('\nQuery:', 'What connections can you draw between climate change and food security?');
+console.log('Response:', answerThree.text);
