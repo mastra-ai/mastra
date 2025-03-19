@@ -154,7 +154,8 @@ export class Workflow<
     }
 
     const step: StepAction<string, any, any, any> = isWorkflow(next)
-      ? workflowToStep(next)
+      ? // @ts-ignore
+        workflowToStep(next)
       : (next as StepAction<string, any, any, any>);
 
     const stepKey = this.#makeStepKey(step);
@@ -414,7 +415,7 @@ export class Workflow<
           loopLabel: `${fallbackStepKey} ${loopType} loop check`,
         },
       })
-      .step(loopFinishedStep, {
+      .step<typeof loopFinishedStep, any, any, [typeof checkStep]>(loopFinishedStep, {
         when: async ({ context }) => {
           const checkStepResult = context.steps?.[checkStepKey];
           if (checkStepResult?.status !== 'success') {
@@ -531,8 +532,7 @@ export class Workflow<
       this.step(
         new Step({
           id: `${lastStep.id}_if_else`,
-          execute: async ({ context }) => {
-            console.log('if else stop step');
+          execute: async () => {
             return { executed: true };
           },
         }),
@@ -545,7 +545,7 @@ export class Workflow<
     this.step(
       {
         id: ifStepKey,
-        execute: async ({ context }) => {
+        execute: async () => {
           return { executed: true };
         },
       },
@@ -569,7 +569,7 @@ export class Workflow<
     this.after(activeCondition.condStep).step(
       {
         id: activeCondition.elseStepKey,
-        execute: async ({ context }) => {
+        execute: async () => {
           return { executed: true };
         },
       },
