@@ -136,6 +136,8 @@ const mcp = new MCPConfiguration({
 
 When using Composio-provided tools, you can authenticate with services (like Google Sheets or Gmail) directly through conversation with your agent. The tools include authentication capabilities that guide you through the process while chatting.
 
+Note: The Composio.dev integration is best suited for single-user scenarios like personal automation, as the SSE URL is tied to your account and can't be used for multiple users. Each URL represents a single account's authentication context.
+
 ### Smithery.ai Registry
 
 [Smithery.ai](https://smithery.ai) provides a registry of MCP servers that you can easily use with Mastra:
