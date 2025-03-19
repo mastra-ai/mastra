@@ -190,6 +190,84 @@ The dimension size must match the output dimension of your chosen embedding mode
 - OpenAI text-embedding-3-large: 3072 dimensions
 - Cohere embed-multilingual-v3: 1024 dimensions
 
+### Naming Rules of Indexes
+
+Each vector database enforces specific naming conventions for indexes and collections to ensure compatibility and prevent conflicts.
+
+<Tabs items={['Pg Vector', 'Pinecone', 'Qdrant', 'Chroma', 'Astra', 'LibSQL', 'Upstash', 'Cloudflare']}>
+  <Tabs.Tab>
+    Index names must:
+    - Start with a letter or underscore
+    - Contain only letters, numbers, and underscores
+    - Example: `my_index_123` is valid
+    - Example: `my-index` is not valid (contains hyphen)
+  </Tabs.Tab>
+  <Tabs.Tab>
+    Index names must:
+    - Use only lowercase letters, numbers, and dashes
+    - Not contain dots (used for DNS routing)
+    - Not use non-Latin characters or emojis
+    - Have a combined length (with project ID) under 52 characters
+      - Example: `my-index-123` is valid
+      - Example: `my.index` is not valid (contains dot)
+  </Tabs.Tab>
+  <Tabs.Tab>
+    Collection names must:
+    - Be 1-255 characters long
+    - Not contain any of these special characters:
+      - `< > : " / \ | ? *`
+      - Null character (`\0`)
+      - Unit separator (`\u{1F}`)
+    - Example: `my_collection_123` is valid
+    - Example: `my/collection` is not valid (contains slash)
+  </Tabs.Tab>
+  <Tabs.Tab>
+    Collection names must:
+    - Be 3-63 characters long
+    - Start and end with a letter or number
+    - Contain only letters, numbers, underscores, or hyphens
+    - Not contain consecutive periods (..)
+    - Not be a valid IPv4 address
+    - Example: `my-collection-123` is valid
+    - Example: `my..collection` is not valid (consecutive periods)
+  </Tabs.Tab>
+  <Tabs.Tab>
+    Collection names must:
+    - Not be empty
+    - Be 48 characters or less
+    - Contain only letters, numbers, and underscores
+    - Example: `my_collection_123` is valid
+    - Example: `my-collection` is not valid (contains hyphen)
+  </Tabs.Tab>
+  <Tabs.Tab>
+    Index names must:
+    - Start with a letter or underscore
+    - Contain only letters, numbers, and underscores
+    - Example: `my_index_123` is valid
+    - Example: `my-index` is not valid (contains hyphen)
+  </Tabs.Tab>
+  <Tabs.Tab>
+    Namespace names must:
+    - Be 2-100 characters long
+    - Contain only:
+      - Alphanumeric characters (a-z, A-Z, 0-9)
+      - Underscores, hyphens, dots
+    - Not start or end with special characters (_, -, .)
+    - Can be case-sensitive
+    - Example: `MyNamespace123` is valid
+    - Example: `_namespace` is not valid (starts with underscore)
+  </Tabs.Tab>
+  <Tabs.Tab>
+    Index names must:
+    - Start with a letter
+    - Be shorter than 32 characters
+    - Contain only lowercase ASCII letters, numbers, and dashes
+    - Use dashes instead of spaces
+    - Example: `my-index-123` is valid
+    - Example: `My_Index` is not valid (uppercase and underscore)
+  </Tabs.Tab>
+</Tabs>
+
 ### Upserting Embeddings
 
 After creating an index, you can store embeddings along with their basic metadata:
