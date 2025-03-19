@@ -14,11 +14,13 @@ MCP in Mastra provides a standardized way to connect to tool servers and support
 ## Installation
 
 Using pnpm:
+
 ```bash
 pnpm add @mastra/mcp@latest
 ```
 
 Using npm:
+
 ```bash
 npm install @mastra/mcp@latest
 ```
@@ -35,11 +37,11 @@ import { openai } from "@ai-sdk/openai";
 const mcp = new MCPConfiguration({
   servers: {
     // stdio example
-    stockPrice: {
-      command: "npx",
-      args: ["tsx", "stock-price.ts"],
-      env: {
-        API_KEY: "your-api-key",
+    sequential: {
+      name: "sequential-thinking",
+      server: {
+        command: "npx",
+        args: ["-y", "@modelcontextprotocol/server-sequential-thinking"],
       },
     },
     // SSE example
@@ -62,6 +64,7 @@ The `MCPConfiguration` class provides two ways to access MCP tools, each suited 
 #### Using Tools (`getTools()`)
 
 Use this approach when:
+
 - You have a single MCP connection
 - The tools are used by a single user/context
 - Tool configuration (API keys, credentials) remains constant
@@ -79,6 +82,7 @@ const agent = new Agent({
 #### Using Toolsets (`getToolsets()`)
 
 Use this approach when:
+
 - You need per-request tool configuration
 - Tools need different credentials per user
 - Running in a multi-user environment (web app, API, etc)
