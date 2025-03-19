@@ -51,8 +51,7 @@ export async function speakHandler(c: Context) {
     await validateBody({ input });
 
     const audioStream = await agent.voice.speak(input, options);
-
-    c.header('Content-Type', `audio/${options.filetype ?? 'mp3'}`);
+    c.header('Content-Type', `audio/${options?.filetype ?? 'mp3'}`);
     c.header('Transfer-Encoding', 'chunked');
 
     return c.body(audioStream as any);
