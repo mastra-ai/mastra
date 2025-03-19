@@ -37,7 +37,7 @@ export function TableOfContents(props: TOCProps) {
   }, [pathname]);
 
   return (
-    <div className="sticky top-[4rem] w-64 hidden xl:block max-h-[calc(100vh-4rem)] overflow-y-auto ">
+    <div className="sticky top-[4rem] w-64 hidden xl:block max-h-[calc(100vh-4rem)] overflow-y-auto pb-4">
       <div className="px-4 py-8 flex flex-col">
         <div>
           <h3 className="text-xs font-semibold mb-2 pl-4 text-[#6b7280] dark:text-white">
