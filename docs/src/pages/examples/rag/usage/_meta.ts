@@ -1,5 +1,5 @@
 const meta = {
-  "basic-rag": "Basic RAG",
+  "basic-rag": "Using the Vector Query Tool",
   "cleanup-rag": "Optimizing Information Density",
   "filter-rag": "Metadata Filtering",
   "cot-rag": "Chain of Thought Prompting",
