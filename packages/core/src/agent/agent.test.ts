@@ -450,8 +450,8 @@ describe('agent', () => {
       expect(agent.tools.vercelTool).toBeDefined();
 
       // Verify both tools can be executed
-      await agent.tools.mastraTool.execute?.({ name: 'test' });
-      await agent.tools.vercelTool.execute?.({ name: 'test' });
+      await agent.tools.mastraTool.execute?.({ name: 'test' }, { messages: [], toolCallId: '' });
+      await agent.tools.vercelTool.execute?.({ name: 'test' }, { messages: [], toolCallId: '' });
 
       expect(mastraExecute).toHaveBeenCalled();
       expect(vercelExecute).toHaveBeenCalled();
