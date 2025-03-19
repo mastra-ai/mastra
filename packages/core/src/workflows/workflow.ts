@@ -1,6 +1,6 @@
 import type { Span } from '@opentelemetry/api';
 import { context as otlpContext, trace } from '@opentelemetry/api';
-import type { z } from 'zod';
+import { z } from 'zod';
 
 import type { MastraPrimitives } from '../action';
 import { MastraBase } from '../base';
@@ -87,31 +87,37 @@ export class Workflow<
   }
 
   step<
-    TSteps extends StepAction<any, any, any, any>[],
     TWorkflow extends Workflow<TSteps, any, any, any>,
     CondStep extends StepVariableType<any, any, any, any>,
     VarStep extends StepVariableType<any, any, any, any>,
-  >(next: TWorkflow, config?: StepConfig<ReturnType<TWorkflow['toStep']>, CondStep, VarStep, TTriggerSchema>): this;
+    Steps extends StepAction<any, any, any, any>[] = TSteps,
+  >(
+    next: TWorkflow,
+    config?: StepConfig<ReturnType<TWorkflow['toStep']>, CondStep, VarStep, TTriggerSchema, Steps>,
+  ): this;
   step<
     TStep extends StepAction<any, any, any, any>,
     CondStep extends StepVariableType<any, any, any, any>,
     VarStep extends StepVariableType<any, any, any, any>,
-  >(step: TStep, config?: StepConfig<TStep, CondStep, VarStep, TTriggerSchema>): this;
+    Steps extends StepAction<any, any, any, any>[] = TSteps,
+  >(step: TStep, config?: StepConfig<TStep, CondStep, VarStep, TTriggerSchema, Steps>): this;
   step<
-    TStep extends StepAction<string, any, any, any> | Workflow<any, any, any, any>,
+    TStepLike extends StepAction<string, any, any, any> | Workflow<TSteps, any, any, any>,
     CondStep extends StepVariableType<any, any, any, any>,
     VarStep extends StepVariableType<any, any, any, any>,
+    Steps extends StepAction<any, any, any, any>[] = TSteps,
   >(
-    next: TStep extends StepAction<string, any, any, any> ? TStep : Workflow<any, any, any, any>,
+    next: TStepLike extends StepAction<string, any, any, any> ? TStepLike : Workflow<TSteps, any, any, any>,
     config?: StepConfig<
-      TStep extends StepAction<string, any, any, any>
-        ? TStep
-        : TStep extends Workflow<any, any, any, any>
-          ? ReturnType<TStep['toStep']>
+      TStepLike extends StepAction<string, any, any, any>
+        ? TStepLike
+        : TStepLike extends Workflow<TSteps, any, any, any>
+          ? ReturnType<TStepLike['toStep']>
           : never,
       CondStep,
       VarStep,
-      TTriggerSchema
+      TTriggerSchema,
+      Steps
     >,
   ): this {
     // step<
@@ -132,7 +138,6 @@ export class Workflow<
       this.after(nextSteps);
       this.step(
         new Step({
-          // @ts-ignore
           id: `__after_${next.map(step => step?.id ?? step?.name).join('_')}`,
           execute: async ({ context }) => {
             return { success: true };
@@ -236,12 +241,13 @@ export class Workflow<
         }
         return step;
       });
+      // @ts-ignore
       nextSteps.forEach(step => this.step(step, config));
       this.step(
         new Step({
           // @ts-ignore
           id: `__after_${next.map(step => step?.id ?? step?.name).join('_')}`,
-          execute: async ({ context }) => {
+          execute: async () => {
             return { success: true };
           },
         }),
@@ -367,6 +373,9 @@ export class Workflow<
 
         return { status: 'continue' };
       },
+      outputSchema: z.object({
+        status: z.enum(['continue', 'complete']),
+      }),
     };
     this.#steps[checkStepKey] = checkStep;
 
@@ -389,7 +398,7 @@ export class Workflow<
 
     // Then create a branch after the check step that loops back to the fallback step
     this.after(checkStep)
-      .step(fallbackStep, {
+      .step<FallbackStep, any, any, [typeof checkStep]>(fallbackStep, {
         when: async ({ context }) => {
           const checkStepResult = context.steps?.[checkStepKey];
           if (checkStepResult?.status !== 'success') {
