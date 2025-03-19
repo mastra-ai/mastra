@@ -1,5 +1,29 @@
 # @mastra/voice-openai-realtime
 
+## 0.0.3
+
+### Patch Changes
+
+- 404640e: AgentNetwork changeset
+- Updated dependencies [404640e]
+- Updated dependencies [3bce733]
+  - @mastra/core@0.6.3
+
+## 0.0.3-alpha.1
+
+### Patch Changes
+
+- Updated dependencies [3bce733]
+  - @mastra/core@0.6.3-alpha.1
+
+## 0.0.3-alpha.0
+
+### Patch Changes
+
+- 404640e: AgentNetwork changeset
+- Updated dependencies [404640e]
+  - @mastra/core@0.6.3-alpha.0
+
 ## 0.0.2
 
 ### Patch Changes
