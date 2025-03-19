@@ -23,6 +23,7 @@ import type { MastraPrimitives } from '../../action';
 import type { ToolsInput } from '../../agent/types';
 import { MastraBase } from '../../base';
 import { RegisteredLogger } from '../../logger';
+import type { Mastra } from '../../mastra';
 
 export class MastraLLMBase extends MastraBase {
   // @ts-ignore
@@ -79,7 +80,9 @@ export class MastraLLMBase extends MastraBase {
     if (p.logger) {
       this.__setLogger(p.logger);
     }
+  }
 
+  __registerMastra(p: Mastra) {
     this.#mastra = p;
   }
 

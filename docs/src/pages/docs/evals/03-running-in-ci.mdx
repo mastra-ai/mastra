@@ -13,7 +13,7 @@ We support any testing framework that supports ESM modules. For example, you can
 
 ```typescript copy showLineNumbers filename="src/mastra/agents/index.test.ts"
 import { describe, it, expect } from 'vitest';
-import { evaluate } from '@mastra/core/eval';
+import { evaluate } from "@mastra/evals";
 import { myAgent } from './index';
 
 describe('My Agent', () => {
@@ -32,7 +32,7 @@ You will need to configure a testSetup and globalSetup script for your testing f
 
 ### Vitest Setup
 
-Add these files to your project to run evals in your CI/CD pipeline and capture results in the Mastra dashboard:
+Add these files to your project to run evals in your CI/CD pipeline:
 
 ```typescript copy showLineNumbers filename="globalSetup.ts"
 import { globalSetup } from '@mastra/evals';
@@ -64,9 +64,11 @@ export default defineConfig({
 
 ## Storage Configuration
 
-To store eval results in Mastra Storage:
+To store eval results in Mastra Storage and capture results in the Mastra dashboard:
 
-```typescript
+```typescript copy showLineNumbers filename="testSetup.ts"
+import { beforeAll } from 'vitest';
+import { attachListeners } from '@mastra/evals';
 import { mastra } from './your-mastra-setup';
 
 beforeAll(async () => {

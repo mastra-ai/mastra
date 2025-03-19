@@ -7,7 +7,7 @@ describe('changesTool', () => {
   describe('execute', () => {
     it('should list all package changelogs when no package is specified', async () => {
       const result = await changesTool.execute({}, mockContext);
-      
+
       // Check for some known packages that should be in the list
       expect(result).toContain('@mastra/core');
       expect(result).toContain('@mastra/deployer');
@@ -16,7 +16,7 @@ describe('changesTool', () => {
 
     it('should return changelog content for a specific package', async () => {
       const result = await changesTool.execute({ package: '@mastra/core' }, mockContext);
-      
+
       // The changelog should be a markdown file with package name as header
       expect(result).toContain('# @mastra/core');
       expect(result).toMatch(/##\s+v?\d+\.\d+\.\d+/); // Should contain version headers
@@ -28,9 +28,10 @@ describe('changesTool', () => {
     });
 
     it('should handle non-existent package gracefully', async () => {
-      const result = await changesTool.execute({ package: 'non-existent-package' }, mockContext)
+      const result = await changesTool
+        .execute({ package: 'non-existent-package' }, mockContext)
         .catch(error => error.message);
-      
+
       expect(result).toContain('Changelog for "non-existent-package" not found');
       expect(result).toContain('Available packages:');
       expect(result).toContain('@mastra/core'); // Should list available packages
@@ -42,4 +43,4 @@ describe('changesTool', () => {
       expect(result).toContain('# @mastra/client-js');
     });
   });
-}); 
+});
