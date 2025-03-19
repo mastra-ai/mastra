@@ -8,10 +8,7 @@ global.fetch = mockFetch;
 
 describe('blog tool', () => {
   test('fetches and parses blog posts correctly', async () => {
-    const fixture = fs.readFileSync(
-      path.join(__dirname, '../__fixtures__/blog-list-raw.txt'),
-      'utf-8'
-    );
+    const fixture = fs.readFileSync(path.join(__dirname, '../__fixtures__/blog-list-raw.txt'), 'utf-8');
 
     mockFetch.mockResolvedValueOnce({
       text: () => Promise.resolve(fixture),
@@ -19,7 +16,9 @@ describe('blog tool', () => {
 
     const result = await blogTool.execute({ url: '/blog' });
     expect(result).toContain('Mastra.ai Blog Posts:');
-    expect(result).toContain('[Announcing our new book: Principles of Building AI agents](/blog/principles-of-ai-engineering)');
+    expect(result).toContain(
+      '[Announcing our new book: Principles of Building AI agents](/blog/principles-of-ai-engineering)',
+    );
     expect(result).toContain('[AI Beats Laboratory: A Multi-Agent Music Generation System](/blog/ai-beats-lab)');
     expect(result).not.toContain('nav');
     expect(result).not.toContain('footer');
@@ -31,10 +30,7 @@ describe('blog tool', () => {
   });
 
   test('returns specific blog post content when URL is provided', async () => {
-    const fixture = fs.readFileSync(
-      path.join(__dirname, '../__fixtures__/blog-post-raw.txt'),
-      'utf-8'
-    );
+    const fixture = fs.readFileSync(path.join(__dirname, '../__fixtures__/blog-post-raw.txt'), 'utf-8');
 
     mockFetch.mockResolvedValueOnce({
       text: () => Promise.resolve(fixture),
@@ -43,7 +39,7 @@ describe('blog tool', () => {
     const result = await blogTool.execute({ url: '/blog/principles-of-ai-engineering' });
     expect(result).toContain('Announcing our new book: Principles of Building AI agents');
     expect(result).toContain('Principles of Building AI agents');
-    expect(result).toContain('Today is YC demo day and we\'re excited to announce the release of our new book');
+    expect(result).toContain("Today is YC demo day and we're excited to announce the release of our new book");
   });
 
   test('removes Next.js initialization code from blog post content', async () => {
@@ -63,4 +59,3 @@ describe('blog tool', () => {
     expect(result).not.toContain('self.__next_f');
   });
 });
-
