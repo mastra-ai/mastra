@@ -145,6 +145,25 @@ const mcp = new MCPConfiguration({
 
 This example is adapted from the Claude integration example in the Smithery documentation.
 
+### Composio.dev Registry
+
+[Composio.dev](https://composio.dev) provides a registry of [SSE-based MCP servers](https://mcp.composio.dev) that can be easily integrated with Mastra. The SSE URL that's generated for Cursor is compatible with Mastra - you can use it directly in your configuration:
+
+```typescript
+const mcp = new MCPConfiguration({
+  servers: {
+    googleSheets: {
+      url: new URL("https://mcp.composio.dev/googlesheets/[private-url-path]"),
+    },
+    gmail: {
+      url: new URL("https://mcp.composio.dev/gmail/[private-url-path]"),
+    },
+  },
+});
+```
+
+When using Composio-provided tools, you can authenticate with services (like Google Sheets or Gmail) directly through conversation with your agent. The tools include authentication capabilities that guide you through the process while chatting.
+
 ## Using the Mastra Documentation Server
 
 Looking to use Mastra's MCP documentation server in your IDE? Check out our [MCP Documentation Server guide](/docs/getting-started/mcp-docs-server) to get started.
