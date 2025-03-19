@@ -87,7 +87,7 @@ export class Workflow<
   }
 
   step<
-    TWorkflow extends Workflow<TSteps, any, any, any>,
+    TWorkflow extends Workflow<any, any, any, any>,
     CondStep extends StepVariableType<any, any, any, any>,
     VarStep extends StepVariableType<any, any, any, any>,
     Steps extends StepAction<any, any, any, any>[] = TSteps,
