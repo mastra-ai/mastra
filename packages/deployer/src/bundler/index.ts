@@ -106,11 +106,11 @@ export abstract class Bundler extends MastraBundler {
     serverFile: string,
     mastraEntryFile: string,
     outputDirectory: string,
-    bundleLocationOrOptions?: { port?: number } | string,
+    bundleLocation?: string,
+    options?: { port?: number },
   ): Promise<void> {
     this.logger.info('Start bundling Mastra');
-    const bundleLocation =
-      typeof bundleLocationOrOptions === 'string' ? bundleLocationOrOptions : join(outputDirectory, this.outputDir);
+    const finalBundleLocation = bundleLocation || join(outputDirectory, this.outputDir);
     const isVirtual = serverFile.includes('\n') || existsSync(serverFile);
 
     const analyzedBundleInfo = await analyzeBundle(
@@ -141,10 +141,10 @@ export abstract class Bundler extends MastraBundler {
 
     // Handle port configuration if needed
     let finalServerFile = serverFile;
-    if (isVirtual && typeof bundleLocationOrOptions === 'object' && bundleLocationOrOptions?.port) {
+    if (isVirtual && options?.port) {
       finalServerFile = serverFile.replaceAll(
         'process.env.PORT',
-        bundleLocationOrOptions.port.toString() || 'process.env.PORT || "4111"',
+        options.port.toString() || 'process.env.PORT || "4111"',
       );
     }
 
@@ -160,7 +160,7 @@ export abstract class Bundler extends MastraBundler {
       inputOptions.input = { index: finalServerFile };
     }
 
-    const bundler = await this.createBundler(inputOptions, { dir: bundleLocation });
+    const bundler = await this.createBundler(inputOptions, { dir: finalBundleLocation });
 
     await bundler.write();
     this.logger.info('Bundling Mastra done');
