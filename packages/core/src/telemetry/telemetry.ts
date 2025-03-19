@@ -177,17 +177,13 @@ export class Telemetry {
         }
 
         // Record input arguments as span attributes
-        if (args.length === 0) {
-          span.setAttribute(`${context.spanName}.input`, 'No Input');
-        } else {
-          args.forEach((arg, index) => {
-            try {
-              span.setAttribute(`${context.spanName}.argument.${index}`, JSON.stringify(arg));
-            } catch {
-              span.setAttribute(`${context.spanName}.argument.${index}`, '[Not Serializable]');
-            }
-          });
-        }
+        args.forEach((arg, index) => {
+          try {
+            span.setAttribute(`${context.spanName}.argument.${index}`, JSON.stringify(arg));
+          } catch {
+            span.setAttribute(`${context.spanName}.argument.${index}`, '[Not Serializable]');
+          }
+        });
 
         let result: any;
         otlpContext.with(trace.setSpan(ctx, span), () => {
