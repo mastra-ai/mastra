@@ -74,7 +74,7 @@ export class Agent<
       throw new Error(`LanguageModel is required to create an Agent. Please provide the 'model'.`);
     }
 
-    this.llm = new MastraLLM({ model: config.model });
+    this.llm = new MastraLLM({ model: config.model, mastra: config.mastra });
 
     this.tools = {} as TTools;
 
@@ -86,6 +86,7 @@ export class Agent<
     }
 
     if (config.mastra) {
+      this.__registerMastra(config.mastra);
       this.__registerPrimitives({
         telemetry: config.mastra.getTelemetry(),
         logger: config.mastra.getLogger(),
@@ -141,6 +142,7 @@ export class Agent<
 
   __registerMastra(mastra: Mastra) {
     this.#mastra = mastra;
+    this.llm.__registerMastra(mastra);
   }
 
   /**
