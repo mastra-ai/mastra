@@ -36,7 +36,9 @@ export class UpstashStore extends MastraStorage {
   }
 
   private getKey(tableName: TABLE_NAMES, keys: Record<string, any>): string {
-    const keyParts = Object.entries(keys).map(([key, value]) => `${key}:${value}`);
+    const keyParts = Object.entries(keys)
+      .filter(([_, value]) => value !== undefined)
+      .map(([key, value]) => `${key}:${value}`);
     return `${tableName}:${keyParts.join(':')}`;
   }
 
