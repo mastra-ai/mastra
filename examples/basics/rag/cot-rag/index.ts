@@ -33,6 +33,7 @@ FINAL ANSWER:
 
 Important: When asked to answer a question, please base your answer only on the context provided in the tool. 
 If the context doesn't contain enough information to fully answer the question, please state that explicitly.
+Remember: Explain how you're using the retrieved information to reach your conclusions.
 `,
   model: openai('gpt-4o-mini'),
   tools: { vectorQueryTool },

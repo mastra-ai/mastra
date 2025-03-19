@@ -80,9 +80,14 @@ THOUGHT PROCESS:
 - Step 3: [Reasoning based on chunks]
 
 FINAL ANSWER:
-[Your concise answer based on the retrieved context]`,
+[Your concise answer based on the retrieved context]
+
+Important: When asked to answer a question, please base your answer only on the context provided in the tool. 
+If the context doesn't contain enough information to fully answer the question, please state that explicitly.
+Remember: Explain how you're using the retrieved information to reach your conclusions.
+`,
   model: openai("gpt-4o-mini"),
-  tools: { contextTool },
+  tools: { vectorQueryTool },
 });
 ```
 
@@ -139,52 +144,22 @@ await vectorStore.upsert({
 });
 ```
 
-## Response Generation with Chain-of-Thought
+## Chain-of-Thought Querying
 
-Function to generate responses using chain-of-thought reasoning:
-
-```typescript copy showLineNumbers{69} filename="src/mastra/index.ts"
-async function generateResponse(query: string) {
-  const prompt = `
-    Please answer the following question using chain-of-thought reasoning:
-    ${query}
-
-    Please base your answer only on the context provided in the tool. If the context doesn't 
-    contain enough information to fully answer the question, please state that explicitly.
-    Remember: Explain how you're using the retrieved information to reach your conclusions.
-    `;
-
-  const completion = await agent.generate(prompt);
-  return completion.text;
-}
-```
-
-## Example Usage
+Try different queries to see how the agent breaks down its reasoning:
 
 ```typescript copy showLineNumbers{83} filename="src/mastra/index.ts"
-async function answerQueries(queries: string[]) {
-  for (const query of queries) {
-    try {
-      const answer = await generateResponse(query);
-      console.log("\nQuery:", query);
-      console.log("\nReasoning Chain + Retrieved Context Response:");
-      console.log(answer);
-      console.log("\n-------------------");
-    } catch (error) {
-      console.error(`Error processing query "${query}":`, error);
-    }
-  }
-}
+const answerOne = await agent.generate('What are the main adaptation strategies for farmers?');
+console.log('\nQuery:', 'What are the main adaptation strategies for farmers?');
+console.log('Response:', answerOne.text);
 
-const queries = [
-  "What are the main adaptation strategies for farmers?",
-  "Analyze how temperature affects crop yields.",
-  "What connections can you draw between climate change and food security?",
-  "How are farmers implementing solutions to address climate challenges?",
-  "What future implications are discussed for agriculture?",
-];
+const answerTwo = await agent.generate('Analyze how temperature affects crop yields.');
+console.log('\nQuery:', 'Analyze how temperature affects crop yields.');
+console.log('Response:', answerTwo.text);
 
-await answerQueries(queries);
+const answerThree = await agent.generate('What connections can you draw between climate change and food security?');
+console.log('\nQuery:', 'What connections can you draw between climate change and food security?');
+console.log('Response:', answerThree.text);
 ```
 
 <br />
