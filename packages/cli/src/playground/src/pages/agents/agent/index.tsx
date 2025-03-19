@@ -41,23 +41,13 @@ function Agent() {
   }
 
   return (
-    <section
-      className={cn(
-        'relative h-full divide-x flex',
-        // sidebar && memory?.result ? 'grid-cols-[256px_1fr_400px]' : 'grid-cols-[1fr_400px]',
-      )}
-    >
+    <section className={cn('relative h-full divide-x flex w-full')}>
       {sidebar && memory?.result ? (
         <div className="h-full w-[256px]">
           <AgentSidebar agentId={agentId!} threadId={threadId!} threads={threads} isLoading={isThreadsLoading} />
         </div>
       ) : null}
-      <div
-        className={cn(
-          'relative overflow-y-hidden',
-          sidebar && memory?.result ? 'w-[calc(100%_-_656px)]' : 'w-[calc(100%_-_400px)]',
-        )}
-      >
+      <div className={cn('relative overflow-y-hidden grow min-w-[325px]')}>
         <Chat
           agentId={agentId!}
           agentName={agent?.name}
@@ -70,10 +60,10 @@ function Agent() {
         />
       </div>
       <MastraResizablePanel
-        defaultWidth={30}
-        minimumWidth={30}
-        maximumWidth={50}
-        className="flex flex-col min-w-[400px] absolute right-0 top-0 h-full z-20 bg-[#121212]"
+        defaultWidth={20}
+        minimumWidth={20}
+        maximumWidth={60}
+        className="flex flex-col min-w-[325px] right-0 top-0 h-full z-20 bg-[#121212]"
       >
         <AgentInformation agentId={agentId!} />
       </MastraResizablePanel>

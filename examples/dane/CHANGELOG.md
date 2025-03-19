@@ -1,5 +1,75 @@
 # @mastra/dane
 
+## 0.0.9
+
+### Patch Changes
+
+- 404640e: AgentNetwork changeset
+- Updated dependencies [404640e]
+- Updated dependencies [3bce733]
+  - @mastra/stabilityai@1.1.12
+  - @mastra/github@1.1.12
+  - @mastra/memory@0.2.4
+  - @mastra/upstash@0.1.12
+  - @mastra/core@0.6.3
+  - @mastra/mcp@0.3.4
+  - @mastra/rag@0.1.12
+
+## 0.0.9-alpha.1
+
+### Patch Changes
+
+- Updated dependencies [3bce733]
+  - @mastra/core@0.6.3-alpha.1
+  - @mastra/github@1.1.12-alpha.1
+  - @mastra/stabilityai@1.1.12-alpha.1
+  - @mastra/mcp@0.3.4-alpha.1
+  - @mastra/memory@0.2.4-alpha.1
+  - @mastra/rag@0.1.12-alpha.1
+  - @mastra/upstash@0.1.12-alpha.1
+
+## 0.0.9-alpha.0
+
+### Patch Changes
+
+- 404640e: AgentNetwork changeset
+- Updated dependencies [404640e]
+  - @mastra/stabilityai@1.1.12-alpha.0
+  - @mastra/github@1.1.12-alpha.0
+  - @mastra/memory@0.2.4-alpha.0
+  - @mastra/upstash@0.1.12-alpha.0
+  - @mastra/core@0.6.3-alpha.0
+  - @mastra/mcp@0.3.4-alpha.0
+  - @mastra/rag@0.1.12-alpha.0
+
+## 0.0.8
+
+### Patch Changes
+
+- Updated dependencies [beaf1c2]
+- Updated dependencies [3084e13]
+  - @mastra/core@0.6.2
+  - @mastra/github@1.1.11
+  - @mastra/stabilityai@1.1.11
+  - @mastra/mcp@0.3.3
+  - @mastra/memory@0.2.3
+  - @mastra/rag@0.1.11
+  - @mastra/upstash@0.1.11
+
+## 0.0.8-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [beaf1c2]
+- Updated dependencies [3084e13]
+  - @mastra/core@0.6.2-alpha.0
+  - @mastra/github@1.1.11-alpha.0
+  - @mastra/stabilityai@1.1.11-alpha.0
+  - @mastra/mcp@0.3.3-alpha.0
+  - @mastra/memory@0.2.3-alpha.0
+  - @mastra/rag@0.1.11-alpha.0
+  - @mastra/upstash@0.1.11-alpha.0
+
 ## 0.0.7
 
 ### Patch Changes

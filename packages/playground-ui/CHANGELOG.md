@@ -1,5 +1,50 @@
 # @mastra/playground-ui
 
+## 2.0.3
+
+### Patch Changes
+
+- 404640e: AgentNetwork changeset
+- Updated dependencies [404640e]
+- Updated dependencies [3bce733]
+  - @mastra/client-js@0.1.11
+  - @mastra/core@0.6.3
+
+## 2.0.3-alpha.1
+
+### Patch Changes
+
+- Updated dependencies [3bce733]
+  - @mastra/core@0.6.3-alpha.1
+  - @mastra/client-js@0.1.11-alpha.1
+
+## 2.0.3-alpha.0
+
+### Patch Changes
+
+- 404640e: AgentNetwork changeset
+- Updated dependencies [404640e]
+  - @mastra/client-js@0.1.11-alpha.0
+  - @mastra/core@0.6.3-alpha.0
+
+## 2.0.2
+
+### Patch Changes
+
+- Updated dependencies [beaf1c2]
+- Updated dependencies [3084e13]
+  - @mastra/core@0.6.2
+  - @mastra/client-js@0.1.10
+
+## 2.0.2-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [beaf1c2]
+- Updated dependencies [3084e13]
+  - @mastra/core@0.6.2-alpha.0
+  - @mastra/client-js@0.1.10-alpha.0
+
 ## 2.0.1
 
 ### Patch Changes

@@ -1,4 +1,10 @@
-import { ActionBarPrimitive, ComposerPrimitive, ThreadPrimitive } from '@assistant-ui/react';
+import {
+  ActionBarPrimitive,
+  ComposerPrimitive,
+  MessagePrimitive,
+  ThreadPrimitive,
+  ToolCallContentPartComponent,
+} from '@assistant-ui/react';
 import { ArrowDownIcon, ArrowUp, PencilIcon, SendHorizontalIcon } from 'lucide-react';
 import type { FC } from 'react';
 
@@ -11,7 +17,14 @@ import { UserMessage } from './user-message';
 
 const suggestions = ['What capabilities do you have?', 'How can you help me?', 'Tell me about yourself'];
 
-export const Thread: FC<{ memory?: boolean }> = ({ memory }) => {
+export const Thread: FC<{ memory?: boolean; ToolFallback?: ToolCallContentPartComponent }> = ({
+  memory,
+  ToolFallback,
+}) => {
+  function WrappedAssistantMessage(props: MessagePrimitive.Root.Props) {
+    return <AssistantMessage {...props} ToolFallback={ToolFallback} />;
+  }
+
   return (
     <ThreadPrimitive.Root
       style={{
@@ -38,7 +51,7 @@ export const Thread: FC<{ memory?: boolean }> = ({ memory }) => {
             components={{
               UserMessage: UserMessage,
               EditComposer: EditComposer,
-              AssistantMessage: AssistantMessage,
+              AssistantMessage: WrappedAssistantMessage,
             }}
           />
         </div>

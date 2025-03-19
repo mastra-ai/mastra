@@ -1,5 +1,46 @@
 # @mastra/deployer
 
+## 0.2.3
+
+### Patch Changes
+
+- 404640e: AgentNetwork changeset
+- Updated dependencies [404640e]
+- Updated dependencies [3bce733]
+  - @mastra/core@0.6.3
+
+## 0.2.3-alpha.1
+
+### Patch Changes
+
+- Updated dependencies [3bce733]
+  - @mastra/core@0.6.3-alpha.1
+
+## 0.2.3-alpha.0
+
+### Patch Changes
+
+- 404640e: AgentNetwork changeset
+- Updated dependencies [404640e]
+  - @mastra/core@0.6.3-alpha.0
+
+## 0.2.2
+
+### Patch Changes
+
+- 4e6732b: Add support for tsconfig paths aliases
+- Updated dependencies [beaf1c2]
+- Updated dependencies [3084e13]
+  - @mastra/core@0.6.2
+
+## 0.2.2-alpha.1
+
+### Patch Changes
+
+- Updated dependencies [beaf1c2]
+- Updated dependencies [3084e13]
+  - @mastra/core@0.6.2-alpha.0
+
 ## 0.2.2-alpha.0
 
 ### Patch Changes
