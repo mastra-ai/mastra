@@ -1,6 +1,6 @@
 {
   "name": "@mastra/mcp-docs-server",
-  "version": "0.0.3-alpha.0",
+  "version": "0.0.3",
   "description": "MCP server for accessing Mastra.ai documentation, changelogs, and news.",
   "type": "module",
   "main": "dist/index.js",
@@ -26,13 +26,11 @@
   },
   "scripts": {
     "prepare-docs": "tsx src/prepare-docs/index.ts",
-    "prebuild": "pnpm prepare-docs",
-    "build": "tsc && chmod +x dist/stdio.js",
-    "predev": "pnpm prepare-docs",
+    "build:lib": "tsup src/index.ts --format esm --experimental-dts --treeshake=smallest --splitting",
+    "build:cli": "tsup src/stdio.ts --format esm --experimental-dts --treeshake=smallest --splitting",
     "dev": "fastmcp dev src/index.ts",
     "inspect": "fastmcp inspect src/index.ts",
     "build:watch": "pnpm build --watch",
-    "pretest": "pnpm build",
     "test": "vitest run",
     "lint": "eslint ."
   },

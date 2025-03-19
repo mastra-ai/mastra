@@ -17,23 +17,24 @@ import type { MastraPrimitives } from '../../action';
 import type { ToolsInput } from '../../agent/types';
 import type { MastraMemory } from '../../memory/memory';
 import type { CoreTool } from '../../tools';
-import { delay, makeCoreTool } from '../../utils';
+import { createMastraProxy, delay, makeCoreTool } from '../../utils';
 
+import type { Mastra } from '../../mastra';
 import { MastraLLMBase } from './base';
 
 export class MastraLLM extends MastraLLMBase {
   #model: LanguageModel;
-  #mastra?: MastraPrimitives;
+  #mastra?: Mastra;
 
-  constructor({ model, mastra }: { model: LanguageModel; mastra?: MastraPrimitives }) {
+  constructor({ model, mastra }: { model: LanguageModel; mastra?: Mastra }) {
     super({ name: 'aisdk', model });
 
     this.#model = model;
 
     if (mastra) {
       this.#mastra = mastra;
-      if (mastra.logger) {
-        this.__setLogger(mastra.logger);
+      if (mastra.getLogger()) {
+        this.__setLogger(mastra.getLogger());
       }
     }
   }
@@ -46,7 +47,9 @@ export class MastraLLM extends MastraLLMBase {
     if (p.logger) {
       this.__setLogger(p.logger);
     }
+  }
 
+  __registerMastra(p: Mastra) {
     this.#mastra = p;
   }
 
@@ -76,6 +79,13 @@ export class MastraLLM extends MastraLLMBase {
     memory?: MastraMemory;
   } = {}): Record<string, CoreTool> {
     this.logger.debug('Starting tool conversion for LLM');
+
+    let mastraProxy = undefined;
+    const logger = this.logger;
+    if (this.#mastra) {
+      mastraProxy = createMastraProxy({ mastra: this.#mastra, logger });
+    }
+
     const converted = Object.entries(tools || {}).reduce(
       (memo, value) => {
         const k = value[0] as string;
@@ -89,7 +99,7 @@ export class MastraLLM extends MastraLLMBase {
             resourceId,
             logger: this.logger,
             memory,
-            mastra: this.#mastra,
+            mastra: mastraProxy,
           };
           memo[k] = makeCoreTool(tool, options);
         }

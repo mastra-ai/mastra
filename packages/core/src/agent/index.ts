@@ -7,7 +7,6 @@ import type {
   CoreUserMessage,
   GenerateObjectResult,
   GenerateTextResult,
-  LanguageModelV1,
   StreamObjectResult,
   StreamTextResult,
   TextPart,
@@ -27,7 +26,7 @@ import { MastraLLM } from '../llm/model';
 import { RegisteredLogger } from '../logger';
 import type { Mastra } from '../mastra';
 import type { MastraMemory } from '../memory/memory';
-import type { MemoryConfig, StorageThreadType } from '../memory/types';
+import type { MemoryConfig } from '../memory/types';
 import { InstrumentClass } from '../telemetry';
 import type { CoreTool } from '../tools/types';
 import { makeCoreTool, createMastraProxy, ensureToolProperties } from '../utils';
@@ -74,7 +73,7 @@ export class Agent<
       throw new Error(`LanguageModel is required to create an Agent. Please provide the 'model'.`);
     }
 
-    this.llm = new MastraLLM({ model: config.model });
+    this.llm = new MastraLLM({ model: config.model, mastra: config.mastra });
 
     this.tools = {} as TTools;
 
@@ -86,6 +85,7 @@ export class Agent<
     }
 
     if (config.mastra) {
+      this.__registerMastra(config.mastra);
       this.__registerPrimitives({
         telemetry: config.mastra.getTelemetry(),
         logger: config.mastra.getLogger(),
@@ -141,6 +141,7 @@ export class Agent<
 
   __registerMastra(mastra: Mastra) {
     this.#mastra = mastra;
+    this.llm.__registerMastra(mastra);
   }
 
   /**
