@@ -3,7 +3,7 @@ title: "Example: A Complete Graph RAG System | RAG | Mastra Docs"
 description: Example of implementing a Graph RAG system in Mastra using OpenAI embeddings and PGVector for vector storage.
 ---
 
-import { GithubLink } from "../../../components/github-link";
+import { GithubLink } from "../../../../components/github-link";
 
 # Graph RAG
 
@@ -49,7 +49,7 @@ import { embedMany } from "ai";
 
 ## GraphRAG Tool Creation
 
-Using createGraphRAGTool imported from @mastra/rag, you can create a tool that queries the vector database and converts the results into a knowledge graph.
+Using createGraphRAGTool imported from @mastra/rag, you can create a tool that queries the vector database and converts the results into a knowledge graph:
 
 ```typescript copy showLineNumbers{8} filename="src/mastra/index.ts"
 const graphRagTool = createGraphRAGTool({
@@ -60,7 +60,6 @@ const graphRagTool = createGraphRAGTool({
     dimension: 1536,
     threshold: 0.7,
   },
-  topK: 5,
 });
 ```
 
@@ -69,9 +68,7 @@ const graphRagTool = createGraphRAGTool({
 Set up the Mastra agent that will handle the responses:
 
 ```typescript copy showLineNumbers{19} filename="src/mastra/index.ts"
-import { openai } from "@ai-sdk/openai";
-
-export const ragAgent = new Agent({
+const ragAgent = new Agent({
   name: "GraphRAG Agent",
   instructions: `You are a helpful assistant that answers questions based on the provided context. Format your answers as follows:
 
@@ -79,7 +76,10 @@ export const ragAgent = new Agent({
 2. CONNECTIONS MADE: List the relationships you found between different parts of the text (2-3 bullet points)
 3. CONCLUSION: One sentence summary that ties everything together
 
-Keep each section brief and focus on the most important points.`,
+Keep each section brief and focus on the most important points.
+
+Important: When asked to answer a question, please base your answer only on the context provided in the tool. 
+If the context doesn't contain enough information to fully answer the question, please state that explicitly.`,
   model: openai("gpt-4o-mini"),
   tools: {
     graphRagTool,
@@ -89,7 +89,7 @@ Keep each section brief and focus on the most important points.`,
 
 ## Instantiate PgVector and Mastra
 
-Instantiate PgVector and Mastra with all components:
+Instantiate PgVector and Mastra with the components:
 
 ```typescript copy showLineNumbers{36} filename="src/mastra/index.ts"
 const pgVector = new PgVector(process.env.POSTGRES_CONNECTION_STRING!);
@@ -98,7 +98,6 @@ export const mastra = new Mastra({
   agents: { ragAgent },
   vectors: { pgVector },
 });
-
 const agent = mastra.getAgent("ragAgent");
 ```
 
@@ -107,9 +106,10 @@ const agent = mastra.getAgent("ragAgent");
 Create a document and process it into chunks:
 
 ```typescript copy showLineNumbers{45} filename="src/mastra/index.ts"
-const doc = MDocument.fromText(
-  `Riverdale Heights: Community Development Study...`,
-);
+const doc = MDocument.fromText(`
+# Riverdale Heights: Community Development Study
+// ... text content ...
+`);
 
 const chunks = await doc.chunk({
   strategy: "recursive",
@@ -125,8 +125,8 @@ Generate embeddings for the chunks and store them in the vector database:
 
 ```typescript copy showLineNumbers{56} filename="src/mastra/index.ts"
 const { embeddings } = await embedMany({
-  values: chunks.map(chunk => chunk.text),
   model: openai.embedding("text-embedding-3-small"),
+  values: chunks.map(chunk => chunk.text),
 });
 
 const vectorStore = mastra.getVector("pgVector");
@@ -141,50 +141,30 @@ await vectorStore.upsert({
 });
 ```
 
-## Response Generation
+## Graph-Based Querying
 
-Function to generate responses based on retrieved context:
-
-```typescript copy showLineNumbers{70} filename="src/mastra/index.ts"
-async function generateResponse(query: string) {
-  const prompt = `
-    Please answer the following question using both semantic and graph-based context:
-    ${query}
-
-    Please base your answer only on the context provided in the tool. If the context doesn't contain enough information to fully answer the question, please state that explicitly.
-    `;
-
-  const completion = await agent.generate(prompt);
-  return completion.text;
-}
-```
-
-## Example Usage
+Try different queries to explore relationships in the data:
 
 ```typescript copy showLineNumbers{82} filename="src/mastra/index.ts"
-async function answerQueries(queries: string[]) {
-  for (const query of queries) {
-    try {
-      const answer = await generateResponse(query);
-      console.log("\nQuery:", query);
-      console.log("Response:", answer);
-    } catch (error) {
-      console.error(`Error processing query "${query}":`, error);
-    }
-  }
-}
+const queryOne = "What are the direct and indirect effects of early railway decisions on Riverdale Heights' current state?";
+const answerOne = await ragAgent.generate(queryOne);
+console.log('\nQuery:', queryOne);
+console.log('Response:', answerOne.text);
 
-const queries = [
-  "What are the direct and indirect effects of early railway decisions on Riverdale Heights' current state?",
+const queryTwo = 'How have changes in transportation infrastructure affected different generations of local businesses and community spaces?';
+const answerTwo = await ragAgent.generate(queryTwo);
+console.log('\nQuery:', queryTwo);
+console.log('Response:', answerTwo.text);
 
-  "How have changes in transportation infrastructure affected different generations of local businesses and community spaces?",
+const queryThree = 'Compare how the Rossi family business and Thompson Steel Works responded to major infrastructure changes, and how their responses affected the community.';
+const answerThree = await ragAgent.generate(queryThree);
+console.log('\nQuery:', queryThree);
+console.log('Response:', answerThree.text);
 
-  "Compare how the Rossi family business and Thompson Steel Works responded to major infrastructure changes, and how their responses affected the community.",
-
-  "Trace how the transformation of the Thompson Steel Works site has influenced surrounding businesses and cultural spaces from 1932 to present.",
-];
-
-await answerQueries(queries);
+const queryFour = 'Trace how the transformation of the Thompson Steel Works site has influenced surrounding businesses and cultural spaces from 1932 to present.';
+const answerFour = await ragAgent.generate(queryFour);
+console.log('\nQuery:', queryFour);
+console.log('Response:', answerFour.text);
 ```
 
 <br />
@@ -194,6 +174,6 @@ await answerQueries(queries);
 <br />
 <GithubLink
   link={
-    "https://github.com/mastra-ai/mastra/blob/main/examples/basics/rag/basic-rag"
+    "https://github.com/mastra-ai/mastra/blob/main/examples/basics/rag/graph-rag"
   }
 />

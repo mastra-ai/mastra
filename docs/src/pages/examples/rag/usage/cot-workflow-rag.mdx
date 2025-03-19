@@ -1,13 +1,13 @@
 ---
-title: "Example: Chain of Thought Workflow | RAG | Mastra Docs"
-description: Example of implementing a RAG system in Mastra with chain-of-thought reasoning using OpenAI and PGVector.
+title: "Example: Structured Reasoning with Workflows | RAG | Mastra Docs"
+description: Example of implementing structured reasoning in a RAG system using Mastra's workflow capabilities.
 ---
 
-import { GithubLink } from "../../../components/github-link";
+import { GithubLink } from "../../../../components/github-link";
 
-# Chain of Thought Workflow RAG
+# Structured Reasoning with Workflows
 
-This example demonstrates how to implement a Retrieval-Augmented Generation (RAG) system using Mastra, OpenAI embeddings, and PGVector for vector storage, with an emphasis on chain-of-thought reasoning using a step-by-step workflow.
+This example demonstrates how to implement a Retrieval-Augmented Generation (RAG) system using Mastra, OpenAI embeddings, and PGVector for vector storage, with an emphasis on structured reasoning through a defined workflow.
 
 ## Overview
 
@@ -100,7 +100,7 @@ const analyzeContext = new Step({
   }),
   execute: async ({ context, mastra }) => {
     console.log("---------------------------");
-    const ragAgent = mastra?.agents?.ragAgent;
+    const ragAgent = mastra?.getAgent('ragAgent');
     const query = context?.getStepResult<{ query: string }>(
       "trigger",
     )?.query;
@@ -126,7 +126,7 @@ const breakdownThoughts = new Step({
   }),
   execute: async ({ context, mastra }) => {
     console.log("---------------------------");
-    const ragAgent = mastra?.agents?.ragAgent;
+    const ragAgent = mastra?.getAgent('ragAgent');
     const analysis = context?.getStepResult<{
       initialAnalysis: string;
     }>("analyzeContext")?.initialAnalysis;
@@ -156,7 +156,7 @@ const connectPieces = new Step({
   }),
   execute: async ({ context, mastra }) => {
     console.log("---------------------------");
-    const ragAgent = mastra?.agents?.ragAgent;
+    const ragAgent = mastra?.getAgent('ragAgent');
     const process = context?.getStepResult<{
       breakdown: string;
     }>("breakdownThoughts")?.breakdown;
@@ -185,7 +185,7 @@ const drawConclusions = new Step({
   }),
   execute: async ({ context, mastra }) => {
     console.log("---------------------------");
-    const ragAgent = mastra?.agents?.ragAgent;
+    const ragAgent = mastra?.getAgent('ragAgent');
     const evidence = context?.getStepResult<{
       connections: string;
     }>("connectPieces")?.connections;
@@ -214,7 +214,7 @@ const finalAnswer = new Step({
   }),
   execute: async ({ context, mastra }) => {
     console.log("---------------------------");
-    const ragAgent = mastra?.agents?.ragAgent;
+    const ragAgent = mastra?.getAgent('ragAgent');
     const conclusions = context?.getStepResult<{
       conclusions: string;
     }>("drawConclusions")?.conclusions;
@@ -272,7 +272,7 @@ export const mastra = new Mastra({
 Process and chunks the document:
 
 ```typescript copy showLineNumbers{177} filename="src/mastra/index.ts"
-const doc = MDocument.fromText(`Your document text here...`);
+const doc = MDocument.fromText(`The Impact of Climate Change on Global Agriculture...`);
 
 const chunks = await doc.chunk({
   strategy: "recursive",
@@ -304,39 +304,32 @@ await vectorStore.upsert({
 });
 ```
 
-## Response Generation
+## Workflow Execution
 
-Function to generate responses using the workflow:
+Here's how to execute the workflow with a query:
 
-```typescript copy showLineNumbers{200} filename="src/mastra/index.ts"
-async function generateResponse(query: string) {
-  const prompt = `
+```typescript copy showLineNumbers{202} filename="src/mastra/index.ts"
+const query = 'What are the main adaptation strategies for farmers?';
+
+console.log('\nQuery:', query);
+const prompt = `
     Please answer the following question:
     ${query}
 
     Please base your answer only on the context provided in the tool. If the context doesn't contain enough information to fully answer the question, please state that explicitly.
     `;
 
-  const { runId, start } = ragWorkflow.createRun();
+const { runId, start } = ragWorkflow.createRun();
 
-  const workflowResult = await start({
-    triggerData: {
-      query: prompt,
-    },
-  });
+console.log('Run:', runId);
 
-  return workflowResult;
-}
-```
-
-## Example Usage
-
-```typescript copy showLineNumbers{219} filename="src/mastra/index.ts"
-const query = "What are the main benefits of telemedicine?";
-console.log("\nQuery:", query);
-const result = await generateResponse(query);
-console.log("\nThought Process:");
-console.log(result.results);
+const workflowResult = await start({
+  triggerData: {
+    query: prompt,
+  },
+});
+console.log('\nThought Process:');
+console.log(workflowResult.results);
 ```
 
 <br />

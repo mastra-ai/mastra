@@ -3,7 +3,7 @@ title: "Example: Agent-Driven Metadata Filtering | Retrieval | RAG | Mastra Docs
 description: Example of using a Mastra agent in a RAG system to construct and apply metadata filters for document retrieval.
 ---
 
-import { GithubLink } from "../../../components/github-link";
+import { GithubLink } from "../../../../components/github-link";
 
 # Agent-Driven Metadata Filtering
 
@@ -12,7 +12,7 @@ This system uses an agent to construct metadata filters from a user's query to s
 
 ## Overview
 
-The implementation consists of the following components:
+The system implements metadata filtering using Mastra and OpenAI. Here's what it does:
 
 1. Sets up a Mastra agent with gpt-4o-mini to understand queries and identify filter requirements
 2. Creates a vector query tool to handle metadata filtering and semantic search
@@ -45,15 +45,14 @@ Then, import the necessary dependencies:
 import { openai } from '@ai-sdk/openai';
 import { Mastra } from '@mastra/core';
 import { Agent } from '@mastra/core/agent';
-import { OpenAI } from '@mastra/core/llm/openai';
-import { createVectorQueryTool, MDocument, PGVECTOR_PROMPT } from '@mastra/rag';
 import { PgVector } from '@mastra/pg';
+import { createVectorQueryTool, MDocument, PGVECTOR_PROMPT } from '@mastra/rag';
 import { embedMany } from 'ai';
 ```
 
 ## Vector Query Tool Creation
 
-Using createVectorQueryTool imported from @mastra/rag, you can create a tool that enables the agent to query the vector database with filtering capabilities.
+Using createVectorQueryTool imported from @mastra/rag, you can create a tool that enables metadata filtering:
 
 ```typescript copy showLineNumbers{9} filename="src/mastra/index.ts"
 const vectorQueryTool = createVectorQueryTool({
@@ -67,12 +66,10 @@ const vectorQueryTool = createVectorQueryTool({
 
 ## Document Processing
 
-Create a document and process it into chunks:
+Create a document and process it into chunks with metadata:
 
 ```typescript copy showLineNumbers{17} filename="src/mastra/index.ts"
-const doc = MDocument.fromText(
-  `The Impact of Climate Change on Global Agriculture...`
-);
+const doc = MDocument.fromText(`The Impact of Climate Change on Global Agriculture...`);
 
 const chunks = await doc.chunk({
   strategy: 'recursive',
@@ -132,6 +129,9 @@ export const ragAgent = new Agent({
   }
 
   ${PGVECTOR_PROMPT}
+
+  Important: When asked to answer a question, please base your answer only on the context provided in the tool. 
+  If the context doesn't contain enough information to fully answer the question, please state that explicitly.
   `,
   tools: { vectorQueryTool },
 });
@@ -147,7 +147,7 @@ The agent's instructions are designed to:
 
 ## Instantiate PgVector and Mastra
 
-Instantiate PgVector and Mastra with all components:
+Instantiate PgVector and Mastra with the components:
 
 ```typescript copy showLineNumbers{69} filename="src/mastra/index.ts"
 const pgVector = new PgVector(process.env.POSTGRES_CONNECTION_STRING!);
@@ -156,13 +156,12 @@ export const mastra = new Mastra({
   agents: { ragAgent },
   vectors: { pgVector },
 });
-
 const agent = mastra.getAgent('ragAgent');
 ```
 
 ## Creating and Storing Embeddings
 
-Generate embeddings for the chunks and store them in the vector database along with their metadata:
+Generate embeddings and store them with metadata:
 
 ```typescript copy showLineNumbers{78} filename="src/mastra/index.ts"
 const { embeddings } = await embedMany({
@@ -186,50 +185,25 @@ await vectorStore.upsert({
 
 The `upsert` operation stores both the vector embeddings and their associated metadata, enabling combined semantic search and metadata filtering capabilities.
 
-## Response Generation
+## Metadata-Based Querying
 
-Function to generate responses based on retrieved context:
+Try different queries using metadata filters:
 
-```typescript copy showLineNumbers{90} filename="src/mastra/index.ts"
-async function generateResponse(query: string) {
-  const prompt = `
-      Please answer the following question:
-      ${query}
+```typescript copy showLineNumbers{96} filename="src/mastra/index.ts"
+const queryOne = 'What are the adaptation strategies mentioned?';
+const answerOne = await agent.generate(queryOne);
+console.log('\nQuery:', queryOne);
+console.log('Response:', answerOne.text);
 
-    Please base your answer only on the context provided.
-    If the context doesn't contain enough information to fully answer the question, please state that explicitly.
-      `;
+const queryTwo = 'Show me recent sections. Check the "nested.id" field and return values that are greater than 2.';
+const answerTwo = await agent.generate(queryTwo);
+console.log('\nQuery:', queryTwo);
+console.log('Response:', answerTwo.text);
 
-  // Call the agent to generate a response
-  const completion = await agent.generate(prompt);
-
-  return completion.text;
-}
-```
-
-## Example Usage
-
-```typescript copy showLineNumbers{105} filename="src/mastra/index.ts"
-const queries = [
-  "What adaptation strategies are mentioned? Use regex to search for the word 'adaptation' in the 'nested.keywords' field.",
-  "Show me recent sections. Check the 'nested.id' field and return values that are greater than 2.",
-  "Search the 'text' field using regex operator to find sections containing 'temperature'.",
-];
-
-async function answerQueries() {
-  for (const query of queries) {
-    try {
-      // Generate and log the response
-      const answer = await generateResponse(query);
-      console.log('\nQuery:', query);
-      console.log('Response:', answer);
-    } catch (error) {
-      console.error(`Error processing query "${query}":`, error);
-    }
-  }
-}
-
-await answerQueries();
+const queryThree = 'Search the "text" field using regex operator to find sections containing "temperature".';
+const answerThree = await agent.generate(queryThree);
+console.log('\nQuery:', queryThree);
+console.log('Response:', answerThree.text);
 ```
 
 <br />
