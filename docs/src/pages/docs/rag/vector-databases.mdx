@@ -9,11 +9,7 @@ import { Tabs } from "nextra/components";
 
 After generating embeddings, you need to store them in a database that supports vector similarity search. Mastra provides a consistent interface for storing and querying embeddings across different vector databases.
 
-## Supported databases
-
-### PostgreSQL with PgVector
-
-Best for teams already using PostgreSQL who want to minimize infrastructure complexity:
+## Supported Databases
 
 <Tabs items={['Pg Vector', 'Pinecone', 'Qdrant', 'Chroma', 'Astra', 'LibSQL', 'Upstash', 'Cloudflare']}>
   <Tabs.Tab>
@@ -33,6 +29,10 @@ Best for teams already using PostgreSQL who want to minimize infrastructure comp
 
   ```
 
+  ### Using PostgreSQL with pgvector
+
+  PostgreSQL with the pgvector extension is a good solution for teams already using PostgreSQL who want to minimize infrastructure complexity. 
+  For detailed setup instructions and best practices, see the [official pgvector repository](https://github.com/pgvector/pgvector).
 </Tabs.Tab>
 <Tabs.Tab>
   ```ts filename="vector-store.ts" showLineNumbers copy
