@@ -3740,7 +3740,8 @@ describe('Workflow', async () => {
           execute: final,
         });
 
-        const wfA = new Workflow<[typeof startStep, typeof otherStep, typeof finalStep]>({
+        const wfA = new Workflow({
+          steps: [startStep, otherStep, finalStep],
           name: 'nested-workflow-a',
           result: {
             schema: z.object({
@@ -3759,9 +3760,9 @@ describe('Workflow', async () => {
           .then(finalStep)
           .commit();
 
-        const t = wfA.toStep();
-        const counterWorkflow = new Workflow<[ReturnType<typeof wfA.toStep>]>({
+        const counterWorkflow = new Workflow({
           name: 'counter-workflow',
+          steps: [wfA.toStep()],
           triggerSchema: z.object({
             startValue: z.number(),
           }),
@@ -3791,25 +3792,12 @@ describe('Workflow', async () => {
             return { output: 'lolo' };
           },
         });
-        const x = new Workflow<[typeof myStep]>({ name: 'lolo', triggerSchema: z.object({ input: z.string() }) });
-        x.step(myStep).commit();
-        const xt = x.toStep();
-        type X = typeof xt;
-        type Y = StepConfig<X, any, any, any, [ReturnType<(typeof x)['toStep']>]>;
-        type Z = Y['when'];
-        const y: Z = async ({ context }) => {
-          context.steps;
-          return true;
-        };
 
-        const at = myStep;
-        type A = typeof at;
-        type B = StepConfig<A, any, any, any, [typeof myStep]>;
-        type C = B['when'];
-        const b: C = async ({ context }) => {
-          context.steps;
-          return true;
-        };
+        type T = ReturnType<typeof wfA.toStep>;
+        const n = wfA.name;
+        const a = await wfA.toStep().execute({} as any);
+        a;
+        const b = a.result;
 
         counterWorkflow
           .step(wfA)
@@ -3824,6 +3812,12 @@ describe('Workflow', async () => {
         const run = counterWorkflow.createRun();
         const result = await run.start({ triggerData: { startValue: 1 } });
         const results = result.results;
+        const x = result.results['nested-workflow-a'];
+        if (x.status === 'success') {
+          const lastStepVal =
+            x.output.results.final.status === 'success' ? x.output.results.final.output.finalValue : undefined;
+          const r = x.output.result;
+        }
 
         console.log('results', results);
 

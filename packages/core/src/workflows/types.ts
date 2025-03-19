@@ -13,13 +13,14 @@ export interface WorkflowOptions<
   TTriggerSchema extends z.ZodObject<any> = any,
   TResultSchema extends z.ZodObject<any> = any,
 > {
+  steps?: TSteps;
   name: TWorkflowName;
   triggerSchema?: TTriggerSchema;
   result?: {
     schema: TResultSchema;
     mapping?: {
       // TODO: fix types
-      [K in keyof z.infer<TResultSchema>]?: any; // VariableReference<VarStep, TTriggerSchema>;
+      [K in keyof z.infer<TResultSchema>]?: any; // VariableReference<VarStep, TTriggerSchema>; // TODO: fix types
     };
   };
   events?: Record<string, { schema: z.ZodObject<any> }>;
@@ -218,7 +219,7 @@ export type StepsRecord<T extends readonly Step<any, any, z.ZodType<any> | undef
 export interface WorkflowRunResult<
   T extends z.ZodObject<any>,
   TSteps extends Step<string, any, z.ZodType<any> | undefined>[],
-  TResult extends z.ZodType<any>,
+  TResult extends z.ZodObject<any>,
 > {
   triggerData?: z.infer<T>;
   result?: z.infer<TResult>;

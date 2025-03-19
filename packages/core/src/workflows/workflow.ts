@@ -27,7 +27,7 @@ import { WorkflowInstance } from './workflow-instance';
 
 export class Workflow<
   TSteps extends Step<string, any, any>[] = Step<string, any, any>[],
-  TStepId extends string = any,
+  TStepId extends string = string,
   TTriggerSchema extends z.ZodObject<any> = any,
   TResultSchema extends z.ZodObject<any> = any,
 > extends MastraBase {
@@ -120,11 +120,6 @@ export class Workflow<
       Steps
     >,
   ): this {
-    // step<
-    //   TStep extends StepAction<any, any, any, any>,
-    //   CondStep extends StepVariableType<any, any, any, any>,
-    //   VarStep extends StepVariableType<any, any, any, any>,
-    // >(next: TStep, config?: StepConfig<TStep, CondStep, VarStep, TTriggerSchema>): this {
     if (Array.isArray(next)) {
       const nextSteps: StepAction<string, any, any, any>[] = next.map(step => {
         if (isWorkflow(step)) {
