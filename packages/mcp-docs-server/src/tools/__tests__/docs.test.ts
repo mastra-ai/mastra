@@ -33,10 +33,13 @@ describe('docsTool', () => {
     });
 
     it('should handle multiple paths in a single request', async () => {
-      const result = await docsTool.execute({ 
-        paths: ['index.mdx', 'reference/tools'] 
-      }, mockContext);
-      
+      const result = await docsTool.execute(
+        {
+          paths: ['index.mdx', 'reference/tools'],
+        },
+        mockContext,
+      );
+
       expect(result).toContain('## index.mdx');
       expect(result).toContain('## reference/tools');
     });
@@ -52,4 +55,4 @@ describe('docsTool', () => {
       expect(result).toContain('Directory contents of reference/tools');
     });
   });
-}); 
+});

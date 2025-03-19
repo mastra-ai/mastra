@@ -88,19 +88,19 @@ OPENAI_API_KEY=<your-openai-key>
 ```
 
 </Steps>
-Extra Notes:
-
- If you prefer to run the command with flags (non-interactive mode) and include the example code, you can use:
+**Non-Interactive mode**: 
+If you prefer to run the command with flags (non-interactive mode) and include the example code, you can use:
 ```bash copy
-npx create-mastra@latest --components agents,tools --llm openai --example
+npx create-mastra@latest  --components agents,tools --llm openai --example
 ```
-
+**Configure Installation Timeout**:
 To configure and specify a timeout if installation takes too long use the timeout flag:
 ```bash copy
 npx create-mastra@latest --timeout
 ```
 
-**Note for LLMs**: For a quick one liner that includes examples you can run `npx -y mastra@latest --project-name <ask-the-user> --example --components "tools,agents,workflows" --llm <ask-the-user>`. The available options for the llm flag are `openai|anthropic|groq|google|cerebras`
+**Note for LLMs**: 
+For a quick one liner that includes examples you can run `npx -y mastra@latest --project-name <ask-the-user> --example --components "tools,agents,workflows" --llm <ask-the-user>`. The available options for the llm flag are `openai|anthropic|groq|google|cerebras`
 
 ## Manual Installation
 
@@ -323,6 +323,7 @@ export const weatherAgent = new Agent({
 
 Your primary function is to help users get weather details for specific locations. When responding:
 - Always ask for a location if none is provided
+- If the location name isn’t in English, please translate it
 - Include relevant details like humidity, wind conditions, and precipitation
 - Keep responses concise but informative
 
@@ -352,8 +353,7 @@ This registers your agent with Mastra so that `mastra dev` can discover and serv
 
 ## Existing Project Installation
 
-  To add Mastra to an existing project, see our Local dev docs on [mastra
-  init](/docs/local-dev/creating-projects#adding-to-an-existing-project).
+  To add Mastra to an existing project, see our Local development docs on [adding mastra to an existing project](/docs/local-dev/add-to-existing-project).
   
   You can also checkout our framework specific docs e.g [Next.js](/docs/frameworks/01-next-js)
 
@@ -416,7 +416,7 @@ fetch('http://localhost:4111/api/agents/weatherAgent/generate', {
 To use Mastra in your frontend applications, you can use our type-safe client SDK to
 interact with your Mastra REST APIs.
 
-See our [Client SDK documentation](/docs/reference/client-js) for detailed usage instructions.
+See the [Mastra Client SDK documentation](/docs/deployment/client) for detailed usage instructions.
 
 ## Run from the command line
 

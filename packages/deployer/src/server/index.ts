@@ -35,6 +35,12 @@ import {
   saveMessagesHandler,
   updateThreadHandler,
 } from './handlers/memory.js';
+import {
+  getNetworkByIdHandler,
+  getNetworksHandler,
+  generateHandler as generateNetworkHandler,
+  streamGenerateHandler as streamGenerateNetworkHandler,
+} from './handlers/network.js';
 import { generateSystemPromptHandler } from './handlers/prompt.js';
 import { rootHandler } from './handlers/root.js';
 import { getTelemetryHandler } from './handlers/telemetry.js';
@@ -162,6 +168,144 @@ export async function createHonoServer(
       },
     }),
     getAgentsHandler,
+  );
+
+  // Network routes
+  app.get(
+    '/api/networks',
+    describeRoute({
+      description: 'Get all available networks',
+      tags: ['networks'],
+      responses: {
+        200: {
+          description: 'List of all networks',
+        },
+      },
+    }),
+    getNetworksHandler,
+  );
+
+  app.get(
+    '/api/networks/:networkId',
+    describeRoute({
+      description: 'Get network by ID',
+      tags: ['networks'],
+      parameters: [
+        {
+          name: 'networkId',
+          in: 'path',
+          required: true,
+          schema: { type: 'string' },
+        },
+      ],
+      responses: {
+        200: {
+          description: 'Network details',
+        },
+        404: {
+          description: 'Network not found',
+        },
+      },
+    }),
+    getNetworkByIdHandler,
+  );
+
+  app.post(
+    '/api/networks/:networkId/generate',
+    bodyLimit(bodyLimitOptions),
+    describeRoute({
+      description: 'Generate a response from a network',
+      tags: ['networks'],
+      parameters: [
+        {
+          name: 'networkId',
+          in: 'path',
+          required: true,
+          schema: { type: 'string' },
+        },
+      ],
+      requestBody: {
+        required: true,
+        content: {
+          'application/json': {
+            schema: {
+              type: 'object',
+              properties: {
+                input: {
+                  oneOf: [
+                    { type: 'string' },
+                    {
+                      type: 'array',
+                      items: { type: 'object' },
+                    },
+                  ],
+                  description: 'Input for the network, can be a string or an array of CoreMessage objects',
+                },
+              },
+              required: ['input'],
+            },
+          },
+        },
+      },
+      responses: {
+        200: {
+          description: 'Generated response',
+        },
+        404: {
+          description: 'Network not found',
+        },
+      },
+    }),
+    generateNetworkHandler,
+  );
+
+  app.post(
+    '/api/networks/:networkId/stream',
+    bodyLimit(bodyLimitOptions),
+    describeRoute({
+      description: 'Generate a response from a network',
+      tags: ['networks'],
+      parameters: [
+        {
+          name: 'networkId',
+          in: 'path',
+          required: true,
+          schema: { type: 'string' },
+        },
+      ],
+      requestBody: {
+        required: true,
+        content: {
+          'application/json': {
+            schema: {
+              type: 'object',
+              properties: {
+                input: {
+                  oneOf: [
+                    { type: 'string' },
+                    {
+                      type: 'array',
+                      items: { type: 'object' },
+                    },
+                  ],
+                  description: 'Input for the network, can be a string or an array of CoreMessage objects',
+                },
+              },
+              required: ['input'],
+            },
+          },
+        },
+      },
+      responses: {
+        200: {
+          description: 'Generated response',
+        },
+        404: {
+          description: 'Network not found',
+        },
+      },
+    }),
+    streamGenerateNetworkHandler,
   );
 
   app.get(
@@ -456,6 +600,55 @@ export async function createHonoServer(
 
   app.get(
     '/api/agents/:agentId/speakers',
+    async (c, next) => {
+      c.header('Deprecation', 'true');
+      c.header('Warning', '299 - "This endpoint is deprecated, use /api/agents/:agentId/voice/speakers instead"');
+      c.header('Link', '</api/agents/:agentId/voice/speakers>; rel="successor-version"');
+      return next();
+    },
+    describeRoute({
+      description: '[DEPRECATED] Use /api/agents/:agentId/voice/speakers instead. Get available speakers for an agent',
+      tags: ['agents'],
+      parameters: [
+        {
+          name: 'agentId',
+          in: 'path',
+          required: true,
+          schema: { type: 'string' },
+        },
+      ],
+      responses: {
+        200: {
+          description: 'List of available speakers',
+          content: {
+            'application/json': {
+              schema: {
+                type: 'array',
+                items: {
+                  type: 'object',
+                  description: 'Speaker information depending on the voice provider',
+                  properties: {
+                    voiceId: { type: 'string' },
+                  },
+                  additionalProperties: true,
+                },
+              },
+            },
+          },
+        },
+        400: {
+          description: 'Agent does not have voice capabilities',
+        },
+        404: {
+          description: 'Agent not found',
+        },
+      },
+    }),
+    getSpeakersHandler,
+  );
+
+  app.get(
+    '/api/agents/:agentId/voice/speakers',
     describeRoute({
       description: 'Get available speakers for an agent',
       tags: ['agents'],
@@ -500,8 +693,15 @@ export async function createHonoServer(
   app.post(
     '/api/agents/:agentId/speak',
     bodyLimit(bodyLimitOptions),
+    async (c, next) => {
+      c.header('Deprecation', 'true');
+      c.header('Warning', '299 - "This endpoint is deprecated, use /api/agents/:agentId/voice/speak instead"');
+      c.header('Link', '</api/agents/:agentId/voice/speak>; rel="successor-version"');
+      return next();
+    },
     describeRoute({
-      description: "Convert text to speech using the agent's voice provider",
+      description:
+        "[DEPRECATED] Use /api/agents/:agentId/voice/speak instead. Convert text to speech using the agent's voice provider",
       tags: ['agents'],
       parameters: [
         {
@@ -569,7 +769,147 @@ export async function createHonoServer(
   );
 
   app.post(
+    '/api/agents/:agentId/voice/speak',
+    bodyLimit(bodyLimitOptions),
+    describeRoute({
+      description: "Convert text to speech using the agent's voice provider",
+      tags: ['agents'],
+      parameters: [
+        {
+          name: 'agentId',
+          in: 'path',
+          required: true,
+          schema: { type: 'string' },
+        },
+      ],
+      requestBody: {
+        required: true,
+        content: {
+          'application/json': {
+            schema: {
+              type: 'object',
+              properties: {
+                text: {
+                  type: 'string',
+                  description: 'Text to convert to speech',
+                },
+                options: {
+                  type: 'object',
+                  description: 'Provider-specific options for speech generation',
+                  properties: {
+                    speaker: {
+                      type: 'string',
+                      description: 'Speaker ID to use for speech generation',
+                    },
+                    options: {
+                      type: 'object',
+                      description: 'Provider-specific options for speech generation',
+                      additionalProperties: true,
+                    },
+                  },
+                  additionalProperties: true,
+                },
+              },
+              required: ['text'],
+            },
+          },
+        },
+      },
+      responses: {
+        200: {
+          description: 'Audio stream',
+          content: {
+            'audio/mpeg': {
+              schema: {
+                format: 'binary',
+                description: 'Audio stream containing the generated speech',
+              },
+            },
+            'audio/*': {
+              schema: {
+                format: 'binary',
+                description: 'Audio stream depending on the provider',
+              },
+            },
+          },
+        },
+        400: {
+          description: 'Agent does not have voice capabilities or invalid request',
+        },
+        404: {
+          description: 'Agent not found',
+        },
+      },
+    }),
+    speakHandler,
+  );
+
+  app.post(
     '/api/agents/:agentId/listen',
+    bodyLimit({
+      ...bodyLimitOptions,
+      maxSize: 10 * 1024 * 1024, // 10 MB for audio files
+    }),
+    async (c, next) => {
+      c.header('Deprecation', 'true');
+      c.header('Warning', '299 - "This endpoint is deprecated, use /api/agents/:agentId/voice/listen instead"');
+      c.header('Link', '</api/agents/:agentId/voice/listen>; rel="successor-version"');
+      return next();
+    },
+    describeRoute({
+      description:
+        "[DEPRECATED] Use /api/agents/:agentId/voice/listen instead. Convert speech to text using the agent's voice provider. Additional provider-specific options can be passed as query parameters.",
+      tags: ['agents'],
+      parameters: [
+        {
+          name: 'agentId',
+          in: 'path',
+          required: true,
+          schema: { type: 'string' },
+        },
+      ],
+      requestBody: {
+        required: true,
+        content: {
+          'audio/mpeg': {
+            schema: {
+              format: 'binary',
+              description:
+                'Audio data stream to transcribe (supports various formats depending on provider like mp3, wav, webm, flac)',
+            },
+          },
+        },
+      },
+      responses: {
+        200: {
+          description: 'Transcription result',
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                properties: {
+                  text: {
+                    type: 'string',
+                    description: 'Transcribed text',
+                  },
+                },
+              },
+            },
+          },
+        },
+        400: {
+          description: 'Agent does not have voice capabilities or invalid request',
+        },
+        404: {
+          description: 'Agent not found',
+        },
+      },
+    }),
+    listenHandler,
+  );
+
+  app.post(
+    '/api/agents/:agentId/voice/listen',
     bodyLimit({
       ...bodyLimitOptions,
       maxSize: 10 * 1024 * 1024, // 10 MB for audio files
@@ -589,11 +929,23 @@ export async function createHonoServer(
       requestBody: {
         required: true,
         content: {
-          'audio/mpeg': {
+          'multipart/form-data': {
             schema: {
-              format: 'binary',
-              description:
-                'Audio data stream to transcribe (supports various formats depending on provider like mp3, wav, webm, flac)',
+              type: 'object',
+              required: ['audio'],
+              properties: {
+                audio: {
+                  type: 'string',
+                  format: 'binary',
+                  description:
+                    'Audio data stream to transcribe (supports various formats depending on provider like mp3, wav, webm, flac)',
+                },
+                options: {
+                  type: 'object',
+                  description: 'Provider-specific options for speech-to-text',
+                  additionalProperties: true,
+                },
+              },
             },
           },
         },

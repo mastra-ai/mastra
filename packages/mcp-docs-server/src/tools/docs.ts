@@ -198,4 +198,3 @@ export const docsTool: Tool<any, typeof docsSchema> = {
     }
   },
 };
-

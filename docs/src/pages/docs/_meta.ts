@@ -40,6 +40,7 @@ const meta = {
     title: "Evals",
     collapsed: false,
   },
+  integrations: "Integrations",
   faq: "FAQ",
   reference: "Reference",
 };

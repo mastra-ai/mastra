@@ -8,6 +8,8 @@ import esbuild from 'rollup-plugin-esbuild';
 
 import type { analyzeBundle } from './analyze';
 import { removeDeployer } from './plugins/remove-deployer';
+import { tsConfigPaths } from './plugins/tsconfig-paths';
+
 export async function getInputOptions(
   entryFile: string,
   analyzedBundleInfo: Awaited<ReturnType<typeof analyzeBundle>>,
@@ -50,6 +52,7 @@ export async function getInputOptions(
     preserveSymlinks: true,
     external: externals,
     plugins: [
+      tsConfigPaths(),
       {
         name: 'alias-optimized-deps',
         // @ts-ignore
