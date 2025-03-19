@@ -2,12 +2,12 @@ import { PassThrough } from 'stream';
 
 import { MastraVoice } from '@mastra/core/voice';
 import { SARVAM_VOICES } from './voices';
-import type { SarvamLanguage, SarvamModel, SarvamVoiceId } from './voices';
+import type { SarvamTTSLanguage, SarvamSTTLanguage, SarvamSTTModel, SarvamTTSModel, SarvamVoiceId } from './voices';
 
 interface SarvamVoiceConfig {
   apiKey?: string;
-  model?: SarvamModel;
-  language?: SarvamLanguage;
+  model?: SarvamTTSModel;
+  language?: SarvamTTSLanguage;
   properties?: {
     pitch?: number;
     pace?: number;
@@ -18,10 +18,29 @@ interface SarvamVoiceConfig {
   };
 }
 
+interface SarvamListenOptions {
+  apiKey?: string;
+  model?: SarvamSTTModel;
+  languageCode?: SarvamSTTLanguage;
+  filetype?: 'mp3' | 'wav';
+}
+
+const defaultSpeechModel = {
+  model: 'bulbul:v1' as const,
+  apiKey: process.env.SARVAM_API_KEY,
+  language: 'en-IN' as const,
+};
+
+const defaultListeningModel = {
+  model: 'saarika:v2' as const,
+  apiKey: process.env.SARVAM_API_KEY,
+  language_code: 'unknown' as const,
+};
+
 export class SarvamVoice extends MastraVoice {
   private apiKey?: string;
-  private model: SarvamModel = 'bulbul:v1';
-  private language: SarvamLanguage = 'en-IN';
+  private model: SarvamTTSModel = 'bulbul:v1';
+  private language: SarvamTTSLanguage = 'en-IN';
   private properties: Record<string, any> = {};
   protected speaker: SarvamVoiceId = 'meera';
   private baseUrl = 'https://api.sarvam.ai';
@@ -29,19 +48,20 @@ export class SarvamVoice extends MastraVoice {
   constructor({
     speechModel,
     speaker,
+    listeningModel,
   }: {
     speechModel?: SarvamVoiceConfig;
     speaker?: SarvamVoiceId;
+    listeningModel?: SarvamListenOptions;
   } = {}) {
-    const defaultSpeechModel = {
-      model: 'bulbul:v1' as const,
-      apiKey: process.env.SARVAM_API_KEY,
-      language: 'en-IN' as const,
-    };
     super({
       speechModel: {
         name: speechModel?.model ?? defaultSpeechModel.model,
         apiKey: speechModel?.apiKey ?? defaultSpeechModel.apiKey,
+      },
+      listeningModel: {
+        name: listeningModel?.model ?? defaultListeningModel.model,
+        apiKey: listeningModel?.model ?? defaultListeningModel.apiKey,
       },
       speaker,
     });
@@ -133,11 +153,43 @@ export class SarvamVoice extends MastraVoice {
     }, 'voice.deepgram.getSpeakers')();
   }
 
-  //Todo: Implement the listen method
-  async listen(
-    _input: NodeJS.ReadableStream,
-    _options?: Record<string, unknown>,
-  ): Promise<string | NodeJS.ReadableStream> {
-    throw new Error('Listening method coming soon.');
+  async listen(input: NodeJS.ReadableStream, options?: SarvamListenOptions): Promise<string> {
+    return this.traced(async () => {
+      // Collect audio data into buffer
+      const chunks: Buffer[] = [];
+      for await (const chunk of input) {
+        if (typeof chunk === 'string') {
+          chunks.push(Buffer.from(chunk));
+        } else {
+          chunks.push(chunk);
+        }
+      }
+      const audioBuffer = Buffer.concat(chunks);
+
+      const form = new FormData();
+      const mimeType = options?.filetype === 'mp3' ? 'audio/mpeg' : 'audio/wav';
+      const blob = new Blob([audioBuffer], { type: mimeType });
+
+      form.append('file', blob);
+      form.append('model', options?.model || 'saarika:v2');
+      form.append('language_code', options?.languageCode || 'unknown');
+      const requestOptions = {
+        method: 'POST',
+        headers: {
+          'api-subscription-key': this.apiKey!,
+        },
+        body: form,
+      };
+
+      try {
+        const response = await fetch(`${this.baseUrl}/speech-to-text`, requestOptions);
+        const result = (await response.json()) as any;
+        //console.log(result);
+        return result.transcript;
+      } catch (error) {
+        console.error('Error during speech-to-text request:', error);
+        throw error;
+      }
+    }, 'voice.sarvam.listen')();
   }
 }

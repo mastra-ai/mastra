@@ -8,6 +8,7 @@ const meta = {
   openai: "OpenAI",
   "openai-realtime": "OpenAI Realtime",
   playai: "PlayAI",
+  sarvam: "Sarvam",
   speechify: "Speechify",
 };
 

@@ -22,11 +22,11 @@ Best for teams already using PostgreSQL who want to minimize infrastructure comp
 
   const store = new PgVector(process.env.POSTGRES_CONNECTION_STRING)
   await store.createIndex({
-    indexName: "my-collection",
+    indexName: "myCollection",
     dimension: 1536,
   });
   await store.upsert({
-    indexName: "my-collection",
+    indexName: "myCollection",
     vectors: embeddings,
     metadata: chunks.map(chunk => ({ text: chunk.text })),
   });
@@ -40,11 +40,11 @@ Best for teams already using PostgreSQL who want to minimize infrastructure comp
 
   const store = new PineconeVector(process.env.PINECONE_API_KEY)
   await store.createIndex({
-    indexName: "my-collection",
+    indexName: "myCollection",
     dimension: 1536,
   });
   await store.upsert({
-    indexName: "my-collection",
+    indexName: "myCollection",
     vectors: embeddings,
     metadata: chunks.map(chunk => ({ text: chunk.text })),
   });
@@ -59,11 +59,11 @@ Best for teams already using PostgreSQL who want to minimize infrastructure comp
     apiKey: process.env.QDRANT_API_KEY
   })
   await store.createIndex({
-    indexName: "my-collection",
+    indexName: "myCollection",
     dimension: 1536,
   });
   await store.upsert({
-    indexName: "my-collection",
+    indexName: "myCollection",
     vectors: embeddings,
     metadata: chunks.map(chunk => ({ text: chunk.text })),
   });
@@ -75,11 +75,11 @@ Best for teams already using PostgreSQL who want to minimize infrastructure comp
 
   const store = new ChromaVector()
   await store.createIndex({
-    indexName: "my-collection",
+    indexName: "myCollection",
     dimension: 1536,
   });
   await store.upsert({
-    indexName: "my-collection",
+    indexName: "myCollection",
     vectors: embeddings,
     metadata: chunks.map(chunk => ({ text: chunk.text })),
   });
@@ -95,11 +95,11 @@ Best for teams already using PostgreSQL who want to minimize infrastructure comp
     keyspace: process.env.ASTRA_DB_KEYSPACE
   })
   await store.createIndex({
-    indexName: "my-collection",
+    indexName: "myCollection",
     dimension: 1536,
   });
   await store.upsert({
-    indexName: "my-collection",
+    indexName: "myCollection",
     vectors: embeddings,
     metadata: chunks.map(chunk => ({ text: chunk.text })),
   });
@@ -114,11 +114,11 @@ import { LibSQLVector } from "@mastra/core/vector/libsql";
     authToken: process.env.DATABASE_AUTH_TOKEN // Optional: for Turso cloud databases
   })
   await store.createIndex({
-    indexName: "my-collection",
+    indexName: "myCollection",
     dimension: 1536,
   });
   await store.upsert({
-    indexName: "my-collection",
+    indexName: "myCollection",
     vectors: embeddings,
     metadata: chunks.map(chunk => ({ text: chunk.text })),
   });
@@ -133,11 +133,11 @@ import { LibSQLVector } from "@mastra/core/vector/libsql";
     token: process.env.UPSTASH_TOKEN
   })
   await store.createIndex({
-    indexName: "my-collection",
+    indexName: "myCollection",
     dimension: 1536,
   });
   await store.upsert({
-    indexName: "my-collection",
+    indexName: "myCollection",
     vectors: embeddings,
     metadata: chunks.map(chunk => ({ text: chunk.text })),
   });
@@ -152,11 +152,11 @@ import { LibSQLVector } from "@mastra/core/vector/libsql";
     apiToken: process.env.CF_API_TOKEN
   })
   await store.createIndex({
-    indexName: "my-collection",
+    indexName: "myCollection",
     dimension: 1536,
   });
   await store.upsert({
-    indexName: "my-collection",
+    indexName: "myCollection",
     vectors: embeddings,
     metadata: chunks.map(chunk => ({ text: chunk.text })),
   });
@@ -175,7 +175,7 @@ Before storing embeddings, you need to create an index with the appropriate dime
 ```ts filename="store-embeddings.ts" showLineNumbers copy
 // Create an index with dimension 1536 (for text-embedding-3-small)
 await store.createIndex({
-  indexName: 'my-collection',
+  indexName: 'myCollection',
   dimension: 1536,
 });
 
@@ -197,7 +197,7 @@ After creating an index, you can store embeddings along with their basic metadat
 ```ts filename="store-embeddings.ts" showLineNumbers copy
 // Store embeddings with their corresponding metadata
 await store.upsert({
-  indexName: 'my-collection',  // index name
+  indexName: 'myCollection',  // index name
   vectors: embeddings,       // array of embedding vectors
   metadata: chunks.map(chunk => ({
     text: chunk.text,  // The original text content
@@ -212,16 +212,18 @@ The upsert operation:
 - Creates new vectors if they don't exist
 - Automatically handles batching for large datasets
 
+For complete examples of upserting embeddings in different vector stores, see the [Upsert Embeddings](../../examples/rag/upsert/upsert-embeddings.mdx) guide.
+
 ## Adding Metadata
 
-Vector stores support rich metadata for advanced filtering and organization. You can add any JSON-serializable fields that will help with retrieval.
+Vector stores support rich metadata (any JSON-serializable fields) for filtering and organization. Since metadata is stored with no fixed schema, use consistent field naming to avoid unexpected query results.
 
-**Reminder:** Metadata is stored as a JSON field with no fixed schema, so you'll want to name your fields consistently and apply a consistent schema, or your queries will return unexpected results.
+**Important**: Metadata is crucial for vector storage - without it, you'd only have numerical embeddings with no way to return the original text or filter results. Always store at least the source text as metadata.
 
 ```ts showLineNumbers copy
 // Store embeddings with rich metadata for better organization and filtering
-await vectorStore.upsert({
-  indexName: "embeddings",
+await store.upsert({
+  indexName: "myCollection",
   vectors: embeddings,
   metadata: chunks.map((chunk) => ({
     // Basic content
@@ -256,16 +258,3 @@ Key metadata considerations:
 - Only store metadata you'll query against
 - Match embedding dimensions to your model (e.g., 1536 for `text-embedding-3-small`)
 
-## Examples
-
-For complete examples of different vector store implementations, see:
-
-- [Insert Embedding in PgVector](../../examples/rag/insert-embedding-in-pgvector.mdx)
-- [Insert Embedding in Pinecone](../../examples/rag/insert-embedding-in-pinecone.mdx)
-- [Insert Embedding in Qdrant](../../examples/rag/insert-embedding-in-qdrant.mdx)
-- [Insert Embedding in Chroma](../../examples/rag/insert-embedding-in-chroma.mdx)
-- [Insert Embedding in Astra DB](../../examples/rag/insert-embedding-in-astra.mdx)
-- [Insert Embedding in LibSQL](../../examples/rag/insert-embedding-in-libsql.mdx)
-- [Insert Embedding in Upstash](../../examples/rag/insert-embedding-in-upstash.mdx)
-- [Insert Embedding in Cloudflare Vectorize](../../examples/rag/insert-embedding-in-vectorize.mdx)
-- [Basic RAG with Vector Storage](../../examples/rag/basic-rag.mdx)
