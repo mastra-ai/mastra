@@ -113,26 +113,9 @@ const response = await agent.stream(
 );
 ```
 
-## Best Practices
-
-1. **Resource Management**
-   - Use unique IDs when creating multiple instances with identical configurations
-   - Consider moving configuration to a higher scope to avoid recreation
-   - Always handle connection lifecycle properly
-
-2. **Error Handling**
-   - Wrap MCP operations in try/catch blocks
-   - Handle connection errors gracefully
-   - Implement proper cleanup in finally blocks
-
-3. **Performance**
-   - Reuse MCP configurations when possible
-   - Use toolsets for dynamic tool access
-   - Configure connection timeouts appropriately
-
 ## Using the Mastra Documentation Server
 
-Looking to use Mastra's documentation server in your IDE? Check out our [Documentation Server guide](/docs/getting-started/docs-server) to get started.
+Looking to use Mastra's MCP documentation server in your IDE? Check out our [MCP Documentation Server guide](/docs/getting-started/mcp-docs-server) to get started.
 
 ## Next Steps
 
