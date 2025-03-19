@@ -39,10 +39,11 @@ export interface ToolAction<
   TSchemaOut extends z.ZodSchema | undefined = undefined,
   TSchemaDeps extends z.ZodSchema | undefined = undefined,
   TContext extends ToolExecutionContext<TSchemaIn, TSchemaDeps> = ToolExecutionContext<TSchemaIn, TSchemaDeps>,
-> extends IAction<string, TSchemaIn, TSchemaOut, TContext, ToolExecutionOptions> {
+  TExtraArgs extends unknown[] = [options: ToolExecutionOptions],
+> extends IAction<string, TSchemaIn, TSchemaOut, TContext, TExtraArgs> {
   description: string;
   dependenciesSchema?: TSchemaDeps;
-  execute?: (context: TContext, options?: ToolExecutionOptions) => Promise<InferZodType<TSchemaOut, unknown>>;
+  execute?: (context: TContext, ...extraArgs: TExtraArgs) => Promise<InferZodType<TSchemaOut, unknown>>;
   mastra?: Mastra;
 }
 

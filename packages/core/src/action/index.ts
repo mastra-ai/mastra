@@ -36,7 +36,7 @@ export interface IAction<
   TSchemaIn extends z.ZodSchema | undefined,
   TSchemaOut extends z.ZodSchema | undefined,
   TContext extends IExecutionContext<TSchemaIn>,
-  TOptions extends unknown = unknown,
+  TExtraArgs extends unknown[] = [],
 > {
   id: TId;
   description?: string;
@@ -44,5 +44,5 @@ export interface IAction<
   outputSchema?: TSchemaOut;
   // execute must remain optional because ITools extends IAction and tools may need execute to be optional
   // when forwarding tool calls to the client or to a queue instead of executing them in the same process
-  execute?: (context: TContext, options?: TOptions) => Promise<InferZodType<TSchemaOut, unknown>>;
+  execute?: (context: TContext, ...extraArgs: TExtraArgs) => Promise<InferZodType<TSchemaOut, unknown>>;
 }
