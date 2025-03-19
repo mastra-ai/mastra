@@ -375,7 +375,7 @@ function createExecute(tool: ToolToConvert, options: ToolOptions, logType?: 'too
     );
   };
 
-  return async (args: any, execOptions?: any) => {
+  return async (args: any, execOptions: any) => {
     try {
       logger.debug(start, { ...rest, args });
       return await execFunction(args, execOptions);
