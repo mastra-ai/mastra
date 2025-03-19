@@ -153,8 +153,6 @@ export const POST = handle(app);
   async deploy(outputDirectory: string): Promise<void> {
     const envVars = await this.loadEnvVars();
 
-    const envsAsObject = Object.assign({}, Object.fromEntries(envVars.entries()));
-
     const teamSlug = await this.getTeamSlug();
 
     // Create the command array with base arguments
@@ -175,7 +173,6 @@ export const POST = handle(app);
       cwd: join(outputDirectory, this.outputDir),
       env: {
         PATH: process.env.PATH,
-        ...envsAsObject,
       },
       stdio: 'inherit',
     });
