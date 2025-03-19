@@ -1,5 +1,33 @@
 # @mastra/dane
 
+## 0.0.9
+
+### Patch Changes
+
+- 404640e: AgentNetwork changeset
+- Updated dependencies [404640e]
+- Updated dependencies [3bce733]
+  - @mastra/stabilityai@1.1.12
+  - @mastra/github@1.1.12
+  - @mastra/memory@0.2.4
+  - @mastra/upstash@0.1.12
+  - @mastra/core@0.6.3
+  - @mastra/mcp@0.3.4
+  - @mastra/rag@0.1.12
+
+## 0.0.9-alpha.1
+
+### Patch Changes
+
+- Updated dependencies [3bce733]
+  - @mastra/core@0.6.3-alpha.1
+  - @mastra/github@1.1.12-alpha.1
+  - @mastra/stabilityai@1.1.12-alpha.1
+  - @mastra/mcp@0.3.4-alpha.1
+  - @mastra/memory@0.2.4-alpha.1
+  - @mastra/rag@0.1.12-alpha.1
+  - @mastra/upstash@0.1.12-alpha.1
+
 ## 0.0.9-alpha.0
 
 ### Patch Changes
