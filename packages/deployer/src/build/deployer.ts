@@ -2,6 +2,7 @@ import * as babel from '@babel/core';
 import type { MastraDeployer } from '@mastra/core';
 import { rollup } from 'rollup';
 import esbuild from 'rollup-plugin-esbuild';
+import dotenv from 'rollup-plugin-dotenv';
 
 import { removeAllExceptDeployer } from './babel/get-deployer';
 import commonjs from '@rollup/plugin-commonjs';
@@ -57,6 +58,9 @@ export function getDeployerBundler(entryFile: string) {
           });
         },
       },
+      dotenv({
+        envKey: 'production',
+      }),
       // let esbuild remove all unused imports
       esbuild({
         target: 'node20',

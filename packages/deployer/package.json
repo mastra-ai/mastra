@@ -99,6 +99,7 @@
     "hono": "^4.7.4",
     "resolve-from": "^5.0.0",
     "rollup": "^4.35.0",
+    "rollup-plugin-dotenv": "^0.5.1",
     "rollup-plugin-esbuild": "^6.2.1",
     "rollup-plugin-node-externals": "^8.0.0",
     "typescript-paths": "^1.5.1",
