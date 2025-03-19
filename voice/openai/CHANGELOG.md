@@ -1,5 +1,14 @@
 # @mastra/voice-openai
 
+## 0.1.8
+
+### Patch Changes
+
+- 404640e: AgentNetwork changeset
+- Updated dependencies [404640e]
+- Updated dependencies [3bce733]
+  - @mastra/core@0.6.3
+
 ## 0.1.8-alpha.1
 
 ### Patch Changes

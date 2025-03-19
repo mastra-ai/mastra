@@ -1,5 +1,14 @@
 # @mastra/speech-deepgram
 
+## 0.1.11
+
+### Patch Changes
+
+- 404640e: AgentNetwork changeset
+- Updated dependencies [404640e]
+- Updated dependencies [3bce733]
+  - @mastra/core@0.6.3
+
 ## 0.1.11-alpha.1
 
 ### Patch Changes
