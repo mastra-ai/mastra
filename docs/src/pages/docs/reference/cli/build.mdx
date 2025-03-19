@@ -14,6 +14,7 @@ mastra build [options]
 ## Options
 
 - `--dir <path>`: Directory containing your Mastra project (default: current directory)
+- `--port <number>`: Port number for the server (default: 4111)
 
 ## What It Does
 
@@ -32,7 +33,17 @@ mastra build
 
 # Build from specific directory
 mastra build --dir ./my-mastra-project
+
+# Build with custom port
+mastra build --port 3000
 ```
+
+## Port Configuration
+
+The server port can be configured in three ways, in order of precedence:
+1. Command line argument: `--port 3000`
+2. Environment variable: `PORT=3000`
+3. Default value: `4111`
 
 ## Output
 

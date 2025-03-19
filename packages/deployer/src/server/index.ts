@@ -1983,23 +1983,25 @@ export async function createHonoServer(
 
 export async function createNodeServer(
   mastra: Mastra,
-  options: { playground?: boolean; swaggerUI?: boolean; apiReqLogs?: boolean } = {},
+  options: { playground?: boolean; swaggerUI?: boolean; apiReqLogs?: boolean; port?: number } = {},
 ) {
   const app = await createHonoServer(mastra, options);
+  const port = options.port || Number(process.env.PORT) || 4111;
+
   return serve(
     {
       fetch: app.fetch,
-      port: Number(process.env.PORT) || 4111,
+      port,
     },
     () => {
       const logger = mastra.getLogger();
-      logger.info(`🦄 Mastra API running on port ${process.env.PORT || 4111}/api`);
-      logger.info(`📚 Open API documentation available at http://localhost:${process.env.PORT || 4111}/openapi.json`);
+      logger.info(`🦄 Mastra API running on port ${port}/api`);
+      logger.info(`📚 Open API documentation available at http://localhost:${port}/openapi.json`);
       if (options?.swaggerUI) {
-        logger.info(`🧪 Swagger UI available at http://localhost:${process.env.PORT || 4111}/swagger-ui`);
+        logger.info(`🧪 Swagger UI available at http://localhost:${port}/swagger-ui`);
       }
       if (options?.playground) {
-        logger.info(`👨‍💻 Playground available at http://localhost:${process.env.PORT || 4111}/`);
+        logger.info(`👨‍💻 Playground available at http://localhost:${port}/`);
       }
     },
   );

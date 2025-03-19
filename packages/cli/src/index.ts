@@ -150,12 +150,13 @@ program
   .command('build')
   .description('Build your Mastra project')
   .option('-d, --dir <path>', 'Path to directory')
+  .option('-p, --port <port>', 'Port number for the server (defaults to 4111)')
   .action(async args => {
     await analytics.trackCommandExecution({
       command: 'mastra build',
       args,
       execution: async () => {
-        await build({ dir: args.dir });
+        await build({ dir: args.dir, port: args?.port ? parseInt(args.port) : undefined });
       },
     });
   });

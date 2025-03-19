@@ -7,7 +7,11 @@ import { mastra } from '#mastra';
 import { createNodeServer } from '#server';
 
 // @ts-ignore
-await createNodeServer(mastra, { playground: true, swaggerUI: true });
+await createNodeServer(mastra, {
+  playground: true,
+  swaggerUI: true,
+  port: process.env.PORT ? Number(process.env.PORT) : 4111,
+});
 
 registerHook(AvailableHooks.ON_GENERATION, ({ input, output, metric, runId, agentName, instructions }) => {
   evaluate({
