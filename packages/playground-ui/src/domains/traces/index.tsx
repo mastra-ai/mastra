@@ -28,7 +28,7 @@ export function Traces({ traces }: { traces: RefinedTrace[] }) {
   const currentTraceParentSpan = currentTrace?.find(span => span.parentSpanId === undefined) || currentTrace?.[0];
 
   return (
-    <div className="h-full w-[calc(100%_-_400px)]">
+    <div className="h-full w-[calc(100%_-_325px)]">
       <ScrollArea className="h-full">
         <Table>
           <TableHeader className="sticky top-0 z-10 bg-[#0F0F0F]" style={{ outline: '1px solid 0_0%_20.4%' }}>
