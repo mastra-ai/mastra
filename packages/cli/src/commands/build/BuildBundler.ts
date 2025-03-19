@@ -11,7 +11,7 @@ export class BuildBundler extends Bundler {
   }
 
   getEnvFiles(): Promise<string[]> {
-    const possibleFiles = ['.env.production', '.env.local', '.env'];
+    const possibleFiles = ['.env.production', '.env.local', '.env.development', '.env'];
 
     try {
       const fileService = new FileService();
