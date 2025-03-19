@@ -37,7 +37,7 @@ const analyzeContext = new Step({
   }),
   execute: async ({ context, mastra }) => {
     console.log('---------------------------');
-    const ragAgent = mastra?.agents?.ragAgent;
+    const ragAgent = mastra?.getAgent('ragAgent');
     const query = context?.getStepResult<{ query: string }>('trigger')?.query;
 
     const analysisPrompt = `${query} 1. First, carefully analyze the retrieved context chunks and identify key information.`;
@@ -57,7 +57,7 @@ const breakdownThoughts = new Step({
   }),
   execute: async ({ context, mastra }) => {
     console.log('---------------------------');
-    const ragAgent = mastra?.agents?.ragAgent;
+    const ragAgent = mastra?.getAgent('ragAgent');
     const analysis = context?.getStepResult<{ initialAnalysis: string }>('analyzeContext')?.initialAnalysis;
 
     const connectionPrompt = `
@@ -81,7 +81,7 @@ const connectPieces = new Step({
   }),
   execute: async ({ context, mastra }) => {
     console.log('---------------------------');
-    const ragAgent = mastra?.agents?.ragAgent;
+    const ragAgent = mastra?.getAgent('ragAgent');
     const process = context?.getStepResult<{ breakdown: string }>('breakdownThoughts')?.breakdown;
     const connectionPrompt = `
         Based on the breakdown: ${process}
@@ -104,7 +104,7 @@ const drawConclusions = new Step({
   }),
   execute: async ({ context, mastra }) => {
     console.log('---------------------------');
-    const ragAgent = mastra?.agents?.ragAgent;
+    const ragAgent = mastra?.getAgent('ragAgent');
     const evidence = context?.getStepResult<{ connections: string }>('connectPieces')?.connections;
     const conclusionPrompt = `
         Based on the connections: ${evidence}
@@ -127,7 +127,7 @@ const finalAnswer = new Step({
   }),
   execute: async ({ context, mastra }) => {
     console.log('---------------------------');
-    const ragAgent = mastra?.agents?.ragAgent;
+    const ragAgent = mastra?.getAgent('ragAgent');
     const conclusions = context?.getStepResult<{ conclusions: string }>('drawConclusions')?.conclusions;
     const answerPrompt = `
         Based on the conclusions: ${conclusions}
