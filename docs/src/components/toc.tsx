@@ -37,8 +37,8 @@ export function TableOfContents(props: TOCProps) {
   }, [pathname]);
 
   return (
-    <div className="sticky top-[4rem] w-64 hidden xl:block h-[calc(100vh-4rem)]">
-      <div className="overflow-y-auto px-4 py-8 flex flex-col">
+    <div className="sticky top-[4rem] w-64 hidden xl:block max-h-[calc(100vh-4rem)] overflow-y-auto pb-4 nextra-scrollbar">
+      <div className="px-4 py-8 flex flex-col">
         <div>
           <h3 className="text-xs font-semibold mb-2 pl-4 text-[#6b7280] dark:text-white">
             On This Page
@@ -105,7 +105,7 @@ export function TableOfContents(props: TOCProps) {
           Subscribe to the Weekly changelog
         </h3>
         <SubscribeForm
-          className="md:flex-col md:items-start"
+          className="md:flex-col md:items-start mt-2"
           inputClassName="md:w-full md:min-w-full pl-2 truncate"
           buttonClassName="md:w-full md:min-w-full"
           showLabel={false}
