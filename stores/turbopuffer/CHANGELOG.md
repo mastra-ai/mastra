@@ -1,5 +1,21 @@
 # @mastra/turbopuffer
 
+## 0.0.4
+
+### Patch Changes
+
+- 404640e: AgentNetwork changeset
+- Updated dependencies [404640e]
+- Updated dependencies [3bce733]
+  - @mastra/core@0.6.3
+
+## 0.0.4-alpha.1
+
+### Patch Changes
+
+- Updated dependencies [3bce733]
+  - @mastra/core@0.6.3-alpha.1
+
 ## 0.0.4-alpha.0
 
 ### Patch Changes
