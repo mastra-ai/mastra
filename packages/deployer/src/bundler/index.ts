@@ -7,7 +7,6 @@ import virtual from '@rollup/plugin-virtual';
 import { copy, ensureDir, readJSON, emptyDir } from 'fs-extra/esm';
 import resolveFrom from 'resolve-from';
 import type { InputOptions, OutputOptions } from 'rollup';
-import { rollup } from 'rollup';
 
 import { analyzeBundle } from '../build/analyze';
 import { createBundler as createBundlerUtil, getInputOptions } from '../build/bundler';
