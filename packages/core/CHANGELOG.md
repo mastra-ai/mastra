@@ -1,5 +1,11 @@
 # @mastra/core
 
+## 0.6.3-alpha.1
+
+### Patch Changes
+
+- 3bce733: fix: agent.generate only get thread if there is threadID
+
 ## 0.6.3-alpha.0
 
 ### Patch Changes
