@@ -1,7 +1,7 @@
 {
   "name": "@mastra/playground-ui",
   "type": "module",
-  "version": "2.0.1",
+  "version": "2.0.3-alpha.0",
   "description": "Mastra Playground components",
   "main": "dist/index.umd.js",
   "module": "dist/index.es.js",
@@ -33,6 +33,7 @@
   "author": "Mastra",
   "license": "ISC",
   "dependencies": {
+    "@ai-sdk/ui-utils": "^1.1.19",
     "@assistant-ui/react": "^0.7.91",
     "@assistant-ui/react-markdown": "^0.7.21",
     "@assistant-ui/react-syntax-highlighter": "^0.7.10",
@@ -66,7 +67,7 @@
     "react-code-block": "1.1.1",
     "react-day-picker": "^9.6.1",
     "react-hook-form": "^7.53.0",
-    "react-markdown": "^9.0.1",
+    "react-markdown": "^9.1.0",
     "react-resizable-panels": "^2.1.7",
     "react-syntax-highlighter": "^15.6.1",
     "rehype-stringify": "^10.0.1",
