@@ -113,6 +113,38 @@ const response = await agent.stream(
 );
 ```
 
+## MCP Registries
+
+MCP servers can be accessed through registries that provide curated collections of tools. Here's how to use tools from different registries:
+
+### Smithery.ai Registry
+
+[Smithery.ai](https://smithery.ai) provides a registry of MCP servers that you can easily use with Mastra:
+
+```typescript
+// Unix/Mac
+const mcp = new MCPConfiguration({
+  servers: {
+    sequentialThinking: {
+      command: "npx",
+      args: ["-y", "@smithery/cli@latest", "run", "@smithery-ai/server-sequential-thinking", "--config", "{}"],
+    },
+  },
+});
+
+// Windows
+const mcp = new MCPConfiguration({
+  servers: {
+    sequentialThinking: {
+      command: "cmd",
+      args: ["/c", "npx", "-y", "@smithery/cli@latest", "run", "@smithery-ai/server-sequential-thinking", "--config", "{}"],
+    },
+  },
+});
+```
+
+This example is adapted from the Claude integration example in the Smithery documentation.
+
 ## Using the Mastra Documentation Server
 
 Looking to use Mastra's MCP documentation server in your IDE? Check out our [MCP Documentation Server guide](/docs/getting-started/mcp-docs-server) to get started.
