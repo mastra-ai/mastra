@@ -15,12 +15,12 @@ import type {
 } from '../';
 import type { MastraPrimitives } from '../../action';
 import type { ToolsInput } from '../../agent/types';
+import type { Mastra } from '../../mastra';
 import type { MastraMemory } from '../../memory/memory';
 import type { CoreTool } from '../../tools';
 import type { DependenciesType } from '../../utils';
 import { createMastraProxy, delay, makeCoreTool } from '../../utils';
 
-import type { Mastra } from '../../mastra';
 import { MastraLLMBase } from './base';
 
 export class MastraLLM extends MastraLLMBase {
@@ -85,6 +85,10 @@ export class MastraLLM extends MastraLLMBase {
     dependencies?: DependenciesType<TSchemaDeps>;
   } = {}): Record<string, CoreTool> {
     this.logger.debug('Starting tool conversion for LLM');
+
+    if (!tools) {
+      return {};
+    }
 
     let mastraProxy = undefined;
     const logger = this.logger;
