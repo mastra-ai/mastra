@@ -117,34 +117,6 @@ const response = await agent.stream(
 
 MCP servers can be accessed through registries that provide curated collections of tools. Here's how to use tools from different registries:
 
-### Smithery.ai Registry
-
-[Smithery.ai](https://smithery.ai) provides a registry of MCP servers that you can easily use with Mastra:
-
-```typescript
-// Unix/Mac
-const mcp = new MCPConfiguration({
-  servers: {
-    sequentialThinking: {
-      command: "npx",
-      args: ["-y", "@smithery/cli@latest", "run", "@smithery-ai/server-sequential-thinking", "--config", "{}"],
-    },
-  },
-});
-
-// Windows
-const mcp = new MCPConfiguration({
-  servers: {
-    sequentialThinking: {
-      command: "cmd",
-      args: ["/c", "npx", "-y", "@smithery/cli@latest", "run", "@smithery-ai/server-sequential-thinking", "--config", "{}"],
-    },
-  },
-});
-```
-
-This example is adapted from the Claude integration example in the Smithery documentation.
-
 ### Composio.dev Registry
 
 [Composio.dev](https://composio.dev) provides a registry of [SSE-based MCP servers](https://mcp.composio.dev) that can be easily integrated with Mastra. The SSE URL that's generated for Cursor is compatible with Mastra - you can use it directly in your configuration:
@@ -163,6 +135,50 @@ const mcp = new MCPConfiguration({
 ```
 
 When using Composio-provided tools, you can authenticate with services (like Google Sheets or Gmail) directly through conversation with your agent. The tools include authentication capabilities that guide you through the process while chatting.
+
+### Smithery.ai Registry
+
+[Smithery.ai](https://smithery.ai) provides a registry of MCP servers that you can easily use with Mastra:
+
+```typescript
+// Unix/Mac
+const mcp = new MCPConfiguration({
+  servers: {
+    sequentialThinking: {
+      command: "npx",
+      args: [
+        "-y",
+        "@smithery/cli@latest",
+        "run",
+        "@smithery-ai/server-sequential-thinking",
+        "--config",
+        "{}",
+      ],
+    },
+  },
+});
+
+// Windows
+const mcp = new MCPConfiguration({
+  servers: {
+    sequentialThinking: {
+      command: "cmd",
+      args: [
+        "/c",
+        "npx",
+        "-y",
+        "@smithery/cli@latest",
+        "run",
+        "@smithery-ai/server-sequential-thinking",
+        "--config",
+        "{}",
+      ],
+    },
+  },
+});
+```
+
+This example is adapted from the Claude integration example in the Smithery documentation.
 
 ## Using the Mastra Documentation Server
 
