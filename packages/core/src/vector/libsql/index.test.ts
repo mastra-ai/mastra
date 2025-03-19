@@ -217,7 +217,12 @@ describe('DefaultVectorDB', () => {
         };
         await vectorDB.updateIndexById(testIndexName, id, update);
 
-        const results = await vectorDB.query({ indexName: testIndexName, queryVector: [4, 5, 6], topK: 1 });
+        const results = await vectorDB.query({
+          indexName: testIndexName,
+          queryVector: [4, 5, 6],
+          topK: 1,
+          includeVector: true,
+        });
         expect(results[0]?.id).toBe(id);
         expect(results[0]?.metadata).toEqual({ test: 'initial' });
         expect(results[0]?.vector).toEqual([4, 5, 6]);
