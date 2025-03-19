@@ -142,7 +142,7 @@ export abstract class Bundler extends MastraBundler {
     // Handle port configuration if needed
     let finalServerFile = serverFile;
     if (isVirtual && typeof bundleLocationOrOptions === 'object' && bundleLocationOrOptions?.port) {
-      finalServerFile = serverFile.replace(
+      finalServerFile = serverFile.replaceAll(
         'process.env.PORT',
         bundleLocationOrOptions.port.toString() || 'process.env.PORT || "4111"',
       );
