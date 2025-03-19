@@ -10,7 +10,6 @@ import { createNodeServer } from '#server';
 await createNodeServer(mastra, {
   playground: true,
   swaggerUI: true,
-  port: process.env.PORT ? Number(process.env.PORT) : 4111,
 });
 
 registerHook(AvailableHooks.ON_GENERATION, ({ input, output, metric, runId, agentName, instructions }) => {
