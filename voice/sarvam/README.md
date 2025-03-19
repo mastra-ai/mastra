@@ -21,17 +21,24 @@ SARVAM_API_KEY=your_api_key
 ```typescript
 import { SarvamVoice } from '@mastra/voice-sarvam';
 
-const voice = new CompositeVoice({
-  speakProvider: new SarvamVoice({
-    speechModel: { apiKey: 'YOUR-API-KEY' },
-    speaker: 'meera',
-  }),
+const voice = new SarvamVoice({
+  speechModel: {
+    model: 'bulbul:v1',
+    apiKey: process.env.SARVAM_API_KEY!,
+    language: 'en-IN',
+  },
+  listeningModel: {
+    apiKey: process.env.SARVAM_API_KEY!,
+    model: 'saarika:v2',
+    languageCode: 'unknown', // By default only works with saarika:v2
+  },
+  speaker: 'meera',
 });
 
 // Create an agent with voice capabilities
 export const agent = new Agent({
   name: 'Agent',
-  instructions: `You are a helpful assistant with voice capabilities.`,
+  instructions: `You are a helpful assistant with both TTS and STT capabilities.`,
   model: google('gemini-1.5-pro-latest'),
   voice: voice,
 });
@@ -41,7 +48,7 @@ const speakers = await voice.getSpeakers();
 
 // Generate speech and save to file
 const audio = await agent.speak("Hello, I'm your AI assistant!");
-const filePath = path.join(process.cwd(), 'agent.mp3');
+const filePath = path.join(process.cwd(), 'agent.wav');
 const writer = createWriteStream(filePath);
 
 audio.pipe(writer);
@@ -62,11 +69,14 @@ const streamWriter = createWriteStream(streamFilePath);
 audioStream.pipe(streamWriter);
 
 console.log(`Speech saved to ${filePath} and ${streamFilePath}`);
+
+// Generate Text from an audio stream
+const text = await voice.listen(audioStream);
 ```
 
 ## Features
 
-- High-quality Text-to-Speech synthesis
+- High-quality Text-to-Speech and Speech-to-Text synthesis
 - Support for 10+ Indian languages
 - Choice of 10+ diverse speakers
 - Advanced voice customization options
