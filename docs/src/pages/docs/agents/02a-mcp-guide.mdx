@@ -91,9 +91,9 @@ Use this approach when:
 ```typescript
 const mcp = new MCPConfiguration({
   servers: {
-    stockPrice: {
+    example: {
       command: "npx",
-      args: ["tsx", "stock-price.ts"],
+      args: ["-y", "@example/fakemcp"],
       env: {
         API_KEY: "your-api-key",
       },
