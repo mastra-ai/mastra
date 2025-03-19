@@ -42,7 +42,7 @@ POSTGRES_CONNECTION_STRING=your_connection_string_here
 
 Then, import the necessary dependencies:
 
-```typescript copy showLineNumbers filename="src/mastra/index.ts"
+```typescript copy showLineNumbers filename="index.ts"
 import { openai } from '@ai-sdk/openai';
 import { Mastra } from "@mastra/core";
 import { Agent } from "@mastra/core/agent";
@@ -57,7 +57,7 @@ import { embedMany } from "ai";
 
 Using createVectorQueryTool imported from @mastra/rag, you can create a tool that can query the vector database.
 
-```typescript copy showLineNumbers{8} filename="src/mastra/index.ts"
+```typescript copy showLineNumbers{8} filename="index.ts"
 const vectorQueryTool = createVectorQueryTool({
   vectorStoreName: "pgVector",
   indexName: "embeddings",
@@ -69,7 +69,7 @@ const vectorQueryTool = createVectorQueryTool({
 
 Using createDocumentChunkerTool imported from @mastra/rag, you can create a tool that chunks the document and sends the chunks to your agent.
 
-```typescript copy showLineNumbers{14} filename="src/mastra/index.ts"
+```typescript copy showLineNumbers{14} filename="index.ts"
 const doc = MDocument.fromText(yourText);
 
 const documentChunkerTool = createDocumentChunkerTool({
@@ -87,7 +87,7 @@ const documentChunkerTool = createDocumentChunkerTool({
 
 Set up a single Mastra agent that can handle both querying and cleaning:
 
-```typescript copy showLineNumbers{26} filename="src/mastra/index.ts"
+```typescript copy showLineNumbers{26} filename="index.ts"
 const ragAgent = new Agent({
   name: "RAG Agent",
   instructions: `You are a helpful assistant that handles both querying and cleaning documents.
@@ -108,7 +108,7 @@ const ragAgent = new Agent({
 
 Instantiate PgVector and Mastra with the components:
 
-```typescript copy showLineNumbers{41} filename="src/mastra/index.ts"
+```typescript copy showLineNumbers{41} filename="index.ts"
 const pgVector = new PgVector(process.env.POSTGRES_CONNECTION_STRING!);
 
 export const mastra = new Mastra({
@@ -122,7 +122,7 @@ const agent = mastra.getAgent('ragAgent');
 
 Chunk the initial document and create embeddings:
 
-```typescript copy showLineNumbers{49} filename="src/mastra/index.ts"
+```typescript copy showLineNumbers{49} filename="index.ts"
 const chunks = await doc.chunk({
   strategy: "recursive",
   size: 256,
@@ -152,7 +152,7 @@ await vectorStore.upsert({
 
 Let's try querying the raw data to establish a baseline:
 
-```typescript copy showLineNumbers{73} filename="src/mastra/index.ts"
+```typescript copy showLineNumbers{73} filename="index.ts"
 // Generate response using the original embeddings
 const query = 'What are all the technologies mentioned for space exploration?';
 const originalResponse = await agent.generate(query);
@@ -164,7 +164,7 @@ console.log('Response:', originalResponse.text);
 
 After seeing the initial results, we can clean the data to improve quality:
 
-```typescript copy showLineNumbers{79} filename="src/mastra/index.ts"
+```typescript copy showLineNumbers{79} filename="index.ts"
 const chunkPrompt = `Use the tool provided to clean the chunks. Make sure to filter out irrelevant information that is not space related and remove duplicates.`;
 
 const newChunks = await agent.generate(chunkPrompt);
@@ -200,7 +200,7 @@ await vectorStore.upsert({
 
 Query the data again after cleaning to observe any differences in the response:
 
-```typescript copy showLineNumbers{109} filename="src/mastra/index.ts"
+```typescript copy showLineNumbers{109} filename="index.ts"
 // Query again with cleaned embeddings
 const cleanedResponse = await agent.generate(query);
 console.log('\nQuery:', query);
