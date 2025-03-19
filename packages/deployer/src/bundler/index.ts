@@ -104,44 +104,74 @@ export abstract class Bundler extends MastraBundler {
   }
 
   protected async _bundle(
-    entry: string,
-    entryFile: string,
+    serverFile: string,
+    mastraEntryFile: string,
     outputDirectory: string,
-    options?: { port?: number },
+    bundleLocationOrOptions?: { port?: number } | string,
   ): Promise<void> {
-    const env = await this.loadEnvVars();
-    const virtualEntry = entry
-      .replace('process.env.PORT', options?.port?.toString() || 'process.env.PORT || "4111"')
-      .replace('#mastra', entryFile);
+    this.logger.info('Start bundling Mastra');
+    const bundleLocation =
+      typeof bundleLocationOrOptions === 'string' ? bundleLocationOrOptions : join(outputDirectory, this.outputDir);
+    const isVirtual = serverFile.includes('\n') || existsSync(serverFile);
 
-    const bundle = await rollup({
-      input: 'virtual-entry',
-      plugins: [
-        {
-          name: 'virtual',
-          resolveId(id) {
-            if (id === 'virtual-entry') {
-              return id;
-            }
-            return null;
-          },
-          load(id) {
-            if (id === 'virtual-entry') {
-              return virtualEntry;
-            }
-            return null;
-          },
-        },
-        // ... rest of plugins ...
-      ],
-    });
+    const analyzedBundleInfo = await analyzeBundle(
+      serverFile,
+      mastraEntryFile,
+      join(outputDirectory, this.analyzeOutputDir),
+      'node',
+      this.logger,
+    );
 
-    await bundle.write({
-      dir: join(outputDirectory, this.outputDir),
-      format: 'es',
-      sourcemap: true,
-    });
+    await writeTelemetryConfig(mastraEntryFile, join(outputDirectory, this.outputDir));
+    const dependenciesToInstall = new Map<string, string>();
+    for (const dep of analyzedBundleInfo.externalDependencies) {
+      try {
+        const pkgPath = resolveFrom(mastraEntryFile, `${dep}/package.json`);
+        const pkg = await readJSON(pkgPath);
+        dependenciesToInstall.set(dep, pkg.version);
+      } catch {
+        dependenciesToInstall.set(dep, 'latest');
+      }
+    }
 
-    await bundle.close();
+    await this.writePackageJson(join(outputDirectory, this.outputDir), dependenciesToInstall);
+    await this.writeInstrumentationFile(join(outputDirectory, this.outputDir));
+
+    this.logger.info('Bundling Mastra application');
+    const inputOptions: InputOptions = await getInputOptions(mastraEntryFile, analyzedBundleInfo, 'node');
+
+    // Handle port configuration if needed
+    let finalServerFile = serverFile;
+    if (isVirtual && typeof bundleLocationOrOptions === 'object' && bundleLocationOrOptions?.port) {
+      finalServerFile = serverFile.replace(
+        'process.env.PORT',
+        bundleLocationOrOptions.port.toString() || 'process.env.PORT || "4111"',
+      );
+    }
+
+    if (isVirtual) {
+      inputOptions.input = { index: '#entry' };
+
+      if (Array.isArray(inputOptions.plugins)) {
+        inputOptions.plugins.unshift(virtual({ '#entry': finalServerFile }));
+      } else {
+        inputOptions.plugins = [virtual({ '#entry': finalServerFile })];
+      }
+    } else {
+      inputOptions.input = { index: finalServerFile };
+    }
+
+    const bundler = await this.createBundler(inputOptions, { dir: bundleLocation });
+
+    await bundler.write();
+    this.logger.info('Bundling Mastra done');
+
+    this.logger.info('Copying public files');
+    await this.copyPublic(dirname(mastraEntryFile), outputDirectory);
+    this.logger.info('Done copying public files');
+
+    this.logger.info('Installing dependencies');
+    await this.installDependencies(outputDirectory);
+    this.logger.info('Done installing dependencies');
   }
 }
