@@ -36,7 +36,7 @@ POSTGRES_CONNECTION_STRING=your_connection_string_here
 
 Then, import the necessary dependencies:
 
-```typescript copy showLineNumbers filename="src/mastra/index.ts"
+```typescript copy showLineNumbers filename="index.ts"
 import { openai } from "@ai-sdk/openai";
 import { Mastra } from "@mastra/core";
 import { Agent } from "@mastra/core/agent";
@@ -49,7 +49,7 @@ import { embedMany } from "ai";
 
 Using createVectorQueryTool imported from @mastra/rag, you can create a tool that can query the vector database.
 
-```typescript copy showLineNumbers{8} filename="src/mastra/index.ts"
+```typescript copy showLineNumbers{8} filename="index.ts"
 const vectorQueryTool = createVectorQueryTool({
   vectorStoreName: "pgVector",
   indexName: "embeddings",
@@ -61,7 +61,7 @@ const vectorQueryTool = createVectorQueryTool({
 
 Set up the Mastra agent with chain-of-thought prompting instructions:
 
-```typescript copy showLineNumbers{14} filename="src/mastra/index.ts"
+```typescript copy showLineNumbers{14} filename="index.ts"
 export const ragAgent = new Agent({
   name: "RAG Agent",
   instructions: `You are a helpful assistant that answers questions based on the provided context.
@@ -95,7 +95,7 @@ Remember: Explain how you're using the retrieved information to reach your concl
 
 Instantiate PgVector and Mastra with all components:
 
-```typescript copy showLineNumbers{36} filename="src/mastra/index.ts"
+```typescript copy showLineNumbers{36} filename="index.ts"
 const pgVector = new PgVector(process.env.POSTGRES_CONNECTION_STRING!);
 
 export const mastra = new Mastra({
@@ -109,7 +109,7 @@ const agent = mastra.getAgent("ragAgent");
 
 Create a document and process it into chunks:
 
-```typescript copy showLineNumbers{44} filename="src/mastra/index.ts"
+```typescript copy showLineNumbers{44} filename="index.ts"
 const doc = MDocument.fromText(
   `The Impact of Climate Change on Global Agriculture...`,
 );
@@ -126,7 +126,7 @@ const chunks = await doc.chunk({
 
 Generate embeddings for the chunks and store them in the vector database:
 
-```typescript copy showLineNumbers{55} filename="src/mastra/index.ts"
+```typescript copy showLineNumbers{55} filename="index.ts"
 const { embeddings } = await embedMany({
   values: chunks.map(chunk => chunk.text),
   model: openai.embedding("text-embedding-3-small"),
@@ -148,7 +148,7 @@ await vectorStore.upsert({
 
 Try different queries to see how the agent breaks down its reasoning:
 
-```typescript copy showLineNumbers{83} filename="src/mastra/index.ts"
+```typescript copy showLineNumbers{83} filename="index.ts"
 const answerOne = await agent.generate('What are the main adaptation strategies for farmers?');
 console.log('\nQuery:', 'What are the main adaptation strategies for farmers?');
 console.log('Response:', answerOne.text);
