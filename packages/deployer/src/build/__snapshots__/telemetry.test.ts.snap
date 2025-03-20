@@ -67,3 +67,10 @@ const telemetry = telemetryConfig;
 export { telemetry };
 "
 `;
+
+exports[`getTelemetryConfig > should be able to extract the telemetry config from ./plugins/__fixtures__/empty-mastra.js 1`] = `
+"const telemetry = {};
+
+export { telemetry };
+"
+`;
