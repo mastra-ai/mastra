@@ -9,6 +9,7 @@ packages:
   - "integration-generator/*"
   - "integrations/*"
   - "examples/*"
+  - "examples/voice/*"
   - "examples/basics/**/*"
   - "examples/basics/llms/*"
   - "packages/cli/src/playground"
