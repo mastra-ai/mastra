@@ -1,13 +1,13 @@
 import type { Agent } from '../agent';
 import type { MastraDeployer } from '../deployer';
-import { LogLevel, createLogger, noopLogger } from '../logger';
 import type { Logger } from '../logger';
+import { LogLevel, createLogger, noopLogger } from '../logger';
 import type { MastraMemory } from '../memory/memory';
 import type { AgentNetwork } from '../network';
 import type { MastraStorage } from '../storage';
 import { DefaultProxyStorage } from '../storage/default-proxy-storage';
-import { InstrumentClass, Telemetry } from '../telemetry';
 import type { OtelConfig } from '../telemetry';
+import { InstrumentClass, Telemetry } from '../telemetry';
 import type { MastraTTS } from '../tts';
 import type { MastraVector } from '../vector';
 import type { Workflow } from '../workflows';
