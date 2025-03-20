@@ -36,12 +36,70 @@ export class AgentTool extends BaseResource {
   }
 }
 
-export class Agent extends BaseResource {
+export class AgentVoice extends BaseResource {
   constructor(
     options: ClientOptions,
     private agentId: string,
   ) {
     super(options);
+    this.agentId = agentId;
+  }
+
+  /**
+   * Convert text to speech using the agent's voice provider
+   * @param text - Text to convert to speech
+   * @param options - Optional provider-specific options for speech generation
+   * @returns Promise containing the audio data
+   */
+  async speak(text: string, options?: { speaker?: string; [key: string]: any }): Promise<Response> {
+    return this.request<Response>(`/api/agents/${this.agentId}/voice/speak`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: { input: text, options },
+      stream: true,
+    });
+  }
+
+  /**
+   * Convert speech to text using the agent's voice provider
+   * @param audio - Audio data to transcribe
+   * @param options - Optional provider-specific options
+   * @returns Promise containing the transcribed text
+   */
+  listen(audio: Blob, options?: Record<string, any>): Promise<Response> {
+    const formData = new FormData();
+    formData.append('audio', audio);
+
+    if (options) {
+      formData.append('options', JSON.stringify(options));
+    }
+
+    return this.request(`/api/agents/${this.agentId}/voice/listen`, {
+      method: 'POST',
+      body: formData,
+    });
+  }
+
+  /**
+   * Get available speakers for the agent's voice provider
+   * @returns Promise containing list of available speakers
+   */
+  getSpeakers(): Promise<Array<{ voiceId: string; [key: string]: any }>> {
+    return this.request(`/api/agents/${this.agentId}/voice/speakers`);
+  }
+}
+
+export class Agent extends BaseResource {
+  public readonly voice: AgentVoice;
+
+  constructor(
+    options: ClientOptions,
+    private agentId: string,
+  ) {
+    super(options);
+    this.voice = new AgentVoice(options, this.agentId);
   }
 
   /**
