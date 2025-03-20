@@ -274,7 +274,7 @@ export function workflowToStep<
         });
 
         if (suspendedStep) {
-          await suspend(suspendedStep[1].suspendPayload);
+          await suspend(suspendedStep[1].suspendPayload, { ...awaitedResult, runId: run.runId });
           // await suspend({
           //   ...suspendedStep[1].suspendPayload,
           //   __meta: { nestedRunId: run.runId, nestedRunPaths: awaitedResult.activePaths },

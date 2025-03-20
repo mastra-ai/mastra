@@ -33,7 +33,7 @@ export interface StepExecutionContext<
   TContext extends WorkflowContext = WorkflowContext,
 > extends IExecutionContext<TSchemaIn> {
   context: TSchemaIn extends z.ZodSchema ? { inputData: z.infer<TSchemaIn> } & TContext : TContext;
-  suspend: (payload?: unknown) => Promise<void>;
+  suspend: (payload?: unknown, softSuspend?: any) => Promise<void>;
   runId: string;
   emit: (event: string, data: any) => void;
   mastra?: MastraUnion;
@@ -192,9 +192,10 @@ type StepSuccess<T> = {
   output: T;
 };
 
-type StepSuspended = {
+type StepSuspended<T> = {
   status: 'suspended';
   suspendPayload?: any;
+  output?: T;
 };
 type StepWaiting = {
   status: 'waiting';
@@ -209,7 +210,7 @@ type StepSkipped = {
   status: 'skipped';
 };
 
-export type StepResult<T> = StepSuccess<T> | StepFailure | StepSuspended | StepWaiting | StepSkipped;
+export type StepResult<T> = StepSuccess<T> | StepFailure | StepSuspended<T> | StepWaiting | StepSkipped;
 
 // Define a type for mapping step IDs to their respective steps[]
 export type StepsRecord<T extends readonly Step<any, any, z.ZodType<any> | undefined>[]> = {
@@ -273,7 +274,7 @@ export type WorkflowEvent =
   | { type: 'RESET_TO_PENDING'; stepId: string }
   | { type: 'CONDITIONS_MET'; stepId: string }
   | { type: 'CONDITION_FAILED'; stepId: string; error: string }
-  | { type: 'SUSPENDED'; stepId: string; suspendPayload?: any }
+  | { type: 'SUSPENDED'; stepId: string; suspendPayload?: any; softSuspend?: any }
   | { type: 'WAITING'; stepId: string }
   | { type: `xstate.error.actor.${string}`; error: Error }
   | { type: `xstate.done.actor.${string}`; output: ResolverFunctionOutput };

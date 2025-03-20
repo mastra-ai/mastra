@@ -382,16 +382,22 @@ export class Machine<
               // console.log(this.#workflowInstance.name, 'emitting', event, ...args);
               this.emit(event, ...args);
             },
-            suspend: async (payload?: any) => {
+            suspend: async (payload?: any, softSuspend?: any) => {
               await this.#workflowInstance.suspend(stepNode.step.id, this);
               if (this.#actor) {
                 // Update context with current result
                 context.steps[stepNode.step.id] = {
                   status: 'suspended',
                   suspendPayload: payload,
+                  output: softSuspend,
                 };
                 this.logger.debug(`Sending SUSPENDED event for step ${stepNode.step.id}`);
-                this.#actor?.send({ type: 'SUSPENDED', suspendPayload: payload, stepId: stepNode.step.id });
+                this.#actor?.send({
+                  type: 'SUSPENDED',
+                  suspendPayload: payload,
+                  stepId: stepNode.step.id,
+                  softSuspend,
+                });
               } else {
                 this.logger.debug(`Actor not available for step ${stepNode.step.id}`);
               }
@@ -658,6 +664,16 @@ export class Machine<
                   assign({
                     steps: ({ context, event }) => {
                       if (event.output.type !== 'SUSPENDED') return context.steps;
+                      if (event.output.softSuspend) {
+                        return {
+                          ...context.steps,
+                          [stepNode.step.id]: {
+                            status: 'suspended',
+                            ...(context.steps?.[stepNode.step.id] || {}),
+                            output: event.output.softSuspend,
+                          },
+                        };
+                      }
                       return {
                         ...context.steps,
                         [stepNode.step.id]: {
@@ -835,6 +851,7 @@ export class Machine<
                     ...(context?.steps?.[stepNode.step.id] || {}),
                     status: 'suspended',
                     suspendPayload: event.type === 'SUSPENDED' ? event.suspendPayload : undefined,
+                    output: event.type === 'SUSPENDED' ? event.softSuspend : undefined,
                   },
                 };
               },
@@ -859,6 +876,7 @@ export class Machine<
                       [stepNode.step.id]: {
                         status: 'suspended',
                         suspendPayload: event.type === 'SUSPENDED' ? event.suspendPayload : undefined,
+                        output: event.type === 'SUSPENDED' ? event.softSuspend : undefined,
                       },
                     };
                   },

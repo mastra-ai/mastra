@@ -3814,8 +3814,21 @@ describe('Workflow', async () => {
         expect(final).toHaveBeenCalledTimes(0);
         expect(last).toHaveBeenCalledTimes(0);
         // @ts-ignore
-        expect(results['nested-workflow-a']).toEqual({
+        expect(results['nested-workflow-a']).toMatchObject({
           status: 'suspended',
+          output: {
+            results: {
+              other: {
+                status: 'suspended',
+              },
+              start: {
+                output: {
+                  newValue: 1,
+                },
+                status: 'success',
+              },
+            },
+          },
         });
 
         // @ts-ignore
