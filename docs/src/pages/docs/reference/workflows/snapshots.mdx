@@ -95,7 +95,10 @@ When a workflow is resumed, Mastra retrieves the persisted snapshot with these s
 
 ## Storage Options for Snapshots
 
-Mastra provides multiple storage options for persisting snapshots:
+Mastra provides multiple storage options for persisting snapshots.
+
+A `storage` instance is configured on the `Mastra` class, and is used to setup a snapshot persistence layer for all workflows registered on the `Mastra` instance.
+This means that storage is shared across all workflows registered with the same `Mastra` instance.
 
 ### LibSQL (Default)
 
@@ -114,6 +117,10 @@ const mastra = new Mastra({
       // authToken: process.env.DATABASE_AUTH_TOKEN,
     }
   }),
+  workflows: {
+    weatherWorkflow,
+    travelWorkflow,
+  }
 });
 ```
 
@@ -130,6 +137,10 @@ const mastra = new Mastra({
     url: process.env.UPSTASH_URL,
     token: process.env.UPSTASH_TOKEN,
   }),
+  workflows: {
+    weatherWorkflow,
+    travelWorkflow,
+  }
 });
 ```
 
