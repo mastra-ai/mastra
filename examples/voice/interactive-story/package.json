@@ -17,7 +17,7 @@
     "@mastra/voice-openai": "workspace:*",
     "@mastra/memory": "workspace:*",
     "mastra": "workspace:*",
-    "@ai-sdk/openai": "^1.2.5",
+    "@ai-sdk/openai": "1.2.5",
     "zod": "^3.24.2",
     "next": "15.2.3"
   },
