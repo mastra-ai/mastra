@@ -21,7 +21,7 @@ import type {
 import { getActivePathsAndStatus, mergeChildValue, resolveVariables, updateStepInHierarchy } from './utils';
 
 export interface WorkflowResultReturn<
-  TResult extends z.ZodType<any>,
+  TResult extends z.ZodObject<any>,
   T extends z.ZodObject<any>,
   TSteps extends Step<any, any, any>[],
 > {

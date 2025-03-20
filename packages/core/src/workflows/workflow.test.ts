@@ -3575,8 +3575,7 @@ describe('Workflow', async () => {
     });
 
     describe('suspending and resuming nested workflows', () => {
-      // TODO: make this work
-      it.skip('should be able to suspend nested workflows', async () => {
+      it('should be able to suspend nested workflow step', async () => {
         const start = vi.fn().mockImplementation(async ({ context }) => {
           // Get the current value (either from trigger or previous increment)
           const currentValue =
@@ -3618,6 +3617,9 @@ describe('Workflow', async () => {
         const last = vi.fn().mockImplementation(async ({ context }) => {
           return { success: true };
         });
+        const begin = vi.fn().mockImplementation(async ({ context }) => {
+          return { success: true };
+        });
         const finalStep = new Step({
           id: 'final',
           description: 'Final step that prints the result',
@@ -3651,7 +3653,13 @@ describe('Workflow', async () => {
           .then(finalStep)
           .commit();
         counterWorkflow
-          .step(wfA)
+          .step(
+            new Step({
+              id: 'begin-step',
+              execute: begin,
+            }),
+          )
+          .then(wfA)
           .then(
             new Step({
               id: 'last-step',
@@ -3660,10 +3668,15 @@ describe('Workflow', async () => {
           )
           .commit();
 
-        const run = counterWorkflow.createRun();
-        const { results } = await run.start({ triggerData: { startValue: 1 } });
+        const mastra = new Mastra({
+          logger,
+          workflows: { counterWorkflow },
+        });
 
-        console.log('results', results);
+        const run = counterWorkflow.createRun();
+        const { runId, results, activePaths } = await run.start({ triggerData: { startValue: 1 } });
+
+        expect(begin).toHaveBeenCalledTimes(1);
         expect(start).toHaveBeenCalledTimes(1);
         expect(other).toHaveBeenCalledTimes(1);
         expect(final).toHaveBeenCalledTimes(0);
@@ -3677,7 +3690,137 @@ describe('Workflow', async () => {
         expect(results['last-step']).toEqual(undefined);
 
         vi.clearAllMocks();
-        const resumedResults = await counterWorkflow.resume({ runId: run.runId, stepId: 'nested-workflow-a.other' });
+        const resumedResults = await run.resume({ stepId: 'nested-workflow-a', context: { startValue: 1 } });
+
+        // @ts-ignore
+        expect(resumedResults.results['nested-workflow-a'].output.results).toEqual({
+          start: { output: { newValue: 1 }, status: 'success' },
+          other: { output: { other: 26 }, status: 'success' },
+          final: { output: { finalValue: 26 + 1 }, status: 'success' },
+        });
+
+        expect(start).toHaveBeenCalledTimes(1);
+        expect(other).toHaveBeenCalledTimes(1);
+        expect(final).toHaveBeenCalledTimes(1);
+        expect(last).toHaveBeenCalledTimes(1);
+      });
+
+      it.only('should be able to suspend nested workflow specific nested step', async () => {
+        const start = vi.fn().mockImplementation(async ({ context }) => {
+          // Get the current value (either from trigger or previous increment)
+          const currentValue =
+            context.getStepResult('start')?.newValue || context.getStepResult('trigger')?.startValue || 0;
+
+          // Increment the value
+          const newValue = currentValue + 1;
+
+          return { newValue };
+        });
+        const startStep = new Step({
+          id: 'start',
+          description: 'Increments the current value by 1',
+          outputSchema: z.object({
+            newValue: z.number(),
+          }),
+          execute: start,
+        });
+
+        let wasSuspended = false;
+        const other = vi.fn().mockImplementation(async ({ context, suspend }) => {
+          if (!wasSuspended) {
+            wasSuspended = true;
+            await suspend();
+          }
+          return { other: 26 };
+        });
+        const otherStep = new Step({
+          id: 'other',
+          description: 'Other step',
+          execute: other,
+        });
+
+        const final = vi.fn().mockImplementation(async ({ context }) => {
+          const startVal = context.getStepResult('start')?.newValue ?? 0;
+          const otherVal = context.getStepResult('other')?.other ?? 0;
+          return { finalValue: startVal + otherVal };
+        });
+        const last = vi.fn().mockImplementation(async ({ context }) => {
+          return { success: true };
+        });
+        const begin = vi.fn().mockImplementation(async ({ context }) => {
+          return { success: true };
+        });
+        const finalStep = new Step({
+          id: 'final',
+          description: 'Final step that prints the result',
+          outputSchema: z.object({
+            finalValue: z.number(),
+          }),
+          execute: final,
+        });
+
+        const counterWorkflow = new Workflow({
+          name: 'counter-workflow',
+          triggerSchema: z.object({
+            startValue: z.number(),
+          }),
+          result: {
+            schema: z.object({
+              finalValue: z.number(),
+            }),
+            mapping: {
+              finalValue: {
+                step: finalStep,
+                path: 'finalValue',
+              },
+            },
+          },
+        });
+
+        const wfA = new Workflow({ name: 'nested-workflow-a' })
+          .step(startStep)
+          .then(otherStep)
+          .then(finalStep)
+          .commit();
+        counterWorkflow
+          .step(
+            new Step({
+              id: 'begin-step',
+              execute: begin,
+            }),
+          )
+          .then(wfA)
+          .then(
+            new Step({
+              id: 'last-step',
+              execute: last,
+            }),
+          )
+          .commit();
+
+        const mastra = new Mastra({
+          logger,
+          workflows: { counterWorkflow },
+        });
+
+        const run = counterWorkflow.createRun();
+        const { runId, results, activePaths } = await run.start({ triggerData: { startValue: 1 } });
+
+        expect(begin).toHaveBeenCalledTimes(1);
+        expect(start).toHaveBeenCalledTimes(1);
+        expect(other).toHaveBeenCalledTimes(1);
+        expect(final).toHaveBeenCalledTimes(0);
+        expect(last).toHaveBeenCalledTimes(0);
+        // @ts-ignore
+        expect(results['nested-workflow-a']).toEqual({
+          status: 'suspended',
+        });
+
+        // @ts-ignore
+        expect(results['last-step']).toEqual(undefined);
+
+        vi.clearAllMocks();
+        const resumedResults = await run.resume({ stepId: 'nested-workflow-a.other', context: { startValue: 1 } });
 
         // @ts-ignore
         expect(resumedResults.results['nested-workflow-a'].output.results).toEqual({
