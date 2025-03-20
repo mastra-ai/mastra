@@ -20,16 +20,16 @@ const vectorStore = new QdrantVector(
 );
 
 // Create a new collection
-await vectorStore.createIndex({ indexName: 'my-collection', dimension: 1536, metric: 'cosine' });
+await vectorStore.createIndex({ indexName: 'myCollection', dimension: 1536, metric: 'cosine' });
 
 // Add vectors
 const vectors = [[0.1, 0.2, ...], [0.3, 0.4, ...]];
 const metadata = [{ text: 'doc1' }, { text: 'doc2' }];
-const ids = await vectorStore.upsert({ indexName: 'my-collection', vectors, metadata });
+const ids = await vectorStore.upsert({ indexName: 'myCollection', vectors, metadata });
 
 // Query vectors
 const results = await vectorStore.query({
-  indexName: 'my-collection',
+  indexName: 'myCollection',
   queryVector: [0.1, 0.2, ...],
   topK: 10, // topK
   filter: { text: { $eq: 'doc1' } }, // optional filter

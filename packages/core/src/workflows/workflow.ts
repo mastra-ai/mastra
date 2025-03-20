@@ -721,7 +721,8 @@ export class Workflow<
       return activeRun.resume({ stepId, context: resumeContext });
     }
 
-    throw new Error(`Workflow run ${runId} not found`);
+    const run = this.createRun({ runId });
+    return run.resume({ stepId, context: resumeContext });
   }
 
   watch(onTransition: (state: WorkflowRunState) => void): () => void {
