@@ -1,5 +1,23 @@
 # mastra
 
+## 0.4.3-alpha.0
+
+### Patch Changes
+
+- 933ea4d: Fix messages in thread not showing latest when switching between threads
+- 9cba774: Fix new thread title not reflecting until refresh or new message is sent
+- 248cb07: Allow ai-sdk Message type for messages in agent generate and stream
+  Fix sidebar horizontal overflow in playground
+- Updated dependencies [e764fd1]
+- Updated dependencies [fb68a80]
+- Updated dependencies [e764fd1]
+- Updated dependencies [05ef3e0]
+- Updated dependencies [95c5745]
+- Updated dependencies [b56a681]
+- Updated dependencies [248cb07]
+  - @mastra/deployer@0.2.4-alpha.0
+  - @mastra/core@0.6.4-alpha.0
+
 ## 0.4.2
 
 ### Patch Changes

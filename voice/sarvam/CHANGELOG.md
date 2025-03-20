@@ -1,5 +1,15 @@
 # @mastra/voice-sarvam
 
+## 0.1.3-alpha.0
+
+### Patch Changes
+
+- 019247c: feat: add STT functionality in @mastra/voice-sarvam
+- Updated dependencies [fb68a80]
+- Updated dependencies [b56a681]
+- Updated dependencies [248cb07]
+  - @mastra/core@0.6.4-alpha.0
+
 ## 0.1.2
 
 ### Patch Changes

@@ -6,6 +6,7 @@ import dotenv from 'rollup-plugin-dotenv';
 
 import { removeAllExceptDeployer } from './babel/get-deployer';
 import commonjs from '@rollup/plugin-commonjs';
+import { recursiveRemoveNonReferencedNodes } from './plugins/remove-unused-references';
 
 export function getDeployerBundler(entryFile: string) {
   return rollup({
@@ -60,6 +61,22 @@ export function getDeployerBundler(entryFile: string) {
       dotenv({
         envKey: 'production',
       }),
+      // let esbuild remove all unused imports
+      esbuild({
+        target: 'node20',
+        platform: 'node',
+        minify: false,
+      }),
+      {
+        name: 'cleanup-nodes',
+        transform(code, id) {
+          if (id !== entryFile) {
+            return;
+          }
+
+          return recursiveRemoveNonReferencedNodes(code);
+        },
+      },
       // let esbuild remove all unused imports
       esbuild({
         target: 'node20',

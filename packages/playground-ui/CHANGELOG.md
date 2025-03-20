@@ -1,5 +1,20 @@
 # @mastra/playground-ui
 
+## 2.0.4-alpha.0
+
+### Patch Changes
+
+- 933ea4d: Fix messages in thread not showing latest when switching between threads
+- 9cba774: Fix new thread title not reflecting until refresh or new message is sent
+- 248cb07: Allow ai-sdk Message type for messages in agent generate and stream
+  Fix sidebar horizontal overflow in playground
+- Updated dependencies [fb68a80]
+- Updated dependencies [05ef3e0]
+- Updated dependencies [b56a681]
+- Updated dependencies [248cb07]
+  - @mastra/core@0.6.4-alpha.0
+  - @mastra/client-js@0.1.12-alpha.0
+
 ## 2.0.3
 
 ### Patch Changes

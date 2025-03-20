@@ -134,7 +134,21 @@
     "@mastra/voice-openai-realtime": "0.0.3",
     "@mastra/voice-playai": "0.1.7",
     "@mastra/voice-sarvam": "0.1.2",
-    "@mastra/voice-speechify": "0.1.7"
+    "@mastra/voice-speechify": "0.1.7",
+    "interactive-story": "0.1.0"
   },
-  "changesets": []
+  "changesets": [
+    "cool-papers-check",
+    "cute-women-stand",
+    "famous-readers-juggle",
+    "fuzzy-ducks-burn",
+    "gold-garlics-attend",
+    "great-jobs-serve",
+    "icy-places-find",
+    "small-teeth-rush",
+    "swift-mirrors-rest",
+    "swift-wings-sneeze",
+    "thirty-plants-brush",
+    "wild-hornets-train"
+  ]
 }
