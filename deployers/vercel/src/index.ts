@@ -75,7 +75,7 @@ export class VercelDeployer extends Deployer {
       },
     });
 
-    const team = await response.json();
+    const team = (await response.json()) as any;
 
     return team.slug;
   }
