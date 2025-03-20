@@ -18,27 +18,44 @@ describe('MastraClient Resources', () => {
   // Helper to mock successful API responses
   const mockFetchResponse = (data: any, options: { isStream?: boolean } = {}) => {
     if (options.isStream) {
-      const stream = new ReadableStream({
-        start(controller) {
-          controller.enqueue(new TextEncoder().encode(JSON.stringify(data)));
-          controller.close();
-        },
-      });
-      (global.fetch as any).mockResolvedValueOnce({
-        ok: true,
-        headers: {
-          get: (name: string) => (name === 'Content-Type' ? 'text/event-stream' : null),
-        },
-        body: stream,
-      });
+      let contentType = 'text/event-stream';
+      let responseBody: ReadableStream;
+
+      if (data instanceof ReadableStream) {
+        responseBody = data;
+        contentType = 'audio/mp3';
+      } else {
+        responseBody = new ReadableStream({
+          start(controller) {
+            controller.enqueue(new TextEncoder().encode(JSON.stringify(data)));
+            controller.close();
+          },
+        });
+      }
+
+      const headers = new Headers();
+      if (contentType === 'audio/mp3') {
+        headers.set('Transfer-Encoding', 'chunked');
+      }
+      headers.set('Content-Type', contentType);
+
+      (global.fetch as any).mockResolvedValueOnce(
+        new Response(responseBody, {
+          status: 200,
+          statusText: 'OK',
+          headers,
+        }),
+      );
     } else {
-      (global.fetch as any).mockResolvedValueOnce({
-        ok: true,
-        headers: {
-          get: (name: string) => (name === 'Content-Type' ? 'application/json' : null),
-        },
-        json: async () => data,
+      const response = new Response(undefined, {
+        status: 200,
+        statusText: 'OK',
+        headers: new Headers({
+          'Content-Type': 'application/json',
+        }),
       });
+      response.json = () => Promise.resolve(data);
+      (global.fetch as any).mockResolvedValueOnce(response);
     }
   };
 
@@ -241,7 +258,7 @@ describe('MastraClient Resources', () => {
       const result = await agent.generate({
         messages: [],
         threadId: 'test-thread',
-        resourceid: 'test-resource',
+        resourceId: 'test-resource',
         output: {},
       });
       expect(result).toEqual(mockResponse);
@@ -253,7 +270,7 @@ describe('MastraClient Resources', () => {
           body: JSON.stringify({
             messages: [],
             threadId: 'test-thread',
-            resourceid: 'test-resource',
+            resourceId: 'test-resource',
             output: {},
           }),
         }),
@@ -330,6 +347,106 @@ describe('MastraClient Resources', () => {
           headers: expect.objectContaining(clientOptions.headers),
         }),
       );
+    });
+  });
+
+  describe('Agent Voice Resource', () => {
+    const agentId = 'test-agent';
+    let agent: ReturnType<typeof client.getAgent>;
+    beforeEach(() => {
+      agent = client.getAgent(agentId);
+    });
+    it('should get available speakers', async () => {
+      const mockResponse = [{ voiceId: 'speaker1' }];
+      mockFetchResponse(mockResponse);
+
+      const result = await agent.voice.getSpeakers();
+
+      expect(result).toEqual(mockResponse);
+      expect(global.fetch).toHaveBeenCalledWith(
+        `${clientOptions.baseUrl}/api/agents/test-agent/voice/speakers`,
+        expect.objectContaining({
+          headers: expect.objectContaining(clientOptions.headers),
+        }),
+      );
+    });
+
+    it(`should call speak without options`, async () => {
+      const mockAudioStream = new ReadableStream();
+      mockFetchResponse(mockAudioStream, { isStream: true });
+
+      const result = await agent.voice.speak('test');
+
+      expect(result).toBeInstanceOf(Response);
+      expect(result.body).toBeInstanceOf(ReadableStream);
+      expect(global.fetch).toHaveBeenCalledWith(
+        `${clientOptions.baseUrl}/api/agents/test-agent/voice/speak`,
+        expect.objectContaining({
+          method: 'POST',
+          headers: expect.objectContaining(clientOptions.headers),
+        }),
+      );
+    });
+
+    it(`should call speak with options`, async () => {
+      const mockAudioStream = new ReadableStream();
+      mockFetchResponse(mockAudioStream, { isStream: true });
+
+      const result = await agent.voice.speak('test', { speaker: 'speaker1' });
+      expect(result).toBeInstanceOf(Response);
+      expect(result.body).toBeInstanceOf(ReadableStream);
+      expect(global.fetch).toHaveBeenCalledWith(
+        `${clientOptions.baseUrl}/api/agents/test-agent/voice/speak`,
+        expect.objectContaining({
+          method: 'POST',
+          headers: expect.objectContaining(clientOptions.headers),
+        }),
+      );
+    });
+
+    it(`should call listen with audio file`, async () => {
+      const transcriptionResponse = { text: 'Hello world' };
+      mockFetchResponse(transcriptionResponse);
+
+      const audioBlob = new Blob(['test audio data'], { type: 'audio/wav' });
+
+      const result = await agent.voice.listen(audioBlob, { filetype: 'wav' });
+      expect(result).toEqual(transcriptionResponse);
+
+      expect(global.fetch).toHaveBeenCalledTimes(1);
+      const [url, config] = (global.fetch as any).mock.calls[0];
+      expect(url).toBe(`${clientOptions.baseUrl}/api/agents/test-agent/voice/listen`);
+      expect(config.method).toBe('POST');
+      expect(config.headers).toMatchObject(clientOptions.headers);
+
+      const formData = config.body;
+      expect(formData).toBeInstanceOf(FormData);
+      const audioContent = formData.get('audio');
+      expect(audioContent).toBeInstanceOf(Blob);
+      expect(audioContent.type).toBe('audio/wav');
+    });
+
+    it(`should call listen with audio blob and options`, async () => {
+      const transcriptionResponse = { text: 'Hello world' };
+      mockFetchResponse(transcriptionResponse);
+
+      const audioBlob = new Blob(['test audio data'], { type: 'audio/mp3' });
+
+      const result = await agent.voice.listen(audioBlob, { filetype: 'mp3' });
+
+      expect(result).toEqual(transcriptionResponse);
+
+      expect(global.fetch).toHaveBeenCalledTimes(1);
+      const [url, config] = (global.fetch as any).mock.calls[0];
+      expect(url).toBe(`${clientOptions.baseUrl}/api/agents/test-agent/voice/listen`);
+      expect(config.method).toBe('POST');
+      expect(config.headers).toMatchObject(clientOptions.headers);
+
+      const formData = config.body as FormData;
+      expect(formData).toBeInstanceOf(FormData);
+      const audioContent = formData.get('audio');
+      expect(audioContent).toBeInstanceOf(Blob);
+      expect(formData.get('options')).toBe(JSON.stringify({ filetype: 'mp3' }));
     });
   });
 

@@ -1,6 +1,6 @@
 {
   "name": "@mastra/turbopuffer",
-  "version": "0.0.2-alpha.2",
+  "version": "0.0.4",
   "description": "Turbopuffer vector store provider for Mastra",
   "type": "module",
   "files": [

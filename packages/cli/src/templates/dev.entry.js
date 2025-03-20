@@ -6,11 +6,6 @@ import { TABLE_EVALS } from '@mastra/core/storage';
 import { mastra } from '#mastra';
 import { createNodeServer } from '#server';
 
-// init storage
-if (mastra.storage) {
-  await mastra.storage.init();
-}
-
 // @ts-ignore
 await createNodeServer(mastra, { playground: true, swaggerUI: true });
 

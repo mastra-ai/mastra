@@ -7,15 +7,15 @@ function Workflow() {
   const { workflowId } = useParams();
 
   return (
-    <main className="flex-1 relative divide-x flex">
-      <div className="w-[calc(100%_-_400px)]">
+    <main className="flex-1 relative divide-x flex w-full">
+      <div className="min-w-[325px] grow">
         <WorkflowGraph workflowId={workflowId!} baseUrl="" />
       </div>
       <MastraResizablePanel
-        defaultWidth={30}
-        minimumWidth={30}
-        maximumWidth={50}
-        className="flex flex-col min-w-[400px] absolute right-0 top-0 h-full z-20 bg-[#121212]"
+        defaultWidth={20}
+        minimumWidth={20}
+        maximumWidth={60}
+        className="flex flex-col min-w-[325px] right-0 top-0 h-full z-20 bg-[#121212]"
       >
         <WorkflowInformation workflowId={workflowId!} />
       </MastraResizablePanel>

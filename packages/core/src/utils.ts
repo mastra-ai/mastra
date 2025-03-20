@@ -1,7 +1,9 @@
 import { createHash } from 'crypto';
+import type { ToolExecutionOptions } from 'ai';
 import jsonSchemaToZod from 'json-schema-to-zod';
 import { z } from 'zod';
 import type { ZodObject } from 'zod';
+
 import type { MastraPrimitives } from './action';
 import type { ToolsInput } from './agent';
 import type { Logger } from './logger';
@@ -302,7 +304,7 @@ interface ToolOptions {
   agentName?: string;
 }
 
-type ToolToConvert = VercelTool | ToolAction<any, any, any, any>;
+type ToolToConvert = VercelTool | ToolAction<any, any, any>;
 
 interface LogOptions {
   agentName?: string;
@@ -346,7 +348,7 @@ function createExecute(tool: ToolToConvert, options: ToolOptions, logType?: 'too
     type: logType,
   });
 
-  const execFunction = async (args: any, execOptions: any) => {
+  const execFunction = async (args: any, execOptions: ToolExecutionOptions) => {
     if (isVercelTool(tool)) {
       return tool?.execute?.(args, execOptions) ?? undefined;
     }

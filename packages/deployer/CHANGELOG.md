@@ -1,5 +1,73 @@
 # @mastra/deployer
 
+## 0.2.3
+
+### Patch Changes
+
+- 404640e: AgentNetwork changeset
+- Updated dependencies [404640e]
+- Updated dependencies [3bce733]
+  - @mastra/core@0.6.3
+
+## 0.2.3-alpha.1
+
+### Patch Changes
+
+- Updated dependencies [3bce733]
+  - @mastra/core@0.6.3-alpha.1
+
+## 0.2.3-alpha.0
+
+### Patch Changes
+
+- 404640e: AgentNetwork changeset
+- Updated dependencies [404640e]
+  - @mastra/core@0.6.3-alpha.0
+
+## 0.2.2
+
+### Patch Changes
+
+- 4e6732b: Add support for tsconfig paths aliases
+- Updated dependencies [beaf1c2]
+- Updated dependencies [3084e13]
+  - @mastra/core@0.6.2
+
+## 0.2.2-alpha.1
+
+### Patch Changes
+
+- Updated dependencies [beaf1c2]
+- Updated dependencies [3084e13]
+  - @mastra/core@0.6.2-alpha.0
+
+## 0.2.2-alpha.0
+
+### Patch Changes
+
+- 4e6732b: Add support for tsconfig paths aliases
+
+## 0.2.1
+
+### Patch Changes
+
+- cc7f392: Fix babel transformation in deployer
+- 0850b4c: Watch and resume per run
+- da8d9bb: Enable public dir copying if it exists
+- 9116d70: Handle the different workflow methods in workflow graph
+- 61ad5a4: Move esbuild plugin higher than commonjs for telemetry extraction
+- Updated dependencies [fc2f89c]
+- Updated dependencies [dfbb131]
+- Updated dependencies [f4854ee]
+- Updated dependencies [afaf73f]
+- Updated dependencies [0850b4c]
+- Updated dependencies [7bcfaee]
+- Updated dependencies [44631b1]
+- Updated dependencies [9116d70]
+- Updated dependencies [6e559a0]
+- Updated dependencies [5f43505]
+  - @mastra/core@0.6.1
+
 ## 0.2.1-alpha.2
 
 ### Patch Changes
