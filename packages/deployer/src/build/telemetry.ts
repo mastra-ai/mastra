@@ -5,34 +5,7 @@ import esbuild from 'rollup-plugin-esbuild';
 import { removeAllExceptTelemetryConfig } from './babel/get-telemetry-config';
 import commonjs from '@rollup/plugin-commonjs';
 import { removeNonReferencedNodes } from './babel/remove-non-referenced-nodes';
-
-function recursiveRemoveNonReferencedNodes(code: string) {
-  return new Promise<{ code: string; map: any }>(async (resolve, reject) => {
-    babel.transform(
-      code,
-      {
-        babelrc: false,
-        configFile: false,
-        plugins: [removeNonReferencedNodes()],
-      },
-      (err, result) => {
-        if (err) {
-          return reject(err);
-        }
-
-        // keep looping until the code is not changed
-        if (result && result.code! !== code) {
-          return recursiveRemoveNonReferencedNodes(result!.code!).then(resolve, reject);
-        }
-
-        resolve({
-          code: result!.code!,
-          map: result!.map!,
-        });
-      },
-    );
-  });
-}
+import { recursiveRemoveNonReferencedNodes } from './plugins/remove-unused-references';
 
 export function getTelemetryBundler(
   entryFile: string,

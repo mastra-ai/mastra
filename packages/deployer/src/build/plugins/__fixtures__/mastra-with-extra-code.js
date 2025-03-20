@@ -4,6 +4,11 @@ import { Agent } from '@mastra/core/agent';
 import { PgVector } from '@mastra/pg';
 import { createVectorQueryTool, MDocument } from '@mastra/rag';
 import { embedMany } from 'ai';
+import { testDeployer } from '@mastra/deployer/test';
+
+function getDeployer() {
+  return testDeployer;
+}
 
 const vectorQueryTool = createVectorQueryTool({
   vectorStoreName: 'pgVector',
@@ -23,6 +28,7 @@ const pgVector = new PgVector(process.env.POSTGRES_CONNECTION_STRING);
 export const mastra = new Mastra({
   agents: { ragAgent },
   vectors: { pgVector },
+  deployer: getDeployer(),
   telemetry: {
     enabled: true,
   },
