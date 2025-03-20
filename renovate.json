@@ -2,10 +2,23 @@
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
   "extends": [
     "config:recommended",
+    ":dependencyDashboard",
     ":disableRateLimiting",
     ":maintainLockFilesWeekly",
-    ":semanticCommits"
+    ":semanticCommits",
+    ":automergeDisabled",
+    ":disablePeerDependencies"
   ],
   "postUpdateOptions": ["pnpmDedupe"],
-  "rebaseWhen": "conflicted"
+  "rebaseWhen": "conflicted",
+  "packageRules": [
+    {
+      "groupName": "examples",
+      "commitMessageTopic": "examples",
+      "groupSlug": "examples-minor",
+      "matchPaths": ["examples/**"],
+      "schedule": "before 7am on Monday",
+      "matchUpdateTypes": ["patch", "minor"]
+    }
+  ]
 }
