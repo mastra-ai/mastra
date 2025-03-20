@@ -23,10 +23,7 @@ export { telemetry };
 `;
 
 exports[`getTelemetryConfig > should be able to extract the telemetry config from ./plugins/__fixtures__/basic-with-const.js 1`] = `
-"import { TestDeployer } from '@mastra/deployer/test';
-
-new TestDeployer();
-const _telemetry = {
+"const _telemetry = {
   enabled: true,
   serviceName: "my-app",
   export: {
@@ -63,6 +60,22 @@ exports[`getTelemetryConfig > should be able to extract the telemetry config fro
 "import { telemetryConfig } from '@/telemetry';
 
 const telemetry = telemetryConfig;
+
+export { telemetry };
+"
+`;
+
+exports[`getTelemetryConfig > should be able to extract the telemetry config from ./plugins/__fixtures__/empty-mastra.js 1`] = `
+"const telemetry = {};
+
+export { telemetry };
+"
+`;
+
+exports[`getTelemetryConfig > should be able to extract the telemetry config from ./plugins/__fixtures__/mastra-with-extra-code.js 1`] = `
+"const telemetry = {
+  enabled: true
+};
 
 export { telemetry };
 "
