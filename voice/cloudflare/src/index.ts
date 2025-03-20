@@ -68,21 +68,20 @@ export class CloudflareVoice extends MastraVoice {
         }
       }
       const audioBuffer = Buffer.concat(chunks);
+      const base64Audio = audioBuffer.toString('base64');
 
-      // Convert the audio buffer into an array of numbers (8-bit unsigned integers)
-      const audioArray = Array.from(new Uint8Array(audioBuffer));
       const model = options?.model || defaultListeningModel.model;
 
       // Use native binding if available, otherwise use REST API
       if (this.binding) {
         // Using Workers AI binding
         const response = (await this.binding.run(model, {
-          audio: audioArray,
+          audio: base64Audio,
         })) as CloudflareListenOutput;
         return response.text;
       } else if (this.client) {
         // Using REST API client
-        const payload = { audio: audioArray, account_id: options?.account_id || defaultListeningModel.account_id };
+        const payload = { audio: base64Audio, account_id: options?.account_id || defaultListeningModel.account_id };
         const response = (await this.client.ai.run(model, payload)) as any;
         return response.text as string;
       } else {
