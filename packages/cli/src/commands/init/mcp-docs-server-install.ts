@@ -38,7 +38,7 @@ async function writeMergedConfig(configPath: string) {
   });
 }
 
-export const windsurfGlobalMCPDirectory = path.join(os.homedir(), '.codeium', 'windsurf', 'mcp_config.json');
+export const windsurfGlobalMCPConfigPath = path.join(os.homedir(), '.codeium', 'windsurf', 'mcp_config.json');
 
 export async function installMastraDocsMCPServer({
   editor,
@@ -48,5 +48,28 @@ export async function installMastraDocsMCPServer({
   directory: string;
 }) {
   if (editor === `cursor`) await writeMergedConfig(path.join(directory, '.cursor', 'mcp.json'));
-  if (editor === `windsurf`) await writeMergedConfig(windsurfGlobalMCPDirectory);
+
+  const windsurfIsInstalled = await globalWindsurfMCPIsAlreadyInstalled();
+  if (editor === `windsurf` && !windsurfIsInstalled) await writeMergedConfig(windsurfGlobalMCPConfigPath);
+}
+
+export async function globalWindsurfMCPIsAlreadyInstalled() {
+  if (!existsSync(windsurfGlobalMCPConfigPath)) {
+    return false;
+  }
+
+  try {
+    const configContents = await readJSON(windsurfGlobalMCPConfigPath);
+
+    if (!configContents?.mcpServers) return false;
+
+    const hasMastraMCP = Object.values(configContents.mcpServers).some((server?: any) =>
+      server?.args?.find((arg?: string) => arg?.includes(`@mastra/mcp-docs-server`)),
+    );
+
+    return hasMastraMCP;
+  } catch (e) {
+    console.error(e);
+    return false;
+  }
 }
