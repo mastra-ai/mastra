@@ -789,7 +789,7 @@ export async function createHonoServer(
             schema: {
               type: 'object',
               properties: {
-                text: {
+                input: {
                   type: 'string',
                   description: 'Text to convert to speech',
                 },
