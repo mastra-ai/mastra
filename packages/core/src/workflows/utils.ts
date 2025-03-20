@@ -256,12 +256,13 @@ export function workflowToStep<
         emit('state-update', workflow.name, state.value, { ...context, ...{ [workflow.name]: state.context } });
       });
 
-      const awaitedResult = context.isResume
-        ? await run.resume({
-            stepId: context.isResume.stepId.split('.').slice(1).join('.'),
-            context: context.inputData,
-          })
-        : await run.start();
+      const awaitedResult =
+        context.isResume && context.isResume.stepId.includes('.')
+          ? await run.resume({
+              stepId: context.isResume.stepId.split('.').slice(1).join('.'),
+              context: context.inputData,
+            })
+          : await run.start();
 
       unwatch();
       if (!awaitedResult) {

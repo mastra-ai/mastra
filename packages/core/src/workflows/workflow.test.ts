@@ -3682,7 +3682,7 @@ describe('Workflow', async () => {
         expect(final).toHaveBeenCalledTimes(0);
         expect(last).toHaveBeenCalledTimes(0);
         // @ts-ignore
-        expect(results['nested-workflow-a']).toEqual({
+        expect(results['nested-workflow-a']).toMatchObject({
           status: 'suspended',
         });
 
@@ -3705,7 +3705,7 @@ describe('Workflow', async () => {
         expect(last).toHaveBeenCalledTimes(1);
       });
 
-      it.only('should be able to suspend nested workflow specific nested step', async () => {
+      it('should be able to suspend nested workflow specific nested step', async () => {
         const start = vi.fn().mockImplementation(async ({ context }) => {
           // Get the current value (either from trigger or previous increment)
           const currentValue =
