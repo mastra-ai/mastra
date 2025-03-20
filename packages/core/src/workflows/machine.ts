@@ -140,7 +140,8 @@ export class Machine<
           context: {
             ...input,
             inputData: { ...((snapshot as any)?.context?.inputData || {}), ...resumeData },
-            isResume: { runId: this.#runId, stepId },
+            // @ts-ignore
+            isResume: { runId: snapshot?.context?.steps[stepId.split('.')?.[0]]?.output?.runId || this.#runId, stepId },
           },
         }
       : undefined;

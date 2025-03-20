@@ -248,10 +248,8 @@ export function workflowToStep<
           telemetry: mastra.getTelemetry(),
         });
       }
-      const run = context.isResume
-        ? workflow.createRun({ runId: `${workflow.name}.${context.isResume.runId}` })
-        : // FIXME: if we run multiple copies at the same time of the same workflow this won't work
-          workflow.createRun({ runId: `${workflow.name}.${runId}` });
+      console.log('yooo', context);
+      const run = context.isResume ? workflow.createRun({ runId: context.isResume.runId }) : workflow.createRun();
       const unwatch = run.watch(state => {
         emit('state-update', workflow.name, state.value, { ...context, ...{ [workflow.name]: state.context } });
       });

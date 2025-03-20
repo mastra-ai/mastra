@@ -3806,7 +3806,7 @@ describe('Workflow', async () => {
         const run = counterWorkflow.createRun();
         const data = await run.start({ triggerData: { startValue: 1 } });
         const { runId, results, activePaths } = data;
-        console.log('data', data);
+        console.dir(data, { depth: null });
 
         expect(begin).toHaveBeenCalledTimes(1);
         expect(start).toHaveBeenCalledTimes(1);
