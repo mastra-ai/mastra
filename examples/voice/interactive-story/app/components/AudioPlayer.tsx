@@ -15,7 +15,7 @@ export default function AudioPlayer({ audioData }: AudioPlayerProps) {
   useEffect(() => {
     if (!audioRef.current || !audioData) return;
 
-    let currentAudio = audioRef.current;
+    const currentAudio = audioRef.current;
     const url = URL.createObjectURL(audioData);
 
     const playAudio = async () => {

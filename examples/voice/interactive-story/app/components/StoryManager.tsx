@@ -23,6 +23,18 @@ interface StoryState {
   };
 }
 
+// Define the interface for formData
+interface FormData {
+  genre: string;
+  protagonistDetails: {
+    name: string;
+    age: number;
+    gender: string;
+    occupation: string;
+  };
+  setting: string;
+}
+
 const formatContent = (content: string): FormattedContent => {
   const parts = content.split(/(?=\d\.\s)/);
   if (parts.length === 1) {
@@ -66,7 +78,7 @@ export default function StoryManager() {
   });
   const [audioBlob, setAudioBlob] = useState<Blob | null>(null);
 
-  const handleInitialSubmit = async (formData: any) => {
+  const handleInitialSubmit = async (formData: FormData) => {
     setIsLoading(true);
     try {
       const agent = mastraClient.getAgent('storyTellerAgent');
