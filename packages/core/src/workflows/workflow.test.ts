@@ -3793,12 +3793,6 @@ describe('Workflow', async () => {
           },
         });
 
-        type T = ReturnType<typeof wfA.toStep>;
-        const n = wfA.name;
-        const a = await wfA.toStep().execute({} as any);
-        a;
-        const b = a.result;
-
         counterWorkflow
           .step(wfA)
           .then(
@@ -3813,13 +3807,11 @@ describe('Workflow', async () => {
         const result = await run.start({ triggerData: { startValue: 1 } });
         const results = result.results;
         const x = result.results['nested-workflow-a'];
-        if (x.status === 'success') {
-          const lastStepVal =
-            x.output.results.final.status === 'success' ? x.output.results.final.output.finalValue : undefined;
-          const r = x.output.result;
-        }
-
-        console.log('results', results);
+        // if (x.status === 'success') {
+        //   const lastStepVal =
+        //     x.output.results.final.status === 'success' ? x.output.results.final.output.finalValue : undefined;
+        //   const r = x.output.result;
+        // }
 
         expect(start).toHaveBeenCalledTimes(1);
         expect(other).toHaveBeenCalledTimes(1);
