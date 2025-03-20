@@ -1,20 +1,7 @@
 import { existsSync } from 'fs';
 import os from 'os';
 import path from 'path';
-import * as p from '@clack/prompts';
 import { ensureFile, readJSON, writeJSON } from 'fs-extra/esm';
-
-export function installMastraDocsMCPServer({
-  editor,
-  directory,
-}: {
-  editor: undefined | 'cursor' | 'windsurf';
-  directory: string;
-}) {
-  if (!editor) return;
-  if (editor === `cursor`) return installCursorMCP(directory);
-  if (editor === `windsurf`) return installWindsurfMCP();
-}
 
 const args = ['-y', '@mastra/mcp-docs-server@latest'];
 const mcpConfig = {
@@ -51,23 +38,38 @@ async function writeMergedConfig(configPath: string) {
   });
 }
 
-export async function installCursorMCP(directory: string) {
-  const configPath = path.join(directory, '.cursor', 'mcp.json');
-  await writeMergedConfig(configPath);
-}
-export async function installWindsurfMCP() {
-  const configPath = path.join(os.homedir(), '.codeium', 'windsurf', 'mcp_config.json');
+export const windsurfGlobalMCPConfigPath = path.join(os.homedir(), '.codeium', 'windsurf', 'mcp_config.json');
 
-  const confirm = await p.select({
-    message: `Windsurf only supports a global MCP config (at ${configPath}) is it ok to add/update that global config?\nThis means the Mastra docs MCP server will be available in all your Windsurf projects.`,
-    options: [
-      { value: 'skip', label: 'No, skip for now' },
-      { value: 'yes', label: 'Yes, I understand' },
-    ],
-  });
-  if (confirm !== `yes`) {
-    return undefined;
+export async function installMastraDocsMCPServer({
+  editor,
+  directory,
+}: {
+  editor: undefined | 'cursor' | 'windsurf';
+  directory: string;
+}) {
+  if (editor === `cursor`) await writeMergedConfig(path.join(directory, '.cursor', 'mcp.json'));
+
+  const windsurfIsInstalled = await globalWindsurfMCPIsAlreadyInstalled();
+  if (editor === `windsurf` && !windsurfIsInstalled) await writeMergedConfig(windsurfGlobalMCPConfigPath);
+}
+
+export async function globalWindsurfMCPIsAlreadyInstalled() {
+  if (!existsSync(windsurfGlobalMCPConfigPath)) {
+    return false;
   }
 
-  await writeMergedConfig(configPath);
+  try {
+    const configContents = await readJSON(windsurfGlobalMCPConfigPath);
+
+    if (!configContents?.mcpServers) return false;
+
+    const hasMastraMCP = Object.values(configContents.mcpServers).some((server?: any) =>
+      server?.args?.find((arg?: string) => arg?.includes(`@mastra/mcp-docs-server`)),
+    );
+
+    return hasMastraMCP;
+  } catch (e) {
+    console.error(e);
+    return false;
+  }
 }
