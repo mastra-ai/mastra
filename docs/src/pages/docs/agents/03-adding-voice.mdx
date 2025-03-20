@@ -25,7 +25,7 @@ export const agent = new Agent({
 });
 
 // The agent can now use voice for interaction
-await agent.speak("Hello, I'm your AI assistant!");
+await agent.voice.speak("Hello, I'm your AI assistant!");
 
 // Read audio file and transcribe
 const audioFilePath = path.join(process.cwd(), "/audio.m4a");
@@ -135,17 +135,17 @@ export const agent = new Agent({
 });
 
 // Establish a WebSocket connection
-await voice.connect();
+await agent.voice.connect();
 
 // Start a conversation
-await voice.speak("Hello, I'm your AI assistant!");
+agent.voice.speak("Hello, I'm your AI assistant!");
 
 // Stream audio from a microphone
 const microphoneStream = getMicrophoneStream();
-await voice.send(microphoneStream);
+agent.voice.send(microphoneStream);
 
 // When done with the conversation
-voice.close();
+agent.voice.close();
 ```
 
 ### Event System
@@ -154,17 +154,17 @@ The realtime voice provider emits several events you can listen for:
 
 ```typescript
 // Listen for speech audio data sent from voice provider
-voice.on('speaking', ({ audio }) => {
+agent.voice.on('speaking', ({ audio }) => {
   // audio contains ReadableStream or Int16Array audio data
 });
 
 // Listen for transcribed text sent from both voice provider and user
-voice.on('writing', ({ text, role }) => {
+agent.voice.on('writing', ({ text, role }) => {
   console.log(`${role} said: ${text}`);
 });
 
 // Listen for errors
-voice.on('error', (error) => {
+agent.voice.on('error', (error) => {
   console.error('Voice error:', error);
 });
 ```
