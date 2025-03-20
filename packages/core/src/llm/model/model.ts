@@ -340,7 +340,7 @@ export class MastraLLM extends MastraLLMBase {
         }
       },
       onFinish: async (props: any) => {
-        void onFinish?.(JSON.stringify(props, null, 2));
+        void onFinish?.(props);
 
         this.logger.debug('[LLM] - Stream Finished:', {
           text: props?.text,
@@ -445,7 +445,7 @@ export class MastraLLM extends MastraLLMBase {
         }
       },
       onFinish: async (props: any) => {
-        void onFinish?.(JSON.stringify(props, null, 2));
+        void onFinish?.(props);
 
         this.logger.debug('[LLM] - Stream Finished:', {
           text: props?.text,

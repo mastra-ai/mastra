@@ -1,6 +1,6 @@
-import type { LanguageModelV1, TelemetrySettings } from 'ai';
+import type { LanguageModelV1, StreamObjectOnFinishCallback, StreamTextOnFinishCallback, TelemetrySettings } from 'ai';
 import type { JSONSchema7 } from 'json-schema';
-import type { ZodSchema } from 'zod';
+import type { z, ZodSchema } from 'zod';
 
 import type { Metric } from '../eval';
 import type {
@@ -62,7 +62,11 @@ export type AgentStreamOptions<Z extends ZodSchema | JSONSchema7 | undefined = u
   context?: CoreMessage[];
   memoryOptions?: MemoryConfig;
   runId?: string;
-  onFinish?: (result: string) => unknown;
+  onFinish?: Z extends undefined
+    ? StreamTextOnFinishCallback<any>
+    : Z extends ZodSchema
+      ? StreamObjectOnFinishCallback<z.infer<Z>>
+      : StreamObjectOnFinishCallback<any>;
   onStepFinish?: (step: string) => unknown;
   maxSteps?: number;
   output?: OutputType | Z;
