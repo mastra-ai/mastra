@@ -137,7 +137,11 @@ export class Machine<
     const actorSnapshot = snapshot
       ? {
           ...snapshot,
-          context: { ...input, inputData: { ...((snapshot as any)?.context?.inputData || {}), ...resumeData } },
+          context: {
+            ...input,
+            inputData: { ...((snapshot as any)?.context?.inputData || {}), ...resumeData },
+            isResume: { runId: this.#runId, stepId },
+          },
         }
       : undefined;
 

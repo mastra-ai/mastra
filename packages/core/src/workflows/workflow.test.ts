@@ -3804,7 +3804,9 @@ describe('Workflow', async () => {
         });
 
         const run = counterWorkflow.createRun();
-        const { runId, results, activePaths } = await run.start({ triggerData: { startValue: 1 } });
+        const data = await run.start({ triggerData: { startValue: 1 } });
+        const { runId, results, activePaths } = data;
+        console.log('data', data);
 
         expect(begin).toHaveBeenCalledTimes(1);
         expect(start).toHaveBeenCalledTimes(1);
@@ -3819,7 +3821,6 @@ describe('Workflow', async () => {
         // @ts-ignore
         expect(results['last-step']).toEqual(undefined);
 
-        vi.clearAllMocks();
         const resumedResults = await run.resume({ stepId: 'nested-workflow-a.other', context: { startValue: 1 } });
 
         // @ts-ignore
@@ -3829,8 +3830,9 @@ describe('Workflow', async () => {
           final: { output: { finalValue: 26 + 1 }, status: 'success' },
         });
 
+        expect(begin).toHaveBeenCalledTimes(1);
         expect(start).toHaveBeenCalledTimes(1);
-        expect(other).toHaveBeenCalledTimes(1);
+        expect(other).toHaveBeenCalledTimes(2);
         expect(final).toHaveBeenCalledTimes(1);
         expect(last).toHaveBeenCalledTimes(1);
       });

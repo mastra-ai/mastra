@@ -262,9 +262,6 @@ export class WorkflowInstance<
           getStepResult: (stepId: string) => results[stepId],
         },
       });
-
-      console.log('steps', results);
-      console.log('applied result mapping', this.name, result.result);
     }
 
     return result;
@@ -499,6 +496,12 @@ export class WorkflowInstance<
       throw new Error(`No snapshot found for workflow run ${this.runId}`);
     }
 
+    const stepParts = stepId.split('.');
+    const stepPath = stepParts.join('.');
+    if (stepParts.length > 1) {
+      stepId = stepParts[0] ?? stepId;
+    }
+
     let parsedSnapshot;
     try {
       parsedSnapshot = typeof snapshot === 'string' ? JSON.parse(snapshot as unknown as string) : snapshot;
@@ -509,6 +512,7 @@ export class WorkflowInstance<
 
     const origSnapshot = parsedSnapshot;
     const startStepId = parsedSnapshot.suspendedSteps?.[stepId];
+
     if (!startStepId) {
       return;
     }
@@ -566,7 +570,7 @@ export class WorkflowInstance<
 
     return this.execute({
       snapshot: parsedSnapshot,
-      stepId,
+      stepId: stepPath,
       resumeData: resumeContext,
     });
   }

@@ -236,26 +236,38 @@ export function workflowToStep<
   { mastra }: { mastra?: Mastra },
 ): StepAction<TStepId, TTriggerSchema, z.ZodType<WorkflowRunResult<TTriggerSchema, TSteps, TResultSchema>>, any> {
   workflow.setNested(true);
-  if (mastra) {
-    workflow.__registerMastra(mastra);
-    workflow.__registerPrimitives({
-      logger: mastra.getLogger(),
-      telemetry: mastra.getTelemetry(),
-    });
-  }
 
   return {
     id: workflow.name,
     workflow,
-    execute: async ({ context, suspend, emit }) => {
-      // TODO: how do I add the metadata of this runId to the main snapshot and how do I make it resume the right workflow run Id and all that
-      const run = workflow.createRun();
-      const unwatch = workflow.watch(state => {
+    execute: async ({ context, suspend, emit, runId, mastra }) => {
+      if (mastra) {
+        workflow.__registerMastra(mastra);
+        workflow.__registerPrimitives({
+          logger: mastra.getLogger(),
+          telemetry: mastra.getTelemetry(),
+        });
+      }
+      const run = context.isResume
+        ? workflow.createRun({ runId: `${workflow.name}.${context.isResume.runId}` })
+        : // FIXME: if we run multiple copies at the same time of the same workflow this won't work
+          workflow.createRun({ runId: `${workflow.name}.${runId}` });
+      const unwatch = run.watch(state => {
         emit('state-update', workflow.name, state.value, { ...context, ...{ [workflow.name]: state.context } });
       });
 
-      const awaitedResult = await run.start();
+      const awaitedResult = context.isResume
+        ? await run.resume({
+            stepId: context.isResume.stepId.split('.').slice(1).join('.'),
+            context: context.inputData,
+          })
+        : await run.start();
+
       unwatch();
+      if (!awaitedResult) {
+        throw new Error('Workflow run failed');
+      }
+
       if (awaitedResult.activePaths?.size > 0) {
         const suspendedStep = [...awaitedResult.activePaths.entries()].find(([stepId, { status }]) => {
           return status === 'suspended';
@@ -269,7 +281,7 @@ export function workflowToStep<
         }
       }
 
-      return awaitedResult;
+      return { ...awaitedResult, runId: run.runId };
     },
   };
 }

@@ -238,6 +238,7 @@ export interface WorkflowContext<
   TSteps extends Step<string, any, any, any>[] = Step<string, any, any, any>[],
   TInputData extends Record<string, any> = Record<string, any>,
 > {
+  isResume?: { runId: string; stepId: string };
   mastra?: MastraUnion;
   steps: {
     [K in keyof StepsRecord<TSteps>]: StepsRecord<TSteps>[K]['outputSchema'] extends undefined
