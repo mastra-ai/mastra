@@ -11,6 +11,7 @@ describe('getTelemetryConfig', () => {
     ['./plugins/__fixtures__/basic-with-const.js', true],
     ['./plugins/__fixtures__/basic-with-import.js', true],
     ['./plugins/__fixtures__/basic-with-function.js', true],
+    ['./plugins/__fixtures__/mastra-with-extra-code.js', true],
     ['./plugins/__fixtures__/empty-mastra.js', false],
     ['./__fixtures__/no-telemetry.js', false],
   ] as [string, boolean][])(
