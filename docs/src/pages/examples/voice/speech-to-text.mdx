@@ -5,6 +5,8 @@ description: Example of using Mastra to create a speech to text application.
 
 import { GithubLink } from '../../../components/github-link';
 
+# Smart Voice Memo App
+
 The following code snippets provide example implementations of Speech-to-Text (STT) functionality in a smart voice memo application using Next.js with direct integration of Mastra. For more details on integrating Mastra with Next.js, please refer to our [Integrate with Next.js](/docs/frameworks/01-next-js) documentation.
 
 ## Creating an Agent with STT Capabilities
@@ -47,7 +49,8 @@ export const mastra = new Mastra({
 });
 ```
 
-Processing Audio for Transcription
+## Processing Audio for Transcription
+
 The following code shows how to receive audio from a web request and use the agent's STT capabilities to transcribe it:
 
 ```typescript filename="app/api/audio/route.ts"
