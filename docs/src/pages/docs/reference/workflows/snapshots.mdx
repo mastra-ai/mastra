@@ -67,6 +67,8 @@ export interface WorkflowRunState {
 ## How Snapshots Are Saved and Retrieved
 
 Mastra persists snapshots to the configured storage system. By default, snapshots are saved to a LibSQL database, but can be configured to use other storage providers like Upstash.
+The snapshots are stored in the `workflow_snapshots` table and identified uniquely by the `run_id` for the associated run.
+Read more about [storage](../storage/libsql.mdx) here.
 
 ### Saving Snapshots
 
