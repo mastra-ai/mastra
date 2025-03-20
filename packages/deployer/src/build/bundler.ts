@@ -5,7 +5,6 @@ import nodeResolve from '@rollup/plugin-node-resolve';
 import { fileURLToPath } from 'node:url';
 import { rollup, type InputOptions, type OutputOptions } from 'rollup';
 import esbuild from 'rollup-plugin-esbuild';
-import dotenv from 'rollup-plugin-dotenv';
 
 import type { analyzeBundle } from './analyze';
 import { removeDeployer } from './plugins/remove-deployer';
@@ -54,9 +53,6 @@ export async function getInputOptions(
     external: externals,
     plugins: [
       tsConfigPaths(),
-      dotenv({
-        envKey: 'production',
-      }),
       {
         name: 'alias-optimized-deps',
         // @ts-ignore
