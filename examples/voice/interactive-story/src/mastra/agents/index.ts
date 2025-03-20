@@ -77,7 +77,7 @@ Yujohn slipped away during the night, following whispered directions to the resi
 export const storyTellerAgent = new Agent({
   name: 'Note Taker Agent',
   instructions: instructions,
-  model: openai('gpt-4o'),
+  model: openai('gpt-4o') as any,
   voice: new OpenAIVoice(),
   memory: new Memory(),
 });

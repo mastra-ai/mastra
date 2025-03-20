@@ -60,7 +60,6 @@ export default function AudioPlayer({ audioData }: AudioPlayerProps) {
   const handleEnded = () => {
     setIsPlaying(false);
     setProgress(0);
-    // You might want to add an onComplete callback prop here
   };
 
   const handleVolumeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
