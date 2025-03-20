@@ -1,5 +1,6 @@
 import { spawn as nodeSpawn } from 'node:child_process';
 import type { SpawnOptions } from 'node:child_process';
+import { dirname } from 'node:path';
 
 /**
  * Promisified version of Node.js spawn function
@@ -36,11 +37,17 @@ function spawn(command: string, args: string[] = [], options: SpawnOptions = {})
 }
 
 export function validate(file: string) {
-  return spawn('node', [
-    '--import',
-    import.meta.resolve('@mastra/deployer/loader'),
-    '--input-type=module',
-    '-e',
-    `import('file://${file.replaceAll('\\', '/')}')`,
-  ]);
+  return spawn(
+    'node',
+    [
+      '--import',
+      import.meta.resolve('@mastra/deployer/loader'),
+      '--input-type=module',
+      '-e',
+      `import('file://${file.replaceAll('\\', '/')}')`,
+    ],
+    {
+      cwd: dirname(file),
+    },
+  );
 }
