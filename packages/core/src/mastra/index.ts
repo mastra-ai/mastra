@@ -13,7 +13,7 @@ import type { MastraVector } from '../vector';
 import type { Workflow } from '../workflows';
 
 export interface Config<
-  TAgents extends Record<string, Agent<any>> = Record<string, Agent<any>>,
+  TAgents extends Record<string, Agent<any, any, any>> = Record<string, Agent<any, any, any>>,
   TWorkflows extends Record<string, Workflow> = Record<string, Workflow>,
   TVectors extends Record<string, MastraVector> = Record<string, MastraVector>,
   TTTS extends Record<string, MastraTTS> = Record<string, MastraTTS>,
@@ -48,7 +48,7 @@ export interface Config<
   excludeMethods: ['getLogger', 'getTelemetry'],
 })
 export class Mastra<
-  TAgents extends Record<string, Agent<any>> = Record<string, Agent<any>>,
+  TAgents extends Record<string, Agent<any, any, any>> = Record<string, Agent<any, any, any>>,
   TWorkflows extends Record<string, Workflow> = Record<string, Workflow>,
   TVectors extends Record<string, MastraVector> = Record<string, MastraVector>,
   TTTS extends Record<string, MastraTTS> = Record<string, MastraTTS>,
