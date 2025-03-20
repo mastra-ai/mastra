@@ -371,7 +371,7 @@ importers:
         version: link:../../../../packages/core
       ai:
         specifier: latest
-        version: 4.1.64(react@19.0.0)(zod@3.24.2)
+        version: 4.1.66(react@19.0.0)(zod@3.24.2)
       zod:
         specifier: ^3.24.2
         version: 3.24.2
@@ -729,7 +729,7 @@ importers:
         version: link:../../../../packages/rag
       ai:
         specifier: latest
-        version: 4.1.64(react@19.0.0)(zod@3.24.2)
+        version: 4.1.66(react@19.0.0)(zod@3.24.2)
     devDependencies:
       dotenv:
         specifier: ^16.4.7
@@ -775,7 +775,7 @@ importers:
         version: link:../../../../packages/rag
       ai:
         specifier: latest
-        version: 4.1.64(react@19.0.0)(zod@3.24.2)
+        version: 4.1.66(react@19.0.0)(zod@3.24.2)
     devDependencies:
       dotenv:
         specifier: ^16.4.7
@@ -797,7 +797,7 @@ importers:
         version: link:../../../../packages/rag
       ai:
         specifier: latest
-        version: 4.1.64(react@19.0.0)(zod@3.24.2)
+        version: 4.1.66(react@19.0.0)(zod@3.24.2)
     devDependencies:
       dotenv:
         specifier: ^16.4.7
@@ -819,7 +819,7 @@ importers:
         version: link:../../../../packages/rag
       ai:
         specifier: latest
-        version: 4.1.64(react@19.0.0)(zod@3.24.2)
+        version: 4.1.66(react@19.0.0)(zod@3.24.2)
       zod:
         specifier: ^3.24.2
         version: 3.24.2
@@ -834,7 +834,7 @@ importers:
         version: link:../../../../packages/rag
       ai:
         specifier: latest
-        version: 4.1.64(react@19.0.0)(zod@3.24.2)
+        version: 4.1.66(react@19.0.0)(zod@3.24.2)
 
   examples/basics/rag/embed-text-chunk:
     dependencies:
@@ -846,7 +846,7 @@ importers:
         version: link:../../../../packages/rag
       ai:
         specifier: latest
-        version: 4.1.64(react@19.0.0)(zod@3.24.2)
+        version: 4.1.66(react@19.0.0)(zod@3.24.2)
 
   examples/basics/rag/embed-text-with-cohere:
     dependencies:
@@ -858,7 +858,7 @@ importers:
         version: link:../../../../packages/rag
       ai:
         specifier: latest
-        version: 4.1.64(react@19.0.0)(zod@3.24.2)
+        version: 4.1.66(react@19.0.0)(zod@3.24.2)
 
   examples/basics/rag/filter-rag:
     dependencies:
@@ -876,7 +876,7 @@ importers:
         version: link:../../../../packages/rag
       ai:
         specifier: latest
-        version: 4.1.64(react@19.0.0)(zod@3.24.2)
+        version: 4.1.66(react@19.0.0)(zod@3.24.2)
     devDependencies:
       dotenv:
         specifier: ^16.4.7
@@ -898,7 +898,7 @@ importers:
         version: link:../../../../packages/rag
       ai:
         specifier: latest
-        version: 4.1.64(react@19.0.0)(zod@3.24.2)
+        version: 4.1.66(react@19.0.0)(zod@3.24.2)
     devDependencies:
       dotenv:
         specifier: ^16.4.7
@@ -917,7 +917,7 @@ importers:
         version: link:../../../../packages/rag
       ai:
         specifier: latest
-        version: 4.1.64(react@19.0.0)(zod@3.24.2)
+        version: 4.1.66(react@19.0.0)(zod@3.24.2)
     devDependencies:
       dotenv:
         specifier: ^16.4.7
@@ -936,7 +936,7 @@ importers:
         version: link:../../../../packages/rag
       ai:
         specifier: latest
-        version: 4.1.64(react@19.0.0)(zod@3.24.2)
+        version: 4.1.66(react@19.0.0)(zod@3.24.2)
 
   examples/basics/rag/insert-embedding-in-libsql:
     dependencies:
@@ -951,7 +951,7 @@ importers:
         version: link:../../../../packages/rag
       ai:
         specifier: latest
-        version: 4.1.64(react@19.0.0)(zod@3.24.2)
+        version: 4.1.66(react@19.0.0)(zod@3.24.2)
 
   examples/basics/rag/insert-embedding-in-pgvector:
     dependencies:
@@ -966,7 +966,7 @@ importers:
         version: link:../../../../packages/rag
       ai:
         specifier: latest
-        version: 4.1.64(react@19.0.0)(zod@3.24.2)
+        version: 4.1.66(react@19.0.0)(zod@3.24.2)
 
   examples/basics/rag/insert-embedding-in-pinecone:
     dependencies:
@@ -981,7 +981,7 @@ importers:
         version: link:../../../../packages/rag
       ai:
         specifier: latest
-        version: 4.1.64(react@19.0.0)(zod@3.24.2)
+        version: 4.1.66(react@19.0.0)(zod@3.24.2)
 
   examples/basics/rag/metadata-extraction:
     dependencies:
@@ -1006,7 +1006,7 @@ importers:
         version: link:../../../../packages/rag
       ai:
         specifier: latest
-        version: 4.1.64(react@19.0.0)(zod@3.24.2)
+        version: 4.1.66(react@19.0.0)(zod@3.24.2)
     devDependencies:
       dotenv:
         specifier: ^16.4.7
@@ -1028,7 +1028,7 @@ importers:
         version: link:../../../../packages/rag
       ai:
         specifier: latest
-        version: 4.1.64(react@19.0.0)(zod@3.24.2)
+        version: 4.1.66(react@19.0.0)(zod@3.24.2)
     devDependencies:
       dotenv:
         specifier: ^16.4.7
@@ -1047,7 +1047,7 @@ importers:
         version: link:../../../../packages/rag
       ai:
         specifier: latest
-        version: 4.1.64(react@19.0.0)(zod@3.24.2)
+        version: 4.1.66(react@19.0.0)(zod@3.24.2)
 
   examples/basics/workflows/calling-agent-from-workflow:
     dependencies:
@@ -1125,7 +1125,7 @@ importers:
         version: link:../../packages/core
       ai:
         specifier: latest
-        version: 4.1.64(react@19.0.0)(zod@3.24.2)
+        version: 4.1.66(react@19.0.0)(zod@3.24.2)
       zod:
         specifier: ^3.24.2
         version: 3.24.2
@@ -1362,7 +1362,7 @@ importers:
         version: 0.10.0(utf-8-validate@6.0.5)
       ai:
         specifier: latest
-        version: 4.1.64(react@19.0.0-rc-45804af1-20241021)(zod@3.24.2)
+        version: 4.1.66(react@19.0.0-rc-45804af1-20241021)(zod@3.24.2)
       bcrypt-ts:
         specifier: ^5.0.3
         version: 5.0.3
@@ -1751,7 +1751,7 @@ importers:
         version: link:../../packages/memory
       ai:
         specifier: latest
-        version: 4.1.64(react@19.0.0)(zod@3.24.2)
+        version: 4.1.66(react@19.0.0)(zod@3.24.2)
       chalk:
         specifier: ^5.4.1
         version: 5.4.1
@@ -1955,7 +1955,7 @@ importers:
         version: link:../../packages/memory
       ai:
         specifier: latest
-        version: 4.1.64(react@19.0.0)(zod@3.24.2)
+        version: 4.1.66(react@19.0.0)(zod@3.24.2)
     devDependencies:
       '@types/node':
         specifier: ^20.17.24
@@ -2041,7 +2041,7 @@ importers:
         version: 1.1.2(@types/react@19.0.10)(react@19.0.0)
       ai:
         specifier: latest
-        version: 4.1.64(react@19.0.0)(zod@3.24.2)
+        version: 4.1.66(react@19.0.0)(zod@3.24.2)
       class-variance-authority:
         specifier: ^0.7.1
         version: 0.7.1
@@ -2248,7 +2248,7 @@ importers:
         version: link:../../packages/core
       ai:
         specifier: latest
-        version: 4.1.64(react@19.0.0)(zod@3.24.2)
+        version: 4.1.66(react@19.0.0)(zod@3.24.2)
     devDependencies:
       '@types/node':
         specifier: ^20.17.24
@@ -3510,9 +3510,15 @@ importers:
         specifier: ^3.22.4
         version: 3.24.2
     devDependencies:
+      '@hono/node-server':
+        specifier: ^1.13.8
+        version: 1.13.8(hono@4.7.4)
       '@internal/lint':
         specifier: workspace:*
         version: link:../_config
+      '@mastra/mcp':
+        specifier: workspace:^
+        version: link:../mcp
       '@types/jsdom':
         specifier: ^21.1.7
         version: 21.1.7
@@ -3528,6 +3534,9 @@ importers:
       eslint:
         specifier: ^9.22.0
         version: 9.22.0(jiti@2.4.2)
+      hono:
+        specifier: ^4.7.4
+        version: 4.7.4
       tsup:
         specifier: ^8.4.0
         version: 8.4.0(@microsoft/api-extractor@7.52.1(@types/node@20.17.24))(@swc/core@1.11.10(@swc/helpers@0.5.15))(jiti@2.4.2)(postcss@8.5.3)(tsx@4.19.3)(typescript@5.8.2)(yaml@2.7.0)
@@ -11924,8 +11933,8 @@ packages:
       zod:
         optional: true
 
-  ai@4.1.64:
-    resolution: {integrity: sha512-pTq12C0V4T9LA0U7Do0G2jFVW1t7LT+s2bS2buL9GB1JH0tmIaLXzzXeq1W6cTWD8dlnEM+9fjB86aEh2gMMig==}
+  ai@4.1.66:
+    resolution: {integrity: sha512-2Ny3reUTpZJhRLMvhJK5pxJ8E15uQSXEyemgsmgX6C6rI81JPPhorPTj6J8xQqZ+BFWLgrKYn9CKpUWZiAVqHw==}
     engines: {node: '>=18'}
     peerDependencies:
       react: ^18 || ^19 || ^19.0.0-rc
@@ -31490,7 +31499,7 @@ snapshots:
       react: 19.0.0
       zod: 3.24.2
 
-  ai@4.1.64(react@19.0.0)(zod@3.24.2):
+  ai@4.1.66(react@19.0.0)(zod@3.24.2):
     dependencies:
       '@ai-sdk/provider': 1.0.12
       '@ai-sdk/provider-utils': 2.1.15(zod@3.24.2)
@@ -31503,7 +31512,7 @@ snapshots:
       react: 19.0.0
       zod: 3.24.2
 
-  ai@4.1.64(react@19.0.0-rc-45804af1-20241021)(zod@3.24.2):
+  ai@4.1.66(react@19.0.0-rc-45804af1-20241021)(zod@3.24.2):
     dependencies:
       '@ai-sdk/provider': 1.0.12
       '@ai-sdk/provider-utils': 2.1.15(zod@3.24.2)

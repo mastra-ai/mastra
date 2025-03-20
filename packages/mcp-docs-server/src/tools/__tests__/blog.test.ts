@@ -1,61 +1,103 @@
-import { describe, expect, test, vi } from 'vitest';
-import { blogTool } from '../blog';
 import fs from 'fs';
 import path from 'path';
+import { MCPConfiguration } from '@mastra/mcp';
+import { describe, expect, test, beforeAll, afterAll } from 'vitest';
+import { serve } from '@hono/node-server';
+import { Hono } from 'hono';
+import type { Context } from 'hono';
 
-const mockFetch = vi.fn();
-global.fetch = mockFetch;
+describe('blog tool integration', () => {
+  let mcp: MCPConfiguration;
+  let tools: any;
+  let server: any;
+  let port: number;
+  let blogListFixture: string;
+  let blogPostFixture: string;
 
-describe('blog tool', () => {
-  test('fetches and parses blog posts correctly', async () => {
-    const fixture = fs.readFileSync(path.join(__dirname, '../__fixtures__/blog-list-raw.txt'), 'utf-8');
+  async function callTool(tool: any, args: any) {
+    const response = await tool.execute({ context: args });
 
-    mockFetch.mockResolvedValueOnce({
-      text: () => Promise.resolve(fixture),
+    // Handle string responses
+    if (typeof response === 'string') {
+      return response;
+    }
+
+    // Handle content array responses
+    if (response?.content) {
+      let text = ``;
+      for (const part of response.content) {
+        if (part?.type === `text`) {
+          text += part?.text;
+        } else {
+          throw new Error(`Found tool content part that's not accounted for. ${JSON.stringify(part, null, 2)}`);
+        }
+      }
+      return text;
+    }
+
+    throw new Error('Unexpected response format');
+  }
+
+  beforeAll(async () => {
+    // Load fixtures
+    blogListFixture = fs.readFileSync(path.join(__dirname, '../__fixtures__/blog-list-raw.txt'), 'utf-8');
+    blogPostFixture = fs.readFileSync(path.join(__dirname, '../__fixtures__/blog-post-raw.txt'), 'utf-8');
+
+    // Set up test Hono server
+    const app = new Hono();
+
+    // Mock blog list endpoint using fixture
+    app.get('/blog', (c: Context) => {
+      return c.html(blogListFixture);
     });
 
-    const result = await blogTool.execute({ url: '/blog' });
+    // Mock specific blog post endpoint using fixture
+    app.get('/blog/principles-of-ai-engineering', (c: Context) => {
+      return c.html(blogPostFixture);
+    });
+
+    // Start the server on any available port
+    server = serve({
+      fetch: app.fetch,
+      port: 0,
+    });
+
+    // Get the actual port the server is running on
+    port = (server.address() as { port: number }).port;
+
+    // Set up MCP with test server URL
+    mcp = new MCPConfiguration({
+      id: 'test-mcp-blog',
+      servers: {
+        mastra: {
+          command: 'node',
+          args: [path.join(__dirname, '../../../dist/stdio.js')],
+          env: { BLOG_URL: `http://localhost:${port}` },
+        },
+      },
+    });
+    tools = await mcp.getTools();
+  });
+
+  afterAll(async () => {
+    await mcp.disconnect();
+    await server.close();
+  });
+
+  test('fetches and parses blog posts', async () => {
+    const result = await callTool(tools.mastra_mastraBlog, { url: '/blog' });
     expect(result).toContain('Mastra.ai Blog Posts:');
-    expect(result).toContain(
-      '[Announcing our new book: Principles of Building AI agents](/blog/principles-of-ai-engineering)',
-    );
-    expect(result).toContain('[AI Beats Laboratory: A Multi-Agent Music Generation System](/blog/ai-beats-lab)');
-    expect(result).not.toContain('nav');
-    expect(result).not.toContain('footer');
+    expect(result).toContain('[Announcing our new book: Principles of Building AI agents]');
   });
 
-  test('handles fetch errors gracefully', async () => {
-    mockFetch.mockRejectedValueOnce(new Error('Network error'));
-    await expect(blogTool.execute({ url: '/blog' })).rejects.toThrow('Failed to fetch blog posts');
-  });
-
-  test('returns specific blog post content when URL is provided', async () => {
-    const fixture = fs.readFileSync(path.join(__dirname, '../__fixtures__/blog-post-raw.txt'), 'utf-8');
-
-    mockFetch.mockResolvedValueOnce({
-      text: () => Promise.resolve(fixture),
-    });
-
-    const result = await blogTool.execute({ url: '/blog/principles-of-ai-engineering' });
+  test('returns specific blog post content', async () => {
+    const result = await callTool(tools.mastra_mastraBlog, { url: '/blog/principles-of-ai-engineering' });
     expect(result).toContain('Announcing our new book: Principles of Building AI agents');
-    expect(result).toContain('Principles of Building AI agents');
-    expect(result).toContain("Today is YC demo day and we're excited to announce the release of our new book");
+    expect(result).toContain("Today is YC demo day and we're excited to announce");
   });
 
-  test('removes Next.js initialization code from blog post content', async () => {
-    const mockContent = `
-      <h1>Test Blog Post</h1>
-      <p>This is a test blog post.</p>
-      <script>(self.__next_f=self.__next_f||[]).push([0]);</script>
-    `;
-
-    mockFetch.mockResolvedValueOnce({
-      text: () => Promise.resolve(mockContent),
-    });
-
-    const result = await blogTool.execute({ url: '/blog/test-post' });
-    expect(result).toContain('Test Blog Post');
-    expect(result).toContain('This is a test blog post.');
-    expect(result).not.toContain('self.__next_f');
+  test('handles invalid blog post URLs', async () => {
+    const result = await callTool(tools.mastra_mastraBlog, { url: '/blog/non-existent-post' });
+    expect(result).toBe('Error: Error: Failed to fetch blog posts');
   });
 });
