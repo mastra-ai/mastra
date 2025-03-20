@@ -113,7 +113,7 @@ Each middleware function:
 }
 ```
 
-## Universal Deployment
+## Deployment
 
 Since Mastra builds to a standard Node.js server, you can deploy to any platform that runs Node.js applications:
 - Cloud VMs (AWS EC2, DigitalOcean Droplets, GCP Compute Engine)
@@ -148,3 +148,9 @@ Start the HTTP server:
 ```bash copy
 node .mastra/output/index.mjs
 ```
+
+## Serverless Deployment
+
+Mastra also supports serverless deployment on Cloudflare Workers, Vercel, and Netlify.
+
+See our [Serverless Deployment](/docs/deployment/deployment) guide for setup instructions.
