@@ -7,7 +7,6 @@ import type {
   CoreUserMessage,
   GenerateObjectResult,
   GenerateTextResult,
-  LanguageModelV1,
   StreamObjectResult,
   StreamTextResult,
   TextPart,
@@ -15,7 +14,7 @@ import type {
   UserContent,
 } from 'ai';
 import type { JSONSchema7 } from 'json-schema';
-import type { z, ZodSchema } from 'zod';
+import type { ZodSchema } from 'zod';
 
 import type { MastraPrimitives, MastraUnion } from '../action';
 import { MastraBase } from '../base';
@@ -27,10 +26,10 @@ import { MastraLLM } from '../llm/model';
 import { RegisteredLogger } from '../logger';
 import type { Mastra } from '../mastra';
 import type { MastraMemory } from '../memory/memory';
-import type { MemoryConfig, StorageThreadType } from '../memory/types';
+import type { MemoryConfig } from '../memory/types';
 import { InstrumentClass } from '../telemetry';
 import type { CoreTool, ToolExecutionContext } from '../tools/types';
-import type { DependenciesType } from '../utils';
+import type { DependenciesType, InferZodType } from '../utils';
 import {
   createDependenciesFrom,
   createMastraProxy,
@@ -44,6 +43,7 @@ import type {
   AgentConfig,
   AgentGenerateOptions,
   AgentStreamOptions,
+  AiMessageType,
   InstructionsBuilder,
   MastraLanguageModel,
   ToolsetsInput,
@@ -871,16 +871,16 @@ export class Agent<
   }
 
   async generate<Z extends ZodSchema | JSONSchema7 | undefined = undefined>(
-    messages: string | string[] | CoreMessage[],
+    messages: string | string[] | CoreMessage[] | AiMessageType[],
     args?: AgentGenerateOptions<Z, TSchemaDeps> & { output?: never; experimental_output?: never },
-  ): Promise<GenerateTextResult<any, Z extends ZodSchema ? z.infer<Z> : unknown>>;
+  ): Promise<GenerateTextResult<any, InferZodType<Z, unknown>>>;
   async generate<Z extends ZodSchema | JSONSchema7 | undefined = undefined>(
-    messages: string | string[] | CoreMessage[],
+    messages: string | string[] | CoreMessage[] | AiMessageType[],
     args?: AgentGenerateOptions<Z, TSchemaDeps> &
       ({ output: Z; experimental_output?: never } | { experimental_output: Z; output?: never }),
-  ): Promise<GenerateObjectResult<Z extends ZodSchema ? z.infer<Z> : unknown>>;
+  ): Promise<GenerateObjectResult<InferZodType<Z, unknown>>>;
   async generate<Z extends ZodSchema | JSONSchema7 | undefined = undefined>(
-    messages: string | string[] | CoreMessage[],
+    messages: string | string[] | CoreMessage[] | AiMessageType[],
     {
       instructions,
       context,
@@ -899,10 +899,7 @@ export class Agent<
       dependencies,
       ...rest
     }: AgentGenerateOptions<Z, TSchemaDeps> = {},
-  ): Promise<
-    | GenerateTextResult<any, Z extends ZodSchema ? z.infer<Z> : unknown>
-    | GenerateObjectResult<Z extends ZodSchema ? z.infer<Z> : unknown>
-  > {
+  ): Promise<GenerateTextResult<any, InferZodType<Z, unknown>> | GenerateObjectResult<InferZodType<Z, unknown>>> {
     let messagesToUse: CoreMessage[] = [];
 
     if (typeof messages === `string`) {
@@ -920,7 +917,7 @@ export class Agent<
             content: message,
           };
         }
-        return message;
+        return message as CoreMessage;
       });
     } else {
       messagesToUse = [messages];
@@ -1020,16 +1017,16 @@ export class Agent<
   }
 
   async stream<Z extends ZodSchema | JSONSchema7 | undefined = undefined>(
-    messages: string | string[] | CoreMessage[],
+    messages: string | string[] | CoreMessage[] | AiMessageType[],
     args?: AgentStreamOptions<Z, TSchemaDeps> & { output?: never; experimental_output?: never },
-  ): Promise<StreamTextResult<any, Z extends ZodSchema ? z.infer<Z> : unknown>>;
+  ): Promise<StreamTextResult<any, InferZodType<Z, unknown>>>;
   async stream<Z extends ZodSchema | JSONSchema7 | undefined = undefined>(
-    messages: string | string[] | CoreMessage[],
+    messages: string | string[] | CoreMessage[] | AiMessageType[],
     args?: AgentStreamOptions<Z, TSchemaDeps> &
       ({ output: Z; experimental_output?: never } | { experimental_output: Z; output?: never }),
-  ): Promise<StreamObjectResult<any, Z extends ZodSchema ? z.infer<Z> : unknown, any>>;
+  ): Promise<StreamObjectResult<any, InferZodType<Z, unknown>, any>>;
   async stream<Z extends ZodSchema | JSONSchema7 | undefined = undefined>(
-    messages: string | string[] | CoreMessage[],
+    messages: string | string[] | CoreMessage[] | AiMessageType[],
     {
       instructions,
       context,
@@ -1049,10 +1046,7 @@ export class Agent<
       dependencies,
       ...rest
     }: AgentStreamOptions<Z, TSchemaDeps> = {},
-  ): Promise<
-    | StreamTextResult<any, Z extends ZodSchema ? z.infer<Z> : unknown>
-    | StreamObjectResult<any, Z extends ZodSchema ? z.infer<Z> : unknown, any>
-  > {
+  ): Promise<StreamTextResult<any, InferZodType<Z, unknown>> | StreamObjectResult<any, InferZodType<Z, unknown>, any>> {
     const runIdToUse = runId || randomUUID();
 
     let messagesToUse: CoreMessage[] = [];
@@ -1072,7 +1066,7 @@ export class Agent<
             content: message,
           };
         }
-        return message;
+        return message as CoreMessage;
       });
     }
 

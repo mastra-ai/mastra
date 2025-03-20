@@ -14,6 +14,7 @@ const meta = {
   start: ".start()",
   execute: ".execute()",
   suspend: ".suspend()",
+  snapshots: "Snapshots",
   resume: ".resume()",
   commit: ".commit()",
   watch: ".watch()",

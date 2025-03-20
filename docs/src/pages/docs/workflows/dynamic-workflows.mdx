@@ -99,6 +99,10 @@ const mainWorkflow = new Workflow({
 
 mainWorkflow.step(createDynamicWorkflow).commit();
 
+// Register the workflow with Mastra
+export const mastra = new Mastra({
+  workflows: { mainWorkflow },
+});
 
 const run = mainWorkflow.createRun();
 const result = await run.start({
