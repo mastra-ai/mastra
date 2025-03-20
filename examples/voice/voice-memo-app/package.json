@@ -8,7 +8,7 @@
     "lint": "next lint"
   },
   "dependencies": {
-    "@ai-sdk/openai": "^1.2.5",
+    "@ai-sdk/openai": "1.2.5",
     "@mastra/core": "workspace:*",
     "@mastra/voice-openai": "workspace:*",
     "next": "15.1.7",
