@@ -3833,6 +3833,8 @@ describe('Workflow', async () => {
 
         // @ts-ignore
         expect(results['last-step']).toEqual(undefined);
+        // @ts-ignore
+        expect(results['nested-workflow-a'].output.activePaths).toEqual(new Map([['other', { status: 'suspended' }]]));
 
         const resumedResults = await run.resume({ stepId: 'nested-workflow-a.other', context: { startValue: 1 } });
 
