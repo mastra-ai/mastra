@@ -112,3 +112,39 @@ Each middleware function:
   }
 }
 ```
+
+## Universal Deployment
+
+Since Mastra builds to a standard Node.js server, you can deploy to any platform that runs Node.js applications:
+- Cloud VMs (AWS EC2, DigitalOcean Droplets, GCP Compute Engine)
+- Container platforms (Docker, Kubernetes)
+- Platform as a Service (Heroku, Railway)
+- Self-hosted servers
+
+### Building
+
+Build the application:
+
+```bash copy
+# Build from current directory
+mastra build
+
+# Or specify a directory
+mastra build --dir ./my-project
+```
+
+The build process:
+1. Locates entry file (`src/mastra/index.ts` or `src/mastra/index.js`)
+2. Creates `.mastra` output directory
+3. Bundles code using Rollup with tree shaking and source maps
+4. Generates [Hono](https://hono.dev) HTTP server
+
+See [`mastra build`](/docs/reference/cli/build) for all options.
+
+### Running the Server
+
+Start the HTTP server:
+
+```bash copy
+node .mastra/output/index.mjs
+```
