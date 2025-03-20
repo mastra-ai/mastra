@@ -17,6 +17,9 @@ const meta = {
   evals: {
     title: "Evals",
   },
+  voice: {
+    title: "Voice",
+  },
 };
 
 export default meta;

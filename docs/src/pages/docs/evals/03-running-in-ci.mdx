@@ -14,6 +14,7 @@ We support any testing framework that supports ESM modules. For example, you can
 ```typescript copy showLineNumbers filename="src/mastra/agents/index.test.ts"
 import { describe, it, expect } from 'vitest';
 import { evaluate } from "@mastra/evals";
+import { ToneConsistencyMetric } from "@mastra/evals/nlp";
 import { myAgent } from './index';
 
 describe('My Agent', () => {
