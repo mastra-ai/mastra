@@ -40,6 +40,10 @@ const meta = {
     title: "Evals",
     collapsed: false,
   },
+  voice: {
+    title: "Voice",
+    collapsed: false,
+  },
   integrations: "Integrations",
   faq: "FAQ",
   reference: "Reference",

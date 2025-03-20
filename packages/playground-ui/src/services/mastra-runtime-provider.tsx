@@ -134,7 +134,9 @@ export function MastraRuntimeProvider({
       } finally {
         reader.releaseLock();
         setIsRunning(false);
-        refreshThreadList?.();
+        setTimeout(() => {
+          refreshThreadList?.();
+        }, 500);
       }
     } catch (error) {
       console.error('Error occurred in MastraRuntimeProvider', error);

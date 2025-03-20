@@ -44,6 +44,11 @@ workflow
     }
   })
   .commit();
+
+// Register the workflow with Mastra
+  export const mastra = new Mastra({
+    workflows: { workflow },
+  });
 ```
 
 ### Accessing Nested Properties
@@ -93,7 +98,7 @@ When a workflow executes, Mastra resolves variables at runtime by:
 This example shows how to map data from the workflow trigger to a step:
 
 ```typescript showLineNumbers filename="src/mastra/workflows/trigger-mapping.ts" copy
-import { Step, Workflow } from "@mastra/core/workflows";
+import { Step, Workflow, Mastra } from "@mastra/core";
 import { z } from "zod";
 
 // Define a step that needs user input
@@ -125,6 +130,11 @@ workflow
     }
   })
   .commit();
+
+  // Register the workflow with Mastra
+  export const mastra = new Mastra({
+    workflows: { workflow },
+  });
 ```
 
 ### Mapping Between Steps
@@ -132,7 +142,7 @@ workflow
 This example demonstrates mapping data from one step to another:
 
 ```typescript showLineNumbers filename="src/mastra/workflows/step-mapping.ts" copy
-import { Step, Workflow } from "@mastra/core/workflows";
+import { Step, Workflow, Mastra } from "@mastra/core";
 import { z } from "zod";
 
 // Step 1: Generate data
@@ -183,6 +193,11 @@ workflow
     }
   })
   .commit();
+
+  // Register the workflow with Mastra
+  export const mastra = new Mastra({
+    workflows: { workflow },
+  });
 ```
 
 ## Type Safety
@@ -190,7 +205,7 @@ workflow
 Mastra provides type safety for variable mappings when using TypeScript:
 
 ```typescript showLineNumbers filename="src/mastra/workflows/type-safe.ts" copy
-import { Step, Workflow } from "@mastra/core/workflows";
+import { Step, Workflow, Mastra } from "@mastra/core";
 import { z } from "zod";
 
 // Define schemas for better type safety
@@ -227,6 +242,11 @@ const workflow = new Workflow({
 });
 
 workflow.step(step1).commit();
+
+  // Register the workflow with Mastra
+  export const mastra = new Mastra({
+    workflows: { workflow },
+  });
 ```
 
 ## Best Practices

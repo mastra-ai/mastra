@@ -10,7 +10,7 @@ Complex workflows often need to pause execution while waiting for external input
 Mastra's suspend and resume features let you pause workflow execution at any step, persist the workflow snapshot to storage, and resume execution from the saved snapshot when ready.
 This entire process is automatically managed by Mastra. No config needed, or manual step required from the user.
 
-Storing the workflow snapshot to storage (libsql by default) means that the workflow state is permanently preserved across sessions even if the workflow is suspended for a long time.
+Storing the workflow snapshot to storage (LibSQL by default) means that the workflow state is permanently preserved across sessions, deployments, and server restarts. This persistence is crucial for workflows that might remain suspended for minutes, hours, or even days while waiting for external input or resources.
 
 ## When to Use Suspend/Resume
 
@@ -106,6 +106,11 @@ workflow
   .then(improveResponseStep)
   .then(evaluateImproved)
   .commit();
+
+  // Register the workflow with Mastra
+  export const mastra = new Mastra({
+    workflows: { workflow },
+  });
 ```
 
 ### Starting and Resuming the Workflow
@@ -158,6 +163,63 @@ if (improveResponseStepResult?.status === 'suspended') {
 - The `resume()` method requires the `stepId` to identify which suspended step to resume
 - You can provide new context data when resuming that will be merged with existing step results
 
+## Storage for Suspend and Resume
+
+When a workflow is suspended using `await suspend()`, Mastra automatically persists the entire workflow state to storage. This is essential for workflows that might remain suspended for extended periods, as it ensures the state is preserved across application restarts or server instances.
+
+### Default Storage: LibSQL
+
+By default, Mastra uses LibSQL as its storage engine:
+
+```typescript
+import { Mastra } from '@mastra/core/mastra';
+import { DefaultStorage } from '@mastra/core/storage/libsql';
+
+const mastra = new Mastra({
+  storage: new DefaultStorage({
+    config: {
+      url: "file:storage.db", // Local file-based database for development
+      // For production, use a persistent URL:
+      // url: process.env.DATABASE_URL,
+      // authToken: process.env.DATABASE_AUTH_TOKEN, // Optional for authenticated connections
+    }
+  }),
+});
+```
+
+The LibSQL storage can be configured in different modes:
+- In-memory database (testing): `:memory:`
+- File-based database (development): `file:storage.db`
+- Remote database (production): URLs like `libsql://your-database.turso.io`
+
+### Alternative Storage Options
+
+#### Upstash (Redis-Compatible)
+
+For serverless applications or environments where Redis is preferred:
+
+```bash
+npm install @mastra/upstash
+```
+
+```typescript
+import { Mastra } from '@mastra/core/mastra';
+import { UpstashStore } from "@mastra/upstash";
+
+const mastra = new Mastra({
+  storage: new UpstashStore({
+    url: process.env.UPSTASH_URL,
+    token: process.env.UPSTASH_TOKEN,
+  }),
+});
+```
+### Storage Considerations
+
+- All storage options support suspend and resume functionality identically
+- The workflow state is automatically serialized and saved when suspended
+- No additional configuration is needed for suspend/resume to work with storage
+- Choose your storage option based on your infrastructure, scaling needs, and existing technology stack
+
 ## Watching and Resuming
 
 To handle suspended workflows, use the `watch` method to monitor workflow status per run and `resume` to continue execution:
@@ -188,6 +250,14 @@ watch(async ({ context, activePaths }) => {
 // Start the workflow execution
 await start({ triggerData: { inputValue: 45 } });
 ```
+
+## Further Reading
+
+For a deeper understanding of how suspend and resume works under the hood:
+
+- [Understanding Snapshots in Mastra Workflows](../reference/workflows/snapshots.mdx) - Learn about the snapshot mechanism that powers suspend and resume functionality
+- [Step Configuration Guide](./steps.mdx) - Learn more about configuring steps in your workflows
+- [Control Flow Guide](./control-flow.mdx) - Advanced workflow control patterns
 
 ## Related Resources
 
