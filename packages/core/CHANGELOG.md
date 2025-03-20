@@ -1,5 +1,14 @@
 # @mastra/core
 
+## 0.6.4-alpha.0
+
+### Patch Changes
+
+- fb68a80: Inject mastra instance into llm class
+- b56a681: Update README and some tests for vector stores
+- 248cb07: Allow ai-sdk Message type for messages in agent generate and stream
+  Fix sidebar horizontal overflow in playground
+
 ## 0.6.3
 
 ### Patch Changes
