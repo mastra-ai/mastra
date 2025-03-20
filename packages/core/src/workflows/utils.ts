@@ -5,6 +5,7 @@ import type { StepAction, StepDef, StepResult, VariableReference, WorkflowContex
 import type { Workflow } from './workflow';
 import { get } from 'radash';
 import type { WorkflowResultReturn } from './workflow-instance';
+import type { Mastra } from '..';
 
 export function isErrorEvent(stateEvent: any): stateEvent is {
   type: `xstate.error.actor.${string}`;
@@ -232,8 +233,17 @@ export function workflowToStep<
   TResultSchema extends z.ZodObject<any> = any,
 >(
   workflow: Workflow<TSteps, TStepId, TTriggerSchema, TResultSchema>,
+  { mastra }: { mastra?: Mastra },
 ): StepAction<TStepId, TTriggerSchema, z.ZodType<WorkflowRunResult<TTriggerSchema, TSteps, TResultSchema>>, any> {
   workflow.setNested(true);
+  if (mastra) {
+    workflow.__registerMastra(mastra);
+    workflow.__registerPrimitives({
+      logger: mastra.getLogger(),
+      telemetry: mastra.getTelemetry(),
+    });
+  }
+
   return {
     id: workflow.name,
     workflow,

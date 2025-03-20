@@ -155,7 +155,7 @@ export class Workflow<
 
     const step: StepAction<string, any, any, any> = isWorkflow(next)
       ? // @ts-ignore
-        workflowToStep(next)
+        workflowToStep(next, { mastra: this.#mastra })
       : (next as StepAction<string, any, any, any>);
 
     const stepKey = this.#makeStepKey(step);
@@ -233,7 +233,7 @@ export class Workflow<
       this.after(lastStep);
       const nextSteps = next.map(step => {
         if (isWorkflow(step)) {
-          return workflowToStep(step);
+          return workflowToStep(step, { mastra: this.#mastra });
         }
         return step;
       });
@@ -266,7 +266,7 @@ export class Workflow<
     const lastStepKey = this.#lastStepStack[this.#lastStepStack.length - 1];
 
     const step: StepAction<string, any, any, any> = isWorkflow(next)
-      ? workflowToStep(next)
+      ? workflowToStep(next, { mastra: this.#mastra })
       : (next as StepAction<string, any, any, any>);
 
     const stepKey = this.#makeStepKey(step);
@@ -505,14 +505,14 @@ export class Workflow<
     this.after(lastStep);
 
     if (ifStep) {
-      const _ifStep = isWorkflow(ifStep) ? workflowToStep(ifStep) : ifStep;
+      const _ifStep = isWorkflow(ifStep) ? workflowToStep(ifStep, { mastra: this.#mastra }) : ifStep;
 
       this.step(_ifStep, {
         when: condition,
       });
 
       if (elseStep) {
-        const _elseStep = isWorkflow(elseStep) ? workflowToStep(elseStep) : elseStep;
+        const _elseStep = isWorkflow(elseStep) ? workflowToStep(elseStep, { mastra: this.#mastra }) : elseStep;
         this.step(_elseStep, {
           when:
             typeof condition === 'function'
@@ -958,7 +958,7 @@ export class Workflow<
   }
 
   toStep(): Step<TStepId, TTriggerSchema, z.ZodType<WorkflowRunResult<TTriggerSchema, TSteps, TResultSchema>>, any> {
-    const x = workflowToStep<TSteps, TStepId, TTriggerSchema, TResultSchema>(this);
+    const x = workflowToStep<TSteps, TStepId, TTriggerSchema, TResultSchema>(this, { mastra: this.#mastra });
     return new Step(x);
   }
 }
