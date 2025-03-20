@@ -18,14 +18,14 @@ interface VercelError {
 }
 
 export class VercelDeployer extends Deployer {
-  private teamId: string;
+  private teamSlug: string;
   private projectName: string;
   private token: string;
 
-  constructor({ teamId, projectName, token }: { teamId: string; projectName: string; token: string }) {
+  constructor({ teamSlug, projectName, token }: { teamSlug: string; projectName: string; token: string }) {
     super({ name: 'VERCEL' });
 
-    this.teamId = teamId;
+    this.teamSlug = teamSlug;
     this.projectName = projectName;
     this.token = token;
   }
@@ -68,16 +68,16 @@ export class VercelDeployer extends Deployer {
     }
   }
 
-  private async getTeamSlug(): Promise<string> {
-    const response = await fetch(`https://api.vercel.com/v10/teams/${this.teamId}`, {
+  private async getTeamId(): Promise<string> {
+    const response = await fetch(`https://api.vercel.com/v2/teams`, {
       headers: {
         Authorization: `Bearer ${this.token}`,
       },
     });
 
-    const team = (await response.json()) as any;
-
-    return team.slug;
+    const res = (await response.json()) as any;
+    const teams = res.teams;
+    return teams.find((team: any) => team.slug === this.teamSlug)?.id;
   }
 
   private async syncEnv(envVars: Map<string, string>, { outputDirectory }: { outputDirectory: string }) {
@@ -99,9 +99,10 @@ export class VercelDeployer extends Deployer {
 
     try {
       const projectId = this.getProjectId({ dir: outputDirectory });
+      const teamId = await this.getTeamId();
 
       const response = await fetch(
-        `https://api.vercel.com/v10/projects/${projectId}/env?teamId=${this.teamId}&upsert=true`,
+        `https://api.vercel.com/v10/projects/${projectId}/env?teamId=${teamId}&upsert=true`,
         {
           method: 'POST',
           headers: {
@@ -153,12 +154,10 @@ export const POST = handle(app);
   async deploy(outputDirectory: string): Promise<void> {
     const envVars = await this.loadEnvVars();
 
-    const teamSlug = await this.getTeamSlug();
-
     // Create the command array with base arguments
     const commandArgs = [
       '--scope',
-      teamSlug,
+      this.teamSlug,
       '--cwd',
       join(outputDirectory, this.outputDir),
       '--token',
