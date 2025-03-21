@@ -17,13 +17,13 @@ constructor({
     version = '1.0.0',
     server,
     capabilities = {},
-    timeoutMillis = 60000,
+    timeout = 60000,
 }: {
     name: string;
     server: StdioServerParameters | SSEClientParameters;
     capabilities?: ClientCapabilities;
     version?: string;
-    timeoutMillis?: number;
+    timeout?: number;
 })
 ```
 
@@ -57,7 +57,7 @@ constructor({
       description: "Optional capabilities configuration for the client.",
     },
     {
-      name: "timeoutMillis",
+      name: "timeout",
       type: "number",
       isOptional: true,
       defaultValue: 60000,

@@ -23,23 +23,23 @@ export class MastraMCPClient extends MastraBase {
   name: string;
   private transport: Transport;
   private client: Client;
-  private readonly timeoutMillis: number;
+  private readonly timeout: number;
   constructor({
     name,
     version = '1.0.0',
     server,
     capabilities = {},
-    timeoutMillis = DEFAULT_REQUEST_TIMEOUT_MSEC,
+    timeout = DEFAULT_REQUEST_TIMEOUT_MSEC,
   }: {
     name: string;
     server: MastraMCPServerDefinition;
     capabilities?: ClientCapabilities;
     version?: string;
-    timeoutMillis?: number;
+    timeout?: number;
   }) {
     super({ name: 'MastraMCPClient' });
     this.name = name;
-    this.timeoutMillis = timeoutMillis;
+    this.timeout = timeout;
 
     if (`url` in server) {
       this.transport = new SSEClientTransport(server.url, {
@@ -125,7 +125,7 @@ export class MastraMCPClient extends MastraBase {
               },
               CallToolResultSchema,
               {
-                timeout: this.timeoutMillis,
+                timeout: this.timeout,
               },
             );
 
