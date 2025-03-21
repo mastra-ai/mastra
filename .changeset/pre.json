@@ -135,9 +135,11 @@
     "@mastra/voice-playai": "0.1.7",
     "@mastra/voice-sarvam": "0.1.2",
     "@mastra/voice-speechify": "0.1.7",
-    "interactive-story": "0.1.0"
+    "interactive-story": "0.1.0",
+    "voice-memo-app": "0.1.1-alpha.0"
   },
   "changesets": [
+    "breezy-groups-wish",
     "cool-papers-check",
     "cute-women-stand",
     "famous-readers-juggle",

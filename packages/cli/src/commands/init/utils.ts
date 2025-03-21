@@ -11,6 +11,7 @@ import yoctoSpinner from 'yocto-spinner';
 import { DepsService } from '../../services/service.deps';
 import { FileService } from '../../services/service.file';
 import { logger } from '../../utils/logger';
+import { globalWindsurfMCPIsAlreadyInstalled, windsurfGlobalMCPConfigPath } from './mcp-docs-server-install';
 
 const exec = util.promisify(child_process.exec);
 
@@ -543,22 +544,46 @@ export const interactivePrompt = async () => {
           initialValue: false,
         }),
       configureEditorWithDocsMCP: async () => {
+        const windsurfIsAlreadyInstalled = await globalWindsurfMCPIsAlreadyInstalled();
+
         const editor = await p.select({
           message: `Make your AI IDE into a Mastra expert? (installs Mastra docs MCP server)`,
           options: [
             { value: 'skip', label: 'Skip for now', hint: 'default' },
             { value: 'cursor', label: 'Cursor' },
-            { value: 'windsurf', label: 'Windsurf' },
+            {
+              value: 'windsurf',
+              label: 'Windsurf',
+              hint: windsurfIsAlreadyInstalled ? `Already installed` : undefined,
+            },
           ],
         });
 
         if (editor === `skip`) return undefined;
+        if (editor === `windsurf` && windsurfIsAlreadyInstalled) {
+          p.log.message(`\nWindsurf is already installed, skipping.`);
+          return undefined;
+        }
 
         if (editor === `cursor`) {
           p.log.message(
             `\nNote: you will need to go into Cursor Settings -> MCP Settings and manually enable the installed Mastra MCP server.\n`,
           );
         }
+
+        if (editor === `windsurf`) {
+          const confirm = await p.select({
+            message: `Windsurf only supports a global MCP config (at ${windsurfGlobalMCPConfigPath}) is it ok to add/update that global config?\nThis means the Mastra docs MCP server will be available in all your Windsurf projects.`,
+            options: [
+              { value: 'yes', label: 'Yes, I understand' },
+              { value: 'skip', label: 'No, skip for now' },
+            ],
+          });
+          if (confirm !== `yes`) {
+            return undefined;
+          }
+        }
+
         return editor;
       },
     },

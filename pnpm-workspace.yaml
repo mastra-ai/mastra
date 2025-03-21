@@ -12,5 +12,6 @@ packages:
   - "examples/voice/*"
   - "examples/basics/**/*"
   - "examples/basics/llms/*"
+  - "examples/voice/*"
   - "packages/cli/src/playground"
   - "packages/*/integration-tests"

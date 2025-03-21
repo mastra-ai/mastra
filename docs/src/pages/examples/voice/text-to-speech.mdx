@@ -34,7 +34,7 @@ export const storyTellerAgent = new Agent({`
 
 ## Registering the Agent with Mastra
 
-This snippet demonstrates how to register the STT-enabled agent with your Mastra instance:
+This snippet demonstrates how to register the agent with your Mastra instance:
 
 ```typescript filename="src/mastra/index.ts"
 import { createLogger } from '@mastra/core/logger';
@@ -52,7 +52,7 @@ export const mastra = new Mastra({
 
 ## Connecting to Mastra from the Frontend
 
-This snippet demonstrates how to initialize the Mastra client using the mastra-js SDK:
+Here we use the Mastra Client SDK to interact with our Mastra server. For more information about the Mastra Client SDK, check out the [documentation](/docs/deployment/client).
 
 ```typescript filename="src/app/page.tsx"
 import { MastraClient } from '@mastra/client-js';
@@ -144,6 +144,8 @@ useEffect(() => {
   };
 }, [audioData]);
 ```
+
+You can view the complete implementation of the Interactive Story Generator on our GitHub repository.
 
 <br />
 <br />
