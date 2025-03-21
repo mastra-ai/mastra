@@ -1,11 +1,8 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 import type { Tool, Context } from 'tylerbarnes-fastmcp-fix';
 import { z } from 'zod';
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+import { fromPackageRoot } from '../utils';
 
 // Helper function to encode package names for file paths
 function encodePackageName(name: string): string {
@@ -17,9 +14,10 @@ function decodePackageName(name: string): string {
   return decodeURIComponent(name);
 }
 
+const changelogsDir = fromPackageRoot('.docs/organized/changelogs');
+
 // Helper function to list package changelogs
 async function listPackageChangelogs(): Promise<Array<{ name: string; path: string }>> {
-  const changelogsDir = path.resolve(__dirname, '../../.docs/organized/changelogs');
   try {
     const files = await fs.readdir(changelogsDir);
     return files
@@ -36,7 +34,6 @@ async function listPackageChangelogs(): Promise<Array<{ name: string; path: stri
 
 // Helper function to read a package changelog
 async function readPackageChangelog(filename: string): Promise<string> {
-  const changelogsDir = path.resolve(__dirname, '../../.docs/organized/changelogs');
   const encodedName = encodePackageName(filename.replace('.md', '')); // Remove .md if present
   const filePath = path.join(changelogsDir, `${encodedName}.md`);
 

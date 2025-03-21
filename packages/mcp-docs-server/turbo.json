@@ -4,27 +4,17 @@
   "tasks": {
     "prepare-docs": {
       "cache": false,
-      "outputs": [".docs/**"]
-    },
-    "dev": {
-      "dependsOn": ["prepare-docs"],
-      "outputs": ["dist/**"],
-      "persistent": true,
-      "cache": false
+      "outputs": [".docs/**"],
+      "dependsOn": ["build:cli"]
     },
     "build": {
-      "dependsOn": ["build:lib", "build:cli"]
-    },
-    "build:lib": {
-      "dependsOn": ["prepare-docs"],
-      "outputs": ["dist/**"]
+      "dependsOn": ["build:cli", "prepare-docs"]
     },
     "build:cli": {
-      "dependsOn": ["prepare-docs"],
       "outputs": ["dist/**"]
     },
     "test": {
-      "dependsOn": ["build"],
+      "dependsOn": ["build", "build:cli", "prepare-docs"],
       "outputs": []
     }
   }

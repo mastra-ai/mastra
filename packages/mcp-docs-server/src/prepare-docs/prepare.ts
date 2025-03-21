@@ -12,3 +12,12 @@ export async function prepare() {
   await preparePackageChanges();
   log('Documentation preparation complete!');
 }
+
+if (process.env.PREPARE === `true`) {
+  try {
+    await prepare();
+  } catch (error) {
+    console.error('Error preparing documentation:', error);
+    process.exit(1);
+  }
+}
