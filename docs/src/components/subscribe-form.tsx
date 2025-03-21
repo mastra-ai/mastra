@@ -120,7 +120,7 @@ export const SubscribeForm = ({
           name="email"
           render={({ field }) => (
             <FormItem className="flex-1 w-full">
-              <FormLabel className="text-[13px] text-[#E6E6E6]">
+              <FormLabel className="text-[13px] text-gray-500 dark:text-[#E6E6E6]">
                 {label || "Mastra Newsletter"}
               </FormLabel>
 
