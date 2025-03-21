@@ -4,8 +4,9 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "pnpm build:llms-txt && next build",
+    "build": "pnpm build:llms-txt && pnpm build:stars && next build",
     "build:llms-txt": "tsx src/scripts/build-llms-text-files.ts",
+    "build:stars": "tsx scripts/fetchStars.ts",
     "start": "next start",
     "lint": "next lint",
     "postbuild": "next-sitemap --config next-sitemap.config.mjs"

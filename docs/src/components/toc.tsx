@@ -4,6 +4,8 @@ import { cn } from "@/lib/utils";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import { SubscribeForm } from "./subscribe-form";
+import { TocSvg } from "./svgs/toc-svg";
+import { ThemeSwitch } from "nextra-theme-docs";
 
 interface TOCItem {
   value: string;
@@ -36,81 +38,103 @@ export function TableOfContents(props: TOCProps) {
     return () => window.removeEventListener("hashchange", updateActiveId);
   }, [pathname]);
 
+  let headingIndex = 0;
+
   return (
     <div className="sticky top-[4rem] w-64 hidden xl:block max-h-[calc(100vh-4rem)] overflow-y-auto pb-4 nextra-scrollbar">
       <div className="px-4 py-8 flex flex-col">
-        <div>
-          <h3 className="text-xs font-semibold mb-2 pl-4 text-[#6b7280] dark:text-white">
-            On This Page
-          </h3>
-          <nav className="flex flex-col space-y-0.5">
-            {pageTitle && (
-              <a
-                href="#"
-                onClick={(e) => {
-                  e.preventDefault();
-                  history.replaceState(null, "", window.location.pathname);
-                  window.scrollTo({ top: 0, behavior: "smooth" });
-                  setActiveId("");
-                }}
-                className={cn(
-                  "dark:text-gray-200 text-black py-1 hover:text-blue-400 transition-colors duration-200 text-sm",
-                  activeId === "" ? "dark:text-[#1aa3ff] font-medium" : "",
-                )}
-              >
-                {pageTitle}
-              </a>
-            )}
-            {props.toc.map((item) => {
-              return (
+        {props.toc.length > 0 && (
+          <div className="border-b-[0.5px] dark:border-[#343434] pb-9">
+            <h3 className="text-xs font-medium mb-2 pl-4 text-[#6b7280] dark:text-[#939393] py-1.5 mb-3 text-[13px] flex flex-row gap-2 items-center">
+              <TocSvg className="w-4 h-4 stroke-[#939393]" />
+              On This Page
+            </h3>
+            <nav className="flex flex-col space-y-0.5">
+              {pageTitle && (
                 <a
-                  key={item.id + item.value}
-                  href={item.id ? `#${item.id}` : undefined}
-                  className={cn("transition-colors py-1 duration-200 text-sm", {
-                    "text:black dark:text-gray-200 hover:text-[#1aa3ff]":
-                      item.depth === 2,
-                    "dark:text-gray-400 dark:hover:text-white text-gray-500 ml-3 hover:text-gray-900":
-                      item.depth > 2,
-                    "dark:text-[#1aa3ff] text-[#004ca3] dark:hover:text-blue-[#1aa3ff]":
-                      item.id === activeId,
-                  })}
+                  href="#"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    history.replaceState(null, "", window.location.pathname);
+                    window.scrollTo({ top: 0, behavior: "smooth" });
+                    setActiveId("");
+                  }}
+                  className={cn(
+                    "text-black dark:text-[#939393] py-1 hover:text-blue-400 transition-colors duration-200 text-sm",
+                    activeId === "" ? "dark:text-white font-medium" : "",
+                  )}
                 >
-                  {item.value}
+                  {pageTitle}
                 </a>
-              );
-            })}
-          </nav>
-        </div>
-        <div className="mt-2 pt-4 border-t  dark:border-neutral-700">
-          <a
-            href="https://github.com/mastra-ai/mastra/issues"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="block text-[#6b7280] dark:text-gray-400 hover:text-black dark:hover:text-gray-200 text-xs"
-          >
-            Question? Give us feedback →
-          </a>
-          <a
-            href={`https://github.com/mastra-ai/mastra/edit/main/docs/${props.filePath}`}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="block text-[#6b7280] dark:text-gray-400 hover:text-black dark:hover:text-gray-200 text-xs"
-          >
-            Edit this page
-          </a>
-        </div>
-      </div>
-      <div className="p-4 border dark:border-[0.5px] rounded-md dark:border-neutral-700">
-        <h3 className="text-xl font-semibold">
-          Subscribe to the Weekly changelog
-        </h3>
-        <SubscribeForm
-          className="md:flex-col md:items-start mt-2"
-          inputClassName="md:w-full md:min-w-full pl-2 truncate"
-          buttonClassName="md:w-full md:min-w-full"
-          showLabel={false}
-        />
+              )}
+              {props.toc.map((item) => {
+                if (item.depth === 2) {
+                  headingIndex++;
+                }
+
+                console.log(
+                  "activeId",
+                  item.id === activeId,
+                  item.id,
+                  activeId,
+                );
+
+                return (
+                  <a
+                    key={item.id + item.value}
+                    href={item.id ? `#${item.id}` : undefined}
+                    className={cn(
+                      "transition-colors py-1 duration-200 text-sm",
+                      {
+                        "text:black dark:text-[#939393] hover:text-[#1aa3ff] dark:hover:text-white":
+                          item.depth === 2,
+                        "dark:text-[#939393] dark:hover:text-white text-gray-500 ml-3 hover:text-gray-900":
+                          item.depth > 2,
+                        "text-[#004ca3] dark:text-white": item.id === activeId,
+                      },
+                    )}
+                  >
+                    {item.depth === 2 && <span>{headingIndex}. </span>}
+                    {item.value}
+                  </a>
+                );
+              })}
+            </nav>
+          </div>
+        )}
+
+        <FeedbackSection filePath={props.filePath} />
       </div>
     </div>
   );
 }
+
+const FeedbackSection = (props: { filePath: string }) => {
+  const buttonClass =
+    "!text-[14px] !text-[#A9A9A9] w-full !bg-[#121212] block rounded-[6px] h-[32px] px-3 flex items-center";
+  return (
+    <div className="pt-5">
+      <div className="space-y-2 pb-6">
+        <ThemeSwitch className={buttonClass} />
+        <a
+          href="https://github.com/mastra-ai/mastra/issues"
+          target="_blank"
+          rel="noopener noreferrer"
+          className={buttonClass}
+        >
+          Give us feedback
+        </a>
+        <a
+          href={`https://github.com/mastra-ai/mastra/edit/main/docs/${props.filePath}`}
+          target="_blank"
+          rel="noopener noreferrer"
+          className={buttonClass}
+        >
+          Edit this page
+        </a>
+      </div>
+
+      <SubscribeForm label="Subscribe to weekly changelog" />
+    </div>
+  );
+};
