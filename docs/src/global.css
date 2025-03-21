@@ -186,7 +186,7 @@ div.nextra-scrollbar {
 }
 
 .nextra-nav-container:is(html[class~="dark"] *) nav a {
-  color: #a9a9a9 !important;
+  color: #a9a9a9;
 }
 
 nav a {
@@ -195,14 +195,12 @@ nav a {
   font-size: 14px !important;
   font-weight: 500 !important;
 }
-nav a[aria-current="true"] {
-  border-radius: 0.375rem;
-}
 
-/* button[title="Change theme"],
-input[type="search"] {
-  border-radius: 9999px !important;
-} */
+.nextra-nav-container:is(html[class~="dark"] *)
+  nav
+  a:is([aria-current="true"]) {
+  color: white;
+}
 
 ul[role="listbox"] {
   border-radius: 0.375rem !important;
