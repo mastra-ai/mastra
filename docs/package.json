@@ -18,7 +18,7 @@
     "clsx": "^2.1.1",
     "lucide-react": "^0.436.0",
     "motion": "^12.5.0",
-    "next": "14.2.22",
+    "next": "14.2.25",
     "next-sitemap": "^4.2.3",
     "nextra": "^3.0.2",
     "nextra-theme-docs": "^3.0.2",
