@@ -111,7 +111,7 @@ export function TableOfContents(props: TOCProps) {
 
 const FeedbackSection = (props: { filePath: string }) => {
   const buttonClass =
-    "!text-[14px] !text-[#A9A9A9] w-full !bg-[#121212] block rounded-[6px] h-[32px] px-3 flex items-center";
+    "!text-[14px] dark:!text-[#A9A9A9] w-full dark:!bg-[#121212] block rounded-[6px] h-[32px] px-3 flex items-center bg-gray-100";
   return (
     <div className="pt-5">
       <div className="space-y-2 pb-6">
