@@ -71,7 +71,7 @@ An optional object that can include configuration for output structure, memory m
     },
     {
       name: "onFinish",
-      type: "(result: string) => Promise<void> | void",
+      type: StreamTextOnFinishCallback | StreamObjectOnFinishCallback,
       isOptional: true,
       description: "Callback function called when streaming is complete.",
     },
