@@ -94,7 +94,6 @@ export function WorkflowConditionNode({ data }: NodeProps<ConditionNode>) {
                             style={{
                               ...style,
                               backgroundColor: '#121212',
-                              border: '0.5px solid #131313',
                               padding: '0 0.75rem 0 0',
                             }}
                           >
