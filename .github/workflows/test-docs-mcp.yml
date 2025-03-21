@@ -6,7 +6,7 @@ on:
     paths:
       - "packages/mcp/**"
       - "packages/mcp-docs-server/**"
-      - ".github/workflows/test-mcp.yml"
+      - ".github/workflows/test-docs-mcp.yml"
 
 jobs:
   test:
