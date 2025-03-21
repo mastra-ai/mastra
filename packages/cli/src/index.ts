@@ -133,11 +133,12 @@ program
   .option('-t, --tools <toolsDirs>', 'Comma-separated list of paths to tool files to include')
   .option('-p, --port <port>', 'Port number for the development server (defaults to 4111)')
   .action(args => {
+    const port = args?.port ? Number(args.port) : process.env.PORT ? Number(process.env.PORT) : undefined;
     analytics.trackCommand({
       command: 'dev',
     });
     dev({
-      port: args?.port ? parseInt(args.port) : 4111,
+      port: port && !isNaN(port) ? port : 4111,
       dir: args?.dir,
       root: args?.root,
       tools: args?.tools ? args.tools.split(',') : [],
@@ -150,13 +151,12 @@ program
   .command('build')
   .description('Build your Mastra project')
   .option('-d, --dir <path>', 'Path to directory')
-  .option('-p, --port <port>', 'Port number for the server (defaults to 4111)')
   .action(async args => {
     await analytics.trackCommandExecution({
       command: 'mastra build',
       args,
       execution: async () => {
-        await build({ dir: args.dir, port: args?.port ? parseInt(args.port) : undefined });
+        await build({ dir: args.dir });
       },
     });
   });
