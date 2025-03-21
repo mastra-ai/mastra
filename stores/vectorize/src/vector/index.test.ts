@@ -27,7 +27,7 @@ function waitUntilReady(vector: CloudflareVector, indexName: string) {
 
 function waitUntilVectorsIndexed(vector: CloudflareVector, indexName: string, expectedCount: number) {
   return new Promise((resolve, reject) => {
-    const maxAttempts = 30;
+    const maxAttempts = 60;
     let attempts = 0;
     const interval = setInterval(async () => {
       try {
@@ -44,13 +44,13 @@ function waitUntilVectorsIndexed(vector: CloudflareVector, indexName: string, ex
       } catch (error) {
         console.log(error);
       }
-    }, 5000);
+    }, 10000);
   });
 }
 
 function waitForMetadataIndexes(vector: CloudflareVector, indexName: string, expectedCount: number) {
   return new Promise((resolve, reject) => {
-    const maxAttempts = 30;
+    const maxAttempts = 60;
     let attempts = 0;
     const interval = setInterval(async () => {
       try {
@@ -67,7 +67,7 @@ function waitForMetadataIndexes(vector: CloudflareVector, indexName: string, exp
       } catch (error) {
         console.log(error);
       }
-    }, 5000);
+    }, 10000);
   });
 }
 
@@ -251,7 +251,7 @@ describe('CloudflareVector', () => {
         const updatedResult = results.find(result => result.id === idToBeUpdated);
         expect(updatedResult).toBeDefined();
         expect(updatedResult?.vector).toEqual(newVector);
-      }, 50000);
+      }, 500000);
 
       it('should throw exception when no updates are given', async () => {
         await expect(vectorDB.updateIndexById(testIndexName, 'id', {})).rejects.toThrow('No update data provided');
