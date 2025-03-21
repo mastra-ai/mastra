@@ -154,7 +154,7 @@ async function bundleExternals(depsToOptimize: Map<string, string[]>, outputDir:
       if (local === '*') {
         virtualFile.push(`export * from '${dep}';`);
       } else if (local === 'default') {
-        virtualFile.push(`export * from '${dep}';`);
+        virtualFile.push(`export { default } from '${dep}';`);
       } else {
         exportStringBuilder.push(local);
       }
