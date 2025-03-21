@@ -1,5 +1,5 @@
 ---
-'@mastra/deployer': major
+'@mastra/deployer': patch
 ---
 
 fix building externals
