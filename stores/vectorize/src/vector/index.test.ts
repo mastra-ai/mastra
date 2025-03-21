@@ -1,7 +1,11 @@
+import dotenv from 'dotenv';
 import { randomUUID } from 'crypto';
 import { describe, it, expect, beforeAll, afterAll, beforeEach, vi, afterEach } from 'vitest';
 
 import { CloudflareVector } from './';
+import type { QueryResult } from '@mastra/core';
+
+dotenv.config();
 
 vi.setConfig({ testTimeout: 80_000, hookTimeout: 80_000 });
 
@@ -157,9 +161,11 @@ describe('CloudflareVector', () => {
       if (results.length > 0) {
         expect(results[0].metadata).toEqual({ label: 'first-dimension' });
       }
-    }, 30000);
+    }, 500000);
 
     it('should query vectors and return vector in results', async () => {
+      await waitUntilVectorsIndexed(vectorDB, testIndexName, 3);
+
       const results = await vectorDB.query({
         indexName: testIndexName,
         queryVector: createVector(0, 0.9),
@@ -173,6 +179,108 @@ describe('CloudflareVector', () => {
         expect(result.vector).toBeDefined();
         expect(result.vector).toHaveLength(VECTOR_DIMENSION);
       }
+    });
+
+    describe('Vector update operations', () => {
+      const testVectors = [createVector(0, 1.0), createVector(1, 1.0), createVector(2, 1.0)];
+      const testIndexName = 'test-index' + Date.now();
+
+      beforeEach(async () => {
+        await vectorDB.createIndex({ indexName: testIndexName, dimension: VECTOR_DIMENSION, metric: 'cosine' });
+      });
+
+      afterEach(async () => {
+        await vectorDB.deleteIndex(testIndexName);
+      });
+
+      it('should update the vector by id', async () => {
+        const ids = await vectorDB.upsert({ indexName: testIndexName, vectors: testVectors });
+        expect(ids).toHaveLength(3);
+
+        const idToBeUpdated = ids[0];
+        const newVector = createVector(0, 4.0);
+        const newMetaData = {
+          test: 'updates',
+        };
+
+        const update = {
+          vector: newVector,
+          metadata: newMetaData,
+        };
+
+        await vectorDB.updateIndexById(testIndexName, idToBeUpdated, update);
+
+        await waitUntilVectorsIndexed(vectorDB, testIndexName, 3);
+
+        const results: QueryResult[] = await vectorDB.query({
+          indexName: testIndexName,
+          queryVector: newVector,
+          topK: 3,
+          includeVector: true,
+        });
+
+        expect(results).toHaveLength(3);
+        const updatedResult = results.find(result => result.id === idToBeUpdated);
+        expect(updatedResult).toBeDefined();
+        expect(updatedResult?.vector).toEqual(newVector);
+      }, 500000);
+
+      it('should only update vector embeddings by id', async () => {
+        const ids = await vectorDB.upsert({ indexName: testIndexName, vectors: testVectors });
+        expect(ids).toHaveLength(3);
+
+        const idToBeUpdated = ids[0];
+        const newVector = createVector(0, 4.0);
+
+        const update = {
+          vector: newVector,
+        };
+
+        await vectorDB.updateIndexById(testIndexName, idToBeUpdated, update);
+
+        await waitUntilVectorsIndexed(vectorDB, testIndexName, 3);
+
+        const results: QueryResult[] = await vectorDB.query({
+          indexName: testIndexName,
+          queryVector: newVector,
+          topK: 2,
+          includeVector: true,
+        });
+
+        expect(results).toHaveLength(2);
+        const updatedResult = results.find(result => result.id === idToBeUpdated);
+        expect(updatedResult).toBeDefined();
+        expect(updatedResult?.vector).toEqual(newVector);
+      }, 50000);
+
+      it('should throw exception when no updates are given', async () => {
+        await expect(vectorDB.updateIndexById(testIndexName, 'id', {})).rejects.toThrow('No update data provided');
+      });
+    });
+
+    describe('Vector delete operations', () => {
+      const testVectors = [createVector(0, 1.0), createVector(1, 1.0), createVector(2, 1.0)];
+
+      afterEach(async () => {
+        await vectorDB.deleteIndex(testIndexName);
+      });
+
+      it('should delete the vector by id', async () => {
+        const ids = await vectorDB.upsert({ indexName: testIndexName, vectors: testVectors });
+        expect(ids).toHaveLength(3);
+        const idToBeDeleted = ids[0];
+
+        await vectorDB.deleteIndexById(testIndexName, idToBeDeleted);
+
+        const results: QueryResult[] = await vectorDB.query({
+          indexName: testIndexName,
+          queryVector: createVector(0, 1.0),
+          topK: 2,
+        });
+
+        expect(results).toHaveLength(2);
+        expect(results.map(res => res.id)).not.toContain(idToBeDeleted);
+      });
     });
   }, 60000);
 
