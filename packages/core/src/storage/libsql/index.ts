@@ -1,7 +1,7 @@
 import { join, resolve, isAbsolute } from 'node:path';
 import { createClient } from '@libsql/client';
-import type { Client, InValue } from '@libsql/client';
-
+import type { InValue } from '@libsql/client';
+import type { createClient as createClientWeb } from '@libsql/client/web';
 import type { MetricResult, TestInfo } from '../../eval';
 import type { MessageType, StorageThreadType } from '../../memory/types';
 import { MastraStorage } from '../base';
@@ -17,10 +17,21 @@ function safelyParseJSON(jsonString: string): any {
   }
 }
 
-export interface LibSQLConfig {
+type Client = ReturnType<typeof createClient> | ReturnType<typeof createClientWeb>;
+
+export interface LibSQLClient {
+  client: Client;
+}
+
+export interface LibSQLClientConfig {
   url: string;
   authToken?: string;
-  createClient?: typeof createClient;
+}
+
+export type LibSQLConfig = LibSQLClientConfig | LibSQLClient;
+
+const isLibSQLClient = (config: LibSQLConfig): config is LibSQLClient => {
+  return "client" in config && config.client !== undefined;
 }
 
 export class LibSQLStore extends MastraStorage {
@@ -29,13 +40,16 @@ export class LibSQLStore extends MastraStorage {
   constructor({ config }: { config: LibSQLConfig }) {
     super({ name: `LibSQLStore` });
 
+    if (isLibSQLClient(config)) {
+      this.client = config.client;
+      return this;
+    }
     // need to re-init every time for in memory dbs or the tables might not exist
     if (config.url === ':memory:' || config.url.startsWith('file::memory:')) {
       this.shouldCacheInit = false;
     }
-    const createClientFn = config.createClient ?? createClient;
 
-    this.client = createClientFn({
+    this.client = createClient({
       url: this.rewriteDbUrl(config.url),
       authToken: config.authToken,
     });
@@ -405,7 +419,7 @@ export class LibSQLStore extends MastraStorage {
     try {
       const threadId = messages[0]?.threadId;
       if (!threadId) {
-        throw new Error("Thread ID is required");
+        throw new Error('Thread ID is required');
       }
 
       // Prepare batch statements for all messages
@@ -418,7 +432,7 @@ export class LibSQLStore extends MastraStorage {
           args: [
             message.id,
             threadId,
-            typeof message.content === "object"
+            typeof message.content === 'object'
               ? JSON.stringify(message.content)
               : message.content,
             message.role,
@@ -429,12 +443,12 @@ export class LibSQLStore extends MastraStorage {
       });
 
       // Execute all inserts in a single batch
-      await this.client.batch(batchStatements, "write");
+      await this.client.batch(batchStatements, 'write');
 
       return messages;
     } catch (error) {
       this.logger.error(
-        "Failed to save messages in database: " +
+        'Failed to save messages in database: ' +
         (error as { message: string })?.message,
       );
       throw error;
