@@ -38,6 +38,7 @@ const sseClient = new MastraMCPClient({
       headers: { Authorization: 'Bearer your-token' },
     },
   },
+  timeoutMillis: 60000, // optional timeout for tool calls
 });
 
 // Connect to the MCP server

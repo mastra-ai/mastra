@@ -17,11 +17,13 @@ constructor({
     version = '1.0.0',
     server,
     capabilities = {},
+    timeoutMillis = 60000,
 }: {
     name: string;
     server: StdioServerParameters | SSEClientParameters;
     capabilities?: ClientCapabilities;
     version?: string;
+    timeoutMillis?: number;
 })
 ```
 
@@ -53,6 +55,13 @@ constructor({
       isOptional: true,
       defaultValue: "{}",
       description: "Optional capabilities configuration for the client.",
+    },
+    {
+      name: "timeoutMillis",
+      type: "number",
+      isOptional: true,
+      defaultValue: 60000,
+      description: "The timeout duration, in milliseconds, for client tool calls.",
     },
   ]}
 />
@@ -177,4 +186,3 @@ const sseClient = new MastraMCPClient({
 
 - For managing multiple MCP servers in your application, see the [MCPConfiguration documentation](./mcp-configuration)
 - For more details about the Model Context Protocol, see the [@modelcontextprotocol/sdk documentation](https://github.com/modelcontextprotocol/typescript-sdk).
-
