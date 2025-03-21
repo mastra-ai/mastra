@@ -4458,6 +4458,9 @@ importers:
       '@types/node':
         specifier: ^20.17.24
         version: 20.17.24
+      dotenv:
+        specifier: ^16.4.7
+        version: 16.4.7
       eslint:
         specifier: ^9.22.0
         version: 9.22.0(jiti@2.4.2)

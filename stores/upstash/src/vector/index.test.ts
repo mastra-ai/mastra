@@ -1,6 +1,11 @@
+import dotenv from 'dotenv';
+
 import { describe, it, expect, beforeAll, afterAll, beforeEach, vi, afterEach } from 'vitest';
 
 import { UpstashVector } from './';
+import type { QueryResult } from '@mastra/core';
+
+dotenv.config();
 
 function waitUntilVectorsIndexed(vector: UpstashVector, indexName: string, expectedCount: number) {
   return new Promise((resolve, reject) => {
@@ -98,19 +103,145 @@ describe.skipIf(!process.env.UPSTASH_VECTOR_URL || !process.env.UPSTASH_VECTOR_T
     }, 5000000);
 
     it('should query vectors and return vector in results', async () => {
-      const results = await vectorStore.query({ indexName: testIndexName, queryVector: createVector(0, 0.9), topK: 3 });
+      const results = await vectorStore.query({
+        indexName: testIndexName,
+        queryVector: createVector(0, 0.9),
+        topK: 3,
+        includeVector: true,
+      });
       expect(results).toHaveLength(3);
-      expect(results?.[0]?.vector).toBeDefined();
-      expect(results?.[0]?.vector).toHaveLength(VECTOR_DIMENSION);
-      expect(results?.[1]?.vector).toBeDefined();
-      expect(results?.[1]?.vector).toHaveLength(VECTOR_DIMENSION);
-      expect(results?.[2]?.vector).toBeDefined();
-      expect(results?.[2]?.vector).toHaveLength(VECTOR_DIMENSION);
+      results.forEach(result => {
+        expect(result.vector).toBeDefined();
+        expect(result.vector).toHaveLength(VECTOR_DIMENSION);
+      });
+    });
+
+    describe('Vector update operations', () => {
+      const testVectors = [createVector(0, 1.0), createVector(1, 1.0), createVector(2, 1.0)];
+
+      const testIndexName = 'test-index';
+
+      afterEach(async () => {
+        await vectorStore.deleteIndex(testIndexName);
+      });
+
+      it('should update the vector by id', async () => {
+        const ids = await vectorStore.upsert({ indexName: testIndexName, vectors: testVectors });
+        expect(ids).toHaveLength(3);
+
+        const idToBeUpdated = ids[0];
+        const newVector = createVector(0, 4.0);
+        const newMetaData = {
+          test: 'updates',
+        };
+
+        const update = {
+          vector: newVector,
+          metadata: newMetaData,
+        };
+
+        await vectorStore.updateIndexById(testIndexName, idToBeUpdated, update);
+
+        await waitUntilVectorsIndexed(vectorStore, testIndexName, 3);
+
+        const results: QueryResult[] = await vectorStore.query({
+          indexName: testIndexName,
+          queryVector: newVector,
+          topK: 2,
+          includeVector: true,
+        });
+        expect(results[0]?.id).toBe(idToBeUpdated);
+        expect(results[0]?.vector).toEqual(newVector);
+        expect(results[0]?.metadata).toEqual(newMetaData);
+      }, 500000);
+
+      it('should only update the metadata by id', async () => {
+        const ids = await vectorStore.upsert({ indexName: testIndexName, vectors: testVectors });
+        expect(ids).toHaveLength(3);
+
+        const idToBeUpdated = ids[0];
+        const newMetaData = {
+          test: 'updates',
+        };
+
+        const update = {
+          metadata: newMetaData,
+        };
+
+        await expect(vectorStore.updateIndexById(testIndexName, 'id', update)).rejects.toThrow(
+          'Both vector and metadata must be provided for an update',
+        );
+      });
+
+      it('should only update vector embeddings by id', async () => {
+        const ids = await vectorStore.upsert({ indexName: testIndexName, vectors: testVectors });
+        expect(ids).toHaveLength(3);
+
+        const idToBeUpdated = ids[0];
+        const newVector = createVector(0, 4.0);
+
+        const update = {
+          vector: newVector,
+        };
+
+        await vectorStore.updateIndexById(testIndexName, idToBeUpdated, update);
+
+        await waitUntilVectorsIndexed(vectorStore, testIndexName, 3);
+
+        const results: QueryResult[] = await vectorStore.query({
+          indexName: testIndexName,
+          queryVector: newVector,
+          topK: 2,
+          includeVector: true,
+        });
+        expect(results[0]?.id).toBe(idToBeUpdated);
+        expect(results[0]?.vector).toEqual(newVector);
+      }, 500000);
+
+      it('should throw exception when no updates are given', async () => {
+        await expect(vectorStore.updateIndexById(testIndexName, 'id', {})).rejects.toThrow('No update data provided');
+      });
+    });
+
+    describe('Vector delete operations', () => {
+      const testVectors = [createVector(0, 1.0), createVector(1, 1.0), createVector(2, 1.0)];
+
+      afterEach(async () => {
+        await vectorStore.deleteIndex(testIndexName);
+      });
+
+      it('should delete the vector by id', async () => {
+        const ids = await vectorStore.upsert({ indexName: testIndexName, vectors: testVectors });
+        expect(ids).toHaveLength(3);
+        const idToBeDeleted = ids[0];
+
+        await vectorStore.deleteIndexById(testIndexName, idToBeDeleted);
+
+        const results: QueryResult[] = await vectorStore.query({
+          indexName: testIndexName,
+          queryVector: createVector(0, 1.0),
+          topK: 2,
+        });
+
+        expect(results).toHaveLength(2);
+        expect(results.map(res => res.id)).not.toContain(idToBeDeleted);
+      });
     });
   });
   describe('Index Operations', () => {
+    const createVector = (primaryDimension: number, value: number = 1.0): number[] => {
+      const vector = new Array(VECTOR_DIMENSION).fill(0);
+      vector[primaryDimension] = value;
+      // Normalize the vector for cosine similarity
+      const magnitude = Math.sqrt(vector.reduce((sum, val) => sum + val * val, 0));
+      return vector.map(val => val / magnitude);
+    };
     it('should create and list an index', async () => {
-      await vectorStore.createIndex({ indexName: testIndexName, dimension: 3, metric: 'cosine' });
+      // since, we do not have to create index explictly in case of upstash. Upserts are enough
+      // for testing the listIndexes() function
+      // await vectorStore.createIndex({ indexName: testIndexName, dimension: 3, metric: 'cosine' });
+      const ids = await vectorStore.upsert({ indexName: testIndexName, vectors: [createVector(0, 1.0)] });
+      expect(ids).toHaveLength(1);
       const indexes = await vectorStore.listIndexes();
       expect(indexes).toEqual([testIndexName]);
     });
@@ -1068,10 +1199,6 @@ describe.skipIf(!process.env.UPSTASH_VECTOR_URL || !process.env.UPSTASH_VECTOR_T
 
     let warnSpy;
 
-    beforeAll(async () => {
-      await vectorStore.createIndex({ indexName: indexName, dimension: 3 });
-    });
-
     afterAll(async () => {
       await vectorStore.deleteIndex(indexName);
       await vectorStore.deleteIndex(indexName2);
@@ -1086,16 +1213,16 @@ describe.skipIf(!process.env.UPSTASH_VECTOR_URL || !process.env.UPSTASH_VECTOR_T
       await vectorStore.deleteIndex(indexName2);
     });
 
-    it('should show deprecation warning when using individual args for createIndex', async () => {
-      await vectorStore.createIndex(indexName2, 3, 'cosine');
-
-      expect(warnSpy).toHaveBeenCalledWith(
-        expect.stringContaining('Deprecation Warning: Passing individual arguments to createIndex() is deprecated'),
-      );
-    });
+    const createVector = (primaryDimension: number, value: number = 1.0): number[] => {
+      const vector = new Array(VECTOR_DIMENSION).fill(0);
+      vector[primaryDimension] = value;
+      // Normalize the vector for cosine similarity
+      const magnitude = Math.sqrt(vector.reduce((sum, val) => sum + val * val, 0));
+      return vector.map(val => val / magnitude);
+    };
 
     it('should show deprecation warning when using individual args for upsert', async () => {
-      await vectorStore.upsert(indexName, [[1, 2, 3]], [{ test: 'data' }]);
+      await vectorStore.upsert(indexName, [createVector(0, 2)], [{ test: 'data' }]);
 
       expect(warnSpy).toHaveBeenCalledWith(
         expect.stringContaining('Deprecation Warning: Passing individual arguments to upsert() is deprecated'),
@@ -1103,7 +1230,7 @@ describe.skipIf(!process.env.UPSTASH_VECTOR_URL || !process.env.UPSTASH_VECTOR_T
     });
 
     it('should show deprecation warning when using individual args for query', async () => {
-      await vectorStore.query(indexName, [1, 2, 3], 5);
+      await vectorStore.query(indexName, createVector(0, 2), 5);
 
       expect(warnSpy).toHaveBeenCalledWith(
         expect.stringContaining('Deprecation Warning: Passing individual arguments to query() is deprecated'),
@@ -1113,7 +1240,7 @@ describe.skipIf(!process.env.UPSTASH_VECTOR_URL || !process.env.UPSTASH_VECTOR_T
     it('should not show deprecation warning when using object param for query', async () => {
       await vectorStore.query({
         indexName,
-        queryVector: [1, 2, 3],
+        queryVector: createVector(0, 2),
         topK: 5,
       });
 
@@ -1133,7 +1260,7 @@ describe.skipIf(!process.env.UPSTASH_VECTOR_URL || !process.env.UPSTASH_VECTOR_T
     it('should not show deprecation warning when using object param for upsert', async () => {
       await vectorStore.upsert({
         indexName,
-        vectors: [[1, 2, 3]],
+        vectors: [createVector(0, 2)],
         metadata: [{ test: 'data' }],
       });
 
@@ -1142,7 +1269,7 @@ describe.skipIf(!process.env.UPSTASH_VECTOR_URL || !process.env.UPSTASH_VECTOR_T
 
     it('should maintain backward compatibility with individual args', async () => {
       // Query
-      const queryResults = await vectorStore.query(indexName, [1, 2, 3], 5);
+      const queryResults = await vectorStore.query(indexName, createVector(0, 2), 5);
       expect(Array.isArray(queryResults)).toBe(true);
 
       // CreateIndex
@@ -1151,7 +1278,7 @@ describe.skipIf(!process.env.UPSTASH_VECTOR_URL || !process.env.UPSTASH_VECTOR_T
       // Upsert
       const upsertResults = await vectorStore.upsert({
         indexName,
-        vectors: [[1, 2, 3]],
+        vectors: [createVector(0, 2)],
         metadata: [{ test: 'data' }],
       });
       expect(Array.isArray(upsertResults)).toBe(true);
