@@ -5,6 +5,7 @@ const meta = {
   variables: "Variables",
   "suspend-and-resume": "Suspend & Resume",
   "dynamic-workflows": "Dynamic Workflows",
+  "error-handling": "Error Handling",
 };
 
 export default meta;
