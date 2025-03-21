@@ -1,6 +1,7 @@
 import type { Mastra } from '@mastra/core';
 import { AvailableHooks, registerHook } from '@mastra/core/hooks';
 import { TABLE_EVALS } from '@mastra/core/storage';
+import { checkEvalStorageFields } from '@mastra/core/utils';
 
 import { GLOBAL_RUN_ID_ENV_KEY } from './constants';
 
@@ -11,12 +12,17 @@ export async function attachListeners(mastra?: Mastra) {
 
   registerHook(AvailableHooks.ON_EVALUATION, async traceObject => {
     if (mastra?.storage) {
+      // Check for required fields
+      const logger = mastra?.getLogger();
+      const areFieldsValid = checkEvalStorageFields(traceObject, logger);
+      if (!areFieldsValid) return;
+
       await mastra.storage.insert({
         tableName: TABLE_EVALS,
         record: {
           input: traceObject.input,
           output: traceObject.output,
-          result: JSON.stringify(traceObject.result),
+          result: JSON.stringify(traceObject.result || {}),
           agent_name: traceObject.agentName,
           metric_name: traceObject.metricName,
           instructions: traceObject.instructions,

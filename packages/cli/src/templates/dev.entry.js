@@ -3,9 +3,9 @@
 import { evaluate } from '@mastra/core/eval';
 import { AvailableHooks, registerHook } from '@mastra/core/hooks';
 import { TABLE_EVALS } from '@mastra/core/storage';
+import { checkEvalStorageFields } from '@mastra/core/utils';
 import { mastra } from '#mastra';
 import { createNodeServer } from '#server';
-
 // @ts-ignore
 await createNodeServer(mastra, { playground: true, swaggerUI: true });
 
@@ -23,12 +23,17 @@ registerHook(AvailableHooks.ON_GENERATION, ({ input, output, metric, runId, agen
 
 registerHook(AvailableHooks.ON_EVALUATION, async traceObject => {
   if (mastra.storage) {
+    // Check for required fields
+    const logger = mastra?.getLogger();
+    const areFieldsValid = checkEvalStorageFields(traceObject, logger);
+    if (!areFieldsValid) return;
+
     await mastra.storage.insert({
       tableName: TABLE_EVALS,
       record: {
         input: traceObject.input,
         output: traceObject.output,
-        result: JSON.stringify(traceObject.result),
+        result: JSON.stringify(traceObject.result || {}),
         agent_name: traceObject.agentName,
         metric_name: traceObject.metricName,
         instructions: traceObject.instructions,
