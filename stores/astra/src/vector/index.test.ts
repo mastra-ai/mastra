@@ -1179,6 +1179,8 @@ describe('AstraVector Integration Tests', () => {
 
       await vectorDB.updateIndexById(testIndexName, idToBeUpdated, update);
 
+      await new Promise(resolve => setTimeout(resolve, 5000));
+
       const results = await vectorDB.query({
         indexName: testIndexName,
         queryVector: newVector,
@@ -1193,7 +1195,7 @@ describe('AstraVector Integration Tests', () => {
     it('should only update the metadata by id', async () => {
       const ids = await vectorDB.upsert({ indexName: testIndexName, vectors: testVectors });
       expect(ids).toHaveLength(4);
-      await new Promise(resolve => setTimeout(resolve, 2000));
+      await new Promise(resolve => setTimeout(resolve, 5000));
 
       const idToBeUpdated = ids[0];
       const newMetaData = {
@@ -1205,7 +1207,7 @@ describe('AstraVector Integration Tests', () => {
       };
 
       await vectorDB.updateIndexById(testIndexName, idToBeUpdated, update);
-      await new Promise(resolve => setTimeout(resolve, 2000));
+      await new Promise(resolve => setTimeout(resolve, 5000));
 
       const results = await vectorDB.query({
         indexName: testIndexName,
@@ -1221,7 +1223,7 @@ describe('AstraVector Integration Tests', () => {
     it('should only update vector embeddings by id', async () => {
       const ids = await vectorDB.upsert({ indexName: testIndexName, vectors: testVectors });
       expect(ids).toHaveLength(4);
-      await new Promise(resolve => setTimeout(resolve, 2000));
+      await new Promise(resolve => setTimeout(resolve, 5000));
 
       const idToBeUpdated = ids[0];
       const newVector = [1, 2, 3, 4];
@@ -1231,7 +1233,7 @@ describe('AstraVector Integration Tests', () => {
       };
 
       await vectorDB.updateIndexById(testIndexName, idToBeUpdated, update);
-      await new Promise(resolve => setTimeout(resolve, 2000));
+      await new Promise(resolve => setTimeout(resolve, 5000));
 
       const results = await vectorDB.query({
         indexName: testIndexName,
