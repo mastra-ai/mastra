@@ -18,6 +18,7 @@ const meta = {
   resume: ".resume()",
   commit: ".commit()",
   watch: ".watch()",
+  "step-retries": "Step Retries",
 };
 
 export default meta;
