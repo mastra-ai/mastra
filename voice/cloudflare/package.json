@@ -42,5 +42,15 @@
     "tsup": "^8.4.0",
     "typescript": "^5.8.2",
     "vitest": "^2.1.9"
-  }
+  },
+  "keywords": [
+    "mastra",
+    "cloudflare",
+    "tts",
+    "stt",
+    "open-source",
+    "speech-to-text",
+    "text-to-speech",
+    "speech-recognition"
+  ]
 }

@@ -40,5 +40,15 @@
     "tsup": "^8.4.0",
     "typescript": "^5.8.2",
     "vitest": "^2.1.9"
-  }
+  },
+  "keywords": [
+    "mastra",
+    "sarvam",
+    "tts",
+    "stt",
+    "indian-languages",
+    "speech-to-text",
+    "text-to-speech",
+    "speech-recognition"
+  ]
 }
