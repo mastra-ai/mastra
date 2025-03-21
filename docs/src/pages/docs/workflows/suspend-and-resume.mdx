@@ -20,6 +20,7 @@ Common scenarios for suspending workflows include:
 - Pausing until external API resources become available
 - Collecting additional data needed for later steps
 - Rate limiting or throttling expensive operations
+- Handling event-driven processes with external triggers
 
 ## Basic Suspend Example
 
@@ -154,7 +155,104 @@ if (improveResponseStepResult?.status === 'suspended') {
 }
 ```
 
-### Key Points About Suspend and Resume
+## Event-Based Suspension and Resumption
+
+In addition to manually suspending steps, Mastra provides event-based suspension through the `afterEvent` method. This allows workflows to automatically suspend and wait for a specific event to occur before continuing.
+
+### Using afterEvent and resumeWithEvent
+
+The `afterEvent` method automatically creates a suspension point in your workflow that waits for a specific event to occur. When the event happens, you can use `resumeWithEvent` to continue the workflow with the event data.
+
+Here's how it works:
+
+1. Define events in your workflow configuration
+2. Use `afterEvent` to create a suspension point waiting for that event
+3. When the event occurs, call `resumeWithEvent` with the event name and data
+
+### Example: Event-Based Workflow
+
+```typescript
+// Define steps
+const getUserInput = new Step({
+  id: 'getUserInput',
+  execute: async () => ({ userInput: 'initial input' }),
+  outputSchema: z.object({ userInput: z.string() }),
+});
+
+const processApproval = new Step({
+  id: 'processApproval',
+  execute: async ({ context }) => {
+    // Access the event data from the context
+    const approvalData = context.inputData?.resumedEvent;
+    return {
+      approved: approvalData?.approved,
+      approvedBy: approvalData?.approverName
+    };
+  },
+  outputSchema: z.object({
+    approved: z.boolean(),
+    approvedBy: z.string()
+  }),
+});
+
+// Create workflow with event definition
+const approvalWorkflow = new Workflow({
+  name: 'approval-workflow',
+  triggerSchema: z.object({ requestId: z.string() }),
+  events: {
+    approvalReceived: {
+      schema: z.object({
+        approved: z.boolean(),
+        approverName: z.string(),
+      }),
+    },
+  },
+});
+
+// Build workflow with event-based suspension
+approvalWorkflow
+  .step(getUserInput)
+  .afterEvent('approvalReceived') // Workflow will automatically suspend here
+  .step(processApproval)          // This step runs after the event is received
+  .commit();
+```
+
+### Running an Event-Based Workflow
+
+```typescript
+// Get the workflow
+const workflow = mastra.getWorkflow('approval-workflow');
+const run = workflow.createRun();
+
+// Start the workflow
+const initialResult = await run.start({
+  triggerData: { requestId: 'request-123' }
+});
+
+console.log('Workflow started, waiting for approval event');
+console.log(initialResult.results);
+// Output will show the workflow is suspended at the event step:
+// {
+//   getUserInput: { status: 'success', output: { userInput: 'initial input' } },
+//   __approvalReceived_event: { status: 'suspended' }
+// }
+
+// Later, when the approval event occurs:
+const resumeResult = await run.resumeWithEvent('approvalReceived', {
+  approved: true,
+  approverName: 'Jane Doe'
+});
+
+console.log('Workflow resumed with event data:', resumeResult.results);
+// Output will show the completed workflow:
+// {
+//   getUserInput: { status: 'success', output: { userInput: 'initial input' } },
+//   __approvalReceived_event: { status: 'success', output: { executed: true, resumedEvent: { approved: true, approverName: 'Jane Doe' } } },
+//   processApproval: { status: 'success', output: { approved: true, approvedBy: 'Jane Doe' } }
+// }
+```
+
+### Key Points About Event-Based Workflows
 
 - The `suspend()` function can optionally take a payload object that will be stored with the suspended state
 - Code after the `await suspend()` call will not execute until the step is resumed
@@ -162,6 +260,13 @@ if (improveResponseStepResult?.status === 'suspended') {
 - When resumed, the step's status changes from `'suspended'` to `'success'` once completed
 - The `resume()` method requires the `stepId` to identify which suspended step to resume
 - You can provide new context data when resuming that will be merged with existing step results
+
+- Events must be defined in the workflow configuration with a schema
+- The `afterEvent` method creates a special suspended step that waits for the event
+- The event step is automatically named `__eventName_event` (e.g., `__approvalReceived_event`)
+- Use `resumeWithEvent` to provide event data and continue the workflow
+- Event data is validated against the schema defined for that event
+- The event data is available in the context as `inputData.resumedEvent`
 
 ## Storage for Suspend and Resume
 
@@ -251,6 +356,35 @@ watch(async ({ context, activePaths }) => {
 await start({ triggerData: { inputValue: 45 } });
 ```
 
+### Watching and Resuming Event-Based Workflows
+
+You can use the same watching pattern with event-based workflows:
+
+```typescript
+const { start, watch, resumeWithEvent } = workflow.createRun();
+
+// Watch for suspended event steps
+watch(async ({ context, activePaths }) => {
+  for (const path of activePaths) {
+    if (path.stepId === '__approvalReceived_event' && path.status === 'suspended') {
+      console.log("Workflow waiting for approval event");
+
+      // In a real scenario, you would wait for the actual event to occur
+      // For example, this could be triggered by a webhook or user interaction
+      setTimeout(async () => {
+        await resumeWithEvent('approvalReceived', {
+          approved: true,
+          approverName: 'Auto Approver',
+        });
+      }, 5000); // Simulate event after 5 seconds
+    }
+  }
+});
+
+// Start the workflow
+await start({ triggerData: { requestId: 'auto-123' } });
+```
+
 ## Further Reading
 
 For a deeper understanding of how suspend and resume works under the hood:
@@ -258,6 +392,7 @@ For a deeper understanding of how suspend and resume works under the hood:
 - [Understanding Snapshots in Mastra Workflows](../reference/workflows/snapshots.mdx) - Learn about the snapshot mechanism that powers suspend and resume functionality
 - [Step Configuration Guide](./steps.mdx) - Learn more about configuring steps in your workflows
 - [Control Flow Guide](./control-flow.mdx) - Advanced workflow control patterns
+- [Event-Driven Workflows](../reference/workflows/events.mdx) - Detailed reference for event-based workflows
 
 ## Related Resources
 
