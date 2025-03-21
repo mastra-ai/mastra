@@ -50,12 +50,15 @@
     "zod": "^3.22.4"
   },
   "devDependencies": {
+    "@hono/node-server": "^1.13.8",
+    "@mastra/mcp": "workspace:^",
     "@internal/lint": "workspace:*",
     "@types/jsdom": "^21.1.7",
     "@types/node": "^20.11.24",
     "@types/turndown": "^5.0.5",
     "@wong2/mcp-cli": "^1.6.0",
     "eslint": "^9.22.0",
+    "hono": "^4.7.4",
     "tsup": "^8.4.0",
     "tsx": "^4.7.1",
     "typescript": "^5.3.3",

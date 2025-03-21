@@ -36,6 +36,10 @@ const meta = {
     title: "Deployment",
     collapsed: false,
   },
+  observability: {
+    title: "Observability",
+    collapsed: false,
+  },
   evals: {
     title: "Evals",
     collapsed: false,
