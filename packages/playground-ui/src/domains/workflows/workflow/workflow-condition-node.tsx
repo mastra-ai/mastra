@@ -10,6 +10,8 @@ import type { Condition } from './utils';
 import { Highlight, themes } from 'prism-react-renderer';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { ChevronDown } from 'lucide-react';
+import { Dialog, DialogContent } from '@/components/ui/dialog';
+import { ScrollArea } from '@/components/ui/scroll-area';
 
 export type ConditionNode = Node<
   {
@@ -21,6 +23,7 @@ export type ConditionNode = Node<
 export function WorkflowConditionNode({ data }: NodeProps<ConditionNode>) {
   const { conditions } = data;
   const [open, setOpen] = useState(true);
+  const [openDialog, setOpenDialog] = useState(false);
   const type = conditions[0]?.type;
   const isCollapsible = (conditions.some(condition => condition.fnString) || conditions?.length > 1) && type !== 'else';
 
@@ -60,8 +63,14 @@ export function WorkflowConditionNode({ data }: NodeProps<ConditionNode>) {
                 <Highlight theme={themes.oneDark} code={String(condition.fnString).trim()} language="javascript">
                   {({ className, style, tokens, getLineProps, getTokenProps }) => (
                     <pre
-                      className={`${className} relative font-mono text-sm overflow-x-auto p-3 w-full rounded-lg mt-2 dark:bg-zinc-800`}
-                      style={{ ...style, maxHeight: '9.62rem' }}
+                      className={`${className} relative font-mono text-sm overflow-x-auto p-3 w-full cursor-pointer rounded-lg mt-2`}
+                      style={{
+                        ...style,
+                        backgroundColor: 'transparent',
+                        border: '1px solid #343434',
+                        maxHeight: '9.62rem',
+                      }}
+                      onClick={() => setOpenDialog(true)}
                     >
                       {tokens.map((line, i) => (
                         <div key={i} {...getLineProps({ line })}>
@@ -74,6 +83,34 @@ export function WorkflowConditionNode({ data }: NodeProps<ConditionNode>) {
                     </pre>
                   )}
                 </Highlight>
+
+                <Dialog open={openDialog} onOpenChange={setOpenDialog}>
+                  <DialogContent className="max-w-[30rem] bg-[#121212] p-[0.5rem]">
+                    <ScrollArea className="w-full p-2" maxHeight="400px">
+                      <Highlight theme={themes.oneDark} code={String(condition.fnString).trim()} language="javascript">
+                        {({ className, style, tokens, getLineProps, getTokenProps }) => (
+                          <pre
+                            className={`${className} relative font-mono text-sm overflow-x-auto p-3 w-full rounded-lg mt-2 dark:bg-zinc-800`}
+                            style={{
+                              ...style,
+                              backgroundColor: '#121212',
+                              padding: '0 0.75rem 0 0',
+                            }}
+                          >
+                            {tokens.map((line, i) => (
+                              <div key={i} {...getLineProps({ line })}>
+                                <span className="inline-block mr-2 text-muted-foreground">{i + 1}</span>
+                                {line.map((token, key) => (
+                                  <span key={key} {...getTokenProps({ token })} />
+                                ))}
+                              </div>
+                            ))}
+                          </pre>
+                        )}
+                      </Highlight>
+                    </ScrollArea>
+                  </DialogContent>
+                </Dialog>
               </Fragment>
             ) : (
               <Fragment key={`${condition.ref?.path}-${index}`}>
