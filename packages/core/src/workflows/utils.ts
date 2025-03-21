@@ -260,7 +260,9 @@ export function workflowToStep<
               stepId: context.isResume.stepId.split('.').slice(1).join('.'),
               context: context.inputData,
             })
-          : await run.start();
+          : await run.start({
+              triggerData: context.inputData,
+            });
 
       unwatch();
       if (!awaitedResult) {
