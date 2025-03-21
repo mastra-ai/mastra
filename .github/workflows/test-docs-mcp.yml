@@ -5,7 +5,7 @@ on:
     branches: [main]
     paths:
       - "packages/mcp/**"
-      - "packages/docs-mcp/**"
+      - "packages/mcp-docs-server/**"
       - ".github/workflows/test-mcp.yml"
 
 jobs:
