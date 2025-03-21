@@ -77,27 +77,25 @@ export async function preparePackageChanges() {
   await fs.mkdir(outputDir, { recursive: true });
 
   // Process each source directory
-  await Promise.all(
-    SOURCE_DIRS.map(async sourceDir => {
-      const fullSourceDir = path.resolve(process.cwd(), sourceDir);
+  for (const sourceDir of SOURCE_DIRS) {
+    const fullSourceDir = path.resolve(process.cwd(), sourceDir);
 
-      try {
-        // Check if directory exists before trying to read it
-        await fs.access(fullSourceDir);
+    try {
+      // Check if directory exists before trying to read it
+      await fs.access(fullSourceDir);
 
-        const entries = await fs.readdir(fullSourceDir, { withFileTypes: true });
-        const packageDirs = entries
-          .filter(entry => entry.isDirectory())
-          .filter(entry => entry.name !== 'docs-mcp' && entry.name !== '_config');
+      const entries = await fs.readdir(fullSourceDir, { withFileTypes: true });
+      const packageDirs = entries
+        .filter(entry => entry.isDirectory())
+        .filter(entry => entry.name !== 'docs-mcp' && entry.name !== '_config');
 
-        // Process each package directory
-        for (const dir of packageDirs) {
-          const packagePath = path.join(fullSourceDir, dir.name);
-          await processPackageDir(packagePath, outputDir);
-        }
-      } catch {
-        console.error(`Skipping ${sourceDir}: Directory not found or not accessible`);
+      // Process each package directory
+      for (const dir of packageDirs) {
+        const packagePath = path.join(fullSourceDir, dir.name);
+        await processPackageDir(packagePath, outputDir);
       }
-    }),
-  );
+    } catch {
+      console.error(`Skipping ${sourceDir}: Directory not found or not accessible`);
+    }
+  }
 }

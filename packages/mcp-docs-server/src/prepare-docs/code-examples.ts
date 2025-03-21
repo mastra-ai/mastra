@@ -23,52 +23,50 @@ export async function prepareCodeExamples() {
   const examples = await fs.readdir(EXAMPLES_SOURCE, { withFileTypes: true });
   const exampleDirs = examples.filter(entry => entry.isDirectory());
 
-  await Promise.all(
-    exampleDirs.map(async dir => {
-      const examplePath = path.join(EXAMPLES_SOURCE, dir.name);
-      const outputFile = path.join(OUTPUT_DIR, `${dir.name}.md`);
+  for (const dir of exampleDirs) {
+    const examplePath = path.join(EXAMPLES_SOURCE, dir.name);
+    const outputFile = path.join(OUTPUT_DIR, `${dir.name}.md`);
 
-      // Collect all relevant files
-      const files: { path: string; content: string }[] = [];
+    // Collect all relevant files
+    const files: { path: string; content: string }[] = [];
 
-      // First add package.json if it exists
-      try {
-        const packageJson = await fs.readFile(path.join(examplePath, 'package.json'), 'utf-8');
-        files.push({
-          path: 'package.json',
-          content: packageJson,
-        });
-      } catch {
-        // Skip if no package.json
+    // First add package.json if it exists
+    try {
+      const packageJson = await fs.readFile(path.join(examplePath, 'package.json'), 'utf-8');
+      files.push({
+        path: 'package.json',
+        content: packageJson,
+      });
+    } catch {
+      // Skip if no package.json
+    }
+
+    // Then scan for TypeScript files in src
+    try {
+      const srcPath = path.join(examplePath, 'src');
+      await scanDirectory(srcPath, srcPath, files);
+    } catch {
+      // Skip if no src directory
+    }
+
+    // If we found any files, generate markdown and check line count
+    if (files.length > 0) {
+      const output = files
+        .map(file => `### ${file.path}\n\`\`\`${getFileType(file.path)}\n${file.content}\n\`\`\`\n`)
+        .join('\n');
+
+      const totalLines = output.split('\n').length;
+
+      // Skip if total lines would exceed 500
+      if (totalLines > 500) {
+        log(`Skipping ${dir.name}: ${totalLines} lines exceeds limit of 500`);
+        continue;
       }
 
-      // Then scan for TypeScript files in src
-      try {
-        const srcPath = path.join(examplePath, 'src');
-        await scanDirectory(srcPath, srcPath, files);
-      } catch {
-        // Skip if no src directory
-      }
-
-      // If we found any files, generate markdown and check line count
-      if (files.length > 0) {
-        const output = files
-          .map(file => `### ${file.path}\n\`\`\`${getFileType(file.path)}\n${file.content}\n\`\`\`\n`)
-          .join('\n');
-
-        const totalLines = output.split('\n').length;
-
-        // Skip if total lines would exceed 500
-        if (totalLines > 500) {
-          log(`Skipping ${dir.name}: ${totalLines} lines exceeds limit of 500`);
-          return;
-        }
-
-        await fs.writeFile(outputFile, output, 'utf-8');
-        log(`Generated ${dir.name}.md with ${totalLines} lines`);
-      }
-    }),
-  );
+      await fs.writeFile(outputFile, output, 'utf-8');
+      log(`Generated ${dir.name}.md with ${totalLines} lines`);
+    }
+  }
 }
 
 /**
