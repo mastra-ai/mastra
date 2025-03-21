@@ -12,18 +12,20 @@ async function copyDir(src: string, dest: string) {
   // Read source directory
   const entries = await fs.readdir(src, { withFileTypes: true });
 
-  for (const entry of entries) {
-    const srcPath = path.join(src, entry.name);
-    const destPath = path.join(dest, entry.name);
+  await Promise.all(
+    entries.map(async entry => {
+      const srcPath = path.join(src, entry.name);
+      const destPath = path.join(dest, entry.name);
 
-    if (entry.isDirectory()) {
-      // Recursively copy directories
-      await copyDir(srcPath, destPath);
-    } else if (entry.isFile() && entry.name.endsWith('.mdx')) {
-      // Copy only MDX files
-      await fs.copyFile(srcPath, destPath);
-    }
-  }
+      if (entry.isDirectory()) {
+        // Recursively copy directories
+        await copyDir(srcPath, destPath);
+      } else if (entry.isFile() && entry.name.endsWith('.mdx')) {
+        // Copy only MDX files
+        await fs.copyFile(srcPath, destPath);
+      }
+    }),
+  );
 }
 
 export async function copyRaw() {
