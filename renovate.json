@@ -41,6 +41,41 @@
       "matchUpdateTypes": ["major", "minor", "patch"],
       "matchDepTypes": ["dependencies", "devDependencies"],
       "dependencyDashboardApproval": false
+    },
+    {
+      "groupName": "core",
+      "commitMessageTopic": "Mastra Core",
+      "matchFileNames": ["packages/*/package.json"],
+      "matchUpdateTypes": ["minor", "patch"],
+      "matchDepTypes": ["dependencies", "devDependencies"]
+    },
+    {
+      "groupName": "storage",
+      "commitMessageTopic": "Mastra storage",
+      "matchFileNames": ["stores/*/package.json"],
+      "matchUpdateTypes": ["minor", "patch"],
+      "matchDepTypes": ["dependencies", "devDependencies"]
+    },
+    {
+      "groupName": "voice",
+      "commitMessageTopic": "Mastra voice",
+      "matchFileNames": ["voice/*/package.json"],
+      "matchUpdateTypes": ["minor", "patch"],
+      "matchDepTypes": ["dependencies", "devDependencies"]
+    },
+    {
+      "groupName": "speech",
+      "commitMessageTopic": "Mastra speech",
+      "matchFileNames": ["speech/*/package.json"],
+      "matchUpdateTypes": ["minor", "patch"],
+      "matchDepTypes": ["dependencies", "devDependencies"]
+    },
+    {
+      "groupName": "deployers",
+      "commitMessageTopic": "Mastra deployers",
+      "matchFileNames": ["deployers/*/package.json"],
+      "matchUpdateTypes": ["minor", "patch"],
+      "matchDepTypes": ["dependencies", "devDependencies"]
     }
   ]
 }
