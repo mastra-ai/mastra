@@ -1,0 +1,489 @@
+---
+title: "Example: Human in the Loop | Workflows | Mastra Docs"
+description: Example of using Mastra to create workflows with human intervention points.
+---
+
+import { GithubLink } from '../../../components/github-link';
+
+# Human in the Loop Workflow
+
+Human-in-the-loop workflows allow you to pause execution at specific points to collect user input, make decisions, or perform actions that require human judgment. This example demonstrates how to create a workflow with human intervention points.
+
+## How It Works
+
+1. A workflow step can **suspend** execution using the `suspend()` function, optionally passing a payload with context for the human decision maker.
+2. When the workflow is **resumed**, the human input is passed in the `context` parameter of the `resume()` call.
+3. This input becomes available in the step's execution context as `context.inputData`, which is typed according to the step's `inputSchema`.
+4. The step can then continue execution based on the human input.
+
+This pattern allows for safe, type-checked human intervention in automated workflows.
+
+## Basic Example
+
+```ts showLineNumbers copy
+import { Mastra } from '@mastra/core';
+import { Step, Workflow } from '@mastra/core/workflows';
+import { z } from 'zod';
+
+// Step 1: Process initial data
+const processData = new Step({
+  id: 'processData',
+  outputSchema: z.object({
+    processedData: z.string(),
+  }),
+  execute: async ({ context }) => {
+    const input = context.triggerData.input;
+    return {
+      processedData: `Processed: ${input}`
+    };
+  },
+});
+
+// Step 2: Request human confirmation before proceeding
+const humanConfirmation = new Step({
+  id: 'humanConfirmation',
+  // This schema defines the structure of data that will be available in context.inputData
+  // when the workflow is resumed
+  inputSchema: z.object({
+    userConfirmed: z.boolean().optional(),
+  }),
+  outputSchema: z.object({
+    confirmationResult: z.boolean(),
+  }),
+  execute: async ({ context, suspend }) => {
+    const processedData = context.getStepResult(processData)?.processedData;
+    // Access the input provided when resuming the workflow
+    const userConfirmed = context.inputData?.userConfirmed;
+
+    // If we don't have user confirmation yet, suspend the workflow
+    // with the processed data as payload
+    if (userConfirmed === undefined) {
+      console.log('Suspending workflow to get user confirmation');
+      await suspend({
+        processedData,
+        message: 'Please review the processed data and confirm to proceed',
+      });
+
+      // This return is just a placeholder as execution will stop at suspend()
+      return { confirmationResult: false };
+    }
+
+    // If we have the user's input, we can proceed
+    console.log(`Resuming workflow with user confirmation: ${userConfirmed}`);
+    return {
+      confirmationResult: userConfirmed
+    };
+  },
+});
+
+// Step 3: Final processing based on human input
+const finalizeProcess = new Step({
+  id: 'finalizeProcess',
+  outputSchema: z.object({
+    result: z.string(),
+  }),
+  execute: async ({ context }) => {
+    const processedData = context.getStepResult(processData)?.processedData;
+    const userConfirmed = context.getStepResult(humanConfirmation)?.confirmationResult;
+
+    if (userConfirmed) {
+      return {
+        result: `${processedData} - Approved by user`
+      };
+    } else {
+      return {
+        result: `${processedData} - Rejected by user`
+      };
+    }
+  },
+});
+
+// Build the workflow
+const humanInLoopWorkflow = new Workflow({
+  name: 'human-in-loop-workflow',
+  triggerSchema: z.object({
+    input: z.string(),
+  }),
+});
+
+humanInLoopWorkflow
+  .step(processData)
+  .then(humanConfirmation)
+  .then(finalizeProcess)
+  .commit();
+
+// Register the workflow
+const mastra = new Mastra({
+  workflows: { humanInLoopWorkflow },
+});
+
+// Example of using the workflow
+async function runWorkflowDemo() {
+  const registeredWorkflow = mastra.getWorkflow('humanInLoopWorkflow');
+  const { runId, start } = registeredWorkflow.createRun();
+
+  // Start the workflow
+  const result = await start({
+    triggerData: {
+      input: 'Sample data requiring human review'
+    }
+  });
+
+  // The workflow will suspend at the humanConfirmation step
+  // Check the status to verify it's suspended
+  if (result.status === 'suspended' && result.suspendedStepId === 'humanConfirmation') {
+    console.log('Workflow suspended. Waiting for user input:', result.suspendPayload);
+
+    // In a real application, you would show a UI or send a notification
+    // and wait for the user to provide their input
+
+    // Simulate user reviewing and confirming after a delay
+    console.log('User is reviewing the data...');
+    await new Promise(resolve => setTimeout(resolve, 2000));
+    console.log('User has reviewed and confirmed');
+
+    // Resume the workflow with user confirmation
+    // This data will be available as context.inputData in the suspended step
+    const resumeResult = await humanInLoopWorkflow.resume({
+      runId,
+      stepId: 'humanConfirmation',
+      context: {
+        // This must match the inputSchema of the humanConfirmation step
+        userConfirmed: true
+      },
+    });
+
+    console.log('Workflow completed:', resumeResult.results);
+    return resumeResult;
+  }
+
+  return result;
+}
+
+// Invoke the demo function
+runWorkflowDemo();
+```
+
+## Advanced Example with Multiple User Inputs
+
+This example demonstrates a more complex workflow that requires multiple human intervention points, such as in a content moderation system.
+
+```ts showLineNumbers copy
+import { Mastra } from '@mastra/core';
+import { Step, Workflow } from '@mastra/core/workflows';
+import { z } from 'zod';
+
+// Step 1: Receive and analyze content
+const analyzeContent = new Step({
+  id: 'analyzeContent',
+  outputSchema: z.object({
+    content: z.string(),
+    aiAnalysisScore: z.number(),
+    flaggedCategories: z.array(z.string()).optional(),
+  }),
+  execute: async ({ context }) => {
+    const content = context.triggerData.content;
+
+    // Simulate AI analysis
+    const aiAnalysisScore = simulateContentAnalysis(content);
+    const flaggedCategories = aiAnalysisScore < 0.7
+      ? ['potentially inappropriate', 'needs review']
+      : [];
+
+    return {
+      content,
+      aiAnalysisScore,
+      flaggedCategories,
+    };
+  },
+});
+
+// Step 2: Moderate content that needs review
+const moderateContent = new Step({
+  id: 'moderateContent',
+  // Define the schema for human input that will be provided when resuming
+  inputSchema: z.object({
+    moderatorDecision: z.enum(['approve', 'reject', 'modify']).optional(),
+    moderatorNotes: z.string().optional(),
+    modifiedContent: z.string().optional(),
+  }),
+  outputSchema: z.object({
+    moderationResult: z.enum(['approved', 'rejected', 'modified']),
+    moderatedContent: z.string(),
+    notes: z.string().optional(),
+  }),
+  execute: async ({ context, suspend }) => {
+    const analysisResult = context.getStepResult(analyzeContent);
+    // Access the input provided when resuming the workflow
+    const moderatorInput = {
+      decision: context.inputData?.moderatorDecision,
+      notes: context.inputData?.moderatorNotes,
+      modifiedContent: context.inputData?.modifiedContent,
+    };
+
+    // If the AI analysis score is high enough, auto-approve
+    if (analysisResult?.aiAnalysisScore > 0.9 && !analysisResult?.flaggedCategories?.length) {
+      return {
+        moderationResult: 'approved',
+        moderatedContent: analysisResult.content,
+        notes: 'Auto-approved by system',
+      };
+    }
+
+    // If we don't have moderator input yet, suspend for human review
+    if (!moderatorInput.decision) {
+      await suspend({
+        content: analysisResult?.content,
+        aiScore: analysisResult?.aiAnalysisScore,
+        flaggedCategories: analysisResult?.flaggedCategories,
+        message: 'Please review this content and make a moderation decision',
+      });
+
+      // Placeholder return
+      return {
+        moderationResult: 'approved',
+        moderatedContent: '',
+      };
+    }
+
+    // Process the moderator's decision
+    switch (moderatorInput.decision) {
+      case 'approve':
+        return {
+          moderationResult: 'approved',
+          moderatedContent: analysisResult?.content || '',
+          notes: moderatorInput.notes || 'Approved by moderator',
+        };
+
+      case 'reject':
+        return {
+          moderationResult: 'rejected',
+          moderatedContent: '',
+          notes: moderatorInput.notes || 'Rejected by moderator',
+        };
+
+      case 'modify':
+        return {
+          moderationResult: 'modified',
+          moderatedContent: moderatorInput.modifiedContent || analysisResult?.content || '',
+          notes: moderatorInput.notes || 'Modified by moderator',
+        };
+
+      default:
+        return {
+          moderationResult: 'rejected',
+          moderatedContent: '',
+          notes: 'Invalid moderator decision',
+        };
+    }
+  },
+});
+
+// Step 3: Apply moderation actions
+const applyModeration = new Step({
+  id: 'applyModeration',
+  outputSchema: z.object({
+    finalStatus: z.string(),
+    content: z.string().optional(),
+    auditLog: z.object({
+      originalContent: z.string(),
+      moderationResult: z.string(),
+      aiScore: z.number(),
+      timestamp: z.string(),
+    }),
+  }),
+  execute: async ({ context }) => {
+    const analysisResult = context.getStepResult(analyzeContent);
+    const moderationResult = context.getStepResult(moderateContent);
+
+    // Create audit log
+    const auditLog = {
+      originalContent: analysisResult?.content || '',
+      moderationResult: moderationResult?.moderationResult || 'unknown',
+      aiScore: analysisResult?.aiAnalysisScore || 0,
+      timestamp: new Date().toISOString(),
+    };
+
+    // Apply moderation action
+    switch (moderationResult?.moderationResult) {
+      case 'approved':
+        return {
+          finalStatus: 'Content published',
+          content: moderationResult.moderatedContent,
+          auditLog,
+        };
+
+      case 'modified':
+        return {
+          finalStatus: 'Content modified and published',
+          content: moderationResult.moderatedContent,
+          auditLog,
+        };
+
+      case 'rejected':
+        return {
+          finalStatus: 'Content rejected',
+          auditLog,
+        };
+
+      default:
+        return {
+          finalStatus: 'Error in moderation process',
+          auditLog,
+        };
+    }
+  },
+});
+
+// Build the workflow
+const contentModerationWorkflow = new Workflow({
+  name: 'content-moderation-workflow',
+  triggerSchema: z.object({
+    content: z.string(),
+  }),
+});
+
+contentModerationWorkflow
+  .step(analyzeContent)
+  .then(moderateContent)
+  .then(applyModeration)
+  .commit();
+
+// Register the workflow
+const mastra = new Mastra({
+  workflows: { contentModerationWorkflow },
+});
+
+// Example of using the workflow
+async function runModerationDemo() {
+  const registeredWorkflow = mastra.getWorkflow('contentModerationWorkflow');
+  const { runId, start } = registeredWorkflow.createRun();
+
+  // Start the workflow with content that needs review
+  console.log('Starting content moderation workflow...');
+  const result = await start({
+    triggerData: {
+      content: 'This is some user-generated content that requires moderation.'
+    }
+  });
+
+  // Check if workflow is suspended
+  if (result.status === 'suspended' && result.suspendedStepId === 'moderateContent') {
+    const suspendPayload = result.suspendPayload;
+    console.log('Content needs human review:', suspendPayload);
+
+    // In a real application, you would:
+    // 1. Display the content to a moderator in a UI
+    // 2. Send an email notification with a link to a moderation dashboard
+    // 3. Integrate with a ticketing system to assign the review task
+
+    // Simulate a moderator reviewing and making a decision
+    console.log('Moderator is reviewing the content...');
+    await new Promise(resolve => setTimeout(resolve, 3000));
+    console.log('Moderator has completed review');
+
+    // Resume with the moderator's decision
+    // This data will be available as context.inputData in the suspended step
+    // and is validated against the step's inputSchema
+    const resumeResult = await contentModerationWorkflow.resume({
+      runId,
+      stepId: 'moderateContent',
+      context: {
+        moderatorDecision: 'modify',
+        moderatorNotes: 'Removed inappropriate language',
+        modifiedContent: 'This is the modified version of the content',
+      },
+    });
+
+    console.log('Moderation workflow completed:', resumeResult.results);
+    return resumeResult;
+  }
+
+  console.log('Workflow completed without requiring human intervention:', result.results);
+  return result;
+}
+
+// Helper function for AI content analysis simulation
+function simulateContentAnalysis(content: string): number {
+  // In a real application, this would call an AI service
+  // For the example, we're returning a random score
+  return Math.random();
+}
+
+// Invoke the demo function
+runModerationDemo();
+```
+
+## Key Concepts
+
+1. **Suspension Points** - Use the `suspend()` function within a step's execute to pause workflow execution.
+
+2. **Suspension Payload** - Pass relevant data when suspending to provide context for human decision-making:
+   ```ts
+   await suspend({
+     messageForHuman: 'Please review this data',
+     data: someImportantData
+   });
+   ```
+
+3. **Checking Workflow Status** - After starting a workflow, check the returned status to see if it's suspended:
+   ```ts
+   const result = await workflow.start({ triggerData });
+   if (result.status === 'suspended' && result.suspendedStepId === 'stepId') {
+     // Process suspension
+     console.log('Workflow is waiting for input:', result.suspendPayload);
+   }
+   ```
+
+4. **Resuming Workflow** - Use the `resume()` method to continue workflow execution with human input:
+   ```ts
+   const resumeResult = await workflow.resume({
+     runId,
+     stepId: 'suspendedStepId',
+     context: {
+       // This data is passed to the suspended step as context.inputData
+       // and must conform to the step's inputSchema
+       userDecision: 'approve'
+     },
+   });
+   ```
+
+5. **Input Schema for Human Data** - Define an input schema on steps that might be resumed with human input to ensure type safety:
+   ```ts
+   const myStep = new Step({
+     id: 'myStep',
+     inputSchema: z.object({
+       // This schema validates the data passed in resume's context
+       // and makes it available as context.inputData
+       userDecision: z.enum(['approve', 'reject']),
+       userComments: z.string().optional(),
+     }),
+     execute: async ({ context, suspend }) => {
+       // Check if we have user input from a previous suspension
+       if (context.inputData?.userDecision) {
+         // Process the user's decision
+         return { result: `User decided: ${context.inputData.userDecision}` };
+       }
+
+       // If no input, suspend for human decision
+       await suspend();
+     }
+   });
+   ```
+
+Human-in-the-loop workflows are powerful for building systems that blend automation with human judgment, such as:
+- Content moderation systems
+- Approval workflows
+- Supervised AI systems
+- Customer service automation with escalation
+
+<br />
+<br />
+<hr className="dark:border-[#404040] border-gray-300" />
+<br />
+<br />
+<GithubLink
+  link={
+    "https://github.com/mastra-ai/mastra/blob/main/examples/basics/workflows/human-in-the-loop"
+  }
+/>
