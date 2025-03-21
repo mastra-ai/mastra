@@ -16,9 +16,31 @@
       "groupName": "examples",
       "commitMessageTopic": "examples",
       "groupSlug": "examples-minor",
-      "matchPaths": ["examples/**"],
+      "matchFileNames": ["examples/**"],
       "schedule": "before 7am on Monday",
       "matchUpdateTypes": ["patch", "minor"]
+    },
+    {
+      "matchDepTypes": ["engines", "@types/node"],
+      "enabled": false
+    },
+    {
+      "groupName": "AI SDK",
+      "commitMessageTopic": "AI SDK",
+      "matchFileNames": ["+(package.json)", "**/package.json", "!./examples/**", "!./docs/**"],
+      "matchPackageNames": ["ai", "^@ai-sdk/"],
+      "matchUpdateTypes": ["major", "minor", "patch"],
+      "matchDepTypes": ["dependencies", "devDependencies"],
+      "dependencyDashboardApproval": false
+    },
+    {
+      "groupName": "typescript",
+      "matchFileNames": ["+(package.json)", "**/package.json", "!./examples/**", "!./docs/**"],
+      "matchPackageNames": ["typescript"],
+      "matchPackagePatterns": ["^@typescript-eslint/"],
+      "matchUpdateTypes": ["major", "minor", "patch"],
+      "matchDepTypes": ["dependencies", "devDependencies"],
+      "dependencyDashboardApproval": false
     }
   ]
 }
