@@ -1188,6 +1188,7 @@ describe('AstraVector Integration Tests', () => {
         includeVector: true,
       });
 
+      expect(results[0]?.id).toEqual(idToBeUpdated);
       expect(results[0]?.vector).toEqual(newVector);
       expect(results[0]?.metadata).toEqual(newMetaData);
     });
@@ -1216,6 +1217,7 @@ describe('AstraVector Integration Tests', () => {
         includeVector: true,
       });
 
+      expect(results[0]?.id).toEqual(idToBeUpdated);
       expect(results[0]?.vector).toEqual(testVectors[0]);
       expect(results[0]?.metadata).toEqual(newMetaData);
     });
@@ -1242,6 +1244,7 @@ describe('AstraVector Integration Tests', () => {
         includeVector: true,
       });
 
+      expect(results[0]?.id).toEqual(idToBeUpdated);
       expect(results[0]?.vector).toEqual(newVector);
     });
 
