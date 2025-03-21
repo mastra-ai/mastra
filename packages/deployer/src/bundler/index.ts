@@ -138,11 +138,6 @@ export abstract class Bundler extends MastraBundler {
     this.logger.info('Bundling Mastra application');
     const inputOptions: InputOptions = await getInputOptions(mastraEntryFile, analyzedBundleInfo, 'node');
 
-    // Handle port configuration if needed
-    if (isVirtual && options?.port) {
-      serverFile = serverFile.replaceAll('process.env.PORT', options.port.toString() || 'process.env.PORT || "4111"');
-    }
-
     if (isVirtual) {
       inputOptions.input = { index: '#entry' };
 
