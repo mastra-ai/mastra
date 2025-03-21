@@ -37,6 +37,7 @@ export const transformTools = (tools?: TTools) => {
       continue;
     }
     const openaiTool = {
+      type: 'function',
       name,
       description: tool.description || `Tool: ${name}`,
       parameters,
