@@ -5,8 +5,8 @@ on:
     branches: [main]
     paths:
       - "packages/mcp/**"
-      - "packages/docs-mcp/**"
-      - ".github/workflows/test-mcp.yml"
+      - "packages/mcp-docs-server/**"
+      - ".github/workflows/test-docs-mcp.yml"
 
 jobs:
   test:
@@ -32,6 +32,10 @@ jobs:
 
       - name: Build core
         run: pnpm build:core
+
+      - name: Build @mastra/mcp
+        working-directory: packages/mcp
+        run: pnpm build
 
       - name: Run Docs MCP tests
         run: pnpm test:docs-mcp

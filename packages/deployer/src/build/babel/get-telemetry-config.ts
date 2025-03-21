@@ -26,11 +26,12 @@ export function removeAllExceptTelemetryConfig(result: { hasCustomConfig: boolea
           return;
         }
 
-        if (!t.isObjectExpression(path.node.arguments[0]) || !path.node.arguments[0].properties?.[0]) {
-          return;
+        let mastraArgs = t.objectExpression([]);
+        if (t.isObjectExpression(path.node.arguments[0])) {
+          mastraArgs = path.node.arguments[0];
         }
 
-        let telemetry = path.node.arguments[0].properties.find(
+        let telemetry = mastraArgs.properties.find(
           // @ts-ignore
           prop => prop.key.name === 'telemetry',
         );
