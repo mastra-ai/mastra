@@ -60,7 +60,7 @@ export function TableOfContents(props: TOCProps) {
                     setActiveId("");
                   }}
                   className={cn(
-                    "text-black dark:text-[#939393] py-1 hover:text-blue-400 transition-colors duration-200 text-sm",
+                    "text-gray-500 dark:text-[#939393] py-1 hover:text-black transition-colors duration-200 text-sm",
                     activeId === "" ? "dark:text-white font-medium" : "",
                   )}
                 >
@@ -86,11 +86,11 @@ export function TableOfContents(props: TOCProps) {
                     className={cn(
                       "transition-colors py-1 duration-200 text-sm",
                       {
-                        "text:black dark:text-[#939393] hover:text-[#1aa3ff] dark:hover:text-white":
+                        "text-gray-500 dark:text-[#939393] hover:text-black dark:hover:text-white":
                           item.depth === 2,
                         "dark:text-[#939393] dark:hover:text-white text-gray-500 ml-3 hover:text-gray-900":
                           item.depth > 2,
-                        "text-[#004ca3] dark:text-white": item.id === activeId,
+                        "text-black dark:text-white": item.id === activeId,
                       },
                     )}
                   >
