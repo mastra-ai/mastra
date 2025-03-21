@@ -1,0 +1,27 @@
+{
+  "name": "discord-mcp-bot",
+  "type": "module",
+  "private": true,
+  "description": "A Discord MCP Bot",
+  "main": "index.js",
+  "version": "0.0.1",
+  "scripts": {
+    "start": "pnpx tsx src/index.ts"
+  },
+  "keywords": [
+    "discord",
+    "mcp",
+    "bot"
+  ],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "@ai-sdk/openai": "latest",
+    "@mastra/core": "workspace:*",
+    "@mastra/mcp": "workspace:*",
+    "ai": "latest",
+    "discord.js": "^14.14.1",
+    "dotenv": "^16.4.7",
+    "zod": "^3.24.0"
+  }
+}
