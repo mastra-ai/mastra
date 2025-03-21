@@ -42,21 +42,15 @@ const buttonCopy = ({
 });
 
 export const SubscribeForm = ({
-  className,
-  showLabel = true,
   idleIcon,
   successIcon,
-  buttonClassName,
-  inputClassName,
   placeholder,
+  label,
 }: {
-  className?: string;
-  showLabel?: boolean;
   idleIcon?: React.ReactNode;
   successIcon?: React.ReactNode;
-  buttonClassName?: string;
-  inputClassName?: string;
   placeholder?: string;
+  label?: string;
 }) => {
   const [buttonState, setButtonState] = useState("idle");
   const form = useForm<z.infer<typeof formSchema>>({
@@ -119,27 +113,23 @@ export const SubscribeForm = ({
     <Form {...form}>
       <form
         onSubmit={form.handleSubmit(onSubmit)}
-        className={cn(
-          "mt-8 items-end flex flex-col md:flex-row w-full gap-2 ",
-          className,
-        )}
+        className={cn("items-end flex flex-col w-full gap-2 ")}
       >
         <FormField
           control={form.control}
           name="email"
           render={({ field }) => (
             <FormItem className="flex-1 w-full">
-              {showLabel ? <FormLabel>Mastra Newsletter</FormLabel> : null}
+              <FormLabel className="text-[13px] text-[#E6E6E6]">
+                {label || "Mastra Newsletter"}
+              </FormLabel>
 
               <FormControl>
                 <input
-                  placeholder={
-                    placeholder || "Follow along with the weekly changelog"
-                  }
+                  placeholder={placeholder || "e.g: john@doe.com"}
                   {...field}
                   className={cn(
-                    "bg-transparent placeholder:text-text-3 text-sm placeholder:text-sm md:min-w-[400px] flex-1 focus:outline-none focus:ring-1 h-[35px] focus:ring-[#3359BC] w-full py-[0.56rem] px-4 dark:border-neutral-700  border rounded-md",
-                    inputClassName,
+                    "bg-transparent placeholder:text-text-[#939393] text-sm placeholder:text-sm flex-1 focus:outline-none focus:ring-1 h-[35px] focus:ring-[#3359BC] w-full py-[0.56rem] px-4 dark:border-[#343434] border rounded-md",
                   )}
                 />
               </FormControl>
@@ -154,8 +144,7 @@ export const SubscribeForm = ({
         />
         <button
           className={cn(
-            "dark:bg-white bg-[#2a2a2a] w-full md:w-[110px] rounded-md hover:opacity-90 h-[35px] justify-center flex items-center px-4 py-[0.56rem] font-semibold text-[0.9rem] text-white dark:text-black",
-            buttonClassName,
+            "dark:bg-[#121212] bg-[#2a2a2a] w-full rounded-md hover:opacity-90 h-[32px] justify-end flex items-center px-4 text-white dark:text-white text-[14px]",
           )}
           disabled={buttonState === "loading"}
         >

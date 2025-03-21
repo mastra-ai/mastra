@@ -15,7 +15,7 @@ const docs: DocsThemeConfig = {
   logoLink: process.env.NEXT_PUBLIC_APP_URL,
   project: {
     link: "https://github.com/mastra-ai/mastra",
-    icon: typeof window !== undefined ? GithubStarCount : null,
+    icon: GithubStarCount,
   },
   docsRepositoryBase: "https://github.com/mastra-ai/mastra/blob/main/docs",
   chat: {
@@ -74,6 +74,15 @@ const docs: DocsThemeConfig = {
   },
   footer: {
     component: Footer,
+  },
+
+  color: {
+    hue: 143,
+    saturation: 89,
+    lightness: 62,
+  },
+  themeSwitch: {
+    component: null,
   },
 };
 
