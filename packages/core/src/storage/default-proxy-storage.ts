@@ -1,114 +1,81 @@
 import type { MessageType, StorageThreadType } from '../memory/types';
 import { MastraStorage } from './base';
 import type { TABLE_NAMES } from './constants';
-import type { DefaultStorage, type LibSQLConfig } from './libsql';
+import type { LibSQLConfig } from './libsql';
 import type { EvalRow, StorageColumn, StorageGetMessagesArg } from './types';
 
 /**
  * A proxy for the DefaultStorage (LibSQLStore) to allow for dynamically loading the storage in a constructor
+ * If the storage is in-memory, it will use the InMemoryStorage.
  */
 export class DefaultProxyStorage extends MastraStorage {
-  private storage: DefaultStorage | null = null;
-  private storageConfig: LibSQLConfig;
-  private isInitializingPromise: Promise<void> | null = null;
+  private storage: Promise<MastraStorage>;
 
   constructor({ config }: { config: LibSQLConfig }) {
     super({ name: 'DefaultStorage' });
-    this.storageConfig = config;
+    this.storage = new Promise((resolve, reject) => {
+      import('./libsql')
+        .then(({ DefaultStorage }) => {
+          resolve(new DefaultStorage({ config }));
+        })
+        .catch(reject);
+    });
   }
 
-  private setupStorage() {
-    if (!this.isInitializingPromise) {
-      this.isInitializingPromise = new Promise((resolve, reject) => {
-        import('./libsql')
-          .then(({ DefaultStorage }) => {
-            this.storage = new DefaultStorage({ config: this.storageConfig });
-            resolve();
-          })
-          .catch(reject);
-      });
-    }
-
-    return this.isInitializingPromise;
+  async createTable(args: { tableName: TABLE_NAMES; schema: Record<string, StorageColumn> }): Promise<void> {
+    return (await this.storage).createTable(args);
   }
 
-  async createTable({
-    tableName,
-    schema,
-  }: {
-    tableName: TABLE_NAMES;
-    schema: Record<string, StorageColumn>;
-  }): Promise<void> {
-    await this.setupStorage();
-    return this.storage!.createTable({ tableName, schema });
+  async clearTable(args: { tableName: TABLE_NAMES }): Promise<void> {
+    return (await this.storage).clearTable(args);
   }
 
-  async clearTable({ tableName }: { tableName: TABLE_NAMES }): Promise<void> {
-    await this.setupStorage();
-    return this.storage!.clearTable({ tableName });
+  async insert(args: { tableName: TABLE_NAMES; record: Record<string, any> }): Promise<void> {
+    return (await this.storage).insert(args);
   }
 
-  async insert({ tableName, record }: { tableName: TABLE_NAMES; record: Record<string, any> }): Promise<void> {
-    await this.setupStorage();
-    return this.storage!.insert({ tableName, record });
+  async batchInsert(args: { tableName: TABLE_NAMES; records: Record<string, any>[] }): Promise<void> {
+    return (await this.storage).batchInsert(args);
   }
 
-  async batchInsert({ tableName, records }: { tableName: TABLE_NAMES; records: Record<string, any>[] }): Promise<void> {
-    await this.setupStorage();
-    return this.storage!.batchInsert({ tableName, records });
+  async load<R>(args: { tableName: TABLE_NAMES; keys: Record<string, string> }): Promise<R | null> {
+    return (await this.storage).load<R>(args);
   }
 
-  async load<R>({ tableName, keys }: { tableName: TABLE_NAMES; keys: Record<string, string> }): Promise<R | null> {
-    await this.setupStorage();
-    return this.storage!.load<R>({ tableName, keys });
+  async getThreadById(args: { threadId: string }): Promise<StorageThreadType | null> {
+    return (await this.storage).getThreadById(args);
   }
 
-  async getThreadById({ threadId }: { threadId: string }): Promise<StorageThreadType | null> {
-    await this.setupStorage();
-    return this.storage!.getThreadById({ threadId });
+  async getThreadsByResourceId(args: { resourceId: string }): Promise<StorageThreadType[]> {
+    return (await this.storage).getThreadsByResourceId(args);
   }
 
-  async getThreadsByResourceId({ resourceId }: { resourceId: string }): Promise<StorageThreadType[]> {
-    await this.setupStorage();
-    return this.storage!.getThreadsByResourceId({ resourceId });
+  async saveThread(args: { thread: StorageThreadType }): Promise<StorageThreadType> {
+    return (await this.storage).saveThread(args);
   }
 
-  async saveThread({ thread }: { thread: StorageThreadType }): Promise<StorageThreadType> {
-    await this.setupStorage();
-    return this.storage!.saveThread({ thread });
-  }
-
-  async updateThread({
-    id,
-    title,
-    metadata,
-  }: {
+  async updateThread(args: {
     id: string;
     title: string;
     metadata: Record<string, unknown>;
   }): Promise<StorageThreadType> {
-    await this.setupStorage();
-    return this.storage!.updateThread({ id, title, metadata });
+    return (await this.storage).updateThread(args);
   }
 
-  async deleteThread({ threadId }: { threadId: string }): Promise<void> {
-    await this.setupStorage();
-    return this.storage!.deleteThread({ threadId });
+  async deleteThread(args: { threadId: string }): Promise<void> {
+    return (await this.storage).deleteThread(args);
   }
 
-  async getMessages<T extends MessageType[]>({ threadId, selectBy }: StorageGetMessagesArg): Promise<T> {
-    await this.setupStorage();
-    return this.storage!.getMessages<T>({ threadId, selectBy });
+  async getMessages<T extends MessageType>(args: StorageGetMessagesArg): Promise<T[]> {
+    return (await this.storage).getMessages<T>(args);
   }
 
-  async saveMessages({ messages }: { messages: MessageType[] }): Promise<MessageType[]> {
-    await this.setupStorage();
-    return this.storage!.saveMessages({ messages });
+  async saveMessages(args: { messages: MessageType[] }): Promise<MessageType[]> {
+    return (await this.storage).saveMessages(args);
   }
 
   async getEvalsByAgentName(agentName: string, type?: 'test' | 'live'): Promise<EvalRow[]> {
-    await this.setupStorage();
-    return this.storage!.getEvalsByAgentName(agentName, type);
+    return (await this.storage).getEvalsByAgentName(agentName, type);
   }
 
   async getTraces(options?: {
@@ -118,7 +85,6 @@ export class DefaultProxyStorage extends MastraStorage {
     perPage: number;
     attributes?: Record<string, string>;
   }): Promise<any[]> {
-    await this.setupStorage();
-    return this.storage!.getTraces(options);
+    return (await this.storage).getTraces(options ?? { page: 0, perPage: 100 });
   }
 }

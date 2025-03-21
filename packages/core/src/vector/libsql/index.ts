@@ -23,28 +23,22 @@ interface LibSQLQueryParams extends QueryVectorParams {
 
 type LibSQLQueryArgs = [...QueryVectorArgs, number?];
 
+export type LibSQLVectorConfig = {
+  connectionUrl: string;
+  authToken?: string;
+  syncUrl?: string;
+  syncInterval?: number;
+};
+
 export class LibSQLVector extends MastraVector {
   private turso: TursoClient;
 
-  constructor({
-    connectionUrl,
-    authToken,
-    syncUrl,
-    syncInterval,
-  }: {
-    connectionUrl: string;
-    authToken?: string;
-    syncUrl?: string;
-    syncInterval?: number;
-  }) {
+  constructor(config: LibSQLVectorConfig) {
     super();
+    const { connectionUrl, authToken, syncUrl, syncInterval } = config;
+    const url = this.rewriteDbUrl(connectionUrl);
 
-    this.turso = createClient({
-      url: this.rewriteDbUrl(connectionUrl),
-      syncUrl: syncUrl,
-      authToken,
-      syncInterval,
-    });
+    this.turso = createClient({ url, syncUrl, authToken, syncInterval });
   }
 
   // If we're in the .mastra/output directory, use the dir outside .mastra dir
