@@ -77,9 +77,18 @@ const docs: DocsThemeConfig = {
   },
 
   color: {
-    hue: 143,
-    saturation: 89,
-    lightness: 62,
+    hue: {
+      dark: 143,
+      light: 143,
+    },
+    saturation: {
+      dark: 89,
+      light: 89,
+    },
+    lightness: {
+      dark: 62,
+      light: 42,
+    },
   },
   themeSwitch: {
     component: null,

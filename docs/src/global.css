@@ -12,12 +12,17 @@ https://nextra.site/docs/docs-theme/theme-configuration#theme-color
 
 body:is(html[class~="dark"] *),
 html:is(html[class~="dark"] *) {
-  background: #050505 !important;
+  background: #050505;
 }
 
 .nextra-nav-container:is(html[class~="dark"] *) {
-  background: #050505 !important;
+  background: #050505;
   border-bottom: 0.5px solid rgb(52, 52, 52);
+}
+
+.nextra-nav-container:is(html[class~="light"] *) {
+  background: rgb(250, 250, 250);
+  border-bottom: 0.5px solid rgb(220, 220, 220);
 }
 
 .nextra-nav-container-blur {
@@ -49,13 +54,11 @@ ul._inline-block {
   padding-inline-end: 4rem;
 }
 
-aside.nextra-sidebar-container li a {
-  /* Default state */
+.nextra-nav-container:is(html[class~="dark"] *) li a {
   color: #939393;
 }
 
-aside.nextra-sidebar-container li a:hover {
-  /* Default state */
+.nextra-nav-container:is(html[class~="dark"] *) li a:hover {
   color: #fff !important;
 }
 
@@ -254,4 +257,10 @@ pre {
   background: transparent;
   color: white;
   border-left: 2px solid white;
+}
+
+.dark\:_bg-primary-400\/10:is(html[class~="light"] *) {
+  background: transparent;
+  color: black;
+  border-left: 2px solid black;
 }
