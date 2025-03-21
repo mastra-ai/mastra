@@ -33,6 +33,10 @@ jobs:
       - name: Build core
         run: pnpm build:core
 
+      - name: Build @mastra/mcp
+        working-directory: packages/mcp
+        run: pnpm build
+
       - name: Run Docs MCP tests
         run: pnpm test:docs-mcp
 
