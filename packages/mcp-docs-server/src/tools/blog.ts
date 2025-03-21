@@ -5,6 +5,9 @@ import { z } from 'zod';
 async function fetchBlogPosts(): Promise<string> {
   try {
     const response = await fetch('https://mastra.ai/blog');
+    if (!response.ok) {
+      throw new Error('Failed to fetch blog posts');
+    }
     const html = await response.text();
 
     const dom = new JSDOM(html);
@@ -30,7 +33,7 @@ async function fetchBlogPosts(): Promise<string> {
 
     return 'Mastra.ai Blog Posts:\n\n' + blogLinks.join('\n');
   } catch (error) {
-    throw new Error('Failed to fetch blog posts');
+    throw new Error('Failed to fetch blog posts ' + JSON.stringify(error));
   }
 }
 
@@ -38,6 +41,9 @@ async function fetchBlogPosts(): Promise<string> {
 async function fetchBlogPost(url: string): Promise<string> {
   try {
     const response = await fetch(url);
+    if (!response.ok) {
+      throw new Error('Failed to fetch blog post');
+    }
     const html = await response.text();
 
     const dom = new JSDOM(html);
@@ -47,7 +53,13 @@ async function fetchBlogPost(url: string): Promise<string> {
     const scripts = document.querySelectorAll('script');
     scripts.forEach(script => script.remove());
 
-    return document.body.textContent || '';
+    // Get the main content
+    const content = document.body.textContent?.trim() || '';
+    if (!content) {
+      throw new Error('No content found in blog post');
+    }
+
+    return content;
   } catch (error) {
     throw new Error(`Failed to fetch blog post: ${error instanceof Error ? error.message : 'Unknown error'}`);
   }
