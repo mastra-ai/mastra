@@ -21,6 +21,7 @@ const meta = {
   events: "Event-Driven Workflows",
   afterEvent: ".afterEvent()",
   resumeWithEvent: ".resumeWithEvent()",
+  "step-retries": "Step Retries",
 };
 
 export default meta;
