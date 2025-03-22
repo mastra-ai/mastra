@@ -1,7 +1,7 @@
 {
-  "name": "@mastra/vectorize",
-  "version": "0.1.13-alpha.0",
-  "description": "Cloudflare Vectorize store provider for Mastra",
+  "name": "@mastra/voice-cloudflare",
+  "version": "0.1.1-alpha.0",
+  "description": "Mastra Sarvam AI voice integration",
   "type": "module",
   "files": [
     "dist"
@@ -25,20 +25,32 @@
     "build": "tsup src/index.ts --format esm,cjs --experimental-dts --clean --treeshake=smallest --splitting",
     "build:watch": "pnpm build --watch",
     "test": "vitest run",
+    "test:watch": "vitest watch",
     "lint": "eslint ."
   },
   "dependencies": {
     "@mastra/core": "workspace:^",
-    "cloudflare": "^4.1.0"
+    "cloudflare": "^4.0.0",
+    "zod": "^3.24.2"
   },
   "devDependencies": {
+    "@cloudflare/workers-types": "^4.20250317.0",
     "@internal/lint": "workspace:*",
     "@microsoft/api-extractor": "^7.52.1",
     "@types/node": "^22.13.10",
     "eslint": "^9.22.0",
     "tsup": "^8.4.0",
     "typescript": "^5.8.2",
-    "vitest": "^3.0.8",
-    "dotenv": "^16.4.7"
-  }
+    "vitest": "^2.1.9"
+  },
+  "keywords": [
+    "mastra",
+    "cloudflare",
+    "tts",
+    "stt",
+    "open-source",
+    "speech-to-text",
+    "text-to-speech",
+    "speech-recognition"
+  ]
 }

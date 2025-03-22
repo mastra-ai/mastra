@@ -639,3 +639,33 @@ export function createMastraProxy({ mastra, logger }: { mastra: Mastra; logger: 
     },
   });
 }
+
+export function checkEvalStorageFields(traceObject: any, logger?: Logger) {
+  const missingFields = [];
+  if (!traceObject.input) missingFields.push('input');
+  if (!traceObject.output) missingFields.push('output');
+  if (!traceObject.agentName) missingFields.push('agent_name');
+  if (!traceObject.metricName) missingFields.push('metric_name');
+  if (!traceObject.instructions) missingFields.push('instructions');
+  if (!traceObject.globalRunId) missingFields.push('global_run_id');
+  if (!traceObject.runId) missingFields.push('run_id');
+
+  if (missingFields.length > 0) {
+    if (logger) {
+      logger.warn('Skipping evaluation storage due to missing required fields', {
+        missingFields,
+        runId: traceObject.runId,
+        agentName: traceObject.agentName,
+      });
+    } else {
+      console.warn('Skipping evaluation storage due to missing required fields', {
+        missingFields,
+        runId: traceObject.runId,
+        agentName: traceObject.agentName,
+      });
+    }
+    return false;
+  }
+
+  return true;
+}
