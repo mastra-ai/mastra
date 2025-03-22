@@ -36,8 +36,8 @@ export class BuildBundler extends Bundler {
       overwrite: true,
     });
   }
-  bundle(entryFile: string, outputDirectory: string): Promise<void> {
-    return this._bundle(this.getEntry(), entryFile, outputDirectory);
+  bundle(entryFile: string, outputDirectory: string, options?: { port?: number }): Promise<void> {
+    return this._bundle(this.getEntry(), entryFile, outputDirectory, options);
   }
 
   protected getEntry(): string {

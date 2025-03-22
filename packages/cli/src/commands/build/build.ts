@@ -4,7 +4,7 @@ import { FileService } from '../../services/service.file';
 
 import { BuildBundler } from './BuildBundler';
 
-export async function build({ dir }: { dir?: string }) {
+export async function build({ dir, port }: { dir?: string; port?: number }) {
   const mastraDir = dir ?? process.cwd();
   const outputDirectory = join(mastraDir, '.mastra');
   const deployer = new BuildBundler();
@@ -14,8 +14,7 @@ export async function build({ dir }: { dir?: string }) {
     join(mastraDir, 'src', 'mastra', 'index.js'),
   ]);
 
-  console.log(join(mastraDir, 'index.ts'), join(mastraDir, 'index.js'));
   await deployer.prepare(outputDirectory);
 
-  await deployer.bundle(mastraEntryFile, outputDirectory);
+  await deployer.bundle(mastraEntryFile, outputDirectory, { port });
 }
