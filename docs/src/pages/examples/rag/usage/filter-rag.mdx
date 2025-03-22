@@ -41,7 +41,7 @@ POSTGRES_CONNECTION_STRING=your_connection_string_here
 
 Then, import the necessary dependencies:
 
-```typescript copy showLineNumbers filename="src/mastra/index.ts"
+```typescript copy showLineNumbers filename="index.ts"
 import { openai } from '@ai-sdk/openai';
 import { Mastra } from '@mastra/core';
 import { Agent } from '@mastra/core/agent';
@@ -54,7 +54,7 @@ import { embedMany } from 'ai';
 
 Using createVectorQueryTool imported from @mastra/rag, you can create a tool that enables metadata filtering:
 
-```typescript copy showLineNumbers{9} filename="src/mastra/index.ts"
+```typescript copy showLineNumbers{9} filename="index.ts"
 const vectorQueryTool = createVectorQueryTool({
   id: 'vectorQueryTool',
   vectorStoreName: "pgVector",
@@ -68,7 +68,7 @@ const vectorQueryTool = createVectorQueryTool({
 
 Create a document and process it into chunks with metadata:
 
-```typescript copy showLineNumbers{17} filename="src/mastra/index.ts"
+```typescript copy showLineNumbers{17} filename="index.ts"
 const doc = MDocument.fromText(`The Impact of Climate Change on Global Agriculture...`);
 
 const chunks = await doc.chunk({
@@ -86,7 +86,7 @@ const chunks = await doc.chunk({
 
 Transform chunks into metadata that can be filtered:
 
-```typescript copy showLineNumbers{31} filename="src/mastra/index.ts"
+```typescript copy showLineNumbers{31} filename="index.ts"
 const chunkMetadata = chunks?.map((chunk: any, index: number) => ({
   text: chunk.text,
   ...chunk.metadata,
@@ -108,7 +108,7 @@ The agent requires both the vector query tool and a system prompt containing:
 - Metadata structure for available filter fields
 - Vector store prompt for filter operations and syntax
 
-```typescript copy showLineNumbers{43} filename="src/mastra/index.ts"
+```typescript copy showLineNumbers{43} filename="index.ts"
 export const ragAgent = new Agent({
   name: 'RAG Agent',
   model: openai('gpt-4o-mini'),
@@ -149,7 +149,7 @@ The agent's instructions are designed to:
 
 Instantiate PgVector and Mastra with the components:
 
-```typescript copy showLineNumbers{69} filename="src/mastra/index.ts"
+```typescript copy showLineNumbers{69} filename="index.ts"
 const pgVector = new PgVector(process.env.POSTGRES_CONNECTION_STRING!);
 
 export const mastra = new Mastra({
@@ -163,7 +163,7 @@ const agent = mastra.getAgent('ragAgent');
 
 Generate embeddings and store them with metadata:
 
-```typescript copy showLineNumbers{78} filename="src/mastra/index.ts"
+```typescript copy showLineNumbers{78} filename="index.ts"
 const { embeddings } = await embedMany({
   model: openai.embedding('text-embedding-3-small'),
   values: chunks.map(chunk => chunk.text),
@@ -189,7 +189,7 @@ The `upsert` operation stores both the vector embeddings and their associated me
 
 Try different queries using metadata filters:
 
-```typescript copy showLineNumbers{96} filename="src/mastra/index.ts"
+```typescript copy showLineNumbers{96} filename="index.ts"
 const queryOne = 'What are the adaptation strategies mentioned?';
 const answerOne = await agent.generate(queryOne);
 console.log('\nQuery:', queryOne);

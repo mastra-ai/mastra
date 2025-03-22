@@ -35,7 +35,7 @@ POSTGRES_CONNECTION_STRING=your_connection_string_here
 
 Import the necessary dependencies:
 
-```typescript copy showLineNumbers filename="src/mastra/index.ts"
+```typescript copy showLineNumbers filename="index.ts"
 import { openai } from "@ai-sdk/openai";
 import { Mastra } from "@mastra/core";
 import { Agent } from "@mastra/core/agent";
@@ -50,7 +50,7 @@ import { z } from "zod";
 
 First, define the workflow with its trigger schema:
 
-```typescript copy showLineNumbers{10} filename="src/mastra/index.ts"
+```typescript copy showLineNumbers{10} filename="index.ts"
 export const ragWorkflow = new Workflow({
   name: "rag-workflow",
   triggerSchema: z.object({
@@ -63,7 +63,7 @@ export const ragWorkflow = new Workflow({
 
 Create a tool for querying the vector database:
 
-```typescript copy showLineNumbers{17} filename="src/mastra/index.ts"
+```typescript copy showLineNumbers{17} filename="index.ts"
 const vectorQueryTool = createVectorQueryTool({
   vectorStoreName: "pgVector",
   indexName: "embeddings",
@@ -75,7 +75,7 @@ const vectorQueryTool = createVectorQueryTool({
 
 Set up the Mastra agent:
 
-```typescript copy showLineNumbers{23} filename="src/mastra/index.ts"
+```typescript copy showLineNumbers{23} filename="index.ts"
 export const ragAgent = new Agent({
   name: "RAG Agent",
   instructions: `You are a helpful assistant that answers questions based on the provided context.`,
@@ -92,7 +92,7 @@ The workflow is divided into multiple steps for chain-of-thought reasoning:
 
 ### 1. Context Analysis Step
 
-```typescript copy showLineNumbers{32} filename="src/mastra/index.ts"
+```typescript copy showLineNumbers{32} filename="index.ts"
 const analyzeContext = new Step({
   id: "analyzeContext",
   outputSchema: z.object({
@@ -118,7 +118,7 @@ const analyzeContext = new Step({
 
 ### 2. Thought Breakdown Step
 
-```typescript copy showLineNumbers{54} filename="src/mastra/index.ts"
+```typescript copy showLineNumbers{54} filename="index.ts"
 const breakdownThoughts = new Step({
   id: "breakdownThoughts",
   outputSchema: z.object({
@@ -148,7 +148,7 @@ const breakdownThoughts = new Step({
 
 ### 3. Connection Step
 
-```typescript copy showLineNumbers{80} filename="src/mastra/index.ts"
+```typescript copy showLineNumbers{80} filename="index.ts"
 const connectPieces = new Step({
   id: "connectPieces",
   outputSchema: z.object({
@@ -177,7 +177,7 @@ const connectPieces = new Step({
 
 ### 4. Conclusion Step
 
-```typescript copy showLineNumbers{105} filename="src/mastra/index.ts"
+```typescript copy showLineNumbers{105} filename="index.ts"
 const drawConclusions = new Step({
   id: "drawConclusions",
   outputSchema: z.object({
@@ -206,7 +206,7 @@ const drawConclusions = new Step({
 
 ### 5. Final Answer Step
 
-```typescript copy showLineNumbers{130} filename="src/mastra/index.ts"
+```typescript copy showLineNumbers{130} filename="index.ts"
 const finalAnswer = new Step({
   id: "finalAnswer",
   outputSchema: z.object({
@@ -242,7 +242,7 @@ const finalAnswer = new Step({
 
 Connect all the steps in the workflow:
 
-```typescript copy showLineNumbers{160} filename="src/mastra/index.ts"
+```typescript copy showLineNumbers{160} filename="index.ts"
 ragWorkflow
   .step(analyzeContext)
   .then(breakdownThoughts)
@@ -257,7 +257,7 @@ ragWorkflow.commit();
 
 Instantiate PgVector and Mastra with all components:
 
-```typescript copy showLineNumbers{169} filename="src/mastra/index.ts"
+```typescript copy showLineNumbers{169} filename="index.ts"
 const pgVector = new PgVector(process.env.POSTGRES_CONNECTION_STRING!);
 
 export const mastra = new Mastra({
@@ -271,7 +271,7 @@ export const mastra = new Mastra({
 
 Process and chunks the document:
 
-```typescript copy showLineNumbers{177} filename="src/mastra/index.ts"
+```typescript copy showLineNumbers{177} filename="index.ts"
 const doc = MDocument.fromText(`The Impact of Climate Change on Global Agriculture...`);
 
 const chunks = await doc.chunk({
@@ -286,7 +286,7 @@ const chunks = await doc.chunk({
 
 Generate and store embeddings:
 
-```typescript copy showLineNumbers{186} filename="src/mastra/index.ts"
+```typescript copy showLineNumbers{186} filename="index.ts"
 const { embeddings } = await embedMany({
   model: openai.embedding('text-embedding-3-small'),
   values: chunks.map(chunk => chunk.text),
@@ -308,7 +308,7 @@ await vectorStore.upsert({
 
 Here's how to execute the workflow with a query:
 
-```typescript copy showLineNumbers{202} filename="src/mastra/index.ts"
+```typescript copy showLineNumbers{202} filename="index.ts"
 const query = 'What are the main adaptation strategies for farmers?';
 
 console.log('\nQuery:', query);

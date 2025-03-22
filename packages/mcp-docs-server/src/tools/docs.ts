@@ -1,12 +1,10 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 import type { Tool, Context } from 'tylerbarnes-fastmcp-fix';
 import { z } from 'zod';
+import { fromPackageRoot } from '../utils';
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-const docsBaseDir = path.join(__dirname, '../../.docs/raw/');
+const docsBaseDir = fromPackageRoot('.docs/raw/');
 
 // Helper function to list contents of a directory
 async function listDirContents(dirPath: string): Promise<{ dirs: string[]; files: string[] }> {

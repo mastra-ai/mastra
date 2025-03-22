@@ -5,7 +5,7 @@ import nodeResolve from '@rollup/plugin-node-resolve';
 import virtual from '@rollup/plugin-virtual';
 import { existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { rollup, type Plugin } from 'rollup';
+import { rollup, type OutputAsset, type OutputChunk, type Plugin } from 'rollup';
 import esbuild from 'rollup-plugin-esbuild';
 import { isNodeBuiltin } from './isNodeBuiltin';
 import { aliasHono } from './plugins/hono-alias';
@@ -13,8 +13,32 @@ import { removeDeployer } from './plugins/remove-deployer';
 import { join } from 'node:path';
 import { validate } from '../validator/validate';
 import { tsConfigPaths } from './plugins/tsconfig-paths';
+import { writeFile } from 'node:fs/promises';
 
-const globalExternals = ['pino', 'pino-pretty', '@libsql/client'];
+const globalExternals = ['pino', 'pino-pretty', '@libsql/client', 'pg', 'libsql', 'jsdom', 'sqlite3'];
+
+function findExternalImporter(module: OutputChunk, external: string, allOutputs: OutputChunk[]) {
+  const capturedFiles = new Set();
+
+  for (const id of module.imports) {
+    if (id === external) {
+      return module;
+    } else {
+      if (id.endsWith('.mjs')) {
+        capturedFiles.add(id);
+      }
+    }
+  }
+
+  for (const file of capturedFiles) {
+    const nextModule = allOutputs.find(o => o.fileName === file);
+    if (nextModule) {
+      return findExternalImporter(nextModule, external, allOutputs);
+    }
+  }
+
+  return null;
+}
 
 /**
  * Analyzes the entry file to identify dependencies that need optimization.
@@ -130,7 +154,7 @@ async function bundleExternals(depsToOptimize: Map<string, string[]>, outputDir:
       if (local === '*') {
         virtualFile.push(`export * from '${dep}';`);
       } else if (local === 'default') {
-        virtualFile.push(`export * from '${dep}';`);
+        virtualFile.push(`export { default } from '${dep}';`);
       } else {
         exportStringBuilder.push(local);
       }
@@ -157,9 +181,8 @@ async function bundleExternals(depsToOptimize: Map<string, string[]>, outputDir:
     ),
     // this dependency breaks the build, so we need to exclude it
     // TODO actually fix this so we don't need to exclude it
-    external: ['jsdom', ...globalExternals],
+    external: globalExternals,
     treeshake: 'smallest',
-    preserveSymlinks: true,
     plugins: [
       virtual(
         Array.from(virtualDependencies.entries()).reduce(
@@ -191,11 +214,29 @@ async function bundleExternals(depsToOptimize: Map<string, string[]>, outputDir:
     dir: outputDir,
     entryFileNames: '[name].mjs',
     chunkFileNames: '[name].mjs',
+    hoistTransitiveImports: false,
   });
+  const moduleResolveMap = {} as Record<string, Record<string, string>>;
+  const filteredChunks = output.filter(o => o.type === 'chunk');
+  for (const o of filteredChunks.filter(o => o.isEntry || o.isDynamicEntry)) {
+    for (const external of globalExternals) {
+      const importer = findExternalImporter(o, external, filteredChunks);
+
+      if (importer) {
+        const fullPath = join(outputDir, importer.fileName);
+        moduleResolveMap[fullPath] = moduleResolveMap[fullPath] || {};
+        if (importer.moduleIds.length > 1) {
+          moduleResolveMap[fullPath][external] = importer.moduleIds.slice(-2, -1)[0]!;
+        }
+      }
+    }
+  }
+
+  await writeFile(join(outputDir, 'module-resolve-map.json'), JSON.stringify(moduleResolveMap, null, 2));
 
   await bundler.close();
 
-  return { output, reverseVirtualReferenceMap };
+  return { output, reverseVirtualReferenceMap, usedExternals: moduleResolveMap };
 }
 
 /**
@@ -209,9 +250,17 @@ async function bundleExternals(depsToOptimize: Map<string, string[]>, outputDir:
  * @returns Analysis result containing invalid chunks and dependency mappings
  */
 async function validateOutput(
-  output: any[],
-  reverseVirtualReferenceMap: Map<string, string>,
-  outputDir: string,
+  {
+    output,
+    reverseVirtualReferenceMap,
+    usedExternals,
+    outputDir,
+  }: {
+    output: (OutputChunk | OutputAsset)[];
+    reverseVirtualReferenceMap: Map<string, string>;
+    usedExternals: Record<string, Record<string, string>>;
+    outputDir: string;
+  },
   logger: Logger,
 ) {
   const result = {
@@ -220,9 +269,12 @@ async function validateOutput(
     externalDependencies: new Set<string>(),
   };
 
-  globalExternals.forEach(dep => result.externalDependencies.add(dep));
-
-  //const internalFiles = new Set<string>(output.map(file => file.fileName));
+  // we should resolve the version of the deps
+  for (const deps of Object.values(usedExternals)) {
+    for (const dep of Object.keys(deps)) {
+      result.externalDependencies.add(dep);
+    }
+  }
 
   for (const file of output) {
     if (file.type === 'asset') {
@@ -281,8 +333,12 @@ export async function analyzeBundle(
   const isVirtualFile = entry.includes('\n') || !existsSync(entry);
 
   const depsToOptimize = await analyze(entry, mastraEntry, isVirtualFile, platform, logger);
-  const { output, reverseVirtualReferenceMap } = await bundleExternals(depsToOptimize, outputDir, logger);
-  const result = await validateOutput(output, reverseVirtualReferenceMap, outputDir, logger);
+  const { output, reverseVirtualReferenceMap, usedExternals } = await bundleExternals(
+    depsToOptimize,
+    outputDir,
+    logger,
+  );
+  const result = await validateOutput({ output, reverseVirtualReferenceMap, usedExternals, outputDir }, logger);
 
   return result;
 }

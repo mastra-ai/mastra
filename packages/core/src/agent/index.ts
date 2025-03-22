@@ -7,7 +7,6 @@ import type {
   CoreUserMessage,
   GenerateObjectResult,
   GenerateTextResult,
-  LanguageModelV1,
   StreamObjectResult,
   StreamTextResult,
   TextPart,
@@ -27,7 +26,7 @@ import { MastraLLM } from '../llm/model';
 import { RegisteredLogger } from '../logger';
 import type { Mastra } from '../mastra';
 import type { MastraMemory } from '../memory/memory';
-import type { MemoryConfig, StorageThreadType } from '../memory/types';
+import type { MemoryConfig } from '../memory/types';
 import { InstrumentClass } from '../telemetry';
 import type { CoreTool } from '../tools/types';
 import { makeCoreTool, createMastraProxy, ensureToolProperties } from '../utils';
@@ -37,6 +36,7 @@ import type {
   AgentConfig,
   AgentGenerateOptions,
   AgentStreamOptions,
+  AiMessageType,
   MastraLanguageModel,
   ToolsetsInput,
   ToolsInput,
@@ -820,16 +820,16 @@ export class Agent<
   }
 
   async generate<Z extends ZodSchema | JSONSchema7 | undefined = undefined>(
-    messages: string | string[] | CoreMessage[],
+    messages: string | string[] | CoreMessage[] | AiMessageType[],
     args?: AgentGenerateOptions<Z> & { output?: never; experimental_output?: never },
   ): Promise<GenerateTextResult<any, Z extends ZodSchema ? z.infer<Z> : unknown>>;
   async generate<Z extends ZodSchema | JSONSchema7 | undefined = undefined>(
-    messages: string | string[] | CoreMessage[],
+    messages: string | string[] | CoreMessage[] | AiMessageType[],
     args?: AgentGenerateOptions<Z> &
       ({ output: Z; experimental_output?: never } | { experimental_output: Z; output?: never }),
   ): Promise<GenerateObjectResult<Z extends ZodSchema ? z.infer<Z> : unknown>>;
   async generate<Z extends ZodSchema | JSONSchema7 | undefined = undefined>(
-    messages: string | string[] | CoreMessage[],
+    messages: string | string[] | CoreMessage[] | AiMessageType[],
     {
       instructions,
       context,
@@ -868,7 +868,7 @@ export class Agent<
             content: message,
           };
         }
-        return message;
+        return message as CoreMessage;
       });
     } else {
       messagesToUse = [messages];
@@ -964,16 +964,16 @@ export class Agent<
   }
 
   async stream<Z extends ZodSchema | JSONSchema7 | undefined = undefined>(
-    messages: string | string[] | CoreMessage[],
+    messages: string | string[] | CoreMessage[] | AiMessageType[],
     args?: AgentStreamOptions<Z> & { output?: never; experimental_output?: never },
   ): Promise<StreamTextResult<any, Z extends ZodSchema ? z.infer<Z> : unknown>>;
   async stream<Z extends ZodSchema | JSONSchema7 | undefined = undefined>(
-    messages: string | string[] | CoreMessage[],
+    messages: string | string[] | CoreMessage[] | AiMessageType[],
     args?: AgentStreamOptions<Z> &
       ({ output: Z; experimental_output?: never } | { experimental_output: Z; output?: never }),
   ): Promise<StreamObjectResult<any, Z extends ZodSchema ? z.infer<Z> : unknown, any>>;
   async stream<Z extends ZodSchema | JSONSchema7 | undefined = undefined>(
-    messages: string | string[] | CoreMessage[],
+    messages: string | string[] | CoreMessage[] | AiMessageType[],
     {
       instructions,
       context,
@@ -1015,7 +1015,7 @@ export class Agent<
             content: message,
           };
         }
-        return message;
+        return message as CoreMessage;
       });
     }
 
