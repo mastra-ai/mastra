@@ -1,4 +1,4 @@
-import { writeFileSync } from 'fs';
+import { writeFile } from 'fs/promises';
 import { join } from 'path';
 
 import { Deployer, createChildProcessLogger } from '@mastra/deployer';
@@ -52,14 +52,13 @@ export class CloudflareDeployer extends Deployer {
 
   async writeFiles(outputDirectory: string): Promise<void> {
     const env = await this.loadEnvVars();
-
     const envsAsObject = Object.assign({}, Object.fromEntries(env.entries()), this.env);
 
     const cfWorkerName = this.projectName;
 
     const wranglerConfig: Record<string, any> = {
       name: cfWorkerName,
-      main: './output/index.mjs',
+      main: './index.mjs',
       compatibility_date: '2024-12-02',
       compatibility_flags: ['nodejs_compat'],
       observability: {
@@ -74,19 +73,21 @@ export class CloudflareDeployer extends Deployer {
       wranglerConfig.routes = this.routes;
     }
 
-    writeFileSync(join(outputDirectory, 'wrangler.json'), JSON.stringify(wranglerConfig));
+    await writeFile(join(outputDirectory, this.outputDir, 'wrangler.json'), JSON.stringify(wranglerConfig));
   }
 
   private getEntry(): string {
     return `
+import { mastra } from '#mastra';
+import { createHonoServer } from '#server';
+
 export default {
   fetch: async (request, env, context) => {
+    // fixes process.env
     Object.keys(env).forEach(key => {
       process.env[key] = env[key]
     })
 
-    const { mastra } = await import('#mastra')
-    const { createHonoServer } = await import('#server')
     const app = await createHonoServer(mastra)
     return app.fetch(request, env, context);
   }
@@ -104,12 +105,12 @@ export default {
 
   async deploy(outputDirectory: string): Promise<void> {
     const cmd = this.workerNamespace
-      ? `npm exec -- wrangler deploy --dispatch-namespace ${this.workerNamespace}`
-      : 'npm exec -- wrangler deploy';
+      ? `npm exec -- wrangler@latest deploy --dispatch-namespace ${this.workerNamespace}`
+      : 'npm exec -- wrangler@latest deploy';
 
     const cpLogger = createChildProcessLogger({
       logger: this.logger,
-      root: outputDirectory,
+      root: join(outputDirectory, this.outputDir),
     });
 
     await cpLogger({
