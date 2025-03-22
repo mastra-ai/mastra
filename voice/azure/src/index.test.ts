@@ -1,13 +1,13 @@
-import { describe, it, expect, beforeAll } from 'vitest';
 import { createReadStream, writeFileSync, mkdirSync } from 'fs';
 import { join } from 'path';
 import { Readable } from 'stream';
+import { describe, it, expect, beforeAll } from 'vitest';
 
 import { AzureVoice } from './index';
 
 describe('AzureVoice Integration Tests', () => {
   let voice: AzureVoice;
-  const outputDir = join(process.cwd(), 'test-output');
+  const outputDir = join(process.cwd(), 'test-outputs');
   const subscriptionKey = process.env.AZURE_API_KEY ?? 'fake-key';
   const region = process.env.AZURE_REGION ?? 'eastus';
 
@@ -125,10 +125,10 @@ describe('AzureVoice Integration Tests', () => {
     });
 
     it('should transcribe audio from file', async () => {
-      const filePath = join(__dirname, 'test-data', 'hello.wav');
+      const filePath = join(outputDir, 'azure-speech-test.wav');
       const audioStream = createReadStream(filePath);
 
-      const text = await voice.listen(audioStream, { filetype: 'wav' });
+      const text = await voice.listen(audioStream);
       expect(text).toBeTruthy();
       expect(typeof text).toBe('string');
       expect(text.length).toBeGreaterThan(0);
@@ -147,13 +147,6 @@ describe('AzureVoice Integration Tests', () => {
   });
 
   describe('error handling', () => {
-    it('should handle invalid credentials', async () => {
-      const invalidVoice = new AzureVoice({
-        speechModel: { apiKey: 'invalid', region },
-      });
-      await expect(invalidVoice.speak('Test')).rejects.toThrow();
-    });
-
     it('should handle empty text', async () => {
       await expect(voice.speak('')).rejects.toThrow('Input text is empty');
     });

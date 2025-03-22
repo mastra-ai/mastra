@@ -25,15 +25,15 @@ import { AzureVoice } from '@mastra/voice-azure';
 // Create voice with both speech and listening capabilities
 const voice = new AzureVoice({
   speechModel: {
-    apiKey: 'your-api-key',  // Optional, can use AZURE_API_KEY env var
-    region: 'your-region',   // Optional, can use AZURE_REGION env var
-    voiceName: 'en-US-AriaNeural' // Optional, default voice
+    apiKey: 'your-api-key', // Optional, can use AZURE_API_KEY env var
+    region: 'your-region', // Optional, can use AZURE_REGION env var
+    voiceName: 'en-US-AriaNeural', // Optional, default voice
   },
   listeningModel: {
-    apiKey: 'your-api-key',  // Optional, can use AZURE_API_KEY env var
-    region: 'your-region',   // Optional, can use AZURE_REGION env var
-    language: 'en-US'        // Optional, recognition language
-  }
+    apiKey: 'your-api-key', // Optional, can use AZURE_API_KEY env var
+    region: 'your-region', // Optional, can use AZURE_REGION env var
+    language: 'en-US', // Optional, recognition language
+  },
 });
 
 // List available voices
@@ -41,13 +41,11 @@ const voices = await voice.getSpeakers();
 
 // Generate speech
 const audioStream = await voice.speak('Hello from Mastra!', {
-  speaker: 'en-US-JennyNeural' // Optional: override default voice
+  speaker: 'en-US-JennyNeural', // Optional: override default voice
 });
 
 // Convert speech to text
-const text = await voice.listen(audioStream, {
-  filetype: 'wav' // Supported formats: mp3, mp4, wav, webm, m4a
-});
+const text = await voice.listen(audioStream);
 ```
 
 ## Features
@@ -75,5 +73,6 @@ Azure provides numerous neural voices across different languages. Here are some 
 Each voice ID follows the format: `{language}-{region}-{name}Neural`
 
 For a complete list of supported voices, you can:
+
 1. Call the `getSpeakers()` method
 2. View the [Azure Neural TTS documentation](https://learn.microsoft.com/en-us/azure/cognitive-services/speech-service/language-support?tabs=tts)

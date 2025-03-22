@@ -174,18 +174,10 @@ export class AzureVoice extends MastraVoice {
   /**
    * Transcribes audio (STT) from a Node.js stream using Azure.
    *
-   * @param {NodeJS.ReadableStream} audioStream - The audio to be transcribed.
-   * @param {Object} [options] - Optional params (filetype, etc.).
-   * @param {string} [options.filetype] - 'mp3', 'wav', etc. (not crucial here).
+   * @param {NodeJS.ReadableStream} audioStream - The audio to be transcribed, must be in .wav format.
    * @returns {Promise<string>} - The recognized text.
    */
-  async listen(
-    audioStream: NodeJS.ReadableStream,
-    options?: {
-      filetype?: 'mp3' | 'mp4' | 'mpeg' | 'mpga' | 'm4a' | 'wav' | 'webm';
-      [key: string]: any;
-    },
-  ): Promise<string> {
+  async listen(audioStream: NodeJS.ReadableStream): Promise<string> {
     if (!this.listeningConfig || !this.speechRecognizer) {
       throw new Error('Listening model (Azure) not configured');
     }
