@@ -26,13 +26,13 @@
   },
   "dependencies": {
     "@mastra/core": "workspace:^",
-    "replicate": "^0.25.2",
+    "replicate": "^0.34.0",
     "zod": "^3.24.2"
   },
   "devDependencies": {
     "@internal/lint": "workspace:*",
     "@microsoft/api-extractor": "^7.52.1",
-    "@types/node": "^22.13.10",
+    "@types/node": "^20.17.24",
     "eslint": "^9.22.0",
     "tsup": "^8.4.0",
     "typescript": "^5.8.2",
