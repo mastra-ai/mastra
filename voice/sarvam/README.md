@@ -1,6 +1,6 @@
 # @mastra/voice-sarvam
 
-Sarvam Voice integration for Mastra, providing Text-to-Speech (TTS) capabilities using Sarvam's voice technology.
+Sarvam Voice integration for Mastra, providing Text-to-Speech (TTS) and Speech-to-text (STT) capabilities using Sarvam's voice technology.
 
 ## Installation
 
