@@ -1,5 +1,11 @@
 # @mastra/core
 
+## 0.6.4-alpha.1
+
+### Patch Changes
+
+- 6794797: Check for eval values before inserting into storage
+
 ## 0.6.4-alpha.0
 
 ### Patch Changes
