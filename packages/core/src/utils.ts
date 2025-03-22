@@ -1,16 +1,16 @@
 import { createHash } from 'crypto';
 import type { ToolExecutionOptions } from 'ai';
 import jsonSchemaToZod from 'json-schema-to-zod';
+import type { ZodObject, ZodSchema } from 'zod';
 import { z } from 'zod';
-import type { ZodObject } from 'zod';
 
 import type { MastraPrimitives } from './action';
 import type { ToolsInput } from './agent';
 import type { Logger } from './logger';
 import type { Mastra } from './mastra';
 import type { MastraMemory } from './memory';
+import type { AnyToolAction, CoreTool, VercelTool } from './tools';
 import { Tool } from './tools';
-import type { CoreTool, ToolAction, VercelTool } from './tools';
 
 export const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
@@ -147,9 +147,10 @@ export interface TagMaskOptions {
 
 /**
  * Transforms a stream by masking content between XML tags.
- * @param stream Input stream to transform
- * @param tag Tag name to mask between (e.g. for <foo>...</foo>, use 'foo')
- * @param options Optional configuration for masking behavior
+ *
+ * @param stream - Input stream to transform.
+ * @param tag - Tag name to mask between (e.g. for <foo>...</foo>, use 'foo').
+ * @param options - Optional configuration for masking behavior.
  */
 export async function* maskStreamTags(
   stream: AsyncIterable<string>,
@@ -272,8 +273,8 @@ export async function* maskStreamTags(
  * Resolve serialized zod output - This function takes the string output ot the `jsonSchemaToZod` function
  * and instantiates the zod object correctly.
  *
- * @param schema - serialized zod object
- * @returns resolved zod object
+ * @param schema - Serialized zod object.
+ * @returns Resolved zod object.
  */
 export function resolveSerializedZodOutput(schema: string): z.ZodType {
   // Creates and immediately executes a new function that takes 'z' as a parameter
@@ -283,16 +284,17 @@ export function resolveSerializedZodOutput(schema: string): z.ZodType {
 }
 
 /**
- * Checks if a tool is a Vercel Tool
- * @param tool - The tool to check
- * @returns True if the tool is a Vercel Tool, false otherwise
+ * Checks if a tool is a Vercel Tool.
+ *
+ * @param tool - The tool to check.
+ * @returns True if the tool is a Vercel Tool, false otherwise.
  */
 export function isVercelTool(tool?: ToolToConvert): tool is VercelTool {
   // Checks if this tool is not an instance of Tool
   return !(tool instanceof Tool);
 }
 
-interface ToolOptions {
+interface ToolOptions<TSchemaDeps extends ZodSchema | undefined = undefined> {
   name: string;
   runId?: string;
   threadId?: string;
@@ -302,9 +304,10 @@ interface ToolOptions {
   mastra?: (Mastra & MastraPrimitives) | MastraPrimitives;
   memory?: MastraMemory;
   agentName?: string;
+  dependencies?: DependenciesType<TSchemaDeps>;
 }
 
-type ToolToConvert = VercelTool | ToolAction<any, any, any>;
+type ToolToConvert = VercelTool | AnyToolAction;
 
 interface LogOptions {
   agentName?: string;
@@ -352,10 +355,15 @@ function createExecute(tool: ToolToConvert, options: ToolOptions, logType?: 'too
     if (isVercelTool(tool)) {
       return tool?.execute?.(args, execOptions) ?? undefined;
     }
+
+    const context = args;
+    const dependencies = validateDependencies(tool.dependenciesSchema, options.dependencies);
+
     return (
       tool?.execute?.(
         {
-          context: args,
+          context,
+          dependencies,
           threadId: options.threadId,
           resourceId: options.resourceId,
           mastra: options.mastra,
@@ -367,7 +375,7 @@ function createExecute(tool: ToolToConvert, options: ToolOptions, logType?: 'too
     );
   };
 
-  return async (args: any, execOptions?: any) => {
+  return async (args: any, execOptions: any) => {
     try {
       logger.debug(start, { ...rest, args });
       return await execFunction(args, execOptions);
@@ -379,11 +387,84 @@ function createExecute(tool: ToolToConvert, options: ToolOptions, logType?: 'too
 }
 
 /**
- * Checks if a value is a Zod type
- * @param value - The value to check
- * @returns True if the value is a Zod type, false otherwise
+ * The type of dependencies that can be used in a tool.
  */
-function isZodType(value: unknown): value is z.ZodType {
+export type DependenciesType<TSchema extends ZodSchema | undefined> = InferZodType<TSchema, Record<string, unknown>>;
+
+/**
+ * Creates an empty dependencies object.
+ *
+ * @template TSchema - The Zod schema to validate against.
+ * @returns The empty dependencies object.
+ */
+export function createEmptyDependencies<TSchema extends ZodSchema | undefined>(): DependenciesType<TSchema> {
+  return {} as DependenciesType<TSchema>;
+}
+
+/**
+ * Creates a dependencies object from an existing object.
+ *
+ * @template TSchema - The Zod schema to validate against.
+ * @param fromValue - The object to create the dependencies from.
+ * @returns The dependencies object.
+ */
+export function createDependenciesFrom<TSchema extends ZodSchema | undefined>(
+  fromValue?: DependenciesType<TSchema>,
+): DependenciesType<TSchema> {
+  return fromValue ?? createEmptyDependencies<TSchema>();
+}
+
+/**
+ * Validates the provided dependencies against an optional Zod schema.
+ *
+ * If a schema is provided, dependencies are validated against it. Without a schema,
+ * dependencies are returned directly if they're a non-null object, otherwise `{}`.
+ *
+ * @param schema - Optional Zod schema defining the structure of the dependencies.
+ * @param dependencies - Optional dependencies object to validate.
+ * @returns Validated dependencies matching the schema, or original/empty object when schema isn't provided.
+ *
+ * @throws Error if validation fails or the schema isn't a valid Zod schema.
+ */
+export function validateDependencies<TSchema extends ZodSchema | undefined>(
+  schema?: TSchema,
+  dependencies?: DependenciesType<TSchema>,
+): DependenciesType<TSchema> {
+  if (!schema) {
+    if (typeof dependencies === 'object' && dependencies !== null) {
+      return dependencies;
+    }
+
+    return createEmptyDependencies<TSchema>();
+  }
+
+  try {
+    if (isZodType(schema)) {
+      return schema.parse(dependencies);
+    } else {
+      throw new Error('Dependencies schema is not a Zod schema');
+    }
+  } catch (error) {
+    throw new Error(`Dependencies validation failed: ${error}`);
+  }
+}
+
+/**
+ * Infers the type from a ZodSchema if provided, otherwise returns unknown.
+ *
+ * @template T - The input type which might be a ZodSchema.
+ * @template Default - The default type to return if the input is not a ZodSchema.
+ * @returns The inferred type from the ZodSchema or Default.
+ */
+export type InferZodType<T, Default> = T extends z.ZodSchema ? z.infer<T> : Default;
+
+/**
+ * Checks if a value is a Zod type.
+ *
+ * @param value - The value to check.
+ * @returns True if the value is a Zod type, false otherwise.
+ */
+export function isZodType(value: unknown): value is z.ZodType {
   // Check if it's a Zod schema by looking for common Zod properties and methods
   return (
     typeof value === 'object' &&
@@ -402,9 +483,10 @@ function createDeterministicId(input: string): string {
 }
 
 /**
- * Sets the properties for a Vercel Tool, including an ID and inputSchema
- * @param tool - The tool to set the properties for
- * @returns The tool with the properties set
+ * Sets the properties for a Vercel Tool, including an ID and inputSchema.
+ *
+ * @param tool - The tool to set the properties for.
+ * @returns The tool with the properties set.
  */
 function setVercelToolProperties(tool: VercelTool) {
   const inputSchema = convertVercelToolParameters(tool);
@@ -421,12 +503,15 @@ function setVercelToolProperties(tool: VercelTool) {
 }
 
 /**
- * Ensures a tool has an ID and inputSchema by generating one if not present
- * @param tool - The tool to ensure has an ID and inputSchema
- * @returns The tool with an ID and inputSchema
+ * Ensures a tool has an ID and inputSchema by generating one if not present.
+ *
+ * @param tool - The tool to ensure has an ID and inputSchema.
+ * @returns The tool with an ID and inputSchema.
  */
-export function ensureToolProperties(tools: ToolsInput): ToolsInput {
-  const toolsWithProperties = Object.keys(tools).reduce<ToolsInput>((acc, key) => {
+export function ensureToolProperties<TSchemaDeps extends ZodSchema | undefined = undefined>(
+  tools: ToolsInput<TSchemaDeps>,
+): ToolsInput<TSchemaDeps> {
+  const toolsWithProperties = Object.keys(tools).reduce<ToolsInput<TSchemaDeps>>((acc, key) => {
     const tool = tools?.[key];
     if (tool) {
       if (isVercelTool(tool)) {
@@ -449,11 +534,12 @@ function convertVercelToolParameters(tool: VercelTool): z.ZodType {
 }
 
 /**
- * Converts a Vercel Tool or Mastra Tool into a CoreTool format
- * @param tool - The tool to convert (either VercelTool or ToolAction)
- * @param options - Tool options including Mastra-specific settings
- * @param logType - Type of tool to log (tool or toolset)
- * @returns A CoreTool that can be used by the system
+ * Converts a Vercel Tool or Mastra Tool into a CoreTool format.
+ *
+ * @param tool - The tool to convert (either VercelTool or ToolAction).
+ * @param options - Tool options including Mastra-specific settings.
+ * @param logType - Type of tool to log (tool or toolset).
+ * @returns A CoreTool that can be used by the system.
  */
 export function makeCoreTool(tool: ToolToConvert, options: ToolOptions, logType?: 'tool' | 'toolset'): CoreTool {
   // Helper to get parameters based on tool type
@@ -494,10 +580,11 @@ export function makeCoreTool(tool: ToolToConvert, options: ToolOptions, logType?
 }
 
 /**
- * Creates a proxy for a Mastra instance to handle deprecated properties
- * @param mastra - The Mastra instance to proxy
- * @param logger - The logger to use for warnings
- * @returns A proxy for the Mastra instance
+ * Creates a proxy for a Mastra instance to handle deprecated properties.
+ *
+ * @param mastra - The Mastra instance to proxy.
+ * @param logger - The logger to use for warnings.
+ * @returns A proxy for the Mastra instance.
  */
 export function createMastraProxy({ mastra, logger }: { mastra: Mastra; logger: Logger }) {
   return new Proxy(mastra, {

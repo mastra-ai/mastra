@@ -4,6 +4,7 @@ import type { z } from 'zod';
 import type { IAction, IExecutionContext, MastraUnion } from '../action';
 import type { BaseLogMessage, RegisteredLogger } from '../logger';
 import type { Mastra } from '../mastra';
+import type { InferZodType } from '../utils';
 import type { Step } from './step';
 
 export interface WorkflowOptions<TTriggerSchema extends z.ZodObject<any> = any> {
@@ -29,10 +30,11 @@ export interface StepAction<
   TSchemaIn extends z.ZodSchema | undefined,
   TSchemaOut extends z.ZodSchema | undefined,
   TContext extends StepExecutionContext<TSchemaIn>,
-> extends IAction<TId, TSchemaIn, TSchemaOut, TContext> {
+  TExtraArgs extends unknown[] = [],
+> extends IAction<TId, TSchemaIn, TSchemaOut, TContext, TExtraArgs> {
   mastra?: Mastra;
   payload?: TSchemaIn extends z.ZodSchema ? Partial<z.infer<TSchemaIn>> : unknown;
-  execute: (context: TContext) => Promise<TSchemaOut extends z.ZodSchema ? z.infer<TSchemaOut> : unknown>;
+  execute: (context: TContext, ...extraArgs: TExtraArgs) => Promise<InferZodType<TSchemaOut, unknown>>;
   retryConfig?: RetryConfig;
 }
 

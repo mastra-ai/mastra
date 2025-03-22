@@ -1,7 +1,7 @@
 import type { MessageType, StorageThreadType } from '../memory/types';
 import { MastraStorage } from './base';
 import type { TABLE_NAMES } from './constants';
-import type { DefaultStorage, type LibSQLConfig } from './libsql';
+import type { DefaultStorage, LibSQLConfig } from './libsql';
 import type { EvalRow, StorageColumn, StorageGetMessagesArg } from './types';
 
 /**

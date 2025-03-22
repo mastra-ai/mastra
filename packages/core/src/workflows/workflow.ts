@@ -258,7 +258,7 @@ export class Workflow<
     const loopFinishedStepKey = `__${fallbackStepKey}_${loopType}_loop_finished`;
     const loopFinishedStep = {
       id: loopFinishedStepKey,
-      execute: async ({ context }: any) => {
+      execute: async () => {
         return { success: true };
       },
     };
@@ -384,7 +384,7 @@ export class Workflow<
     this.step(
       {
         id: ifStepKey,
-        execute: async ({ context }) => {
+        execute: async () => {
           return { executed: true };
         },
       },
@@ -408,7 +408,7 @@ export class Workflow<
     this.after(activeCondition.condStep).step(
       {
         id: activeCondition.elseStepKey,
-        execute: async ({ context }) => {
+        execute: async () => {
           return { executed: true };
         },
       },

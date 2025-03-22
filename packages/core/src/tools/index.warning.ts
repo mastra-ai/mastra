@@ -8,9 +8,10 @@ export * from './tool';
 export class Tool<
   TSchemaIn extends z.ZodSchema | undefined = undefined,
   TSchemaOut extends z.ZodSchema | undefined = undefined,
-  TContext extends ToolExecutionContext<TSchemaIn> = ToolExecutionContext<TSchemaIn>,
-> extends BaseTool<TSchemaIn, TSchemaOut, TContext> {
-  constructor(opts: ToolAction<TSchemaIn, TSchemaOut, TContext>) {
+  TSchemaDeps extends z.ZodSchema | undefined = undefined,
+  TContext extends ToolExecutionContext<TSchemaIn, TSchemaDeps> = ToolExecutionContext<TSchemaIn, TSchemaDeps>,
+> extends BaseTool<TSchemaIn, TSchemaOut, TSchemaDeps, TContext> {
+  constructor(opts: ToolAction<TSchemaIn, TSchemaOut, TSchemaDeps, TContext>) {
     super(opts);
 
     console.warn('Please import "Tool" from "@mastra/core/tools" instead of "@mastra/core"');

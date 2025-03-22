@@ -1,3 +1,4 @@
+import type { ZodSchema } from 'zod';
 import type { ToolsInput } from '../agent';
 import { MastraBase } from '../base';
 import { InstrumentClass } from '../telemetry';
@@ -36,7 +37,8 @@ export abstract class MastraVoice<
   TOptions = unknown,
   TSpeakOptions = unknown,
   TListenOptions = unknown,
-  TTools extends ToolsInput = ToolsInput,
+  TSchemaDeps extends ZodSchema | undefined = undefined,
+  TTools extends ToolsInput<TSchemaDeps> = ToolsInput<TSchemaDeps>,
   TEventArgs extends VoiceEventMap = VoiceEventMap,
   TSpeakerMetadata = unknown,
 > extends MastraBase {
