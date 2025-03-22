@@ -7,12 +7,11 @@ import type {
   StepGraph,
   StorageThreadType,
   BaseLogMessage,
-  OutputType,
 } from '@mastra/core';
 
 import type { AgentGenerateOptions, AgentStreamOptions } from '@mastra/core/agent';
 import type { JSONSchema7 } from 'json-schema';
-import { ZodSchema } from 'zod';
+import type { ZodSchema } from 'zod';
 
 export interface ClientOptions {
   /** Base URL for API requests */
@@ -25,6 +24,7 @@ export interface ClientOptions {
   maxBackoffMs?: number;
   /** Custom headers to include with requests */
   headers?: Record<string, string>;
+  /** Abort signal for request */
 }
 
 export interface RequestOptions {
@@ -32,6 +32,7 @@ export interface RequestOptions {
   headers?: Record<string, string>;
   body?: any;
   stream?: boolean;
+  signal?: AbortSignal;
 }
 
 export interface GetAgentResponse {
@@ -43,11 +44,11 @@ export interface GetAgentResponse {
 }
 
 export type GenerateParams<T extends JSONSchema7 | ZodSchema | undefined = undefined> = {
-  messages: string | string[] | CoreMessage[];
+  messages: string | string[] | CoreMessage[] | AiMessageType[];
 } & Partial<AgentGenerateOptions<T>>;
 
 export type StreamParams<T extends JSONSchema7 | ZodSchema | undefined = undefined> = {
-  messages: string | string[] | CoreMessage[];
+  messages: string | string[] | CoreMessage[] | AiMessageType[];
 } & Partial<AgentStreamOptions<T>>;
 
 export interface GetEvalsByAgentIdResponse extends GetAgentResponse {
@@ -78,10 +79,20 @@ export type WorkflowRunResult = {
   context: {
     steps: Record<
       string,
-      {
-        status: 'completed' | 'suspended' | 'running';
-        [key: string]: any;
-      }
+      | {
+          status: 'success';
+          output: any;
+          [key: string]: any;
+        }
+      | {
+          status: 'pending';
+          [key: string]: any;
+        }
+      | {
+          status: 'suspended';
+          suspendPayload: any;
+          [key: string]: any;
+        }
     >;
   };
   timestamp: number;
@@ -177,4 +188,19 @@ export interface GetTelemetryParams {
   page?: number;
   perPage?: number;
   attribute?: Record<string, string>;
+}
+
+export interface GetNetworkResponse {
+  name: string;
+  instructions: string;
+  agents: Array<{
+    name: string;
+    provider: string;
+    modelId: string;
+  }>;
+  routingModel: {
+    provider: string;
+    modelId: string;
+  };
+  state?: Record<string, any>;
 }

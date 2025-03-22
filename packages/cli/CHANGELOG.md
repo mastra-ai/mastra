@@ -1,5 +1,164 @@
 # mastra
 
+## 0.4.3-alpha.1
+
+### Patch Changes
+
+- 2348e30: When running pnpm create mastra and selecting to install MCP docs server for Windsurf, the prompt placement was confusing as there was an additional confirm step during initialization later. Now the prompts all happen at the same time. Also added a check so we don't re-install global Windsurf if it's already installed
+
+## 0.4.3-alpha.0
+
+### Patch Changes
+
+- 933ea4d: Fix messages in thread not showing latest when switching between threads
+- 9cba774: Fix new thread title not reflecting until refresh or new message is sent
+- 248cb07: Allow ai-sdk Message type for messages in agent generate and stream
+  Fix sidebar horizontal overflow in playground
+- Updated dependencies [e764fd1]
+- Updated dependencies [fb68a80]
+- Updated dependencies [e764fd1]
+- Updated dependencies [05ef3e0]
+- Updated dependencies [95c5745]
+- Updated dependencies [b56a681]
+- Updated dependencies [248cb07]
+  - @mastra/deployer@0.2.4-alpha.0
+  - @mastra/core@0.6.4-alpha.0
+
+## 0.4.2
+
+### Patch Changes
+
+- 404640e: AgentNetwork changeset
+- Updated dependencies [404640e]
+- Updated dependencies [3bce733]
+  - @mastra/deployer@0.2.3
+  - @mastra/core@0.6.3
+
+## 0.4.2-alpha.1
+
+### Patch Changes
+
+- Updated dependencies [3bce733]
+  - @mastra/core@0.6.3-alpha.1
+  - @mastra/deployer@0.2.3-alpha.1
+
+## 0.4.2-alpha.0
+
+### Patch Changes
+
+- 404640e: AgentNetwork changeset
+- Updated dependencies [404640e]
+  - @mastra/deployer@0.2.3-alpha.0
+  - @mastra/core@0.6.3-alpha.0
+
+## 0.4.1
+
+### Patch Changes
+
+- aede1ea: Add non english support to weather example
+- 2f6a8b6: Update port handling in dev command to ensure CLI port takes precedence over environment variables and add warning when overriding PORT environment variable.
+- 010fc45: Fix storage init stuck
+- Updated dependencies [4e6732b]
+- Updated dependencies [beaf1c2]
+- Updated dependencies [3084e13]
+  - @mastra/deployer@0.2.2
+  - @mastra/core@0.6.2
+
+## 0.4.1-alpha.2
+
+### Patch Changes
+
+- 010fc45: Fix storage init stuck
+
+## 0.4.1-alpha.1
+
+### Patch Changes
+
+- 2f6a8b6: Update port handling in dev command to ensure CLI port takes precedence over environment variables and add warning when overriding PORT environment variable.
+- Updated dependencies [beaf1c2]
+- Updated dependencies [3084e13]
+  - @mastra/core@0.6.2-alpha.0
+  - @mastra/deployer@0.2.2-alpha.1
+
+## 0.4.1-alpha.0
+
+### Patch Changes
+
+- aede1ea: Add non english support to weather example
+- Updated dependencies [4e6732b]
+  - @mastra/deployer@0.2.2-alpha.0
+
+## 0.4.0
+
+### Minor Changes
+
+- f9b6ab5: add Cerebras as a llm provider to create-mastra@latest
+
+### Patch Changes
+
+- 5052613: Added a new `mastra create --project-name <string>` flag so coder agents can create new Mastra projects with a one line command.
+- 1291e89: Add resizable-panel to playground-ui and use in agent and workflow sidebars
+- 1405e46: update the Groq model the create-mastra@latest sets
+- da8d9bb: Enable public dir copying if it exists
+- 9ba1e97: update playground ui for mastra and create-mastra
+- 5baf1ec: animate new traces
+- 65f2a4c: Add Mastra Docs MCP to the pnpm create mastra TUI with the option to install in Cursor or Windsurf
+- 9116d70: Handle the different workflow methods in workflow graph
+- 0709d99: add prop for dynamic empty text
+- Updated dependencies [cc7f392]
+- Updated dependencies [fc2f89c]
+- Updated dependencies [dfbb131]
+- Updated dependencies [f4854ee]
+- Updated dependencies [afaf73f]
+- Updated dependencies [0850b4c]
+- Updated dependencies [7bcfaee]
+- Updated dependencies [da8d9bb]
+- Updated dependencies [44631b1]
+- Updated dependencies [9116d70]
+- Updated dependencies [6e559a0]
+- Updated dependencies [5f43505]
+- Updated dependencies [61ad5a4]
+  - @mastra/deployer@0.2.1
+  - @mastra/core@0.6.1
+
+## 0.4.0-alpha.2
+
+### Patch Changes
+
+- da8d9bb: Enable public dir copying if it exists
+- 5baf1ec: animate new traces
+- 65f2a4c: Add Mastra Docs MCP to the pnpm create mastra TUI with the option to install in Cursor or Windsurf
+- 9116d70: Handle the different workflow methods in workflow graph
+- 0709d99: add prop for dynamic empty text
+- Updated dependencies [cc7f392]
+- Updated dependencies [fc2f89c]
+- Updated dependencies [dfbb131]
+- Updated dependencies [0850b4c]
+- Updated dependencies [da8d9bb]
+- Updated dependencies [9116d70]
+  - @mastra/deployer@0.2.1-alpha.2
+  - @mastra/core@0.6.1-alpha.2
+
+## 0.4.0-alpha.1
+
+### Minor Changes
+
+- f9b6ab5: add Cerebras as a llm provider to create-mastra@latest
+
+### Patch Changes
+
+- 5052613: Added a new `mastra create --project-name <string>` flag so coder agents can create new Mastra projects with a one line command.
+- 1291e89: Add resizable-panel to playground-ui and use in agent and workflow sidebars
+- 9ba1e97: update playground ui for mastra and create-mastra
+- Updated dependencies [f4854ee]
+- Updated dependencies [afaf73f]
+- Updated dependencies [44631b1]
+- Updated dependencies [6e559a0]
+- Updated dependencies [5f43505]
+- Updated dependencies [61ad5a4]
+  - @mastra/core@0.6.1-alpha.1
+  - @mastra/deployer@0.2.1-alpha.1
+
 ## 0.3.2-alpha.0
 
 ### Patch Changes

@@ -1,18 +1,17 @@
 import { Braces } from 'lucide-react';
-import { MouseEvent as ReactMouseEvent, ReactNode, useContext, useState } from 'react';
+import { ReactNode, useContext, useState } from 'react';
 
 import { Skeleton } from '@/components/ui/skeleton';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 
 import { cn } from '@/lib/utils';
 
+import { MastraResizablePanel } from '@/domains/resizable-panel';
 import { Traces } from '@/domains/traces';
 import { TraceContext, TraceProvider } from '@/domains/traces/context/trace-context';
 import { TraceDetails } from '@/domains/traces/trace-details';
 import { SpanDetail } from '@/domains/traces/trace-span-details';
-import { useResizeColumn } from '@/hooks/use-resize-column';
 import { useTraces } from '@/hooks/use-traces';
-import { MastraResizablePanel } from '@/domains/resizable-panel';
 
 export function AgentTraces({
   agentName,
@@ -44,7 +43,7 @@ function AgentTracesInner({
   if (firstCallLoading) {
     return (
       <main className="flex-1 relative overflow-hidden h-full">
-        <div className="h-full w-[calc(100%_-_400px)]">
+        <div className="h-full w-[calc(100%_-_325px)]">
           <Table>
             <TableHeader className="sticky top-0 z-10 bg-[#0F0F0F]">
               <TableRow className="border-gray-6 border-b-[0.1px] text-[0.8125rem]">
@@ -74,7 +73,7 @@ function AgentTracesInner({
             </TableBody>
           </Table>
         </div>
-        <SidebarItems sidebarChild={sidebarChild} className="min-w-[400px]" />
+        <SidebarItems sidebarChild={sidebarChild} className="min-w-[325px]" />
       </main>
     );
   }
@@ -82,7 +81,7 @@ function AgentTracesInner({
   if (!traces || traces.length === 0) {
     return (
       <main className="flex-1 h-full relative overflow-hidden">
-        <div className="h-full w-[calc(100%_-_400px)]">
+        <div className="h-full w-[calc(100%_-_325px)]">
           <Table>
             <TableHeader className="sticky top-0 z-10 bg-[#0F0F0F]">
               <TableRow className="border-gray-6 border-b-[0.1px] text-[0.8125rem]">
@@ -103,7 +102,7 @@ function AgentTracesInner({
             </TableBody>
           </Table>
         </div>
-        <SidebarItems sidebarChild={sidebarChild} className="min-w-[400px]" />
+        <SidebarItems sidebarChild={sidebarChild} className="min-w-[325px]" />
       </main>
     );
   }
@@ -111,7 +110,7 @@ function AgentTracesInner({
   return (
     <main className="flex-1 h-full relative overflow-hidden">
       <Traces traces={traces} />
-      <SidebarItems sidebarChild={sidebarChild} className={cn(open ? 'grid grid-cols-2 w-[60%]' : 'min-w-[400px]')} />
+      <SidebarItems sidebarChild={sidebarChild} className={cn(open ? 'grid grid-cols-2 w-[60%]' : 'min-w-[325px]')} />
     </main>
   );
 }
@@ -126,9 +125,9 @@ function SidebarItems({ sidebarChild, className }: { sidebarChild: ReactNode; cl
         'absolute right-0 top-0 h-full z-20 overflow-x-scroll border-l-[0.5px] bg-mastra-bg-1 bg-[#121212]',
         className,
       )}
-      defaultWidth={open ? 60 : 30}
-      minimumWidth={open ? 50 : 30}
-      maximumWidth={open ? 90 : 50}
+      defaultWidth={open ? 60 : 20}
+      minimumWidth={open ? 50 : 20}
+      maximumWidth={open ? 90 : 60}
     >
       {open && (
         <div

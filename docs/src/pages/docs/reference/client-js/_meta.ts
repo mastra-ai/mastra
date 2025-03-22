@@ -1,5 +1,4 @@
 export default {
-  index: "Overview",
   agents: "Agents API",
   memory: "Memory API",
   tools: "Tools API",

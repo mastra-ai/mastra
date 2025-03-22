@@ -1,6 +1,6 @@
 {
   "name": "@mastra/upstash",
-  "version": "0.1.10-alpha.0",
+  "version": "0.1.13-alpha.0",
   "description": "Upstash provider for Mastra - includes both vector and db storage capabilities",
   "type": "module",
   "main": "dist/index.js",
@@ -35,6 +35,7 @@
     "@internal/lint": "workspace:*",
     "@microsoft/api-extractor": "^7.52.1",
     "@types/node": "^22.13.10",
+    "dotenv": "^16.4.7",
     "eslint": "^9.22.0",
     "tsup": "^8.4.0",
     "typescript": "^5.8.2",

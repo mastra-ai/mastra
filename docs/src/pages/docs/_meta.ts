@@ -16,6 +16,10 @@ const meta = {
     title: "Agents",
     collapsed: false,
   },
+  storage: {
+    title: "Storage",
+    collapsed: false,
+  },
   workflows: {
     title: "Workflows",
     collapsed: false,
@@ -32,10 +36,20 @@ const meta = {
     title: "Deployment",
     collapsed: false,
   },
+  observability: {
+    title: "Observability",
+    collapsed: false,
+  },
   evals: {
     title: "Evals",
     collapsed: false,
   },
+  voice: {
+    title: "Voice",
+    collapsed: false,
+  },
+  integrations: "Integrations",
+  faq: "FAQ",
   reference: "Reference",
 };
 

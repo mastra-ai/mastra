@@ -13,7 +13,7 @@ export function removeAllExceptTelemetryConfig(result: { hasCustomConfig: boolea
         },
       },
 
-      NewExpression(path) {
+      NewExpression(path, state) {
         // is a variable declaration
         const varDeclaratorPath = path.findParent(path => t.isVariableDeclarator(path.node));
         if (!varDeclaratorPath) {
@@ -26,32 +26,44 @@ export function removeAllExceptTelemetryConfig(result: { hasCustomConfig: boolea
           return;
         }
 
-        // @ts-ignore
-        let telemetry = path.node.arguments[0]?.properties?.find(
+        let mastraArgs = t.objectExpression([]);
+        if (t.isObjectExpression(path.node.arguments[0])) {
+          mastraArgs = path.node.arguments[0];
+        }
+
+        let telemetry = mastraArgs.properties.find(
           // @ts-ignore
           prop => prop.key.name === 'telemetry',
         );
+        let telemetryValue: babel.types.Expression = t.objectExpression([]);
 
-        const programPath = path.scope.getProgramParent().path;
+        const programPath = path.scope.getProgramParent().path as NodePath<babel.types.Program> | undefined;
         if (!programPath) {
           return;
         }
 
-        if (telemetry) {
+        if (telemetry && t.isObjectProperty(telemetry) && t.isExpression(telemetry.value)) {
           result.hasCustomConfig = true;
-        } else {
-          telemetry = {
-            value: t.objectExpression([]),
-          };
+          telemetryValue = telemetry.value;
+
+          if (t.isIdentifier(telemetry.value) && telemetry.value.name === 'telemetry') {
+            const telemetryBinding = state.file.scope.getBinding('telemetry')!;
+
+            if (telemetryBinding && t.isVariableDeclarator(telemetryBinding.path.node)) {
+              const id = path.scope.generateUidIdentifier('telemetry');
+
+              telemetryBinding.path.replaceWith(t.variableDeclarator(id, telemetryBinding.path.node.init!));
+              telemetryValue = id;
+            }
+          }
         }
 
         // add the deployer export
         const exportDeclaration = t.exportNamedDeclaration(
-          t.variableDeclaration('const', [t.variableDeclarator(t.identifier('telemetry'), telemetry.value)]),
+          t.variableDeclaration('const', [t.variableDeclarator(t.identifier('telemetry'), telemetryValue)]),
           [],
         );
 
-        // @ts-ignore
         programPath.node.body.push(exportDeclaration);
       },
     },

@@ -46,31 +46,29 @@ import type { WorkflowRunResult } from './types';
 // })();
 
 // Workflow
-
 // (async () => {
 //   const client = new MastraClient({
 //     baseUrl: 'http://localhost:4111',
 //   });
 
-//   let finalWorkflowResult: WorkflowRunResult | null = null;
-
-//   try{
-//     const workflowId = 'weatherWorkflow';
-
+//   try {
+//     const workflowId = 'myWorkflow';
 //     const workflow = client.getWorkflow(workflowId);
 
-//     const {runId} = await workflow.startRun({
-//       city: 'New York',
+//     const { runId } = await workflow.createRun();
+
+//     workflow.watch({ runId }, record => {
+//       console.log(new Date().toTimeString(), record);
 //     });
 
-//     for await (const record of workflow.watch({runId})) {
-//       console.log(new Date().toTimeString(), record);
-//       finalWorkflowResult = record;
-//     }
-//   }catch(e){
-//     console.log(e);
-//   }finally{
-//     console.log('Done')
-//     console.log({finalWorkflowResult});
+//     await workflow.start({
+//       runId,
+//       triggerData: {
+//         city: 'New York',
+//       },
+//     });
+
+//   } catch (e) {
+//     console.error('Workflow error:', e);
 //   }
 // })();

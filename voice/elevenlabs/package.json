@@ -1,6 +1,6 @@
 {
   "name": "@mastra/voice-elevenlabs",
-  "version": "0.1.5-alpha.0",
+  "version": "0.1.8-alpha.0",
   "description": "Mastra ElevenLabs voice integration",
   "type": "module",
   "files": [

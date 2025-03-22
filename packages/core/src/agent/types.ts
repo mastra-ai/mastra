@@ -42,6 +42,7 @@ export interface AgentConfig<
 }
 
 export type AgentGenerateOptions<Z extends ZodSchema | JSONSchema7 | undefined = undefined> = {
+  instructions?: string;
   toolsets?: ToolsetsInput;
   context?: CoreMessage[];
   memoryOptions?: MemoryConfig;
@@ -56,6 +57,7 @@ export type AgentGenerateOptions<Z extends ZodSchema | JSONSchema7 | undefined =
   (Z extends undefined ? DefaultLLMTextOptions : DefaultLLMTextObjectOptions);
 
 export type AgentStreamOptions<Z extends ZodSchema | JSONSchema7 | undefined = undefined> = {
+  instructions?: string;
   toolsets?: ToolsetsInput;
   context?: CoreMessage[];
   memoryOptions?: MemoryConfig;

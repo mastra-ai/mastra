@@ -25,7 +25,7 @@ export const agent = new Agent({
 });
 
 // The agent can now use voice for interaction
-await agent.speak("Hello, I'm your AI assistant!");
+await agent.voice.speak("Hello, I'm your AI assistant!");
 
 // Read audio file and transcribe
 const audioFilePath = path.join(process.cwd(), "/audio.m4a");
@@ -102,4 +102,69 @@ try {
 } catch (error) {
   console.error("Error transcribing audio:", error);
 }
+```
+
+## Real-time Voice Interactions
+
+For more dynamic and interactive voice experiences, you can use real-time voice providers that support speech-to-speech capabilities:
+
+```typescript
+import { Agent } from "@mastra/core/agent";
+import { OpenAIRealtimeVoice } from "@mastra/voice-openai-realtime";
+import { search, calculate } from "../tools";
+
+// Initialize the realtime voice provider
+const voice = new OpenAIRealtimeVoice({
+  chatModel: {
+    apiKey: process.env.OPENAI_API_KEY,
+    model: 'gpt-4o-mini-realtime',
+  },
+  speaker: 'alloy'
+});
+
+// Create an agent with speech-to-speech voice capabilities
+export const agent = new Agent({
+  name: 'Agent',
+  instructions: `You are a helpful assistant with speech-to-speech capabilities.`,
+  model: openai('gpt-4o'),
+  tools: { // Tools configured on Agent are passed to voice provider
+    search,
+    calculate
+  },
+  voice
+});
+
+// Establish a WebSocket connection
+await agent.voice.connect();
+
+// Start a conversation
+agent.voice.speak("Hello, I'm your AI assistant!");
+
+// Stream audio from a microphone
+const microphoneStream = getMicrophoneStream();
+agent.voice.send(microphoneStream);
+
+// When done with the conversation
+agent.voice.close();
+```
+
+### Event System
+
+The realtime voice provider emits several events you can listen for:
+
+```typescript
+// Listen for speech audio data sent from voice provider
+agent.voice.on('speaking', ({ audio }) => {
+  // audio contains ReadableStream or Int16Array audio data
+});
+
+// Listen for transcribed text sent from both voice provider and user
+agent.voice.on('writing', ({ text, role }) => {
+  console.log(`${role} said: ${text}`);
+});
+
+// Listen for errors
+agent.voice.on('error', (error) => {
+  console.error('Voice error:', error);
+});
 ```

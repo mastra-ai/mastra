@@ -1,7 +1,9 @@
 import { createHash } from 'crypto';
+import type { ToolExecutionOptions } from 'ai';
 import jsonSchemaToZod from 'json-schema-to-zod';
 import { z } from 'zod';
 import type { ZodObject } from 'zod';
+
 import type { MastraPrimitives } from './action';
 import type { ToolsInput } from './agent';
 import type { Logger } from './logger';
@@ -302,7 +304,7 @@ interface ToolOptions {
   agentName?: string;
 }
 
-type ToolToConvert = VercelTool | ToolAction<any, any, any, any>;
+type ToolToConvert = VercelTool | ToolAction<any, any, any>;
 
 interface LogOptions {
   agentName?: string;
@@ -346,7 +348,7 @@ function createExecute(tool: ToolToConvert, options: ToolOptions, logType?: 'too
     type: logType,
   });
 
-  const execFunction = async (args: any, execOptions: any) => {
+  const execFunction = async (args: any, execOptions: ToolExecutionOptions) => {
     if (isVercelTool(tool)) {
       return tool?.execute?.(args, execOptions) ?? undefined;
     }
@@ -459,11 +461,32 @@ export function makeCoreTool(tool: ToolToConvert, options: ToolOptions, logType?
     if (isVercelTool(tool)) {
       return convertVercelToolParameters(tool);
     }
-    // If the tool is a Mastra Tool, return the inputSchema
     return tool.inputSchema ?? z.object({});
   };
 
+  // Check if this is a provider-defined tool
+  const isProviderDefined =
+    'type' in tool &&
+    tool.type === 'provider-defined' &&
+    'id' in tool &&
+    typeof tool.id === 'string' &&
+    tool.id.includes('.');
+
+  // For provider-defined tools, we need to include all required properties
+  if (isProviderDefined) {
+    return {
+      type: 'provider-defined' as const,
+      id: tool.id as `${string}.${string}`,
+      args: ('args' in tool ? tool.args : {}) as Record<string, unknown>,
+      description: tool.description!,
+      parameters: getParameters(),
+      execute: tool.execute ? createExecute(tool, { ...options, description: tool.description }, logType) : undefined,
+    };
+  }
+
+  // For function tools
   return {
+    type: 'function' as const,
     description: tool.description!,
     parameters: getParameters(),
     execute: tool.execute ? createExecute(tool, { ...options, description: tool.description }, logType) : undefined,
@@ -528,4 +551,34 @@ export function createMastraProxy({ mastra, logger }: { mastra: Mastra; logger: 
       return Reflect.get(target, prop);
     },
   });
+}
+
+export function checkEvalStorageFields(traceObject: any, logger?: Logger) {
+  const missingFields = [];
+  if (!traceObject.input) missingFields.push('input');
+  if (!traceObject.output) missingFields.push('output');
+  if (!traceObject.agentName) missingFields.push('agent_name');
+  if (!traceObject.metricName) missingFields.push('metric_name');
+  if (!traceObject.instructions) missingFields.push('instructions');
+  if (!traceObject.globalRunId) missingFields.push('global_run_id');
+  if (!traceObject.runId) missingFields.push('run_id');
+
+  if (missingFields.length > 0) {
+    if (logger) {
+      logger.warn('Skipping evaluation storage due to missing required fields', {
+        missingFields,
+        runId: traceObject.runId,
+        agentName: traceObject.agentName,
+      });
+    } else {
+      console.warn('Skipping evaluation storage due to missing required fields', {
+        missingFields,
+        runId: traceObject.runId,
+        agentName: traceObject.agentName,
+      });
+    }
+    return false;
+  }
+
+  return true;
 }
