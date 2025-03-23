@@ -241,6 +241,21 @@ describe('agent', () => {
     expect(message).toBe('Executed successfully');
   }, 500000);
 
+  it('should call tool 6 times', async () => {
+    const agent = new Agent({
+      name: 'Test agent',
+      instructions: 'Test agent',
+      model: openai('gpt-4o'),
+      tools: integration.getStaticTools(),
+      defaultMaxSteps: 7,
+    });
+
+    const response = await agent.generate('Call testTool 10 times.', {
+      toolChoice: 'required',
+    });
+    expect(response.steps.length).toBe(7);
+  }, 500000);
+
   it('should properly sanitize incomplete tool calls from memory messages', () => {
     const agent = new Agent({
       name: 'Test agent',

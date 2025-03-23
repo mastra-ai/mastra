@@ -32,6 +32,7 @@ export interface AgentConfig<
   name: string;
   instructions: string;
   model: MastraLanguageModel;
+  defaultMaxSteps?: number;
   tools?: TTools;
   mastra?: Mastra;
   /** @deprecated This property is deprecated. Use evals instead to add evaluation metrics. */
