@@ -450,7 +450,7 @@ export function validateDependencies<TSchema extends ZodSchema | undefined>(
 }
 
 /**
- * Infers the type from a ZodSchema if provided, otherwise returns unknown.
+ * Infers the type from a ZodSchema if provided, otherwise returns the default type.
  *
  * @template T - The input type which might be a ZodSchema.
  * @template Default - The default type to return if the input is not a ZodSchema.
