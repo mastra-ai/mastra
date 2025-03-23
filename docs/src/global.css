@@ -33,7 +33,13 @@ html:is(html[class~="dark"] *) {
   position: absolute;
   left: 50%;
   transform: translateX(-50%);
+  gap: 0.5rem;
+  margin-top: 1px; /* Compensate for the border */
 }
+
+.nextra-nav-container nav > a:hover {
+  background: transparent !important;
+} /* Github button*/
 
 @media (max-width: 1024px) {
   .nextra-nav-container nav > div:nth-child(2) {
@@ -79,7 +85,7 @@ ul._inline-block {
   transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
   transition-duration: 0.15s;
   border-radius: 0.375rem;
-  font-size: 0.9rem;
+  font-size: 0.9rem !important;
   padding-top: 0.5rem;
   padding-bottom: 0.5rem;
   padding-left: 0.75rem;
@@ -220,7 +226,6 @@ div.nextra-scrollbar {
 nav a {
   padding-block: 8px;
   padding-inline: 16px;
-  font-size: 14px !important;
   font-weight: 500 !important;
 }
 

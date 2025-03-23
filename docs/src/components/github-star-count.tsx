@@ -6,7 +6,7 @@ export const GithubStarCount = () => {
   const stars = useFetchStars();
 
   return (
-    <div className="flex gap-1 items-center">
+    <div className="font-medium w-fit rounded-md opacity-90 transition-colors hover:opacity-100 flex items-center gap-2 justify-start pl-[7px] pr-2.5 py-2 h-[2.125rem] text-white text-sm">
       <svg
         width="37"
         height="37"
