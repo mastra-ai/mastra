@@ -241,7 +241,7 @@ describe('agent', () => {
     expect(message).toBe('Executed successfully');
   }, 500000);
 
-  it('should call tool 6 times', async () => {
+  it('should reach default max steps', async () => {
     const agent = new Agent({
       name: 'Test agent',
       instructions: 'Test agent',
