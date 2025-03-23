@@ -18,150 +18,273 @@ Human-in-the-loop workflows allow you to pause execution at specific points to c
 
 This pattern allows for safe, type-checked human intervention in automated workflows.
 
-## Basic Example
+## Interactive Terminal Example Using Inquirer
+
+This example demonstrates how to use the [Inquirer](https://www.npmjs.com/package/@inquirer/prompts) library to collect user input directly from the terminal when a workflow is suspended, creating a truly interactive human-in-the-loop experience.
 
 ```ts showLineNumbers copy
 import { Mastra } from '@mastra/core';
 import { Step, Workflow } from '@mastra/core/workflows';
 import { z } from 'zod';
+import { confirm, input, select } from '@inquirer/prompts';
 
-// Step 1: Process initial data
-const processData = new Step({
-  id: 'processData',
+// Step 1: Generate product recommendations
+const generateRecommendations = new Step({
+  id: 'generateRecommendations',
   outputSchema: z.object({
-    processedData: z.string(),
+    customerName: z.string(),
+    recommendations: z.array(
+      z.object({
+        productId: z.string(),
+        productName: z.string(),
+        price: z.number(),
+        description: z.string(),
+      }),
+    ),
   }),
   execute: async ({ context }) => {
-    const input = context.triggerData.input;
+    const customerName = context.triggerData.customerName;
+
+    // In a real application, you might call an API or ML model here
+    // For this example, we'll return mock data
     return {
-      processedData: `Processed: ${input}`
+      customerName,
+      recommendations: [
+        {
+          productId: 'prod-001',
+          productName: 'Premium Widget',
+          price: 99.99,
+          description: 'Our best-selling premium widget with advanced features',
+        },
+        {
+          productId: 'prod-002',
+          productName: 'Basic Widget',
+          price: 49.99,
+          description: 'Affordable entry-level widget for beginners',
+        },
+        {
+          productId: 'prod-003',
+          productName: 'Widget Pro Plus',
+          price: 149.99,
+          description: 'Professional-grade widget with extended warranty',
+        },
+      ],
     };
   },
 });
 
-// Step 2: Request human confirmation before proceeding
-const humanConfirmation = new Step({
-  id: 'humanConfirmation',
-  // This schema defines the structure of data that will be available in context.inputData
-  // when the workflow is resumed
+// Step 2: Get human approval and customization for the recommendations
+const reviewRecommendations = new Step({
+  id: 'reviewRecommendations',
   inputSchema: z.object({
-    userConfirmed: z.boolean().optional(),
+    approvedProducts: z.array(z.string()),
+    customerNote: z.string().optional(),
+    offerDiscount: z.boolean().optional(),
   }),
   outputSchema: z.object({
-    confirmationResult: z.boolean(),
+    finalRecommendations: z.array(
+      z.object({
+        productId: z.string(),
+        productName: z.string(),
+        price: z.number(),
+      }),
+    ),
+    customerNote: z.string().optional(),
+    offerDiscount: z.boolean(),
   }),
   execute: async ({ context, suspend }) => {
-    const processedData = context.getStepResult(processData)?.processedData;
-    // Access the input provided when resuming the workflow
-    const userConfirmed = context.inputData?.userConfirmed;
+    const { customerName, recommendations } = context.getStepResult(generateRecommendations) || {
+      customerName: '',
+      recommendations: [],
+    };
 
-    // If we don't have user confirmation yet, suspend the workflow
-    // with the processed data as payload
-    if (userConfirmed === undefined) {
-      console.log('Suspending workflow to get user confirmation');
+    // Check if we have input from a resumed workflow
+    const reviewInput = {
+      approvedProducts: context.inputData?.approvedProducts || [],
+      customerNote: context.inputData?.customerNote,
+      offerDiscount: context.inputData?.offerDiscount,
+    };
+
+    // If we don't have agent input yet, suspend for human review
+    if (!reviewInput.approvedProducts.length) {
+      console.log(`Generating recommendations for customer: ${customerName}`);
       await suspend({
-        processedData,
-        message: 'Please review the processed data and confirm to proceed',
+        customerName,
+        recommendations,
+        message: 'Please review these product recommendations before sending to the customer',
       });
 
-      // This return is just a placeholder as execution will stop at suspend()
-      return { confirmationResult: false };
+      // Placeholder return (won't be reached due to suspend)
+      return {
+        finalRecommendations: [],
+        customerNote: '',
+        offerDiscount: false,
+      };
     }
 
-    // If we have the user's input, we can proceed
-    console.log(`Resuming workflow with user confirmation: ${userConfirmed}`);
+    // Process the agent's product selections
+    const finalRecommendations = recommendations
+      .filter(product => reviewInput.approvedProducts.includes(product.productId))
+      .map(product => ({
+        productId: product.productId,
+        productName: product.productName,
+        price: product.price,
+      }));
+
     return {
-      confirmationResult: userConfirmed
+      finalRecommendations,
+      customerNote: reviewInput.customerNote || '',
+      offerDiscount: reviewInput.offerDiscount || false,
     };
   },
 });
 
-// Step 3: Final processing based on human input
-const finalizeProcess = new Step({
-  id: 'finalizeProcess',
+// Step 3: Send the recommendations to the customer
+const sendRecommendations = new Step({
+  id: 'sendRecommendations',
   outputSchema: z.object({
-    result: z.string(),
+    emailSent: z.boolean(),
+    emailContent: z.string(),
   }),
   execute: async ({ context }) => {
-    const processedData = context.getStepResult(processData)?.processedData;
-    const userConfirmed = context.getStepResult(humanConfirmation)?.confirmationResult;
+    const { customerName } = context.getStepResult(generateRecommendations) || { customerName: '' };
+    const { finalRecommendations, customerNote, offerDiscount } = context.getStepResult(reviewRecommendations) || {
+      finalRecommendations: [],
+      customerNote: '',
+      offerDiscount: false,
+    };
 
-    if (userConfirmed) {
-      return {
-        result: `${processedData} - Approved by user`
-      };
-    } else {
-      return {
-        result: `${processedData} - Rejected by user`
-      };
+    // Generate email content based on the recommendations
+    let emailContent = `Dear ${customerName},\n\nBased on your preferences, we recommend:\n\n`;
+
+    finalRecommendations.forEach(product => {
+      emailContent += `- ${product.productName}: $${product.price.toFixed(2)}\n`;
+    });
+
+    if (offerDiscount) {
+      emailContent += '\nAs a valued customer, use code SAVE10 for 10% off your next purchase!\n';
     }
+
+    if (customerNote) {
+      emailContent += `\nPersonal note: ${customerNote}\n`;
+    }
+
+    emailContent += '\nThank you for your business,\nThe Sales Team';
+
+    // In a real application, you would send this email
+    console.log('Email content generated:', emailContent);
+
+    return {
+      emailSent: true,
+      emailContent,
+    };
   },
 });
 
 // Build the workflow
-const humanInLoopWorkflow = new Workflow({
-  name: 'human-in-loop-workflow',
+const recommendationWorkflow = new Workflow({
+  name: 'product-recommendation-workflow',
   triggerSchema: z.object({
-    input: z.string(),
+    customerName: z.string(),
   }),
 });
 
-humanInLoopWorkflow
-  .step(processData)
-  .then(humanConfirmation)
-  .then(finalizeProcess)
-  .commit();
+recommendationWorkflow
+.step(generateRecommendations)
+.then(reviewRecommendations)
+.then(sendRecommendations)
+.commit();
 
 // Register the workflow
 const mastra = new Mastra({
-  workflows: { humanInLoopWorkflow },
+  workflows: { recommendationWorkflow },
 });
 
-// Example of using the workflow
-async function runWorkflowDemo() {
-  const registeredWorkflow = mastra.getWorkflow('humanInLoopWorkflow');
-  const { runId, start } = registeredWorkflow.createRun();
+// Example of using the workflow with Inquirer prompts
+async function runRecommendationWorkflow() {
+  const registeredWorkflow = mastra.getWorkflow('recommendationWorkflow');
+  const run = registeredWorkflow.createRun();
 
-  // Start the workflow
-  const result = await start({
+  console.log('Starting product recommendation workflow...');
+  const result = await run.start({
     triggerData: {
-      input: 'Sample data requiring human review'
-    }
+      customerName: 'Jane Smith',
+    },
   });
 
-  // The workflow will suspend at the humanConfirmation step
-  // Check the status to verify it's suspended
-  if (result.status === 'suspended' && result.suspendedStepId === 'humanConfirmation') {
-    console.log('Workflow suspended. Waiting for user input:', result.suspendPayload);
+  const isReviewStepSuspended = result.activePaths.get('reviewRecommendations')?.status === 'suspended';
 
-    // In a real application, you would show a UI or send a notification
-    // and wait for the user to provide their input
+  // Check if workflow is suspended for human review
+  if (isReviewStepSuspended) {
+    const { customerName, recommendations, message } = result.activePaths.get('reviewRecommendations')?.suspendPayload;
 
-    // Simulate user reviewing and confirming after a delay
-    console.log('User is reviewing the data...');
-    await new Promise(resolve => setTimeout(resolve, 2000));
-    console.log('User has reviewed and confirmed');
+    console.log('\n===================================');
+    console.log(message);
+    console.log(`Customer: ${customerName}`);
+    console.log('===================================\n');
 
-    // Resume the workflow with user confirmation
-    // This data will be available as context.inputData in the suspended step
-    const resumeResult = await humanInLoopWorkflow.resume({
-      runId,
-      stepId: 'humanConfirmation',
+    // Use Inquirer to collect input from the sales agent in the terminal
+    console.log('Available product recommendations:');
+    recommendations.forEach((product, index) => {
+      console.log(`${index + 1}. ${product.productName} - $${product.price.toFixed(2)}`);
+      console.log(`   ${product.description}\n`);
+    });
+
+    // Let the agent select which products to recommend
+    const approvedProducts = await checkbox({
+      message: 'Select products to recommend to the customer:',
+      choices: recommendations.map(product => ({
+        name: `${product.productName} ($${product.price.toFixed(2)})`,
+        value: product.productId,
+      })),
+    });
+
+    // Let the agent add a personal note
+    const includeNote = await confirm({
+      message: 'Would you like to add a personal note?',
+      default: false,
+    });
+
+    let customerNote = '';
+    if (includeNote) {
+      customerNote = await input({
+        message: 'Enter your personalized note for the customer:',
+      });
+    }
+
+    // Ask if a discount should be offered
+    const offerDiscount = await confirm({
+      message: 'Offer a 10% discount to this customer?',
+      default: false,
+    });
+
+    console.log('\nSubmitting your review...');
+
+    // Resume the workflow with the agent's input
+    const resumeResult = await run.resume({
+      stepId: 'reviewRecommendations',
       context: {
-        // This must match the inputSchema of the humanConfirmation step
-        userConfirmed: true
+        approvedProducts,
+        customerNote,
+        offerDiscount,
       },
     });
 
-    console.log('Workflow completed:', resumeResult.results);
+    console.log('\n===================================');
+    console.log('Workflow completed!');
+    console.log('Email content:');
+    console.log('===================================\n');
+    console.log(resumeResult?.results?.sendRecommendations || 'No email content generated');
+
     return resumeResult;
   }
 
   return result;
 }
 
-// Invoke the demo function
-runWorkflowDemo();
+// Invoke the workflow with interactive terminal input
+runRecommendationWorkflow().catch(console.error);
+
 ```
 
 ## Advanced Example with Multiple User Inputs
@@ -172,6 +295,7 @@ This example demonstrates a more complex workflow that requires multiple human i
 import { Mastra } from '@mastra/core';
 import { Step, Workflow } from '@mastra/core/workflows';
 import { z } from 'zod';
+import { select, input } from '@inquirer/prompts';
 
 // Step 1: Receive and analyze content
 const analyzeContent = new Step({
@@ -212,6 +336,7 @@ const moderateContent = new Step({
     moderatedContent: z.string(),
     notes: z.string().optional(),
   }),
+  // @ts-ignore
   execute: async ({ context, suspend }) => {
     const analysisResult = context.getStepResult(analyzeContent);
     // Access the input provided when resuming the workflow
@@ -354,48 +479,82 @@ const mastra = new Mastra({
   workflows: { contentModerationWorkflow },
 });
 
-// Example of using the workflow
+// Example of using the workflow with Inquirer prompts
 async function runModerationDemo() {
   const registeredWorkflow = mastra.getWorkflow('contentModerationWorkflow');
-  const { runId, start } = registeredWorkflow.createRun();
+  const run = registeredWorkflow.createRun();
 
   // Start the workflow with content that needs review
   console.log('Starting content moderation workflow...');
-  const result = await start({
+  const result = await run.start({
     triggerData: {
       content: 'This is some user-generated content that requires moderation.'
     }
   });
 
+  const isReviewStepSuspended = result.activePaths.get('moderateContent')?.status === 'suspended';
+
   // Check if workflow is suspended
-  if (result.status === 'suspended' && result.suspendedStepId === 'moderateContent') {
-    const suspendPayload = result.suspendPayload;
-    console.log('Content needs human review:', suspendPayload);
+  if (isReviewStepSuspended) {
+    const { content, aiScore, flaggedCategories, message } = result.activePaths.get('moderateContent')?.suspendPayload;
 
-    // In a real application, you would:
-    // 1. Display the content to a moderator in a UI
-    // 2. Send an email notification with a link to a moderation dashboard
-    // 3. Integrate with a ticketing system to assign the review task
+    console.log('\n===================================');
+    console.log(message);
+    console.log('===================================\n');
 
-    // Simulate a moderator reviewing and making a decision
-    console.log('Moderator is reviewing the content...');
-    await new Promise(resolve => setTimeout(resolve, 3000));
-    console.log('Moderator has completed review');
+    console.log('Content to review:');
+    console.log(content);
+    console.log(`\nAI Analysis Score: ${aiScore}`);
+    console.log(`Flagged Categories: ${flaggedCategories?.join(', ') || 'None'}\n`);
 
-    // Resume with the moderator's decision
-    // This data will be available as context.inputData in the suspended step
-    // and is validated against the step's inputSchema
-    const resumeResult = await contentModerationWorkflow.resume({
-      runId,
+    // Collect moderator decision using Inquirer
+    const moderatorDecision = await select({
+      message: 'Select your moderation decision:',
+      choices: [
+        { name: 'Approve content as is', value: 'approve' },
+        { name: 'Reject content completely', value: 'reject' },
+        { name: 'Modify content before publishing', value: 'modify' }
+      ],
+    });
+
+    // Collect additional information based on decision
+    let moderatorNotes = '';
+    let modifiedContent = '';
+
+    moderatorNotes = await input({
+      message: 'Enter any notes about your decision:',
+    });
+
+    if (moderatorDecision === 'modify') {
+      modifiedContent = await input({
+        message: 'Enter the modified content:',
+        default: content,
+      });
+    }
+
+    console.log('\nSubmitting your moderation decision...');
+
+    // Resume the workflow with the moderator's input
+    const resumeResult = await run.resume({
       stepId: 'moderateContent',
       context: {
-        moderatorDecision: 'modify',
-        moderatorNotes: 'Removed inappropriate language',
-        modifiedContent: 'This is the modified version of the content',
+        moderatorDecision,
+        moderatorNotes,
+        modifiedContent,
       },
     });
 
-    console.log('Moderation workflow completed:', resumeResult.results);
+    if (resumeResult?.results?.applyModeration?.status === 'success') {
+      console.log('\n===================================');
+      console.log(`Moderation complete: ${resumeResult?.results?.applyModeration?.output.finalStatus}`);
+      console.log('===================================\n');
+
+      if (resumeResult?.results?.applyModeration?.output.content) {
+        console.log('Published content:');
+        console.log(resumeResult.results.applyModeration.output.content);
+      }
+    }
+
     return resumeResult;
   }
 
@@ -411,7 +570,7 @@ function simulateContentAnalysis(content: string): number {
 }
 
 // Invoke the demo function
-runModerationDemo();
+runModerationDemo().catch(console.error);
 ```
 
 ## Key Concepts
@@ -435,10 +594,35 @@ runModerationDemo();
    }
    ```
 
-4. **Resuming Workflow** - Use the `resume()` method to continue workflow execution with human input:
+4. **Interactive Terminal Input** - Use libraries like Inquirer to create interactive prompts:
    ```ts
-   const resumeResult = await workflow.resume({
-     runId,
+   import { select, input, confirm } from '@inquirer/prompts';
+
+   // When the workflow is suspended
+   if (result.status === 'suspended') {
+     // Display information from the suspend payload
+     console.log(result.suspendPayload.message);
+
+     // Collect user input interactively
+     const decision = await select({
+       message: 'What would you like to do?',
+       choices: [
+         { name: 'Approve', value: 'approve' },
+         { name: 'Reject', value: 'reject' }
+       ]
+     });
+
+     // Resume the workflow with the collected input
+     await run.resume({
+       stepId: result.suspendedStepId,
+       context: { decision }
+     });
+   }
+   ```
+
+5. **Resuming Workflow** - Use the `resume()` method to continue workflow execution with human input:
+   ```ts
+   const resumeResult = await run.resume({
      stepId: 'suspendedStepId',
      context: {
        // This data is passed to the suspended step as context.inputData
@@ -448,7 +632,7 @@ runModerationDemo();
    });
    ```
 
-5. **Input Schema for Human Data** - Define an input schema on steps that might be resumed with human input to ensure type safety:
+6. **Input Schema for Human Data** - Define an input schema on steps that might be resumed with human input to ensure type safety:
    ```ts
    const myStep = new Step({
      id: 'myStep',
