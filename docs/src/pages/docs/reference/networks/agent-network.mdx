@@ -16,9 +16,12 @@ The `AgentNetwork` class provides a way to create a network of specialized agent
 - **Dynamic Decision Making**: The router decides which agent to call based on the task requirements
 
 ## Usage
+**Warning**: The AgentNetwork is currently available on pre-releases only, you will require the following package versions:
+    - @mastra/core: "0.6.4-alpha.0
+    - mastra: 0.4.3-alpha.1
 
 ```typescript
-import { AgentNetwork } from '@mastra/core';
+import { AgentNetwork } from '@mastra/core/network';
 import { openai } from '@mastra/openai';
 
 // Create specialized agents
