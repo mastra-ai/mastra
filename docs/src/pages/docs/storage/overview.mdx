@@ -3,6 +3,7 @@ title: Storage in Mastra | Mastra Docs
 description: Overview of Mastra's storage system and data persistence capabilities.
 ---
 
+import { Tabs } from "nextra/components";
 import { PropertiesTable } from '@/components/properties-table'
 import { SchemaTable } from '@/components/schema-table'
 
@@ -16,7 +17,7 @@ MastraStorage provides a unified interface for managing
 - Evaluation Datasets - as evaluations are run, the scores and reasons are stored in datasets.
 
 <img
-  src="/docs/mastra-storage.png"
+  src="/docs/mastra-storage-overview.png"
   alt="Diagram showing storage in Mastra"
   width={700}
 />
@@ -24,10 +25,8 @@ MastraStorage provides a unified interface for managing
 Mastra provides different storage providers, but you can treat them as interchangeable. Eg, you could use libsql in development but postgres in production, and your code will work the same both ways.
 ## Data Schema
 
-### Memory
-
-**Messages**
-
+<Tabs items={['Messages', 'Threads', 'Workflows', 'Evaluation Datasets', 'Traces']}>
+  <Tabs.Tab>
 Stores conversation messages and their metadata. Each message belongs to a thread and contains the actual content along with metadata about the sender role and message type.
 
 <SchemaTable
@@ -76,9 +75,8 @@ Stores conversation messages and their metadata. Each message belongs to a threa
     }
   ]}
 />
-
-**Threads**
-
+  </Tabs.Tab>
+  <Tabs.Tab>
 Groups related messages together and associates them with a resource. Contains metadata about the conversation.
 
 <SchemaTable
@@ -123,10 +121,9 @@ Groups related messages together and associates them with a resource. Contains m
     }
   ]}
 />
-
-## Workflows
-
-Preserves workflow execution states and enables resuming workflows:
+  </Tabs.Tab>
+  <Tabs.Tab>
+Preserves workflow execution states and enables resuming workflows.
 
 <SchemaTable
   columns={[
@@ -157,10 +154,9 @@ Preserves workflow execution states and enables resuming workflows:
     }
   ]}
 />
-
-### Evaluation Datasets
-
-Stores evaluation results from running metrics against agent outputs:
+  </Tabs.Tab>
+  <Tabs.Tab>
+Stores evaluation results from running metrics against agent outputs.
 
 <SchemaTable
   columns={[
@@ -216,10 +212,9 @@ Stores evaluation results from running metrics against agent outputs:
     }
   ]}
 />
-
-### Traces
-
-Captures OpenTelemetry traces for monitoring and debugging:
+  </Tabs.Tab>
+  <Tabs.Tab>
+Captures OpenTelemetry traces for monitoring and debugging.
 
 <SchemaTable
   columns={[
@@ -306,6 +301,8 @@ Captures OpenTelemetry traces for monitoring and debugging:
     }
   ]}
 />
+  </Tabs.Tab>
+</Tabs>
 
 ## Configuration
 
