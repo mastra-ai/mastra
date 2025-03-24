@@ -1,5 +1,11 @@
 # create-mastra
 
+## 0.2.2-alpha.1
+
+### Patch Changes
+
+- 77e4c35: Pop a dialog showing the functional condition when a functional condition is clicked on workflow graph
+
 ## 0.2.2-alpha.0
 
 ### Patch Changes

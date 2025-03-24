@@ -1,5 +1,13 @@
 # @mastra/evals
 
+## 0.1.13-alpha.1
+
+### Patch Changes
+
+- 6794797: Check for eval values before inserting into storage
+- Updated dependencies [6794797]
+  - @mastra/core@0.6.4-alpha.1
+
 ## 0.1.13-alpha.0
 
 ### Patch Changes

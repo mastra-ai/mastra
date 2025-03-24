@@ -67,4 +67,3 @@ export async function callTool(tool: any, args: any) {
 
   throw new Error('Unexpected response format');
 }
-
