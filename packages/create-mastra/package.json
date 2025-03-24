@@ -52,7 +52,7 @@
     "@types/fs-extra": "^11.0.4",
     "@types/node": "^20.17.27",
     "esbuild": "^0.24.2",
-    "eslint": "^9.22.0",
+    "eslint": "^9.23.0",
     "mastra": "workspace:^",
     "rollup": "^4.35.0",
     "rollup-plugin-esbuild": "^6.2.1",

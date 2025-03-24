@@ -114,7 +114,7 @@
     "@types/fs-extra": "^11.0.4",
     "@types/node": "^20.17.27",
     "concurrently": "^9.1.2",
-    "eslint": "^9.22.0",
+    "eslint": "^9.23.0",
     "hono-openapi": "^0.4.6",
     "rollup-plugin-visualizer": "^5.14.0",
     "superjson": "^2.2.2",

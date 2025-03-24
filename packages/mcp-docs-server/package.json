@@ -50,7 +50,7 @@
     "@types/node": "^20.11.24",
     "@types/turndown": "^5.0.5",
     "@wong2/mcp-cli": "^1.6.0",
-    "eslint": "^9.22.0",
+    "eslint": "^9.23.0",
     "hono": "^4.7.4",
     "tsup": "^8.4.0",
     "tsx": "^4.7.1",

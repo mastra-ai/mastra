@@ -64,7 +64,7 @@
     "@microsoft/api-extractor": "^7.52.1",
     "@types/node": "^20.17.27",
     "@types/pg": "^8.11.11",
-    "eslint": "^9.22.0",
+    "eslint": "^9.23.0",
     "tsup": "^8.4.0",
     "typescript": "^5.8.2",
     "typescript-eslint": "^8.26.1",

@@ -12,7 +12,7 @@
   "author": "",
   "license": "ISC",
   "devDependencies": {
-    "@types/express": "^5.0.0",
+    "@types/express": "^4.0.0",
     "@types/node": "^20.17.27",
     "concurrently": "^9.1.2",
     "dotenv": "^16.4.7",
