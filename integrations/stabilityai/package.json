@@ -72,7 +72,7 @@
   "license": "ISC",
   "dependencies": {
     "@mastra/core": "workspace:^",
-    "axios": "^1.8.2",
+    "axios": "^1.8.4",
     "zod": "^3.24.2"
   }
 }
