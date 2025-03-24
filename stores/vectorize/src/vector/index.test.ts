@@ -305,6 +305,7 @@ describe('CloudflareVector', () => {
 
       it('should delete the vector by id', async () => {
         const ids = await vectorDB.upsert({ indexName, vectors: testVectors });
+        await waitUntilVectorsIndexed(vectorDB, indexName, testVectors.length);
         expect(ids).toHaveLength(3);
         const idToBeDeleted = ids[0];
 

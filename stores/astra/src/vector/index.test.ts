@@ -1263,8 +1263,8 @@ describe('AstraVector Integration Tests', () => {
       expect(updatedResult?.vector).toEqual(newVector);
     });
 
-    it('should throw exception when no updates are given', () => {
-      expect(vectorDB.updateIndexById(indexName, 'id', {})).rejects.toThrow('No updates provided');
+    it('should throw exception when no updates are given', async () => {
+      await expect(vectorDB.updateIndexById(indexName, 'id', {})).rejects.toThrow('No updates provided');
     });
 
     it('should delete the vector by id', async () => {
