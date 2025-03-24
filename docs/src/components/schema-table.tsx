@@ -61,7 +61,7 @@ export const SchemaTable: React.FC<SchemaTableProps> = ({ columns = [] }) => {
                   ? `FK → ${constraint.value}`
                   : constraint.type === "nullable"
                     ? constraint.value === false
-                      ? "CAN NOT BE NULL"
+                      ? "NOT NULL"
                       : "CAN BE NULL"
                     : constraint.type.toUpperCase()}
             </div>
