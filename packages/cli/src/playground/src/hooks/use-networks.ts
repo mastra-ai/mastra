@@ -1,14 +1,11 @@
 import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
-import { GetNetworkResponse, MastraClient } from '@mastra/client-js';
+import { GetNetworkResponse } from '@mastra/client-js';
+import { client } from '@/lib/client';
 
 export const useNetworks = () => {
   const [networks, setNetworks] = useState<GetNetworkResponse[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-
-  const client = new MastraClient({
-    baseUrl: '',
-  });
 
   useEffect(() => {
     const fetchNetworks = async () => {
@@ -34,10 +31,6 @@ export const useNetworks = () => {
 export const useNetwork = (networkId: string) => {
   const [network, setNetwork] = useState<GetNetworkResponse | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-
-  const client = new MastraClient({
-    baseUrl: '',
-  });
 
   useEffect(() => {
     const fetchNetwork = async () => {

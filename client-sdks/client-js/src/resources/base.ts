@@ -31,6 +31,7 @@ export class BaseResource {
             ...defaultHeaders,
             ...headers,
             ...options.headers,
+            'x-mastra-client-type': 'js',
           },
           body:
             options.body instanceof FormData ? options.body : options.body ? JSON.stringify(options.body) : undefined,
