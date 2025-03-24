@@ -3,7 +3,7 @@
   "version": "0.0.1",
   "private": true,
   "devDependencies": {
-    "globby": "^14.0.1",
+    "globby": "^14.1.0",
     "resolve.exports": "^2.0.3",
     "vitest": "^3.0.7"
   },
