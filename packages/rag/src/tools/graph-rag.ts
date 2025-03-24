@@ -46,13 +46,13 @@ export const createGraphRAGTool = ({
 
   const baseSchema = {
     queryText: z.string().describe(queryTextDescription),
-    topK: z.any().describe(topKDescription),
+    topK: z.coerce.number().describe(topKDescription),
   };
   const inputSchema = enableFilter
     ? z
         .object({
           ...baseSchema,
-          filter: z.string().describe(filterDescription),
+          filter: z.coerce.string().describe(filterDescription),
         })
         .passthrough()
     : z.object(baseSchema).passthrough();
@@ -70,7 +70,8 @@ export const createGraphRAGTool = ({
           : typeof topK === 'string' && !isNaN(Number(topK))
             ? Number(topK)
             : 10;
-      const vectorStore = mastra?.vectors?.[vectorStoreName];
+      const vectorStore = mastra?.getVector(vectorStoreName);
+      const logger = mastra?.getLogger();
 
       if (vectorStore) {
         let queryFilter = {};
@@ -80,15 +81,15 @@ export const createGraphRAGTool = ({
               return typeof filter === 'string' ? JSON.parse(filter) : filter;
             } catch (error) {
               // Log the error and use empty object
-              if (mastra.logger) {
-                mastra.logger.warn('Failed to parse filter as JSON, using empty filter', { filter, error });
+              if (logger) {
+                logger.warn('Failed to parse filter as JSON, using empty filter', { filter, error });
               }
               return {};
             }
           })();
         }
-        if (mastra.logger) {
-          mastra.logger.debug('Using this filter and topK:', { queryFilter, topK: topKValue });
+        if (logger) {
+          logger.debug('Using this filter and topK:', { queryFilter, topK: topKValue });
         }
         const { results, queryEmbedding } = await vectorQuerySearch({
           indexName,
