@@ -1196,9 +1196,12 @@ describe('AstraVector Integration Tests', () => {
         includeVector: true,
       });
 
-      expect(results[0]?.id).toEqual(idToBeUpdated);
-      expect(results[0]?.vector).toEqual(newVector);
-      expect(results[0]?.metadata).toEqual(newMetaData);
+      expect(results).toHaveLength(2);
+      const updatedResult = results.find(result => result.id === idToBeUpdated);
+      expect(updatedResult).toBeDefined();
+      expect(updatedResult?.id).toEqual(idToBeUpdated);
+      expect(updatedResult?.vector).toEqual(newVector);
+      expect(updatedResult?.metadata).toEqual(newMetaData);
     });
 
     it('should only update the metadata by id', async () => {
@@ -1224,9 +1227,12 @@ describe('AstraVector Integration Tests', () => {
         includeVector: true,
       });
 
-      expect(results[0]?.id).toEqual(idToBeUpdated);
-      expect(results[0]?.vector).toEqual(testVectors[0]);
-      expect(results[0]?.metadata).toEqual(newMetaData);
+      expect(results).toHaveLength(2);
+      const updatedResult = results.find(result => result.id === idToBeUpdated);
+      expect(updatedResult).toBeDefined();
+      expect(updatedResult?.id).toEqual(idToBeUpdated);
+      expect(updatedResult?.vector).toEqual(testVectors[0]);
+      expect(updatedResult?.metadata).toEqual(newMetaData);
     });
 
     it('should only update vector embeddings by id', async () => {
@@ -1250,8 +1256,11 @@ describe('AstraVector Integration Tests', () => {
         includeVector: true,
       });
 
-      expect(results[0]?.id).toEqual(idToBeUpdated);
-      expect(results[0]?.vector).toEqual(newVector);
+      expect(results).toHaveLength(2);
+      const updatedResult = results.find(result => result.id === idToBeUpdated);
+      expect(updatedResult).toBeDefined();
+      expect(updatedResult?.id).toEqual(idToBeUpdated);
+      expect(updatedResult?.vector).toEqual(newVector);
     });
 
     it('should throw exception when no updates are given', () => {
