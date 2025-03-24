@@ -1,5 +1,16 @@
 # @mastra/upstash
 
+## 0.2.0-alpha.1
+
+### Minor Changes
+
+- c0b2496: Added new operations implementations for MastraVector methods in upstash store
+
+### Patch Changes
+
+- Updated dependencies [6794797]
+  - @mastra/core@0.6.4-alpha.1
+
 ## 0.1.13-alpha.0
 
 ### Patch Changes

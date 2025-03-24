@@ -1,5 +1,16 @@
 # @mastra/deployer-cloudflare
 
+## 0.1.13-alpha.1
+
+### Patch Changes
+
+- 85a2461: Fix cloudflare deployer
+- Updated dependencies [6794797]
+- Updated dependencies [709aa2c]
+- Updated dependencies [85a2461]
+  - @mastra/core@0.6.4-alpha.1
+  - @mastra/deployer@0.2.4-alpha.1
+
 ## 0.1.13-alpha.0
 
 ### Patch Changes

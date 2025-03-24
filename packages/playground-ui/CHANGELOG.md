@@ -1,5 +1,14 @@
 # @mastra/playground-ui
 
+## 2.0.4-alpha.1
+
+### Patch Changes
+
+- 77e4c35: Pop a dialog showing the functional condition when a functional condition is clicked on workflow graph
+- Updated dependencies [6794797]
+  - @mastra/core@0.6.4-alpha.1
+  - @mastra/client-js@0.1.12-alpha.1
+
 ## 2.0.4-alpha.0
 
 ### Patch Changes

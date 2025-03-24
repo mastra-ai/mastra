@@ -1,5 +1,17 @@
 # mastra
 
+## 0.4.3-alpha.2
+
+### Patch Changes
+
+- 6794797: Check for eval values before inserting into storage
+- 77e4c35: Pop a dialog showing the functional condition when a functional condition is clicked on workflow graph
+- Updated dependencies [6794797]
+- Updated dependencies [709aa2c]
+- Updated dependencies [85a2461]
+  - @mastra/core@0.6.4-alpha.1
+  - @mastra/deployer@0.2.4-alpha.1
+
 ## 0.4.3-alpha.1
 
 ### Patch Changes

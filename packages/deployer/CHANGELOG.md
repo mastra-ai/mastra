@@ -1,5 +1,14 @@
 # @mastra/deployer
 
+## 0.2.4-alpha.1
+
+### Patch Changes
+
+- 709aa2c: fix building externals
+- 85a2461: Fix cloudflare deployer
+- Updated dependencies [6794797]
+  - @mastra/core@0.6.4-alpha.1
+
 ## 0.2.4-alpha.0
 
 ### Patch Changes
