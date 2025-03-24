@@ -1,6 +1,6 @@
 {
   "name": "@mastra/core",
-  "version": "0.6.4-alpha.1",
+  "version": "0.6.4",
   "license": "ISC",
   "type": "module",
   "main": "dist/index.js",

@@ -1,5 +1,16 @@
 # @mastra/astra
 
+## 0.2.5
+
+### Patch Changes
+
+- b56a681: Update README and some tests for vector stores
+- Updated dependencies [6794797]
+- Updated dependencies [fb68a80]
+- Updated dependencies [b56a681]
+- Updated dependencies [248cb07]
+  - @mastra/core@0.6.4
+
 ## 0.2.5-alpha.1
 
 ### Patch Changes
