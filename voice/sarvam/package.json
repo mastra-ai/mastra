@@ -1,6 +1,6 @@
 {
   "name": "@mastra/voice-sarvam",
-  "version": "0.1.3-alpha.0",
+  "version": "0.1.3",
   "description": "Mastra Sarvam AI voice integration",
   "type": "module",
   "files": [

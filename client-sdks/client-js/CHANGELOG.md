@@ -1,5 +1,25 @@
 # @mastra/client-js
 
+## 0.1.12
+
+### Patch Changes
+
+- 05ef3e0: Support voice for mastra client
+- 248cb07: Allow ai-sdk Message type for messages in agent generate and stream
+  Fix sidebar horizontal overflow in playground
+- Updated dependencies [6794797]
+- Updated dependencies [fb68a80]
+- Updated dependencies [b56a681]
+- Updated dependencies [248cb07]
+  - @mastra/core@0.6.4
+
+## 0.1.12-alpha.1
+
+### Patch Changes
+
+- Updated dependencies [6794797]
+  - @mastra/core@0.6.4-alpha.1
+
 ## 0.1.12-alpha.0
 
 ### Patch Changes

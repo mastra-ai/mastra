@@ -1,5 +1,6 @@
 {
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "rangeStrategy": "bump",
   "extends": [
     "config:recommended",
     ":dependencyDashboard",
@@ -27,7 +28,7 @@
     {
       "groupName": "AI SDK",
       "commitMessageTopic": "AI SDK",
-      "matchFileNames": ["+(package.json)", "**/package.json", "!./examples/**", "!./docs/**"],
+      "matchFileNames": ["+(package.json)", "**/package.json", "!./docs/**"],
       "matchPackageNames": ["ai", "^@ai-sdk/"],
       "matchUpdateTypes": ["major", "minor", "patch"],
       "matchDepTypes": ["dependencies", "devDependencies"],

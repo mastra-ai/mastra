@@ -1,6 +1,6 @@
 {
   "name": "@mastra/deployer",
-  "version": "0.2.4-alpha.0",
+  "version": "0.2.4",
   "description": "",
   "type": "module",
   "files": [

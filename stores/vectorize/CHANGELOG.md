@@ -1,5 +1,30 @@
 # @mastra/vectorize
 
+## 0.2.0
+
+### Minor Changes
+
+- 1cd2e3f: Added new operation impls for MastraVector in vectorize store
+
+### Patch Changes
+
+- Updated dependencies [6794797]
+- Updated dependencies [fb68a80]
+- Updated dependencies [b56a681]
+- Updated dependencies [248cb07]
+  - @mastra/core@0.6.4
+
+## 0.2.0-alpha.1
+
+### Minor Changes
+
+- 1cd2e3f: Added new operation impls for MastraVector in vectorize store
+
+### Patch Changes
+
+- Updated dependencies [6794797]
+  - @mastra/core@0.6.4-alpha.1
+
 ## 0.1.13-alpha.0
 
 ### Patch Changes
