@@ -1,5 +1,16 @@
 # @mastra/mcp-docs-server
 
+## 0.0.4
+
+### Patch Changes
+
+- 9b05d4e: Added explicit error handling for bad blog post fetches
+- Updated dependencies [6794797]
+- Updated dependencies [fb68a80]
+- Updated dependencies [b56a681]
+- Updated dependencies [248cb07]
+  - @mastra/core@0.6.4
+
 ## 0.0.4-alpha.1
 
 ### Patch Changes

@@ -1,5 +1,21 @@
 # @mastra/deployer
 
+## 0.2.4
+
+### Patch Changes
+
+- e764fd1: Fix telemetry when side-effects are added to the mastra file
+- 709aa2c: fix building externals
+- e764fd1: Fix deployer when side-effects are added to the mastra file
+- 05ef3e0: Support voice for mastra client
+- 95c5745: Fix symlink resolving and externals
+- 85a2461: Fix cloudflare deployer
+- Updated dependencies [6794797]
+- Updated dependencies [fb68a80]
+- Updated dependencies [b56a681]
+- Updated dependencies [248cb07]
+  - @mastra/core@0.6.4
+
 ## 0.2.4-alpha.1
 
 ### Patch Changes
