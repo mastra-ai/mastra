@@ -1,4 +1,4 @@
-import type { CoreMessage, LanguageModel, Schema } from 'ai';
+import type { CoreMessage, CoreToolMessage, LanguageModel, Schema, ToolInvocation, ToolResultPart } from 'ai';
 import { generateObject, generateText, jsonSchema, Output, streamObject, streamText } from 'ai';
 import type { JSONSchema7 } from 'json-schema';
 import type { ZodSchema } from 'zod';
@@ -14,12 +14,13 @@ import type {
   StreamReturn,
 } from '../';
 import type { MastraPrimitives } from '../../action';
-import type { ToolsInput } from '../../agent/types';
+import type { AiMessageType, ToolsInput } from '../../agent/types';
+import type { Mastra } from '../../mastra';
+import type { MessageType } from '../../memory';
 import type { MastraMemory } from '../../memory/memory';
 import type { CoreTool } from '../../tools';
 import { createMastraProxy, delay, makeCoreTool } from '../../utils';
 
-import type { Mastra } from '../../mastra';
 import { MastraLLMBase } from './base';
 
 export class MastraLLM extends MastraLLMBase {
@@ -190,7 +191,7 @@ export class MastraLLM extends MastraLLMBase {
     }
 
     return await generateText({
-      messages,
+      messages: this.convertToUIMessages(messages),
       ...argsForExecute,
       experimental_telemetry: {
         ...this.experimental_telemetry,
@@ -271,7 +272,7 @@ export class MastraLLM extends MastraLLMBase {
     }
 
     return await generateObject({
-      messages,
+      messages: this.convertToUIMessages(messages),
       ...argsForExecute,
       output: output as any,
       schema,
@@ -372,8 +373,8 @@ export class MastraLLM extends MastraLLMBase {
       }
     }
 
-    return await streamText({
-      messages,
+    return streamText({
+      messages: this.convertToUIMessages(messages),
       ...argsForExecute,
       experimental_telemetry: {
         ...this.experimental_telemetry,
@@ -475,7 +476,7 @@ export class MastraLLM extends MastraLLMBase {
     }
 
     return streamObject({
-      messages,
+      messages: this.convertToUIMessages(messages),
       ...argsForExecute,
       output: output as any,
       schema,
@@ -564,7 +565,7 @@ export class MastraLLM extends MastraLLMBase {
     }
 
     return (await this.__streamObject({
-      messages: msgs as CoreMessage[],
+      messages: msgs,
       structuredOutput: output,
       onStepFinish,
       onFinish,
@@ -576,5 +577,95 @@ export class MastraLLM extends MastraLLMBase {
       telemetry,
       ...rest,
     })) as unknown as StreamReturn<Z>;
+  }
+
+  protected convertToUIMessages(messages: CoreMessage[]): AiMessageType[] {
+    function addToolMessageToChat({
+      toolMessage,
+      messages,
+      toolResultContents,
+    }: {
+      toolMessage: CoreToolMessage;
+      messages: Array<AiMessageType>;
+      toolResultContents: Array<ToolResultPart>;
+    }): { chatMessages: Array<AiMessageType>; toolResultContents: Array<ToolResultPart> } {
+      const chatMessages = messages.map(message => {
+        if (message.toolInvocations) {
+          return {
+            ...message,
+            toolInvocations: message.toolInvocations.map(toolInvocation => {
+              const toolResult = toolMessage.content.find(tool => tool.toolCallId === toolInvocation.toolCallId);
+
+              if (toolResult) {
+                return {
+                  ...toolInvocation,
+                  state: 'result',
+                  result: toolResult.result,
+                };
+              }
+
+              return toolInvocation;
+            }),
+          };
+        }
+
+        return message;
+      }) as Array<AiMessageType>;
+
+      const resultContents = [...toolResultContents, ...toolMessage.content];
+
+      return { chatMessages, toolResultContents: resultContents };
+    }
+
+    const { chatMessages } = messages.reduce(
+      (obj: { chatMessages: Array<AiMessageType>; toolResultContents: Array<ToolResultPart> }, message) => {
+        if (message.role === 'tool') {
+          return addToolMessageToChat({
+            toolMessage: message as CoreToolMessage,
+            messages: obj.chatMessages,
+            toolResultContents: obj.toolResultContents,
+          });
+        }
+
+        let textContent = '';
+        let toolInvocations: Array<ToolInvocation> = [];
+
+        if (typeof message.content === 'string') {
+          textContent = message.content;
+        } else if (typeof message.content === 'number') {
+          textContent = String(message.content);
+        } else if (Array.isArray(message.content)) {
+          for (const content of message.content) {
+            if (content.type === 'text') {
+              textContent += content.text;
+            } else if (content.type === 'tool-call') {
+              const toolResult = obj.toolResultContents.find(tool => tool.toolCallId === content.toolCallId);
+              toolInvocations.push({
+                state: toolResult ? 'result' : 'call',
+                toolCallId: content.toolCallId,
+                toolName: content.toolName,
+                args: content.args,
+                result: toolResult?.result,
+              });
+            }
+          }
+        }
+
+        obj.chatMessages.push({
+          id: (message as MessageType).id,
+          role: message.role as AiMessageType['role'],
+          content: textContent,
+          toolInvocations,
+        });
+
+        return obj;
+      },
+      { chatMessages: [], toolResultContents: [] } as {
+        chatMessages: Array<AiMessageType>;
+        toolResultContents: Array<ToolResultPart>;
+      },
+    );
+
+    return chatMessages;
   }
 }
