@@ -3690,7 +3690,7 @@ describe('Workflow', async () => {
         expect(results['last-step']).toEqual(undefined);
 
         vi.clearAllMocks();
-        const resumedResults = await run.resume({ stepId: 'nested-workflow-a', context: { startValue: 1 } });
+        const resumedResults = await run.resume({ stepId: 'nested-workflow-a', context: { startValue: 0 } });
 
         // @ts-ignore
         expect(resumedResults.results['nested-workflow-a'].output.results).toEqual({
