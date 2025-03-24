@@ -22,6 +22,8 @@ const analytics = new PosthogAnalytics({
 
 const program = new Command();
 
+const origin = process.env.MASTRA_ANALYTICS_ORIGIN as 'mastra-cloud' | 'oss';
+
 program
   .version(`${version}`, '-v, --version')
   .description(`Mastra CLI ${version}`)
@@ -29,6 +31,7 @@ program
     try {
       analytics.trackCommand({
         command: 'version',
+        origin,
       });
       console.log(`Mastra CLI: ${version}`);
     } catch {
@@ -73,6 +76,7 @@ program
           projectName: args.projectName,
         });
       },
+      origin,
     });
   });
 
@@ -122,6 +126,7 @@ program
         });
         return;
       },
+      origin,
     });
   });
 
@@ -135,6 +140,7 @@ program
   .action(args => {
     analytics.trackCommand({
       command: 'dev',
+      origin,
     });
     dev({
       port: args?.port ? parseInt(args.port) : 4111,
@@ -157,6 +163,7 @@ program
       execution: async () => {
         await build({ dir: args.dir });
       },
+      origin,
     });
   });
 
@@ -171,6 +178,7 @@ program
       execution: async () => {
         await deploy({ dir: args.dir });
       },
+      origin,
     });
   });
 
