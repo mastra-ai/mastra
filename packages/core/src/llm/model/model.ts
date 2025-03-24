@@ -373,7 +373,7 @@ export class MastraLLM extends MastraLLMBase {
       }
     }
 
-    return streamText({
+    return await streamText({
       messages: this.convertToUIMessages(messages),
       ...argsForExecute,
       experimental_telemetry: {
