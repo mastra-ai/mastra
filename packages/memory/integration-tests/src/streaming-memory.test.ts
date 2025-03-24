@@ -1,4 +1,6 @@
+import { spawn } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
+import { createServer } from 'node:net';
 import { openai } from '@ai-sdk/openai';
 import { useChat } from '@ai-sdk/react';
 import { Agent } from '@mastra/core/agent';
@@ -7,8 +9,20 @@ import { Memory } from '@mastra/memory';
 import { renderHook, act, waitFor } from '@testing-library/react';
 import type { Message } from 'ai';
 import { JSDOM } from 'jsdom';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, afterEach, beforeEach } from 'vitest';
 import { z } from 'zod';
+
+// Helper to find an available port
+async function getAvailablePort(): Promise<number> {
+  return new Promise((resolve, reject) => {
+    const server = createServer();
+    server.listen(0, () => {
+      const { port } = server.address() as { port: number };
+      server.close(() => resolve(port));
+    });
+    server.on('error', reject);
+  });
+}
 
 // Set up JSDOM environment for React testing
 const dom = new JSDOM('<!doctype html><html><body></body></html>', {
@@ -96,16 +110,54 @@ describe('Memory Streaming Tests', () => {
   });
 
   describe('should stream via useChat after tool call', () => {
+    let mastraServer: ReturnType<typeof spawn>;
+    let port: number;
     const threadId = randomUUID();
     const resourceId = 'test-resource';
 
-    it.only('should stream via useChat after tool call', async () => {
+    beforeEach(async () => {
+      port = await getAvailablePort();
+
+      mastraServer = spawn('pnpm', ['mastra', 'dev', '--port', port.toString()], {
+        stdio: 'pipe',
+        detached: true, // Run in a new process group so we can kill it and children
+      });
+
+      // Wait for server to be ready
+      await new Promise<void>((resolve, reject) => {
+        let output = '';
+        mastraServer.stdout?.on('data', data => {
+          output += data.toString();
+          console.log(output);
+          if (output.includes('http://localhost:')) {
+            resolve();
+          }
+        });
+        mastraServer.stderr?.on('data', data => {
+          console.error('Mastra server error:', data.toString());
+        });
+
+        setTimeout(() => reject(new Error('Mastra server failed to start')), 10000);
+      });
+    });
+
+    afterEach(() => {
+      // Kill the server and its process group
+      if (mastraServer?.pid) {
+        try {
+          process.kill(-mastraServer.pid, 'SIGTERM');
+        } catch (e) {
+          console.error('Failed to kill Mastra server:', e);
+        }
+      }
+    });
+
+    it('should stream via useChat after tool call', async () => {
       let error: Error | null = null;
       const { result } = renderHook(() => {
         const chat = useChat({
-          api: `http://localhost:4111/api/agents/test/stream`,
+          api: `http://localhost:${port}/api/agents/test/stream`,
           experimental_prepareRequestBody({ messages }: { messages: Message[]; id: string }) {
-            // console.log('useChat preparing request:', { messages, id, threadId, resourceId });
             return {
               messages,
               threadId,
@@ -123,19 +175,13 @@ describe('Memory Streaming Tests', () => {
         return chat;
       });
 
-      // console.log('Initial messages:', result.current.messages);
-
       // Trigger weather tool
       await act(async () => {
-        // console.log('Sending weather request');
         await result.current.append({
           role: 'user',
           content: 'what is the weather in Los Angeles?',
         });
-        // console.log('Message appended');
       });
-
-      // console.log('After append messages:', result.current.messages);
 
       expect(error).toBeNull();
       await waitFor(
@@ -168,7 +214,6 @@ describe('Memory Streaming Tests', () => {
       );
 
       expect(error).toBeNull();
-      // console.log(`final messages`, result.current.messages);
     });
   });
 });
