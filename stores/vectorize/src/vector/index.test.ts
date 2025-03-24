@@ -252,7 +252,7 @@ describe('CloudflareVector', () => {
         expect(updatedResult?.vector).toEqual(newVector);
       }, 500000);
 
-      it.only('should only update vector embeddings by id', async () => {
+      it('should only update vector embeddings by id', async () => {
         const ids = await vectorDB.upsert({ indexName, vectors: testVectors });
         expect(ids).toHaveLength(3);
 
@@ -303,7 +303,7 @@ describe('CloudflareVector', () => {
         }
       });
 
-      it.only('should delete the vector by id', async () => {
+      it('should delete the vector by id', async () => {
         const ids = await vectorDB.upsert({ indexName, vectors: testVectors });
         expect(ids).toHaveLength(3);
         const idToBeDeleted = ids[0];
