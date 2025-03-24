@@ -1,15 +1,13 @@
 import { randomUUID } from 'node:crypto';
 import { openai } from '@ai-sdk/openai';
 import { useChat } from '@ai-sdk/react';
-import { serve } from '@hono/node-server';
 import { Agent } from '@mastra/core/agent';
 import { createTool } from '@mastra/core/tools';
 import { Memory } from '@mastra/memory';
 import { renderHook, act, waitFor } from '@testing-library/react';
 import type { Message } from 'ai';
-import { Hono } from 'hono';
 import { JSDOM } from 'jsdom';
-import { describe, expect, it, afterEach } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
 
 // Set up JSDOM environment for React testing
@@ -25,11 +23,6 @@ global.navigator = dom.window.navigator;
 global.fetch = global.fetch || fetch;
 
 describe('Memory Streaming Tests', () => {
-  // Add delay after each test
-  afterEach(() => {
-    return new Promise(resolve => setTimeout(resolve, 2000));
-  });
-
   it('should stream after tool call with memory only', async () => {
     const memory = new Memory({
       options: {
@@ -103,157 +96,68 @@ describe('Memory Streaming Tests', () => {
   });
 
   describe('should stream via useChat after tool call', () => {
-    let server: ReturnType<typeof serve>;
     const threadId = randomUUID();
     const resourceId = 'test-resource';
 
-    afterEach(() => {
-      if (server) {
-        server.close();
-      }
-    });
-
     it.only('should stream via useChat after tool call', async () => {
-      // Create memory instance
-      const memory = new Memory({
-        options: {
-          workingMemory: {
-            enabled: true,
-            use: 'tool-call',
-          },
-        },
-      });
-
-      // Create test tools
-      const weatherTool = createTool({
-        id: 'get_weather',
-        description: 'Get the weather for a given location',
-        inputSchema: z.object({
-          postalCode: z.string().describe('The location to get the weather for'),
-        }),
-        execute: async ({ context: { postalCode } }) => {
-          console.log(`tool call!`);
-          return `The weather in ${postalCode} is sunny. It is currently 70 degrees and feels like 65 degrees.`;
-        },
-      });
-
-      // Create agent with memory and tools
-      const agent = new Agent({
-        name: 'test',
-        instructions:
-          'You are a weather agent. When asked about weather in any city, use the get_weather tool with the city name as the postal code.',
-        model: openai('gpt-4o'),
-        memory,
-        tools: { get_weather: weatherTool },
-      });
-
-      // Set up Hono server
-      const app = new Hono();
-
-      app.use('*', async (c, next) => {
-        console.log('Incoming request:', c.req.method, c.req.url);
-        await next();
-      });
-
-      // Add chat endpoint
-      app.post('/api/chat/', async c => {
-        console.log('Chat endpoint hit');
-        const body = await c.req.json();
-        const { messages, threadId, resourceId } = body;
-
-        // Get last message
-        const lastMessage = messages[messages.length - 1];
-        console.log('Processing message:', lastMessage);
-
-        // Stream response
-        const stream = await agent.stream(lastMessage.content, {
-          threadId,
-          resourceId,
-        });
-
-        console.log('Agent stream created');
-
-        return new Response(stream.toDataStream(), {
-          headers: {
-            'Content-Type': 'text/event-stream',
-            'Cache-Control': 'no-cache',
-            Connection: 'keep-alive',
-          },
-        });
-      });
-
-      // Start server
-      server = serve({
-        fetch: app.fetch,
-        port: 0,
-      });
-
-      // Get the actual port
-      const port = (server.address() as { port: number }).port;
-      console.log('Server started on port:', port);
-
+      let error: Error | null = null;
       const { result } = renderHook(() => {
         const chat = useChat({
-          api: `http://localhost:${port}/api/chat/`,
-          experimental_prepareRequestBody({ messages, id }: { messages: Message[]; id: string }) {
-            console.log('useChat preparing request:', { messages, id });
+          api: `http://localhost:4111/api/agents/test/stream`,
+          experimental_prepareRequestBody({ messages }: { messages: Message[]; id: string }) {
+            // console.log('useChat preparing request:', { messages, id, threadId, resourceId });
             return {
               messages,
               threadId,
               resourceId,
             };
           },
-          // onResponse(response) {
-          // console.log('useChat received response:', response);
-          // },
-          onFinish(message) {
-            console.log('useChat finished:', message);
+          onFinish(_message) {
+            // console.log('useChat finished:', _message);
           },
-          onError(error) {
+          onError(e) {
+            error = e;
             console.error('useChat error:', error);
           },
         });
-        // console.log('useChat hook result:', chat);
         return chat;
       });
 
-      console.log('Initial messages:', result.current.messages);
+      // console.log('Initial messages:', result.current.messages);
 
       // Trigger weather tool
       await act(async () => {
-        console.log('Sending weather request');
+        // console.log('Sending weather request');
         await result.current.append({
-          id: '1',
           role: 'user',
-          content: 'what is the weather in LA?',
+          content: 'what is the weather in Los Angeles?',
         });
-        console.log('Message appended');
+        // console.log('Message appended');
       });
 
-      console.log('After append messages:', result.current.messages);
+      // console.log('After append messages:', result.current.messages);
 
-      // Wait for first response
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      expect(error).toBeNull();
       await waitFor(
         () => {
           expect(result.current.messages).toHaveLength(2);
-          expect(result.current.messages[1].content).toContain('LA');
+          expect(result.current.messages[1].content).toContain('Los Angeles');
           expect(result.current.messages[1].content).toContain('70 degrees');
         },
         { timeout: 5000 },
       );
 
+      expect(error).toBeNull();
+
       // Send another message
       await act(async () => {
         await result.current.append({
-          id: '2',
           role: 'user',
           content: 'what is the weather in Seattle?',
         });
       });
 
-      // Wait for second response
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      expect(error).toBeNull();
       await waitFor(
         () => {
           expect(result.current.messages).toHaveLength(4);
@@ -263,7 +167,8 @@ describe('Memory Streaming Tests', () => {
         { timeout: 5000 },
       );
 
-      console.log(`final messages`, result.current.messages);
+      expect(error).toBeNull();
+      // console.log(`final messages`, result.current.messages);
     });
   });
 });
