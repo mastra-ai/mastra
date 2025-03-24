@@ -1,5 +1,11 @@
 # @mastra/rag
 
+## 0.1.13-alpha.2
+
+### Patch Changes
+
+- ac30427: Updated inputschema for vectorquery tool
+
 ## 0.1.13-alpha.1
 
 ### Patch Changes
