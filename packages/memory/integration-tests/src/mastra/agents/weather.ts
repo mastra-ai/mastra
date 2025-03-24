@@ -14,9 +14,10 @@ const memory = new Memory({
 
 export const weatherAgent = new Agent({
   name: 'test',
-  instructions: 'You are a weather agent. When asked about weather in any city, use the get_weather tool with the city name as the postal code.',
-  model: openai('gpt-4'),
+  instructions:
+    'You are a weather agent. When asked about weather in any city, use the get_weather tool with the city name as the postal code.',
+  model: openai('gpt-4o'),
   memory,
   tools: { get_weather: weatherTool },
 });
-    
+
