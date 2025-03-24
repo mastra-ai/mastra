@@ -248,7 +248,6 @@ export function workflowToStep<
           telemetry: mastra.getTelemetry(),
         });
       }
-      console.log('yooo', context);
       const run = context.isResume ? workflow.createRun({ runId: context.isResume.runId }) : workflow.createRun();
       const unwatch = run.watch(state => {
         emit('state-update', workflow.name, state.value, { ...context, ...{ [workflow.name]: state.context } });
