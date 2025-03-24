@@ -16,6 +16,8 @@ interface CommandData {
   error?: string;
 }
 
+export type CLI_ORIGIN = 'mastra-cloud' | 'oss';
+
 export class PosthogAnalytics {
   private sessionId: string;
   private client?: PostHog;
@@ -131,7 +133,7 @@ export class PosthogAnalytics {
     durationMs?: number;
     status?: 'success' | 'error';
     error?: string;
-    origin?: 'mastra-cloud' | 'oss';
+    origin?: CLI_ORIGIN;
   }): void {
     try {
       if (!this.client) {
@@ -179,7 +181,7 @@ export class PosthogAnalytics {
     command: string;
     args: Record<string, unknown>;
     execution: () => Promise<T>;
-    origin?: 'mastra-cloud' | 'oss';
+    origin?: CLI_ORIGIN;
   }): Promise<T> {
     const startTime = process.hrtime();
 

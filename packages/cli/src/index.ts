@@ -1,7 +1,7 @@
 #! /usr/bin/env node
 import { Command } from 'commander';
 
-import { PosthogAnalytics } from './analytics/index';
+import { PosthogAnalytics, type CLI_ORIGIN } from './analytics/index';
 import { build } from './commands/build/build';
 import { create } from './commands/create/create';
 import { deploy } from './commands/deploy/index';
@@ -22,7 +22,7 @@ const analytics = new PosthogAnalytics({
 
 const program = new Command();
 
-const origin = process.env.MASTRA_ANALYTICS_ORIGIN as 'mastra-cloud' | 'oss';
+const origin = process.env.MASTRA_ANALYTICS_ORIGIN as CLI_ORIGIN;
 
 program
   .version(`${version}`, '-v, --version')
