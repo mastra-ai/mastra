@@ -1,5 +1,13 @@
 # @mastra/voice-sarvam
 
+## 0.1.3-alpha.1
+
+### Patch Changes
+
+- a0bac3a: chore: update savram voice package
+- Updated dependencies [6794797]
+  - @mastra/core@0.6.4-alpha.1
+
 ## 0.1.3-alpha.0
 
 ### Patch Changes
