@@ -161,7 +161,7 @@ export class PosthogAnalytics {
         properties: {
           ...this.getSystemProperties(),
           ...commandData,
-          origin: options.origin || 'oss',
+          origin: options?.origin || 'oss',
         },
       });
     } catch {
