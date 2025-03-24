@@ -136,21 +136,34 @@
     "@mastra/voice-sarvam": "0.1.2",
     "@mastra/voice-speechify": "0.1.7",
     "interactive-story": "0.1.0",
-    "voice-memo-app": "0.1.1-alpha.0"
+    "voice-memo-app": "0.1.1-alpha.0",
+    "@mastra/voice-azure": "0.1.0-alpha.0",
+    "@mastra/voice-cloudflare": "0.1.1-alpha.0"
   },
   "changesets": [
     "breezy-groups-wish",
+    "cold-berries-study",
     "cool-papers-check",
+    "cruel-months-say",
     "cute-women-stand",
+    "easy-laws-live",
+    "every-bars-stand",
     "famous-readers-juggle",
+    "fluffy-zoos-build",
     "fuzzy-ducks-burn",
     "gold-garlics-attend",
     "great-jobs-serve",
     "icy-places-find",
+    "khaki-toys-attend",
+    "mcp-client-timeout",
+    "pretty-teams-lay",
+    "silent-terms-lay",
     "small-teeth-rush",
+    "soft-waves-juggle",
     "swift-mirrors-rest",
     "swift-wings-sneeze",
     "thirty-plants-brush",
+    "twenty-papers-hide",
     "wild-hornets-train"
   ]
 }
