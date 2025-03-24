@@ -65,6 +65,9 @@ const docs: DocsThemeConfig = {
   sidebar: {
     defaultMenuCollapseLevel: 2,
   },
+  search: {
+    placeholder: "Search",
+  },
   components: {
     PropertiesTable: PropertiesTable as any,
     OperatorsTable: OperatorsTable as any,
