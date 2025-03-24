@@ -1,7 +1,6 @@
 import { join, resolve, isAbsolute } from 'node:path';
 import { createClient } from '@libsql/client';
-import type { InValue } from '@libsql/client';
-import type { createClient as createClientWeb } from '@libsql/client/web';
+import type { Client, InValue } from '@libsql/client';
 import type { MetricResult, TestInfo } from '../../eval';
 import type { MessageType, StorageThreadType } from '../../memory/types';
 import { MastraStorage } from '../base';
@@ -17,21 +16,9 @@ function safelyParseJSON(jsonString: string): any {
   }
 }
 
-type Client = ReturnType<typeof createClient> | ReturnType<typeof createClientWeb>;
-
-export interface LibSQLClient {
-  client: Client;
-}
-
-export interface LibSQLClientConfig {
+export interface LibSQLConfig {
   url: string;
   authToken?: string;
-}
-
-export type LibSQLConfig = LibSQLClientConfig | LibSQLClient;
-
-const isLibSQLClient = (config: LibSQLConfig): config is LibSQLClient => {
-  return "client" in config && config.client !== undefined;
 }
 
 export class LibSQLStore extends MastraStorage {
@@ -40,10 +27,6 @@ export class LibSQLStore extends MastraStorage {
   constructor({ config }: { config: LibSQLConfig }) {
     super({ name: `LibSQLStore` });
 
-    if (isLibSQLClient(config)) {
-      this.client = config.client;
-      return this;
-    }
     // need to re-init every time for in memory dbs or the tables might not exist
     if (config.url === ':memory:' || config.url.startsWith('file::memory:')) {
       this.shouldCacheInit = false;
