@@ -44,8 +44,8 @@
   },
   "devDependencies": {
     "@hono/node-server": "^1.13.8",
-    "@mastra/mcp": "workspace:^",
     "@internal/lint": "workspace:*",
+    "@mastra/mcp": "workspace:^",
     "@types/jsdom": "^21.1.7",
     "@types/node": "^20.11.24",
     "@types/turndown": "^5.0.5",
@@ -55,6 +55,6 @@
     "tsup": "^8.4.0",
     "tsx": "^4.7.1",
     "typescript": "^5.3.3",
-    "vitest": "^3.0.8"
+    "vitest": "^3.0.9"
   }
 }

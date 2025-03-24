@@ -58,7 +58,7 @@
     "@size-limit/preset-small-lib": "^11.2.0",
     "@types/jest": "^29.5.14",
     "@types/lodash": "^4.17.16",
-    "@types/node": "^22.13.10",
+    "@types/node": "^20.17.27",
     "cross-env": "^7.0.3",
     "dts-cli": "^2.0.5",
     "eslint": "^9.22.0",
