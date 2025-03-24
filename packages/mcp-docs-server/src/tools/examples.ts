@@ -1,15 +1,13 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 import type { Tool, Context } from 'tylerbarnes-fastmcp-fix';
 import { z } from 'zod';
+import { fromPackageRoot } from '../utils';
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+const examplesDir = fromPackageRoot('.docs/organized/code-examples');
 
 // Helper function to list code examples
 async function listCodeExamples(): Promise<Array<{ name: string; path: string }>> {
-  const examplesDir = path.resolve(__dirname, '../../.docs/organized/code-examples');
   try {
     const files = await fs.readdir(examplesDir);
     return files
@@ -26,7 +24,6 @@ async function listCodeExamples(): Promise<Array<{ name: string; path: string }>
 
 // Helper function to read a code example
 async function readCodeExample(filename: string): Promise<string> {
-  const examplesDir = path.resolve(__dirname, '../../.docs/organized/code-examples');
   const filePath = path.join(examplesDir, filename);
 
   try {
