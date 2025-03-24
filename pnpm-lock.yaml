@@ -3614,8 +3614,8 @@ importers:
         specifier: ^1.2.1
         version: 1.2.1(react@19.0.0)(zod@3.24.2)
       '@mastra/client-js':
-        specifier: ^0.1.12
-        version: 0.1.12(bufferutil@4.0.9)(react@19.0.0)(utf-8-validate@6.0.5)
+        specifier: workspace:*
+        version: link:../../../client-sdks/client-js
       '@mastra/core':
         specifier: workspace:*
         version: link:../../core
@@ -8426,13 +8426,6 @@ packages:
 
   '@marijn/find-cluster-break@1.0.2':
     resolution: {integrity: sha512-l0h88YhZFyKdXIFNfSWpyjStDjGHwZ/U7iobcK1cQQD8sejsONdQtTVU+1wVN1PBw40PiiHB1vA5S7VTfQiP9g==}
-
-  '@mastra/client-js@0.1.12':
-    resolution: {integrity: sha512-/CrylmlvzluMR0sm0iaO3ELCsWkaSuWGpGx4XyN23dKKvuS0A5MWwMgquEjjhzcf4p23kDZ2ZzHCRSkY5KnIbw==}
-
-  '@mastra/core@0.6.4':
-    resolution: {integrity: sha512-8IXdPEvlnIHaQY5Rb9mFIRfs+lZrH/u7wVPtpiFHmHcVD5AfJZBeAOh/XyoHqb9hAZ+VQ9NLejanPVgx++c/ag==}
-    engines: {node: '>=20'}
 
   '@microsoft/api-extractor-model@7.28.13':
     resolution: {integrity: sha512-39v/JyldX4MS9uzHcdfmjjfS6cYGAoXV+io8B5a338pkHiSt+gy2eXQ0Q7cGFJ7quSa1VqqlMdlPrB6sLR/cAw==}
@@ -26253,57 +26246,6 @@ snapshots:
       - supports-color
 
   '@marijn/find-cluster-break@1.0.2': {}
-
-  '@mastra/client-js@0.1.12(bufferutil@4.0.9)(react@19.0.0)(utf-8-validate@6.0.5)':
-    dependencies:
-      '@mastra/core': 0.6.4(bufferutil@4.0.9)(react@19.0.0)(utf-8-validate@6.0.5)
-      json-schema: 0.4.0
-      zod: 3.24.2
-      zod-to-json-schema: 3.24.4(zod@3.24.2)
-    transitivePeerDependencies:
-      - aws-crt
-      - bufferutil
-      - encoding
-      - react
-      - supports-color
-      - utf-8-validate
-
-  '@mastra/core@0.6.4(bufferutil@4.0.9)(react@19.0.0)(utf-8-validate@6.0.5)':
-    dependencies:
-      '@libsql/client': 0.14.0(bufferutil@4.0.9)(utf-8-validate@6.0.5)
-      '@opentelemetry/api': 1.9.0
-      '@opentelemetry/auto-instrumentations-node': 0.56.1(@opentelemetry/api@1.9.0)(encoding@0.1.13)
-      '@opentelemetry/core': 1.30.1(@opentelemetry/api@1.9.0)
-      '@opentelemetry/exporter-trace-otlp-grpc': 0.57.2(@opentelemetry/api@1.9.0)
-      '@opentelemetry/exporter-trace-otlp-http': 0.57.2(@opentelemetry/api@1.9.0)
-      '@opentelemetry/otlp-exporter-base': 0.57.2(@opentelemetry/api@1.9.0)
-      '@opentelemetry/otlp-transformer': 0.57.2(@opentelemetry/api@1.9.0)
-      '@opentelemetry/resources': 1.30.1(@opentelemetry/api@1.9.0)
-      '@opentelemetry/sdk-metrics': 1.30.1(@opentelemetry/api@1.9.0)
-      '@opentelemetry/sdk-node': 0.57.2(@opentelemetry/api@1.9.0)
-      '@opentelemetry/sdk-trace-base': 1.30.1(@opentelemetry/api@1.9.0)
-      '@opentelemetry/sdk-trace-node': 1.30.1(@opentelemetry/api@1.9.0)
-      '@opentelemetry/semantic-conventions': 1.30.0
-      ai: 4.2.2(react@19.0.0)(zod@3.24.2)
-      cohere-ai: 7.16.0(encoding@0.1.13)
-      date-fns: 3.6.0
-      dotenv: 16.4.7
-      fastembed: 1.14.1
-      json-schema: 0.4.0
-      json-schema-to-zod: 2.6.0
-      pino: 9.6.0
-      pino-pretty: 13.0.0
-      radash: 12.1.0
-      sift: 17.1.3
-      xstate: 5.19.2
-      zod: 3.24.2
-    transitivePeerDependencies:
-      - aws-crt
-      - bufferutil
-      - encoding
-      - react
-      - supports-color
-      - utf-8-validate
 
   '@microsoft/api-extractor-model@7.28.13(@types/node@20.17.24)':
     dependencies:
