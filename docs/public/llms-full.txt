@@ -1280,7 +1280,7 @@ new CloudflareDeployer({
 
 ```typescript copy showLineNumbers
 new VercelDeployer({
-  teamId: 'your-vercel-team-id',
+  teamSlug: 'your-vercel-team-slug',
   projectName: 'your-project-name',
   token: 'your-vercel-token'
   // For complete configuration options, see the reference documentation
@@ -7418,7 +7418,7 @@ import { VercelDeployer } from '@mastra/deployer-vercel';
 
 const mastra = new Mastra({
   deployer: new VercelDeployer({
-    teamId: 'your-team-id',
+    teamSlug: 'your-team-slug',
     projectName: 'your-project-name',
     token: 'your-vercel-token'
   }),
@@ -7433,9 +7433,9 @@ const mastra = new Mastra({
 <PropertiesTable
   content={[
     {
-      name: "teamId",
+      name: "teamSlug",
       type: "string",
-      description: "Your Vercel team ID.",
+      description: "Your Vercel team slug.",
       isOptional: false,
     },
     {
