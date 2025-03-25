@@ -95,7 +95,6 @@
     "@mastra/firecrawl": "1.1.13",
     "@mastra/github": "1.1.13",
     "@mastra/ragie": "1.1.13",
-    "@mastra/stabilityai": "1.1.13",
     "@internal/lint": "0.0.1",
     "mastra": "0.4.3",
     "@mastra/playground": "0.0.1",
