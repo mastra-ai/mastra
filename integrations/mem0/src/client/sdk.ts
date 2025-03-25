@@ -1,7 +1,7 @@
 import type { Message, MemoryOptions, SearchOptions } from 'mem0ai';
 import Mem0Client from 'mem0ai';
 import type { Mem0Config } from '../types';
-import { convertCamelCaseToSnakeCase, convertStringToMessages, getMemoryString } from './utils';
+import { Mem0Utils } from './utils';
 
 export class Mem0AIClient {
   private client: Mem0Client;
@@ -9,20 +9,20 @@ export class Mem0AIClient {
 
   constructor(config: Mem0Config) {
     const snakeCaseConfig = Object.fromEntries(
-      Object.entries(config).map(([key, value]) => [convertCamelCaseToSnakeCase(key), value])
+      Object.entries(config).map(([key, value]) => [Mem0Utils.convertCamelCaseToSnakeCase(key), value])
     ) as Mem0Config;
     this.mem0Config = snakeCaseConfig;
     this.client = new Mem0Client(snakeCaseConfig);
   }
 
   async createMemory(messages: Message[] | string, options?: MemoryOptions) {
-    const messagesToAdd = typeof messages === 'string' ? convertStringToMessages(messages) : messages;
+    const messagesToAdd = typeof messages === 'string' ? Mem0Utils.convertStringToMessages(messages) : messages;
     const memory = await this.client.add(messagesToAdd, {
       ...this.mem0Config,
       ...options,
     });
 
-    const memoryString = getMemoryString(memory);
+    const memoryString = Mem0Utils.getMemoryString(memory);
     
     return memoryString;
   }
@@ -33,7 +33,7 @@ export class Mem0AIClient {
       ...options,
     });
 
-    const memoryString = getMemoryString(memory);
+    const memoryString = Mem0Utils.getMemoryString(memory);
 
     return memoryString;
   }
