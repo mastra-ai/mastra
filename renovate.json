@@ -65,6 +65,7 @@
       "groupName": "core",
       "commitMessageTopic": "Mastra Core",
       "matchFileNames": ["packages/*/package.json"],
+      "excludePackageNames": ["ai", "^@ai-sdk/"],
       "matchUpdateTypes": ["minor", "patch"],
       "matchDepTypes": ["dependencies", "devDependencies"]
     },
