@@ -829,7 +829,11 @@ export class Agent<
   async generate<Z extends ZodSchema | JSONSchema7 | undefined = undefined>(
     messages: string | string[] | CoreMessage[] | AiMessageType[],
     args?: AgentGenerateOptions<Z> & { output?: never; experimental_output?: Z },
-  ): Promise<GenerateTextResult<any, Z extends ZodSchema ? z.infer<Z> : unknown>>;
+  ): Promise<
+    GenerateTextResult<any, Z extends ZodSchema ? z.infer<Z> : unknown> & {
+      object: Z extends ZodSchema ? z.infer<Z> : unknown;
+    }
+  >;
   async generate<Z extends ZodSchema | JSONSchema7 | undefined = undefined>(
     messages: string | string[] | CoreMessage[] | AiMessageType[],
     {
@@ -982,7 +986,14 @@ export class Agent<
   async stream<Z extends ZodSchema | JSONSchema7 | undefined = undefined>(
     messages: string | string[] | CoreMessage[] | AiMessageType[],
     args?: AgentStreamOptions<Z> & { output?: never; experimental_output?: Z },
-  ): Promise<StreamTextResult<any, Z extends ZodSchema ? z.infer<Z> : unknown>>;
+  ): Promise<
+    StreamTextResult<any, Z extends ZodSchema ? z.infer<Z> : unknown> & {
+      partialObjectStream: StreamTextResult<
+        any,
+        Z extends ZodSchema ? z.infer<Z> : unknown
+      >['experimental_partialOutputStream'];
+    }
+  >;
   async stream<Z extends ZodSchema | JSONSchema7 | undefined = undefined>(
     messages: string | string[] | CoreMessage[] | AiMessageType[],
     {
