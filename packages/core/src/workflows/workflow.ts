@@ -21,7 +21,7 @@ import type {
   WorkflowRunState,
 } from './types';
 import { WhenConditionReturnValue } from './types';
-import { isVariableReference, isWorkflow, updateStepInHierarchy, workflowToStep } from './utils';
+import { isVariableReference, isWorkflow, workflowToStep } from './utils';
 import type { WorkflowResultReturn } from './workflow-instance';
 import { WorkflowInstance } from './workflow-instance';
 
