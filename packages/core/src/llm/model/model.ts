@@ -152,7 +152,7 @@ export class MastraLLM extends MastraLLMBase {
       toolChoice,
       maxSteps,
       onStepFinish: async (props: any) => {
-        onStepFinish?.(JSON.stringify(props, null, 2));
+        void onStepFinish?.(props);
 
         this.logger.debug('[LLM] - Step Change:', {
           text: props?.text,
@@ -236,7 +236,7 @@ export class MastraLLM extends MastraLLMBase {
       maxSteps,
       toolChoice,
       onStepFinish: async (props: any) => {
-        onStepFinish?.(JSON.stringify(props, null, 2));
+        void onStepFinish?.(props);
 
         this.logger.debug('[LLM] - Step Change:', {
           text: props?.text,
@@ -321,7 +321,7 @@ export class MastraLLM extends MastraLLMBase {
       maxSteps,
       toolChoice,
       onStepFinish: async (props: any) => {
-        onStepFinish?.(JSON.stringify(props, null, 2));
+        void onStepFinish?.(props);
 
         this.logger.debug('[LLM] - Stream Step Change:', {
           text: props?.text,
@@ -341,7 +341,7 @@ export class MastraLLM extends MastraLLMBase {
         }
       },
       onFinish: async (props: any) => {
-        void onFinish?.(JSON.stringify(props, null, 2));
+        void onFinish?.(props);
 
         this.logger.debug('[LLM] - Stream Finished:', {
           text: props?.text,
@@ -424,7 +424,7 @@ export class MastraLLM extends MastraLLMBase {
       maxSteps,
       toolChoice,
       onStepFinish: async (props: any) => {
-        onStepFinish?.(JSON.stringify(props, null, 2));
+        void onStepFinish?.(props);
 
         this.logger.debug('[LLM] - Stream Step Change:', {
           text: props?.text,
@@ -446,7 +446,7 @@ export class MastraLLM extends MastraLLMBase {
         }
       },
       onFinish: async (props: any) => {
-        void onFinish?.(JSON.stringify(props, null, 2));
+        void onFinish?.(props);
 
         this.logger.debug('[LLM] - Stream Finished:', {
           text: props?.text,
