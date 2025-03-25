@@ -35,27 +35,27 @@
     "@modelcontextprotocol/sdk": "^1.7.0",
     "date-fns": "^4.1.0",
     "exit-hook": "^4.0.0",
-    "fastmcp": "^1.20.4",
+    "fastmcp": "^1.20.5",
     "jsdom": "^26.0.0",
-    "turndown": "^7.1.2",
+    "turndown": "^7.2.0",
     "tylerbarnes-fastmcp-fix": "^1.0.0",
     "uuid": "^11.1.0",
-    "zod": "^3.22.4"
+    "zod": "^3.24.2"
   },
   "devDependencies": {
-    "@hono/node-server": "^1.13.8",
+    "@hono/node-server": "^1.14.0",
     "@internal/lint": "workspace:*",
     "@mastra/mcp": "workspace:^",
     "@types/jsdom": "^21.1.7",
-    "@types/node": "^20.11.24",
+    "@types/node": "^20.17.27",
     "@types/turndown": "^5.0.5",
     "@wong2/mcp-cli": "^1.6.0",
     "cross-env": "^7.0.3",
     "eslint": "^9.23.0",
-    "hono": "^4.7.4",
+    "hono": "^4.7.5",
     "tsup": "^8.4.0",
-    "tsx": "^4.7.1",
-    "typescript": "^5.3.3",
+    "tsx": "^4.19.3",
+    "typescript": "^5.8.2",
     "vitest": "^3.0.9"
   }
 }
