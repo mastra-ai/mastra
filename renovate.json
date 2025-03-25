@@ -4,7 +4,6 @@
   "extends": [
     "config:recommended",
     ":dependencyDashboard",
-    ":dependencyDashboardApproval",
     ":disableRateLimiting",
     ":maintainLockFilesWeekly",
     ":semanticCommits",
@@ -13,6 +12,9 @@
   ],
   "postUpdateOptions": ["pnpmDedupe"],
   "rebaseWhen": "conflicted",
+  "major": {
+    "dependencyDashboardApproval": true
+  },
   "packageRules": [
     {
       "groupName": "examples",
@@ -65,6 +67,7 @@
       "groupName": "core",
       "commitMessageTopic": "Mastra Core",
       "matchFileNames": ["packages/*/package.json"],
+      "excludePackageNames": ["ai", "^@ai-sdk/"],
       "matchUpdateTypes": ["minor", "patch"],
       "matchDepTypes": ["dependencies", "devDependencies"]
     },
@@ -93,6 +96,13 @@
       "groupName": "deployers",
       "commitMessageTopic": "Mastra deployers",
       "matchFileNames": ["deployers/*/package.json"],
+      "matchUpdateTypes": ["minor", "patch"],
+      "matchDepTypes": ["dependencies", "devDependencies"]
+    },
+    {
+      "groupName": "playground",
+      "commitMessageTopic": "Mastra playground",
+      "matchFileNames": ["packages/cli/playground/package.json"],
       "matchUpdateTypes": ["minor", "patch"],
       "matchDepTypes": ["dependencies", "devDependencies"]
     }
