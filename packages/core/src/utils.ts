@@ -1,5 +1,6 @@
 import { createHash } from 'crypto';
-import type { ToolExecutionOptions } from 'ai';
+import { convertToCoreMessages } from 'ai';
+import type { CoreMessage, ToolExecutionOptions } from 'ai';
 import jsonSchemaToZod from 'json-schema-to-zod';
 import { z } from 'zod';
 import type { ZodObject } from 'zod';
@@ -8,7 +9,7 @@ import type { MastraPrimitives } from './action';
 import type { ToolsInput } from './agent';
 import type { Logger } from './logger';
 import type { Mastra } from './mastra';
-import type { MastraMemory } from './memory';
+import type { AiMessageType, MastraMemory } from './memory';
 import { Tool } from './tools';
 import type { CoreTool, ToolAction, VercelTool } from './tools';
 
@@ -594,4 +595,65 @@ export function checkEvalStorageFields(traceObject: any, logger?: Logger) {
   }
 
   return true;
+}
+
+// lifted from https://github.com/vercel/ai/blob/main/packages/ai/core/prompt/detect-prompt-type.ts#L27
+function detectSingleMessageCharacteristics(
+  message: any,
+): 'has-ui-specific-parts' | 'has-core-specific-parts' | 'message' | 'other' {
+  if (
+    typeof message === 'object' &&
+    message !== null &&
+    (message.role === 'function' || // UI-only role
+      message.role === 'data' || // UI-only role
+      'toolInvocations' in message || // UI-specific field
+      'parts' in message || // UI-specific field
+      'experimental_attachments' in message)
+  ) {
+    return 'has-ui-specific-parts';
+  } else if (
+    typeof message === 'object' &&
+    message !== null &&
+    'content' in message &&
+    (Array.isArray(message.content) || // Core messages can have array content
+      'experimental_providerMetadata' in message ||
+      'providerOptions' in message)
+  ) {
+    return 'has-core-specific-parts';
+  } else if (
+    typeof message === 'object' &&
+    message !== null &&
+    'role' in message &&
+    'content' in message &&
+    typeof message.content === 'string' &&
+    ['system', 'user', 'assistant', 'tool'].includes(message.role)
+  ) {
+    return 'message';
+  } else {
+    return 'other';
+  }
+}
+
+function isUiMessage(message: CoreMessage | AiMessageType): message is AiMessageType {
+  return detectSingleMessageCharacteristics(message) === `has-ui-specific-parts`;
+}
+function isCoreMessage(message: CoreMessage | AiMessageType): message is CoreMessage {
+  return [`has-core-specific-parts`, `message`].includes(detectSingleMessageCharacteristics(message));
+}
+
+export function ensureAllMessagesAreCoreMessages(messages: (CoreMessage | AiMessageType)[]) {
+  return messages
+    .map(message => {
+      if (isUiMessage(message)) {
+        return convertToCoreMessages([message]);
+      }
+      if (isCoreMessage(message)) {
+        return message;
+      }
+      const characteristics = detectSingleMessageCharacteristics(message);
+      throw new Error(
+        `Message does not appear to be a core message or a UI message but must be one of the two, found "${characteristics}" type for message:\n\n${JSON.stringify(message, null, 2)}\n`,
+      );
+    })
+    .flat();
 }
