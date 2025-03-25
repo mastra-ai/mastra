@@ -18,8 +18,8 @@ import { WorkflowLoopResultNode } from './workflow-loop-result-node';
 
 export function WorkflowGraphInner({ workflow }: { workflow: Workflow }) {
   const { nodes: initialNodes, edges: initialEdges } = contructNodesAndEdges({
-    stepGraph: workflow.serializedStepGraph,
-    stepSubscriberGraph: workflow.serializedStepSubscriberGraph,
+    stepGraph: workflow.serializedStepGraph || workflow.stepGraph,
+    stepSubscriberGraph: workflow.serializedStepSubscriberGraph || workflow.stepSubscriberGraph,
   });
   const [nodes, _, onNodesChange] = useNodesState(initialNodes);
   const [edges] = useEdgesState(initialEdges);

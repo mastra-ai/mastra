@@ -106,7 +106,15 @@ function Attributes({ span }: { span: Span }) {
   return <AttributesValues attributes={span.attributes} />;
 }
 
-function AttributesValues({ attributes, depth = 0 }: { attributes: unknown; depth?: number }) {
+function AttributesValues({
+  attributes,
+  depth = 0,
+  keyName,
+}: {
+  attributes: unknown;
+  depth?: number;
+  keyName?: string | string[];
+}) {
   if (attributes === null) return null;
   if (attributes === undefined) return null;
 
@@ -118,6 +126,10 @@ function AttributesValues({ attributes, depth = 0 }: { attributes: unknown; dept
         return <SyntaxHighlighter data={attr} />;
       }
     } catch {
+      const val = attributes ? cleanString(attributes.toString()) : 'N/A';
+      if (keyName === 'Input' && val === '[Not Serializable]') {
+        return <span className="text-sm overflow-x-scroll">No input</span>;
+      }
       return (
         <span className="text-sm overflow-x-scroll">{attributes ? cleanString(attributes.toString()) : 'N/A'}</span>
       );
@@ -151,7 +163,7 @@ function AttributesValues({ attributes, depth = 0 }: { attributes: unknown; dept
           {entries.map(([key, val]) => (
             <div key={key} className="flex flex-col gap-2 p-2 pl-0">
               <span className="text-sm capitalize text-mastra-el-3">{transformKey(key)}</span>
-              <AttributesValues attributes={val} depth={depth + 1} />
+              <AttributesValues attributes={val} depth={depth + 1} keyName={transformKey(key)} />
             </div>
           ))}
         </div>
