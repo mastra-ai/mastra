@@ -118,7 +118,7 @@
     "@opentelemetry/semantic-conventions": "^1.30.0",
     "ai": "^4.1.54",
     "cohere-ai": "^7.16.0",
-    "date-fns": "^3.6.0",
+    "date-fns": "^4.1.0",
     "dotenv": "^16.4.7",
     "fastembed": "^1.14.1",
     "json-schema": "^0.4.0",
