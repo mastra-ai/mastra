@@ -3528,9 +3528,6 @@ importers:
       '@wong2/mcp-cli':
         specifier: ^1.6.0
         version: 1.6.0
-      cross-env:
-        specifier: ^7.0.3
-        version: 7.0.3
       eslint:
         specifier: ^9.23.0
         version: 9.23.0(jiti@2.4.2)
