@@ -228,7 +228,7 @@ importers:
     dependencies:
       '@ai-sdk/openai':
         specifier: latest
-        version: 1.3.1(zod@3.24.2)
+        version: 1.3.2(zod@3.24.2)
       '@mastra/core':
         specifier: workspace:*
         version: link:../../packages/core
@@ -240,7 +240,7 @@ importers:
     dependencies:
       '@ai-sdk/openai':
         specifier: ^1.2.5
-        version: 1.3.1(zod@3.24.2)
+        version: 1.3.2(zod@3.24.2)
       '@mastra/client-js':
         specifier: workspace:*
         version: link:../../client-sdks/client-js
@@ -307,7 +307,7 @@ importers:
     dependencies:
       '@ai-sdk/openai':
         specifier: latest
-        version: 1.3.1(zod@3.24.2)
+        version: 1.3.2(zod@3.24.2)
       '@assistant-ui/react':
         specifier: 0.7.85
         version: 0.7.85(@types/react-dom@19.0.4(@types/react@19.0.12))(@types/react@19.0.12)(react-dom@19.0.0(react@19.0.0))(react@19.0.0)(use-sync-external-store@1.4.0(react@19.0.0))
@@ -365,7 +365,7 @@ importers:
     dependencies:
       '@ai-sdk/openai':
         specifier: latest
-        version: 1.3.1(zod@3.24.2)
+        version: 1.3.2(zod@3.24.2)
       '@mastra/core':
         specifier: workspace:*
         version: link:../../../../packages/core
@@ -395,7 +395,7 @@ importers:
         version: 1.2.1(zod@3.24.2)
       '@ai-sdk/openai':
         specifier: latest
-        version: 1.3.1(zod@3.24.2)
+        version: 1.3.2(zod@3.24.2)
       '@mastra/core':
         specifier: workspace:*
         version: link:../../../../packages/core
@@ -410,7 +410,7 @@ importers:
         version: 1.2.1(zod@3.24.2)
       '@ai-sdk/openai':
         specifier: latest
-        version: 1.3.1(zod@3.24.2)
+        version: 1.3.2(zod@3.24.2)
       '@mastra/core':
         specifier: workspace:*
         version: link:../../../../packages/core
@@ -422,7 +422,7 @@ importers:
     dependencies:
       '@ai-sdk/openai':
         specifier: latest
-        version: 1.3.1(zod@3.24.2)
+        version: 1.3.2(zod@3.24.2)
       '@mastra/core':
         specifier: workspace:*
         version: link:../../../../packages/core
@@ -434,7 +434,7 @@ importers:
     dependencies:
       '@ai-sdk/openai':
         specifier: latest
-        version: 1.3.1(zod@3.24.2)
+        version: 1.3.2(zod@3.24.2)
       '@mastra/core':
         specifier: workspace:*
         version: link:../../../../packages/core
@@ -446,7 +446,7 @@ importers:
     dependencies:
       '@ai-sdk/openai':
         specifier: ^1.2.1
-        version: 1.3.1(zod@3.24.2)
+        version: 1.3.2(zod@3.24.2)
       '@mastra/core':
         specifier: workspace:*
         version: link:../../../../packages/core
@@ -480,7 +480,7 @@ importers:
     dependencies:
       '@ai-sdk/openai':
         specifier: latest
-        version: 1.3.1(zod@3.24.2)
+        version: 1.3.2(zod@3.24.2)
       '@mastra/evals':
         specifier: workspace:^
         version: link:../../../../packages/evals
@@ -493,7 +493,7 @@ importers:
     dependencies:
       '@ai-sdk/openai':
         specifier: latest
-        version: 1.3.1(zod@3.24.2)
+        version: 1.3.2(zod@3.24.2)
       '@mastra/evals':
         specifier: workspace:^
         version: link:../../../../packages/evals
@@ -526,7 +526,7 @@ importers:
     dependencies:
       '@ai-sdk/openai':
         specifier: latest
-        version: 1.3.1(zod@3.24.2)
+        version: 1.3.2(zod@3.24.2)
       '@mastra/evals':
         specifier: workspace:^
         version: link:../../../../packages/evals
@@ -539,7 +539,7 @@ importers:
     dependencies:
       '@ai-sdk/openai':
         specifier: latest
-        version: 1.3.1(zod@3.24.2)
+        version: 1.3.2(zod@3.24.2)
       '@mastra/evals':
         specifier: workspace:^
         version: link:../../../../packages/evals
@@ -552,7 +552,7 @@ importers:
     dependencies:
       '@ai-sdk/openai':
         specifier: latest
-        version: 1.3.1(zod@3.24.2)
+        version: 1.3.2(zod@3.24.2)
       '@mastra/evals':
         specifier: workspace:^
         version: link:../../../../packages/evals
@@ -565,7 +565,7 @@ importers:
     dependencies:
       '@ai-sdk/openai':
         specifier: latest
-        version: 1.3.1(zod@3.24.2)
+        version: 1.3.2(zod@3.24.2)
       '@mastra/evals':
         specifier: workspace:^
         version: link:../../../../packages/evals
@@ -578,7 +578,7 @@ importers:
     dependencies:
       '@ai-sdk/openai':
         specifier: latest
-        version: 1.3.1(zod@3.24.2)
+        version: 1.3.2(zod@3.24.2)
       '@mastra/core':
         specifier: workspace:^
         version: link:../../../../packages/core
@@ -597,7 +597,7 @@ importers:
     dependencies:
       '@ai-sdk/openai':
         specifier: latest
-        version: 1.3.1(zod@3.24.2)
+        version: 1.3.2(zod@3.24.2)
       '@mastra/evals':
         specifier: workspace:^
         version: link:../../../../packages/evals
@@ -610,7 +610,7 @@ importers:
     dependencies:
       '@ai-sdk/openai':
         specifier: latest
-        version: 1.3.1(zod@3.24.2)
+        version: 1.3.2(zod@3.24.2)
       '@mastra/evals':
         specifier: workspace:^
         version: link:../../../../packages/evals
@@ -633,7 +633,7 @@ importers:
     dependencies:
       '@ai-sdk/openai':
         specifier: latest
-        version: 1.3.1(zod@3.24.2)
+        version: 1.3.2(zod@3.24.2)
       '@mastra/evals':
         specifier: workspace:^
         version: link:../../../../packages/evals
@@ -646,7 +646,7 @@ importers:
     dependencies:
       '@ai-sdk/openai':
         specifier: latest
-        version: 1.3.1(zod@3.24.2)
+        version: 1.3.2(zod@3.24.2)
       '@mastra/evals':
         specifier: workspace:^
         version: link:../../../../packages/evals
@@ -679,7 +679,7 @@ importers:
     dependencies:
       '@ai-sdk/openai':
         specifier: latest
-        version: 1.3.1(zod@3.24.2)
+        version: 1.3.2(zod@3.24.2)
       '@mastra/evals':
         specifier: workspace:^
         version: link:../../../../packages/evals
@@ -717,7 +717,7 @@ importers:
     dependencies:
       '@ai-sdk/openai':
         specifier: latest
-        version: 1.3.1(zod@3.24.2)
+        version: 1.3.2(zod@3.24.2)
       '@mastra/core':
         specifier: workspace:*
         version: link:../../../../packages/core
@@ -763,7 +763,7 @@ importers:
     dependencies:
       '@ai-sdk/openai':
         specifier: latest
-        version: 1.3.1(zod@3.24.2)
+        version: 1.3.2(zod@3.24.2)
       '@mastra/core':
         specifier: workspace:*
         version: link:../../../../packages/core
@@ -785,7 +785,7 @@ importers:
     dependencies:
       '@ai-sdk/openai':
         specifier: latest
-        version: 1.3.1(zod@3.24.2)
+        version: 1.3.2(zod@3.24.2)
       '@mastra/core':
         specifier: workspace:*
         version: link:../../../../packages/core
@@ -807,7 +807,7 @@ importers:
     dependencies:
       '@ai-sdk/openai':
         specifier: latest
-        version: 1.3.1(zod@3.24.2)
+        version: 1.3.2(zod@3.24.2)
       '@mastra/core':
         specifier: workspace:*
         version: link:../../../../packages/core
@@ -828,7 +828,7 @@ importers:
     dependencies:
       '@ai-sdk/openai':
         specifier: latest
-        version: 1.3.1(zod@3.24.2)
+        version: 1.3.2(zod@3.24.2)
       '@mastra/rag':
         specifier: workspace:*
         version: link:../../../../packages/rag
@@ -840,7 +840,7 @@ importers:
     dependencies:
       '@ai-sdk/openai':
         specifier: latest
-        version: 1.3.1(zod@3.24.2)
+        version: 1.3.2(zod@3.24.2)
       '@mastra/rag':
         specifier: workspace:*
         version: link:../../../../packages/rag
@@ -864,7 +864,7 @@ importers:
     dependencies:
       '@ai-sdk/openai':
         specifier: latest
-        version: 1.3.1(zod@3.24.2)
+        version: 1.3.2(zod@3.24.2)
       '@mastra/core':
         specifier: workspace:*
         version: link:../../../../packages/core
@@ -886,7 +886,7 @@ importers:
     dependencies:
       '@ai-sdk/openai':
         specifier: latest
-        version: 1.3.1(zod@3.24.2)
+        version: 1.3.2(zod@3.24.2)
       '@mastra/core':
         specifier: workspace:*
         version: link:../../../../packages/core
@@ -908,7 +908,7 @@ importers:
     dependencies:
       '@ai-sdk/openai':
         specifier: latest
-        version: 1.3.1(zod@3.24.2)
+        version: 1.3.2(zod@3.24.2)
       '@mastra/pg':
         specifier: workspace:*
         version: link:../../../../stores/pg
@@ -927,7 +927,7 @@ importers:
     dependencies:
       '@ai-sdk/openai':
         specifier: latest
-        version: 1.3.1(zod@3.24.2)
+        version: 1.3.2(zod@3.24.2)
       '@mastra/chroma':
         specifier: workspace:*
         version: link:../../../../stores/chroma
@@ -942,7 +942,7 @@ importers:
     dependencies:
       '@ai-sdk/openai':
         specifier: latest
-        version: 1.3.1(zod@3.24.2)
+        version: 1.3.2(zod@3.24.2)
       '@mastra/core':
         specifier: workspace:*
         version: link:../../../../packages/core
@@ -957,7 +957,7 @@ importers:
     dependencies:
       '@ai-sdk/openai':
         specifier: latest
-        version: 1.3.1(zod@3.24.2)
+        version: 1.3.2(zod@3.24.2)
       '@mastra/pg':
         specifier: workspace:*
         version: link:../../../../stores/pg
@@ -972,7 +972,7 @@ importers:
     dependencies:
       '@ai-sdk/openai':
         specifier: latest
-        version: 1.3.1(zod@3.24.2)
+        version: 1.3.2(zod@3.24.2)
       '@mastra/pinecone':
         specifier: workspace:*
         version: link:../../../../stores/pinecone
@@ -997,7 +997,7 @@ importers:
     dependencies:
       '@ai-sdk/openai':
         specifier: latest
-        version: 1.3.1(zod@3.24.2)
+        version: 1.3.2(zod@3.24.2)
       '@mastra/pg':
         specifier: workspace:*
         version: link:../../../../stores/pg
@@ -1016,7 +1016,7 @@ importers:
     dependencies:
       '@ai-sdk/openai':
         specifier: latest
-        version: 1.3.1(zod@3.24.2)
+        version: 1.3.2(zod@3.24.2)
       '@mastra/core':
         specifier: workspace:*
         version: link:../../../../packages/core
@@ -1038,7 +1038,7 @@ importers:
     dependencies:
       '@ai-sdk/openai':
         specifier: latest
-        version: 1.3.1(zod@3.24.2)
+        version: 1.3.2(zod@3.24.2)
       '@mastra/pinecone':
         specifier: workspace:*
         version: link:../../../../stores/pinecone
@@ -1053,7 +1053,7 @@ importers:
     dependencies:
       '@ai-sdk/openai':
         specifier: latest
-        version: 1.3.1(zod@3.24.2)
+        version: 1.3.2(zod@3.24.2)
       '@mastra/core':
         specifier: workspace:*
         version: link:../../../../packages/core
@@ -1305,7 +1305,7 @@ importers:
     dependencies:
       '@ai-sdk/openai':
         specifier: latest
-        version: 1.3.1(zod@3.24.2)
+        version: 1.3.2(zod@3.24.2)
       '@ai-sdk/react':
         specifier: ^1.1.21
         version: 1.2.1(react@19.0.0-rc-45804af1-20241021)(zod@3.24.2)
@@ -1702,7 +1702,7 @@ importers:
     dependencies:
       '@ai-sdk/openai':
         specifier: latest
-        version: 1.3.1(zod@3.24.2)
+        version: 1.3.2(zod@3.24.2)
       '@mastra/core':
         specifier: workspace:*
         version: link:../../packages/core
@@ -1742,7 +1742,7 @@ importers:
     dependencies:
       '@ai-sdk/openai':
         specifier: latest
-        version: 1.3.1(zod@3.24.2)
+        version: 1.3.2(zod@3.24.2)
       '@mastra/core':
         specifier: workspace:*
         version: link:../../packages/core
@@ -1763,7 +1763,7 @@ importers:
     dependencies:
       '@ai-sdk/openai':
         specifier: ^1.2.1
-        version: 1.3.1(zod@3.24.2)
+        version: 1.3.2(zod@3.24.2)
       '@mastra/core':
         specifier: workspace:*
         version: link:../../packages/core
@@ -1781,7 +1781,7 @@ importers:
     dependencies:
       '@ai-sdk/openai':
         specifier: ^1.2.1
-        version: 1.3.1(zod@3.24.2)
+        version: 1.3.2(zod@3.24.2)
       '@mastra/core':
         specifier: workspace:*
         version: link:../../packages/core
@@ -1793,7 +1793,7 @@ importers:
     dependencies:
       '@ai-sdk/openai':
         specifier: latest
-        version: 1.3.1(zod@3.24.2)
+        version: 1.3.2(zod@3.24.2)
       '@mastra/core':
         specifier: workspace:*
         version: link:../../packages/core
@@ -1815,7 +1815,7 @@ importers:
     dependencies:
       '@ai-sdk/openai':
         specifier: latest
-        version: 1.3.1(zod@3.24.2)
+        version: 1.3.2(zod@3.24.2)
       '@mastra/core':
         specifier: workspace:*
         version: link:../../packages/core
@@ -1943,7 +1943,7 @@ importers:
         version: 1.2.1(zod@3.24.2)
       '@ai-sdk/openai':
         specifier: latest
-        version: 1.3.1(zod@3.24.2)
+        version: 1.3.2(zod@3.24.2)
       '@mastra/core':
         specifier: workspace:*
         version: link:../../packages/core
@@ -1974,7 +1974,7 @@ importers:
     dependencies:
       '@ai-sdk/openai':
         specifier: latest
-        version: 1.3.1(zod@3.24.2)
+        version: 1.3.2(zod@3.24.2)
       '@mastra/core':
         specifier: workspace:*
         version: link:../../packages/core
@@ -2230,7 +2230,7 @@ importers:
     dependencies:
       '@ai-sdk/openai':
         specifier: latest
-        version: 1.3.1(zod@3.24.2)
+        version: 1.3.2(zod@3.24.2)
       '@mastra/core':
         specifier: workspace:^
         version: link:../../packages/core
@@ -2242,7 +2242,7 @@ importers:
     dependencies:
       '@ai-sdk/openai':
         specifier: latest
-        version: 1.3.1(zod@3.24.2)
+        version: 1.3.2(zod@3.24.2)
       '@mastra/core':
         specifier: workspace:^
         version: link:../../packages/core
@@ -2292,7 +2292,7 @@ importers:
     dependencies:
       '@ai-sdk/openai':
         specifier: latest
-        version: 1.3.1(zod@3.24.2)
+        version: 1.3.2(zod@3.24.2)
       '@mastra/core':
         specifier: workspace:*
         version: link:../../packages/core
@@ -2352,7 +2352,7 @@ importers:
     devDependencies:
       '@ai-sdk/openai':
         specifier: latest
-        version: 1.3.1(zod@3.24.2)
+        version: 1.3.2(zod@3.24.2)
       '@types/node':
         specifier: ^20.17.27
         version: 20.17.27
@@ -3092,7 +3092,7 @@ importers:
     devDependencies:
       '@ai-sdk/openai':
         specifier: ^1.2.1
-        version: 1.3.1(zod@3.24.2)
+        version: 1.3.2(zod@3.24.2)
       '@babel/core':
         specifier: ^7.26.9
         version: 7.26.10
@@ -3359,7 +3359,7 @@ importers:
     devDependencies:
       '@ai-sdk/openai':
         specifier: latest
-        version: 1.3.1(zod@3.24.2)
+        version: 1.3.2(zod@3.24.2)
       '@internal/lint':
         specifier: workspace:*
         version: link:../_config
@@ -3606,7 +3606,7 @@ importers:
     dependencies:
       '@ai-sdk/openai':
         specifier: ^1.3.0
-        version: 1.3.1(zod@3.24.2)
+        version: 1.3.2(zod@3.24.2)
       '@ai-sdk/react':
         specifier: ^1.2.1
         version: 1.2.1(react@19.0.0)(zod@3.24.2)
@@ -3912,7 +3912,7 @@ importers:
         version: 1.2.2(zod@3.24.2)
       '@ai-sdk/openai':
         specifier: latest
-        version: 1.3.1(zod@3.24.2)
+        version: 1.3.2(zod@3.24.2)
       '@internal/lint':
         specifier: workspace:*
         version: link:../_config
@@ -4077,8 +4077,8 @@ importers:
         specifier: workspace:^
         version: link:../../packages/core
       ibm-watson:
-        specifier: ^8.0.0
-        version: 8.0.0
+        specifier: ^10.0.0
+        version: 10.0.0
       zod:
         specifier: ^3.24.2
         version: 3.24.2
@@ -4941,8 +4941,8 @@ packages:
     peerDependencies:
       zod: ^3.0.0
 
-  '@ai-sdk/openai@1.3.1':
-    resolution: {integrity: sha512-Fhb9IYEJdS9vIFwOxr9igiWF8x0xYSqAB7eYuHtZ9D6ovo4RB2JO7lSg0qQWGIGYxtwoipXwLjgF/ov25W23Hw==}
+  '@ai-sdk/openai@1.3.2':
+    resolution: {integrity: sha512-TgtD2NbDKiOipaLb5/eY6fN64Gu32V/sZ0VM5UndsWAGKkB1if3jSLic6TcQjNvnBuhkzZY6L9deVDe4z+2PBg==}
     engines: {node: '>=18'}
     peerDependencies:
       zod: ^3.0.0
@@ -13590,10 +13590,6 @@ packages:
   diff-match-patch@1.0.5:
     resolution: {integrity: sha512-IayShXAgj/QMXgB0IWmKx+rOPuGMhqm5w6jvFxmVenXKIzRqTAAsbBPT3kWQeGANj3jGgvcvv4yK6SxqYmikgw==}
 
-  diff-sequences@27.5.1:
-    resolution: {integrity: sha512-k1gCAXAsNgLwEL+Y8Wvl+M6oEFj5bgazfZULpS5CneoPPXRaCCW7dm+q21Ky2VEE5X+VeRDBVg1Pcvvsr4TtNQ==}
-    engines: {node: ^10.13.0 || ^12.13.0 || ^14.15.0 || >=15.0.0}
-
   diff-sequences@29.6.3:
     resolution: {integrity: sha512-EjePK1srD3P08o2j4f0ExnylqRs5B9tJjcp9t1krH2qRi8CCdsYfwe9JgSLurFBWwq4uOlipzfk5fHNvwFKr8Q==}
     engines: {node: ^14.15.0 || ^16.10.0 || >=18.0.0}
@@ -14514,10 +14510,6 @@ packages:
   expect-type@1.2.0:
     resolution: {integrity: sha512-80F22aiJ3GLyVnS/B3HzgR6RelZVumzj9jkL0Rhz4h0xYbNW9PjlQz5h3J/SShErbXBc295vseR4/MIbVmUbeA==}
     engines: {node: '>=12.0.0'}
-
-  expect@27.5.1:
-    resolution: {integrity: sha512-E1q5hSUG2AmYQwQJ041nvgpkODHQvB+RKlB4IYdru6uJsyFTRyZAP463M+1lINorwbqAmUggi6+WwkD8lCS/Dw==}
-    engines: {node: ^10.13.0 || ^12.13.0 || ^14.15.0 || >=15.0.0}
 
   expect@29.7.0:
     resolution: {integrity: sha512-2Zks0hf1VLFYI1kbh0I5jP3KHHyCHpkfyHBzsSXRFgl/Bg9mWYfMW8oD+PdMPlEwy5HNsR9JutYy6pMeOh61nw==}
@@ -15524,13 +15516,13 @@ packages:
     resolution: {integrity: sha512-Y93lCzHYgGWdrJ66yIktxiaGULYc6oGiABxhcO5AufBeOyoIdZF7bIfLaOrbM0iGIOXQQgxxRrFEnb+Y6w1n4A==}
     engines: {node: '>=10.18'}
 
-  ibm-cloud-sdk-core@4.3.4:
-    resolution: {integrity: sha512-hic1vAcgSLq2dAhmyOj89Gokq5xjCBlI8t82w5/HE979KG6iCsVNXMsjZdTBo9mm/J6K4NubC2G1TbS0SaZiDg==}
-    engines: {node: '>=14'}
+  ibm-cloud-sdk-core@5.3.2:
+    resolution: {integrity: sha512-YhtS+7hGNO61h/4jNShHxbbuJ1TnDqiFKQzfEaqePnonOvv8NnxWxOk92FlKKCCzZNOT34Gnd7WCLVJTntwEFQ==}
+    engines: {node: '>=18'}
 
-  ibm-watson@8.0.0:
-    resolution: {integrity: sha512-0vhB1bMZbF6H6AR18LDziaO5+7l8tkTeSeum2/z1gYEy25EatNWh3tHWiFgra923/HST1ZFJWcxloeZTohP9oA==}
-    engines: {node: '>=16.0.0'}
+  ibm-watson@10.0.0:
+    resolution: {integrity: sha512-OHpcGmMYbg36QzrLORiHrD2gPiGa/Vl7Uzl9v75xkZj5yfUbK0Vd/xPtE2QU7fudEjjzbPqx411+G5Nu2YWZ0w==}
+    engines: {node: '>=20.0.0'}
 
   iconv-lite@0.4.24:
     resolution: {integrity: sha512-v3MXnZAcvnywkTUEZomIActle7RXXeedOR31wwl7VlyoXO4Qi9arvSenNQWne1TcRwhCL1HwLI21bEqdpj8/rA==}
@@ -16076,10 +16068,6 @@ packages:
       ts-node:
         optional: true
 
-  jest-diff@27.5.1:
-    resolution: {integrity: sha512-m0NvkX55LDt9T4mctTEgnZk3fmEg3NRYutvMPWM/0iPnkFj2wIeF45O1718cMSOFO1vINkqmxqD8vE37uTEbqw==}
-    engines: {node: ^10.13.0 || ^12.13.0 || ^14.15.0 || >=15.0.0}
-
   jest-diff@29.7.0:
     resolution: {integrity: sha512-LMIgiIrhigmPrs03JHpxUh2yISK3vLFPkAodPeo0+BuF7wA2FoQbkEg1u8gBYBThncu7e1oEDUfIXVuTqLRUjw==}
     engines: {node: ^14.15.0 || ^16.10.0 || >=18.0.0}
@@ -16121,17 +16109,9 @@ packages:
     resolution: {integrity: sha512-kYA8IJcSYtST2BY9I+SMC32nDpBT3J2NvWJx8+JCuCdl/CR1I4EKUJROiP8XtCcxqgTTBGJNdbB1A8XRKbTetw==}
     engines: {node: ^14.15.0 || ^16.10.0 || >=18.0.0}
 
-  jest-matcher-utils@27.5.1:
-    resolution: {integrity: sha512-z2uTx/T6LBaCoNWNFWwChLBKYxTMcGBRjAt+2SbP929/Fflb9aa5LGma654Rz8z9HLxsrUaYzxE9T/EFIL/PAw==}
-    engines: {node: ^10.13.0 || ^12.13.0 || ^14.15.0 || >=15.0.0}
-
   jest-matcher-utils@29.7.0:
     resolution: {integrity: sha512-sBkD+Xi9DtcChsI3L3u0+N0opgPYnCRPtGcQYrgXmR+hmt/fYfWAL0xRXYU8eWOdfuLgBe0YCW3AFtnRLagq/g==}
     engines: {node: ^14.15.0 || ^16.10.0 || >=18.0.0}
-
-  jest-message-util@27.5.1:
-    resolution: {integrity: sha512-rMyFe1+jnyAAf+NHwTclDz0eAaLkVDdKVHHBFWsBWHnnh5YeJMNWWsv7AbFYXfK3oTqvL7VTWkhNLu1jX24D+g==}
-    engines: {node: ^10.13.0 || ^12.13.0 || ^14.15.0 || >=15.0.0}
 
   jest-message-util@29.7.0:
     resolution: {integrity: sha512-GBEV4GRADeP+qtB2+6u61stea8mGcOT4mCtrYISZwfu9/ISHFJ/5zOMXYbpBE9RsS5+Gb63DW4FgmnKJ79Kf6w==}
@@ -21871,7 +21851,7 @@ snapshots:
       '@ai-sdk/provider-utils': 2.1.13(zod@3.24.2)
       zod: 3.24.2
 
-  '@ai-sdk/openai@1.3.1(zod@3.24.2)':
+  '@ai-sdk/openai@1.3.2(zod@3.24.2)':
     dependencies:
       '@ai-sdk/provider': 1.1.0
       '@ai-sdk/provider-utils': 2.2.1(zod@3.24.2)
@@ -33243,8 +33223,6 @@ snapshots:
 
   diff-match-patch@1.0.5: {}
 
-  diff-sequences@27.5.1: {}
-
   diff-sequences@29.6.3: {}
 
   diff@4.0.2: {}
@@ -34788,13 +34766,6 @@ snapshots:
 
   expect-type@1.2.0: {}
 
-  expect@27.5.1:
-    dependencies:
-      '@jest/types': 27.5.1
-      jest-get-type: 27.5.1
-      jest-matcher-utils: 27.5.1
-      jest-message-util: 27.5.1
-
   expect@29.7.0:
     dependencies:
       '@jest/expect-utils': 29.7.0
@@ -36026,7 +35997,7 @@ snapshots:
 
   hyperdyperid@1.2.0: {}
 
-  ibm-cloud-sdk-core@4.3.4:
+  ibm-cloud-sdk-core@5.3.2:
     dependencies:
       '@types/debug': 4.1.12
       '@types/node': 20.17.27
@@ -36035,7 +36006,6 @@ snapshots:
       camelcase: 6.3.0
       debug: 4.4.0(supports-color@8.1.1)
       dotenv: 16.4.7
-      expect: 27.5.1
       extend: 3.0.2
       file-type: 16.5.4
       form-data: 4.0.0
@@ -36047,7 +36017,7 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  ibm-watson@8.0.0:
+  ibm-watson@10.0.0:
     dependencies:
       '@types/async': 3.2.24
       '@types/extend': 3.0.4
@@ -36057,7 +36027,7 @@ snapshots:
       async: 3.2.6
       camelcase: 6.3.0
       extend: 3.0.2
-      ibm-cloud-sdk-core: 4.3.4
+      ibm-cloud-sdk-core: 5.3.2
       isstream: 0.1.2
       websocket: 1.0.35
     transitivePeerDependencies:
@@ -36672,13 +36642,6 @@ snapshots:
       - babel-plugin-macros
       - supports-color
 
-  jest-diff@27.5.1:
-    dependencies:
-      chalk: 4.1.2
-      diff-sequences: 27.5.1
-      jest-get-type: 27.5.1
-      pretty-format: 27.5.1
-
   jest-diff@29.7.0:
     dependencies:
       chalk: 4.1.2
@@ -36749,31 +36712,12 @@ snapshots:
       jest-get-type: 29.6.3
       pretty-format: 29.7.0
 
-  jest-matcher-utils@27.5.1:
-    dependencies:
-      chalk: 4.1.2
-      jest-diff: 27.5.1
-      jest-get-type: 27.5.1
-      pretty-format: 27.5.1
-
   jest-matcher-utils@29.7.0:
     dependencies:
       chalk: 4.1.2
       jest-diff: 29.7.0
       jest-get-type: 29.6.3
       pretty-format: 29.7.0
-
-  jest-message-util@27.5.1:
-    dependencies:
-      '@babel/code-frame': 7.26.2
-      '@jest/types': 27.5.1
-      '@types/stack-utils': 2.0.3
-      chalk: 4.1.2
-      graceful-fs: 4.2.11
-      micromatch: 4.0.8
-      pretty-format: 27.5.1
-      slash: 3.0.0
-      stack-utils: 2.0.6
 
   jest-message-util@29.7.0:
     dependencies:

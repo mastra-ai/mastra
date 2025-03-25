@@ -26,7 +26,7 @@
   },
   "dependencies": {
     "@mastra/core": "workspace:^",
-    "ibm-watson": "^8.0.0",
+    "ibm-watson": "^10.0.0",
     "zod": "^3.24.2"
   },
   "devDependencies": {
