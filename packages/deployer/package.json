@@ -121,7 +121,7 @@
     "tsup": "^8.4.0",
     "type-fest": "^4.37.0",
     "typescript": "^5.8.2",
-    "vitest": "^2.1.9",
+    "vitest": "^3.0.9",
     "zod-to-json-schema": "^3.24.3"
   }
 }
