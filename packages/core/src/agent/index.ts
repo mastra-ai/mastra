@@ -1049,7 +1049,7 @@ export class Agent<
         tools: this.tools,
         convertedTools,
         onStepFinish: (result: any) => {
-          onStepFinish?.(result);
+          void onStepFinish?.(result);
         },
         onFinish: async (result: any) => {
           try {
