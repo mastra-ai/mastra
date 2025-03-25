@@ -30,7 +30,7 @@ jobs:
       - name: Setup Node.js 20.x
         uses: actions/setup-node@v4
         with:
-          node-version: 20.x
+          node-version: 20.19.0
           cache: 'pnpm'
 
       - name: Install dependencies
@@ -63,7 +63,7 @@ jobs:
       - name: Setup Node.js 20.x
         uses: actions/setup-node@v4
         with:
-          node-version: 20.x
+          node-version: 20.19.0
           cache: 'pnpm'
 
       - name: Install dependencies
@@ -105,7 +105,7 @@ jobs:
       - name: Setup Node.js 20.x
         uses: actions/setup-node@v4
         with:
-          node-version: 20.x
+          node-version: 20.19.0
           cache: 'pnpm'
 
       - name: Install dependencies

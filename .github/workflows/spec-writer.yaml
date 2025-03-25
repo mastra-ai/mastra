@@ -32,7 +32,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20' # Adjust version as needed
+          node-version: '20.19.0' # Adjust version as needed
           cache: 'npm'
           cache-dependency-path: './integration-generator/package-lock.json'
 
