@@ -249,6 +249,7 @@ export class Memory extends MastraMemory {
               text: message.content,
               message_id: message.id,
               thread_id: message.threadId,
+              resource_id: message.resourceId,
             },
           ],
         });

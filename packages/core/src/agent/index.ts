@@ -358,6 +358,7 @@ export class Agent<
                 return {
                   id: messageId,
                   threadId: threadId,
+                  resourceId: resourceId,
                   role: message.role as any,
                   content: message.content as any,
                   createdAt: new Date(Date.now() + index), // use Date.now() + index to make sure every message is atleast one millisecond apart
@@ -754,6 +755,7 @@ export class Agent<
                 id: this.getMemory()?.generateId()!,
                 createdAt: new Date(),
                 threadId: thread.id,
+                resourceId: resourceId,
                 ...u,
                 content: u.content as UserContent | AssistantContent,
                 role: u.role as 'user' | 'assistant',
