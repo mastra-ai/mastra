@@ -31,8 +31,6 @@ export function WorkflowGraphInner({ workflow }: { workflow: Workflow }) {
     'loop-result-node': WorkflowLoopResultNode,
   };
 
-  console.log('nodes===>', nodes);
-
   return (
     <div className="w-full h-full">
       <ReactFlow
