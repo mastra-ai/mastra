@@ -41,9 +41,12 @@ Our implementation will:
 ```
 research-assistant/
 ├── src/
-│   ├── agents/
-│   │   └── researchAgent.ts
-│   └── index.ts
+│   ├── mastra/
+│   │   ├── agents/
+│   │   │   └── researchAgent.ts
+│   │   └── index.ts
+│   ├── index.ts
+│   └── store.ts
 ├── package.json
 └── .env
 ```
@@ -74,9 +77,10 @@ POSTGRES_CONNECTION_STRING=your_connection_string
 
 Create the necessary files for our project:
 
-```bash
-mkdir -p src/agents
-touch src/agents/researchAgent.ts src/index.ts
+```bash copy
+mkdir -p src/mastra/agents
+touch src/mastra/agents/researchAgent.ts
+touch src/mastra/index.ts src/store.ts src/index.ts
 ```
 
 ### Create the Research Assistant Agent
@@ -86,7 +90,7 @@ Now we'll create our RAG-enabled research assistant. The agent uses:
 - GPT-4o-mini for understanding queries and generating responses
 - Custom instructions that guide the agent on how to analyze papers, use retrieved content effectively, and acknowledge limitations
 
-```typescript copy showLineNumbers filename="src/agents/researchAgent.ts"
+```typescript copy showLineNumbers filename="src/mastra/agents/researchAgent.ts"
 import { Agent } from '@mastra/core/agent';
 import { openai } from '@ai-sdk/openai';
 import { createVectorQueryTool } from '@mastra/rag';
@@ -115,14 +119,13 @@ export const researchAgent = new Agent({
 
 ### Set Up the Mastra Instance and Vector Store
 
-```typescript copy showLineNumbers filename="src/index.ts"
-import { MDocument } from '@mastra/rag';
+```typescript copy showLineNumbers filename="src/mastra/index.ts"
 import { Mastra } from '@mastra/core';
 import { PgVector } from '@mastra/pg';
-import { embedMany } from 'ai';
 
 import { researchAgent } from './agents/researchAgent';
 
+// Initialize Mastra instance
 const pgVector = new PgVector(process.env.POSTGRES_CONNECTION_STRING!);
 export const mastra = new Mastra({
   agents: { researchAgent },
@@ -137,7 +140,12 @@ This step handles the initial document processing. We:
 2. Convert it into a document object
 3. Split it into smaller, manageable chunks for better processing
 
-```typescript copy showLineNumbers{14} filename="src/index.ts"
+```typescript copy showLineNumbers filename="src/store.ts"
+import { openai } from "@ai-sdk/openai";
+import { MDocument } from '@mastra/rag';
+import { embedMany } from 'ai';
+import { mastra } from "./mastra";
+
 // Load the paper
 const paperUrl = "https://arxiv.org/html/1706.03762";
 const response = await fetch(paperUrl);
@@ -151,6 +159,9 @@ const chunks = await doc.chunk({
   overlap: 50,
   separator: '\n',
 });
+
+// A log to show the number of chunks
+console.log("Number of chunks:", chunks.length); // 893 chunks
 ```
 
 ### Create and Store Embeddings
@@ -164,7 +175,7 @@ Finally, we'll prepare our content for RAG by:
 
 This allows our agent to efficiently search and retrieve relevant information.
 
-```typescript copy showLineNumbers{28} filename="src/index.ts"
+```typescript copy showLineNumbers{18} filename="src/store.ts"
 // Generate embeddings
 const { embeddings } = await embedMany({
   model: openai.embedding('text-embedding-3-small'),
@@ -197,11 +208,18 @@ This will:
 3. Generate embeddings for each chunk
 4. Store both the embeddings and text in our vector database
 
+To run the script and store embeddings:
+
+```bash
+npx bun src/store.ts
+```
+
 ### Test the Assistant
 
 Let's test our research assistant with different types of queries:
 
 ```typescript filename="src/index.ts" showLineNumbers{52} copy
+import { mastra } from "./mastra";
 const agent = mastra.getAgent('researchAgent');
 
 // Basic query about concepts
@@ -209,6 +227,12 @@ const query1 = "What problems does sequence modeling face with neural networks?"
 const response1 = await agent.generate(query1);
 console.log("\nQuery:", query1);
 console.log("Response:", response1.text);
+```
+
+Run the script:
+
+```bash copy
+npx bun src/index.ts
 ```
 
 You should see output like:
@@ -243,7 +267,7 @@ task, while also reducing training costs.
 Start the Mastra server to expose your research assistant via API:
 
 ```bash
-mastra dev --dir src
+mastra dev
 ```
 
 Your research assistant will be available at:
