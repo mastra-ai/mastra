@@ -91,7 +91,6 @@
     "examples-workflow-with-memory": "0.0.1",
     "examples-workflow-with-separate-steps": "0.0.1-alpha.2",
     "examples-yc-directory": "1.0.1-alpha.2",
-    "@mastra/composio": "0.1.13",
     "@mastra/firecrawl": "1.1.13",
     "@mastra/github": "1.1.13",
     "@mastra/ragie": "1.1.13",
