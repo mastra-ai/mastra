@@ -77,7 +77,7 @@ An optional object that can include configuration for output structure, memory m
     },
     {
       name: "onStepFinish",
-      type: "(step: string) => void",
+      type: "GenerateTextOnStepFinishCallback<any> | never",
       isOptional: true,
       description: "Callback function called after each execution step. Receives step details as a JSON string.",
     },

@@ -71,13 +71,13 @@ An optional object that can include configuration for output structure, memory m
     },
     {
       name: "onFinish",
-      type: StreamTextOnFinishCallback | StreamObjectOnFinishCallback,
+      type: "StreamTextOnFinishCallback | StreamObjectOnFinishCallback",
       isOptional: true,
-      description: "Callback function called when streaming is complete.",
+      description: "Callback function called when streaming is complete. Unavailable for structured output",
     },
     {
       name: "onStepFinish",
-      type: "(step: string) => void",
+      type: "GenerateTextOnStepFinishCallback<any> | never",
       isOptional: true,
       description: "Callback function called after each step during streaming.",
     },
