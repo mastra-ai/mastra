@@ -10,8 +10,8 @@ import { Telemetry } from '../telemetry';
 import { createTool } from '../tools';
 
 import { Step } from './step';
-import { WhenConditionReturnValue } from './types';
 import type { WorkflowContext, WorkflowResumeResult } from './types';
+import { WhenConditionReturnValue } from './types';
 import { Workflow } from './workflow';
 
 const storage = new DefaultStorage({
@@ -1845,6 +1845,8 @@ describe('Workflow', async () => {
       });
 
       const workflow = new Workflow({ name: 'test-workflow' });
+
+      // @ts-expect-error - tools are not type-safe compatible with step actions
       workflow.step(step1).after(step1).step(randomTool).commit();
 
       await workflow.createRun().start();
