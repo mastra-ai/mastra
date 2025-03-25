@@ -222,7 +222,26 @@ export class PgVector extends MastraVector {
       const acquired = await client.query('SELECT pg_try_advisory_lock($1)', [lockId]);
 
       if (!acquired.rows[0].pg_try_advisory_lock) {
-        // Wait for other process to finish
+        // Check if table already exists
+        const exists = await client.query(
+          `
+          SELECT 1 FROM pg_class c 
+          JOIN pg_namespace n ON n.oid = c.relnamespace
+          WHERE c.relname = $1 
+          AND n.nspname = 'public'
+        `,
+          [indexName],
+        );
+
+        if (exists.rows.length > 0) {
+          // Table exists, just build index if needed
+          if (buildIndex) {
+            await this.buildIndex({ indexName, metric, indexConfig });
+          }
+          return;
+        }
+
+        // Table doesn't exist, wait for lock
         await client.query('SELECT pg_advisory_lock($1)', [lockId]);
       }
 
@@ -284,6 +303,23 @@ export class PgVector extends MastraVector {
       const acquired = await client.query('SELECT pg_try_advisory_lock($1)', [lockId]);
 
       if (!acquired.rows[0].pg_try_advisory_lock) {
+        // Check if index already exists
+        const exists = await client.query(
+          `
+            SELECT 1 FROM pg_class c 
+            JOIN pg_namespace n ON n.oid = c.relnamespace
+            WHERE c.relname = $1 
+            AND n.nspname = 'public'
+          `,
+          [`${indexName}_vector_idx`],
+        );
+
+        if (exists.rows.length > 0) {
+          this.indexCache.delete(indexName); // Still clear cache since we checked
+          return;
+        }
+
+        // Index doesn't exist, wait for lock
         await client.query('SELECT pg_advisory_lock($1)', [lockId]);
       }
 
