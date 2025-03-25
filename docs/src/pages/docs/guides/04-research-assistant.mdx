@@ -160,8 +160,8 @@ const chunks = await doc.chunk({
   separator: '\n',
 });
 
-// A log to show the number of chunks
-console.log("Number of chunks:", chunks.length); // 893 chunks
+console.log("Number of chunks:", chunks.length);
+// Number of chunks: 893
 ```
 
 ### Create and Store Embeddings
@@ -175,7 +175,7 @@ Finally, we'll prepare our content for RAG by:
 
 This allows our agent to efficiently search and retrieve relevant information.
 
-```typescript copy showLineNumbers{18} filename="src/store.ts"
+```typescript copy showLineNumbers{23} filename="src/store.ts"
 // Generate embeddings
 const { embeddings } = await embedMany({
   model: openai.embedding('text-embedding-3-small'),
@@ -208,7 +208,7 @@ This will:
 3. Generate embeddings for each chunk
 4. Store both the embeddings and text in our vector database
 
-To run the script and store embeddings:
+To run the script and store the embeddings:
 
 ```bash
 npx bun src/store.ts
@@ -218,7 +218,7 @@ npx bun src/store.ts
 
 Let's test our research assistant with different types of queries:
 
-```typescript filename="src/index.ts" showLineNumbers{52} copy
+```typescript filename="src/index.ts" showLineNumbers copy
 import { mastra } from "./mastra";
 const agent = mastra.getAgent('researchAgent');
 
@@ -246,7 +246,7 @@ Response: Sequence modeling with neural networks faces several key challenges:
 ```
 
 Let's try another question:
-```typescript filename="src/index.ts" showLineNumbers{60} copy
+```typescript filename="src/index.ts" showLineNumbers{10} copy
 // Query about specific findings
 const query2 = "What improvements were achieved in translation quality?";
 const response2 = await agent.generate(query2);
