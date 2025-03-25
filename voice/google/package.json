@@ -28,7 +28,7 @@
     "lint": "eslint ."
   },
   "dependencies": {
-    "@google-cloud/speech": "^6.7.1",
+    "@google-cloud/speech": "^7.0.1",
     "@google-cloud/text-to-speech": "^5.8.1",
     "@mastra/core": "workspace:^",
     "zod": "^3.24.2"
