@@ -110,7 +110,7 @@ export class Agent<
     if (config.voice) {
       this.voice = config.voice;
       this.voice?.addTools(this.tools);
-      this.voice?.updateConfig({ instructions: config.instructions });
+      this.voice?.addInstructions(config.instructions);
     }
   }
 
