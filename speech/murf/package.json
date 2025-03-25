@@ -1,6 +1,6 @@
 {
   "name": "@mastra/speech-murf",
-  "version": "0.1.14-alpha.1",
+  "version": "0.1.14-alpha.2",
   "description": "Mastra Murf speech integration (DEPRECATED - use @mastra/voice-murf instead)",
   "type": "module",
   "files": [
