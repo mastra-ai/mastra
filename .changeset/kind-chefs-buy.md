@@ -4,4 +4,4 @@
 'create-mastra': patch
 ---
 
-Fix messages in thread not showing latest when switching between threads
+Show No input for steps without input on traces UI

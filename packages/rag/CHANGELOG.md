@@ -1,5 +1,36 @@
 # @mastra/rag
 
+## 0.1.14-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [b4fbc59]
+  - @mastra/core@0.6.5-alpha.0
+
+## 0.1.13
+
+### Patch Changes
+
+- ac30427: Updated inputschema for vectorquery tool
+- Updated dependencies [6794797]
+- Updated dependencies [fb68a80]
+- Updated dependencies [b56a681]
+- Updated dependencies [248cb07]
+  - @mastra/core@0.6.4
+
+## 0.1.13-alpha.2
+
+### Patch Changes
+
+- ac30427: Updated inputschema for vectorquery tool
+
+## 0.1.13-alpha.1
+
+### Patch Changes
+
+- Updated dependencies [6794797]
+  - @mastra/core@0.6.4-alpha.1
+
 ## 0.1.13-alpha.0
 
 ### Patch Changes

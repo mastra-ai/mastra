@@ -2,14 +2,16 @@ import fs from 'node:fs/promises';
 
 import { FastMCP } from 'tylerbarnes-fastmcp-fix';
 
+import { prepare } from './prepare-docs/prepare.js';
 import { blogTool } from './tools/blog.js';
 import { changesTool } from './tools/changes.js';
 import { docsTool } from './tools/docs.js';
 import { examplesTool } from './tools/examples.js';
 import { fromPackageRoot } from './utils.js';
 
-// console.error('Starting Mastra Documentation Server...');
-// console.error('Docs base dir:', path.join(__dirname, '../.docs/raw/'));
+if (process.env.REBUILD_DOCS_ON_START === 'true') {
+  await prepare();
+}
 
 const server = new FastMCP({
   name: 'Mastra Documentation Server',

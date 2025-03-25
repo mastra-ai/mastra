@@ -1,5 +1,40 @@
 # @mastra/deployer-vercel
 
+## 0.1.14-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [b4fbc59]
+  - @mastra/core@0.6.5-alpha.0
+  - @mastra/deployer@0.2.5-alpha.0
+
+## 0.1.13
+
+### Patch Changes
+
+- Updated dependencies [e764fd1]
+- Updated dependencies [6794797]
+- Updated dependencies [709aa2c]
+- Updated dependencies [fb68a80]
+- Updated dependencies [e764fd1]
+- Updated dependencies [05ef3e0]
+- Updated dependencies [95c5745]
+- Updated dependencies [b56a681]
+- Updated dependencies [85a2461]
+- Updated dependencies [248cb07]
+  - @mastra/deployer@0.2.4
+  - @mastra/core@0.6.4
+
+## 0.1.13-alpha.1
+
+### Patch Changes
+
+- Updated dependencies [6794797]
+- Updated dependencies [709aa2c]
+- Updated dependencies [85a2461]
+  - @mastra/core@0.6.4-alpha.1
+  - @mastra/deployer@0.2.4-alpha.1
+
 ## 0.1.13-alpha.0
 
 ### Patch Changes

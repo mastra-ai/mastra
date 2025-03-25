@@ -4,4 +4,4 @@
 'create-mastra': patch
 ---
 
-Fix new thread title not reflecting until refresh or new message is sent
+Only mark required fields as required on the playground

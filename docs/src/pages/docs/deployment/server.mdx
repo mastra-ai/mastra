@@ -113,6 +113,35 @@ Each middleware function:
 }
 ```
 
+### Special Mastra Headers
+
+When integrating with Mastra Cloud or building custom clients, there are special headers that clients send to identify themselves and enable specific features. Your server middleware can check for these headers to customize behavior:
+
+```typescript copy
+{
+  handler: async (c, next) => {
+    // Check for Mastra-specific headers in incoming requests
+    const isFromMastraCloud = c.req.header('x-mastra-cloud') === 'true';
+    const clientType = c.req.header('x-mastra-client-type'); // e.g., 'js', 'python'
+    const isDevPlayground = c.req.header('x-mastra-dev-playground') === 'true';
+    
+    // Customize behavior based on client information
+    if (isFromMastraCloud) {
+      // Special handling for Mastra Cloud requests
+    }
+    
+    await next();
+  }
+}
+```
+
+These headers have the following purposes:
+- `x-mastra-cloud`: Indicates that the request is coming from Mastra Cloud
+- `x-mastra-client-type`: Specifies the client SDK type (e.g., 'js', 'python')
+- `x-mastra-dev-playground`: Indicates that the request is from the development playground
+
+You can use these headers in your middleware to implement client-specific logic or enable features only for certain environments.
+
 ## Deployment
 
 Since Mastra builds to a standard Node.js server, you can deploy to any platform that runs Node.js applications:

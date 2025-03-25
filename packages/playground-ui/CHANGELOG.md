@@ -1,5 +1,41 @@
 # @mastra/playground-ui
 
+## 2.0.5-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [b4fbc59]
+- Updated dependencies [0206617]
+- Updated dependencies [3811029]
+  - @mastra/core@0.6.5-alpha.0
+  - @mastra/client-js@0.1.13-alpha.0
+
+## 2.0.4
+
+### Patch Changes
+
+- 933ea4d: Fix messages in thread not showing latest when switching between threads
+- 9cba774: Fix new thread title not reflecting until refresh or new message is sent
+- 77e4c35: Pop a dialog showing the functional condition when a functional condition is clicked on workflow graph
+- 248cb07: Allow ai-sdk Message type for messages in agent generate and stream
+  Fix sidebar horizontal overflow in playground
+- Updated dependencies [6794797]
+- Updated dependencies [fb68a80]
+- Updated dependencies [05ef3e0]
+- Updated dependencies [b56a681]
+- Updated dependencies [248cb07]
+  - @mastra/core@0.6.4
+  - @mastra/client-js@0.1.12
+
+## 2.0.4-alpha.1
+
+### Patch Changes
+
+- 77e4c35: Pop a dialog showing the functional condition when a functional condition is clicked on workflow graph
+- Updated dependencies [6794797]
+  - @mastra/core@0.6.4-alpha.1
+  - @mastra/client-js@0.1.12-alpha.1
+
 ## 2.0.4-alpha.0
 
 ### Patch Changes

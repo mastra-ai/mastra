@@ -1,6 +1,6 @@
 {
   "name": "@mastra/client-js",
-  "version": "0.1.12-alpha.0",
+  "version": "0.1.13-alpha.0",
   "description": "The official TypeScript library for the Mastra Client API",
   "author": "",
   "type": "module",
@@ -38,9 +38,9 @@
     "@internal/lint": "workspace:*",
     "@tsconfig/recommended": "^1.0.8",
     "@types/json-schema": "^7.0.15",
-    "@types/node": "^22.13.10",
+    "@types/node": "^20.17.27",
     "tsup": "^8.4.0",
     "typescript": "^5.8.2",
-    "vitest": "^3.0.8"
+    "vitest": "^3.0.9"
   }
 }
