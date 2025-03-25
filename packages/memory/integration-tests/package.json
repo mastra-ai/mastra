@@ -29,7 +29,7 @@
     "@vitest/coverage-v8": "^1.6.1",
     "ai": "^4.2.2",
     "jsdom": "^26.0.0",
-    "next": "^15.2.3",
+    "next": "^15.2.4",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "typescript": "^5.8.2",
