@@ -67,7 +67,7 @@
     "react-code-block": "1.1.1",
     "react-day-picker": "^9.6.1",
     "react-hook-form": "^7.53.0",
-    "react-markdown": "^9.1.0",
+    "react-markdown": "^10.1.0",
     "react-resizable-panels": "^2.1.7",
     "react-syntax-highlighter": "^15.6.1",
     "rehype-stringify": "^10.0.1",
