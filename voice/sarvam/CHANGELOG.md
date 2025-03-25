@@ -1,5 +1,41 @@
 # @mastra/voice-sarvam
 
+## 0.1.4-alpha.1
+
+### Patch Changes
+
+- Updated dependencies [0b54522]
+- Updated dependencies [1af25d5]
+- Updated dependencies [27439ad]
+  - @mastra/core@0.7.0-alpha.1
+
+## 0.1.4-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [b4fbc59]
+  - @mastra/core@0.6.5-alpha.0
+
+## 0.1.3
+
+### Patch Changes
+
+- a0bac3a: chore: update savram voice package
+- 019247c: feat: add STT functionality in @mastra/voice-sarvam
+- Updated dependencies [6794797]
+- Updated dependencies [fb68a80]
+- Updated dependencies [b56a681]
+- Updated dependencies [248cb07]
+  - @mastra/core@0.6.4
+
+## 0.1.3-alpha.1
+
+### Patch Changes
+
+- a0bac3a: chore: update savram voice package
+- Updated dependencies [6794797]
+  - @mastra/core@0.6.4-alpha.1
+
 ## 0.1.3-alpha.0
 
 ### Patch Changes

@@ -1,5 +1,30 @@
 # create-mastra
 
+## 0.2.3-alpha.0
+
+### Patch Changes
+
+- 2447900: Show No input for steps without input on traces UI
+- c30787b: Stop automatically scrolling to bottom in agent chat if user has scrolled up
+- 214e7ce: Only mark required fields as required on the playground
+- 0b496ff: Load env vars on mastra deploy
+
+## 0.2.2
+
+### Patch Changes
+
+- 933ea4d: Fix messages in thread not showing latest when switching between threads
+- 9cba774: Fix new thread title not reflecting until refresh or new message is sent
+- 77e4c35: Pop a dialog showing the functional condition when a functional condition is clicked on workflow graph
+- 248cb07: Allow ai-sdk Message type for messages in agent generate and stream
+  Fix sidebar horizontal overflow in playground
+
+## 0.2.2-alpha.1
+
+### Patch Changes
+
+- 77e4c35: Pop a dialog showing the functional condition when a functional condition is clicked on workflow graph
+
 ## 0.2.2-alpha.0
 
 ### Patch Changes

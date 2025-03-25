@@ -1,5 +1,6 @@
 {
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "rangeStrategy": "bump",
   "extends": [
     "config:recommended",
     ":dependencyDashboard",
@@ -11,6 +12,9 @@
   ],
   "postUpdateOptions": ["pnpmDedupe"],
   "rebaseWhen": "conflicted",
+  "major": {
+    "dependencyDashboardApproval": true
+  },
   "packageRules": [
     {
       "groupName": "examples",
@@ -27,9 +31,16 @@
     {
       "groupName": "AI SDK",
       "commitMessageTopic": "AI SDK",
-      "matchFileNames": ["+(package.json)", "**/package.json", "!./examples/**", "!./docs/**"],
+      "matchFileNames": ["+(package.json)", "**/package.json", "!./docs/**"],
       "matchPackageNames": ["ai", "^@ai-sdk/"],
       "matchUpdateTypes": ["major", "minor", "patch"],
+      "matchDepTypes": ["dependencies", "devDependencies"],
+      "dependencyDashboardApproval": false
+    },
+    {
+      "groupName": "E2e tests",
+      "commitMessageTopic": "e2e-tests",
+      "matchFileNames": ["e2e-tests/**/package.json"],
       "matchDepTypes": ["dependencies", "devDependencies"],
       "dependencyDashboardApproval": false
     },
@@ -43,9 +54,20 @@
       "dependencyDashboardApproval": false
     },
     {
+      "groupName": "formatting & linting",
+      "commitMessageTopic": "Formatting & linting",
+      "matchPaths": ["+(package.json)", "**/package.json"],
+      "matchPackageNames": ["eslint", "prettier"],
+      "matchPackagePatterns": ["^eslint-"],
+      "matchUpdateTypes": ["major", "minor", "patch"],
+      "matchDepTypes": ["dependencies", "devDependencies"],
+      "dependencyDashboardApproval": false
+    },
+    {
       "groupName": "core",
       "commitMessageTopic": "Mastra Core",
       "matchFileNames": ["packages/*/package.json"],
+      "excludePackageNames": ["ai", "^@ai-sdk/"],
       "matchUpdateTypes": ["minor", "patch"],
       "matchDepTypes": ["dependencies", "devDependencies"]
     },
@@ -74,6 +96,13 @@
       "groupName": "deployers",
       "commitMessageTopic": "Mastra deployers",
       "matchFileNames": ["deployers/*/package.json"],
+      "matchUpdateTypes": ["minor", "patch"],
+      "matchDepTypes": ["dependencies", "devDependencies"]
+    },
+    {
+      "groupName": "playground",
+      "commitMessageTopic": "Mastra playground",
+      "matchFileNames": ["packages/cli/playground/package.json"],
       "matchUpdateTypes": ["minor", "patch"],
       "matchDepTypes": ["dependencies", "devDependencies"]
     }

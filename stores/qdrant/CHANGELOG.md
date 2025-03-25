@@ -1,5 +1,39 @@
 # @mastra/qdrant
 
+## 0.2.5-alpha.1
+
+### Patch Changes
+
+- Updated dependencies [0b54522]
+- Updated dependencies [1af25d5]
+- Updated dependencies [27439ad]
+  - @mastra/core@0.7.0-alpha.1
+
+## 0.2.5-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [b4fbc59]
+  - @mastra/core@0.6.5-alpha.0
+
+## 0.2.4
+
+### Patch Changes
+
+- b56a681: Update README and some tests for vector stores
+- Updated dependencies [6794797]
+- Updated dependencies [fb68a80]
+- Updated dependencies [b56a681]
+- Updated dependencies [248cb07]
+  - @mastra/core@0.6.4
+
+## 0.2.4-alpha.1
+
+### Patch Changes
+
+- Updated dependencies [6794797]
+  - @mastra/core@0.6.4-alpha.1
+
 ## 0.2.4-alpha.0
 
 ### Patch Changes

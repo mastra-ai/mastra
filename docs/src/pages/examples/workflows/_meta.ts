@@ -9,6 +9,7 @@ const meta = {
   "cyclical-dependencies": "Cyclical Dependencies",
   "suspend-and-resume": "Suspend and Resume",
   "workflow-variables": "Workflow Variables",
+  "human-in-the-loop": "Human in the Loop",
 };
 
 export default meta;

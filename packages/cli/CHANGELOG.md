@@ -1,5 +1,67 @@
 # mastra
 
+## 0.4.4-alpha.1
+
+### Patch Changes
+
+- 2447900: Show No input for steps without input on traces UI
+- c30787b: Stop automatically scrolling to bottom in agent chat if user has scrolled up
+- 214e7ce: Only mark required fields as required on the playground
+- 0b496ff: Load env vars on mastra deploy
+- Updated dependencies [cdc0498]
+- Updated dependencies [0b54522]
+- Updated dependencies [1af25d5]
+- Updated dependencies [0b496ff]
+- Updated dependencies [27439ad]
+  - @mastra/deployer@0.2.5-alpha.1
+  - @mastra/core@0.7.0-alpha.1
+
+## 0.4.4-alpha.0
+
+### Patch Changes
+
+- e05e7cc: Add origin to cli tracking
+- 3811029: Add identifying header
+- Updated dependencies [b4fbc59]
+  - @mastra/core@0.6.5-alpha.0
+  - @mastra/deployer@0.2.5-alpha.0
+
+## 0.4.3
+
+### Patch Changes
+
+- 2348e30: When running pnpm create mastra and selecting to install MCP docs server for Windsurf, the prompt placement was confusing as there was an additional confirm step during initialization later. Now the prompts all happen at the same time. Also added a check so we don't re-install global Windsurf if it's already installed
+- 6794797: Check for eval values before inserting into storage
+- 933ea4d: Fix messages in thread not showing latest when switching between threads
+- 9cba774: Fix new thread title not reflecting until refresh or new message is sent
+- 77e4c35: Pop a dialog showing the functional condition when a functional condition is clicked on workflow graph
+- 248cb07: Allow ai-sdk Message type for messages in agent generate and stream
+  Fix sidebar horizontal overflow in playground
+- Updated dependencies [e764fd1]
+- Updated dependencies [6794797]
+- Updated dependencies [709aa2c]
+- Updated dependencies [fb68a80]
+- Updated dependencies [e764fd1]
+- Updated dependencies [05ef3e0]
+- Updated dependencies [95c5745]
+- Updated dependencies [b56a681]
+- Updated dependencies [85a2461]
+- Updated dependencies [248cb07]
+  - @mastra/deployer@0.2.4
+  - @mastra/core@0.6.4
+
+## 0.4.3-alpha.2
+
+### Patch Changes
+
+- 6794797: Check for eval values before inserting into storage
+- 77e4c35: Pop a dialog showing the functional condition when a functional condition is clicked on workflow graph
+- Updated dependencies [6794797]
+- Updated dependencies [709aa2c]
+- Updated dependencies [85a2461]
+  - @mastra/core@0.6.4-alpha.1
+  - @mastra/deployer@0.2.4-alpha.1
+
 ## 0.4.3-alpha.1
 
 ### Patch Changes

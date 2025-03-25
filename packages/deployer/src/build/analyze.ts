@@ -17,7 +17,7 @@ import { writeFile } from 'node:fs/promises';
 
 const globalExternals = ['pino', 'pino-pretty', '@libsql/client', 'pg', 'libsql', 'jsdom', 'sqlite3'];
 
-function findExternalImporter(module: OutputChunk, external: string, allOutputs: OutputChunk[]) {
+function findExternalImporter(module: OutputChunk, external: string, allOutputs: OutputChunk[]): OutputChunk | null {
   const capturedFiles = new Set();
 
   for (const id of module.imports) {
@@ -33,7 +33,11 @@ function findExternalImporter(module: OutputChunk, external: string, allOutputs:
   for (const file of capturedFiles) {
     const nextModule = allOutputs.find(o => o.fileName === file);
     if (nextModule) {
-      return findExternalImporter(nextModule, external, allOutputs);
+      const importer = findExternalImporter(nextModule, external, allOutputs);
+
+      if (importer) {
+        return importer;
+      }
     }
   }
 
@@ -218,6 +222,7 @@ async function bundleExternals(depsToOptimize: Map<string, string[]>, outputDir:
   });
   const moduleResolveMap = {} as Record<string, Record<string, string>>;
   const filteredChunks = output.filter(o => o.type === 'chunk');
+
   for (const o of filteredChunks.filter(o => o.isEntry || o.isDynamicEntry)) {
     for (const external of globalExternals) {
       const importer = findExternalImporter(o, external, filteredChunks);
@@ -225,8 +230,12 @@ async function bundleExternals(depsToOptimize: Map<string, string[]>, outputDir:
       if (importer) {
         const fullPath = join(outputDir, importer.fileName);
         moduleResolveMap[fullPath] = moduleResolveMap[fullPath] || {};
-        if (importer.moduleIds.length > 1) {
-          moduleResolveMap[fullPath][external] = importer.moduleIds.slice(-2, -1)[0]!;
+        if (importer.moduleIds.length) {
+          moduleResolveMap[fullPath][external] = importer.moduleIds[importer.moduleIds.length - 1]?.startsWith(
+            '\x00virtual:#virtual',
+          )
+            ? importer.moduleIds[importer.moduleIds.length - 2]!
+            : importer.moduleIds[importer.moduleIds.length - 1]!;
         }
       }
     }

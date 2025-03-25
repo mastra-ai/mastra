@@ -74,7 +74,7 @@ export class AgentNetwork extends MastraBase {
             // Extract the actions from the context
             const actions = context.actions;
 
-            console.log(`Executing ${actions.length} specialized agents`);
+            this.logger.debug(`Executing ${actions.length} specialized agents`);
 
             // Execute each agent in parallel and collect results
             const results = await Promise.all(
@@ -83,7 +83,7 @@ export class AgentNetwork extends MastraBase {
               ),
             );
 
-            console.log(results);
+            this.logger.debug('Results:', { results });
 
             // Store the results in the agent history for future reference
             actions.forEach((action, index) => {
@@ -98,7 +98,7 @@ export class AgentNetwork extends MastraBase {
           } catch (err) {
             // Properly type the error
             const error = err as Error;
-            console.error('Error in transmit tool:', error);
+            this.logger.error('Error in transmit tool:', { error });
             return `Error executing agents: ${error.message}`;
           }
         },
@@ -241,13 +241,11 @@ export class AgentNetwork extends MastraBase {
       // Generate a response from the agent
       const result = await agent.generate(messagesWithContext);
 
-      console.log(result);
-
       return result.text;
     } catch (err) {
       // Properly type the error
       const error = err as Error;
-      console.error(`Error executing agent "${agentId}":`, error);
+      this.logger.error(`Error executing agent "${agentId}":`, { error });
       return `Unable to execute agent "${agentId}": ${error.message}`;
     }
   }
@@ -369,7 +367,7 @@ export class AgentNetwork extends MastraBase {
     | GenerateObjectResult<Z extends ZodSchema ? z.infer<Z> : unknown>
   > {
     this.#clearNetworkHistoryBeforeRun();
-    console.log(`AgentNetwork: Starting generation with ${this.#agents.length} available agents`);
+    this.logger.debug(`AgentNetwork: Starting generation with ${this.#agents.length} available agents`);
 
     const ops = {
       maxSteps: this.#agents?.length * 10, // Default to 10 steps per agent
@@ -377,7 +375,7 @@ export class AgentNetwork extends MastraBase {
     };
 
     // Log the start of the routing process
-    console.log(`AgentNetwork: Routing with max steps: ${ops.maxSteps}`);
+    this.logger.debug(`AgentNetwork: Routing with max steps: ${ops.maxSteps}`);
 
     // Generate a response using the routing agent
     const result = await this.#routingAgent.generate(
@@ -386,7 +384,7 @@ export class AgentNetwork extends MastraBase {
     );
 
     // Log completion
-    console.log(`AgentNetwork: Generation complete with ${result.steps?.length || 0} steps`);
+    this.logger.debug(`AgentNetwork: Generation complete with ${result.steps?.length || 0} steps`);
 
     return result;
   }
@@ -409,7 +407,7 @@ export class AgentNetwork extends MastraBase {
     | StreamObjectResult<any, Z extends ZodSchema ? z.infer<Z> : unknown, any>
   > {
     this.#clearNetworkHistoryBeforeRun();
-    console.log(`AgentNetwork: Starting generation with ${this.#agents.length} available agents`);
+    this.logger.debug(`AgentNetwork: Starting generation with ${this.#agents.length} available agents`);
 
     const ops = {
       maxSteps: this.#agents?.length * 10, // Default to 10 steps per agent
@@ -417,7 +415,7 @@ export class AgentNetwork extends MastraBase {
     };
 
     // Log the start of the routing process
-    console.log(`AgentNetwork: Routing with max steps: ${ops.maxSteps}`);
+    this.logger.debug(`AgentNetwork: Routing with max steps: ${ops.maxSteps}`);
 
     // Generate a response using the routing agent
     const result = await this.#routingAgent.stream(
@@ -429,6 +427,7 @@ export class AgentNetwork extends MastraBase {
   }
 
   __registerMastra(p: Mastra) {
+    this.__setLogger(p.getLogger());
     this.#routingAgent.__registerMastra(p);
     // Register primitives for each agent in the network
     for (const agent of this.#agents) {

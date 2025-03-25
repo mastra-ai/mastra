@@ -14,6 +14,8 @@ import { Button } from '@/components/ui/button';
 
 import { AssistantMessage } from './assistant-message';
 import { UserMessage } from './user-message';
+import { useRef } from 'react';
+import { useAutoscroll } from '@/hooks/use-autoscroll';
 
 const suggestions = ['What capabilities do you have?', 'How can you help me?', 'Tell me about yourself'];
 
@@ -24,6 +26,8 @@ export const Thread: FC<{ memory?: boolean; ToolFallback?: ToolCallContentPartCo
   function WrappedAssistantMessage(props: MessagePrimitive.Root.Props) {
     return <AssistantMessage {...props} ToolFallback={ToolFallback} />;
   }
+  const areaRef = useRef<HTMLDivElement>(null);
+  useAutoscroll(areaRef, { enabled: true });
 
   return (
     <ThreadPrimitive.Root
@@ -44,6 +48,8 @@ export const Thread: FC<{ memory?: boolean; ToolFallback?: ToolCallContentPartCo
           height: memory ? 'calc(100vh - 65px)' : 'calc(100vh - 90px)',
           paddingBottom: '108px',
         }}
+        ref={areaRef}
+        autoScroll={false}
       >
         <div style={{ width: '100%', maxWidth: '48rem', paddingInline: '1.5rem' }}>
           <ThreadWelcome />

@@ -4,4 +4,4 @@
 'create-mastra': patch
 ---
 
-Fix new thread title not reflecting until refresh or new message is sent
+Show No input for steps without input on traces UI
