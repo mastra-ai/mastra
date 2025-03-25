@@ -24,9 +24,9 @@ export function jsonSchemaPropertiesToTSTypes(value: any): z.ZodTypeAny {
     const types = value.type.map((type: string) => {
       return jsonSchemaPropertiesToTSTypes({ ...value, type });
     });
-    return z.union(types).describe(
-      (value.description || '') + (value.examples ? `\nExamples: ${value.examples.join(', ')}` : '')
-    );
+    return z
+      .union(types)
+      .describe((value.description || '') + (value.examples ? `\nExamples: ${value.examples.join(', ')}` : ''));
   }
 
   let zodType;

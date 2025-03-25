@@ -11,4 +11,3 @@ export const weatherTool = createTool({
     return `The weather in ${postalCode} is sunny. It is currently 70 degrees and feels like 65 degrees.`;
   },
 });
-    
