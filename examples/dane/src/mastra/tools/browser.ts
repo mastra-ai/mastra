@@ -6,7 +6,6 @@ import { z } from 'zod';
 
 export const browserTool = createTool({
   id: 'browserTool',
-  name: 'Browser Tool',
   description: 'Browser Tool, opens a browser and navigates to a url capturing the content',
   inputSchema: z.object({
     url: z.string(),
@@ -60,7 +59,6 @@ export const browserTool = createTool({
 
 export const googleSearch = createTool({
   id: 'googleSearch',
-  name: 'Google Search',
   description: 'Google Search. Passes the query to Google and returns the search results.',
   inputSchema: z.object({
     query: z.string(),
