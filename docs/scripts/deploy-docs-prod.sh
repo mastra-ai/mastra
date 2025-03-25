@@ -7,7 +7,7 @@ echo "env: $VERCEL_ENV"
 commit_message=$(git log -1 --pretty=%B)
 
 if [[ "$VERCEL_ENV" == "production" ]]; then
-  if [[ ${commit_message,,} = "chore: version - enter prerelease mode"; then
+  if [[ ${commit_message,,} = "chore: version - enter prerelease mode" ]]; then
     echo "✅ - Build can proceed"
     exit 1;
   else
