@@ -30,7 +30,7 @@
     "@mastra/core": "workspace:^",
     "json-schema": "^0.4.0",
     "zod": "^3.24.2",
-    "zod-to-json-schema": "^3.24.3"
+    "zod-to-json-schema": "^3.24.5"
   },
   "devDependencies": {
     "@babel/preset-env": "^7.26.9",
