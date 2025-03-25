@@ -1,10 +1,10 @@
 {
-  "name": "@mastra/ragie",
-  "version": "1.1.14-alpha.1",
+  "name": "@mastra/composio",
+  "version": "0.1.14-alpha.1",
   "description": "",
+  "type": "module",
   "main": "dist/index.js",
   "typings": "dist/index.d.ts",
-  "type": "module",
   "files": [
     "dist"
   ],
@@ -24,13 +24,12 @@
   "scripts": {
     "analyze": "size-limit --why",
     "build": "tsup src/index.ts --format esm,cjs --dts --clean --treeshake=smallest --splitting",
-    "build:dev": "tsup src/index.ts --format esm,cjs --dts --clean --treeshake=smallest --splitting --watch",
+    "build:watch": "pnpm build --watch",
     "lint": "dts lint",
     "size": "size-limit",
     "start": "dts watch",
     "test": "node --experimental-vm-modules node_modules/jest/bin/jest.js",
-    "clean": "rm -rf dist && rm -rf node_modules",
-    "gen:zod:schema": "pnpx ts-to-zod  src/client/types.gen.ts src/client/zodSchema.ts"
+    "clean": "rm -rf dist && rm -rf node_modules"
   },
   "husky": {
     "hooks": {
@@ -51,6 +50,7 @@
     }
   ],
   "devDependencies": {
+    "@internal/lint": "workspace:*",
     "@jest/globals": "^29.7.0",
     "@microsoft/api-extractor": "^7.52.1",
     "@rollup/plugin-image": "^3.0.3",
@@ -59,6 +59,7 @@
     "@types/lodash": "^4.17.16",
     "@types/node": "^20.17.27",
     "dts-cli": "^2.0.5",
+    "eslint": "^9.23.0",
     "husky": "^9.1.7",
     "jest": "^29.7.0",
     "size-limit": "^11.2.0",
@@ -70,9 +71,8 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
-    "@hey-api/client-fetch": "^0.3.4",
     "@mastra/core": "workspace:^",
-    "ts-to-zod": "^3.15.0",
+    "composio-core": "^0.3.3",
     "zod": "^3.24.2"
   }
 }

@@ -10,6 +10,7 @@ import { init } from './commands/init/init';
 import { checkAndInstallCoreDeps, checkPkgJson, interactivePrompt } from './commands/init/utils';
 import { DepsService } from './services/service.deps';
 import { logger } from './utils/logger';
+import { config } from 'dotenv';
 
 const depsService = new DepsService();
 const version = await depsService.getPackageVersion();
@@ -172,6 +173,7 @@ program
   .description('Deploy your Mastra project')
   .option('-d, --dir <path>', 'Path to directory')
   .action(async args => {
+    config({ path: ['.env', '.env.production'] });
     await analytics.trackCommandExecution({
       command: 'mastra deploy',
       args,

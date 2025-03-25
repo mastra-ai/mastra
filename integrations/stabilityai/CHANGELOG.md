@@ -1,22 +1,23 @@
-# @mastra/speech-deepgram
+# @mastra/stabilityai
 
-## 0.1.13-alpha.1
+## 1.1.14-alpha.1
 
 ### Patch Changes
 
+- 51ee4bb: Update axios
 - Updated dependencies [0b54522]
 - Updated dependencies [1af25d5]
 - Updated dependencies [27439ad]
   - @mastra/core@0.7.0-alpha.1
 
-## 0.1.13-alpha.0
+## 1.1.14-alpha.0
 
 ### Patch Changes
 
 - Updated dependencies [b4fbc59]
   - @mastra/core@0.6.5-alpha.0
 
-## 0.1.12
+## 1.1.13
 
 ### Patch Changes
 
@@ -26,14 +27,14 @@
 - Updated dependencies [248cb07]
   - @mastra/core@0.6.4
 
-## 0.1.12-alpha.1
+## 1.1.13-alpha.1
 
 ### Patch Changes
 
 - Updated dependencies [6794797]
   - @mastra/core@0.6.4-alpha.1
 
-## 0.1.12-alpha.0
+## 1.1.13-alpha.0
 
 ### Patch Changes
 
@@ -42,7 +43,7 @@
 - Updated dependencies [248cb07]
   - @mastra/core@0.6.4-alpha.0
 
-## 0.1.11
+## 1.1.12
 
 ### Patch Changes
 
@@ -51,14 +52,14 @@
 - Updated dependencies [3bce733]
   - @mastra/core@0.6.3
 
-## 0.1.11-alpha.1
+## 1.1.12-alpha.1
 
 ### Patch Changes
 
 - Updated dependencies [3bce733]
   - @mastra/core@0.6.3-alpha.1
 
-## 0.1.11-alpha.0
+## 1.1.12-alpha.0
 
 ### Patch Changes
 
@@ -66,7 +67,7 @@
 - Updated dependencies [404640e]
   - @mastra/core@0.6.3-alpha.0
 
-## 0.1.10
+## 1.1.11
 
 ### Patch Changes
 
@@ -74,7 +75,7 @@
 - Updated dependencies [3084e13]
   - @mastra/core@0.6.2
 
-## 0.1.10-alpha.0
+## 1.1.11-alpha.0
 
 ### Patch Changes
 
@@ -82,7 +83,7 @@
 - Updated dependencies [3084e13]
   - @mastra/core@0.6.2-alpha.0
 
-## 0.1.9
+## 1.1.10
 
 ### Patch Changes
 
@@ -98,7 +99,7 @@
 - Updated dependencies [5f43505]
   - @mastra/core@0.6.1
 
-## 0.1.9-alpha.2
+## 1.1.10-alpha.2
 
 ### Patch Changes
 
@@ -108,7 +109,7 @@
 - Updated dependencies [9116d70]
   - @mastra/core@0.6.1-alpha.2
 
-## 0.1.9-alpha.1
+## 1.1.10-alpha.1
 
 ### Patch Changes
 
@@ -119,14 +120,14 @@
 - Updated dependencies [5f43505]
   - @mastra/core@0.6.1-alpha.1
 
-## 0.1.9-alpha.0
+## 1.1.10-alpha.0
 
 ### Patch Changes
 
 - Updated dependencies [7bcfaee]
   - @mastra/core@0.6.1-alpha.0
 
-## 0.1.8
+## 1.1.9
 
 ### Patch Changes
 
@@ -137,7 +138,7 @@
 - Updated dependencies [c2144f4]
   - @mastra/core@0.6.0
 
-## 0.1.8-alpha.1
+## 1.1.9-alpha.1
 
 ### Patch Changes
 
@@ -147,14 +148,14 @@
 - Updated dependencies [c2144f4]
   - @mastra/core@0.6.0-alpha.1
 
-## 0.1.8-alpha.0
+## 1.1.9-alpha.0
 
 ### Patch Changes
 
 - Updated dependencies [3729dbd]
   - @mastra/core@0.5.1-alpha.0
 
-## 0.1.7
+## 1.1.8
 
 ### Patch Changes
 
@@ -198,14 +199,14 @@
 - Updated dependencies [c139344]
   - @mastra/core@0.5.0
 
-## 0.1.7-alpha.12
+## 1.1.8-alpha.12
 
 ### Patch Changes
 
 - Updated dependencies [a85ab24]
   - @mastra/core@0.5.0-alpha.12
 
-## 0.1.7-alpha.11
+## 1.1.8-alpha.11
 
 ### Patch Changes
 
@@ -217,14 +218,14 @@
 - Updated dependencies [fd4a1d7]
   - @mastra/core@0.5.0-alpha.11
 
-## 0.1.7-alpha.10
+## 1.1.8-alpha.10
 
 ### Patch Changes
 
 - Updated dependencies [a910463]
   - @mastra/core@0.5.0-alpha.10
 
-## 0.1.7-alpha.9
+## 1.1.8-alpha.9
 
 ### Patch Changes
 
@@ -234,28 +235,28 @@
 - Updated dependencies [f2301de]
   - @mastra/core@0.5.0-alpha.9
 
-## 0.1.7-alpha.8
+## 1.1.8-alpha.8
 
 ### Patch Changes
 
 - Updated dependencies [506f1d5]
   - @mastra/core@0.5.0-alpha.8
 
-## 0.1.7-alpha.7
+## 1.1.8-alpha.7
 
 ### Patch Changes
 
 - Updated dependencies [ee667a2]
   - @mastra/core@0.5.0-alpha.7
 
-## 0.1.7-alpha.6
+## 1.1.8-alpha.6
 
 ### Patch Changes
 
 - Updated dependencies [f6678e4]
   - @mastra/core@0.5.0-alpha.6
 
-## 0.1.7-alpha.5
+## 1.1.8-alpha.5
 
 ### Patch Changes
 
@@ -276,35 +277,35 @@
 - Updated dependencies [358f069]
   - @mastra/core@0.5.0-alpha.5
 
-## 0.1.7-alpha.4
+## 1.1.8-alpha.4
 
 ### Patch Changes
 
 - Updated dependencies [d79aedf]
   - @mastra/core@0.5.0-alpha.4
 
-## 0.1.7-alpha.3
+## 1.1.8-alpha.3
 
 ### Patch Changes
 
 - Updated dependencies [3d0e290]
   - @mastra/core@0.5.0-alpha.3
 
-## 0.1.7-alpha.2
+## 1.1.8-alpha.2
 
 ### Patch Changes
 
 - Updated dependencies [02ffb7b]
   - @mastra/core@0.5.0-alpha.2
 
-## 0.1.7-alpha.1
+## 1.1.8-alpha.1
 
 ### Patch Changes
 
 - Updated dependencies [dab255b]
   - @mastra/core@0.5.0-alpha.1
 
-## 0.1.7-alpha.0
+## 1.1.8-alpha.0
 
 ### Patch Changes
 
@@ -314,21 +315,21 @@
 - Updated dependencies [c139344]
   - @mastra/core@0.5.0-alpha.0
 
-## 0.1.6
+## 1.1.7
 
 ### Patch Changes
 
 - Updated dependencies [1da20e7]
   - @mastra/core@0.4.4
 
-## 0.1.6-alpha.0
+## 1.1.7-alpha.0
 
 ### Patch Changes
 
 - Updated dependencies [1da20e7]
   - @mastra/core@0.4.4-alpha.0
 
-## 0.1.5
+## 1.1.6
 
 ### Patch Changes
 
@@ -351,14 +352,14 @@
 - Updated dependencies [dabecf4]
   - @mastra/core@0.4.3
 
-## 0.1.5-alpha.4
+## 1.1.6-alpha.4
 
 ### Patch Changes
 
 - Updated dependencies [dabecf4]
   - @mastra/core@0.4.3-alpha.4
 
-## 0.1.5-alpha.3
+## 1.1.6-alpha.3
 
 ### Patch Changes
 
@@ -371,7 +372,7 @@
 - Updated dependencies [bb4f447]
   - @mastra/core@0.4.3-alpha.3
 
-## 0.1.5-alpha.2
+## 1.1.6-alpha.2
 
 ### Patch Changes
 
@@ -379,7 +380,7 @@
 - Updated dependencies [e62de74]
   - @mastra/core@0.4.3-alpha.2
 
-## 0.1.5-alpha.1
+## 1.1.6-alpha.1
 
 ### Patch Changes
 
@@ -391,19 +392,17 @@
 - Updated dependencies [5f28f44]
   - @mastra/core@0.4.3-alpha.1
 
-## 0.1.5-alpha.0
+## 1.1.6-alpha.0
 
 ### Patch Changes
 
 - Updated dependencies [06aa827]
   - @mastra/core@0.4.3-alpha.0
 
-## 0.1.4
+## 1.1.5
 
 ### Patch Changes
 
-- abe4600: deprecate @mastra/speech-deepgram for @mastra/voice-deepgram
-- f626fbb: make alpha package for speech-deepgram change
 - Updated dependencies [7fceae1]
 - Updated dependencies [8d94c3e]
 - Updated dependencies [99dcdb5]
@@ -413,7 +412,7 @@
 - Updated dependencies [eb91535]
   - @mastra/core@0.4.2
 
-## 0.1.4-alpha.4
+## 1.1.5-alpha.2
 
 ### Patch Changes
 
@@ -423,24 +422,22 @@
 - Updated dependencies [eb91535]
   - @mastra/core@0.4.2-alpha.2
 
-## 0.1.4-alpha.3
+## 1.1.5-alpha.1
 
 ### Patch Changes
 
 - Updated dependencies [6cb63e0]
   - @mastra/core@0.4.2-alpha.1
 
-## 0.1.4-alpha.2
+## 1.1.5-alpha.0
 
 ### Patch Changes
 
-- abe4600: deprecate @mastra/speech-deepgram for @mastra/voice-deepgram
-- f626fbb: make alpha package for speech-deepgram change
 - Updated dependencies [7fceae1]
 - Updated dependencies [f626fbb]
   - @mastra/core@0.4.2-alpha.0
 
-## 0.1.4
+## 1.1.4
 
 ### Patch Changes
 
@@ -449,7 +446,7 @@
 - Updated dependencies [b405f08]
   - @mastra/core@0.4.1
 
-## 0.1.3
+## 1.1.3
 
 ### Patch Changes
 
@@ -457,28 +454,28 @@
 - Updated dependencies [fe0fd01]
   - @mastra/core@0.4.0
 
-## 0.1.3-alpha.1
+## 1.1.3-alpha.1
 
 ### Patch Changes
 
 - Updated dependencies [fe0fd01]
   - @mastra/core@0.4.0-alpha.1
 
-## 0.1.3-alpha.0
+## 1.1.3-alpha.0
 
 ### Patch Changes
 
 - Updated dependencies [2fc618f]
   - @mastra/core@0.4.0-alpha.0
 
-## 0.1.2
+## 1.1.2
 
 ### Patch Changes
 
 - Updated dependencies [f205ede]
   - @mastra/core@0.3.0
 
-## 0.1.1
+## 1.1.1
 
 ### Patch Changes
 
@@ -490,7 +487,7 @@
 - Updated dependencies [aac1667]
   - @mastra/core@0.2.1
 
-## 0.1.1-alpha.0
+## 1.1.1-alpha.0
 
 ### Patch Changes
 
@@ -502,22 +499,25 @@
 - Updated dependencies [aac1667]
   - @mastra/core@0.2.1-alpha.0
 
-## 0.1.0
+## 1.1.0
 
 ### Minor Changes
 
-- 5916f9d: Update deps from fixed to ^
 - 8b416d9: Breaking changes
 
 ### Patch Changes
 
+- 8ae2bbc: Dane publishing
 - b97ca96: Tracing into default storage
+- 0b74006: Workflow updates
+- 79a464e: Update cli, dane, stabilityai builds.
 - 9c10484: update all packages
 - 70dabd9: Fix broken publish
-- cfb966f: Deprecate @mastra/tts for mastra speech providers
-- 9625602: Use mastra core splitted bundles in other packages
-- 6caa4b3: Speech modules for TTS providers
+- 0bd142c: Fixes learned from docs
+- b8f3be0: New bundling for integrations
+- 327ece7: Updates for ts versions
 - 4f1d1a1: Enforce types ann cleanup package.json
+- ee4de15: Dane fixes
 - Updated dependencies [f537e33]
 - Updated dependencies [6f2c0f5]
 - Updated dependencies [e4d4ede]
@@ -673,7 +673,7 @@
 - Updated dependencies [a221426]
   - @mastra/core@0.2.0
 
-## 0.1.0-alpha.35
+## 1.1.0-alpha.85
 
 ### Patch Changes
 
@@ -688,14 +688,14 @@
 - Updated dependencies [a221426]
   - @mastra/core@0.2.0-alpha.110
 
-## 0.1.0-alpha.34
+## 1.1.0-alpha.84
 
 ### Patch Changes
 
 - Updated dependencies [d5fccfb]
   - @mastra/core@0.2.0-alpha.109
 
-## 0.1.0-alpha.33
+## 1.1.0-alpha.83
 
 ### Patch Changes
 
@@ -703,14 +703,14 @@
 - Updated dependencies [95a4697]
   - @mastra/core@0.2.0-alpha.108
 
-## 0.1.0-alpha.32
+## 1.1.0-alpha.82
 
 ### Patch Changes
 
 - Updated dependencies [66a5392]
   - @mastra/core@0.2.0-alpha.107
 
-## 0.1.0-alpha.31
+## 1.1.0-alpha.81
 
 ### Patch Changes
 
@@ -718,7 +718,7 @@
 - Updated dependencies [a8a459a]
   - @mastra/core@0.2.0-alpha.106
 
-## 0.1.0-alpha.30
+## 1.1.0-alpha.80
 
 ### Patch Changes
 
@@ -726,7 +726,7 @@
 - Updated dependencies [99f1847]
   - @mastra/core@0.2.0-alpha.105
 
-## 0.1.0-alpha.29
+## 1.1.0-alpha.79
 
 ### Patch Changes
 
@@ -738,21 +738,21 @@
 - Updated dependencies [10870bc]
   - @mastra/core@0.2.0-alpha.104
 
-## 0.1.0-alpha.28
+## 1.1.0-alpha.78
 
 ### Patch Changes
 
 - Updated dependencies [4534e77]
   - @mastra/core@0.2.0-alpha.103
 
-## 0.1.0-alpha.27
+## 1.1.0-alpha.77
 
 ### Patch Changes
 
 - Updated dependencies [a9345f9]
   - @mastra/core@0.2.0-alpha.102
 
-## 0.1.0-alpha.26
+## 1.1.0-alpha.76
 
 ### Patch Changes
 
@@ -761,21 +761,21 @@
 - Updated dependencies [4f1d1a1]
   - @mastra/core@0.2.0-alpha.101
 
-## 0.1.0-alpha.25
+## 1.1.0-alpha.75
 
 ### Patch Changes
 
 - Updated dependencies [9d1796d]
   - @mastra/core@0.2.0-alpha.100
 
-## 0.1.0-alpha.24
+## 1.1.0-alpha.74
 
 ### Patch Changes
 
 - Updated dependencies [7d83b92]
   - @mastra/core@0.2.0-alpha.99
 
-## 0.1.0-alpha.23
+## 1.1.0-alpha.73
 
 ### Patch Changes
 
@@ -784,7 +784,7 @@
 - Updated dependencies [202d404]
   - @mastra/core@0.2.0-alpha.98
 
-## 0.1.0-alpha.22
+## 1.1.0-alpha.72
 
 ### Patch Changes
 
@@ -796,21 +796,21 @@
 - Updated dependencies [a870123]
   - @mastra/core@0.2.0-alpha.97
 
-## 0.1.0-alpha.21
+## 1.1.0-alpha.71
 
 ### Patch Changes
 
 - Updated dependencies [74b3078]
   - @mastra/core@0.2.0-alpha.96
 
-## 0.1.0-alpha.20
+## 1.1.0-alpha.70
 
 ### Patch Changes
 
 - Updated dependencies [9fb59d6]
   - @mastra/core@0.2.0-alpha.95
 
-## 0.1.0-alpha.19
+## 1.1.0-alpha.69
 
 ### Minor Changes
 
@@ -823,21 +823,21 @@
 - Updated dependencies [8b416d9]
   - @mastra/core@0.2.0-alpha.94
 
-## 0.1.0-alpha.18
+## 1.0.1-alpha.68
 
 ### Patch Changes
 
 - Updated dependencies [5285356]
   - @mastra/core@0.2.0-alpha.93
 
-## 0.1.0-alpha.17
+## 1.0.1-alpha.67
 
 ### Patch Changes
 
 - Updated dependencies [4d4f6b6]
   - @mastra/core@0.2.0-alpha.92
 
-## 0.1.0-alpha.16
+## 1.0.1-alpha.66
 
 ### Patch Changes
 
@@ -848,7 +848,7 @@
 - Updated dependencies [16e5b04]
   - @mastra/core@0.2.0-alpha.91
 
-## 0.1.0-alpha.15
+## 1.0.1-alpha.65
 
 ### Patch Changes
 
@@ -857,32 +857,28 @@
 - Updated dependencies [3700be1]
   - @mastra/core@0.2.0-alpha.90
 
-## 0.1.0-alpha.14
+## 1.0.1-alpha.64
 
 ### Patch Changes
 
 - Updated dependencies [27275c9]
   - @mastra/core@0.2.0-alpha.89
 
-## 0.1.0-alpha.13
+## 1.0.1-alpha.63
 
 ### Patch Changes
 
 - Updated dependencies [ccbc581]
   - @mastra/core@0.2.0-alpha.88
 
-## 0.1.0-alpha.12
+## 1.0.1-alpha.62
 
 ### Patch Changes
 
 - Updated dependencies [7365b6c]
   - @mastra/core@0.2.0-alpha.87
 
-## 0.1.0-alpha.11
-
-### Minor Changes
-
-- 5916f9d: Update deps from fixed to ^
+## 1.0.1-alpha.61
 
 ### Patch Changes
 
@@ -893,14 +889,14 @@
 - Updated dependencies [04f3171]
   - @mastra/core@0.2.0-alpha.86
 
-## 0.0.1-alpha.10
+## 1.0.1-alpha.60
 
 ### Patch Changes
 
 - Updated dependencies [e9d1b47]
   - @mastra/core@0.2.0-alpha.85
 
-## 0.0.1-alpha.9
+## 1.0.1-alpha.59
 
 ### Patch Changes
 
@@ -910,46 +906,47 @@
 - Updated dependencies [38b7f66]
   - @mastra/core@0.2.0-alpha.84
 
-## 0.0.1-alpha.8
+## 1.0.1-alpha.58
 
 ### Patch Changes
 
-- 9625602: Use mastra core splitted bundles in other packages
+- b8f3be0: New bundling for integrations
 - Updated dependencies [30322ce]
 - Updated dependencies [78eec7c]
 - Updated dependencies [9625602]
 - Updated dependencies [8769a62]
   - @mastra/core@0.2.0-alpha.83
 
-## 0.0.1-alpha.7
+## 1.0.1-alpha.57
 
 ### Patch Changes
 
 - Updated dependencies [73d112c]
   - @mastra/core@0.1.27-alpha.82
 
-## 0.0.1-alpha.6
+## 1.0.1-alpha.56
 
 ### Patch Changes
 
 - Updated dependencies [9fb3039]
   - @mastra/core@0.1.27-alpha.81
 
-## 0.0.1-alpha.5
+## 1.0.1-alpha.55
 
 ### Patch Changes
 
+- 327ece7: Updates for ts versions
 - Updated dependencies [327ece7]
   - @mastra/core@0.1.27-alpha.80
 
-## 0.0.1-alpha.4
+## 1.0.1-alpha.54
 
 ### Patch Changes
 
 - Updated dependencies [21fe536]
   - @mastra/core@0.1.27-alpha.79
 
-## 0.0.1-alpha.3
+## 1.0.1-alpha.53
 
 ### Patch Changes
 
@@ -957,15 +954,14 @@
 - Updated dependencies [685108a]
   - @mastra/core@0.1.27-alpha.78
 
-## 0.0.1-alpha.2
+## 1.0.1-alpha.52
 
 ### Patch Changes
 
-- cfb966f: Deprecate @mastra/tts for mastra speech providers
 - Updated dependencies [8105fae]
   - @mastra/core@0.1.27-alpha.77
 
-## 0.0.1-alpha.1
+## 1.0.1-alpha.51
 
 ### Patch Changes
 
@@ -973,8 +969,253 @@
 - Updated dependencies [ae7bf94]
   - @mastra/core@0.1.27-alpha.76
 
-## 0.0.1-alpha.0
+## 1.0.1-alpha.50
 
 ### Patch Changes
 
-- 6caa4b3: Speech modules for TTS providers
+- Updated dependencies [23dcb23]
+  - @mastra/core@0.1.27-alpha.75
+
+## 1.0.1-alpha.49
+
+### Patch Changes
+
+- Updated dependencies [7b87567]
+  - @mastra/core@0.1.27-alpha.74
+
+## 1.0.1-alpha.48
+
+### Patch Changes
+
+- Updated dependencies [3427b95]
+  - @mastra/core@0.1.27-alpha.73
+
+## 1.0.1-alpha.47
+
+### Patch Changes
+
+- Updated dependencies [e4d4ede]
+- Updated dependencies [06b2c0a]
+  - @mastra/core@0.1.27-alpha.72
+
+## 1.0.1-alpha.46
+
+### Patch Changes
+
+- Updated dependencies [d9c8dd0]
+  - @mastra/core@0.1.27-alpha.71
+
+## 1.0.1-alpha.45
+
+### Patch Changes
+
+- Updated dependencies [dd6d87f]
+- Updated dependencies [04434b6]
+  - @mastra/core@0.1.27-alpha.70
+
+## 1.0.1-alpha.44
+
+### Patch Changes
+
+- Updated dependencies [1944807]
+- Updated dependencies [9ade36e]
+  - @mastra/core@0.1.27-alpha.69
+
+## 1.0.1-alpha.43
+
+### Patch Changes
+
+- Updated dependencies [0be7181]
+- Updated dependencies [0be7181]
+  - @mastra/core@0.1.27-alpha.68
+
+## 1.0.1-alpha.42
+
+### Patch Changes
+
+- Updated dependencies [c8ff2f5]
+  - @mastra/core@0.1.27-alpha.67
+
+## 1.0.1-alpha.41
+
+### Patch Changes
+
+- Updated dependencies [14064f2]
+  - @mastra/core@0.1.27-alpha.66
+
+## 1.0.1-alpha.40
+
+### Patch Changes
+
+- Updated dependencies [e66643a]
+  - @mastra/core@0.1.27-alpha.65
+
+## 1.0.1-alpha.39
+
+### Patch Changes
+
+- Updated dependencies [f368477]
+- Updated dependencies [d5ec619]
+  - @mastra/core@0.1.27-alpha.64
+
+## 1.0.1-alpha.38
+
+### Patch Changes
+
+- Updated dependencies [e097800]
+  - @mastra/core@0.1.27-alpha.63
+
+## 1.0.1-alpha.37
+
+### Patch Changes
+
+- Updated dependencies [93a3719]
+  - @mastra/core@0.1.27-alpha.62
+
+## 1.0.1-alpha.36
+
+### Patch Changes
+
+- Updated dependencies [dc90663]
+  - @mastra/core@0.1.27-alpha.61
+
+## 1.0.1-alpha.35
+
+### Patch Changes
+
+- Updated dependencies [3967e69]
+  - @mastra/core@0.1.27-alpha.60
+
+## 1.0.1-alpha.34
+
+### Patch Changes
+
+- Updated dependencies [b524c22]
+  - @mastra/core@0.1.27-alpha.59
+
+## 1.0.1-alpha.33
+
+### Patch Changes
+
+- Updated dependencies [1874f40]
+- Updated dependencies [4b1ce2c]
+  - @mastra/core@0.1.27-alpha.58
+
+## 1.0.1-alpha.32
+
+### Patch Changes
+
+- Updated dependencies [fd494a3]
+  - @mastra/core@0.1.27-alpha.57
+
+## 1.0.1-alpha.31
+
+### Patch Changes
+
+- Updated dependencies [9f3ab05]
+  - @mastra/core@0.1.27-alpha.56
+
+## 1.0.1-alpha.30
+
+### Patch Changes
+
+- 0b74006: Workflow updates
+- Updated dependencies [592e3cf]
+- Updated dependencies [837a288]
+- Updated dependencies [0b74006]
+  - @mastra/core@0.1.27-alpha.55
+
+## 1.0.1-alpha.29
+
+### Patch Changes
+
+- Updated dependencies [d2cd535]
+  - @mastra/core@0.1.27-alpha.54
+
+## 1.0.1-alpha.28
+
+### Patch Changes
+
+- Updated dependencies [8e7814f]
+  - @mastra/core@0.1.27-alpha.53
+
+## 1.0.1-alpha.27
+
+### Patch Changes
+
+- Updated dependencies [eedb829]
+  - @mastra/core@0.1.27-alpha.52
+
+## 1.0.1-alpha.26
+
+### Patch Changes
+
+- Updated dependencies [a7b016d]
+- Updated dependencies [da2e8d3]
+- Updated dependencies [538a136]
+  - @mastra/core@0.1.27-alpha.51
+
+## 1.0.1-alpha.25
+
+### Patch Changes
+
+- Updated dependencies [401a4d9]
+  - @mastra/core@0.1.27-alpha.50
+
+## 1.0.1-alpha.24
+
+### Patch Changes
+
+- Updated dependencies [79acad0]
+- Updated dependencies [f5dfa20]
+  - @mastra/core@0.1.27-alpha.49
+
+## 1.0.1-alpha.23
+
+### Patch Changes
+
+- Updated dependencies [b726bf5]
+  - @mastra/core@0.1.27-alpha.48
+
+## 1.0.1-alpha.22
+
+### Patch Changes
+
+- Updated dependencies [f6ba259]
+  - @mastra/core@0.1.27-alpha.47
+
+## 1.0.1-alpha.21
+
+### Patch Changes
+
+- 8ae2bbc: Dane publishing
+- 0bd142c: Fixes learned from docs
+- ee4de15: Dane fixes
+- Updated dependencies [8ae2bbc]
+- Updated dependencies [0bd142c]
+- Updated dependencies [ee4de15]
+  - @mastra/core@0.1.27-alpha.46
+
+## 1.0.1-alpha.20
+
+### Patch Changes
+
+- Updated dependencies [e608d8c]
+- Updated dependencies [002d6d8]
+  - @mastra/core@0.1.27-alpha.45
+
+## 1.0.1-alpha.19
+
+### Patch Changes
+
+- 79a464e: Update cli, dane, stabilityai builds.
+- Updated dependencies [2fa7f53]
+  - @mastra/core@0.1.27-alpha.44
+
+## 1.0.1-alpha.18
+
+### Patch Changes
+
+- Updated dependencies [2e099d2]
+- Updated dependencies [d6d8159]
+  - @mastra/core@0.1.27-alpha.43
