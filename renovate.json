@@ -4,6 +4,7 @@
   "extends": [
     "config:recommended",
     ":dependencyDashboard",
+    ":dependencyDashboardApproval",
     ":disableRateLimiting",
     ":maintainLockFilesWeekly",
     ":semanticCommits",
@@ -46,6 +47,16 @@
       "matchFileNames": ["+(package.json)", "**/package.json", "!./examples/**", "!./docs/**"],
       "matchPackageNames": ["typescript"],
       "matchPackagePatterns": ["^@typescript-eslint/"],
+      "matchUpdateTypes": ["major", "minor", "patch"],
+      "matchDepTypes": ["dependencies", "devDependencies"],
+      "dependencyDashboardApproval": false
+    },
+    {
+      "groupName": "formatting & linting",
+      "commitMessageTopic": "Formatting & linting",
+      "matchPaths": ["+(package.json)", "**/package.json"],
+      "matchPackageNames": ["eslint", "prettier"],
+      "matchPackagePatterns": ["^eslint-"],
       "matchUpdateTypes": ["major", "minor", "patch"],
       "matchDepTypes": ["dependencies", "devDependencies"],
       "dependencyDashboardApproval": false
