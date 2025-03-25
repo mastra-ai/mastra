@@ -25,7 +25,7 @@ importers:
         specifier: ^15.4.3
         version: 15.5.0
       npm-run-all2:
-        specifier: ^5.0.0
+        specifier: ^5.0.2
         version: 5.0.2
       prettier:
         specifier: ^3.5.3
