@@ -10,7 +10,7 @@
   "keywords": [],
   "author": "",
   "license": "ISC",
-  "packageManager": "pnpm@10.4.1",
+  "packageManager": "pnpm@10.6.5",
   "dependencies": {
     "@mastra/core": "link:%%MASTRA_DIR%%/packages/core",
     "@inner/inner-tools": "workspace:*"

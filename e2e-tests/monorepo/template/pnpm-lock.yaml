@@ -7,3 +7,22 @@ settings:
 importers:
 
   .: {}
+
+  apps/custom:
+    dependencies:
+      '@inner/inner-tools':
+        specifier: workspace:*
+        version: link:../../packages/inner-tools
+      '@mastra/core':
+        specifier: link:%%MASTRA_DIR%%/packages/core
+        version: link:%%MASTRA_DIR%%/packages/core
+    devDependencies:
+      mastra:
+        specifier: link:%%MASTRA_DIR%%/packages/cli
+        version: link:%%MASTRA_DIR%%/packages/cli
+
+  packages/inner-tools:
+    dependencies:
+      '@mastra/core':
+        specifier: link:%%MASTRA_DIR%%/packages/core
+        version: link:%%MASTRA_DIR%%/packages/core
