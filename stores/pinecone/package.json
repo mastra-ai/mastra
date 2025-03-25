@@ -26,7 +26,7 @@
   },
   "dependencies": {
     "@mastra/core": "workspace:^",
-    "@pinecone-database/pinecone": "^3.0.3"
+    "@pinecone-database/pinecone": "^5.1.1"
   },
   "devDependencies": {
     "@internal/lint": "workspace:*",
