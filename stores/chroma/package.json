@@ -26,7 +26,7 @@
   },
   "dependencies": {
     "@mastra/core": "workspace:^",
-    "chromadb": "^1.10.5"
+    "chromadb": "^2.0.1"
   },
   "devDependencies": {
     "@internal/lint": "workspace:*",
