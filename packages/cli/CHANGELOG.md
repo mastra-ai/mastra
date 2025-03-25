@@ -1,5 +1,15 @@
 # mastra
 
+## 0.4.4-alpha.0
+
+### Patch Changes
+
+- e05e7cc: Add origin to cli tracking
+- 3811029: Add identifying header
+- Updated dependencies [b4fbc59]
+  - @mastra/core@0.6.5-alpha.0
+  - @mastra/deployer@0.2.5-alpha.0
+
 ## 0.4.3
 
 ### Patch Changes
