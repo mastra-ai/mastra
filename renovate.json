@@ -4,7 +4,6 @@
   "extends": [
     "config:recommended",
     ":dependencyDashboard",
-    ":dependencyDashboardApproval",
     ":disableRateLimiting",
     ":maintainLockFilesWeekly",
     ":semanticCommits",
@@ -13,6 +12,9 @@
   ],
   "postUpdateOptions": ["pnpmDedupe"],
   "rebaseWhen": "conflicted",
+  "major": {
+    "dependencyDashboardApproval": true
+  },
   "packageRules": [
     {
       "groupName": "examples",
