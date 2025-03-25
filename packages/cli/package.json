@@ -1,6 +1,6 @@
 {
   "name": "mastra",
-  "version": "0.4.3",
+  "version": "0.4.4-alpha.0",
   "license": "ISC",
   "description": "cli for mastra",
   "type": "module",
@@ -74,22 +74,21 @@
   },
   "devDependencies": {
     "@internal/lint": "workspace:*",
-    "@mastra/playground-ui": "workspace:*",
     "@mastra/client-js": "workspace:*",
+    "@mastra/playground-ui": "workspace:*",
     "@microsoft/api-extractor": "^7.52.1",
-    "@types/express": "^5.0.0",
     "@types/fs-extra": "^11.0.4",
-    "@types/node": "^22.13.10",
+    "@types/node": "^20.17.27",
     "@types/prompt": "^1.1.9",
     "@types/tcp-port-used": "^1.0.4",
     "cpy-cli": "^5.0.0",
-    "eslint": "^9.22.0",
+    "eslint": "^9.23.0",
     "memfs": "^4.17.0",
-    "npm-run-all2": "^5.0.0",
+    "npm-run-all2": "^7.0.2",
     "rollup": "^4.35.0",
     "tsup": "^8.4.0",
     "type-fest": "^4.37.0",
     "typescript": "^5.8.2",
-    "vitest": "^3.0.8"
+    "vitest": "^3.0.9"
   }
 }

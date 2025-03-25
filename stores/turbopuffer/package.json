@@ -1,6 +1,6 @@
 {
   "name": "@mastra/turbopuffer",
-  "version": "0.0.5",
+  "version": "0.0.6-alpha.0",
   "description": "Turbopuffer vector store provider for Mastra",
   "type": "module",
   "files": [
@@ -34,11 +34,11 @@
   "devDependencies": {
     "@internal/lint": "workspace:*",
     "@microsoft/api-extractor": "^7.52.1",
-    "@types/node": "^22.13.10",
+    "@types/node": "^20.17.27",
     "dotenv": "^16.4.7",
-    "eslint": "^9.22.0",
+    "eslint": "^9.23.0",
     "tsup": "^8.4.0",
     "typescript": "^5.8.2",
-    "vitest": "^3.0.8"
+    "vitest": "^3.0.9"
   }
 }

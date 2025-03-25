@@ -19,6 +19,16 @@ export function jsonSchemaPropertiesToTSTypes(value: any): z.ZodTypeAny {
     return z.object({});
   }
 
+  // Handle case where type is an array of strings
+  if (Array.isArray(value.type)) {
+    const types = value.type.map((type: string) => {
+      return jsonSchemaPropertiesToTSTypes({ ...value, type });
+    });
+    return z
+      .union(types)
+      .describe((value.description || '') + (value.examples ? `\nExamples: ${value.examples.join(', ')}` : ''));
+  }
+
   let zodType;
   switch (value.type) {
     case 'string':

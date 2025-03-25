@@ -1,5 +1,11 @@
 # @mastra/core
 
+## 0.6.5-alpha.0
+
+### Patch Changes
+
+- b4fbc59: Fixed an issue where sending CoreMessages to AI SDK would result in "Unsupported role: tool" errors
+
 ## 0.6.4
 
 ### Patch Changes

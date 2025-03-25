@@ -28,8 +28,6 @@ describe('AstraVector Integration Tests', () => {
   const testIndexName = 'testvectors1733728136118'; // Unique collection name
   const testIndexName2 = 'testvectors1733728136119'; // Unique collection name
 
-  console.log('testIndexName:', testIndexName);
-
   beforeAll(async () => {
     // Ensure required environment variables are set
     const token = process.env.ASTRA_DB_TOKEN;
@@ -1155,6 +1153,16 @@ describe('AstraVector Integration Tests', () => {
   });
 
   describe('Basic vector operations', () => {
+    const indexName = 'testbasicvectoroperations';
+
+    beforeAll(async () => {
+      await vectorDB.createIndex({ indexName, dimension: 4 });
+    });
+
+    afterAll(async () => {
+      await vectorDB.deleteIndex(indexName);
+    });
+
     const testVectors = [
       [1, 0, 0, 0],
       [0, 1, 0, 0],
@@ -1163,7 +1171,7 @@ describe('AstraVector Integration Tests', () => {
     ];
 
     it('should update the vector by id', async () => {
-      const ids = await vectorDB.upsert({ indexName: testIndexName, vectors: testVectors });
+      const ids = await vectorDB.upsert({ indexName, vectors: testVectors });
       expect(ids).toHaveLength(4);
 
       const idToBeUpdated = ids[0];
@@ -1177,23 +1185,28 @@ describe('AstraVector Integration Tests', () => {
         metadata: newMetaData,
       };
 
-      await vectorDB.updateIndexById(testIndexName, idToBeUpdated, update);
+      await vectorDB.updateIndexById(indexName, idToBeUpdated, update);
+
+      await new Promise(resolve => setTimeout(resolve, 2000));
 
       const results = await vectorDB.query({
-        indexName: testIndexName,
+        indexName: indexName,
         queryVector: newVector,
         topK: 2,
         includeVector: true,
       });
 
-      expect(results[0]?.vector).toEqual(newVector);
-      expect(results[0]?.metadata).toEqual(newMetaData);
+      expect(results).toHaveLength(2);
+      const updatedResult = results.find(result => result.id === idToBeUpdated);
+      expect(updatedResult).toBeDefined();
+      expect(updatedResult?.id).toEqual(idToBeUpdated);
+      expect(updatedResult?.vector).toEqual(newVector);
+      expect(updatedResult?.metadata).toEqual(newMetaData);
     });
 
     it('should only update the metadata by id', async () => {
-      const ids = await vectorDB.upsert({ indexName: testIndexName, vectors: testVectors });
+      const ids = await vectorDB.upsert({ indexName, vectors: testVectors });
       expect(ids).toHaveLength(4);
-      await new Promise(resolve => setTimeout(resolve, 2000));
 
       const idToBeUpdated = ids[0];
       const newMetaData = {
@@ -1204,24 +1217,27 @@ describe('AstraVector Integration Tests', () => {
         metadata: newMetaData,
       };
 
-      await vectorDB.updateIndexById(testIndexName, idToBeUpdated, update);
+      await vectorDB.updateIndexById(indexName, idToBeUpdated, update);
       await new Promise(resolve => setTimeout(resolve, 2000));
 
       const results = await vectorDB.query({
-        indexName: testIndexName,
+        indexName: indexName,
         queryVector: testVectors[0],
         topK: 2,
         includeVector: true,
       });
 
-      expect(results[0]?.vector).toEqual(testVectors[0]);
-      expect(results[0]?.metadata).toEqual(newMetaData);
+      expect(results).toHaveLength(2);
+      const updatedResult = results.find(result => result.id === idToBeUpdated);
+      expect(updatedResult).toBeDefined();
+      expect(updatedResult?.id).toEqual(idToBeUpdated);
+      expect(updatedResult?.vector).toEqual(testVectors[0]);
+      expect(updatedResult?.metadata).toEqual(newMetaData);
     });
 
     it('should only update vector embeddings by id', async () => {
-      const ids = await vectorDB.upsert({ indexName: testIndexName, vectors: testVectors });
+      const ids = await vectorDB.upsert({ indexName, vectors: testVectors });
       expect(ids).toHaveLength(4);
-      await new Promise(resolve => setTimeout(resolve, 2000));
 
       const idToBeUpdated = ids[0];
       const newVector = [1, 2, 3, 4];
@@ -1230,32 +1246,36 @@ describe('AstraVector Integration Tests', () => {
         vector: newVector,
       };
 
-      await vectorDB.updateIndexById(testIndexName, idToBeUpdated, update);
+      await vectorDB.updateIndexById(indexName, idToBeUpdated, update);
       await new Promise(resolve => setTimeout(resolve, 2000));
 
       const results = await vectorDB.query({
-        indexName: testIndexName,
+        indexName: indexName,
         queryVector: newVector,
         topK: 2,
         includeVector: true,
       });
 
-      expect(results[0]?.vector).toEqual(newVector);
+      expect(results).toHaveLength(2);
+      const updatedResult = results.find(result => result.id === idToBeUpdated);
+      expect(updatedResult).toBeDefined();
+      expect(updatedResult?.id).toEqual(idToBeUpdated);
+      expect(updatedResult?.vector).toEqual(newVector);
     });
 
-    it('should throw exception when no updates are given', () => {
-      expect(vectorDB.updateIndexById(testIndexName, 'id', {})).rejects.toThrow('No updates provided');
+    it('should throw exception when no updates are given', async () => {
+      await expect(vectorDB.updateIndexById(indexName, 'id', {})).rejects.toThrow('No updates provided');
     });
 
     it('should delete the vector by id', async () => {
-      const ids = await vectorDB.upsert({ indexName: testIndexName, vectors: testVectors });
+      const ids = await vectorDB.upsert({ indexName, vectors: testVectors });
       expect(ids).toHaveLength(4);
 
       const idToBeDeleted = ids[0];
-      await vectorDB.deleteIndexById(testIndexName, idToBeDeleted);
+      await vectorDB.deleteIndexById(indexName, idToBeDeleted);
 
       const results = await vectorDB.query({
-        indexName: testIndexName,
+        indexName: indexName,
         queryVector: [1, 0, 0, 0],
         topK: 2,
       });
