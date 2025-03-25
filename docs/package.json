@@ -26,7 +26,7 @@
     "react-dom": "^18",
     "react-hook-form": "^7.54.2",
     "sonner": "^2.0.1",
-    "tailwind-merge": "^2.6.0"
+    "tailwind-merge": "^3.0.2"
   },
   "devDependencies": {
     "@types/node": "^20",
