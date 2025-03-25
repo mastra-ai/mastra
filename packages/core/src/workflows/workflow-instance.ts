@@ -18,21 +18,31 @@ import type {
   WorkflowRunResult,
   WorkflowRunState,
 } from './types';
-import { getActivePathsAndStatus, mergeChildValue, updateStepInHierarchy } from './utils';
+import { getActivePathsAndStatus, mergeChildValue, resolveVariables, updateStepInHierarchy } from './utils';
 
-export interface WorkflowResultReturn<T extends z.ZodType<any>, TSteps extends Step<any, any, any>[]> {
+export interface WorkflowResultReturn<
+  TResult extends z.ZodObject<any>,
+  T extends z.ZodObject<any>,
+  TSteps extends Step<any, any, any>[],
+> {
   runId: string;
-  start: (props?: { triggerData?: z.infer<T> } | undefined) => Promise<WorkflowRunResult<T, TSteps>>;
+  start: (props?: { triggerData?: z.infer<T> } | undefined) => Promise<WorkflowRunResult<T, TSteps, TResult>>;
   watch: (onTransition: (state: WorkflowRunState) => void) => () => void;
   resume: (props: {
     stepId: string;
     context?: Record<string, any>;
-  }) => Promise<Omit<WorkflowRunResult<T, TSteps>, 'runId'> | undefined>;
-  resumeWithEvent: (eventName: string, data: any) => Promise<Omit<WorkflowRunResult<T, TSteps>, 'runId'> | undefined>;
+  }) => Promise<Omit<WorkflowRunResult<T, TSteps, TResult>, 'runId'> | undefined>;
+  resumeWithEvent: (
+    eventName: string,
+    data: any,
+  ) => Promise<Omit<WorkflowRunResult<T, TSteps, TResult>, 'runId'> | undefined>;
 }
 
-export class WorkflowInstance<TSteps extends Step<any, any, any>[] = any, TTriggerSchema extends z.ZodObject<any> = any>
-  implements WorkflowResultReturn<TTriggerSchema, TSteps>
+export class WorkflowInstance<
+  TSteps extends Step<any, any, any>[] = any,
+  TTriggerSchema extends z.ZodObject<any> = any,
+  TResult extends z.ZodObject<any> = any,
+> implements WorkflowResultReturn<TResult, TTriggerSchema, TSteps>
 {
   name: string;
   #mastra?: Mastra;
@@ -54,6 +64,8 @@ export class WorkflowInstance<TSteps extends Step<any, any, any>[] = any, TTrigg
   #onStepTransition: Set<(state: WorkflowRunState) => void | Promise<void>> = new Set();
   #onFinish?: () => void;
 
+  #resultMapping?: Record<string, { step: StepAction<any, any, any, any>; path: string }>;
+
   // indexed by stepId
   #suspendedMachines: Record<string, Machine<TSteps, TTriggerSchema>> = {};
   // {step1&&step2: {step1: true, step2: true}}
@@ -70,6 +82,7 @@ export class WorkflowInstance<TSteps extends Step<any, any, any>[] = any, TTrigg
     stepSubscriberGraph,
     onFinish,
     onStepTransition,
+    resultMapping,
     events,
   }: {
     name: string;
@@ -82,6 +95,7 @@ export class WorkflowInstance<TSteps extends Step<any, any, any>[] = any, TTrigg
     stepSubscriberGraph: Record<string, StepGraph>;
     onFinish?: () => void;
     onStepTransition?: Set<(state: WorkflowRunState) => void | Promise<void>>;
+    resultMapping?: Record<string, { step: StepAction<any, any, any, any>; path: string }>;
     events?: Record<string, { schema: z.ZodObject<any> }>;
   }) {
     this.name = name;
@@ -97,6 +111,8 @@ export class WorkflowInstance<TSteps extends Step<any, any, any>[] = any, TTrigg
     this.#runId = runId ?? crypto.randomUUID();
 
     this.#onFinish = onFinish;
+
+    this.#resultMapping = resultMapping;
 
     this.events = events;
     onStepTransition?.forEach(handler => this.#onStepTransition.add(handler));
@@ -155,7 +171,7 @@ export class WorkflowInstance<TSteps extends Step<any, any, any>[] = any, TTrigg
     triggerData?: z.infer<TTriggerSchema>;
     snapshot?: Snapshot<any>;
     resumeData?: any; // TODO: once we have a resume schema plug that in here
-  } = {}): Promise<Omit<WorkflowRunResult<TTriggerSchema, TSteps>, 'runId'>> {
+  } = {}): Promise<Omit<WorkflowRunResult<TTriggerSchema, TSteps, TResult>, 'runId'>> {
     this.#executionSpan = this.#mastra?.getTelemetry()?.tracer.startSpan(`workflow.${this.name}.execute`, {
       attributes: { componentName: this.name, runId: this.runId },
     });
@@ -232,7 +248,23 @@ export class WorkflowInstance<TSteps extends Step<any, any, any>[] = any, TTrigg
 
     await this.persistWorkflowSnapshot();
 
-    return { results, activePaths };
+    const result: Omit<WorkflowRunResult<TTriggerSchema, TSteps, TResult>, 'runId'> = { results, activePaths };
+    if (this.#resultMapping) {
+      result.result = resolveVariables({
+        runId: this.#runId,
+        logger: this.logger,
+        variables: this.#resultMapping,
+        context: {
+          steps: results,
+          triggerData: triggerData,
+          inputData: {},
+          attempts: machineInput.attempts,
+          getStepResult: (stepId: string) => results[stepId],
+        },
+      });
+    }
+
+    return result;
   }
 
   hasSubscribers(stepId: string) {
@@ -464,6 +496,12 @@ export class WorkflowInstance<TSteps extends Step<any, any, any>[] = any, TTrigg
       throw new Error(`No snapshot found for workflow run ${this.runId}`);
     }
 
+    const stepParts = stepId.split('.');
+    const stepPath = stepParts.join('.');
+    if (stepParts.length > 1) {
+      stepId = stepParts[0] ?? stepId;
+    }
+
     let parsedSnapshot;
     try {
       parsedSnapshot = typeof snapshot === 'string' ? JSON.parse(snapshot as unknown as string) : snapshot;
@@ -473,6 +511,7 @@ export class WorkflowInstance<TSteps extends Step<any, any, any>[] = any, TTrigg
     }
 
     const startStepId = parsedSnapshot.suspendedSteps?.[stepId];
+
     if (!startStepId) {
       return;
     }
@@ -530,7 +569,7 @@ export class WorkflowInstance<TSteps extends Step<any, any, any>[] = any, TTrigg
 
     return this.execute({
       snapshot: parsedSnapshot,
-      stepId,
+      stepId: stepPath,
       resumeData: resumeContext,
     });
   }

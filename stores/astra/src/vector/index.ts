@@ -85,8 +85,8 @@ export class AstraVector extends MastraVector {
       metadata: metadata?.[i] || {},
     }));
 
-    const result = await collection.insertMany(records);
-    return result.insertedIds.map(id => (id || '').toString());
+    await collection.insertMany(records);
+    return vectorIds;
   }
 
   transformFilter(filter?: VectorFilter) {
@@ -189,13 +189,13 @@ export class AstraVector extends MastraVector {
       updateDoc.metadata = update.metadata;
     }
 
-    await collection.findOneAndUpdate({ _id: id }, { $set: updateDoc });
+    await collection.findOneAndUpdate({ id }, { $set: updateDoc });
   }
 
   async deleteIndexById(indexName: string, id: string): Promise<void> {
     try {
       const collection = this.#db.collection(indexName);
-      await collection.deleteOne({ _id: id });
+      await collection.deleteOne({ id });
     } catch (error: any) {
       throw new Error(`Failed to delete index by id: ${id} for index name: ${indexName}: ${error.message}`);
     }

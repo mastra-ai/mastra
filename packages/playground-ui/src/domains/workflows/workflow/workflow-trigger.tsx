@@ -113,10 +113,8 @@ export function WorkflowTrigger({
     return (
       <ScrollArea className="h-[calc(100vh-126px)] pt-2 px-4 pb-4 text-xs">
         <div className="space-y-4">
-          <div className="grid grid-cols-[100px_1fr] gap-2">
-            <Skeleton className="h-3" />
-            <Skeleton className="h-3" />
-          </div>
+          <Skeleton className="h-10" />
+          <Skeleton className="h-10" />
         </div>
       </ScrollArea>
     );

@@ -1,5 +1,31 @@
 # @mastra/astra
 
+## 0.2.6-alpha.0
+
+### Patch Changes
+
+- 15702ff: Updated upsert, updateIndexById, deleteIndexById for astra and updated tests for astra and vectorize
+- Updated dependencies [b4fbc59]
+  - @mastra/core@0.6.5-alpha.0
+
+## 0.2.5
+
+### Patch Changes
+
+- b56a681: Update README and some tests for vector stores
+- Updated dependencies [6794797]
+- Updated dependencies [fb68a80]
+- Updated dependencies [b56a681]
+- Updated dependencies [248cb07]
+  - @mastra/core@0.6.4
+
+## 0.2.5-alpha.1
+
+### Patch Changes
+
+- Updated dependencies [6794797]
+  - @mastra/core@0.6.4-alpha.1
+
 ## 0.2.5-alpha.0
 
 ### Patch Changes

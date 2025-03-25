@@ -1,5 +1,27 @@
 # @mastra/core
 
+## 0.6.5-alpha.0
+
+### Patch Changes
+
+- b4fbc59: Fixed an issue where sending CoreMessages to AI SDK would result in "Unsupported role: tool" errors
+
+## 0.6.4
+
+### Patch Changes
+
+- 6794797: Check for eval values before inserting into storage
+- fb68a80: Inject mastra instance into llm class
+- b56a681: Update README and some tests for vector stores
+- 248cb07: Allow ai-sdk Message type for messages in agent generate and stream
+  Fix sidebar horizontal overflow in playground
+
+## 0.6.4-alpha.1
+
+### Patch Changes
+
+- 6794797: Check for eval values before inserting into storage
+
 ## 0.6.4-alpha.0
 
 ### Patch Changes

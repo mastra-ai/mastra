@@ -4,4 +4,4 @@
 'create-mastra': patch
 ---
 
-Fix messages in thread not showing latest when switching between threads
+Stop automatically scrolling to bottom in agent chat if user has scrolled up
