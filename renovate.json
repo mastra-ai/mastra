@@ -35,6 +35,13 @@
       "dependencyDashboardApproval": false
     },
     {
+      "groupName": "E2e tests",
+      "commitMessageTopic": "e2e-tests",
+      "matchFileNames": ["e2e-tests/**/package.json"],
+      "matchDepTypes": ["dependencies", "devDependencies"],
+      "dependencyDashboardApproval": false
+    },
+    {
       "groupName": "typescript",
       "matchFileNames": ["+(package.json)", "**/package.json", "!./examples/**", "!./docs/**"],
       "matchPackageNames": ["typescript"],
