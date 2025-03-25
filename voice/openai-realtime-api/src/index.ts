@@ -29,6 +29,8 @@ type EventMap = {
 /** Default voice for text-to-speech. 'alloy' provides a neutral, balanced voice suitable for most use cases */
 const DEFAULT_VOICE: Realtime.Voice = 'alloy';
 
+const DEFAULT_TRANSCRIBER: Realtime.AudioTranscriptionModel = 'whisper-1';
+
 const DEFAULT_URL = 'wss://api.openai.com/v1/realtime';
 
 /**
@@ -111,15 +113,16 @@ export class OpenAIRealtimeVoice extends MastraVoice {
   private instructions?: string;
   private tools?: TTools;
   private debug: boolean;
+  private queue: unknown[] = [];
+  private transcriber: Realtime.AudioTranscriptionModel;
 
   /**
    * Creates a new instance of OpenAIRealtimeVoice.
    *
    * @param options - Configuration options for the voice instance
-   * @param options.chatModel - Configuration for the chat model
-   * @param options.chatModel.model - The model ID to use (defaults to GPT-4 Mini Realtime)
-   * @param options.chatModel.apiKey - OpenAI API key. Falls back to process.env.OPENAI_API_KEY
-   * @param options.chatModel.tools - Tools configuration for the model
+   * @param options.url - The base URL for the OpenAI Realtime API
+   * @param options.model - The model ID to use (defaults to GPT-4 Mini Realtime)
+   * @param options.apiKey - OpenAI API key. Falls back to process.env.OPENAI_API_KEY
    * @param options.speaker - Voice ID to use (defaults to 'alloy')
    * @param options.debug - Enable debug mode
    *
@@ -134,25 +137,20 @@ export class OpenAIRealtimeVoice extends MastraVoice {
    * });
    * ```
    */
-  constructor({
-    chatModel,
-    speaker,
-    debug = false,
-  }: {
-    chatModel?: {
+  constructor(
+    options: {
       model?: string;
-      apiKey?: string;
-      tools?: TTools;
-      instructions?: string;
       url?: string;
-    };
-    speaker?: Realtime.Voice;
-    debug?: boolean;
-  } = {}) {
+      apiKey?: string;
+      speaker?: Realtime.Voice;
+      transcriber?: Realtime.AudioTranscriptionModel;
+      debug?: boolean;
+    } = {},
+  ) {
     super();
 
-    const url = `${chatModel?.url || DEFAULT_URL}?model=${chatModel?.model || DEFAULT_MODEL}`;
-    const apiKey = chatModel?.apiKey || process.env.OPENAI_API_KEY;
+    const url = `${options.url || DEFAULT_URL}?model=${options.model || DEFAULT_MODEL}`;
+    const apiKey = options.apiKey || process.env.OPENAI_API_KEY;
     this.ws = new WebSocket(url, undefined, {
       headers: {
         Authorization: 'Bearer ' + apiKey,
@@ -163,10 +161,9 @@ export class OpenAIRealtimeVoice extends MastraVoice {
     this.client = new EventEmitter();
     this.state = 'close';
     this.events = {} as EventMap;
-    this.tools = chatModel?.tools;
-    this.instructions = chatModel?.instructions;
-    this.speaker = speaker || DEFAULT_VOICE;
-    this.debug = debug;
+    this.speaker = options.speaker || DEFAULT_VOICE;
+    this.transcriber = options.transcriber || DEFAULT_TRANSCRIBER;
+    this.debug = options.debug || false;
     this.setupEventListeners();
   }
 
@@ -201,6 +198,22 @@ export class OpenAIRealtimeVoice extends MastraVoice {
   }
 
   /**
+   * Equips the voice instance with a set of instructions.
+   * Instructions allow the model to perform additional actions during conversations.
+   *
+   * @param instructions - Optional instructions to addInstructions
+   * @returns Transformed instructions ready for use with the model
+   *
+   * @example
+   * ```typescript
+   * voice.addInstuctions('You are a helpful assistant.');
+   * ```
+   */
+  addInstructions(instructions?: string) {
+    this.instructions = instructions;
+  }
+
+  /**
    * Equips the voice instance with a set of tools.
    * Tools allow the model to perform additional actions during conversations.
    *
@@ -217,10 +230,7 @@ export class OpenAIRealtimeVoice extends MastraVoice {
    * ```
    */
   addTools(tools?: TTools) {
-    const openaiTools = transformTools(tools);
-    this.updateConfig({
-      tools: openaiTools.map(t => t.openaiTool),
-    });
+    this.tools = tools || {};
   }
 
   /**
@@ -376,7 +386,7 @@ export class OpenAIRealtimeVoice extends MastraVoice {
       instructions: this.instructions,
       tools: openaiTools.map(t => t.openaiTool),
       input_audio_transcription: {
-        model: 'whisper-1',
+        model: this.transcriber,
       },
       voice: this.speaker,
     });
@@ -536,6 +546,11 @@ export class OpenAIRealtimeVoice extends MastraVoice {
 
     this.client.on('session.created', ev => {
       this.emit('session.created', ev);
+
+      const queue = this.queue.splice(0, this.queue.length);
+      for (const ev of queue) {
+        this.ws.send(JSON.stringify(ev));
+      }
     });
     this.client.on('session.updated', ev => {
       this.emit('session.updated', ev);
@@ -551,10 +566,10 @@ export class OpenAIRealtimeVoice extends MastraVoice {
       this.emit('speaker', speakerStream);
     });
     this.client.on('conversation.item.input_audio_transcription.delta', ev => {
-      this.emit('transcribing', { text: ev.delta, response_id: ev.response_id, role: 'user' });
+      this.emit('writing', { text: ev.delta, response_id: ev.response_id, role: 'user' });
     });
     this.client.on('conversation.item.input_audio_transcription.done', ev => {
-      this.emit('transcribing', { text: '\n', response_id: ev.response_id, role: 'user' });
+      this.emit('writing', { text: '\n', response_id: ev.response_id, role: 'user' });
     });
     this.client.on('response.audio.delta', ev => {
       const audio = Buffer.from(ev.delta, 'base64');
@@ -570,16 +585,16 @@ export class OpenAIRealtimeVoice extends MastraVoice {
       stream?.end();
     });
     this.client.on('response.audio_transcript.delta', ev => {
-      this.emit('writing', { text: ev.delta, response_id: ev.response_id });
+      this.emit('writing', { text: ev.delta, response_id: ev.response_id, role: 'assistant' });
     });
     this.client.on('response.audio_transcript.done', ev => {
-      this.emit('writing', { text: '\n', response_id: ev.response_id });
+      this.emit('writing', { text: '\n', response_id: ev.response_id, role: 'assistant' });
     });
     this.client.on('response.text.delta', ev => {
-      this.emit('writing', { text: ev.delta, response_id: ev.response_id });
+      this.emit('writing', { text: ev.delta, response_id: ev.response_id, role: 'assistant' });
     });
     this.client.on('response.text.done', ev => {
-      this.emit('writing', { text: '\n', response_id: ev.response_id });
+      this.emit('writing', { text: '\n', response_id: ev.response_id, role: 'assistant' });
     });
     this.client.on('response.done', async ev => {
       await this.handleFunctionCalls(ev);
@@ -648,11 +663,15 @@ export class OpenAIRealtimeVoice extends MastraVoice {
   }
 
   private sendEvent(type: string, data: any) {
-    this.ws.send(
-      JSON.stringify({
-        type: type,
-        ...data,
-      }),
-    );
+    if (this.ws.readyState !== this.ws.OPEN) {
+      this.queue.push({ type: type, ...data });
+    } else {
+      this.ws.send(
+        JSON.stringify({
+          type: type,
+          ...data,
+        }),
+      );
+    }
   }
 }
