@@ -7,7 +7,7 @@
     "@types/node": "^20.17.24",
     "husky": "^9.1.7",
     "lint-staged": "^15.4.3",
-    "npm-run-all2": "^5.0.0",
+    "npm-run-all2": "^7.0.2",
     "prettier": "^3.5.3",
     "turbo": "^2.4.4",
     "typescript": "^5.8.2",
