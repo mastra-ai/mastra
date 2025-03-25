@@ -191,7 +191,7 @@ export class MastraLLM extends MastraLLMBase {
     }
 
     return await generateText({
-      messages: this.convertToUIMessages(messages),
+      messages,
       ...argsForExecute,
       experimental_telemetry: {
         ...this.experimental_telemetry,
@@ -272,7 +272,7 @@ export class MastraLLM extends MastraLLMBase {
     }
 
     return await generateObject({
-      messages: this.convertToUIMessages(messages),
+      messages,
       ...argsForExecute,
       output: output as any,
       schema,
@@ -374,7 +374,7 @@ export class MastraLLM extends MastraLLMBase {
     }
 
     return await streamText({
-      messages: this.convertToUIMessages(messages),
+      messages,
       ...argsForExecute,
       experimental_telemetry: {
         ...this.experimental_telemetry,
@@ -476,7 +476,7 @@ export class MastraLLM extends MastraLLMBase {
     }
 
     return streamObject({
-      messages: this.convertToUIMessages(messages),
+      messages,
       ...argsForExecute,
       output: output as any,
       schema,
