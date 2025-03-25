@@ -36,14 +36,13 @@ const readConventionalCommitSpec = new Step({
   outputSchema: z.object({
     fileData: z.any(),
   }),
-  execute: async ({ suspend }) => {
+  execute: async () => {
     if (!fsTool?.execute) {
       return { fileData: null };
     }
 
     const fileData = await fsTool.execute({
       context: { action: 'read', file: 'data/crawl/conventional-commit.json', data: '' } as any,
-      suspend,
     });
 
     return { fileData };

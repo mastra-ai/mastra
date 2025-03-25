@@ -1,10 +1,10 @@
+import { EventEmitter } from 'events';
+import { PassThrough } from 'stream';
 import type { ToolsInput } from '@mastra/core/agent';
 import { MastraVoice } from '@mastra/core/voice';
-import { isReadableStream, transformTools } from './utils';
-import { WebSocket } from 'ws';
-import { EventEmitter } from 'events';
 import type { Realtime, RealtimeServerEvents } from 'openai-realtime-api';
-import { PassThrough } from 'stream';
+import { WebSocket } from 'ws';
+import { isReadableStream, transformTools } from './utils';
 
 /**
  * Event callback function type
@@ -36,21 +36,22 @@ const DEFAULT_URL = 'wss://api.openai.com/v1/realtime';
  * This model is optimized for low-latency responses while maintaining high quality output.
  */
 const DEFAULT_MODEL = 'gpt-4o-mini-realtime-preview-2024-12-17';
-/**
- * Default Voice Activity Detection (VAD) configuration.
- * These settings control how the system detects speech segments.
- *
- * @property {string} type - Uses server-side VAD for better accuracy
- * @property {number} threshold - Speech detection sensitivity (0.5 = balanced)
- * @property {number} prefix_padding_ms - Includes 1 second of audio before speech
- * @property {number} silence_duration_ms - Waits 1 second of silence before ending turn
- */
-const DEFAULT_VAD_CONFIG = {
-  type: 'server_vad',
-  threshold: 0.5,
-  prefix_padding_ms: 1000,
-  silence_duration_ms: 1000,
-} as Realtime.TurnDetection;
+
+// /**
+//  * Default Voice Activity Detection (VAD) configuration.
+//  * These settings control how the system detects speech segments.
+//  *
+//  * @property {string} type - Uses server-side VAD for better accuracy
+//  * @property {number} threshold - Speech detection sensitivity (0.5 = balanced)
+//  * @property {number} prefix_padding_ms - Includes 1 second of audio before speech
+//  * @property {number} silence_duration_ms - Waits 1 second of silence before ending turn
+//  */
+// const DEFAULT_VAD_CONFIG = {
+//   type: 'server_vad',
+//   threshold: 0.5,
+//   prefix_padding_ms: 1000,
+//   silence_duration_ms: 1000,
+// } as Realtime.TurnDetection;
 
 type TTools = ToolsInput;
 
@@ -580,8 +581,8 @@ export class OpenAIRealtimeVoice extends MastraVoice {
     this.client.on('response.text.done', ev => {
       this.emit('writing', { text: '\n', response_id: ev.response_id });
     });
-    this.client.on('response.done', ev => {
-      this.handleFunctionCalls(ev);
+    this.client.on('response.done', async ev => {
+      await this.handleFunctionCalls(ev);
       this.emit('response.done', ev);
       speakerStreams.delete(ev.response.id);
     });
