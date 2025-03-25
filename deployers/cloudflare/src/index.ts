@@ -2,6 +2,8 @@ import { writeFile } from 'fs/promises';
 import { join } from 'path';
 
 import { Deployer, createChildProcessLogger } from '@mastra/deployer';
+import type { analyzeBundle } from '@mastra/deployer/analyze';
+import virtual from '@rollup/plugin-virtual';
 import { Cloudflare } from 'cloudflare';
 
 interface CFRoute {
@@ -78,6 +80,7 @@ export class CloudflareDeployer extends Deployer {
 
   private getEntry(): string {
     return `
+import '#polyfills';
 import { mastra } from '#mastra';
 import { createHonoServer } from '#server';
 
@@ -97,6 +100,28 @@ export default {
   async prepare(outputDirectory: string): Promise<void> {
     await super.prepare(outputDirectory);
     await this.writeFiles(outputDirectory);
+  }
+
+  async getBundlerOptions(
+    serverFile: string,
+    mastraEntryFile: string,
+    analyzedBundleInfo: Awaited<ReturnType<typeof analyzeBundle>>,
+  ) {
+    const inputOptions = await super.getBundlerOptions(serverFile, mastraEntryFile, analyzedBundleInfo);
+
+    if (Array.isArray(inputOptions.plugins)) {
+      inputOptions.plugins = [
+        virtual({
+          '#polyfills': `
+process.versions = process.versions || {};
+process.versions.node = '${process.versions.node}';
+      `,
+        }),
+        ...inputOptions.plugins,
+      ];
+    }
+
+    return inputOptions;
   }
 
   async bundle(entryFile: string, outputDirectory: string): Promise<void> {
