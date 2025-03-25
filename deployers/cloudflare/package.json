@@ -49,7 +49,7 @@
     "execa": "^9.5.2",
     "rollup-plugin-polyfill-node": "^0.13.0",
     "rollup-plugin-shim": "^1.0.0",
-    "wrangler": "^3.112.0",
+    "wrangler": "^4.4.0",
     "zod": "^3.24.2"
   },
   "devDependencies": {
