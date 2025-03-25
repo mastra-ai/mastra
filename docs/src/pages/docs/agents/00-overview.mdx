@@ -210,6 +210,31 @@ const response = await myAgent.generate(
 );
 ```
 
+### onFinish
+
+Only available when streaming. Callback that is called when the LLM response and all request tool executions (for tools that have an `execute` function) are finished:
+
+```ts showLineNumbers filename="src/mastra/agents/index.ts" copy
+const stream = await myAgent.stream(
+  [{ role: "user", content: "Calculate the taxi driver's daily earnings." }],
+  {
+    maxSteps: 5,
+    onFinish: ({ 
+      steps, 
+      text,
+      finishReason,  // 'complete', 'length', 'tool', etc.
+      usage,         // token usage statistics
+      reasoningDetails // additional context about the agent's decisions
+    }) => {
+      console.log("Stream complete:", { 
+        totalSteps: steps.length, 
+        finishReason,
+        usage 
+      });
+    }
+  }
+);
+```
 
 ## 5. Running Agents
 
