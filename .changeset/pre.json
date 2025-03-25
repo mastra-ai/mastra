@@ -141,11 +141,22 @@
     "@mastra/voice-speechify": "0.1.8"
   },
   "changesets": [
+    "beige-feet-mate",
+    "bumpy-geese-pick",
+    "cold-heads-worry",
     "cool-papers-check",
     "cruel-planets-reply",
     "dirty-breads-jump",
+    "hot-flowers-care",
+    "kind-chefs-buy",
+    "little-ideas-run",
+    "poor-bottles-fall",
     "puny-mugs-doubt",
+    "puny-pianos-accept",
     "ready-falcons-heal",
+    "shiny-aliens-begin",
+    "tired-bobcats-enter",
+    "tricky-kids-relax",
     "two-gifts-share"
   ]
 }

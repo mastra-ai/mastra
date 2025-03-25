@@ -1,5 +1,21 @@
 # mastra
 
+## 0.4.4-alpha.1
+
+### Patch Changes
+
+- 2447900: Show No input for steps without input on traces UI
+- c30787b: Stop automatically scrolling to bottom in agent chat if user has scrolled up
+- 214e7ce: Only mark required fields as required on the playground
+- 0b496ff: Load env vars on mastra deploy
+- Updated dependencies [cdc0498]
+- Updated dependencies [0b54522]
+- Updated dependencies [1af25d5]
+- Updated dependencies [0b496ff]
+- Updated dependencies [27439ad]
+  - @mastra/deployer@0.2.5-alpha.1
+  - @mastra/core@0.7.0-alpha.1
+
 ## 0.4.4-alpha.0
 
 ### Patch Changes

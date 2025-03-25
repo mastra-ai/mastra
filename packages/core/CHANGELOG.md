@@ -1,5 +1,16 @@
 # @mastra/core
 
+## 0.7.0-alpha.1
+
+### Minor Changes
+
+- 1af25d5: Added nested workflows API
+
+### Patch Changes
+
+- 0b54522: AgentNetwork logs
+- 27439ad: Updated the jsonSchemaPropertiesToTSTypes function to properly handle JSON Schema definitions where type can be an array of strings. Previously, the function only handled single string types, but according to the JSON Schema specification, type can be an array of possible types.
+
 ## 0.6.5-alpha.0
 
 ### Patch Changes
