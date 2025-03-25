@@ -96,6 +96,13 @@
       "matchFileNames": ["deployers/*/package.json"],
       "matchUpdateTypes": ["minor", "patch"],
       "matchDepTypes": ["dependencies", "devDependencies"]
+    },
+    {
+      "groupName": "playground",
+      "commitMessageTopic": "Mastra playground",
+      "matchFileNames": ["packages/cli/playground/package.json"],
+      "matchUpdateTypes": ["minor", "patch"],
+      "matchDepTypes": ["dependencies", "devDependencies"]
     }
   ]
 }
