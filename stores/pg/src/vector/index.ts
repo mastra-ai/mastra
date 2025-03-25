@@ -1,3 +1,4 @@
+import { createHash } from 'crypto';
 import { MastraVector } from '@mastra/core/vector';
 import type {
   IndexStats,
@@ -215,24 +216,19 @@ export class PgVector extends MastraVector {
         throw new Error('PostgreSQL vector extension is not available. Please install it first.');
       }
 
-      // Try to create extension
-      await client.query('BEGIN');
+      // Get advisory lock using hash of index name
+      const hash = createHash('sha256').update(indexName).digest('hex');
+      const lockId = BigInt('0x' + hash.slice(0, 8)) % BigInt(2 ** 31); // Take first 8 chars and convert to number
+      const acquired = await client.query('SELECT pg_try_advisory_lock($1)', [lockId]);
+
+      if (!acquired.rows[0].pg_try_advisory_lock) {
+        // Wait for other process to finish
+        await client.query('SELECT pg_advisory_lock($1)', [lockId]);
+      }
+
       try {
         await client.query('CREATE EXTENSION IF NOT EXISTS vector');
-        await client.query('COMMIT');
-      } catch (err: any) {
-        await client.query('ROLLBACK');
-        // If error is duplicate extension, that's fine
-        if (err.code === '23505') {
-          console.log('Vector extension already exists, continuing...');
-        } else {
-          throw err;
-        }
-      }
-      // Wrap table creation in transaction
-      await client.query('BEGIN');
-      try {
-        // Create the table with explicit schema
+
         await client.query(`
         CREATE TABLE IF NOT EXISTS ${indexName} (
           id SERIAL PRIMARY KEY,
@@ -241,16 +237,9 @@ export class PgVector extends MastraVector {
           metadata JSONB DEFAULT '{}'::jsonb
         );
       `);
-        await client.query('COMMIT');
-      } catch (err: any) {
-        await client.query('ROLLBACK');
-        // If error is duplicate table/sequence, that's fine
-        if (err.code === '23505') {
-          // Another concurrent operation created it
-          console.log('Table/sequence already exists, continuing...');
-        } else {
-          throw err;
-        }
+      } finally {
+        // Always release lock
+        await client.query('SELECT pg_advisory_unlock($1)', [lockId]);
       }
 
       if (buildIndex) {
@@ -285,19 +274,31 @@ export class PgVector extends MastraVector {
 
     const client = await this.pool.connect();
     try {
-      await client.query(`DROP INDEX IF EXISTS ${indexName}_vector_idx`);
+      // Use a different hash prefix for buildIndex locks to avoid conflicts with createIndex
+      const hash = createHash('sha256')
+        .update('build:' + indexName)
+        .digest('hex');
+      const lockId = BigInt('0x' + hash.slice(0, 8)) % BigInt(2 ** 31);
+      const acquired = await client.query('SELECT pg_try_advisory_lock($1)', [lockId]);
 
-      if (indexConfig.type === 'flat') return;
+      if (!acquired.rows[0].pg_try_advisory_lock) {
+        await client.query('SELECT pg_advisory_lock($1)', [lockId]);
+      }
 
-      const metricOp =
-        metric === 'cosine' ? 'vector_cosine_ops' : metric === 'euclidean' ? 'vector_l2_ops' : 'vector_ip_ops';
+      try {
+        await client.query(`DROP INDEX IF EXISTS ${indexName}_vector_idx`);
 
-      let indexSQL: string;
-      if (indexConfig.type === 'hnsw') {
-        const m = indexConfig.hnsw?.m ?? 8;
-        const efConstruction = indexConfig.hnsw?.efConstruction ?? 32;
+        if (indexConfig.type === 'flat') return;
 
-        indexSQL = `
+        const metricOp =
+          metric === 'cosine' ? 'vector_cosine_ops' : metric === 'euclidean' ? 'vector_l2_ops' : 'vector_ip_ops';
+
+        let indexSQL: string;
+        if (indexConfig.type === 'hnsw') {
+          const m = indexConfig.hnsw?.m ?? 8;
+          const efConstruction = indexConfig.hnsw?.efConstruction ?? 32;
+
+          indexSQL = `
           CREATE INDEX IF NOT EXISTS ${indexName}_vector_idx 
           ON ${indexName} 
           USING hnsw (embedding ${metricOp})
@@ -306,40 +307,27 @@ export class PgVector extends MastraVector {
             ef_construction = ${efConstruction}
           )
         `;
-      } else {
-        let lists: number;
-        if (indexConfig.ivf?.lists) {
-          lists = indexConfig.ivf.lists;
         } else {
-          const size = (await client.query(`SELECT COUNT(*) FROM ${indexName}`)).rows[0].count;
-          lists = Math.max(100, Math.min(4000, Math.floor(Math.sqrt(size) * 2)));
-        }
-        indexSQL = `
+          let lists: number;
+          if (indexConfig.ivf?.lists) {
+            lists = indexConfig.ivf.lists;
+          } else {
+            const size = (await client.query(`SELECT COUNT(*) FROM ${indexName}`)).rows[0].count;
+            lists = Math.max(100, Math.min(4000, Math.floor(Math.sqrt(size) * 2)));
+          }
+          indexSQL = `
           CREATE INDEX IF NOT EXISTS ${indexName}_vector_idx
           ON ${indexName}
           USING ivfflat (embedding ${metricOp})
           WITH (lists = ${lists});
         `;
-      }
-
-      // Wrap index creation in a transaction
-      await client.query('BEGIN');
-      try {
-        await client.query(indexSQL);
-        await client.query('COMMIT');
-        this.indexCache.delete(indexName);
-      } catch (err: any) {
-        await client.query('ROLLBACK');
-        // If error is duplicate index, that's fine - another concurrent operation created it
-        if (err.code === '23505') {
-          this.indexCache.delete(indexName); // Still clear cache since index was modified
-          return;
         }
-        throw err;
+
+        await client.query(indexSQL);
+        this.indexCache.delete(indexName);
+      } finally {
+        await client.query('SELECT pg_advisory_unlock($1)', [lockId]);
       }
-    } catch (error) {
-      // Re-throw any errors
-      throw error;
     } finally {
       client.release();
     }
