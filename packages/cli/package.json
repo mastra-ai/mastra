@@ -55,7 +55,7 @@
     "@opentelemetry/instrumentation": "^0.57.2",
     "@swc/core": "^1.11.8",
     "chokidar": "^4.0.3",
-    "commander": "^12.1.0",
+    "commander": "^13.1.0",
     "dotenv": "^16.4.7",
     "execa": "^9.5.2",
     "fs-extra": "^11.3.0",

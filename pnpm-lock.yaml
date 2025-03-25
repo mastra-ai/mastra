@@ -2728,8 +2728,8 @@ importers:
         specifier: ^4.0.3
         version: 4.0.3
       commander:
-        specifier: ^12.1.0
-        version: 12.1.0
+        specifier: ^13.1.0
+        version: 13.1.0
       dotenv:
         specifier: ^16.4.7
         version: 16.4.7
@@ -3145,8 +3145,8 @@ importers:
   packages/create-mastra:
     dependencies:
       commander:
-        specifier: ^12.1.0
-        version: 12.1.0
+        specifier: ^13.1.0
+        version: 13.1.0
       execa:
         specifier: ^9.5.2
         version: 9.5.2
