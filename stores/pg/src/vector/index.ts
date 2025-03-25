@@ -216,10 +216,24 @@ export class PgVector extends MastraVector {
       }
 
       // Try to create extension
-      await client.query('CREATE EXTENSION IF NOT EXISTS vector');
-
-      // Create the table with explicit schema
-      await client.query(`
+      await client.query('BEGIN');
+      try {
+        await client.query('CREATE EXTENSION IF NOT EXISTS vector');
+        await client.query('COMMIT');
+      } catch (err: any) {
+        await client.query('ROLLBACK');
+        // If error is duplicate extension, that's fine
+        if (err.code === '23505') {
+          console.log('Vector extension already exists, continuing...');
+        } else {
+          throw err;
+        }
+      }
+      // Wrap table creation in transaction
+      await client.query('BEGIN');
+      try {
+        // Create the table with explicit schema
+        await client.query(`
         CREATE TABLE IF NOT EXISTS ${indexName} (
           id SERIAL PRIMARY KEY,
           vector_id TEXT UNIQUE NOT NULL,
@@ -227,6 +241,17 @@ export class PgVector extends MastraVector {
           metadata JSONB DEFAULT '{}'::jsonb
         );
       `);
+        await client.query('COMMIT');
+      } catch (err: any) {
+        await client.query('ROLLBACK');
+        // If error is duplicate table/sequence, that's fine
+        if (err.code === '23505') {
+          // Another concurrent operation created it
+          console.log('Table/sequence already exists, continuing...');
+        } else {
+          throw err;
+        }
+      }
 
       if (buildIndex) {
         await this.buildIndex({ indexName, metric, indexConfig });
@@ -273,7 +298,7 @@ export class PgVector extends MastraVector {
         const efConstruction = indexConfig.hnsw?.efConstruction ?? 32;
 
         indexSQL = `
-          CREATE INDEX ${indexName}_vector_idx 
+          CREATE INDEX IF NOT EXISTS ${indexName}_vector_idx 
           ON ${indexName} 
           USING hnsw (embedding ${metricOp})
           WITH (
@@ -290,15 +315,31 @@ export class PgVector extends MastraVector {
           lists = Math.max(100, Math.min(4000, Math.floor(Math.sqrt(size) * 2)));
         }
         indexSQL = `
-          CREATE INDEX ${indexName}_vector_idx
+          CREATE INDEX IF NOT EXISTS ${indexName}_vector_idx
           ON ${indexName}
           USING ivfflat (embedding ${metricOp})
           WITH (lists = ${lists});
         `;
       }
 
-      await client.query(indexSQL);
-      this.indexCache.delete(indexName);
+      // Wrap index creation in a transaction
+      await client.query('BEGIN');
+      try {
+        await client.query(indexSQL);
+        await client.query('COMMIT');
+        this.indexCache.delete(indexName);
+      } catch (err: any) {
+        await client.query('ROLLBACK');
+        // If error is duplicate index, that's fine - another concurrent operation created it
+        if (err.code === '23505') {
+          this.indexCache.delete(indexName); // Still clear cache since index was modified
+          return;
+        }
+        throw err;
+      }
+    } catch (error) {
+      // Re-throw any errors
+      throw error;
     } finally {
       client.release();
     }
