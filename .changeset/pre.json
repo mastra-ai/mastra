@@ -140,5 +140,12 @@
     "@mastra/voice-sarvam": "0.1.3",
     "@mastra/voice-speechify": "0.1.8"
   },
-  "changesets": []
+  "changesets": [
+    "cool-papers-check",
+    "cruel-planets-reply",
+    "dirty-breads-jump",
+    "puny-mugs-doubt",
+    "ready-falcons-heal",
+    "two-gifts-share"
+  ]
 }
