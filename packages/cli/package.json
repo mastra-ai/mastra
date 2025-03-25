@@ -78,7 +78,7 @@
     "@mastra/playground-ui": "workspace:*",
     "@microsoft/api-extractor": "^7.52.1",
     "@types/fs-extra": "^11.0.4",
-    "@types/node": "^20.17.27",
+    "@types/node": "^22.13.13",
     "@types/prompt": "^1.1.9",
     "@types/tcp-port-used": "^1.0.4",
     "cpy-cli": "^5.0.0",

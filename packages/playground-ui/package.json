@@ -93,7 +93,7 @@
     "tailwindcss": "^3.0.0"
   },
   "devDependencies": {
-    "@types/node": "^20.17.27",
+    "@types/node": "^22.13.13",
     "@types/react": "^19.0.10",
     "@types/react-dom": "^19.0.4",
     "@vitejs/plugin-react": "^4.3.4",

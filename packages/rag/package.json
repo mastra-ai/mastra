@@ -45,7 +45,7 @@
     "@ai-sdk/openai": "latest",
     "@internal/lint": "workspace:*",
     "@microsoft/api-extractor": "^7.52.1",
-    "@types/node": "^20.17.27",
+    "@types/node": "^22.13.13",
     "ai": "^4.1.54",
     "dotenv": "^16.4.7",
     "eslint": "^9.23.0",

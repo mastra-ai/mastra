@@ -112,7 +112,7 @@
     "@types/babel__core": "^7.20.5",
     "@types/babel__helper-module-imports": "^7.18.3",
     "@types/fs-extra": "^11.0.4",
-    "@types/node": "^20.17.27",
+    "@types/node": "^22.13.13",
     "concurrently": "^9.1.2",
     "eslint": "^9.23.0",
     "hono-openapi": "^0.4.6",

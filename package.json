@@ -4,7 +4,7 @@
   "type": "module",
   "devDependencies": {
     "@changesets/cli": "^2.28.1",
-    "@types/node": "^20.17.24",
+    "@types/node": "^22.13.13",
     "husky": "^9.1.7",
     "lint-staged": "^15.4.3",
     "npm-run-all2": "^5.0.0",
@@ -62,7 +62,7 @@
   },
   "resolutions": {
     "typescript": "^5.7.3",
-    "@types/node": "^20.17.27"
+    "@types/node": "^22.13.13"
   },
   "packageManager": "pnpm@10.4.1+sha512.c753b6c3ad7afa13af388fa6d808035a008e30ea9993f58c6663e2bc5ff21679aa834db094987129aa4d488b86df57f7b634981b2f827cdcacc698cc0cfb88af"
 }

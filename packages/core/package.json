@@ -139,7 +139,7 @@
     "@types/babel__core": "^7.20.5",
     "@types/json-schema": "^7.0.15",
     "@types/lodash-es": "^4.17.12",
-    "@types/node": "^20.17.27",
+    "@types/node": "^22.13.13",
     "@types/pino": "^7.0.5",
     "@types/qs": "^6.9.18",
     "eslint": "^9.23.0",

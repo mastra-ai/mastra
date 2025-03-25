@@ -38,7 +38,7 @@
     "@internal/lint": "workspace:*",
     "@tsconfig/recommended": "^1.0.8",
     "@types/json-schema": "^7.0.15",
-    "@types/node": "^20.17.27",
+    "@types/node": "^22.13.13",
     "tsup": "^8.4.0",
     "typescript": "^5.8.2",
     "vitest": "^3.0.9"

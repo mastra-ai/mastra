@@ -23,7 +23,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: "22.14.0"
 
       - name: Install dane cli
         run: pnpm install -g @mastra/dane

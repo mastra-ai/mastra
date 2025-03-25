@@ -32,7 +32,7 @@
 		}
 	},
 	"devDependencies": {
-		"@types/node": "^22.13.5",
+		"@types/node": "^22.13.13",
 		"tsx": "^4.19.3",
 		"typescript": "^5.3.3"
 	}

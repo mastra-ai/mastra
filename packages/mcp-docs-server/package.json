@@ -47,7 +47,7 @@
     "@internal/lint": "workspace:*",
     "@mastra/mcp": "workspace:^",
     "@types/jsdom": "^21.1.7",
-    "@types/node": "^20.11.24",
+    "@types/node": "^22.13.13",
     "@types/turndown": "^5.0.5",
     "@wong2/mcp-cli": "^1.6.0",
     "eslint": "^9.23.0",
