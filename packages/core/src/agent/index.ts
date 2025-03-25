@@ -29,7 +29,7 @@ import type { MastraMemory } from '../memory/memory';
 import type { MemoryConfig } from '../memory/types';
 import { InstrumentClass } from '../telemetry';
 import type { CoreTool } from '../tools/types';
-import { makeCoreTool, createMastraProxy, ensureToolProperties } from '../utils';
+import { makeCoreTool, createMastraProxy, ensureToolProperties, ensureAllMessagesAreCoreMessages } from '../utils';
 import type { CompositeVoice } from '../voice';
 
 import type {
@@ -220,8 +220,7 @@ export class Agent<
         return { threadId: threadId || '', messages: userMessages };
       }
 
-      const userMessage = this.getMostRecentUserMessage(userMessages);
-      const newMessages = userMessage ? [userMessage] : userMessages;
+      const newMessages = ensureAllMessagesAreCoreMessages(userMessages);
 
       const messages = newMessages.map(u => {
         return {
