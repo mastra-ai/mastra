@@ -107,7 +107,10 @@ export function jsonSchemaToModel(jsonSchema: Record<string, any>): ZodObject<an
       zodType = zodType.describe(value.description);
     }
 
-    if (requiredFields.includes(key)) {
+    // Add check for null type requiring the field
+    const isTypeRequired = value.type === 'null';
+
+    if (requiredFields.includes(key) || isTypeRequired) {
       zodSchema[key] = zodType;
     } else {
       zodSchema[key] = zodType.nullable().optional();
