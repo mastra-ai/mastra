@@ -29,7 +29,7 @@
   },
   "dependencies": {
     "@mastra/core": "workspace:^",
-    "openai": "^4.86.2",
+    "openai": "^4.89.0",
     "zod": "^3.24.2"
   },
   "devDependencies": {

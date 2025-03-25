@@ -26,7 +26,7 @@
   },
   "dependencies": {
     "@mastra/core": "workspace:^",
-    "microsoft-cognitiveservices-speech-sdk": "^1.42.0"
+    "microsoft-cognitiveservices-speech-sdk": "^1.43.0"
   },
   "devDependencies": {
     "@internal/lint": "workspace:*",

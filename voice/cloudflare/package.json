@@ -30,11 +30,11 @@
   },
   "dependencies": {
     "@mastra/core": "workspace:^",
-    "cloudflare": "^4.0.0",
+    "cloudflare": "^4.2.0",
     "zod": "^3.24.2"
   },
   "devDependencies": {
-    "@cloudflare/workers-types": "^4.20250317.0",
+    "@cloudflare/workers-types": "^4.20250321.0",
     "@internal/lint": "workspace:*",
     "@microsoft/api-extractor": "^7.52.1",
     "@types/node": "^20.17.27",
