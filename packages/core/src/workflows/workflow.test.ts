@@ -10,7 +10,8 @@ import { Telemetry } from '../telemetry';
 import { createTool } from '../tools';
 
 import { Step } from './step';
-import { WhenConditionReturnValue, type WorkflowContext, type WorkflowResumeResult } from './types';
+import { WhenConditionReturnValue } from './types';
+import type { WorkflowContext, WorkflowResumeResult } from './types';
 import { Workflow } from './workflow';
 
 const storage = new DefaultStorage({
