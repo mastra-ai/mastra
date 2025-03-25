@@ -102,6 +102,29 @@ export abstract class Bundler extends MastraBundler {
     await copy(publicDir, join(outputDirectory, this.outputDir));
   }
 
+  protected async getBundlerOptions(
+    serverFile: string,
+    mastraEntryFile: string,
+    analyzedBundleInfo: Awaited<ReturnType<typeof analyzeBundle>>,
+  ) {
+    const inputOptions: InputOptions = await getInputOptions(mastraEntryFile, analyzedBundleInfo, 'node');
+    const isVirtual = serverFile.includes('\n') || existsSync(serverFile);
+
+    if (isVirtual) {
+      inputOptions.input = { index: '#entry' };
+
+      if (Array.isArray(inputOptions.plugins)) {
+        inputOptions.plugins.unshift(virtual({ '#entry': serverFile }));
+      } else {
+        inputOptions.plugins = [virtual({ '#entry': serverFile })];
+      }
+    } else {
+      inputOptions.input = { index: serverFile };
+    }
+
+    return inputOptions;
+  }
+
   protected async _bundle(
     serverFile: string,
     mastraEntryFile: string,
@@ -109,7 +132,6 @@ export abstract class Bundler extends MastraBundler {
     bundleLocation: string = join(outputDirectory, this.outputDir),
   ): Promise<void> {
     this.logger.info('Start bundling Mastra');
-    const isVirtual = serverFile.includes('\n') || existsSync(serverFile);
 
     const analyzedBundleInfo = await analyzeBundle(
       serverFile,
@@ -135,20 +157,7 @@ export abstract class Bundler extends MastraBundler {
     await this.writeInstrumentationFile(join(outputDirectory, this.outputDir));
 
     this.logger.info('Bundling Mastra application');
-    const inputOptions: InputOptions = await getInputOptions(mastraEntryFile, analyzedBundleInfo, 'node');
-
-    if (isVirtual) {
-      inputOptions.input = { index: '#entry' };
-
-      if (Array.isArray(inputOptions.plugins)) {
-        inputOptions.plugins.unshift(virtual({ '#entry': serverFile }));
-      } else {
-        inputOptions.plugins = [virtual({ '#entry': serverFile })];
-      }
-    } else {
-      inputOptions.input = { index: serverFile };
-    }
-
+    const inputOptions: InputOptions = await this.getBundlerOptions(serverFile, mastraEntryFile, analyzedBundleInfo);
     const bundler = await this.createBundler(inputOptions, { dir: bundleLocation });
 
     await bundler.write();
