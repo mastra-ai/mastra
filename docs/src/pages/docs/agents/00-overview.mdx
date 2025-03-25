@@ -154,6 +154,34 @@ const response = await myAgent.generate(
 console.log("Structured Output:", response.object);
 ```
 
+### Using Tools
+
+If you need to generate structured output alongside tool calls, you'll need to use the `experimental_output` property instead of `output`. Here's how:
+
+```typescript
+const schema = z.object({
+  summary: z.string(),
+  keywords: z.array(z.string()),
+});
+
+const response = await myAgent.generate(
+  [
+    {
+      role: "user",
+      content: "Please analyze this repository and provide a summary and keywords...",
+    },
+  ],
+  {
+    // Use experimental_output to enable both structured output and tool calls
+    experimental_output: schema,  
+  },
+);
+
+console.log("Structured Output:", response.text);
+```
+<br/>
+
+
 This allows you to have strong typing and validation for the structured data returned by the agent.
 
 ## 4. Multi-step Tool use Agents
@@ -194,7 +222,7 @@ const response = await myAgent.generate(
 );
 ```
 
-### onStepFinish
+### Using onStepFinish
 
 You can monitor the progress of multi-step operations using the `onStepFinish` callback. This is useful for debugging or providing progress updates to users.
 `onStepFinish` is only available when streaming or generating text without structured output.
@@ -211,7 +239,7 @@ const response = await myAgent.generate(
 );
 ```
 
-### onFinish
+### Using onFinish
 
 The `onFinish` callback is available when streaming responses and provides detailed information about the completed interaction. It is called after the LLM has finished generating its response and all tool executions have completed.
  This callback receives the final response text, execution steps, token usage statistics, and other metadata that can be useful for monitoring and logging:
