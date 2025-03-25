@@ -227,8 +227,10 @@ export class PgVector extends MastraVector {
       }
 
       try {
+        // Try to create extension
         await client.query('CREATE EXTENSION IF NOT EXISTS vector');
 
+        // Create the table with explicit schema
         await client.query(`
         CREATE TABLE IF NOT EXISTS ${indexName} (
           id SERIAL PRIMARY KEY,
