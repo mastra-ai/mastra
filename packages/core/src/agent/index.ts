@@ -894,7 +894,9 @@ export class Agent<
         messages: messageObjects,
         tools: this.tools,
         convertedTools,
-        onStepFinish,
+        onStepFinish: (result: any) => {
+          void onStepFinish?.(result);
+        },
         maxSteps: maxSteps || 5,
         runId: runIdToUse,
         temperature,
@@ -922,7 +924,9 @@ export class Agent<
         messages: messageObjects,
         tools: this.tools,
         convertedTools,
-        onStepFinish,
+        onStepFinish: (result: any) => {
+          void onStepFinish?.(result);
+        },
         maxSteps,
         runId: runIdToUse,
         temperature,
@@ -946,7 +950,9 @@ export class Agent<
       tools: this.tools,
       structuredOutput: output,
       convertedTools,
-      onStepFinish,
+      onStepFinish: (result: any) => {
+        void onStepFinish?.(result);
+      },
       maxSteps,
       runId: runIdToUse,
       temperature,
@@ -1042,19 +1048,20 @@ export class Agent<
         temperature,
         tools: this.tools,
         convertedTools,
-        onStepFinish,
-        onFinish: async (result: string) => {
+        onStepFinish: (result: any) => {
+          void onStepFinish?.(result);
+        },
+        onFinish: async (result: any) => {
           try {
-            const res = JSON.parse(result) || {};
-            const outputText = res.text;
-            await after({ result: res, threadId, memoryConfig: memoryOptions, outputText, runId: runIdToUse });
+            const outputText = result.text;
+            await after({ result, threadId, memoryConfig: memoryOptions, outputText, runId: runIdToUse });
           } catch (e) {
             this.logger.error('Error saving memory on finish', {
               error: e,
               runId,
             });
           }
-          onFinish?.(result);
+          void onFinish?.(result);
         },
         maxSteps,
         runId: runIdToUse,
@@ -1076,19 +1083,20 @@ export class Agent<
         temperature,
         tools: this.tools,
         convertedTools,
-        onStepFinish,
-        onFinish: async (result: string) => {
+        onStepFinish: (result: any) => {
+          void onStepFinish?.(result);
+        },
+        onFinish: async (result: any) => {
           try {
-            const res = JSON.parse(result) || {};
-            const outputText = res.text;
-            await after({ result: res, threadId, memoryConfig: memoryOptions, outputText, runId: runIdToUse });
+            const outputText = result.text;
+            await after({ result, threadId, memoryConfig: memoryOptions, outputText, runId: runIdToUse });
           } catch (e) {
             this.logger.error('Error saving memory on finish', {
               error: e,
               runId,
             });
           }
-          onFinish?.(result);
+          void onFinish?.(result);
         },
         maxSteps,
         runId: runIdToUse,
@@ -1109,19 +1117,20 @@ export class Agent<
       temperature,
       structuredOutput: output,
       convertedTools,
-      onStepFinish,
-      onFinish: async (result: string) => {
+      onStepFinish: (result: any) => {
+        void onStepFinish?.(result);
+      },
+      onFinish: async (result: any) => {
         try {
-          const res = JSON.parse(result) || {};
-          const outputText = JSON.stringify(res.object);
-          await after({ result: res, threadId, memoryConfig: memoryOptions, outputText, runId: runIdToUse });
+          const outputText = JSON.stringify(result.object);
+          await after({ result, threadId, memoryConfig: memoryOptions, outputText, runId: runIdToUse });
         } catch (e) {
           this.logger.error('Error saving memory on finish', {
             error: e,
             runId,
           });
         }
-        onFinish?.(result);
+        void onFinish?.(result);
       },
       runId: runIdToUse,
       toolChoice,
