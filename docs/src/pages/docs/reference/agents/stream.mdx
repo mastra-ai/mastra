@@ -73,13 +73,13 @@ An optional object that can include configuration for output structure, memory m
       name: "onFinish",
       type: "StreamTextOnFinishCallback | StreamObjectOnFinishCallback",
       isOptional: true,
-      description: "Callback function called when streaming is complete. Unavailable for structured output",
+      description: "Callback function called when streaming is complete.",
     },
     {
       name: "onStepFinish",
       type: "GenerateTextOnStepFinishCallback<any> | never",
       isOptional: true,
-      description: "Callback function called after each step during streaming.",
+      description: "Callback function called after each step during streaming. Unavailable for structured output",
     },
     {
       name: "output",
