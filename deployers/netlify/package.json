@@ -36,7 +36,7 @@
     "@rollup/plugin-virtual": "^3.0.2",
     "date-fns": "^4.1.0",
     "execa": "^9.5.2",
-    "netlify-cli": "^18.1.0",
+    "netlify-cli": "^19.0.3",
     "zod": "^3.24.2"
   },
   "devDependencies": {
