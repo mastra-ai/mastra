@@ -2936,8 +2936,8 @@ importers:
         specifier: 1.1.1
         version: 1.1.1(prism-react-renderer@2.4.1(react@18.3.1))(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
       react-day-picker:
-        specifier: ^9.6.1
-        version: 9.6.2(react@18.3.1)
+        specifier: ^9.6.3
+        version: 9.6.3(react@18.3.1)
       react-dom:
         specifier: ^18.3.1
         version: 18.3.1(react@18.3.1)
@@ -3772,7 +3772,7 @@ importers:
         version: 1.1.1(prism-react-renderer@2.4.1(react@19.0.0))(react-dom@19.0.0(react@19.0.0))(react@19.0.0)
       react-day-picker:
         specifier: ^9.6.1
-        version: 9.6.2(react@19.0.0)
+        version: 9.6.3(react@19.0.0)
       react-dom:
         specifier: '>=19.0.0'
         version: 19.0.0(react@19.0.0)
@@ -18912,8 +18912,8 @@ packages:
       date-fns: ^2.28.0 || ^3.0.0
       react: ^16.8.0 || ^17.0.0 || ^18.0.0
 
-  react-day-picker@9.6.2:
-    resolution: {integrity: sha512-HVrTpDUYGKbi9scU9v2N3BPGMnL5jwekGFXcyyrvpamZdgYGfzVcovsBD4/yNGxhpCIX5X/5IoLDEAayNv1EqA==}
+  react-day-picker@9.6.3:
+    resolution: {integrity: sha512-rDqCSKAl5MLX0z1fLkYcBenQK4ANlYaAhUR0ruVSVAhAa7/ZmKQqgDpXPoS7bYEkgBRH06LO1qNFP1Ki8uiZpw==}
     engines: {node: '>=18'}
     peerDependencies:
       react: '>=16.8.0'
@@ -40092,14 +40092,14 @@ snapshots:
       date-fns: 3.6.0
       react: 19.0.0
 
-  react-day-picker@9.6.2(react@18.3.1):
+  react-day-picker@9.6.3(react@18.3.1):
     dependencies:
       '@date-fns/tz': 1.2.0
       date-fns: 4.1.0
       date-fns-jalali: 4.1.0-0
       react: 18.3.1
 
-  react-day-picker@9.6.2(react@19.0.0):
+  react-day-picker@9.6.3(react@19.0.0):
     dependencies:
       '@date-fns/tz': 1.2.0
       date-fns: 4.1.0
