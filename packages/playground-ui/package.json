@@ -75,7 +75,7 @@
     "remark-parse": "^11.0.0",
     "remark-rehype": "^11.1.1",
     "remeda": "^2.21.1",
-    "shiki": "^1.29.2",
+    "shiki": "^3.2.1",
     "sonner": "^2.0.1",
     "superjson": "^2.2.2",
     "swr": "^2.3.3",
