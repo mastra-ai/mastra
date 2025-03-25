@@ -140,6 +140,7 @@ export class Machine<
           context: {
             ...input,
             inputData: { ...((snapshot as any)?.context?.inputData || {}), ...resumeData },
+            // ts-ignore is needed here because our snapshot types don't really match xstate snapshot types right now. We should fix this in general.
             // @ts-ignore
             isResume: { runId: snapshot?.context?.steps[stepId.split('.')?.[0]]?.output?.runId || this.#runId, stepId },
           },
