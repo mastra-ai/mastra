@@ -29,11 +29,11 @@
   },
   "dependencies": {
     "@mastra/core": "workspace:^",
-    "@turbopuffer/turbopuffer": "^0.6.4"
+    "@turbopuffer/turbopuffer": "^0.6.12"
   },
   "devDependencies": {
     "@internal/lint": "workspace:*",
-    "@microsoft/api-extractor": "^7.52.1",
+    "@microsoft/api-extractor": "^7.52.2",
     "@types/node": "^20.17.27",
     "dotenv": "^16.4.7",
     "eslint": "^9.23.0",

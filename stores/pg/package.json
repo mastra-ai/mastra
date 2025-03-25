@@ -34,12 +34,12 @@
   },
   "dependencies": {
     "@mastra/core": "workspace:^",
-    "pg": "^8.13.3",
-    "pg-promise": "^11.11.0"
+    "pg": "^8.14.1",
+    "pg-promise": "^11.13.0"
   },
   "devDependencies": {
     "@internal/lint": "workspace:*",
-    "@microsoft/api-extractor": "^7.52.1",
+    "@microsoft/api-extractor": "^7.52.2",
     "@types/node": "^20.17.27",
     "@types/pg": "^8.11.11",
     "eslint": "^9.23.0",

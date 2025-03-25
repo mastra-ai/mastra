@@ -28,12 +28,12 @@
   },
   "dependencies": {
     "@mastra/core": "workspace:^",
-    "@upstash/redis": "^1.34.5",
+    "@upstash/redis": "^1.34.6",
     "@upstash/vector": "^1.2.1"
   },
   "devDependencies": {
     "@internal/lint": "workspace:*",
-    "@microsoft/api-extractor": "^7.52.1",
+    "@microsoft/api-extractor": "^7.52.2",
     "@types/node": "^20.17.27",
     "dotenv": "^16.4.7",
     "eslint": "^9.23.0",
