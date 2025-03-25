@@ -44,7 +44,7 @@
     "@mastra/core": "workspace:^",
     "@mastra/deployer": "workspace:^",
     "@rollup/plugin-virtual": "^3.0.2",
-    "cloudflare": "^4.1.0",
+    "cloudflare": "^4.2.0",
     "date-fns": "^4.1.0",
     "execa": "^9.5.2",
     "rollup-plugin-polyfill-node": "^0.13.0",
@@ -54,7 +54,7 @@
   },
   "devDependencies": {
     "@internal/lint": "workspace:*",
-    "@microsoft/api-extractor": "^7.52.1",
+    "@microsoft/api-extractor": "^7.52.2",
     "@types/node": "^20.17.27",
     "eslint": "^9.23.0",
     "tsup": "^8.4.0",
