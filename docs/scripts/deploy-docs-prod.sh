@@ -9,12 +9,12 @@ commit_message=$(git log -1 --pretty=%B)
 if [[ "$VERCEL_ENV" == "production" ]]; then
   if [[ ${commit_message,,} = "chore: version - enter prerelease mode" ]]; then
     echo "✅ - Build can proceed"
-    exit 0;
+    exit 1;
   else
     echo "🛑 - Build cancelled"
-    exit 1;
+    exit 0;
   fi
 fi
 
 echo "✅ - Build can proceed"
-exit 0;
+exit 1;
