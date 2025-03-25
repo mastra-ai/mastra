@@ -895,7 +895,7 @@ export class Agent<
         tools: this.tools,
         convertedTools,
         onStepFinish: (result: any) => {
-          onStepFinish?.(result);
+          void onStepFinish?.(result);
         },
         maxSteps: maxSteps || 5,
         runId: runIdToUse,
@@ -925,7 +925,7 @@ export class Agent<
         tools: this.tools,
         convertedTools,
         onStepFinish: (result: any) => {
-          onStepFinish?.(result);
+          void onStepFinish?.(result);
         },
         maxSteps,
         runId: runIdToUse,
@@ -951,7 +951,7 @@ export class Agent<
       structuredOutput: output,
       convertedTools,
       onStepFinish: (result: any) => {
-        onStepFinish?.(result);
+        void onStepFinish?.(result);
       },
       maxSteps,
       runId: runIdToUse,
@@ -1061,7 +1061,7 @@ export class Agent<
               runId,
             });
           }
-          onFinish?.(result);
+          void onFinish?.(result);
         },
         maxSteps,
         runId: runIdToUse,
@@ -1084,7 +1084,7 @@ export class Agent<
         tools: this.tools,
         convertedTools,
         onStepFinish: (result: any) => {
-          onStepFinish?.(result);
+          void onStepFinish?.(result);
         },
         onFinish: async (result: any) => {
           try {
@@ -1096,7 +1096,7 @@ export class Agent<
               runId,
             });
           }
-          onFinish?.(result);
+          void onFinish?.(result);
         },
         maxSteps,
         runId: runIdToUse,
@@ -1118,7 +1118,7 @@ export class Agent<
       structuredOutput: output,
       convertedTools,
       onStepFinish: (result: any) => {
-        onStepFinish?.(result);
+        void onStepFinish?.(result);
       },
       onFinish: async (result: any) => {
         try {
@@ -1130,7 +1130,7 @@ export class Agent<
             runId,
           });
         }
-        onFinish?.(result);
+        void onFinish?.(result);
       },
       runId: runIdToUse,
       toolChoice,
