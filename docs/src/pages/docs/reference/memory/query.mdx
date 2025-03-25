@@ -60,6 +60,13 @@ const { messages } = await memory.query({
       isOptional: false,
     },
     {
+      name: "resourceId",
+      type: "string",
+      description:
+        "Optional ID of the resource that owns the thread. If provided, validates thread ownership",
+      isOptional: true,
+    },
+    {
       name: "selectBy",
       type: "object",
       description: "Options for filtering messages",

@@ -28,62 +28,111 @@ Retrieve detailed information about a workflow:
 const details = await workflow.details();
 ```
 
-### Execute Workflow
+### Start workflow run asynchronously
 
-Execute a workflow with input parameters:
+Start a workflow run with triggerData and await full run results:
 
 ```typescript
-const result = await workflow.execute({
-  input: {
+const {runId} = workflow.createRun()
+
+const result = await workflow.startAsync({
+  runId,
+  triggerData: {
     param1: "value1",
     param2: "value2",
   },
 });
 ```
 
-### Resume Workflow
+### Resume Workflow run asynchronously
 
-Resume a suspended workflow step:
+Resume a suspended workflow step and await full run result:
 
 ```typescript
-const result = await workflow.resume({
+const {runId} = createRun({runId: prevRunId})
+
+const result = await workflow.resumeAsync({
+  runId,
   stepId: "step-id",
-  runId: "run-id",
   contextData: { key: "value" },
 });
 ```
 
 ### Watch Workflow
 
-Watch workflow transitions in real-time using an async iterator:
+Watch workflow transitions
 
 ```typescript
-// Get workflow instance
-const workflow = client.getWorkflow("workflow-id");
+try{
+  // Get workflow instance
+  const workflow = client.getWorkflow("workflow-id");
 
-const workflowWatch = workflow.watch()
+  // Create a workflow run
+  const {runId} = workflow.createRun()
 
-// Execute workflow
-workflow.execute()
+  // Watch workflow run 
+     workflow.watch({runId},(record)=>{
+       // Every new record is the latest transition state of the workflow run
 
-// Watch for workflow transitions
-for await (const record of workflowWatch) {
-  // Each record contains workflow transition data
-  console.log({
-    activePaths: record.activePaths,
-    context: record.context,
-    timestamp: record.timestamp
-    runId: record.runId
-  });
+        console.log({
+          activePaths: record.activePaths,
+          context: record.context,
+          timestamp: record.timestamp,
+          runId: record.runId
+        });
+     });
+
+  // Start workflow run
+     workflow.start({
+      runId,
+      triggerData: {
+        city: 'New York',
+      },
+    });
+}catch(e){
+  console.error(e);
 }
+```
+### Resume Workflow
 
+Resume workflow run and watch workflow step transitions
 
+```typescript
+try{
+  //To resume a workflow run, when a step is suspended
+  const {run} = createRun({runId: prevRunId})
+
+  //Watch run
+   workflow.watch({runId},(record)=>{
+   // Every new record is the latest transition state of the workflow run
+
+        console.log({
+          activePaths: record.activePaths,
+          context: record.context,
+          timestamp: record.timestamp,
+          runId: record.runId
+        });
+   })
+
+   //resume run
+   workflow.resume({
+      runId,
+      stepId: "step-id",
+      contextData: { key: "value" },
+    });
+}catch(e){
+  console.error(e);
+}
 ```
 
-The `watch()` method returns an AsyncGenerator that yields workflow transition records. Each record contains:
-- `activePaths`: Currently active paths in the workflow
-- `context`: Current workflow context data
-- `timestamp`: Timestamp of the transition
-- `runId`: Uniqe Identifier for workflow run
+### Workflow run result
+A workflow run result yields the following:
 
-This makes it easy to process workflow transitions in real-time using a simple for-await loop.
+| Field | Type | Description |
+|-------|------|-------------|
+| `activePaths` | `Array<{ stepId: string; stepPath: string[]; status: 'completed' \| 'suspended' \| 'pending' }>` | Currently active paths in the workflow with their execution status |
+| `context` | `{ steps: Record<string, { status: 'completed' \| 'suspended' \| 'running'; [key: string]: any }> }` | Current workflow context including step statuses and additional step data |
+| `timestamp` | `number` | Unix timestamp of when this transition occurred |
+| `runId` | `string` | Unique identifier for this workflow run instance |
+| `suspendedSteps` | `Record<string, any>` | Map of currently suspended steps and their suspension data |
+

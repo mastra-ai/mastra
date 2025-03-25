@@ -1,5 +1,277 @@
 # @mastra/core
 
+## 0.7.0-alpha.1
+
+### Minor Changes
+
+- 1af25d5: Added nested workflows API
+
+### Patch Changes
+
+- 0b54522: AgentNetwork logs
+- 27439ad: Updated the jsonSchemaPropertiesToTSTypes function to properly handle JSON Schema definitions where type can be an array of strings. Previously, the function only handled single string types, but according to the JSON Schema specification, type can be an array of possible types.
+
+## 0.6.5-alpha.0
+
+### Patch Changes
+
+- b4fbc59: Fixed an issue where sending CoreMessages to AI SDK would result in "Unsupported role: tool" errors
+
+## 0.6.4
+
+### Patch Changes
+
+- 6794797: Check for eval values before inserting into storage
+- fb68a80: Inject mastra instance into llm class
+- b56a681: Update README and some tests for vector stores
+- 248cb07: Allow ai-sdk Message type for messages in agent generate and stream
+  Fix sidebar horizontal overflow in playground
+
+## 0.6.4-alpha.1
+
+### Patch Changes
+
+- 6794797: Check for eval values before inserting into storage
+
+## 0.6.4-alpha.0
+
+### Patch Changes
+
+- fb68a80: Inject mastra instance into llm class
+- b56a681: Update README and some tests for vector stores
+- 248cb07: Allow ai-sdk Message type for messages in agent generate and stream
+  Fix sidebar horizontal overflow in playground
+
+## 0.6.3
+
+### Patch Changes
+
+- 404640e: AgentNetwork changeset
+- 3bce733: fix: agent.generate only get thread if there is threadID
+
+## 0.6.3-alpha.1
+
+### Patch Changes
+
+- 3bce733: fix: agent.generate only get thread if there is threadID
+
+## 0.6.3-alpha.0
+
+### Patch Changes
+
+- 404640e: AgentNetwork changeset
+
+## 0.6.2
+
+### Patch Changes
+
+- beaf1c2: createTool type fixes
+- 3084e13: More parallel memory operations
+
+## 0.6.2-alpha.0
+
+### Patch Changes
+
+- beaf1c2: createTool type fixes
+- 3084e13: More parallel memory operations
+
+## 0.6.1
+
+### Patch Changes
+
+- fc2f89c: Insert static payload into inputData
+- dfbb131: Fix after method on multiple passes
+- f4854ee: Fix else branch execution when if-branch has loops
+- afaf73f: Add fix for vercel tools and optional instructions
+- 0850b4c: Watch and resume per run
+- 7bcfaee: Remove node_modules-path dir which calls \_\_dirname at the top level and breaks some esm runtimes
+- 44631b1: Fix after usage with skipped conditions on the awaited steps
+- 9116d70: Handle the different workflow methods in workflow graph
+- 6e559a0: Update Voice for realtime providers
+- 5f43505: feat: OpenAI realtime voice provider for speech to speech communication
+  Update voice speaking event type
+
+## 0.6.1-alpha.2
+
+### Patch Changes
+
+- fc2f89c: Insert static payload into inputData
+- dfbb131: Fix after method on multiple passes
+- 0850b4c: Watch and resume per run
+- 9116d70: Handle the different workflow methods in workflow graph
+
+## 0.6.1-alpha.1
+
+### Patch Changes
+
+- f4854ee: Fix else branch execution when if-branch has loops
+- afaf73f: Add fix for vercel tools and optional instructions
+- 44631b1: Fix after usage with skipped conditions on the awaited steps
+- 6e559a0: Update Voice for realtime providers
+- 5f43505: feat: OpenAI realtime voice provider for speech to speech communication
+  Update voice speaking event type
+
+## 0.6.1-alpha.0
+
+### Patch Changes
+
+- 7bcfaee: Remove node_modules-path dir which calls \_\_dirname at the top level and breaks some esm runtimes
+
+## 0.6.0
+
+### Minor Changes
+
+- 1c8cda4: Experimental .afterEvent() support. Fixed suspend/resume in first workflow or .after() branch step. Changed suspend metadata to be in context.resumeData instead of resumed step output.
+- 95b4144: Added server middleware to apply custom functionality in API endpoints like auth
+
+### Patch Changes
+
+- 16b98d9: Reduce default step retry attempts
+- 3729dbd: Fixed a bug where useChat with client side tool calling and Memory would not work. Added docs for using Memory with useChat()
+- c2144f4: Enable dynamic import of default-storage to reduce runtime/bundle size when not using default storage
+
+## 0.6.0-alpha.1
+
+### Minor Changes
+
+- 1c8cda4: Experimental .afterEvent() support. Fixed suspend/resume in first workflow or .after() branch step. Changed suspend metadata to be in context.resumeData instead of resumed step output.
+- 95b4144: Added server middleware to apply custom functionality in API endpoints like auth
+
+### Patch Changes
+
+- 16b98d9: Reduce default step retry attempts
+- c2144f4: Enable dynamic import of default-storage to reduce runtime/bundle size when not using default storage
+
+## 0.5.1-alpha.0
+
+### Patch Changes
+
+- 3729dbd: Fixed a bug where useChat with client side tool calling and Memory would not work. Added docs for using Memory with useChat()
+
+## 0.5.0
+
+### Minor Changes
+
+- 59df7b6: Added a new option to use tool-calls for saving working memory: new Memory({ workingMemory: { enabled: true, use: "tool-call" } }). This is to support response methods like toDataStream where masking working memory chunks would be more resource intensive and complex.
+  To support this `memory` is now passed into tool execute args.
+- dfbe4e9: Added new looping constructs with while/until and optional enum-based cyclical condition execution
+- 3764e71: Workflow trigger data should only accept object types
+- 02ffb7b: Added updateIndexById and deleteIndexById methods in the MastraVector inteface
+- 358f069: Experimental if-else branching in between steps
+
+### Patch Changes
+
+- a910463: Improve typinges for getStepResult and workflow results
+- 22643eb: Replace MastraPrimitives with direct Mastra instance
+- 6feb23f: Fix for else condition with ref/query syntax
+- f2d6727: Support for compound `.after` syntax
+- 7a7a547: Fix telemetry getter in hono server
+- 29f3a82: Improve agent generate,stream returnTypes
+- 3d0e290: Fixed an issue where messages that were numbers weren't being stored as strings. Fixed incorrect array access when retrieving memory messages
+- e9fbac5: Update Vercel tools to have id and update deployer
+- 301e4ee: Fix log level showing number in core logger
+- ee667a2: Fixed a serialization bug for thread IDs and dates in memory
+- dab255b: Fixed bug where using an in memory libsql db (config.url = ":memory:) for memory would throw errors about missing tables
+- 1e8bcbc: Fix suspend types
+- f6678e4: Fixed an issue where we were using a non-windows-friendly absolute path check for libsql file urls
+- 9e81f35: Fix query filter for vector search and rerank
+- c93798b: Added MastraLanguageModel which extends LanguageModelV1
+- a85ab24: make execute optional for create tool
+- dbd9f2d: Handle different condition types on workflow graph
+- 59df7b6: Keep default memory db in .mastra/mastra.db, not .mastra/output/memory.db for consistency
+- caefaa2: Added optional chaining to a memory function call that may not exist
+- c151ae6: Fixed an issue where models that don't support structured output would error when generating a thread title. Added an option to disable thread title llm generation `new Memory({ threads: { generateTitle: false }})`
+- 52e0418: Split up action types between tools and workflows
+- d79aedf: Fix import/require paths in these package.json
+- 03236ec: Added GRPC Exporter for Laminar and updated dodcs for Observability Providers
+- df982db: Updated Agent tool input to accept vercel tool format
+- a171b37: Better retry mechanisms
+- 506f1d5: Properly serialize any date object when inserting into libsql
+- 0461849: Fixed a bug where mastra.db file location was inconsistently created when running mastra dev vs running a file directly (tsx src/index.ts for ex)
+- 2259379: Add documentation for workflow looping APIs
+- aeb5e36: Adds default schema for tool when not provided
+- f2301de: Added the ability to ensure the accessed thread in memory.query() is for the right resource id. ex memory.query({ threadId, resourceId }). If the resourceId doesn't own the thread it will throw an error.
+- fd4a1d7: Update cjs bundling to make sure files are split
+- c139344: When converting JSON schemas to Zod schemas, we were sometimes marking optional fields as nullable instead, making them required with a null value, even if the schema didn't mark them as required
+
+## 0.5.0-alpha.12
+
+### Patch Changes
+
+- a85ab24: make execute optional for create tool
+
+## 0.5.0-alpha.11
+
+### Patch Changes
+
+- 7a7a547: Fix telemetry getter in hono server
+- c93798b: Added MastraLanguageModel which extends LanguageModelV1
+- dbd9f2d: Handle different condition types on workflow graph
+- a171b37: Better retry mechanisms
+- fd4a1d7: Update cjs bundling to make sure files are split
+
+## 0.5.0-alpha.10
+
+### Patch Changes
+
+- a910463: Improve typinges for getStepResult and workflow results
+
+## 0.5.0-alpha.9
+
+### Patch Changes
+
+- e9fbac5: Update Vercel tools to have id and update deployer
+- 1e8bcbc: Fix suspend types
+- aeb5e36: Adds default schema for tool when not provided
+- f2301de: Added the ability to ensure the accessed thread in memory.query() is for the right resource id. ex memory.query({ threadId, resourceId }). If the resourceId doesn't own the thread it will throw an error.
+
+## 0.5.0-alpha.8
+
+### Patch Changes
+
+- 506f1d5: Properly serialize any date object when inserting into libsql
+
+## 0.5.0-alpha.7
+
+### Patch Changes
+
+- ee667a2: Fixed a serialization bug for thread IDs and dates in memory
+
+## 0.5.0-alpha.6
+
+### Patch Changes
+
+- f6678e4: Fixed an issue where we were using a non-windows-friendly absolute path check for libsql file urls
+
+## 0.5.0-alpha.5
+
+### Minor Changes
+
+- dfbe4e9: Added new looping constructs with while/until and optional enum-based cyclical condition execution
+- 3764e71: Workflow trigger data should only accept object types
+- 358f069: Experimental if-else branching in between steps
+
+### Patch Changes
+
+- 22643eb: Replace MastraPrimitives with direct Mastra instance
+- 6feb23f: Fix for else condition with ref/query syntax
+- f2d6727: Support for compound `.after` syntax
+- 301e4ee: Fix log level showing number in core logger
+- 9e81f35: Fix query filter for vector search and rerank
+- caefaa2: Added optional chaining to a memory function call that may not exist
+- c151ae6: Fixed an issue where models that don't support structured output would error when generating a thread title. Added an option to disable thread title llm generation `new Memory({ threads: { generateTitle: false }})`
+- 52e0418: Split up action types between tools and workflows
+- 03236ec: Added GRPC Exporter for Laminar and updated dodcs for Observability Providers
+- df982db: Updated Agent tool input to accept vercel tool format
+- 0461849: Fixed a bug where mastra.db file location was inconsistently created when running mastra dev vs running a file directly (tsx src/index.ts for ex)
+- 2259379: Add documentation for workflow looping APIs
+
+## 0.5.0-alpha.4
+
+### Patch Changes
+
+- d79aedf: Fix import/require paths in these package.json
+
 ## 0.5.0-alpha.3
 
 ### Patch Changes

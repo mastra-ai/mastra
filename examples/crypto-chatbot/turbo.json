@@ -1,0 +1,30 @@
+{
+  "extends": ["//"],
+  "tasks": {
+    "build": {
+      "dependsOn": ["^build"],
+      "env": [
+        "AUTH_SECRET",
+        "BLOB_READ_WRITE_TOKEN",
+        "DATABASE_URL",
+        "DATABASE_URL_UNPOOLED",
+        "OPENAI_API_KEY",
+        "PGDATABASE",
+        "PGHOST",
+        "PGHOST_UNPOOLED",
+        "PGPASSWORD",
+        "PGUSER",
+        "POSTGRES_DATABASE",
+        "POSTGRES_HOST",
+        "POSTGRES_PASSWORD",
+        "POSTGRES_PRISMA_URL",
+        "POSTGRES_URL",
+        "POSTGRES_URL_NON_POOLING",
+        "POSTGRES_URL_NO_SSL",
+        "POSTGRES_USER"
+      ],
+      "outputs": [".next/**", "!.next/cache/**", ".mastra/**"]
+    }
+  },
+  "globalDependencies": ["tsconfig.json", "../../tsconfig.node.json"]
+}

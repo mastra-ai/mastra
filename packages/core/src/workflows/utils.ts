@@ -1,4 +1,11 @@
-import type { StepResult, VariableReference } from './types';
+import type { z } from 'zod';
+import type { Logger } from '../logger';
+import type { Step } from './step';
+import type { StepAction, StepDef, StepResult, VariableReference, WorkflowContext, WorkflowRunResult } from './types';
+import type { Workflow } from './workflow';
+import { get } from 'radash';
+import type { WorkflowResultReturn } from './workflow-instance';
+import type { Mastra } from '..';
 
 export function isErrorEvent(stateEvent: any): stateEvent is {
   type: `xstate.error.actor.${string}`;
@@ -47,6 +54,10 @@ export function isFinalState(status: string): boolean {
   return ['completed', 'failed'].includes(status);
 }
 
+export function isLimboState(status: string): boolean {
+  return status === 'limbo';
+}
+
 export function recursivelyCheckForFinalState({
   value,
   suspendedPaths,
@@ -57,8 +68,8 @@ export function recursivelyCheckForFinalState({
   path: string;
 }): boolean {
   if (typeof value === 'string') {
-    // if the value is a final state or it has previouslyreached a suspended state, return true
-    return isFinalState(value) || suspendedPaths.has(path);
+    // if the value is a final state or limbo state or it has previously reached a suspended state, return true
+    return isFinalState(value) || isLimboState(value) || suspendedPaths.has(path);
   }
   return Object.keys(value).every(key =>
     recursivelyCheckForFinalState({ value: value[key]!, suspendedPaths, path: path ? `${path}.${key}` : key }),
@@ -158,4 +169,120 @@ export function getResultActivePaths(state: {
     acc.set(curr.stepId, entry);
     return acc;
   }, new Map<string, { status: string; suspendPayload?: any }>());
+}
+
+export function isWorkflow(
+  step: Step<any, any, any, any> | Workflow<any, any, any, any>,
+): step is Workflow<any, any, any, any> {
+  // @ts-ignore
+  return !!step?.name;
+}
+
+export function resolveVariables<TSteps extends Step<any, any, any>[]>({
+  runId,
+  logger,
+  variables,
+  context,
+}: {
+  runId: string;
+  logger: Logger;
+  variables: Record<string, VariableReference<any, any>>;
+  context: WorkflowContext;
+}): Record<string, any> {
+  const resolvedData: Record<string, any> = {};
+
+  for (const [key, variable] of Object.entries(variables)) {
+    // Check if variable comes from trigger data or a previous step's result
+    const sourceData =
+      variable.step === 'trigger'
+        ? context.triggerData
+        : getStepResult(context.steps[variable.step.id ?? variable.step.name]);
+
+    logger.debug(
+      `Got source data for ${key} variable from ${variable.step === 'trigger' ? 'trigger' : (variable.step.id ?? variable.step.name)}`,
+      {
+        sourceData,
+        path: variable.path,
+        runId: runId,
+      },
+    );
+
+    if (!sourceData && variable.step !== 'trigger') {
+      resolvedData[key] = undefined;
+      continue;
+    }
+
+    // If path is empty or '.', return the entire source data
+    const value = variable.path === '' || variable.path === '.' ? sourceData : get(sourceData, variable.path);
+
+    logger.debug(`Resolved variable ${key}`, {
+      value,
+      runId: runId,
+    });
+
+    resolvedData[key] = value;
+  }
+
+  return resolvedData;
+}
+
+export function workflowToStep<
+  TSteps extends Step<any, any, any, any>[],
+  TStepId extends string = any,
+  TTriggerSchema extends z.ZodObject<any> = any,
+  TResultSchema extends z.ZodObject<any> = any,
+>(
+  workflow: Workflow<TSteps, TStepId, TTriggerSchema, TResultSchema>,
+  { mastra }: { mastra?: Mastra },
+): StepAction<TStepId, TTriggerSchema, z.ZodType<WorkflowRunResult<TTriggerSchema, TSteps, TResultSchema>>, any> {
+  workflow.setNested(true);
+
+  return {
+    id: workflow.name,
+    workflow,
+    execute: async ({ context, suspend, emit, runId, mastra }) => {
+      if (mastra) {
+        workflow.__registerMastra(mastra);
+        workflow.__registerPrimitives({
+          logger: mastra.getLogger(),
+          telemetry: mastra.getTelemetry(),
+        });
+      }
+      const run = context.isResume ? workflow.createRun({ runId: context.isResume.runId }) : workflow.createRun();
+      const unwatch = run.watch(state => {
+        emit('state-update', workflow.name, state.value, { ...context, ...{ [workflow.name]: state.context } });
+      });
+
+      const awaitedResult =
+        context.isResume && context.isResume.stepId.includes('.')
+          ? await run.resume({
+              stepId: context.isResume.stepId.split('.').slice(1).join('.'),
+              context: context.inputData,
+            })
+          : await run.start({
+              triggerData: context.inputData,
+            });
+
+      unwatch();
+      if (!awaitedResult) {
+        throw new Error('Workflow run failed');
+      }
+
+      if (awaitedResult.activePaths?.size > 0) {
+        const suspendedStep = [...awaitedResult.activePaths.entries()].find(([stepId, { status }]) => {
+          return status === 'suspended';
+        });
+
+        if (suspendedStep) {
+          await suspend(suspendedStep[1].suspendPayload, { ...awaitedResult, runId: run.runId });
+          // await suspend({
+          //   ...suspendedStep[1].suspendPayload,
+          //   __meta: { nestedRunId: run.runId, nestedRunPaths: awaitedResult.activePaths },
+          // });
+        }
+      }
+
+      return { ...awaitedResult, runId: run.runId };
+    },
+  };
 }

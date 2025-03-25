@@ -45,7 +45,7 @@ const processOrder = new Step({
       required: false
     },
     {
-      name: "outputSchema", 
+      name: "outputSchema",
       type: "z.ZodSchema",
       description: "Zod schema to validate step output data",
       required: false
@@ -83,6 +83,11 @@ const processOrder = new Step({
       name: "suspend",
       type: "() => Promise<void>",
       description: "Function to suspend step execution"
+    },
+    {
+      name: "mastra",
+      type: "Mastra",
+      description: "Access to Mastra instance"
     }
   ]}
 />

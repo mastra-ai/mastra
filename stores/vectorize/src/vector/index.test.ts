@@ -1,7 +1,11 @@
+import dotenv from 'dotenv';
 import { randomUUID } from 'crypto';
 import { describe, it, expect, beforeAll, afterAll, beforeEach, vi, afterEach } from 'vitest';
 
 import { CloudflareVector } from './';
+import type { QueryResult } from '@mastra/core';
+
+dotenv.config();
 
 vi.setConfig({ testTimeout: 80_000, hookTimeout: 80_000 });
 
@@ -23,7 +27,7 @@ function waitUntilReady(vector: CloudflareVector, indexName: string) {
 
 function waitUntilVectorsIndexed(vector: CloudflareVector, indexName: string, expectedCount: number) {
   return new Promise((resolve, reject) => {
-    const maxAttempts = 30;
+    const maxAttempts = 60;
     let attempts = 0;
     const interval = setInterval(async () => {
       try {
@@ -40,13 +44,13 @@ function waitUntilVectorsIndexed(vector: CloudflareVector, indexName: string, ex
       } catch (error) {
         console.log(error);
       }
-    }, 5000);
+    }, 10000);
   });
 }
 
 function waitForMetadataIndexes(vector: CloudflareVector, indexName: string, expectedCount: number) {
   return new Promise((resolve, reject) => {
-    const maxAttempts = 30;
+    const maxAttempts = 60;
     let attempts = 0;
     const interval = setInterval(async () => {
       try {
@@ -63,7 +67,7 @@ function waitForMetadataIndexes(vector: CloudflareVector, indexName: string, exp
       } catch (error) {
         console.log(error);
       }
-    }, 5000);
+    }, 10000);
   });
 }
 
@@ -107,6 +111,24 @@ describe('CloudflareVector', () => {
   describe('Index Operations', () => {
     const tempIndexName = 'test_temp_index';
 
+    beforeEach(async () => {
+      // Cleanup any existing index before each test
+      try {
+        await vectorDB.deleteIndex(tempIndexName);
+      } catch (error) {
+        // Ignore errors if index doesn't exist
+      }
+    });
+
+    afterEach(async () => {
+      // Cleanup after each test
+      try {
+        await vectorDB.deleteIndex(tempIndexName);
+      } catch (error) {
+        // Ignore errors if index doesn't exist
+      }
+    });
+
     it('should create and list indexes', async () => {
       await vectorDB.createIndex({ indexName: tempIndexName, dimension: VECTOR_DIMENSION, metric: 'cosine' });
       await waitUntilReady(vectorDB, tempIndexName);
@@ -114,16 +136,20 @@ describe('CloudflareVector', () => {
       expect(indexes).toContain(tempIndexName);
     });
 
-    it('should describe an index correctly', async () => {
+    it('should create, describe, and delete an index', async () => {
+      // Create
+      await vectorDB.createIndex({ indexName: tempIndexName, dimension: VECTOR_DIMENSION, metric: 'cosine' });
+      await waitUntilReady(vectorDB, tempIndexName);
+
+      // Describe
       const stats = await vectorDB.describeIndex(tempIndexName);
       expect(stats).toEqual({
         dimension: VECTOR_DIMENSION,
         metric: 'cosine',
         count: 0,
       });
-    });
 
-    it('should delete an index', async () => {
+      // Delete
       await vectorDB.deleteIndex(tempIndexName);
       const indexes = await vectorDB.listIndexes();
       expect(indexes).not.toContain(tempIndexName);
@@ -157,9 +183,11 @@ describe('CloudflareVector', () => {
       if (results.length > 0) {
         expect(results[0].metadata).toEqual({ label: 'first-dimension' });
       }
-    }, 30000);
+    }, 500000);
 
     it('should query vectors and return vector in results', async () => {
+      await waitUntilVectorsIndexed(vectorDB, testIndexName, 3);
+
       const results = await vectorDB.query({
         indexName: testIndexName,
         queryVector: createVector(0, 0.9),
@@ -174,7 +202,127 @@ describe('CloudflareVector', () => {
         expect(result.vector).toHaveLength(VECTOR_DIMENSION);
       }
     });
-  }, 60000);
+
+    describe('Vector update operations', () => {
+      const testVectors = [createVector(0, 1.0), createVector(1, 1.0), createVector(2, 1.0)];
+      const indexName = 'test-index' + Date.now();
+
+      beforeEach(async () => {
+        await vectorDB.createIndex({ indexName, dimension: VECTOR_DIMENSION, metric: 'cosine' });
+        await waitUntilReady(vectorDB, indexName);
+      });
+
+      afterEach(async () => {
+        try {
+          await vectorDB.deleteIndex(indexName);
+        } catch (error) {
+          // Ignore errors if index doesn't exist
+        }
+      });
+
+      it('should update the vector by id', async () => {
+        const ids = await vectorDB.upsert({ indexName, vectors: testVectors });
+        expect(ids).toHaveLength(3);
+
+        const idToBeUpdated = ids[0];
+        const newVector = createVector(0, 4.0);
+        const newMetaData = {
+          test: 'updates',
+        };
+
+        const update = {
+          vector: newVector,
+          metadata: newMetaData,
+        };
+
+        await vectorDB.updateIndexById(indexName, idToBeUpdated, update);
+
+        await waitUntilVectorsIndexed(vectorDB, indexName, 3);
+
+        const results: QueryResult[] = await vectorDB.query({
+          indexName,
+          queryVector: newVector,
+          topK: 3,
+          includeVector: true,
+        });
+
+        expect(results).toHaveLength(3);
+        const updatedResult = results.find(result => result.id === idToBeUpdated);
+        expect(updatedResult).toBeDefined();
+        expect(updatedResult?.vector).toEqual(newVector);
+      }, 500000);
+
+      it('should only update vector embeddings by id', async () => {
+        const ids = await vectorDB.upsert({ indexName, vectors: testVectors });
+        expect(ids).toHaveLength(3);
+
+        const idToBeUpdated = ids[0];
+        const newVector = createVector(0, 4.0);
+
+        const update = {
+          vector: newVector,
+        };
+
+        await vectorDB.updateIndexById(indexName, idToBeUpdated, update);
+
+        await waitUntilVectorsIndexed(vectorDB, indexName, 3);
+
+        const results: QueryResult[] = await vectorDB.query({
+          indexName,
+          queryVector: newVector,
+          topK: 2,
+          includeVector: true,
+        });
+
+        expect(results).toHaveLength(2);
+        const updatedResult = results.find(result => result.id === idToBeUpdated);
+        expect(updatedResult).toBeDefined();
+        expect(updatedResult?.vector).toEqual(newVector);
+      }, 500000);
+
+      it('should throw exception when no updates are given', async () => {
+        await expect(vectorDB.updateIndexById(indexName, 'id', {})).rejects.toThrow('No update data provided');
+      });
+    });
+
+    describe('Vector delete operations', () => {
+      const testVectors = [createVector(0, 1.0), createVector(1, 1.0), createVector(2, 1.0)];
+
+      const indexName = 'delete-test-index' + Date.now();
+
+      beforeEach(async () => {
+        await vectorDB.createIndex({ indexName, dimension: VECTOR_DIMENSION, metric: 'cosine' });
+        await waitUntilReady(vectorDB, indexName);
+      });
+
+      afterEach(async () => {
+        try {
+          await vectorDB.deleteIndex(indexName);
+        } catch (error) {
+          // Ignore errors if index doesn't exist
+        }
+      });
+
+      it('should delete the vector by id', async () => {
+        const ids = await vectorDB.upsert({ indexName, vectors: testVectors });
+        await waitUntilVectorsIndexed(vectorDB, indexName, testVectors.length);
+        expect(ids).toHaveLength(3);
+        const idToBeDeleted = ids[0];
+
+        await vectorDB.deleteIndexById(indexName, idToBeDeleted);
+        await waitUntilVectorsIndexed(vectorDB, indexName, 2);
+
+        const results: QueryResult[] = await vectorDB.query({
+          indexName,
+          queryVector: createVector(0, 1.0),
+          topK: 2,
+        });
+
+        expect(results).toHaveLength(2);
+        expect(results.map(res => res.id)).not.toContain(idToBeDeleted);
+      });
+    });
+  }, 80000);
 
   describe('Error Handling', () => {
     it('should handle invalid dimension vectors', async () => {
@@ -364,7 +512,11 @@ describe('CloudflareVector', () => {
       for (const { propertyName } of currentMetadata) {
         await vectorDB.deleteMetadataIndex(testIndexName2, propertyName as string);
       }
-      await vectorDB.deleteIndex(testIndexName2);
+      try {
+        await vectorDB.deleteIndex(testIndexName2);
+      } catch (error) {
+        // Ignore errors if index doesn't exist
+      }
     }, 800000);
 
     describe('Basic Equality Operators', () => {

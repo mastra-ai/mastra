@@ -71,6 +71,36 @@ export const mastra = new Mastra({
 
 This registers your agent with Mastra, making it available for use.
 
+## Abort Signals
+The abort signals from `generate` and `stream` (text generation) are forwarded to the tool execution. You can access them in the second parameter of the execute function and e.g. abort long-running computations or forward them to fetch calls inside tools.
+
+```typescript
+import { Agent } from "@mastra/core/agent";
+import { createTool } from "@mastra/core/tools";
+import { z } from "zod";
+
+const agent = new Agent({
+  name: "Weather agent",
+  tools: {
+    weather: createTool({
+      id: "Get Weather Information",
+      description: 'Get the weather in a location',
+      inputSchema: z.object({ location: z.string() }),
+      execute: async ({ context: { location } }, { abortSignal }) => {
+        return fetch(
+          `https://api.weatherapi.com/v1/current.json?q=${location}`,
+          { signal: abortSignal }, // forward the abort signal to fetch
+        );
+      },
+    }),
+  }
+})
+
+const result = await agent.generate('What is the weather in San Francisco?', {
+  abortSignal: myAbortSignal, // signal that will be forwarded to tools
+});
+```
+
 ## Debugging Tools
 
 You can test tools using Vitest or any other testing framework. Writing unit tests for your tools ensures they behave as expected and helps catch errors early.
@@ -97,6 +127,49 @@ main();
 ```
 
 The agent will use the `weatherInfo` tool to get the current weather in New York City and respond accordingly.
+
+
+## Vercel AI SDK Tool Format
+
+Mastra supports tools created using the Vercel AI SDK format. You can import and use these tools directly:
+
+```typescript filename="src/mastra/tools/vercelTool.ts" copy
+import { tool } from 'ai';
+import { z } from 'zod';
+
+export const weatherInfo = tool({
+  description: "Fetches the current weather information for a given city",
+  parameters: z.object({
+    city: z.string().describe("The city to get weather for")
+  }),
+  execute: async ({ city }) => {
+    // Replace with actual API call
+    const data = await fetch(`https://api.example.com/weather?city=${city}`);
+    return data.json();
+  }
+});
+```
+
+You can use Vercel tools alongside Mastra tools in your agents:
+
+```typescript filename="src/mastra/agents/weatherAgent.ts"
+import { Agent } from "@mastra/core/agent";
+import { openai } from "@ai-sdk/openai";
+import { weatherInfo } from "../tools/vercelTool";
+import * as mastraTools from "../tools/mastraTools";
+
+export const weatherAgent = new Agent({
+  name: "Weather Agent",
+  instructions: "You are a helpful assistant that provides weather information.",
+  model: openai("gpt-4"),
+  tools: {
+    weatherInfo,  // Vercel tool
+    ...mastraTools  // Mastra tools
+  },
+});
+```
+
+Both tool formats will work seamlessly within your agent's workflow.
 
 ## Tool Design Best Practices
 
@@ -149,3 +222,9 @@ Tools are more likely to be used effectively when:
 - Unclear parameter descriptions or missing examples
 
 Following these practices helps ensure your tools are discoverable and usable by agents while maintaining clean separation between purpose (main description) and implementation details (parameter schemas).
+
+## Model Context Protocol (MCP) Tools
+
+Mastra also supports tools from MCP-compatible servers through the `@mastra/mcp` package. MCP provides a standardized way for AI models to discover and interact with external tools and resources. This makes it easy to integrate third-party tools into your agents without writing custom integrations.
+
+For detailed information about using MCP tools, including configuration options and best practices, see our [MCP guide](/docs/agents/02a-mcp-guide).

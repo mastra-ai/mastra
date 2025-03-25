@@ -1,5 +1,161 @@
 # create-mastra
 
+## 0.2.3-alpha.0
+
+### Patch Changes
+
+- 2447900: Show No input for steps without input on traces UI
+- c30787b: Stop automatically scrolling to bottom in agent chat if user has scrolled up
+- 214e7ce: Only mark required fields as required on the playground
+- 0b496ff: Load env vars on mastra deploy
+
+## 0.2.2
+
+### Patch Changes
+
+- 933ea4d: Fix messages in thread not showing latest when switching between threads
+- 9cba774: Fix new thread title not reflecting until refresh or new message is sent
+- 77e4c35: Pop a dialog showing the functional condition when a functional condition is clicked on workflow graph
+- 248cb07: Allow ai-sdk Message type for messages in agent generate and stream
+  Fix sidebar horizontal overflow in playground
+
+## 0.2.2-alpha.1
+
+### Patch Changes
+
+- 77e4c35: Pop a dialog showing the functional condition when a functional condition is clicked on workflow graph
+
+## 0.2.2-alpha.0
+
+### Patch Changes
+
+- 933ea4d: Fix messages in thread not showing latest when switching between threads
+- 9cba774: Fix new thread title not reflecting until refresh or new message is sent
+- 248cb07: Allow ai-sdk Message type for messages in agent generate and stream
+  Fix sidebar horizontal overflow in playground
+
+## 0.2.1
+
+### Patch Changes
+
+- 404640e: AgentNetwork changeset
+
+## 0.2.1-alpha.0
+
+### Patch Changes
+
+- 404640e: AgentNetwork changeset
+
+## 0.2.0
+
+### Minor Changes
+
+- f9b6ab5: add Cerebras as a llm provider to create-mastra@latest
+
+### Patch Changes
+
+- 0f24546: Add google as a new LLM provider option in project creation
+- 1291e89: Add resizable-panel to playground-ui and use in agent and workflow sidebars
+- 9ba1e97: update playground ui for mastra and create-mastra
+- 5baf1ec: animate new traces
+- 9116d70: Handle the different workflow methods in workflow graph
+- 0709d99: add prop for dynamic empty text
+
+## 0.2.0-alpha.2
+
+### Patch Changes
+
+- 5baf1ec: animate new traces
+- 9116d70: Handle the different workflow methods in workflow graph
+- 0709d99: add prop for dynamic empty text
+
+## 0.2.0-alpha.1
+
+### Minor Changes
+
+- f9b6ab5: add Cerebras as a llm provider to create-mastra@latest
+
+### Patch Changes
+
+- 1291e89: Add resizable-panel to playground-ui and use in agent and workflow sidebars
+- 9ba1e97: update playground ui for mastra and create-mastra
+
+## 0.1.10-alpha.0
+
+### Patch Changes
+
+- 0f24546: Add google as a new LLM provider option in project creation
+
+## 0.1.9
+
+### Patch Changes
+
+- c49f798: remove hardcoded localhost url in playground
+- d3d6fae: Deprecate mastra dev --env flag
+
+## 0.1.9-alpha.1
+
+### Patch Changes
+
+- c49f798: remove hardcoded localhost url in playground
+
+## 0.1.9-alpha.0
+
+### Patch Changes
+
+- d3d6fae: Deprecate mastra dev --env flag
+
+## 0.1.8
+
+### Patch Changes
+
+- 5fae49e: Configurable timeout on npm create mastra
+- 91d2e30: Fix init in non npm project
+- 960690d: Improve client-js workflow watch dx
+- dbd9f2d: Handle different condition types on workflow graph
+- 07a7470: Move WorkflowTrigger to playground-ui package and use in dev playground
+- a80bdaf: persist data in run tab in dev
+- e5149bb: Fix playground-ui agent-evals tab-content
+- 8deb34c: Better workflow watch api + watch workflow by runId
+- 36d970e: Make tools discovery work in mastra dev
+- 144b3d5: Update traces table UI, agent Chat UI
+  Fix get workflows breaking
+- 62565c1: --no-timeout npm create mastra flag
+- 9035565: Update tools dev playground inputs for different fieldtypes
+- af7466e: fix playground issues
+- fd4a1d7: Update cjs bundling to make sure files are split
+
+## 0.1.8-alpha.5
+
+### Patch Changes
+
+- 07a7470: Move WorkflowTrigger to playground-ui package and use in dev playground
+
+## 0.1.8-alpha.4
+
+### Patch Changes
+
+- dbd9f2d: Handle different condition types on workflow graph
+- 8deb34c: Better workflow watch api + watch workflow by runId
+- 36d970e: Make tools discovery work in mastra dev
+- fd4a1d7: Update cjs bundling to make sure files are split
+
+## 0.1.8-alpha.3
+
+### Patch Changes
+
+- 91d2e30: Fix init in non npm project
+- a80bdaf: persist data in run tab in dev
+- 9035565: Update tools dev playground inputs for different fieldtypes
+- af7466e: fix playground issues
+
+## 0.1.8-alpha.2
+
+### Patch Changes
+
+- 144b3d5: Update traces table UI, agent Chat UI
+  Fix get workflows breaking
+
 ## 0.1.8-alpha.1
 
 ### Patch Changes

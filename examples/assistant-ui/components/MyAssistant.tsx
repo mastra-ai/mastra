@@ -1,7 +1,6 @@
 'use client';
 
-import { Thread } from '@assistant-ui/react';
-import { makeMarkdownText } from '@assistant-ui/react-markdown';
+import { Thread, makeMarkdownText } from '@assistant-ui/react-ui';
 
 const MarkdownText = makeMarkdownText();
 

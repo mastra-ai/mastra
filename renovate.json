@@ -1,0 +1,122 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "rangeStrategy": "bump",
+  "extends": [
+    "config:recommended",
+    ":dependencyDashboard",
+    ":disableRateLimiting",
+    ":maintainLockFilesWeekly",
+    ":semanticCommits",
+    ":automergeDisabled",
+    ":disablePeerDependencies"
+  ],
+  "postUpdateOptions": ["pnpmDedupe"],
+  "rebaseWhen": "conflicted",
+  "major": {
+    "dependencyDashboardApproval": true
+  },
+  "packageRules": [
+    {
+      "groupName": "examples",
+      "commitMessageTopic": "examples",
+      "groupSlug": "examples-minor",
+      "matchFileNames": ["examples/**"],
+      "schedule": "before 7am on Monday",
+      "matchUpdateTypes": ["patch", "minor"]
+    },
+    {
+      "matchDepTypes": ["engines", "@types/node"],
+      "enabled": false
+    },
+    {
+      "matchFileNames": ["docs/package.json"],
+      "enabled": false
+    },
+    {
+      "groupName": "AI SDK",
+      "commitMessageTopic": "AI SDK",
+      "matchFileNames": ["+(package.json)", "**/package.json", "!./docs/**"],
+      "matchPackageNames": ["ai", "^@ai-sdk/"],
+      "matchUpdateTypes": ["major", "minor", "patch"],
+      "matchDepTypes": ["dependencies", "devDependencies"],
+      "dependencyDashboardApproval": false
+    },
+    {
+      "groupName": "E2e tests",
+      "commitMessageTopic": "e2e-tests",
+      "matchFileNames": ["e2e-tests/**/package.json"],
+      "matchDepTypes": ["dependencies", "devDependencies"],
+      "dependencyDashboardApproval": false
+    },
+    {
+      "groupName": "typescript",
+      "matchFileNames": ["+(package.json)", "**/package.json", "!./examples/**", "!./docs/**"],
+      "matchPackageNames": ["typescript"],
+      "matchPackagePatterns": ["^@typescript-eslint/"],
+      "matchUpdateTypes": ["major", "minor", "patch"],
+      "matchDepTypes": ["dependencies", "devDependencies"],
+      "dependencyDashboardApproval": false
+    },
+    {
+      "groupName": "formatting & linting",
+      "commitMessageTopic": "Formatting & linting",
+      "matchPaths": ["+(package.json)", "**/package.json"],
+      "matchPackageNames": ["eslint", "prettier"],
+      "matchPackagePatterns": ["^eslint-"],
+      "matchUpdateTypes": ["major", "minor", "patch"],
+      "matchDepTypes": ["dependencies", "devDependencies"],
+      "dependencyDashboardApproval": false
+    },
+    {
+      "groupName": "Build tools",
+      "commitMessageTopic": "Build tools",
+      "matchPaths": ["+(package.json)", "**/package.json"],
+      "matchUpdateTypes": ["major", "minor", "patch"],
+      "matchDepTypes": ["devDependencies"],
+      "matchPackageNames": ["@microsoft/api-extractor", "tsup", "rollup"]
+    },
+    {
+      "groupName": "core",
+      "commitMessageTopic": "Mastra Core",
+      "matchFileNames": ["packages/*/package.json"],
+      "excludePackageNames": ["ai", "^@ai-sdk/"],
+      "matchUpdateTypes": ["minor", "patch"],
+      "matchDepTypes": ["dependencies", "devDependencies"]
+    },
+    {
+      "groupName": "storage",
+      "commitMessageTopic": "Mastra storage",
+      "matchFileNames": ["stores/*/package.json"],
+      "matchUpdateTypes": ["minor", "patch"],
+      "matchDepTypes": ["dependencies", "devDependencies"]
+    },
+    {
+      "groupName": "voice",
+      "commitMessageTopic": "Mastra voice",
+      "matchFileNames": ["voice/*/package.json"],
+      "matchUpdateTypes": ["minor", "patch"],
+      "matchDepTypes": ["dependencies", "devDependencies"]
+    },
+    {
+      "groupName": "speech",
+      "commitMessageTopic": "Mastra speech",
+      "matchFileNames": ["speech/*/package.json"],
+      "matchUpdateTypes": ["minor", "patch"],
+      "matchDepTypes": ["dependencies", "devDependencies"]
+    },
+    {
+      "groupName": "deployers",
+      "commitMessageTopic": "Mastra deployers",
+      "matchFileNames": ["deployers/*/package.json"],
+      "matchUpdateTypes": ["minor", "patch"],
+      "matchDepTypes": ["dependencies", "devDependencies"]
+    },
+    {
+      "groupName": "playground",
+      "commitMessageTopic": "Mastra playground",
+      "matchFileNames": ["packages/cli/src/playground/package.json"],
+      "matchUpdateTypes": ["minor", "patch"],
+      "matchDepTypes": ["dependencies", "devDependencies"]
+    }
+  ]
+}

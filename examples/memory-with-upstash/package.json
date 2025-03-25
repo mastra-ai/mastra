@@ -17,11 +17,11 @@
     "@ai-sdk/openai": "latest",
     "@mastra/core": "workspace:*",
     "@mastra/memory": "workspace:*",
-    "@mastra/upstash": "workspace:*",
-    "@mastra/pg": "workspace:*"
+    "@mastra/pg": "workspace:*",
+    "@mastra/upstash": "workspace:*"
   },
   "devDependencies": {
     "dotenv": "^16.4.7",
-    "tsx": "^4.19.2"
+    "tsx": "^4.19.3"
   }
 }

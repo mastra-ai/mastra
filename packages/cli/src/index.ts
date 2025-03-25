@@ -1,7 +1,7 @@
 #! /usr/bin/env node
 import { Command } from 'commander';
 
-import { PosthogAnalytics } from './analytics/index';
+import { PosthogAnalytics, type CLI_ORIGIN } from './analytics/index';
 import { build } from './commands/build/build';
 import { create } from './commands/create/create';
 import { deploy } from './commands/deploy/index';
@@ -10,6 +10,7 @@ import { init } from './commands/init/init';
 import { checkAndInstallCoreDeps, checkPkgJson, interactivePrompt } from './commands/init/utils';
 import { DepsService } from './services/service.deps';
 import { logger } from './utils/logger';
+import { config } from 'dotenv';
 
 const depsService = new DepsService();
 const version = await depsService.getPackageVersion();
@@ -22,6 +23,8 @@ const analytics = new PosthogAnalytics({
 
 const program = new Command();
 
+const origin = process.env.MASTRA_ANALYTICS_ORIGIN as CLI_ORIGIN;
+
 program
   .version(`${version}`, '-v, --version')
   .description(`Mastra CLI ${version}`)
@@ -29,6 +32,7 @@ program
     try {
       analytics.trackCommand({
         command: 'version',
+        origin,
       });
       console.log(`Mastra CLI: ${version}`);
     } catch {
@@ -41,10 +45,14 @@ program
   .description('Create a new Mastra project')
   .option('--default', 'Quick start with defaults(src, OpenAI, no examples)')
   .option('-c, --components <components>', 'Comma-separated list of components (agents, tools, workflows)')
-  .option('-l, --llm <model-provider>', 'Default model provider (openai, anthropic, or groq))')
+  .option('-l, --llm <model-provider>', 'Default model provider (openai, anthropic, groq, google, or cerebras))')
   .option('-k, --llm-api-key <api-key>', 'API key for the model provider')
   .option('-e, --example', 'Include example code')
   .option('-t, --timeout [timeout]', 'Configurable timeout for package installation, defaults to 60000 ms')
+  .option(
+    '-p, --project-name <string>',
+    'Project name that will be used in package.json and as the project directory name.',
+  )
   .action(async args => {
     await analytics.trackCommandExecution({
       command: 'create',
@@ -66,8 +74,10 @@ program
           addExample: args.example,
           llmApiKey: args['llm-api-key'],
           timeout,
+          projectName: args.projectName,
         });
       },
+      origin,
     });
   });
 
@@ -117,6 +127,7 @@ program
         });
         return;
       },
+      origin,
     });
   });
 
@@ -125,17 +136,18 @@ program
   .description('Start mastra server')
   .option('-d, --dir <dir>', 'Path to your mastra folder')
   .option('-r, --root <root>', 'Path to your root folder')
-  .option('-e, --env <env>', 'Environment File to use (defaults to .env.development)')
   .option('-t, --tools <toolsDirs>', 'Comma-separated list of paths to tool files to include')
   .option('-p, --port <port>', 'Port number for the development server (defaults to 4111)')
   .action(args => {
     analytics.trackCommand({
       command: 'dev',
+      origin,
     });
     dev({
       port: args?.port ? parseInt(args.port) : 4111,
       dir: args?.dir,
       root: args?.root,
+      tools: args?.tools ? args.tools.split(',') : [],
     }).catch(err => {
       logger.error(err.message);
     });
@@ -152,6 +164,7 @@ program
       execution: async () => {
         await build({ dir: args.dir });
       },
+      origin,
     });
   });
 
@@ -160,12 +173,14 @@ program
   .description('Deploy your Mastra project')
   .option('-d, --dir <path>', 'Path to directory')
   .action(async args => {
+    config({ path: ['.env', '.env.production'] });
     await analytics.trackCommandExecution({
       command: 'mastra deploy',
       args,
       execution: async () => {
         await deploy({ dir: args.dir });
       },
+      origin,
     });
   });
 

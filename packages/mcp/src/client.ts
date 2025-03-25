@@ -1,34 +1,45 @@
+import { MastraBase } from '@mastra/core/base';
 import { createTool } from '@mastra/core/tools';
 import { jsonSchemaToModel } from '@mastra/core/utils';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { SSEClientTransport } from '@modelcontextprotocol/sdk/client/sse.js';
-import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
+import { getDefaultEnvironment, StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
 import type { StdioServerParameters } from '@modelcontextprotocol/sdk/client/stdio.js';
+import { DEFAULT_REQUEST_TIMEOUT_MSEC } from '@modelcontextprotocol/sdk/shared/protocol.js';
 import type { Protocol } from '@modelcontextprotocol/sdk/shared/protocol.js';
 import type { Transport } from '@modelcontextprotocol/sdk/shared/transport.js';
 import type { ClientCapabilities } from '@modelcontextprotocol/sdk/types.js';
-import { ListResourcesResultSchema } from '@modelcontextprotocol/sdk/types.js';
+import { CallToolResultSchema, ListResourcesResultSchema } from '@modelcontextprotocol/sdk/types.js';
+
+import { asyncExitHook, gracefulExit } from 'exit-hook';
 
 type SSEClientParameters = {
   url: URL;
 } & ConstructorParameters<typeof SSEClientTransport>[1];
 
-export class MastraMCPClient {
+export type MastraMCPServerDefinition = StdioServerParameters | SSEClientParameters;
+
+export class MastraMCPClient extends MastraBase {
   name: string;
   private transport: Transport;
   private client: Client;
+  private readonly timeout: number;
   constructor({
     name,
     version = '1.0.0',
     server,
     capabilities = {},
+    timeout = DEFAULT_REQUEST_TIMEOUT_MSEC,
   }: {
     name: string;
-    server: StdioServerParameters | SSEClientParameters;
+    server: MastraMCPServerDefinition;
     capabilities?: ClientCapabilities;
     version?: string;
+    timeout?: number;
   }) {
+    super({ name: 'MastraMCPClient' });
     this.name = name;
+    this.timeout = timeout;
 
     if (`url` in server) {
       this.transport = new SSEClientTransport(server.url, {
@@ -36,7 +47,11 @@ export class MastraMCPClient {
         eventSourceInit: server.eventSourceInit,
       });
     } else {
-      this.transport = new StdioClientTransport(server);
+      this.transport = new StdioClientTransport({
+        ...server,
+        // without ...getDefaultEnvironment() commands like npx will fail because there will be no PATH env var
+        env: { ...getDefaultEnvironment(), ...(server.env || {}) },
+      });
     }
 
     this.client = new Client(
@@ -50,8 +65,36 @@ export class MastraMCPClient {
     );
   }
 
+  private isConnected = false;
+
   async connect() {
-    return await this.client.connect(this.transport);
+    if (this.isConnected) return;
+    try {
+      await this.client.connect(this.transport);
+      this.isConnected = true;
+      const originalOnClose = this.client.onclose;
+      this.client.onclose = () => {
+        this.isConnected = false;
+        if (typeof originalOnClose === `function`) {
+          originalOnClose();
+        }
+      };
+      asyncExitHook(
+        async () => {
+          this.logger.debug(`Disconnecting ${this.name} MCP server`);
+          await this.disconnect();
+        },
+        { wait: 5000 },
+      );
+
+      process.on('SIGTERM', () => gracefulExit());
+    } catch (e) {
+      this.logger.error(
+        `Failed connecting to MCPClient with name ${this.name}.\n${e instanceof Error ? e.stack : JSON.stringify(e, null, 2)}`,
+      );
+      this.isConnected = false;
+      throw e;
+    }
   }
 
   async disconnect() {
@@ -71,14 +114,20 @@ export class MastraMCPClient {
       const s = jsonSchemaToModel(tool.inputSchema);
       const mastraTool = createTool({
         id: `${this.name}_${tool.name}`,
-        description: tool.description,
+        description: tool.description || '',
         inputSchema: s,
         execute: async ({ context }) => {
           try {
-            const res = await this.client.callTool({
-              name: tool.name,
-              arguments: context,
-            });
+            const res = await this.client.callTool(
+              {
+                name: tool.name,
+                arguments: context,
+              },
+              CallToolResultSchema,
+              {
+                timeout: this.timeout,
+              },
+            );
 
             return res;
           } catch (e) {

@@ -64,6 +64,7 @@ export function getResuableTests(memory: Memory) {
 
         const result = await memory.rememberMessages({
           threadId: thread.id,
+          resourceId,
           config: { lastMessages: 10 },
         });
         expect(result.messages).toHaveLength(10); // lastMessages is set to 10
@@ -72,6 +73,7 @@ export function getResuableTests(memory: Memory) {
 
         const result2 = await memory.rememberMessages({
           threadId: thread.id,
+          resourceId,
           config: {
             lastMessages: 15,
           },
@@ -92,6 +94,7 @@ export function getResuableTests(memory: Memory) {
         await memory.saveMessages({ messages: conversation });
         const result = await memory.rememberMessages({
           threadId: thread.id,
+          resourceId,
           config: { lastMessages: 10 },
         });
 
@@ -115,6 +118,7 @@ export function getResuableTests(memory: Memory) {
         // Search for weather-related messages
         const weatherQuery = await memory.rememberMessages({
           threadId: thread.id,
+          resourceId,
           config: { lastMessages: 0, semanticRecall: { messageRange: 1, topK: 1 } },
           vectorMessageSearch: "How's the temperature outside?",
         });
@@ -128,6 +132,7 @@ export function getResuableTests(memory: Memory) {
         // Search for location-related messages
         const locationQuery = await memory.rememberMessages({
           threadId: thread.id,
+          resourceId,
           vectorMessageSearch: 'Tell me about cities in France',
           config: {
             semanticRecall: {
@@ -147,6 +152,7 @@ export function getResuableTests(memory: Memory) {
         // Search for location-related messages
         const locationQuery2 = await memory.rememberMessages({
           threadId: thread.id,
+          resourceId,
           vectorMessageSearch: 'Tell me about cities in France',
           config: {
             semanticRecall: {
@@ -166,6 +172,7 @@ export function getResuableTests(memory: Memory) {
         // Search for location-related messages
         const locationQuery3 = await memory.rememberMessages({
           threadId: thread.id,
+          resourceId,
           vectorMessageSearch: 'Tell me about cities in France',
           config: {
             semanticRecall: {
@@ -199,6 +206,7 @@ export function getResuableTests(memory: Memory) {
 
         const result = await memory.rememberMessages({
           threadId: thread.id,
+          resourceId,
           vectorMessageSearch: 'topic X',
           config: {
             lastMessages: 0,
@@ -240,6 +248,7 @@ export function getResuableTests(memory: Memory) {
         await memory.saveMessages({ messages });
         const result = await memory.rememberMessages({
           threadId: thread.id,
+          resourceId,
           config: {
             lastMessages: 10,
           },
@@ -265,11 +274,56 @@ export function getResuableTests(memory: Memory) {
 
         const result = await memory.rememberMessages({
           threadId: thread.id,
+          resourceId,
           config: {
             lastMessages: 10,
           },
         });
         expect(result.messages[0].content).toEqual(complexMessage);
+      });
+    });
+
+    describe('Resource Validation', () => {
+      it('should allow access with correct resourceId', async () => {
+        const messages = [createTestMessage(thread.id, 'Test message')];
+        await memory.saveMessages({ messages });
+
+        const result = await memory.rememberMessages({
+          threadId: thread.id,
+          resourceId,
+          config: { lastMessages: 10 },
+        });
+
+        expect(result.messages).toHaveLength(1);
+        expect(result.messages[0].content).toBe('Test message');
+      });
+
+      it('should reject access with incorrect resourceId', async () => {
+        const messages = [createTestMessage(thread.id, 'Test message')];
+        await memory.saveMessages({ messages });
+
+        await expect(
+          memory.rememberMessages({
+            threadId: thread.id,
+            resourceId: 'wrong-resource',
+            config: { lastMessages: 10 },
+          }),
+        ).rejects.toThrow(
+          `Thread with id ${thread.id} is for resource with id ${resourceId} but resource wrong-resource was queried`,
+        );
+      });
+
+      it('should handle undefined resourceId gracefully', async () => {
+        const messages = [createTestMessage(thread.id, 'Test message')];
+        await memory.saveMessages({ messages });
+
+        const result = await memory.rememberMessages({
+          threadId: thread.id,
+          config: { lastMessages: 10 },
+        });
+
+        expect(result.messages).toHaveLength(1);
+        expect(result.messages[0].content).toBe('Test message');
       });
     });
   });

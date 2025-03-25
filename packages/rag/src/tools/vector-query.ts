@@ -4,7 +4,13 @@ import { z } from 'zod';
 
 import { rerank } from '../rerank';
 import type { RerankConfig } from '../rerank';
-import { vectorQuerySearch, defaultVectorQueryDescription, filterDescription, topKDescription } from '../utils';
+import {
+  vectorQuerySearch,
+  defaultVectorQueryDescription,
+  filterDescription,
+  topKDescription,
+  queryTextDescription,
+} from '../utils';
 
 export const createVectorQueryTool = ({
   vectorStoreName,
@@ -25,40 +31,55 @@ export const createVectorQueryTool = ({
 }): ReturnType<typeof createTool> => {
   const toolId = id || `VectorQuery ${vectorStoreName} ${indexName} Tool`;
   const toolDescription = description || defaultVectorQueryDescription();
+  // Create base schema with required fields
+  const baseSchema = {
+    queryText: z.string().describe(queryTextDescription),
+    topK: z.coerce.number().describe(topKDescription),
+  };
+  const inputSchema = enableFilter
+    ? z
+        .object({
+          ...baseSchema,
+          filter: z.coerce.string().describe(filterDescription),
+        })
+        .passthrough()
+    : z.object(baseSchema).passthrough();
   return createTool({
     id: toolId,
-    inputSchema: z.object({
-      queryText: z.string().describe('The text query to search for in the vector database'),
-      topK: z.number().describe(topKDescription),
-      filter: z.string().describe(filterDescription),
-    }),
+    inputSchema,
     outputSchema: z.object({
       relevantContext: z.any(),
     }),
     description: toolDescription,
     execute: async ({ context: { queryText, topK, filter }, mastra }) => {
-      console.log({
-        topK,
-        filter,
-      });
-      const vectorStore = mastra?.vectors?.[vectorStoreName];
+      const topKValue =
+        typeof topK === 'number' && !isNaN(topK)
+          ? topK
+          : typeof topK === 'string' && !isNaN(Number(topK))
+            ? Number(topK)
+            : 10;
+
+      const vectorStore = mastra?.getVector(vectorStoreName);
+      const logger = mastra?.getLogger();
 
       // Get relevant chunks from the vector database
       if (vectorStore) {
         let queryFilter = {};
-        if (enableFilter) {
-          queryFilter = filter
-            ? (() => {
-                try {
-                  return JSON.parse(filter);
-                } catch {
-                  return filter;
-                }
-              })()
-            : filter;
+        if (enableFilter && filter) {
+          queryFilter = (() => {
+            try {
+              return typeof filter === 'string' ? JSON.parse(filter) : filter;
+            } catch (error) {
+              // Log the error and use empty object
+              if (logger) {
+                logger.warn('Failed to parse filter as JSON, using empty filter', { filter, error });
+              }
+              return {};
+            }
+          })();
         }
-        if (mastra.logger) {
-          mastra.logger.debug('Using this filter and topK:', { queryFilter, topK });
+        if (logger) {
+          logger.debug('Using this filter and topK:', { queryFilter, topK: topKValue });
         }
 
         const { results } = await vectorQuerySearch({
@@ -67,24 +88,22 @@ export const createVectorQueryTool = ({
           queryText,
           model,
           queryFilter: Object.keys(queryFilter || {}).length > 0 ? queryFilter : undefined,
-          topK,
+          topK: topKValue,
         });
         if (reranker) {
           const rerankedResults = await rerank(results, queryText, reranker.model, {
             ...reranker.options,
-            topK: reranker.options?.topK || topK,
+            topK: reranker.options?.topK || topKValue,
           });
           const relevantChunks = rerankedResults.map(({ result }) => result?.metadata);
           return { relevantContext: relevantChunks };
         }
 
         const relevantChunks = results.map(result => result?.metadata);
-
         return {
           relevantContext: relevantChunks,
         };
       }
-
       return {
         relevantContext: [],
       };

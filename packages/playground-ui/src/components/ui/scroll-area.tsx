@@ -2,17 +2,34 @@ import * as ScrollAreaPrimitive from '@radix-ui/react-scroll-area';
 import * as React from 'react';
 
 import { cn } from '@/lib/utils';
+import { useAutoscroll } from '@/hooks/use-autoscroll';
 
-const ScrollArea = React.forwardRef<
-  React.ElementRef<typeof ScrollAreaPrimitive.Root>,
-  React.ComponentPropsWithoutRef<typeof ScrollAreaPrimitive.Root>
->(({ className, children, ...props }, ref) => (
-  <ScrollAreaPrimitive.Root ref={ref} className={cn('relative overflow-hidden', className)} {...props}>
-    <ScrollAreaPrimitive.Viewport className="h-full w-full rounded-[inherit]">{children}</ScrollAreaPrimitive.Viewport>
-    <ScrollBar />
-    <ScrollAreaPrimitive.Corner />
-  </ScrollAreaPrimitive.Root>
-));
+interface ScrollAreaProps extends React.ComponentPropsWithoutRef<typeof ScrollAreaPrimitive.Root> {
+  viewPortClassName?: string;
+  maxHeight?: string;
+  autoScroll?: boolean;
+}
+
+const ScrollArea = React.forwardRef<React.ElementRef<typeof ScrollAreaPrimitive.Root>, ScrollAreaProps>(
+  ({ className, children, viewPortClassName, maxHeight, autoScroll = false, ...props }, ref) => {
+    const areaRef = React.useRef<HTMLDivElement>(null);
+    useAutoscroll(areaRef, { enabled: autoScroll });
+
+    return (
+      <ScrollAreaPrimitive.Root ref={ref} className={cn('relative overflow-hidden', className)} {...props}>
+        <ScrollAreaPrimitive.Viewport
+          ref={areaRef}
+          className={cn('h-full w-full rounded-[inherit] [&>div]:!block', viewPortClassName)}
+          style={maxHeight ? { maxHeight } : undefined}
+        >
+          {children}
+        </ScrollAreaPrimitive.Viewport>
+        <ScrollBar />
+        <ScrollAreaPrimitive.Corner />
+      </ScrollAreaPrimitive.Root>
+    );
+  },
+);
 ScrollArea.displayName = ScrollAreaPrimitive.Root.displayName;
 
 const ScrollBar = React.forwardRef<

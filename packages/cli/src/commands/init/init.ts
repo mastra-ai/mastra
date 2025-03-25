@@ -3,8 +3,10 @@ import util from 'node:util';
 import * as p from '@clack/prompts';
 import color from 'picocolors';
 
-import { getPackageManager, getPackageManagerInstallCommand } from '../utils';
+import { DepsService } from '../../services/service.deps';
+import { getPackageManagerInstallCommand } from '../utils';
 
+import { installMastraDocsMCPServer } from './mcp-docs-server-install';
 import {
   createComponentsDir,
   createMastraDir,
@@ -26,12 +28,14 @@ export const init = async ({
   components,
   llmProvider = 'openai',
   llmApiKey,
+  configureEditorWithDocsMCP,
 }: {
   directory: string;
   components: string[];
   llmProvider: LLMProvider;
   addExample: boolean;
   llmApiKey?: string;
+  configureEditorWithDocsMCP?: undefined | 'windsurf' | 'cursor';
 }) => {
   s.start('Initializing Mastra');
 
@@ -67,9 +71,17 @@ export const init = async ({
     const key = await getAPIKey(llmProvider || 'openai');
 
     const aiSdkPackage = getAISDKPackage(llmProvider);
-    const pm = getPackageManager();
+    const depsService = new DepsService();
+    const pm = depsService.packageManager;
     const installCommand = getPackageManagerInstallCommand(pm);
     await exec(`${pm} ${installCommand} ${aiSdkPackage}`);
+
+    if (configureEditorWithDocsMCP) {
+      await installMastraDocsMCPServer({
+        editor: configureEditorWithDocsMCP,
+        directory: process.cwd(),
+      });
+    }
 
     s.stop();
     if (!llmApiKey) {

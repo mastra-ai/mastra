@@ -1,3 +1,5 @@
+import { existsSync } from 'fs';
+import { join } from 'path';
 import type {
   AssistantContent,
   ToolResultPart,
@@ -6,14 +8,12 @@ import type {
   ToolInvocation,
   CoreMessage,
   EmbeddingModel,
-  CoreTool,
 } from 'ai';
-import { existsSync } from 'fs';
-import { join } from 'path';
 
 import { MastraBase } from '../base';
 import type { MastraStorage, StorageGetMessagesArg } from '../storage';
-import { DefaultStorage } from '../storage/libsql';
+import { DefaultProxyStorage } from '../storage/default-proxy-storage';
+import type { CoreTool } from '../tools';
 import { deepMerge } from '../utils';
 import type { MastraVector } from '../vector';
 import { defaultEmbedder } from '../vector/fastembed';
@@ -35,6 +35,9 @@ export abstract class MastraMemory extends MastraBase {
   protected threadConfig: MemoryConfig = {
     lastMessages: 40,
     semanticRecall: true,
+    threads: {
+      generateTitle: true, // TODO: should we disable this by default to reduce latency?
+    },
   };
 
   constructor(config: { name: string } & SharedMemoryConfig) {
@@ -42,7 +45,7 @@ export abstract class MastraMemory extends MastraBase {
 
     this.storage =
       config.storage ||
-      new DefaultStorage({
+      new DefaultProxyStorage({
         config: {
           url: 'file:memory.db',
         },
@@ -107,7 +110,7 @@ export abstract class MastraMemory extends MastraBase {
    * This will be called when converting tools for the agent.
    * Implementations can override this to provide additional tools.
    */
-  public getTools(config?: MemoryConfig): Record<string, CoreTool> {
+  public getTools(_config?: MemoryConfig): Record<string, CoreTool> {
     return {};
   }
 
@@ -129,19 +132,22 @@ export abstract class MastraMemory extends MastraBase {
     return { indexName };
   }
 
-  protected getMergedThreadConfig(config?: MemoryConfig): MemoryConfig {
+  public getMergedThreadConfig(config?: MemoryConfig): MemoryConfig {
     return deepMerge(this.threadConfig, config || {});
   }
 
   abstract rememberMessages({
     threadId,
+    resourceId,
     vectorMessageSearch,
     config,
   }: {
     threadId: string;
+    resourceId?: string;
     vectorMessageSearch?: string;
     config?: MemoryConfig;
   }): Promise<{
+    threadId: string;
     messages: CoreMessage[];
     uiMessages: AiMessageType[];
   }>;
@@ -294,6 +300,7 @@ export abstract class MastraMemory extends MastraBase {
    */
   abstract query({
     threadId,
+    resourceId,
     selectBy,
   }: StorageGetMessagesArg): Promise<{ messages: CoreMessage[]; uiMessages: AiMessageType[] }>;
 
@@ -318,7 +325,7 @@ export abstract class MastraMemory extends MastraBase {
   }): Promise<StorageThreadType> {
     const thread: StorageThreadType = {
       id: threadId || this.generateId(),
-      title: title || 'New Thread',
+      title: title || `New Thread ${new Date().toISOString()}`,
       resourceId,
       createdAt: new Date(),
       updatedAt: new Date(),

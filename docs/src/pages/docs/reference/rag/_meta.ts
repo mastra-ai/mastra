@@ -13,6 +13,7 @@ const meta = {
   libsql: "LibSQLVector",
   pinecone: "PineconeVector",
   qdrant: "QdrantVector",
+  turbopuffer: "TurboPuffer",
   upstash: "UpstashVector",
 };
 

@@ -1,0 +1,72 @@
+name: Integration Request
+description: Request a new integration to be added to Mastra
+title: "[INTEGRATION] "
+labels: ["integration", "enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for suggesting a new integration for Mastra! Please provide as much detail as possible about the service you'd like to see integrated.
+
+  - type: textarea
+    attributes:
+      label: Service Information
+      description: Provide details about the service you want integrated.
+      placeholder: |
+        - Service Name: (e.g., Slack, MongoDB, etc.)
+        - Service Website: (e.g., https://service.com)
+        - API Documentation: (e.g., https://service.com/api-docs)
+    validations:
+      required: true
+
+  - type: textarea
+    attributes:
+      label: Use Case
+      description: Describe how you would use this integration with Mastra.
+      placeholder: "I want to use this integration to allow my Mastra agents to fetch data from this service and use it in workflows."
+    validations:
+      required: true
+
+  - type: dropdown
+    attributes:
+      label: Authentication Type
+      description: What type of authentication does this service use?
+      options:
+        - API Key
+        - OAuth
+        - Basic Authentication
+        - Bearer Token
+        - Custom
+        - Not Sure
+    validations:
+      required: true
+
+  - type: textarea
+    attributes:
+      label: Key Features
+      description: What are the key features or endpoints of this service that would be most useful to integrate?
+      placeholder: |
+        For example:
+        - User management endpoints
+        - Data retrieval endpoints
+        - Notification capabilities
+    validations:
+      required: true
+
+  - type: textarea
+    attributes:
+      label: Additional Context
+      description: Add any other context or screenshots about the integration request here.
+      placeholder: "Any additional information that might help us understand the request better."
+    validations:
+      required: false
+
+  - type: checkboxes
+    attributes:
+      label: Verification
+      description: Before submitting, please make sure you've completed the following
+      options:
+        - label: I have searched the existing issues to make sure this integration hasn't already been requested
+          required: true
+        - label: I have checked that this service has a public API that can be integrated
+          required: true

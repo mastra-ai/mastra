@@ -1,8 +1,8 @@
 import { z } from 'zod';
-
 import { mastra } from './mastra';
 
 const agent = mastra.getAgent('chefAgent');
+const responsesAgent = mastra.getAgent('chefAgentResponses');
 
 async function text() {
   // Query 1: Basic pantry ingredients
@@ -250,7 +250,7 @@ async function main() {
 
   // await experimentalTextObject();
 
-  await generateExperimentalStreamObject();
+  // await generateExperimentalStreamObject();
 
   // await generateText();
 
@@ -267,6 +267,14 @@ async function main() {
   // await streamObject();
 
   // await generateStreamObject();
+
+  const query1 = 'What happened in San Francisco last week?';
+
+  const pastaResponse = await responsesAgent.generate(query1, {
+    instructions: 'You take every recipe you get an exaggerate it and use weird ingredients.',
+  });
+
+  console.log(pastaResponse.text);
 }
 
 main();

@@ -8,8 +8,16 @@ const meta = {
     title: "Guides",
     collapsed: false,
   },
+  frameworks: {
+    title: "Frameworks",
+    collapsed: true,
+  },
   agents: {
     title: "Agents",
+    collapsed: false,
+  },
+  storage: {
+    title: "Storage",
     collapsed: false,
   },
   workflows: {
@@ -28,10 +36,20 @@ const meta = {
     title: "Deployment",
     collapsed: false,
   },
+  observability: {
+    title: "Observability",
+    collapsed: false,
+  },
   evals: {
     title: "Evals",
     collapsed: false,
   },
+  voice: {
+    title: "Voice",
+    collapsed: false,
+  },
+  integrations: "Integrations",
+  faq: "FAQ",
   reference: "Reference",
 };
 

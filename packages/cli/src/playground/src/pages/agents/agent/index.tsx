@@ -1,5 +1,4 @@
-import { AgentChat as Chat } from '@mastra/playground-ui';
-// import {Chat}   from "@/components/Chat"
+import { AgentChat as Chat, MastraResizablePanel } from '@mastra/playground-ui';
 import { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router';
 import { v4 as uuid } from '@lukeed/uuid';
@@ -22,7 +21,7 @@ function Agent() {
     threadId: threadId!,
     memory: !!memory?.result,
   });
-  const [sidebar, setSidebar] = useState(true);
+  const [sidebar, _] = useState(true);
   const {
     threads,
     isLoading: isThreadsLoading,
@@ -38,26 +37,17 @@ function Agent() {
   }, [memory?.result, threadId]);
 
   if (isAgentLoading) {
-    return (
-      <section className="flex-1 relative grid grid-cols-[1fr_400px] divide-x">
-        <div className="flex flex-col">
-          <AgentInformation agentId={agentId!} />
-        </div>
-      </section>
-    );
+    return null;
   }
 
   return (
-    <section
-      className={cn(
-        'relative grid h-full divide-x',
-        sidebar && memory?.result ? 'grid-cols-[256px_1fr_400px]' : 'grid-cols-[1fr_400px]',
-      )}
-    >
+    <section className={cn('relative h-full divide-x flex w-full')}>
       {sidebar && memory?.result ? (
-        <AgentSidebar agentId={agentId!} threadId={threadId!} threads={threads} isLoading={isThreadsLoading} />
+        <div className="h-full w-[256px]">
+          <AgentSidebar agentId={agentId!} threadId={threadId!} threads={threads} isLoading={isThreadsLoading} />
+        </div>
       ) : null}
-      <div className="relative overflow-y-hidden">
+      <div className={cn('relative overflow-y-hidden grow min-w-[325px]')}>
         <Chat
           agentId={agentId!}
           agentName={agent?.name}
@@ -69,9 +59,14 @@ function Agent() {
           }}
         />
       </div>
-      <div className="flex flex-col">
+      <MastraResizablePanel
+        defaultWidth={20}
+        minimumWidth={20}
+        maximumWidth={60}
+        className="flex flex-col min-w-[325px] right-0 top-0 h-full z-20 bg-[#121212] [&>div:first-child]:-left-[1px] [&>div:first-child]:-right-[1px] [&>div:first-child]:w-[1px] [&>div:first-child]:bg-[#424242] [&>div:first-child]:hover:w-[2px] [&>div:first-child]:active:w-[2px]"
+      >
         <AgentInformation agentId={agentId!} />
-      </div>
+      </MastraResizablePanel>
     </section>
   );
 }

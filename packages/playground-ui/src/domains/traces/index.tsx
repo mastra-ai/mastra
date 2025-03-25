@@ -1,5 +1,5 @@
 import { Braces, Clock1 } from 'lucide-react';
-import { useContext, useEffect } from 'react';
+import { useContext, useEffect, useState } from 'react';
 
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -12,27 +12,33 @@ import type { RefinedTrace, Span, SpanStatus } from './types';
 import { formatDuration, formatOtelTimestamp } from './utils';
 
 export function Traces({ traces }: { traces: RefinedTrace[] }) {
-  const { setTraces, trace: currentTrace } = useContext(TraceContext);
-
-  const currentTraceParentSpan = currentTrace?.find(span => span.parentSpanId === undefined) || currentTrace?.[0];
+  const { trace: currentTrace } = useContext(TraceContext);
+  const [prevTracesId, setPrevTracesId] = useState(new Set());
 
   useEffect(() => {
-    setTraces(traces);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    if (!prevTracesId.size && traces) {
+      setPrevTracesId(new Set(traces.map(trace => trace.traceId)));
+    }
   }, [traces]);
 
+  const isNew = (traceId: string) => {
+    if (!prevTracesId.size) return false;
+    return !prevTracesId.has(traceId);
+  };
+  const currentTraceParentSpan = currentTrace?.find(span => span.parentSpanId === undefined) || currentTrace?.[0];
+
   return (
-    <div className="h-full w-[calc(100%_-_400px)]">
+    <div className="h-full w-[calc(100%_-_325px)]">
       <ScrollArea className="h-full">
         <Table>
-          <TableHeader className="bg-mastra-bg-2 sticky top-0 z-10">
+          <TableHeader className="sticky top-0 z-10 bg-[#0F0F0F]" style={{ outline: '1px solid 0_0%_20.4%' }}>
             <TableRow className="border-gray-6 border-b-[0.1px] text-[0.8125rem]">
-              <TableHead className="text-mastra-el-3">Trace</TableHead>
-              <TableHead className="text-mastra-el-3 flex items-center gap-1">
+              <TableHead className="text-mastra-el-3 h-10">Trace</TableHead>
+              <TableHead className="text-mastra-el-3 flex items-center gap-1 h-10">
                 <Braces className="h-3 w-3" /> Trace Id
               </TableHead>
-              <TableHead className="text-mastra-el-3">Started</TableHead>
-              <TableHead className="text-mastra-el-3">Total Duration</TableHead>
+              <TableHead className="text-mastra-el-3 h-10">Started</TableHead>
+              <TableHead className="text-mastra-el-3 h-10">Total Duration</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody className="border-b border-gray-6">
@@ -46,9 +52,13 @@ export function Traces({ traces }: { traces: RefinedTrace[] }) {
               traces.map((trace, index) => (
                 <TableRow
                   key={trace.traceId}
-                  className={cn('border-b-gray-6 border-b-[0.1px] text-[0.8125rem]', {
-                    'bg-muted/50': currentTraceParentSpan?.traceId === trace.traceId,
-                  })}
+                  className={cn(
+                    'border-b-gray-6 border-b-[0.1px] text-[0.8125rem]',
+                    isNew(trace.traceId) ? 'animate-fade-in' : 'not-new',
+                    {
+                      'bg-muted/50': currentTraceParentSpan?.traceId === trace.traceId,
+                    },
+                  )}
                 >
                   <TableCell>
                     <TraceButton

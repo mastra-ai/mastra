@@ -85,7 +85,7 @@ export class CharacterTransformer extends TextTransformer {
       if (this.lengthFunction(split) <= this.size) {
         chunks.push(split);
       } else {
-        // If a single split is too large, split it further
+        // If a single split is too large, split it further with overlap
         const subChunks = this.__splitChunk(split);
         chunks.push(...subChunks);
       }
@@ -96,24 +96,25 @@ export class CharacterTransformer extends TextTransformer {
 
   private __splitChunk(text: string): string[] {
     const chunks: string[] = [];
-    let currentChunk = '';
+    let currentPosition = 0;
 
-    // Split by characters if no other separator is suitable
-    const chars = text.split('');
+    while (currentPosition < text.length) {
+      let chunkEnd = currentPosition;
 
-    for (const char of chars) {
-      if (this.lengthFunction(currentChunk + char) <= this.size) {
-        currentChunk += char;
-      } else {
-        if (currentChunk) {
-          chunks.push(currentChunk);
-        }
-        currentChunk = char;
+      // Build chunk up to max size
+      while (chunkEnd < text.length && this.lengthFunction(text.slice(currentPosition, chunkEnd + 1)) <= this.size) {
+        chunkEnd++;
       }
-    }
 
-    if (currentChunk) {
+      const currentChunk = text.slice(currentPosition, chunkEnd);
+      const chunkLength = this.lengthFunction(currentChunk);
       chunks.push(currentChunk);
+
+      // If we're at the end, break to avoid tiny chunks
+      if (chunkEnd >= text.length) break;
+
+      // Move position forward by chunk size minus overlap
+      currentPosition += Math.max(1, chunkLength - this.overlap);
     }
 
     return chunks;

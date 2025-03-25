@@ -1,4 +1,5 @@
 import { MastraClient } from './client';
+import type { WorkflowRunResult } from './types';
 
 // Agent
 
@@ -45,22 +46,29 @@ import { MastraClient } from './client';
 // })();
 
 // Workflow
-
 // (async () => {
 //   const client = new MastraClient({
 //     baseUrl: 'http://localhost:4111',
 //   });
 
-//   const workflowId = 'weatherWorkflow';
+//   try {
+//     const workflowId = 'myWorkflow';
+//     const workflow = client.getWorkflow(workflowId);
 
-//   const workflow = client.getWorkflow(workflowId);
-//   const response = workflow.watch();
+//     const { runId } = await workflow.createRun();
 
-//   workflow.execute({
-//     city: 'New York',
-//   });
+//     workflow.watch({ runId }, record => {
+//       console.log(new Date().toTimeString(), record);
+//     });
 
-//   for await (const record of response) {
-//     console.log(new Date().toTimeString(), record);
+//     await workflow.start({
+//       runId,
+//       triggerData: {
+//         city: 'New York',
+//       },
+//     });
+
+//   } catch (e) {
+//     console.error('Workflow error:', e);
 //   }
 // })();

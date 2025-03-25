@@ -1,7 +1,7 @@
+import type { MastraLanguageModel } from '@mastra/core/agent';
 import { MastraAgentRelevanceScorer, CohereRelevanceScorer } from '@mastra/core/relevance';
 import type { RelevanceScoreProvider } from '@mastra/core/relevance';
 import type { QueryResult } from '@mastra/core/vector';
-import type { LanguageModelV1 } from 'ai';
 
 // Default weights for different scoring components (must add up to 1)
 const DEFAULT_WEIGHTS = {
@@ -47,7 +47,7 @@ export interface RerankerFunctionOptions {
 
 export interface RerankConfig {
   options?: RerankerOptions;
-  model: LanguageModelV1;
+  model: MastraLanguageModel;
 }
 
 // Calculate position score based on position in original list
@@ -86,7 +86,7 @@ function adjustScores(score: number, queryAnalysis: { magnitude: number; dominan
 export async function rerank(
   results: QueryResult[],
   query: string,
-  model: LanguageModelV1,
+  model: MastraLanguageModel,
   options: RerankerFunctionOptions,
 ): Promise<RerankResult[]> {
   let semanticProvider: RelevanceScoreProvider;
@@ -115,7 +115,10 @@ export async function rerank(
   const scoredResults = await Promise.all(
     results.map(async (result, index) => {
       // Get semantic score from chosen provider
-      const semanticScore = await semanticProvider.getRelevanceScore(query, result?.metadata?.text);
+      let semanticScore = 0;
+      if (result?.metadata?.text) {
+        semanticScore = await semanticProvider.getRelevanceScore(query, result?.metadata?.text);
+      }
 
       // Get existing vector score from result
       const vectorScore = result.score;

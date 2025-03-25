@@ -2,7 +2,6 @@ import type { LanguageModelV1, TelemetrySettings } from 'ai';
 import type { JSONSchema7 } from 'json-schema';
 import type { ZodSchema } from 'zod';
 
-import type { MastraPrimitives } from '../action';
 import type { Metric } from '../eval';
 import type {
   CoreMessage,
@@ -12,26 +11,29 @@ import type {
   DefaultLLMTextOptions,
   OutputType,
 } from '../llm';
+import type { Mastra } from '../mastra';
 import type { MastraMemory } from '../memory/memory';
 import type { MemoryConfig } from '../memory/types';
-import type { ToolAction } from '../tools';
+import type { ToolAction, VercelTool } from '../tools';
 import type { CompositeVoice } from '../voice';
 
 export type { Message as AiMessageType } from 'ai';
 
-export type ToolsetsInput = Record<string, Record<string, ToolAction<any, any, any, any>>>;
+export type ToolsInput = Record<string, ToolAction<any, any, any> | VercelTool>;
 
-export type ToolsInput = Record<string, ToolAction<any, any, any, any>>;
+export type ToolsetsInput = Record<string, ToolsInput>;
+
+export type MastraLanguageModel = LanguageModelV1;
 
 export interface AgentConfig<
-  TTools extends Record<string, ToolAction<any, any, any, any>> = Record<string, ToolAction<any, any, any, any>>,
+  TTools extends ToolsInput = ToolsInput,
   TMetrics extends Record<string, Metric> = Record<string, Metric>,
 > {
   name: string;
   instructions: string;
-  model: LanguageModelV1;
+  model: MastraLanguageModel;
   tools?: TTools;
-  mastra?: MastraPrimitives;
+  mastra?: Mastra;
   /** @deprecated This property is deprecated. Use evals instead to add evaluation metrics. */
   metrics?: TMetrics;
   evals?: TMetrics;
@@ -40,6 +42,7 @@ export interface AgentConfig<
 }
 
 export type AgentGenerateOptions<Z extends ZodSchema | JSONSchema7 | undefined = undefined> = {
+  instructions?: string;
   toolsets?: ToolsetsInput;
   context?: CoreMessage[];
   memoryOptions?: MemoryConfig;
@@ -54,6 +57,7 @@ export type AgentGenerateOptions<Z extends ZodSchema | JSONSchema7 | undefined =
   (Z extends undefined ? DefaultLLMTextOptions : DefaultLLMTextObjectOptions);
 
 export type AgentStreamOptions<Z extends ZodSchema | JSONSchema7 | undefined = undefined> = {
+  instructions?: string;
   toolsets?: ToolsetsInput;
   context?: CoreMessage[];
   memoryOptions?: MemoryConfig;

@@ -7,6 +7,7 @@ import type { Run } from '../run/types';
 // Constants and Types (keeping from original implementation)
 export const RegisteredLogger = {
   AGENT: 'AGENT',
+  NETWORK: 'NETWORK',
   WORKFLOW: 'WORKFLOW',
   LLM: 'LLM',
   TTS: 'TTS',
@@ -77,6 +78,13 @@ export class Logger {
       {
         name: options.name || 'app',
         level: options.level || LogLevel.INFO,
+        formatters: {
+          level: label => {
+            return {
+              level: label,
+            };
+          },
+        },
       },
       options.overrideDefaultTransports
         ? options?.transports?.default

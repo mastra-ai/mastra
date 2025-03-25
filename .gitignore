@@ -18,11 +18,14 @@ dist/
 openapi-ts-error*
 
 .mastra
+memory.db
+
 # github actions
 .secrets
 # Local Netlify folder
 .netlify
 .npmrc
 
-# Test output directories
-voice/**/test-output*/
+# Test directories
+voice/**/test-outputs/
+voice/**/test-data/

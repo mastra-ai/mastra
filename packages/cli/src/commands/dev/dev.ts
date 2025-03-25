@@ -22,8 +22,8 @@ const startServer = async (dotMastraPath: string, port: number, env: Map<string,
       {
         cwd: dotMastraPath,
         env: {
-          PORT: port.toString() || '4111',
           ...Object.fromEntries(env),
+          PORT: port.toString() || process.env.PORT || '4111',
           MASTRA_DEFAULT_STORAGE_URL: `file:${join(dotMastraPath, '..', 'mastra.db')}`,
         },
         stdio: 'inherit',
@@ -75,7 +75,7 @@ const startServer = async (dotMastraPath: string, port: number, env: Map<string,
   }
 };
 
-async function rebundleAndRestart(dotMastraPath: string, port: number, bundler: DevBundler) {
+async function rebundleAndRestart(dotMastraPath: string, port: number, bundler: DevBundler, tools?: string[]) {
   if (isRestarting) {
     return;
   }
@@ -85,7 +85,7 @@ async function rebundleAndRestart(dotMastraPath: string, port: number, bundler: 
     // If current server process is running, stop it
     if (currentServerProcess) {
       logger.debug('Stopping current server...');
-      currentServerProcess.kill('SIGKILL');
+      currentServerProcess.kill('SIGINT');
     }
 
     const env = await bundler.loadEnvVars();
@@ -96,25 +96,28 @@ async function rebundleAndRestart(dotMastraPath: string, port: number, bundler: 
   }
 }
 
-export async function dev({ port, dir, root }: { dir?: string; root?: string; port: number }) {
+export async function dev({ port, dir, root, tools }: { dir?: string; root?: string; port: number; tools?: string[] }) {
   const rootDir = root || process.cwd();
   const mastraDir = join(rootDir, dir || 'src/mastra');
   const dotMastraPath = join(rootDir, '.mastra');
+
+  const defaultToolsPath = join(mastraDir, 'tools');
+  const discoveredTools = [defaultToolsPath, ...(tools || [])];
 
   const fileService = new FileService();
   const entryFile = fileService.getFirstExistingFile([join(mastraDir, 'index.ts'), join(mastraDir, 'index.js')]);
 
   const bundler = new DevBundler();
 
-  const env = await bundler.loadEnvVars();
-
   await bundler.prepare(dotMastraPath);
 
-  const watcher = await bundler.watch(entryFile, dotMastraPath);
+  const watcher = await bundler.watch(entryFile, dotMastraPath, discoveredTools);
+
+  const env = await bundler.loadEnvVars();
 
   await startServer(join(dotMastraPath, 'output'), port, env);
 
-  watcher.on('event', event => {
+  watcher.on('event', (event: { code: string }) => {
     if (event.code === 'BUNDLE_END') {
       logger.info('[Mastra Dev] - Bundling finished, restarting server...');
       // eslint-disable-next-line @typescript-eslint/no-floating-promises
@@ -128,7 +131,6 @@ export async function dev({ port, dir, root }: { dir?: string; root?: string; po
       currentServerProcess.kill();
     }
 
-    // eslint-disable-next-line @typescript-eslint/no-floating-promises
     watcher.close();
     process.exit(0);
   });

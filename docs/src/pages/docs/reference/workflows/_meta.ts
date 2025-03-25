@@ -6,13 +6,22 @@ const meta = {
   "step-function": ".step()",
   after: ".after()",
   then: ".then()",
+  until: ".until()",
+  while: ".while()",
+  if: ".if()",
+  else: ".else()",
   createRun: ".createRun()",
   start: ".start()",
   execute: ".execute()",
   suspend: ".suspend()",
+  snapshots: "Snapshots",
   resume: ".resume()",
   commit: ".commit()",
   watch: ".watch()",
+  events: "Event-Driven Workflows",
+  afterEvent: ".afterEvent()",
+  resumeWithEvent: ".resumeWithEvent()",
+  "step-retries": "Step Retries",
 };
 
 export default meta;
