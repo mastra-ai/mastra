@@ -24,7 +24,7 @@
     "test": "echo \"deprecated\""
   },
   "dependencies": {
-    "@google-cloud/text-to-speech": "^5.8.1",
+    "@google-cloud/text-to-speech": "^6.0.1",
     "@mastra/core": "workspace:^",
     "zod": "^3.24.2"
   },
