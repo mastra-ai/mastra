@@ -29,6 +29,10 @@
       "enabled": false
     },
     {
+      "matchFileNames": ["docs/package.json"],
+      "enabled": false
+    },
+    {
       "groupName": "AI SDK",
       "commitMessageTopic": "AI SDK",
       "matchFileNames": ["+(package.json)", "**/package.json", "!./docs/**"],
@@ -62,6 +66,14 @@
       "matchUpdateTypes": ["major", "minor", "patch"],
       "matchDepTypes": ["dependencies", "devDependencies"],
       "dependencyDashboardApproval": false
+    },
+    {
+      "groupName": "Build tools",
+      "commitMessageTopic": "Build tools",
+      "matchPaths": ["+(package.json)", "**/package.json"],
+      "matchUpdateTypes": ["major", "minor", "patch"],
+      "matchDepTypes": ["devDependencies"],
+      "matchPackageNames": ["@microsoft/api-extractor", "tsup", "rollup"]
     },
     {
       "groupName": "core",
@@ -102,7 +114,7 @@
     {
       "groupName": "playground",
       "commitMessageTopic": "Mastra playground",
-      "matchFileNames": ["packages/cli/playground/package.json"],
+      "matchFileNames": ["packages/cli/src/playground/package.json"],
       "matchUpdateTypes": ["minor", "patch"],
       "matchDepTypes": ["dependencies", "devDependencies"]
     }

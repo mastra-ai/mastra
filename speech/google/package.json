@@ -1,6 +1,6 @@
 {
   "name": "@mastra/speech-google",
-  "version": "0.1.14-alpha.0",
+  "version": "0.1.14-alpha.1",
   "description": "Mastra Google speech integration (DEPRECATED - use @mastra/voice-google instead)",
   "type": "module",
   "main": "dist/index.js",
@@ -24,7 +24,7 @@
     "test": "echo \"deprecated\""
   },
   "dependencies": {
-    "@google-cloud/text-to-speech": "^5.8.1",
+    "@google-cloud/text-to-speech": "^6.0.1",
     "@mastra/core": "workspace:^",
     "zod": "^3.24.2"
   },

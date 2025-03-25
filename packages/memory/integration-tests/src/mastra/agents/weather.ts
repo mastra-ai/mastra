@@ -20,4 +20,3 @@ export const weatherAgent = new Agent({
   memory,
   tools: { get_weather: weatherTool },
 });
-
