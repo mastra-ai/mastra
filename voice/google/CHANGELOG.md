@@ -1,5 +1,16 @@
 # @mastra/voice-google
 
+## 0.1.9-alpha.2
+
+### Patch Changes
+
+- f7be454: fix(deps): update dependency @google-cloud/text-to-speech to v6
+- Updated dependencies [a838fde]
+- Updated dependencies [a8bd4cf]
+- Updated dependencies [7a3eeb0]
+- Updated dependencies [6530ad1]
+  - @mastra/core@0.7.0-alpha.2
+
 ## 0.1.9-alpha.1
 
 ### Patch Changes
