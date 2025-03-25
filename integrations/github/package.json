@@ -73,7 +73,7 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
-    "@hey-api/client-fetch": "^0.3.4",
+    "@hey-api/client-fetch": "^0.8.3",
     "@mastra/core": "workspace:^",
     "ts-to-zod": "^3.15.0",
     "zod": "^3.24.2"
