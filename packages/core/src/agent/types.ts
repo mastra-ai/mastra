@@ -1,4 +1,11 @@
-import type { LanguageModelV1, StreamObjectOnFinishCallback, StreamTextOnFinishCallback, TelemetrySettings } from 'ai';
+import type {
+  GenerateTextOnStepFinishCallback,
+  LanguageModelV1,
+  StreamObjectOnFinishCallback,
+  StreamTextOnFinishCallback,
+  StreamTextOnStepFinishCallback,
+  TelemetrySettings,
+} from 'ai';
 import type { JSONSchema7 } from 'json-schema';
 import type { z, ZodSchema } from 'zod';
 
@@ -47,7 +54,7 @@ export type AgentGenerateOptions<Z extends ZodSchema | JSONSchema7 | undefined =
   context?: CoreMessage[];
   memoryOptions?: MemoryConfig;
   runId?: string;
-  onStepFinish?: (step: string) => void;
+  onStepFinish?: Z extends undefined ? GenerateTextOnStepFinishCallback<any> : never;
   maxSteps?: number;
   output?: OutputType | Z;
   experimental_output?: Z;
@@ -67,7 +74,7 @@ export type AgentStreamOptions<Z extends ZodSchema | JSONSchema7 | undefined = u
     : Z extends ZodSchema
       ? StreamObjectOnFinishCallback<z.infer<Z>>
       : StreamObjectOnFinishCallback<any>;
-  onStepFinish?: (step: string) => unknown;
+  onStepFinish?: Z extends undefined ? StreamTextOnStepFinishCallback<any> : never;
   maxSteps?: number;
   output?: OutputType | Z;
   temperature?: number;

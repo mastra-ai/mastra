@@ -894,7 +894,9 @@ export class Agent<
         messages: messageObjects,
         tools: this.tools,
         convertedTools,
-        onStepFinish,
+        onStepFinish: (result: any) => {
+          onStepFinish?.(result);
+        },
         maxSteps: maxSteps || 5,
         runId: runIdToUse,
         temperature,
@@ -922,7 +924,9 @@ export class Agent<
         messages: messageObjects,
         tools: this.tools,
         convertedTools,
-        onStepFinish,
+        onStepFinish: (result: any) => {
+          onStepFinish?.(result);
+        },
         maxSteps,
         runId: runIdToUse,
         temperature,
@@ -946,7 +950,9 @@ export class Agent<
       tools: this.tools,
       structuredOutput: output,
       convertedTools,
-      onStepFinish,
+      onStepFinish: (result: any) => {
+        onStepFinish?.(result);
+      },
       maxSteps,
       runId: runIdToUse,
       temperature,
@@ -1042,7 +1048,9 @@ export class Agent<
         temperature,
         tools: this.tools,
         convertedTools,
-        onStepFinish,
+        onStepFinish: (result: any) => {
+          onStepFinish?.(result);
+        },
         onFinish: async (result: any) => {
           try {
             const outputText = result.text;
@@ -1075,7 +1083,9 @@ export class Agent<
         temperature,
         tools: this.tools,
         convertedTools,
-        onStepFinish,
+        onStepFinish: (result: any) => {
+          onStepFinish?.(result);
+        },
         onFinish: async (result: any) => {
           try {
             const outputText = result.text;
@@ -1107,7 +1117,9 @@ export class Agent<
       temperature,
       structuredOutput: output,
       convertedTools,
-      onStepFinish,
+      onStepFinish: (result: any) => {
+        onStepFinish?.(result);
+      },
       onFinish: async (result: any) => {
         try {
           const outputText = JSON.stringify(result.object);
