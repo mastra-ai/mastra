@@ -1,4 +1,5 @@
 import React from "react";
+import { useMDXComponents } from "nextra/mdx";
 
 interface ColumnConstraint {
   type: "nullable" | "primaryKey" | "foreignKey" | "unique" | "default";
@@ -85,11 +86,30 @@ export const SchemaTable: React.FC<SchemaTableProps> = ({ columns = [] }) => {
                 {column.type}
               </div>
             </div>
-            <div className="text-sm text-zinc-500">{column.description}</div>
+            <div className="text-sm text-zinc-500">
+              <MDXText>{column.description ?? ""}</MDXText>
+            </div>
             {renderConstraints(column.constraints)}
           </div>
         ))}
       </div>
     </div>
+  );
+};
+
+const MDXText = ({ children }: { children: string }) => {
+  const components = useMDXComponents();
+  return (
+    <>
+      {children
+        .split(/(`[^`]+`)/)
+        .map((part, i) =>
+          part.startsWith("`") && components.code ? (
+            <components.code key={i}>{part.slice(1, -1)}</components.code>
+          ) : (
+            part
+          ),
+        )}
+    </>
   );
 };

@@ -45,7 +45,7 @@ Stores conversation messages and their metadata. Each message belongs to a threa
     {
       name: "id",
       type: "text",
-      description: "Unique identifier for the message",
+      description: "UUIDv4 (example: `550e8400-e29b-41d4-a716-446655440000`)",
       constraints: [
         { type: "primaryKey" },
         { type: "nullable", value: false }
@@ -54,7 +54,7 @@ Stores conversation messages and their metadata. Each message belongs to a threa
     {
       name: "thread_id",
       type: "text",
-      description: "Reference to the parent thread",
+      description: "UUIDv4 parent thread reference",
       constraints: [
         { type: "foreignKey", value: "threads.id" },
         { type: "nullable", value: false }
@@ -63,24 +63,24 @@ Stores conversation messages and their metadata. Each message belongs to a threa
     {
       name: "content",
       type: "text",
-      description: "The actual message content",
       constraints: [{ type: "nullable", value: false }]
     },
     {
       name: "role",
       type: "text",
-      description: "Message sender role (user/assistant/system)",
+      description: "Enum of `system | user | assistant | tool`",
       constraints: [{ type: "nullable", value: false }]
     },
     {
       name: "type",
       type: "text",
-      description: "Message type identifier",
+      description: "Enum of `text | tool-call | tool-result`",
       constraints: [{ type: "nullable", value: false }]
     },
     {
       name: "createdAt",
       type: "timestamp",
+      description: "Used for thread message ordering",
       constraints: [{ type: "nullable", value: false }]
     }
   ]}
@@ -94,7 +94,7 @@ Groups related messages together and associates them with a resource. Contains m
     {
       name: "id",
       type: "text",
-      description: "Unique identifier for the thread",
+      description: "UUIDv4 (example: `550e8400-e29b-41d4-a716-446655440000`)",
       constraints: [
         { type: "primaryKey" },
         { type: "nullable", value: false }
@@ -103,7 +103,7 @@ Groups related messages together and associates them with a resource. Contains m
     {
       name: "resourceId",
       type: "text",
-      description: "Identifier for the associated resource",
+      description: "Primary identifier of the external resource this thread is associated with. Used to group and retrieve related threads.",
       constraints: [{ type: "nullable", value: false }]
     },
     {
@@ -115,7 +115,7 @@ Groups related messages together and associates them with a resource. Contains m
     {
       name: "metadata",
       type: "text",
-      description: "Additional custom metadata for the thread",
+      description: "Additional custom metadata for the thread (stringified JSON)",
     },
     {
       name: "createdAt",
@@ -125,7 +125,7 @@ Groups related messages together and associates them with a resource. Contains m
     {
       name: "updatedAt",
       type: "timestamp",
-      description: "When the thread was last modified",
+      description: "Used for thread ordering history",
       constraints: [{ type: "nullable", value: false }]
     }
   ]}
