@@ -1,3 +1,4 @@
+import { randomUUID } from 'crypto';
 import type {
   AssistantContent,
   CoreAssistantMessage,
@@ -12,7 +13,6 @@ import type {
   ToolCallPart,
   UserContent,
 } from 'ai';
-import { randomUUID } from 'crypto';
 import type { JSONSchema7 } from 'json-schema';
 import type { ZodSchema } from 'zod';
 
@@ -50,6 +50,7 @@ import type {
   ToolsetsInput,
   ToolsInput,
 } from './types';
+import { AgentInstructions } from './types';
 
 export * from './types';
 
@@ -64,7 +65,7 @@ export class Agent<
 > extends MastraBase {
   public name: string;
   readonly llm: MastraLLMBase;
-  #instructions: string | InstructionsBuilder<TSchemaDeps>;
+  #instructions: AgentInstructions<TSchemaDeps>;
   readonly model?: MastraLanguageModel;
   #mastra?: Mastra;
   #memory?: MastraMemory;
@@ -76,11 +77,15 @@ export class Agent<
   #dependenciesSchema?: TSchemaDeps;
   #currentDependencies?: DependenciesType<TSchemaDeps>;
 
+  get instructions(): AgentInstructions<TSchemaDeps> {
+    return this.#instructions;
+  }
+
   constructor(config: AgentConfig<TSchemaDeps, TTools, TMetrics>) {
     super({ component: RegisteredLogger.AGENT });
 
     this.name = config.name;
-    this.#instructions = config.instructions;
+    this.#instructions = new AgentInstructions(config.instructions, config.dependenciesSchema);
 
     if (!config.model) {
       throw new Error(`LanguageModel is required to create an Agent. Please provide the 'model'.`);
@@ -122,33 +127,12 @@ export class Agent<
     if (config.voice) {
       this.voice = config.voice;
       this.voice?.addTools(this.tools);
-      this.voice?.addInstructions(config.instructions);
+      this.voice?.addInstructions(this.#instructions.toString()); // TODO: support dynamic instructions in voice providers
     }
 
     if (config.dependenciesSchema) {
       this.#dependenciesSchema = config.dependenciesSchema;
     }
-  }
-
-  /**
-   * Resolve instructions with dependencies.
-   *
-   * @param dependencies Dependencies to use when evaluating dynamic instructions.
-   * @param instructions Optional instructions to override the agent's instructions.
-   * @returns Promise<string> The resolved instructions with dependencies applied.
-   */
-  async resolveInstructions(dependencies?: DependenciesType<TSchemaDeps>, instructions?: string): Promise<string> {
-    if (instructions) {
-      return instructions;
-    }
-
-    if (typeof this.#instructions === 'function') {
-      return await this.#instructions({
-        dependencies: validateDependencies(this.#dependenciesSchema, dependencies),
-      });
-    }
-
-    return this.#instructions;
   }
 
   public hasOwnMemory(): boolean {
@@ -159,7 +143,8 @@ export class Agent<
   }
 
   __updateInstructions(newInstructions: string | InstructionsBuilder<TSchemaDeps>) {
-    this.#instructions = newInstructions;
+    this.#instructions = new AgentInstructions(newInstructions, this.#dependenciesSchema);
+    this.voice?.addInstructions(this.#instructions.toString()); // TODO: support dynamic instructions in voice providers
     this.logger.debug(`[Agents:${this.name}] Instructions updated.`, { model: this.model, name: this.name });
   }
 
@@ -678,7 +663,7 @@ export class Agent<
           createDependenciesFrom(dependencies),
         );
 
-        const resolvedInstructions = await this.resolveInstructions(this.#currentDependencies, instructions);
+        const resolvedInstructions = await this.instructions.resolve(this.#currentDependencies, instructions);
         const systemMessage: CoreMessage = {
           role: 'system',
           content: `${resolvedInstructions}.`,
@@ -854,7 +839,7 @@ export class Agent<
         if (Object.keys(this.evals || {}).length > 0) {
           const input = messages.map(message => message.content).join('\n');
           const runIdToUse = runId || crypto.randomUUID();
-          const resolvedInstructions = await this.resolveInstructions(this.#currentDependencies, instructions);
+          const resolvedInstructions = await this.instructions.resolve(this.#currentDependencies, instructions);
           for (const metric of Object.values(this.evals || {})) {
             executeHook(AvailableHooks.ON_GENERATION, {
               input,
