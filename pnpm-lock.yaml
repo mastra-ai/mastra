@@ -3568,6 +3568,9 @@ importers:
       jsdom:
         specifier: ^26.0.0
         version: 26.0.0(bufferutil@4.0.9)(utf-8-validate@6.0.5)
+      mastra:
+        specifier: workspace:*
+        version: link:../../cli
       next:
         specifier: ^15.2.3
         version: 15.2.3(@opentelemetry/api@1.9.0)(react-dom@19.0.0(react@19.0.0))(react@19.0.0)
