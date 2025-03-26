@@ -57,6 +57,15 @@ await agent.stream("What was our conversation about?", {
 });
 ```
 
+### TokenLimiter Options
+
+The TokenLimiter uses the document chunking functionality from `@mastra/rag` with cl100k_base encoding for accurate token counting.
+
+```typescript
+// Simple usage - limit to 8000 tokens
+new TokenLimiter(8000)
+```
+
 ### ToolCallFilter Options
 
 The ToolCallFilter can be configured in two ways:

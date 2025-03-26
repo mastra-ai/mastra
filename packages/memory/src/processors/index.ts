@@ -1,5 +1,6 @@
 import type { CoreMessage } from '@mastra/core';
 import type { MessageProcessor } from '../index';
+import { MDocument } from '@mastra/rag';
 
 interface TextPart {
   type: 'text';
@@ -46,9 +47,7 @@ export class ToolCallFilter implements MessageProcessor {
       // Exclude all tool calls and results
       return messages.filter(message => {
         if (Array.isArray(message.content)) {
-          return !message.content.some(part => 
-            part.type === 'tool-call' || part.type === 'tool-result'
-          );
+          return !message.content.some(part => part.type === 'tool-call' || part.type === 'tool-result');
         }
         return true;
       });
@@ -86,7 +85,7 @@ export class ToolCallFilter implements MessageProcessor {
         // Create a copy of the message with the filtered content
         return {
           ...message,
-          content: filteredContent
+          content: filteredContent,
         };
       });
 
@@ -106,12 +105,17 @@ export class ToolCallFilter implements MessageProcessor {
 
 /**
  * Limits the total number of tokens in the messages.
- * Uses a simple approximation for token counting if tokensPerMessage is not provided.
+ * Uses MDocument from @mastra/rag with cl100k_base encoding for accurate token counting.
+ * This encoding is used by all modern OpenAI models (GPT-3.5, GPT-4, etc).
  */
 export class TokenLimiter implements MessageProcessor {
-  constructor(private maxTokens: number, private tokensPerMessage?: (message: CoreMessage) => number) {}
+  /**
+   * Create a token limiter for messages.
+   * @param maxTokens Maximum number of tokens to allow
+   */
+  constructor(private maxTokens: number) {}
 
-  process(messages: CoreMessage[]): CoreMessage[] {
+  async process(messages: CoreMessage[]): Promise<CoreMessage[]> {
     // Messages are already chronologically ordered - take most recent ones up to the token limit
     let totalTokens = 0;
     const result: CoreMessage[] = [];
@@ -123,9 +127,7 @@ export class TokenLimiter implements MessageProcessor {
       // Skip undefined messages (shouldn't happen, but TypeScript is concerned)
       if (!message) continue;
       
-      const messageTokens = this.tokensPerMessage
-        ? this.tokensPerMessage(message)
-        : this.estimateTokens(message);
+      const messageTokens = await this.estimateTokens(message);
       
       if (totalTokens + messageTokens <= this.maxTokens) {
         // Insert at the beginning to maintain chronological order
@@ -140,21 +142,70 @@ export class TokenLimiter implements MessageProcessor {
     return result;
   }
   
-  private estimateTokens(message: CoreMessage): number {
-    // Simple approximation: ~4 chars per token
+  private async estimateTokens(message: CoreMessage): Promise<number> {
+    // Base cost for message metadata (role, etc.)
+    let tokenCount = 4; // Every message starts with role and potential metadata
+    
     if (typeof message.content === 'string') {
-      return Math.ceil(message.content.length / 4);
+      // Count tokens for string content
+      tokenCount += await this.countTokens(message.content);
     } else if (Array.isArray(message.content)) {
-      return Math.ceil(
-        message.content.reduce((sum, part) => {
-          if (part.type === 'text') {
-            return sum + (part as TextPart).text.length / 4;
+      // Calculate tokens for each content part
+      for (const part of message.content) {
+        // Base cost for each part's type and metadata
+        tokenCount += 3;
+        
+        if (part.type === 'text') {
+          tokenCount += await this.countTokens((part as TextPart).text);
+        } else if (part.type === 'tool-call') {
+          // Token cost for tool name
+          const toolCall = part as unknown as ToolCall & { args?: any };
+          tokenCount += await this.countTokens(toolCall.name);
+          
+          // Token cost for args if present
+          if (toolCall.args) {
+            tokenCount += await this.countTokens(
+              typeof toolCall.args === 'string' ? toolCall.args : JSON.stringify(toolCall.args)
+            );
           }
-          // Assume non-text content has a fixed token cost
-          return sum + 20;
-        }, 0)
-      );
+        } else if (part.type === 'tool-result') {
+          // Token cost for tool result
+          const toolResult = part as unknown as ToolResult & { result?: any };
+          if (toolResult.result) {
+            tokenCount += await this.countTokens(
+              typeof toolResult.result === 'string' ? toolResult.result : JSON.stringify(toolResult.result)
+            );
+          }
+        } else {
+          // Other content types (image, etc.)
+          tokenCount += 10; // Base estimate for unknown types
+        }
+      }
     }
-    return 0;
+    
+    return tokenCount;
   }
-} 
+
+  /**
+   * Counts tokens in text using MDocument's chunking functionality
+   */
+  private async countTokens(text: string): Promise<number> {
+    // For empty strings, return 0 tokens
+    if (!text || text.length === 0) {
+      return 0;
+    }
+
+    // Use MDocument to create a document
+    const doc = MDocument.fromText(text);
+    
+    // Chunk it with token strategy and size of 1 to get the exact token count
+    const chunks = await doc.chunk({
+      strategy: 'token',
+      encodingName: 'cl100k_base',
+      size: 1 // Setting chunk size to 1 token will tell us exactly how many tokens
+    });
+    
+    // The number of chunks is the token count
+    return chunks.length;
+  }
+}
