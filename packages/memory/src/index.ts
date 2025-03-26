@@ -281,13 +281,21 @@ export class Memory extends MastraMemory {
 
   protected mutateMessagesToHideWorkingMemory(messages: MessageType[]) {
     const workingMemoryRegex = /<working_memory>([^]*?)<\/working_memory>/g;
-    for (const message of messages) {
+
+    for (const [index, message] of messages.entries()) {
       if (typeof message?.content === `string`) {
         message.content = message.content.replace(workingMemoryRegex, ``).trim();
       } else if (Array.isArray(message?.content)) {
         for (const content of message.content) {
           if (content.type === `text`) {
             content.text = content.text.replace(workingMemoryRegex, ``).trim();
+          }
+
+          if (
+            (content.type === `tool-call` || content.type === `tool-result`) &&
+            content.toolName === `updateWorkingMemory`
+          ) {
+            delete messages[index];
           }
         }
       }
@@ -308,7 +316,7 @@ export class Memory extends MastraMemory {
     return null;
   }
 
-  protected async getWorkingMemory({ threadId }: { threadId: string }): Promise<string | null> {
+  public async getWorkingMemory({ threadId }: { threadId: string }): Promise<string | null> {
     if (!this.threadConfig.workingMemory?.enabled) return null;
 
     // Get thread from storage
