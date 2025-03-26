@@ -136,7 +136,9 @@
     "@mastra/voice-openai-realtime": "0.0.4",
     "@mastra/voice-playai": "0.1.8",
     "@mastra/voice-sarvam": "0.1.3",
-    "@mastra/voice-speechify": "0.1.8"
+    "@mastra/voice-speechify": "0.1.8",
+    "memory-with-mem0": "1.0.0",
+    "@mastra/mem0": "0.0.1-alpha.1"
   },
   "changesets": [
     "beige-feet-mate",
@@ -151,6 +153,7 @@
     "forty-sides-pick",
     "hot-flowers-care",
     "kind-chefs-buy",
+    "late-things-like",
     "light-cats-stand",
     "open-baboons-exist",
     "poor-bottles-fall",
