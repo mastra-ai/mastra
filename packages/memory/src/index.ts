@@ -321,7 +321,7 @@ export class Memory extends MastraMemory {
     return null;
   }
 
-  protected async getWorkingMemory({ threadId }: { threadId: string }): Promise<string | null> {
+  public async getWorkingMemory({ threadId }: { threadId: string }): Promise<string | null> {
     if (!this.threadConfig.workingMemory?.enabled) return null;
 
     // Get thread from storage

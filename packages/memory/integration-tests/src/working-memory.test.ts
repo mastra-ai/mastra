@@ -121,8 +121,6 @@ describe('Working Memory Tests', () => {
 
     await memory.saveMessages({ messages });
 
-    // Get the working memory
-    // @ts-expect-error
     const workingMemory = await memory.getWorkingMemory({ threadId: thread.id });
     expect(workingMemory).toContain('<first_name>Tyler</first_name>');
     expect(workingMemory).toContain('<location>San Francisco</location>');
@@ -142,7 +140,6 @@ describe('Working Memory Tests', () => {
   });
 
   it('should initialize with default working memory template', async () => {
-    // @ts-expect-error
     const workingMemory = await memory.getWorkingMemory({ threadId: thread.id });
     expect(workingMemory).toContain('<user>');
     expect(workingMemory).toContain('<first_name>');
@@ -204,7 +201,6 @@ describe('Working Memory Tests', () => {
       ],
     });
 
-    // @ts-expect-error
     const workingMemory = await memory.getWorkingMemory({ threadId: thread.id });
     expect(workingMemory).toContain('<first_name>John</first_name>');
     expect(workingMemory).toContain('<location>New York</location>');
@@ -270,7 +266,6 @@ describe('Working Memory Tests', () => {
     await disabledMemory.saveMessages({ messages });
 
     // Working memory should be null when disabled
-    // @ts-expect-error
     const workingMemory = await disabledMemory.getWorkingMemory({ threadId: thread.id });
     expect(workingMemory).toBeNull();
 
@@ -399,8 +394,6 @@ describe('Working Memory Tests', () => {
       resourceId,
     });
 
-    // Get working memory
-    // @ts-expect-error
     const workingMemory = await memory.getWorkingMemory({ threadId: thread.id });
     expect(workingMemory).toContain('<first_name>Tyler</first_name>');
     expect(workingMemory).toContain('<location>San Francisco</location>');
@@ -437,7 +430,6 @@ describe('Working Memory Tests', () => {
       resourceId,
     });
 
-    // @ts-expect-error
     let workingMemory = await memory.getWorkingMemory({ threadId: thread.id });
     expect(workingMemory).toContain('<first_name>Tyler</first_name>');
     expect(workingMemory?.toLowerCase()).toContain('<location>submarine under the sea</location>');
@@ -447,7 +439,6 @@ describe('Working Memory Tests', () => {
       resourceId,
     });
 
-    // @ts-expect-error
     workingMemory = await memory.getWorkingMemory({ threadId: thread.id });
     expect(workingMemory).toContain('<first_name>Jim</first_name>');
     expect(workingMemory?.toLowerCase()).toContain('<location>submarine under the sea</location>');
@@ -457,7 +448,6 @@ describe('Working Memory Tests', () => {
       resourceId,
     });
 
-    // @ts-expect-error
     workingMemory = await memory.getWorkingMemory({ threadId: thread.id });
     expect(workingMemory).toContain('<first_name>Jim</first_name>');
     expect(workingMemory).toContain('<location>Vancouver Island</location>');
@@ -489,7 +479,6 @@ describe('Working Memory Tests', () => {
     expect(memoryArgs).not.toContain('<location>Vancouver Island</location>');
     expect(memoryArgs).toEqual([]);
 
-    // @ts-expect-error
     workingMemory = await memory.getWorkingMemory({ threadId: thread.id });
     expect(workingMemory).toBe(`<user><first_name>Jim</first_name><location>Vancouver Island</location></user>`);
   });
