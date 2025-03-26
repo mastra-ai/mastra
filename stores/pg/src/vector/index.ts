@@ -234,10 +234,8 @@ export class PgVector extends MastraVector {
         );
 
         if (exists.rows.length > 0) {
-          // Table exists, just build index if needed
-          if (buildIndex) {
-            await this.buildIndex({ indexName, metric, indexConfig });
-          }
+          // Table exists so return early
+          console.log(`Table ${indexName} already exists, skipping creation`);
           return;
         }
 
@@ -315,6 +313,7 @@ export class PgVector extends MastraVector {
         );
 
         if (exists.rows.length > 0) {
+          console.log(`Index ${indexName}_vector_idx already exists, skipping creation`);
           this.indexCache.delete(indexName); // Still clear cache since we checked
           return;
         }
@@ -326,7 +325,10 @@ export class PgVector extends MastraVector {
       try {
         await client.query(`DROP INDEX IF EXISTS ${indexName}_vector_idx`);
 
-        if (indexConfig.type === 'flat') return;
+        if (indexConfig.type === 'flat') {
+          this.indexCache.delete(indexName);
+          return;
+        }
 
         const metricOp =
           metric === 'cosine' ? 'vector_cosine_ops' : metric === 'euclidean' ? 'vector_l2_ops' : 'vector_ip_ops';
