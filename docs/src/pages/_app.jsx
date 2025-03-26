@@ -3,7 +3,7 @@ import { Toaster } from "@/components/ui/toaster";
 import localFont from "next/font/local";
 import { PostHogProvider } from "posthog-js/react";
 import posthog from "posthog-js";
-import { Router, useRouter } from 'next/router'
+import { Router } from 'next/router'
 import { useEffect, useRef } from 'react'
 import "../global.css";
 
@@ -19,8 +19,6 @@ const commitMono = localFont({
 
 
 export default function Nextra({ Component, pageProps }) {
-
-  const router = useRouter()
   const oldUrlRef = useRef('')
 
    useEffect(() => {
