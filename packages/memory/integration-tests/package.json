@@ -3,14 +3,16 @@
   "private": true,
   "version": "0.1.0",
   "scripts": {
-    "test": "pnpm test:pg && pnpm test:upstash && pnpm test:libsql",
+    "test": "pnpm test:pg && pnpm test:upstash && pnpm test:libsql && pnpm test:streaming && pnpm test:working-memory",
     "pretest:pg": "docker compose up -d postgres && (for i in $(seq 1 30); do docker compose exec -T postgres pg_isready -U postgres && break || (sleep 1; [ $i -eq 30 ] && exit 1); done)",
     "test:pg": "vitest run ./src/with-pg-storage.test.ts",
     "posttest:pg": "docker compose down --volumes",
     "pretest:upstash": "docker compose up -d redis serverless-redis-http",
     "test:upstash": "vitest run ./src/with-upstash-storage.test.ts",
     "posttest:upstash": "docker compose down --volumes",
-    "test:libsql": "vitest run ./src/with-libsql-storage.test.ts"
+    "test:libsql": "vitest run ./src/with-libsql-storage.test.ts",
+    "test:streaming": "vitest run ./src/streaming-memory.test.ts",
+    "test:working-memory": "vitest run ./src/working-memory.test.ts"
   },
   "dependencies": {
     "@ai-sdk/openai": "^1.3.0",
@@ -24,11 +26,10 @@
     "zod": "^3.24.2"
   },
   "devDependencies": {
-    "@microsoft/api-extractor": "^7.52.1",
     "@testing-library/react": "^16.2.0",
     "@types/node": "^20.17.27",
-    "@vitest/coverage-v8": "^1.6.1",
     "ai": "^4.2.2",
+    "mastra": "workspace:*",
     "jsdom": "^26.0.0",
     "next": "^15.2.3",
     "react": "^19.0.0",

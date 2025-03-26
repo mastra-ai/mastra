@@ -1,6 +1,7 @@
 import { spawn } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { createServer } from 'node:net';
+import path from 'node:path';
 import { openai } from '@ai-sdk/openai';
 import { useChat } from '@ai-sdk/react';
 import type { AiMessageType } from '@mastra/core';
@@ -11,7 +12,7 @@ import { Memory } from '@mastra/memory';
 import { renderHook, act, waitFor } from '@testing-library/react';
 import type { Message } from 'ai';
 import { JSDOM } from 'jsdom';
-import { describe, expect, it, afterEach, beforeEach } from 'vitest';
+import { describe, expect, it, beforeAll, afterAll } from 'vitest';
 import { z } from 'zod';
 import { weatherAgent } from './mastra/agents/weather';
 
@@ -118,13 +119,22 @@ describe('Memory Streaming Tests', () => {
     const threadId = randomUUID();
     const resourceId = 'test-resource';
 
-    beforeEach(async () => {
+    beforeAll(async () => {
       port = await getAvailablePort();
 
-      mastraServer = spawn('pnpm', ['mastra', 'dev', '--port', port.toString()], {
-        stdio: 'pipe',
-        detached: true, // Run in a new process group so we can kill it and children
-      });
+      mastraServer = spawn(
+        'pnpm',
+        [
+          path.resolve(import.meta.dirname, `..`, `..`, `..`, `cli`, `dist`, `index.js`),
+          'dev',
+          '--port',
+          port.toString(),
+        ],
+        {
+          stdio: 'pipe',
+          detached: true, // Run in a new process group so we can kill it and children
+        },
+      );
 
       // Wait for server to be ready
       await new Promise<void>((resolve, reject) => {
@@ -144,7 +154,7 @@ describe('Memory Streaming Tests', () => {
       });
     });
 
-    afterEach(() => {
+    afterAll(() => {
       // Kill the server and its process group
       if (mastraServer?.pid) {
         try {
