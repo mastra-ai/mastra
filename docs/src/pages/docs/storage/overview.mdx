@@ -34,6 +34,24 @@ MastraStorage provides a unified interface for managing
 </div>
 
 Mastra provides different storage providers, but you can treat them as interchangeable. Eg, you could use libsql in development but postgres in production, and your code will work the same both ways.
+
+## Configuration
+
+Mastra can be configured with a default storage option:
+
+```typescript
+import { Mastra } from '@mastra/core/mastra';
+import { DefaultStorage } from '@mastra/core/storage/libsql';
+
+const mastra = new Mastra({
+  storage: new DefaultStorage({
+    config: {
+      url: "file:storage.db",
+    }
+  }),
+});
+```
+
 ## Data Schema
 
 <Tabs items={['Messages', 'Threads', 'Workflows', 'Eval Datasets', 'Traces']}>
@@ -45,7 +63,7 @@ Stores conversation messages and their metadata. Each message belongs to a threa
     {
       name: "id",
       type: "uuidv4",
-      description: "Unique identifier for the message (example: `550e8400-e29b-41d4-a716-446655440000`)",
+      description: "Unique identifier for the message (format: `xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx`)",
       constraints: [
         { type: "primaryKey" },
         { type: "nullable", value: false }
@@ -94,7 +112,7 @@ Groups related messages together and associates them with a resource. Contains m
     {
       name: "id",
       type: "uuidv4",
-      description: "Unique identifier for the thread (example: `550e8400-e29b-41d4-a716-446655440000`)",
+      description: "Unique identifier for the thread (format: `xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx`)",
       constraints: [
         { type: "primaryKey" },
         { type: "nullable", value: false }
@@ -149,7 +167,7 @@ When `suspend` is called on a workflow, its state is saved in the following form
     {
       name: "run_id",
       type: "uuidv4",
-      description: "Unique identifier for this workflow run (example: `550e8400-e29b-41d4-a716-446655440000`)",
+      description: "Unique identifier for the workflow execution. Used to track state across suspend/resume cycles (format: `xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx`)",
       constraints: [{ type: "nullable", value: false }]
     },
     {
@@ -203,25 +221,31 @@ Stores eval results from running metrics against agent outputs.
     {
       name: "result",
       type: "jsonb",
-      description: "Metric eval result data (score and details)",
+      description: "Eval result data that includes score and details. Example:",
+      example: {
+        score: 0.95,
+        details: {
+          reason: "Response accurately reflects source material",
+          citations: ["page 1", "page 3"]
+        }
+      },
       constraints: [{ type: "nullable", value: false }]
     },
     {
       name: "agent_name",
       type: "text",
-      description: "Name of the evaluated agent",
       constraints: [{ type: "nullable", value: false }]
     },
     {
       name: "metric_name",
       type: "text",
-      description: "Name of the eval metric",
+      description: "e.g Faithfulness, Hallucination, etc.",
       constraints: [{ type: "nullable", value: false }]
     },
     {
       name: "instructions",
       type: "text",
-      description: "Agent instructions",
+      description: "System prompt or instructions for the agent",
       constraints: [{ type: "nullable", value: false }]
     },
     {
@@ -232,14 +256,14 @@ Stores eval results from running metrics against agent outputs.
     },
     {
       name: "global_run_id",
-      type: "text",
-      description: "Identifier for the global eval run",
+      type: "uuidv4",
+      description: "Groups related evaluation runs (e.g. all unit tests in a CI run)",
       constraints: [{ type: "nullable", value: false }]
     },
     {
       name: "run_id",
-      type: "text",
-      description: "Identifier for this specific eval",
+      type: "uuidv4",
+      description: "Unique identifier for the run being evaluated (format: `xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx`)",
       constraints: [{ type: "nullable", value: false }]
     },
     {
@@ -339,23 +363,6 @@ Captures OpenTelemetry traces for monitoring and debugging.
 />
   </Tabs.Tab>
 </Tabs>
-
-## Configuration
-
-Mastra can be configured with a default storage option:
-
-```typescript
-import { Mastra } from '@mastra/core/mastra';
-import { DefaultStorage } from '@mastra/core/storage/libsql';
-
-const mastra = new Mastra({
-  storage: new DefaultStorage({
-    config: {
-      url: "file:storage.db",
-    }
-  }),
-});
-```
 
 ## Other Storage Providers
 If you want to use other storage, check out the following providers:
