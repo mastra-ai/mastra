@@ -23,6 +23,7 @@ import type { MastraMemory } from '../memory/memory';
 import type { MemoryConfig } from '../memory/types';
 import type { ToolActionWithDeps, VercelTool } from '../tools';
 import type { DependenciesType } from '../utils';
+import { validateDependencies } from '../utils';
 import type { CompositeVoice } from '../voice';
 
 export type { Message as AiMessageType } from 'ai';
@@ -35,6 +36,65 @@ export type MastraLanguageModel = LanguageModelV1;
 export type InstructionsBuilder<TSchemaDeps extends ZodSchema | undefined> = (context: {
   dependencies: DependenciesType<TSchemaDeps>;
 }) => Promise<string> | string;
+
+/**
+ * Handles resolution of agent instructions, supporting both static strings
+ * and dynamic functions that depend on runtime values.
+ *
+ * @template TSchemaDeps - Zod schema for dependencies validation.
+ */
+export class AgentInstructions<TSchemaDeps extends ZodSchema | undefined> {
+  private readonly instructions: string | InstructionsBuilder<TSchemaDeps>;
+  private readonly schema?: TSchemaDeps;
+
+  /**
+   * Creates a new AgentInstructions instance.
+   *
+   * @param instructions Static string or function that generates instructions.
+   * @param schema Optional Zod schema for validating dependencies.
+   */
+  constructor(instructions: string | InstructionsBuilder<TSchemaDeps>, schema?: TSchemaDeps) {
+    this.instructions = instructions;
+    this.schema = schema;
+  }
+
+  /**
+   * Resolves the instructions to a string, evaluating any dynamic instructions
+   * with the provided dependencies.
+   *
+   * @param dependencies Optional dependencies to use for dynamic instructions.
+   * @param instructions Optional string to override the stored instructions.
+   * @returns A promise resolving to the final instructions string.
+   * @throws Will throw an error if dependencies validation fails against the schema.
+   */
+  async resolve(dependencies?: DependenciesType<TSchemaDeps>, instructions?: string): Promise<string> {
+    if (instructions) {
+      return instructions;
+    }
+
+    if (typeof this.instructions === 'string') {
+      return this.instructions;
+    }
+
+    const emptyDeps = {} as DependenciesType<TSchemaDeps>;
+    const validatedDeps = this.schema
+      ? validateDependencies(this.schema, dependencies || emptyDeps)
+      : dependencies || emptyDeps;
+
+    return await this.instructions({ dependencies: validatedDeps });
+  }
+
+  /**
+   * String representation for when instructions are used in string contexts.
+   * Returns the static string directly or a placeholder for dynamic instructions.
+   */
+  toString(): string {
+    if (typeof this.instructions === 'string') {
+      return this.instructions;
+    }
+    return '[Dynamic Instructions]';
+  }
+}
 
 export interface AgentConfig<
   TSchemaDeps extends ZodSchema | undefined = undefined,
