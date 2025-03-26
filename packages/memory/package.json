@@ -1,6 +1,6 @@
 {
   "name": "@mastra/memory",
-  "version": "0.2.6-alpha.1",
+  "version": "0.2.6-alpha.3",
   "description": "",
   "type": "module",
   "main": "./dist/index.js",
@@ -51,6 +51,7 @@
   "license": "ISC",
   "dependencies": {
     "@mastra/core": "workspace:^",
+    "@mastra/rag": "workspace:^",
     "@upstash/redis": "^1.34.5",
     "ai": "^4.1.54",
     "pg": "^8.13.3",

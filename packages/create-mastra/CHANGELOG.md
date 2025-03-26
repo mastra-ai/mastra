@@ -1,5 +1,11 @@
 # create-mastra
 
+## 0.2.3-alpha.1
+
+### Patch Changes
+
+- 2134786: Fix traces navigation not working in playground
+
 ## 0.2.3-alpha.0
 
 ### Patch Changes

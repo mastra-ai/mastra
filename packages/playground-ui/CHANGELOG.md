@@ -1,5 +1,27 @@
 # @mastra/playground-ui
 
+## 3.0.0-alpha.3
+
+### Patch Changes
+
+- 2134786: Fix traces navigation not working in playground
+- Updated dependencies [160f88e]
+- Updated dependencies [b3b34f5]
+- Updated dependencies [a4686e8]
+  - @mastra/client-js@0.1.13-alpha.3
+  - @mastra/core@0.7.0-alpha.3
+
+## 3.0.0-alpha.2
+
+### Patch Changes
+
+- Updated dependencies [a838fde]
+- Updated dependencies [a8bd4cf]
+- Updated dependencies [7a3eeb0]
+- Updated dependencies [6530ad1]
+  - @mastra/core@0.7.0-alpha.2
+  - @mastra/client-js@0.1.13-alpha.2
+
 ## 3.0.0-alpha.1
 
 ### Patch Changes

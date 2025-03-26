@@ -1,5 +1,21 @@
 # @mastra/core
 
+## 0.7.0-alpha.3
+
+### Patch Changes
+
+- b3b34f5: Fix agent generate,stream returnType with experimental_output
+- a4686e8: Realtime event queue
+
+## 0.7.0-alpha.2
+
+### Patch Changes
+
+- a838fde: Update memory.ts
+- a8bd4cf: Fixed JSON Schema generation for null types to prevent duplicate null entries in type arrays
+- 7a3eeb0: Fixed a memory issue when using useChat where new messages were formatted as ui messages, were mixed with stored core messages in memory, and a mixed list was sent to AI SDK, causing it to error
+- 6530ad1: Correct agent onFinish interface
+
 ## 0.7.0-alpha.1
 
 ### Minor Changes

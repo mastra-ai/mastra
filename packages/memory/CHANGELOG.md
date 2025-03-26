@@ -1,5 +1,25 @@
 # @mastra/memory
 
+## 0.2.6-alpha.3
+
+### Patch Changes
+
+- 05095e9: Fixed an issue where very long messages would cause Memory semantic recall to throw errors
+- Updated dependencies [b3b34f5]
+- Updated dependencies [a4686e8]
+  - @mastra/core@0.7.0-alpha.3
+  - @mastra/rag@0.1.14-alpha.3
+
+## 0.2.6-alpha.2
+
+### Patch Changes
+
+- Updated dependencies [a838fde]
+- Updated dependencies [a8bd4cf]
+- Updated dependencies [7a3eeb0]
+- Updated dependencies [6530ad1]
+  - @mastra/core@0.7.0-alpha.2
+
 ## 0.2.6-alpha.1
 
 ### Patch Changes

@@ -1,6 +1,6 @@
 {
   "name": "@mastra/speech-murf",
-  "version": "0.1.14-alpha.1",
+  "version": "0.1.14-alpha.3",
   "description": "Mastra Murf speech integration (DEPRECATED - use @mastra/voice-murf instead)",
   "type": "module",
   "files": [
@@ -33,7 +33,7 @@
   },
   "devDependencies": {
     "@internal/lint": "workspace:*",
-    "@microsoft/api-extractor": "^7.52.1",
+    "@microsoft/api-extractor": "^7.52.2",
     "@types/node": "^20.17.27",
     "eslint": "^9.23.0",
     "tsup": "^8.4.0",

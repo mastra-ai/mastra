@@ -1,5 +1,23 @@
 # @mastra/voice-elevenlabs
 
+## 0.1.9-alpha.3
+
+### Patch Changes
+
+- Updated dependencies [b3b34f5]
+- Updated dependencies [a4686e8]
+  - @mastra/core@0.7.0-alpha.3
+
+## 0.1.9-alpha.2
+
+### Patch Changes
+
+- Updated dependencies [a838fde]
+- Updated dependencies [a8bd4cf]
+- Updated dependencies [7a3eeb0]
+- Updated dependencies [6530ad1]
+  - @mastra/core@0.7.0-alpha.2
+
 ## 0.1.9-alpha.1
 
 ### Patch Changes
