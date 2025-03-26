@@ -22,6 +22,7 @@
     "next-sitemap": "^4.2.3",
     "nextra": "^3.0.2",
     "nextra-theme-docs": "^3.0.2",
+    "posthog-js": "^1.232.7",
     "react": "^18",
     "react-dom": "^18",
     "react-hook-form": "^7.54.2",
