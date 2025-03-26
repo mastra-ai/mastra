@@ -40,7 +40,7 @@ export function MastraRuntimeProvider({
       (hasNewInitialMessages && currentThreadId === threadId)
     ) {
       if (initialMessages && threadId && memory) {
-        const newMessages: ThreadMessageLike[] = initialMessages
+        const convertedMessages: ThreadMessageLike[] = initialMessages
           ?.map((message: any) => {
             if (message?.toolInvocations?.length > 0) {
               return {
@@ -57,7 +57,7 @@ export function MastraRuntimeProvider({
             return message;
           })
           .filter(Boolean);
-        setMessages(newMessages);
+        setMessages(convertedMessages);
         setCurrentThreadId(threadId);
       }
     }
