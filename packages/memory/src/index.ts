@@ -7,13 +7,56 @@ import { MDocument } from '@mastra/rag';
 import { embedMany } from 'ai';
 import { updateWorkingMemoryTool } from './tools/working-memory';
 
+// Export all processors
+export * from './processors';
+
+/**
+ * Interface for message processors that can filter or transform messages
+ * before they're sent to the LLM.
+ */
+export interface MessageProcessor {
+  /**
+   * Process a list of messages and return a filtered or transformed list.
+   * @param messages The messages to process
+   * @returns The processed messages
+   */
+  process(messages: CoreMessage[]): CoreMessage[] | Promise<CoreMessage[]>;
+}
+
+/**
+ * Extended memory configuration that includes message processors.
+ */
+export interface ExtendedMemoryConfig extends MemoryConfig {
+  /**
+   * List of message processors to apply to messages before they're sent to the LLM.
+   */
+  processors?: MessageProcessor[];
+}
+
+/**
+ * Extended shared memory configuration that includes message processors.
+ */
+export interface ExtendedSharedMemoryConfig extends SharedMemoryConfig {
+  /**
+   * Memory configuration options including processors.
+   */
+  options?: ExtendedMemoryConfig;
+}
+
 /**
  * Concrete implementation of MastraMemory that adds support for thread configuration
  * and message injection.
  */
 export class Memory extends MastraMemory {
-  constructor(config: SharedMemoryConfig = {}) {
+  private processors: MessageProcessor[] = [];
+
+  constructor(config: ExtendedSharedMemoryConfig = {}) {
     super({ name: 'Memory', ...config });
+
+    // Initialize processors if provided
+    if (config.options?.processors) {
+      this.processors = config.options.processors;
+    }
 
     const mergedConfig = this.getMergedThreadConfig({
       workingMemory: config.options?.workingMemory || {
@@ -36,12 +79,52 @@ export class Memory extends MastraMemory {
     }
   }
 
+  /**
+   * Apply all configured message processors to a list of messages.
+   * @param messages The messages to process
+   * @returns The processed messages
+   */
+  private async applyProcessors(messages: CoreMessage[]): Promise<CoreMessage[]> {
+    let processedMessages = [...messages];
+    
+    for (const processor of this.processors) {
+      processedMessages = await processor.process(processedMessages);
+    }
+    
+    return processedMessages;
+  }
+
+  /**
+   * Apply processors specified in the query options to messages.
+   * @param messages The messages to process
+   * @param processors Optional processors to apply for this specific query
+   * @returns The processed messages
+   */
+  private async applyQueryProcessors(
+    messages: CoreMessage[],
+    processors?: MessageProcessor[]
+  ): Promise<CoreMessage[]> {
+    if (!processors || processors.length === 0) {
+      return messages;
+    }
+    
+    let processedMessages = [...messages];
+    
+    for (const processor of processors) {
+      processedMessages = await processor.process(processedMessages);
+    }
+    
+    return processedMessages;
+  }
+
   async query({
     threadId,
     resourceId,
     selectBy,
     threadConfig,
-  }: StorageGetMessagesArg): Promise<{ messages: CoreMessage[]; uiMessages: AiMessageType[] }> {
+  }: StorageGetMessagesArg & { 
+    threadConfig?: ExtendedMemoryConfig;
+  }): Promise<{ messages: CoreMessage[]; uiMessages: AiMessageType[] }> {
     if (resourceId) await this.validateThreadIsOwnedByResource(threadId, resourceId);
 
     const vectorResults: {
@@ -57,7 +140,7 @@ export class Memory extends MastraMemory {
       threadConfig,
     });
 
-    const config = this.getMergedThreadConfig(threadConfig || {});
+    const config = this.getMergedThreadConfig(threadConfig || {}) as ExtendedMemoryConfig;
 
     const vectorConfig =
       typeof config?.semanticRecall === `boolean`
@@ -118,7 +201,15 @@ export class Memory extends MastraMemory {
     const messages = this.parseMessages(rawMessages);
     const uiMessages = this.convertToUIMessages(rawMessages);
 
-    return { messages, uiMessages };
+    // Apply global processors
+    let processedMessages = await this.applyProcessors(messages);
+    
+    // Apply query-specific processors if provided
+    if (config.processors) {
+      processedMessages = await this.applyQueryProcessors(processedMessages, config.processors);
+    }
+
+    return { messages: processedMessages, uiMessages };
   }
 
   async rememberMessages({
@@ -130,7 +221,7 @@ export class Memory extends MastraMemory {
     threadId: string;
     resourceId?: string;
     vectorMessageSearch?: string;
-    config?: MemoryConfig;
+    config?: ExtendedMemoryConfig;
   }): Promise<{
     threadId: string;
     messages: CoreMessage[];
@@ -138,7 +229,7 @@ export class Memory extends MastraMemory {
   }> {
     if (resourceId) await this.validateThreadIsOwnedByResource(threadId, resourceId);
 
-    const threadConfig = this.getMergedThreadConfig(config || {});
+    const threadConfig = this.getMergedThreadConfig(config || {}) as ExtendedMemoryConfig;
 
     if (!threadConfig.lastMessages && !threadConfig.semanticRecall) {
       return {
@@ -148,7 +239,7 @@ export class Memory extends MastraMemory {
       };
     }
 
-    const messages = await this.query({
+    const messagesResult = await this.query({
       threadId,
       selectBy: {
         last: threadConfig.lastMessages,
@@ -157,11 +248,11 @@ export class Memory extends MastraMemory {
       threadConfig: config,
     });
 
-    this.logger.debug(`Remembered message history includes ${messages.messages.length} messages.`);
+    this.logger.debug(`Remembered message history includes ${messagesResult.messages.length} messages.`);
     return {
       threadId,
-      messages: messages.messages,
-      uiMessages: messages.uiMessages,
+      messages: messagesResult.messages,
+      uiMessages: messagesResult.uiMessages,
     };
   }
 
