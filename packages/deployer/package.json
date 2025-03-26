@@ -1,6 +1,6 @@
 {
   "name": "@mastra/deployer",
-  "version": "0.2.4",
+  "version": "0.2.5-alpha.2",
   "description": "",
   "type": "module",
   "files": [
@@ -112,9 +112,9 @@
     "@types/babel__core": "^7.20.5",
     "@types/babel__helper-module-imports": "^7.18.3",
     "@types/fs-extra": "^11.0.4",
-    "@types/node": "^22.13.10",
+    "@types/node": "^20.17.27",
     "concurrently": "^9.1.2",
-    "eslint": "^9.22.0",
+    "eslint": "^9.23.0",
     "hono-openapi": "^0.4.6",
     "rollup-plugin-visualizer": "^5.14.0",
     "superjson": "^2.2.2",

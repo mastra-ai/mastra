@@ -1,5 +1,33 @@
 # @mastra/client-js
 
+## 0.1.13-alpha.2
+
+### Patch Changes
+
+- Updated dependencies [a838fde]
+- Updated dependencies [a8bd4cf]
+- Updated dependencies [7a3eeb0]
+- Updated dependencies [6530ad1]
+  - @mastra/core@0.7.0-alpha.2
+
+## 0.1.13-alpha.1
+
+### Patch Changes
+
+- Updated dependencies [0b54522]
+- Updated dependencies [1af25d5]
+- Updated dependencies [27439ad]
+  - @mastra/core@0.7.0-alpha.1
+
+## 0.1.13-alpha.0
+
+### Patch Changes
+
+- 0206617: Fix mastaClient cors error, remove default req headers
+- 3811029: Add identifying header
+- Updated dependencies [b4fbc59]
+  - @mastra/core@0.6.5-alpha.0
+
 ## 0.1.12
 
 ### Patch Changes

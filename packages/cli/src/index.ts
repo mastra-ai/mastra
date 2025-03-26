@@ -1,7 +1,7 @@
 #! /usr/bin/env node
 import { Command } from 'commander';
 
-import { PosthogAnalytics } from './analytics/index';
+import { PosthogAnalytics, type CLI_ORIGIN } from './analytics/index';
 import { build } from './commands/build/build';
 import { create } from './commands/create/create';
 import { deploy } from './commands/deploy/index';
@@ -10,6 +10,7 @@ import { init } from './commands/init/init';
 import { checkAndInstallCoreDeps, checkPkgJson, interactivePrompt } from './commands/init/utils';
 import { DepsService } from './services/service.deps';
 import { logger } from './utils/logger';
+import { config } from 'dotenv';
 
 const depsService = new DepsService();
 const version = await depsService.getPackageVersion();
@@ -22,6 +23,8 @@ const analytics = new PosthogAnalytics({
 
 const program = new Command();
 
+const origin = process.env.MASTRA_ANALYTICS_ORIGIN as CLI_ORIGIN;
+
 program
   .version(`${version}`, '-v, --version')
   .description(`Mastra CLI ${version}`)
@@ -29,6 +32,7 @@ program
     try {
       analytics.trackCommand({
         command: 'version',
+        origin,
       });
       console.log(`Mastra CLI: ${version}`);
     } catch {
@@ -73,6 +77,7 @@ program
           projectName: args.projectName,
         });
       },
+      origin,
     });
   });
 
@@ -122,6 +127,7 @@ program
         });
         return;
       },
+      origin,
     });
   });
 
@@ -135,6 +141,7 @@ program
   .action(args => {
     analytics.trackCommand({
       command: 'dev',
+      origin,
     });
     dev({
       port: args?.port ? parseInt(args.port) : 4111,
@@ -157,6 +164,7 @@ program
       execution: async () => {
         await build({ dir: args.dir });
       },
+      origin,
     });
   });
 
@@ -165,12 +173,14 @@ program
   .description('Deploy your Mastra project')
   .option('-d, --dir <path>', 'Path to directory')
   .action(async args => {
+    config({ path: ['.env', '.env.production'] });
     await analytics.trackCommandExecution({
       command: 'mastra deploy',
       args,
       execution: async () => {
         await deploy({ dir: args.dir });
       },
+      origin,
     });
   });
 

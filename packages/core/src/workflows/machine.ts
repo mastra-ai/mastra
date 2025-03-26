@@ -46,6 +46,7 @@ import type { WorkflowInstance } from './workflow-instance';
 export class Machine<
   TSteps extends Step<any, any, any>[] = any,
   TTriggerSchema extends z.ZodObject<any> = any,
+  TResultSchema extends z.ZodObject<any> = any,
 > extends EventEmitter {
   logger: Logger;
   #mastra?: Mastra;
@@ -116,7 +117,7 @@ export class Machine<
     input?: any;
     snapshot?: Snapshot<any>;
     resumeData?: any;
-  } = {}): Promise<Pick<WorkflowRunResult<TTriggerSchema, TSteps>, 'results' | 'activePaths'>> {
+  } = {}): Promise<Pick<WorkflowRunResult<TTriggerSchema, TSteps, TResultSchema>, 'results' | 'activePaths'>> {
     if (snapshot) {
       // First, let's log the incoming snapshot for debugging
       this.logger.debug(`Workflow snapshot received`, { runId: this.#runId, snapshot });
@@ -136,7 +137,13 @@ export class Machine<
     const actorSnapshot = snapshot
       ? {
           ...snapshot,
-          context: { ...input, inputData: { ...((snapshot as any)?.context?.inputData || {}), ...resumeData } },
+          context: {
+            ...input,
+            inputData: { ...((snapshot as any)?.context?.inputData || {}), ...resumeData },
+            // ts-ignore is needed here because our snapshot types don't really match xstate snapshot types right now. We should fix this in general.
+            // @ts-ignore
+            isResume: { runId: snapshot?.context?.steps[stepId.split('.')?.[0]]?.output?.runId || this.#runId, stepId },
+          },
         }
       : undefined;
 
@@ -373,16 +380,26 @@ export class Machine<
                 return undefined;
               }) satisfies WorkflowContext<TTriggerSchema>['getStepResult'],
             } as WorkflowContext,
-            suspend: async (payload?: any) => {
+            emit: (event: string, ...args: any[]) => {
+              // console.log(this.#workflowInstance.name, 'emitting', event, ...args);
+              this.emit(event, ...args);
+            },
+            suspend: async (payload?: any, softSuspend?: any) => {
               await this.#workflowInstance.suspend(stepNode.step.id, this);
               if (this.#actor) {
                 // Update context with current result
                 context.steps[stepNode.step.id] = {
                   status: 'suspended',
                   suspendPayload: payload,
+                  output: softSuspend,
                 };
                 this.logger.debug(`Sending SUSPENDED event for step ${stepNode.step.id}`);
-                this.#actor?.send({ type: 'SUSPENDED', suspendPayload: payload, stepId: stepNode.step.id });
+                this.#actor?.send({
+                  type: 'SUSPENDED',
+                  suspendPayload: payload,
+                  stepId: stepNode.step.id,
+                  softSuspend,
+                });
               } else {
                 this.logger.debug(`Actor not available for step ${stepNode.step.id}`);
               }
@@ -649,6 +666,16 @@ export class Machine<
                   assign({
                     steps: ({ context, event }) => {
                       if (event.output.type !== 'SUSPENDED') return context.steps;
+                      if (event.output.softSuspend) {
+                        return {
+                          ...context.steps,
+                          [stepNode.step.id]: {
+                            status: 'suspended',
+                            ...(context.steps?.[stepNode.step.id] || {}),
+                            output: event.output.softSuspend,
+                          },
+                        };
+                      }
                       return {
                         ...context.steps,
                         [stepNode.step.id]: {
@@ -826,6 +853,7 @@ export class Machine<
                     ...(context?.steps?.[stepNode.step.id] || {}),
                     status: 'suspended',
                     suspendPayload: event.type === 'SUSPENDED' ? event.suspendPayload : undefined,
+                    output: event.type === 'SUSPENDED' ? event.softSuspend : undefined,
                   },
                 };
               },
@@ -850,6 +878,7 @@ export class Machine<
                       [stepNode.step.id]: {
                         status: 'suspended',
                         suspendPayload: event.type === 'SUSPENDED' ? event.suspendPayload : undefined,
+                        output: event.type === 'SUSPENDED' ? event.softSuspend : undefined,
                       },
                     };
                   },

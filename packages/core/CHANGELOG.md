@@ -1,5 +1,31 @@
 # @mastra/core
 
+## 0.7.0-alpha.2
+
+### Patch Changes
+
+- a838fde: Update memory.ts
+- a8bd4cf: Fixed JSON Schema generation for null types to prevent duplicate null entries in type arrays
+- 7a3eeb0: Fixed a memory issue when using useChat where new messages were formatted as ui messages, were mixed with stored core messages in memory, and a mixed list was sent to AI SDK, causing it to error
+- 6530ad1: Correct agent onFinish interface
+
+## 0.7.0-alpha.1
+
+### Minor Changes
+
+- 1af25d5: Added nested workflows API
+
+### Patch Changes
+
+- 0b54522: AgentNetwork logs
+- 27439ad: Updated the jsonSchemaPropertiesToTSTypes function to properly handle JSON Schema definitions where type can be an array of strings. Previously, the function only handled single string types, but according to the JSON Schema specification, type can be an array of possible types.
+
+## 0.6.5-alpha.0
+
+### Patch Changes
+
+- b4fbc59: Fixed an issue where sending CoreMessages to AI SDK would result in "Unsupported role: tool" errors
+
 ## 0.6.4
 
 ### Patch Changes

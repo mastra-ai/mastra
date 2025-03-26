@@ -46,8 +46,8 @@ export const useTraces = (componentName: string, baseUrl: string, isWorkflow: bo
     toast.error(error.message);
   }, []);
 
-  const shouldContinue = useCallback((result: RefinedTrace[]) => {
-    return result.length > 0;
+  const shouldContinue = useCallback(() => {
+    return true;
   }, []);
 
   const { firstCallLoading, error } = usePolling<RefinedTrace[], { message: string }>({

@@ -1,6 +1,6 @@
 {
   "name": "@mastra/voice-speechify",
-  "version": "0.1.8",
+  "version": "0.1.9-alpha.2",
   "description": "Mastra Speechify voice integration",
   "type": "module",
   "files": [
@@ -35,8 +35,8 @@
   "devDependencies": {
     "@internal/lint": "workspace:*",
     "@microsoft/api-extractor": "^7.52.1",
-    "@types/node": "^22.13.10",
-    "eslint": "^9.22.0",
+    "@types/node": "^20.17.27",
+    "eslint": "^9.23.0",
     "tsup": "^8.4.0",
     "typescript": "^5.8.2",
     "vitest": "^2.1.9"

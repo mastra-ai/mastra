@@ -1,5 +1,37 @@
 # @mastra/deployer-vercel
 
+## 0.1.14-alpha.2
+
+### Patch Changes
+
+- Updated dependencies [a838fde]
+- Updated dependencies [a8bd4cf]
+- Updated dependencies [7a3eeb0]
+- Updated dependencies [6530ad1]
+  - @mastra/core@0.7.0-alpha.2
+  - @mastra/deployer@0.2.5-alpha.2
+
+## 0.1.14-alpha.1
+
+### Patch Changes
+
+- 0b496ff: Load env vars on mastra deploy
+- Updated dependencies [cdc0498]
+- Updated dependencies [0b54522]
+- Updated dependencies [1af25d5]
+- Updated dependencies [0b496ff]
+- Updated dependencies [27439ad]
+  - @mastra/deployer@0.2.5-alpha.1
+  - @mastra/core@0.7.0-alpha.1
+
+## 0.1.14-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [b4fbc59]
+  - @mastra/core@0.6.5-alpha.0
+  - @mastra/deployer@0.2.5-alpha.0
+
 ## 0.1.13
 
 ### Patch Changes
