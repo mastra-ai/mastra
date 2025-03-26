@@ -1,5 +1,12 @@
 # @mastra/core
 
+## 0.7.0-alpha.3
+
+### Patch Changes
+
+- b3b34f5: Fix agent generate,stream returnType with experimental_output
+- a4686e8: Realtime event queue
+
 ## 0.7.0-alpha.2
 
 ### Patch Changes

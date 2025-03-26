@@ -1,5 +1,14 @@
 # @mastra/client-js
 
+## 0.1.13-alpha.3
+
+### Patch Changes
+
+- 160f88e: Leverage aiSDK processDataStream util in MastraClient
+- Updated dependencies [b3b34f5]
+- Updated dependencies [a4686e8]
+  - @mastra/core@0.7.0-alpha.3
+
 ## 0.1.13-alpha.2
 
 ### Patch Changes
