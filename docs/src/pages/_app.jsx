@@ -14,6 +14,32 @@ const inter = Inter({ subsets: ["latin"], variable: "--inter" });
 import "../global.css";
 
 export default function Nextra({ Component, pageProps }) {
+  const oldUrlRef = useRef("");
+
+  useEffect(() => {
+    posthog.init(process.env.NEXT_PUBLIC_POSTHOG_KEY, {
+      api_host:
+        process.env.NEXT_PUBLIC_POSTHOG_HOST || "https://us.i.posthog.com",
+      // Enable debug mode in development
+      loaded: (posthog) => {
+        if (process.env.NODE_ENV === "development") posthog.debug();
+      },
+    });
+
+    const handleRouteChange = () => posthog?.capture("$pageview");
+    const handleRouteChangeStart = () =>
+      posthog?.capture("$pageleave", {
+        $current_url: oldUrlRef.current,
+      });
+
+    Router.events.on("routeChangeComplete", handleRouteChange);
+    Router.events.on("routeChangeStart", handleRouteChangeStart);
+
+    return () => {
+      Router.events.off("routeChangeComplete", handleRouteChange);
+      Router.events.off("routeChangeStart", handleRouteChangeStart);
+    };
+  }, []);
   return (
     <>
       <style jsx global>{`
