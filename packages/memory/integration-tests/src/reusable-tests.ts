@@ -378,5 +378,34 @@ export function getResuableTests(memory: Memory) {
         expect(result.messages[0].content).toBe('Test message');
       });
     });
+    describe('Concurrent Operations', () => {
+      it('should handle concurrent message saves with embeddings', async () => {
+        const thread = await memory.saveThread({
+          thread: createTestThread('Concurrent Test Thread'),
+        });
+
+        // Create multiple batches of messages with embeddings
+        const messagesBatches = Array(5)
+          .fill(null)
+          .map(() => [
+            createTestMessage(thread.id, 'Test message with embedding'),
+            createTestMessage(thread.id, 'Another test message with embedding'),
+          ]);
+
+        // Try to save all batches concurrently
+        const promises = messagesBatches.map(messages => memory.saveMessages({ messages }));
+
+        // Should handle concurrent index creation gracefully
+        await expect(Promise.all(promises)).resolves.not.toThrow();
+
+        // Verify all messages were saved
+        const result = await memory.rememberMessages({
+          threadId: thread.id,
+          resourceId,
+          config: { lastMessages: 20 },
+        });
+        expect(result.messages).toHaveLength(messagesBatches.flat().length);
+      });
+    });
   });
 }
