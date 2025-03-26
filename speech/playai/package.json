@@ -1,6 +1,6 @@
 {
   "name": "@mastra/speech-playai",
-  "version": "0.1.13-alpha.1",
+  "version": "0.1.13-alpha.2",
   "description": "Mastra PlayAI speech integration (DEPRECATED - use @mastra/voice-playai instead)",
   "type": "module",
   "main": "dist/index.js",
@@ -29,7 +29,7 @@
   },
   "devDependencies": {
     "@internal/lint": "workspace:*",
-    "@microsoft/api-extractor": "^7.52.1",
+    "@microsoft/api-extractor": "^7.52.2",
     "@types/node": "^20.17.27",
     "eslint": "^9.23.0",
     "tsup": "^8.4.0",

@@ -1,6 +1,6 @@
 {
   "name": "@mastra/speech-openai",
-  "version": "0.1.14-alpha.1",
+  "version": "0.1.14-alpha.2",
   "description": "Mastra OpenAI speech integration  (deprecated, please use @mastra/voice-openai instead)",
   "type": "module",
   "main": "dist/index.js",
@@ -25,12 +25,12 @@
   },
   "dependencies": {
     "@mastra/core": "workspace:^",
-    "openai": "^4.86.2",
+    "openai": "^4.89.0",
     "zod": "^3.24.2"
   },
   "devDependencies": {
     "@internal/lint": "workspace:*",
-    "@microsoft/api-extractor": "^7.52.1",
+    "@microsoft/api-extractor": "^7.52.2",
     "@types/node": "^20.17.27",
     "eslint": "^9.23.0",
     "tsup": "^8.4.0",

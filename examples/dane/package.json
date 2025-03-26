@@ -1,6 +1,6 @@
 {
   "name": "@mastra/dane",
-  "version": "0.0.11-alpha.1",
+  "version": "0.0.11-alpha.2",
   "main": "dist/index.js",
   "type": "module",
   "files": [
@@ -36,7 +36,6 @@
     "@mastra/mcp": "workspace:*",
     "@mastra/memory": "workspace:*",
     "@mastra/rag": "workspace:*",
-    "@mastra/stabilityai": "workspace:*",
     "@mastra/upstash": "workspace:*",
     "boxen": "^8.0.1",
     "chalk": "^5.4.1",
