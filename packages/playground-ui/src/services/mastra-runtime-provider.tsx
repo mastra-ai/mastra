@@ -49,6 +49,7 @@ export function MastraRuntimeProvider({
   const mastra = new MastraClient({
     baseUrl: baseUrl || '',
   });
+  const agent = mastra.getAgent(agentId);
 
   const onNew = async (message: AppendMessage) => {
     if (message.content[0]?.type !== 'text') throw new Error('Only text messages are supported');
@@ -58,7 +59,6 @@ export function MastraRuntimeProvider({
     setIsRunning(true);
 
     try {
-      const agent = mastra.getAgent(agentId);
       const response = await agent.stream({
         messages: [
           {
@@ -70,74 +70,137 @@ export function MastraRuntimeProvider({
         ...(memory ? { threadId, resourceId: agentId } : {}),
       });
 
-      const reader = response.body?.getReader();
-      const decoder = new TextDecoder();
+      if (!response.body) {
+        throw new Error('No response body');
+      }
 
-      let buffer = '';
-      let assistantMessage = '';
+      const parts = [];
+      let content = '';
+      let currentTextPart: { type: 'text'; text: string } | null = null;
+
       let assistantMessageAdded = false;
-      let errorMessage = '';
 
-      if (!reader) {
-        throw new Error('No reader found');
+      function updater() {
+        setMessages(currentConversation => {
+          const message: ThreadMessageLike = {
+            role: 'assistant',
+            content: [{ type: 'text', text: content }],
+          };
+
+          if (!assistantMessageAdded) {
+            assistantMessageAdded = true;
+            return [...currentConversation, message];
+          }
+          return [...currentConversation.slice(0, -1), message];
+        });
       }
 
-      try {
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
-
-          const chunk = decoder.decode(value);
-          buffer += chunk;
-          const matches = buffer.matchAll(/0:"((?:\\.|(?!").)*?)"/g);
-          const errorMatches = buffer.matchAll(/3:"((?:\\.|(?!").)*?)"/g);
-
-          if (errorMatches) {
-            for (const match of errorMatches) {
-              const content = match[1];
-              errorMessage += content;
-              setMessages(currentConversation => [
-                ...currentConversation.slice(0, -1),
-                {
-                  role: 'assistant',
-                  content: [{ type: 'text', text: errorMessage }],
-                  isError: true,
-                },
-              ]);
-            }
+      await response.processDataStream({
+        onTextPart(value) {
+          if (currentTextPart == null) {
+            currentTextPart = {
+              type: 'text',
+              text: value,
+            };
+            parts.push(currentTextPart);
+          } else {
+            currentTextPart.text += value;
           }
+          content += value;
+          updater();
+        },
+        async onToolCallPart(value) {
+          console.log('Tool call received:', value);
 
-          for (const match of matches) {
-            const content = match[1].replace(/\\"/g, '"').replace(/\\n/g, '\n');
-            assistantMessage += content;
-            setMessages(currentConversation => {
-              const message: ThreadMessageLike = {
-                role: 'assistant',
-                content: [{ type: 'text', text: assistantMessage }],
+          // Update the messages state
+          setMessages(currentConversation => {
+            // Get the last message (should be the assistant's message)
+            const lastMessage = currentConversation[currentConversation.length - 1];
+
+            // Only process if the last message is from the assistant
+            if (lastMessage && lastMessage.role === 'assistant') {
+              // Create a new message with the tool call part
+              const updatedMessage: ThreadMessageLike = {
+                ...lastMessage,
+                content: Array.isArray(lastMessage.content)
+                  ? [
+                      ...lastMessage.content,
+                      {
+                        type: 'tool-call',
+                        toolCallId: value.toolCallId,
+                        toolName: value.toolName,
+                        args: value.args,
+                      },
+                    ]
+                  : [
+                      ...(typeof lastMessage.content === 'string' ? [{ type: 'text', text: lastMessage.content }] : []),
+                      {
+                        type: 'tool-call',
+                        toolCallId: value.toolCallId,
+                        toolName: value.toolName,
+                        args: value.args,
+                      },
+                    ],
               };
-              const lastMessage = currentConversation[currentConversation.length - 1];
-              if (lastMessage.id) {
-                // messages not coming from the db shouldn't have id yet,
-                // and any from the db shouldn't be getting updated in the stream
-                return currentConversation;
-              }
 
-              if (!assistantMessageAdded) {
-                assistantMessageAdded = true;
-                return [...currentConversation, message];
-              }
-              return [...currentConversation.slice(0, -1), message];
-            });
-          }
-          buffer = '';
-        }
-      } finally {
-        reader.releaseLock();
-        setIsRunning(false);
-        setTimeout(() => {
-          refreshThreadList?.();
-        }, 500);
-      }
+              // Replace the last message with the updated one
+              return [...currentConversation.slice(0, -1), updatedMessage];
+            }
+
+            // If there's no assistant message yet, create one
+            const newMessage: ThreadMessageLike = {
+              role: 'assistant',
+              content: [
+                { type: 'text', text: content },
+                {
+                  type: 'tool-call',
+                  toolCallId: value.toolCallId,
+                  toolName: value.toolName,
+                  args: value.args,
+                },
+              ],
+            };
+            return [...currentConversation, newMessage];
+          });
+        },
+        async onToolResultPart(value: any) {
+          console.log('Tool call result received:', value);
+
+          // Update the messages state
+          setMessages(currentConversation => {
+            // Get the last message (should be the assistant's message)
+            const lastMessage = currentConversation[currentConversation.length - 1];
+
+            // Only process if the last message is from the assistant and has content array
+            if (lastMessage && lastMessage.role === 'assistant' && Array.isArray(lastMessage.content)) {
+              // Find the tool call content part that this result belongs to
+              const updatedContent = lastMessage.content.map(part => {
+                if (typeof part === 'object' && part.type === 'tool-call' && part.toolCallId === value.toolCallId) {
+                  return {
+                    ...part,
+                    result: value.result,
+                  };
+                }
+                return part;
+              });
+
+              // Create a new message with the updated content
+              const updatedMessage: ThreadMessageLike = {
+                ...lastMessage,
+                content: updatedContent,
+              };
+              // Replace the last message with the updated one
+              return [...currentConversation.slice(0, -1), updatedMessage];
+            }
+            return currentConversation;
+          });
+        },
+        onErrorPart(error) {
+          throw new Error(error);
+        },
+      });
+
+      setIsRunning(false);
     } catch (error) {
       console.error('Error occurred in MastraRuntimeProvider', error);
       setIsRunning(false);
