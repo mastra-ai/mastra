@@ -44,8 +44,8 @@ Stores conversation messages and their metadata. Each message belongs to a threa
   columns={[
     {
       name: "id",
-      type: "text",
-      description: "UUIDv4 (example: `550e8400-e29b-41d4-a716-446655440000`)",
+      type: "uuidv4",
+      description: "Unique identifier for the message (example: `550e8400-e29b-41d4-a716-446655440000`)",
       constraints: [
         { type: "primaryKey" },
         { type: "nullable", value: false }
@@ -53,8 +53,8 @@ Stores conversation messages and their metadata. Each message belongs to a threa
     },
     {
       name: "thread_id",
-      type: "text",
-      description: "UUIDv4 parent thread reference",
+      type: "uuidv4",
+      description: "Parent thread reference",
       constraints: [
         { type: "foreignKey", value: "threads.id" },
         { type: "nullable", value: false }
@@ -93,8 +93,8 @@ Groups related messages together and associates them with a resource. Contains m
   columns={[
     {
       name: "id",
-      type: "text",
-      description: "UUIDv4 (example: `550e8400-e29b-41d4-a716-446655440000`)",
+      type: "uuidv4",
+      description: "Unique identifier for the thread (example: `550e8400-e29b-41d4-a716-446655440000`)",
       constraints: [
         { type: "primaryKey" },
         { type: "nullable", value: false }
@@ -115,7 +115,11 @@ Groups related messages together and associates them with a resource. Contains m
     {
       name: "metadata",
       type: "text",
-      description: "Additional custom metadata for the thread (stringified JSON)",
+      description: "Custom thread metadata as stringified JSON. Example:",
+      example: {
+        category: "support",
+        priority: 1
+      }
     },
     {
       name: "createdAt",
@@ -132,7 +136,7 @@ Groups related messages together and associates them with a resource. Contains m
 />
   </Tabs.Tab>
   <Tabs.Tab>
-Preserves workflow execution states and enables resuming workflows.
+When `suspend` is called on a workflow, its state is saved in the following format. When `resume` is called, that state is rehydrated.
 
 <SchemaTable
   columns={[
@@ -144,14 +148,25 @@ Preserves workflow execution states and enables resuming workflows.
     },
     {
       name: "run_id",
-      type: "text",
-      description: "Unique identifier for this workflow run",
+      type: "uuidv4",
+      description: "Unique identifier for this workflow run (example: `550e8400-e29b-41d4-a716-446655440000`)",
       constraints: [{ type: "nullable", value: false }]
     },
     {
       name: "snapshot",
       type: "text",
-      description: "Serialized workflow state data",
+      description: "Serialized workflow state as JSON. Example:",
+      example: {
+        value: { currentState: 'running' },
+        context: {
+          stepResults: {},
+          attempts: {},
+          triggerData: {}
+        },
+        activePaths: [],
+        runId: '550e8400-e29b-41d4-a716-446655440000',
+        timestamp: 1648176000000
+      },
       constraints: [{ type: "nullable", value: false }]
     },
     {
@@ -162,7 +177,7 @@ Preserves workflow execution states and enables resuming workflows.
     {
       name: "updatedAt",
       type: "timestamp",
-      description: "When the workflow state was last modified",
+      description: "Last modification time, used to track state changes during workflow execution",
       constraints: [{ type: "nullable", value: false }]
     }
   ]}
