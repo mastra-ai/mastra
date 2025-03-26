@@ -230,6 +230,7 @@ export interface WorkflowRunResult<
       : StepResult<z.infer<NonNullable<StepsRecord<TSteps>[K]['outputSchema']>>>;
   };
   runId: string;
+  timestamp: number;
   activePaths: Map<keyof StepsRecord<TSteps>, { status: string; suspendPayload?: any }>;
 }
 

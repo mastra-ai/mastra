@@ -1,11 +1,11 @@
+import { get } from 'radash';
 import type { z } from 'zod';
+import type { Mastra } from '..';
 import type { Logger } from '../logger';
 import type { Step } from './step';
 import type { StepAction, StepDef, StepResult, VariableReference, WorkflowContext, WorkflowRunResult } from './types';
 import type { Workflow } from './workflow';
-import { get } from 'radash';
 import type { WorkflowResultReturn } from './workflow-instance';
-import type { Mastra } from '..';
 
 export function isErrorEvent(stateEvent: any): stateEvent is {
   type: `xstate.error.actor.${string}`;
@@ -250,7 +250,7 @@ export function workflowToStep<
       }
       const run = context.isResume ? workflow.createRun({ runId: context.isResume.runId }) : workflow.createRun();
       const unwatch = run.watch(state => {
-        emit('state-update', workflow.name, state.value, { ...context, ...{ [workflow.name]: state.context } });
+        emit('state-update', workflow.name, state.results, { ...context, ...{ [workflow.name]: state.results } });
       });
 
       const awaitedResult =

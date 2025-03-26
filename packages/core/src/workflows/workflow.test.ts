@@ -2090,16 +2090,16 @@ describe('Workflow', async () => {
       });
 
       run.watch(data => {
-        const suspended = data.activePaths.find(p => p.status === 'suspended');
-        if (suspended?.stepId === 'promptAgent') {
+        const isPromptAgentSuspended = data.activePaths.get('promptAgent')?.status === 'suspended';
+        if (isPromptAgentSuspended) {
           const newCtx = {
-            ...data.context,
+            ...data.results,
           };
           // @ts-ignore
-          newCtx.steps.getUserInput.output = {
+          newCtx.getUserInput.output = {
             userInput: 'test input for resumption',
           };
-          resolveWorkflowSuspended({ stepId: suspended.stepId, context: newCtx });
+          resolveWorkflowSuspended({ stepId: 'promptAgent', context: newCtx });
         }
       });
 
@@ -2212,10 +2212,10 @@ describe('Workflow', async () => {
       const result = await new Promise<WorkflowResumeResult<any>>((resolve, reject) => {
         let hasResumed = false;
         run.watch(async data => {
-          const suspended = data.activePaths.find(p => p.status === 'suspended');
-          if (suspended?.stepId === 'humanIntervention') {
+          const suspended = data.activePaths.get('humanIntervention');
+          if (suspended?.status === 'suspended') {
             const newCtx = {
-              ...data.context,
+              ...data.results,
               humanPrompt: 'What improvements would you suggest?',
             };
             if (!hasResumed) {
@@ -2223,7 +2223,7 @@ describe('Workflow', async () => {
 
               try {
                 const resumed = await run.resume({
-                  stepId: suspended.stepId,
+                  stepId: 'humanIntervention',
                   context: newCtx,
                 });
 
@@ -2363,11 +2363,12 @@ describe('Workflow', async () => {
       const result = await new Promise<WorkflowResumeResult<any>>((resolve, reject) => {
         let hasResumed = false;
         run.watch(async data => {
-          const suspended = data.activePaths.find(p => p.status === 'suspended');
+          const isHumanInterventionSuspended = data.activePaths.get('humanIntervention')?.status === 'suspended';
+          const isImproveResponseSuspended = data.activePaths.get('improveResponse')?.status === 'suspended';
 
-          if (suspended?.stepId === 'humanIntervention') {
+          if (isHumanInterventionSuspended) {
             const newCtx = {
-              ...data.context,
+              ...data.results,
               humanPrompt: 'What improvements would you suggest?',
             };
             if (!hasResumed) {
@@ -2375,7 +2376,7 @@ describe('Workflow', async () => {
 
               try {
                 const resumed = await run.resume({
-                  stepId: suspended.stepId,
+                  stepId: 'humanIntervention',
                   context: newCtx,
                 });
                 resolve(resumed as any);
@@ -2383,11 +2384,11 @@ describe('Workflow', async () => {
                 reject(error);
               }
             }
-          } else if (suspended?.stepId === 'improveResponse') {
+          } else if (isImproveResponseSuspended) {
             const resumed = run.resume({
-              stepId: suspended.stepId,
+              stepId: 'improveResponse',
               context: {
-                ...data.context,
+                ...data.results,
               },
             });
             improvedResponseResultPromise = resumed;
