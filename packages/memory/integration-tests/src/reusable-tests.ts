@@ -1,5 +1,7 @@
 import { randomUUID } from 'node:crypto';
-import type { Memory } from '@mastra/memory';
+import { openai } from '@ai-sdk/openai';
+import { Agent } from '@mastra/core';
+import { Memory } from '@mastra/memory';
 import type { TextPart, ImagePart, FilePart, ToolCallPart } from 'ai';
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
 
@@ -105,6 +107,56 @@ export function getResuableTests(memory: Memory) {
     });
 
     describe('Semantic Search', () => {
+      it('should chunk long messages before embedding', async () => {
+        const memory = new Memory({
+          embedder: openai.embedding(`text-embedding-3-small`),
+          options: {
+            semanticRecall: {
+              topK: 1,
+              messageRange: 1,
+            },
+          },
+        });
+
+        const thread = await memory.createThread({
+          resourceId,
+          title: 'Long chunking test',
+        });
+        const threadId = thread.id;
+
+        const content = Array(1000).fill(`This is a long message to test chunking with`).join(`\n`);
+        await expect(
+          memory.saveMessages({
+            messages: [
+              {
+                type: 'text',
+                role: 'user',
+                content,
+                threadId,
+                id: `long-chunking-message-${Date.now()}`,
+                createdAt: new Date(),
+              },
+            ],
+          }),
+        ).resolves.not.toThrow();
+
+        const { messages } = await memory.query({
+          threadId,
+          resourceId,
+          selectBy: {
+            vectorSearchString: content,
+          },
+          threadConfig: {
+            semanticRecall: {
+              topK: 2,
+              messageRange: 2,
+            },
+          },
+        });
+
+        expect(messages.length).toBe(1);
+      });
+
       it('should find semantically similar messages', async () => {
         const messages = [
           createTestMessage(thread.id, 'The weather is nice today', 'user'),

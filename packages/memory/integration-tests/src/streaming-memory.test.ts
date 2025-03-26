@@ -40,7 +40,7 @@ global.navigator = dom.window.navigator;
 global.fetch = global.fetch || fetch;
 
 describe('Memory Streaming Tests', () => {
-  it('should stream after tool call with memory only', async () => {
+  it('should handle multiple tool calls in memory thread history', async () => {
     const memory = new Memory({
       options: {
         workingMemory: {

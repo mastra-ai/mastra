@@ -51,6 +51,7 @@
   "license": "ISC",
   "dependencies": {
     "@mastra/core": "workspace:^",
+    "@mastra/rag": "workspace:^",
     "@upstash/redis": "^1.34.5",
     "ai": "^4.1.54",
     "pg": "^8.13.3",
