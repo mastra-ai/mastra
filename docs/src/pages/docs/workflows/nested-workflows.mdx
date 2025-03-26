@@ -17,7 +17,14 @@ const nestedWorkflow = new Workflow({ name: "nested-workflow" })
 
 // Use the nested workflow in a parent workflow
 const parentWorkflow = new Workflow({ name: "parent-workflow" })
-  .step(nestedWorkflow)
+  .step(nestedWorkflow, {
+    variables: {
+      city: {
+        step: "trigger",
+        path: "myTriggerInput",
+      },
+    },
+  })
   .then(stepC)
   .commit();
 ```
