@@ -281,13 +281,26 @@ export class Memory extends MastraMemory {
 
   protected mutateMessagesToHideWorkingMemory(messages: MessageType[]) {
     const workingMemoryRegex = /<working_memory>([^]*?)<\/working_memory>/g;
-    for (const message of messages) {
+
+    const deletedToolCallIds = new Set<string>();
+    for (const [index, message] of messages.entries()) {
       if (typeof message?.content === `string`) {
         message.content = message.content.replace(workingMemoryRegex, ``).trim();
       } else if (Array.isArray(message?.content)) {
         for (const content of message.content) {
           if (content.type === `text`) {
             content.text = content.text.replace(workingMemoryRegex, ``).trim();
+          }
+
+          if (content.type === `tool-call` && content.toolName === `updateWorkingMemory`) {
+            deletedToolCallIds.add(content.toolCallId);
+            delete messages[index];
+          } else if (
+            content.type === `tool-result` &&
+            content.toolName === `updateWorkingMemory` &&
+            deletedToolCallIds.has(content.toolCallId)
+          ) {
+            delete messages[index];
           }
         }
       }
