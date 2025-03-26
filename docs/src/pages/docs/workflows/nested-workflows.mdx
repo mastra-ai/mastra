@@ -45,20 +45,6 @@ if (nestedWorkflowResult.status === "success") {
 
 Nested workflows support all the control flow features available to regular steps:
 
-### Conditional Execution
-
-You can use conditions with nested workflows:
-
-```typescript
-parentWorkflow.step(nestedWorkflowA).then(nestedWorkflowB, {
-  when: async ({ context }) => {
-    // Condition based on nestedWorkflowA's results
-    const resultA = context.getStepResult("nested-workflow-a");
-    return resultA.someValue === true;
-  },
-});
-```
-
 ### Parallel Execution
 
 Multiple nested workflows can be executed in parallel:
@@ -70,6 +56,14 @@ parentWorkflow
   .after([nestedWorkflowA, nestedWorkflowB])
   .step(finalStep);
 ```
+
+Or using `step()` with an array of workflows:
+
+```typescript
+parentWorkflow.step([nestedWorkflowA, nestedWorkflowB]).then(finalStep);
+```
+
+In this case, `then()` will implicitly wait for all the workflows to finish before executing the final step.
 
 ### If-Else Branching
 
