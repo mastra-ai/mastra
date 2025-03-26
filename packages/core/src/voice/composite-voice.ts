@@ -101,6 +101,17 @@ export class CompositeVoice extends MastraVoice {
   }
 
   /**
+   * Equip the voice provider with instructions
+   * @param instructions Instructions to add
+   */
+  addInstructions(instructions: string): void {
+    if (!this.realtimeProvider) {
+      return;
+    }
+    this.realtimeProvider.addInstructions(instructions);
+  }
+
+  /**
    * Equip the voice provider with tools
    * @param tools Array of tools to add
    */

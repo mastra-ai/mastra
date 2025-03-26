@@ -1,6 +1,6 @@
 {
   "name": "@mastra/speech-replicate",
-  "version": "0.1.14-alpha.0",
+  "version": "0.1.14-alpha.2",
   "description": "Mastra Replicate speech integration",
   "type": "module",
   "main": "dist/index.js",
@@ -26,12 +26,12 @@
   },
   "dependencies": {
     "@mastra/core": "workspace:^",
-    "replicate": "^0.25.2",
+    "replicate": "^0.34.1",
     "zod": "^3.24.2"
   },
   "devDependencies": {
     "@internal/lint": "workspace:*",
-    "@microsoft/api-extractor": "^7.52.1",
+    "@microsoft/api-extractor": "^7.52.2",
     "@types/node": "^20.17.27",
     "eslint": "^9.23.0",
     "tsup": "^8.4.0",

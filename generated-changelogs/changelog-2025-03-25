@@ -1,0 +1,653 @@
+## packages/core
+Here's the structured changelog for the Mastra AI core package updates:
+
+## New Features
+
+- Added nested workflows API, enabling workflows to be composed and nested within each other (#1af25d5)
+- Added support for workflow result schemas and variable mapping between nested workflows
+- Added new concurrent execution syntax for running multiple workflow steps in parallel
+- Added support for loop labels and loop types in workflow steps
+
+## Improvements
+
+- Enhanced JSON Schema type handling to properly support arrays of string types in schema definitions (#27439ad)
+- Improved agent memory operations:
+  - More parallel memory operations for better performance (#3084e13)
+  - Optimized thread and message handling
+  - Added support for AI SDK message types in agent generate and stream methods
+
+- Enhanced workflow execution:
+  - Added per-run watch and resume capabilities
+  - Improved handling of workflow methods in workflow graphs
+  - Better context sharing between nested workflows
+  - Added support for workflow result mapping
+
+## Notable Bug Fixes
+
+- Fixed an issue where sending CoreMessages to AI SDK would result in "Unsupported role: tool" errors (#b4fbc59)
+- Fixed after method execution when used with skipped conditions on awaited steps (#44631b1)
+- Fixed else branch execution when if-branch has loops (#f4854ee)
+- Fixed agent.generate to only get thread if there is threadID (#3bce733)
+
+## Build/Deployment Improvements
+
+- Removed node_modules-path dir which calls __dirname at the top level to fix ESM runtime compatibility (#7bcfaee)
+- Updated dependencies to latest versions
+- Improved type definitions and interfaces throughout the codebase
+
+## Performance Optimizations
+
+- Optimized memory operations with parallel processing
+- Improved state management for nested workflows
+- Enhanced context handling and data flow between workflow steps
+
+This release significantly enhances the workflow capabilities of Mastra AI, particularly in handling nested workflows and concurrent execution, while improving overall stability and performance.
+
+## packages/cli
+Here's the structured changelog for the CLI package updates:
+
+## New Features
+- Added Networks feature with full UI support for managing agent networks (#c30787b)
+- Added Mastra Docs MCP server integration with support for Windsurf and Cursor editors (#65f2a4c)
+- Added Cerebras and Groq as LLM provider options in create-mastra (#f9b6ab5)
+- Added project name flag to CLI for programmatic project creation (#5052613)
+
+## Improvements
+- Enhanced agent chat UI:
+  - Stopped auto-scrolling when user scrolls up (#c30787b)
+  - Fixed message display when switching threads (#933ea4d)
+  - Added support for non-English locations in weather example (#aede1ea)
+- Enhanced playground UI:
+  - Added resizable panels for agent and workflow sidebars (#1291e89)
+  - Improved workflow graph visualization (#9116d70)
+  - Added animation for new traces (#5baf1ec)
+  - Updated empty state text handling (#0709d99)
+
+## Notable Bug Fixes
+- Fixed thread title not updating until refresh (#9cba774)
+- Fixed storage initialization issues (#010fc45)
+- Fixed evaluation value validation before storage insertion (#6794797)
+- Fixed messages not showing latest content when switching threads (#933ea4d)
+
+## Build/Deployment Improvements
+- Added automatic public directory copying during builds (#da8d9bb)
+- Improved port handling in dev command with environment variable precedence (#2f6a8b6)
+- Added origin tracking for CLI analytics (#e05e7cc)
+- Updated build configuration and dependencies (#404640e)
+
+## Performance Optimizations
+- Improved thread title fetching with optimized refresh logic
+- Enhanced workflow method handling in graph visualization
+- Optimized storage field validation checks
+
+The changelog represents significant updates focused on improving user experience, adding new features, and enhancing system stability.
+
+## packages/create-mastra
+Here's the structured changelog for create-mastra covering the period from March 18-25, 2025:
+
+## New Features
+- Added Cerebras as a new LLM provider option for project creation (#f9b6ab5)
+- Added Google as a new LLM provider option in project creation (#0f24546)
+- Added dialog popup to display functional conditions when clicked in workflow graph (#77e4c35)
+
+## UI Improvements
+- Added resizable panels to playground UI for agent and workflow sidebars (#1291e89)
+- Stopped automatic scrolling to bottom in agent chat when user has scrolled up (#c30787b)
+- Updated playground UI with improved layout and functionality (#9ba1e97)
+- Added animations for new traces in the interface (#5baf1ec)
+- Improved workflow graph to handle different workflow methods (#9116d70)
+- Only required fields are now marked as required in the playground (#214e7ce)
+- Added support for showing "No input" for steps without input on traces UI (#2447900)
+
+## Bug Fixes
+- Fixed thread message display issues when switching between threads (#933ea4d)
+- Fixed new thread titles not updating until refresh or new message (#9cba774)
+- Fixed sidebar horizontal overflow issues in playground (#248cb07)
+
+## Technical Improvements
+- Added support for ai-sdk Message type in agent generate and stream functions (#248cb07)
+- Improved environment variable handling during Mastra deployment (#0b496ff)
+
+This release includes significant improvements to the playground UI, enhanced LLM provider support, and several important bug fixes for thread management and display issues.
+
+## packages/deployer
+Here's the structured changelog for the deployer package updates:
+
+## New Features
+- Added support for agent networks with new API endpoints for managing and interacting with networks (#cdc0498)
+- Added voice capabilities with dedicated endpoints for text-to-speech and speech-to-text operations (#05ef3e0)
+- Added support for workflow runs with new endpoints for creating, starting, and managing workflow executions (#27439ad)
+- Added public directory copying during deployment if it exists (#da8d9bb)
+
+## Improvements
+- Enhanced workflow management with better handling of different workflow methods in workflow graph (#9116d70)
+- Added support for tsconfig path aliases for better module resolution (#4e6732b)
+- Improved environment variable handling during deployment (#0b496ff)
+- Enhanced module resolution with custom resolver for external packages (#b56a681)
+
+## Notable Bug Fixes
+- Fixed process.versions.node.split in Cloudflare deployer (#cdc0498)
+- Fixed telemetry extraction when side-effects are present in Mastra file (#e764fd1)
+- Fixed symlink resolving and externals handling (#95c5745)
+- Fixed Cloudflare deployer functionality (#85a2461)
+
+## Build/Deployment Improvements
+- Improved external dependency handling during build process (#709aa2c)
+- Enhanced bundling process with better treeshaking configuration (#b4fbc59)
+- Added validation step for bundled chunks to ensure build integrity (#fb68a80)
+- Improved module resolution map generation for better dependency tracking (#248cb07)
+
+## API Changes
+- Deprecated several voice-related endpoints in favor of new /voice prefixed endpoints
+- Added new async workflow endpoints for better control over workflow execution
+- Enhanced workflow API with dedicated endpoints for run management
+
+This release focuses on improving the deployment process, enhancing workflow management, and adding robust network and voice capabilities while maintaining backward compatibility through careful deprecation of older endpoints.
+
+## packages/evals
+Here's the changelog for the evals package updates between March 18-25, 2025:
+
+## Improvements
+
+- Added validation checks for evaluation data before storage insertion to prevent invalid records (#6794797)
+- Enhanced result handling to safely stringify empty evaluation results (#e1a84fc)
+
+## Build Updates
+
+- Updated dependencies:
+  - ESLint to v9.23.0
+  - Vitest to v3.0.9
+  - @mastra/core to v0.7.0-alpha.1
+
+The main focus of this update was improving data validation and handling in the evaluation storage system. The changes help prevent invalid data from being stored and make result handling more robust.
+
+Note: Version bumped to 0.1.14-alpha.1
+
+## packages/rag
+Here's the structured changelog for the RAG package updates:
+
+## Improvements
+
+- Updated input schema validation for vector query tools:
+  - Added number coercion for `topK` parameter to ensure consistent numeric values
+  - Added string coercion for `filter` parameter to handle various input formats (#ac30427)
+
+- Enhanced error handling and logging in GraphRAG and Vector Query tools:
+  - Improved filter parsing error messages
+  - Added more detailed debug logging for query parameters
+  - Switched to using centralized logger instance
+
+- Updated vector store access pattern to use `getVector()` method instead of direct property access for better encapsulation
+
+## Build/Deployment
+
+- Updated dependencies:
+  - Upgraded Node.js types to v20.17.27
+  - Updated ESLint to v9.23.0
+  - Updated Vitest to v3.0.9
+  - Updated core package dependencies to latest alpha versions
+
+The main focus of this update was improving input validation and error handling in the RAG tools, while maintaining backwards compatibility. The changes make the tools more robust when handling different input formats and provide better debugging information.
+
+## packages/memory
+Based on the git diff, I'll create a structured changelog for the memory package covering the period from March 18-25, 2025. Here's what's notable:
+
+## Memory Package Updates (v0.2.6-alpha.1)
+
+### New Features
+- Added streaming support for memory operations after tool calls (#404640e)
+- Implemented working memory integration with tool-call functionality (#404640e)
+
+### Testing & Development
+- Added comprehensive integration tests for memory streaming capabilities
+- Introduced new test suite for streaming memory with tool interactions
+- Added weather agent test implementation for memory validation
+
+### Dependencies & Infrastructure
+- Updated core dependency to v0.7.0-alpha.1
+- Upgraded development dependencies:
+  - Node.js types to v20.17.27
+  - ESLint to v9.23.0
+  - Vitest to v3.0.9
+- Added new testing dependencies for streaming functionality:
+  - @ai-sdk/react
+  - jsdom
+  - react/react-dom
+  - zod
+
+The main focus of this release was adding robust streaming support for memory operations and improving the testing infrastructure around memory functionality, particularly in conjunction with tool calls.
+
+## packages/mcp
+Here's the changelog for the MCP package updates between March 18-25, 2025:
+
+## New Features
+- Added configurable timeout option for tool calls in MCP client (#2621e3f)
+
+## Improvements
+- Updated core dependency to version 0.7.0-alpha.1 for enhanced functionality
+- Enhanced tool call handling with explicit schema validation
+
+## Dependencies & Build
+- Updated Node.js types to v20.17.27
+- Upgraded ESLint to v9.23.0
+- Updated Vitest testing framework to v3.0.9
+
+The main highlight of this release is the addition of a configurable timeout option for tool calls, allowing better control over request timeouts. The default timeout aligns with the MCP protocol standards but can now be customized as needed.
+
+Example usage:
+```javascript
+const client = new MastraMCPClient({
+  // ... other options
+  timeout: 60000 // Set 60 second timeout for tool calls
+});
+```
+
+## deployers/cloudflare
+Here's the structured changelog for the Cloudflare deployer module covering March 18-25, 2025:
+
+## Cloudflare Deployer Updates
+
+### Notable Bug Fixes
+- Fixed Node.js version handling in Cloudflare Workers environment (#cdc0498)
+- Resolved Cloudflare deployer configuration issues (#85a2461)
+
+### Build/Deployment Improvements
+- Upgraded Wrangler CLI dependency to version 4.4.0 for improved deployment capabilities
+- Switched to async file operations using fs/promises for better performance
+- Updated output directory structure and wrangler.json location for more reliable deployments
+- Added polyfills support for better Node.js compatibility in Cloudflare Workers
+
+### Dependencies
+- Updated development dependencies:
+  - Node.js types to v20.17.27
+  - ESLint to v9.23.0
+  - Vitest to v3.0.9
+
+The main focus of this update was improving stability and compatibility of the Cloudflare deployer, particularly around Node.js version handling and deployment configuration. The upgrade to Wrangler 4.4.0 brings the latest Cloudflare Workers features and improvements to the deployment process.
+
+## deployers/netlify
+Here's the structured changelog for the Netlify deployer module covering March 18-25, 2025:
+
+## Netlify Deployer Updates
+
+### Improvements
+- Updated Netlify CLI to version 19.0.3 for improved deployment capabilities (#4be4cb9)
+
+### Build/Deployment
+- Updated development dependencies:
+  - Node.js types to v20.17.27
+  - ESLint to v9.23.0
+  - Vitest to v3.0.9
+
+### Dependencies
+- Updated core Mastra dependencies to latest versions:
+  - @mastra/deployer to v0.2.5-alpha.1
+  - @mastra/core to v0.7.0-alpha.1
+
+This release focuses primarily on keeping dependencies up-to-date and ensuring compatibility with the latest Netlify CLI tooling. The update to Netlify CLI 19.0.3 brings the latest deployment features and security updates from Netlify's platform.
+
+## deployers/vercel
+Here's the changelog for the Vercel deployer module covering March 18-25, 2025:
+
+## Vercel Deployer Updates
+
+### Breaking Changes
+- Renamed configuration parameter `teamId` to `teamSlug` to better reflect Vercel's terminology (#0b496ff)
+
+### Improvements
+- Added automatic environment variable loading during Mastra deployments (#0b496ff)
+- Enhanced project ID detection by updating path to include output directory (#0b496ff)
+- Added team ID resolution from team slug for better API compatibility (#0b496ff)
+
+### Documentation
+- Updated README with correct configuration parameters and examples
+- Added required `token` parameter to configuration documentation
+
+### Dependencies
+- Updated @types/node to ^20.17.27
+- Updated eslint to ^9.23.0
+- Updated vitest to ^3.0.9
+
+This release focuses on improving the Vercel deployment configuration and environment variable handling, making it more robust and user-friendly. The breaking change from `teamId` to `teamSlug` aligns the configuration with Vercel's current API structure.
+
+## speech/azure
+Based on the git diff provided, here's the structured changelog for the Mastra AI speech/azure module covering March 18-25, 2025:
+
+# Mastra AI Speech Azure Module Changelog
+
+## Build & Dependencies
+- Updated Node.js type definitions to v20.17.27 for improved TypeScript support
+- Upgraded ESLint to v9.23.0 for enhanced code quality checks
+- Updated core dependencies to align with @mastra/core v0.7.0-alpha.1
+
+The changes during this period were primarily focused on dependency updates and build system maintenance. No significant feature additions, bug fixes, or performance improvements were included in this release.
+
+Note: Most changes were internal dependency updates and version bumps, which don't directly affect end-user functionality. The module moved from version 0.1.10-alpha.1 to 0.1.14-alpha.1 through several incremental releases.
+
+## speech/deepgram
+Based on the git diff provided, here's the structured changelog for the Mastra AI speech/deepgram module for March 18-25, 2025:
+
+## Build & Dependencies
+
+- Updated Node.js type definitions to version 20.17.27 for improved TypeScript support (#b56a681)
+- Upgraded ESLint to version 9.23.0 for enhanced code quality checks (#248cb07)
+- Updated core dependency to version 0.7.0-alpha.1 with multiple improvements (#0b54522, #1af25d5, #27439ad)
+
+## Important Notice
+
+This module is now deprecated. Please use `@mastra/voice-deepgram` for new implementations.
+
+Note: Most changes in this period were routine dependency updates and version bumps. No significant feature additions, bug fixes, or performance improvements were identified in the diff.
+
+Version: 0.1.13-alpha.1
+
+## speech/elevenlabs
+Based on the git diff provided, here's the structured changelog for the speech/elevenlabs module for March 18-25, 2025:
+
+## Speech/ElevenLabs Module Updates
+
+### Build & Dependencies
+- Updated Node.js type definitions to version 20.17.27 for improved TypeScript support
+- Upgraded ESLint to version 9.23.0 for enhanced code quality checks
+- Updated core dependencies to align with @mastra/core v0.7.0-alpha.1
+
+### Important Notice
+This module is now deprecated. Please migrate to `@mastra/voice-elevenlabs` for future development and updates.
+
+Note: Most changes in this period were internal dependency updates and build system maintenance. No significant feature changes or bug fixes were introduced in this release window.
+
+Version: 0.1.13-alpha.1
+
+## speech/google
+Here's the structured changelog for the Mastra AI speech/google module covering March 18-25, 2025:
+
+# Mastra AI Speech/Google Module Changelog
+
+## Dependencies & Build Updates
+
+- Upgraded Google Cloud Text-to-Speech SDK to version 6.0.1 for improved stability and features
+- Updated development dependencies:
+  - Node.js types to v20.17.27
+  - ESLint to v9.23.0
+
+## Core Integration Updates
+
+- Multiple compatibility updates to align with @mastra/core v0.7.0-alpha.1
+- Maintained backward compatibility with core module changes
+
+## Notes
+
+This module is now deprecated - please migrate to `@mastra/voice-google` for future development.
+
+---
+
+The changes during this period were primarily focused on dependency updates and maintaining compatibility with the core Mastra AI framework. No major features or breaking changes were introduced.
+
+## speech/ibm
+Based on the git diff provided, here's the structured changelog for the IBM Speech module covering March 18-25, 2025:
+
+# IBM Speech Module Changelog (v0.1.14-alpha.1)
+
+## Build & Dependencies
+
+- Updated Node.js type definitions to v20.17.27 for improved TypeScript support
+- Upgraded ESLint to v9.23.0 for enhanced code quality checks
+- Updated core dependency to @mastra/core@0.7.0-alpha.1
+
+Note: This release primarily contains dependency updates and build system improvements. No significant functional changes or features were added to the IBM Speech module itself during this period.
+
+For a complete list of underlying core framework changes, please refer to the [@mastra/core changelog](link-to-core-changelog).
+
+## speech/murf
+Based on the git diff provided, here's the structured changelog for the Mastra AI speech/murf module for March 18-25, 2025:
+
+# Mastra AI Speech/Murf Changelog
+
+## Build & Dependencies
+- Updated Node.js type definitions to version 20.17.27 for improved TypeScript support
+- Upgraded ESLint to version 9.23.0 for enhanced code quality checks
+- Updated core dependencies to align with @mastra/core@0.7.0-alpha.1
+
+## Important Notice
+This module is now deprecated. Please migrate to `@mastra/voice-murf` for future development.
+
+Note: Most changes in this period were routine dependency updates and internal version bumps. No significant feature additions, bug fixes, or performance improvements were identified in the diff.
+
+For users and developers:
+- If you're starting a new project, use `@mastra/voice-murf` instead
+- Existing implementations should plan migration to the new package
+
+## speech/openai
+Based on the git diff provided, here's the structured changelog for the speech/openai module covering March 18-25, 2025:
+
+# Mastra Speech OpenAI Module Changelog
+
+## Build & Dependencies
+- Updated Node.js type definitions to v20.17.27 for improved TypeScript support
+- Upgraded ESLint to version 9.23.0 for enhanced code quality checks
+- Updated core dependencies to align with @mastra/core v0.7.0-alpha.1
+
+## Important Notice
+This module is now deprecated. Please migrate to `@mastra/voice-openai` for future development and updates.
+
+Note: Most changes in this period were internal dependency updates and build system maintenance. No significant feature changes, bug fixes, or performance improvements were introduced in this release window.
+
+For users of this module:
+- Continue using the latest stable version (0.1.14)
+- Plan migration to `@mastra/voice-openai` for future development
+
+## speech/playai
+Based on the git diff provided, I'll create a structured changelog for the speech/playai module. However, I notice that most changes are dependency updates and version bumps, with limited functional changes.
+
+# Mastra AI Speech/PlayAI Changelog (March 18-25, 2025)
+
+## Build & Dependencies
+
+- Updated Node.js type definitions to version 20.17.27 for improved TypeScript support
+- Upgraded ESLint to version 9.23.0 for enhanced code quality checks
+- Updated core dependency to @mastra/core@0.7.0-alpha.1
+
+## Important Notes
+
+This module is now deprecated - users should migrate to `@mastra/voice-playai` for future development.
+
+---
+
+Note: Most changes in this period were internal dependency updates and version management. No significant feature additions, bug fixes, or performance improvements were identified in the diff.
+
+For users and developers:
+- Continue using `@mastra/voice-playai` for new projects
+- Existing implementations should plan migration to the new voice-playai module
+
+## speech/replicate
+Based on the git diff provided, here's the structured changelog for the Mastra AI speech/replicate module for March 18-25, 2025:
+
+# Mastra Speech Replicate Changelog (March 18-25, 2025)
+
+## Build & Dependencies
+
+- Updated core dependency to @mastra/core@0.7.0-alpha.1 for improved stability and feature support (#0b54522, #1af25d5, #27439ad)
+- Upgraded development dependencies:
+  - Node.js types to v20.17.27 for better TypeScript support
+  - ESLint to v9.23.0 for enhanced code quality checks
+
+Note: This update period primarily focused on dependency maintenance and build system improvements. No major feature changes or bug fixes were implemented in the speech/replicate module itself.
+
+The changes were mostly internal updates to maintain compatibility with the latest Mastra core version and development tools. Users should experience no breaking changes from this update.
+
+## speech/speechify
+Based on the git diff provided, here's the structured changelog for the Speechify module (March 18-25, 2025):
+
+## Build & Dependencies
+
+- Updated core dependency to version 0.7.0-alpha.1 (#0b54522, #1af25d5, #27439ad)
+- Upgraded Node.js types to v20.17.27
+- Updated ESLint to version 9.23.0
+
+## Important Notice
+
+This module is now deprecated. Please use `@mastra/voice-speechify` instead for future development.
+
+Note: Most changes in this release period were internal dependency updates and build system improvements. No significant feature changes, bug fixes, or performance optimizations were made to the module itself, which aligns with its deprecated status.
+
+For users of this module:
+- We recommend migrating to `@mastra/voice-speechify` for continued support and new features
+- This version maintains compatibility with Mastra Core updates while in transition
+
+## stores/pg
+Based on the git diff provided, here's the changelog for the Mastra AI PostgreSQL module (stores/pg) covering March 18-25, 2025:
+
+# Mastra AI PostgreSQL Store Changelog
+
+## Build & Dependencies
+
+- Updated Node.js types to version 20.17.27 for improved type definitions
+- Upgraded ESLint to version 9.23.0 for enhanced code quality checks
+- Updated Vitest testing framework to version 3.0.9
+- Bumped version to 0.2.6-alpha.1
+
+## Core Dependencies
+
+- Updated to @mastra/core@0.7.0-alpha.1 which includes several internal improvements
+
+Note: This update period primarily focused on maintenance and dependency updates. No significant feature changes or bug fixes were implemented in the PostgreSQL store module itself.
+
+For more details about the core updates, please refer to the [@mastra/core changelog](link-to-core-changelog).
+
+## stores/astra
+Here's the structured changelog for the Astra module covering March 18-25, 2025:
+
+## Astra Store Updates (v0.2.6-alpha.1)
+
+### Improvements
+- Enhanced vector operations with improved ID handling in upsert operations (#15702ff)
+- Updated vector query operations to use consistent ID field references (#15702ff)
+- Improved test coverage for basic vector operations with better isolation (#15702ff)
+
+### Bug Fixes
+- Fixed document update operations to use correct ID field for finding documents (#15702ff)
+- Corrected delete operations to properly reference document IDs (#15702ff)
+- Fixed vector insertion to return consistent vector IDs (#15702ff)
+
+### Documentation
+- Updated README examples with consistent collection naming conventions (#b56a681)
+- Improved vector store documentation and examples (#b56a681)
+
+### Build/Dependencies
+- Updated Node.js types to version 20.17.27
+- Upgraded ESLint to version 9.23.0
+- Updated Vitest to version 3.0.9
+
+The main focus of this release was improving the reliability and consistency of vector operations, particularly around ID handling and document updates. Test coverage has been enhanced to better validate these operations.
+
+## stores/chroma
+Here's the structured changelog for the Chroma store module covering March 18-25, 2025:
+
+# Chroma Store Updates (v0.2.6-alpha.1)
+
+### Documentation & Examples
+- Updated collection naming convention in README examples to use camelCase format (`myCollection` instead of `my-collection`) (#b56a681)
+
+### Dependencies & Build
+- Upgraded core dependency to @mastra/core@0.7.0-alpha.1
+- Updated development dependencies:
+  - Node.js types to v20.17.27
+  - ESLint to v9.23.0
+  - Vitest to v3.0.9
+
+Note: This release period focused mainly on maintenance updates and dependency upgrades. The main functional change was standardizing the documentation examples to follow consistent naming conventions.
+
+## stores/pinecone
+Based on the git diff provided, here's the structured changelog for the Pinecone store module (2025-03-18 - 2025-03-25):
+
+# Pinecone Store Changelog
+
+## New Features
+- Added new operation implementations for MastraVector in Pinecone store (#2ee56ad)
+
+## Build/Deployment Improvements
+- Updated core dependency to version 0.7.0-alpha.1
+- Updated development dependencies:
+  - Node.js types to v20.17.27
+  - ESLint to v9.23.0
+  - Vitest to v3.0.9
+
+Note: This period primarily focused on infrastructure updates and dependency maintenance. The main functional change was the addition of new MastraVector operations in the Pinecone store implementation. Most other changes were version bumps and internal dependency updates.
+
+The changelog reflects the most significant changes while omitting routine version bumps and minor dependency updates that don't directly impact functionality.
+
+## stores/qdrant
+Here's the structured changelog for the Qdrant store module covering March 18-25, 2025:
+
+# Qdrant Store Changelog
+
+## Documentation & Examples
+- Updated collection naming convention in README examples from 'my-collection' to 'myCollection' for consistency (b56a681)
+- Improved vector store documentation and test coverage (b56a681)
+
+## Dependencies & Build
+- Updated core dependency to version 0.7.0-alpha.1
+- Upgraded development dependencies:
+  - Node types to v20.17.27
+  - ESLint to v9.23.0
+  - Vitest to v3.0.9
+
+Note: This update period mostly contained internal maintenance changes and documentation improvements. The main functional changes were related to dependency updates and documentation standardization.
+
+The changes maintain backward compatibility and no breaking changes were introduced.
+
+## stores/upstash
+Here's the structured changelog for the Upstash module updates:
+
+## @mastra/upstash v0.2.1-alpha.1
+
+### New Features
+- Added vector operations for managing individual records:
+  - `updateIndexById`: Update vector embeddings and metadata for specific vectors (#c0b2496)
+  - `deleteIndexById`: Remove individual vectors from an index (#c0b2496)
+
+### Improvements
+- Enhanced vector query capabilities with optional vector inclusion in results (#c0b2496)
+- Made namespace parameter optional with 'workflows' as default for workflow operations (#27439ad)
+- Improved key generation by filtering out undefined values (#7911ddf)
+
+### Bug Fixes
+- Fixed Redis key sanitization for workflow snapshot storage (#7911ddf)
+
+### Development Updates
+- Updated development dependencies:
+  - Node types to v20.17.27
+  - ESLint to v9.23.0
+  - Vitest to v3.0.9
+- Added dotenv for test environment configuration
+
+This release focuses on expanding vector operation capabilities and improving workflow storage handling. The new vector operations enable more granular control over vector data management, while the workflow storage improvements provide better default behaviors and key handling.
+
+## stores/vectorize
+Here's the changelog for the Vectorize store module covering March 18-25, 2025:
+
+## Vectorize Store Updates (v0.2.1-alpha.1)
+
+### New Features
+- Added vector update operations with `updateIndexById` method to modify existing vectors and metadata (#15702ff)
+- Added vector deletion support with `deleteIndexById` method for removing individual vectors (#15702ff)
+
+### Improvements
+- Enhanced test coverage for vector operations including update and delete scenarios (#15702ff)
+- Increased vector indexing timeout thresholds for better reliability in tests
+  - Extended max attempts from 30 to 60
+  - Increased wait interval from 5s to 10s
+
+### Test Infrastructure
+- Added proper cleanup routines before and after vector tests to ensure consistent test environment
+- Implemented dotenv configuration support for test environment
+- Extended test timeouts to accommodate real-world vector indexing latencies
+
+### Dependencies
+- Updated core dependencies to @mastra/core@0.7.0-alpha.1
+- Upgraded development dependencies:
+  - @types/node to ^20.17.27
+  - eslint to ^9.23.0
+  - vitest to ^3.0.9
+
+This release focuses on expanding vector manipulation capabilities and improving test reliability for the Vectorize store implementation.

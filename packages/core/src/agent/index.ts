@@ -1,4 +1,3 @@
-import { randomUUID } from 'crypto';
 import type {
   AssistantContent,
   CoreAssistantMessage,
@@ -13,6 +12,7 @@ import type {
   ToolCallPart,
   UserContent,
 } from 'ai';
+import { randomUUID } from 'crypto';
 import type { JSONSchema7 } from 'json-schema';
 import type { ZodSchema } from 'zod';
 
@@ -33,6 +33,7 @@ import type { DependenciesType, InferZodType } from '../utils';
 import {
   createDependenciesFrom,
   createMastraProxy,
+  ensureAllMessagesAreCoreMessages,
   ensureToolProperties,
   makeCoreTool,
   validateDependencies,
@@ -121,7 +122,7 @@ export class Agent<
     if (config.voice) {
       this.voice = config.voice;
       this.voice?.addTools(this.tools);
-      this.voice?.updateConfig({ instructions: config.instructions });
+      this.voice?.addInstructions(config.instructions);
     }
 
     if (config.dependenciesSchema) {
@@ -256,8 +257,7 @@ export class Agent<
         return { threadId: threadId || '', messages: userMessages };
       }
 
-      const userMessage = this.getMostRecentUserMessage(userMessages);
-      const newMessages = userMessage ? [userMessage] : userMessages;
+      const newMessages = ensureAllMessagesAreCoreMessages(userMessages);
 
       const messages = newMessages.map(u => {
         return {
@@ -876,9 +876,16 @@ export class Agent<
   ): Promise<GenerateTextResult<any, InferZodType<Z, unknown>>>;
   async generate<Z extends ZodSchema | JSONSchema7 | undefined = undefined>(
     messages: string | string[] | CoreMessage[] | AiMessageType[],
-    args?: AgentGenerateOptions<Z, TSchemaDeps> &
-      ({ output: Z; experimental_output?: never } | { experimental_output: Z; output?: never }),
+    args?: AgentGenerateOptions<Z, TSchemaDeps> & { output?: Z; experimental_output?: never },
   ): Promise<GenerateObjectResult<InferZodType<Z, unknown>>>;
+  async generate<Z extends ZodSchema | JSONSchema7 | undefined = undefined>(
+    messages: string | string[] | CoreMessage[] | AiMessageType[],
+    args?: AgentGenerateOptions<Z, TSchemaDeps> & { output?: never; experimental_output?: Z },
+  ): Promise<
+    GenerateTextResult<any, InferZodType<Z, unknown>> & {
+      object: InferZodType<Z, unknown>;
+    }
+  >;
   async generate<Z extends ZodSchema | JSONSchema7 | undefined = undefined>(
     messages: string | string[] | CoreMessage[] | AiMessageType[],
     {
@@ -944,7 +951,9 @@ export class Agent<
         messages: messageObjects,
         tools: this.tools,
         convertedTools,
-        onStepFinish,
+        onStepFinish: (result: any) => {
+          void onStepFinish?.(result);
+        },
         maxSteps: maxSteps || 5,
         runId: runIdToUse,
         temperature,
@@ -973,7 +982,9 @@ export class Agent<
         messages: messageObjects,
         tools: this.tools,
         convertedTools,
-        onStepFinish,
+        onStepFinish: (result: any) => {
+          void onStepFinish?.(result);
+        },
         maxSteps,
         runId: runIdToUse,
         temperature,
@@ -998,7 +1009,9 @@ export class Agent<
       tools: this.tools,
       structuredOutput: output,
       convertedTools,
-      onStepFinish,
+      onStepFinish: (result: any) => {
+        void onStepFinish?.(result);
+      },
       maxSteps,
       runId: runIdToUse,
       temperature,
@@ -1022,9 +1035,16 @@ export class Agent<
   ): Promise<StreamTextResult<any, InferZodType<Z, unknown>>>;
   async stream<Z extends ZodSchema | JSONSchema7 | undefined = undefined>(
     messages: string | string[] | CoreMessage[] | AiMessageType[],
-    args?: AgentStreamOptions<Z, TSchemaDeps> &
-      ({ output: Z; experimental_output?: never } | { experimental_output: Z; output?: never }),
+    args?: AgentStreamOptions<Z, TSchemaDeps> & { output?: Z; experimental_output?: never },
   ): Promise<StreamObjectResult<any, InferZodType<Z, unknown>, any>>;
+  async stream<Z extends ZodSchema | JSONSchema7 | undefined = undefined>(
+    messages: string | string[] | CoreMessage[] | AiMessageType[],
+    args?: AgentStreamOptions<Z, TSchemaDeps> & { output?: never; experimental_output?: Z },
+  ): Promise<
+    StreamTextResult<any, InferZodType<Z, unknown>> & {
+      partialObjectStream: StreamTextResult<any, InferZodType<Z, unknown>>['experimental_partialOutputStream'];
+    }
+  >;
   async stream<Z extends ZodSchema | JSONSchema7 | undefined = undefined>(
     messages: string | string[] | CoreMessage[] | AiMessageType[],
     {
@@ -1094,19 +1114,20 @@ export class Agent<
         temperature,
         tools: this.tools,
         convertedTools,
-        onStepFinish,
-        onFinish: async (result: string) => {
+        onStepFinish: (result: any) => {
+          void onStepFinish?.(result);
+        },
+        onFinish: async (result: any) => {
           try {
-            const res = JSON.parse(result) || {};
-            const outputText = res.text;
-            await after({ result: res, threadId, memoryConfig: memoryOptions, outputText, runId: runIdToUse });
+            const outputText = result.text;
+            await after({ result, threadId, memoryConfig: memoryOptions, outputText, runId: runIdToUse });
           } catch (e) {
             this.logger.error('Error saving memory on finish', {
               error: e,
               runId,
             });
           }
-          onFinish?.(result);
+          void onFinish?.(result);
         },
         maxSteps,
         runId: runIdToUse,
@@ -1129,19 +1150,20 @@ export class Agent<
         temperature,
         tools: this.tools,
         convertedTools,
-        onStepFinish,
-        onFinish: async (result: string) => {
+        onStepFinish: (result: any) => {
+          void onStepFinish?.(result);
+        },
+        onFinish: async (result: any) => {
           try {
-            const res = JSON.parse(result) || {};
-            const outputText = res.text;
-            await after({ result: res, threadId, memoryConfig: memoryOptions, outputText, runId: runIdToUse });
+            const outputText = result.text;
+            await after({ result, threadId, memoryConfig: memoryOptions, outputText, runId: runIdToUse });
           } catch (e) {
             this.logger.error('Error saving memory on finish', {
               error: e,
               runId,
             });
           }
-          onFinish?.(result);
+          void onFinish?.(result);
         },
         maxSteps,
         runId: runIdToUse,
@@ -1163,19 +1185,20 @@ export class Agent<
       temperature,
       structuredOutput: output,
       convertedTools,
-      onStepFinish,
-      onFinish: async (result: string) => {
+      onStepFinish: (result: any) => {
+        void onStepFinish?.(result);
+      },
+      onFinish: async (result: any) => {
         try {
-          const res = JSON.parse(result) || {};
-          const outputText = JSON.stringify(res.object);
-          await after({ result: res, threadId, memoryConfig: memoryOptions, outputText, runId: runIdToUse });
+          const outputText = JSON.stringify(result.object);
+          await after({ result, threadId, memoryConfig: memoryOptions, outputText, runId: runIdToUse });
         } catch (e) {
           this.logger.error('Error saving memory on finish', {
             error: e,
             runId,
           });
         }
-        onFinish?.(result);
+        void onFinish?.(result);
       },
       runId: runIdToUse,
       toolChoice,

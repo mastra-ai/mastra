@@ -1,5 +1,14 @@
 # create-mastra
 
+## 0.2.3-alpha.0
+
+### Patch Changes
+
+- 2447900: Show No input for steps without input on traces UI
+- c30787b: Stop automatically scrolling to bottom in agent chat if user has scrolled up
+- 214e7ce: Only mark required fields as required on the playground
+- 0b496ff: Load env vars on mastra deploy
+
 ## 0.2.2
 
 ### Patch Changes

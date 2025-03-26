@@ -106,7 +106,7 @@ type MastraCustomLLMOptions<
 > = {
   tools?: TTools;
   convertedTools?: Record<string, CoreTool>;
-  onStepFinish?: (step: string) => void;
+  onStepFinish?: (step: unknown) => void;
   experimental_output?: Z;
   telemetry?: TelemetrySettings;
   threadId?: string;

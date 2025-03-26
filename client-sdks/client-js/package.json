@@ -1,6 +1,6 @@
 {
   "name": "@mastra/client-js",
-  "version": "0.1.13-alpha.0",
+  "version": "0.1.13-alpha.2",
   "description": "The official TypeScript library for the Mastra Client API",
   "author": "",
   "type": "module",
@@ -27,6 +27,7 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@ai-sdk/ui-utils": "^1.1.19",
     "@mastra/core": "workspace:^",
     "json-schema": "^0.4.0",
     "zod": "^3.24.2",
