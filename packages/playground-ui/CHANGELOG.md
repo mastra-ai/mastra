@@ -1,5 +1,11 @@
 # @mastra/playground-ui
 
+## 3.0.0-alpha.4
+
+### Patch Changes
+
+- 6d5d9c6: Show tool calls in playground chat
+
 ## 3.0.0-alpha.3
 
 ### Patch Changes
