@@ -7,6 +7,6 @@ export const mastra = new Mastra({
   agents: { mem0Agent },
   logger: createLogger({
     name: 'Mastra',
-    level: 'debug',
+    level: 'error',
   }),
 });
