@@ -1,5 +1,11 @@
 # mastra
 
+## 0.4.4-alpha.4
+
+### Patch Changes
+
+- 6d5d9c6: Show tool calls in playground chat
+
 ## 0.4.4-alpha.3
 
 ### Patch Changes
