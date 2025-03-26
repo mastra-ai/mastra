@@ -29,12 +29,23 @@ function waitUntilVectorsIndexed(vector: CloudflareVector, indexName: string, ex
   return new Promise((resolve, reject) => {
     const maxAttempts = 60;
     let attempts = 0;
+    let lastCount = 0;
+    let stableCount = 0;
+
     const interval = setInterval(async () => {
       try {
         const stats = await vector.describeIndex(indexName);
         if (stats && stats.count >= expectedCount) {
-          clearInterval(interval);
-          resolve(true);
+          if (stats.count === lastCount) {
+            stableCount++;
+            if (stableCount >= 2) {
+              clearInterval(interval);
+              resolve(true);
+            }
+          } else {
+            stableCount = 1;
+          }
+          lastCount = stats.count;
         }
         attempts++;
         if (attempts >= maxAttempts) {
@@ -205,23 +216,39 @@ describe('CloudflareVector', () => {
 
     describe('Vector update operations', () => {
       const testVectors = [createVector(0, 1.0), createVector(1, 1.0), createVector(2, 1.0)];
-      const indexName = 'test-index' + Date.now();
+      const indexName1 = 'test-index1' + Date.now();
+      const indexName2 = 'test-index2' + Date.now();
+      const indexName3 = 'test-index3' + Date.now();
 
-      beforeEach(async () => {
-        await vectorDB.createIndex({ indexName, dimension: VECTOR_DIMENSION, metric: 'cosine' });
-        await waitUntilReady(vectorDB, indexName);
+      beforeAll(async () => {
+        await vectorDB.createIndex({ indexName: indexName1, dimension: VECTOR_DIMENSION, metric: 'cosine' });
+        await waitUntilReady(vectorDB, indexName1);
+        await vectorDB.createIndex({ indexName: indexName2, dimension: VECTOR_DIMENSION, metric: 'cosine' });
+        await waitUntilReady(vectorDB, indexName2);
+        await vectorDB.createIndex({ indexName: indexName3, dimension: VECTOR_DIMENSION, metric: 'cosine' });
+        await waitUntilReady(vectorDB, indexName3);
       });
 
-      afterEach(async () => {
+      afterAll(async () => {
         try {
-          await vectorDB.deleteIndex(indexName);
+          await vectorDB.deleteIndex(indexName1);
+        } catch (error) {
+          // Ignore errors if index doesn't exist
+        }
+        try {
+          await vectorDB.deleteIndex(indexName2);
+        } catch (error) {
+          // Ignore errors if index doesn't exist
+        }
+        try {
+          await vectorDB.deleteIndex(indexName3);
         } catch (error) {
           // Ignore errors if index doesn't exist
         }
       });
 
       it('should update the vector by id', async () => {
-        const ids = await vectorDB.upsert({ indexName, vectors: testVectors });
+        const ids = await vectorDB.upsert({ indexName: indexName1, vectors: testVectors });
         expect(ids).toHaveLength(3);
 
         const idToBeUpdated = ids[0];
@@ -235,12 +262,12 @@ describe('CloudflareVector', () => {
           metadata: newMetaData,
         };
 
-        await vectorDB.updateIndexById(indexName, idToBeUpdated, update);
+        await vectorDB.updateIndexById(indexName1, idToBeUpdated, update);
 
-        await waitUntilVectorsIndexed(vectorDB, indexName, 3);
+        await waitUntilVectorsIndexed(vectorDB, indexName1, 3);
 
         const results: QueryResult[] = await vectorDB.query({
-          indexName,
+          indexName: indexName1,
           queryVector: newVector,
           topK: 3,
           includeVector: true,
@@ -253,7 +280,7 @@ describe('CloudflareVector', () => {
       }, 500000);
 
       it('should only update vector embeddings by id', async () => {
-        const ids = await vectorDB.upsert({ indexName, vectors: testVectors });
+        const ids = await vectorDB.upsert({ indexName: indexName2, vectors: testVectors });
         expect(ids).toHaveLength(3);
 
         const idToBeUpdated = ids[0];
@@ -263,12 +290,12 @@ describe('CloudflareVector', () => {
           vector: newVector,
         };
 
-        await vectorDB.updateIndexById(indexName, idToBeUpdated, update);
+        await vectorDB.updateIndexById(indexName2, idToBeUpdated, update);
 
-        await waitUntilVectorsIndexed(vectorDB, indexName, 3);
+        await waitUntilVectorsIndexed(vectorDB, indexName2, 3);
 
         const results: QueryResult[] = await vectorDB.query({
-          indexName,
+          indexName: indexName2,
           queryVector: newVector,
           topK: 2,
           includeVector: true,
@@ -281,7 +308,7 @@ describe('CloudflareVector', () => {
       }, 500000);
 
       it('should throw exception when no updates are given', async () => {
-        await expect(vectorDB.updateIndexById(indexName, 'id', {})).rejects.toThrow('No update data provided');
+        await expect(vectorDB.updateIndexById(indexName3, 'id', {})).rejects.toThrow('No update data provided');
       });
     });
 
@@ -431,6 +458,7 @@ describe('CloudflareVector', () => {
       await vectorDB.createMetadataIndex(testIndexName2, 'code', 'string');
       await vectorDB.createMetadataIndex(testIndexName2, 'optionalField', 'string');
       await vectorDB.createMetadataIndex(testIndexName2, 'mixedField', 'string');
+      //      await vectorDB.createMetadataIndex(testIndexName2, 'mixedField', 'number');
 
       await waitForMetadataIndexes(vectorDB, testIndexName2, 10);
 
