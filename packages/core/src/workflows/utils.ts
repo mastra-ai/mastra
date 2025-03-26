@@ -1,11 +1,10 @@
+import { get } from 'radash';
 import type { z } from 'zod';
+import type { Mastra } from '..';
 import type { Logger } from '../logger';
 import type { Step } from './step';
-import type { StepAction, StepDef, StepResult, VariableReference, WorkflowContext, WorkflowRunResult } from './types';
+import type { StepAction, StepResult, VariableReference, WorkflowContext, WorkflowRunResult } from './types';
 import type { Workflow } from './workflow';
-import { get } from 'radash';
-import type { WorkflowResultReturn } from './workflow-instance';
-import type { Mastra } from '..';
 
 export function isErrorEvent(stateEvent: any): stateEvent is {
   type: `xstate.error.actor.${string}`;
