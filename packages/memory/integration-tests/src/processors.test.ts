@@ -1,27 +1,33 @@
-import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { Memory, TokenLimiter, ToolCallFilter } from '@mastra/memory';
+import { afterEach } from 'node:test';
+import type { MessageType } from '@mastra/core';
 import { LibSQLStore } from '@mastra/core/storage/libsql';
+import { Memory, TokenLimiter, ToolCallFilter } from '@mastra/memory';
+import { describe, it, expect, beforeAll } from 'vitest';
 
 describe('Memory with Processors', () => {
   let memory: Memory;
   let storage: LibSQLStore;
+  const resourceId = 'processor-test';
 
   beforeAll(() => {
     // Create a single in-memory database for all tests
     storage = new LibSQLStore({
-      url: 'file::memory:?cache=shared',
+      config: {
+        url: 'file::memory:?cache=shared',
+      },
     });
-    
+
     // Initialize memory with the in-memory database
     memory = new Memory({
-      storage
+      storage,
     });
   });
 
-  afterAll(async () => {
-    // Clean up
-    if (storage) {
-      await storage.close?.();
+  afterEach(async () => {
+    for (const thread of await storage.getThreadsByResourceId({
+      resourceId,
+    })) {
+      await storage.deleteThread({ threadId: thread.id });
     }
   });
 
@@ -29,17 +35,20 @@ describe('Memory with Processors', () => {
     // Create a thread
     const thread = await memory.createThread({
       title: 'TokenLimiter Test Thread',
+      resourceId,
     });
 
     // Create messages (10 messages, 10 tokens each = 100 tokens total)
-    const messages = [];
+    const messages: MessageType[] = [];
+    const startTime = Date.now();
     for (let i = 0; i < 10; i++) {
       messages.push({
         role: 'user',
         content: `Message ${i}`,
         id: `token-${i}`,
         threadId: thread.id,
-        createdAt: new Date(Date.now() + i * 1000), // Each message is 1 second after the previous
+        createdAt: new Date(startTime + i * 1000), // Each message is 1 second after the previous
+        type: 'text',
       });
     }
 
@@ -51,19 +60,17 @@ describe('Memory with Processors', () => {
       threadId: thread.id,
       selectBy: { last: 10 }, // Try to get all 10 messages
       threadConfig: {
-        processors: [new TokenLimiter(50)] // Limit to 50 tokens
-      }
+        processors: [new TokenLimiter(50)], // Limit to 50 tokens
+      },
     });
 
     // We should have messages limited by token count
     expect(result.messages.length).toBeGreaterThan(0);
     expect(result.messages.length).toBeLessThan(10);
-    
+
     // And they should be the most recent ones
-    const msgIds = result.messages
-      .map(m => (m as any).id)
-      .sort();
-    
+    const msgIds = result.messages.map(m => (m as any).id).sort();
+
     // Verify we have some of the messages
     expect(msgIds.length).toBeGreaterThan(0);
   });
@@ -72,6 +79,7 @@ describe('Memory with Processors', () => {
     // Create a thread
     const thread = await memory.createThread({
       title: 'ToolFilter Test Thread',
+      resourceId,
     });
 
     // Add a message with text
@@ -81,24 +89,26 @@ describe('Memory with Processors', () => {
       id: 'tool-test-text',
       threadId: thread.id,
       createdAt: new Date(),
-    };
+      type: 'text',
+    } satisfies MessageType;
 
     // Add a message with a tool call
     const toolCallMessage = {
       role: 'assistant',
       content: [
         { type: 'text', text: 'Using weather tool:' },
-        { 
-          type: 'tool-call', 
-          id: 'tool-call-1', 
-          name: 'weather',
-          args: { location: 'New York' } 
-        }
+        {
+          type: 'tool-call',
+          toolCallId: 'tool-call-1',
+          toolName: 'weather',
+          args: { location: 'New York' },
+        },
       ],
       id: 'tool-test-call',
       threadId: thread.id,
       createdAt: new Date(),
-    };
+      type: 'tool-call',
+    } satisfies MessageType;
 
     // Save messages
     await memory.saveMessages({ messages: [textMessage, toolCallMessage] });
@@ -108,8 +118,8 @@ describe('Memory with Processors', () => {
       threadId: thread.id,
       selectBy: { last: 10 },
       threadConfig: {
-        processors: [new ToolCallFilter({ exclude: ['weather'] })]
-      }
+        processors: [new ToolCallFilter({ exclude: ['weather'] })],
+      },
     });
 
     // We should only have the text message
@@ -121,27 +131,30 @@ describe('Memory with Processors', () => {
     // Create a thread
     const thread = await memory.createThread({
       title: 'Multiple Processors Test Thread',
+      resourceId,
     });
 
     // Add messages with different tools
-    const messages = [
+    const messages: MessageType[] = [
       {
         role: 'user',
         content: 'Hello world',
         id: 'multi-text-1',
         threadId: thread.id,
         createdAt: new Date(Date.now() - 5000),
+        type: 'text',
       },
       {
         role: 'assistant',
+        type: 'text',
         content: [
           { type: 'text', text: 'Using weather tool:' },
-          { 
-            type: 'tool-call', 
-            id: 'multi-tool-1', 
-            name: 'weather',
-            args: { location: 'New York' } 
-          }
+          {
+            type: 'tool-call',
+            toolCallId: 'multi-tool-1',
+            toolName: 'weather',
+            args: { location: 'New York' },
+          },
         ],
         id: 'multi-weather',
         threadId: thread.id,
@@ -149,14 +162,15 @@ describe('Memory with Processors', () => {
       },
       {
         role: 'assistant',
+        type: 'text',
         content: [
           { type: 'text', text: 'Using calculator tool:' },
-          { 
-            type: 'tool-call', 
-            id: 'multi-tool-2', 
-            name: 'calculator',
-            args: { expression: '2+2' } 
-          }
+          {
+            type: 'tool-call',
+            toolCallId: 'multi-tool-2',
+            toolName: 'calculator',
+            args: { expression: '2+2' },
+          },
         ],
         id: 'multi-calc',
         threadId: thread.id,
@@ -164,6 +178,7 @@ describe('Memory with Processors', () => {
       },
       {
         role: 'user',
+        type: 'text',
         content: 'Thanks!',
         id: 'multi-text-2',
         threadId: thread.id,
@@ -182,19 +197,18 @@ describe('Memory with Processors', () => {
         processors: [
           new ToolCallFilter({ exclude: ['weather'] }),
           // Limit tokens to a relatively small amount
-          new TokenLimiter(50)
-        ]
-      }
+          new TokenLimiter(50),
+        ],
+      },
     });
 
     // We should have fewer messages after filtering
     expect(result.messages.length).toBeGreaterThan(0);
     expect(result.messages.length).toBeLessThan(4);
-    
+
     // And they should exclude weather messages
-    const weatherMsgIds = result.messages
-      .filter(m => (m as any).id.includes('weather'))
-      .map(m => (m as any).id);
+    const weatherMsgIds = result.messages.filter(m => (m as any).id.includes('weather')).map(m => (m as any).id);
     expect(weatherMsgIds.length).toBe(0);
   });
-}); 
+});
+
