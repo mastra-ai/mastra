@@ -105,7 +105,7 @@ export async function createHonoServer(
     cors({
       origin: '*',
       allowMethods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-      allowHeaders: ['Content-Type', 'Authorization'],
+      allowHeaders: ['Content-Type', 'Authorization', 'x-mastra-client-type'],
       exposeHeaders: ['Content-Length', 'X-Requested-With'],
       credentials: false,
       maxAge: 3600,
