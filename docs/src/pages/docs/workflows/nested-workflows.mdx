@@ -112,6 +112,23 @@ The skipped workflow will have a status of `skipped` in the results:
 
 The `.then(finalStep)` call following the if-else block will merge the if and else branches back into a single execution path.
 
+### Looping
+
+Nested workflows can use `.until()` and `.while()` loops same as any other step. One interesting new pattern is to pass a workflow directly as the loop-back argument to keep executing that nested workflow until something is true about its results:
+
+```typescript
+parentWorkflow
+  .step(firstStep)
+  .while(
+    ({ context }) =>
+      context.getStepResult("nested-workflow").output.results.someField ===
+      "someValue",
+    nestedWorkflow,
+  )
+  .step(finalStep)
+  .commit();
+```
+
 ## Watching Nested Workflows
 
 You can watch the state changes of nested workflows using the `watch` method on the parent workflow. This is useful for monitoring the progress and state transitions of complex workflows:
