@@ -49,7 +49,7 @@ export type GenerateParams<T extends JSONSchema7 | ZodSchema | undefined = undef
 
 export type StreamParams<T extends JSONSchema7 | ZodSchema | undefined = undefined> = {
   messages: string | string[] | CoreMessage[] | AiMessageType[];
-} & Partial<AgentStreamOptions<T>>;
+} & Omit<AgentStreamOptions<T>, 'onFinish' | 'onStepFinish' | 'telemetry'>;
 
 export interface GetEvalsByAgentIdResponse extends GetAgentResponse {
   evals: any[];
