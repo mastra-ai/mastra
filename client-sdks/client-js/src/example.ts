@@ -1,5 +1,5 @@
-import { MastraClient } from './client';
-import type { WorkflowRunResult } from './types';
+// import { MastraClient } from './client';
+// import type { WorkflowRunResult } from './types';
 
 // Agent
 
@@ -8,38 +8,29 @@ import type { WorkflowRunResult } from './types';
 //     baseUrl: 'http://localhost:4111',
 //   });
 
+//   console.log('Starting agent...');
+
 //   try {
 //     const agent = client.getAgent('weatherAgent');
 //     const response = await agent.stream({
-//       messages: [
-//         {
-//           role: 'user',
-//           content: 'Hello, world!',
-//         },
-//       ],
+//       messages: 'what is the weather in new york?',
+//     })
+
+//     response.processDataStream({
+//       onTextPart: (text) => {
+//         process.stdout.write(text);
+//       },
+//       onFilePart: (file) => {
+//         console.log(file);
+//       },
+//       onDataPart: (data) => {
+//         console.log(data);
+//       },
+//       onErrorPart: (error) => {
+//         console.error(error);
+//       },
 //     });
 
-//     const reader = response?.body?.getReader();
-//     const decoder = new TextDecoder();
-//     let buffer = '';
-
-//     while (true) {
-//       if (!reader) break;
-//       const { value, done } = await reader.read();
-//       if (done) break;
-
-//       const chunk = decoder.decode(value);
-//       buffer += chunk;
-
-//       console.log(buffer);
-
-//       const matches = buffer.matchAll(/0:"([^"]*)"/g);
-
-//       for (const match of matches) {
-//         const content = match[1];
-//         process.stdout.write(`${content}\n`);
-//       }
-//     }
 //   } catch (error) {
 //     console.error(error);
 //   }

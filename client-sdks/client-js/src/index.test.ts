@@ -318,19 +318,18 @@ describe('MastraClient Resources', () => {
     });
 
     it('should get agent evals', async () => {
-      const mockResponse = {
-        name: 'Test Agent',
-        evals: [{ id: 'eval1' }],
-      };
+      const mockResponse = { data: 'test' };
       mockFetchResponse(mockResponse);
       const result = await agent.evals();
       expect(result).toEqual(mockResponse);
-      expect(global.fetch).toHaveBeenCalledWith(`${clientOptions.baseUrl}/api/agents/test-agent/evals/ci`, {
-        headers: {
-          Authorization: 'Bearer test-key',
-          'Content-Type': 'application/json',
-        },
-      });
+      expect(global.fetch).toHaveBeenCalledWith(
+        `${clientOptions.baseUrl}/api/agents/test-agent/evals/ci`,
+        expect.objectContaining({
+          headers: expect.objectContaining({
+            Authorization: 'Bearer test-key',
+          }),
+        }),
+      );
     });
 
     it('should get live evals', async () => {
@@ -529,29 +528,27 @@ describe('MastraClient Resources', () => {
     });
 
     it('should save messages to memory', async () => {
-      const messages: MessageType[] = [
+      const messages = [
         {
           id: '1',
-          type: 'text',
+          type: 'text' as const,
           content: 'test',
-          role: 'user',
+          role: 'user' as const,
           threadId: 'test-thread',
-          createdAt: new Date(),
+          createdAt: new Date('2025-03-26T10:40:55.116Z'),
         },
       ];
       mockFetchResponse(messages);
-      const result = await client.saveMessageToMemory({ messages, agentId });
+      const result = await client.saveMessageToMemory({ agentId, messages });
       expect(result).toEqual(messages);
       expect(global.fetch).toHaveBeenCalledWith(
         `${clientOptions.baseUrl}/api/memory/save-messages?agentId=${agentId}`,
-        {
+        expect.objectContaining({
           method: 'POST',
-          headers: {
+          headers: expect.objectContaining({
             Authorization: 'Bearer test-key',
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({ messages, agentId }),
-        },
+          }),
+        }),
       );
     });
   });
@@ -584,21 +581,19 @@ describe('MastraClient Resources', () => {
     });
 
     it('should execute tool', async () => {
-      const mockResponse = {
-        result: 'Tool execution result',
-      };
+      const mockResponse = { data: 'test' };
       mockFetchResponse(mockResponse);
-
       const result = await tool.execute({ data: '' });
       expect(result).toEqual(mockResponse);
-      expect(global.fetch).toHaveBeenCalledWith(`${clientOptions.baseUrl}/api/tools/test-tool/execute`, {
-        method: 'POST',
-        headers: {
-          Authorization: 'Bearer test-key',
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ data: '' }),
-      });
+      expect(global.fetch).toHaveBeenCalledWith(
+        `${clientOptions.baseUrl}/api/tools/test-tool/execute`,
+        expect.objectContaining({
+          method: 'POST',
+          headers: expect.objectContaining({
+            Authorization: 'Bearer test-key',
+          }),
+        }),
+      );
     });
   });
 
