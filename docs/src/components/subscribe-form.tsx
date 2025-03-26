@@ -76,6 +76,10 @@ export const SubscribeForm = ({
       return toast.error("Please enter an email");
     }
     setButtonState("loading");
+    console.log(
+      process.env.NEXT_PUBLIC_HS_PORTAL_ID,
+      process.env.NEXT_PUBLIC_HS_FORM_GUID,
+    );
     try {
       const response = await fetch(
         `https://api.hsforms.com/submissions/v3/integration/submit/${process.env.NEXT_PUBLIC_HS_PORTAL_ID}/${process.env.NEXT_PUBLIC_HS_FORM_GUID}`,
