@@ -458,7 +458,6 @@ describe('CloudflareVector', () => {
       await vectorDB.createMetadataIndex(testIndexName2, 'code', 'string');
       await vectorDB.createMetadataIndex(testIndexName2, 'optionalField', 'string');
       await vectorDB.createMetadataIndex(testIndexName2, 'mixedField', 'string');
-      //      await vectorDB.createMetadataIndex(testIndexName2, 'mixedField', 'number');
 
       await waitForMetadataIndexes(vectorDB, testIndexName2, 10);
 
