@@ -13,17 +13,17 @@
   "license": "ISC",
   "type": "module",
   "dependencies": {
-    "@ai-sdk/openai": "^1.1.14",
+    "@ai-sdk/openai": "^1.2.1",
     "@mastra/core": "workspace:*",
-    "mastra": "workspace:*",
-    "zod": "^3.24.2",
-    "@mastra/voice-openai": "workspace:*",
     "@mastra/voice-elevenlabs": "workspace:*",
-    "@mastra/voice-playai": "workspace:*"
+    "@mastra/voice-openai": "workspace:*",
+    "@mastra/voice-playai": "workspace:*",
+    "mastra": "workspace:*",
+    "zod": "^3.24.2"
   },
   "devDependencies": {
-    "@types/node": "^22.13.5",
+    "@types/node": "^20.17.27",
     "tsx": "^4.19.3",
-    "typescript": "^5.7.3"
+    "typescript": "^5.8.2"
   }
 }

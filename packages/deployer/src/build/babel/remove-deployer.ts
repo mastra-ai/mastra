@@ -2,7 +2,6 @@ import babel from '@babel/core';
 
 export function removeDeployer() {
   const t = babel.types;
-  let mastraClass: string | null = null;
 
   return {
     name: 'remove-deployer',
@@ -24,9 +23,27 @@ export function removeDeployer() {
           state.hasReplaced = true;
           const newMastraObj = t.cloneNode(path.node);
           if (t.isObjectExpression(newMastraObj.arguments[0]) && newMastraObj.arguments[0].properties?.[0]) {
-            newMastraObj.arguments[0].properties = newMastraObj.arguments[0].properties.filter(
-              prop => t.isObjectProperty(prop) && t.isIdentifier(prop.key) && prop.key.name !== 'deployer',
+            const deployer = newMastraObj.arguments[0].properties.find(
+              prop => t.isObjectProperty(prop) && t.isIdentifier(prop.key) && prop.key.name === 'deployer',
             );
+
+            if (!deployer) {
+              return;
+            }
+
+            newMastraObj.arguments[0].properties = newMastraObj.arguments[0].properties.filter(
+              prop => prop !== deployer,
+            );
+
+            // try to find the binding of the deployer which should be the reference to the deployer
+            if (t.isObjectProperty(deployer) && t.isIdentifier(deployer.value)) {
+              const deployerBinding = state.file.scope.getBinding(deployer.value.name);
+
+              if (deployerBinding) {
+                deployerBinding?.path?.parentPath?.remove();
+              }
+            }
+
             path.replaceWith(newMastraObj);
           }
         }

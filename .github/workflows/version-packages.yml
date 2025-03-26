@@ -11,36 +11,60 @@ on:
 
 jobs:
   version:
+    # Only run on the main repository, not on forks
+    if: ${{ github.repository == 'mastra-ai/mastra' }}
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/create-github-app-token@v1
+        id: app-token
+        with:
+          app-id: ${{ vars.DANE_APP_ID }}
+          private-key: ${{ secrets.DANE_APP_PRIVATE_KEY }}
+
       - name: Checkout Repository
         uses: actions/checkout@v4
         with:
+          token: ${{ steps.app-token.outputs.token }}
+          # Fetch entire git history so  Changesets can generate changelogs
+          # with the correct commits
           fetch-depth: 0
-          token: ${{ secrets.GITHUB_TOKEN }}
+          persist-credentials: false
 
-      - name: Install pnpm
-        uses: pnpm/action-setup@v2
+      - uses: pnpm/action-setup@v4
+        name: Install pnpm
         with:
-          version: 9.7.0
+          run_install: false
 
-      - name: Setup Node.js
+      - name: Setup Node.js 20.x
         uses: actions/setup-node@v4
         with:
-          node-version: "20"
-          cache: "pnpm"
+          node-version: 20.x
+          cache: 'pnpm'
 
       - name: Install dependencies
         run: pnpm install
 
-      - name: Build
-        run: pnpm build:core && pnpm build:deployer && pnpm build:clients && pnpm build:cli
+      - name: Bump mcp-docs-server prerelease version
+        env:
+          GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}
+          # husky precommit runs linting and typechecking - those are handled by other GH actions already
+          HUSKY: 0
+        run: |
+          cd packages/mcp-docs-server
+          pnpm version prerelease --preid alpha --no-git-tag-version
+          cd ../..
+          git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git config --global user.name "github-actions[bot]"
+          git add packages/mcp-docs-server/package.json
+          git commit -m "chore: bump @mastra/mcp-docs-server prerelease version"
 
       - name: Create Release Pull Request
         uses: changesets/action@v1
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}
+          # husky precommit runs linting and typechecking - those are handled by other GH actions already
+          HUSKY: 0
         with:
-          title: "chore: version packages"
-          commit: "chore: version packages"
+          title: 'chore: version packages'
+          commit: 'chore: version packages'
           version: pnpm changeset version

@@ -1,5 +1,292 @@
 # @mastra/deployer
 
+## 0.2.5-alpha.2
+
+### Patch Changes
+
+- Updated dependencies [a838fde]
+- Updated dependencies [a8bd4cf]
+- Updated dependencies [7a3eeb0]
+- Updated dependencies [6530ad1]
+  - @mastra/core@0.7.0-alpha.2
+
+## 0.2.5-alpha.1
+
+### Patch Changes
+
+- cdc0498: Fix process.versions.node.split in cloudflare deployer
+- 0b496ff: Load env vars on mastra deploy
+- Updated dependencies [0b54522]
+- Updated dependencies [1af25d5]
+- Updated dependencies [27439ad]
+  - @mastra/core@0.7.0-alpha.1
+
+## 0.2.5-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [b4fbc59]
+  - @mastra/core@0.6.5-alpha.0
+
+## 0.2.4
+
+### Patch Changes
+
+- e764fd1: Fix telemetry when side-effects are added to the mastra file
+- 709aa2c: fix building externals
+- e764fd1: Fix deployer when side-effects are added to the mastra file
+- 05ef3e0: Support voice for mastra client
+- 95c5745: Fix symlink resolving and externals
+- 85a2461: Fix cloudflare deployer
+- Updated dependencies [6794797]
+- Updated dependencies [fb68a80]
+- Updated dependencies [b56a681]
+- Updated dependencies [248cb07]
+  - @mastra/core@0.6.4
+
+## 0.2.4-alpha.1
+
+### Patch Changes
+
+- 709aa2c: fix building externals
+- 85a2461: Fix cloudflare deployer
+- Updated dependencies [6794797]
+  - @mastra/core@0.6.4-alpha.1
+
+## 0.2.4-alpha.0
+
+### Patch Changes
+
+- e764fd1: Fix telemetry when side-effects are added to the mastra file
+- e764fd1: Fix deployer when side-effects are added to the mastra file
+- 05ef3e0: Support voice for mastra client
+- 95c5745: Fix symlink resolving and externals
+- Updated dependencies [fb68a80]
+- Updated dependencies [b56a681]
+- Updated dependencies [248cb07]
+  - @mastra/core@0.6.4-alpha.0
+
+## 0.2.3
+
+### Patch Changes
+
+- 404640e: AgentNetwork changeset
+- Updated dependencies [404640e]
+- Updated dependencies [3bce733]
+  - @mastra/core@0.6.3
+
+## 0.2.3-alpha.1
+
+### Patch Changes
+
+- Updated dependencies [3bce733]
+  - @mastra/core@0.6.3-alpha.1
+
+## 0.2.3-alpha.0
+
+### Patch Changes
+
+- 404640e: AgentNetwork changeset
+- Updated dependencies [404640e]
+  - @mastra/core@0.6.3-alpha.0
+
+## 0.2.2
+
+### Patch Changes
+
+- 4e6732b: Add support for tsconfig paths aliases
+- Updated dependencies [beaf1c2]
+- Updated dependencies [3084e13]
+  - @mastra/core@0.6.2
+
+## 0.2.2-alpha.1
+
+### Patch Changes
+
+- Updated dependencies [beaf1c2]
+- Updated dependencies [3084e13]
+  - @mastra/core@0.6.2-alpha.0
+
+## 0.2.2-alpha.0
+
+### Patch Changes
+
+- 4e6732b: Add support for tsconfig paths aliases
+
+## 0.2.1
+
+### Patch Changes
+
+- cc7f392: Fix babel transformation in deployer
+- 0850b4c: Watch and resume per run
+- da8d9bb: Enable public dir copying if it exists
+- 9116d70: Handle the different workflow methods in workflow graph
+- 61ad5a4: Move esbuild plugin higher than commonjs for telemetry extraction
+- Updated dependencies [fc2f89c]
+- Updated dependencies [dfbb131]
+- Updated dependencies [f4854ee]
+- Updated dependencies [afaf73f]
+- Updated dependencies [0850b4c]
+- Updated dependencies [7bcfaee]
+- Updated dependencies [44631b1]
+- Updated dependencies [9116d70]
+- Updated dependencies [6e559a0]
+- Updated dependencies [5f43505]
+  - @mastra/core@0.6.1
+
+## 0.2.1-alpha.2
+
+### Patch Changes
+
+- cc7f392: Fix babel transformation in deployer
+- 0850b4c: Watch and resume per run
+- da8d9bb: Enable public dir copying if it exists
+- 9116d70: Handle the different workflow methods in workflow graph
+- Updated dependencies [fc2f89c]
+- Updated dependencies [dfbb131]
+- Updated dependencies [0850b4c]
+- Updated dependencies [9116d70]
+  - @mastra/core@0.6.1-alpha.2
+
+## 0.2.1-alpha.1
+
+### Patch Changes
+
+- 61ad5a4: Move esbuild plugin higher than commonjs for telemetry extraction
+- Updated dependencies [f4854ee]
+- Updated dependencies [afaf73f]
+- Updated dependencies [44631b1]
+- Updated dependencies [6e559a0]
+- Updated dependencies [5f43505]
+  - @mastra/core@0.6.1-alpha.1
+
+## 0.2.1-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [7bcfaee]
+  - @mastra/core@0.6.1-alpha.0
+
+## 0.2.0
+
+### Minor Changes
+
+- 95b4144: Added server middleware to apply custom functionality in API endpoints like auth
+
+### Patch Changes
+
+- Updated dependencies [16b98d9]
+- Updated dependencies [1c8cda4]
+- Updated dependencies [95b4144]
+- Updated dependencies [3729dbd]
+- Updated dependencies [c2144f4]
+  - @mastra/core@0.6.0
+
+## 0.2.0-alpha.1
+
+### Minor Changes
+
+- 95b4144: Added server middleware to apply custom functionality in API endpoints like auth
+
+### Patch Changes
+
+- Updated dependencies [16b98d9]
+- Updated dependencies [1c8cda4]
+- Updated dependencies [95b4144]
+- Updated dependencies [c2144f4]
+  - @mastra/core@0.6.0-alpha.1
+
+## 0.1.9-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [3729dbd]
+  - @mastra/core@0.5.1-alpha.0
+
+## 0.1.8
+
+### Patch Changes
+
+- 7a7a547: Fix telemetry getter in hono server
+- e9fbac5: Update Vercel tools to have id and update deployer
+- 8deb34c: Better workflow watch api + watch workflow by runId
+- c2dde91: Return full workflow details in api/workflows endpoint
+- 5d41958: Remove redundant mastra server agent stream, generate messages validation
+- 144b3d5: Update traces table UI, agent Chat UI
+  Fix get workflows breaking
+- 03236ec: Added GRPC Exporter for Laminar and updated dodcs for Observability Providers
+- 731dd8a: Removed useless logging that showed up when user selected log drains tab on the playground
+- 0461849: Fixed a bug where mastra.db file location was inconsistently created when running mastra dev vs running a file directly (tsx src/index.ts for ex)
+- fd4a1d7: Update cjs bundling to make sure files are split
+- 960690d: return runId from server on workflow watch
+- Updated dependencies [a910463]
+- Updated dependencies [59df7b6]
+- Updated dependencies [22643eb]
+- Updated dependencies [6feb23f]
+- Updated dependencies [f2d6727]
+- Updated dependencies [7a7a547]
+- Updated dependencies [29f3a82]
+- Updated dependencies [3d0e290]
+- Updated dependencies [e9fbac5]
+- Updated dependencies [301e4ee]
+- Updated dependencies [ee667a2]
+- Updated dependencies [dfbe4e9]
+- Updated dependencies [dab255b]
+- Updated dependencies [1e8bcbc]
+- Updated dependencies [f6678e4]
+- Updated dependencies [9e81f35]
+- Updated dependencies [c93798b]
+- Updated dependencies [a85ab24]
+- Updated dependencies [dbd9f2d]
+- Updated dependencies [59df7b6]
+- Updated dependencies [caefaa2]
+- Updated dependencies [c151ae6]
+- Updated dependencies [52e0418]
+- Updated dependencies [d79aedf]
+- Updated dependencies [03236ec]
+- Updated dependencies [3764e71]
+- Updated dependencies [df982db]
+- Updated dependencies [a171b37]
+- Updated dependencies [506f1d5]
+- Updated dependencies [02ffb7b]
+- Updated dependencies [0461849]
+- Updated dependencies [2259379]
+- Updated dependencies [aeb5e36]
+- Updated dependencies [f2301de]
+- Updated dependencies [358f069]
+- Updated dependencies [fd4a1d7]
+- Updated dependencies [c139344]
+  - @mastra/core@0.5.0
+
+## 0.1.8-alpha.12
+
+### Patch Changes
+
+- Updated dependencies [a85ab24]
+  - @mastra/core@0.5.0-alpha.12
+
+## 0.1.8-alpha.11
+
+### Patch Changes
+
+- 7a7a547: Fix telemetry getter in hono server
+- 8deb34c: Better workflow watch api + watch workflow by runId
+- 5d41958: Remove redundant mastra server agent stream, generate messages validation
+- fd4a1d7: Update cjs bundling to make sure files are split
+- Updated dependencies [7a7a547]
+- Updated dependencies [c93798b]
+- Updated dependencies [dbd9f2d]
+- Updated dependencies [a171b37]
+- Updated dependencies [fd4a1d7]
+  - @mastra/core@0.5.0-alpha.11
+
+## 0.1.8-alpha.10
+
+### Patch Changes
+
+- Updated dependencies [a910463]
+  - @mastra/core@0.5.0-alpha.10
+
 ## 0.1.8-alpha.9
 
 ### Patch Changes

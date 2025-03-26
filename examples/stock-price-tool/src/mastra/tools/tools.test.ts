@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 
-import { getStockPrice } from '.';
+import { getStockPrice } from './stock-price';
 
 describe('Test Tools', () => {
   it('should run the stockPrices', async () => {

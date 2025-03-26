@@ -1,0 +1,42 @@
+name: Docs MCP Tests
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "packages/mcp/**"
+      - "packages/mcp-docs-server/**"
+      - ".github/workflows/test-docs-mcp.yml"
+
+jobs:
+  test:
+    # Only run on the main repository, not on forks
+    if: ${{ github.repository == 'mastra-ai/mastra' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v2
+        with:
+          version: 9.7.0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "pnpm"
+
+      - name: Install dependencies
+        run: pnpm install
+
+      - name: Build core
+        run: pnpm build:core
+
+      - name: Build @mastra/mcp
+        working-directory: packages/mcp
+        run: pnpm build
+
+      - name: Run Docs MCP tests
+        run: pnpm test:docs-mcp
+

@@ -13,6 +13,8 @@ permissions:
 jobs:
   eval:
     name: Run Bird Checker evals
+    # Only run on the main repository, not on forks
+    if: ${{ github.repository == 'mastra-ai/mastra' }}
     runs-on: ubuntu-latest
     defaults:
       run:

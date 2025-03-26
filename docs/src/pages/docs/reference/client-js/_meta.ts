@@ -1,5 +1,4 @@
-export default {
-  index: "Overview",
+ const meta = {
   agents: "Agents API",
   memory: "Memory API",
   tools: "Tools API",
@@ -9,3 +8,5 @@ export default {
   telemetry: "Telemetry API",
   "error-handling": "Error Handling",
 };
+
+export default meta

@@ -33,16 +33,10 @@ An optional object that can include configuration for output structure, memory m
 <PropertiesTable
   content={[
     {
-      name: "output",
-      type: "Zod schema | JsonSchema7",
+      name: "abortSignal",
+      type: "AbortSignal",
       isOptional: true,
-      description: "Defines the expected structure of the output. Can be a JSON Schema object or a Zod schema.",
-    },
-    {
-      name: "experimental_output",
-      type: "Zod schema | JsonSchema7",
-      isOptional: true,
-      description: "Enables structured output generation alongside text generation and tool calls. The model will generate responses that conform to the provided schema.",
+      description: "Signal object that allows you to abort the agent's execution. When the signal is aborted, all ongoing operations will be terminated.",
     },
     {
       name: "context",
@@ -51,41 +45,22 @@ An optional object that can include configuration for output structure, memory m
       description: "Additional context messages to provide to the agent.",
     },
     {
-      name: "memoryOptions",
-      type: "MemoryConfig",
+      name: "experimental_output",
+      type: "Zod schema | JsonSchema7",
       isOptional: true,
-      description: "Configuration options for memory management. See MemoryConfig section below for details.",
+      description: "Enables structured output generation alongside text generation and tool calls. The model will generate responses that conform to the provided schema.",
     },
     {
-      name: "toolChoice",
-      type: "'auto' | 'none' | 'required' | { type: 'tool'; toolName: string }",
-      isOptional: true,
-      defaultValue: "'auto'",
-      description: "Controls how the agent uses tools during generation.",
-    },
-    {
-      name: "telemetry",
-      type: "TelemetrySettings",
-      isOptional: true,
-      description: "Settings for telemetry collection during generation. See TelemetrySettings section below for details.",
-    },
-    {
-      name: "threadId",
+      name: "instructions",
       type: "string",
       isOptional: true,
-      description: "Identifier for the conversation thread. Allows for maintaining context across multiple interactions. Must be provided if resourceId is provided.",
+      description: "Custom instructions that override the agent's default instructions for this specific generation. Useful for dynamically modifying agent behavior without creating a new agent instance.",
     },
     {
-      name: "resourceId",
-      type: "string",
+      name: "output",
+      type: "Zod schema | JsonSchema7",
       isOptional: true,
-      description: "Identifier for the user or resource interacting with the agent. Must be provided if threadId is provided.",
-    },
-    {
-      name: "onStepFinish",
-      type: "(step: string) => void",
-      isOptional: true,
-      description: "Callback function called after each execution step. Receives step details as a JSON string.",
+      description: "Defines the expected structure of the output. Can be a JSON Schema object or a Zod schema.",
     },
     {
       name: "maxSteps",
@@ -95,17 +70,54 @@ An optional object that can include configuration for output structure, memory m
       description: "Maximum number of execution steps allowed.",
     },
     {
-      name: "toolsets",
-      type: "ToolsetsInput",
+      name: "memoryOptions",
+      type: "MemoryConfig",
       isOptional: true,
-      description: "Additional toolsets to make available to the agent during generation.",
+      description: "Configuration options for memory management. See MemoryConfig section below for details.",
+    },
+    {
+      name: "onStepFinish",
+      type: "GenerateTextOnStepFinishCallback<any> | never",
+      isOptional: true,
+      description: "Callback function called after each execution step. Receives step details as a JSON string. Unavailable for structured output",
+    },
+    {
+      name: "resourceId",
+      type: "string",
+      isOptional: true,
+      description: "Identifier for the user or resource interacting with the agent. Must be provided if threadId is provided.",
+    },
+    {
+      name: "telemetry",
+      type: "TelemetrySettings",
+      isOptional: true,
+      description: "Settings for telemetry collection during generation. See TelemetrySettings section below for details.",
     },
     {
       name: "temperature",
       type: "number",
       isOptional: true,
       description: "Controls randomness in the model's output. Higher values (e.g., 0.8) make the output more random, lower values (e.g., 0.2) make it more focused and deterministic.",
-    }
+    },
+    {
+      name: "threadId",
+      type: "string",
+      isOptional: true,
+      description: "Identifier for the conversation thread. Allows for maintaining context across multiple interactions. Must be provided if resourceId is provided.",
+    },
+    {
+      name: "toolChoice",
+      type: "'auto' | 'none' | 'required' | { type: 'tool'; toolName: string }",
+      isOptional: true,
+      defaultValue: "'auto'",
+      description: "Controls how the agent uses tools during generation.",
+    },
+    {
+      name: "toolsets",
+      type: "ToolsetsInput",
+      isOptional: true,
+      description: "Additional toolsets to make available to the agent during generation.",
+    },
   ]}
 />
 

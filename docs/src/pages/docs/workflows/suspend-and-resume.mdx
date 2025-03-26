@@ -7,7 +7,10 @@ description: "Suspend and resume in Mastra workflows allows you to pause executi
 
 Complex workflows often need to pause execution while waiting for external input or resources.
 
-Mastra's suspend and resume features let you pause workflow execution at any step, persist the workflow state, and continue when ready.
+Mastra's suspend and resume features let you pause workflow execution at any step, persist the workflow snapshot to storage, and resume execution from the saved snapshot when ready.
+This entire process is automatically managed by Mastra. No config needed, or manual step required from the user.
+
+Storing the workflow snapshot to storage (LibSQL by default) means that the workflow state is permanently preserved across sessions, deployments, and server restarts. This persistence is crucial for workflows that might remain suspended for minutes, hours, or even days while waiting for external input or resources.
 
 ## When to Use Suspend/Resume
 
@@ -17,6 +20,7 @@ Common scenarios for suspending workflows include:
 - Pausing until external API resources become available
 - Collecting additional data needed for later steps
 - Rate limiting or throttling expensive operations
+- Handling event-driven processes with external triggers
 
 ## Basic Suspend Example
 
@@ -103,6 +107,11 @@ workflow
   .then(improveResponseStep)
   .then(evaluateImproved)
   .commit();
+
+  // Register the workflow with Mastra
+  export const mastra = new Mastra({
+    workflows: { workflow },
+  });
 ```
 
 ### Starting and Resuming the Workflow
@@ -123,8 +132,7 @@ if (promptAgentStepResult?.status === 'suspended') {
   console.log('Workflow suspended at promptAgent step');
 
   // Resume the workflow with new context
-  const resumeResult = await wf.resume({
-    runId: run.runId,
+  const resumeResult = await run.resume({
     stepId: 'promptAgent',
     context: { userInput: 'Human provided input' }
   });
@@ -138,8 +146,7 @@ if (improveResponseStepResult?.status === 'suspended') {
   console.log('Workflow suspended at improveResponse step');
 
   // Resume again with different context
-  const finalResult = await wf.resume({
-    runId: run.runId,
+  const finalResult = await run.resume({
     stepId: 'improveResponse',
     context: { refinedOutput: 'Human refined output' }
   });
@@ -148,36 +155,196 @@ if (improveResponseStepResult?.status === 'suspended') {
 }
 ```
 
-### Key Points About Suspend and Resume
+## Event-Based Suspension and Resumption
+
+In addition to manually suspending steps, Mastra provides event-based suspension through the `afterEvent` method. This allows workflows to automatically suspend and wait for a specific event to occur before continuing.
+
+### Using afterEvent and resumeWithEvent
+
+The `afterEvent` method automatically creates a suspension point in your workflow that waits for a specific event to occur. When the event happens, you can use `resumeWithEvent` to continue the workflow with the event data.
+
+Here's how it works:
+
+1. Define events in your workflow configuration
+2. Use `afterEvent` to create a suspension point waiting for that event
+3. When the event occurs, call `resumeWithEvent` with the event name and data
+
+### Example: Event-Based Workflow
+
+```typescript
+// Define steps
+const getUserInput = new Step({
+  id: 'getUserInput',
+  execute: async () => ({ userInput: 'initial input' }),
+  outputSchema: z.object({ userInput: z.string() }),
+});
+
+const processApproval = new Step({
+  id: 'processApproval',
+  execute: async ({ context }) => {
+    // Access the event data from the context
+    const approvalData = context.inputData?.resumedEvent;
+    return {
+      approved: approvalData?.approved,
+      approvedBy: approvalData?.approverName
+    };
+  },
+  outputSchema: z.object({
+    approved: z.boolean(),
+    approvedBy: z.string()
+  }),
+});
+
+// Create workflow with event definition
+const approvalWorkflow = new Workflow({
+  name: 'approval-workflow',
+  triggerSchema: z.object({ requestId: z.string() }),
+  events: {
+    approvalReceived: {
+      schema: z.object({
+        approved: z.boolean(),
+        approverName: z.string(),
+      }),
+    },
+  },
+});
+
+// Build workflow with event-based suspension
+approvalWorkflow
+  .step(getUserInput)
+  .afterEvent('approvalReceived') // Workflow will automatically suspend here
+  .step(processApproval)          // This step runs after the event is received
+  .commit();
+```
+
+### Running an Event-Based Workflow
+
+```typescript
+// Get the workflow
+const workflow = mastra.getWorkflow('approval-workflow');
+const run = workflow.createRun();
+
+// Start the workflow
+const initialResult = await run.start({
+  triggerData: { requestId: 'request-123' }
+});
+
+console.log('Workflow started, waiting for approval event');
+console.log(initialResult.results);
+// Output will show the workflow is suspended at the event step:
+// {
+//   getUserInput: { status: 'success', output: { userInput: 'initial input' } },
+//   __approvalReceived_event: { status: 'suspended' }
+// }
+
+// Later, when the approval event occurs:
+const resumeResult = await run.resumeWithEvent('approvalReceived', {
+  approved: true,
+  approverName: 'Jane Doe'
+});
+
+console.log('Workflow resumed with event data:', resumeResult.results);
+// Output will show the completed workflow:
+// {
+//   getUserInput: { status: 'success', output: { userInput: 'initial input' } },
+//   __approvalReceived_event: { status: 'success', output: { executed: true, resumedEvent: { approved: true, approverName: 'Jane Doe' } } },
+//   processApproval: { status: 'success', output: { approved: true, approvedBy: 'Jane Doe' } }
+// }
+```
+
+### Key Points About Event-Based Workflows
 
 - The `suspend()` function can optionally take a payload object that will be stored with the suspended state
 - Code after the `await suspend()` call will not execute until the step is resumed
 - When a step is suspended, its status becomes `'suspended'` in the workflow results
 - When resumed, the step's status changes from `'suspended'` to `'success'` once completed
-- The `resume()` method requires the `runId` and `stepId` to identify which suspended step to resume
+- The `resume()` method requires the `stepId` to identify which suspended step to resume
 - You can provide new context data when resuming that will be merged with existing step results
+
+- Events must be defined in the workflow configuration with a schema
+- The `afterEvent` method creates a special suspended step that waits for the event
+- The event step is automatically named `__eventName_event` (e.g., `__approvalReceived_event`)
+- Use `resumeWithEvent` to provide event data and continue the workflow
+- Event data is validated against the schema defined for that event
+- The event data is available in the context as `inputData.resumedEvent`
+
+## Storage for Suspend and Resume
+
+When a workflow is suspended using `await suspend()`, Mastra automatically persists the entire workflow state to storage. This is essential for workflows that might remain suspended for extended periods, as it ensures the state is preserved across application restarts or server instances.
+
+### Default Storage: LibSQL
+
+By default, Mastra uses LibSQL as its storage engine:
+
+```typescript
+import { Mastra } from '@mastra/core/mastra';
+import { DefaultStorage } from '@mastra/core/storage/libsql';
+
+const mastra = new Mastra({
+  storage: new DefaultStorage({
+    config: {
+      url: "file:storage.db", // Local file-based database for development
+      // For production, use a persistent URL:
+      // url: process.env.DATABASE_URL,
+      // authToken: process.env.DATABASE_AUTH_TOKEN, // Optional for authenticated connections
+    }
+  }),
+});
+```
+
+The LibSQL storage can be configured in different modes:
+- In-memory database (testing): `:memory:`
+- File-based database (development): `file:storage.db`
+- Remote database (production): URLs like `libsql://your-database.turso.io`
+
+### Alternative Storage Options
+
+#### Upstash (Redis-Compatible)
+
+For serverless applications or environments where Redis is preferred:
+
+```bash
+npm install @mastra/upstash
+```
+
+```typescript
+import { Mastra } from '@mastra/core/mastra';
+import { UpstashStore } from "@mastra/upstash";
+
+const mastra = new Mastra({
+  storage: new UpstashStore({
+    url: process.env.UPSTASH_URL,
+    token: process.env.UPSTASH_TOKEN,
+  }),
+});
+```
+### Storage Considerations
+
+- All storage options support suspend and resume functionality identically
+- The workflow state is automatically serialized and saved when suspended
+- No additional configuration is needed for suspend/resume to work with storage
+- Choose your storage option based on your infrastructure, scaling needs, and existing technology stack
 
 ## Watching and Resuming
 
-To handle suspended workflows, use the `watch` method to monitor workflow status and `resume` to continue execution:
+To handle suspended workflows, use the `watch` method to monitor workflow status per run and `resume` to continue execution:
 
 ```typescript
 import { mastra } from "./index";
 
 // Get the workflow
 const myWorkflow = mastra.getWorkflow('myWorkflow');
-const { runId, start } = myWorkflow.createRun();
+const { start, watch, resume } = myWorkflow.createRun();
 
 // Start watching the workflow before executing it
-myWorkflow.watch(async ({ context, activePaths }) => {
+watch(async ({ context, activePaths }) => {
   for (const _path of activePaths) {
     const stepTwoStatus = context.steps?.stepTwo?.status;
     if (stepTwoStatus === 'suspended') {
       console.log("Workflow suspended, resuming with new value");
 
       // Resume the workflow with new context
-      await myWorkflow.resume({
-        runId,
+      await resume({
         stepId: 'stepTwo',
         context: { secondValue: 100 },
       });
@@ -188,6 +355,44 @@ myWorkflow.watch(async ({ context, activePaths }) => {
 // Start the workflow execution
 await start({ triggerData: { inputValue: 45 } });
 ```
+
+### Watching and Resuming Event-Based Workflows
+
+You can use the same watching pattern with event-based workflows:
+
+```typescript
+const { start, watch, resumeWithEvent } = workflow.createRun();
+
+// Watch for suspended event steps
+watch(async ({ context, activePaths }) => {
+  for (const path of activePaths) {
+    if (path.stepId === '__approvalReceived_event' && path.status === 'suspended') {
+      console.log("Workflow waiting for approval event");
+
+      // In a real scenario, you would wait for the actual event to occur
+      // For example, this could be triggered by a webhook or user interaction
+      setTimeout(async () => {
+        await resumeWithEvent('approvalReceived', {
+          approved: true,
+          approverName: 'Auto Approver',
+        });
+      }, 5000); // Simulate event after 5 seconds
+    }
+  }
+});
+
+// Start the workflow
+await start({ triggerData: { requestId: 'auto-123' } });
+```
+
+## Further Reading
+
+For a deeper understanding of how suspend and resume works under the hood:
+
+- [Understanding Snapshots in Mastra Workflows](../reference/workflows/snapshots.mdx) - Learn about the snapshot mechanism that powers suspend and resume functionality
+- [Step Configuration Guide](./steps.mdx) - Learn more about configuring steps in your workflows
+- [Control Flow Guide](./control-flow.mdx) - Advanced workflow control patterns
+- [Event-Driven Workflows](../reference/workflows/events.mdx) - Detailed reference for event-based workflows
 
 ## Related Resources
 

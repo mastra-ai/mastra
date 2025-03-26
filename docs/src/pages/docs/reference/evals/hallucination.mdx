@@ -131,33 +131,36 @@ console.log(result.info.reason); // Explanation of the score
 
 ## Scoring Details
 
-The metric evaluates hallucination through contradiction detection and numerical precision analysis.
+The metric evaluates hallucination through contradiction detection and unsupported claim analysis.
 
 ### Scoring Process
 
 1. Analyzes factual content:
    - Extracts statements from context
-   - Identifies numerical values
+   - Identifies numerical values and dates
    - Maps statement relationships
 
-2. Analyzes output for contradictions:
+2. Analyzes output for hallucinations:
    - Compares against context statements
-   - Marks direct conflicts as contradictions
+   - Marks direct conflicts as hallucinations
+   - Identifies unsupported claims as hallucinations
    - Evaluates numerical accuracy
    - Considers approximation context
 
 3. Calculates hallucination score:
-   - Counts contradicted statements
+   - Counts hallucinated statements (contradictions and unsupported claims)
    - Divides by total statements
    - Scales to configured range
 
-Final score: `(contradicted_statements / total_statements) * scale`
+Final score: `(hallucinated_statements / total_statements) * scale`
 
 ### Important Considerations
 
-- Speculative language ("might", "possibly", "believe") does not constitute contradictions
-- Additional information beyond context scope is allowed unless it directly conflicts
-- Empty outputs result in zero contradictions
+- Claims not present in context are treated as hallucinations
+- Subjective claims are hallucinations unless explicitly supported
+- Speculative language ("might", "possibly") about facts IN context is allowed
+- Speculative language about facts NOT in context is treated as hallucination
+- Empty outputs result in zero hallucinations
 - Numerical evaluation considers:
   - Scale-appropriate precision
   - Contextual approximations

@@ -1,0 +1,20 @@
+{
+  "name": "examples-agent-network",
+  "type": "module",
+  "private": true,
+  "description": "",
+  "main": "index.js",
+  "version": "0.0.1",
+  "scripts": {
+    "start": "npx bun src/index.ts"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "@ai-sdk/openai": "^1.2.5",
+    "@mastra/client-js": "workspace:*",
+    "@mastra/core": "workspace:*",
+    "zod": "^3.24.2"
+  }
+}

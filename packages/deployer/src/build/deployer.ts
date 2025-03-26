@@ -5,25 +5,27 @@ import esbuild from 'rollup-plugin-esbuild';
 
 import { removeAllExceptDeployer } from './babel/get-deployer';
 import commonjs from '@rollup/plugin-commonjs';
+import { recursiveRemoveNonReferencedNodes } from './plugins/remove-unused-references';
 
-export async function getDeployer(entryFile: string, outputDir: string) {
-  const bundle = await rollup({
+export function getDeployerBundler(entryFile: string) {
+  return rollup({
+    logLevel: 'silent',
     input: {
       deployer: entryFile,
     },
     treeshake: 'smallest',
     plugins: [
-      commonjs({
-        extensions: ['.js', '.ts'],
-        strictRequires: 'strict',
-        transformMixedEsModules: true,
-        ignoreTryCatch: false,
-      }),
       // transpile typescript to something we understand
       esbuild({
         target: 'node20',
         platform: 'node',
         minify: false,
+      }),
+      commonjs({
+        extensions: ['.js', '.ts'],
+        strictRequires: 'strict',
+        transformMixedEsModules: true,
+        ignoreTryCatch: false,
       }),
       {
         name: 'get-deployer',
@@ -61,8 +63,29 @@ export async function getDeployer(entryFile: string, outputDir: string) {
         platform: 'node',
         minify: false,
       }),
+      {
+        name: 'cleanup-nodes',
+        transform(code, id) {
+          if (id !== entryFile) {
+            return;
+          }
+
+          return recursiveRemoveNonReferencedNodes(code);
+        },
+      },
+      // let esbuild remove all unused imports
+      esbuild({
+        target: 'node20',
+        platform: 'node',
+        minify: false,
+      }),
     ],
   });
+}
+
+export async function getDeployer(entryFile: string, outputDir: string) {
+  console.log('entryFile', entryFile);
+  const bundle = await getDeployerBundler(entryFile);
 
   await bundle.write({
     dir: outputDir,

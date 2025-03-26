@@ -1,12 +1,15 @@
 import { createHash } from 'crypto';
+import { convertToCoreMessages } from 'ai';
+import type { CoreMessage, ToolExecutionOptions } from 'ai';
 import jsonSchemaToZod from 'json-schema-to-zod';
 import { z } from 'zod';
 import type { ZodObject } from 'zod';
+
 import type { MastraPrimitives } from './action';
 import type { ToolsInput } from './agent';
 import type { Logger } from './logger';
 import type { Mastra } from './mastra';
-import type { MastraMemory } from './memory';
+import type { AiMessageType, MastraMemory } from './memory';
 import { Tool } from './tools';
 import type { CoreTool, ToolAction, VercelTool } from './tools';
 
@@ -15,6 +18,16 @@ export const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, 
 export function jsonSchemaPropertiesToTSTypes(value: any): z.ZodTypeAny {
   if (!value.type) {
     return z.object({});
+  }
+
+  // Handle case where type is an array of strings
+  if (Array.isArray(value.type)) {
+    const types = value.type.map((type: string) => {
+      return jsonSchemaPropertiesToTSTypes({ ...value, type });
+    });
+    return z
+      .union(types)
+      .describe((value.description || '') + (value.examples ? `\nExamples: ${value.examples.join(', ')}` : ''));
   }
 
   let zodType;
@@ -95,7 +108,10 @@ export function jsonSchemaToModel(jsonSchema: Record<string, any>): ZodObject<an
       zodType = zodType.describe(value.description);
     }
 
-    if (requiredFields.includes(key)) {
+    // Add check for null type requiring the field
+    const isTypeRequired = value.type === 'null';
+
+    if (requiredFields.includes(key) || isTypeRequired) {
       zodSchema[key] = zodType;
     } else {
       zodSchema[key] = zodType.nullable().optional();
@@ -302,7 +318,7 @@ interface ToolOptions {
   agentName?: string;
 }
 
-type ToolToConvert = VercelTool | ToolAction<any, any, any, any>;
+type ToolToConvert = VercelTool | ToolAction<any, any, any>;
 
 interface LogOptions {
   agentName?: string;
@@ -336,7 +352,8 @@ function createLogMessageOptions({ agentName, toolName, tool, type }: LogOptions
 }
 
 function createExecute(tool: ToolToConvert, options: ToolOptions, logType?: 'tool' | 'toolset') {
-  const { logger, ...rest } = options;
+  // dont't add memory or mastra to logging
+  const { logger, mastra: _mastra, memory: _memory, ...rest } = options;
 
   const { start, error } = createLogMessageOptions({
     agentName: options.agentName,
@@ -345,7 +362,7 @@ function createExecute(tool: ToolToConvert, options: ToolOptions, logType?: 'too
     type: logType,
   });
 
-  const execFunction = async (args: any, execOptions: any) => {
+  const execFunction = async (args: any, execOptions: ToolExecutionOptions) => {
     if (isVercelTool(tool)) {
       return tool?.execute?.(args, execOptions) ?? undefined;
     }
@@ -458,11 +475,32 @@ export function makeCoreTool(tool: ToolToConvert, options: ToolOptions, logType?
     if (isVercelTool(tool)) {
       return convertVercelToolParameters(tool);
     }
-    // If the tool is a Mastra Tool, return the inputSchema
     return tool.inputSchema ?? z.object({});
   };
 
+  // Check if this is a provider-defined tool
+  const isProviderDefined =
+    'type' in tool &&
+    tool.type === 'provider-defined' &&
+    'id' in tool &&
+    typeof tool.id === 'string' &&
+    tool.id.includes('.');
+
+  // For provider-defined tools, we need to include all required properties
+  if (isProviderDefined) {
+    return {
+      type: 'provider-defined' as const,
+      id: tool.id as `${string}.${string}`,
+      args: ('args' in tool ? tool.args : {}) as Record<string, unknown>,
+      description: tool.description!,
+      parameters: getParameters(),
+      execute: tool.execute ? createExecute(tool, { ...options, description: tool.description }, logType) : undefined,
+    };
+  }
+
+  // For function tools
   return {
+    type: 'function' as const,
     description: tool.description!,
     parameters: getParameters(),
     execute: tool.execute ? createExecute(tool, { ...options, description: tool.description }, logType) : undefined,
@@ -527,4 +565,95 @@ export function createMastraProxy({ mastra, logger }: { mastra: Mastra; logger: 
       return Reflect.get(target, prop);
     },
   });
+}
+
+export function checkEvalStorageFields(traceObject: any, logger?: Logger) {
+  const missingFields = [];
+  if (!traceObject.input) missingFields.push('input');
+  if (!traceObject.output) missingFields.push('output');
+  if (!traceObject.agentName) missingFields.push('agent_name');
+  if (!traceObject.metricName) missingFields.push('metric_name');
+  if (!traceObject.instructions) missingFields.push('instructions');
+  if (!traceObject.globalRunId) missingFields.push('global_run_id');
+  if (!traceObject.runId) missingFields.push('run_id');
+
+  if (missingFields.length > 0) {
+    if (logger) {
+      logger.warn('Skipping evaluation storage due to missing required fields', {
+        missingFields,
+        runId: traceObject.runId,
+        agentName: traceObject.agentName,
+      });
+    } else {
+      console.warn('Skipping evaluation storage due to missing required fields', {
+        missingFields,
+        runId: traceObject.runId,
+        agentName: traceObject.agentName,
+      });
+    }
+    return false;
+  }
+
+  return true;
+}
+
+// lifted from https://github.com/vercel/ai/blob/main/packages/ai/core/prompt/detect-prompt-type.ts#L27
+function detectSingleMessageCharacteristics(
+  message: any,
+): 'has-ui-specific-parts' | 'has-core-specific-parts' | 'message' | 'other' {
+  if (
+    typeof message === 'object' &&
+    message !== null &&
+    (message.role === 'function' || // UI-only role
+      message.role === 'data' || // UI-only role
+      'toolInvocations' in message || // UI-specific field
+      'parts' in message || // UI-specific field
+      'experimental_attachments' in message)
+  ) {
+    return 'has-ui-specific-parts';
+  } else if (
+    typeof message === 'object' &&
+    message !== null &&
+    'content' in message &&
+    (Array.isArray(message.content) || // Core messages can have array content
+      'experimental_providerMetadata' in message ||
+      'providerOptions' in message)
+  ) {
+    return 'has-core-specific-parts';
+  } else if (
+    typeof message === 'object' &&
+    message !== null &&
+    'role' in message &&
+    'content' in message &&
+    typeof message.content === 'string' &&
+    ['system', 'user', 'assistant', 'tool'].includes(message.role)
+  ) {
+    return 'message';
+  } else {
+    return 'other';
+  }
+}
+
+function isUiMessage(message: CoreMessage | AiMessageType): message is AiMessageType {
+  return detectSingleMessageCharacteristics(message) === `has-ui-specific-parts`;
+}
+function isCoreMessage(message: CoreMessage | AiMessageType): message is CoreMessage {
+  return [`has-core-specific-parts`, `message`].includes(detectSingleMessageCharacteristics(message));
+}
+
+export function ensureAllMessagesAreCoreMessages(messages: (CoreMessage | AiMessageType)[]) {
+  return messages
+    .map(message => {
+      if (isUiMessage(message)) {
+        return convertToCoreMessages([message]);
+      }
+      if (isCoreMessage(message)) {
+        return message;
+      }
+      const characteristics = detectSingleMessageCharacteristics(message);
+      throw new Error(
+        `Message does not appear to be a core message or a UI message but must be one of the two, found "${characteristics}" type for message:\n\n${JSON.stringify(message, null, 2)}\n`,
+      );
+    })
+    .flat();
 }

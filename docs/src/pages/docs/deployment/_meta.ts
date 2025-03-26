@@ -1,6 +1,7 @@
 const meta = {
-  "logging-and-tracing": "Logging and Tracing",
-  deployment: "Deployment",
+  server: "With a Server",
+  deployment: "Serverless Platforms",
+  client: "The Mastra Client",
 };
 
 export default meta;

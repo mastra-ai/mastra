@@ -14,6 +14,7 @@ concurrency: ${{ github.workflow }}-${{ github.ref }}
 jobs:
   release:
     name: Changesets Release
+    if: ${{ github.repository == 'mastra-ai/mastra' }}
     runs-on: ubuntu-latest
     outputs:
       exited_prerelease: ${{ steps.exit-prerelease-mode.outputs.executed }}
@@ -116,7 +117,7 @@ jobs:
 
   enter_prerelease:
     needs: release
-    if: needs.release.outputs.exited_prerelease == 'true'
+    if: ${{ github.repository == 'mastra-ai/mastra' && needs.release.outputs.exited_prerelease == 'true' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/create-github-app-token@v1
@@ -168,7 +169,7 @@ jobs:
           git pull
           pnpm changeset pre enter alpha
           git add -A
-          git commit -m 'chore: version - enter prerelease mode'
+          git commit -m 'chore: version - enter prerelease mode' --no-verify
 
       - name: Push prerelease changes
         if: ${{ !inputs.dry_run }}

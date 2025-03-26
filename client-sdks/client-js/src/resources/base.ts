@@ -24,11 +24,12 @@ export class BaseResource {
         const response = await fetch(`${baseUrl}${path}`, {
           ...options,
           headers: {
-            'Content-Type': 'application/json',
             ...headers,
             ...options.headers,
+            'x-mastra-client-type': 'js',
           },
-          body: options.body ? JSON.stringify(options.body) : undefined,
+          body:
+            options.body instanceof FormData ? options.body : options.body ? JSON.stringify(options.body) : undefined,
         });
 
         if (!response.ok) {

@@ -156,6 +156,54 @@ interface IndexStats {
   ]}
 />
 
+### updateIndexById()
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "Name of the index to update",
+    },
+    {
+      name: "id",
+      type: "string",
+      description: "ID of the item to update",
+    },
+    {
+      name: "update",
+      type: "object",
+      description: "Update object containing vector and/or metadata",
+    },
+  ]}
+/>
+
+The `update` object can have the following properties:
+
+- `vector` (optional): An array of numbers representing the new vector.
+- `metadata` (optional): A record of key-value pairs for metadata.
+
+Throws an error if neither `vector` nor `metadata` is provided, or if only `metadata` is provided.
+
+### deleteIndexById()
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "Name of the index from which to delete the item",
+    },
+    {
+      name: "id",
+      type: "string",
+      description: "ID of the item to delete",
+    },
+  ]}
+/>
+
+Attempts to delete an item by its ID from the specified index. Logs an error message if the deletion fails.
+
 ## Response Types
 
 Query results are returned in this format:
@@ -195,4 +243,5 @@ Required environment variables:
 - `UPSTASH_VECTOR_TOKEN`: Your Upstash Vector API token
 
 ### Related
-- [Metadata Filters](./metadata-filters) 
+
+- [Metadata Filters](./metadata-filters)

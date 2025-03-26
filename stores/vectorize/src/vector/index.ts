@@ -20,7 +20,7 @@ export class CloudflareVector extends MastraVector {
     this.accountId = accountId;
 
     this.client = new Cloudflare({
-      apiKey: apiToken,
+      apiToken: apiToken,
     });
   }
 
@@ -157,5 +157,39 @@ export class CloudflareVector extends MastraVector {
     });
 
     return res?.metadataIndexes ?? [];
+  }
+
+  async updateIndexById(
+    indexName: string,
+    id: string,
+    update: {
+      vector?: number[];
+      metadata?: Record<string, any>;
+    },
+  ): Promise<void> {
+    if (!update.vector && !update.metadata) {
+      throw new Error('No update data provided');
+    }
+
+    const updatePayload: any = {
+      ids: [id],
+      account_id: this.accountId,
+    };
+
+    if (update.vector) {
+      updatePayload.vectors = [update.vector];
+    }
+    if (update.metadata) {
+      updatePayload.metadata = [update.metadata];
+    }
+
+    await this.upsert({ indexName: indexName, vectors: updatePayload.vectors, metadata: updatePayload.metadata });
+  }
+
+  async deleteIndexById(indexName: string, id: string): Promise<void> {
+    await this.client.vectorize.indexes.deleteByIds(indexName, {
+      ids: [id],
+      account_id: this.accountId,
+    });
   }
 }

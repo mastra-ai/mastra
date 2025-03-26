@@ -4,7 +4,6 @@ import { z } from 'zod';
 
 export const fsTool = createTool({
   id: 'fsTool',
-  name: 'File System Tool',
   description: 'File System Tool',
   inputSchema: z.object({
     action: z.string(),

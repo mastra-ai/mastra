@@ -1,8 +1,11 @@
 {
   "name": "@mastra/deployer-vercel",
-  "version": "0.1.8-alpha.9",
+  "version": "0.1.14-alpha.2",
   "description": "",
   "type": "module",
+  "files": [
+    "dist"
+  ],
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "exports": {
@@ -19,7 +22,7 @@
     "./package.json": "./package.json"
   },
   "scripts": {
-    "build": "tsup src/index.ts --format esm,cjs --experimental-dts --clean --treeshake",
+    "build": "tsup src/index.ts --format esm,cjs --experimental-dts --clean --treeshake=smallest --splitting",
     "build:watch": "pnpm build --watch",
     "test": "vitest run",
     "lint": "eslint ."
@@ -31,16 +34,16 @@
     "@mastra/core": "workspace:^",
     "@mastra/deployer": "workspace:^",
     "@rollup/plugin-virtual": "^3.0.2",
-    "fs-extra": "^11.2.0"
+    "fs-extra": "^11.3.0"
   },
   "devDependencies": {
     "@internal/lint": "workspace:*",
-    "eslint": "^9.20.1",
-    "@microsoft/api-extractor": "^7.49.2",
-    "@types/node": "^22.13.1",
-    "tsup": "^8.0.1",
-    "typescript": "^5.7.3",
-    "vercel": "^39.3.0",
-    "vitest": "^3.0.4"
+    "@microsoft/api-extractor": "^7.52.1",
+    "@types/node": "^20.17.27",
+    "eslint": "^9.23.0",
+    "tsup": "^8.4.0",
+    "typescript": "^5.8.2",
+    "vercel": "^39.4.2",
+    "vitest": "^3.0.9"
   }
 }

@@ -8,7 +8,6 @@ import type {
   EmbedResult as AiEmbedResult,
   GenerateObjectResult,
   GenerateTextResult,
-  LanguageModelV1,
   StreamObjectResult,
   StreamTextResult,
   TelemetrySettings,
@@ -20,11 +19,11 @@ import type {
 import type { JSONSchema7 } from 'json-schema';
 import type { z, ZodSchema } from 'zod';
 
-import type { ToolsInput } from '../agent/types';
+import type { MastraLanguageModel, ToolsInput } from '../agent/types';
 import type { Run } from '../run/types';
 import type { CoreTool } from '../tools/types';
 
-export type LanguageModel = LanguageModelV1;
+export type LanguageModel = MastraLanguageModel;
 
 export type CoreMessage = AiCoreMessage;
 
@@ -102,7 +101,7 @@ export type DefaultLLMStreamObjectOptions = Omit<StreamObjectOptions, MastraCust
 type MastraCustomLLMOptions<Z extends ZodSchema | JSONSchema7 | undefined = undefined> = {
   tools?: ToolsInput;
   convertedTools?: Record<string, CoreTool>;
-  onStepFinish?: (step: string) => void;
+  onStepFinish?: (step: unknown) => void;
   experimental_output?: Z;
   telemetry?: TelemetrySettings;
   threadId?: string;

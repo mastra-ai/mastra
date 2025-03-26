@@ -1,7 +1,8 @@
-import type { GenerateReturn, StreamReturn } from '@mastra/core';
+import type { GenerateReturn } from '@mastra/core';
 import type { JSONSchema7 } from 'json-schema';
 import { ZodSchema } from 'zod';
 import { zodToJsonSchema } from 'zod-to-json-schema';
+import { processDataStream } from '@ai-sdk/ui-utils';
 
 import type {
   GenerateParams,
@@ -28,6 +29,7 @@ export class AgentTool extends BaseResource {
    * @param params - Parameters required for tool execution
    * @returns Promise containing tool execution results
    */
+  /** @deprecated use CreateRun/startRun */
   execute(params: { data: any }): Promise<any> {
     return this.request(`/api/agents/${this.agentId}/tools/${this.toolId}/execute`, {
       method: 'POST',
@@ -36,12 +38,70 @@ export class AgentTool extends BaseResource {
   }
 }
 
-export class Agent extends BaseResource {
+export class AgentVoice extends BaseResource {
   constructor(
     options: ClientOptions,
     private agentId: string,
   ) {
     super(options);
+    this.agentId = agentId;
+  }
+
+  /**
+   * Convert text to speech using the agent's voice provider
+   * @param text - Text to convert to speech
+   * @param options - Optional provider-specific options for speech generation
+   * @returns Promise containing the audio data
+   */
+  async speak(text: string, options?: { speaker?: string; [key: string]: any }): Promise<Response> {
+    return this.request<Response>(`/api/agents/${this.agentId}/voice/speak`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: { input: text, options },
+      stream: true,
+    });
+  }
+
+  /**
+   * Convert speech to text using the agent's voice provider
+   * @param audio - Audio data to transcribe
+   * @param options - Optional provider-specific options
+   * @returns Promise containing the transcribed text
+   */
+  listen(audio: Blob, options?: Record<string, any>): Promise<Response> {
+    const formData = new FormData();
+    formData.append('audio', audio);
+
+    if (options) {
+      formData.append('options', JSON.stringify(options));
+    }
+
+    return this.request(`/api/agents/${this.agentId}/voice/listen`, {
+      method: 'POST',
+      body: formData,
+    });
+  }
+
+  /**
+   * Get available speakers for the agent's voice provider
+   * @returns Promise containing list of available speakers
+   */
+  getSpeakers(): Promise<Array<{ voiceId: string; [key: string]: any }>> {
+    return this.request(`/api/agents/${this.agentId}/voice/speakers`);
+  }
+}
+
+export class Agent extends BaseResource {
+  public readonly voice: AgentVoice;
+
+  constructor(
+    options: ClientOptions,
+    private agentId: string,
+  ) {
+    super(options);
+    this.voice = new AgentVoice(options, this.agentId);
   }
 
   /**
@@ -78,9 +138,15 @@ export class Agent extends BaseResource {
   /**
    * Streams a response from the agent
    * @param params - Stream parameters including prompt
-   * @returns Promise containing the streamed response
+   * @returns Promise containing the enhanced Response object with processDataStream method
    */
-  stream<T extends JSONSchema7 | ZodSchema | undefined = undefined>(params: StreamParams<T>): Promise<Response> {
+  async stream<T extends JSONSchema7 | ZodSchema | undefined = undefined>(
+    params: StreamParams<T>,
+  ): Promise<
+    Response & {
+      processDataStream: (options?: Omit<Parameters<typeof processDataStream>[0], 'stream'>) => Promise<void>;
+    }
+  > {
     const processedParams = {
       ...params,
       output: params.output instanceof ZodSchema ? zodToJsonSchema(params.output) : params.output,
@@ -90,11 +156,26 @@ export class Agent extends BaseResource {
           : params.experimental_output,
     };
 
-    return this.request(`/api/agents/${this.agentId}/stream`, {
+    const response: Response & {
+      processDataStream: (options?: Omit<Parameters<typeof processDataStream>[0], 'stream'>) => Promise<void>;
+    } = await this.request(`/api/agents/${this.agentId}/stream`, {
       method: 'POST',
       body: processedParams,
       stream: true,
     });
+
+    if (!response.body) {
+      throw new Error('No response body');
+    }
+
+    response.processDataStream = async (options = {}) => {
+      await processDataStream({
+        stream: response.body as ReadableStream<Uint8Array>,
+        ...options,
+      });
+    };
+
+    return response;
   }
 
   /**

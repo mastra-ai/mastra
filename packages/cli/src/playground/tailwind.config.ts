@@ -8,7 +8,7 @@ export default {
     './src/pages/**/*.{js,ts,jsx,tsx,mdx}',
     './src/components/**/*.{js,ts,jsx,tsx,mdx}',
     './src/**/*.{js,ts,jsx,tsx,html}',
-    './node_modules/@mastra/playground/**/*.{js,ts,jsx,tsx}',
+    './node_modules/@mastra/playground-ui/src/**/*.{js,ts,jsx,tsx}',
   ],
   theme: {
     container: {
@@ -122,6 +122,7 @@ export default {
         ripple: 'ripple var(--duration,2s) ease calc(var(--i, 0)*.2s) infinite',
         'icon-right': 'animate-icon-right ease-out 250ms',
         'typing-dot-bounce': 'typing-dot-bounce 1.4s infinite ease-in-out',
+        'fade-in': 'fade-in 1s ease-out',
       },
       keyframes: {
         ripple: {
@@ -146,6 +147,16 @@ export default {
           },
           '50%': {
             transform: 'translateY(-4px)',
+          },
+        },
+        'fade-in': {
+          '0%': {
+            opacity: '0.8',
+            backgroundColor: 'hsl(var(--muted))',
+          },
+          '100%': {
+            opacity: '1',
+            backgroundColor: 'transparent',
           },
         },
       },

@@ -3,9 +3,10 @@ import type { MastraDeployer } from '../deployer';
 import { LogLevel, createLogger, noopLogger } from '../logger';
 import type { Logger } from '../logger';
 import type { MastraMemory } from '../memory/memory';
+import type { AgentNetwork } from '../network';
 import type { MastraStorage } from '../storage';
-import { DefaultStorage } from '../storage/libsql';
-import { InstrumentClass, OTLPStorageExporter, Telemetry } from '../telemetry';
+import { DefaultProxyStorage } from '../storage/default-proxy-storage';
+import { InstrumentClass, Telemetry } from '../telemetry';
 import type { OtelConfig } from '../telemetry';
 import type { MastraTTS } from '../tts';
 import type { MastraVector } from '../vector';
@@ -17,8 +18,10 @@ export interface Config<
   TVectors extends Record<string, MastraVector> = Record<string, MastraVector>,
   TTTS extends Record<string, MastraTTS> = Record<string, MastraTTS>,
   TLogger extends Logger = Logger,
+  TNetworks extends Record<string, AgentNetwork> = Record<string, AgentNetwork>,
 > {
   agents?: TAgents;
+  networks?: TNetworks;
   storage?: MastraStorage;
   vectors?: TVectors;
   logger?: TLogger | false;
@@ -26,6 +29,15 @@ export interface Config<
   tts?: TTTS;
   telemetry?: OtelConfig;
   deployer?: MastraDeployer;
+
+  /**
+   * Server middleware functions to be applied to API routes
+   * Each middleware can specify a path pattern (defaults to '/api/*')
+   */
+  serverMiddleware?: Array<{
+    handler: (c: any, next: () => Promise<void>) => Promise<Response | void>;
+    path?: string;
+  }>;
 
   // @deprecated add memory to your Agent directly instead
   memory?: MastraMemory;
@@ -41,18 +53,53 @@ export class Mastra<
   TVectors extends Record<string, MastraVector> = Record<string, MastraVector>,
   TTTS extends Record<string, MastraTTS> = Record<string, MastraTTS>,
   TLogger extends Logger = Logger,
+  TNetworks extends Record<string, AgentNetwork> = Record<string, AgentNetwork>,
 > {
   #vectors?: TVectors;
   #agents: TAgents;
   #logger: TLogger;
   #workflows: TWorkflows;
-  #telemetry?: Telemetry;
   #tts?: TTTS;
   #deployer?: MastraDeployer;
-  storage?: MastraStorage;
-  memory?: MastraMemory;
+  #serverMiddleware: Array<{
+    handler: (c: any, next: () => Promise<void>) => Promise<Response | void>;
+    path: string;
+  }> = [];
+  #telemetry?: Telemetry;
+  #storage?: MastraStorage;
+  #memory?: MastraMemory;
+  #networks?: TNetworks;
+
+  /**
+   * @deprecated use getTelemetry() instead
+   */
+  get telemetry() {
+    return this.#telemetry;
+  }
+
+  /**
+   * @deprecated use getStorage() instead
+   */
+  get storage() {
+    return this.#storage;
+  }
+
+  /**
+   * @deprecated use getMemory() instead
+   */
+  get memory() {
+    return this.#memory;
+  }
 
   constructor(config?: Config<TAgents, TWorkflows, TVectors, TTTS, TLogger>) {
+    // Store server middleware with default path
+    if (config?.serverMiddleware) {
+      this.#serverMiddleware = config.serverMiddleware.map(m => ({
+        handler: m.handler,
+        path: m.path || '/api/*',
+      }));
+    }
+
     /*
       Logger
     */
@@ -72,7 +119,7 @@ export class Mastra<
 
     let storage = config?.storage;
     if (!storage) {
-      storage = new DefaultStorage({
+      storage = new DefaultProxyStorage({
         config: {
           url: process.env.MASTRA_DEFAULT_STORAGE_URL || `:memory:`,
         },
@@ -82,46 +129,18 @@ export class Mastra<
     /*
     Telemetry
     */
-    // if storage is a libsql instance, we need to default the telemetry exporter to OTLPStorageExporter
-    if (storage instanceof DefaultStorage && config?.telemetry?.export?.type !== 'custom') {
-      const newTelemetry = {
-        ...(config?.telemetry || {}),
-        export: {
-          type: 'custom',
-          exporter: new OTLPStorageExporter({
-            logger: this.getLogger(),
-            storage,
-          }),
-        },
-      };
-      this.#telemetry = Telemetry.init(newTelemetry as OtelConfig);
-    } else if (config?.telemetry) {
-      this.#telemetry = Telemetry.init(config?.telemetry);
-    }
-
-    /**
-     * Deployer
-     **/
-    if (config?.deployer) {
-      this.#deployer = config.deployer;
-      if (this.#telemetry) {
-        this.#deployer = this.#telemetry.traceClass(config.deployer, {
-          excludeMethods: ['__setTelemetry', '__getTelemetry'],
-        });
-        this.#deployer.__setTelemetry(this.#telemetry);
-      }
-    }
+    this.#telemetry = Telemetry.init(config?.telemetry);
 
     /*
       Storage
     */
     if (this.#telemetry) {
-      this.storage = this.#telemetry.traceClass(storage, {
+      this.#storage = this.#telemetry.traceClass(storage, {
         excludeMethods: ['__setTelemetry', '__getTelemetry'],
       });
-      this.storage.__setTelemetry(this.#telemetry);
+      this.#storage.__setTelemetry(this.#telemetry);
     } else {
-      this.storage = storage;
+      this.#storage = storage;
     }
 
     /*
@@ -148,12 +167,12 @@ export class Mastra<
     }
 
     if (config?.memory) {
-      this.memory = config.memory;
+      this.#memory = config.memory;
       if (this.#telemetry) {
-        this.memory = this.#telemetry.traceClass(config.memory, {
+        this.#memory = this.#telemetry.traceClass(config.memory, {
           excludeMethods: ['__setTelemetry', '__getTelemetry'],
         });
-        this.memory.__setTelemetry(this.#telemetry);
+        this.#memory.__setTelemetry(this.#telemetry);
       }
     }
 
@@ -195,6 +214,7 @@ This is a warning for now, but will throw an error in the future
         if (agents[key]) {
           throw new Error(`Agent with name ID:${key} already exists`);
         }
+        agent.__registerMastra(this);
 
         agent.__registerPrimitives({
           logger: this.getLogger(),
@@ -206,13 +226,24 @@ This is a warning for now, but will throw an error in the future
           vectors: this.#vectors,
         });
 
-        agent.__registerMastra(this);
-
         agents[key] = agent;
       });
     }
 
     this.#agents = agents as TAgents;
+
+    /*
+    Networks
+    */
+    this.#networks = {} as TNetworks;
+
+    if (config?.networks) {
+      Object.entries(config.networks).forEach(([key, network]) => {
+        network.__registerMastra(this);
+        // @ts-ignore
+        this.#networks[key] = network;
+      });
+    }
 
     /*
     Workflows
@@ -295,7 +326,7 @@ This is a warning for now, but will throw an error in the future
   }
 
   public setStorage(storage: MastraStorage) {
-    this.storage = storage;
+    this.#storage = storage;
   }
 
   public setLogger({ logger }: { logger: TLogger }) {
@@ -307,8 +338,8 @@ This is a warning for now, but will throw an error in the future
       });
     }
 
-    if (this.memory) {
-      this.memory.__setLogger(this.#logger);
+    if (this.#memory) {
+      this.#memory.__setLogger(this.#logger);
     }
 
     if (this.#deployer) {
@@ -321,8 +352,8 @@ This is a warning for now, but will throw an error in the future
       });
     }
 
-    if (this.storage) {
-      this.storage.__setLogger(this.#logger);
+    if (this.#storage) {
+      this.#storage.__setLogger(this.#logger);
     }
 
     if (this.#vectors) {
@@ -343,11 +374,11 @@ This is a warning for now, but will throw an error in the future
       });
     }
 
-    if (this.memory) {
-      this.memory = this.#telemetry.traceClass(this.memory, {
+    if (this.#memory) {
+      this.#memory = this.#telemetry.traceClass(this.#memory, {
         excludeMethods: ['__setTelemetry', '__getTelemetry'],
       });
-      this.memory.__setTelemetry(this.#telemetry);
+      this.#memory.__setTelemetry(this.#telemetry);
     }
 
     if (this.#deployer) {
@@ -370,11 +401,11 @@ This is a warning for now, but will throw an error in the future
       this.#tts = tts as TTTS;
     }
 
-    if (this.storage) {
-      this.storage = this.#telemetry.traceClass(this.storage, {
+    if (this.#storage) {
+      this.#storage = this.#telemetry.traceClass(this.#storage, {
         excludeMethods: ['__setTelemetry', '__getTelemetry'],
       });
-      this.storage.__setTelemetry(this.#telemetry);
+      this.#storage.__setTelemetry(this.#telemetry);
     }
 
     if (this.#vectors) {
@@ -401,6 +432,35 @@ This is a warning for now, but will throw an error in the future
 
   public getTelemetry() {
     return this.#telemetry;
+  }
+
+  public getMemory() {
+    return this.#memory;
+  }
+
+  public getStorage() {
+    return this.#storage;
+  }
+
+  public getServerMiddleware() {
+    return this.#serverMiddleware;
+  }
+
+  public getNetworks() {
+    return Object.values(this.#networks || {});
+  }
+
+  /**
+   * Get a specific network by ID
+   * @param networkId - The ID of the network to retrieve
+   * @returns The network with the specified ID, or undefined if not found
+   */
+  public getNetwork(networkId: string): AgentNetwork | undefined {
+    const networks = this.getNetworks();
+    return networks.find(network => {
+      const routingAgent = network.getRoutingAgent();
+      return network.formatAgentId(routingAgent.name) === networkId;
+    });
   }
 
   public async getLogsByRunId({ runId, transportId }: { runId: string; transportId: string }) {

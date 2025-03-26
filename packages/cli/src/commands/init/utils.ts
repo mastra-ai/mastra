@@ -11,10 +11,11 @@ import yoctoSpinner from 'yocto-spinner';
 import { DepsService } from '../../services/service.deps';
 import { FileService } from '../../services/service.file';
 import { logger } from '../../utils/logger';
+import { globalWindsurfMCPIsAlreadyInstalled, windsurfGlobalMCPConfigPath } from './mcp-docs-server-install';
 
 const exec = util.promisify(child_process.exec);
 
-export type LLMProvider = 'openai' | 'anthropic' | 'groq';
+export type LLMProvider = 'openai' | 'anthropic' | 'groq' | 'google' | 'cerebras';
 export type Components = 'agents' | 'workflows' | 'tools';
 
 export const getAISDKPackage = (llmProvider: LLMProvider) => {
@@ -25,6 +26,10 @@ export const getAISDKPackage = (llmProvider: LLMProvider) => {
       return '@ai-sdk/anthropic';
     case 'groq':
       return '@ai-sdk/groq';
+    case 'google':
+      return '@ai-sdk/google';
+    case 'cerebras':
+      return '@ai-sdk/cerebras';
     default:
       return '@ai-sdk/openai';
   }
@@ -42,9 +47,14 @@ export const getProviderImportAndModelItem = (llmProvider: LLMProvider) => {
     modelItem = `anthropic('claude-3-5-sonnet-20241022')`;
   } else if (llmProvider === 'groq') {
     providerImport = `import { groq } from '${getAISDKPackage(llmProvider)}';`;
-    modelItem = `groq('llama3-groq-70b-8192-tool-use-preview')`;
+    modelItem = `groq('llama-3.3-70b-versatile')`;
+  } else if (llmProvider === 'google') {
+    providerImport = `import { google } from '${getAISDKPackage(llmProvider)}';`;
+    modelItem = `google('gemini-1.5-pro-latest')`;
+  } else if (llmProvider === 'cerebras') {
+    providerImport = `import { cerebras } from '${getAISDKPackage(llmProvider)}';`;
+    modelItem = `cerebras('llama-3.3-70b')`;
   }
-
   return { providerImport, modelItem };
 };
 
@@ -56,6 +66,7 @@ export async function writeAgentSample(llmProvider: LLMProvider, destPath: strin
 
       Your primary function is to help users get weather details for specific locations. When responding:
       - Always ask for a location if none is provided
+      - If the location name isn’t in English, please translate it
       - If giving a location with multiple parts (e.g. "New York, NY"), use the most relevant part (e.g. "New York")
       - Include relevant details like humidity, wind conditions, and precipitation
       - Keep responses concise but informative
@@ -419,6 +430,12 @@ export const getAPIKey = async (provider: LLMProvider) => {
     case 'groq':
       key = 'GROQ_API_KEY';
       return key;
+    case 'google':
+      key = 'GOOGLE_GENERATIVE_AI_API_KEY';
+      return key;
+    case 'cerebras':
+      key = 'CEREBRAS_API_KEY';
+      return key;
     default:
       return key;
   }
@@ -499,6 +516,8 @@ export const interactivePrompt = async () => {
             { value: 'openai', label: 'OpenAI', hint: 'recommended' },
             { value: 'anthropic', label: 'Anthropic' },
             { value: 'groq', label: 'Groq' },
+            { value: 'google', label: 'Google' },
+            { value: 'cerebras', label: 'Cerebras' },
           ],
         }),
       llmApiKey: async ({ results: { llmProvider } }) => {
@@ -524,6 +543,49 @@ export const interactivePrompt = async () => {
           message: 'Add example',
           initialValue: false,
         }),
+      configureEditorWithDocsMCP: async () => {
+        const windsurfIsAlreadyInstalled = await globalWindsurfMCPIsAlreadyInstalled();
+
+        const editor = await p.select({
+          message: `Make your AI IDE into a Mastra expert? (installs Mastra docs MCP server)`,
+          options: [
+            { value: 'skip', label: 'Skip for now', hint: 'default' },
+            { value: 'cursor', label: 'Cursor' },
+            {
+              value: 'windsurf',
+              label: 'Windsurf',
+              hint: windsurfIsAlreadyInstalled ? `Already installed` : undefined,
+            },
+          ],
+        });
+
+        if (editor === `skip`) return undefined;
+        if (editor === `windsurf` && windsurfIsAlreadyInstalled) {
+          p.log.message(`\nWindsurf is already installed, skipping.`);
+          return undefined;
+        }
+
+        if (editor === `cursor`) {
+          p.log.message(
+            `\nNote: you will need to go into Cursor Settings -> MCP Settings and manually enable the installed Mastra MCP server.\n`,
+          );
+        }
+
+        if (editor === `windsurf`) {
+          const confirm = await p.select({
+            message: `Windsurf only supports a global MCP config (at ${windsurfGlobalMCPConfigPath}) is it ok to add/update that global config?\nThis means the Mastra docs MCP server will be available in all your Windsurf projects.`,
+            options: [
+              { value: 'yes', label: 'Yes, I understand' },
+              { value: 'skip', label: 'No, skip for now' },
+            ],
+          });
+          if (confirm !== `yes`) {
+            return undefined;
+          }
+        }
+
+        return editor;
+      },
     },
     {
       onCancel: () => {
