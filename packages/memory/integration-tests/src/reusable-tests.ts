@@ -118,20 +118,43 @@ export function getResuableTests(memory: Memory) {
           },
         });
 
+        const thread = await memory.createThread({
+          resourceId,
+          title: 'Long chunking test',
+        });
+        const threadId = thread.id;
+
+        const content = Array(1000).fill(`This is a long message to test chunking with`).join(`\n`);
         await expect(
           memory.saveMessages({
             messages: [
               {
                 type: 'text',
                 role: 'user',
-                content: Array(1000).fill(`This is a long message to test chunking with`).join(`\n`),
-                threadId: 'long-chunking-test',
+                content,
+                threadId,
                 id: `long-chunking-message-${Date.now()}`,
                 createdAt: new Date(),
               },
             ],
           }),
         ).resolves.not.toThrow();
+
+        const { messages } = await memory.query({
+          threadId,
+          resourceId,
+          selectBy: {
+            vectorSearchString: content,
+          },
+          threadConfig: {
+            semanticRecall: {
+              topK: 2,
+              messageRange: 2,
+            },
+          },
+        });
+
+        expect(messages.length).toBe(1);
       });
 
       it('should find semantically similar messages', async () => {
