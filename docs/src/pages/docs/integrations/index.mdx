@@ -26,7 +26,7 @@ npm install @mastra/github
 Create a new file for your integrations (e.g., `src/mastra/integrations/index.ts`) and import the integration:
 
 ```typescript filename="src/mastra/integrations/index.ts" showLineNumbers copy
-import { GithubIntegration } from '@mastra/github';
+import { GithubIntegration } from "@mastra/github";
 
 export const github = new GithubIntegration({
   config: {
@@ -42,13 +42,13 @@ Make sure to replace `process.env.GITHUB_PAT!` with your actual GitHub Personal 
 You can now use the integration when defining tools for your agents or in workflows.
 
 ```typescript filename="src/mastra/tools/index.ts" showLineNumbers copy
-import { createTool } from '@mastra/core';
-import { z } from 'zod';
-import { github } from '../integrations';
+import { createTool } from "@mastra/core";
+import { z } from "zod";
+import { github } from "../integrations";
 
 export const getMainBranchRef = createTool({
-  id: 'getMainBranchRef',
-  description: 'Fetch the main branch reference from a GitHub repository',
+  id: "getMainBranchRef",
+  description: "Fetch the main branch reference from a GitHub repository",
   inputSchema: z.object({
     owner: z.string(),
     repo: z.string(),
@@ -63,7 +63,7 @@ export const getMainBranchRef = createTool({
       path: {
         owner: context.owner,
         repo: context.repo,
-        ref: 'heads/main',
+        ref: "heads/main",
       },
     });
 
@@ -83,14 +83,15 @@ In the example above:
 Once you've defined tools that utilize integrations, you can include these tools in your agents.
 
 ```typescript filename="src/mastra/agents/index.ts" showLineNumbers copy
-import { openai } from '@ai-sdk/openai';
-import { Agent } from '@mastra/core';
-import { getMainBranchRef } from '../tools';
+import { openai } from "@ai-sdk/openai";
+import { Agent } from "@mastra/core";
+import { getMainBranchRef } from "../tools";
 
 export const codeReviewAgent = new Agent({
-  name: 'Code Review Agent',
-  instructions: 'An agent that reviews code repositories and provides feedback.',
-  model: openai('gpt-4o-mini'),
+  name: "Code Review Agent",
+  instructions:
+    "An agent that reviews code repositories and provides feedback.",
+  model: openai("gpt-4o-mini"),
   tools: {
     getMainBranchRef,
     // other tools...
@@ -113,6 +114,91 @@ GITHUB_PAT=your_personal_access_token
 ```
 
 Consider using a `.env` file or another secure method to manage sensitive credentials.
+
+### Example: Adding the Mem0 Integration
+
+In this example you'll learn how to use the [Mem0](https://mem0.ai) platform to add long-term memory capabilities to an agent via tool-use.
+This memory integration can work alongside Mastra's own [agent memory features](https://mastra.ai/docs/agents/01-agent-memory).
+Mem0 enables your agent to memorize and later remember facts per-user across all interactions with that user, while Mastra's memory works per-thread. Using the two in conjunction will allow Mem0 to store long term memories across conversations/interactions, while Mastra's memory will maintain linear conversation history in individual conversations.
+
+1. **Install the Integration Package**
+
+To install the Mem0 integration, run:
+
+```bash
+npm install @mastra/mem0
+```
+
+2. **Add the Integration to Your Project**
+
+Create a new file for your integrations (e.g., `src/mastra/integrations/index.ts`) and import the integration:
+
+```typescript filename="src/mastra/integrations/index.ts" showLineNumbers copy
+import { Mem0Integration } from "@mastra/mem0";
+
+export const mem0 = new Mem0Integration({
+  config: {
+    apiKey: process.env.MEM0_API_KEY!,
+    userId: "alice",
+  },
+});
+```
+
+3. **Use the Integration in Tools or Workflows**
+
+You can now use the integration when defining tools for your agents or in workflows.
+
+```typescript filename="src/mastra/tools/index.ts" showLineNumbers copy
+import { createTool } from "@mastra/core";
+import { z } from "zod";
+import { mem0 } from "../integrations";
+
+export const mem0RememberTool = createTool({
+  id: "Mem0-remember",
+  description:
+    "Remember your agent memories that you've previously saved using the Mem0-memorize tool.",
+  inputSchema: z.object({
+    question: z
+      .string()
+      .describe("Question used to look up the answer in saved memories."),
+  }),
+  outputSchema: z.object({
+    answer: z.string().describe("Remembered answer"),
+  }),
+  execute: async ({ context }) => {
+    console.log(`Searching memory "${context.question}"`);
+    const memory = await mem0.searchMemory(context.question);
+    console.log(`\nFound memory "${memory}"\n`);
+
+    return {
+      answer: memory,
+    };
+  },
+});
+
+export const mem0MemorizeTool = createTool({
+  id: "Mem0-memorize",
+  description:
+    "Save information to mem0 so you can remember it later using the Mem0-remember tool.",
+  inputSchema: z.object({
+    statement: z.string().describe("A statement to save into memory"),
+  }),
+  execute: async ({ context }) => {
+    console.log(`\nCreating memory "${context.statement}"\n`);
+    // to reduce latency memories can be saved async without blocking tool execution
+    void mem0.createMemory(context.statement).then(() => {
+      console.log(`\nMemory "${context.statement}" saved.\n`);
+    });
+    return { success: true };
+  },
+});
+```
+
+In the example above:
+
+- We import the `@mastra/mem0` integration.
+- We define two tools that uses the Mem0 API client to create new memories and recall previously saved memories.
+- The tool accepts `question` as an input and returns the memory as a string.
 
 ## Available Integrations
 
