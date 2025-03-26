@@ -1,11 +1,11 @@
 import { ChatRequestOptions } from 'ai';
 import { Message } from '@ai-sdk/react';
 import { PreviewMessage, ThinkingMessage } from './message';
-import { useScrollToBottom } from './use-scroll-to-bottom';
 import { Overview } from './overview';
-import { memo } from 'react';
+import { memo, useRef } from 'react';
 import { Vote } from '@/lib/db/schema';
 import equal from 'fast-deep-equal';
+import { useAutoscroll } from '@/hooks/use-autoscroll';
 
 interface MessagesProps {
   chatId: string;
@@ -19,7 +19,8 @@ interface MessagesProps {
 }
 
 function PureMessages({ chatId, isLoading, votes, messages, setMessages, reload, isReadonly }: MessagesProps) {
-  const [messagesContainerRef, messagesEndRef] = useScrollToBottom<HTMLDivElement>();
+  const messagesContainerRef = useRef(null);
+  useAutoscroll(messagesContainerRef);
 
   return (
     <div ref={messagesContainerRef} className="flex flex-col min-w-0 gap-6 flex-1 overflow-y-scroll pt-4">
@@ -40,7 +41,7 @@ function PureMessages({ chatId, isLoading, votes, messages, setMessages, reload,
 
       {isLoading && messages.length > 0 && messages[messages.length - 1].role === 'user' && <ThinkingMessage />}
 
-      <div ref={messagesEndRef} className="shrink-0 min-w-[24px] min-h-[24px]" />
+      {/* <div ref={messagesEndRef} className="shrink-0 min-w-[24px] min-h-[24px]" /> */}
     </div>
   );
 }
