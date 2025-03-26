@@ -40,11 +40,28 @@ export function MastraRuntimeProvider({
       (hasNewInitialMessages && currentThreadId === threadId)
     ) {
       if (initialMessages && threadId && memory) {
-        setMessages(initialMessages);
+        const newMessages: ThreadMessageLike[] = initialMessages
+          ?.map((message: any) => {
+            if (message?.toolInvocations?.length > 0) {
+              return {
+                ...message,
+                content: message.toolInvocations.map((toolInvocation: any) => ({
+                  type: 'tool-call',
+                  toolCallId: toolInvocation?.toolCallId,
+                  toolName: toolInvocation?.toolName,
+                  args: toolInvocation?.args,
+                  result: toolInvocation?.result,
+                })),
+              };
+            }
+            return message;
+          })
+          .filter(Boolean);
+        setMessages(newMessages);
         setCurrentThreadId(threadId);
       }
     }
-  }, [initialMessages, threadId, memory, messages]);
+  }, [initialMessages, threadId, memory]);
 
   const mastra = new MastraClient({
     baseUrl: baseUrl || '',
@@ -110,8 +127,6 @@ export function MastraRuntimeProvider({
           updater();
         },
         async onToolCallPart(value) {
-          console.log('Tool call received:', value);
-
           // Update the messages state
           setMessages(currentConversation => {
             // Get the last message (should be the assistant's message)
@@ -164,8 +179,6 @@ export function MastraRuntimeProvider({
           });
         },
         async onToolResultPart(value: any) {
-          console.log('Tool call result received:', value);
-
           // Update the messages state
           setMessages(currentConversation => {
             // Get the last message (should be the assistant's message)
