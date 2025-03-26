@@ -2341,8 +2341,8 @@ importers:
   integrations/firecrawl:
     dependencies:
       '@hey-api/client-fetch':
-        specifier: ^0.3.4
-        version: 0.3.4
+        specifier: ^0.8.3
+        version: 0.8.3
       '@mastra/core':
         specifier: workspace:^
         version: link:../../packages/core
@@ -2408,8 +2408,8 @@ importers:
   integrations/github:
     dependencies:
       '@hey-api/client-fetch':
-        specifier: ^0.3.4
-        version: 0.3.4
+        specifier: ^0.8.3
+        version: 0.8.3
       '@mastra/core':
         specifier: workspace:^
         version: link:../../packages/core
@@ -2475,8 +2475,8 @@ importers:
   integrations/ragie:
     dependencies:
       '@hey-api/client-fetch':
-        specifier: ^0.3.4
-        version: 0.3.4
+        specifier: ^0.8.3
+        version: 0.8.3
       '@mastra/core':
         specifier: workspace:^
         version: link:../../packages/core
@@ -7299,8 +7299,8 @@ packages:
     engines: {node: '>=6'}
     hasBin: true
 
-  '@hey-api/client-fetch@0.3.4':
-    resolution: {integrity: sha512-2iEXxLNf3HQWPJC04XYaZZSqtx+gLg2dxi8oEgrYDhoBGPlaEgpao73rVjdng0YzlB4YkCkZV8p8VkhVnIaKHQ==}
+  '@hey-api/client-fetch@0.8.3':
+    resolution: {integrity: sha512-EBVa8wwUMyBSeQ32PtCz6u5bFQZIMAufvwCT1ZtpjqT3caJQEza4NokbGU50q1ZVrMsM5Ot6GuDNJOF3TMo26Q==}
 
   '@hono/node-server@1.13.8':
     resolution: {integrity: sha512-fsn8ucecsAXUoVxrUil0m13kOEq4mkX4/4QozCqmY+HpGfKl74OYSn8JcMA8GnG0ClfdRI4/ZSeG7zhFaVg+wg==}
@@ -24002,7 +24002,7 @@ snapshots:
       protobufjs: 7.4.0
       yargs: 17.7.2
 
-  '@hey-api/client-fetch@0.3.4': {}
+  '@hey-api/client-fetch@0.8.3': {}
 
   '@hono/node-server@1.13.8(hono@4.7.4)':
     dependencies:
