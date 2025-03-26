@@ -1,6 +1,6 @@
 import type { CoreMessage } from '@mastra/core';
-import type { MessageProcessor } from '../index';
 import { MDocument } from '@mastra/rag';
+import type { MessageProcessor } from '../index';
 
 interface TextPart {
   type: 'text';
@@ -119,16 +119,16 @@ export class TokenLimiter implements MessageProcessor {
     // Messages are already chronologically ordered - take most recent ones up to the token limit
     let totalTokens = 0;
     const result: CoreMessage[] = [];
-    
+
     // Process messages in reverse (newest first)
     for (let i = messages.length - 1; i >= 0; i--) {
       const message = messages[i];
-      
+
       // Skip undefined messages (shouldn't happen, but TypeScript is concerned)
       if (!message) continue;
-      
+
       const messageTokens = await this.estimateTokens(message);
-      
+
       if (totalTokens + messageTokens <= this.maxTokens) {
         // Insert at the beginning to maintain chronological order
         result.unshift(message);
@@ -138,14 +138,14 @@ export class TokenLimiter implements MessageProcessor {
         break;
       }
     }
-    
+
     return result;
   }
-  
+
   private async estimateTokens(message: CoreMessage): Promise<number> {
     // Base cost for message metadata (role, etc.)
     let tokenCount = 4; // Every message starts with role and potential metadata
-    
+
     if (typeof message.content === 'string') {
       // Count tokens for string content
       tokenCount += await this.countTokens(message.content);
@@ -154,18 +154,18 @@ export class TokenLimiter implements MessageProcessor {
       for (const part of message.content) {
         // Base cost for each part's type and metadata
         tokenCount += 3;
-        
+
         if (part.type === 'text') {
           tokenCount += await this.countTokens((part as TextPart).text);
         } else if (part.type === 'tool-call') {
           // Token cost for tool name
           const toolCall = part as unknown as ToolCall & { args?: any };
           tokenCount += await this.countTokens(toolCall.name);
-          
+
           // Token cost for args if present
           if (toolCall.args) {
             tokenCount += await this.countTokens(
-              typeof toolCall.args === 'string' ? toolCall.args : JSON.stringify(toolCall.args)
+              typeof toolCall.args === 'string' ? toolCall.args : JSON.stringify(toolCall.args),
             );
           }
         } else if (part.type === 'tool-result') {
@@ -173,7 +173,7 @@ export class TokenLimiter implements MessageProcessor {
           const toolResult = part as unknown as ToolResult & { result?: any };
           if (toolResult.result) {
             tokenCount += await this.countTokens(
-              typeof toolResult.result === 'string' ? toolResult.result : JSON.stringify(toolResult.result)
+              typeof toolResult.result === 'string' ? toolResult.result : JSON.stringify(toolResult.result),
             );
           }
         } else {
@@ -182,7 +182,7 @@ export class TokenLimiter implements MessageProcessor {
         }
       }
     }
-    
+
     return tokenCount;
   }
 
@@ -197,14 +197,14 @@ export class TokenLimiter implements MessageProcessor {
 
     // Use MDocument to create a document
     const doc = MDocument.fromText(text);
-    
+
     // Chunk it with token strategy and size of 1 to get the exact token count
     const chunks = await doc.chunk({
       strategy: 'token',
       encodingName: 'cl100k_base',
       size: 1 // Setting chunk size to 1 token will tell us exactly how many tokens
     });
-    
+
     // The number of chunks is the token count
     return chunks.length;
   }
