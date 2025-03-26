@@ -764,7 +764,7 @@ describe('agent', () => {
         userName: 'Carlos',
       };
 
-      const resolvedInstructions = await agent.resolveInstructions(streamDependencies);
+      const resolvedInstructions = await agent.instructions.resolve(streamDependencies);
       expect(resolvedInstructions).toContain('Carlos');
       expect(resolvedInstructions).toContain('Western Europe');
       expect(resolvedInstructions).toContain('stream-api-key-123');
@@ -832,7 +832,7 @@ describe('agent', () => {
       dependenciesSchema: depsSchema,
     });
 
-    await expect(agent.resolveInstructions()).rejects.toThrow('Dependencies validation failed');
+    await expect(agent.instructions.resolve()).rejects.toThrow('Dependencies validation failed');
 
     const response = await agent.generate('Introduce yourself briefly', {
       dependencies: {
@@ -851,7 +851,7 @@ describe('agent', () => {
       model: openai('gpt-4o'),
     });
 
-    const staticInstructions = await staticAgent.resolveInstructions();
+    const staticInstructions = await staticAgent.instructions.resolve();
     expect(staticInstructions).toBe('You are a helpful assistant.');
 
     const dynamicAgentNoSchema = new Agent({
@@ -862,7 +862,7 @@ describe('agent', () => {
       model: openai('gpt-4o'),
     });
 
-    const dynamicInstructionsNoSchema = await dynamicAgentNoSchema.resolveInstructions();
+    const dynamicInstructionsNoSchema = await dynamicAgentNoSchema.instructions.resolve();
     expect(dynamicInstructionsNoSchema).toBe(
       'You are a weather assistant. Always use celsius for temperature by default.',
     );
@@ -889,7 +889,7 @@ describe('agent', () => {
       tempUnit: 'celsius' as const,
     };
 
-    const resolvedInstructions = await dynamicAgent.resolveInstructions(validDeps);
+    const resolvedInstructions = await dynamicAgent.instructions.resolve(validDeps);
     expect(resolvedInstructions).toContain('You are a weather assistant for John');
     expect(resolvedInstructions).toContain('Always use celsius for temperature');
 
@@ -901,9 +901,9 @@ describe('agent', () => {
       dependencies: validDeps,
     });
 
-    await expect(dynamicAgent.resolveInstructions()).rejects.toThrow('Dependencies validation failed');
+    await expect(dynamicAgent.instructions.resolve()).rejects.toThrow('Dependencies validation failed');
 
-    await expect(dynamicAgent.resolveInstructions({ userName: 'John' } as any)).rejects.toThrow(
+    await expect(dynamicAgent.instructions.resolve({ userName: 'John' } as any)).rejects.toThrow(
       'Dependencies validation failed',
     );
   });
@@ -915,14 +915,14 @@ describe('agent', () => {
       model: openai('gpt-4o'),
     });
 
-    const initialInstructions = await agent.resolveInstructions();
+    const initialInstructions = await agent.instructions.resolve();
     expect(initialInstructions).toBe('You are a general assistant.');
 
     agent.__updateInstructions(
       'You are a specialized math tutor. Always include the phrase "As your math tutor" in your responses.',
     );
 
-    const updatedInstructions = await agent.resolveInstructions();
+    const updatedInstructions = await agent.instructions.resolve();
     expect(updatedInstructions).toBe(
       'You are a specialized math tutor. Always include the phrase "As your math tutor" in your responses.',
     );
@@ -937,7 +937,7 @@ describe('agent', () => {
 
     agent.__updateInstructions(dynamicInstructions as any);
 
-    const emptyDynamicInstructions = await agent.resolveInstructions();
+    const emptyDynamicInstructions = await agent.instructions.resolve();
     expect(emptyDynamicInstructions).toBe(
       'You are a specialized tutor. Always include the phrase "As your tutor" in your responses.',
     );
@@ -963,9 +963,9 @@ describe('agent', () => {
 
     agentWithSchema.__updateInstructions(schemaInstructions);
 
-    await expect(agentWithSchema.resolveInstructions()).rejects.toThrow('Dependencies validation failed');
+    await expect(agentWithSchema.instructions.resolve()).rejects.toThrow('Dependencies validation failed');
 
-    const resolvedWithDeps = await agentWithSchema.resolveInstructions({ subject: 'physics' });
+    const resolvedWithDeps = await agentWithSchema.instructions.resolve({ subject: 'physics' });
     expect(resolvedWithDeps).toBe(
       'You are a specialized physics tutor. Always include the phrase "As your physics tutor" in your responses.',
     );
@@ -996,17 +996,17 @@ describe('agent', () => {
       dependenciesSchema: depsSchema,
     });
 
-    await expect(agent.resolveInstructions()).rejects.toThrow('Dependencies validation failed');
+    await expect(agent.instructions.resolve()).rejects.toThrow('Dependencies validation failed');
 
     await expect(
-      agent.resolveInstructions({
+      agent.instructions.resolve({
         userName: 'Bob',
         // Missing 'role' field
         expertise: ['JavaScript'],
       } as any),
     ).rejects.toThrow('Dependencies validation failed');
 
-    const resolvedInstructions = await agent.resolveInstructions({
+    const resolvedInstructions = await agent.instructions.resolve({
       userName: 'Bob',
       role: 'technical advisor',
       expertise: ['JavaScript', 'TypeScript', 'React'],
@@ -1031,7 +1031,7 @@ describe('agent', () => {
       model: openai('gpt-4o'),
     });
 
-    const resolvedInstructions = await agent.resolveInstructions({
+    const resolvedInstructions = await agent.instructions.resolve({
       userName: 'Bob',
       role: 'technical advisor',
       expertise: ['JavaScript'],
@@ -1049,10 +1049,10 @@ describe('agent', () => {
       model: openai('gpt-4o'),
     });
 
-    const resolvedStaticInstructions = await staticAgent.resolveInstructions();
+    const resolvedStaticInstructions = await staticAgent.instructions.resolve();
     expect(resolvedStaticInstructions).toBe('You are a static instructions agent.');
 
-    const resolvedStaticWithDeps = await staticAgent.resolveInstructions({ foo: 'bar' } as any);
+    const resolvedStaticWithDeps = await staticAgent.instructions.resolve({ foo: 'bar' } as any);
     expect(resolvedStaticWithDeps).toBe('You are a static instructions agent.');
 
     const simpleDynamicAgent = new Agent({
@@ -1063,10 +1063,10 @@ describe('agent', () => {
       model: openai('gpt-4o'),
     });
 
-    const resolvedSimpleDynamic = await simpleDynamicAgent.resolveInstructions();
+    const resolvedSimpleDynamic = await simpleDynamicAgent.instructions.resolve();
     expect(resolvedSimpleDynamic).toBe('You are a dynamic agent with default mode.');
 
-    const resolvedSimpleDynamicWithDeps = await simpleDynamicAgent.resolveInstructions({ mode: 'advanced' });
+    const resolvedSimpleDynamicWithDeps = await simpleDynamicAgent.instructions.resolve({ mode: 'advanced' });
     expect(resolvedSimpleDynamicWithDeps).toBe('You are a dynamic agent with advanced mode.');
 
     const depsSchema = z.object({
@@ -1083,19 +1083,19 @@ describe('agent', () => {
       dependenciesSchema: depsSchema,
     });
 
-    const resolvedComplexDynamic = await complexDynamicAgent.resolveInstructions({
+    const resolvedComplexDynamic = await complexDynamicAgent.instructions.resolve({
       mode: 'expert',
       userName: 'Charlie',
     });
     expect(resolvedComplexDynamic).toBe('Hello Charlie, you are using the expert mode.');
 
     await expect(
-      complexDynamicAgent.resolveInstructions({
+      complexDynamicAgent.instructions.resolve({
         mode: 'invalid-mode' as any,
         userName: 'Dave',
       }),
     ).rejects.toThrow('Dependencies validation failed');
 
-    await expect(complexDynamicAgent.resolveInstructions()).rejects.toThrow('Dependencies validation failed');
+    await expect(complexDynamicAgent.instructions.resolve()).rejects.toThrow('Dependencies validation failed');
   });
 });
