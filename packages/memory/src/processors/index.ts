@@ -202,7 +202,8 @@ export class TokenLimiter implements MessageProcessor {
     const chunks = await doc.chunk({
       strategy: 'token',
       encodingName: 'cl100k_base',
-      size: 1 // Setting chunk size to 1 token will tell us exactly how many tokens
+      size: 1, // Setting chunk size to 1 token will tell us exactly how many tokens
+      overlap: 0,
     });
 
     // The number of chunks is the token count
