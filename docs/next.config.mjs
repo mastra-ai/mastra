@@ -2,6 +2,9 @@
 import nextra from 'nextra';
 
 const withNextra = nextra({
+  search: {
+    codeblocks: true
+  },
   theme: 'nextra-theme-docs',
   themeConfig: './theme.config.tsx',
   mdxOptions: {

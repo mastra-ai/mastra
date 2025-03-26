@@ -1,6 +1,6 @@
 {
   "name": "@mastra/evals",
-  "version": "0.1.14-alpha.0",
+  "version": "0.1.14-alpha.3",
   "description": "",
   "type": "module",
   "files": [
@@ -84,9 +84,9 @@
     "@types/string-similarity": "^4.0.2",
     "ai": "^4.1.54",
     "dotenv": "^16.4.7",
-    "eslint": "^9.22.0",
+    "eslint": "^9.23.0",
     "tsup": "^8.4.0",
     "typescript": "^5.8.2",
-    "vitest": "^3.0.8"
+    "vitest": "^3.0.9"
   }
 }

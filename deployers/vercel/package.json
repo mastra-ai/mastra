@@ -1,6 +1,6 @@
 {
   "name": "@mastra/deployer-vercel",
-  "version": "0.1.14-alpha.0",
+  "version": "0.1.14-alpha.3",
   "description": "",
   "type": "module",
   "files": [
@@ -39,11 +39,11 @@
   "devDependencies": {
     "@internal/lint": "workspace:*",
     "@microsoft/api-extractor": "^7.52.1",
-    "@types/node": "^22.13.10",
-    "eslint": "^9.22.0",
+    "@types/node": "^20.17.27",
+    "eslint": "^9.23.0",
     "tsup": "^8.4.0",
     "typescript": "^5.8.2",
     "vercel": "^39.4.2",
-    "vitest": "^3.0.8"
+    "vitest": "^3.0.9"
   }
 }

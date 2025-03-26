@@ -63,6 +63,8 @@ const response = await myAgent.generate([
 console.log("Agent:", response.text);
 ```
 
+For more details about the generate method and its options, see the [generate reference documentation](/docs/reference/agents/generate).
+
 ### Streaming responses
 
 For more real-time responses, you can stream the agent's response:
@@ -79,7 +81,9 @@ for await (const chunk of stream.textStream) {
 }
 ```
 
-## **3. Structured Output**
+For more details about streaming responses, see the [stream reference documentation](/docs/reference/agents/stream).
+
+## 3. Structured Output
 
 Agents can return structured data by providing a JSON Schema or using a Zod schema.
 
@@ -150,9 +154,119 @@ const response = await myAgent.generate(
 console.log("Structured Output:", response.object);
 ```
 
+### Using Tools
+
+If you need to generate structured output alongside tool calls, you'll need to use the `experimental_output` property instead of `output`. Here's how:
+
+```typescript
+const schema = z.object({
+  summary: z.string(),
+  keywords: z.array(z.string()),
+});
+
+const response = await myAgent.generate(
+  [
+    {
+      role: "user",
+      content: "Please analyze this repository and provide a summary and keywords...",
+    },
+  ],
+  {
+    // Use experimental_output to enable both structured output and tool calls
+    experimental_output: schema,  
+  },
+);
+
+console.log("Structured Output:", response.object);
+```
+<br/>
+
+
 This allows you to have strong typing and validation for the structured data returned by the agent.
 
-## **4. Running Agents**
+## 4. Multi-step Tool use Agents
+
+Agents can be enhanced with tools - functions that extend their capabilities beyond text generation. Tools allow agents to perform calculations, access external systems, and process data. For details on creating and configuring tools, see the [Adding Tools documentation](/docs/agents/02-adding-tools).
+
+### Using maxSteps
+
+The `maxSteps` parameter controls the maximum number of sequential LLM calls an agent can make, particularly important when using tool calls. By default, it is set to 1 to prevent infinite loops in case of misconfigured tools. You can increase this limit based on your use case:
+
+```ts showLineNumbers filename="src/mastra/agents/index.ts" copy
+import { Agent } from "@mastra/core/agent";
+import { openai } from "@ai-sdk/openai";
+import * as mathjs from "mathjs";
+import { z } from "zod";
+
+export const myAgent = new Agent({
+  name: "My Agent",
+  instructions: "You are a helpful assistant that can solve math problems.",
+  model: openai("gpt-4o-mini"),
+  tools: {
+    calculate: {
+      description: "Calculator for mathematical expressions",
+      schema: z.object({ expression: z.string() }),
+      execute: async ({ expression }) => mathjs.evaluate(expression)
+    }
+  }
+});
+
+const response = await myAgent.generate(
+  [{
+    role: "user",
+    content: "If a taxi driver earns $9461 per hour and works 12 hours a day, how much does they earn in one day?"
+  }],
+  {
+    maxSteps: 5 // Allow up to 5 tool usage steps
+  }
+);
+```
+
+### Using onStepFinish
+
+You can monitor the progress of multi-step operations using the `onStepFinish` callback. This is useful for debugging or providing progress updates to users.
+`onStepFinish` is only available when streaming or generating text without structured output.
+
+```ts showLineNumbers filename="src/mastra/agents/index.ts" copy
+const response = await myAgent.generate(
+  [{ role: "user", content: "Calculate the taxi driver's daily earnings." }],
+  {
+    maxSteps: 5,
+    onStepFinish: ({ text, toolCalls, toolResults }) => {
+      console.log("Step completed:", { text, toolCalls, toolResults });
+    }
+  }
+);
+```
+
+### Using onFinish
+
+The `onFinish` callback is available when streaming responses and provides detailed information about the completed interaction. It is called after the LLM has finished generating its response and all tool executions have completed.
+ This callback receives the final response text, execution steps, token usage statistics, and other metadata that can be useful for monitoring and logging:
+
+```ts showLineNumbers filename="src/mastra/agents/index.ts" copy
+const stream = await myAgent.stream(
+  [{ role: "user", content: "Calculate the taxi driver's daily earnings." }],
+  {
+    maxSteps: 5,
+    onFinish: ({ 
+      steps, 
+      text,
+      finishReason,  // 'complete', 'length', 'tool', etc.
+      usage,         // token usage statistics
+      reasoningDetails // additional context about the agent's decisions
+    }) => {
+      console.log("Stream complete:", { 
+        totalSteps: steps.length, 
+        finishReason,
+        usage 
+      });
+    }
+  }
+);
+```
+
+## 5. Running Agents
 
 Mastra provides a CLI command `mastra dev` to run your agents behind an API. By default, this looks for exported agents in files in the `src/mastra/agents` directory.
 

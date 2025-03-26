@@ -1,5 +1,34 @@
 # @mastra/deployer
 
+## 0.2.5-alpha.3
+
+### Patch Changes
+
+- Updated dependencies [b3b34f5]
+- Updated dependencies [a4686e8]
+  - @mastra/core@0.7.0-alpha.3
+
+## 0.2.5-alpha.2
+
+### Patch Changes
+
+- Updated dependencies [a838fde]
+- Updated dependencies [a8bd4cf]
+- Updated dependencies [7a3eeb0]
+- Updated dependencies [6530ad1]
+  - @mastra/core@0.7.0-alpha.2
+
+## 0.2.5-alpha.1
+
+### Patch Changes
+
+- cdc0498: Fix process.versions.node.split in cloudflare deployer
+- 0b496ff: Load env vars on mastra deploy
+- Updated dependencies [0b54522]
+- Updated dependencies [1af25d5]
+- Updated dependencies [27439ad]
+  - @mastra/core@0.7.0-alpha.1
+
 ## 0.2.5-alpha.0
 
 ### Patch Changes

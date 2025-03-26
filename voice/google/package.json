@@ -1,6 +1,6 @@
 {
   "name": "@mastra/voice-google",
-  "version": "0.1.9-alpha.0",
+  "version": "0.1.9-alpha.3",
   "description": "Mastra Google voice integration",
   "type": "module",
   "files": [
@@ -29,14 +29,14 @@
   },
   "dependencies": {
     "@google-cloud/speech": "^6.7.1",
-    "@google-cloud/text-to-speech": "^5.8.1",
+    "@google-cloud/text-to-speech": "^6.0.1",
     "@mastra/core": "workspace:^",
     "zod": "^3.24.2"
   },
   "devDependencies": {
     "@internal/lint": "workspace:*",
-    "@types/node": "^22.13.10",
-    "eslint": "^9.22.0",
+    "@types/node": "^20.17.27",
+    "eslint": "^9.23.0",
     "tsup": "^8.4.0",
     "typescript": "^5.8.2",
     "vitest": "^2.1.9"
