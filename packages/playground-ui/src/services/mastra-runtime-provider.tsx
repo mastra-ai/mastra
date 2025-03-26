@@ -201,6 +201,9 @@ export function MastraRuntimeProvider({
       });
 
       setIsRunning(false);
+      setTimeout(() => {
+        refreshThreadList?.();
+      }, 500);
     } catch (error) {
       console.error('Error occurred in MastraRuntimeProvider', error);
       setIsRunning(false);
