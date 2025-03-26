@@ -13,7 +13,7 @@
     "test:libsql": "vitest run ./src/with-libsql-storage.test.ts"
   },
   "dependencies": {
-    "@ai-sdk/openai": "^1.3.0",
+    "@ai-sdk/openai": "^1.3.2",
     "@ai-sdk/react": "^1.2.1",
     "@mastra/client-js": "workspace:*",
     "@mastra/core": "workspace:*",
