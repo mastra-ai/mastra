@@ -16,10 +16,6 @@ const meta = {
     title: "Agents",
     collapsed: false,
   },
-  storage: {
-    title: "Storage",
-    collapsed: false,
-  },
   workflows: {
     title: "Workflows",
     collapsed: false,
@@ -42,6 +38,10 @@ const meta = {
   },
   evals: {
     title: "Evals",
+    collapsed: false,
+  },
+  storage: {
+    title: "Storage",
     collapsed: false,
   },
   voice: {

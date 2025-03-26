@@ -10,9 +10,9 @@ The `.chunk()` function splits documents into smaller segments using various str
 ## Example
 
 ```typescript
-import { Document } from '@mastra/core';
+import { MDocument } from '@mastra/rag';
 
-const doc = new Document(`
+const doc = MDocument.fromMarkdown(`
 # Introduction
 This is a sample document that we want to split into chunks.
 

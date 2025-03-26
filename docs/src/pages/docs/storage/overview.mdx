@@ -3,6 +3,8 @@ title: Storage in Mastra | Mastra Docs
 description: Overview of Mastra's storage system and data persistence capabilities.
 ---
 
+import { Tabs } from "nextra/components";
+import { useTheme } from 'nextra-theme-docs'
 import { PropertiesTable } from '@/components/properties-table'
 import { SchemaTable } from '@/components/schema-table'
 
@@ -13,21 +15,29 @@ MastraStorage provides a unified interface for managing
 - Workflow Tracking, allowing users to suspend and resume workflow runs.
 - Memory, threads and messages per resourceId in your application
 - Traces - OpenTelemetry traces from all components of Mastra
-- Evaluation Datasets - as evaluations are run, the scores and reasons are stored in datasets.
+- Eval Datasets - as evals are run, the scores and reasons are stored in datasets.
 
-<img
-  src="/docs/mastra-storage.png"
-  alt="Diagram showing storage in Mastra"
-  width={700}
-/>
+<div>
+  {useTheme().resolvedTheme === 'dark' ? (
+    <img
+      src="/docs/mastra-storage-overview-dark.png"
+      alt="Diagram showing storage in Mastra"
+      width={700}
+    />
+  ) : (
+    <img
+      src="/docs/mastra-storage-overview-light.png"
+      alt="Diagram showing storage in Mastra"
+      width={700}
+    />
+  )}
+</div>
 
 Mastra provides different storage providers, but you can treat them as interchangeable. Eg, you could use libsql in development but postgres in production, and your code will work the same both ways.
 ## Data Schema
 
-### Memory
-
-**Messages**
-
+<Tabs items={['Messages', 'Threads', 'Workflows', 'Eval Datasets', 'Traces']}>
+  <Tabs.Tab>
 Stores conversation messages and their metadata. Each message belongs to a thread and contains the actual content along with metadata about the sender role and message type.
 
 <SchemaTable
@@ -35,7 +45,7 @@ Stores conversation messages and their metadata. Each message belongs to a threa
     {
       name: "id",
       type: "text",
-      description: "Unique identifier for the message",
+      description: "UUIDv4 (example: `550e8400-e29b-41d4-a716-446655440000`)",
       constraints: [
         { type: "primaryKey" },
         { type: "nullable", value: false }
@@ -44,7 +54,7 @@ Stores conversation messages and their metadata. Each message belongs to a threa
     {
       name: "thread_id",
       type: "text",
-      description: "Reference to the parent thread",
+      description: "UUIDv4 parent thread reference",
       constraints: [
         { type: "foreignKey", value: "threads.id" },
         { type: "nullable", value: false }
@@ -53,32 +63,30 @@ Stores conversation messages and their metadata. Each message belongs to a threa
     {
       name: "content",
       type: "text",
-      description: "The actual message content",
       constraints: [{ type: "nullable", value: false }]
     },
     {
       name: "role",
       type: "text",
-      description: "Message sender role (user/assistant/system)",
+      description: "Enum of `system | user | assistant | tool`",
       constraints: [{ type: "nullable", value: false }]
     },
     {
       name: "type",
       type: "text",
-      description: "Message type identifier",
+      description: "Enum of `text | tool-call | tool-result`",
       constraints: [{ type: "nullable", value: false }]
     },
     {
       name: "createdAt",
       type: "timestamp",
-      description: "When the message was created",
+      description: "Used for thread message ordering",
       constraints: [{ type: "nullable", value: false }]
     }
   ]}
 />
-
-**Threads**
-
+  </Tabs.Tab>
+  <Tabs.Tab>
 Groups related messages together and associates them with a resource. Contains metadata about the conversation.
 
 <SchemaTable
@@ -86,7 +94,7 @@ Groups related messages together and associates them with a resource. Contains m
     {
       name: "id",
       type: "text",
-      description: "Unique identifier for the thread",
+      description: "UUIDv4 (example: `550e8400-e29b-41d4-a716-446655440000`)",
       constraints: [
         { type: "primaryKey" },
         { type: "nullable", value: false }
@@ -95,7 +103,7 @@ Groups related messages together and associates them with a resource. Contains m
     {
       name: "resourceId",
       type: "text",
-      description: "Identifier for the associated resource",
+      description: "Primary identifier of the external resource this thread is associated with. Used to group and retrieve related threads.",
       constraints: [{ type: "nullable", value: false }]
     },
     {
@@ -107,26 +115,24 @@ Groups related messages together and associates them with a resource. Contains m
     {
       name: "metadata",
       type: "text",
-      description: "Additional custom metadata for the thread",
+      description: "Additional custom metadata for the thread (stringified JSON)",
     },
     {
       name: "createdAt",
       type: "timestamp",
-      description: "When the thread was created",
       constraints: [{ type: "nullable", value: false }]
     },
     {
       name: "updatedAt",
       type: "timestamp",
-      description: "When the thread was last modified",
+      description: "Used for thread ordering history",
       constraints: [{ type: "nullable", value: false }]
     }
   ]}
 />
-
-## Workflows
-
-Preserves workflow execution states and enables resuming workflows:
+  </Tabs.Tab>
+  <Tabs.Tab>
+Preserves workflow execution states and enables resuming workflows.
 
 <SchemaTable
   columns={[
@@ -134,33 +140,36 @@ Preserves workflow execution states and enables resuming workflows:
       name: "workflow_name",
       type: "text",
       description: "Name of the workflow",
+      constraints: [{ type: "nullable", value: false }]
     },
     {
       name: "run_id",
       type: "text",
       description: "Unique identifier for this workflow run",
+      constraints: [{ type: "nullable", value: false }]
     },
     {
       name: "snapshot",
       type: "text",
       description: "Serialized workflow state data",
+      constraints: [{ type: "nullable", value: false }]
     },
     {
       name: "createdAt",
       type: "timestamp",
-      description: "When the workflow state was first saved",
+      constraints: [{ type: "nullable", value: false }]
     },
     {
       name: "updatedAt",
       type: "timestamp",
       description: "When the workflow state was last modified",
+      constraints: [{ type: "nullable", value: false }]
     }
   ]}
 />
-
-### Evaluation Datasets
-
-Stores evaluation results from running metrics against agent outputs:
+  </Tabs.Tab>
+  <Tabs.Tab>
+Stores eval results from running metrics against agent outputs.
 
 <SchemaTable
   columns={[
@@ -168,58 +177,66 @@ Stores evaluation results from running metrics against agent outputs:
       name: "input",
       type: "text",
       description: "Input provided to the agent",
+      constraints: [{ type: "nullable", value: false }]
     },
     {
       name: "output",
       type: "text",
       description: "Output generated by the agent",
+      constraints: [{ type: "nullable", value: false }]
     },
     {
       name: "result",
       type: "jsonb",
-      description: "Metric evaluation result data (score and details)",
+      description: "Metric eval result data (score and details)",
+      constraints: [{ type: "nullable", value: false }]
     },
     {
       name: "agent_name",
       type: "text",
       description: "Name of the evaluated agent",
+      constraints: [{ type: "nullable", value: false }]
     },
     {
       name: "metric_name",
       type: "text",
-      description: "Name of the evaluation metric",
+      description: "Name of the eval metric",
+      constraints: [{ type: "nullable", value: false }]
     },
     {
       name: "instructions",
       type: "text",
-      description: "Agent instructions used during evaluation",
+      description: "Agent instructions",
+      constraints: [{ type: "nullable", value: false }]
     },
     {
       name: "test_info",
       type: "jsonb",
       description: "Additional test metadata and configuration",
+      constraints: [{ type: "nullable", value: false }]
     },
     {
       name: "global_run_id",
       type: "text",
-      description: "Identifier for the global evaluation run",
+      description: "Identifier for the global eval run",
+      constraints: [{ type: "nullable", value: false }]
     },
     {
       name: "run_id",
       type: "text",
-      description: "Identifier for this specific evaluation",
+      description: "Identifier for this specific eval",
+      constraints: [{ type: "nullable", value: false }]
     },
     {
       name: "created_at",
       type: "timestamp",
-      description: "When the evaluation was performed",
+      constraints: [{ type: "nullable", value: false }]
     }
   ]}
 />
-
-### Traces
-
-Captures OpenTelemetry traces for monitoring and debugging:
+  </Tabs.Tab>
+  <Tabs.Tab>
+Captures OpenTelemetry traces for monitoring and debugging.
 
 <SchemaTable
   columns={[
@@ -301,11 +318,12 @@ Captures OpenTelemetry traces for monitoring and debugging:
     {
       name: "createdAt",
       type: "timestamp",
-      description: "When this trace record was created",
       constraints: [{ type: "nullable", value: false }]
     }
   ]}
 />
+  </Tabs.Tab>
+</Tabs>
 
 ## Configuration
 

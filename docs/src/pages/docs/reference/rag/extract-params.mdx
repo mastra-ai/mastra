@@ -14,7 +14,9 @@ ExtractParams configures metadata extraction from document chunks.
 `ExtractParams` configures automatic metadata extraction from chunks using LLM analysis.
 
 ```typescript showLineNumbers copy
-const doc = new Document(text);
+import { MDocument } from "@mastra/rag";
+
+const doc = MDocument.fromText(text);
 const chunks = await doc.chunk({
   extract: {
     fields: [
