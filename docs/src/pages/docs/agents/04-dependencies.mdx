@@ -18,7 +18,7 @@ The dependency system allows you to:
 The type and runtime systems work together to ensure:
 
 - The type system helps you define the correct shape of dependencies, but doesn't strictly enforce their presence
-- If you define a dependencies schema but don't provide dependencies when calling `generate()`, `stream()`, or `resolveInstructions()`, you'll get runtime validation errors
+- If you define a dependencies schema but don't provide dependencies when calling `generate()`, `stream()`, or `agent.instructions.resolve()`, you'll get runtime validation errors
 - Dependencies you provide must match the schema you defined
 - Dependencies are properly passed to tools and are validated against each tool's own schema at runtime
 
@@ -188,7 +188,7 @@ const agent = new Agent({
 });
 
 // CORRECT: Valid dependencies
-const instructions = await agent.resolveInstructions({
+const instructions = await agent.instructions.resolve({
   apiKey: process.env.WEATHER_API_KEY,
   userId: 123,
   temperatureUnit: "celsius",
@@ -196,7 +196,7 @@ const instructions = await agent.resolveInstructions({
 // returns: "You are a weather assistant for user 123. Always use celsius for temperature."
 
 // ERROR: Missing or invalid dependencies
-await agent.resolveInstructions();
+await agent.instructions.resolve();
 // ⚠️ Will throw: "Dependencies validation failed"
 ```
 
