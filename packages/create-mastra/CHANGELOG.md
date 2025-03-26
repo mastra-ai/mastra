@@ -1,5 +1,11 @@
 # create-mastra
 
+## 0.2.3-alpha.2
+
+### Patch Changes
+
+- 6d5d9c6: Show tool calls in playground chat
+
 ## 0.2.3-alpha.1
 
 ### Patch Changes
