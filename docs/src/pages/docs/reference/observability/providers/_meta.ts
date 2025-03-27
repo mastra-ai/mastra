@@ -11,4 +11,4 @@ const meta = {
   laminar: "Laminar",
 };
 
-export default meta
+export default meta;
