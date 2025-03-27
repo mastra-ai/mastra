@@ -39,14 +39,14 @@ Mastra provides different storage providers, but you can treat them as interchan
 
 Mastra can be configured with a default storage option:
 
-```typescript
+```typescript copy
 import { Mastra } from '@mastra/core/mastra';
 import { DefaultStorage } from '@mastra/core/storage/libsql';
 
 const mastra = new Mastra({
   storage: new DefaultStorage({
     config: {
-      url: "file:storage.db",
+      url: "file:.mastra/mastra.db",
     }
   }),
 });
@@ -133,7 +133,7 @@ Groups related messages together and associates them with a resource. Contains m
     {
       name: "metadata",
       type: "text",
-      description: "Custom thread metadata as stringified JSON. Example:",
+      description: "Custom thread metadata as stringified JSON.",
       example: {
         category: "support",
         priority: 1
@@ -173,7 +173,7 @@ When `suspend` is called on a workflow, its state is saved in the following form
     {
       name: "snapshot",
       type: "text",
-      description: "Serialized workflow state as JSON. Example:",
+      description: "Serialized workflow state as JSON.",
       example: {
         value: { currentState: 'running' },
         context: {
@@ -221,7 +221,7 @@ Stores eval results from running metrics against agent outputs.
     {
       name: "result",
       type: "jsonb",
-      description: "Eval result data that includes score and details. Example:",
+      description: "Eval result data that includes score and details.",
       example: {
         score: 0.95,
         details: {
@@ -282,7 +282,7 @@ Captures OpenTelemetry traces for monitoring and debugging.
     {
       name: "id",
       type: "text",
-      description: "Primary key - Unique identifier for the trace",
+      description: "Unique trace identifier",
       constraints: [
         { type: "nullable", value: false },
         { type: "primaryKey" }
@@ -291,41 +291,45 @@ Captures OpenTelemetry traces for monitoring and debugging.
     {
       name: "parentSpanId",
       type: "text",
-      description: "ID of the parent span if this is a child span",
+      description: "ID of the parent span. Null if span is top level",
     },
     {
       name: "name",
       type: "text",
-      description: "Name of the traced operation",
+      description: "Operation name (e.g. function name, HTTP route)",
       constraints: [{ type: "nullable", value: false }]
     },
     {
       name: "traceId",
       type: "text",
-      description: "ID of the full trace this span belongs to",
+      description: "Root trace identifier that groups related spans",
       constraints: [{ type: "nullable", value: false }]
     },
     {
       name: "scope",
       type: "text",
-      description: "Scope of the traced operation",
+      description: "Package/module/service name that created the span",
       constraints: [{ type: "nullable", value: false }]
     },
     {
       name: "kind",
       type: "integer",
-      description: "Type of span (e.g., client, server)",
+      description: "`INTERNAL` (0, within process), `CLIENT` (1, outgoing calls), `SERVER` (2, incoming calls), `PRODUCER` (3, async job creation), `CONSUMER` (4, async job processing)",
       constraints: [{ type: "nullable", value: false }]
     },
     {
       name: "attributes",
       type: "jsonb",
-      description: "Key-value pairs with span metadata",
+      description: "User defined key-value pairs with span metadata",
     },
     {
       name: "status",
       type: "jsonb",
-      description: "Status information about the span",
+      description: "JSON object with `code` (UNSET=0, ERROR=1, OK=2) and optional `message`",
+      example: {
+        code: 1,
+        message: "HTTP request failed with status 500"
+      }
     },
     {
       name: "events",
@@ -345,13 +349,13 @@ Captures OpenTelemetry traces for monitoring and debugging.
     {
       name: "startTime",
       type: "bigint",
-      description: "When the span started (nanoseconds)",
+      description: "Nanoseconds since Unix epoch when span started",
       constraints: [{ type: "nullable", value: false }]
     },
     {
       name: "endTime",
       type: "bigint",
-      description: "When the span ended (nanoseconds)",
+      description: "Nanoseconds since Unix epoch when span ended",
       constraints: [{ type: "nullable", value: false }]
     },
     {
@@ -364,8 +368,8 @@ Captures OpenTelemetry traces for monitoring and debugging.
   </Tabs.Tab>
 </Tabs>
 
-## Other Storage Providers
-If you want to use other storage, check out the following providers:
-- [LibSQL Storage](../reference/storage/libsql.mdx)
-- [PostgreSQL Storage](../reference/storage/postgresql.mdx)
-- [Upstash Storage](../reference/storage/upstash.mdx)
+## Storage Providers
+Mastra supports the following providers:
+- For local development, check out [LibSQL Storage](../reference/storage/libsql.mdx)
+- For production, check out [PostgreSQL Storage](../reference/storage/postgresql.mdx)
+- For caching, check out [Upstash Storage](../reference/storage/upstash.mdx)

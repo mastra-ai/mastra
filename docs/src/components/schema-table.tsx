@@ -91,9 +91,12 @@ export const SchemaTable: React.FC<SchemaTableProps> = ({ columns = [] }) => {
             <div className="text-sm text-zinc-400">
               <MDXText>{column.description ?? ""}</MDXText>
               {column.example && (
-                <MDXExample>
-                  {JSON.stringify(column.example, null, 2)}
-                </MDXExample>
+                <div className="mt-1 flex flex-col gap-1">
+                  Example:
+                  <MDXExample>
+                    {JSON.stringify(column.example, null, 2)}
+                  </MDXExample>
+                </div>
               )}
             </div>
           </div>
