@@ -1,5 +1,6 @@
 import type { CoreMessage } from '@mastra/core';
-import { getEncoding } from 'js-tiktoken';
+import { Tiktoken } from 'js-tiktoken/lite';
+import cl100k_base from 'js-tiktoken/ranks/cl100k_base';
 import type { MessageProcessor } from '../index';
 
 interface TextPart {
@@ -120,7 +121,7 @@ export class TokenLimiter implements MessageProcessor {
     let totalTokens = 0;
     const result: CoreMessage[] = [];
 
-    const encoder = getEncoding('cl100k_base');
+    const encoder = new Tiktoken(cl100k_base);
 
     // Process messages in reverse (newest first)
     for (let i = messages.length - 1; i >= 0; i--) {
@@ -144,7 +145,7 @@ export class TokenLimiter implements MessageProcessor {
     return result;
   }
 
-  private countTokens(message: CoreMessage, encoder: any): number {
+  private countTokens(message: CoreMessage, encoder: Tiktoken): number {
     // Base cost for message metadata (role, etc.)
     let tokenCount = 4; // Every message starts with role and potential metadata
 
