@@ -26,7 +26,7 @@ import type { CompositeVoice } from '../voice';
 
 export type { Message as AiMessageType } from 'ai';
 
-export type ToolsInput = Record<string, ToolAction<any, any, any> | VercelTool>;
+export type ToolsInput = Record<string, ToolAction | VercelTool>;
 
 export type ToolsetsInput = Record<string, ToolsInput>;
 
