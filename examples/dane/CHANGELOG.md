@@ -1,5 +1,12 @@
 # @mastra/dane
 
+## 0.0.11-alpha.4
+
+### Patch Changes
+
+- Updated dependencies [394dfad]
+  - @mastra/memory@0.2.6-alpha.4
+
 ## 0.0.11-alpha.3
 
 ### Patch Changes
