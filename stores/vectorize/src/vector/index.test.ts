@@ -25,7 +25,12 @@ function waitUntilReady(vector: CloudflareVector, indexName: string) {
   });
 }
 
-function waitUntilVectorsIndexed(vector: CloudflareVector, indexName: string, expectedCount: number) {
+function waitUntilVectorsIndexed(
+  vector: CloudflareVector,
+  indexName: string,
+  expectedCount: number,
+  exactCount = false,
+) {
   return new Promise((resolve, reject) => {
     const maxAttempts = 60;
     let attempts = 0;
@@ -35,7 +40,8 @@ function waitUntilVectorsIndexed(vector: CloudflareVector, indexName: string, ex
     const interval = setInterval(async () => {
       try {
         const stats = await vector.describeIndex(indexName);
-        if (stats && stats.count >= expectedCount) {
+        const check = exactCount ? stats?.count === expectedCount : stats?.count >= expectedCount;
+        if (stats && check) {
           if (stats.count === lastCount) {
             stableCount++;
             if (stableCount >= 2) {
@@ -337,7 +343,7 @@ describe('CloudflareVector', () => {
         const idToBeDeleted = ids[0];
 
         await vectorDB.deleteIndexById(indexName, idToBeDeleted);
-        await waitUntilVectorsIndexed(vectorDB, indexName, 2);
+        await waitUntilVectorsIndexed(vectorDB, indexName, 2, true);
 
         const results: QueryResult[] = await vectorDB.query({
           indexName,
@@ -349,7 +355,7 @@ describe('CloudflareVector', () => {
         expect(results.map(res => res.id)).not.toContain(idToBeDeleted);
       });
     });
-  }, 80000);
+  }, 800000);
 
   describe('Error Handling', () => {
     it('should handle invalid dimension vectors', async () => {
