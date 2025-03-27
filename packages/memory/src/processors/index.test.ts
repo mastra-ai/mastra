@@ -1,27 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 import { TokenLimiter, ToolCallFilter } from './index';
 import type { CoreMessage } from '@mastra/core';
-import { MDocument } from '@mastra/rag';
-
-// Mock MDocument and its chunk method
-vi.mock('@mastra/rag', () => {
-  return {
-    MDocument: {
-      fromText: (text: string) => ({
-        chunk: async ({ size = 1 }) => {
-          // Create chunks of the specified size to simulate token chunking
-          // For testing, we'll use the approximation that 1 token ≈ 4 characters
-          const tokenCount = Math.ceil(text.length / 4);
-          
-          // Create an array with tokenCount elements
-          return Array.from({ length: tokenCount }, (_, i) => ({
-            text: text.substring(i * 4, Math.min((i + 1) * 4, text.length))
-          }));
-        }
-      })
-    }
-  };
-});
 
 // Mock message type for testing with id field
 type MockMessage = CoreMessage & { id: string };
@@ -34,7 +13,7 @@ describe('TokenLimiter', () => {
     createdAt: new Date(Date.now() - parseInt(id) * 1000), // older ids have earlier timestamps
   } as MockMessage);
 
-  it('should limit messages to the specified token count', async () => {
+  it('should limit messages to the specified token count', () => {
     // Create messages with predictable token counts (approximately 25 tokens each)
     const messages = [
       createMessage('1', 'A '.repeat(100)), // ~25 tokens
@@ -45,7 +24,7 @@ describe('TokenLimiter', () => {
     ];
 
     const limiter = new TokenLimiter(60); // Should allow approximately 2 messages
-    const result = await limiter.process(messages) as MockMessage[];
+    const result = limiter.process(messages) as MockMessage[];
 
     // Should prioritize newest messages (higher ids)
     expect(result.length).toBe(2);
@@ -53,13 +32,13 @@ describe('TokenLimiter', () => {
     expect(result[1].id).toBe('5');
   });
 
-  it('should handle empty messages array', async () => {
+  it('should handle empty messages array', () => {
     const limiter = new TokenLimiter(1000);
-    const result = await limiter.process([]);
+    const result = limiter.process([]);
     expect(result).toEqual([]);
   });
 
-  it('should handle complex message structures with tiktoken', async () => {
+  it('should handle complex message structures', () => {
     // Create messages with different content types
     const messages = [
       createMessage('1', 'Simple text message'),
@@ -93,7 +72,7 @@ describe('TokenLimiter', () => {
     ];
 
     const limiter = new TokenLimiter(100); 
-    const result = await limiter.process(messages) as MockMessage[];
+    const result = limiter.process(messages) as MockMessage[];
 
     // All messages should fit in our limit
     expect(result.length).toBe(3);
