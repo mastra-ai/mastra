@@ -296,8 +296,8 @@ Captures OpenTelemetry traces for monitoring and debugging.
     {
       name: "name",
       type: "text",
-      description: "Operation name (e.g. function name, HTTP route)",
-      constraints: [{ type: "nullable", value: false }]
+      description: "Hierarchical operation name (e.g. `workflow.myWorkflow.execute`, `http.request`, `database.query`)",
+      constraints: [{ type: "nullable", value: false }],
     },
     {
       name: "traceId",
@@ -308,7 +308,7 @@ Captures OpenTelemetry traces for monitoring and debugging.
     {
       name: "scope",
       type: "text",
-      description: "Package/module/service name that created the span",
+      description: "Library/package/service that created the span (e.g. `@mastra/core`, `express`, `pg`)",
       constraints: [{ type: "nullable", value: false }]
     },
     {
@@ -320,7 +320,7 @@ Captures OpenTelemetry traces for monitoring and debugging.
     {
       name: "attributes",
       type: "jsonb",
-      description: "User defined key-value pairs with span metadata",
+      description: "User defined key-value pairs that contain span metadata",
     },
     {
       name: "status",
