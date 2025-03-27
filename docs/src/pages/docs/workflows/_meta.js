@@ -6,6 +6,7 @@ const meta = {
   "suspend-and-resume": "Suspend & Resume",
   "dynamic-workflows": "Dynamic Workflows",
   "error-handling": "Error Handling",
+  "nested-workflows": "Nested Workflows",
 };
 
 export default meta;
