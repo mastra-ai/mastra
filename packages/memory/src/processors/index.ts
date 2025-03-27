@@ -3,23 +3,6 @@ import { Tiktoken } from 'js-tiktoken/lite';
 import cl100k_base from 'js-tiktoken/ranks/cl100k_base';
 import type { MessageProcessor } from '../index';
 
-interface TextPart {
-  type: 'text';
-  text: string;
-}
-
-// Note: These interfaces are for type checking only, we'll use type assertions with 'unknown'
-interface ToolCall {
-  type: 'tool-call';
-  toolCallId: string;
-  toolName: string;
-}
-
-interface ToolResult {
-  type: 'tool-result';
-  toolCallId: string;
-}
-
 /**
  * Filters out tool calls and results from messages.
  * By default (with no arguments), excludes all tool calls and their results.
@@ -63,9 +46,8 @@ export class ToolCallFilter implements MessageProcessor {
         if (Array.isArray(message.content)) {
           message.content.forEach(part => {
             if (part.type === 'tool-call') {
-              const toolCall = part as unknown as ToolCall;
-              if (this.exclude!.includes(toolCall.toolName)) {
-                excludedToolCallIds.push(toolCall.toolCallId);
+              if (this.exclude!.includes(part.toolName)) {
+                excludedToolCallIds.push(part.toolCallId);
               }
             }
           });
@@ -108,18 +90,19 @@ export class ToolCallFilter implements MessageProcessor {
  * This encoding is used by all modern OpenAI models (GPT-3.5, GPT-4, etc).
  */
 export class TokenLimiter implements MessageProcessor {
+  private encoder: Tiktoken;
   /**
    * Create a token limiter for messages.
    * @param maxTokens Maximum number of tokens to allow
    */
-  constructor(private maxTokens: number) {}
+  constructor(private maxTokens: number) {
+    this.encoder = new Tiktoken(cl100k_base);
+  }
 
   process(messages: CoreMessage[]): CoreMessage[] {
     // Messages are already chronologically ordered - take most recent ones up to the token limit
     let totalTokens = 0;
     const result: CoreMessage[] = [];
-
-    const encoder = new Tiktoken(cl100k_base);
 
     // Process messages in reverse (newest first)
     for (let i = messages.length - 1; i >= 0; i--) {
@@ -128,7 +111,7 @@ export class TokenLimiter implements MessageProcessor {
       // Skip undefined messages (shouldn't happen, but TypeScript is concerned)
       if (!message) continue;
 
-      const messageTokens = this.countTokens(message, encoder);
+      const messageTokens = this.countTokens(message);
 
       if (totalTokens + messageTokens <= this.maxTokens) {
         // Insert at the beginning to maintain chronological order
@@ -143,56 +126,33 @@ export class TokenLimiter implements MessageProcessor {
     return result;
   }
 
-  private countTokens(message: CoreMessage, encoder: Tiktoken): number {
-    // Base cost for message metadata (role, etc.)
-    let tokenCount = 4; // Every message starts with role and potential metadata
+  public countTokens(message: CoreMessage): number {
+    let tokenString = message.role;
 
     if (typeof message.content === 'string') {
-      // Count tokens for string content using the encoder
-      tokenCount += encoder.encode(message.content || '').length;
+      tokenString += message.content;
     } else if (Array.isArray(message.content)) {
       // Calculate tokens for each content part
       for (const part of message.content) {
-        if (!part) continue; // Skip null/undefined parts
-
-        // Base cost for each part's type and metadata
-        tokenCount += 3;
-
+        tokenString += part.type;
         if (part.type === 'text') {
-          // Text content
-          const text = (part as TextPart).text;
-          tokenCount += encoder.encode(text || '').length;
+          tokenString += part.text;
         } else if (part.type === 'tool-call') {
-          // Tool calls have name, args, etc.
-          const toolCall = part as unknown as ToolCall & { args?: any };
-
-          // Token cost for tool name
-          if (toolCall.toolName) {
-            tokenCount += encoder.encode(toolCall.toolName).length;
-          }
-
-          // Token cost for args if present
-          if (toolCall.args) {
-            const argsString = typeof toolCall.args === 'string' ? toolCall.args : JSON.stringify(toolCall.args);
-            tokenCount += encoder.encode(argsString || '').length;
+          tokenString += part.toolName as any;
+          if (part.args) {
+            tokenString += typeof part.args === 'string' ? part.args : JSON.stringify(part.args);
           }
         } else if (part.type === 'tool-result') {
-          // Tool results can be large
-          const toolResult = part as unknown as ToolResult & { result?: any };
-
           // Token cost for result if present
-          if (toolResult.result !== undefined) {
-            const resultString =
-              typeof toolResult.result === 'string' ? toolResult.result : JSON.stringify(toolResult.result);
-            tokenCount += encoder.encode(resultString || '').length;
+          if (part.result !== undefined) {
+            tokenString += typeof part.result === 'string' ? part.result : JSON.stringify(part.result);
           }
         } else {
-          // Other content types (image, etc.) - flat cost
-          tokenCount += 10;
+          tokenString += JSON.stringify(part);
         }
       }
     }
 
-    return tokenCount;
+    return this.encoder.encode(tokenString).length;
   }
 }
