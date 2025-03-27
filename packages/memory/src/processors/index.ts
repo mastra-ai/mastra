@@ -99,9 +99,14 @@ export class TokenLimiter implements MessageProcessor {
     this.encoder = new Tiktoken(cl100k_base);
   }
 
-  process(messages: CoreMessage[]): CoreMessage[] {
+  process(messages: CoreMessage[], { systemMessage }: { systemMessage?: CoreMessage } = {}): CoreMessage[] {
     // Messages are already chronologically ordered - take most recent ones up to the token limit
     let totalTokens = 0;
+
+    if (systemMessage) {
+      totalTokens += this.countTokens(systemMessage);
+    }
+
     const result: CoreMessage[] = [];
 
     // Process messages in reverse (newest first)

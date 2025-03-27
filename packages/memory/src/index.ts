@@ -20,7 +20,7 @@ export interface MessageProcessor {
    * @param messages The messages to process
    * @returns The processed messages
    */
-  process(messages: CoreMessage[]): CoreMessage[] | Promise<CoreMessage[]>;
+  process(messages: CoreMessage[], opts: { systemMessage?: CoreMessage }): CoreMessage[] | Promise<CoreMessage[]>;
 }
 
 /**
@@ -84,36 +84,20 @@ export class Memory extends MastraMemory {
    * @param messages The messages to process
    * @returns The processed messages
    */
-  private async applyProcessors(messages: CoreMessage[]): Promise<CoreMessage[]> {
-    let processedMessages = [...messages];
-    
-    for (const processor of this.processors) {
-      processedMessages = await processor.process(processedMessages);
-    }
-    
-    return processedMessages;
-  }
-
-  /**
-   * Apply processors specified in the query options to messages.
-   * @param messages The messages to process
-   * @param processors Optional processors to apply for this specific query
-   * @returns The processed messages
-   */
-  private async applyQueryProcessors(
+  private async applyProcessors(
     messages: CoreMessage[],
-    processors?: MessageProcessor[]
+    opts: { processors?: MessageProcessor[]; systemMessage?: CoreMessage },
   ): Promise<CoreMessage[]> {
-    if (!processors || processors.length === 0) {
+    if (!opts.processors || opts.processors.length === 0) {
       return messages;
     }
-    
+
     let processedMessages = [...messages];
-    
-    for (const processor of processors) {
-      processedMessages = await processor.process(processedMessages);
+
+    for (const processor of opts.processors) {
+      processedMessages = await processor.process(processedMessages, { systemMessage: opts.systemMessage });
     }
-    
+
     return processedMessages;
   }
 
@@ -122,8 +106,10 @@ export class Memory extends MastraMemory {
     resourceId,
     selectBy,
     threadConfig,
-  }: StorageGetMessagesArg & { 
+    systemMessage,
+  }: StorageGetMessagesArg & {
     threadConfig?: ExtendedMemoryConfig;
+    systemMessage?: CoreMessage;
   }): Promise<{ messages: CoreMessage[]; uiMessages: AiMessageType[] }> {
     if (resourceId) await this.validateThreadIsOwnedByResource(threadId, resourceId);
 
@@ -202,11 +188,14 @@ export class Memory extends MastraMemory {
     const uiMessages = this.convertToUIMessages(rawMessages);
 
     // Apply global processors
-    let processedMessages = await this.applyProcessors(messages);
-    
+    let processedMessages = await this.applyProcessors(messages, { processors: this.processors, systemMessage });
+
     // Apply query-specific processors if provided
     if (config.processors) {
-      processedMessages = await this.applyQueryProcessors(processedMessages, config.processors);
+      processedMessages = await this.applyProcessors(processedMessages, {
+        processors: config.processors,
+        systemMessage,
+      });
     }
 
     return { messages: processedMessages, uiMessages };
@@ -215,11 +204,13 @@ export class Memory extends MastraMemory {
   async rememberMessages({
     threadId,
     resourceId,
+    systemMessage,
     vectorMessageSearch,
     config,
   }: {
     threadId: string;
     resourceId?: string;
+    systemMessage?: CoreMessage;
     vectorMessageSearch?: string;
     config?: ExtendedMemoryConfig;
   }): Promise<{
@@ -246,6 +237,7 @@ export class Memory extends MastraMemory {
         vectorSearchString: threadConfig.semanticRecall && vectorMessageSearch ? vectorMessageSearch : undefined,
       },
       threadConfig: config,
+      systemMessage,
     });
 
     this.logger.debug(`Remembered message history includes ${messagesResult.messages.length} messages.`);

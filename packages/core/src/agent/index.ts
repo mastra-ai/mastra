@@ -203,12 +203,14 @@ export class Agent<
     memoryConfig,
     resourceId,
     userMessages,
+    systemMessage,
     runId,
   }: {
     resourceId: string;
     threadId: string;
     memoryConfig?: MemoryConfig;
     userMessages: CoreMessage[];
+    systemMessage: CoreMessage;
     time?: Date;
     keyword?: string;
     runId?: string;
@@ -242,6 +244,7 @@ export class Agent<
                   threadId,
                   resourceId,
                   config: memoryConfig,
+                  systemMessage,
                   vectorMessageSearch: messages
                     .slice(-1)
                     .map(m => {
@@ -581,12 +584,14 @@ export class Agent<
     threadId,
     memoryConfig,
     messages,
+    systemMessage,
   }: {
     runId?: string;
     threadId: string;
     memoryConfig?: MemoryConfig;
     messages: CoreMessage[];
     resourceId: string;
+    systemMessage: CoreMessage;
   }) {
     let coreMessages: CoreMessage[] = [];
     let threadIdToUse = threadId;
@@ -597,6 +602,7 @@ export class Agent<
       resourceId,
       userMessages: messages,
       memoryConfig,
+      systemMessage,
     });
 
     coreMessages = saveMessageResponse.messages;
@@ -672,6 +678,7 @@ export class Agent<
             threadId: threadIdToUse,
             memoryConfig,
             messages,
+            systemMessage,
           });
 
           coreMessages = preExecuteResult.coreMessages;

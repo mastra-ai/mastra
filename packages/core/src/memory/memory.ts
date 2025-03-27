@@ -121,7 +121,7 @@ export abstract class MastraMemory extends MastraBase {
     const dimensionsByModelId: Record<string, number> = {
       'bge-small-en-v1.5': 384,
       'bge-base-en-v1.5': 768,
-      'voyage-3-lite': 512
+      'voyage-3-lite': 512,
     };
 
     const dimensions = dimensionsByModelId[this.embedder.modelId] || defaultDimensions;
@@ -140,11 +140,13 @@ export abstract class MastraMemory extends MastraBase {
     threadId,
     resourceId,
     vectorMessageSearch,
+    systemMessage,
     config,
   }: {
     threadId: string;
     resourceId?: string;
     vectorMessageSearch?: string;
+    systemMessage?: CoreMessage;
     config?: MemoryConfig;
   }): Promise<{
     threadId: string;
