@@ -181,6 +181,16 @@ export class PgVector extends MastraVector {
       return vectorIds;
     } catch (error) {
       await client.query('ROLLBACK');
+      if (error instanceof Error && error.message?.includes('expected') && error.message?.includes('dimensions')) {
+        const match = error.message.match(/expected (\d+) dimensions, not (\d+)/);
+        if (match) {
+          const [, expected, actual] = match;
+          throw new Error(
+            `Vector dimension mismatch: Index "${params.indexName}" expects ${expected} dimensions but got ${actual} dimensions. ` +
+              `Either use a matching embedding model or delete and recreate the index with the new dimension.`,
+          );
+        }
+      }
       throw error;
     } finally {
       client.release();
