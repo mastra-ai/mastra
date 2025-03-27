@@ -3,9 +3,8 @@ import type { z } from 'zod';
 import type { Mastra } from '..';
 import type { Logger } from '../logger';
 import type { Step } from './step';
-import type { StepAction, StepDef, StepResult, VariableReference, WorkflowContext, WorkflowRunResult } from './types';
+import type { StepAction, StepResult, VariableReference, WorkflowContext, WorkflowRunResult } from './types';
 import type { Workflow } from './workflow';
-import type { WorkflowResultReturn } from './workflow-instance';
 
 export function isErrorEvent(stateEvent: any): stateEvent is {
   type: `xstate.error.actor.${string}`;
@@ -116,6 +115,7 @@ export function mergeChildValue(
 ): Record<string, any> {
   const traverse = (current: Record<string, any>) => {
     const obj: Record<string, any> = {};
+
     for (const [key, value] of Object.entries(current)) {
       if (key === startStepId) {
         // Found child state
@@ -160,7 +160,8 @@ export function getResultActivePaths(state: {
   value: Record<string, string>;
   context: { steps: Record<string, any> };
 }) {
-  return getActivePathsAndStatus(state.value).reduce((acc, curr) => {
+  const activePaths = getActivePathsAndStatus(state.value);
+  const activePathsAndStatus = activePaths.reduce((acc, curr) => {
     const entry: { status: string; suspendPayload?: any } = { status: curr.status };
     if (curr.status === 'suspended') {
       // @ts-ignore
@@ -169,6 +170,7 @@ export function getResultActivePaths(state: {
     acc.set(curr.stepId, entry);
     return acc;
   }, new Map<string, { status: string; suspendPayload?: any }>());
+  return activePathsAndStatus;
 }
 
 export function isWorkflow(

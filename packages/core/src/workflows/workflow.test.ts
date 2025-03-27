@@ -1723,7 +1723,6 @@ describe('Workflow', async () => {
         id: 'final',
         description: 'Final step that prints the result',
         execute: async (...rest) => {
-          console.log('calling final');
           return final(...rest);
         },
       });
@@ -1733,7 +1732,6 @@ describe('Workflow', async () => {
         id: 'dummy',
         description: 'Dummy step',
         execute: async (...rest) => {
-          console.log('calling dummyStep');
           return mockAction(...rest);
         },
       });
@@ -1743,7 +1741,6 @@ describe('Workflow', async () => {
         id: 'dummy2',
         description: 'Dummy step',
         execute: async (...rest) => {
-          console.log('calling dummyStep2');
           return mockAction2(...rest);
         },
       });
@@ -1753,9 +1750,6 @@ describe('Workflow', async () => {
         id: 'dummy3',
         description: 'Dummy step',
         execute: async (...rest) => {
-          console.log({ rest: rest[0].context.steps['increment'] }, '=======');
-          console.log(rest[0].context.getStepResult('increment'));
-          console.log('calling dummyStep3');
           return mockAction3(...rest);
         },
       });
@@ -1877,19 +1871,22 @@ describe('Workflow', async () => {
       expect(onTransition).toHaveBeenCalledWith(
         expect.objectContaining({
           runId: expect.any(String),
-          value: { step1: 'runningSubscribers' },
-          context: expect.objectContaining({
-            steps: { step1: expect.any(Object) },
-            triggerData: {},
-            attempts: { step1: 0, step2: 0 },
-          }),
-          activePaths: [
-            {
-              stepPath: expect.any(Array),
-              stepId: 'step1',
-              status: 'runningSubscribers',
+          results: {
+            step1: {
+              output: {
+                result: 'success1',
+              },
+              status: 'success',
             },
-          ],
+          },
+          activePaths: new Map([
+            [
+              'step1',
+              {
+                status: 'runningSubscribers',
+              },
+            ],
+          ]),
           timestamp: expect.any(Number),
         }),
       );
@@ -1968,18 +1965,10 @@ describe('Workflow', async () => {
       expect(onTransition).toHaveBeenCalledTimes(6);
       expect(onTransition).toHaveBeenCalledWith(
         expect.objectContaining({
-          activePaths: [
-            {
-              stepPath: expect.any(Array),
-              stepId: 'step1',
-              status: 'runningSubscribers',
-            },
-            {
-              stepPath: expect.any(Array),
-              stepId: 'step2',
-              status: 'runningSubscribers',
-            },
-          ],
+          activePaths: new Map([
+            ['step1', { status: 'runningSubscribers' }],
+            ['step2', { status: 'runningSubscribers' }],
+          ]),
         }),
       );
     });
@@ -2990,7 +2979,6 @@ describe('Workflow', async () => {
 
         const run = counterWorkflow.createRun();
         const { results } = await run.start({ triggerData: { startValue: 1 } });
-        console.log(results);
 
         expect(start).toHaveBeenCalledTimes(1);
         expect(other).toHaveBeenCalledTimes(1);
@@ -3097,7 +3085,6 @@ describe('Workflow', async () => {
 
         const run = counterWorkflow.createRun();
         const { results } = await run.start({ triggerData: { startValue: 1 } });
-        console.log(results);
 
         expect(start).toHaveBeenCalledTimes(1);
         expect(other).toHaveBeenCalledTimes(0);
@@ -3212,7 +3199,6 @@ describe('Workflow', async () => {
 
         const run = counterWorkflow.createRun();
         const { results } = await run.start({ triggerData: { startValue: 1 } });
-        console.log(results);
 
         expect(start).toHaveBeenCalledTimes(1);
         expect(other).toHaveBeenCalledTimes(1);
@@ -3243,6 +3229,7 @@ describe('Workflow', async () => {
                   status: 'success',
                 },
               },
+              timestamp: expect.any(Number),
             },
             status: 'success',
           },
@@ -3545,7 +3532,7 @@ describe('Workflow', async () => {
 
         const run = counterWorkflow.createRun();
         const unwatch = counterWorkflow.watch(state => {
-          console.log('state', JSON.stringify(state.value, null, 2));
+          console.log('state', JSON.stringify(state.results, null, 2));
         });
         const { results } = await run.start({ triggerData: { startValue: 1 } });
 

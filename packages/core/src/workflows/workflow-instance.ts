@@ -245,11 +245,18 @@ export class WorkflowInstance<
 
     this.#machines[startStepId] = defaultMachine;
 
-    const stateUpdateHandler = (startStepId: string, state: any) => {
-      if (startStepId === 'trigger') {
-        this.#state = state;
+    const stateUpdateHandler = (startStepId: string, state: any, ctx?: any) => {
+      let fullState: { value: any; context: any } = { value: {}, context: {} };
+      if (ctx) {
+        fullState['value'] = state;
+        fullState['context'] = ctx;
       } else {
-        this.#state = mergeChildValue(startStepId, this.#state, state.value);
+        fullState = state;
+      }
+      if (startStepId === 'trigger') {
+        this.#state = fullState.value;
+      } else {
+        this.#state = mergeChildValue(startStepId, this.#state, fullState.value);
       }
 
       const now = Date.now();
@@ -257,9 +264,9 @@ export class WorkflowInstance<
         this.#onStepTransition.forEach(onTransition => {
           void onTransition({
             runId: this.#runId,
-            results: state.context.steps,
+            results: fullState.context.steps,
             activePaths: getResultActivePaths(
-              state as unknown as { value: Record<string, string>; context: { steps: Record<string, any> } },
+              fullState as unknown as { value: Record<string, string>; context: { steps: Record<string, any> } },
             ),
             timestamp: now,
           });
@@ -318,11 +325,18 @@ export class WorkflowInstance<
       }
     });
 
-    const stateUpdateHandler = (startStepId: string, state: any) => {
-      if (startStepId === 'trigger') {
-        this.#state = state;
+    const stateUpdateHandler = (startStepId: string, state: any, ctx?: any) => {
+      let fullState: { value: any; context: any } = { value: {}, context: {} };
+      if (ctx) {
+        fullState['value'] = state;
+        fullState['context'] = ctx;
       } else {
-        this.#state = mergeChildValue(startStepId, this.#state, state.value);
+        fullState = state;
+      }
+      if (startStepId === 'trigger') {
+        this.#state = fullState.value;
+      } else {
+        this.#state = mergeChildValue(startStepId, this.#state, fullState.value);
       }
 
       const now = Date.now();
@@ -330,9 +344,9 @@ export class WorkflowInstance<
         this.#onStepTransition.forEach(onTransition => {
           void onTransition({
             runId: this.#runId,
-            results: state.context.steps,
+            results: fullState.context.steps,
             activePaths: getResultActivePaths(
-              state as unknown as { value: Record<string, string>; context: { steps: Record<string, any> } },
+              fullState as unknown as { value: Record<string, string>; context: { steps: Record<string, any> } },
             ),
             timestamp: now,
           });
