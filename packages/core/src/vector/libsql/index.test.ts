@@ -150,7 +150,10 @@ describe('DefaultVectorDB', () => {
 
       it('should throw error if vector dimensions dont match', async () => {
         const vectors = [[1, 2, 3, 4]]; // 4D vector for 3D index
-        await expect(vectorDB.upsert({ indexName: testIndexName, vectors })).rejects.toThrow();
+        await expect(vectorDB.upsert({ indexName: testIndexName, vectors })).rejects.toThrow(
+          `Vector dimension mismatch: Index "${testIndexName}" expects 3 dimensions but got 4 dimensions. ` +
+            `Either use a matching embedding model or delete and recreate the index with the new dimension.`,
+        );
       });
 
       it('should delete the vector by id', async () => {
