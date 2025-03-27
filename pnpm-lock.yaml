@@ -124,7 +124,7 @@ importers:
         version: link:../../packages/_config
       '@microsoft/api-extractor':
         specifier: ^7.52.1
-        version: 7.52.2(@types/node@20.17.27)
+        version: 7.52.1(@types/node@20.17.27)
       '@types/node':
         specifier: ^20.17.27
         version: 20.17.27
@@ -133,7 +133,7 @@ importers:
         version: 9.23.0(jiti@2.4.2)
       tsup:
         specifier: ^8.4.0
-        version: 8.4.0(@microsoft/api-extractor@7.52.2(@types/node@20.17.27))(@swc/core@1.11.10(@swc/helpers@0.5.15))(jiti@2.4.2)(postcss@8.5.3)(tsx@4.19.3)(typescript@5.8.2)(yaml@2.7.0)
+        version: 8.4.0(@microsoft/api-extractor@7.52.1(@types/node@20.17.27))(@swc/core@1.11.10(@swc/helpers@0.5.15))(jiti@2.4.2)(postcss@8.5.3)(tsx@4.19.3)(typescript@5.8.2)(yaml@2.7.0)
       typescript:
         specifier: ^5.7.3
         version: 5.8.2
@@ -170,7 +170,7 @@ importers:
         version: link:../../packages/_config
       '@microsoft/api-extractor':
         specifier: ^7.52.1
-        version: 7.52.2(@types/node@20.17.27)
+        version: 7.52.1(@types/node@20.17.27)
       '@types/node':
         specifier: ^20.17.27
         version: 20.17.27
@@ -179,7 +179,7 @@ importers:
         version: 9.23.0(jiti@2.4.2)
       tsup:
         specifier: ^8.4.0
-        version: 8.4.0(@microsoft/api-extractor@7.52.2(@types/node@20.17.27))(@swc/core@1.11.10(@swc/helpers@0.5.15))(jiti@2.4.2)(postcss@8.5.3)(tsx@4.19.3)(typescript@5.8.2)(yaml@2.7.0)
+        version: 8.4.0(@microsoft/api-extractor@7.52.1(@types/node@20.17.27))(@swc/core@1.11.10(@swc/helpers@0.5.15))(jiti@2.4.2)(postcss@8.5.3)(tsx@4.19.3)(typescript@5.8.2)(yaml@2.7.0)
       typescript:
         specifier: ^5.7.3
         version: 5.8.2
@@ -207,7 +207,7 @@ importers:
         version: link:../../packages/_config
       '@microsoft/api-extractor':
         specifier: ^7.52.1
-        version: 7.52.2(@types/node@20.17.27)
+        version: 7.52.1(@types/node@20.17.27)
       '@types/node':
         specifier: ^20.17.27
         version: 20.17.27
@@ -216,7 +216,7 @@ importers:
         version: 9.23.0(jiti@2.4.2)
       tsup:
         specifier: ^8.4.0
-        version: 8.4.0(@microsoft/api-extractor@7.52.2(@types/node@20.17.27))(@swc/core@1.11.10(@swc/helpers@0.5.15))(jiti@2.4.2)(postcss@8.5.3)(tsx@4.19.3)(typescript@5.8.2)(yaml@2.7.0)
+        version: 8.4.0(@microsoft/api-extractor@7.52.1(@types/node@20.17.27))(@swc/core@1.11.10(@swc/helpers@0.5.15))(jiti@2.4.2)(postcss@8.5.3)(tsx@4.19.3)(typescript@5.8.2)(yaml@2.7.0)
       typescript:
         specifier: ^5.7.3
         version: 5.8.2
@@ -231,7 +231,7 @@ importers:
     dependencies:
       '@ai-sdk/openai':
         specifier: latest
-        version: 1.3.3(zod@3.24.2)
+        version: 1.3.2(zod@3.24.2)
       '@mastra/core':
         specifier: workspace:*
         version: link:../../packages/core
@@ -258,10 +258,10 @@ importers:
     dependencies:
       '@ai-sdk/anthropic':
         specifier: ^1.1.15
-        version: 1.2.1(zod@3.24.2)
+        version: 1.1.17(zod@3.24.2)
       '@ai-sdk/react':
         specifier: ^1.1.21
-        version: 1.2.2(react@19.0.0)(zod@3.24.2)
+        version: 1.1.23(react@19.0.0)(zod@3.24.2)
       '@mastra/core':
         specifier: workspace:*
         version: link:../../packages/core
@@ -280,7 +280,7 @@ importers:
     devDependencies:
       '@eslint/eslintrc':
         specifier: ^3.3.0
-        version: 3.3.1
+        version: 3.3.0
       '@types/node':
         specifier: ^20.17.27
         version: 20.17.27
@@ -310,7 +310,7 @@ importers:
     dependencies:
       '@ai-sdk/openai':
         specifier: latest
-        version: 1.3.3(zod@3.24.2)
+        version: 1.3.2(zod@3.24.2)
       '@assistant-ui/react':
         specifier: 0.7.85
         version: 0.7.85(@types/react-dom@19.0.4(@types/react@19.0.10))(@types/react@19.0.10)(react-dom@19.0.0(react@19.0.0))(react@19.0.0)(use-sync-external-store@1.4.0(react@19.0.0))
@@ -368,7 +368,7 @@ importers:
     dependencies:
       '@ai-sdk/openai':
         specifier: latest
-        version: 1.3.3(zod@3.24.2)
+        version: 1.3.2(zod@3.24.2)
       '@mastra/core':
         specifier: workspace:*
         version: link:../../../../packages/core
@@ -398,7 +398,7 @@ importers:
         version: 1.2.1(zod@3.24.2)
       '@ai-sdk/openai':
         specifier: latest
-        version: 1.3.3(zod@3.24.2)
+        version: 1.3.2(zod@3.24.2)
       '@mastra/core':
         specifier: workspace:*
         version: link:../../../../packages/core
@@ -413,7 +413,7 @@ importers:
         version: 1.2.1(zod@3.24.2)
       '@ai-sdk/openai':
         specifier: latest
-        version: 1.3.3(zod@3.24.2)
+        version: 1.3.2(zod@3.24.2)
       '@mastra/core':
         specifier: workspace:*
         version: link:../../../../packages/core
@@ -425,7 +425,7 @@ importers:
     dependencies:
       '@ai-sdk/openai':
         specifier: latest
-        version: 1.3.3(zod@3.24.2)
+        version: 1.3.2(zod@3.24.2)
       '@mastra/core':
         specifier: workspace:*
         version: link:../../../../packages/core
@@ -437,7 +437,7 @@ importers:
     dependencies:
       '@ai-sdk/openai':
         specifier: latest
-        version: 1.3.3(zod@3.24.2)
+        version: 1.3.2(zod@3.24.2)
       '@mastra/core':
         specifier: workspace:*
         version: link:../../../../packages/core
@@ -483,7 +483,7 @@ importers:
     dependencies:
       '@ai-sdk/openai':
         specifier: latest
-        version: 1.3.3(zod@3.24.2)
+        version: 1.3.2(zod@3.24.2)
       '@mastra/evals':
         specifier: workspace:^
         version: link:../../../../packages/evals
@@ -496,7 +496,7 @@ importers:
     dependencies:
       '@ai-sdk/openai':
         specifier: latest
-        version: 1.3.3(zod@3.24.2)
+        version: 1.3.2(zod@3.24.2)
       '@mastra/evals':
         specifier: workspace:^
         version: link:../../../../packages/evals
@@ -529,7 +529,7 @@ importers:
     dependencies:
       '@ai-sdk/openai':
         specifier: latest
-        version: 1.3.3(zod@3.24.2)
+        version: 1.3.2(zod@3.24.2)
       '@mastra/evals':
         specifier: workspace:^
         version: link:../../../../packages/evals
@@ -542,7 +542,7 @@ importers:
     dependencies:
       '@ai-sdk/openai':
         specifier: latest
-        version: 1.3.3(zod@3.24.2)
+        version: 1.3.2(zod@3.24.2)
       '@mastra/evals':
         specifier: workspace:^
         version: link:../../../../packages/evals
@@ -555,7 +555,7 @@ importers:
     dependencies:
       '@ai-sdk/openai':
         specifier: latest
-        version: 1.3.3(zod@3.24.2)
+        version: 1.3.2(zod@3.24.2)
       '@mastra/evals':
         specifier: workspace:^
         version: link:../../../../packages/evals
@@ -568,7 +568,7 @@ importers:
     dependencies:
       '@ai-sdk/openai':
         specifier: latest
-        version: 1.3.3(zod@3.24.2)
+        version: 1.3.2(zod@3.24.2)
       '@mastra/evals':
         specifier: workspace:^
         version: link:../../../../packages/evals
@@ -581,7 +581,7 @@ importers:
     dependencies:
       '@ai-sdk/openai':
         specifier: latest
-        version: 1.3.3(zod@3.24.2)
+        version: 1.3.2(zod@3.24.2)
       '@mastra/core':
         specifier: workspace:^
         version: link:../../../../packages/core
@@ -600,7 +600,7 @@ importers:
     dependencies:
       '@ai-sdk/openai':
         specifier: latest
-        version: 1.3.3(zod@3.24.2)
+        version: 1.3.2(zod@3.24.2)
       '@mastra/evals':
         specifier: workspace:^
         version: link:../../../../packages/evals
@@ -613,7 +613,7 @@ importers:
     dependencies:
       '@ai-sdk/openai':
         specifier: latest
-        version: 1.3.3(zod@3.24.2)
+        version: 1.3.2(zod@3.24.2)
       '@mastra/evals':
         specifier: workspace:^
         version: link:../../../../packages/evals
@@ -636,7 +636,7 @@ importers:
     dependencies:
       '@ai-sdk/openai':
         specifier: latest
-        version: 1.3.3(zod@3.24.2)
+        version: 1.3.2(zod@3.24.2)
       '@mastra/evals':
         specifier: workspace:^
         version: link:../../../../packages/evals
@@ -649,7 +649,7 @@ importers:
     dependencies:
       '@ai-sdk/openai':
         specifier: latest
-        version: 1.3.3(zod@3.24.2)
+        version: 1.3.2(zod@3.24.2)
       '@mastra/evals':
         specifier: workspace:^
         version: link:../../../../packages/evals
@@ -682,7 +682,7 @@ importers:
     dependencies:
       '@ai-sdk/openai':
         specifier: latest
-        version: 1.3.3(zod@3.24.2)
+        version: 1.3.2(zod@3.24.2)
       '@mastra/evals':
         specifier: workspace:^
         version: link:../../../../packages/evals
@@ -720,7 +720,7 @@ importers:
     dependencies:
       '@ai-sdk/openai':
         specifier: latest
-        version: 1.3.3(zod@3.24.2)
+        version: 1.3.2(zod@3.24.2)
       '@mastra/core':
         specifier: workspace:*
         version: link:../../../../packages/core
@@ -766,7 +766,7 @@ importers:
     dependencies:
       '@ai-sdk/openai':
         specifier: latest
-        version: 1.3.3(zod@3.24.2)
+        version: 1.3.2(zod@3.24.2)
       '@mastra/core':
         specifier: workspace:*
         version: link:../../../../packages/core
@@ -788,7 +788,7 @@ importers:
     dependencies:
       '@ai-sdk/openai':
         specifier: latest
-        version: 1.3.3(zod@3.24.2)
+        version: 1.3.2(zod@3.24.2)
       '@mastra/core':
         specifier: workspace:*
         version: link:../../../../packages/core
@@ -810,7 +810,7 @@ importers:
     dependencies:
       '@ai-sdk/openai':
         specifier: latest
-        version: 1.3.3(zod@3.24.2)
+        version: 1.3.2(zod@3.24.2)
       '@mastra/core':
         specifier: workspace:*
         version: link:../../../../packages/core
@@ -831,7 +831,7 @@ importers:
     dependencies:
       '@ai-sdk/openai':
         specifier: latest
-        version: 1.3.3(zod@3.24.2)
+        version: 1.3.2(zod@3.24.2)
       '@mastra/rag':
         specifier: workspace:*
         version: link:../../../../packages/rag
@@ -843,7 +843,7 @@ importers:
     dependencies:
       '@ai-sdk/openai':
         specifier: latest
-        version: 1.3.3(zod@3.24.2)
+        version: 1.3.2(zod@3.24.2)
       '@mastra/rag':
         specifier: workspace:*
         version: link:../../../../packages/rag
@@ -867,7 +867,7 @@ importers:
     dependencies:
       '@ai-sdk/openai':
         specifier: latest
-        version: 1.3.3(zod@3.24.2)
+        version: 1.3.2(zod@3.24.2)
       '@mastra/core':
         specifier: workspace:*
         version: link:../../../../packages/core
@@ -889,7 +889,7 @@ importers:
     dependencies:
       '@ai-sdk/openai':
         specifier: latest
-        version: 1.3.3(zod@3.24.2)
+        version: 1.3.2(zod@3.24.2)
       '@mastra/core':
         specifier: workspace:*
         version: link:../../../../packages/core
@@ -911,7 +911,7 @@ importers:
     dependencies:
       '@ai-sdk/openai':
         specifier: latest
-        version: 1.3.3(zod@3.24.2)
+        version: 1.3.2(zod@3.24.2)
       '@mastra/pg':
         specifier: workspace:*
         version: link:../../../../stores/pg
@@ -930,7 +930,7 @@ importers:
     dependencies:
       '@ai-sdk/openai':
         specifier: latest
-        version: 1.3.3(zod@3.24.2)
+        version: 1.3.2(zod@3.24.2)
       '@mastra/chroma':
         specifier: workspace:*
         version: link:../../../../stores/chroma
@@ -945,7 +945,7 @@ importers:
     dependencies:
       '@ai-sdk/openai':
         specifier: latest
-        version: 1.3.3(zod@3.24.2)
+        version: 1.3.2(zod@3.24.2)
       '@mastra/core':
         specifier: workspace:*
         version: link:../../../../packages/core
@@ -960,7 +960,7 @@ importers:
     dependencies:
       '@ai-sdk/openai':
         specifier: latest
-        version: 1.3.3(zod@3.24.2)
+        version: 1.3.2(zod@3.24.2)
       '@mastra/pg':
         specifier: workspace:*
         version: link:../../../../stores/pg
@@ -975,7 +975,7 @@ importers:
     dependencies:
       '@ai-sdk/openai':
         specifier: latest
-        version: 1.3.3(zod@3.24.2)
+        version: 1.3.2(zod@3.24.2)
       '@mastra/pinecone':
         specifier: workspace:*
         version: link:../../../../stores/pinecone
@@ -1000,7 +1000,7 @@ importers:
     dependencies:
       '@ai-sdk/openai':
         specifier: latest
-        version: 1.3.3(zod@3.24.2)
+        version: 1.3.2(zod@3.24.2)
       '@mastra/pg':
         specifier: workspace:*
         version: link:../../../../stores/pg
@@ -1019,7 +1019,7 @@ importers:
     dependencies:
       '@ai-sdk/openai':
         specifier: latest
-        version: 1.3.3(zod@3.24.2)
+        version: 1.3.2(zod@3.24.2)
       '@mastra/core':
         specifier: workspace:*
         version: link:../../../../packages/core
@@ -1041,7 +1041,7 @@ importers:
     dependencies:
       '@ai-sdk/openai':
         specifier: latest
-        version: 1.3.3(zod@3.24.2)
+        version: 1.3.2(zod@3.24.2)
       '@mastra/pinecone':
         specifier: workspace:*
         version: link:../../../../stores/pinecone
@@ -1056,7 +1056,7 @@ importers:
     dependencies:
       '@ai-sdk/openai':
         specifier: latest
-        version: 1.3.3(zod@3.24.2)
+        version: 1.3.2(zod@3.24.2)
       '@mastra/core':
         specifier: workspace:*
         version: link:../../../../packages/core
@@ -1308,7 +1308,7 @@ importers:
     dependencies:
       '@ai-sdk/openai':
         specifier: latest
-        version: 1.3.3(zod@3.24.2)
+        version: 1.3.2(zod@3.24.2)
       '@ai-sdk/react':
         specifier: ^1.1.21
         version: 1.2.2(react@19.0.0-rc-45804af1-20241021)(zod@3.24.2)
@@ -1323,7 +1323,7 @@ importers:
         version: link:../../stores/pg
       '@next/env':
         specifier: ^15.2.2
-        version: 15.2.3
+        version: 15.2.2
       '@radix-ui/react-alert-dialog':
         specifier: ^1.1.6
         version: 1.1.6(@types/react-dom@19.0.4(@types/react@19.0.10))(@types/react@19.0.10)(react-dom@19.0.0-rc-45804af1-20241021(react@19.0.0-rc-45804af1-20241021))(react@19.0.0-rc-45804af1-20241021)
@@ -1534,7 +1534,7 @@ importers:
     dependencies:
       '@ai-sdk/anthropic':
         specifier: ^1.1.15
-        version: 1.2.1(zod@3.24.2)
+        version: 1.1.17(zod@3.24.2)
       '@inquirer/prompts':
         specifier: ^7.3.3
         version: 7.4.0(@types/node@20.17.27)
@@ -1621,11 +1621,35 @@ importers:
         specifier: ^4.19.3
         version: 4.19.3
 
+  examples/discord-analysis-bot:
+    dependencies:
+      '@ai-sdk/openai':
+        specifier: latest
+        version: 1.3.3(zod@3.24.2)
+      '@mastra/core':
+        specifier: workspace:*
+        version: link:../../packages/core
+      '@mastra/mcp':
+        specifier: workspace:*
+        version: link:../../packages/mcp
+      ai:
+        specifier: latest
+        version: 4.2.6(react@19.0.0)(zod@3.24.2)
+      discord.js:
+        specifier: ^14.14.1
+        version: 14.18.0(bufferutil@4.0.9)(utf-8-validate@6.0.5)
+      dotenv:
+        specifier: ^16.4.7
+        version: 16.4.7
+      zod:
+        specifier: ^3.24.0
+        version: 3.24.2
+
   examples/fireworks-r1:
     dependencies:
       '@ai-sdk/anthropic':
         specifier: ^1.1.15
-        version: 1.2.1(zod@3.24.2)
+        version: 1.1.17(zod@3.24.2)
       '@ai-sdk/fireworks':
         specifier: ^0.1.14
         version: 0.1.16(zod@3.24.2)
@@ -1677,7 +1701,7 @@ importers:
     dependencies:
       '@ai-sdk/openai':
         specifier: latest
-        version: 1.3.3(zod@3.24.2)
+        version: 1.3.2(zod@3.24.2)
       '@mastra/core':
         specifier: workspace:*
         version: link:../../packages/core
@@ -1717,7 +1741,7 @@ importers:
     dependencies:
       '@ai-sdk/openai':
         specifier: latest
-        version: 1.3.3(zod@3.24.2)
+        version: 1.3.2(zod@3.24.2)
       '@mastra/core':
         specifier: workspace:*
         version: link:../../packages/core
@@ -1793,7 +1817,7 @@ importers:
     dependencies:
       '@ai-sdk/openai':
         specifier: latest
-        version: 1.3.3(zod@3.24.2)
+        version: 1.3.2(zod@3.24.2)
       '@mastra/core':
         specifier: workspace:*
         version: link:../../packages/core
@@ -1815,7 +1839,7 @@ importers:
     dependencies:
       '@ai-sdk/openai':
         specifier: latest
-        version: 1.3.3(zod@3.24.2)
+        version: 1.3.2(zod@3.24.2)
       '@mastra/core':
         specifier: workspace:*
         version: link:../../packages/core
@@ -1937,13 +1961,13 @@ importers:
     dependencies:
       '@ai-sdk/anthropic':
         specifier: ^1.1.15
-        version: 1.2.1(zod@3.24.2)
+        version: 1.1.17(zod@3.24.2)
       '@ai-sdk/groq':
         specifier: latest
         version: 1.2.1(zod@3.24.2)
       '@ai-sdk/openai':
         specifier: latest
-        version: 1.3.3(zod@3.24.2)
+        version: 1.3.2(zod@3.24.2)
       '@mastra/core':
         specifier: workspace:*
         version: link:../../packages/core
@@ -1974,7 +1998,7 @@ importers:
     dependencies:
       '@ai-sdk/openai':
         specifier: latest
-        version: 1.3.3(zod@3.24.2)
+        version: 1.3.2(zod@3.24.2)
       '@mastra/core':
         specifier: workspace:*
         version: link:../../packages/core
@@ -1999,7 +2023,7 @@ importers:
     dependencies:
       '@ai-sdk/anthropic':
         specifier: ^1.1.15
-        version: 1.2.1(zod@3.24.2)
+        version: 1.1.17(zod@3.24.2)
       '@libsql/client':
         specifier: ^0.14.0
         version: 0.14.0(bufferutil@4.0.9)(utf-8-validate@6.0.5)
@@ -2230,7 +2254,7 @@ importers:
     dependencies:
       '@ai-sdk/openai':
         specifier: latest
-        version: 1.3.3(zod@3.24.2)
+        version: 1.3.2(zod@3.24.2)
       '@mastra/core':
         specifier: workspace:^
         version: link:../../packages/core
@@ -2242,7 +2266,7 @@ importers:
     dependencies:
       '@ai-sdk/openai':
         specifier: latest
-        version: 1.3.3(zod@3.24.2)
+        version: 1.3.2(zod@3.24.2)
       '@mastra/core':
         specifier: workspace:^
         version: link:../../packages/core
@@ -2292,7 +2316,7 @@ importers:
     dependencies:
       '@ai-sdk/openai':
         specifier: latest
-        version: 1.3.3(zod@3.24.2)
+        version: 1.3.2(zod@3.24.2)
       '@mastra/core':
         specifier: workspace:*
         version: link:../../packages/core
@@ -2352,7 +2376,7 @@ importers:
     devDependencies:
       '@ai-sdk/openai':
         specifier: latest
-        version: 1.3.3(zod@3.24.2)
+        version: 1.3.2(zod@3.24.2)
       '@types/node':
         specifier: ^20.17.27
         version: 20.17.27
@@ -2392,7 +2416,7 @@ importers:
         version: 29.7.0
       '@microsoft/api-extractor':
         specifier: ^7.52.1
-        version: 7.52.2(@types/node@20.17.27)
+        version: 7.52.1(@types/node@20.17.27)
       '@rollup/plugin-image':
         specifier: ^3.0.3
         version: 3.0.3(rollup@3.29.5)
@@ -2428,7 +2452,7 @@ importers:
         version: 29.2.6(@babel/core@7.26.10)(@jest/transform@29.7.0)(@jest/types@29.6.3)(babel-jest@29.7.0(@babel/core@7.26.10))(esbuild@0.19.12)(jest@29.7.0(@types/node@20.17.27)(babel-plugin-macros@3.1.0)(ts-node@10.9.2(@swc/core@1.11.10(@swc/helpers@0.5.15))(@types/node@20.17.27)(typescript@5.8.2)))(typescript@5.8.2)
       tsup:
         specifier: ^8.4.0
-        version: 8.4.0(@microsoft/api-extractor@7.52.2(@types/node@20.17.27))(@swc/core@1.11.10(@swc/helpers@0.5.15))(jiti@2.4.2)(postcss@8.5.3)(tsx@4.19.3)(typescript@5.8.2)(yaml@2.7.0)
+        version: 8.4.0(@microsoft/api-extractor@7.52.1(@types/node@20.17.27))(@swc/core@1.11.10(@swc/helpers@0.5.15))(jiti@2.4.2)(postcss@8.5.3)(tsx@4.19.3)(typescript@5.8.2)(yaml@2.7.0)
       typescript:
         specifier: ^5.7.3
         version: 5.8.2
@@ -2456,7 +2480,7 @@ importers:
         version: 29.7.0
       '@microsoft/api-extractor':
         specifier: ^7.52.1
-        version: 7.52.2(@types/node@20.17.27)
+        version: 7.52.1(@types/node@20.17.27)
       '@rollup/plugin-image':
         specifier: ^3.0.3
         version: 3.0.3(rollup@4.36.0)
@@ -2495,7 +2519,7 @@ importers:
         version: 29.2.6(@babel/core@7.26.10)(@jest/transform@29.7.0)(@jest/types@29.6.3)(babel-jest@29.7.0(@babel/core@7.26.10))(esbuild@0.19.12)(jest@29.7.0(@types/node@20.17.27)(babel-plugin-macros@3.1.0)(ts-node@10.9.2(@swc/core@1.11.10(@swc/helpers@0.5.15))(@types/node@20.17.27)(typescript@5.8.2)))(typescript@5.8.2)
       tsup:
         specifier: ^8.4.0
-        version: 8.4.0(@microsoft/api-extractor@7.52.2(@types/node@20.17.27))(@swc/core@1.11.10(@swc/helpers@0.5.15))(jiti@2.4.2)(postcss@8.5.3)(tsx@4.19.3)(typescript@5.8.2)(yaml@2.7.0)
+        version: 8.4.0(@microsoft/api-extractor@7.52.1(@types/node@20.17.27))(@swc/core@1.11.10(@swc/helpers@0.5.15))(jiti@2.4.2)(postcss@8.5.3)(tsx@4.19.3)(typescript@5.8.2)(yaml@2.7.0)
       typescript:
         specifier: ^5.7.3
         version: 5.8.2
@@ -2560,7 +2584,7 @@ importers:
         version: 29.7.0
       '@microsoft/api-extractor':
         specifier: ^7.52.1
-        version: 7.52.2(@types/node@20.17.27)
+        version: 7.52.1(@types/node@20.17.27)
       '@rollup/plugin-image':
         specifier: ^3.0.3
         version: 3.0.3(rollup@4.36.0)
@@ -2593,7 +2617,7 @@ importers:
         version: 29.2.6(@babel/core@7.26.10)(@jest/transform@29.7.0)(@jest/types@29.6.3)(babel-jest@29.7.0(@babel/core@7.26.10))(esbuild@0.19.12)(jest@29.7.0(@types/node@20.17.27)(babel-plugin-macros@3.1.0)(ts-node@10.9.2(@swc/core@1.11.10(@swc/helpers@0.5.15))(@types/node@20.17.27)(typescript@5.8.2)))(typescript@5.8.2)
       tsup:
         specifier: ^8.4.0
-        version: 8.4.0(@microsoft/api-extractor@7.52.2(@types/node@20.17.27))(@swc/core@1.11.10(@swc/helpers@0.5.15))(jiti@2.4.2)(postcss@8.5.3)(tsx@4.19.3)(typescript@5.8.2)(yaml@2.7.0)
+        version: 8.4.0(@microsoft/api-extractor@7.52.1(@types/node@20.17.27))(@swc/core@1.11.10(@swc/helpers@0.5.15))(jiti@2.4.2)(postcss@8.5.3)(tsx@4.19.3)(typescript@5.8.2)(yaml@2.7.0)
       typescript:
         specifier: ^5.7.3
         version: 5.8.2
@@ -2705,7 +2729,7 @@ importers:
         version: link:../playground-ui
       '@microsoft/api-extractor':
         specifier: ^7.52.1
-        version: 7.52.2(@types/node@20.17.27)
+        version: 7.52.1(@types/node@20.17.27)
       '@types/fs-extra':
         specifier: ^11.0.4
         version: 11.0.4
@@ -2735,7 +2759,7 @@ importers:
         version: 4.36.0
       tsup:
         specifier: ^8.4.0
-        version: 8.4.0(@microsoft/api-extractor@7.52.2(@types/node@20.17.27))(@swc/core@1.11.10(@swc/helpers@0.5.15))(jiti@2.4.2)(postcss@8.5.3)(tsx@4.19.3)(typescript@5.8.2)(yaml@2.7.0)
+        version: 8.4.0(@microsoft/api-extractor@7.52.1(@types/node@20.17.27))(@swc/core@1.11.10(@swc/helpers@0.5.15))(jiti@2.4.2)(postcss@8.5.3)(tsx@4.19.3)(typescript@5.8.2)(yaml@2.7.0)
       type-fest:
         specifier: ^4.37.0
         version: 4.37.0
@@ -2892,7 +2916,7 @@ importers:
     devDependencies:
       '@microsoft/api-extractor':
         specifier: ^7.52.1
-        version: 7.52.2(@types/node@20.17.27)
+        version: 7.52.1(@types/node@20.17.27)
       '@types/react':
         specifier: ^18.3.18
         version: 18.3.18
@@ -2970,7 +2994,7 @@ importers:
         version: 1.30.0
       ai:
         specifier: ^4.1.54
-        version: 4.2.5(react@19.0.0)(zod@3.24.2)
+        version: 4.1.61(react@19.0.0)(zod@3.24.2)
       cohere-ai:
         specifier: ^7.16.0
         version: 7.16.0(encoding@0.1.13)
@@ -3019,7 +3043,7 @@ importers:
         version: link:../_config
       '@microsoft/api-extractor':
         specifier: ^7.52.1
-        version: 7.52.2(@types/node@20.17.27)
+        version: 7.52.1(@types/node@20.17.27)
       '@size-limit/preset-small-lib':
         specifier: ^11.2.0
         version: 11.2.0(size-limit@11.2.0)
@@ -3052,7 +3076,7 @@ importers:
         version: 11.2.0
       tsup:
         specifier: ^8.4.0
-        version: 8.4.0(@microsoft/api-extractor@7.52.2(@types/node@20.17.27))(@swc/core@1.11.10(@swc/helpers@0.5.15))(jiti@2.4.2)(postcss@8.5.3)(tsx@4.19.3)(typescript@5.8.2)(yaml@2.7.0)
+        version: 8.4.0(@microsoft/api-extractor@7.52.1(@types/node@20.17.27))(@swc/core@1.11.10(@swc/helpers@0.5.15))(jiti@2.4.2)(postcss@8.5.3)(tsx@4.19.3)(typescript@5.8.2)(yaml@2.7.0)
       typescript:
         specifier: ^5.7.3
         version: 5.8.2
@@ -3089,7 +3113,7 @@ importers:
         version: link:../_config
       '@microsoft/api-extractor':
         specifier: ^7.52.1
-        version: 7.52.2(@types/node@20.17.27)
+        version: 7.52.1(@types/node@20.17.27)
       '@rollup/plugin-commonjs':
         specifier: ^28.0.3
         version: 28.0.3(rollup@4.36.0)
@@ -3204,7 +3228,7 @@ importers:
         version: link:../_config
       '@microsoft/api-extractor':
         specifier: ^7.52.1
-        version: 7.52.2(@types/node@20.17.27)
+        version: 7.52.1(@types/node@20.17.27)
       '@types/babel__core':
         specifier: ^7.20.5
         version: 7.20.5
@@ -3234,7 +3258,7 @@ importers:
         version: 2.2.2
       tsup:
         specifier: ^8.4.0
-        version: 8.4.0(@microsoft/api-extractor@7.52.2(@types/node@20.17.27))(@swc/core@1.11.10(@swc/helpers@0.5.15))(jiti@2.4.2)(postcss@8.5.3)(tsx@4.19.3)(typescript@5.8.2)(yaml@2.7.0)
+        version: 8.4.0(@microsoft/api-extractor@7.52.1(@types/node@20.17.27))(@swc/core@1.11.10(@swc/helpers@0.5.15))(jiti@2.4.2)(postcss@8.5.3)(tsx@4.19.3)(typescript@5.8.2)(yaml@2.7.0)
       type-fest:
         specifier: ^4.37.0
         version: 4.37.0
@@ -3277,13 +3301,13 @@ importers:
     devDependencies:
       '@ai-sdk/openai':
         specifier: latest
-        version: 1.3.3(zod@3.24.2)
+        version: 1.3.2(zod@3.24.2)
       '@internal/lint':
         specifier: workspace:*
         version: link:../_config
       '@microsoft/api-extractor':
         specifier: ^7.52.1
-        version: 7.52.2(@types/node@20.17.27)
+        version: 7.52.1(@types/node@20.17.27)
       '@types/difflib':
         specifier: ^0.2.7
         version: 0.2.7
@@ -3298,7 +3322,7 @@ importers:
         version: 4.0.2
       ai:
         specifier: ^4.1.54
-        version: 4.2.5(react@19.0.0)(zod@3.24.2)
+        version: 4.1.61(react@19.0.0)(zod@3.24.2)
       dotenv:
         specifier: ^16.4.7
         version: 16.4.7
@@ -3307,7 +3331,7 @@ importers:
         version: 9.23.0(jiti@2.4.2)
       tsup:
         specifier: ^8.4.0
-        version: 8.4.0(@microsoft/api-extractor@7.52.2(@types/node@20.17.27))(@swc/core@1.11.10(@swc/helpers@0.5.15))(jiti@2.4.2)(postcss@8.5.3)(tsx@4.19.3)(typescript@5.8.2)(yaml@2.7.0)
+        version: 8.4.0(@microsoft/api-extractor@7.52.1(@types/node@20.17.27))(@swc/core@1.11.10(@swc/helpers@0.5.15))(jiti@2.4.2)(postcss@8.5.3)(tsx@4.19.3)(typescript@5.8.2)(yaml@2.7.0)
       typescript:
         specifier: ^5.7.3
         version: 5.8.2
@@ -3326,7 +3350,7 @@ importers:
         version: link:../_config
       '@microsoft/api-extractor':
         specifier: ^7.52.1
-        version: 7.52.2(@types/node@20.17.27)
+        version: 7.52.1(@types/node@20.17.27)
       '@types/node':
         specifier: ^20.17.27
         version: 20.17.27
@@ -3335,7 +3359,7 @@ importers:
         version: 9.23.0(jiti@2.4.2)
       tsup:
         specifier: ^8.4.0
-        version: 8.4.0(@microsoft/api-extractor@7.52.2(@types/node@20.17.27))(@swc/core@1.11.10(@swc/helpers@0.5.15))(jiti@2.4.2)(postcss@8.5.3)(tsx@4.19.3)(typescript@5.8.2)(yaml@2.7.0)
+        version: 8.4.0(@microsoft/api-extractor@7.52.1(@types/node@20.17.27))(@swc/core@1.11.10(@swc/helpers@0.5.15))(jiti@2.4.2)(postcss@8.5.3)(tsx@4.19.3)(typescript@5.8.2)(yaml@2.7.0)
       typescript:
         specifier: ^5.7.3
         version: 5.8.2
@@ -3363,13 +3387,13 @@ importers:
     devDependencies:
       '@ai-sdk/anthropic':
         specifier: ^1.1.15
-        version: 1.2.1(zod@3.24.2)
+        version: 1.1.17(zod@3.24.2)
       '@internal/lint':
         specifier: workspace:*
         version: link:../_config
       '@microsoft/api-extractor':
         specifier: ^7.52.1
-        version: 7.52.2(@types/node@20.17.27)
+        version: 7.52.1(@types/node@20.17.27)
       '@types/node':
         specifier: ^20.17.27
         version: 20.17.27
@@ -3381,7 +3405,7 @@ importers:
         version: 1.20.5
       tsup:
         specifier: ^8.4.0
-        version: 8.4.0(@microsoft/api-extractor@7.52.2(@types/node@20.17.27))(@swc/core@1.11.10(@swc/helpers@0.5.15))(jiti@2.4.2)(postcss@8.5.3)(tsx@4.19.3)(typescript@5.8.2)(yaml@2.7.0)
+        version: 8.4.0(@microsoft/api-extractor@7.52.1(@types/node@20.17.27))(@swc/core@1.11.10(@swc/helpers@0.5.15))(jiti@2.4.2)(postcss@8.5.3)(tsx@4.19.3)(typescript@5.8.2)(yaml@2.7.0)
       typescript:
         specifier: ^5.7.3
         version: 5.8.2
@@ -3481,7 +3505,7 @@ importers:
         version: 1.34.5
       ai:
         specifier: ^4.1.54
-        version: 4.2.5(react@19.0.0)(zod@3.24.2)
+        version: 4.1.61(react@19.0.0)(zod@3.24.2)
       pg:
         specifier: ^8.13.3
         version: 8.14.0
@@ -3503,7 +3527,7 @@ importers:
         version: link:../_config
       '@microsoft/api-extractor':
         specifier: ^7.52.1
-        version: 7.52.2(@types/node@20.17.27)
+        version: 7.52.1(@types/node@20.17.27)
       '@types/node':
         specifier: ^20.17.27
         version: 20.17.27
@@ -3515,7 +3539,7 @@ importers:
         version: 9.23.0(jiti@2.4.2)
       tsup:
         specifier: ^8.4.0
-        version: 8.4.0(@microsoft/api-extractor@7.52.2(@types/node@20.17.27))(@swc/core@1.11.10(@swc/helpers@0.5.15))(jiti@2.4.2)(postcss@8.5.3)(tsx@4.19.3)(typescript@5.8.2)(yaml@2.7.0)
+        version: 8.4.0(@microsoft/api-extractor@7.52.1(@types/node@20.17.27))(@swc/core@1.11.10(@swc/helpers@0.5.15))(jiti@2.4.2)(postcss@8.5.3)(tsx@4.19.3)(typescript@5.8.2)(yaml@2.7.0)
       typescript:
         specifier: ^5.7.3
         version: 5.8.2
@@ -3533,7 +3557,7 @@ importers:
         version: 1.3.2(zod@3.24.2)
       '@ai-sdk/react':
         specifier: ^1.2.1
-        version: 1.2.2(react@19.0.0)(zod@3.24.2)
+        version: 1.2.1(react@19.0.0)(zod@3.24.2)
       '@mastra/client-js':
         specifier: workspace:*
         version: link:../../../client-sdks/client-js
@@ -3564,7 +3588,7 @@ importers:
         version: 20.17.27
       ai:
         specifier: ^4.2.2
-        version: 4.2.5(react@19.0.0)(zod@3.24.2)
+        version: 4.2.2(react@19.0.0)(zod@3.24.2)
       jsdom:
         specifier: ^26.0.0
         version: 26.0.0(bufferutil@4.0.9)(utf-8-validate@6.0.5)
@@ -3591,7 +3615,7 @@ importers:
     dependencies:
       '@ai-sdk/ui-utils':
         specifier: ^1.1.19
-        version: 1.2.1(zod@3.24.2)
+        version: 1.1.19(zod@3.24.2)
       '@assistant-ui/react':
         specifier: ^0.7.91
         version: 0.7.91(@types/react-dom@19.0.4(@types/react@19.0.10))(@types/react@19.0.10)(react-dom@19.0.0(react@19.0.0))(react@19.0.0)(use-sync-external-store@1.4.0(react@19.0.0))
@@ -3836,19 +3860,19 @@ importers:
         version: 1.2.2(zod@3.24.2)
       '@ai-sdk/openai':
         specifier: latest
-        version: 1.3.3(zod@3.24.2)
+        version: 1.3.2(zod@3.24.2)
       '@internal/lint':
         specifier: workspace:*
         version: link:../_config
       '@microsoft/api-extractor':
         specifier: ^7.52.1
-        version: 7.52.2(@types/node@20.17.27)
+        version: 7.52.1(@types/node@20.17.27)
       '@types/node':
         specifier: ^20.17.27
         version: 20.17.27
       ai:
         specifier: ^4.1.54
-        version: 4.2.5(react@19.0.0)(zod@3.24.2)
+        version: 4.1.61(react@19.0.0)(zod@3.24.2)
       dotenv:
         specifier: ^16.4.7
         version: 16.4.7
@@ -3857,7 +3881,7 @@ importers:
         version: 9.23.0(jiti@2.4.2)
       tsup:
         specifier: ^8.4.0
-        version: 8.4.0(@microsoft/api-extractor@7.52.2(@types/node@20.17.27))(@swc/core@1.11.10(@swc/helpers@0.5.15))(jiti@2.4.2)(postcss@8.5.3)(tsx@4.19.3)(typescript@5.8.2)(yaml@2.7.0)
+        version: 8.4.0(@microsoft/api-extractor@7.52.1(@types/node@20.17.27))(@swc/core@1.11.10(@swc/helpers@0.5.15))(jiti@2.4.2)(postcss@8.5.3)(tsx@4.19.3)(typescript@5.8.2)(yaml@2.7.0)
       typescript:
         specifier: ^5.7.3
         version: 5.8.2
@@ -4198,7 +4222,7 @@ importers:
         version: link:../../packages/_config
       '@microsoft/api-extractor':
         specifier: ^7.52.1
-        version: 7.52.2(@types/node@20.17.27)
+        version: 7.52.1(@types/node@20.17.27)
       '@types/node':
         specifier: ^20.17.27
         version: 20.17.27
@@ -4207,7 +4231,7 @@ importers:
         version: 9.23.0(jiti@2.4.2)
       tsup:
         specifier: ^8.4.0
-        version: 8.4.0(@microsoft/api-extractor@7.52.2(@types/node@20.17.27))(@swc/core@1.11.10(@swc/helpers@0.5.15))(jiti@2.4.2)(postcss@8.5.3)(tsx@4.19.3)(typescript@5.8.2)(yaml@2.7.0)
+        version: 8.4.0(@microsoft/api-extractor@7.52.1(@types/node@20.17.27))(@swc/core@1.11.10(@swc/helpers@0.5.15))(jiti@2.4.2)(postcss@8.5.3)(tsx@4.19.3)(typescript@5.8.2)(yaml@2.7.0)
       typescript:
         specifier: ^5.7.3
         version: 5.8.2
@@ -4229,7 +4253,7 @@ importers:
         version: link:../../packages/_config
       '@microsoft/api-extractor':
         specifier: ^7.52.1
-        version: 7.52.2(@types/node@20.17.27)
+        version: 7.52.1(@types/node@20.17.27)
       '@types/node':
         specifier: ^20.17.27
         version: 20.17.27
@@ -4238,7 +4262,7 @@ importers:
         version: 9.23.0(jiti@2.4.2)
       tsup:
         specifier: ^8.4.0
-        version: 8.4.0(@microsoft/api-extractor@7.52.2(@types/node@20.17.27))(@swc/core@1.11.10(@swc/helpers@0.5.15))(jiti@2.4.2)(postcss@8.5.3)(tsx@4.19.3)(typescript@5.8.2)(yaml@2.7.0)
+        version: 8.4.0(@microsoft/api-extractor@7.52.1(@types/node@20.17.27))(@swc/core@1.11.10(@swc/helpers@0.5.15))(jiti@2.4.2)(postcss@8.5.3)(tsx@4.19.3)(typescript@5.8.2)(yaml@2.7.0)
       typescript:
         specifier: ^5.7.3
         version: 5.8.2
@@ -4263,7 +4287,7 @@ importers:
         version: link:../../packages/_config
       '@microsoft/api-extractor':
         specifier: ^7.52.1
-        version: 7.52.2(@types/node@20.17.27)
+        version: 7.52.1(@types/node@20.17.27)
       '@types/node':
         specifier: ^20.17.27
         version: 20.17.27
@@ -4275,7 +4299,7 @@ importers:
         version: 9.23.0(jiti@2.4.2)
       tsup:
         specifier: ^8.4.0
-        version: 8.4.0(@microsoft/api-extractor@7.52.2(@types/node@20.17.27))(@swc/core@1.11.10(@swc/helpers@0.5.15))(jiti@2.4.2)(postcss@8.5.3)(tsx@4.19.3)(typescript@5.8.2)(yaml@2.7.0)
+        version: 8.4.0(@microsoft/api-extractor@7.52.1(@types/node@20.17.27))(@swc/core@1.11.10(@swc/helpers@0.5.15))(jiti@2.4.2)(postcss@8.5.3)(tsx@4.19.3)(typescript@5.8.2)(yaml@2.7.0)
       typescript:
         specifier: ^5.7.3
         version: 5.8.2
@@ -4297,7 +4321,7 @@ importers:
         version: link:../../packages/_config
       '@microsoft/api-extractor':
         specifier: ^7.52.1
-        version: 7.52.2(@types/node@20.17.27)
+        version: 7.52.1(@types/node@20.17.27)
       '@types/node':
         specifier: ^20.17.27
         version: 20.17.27
@@ -4309,7 +4333,7 @@ importers:
         version: 9.23.0(jiti@2.4.2)
       tsup:
         specifier: ^8.4.0
-        version: 8.4.0(@microsoft/api-extractor@7.52.2(@types/node@20.17.27))(@swc/core@1.11.10(@swc/helpers@0.5.15))(jiti@2.4.2)(postcss@8.5.3)(tsx@4.19.3)(typescript@5.8.2)(yaml@2.7.0)
+        version: 8.4.0(@microsoft/api-extractor@7.52.1(@types/node@20.17.27))(@swc/core@1.11.10(@swc/helpers@0.5.15))(jiti@2.4.2)(postcss@8.5.3)(tsx@4.19.3)(typescript@5.8.2)(yaml@2.7.0)
       typescript:
         specifier: ^5.7.3
         version: 5.8.2
@@ -4331,7 +4355,7 @@ importers:
         version: link:../../packages/_config
       '@microsoft/api-extractor':
         specifier: ^7.52.1
-        version: 7.52.2(@types/node@20.17.27)
+        version: 7.52.1(@types/node@20.17.27)
       '@types/node':
         specifier: ^20.17.27
         version: 20.17.27
@@ -4340,7 +4364,7 @@ importers:
         version: 9.23.0(jiti@2.4.2)
       tsup:
         specifier: ^8.4.0
-        version: 8.4.0(@microsoft/api-extractor@7.52.2(@types/node@20.17.27))(@swc/core@1.11.10(@swc/helpers@0.5.15))(jiti@2.4.2)(postcss@8.5.3)(tsx@4.19.3)(typescript@5.8.2)(yaml@2.7.0)
+        version: 8.4.0(@microsoft/api-extractor@7.52.1(@types/node@20.17.27))(@swc/core@1.11.10(@swc/helpers@0.5.15))(jiti@2.4.2)(postcss@8.5.3)(tsx@4.19.3)(typescript@5.8.2)(yaml@2.7.0)
       typescript:
         specifier: ^5.7.3
         version: 5.8.2
@@ -4362,7 +4386,7 @@ importers:
         version: link:../../packages/_config
       '@microsoft/api-extractor':
         specifier: ^7.52.1
-        version: 7.52.2(@types/node@20.17.27)
+        version: 7.52.1(@types/node@20.17.27)
       '@types/node':
         specifier: ^20.17.27
         version: 20.17.27
@@ -4374,7 +4398,7 @@ importers:
         version: 9.23.0(jiti@2.4.2)
       tsup:
         specifier: ^8.4.0
-        version: 8.4.0(@microsoft/api-extractor@7.52.2(@types/node@20.17.27))(@swc/core@1.11.10(@swc/helpers@0.5.15))(jiti@2.4.2)(postcss@8.5.3)(tsx@4.19.3)(typescript@5.8.2)(yaml@2.7.0)
+        version: 8.4.0(@microsoft/api-extractor@7.52.1(@types/node@20.17.27))(@swc/core@1.11.10(@swc/helpers@0.5.15))(jiti@2.4.2)(postcss@8.5.3)(tsx@4.19.3)(typescript@5.8.2)(yaml@2.7.0)
       typescript:
         specifier: ^5.7.3
         version: 5.8.2
@@ -4399,7 +4423,7 @@ importers:
         version: link:../../packages/_config
       '@microsoft/api-extractor':
         specifier: ^7.52.1
-        version: 7.52.2(@types/node@20.17.27)
+        version: 7.52.1(@types/node@20.17.27)
       '@types/node':
         specifier: ^20.17.27
         version: 20.17.27
@@ -4411,7 +4435,7 @@ importers:
         version: 9.23.0(jiti@2.4.2)
       tsup:
         specifier: ^8.4.0
-        version: 8.4.0(@microsoft/api-extractor@7.52.2(@types/node@20.17.27))(@swc/core@1.11.10(@swc/helpers@0.5.15))(jiti@2.4.2)(postcss@8.5.3)(tsx@4.19.3)(typescript@5.8.2)(yaml@2.7.0)
+        version: 8.4.0(@microsoft/api-extractor@7.52.1(@types/node@20.17.27))(@swc/core@1.11.10(@swc/helpers@0.5.15))(jiti@2.4.2)(postcss@8.5.3)(tsx@4.19.3)(typescript@5.8.2)(yaml@2.7.0)
       typescript:
         specifier: ^5.7.3
         version: 5.8.2
@@ -4433,7 +4457,7 @@ importers:
         version: link:../../packages/_config
       '@microsoft/api-extractor':
         specifier: ^7.52.1
-        version: 7.52.2(@types/node@20.17.27)
+        version: 7.52.1(@types/node@20.17.27)
       '@types/node':
         specifier: ^20.17.27
         version: 20.17.27
@@ -4445,7 +4469,7 @@ importers:
         version: 9.23.0(jiti@2.4.2)
       tsup:
         specifier: ^8.4.0
-        version: 8.4.0(@microsoft/api-extractor@7.52.2(@types/node@20.17.27))(@swc/core@1.11.10(@swc/helpers@0.5.15))(jiti@2.4.2)(postcss@8.5.3)(tsx@4.19.3)(typescript@5.8.2)(yaml@2.7.0)
+        version: 8.4.0(@microsoft/api-extractor@7.52.1(@types/node@20.17.27))(@swc/core@1.11.10(@swc/helpers@0.5.15))(jiti@2.4.2)(postcss@8.5.3)(tsx@4.19.3)(typescript@5.8.2)(yaml@2.7.0)
       typescript:
         specifier: ^5.7.3
         version: 5.8.2
@@ -4460,14 +4484,14 @@ importers:
         version: link:../../packages/core
       microsoft-cognitiveservices-speech-sdk:
         specifier: ^1.42.0
-        version: 1.43.0(bufferutil@4.0.9)(utf-8-validate@5.0.10)
+        version: 1.42.0(bufferutil@4.0.9)(utf-8-validate@5.0.10)
     devDependencies:
       '@internal/lint':
         specifier: workspace:*
         version: link:../../packages/_config
       '@microsoft/api-extractor':
         specifier: ^7.52.1
-        version: 7.52.2(@types/node@20.17.27)
+        version: 7.52.1(@types/node@20.17.27)
       '@types/node':
         specifier: ^20.17.27
         version: 20.17.27
@@ -4476,7 +4500,7 @@ importers:
         version: 9.23.0(jiti@2.4.2)
       tsup:
         specifier: ^8.4.0
-        version: 8.4.0(@microsoft/api-extractor@7.52.2(@types/node@20.17.27))(@swc/core@1.11.10(@swc/helpers@0.5.15))(jiti@2.4.2)(postcss@8.5.3)(tsx@4.19.3)(typescript@5.8.2)(yaml@2.7.0)
+        version: 8.4.0(@microsoft/api-extractor@7.52.1(@types/node@20.17.27))(@swc/core@1.11.10(@swc/helpers@0.5.15))(jiti@2.4.2)(postcss@8.5.3)(tsx@4.19.3)(typescript@5.8.2)(yaml@2.7.0)
       typescript:
         specifier: ^5.7.3
         version: 5.8.2
@@ -4504,7 +4528,7 @@ importers:
         version: link:../../packages/_config
       '@microsoft/api-extractor':
         specifier: ^7.52.1
-        version: 7.52.2(@types/node@20.17.27)
+        version: 7.52.1(@types/node@20.17.27)
       '@types/node':
         specifier: ^20.17.27
         version: 20.17.27
@@ -4513,7 +4537,7 @@ importers:
         version: 9.23.0(jiti@2.4.2)
       tsup:
         specifier: ^8.4.0
-        version: 8.4.0(@microsoft/api-extractor@7.52.2(@types/node@20.17.27))(@swc/core@1.11.10(@swc/helpers@0.5.15))(jiti@2.4.2)(postcss@8.5.3)(tsx@4.19.3)(typescript@5.8.2)(yaml@2.7.0)
+        version: 8.4.0(@microsoft/api-extractor@7.52.1(@types/node@20.17.27))(@swc/core@1.11.10(@swc/helpers@0.5.15))(jiti@2.4.2)(postcss@8.5.3)(tsx@4.19.3)(typescript@5.8.2)(yaml@2.7.0)
       typescript:
         specifier: ^5.7.3
         version: 5.8.2
@@ -4538,7 +4562,7 @@ importers:
         version: link:../../packages/_config
       '@microsoft/api-extractor':
         specifier: ^7.52.1
-        version: 7.52.2(@types/node@20.17.27)
+        version: 7.52.1(@types/node@20.17.27)
       '@types/node':
         specifier: ^20.17.27
         version: 20.17.27
@@ -4547,7 +4571,7 @@ importers:
         version: 9.23.0(jiti@2.4.2)
       tsup:
         specifier: ^8.4.0
-        version: 8.4.0(@microsoft/api-extractor@7.52.2(@types/node@20.17.27))(@swc/core@1.11.10(@swc/helpers@0.5.15))(jiti@2.4.2)(postcss@8.5.3)(tsx@4.19.3)(typescript@5.8.2)(yaml@2.7.0)
+        version: 8.4.0(@microsoft/api-extractor@7.52.1(@types/node@20.17.27))(@swc/core@1.11.10(@swc/helpers@0.5.15))(jiti@2.4.2)(postcss@8.5.3)(tsx@4.19.3)(typescript@5.8.2)(yaml@2.7.0)
       typescript:
         specifier: ^5.7.3
         version: 5.8.2
@@ -4572,7 +4596,7 @@ importers:
         version: link:../../packages/_config
       '@microsoft/api-extractor':
         specifier: ^7.52.1
-        version: 7.52.2(@types/node@20.17.27)
+        version: 7.52.1(@types/node@20.17.27)
       '@types/node':
         specifier: ^20.17.27
         version: 20.17.27
@@ -4581,7 +4605,7 @@ importers:
         version: 9.23.0(jiti@2.4.2)
       tsup:
         specifier: ^8.4.0
-        version: 8.4.0(@microsoft/api-extractor@7.52.2(@types/node@20.17.27))(@swc/core@1.11.10(@swc/helpers@0.5.15))(jiti@2.4.2)(postcss@8.5.3)(tsx@4.19.3)(typescript@5.8.2)(yaml@2.7.0)
+        version: 8.4.0(@microsoft/api-extractor@7.52.1(@types/node@20.17.27))(@swc/core@1.11.10(@swc/helpers@0.5.15))(jiti@2.4.2)(postcss@8.5.3)(tsx@4.19.3)(typescript@5.8.2)(yaml@2.7.0)
       typescript:
         specifier: ^5.7.3
         version: 5.8.2
@@ -4640,7 +4664,7 @@ importers:
         version: link:../../packages/_config
       '@microsoft/api-extractor':
         specifier: ^7.52.1
-        version: 7.52.2(@types/node@20.17.27)
+        version: 7.52.1(@types/node@20.17.27)
       '@types/node':
         specifier: ^20.17.27
         version: 20.17.27
@@ -4649,7 +4673,7 @@ importers:
         version: 9.23.0(jiti@2.4.2)
       tsup:
         specifier: ^8.4.0
-        version: 8.4.0(@microsoft/api-extractor@7.52.2(@types/node@20.17.27))(@swc/core@1.11.10(@swc/helpers@0.5.15))(jiti@2.4.2)(postcss@8.5.3)(tsx@4.19.3)(typescript@5.8.2)(yaml@2.7.0)
+        version: 8.4.0(@microsoft/api-extractor@7.52.1(@types/node@20.17.27))(@swc/core@1.11.10(@swc/helpers@0.5.15))(jiti@2.4.2)(postcss@8.5.3)(tsx@4.19.3)(typescript@5.8.2)(yaml@2.7.0)
       typescript:
         specifier: ^5.7.3
         version: 5.8.2
@@ -4664,7 +4688,7 @@ importers:
         version: link:../../packages/core
       openai:
         specifier: ^4.86.2
-        version: 4.89.0(encoding@0.1.13)(ws@8.18.1(bufferutil@4.0.9)(utf-8-validate@6.0.5))(zod@3.24.2)
+        version: 4.87.3(encoding@0.1.13)(ws@8.18.1(bufferutil@4.0.9)(utf-8-validate@6.0.5))(zod@3.24.2)
       zod:
         specifier: ^3.24.2
         version: 3.24.2
@@ -4674,7 +4698,7 @@ importers:
         version: link:../../packages/_config
       '@microsoft/api-extractor':
         specifier: ^7.52.1
-        version: 7.52.2(@types/node@20.17.27)
+        version: 7.52.1(@types/node@20.17.27)
       '@types/node':
         specifier: ^20.17.27
         version: 20.17.27
@@ -4683,7 +4707,7 @@ importers:
         version: 9.23.0(jiti@2.4.2)
       tsup:
         specifier: ^8.4.0
-        version: 8.4.0(@microsoft/api-extractor@7.52.2(@types/node@20.17.27))(@swc/core@1.11.10(@swc/helpers@0.5.15))(jiti@2.4.2)(postcss@8.5.3)(tsx@4.19.3)(typescript@5.8.2)(yaml@2.7.0)
+        version: 8.4.0(@microsoft/api-extractor@7.52.1(@types/node@20.17.27))(@swc/core@1.11.10(@swc/helpers@0.5.15))(jiti@2.4.2)(postcss@8.5.3)(tsx@4.19.3)(typescript@5.8.2)(yaml@2.7.0)
       typescript:
         specifier: ^5.7.3
         version: 5.8.2
@@ -4711,7 +4735,7 @@ importers:
         version: link:../../packages/_config
       '@microsoft/api-extractor':
         specifier: ^7.49.2
-        version: 7.52.2(@types/node@20.17.27)
+        version: 7.52.1(@types/node@20.17.27)
       '@types/node':
         specifier: ^20.17.27
         version: 20.17.27
@@ -4723,7 +4747,7 @@ importers:
         version: 9.23.0(jiti@2.4.2)
       tsup:
         specifier: ^8.3.6
-        version: 8.4.0(@microsoft/api-extractor@7.52.2(@types/node@20.17.27))(@swc/core@1.11.10(@swc/helpers@0.5.15))(jiti@2.4.2)(postcss@8.5.3)(tsx@4.19.3)(typescript@5.8.2)(yaml@2.7.0)
+        version: 8.4.0(@microsoft/api-extractor@7.52.1(@types/node@20.17.27))(@swc/core@1.11.10(@swc/helpers@0.5.15))(jiti@2.4.2)(postcss@8.5.3)(tsx@4.19.3)(typescript@5.8.2)(yaml@2.7.0)
       typescript:
         specifier: ^5.7.3
         version: 5.8.2
@@ -4745,7 +4769,7 @@ importers:
         version: link:../../packages/_config
       '@microsoft/api-extractor':
         specifier: ^7.52.1
-        version: 7.52.2(@types/node@20.17.27)
+        version: 7.52.1(@types/node@20.17.27)
       '@types/node':
         specifier: ^20.17.27
         version: 20.17.27
@@ -4754,7 +4778,7 @@ importers:
         version: 9.23.0(jiti@2.4.2)
       tsup:
         specifier: ^8.4.0
-        version: 8.4.0(@microsoft/api-extractor@7.52.2(@types/node@20.17.27))(@swc/core@1.11.10(@swc/helpers@0.5.15))(jiti@2.4.2)(postcss@8.5.3)(tsx@4.19.3)(typescript@5.8.2)(yaml@2.7.0)
+        version: 8.4.0(@microsoft/api-extractor@7.52.1(@types/node@20.17.27))(@swc/core@1.11.10(@swc/helpers@0.5.15))(jiti@2.4.2)(postcss@8.5.3)(tsx@4.19.3)(typescript@5.8.2)(yaml@2.7.0)
       typescript:
         specifier: ^5.7.3
         version: 5.8.2
@@ -4776,7 +4800,7 @@ importers:
         version: link:../../packages/_config
       '@microsoft/api-extractor':
         specifier: ^7.52.1
-        version: 7.52.2(@types/node@20.17.27)
+        version: 7.52.1(@types/node@20.17.27)
       '@types/node':
         specifier: ^20.17.27
         version: 20.17.27
@@ -4785,7 +4809,7 @@ importers:
         version: 9.23.0(jiti@2.4.2)
       tsup:
         specifier: ^8.4.0
-        version: 8.4.0(@microsoft/api-extractor@7.52.2(@types/node@20.17.27))(@swc/core@1.11.10(@swc/helpers@0.5.15))(jiti@2.4.2)(postcss@8.5.3)(tsx@4.19.3)(typescript@5.8.2)(yaml@2.7.0)
+        version: 8.4.0(@microsoft/api-extractor@7.52.1(@types/node@20.17.27))(@swc/core@1.11.10(@swc/helpers@0.5.15))(jiti@2.4.2)(postcss@8.5.3)(tsx@4.19.3)(typescript@5.8.2)(yaml@2.7.0)
       typescript:
         specifier: ^5.7.3
         version: 5.8.2
@@ -4810,7 +4834,7 @@ importers:
         version: link:../../packages/_config
       '@microsoft/api-extractor':
         specifier: ^7.52.1
-        version: 7.52.2(@types/node@20.17.27)
+        version: 7.52.1(@types/node@20.17.27)
       '@types/node':
         specifier: ^20.17.27
         version: 20.17.27
@@ -4819,7 +4843,7 @@ importers:
         version: 9.23.0(jiti@2.4.2)
       tsup:
         specifier: ^8.4.0
-        version: 8.4.0(@microsoft/api-extractor@7.52.2(@types/node@20.17.27))(@swc/core@1.11.10(@swc/helpers@0.5.15))(jiti@2.4.2)(postcss@8.5.3)(tsx@4.19.3)(typescript@5.8.2)(yaml@2.7.0)
+        version: 8.4.0(@microsoft/api-extractor@7.52.1(@types/node@20.17.27))(@swc/core@1.11.10(@swc/helpers@0.5.15))(jiti@2.4.2)(postcss@8.5.3)(tsx@4.19.3)(typescript@5.8.2)(yaml@2.7.0)
       typescript:
         specifier: ^5.7.3
         version: 5.8.2
@@ -4828,6 +4852,12 @@ importers:
         version: 2.1.9(@edge-runtime/vm@3.2.0)(@types/node@20.17.27)(jsdom@26.0.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))(lightningcss@1.29.2)(terser@5.39.0)
 
 packages:
+
+  '@ai-sdk/anthropic@1.1.17':
+    resolution: {integrity: sha512-t4ipxope34TFvWa4SrFsg2//aAFk3hUv2gxlM5W39IdsT7Hq2nMxJIcXE6C19YdhE/0Kep32iv38BgPaDZet6A==}
+    engines: {node: '>=18'}
+    peerDependencies:
+      zod: ^3.0.0
 
   '@ai-sdk/anthropic@1.2.1':
     resolution: {integrity: sha512-X2bcuDXDKl8UCxUbiK+BX/xW8FLLzc36jngQmQycRvzr1Lmc8k8l+0pgLjgvmWRmbF+L9XOzP38Wm86bdTrFzQ==}
@@ -4929,6 +4959,28 @@ packages:
       zod:
         optional: true
 
+  '@ai-sdk/react@1.1.23':
+    resolution: {integrity: sha512-R+PG9ya0GLs6orzt+1MxmjrWFuZM0gVs+l8ihBr1u+42wwkVeojY4CAtQjW4nrfGTVbdJYkl5y+r/VKfjr42aQ==}
+    engines: {node: '>=18'}
+    peerDependencies:
+      react: ^18 || ^19 || ^19.0.0-rc
+      zod: ^3.0.0
+    peerDependenciesMeta:
+      react:
+        optional: true
+      zod:
+        optional: true
+
+  '@ai-sdk/react@1.2.1':
+    resolution: {integrity: sha512-ZC1GlQ/NRMMAl66nbcqiKmn2DrJb7faDQxvdE8W0aUZYNsGCwFLiNcbGkV7i6Y3VM0nFq9p8joOqAs1cv7zt9g==}
+    engines: {node: '>=18'}
+    peerDependencies:
+      react: ^18 || ^19 || ^19.0.0-rc
+      zod: ^3.23.8
+    peerDependenciesMeta:
+      zod:
+        optional: true
+
   '@ai-sdk/react@1.2.2':
     resolution: {integrity: sha512-rxyNTFjUd3IilVOJFuUJV5ytZBYAIyRi50kFS2gNmSEiG4NHMBBm31ddrxI/i86VpY8gzZVp1/igtljnWBihUA==}
     engines: {node: '>=18'}
@@ -4959,6 +5011,15 @@ packages:
 
   '@ai-sdk/ui-utils@0.0.50':
     resolution: {integrity: sha512-Z5QYJVW+5XpSaJ4jYCCAVG7zIAuKOOdikhgpksneNmKvx61ACFaf98pmOd+xnjahl0pIlc/QIe6O4yVaJ1sEaw==}
+    engines: {node: '>=18'}
+    peerDependencies:
+      zod: ^3.0.0
+    peerDependenciesMeta:
+      zod:
+        optional: true
+
+  '@ai-sdk/ui-utils@1.1.19':
+    resolution: {integrity: sha512-rDHy2uxlPMt3jjS9L6mBrsfhEInZ5BVoWevmD13fsAt2s/XWy2OwwKmgmUQkdLlY4mn/eyeYAfDGK8+5CbOAgg==}
     engines: {node: '>=18'}
     peerDependencies:
       zod: ^3.0.0
@@ -6201,9 +6262,21 @@ packages:
     resolution: {integrity: sha512-KrkT6qO5NxqNfy68sBl6CTSoJ4SNDIS5iQArkibhlbGU4LaDukZ3q2HIkh8aUKDio6o4itU4xDR7t82Y2eP1Bg==}
     engines: {node: '>=14'}
 
+  '@discordjs/builders@1.10.1':
+    resolution: {integrity: sha512-OWo1fY4ztL1/M/DUyRPShB4d/EzVfuUvPTRRHRIt/YxBrUYSz0a+JicD5F5zHFoNs2oTuWavxCOVFV1UljHTng==}
+    engines: {node: '>=16.11.0'}
+
+  '@discordjs/collection@1.5.3':
+    resolution: {integrity: sha512-SVb428OMd3WO1paV3rm6tSjM4wC+Kecaa1EUGX7vc6/fddvw/6lg90z4QtCqm21zvVe92vMMDt9+DkIvjXImQQ==}
+    engines: {node: '>=16.11.0'}
+
   '@discordjs/collection@2.1.1':
     resolution: {integrity: sha512-LiSusze9Tc7qF03sLCujF5iZp7K+vRNEDBZ86FT9aQAv3vxMLihUvKvpsCWiQ2DJq1tVckopKm1rxomgNUc9hg==}
     engines: {node: '>=18'}
+
+  '@discordjs/formatters@0.6.0':
+    resolution: {integrity: sha512-YIruKw4UILt/ivO4uISmrGq2GdMY6EkoTtD0oS0GvkJFRZbTSdPhzYiUILbJ/QslsvC9H9nTgGgnarnIl4jMfw==}
+    engines: {node: '>=16.11.0'}
 
   '@discordjs/rest@2.4.3':
     resolution: {integrity: sha512-+SO4RKvWsM+y8uFHgYQrcTl/3+cY02uQOH7/7bKbVZsTfrfpoE62o5p+mmV+s7FVhTX82/kQUGGbu4YlV60RtA==}
@@ -6212,6 +6285,10 @@ packages:
   '@discordjs/util@1.1.1':
     resolution: {integrity: sha512-eddz6UnOBEB1oITPinyrB2Pttej49M9FZQY8NxgEvc3tq6ZICZ19m70RsmzRdDHk80O9NoYN/25AqJl8vPVf/g==}
     engines: {node: '>=18'}
+
+  '@discordjs/ws@1.2.1':
+    resolution: {integrity: sha512-PBvenhZG56a6tMWF/f4P6f4GxZKJTBG95n7aiGSPTnodmz4N5g60t79rSIAq7ywMbv8A4jFtexMruH+oe51aQQ==}
+    engines: {node: '>=16.11.0'}
 
   '@discoveryjs/json-ext@0.6.3':
     resolution: {integrity: sha512-4B4OijXeVNOPZlYA2oEwWOTkzyltLao+xbotHQeqN++Rv27Y6s818+n2Qkp8q+Fxhn0t/5lA5X1Mxktud8eayQ==}
@@ -7267,6 +7344,10 @@ packages:
     resolution: {integrity: sha512-269Z39MS6wVJtsoUl10L60WdkhJVdPG24Q4eZTH3nnF6lpvSShEK3wQjDX9JRWAUPvPh7COouPpU9IrqaZFvtQ==}
     engines: {node: ^12.22.0 || ^14.17.0 || >=16.0.0}
 
+  '@eslint/eslintrc@3.3.0':
+    resolution: {integrity: sha512-yaVPAiNAalnCZedKLdR21GOGILMLKPyqSLWaAjQFvYA2i/ciDi8ArYVr69Anohb6cH2Ukhqti4aFnYyPm8wdwQ==}
+    engines: {node: ^18.18.0 || ^20.9.0 || >=21.1.0}
+
   '@eslint/eslintrc@3.3.1':
     resolution: {integrity: sha512-gtF186CXhIl1p4pJNGZw8Yc6RlshoePRvE0X91oPGb3vZ8pM3qOS9W9NGPat9LziaBV7XrJWGylNQXkGcnM3IQ==}
     engines: {node: ^18.18.0 || ^20.9.0 || >=21.1.0}
@@ -8053,11 +8134,18 @@ packages:
   '@microsoft/api-extractor-model@7.28.13':
     resolution: {integrity: sha512-39v/JyldX4MS9uzHcdfmjjfS6cYGAoXV+io8B5a338pkHiSt+gy2eXQ0Q7cGFJ7quSa1VqqlMdlPrB6sLR/cAw==}
 
+  '@microsoft/api-extractor-model@7.30.4':
+    resolution: {integrity: sha512-RobC0gyVYsd2Fao9MTKOfTdBm41P/bCMUmzS5mQ7/MoAKEqy0FOBph3JOYdq4X4BsEnMEiSHc+0NUNmdzxCpjA==}
+
   '@microsoft/api-extractor-model@7.30.5':
     resolution: {integrity: sha512-0ic4rcbcDZHz833RaTZWTGu+NpNgrxVNjVaor0ZDUymfDFzjA/Uuk8hYziIUIOEOSTfmIQqyzVwlzxZxPe7tOA==}
 
   '@microsoft/api-extractor@7.43.0':
     resolution: {integrity: sha512-GFhTcJpB+MI6FhvXEI9b2K0snulNLWHqC/BbcJtyNYcKUiw7l3Lgis5ApsYncJ0leALX7/of4XfmXk+maT111w==}
+    hasBin: true
+
+  '@microsoft/api-extractor@7.52.1':
+    resolution: {integrity: sha512-m3I5uAwE05orsu3D1AGyisX5KxsgVXB+U4bWOOaX/Z7Ftp/2Cy41qsNhO6LPvSxHBaapyser5dVorF1t5M6tig==}
     hasBin: true
 
   '@microsoft/api-extractor@7.52.2':
@@ -8301,6 +8389,9 @@ packages:
 
   '@next/env@15.1.7':
     resolution: {integrity: sha512-d9jnRrkuOH7Mhi+LHav2XW91HOgTAWHxjMPkXMGBc9B2b7614P7kjt8tAplRvJpbSt4nbO1lugcT/kAaWzjlLQ==}
+
+  '@next/env@15.2.2':
+    resolution: {integrity: sha512-yWgopCfA9XDR8ZH3taB5nRKtKJ1Q5fYsTOuYkzIIoS8TJ0UAUKAGF73JnGszbjk2ufAQDj6mDdgsJAFx5CLtYQ==}
 
   '@next/env@15.2.3':
     resolution: {integrity: sha512-a26KnbW9DFEUsSxAxKBORR/uD9THoYoKbkpFywMN/AFvboTt94b8+g/07T8J6ACsdLag8/PDU60ov4rPxRAixw==}
@@ -10085,6 +10176,14 @@ packages:
       '@types/node':
         optional: true
 
+  '@rushstack/node-core-library@5.12.0':
+    resolution: {integrity: sha512-QSwwzgzWoil1SCQse+yCHwlhRxNv2dX9siPnAb9zR/UmMhac4mjMrlMZpk64BlCeOFi1kJKgXRkihSwRMbboAQ==}
+    peerDependencies:
+      '@types/node': ^20.17.27
+    peerDependenciesMeta:
+      '@types/node':
+        optional: true
+
   '@rushstack/node-core-library@5.13.0':
     resolution: {integrity: sha512-IGVhy+JgUacAdCGXKUrRhwHMTzqhWwZUI+qEPcdzsb80heOw0QPbhhoVsoiMF7Klp8eYsp7hzpScMXmOa3Uhfg==}
     peerDependencies:
@@ -10107,6 +10206,14 @@ packages:
       '@types/node':
         optional: true
 
+  '@rushstack/terminal@0.15.1':
+    resolution: {integrity: sha512-3vgJYwumcjoDOXU3IxZfd616lqOdmr8Ezj4OWgJZfhmiBK4Nh7eWcv8sU8N/HdzXcuHDXCRGn/6O2Q75QvaZMA==}
+    peerDependencies:
+      '@types/node': ^20.17.27
+    peerDependenciesMeta:
+      '@types/node':
+        optional: true
+
   '@rushstack/terminal@0.15.2':
     resolution: {integrity: sha512-7Hmc0ysK5077R/IkLS9hYu0QuNafm+TbZbtYVzCMbeOdMjaRboLKrhryjwZSRJGJzu+TV1ON7qZHeqf58XfLpA==}
     peerDependencies:
@@ -10118,11 +10225,22 @@ packages:
   '@rushstack/ts-command-line@4.19.1':
     resolution: {integrity: sha512-J7H768dgcpG60d7skZ5uSSwyCZs/S2HrWP1Ds8d1qYAyaaeJmpmmLr9BVw97RjFzmQPOYnoXcKA4GkqDCkduQg==}
 
+  '@rushstack/ts-command-line@4.23.6':
+    resolution: {integrity: sha512-7WepygaF3YPEoToh4MAL/mmHkiIImQq3/uAkQX46kVoKTNOOlCtFGyNnze6OYuWw2o9rxsyrHVfIBKxq/am2RA==}
+
   '@rushstack/ts-command-line@4.23.7':
     resolution: {integrity: sha512-Gr9cB7DGe6uz5vq2wdr89WbVDKz0UeuFEn5H2CfWDe7JvjFFaiV15gi6mqDBTbHhHCWS7w8mF1h3BnIfUndqdA==}
 
   '@sapphire/async-queue@1.5.5':
     resolution: {integrity: sha512-cvGzxbba6sav2zZkH8GPf2oGk9yYoD5qrNWdu9fRehifgnFZJMV+nuy2nON2roRO4yQQ+v7MK/Pktl/HgfsUXg==}
+    engines: {node: '>=v14.0.0', npm: '>=7.0.0'}
+
+  '@sapphire/shapeshift@4.0.0':
+    resolution: {integrity: sha512-d9dUmWVA7MMiKobL3VpLF8P2aeanRTu6ypG2OIaEv/ZHH/SUQ2iHOVyi5wAPjQ+HmnMuL0whK9ez8I/raWbtIg==}
+    engines: {node: '>=v16'}
+
+  '@sapphire/snowflake@3.5.3':
+    resolution: {integrity: sha512-jjmJywLAFoWeBi1W7994zZyiNWPIiqRRNAmSERxyg93xRGzNYvGjlZ0gR6x0F4gPRi2+0O6S71kOZYyr3cxaIQ==}
     engines: {node: '>=v14.0.0', npm: '>=7.0.0'}
 
   '@sapphire/snowflake@3.5.5':
@@ -11696,8 +11814,40 @@ packages:
       zod:
         optional: true
 
+  ai@4.1.61:
+    resolution: {integrity: sha512-Y9SAyGJEeW23F6C7PSHZXYNEvbH2cqJm0rVW2AoeFaXFT13ttx8rAqs8wz2w466C1UB329yl5PXayFcHqofSEA==}
+    engines: {node: '>=18'}
+    peerDependencies:
+      react: ^18 || ^19 || ^19.0.0-rc
+      zod: ^3.0.0
+    peerDependenciesMeta:
+      react:
+        optional: true
+      zod:
+        optional: true
+
+  ai@4.2.2:
+    resolution: {integrity: sha512-lSQyQCP13/CYuPQ95vnMGgZBUPnqNrEwenreoO/qpPei0NJNDbYYIyUYceQa4WmOUnq2rkP2y4eU0WRrbZoQBQ==}
+    engines: {node: '>=18'}
+    peerDependencies:
+      react: ^18 || ^19 || ^19.0.0-rc
+      zod: ^3.23.8
+    peerDependenciesMeta:
+      react:
+        optional: true
+
   ai@4.2.5:
     resolution: {integrity: sha512-URJEslI3cgF/atdTJHtz+Sj0W1JTmiGmD3znw9KensL3qV605odktDim+GTazNJFPR4QaIu1lUio5b8RymvOjA==}
+    engines: {node: '>=18'}
+    peerDependencies:
+      react: ^18 || ^19 || ^19.0.0-rc
+      zod: ^3.23.8
+    peerDependenciesMeta:
+      react:
+        optional: true
+
+  ai@4.2.6:
+    resolution: {integrity: sha512-vw0tGCUvnmOmzFm4rZI0o+sKx3Lcp7Fo5MrK3T+0ZVws/6+3CtB9ANmaC7DhJfdZFYm+wJuWMylsSEiJMjhJZQ==}
     engines: {node: '>=18'}
     peerDependencies:
       react: ^18 || ^19 || ^19.0.0-rc
@@ -12015,6 +12165,9 @@ packages:
 
   axios@1.7.7:
     resolution: {integrity: sha512-S4kL7XrjgBmvdGut0sN3yJxqYzrDOnivkBiN0OFs6hLiUam3UPvswUo0kqGyhqUZGEOytHyumEdXsAkgCOUf3Q==}
+
+  axios@1.8.3:
+    resolution: {integrity: sha512-iP4DebzoNlP/YN2dpwCgb8zoCmhtkajzS48JvwmkSkXvPI3DHc7m+XYL5tGnSlJtR6nImXZmdCuN5aP8dh1d8A==}
 
   axios@1.8.4:
     resolution: {integrity: sha512-eBSYY4Y68NNlHbHBMdeDmKNtDgXWhQsJcGqzO3iLUM0GraQFSS9cVgPX5I9b3lbdFKyYoAEGAZF1DwhTaljNAw==}
@@ -13333,6 +13486,10 @@ packages:
 
   discord-api-types@0.37.119:
     resolution: {integrity: sha512-WasbGFXEB+VQWXlo6IpW3oUv73Yuau1Ig4AZF/m13tXcTKnMpc/mHjpztIlz4+BM9FG9BHQkEXiPto3bKduQUg==}
+
+  discord.js@14.18.0:
+    resolution: {integrity: sha512-SvU5kVUvwunQhN2/+0t55QW/1EHfB1lp0TtLZUSXVHDmyHTrdOj5LRKdR0zLcybaA15F+NtdWuWmGOX9lE+CAw==}
+    engines: {node: '>=18'}
 
   dlv@1.1.3:
     resolution: {integrity: sha512-+HlytyjlPKnIG8XuRG8WvmBP8xs8P71y+SKKS6ZXWoEgLuePxtDoUEiH7WkdePWrQ5JBpE6aoVqfZfJUQkjXwA==}
@@ -16335,6 +16492,9 @@ packages:
   lodash.once@4.1.1:
     resolution: {integrity: sha512-Sb487aTOCr9drQVL8pIxOzVhafOjZN9UU54hiN8PU3uAiSV7lx1yYNpbNmex2PK6dSJoNTSJUUswT651yww3Mg==}
 
+  lodash.snakecase@4.1.1:
+    resolution: {integrity: sha512-QZ1d4xoBHYUeuouhEq3lk3Uq7ldgyFXGBhg04+oRLnIz8o9T65Eh+8YdroUwn846zchkA9yDsDl5CVVaV2nqYw==}
+
   lodash.sortby@4.7.0:
     resolution: {integrity: sha512-HDWXG8isMntAyRF5vZ7xKuEvOhT4AhlRt/3czTSjvGUxjYCBVRQY48ViDHyfYz9VIoBkW4TMGQNapx+l3RUwdA==}
 
@@ -16747,6 +16907,9 @@ packages:
   micromatch@4.0.8:
     resolution: {integrity: sha512-PXwfBhYu0hBCPw8Dn0E+WDYb7af3dSLVWKi3HGv84IdF4TyFoC0ysxFd0Goxw7nSv4T/PzEJQxsYsEiFCKo2BA==}
     engines: {node: '>=8.6'}
+
+  microsoft-cognitiveservices-speech-sdk@1.42.0:
+    resolution: {integrity: sha512-ERrS1rwPPCN1foOwlJv3XmKO4NtBchjW+zYPQBgv4ffRfh87DcxuISXICPDjvlAU61w/r+y6p1W0pnX3gwVZ7A==}
 
   microsoft-cognitiveservices-speech-sdk@1.43.0:
     resolution: {integrity: sha512-wOT3NTvJfgtCrWMjBGox0XSCh8kXDWVXdL7sf0iLAubt5tk+NuVFA9ybu0bkNHNMjIbpXiBgauifaV9y3jfwHw==}
@@ -17664,6 +17827,18 @@ packages:
     resolution: {integrity: sha512-JM8fhcpmpGN0vrUwGquYIzdcEQHtFuom6sRCbbCM6CfzZXNuRk33G7KfeRAIfnaCxSpzrP5iHtwJzIm6biUZ2Q==}
     hasBin: true
 
+  openai@4.87.3:
+    resolution: {integrity: sha512-d2D54fzMuBYTxMW8wcNmhT1rYKcTfMJ8t+4KjH2KtvYenygITiGBgHoIrzHwnDQWW+C5oCA+ikIR2jgPCFqcKQ==}
+    hasBin: true
+    peerDependencies:
+      ws: ^8.18.0
+      zod: ^3.23.8
+    peerDependenciesMeta:
+      ws:
+        optional: true
+      zod:
+        optional: true
+
   openai@4.89.0:
     resolution: {integrity: sha512-XNI0q2l8/Os6jmojxaID5EhyQjxZgzR2gWcpEjYWK5hGKwE7AcifxEY7UNwFDDHJQXqeiosQ0CJwQN+rvnwdjA==}
     hasBin: true
@@ -18262,8 +18437,8 @@ packages:
     resolution: {integrity: sha512-cDWgoah1Gez9rN3H4165peY9qfpEo+SA61oQv65O3cRUE1pOEoJWwddwcqKE8XZYjbblOJlYDlLV4h67HrEVDg==}
     engines: {node: '>=12'}
 
-  posthog-js@1.232.7:
-    resolution: {integrity: sha512-9Hqdam80bf41mj30O3ZLgdfDtZqR9TXNpTh7EkJo6C/emerFQEnW7X+E3yyE81KIPON4amSqTj5BL0gg+qZ28w==}
+  posthog-js@1.233.1:
+    resolution: {integrity: sha512-/OgWdJ7xLqKU8LIEsB8ss900DrxY47TDrOEC5zxuK5ngs/mz+6XVFLfI0jz9AqFmZQpa/iuY0rNr2hm6lWStaQ==}
     peerDependencies:
       '@rrweb/types': 2.0.0-alpha.17
       rrweb-snapshot: 2.0.0-alpha.17
@@ -20118,6 +20293,9 @@ packages:
       esbuild:
         optional: true
 
+  ts-mixer@6.0.4:
+    resolution: {integrity: sha512-ufKpbmrugz5Aou4wcr5Wc1UUFWOLhq+Fm6qa6P0w0K5Qw2yhaUoiWszhCVuNQyNwrlGiscHOmqYoAox1PtvgjA==}
+
   ts-morph@12.0.0:
     resolution: {integrity: sha512-VHC8XgU2fFW7yO1f/b3mxKDje1vmyzFXHWzOYmKEkCEwcLjDtbdLgBQviqj4ZwP4MJkQtRo6Ha2I29lq/B+VxA==}
 
@@ -21345,6 +21523,12 @@ packages:
 
 snapshots:
 
+  '@ai-sdk/anthropic@1.1.17(zod@3.24.2)':
+    dependencies:
+      '@ai-sdk/provider': 1.0.11
+      '@ai-sdk/provider-utils': 2.1.13(zod@3.24.2)
+      zod: 3.24.2
+
   '@ai-sdk/anthropic@1.2.1(zod@3.24.2)':
     dependencies:
       '@ai-sdk/provider': 1.1.0
@@ -21445,6 +21629,26 @@ snapshots:
       react: 19.0.0-rc-02c0e824-20241028
       zod: 3.24.2
 
+  '@ai-sdk/react@1.1.23(react@19.0.0)(zod@3.24.2)':
+    dependencies:
+      '@ai-sdk/provider-utils': 2.1.13(zod@3.24.2)
+      '@ai-sdk/ui-utils': 1.1.19(zod@3.24.2)
+      swr: 2.3.3(react@19.0.0)
+      throttleit: 2.1.0
+    optionalDependencies:
+      react: 19.0.0
+      zod: 3.24.2
+
+  '@ai-sdk/react@1.2.1(react@19.0.0)(zod@3.24.2)':
+    dependencies:
+      '@ai-sdk/provider-utils': 2.2.1(zod@3.24.2)
+      '@ai-sdk/ui-utils': 1.2.1(zod@3.24.2)
+      react: 19.0.0
+      swr: 2.3.3(react@19.0.0)
+      throttleit: 2.1.0
+    optionalDependencies:
+      zod: 3.24.2
+
   '@ai-sdk/react@1.2.2(react@19.0.0)(zod@3.24.2)':
     dependencies:
       '@ai-sdk/provider-utils': 2.2.1(zod@3.24.2)
@@ -21488,6 +21692,14 @@ snapshots:
       '@ai-sdk/provider-utils': 1.0.22(zod@3.24.2)
       json-schema: 0.4.0
       secure-json-parse: 2.7.0
+      zod-to-json-schema: 3.24.4(zod@3.24.2)
+    optionalDependencies:
+      zod: 3.24.2
+
+  '@ai-sdk/ui-utils@1.1.19(zod@3.24.2)':
+    dependencies:
+      '@ai-sdk/provider': 1.0.11
+      '@ai-sdk/provider-utils': 2.1.13(zod@3.24.2)
       zod-to-json-schema: 3.24.4(zod@3.24.2)
     optionalDependencies:
       zod: 3.24.2
@@ -21624,7 +21836,7 @@ snapshots:
 
   '@assistant-ui/react@0.7.85(@types/react-dom@19.0.4(@types/react@19.0.10))(@types/react@19.0.10)(react-dom@19.0.0(react@19.0.0))(react@19.0.0)(use-sync-external-store@1.4.0(react@19.0.0))':
     dependencies:
-      '@ai-sdk/provider': 1.1.0
+      '@ai-sdk/provider': 1.0.11
       '@radix-ui/primitive': 1.1.1
       '@radix-ui/react-avatar': 1.1.3(@types/react-dom@19.0.4(@types/react@19.0.10))(@types/react@19.0.10)(react-dom@19.0.0(react@19.0.0))(react@19.0.0)
       '@radix-ui/react-compose-refs': 1.1.1(@types/react@19.0.10)(react@19.0.0)
@@ -21658,7 +21870,7 @@ snapshots:
 
   '@assistant-ui/react@0.7.91(@types/react-dom@19.0.4(@types/react@19.0.10))(@types/react@19.0.10)(react-dom@19.0.0(react@19.0.0))(react@19.0.0)(use-sync-external-store@1.4.0(react@19.0.0))':
     dependencies:
-      '@ai-sdk/provider': 1.1.0
+      '@ai-sdk/provider': 1.0.11
       '@radix-ui/primitive': 1.1.1
       '@radix-ui/react-avatar': 1.1.3(@types/react-dom@19.0.4(@types/react@19.0.10))(@types/react@19.0.10)(react-dom@19.0.0(react@19.0.0))(react@19.0.0)
       '@radix-ui/react-compose-refs': 1.1.1(@types/react@19.0.10)(react@19.0.0)
@@ -23431,7 +23643,23 @@ snapshots:
       gonzales-pe: 4.3.0
       node-source-walk: 6.0.2
 
+  '@discordjs/builders@1.10.1':
+    dependencies:
+      '@discordjs/formatters': 0.6.0
+      '@discordjs/util': 1.1.1
+      '@sapphire/shapeshift': 4.0.0
+      discord-api-types: 0.37.119
+      fast-deep-equal: 3.1.3
+      ts-mixer: 6.0.4
+      tslib: 2.8.1
+
+  '@discordjs/collection@1.5.3': {}
+
   '@discordjs/collection@2.1.1': {}
+
+  '@discordjs/formatters@0.6.0':
+    dependencies:
+      discord-api-types: 0.37.119
 
   '@discordjs/rest@2.4.3':
     dependencies:
@@ -23446,6 +23674,21 @@ snapshots:
       undici: 6.21.1
 
   '@discordjs/util@1.1.1': {}
+
+  '@discordjs/ws@1.2.1(bufferutil@4.0.9)(utf-8-validate@6.0.5)':
+    dependencies:
+      '@discordjs/collection': 2.1.1
+      '@discordjs/rest': 2.4.3
+      '@discordjs/util': 1.1.1
+      '@sapphire/async-queue': 1.5.5
+      '@types/ws': 8.18.0
+      '@vladfrangu/async_event_emitter': 2.4.6
+      discord-api-types: 0.37.119
+      tslib: 2.8.1
+      ws: 8.18.1(bufferutil@4.0.9)(utf-8-validate@6.0.5)
+    transitivePeerDependencies:
+      - bufferutil
+      - utf-8-validate
 
   '@discoveryjs/json-ext@0.6.3': {}
 
@@ -24013,6 +24256,20 @@ snapshots:
       debug: 4.4.0(supports-color@8.1.1)
       espree: 9.6.1
       globals: 13.24.0
+      ignore: 5.3.2
+      import-fresh: 3.3.1
+      js-yaml: 4.1.0
+      minimatch: 3.1.2
+      strip-json-comments: 3.1.1
+    transitivePeerDependencies:
+      - supports-color
+
+  '@eslint/eslintrc@3.3.0':
+    dependencies:
+      ajv: 6.12.6
+      debug: 4.4.0(supports-color@8.1.1)
+      espree: 10.3.0
+      globals: 14.0.0
       ignore: 5.3.2
       import-fresh: 3.3.1
       js-yaml: 4.1.0
@@ -25293,6 +25550,14 @@ snapshots:
     transitivePeerDependencies:
       - '@types/node'
 
+  '@microsoft/api-extractor-model@7.30.4(@types/node@20.17.27)':
+    dependencies:
+      '@microsoft/tsdoc': 0.15.1
+      '@microsoft/tsdoc-config': 0.17.1
+      '@rushstack/node-core-library': 5.12.0(@types/node@20.17.27)
+    transitivePeerDependencies:
+      - '@types/node'
+
   '@microsoft/api-extractor-model@7.30.5(@types/node@20.17.27)':
     dependencies:
       '@microsoft/tsdoc': 0.15.1
@@ -25310,6 +25575,24 @@ snapshots:
       '@rushstack/rig-package': 0.5.2
       '@rushstack/terminal': 0.10.0(@types/node@20.17.27)
       '@rushstack/ts-command-line': 4.19.1(@types/node@20.17.27)
+      lodash: 4.17.21
+      minimatch: 3.0.8
+      resolve: 1.22.10
+      semver: 7.5.4
+      source-map: 0.6.1
+      typescript: 5.8.2
+    transitivePeerDependencies:
+      - '@types/node'
+
+  '@microsoft/api-extractor@7.52.1(@types/node@20.17.27)':
+    dependencies:
+      '@microsoft/api-extractor-model': 7.30.4(@types/node@20.17.27)
+      '@microsoft/tsdoc': 0.15.1
+      '@microsoft/tsdoc-config': 0.17.1
+      '@rushstack/node-core-library': 5.12.0(@types/node@20.17.27)
+      '@rushstack/rig-package': 0.5.3
+      '@rushstack/terminal': 0.15.1(@types/node@20.17.27)
+      '@rushstack/ts-command-line': 4.23.6(@types/node@20.17.27)
       lodash: 4.17.21
       minimatch: 3.0.8
       resolve: 1.22.10
@@ -25846,6 +26129,8 @@ snapshots:
   '@next/env@15.1.2': {}
 
   '@next/env@15.1.7': {}
+
+  '@next/env@15.2.2': {}
 
   '@next/env@15.2.3': {}
 
@@ -28495,6 +28780,19 @@ snapshots:
     optionalDependencies:
       '@types/node': 20.17.27
 
+  '@rushstack/node-core-library@5.12.0(@types/node@20.17.27)':
+    dependencies:
+      ajv: 8.13.0
+      ajv-draft-04: 1.0.0(ajv@8.13.0)
+      ajv-formats: 3.0.1(ajv@8.13.0)
+      fs-extra: 11.3.0
+      import-lazy: 4.0.0
+      jju: 1.4.0
+      resolve: 1.22.10
+      semver: 7.5.4
+    optionalDependencies:
+      '@types/node': 20.17.27
+
   '@rushstack/node-core-library@5.13.0(@types/node@20.17.27)':
     dependencies:
       ajv: 8.13.0
@@ -28525,6 +28823,13 @@ snapshots:
     optionalDependencies:
       '@types/node': 20.17.27
 
+  '@rushstack/terminal@0.15.1(@types/node@20.17.27)':
+    dependencies:
+      '@rushstack/node-core-library': 5.12.0(@types/node@20.17.27)
+      supports-color: 8.1.1
+    optionalDependencies:
+      '@types/node': 20.17.27
+
   '@rushstack/terminal@0.15.2(@types/node@20.17.27)':
     dependencies:
       '@rushstack/node-core-library': 5.13.0(@types/node@20.17.27)
@@ -28541,6 +28846,15 @@ snapshots:
     transitivePeerDependencies:
       - '@types/node'
 
+  '@rushstack/ts-command-line@4.23.6(@types/node@20.17.27)':
+    dependencies:
+      '@rushstack/terminal': 0.15.1(@types/node@20.17.27)
+      '@types/argparse': 1.0.38
+      argparse: 1.0.10
+      string-argv: 0.3.2
+    transitivePeerDependencies:
+      - '@types/node'
+
   '@rushstack/ts-command-line@4.23.7(@types/node@20.17.27)':
     dependencies:
       '@rushstack/terminal': 0.15.2(@types/node@20.17.27)
@@ -28551,6 +28865,13 @@ snapshots:
       - '@types/node'
 
   '@sapphire/async-queue@1.5.5': {}
+
+  '@sapphire/shapeshift@4.0.0':
+    dependencies:
+      fast-deep-equal: 3.1.3
+      lodash: 4.17.21
+
+  '@sapphire/snowflake@3.5.3': {}
 
   '@sapphire/snowflake@3.5.5': {}
 
@@ -30662,6 +30983,31 @@ snapshots:
       - solid-js
       - vue
 
+  ai@4.1.61(react@19.0.0)(zod@3.24.2):
+    dependencies:
+      '@ai-sdk/provider': 1.0.11
+      '@ai-sdk/provider-utils': 2.1.13(zod@3.24.2)
+      '@ai-sdk/react': 1.1.23(react@19.0.0)(zod@3.24.2)
+      '@ai-sdk/ui-utils': 1.1.19(zod@3.24.2)
+      '@opentelemetry/api': 1.9.0
+      eventsource-parser: 3.0.0
+      jsondiffpatch: 0.6.0
+    optionalDependencies:
+      react: 19.0.0
+      zod: 3.24.2
+
+  ai@4.2.2(react@19.0.0)(zod@3.24.2):
+    dependencies:
+      '@ai-sdk/provider': 1.1.0
+      '@ai-sdk/provider-utils': 2.2.1(zod@3.24.2)
+      '@ai-sdk/react': 1.2.1(react@19.0.0)(zod@3.24.2)
+      '@ai-sdk/ui-utils': 1.2.1(zod@3.24.2)
+      '@opentelemetry/api': 1.9.0
+      jsondiffpatch: 0.6.0
+      zod: 3.24.2
+    optionalDependencies:
+      react: 19.0.0
+
   ai@4.2.5(react@19.0.0)(zod@3.24.2):
     dependencies:
       '@ai-sdk/provider': 1.1.0
@@ -30685,6 +31031,18 @@ snapshots:
       zod: 3.24.2
     optionalDependencies:
       react: 19.0.0-rc-45804af1-20241021
+
+  ai@4.2.6(react@19.0.0)(zod@3.24.2):
+    dependencies:
+      '@ai-sdk/provider': 1.1.0
+      '@ai-sdk/provider-utils': 2.2.1(zod@3.24.2)
+      '@ai-sdk/react': 1.2.2(react@19.0.0)(zod@3.24.2)
+      '@ai-sdk/ui-utils': 1.2.1(zod@3.24.2)
+      '@opentelemetry/api': 1.9.0
+      jsondiffpatch: 0.6.0
+      zod: 3.24.2
+    optionalDependencies:
+      react: 19.0.0
 
   ajv-draft-04@1.0.0(ajv@8.13.0):
     optionalDependencies:
@@ -31009,6 +31367,14 @@ snapshots:
   axe-core@4.10.3: {}
 
   axios@1.7.7:
+    dependencies:
+      follow-redirects: 1.15.9(debug@4.4.0)
+      form-data: 4.0.2
+      proxy-from-env: 1.1.0
+    transitivePeerDependencies:
+      - debug
+
+  axios@1.8.3:
     dependencies:
       follow-redirects: 1.15.9(debug@4.4.0)
       form-data: 4.0.2
@@ -32438,6 +32804,24 @@ snapshots:
       path-type: 4.0.0
 
   discord-api-types@0.37.119: {}
+
+  discord.js@14.18.0(bufferutil@4.0.9)(utf-8-validate@6.0.5):
+    dependencies:
+      '@discordjs/builders': 1.10.1
+      '@discordjs/collection': 1.5.3
+      '@discordjs/formatters': 0.6.0
+      '@discordjs/rest': 2.4.3
+      '@discordjs/util': 1.1.1
+      '@discordjs/ws': 1.2.1(bufferutil@4.0.9)(utf-8-validate@6.0.5)
+      '@sapphire/snowflake': 3.5.3
+      discord-api-types: 0.37.119
+      fast-deep-equal: 3.1.3
+      lodash.snakecase: 4.1.1
+      tslib: 2.8.1
+      undici: 6.21.1
+    transitivePeerDependencies:
+      - bufferutil
+      - utf-8-validate
 
   dlv@1.1.3: {}
 
@@ -36670,6 +37054,8 @@ snapshots:
 
   lodash.once@4.1.1: {}
 
+  lodash.snakecase@4.1.1: {}
+
   lodash.sortby@4.7.0: {}
 
   lodash.startcase@4.4.0: {}
@@ -37082,7 +37468,7 @@ snapshots:
       uuid: 9.0.1
       zod: 3.22.4
     optionalDependencies:
-      posthog-js: 1.232.7
+      posthog-js: 1.233.1
     transitivePeerDependencies:
       - '@rrweb/types'
       - debug
@@ -37325,6 +37711,19 @@ snapshots:
     dependencies:
       braces: 3.0.3
       picomatch: 2.3.1
+
+  microsoft-cognitiveservices-speech-sdk@1.42.0(bufferutil@4.0.9)(utf-8-validate@5.0.10):
+    dependencies:
+      '@types/webrtc': 0.0.37
+      agent-base: 6.0.2
+      bent: 7.3.12
+      https-proxy-agent: 4.0.0
+      uuid: 9.0.1
+      ws: 7.5.10(bufferutil@4.0.9)(utf-8-validate@5.0.10)
+    transitivePeerDependencies:
+      - bufferutil
+      - supports-color
+      - utf-8-validate
 
   microsoft-cognitiveservices-speech-sdk@1.43.0(bufferutil@4.0.9)(utf-8-validate@5.0.10):
     dependencies:
@@ -38039,7 +38438,7 @@ snapshots:
 
   node-ical@0.20.1:
     dependencies:
-      axios: 1.8.4(debug@4.4.0)
+      axios: 1.8.3
       moment-timezone: 0.5.47
       rrule: 2.8.1
       uuid: 10.0.0
@@ -38381,6 +38780,21 @@ snapshots:
       formdata-node: 4.4.1
       node-fetch: 2.7.0(encoding@0.1.13)
       web-streams-polyfill: 3.3.3
+    transitivePeerDependencies:
+      - encoding
+
+  openai@4.87.3(encoding@0.1.13)(ws@8.18.1(bufferutil@4.0.9)(utf-8-validate@6.0.5))(zod@3.24.2):
+    dependencies:
+      '@types/node': 20.17.27
+      '@types/node-fetch': 2.6.12
+      abort-controller: 3.0.0
+      agentkeepalive: 4.6.0
+      form-data-encoder: 1.7.2
+      formdata-node: 4.4.1
+      node-fetch: 2.7.0(encoding@0.1.13)
+    optionalDependencies:
+      ws: 8.18.1(bufferutil@4.0.9)(utf-8-validate@6.0.5)
+      zod: 3.24.2
     transitivePeerDependencies:
       - encoding
 
@@ -38954,7 +39368,7 @@ snapshots:
 
   postgres@3.4.5: {}
 
-  posthog-js@1.232.7:
+  posthog-js@1.233.1:
     dependencies:
       core-js: 3.41.0
       fflate: 0.4.8
@@ -41339,6 +41753,8 @@ snapshots:
       babel-jest: 29.7.0(@babel/core@7.26.10)
       esbuild: 0.19.12
 
+  ts-mixer@6.0.4: {}
+
   ts-morph@12.0.0:
     dependencies:
       '@ts-morph/common': 0.11.1
@@ -41417,6 +41833,35 @@ snapshots:
   tslib@1.14.1: {}
 
   tslib@2.8.1: {}
+
+  tsup@8.4.0(@microsoft/api-extractor@7.52.1(@types/node@20.17.27))(@swc/core@1.11.10(@swc/helpers@0.5.15))(jiti@2.4.2)(postcss@8.5.3)(tsx@4.19.3)(typescript@5.8.2)(yaml@2.7.0):
+    dependencies:
+      bundle-require: 5.1.0(esbuild@0.25.1)
+      cac: 6.7.14
+      chokidar: 4.0.3
+      consola: 3.4.0
+      debug: 4.4.0(supports-color@8.1.1)
+      esbuild: 0.25.1
+      joycon: 3.1.1
+      picocolors: 1.1.1
+      postcss-load-config: 6.0.1(jiti@2.4.2)(postcss@8.5.3)(tsx@4.19.3)(yaml@2.7.0)
+      resolve-from: 5.0.0
+      rollup: 4.36.0
+      source-map: 0.8.0-beta.0
+      sucrase: 3.35.0
+      tinyexec: 0.3.2
+      tinyglobby: 0.2.12
+      tree-kill: 1.2.2
+    optionalDependencies:
+      '@microsoft/api-extractor': 7.52.1(@types/node@20.17.27)
+      '@swc/core': 1.11.10(@swc/helpers@0.5.15)
+      postcss: 8.5.3
+      typescript: 5.8.2
+    transitivePeerDependencies:
+      - jiti
+      - supports-color
+      - tsx
+      - yaml
 
   tsup@8.4.0(@microsoft/api-extractor@7.52.2(@types/node@20.17.27))(@swc/core@1.11.10(@swc/helpers@0.5.15))(jiti@2.4.2)(postcss@8.5.3)(tsx@4.19.3)(typescript@5.8.2)(yaml@2.7.0):
     dependencies:
