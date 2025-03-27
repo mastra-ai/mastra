@@ -43,7 +43,8 @@
     "build": "pnpm run check && tsup src/index.ts --format esm,cjs --experimental-dts --clean --treeshake=smallest --splitting",
     "build:watch": "pnpm build --watch",
     "test:integration": "cd integration-tests && pnpm run test",
-    "test": "pnpm test:integration",
+    "test:unit": "pnpm vitest run ./src/*",
+    "test": "pnpm test:integration && pnpm test:unit",
     "lint": "eslint ."
   },
   "keywords": [],
