@@ -39,6 +39,7 @@ export function CookieBanner({
         ad_user_data: "denied",
         ad_personalization: "denied",
       });
+      return;
     }
     onConsentChange(storedConsent === "true");
   }, [isEU]);
