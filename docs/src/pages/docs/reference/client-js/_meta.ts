@@ -1,4 +1,4 @@
- const meta = {
+const meta = {
   agents: "Agents API",
   memory: "Memory API",
   tools: "Tools API",
@@ -9,4 +9,4 @@
   "error-handling": "Error Handling",
 };
 
-export default meta
+export default meta;
