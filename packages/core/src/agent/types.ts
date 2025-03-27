@@ -57,9 +57,9 @@ export class AgentInstructions<TSchemaDeps extends ZodSchema | undefined> {
   /**
    * Creates a new AgentInstructions instance.
    *
-   * @param options.instructions Static string instructions to use as fallback.
-   * @param options.instructionsBuilder Optional function that generates dynamic instructions.
-   * @param options.dependenciesSchema Optional Zod schema for validating dependencies.
+   * @param instructions Static string instructions to use as fallback.
+   * @param instructionsBuilder Optional function that builds dynamic instructions.
+   * @param dependenciesSchema Optional Zod schema for validating dependencies.
    */
   constructor({ instructions, instructionsBuilder, dependenciesSchema }: AgentInstructionsOptions<TSchemaDeps>) {
     this.instructions = instructions;
@@ -71,10 +71,10 @@ export class AgentInstructions<TSchemaDeps extends ZodSchema | undefined> {
    * Static factory method to create an AgentInstructions instance from either
    * a static string or a dynamic instructions builder function.
    *
-   * @param instructionsInput Either a static string or function that generates instructions
-   * @param options.dependenciesSchema Optional Zod schema for validating dependencies
-   * @param options.fallbackInstructions Optional fallback string to use when input is a builder
-   * @returns A new AgentInstructions instance
+   * @param instructionsInput Either a static string or function that generates instructions.
+   * @param options.dependenciesSchema Optional Zod schema for validating dependencies.
+   * @param options.fallbackInstructions Optional fallback string to use when input is a builder.
+   * @returns A new AgentInstructions instance.
    */
   static from<T extends ZodSchema | undefined>(
     instructionsInput: string | InstructionsBuilder<T>,
