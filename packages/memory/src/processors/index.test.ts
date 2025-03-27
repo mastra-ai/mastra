@@ -1,10 +1,11 @@
 import { openai } from '@ai-sdk/openai';
-import { createTool, type CoreMessage, type MessageType } from '@mastra/core';
+import { createTool } from '@mastra/core';
+import type { CoreMessage, MessageType } from '@mastra/core';
 import { Agent } from '@mastra/core/agent';
 import { describe, it, expect } from 'vitest';
+import { z } from 'zod';
 import { generateConversationHistory } from '../../integration-tests/src/test-utils';
 import { TokenLimiter, ToolCallFilter } from './index';
-import { z } from 'zod';
 
 describe('TokenLimiter', () => {
   it('should limit messages to the specified token count', () => {

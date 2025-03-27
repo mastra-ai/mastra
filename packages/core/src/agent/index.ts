@@ -265,6 +265,11 @@ export class Agent<
         runId,
       });
 
+      const processedMessages = memory.processMessages({
+        messages: this.sanitizeResponseMessages(memoryMessages),
+        systemMessage,
+      });
+
       return {
         threadId: thread.id,
         messages: [
@@ -274,7 +279,7 @@ export class Agent<
                 content: memorySystemMessage,
               }
             : null,
-          ...this.sanitizeResponseMessages(memoryMessages),
+          ...processedMessages,
           ...newMessages,
         ].filter((message): message is NonNullable<typeof message> => Boolean(message)),
       };

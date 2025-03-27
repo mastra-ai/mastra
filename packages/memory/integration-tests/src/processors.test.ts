@@ -66,20 +66,21 @@ describe('Memory with Processors', () => {
     await memory.saveMessages({ messages });
 
     // Get messages with a token limit of 250 (should get ~2.5 messages)
-    const result = await memory.query({
+    const queryResult = await memory.query({
       threadId: thread.id,
       selectBy: { last: 20 },
-      threadConfig: {
-        processors: [new TokenLimiter(250)], // Limit to 250 tokens
-      },
+    });
+    const result = memory.processMessages({
+      messages: queryResult.messages,
+      processors: [new TokenLimiter(250)], // Limit to 250 tokens
     });
 
     // We should have messages limited by token count
-    expect(result.messages.length).toBeGreaterThan(0);
-    expect(result.messages.length).toBeLessThanOrEqual(4); // Should get a small subset of messages
+    expect(result.length).toBeGreaterThan(0);
+    expect(result.length).toBeLessThanOrEqual(4); // Should get a small subset of messages
 
     // And they should be the most recent ones
-    const msgIds = result.messages.map(m => (m as any).id);
+    const msgIds = result.map(m => (m as any).id);
     // Verify we have the most recent message(s)
     expect(msgIds.length).toBeGreaterThan(0);
 
@@ -92,16 +93,17 @@ describe('Memory with Processors', () => {
     expect(highestMsgIdNumber).toBeGreaterThan(15);
 
     // Now query with a very high token limit that should return all messages
-    const allMessagesResult = await memory.query({
+    const allMessagesQuery = await memory.query({
       threadId: thread.id,
       selectBy: { last: 20 },
-      threadConfig: {
-        processors: [new TokenLimiter(3000)], // High limit that should exceed total tokens
-      },
+    });
+    const allMessagesResult = memory.processMessages({
+      messages: allMessagesQuery.messages,
+      processors: [new TokenLimiter(3000)], // High limit that should exceed total tokens
     });
 
     // We should get all 20 messages
-    expect(allMessagesResult.messages.length).toBe(20);
+    expect(allMessagesResult.length).toBe(20);
   });
 
   it('should apply ToolCallFilter when retrieving messages', async () => {
@@ -123,60 +125,58 @@ describe('Memory with Processors', () => {
     await memory.saveMessages({ messages });
 
     // filter weather tool calls
-    const result = await memory.query({
+    const queryResult = await memory.query({
       threadId: thread.id,
       selectBy: { last: 20 },
-      threadConfig: {
-        processors: [new ToolCallFilter({ exclude: ['weather'] })],
-      },
     });
-    expect(result.messages.length).toBeLessThan(messages.length);
-    expect(filterToolCallsByName(result.messages, 'weather')).toHaveLength(0);
-    expect(filterToolResultsByName(result.messages, 'weather')).toHaveLength(0);
-    expect(filterToolCallsByName(result.messages, 'calculator')).toHaveLength(1);
-    expect(filterToolResultsByName(result.messages, 'calculator')).toHaveLength(1);
+    const result = memory.processMessages({
+      messages: queryResult.messages,
+      processors: [new ToolCallFilter({ exclude: ['weather'] })],
+    });
+    expect(result.length).toBeLessThan(messages.length);
+    expect(filterToolCallsByName(result, 'weather')).toHaveLength(0);
+    expect(filterToolResultsByName(result, 'weather')).toHaveLength(0);
+    expect(filterToolCallsByName(result, 'calculator')).toHaveLength(1);
+    expect(filterToolResultsByName(result, 'calculator')).toHaveLength(1);
 
     // make another query with no processors to make sure memory messages in DB were not altered and were only filtered from results
-    const result2 = await memory.query({
+    const queryResult2 = await memory.query({
       threadId: thread.id,
       selectBy: { last: 20 },
-      threadConfig: {
-        processors: [],
-      },
     });
-    expect(result2.messages).toHaveLength(messages.length);
-    expect(filterToolCallsByName(result2.messages, 'weather')).toHaveLength(1);
-    expect(filterToolResultsByName(result2.messages, 'weather')).toHaveLength(1);
-    expect(filterToolCallsByName(result2.messages, 'calculator')).toHaveLength(1);
-    expect(filterToolResultsByName(result2.messages, 'calculator')).toHaveLength(1);
+    const result2 = memory.processMessages({ messages: queryResult2.messages, processors: [] });
+    expect(result2).toHaveLength(messages.length);
+    expect(filterToolCallsByName(result2, 'weather')).toHaveLength(1);
+    expect(filterToolResultsByName(result2, 'weather')).toHaveLength(1);
+    expect(filterToolCallsByName(result2, 'calculator')).toHaveLength(1);
+    expect(filterToolResultsByName(result2, 'calculator')).toHaveLength(1);
 
     // filter all by name
-    const result3 = await memory.query({
+    const queryResult3 = await memory.query({
       threadId: thread.id,
       selectBy: { last: 20 },
-      threadConfig: {
-        processors: [new ToolCallFilter({ exclude: ['weather', 'calculator'] })],
-      },
     });
-    expect(result3.messages.length).toBeLessThan(messages.length);
-    expect(filterToolCallsByName(result3.messages, 'weather')).toHaveLength(0);
-    expect(filterToolResultsByName(result3.messages, 'weather')).toHaveLength(0);
-    expect(filterToolCallsByName(result3.messages, 'calculator')).toHaveLength(0);
-    expect(filterToolResultsByName(result3.messages, 'calculator')).toHaveLength(0);
+    const result3 = memory.processMessages({
+      messages: queryResult3.messages,
+      processors: [new ToolCallFilter({ exclude: ['weather', 'calculator'] })],
+    });
+    expect(result3.length).toBeLessThan(messages.length);
+    expect(filterToolCallsByName(result3, 'weather')).toHaveLength(0);
+    expect(filterToolResultsByName(result3, 'weather')).toHaveLength(0);
+    expect(filterToolCallsByName(result3, 'calculator')).toHaveLength(0);
+    expect(filterToolResultsByName(result3, 'calculator')).toHaveLength(0);
 
     // filter all by default
-    const result4 = await memory.query({
+    const queryResult4 = await memory.query({
       threadId: thread.id,
       selectBy: { last: 20 },
-      threadConfig: {
-        processors: [new ToolCallFilter()],
-      },
     });
-    expect(result4.messages.length).toBeLessThan(messages.length);
-    expect(filterToolCallsByName(result4.messages, 'weather')).toHaveLength(0);
-    expect(filterToolResultsByName(result4.messages, 'weather')).toHaveLength(0);
-    expect(filterToolCallsByName(result4.messages, 'calculator')).toHaveLength(0);
-    expect(filterToolResultsByName(result4.messages, 'calculator')).toHaveLength(0);
+    const result4 = memory.processMessages({ messages: queryResult4.messages, processors: [new ToolCallFilter()] });
+    expect(result4.length).toBeLessThan(messages.length);
+    expect(filterToolCallsByName(result4, 'weather')).toHaveLength(0);
+    expect(filterToolResultsByName(result4, 'weather')).toHaveLength(0);
+    expect(filterToolCallsByName(result4, 'calculator')).toHaveLength(0);
+    expect(filterToolResultsByName(result4, 'calculator')).toHaveLength(0);
   });
 
   it('should apply multiple processors in order', async () => {
@@ -198,20 +198,21 @@ describe('Memory with Processors', () => {
     await memory.saveMessages({ messages });
 
     // Apply multiple processors: first remove weather tool calls, then limit to 250 tokens
-    const result = await memory.query({
+    const queryResult = await memory.query({
       threadId: thread.id,
       selectBy: { last: 20 },
-      threadConfig: {
-        processors: [new ToolCallFilter({ exclude: ['weather'] }), new TokenLimiter(250)],
-      },
+    });
+    const result = memory.processMessages({
+      messages: queryResult.messages,
+      processors: [new ToolCallFilter({ exclude: ['weather'] }), new TokenLimiter(250)],
     });
 
     // We should have fewer messages after filtering and token limiting
-    expect(result.messages.length).toBeGreaterThan(0);
-    expect(result.messages.length).toBeLessThan(messages.length);
+    expect(result.length).toBeGreaterThan(0);
+    expect(result.length).toBeLessThan(messages.length);
     // And they should exclude weather tool messages
-    expect(filterToolResultsByName(result.messages, `weather`)).toHaveLength(0);
-    expect(filterToolCallsByName(result.messages, `weather`)).toHaveLength(0);
+    expect(filterToolResultsByName(result, `weather`)).toHaveLength(0);
+    expect(filterToolCallsByName(result, `weather`)).toHaveLength(0);
   });
 
   it('should apply processors with a real Mastra agent', async () => {
@@ -275,71 +276,76 @@ describe('Memory with Processors', () => {
       threadId,
       resourceId,
     });
+
     // Query with no processors to verify baseline message count
-    const baselineResult = await memory.query({
+    const queryResult = await memory.query({
       threadId,
       selectBy: { last: 20 },
-      threadConfig: {
-        processors: [],
-      },
+    });
+    const baselineResult = memory.processMessages({
+      messages: queryResult.messages,
+      processors: [],
     });
 
     // There should be at least 6 messages (3 user + 3 assistant responses)
-    expect(baselineResult.messages.length).toBeGreaterThanOrEqual(6);
+    expect(baselineResult.length).toBeGreaterThanOrEqual(6);
 
     // Verify we have tool calls in the baseline
-    const weatherToolCalls = filterToolCallsByName(baselineResult.messages, 'get_weather');
-    const calculatorToolCalls = filterToolCallsByName(baselineResult.messages, 'calculator');
+    const weatherToolCalls = filterToolCallsByName(baselineResult, 'get_weather');
+    const calculatorToolCalls = filterToolCallsByName(baselineResult, 'calculator');
     expect(weatherToolCalls.length).toBeGreaterThan(0);
     expect(calculatorToolCalls.length).toBeGreaterThan(0);
 
     // Test filtering weather tool calls
-    const weatherFilteredResult = await memory.query({
+    const weatherQueryResult = await memory.query({
       threadId,
       selectBy: { last: 20 },
-      threadConfig: {
-        processors: [new ToolCallFilter({ exclude: ['get_weather'] })],
-      },
+    });
+    const weatherFilteredResult = memory.processMessages({
+      messages: weatherQueryResult.messages,
+      processors: [new ToolCallFilter({ exclude: ['get_weather'] })],
     });
 
     // Should have fewer messages after filtering
-    expect(weatherFilteredResult.messages.length).toBeLessThan(baselineResult.messages.length);
+    expect(weatherFilteredResult.length).toBeLessThan(baselineResult.length);
 
     // No weather tool calls should remain
-    expect(filterToolCallsByName(weatherFilteredResult.messages, 'get_weather').length).toBe(0);
-    expect(filterToolResultsByName(weatherFilteredResult.messages, 'get_weather').length).toBe(0);
+    expect(filterToolCallsByName(weatherFilteredResult, 'get_weather').length).toBe(0);
+    expect(filterToolResultsByName(weatherFilteredResult, 'get_weather').length).toBe(0);
 
     // Calculator tool calls should still be present
-    expect(filterToolCallsByName(weatherFilteredResult.messages, 'calculator').length).toBeGreaterThan(0);
+    expect(filterToolCallsByName(weatherFilteredResult, 'calculator').length).toBeGreaterThan(0);
 
     // Test token limiting
-    const tokenLimitedResult = await memory.query({
+    const tokenLimitQuery = await memory.query({
       threadId,
       selectBy: { last: 20 },
-      threadConfig: {
-        processors: [new TokenLimiter(100)], // Small limit to only get a subset
-      },
+    });
+    const tokenLimitedResult = memory.processMessages({
+      messages: tokenLimitQuery.messages,
+      processors: [new TokenLimiter(100)], // Small limit to only get a subset
     });
 
     // Should have fewer messages after token limiting
-    expect(tokenLimitedResult.messages.length).toBeLessThan(baselineResult.messages.length);
+    expect(tokenLimitedResult.length).toBeLessThan(baselineResult.length);
 
     // Test combining processors
-    const combinedResult = await memory.query({
+    const combinedQuery = await memory.query({
       threadId,
       selectBy: { last: 20 },
-      threadConfig: {
-        processors: [new ToolCallFilter({ exclude: ['get_weather', 'calculator'] }), new TokenLimiter(500)],
-      },
+    });
+    const combinedResult = memory.processMessages({
+      messages: combinedQuery.messages,
+      processors: [new ToolCallFilter({ exclude: ['get_weather', 'calculator'] }), new TokenLimiter(500)],
     });
 
     // No tool calls should remain
-    expect(filterToolCallsByName(combinedResult.messages, 'get_weather').length).toBe(0);
-    expect(filterToolCallsByName(combinedResult.messages, 'calculator').length).toBe(0);
-    expect(filterToolResultsByName(combinedResult.messages, 'get_weather').length).toBe(0);
-    expect(filterToolResultsByName(combinedResult.messages, 'calculator').length).toBe(0);
+    expect(filterToolCallsByName(combinedResult, 'get_weather').length).toBe(0);
+    expect(filterToolCallsByName(combinedResult, 'calculator').length).toBe(0);
+    expect(filterToolResultsByName(combinedResult, 'get_weather').length).toBe(0);
+    expect(filterToolResultsByName(combinedResult, 'calculator').length).toBe(0);
 
     // The result should still contain some messages
-    expect(combinedResult.messages.length).toBeGreaterThan(0);
+    expect(combinedResult.length).toBeGreaterThan(0);
   });
 });

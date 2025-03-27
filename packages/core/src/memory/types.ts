@@ -2,6 +2,7 @@ import type { AssistantContent, CoreMessage, EmbeddingModel, ToolContent, UserCo
 
 import type { MastraStorage } from '../storage';
 import type { MastraVector } from '../vector';
+import type { MessageProcessor } from '.';
 
 export type { Message as AiMessageType } from 'ai';
 
@@ -58,4 +59,6 @@ export type SharedMemoryConfig = {
 
   vector?: MastraVector;
   embedder?: EmbeddingModel<string>;
+
+  processors?: MessageProcessor[];
 };
