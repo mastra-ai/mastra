@@ -26,6 +26,7 @@ export function CookieBanner({
         localStorage.setItem("cookie-consent", "true");
         onConsentChange(true);
       }
+      onConsentChange(storedConsent === "true");
       return;
     }
 
