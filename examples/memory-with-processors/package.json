@@ -1,0 +1,20 @@
+{
+  "name": "memory-with-processors",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "start": "tsx src/index.ts",
+    "chat": "tsx src/chat.ts"
+  },
+  "dependencies": {
+    "@ai-sdk/openai": "^1.0.0",
+    "@mastra/core": "workspace:*",
+    "@mastra/memory": "workspace:*",
+    "dotenv": "^16.3.1",
+    "js-tiktoken": "^1.0.13",
+    "tiktoken": "^1.0.13",
+    "tsx": "^4.6.2",
+    "zod": "^3.22.4"
+  }
+} 
