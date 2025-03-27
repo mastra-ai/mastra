@@ -11,8 +11,8 @@ interface TextPart {
 // Note: These interfaces are for type checking only, we'll use type assertions with 'unknown'
 interface ToolCall {
   type: 'tool-call';
-  id: string;
-  name: string;
+  toolCallId: string;
+  toolName: string;
 }
 
 interface ToolResult {
@@ -26,7 +26,7 @@ interface ToolResult {
  * Can be configured to exclude only specific tools by name.
  */
 export class ToolCallFilter implements MessageProcessor {
-  private exclude: string[] | null;
+  private exclude: string[] | 'all';
 
   /**
    * Create a filter for tool calls and their results.
@@ -36,7 +36,7 @@ export class ToolCallFilter implements MessageProcessor {
   constructor(options?: { exclude?: string[] }) {
     // If no options or exclude is provided, exclude all tools
     if (!options || !options.exclude) {
-      this.exclude = null; // null means exclude all tools
+      this.exclude = 'all'; // null means exclude all tools
     } else {
       // Exclude specific tools
       this.exclude = Array.isArray(options.exclude) ? options.exclude : [];
@@ -44,59 +44,57 @@ export class ToolCallFilter implements MessageProcessor {
   }
 
   process(messages: CoreMessage[]): CoreMessage[] {
-    if (this.exclude === null) {
+    if (this.exclude === 'all') {
       // Exclude all tool calls and results
       return messages.filter(message => {
+        // Skip any message that has tool-call or tool-result content
         if (Array.isArray(message.content)) {
           return !message.content.some(part => part.type === 'tool-call' || part.type === 'tool-result');
         }
         return true;
       });
-    } else if (this.exclude.length > 0) {
-      // Filter out specific tool calls and their results
-      const processedMessages = messages.map(message => {
-        if (!Array.isArray(message.content)) {
-          return message;
-        }
+    }
 
-        // Find IDs of tool calls to exclude
-        const excludedToolCallIds: string[] = [];
-        message.content.forEach(part => {
-          if (part.type === 'tool-call') {
-            const toolCall = part as unknown as ToolCall;
-            if (this.exclude!.includes(toolCall.name)) {
-              excludedToolCallIds.push(toolCall.id);
+    if (this.exclude.length > 0) {
+      // First identify tool calls to exclude by name
+      const excludedToolCallIds: string[] = [];
+
+      messages.forEach(message => {
+        if (Array.isArray(message.content)) {
+          message.content.forEach(part => {
+            if (part.type === 'tool-call') {
+              const toolCall = part as unknown as ToolCall;
+              if (this.exclude!.includes(toolCall.toolName)) {
+                excludedToolCallIds.push(toolCall.toolCallId);
+              }
             }
-          }
-        });
-
-        // Filter out the excluded tool calls and their results
-        const filteredContent = message.content.filter(part => {
-          if (part.type === 'tool-call') {
-            const toolCall = part as unknown as ToolCall;
-            return !this.exclude!.includes(toolCall.name);
-          }
-          if (part.type === 'tool-result') {
-            const toolResult = part as unknown as ToolResult;
-            return !excludedToolCallIds.includes(toolResult.toolCallId);
-          }
-          return true;
-        });
-
-        // Create a copy of the message with the filtered content
-        return {
-          ...message,
-          content: filteredContent,
-        };
+          });
+        }
       });
 
-      // Filter out any messages that now have empty content
-      return processedMessages.filter(message => {
-        if (Array.isArray(message.content)) {
-          return message.content.length > 0;
+      // Now filter out messages with excluded tool calls or their results
+      return messages.filter(message => {
+        // Filter out tool-call messages that contain excluded tools
+        if (message.role === 'assistant' && Array.isArray(message.content)) {
+          const hasExcludedTool = message.content.some(part => {
+            return part.type === 'tool-call' && this.exclude.includes(part.toolName);
+          });
+
+          return !hasExcludedTool;
         }
+
+        // Filter out tool-result messages for excluded tool calls
+        if (message.role === 'tool' && Array.isArray(message.content)) {
+          const isForExcludedTool = message.content.some(part => {
+            return part.type === 'tool-result' && excludedToolCallIds.includes(part.toolCallId);
+          });
+
+          return !isForExcludedTool;
+        }
+
+        // Keep messages without excluded tool content
         return true;
-      }) as CoreMessage[];
+      });
     }
 
     // Empty exclude array, return original messages
@@ -156,7 +154,7 @@ export class TokenLimiter implements MessageProcessor {
       // Calculate tokens for each content part
       for (const part of message.content) {
         if (!part) continue; // Skip null/undefined parts
-        
+
         // Base cost for each part's type and metadata
         tokenCount += 3;
 
@@ -169,15 +167,13 @@ export class TokenLimiter implements MessageProcessor {
           const toolCall = part as unknown as ToolCall & { args?: any };
 
           // Token cost for tool name
-          if (toolCall.name) {
-            tokenCount += encoder.encode(toolCall.name).length;
+          if (toolCall.toolName) {
+            tokenCount += encoder.encode(toolCall.toolName).length;
           }
 
           // Token cost for args if present
           if (toolCall.args) {
-            const argsString = typeof toolCall.args === 'string' 
-              ? toolCall.args 
-              : JSON.stringify(toolCall.args);
+            const argsString = typeof toolCall.args === 'string' ? toolCall.args : JSON.stringify(toolCall.args);
             tokenCount += encoder.encode(argsString || '').length;
           }
         } else if (part.type === 'tool-result') {
@@ -186,9 +182,8 @@ export class TokenLimiter implements MessageProcessor {
 
           // Token cost for result if present
           if (toolResult.result !== undefined) {
-            const resultString = typeof toolResult.result === 'string' 
-              ? toolResult.result 
-              : JSON.stringify(toolResult.result);
+            const resultString =
+              typeof toolResult.result === 'string' ? toolResult.result : JSON.stringify(toolResult.result);
             tokenCount += encoder.encode(resultString || '').length;
           }
         } else {
