@@ -51,9 +51,7 @@
   "keywords": [],
   "author": "",
   "license": "ISC",
-  "dependencies": {
-    "zod-to-json-schema": "^3.24.3"
-  },
+  "dependencies": {},
   "peerDependencies": {
     "@mastra/core": "workspace:^"
   },
@@ -67,6 +65,7 @@
     "superjson": "^2.2.2",
     "tsup": "^8.4.0",
     "typescript": "^5.8.2",
-    "vitest": "^2.1.9"
+    "vitest": "^2.1.9",
+    "zod-to-json-schema": "^3.24.3"
   }
 }

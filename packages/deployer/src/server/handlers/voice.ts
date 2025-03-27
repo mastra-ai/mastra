@@ -1,8 +1,8 @@
 import type { Mastra } from '@mastra/core';
 import {
   getSpeakersHandler as getOriginalSpeakersHandler,
-  speakHandler as getOriginalSpeakHandler,
-  listenHandler as getOriginalListenHandler,
+  generateSpeechHandler as getOriginalSpeakHandler,
+  transcribeSpeechHandler as getOriginalListenHandler,
 } from '@mastra/server/handlers/voice';
 import type { Context } from 'hono';
 import { HTTPException } from 'hono/http-exception';
@@ -40,7 +40,7 @@ export async function speakHandler(c: Context) {
     const audioStream = await getOriginalSpeakHandler({
       mastra,
       agentId,
-      body: { input, options },
+      body: { text: input, speakerId: options?.speakerId },
     });
 
     c.header('Content-Type', `audio/${options?.filetype ?? 'mp3'}`);
@@ -73,15 +73,17 @@ export async function listenHandler(c: Context) {
 
     try {
       parsedOptions = options ? JSON.parse(options as string) : {};
-    } catch (error) {
+    } catch {
       // Ignore parsing errors and use empty options
     }
 
     const transcription = await getOriginalListenHandler({
       mastra,
       agentId,
-      audioBuffer: Buffer.from(audioData),
-      options: parsedOptions,
+      body: {
+        audioData: Buffer.from(audioData),
+        options: parsedOptions,
+      },
     });
 
     return c.json({ text: transcription });

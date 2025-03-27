@@ -97,7 +97,7 @@ export async function queryVectors({
 
     const vector = getVector(mastra, vectorName);
     const results: QueryResult[] = await vector.query(query);
-    return { results };
+    return results;
   } catch (error) {
     return handleError(error, 'Error querying vectors');
   }
@@ -109,7 +109,7 @@ export async function listIndexes({ mastra, vectorName }: Pick<VectorContext, 'm
     const vector = getVector(mastra, vectorName);
 
     const indexes = await vector.listIndexes();
-    return { indexes: indexes.filter(Boolean) };
+    return indexes.filter(Boolean);
   } catch (error) {
     return handleError(error, 'Error listing indexes');
   }
