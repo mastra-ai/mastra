@@ -59,7 +59,7 @@ await agent.stream("What was our conversation about?", {
 
 ### TokenLimiter Options
 
-The TokenLimiter uses the document chunking functionality from `@mastra/rag` with cl100k_base encoding for accurate token counting.
+The TokenLimiter uses js-tiktoken with cl100k_base encoding for accurate token counting. This provides precise token counts that match those used by modern OpenAI models (GPT-3.5, GPT-4, etc.).
 
 ```typescript
 // Simple usage - limit to 8000 tokens
