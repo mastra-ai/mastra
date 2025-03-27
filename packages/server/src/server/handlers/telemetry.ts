@@ -1,3 +1,5 @@
+import { MastraStorage, TABLE_TRACES } from '@mastra/core/storage';
+import type { resourceSpans } from '@opentelemetry/api';
 import { HTTPException } from '../http-exception';
 import type { Context } from '../types';
 
@@ -53,5 +55,99 @@ export async function getTelemetryHandler({ mastra, body }: TelemetryContext) {
     return { traces };
   } catch (error) {
     return handleError(error, 'Error getting telemetry');
+  }
+}
+
+export async function storeTelemetryHandler({ mastra, body }: Context & { body: { resourceSpans: any[] } }) {
+  try {
+    const storage = mastra.getStorage();
+
+    if (!storage) {
+      throw new HTTPException(400, { message: 'Storage is not initialized' });
+    }
+
+    const now = new Date();
+
+    const items = body?.resourceSpans?.[0]?.scopeSpans;
+
+    const allSpans: any[] = items.reduce((acc: any, scopedSpans: any) => {
+      const { scope, spans } = scopedSpans;
+      for (const span of spans) {
+        const {
+          spanId,
+          parentSpanId,
+          traceId,
+          name,
+          kind,
+          attributes,
+          status,
+          events,
+          links,
+          startTimeUnixNano,
+          endTimeUnixNano,
+          ...rest
+        } = span;
+
+        const startTime = Number(BigInt(startTimeUnixNano) / 1000n);
+        const endTime = Number(BigInt(endTimeUnixNano) / 1000n);
+
+        acc.push({
+          id: spanId,
+          parentSpanId,
+          traceId,
+          name,
+          scope: scope.name,
+          kind,
+          status: JSON.stringify(status),
+          events: JSON.stringify(events),
+          links: JSON.stringify(links),
+          attributes: JSON.stringify(
+            attributes.reduce((acc: Record<string, any>, attr: any) => {
+              const valueKey = Object.keys(attr.value)[0];
+              if (valueKey) {
+                acc[attr.key] = attr.value[valueKey];
+              }
+              return acc;
+            }, {}),
+          ),
+          startTime,
+          endTime,
+          other: JSON.stringify(rest),
+          createdAt: now,
+        });
+      }
+      return acc;
+    }, []);
+
+    return storage
+      .__batchInsert({
+        tableName: TABLE_TRACES,
+        records: allSpans,
+      })
+      .then(() => {
+        return {
+          status: 'success',
+          message: 'Traces received and processed successfully',
+          traceCount: body.resourceSpans?.length || 0,
+        };
+      })
+      .catch(() => {
+        return {
+          status: 'error',
+          message: 'Failed to process traces',
+          // @ts-ignore
+          error: error.message,
+        };
+      });
+
+    // Return a simple response
+  } catch (error) {
+    console.error('Error processing traces:', error);
+    return {
+      status: 'error',
+      message: 'Failed to process traces',
+      // @ts-ignore
+      error: error.message,
+    };
   }
 }
