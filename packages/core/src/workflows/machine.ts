@@ -117,7 +117,9 @@ export class Machine<
     input?: any;
     snapshot?: Snapshot<any>;
     resumeData?: any;
-  } = {}): Promise<Pick<WorkflowRunResult<TTriggerSchema, TSteps, TResultSchema>, 'results' | 'activePaths'>> {
+  } = {}): Promise<
+    Pick<WorkflowRunResult<TTriggerSchema, TSteps, TResultSchema>, 'results' | 'activePaths' | 'runId' | 'timestamp'>
+  > {
     if (snapshot) {
       // First, let's log the incoming snapshot for debugging
       this.logger.debug(`Workflow snapshot received`, { runId: this.#runId, snapshot });
@@ -189,7 +191,7 @@ export class Machine<
 
       const suspendedPaths: Set<string> = new Set();
       this.#actor.subscribe(async state => {
-        this.emit('state-update', this.#startStepId, state.value, state.context);
+        this.emit('state-update', this.#startStepId, state);
 
         getSuspendedPaths({
           value: state.value as Record<string, string>,
@@ -228,10 +230,12 @@ export class Machine<
           this.#cleanup();
           this.#executionSpan?.end();
           resolve({
+            runId: this.#runId,
             results: isResumedInitialStep ? { ...origSteps, ...state.context.steps } : state.context.steps,
             activePaths: getResultActivePaths(
               state as unknown as { value: Record<string, string>; context: { steps: Record<string, any> } },
             ),
+            timestamp: Date.now(),
           });
         } catch (error) {
           // If snapshot persistence fails, we should still resolve
@@ -241,10 +245,12 @@ export class Machine<
           this.#cleanup();
           this.#executionSpan?.end();
           resolve({
+            runId: this.#runId,
             results: isResumedInitialStep ? { ...origSteps, ...state.context.steps } : state.context.steps,
             activePaths: getResultActivePaths(
               state as unknown as { value: Record<string, string>; context: { steps: Record<string, any> } },
             ),
+            timestamp: Date.now(),
           });
         }
       });

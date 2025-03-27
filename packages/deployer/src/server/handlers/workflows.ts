@@ -164,8 +164,9 @@ export async function watchWorkflowHandler(c: Context) {
       c,
       async stream => {
         return new Promise((_resolve, _reject) => {
-          let unwatch: () => void = run.watch(({ activePaths, context, runId, timestamp, suspendedSteps }) => {
-            void stream.write(JSON.stringify({ activePaths, context, runId, timestamp, suspendedSteps }) + '\x1E');
+          let unwatch: () => void = run.watch(({ activePaths, runId, timestamp, results }) => {
+            const activePathsObj = Object.fromEntries(activePaths);
+            void stream.write(JSON.stringify({ activePaths: activePathsObj, runId, timestamp, results }) + '\x1E');
           });
 
           stream.onAbort(() => {

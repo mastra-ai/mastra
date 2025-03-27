@@ -155,7 +155,7 @@ export class Workflow extends BaseResource {
               const parsedRecord = JSON.parse(record);
 
               //Check to see if all steps are completed and cancel reader
-              const isWorkflowCompleted = parsedRecord?.activePaths?.every(
+              const isWorkflowCompleted = Object.values(parsedRecord?.activePaths || {}).every(
                 (path: any) =>
                   path.status === 'completed' ||
                   path.status === 'suspended' ||
@@ -167,7 +167,7 @@ export class Workflow extends BaseResource {
               }
               yield parsedRecord;
             } catch (e) {
-              throw new Error(`Could not parse record: ${record}`);
+              throw new Error(`Could not parse record: ${record}, ${e}`);
             }
           }
         }
