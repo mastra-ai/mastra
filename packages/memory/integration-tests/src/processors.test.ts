@@ -31,6 +31,12 @@ function generateConversationHistory({
     search: { query: 'latest AI developments' },
   };
 
+  const toolResults = {
+    weather: 'Pretty hot',
+    calculator: '4',
+    search: 'Anthropic blah blah blah',
+  };
+
   const messages: MessageType[] = [];
   const startTime = Date.now();
 
@@ -68,10 +74,25 @@ function generateConversationHistory({
             args: toolArgs[toolName as keyof typeof toolArgs] || {},
           },
         ],
-        id: `message-${i * 2 + 1}`,
+        id: `tool-call-${i * 2 + 1}`,
         threadId,
         createdAt: new Date(startTime + i * 2000 + 1000), // 1 second after user message
         type: 'tool-call',
+      });
+      messages.push({
+        role: 'tool',
+        type: `tool-result`,
+        id: `tool-result-${i * 2 + 1}`,
+        createdAt: new Date(startTime + i * 2000 + 1100),
+        threadId,
+        content: [
+          {
+            type: 'tool-result',
+            result: toolResults[toolName as keyof typeof toolResults] || {},
+            toolCallId: `tool-${i}`,
+            toolName,
+          },
+        ],
       });
     } else {
       // Regular assistant text message
