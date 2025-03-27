@@ -764,7 +764,7 @@ describe('agent', () => {
         userName: 'Carlos',
       };
 
-      const resolvedInstructions = await agent.instructions.resolve(streamDependencies);
+      const resolvedInstructions = await agent.instructions.resolve({ dependencies: streamDependencies });
       expect(resolvedInstructions).toContain('Carlos');
       expect(resolvedInstructions).toContain('Western Europe');
       expect(resolvedInstructions).toContain('stream-api-key-123');
@@ -832,7 +832,8 @@ describe('agent', () => {
       dependenciesSchema: depsSchema,
     });
 
-    await expect(agent.instructions.resolve()).rejects.toThrow('Dependencies validation failed');
+    const fallbackDynamicInstructions = await agent.instructions.resolve();
+    expect(fallbackDynamicInstructions).toBe('[Dynamic Instructions]');
 
     const response = await agent.generate('Introduce yourself briefly', {
       dependencies: {
@@ -889,7 +890,7 @@ describe('agent', () => {
       tempUnit: 'celsius' as const,
     };
 
-    const resolvedInstructions = await dynamicAgent.instructions.resolve(validDeps);
+    const resolvedInstructions = await dynamicAgent.instructions.resolve({ dependencies: validDeps });
     expect(resolvedInstructions).toContain('You are a weather assistant for John');
     expect(resolvedInstructions).toContain('Always use celsius for temperature');
 
@@ -901,9 +902,11 @@ describe('agent', () => {
       dependencies: validDeps,
     });
 
-    await expect(dynamicAgent.instructions.resolve()).rejects.toThrow('Dependencies validation failed');
+    // This should now return static instructions instead of throwing
+    const staticFallback = await dynamicAgent.instructions.resolve();
+    expect(staticFallback).toBe(dynamicAgent.instructions.getStaticInstructions());
 
-    await expect(dynamicAgent.instructions.resolve({ userName: 'John' } as any)).rejects.toThrow(
+    await expect(dynamicAgent.instructions.resolve({ dependencies: { userName: 'John' } as any })).rejects.toThrow(
       'Dependencies validation failed',
     );
   });
@@ -963,9 +966,11 @@ describe('agent', () => {
 
     agentWithSchema.__updateInstructions(schemaInstructions);
 
-    await expect(agentWithSchema.instructions.resolve()).rejects.toThrow('Dependencies validation failed');
+    // Should now return static instructions instead of throwing
+    const staticFallback = await agentWithSchema.instructions.resolve();
+    expect(staticFallback).toBe('[Dynamic Instructions]');
 
-    const resolvedWithDeps = await agentWithSchema.instructions.resolve({ subject: 'physics' });
+    const resolvedWithDeps = await agentWithSchema.instructions.resolve({ dependencies: { subject: 'physics' } });
     expect(resolvedWithDeps).toBe(
       'You are a specialized physics tutor. Always include the phrase "As your physics tutor" in your responses.',
     );
@@ -996,20 +1001,26 @@ describe('agent', () => {
       dependenciesSchema: depsSchema,
     });
 
-    await expect(agent.instructions.resolve()).rejects.toThrow('Dependencies validation failed');
+    // This should now return static instructions instead of throwing
+    const fallbackInstructions = await agent.instructions.resolve();
+    expect(fallbackInstructions).toBe('[Dynamic Instructions]');
 
     await expect(
       agent.instructions.resolve({
-        userName: 'Bob',
-        // Missing 'role' field
-        expertise: ['JavaScript'],
+        dependencies: {
+          userName: 'Bob',
+          // Missing 'role' field
+          expertise: ['JavaScript'],
+        },
       } as any),
     ).rejects.toThrow('Dependencies validation failed');
 
     const resolvedInstructions = await agent.instructions.resolve({
-      userName: 'Bob',
-      role: 'technical advisor',
-      expertise: ['JavaScript', 'TypeScript', 'React'],
+      dependencies: {
+        userName: 'Bob',
+        role: 'technical advisor',
+        expertise: ['JavaScript', 'TypeScript', 'React'],
+      },
     });
 
     expect(resolvedInstructions).toBe(
@@ -1032,9 +1043,11 @@ describe('agent', () => {
     });
 
     const resolvedInstructions = await agent.instructions.resolve({
-      userName: 'Bob',
-      role: 'technical advisor',
-      expertise: ['JavaScript'],
+      dependencies: {
+        userName: 'Bob',
+        role: 'technical advisor',
+        expertise: ['JavaScript'],
+      },
     });
 
     expect(resolvedInstructions).toBe(
@@ -1052,7 +1065,7 @@ describe('agent', () => {
     const resolvedStaticInstructions = await staticAgent.instructions.resolve();
     expect(resolvedStaticInstructions).toBe('You are a static instructions agent.');
 
-    const resolvedStaticWithDeps = await staticAgent.instructions.resolve({ foo: 'bar' } as any);
+    const resolvedStaticWithDeps = await staticAgent.instructions.resolve({ dependencies: { foo: 'bar' } as any });
     expect(resolvedStaticWithDeps).toBe('You are a static instructions agent.');
 
     const simpleDynamicAgent = new Agent({
@@ -1066,7 +1079,9 @@ describe('agent', () => {
     const resolvedSimpleDynamic = await simpleDynamicAgent.instructions.resolve();
     expect(resolvedSimpleDynamic).toBe('You are a dynamic agent with default mode.');
 
-    const resolvedSimpleDynamicWithDeps = await simpleDynamicAgent.instructions.resolve({ mode: 'advanced' });
+    const resolvedSimpleDynamicWithDeps = await simpleDynamicAgent.instructions.resolve({
+      dependencies: { mode: 'advanced' },
+    });
     expect(resolvedSimpleDynamicWithDeps).toBe('You are a dynamic agent with advanced mode.');
 
     const depsSchema = z.object({
@@ -1084,18 +1099,62 @@ describe('agent', () => {
     });
 
     const resolvedComplexDynamic = await complexDynamicAgent.instructions.resolve({
-      mode: 'expert',
-      userName: 'Charlie',
+      dependencies: {
+        mode: 'expert',
+        userName: 'Alex',
+      },
     });
-    expect(resolvedComplexDynamic).toBe('Hello Charlie, you are using the expert mode.');
+    expect(resolvedComplexDynamic).toBe('Hello Alex, you are using the expert mode.');
 
     await expect(
       complexDynamicAgent.instructions.resolve({
-        mode: 'invalid-mode' as any,
-        userName: 'Dave',
+        dependencies: {
+          mode: 'invalid' as any,
+          userName: 'Bob',
+        },
       }),
     ).rejects.toThrow('Dependencies validation failed');
 
-    await expect(complexDynamicAgent.instructions.resolve()).rejects.toThrow('Dependencies validation failed');
+    // This test should now return static instructions instead of throwing
+    const fallbackInstructions = await complexDynamicAgent.instructions.resolve();
+    expect(fallbackInstructions).toBe(complexDynamicAgent.instructions.getStaticInstructions());
+  });
+
+  it('should return static instructions when schema exists but no dependencies provided', async () => {
+    const staticInstructions = 'You are a static agent with dependencies schema.';
+    const depsSchema = z.object({
+      apiKey: z.string(),
+      userId: z.number(),
+    });
+
+    const dynamicInstructions = ({ dependencies }: { dependencies: z.infer<typeof depsSchema> }) => {
+      return `You are assisting user ${dependencies.userId} with API key ${dependencies.apiKey}`;
+    };
+
+    const agent = new Agent({
+      name: 'FallbackAgent',
+      instructions: staticInstructions,
+      model: openai('gpt-4o'),
+      dependenciesSchema: depsSchema,
+    });
+
+    agent.__updateInstructions(dynamicInstructions);
+
+    // When no dependencies provided, should return static instructions
+    const noDepResult = await agent.instructions.resolve();
+    expect(noDepResult).toBe('[Dynamic Instructions]');
+
+    // When valid dependencies provided, should return dynamic instructions
+    const withDepResult = await agent.instructions.resolve({
+      dependencies: { apiKey: 'test-key', userId: 123 },
+    });
+    expect(withDepResult).toBe('You are assisting user 123 with API key test-key');
+
+    // When invalid dependencies provided, should still fail validation
+    await expect(
+      agent.instructions.resolve({
+        dependencies: { apiKey: 'test-key' } as any,
+      }),
+    ).rejects.toThrow('Dependencies validation failed');
   });
 });
