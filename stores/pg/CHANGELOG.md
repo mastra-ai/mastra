@@ -1,5 +1,23 @@
 # @mastra/pg
 
+## 0.2.6
+
+### Patch Changes
+
+- e91bee7: Added helper method for both createindex and buildIndex
+- 7172059: Update PG Vector to use handle concurrent createIndex
+- Updated dependencies [b4fbc59]
+- Updated dependencies [a838fde]
+- Updated dependencies [a8bd4cf]
+- Updated dependencies [7a3eeb0]
+- Updated dependencies [0b54522]
+- Updated dependencies [b3b34f5]
+- Updated dependencies [1af25d5]
+- Updated dependencies [a4686e8]
+- Updated dependencies [6530ad1]
+- Updated dependencies [27439ad]
+  - @mastra/core@0.7.0
+
 ## 0.2.6-alpha.4
 
 ### Patch Changes
