@@ -187,40 +187,45 @@ export function WorkflowTrigger({
         )}
 
         {Object.values(workflowActivePaths).length > 0 && (
-          <div className="flex flex-col">
+          <div className="flex flex-col gap-2">
             <Text variant="secondary" className="px-4 text-mastra-el-3" size="xs">
               Status
             </Text>
-            <div className="px-4">
-              {Object.entries(workflowActivePaths)?.map(([stepId, { status: pathStatus }], idx: number) => {
-                const status = pathStatus.charAt(0).toUpperCase() + pathStatus.slice(1);
-
-                const statusIcon =
-                  status === 'Completed' ? (
-                    <div className="w-2 h-2 bg-green-500 rounded-full" />
-                  ) : (
-                    <div className="w-2 h-2 bg-yellow-500 rounded-full animate-pulse" />
-                  );
+            <div className="px-4 flex flex-col gap-4">
+              {Object.entries(workflowActivePaths)?.map(([stepId, { status: pathStatus, stepPath }]) => {
                 return (
-                  <div key={idx} className="flex flex-col mt-2 overflow-hidden border">
-                    <div
-                      key={idx}
-                      className={`
-                              flex items-center justify-between p-3
-                              ${idx !== Object.keys(workflowActivePaths).length - 1 ? 'border-b' : ''}
-                              bg-white/5
-                            `}
-                    >
-                      <Text variant="secondary" className="text-mastra-el-3" size="xs">
-                        {stepId.charAt(0).toUpperCase() + stepId.slice(1)}
-                      </Text>
-                      <span className="flex items-center gap-2">
-                        <Text variant="secondary" className="text-mastra-el-3" size="xs">
-                          {statusIcon}
-                        </Text>
-                        {status}
-                      </span>
-                    </div>
+                  <div className="flex flex-col gap-1">
+                    {stepPath?.map((path, idx) => {
+                      const status =
+                        pathStatus === 'completed'
+                          ? 'Completed'
+                          : stepId === path
+                            ? pathStatus.charAt(0).toUpperCase() + pathStatus.slice(1)
+                            : 'Completed';
+
+                      const statusIcon =
+                        status === 'Completed' ? (
+                          <div className="w-2 h-2 bg-green-500 rounded-full" />
+                        ) : (
+                          <div className="w-2 h-2 bg-yellow-500 rounded-full animate-pulse" />
+                        );
+
+                      return (
+                        <div key={idx} className="flex flex-col overflow-hidden border">
+                          <div className={`flex items-center justify-between p-3`}>
+                            <Text variant="secondary" className="text-mastra-el-3" size="xs">
+                              {path.charAt(0).toUpperCase() + path.slice(1)}
+                            </Text>
+                            <span className="flex items-center gap-2">
+                              <Text variant="secondary" className="text-mastra-el-3" size="xs">
+                                {statusIcon}
+                              </Text>
+                              {status}
+                            </span>
+                          </div>
+                        </div>
+                      );
+                    })}
                   </div>
                 );
               })}
@@ -237,7 +242,7 @@ export function WorkflowTrigger({
               {step.suspendPayload && (
                 <div>
                   <CodeBlockDemo
-                    className="w-[300px] overflow-x-auto"
+                    className="w-[300px] overflow-x-auto p-2"
                     code={JSON.stringify(step.suspendPayload, null, 2)}
                     language="json"
                   />
