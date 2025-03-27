@@ -85,7 +85,7 @@ export class Agent<
     super({ component: RegisteredLogger.AGENT });
 
     this.name = config.name;
-    this.#instructions = new AgentInstructions(config.instructions, config.dependenciesSchema);
+    this.#instructions = AgentInstructions.from(config.instructions, { dependenciesSchema: config.dependenciesSchema });
 
     if (!config.model) {
       throw new Error(`LanguageModel is required to create an Agent. Please provide the 'model'.`);
@@ -143,7 +143,7 @@ export class Agent<
   }
 
   __updateInstructions(newInstructions: string | InstructionsBuilder<TSchemaDeps>) {
-    this.#instructions = new AgentInstructions(newInstructions, this.#dependenciesSchema);
+    this.#instructions = AgentInstructions.from(newInstructions, { dependenciesSchema: this.#dependenciesSchema });
     this.voice?.addInstructions(this.#instructions.toString()); // TODO: support dynamic instructions in voice providers
     this.logger.debug(`[Agents:${this.name}] Instructions updated.`, { model: this.model, name: this.name });
   }
@@ -663,7 +663,11 @@ export class Agent<
           createDependenciesFrom(dependencies),
         );
 
-        const resolvedInstructions = await this.instructions.resolve(this.#currentDependencies, instructions);
+        const resolvedInstructions = await this.instructions.resolve({
+          dependencies: this.#currentDependencies,
+          instructions,
+        });
+
         const systemMessage: CoreMessage = {
           role: 'system',
           content: `${resolvedInstructions}.`,
@@ -839,7 +843,11 @@ export class Agent<
         if (Object.keys(this.evals || {}).length > 0) {
           const input = messages.map(message => message.content).join('\n');
           const runIdToUse = runId || crypto.randomUUID();
-          const resolvedInstructions = await this.instructions.resolve(this.#currentDependencies, instructions);
+          const resolvedInstructions = await this.instructions.resolve({
+            dependencies: this.#currentDependencies,
+            instructions,
+          });
+
           for (const metric of Object.values(this.evals || {})) {
             executeHook(AvailableHooks.ON_GENERATION, {
               input,
