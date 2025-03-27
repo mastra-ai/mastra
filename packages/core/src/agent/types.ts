@@ -37,6 +37,12 @@ export type InstructionsBuilder<TSchemaDeps extends ZodSchema | undefined> = (co
   dependencies: DependenciesType<TSchemaDeps>;
 }) => Promise<string> | string;
 
+export interface AgentInstructionsOptions<TSchemaDeps extends ZodSchema | undefined> {
+  instructions: string;
+  instructionsBuilder?: InstructionsBuilder<TSchemaDeps>;
+  dependenciesSchema?: TSchemaDeps;
+}
+
 /**
  * Handles resolution of agent instructions, supporting both static strings
  * and dynamic functions that depend on runtime values.
@@ -44,18 +50,46 @@ export type InstructionsBuilder<TSchemaDeps extends ZodSchema | undefined> = (co
  * @template TSchemaDeps - Zod schema for dependencies validation.
  */
 export class AgentInstructions<TSchemaDeps extends ZodSchema | undefined> {
-  private readonly instructions: string | InstructionsBuilder<TSchemaDeps>;
-  private readonly schema?: TSchemaDeps;
+  private readonly instructions: string;
+  private readonly instructionsBuilder?: InstructionsBuilder<TSchemaDeps>;
+  private readonly dependenciesSchema?: TSchemaDeps;
 
   /**
    * Creates a new AgentInstructions instance.
    *
-   * @param instructions Static string or function that generates instructions.
-   * @param schema Optional Zod schema for validating dependencies.
+   * @param options.instructions Static string instructions to use as fallback.
+   * @param options.instructionsBuilder Optional function that generates dynamic instructions.
+   * @param options.dependenciesSchema Optional Zod schema for validating dependencies.
    */
-  constructor(instructions: string | InstructionsBuilder<TSchemaDeps>, schema?: TSchemaDeps) {
+  constructor({ instructions, instructionsBuilder, dependenciesSchema }: AgentInstructionsOptions<TSchemaDeps>) {
     this.instructions = instructions;
-    this.schema = schema;
+    this.instructionsBuilder = instructionsBuilder;
+    this.dependenciesSchema = dependenciesSchema;
+  }
+
+  /**
+   * Static factory method to create an AgentInstructions instance from either
+   * a static string or a dynamic instructions builder function.
+   *
+   * @param instructionsInput Either a static string or function that generates instructions
+   * @param options.dependenciesSchema Optional Zod schema for validating dependencies
+   * @param options.fallbackInstructions Optional fallback string to use when input is a builder
+   * @returns A new AgentInstructions instance
+   */
+  static from<T extends ZodSchema | undefined>(
+    instructionsInput: string | InstructionsBuilder<T>,
+    options: {
+      dependenciesSchema?: T;
+      fallbackInstructions?: string;
+    } = {},
+  ): AgentInstructions<T> {
+    const { dependenciesSchema, fallbackInstructions = '[Dynamic Instructions]' } = options;
+
+    return new AgentInstructions({
+      instructions: typeof instructionsInput === 'string' ? instructionsInput : fallbackInstructions,
+      instructionsBuilder: typeof instructionsInput === 'function' ? instructionsInput : undefined,
+      dependenciesSchema,
+    });
   }
 
   /**
@@ -65,34 +99,48 @@ export class AgentInstructions<TSchemaDeps extends ZodSchema | undefined> {
    * @param dependencies Optional dependencies to use for dynamic instructions.
    * @param instructions Optional string to override the stored instructions.
    * @returns A promise resolving to the final instructions string.
-   * @throws Will throw an error if dependencies validation fails against the schema.
+   * @throws Will throw an error if dependencies are provided but fail validation against the schema.
    */
-  async resolve(dependencies?: DependenciesType<TSchemaDeps>, instructions?: string): Promise<string> {
+  async resolve({
+    dependencies,
+    instructions,
+  }: {
+    dependencies?: DependenciesType<TSchemaDeps>;
+    instructions?: string;
+  } = {}): Promise<string> {
     if (instructions) {
       return instructions;
     }
 
-    if (typeof this.instructions === 'string') {
+    if (!this.instructionsBuilder) {
       return this.instructions;
     }
 
+    if (this.dependenciesSchema && !dependencies) {
+      return this.instructions;
+    }
+
+    // We only validate provided dependencies against the existing schema
     const emptyDeps = {} as DependenciesType<TSchemaDeps>;
-    const validatedDeps = this.schema
-      ? validateDependencies(this.schema, dependencies || emptyDeps)
+    const validatedDeps = this.dependenciesSchema
+      ? validateDependencies(this.dependenciesSchema, dependencies || emptyDeps)
       : dependencies || emptyDeps;
 
-    return await this.instructions({ dependencies: validatedDeps });
+    return await this.instructionsBuilder({ dependencies: validatedDeps });
+  }
+
+  /**
+   * Get the static instructions without resolving dependencies.
+   */
+  getStaticInstructions(): string {
+    return this.instructions;
   }
 
   /**
    * String representation for when instructions are used in string contexts.
-   * Returns the static string directly or a placeholder for dynamic instructions.
    */
   toString(): string {
-    if (typeof this.instructions === 'string') {
-      return this.instructions;
-    }
-    return '[Dynamic Instructions]';
+    return this.instructions;
   }
 }
 
