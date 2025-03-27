@@ -1,9 +1,13 @@
 import { afterEach } from 'node:test';
 import { tmpdir } from 'os';
 import { join } from 'path';
+import { openai } from '@ai-sdk/openai';
+import { Agent } from '@mastra/core/agent';
 import { LibSQLStore } from '@mastra/core/storage/libsql';
+import { createTool } from '@mastra/core/tools';
 import { Memory, TokenLimiter, ToolCallFilter } from '@mastra/memory';
 import { describe, it, expect, beforeEach } from 'vitest';
+import { z } from 'zod';
 import { filterToolCallsByName, filterToolResultsByName, generateConversationHistory } from './test-utils';
 
 describe('Memory with Processors', () => {
@@ -208,5 +212,134 @@ describe('Memory with Processors', () => {
     // And they should exclude weather tool messages
     expect(filterToolResultsByName(result.messages, `weather`)).toHaveLength(0);
     expect(filterToolCallsByName(result.messages, `weather`)).toHaveLength(0);
+  });
+
+  it('should apply processors with a real Mastra agent', async () => {
+    // Create a thread
+    const thread = await memory.createThread({
+      title: 'Real Agent Processor Test Thread',
+      resourceId,
+    });
+
+    const threadId = thread.id;
+
+    // Create test tools
+    const weatherTool = createTool({
+      id: 'get_weather',
+      description: 'Get the weather for a given location',
+      inputSchema: z.object({
+        location: z.string().describe('The location to get the weather for'),
+      }),
+      execute: async ({ context: { location } }) => {
+        return `The weather in ${location} is sunny. It is currently 70 degrees and feels like 65 degrees.`;
+      },
+    });
+
+    const calculatorTool = createTool({
+      id: 'calculator',
+      description: 'Perform a simple calculation',
+      inputSchema: z.object({
+        expression: z.string().describe('The mathematical expression to calculate'),
+      }),
+      execute: async ({ context: { expression } }) => {
+        return `The result of ${expression} is ${eval(expression)}`;
+      },
+    });
+
+    const instructions =
+      'You are a helpful assistant with access to weather and calculator tools. Use them when appropriate.';
+    // Create agent with memory and tools
+    const agent = new Agent({
+      name: 'processor-test-agent',
+      instructions,
+      model: openai('gpt-4o'),
+      memory,
+      tools: {
+        get_weather: weatherTool,
+        calculator: calculatorTool,
+      },
+    });
+
+    // First message - use weather tool
+    await agent.generate('What is the weather in Seattle?', {
+      threadId,
+      resourceId,
+    });
+    // Second message - use calculator tool
+    await agent.generate('Calculate 123 * 456', {
+      threadId,
+      resourceId,
+    });
+    // Third message - simple text response
+    await agent.generate('Tell me something interesting about space', {
+      threadId,
+      resourceId,
+    });
+    // Query with no processors to verify baseline message count
+    const baselineResult = await memory.query({
+      threadId,
+      selectBy: { last: 20 },
+      threadConfig: {
+        processors: [],
+      },
+    });
+
+    // There should be at least 6 messages (3 user + 3 assistant responses)
+    expect(baselineResult.messages.length).toBeGreaterThanOrEqual(6);
+
+    // Verify we have tool calls in the baseline
+    const weatherToolCalls = filterToolCallsByName(baselineResult.messages, 'get_weather');
+    const calculatorToolCalls = filterToolCallsByName(baselineResult.messages, 'calculator');
+    expect(weatherToolCalls.length).toBeGreaterThan(0);
+    expect(calculatorToolCalls.length).toBeGreaterThan(0);
+
+    // Test filtering weather tool calls
+    const weatherFilteredResult = await memory.query({
+      threadId,
+      selectBy: { last: 20 },
+      threadConfig: {
+        processors: [new ToolCallFilter({ exclude: ['get_weather'] })],
+      },
+    });
+
+    // Should have fewer messages after filtering
+    expect(weatherFilteredResult.messages.length).toBeLessThan(baselineResult.messages.length);
+
+    // No weather tool calls should remain
+    expect(filterToolCallsByName(weatherFilteredResult.messages, 'get_weather').length).toBe(0);
+    expect(filterToolResultsByName(weatherFilteredResult.messages, 'get_weather').length).toBe(0);
+
+    // Calculator tool calls should still be present
+    expect(filterToolCallsByName(weatherFilteredResult.messages, 'calculator').length).toBeGreaterThan(0);
+
+    // Test token limiting
+    const tokenLimitedResult = await memory.query({
+      threadId,
+      selectBy: { last: 20 },
+      threadConfig: {
+        processors: [new TokenLimiter(100)], // Small limit to only get a subset
+      },
+    });
+
+    // Should have fewer messages after token limiting
+    expect(tokenLimitedResult.messages.length).toBeLessThan(baselineResult.messages.length);
+
+    // Test combining processors
+    const combinedResult = await memory.query({
+      threadId,
+      selectBy: { last: 20 },
+      threadConfig: {
+        processors: [new ToolCallFilter({ exclude: ['get_weather', 'calculator'] }), new TokenLimiter(500)],
+      },
+    });
+
+    // No tool calls should remain
+    expect(filterToolCallsByName(combinedResult.messages, 'get_weather').length).toBe(0);
+    expect(filterToolCallsByName(combinedResult.messages, 'calculator').length).toBe(0);
+    expect(filterToolResultsByName(combinedResult.messages, 'get_weather').length).toBe(0);
+    expect(filterToolResultsByName(combinedResult.messages, 'calculator').length).toBe(0);
+
+    // The result should still contain some messages
+    expect(combinedResult.messages.length).toBeGreaterThan(0);
   });
 });
