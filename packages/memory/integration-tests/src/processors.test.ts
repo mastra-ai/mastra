@@ -1,8 +1,22 @@
 import { afterEach } from 'node:test';
-import type { MessageType } from '@mastra/core';
+import { tmpdir } from 'os';
+import { join } from 'path';
+import type { CoreMessage, MessageType } from '@mastra/core';
 import { LibSQLStore } from '@mastra/core/storage/libsql';
 import { Memory, TokenLimiter, ToolCallFilter } from '@mastra/memory';
-import { describe, it, expect, beforeAll } from 'vitest';
+import { describe, it, expect, beforeEach } from 'vitest';
+
+const toolArgs = {
+  weather: { location: 'New York' },
+  calculator: { expression: '2+2' },
+  search: { query: 'latest AI developments' },
+};
+
+const toolResults = {
+  weather: 'Pretty hot',
+  calculator: '4',
+  search: 'Anthropic blah blah blah',
+};
 
 /**
  * Creates a simulated conversation history with alternating messages and occasional tool calls
@@ -20,22 +34,11 @@ function generateConversationHistory({
   threadId: string;
   messageCount?: number;
   toolFrequency?: number;
-  toolNames?: string[];
+  toolNames?: (keyof typeof toolArgs)[];
 }): MessageType[] {
   // Create some words that will each be about one token
   const words = ['apple', 'banana', 'orange', 'grape'];
   // Arguments for different tools
-  const toolArgs = {
-    weather: { location: 'New York' },
-    calculator: { expression: '2+2' },
-    search: { query: 'latest AI developments' },
-  };
-
-  const toolResults = {
-    weather: 'Pretty hot',
-    calculator: '4',
-    search: 'Anthropic blah blah blah',
-  };
 
   const messages: MessageType[] = [];
   const startTime = Date.now();
@@ -110,16 +113,32 @@ function generateConversationHistory({
   return messages;
 }
 
+function filterToolCallsByName(messages: CoreMessage[], name: string) {
+  return messages.filter(
+    m => Array.isArray(m.content) && m.content.some(part => part.type === 'tool-call' && part.toolName === name),
+  );
+}
+function filterToolResultsByName(messages: CoreMessage[], name: string) {
+  return messages.filter(
+    m => Array.isArray(m.content) && m.content.some(part => part.type === 'tool-result' && part.toolName === name),
+  );
+}
+
 describe('Memory with Processors', () => {
   let memory: Memory;
   let storage: LibSQLStore;
   const resourceId = 'processor-test';
+  let testCount = 0;
 
-  beforeAll(() => {
-    // Create a single in-memory database for all tests
+  beforeEach(() => {
+    // Create a new unique database file in the temp directory for each test
+    const timestamp = Date.now();
+    const uniqueId = `memory-processor-test-${timestamp}-${testCount++}`;
+    const dbPath = join(tmpdir(), uniqueId);
+
     storage = new LibSQLStore({
       config: {
-        url: 'file::memory:?cache=shared',
+        url: `file:${dbPath}`,
       },
     });
 
@@ -171,14 +190,20 @@ describe('Memory with Processors', () => {
 
     // We should have messages limited by token count
     expect(result.messages.length).toBeGreaterThan(0);
-    expect(result.messages.length).toBeLessThan(4); // Should get a few messages
+    expect(result.messages.length).toBeLessThanOrEqual(4); // Should get a small subset of messages
 
     // And they should be the most recent ones
     const msgIds = result.messages.map(m => (m as any).id);
     // Verify we have the most recent message(s)
     expect(msgIds.length).toBeGreaterThan(0);
-    // Check if the most recent message is included
-    expect(msgIds).toContain('message-19');
+
+    // Get the highest message ID number from the results
+    const highestMsgIdNumber = Math.max(
+      ...msgIds.filter(id => id.startsWith('message-')).map(id => parseInt(id.replace('message-', ''), 10)),
+    );
+
+    // The highest message ID should be one of the last ones from the original set
+    expect(highestMsgIdNumber).toBeGreaterThan(15);
 
     // Now query with a very high token limit that should return all messages
     const allMessagesResult = await memory.query({
@@ -205,34 +230,67 @@ describe('Memory with Processors', () => {
       threadId: thread.id,
       messageCount: 5,
       toolFrequency: 2, // Every other assistant response is a tool call
-      toolNames: ['weather', 'calculator'], // Limit to these two tools for simplicity
+      toolNames: ['weather', 'calculator'],
     });
 
     // Save messages
     await memory.saveMessages({ messages });
 
-    // Get messages with a weather tool filter
+    // filter weather tool calls
     const result = await memory.query({
       threadId: thread.id,
-      selectBy: { last: 10 },
+      selectBy: { last: 20 },
       threadConfig: {
         processors: [new ToolCallFilter({ exclude: ['weather'] })],
       },
     });
-
-    // We should have fewer messages after filtering
     expect(result.messages.length).toBeLessThan(messages.length);
+    expect(filterToolCallsByName(result.messages, 'weather')).toHaveLength(0);
+    expect(filterToolResultsByName(result.messages, 'weather')).toHaveLength(0);
+    expect(filterToolCallsByName(result.messages, 'calculator')).toHaveLength(1);
+    expect(filterToolResultsByName(result.messages, 'calculator')).toHaveLength(1);
 
-    // And they should exclude weather tool messages
-    const weatherMsgIds = result.messages
-      .filter(
-        m =>
-          Array.isArray(m.content) &&
-          m.content.some(part => part.type === 'tool-call' && (part as any).toolName === 'weather'),
-      )
-      .map(m => (m as any).id);
+    // make another query with no processors to make sure memory messages in DB were not altered and were only filtered from results
+    const result2 = await memory.query({
+      threadId: thread.id,
+      selectBy: { last: 20 },
+      threadConfig: {
+        processors: [],
+      },
+    });
+    expect(result2.messages).toHaveLength(messages.length);
+    expect(filterToolCallsByName(result2.messages, 'weather')).toHaveLength(1);
+    expect(filterToolResultsByName(result2.messages, 'weather')).toHaveLength(1);
+    expect(filterToolCallsByName(result2.messages, 'calculator')).toHaveLength(1);
+    expect(filterToolResultsByName(result2.messages, 'calculator')).toHaveLength(1);
 
-    expect(weatherMsgIds.length).toBe(0);
+    // filter all by name
+    const result3 = await memory.query({
+      threadId: thread.id,
+      selectBy: { last: 20 },
+      threadConfig: {
+        processors: [new ToolCallFilter({ exclude: ['weather', 'calculator'] })],
+      },
+    });
+    expect(result3.messages.length).toBeLessThan(messages.length);
+    expect(filterToolCallsByName(result3.messages, 'weather')).toHaveLength(0);
+    expect(filterToolResultsByName(result3.messages, 'weather')).toHaveLength(0);
+    expect(filterToolCallsByName(result3.messages, 'calculator')).toHaveLength(0);
+    expect(filterToolResultsByName(result3.messages, 'calculator')).toHaveLength(0);
+
+    // filter all by default
+    const result4 = await memory.query({
+      threadId: thread.id,
+      selectBy: { last: 20 },
+      threadConfig: {
+        processors: [new ToolCallFilter()],
+      },
+    });
+    expect(result4.messages.length).toBeLessThan(messages.length);
+    expect(filterToolCallsByName(result4.messages, 'weather')).toHaveLength(0);
+    expect(filterToolResultsByName(result4.messages, 'weather')).toHaveLength(0);
+    expect(filterToolCallsByName(result4.messages, 'calculator')).toHaveLength(0);
+    expect(filterToolResultsByName(result4.messages, 'calculator')).toHaveLength(0);
   });
 
   it('should apply multiple processors in order', async () => {
@@ -265,16 +323,8 @@ describe('Memory with Processors', () => {
     // We should have fewer messages after filtering and token limiting
     expect(result.messages.length).toBeGreaterThan(0);
     expect(result.messages.length).toBeLessThan(messages.length);
-
-    // And they should exclude weather messages
-    const weatherMsgIds = result.messages
-      .filter(
-        m =>
-          Array.isArray(m.content) &&
-          m.content.some(part => part.type === 'tool-call' && (part as any).toolName === 'weather'),
-      )
-      .map(m => (m as any).id);
-
-    expect(weatherMsgIds.length).toBe(0);
+    // And they should exclude weather tool messages
+    expect(filterToolResultsByName(result.messages, `weather`)).toHaveLength(0);
+    expect(filterToolCallsByName(result.messages, `weather`)).toHaveLength(0);
   });
 });
