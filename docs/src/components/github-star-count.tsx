@@ -63,9 +63,8 @@ export const GithubStarCount = () => {
       {isClient ? (
         <ul className="-mr-8">
           <li>
-            <a
-              target="_blank"
-              href="https://github.com/mastra-ai/mastra"
+            <button
+              type="button"
               className="font-medium w-fit rounded-md opacity-90 transition-colors hover:opacity-100 flex items-center gap-2 justify-start pl-[7px] pr-2.5 py-2 h-[2.125rem] dark:text-white text-sm"
             >
               <svg
@@ -102,7 +101,7 @@ export const GithubStarCount = () => {
                   />
                 </svg>
               </div>
-            </a>
+            </button>
           </li>
         </ul>
       ) : null}
