@@ -104,6 +104,18 @@ export function generateConversationHistory({
     }
   }
 
+  if (messages.at(-1)!.type === `tool-result`) {
+    const userContent = Array(25).fill(words).flat().join(' '); // ~100 tokens
+    messages.push({
+      role: 'user',
+      content: userContent,
+      id: `message-${messages.length + 1 * 2}`,
+      threadId,
+      createdAt: new Date(startTime + messages.length + 1 * 2000), // Each pair 2 seconds apart
+      type: 'text',
+    });
+  }
+
   return messages;
 }
 
