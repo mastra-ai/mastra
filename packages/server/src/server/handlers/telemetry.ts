@@ -1,5 +1,4 @@
-import { MastraStorage, TABLE_TRACES } from '@mastra/core/storage';
-import type { resourceSpans } from '@opentelemetry/api';
+import { TABLE_TRACES } from '@mastra/core/storage';
 import { HTTPException } from '../http-exception';
 import type { Context } from '../types';
 

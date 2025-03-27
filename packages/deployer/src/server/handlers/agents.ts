@@ -6,12 +6,10 @@ import {
   getLiveEvalsByAgentIdHandler as getOriginalLiveEvalsByAgentIdHandler,
   generateHandler as getOriginalGenerateHandler,
   streamGenerateHandler as getOriginalStreamGenerateHandler,
-  setAgentInstructionsHandler as getOriginalSetAgentInstructionsHandler,
 } from '@mastra/server/handlers/agents';
 import type { Context } from 'hono';
 
 import { handleError } from './error';
-import { validateBody } from './utils';
 
 // Agent handlers
 export async function getAgentsHandler(c: Context) {

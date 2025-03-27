@@ -1,12 +1,12 @@
 import type { Mastra } from '@mastra/core';
 import type { MastraVector, QueryResult, IndexStats } from '@mastra/core/vector';
 import {
-  upsertVectorsHandler as getOriginalUpsertVectorsHandler,
-  createIndexHandler as getOriginalCreateIndexHandler,
-  queryVectorsHandler as getOriginalQueryVectorsHandler,
-  listIndexesHandler as getOriginalListIndexesHandler,
-  describeIndexHandler as getOriginalDescribeIndexHandler,
-  deleteIndexHandler as getOriginalDeleteIndexHandler,
+  upsertVectors as getOriginalUpsertVectorsHandler,
+  createIndex as getOriginalCreateIndexHandler,
+  queryVectors as getOriginalQueryVectorsHandler,
+  listIndexes as getOriginalListIndexesHandler,
+  describeIndex as getOriginalDescribeIndexHandler,
+  deleteIndex as getOriginalDeleteIndexHandler,
 } from '@mastra/server/handlers/vector';
 import type { Context } from 'hono';
 
@@ -48,16 +48,12 @@ export async function upsertVectors(c: Context) {
   try {
     const mastra: Mastra = c.get('mastra');
     const vectorName = c.req.param('vectorName');
-    const { indexName, vectors, metadata, ids } = await c.req.json<UpsertRequest>();
-
-    if (!indexName || !vectors || !Array.isArray(vectors)) {
-      throw new HTTPException(400, { message: 'Invalid request body. indexName and vectors array are required.' });
-    }
+    const body = await c.req.json<UpsertRequest>();
 
     const result = await getOriginalUpsertVectorsHandler({
       mastra,
       vectorName,
-      body: { indexName, vectors, metadata, ids },
+      index: body,
     });
 
     return c.json({ ids: result });
@@ -71,22 +67,12 @@ export async function createIndex(c: Context) {
   try {
     const mastra: Mastra = c.get('mastra');
     const vectorName = c.req.param('vectorName');
-    const { indexName, dimension, metric } = await c.req.json<CreateIndexRequest>();
-
-    if (!indexName || typeof dimension !== 'number' || dimension <= 0) {
-      throw new HTTPException(400, {
-        message: 'Invalid request body. indexName and positive dimension number are required.',
-      });
-    }
-
-    if (metric && !['cosine', 'euclidean', 'dotproduct'].includes(metric)) {
-      throw new HTTPException(400, { message: 'Invalid metric. Must be one of: cosine, euclidean, dotproduct' });
-    }
+    const body = await c.req.json<CreateIndexRequest>();
 
     await getOriginalCreateIndexHandler({
       mastra,
       vectorName,
-      body: { indexName, dimension, metric },
+      index: body,
     });
 
     return c.json({ success: true });
@@ -102,14 +88,10 @@ export async function queryVectors(c: Context) {
     const vectorName = c.req.param('vectorName');
     const { indexName, queryVector, topK = 10, filter, includeVector = false } = await c.req.json<QueryRequest>();
 
-    if (!indexName || !queryVector || !Array.isArray(queryVector)) {
-      throw new HTTPException(400, { message: 'Invalid request body. indexName and queryVector array are required.' });
-    }
-
     const results: QueryResult[] = await getOriginalQueryVectorsHandler({
       mastra,
       vectorName,
-      body: { indexName, queryVector, topK, filter, includeVector },
+      query: { indexName, queryVector, topK, filter, includeVector },
     });
 
     return c.json({ results });
@@ -129,7 +111,7 @@ export async function listIndexes(c: Context) {
       vectorName,
     });
 
-    return c.json({ indexes: indexes.filter(Boolean) });
+    return c.json({ indexes });
   } catch (error) {
     return handleError(error, 'Error listing indexes');
   }
@@ -146,7 +128,7 @@ export async function describeIndex(c: Context) {
       throw new HTTPException(400, { message: 'Index name is required' });
     }
 
-    const stats: IndexStats = await getOriginalDescribeIndexHandler({
+    const stats = await getOriginalDescribeIndexHandler({
       mastra,
       vectorName,
       indexName,

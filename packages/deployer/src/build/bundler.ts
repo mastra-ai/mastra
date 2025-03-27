@@ -81,6 +81,17 @@ export async function getInputOptions(
             find: /^\#server$/,
             replacement: fileURLToPath(import.meta.resolve('@mastra/deployer/server')).replaceAll('\\', '/'),
           },
+          {
+            find: /^\@mastra\/server\/(.*)/,
+            replacement: `@mastra/server/$1`,
+            customResolver: id => {
+              if (id.startsWith('@mastra/server')) {
+                return {
+                  id: fileURLToPath(import.meta.resolve(id)),
+                };
+              }
+            },
+          },
           { find: /^\#mastra$/, replacement: normalizedEntryFile },
         ],
       }),

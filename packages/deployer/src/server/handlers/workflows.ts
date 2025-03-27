@@ -11,7 +11,7 @@ import {
 } from '@mastra/server/handlers/workflows';
 import type { Context } from 'hono';
 import { HTTPException } from 'hono/http-exception';
-import { streamText } from 'hono/streaming';
+import { stream, streamText } from 'hono/streaming';
 
 import { handleError } from './error';
 
@@ -120,17 +120,14 @@ export async function watchWorkflowHandler(c: Context) {
       runId,
     });
 
-    if (!(result instanceof ReadableStream)) {
-      return result;
-    }
-
-    return streamText(
+    return stream(
       c,
       stream => {
         stream.onAbort(() => {
           return result.cancel();
         });
 
+        // @ts-ignore
         return stream.pipe(result);
       },
       async (err, stream) => {

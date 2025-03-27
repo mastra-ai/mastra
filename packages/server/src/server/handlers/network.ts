@@ -77,9 +77,10 @@ export async function getNetworkByIdHandler({ mastra, networkId }: Pick<NetworkC
 export async function generateHandler({
   mastra,
   networkId,
-  messages,
-  ...rest
-}: NetworkContext & { messages?: Parameters<AgentNetwork['generate']>[0] } & Parameters<AgentNetwork['generate']>[1]) {
+  body,
+}: NetworkContext & {
+  body: { messages?: Parameters<AgentNetwork['generate']>[0] } & Parameters<AgentNetwork['generate']>[1];
+}) {
   try {
     const network = mastra.getNetwork(networkId!);
 
@@ -87,11 +88,10 @@ export async function generateHandler({
       throw new HTTPException(404, { message: 'Network not found' });
     }
 
-    validateBody({ messages });
+    validateBody({ messages: body.messages });
 
-    const result = await network.generate(messages!, {
-      ...rest,
-    });
+    const { messages, ...rest } = body;
+    const result = await network.generate(messages!, rest);
 
     return result;
   } catch (error) {
@@ -102,9 +102,10 @@ export async function generateHandler({
 export async function streamGenerateHandler({
   mastra,
   networkId,
-  messages,
-  ...args
-}: NetworkContext & { messages?: Parameters<AgentNetwork['stream']>[0] } & Parameters<AgentNetwork['stream']>[1]) {
+  body,
+}: NetworkContext & {
+  body: { messages?: Parameters<AgentNetwork['stream']>[0] } & Parameters<AgentNetwork['stream']>[1];
+}) {
   try {
     const network = mastra.getNetwork(networkId!);
 
@@ -112,11 +113,25 @@ export async function streamGenerateHandler({
       throw new HTTPException(404, { message: 'Network not found' });
     }
 
-    validateBody({ messages });
+    validateBody({ messages: body.messages });
 
-    const streamResult = await network.stream(messages!, args);
+    const { messages, output, ...rest } = body;
+    const streamResult = await network.stream(messages!, {
+      output: output as any,
+      ...rest,
+    });
 
-    return streamResult;
+    const streamResponse = output
+      ? streamResult.toTextStreamResponse()
+      : streamResult.toDataStreamResponse({
+          sendUsage: true,
+          sendReasoning: true,
+          getErrorMessage: (error: any) => {
+            return `An error occurred while processing your request. ${error instanceof Error ? error.message : JSON.stringify(error)}`;
+          },
+        });
+
+    return streamResponse;
   } catch (error) {
     return handleError(error, 'Error streaming from network');
   }
