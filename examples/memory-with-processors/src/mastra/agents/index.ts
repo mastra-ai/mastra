@@ -6,17 +6,32 @@ import type { MessageProcessor, SharedMessageProcessorOpts } from '@mastra/core/
 import { Memory, TokenLimiter, ToolCallFilter } from '@mastra/memory';
 import { z } from 'zod';
 
-// Custom processor that filters out messages containing specific keywords
-class KeywordFilter implements MessageProcessor {
+// Custom processor that makes the llm forget any messages that contain keywords
+class ForgetfulProcessor implements MessageProcessor {
   constructor(private keywords: string[]) {}
 
   process(messages: CoreMessage[], _opts: SharedMessageProcessorOpts = {}): CoreMessage[] {
-    return messages.filter(message => {
-      if (typeof message.content === 'string') {
-        const content = message.content;
-        return !this.keywords.some(keyword => content.toLowerCase().includes(keyword.toLowerCase()));
+    return messages.map(message => {
+      if (message.role === `assistant` || message.role === `user`) {
+        const content =
+          typeof message.content === `string`
+            ? message.content
+            : message.content.reduce((msg = ``, current) => {
+                if (current.type === `text`) {
+                  return msg + `\n${current.text}`;
+                }
+              }, '') || '';
+
+        const shouldForgetThis = this.keywords.some(keyword => content.toLowerCase().includes(keyword.toLowerCase()));
+        console.log(`\n`, { shouldForgetThis, content });
+        if (shouldForgetThis && (message.role === `user` || message.role === `assistant`)) {
+          return {
+            role: 'assistant',
+            content: `<forgotten>I'm getting forgetful in my old age. this used to be a ${message.role} message but I forgot it</forgotten>`,
+          };
+        }
       }
-      return true;
+      return message;
     });
   }
 }
@@ -29,7 +44,7 @@ const supportMemory = new Memory({
   ],
   options: {
     lastMessages: 50,
-    semanticRecall: true,
+    semanticRecall: false,
   },
 });
 
@@ -65,23 +80,20 @@ const interviewMemory = new Memory({
     // Filter out all tool calls to keep conversation focused
     new ToolCallFilter(),
     // Custom filter to remove messages with certain keywords
-    new KeywordFilter(['confidential', 'private', 'sensitive']),
+    new ForgetfulProcessor(['name']),
   ],
   options: {
     lastMessages: 30,
-    semanticRecall: {
-      topK: 3,
-      messageRange: { before: 2, after: 2 },
-    },
+    semanticRecall: false,
   },
 });
 
 // Interviewer agent that filters out tool calls and sensitive content
 export const interviewerAgent = new Agent({
-  name: 'Job Interviewer',
+  name: 'Forgetful Job Interviewer',
   instructions:
-    'You are a professional job interviewer for a technology company. Conduct insightful interviews by asking relevant questions about skills, experience, and problem-solving abilities. Respond to candidate answers and ask follow-up questions. Keep the interview professional and engaging. Remember details the candidate shares earlier in the conversation.',
-  model: openai('gpt-4o-mini'),
+    "You are a professional job interviewer for a technology company. Conduct insightful interviews by asking relevant questions about skills, experience, and problem-solving abilities. Respond to candidate answers and ask follow-up questions. Keep the interview professional and engaging. Remember details the candidate shares earlier in the conversation. Sometimes you forget things by accident. The system will show you if you forgot. Don't be embarassed, you can admit when you forget something, you'll know when you do because there will be a message wrapped in <forgetten> tags. Don't refer to the user by their name, it comes across as too eager",
+  model: openai('gpt-4o'),
   memory: interviewMemory,
 });
 

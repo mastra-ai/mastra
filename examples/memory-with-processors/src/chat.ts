@@ -14,9 +14,16 @@ console.log(`Thread ID: ${threadId}`);
 const resourceId = 'DEMO_CANDIDATE_1';
 
 async function logRes(res: Awaited<ReturnType<typeof agent.stream>>) {
-  console.log(`\n👔 Interviewer:`);
-  for await (const chunk of res.textStream) {
-    process.stdout.write(chunk);
+  console.log(`\n👔 Forgetful interviewer (can never remember your name):`);
+  for await (const chunk of res.fullStream) {
+    switch (chunk.type) {
+      case 'error':
+        console.error(chunk.error);
+        break;
+      case 'text-delta':
+        process.stdout.write(chunk.textDelta);
+        break;
+    }
   }
   console.log(`\n\n`);
 }
@@ -82,4 +89,5 @@ async function main() {
   }
 }
 
-main(); 
+main();
+

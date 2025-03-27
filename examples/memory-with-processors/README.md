@@ -19,11 +19,11 @@ The support agent demo (`npm run start`) showcases the `TokenLimiter` processor,
 
 ### 2. Content Filtering with Interview Agent
 
-The interview agent demo (`npm run chat`) showcases:
+The forgetful interview agent demo (`npm run chat`) showcases:
 
 - `ToolCallFilter`: Removes all tool calls from the conversation history
-- `KeywordFilter`: Removes messages containing specific keywords ("confidential", "private", "sensitive")
-- Interactive chat where you can see how filtered content is "forgotten"
+- `ForgetfulProcessor`: Replaces messages containing specific keywords ("name", "work", etc) with a message telling the agent it forgot
+- Interactive chat where you can see how this content is "forgotten"
 
 ## Installation
 
