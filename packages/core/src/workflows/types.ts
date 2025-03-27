@@ -231,7 +231,7 @@ export interface WorkflowRunResult<
   };
   runId: string;
   timestamp: number;
-  activePaths: Map<keyof StepsRecord<TSteps>, { status: string; suspendPayload?: any }>;
+  activePaths: Map<keyof StepsRecord<TSteps>, { status: string; suspendPayload?: any; stepPath: string[] }>;
 }
 
 // Update WorkflowContext

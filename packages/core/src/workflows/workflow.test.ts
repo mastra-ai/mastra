@@ -10,7 +10,8 @@ import { Telemetry } from '../telemetry';
 import { createTool } from '../tools';
 
 import { Step } from './step';
-import { StepConfig, WhenConditionReturnValue, type WorkflowContext, type WorkflowResumeResult } from './types';
+import { StepConfig, WhenConditionReturnValue } from './types';
+import type { WorkflowContext, WorkflowResumeResult } from './types';
 import { Workflow } from './workflow';
 
 const storage = new DefaultStorage({
@@ -3822,7 +3823,9 @@ describe('Workflow', async () => {
         // @ts-ignore
         expect(results['last-step']).toEqual(undefined);
         // @ts-ignore
-        expect(results['nested-workflow-a'].output.activePaths).toEqual(new Map([['other', { status: 'suspended' }]]));
+        expect(results['nested-workflow-a'].output.activePaths).toEqual(
+          new Map([['other', { status: 'suspended', stepPath: ['start', 'other'] }]]),
+        );
 
         const resumedResults = await run.resume({ stepId: 'nested-workflow-a.other', context: { startValue: 1 } });
 

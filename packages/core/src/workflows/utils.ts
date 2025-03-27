@@ -162,14 +162,18 @@ export function getResultActivePaths(state: {
 }) {
   const activePaths = getActivePathsAndStatus(state.value);
   const activePathsAndStatus = activePaths.reduce((acc, curr) => {
-    const entry: { status: string; suspendPayload?: any } = { status: curr.status };
+    const entry: { status: string; suspendPayload?: any; stepPath: string[] } = {
+      status: curr.status,
+      stepPath: curr.stepPath,
+    };
     if (curr.status === 'suspended') {
       // @ts-ignore
       entry.suspendPayload = state.context.steps[curr.stepId].suspendPayload;
+      entry.stepPath = curr.stepPath;
     }
     acc.set(curr.stepId, entry);
     return acc;
-  }, new Map<string, { status: string; suspendPayload?: any }>());
+  }, new Map<string, { status: string; suspendPayload?: any; stepPath: string[] }>());
   return activePathsAndStatus;
 }
 
