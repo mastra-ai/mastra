@@ -344,7 +344,12 @@ Captures OpenTelemetry traces for monitoring and debugging.
     {
       name: "other",
       type: "text",
-      description: "Additional span data",
+      description: "Additional OpenTelemetry span fields as stringified JSON",
+      example: {
+        droppedAttributesCount: 2,
+        droppedEventsCount: 1,
+        instrumentationLibrary: "@opentelemetry/instrumentation-http"
+      }
     },
     {
       name: "startTime",
@@ -372,4 +377,4 @@ Captures OpenTelemetry traces for monitoring and debugging.
 Mastra supports the following providers:
 - For local development, check out [LibSQL Storage](../reference/storage/libsql.mdx)
 - For production, check out [PostgreSQL Storage](../reference/storage/postgresql.mdx)
-- For caching, check out [Upstash Storage](../reference/storage/upstash.mdx)
+- For serverless deployments, check out [Upstash Storage](../reference/storage/upstash.mdx)
