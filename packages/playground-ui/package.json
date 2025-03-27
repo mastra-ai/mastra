@@ -1,7 +1,7 @@
 {
   "name": "@mastra/playground-ui",
   "type": "module",
-  "version": "2.0.4-alpha.0",
+  "version": "3.0.0-alpha.4",
   "description": "Mastra Playground components",
   "main": "dist/index.umd.js",
   "module": "dist/index.es.js",
@@ -93,7 +93,7 @@
     "tailwindcss": "^3.0.0"
   },
   "devDependencies": {
-    "@types/node": "^22.13.10",
+    "@types/node": "^20.17.27",
     "@types/react": "^19.0.10",
     "@types/react-dom": "^19.0.4",
     "@vitejs/plugin-react": "^4.3.4",
@@ -105,7 +105,7 @@
     "tailwind-merge": "^3.0.2",
     "tailwindcss": "^3.4.17",
     "typescript": "^5.8.2",
-    "vite": "^5.4.14",
+    "vite": "^5.4.15",
     "vite-plugin-dts": "^3.9.1",
     "vite-plugin-lib-inject-css": "^2.2.1"
   }

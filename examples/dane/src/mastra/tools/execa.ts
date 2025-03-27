@@ -16,7 +16,6 @@ const colorTransform = new Transform({
 
 export const execaTool = createTool({
   id: 'execaTool',
-  name: 'Execa System Tool',
   description: 'Execa System Tool',
   inputSchema: z.object({
     command: z.string(),

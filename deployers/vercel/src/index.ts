@@ -18,14 +18,14 @@ interface VercelError {
 }
 
 export class VercelDeployer extends Deployer {
-  private teamId: string;
+  private teamSlug: string;
   private projectName: string;
   private token: string;
 
-  constructor({ teamId, projectName, token }: { teamId: string; projectName: string; token: string }) {
+  constructor({ teamSlug, projectName, token }: { teamSlug: string; projectName: string; token: string }) {
     super({ name: 'VERCEL' });
 
-    this.teamId = teamId;
+    this.teamSlug = teamSlug;
     this.projectName = projectName;
     this.token = token;
   }
@@ -58,7 +58,8 @@ export class VercelDeployer extends Deployer {
   }
 
   private getProjectId({ dir }: { dir: string }): string {
-    const projectJsonPath = join(dir, '.vercel', 'project.json');
+    const projectJsonPath = join(dir, 'output', '.vercel', 'project.json');
+
     try {
       const projectJson = JSON.parse(readFileSync(projectJsonPath, 'utf-8'));
       return projectJson.projectId;
@@ -67,7 +68,19 @@ export class VercelDeployer extends Deployer {
     }
   }
 
-  private async syncEnv(envVars: Map<string, string>) {
+  private async getTeamId(): Promise<string> {
+    const response = await fetch(`https://api.vercel.com/v2/teams`, {
+      headers: {
+        Authorization: `Bearer ${this.token}`,
+      },
+    });
+
+    const res = (await response.json()) as any;
+    const teams = res.teams;
+    return teams.find((team: any) => team.slug === this.teamSlug)?.id;
+  }
+
+  private async syncEnv(envVars: Map<string, string>, { outputDirectory }: { outputDirectory: string }) {
     console.log('Syncing environment variables...');
 
     // Transform env vars into the format expected by Vercel API
@@ -85,10 +98,11 @@ export class VercelDeployer extends Deployer {
     });
 
     try {
-      const projectId = this.getProjectId({ dir: process.cwd() });
+      const projectId = this.getProjectId({ dir: outputDirectory });
+      const teamId = await this.getTeamId();
 
       const response = await fetch(
-        `https://api.vercel.com/v10/projects/${projectId}/env?teamId=${this.teamId}&upsert=true`,
+        `https://api.vercel.com/v10/projects/${projectId}/env?teamId=${teamId}&upsert=true`,
         {
           method: 'POST',
           headers: {
@@ -143,7 +157,7 @@ export const POST = handle(app);
     // Create the command array with base arguments
     const commandArgs = [
       '--scope',
-      this.teamId as string,
+      this.teamSlug,
       '--cwd',
       join(outputDirectory, this.outputDir),
       '--token',
@@ -157,7 +171,6 @@ export const POST = handle(app);
     child_process.execSync(`npx vercel ${commandArgs.join(' ')}`, {
       cwd: join(outputDirectory, this.outputDir),
       env: {
-        // ...this.env,
         PATH: process.env.PATH,
       },
       stdio: 'inherit',
@@ -167,7 +180,7 @@ export const POST = handle(app);
 
     if (envVars.size > 0) {
       // Sync environment variables for future deployments
-      await this.syncEnv(envVars);
+      await this.syncEnv(envVars, { outputDirectory });
     } else {
       this.logger.info('\nAdd your ENV vars to .env or your vercel dashboard.\n');
     }

@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useContext, useMemo, useState } from 'react';
 import { toast } from 'sonner';
 
 import usePolling from '@/lib/polls';
@@ -6,9 +6,12 @@ import { MastraClient } from '@mastra/client-js';
 
 import type { RefinedTrace } from '@/domains/traces/types';
 import { refineTraces } from '@/domains/traces/utils';
+import { TraceContext } from '@/domains/traces/context/trace-context';
 
 export const useTraces = (componentName: string, baseUrl: string, isWorkflow: boolean = false) => {
   const [traces, setTraces] = useState<RefinedTrace[]>([]);
+
+  const { setTraces: setTraceContextTraces } = useContext(TraceContext);
 
   // Memoize the client instance
   const client = useMemo(
@@ -36,18 +39,22 @@ export const useTraces = (componentName: string, baseUrl: string, isWorkflow: bo
     }
   }, [client, componentName, isWorkflow]);
 
-  const onSuccess = useCallback((newTraces: RefinedTrace[]) => {
-    if (newTraces.length > 0) {
-      setTraces(() => newTraces);
-    }
-  }, []);
+  const onSuccess = useCallback(
+    (newTraces: RefinedTrace[]) => {
+      if (newTraces.length > 0) {
+        setTraces(() => newTraces);
+        setTraceContextTraces(() => newTraces);
+      }
+    },
+    [setTraceContextTraces],
+  );
 
   const onError = useCallback((error: { message: string }) => {
     toast.error(error.message);
   }, []);
 
-  const shouldContinue = useCallback((result: RefinedTrace[]) => {
-    return result.length > 0;
+  const shouldContinue = useCallback(() => {
+    return true;
   }, []);
 
   const { firstCallLoading, error } = usePolling<RefinedTrace[], { message: string }>({

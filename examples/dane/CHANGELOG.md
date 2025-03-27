@@ -1,5 +1,105 @@
 # @mastra/dane
 
+## 0.0.11-alpha.3
+
+### Patch Changes
+
+- Updated dependencies [05095e9]
+- Updated dependencies [b3b34f5]
+- Updated dependencies [a4686e8]
+  - @mastra/memory@0.2.6-alpha.3
+  - @mastra/core@0.7.0-alpha.3
+  - @mastra/github@1.1.14-alpha.3
+  - @mastra/mcp@0.3.6-alpha.3
+  - @mastra/rag@0.1.14-alpha.3
+  - @mastra/upstash@0.2.1-alpha.3
+
+## 0.0.11-alpha.2
+
+### Patch Changes
+
+- Updated dependencies [a838fde]
+- Updated dependencies [a8bd4cf]
+- Updated dependencies [7a3eeb0]
+- Updated dependencies [6530ad1]
+  - @mastra/core@0.7.0-alpha.2
+  - @mastra/github@1.1.14-alpha.2
+  - @mastra/mcp@0.3.6-alpha.2
+  - @mastra/memory@0.2.6-alpha.2
+  - @mastra/rag@0.1.14-alpha.2
+  - @mastra/upstash@0.2.1-alpha.2
+
+## 0.0.11-alpha.1
+
+### Patch Changes
+
+- Updated dependencies [0b54522]
+- Updated dependencies [51ee4bb]
+- Updated dependencies [1af25d5]
+- Updated dependencies [27439ad]
+  - @mastra/core@0.7.0-alpha.1
+  - @mastra/stabilityai@1.1.14-alpha.1
+  - @mastra/github@1.1.14-alpha.1
+  - @mastra/mcp@0.3.6-alpha.1
+  - @mastra/memory@0.2.6-alpha.1
+  - @mastra/rag@0.1.14-alpha.1
+  - @mastra/upstash@0.2.1-alpha.1
+
+## 0.0.11-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [b4fbc59]
+  - @mastra/core@0.6.5-alpha.0
+  - @mastra/github@1.1.14-alpha.0
+  - @mastra/stabilityai@1.1.14-alpha.0
+  - @mastra/mcp@0.3.6-alpha.0
+  - @mastra/memory@0.2.6-alpha.0
+  - @mastra/rag@0.1.14-alpha.0
+  - @mastra/upstash@0.2.1-alpha.0
+
+## 0.0.10
+
+### Patch Changes
+
+- Updated dependencies [6794797]
+- Updated dependencies [fb68a80]
+- Updated dependencies [2621e3f]
+- Updated dependencies [ac30427]
+- Updated dependencies [c0b2496]
+- Updated dependencies [b56a681]
+- Updated dependencies [7911ddf]
+- Updated dependencies [248cb07]
+  - @mastra/core@0.6.4
+  - @mastra/mcp@0.3.5
+  - @mastra/rag@0.1.13
+  - @mastra/upstash@0.2.0
+  - @mastra/github@1.1.13
+  - @mastra/stabilityai@1.1.13
+  - @mastra/memory@0.2.5
+
+## 0.0.10-alpha.2
+
+### Patch Changes
+
+- Updated dependencies [ac30427]
+  - @mastra/rag@0.1.13-alpha.2
+
+## 0.0.10-alpha.1
+
+### Patch Changes
+
+- Updated dependencies [6794797]
+- Updated dependencies [2621e3f]
+- Updated dependencies [c0b2496]
+  - @mastra/core@0.6.4-alpha.1
+  - @mastra/mcp@0.3.5-alpha.1
+  - @mastra/upstash@0.2.0-alpha.1
+  - @mastra/github@1.1.13-alpha.1
+  - @mastra/stabilityai@1.1.13-alpha.1
+  - @mastra/memory@0.2.5-alpha.1
+  - @mastra/rag@0.1.13-alpha.1
+
 ## 0.0.10-alpha.0
 
 ### Patch Changes

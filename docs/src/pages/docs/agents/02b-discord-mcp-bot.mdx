@@ -1,0 +1,87 @@
+---
+title: "Discord MCP Bot | Agent Documentation | Mastra"
+description: Documentation for using the Discord MCP bot to interact with Mastra.ai through Discord.
+---
+
+# Discord MCP Bot
+
+The Discord MCP bot answers questions about Mastra.ai through Discord. It uses [Model Context Protocol (MCP)](/docs/agents/02a-mcp-guide) to:
+- Find relevant documentation in the Mastra.ai docs
+- Share code from the examples repository
+- Answer questions about Mastra features and concepts
+
+## Features
+
+- Direct message support for private conversations
+- Thread-based discussions in channels
+- Documentation lookup through MCP docs server
+- Code examples from the Mastra repository
+
+## Using the Bot
+
+### Commands
+
+The bot uses Discord slash commands - type `/` to see available commands. The bot supports:
+
+1. `/ask` - Ask questions about Mastra.ai
+2. `/cleardm` - Clear bot messages in direct messages
+
+### Usage
+
+The bot works in both DMs and channels:
+
+**Direct Messages**
+- For private 1:1 conversations with the bot
+- Use `/cleardm` to remove bot messages
+
+**Server Channels**
+- For team discussions and shared questions
+- Creates a new thread for each `/ask` command
+
+### Example Usage
+
+Type `/ask` in Discord, then ask your question. Here are some examples:
+
+1. **Getting Documentation Help**
+   ```
+   How do I add memory to my agent?
+   ```
+   The bot will provide relevant documentation and code examples.
+
+2. **Code Examples**
+   ```
+   Show me an example of using workflows
+   ```
+   The bot will share code examples from the Mastra.ai examples repository.
+
+3. **Development Support**
+   ```
+   What's the best way to implement voice in my agent?
+   ```
+   The bot will guide you through implementation options and best practices.
+
+## Response Guidelines
+
+The bot structures responses in two parts:
+
+1. **Documentation and Examples**
+   - Links to relevant sections in Mastra.ai docs
+   - Uses MCP docs server to find information
+   - Links to relevant GitHub examples
+
+2. **Explanations**
+   - References specific Mastra features
+   - Explains concepts and implementation details
+   - Provides context for documentation and examples
+
+## Best Practices
+
+1. **Message Format**
+   - Keep questions under 2000 characters
+   - Wait a few seconds between messages
+   - Long responses will be split into multiple messages
+
+2. **Asking Questions**
+   - Ask about specific Mastra features or concepts
+   - Include context about what you're building
+   - Use threads to organize different topics
