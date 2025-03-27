@@ -93,12 +93,12 @@ export function WorkflowTrigger({
   useEffect(() => {
     if (!watchResultToUse?.activePaths || !result?.runId) return;
 
-    const suspended = watchResultToUse.activePaths
-      .filter((path: WorkflowPath) => watchResultToUse.context?.steps?.[path.stepId]?.status === 'suspended')
-      .map((path: WorkflowPath) => ({
-        stepId: path.stepId,
+    const suspended = Object.entries(watchResultToUse.activePaths)
+      .filter(([_, { status }]) => status === 'suspended')
+      .map(([stepId, { suspendPayload }]) => ({
+        stepId,
         runId: result.runId,
-        suspendPayload: watchResultToUse.context?.steps?.[path.stepId]?.suspendPayload,
+        suspendPayload,
       }));
     setSuspendedSteps(suspended);
   }, [watchResultToUse, result]);
@@ -186,51 +186,41 @@ export function WorkflowTrigger({
           </div>
         )}
 
-        {workflowActivePaths.length > 0 && (
+        {Object.values(workflowActivePaths).length > 0 && (
           <div className="flex flex-col">
             <Text variant="secondary" className="px-4 text-mastra-el-3" size="xs">
               Status
             </Text>
             <div className="px-4">
-              {workflowActivePaths?.map((activePath: any, idx: number) => {
+              {Object.entries(workflowActivePaths)?.map(([stepId, { status: pathStatus }], idx: number) => {
+                const status = pathStatus.charAt(0).toUpperCase() + pathStatus.slice(1);
+
+                const statusIcon =
+                  status === 'Completed' ? (
+                    <div className="w-2 h-2 bg-green-500 rounded-full" />
+                  ) : (
+                    <div className="w-2 h-2 bg-yellow-500 rounded-full animate-pulse" />
+                  );
                 return (
                   <div key={idx} className="flex flex-col mt-2 overflow-hidden border">
-                    {activePath?.stepPath?.map((sp: any, idx: number) => {
-                      const status =
-                        activePath?.status === 'completed'
-                          ? 'Completed'
-                          : sp === activePath?.stepId
-                            ? activePath?.status.charAt(0).toUpperCase() + activePath?.status.slice(1)
-                            : 'Completed';
-
-                      const statusIcon =
-                        status === 'Completed' ? (
-                          <div className="w-2 h-2 bg-green-500 rounded-full" />
-                        ) : (
-                          <div className="w-2 h-2 bg-yellow-500 rounded-full animate-pulse" />
-                        );
-
-                      return (
-                        <div
-                          key={idx}
-                          className={`
-                            flex items-center justify-between p-3
-                            ${idx !== activePath.stepPath.length - 1 ? 'border-b' : ''}
-                            bg-white/5
-                          `}
-                        >
-                          <Text variant="secondary" className="text-mastra-el-3" size="xs">
-                            {sp.charAt(0).toUpperCase() + sp.slice(1)}
-                          </Text>
-                          <span className="flex items-center gap-2">
-                            <Text variant="secondary" className="text-mastra-el-3" size="xs">
-                              {statusIcon}
-                            </Text>
-                            {status}
-                          </span>
-                        </div>
-                      );
-                    })}
+                    <div
+                      key={idx}
+                      className={`
+                              flex items-center justify-between p-3
+                              ${idx !== Object.keys(workflowActivePaths).length - 1 ? 'border-b' : ''}
+                              bg-white/5
+                            `}
+                    >
+                      <Text variant="secondary" className="text-mastra-el-3" size="xs">
+                        {stepId.charAt(0).toUpperCase() + stepId.slice(1)}
+                      </Text>
+                      <span className="flex items-center gap-2">
+                        <Text variant="secondary" className="text-mastra-el-3" size="xs">
+                          {statusIcon}
+                        </Text>
+                        {status}
+                      </span>
+                    </div>
                   </div>
                 );
               })}
