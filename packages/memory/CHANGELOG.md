@@ -1,5 +1,32 @@
 # @mastra/memory
 
+## 0.2.6
+
+### Patch Changes
+
+- 05095e9: Fixed an issue where very long messages would cause Memory semantic recall to throw errors
+- 394dfad: Removed working memory tool calls from thread history after the working memory has been updated. This is to prevent updates from polluting the context history and confusing agents. They should only see the most recent copy of working memory.
+  Also made memory.getWorkingMemory() public since it's useful for testing, debugging, and building UIs.
+- Updated dependencies [b4fbc59]
+- Updated dependencies [a838fde]
+- Updated dependencies [a8bd4cf]
+- Updated dependencies [7a3eeb0]
+- Updated dependencies [0b54522]
+- Updated dependencies [b3b34f5]
+- Updated dependencies [1af25d5]
+- Updated dependencies [a4686e8]
+- Updated dependencies [6530ad1]
+- Updated dependencies [27439ad]
+  - @mastra/core@0.7.0
+  - @mastra/rag@0.1.14
+
+## 0.2.6-alpha.4
+
+### Patch Changes
+
+- 394dfad: Removed working memory tool calls from thread history after the working memory has been updated. This is to prevent updates from polluting the context history and confusing agents. They should only see the most recent copy of working memory.
+  Also made memory.getWorkingMemory() public since it's useful for testing, debugging, and building UIs.
+
 ## 0.2.6-alpha.3
 
 ### Patch Changes

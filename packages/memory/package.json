@@ -1,6 +1,6 @@
 {
   "name": "@mastra/memory",
-  "version": "0.2.6-alpha.3",
+  "version": "0.2.6",
   "description": "",
   "type": "module",
   "main": "./dist/index.js",
@@ -54,8 +54,8 @@
     "@mastra/core": "workspace:^",
     "@mastra/rag": "workspace:^",
     "@upstash/redis": "^1.34.5",
-    "ai": "^4.1.54",
     "js-tiktoken": "^1.0.19",
+    "ai": "^4.2.2",
     "pg": "^8.13.3",
     "pg-pool": "^3.7.1",
     "postgres": "^3.4.5",
