@@ -1,5 +1,11 @@
 # @mastra/pg
 
+## 0.2.6-alpha.4
+
+### Patch Changes
+
+- e91bee7: Added helper method for both createindex and buildIndex
+
 ## 0.2.6-alpha.3
 
 ### Patch Changes
