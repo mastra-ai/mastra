@@ -93,12 +93,12 @@ export function WorkflowTrigger({
   useEffect(() => {
     if (!watchResultToUse?.activePaths || !result?.runId) return;
 
-    const suspended = watchResultToUse.activePaths
-      .filter((path: WorkflowPath) => watchResultToUse.context?.steps?.[path.stepId]?.status === 'suspended')
-      .map((path: WorkflowPath) => ({
-        stepId: path.stepId,
+    const suspended = Object.entries(watchResultToUse.activePaths)
+      .filter(([_, { status }]) => status === 'suspended')
+      .map(([stepId, { suspendPayload }]) => ({
+        stepId,
         runId: result.runId,
-        suspendPayload: watchResultToUse.context?.steps?.[path.stepId]?.suspendPayload,
+        suspendPayload,
       }));
     setSuspendedSteps(suspended);
   }, [watchResultToUse, result]);
@@ -186,21 +186,21 @@ export function WorkflowTrigger({
           </div>
         )}
 
-        {workflowActivePaths.length > 0 && (
-          <div className="flex flex-col">
+        {Object.values(workflowActivePaths).length > 0 && (
+          <div className="flex flex-col gap-2">
             <Text variant="secondary" className="px-4 text-mastra-el-3" size="xs">
               Status
             </Text>
-            <div className="px-4">
-              {workflowActivePaths?.map((activePath: any, idx: number) => {
+            <div className="px-4 flex flex-col gap-4">
+              {Object.entries(workflowActivePaths)?.map(([stepId, { status: pathStatus, stepPath }]) => {
                 return (
-                  <div key={idx} className="flex flex-col mt-2 overflow-hidden border">
-                    {activePath?.stepPath?.map((sp: any, idx: number) => {
+                  <div className="flex flex-col gap-1">
+                    {stepPath?.map((path, idx) => {
                       const status =
-                        activePath?.status === 'completed'
+                        pathStatus === 'completed'
                           ? 'Completed'
-                          : sp === activePath?.stepId
-                            ? activePath?.status.charAt(0).toUpperCase() + activePath?.status.slice(1)
+                          : stepId === path
+                            ? pathStatus.charAt(0).toUpperCase() + pathStatus.slice(1)
                             : 'Completed';
 
                       const statusIcon =
@@ -211,23 +211,18 @@ export function WorkflowTrigger({
                         );
 
                       return (
-                        <div
-                          key={idx}
-                          className={`
-                            flex items-center justify-between p-3
-                            ${idx !== activePath.stepPath.length - 1 ? 'border-b' : ''}
-                            bg-white/5
-                          `}
-                        >
-                          <Text variant="secondary" className="text-mastra-el-3" size="xs">
-                            {sp.charAt(0).toUpperCase() + sp.slice(1)}
-                          </Text>
-                          <span className="flex items-center gap-2">
+                        <div key={idx} className="flex flex-col overflow-hidden border">
+                          <div className={`flex items-center justify-between p-3`}>
                             <Text variant="secondary" className="text-mastra-el-3" size="xs">
-                              {statusIcon}
+                              {path.charAt(0).toUpperCase() + path.slice(1)}
                             </Text>
-                            {status}
-                          </span>
+                            <span className="flex items-center gap-2">
+                              <Text variant="secondary" className="text-mastra-el-3" size="xs">
+                                {statusIcon}
+                              </Text>
+                              {status}
+                            </span>
+                          </div>
                         </div>
                       );
                     })}
@@ -247,7 +242,7 @@ export function WorkflowTrigger({
               {step.suspendPayload && (
                 <div>
                   <CodeBlockDemo
-                    className="w-[300px] overflow-x-auto"
+                    className="w-[300px] overflow-x-auto p-2"
                     code={JSON.stringify(step.suspendPayload, null, 2)}
                     language="json"
                   />
