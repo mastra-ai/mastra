@@ -21,6 +21,11 @@ import { DefaultVectorDB } from '../vector/libsql';
 
 import type { MessageType, SharedMemoryConfig, StorageThreadType, MemoryConfig, AiMessageType } from './types';
 
+export type SharedMessageProcessorOpts = {
+  systemMessage?: string;
+  memorySystemMessage?: string;
+  newMessages?: CoreMessage[];
+};
 /**
  * Interface for message processors that can filter or transform messages
  * before they're sent to the LLM.
@@ -31,7 +36,7 @@ export interface MessageProcessor {
    * @param messages The messages to process
    * @returns The processed messages
    */
-  process(messages: CoreMessage[], opts: { systemMessage?: CoreMessage }): CoreMessage[];
+  process(messages: CoreMessage[], opts: SharedMessageProcessorOpts): CoreMessage[];
 }
 
 /**
@@ -162,7 +167,9 @@ export abstract class MastraMemory extends MastraBase {
    */
   private applyProcessors(
     messages: CoreMessage[],
-    opts: { processors?: MessageProcessor[]; systemMessage?: CoreMessage },
+    opts: {
+      processors?: MessageProcessor[];
+    } & SharedMessageProcessorOpts,
   ): CoreMessage[] {
     const processors = opts.processors || this.processors;
     if (!processors || processors.length === 0) {
@@ -172,7 +179,11 @@ export abstract class MastraMemory extends MastraBase {
     let processedMessages = [...messages];
 
     for (const processor of processors) {
-      processedMessages = processor.process(processedMessages, { systemMessage: opts.systemMessage });
+      processedMessages = processor.process(processedMessages, {
+        systemMessage: opts.systemMessage,
+        newMessages: opts.newMessages,
+        memorySystemMessage: opts.memorySystemMessage,
+      });
     }
 
     return processedMessages;
@@ -180,14 +191,13 @@ export abstract class MastraMemory extends MastraBase {
 
   processMessages({
     messages,
-    systemMessage,
     processors,
+    ...opts
   }: {
     messages: CoreMessage[];
-    systemMessage?: CoreMessage;
     processors?: MessageProcessor[];
-  }) {
-    return this.applyProcessors(messages, { processors: processors || this.processors, systemMessage });
+  } & SharedMessageProcessorOpts) {
+    return this.applyProcessors(messages, { processors: processors || this.processors, ...opts });
   }
 
   abstract rememberMessages({

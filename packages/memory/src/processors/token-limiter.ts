@@ -1,4 +1,4 @@
-import type { CoreMessage } from '@mastra/core';
+import type { CoreMessage, SharedMessageProcessorOpts } from '@mastra/core';
 import type { MessageProcessor } from '@mastra/core/memory';
 import { Tiktoken } from 'js-tiktoken/lite';
 import cl100k_base from 'js-tiktoken/ranks/cl100k_base';
@@ -18,7 +18,10 @@ export class TokenLimiter implements MessageProcessor {
     this.encoder = new Tiktoken(cl100k_base);
   }
 
-  process(messages: CoreMessage[], { systemMessage }: { systemMessage?: CoreMessage } = {}): CoreMessage[] {
+  process(
+    messages: CoreMessage[],
+    { systemMessage, memorySystemMessage, newMessages }: SharedMessageProcessorOpts = {},
+  ): CoreMessage[] {
     // Messages are already chronologically ordered - take most recent ones up to the token limit
     let totalTokens = 0;
 
@@ -26,11 +29,17 @@ export class TokenLimiter implements MessageProcessor {
       totalTokens += this.countTokens(systemMessage);
     }
 
+    if (memorySystemMessage) {
+      totalTokens += this.countTokens(memorySystemMessage);
+    }
+
+    const allMessages = [...messages, ...(newMessages || [])];
+
     const result: CoreMessage[] = [];
 
     // Process messages in reverse (newest first)
-    for (let i = messages.length - 1; i >= 0; i--) {
-      const message = messages[i];
+    for (let i = allMessages.length - 1; i >= 0; i--) {
+      const message = allMessages[i];
 
       // Skip undefined messages (shouldn't happen, but TypeScript is concerned)
       if (!message) continue;
@@ -50,7 +59,11 @@ export class TokenLimiter implements MessageProcessor {
     return result;
   }
 
-  public countTokens(message: CoreMessage): number {
+  public countTokens(message: string | CoreMessage): number {
+    if (typeof message === `string`) {
+      return this.encoder.encode(message).length;
+    }
+
     let tokenString = message.role;
 
     if (typeof message.content === 'string') {

@@ -267,7 +267,9 @@ export class Agent<
 
       const processedMessages = memory.processMessages({
         messages: this.sanitizeResponseMessages(memoryMessages),
-        systemMessage,
+        newMessages,
+        systemMessage: typeof systemMessage?.content === `string` ? systemMessage.content : undefined,
+        memorySystemMessage: memorySystemMessage ?? ``,
       });
 
       return {
