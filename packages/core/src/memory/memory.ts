@@ -157,19 +157,22 @@ export abstract class MastraMemory extends MastraBase {
   }
 
   protected parseMessages(messages: MessageType[]): CoreMessage[] {
-    return messages.map(msg => ({
-      ...msg,
-      content: (() => {
-        if (typeof msg.content === 'string' && (msg.content.startsWith('[') || msg.content.startsWith('{'))) {
-          try {
-            return JSON.parse(msg.content);
-          } catch (e) {
-            return msg.content;
-          }
+    return messages.map(msg => {
+      let content = msg.content;
+      if (typeof content === 'string' && (content.startsWith('[') || content.startsWith('{'))) {
+        try {
+          content = JSON.parse(content);
+        } catch (e) {
+          // Keep the original string if it's not valid JSON
         }
-        return typeof msg.content === 'number' ? String(msg.content) : msg.content;
-      })()
-    })) as CoreMessage[];
+      } else if (typeof content === 'number') {
+        content = String(content);
+      }
+      return {
+        ...msg,
+        content,
+      };
+    }) as CoreMessage[];
   }
 
   protected convertToUIMessages(messages: MessageType[]): AiMessageType[] {
