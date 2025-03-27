@@ -72,7 +72,7 @@ export interface GetWorkflowResponse {
 }
 
 export type WorkflowRunResult = {
-  activePaths: Record<string, { status: string; suspendPayload?: any }>;
+  activePaths: Record<string, { status: string; suspendPayload?: any; stepPath: string[] }>;
   results: CoreWorkflowRunResult<any, any, any>['results'];
   timestamp: number;
   runId: string;
