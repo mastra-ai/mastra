@@ -13,16 +13,15 @@ The Mastra class is the core entry point for your application. It manages agents
   content={[
     {
       name: "agents",
-      type: "Agent[]",
-      description: "Array of Agent instances to register",
+      type: "Record<string, Agent>",
+      description: "Record of Agent instances to register",
       isOptional: true,
-      defaultValue: "[]",
+      defaultValue: "{}",
     },
     {
-      name: "tools",
-      type: "Record<string, ToolApi>",
-      description:
-        "Custom tools to register. Structured as a key-value pair, with keys being the tool name and values being the tool function.",
+      name: "networks",
+      type: "Record<string, AgentNetwork>",
+      description: "Record of AgentNetwork instances to register"
       isOptional: true,
       defaultValue: "{}",
     },
@@ -54,6 +53,13 @@ The Mastra class is the core entry point for your application. It manages agents
       defaultValue: "{}",
     },
     {
+      name: "tts",
+      type: "Record<string, MastraTTS>",
+      description: "MastraTTS to register. Structured as a key-value pair, with keys being the tts name and values being the tts instance.",
+      isOptional: true,
+      defaultValue: "{}",
+    },
+    {
       name: "serverMiddleware",
       type: "Array<{ handler: (c: any, next: () => Promise<void>) => Promise<Response | void>; path?: string; }>",
       description: "Server middleware functions to be applied to API routes. Each middleware can specify a path pattern (defaults to '/api/*').",
@@ -77,15 +83,15 @@ export const mastra = new Mastra({});
 // Full initialization with all options
 export const mastra = new Mastra({
   agents: {},
-  workflows: [],
-  integrations: [],
+  networks: {},
+  storage: {},
+  vectors: {},
+  workflows: {},
+  tts: {},
   logger: createLogger({
     name: "My Project",
     level: "info",
   }),
-  storage: {},
-  tools: {},
-  vectors: {},
 });
 ```
 
