@@ -1,5 +1,12 @@
 # @mastra/core
 
+## 0.7.1-alpha.1
+
+### Patch Changes
+
+- fe56be0: exclude \_\_primitive, getMemory, hasOwnMemory from traces since they create noisy traces
+- fca3b21: fix server in mastra not to be mandatory
+
 ## 0.7.1-alpha.0
 
 ### Patch Changes
