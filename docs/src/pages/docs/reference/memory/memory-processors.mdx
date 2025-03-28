@@ -58,7 +58,7 @@ const memory = new Memory({
 
     // Or exclude only specific tools
     new ToolCallFilter({
-      exclude: ["audioPlayer", "videoPlayer"],
+      exclude: ["imageGenTool"],
     }),
   ],
 });
@@ -74,8 +74,8 @@ import { TokenLimiter, ToolCallFilter } from "@mastra/memory";
 // Multiple processors can be combined
 const memory = new Memory({
   processors: [
-    // First filter out audio player tool calls
-    new ToolCallFilter({ exclude: ["audioPlayer"] }),
+    // First filter out previous image gen tool calls
+    new ToolCallFilter({ exclude: ["imageGenTool"] }),
     // Then limit the total tokens
     new TokenLimiter(8000),
   ],
