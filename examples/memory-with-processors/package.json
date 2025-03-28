@@ -5,7 +5,8 @@
   "type": "module",
   "scripts": {
     "support": "tsx src/support-agent.ts",
-    "interview": "tsx src/forgetful-interviewer.ts"
+    "interview": "tsx src/forgetful-interviewer.ts",
+    "tokens": "tsx src/processor-example.ts"
   },
   "dependencies": {
     "@ai-sdk/openai": "^1.0.0",

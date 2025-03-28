@@ -11,7 +11,7 @@ This example demonstrates how to use and create memory processors in Mastra. Mem
 
 ### 1. Token Limiting with Support Agent
 
-The support agent demo (`npm run start`) showcases the `TokenLimiter` processor, which:
+The support agent demo (`pnpm run support`) showcases the `TokenLimiter` processor, which:
 
 - Limits conversation history to 2000 tokens
 - Automatically prioritizes keeping the most recent messages
@@ -19,11 +19,20 @@ The support agent demo (`npm run start`) showcases the `TokenLimiter` processor,
 
 ### 2. Content Filtering with Interview Agent
 
-The forgetful interview agent demo (`npm run chat`) showcases:
+The forgetful interview agent demo (`pnpm run interview`) showcases:
 
 - `ToolCallFilter`: Removes all tool calls from the conversation history
 - `ForgetfulProcessor`: Replaces messages containing specific keywords ("name", "work", etc) with a message telling the agent it forgot
 - Interactive chat where you can see how this content is "forgotten"
+
+### 3. Extreme Token Limiting with Large File Tool
+
+The token limiter stress test (`pnpm run tokens`) demonstrates:
+
+- How TokenLimiter handles extremely large responses (reading a massive pnpm-lock.yaml file)
+- Real-time token usage statistics
+- How older messages (including large tool responses) get pruned when limits are exceeded
+- Low token limit (1000) to clearly show the limiting behavior
 
 ## Installation
 
@@ -33,16 +42,22 @@ pnpm install
 
 ## Usage
 
-Run the token limiting demo:
+Run the support agent token limiting demo:
 
 ```bash
-pnpm run start
+pnpm run support
 ```
 
 Run the interactive content filtering demo:
 
 ```bash
-pnpm run chat
+pnpm run interview
+```
+
+Run the extreme token limiting stress test:
+
+```bash
+pnpm run tokens
 ```
 
 ## Creating Your Own Processors
