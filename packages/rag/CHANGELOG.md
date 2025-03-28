@@ -1,5 +1,18 @@
 # @mastra/rag
 
+## 0.1.15-alpha.0
+
+### Patch Changes
+
+- 7599d77: fix(deps): update ai sdk to ^4.2.2
+- Updated dependencies [107bcfe]
+- Updated dependencies [5b4e19f]
+- Updated dependencies [7599d77]
+- Updated dependencies [cafae83]
+- Updated dependencies [8076ecf]
+- Updated dependencies [304397c]
+  - @mastra/core@0.7.1-alpha.0
+
 ## 0.1.14
 
 ### Patch Changes
