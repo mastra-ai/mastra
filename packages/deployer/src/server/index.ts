@@ -6,7 +6,7 @@ import { serveStatic } from '@hono/node-server/serve-static';
 import { swaggerUI } from '@hono/swagger-ui';
 import type { Mastra } from '@mastra/core';
 import { Hono } from 'hono';
-import type { Context } from 'hono';
+import type { Context, MiddlewareHandler } from 'hono';
 
 import { bodyLimit } from 'hono/body-limit';
 import { cors } from 'hono/cors';
@@ -139,6 +139,50 @@ export async function createHonoServer(
     maxSize: 4.5 * 1024 * 1024, // 4.5 MB,
     onError: (c: Context) => c.json({ error: 'Request body too large' }, 413),
   };
+
+  const server = mastra.getServer();
+  const routes = server?.apiRoutes;
+
+  if (server?.middleware) {
+    const normalizedMiddlewares = Array.isArray(server.middleware) ? server.middleware : [server.middleware];
+    const middlewares = normalizedMiddlewares.map(middleware => {
+      if (typeof middleware === 'function') {
+        return {
+          path: '*',
+          handler: middleware,
+        };
+      }
+
+      return middleware;
+    });
+
+    for (const middleware of middlewares) {
+      app.use(middleware.path, middleware.handler);
+    }
+  }
+
+  if (routes) {
+    for (const route of routes) {
+      const middlewares: MiddlewareHandler[] = [];
+
+      if (route.middleware) {
+        middlewares.push(...(Array.isArray(route.middleware) ? route.middleware : [route.middleware]));
+      }
+      if (route.openapi) {
+        middlewares.push(describeRoute(route.openapi));
+      }
+      console.log({ path: route.path, middlewares });
+      if (route.method === 'GET') {
+        app.get(route.path, ...middlewares, route.handler);
+      } else if (route.method === 'POST') {
+        app.post(route.path, ...middlewares, route.handler);
+      } else if (route.method === 'PUT') {
+        app.put(route.path, ...middlewares, route.handler);
+      } else if (route.method === 'DELETE') {
+        app.delete(route.path, ...middlewares, route.handler);
+      }
+    }
+  }
 
   // API routes
   app.get(
