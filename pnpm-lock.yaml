@@ -2839,8 +2839,8 @@ importers:
         specifier: ^11.18.2
         version: 11.18.2(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
       lucide-react:
-        specifier: ^0.468.0
-        version: 0.468.0(react@18.3.1)
+        specifier: ^0.483.0
+        version: 0.483.0(react@18.3.1)
       next-themes:
         specifier: ^0.4.5
         version: 0.4.6(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
@@ -16495,11 +16495,6 @@ packages:
     peerDependencies:
       react: ^16.5.1 || ^17.0.0 || ^18.0.0 || ^19.0.0-rc
 
-  lucide-react@0.468.0:
-    resolution: {integrity: sha512-6koYRhnM2N0GGZIdXzSeiNwguv1gt/FAjZOiPl76roBi3xKEXa4WmfpxgQwTTL4KipXjefrnf3oV4IsYhi4JFA==}
-    peerDependencies:
-      react: ^16.5.1 || ^17.0.0 || ^18.0.0 || ^19.0.0-rc
-
   lucide-react@0.474.0:
     resolution: {integrity: sha512-CmghgHkh0OJNmxGKWc0qfPJCYHASPMVSyGY8fj3xgk4v84ItqDg64JNKFZn5hC6E0vHi6gxnbCgwhyVB09wQtA==}
     peerDependencies:
@@ -16512,6 +16507,11 @@ packages:
 
   lucide-react@0.477.0:
     resolution: {integrity: sha512-yCf7aYxerFZAbd8jHJxjwe1j7jEMPptjnaOqdYeirFnEy85cNR3/L+o0I875CYFYya+eEVzZSbNuRk8BZPDpVw==}
+    peerDependencies:
+      react: ^16.5.1 || ^17.0.0 || ^18.0.0 || ^19.0.0
+
+  lucide-react@0.483.0:
+    resolution: {integrity: sha512-WldsY17Qb/T3VZdMnVQ9C3DDIP7h1ViDTHVdVGnLZcvHNg30zH/MTQ04RTORjexoGmpsXroiQXZ4QyR0kBy0FA==}
     peerDependencies:
       react: ^16.5.1 || ^17.0.0 || ^18.0.0 || ^19.0.0
 
@@ -36942,10 +36942,6 @@ snapshots:
     dependencies:
       react: 19.0.0-rc-02c0e824-20241028
 
-  lucide-react@0.468.0(react@18.3.1):
-    dependencies:
-      react: 18.3.1
-
   lucide-react@0.474.0(react@19.0.0):
     dependencies:
       react: 19.0.0
@@ -36957,6 +36953,10 @@ snapshots:
   lucide-react@0.477.0(react@19.0.0):
     dependencies:
       react: 19.0.0
+
+  lucide-react@0.483.0(react@18.3.1):
+    dependencies:
+      react: 18.3.1
 
   luxon@3.5.0: {}
 
