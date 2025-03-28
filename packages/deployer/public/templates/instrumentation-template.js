@@ -54,19 +54,8 @@ async function getExporter(config) {
   } else if (config.export?.type === 'custom') {
     return config.export.exporter;
   } else {
-    const storage = new LibSQLStore({
-      config: {
-        url: 'file:.mastra/mastra.db',
-      },
-    });
-    await storage.init();
-
-    return new OTLPStorageExporter({
-      logger: createLogger({
-        name: 'telemetry',
-        level: 'silent',
-      }),
-      storage,
+    return new OTLPHttpExporter({
+      url: `http://localhost:${process.env.PORT ?? 4111}/api/telemetry`,
     });
   }
 }

@@ -43,7 +43,7 @@ import {
 } from './handlers/network.js';
 import { generateSystemPromptHandler } from './handlers/prompt.js';
 import { rootHandler } from './handlers/root.js';
-import { getTelemetryHandler } from './handlers/telemetry.js';
+import { getTelemetryHandler, storeTelemetryHandler } from './handlers/telemetry.js';
 import { executeAgentToolHandler, executeToolHandler, getToolByIdHandler, getToolsHandler } from './handlers/tools.js';
 import {
   upsertVectors,
@@ -1341,6 +1341,20 @@ export async function createHonoServer(
       },
     }),
     getTelemetryHandler,
+  );
+
+  app.post(
+    '/api/telemetry',
+    describeRoute({
+      description: 'Store telemetry',
+      tags: ['telemetry'],
+      responses: {
+        200: {
+          description: 'Traces stored',
+        },
+      },
+    }),
+    storeTelemetryHandler,
   );
 
   // Workflow routes
