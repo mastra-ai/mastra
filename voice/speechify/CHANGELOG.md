@@ -1,5 +1,13 @@
 # @mastra/voice-speechify
 
+## 0.1.10-alpha.1
+
+### Patch Changes
+
+- Updated dependencies [fe56be0]
+- Updated dependencies [fca3b21]
+  - @mastra/core@0.7.1-alpha.1
+
 ## 0.1.10-alpha.0
 
 ### Patch Changes

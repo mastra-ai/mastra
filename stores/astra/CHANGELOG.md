@@ -1,5 +1,14 @@
 # @mastra/astra
 
+## 0.2.7-alpha.1
+
+### Patch Changes
+
+- 866da3c: Update astra tests to check collection is empty
+- Updated dependencies [fe56be0]
+- Updated dependencies [fca3b21]
+  - @mastra/core@0.7.1-alpha.1
+
 ## 0.2.7-alpha.0
 
 ### Patch Changes
