@@ -1,6 +1,6 @@
 const meta = {
   Memory: "Memory Class",
-  "message-processors": "Message Processors",
+  "memory-processors": "Memory Processors",
   createThread: ".createThread()",
   query: ".query()",
   getThreadById: ".getThreadById()",
