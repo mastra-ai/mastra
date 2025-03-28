@@ -30,7 +30,7 @@ export interface Config<
   tts?: TTTS;
   telemetry?: OtelConfig;
   deployer?: MastraDeployer;
-  server: ServerConfig;
+  server?: ServerConfig;
 
   /**
    * Server middleware functions to be applied to API routes
