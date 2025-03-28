@@ -837,6 +837,127 @@ describe('Workflow', async () => {
       // @ts-ignore
       expect(results.increment.output).toEqual({ newValue: 10 });
     });
+
+    it('should run a while loop after a `.after` call', async () => {
+      const step1Action = vi.fn();
+      const step2Action = vi.fn();
+      const step3Action = vi.fn();
+      const step4Action = vi.fn();
+      const step5Action = vi.fn();
+
+      const step1 = new Step({
+        id: 'step1',
+        execute: step1Action,
+      });
+
+      const step2 = new Step({
+        id: 'step2',
+        execute: step2Action,
+      });
+
+      const step3 = new Step({
+        id: 'step3',
+        execute: step3Action,
+      });
+
+      const step4 = new Step({
+        id: 'step4',
+        execute: step4Action,
+      });
+
+      const step5 = new Step({
+        id: 'step5',
+        execute: step5Action,
+      });
+
+      const wf = new Workflow({
+        name: 'counter-workflow',
+        triggerSchema: z.object({
+          target: z.number(),
+          startValue: z.number(),
+        }),
+      });
+
+      wf.step(step1)
+        .then(step2)
+        .after(step2)
+        .while(async () => false, step3)
+        .then(step4)
+        .step(step5)
+        .commit();
+
+      const run = wf.createRun();
+      await run.start({ triggerData: { target: 10, startValue: 0 } });
+
+      expect(step5Action).toHaveBeenCalledTimes(1);
+      expect(step4Action).toHaveBeenCalledTimes(1);
+      expect(step3Action).toHaveBeenCalledTimes(0);
+      expect(step2Action).toHaveBeenCalledTimes(1);
+      expect(step1Action).toHaveBeenCalledTimes(1);
+    });
+
+    it('should run a `.step` call once after a while loop', async () => {
+      const step1Action = vi.fn();
+      const step2Action = vi.fn();
+      const step3Action = vi.fn().mockImplementation(async ({ context }) => {
+        count++;
+        return { count };
+      });
+      const step4Action = vi.fn();
+      const step5Action = vi.fn();
+
+      let count = 0;
+
+      const step1 = new Step({
+        id: 'step1',
+        execute: step1Action,
+      });
+
+      const step2 = new Step({
+        id: 'step2',
+        execute: step2Action,
+      });
+
+      const step3 = new Step({
+        id: 'step3',
+        execute: step3Action,
+      });
+
+      const step4 = new Step({
+        id: 'step4',
+        execute: step4Action,
+      });
+
+      const step5 = new Step({
+        id: 'step5',
+        execute: step5Action,
+      });
+
+      const wf = new Workflow({
+        name: 'counter-workflow',
+        triggerSchema: z.object({
+          target: z.number(),
+          startValue: z.number(),
+        }),
+      });
+
+      wf.step(step1)
+        .then(step2)
+        .after(step2)
+        .while(async () => count < 10, step3)
+        .then(step4)
+        .step(step5)
+        .commit();
+
+      const run = wf.createRun();
+      await run.start({ triggerData: { target: 10, startValue: 0 } });
+
+      expect(step5Action).toHaveBeenCalledTimes(1);
+      expect(step4Action).toHaveBeenCalledTimes(1);
+      expect(step3Action).toHaveBeenCalledTimes(10);
+      expect(step2Action).toHaveBeenCalledTimes(1);
+      expect(step1Action).toHaveBeenCalledTimes(1);
+    });
   });
 
   describe('if-else branching', () => {
@@ -3176,8 +3297,8 @@ describe('Workflow', async () => {
           .step(startStep)
           .if(
             async () => true,
-            new Workflow({ name: 'nested-workflow-c' }).step(otherStep),
-            new Workflow({ name: 'nested-workflow-d' }).step(otherStep),
+            new Workflow({ name: 'nested-workflow-c' }).step(otherStep).commit(),
+            new Workflow({ name: 'nested-workflow-d' }).step(otherStep).commit(),
           )
           .then(finalStep)
           .commit();

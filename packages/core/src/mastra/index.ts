@@ -4,6 +4,7 @@ import { LogLevel, createLogger, noopLogger } from '../logger';
 import type { Logger } from '../logger';
 import type { MastraMemory } from '../memory/memory';
 import type { AgentNetwork } from '../network';
+import type { ServerConfig } from '../server/types';
 import type { MastraStorage } from '../storage';
 import { DefaultProxyStorage } from '../storage/default-proxy-storage';
 import { InstrumentClass, Telemetry } from '../telemetry';
@@ -29,10 +30,12 @@ export interface Config<
   tts?: TTTS;
   telemetry?: OtelConfig;
   deployer?: MastraDeployer;
+  server: ServerConfig;
 
   /**
    * Server middleware functions to be applied to API routes
    * Each middleware can specify a path pattern (defaults to '/api/*')
+   * @deprecated use server.middleware instead
    */
   serverMiddleware?: Array<{
     handler: (c: any, next: () => Promise<void>) => Promise<Response | void>;
@@ -69,6 +72,7 @@ export class Mastra<
   #storage?: MastraStorage;
   #memory?: MastraMemory;
   #networks?: TNetworks;
+  #server?: ServerConfig;
 
   /**
    * @deprecated use getTelemetry() instead
@@ -266,6 +270,11 @@ This is a warning for now, but will throw an error in the future
         this.#workflows[key] = workflow;
       });
     }
+
+    if (config?.server) {
+      this.#server = config.server;
+    }
+
     this.setLogger({ logger });
   }
 
@@ -448,6 +457,10 @@ This is a warning for now, but will throw an error in the future
 
   public getNetworks() {
     return Object.values(this.#networks || {});
+  }
+
+  public getServer() {
+    return this.#server;
   }
 
   /**
