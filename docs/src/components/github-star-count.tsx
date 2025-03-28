@@ -1,3 +1,4 @@
+"use client";
 import React from "react";
 const localStorageKey = `MASTRA_AI_STAR_COUNT`;
 

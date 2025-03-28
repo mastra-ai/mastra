@@ -1,0 +1,202 @@
+@import "tailwindcss";
+
+:root {
+  --nextra-navbar-height: 60px;
+}
+
+body:is(html[class~="dark"] *),
+html:is(html[class~="dark"] *) {
+  background: #0a0a0a !important;
+}
+
+.nextra-nav-container:is(html[class~="dark"] *) {
+  background: #0a0a0a !important;
+}
+
+.dark\:_bg-black:is(html[class~="dark"] *) {
+  background-color: #141415 !important;
+}
+
+nav {
+  padding: 0 !important;
+}
+
+div:has(aside.nextra-sidebar-container) {
+  margin: 0 auto;
+}
+
+/*.nextra-nav-container + div {*/
+/*  max-width: 80rem;*/
+/*}*/
+
+div._transform-gpu > div > ul {
+  gap: 0.15rem;
+}
+
+ul li a {
+  padding-block: 0.175rem !important;
+}
+
+ul._inline-block {
+  padding-inline-end: 4rem;
+}
+
+aside.nextra-sidebar-container {
+  padding-inline-start: 1rem;
+}
+
+aside.nextra-sidebar-container,
+nav.nextra-toc {
+  width: 18rem;
+}
+
+article:has(main) {
+  width: auto !important;
+  justify-content: start !important;
+}
+
+main._max-w-6xl {
+  max-width: 70ch;
+  margin-inline-start: 0;
+}
+
+a {
+  background: transparent !important;
+}
+
+button._transition:not([title="Copy code"]):is(html[class~="dark"] *),
+li:is(html[class~="dark"] *) {
+  font-weight: 400;
+  color: #fff !important;
+}
+
+button._transition:not([title="Copy code"]),
+a[href="/docs/guide"],
+a[href="/docs/guide/08-running-evals"] {
+  padding-inline: 0.375rem !important;
+  color: #000 !important;
+}
+
+a[href="/docs/guide"]:is(html[class~="dark"] *),
+a[href="/docs/guide/08-running-evals"]:is(html[class~="dark"] *) {
+  color: #fff !important;
+  font-weight: 400;
+  padding-inline: 0.375rem !important;
+}
+
+div._overflow-y-auto {
+  padding-inline-start: 0;
+}
+
+ul._flex {
+  padding-inline-start: 0.375rem !important;
+  margin-inline-start: 0 !important;
+  padding-block-start: 0 !important;
+  &::before {
+    content: "";
+    background: transparent !important;
+  }
+}
+
+ul._flex > li a {
+  padding-inline-start: 0.375rem !important;
+}
+
+button._transition
+  + div._transform-gpu
+  ul
+  button:not(:has(.active)):is(html[class~="dark"] *) {
+  color: #a3a3a3 !important;
+}
+
+button._flex._transition:has(+ div._transform-gpu li.active):is(
+    html[class~="dark"] *
+  ) {
+  color: white !important;
+}
+
+._font-semibold {
+  font-weight: 500 !important;
+}
+
+h2 {
+  border-bottom: none !important;
+}
+
+p[class*="not(:first-child)"] {
+  margin-top: 1rem !important; /* mt-4 equivalent */
+}
+
+ul[class*="not(:first-child)"] {
+  margin-top: 1rem !important; /* mt-4 equivalent */
+}
+
+.nextra-callout p {
+  margin-top: 0 !important;
+}
+
+tr {
+  background: none !important;
+  border: none;
+}
+
+th {
+  border: none !important;
+  border-bottom: 0.5px solid hsl(0, 0%, 20%) !important;
+  &:is(:not(html[class~="dark"] *)) {
+    border-bottom: 0.5px solid hsl(0, 0%, 80%) !important;
+  }
+}
+
+td {
+  border: none !important;
+  border-bottom: 0.5px solid hsl(0, 0%, 20%) !important;
+
+  &:is(:not(html[class~="dark"] *)) {
+    border-bottom: 0.5px solid hsl(0, 0%, 80%) !important;
+  }
+}
+
+button[title="Hide sidebar"] {
+  display: none;
+}
+
+pre > * {
+  font-size: 13px !important;
+}
+
+div.nextra-scrollbar {
+  gap: 4px;
+}
+nav a {
+  padding-block: 8px;
+  padding-inline: 16px;
+  font-size: 14px;
+}
+nav a[aria-current="true"] {
+  font-weight: 400;
+  border-radius: 0.375rem;
+}
+
+/* button[title="Change theme"],
+input[type="search"] {
+  border-radius: 9999px !important;
+} */
+
+ul[role="listbox"] {
+  border-radius: 0.375rem !important;
+  box-shadow: none;
+}
+
+.gh-link {
+  background: linear-gradient(
+    90deg,
+    rgba(255, 255, 255, 0.1) 4.66%,
+    rgba(255, 255, 255, 0.03) 97.46%
+  ) !important;
+  margin-right: -13px !important;
+}
+
+.nextra-sidebar-footer:is(html[class~="dark"] *) {
+  background: #0a0a0a !important;
+}
