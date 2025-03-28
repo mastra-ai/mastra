@@ -83,10 +83,10 @@ You can monitor workflows for errors using the `watch` method:
 ```typescript
 const { start, watch } = workflow.createRun();
 
-watch(async ({ context, activePaths }) => {
+watch(async ({ results }) => {
   // Check for any failed steps
-  const failedSteps = Object.entries(context.steps)
-    .filter(([_, step]) => step.status === 'failed')
+  const failedSteps = Object.entries(results)
+    .filter(([_, step]) => step.status === "failed")
     .map(([stepId]) => stepId);
 
   if (failedSteps.length > 0) {

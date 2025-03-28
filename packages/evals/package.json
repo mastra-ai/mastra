@@ -1,6 +1,6 @@
 {
   "name": "@mastra/evals",
-  "version": "0.1.14-alpha.1",
+  "version": "0.1.14",
   "description": "",
   "type": "module",
   "files": [
@@ -82,7 +82,7 @@
     "@types/fs-extra": "^11.0.4",
     "@types/sentiment": "^5.0.4",
     "@types/string-similarity": "^4.0.2",
-    "ai": "^4.1.54",
+    "ai": "^4.2.2",
     "dotenv": "^16.4.7",
     "eslint": "^9.23.0",
     "tsup": "^8.4.0",

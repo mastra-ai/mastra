@@ -7,6 +7,7 @@ import type {
   StepGraph,
   StorageThreadType,
   BaseLogMessage,
+  WorkflowRunResult as CoreWorkflowRunResult,
 } from '@mastra/core';
 
 import type { AgentGenerateOptions, AgentStreamOptions } from '@mastra/core/agent';
@@ -49,7 +50,7 @@ export type GenerateParams<T extends JSONSchema7 | ZodSchema | undefined = undef
 
 export type StreamParams<T extends JSONSchema7 | ZodSchema | undefined = undefined> = {
   messages: string | string[] | CoreMessage[] | AiMessageType[];
-} & Partial<AgentStreamOptions<T>>;
+} & Omit<AgentStreamOptions<T>, 'onFinish' | 'onStepFinish' | 'telemetry'>;
 
 export interface GetEvalsByAgentIdResponse extends GetAgentResponse {
   evals: any[];
@@ -71,35 +72,11 @@ export interface GetWorkflowResponse {
 }
 
 export type WorkflowRunResult = {
-  activePaths: Array<{
-    stepId: string;
-    stepPath: string[];
-    status: 'completed' | 'suspended' | 'pending';
-  }>;
-  context: {
-    steps: Record<
-      string,
-      | {
-          status: 'success';
-          output: any;
-          [key: string]: any;
-        }
-      | {
-          status: 'pending';
-          [key: string]: any;
-        }
-      | {
-          status: 'suspended';
-          suspendPayload: any;
-          [key: string]: any;
-        }
-    >;
-  };
+  activePaths: Record<string, { status: string; suspendPayload?: any; stepPath: string[] }>;
+  results: CoreWorkflowRunResult<any, any, any>['results'];
   timestamp: number;
-  suspendedSteps: Record<string, any>;
   runId: string;
 };
-
 export interface UpsertVectorParams {
   indexName: string;
   vectors: number[][];

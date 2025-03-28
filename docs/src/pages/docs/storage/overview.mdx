@@ -3,6 +3,8 @@ title: Storage in Mastra | Mastra Docs
 description: Overview of Mastra's storage system and data persistence capabilities.
 ---
 
+import { Tabs } from "nextra/components";
+import { useTheme } from 'nextra-theme-docs'
 import { PropertiesTable } from '@/components/properties-table'
 import { SchemaTable } from '@/components/schema-table'
 
@@ -13,29 +15,55 @@ MastraStorage provides a unified interface for managing
 - Workflow Tracking, allowing users to suspend and resume workflow runs.
 - Memory, threads and messages per resourceId in your application
 - Traces - OpenTelemetry traces from all components of Mastra
-- Evaluation Datasets - as evaluations are run, the scores and reasons are stored in datasets.
+- Eval Datasets - as evals are run, the scores and reasons are stored in datasets.
 
-<img
-  src="/docs/mastra-storage.png"
-  alt="Diagram showing storage in Mastra"
-  width={700}
-/>
+<div>
+  {useTheme().resolvedTheme === 'dark' ? (
+    <img
+      src="/docs/mastra-storage-overview-dark.png"
+      alt="Diagram showing storage in Mastra"
+      width={700}
+    />
+  ) : (
+    <img
+      src="/docs/mastra-storage-overview-light.png"
+      alt="Diagram showing storage in Mastra"
+      width={700}
+    />
+  )}
+</div>
 
 Mastra provides different storage providers, but you can treat them as interchangeable. Eg, you could use libsql in development but postgres in production, and your code will work the same both ways.
+
+## Configuration
+
+Mastra can be configured with a default storage option:
+
+```typescript copy
+import { Mastra } from '@mastra/core/mastra';
+import { DefaultStorage } from '@mastra/core/storage/libsql';
+
+const mastra = new Mastra({
+  storage: new DefaultStorage({
+    config: {
+      url: "file:.mastra/mastra.db",
+    }
+  }),
+});
+```
+
 ## Data Schema
 
-### Memory
-
-**Messages**
-
+<Tabs items={['Messages', 'Threads', 'Workflows', 'Eval Datasets', 'Traces']}>
+  <Tabs.Tab>
 Stores conversation messages and their metadata. Each message belongs to a thread and contains the actual content along with metadata about the sender role and message type.
 
 <SchemaTable
   columns={[
     {
       name: "id",
-      type: "text",
-      description: "Unique identifier for the message",
+      type: "uuidv4",
+      description: "Unique identifier for the message (format: `xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx`)",
       constraints: [
         { type: "primaryKey" },
         { type: "nullable", value: false }
@@ -43,8 +71,8 @@ Stores conversation messages and their metadata. Each message belongs to a threa
     },
     {
       name: "thread_id",
-      type: "text",
-      description: "Reference to the parent thread",
+      type: "uuidv4",
+      description: "Parent thread reference",
       constraints: [
         { type: "foreignKey", value: "threads.id" },
         { type: "nullable", value: false }
@@ -53,40 +81,38 @@ Stores conversation messages and their metadata. Each message belongs to a threa
     {
       name: "content",
       type: "text",
-      description: "The actual message content",
       constraints: [{ type: "nullable", value: false }]
     },
     {
       name: "role",
       type: "text",
-      description: "Message sender role (user/assistant/system)",
+      description: "Enum of `system | user | assistant | tool`",
       constraints: [{ type: "nullable", value: false }]
     },
     {
       name: "type",
       type: "text",
-      description: "Message type identifier",
+      description: "Enum of `text | tool-call | tool-result`",
       constraints: [{ type: "nullable", value: false }]
     },
     {
       name: "createdAt",
       type: "timestamp",
-      description: "When the message was created",
+      description: "Used for thread message ordering",
       constraints: [{ type: "nullable", value: false }]
     }
   ]}
 />
-
-**Threads**
-
+  </Tabs.Tab>
+  <Tabs.Tab>
 Groups related messages together and associates them with a resource. Contains metadata about the conversation.
 
 <SchemaTable
   columns={[
     {
       name: "id",
-      type: "text",
-      description: "Unique identifier for the thread",
+      type: "uuidv4",
+      description: "Unique identifier for the thread (format: `xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx`)",
       constraints: [
         { type: "primaryKey" },
         { type: "nullable", value: false }
@@ -95,7 +121,7 @@ Groups related messages together and associates them with a resource. Contains m
     {
       name: "resourceId",
       type: "text",
-      description: "Identifier for the associated resource",
+      description: "Primary identifier of the external resource this thread is associated with. Used to group and retrieve related threads.",
       constraints: [{ type: "nullable", value: false }]
     },
     {
@@ -107,26 +133,28 @@ Groups related messages together and associates them with a resource. Contains m
     {
       name: "metadata",
       type: "text",
-      description: "Additional custom metadata for the thread",
+      description: "Custom thread metadata as stringified JSON.",
+      example: {
+        category: "support",
+        priority: 1
+      }
     },
     {
       name: "createdAt",
       type: "timestamp",
-      description: "When the thread was created",
       constraints: [{ type: "nullable", value: false }]
     },
     {
       name: "updatedAt",
       type: "timestamp",
-      description: "When the thread was last modified",
+      description: "Used for thread ordering history",
       constraints: [{ type: "nullable", value: false }]
     }
   ]}
 />
-
-## Workflows
-
-Preserves workflow execution states and enables resuming workflows:
+  </Tabs.Tab>
+  <Tabs.Tab>
+When `suspend` is called on a workflow, its state is saved in the following format. When `resume` is called, that state is rehydrated.
 
 <SchemaTable
   columns={[
@@ -134,33 +162,47 @@ Preserves workflow execution states and enables resuming workflows:
       name: "workflow_name",
       type: "text",
       description: "Name of the workflow",
+      constraints: [{ type: "nullable", value: false }]
     },
     {
       name: "run_id",
-      type: "text",
-      description: "Unique identifier for this workflow run",
+      type: "uuidv4",
+      description: "Unique identifier for the workflow execution. Used to track state across suspend/resume cycles (format: `xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx`)",
+      constraints: [{ type: "nullable", value: false }]
     },
     {
       name: "snapshot",
       type: "text",
-      description: "Serialized workflow state data",
+      description: "Serialized workflow state as JSON.",
+      example: {
+        value: { currentState: 'running' },
+        context: {
+          stepResults: {},
+          attempts: {},
+          triggerData: {}
+        },
+        activePaths: [],
+        runId: '550e8400-e29b-41d4-a716-446655440000',
+        timestamp: 1648176000000
+      },
+      constraints: [{ type: "nullable", value: false }]
     },
     {
       name: "createdAt",
       type: "timestamp",
-      description: "When the workflow state was first saved",
+      constraints: [{ type: "nullable", value: false }]
     },
     {
       name: "updatedAt",
       type: "timestamp",
-      description: "When the workflow state was last modified",
+      description: "Last modification time, used to track state changes during workflow execution",
+      constraints: [{ type: "nullable", value: false }]
     }
   ]}
 />
-
-### Evaluation Datasets
-
-Stores evaluation results from running metrics against agent outputs:
+  </Tabs.Tab>
+  <Tabs.Tab>
+Stores eval results from running metrics against agent outputs.
 
 <SchemaTable
   columns={[
@@ -168,65 +210,79 @@ Stores evaluation results from running metrics against agent outputs:
       name: "input",
       type: "text",
       description: "Input provided to the agent",
+      constraints: [{ type: "nullable", value: false }]
     },
     {
       name: "output",
       type: "text",
       description: "Output generated by the agent",
+      constraints: [{ type: "nullable", value: false }]
     },
     {
       name: "result",
       type: "jsonb",
-      description: "Metric evaluation result data (score and details)",
+      description: "Eval result data that includes score and details.",
+      example: {
+        score: 0.95,
+        details: {
+          reason: "Response accurately reflects source material",
+          citations: ["page 1", "page 3"]
+        }
+      },
+      constraints: [{ type: "nullable", value: false }]
     },
     {
       name: "agent_name",
       type: "text",
-      description: "Name of the evaluated agent",
+      constraints: [{ type: "nullable", value: false }]
     },
     {
       name: "metric_name",
       type: "text",
-      description: "Name of the evaluation metric",
+      description: "e.g Faithfulness, Hallucination, etc.",
+      constraints: [{ type: "nullable", value: false }]
     },
     {
       name: "instructions",
       type: "text",
-      description: "Agent instructions used during evaluation",
+      description: "System prompt or instructions for the agent",
+      constraints: [{ type: "nullable", value: false }]
     },
     {
       name: "test_info",
       type: "jsonb",
       description: "Additional test metadata and configuration",
+      constraints: [{ type: "nullable", value: false }]
     },
     {
       name: "global_run_id",
-      type: "text",
-      description: "Identifier for the global evaluation run",
+      type: "uuidv4",
+      description: "Groups related evaluation runs (e.g. all unit tests in a CI run)",
+      constraints: [{ type: "nullable", value: false }]
     },
     {
       name: "run_id",
-      type: "text",
-      description: "Identifier for this specific evaluation",
+      type: "uuidv4",
+      description: "Unique identifier for the run being evaluated (format: `xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx`)",
+      constraints: [{ type: "nullable", value: false }]
     },
     {
       name: "created_at",
       type: "timestamp",
-      description: "When the evaluation was performed",
+      constraints: [{ type: "nullable", value: false }]
     }
   ]}
 />
-
-### Traces
-
-Captures OpenTelemetry traces for monitoring and debugging:
+  </Tabs.Tab>
+  <Tabs.Tab>
+Captures OpenTelemetry traces for monitoring and debugging.
 
 <SchemaTable
   columns={[
     {
       name: "id",
       type: "text",
-      description: "Primary key - Unique identifier for the trace",
+      description: "Unique trace identifier",
       constraints: [
         { type: "nullable", value: false },
         { type: "primaryKey" }
@@ -235,41 +291,45 @@ Captures OpenTelemetry traces for monitoring and debugging:
     {
       name: "parentSpanId",
       type: "text",
-      description: "ID of the parent span if this is a child span",
+      description: "ID of the parent span. Null if span is top level",
     },
     {
       name: "name",
       type: "text",
-      description: "Name of the traced operation",
-      constraints: [{ type: "nullable", value: false }]
+      description: "Hierarchical operation name (e.g. `workflow.myWorkflow.execute`, `http.request`, `database.query`)",
+      constraints: [{ type: "nullable", value: false }],
     },
     {
       name: "traceId",
       type: "text",
-      description: "ID of the full trace this span belongs to",
+      description: "Root trace identifier that groups related spans",
       constraints: [{ type: "nullable", value: false }]
     },
     {
       name: "scope",
       type: "text",
-      description: "Scope of the traced operation",
+      description: "Library/package/service that created the span (e.g. `@mastra/core`, `express`, `pg`)",
       constraints: [{ type: "nullable", value: false }]
     },
     {
       name: "kind",
       type: "integer",
-      description: "Type of span (e.g., client, server)",
+      description: "`INTERNAL` (0, within process), `CLIENT` (1, outgoing calls), `SERVER` (2, incoming calls), `PRODUCER` (3, async job creation), `CONSUMER` (4, async job processing)",
       constraints: [{ type: "nullable", value: false }]
     },
     {
       name: "attributes",
       type: "jsonb",
-      description: "Key-value pairs with span metadata",
+      description: "User defined key-value pairs that contain span metadata",
     },
     {
       name: "status",
       type: "jsonb",
-      description: "Status information about the span",
+      description: "JSON object with `code` (UNSET=0, ERROR=1, OK=2) and optional `message`",
+      example: {
+        code: 1,
+        message: "HTTP request failed with status 500"
+      }
     },
     {
       name: "events",
@@ -284,48 +344,37 @@ Captures OpenTelemetry traces for monitoring and debugging:
     {
       name: "other",
       type: "text",
-      description: "Additional span data",
+      description: "Additional OpenTelemetry span fields as stringified JSON",
+      example: {
+        droppedAttributesCount: 2,
+        droppedEventsCount: 1,
+        instrumentationLibrary: "@opentelemetry/instrumentation-http"
+      }
     },
     {
       name: "startTime",
       type: "bigint",
-      description: "When the span started (nanoseconds)",
+      description: "Nanoseconds since Unix epoch when span started",
       constraints: [{ type: "nullable", value: false }]
     },
     {
       name: "endTime",
       type: "bigint",
-      description: "When the span ended (nanoseconds)",
+      description: "Nanoseconds since Unix epoch when span ended",
       constraints: [{ type: "nullable", value: false }]
     },
     {
       name: "createdAt",
       type: "timestamp",
-      description: "When this trace record was created",
       constraints: [{ type: "nullable", value: false }]
     }
   ]}
 />
+  </Tabs.Tab>
+</Tabs>
 
-## Configuration
-
-Mastra can be configured with a default storage option:
-
-```typescript
-import { Mastra } from '@mastra/core/mastra';
-import { DefaultStorage } from '@mastra/core/storage/libsql';
-
-const mastra = new Mastra({
-  storage: new DefaultStorage({
-    config: {
-      url: "file:storage.db",
-    }
-  }),
-});
-```
-
-## Other Storage Providers
-If you want to use other storage, check out the following providers:
-- [LibSQL Storage](../reference/storage/libsql.mdx)
-- [PostgreSQL Storage](../reference/storage/postgresql.mdx)
-- [Upstash Storage](../reference/storage/upstash.mdx)
+## Storage Providers
+Mastra supports the following providers:
+- For local development, check out [LibSQL Storage](../reference/storage/libsql.mdx)
+- For production, check out [PostgreSQL Storage](../reference/storage/postgresql.mdx)
+- For serverless deployments, check out [Upstash Storage](../reference/storage/upstash.mdx)

@@ -6,8 +6,8 @@ on:
     paths:
       - "packages/memory/**"
       - "packages/memory/*/package.json"
-      - "storage/**"
-      - "storage/*/package.json"
+      - "stores/**"
+      - "stores/*/package.json"
       - ".github/workflows/test-memory.yml"
 
 jobs:
@@ -55,14 +55,11 @@ jobs:
       - name: Build core
         run: pnpm build:core
 
-      - name: Build storage packages
-        run: pnpm --filter "@mastra/store-*" build
-
-      - name: Build vector packages
-        run: pnpm --filter "@mastra/vector-*" build
-
       - name: Build vector+store packages
         run: pnpm build:combined-stores
+
+      - name: Build Mastra CLI (used in int tests)
+        run: pnpm build:cli
 
       - name: Build memory
         run: pnpm build:memory

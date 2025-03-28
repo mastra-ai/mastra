@@ -45,7 +45,14 @@ export class Workflow<
   #mastra?: Mastra;
   #runs: Map<string, WorkflowInstance<TSteps, TTriggerSchema>> = new Map();
   #isNested: boolean = false;
-  #onStepTransition: Set<(state: WorkflowRunState) => void | Promise<void>> = new Set();
+  #onStepTransition: Set<
+    (
+      state: Pick<
+        WorkflowRunResult<TTriggerSchema, TSteps, TResultSchema>,
+        'results' | 'activePaths' | 'runId' | 'timestamp'
+      >,
+    ) => void | Promise<void>
+  > = new Set();
   // registers stepIds on `after` calls
   #afterStepStack: string[] = [];
   #lastStepStack: string[] = [];
@@ -652,14 +659,16 @@ export class Workflow<
     this.after(lastStep);
 
     if (ifStep) {
-      const _ifStep = isWorkflow(ifStep) ? workflowToStep(ifStep, { mastra: this.#mastra }) : ifStep;
+      const _ifStep = isWorkflow(ifStep) ? workflowToStep(ifStep, { mastra: this.#mastra }) : (ifStep as TStep);
 
       this.step(_ifStep, {
         when: condition,
       });
 
       if (elseStep) {
-        const _elseStep = isWorkflow(elseStep) ? workflowToStep(elseStep, { mastra: this.#mastra }) : elseStep;
+        const _elseStep = isWorkflow(elseStep)
+          ? workflowToStep(elseStep, { mastra: this.#mastra })
+          : (elseStep as TStep);
         this.step(_elseStep, {
           when:
             typeof condition === 'function'
@@ -1062,7 +1071,14 @@ export class Workflow<
     return run.resume({ stepId, context: resumeContext });
   }
 
-  watch(onTransition: (state: WorkflowRunState) => void): () => void {
+  watch(
+    onTransition: (
+      state: Pick<
+        WorkflowRunResult<TTriggerSchema, TSteps, TResultSchema>,
+        'results' | 'activePaths' | 'runId' | 'timestamp'
+      >,
+    ) => void,
+  ): () => void {
     this.logger.warn(`Please use 'watch' on the 'createRun' call instead, watch is deprecated`);
     this.#onStepTransition.add(onTransition);
 

@@ -38,7 +38,6 @@ const packages_llm_text = `
   - ALL integration packages are under integrations/
   @mastra/composio -> integrations/composio
   @mastra/github -> integrations/github
-  @mastra/stabilityai -> integrations/stabilityai
   @mastra/firecrawl -> integrations/firecrawl
   
   ##VALIDATION:
