@@ -139,5 +139,14 @@
     "@mastra/voice-sarvam": "0.1.4",
     "@mastra/voice-speechify": "0.1.9"
   },
-  "changesets": []
+  "changesets": [
+    "blue-candles-brush",
+    "chatty-teeth-joke",
+    "cool-papers-check",
+    "dirty-worms-relate",
+    "swift-worms-give",
+    "three-crews-travel",
+    "tiny-eels-rule",
+    "yellow-mugs-lose"
+  ]
 }

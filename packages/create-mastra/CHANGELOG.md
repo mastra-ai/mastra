@@ -1,5 +1,11 @@
 # create-mastra
 
+## 0.2.4-alpha.0
+
+### Patch Changes
+
+- 8076ecf: Unify workflow watch/start response
+
 ## 0.2.3
 
 ### Patch Changes

@@ -1,5 +1,20 @@
 # mastra
 
+## 0.4.5-alpha.0
+
+### Patch Changes
+
+- 8076ecf: Unify workflow watch/start response
+- Updated dependencies [05d58cc]
+- Updated dependencies [107bcfe]
+- Updated dependencies [5b4e19f]
+- Updated dependencies [7599d77]
+- Updated dependencies [cafae83]
+- Updated dependencies [8076ecf]
+- Updated dependencies [304397c]
+  - @mastra/deployer@0.2.6-alpha.0
+  - @mastra/core@0.7.1-alpha.0
+
 ## 0.4.4
 
 ### Patch Changes

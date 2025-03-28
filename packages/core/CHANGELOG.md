@@ -1,5 +1,16 @@
 # @mastra/core
 
+## 0.7.1-alpha.0
+
+### Patch Changes
+
+- 107bcfe: Fixed JSON parsing in memory component to prevent crashes when encountering strings that start with '[' or '{' but are not valid JSON
+- 5b4e19f: fix hanging and excessive workflow execution
+- 7599d77: fix(deps): update ai sdk to ^4.2.2
+- cafae83: Changed error messages for vector mismatch with index
+- 8076ecf: Unify workflow watch/start response
+- 304397c: Add support for custom api routes in mastra
+
 ## 0.7.0
 
 ### Minor Changes
