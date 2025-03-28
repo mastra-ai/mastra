@@ -4,9 +4,10 @@ description: Overview of Mastra's storage system and data persistence capabiliti
 ---
 
 import { Tabs } from "nextra/components";
-import { useTheme } from 'nextra-theme-docs'
-import { PropertiesTable } from '@/components/properties-table'
-import { SchemaTable } from '@/components/schema-table'
+
+import { PropertiesTable } from "@/components/properties-table";
+import { SchemaTable } from "@/components/schema-table";
+import { StorageOverviewImage } from "@/components/storage-overview-image";
 
 # MastraStorage
 
@@ -17,23 +18,10 @@ MastraStorage provides a unified interface for managing
 - Traces - OpenTelemetry traces from all components of Mastra
 - Eval Datasets - as evals are run, the scores and reasons are stored in datasets.
 
-<div>
-  {useTheme().resolvedTheme === 'dark' ? (
-    <img
-      src="/docs/mastra-storage-overview-dark.png"
-      alt="Diagram showing storage in Mastra"
-      width={700}
-    />
-  ) : (
-    <img
-      src="/docs/mastra-storage-overview-light.png"
-      alt="Diagram showing storage in Mastra"
-      width={700}
-    />
-  )}
-</div>
+<StorageOverviewImage />
 
 Mastra provides different storage providers, but you can treat them as interchangeable. Eg, you could use libsql in development but postgres in production, and your code will work the same both ways.
+
 ## Data Schema
 
 <Tabs items={['Messages', 'Threads', 'Workflows', 'Eval Datasets', 'Traces']}>
@@ -330,20 +318,22 @@ Captures OpenTelemetry traces for monitoring and debugging.
 Mastra can be configured with a default storage option:
 
 ```typescript
-import { Mastra } from '@mastra/core/mastra';
-import { DefaultStorage } from '@mastra/core/storage/libsql';
+import { Mastra } from "@mastra/core/mastra";
+import { DefaultStorage } from "@mastra/core/storage/libsql";
 
 const mastra = new Mastra({
   storage: new DefaultStorage({
     config: {
       url: "file:storage.db",
-    }
+    },
   }),
 });
 ```
 
 ## Other Storage Providers
+
 If you want to use other storage, check out the following providers:
+
 - [LibSQL Storage](../reference/storage/libsql.mdx)
 - [PostgreSQL Storage](../reference/storage/postgresql.mdx)
 - [Upstash Storage](../reference/storage/upstash.mdx)
