@@ -227,8 +227,7 @@ export async function watchWorkflowHandler({
       start(controller) {
         unwatch = run.watch(({ activePaths, runId, timestamp, results }) => {
           const activePathsObj = Object.fromEntries(activePaths);
-          console.log('writing to stream');
-          controller.enqueue(JSON.stringify({ activePaths: activePathsObj, runId, timestamp, results }) + '\x1E');
+          controller.enqueue(JSON.stringify({ activePaths: activePathsObj, runId, timestamp, results }));
 
           if (asyncRef) {
             clearImmediate(asyncRef);
@@ -238,7 +237,6 @@ export async function watchWorkflowHandler({
           // a run is finished if we cannot retrieve it anymore
           asyncRef = setImmediate(() => {
             if (!workflow.getRun(runId)) {
-              console.log('closing stream');
               controller.close();
             }
           });

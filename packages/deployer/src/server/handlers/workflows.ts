@@ -114,7 +114,7 @@ export function watchWorkflowHandler(c: Context) {
       throw new HTTPException(400, { message: 'runId required to watch workflow' });
     }
 
-    return streamText(
+    return stream(
       c,
       async stream => {
         try {
@@ -123,30 +123,15 @@ export function watchWorkflowHandler(c: Context) {
             workflowId,
             runId,
           });
-          // stream.onAbort(() => {
-          //   if (!result.locked) {
-          //     return result.cancel();
-          //   }
-          // });
+          stream.onAbort(() => {
+            if (!result.locked) {
+              return result.cancel();
+            }
+          });
 
-          await stream.write('hello');
-          // console.log('writing');
           for await (const chunk of result) {
-            console.log('writing chunk to response', chunk);
-            await stream.write(chunk.toString());
-            // await stream.write(chunk);
+            await stream.write(chunk.toString() + '\x1E');
           }
-          // console.log('done');
-
-          // await stream.write(`hello`);
-          // await stream.pipe(result);
-
-          // return stream.pipe(result);
-
-          // for await (const chunk of result) {
-          //   await stream.write(chunk);
-          // }
-          // await stream.close();
         } catch (err) {
           console.log(err);
         }
