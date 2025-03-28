@@ -23,6 +23,41 @@ async function waitForCondition(
   return false;
 }
 
+async function createIndexAndWait(
+  vectorDB: AstraVector,
+  indexName: string,
+  dimension: number,
+  metric: 'cosine' | 'euclidean' | 'dotproduct',
+) {
+  await vectorDB.createIndex({ indexName, dimension, metric });
+  const created = await waitForCondition(
+    async () => {
+      const newCollections = await vectorDB.listIndexes();
+      return newCollections.includes(indexName);
+    },
+    30000,
+    2000,
+  );
+  if (!created) {
+    throw new Error('Timed out waiting for collection to be created');
+  }
+}
+
+async function deleteIndexAndWait(vectorDB: AstraVector, indexName: string) {
+  await vectorDB.deleteIndex(indexName);
+  const deleted = await waitForCondition(
+    async () => {
+      const newCollections = await vectorDB.listIndexes();
+      return !newCollections.includes(indexName);
+    },
+    30000,
+    2000,
+  );
+  if (!deleted) {
+    throw new Error('Timed out waiting for collection to be deleted');
+  }
+}
+
 describe('AstraVector Integration Tests', () => {
   let vectorDB: AstraVector;
   const testIndexName = 'testvectors1733728136118'; // Unique collection name
@@ -62,19 +97,8 @@ describe('AstraVector Integration Tests', () => {
       throw error;
     }
 
-    await vectorDB.createIndex({ indexName: testIndexName, dimension: 4, metric: 'cosine' });
-    await vectorDB.createIndex({ indexName: testIndexName2, dimension: 4, metric: 'cosine' });
-    const created = await waitForCondition(
-      async () => {
-        const newCollections = await vectorDB.listIndexes();
-        return newCollections.length === 2;
-      },
-      30000,
-      2000,
-    );
-    if (!created) {
-      throw new Error('Timed out waiting for collections to be created');
-    }
+    await createIndexAndWait(vectorDB, testIndexName, 4, 'cosine');
+    await createIndexAndWait(vectorDB, testIndexName2, 4, 'cosine');
   }, 500000);
 
   afterAll(async () => {
@@ -182,11 +206,7 @@ describe('AstraVector Integration Tests', () => {
 
     try {
       // Create index with higher dimensions
-      await vectorDB.createIndex({
-        indexName: highDimIndexName,
-        dimension: 1536,
-        metric: 'cosine',
-      });
+      await createIndexAndWait(vectorDB, highDimIndexName, 1536, 'cosine');
 
       // Insert high-dimensional vectors
       const vectors = [
@@ -225,7 +245,7 @@ describe('AstraVector Integration Tests', () => {
       expect(results?.[0]?.score).toBeCloseTo(1, 4);
     } finally {
       // Cleanup
-      await vectorDB.deleteIndex(highDimIndexName);
+      await deleteIndexAndWait(vectorDB, highDimIndexName);
     }
   });
 
@@ -237,11 +257,7 @@ describe('AstraVector Integration Tests', () => {
 
       try {
         // Create index with different metric
-        await vectorDB.createIndex({
-          indexName: metricIndexName,
-          dimension: 4,
-          metric,
-        });
+        await createIndexAndWait(vectorDB, metricIndexName, 4, metric);
 
         // Insert same vectors
         const vectors = [
@@ -270,7 +286,7 @@ describe('AstraVector Integration Tests', () => {
         expect(results?.[0]?.score).toBeGreaterThan(results?.[1]?.score!);
       } finally {
         // Cleanup
-        await vectorDB.deleteIndex(metricIndexName);
+        await deleteIndexAndWait(vectorDB, metricIndexName);
       }
     }
   }, 500000);
@@ -1085,12 +1101,12 @@ describe('AstraVector Integration Tests', () => {
     let warnSpy;
 
     beforeAll(async () => {
-      await vectorDB.createIndex({ indexName: indexName, dimension: 3 });
+      await createIndexAndWait(vectorDB, indexName, 3, 'cosine');
     });
 
     afterAll(async () => {
-      await vectorDB.deleteIndex(indexName);
-      await vectorDB.deleteIndex(indexName2);
+      await deleteIndexAndWait(vectorDB, indexName);
+      await deleteIndexAndWait(vectorDB, indexName2);
     });
 
     beforeEach(async () => {
@@ -1099,7 +1115,7 @@ describe('AstraVector Integration Tests', () => {
 
     afterEach(async () => {
       warnSpy.mockRestore();
-      await vectorDB.deleteIndex(indexName2);
+      await deleteIndexAndWait(vectorDB, indexName2);
     });
 
     it('should show deprecation warning when using individual args for createIndex', async () => {
@@ -1179,11 +1195,11 @@ describe('AstraVector Integration Tests', () => {
     const indexName = 'testbasicvectoroperations';
 
     beforeAll(async () => {
-      await vectorDB.createIndex({ indexName, dimension: 4 });
+      await createIndexAndWait(vectorDB, indexName, 4, 'cosine');
     });
 
     afterAll(async () => {
-      await vectorDB.deleteIndex(indexName);
+      await deleteIndexAndWait(vectorDB, indexName);
     });
 
     const testVectors = [
