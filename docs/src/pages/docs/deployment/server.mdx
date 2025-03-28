@@ -14,9 +14,41 @@ Mastra uses [Hono](https://hono.dev) as its underlying HTTP server framework. Wh
 The server provides:
 - API endpoints for all registered agents
 - API endpoints for all registered workflows
+- Custom api route supports
 - Custom middleware support
 
-## Server Middleware
+## Custom API Routes
+
+Mastra provides a list of api routes that are automatically generated based on the registered agents and workflows. You can also define custom api routes the Mastra instance.
+
+These routes can live in the same file as the Mastra instance or in a separate file. We recommend keeping them in a separate file to keep the Mastra instance clean.
+
+```typescript copy showLineNumbers
+import { Mastra } from '@mastra/core';
+import { registerApiRoute } from "@mastra/core/server"
+
+export const mastra = new Mastra({
+  server: {
+    apiRoutes: [
+      registerApiRoute('/my-custom-route', {
+        method: 'GET',
+        handler: async (c) => {
+          // you have access to mastra instance here
+          const mastra = c.get('mastra')
+
+          // you can use the mastra instance to get agents, workflows, etc.
+          const agents = await mastra.getAgent('my-agent')
+
+          return c.json({ message: 'Hello, world!' });
+        }
+      })
+    ]
+  }
+  // Other configuration options
+});
+```
+
+## Middleware
 
 Mastra allows you to configure custom middleware functions that will be applied to API routes. This is useful for adding authentication, logging, CORS, or other HTTP-level functionality to your API endpoints.
 
@@ -25,7 +57,8 @@ import { Mastra } from '@mastra/core';
 
 export const mastra = new Mastra({
   // Other configuration options
-  serverMiddleware: [
+  server: {
+    middleware: [
     {
       handler: async (c, next) => {
         // Example: Add authentication check
@@ -37,18 +70,40 @@ export const mastra = new Mastra({
         // Continue to the next middleware or route handler
         await next();
       },
-      path: '/api/*', // Optional: defaults to '/api/*' if not specified
+      path: '/api/*'
     },
-    {
-      handler: async (c, next) => {
-        // Example: Add request logging
-        console.log(`${c.req.method} ${c.req.url}`);
-        await next();
-      },
-      // This middleware will apply to all routes since no path is specified
-    }
+    // add middleware to all routes
+    async (c, next) => {
+      // Example: Add request logging
+      console.log(`${c.req.method} ${c.req.url}`);
+      await next();
+    },
   ]
 });
+```
+
+if you want to add a middleware to a single route, you can also specify that in the registerApiRoute using `registerApiRoute`.
+
+```typescript copy showLineNumbers
+registerApiRoute('/my-custom-route', {
+  method: 'GET',
+  middleware: [
+    async (c, next) => {
+      // Example: Add request logging
+      console.log(`${c.req.method} ${c.req.url}`);
+      await next();
+    },
+  ],
+  handler: async (c) => {
+    // you have access to mastra instance here
+    const mastra = c.get('mastra')
+
+    // you can use the mastra instance to get agents, workflows, etc.
+    const agents = await mastra.getAgent('my-agent')
+
+    return c.json({ message: 'Hello, world!' });
+  }
+})
 ```
 
 ### Middleware Behavior
