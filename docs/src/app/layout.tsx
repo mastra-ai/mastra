@@ -1,7 +1,7 @@
 import { Toaster } from "@/components/ui/toaster";
 import { Analytics } from "@vercel/analytics/next";
 import type { Metadata } from "next";
-import { Footer, Layout, Navbar } from "nextra-theme-docs";
+import { Layout, Navbar } from "nextra-theme-docs";
 import { Head } from "nextra/components";
 import { getPageMap } from "nextra/page-map";
 import "./globals.css";
@@ -10,6 +10,7 @@ import { fonts } from "./font/setup";
 import { cn } from "@/lib/utils";
 import { logo } from "@/components/logo";
 import { GithubStarCount } from "@/components/github-star-count";
+import { Footer } from "@/components/footer";
 
 const navbar = (
   <Navbar

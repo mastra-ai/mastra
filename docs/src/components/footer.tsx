@@ -59,7 +59,7 @@ export const Footer = () => {
   return (
     <footer
       data-state={!showFooter}
-      className="flex z-30 max-w-[90rem] mx-auto px-1 bg-[#fafafa] dark:bg-[#0a0a0a] dark:border-t-[#222222] relative w-full border-t-[0.5px] flex-col items-center pt-8 lg:pt-[5rem] pb-24 md:pb-32 footer data-[state=false]:mt-8 "
+      className="flex z-30 max-w-[90rem] border-t-neutral-300 mx-auto px-1 dark:border-t-neutral-700 relative w-full border-t-[0.5px] flex-col items-center pt-8 lg:pt-[5rem] pb-24 md:pb-32 footer data-[state=false]:mt-8 "
     >
       <div className="flex flex-col lg:flex-row gap-16 lg:gap-0 w-full justify-between px-6 md:px-0 md:pl-3 md:pr-4">
         <div className="flex gap-2 dark:text-white">{logo}</div>
