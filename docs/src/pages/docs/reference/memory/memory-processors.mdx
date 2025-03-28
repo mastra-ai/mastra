@@ -25,14 +25,16 @@ The `TokenLimiter` processor helps prevent context window overflow.
 - Keeps messages up to the specified token limit
 - Works with messages already in chronological order
 - Prioritizes keeping the most recent messages when token limit is reached
+- Can be used to reduce costs and make token usage more predictable
+- Setting the max context window size your model supports will help prevent API errors
 
 ```typescript copy showLineNumbers
 import { Memory, TokenLimiter } from "@mastra/memory";
 
 const memory = new Memory({
   processors: [
-    // Limit message history to approximately 8000 tokens
-    new TokenLimiter(8000),
+    // Limit message history to approximately 128000 tokens (ex. for gpt-4o)
+    new TokenLimiter(128000),
   ],
 });
 ```
