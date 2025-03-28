@@ -68,13 +68,13 @@ The ToolCallFilter:
 
 ## Implementing Custom Processors
 
-You can create custom processors by implementing the `MemoryProcessor` interface:
+You can create custom processors by extending the `MemoryProcessor` class:
 
 ```typescript copy showLineNumbers
 import { Memory, MemoryProcessor, CoreMessage } from "@mastra/memory";
 
 // Simple example of implementing the MemoryProcessor interface
-class SimpleMessageFilter implements MemoryProcessor {
+class SimpleMessageFilter extends MemoryProcessor {
   process(messages: CoreMessage[]): CoreMessage[] {
     // Return a subset of messages based on your criteria
     return messages.slice(0, 10); // For example, just keep the first 10 messages
@@ -96,7 +96,7 @@ Here are additional examples of custom message processors. Note that they're psu
 Filter content to only include specific types (like keeping only text):
 
 ```typescript copy showLineNumbers
-class TextOnlyFilter implements MemoryProcessor {
+class TextOnlyFilter extends MemoryProcessor {
   process(messages: CoreMessage[]): CoreMessage[] {
     return messages
       .map((message) => {
@@ -125,7 +125,7 @@ class TextOnlyFilter implements MemoryProcessor {
 This is particularly useful for models like Gemini that have limitations with audio content (untested example code):
 
 ```typescript copy showLineNumbers
-class AudioMessageFilter implements MemoryProcessor {
+class AudioMessageFilter extends MemoryProcessor {
   process(messages: CoreMessage[]): CoreMessage[] {
     return messages.filter((message) => {
       // Check for audio content in string messages
@@ -161,7 +161,7 @@ class AudioMessageFilter implements MemoryProcessor {
 Filter out reasoning parts from the messages to keep only the final responses (untested example code):
 
 ```typescript copy showLineNumbers
-class ReasoningFilter implements MemoryProcessor {
+class ReasoningFilter extends MemoryProcessor {
   process(messages: CoreMessage[]): CoreMessage[] {
     return messages
       .map((message) => {
