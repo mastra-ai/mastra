@@ -11,6 +11,7 @@ import { cn } from "@/lib/utils";
 import { logo } from "@/components/logo";
 import { GithubStarCount } from "@/components/github-star-count";
 import { Footer } from "@/components/footer";
+import { PostHogProvider } from "@/analytics/posthog-provider";
 
 const navbar = (
   <Navbar
@@ -39,37 +40,6 @@ export const metadata: Metadata = {
   title: "The Typescript AI framework - Mastra",
   description:
     "Prototype and productionize AI features with a modern JS/TS stack",
-  icons: {
-    icon: [
-      {
-        rel: "icon",
-        url: "/favicon/favicon.ico",
-        sizes: "32x32",
-        type: "image/png",
-      },
-      {
-        rel: "icon",
-        url: "/favicon/icon.svg",
-        type: "image/svg+xml",
-      },
-      {
-        rel: "apple-touch-icon",
-        url: "/favicon/apple-touch-icon.png",
-      },
-      {
-        rel: "icon",
-        url: "/favicon/icon-512.svg",
-        type: "image/svg+xml",
-        sizes: "512x512",
-      },
-      {
-        rel: "icon",
-        url: "/favicon/icon-192.svg",
-        type: "image/svg+xml",
-        sizes: "192x192",
-      },
-    ],
-  },
 };
 
 export default async function RootLayout({
@@ -78,26 +48,31 @@ export default async function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" dir="ltr" suppressHydrationWarning>
+    <html
+      lang="en"
+      dir="ltr"
+      className={cn(
+        "antialiased",
+        fonts.geistMono.variable,
+        fonts.inter.variable,
+      )}
+      suppressHydrationWarning
+    >
       <Head>
         {/* Your additional tags should be passed as `children` of `<Head>` element */}
       </Head>
-      <body
-        className={cn(
-          "antialiased",
-          fonts.geistMono.variable,
-          fonts.inter.variable,
-        )}
-      >
-        <Layout
-          navbar={navbar}
-          pageMap={await getPageMap()}
-          docsRepositoryBase="https://github.com/mastra-ai/mastra/blob/main/docs"
-          footer={footer}
-          // ... Your additional layout options
-        >
-          {children}
-        </Layout>
+      <body>
+        <PostHogProvider>
+          <Layout
+            navbar={navbar}
+            pageMap={await getPageMap()}
+            docsRepositoryBase="https://github.com/mastra-ai/mastra/blob/main/docs"
+            footer={footer}
+            // ... Your additional layout options
+          >
+            {children}
+          </Layout>
+        </PostHogProvider>
         <Toaster />
       </body>
       <Analytics />

@@ -2,6 +2,11 @@
 
 @custom-variant dark (&:where(.dark, .dark *));
 
+@theme inline {
+  --font-sans: var(--inter);
+  --font-mono: var(--geist-mono);
+}
+
 :root {
   --nextra-navbar-height: 60px;
 }
