@@ -53,13 +53,6 @@ The Mastra class is the core entry point for your application. It manages agents
       defaultValue: "{}",
     },
     {
-      name: "tts",
-      type: "Record<string, MastraTTS>",
-      description: "MastraTTS to register. Structured as a key-value pair, with keys being the tts name and values being the tts instance.",
-      isOptional: true,
-      defaultValue: "{}",
-    },
-    {
       name: "serverMiddleware",
       type: "Array<{ handler: (c: any, next: () => Promise<void>) => Promise<Response | void>; path?: string; }>",
       description: "Server middleware functions to be applied to API routes. Each middleware can specify a path pattern (defaults to '/api/*').",
@@ -87,7 +80,6 @@ export const mastra = new Mastra({
   storage: {},
   vectors: {},
   workflows: {},
-  tts: {},
   logger: createLogger({
     name: "My Project",
     level: "info",
