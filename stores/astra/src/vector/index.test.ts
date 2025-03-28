@@ -46,8 +46,20 @@ describe('AstraVector Integration Tests', () => {
     try {
       const collections = await vectorDB.listIndexes();
       await Promise.all(collections.map(c => vectorDB.deleteIndex(c)));
+      const deleted = await waitForCondition(
+        async () => {
+          const remainingCollections = await vectorDB.listIndexes();
+          return remainingCollections.length === 0;
+        },
+        30000,
+        2000,
+      );
+      if (!deleted) {
+        throw new Error('Timed out waiting for collections to be deleted');
+      }
     } catch (error) {
       console.error('Failed to delete test collections:', error);
+      throw error;
     }
 
     await vectorDB.createIndex({ indexName: testIndexName, dimension: 4, metric: 'cosine' });
