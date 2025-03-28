@@ -1,11 +1,12 @@
-import type { CoreMessage, MessageProcessor } from '@mastra/core';
+import type { CoreMessage } from '@mastra/core';
+import { MessageProcessor } from '@mastra/core';
 
 /**
  * Filters out tool calls and results from messages.
  * By default (with no arguments), excludes all tool calls and their results.
  * Can be configured to exclude only specific tools by name.
  */
-export class ToolCallFilter implements MessageProcessor {
+export class ToolCallFilter extends MessageProcessor {
   private exclude: string[] | 'all';
 
   /**
@@ -13,7 +14,8 @@ export class ToolCallFilter implements MessageProcessor {
    * @param options Configuration options
    * @param options.exclude List of specific tool names to exclude. If not provided, all tool calls are excluded.
    */
-  constructor(options?: { exclude?: string[] }) {
+  constructor(options: { exclude?: string[] } = {}) {
+    super({ name: 'ToolCallFilter' });
     // If no options or exclude is provided, exclude all tools
     if (!options || !options.exclude) {
       this.exclude = 'all'; // null means exclude all tools

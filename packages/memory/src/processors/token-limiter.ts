@@ -1,5 +1,5 @@
 import type { CoreMessage, SharedMessageProcessorOpts } from '@mastra/core';
-import type { MessageProcessor } from '@mastra/core/memory';
+import { MessageProcessor } from '@mastra/core/memory';
 import { Tiktoken } from 'js-tiktoken/lite';
 import cl100k_base from 'js-tiktoken/ranks/cl100k_base';
 
@@ -8,13 +8,16 @@ import cl100k_base from 'js-tiktoken/ranks/cl100k_base';
  * Uses js-tiktoken with cl100k_base encoding for accurate token counting.
  * This encoding is used by all modern OpenAI models (GPT-3.5, GPT-4, etc).
  */
-export class TokenLimiter implements MessageProcessor {
+export class TokenLimiter extends MessageProcessor {
   private encoder: Tiktoken;
   /**
    * Create a token limiter for messages.
    * @param maxTokens Maximum number of tokens to allow
    */
   constructor(private maxTokens: number) {
+    super({
+      name: 'TokenLimiter',
+    });
     this.encoder = new Tiktoken(cl100k_base);
   }
 
@@ -51,6 +54,9 @@ export class TokenLimiter implements MessageProcessor {
         result.unshift(message);
         totalTokens += messageTokens;
       } else {
+        this.logger.info(
+          `filtering ${allMessages.length - result.length}/${allMessages.length} messages, token limit of ${this.maxTokens} exceeded`,
+        );
         // If we can't fit the message, we stop
         break;
       }

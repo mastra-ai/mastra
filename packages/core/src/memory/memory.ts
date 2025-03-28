@@ -30,13 +30,15 @@ export type SharedMessageProcessorOpts = {
  * Interface for message processors that can filter or transform messages
  * before they're sent to the LLM.
  */
-export interface MessageProcessor {
+export abstract class MessageProcessor extends MastraBase {
   /**
    * Process a list of messages and return a filtered or transformed list.
    * @param messages The messages to process
    * @returns The processed messages
    */
-  process(messages: CoreMessage[], opts: SharedMessageProcessorOpts): CoreMessage[];
+  process(messages: CoreMessage[], _opts: SharedMessageProcessorOpts): CoreMessage[] {
+    return messages;
+  }
 }
 
 /**
