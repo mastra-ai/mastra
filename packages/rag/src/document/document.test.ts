@@ -1638,6 +1638,79 @@ describe('MDocument', () => {
       expect(docs?.[0]?.text).toContain('# Title');
     });
   });
+
+  describe('metadata extraction', () => {
+    it('should extract metadata with default settings', async () => {
+      const doc = MDocument.fromMarkdown(
+        '# AI and Machine Learning\n\nThis is a test document about artificial intelligence and machine learning.',
+      );
+
+      const chunks = await doc.chunk({
+        strategy: 'markdown',
+        extract: {
+          title: true,
+          summary: true,
+          keywords: true,
+        },
+      });
+
+      const metadata = chunks[0].metadata;
+      expect(metadata).toBeDefined();
+      expect(metadata.documentTitle).toBeDefined();
+      expect(metadata.sectionSummary).toBeDefined();
+      expect(metadata.excerptKeywords).toMatch(/^KEYWORDS: .*/);
+    }, 15000);
+
+    it('should extract metadata with custom settings', async () => {
+      const doc = MDocument.fromMarkdown(
+        '# AI and Machine Learning\n\nThis is a test document about artificial intelligence and machine learning.',
+      );
+
+      const chunks = await doc.chunk({
+        strategy: 'markdown',
+        extract: {
+          title: {
+            nodes: 2,
+            nodeTemplate: 'Generate a title for this: {context}',
+            combineTemplate: 'Combine these titles: {context}',
+          },
+          summary: {
+            summaries: ['self'],
+            promptTemplate: 'Summarize this: {context}',
+          },
+          questions: {
+            questions: 2,
+            promptTemplate: 'Generate {numQuestions} questions about: {context}',
+          },
+          keywords: {
+            keywords: 3,
+            promptTemplate: 'Extract {maxKeywords} key terms from: {context}',
+          },
+        },
+      });
+
+      const metadata = chunks[0].metadata;
+      expect(metadata).toBeDefined();
+      expect(metadata.documentTitle).toBeDefined();
+      expect(metadata.sectionSummary).toBeDefined();
+      expect(metadata.questionsThisExcerptCanAnswer).toMatch(/^1\. .*\?2\. .*\?$/);
+      expect(metadata.excerptKeywords).toMatch(/^1\. .*\n2\. .*\n3\. .*$/);
+    }, 15000);
+
+    it('should handle invalid summary types', async () => {
+      const doc = MDocument.fromText('Test document');
+
+      await expect(
+        doc.chunk({
+          extract: {
+            summary: {
+              summaries: ['invalid'],
+            },
+          },
+        }),
+      ).rejects.toThrow("Summaries must be one of 'self', 'prev', 'next'");
+    }, 15000);
+  });
 });
 
 // Helper function to find the longest common substring between two strings

@@ -115,10 +115,8 @@ const chunks = await doc.chunk({
   strategy: 'markdown',
   headers: [['#', 'title'], ['##', 'section']],
   extract: {
-    fields: [
-      { name: 'summary', description: 'A brief summary' },
-      { name: 'keywords', description: 'Key terms' }
-    ]
+    summary: true, // Extract summaries with default settings
+    keywords: true  // Extract keywords with default settings
   }
 });
 

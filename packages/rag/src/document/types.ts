@@ -41,7 +41,7 @@ export type ExtractParams = {
   title?: TitleExtractorsArgs | boolean;
   summary?: SummaryExtractArgs | boolean;
   questions?: QuestionAnswerExtractArgs | boolean;
-  keywords?: boolean | Record<string, any>;
+  keywords?: KeywordExtractArgs | boolean;
 };
 
 export type ChunkOptions = {
