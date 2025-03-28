@@ -146,7 +146,7 @@ export class Workflow<
       this.after(nextSteps);
       this.step(
         new Step({
-          id: `__after_${next.map(step => step?.id ?? step?.name).join('_')}`,
+          id: `__after_${next.map(step => config?.id ?? step?.id ?? step?.name).join('_')}`,
           execute: async ({ context }) => {
             return { success: true };
           },
@@ -171,7 +171,7 @@ export class Workflow<
         workflowToStep(next, { mastra: this.#mastra })
       : (next as StepAction<string, any, any, any>);
 
-    const stepKey = this.#makeStepKey(step);
+    const stepKey = this.#makeStepKey(step, config);
     const when = config?.['#internal']?.when || config?.when;
 
     const graphEntry: StepNode = {
@@ -195,7 +195,7 @@ export class Workflow<
     // if we are in an after chain and we have a stepGraph
     if (parentStepKey && stepGraph) {
       // if the stepGraph has an initial, but it doesn't contain the current step, add it to the initial
-      if (!stepGraph.initial.some(step => step.step.id === stepKey)) {
+      if (!stepGraph.initial.some(step => step.config.id === stepKey || step.step.id === stepKey)) {
         stepGraph.initial.push(graphEntry);
         if (serializedStepGraph) serializedStepGraph.initial.push(graphEntry);
       }
@@ -293,7 +293,7 @@ export class Workflow<
         workflowToStep(next, { mastra: this.#mastra })
       : (next as StepAction<string, any, any, any>);
 
-    const stepKey = this.#makeStepKey(step);
+    const stepKey = this.#makeStepKey(step, config);
     const when = config?.['#internal']?.when || config?.when;
 
     const graphEntry: StepNode = {
@@ -335,10 +335,10 @@ export class Workflow<
     return this as WorkflowBuilder<this>;
   }
 
-  #makeStepKey(step: Step<any, any, any> | Workflow<any, any>) {
+  #makeStepKey(step: Step<any, any, any> | Workflow<any, any>, config?: StepConfig<any, any, any, any, any>) {
     // return `${step.id}${this.#delimiter}${Object.keys(this.steps2).length}`;
     // @ts-ignore
-    return `${step.id ?? step.name}`;
+    return `${config?.id ?? step.id ?? step.name}`;
   }
 
   then<
@@ -404,7 +404,7 @@ export class Workflow<
       ? workflowToStep(next, { mastra: this.#mastra })
       : (next as StepAction<string, any, any, any>);
 
-    const stepKey = this.#makeStepKey(step);
+    const stepKey = this.#makeStepKey(step, config);
     const when = config?.['#internal']?.when || config?.when;
 
     const graphEntry: StepNode = {
@@ -527,7 +527,7 @@ export class Workflow<
         return { success: true };
       },
     };
-    this.#steps[checkStepKey] = checkStep;
+    this.#steps[loopFinishedStepKey] = loopFinishedStep;
 
     // First add the check step after the last step
     this.then(checkStep, {
@@ -585,7 +585,10 @@ export class Workflow<
     FallbackStep extends StepAction<string, any, any, any>,
     CondStep extends StepVariableType<any, any, any, any>,
     VarStep extends StepVariableType<any, any, any, any>,
-  >(condition: StepConfig<FallbackStep, CondStep, VarStep, TTriggerSchema>['when'], fallbackStep: FallbackStep) {
+  >(
+    condition: StepConfig<FallbackStep, CondStep, VarStep, TTriggerSchema, TSteps>['when'],
+    fallbackStep: FallbackStep,
+  ) {
     const applyOperator = (operator: string, value: any, target: any) => {
       switch (operator) {
         case '$eq':

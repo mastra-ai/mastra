@@ -129,6 +129,7 @@ export type StepDef<
 > = Record<
   TStepId,
   {
+    id?: string;
     when?:
       | Condition<any, any>
       | ((args: { context: WorkflowContext; mastra?: Mastra }) => Promise<boolean | WhenConditionReturnValue>);
