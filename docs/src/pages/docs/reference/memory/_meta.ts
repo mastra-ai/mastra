@@ -4,6 +4,7 @@ const meta = {
   query: ".query()",
   getThreadById: ".getThreadById()",
   getThreadsByResourceId: ".getThreadsByResourceId()",
+  "memory-processors": "Memory Processors",
 };
 
 export default meta;

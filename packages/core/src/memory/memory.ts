@@ -21,6 +21,26 @@ import { DefaultVectorDB } from '../vector/libsql';
 
 import type { MessageType, SharedMemoryConfig, StorageThreadType, MemoryConfig, AiMessageType } from './types';
 
+export type SharedMemoryProcessorOpts = {
+  systemMessage?: string;
+  memorySystemMessage?: string;
+  newMessages?: CoreMessage[];
+};
+/**
+ * Interface for message processors that can filter or transform messages
+ * before they're sent to the LLM.
+ */
+export abstract class MemoryProcessor extends MastraBase {
+  /**
+   * Process a list of messages and return a filtered or transformed list.
+   * @param messages The messages to process
+   * @returns The processed messages
+   */
+  process(messages: CoreMessage[], _opts: SharedMemoryProcessorOpts): CoreMessage[] {
+    return messages;
+  }
+}
+
 /**
  * Abstract Memory class that defines the interface for storing and retrieving
  * conversation threads and messages.
@@ -31,6 +51,7 @@ export abstract class MastraMemory extends MastraBase {
   storage: MastraStorage;
   vector: MastraVector;
   embedder: EmbeddingModel<string>;
+  private processors: MemoryProcessor[] = [];
 
   protected threadConfig: MemoryConfig = {
     lastMessages: 40,
@@ -81,6 +102,11 @@ export abstract class MastraMemory extends MastraBase {
 
     if (config.options) {
       this.threadConfig = this.getMergedThreadConfig(config.options);
+    }
+
+    // Initialize processors if provided
+    if (config.processors) {
+      this.processors = config.processors;
     }
   }
 
@@ -136,15 +162,57 @@ export abstract class MastraMemory extends MastraBase {
     return deepMerge(this.threadConfig, config || {});
   }
 
+  /**
+   * Apply all configured message processors to a list of messages.
+   * @param messages The messages to process
+   * @returns The processed messages
+   */
+  private applyProcessors(
+    messages: CoreMessage[],
+    opts: {
+      processors?: MemoryProcessor[];
+    } & SharedMemoryProcessorOpts,
+  ): CoreMessage[] {
+    const processors = opts.processors || this.processors;
+    if (!processors || processors.length === 0) {
+      return messages;
+    }
+
+    let processedMessages = [...messages];
+
+    for (const processor of processors) {
+      processedMessages = processor.process(processedMessages, {
+        systemMessage: opts.systemMessage,
+        newMessages: opts.newMessages,
+        memorySystemMessage: opts.memorySystemMessage,
+      });
+    }
+
+    return processedMessages;
+  }
+
+  processMessages({
+    messages,
+    processors,
+    ...opts
+  }: {
+    messages: CoreMessage[];
+    processors?: MemoryProcessor[];
+  } & SharedMemoryProcessorOpts) {
+    return this.applyProcessors(messages, { processors: processors || this.processors, ...opts });
+  }
+
   abstract rememberMessages({
     threadId,
     resourceId,
     vectorMessageSearch,
+    systemMessage,
     config,
   }: {
     threadId: string;
     resourceId?: string;
     vectorMessageSearch?: string;
+    systemMessage?: CoreMessage;
     config?: MemoryConfig;
   }): Promise<{
     threadId: string;

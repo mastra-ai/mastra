@@ -1,0 +1,200 @@
+---
+title: "Memory Processors | Reference | Mastra Docs"
+description: Documentation on how to filter and transform messages in Mastra Memory.
+---
+
+# Memory Processors
+
+Memory message processors allow you to filter or transform recalled messages before they're sent to the LLM. This is particularly useful for:
+
+- Limiting token usage to prevent context overflow
+- Filtering out specific message types (e.g. audio files, tool calls)
+- Truncating long tool results in message history (e.g. base64 images)
+- Implementing custom filtering logic
+
+> **Important**: Processors only affect messages retrieved from memory. They don't filter new messages that a user is currently sending to the agent.
+
+## Built-in Processors
+
+Mastra provides two built-in processors:
+
+### TokenLimiter
+
+The `TokenLimiter` processor helps prevent context window overflow.
+
+- Keeps messages up to the specified token limit
+- Works with messages already in chronological order
+- Prioritizes keeping the most recent messages when token limit is reached
+- Can be used to reduce costs and make token usage more predictable
+- Setting the max context window size your model supports will help prevent API errors
+
+```typescript copy showLineNumbers
+import { Memory, TokenLimiter } from "@mastra/memory";
+
+const memory = new Memory({
+  processors: [
+    // Limit message history to approximately 128000 tokens (ex. for gpt-4o)
+    new TokenLimiter(128000),
+  ],
+});
+```
+
+### ToolCallFilter
+
+The `ToolCallFilter` processor removes tool calls and their results.
+
+- By default (with no arguments), excludes all tool calls and their results
+- Can be configured to exclude specific tools by name with `{ exclude: ['toolName'] }`
+- Will also exclude the corresponding tool results for any filtered tool calls
+- Preserves all other content in messages
+
+```typescript copy showLineNumbers
+import { Memory, ToolCallFilter } from "@mastra/memory";
+
+const memory = new Memory({
+  processors: [
+    // Remove all tool calls and results
+    new ToolCallFilter(),
+
+    // Or exclude only specific tools
+    new ToolCallFilter({
+      exclude: ["imageGenTool"],
+    }),
+  ],
+});
+```
+
+## Applying Multiple Processors
+
+You can combine multiple processors, each will run after the previous one.
+
+```typescript copy showLineNumbers
+import { TokenLimiter, ToolCallFilter } from "@mastra/memory";
+
+// Multiple processors can be combined
+const memory = new Memory({
+  processors: [
+    // First filter out previous image gen tool calls
+    new ToolCallFilter({ exclude: ["imageGenTool"] }),
+    // Then limit the total tokens
+    new TokenLimiter(8000),
+  ],
+});
+```
+
+Processors are applied in the order they appear in the array. This means that the output from the first processor becomes the input to the second processor, and so on.
+The order matters, notice here that if you instead exclude tool calls after limiting tokens, you will limit more tokens than intended as token limiting would include tool call tokens that are later removed.
+Putting the token limiter as the last processor will almost always be the right thing to do.
+
+## Creating your own Custom Processors
+
+The examples in this documentation (below) are just illustrations to help you understand how to extend the `MemoryProcessor` class. You can create your own custom processors tailored to your specific use cases.
+
+The message processor system is designed to be flexible and extensible, allowing you to create processors that:
+
+- Remove specific content types (like audio for Gemini models)
+- Filter messages based on custom criteria
+- Transform message content
+- Simplify complex messages
+- Remove sensitive information (note that this is not a security measure, the LLM will still see any new messages)
+
+You can create custom processors by extending the `MemoryProcessor` class:
+
+```typescript copy showLineNumbers
+import { Memory, MemoryProcessor, CoreMessage } from "@mastra/memory";
+
+// Simple example of implementing the MemoryProcessor interface
+class SimpleMessageFilter extends MemoryProcessor {
+  process(messages: CoreMessage[]): CoreMessage[] {
+    // Return a subset of messages based on your criteria
+    return messages.slice(0, 10); // For example, just keep the first 10 messages
+  }
+}
+
+// Use the processor
+const memory = new Memory({
+  processors: [new SimpleMessageFilter()],
+});
+```
+
+When designing your processors, remember that they should be:
+
+1. Immutable - don't modify messages in place, create new ones
+2. Focused - each processor should have a single responsibility
+3. Efficient - avoid unnecessary processing, especially with large message histories
+
+## Practical Processor Examples
+
+Here are additional examples of custom message processors. Note that they're psuedo code examples and haven't been tested. Their purpose is to give you an idea of what's possible.
+
+### Audio Message Filter
+
+This is particularly useful for models like Gemini that have limitations with audio content:
+
+Note: untested example code
+
+```typescript copy showLineNumbers
+class AudioMessageFilter extends MemoryProcessor {
+  process(messages: CoreMessage[]): CoreMessage[] {
+    return messages.filter((message) => {
+      // Check for audio content in string messages
+      if (typeof message.content === "string") {
+        return (
+          !message.content.includes("data:audio/") &&
+          !message.content.includes(".mp3") &&
+          !message.content.includes(".wav")
+        );
+      }
+      // Check for audio content in message parts
+      else if (Array.isArray(message.content)) {
+        return !message.content.some((part) => {
+          if (part.type === "audio") return true;
+          if (
+            part.type === "text" &&
+            (part.text.includes("data:audio/") ||
+              part.text.includes(".mp3") ||
+              part.text.includes(".wav"))
+          )
+            return true;
+          return false;
+        });
+      }
+      return true;
+    });
+  }
+}
+```
+
+### Reasoning Filter
+
+Filter out reasoning parts from the messages to keep only the final responses:
+
+Note: untested example code
+
+```typescript copy showLineNumbers
+class ReasoningFilter extends MemoryProcessor {
+  process(messages: CoreMessage[]): CoreMessage[] {
+    return messages
+      .map((message) => {
+        if (Array.isArray(message.content)) {
+          // Filter out any reasoning parts from the content
+          return {
+            ...message,
+            content: message.content.filter(
+              (part) =>
+                part.type !== "reasoning" && part.type !== "redacted-reasoning",
+            ),
+          };
+        }
+        return message;
+      })
+      .filter((message) => {
+        // Keep messages that still have content after filtering
+        if (Array.isArray(message.content)) {
+          return message.content.length > 0;
+        }
+        return true;
+      });
+  }
+}
+```
