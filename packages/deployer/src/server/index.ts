@@ -21,10 +21,10 @@ import {
   getLiveEvalsByAgentIdHandler,
   setAgentInstructionsHandler,
   streamGenerateHandler,
-} from './handlers/agents.js';
-import { handleClientsRefresh, handleTriggerClientsRefresh } from './handlers/client.js';
-import { errorHandler } from './handlers/error.js';
-import { getLogsByRunIdHandler, getLogsHandler, getLogTransports } from './handlers/logs.js';
+} from './handlers/agents';
+import { handleClientsRefresh, handleTriggerClientsRefresh } from './handlers/client';
+import { errorHandler } from './handlers/error';
+import { getLogsByRunIdHandler, getLogsHandler, getLogTransports } from './handlers/logs';
 import {
   createThreadHandler,
   deleteThreadHandler,
@@ -34,26 +34,19 @@ import {
   getThreadsHandler,
   saveMessagesHandler,
   updateThreadHandler,
-} from './handlers/memory.js';
+} from './handlers/memory';
 import {
   getNetworkByIdHandler,
   getNetworksHandler,
   generateHandler as generateNetworkHandler,
   streamGenerateHandler as streamGenerateNetworkHandler,
-} from './handlers/network.js';
-import { generateSystemPromptHandler } from './handlers/prompt.js';
-import { rootHandler } from './handlers/root.js';
-import { getTelemetryHandler } from './handlers/telemetry.js';
-import { executeAgentToolHandler, executeToolHandler, getToolByIdHandler, getToolsHandler } from './handlers/tools.js';
-import {
-  upsertVectors,
-  createIndex,
-  queryVectors,
-  listIndexes,
-  describeIndex,
-  deleteIndex,
-} from './handlers/vector.js';
-import { getSpeakersHandler, speakHandler, listenHandler } from './handlers/voice.js';
+} from './handlers/network';
+import { generateSystemPromptHandler } from './handlers/prompt';
+import { rootHandler } from './handlers/root';
+import { getTelemetryHandler } from './handlers/telemetry';
+import { executeAgentToolHandler, executeToolHandler, getToolByIdHandler, getToolsHandler } from './handlers/tools';
+import { upsertVectors, createIndex, queryVectors, listIndexes, describeIndex, deleteIndex } from './handlers/vector';
+import { getSpeakersHandler, speakHandler, listenHandler } from './handlers/voice';
 import {
   startWorkflowRunHandler,
   resumeAsyncWorkflowHandler,
@@ -63,8 +56,8 @@ import {
   resumeWorkflowHandler,
   watchWorkflowHandler,
   createRunHandler,
-} from './handlers/workflows.js';
-import { html } from './welcome.js';
+} from './handlers/workflows';
+import { html } from './welcome';
 
 type Bindings = {};
 

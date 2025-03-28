@@ -1,4 +1,3 @@
-import type { ToolExecutionOptions } from 'ai';
 import type { z } from 'zod';
 
 import type { Mastra } from '../mastra';
