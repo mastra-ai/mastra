@@ -15,6 +15,23 @@ const PINECONE_API_KEY = process.env.PINECONE_API_KEY!;
 
 vi.setConfig({ testTimeout: 80_000, hookTimeout: 80_000 });
 
+// Helper function to create sparse vectors for testing
+function createSparseVector(text: string) {
+  const words = text.toLowerCase().split(/\W+/).filter(Boolean);
+  const uniqueWords = Array.from(new Set(words));
+  const indices: number[] = [];
+  const values: number[] = [];
+
+  // Create a simple term frequency vector
+  uniqueWords.forEach((word, i) => {
+    const frequency = words.filter(w => w === word).length;
+    indices.push(i);
+    values.push(frequency);
+  });
+
+  return { indices, values };
+}
+
 function waitUntilReady(vectorDB: PineconeVector, indexName: string) {
   return new Promise(resolve => {
     const interval = setInterval(async () => {
@@ -101,6 +118,7 @@ describe.skip('PineconeVector Integration Tests', () => {
   const indexNameUpdate = 'test-index-update';
   const indexNameDelete = 'test-index-delete';
   const indexNameNamespace = 'test-index-namespace';
+  const indexNameHybrid = 'test-index-hybrid';
   const dimension = 3;
 
   beforeAll(async () => {
@@ -130,7 +148,12 @@ describe.skip('PineconeVector Integration Tests', () => {
     } catch {
       // Ignore errors if index doesn't exist
     }
-
+    try {
+      await vectorDB.deleteIndex(indexNameHybrid);
+      await waitUntilIndexDeleted(vectorDB, indexNameHybrid);
+    } catch {
+      // Ignore errors if index doesn't exist
+    }
     // Create test index
     await vectorDB.createIndex({ indexName: testIndexName, dimension });
     await waitUntilReady(vectorDB, testIndexName);
@@ -155,6 +178,11 @@ describe.skip('PineconeVector Integration Tests', () => {
     }
     try {
       await vectorDB.deleteIndex(indexNameNamespace);
+    } catch {
+      // Ignore errors if index doesn't exist
+    }
+    try {
+      await vectorDB.deleteIndex(indexNameHybrid);
     } catch {
       // Ignore errors if index doesn't exist
     }
@@ -1275,6 +1303,109 @@ describe.skip('PineconeVector Integration Tests', () => {
       expect(results.length).toBeGreaterThan(0);
     });
   });
+
+  describe('Hybrid Search Operations', () => {
+    const testVectors = [
+      [0.9, 0.1, 0.0], // cats (very distinct)
+      [0.1, 0.9, 0.0], // dogs (very distinct)
+      [0.0, 0.0, 0.9], // birds (completely different)
+    ];
+
+    const testMetadata = [
+      { text: 'cats purr and meow', animal: 'cat' },
+      { text: 'dogs bark and fetch', animal: 'dog' },
+      { text: 'birds fly and nest', animal: 'bird' },
+    ];
+
+    // Create sparse vectors with fixed vocabulary indices
+    const testSparseVectors = [
+      { indices: [0], values: [1.0] }, // cat terms only
+      { indices: [1], values: [1.0] }, // dog terms only
+      { indices: [2], values: [1.0] }, // bird terms only
+    ];
+
+    beforeEach(async () => {
+      await vectorDB.createIndex({ indexName: indexNameHybrid, dimension: 3, metric: 'dotproduct' });
+      await waitUntilReady(vectorDB, indexNameHybrid);
+
+      // Upsert with both dense and sparse vectors
+      await vectorDB.upsert({
+        indexName: indexNameHybrid,
+        vectors: testVectors,
+        sparseVectors: testSparseVectors,
+        metadata: testMetadata,
+      });
+      await waitUntilVectorsIndexed(vectorDB, indexNameHybrid, 3);
+    });
+
+    afterEach(async () => {
+      try {
+        await vectorDB.deleteIndex(indexNameHybrid);
+        await waitUntilIndexDeleted(vectorDB, indexNameHybrid);
+      } catch {
+        // Ignore errors if index doesn't exist
+      }
+    });
+
+    it('should combine dense and sparse signals in hybrid search', async () => {
+      // Query vector strongly favors cats
+      const queryVector = [1.0, 0.0, 0.0];
+      // But sparse vector strongly favors dogs
+      const sparseVector = {
+        indices: [1], // Index 1 corresponds to dog-related terms
+        values: [1.0], // Maximum weight for dog terms
+      };
+
+      const results = await vectorDB.query({
+        indexName: indexNameHybrid,
+        queryVector,
+        sparseVector,
+        topK: 2,
+      });
+
+      expect(results).toHaveLength(2);
+
+      // Get results with just vector similarity
+      const vectorResults = await vectorDB.query({
+        indexName: indexNameHybrid,
+        queryVector,
+        topK: 2,
+      });
+
+      // Results should be different when using hybrid search vs just vector
+      expect(results[0].id).not.toBe(vectorResults[0].id);
+
+      // First result should be dog due to sparse vector influence
+      expect(results[0].metadata?.animal).toBe('dog');
+    });
+
+    it('should support sparse vectors as optional parameters', async () => {
+      // Should work with just dense vectors in upsert
+      await vectorDB.upsert({
+        indexName: indexNameHybrid,
+        vectors: [[0.1, 0.2, 0.3]],
+        metadata: [{ test: 'dense only' }],
+      });
+
+      // Should work with just dense vector in query
+      const denseOnlyResults = await vectorDB.query({
+        indexName: indexNameHybrid,
+        queryVector: [0.1, 0.2, 0.3],
+        topK: 1,
+      });
+      expect(denseOnlyResults).toHaveLength(1);
+
+      // Should work with both dense and sparse in query
+      const hybridResults = await vectorDB.query({
+        indexName: indexNameHybrid,
+        queryVector: [0.1, 0.2, 0.3],
+        sparseVector: createSparseVector('test query'),
+        topK: 1,
+      });
+      expect(hybridResults).toHaveLength(1);
+    });
+  });
+
   describe('Deprecation Warnings', () => {
     const indexName = 'testdeprecationwarnings';
 

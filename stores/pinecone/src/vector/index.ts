@@ -11,7 +11,12 @@ import type {
 } from '@mastra/core/vector';
 import type { VectorFilter } from '@mastra/core/vector/filter';
 import { Pinecone } from '@pinecone-database/pinecone';
-import type { IndexStatsDescription, UpdateOptions } from '@pinecone-database/pinecone';
+import type {
+  IndexStatsDescription,
+  QueryOptions,
+  RecordSparseValues,
+  UpdateOptions,
+} from '@pinecone-database/pinecone';
 
 import { PineconeFilterTranslator } from './filter';
 
@@ -21,15 +26,17 @@ interface PineconeIndexStats extends IndexStats {
 
 interface PineconeQueryVectorParams extends QueryVectorParams {
   namespace?: string;
+  sparseVector?: RecordSparseValues;
 }
 
-type PineconeQueryVectorArgs = [...QueryVectorArgs, string?];
+type PineconeQueryVectorArgs = [...QueryVectorArgs, string?, RecordSparseValues?];
 
 interface PineconeUpsertVectorParams extends UpsertVectorParams {
   namespace?: string;
+  sparseVectors?: RecordSparseValues[];
 }
 
-type PineconeUpsertVectorArgs = [...UpsertVectorArgs, string?];
+type PineconeUpsertVectorArgs = [...UpsertVectorArgs, string?, RecordSparseValues[]?];
 
 export class PineconeVector extends MastraVector {
   private client: Pinecone;
@@ -78,9 +85,10 @@ export class PineconeVector extends MastraVector {
   async upsert(...args: ParamsToArgs<PineconeUpsertVectorParams> | PineconeUpsertVectorArgs): Promise<string[]> {
     const params = this.normalizeArgs<PineconeUpsertVectorParams, PineconeUpsertVectorArgs>('upsert', args, [
       'namespace',
+      'sparseVectors',
     ]);
 
-    const { indexName, vectors, metadata, ids, namespace } = params;
+    const { indexName, vectors, metadata, ids, namespace, sparseVectors } = params;
 
     const index = this.client.Index(indexName).namespace(namespace || '');
 
@@ -90,6 +98,7 @@ export class PineconeVector extends MastraVector {
     const records = vectors.map((vector, i) => ({
       id: vectorIds[i]!,
       values: vector,
+      ...(sparseVectors?.[i] && { sparseValues: sparseVectors?.[i] }),
       metadata: metadata?.[i] || {},
     }));
 
@@ -109,21 +118,31 @@ export class PineconeVector extends MastraVector {
   }
 
   async query(...args: ParamsToArgs<PineconeQueryVectorParams> | PineconeQueryVectorArgs): Promise<QueryResult[]> {
-    const params = this.normalizeArgs<PineconeQueryVectorParams, PineconeQueryVectorArgs>('query', args, ['namespace']);
+    const params = this.normalizeArgs<PineconeQueryVectorParams, PineconeQueryVectorArgs>('query', args, [
+      'namespace',
+      'sparseVector',
+    ]);
 
-    const { indexName, queryVector, topK = 10, filter, includeVector = false, namespace } = params;
+    const { indexName, queryVector, topK = 10, filter, includeVector = false, namespace, sparseVector } = params;
 
     const index = this.client.Index(indexName).namespace(namespace || '');
 
     const translatedFilter = this.transformFilter(filter) ?? undefined;
 
-    const results = await index.query({
+    const queryParams: QueryOptions = {
       vector: queryVector,
       topK,
-      filter: translatedFilter,
       includeMetadata: true,
       includeValues: includeVector,
-    });
+      filter: translatedFilter,
+    };
+
+    // If sparse vector is provided, use hybrid search
+    if (sparseVector) {
+      queryParams.sparseVector = sparseVector;
+    }
+
+    const results = await index.query(queryParams);
 
     return results.matches.map(match => ({
       id: match.id,
