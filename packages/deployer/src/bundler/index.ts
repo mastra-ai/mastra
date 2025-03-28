@@ -130,6 +130,7 @@ export abstract class Bundler extends MastraBundler {
     mastraEntryFile: string,
     outputDirectory: string,
     bundleLocation: string = join(outputDirectory, this.outputDir),
+    options?: { port?: number },
   ): Promise<void> {
     this.logger.info('Start bundling Mastra');
 
