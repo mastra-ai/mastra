@@ -129,6 +129,7 @@ export type StepDef<
 > = Record<
   TStepId,
   {
+    id?: string;
     when?:
       | Condition<any, any>
       | ((args: { context: WorkflowContext; mastra?: Mastra }) => Promise<boolean | WhenConditionReturnValue>);
@@ -185,6 +186,7 @@ export interface StepConfig<
     loopLabel?: string;
     loopType?: 'while' | 'until' | undefined;
   };
+  id?: string;
 }
 
 type StepSuccess<T> = {
