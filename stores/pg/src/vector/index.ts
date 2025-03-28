@@ -181,6 +181,16 @@ export class PgVector extends MastraVector {
       return vectorIds;
     } catch (error) {
       await client.query('ROLLBACK');
+      if (error instanceof Error && error.message?.includes('expected') && error.message?.includes('dimensions')) {
+        const match = error.message.match(/expected (\d+) dimensions, not (\d+)/);
+        if (match) {
+          const [, expected, actual] = match;
+          throw new Error(
+            `Vector dimension mismatch: Index "${params.indexName}" expects ${expected} dimensions but got ${actual} dimensions. ` +
+              `Either use a matching embedding model or delete and recreate the index with the new dimension.`,
+          );
+        }
+      }
       throw error;
     } finally {
       client.release();
@@ -262,7 +272,7 @@ export class PgVector extends MastraVector {
       }
 
       if (buildIndex) {
-        await this.buildIndex({ indexName, metric, indexConfig });
+        await this.setupIndex({ indexName, metric, indexConfig }, client);
       }
     } catch (error: any) {
       console.error('Failed to create vector table:', error);
@@ -293,52 +303,59 @@ export class PgVector extends MastraVector {
 
     const client = await this.pool.connect();
     try {
-      // Use a different hash prefix for buildIndex locks to avoid conflicts with createIndex
-      const hash = createHash('sha256')
-        .update('build:' + indexName)
-        .digest('hex');
-      const lockId = BigInt('0x' + hash.slice(0, 8)) % BigInt(2 ** 31);
-      const acquired = await client.query('SELECT pg_try_advisory_lock($1)', [lockId]);
+      await this.setupIndex({ indexName, metric, indexConfig }, client);
+    } finally {
+      client.release();
+    }
+  }
 
-      if (!acquired.rows[0].pg_try_advisory_lock) {
-        // Check if index already exists
-        const exists = await client.query(
-          `
+  private async setupIndex({ indexName, metric, indexConfig }: PgDefineIndexParams, client: pg.PoolClient) {
+    // Use a different hash prefix for buildIndex locks to avoid conflicts with createIndex
+    const hash = createHash('sha256')
+      .update('build:' + indexName)
+      .digest('hex');
+    const lockId = BigInt('0x' + hash.slice(0, 8)) % BigInt(2 ** 31);
+    const acquired = await client.query('SELECT pg_try_advisory_lock($1)', [lockId]);
+
+    if (!acquired.rows[0].pg_try_advisory_lock) {
+      // Check if index already exists
+      const exists = await client.query(
+        `
             SELECT 1 FROM pg_class c 
             JOIN pg_namespace n ON n.oid = c.relnamespace
             WHERE c.relname = $1 
             AND n.nspname = 'public'
           `,
-          [`${indexName}_vector_idx`],
-        );
+        [`${indexName}_vector_idx`],
+      );
 
-        if (exists.rows.length > 0) {
-          console.log(`Index ${indexName}_vector_idx already exists, skipping creation`);
-          this.indexCache.delete(indexName); // Still clear cache since we checked
-          return;
-        }
-
-        // Index doesn't exist, wait for lock
-        await client.query('SELECT pg_advisory_lock($1)', [lockId]);
+      if (exists.rows.length > 0) {
+        console.log(`Index ${indexName}_vector_idx already exists, skipping creation`);
+        this.indexCache.delete(indexName); // Still clear cache since we checked
+        return;
       }
 
-      try {
-        await client.query(`DROP INDEX IF EXISTS ${indexName}_vector_idx`);
+      // Index doesn't exist, wait for lock
+      await client.query('SELECT pg_advisory_lock($1)', [lockId]);
+    }
 
-        if (indexConfig.type === 'flat') {
-          this.indexCache.delete(indexName);
-          return;
-        }
+    try {
+      await client.query(`DROP INDEX IF EXISTS ${indexName}_vector_idx`);
 
-        const metricOp =
-          metric === 'cosine' ? 'vector_cosine_ops' : metric === 'euclidean' ? 'vector_l2_ops' : 'vector_ip_ops';
+      if (indexConfig.type === 'flat') {
+        this.indexCache.delete(indexName);
+        return;
+      }
 
-        let indexSQL: string;
-        if (indexConfig.type === 'hnsw') {
-          const m = indexConfig.hnsw?.m ?? 8;
-          const efConstruction = indexConfig.hnsw?.efConstruction ?? 32;
+      const metricOp =
+        metric === 'cosine' ? 'vector_cosine_ops' : metric === 'euclidean' ? 'vector_l2_ops' : 'vector_ip_ops';
 
-          indexSQL = `
+      let indexSQL: string;
+      if (indexConfig.type === 'hnsw') {
+        const m = indexConfig.hnsw?.m ?? 8;
+        const efConstruction = indexConfig.hnsw?.efConstruction ?? 32;
+
+        indexSQL = `
           CREATE INDEX IF NOT EXISTS ${indexName}_vector_idx 
           ON ${indexName} 
           USING hnsw (embedding ${metricOp})
@@ -347,29 +364,26 @@ export class PgVector extends MastraVector {
             ef_construction = ${efConstruction}
           )
         `;
+      } else {
+        let lists: number;
+        if (indexConfig.ivf?.lists) {
+          lists = indexConfig.ivf.lists;
         } else {
-          let lists: number;
-          if (indexConfig.ivf?.lists) {
-            lists = indexConfig.ivf.lists;
-          } else {
-            const size = (await client.query(`SELECT COUNT(*) FROM ${indexName}`)).rows[0].count;
-            lists = Math.max(100, Math.min(4000, Math.floor(Math.sqrt(size) * 2)));
-          }
-          indexSQL = `
+          const size = (await client.query(`SELECT COUNT(*) FROM ${indexName}`)).rows[0].count;
+          lists = Math.max(100, Math.min(4000, Math.floor(Math.sqrt(size) * 2)));
+        }
+        indexSQL = `
           CREATE INDEX IF NOT EXISTS ${indexName}_vector_idx
           ON ${indexName}
           USING ivfflat (embedding ${metricOp})
           WITH (lists = ${lists});
         `;
-        }
-
-        await client.query(indexSQL);
-        this.indexCache.delete(indexName);
-      } finally {
-        await client.query('SELECT pg_advisory_unlock($1)', [lockId]);
       }
+
+      await client.query(indexSQL);
+      this.indexCache.delete(indexName);
     } finally {
-      client.release();
+      await client.query('SELECT pg_advisory_unlock($1)', [lockId]);
     }
   }
 

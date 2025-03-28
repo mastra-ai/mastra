@@ -25,6 +25,11 @@ import { isVariableReference, isWorkflow, updateStepInHierarchy, workflowToStep 
 import type { WorkflowResultReturn } from './workflow-instance';
 import { WorkflowInstance } from './workflow-instance';
 
+type WorkflowBuilder<T extends Workflow<any, any>> = Pick<
+  T,
+  'step' | 'then' | 'after' | 'while' | 'until' | 'if' | 'else' | 'afterEvent' | 'commit'
+>;
+
 export class Workflow<
   TSteps extends Step<string, any, any>[] = Step<string, any, any>[],
   TStepId extends string = string,
@@ -40,10 +45,18 @@ export class Workflow<
   #mastra?: Mastra;
   #runs: Map<string, WorkflowInstance<TSteps, TTriggerSchema>> = new Map();
   #isNested: boolean = false;
-  #onStepTransition: Set<(state: WorkflowRunState) => void | Promise<void>> = new Set();
+  #onStepTransition: Set<
+    (
+      state: Pick<
+        WorkflowRunResult<TTriggerSchema, TSteps, TResultSchema>,
+        'results' | 'activePaths' | 'runId' | 'timestamp'
+      >,
+    ) => void | Promise<void>
+  > = new Set();
   // registers stepIds on `after` calls
   #afterStepStack: string[] = [];
   #lastStepStack: string[] = [];
+  #lastBuilderType: 'step' | 'then' | 'after' | 'while' | 'until' | 'if' | 'else' | 'afterEvent' | null = null;
   #ifStack: {
     condition: StepConfig<any, any, any, TTriggerSchema>['when'];
     elseStepKey: string;
@@ -94,13 +107,13 @@ export class Workflow<
   >(
     next: TWorkflow,
     config?: StepConfig<ReturnType<TWorkflow['toStep']>, CondStep, VarStep, TTriggerSchema, Steps>,
-  ): this;
+  ): WorkflowBuilder<this>;
   step<
     TStep extends StepAction<any, any, any, any>,
     CondStep extends StepVariableType<any, any, any, any>,
     VarStep extends StepVariableType<any, any, any, any>,
     Steps extends StepAction<any, any, any, any>[] = TSteps,
-  >(step: TStep, config?: StepConfig<TStep, CondStep, VarStep, TTriggerSchema, Steps>): this;
+  >(step: TStep, config?: StepConfig<TStep, CondStep, VarStep, TTriggerSchema, Steps>): WorkflowBuilder<this>;
   step<
     TStepLike extends StepAction<string, any, any, any> | Workflow<TSteps, any, any, any>,
     CondStep extends StepVariableType<any, any, any, any>,
@@ -119,7 +132,7 @@ export class Workflow<
       TTriggerSchema,
       Steps
     >,
-  ): this {
+  ): WorkflowBuilder<this> {
     if (Array.isArray(next)) {
       const nextSteps: StepAction<string, any, any, any>[] = next.map(step => {
         if (isWorkflow(step)) {
@@ -175,7 +188,7 @@ export class Workflow<
 
     this.#steps[stepKey] = step;
 
-    const parentStepKey = this.#afterStepStack[this.#afterStepStack.length - 1];
+    const parentStepKey = this.#getParentStepKey({ loop_check: true });
     const stepGraph = this.#stepSubscriberGraph[parentStepKey || ''];
     const serializedStepGraph = this.#serializedStepSubscriberGraph[parentStepKey || ''];
 
@@ -196,8 +209,130 @@ export class Workflow<
       this.#serializedStepGraph.initial.push(graphEntry);
     }
     this.#lastStepStack.push(stepKey);
+    this.#lastBuilderType = 'step';
+    return this as WorkflowBuilder<this>;
+  }
 
-    return this;
+  #__internalStep<
+    TWorkflow extends Workflow<any, any, any, any>,
+    CondStep extends StepVariableType<any, any, any, any>,
+    VarStep extends StepVariableType<any, any, any, any>,
+    Steps extends StepAction<any, any, any, any>[] = TSteps,
+  >(
+    next: TWorkflow,
+    config?: StepConfig<ReturnType<TWorkflow['toStep']>, CondStep, VarStep, TTriggerSchema, Steps>,
+    internalUse?: boolean,
+  ): WorkflowBuilder<this>;
+  #__internalStep<
+    TStep extends StepAction<any, any, any, any>,
+    CondStep extends StepVariableType<any, any, any, any>,
+    VarStep extends StepVariableType<any, any, any, any>,
+    Steps extends StepAction<any, any, any, any>[] = TSteps,
+  >(
+    step: TStep,
+    config?: StepConfig<TStep, CondStep, VarStep, TTriggerSchema, Steps>,
+    internalUse?: boolean,
+  ): WorkflowBuilder<this>;
+  #__internalStep<
+    TStepLike extends StepAction<string, any, any, any> | Workflow<TSteps, any, any, any>,
+    CondStep extends StepVariableType<any, any, any, any>,
+    VarStep extends StepVariableType<any, any, any, any>,
+    Steps extends StepAction<any, any, any, any>[] = TSteps,
+  >(
+    next: TStepLike extends StepAction<string, any, any, any> ? TStepLike : Workflow<TSteps, any, any, any>,
+    config?: StepConfig<
+      TStepLike extends StepAction<string, any, any, any>
+        ? TStepLike
+        : TStepLike extends Workflow<TSteps, any, any, any>
+          ? ReturnType<TStepLike['toStep']>
+          : never,
+      CondStep,
+      VarStep,
+      TTriggerSchema,
+      Steps
+    >,
+    internalUse?: boolean,
+  ): WorkflowBuilder<this> {
+    if (Array.isArray(next)) {
+      const nextSteps: StepAction<string, any, any, any>[] = next.map(step => {
+        if (isWorkflow(step)) {
+          const asStep = step.toStep();
+          return asStep;
+        } else {
+          return step as StepAction<string, any, any, any>;
+        }
+      });
+      nextSteps.forEach(step => this.#__internalStep(step, config, internalUse));
+      this.after(nextSteps);
+      this.#__internalStep(
+        new Step({
+          id: `__after_${next.map(step => step?.id ?? step?.name).join('_')}`,
+          execute: async ({ context }) => {
+            return { success: true };
+          },
+        }),
+        undefined,
+        internalUse,
+      );
+      return this;
+    }
+
+    const { variables = {} } = config || {};
+
+    const requiredData: Record<string, any> = {};
+
+    // Add valid variables to requiredData
+    for (const [key, variable] of Object.entries(variables)) {
+      if (variable && isVariableReference(variable)) {
+        requiredData[key] = variable;
+      }
+    }
+
+    const step: StepAction<string, any, any, any> = isWorkflow(next)
+      ? // @ts-ignore
+        workflowToStep(next, { mastra: this.#mastra })
+      : (next as StepAction<string, any, any, any>);
+
+    const stepKey = this.#makeStepKey(step);
+    const when = config?.['#internal']?.when || config?.when;
+
+    const graphEntry: StepNode = {
+      step,
+      config: {
+        ...this.#makeStepDef(stepKey),
+        ...config,
+        loopLabel: config?.['#internal']?.loopLabel,
+        loopType: config?.['#internal']?.loopType,
+        serializedWhen: typeof when === 'function' ? when.toString() : when,
+        data: requiredData,
+      },
+    };
+
+    this.#steps[stepKey] = step;
+
+    const parentStepKey = this.#getParentStepKey();
+    const stepGraph = this.#stepSubscriberGraph[parentStepKey || ''];
+    const serializedStepGraph = this.#serializedStepSubscriberGraph[parentStepKey || ''];
+
+    // if we are in an after chain and we have a stepGraph
+    if (parentStepKey && stepGraph) {
+      // if the stepGraph has an initial, but it doesn't contain the current step, add it to the initial
+      if (!stepGraph.initial.some(step => step.step.id === stepKey)) {
+        stepGraph.initial.push(graphEntry);
+        if (serializedStepGraph) serializedStepGraph.initial.push(graphEntry);
+      }
+      // add the current step to the stepGraph
+      stepGraph[stepKey] = [];
+      if (serializedStepGraph) serializedStepGraph[stepKey] = [];
+    } else {
+      // Normal step addition to main graph
+      if (!this.#stepGraph[stepKey]) this.#stepGraph[stepKey] = [];
+      this.#stepGraph.initial.push(graphEntry);
+      this.#serializedStepGraph.initial.push(graphEntry);
+    }
+    this.#lastStepStack.push(stepKey);
+    this.#lastBuilderType = 'step';
+    return this as WorkflowBuilder<this>;
   }
 
   #makeStepKey(step: Step<any, any, any> | Workflow<any, any>) {
@@ -292,6 +427,10 @@ export class Workflow<
     const stepGraph = this.#stepSubscriberGraph[parentStepKey || ''];
     const serializedStepGraph = this.#serializedStepSubscriberGraph[parentStepKey || ''];
 
+    if (parentStepKey && this.#lastBuilderType === 'after') {
+      return this.step(step, config);
+    }
+
     if (parentStepKey && stepGraph && stepGraph[lastStepKey]) {
       stepGraph[lastStepKey].push(graphEntry);
       if (serializedStepGraph && serializedStepGraph[lastStepKey]) serializedStepGraph[lastStepKey].push(graphEntry);
@@ -305,7 +444,8 @@ export class Workflow<
       this.#serializedStepGraph[lastStepKey].push(graphEntry);
     }
 
-    return this;
+    this.#lastBuilderType = 'then';
+    return this as WorkflowBuilder<this>;
   }
 
   private loop<
@@ -316,7 +456,7 @@ export class Workflow<
     applyOperator: (op: string, value: any, target: any) => { status: string },
     condition: StepConfig<FallbackStep, CondStep, VarStep, TTriggerSchema, TSteps>['when'],
     fallbackStep: FallbackStep,
-    loopType?: 'while' | 'until',
+    loopType: 'while' | 'until',
   ) {
     const lastStepKey = this.#lastStepStack[this.#lastStepStack.length - 1];
     // If no last step, we can't do anything
@@ -334,10 +474,14 @@ export class Workflow<
       execute: async ({ context }: any) => {
         if (typeof condition === 'function') {
           const result = await condition({ context });
-          if (loopType === 'while') {
-            return { status: result ? 'continue' : 'complete' };
-          } else {
-            return { status: result ? 'complete' : 'continue' };
+
+          switch (loopType) {
+            case 'while':
+              return { status: result ? 'continue' : 'complete' };
+            case 'until':
+              return { status: result ? 'complete' : 'continue' };
+            default:
+              throw new Error(`Invalid loop type: ${loopType}`);
           }
         }
 
@@ -393,44 +537,43 @@ export class Workflow<
     });
 
     // Then create a branch after the check step that loops back to the fallback step
-    this.after(checkStep)
-      .step<FallbackStep, any, any, [typeof checkStep]>(fallbackStep, {
-        when: async ({ context }) => {
-          const checkStepResult = context.steps?.[checkStepKey];
-          if (checkStepResult?.status !== 'success') {
-            return WhenConditionReturnValue.ABORT;
-          }
+    this.after(checkStep);
+    this.#__internalStep<FallbackStep, any, any, [typeof checkStep]>(fallbackStep, {
+      when: async ({ context }) => {
+        const checkStepResult = context.steps?.[checkStepKey];
+        if (checkStepResult?.status !== 'success') {
+          return WhenConditionReturnValue.ABORT;
+        }
 
-          const status = checkStepResult?.output?.status;
-          return status === 'continue' ? WhenConditionReturnValue.CONTINUE : WhenConditionReturnValue.CONTINUE_FAILED;
-        },
-        '#internal': {
-          // @ts-ignore
-          when: condition!,
-          loopType: loopType!,
-        },
-      })
-      .then(checkStep, {
-        '#internal': {
-          loopLabel: `${fallbackStepKey} ${loopType} loop check`,
-        },
-      })
-      .step<typeof loopFinishedStep, any, any, [typeof checkStep]>(loopFinishedStep, {
-        when: async ({ context }) => {
-          const checkStepResult = context.steps?.[checkStepKey];
-          if (checkStepResult?.status !== 'success') {
-            return WhenConditionReturnValue.CONTINUE_FAILED;
-          }
+        const status = checkStepResult?.output?.status;
+        return status === 'continue' ? WhenConditionReturnValue.CONTINUE : WhenConditionReturnValue.CONTINUE_FAILED;
+      },
+      '#internal': {
+        // @ts-ignore
+        when: condition!,
+        loopType: loopType!,
+      },
+    }).then(checkStep, {
+      '#internal': {
+        loopLabel: `${fallbackStepKey} ${loopType} loop check`,
+      },
+    });
+    this.#__internalStep<typeof loopFinishedStep, any, any, [typeof checkStep]>(loopFinishedStep, {
+      when: async ({ context }) => {
+        const checkStepResult = context.steps?.[checkStepKey];
+        if (checkStepResult?.status !== 'success') {
+          return WhenConditionReturnValue.CONTINUE_FAILED;
+        }
 
-          const status = checkStepResult?.output?.status;
-          return status === 'complete' ? WhenConditionReturnValue.CONTINUE : WhenConditionReturnValue.CONTINUE_FAILED;
-        },
-        '#internal': {
-          loopLabel: `${fallbackStepKey} ${loopType} loop finished`,
-          //@ts-ignore
-          loopType,
-        },
-      });
+        const status = checkStepResult?.output?.status;
+        return status === 'complete' ? WhenConditionReturnValue.CONTINUE : WhenConditionReturnValue.CONTINUE_FAILED;
+      },
+      '#internal': {
+        loopLabel: `${fallbackStepKey} ${loopType} loop finished`,
+        //@ts-ignore
+        loopType,
+      },
+    });
 
     return this;
   }
@@ -459,7 +602,13 @@ export class Workflow<
       }
     };
 
-    return this.loop(applyOperator, condition, fallbackStep, 'while');
+    const res = this.loop(applyOperator, condition, fallbackStep, 'while') as Pick<
+      WorkflowBuilder<this>,
+      'then' | 'commit'
+    >;
+    this.#lastBuilderType = 'while';
+
+    return res;
   }
 
   until<
@@ -489,7 +638,12 @@ export class Workflow<
       }
     };
 
-    return this.loop(applyOperator, condition, fallbackStep, 'until');
+    const res = this.loop(applyOperator, condition, fallbackStep, 'until') as Pick<
+      WorkflowBuilder<this>,
+      'then' | 'commit'
+    >;
+    this.#lastBuilderType = 'until';
+    return res;
   }
 
   if<TStep extends StepAction<string, any, any, any>>(
@@ -505,14 +659,16 @@ export class Workflow<
     this.after(lastStep);
 
     if (ifStep) {
-      const _ifStep = isWorkflow(ifStep) ? workflowToStep(ifStep, { mastra: this.#mastra }) : ifStep;
+      const _ifStep = isWorkflow(ifStep) ? workflowToStep(ifStep, { mastra: this.#mastra }) : (ifStep as TStep);
 
       this.step(_ifStep, {
         when: condition,
       });
 
       if (elseStep) {
-        const _elseStep = isWorkflow(elseStep) ? workflowToStep(elseStep, { mastra: this.#mastra }) : elseStep;
+        const _elseStep = isWorkflow(elseStep)
+          ? workflowToStep(elseStep, { mastra: this.#mastra })
+          : (elseStep as TStep);
         this.step(_elseStep, {
           when:
             typeof condition === 'function'
@@ -557,7 +713,8 @@ export class Workflow<
     const elseStepKey = `__${lastStep.id}_else`;
     this.#ifStack.push({ condition, elseStepKey, condStep: lastStep });
 
-    return this;
+    this.#lastBuilderType = 'if';
+    return this as WorkflowBuilder<this>;
   }
 
   else() {
@@ -585,16 +742,19 @@ export class Workflow<
       },
     );
 
-    return this;
+    this.#lastBuilderType = 'else';
+    return this as WorkflowBuilder<this>;
   }
 
-  after<TStep extends StepAction<string, any, any, any>>(steps: TStep | TStep[]): Omit<typeof this, 'then' | 'after'>;
+  after<TStep extends StepAction<string, any, any, any>>(
+    steps: TStep | TStep[],
+  ): Omit<WorkflowBuilder<this>, 'then' | 'after'>;
   after<TWorkflow extends Workflow<any, any, any, any>>(
     steps: TWorkflow | TWorkflow[],
-  ): Omit<typeof this, 'then' | 'after'>;
+  ): Omit<WorkflowBuilder<this>, 'then' | 'after'>;
   after<TStep extends StepAction<string, any, any, any> | Workflow<any, any, any, any>>(
     steps: TStep | Workflow | (TStep | Workflow)[],
-  ): Omit<typeof this, 'then' | 'after'> {
+  ): Omit<WorkflowBuilder<this>, 'then' | 'after'> {
     const stepsArray = Array.isArray(steps) ? steps : [steps];
     const stepKeys = stepsArray.map(step => this.#makeStepKey(step));
 
@@ -608,7 +768,8 @@ export class Workflow<
       this.#serializedStepSubscriberGraph[compoundKey] = { initial: [] };
     }
 
-    return this as Omit<typeof this, 'then' | 'after'>;
+    this.#lastBuilderType = 'after';
+    return this as Omit<WorkflowBuilder<this>, 'then' | 'after'>;
   }
 
   afterEvent(eventName: string) {
@@ -637,7 +798,8 @@ export class Workflow<
 
     this.after(lastStep).step(eventStep).after(eventStep);
 
-    return this;
+    this.#lastBuilderType = 'afterEvent';
+    return this as WorkflowBuilder<this>;
   }
 
   /**
@@ -740,6 +902,19 @@ export class Workflow<
 
   getExecutionSpan(runId: string) {
     return this.#runs.get(runId)?.executionSpan;
+  }
+
+  #getParentStepKey({ loop_check } = { loop_check: false }) {
+    let parentStepKey = undefined;
+    for (let i = this.#afterStepStack.length - 1; i >= 0; i--) {
+      const stepKey = this.#afterStepStack[i];
+      if (stepKey && this.#stepSubscriberGraph[stepKey] && (loop_check ? !stepKey.includes('loop_check') : true)) {
+        parentStepKey = stepKey;
+        break;
+      }
+    }
+
+    return parentStepKey;
   }
 
   #makeStepDef<TStepId extends TSteps[number]['id'], TSteps extends Step<any, any, any>[]>(
@@ -896,7 +1071,14 @@ export class Workflow<
     return run.resume({ stepId, context: resumeContext });
   }
 
-  watch(onTransition: (state: WorkflowRunState) => void): () => void {
+  watch(
+    onTransition: (
+      state: Pick<
+        WorkflowRunResult<TTriggerSchema, TSteps, TResultSchema>,
+        'results' | 'activePaths' | 'runId' | 'timestamp'
+      >,
+    ) => void,
+  ): () => void {
     this.logger.warn(`Please use 'watch' on the 'createRun' call instead, watch is deprecated`);
     this.#onStepTransition.add(onTransition);
 

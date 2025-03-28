@@ -19,9 +19,9 @@ const workflow = new Workflow({
 const run = workflow.createRun();
 
 // Subscribe to state changes
-const unsubscribe = run.watch((state) => {
-  console.log('Current step:', state.currentStep);
-  console.log('Step outputs:', state.stepOutputs);
+const unsubscribe = run.watch(({results, activePaths}) => {
+  console.log('Results:', results);
+  console.log('Active paths:', activePaths);
 });
 
 // Run the workflow
@@ -51,28 +51,28 @@ unsubscribe();
 <PropertiesTable
   content={[
     {
-      name: "currentStep",
-      type: "string",
-      description: "ID of the currently executing step",
-      isOptional: false
-    },
-    {
-      name: "stepOutputs",
+      name: "results",
       type: "Record<string, any>",
       description: "Outputs from completed workflow steps",
       isOptional: false
     },
     {
-      name: "status",
-      type: "'running' | 'completed' | 'failed'",
-      description: "Current status of the workflow",
+      name: "activePaths",
+      type: "Map<string, { status: string; suspendPayload?: any; stepPath: string[] }>",
+      description: "Current status of each step",
       isOptional: false
     },
     {
-      name: "error",
-      type: "Error | null",
-      description: "Error object if workflow failed",
-      isOptional: true
+      name: "runId",
+      type: "string",
+      description: "ID of the workflow run",
+      isOptional: false
+    },
+    {
+      name: "timestamp",
+      type: "number",
+      description: "Timestamp of the workflow run",
+      isOptional: false
     }
   ]}
 />
@@ -94,9 +94,9 @@ unsubscribe();
 Monitor specific step completion:
 
 ```typescript
-run.watch((state) => {
-  if (state.currentStep === 'processDocument') {
-    console.log('Document processing output:', state.stepOutputs.processDocument);
+run.watch(({results, activePaths}) => {
+  if (activePaths.get('processDocument')?.status === 'completed') {
+    console.log('Document processing output:', results['processDocument'].output);
   }
 });
 ```
@@ -104,9 +104,9 @@ run.watch((state) => {
 Error handling:
 
 ```typescript
-run.watch((state) => {
-  if (state.status === 'failed') {
-    console.error('Workflow failed:', state.error);
+run.watch(({results, activePaths}) => {
+  if (activePaths.get('processDocument')?.status === 'failed') {
+    console.error('Document processing failed:', results['processDocument'].error);
     // Implement error recovery logic
   }
 });
