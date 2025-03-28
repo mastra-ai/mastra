@@ -5,11 +5,11 @@ description: Documentation on how to filter and transform messages in Mastra Mem
 
 # Memory Message Processors
 
-Memory message processors allow you to filter or transform messages before they're sent to the LLM. This is particularly useful for:
+Memory message processors allow you to filter or transform recalled messages before they're sent to the LLM. This is particularly useful for:
 
 - Limiting token usage to prevent context overflow
-- Filtering out specific message types (e.g., audio files, tool calls)
-- Removing messages from specific roles
+- Filtering out specific message types (e.g. audio files, tool calls)
+- Truncating long tool results in message history (e.g. base64 images)
 - Implementing custom filtering logic
 
 > **Important**: Processors only affect messages retrieved from memory. They don't filter new messages that a user is currently sending to the agent.
@@ -228,4 +228,3 @@ When designing your processors, remember that they should be:
 1. Immutable - don't modify messages in place, create new ones
 2. Focused - each processor should have a single responsibility
 3. Efficient - avoid unnecessary processing, especially with large message histories
-
