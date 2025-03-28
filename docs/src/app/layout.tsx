@@ -10,7 +10,6 @@ import { fonts } from "./font/setup";
 import { cn } from "@/lib/utils";
 import { logo } from "@/components/logo";
 import { GithubStarCount } from "@/components/github-star-count";
-import { TableOfContents } from "@/components/toc";
 
 const navbar = (
   <Navbar
