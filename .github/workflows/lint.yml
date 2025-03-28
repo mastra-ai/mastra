@@ -37,7 +37,7 @@ jobs:
         run: pnpm install
 
       - name: Lint
-        run: pnpm turbo --filter "!./examples/*" --filter "!./docs/*" --filter "!./integrations/*" --filter "!@mastra/playground" lint
+        run: pnpm turbo --filter "!./examples/**/*" --filter "!./docs/**/*" --filter "!./integrations/**/*" --filter "!@mastra/playground" lint
 
   check-bundle:
     name: Validate build outputs
@@ -70,7 +70,7 @@ jobs:
         run: pnpm install
 
       - name: Build
-        run: pnpm turbo --filter "!./examples/*" --filter "!./docs" build
+        run: pnpm turbo --filter "!./examples/**/*" --filter "!./docs/" build
 
       - name: Install test dependencies
         working-directory: ./e2e-tests/pkg-outputs
