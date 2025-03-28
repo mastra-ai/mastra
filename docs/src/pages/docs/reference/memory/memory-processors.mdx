@@ -69,13 +69,13 @@ The ToolCallFilter:
 
 ## Implementing Custom Processors
 
-You can create custom processors by implementing the `MessageProcessor` interface:
+You can create custom processors by implementing the `MemoryProcessor` interface:
 
 ```typescript copy showLineNumbers
-import { Memory, MessageProcessor, CoreMessage } from "@mastra/memory";
+import { Memory, MemoryProcessor, CoreMessage } from "@mastra/memory";
 
-// Simple example of implementing the MessageProcessor interface
-class SimpleMessageFilter implements MessageProcessor {
+// Simple example of implementing the MemoryProcessor interface
+class SimpleMessageFilter implements MemoryProcessor {
   process(messages: CoreMessage[]): CoreMessage[] {
     // Return a subset of messages based on your criteria
     return messages.slice(0, 10); // For example, just keep the first 10 messages
@@ -97,7 +97,7 @@ Here are additional examples of custom message processors. Note that they're psu
 Filter content to only include specific types (like keeping only text):
 
 ```typescript copy showLineNumbers
-class TextOnlyFilter implements MessageProcessor {
+class TextOnlyFilter implements MemoryProcessor {
   process(messages: CoreMessage[]): CoreMessage[] {
     return messages
       .map((message) => {
@@ -126,7 +126,7 @@ class TextOnlyFilter implements MessageProcessor {
 This is particularly useful for models like Gemini that have limitations with audio content (untested example code):
 
 ```typescript copy showLineNumbers
-class AudioMessageFilter implements MessageProcessor {
+class AudioMessageFilter implements MemoryProcessor {
   process(messages: CoreMessage[]): CoreMessage[] {
     return messages.filter((message) => {
       // Check for audio content in string messages
@@ -162,7 +162,7 @@ class AudioMessageFilter implements MessageProcessor {
 Filter out reasoning parts from the messages to keep only the final responses (untested example code):
 
 ```typescript copy showLineNumbers
-class ReasoningFilter implements MessageProcessor {
+class ReasoningFilter implements MemoryProcessor {
   process(messages: CoreMessage[]): CoreMessage[] {
     return messages
       .map((message) => {
@@ -213,7 +213,7 @@ Putting the token limiter as the last processor will almost always be the right 
 
 ## Creating Your Own Processors
 
-The examples in this documentation are just illustrations to help you understand how to implement the `MessageProcessor` interface. You should create your own custom processors tailored to your specific use cases.
+The examples in this documentation are just illustrations to help you understand how to implement the `MemoryProcessor` interface. You should create your own custom processors tailored to your specific use cases.
 
 Mastra provides `TokenLimiter` and `ToolCallFilter` as built-in processors, but for other filtering needs, you should implement custom processors that address your particular requirements.
 

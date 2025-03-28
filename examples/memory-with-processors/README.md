@@ -62,13 +62,13 @@ pnpm run tokens
 
 ## Creating Your Own Processors
 
-To create a custom processor, implement the `MessageProcessor` interface:
+To create a custom processor, implement the `MemoryProcessor` interface:
 
 ```typescript
 import type { CoreMessage } from '@mastra/core';
-import type { MessageProcessor } from '@mastra/core/memory';
+import type { MemoryProcessor } from '@mastra/core/memory';
 
-class CustomProcessor implements MessageProcessor {
+class CustomProcessor implements MemoryProcessor {
   process(messages: CoreMessage[]): CoreMessage[] {
     // Filter or transform messages here
     return filteredMessages;
@@ -87,4 +87,3 @@ const memory = new Memory({
   ],
 });
 ```
-

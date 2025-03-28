@@ -1,12 +1,12 @@
 import type { CoreMessage } from '@mastra/core';
-import { MessageProcessor } from '@mastra/core';
+import { MemoryProcessor } from '@mastra/core';
 
 /**
  * Filters out tool calls and results from messages.
  * By default (with no arguments), excludes all tool calls and their results.
  * Can be configured to exclude only specific tools by name.
  */
-export class ToolCallFilter extends MessageProcessor {
+export class ToolCallFilter extends MemoryProcessor {
   private exclude: string[] | 'all';
 
   /**

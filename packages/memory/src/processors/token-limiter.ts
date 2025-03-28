@@ -1,5 +1,5 @@
-import type { CoreMessage, SharedMessageProcessorOpts } from '@mastra/core';
-import { MessageProcessor } from '@mastra/core/memory';
+import type { CoreMessage, SharedMemoryProcessorOpts } from '@mastra/core';
+import { MemoryProcessor } from '@mastra/core/memory';
 import { Tiktoken } from 'js-tiktoken/lite';
 import cl100k_base from 'js-tiktoken/ranks/cl100k_base';
 
@@ -8,7 +8,7 @@ import cl100k_base from 'js-tiktoken/ranks/cl100k_base';
  * Uses js-tiktoken with cl100k_base encoding for accurate token counting.
  * This encoding is used by all modern OpenAI models (GPT-3.5, GPT-4, etc).
  */
-export class TokenLimiter extends MessageProcessor {
+export class TokenLimiter extends MemoryProcessor {
   private encoder: Tiktoken;
   /**
    * Create a token limiter for messages.
@@ -23,7 +23,7 @@ export class TokenLimiter extends MessageProcessor {
 
   process(
     messages: CoreMessage[],
-    { systemMessage, memorySystemMessage, newMessages }: SharedMessageProcessorOpts = {},
+    { systemMessage, memorySystemMessage, newMessages }: SharedMemoryProcessorOpts = {},
   ): CoreMessage[] {
     // Messages are already chronologically ordered - take most recent ones up to the token limit
     let totalTokens = 0;

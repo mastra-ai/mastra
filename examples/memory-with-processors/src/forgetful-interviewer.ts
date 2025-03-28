@@ -5,16 +5,16 @@ import Readline from 'readline';
 import { openai } from '@ai-sdk/openai';
 import { Agent } from '@mastra/core/agent';
 import type { CoreMessage } from '@mastra/core';
-import type { MessageProcessor, SharedMessageProcessorOpts } from '@mastra/core/memory';
+import type { MemoryProcessor, SharedMemoryProcessorOpts } from '@mastra/core/memory';
 import { Memory } from '@mastra/memory';
 
 import { makeSend } from './utils';
 
 // Custom processor that makes the llm forget any messages that contain keywords
-class ForgetfulProcessor implements MessageProcessor {
+class ForgetfulProcessor implements MemoryProcessor {
   constructor(private keywords: string[]) {}
 
-  process(messages: CoreMessage[], _opts: SharedMessageProcessorOpts = {}): CoreMessage[] {
+  process(messages: CoreMessage[], _opts: SharedMemoryProcessorOpts = {}): CoreMessage[] {
     return messages.map(message => {
       if (message.role === `assistant` || message.role === `user`) {
         const content =
