@@ -46,11 +46,13 @@ export const SubscribeForm = ({
   successIcon,
   placeholder,
   label,
+  className,
 }: {
   idleIcon?: React.ReactNode;
   successIcon?: React.ReactNode;
   placeholder?: string;
   label?: string;
+  className?: string;
 }) => {
   const [buttonState, setButtonState] = useState("idle");
   const form = useForm<z.infer<typeof formSchema>>({
@@ -112,8 +114,16 @@ export const SubscribeForm = ({
   return (
     <Form {...form}>
       <form
-        onSubmit={form.handleSubmit(onSubmit)}
-        className={cn("items-end flex flex-col w-full gap-2 ")}
+        className={cn(
+          "mt-8 items-end flex flex-col md:flex-row w-full gap-2 ",
+          className,
+        )}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") {
+            e.preventDefault();
+            form.handleSubmit(onSubmit)();
+          }
+        }}
       >
         <FormField
           control={form.control}
@@ -146,6 +156,10 @@ export const SubscribeForm = ({
           className={cn(
             "dark:bg-[#121212] bg-[#2a2a2a] w-full rounded-md hover:opacity-90 h-[32px] justify-end flex items-center px-4 text-white dark:text-white text-[14px]",
           )}
+          onClick={(e) => {
+            e.preventDefault();
+            form.handleSubmit(onSubmit)();
+          }}
           disabled={buttonState === "loading"}
         >
           <AnimatePresence mode="popLayout" initial={false}>
