@@ -90,7 +90,7 @@ const memory = new Memory({
 
 ## Practical Processor Examples
 
-Here are additional examples of custom message processors:
+Here are additional examples of custom message processors. Note that they're psuedo code examples and haven't been tested. Their purpose is to give you an idea for what's possible.
 
 ### Content Type Filter
 
@@ -123,7 +123,7 @@ class TextOnlyFilter implements MessageProcessor {
 
 ### Audio Message Filter
 
-This is particularly useful for models like Gemini that have limitations with audio content:
+This is particularly useful for models like Gemini that have limitations with audio content (untested example code):
 
 ```typescript copy showLineNumbers
 class AudioMessageFilter implements MessageProcessor {
@@ -159,7 +159,7 @@ class AudioMessageFilter implements MessageProcessor {
 
 ### Reasoning Filter
 
-Filter out reasoning parts from the messages to keep only the final responses:
+Filter out reasoning parts from the messages to keep only the final responses (untested example code):
 
 ```typescript copy showLineNumbers
 class ReasoningFilter implements MessageProcessor {
@@ -208,6 +208,8 @@ const memory = new Memory({
 ```
 
 Processors are applied in the order they appear in the array. This means that the output from the first processor becomes the input to the second processor, and so on.
+The order matters, notice here that if you instead exclude tool calls after limiting tokens, you will limit more tokens than intended as token limiting would include tool call tokens that are later removed.
+Putting the token limiter as the last processor will almost always be the right thing to do.
 
 ## Creating Your Own Processors
 
@@ -220,8 +222,8 @@ The message processor system is designed to be flexible and extensible, allowing
 - Remove specific content types (like audio for Gemini models)
 - Filter messages based on custom criteria
 - Transform message content
-- Remove sensitive information
 - Simplify complex messages
+- Remove sensitive information (note that this is not a security measure, the LLM will still see any new messages)
 
 When designing your processors, remember that they should be:
 
