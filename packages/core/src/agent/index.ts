@@ -58,6 +58,7 @@ export class Agent<
   readonly model?: MastraLanguageModel;
   #mastra?: Mastra;
   #memory?: MastraMemory;
+  #defaultMaxSteps: number;
   tools: TTools;
   /** @deprecated This property is deprecated. Use evals instead. */
   metrics: TMetrics;
@@ -75,6 +76,8 @@ export class Agent<
     }
 
     this.llm = new MastraLLM({ model: config.model, mastra: config.mastra });
+
+    this.#defaultMaxSteps = config.defaultMaxSteps || 5;
 
     this.tools = {} as TTools;
 
@@ -842,7 +845,7 @@ export class Agent<
       threadId: threadIdInFn,
       memoryOptions,
       resourceId,
-      maxSteps = 5,
+      maxSteps = this.#defaultMaxSteps,
       onStepFinish,
       runId,
       output,
@@ -903,7 +906,7 @@ export class Agent<
         onStepFinish: (result: any) => {
           void onStepFinish?.(result);
         },
-        maxSteps: maxSteps || 5,
+        maxSteps: maxSteps,
         runId: runIdToUse,
         temperature,
         toolChoice: toolChoice || 'auto',
@@ -1002,7 +1005,7 @@ export class Agent<
       threadId: threadIdInFn,
       memoryOptions,
       resourceId,
-      maxSteps = 5,
+      maxSteps = this.#defaultMaxSteps,
       onFinish,
       onStepFinish,
       runId,
