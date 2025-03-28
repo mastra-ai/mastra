@@ -64,6 +64,17 @@ describe('AstraVector Integration Tests', () => {
 
     await vectorDB.createIndex({ indexName: testIndexName, dimension: 4, metric: 'cosine' });
     await vectorDB.createIndex({ indexName: testIndexName2, dimension: 4, metric: 'cosine' });
+    const created = await waitForCondition(
+      async () => {
+        const newCollections = await vectorDB.listIndexes();
+        return newCollections.length === 2;
+      },
+      30000,
+      2000,
+    );
+    if (!created) {
+      throw new Error('Timed out waiting for collections to be created');
+    }
   }, 500000);
 
   afterAll(async () => {
