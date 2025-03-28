@@ -38,7 +38,6 @@ The TokenLimiter:
 - Keeps messages up to the specified token limit
 - Works with messages already in chronological order
 - Prioritizes keeping the most recent messages when token limit is reached
-- Uses a simple approximation for token counting (or a custom counting function if provided)
 
 ### ToolCallFilter
 
@@ -63,7 +62,7 @@ const memory = new Memory({
 The ToolCallFilter:
 
 - By default (with no arguments), excludes all tool calls and their results
-- Can be configured to exclude specific tools by name with `{ exclude: ['tool-name'] }`
+- Can be configured to exclude specific tools by name with `{ exclude: ['toolName'] }`
 - Will also exclude the corresponding tool results for any filtered tool calls
 - Preserves all other content in messages
 
