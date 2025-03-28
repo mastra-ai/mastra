@@ -121,8 +121,6 @@ describe('Working Memory Tests', () => {
 
     await memory.saveMessages({ messages });
 
-    // Get the working memory
-    // @ts-expect-error
     const workingMemory = await memory.getWorkingMemory({ threadId: thread.id });
     expect(workingMemory).toContain('<first_name>Tyler</first_name>');
     expect(workingMemory).toContain('<location>San Francisco</location>');
@@ -142,7 +140,6 @@ describe('Working Memory Tests', () => {
   });
 
   it('should initialize with default working memory template', async () => {
-    // @ts-expect-error
     const workingMemory = await memory.getWorkingMemory({ threadId: thread.id });
     expect(workingMemory).toContain('<user>');
     expect(workingMemory).toContain('<first_name>');
@@ -204,7 +201,6 @@ describe('Working Memory Tests', () => {
       ],
     });
 
-    // @ts-expect-error
     const workingMemory = await memory.getWorkingMemory({ threadId: thread.id });
     expect(workingMemory).toContain('<first_name>John</first_name>');
     expect(workingMemory).toContain('<location>New York</location>');
@@ -270,7 +266,6 @@ describe('Working Memory Tests', () => {
     await disabledMemory.saveMessages({ messages });
 
     // Working memory should be null when disabled
-    // @ts-expect-error
     const workingMemory = await disabledMemory.getWorkingMemory({ threadId: thread.id });
     expect(workingMemory).toBeNull();
 
@@ -370,35 +365,121 @@ describe('Working Memory Tests', () => {
   });
 
   it('should handle LLM responses with working memory using tool calls', async () => {
+    const memory = new Memory({
+      storage: new DefaultStorage({
+        config: {
+          url: 'file:test.db',
+        },
+      }),
+      options: {
+        workingMemory: {
+          enabled: true,
+          use: 'tool-call',
+        },
+        lastMessages: 5,
+      },
+    });
+
     const agent = new Agent({
       name: 'Memory Test Agent',
       instructions: 'You are a helpful AI agent. Always add working memory tags to remember user information.',
       model: openai('gpt-4o'),
-      memory: new Memory({
-        storage: new DefaultStorage({
-          config: {
-            url: 'file:test.db',
-          },
-        }),
-        options: {
-          workingMemory: {
-            enabled: true,
-            use: 'tool-call',
-          },
-          lastMessages: 5,
-        },
-      }),
+      memory,
     });
+
+    const thread = await memory.createThread(createTestThread(`Tool call working memory test`));
 
     await agent.generate('Hi, my name is Tyler and I live in San Francisco', {
       threadId: thread.id,
       resourceId,
     });
 
-    // Get working memory
-    // @ts-expect-error
     const workingMemory = await memory.getWorkingMemory({ threadId: thread.id });
     expect(workingMemory).toContain('<first_name>Tyler</first_name>');
     expect(workingMemory).toContain('<location>San Francisco</location>');
+  });
+
+  it("shouldn't pollute context with working memory tool call args, only the system instruction working memory should exist", async () => {
+    const memory = new Memory({
+      storage: new DefaultStorage({
+        config: {
+          url: 'file:test.db',
+        },
+      }),
+      options: {
+        workingMemory: {
+          enabled: true,
+          use: 'tool-call',
+          template: `<user><first_name></first_name><location></location></user>`,
+        },
+        lastMessages: 5,
+      },
+    });
+
+    const agent = new Agent({
+      name: 'Memory Test Agent',
+      instructions: 'You are a helpful AI agent. Always add working memory tags to remember user information.',
+      model: openai('gpt-4o'),
+      memory,
+    });
+
+    const thread = await memory.createThread(createTestThread(`Tool call working memory context pollution test`));
+
+    await agent.generate('Hi, my name is Tyler and I live in a submarine under the sea', {
+      threadId: thread.id,
+      resourceId,
+    });
+
+    let workingMemory = await memory.getWorkingMemory({ threadId: thread.id });
+    expect(workingMemory).toContain('<first_name>Tyler</first_name>');
+    expect(workingMemory?.toLowerCase()).toContain('<location>submarine under the sea</location>');
+
+    await agent.generate('I changed my name to Jim', {
+      threadId: thread.id,
+      resourceId,
+    });
+
+    workingMemory = await memory.getWorkingMemory({ threadId: thread.id });
+    expect(workingMemory).toContain('<first_name>Jim</first_name>');
+    expect(workingMemory?.toLowerCase()).toContain('<location>submarine under the sea</location>');
+
+    await agent.generate('I moved to Vancouver Island', {
+      threadId: thread.id,
+      resourceId,
+    });
+
+    workingMemory = await memory.getWorkingMemory({ threadId: thread.id });
+    expect(workingMemory).toContain('<first_name>Jim</first_name>');
+    expect(workingMemory).toContain('<location>Vancouver Island</location>');
+
+    const history = await memory.query({
+      threadId: thread.id,
+      resourceId,
+      selectBy: {
+        last: 20,
+      },
+    });
+
+    const memoryArgs: string[] = [];
+
+    for (const message of history.messages) {
+      if (message.role === `assistant`) {
+        for (const part of message.content) {
+          if (typeof part === `string`) continue;
+          if (part.type === `tool-call` && part.toolName === `updateWorkingMemory`) {
+            memoryArgs.push((part.args as any).memory);
+          }
+        }
+      }
+    }
+
+    expect(memoryArgs).not.toContain(`<first_name>Tyler</first_name>`);
+    expect(memoryArgs).not.toContain('<location>submarine under the sea</location>');
+    expect(memoryArgs).not.toContain('<first_name>Jim</first_name>');
+    expect(memoryArgs).not.toContain('<location>Vancouver Island</location>');
+    expect(memoryArgs).toEqual([]);
+
+    workingMemory = await memory.getWorkingMemory({ threadId: thread.id });
+    expect(workingMemory).toBe(`<user><first_name>Jim</first_name><location>Vancouver Island</location></user>`);
   });
 });

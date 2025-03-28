@@ -115,6 +115,7 @@ export function mergeChildValue(
 ): Record<string, any> {
   const traverse = (current: Record<string, any>) => {
     const obj: Record<string, any> = {};
+
     for (const [key, value] of Object.entries(current)) {
       if (key === startStepId) {
         // Found child state
@@ -159,15 +160,21 @@ export function getResultActivePaths(state: {
   value: Record<string, string>;
   context: { steps: Record<string, any> };
 }) {
-  return getActivePathsAndStatus(state.value).reduce((acc, curr) => {
-    const entry: { status: string; suspendPayload?: any } = { status: curr.status };
+  const activePaths = getActivePathsAndStatus(state.value);
+  const activePathsAndStatus = activePaths.reduce((acc, curr) => {
+    const entry: { status: string; suspendPayload?: any; stepPath: string[] } = {
+      status: curr.status,
+      stepPath: curr.stepPath,
+    };
     if (curr.status === 'suspended') {
       // @ts-ignore
       entry.suspendPayload = state.context.steps[curr.stepId].suspendPayload;
+      entry.stepPath = curr.stepPath;
     }
     acc.set(curr.stepId, entry);
     return acc;
-  }, new Map<string, { status: string; suspendPayload?: any }>());
+  }, new Map<string, { status: string; suspendPayload?: any; stepPath: string[] }>());
+  return activePathsAndStatus;
 }
 
 export function isWorkflow(
@@ -249,7 +256,7 @@ export function workflowToStep<
       }
       const run = context.isResume ? workflow.createRun({ runId: context.isResume.runId }) : workflow.createRun();
       const unwatch = run.watch(state => {
-        emit('state-update', workflow.name, state.value, { ...context, ...{ [workflow.name]: state.context } });
+        emit('state-update', workflow.name, state.results, { ...context, ...{ [workflow.name]: state.results } });
       });
 
       const awaitedResult =

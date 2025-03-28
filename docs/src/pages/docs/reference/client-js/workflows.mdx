@@ -76,7 +76,7 @@ try{
 
         console.log({
           activePaths: record.activePaths,
-          context: record.context,
+          results: record.results,
           timestamp: record.timestamp,
           runId: record.runId
         });
@@ -108,7 +108,7 @@ try{
 
         console.log({
           activePaths: record.activePaths,
-          context: record.context,
+          results: record.results,
           timestamp: record.timestamp,
           runId: record.runId
         });
@@ -130,9 +130,7 @@ A workflow run result yields the following:
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `activePaths` | `Array<{ stepId: string; stepPath: string[]; status: 'completed' \| 'suspended' \| 'pending' }>` | Currently active paths in the workflow with their execution status |
-| `context` | `{ steps: Record<string, { status: 'completed' \| 'suspended' \| 'running'; [key: string]: any }> }` | Current workflow context including step statuses and additional step data |
+| `activePaths` | `Record<string, { status: string; suspendPayload?: any; stepPath: string[] }>` | Currently active paths in the workflow with their execution status |
+| `results` | `CoreWorkflowRunResult<any, any, any>['results']` | Results from the workflow execution |
 | `timestamp` | `number` | Unix timestamp of when this transition occurred |
 | `runId` | `string` | Unique identifier for this workflow run instance |
-| `suspendedSteps` | `Record<string, any>` | Map of currently suspended steps and their suspension data |
-

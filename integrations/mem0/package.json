@@ -1,6 +1,6 @@
 {
   "name": "@mastra/mem0",
-  "version": "0.0.1-alpha.1",
+  "version": "0.0.1",
   "description": "Mem0 is a memory-based AI platform that allows you to store, search your memories based on the user's query.",
   "type": "module",
   "keywords": [],

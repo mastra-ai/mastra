@@ -7,7 +7,7 @@ export const UserMessage: FC = () => {
       style={{
         placeItems: 'end',
       }}
-      className="grid w-full py-4"
+      className="grid w-full"
     >
       {/* <UserActionBar /> */}
 

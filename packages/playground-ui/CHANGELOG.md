@@ -1,5 +1,36 @@
 # @mastra/playground-ui
 
+## 3.0.0
+
+### Patch Changes
+
+- 6d5d9c6: Show tool calls in playground chat
+- 2447900: Show No input for steps without input on traces UI
+- c30787b: Stop automatically scrolling to bottom in agent chat if user has scrolled up
+- 214e7ce: Only mark required fields as required on the playground
+- 2134786: Fix traces navigation not working in playground
+- Updated dependencies [b4fbc59]
+- Updated dependencies [0206617]
+- Updated dependencies [a838fde]
+- Updated dependencies [a8bd4cf]
+- Updated dependencies [7a3eeb0]
+- Updated dependencies [0b54522]
+- Updated dependencies [160f88e]
+- Updated dependencies [b3b34f5]
+- Updated dependencies [3811029]
+- Updated dependencies [1af25d5]
+- Updated dependencies [a4686e8]
+- Updated dependencies [6530ad1]
+- Updated dependencies [27439ad]
+  - @mastra/core@0.7.0
+  - @mastra/client-js@0.1.13
+
+## 3.0.0-alpha.4
+
+### Patch Changes
+
+- 6d5d9c6: Show tool calls in playground chat
+
 ## 3.0.0-alpha.3
 
 ### Patch Changes
