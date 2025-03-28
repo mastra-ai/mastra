@@ -142,17 +142,20 @@ describe('Workflow', async () => {
 
       workflow
         .step(step1, {
+          id: 'step1',
           variables: {
             status: { step: 'trigger', path: 'status' },
           },
         })
         .then(step2, {
+          id: 'step2',
           when: {
             ref: { step: step1, path: 'status' },
             query: { $eq: 'success' },
           },
         })
         .then(step3, {
+          id: 'step3',
           when: {
             ref: { step: step1, path: 'status' },
             query: { $eq: 'failed' },
@@ -213,11 +216,13 @@ describe('Workflow', async () => {
       workflow
         .step(step1)
         .then(step2, {
+          id: 'step2',
           when: {
             'step1.status': 'success',
           },
         })
         .then(step3, {
+          id: 'step3',
           when: {
             'step2.status': 'unexpected value',
           },
@@ -255,6 +260,7 @@ describe('Workflow', async () => {
       workflow
         .step(step1)
         .then(step2, {
+          id: 'step2',
           when: async ({ context }) => {
             const step1Result = context.getStepResult(step1);
 
@@ -295,6 +301,7 @@ describe('Workflow', async () => {
 
       workflow
         .step(step1, {
+          id: 'step1',
           variables: {
             inputData: { step: 'trigger', path: 'inputData' },
           },
@@ -412,6 +419,7 @@ describe('Workflow', async () => {
 
       workflow
         .step(step1, {
+          id: 'step1',
           variables: {
             tData: { step: 'trigger', path: '.' },
           },
@@ -466,6 +474,7 @@ describe('Workflow', async () => {
       workflow
         .step(step1)
         .then(step2, {
+          id: 'step2',
           variables: {
             previousValue: { step: step1, path: 'nested.value' },
           },
@@ -547,6 +556,7 @@ describe('Workflow', async () => {
       workflow
         .step(step1)
         .then(step2, {
+          id: 'step2',
           variables: {
             data: { step: step1, path: 'data' },
           },
@@ -605,6 +615,7 @@ describe('Workflow', async () => {
       workflow
         .step(step1)
         .then(step2, {
+          id: 'step2',
           when: {
             and: [
               {
@@ -635,6 +646,7 @@ describe('Workflow', async () => {
           },
         })
         .then(step3, {
+          id: 'step3',
           when: {
             or: [
               {
@@ -1681,6 +1693,7 @@ describe('Workflow', async () => {
         .then(step5)
         .after(step1)
         .step(step3, {
+          id: 'step3',
           when: {
             ref: { step: step1, path: 'status' },
             query: { $eq: 'failed' },
@@ -1745,12 +1758,12 @@ describe('Workflow', async () => {
       const step5 = new Step({ id: 'step5', execute: step5Action });
       const workflow = new Workflow({ name: 'test-workflow' });
       workflow
-        .step(step1, { when: async () => true })
-        .then(step2, { when: async () => false })
+        .step(step1, { id: 'step1' })
+        .then(step2, { id: 'step2', when: async () => false })
         .after([step1, step2])
-        .step(step3)
-        .then(step4)
-        .then(step5)
+        .step(step3, { id: 'step3' })
+        .then(step4, { id: 'step4' })
+        .then(step5, { id: 'step5' })
         .commit();
 
       const run = workflow.createRun();
@@ -1894,6 +1907,7 @@ describe('Workflow', async () => {
         .step(dummyStep3)
         .after(dummyStep3)
         .step(incrementStep, {
+          id: 'incrementStep',
           when: async ({ context }) => {
             const isPassed = context.getStepResult(incrementStep)?.newValue < 10;
             if (isPassed) {
@@ -1904,6 +1918,7 @@ describe('Workflow', async () => {
           },
         })
         .step(finalStep, {
+          id: 'finalStep',
           when: async ({ context }) => {
             const isPassed = context.getStepResult(incrementStep)?.newValue >= 10;
             return isPassed;
@@ -2302,9 +2317,11 @@ describe('Workflow', async () => {
         .then(evaluateTone)
         .after(evaluateTone)
         .step(humanIntervention, {
+          id: 'humanIntervention',
           when: () => Promise.resolve(true),
         })
         .step(explainResponse, {
+          id: 'explainResponse',
           when: () => Promise.resolve(false),
         })
         .commit();
@@ -2453,9 +2470,11 @@ describe('Workflow', async () => {
         .then(evaluateImproved)
         .after(evaluateImproved)
         .step(humanIntervention, {
+          id: 'humanIntervention',
           when: () => Promise.resolve(true),
         })
         .step(explainResponse, {
+          id: 'explainResponse',
           when: () => Promise.resolve(false),
         })
         .commit();

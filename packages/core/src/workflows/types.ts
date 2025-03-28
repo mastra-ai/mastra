@@ -185,6 +185,7 @@ export interface StepConfig<
     loopLabel?: string;
     loopType?: 'while' | 'until' | undefined;
   };
+  id?: string;
 }
 
 type StepSuccess<T> = {

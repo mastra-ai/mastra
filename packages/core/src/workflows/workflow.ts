@@ -531,6 +531,7 @@ export class Workflow<
 
     // First add the check step after the last step
     this.then(checkStep, {
+      id: checkStepKey,
       '#internal': {
         loopLabel: `${fallbackStepKey} ${loopType} loop check`,
       },
@@ -554,11 +555,13 @@ export class Workflow<
         loopType: loopType!,
       },
     }).then(checkStep, {
+      id: checkStepKey,
       '#internal': {
         loopLabel: `${fallbackStepKey} ${loopType} loop check`,
       },
     });
     this.#__internalStep<typeof loopFinishedStep, any, any, [typeof checkStep]>(loopFinishedStep, {
+      id: loopFinishedStepKey,
       when: async ({ context }) => {
         const checkStepResult = context.steps?.[checkStepKey];
         if (checkStepResult?.status !== 'success') {
@@ -662,6 +665,7 @@ export class Workflow<
       const _ifStep = isWorkflow(ifStep) ? workflowToStep(ifStep, { mastra: this.#mastra }) : (ifStep as TStep);
 
       this.step(_ifStep, {
+        id: _ifStep.id,
         when: condition,
       });
 
@@ -670,6 +674,7 @@ export class Workflow<
           ? workflowToStep(elseStep, { mastra: this.#mastra })
           : (elseStep as TStep);
         this.step(_elseStep, {
+          id: _elseStep.id,
           when:
             typeof condition === 'function'
               ? async payload => {
@@ -706,6 +711,7 @@ export class Workflow<
         },
       },
       {
+        id: ifStepKey,
         when: condition,
       },
     );
@@ -731,6 +737,7 @@ export class Workflow<
         },
       },
       {
+        id: activeCondition.elseStepKey,
         when:
           typeof activeCondition.condition === 'function'
             ? async payload => {
