@@ -1,5 +1,6 @@
 import { Readable } from 'stream';
 import type { ToolsInput } from '@mastra/core/agent';
+import { isZodObject } from 'zod';
 import { zodToJsonSchema } from 'zod-to-json-schema';
 
 export type OpenAIExecuteFunction = (args: any) => Promise<any>;
@@ -11,22 +12,14 @@ export const transformTools = (tools?: TTools) => {
     let parameters: { [key: string]: any };
 
     if ('inputSchema' in tool && tool.inputSchema) {
-      if (
-        typeof tool.inputSchema === 'object' &&
-        tool.inputSchema._def &&
-        tool.inputSchema._def.typeName === 'ZodObject'
-      ) {
+      if (isZodObject(tool.inputSchema)) {
         parameters = zodToJsonSchema(tool.inputSchema);
         delete parameters.$schema;
       } else {
         parameters = tool.inputSchema;
       }
     } else if ('parameters' in tool) {
-      if (
-        typeof tool.parameters === 'object' &&
-        tool.parameters._def &&
-        tool.parameters._def.typeName === 'ZodObject'
-      ) {
+      if (isZodObject(tool.parameters)) {
         parameters = zodToJsonSchema(tool.parameters);
         delete parameters.$schema;
       } else {
@@ -86,3 +79,15 @@ export const isReadableStream = (obj: unknown) => {
     obj.readable === true
   );
 };
+
+function isZodObject(schema: unknown) {
+  return (
+    !!schema &&
+    typeof schema === 'object' &&
+    '_def' in schema &&
+    schema._def &&
+    typeof schema._def === 'object' &&
+    'typeName' in schema._def &&
+    schema._def.typeName === 'ZodObject'
+  );
+}
