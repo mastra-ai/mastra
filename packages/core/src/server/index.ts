@@ -11,26 +11,33 @@ type ParamsFromPath<P extends string> = {
 
 export function registerApiRoute<P extends string>(
   path: P,
-  options: {
-    method: Methods;
-    openapi?: DescribeRouteOptions;
-    handler: Handler<
-      {
-        Variables: {
-          mastra: Mastra;
-        };
+  options: P extends `/api/${string}`
+    ? never
+    : {
+        method: Methods;
+        openapi?: DescribeRouteOptions;
+        handler: Handler<
+          {
+            Variables: {
+              mastra: Mastra;
+            };
+          },
+          P,
+          ParamsFromPath<P>
+        >;
+        middleware?: MiddlewareHandler | MiddlewareHandler[];
       },
-      P,
-      ParamsFromPath<P>
-    >;
-    middleware?: MiddlewareHandler | MiddlewareHandler[];
-  },
-): ApiRoute {
+): P extends `/api/${string}` ? never : ApiRoute {
+  if (path.startsWith('/api/')) {
+    throw new Error('Path must not start with "/api", it\'s reserved for internal API routes');
+  }
+
+  // @ts-expect-error
   return {
     path,
     method: options.method,
     handler: options.handler,
     openapi: options.openapi,
     middleware: options.middleware,
-  };
+  } as ApiRoute;
 }
