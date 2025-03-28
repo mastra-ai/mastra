@@ -4,7 +4,7 @@ import { LogLevel, createLogger, noopLogger } from '../logger';
 import type { Logger } from '../logger';
 import type { MastraMemory } from '../memory/memory';
 import type { AgentNetwork } from '../network';
-import type { ApiRoute, ServerConfig } from '../server/types';
+import type { ServerConfig } from '../server/types';
 import type { MastraStorage } from '../storage';
 import { DefaultProxyStorage } from '../storage/default-proxy-storage';
 import { InstrumentClass, Telemetry } from '../telemetry';
@@ -35,6 +35,7 @@ export interface Config<
   /**
    * Server middleware functions to be applied to API routes
    * Each middleware can specify a path pattern (defaults to '/api/*')
+   * @deprecated use server.middleware instead
    */
   serverMiddleware?: Array<{
     handler: (c: any, next: () => Promise<void>) => Promise<Response | void>;

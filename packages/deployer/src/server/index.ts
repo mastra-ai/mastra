@@ -140,7 +140,26 @@ export async function createHonoServer(
     onError: (c: Context) => c.json({ error: 'Request body too large' }, 413),
   };
 
-  const routes = mastra.getServer()?.apiRoutes;
+  const server = mastra.getServer();
+  const routes = server?.apiRoutes;
+
+  if (server?.middleware) {
+    const normalizedMiddlewares = Array.isArray(server.middleware) ? server.middleware : [server.middleware];
+    const middlewares = normalizedMiddlewares.map(middleware => {
+      if (typeof middleware === 'function') {
+        return {
+          path: '*',
+          handler: middleware,
+        };
+      }
+
+      return middleware;
+    });
+
+    for (const middleware of middlewares) {
+      app.use(middleware.path, middleware.handler);
+    }
+  }
 
   if (routes) {
     for (const route of routes) {
@@ -152,7 +171,7 @@ export async function createHonoServer(
       if (route.openapi) {
         middlewares.push(describeRoute(route.openapi));
       }
-
+      console.log({ path: route.path, middlewares });
       if (route.method === 'GET') {
         app.get(route.path, ...middlewares, route.handler);
       } else if (route.method === 'POST') {

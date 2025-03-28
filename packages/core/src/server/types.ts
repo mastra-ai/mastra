@@ -10,8 +10,11 @@ export type ApiRoute = {
   openapi?: DescribeRouteOptions;
 };
 
+type Middleware = MiddlewareHandler | { path: string; handler: MiddlewareHandler };
+
 export type ServerConfig = {
-  port?: number;
+  // TOOD add support for port
+  // port?: number;
   apiRoutes?: ApiRoute[];
-  middleware?: MiddlewareHandler | Array<MiddlewareHandler>;
+  middleware?: Middleware | Middleware[];
 };
