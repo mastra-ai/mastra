@@ -80,8 +80,8 @@ export async function startAsyncWorkflowHandler({
   mastra,
   workflowId,
   runId,
-  body,
-}: Pick<WorkflowContext, 'mastra' | 'workflowId' | 'runId'> & { body?: unknown }) {
+  triggerData,
+}: Pick<WorkflowContext, 'mastra' | 'workflowId' | 'runId'> & { triggerData?: unknown }) {
   try {
     if (!workflowId) {
       throw new HTTPException(400, { message: 'Workflow ID is required' });
@@ -104,7 +104,7 @@ export async function startAsyncWorkflowHandler({
     }
 
     const result = await run.start({
-      triggerData: body,
+      triggerData,
     });
     return result;
   } catch (error) {
@@ -172,8 +172,8 @@ export async function startWorkflowRunHandler({
   mastra,
   workflowId,
   runId,
-  body,
-}: Pick<WorkflowContext, 'mastra' | 'workflowId' | 'runId'> & { body?: { triggerData?: unknown } }) {
+  triggerData,
+}: Pick<WorkflowContext, 'mastra' | 'workflowId' | 'runId'> & { triggerData?: unknown }) {
   try {
     if (!workflowId) {
       throw new HTTPException(400, { message: 'Workflow ID is required' });
@@ -191,7 +191,7 @@ export async function startWorkflowRunHandler({
     }
 
     await run.start({
-      triggerData: body,
+      triggerData,
     });
 
     return { message: 'Workflow run started' };
@@ -204,7 +204,7 @@ export async function watchWorkflowHandler({
   mastra,
   workflowId,
   runId,
-}: Pick<WorkflowContext, 'mastra' | 'workflowId' | 'runId'>) {
+}: Pick<WorkflowContext, 'mastra' | 'workflowId' | 'runId'>): Promise<ReadableStream<string>> {
   try {
     if (!workflowId) {
       throw new HTTPException(400, { message: 'Workflow ID is required' });
@@ -222,11 +222,26 @@ export async function watchWorkflowHandler({
     }
 
     let unwatch: () => void;
-    const stream = new ReadableStream({
+    let asyncRef: NodeJS.Immediate | null = null;
+    const stream = new ReadableStream<string>({
       start(controller) {
         unwatch = run.watch(({ activePaths, runId, timestamp, results }) => {
           const activePathsObj = Object.fromEntries(activePaths);
+          console.log('writing to stream');
           controller.enqueue(JSON.stringify({ activePaths: activePathsObj, runId, timestamp, results }) + '\x1E');
+
+          if (asyncRef) {
+            clearImmediate(asyncRef);
+            asyncRef = null;
+          }
+
+          // a run is finished if we cannot retrieve it anymore
+          asyncRef = setImmediate(() => {
+            if (!workflow.getRun(runId)) {
+              console.log('closing stream');
+              controller.close();
+            }
+          });
         });
       },
       cancel() {

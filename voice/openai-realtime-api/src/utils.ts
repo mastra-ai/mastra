@@ -13,7 +13,9 @@ export const transformTools = (tools?: TTools) => {
     if ('inputSchema' in tool && tool.inputSchema) {
       if (
         typeof tool.inputSchema === 'object' &&
+        // @ts-ignore
         tool.inputSchema._def &&
+        // @ts-ignore
         tool.inputSchema._def.typeName === 'ZodObject'
       ) {
         parameters = zodToJsonSchema(tool.inputSchema);
@@ -24,7 +26,9 @@ export const transformTools = (tools?: TTools) => {
     } else if ('parameters' in tool) {
       if (
         typeof tool.parameters === 'object' &&
+        // @ts-ignore
         tool.parameters._def &&
+        // @ts-ignore
         tool.parameters._def.typeName === 'ZodObject'
       ) {
         parameters = zodToJsonSchema(tool.parameters);
