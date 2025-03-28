@@ -46,7 +46,7 @@ It provides real-time vector search, with features like hybrid search, metadata 
       type: "'cosine' | 'euclidean' | 'dotproduct'",
       isOptional: true,
       defaultValue: "cosine",
-      description: "Distance metric for similarity search",
+      description: "Distance metric for similarity search. Use 'dotproduct' if you plan to use hybrid search.",
     },
   ]}
 />
@@ -63,7 +63,13 @@ It provides real-time vector search, with features like hybrid search, metadata 
     {
       name: "vectors",
       type: "number[][]",
-      description: "Array of embedding vectors",
+      description: "Array of dense embedding vectors",
+    },
+    {
+      name: "sparseVectors",
+      type: "{ indices: number[], values: number[] }[]",
+      isOptional: true,
+      description: "Array of sparse vectors for hybrid search. Each vector must have matching indices and values arrays.",
     },
     {
       name: "metadata",
@@ -76,6 +82,12 @@ It provides real-time vector search, with features like hybrid search, metadata 
       type: "string[]",
       isOptional: true,
       description: "Optional vector IDs (auto-generated if not provided)",
+    },
+    {
+      name: "namespace",
+      type: "string",
+      isOptional: true,
+      description: "Optional namespace to store vectors in. Vectors in different namespaces are isolated from each other.",
     },
   ]}
 />
@@ -92,7 +104,13 @@ It provides real-time vector search, with features like hybrid search, metadata 
     {
       name: "vector",
       type: "number[]",
-      description: "Query vector to find similar vectors",
+      description: "Dense query vector to find similar vectors",
+    },
+    {
+      name: "sparseVector",
+      type: "{ indices: number[], values: number[] }",
+      isOptional: true,
+      description: "Optional sparse vector for hybrid search. Must have matching indices and values arrays.",
     },
     {
       name: "topK",
@@ -113,6 +131,12 @@ It provides real-time vector search, with features like hybrid search, metadata 
       isOptional: true,
       defaultValue: "false",
       description: "Whether to include the vector in the result",
+    },
+    {
+      name: "namespace",
+      type: "string",
+      isOptional: true,
+      description: "Optional namespace to query vectors from. Only returns results from the specified namespace.",
     },
   ]}
 />
@@ -244,6 +268,14 @@ Required environment variables:
 - `PINECONE_API_KEY`: Your Pinecone API key
 - `PINECONE_ENVIRONMENT`: Pinecone environment (e.g., 'us-west1-gcp')
 
-### Related
+## Hybrid Search
+
+Pinecone supports hybrid search by combining dense and sparse vectors. To use hybrid search:
+
+1. Create an index with `metric: 'dotproduct'`
+2. During upsert, provide sparse vectors using the `sparseVectors` parameter
+3. During query, provide a sparse vector using the `sparseVector` parameter
+
+## Related
 
 - [Metadata Filters](./metadata-filters)
