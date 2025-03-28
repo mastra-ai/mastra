@@ -49,14 +49,14 @@ export async function startAsyncWorkflowHandler(c: Context) {
   try {
     const mastra: Mastra = c.get('mastra');
     const workflowId = c.req.param('workflowId');
-    const body = await c.req.json();
+    const triggerData = await c.req.json();
     const runId = c.req.query('runId');
 
     const result = await getOriginalStartAsyncWorkflowHandler({
       mastra,
       workflowId,
       runId,
-      body: { triggerData: body },
+      triggerData,
     });
 
     return c.json(result);
@@ -87,14 +87,14 @@ export async function startWorkflowRunHandler(c: Context) {
   try {
     const mastra: Mastra = c.get('mastra');
     const workflowId = c.req.param('workflowId');
-    const body = await c.req.json();
+    const triggerData = await c.req.json();
     const runId = c.req.query('runId');
 
     await getOriginalStartWorkflowRunHandler({
       mastra,
       workflowId,
       runId,
-      body: { triggerData: body },
+      triggerData,
     });
 
     return c.json({ message: 'Workflow run started' });
@@ -103,7 +103,7 @@ export async function startWorkflowRunHandler(c: Context) {
   }
 }
 
-export async function watchWorkflowHandler(c: Context) {
+export function watchWorkflowHandler(c: Context) {
   try {
     const mastra: Mastra = c.get('mastra');
     const logger = mastra.getLogger();
@@ -114,26 +114,45 @@ export async function watchWorkflowHandler(c: Context) {
       throw new HTTPException(400, { message: 'runId required to watch workflow' });
     }
 
-    const result = await getOriginalWatchWorkflowHandler({
-      mastra,
-      workflowId,
-      runId,
-    });
-
-    return stream(
+    return streamText(
       c,
-      stream => {
-        stream.onAbort(() => {
-          return result.cancel();
-        });
+      async stream => {
+        try {
+          const result = await getOriginalWatchWorkflowHandler({
+            mastra,
+            workflowId,
+            runId,
+          });
+          // stream.onAbort(() => {
+          //   if (!result.locked) {
+          //     return result.cancel();
+          //   }
+          // });
 
-        // @ts-ignore
-        return stream.pipe(result);
+          await stream.write('hello');
+          // console.log('writing');
+          for await (const chunk of result) {
+            console.log('writing chunk to response', chunk);
+            await stream.write(chunk.toString());
+            // await stream.write(chunk);
+          }
+          // console.log('done');
+
+          // await stream.write(`hello`);
+          // await stream.pipe(result);
+
+          // return stream.pipe(result);
+
+          // for await (const chunk of result) {
+          //   await stream.write(chunk);
+          // }
+          // await stream.close();
+        } catch (err) {
+          console.log(err);
+        }
       },
-      async (err, stream) => {
+      async err => {
         logger.error('Error in watch stream: ' + err?.message);
-        stream.abort();
-        await stream.close();
       },
     );
   } catch (error) {
