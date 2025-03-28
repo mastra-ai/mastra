@@ -1,6 +1,5 @@
 import { Readable } from 'stream';
 import type { ToolsInput } from '@mastra/core/agent';
-import { isZodObject } from 'zod';
 import { zodToJsonSchema } from 'zod-to-json-schema';
 
 export type OpenAIExecuteFunction = (args: any) => Promise<any>;
