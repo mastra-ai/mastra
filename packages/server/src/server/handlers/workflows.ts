@@ -224,8 +224,9 @@ export async function watchWorkflowHandler({
     let unwatch: () => void;
     const stream = new ReadableStream({
       start(controller) {
-        unwatch = run.watch(({ activePaths, context, runId, timestamp, suspendedSteps }) => {
-          controller.enqueue(JSON.stringify({ activePaths, context, runId, timestamp, suspendedSteps }) + '\x1E');
+        unwatch = run.watch(({ activePaths, runId, timestamp, results }) => {
+          const activePathsObj = Object.fromEntries(activePaths);
+          controller.enqueue(JSON.stringify({ activePaths: activePathsObj, runId, timestamp, results }) + '\x1E');
         });
       },
       cancel() {
