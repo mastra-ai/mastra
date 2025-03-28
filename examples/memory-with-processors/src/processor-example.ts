@@ -1,6 +1,9 @@
 import 'dotenv/config';
 import { openai } from '@ai-sdk/openai';
-import { Agent, createTool, createLogger, Mastra } from '@mastra/core';
+import { Mastra } from '@mastra/core';
+import { createLogger } from '@mastra/core/logger';
+import { createTool } from '@mastra/core/tools';
+import { Agent } from '@mastra/core/agent';
 import { Memory, TokenLimiter } from '@mastra/memory';
 import { readFileSync, existsSync } from 'fs';
 import { resolve } from 'path';
