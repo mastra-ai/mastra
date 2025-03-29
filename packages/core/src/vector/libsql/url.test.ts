@@ -1,8 +1,8 @@
 import { existsSync, mkdirSync } from 'fs';
-import { stat, mkdir, rm, mkdtemp } from 'fs/promises';
+import { mkdtemp, rm, stat } from 'fs/promises';
 import { tmpdir } from 'os';
 import { join } from 'path';
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { LibSQLVector } from './index';
 
 describe('LibSQLVector URL rewriting', () => {
