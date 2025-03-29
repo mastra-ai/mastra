@@ -3,8 +3,8 @@
   "version": "0.0.1",
   "private": true,
   "devDependencies": {
-    "rollup": "^4.35.0",
-    "vitest": "^3.0.7"
+    "rollup": "^4.37.0",
+    "vitest": "^3.0.9"
   },
   "scripts": {
     "test": "vitest"
