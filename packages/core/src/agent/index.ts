@@ -56,7 +56,7 @@ export * from './types';
 
 @InstrumentClass({
   prefix: 'agent',
-  excludeMethods: ['__setTools', '__setLogger', '__setTelemetry', 'log'],
+  excludeMethods: ['hasOwnMemory', 'getMemory', '__primitive', '__setTools', '__setLogger', '__setTelemetry', 'log'],
 })
 export class Agent<
   TSchemaDeps extends ZodSchema | undefined = undefined,
