@@ -10,12 +10,14 @@ import { SchemaTable } from '@/components/schema-table'
 
 # MastraStorage
 
-MastraStorage provides a unified interface for managing
+`MastraStorage` provides a unified interface for managing:
 
-- **`Workflow Tracking`**: allowing users to suspend and resume workflow runs.
-- **`Memory`**: threads and messages per resourceId in your application
-- **`Traces`**: OpenTelemetry traces from all components of Mastra
-- **`Eval Datasets`**: as evals are run, the scores and reasons are stored in datasets.
+- **Suspended Workflows**: the serialized state of suspended workflows (so they can be resumed later)
+- **Memory**: threads and messages per `resourceId` in your application
+- **Traces**: OpenTelemetry traces from all components of Mastra
+- **Eval Datasets**: scores and scoring reasons from eval runs
+
+<br />
 
 <div>
   {useTheme().resolvedTheme === 'dark' ? (
