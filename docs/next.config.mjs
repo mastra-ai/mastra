@@ -18,22 +18,32 @@ const withNextra = nextra({
 });
 
 export default withNextra({
-  assetPrefix: process.env.NODE_ENV === 'production' ? '/docs' : '',
+  assetPrefix: process.env.NODE_ENV === "production" ? "/docs" : "",
 
   async rewrites() {
     return {
       beforeFiles: [
         {
-          source: '/docs/_next/:path+',
-          destination: '/_next/:path+',
+          source: "/docs/_next/:path+",
+          destination: "/_next/:path+",
         },
       ],
     };
   },
   redirects: () => [
     {
-      source: '/docs/08-running-evals',
-      destination: '/docs/evals/00-overview',
+      source: "/docs/08-running-evals",
+      destination: "/docs/evals/overview",
+      permanent: true,
+    },
+    {
+      source: "/docs/guides/04-recruiter",
+      destination: "/docs/guides/ai-recruiter",
+      permanent: true,
+    },
+    {
+      source: "/docs/:path*/:prefix(\\d{2}[a-z]?)-:slug",
+      destination: "/docs/:path*/:slug",
       permanent: true,
     },
   ],
