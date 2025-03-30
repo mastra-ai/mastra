@@ -12,10 +12,10 @@ import { SchemaTable } from '@/components/schema-table'
 
 MastraStorage provides a unified interface for managing
 
-- Workflow Tracking, allowing users to suspend and resume workflow runs.
-- Memory, threads and messages per resourceId in your application
-- Traces - OpenTelemetry traces from all components of Mastra
-- Eval Datasets - as evals are run, the scores and reasons are stored in datasets.
+- **`Workflow Tracking`**: allowing users to suspend and resume workflow runs.
+- **`Memory`**: threads and messages per resourceId in your application
+- **`Traces`**: OpenTelemetry traces from all components of Mastra
+- **`Eval Datasets`**: as evals are run, the scores and reasons are stored in datasets.
 
 <div>
   {useTheme().resolvedTheme === 'dark' ? (
@@ -58,6 +58,7 @@ const mastra = new Mastra({
   <Tabs.Tab>
 Stores conversation messages and their metadata. Each message belongs to a thread and contains the actual content along with metadata about the sender role and message type.
 
+<br />
 <SchemaTable
   columns={[
     {
@@ -107,6 +108,7 @@ Stores conversation messages and their metadata. Each message belongs to a threa
   <Tabs.Tab>
 Groups related messages together and associates them with a resource. Contains metadata about the conversation.
 
+<br />
 <SchemaTable
   columns={[
     {
@@ -133,7 +135,7 @@ Groups related messages together and associates them with a resource. Contains m
     {
       name: "metadata",
       type: "text",
-      description: "Custom thread metadata as stringified JSON.",
+      description: "Custom thread metadata as stringified JSON. Example:",
       example: {
         category: "support",
         priority: 1
@@ -156,6 +158,7 @@ Groups related messages together and associates them with a resource. Contains m
   <Tabs.Tab>
 When `suspend` is called on a workflow, its state is saved in the following format. When `resume` is called, that state is rehydrated.
 
+<br />
 <SchemaTable
   columns={[
     {
@@ -173,7 +176,7 @@ When `suspend` is called on a workflow, its state is saved in the following form
     {
       name: "snapshot",
       type: "text",
-      description: "Serialized workflow state as JSON.",
+      description: "Serialized workflow state as JSON. Example:",
       example: {
         value: { currentState: 'running' },
         context: {
@@ -204,6 +207,7 @@ When `suspend` is called on a workflow, its state is saved in the following form
   <Tabs.Tab>
 Stores eval results from running metrics against agent outputs.
 
+<br />
 <SchemaTable
   columns={[
     {
@@ -221,7 +225,7 @@ Stores eval results from running metrics against agent outputs.
     {
       name: "result",
       type: "jsonb",
-      description: "Eval result data that includes score and details.",
+      description: "Eval result data that includes score and details. Example:",
       example: {
         score: 0.95,
         details: {
@@ -277,6 +281,7 @@ Stores eval results from running metrics against agent outputs.
   <Tabs.Tab>
 Captures OpenTelemetry traces for monitoring and debugging.
 
+<br />
 <SchemaTable
   columns={[
     {
@@ -325,7 +330,7 @@ Captures OpenTelemetry traces for monitoring and debugging.
     {
       name: "status",
       type: "jsonb",
-      description: "JSON object with `code` (UNSET=0, ERROR=1, OK=2) and optional `message`",
+      description: "JSON object with `code` (UNSET=0, ERROR=1, OK=2) and optional `message`. Example:",
       example: {
         code: 1,
         message: "HTTP request failed with status 500"
@@ -344,7 +349,7 @@ Captures OpenTelemetry traces for monitoring and debugging.
     {
       name: "other",
       type: "text",
-      description: "Additional OpenTelemetry span fields as stringified JSON",
+      description: "Additional OpenTelemetry span fields as stringified JSON. Example:",
       example: {
         droppedAttributesCount: 2,
         droppedEventsCount: 1,
