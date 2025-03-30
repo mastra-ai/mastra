@@ -1,8 +1,8 @@
 const meta = {
-  "01-chef-michel": "Agents: Chef Michel",
-  "02-stock-agent": "Tools: Stock Agent",
-  "03-recruiter": "Workflows: AI Recruiter",
-  "04-research-assistant": "RAG: Research Assistant",
+  "chef-michel": "Agents: Chef Michel",
+  "stock-agent": "Tools: Stock Agent",
+  "ai-recruiter": "Workflows: AI Recruiter",
+  "research-assistant": "RAG: Research Assistant",
 };
 
 export default meta;
