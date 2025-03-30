@@ -107,6 +107,9 @@ For a complete list of supported observability providers and their configuration
 
 ### Next.js-specific Tracing steps
 
-Next.js applications can use either Vercel's OpenTelemetry setup or a custom instrumentation file. Both approaches require installing the OpenTelemetry API package and configuring an instrumentation file. 
+If you're using Next.js, you have three additional configuration steps:
+1. Enable the instrumentation hook in `next.config.ts`
+2. Configure Mastra telemetry settings
+3. Set up an OpenTelemetry exporter
 
-For implementation details, see the [Next.js Tracing](/docs/observability/nextjs-tracing) guide.
+For implementation details, see the [Next.js Tracing](./nextjs-tracing) guide.
