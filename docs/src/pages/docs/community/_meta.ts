@@ -1,8 +1,11 @@
 import { Meta } from "nextra";
 
 const meta: Meta = {
-  index: {
+  licensing: {
     title: "Licensing",
+  },
+  discord: {
+    title: "Discord",
   },
 };
 
