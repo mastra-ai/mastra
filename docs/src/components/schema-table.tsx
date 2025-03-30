@@ -92,7 +92,6 @@ export const SchemaTable: React.FC<SchemaTableProps> = ({ columns = [] }) => {
               <MDXText>{column.description ?? ""}</MDXText>
               {column.example && (
                 <div className="mt-1 flex flex-col gap-1">
-                  Example:
                   <MDXExample>
                     {JSON.stringify(column.example, null, 2)}
                   </MDXExample>
@@ -113,7 +112,9 @@ const MDXExample = ({ children }: { children: string }) => {
     <div className="my-2">
       {components.pre && components.code && (
         <components.pre>
-          <components.code>{children}</components.code>
+          <components.code>
+            <div className="pl-5">{children}</div>
+          </components.code>
         </components.pre>
       )}
     </div>
