@@ -3,7 +3,6 @@ const meta = {
   "01-agent-memory": "Agent Memory",
   "02-adding-tools": "Adding Tools",
   "02a-mcp-guide": "Using MCP",
-  "02b-discord-mcp-bot": "Discord MCP Bot",
   "03-adding-voice": "Adding Voice",
 };
 
