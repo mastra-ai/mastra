@@ -32,7 +32,7 @@ import type { CoreTool } from '../tools/types';
 import { makeCoreTool, createMastraProxy, ensureToolProperties, ensureAllMessagesAreCoreMessages } from '../utils';
 import type { CompositeVoice } from '../voice';
 import { DefaultVoice } from '../voice';
-
+import { agentToStep, Step } from '../workflows';
 import type {
   AgentConfig,
   AgentGenerateOptions,
@@ -42,7 +42,6 @@ import type {
   ToolsetsInput,
   ToolsInput,
 } from './types';
-import { agentToStep, Step } from '../workflows';
 
 export * from './types';
 
