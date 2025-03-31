@@ -30,7 +30,7 @@ import type { MemoryConfig } from '../memory/types';
 import { InstrumentClass } from '../telemetry';
 import type { CoreTool } from '../tools/types';
 import { makeCoreTool, createMastraProxy, ensureToolProperties, ensureAllMessagesAreCoreMessages } from '../utils';
-import type { CompositeVoice } from '../voice';
+import { CompositeVoice } from '../voice';
 
 import type {
   AgentConfig,
@@ -64,7 +64,7 @@ export class Agent<
   /** @deprecated This property is deprecated. Use evals instead. */
   metrics: TMetrics;
   evals: TMetrics;
-  voice?: CompositeVoice;
+  voice: CompositeVoice;
 
   constructor(config: AgentConfig<TAgentId, TTools, TMetrics>) {
     super({ component: RegisteredLogger.AGENT });
@@ -113,6 +113,8 @@ export class Agent<
       this.voice = config.voice;
       this.voice?.addTools(this.tools);
       this.voice?.addInstructions(config.instructions);
+    } else {
+      this.voice = new CompositeVoice({});
     }
   }
 
