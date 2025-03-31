@@ -1,6 +1,6 @@
 {
   "name": "@mastra/rag",
-  "version": "0.1.14-alpha.1",
+  "version": "0.1.15-alpha.0",
   "description": "",
   "type": "module",
   "main": "dist/index.js",
@@ -46,7 +46,7 @@
     "@internal/lint": "workspace:*",
     "@microsoft/api-extractor": "^7.52.1",
     "@types/node": "^20.17.27",
-    "ai": "^4.1.54",
+    "ai": "^4.2.2",
     "dotenv": "^16.4.7",
     "eslint": "^9.23.0",
     "tsup": "^8.4.0",

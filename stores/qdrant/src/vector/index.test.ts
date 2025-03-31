@@ -1,9 +1,9 @@
 // To setup a Qdrant server, run:
 // docker run -p 6333:6333 qdrant/qdrant
+import type { QueryResult } from '@mastra/core';
 import { describe, it, expect, beforeAll, afterAll, afterEach, vi, beforeEach } from 'vitest';
 
 import { QdrantVector } from './index';
-import type { QueryResult } from '@mastra/core';
 
 const dimension = 3;
 
@@ -165,7 +165,7 @@ describe('QdrantVector', () => {
       expect(ids).toHaveLength(3);
 
       const idToBeUpdated = ids[0];
-      const newVector = [1, 2, 3];
+      const newVector = [4, 4, 4];
 
       const update = {
         vector: newVector,

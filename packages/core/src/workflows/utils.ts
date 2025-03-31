@@ -1,11 +1,12 @@
-import type { z } from 'zod';
+import { get } from 'radash';
+import { z } from 'zod';
+import type { Mastra } from '..';
 import type { Logger } from '../logger';
 import type { Step } from './step';
-import type { StepAction, StepDef, StepResult, VariableReference, WorkflowContext, WorkflowRunResult } from './types';
-import type { Workflow } from './workflow';
-import { get } from 'radash';
-import type { WorkflowResultReturn } from './workflow-instance';
-import type { Mastra } from '..';
+import type { StepAction, StepResult, VariableReference, WorkflowContext, WorkflowRunResult } from './types';
+import { Workflow } from './workflow';
+import { Agent, type ToolsInput } from '../agent';
+import type { Metric } from '../eval';
 
 export function isErrorEvent(stateEvent: any): stateEvent is {
   type: `xstate.error.actor.${string}`;
@@ -116,6 +117,7 @@ export function mergeChildValue(
 ): Record<string, any> {
   const traverse = (current: Record<string, any>) => {
     const obj: Record<string, any> = {};
+
     for (const [key, value] of Object.entries(current)) {
       if (key === startStepId) {
         // Found child state
@@ -160,22 +162,35 @@ export function getResultActivePaths(state: {
   value: Record<string, string>;
   context: { steps: Record<string, any> };
 }) {
-  return getActivePathsAndStatus(state.value).reduce((acc, curr) => {
-    const entry: { status: string; suspendPayload?: any } = { status: curr.status };
+  const activePaths = getActivePathsAndStatus(state.value);
+  const activePathsAndStatus = activePaths.reduce((acc, curr) => {
+    const entry: { status: string; suspendPayload?: any; stepPath: string[] } = {
+      status: curr.status,
+      stepPath: curr.stepPath,
+    };
     if (curr.status === 'suspended') {
       // @ts-ignore
       entry.suspendPayload = state.context.steps[curr.stepId].suspendPayload;
+      entry.stepPath = curr.stepPath;
     }
     acc.set(curr.stepId, entry);
     return acc;
-  }, new Map<string, { status: string; suspendPayload?: any }>());
+  }, new Map<string, { status: string; suspendPayload?: any; stepPath: string[] }>());
+  return activePathsAndStatus;
 }
 
 export function isWorkflow(
-  step: Step<any, any, any, any> | Workflow<any, any, any, any>,
+  step: Step<any, any, any, any> | Workflow<any, any, any, any> | Agent<any, any, any>,
 ): step is Workflow<any, any, any, any> {
   // @ts-ignore
-  return !!step?.name;
+  return step instanceof Workflow;
+}
+
+export function isAgent(
+  step: Step<any, any, any, any> | Agent<any, any, any> | Workflow<any, any, any, any>,
+): step is Agent<any, any, any> {
+  // @ts-ignore
+  return step instanceof Agent;
 }
 
 export function resolveVariables<TSteps extends Step<any, any, any>[]>({
@@ -226,6 +241,47 @@ export function resolveVariables<TSteps extends Step<any, any, any>[]>({
   return resolvedData;
 }
 
+export function agentToStep<
+  TAgentId extends string = string,
+  TTools extends ToolsInput = ToolsInput,
+  TMetrics extends Record<string, Metric> = Record<string, Metric>,
+>(
+  agent: Agent<TAgentId, TTools, TMetrics>,
+): StepAction<TAgentId, z.ZodObject<{ prompt: z.ZodString }>, z.ZodObject<{ text: z.ZodString }>, any> {
+  return {
+    id: agent.name,
+    inputSchema: z.object({
+      prompt: z.string(),
+      resourceId: z.string().optional(),
+      threadId: z.string().optional(),
+    }),
+    outputSchema: z.object({
+      text: z.string(),
+    }),
+    execute: async ({ context, runId, mastra }) => {
+      if (!mastra) {
+        throw new Error('Mastra instance not found');
+      }
+
+      agent.__registerMastra(mastra);
+      agent.__registerPrimitives({
+        logger: mastra.getLogger(),
+        telemetry: mastra.getTelemetry(),
+      });
+
+      const result = await agent.generate(context.inputData.prompt, {
+        runId,
+        resourceId: context.inputData.resourceId,
+        threadId: context.inputData.threadId,
+      });
+
+      return {
+        text: result.text,
+      };
+    },
+  };
+}
+
 export function workflowToStep<
   TSteps extends Step<any, any, any, any>[],
   TStepId extends string = any,
@@ -250,7 +306,7 @@ export function workflowToStep<
       }
       const run = context.isResume ? workflow.createRun({ runId: context.isResume.runId }) : workflow.createRun();
       const unwatch = run.watch(state => {
-        emit('state-update', workflow.name, state.value, { ...context, ...{ [workflow.name]: state.context } });
+        emit('state-update', workflow.name, state.results, { ...context, ...{ [workflow.name]: state.results } });
       });
 
       const awaitedResult =

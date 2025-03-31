@@ -29,7 +29,7 @@ import type { MastraMemory } from '../memory/memory';
 import type { MemoryConfig, StorageThreadType } from '../memory/types';
 import { InstrumentClass } from '../telemetry';
 import type { CoreTool } from '../tools/types';
-import { makeCoreTool, createMastraProxy, ensureToolProperties } from '../utils';
+import { makeCoreTool, createMastraProxy, ensureToolProperties, ensureAllMessagesAreCoreMessages } from '../utils';
 import type { CompositeVoice } from '../voice';
 
 import type {
@@ -41,18 +41,20 @@ import type {
   ToolsetsInput,
   ToolsInput,
 } from './types';
+import { agentToStep, Step } from '../workflows';
 
 export * from './types';
 
 @InstrumentClass({
   prefix: 'agent',
-  excludeMethods: ['__setTools', '__setLogger', '__setTelemetry', 'log'],
+  excludeMethods: ['hasOwnMemory', 'getMemory', '__primitive', '__setTools', '__setLogger', '__setTelemetry', 'log'],
 })
 export class Agent<
+  TAgentId extends string = string,
   TTools extends ToolsInput = ToolsInput,
   TMetrics extends Record<string, Metric> = Record<string, Metric>,
 > extends MastraBase {
-  public name: string;
+  public name: TAgentId;
   readonly llm: MastraLLMBase;
   instructions: string;
   readonly model?: MastraLanguageModel;
@@ -64,7 +66,7 @@ export class Agent<
   evals: TMetrics;
   voice?: CompositeVoice;
 
-  constructor(config: AgentConfig<TTools, TMetrics>) {
+  constructor(config: AgentConfig<TAgentId, TTools, TMetrics>) {
     super({ component: RegisteredLogger.AGENT });
 
     this.name = config.name;
@@ -110,7 +112,7 @@ export class Agent<
     if (config.voice) {
       this.voice = config.voice;
       this.voice?.addTools(this.tools);
-      this.voice?.updateConfig({ instructions: config.instructions });
+      this.voice?.addInstructions(config.instructions);
     }
   }
 
@@ -220,8 +222,7 @@ export class Agent<
         return { threadId: threadId || '', messages: userMessages };
       }
 
-      const userMessage = this.getMostRecentUserMessage(userMessages);
-      const newMessages = userMessage ? [userMessage] : userMessages;
+      const newMessages = ensureAllMessagesAreCoreMessages(userMessages);
 
       const messages = newMessages.map(u => {
         return {
@@ -832,9 +833,16 @@ export class Agent<
   ): Promise<GenerateTextResult<any, Z extends ZodSchema ? z.infer<Z> : unknown>>;
   async generate<Z extends ZodSchema | JSONSchema7 | undefined = undefined>(
     messages: string | string[] | CoreMessage[] | AiMessageType[],
-    args?: AgentGenerateOptions<Z> &
-      ({ output: Z; experimental_output?: never } | { experimental_output: Z; output?: never }),
+    args?: AgentGenerateOptions<Z> & { output?: Z; experimental_output?: never },
   ): Promise<GenerateObjectResult<Z extends ZodSchema ? z.infer<Z> : unknown>>;
+  async generate<Z extends ZodSchema | JSONSchema7 | undefined = undefined>(
+    messages: string | string[] | CoreMessage[] | AiMessageType[],
+    args?: AgentGenerateOptions<Z> & { output?: never; experimental_output?: Z },
+  ): Promise<
+    GenerateTextResult<any, Z extends ZodSchema ? z.infer<Z> : unknown> & {
+      object: Z extends ZodSchema ? z.infer<Z> : unknown;
+    }
+  >;
   async generate<Z extends ZodSchema | JSONSchema7 | undefined = undefined>(
     messages: string | string[] | CoreMessage[] | AiMessageType[],
     {
@@ -982,9 +990,19 @@ export class Agent<
   ): Promise<StreamTextResult<any, Z extends ZodSchema ? z.infer<Z> : unknown>>;
   async stream<Z extends ZodSchema | JSONSchema7 | undefined = undefined>(
     messages: string | string[] | CoreMessage[] | AiMessageType[],
-    args?: AgentStreamOptions<Z> &
-      ({ output: Z; experimental_output?: never } | { experimental_output: Z; output?: never }),
+    args?: AgentStreamOptions<Z> & { output?: Z; experimental_output?: never },
   ): Promise<StreamObjectResult<any, Z extends ZodSchema ? z.infer<Z> : unknown, any>>;
+  async stream<Z extends ZodSchema | JSONSchema7 | undefined = undefined>(
+    messages: string | string[] | CoreMessage[] | AiMessageType[],
+    args?: AgentStreamOptions<Z> & { output?: never; experimental_output?: Z },
+  ): Promise<
+    StreamTextResult<any, Z extends ZodSchema ? z.infer<Z> : unknown> & {
+      partialObjectStream: StreamTextResult<
+        any,
+        Z extends ZodSchema ? z.infer<Z> : unknown
+      >['experimental_partialOutputStream'];
+    }
+  >;
   async stream<Z extends ZodSchema | JSONSchema7 | undefined = undefined>(
     messages: string | string[] | CoreMessage[] | AiMessageType[],
     {
@@ -1227,5 +1245,10 @@ export class Agent<
       });
       throw e;
     }
+  }
+
+  toStep(): Step<TAgentId, z.ZodObject<{ prompt: z.ZodString }>, z.ZodObject<{ text: z.ZodString }>, any> {
+    const x = agentToStep(this);
+    return new Step(x);
   }
 }

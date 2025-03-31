@@ -33,7 +33,7 @@ const result = await start();
     },
     {
       name: "watch",
-      type: "(callback: (record: WorkflowRunState) => void) => () => void",
+      type: "(callback: (record: WorkflowResult) => void) => () => void",
       description: "Function that accepts a callback function that will be called with each transition of the workflow run",
     },
     {

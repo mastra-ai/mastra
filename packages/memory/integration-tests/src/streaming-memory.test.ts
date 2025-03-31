@@ -1,16 +1,20 @@
 import { spawn } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { createServer } from 'node:net';
+import path from 'node:path';
 import { openai } from '@ai-sdk/openai';
 import { useChat } from '@ai-sdk/react';
+import type { AiMessageType } from '@mastra/core';
+import { ensureAllMessagesAreCoreMessages } from '@mastra/core';
 import { Agent } from '@mastra/core/agent';
 import { createTool } from '@mastra/core/tools';
 import { Memory } from '@mastra/memory';
 import { renderHook, act, waitFor } from '@testing-library/react';
 import type { Message } from 'ai';
 import { JSDOM } from 'jsdom';
-import { describe, expect, it, afterEach, beforeEach } from 'vitest';
+import { describe, expect, it, beforeAll, afterAll } from 'vitest';
 import { z } from 'zod';
+import { weatherAgent } from './mastra/agents/weather';
 
 // Helper to find an available port
 async function getAvailablePort(): Promise<number> {
@@ -37,7 +41,7 @@ global.navigator = dom.window.navigator;
 global.fetch = global.fetch || fetch;
 
 describe('Memory Streaming Tests', () => {
-  it('should stream after tool call with memory only', async () => {
+  it('should handle multiple tool calls in memory thread history', async () => {
     const memory = new Memory({
       options: {
         workingMemory: {
@@ -115,13 +119,22 @@ describe('Memory Streaming Tests', () => {
     const threadId = randomUUID();
     const resourceId = 'test-resource';
 
-    beforeEach(async () => {
+    beforeAll(async () => {
       port = await getAvailablePort();
 
-      mastraServer = spawn('pnpm', ['mastra', 'dev', '--port', port.toString()], {
-        stdio: 'pipe',
-        detached: true, // Run in a new process group so we can kill it and children
-      });
+      mastraServer = spawn(
+        'pnpm',
+        [
+          path.resolve(import.meta.dirname, `..`, `..`, `..`, `cli`, `dist`, `index.js`),
+          'dev',
+          '--port',
+          port.toString(),
+        ],
+        {
+          stdio: 'pipe',
+          detached: true, // Run in a new process group so we can kill it and children
+        },
+      );
 
       // Wait for server to be ready
       await new Promise<void>((resolve, reject) => {
@@ -141,7 +154,7 @@ describe('Memory Streaming Tests', () => {
       });
     });
 
-    afterEach(() => {
+    afterAll(() => {
       // Kill the server and its process group
       if (mastraServer?.pid) {
         try {
@@ -159,13 +172,13 @@ describe('Memory Streaming Tests', () => {
           api: `http://localhost:${port}/api/agents/test/stream`,
           experimental_prepareRequestBody({ messages }: { messages: Message[]; id: string }) {
             return {
-              messages,
+              messages: [messages.at(-1)],
               threadId,
               resourceId,
             };
           },
-          onFinish(_message) {
-            // console.log('useChat finished:', _message);
+          onFinish(message) {
+            console.log('useChat finished', message.id);
           },
           onError(e) {
             error = e;
@@ -175,45 +188,135 @@ describe('Memory Streaming Tests', () => {
         return chat;
       });
 
-      // Trigger weather tool
-      await act(async () => {
-        await result.current.append({
-          role: 'user',
-          content: 'what is the weather in Los Angeles?',
+      let messageCount = 0;
+      async function expectResponse({ message, responseContains }: { message: string; responseContains: string[] }) {
+        messageCount++;
+        await act(async () => {
+          await result.current.append({
+            role: 'user',
+            content: message,
+          });
         });
+        const responseIndex = messageCount * 2 - 1;
+        await waitFor(
+          () => {
+            expect(error).toBeNull();
+            expect(result.current.messages).toHaveLength(messageCount * 2);
+            for (const should of responseContains) {
+              expect(result.current.messages[responseIndex].content).toContain(should);
+            }
+          },
+          { timeout: 1000 },
+        );
+      }
+
+      await expectResponse({
+        message: 'what is the weather in Los Angeles?',
+        responseContains: ['Los Angeles', '70 degrees'],
       });
 
-      expect(error).toBeNull();
-      await waitFor(
-        () => {
-          expect(result.current.messages).toHaveLength(2);
-          expect(result.current.messages[1].content).toContain('Los Angeles');
-          expect(result.current.messages[1].content).toContain('70 degrees');
-        },
-        { timeout: 5000 },
-      );
+      await expectResponse({
+        message: 'what is the weather in Seattle?',
+        responseContains: ['Seattle', '70 degrees'],
+      });
+    });
 
-      expect(error).toBeNull();
+    it('should stream useChat with client side tool calling', async () => {
+      let error: Error | null = null;
+      const threadId = randomUUID();
 
-      // Send another message
-      await act(async () => {
-        await result.current.append({
-          role: 'user',
-          content: 'what is the weather in Seattle?',
+      await weatherAgent.generate(`hi`, {
+        threadId,
+        resourceId,
+      });
+      await weatherAgent.generate(`LA weather`, { threadId, resourceId });
+
+      const initialMessages = (await weatherAgent.getMemory()!.query({ threadId })).uiMessages;
+      let clipboard = ``;
+      const { result } = renderHook(() => {
+        const chat = useChat({
+          api: `http://localhost:${port}/api/agents/test/stream`,
+          initialMessages,
+          experimental_prepareRequestBody({ messages }: { messages: Message[]; id: string }) {
+            return {
+              messages: [messages.at(-1)],
+              threadId,
+              resourceId,
+            };
+          },
+          onFinish(message) {
+            console.log('useChat finished', message.id);
+          },
+          onError(e) {
+            error = e;
+            console.error('useChat error:', error);
+          },
+          onToolCall: async ({ toolCall }) => {
+            console.log(toolCall);
+            if (toolCall.toolName === `clipboard`) {
+              await new Promise(res => setTimeout(res, 10));
+              return clipboard;
+            }
+          },
         });
+        return chat;
       });
 
-      expect(error).toBeNull();
-      await waitFor(
-        () => {
-          expect(result.current.messages).toHaveLength(4);
-          expect(result.current.messages[3].content).toContain('Seattle');
-          expect(result.current.messages[3].content).toContain('70 degrees');
-        },
-        { timeout: 5000 },
-      );
+      async function expectResponse({ message, responseContains }: { message: string; responseContains: string[] }) {
+        const messageCountBefore = result.current.messages.length;
+        await act(async () => {
+          await result.current.append({
+            role: 'user',
+            content: message,
+          });
+        });
+        const coreMessages = ensureAllMessagesAreCoreMessages(result.current.messages as AiMessageType[]);
+        await waitFor(
+          () => {
+            expect(error).toBeNull();
+            expect(result.current.messages.length).toBeGreaterThan(messageCountBefore);
+          },
+          { timeout: 1000 },
+        );
 
-      expect(error).toBeNull();
+        const latestMessage = coreMessages.at(-1);
+        if (!latestMessage) throw new Error(`No latest message`);
+        for (const should of responseContains) {
+          let searchString = typeof latestMessage.content === `string` ? latestMessage.content : ``;
+
+          if (Array.isArray(latestMessage.content)) {
+            for (const part of latestMessage.content) {
+              if (part.type === `text`) {
+                searchString += `\n${part.text}`;
+              }
+              if (part.type === `tool-result`) {
+                searchString += `\n${JSON.stringify(part.result)}`;
+              }
+            }
+          }
+          expect(searchString).toContain(should);
+        }
+      }
+
+      clipboard = `test 1!`;
+      await expectResponse({
+        message: 'whats in my clipboard?',
+        responseContains: [clipboard],
+      });
+      await expectResponse({
+        message: 'weather in Las Vegas',
+        responseContains: ['Las Vegas', '70 degrees'],
+      });
+      clipboard = `test 2!`;
+      await expectResponse({
+        message: 'whats in my clipboard?',
+        responseContains: [clipboard],
+      });
+      clipboard = `test 3!`;
+      await expectResponse({
+        message: 'whats in my clipboard now?',
+        responseContains: [clipboard],
+      });
     });
   });
 });

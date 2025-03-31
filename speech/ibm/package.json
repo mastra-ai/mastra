@@ -1,6 +1,6 @@
 {
   "name": "@mastra/speech-ibm",
-  "version": "0.1.14-alpha.1",
+  "version": "0.1.15-alpha.0",
   "description": "Mastra IBM speech integration",
   "type": "module",
   "main": "dist/index.js",
@@ -31,7 +31,7 @@
   },
   "devDependencies": {
     "@internal/lint": "workspace:*",
-    "@microsoft/api-extractor": "^7.52.1",
+    "@microsoft/api-extractor": "^7.52.2",
     "@types/node": "^20.17.27",
     "eslint": "^9.23.0",
     "tsup": "^8.4.0",

@@ -1,5 +1,50 @@
 # @mastra/core
 
+## 0.7.1-alpha.0
+
+### Patch Changes
+
+- 107bcfe: Fixed JSON parsing in memory component to prevent crashes when encountering strings that start with '[' or '{' but are not valid JSON
+- 5b4e19f: fix hanging and excessive workflow execution
+- 7599d77: fix(deps): update ai sdk to ^4.2.2
+- cafae83: Changed error messages for vector mismatch with index
+- 8076ecf: Unify workflow watch/start response
+- 304397c: Add support for custom api routes in mastra
+
+## 0.7.0
+
+### Minor Changes
+
+- 1af25d5: Added nested workflows API
+
+### Patch Changes
+
+- b4fbc59: Fixed an issue where sending CoreMessages to AI SDK would result in "Unsupported role: tool" errors
+- a838fde: Update memory.ts
+- a8bd4cf: Fixed JSON Schema generation for null types to prevent duplicate null entries in type arrays
+- 7a3eeb0: Fixed a memory issue when using useChat where new messages were formatted as ui messages, were mixed with stored core messages in memory, and a mixed list was sent to AI SDK, causing it to error
+- 0b54522: AgentNetwork logs
+- b3b34f5: Fix agent generate,stream returnType with experimental_output
+- a4686e8: Realtime event queue
+- 6530ad1: Correct agent onFinish interface
+- 27439ad: Updated the jsonSchemaPropertiesToTSTypes function to properly handle JSON Schema definitions where type can be an array of strings. Previously, the function only handled single string types, but according to the JSON Schema specification, type can be an array of possible types.
+
+## 0.7.0-alpha.3
+
+### Patch Changes
+
+- b3b34f5: Fix agent generate,stream returnType with experimental_output
+- a4686e8: Realtime event queue
+
+## 0.7.0-alpha.2
+
+### Patch Changes
+
+- a838fde: Update memory.ts
+- a8bd4cf: Fixed JSON Schema generation for null types to prevent duplicate null entries in type arrays
+- 7a3eeb0: Fixed a memory issue when using useChat where new messages were formatted as ui messages, were mixed with stored core messages in memory, and a mixed list was sent to AI SDK, causing it to error
+- 6530ad1: Correct agent onFinish interface
+
 ## 0.7.0-alpha.1
 
 ### Minor Changes

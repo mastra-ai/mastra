@@ -1,4 +1,4 @@
-export default {
+const meta = {
   index: "Overview",
   dash0: "Dash0",
   signoz: "SigNoz",
@@ -10,3 +10,5 @@ export default {
   traceloop: "Traceloop",
   laminar: "Laminar",
 };
+
+export default meta;

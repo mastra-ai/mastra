@@ -2,6 +2,7 @@ import { Mastra } from '@mastra/core';
 import { createLogger } from '@mastra/core/logger';
 import { researchNetwork } from './network';
 import { webSearchAgent } from './agents';
+import { agentWorkflow } from './workflows';
 
 export const mastra = new Mastra({
   agents: {
@@ -9,6 +10,9 @@ export const mastra = new Mastra({
   },
   networks: {
     researchNetwork,
+  },
+  workflows: {
+    agentWorkflow,
   },
   logger: createLogger({ name: 'Chef', level: 'info' }),
   serverMiddleware: [
