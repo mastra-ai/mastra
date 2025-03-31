@@ -41,7 +41,7 @@ export async function getLogTransports({ mastra }: Pick<LogsContext, 'mastra'>) 
     const transports = logger.transports;
 
     return {
-      transports: Object.keys(transports),
+      transports: transports ? Object.keys(transports) : [],
     };
   } catch (error) {
     return handleError(error, 'Error getting log Transports');
