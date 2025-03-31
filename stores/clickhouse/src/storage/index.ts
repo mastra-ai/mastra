@@ -453,27 +453,17 @@ export class ClickhouseStore extends MastraStorage {
   async deleteThread({ threadId }: { threadId: string }): Promise<void> {
     try {
       // First delete all messages associated with this thread
-      await this.db.query({
-        query: `DELETE FROM "${TABLE_MESSAGES}" WHERE thread_id = {var_thread_id:String}`,
+      await this.db.command({
+        query: `DELETE FROM "${TABLE_MESSAGES}" WHERE thread_id = '${threadId}';`,
         query_params: { var_thread_id: threadId },
-        clickhouse_settings: {
-          // Allows to insert serialized JS Dates (such as '2023-12-06T10:54:48.000Z')
-          date_time_input_format: 'best_effort',
-          date_time_output_format: 'iso',
-          use_client_time_zone: 1,
-        },
+        clickhouse_settings: {},
       });
 
       // Then delete the thread
-      await this.db.query({
-        query: `DELETE FROM "${TABLE_THREADS}" WHERE id = {var_id:String}`,
-        query_params: { id: threadId },
-        clickhouse_settings: {
-          // Allows to insert serialized JS Dates (such as '2023-12-06T10:54:48.000Z')
-          date_time_input_format: 'best_effort',
-          date_time_output_format: 'iso',
-          use_client_time_zone: 1,
-        },
+      await this.db.command({
+        query: `DELETE FROM "${TABLE_THREADS}" WHERE id = {var_id:String};`,
+        query_params: { var_id: threadId },
+        clickhouse_settings: {},
       });
     } catch (error) {
       console.error('Error deleting thread:', error);
