@@ -271,6 +271,7 @@ export class Memory extends MastraMemory {
           metadata: chunks.map(() => ({
             message_id: message.id,
             thread_id: message.threadId,
+            resource_id: message.resourceId,
           })),
         });
       }
