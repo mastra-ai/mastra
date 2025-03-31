@@ -10,7 +10,7 @@ export class Agent<
   TTools extends ToolsInput<TSchemaDeps> = ToolsInput<TSchemaDeps>,
   TMetrics extends Record<string, Metric> = Record<string, Metric>,
 > extends BaseAgent<TAgentId, TSchemaDeps, TTools, TMetrics> {
-  constructor(config: AgentConfig<TSchemaDeps, TTools, TMetrics>) {
+  constructor(config: AgentConfig<TAgentId, TSchemaDeps, TTools, TMetrics>) {
     super(config);
 
     this.logger.warn('Please import "Agent from "@mastra/core/agent" instead of "@mastra/core"');

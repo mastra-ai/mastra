@@ -1,12 +1,14 @@
 import { get } from 'radash';
+import type { ZodSchema } from 'zod';
 import { z } from 'zod';
 import type { Mastra } from '..';
+import type { ToolsInput } from '../agent';
+import { Agent } from '../agent';
+import type { Metric } from '../eval';
 import type { Logger } from '../logger';
 import type { Step } from './step';
 import type { StepAction, StepResult, VariableReference, WorkflowContext, WorkflowRunResult } from './types';
 import { Workflow } from './workflow';
-import { Agent, type ToolsInput } from '../agent';
-import type { Metric } from '../eval';
 
 export function isErrorEvent(stateEvent: any): stateEvent is {
   type: `xstate.error.actor.${string}`;
@@ -243,10 +245,11 @@ export function resolveVariables<TSteps extends Step<any, any, any>[]>({
 
 export function agentToStep<
   TAgentId extends string = string,
-  TTools extends ToolsInput = ToolsInput,
+  TSchemaDeps extends ZodSchema | undefined = undefined,
+  TTools extends ToolsInput<TSchemaDeps> = ToolsInput<TSchemaDeps>,
   TMetrics extends Record<string, Metric> = Record<string, Metric>,
 >(
-  agent: Agent<TAgentId, TTools, TMetrics>,
+  agent: Agent<TAgentId, TSchemaDeps, TTools, TMetrics>,
 ): StepAction<TAgentId, z.ZodObject<{ prompt: z.ZodString }>, z.ZodObject<{ text: z.ZodString }>, any> {
   return {
     id: agent.name,

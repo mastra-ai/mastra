@@ -14,7 +14,7 @@ import type {
   UserContent,
 } from 'ai';
 import type { JSONSchema7 } from 'json-schema';
-import type { ZodSchema } from 'zod';
+import type { z, ZodSchema } from 'zod';
 
 import type { MastraPrimitives, MastraUnion } from '../action';
 import { MastraBase } from '../base';
@@ -40,6 +40,18 @@ import {
 } from '../utils';
 import type { CompositeVoice } from '../voice';
 import { agentToStep, Step } from '../workflows';
+
+import type {
+  AgentConfig,
+  AgentGenerateOptions,
+  AgentStreamOptions,
+  AiMessageType,
+  InstructionsBuilder,
+  MastraLanguageModel,
+  ToolsetsInput,
+  ToolsInput,
+} from './types';
+import { AgentInstructions } from './types';
 
 export * from './types';
 
