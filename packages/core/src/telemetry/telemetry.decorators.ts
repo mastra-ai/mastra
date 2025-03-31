@@ -50,6 +50,12 @@ export function withSpan(options: {
       });
 
       const currentBaggage = propagation.getBaggage(ctx);
+      //@ts-ignore
+      if (currentBaggage?.['http.request_id']) {
+        //@ts-ignore
+        span.setAttribute('http.request_id', currentBaggage?.['http.request_id']);
+      }
+
       // @ts-ignore
       if (currentBaggage?.componentName) {
         // @ts-ignore
@@ -63,7 +69,14 @@ export function withSpan(options: {
         // @ts-ignore
         span.setAttribute('runId', this.runId);
         // @ts-ignore
-        ctx = propagation.setBaggage(ctx, { componentName: this.name, runId: this.runId });
+        ctx = propagation.setBaggage(ctx, {
+          // @ts-ignore
+          componentName: this.name,
+          // @ts-ignore
+          runId: this.runId,
+          // @ts-ignore
+          'http.request_id': currentBaggage?.['http.request_id'],
+        });
       }
 
       let result;

@@ -4,7 +4,7 @@ import { pathToFileURL } from 'url';
 import { serve } from '@hono/node-server';
 import { serveStatic } from '@hono/node-server/serve-static';
 import { swaggerUI } from '@hono/swagger-ui';
-import type { Mastra } from '@mastra/core';
+import { Telemetry, type Mastra } from '@mastra/core';
 import { Hono } from 'hono';
 import type { Context, MiddlewareHandler } from 'hono';
 
@@ -66,6 +66,7 @@ import {
   getWorkflowRunsHandler,
 } from './handlers/workflows.js';
 import { html } from './welcome.js';
+import { randomUUID } from 'crypto';
 
 type Bindings = {};
 
@@ -133,7 +134,26 @@ export async function createHonoServer(
     c.set('mastra', mastra);
     c.set('tools', tools);
     c.set('playground', options.playground === true);
-    await next();
+
+    const requestId = c.req.header('x-request-id') ?? randomUUID();
+    const span = Telemetry.getActiveSpan();
+    if (span) {
+      span.setAttribute('http.request_id', requestId);
+      span.updateName(`${c.req.method} ${c.req.path}`);
+
+      const newCtx = Telemetry.setBaggage({
+        'http.request_id': requestId,
+      });
+
+      await new Promise((resolve, reject) => {
+        Telemetry.withContext(newCtx, async () => {
+          await next();
+          resolve(true);
+        });
+      });
+    } else {
+      await next();
+    }
   });
 
   const bodyLimitOptions = {
