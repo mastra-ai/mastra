@@ -260,7 +260,7 @@ export class ClickhouseStore extends MastraStorage {
       }, {});
 
       const result = await this.db.query({
-        query: `SELECT *, toDateTime64(createdAt, 3) as createdAt, toDateTime64(updatedAt, 3) as updatedAt FROM ${tableName} ${TABLE_ENGINES[tableName as TABLE_NAMES] === 'ReplacingMergeTree()' ? 'FINAL' : ''} WHERE ${conditions}`,
+        query: `SELECT *, toDateTime64(createdAt, 3) as createdAt, toDateTime64(updatedAt, 3) as updatedAt FROM ${tableName} ${TABLE_ENGINES[tableName as TABLE_NAMES].startsWith('ReplacingMergeTree') ? 'FINAL' : ''} WHERE ${conditions}`,
         query_params: values,
         clickhouse_settings: {
           // Allows to insert serialized JS Dates (such as '2023-12-06T10:54:48.000Z')
