@@ -32,8 +32,8 @@ const agent1 = new Agent({
   instructions: `You are an agent with both STT and TTS capabilities.`,
   model: openai('gpt-4o'),
   voice: new CompositeVoice({
-    listenProvider: new OpenAIVoice(), // For converting speech to text
-    speakProvider: new PlayAIVoice(), // For converting text to speech
+    input: new OpenAIVoice(), // For converting speech to text
+    output: new PlayAIVoice(), // For converting text to speech
   }),
 });
 
