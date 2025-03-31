@@ -1,0 +1,48 @@
+{
+  "name": "@mastra/clickhouse",
+  "version": "0.2.7-alpha.0",
+  "description": "Clickhouse provider for Mastra - includes both db storage capabilities",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      },
+      "require": {
+        "types": "./dist/index.d.cts",
+        "default": "./dist/index.cjs"
+      }
+    },
+    "./package.json": "./package.json"
+  },
+  "scripts": {
+    "build": "tsup src/index.ts --format esm,cjs --experimental-dts --clean --treeshake=smallest --splitting",
+    "build:watch": "pnpm build --watch",
+    "pretest": "docker compose up -d && (for i in $(seq 1 30); do docker compose exec -T db clickhouse-client --query 'SELECT 1'  && break || (sleep 1; [ $i -eq 30 ] && exit 1); done)",
+    "test": "vitest run",
+    "pretest:perf": "docker compose -f docker-compose.perf.yaml up -d && (for i in $(seq 1 30); do docker compose -f docker-compose.perf.yaml exec -T db pg_isready -U postgres && break || (sleep 1; [ $i -eq 30 ] && exit 1); done)",
+    "test:perf": "NODE_OPTIONS='--max-old-space-size=16384' vitest run -c vitest.perf.config.ts",
+    "posttest": "docker compose down -v",
+    "posttest:perf": "docker compose -f docker-compose.perf.yaml down -v",
+    "pretest:watch": "docker compose up -d",
+    "test:watch": "vitest watch",
+    "posttest:watch": "docker compose down -v",
+    "lint": "eslint ."
+  },
+  "dependencies": {
+    "@mastra/core": "workspace:^",
+    "@clickhouse/client": "^1.11.0"
+  },
+  "devDependencies": {
+    "@internal/lint": "workspace:*",
+    "@microsoft/api-extractor": "^7.52.1",
+    "@types/node": "^20.17.27",
+    "eslint": "^9.23.0",
+    "tsup": "^8.4.0",
+    "typescript": "^5.8.2",
+    "vitest": "^3.0.9"
+  }
+}

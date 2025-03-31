@@ -1,0 +1,677 @@
+import type { MessageType, StorageThreadType } from '@mastra/core/memory';
+import {
+  MastraStorage,
+  TABLE_EVALS,
+  TABLE_MESSAGES,
+  TABLE_SCHEMAS,
+  TABLE_THREADS,
+  TABLE_TRACES,
+  TABLE_WORKFLOW_SNAPSHOT,
+} from '@mastra/core/storage';
+import type { EvalRow, StorageColumn, StorageGetMessagesArg, TABLE_NAMES } from '@mastra/core/storage';
+import type { WorkflowRunState } from '@mastra/core/workflows';
+import { createClient, ClickHouseClient } from '@clickhouse/client';
+
+export type ClickhouseConfig = {
+  url: string;
+  username: string;
+  password: string;
+};
+
+const TABLE_ENGINES: Record<TABLE_NAMES, string> = {
+  [TABLE_MESSAGES]: `MergeTree()`,
+  [TABLE_WORKFLOW_SNAPSHOT]: `ReplacingMergeTree()`,
+  [TABLE_TRACES]: `MergeTree()`,
+  [TABLE_THREADS]: `ReplacingMergeTree()`,
+  [TABLE_EVALS]: `MergeTree()`,
+};
+
+const COLUMN_TYPES: Record<StorageColumn['type'], string> = {
+  text: 'String',
+  timestamp: 'DateTime64(3)',
+  uuid: 'String',
+  jsonb: 'String',
+  integer: 'Int64',
+  bigint: 'Int64',
+};
+
+function transformRows<R>(rows: any[]): R[] {
+  return rows.map((row: any) => transformRow<R>(row));
+}
+
+function transformRow<R>(row: any): R {
+  if (row.createdAt) {
+    row.createdAt = new Date(row.createdAt);
+  }
+  if (row.updatedAt) {
+    row.updatedAt = new Date(row.updatedAt);
+  }
+  return row;
+}
+
+export class ClickhouseStore extends MastraStorage {
+  private db: ClickHouseClient;
+
+  constructor(config: ClickhouseConfig) {
+    super({ name: 'ClickhouseStore' });
+    this.db = createClient({
+      url: config.url,
+      username: config.username,
+      password: config.password,
+    });
+  }
+
+  getEvalsByAgentName(_agentName: string, _type?: 'test' | 'live'): Promise<EvalRow[]> {
+    throw new Error('Method not implemented.');
+  }
+
+  async batchInsert({ tableName, records }: { tableName: TABLE_NAMES; records: Record<string, any>[] }): Promise<void> {
+    try {
+      await this.db.insert({
+        table: tableName,
+        values: records,
+        format: 'JSONEachRow',
+        clickhouse_settings: {
+          // Allows to insert serialized JS Dates (such as '2023-12-06T10:54:48.000Z')
+          date_time_input_format: 'best_effort',
+          use_client_time_zone: 1,
+        },
+      });
+    } catch (error) {
+      console.error(`Error inserting into ${tableName}:`, error);
+      throw error;
+    }
+  }
+
+  async getTraces({
+    name,
+    scope,
+    page,
+    perPage,
+    attributes,
+  }: {
+    name?: string;
+    scope?: string;
+    page: number;
+    perPage: number;
+    attributes?: Record<string, string>;
+  }): Promise<any[]> {
+    let idx = 1;
+    const limit = perPage;
+    const offset = page * perPage;
+
+    const args: Record<string, any> = {};
+
+    const conditions: string[] = [];
+    if (name) {
+      conditions.push(`name LIKE CONCAT(\$${idx++}, '%')`);
+    }
+    if (scope) {
+      conditions.push(`scope = \$${idx++}`);
+    }
+    if (attributes) {
+      Object.keys(attributes).forEach(key => {
+        conditions.push(`attributes->>'${key}' = \$${idx++}`);
+      });
+    }
+
+    const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+
+    if (name) {
+      args[name] = 'String';
+    }
+
+    if (scope) {
+      args[scope] = 'String';
+    }
+
+    if (attributes) {
+      for (const [_key, value] of Object.entries(attributes)) {
+        args[value] = 'String';
+      }
+    }
+
+    const result = await this.db.query({
+      query: `SELECT toDateTime64(createdAt, 3) as createdAt, toDateTime64(updatedAt, 3) as updatedAt FROM ${TABLE_TRACES} ${whereClause} ORDER BY "createdAt" DESC LIMIT ${limit} OFFSET ${offset}`,
+      query_params: args,
+      clickhouse_settings: {
+        // Allows to insert serialized JS Dates (such as '2023-12-06T10:54:48.000Z')
+        date_time_input_format: 'best_effort',
+        use_client_time_zone: 1,
+      },
+    });
+
+    if (!result) {
+      return [];
+    }
+
+    const rows = await result.json();
+    return rows.data;
+  }
+
+  async createTable({
+    tableName,
+    schema,
+  }: {
+    tableName: TABLE_NAMES;
+    schema: Record<string, StorageColumn>;
+  }): Promise<void> {
+    try {
+      const columns = Object.entries(schema)
+        .map(([name, def]) => {
+          const constraints = [];
+          if (!def.nullable) constraints.push('NOT NULL');
+          return `"${name}" ${COLUMN_TYPES[def.type]} ${constraints.join(' ')}`;
+        })
+        .join(',\n');
+
+      const sql = `
+        CREATE TABLE IF NOT EXISTS ${tableName} (
+          ${columns}
+        )
+        ENGINE = ${TABLE_ENGINES[tableName]}
+        PARTITION BY "createdAt"
+        PRIMARY KEY (createdAt, id)
+        ORDER BY (createdAt, id)
+        SETTINGS index_granularity = 8192;
+      `;
+
+      await this.db.query({
+        query: sql,
+        clickhouse_settings: {
+          // Allows to insert serialized JS Dates (such as '2023-12-06T10:54:48.000Z')
+          date_time_input_format: 'best_effort',
+          use_client_time_zone: 1,
+        },
+      });
+    } catch (error) {
+      console.error(`Error creating table ${tableName}:`, error);
+      throw error;
+    }
+  }
+
+  async clearTable({ tableName }: { tableName: TABLE_NAMES }): Promise<void> {
+    try {
+      await this.db.query({
+        query: `TRUNCATE TABLE ${tableName}`,
+        clickhouse_settings: {
+          // Allows to insert serialized JS Dates (such as '2023-12-06T10:54:48.000Z')
+          date_time_input_format: 'best_effort',
+          use_client_time_zone: 1,
+        },
+      });
+    } catch (error) {
+      console.error(`Error clearing table ${tableName}:`, error);
+      throw error;
+    }
+  }
+
+  async insert({ tableName, record }: { tableName: TABLE_NAMES; record: Record<string, any> }): Promise<void> {
+    try {
+      await this.db.insert({
+        table: tableName,
+        values: [record],
+        format: 'JSONEachRow',
+        clickhouse_settings: {
+          // Allows to insert serialized JS Dates (such as '2023-12-06T10:54:48.000Z')
+          date_time_input_format: 'best_effort',
+          use_client_time_zone: 1,
+        },
+      });
+    } catch (error) {
+      console.error(`Error inserting into ${tableName}:`, error);
+      throw error;
+    }
+  }
+
+  async load<R>({ tableName, keys }: { tableName: TABLE_NAMES; keys: Record<string, string> }): Promise<R | null> {
+    try {
+      const keyEntries = Object.entries(keys);
+      const conditions = keyEntries
+        .map(
+          ([key], index) =>
+            `"${key}" = {${key}:${COLUMN_TYPES[TABLE_SCHEMAS[tableName as TABLE_NAMES]?.[key]?.type ?? 'text']}}`,
+        )
+        .join(' AND ');
+      const values = keyEntries.reduce((acc, [key, value]) => {
+        return { ...acc, [key]: value };
+      }, {});
+
+      const result = await this.db.query({
+        query: `SELECT toDateTime64(createdAt, 3) as createdAt, toDateTime64(updatedAt, 3) as updatedAt FROM ${tableName} WHERE ${conditions}`,
+        query_params: values,
+        clickhouse_settings: {
+          // Allows to insert serialized JS Dates (such as '2023-12-06T10:54:48.000Z')
+          date_time_input_format: 'best_effort',
+          use_client_time_zone: 1,
+        },
+      });
+
+      if (!result) {
+        return null;
+      }
+
+      console.log({ result });
+
+      const rows = await result.json();
+      // If this is a workflow snapshot, parse the snapshot field
+      if (tableName === TABLE_WORKFLOW_SNAPSHOT) {
+        const snapshot = rows.data[0] as any;
+        if (typeof snapshot.snapshot === 'string') {
+          snapshot.snapshot = JSON.parse(snapshot.snapshot);
+        }
+        return snapshot;
+      }
+
+      const data: R = transformRow<R>(rows.data[0] as any);
+      return data;
+    } catch (error) {
+      console.error(`Error loading from ${tableName}:`, error);
+      throw error;
+    }
+  }
+
+  async getThreadById({ threadId }: { threadId: string }): Promise<StorageThreadType | null> {
+    try {
+      const result = await this.db.query({
+        query: `SELECT 
+          id,
+          "resourceId",
+          title,
+          metadata,
+          toDateTime64(createdAt, 3) as createdAt,
+          toDateTime64(updatedAt, 3) as updatedAt
+        FROM "${TABLE_THREADS}"
+        WHERE id = {id:String}`,
+        query_params: { id: threadId },
+        clickhouse_settings: {
+          // Allows to insert serialized JS Dates (such as '2023-12-06T10:54:48.000Z')
+          date_time_input_format: 'best_effort',
+          use_client_time_zone: 1,
+        },
+      });
+
+      const rows = await result.json();
+      const thread = rows.data[0] as StorageThreadType;
+
+      if (!thread) {
+        return null;
+      }
+
+      return {
+        ...thread,
+        metadata: typeof thread.metadata === 'string' ? JSON.parse(thread.metadata) : thread.metadata,
+        createdAt: thread.createdAt,
+        updatedAt: thread.updatedAt,
+      };
+    } catch (error) {
+      console.error(`Error getting thread ${threadId}:`, error);
+      throw error;
+    }
+  }
+
+  async getThreadsByResourceId({ resourceId }: { resourceId: string }): Promise<StorageThreadType[]> {
+    try {
+      const result = await this.db.query({
+        query: `SELECT 
+          id,
+          "resourceId",
+          title,
+          metadata,
+          toDateTime64(createdAt, 3) as createdAt,
+          toDateTime64(updatedAt, 3) as updatedAt
+        FROM "${TABLE_THREADS}"
+        WHERE "resourceId" = {resourceId:String}`,
+        query_params: { resourceId },
+        clickhouse_settings: {
+          // Allows to insert serialized JS Dates (such as '2023-12-06T10:54:48.000Z')
+          date_time_input_format: 'best_effort',
+          use_client_time_zone: 1,
+        },
+      });
+
+      const rows = await result.json();
+      const threads = rows.data as StorageThreadType[];
+
+      return threads.map((thread: StorageThreadType) => ({
+        ...thread,
+        metadata: typeof thread.metadata === 'string' ? JSON.parse(thread.metadata) : thread.metadata,
+        createdAt: thread.createdAt,
+        updatedAt: thread.updatedAt,
+      }));
+    } catch (error) {
+      console.error(`Error getting threads for resource ${resourceId}:`, error);
+      throw error;
+    }
+  }
+
+  async saveThread({ thread }: { thread: StorageThreadType }): Promise<StorageThreadType> {
+    try {
+      await this.db.insert({
+        table: TABLE_THREADS,
+        values: [thread],
+        format: 'JSONEachRow',
+        clickhouse_settings: {
+          // Allows to insert serialized JS Dates (such as '2023-12-06T10:54:48.000Z')
+          date_time_input_format: 'best_effort',
+          use_client_time_zone: 1,
+        },
+      });
+
+      return thread;
+    } catch (error) {
+      console.error('Error saving thread:', error);
+      throw error;
+    }
+  }
+
+  async updateThread({
+    id,
+    title,
+    metadata,
+  }: {
+    id: string;
+    title: string;
+    metadata: Record<string, unknown>;
+  }): Promise<StorageThreadType> {
+    try {
+      // First get the existing thread to merge metadata
+      const existingThread = await this.getThreadById({ threadId: id });
+      if (!existingThread) {
+        throw new Error(`Thread ${id} not found`);
+      }
+
+      // Merge the existing metadata with the new metadata
+      const mergedMetadata = {
+        ...existingThread.metadata,
+        ...metadata,
+      };
+
+      const queryResult = await this.db.query({
+        query: `SELECT toDateTime64(createdAt, 3) as createdAt, toDateTime64(updatedAt, 3) as updatedAt FROM "${TABLE_THREADS}" WHERE id = {id:String}`,
+        query_params: { id },
+        clickhouse_settings: {
+          // Allows to insert serialized JS Dates (such as '2023-12-06T10:54:48.000Z')
+          date_time_input_format: 'best_effort',
+          use_client_time_zone: 1,
+        },
+      });
+
+      const rows = await queryResult.json();
+      const thread = rows.data[0] as StorageThreadType;
+
+      if (!thread) {
+        throw new Error(`Thread ${id} not found`);
+      }
+
+      const updatedThread = {
+        ...thread,
+        title,
+        metadata: mergedMetadata,
+        updatedAt: new Date(),
+        COLUMN_TYPES,
+      };
+
+      await this.db.insert({
+        table: TABLE_THREADS,
+        values: [updatedThread],
+        format: 'JSONEachRow',
+        clickhouse_settings: {
+          // Allows to insert serialized JS Dates (such as '2023-12-06T10:54:48.000Z')
+          date_time_input_format: 'best_effort',
+          use_client_time_zone: 1,
+        },
+      });
+
+      return updatedThread;
+    } catch (error) {
+      console.error('Error updating thread:', error);
+      throw error;
+    }
+  }
+
+  async deleteThread({ threadId }: { threadId: string }): Promise<void> {
+    try {
+      // First delete all messages associated with this thread
+      await this.db.query({
+        query: `DELETE FROM "${TABLE_MESSAGES}" WHERE thread_id = {threadId:String}`,
+        query_params: { threadId },
+        clickhouse_settings: {
+          // Allows to insert serialized JS Dates (such as '2023-12-06T10:54:48.000Z')
+          date_time_input_format: 'best_effort',
+          use_client_time_zone: 1,
+        },
+      });
+
+      // Then delete the thread
+      await this.db.query({
+        query: `DELETE FROM "${TABLE_THREADS}" WHERE id = {id:String}`,
+        query_params: { id: threadId },
+        clickhouse_settings: {
+          // Allows to insert serialized JS Dates (such as '2023-12-06T10:54:48.000Z')
+          date_time_input_format: 'best_effort',
+          use_client_time_zone: 1,
+        },
+      });
+    } catch (error) {
+      console.error('Error deleting thread:', error);
+      throw error;
+    }
+  }
+
+  async getMessages<T = unknown>({ threadId, selectBy }: StorageGetMessagesArg): Promise<T> {
+    try {
+      const messages: any[] = [];
+      const limit = typeof selectBy?.last === `number` ? selectBy.last : 40;
+      const include = selectBy?.include || [];
+
+      if (include.length) {
+        const includeResult = await this.db.query({
+          query: `
+          WITH ordered_messages AS (
+            SELECT 
+              *,
+              toDateTime64(createdAt, 3) as createdAt,
+              toDateTime64(updatedAt, 3) as updatedAt,
+              ROW_NUMBER() OVER (ORDER BY "createdAt" DESC) as row_num
+            FROM "${TABLE_MESSAGES}"
+            WHERE thread_id = {threadId:String}
+          )
+          SELECT
+            m.id, 
+            m.content, 
+            m.role, 
+            m.type,
+            m.createdAt, 
+            m.updatedAt,
+            m.thread_id AS "threadId"
+          FROM ordered_messages m
+          WHERE m.id = ANY({include:Array(String)})
+          OR EXISTS (
+            SELECT 1 FROM ordered_messages target
+            WHERE target.id = ANY({include:Array(String)})
+            AND (
+              -- Get previous messages based on the max withPreviousMessages
+              (m.row_num <= target.row_num + {withPreviousMessages:Int64} AND m.row_num > target.row_num)
+              OR
+              -- Get next messages based on the max withNextMessages
+              (m.row_num >= target.row_num - {withNextMessages:Int64} AND m.row_num < target.row_num)
+            )
+          )
+          ORDER BY m."createdAt" DESC
+          `,
+          query_params: {
+            threadId,
+            include: include.map(i => i.id),
+            withPreviousMessages: Math.max(...include.map(i => i.withPreviousMessages || 0)),
+            withNextMessages: Math.max(...include.map(i => i.withNextMessages || 0)),
+          },
+          clickhouse_settings: {
+            // Allows to insert serialized JS Dates (such as '2023-12-06T10:54:48.000Z')
+            date_time_input_format: 'best_effort',
+            use_client_time_zone: 1,
+          },
+        });
+
+        const rows = await includeResult.json();
+        messages.push(...transformRows<T>(rows.data));
+      }
+
+      // Then get the remaining messages, excluding the ids we just fetched
+      const result = await this.db.query({
+        query: `
+        SELECT 
+            id, 
+            content, 
+            role, 
+            type,
+            toDateTime64(createdAt, 3) as createdAt,
+            thread_id AS "threadId"
+        FROM "${TABLE_MESSAGES}"
+        WHERE thread_id = {threadId:String}
+        AND id NOT IN ({exclude:Array(String)})
+        ORDER BY "createdAt" DESC
+        LIMIT {limit:Int64}
+        `,
+        query_params: {
+          threadId,
+          exclude: messages.map(m => m.id),
+          limit,
+        },
+        clickhouse_settings: {
+          // Allows to insert serialized JS Dates (such as '2023-12-06T10:54:48.000Z')
+          date_time_input_format: 'best_effort',
+          use_client_time_zone: 1,
+        },
+      });
+
+      const rows = await result.json();
+      messages.push(...transformRows<T>(rows.data));
+
+      // Sort all messages by creation date
+      messages.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+
+      // Parse message content
+      messages.forEach(message => {
+        if (typeof message.content === 'string') {
+          try {
+            message.content = JSON.parse(message.content);
+          } catch {
+            // If parsing fails, leave as string
+          }
+        }
+      });
+
+      return messages as T;
+    } catch (error) {
+      console.error('Error getting messages:', error);
+      throw error;
+    }
+  }
+
+  async saveMessages({ messages }: { messages: MessageType[] }): Promise<MessageType[]> {
+    if (messages.length === 0) return messages;
+
+    try {
+      const threadId = messages[0]?.threadId;
+      if (!threadId) {
+        throw new Error('Thread ID is required');
+      }
+
+      // Check if thread exists
+      const thread = await this.getThreadById({ threadId });
+      if (!thread) {
+        throw new Error(`Thread ${threadId} not found`);
+      }
+
+      await this.db.insert({
+        table: TABLE_MESSAGES,
+        format: 'JSONEachRow',
+        values: messages.map(message => ({
+          id: message.id,
+          thread_id: threadId,
+          content: typeof message.content === 'string' ? message.content : JSON.stringify(message.content),
+          createdAt: message.createdAt,
+          role: message.role,
+          type: message.type,
+        })),
+        clickhouse_settings: {
+          // Allows to insert serialized JS Dates (such as '2023-12-06T10:54:48.000Z')
+          date_time_input_format: 'best_effort',
+          use_client_time_zone: 1,
+        },
+      });
+
+      return messages;
+    } catch (error) {
+      console.error('Error saving messages:', error);
+      throw error;
+    }
+  }
+
+  async persistWorkflowSnapshot({
+    workflowName,
+    runId,
+    snapshot,
+  }: {
+    workflowName: string;
+    runId: string;
+    snapshot: WorkflowRunState;
+  }): Promise<void> {
+    try {
+      const now = new Date();
+      await this.db.insert({
+        table: TABLE_WORKFLOW_SNAPSHOT,
+        format: 'JSONEachRow',
+        values: [
+          {
+            workflow_name: workflowName,
+            run_id: runId,
+            snapshot: JSON.stringify(snapshot),
+            createdAt: now,
+            updatedAt: now,
+          },
+        ],
+        clickhouse_settings: {
+          // Allows to insert serialized JS Dates (such as '2023-12-06T10:54:48.000Z')
+          date_time_input_format: 'best_effort',
+          use_client_time_zone: 1,
+        },
+      });
+    } catch (error) {
+      console.error('Error persisting workflow snapshot:', error);
+      throw error;
+    }
+  }
+
+  async loadWorkflowSnapshot({
+    workflowName,
+    runId,
+  }: {
+    workflowName: string;
+    runId: string;
+  }): Promise<WorkflowRunState | null> {
+    try {
+      const result = await this.load({
+        tableName: TABLE_WORKFLOW_SNAPSHOT,
+        keys: {
+          workflow_name: workflowName,
+          run_id: runId,
+        },
+      });
+
+      if (!result) {
+        return null;
+      }
+
+      return (result as any).snapshot;
+    } catch (error) {
+      console.error('Error loading workflow snapshot:', error);
+      throw error;
+    }
+  }
+
+  async close(): Promise<void> {
+    await this.db.close();
+  }
+}
