@@ -2896,6 +2896,82 @@ describe('Workflow', async () => {
         output: { text: 'London' },
       });
     });
+
+    it('should be able to use an agent as a .after() step', async () => {
+      const execute = vi.fn<any>().mockResolvedValue({ result: 'success' });
+      const finalStep = new Step({ id: 'finalStep', execute });
+
+      const workflow = new Workflow({
+        name: 'test-workflow',
+        triggerSchema: z.object({
+          prompt1: z.string(),
+          prompt2: z.string(),
+        }),
+      });
+
+      const agent = new Agent({
+        name: 'test-agent-1',
+        instructions: 'test agent instructions',
+        model: openai('gpt-4'),
+      });
+
+      const agent2 = new Agent({
+        name: 'test-agent-2',
+        instructions: 'test agent instructions',
+        model: openai('gpt-4'),
+      });
+
+      const mastra = new Mastra({
+        logger,
+        workflows: { 'test-workflow': workflow },
+        agents: { 'test-agent-1': agent, 'test-agent-2': agent2 },
+        storage,
+      });
+
+      workflow
+        .step(agent, {
+          variables: {
+            prompt: {
+              step: 'trigger',
+              path: 'prompt1',
+            },
+          },
+        })
+        .step(agent2, {
+          variables: {
+            prompt: {
+              step: 'trigger',
+              path: 'prompt2',
+            },
+          },
+        })
+        .after([agent, agent2])
+        .step(finalStep)
+        .commit();
+
+      const run = workflow.createRun();
+      const result = await run.start({
+        triggerData: { prompt1: 'Capital of France, just the name', prompt2: 'Capital of UK, just the name' },
+      });
+
+      console.log(result);
+
+      expect(execute).toHaveBeenCalledTimes(1);
+      expect(result.results['finalStep']).toEqual({
+        status: 'success',
+        output: { result: 'success' },
+      });
+
+      expect(result.results['test-agent-1']).toEqual({
+        status: 'success',
+        output: { text: 'Paris' },
+      });
+
+      expect(result.results['test-agent-2']).toEqual({
+        status: 'success',
+        output: { text: 'London' },
+      });
+    });
   });
 
   describe('Nested workflows', () => {
