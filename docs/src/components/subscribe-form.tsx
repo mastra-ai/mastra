@@ -139,7 +139,7 @@ export const SubscribeForm = ({
               <FormControl>
                 <input
                   placeholder={
-                    placeholder || "Follow along with the weekly changelog"
+                    placeholder || "you@example.com"
                   }
                   {...field}
                   className={cn(
