@@ -93,7 +93,7 @@ export function ChatComponent() {
 }
 ```
 
-> **Gotcha**: When using `useChat` with agent memory functionality, make sure to check out the [Agent Memory section](/docs/agents/01-agent-memory#usechat) for important implementation details.
+> **Gotcha**: When using `useChat` with agent memory functionality, make sure to check out the [Agent Memory section](/docs/agents/agent-memory#usechat) for important implementation details.
 
 ### useCompletion
 
@@ -201,13 +201,13 @@ export default function Page() {
 
 Mastra  supports tools created using the AI SDK format, so you can use
 them directly with Mastra agents. See our tools doc on [Vercel AI SDK Tool Format
-](/docs/agents/02-adding-tools#vercel-ai-sdk-tool-format) for more details.
+](/docs/agents/adding-tools#vercel-ai-sdk-tool-format) for more details.
 
 
 ### Client-side tool calling
 
 Mastra leverages AI SDK's tool calling, so what applies in AI SDK applies here still. 
-[Agent Tools](/docs/agents/02-adding-tools) in Mastra are 100% percent compatible with AI SDK tools.
+[Agent Tools](/docs/agents/adding-tools) in Mastra are 100% percent compatible with AI SDK tools.
 
 Mastra tools also expose an optional `execute` async function. It is optional because you might want to forward tool calls to the client or to a queue instead of executing them in the same process.
 
