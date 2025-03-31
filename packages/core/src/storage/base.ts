@@ -2,7 +2,14 @@ import { MastraBase } from '../base';
 import type { MessageType, StorageThreadType } from '../memory/types';
 import type { WorkflowRunState } from '../workflows';
 
-import { TABLE_WORKFLOW_SNAPSHOT, TABLE_EVALS, TABLE_MESSAGES, TABLE_THREADS, TABLE_TRACES } from './constants';
+import {
+  TABLE_WORKFLOW_SNAPSHOT,
+  TABLE_EVALS,
+  TABLE_MESSAGES,
+  TABLE_THREADS,
+  TABLE_TRACES,
+  TABLE_SCHEMAS,
+} from './constants';
 import type { TABLE_NAMES } from './constants';
 import type { EvalRow, StorageColumn, StorageGetMessagesArg, WorkflowRuns } from './types';
 
@@ -158,104 +165,27 @@ export abstract class MastraStorage extends MastraBase {
     this.hasInitialized = Promise.all([
       this.createTable({
         tableName: TABLE_WORKFLOW_SNAPSHOT,
-        schema: {
-          workflow_name: {
-            type: 'text',
-          },
-          run_id: {
-            type: 'text',
-          },
-          snapshot: {
-            type: 'text',
-          },
-          createdAt: {
-            type: 'timestamp',
-          },
-          updatedAt: {
-            type: 'timestamp',
-          },
-        },
+        schema: TABLE_SCHEMAS[TABLE_WORKFLOW_SNAPSHOT],
       }),
 
       this.createTable({
         tableName: TABLE_EVALS,
-        schema: {
-          input: {
-            type: 'text',
-          },
-          output: {
-            type: 'text',
-          },
-          result: {
-            type: 'jsonb',
-          },
-          agent_name: {
-            type: 'text',
-          },
-          metric_name: {
-            type: 'text',
-          },
-          instructions: {
-            type: 'text',
-          },
-          test_info: {
-            type: 'jsonb',
-            nullable: true,
-          },
-          global_run_id: {
-            type: 'text',
-          },
-          run_id: {
-            type: 'text',
-          },
-          created_at: {
-            type: 'timestamp',
-          },
-        },
+        schema: TABLE_SCHEMAS[TABLE_EVALS],
       }),
 
       this.createTable({
         tableName: TABLE_THREADS,
-        schema: {
-          id: { type: 'text', nullable: false, primaryKey: true },
-          resourceId: { type: 'text', nullable: false },
-          title: { type: 'text', nullable: false },
-          metadata: { type: 'text', nullable: true },
-          createdAt: { type: 'timestamp', nullable: false },
-          updatedAt: { type: 'timestamp', nullable: false },
-        },
+        schema: TABLE_SCHEMAS[TABLE_THREADS],
       }),
 
       this.createTable({
         tableName: TABLE_MESSAGES,
-        schema: {
-          id: { type: 'text', nullable: false, primaryKey: true },
-          thread_id: { type: 'text', nullable: false },
-          content: { type: 'text', nullable: false },
-          role: { type: 'text', nullable: false },
-          type: { type: 'text', nullable: false },
-          createdAt: { type: 'timestamp', nullable: false },
-        },
+        schema: TABLE_SCHEMAS[TABLE_MESSAGES],
       }),
 
       this.createTable({
         tableName: TABLE_TRACES,
-        schema: {
-          id: { type: 'text', nullable: false, primaryKey: true },
-          parentSpanId: { type: 'text', nullable: true },
-          name: { type: 'text', nullable: false },
-          traceId: { type: 'text', nullable: false },
-          scope: { type: 'text', nullable: false },
-          kind: { type: 'integer', nullable: false },
-          attributes: { type: 'jsonb', nullable: true },
-          status: { type: 'jsonb', nullable: true },
-          events: { type: 'jsonb', nullable: true },
-          links: { type: 'jsonb', nullable: true },
-          other: { type: 'text', nullable: true },
-          startTime: { type: 'bigint', nullable: false },
-          endTime: { type: 'bigint', nullable: false },
-          createdAt: { type: 'timestamp', nullable: false },
-        },
+        schema: TABLE_SCHEMAS[TABLE_TRACES],
       }),
     ]).then(() => true);
 
