@@ -154,6 +154,8 @@ export class Workflow<
         if (isWorkflow(step)) {
           const asStep = step.toStep();
           return asStep;
+        } else if (isAgent(step)) {
+          return agentToStep(step);
         } else {
           return step as StepAction<string, any, any, any>;
         }
@@ -374,7 +376,15 @@ export class Workflow<
     config?: StepConfig<StepAction<string, any, any, any>, CondStep, VarStep, TTriggerSchema>,
   ): this;
   then<
-    TStep extends StepAction<string, any, any, any> | Workflow<any, any, any, any>,
+    TAgent extends Agent<any, any, any>,
+    CondStep extends StepVariableType<any, any, any, any>,
+    VarStep extends StepVariableType<any, any, any, any>,
+  >(
+    next: TAgent | TAgent[],
+    config?: StepConfig<StepAction<string, any, any, any>, CondStep, VarStep, TTriggerSchema>,
+  ): this;
+  then<
+    TStep extends StepAction<string, any, any, any> | Workflow<any, any, any, any> | Agent<any, any, any>,
     CondStep extends StepVariableType<any, any, any, any>,
     VarStep extends StepVariableType<any, any, any, any>,
   >(next: TStep | TStep[], config?: StepConfig<StepAction<string, any, any, any>, CondStep, VarStep, TTriggerSchema>) {
@@ -387,7 +397,14 @@ export class Workflow<
       this.after(lastStep);
       const nextSteps = next.map(step => {
         if (isWorkflow(step)) {
+          // types possibly infinite issue here
+          // @ts-ignore
           return workflowToStep(step, { mastra: this.#mastra });
+        }
+        if (isAgent(step)) {
+          // types possibly infinite issue here
+          // @ts-ignore
+          return agentToStep(step);
         }
         return step;
       });
@@ -421,7 +438,9 @@ export class Workflow<
 
     const step: StepAction<string, any, any, any> = isWorkflow(next)
       ? workflowToStep(next, { mastra: this.#mastra })
-      : (next as StepAction<string, any, any, any>);
+      : isAgent(next)
+        ? agentToStep(next)
+        : (next as StepAction<string, any, any, any>);
 
     const stepKey = this.#makeStepKey(step);
     const when = config?.['#internal']?.when || config?.when;
