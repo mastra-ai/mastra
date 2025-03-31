@@ -109,7 +109,7 @@ describe('TokenLimiter', () => {
     tools: { calculatorTool },
   });
 
-  describe.concurrent(`90% accuracy`, () => {
+  describe.concurrent(`98% accuracy`, () => {
     it(`20 messages, no tools`, async () => {
       await expectTokenEstimate(
         {
