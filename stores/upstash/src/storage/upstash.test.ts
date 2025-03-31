@@ -383,7 +383,7 @@ describe('UpstashStore', () => {
         snapshot: workflow2,
       });
 
-      const { runs, total } = await store.getWorkflows({ namespace: testNamespace });
+      const { runs, total } = await store.__getWorkflows({ namespace: testNamespace });
       expect(runs).toHaveLength(2);
       expect(total).toBe(2);
       expect(runs[0]!.workflowName).toBe(workflowName2); // Most recent first
@@ -415,7 +415,7 @@ describe('UpstashStore', () => {
         snapshot: workflow2,
       });
 
-      const { runs, total } = await store.getWorkflows({ namespace: testNamespace, workflowName: workflowName1 });
+      const { runs, total } = await store.__getWorkflows({ namespace: testNamespace, workflowName: workflowName1 });
       expect(runs).toHaveLength(1);
       expect(total).toBe(1);
       expect(runs[0]!.workflowName).toBe(workflowName1);
@@ -469,7 +469,7 @@ describe('UpstashStore', () => {
         },
       });
 
-      const { runs } = await store.getWorkflows({
+      const { runs } = await store.__getWorkflows({
         namespace: testNamespace,
         fromDate: yesterday,
         toDate: now,
@@ -515,7 +515,7 @@ describe('UpstashStore', () => {
       });
 
       // Get first page
-      const page1 = await store.getWorkflows({
+      const page1 = await store.__getWorkflows({
         namespace: testNamespace,
         limit: 2,
         offset: 0,
@@ -530,7 +530,7 @@ describe('UpstashStore', () => {
       expect(secondSnapshot.context?.steps[stepId2]?.status).toBe('running');
 
       // Get second page
-      const page2 = await store.getWorkflows({
+      const page2 = await store.__getWorkflows({
         namespace: testNamespace,
         limit: 2,
         offset: 2,
