@@ -45,7 +45,6 @@ function findLinkedDependencies(dir, protocol = 'link:') {
   try {
     // Read package.json from current working directory
     const packageJson = JSON.parse(readFileSync(`${dir}/package.json`, 'utf8'));
-    console.log({ dir, packageJson });
 
     // Initialize an object to store linked dependencies
     const linkedDependencies = {};

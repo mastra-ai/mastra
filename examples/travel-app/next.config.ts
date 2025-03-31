@@ -16,6 +16,18 @@ const nextConfig: NextConfig = {
   generateBuildId: async () => {
     return process.env.VERCEL_GIT_COMMIT_SHA || "stable-build";
   },
+
+  webpack: (config, { isServer }) => {
+    // Handle native node modules
+    if (!isServer) {
+      config.resolve.fallback = {
+        ...config.resolve.fallback,
+        "onnxruntime-node": false,
+      };
+    }
+
+    return config;
+  },
 };
 
 export default nextConfig;
