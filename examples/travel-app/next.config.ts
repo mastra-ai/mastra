@@ -26,6 +26,11 @@ const nextConfig: NextConfig = {
       };
     }
 
+    config.module = {
+      ...config.module,
+      noParse: [/onnxruntime-node/],
+    };
+
     return config;
   },
 };
