@@ -790,6 +790,7 @@ export class Workflow<
   after<TWorkflow extends Workflow<any, any, any, any>>(
     steps: TWorkflow | TWorkflow[],
   ): Omit<WorkflowBuilder<this>, 'then' | 'after'>;
+  after<TAgent extends Agent<any, any, any>>(steps: TAgent | TAgent[]): Omit<WorkflowBuilder<this>, 'then' | 'after'>;
   after<TStep extends StepAction<string, any, any, any> | Workflow<any, any, any, any>>(
     steps: TStep | Workflow | (TStep | Workflow)[],
   ): Omit<WorkflowBuilder<this>, 'then' | 'after'> {
