@@ -45,7 +45,7 @@ import {
 } from './handlers/network';
 import { generateSystemPromptHandler } from './handlers/prompt';
 import { rootHandler } from './handlers/root';
-import { getTelemetryHandler } from './handlers/telemetry';
+import { getTelemetryHandler, storeTelemetryHandler } from './handlers/telemetry';
 import { executeAgentToolHandler, executeToolHandler, getToolByIdHandler, getToolsHandler } from './handlers/tools';
 import { upsertVectors, createIndex, queryVectors, listIndexes, describeIndex, deleteIndex } from './handlers/vector';
 import { getSpeakersHandler, speakHandler, listenHandler } from './handlers/voice';

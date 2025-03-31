@@ -1,5 +1,8 @@
 import type { Mastra } from '@mastra/core';
-import { getTelemetryHandler as getOriginalTelemetryHandler } from '@mastra/server/handlers/telemetry';
+import {
+  getTelemetryHandler as getOriginalTelemetryHandler,
+  storeTelemetryHandler as getOriginalStoreTelemetryHandler,
+} from '@mastra/server/handlers/telemetry';
 import type { Context } from 'hono';
 
 import { handleError } from './error';
@@ -27,7 +30,7 @@ export async function storeTelemetryHandler(c: Context) {
     const body = await c.req.json();
 
     const mastra: Mastra = c.get('mastra');
-    const result = await storeTelemetryHandler({ mastra, body });
+    const result = await getOriginalStoreTelemetryHandler({ mastra, body });
 
     if (result.status === 'error') {
       return c.json(result, 500);
