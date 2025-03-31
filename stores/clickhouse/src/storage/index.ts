@@ -179,7 +179,19 @@ export class ClickhouseStore extends MastraStorage {
         })
         .join(',\n');
 
-      const sql = `
+      const sql =
+        tableName === TABLE_WORKFLOW_SNAPSHOT
+          ? `
+        CREATE TABLE IF NOT EXISTS ${tableName} (
+          ${['id String'].concat(columns)}
+        )
+        ENGINE = ${TABLE_ENGINES[tableName]}
+        PARTITION BY "createdAt"
+        PRIMARY KEY (createdAt, run_id, workflow_name)
+        ORDER BY (createdAt, run_id, workflow_name)
+        SETTINGS index_granularity = 8192;
+          `
+          : `
         CREATE TABLE IF NOT EXISTS ${tableName} (
           ${columns}
         )
