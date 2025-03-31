@@ -1,5 +1,18 @@
 # @mastra/qdrant
 
+## 0.2.6-alpha.1
+
+### Patch Changes
+
+- 7071597: Update pinecone to include namespace and hybrid search
+- Updated dependencies [619c39d]
+- Updated dependencies [fe56be0]
+- Updated dependencies [a0967a0]
+- Updated dependencies [fca3b21]
+- Updated dependencies [0118361]
+- Updated dependencies [619c39d]
+  - @mastra/core@0.8.0-alpha.1
+
 ## 0.2.6-alpha.0
 
 ### Patch Changes
