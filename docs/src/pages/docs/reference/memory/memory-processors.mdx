@@ -39,7 +39,7 @@ const memory = new Memory({
 });
 ```
 
-The `TokenLimiter` uses `o200k_base` encoding by default, which is used by GPT-4o models. If you need to use a different encoding:
+The `TokenLimiter` uses `o200k_base` encoding by default which works well for `gpt-4o` and `gpt-4o-mini` and may also work for other models (or be close enough for your usecase). If you need to use a different encoding:
 
 ```typescript copy showLineNumbers
 // Import the encoding you need
@@ -55,6 +55,8 @@ const memory = new Memory({
   ],
 });
 ```
+
+See the [OpenAI cookbook](https://cookbook.openai.com/examples/how_to_count_tokens_with_tiktoken#encodings) on token estimation or the [`js-tiktoken` repo](https://github.com/dqbd/tiktoken) for more info.
 
 ### ToolCallFilter
 
