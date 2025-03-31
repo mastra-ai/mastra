@@ -1,0 +1,18 @@
+{
+  "name": "google",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "dependencies": {
+    "@mastra/core": "workspace:*",
+    "@mastra/node-speaker": "^0.1.0",
+    "@mastra/voice-google-live": "workspace:*",
+    "wav": "^1.0.2"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC"
+}

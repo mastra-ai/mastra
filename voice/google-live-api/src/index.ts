@@ -1,8 +1,8 @@
+import type { LiveServerMessage, Session } from '@google/genai';
+import { GoogleGenAI, Modality } from '@google/genai';
 import { MastraVoice } from '@mastra/core/voice';
-import { GoogleGenAI, Modality, Session } from '@google/genai';
-import type { LiveServerMessage } from '@google/genai';
 
-type VoiceEventType = 'speak' | 'writing' | 'error';
+type VoiceEventType = 'speaking' | 'writing' | 'error';
 
 type EventCallback = (...args: any[]) => void;
 
@@ -58,7 +58,7 @@ export class GoogleLiveAPI extends MastraVoice {
     this.session = null;
   }
 
-  async speak(input: string | NodeJS.ReadableStream, options?: { speaker?: string }): Promise<void> {
+  async speak(input: string | NodeJS.ReadableStream): Promise<void> {
     if (!this.session) {
       throw new Error('Not connected. Call connect() first');
     }
@@ -79,11 +79,7 @@ export class GoogleLiveAPI extends MastraVoice {
         role: 'user',
         parts: [
           {
-            text: input,
-            inlineData: {
-              data: `Repeat the following text: ${input}`,
-              mimeType: 'text/plain',
-            },
+            text: `Repeat after me: "${input}"`,
           },
         ],
       },
@@ -96,7 +92,7 @@ export class GoogleLiveAPI extends MastraVoice {
       this.session = await this.ai.live.connect({
         model: DEFAULT_MODEL,
         config: {
-          responseModalities: [Modality.TEXT, Modality.AUDIO],
+          responseModalities: [Modality.AUDIO],
           speechConfig: {
             voiceConfig: {
               prebuiltVoiceConfig: {
@@ -108,22 +104,27 @@ export class GoogleLiveAPI extends MastraVoice {
         callbacks: {
           onopen: () => {
             this.state = 'open';
-            this.emit('speak', { status: 'Connected' });
+            //console.log('Connection opened');
+            this.emit('connection', { status: 'Connected' });
           },
           onclose: () => {
             this.state = 'close';
-            this.emit('speak', { status: 'Closed' });
+            this.emit('connection', { status: 'Closed' });
           },
           onerror: e => {
+            console.error('Error:', e);
             this.emit('error', e);
           },
           onmessage: (e: LiveServerMessage) => {
+            //console.log('Message:', e);
             this.handleMessage(e);
           },
         },
       });
+      this.state = 'open';
     } catch (e) {
       this.state = 'close';
+      console.error('Connection error:', e);
       this.emit('error', e);
       throw e;
     }
@@ -145,6 +146,9 @@ export class GoogleLiveAPI extends MastraVoice {
     }
   }
   private handleMessage(e: LiveServerMessage): void {
+    if (e.serverContent?.turnComplete === true) {
+      this.emit('speaking:completed', { status: 'Speaking completed' });
+    }
     if (e.serverContent?.modelTurn) {
       // Handle text content
       e.serverContent.modelTurn.parts?.forEach(part => {
@@ -155,12 +159,12 @@ export class GoogleLiveAPI extends MastraVoice {
         // Handle audio data
         if (part.inlineData?.data) {
           const audioBuffer = Buffer.from(part.inlineData.data, 'base64');
-          this.emit('speak', { audio: audioBuffer });
+          this.emit('speaking', { audioBuffer: audioBuffer });
         }
       });
     }
     if (e.serverContent?.turnComplete === true) {
-      this.emit('speak', { status: 'completed' });
+      this.emit('conversation.completed', { status: 'completed' });
     }
   }
   listen(
