@@ -2,7 +2,7 @@ import { openai } from '@ai-sdk/openai';
 import { createTool } from '@mastra/core';
 import { Agent } from '@mastra/core/agent';
 import type { CoreMessage } from '@mastra/core';
-import { MemoryProcessor, SharedMemoryProcessorOpts } from '@mastra/core/memory';
+import { MemoryProcessor, MemoryProcessorOpts } from '@mastra/core/memory';
 import { Memory } from '@mastra/memory';
 import { TokenLimiter, ToolCallFilter } from '@mastra/memory/processors';
 import { z } from 'zod';
@@ -13,7 +13,7 @@ class ForgetfulProcessor extends MemoryProcessor {
     super({ name: 'ForgetfulProcessor' });
   }
 
-  process(messages: CoreMessage[], _opts: SharedMemoryProcessorOpts = {}): CoreMessage[] {
+  process(messages: CoreMessage[], _opts: MemoryProcessorOpts = {}): CoreMessage[] {
     return messages.map(message => {
       if (message.role === `assistant` || message.role === `user`) {
         const content =

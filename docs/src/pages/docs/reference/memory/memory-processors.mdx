@@ -123,10 +123,7 @@ You can create custom processors by extending the `MemoryProcessor` class:
 
 ```typescript copy showLineNumbers
 import { Memory, CoreMessage } from "@mastra/memory";
-import {
-  MemoryProcessor,
-  SharedMemoryProcessorOpts,
-} from "@mastra/core/memory";
+import { MemoryProcessor, MemoryProcessorOpts } from "@mastra/core/memory";
 
 // Simple example of implementing the MemoryProcessor interface
 class SimpleMessageFilter extends MemoryProcessor {
@@ -136,7 +133,7 @@ class SimpleMessageFilter extends MemoryProcessor {
 
   process(
     messages: CoreMessage[],
-    _opts: SharedMemoryProcessorOpts = {},
+    _opts: MemoryProcessorOpts = {},
   ): CoreMessage[] {
     // Return a subset of messages based on your criteria
     return messages.slice(0, 10); // For example, just keep the first 10 messages

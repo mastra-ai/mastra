@@ -1,4 +1,4 @@
-import type { CoreMessage, SharedMemoryProcessorOpts } from '@mastra/core';
+import type { CoreMessage, MemoryProcessorOpts } from '@mastra/core';
 import { MemoryProcessor } from '@mastra/core/memory';
 import { Tiktoken } from 'js-tiktoken/lite';
 import type { TiktokenBPE } from 'js-tiktoken/lite';
@@ -51,7 +51,7 @@ export class TokenLimiter extends MemoryProcessor {
 
   process(
     messages: CoreMessage[],
-    { systemMessage, memorySystemMessage, newMessages }: SharedMemoryProcessorOpts = {},
+    { systemMessage, memorySystemMessage, newMessages }: MemoryProcessorOpts = {},
   ): CoreMessage[] {
     // Messages are already chronologically ordered - take most recent ones up to the token limit
     let totalTokens = 0;

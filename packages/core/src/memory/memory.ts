@@ -21,7 +21,7 @@ import { DefaultVectorDB } from '../vector/libsql';
 
 import type { MessageType, SharedMemoryConfig, StorageThreadType, MemoryConfig, AiMessageType } from './types';
 
-export type SharedMemoryProcessorOpts = {
+export type MemoryProcessorOpts = {
   systemMessage?: string;
   memorySystemMessage?: string;
   newMessages?: CoreMessage[];
@@ -36,7 +36,7 @@ export abstract class MemoryProcessor extends MastraBase {
    * @param messages The messages to process
    * @returns The processed messages
    */
-  process(messages: CoreMessage[], _opts: SharedMemoryProcessorOpts): CoreMessage[] {
+  process(messages: CoreMessage[], _opts: MemoryProcessorOpts): CoreMessage[] {
     return messages;
   }
 }
@@ -171,7 +171,7 @@ export abstract class MastraMemory extends MastraBase {
     messages: CoreMessage[],
     opts: {
       processors?: MemoryProcessor[];
-    } & SharedMemoryProcessorOpts,
+    } & MemoryProcessorOpts,
   ): CoreMessage[] {
     const processors = opts.processors || this.processors;
     if (!processors || processors.length === 0) {
@@ -198,7 +198,7 @@ export abstract class MastraMemory extends MastraBase {
   }: {
     messages: CoreMessage[];
     processors?: MemoryProcessor[];
-  } & SharedMemoryProcessorOpts) {
+  } & MemoryProcessorOpts) {
     return this.applyProcessors(messages, { processors: processors || this.processors, ...opts });
   }
 
