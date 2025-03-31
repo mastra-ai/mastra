@@ -40,6 +40,10 @@ function transformRows<R>(rows: any[]): R[] {
 }
 
 function transformRow<R>(row: any): R {
+  if (!row) {
+    return row;
+  }
+
   if (row.createdAt) {
     row.createdAt = new Date(row.createdAt);
   }
@@ -248,15 +252,15 @@ export class ClickhouseStore extends MastraStorage {
       const conditions = keyEntries
         .map(
           ([key], index) =>
-            `"${key}" = {${key}:${COLUMN_TYPES[TABLE_SCHEMAS[tableName as TABLE_NAMES]?.[key]?.type ?? 'text']}}`,
+            `"${key}" = {var_${key}:${COLUMN_TYPES[TABLE_SCHEMAS[tableName as TABLE_NAMES]?.[key]?.type ?? 'text']}}`,
         )
         .join(' AND ');
       const values = keyEntries.reduce((acc, [key, value]) => {
-        return { ...acc, [key]: value };
+        return { ...acc, [`var_${key}`]: value };
       }, {});
 
       const result = await this.db.query({
-        query: `SELECT toDateTime64(createdAt, 3) as createdAt, toDateTime64(updatedAt, 3) as updatedAt FROM ${tableName} WHERE ${conditions}`,
+        query: `SELECT *, toDateTime64(createdAt, 3) as createdAt, toDateTime64(updatedAt, 3) as updatedAt FROM ${tableName} WHERE ${conditions}`,
         query_params: values,
         clickhouse_settings: {
           // Allows to insert serialized JS Dates (such as '2023-12-06T10:54:48.000Z')
@@ -270,8 +274,6 @@ export class ClickhouseStore extends MastraStorage {
         return null;
       }
 
-      console.log({ result });
-
       const rows = await result.json();
       // If this is a workflow snapshot, parse the snapshot field
       if (tableName === TABLE_WORKFLOW_SNAPSHOT) {
@@ -279,7 +281,7 @@ export class ClickhouseStore extends MastraStorage {
         if (typeof snapshot.snapshot === 'string') {
           snapshot.snapshot = JSON.parse(snapshot.snapshot);
         }
-        return snapshot;
+        return transformRow(snapshot);
       }
 
       const data: R = transformRow(rows.data[0]);
@@ -301,8 +303,8 @@ export class ClickhouseStore extends MastraStorage {
           toDateTime64(createdAt, 3) as createdAt,
           toDateTime64(updatedAt, 3) as updatedAt
         FROM "${TABLE_THREADS}"
-        WHERE id = {id:String}`,
-        query_params: { id: threadId },
+        WHERE id = {var_id:String}`,
+        query_params: { var_id: threadId },
         clickhouse_settings: {
           // Allows to insert serialized JS Dates (such as '2023-12-06T10:54:48.000Z')
           date_time_input_format: 'best_effort',
@@ -341,8 +343,8 @@ export class ClickhouseStore extends MastraStorage {
           toDateTime64(createdAt, 3) as createdAt,
           toDateTime64(updatedAt, 3) as updatedAt
         FROM "${TABLE_THREADS}"
-        WHERE "resourceId" = {resourceId:String}`,
-        query_params: { resourceId },
+        WHERE "resourceId" = {var_resourceId:String}`,
+        query_params: { var_resourceId: resourceId },
         clickhouse_settings: {
           // Allows to insert serialized JS Dates (such as '2023-12-06T10:54:48.000Z')
           date_time_input_format: 'best_effort',
@@ -415,8 +417,8 @@ export class ClickhouseStore extends MastraStorage {
       };
 
       const queryResult = await this.db.query({
-        query: `SELECT toDateTime64(createdAt, 3) as createdAt, toDateTime64(updatedAt, 3) as updatedAt FROM "${TABLE_THREADS}" WHERE id = {id:String}`,
-        query_params: { id },
+        query: `SELECT toDateTime64(createdAt, 3) as createdAt, toDateTime64(updatedAt, 3) as updatedAt FROM "${TABLE_THREADS}" WHERE id = {var_id:String}`,
+        query_params: { var_id: id },
         clickhouse_settings: {
           // Allows to insert serialized JS Dates (such as '2023-12-06T10:54:48.000Z')
           date_time_input_format: 'best_effort',
@@ -468,8 +470,8 @@ export class ClickhouseStore extends MastraStorage {
     try {
       // First delete all messages associated with this thread
       await this.db.query({
-        query: `DELETE FROM "${TABLE_MESSAGES}" WHERE thread_id = {threadId:String}`,
-        query_params: { threadId },
+        query: `DELETE FROM "${TABLE_MESSAGES}" WHERE thread_id = {var_thread_id:String}`,
+        query_params: { var_thread_id: threadId },
         clickhouse_settings: {
           // Allows to insert serialized JS Dates (such as '2023-12-06T10:54:48.000Z')
           date_time_input_format: 'best_effort',
@@ -480,7 +482,7 @@ export class ClickhouseStore extends MastraStorage {
 
       // Then delete the thread
       await this.db.query({
-        query: `DELETE FROM "${TABLE_THREADS}" WHERE id = {id:String}`,
+        query: `DELETE FROM "${TABLE_THREADS}" WHERE id = {var_id:String}`,
         query_params: { id: threadId },
         clickhouse_settings: {
           // Allows to insert serialized JS Dates (such as '2023-12-06T10:54:48.000Z')
@@ -511,7 +513,7 @@ export class ClickhouseStore extends MastraStorage {
               toDateTime64(updatedAt, 3) as updatedAt,
               ROW_NUMBER() OVER (ORDER BY "createdAt" DESC) as row_num
             FROM "${TABLE_MESSAGES}"
-            WHERE thread_id = {threadId:String}
+            WHERE thread_id = {var_thread_id:String}
           )
           SELECT
             m.id, 
@@ -522,25 +524,25 @@ export class ClickhouseStore extends MastraStorage {
             m.updatedAt,
             m.thread_id AS "threadId"
           FROM ordered_messages m
-          WHERE m.id = ANY({include:Array(String)})
+          WHERE m.id = ANY({var_include:Array(String)})
           OR EXISTS (
             SELECT 1 FROM ordered_messages target
-            WHERE target.id = ANY({include:Array(String)})
+            WHERE target.id = ANY({var_include:Array(String)})
             AND (
               -- Get previous messages based on the max withPreviousMessages
-              (m.row_num <= target.row_num + {withPreviousMessages:Int64} AND m.row_num > target.row_num)
+              (m.row_num <= target.row_num + {var_withPreviousMessages:Int64} AND m.row_num > target.row_num)
               OR
               -- Get next messages based on the max withNextMessages
-              (m.row_num >= target.row_num - {withNextMessages:Int64} AND m.row_num < target.row_num)
+              (m.row_num >= target.row_num - {var_withNextMessages:Int64} AND m.row_num < target.row_num)
             )
           )
           ORDER BY m."createdAt" DESC
           `,
           query_params: {
-            threadId,
-            include: include.map(i => i.id),
-            withPreviousMessages: Math.max(...include.map(i => i.withPreviousMessages || 0)),
-            withNextMessages: Math.max(...include.map(i => i.withNextMessages || 0)),
+            var_thread_id: threadId,
+            var_include: include.map(i => i.id),
+            var_withPreviousMessages: Math.max(...include.map(i => i.withPreviousMessages || 0)),
+            var_withNextMessages: Math.max(...include.map(i => i.withNextMessages || 0)),
           },
           clickhouse_settings: {
             // Allows to insert serialized JS Dates (such as '2023-12-06T10:54:48.000Z')
