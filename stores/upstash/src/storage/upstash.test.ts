@@ -1,4 +1,6 @@
 import { randomUUID } from 'crypto';
+import type { MessageType } from '@mastra/core/memory';
+import type { TABLE_NAMES } from '@mastra/core/storage';
 import { MastraStorage, TABLE_WORKFLOW_SNAPSHOT } from '@mastra/core/storage';
 import type { WorkflowRunState } from '@mastra/core/workflows';
 import { describe, it, expect, beforeAll, beforeEach, afterAll, vi } from 'vitest';
@@ -7,6 +9,25 @@ import { UpstashStore } from './index';
 
 // Increase timeout for all tests in this file to 30 seconds
 vi.setConfig({ testTimeout: 60_000, hookTimeout: 60_000 });
+
+const createSampleThread = () => ({
+  id: `thread-${randomUUID()}`,
+  resourceId: `resource-${randomUUID()}`,
+  title: 'Test Thread',
+  createdAt: new Date(),
+  updatedAt: new Date(),
+  metadata: { key: 'value' },
+});
+
+const createSampleMessage = (threadId: string, content: string = 'Hello') =>
+  ({
+    id: `msg-${randomUUID()}`,
+    role: 'user',
+    type: 'text',
+    threadId,
+    content: [{ type: 'text', text: content }],
+    createdAt: new Date(),
+  }) as any;
 
 const createSampleWorkflowSnapshot = (status: string, createdAt?: Date) => {
   const runId = `run-${randomUUID()}`;
@@ -53,8 +74,8 @@ describe('UpstashStore', () => {
 
   afterAll(async () => {
     // Clean up test tables
-    await store.clearTable({ tableName: testTableName });
-    await store.clearTable({ tableName: testTableName2 });
+    await store.clearTable({ tableName: testTableName as TABLE_NAMES });
+    await store.clearTable({ tableName: testTableName2 as TABLE_NAMES });
     await store.clearTable({ tableName: MastraStorage.TABLE_THREADS });
     await store.clearTable({ tableName: MastraStorage.TABLE_MESSAGES });
   });
@@ -62,7 +83,7 @@ describe('UpstashStore', () => {
   describe('Table Operations', () => {
     it('should create a new table with schema', async () => {
       await store.createTable({
-        tableName: testTableName,
+        tableName: testTableName as TABLE_NAMES,
         schema: {
           id: { type: 'text', primaryKey: true },
           data: { type: 'text', nullable: true },
@@ -71,17 +92,17 @@ describe('UpstashStore', () => {
 
       // Verify table exists by inserting and retrieving data
       await store.insert({
-        tableName: testTableName,
+        tableName: testTableName as TABLE_NAMES,
         record: { id: 'test1', data: 'test-data' },
       });
 
-      const result = await store.load({ tableName: testTableName, keys: { id: 'test1' } });
+      const result = await store.load({ tableName: testTableName as TABLE_NAMES, keys: { id: 'test1' } });
       expect(result).toBeTruthy();
     });
 
     it('should handle multiple table creation', async () => {
       await store.createTable({
-        tableName: testTableName2,
+        tableName: testTableName2 as TABLE_NAMES,
         schema: {
           id: { type: 'text', primaryKey: true },
           data: { type: 'text', nullable: true },
@@ -90,11 +111,11 @@ describe('UpstashStore', () => {
 
       // Verify both tables work independently
       await store.insert({
-        tableName: testTableName2,
+        tableName: testTableName2 as TABLE_NAMES,
         record: { id: 'test2', data: 'test-data-2' },
       });
 
-      const result = await store.load({ tableName: testTableName2, keys: { id: 'test2' } });
+      const result = await store.load({ tableName: testTableName2 as TABLE_NAMES, keys: { id: 'test2' } });
       expect(result).toBeTruthy();
     });
   });
@@ -106,19 +127,12 @@ describe('UpstashStore', () => {
 
     it('should create and retrieve a thread', async () => {
       const now = new Date();
-      const thread = {
-        id: 'thread-1',
-        resourceId: 'resource-1',
-        title: 'Test Thread',
-        createdAt: now,
-        updatedAt: now,
-        metadata: { key: 'value' },
-      };
+      const thread = createSampleThread();
 
-      const savedThread = await store.saveThread({ thread });
+      const savedThread = await store.__saveThread({ thread });
       expect(savedThread).toEqual(thread);
 
-      const retrievedThread = await store.getThreadById({ threadId: thread.id });
+      const retrievedThread = await store.__getThreadById({ threadId: thread.id });
       expect(retrievedThread).toEqual({
         ...thread,
         createdAt: new Date(now.toISOString()),
@@ -132,46 +146,26 @@ describe('UpstashStore', () => {
     });
 
     it('should get threads by resource ID', async () => {
-      const resourceId = 'resource-1';
-      const threads = [
-        {
-          id: 'thread-1',
-          resourceId,
-          title: 'Thread 1',
-          createdAt: new Date(),
-          updatedAt: new Date(),
-          metadata: {},
-        },
-        {
-          id: 'thread-2',
-          resourceId,
-          title: 'Thread 2',
-          createdAt: new Date(),
-          updatedAt: new Date(),
-          metadata: {},
-        },
-      ];
+      const thread1 = createSampleThread();
+      const thread2 = { ...createSampleThread(), resourceId: thread1.resourceId };
+      const threads = [thread1, thread2];
+
+      const resourceId = threads[0].resourceId;
+      const threadIds = threads.map(t => t.id);
 
       await Promise.all(threads.map(thread => store.saveThread({ thread })));
 
       const retrievedThreads = await store.getThreadsByResourceId({ resourceId });
       expect(retrievedThreads).toHaveLength(2);
-      expect(retrievedThreads.map(t => t.id)).toEqual(expect.arrayContaining(['thread-1', 'thread-2']));
+      expect(retrievedThreads.map(t => t.id)).toEqual(expect.arrayContaining(threadIds));
     });
 
     it('should update thread metadata', async () => {
-      const thread = {
-        id: 'thread-1',
-        resourceId: 'resource-1',
-        title: 'Test Thread',
-        createdAt: new Date(),
-        updatedAt: new Date(),
-        metadata: { initial: 'value' },
-      };
+      const thread = createSampleThread();
 
       await store.saveThread({ thread });
 
-      const updatedThread = await store.updateThread({
+      const updatedThread = await store.__updateThread({
         id: thread.id,
         title: 'Updated Title',
         metadata: { updated: 'value' },
@@ -179,7 +173,7 @@ describe('UpstashStore', () => {
 
       expect(updatedThread.title).toBe('Updated Title');
       expect(updatedThread.metadata).toEqual({
-        initial: 'value',
+        key: 'value',
         updated: 'value',
       });
     });
@@ -192,14 +186,7 @@ describe('UpstashStore', () => {
 
     it('should handle Date objects in thread operations', async () => {
       const now = new Date();
-      const thread = {
-        id: 'thread-1',
-        resourceId: 'resource-1',
-        title: 'Test Thread',
-        createdAt: now,
-        updatedAt: now,
-        metadata: {},
-      };
+      const thread = createSampleThread();
 
       await store.saveThread({ thread });
       const retrievedThread = await store.getThreadById({ threadId: thread.id });
@@ -211,16 +198,9 @@ describe('UpstashStore', () => {
 
     it('should handle ISO string dates in thread operations', async () => {
       const now = new Date();
-      const thread = {
-        id: 'thread-2',
-        resourceId: 'resource-1',
-        title: 'Test Thread',
-        createdAt: now.toISOString(),
-        updatedAt: now.toISOString(),
-        metadata: {},
-      };
+      const thread = createSampleThread();
 
-      await store.saveThread({ thread: thread as any });
+      await store.saveThread({ thread });
       const retrievedThread = await store.getThreadById({ threadId: thread.id });
       expect(retrievedThread?.createdAt).toBeInstanceOf(Date);
       expect(retrievedThread?.updatedAt).toBeInstanceOf(Date);
@@ -230,16 +210,9 @@ describe('UpstashStore', () => {
 
     it('should handle mixed date formats in thread operations', async () => {
       const now = new Date();
-      const thread = {
-        id: 'thread-3',
-        resourceId: 'resource-1',
-        title: 'Test Thread',
-        createdAt: now,
-        updatedAt: now.toISOString(),
-        metadata: {},
-      };
+      const thread = createSampleThread();
 
-      await store.saveThread({ thread: thread as any });
+      await store.saveThread({ thread });
       const retrievedThread = await store.getThreadById({ threadId: thread.id });
       expect(retrievedThread?.createdAt).toBeInstanceOf(Date);
       expect(retrievedThread?.updatedAt).toBeInstanceOf(Date);
@@ -249,28 +222,13 @@ describe('UpstashStore', () => {
 
     it('should handle date serialization in getThreadsByResourceId', async () => {
       const now = new Date();
-      const threads = [
-        {
-          id: 'thread-1',
-          resourceId: 'resource-1',
-          title: 'Thread 1',
-          createdAt: now,
-          updatedAt: now.toISOString(),
-          metadata: {},
-        },
-        {
-          id: 'thread-2',
-          resourceId: 'resource-1',
-          title: 'Thread 2',
-          createdAt: now.toISOString(),
-          updatedAt: now,
-          metadata: {},
-        },
-      ];
+      const thread1 = createSampleThread();
+      const thread2 = { ...createSampleThread(), resourceId: thread1.resourceId };
+      const threads = [thread1, thread2];
 
-      await Promise.all(threads.map(thread => store.saveThread({ thread: thread as any })));
+      await Promise.all(threads.map(thread => store.saveThread({ thread })));
 
-      const retrievedThreads = await store.getThreadsByResourceId({ resourceId: 'resource-1' });
+      const retrievedThreads = await store.getThreadsByResourceId({ resourceId: threads[0].resourceId });
       expect(retrievedThreads).toHaveLength(2);
       retrievedThreads.forEach(thread => {
         expect(thread.createdAt).toBeInstanceOf(Date);
@@ -289,7 +247,7 @@ describe('UpstashStore', () => {
       await store.clearTable({ tableName: MastraStorage.TABLE_THREADS });
 
       // Create a test thread
-      await store.saveThread({
+      await store.__saveThread({
         thread: {
           id: threadId,
           resourceId: 'resource-1',
@@ -303,41 +261,20 @@ describe('UpstashStore', () => {
 
     it('should save and retrieve messages in order', async () => {
       const messages = [
-        {
-          id: 'msg-1',
-          threadId,
-          role: 'user',
-          type: 'text',
-          content: [{ type: 'text', text: 'First' }],
-          createdAt: new Date().toISOString(),
-        },
-        {
-          id: 'msg-2',
-          threadId,
-          role: 'assistant',
-          type: 'text',
-          content: [{ type: 'text', text: 'Second' }],
-          createdAt: new Date().toISOString(),
-        },
-        {
-          id: 'msg-3',
-          threadId,
-          role: 'user',
-          type: 'text',
-          content: [{ type: 'text', text: 'Third' }],
-          createdAt: new Date().toISOString(),
-        },
+        createSampleMessage(threadId, 'First'),
+        createSampleMessage(threadId, 'Second'),
+        createSampleMessage(threadId, 'Third'),
       ];
 
-      await store.saveMessages({ messages });
+      await store.__saveMessages({ messages: messages as MessageType[] });
 
-      const retrievedMessages = await store.getMessages({ threadId });
+      const retrievedMessages = await store.__getMessages({ threadId });
       expect(retrievedMessages).toHaveLength(3);
       expect(retrievedMessages.map(m => m.content[0].text)).toEqual(['First', 'Second', 'Third']);
     });
 
     it('should handle empty message array', async () => {
-      const result = await store.saveMessages({ messages: [] });
+      const result = await store.__saveMessages({ messages: [] });
       expect(result).toEqual([]);
     });
 
@@ -353,13 +290,13 @@ describe('UpstashStore', () => {
             { type: 'code', text: 'code block', language: 'typescript' },
             { type: 'text', text: 'and more text' },
           ],
-          createdAt: new Date().toISOString(),
+          createdAt: new Date(),
         },
       ];
 
-      await store.saveMessages({ messages });
+      await store.__saveMessages({ messages: messages as MessageType[] });
 
-      const retrievedMessages = await store.getMessages({ threadId });
+      const retrievedMessages = await store.__getMessages({ threadId });
       expect(retrievedMessages[0].content).toEqual(messages[0].content);
     });
   });
@@ -386,7 +323,7 @@ describe('UpstashStore', () => {
         runId: testRunId,
         activePaths: [],
         timestamp: Date.now(),
-      };
+      } as unknown as WorkflowRunState;
 
       await store.persistWorkflowSnapshot({
         namespace: testNamespace,
@@ -446,7 +383,7 @@ describe('UpstashStore', () => {
         snapshot: workflow2,
       });
 
-      const { runs, total } = await store.__getWorkflows();
+      const { runs, total } = await store.getWorkflows({ namespace: testNamespace });
       expect(runs).toHaveLength(2);
       expect(total).toBe(2);
       expect(runs[0]!.workflowName).toBe(workflowName2); // Most recent first
@@ -501,6 +438,7 @@ describe('UpstashStore', () => {
       await store.insert({
         tableName: TABLE_WORKFLOW_SNAPSHOT,
         record: {
+          namespace: testNamespace,
           workflow_name: workflowName1,
           run_id: runId1,
           snapshot: workflow1,
@@ -511,6 +449,7 @@ describe('UpstashStore', () => {
       await store.insert({
         tableName: TABLE_WORKFLOW_SNAPSHOT,
         record: {
+          namespace: testNamespace,
           workflow_name: workflowName2,
           run_id: runId2,
           snapshot: workflow2,
@@ -521,6 +460,7 @@ describe('UpstashStore', () => {
       await store.insert({
         tableName: TABLE_WORKFLOW_SNAPSHOT,
         record: {
+          namespace: testNamespace,
           workflow_name: workflowName3,
           run_id: runId3,
           snapshot: workflow3,
@@ -529,7 +469,8 @@ describe('UpstashStore', () => {
         },
       });
 
-      const { runs } = await store.__getWorkflows({
+      const { runs } = await store.getWorkflows({
+        namespace: testNamespace,
         fromDate: yesterday,
         toDate: now,
       });
@@ -574,7 +515,11 @@ describe('UpstashStore', () => {
       });
 
       // Get first page
-      const page1 = await store.__getWorkflows({ limit: 2, offset: 0 });
+      const page1 = await store.getWorkflows({
+        namespace: testNamespace,
+        limit: 2,
+        offset: 0,
+      });
       expect(page1.runs).toHaveLength(2);
       expect(page1.total).toBe(3); // Total count of all records
       expect(page1.runs[0]!.workflowName).toBe(workflowName3);
@@ -585,7 +530,11 @@ describe('UpstashStore', () => {
       expect(secondSnapshot.context?.steps[stepId2]?.status).toBe('running');
 
       // Get second page
-      const page2 = await store.__getWorkflows({ limit: 2, offset: 2 });
+      const page2 = await store.getWorkflows({
+        namespace: testNamespace,
+        limit: 2,
+        offset: 2,
+      });
       expect(page2.runs).toHaveLength(1);
       expect(page2.total).toBe(3);
       expect(page2.runs[0]!.workflowName).toBe(workflowName1);

@@ -79,6 +79,12 @@ export class UpstashStore extends MastraStorage {
     if (tableName === MastraStorage.TABLE_MESSAGES) {
       // For messages, use threadId as the primary key component
       key = this.getKey(tableName, { threadId: record.threadId, id: record.id });
+    } else if (tableName === MastraStorage.TABLE_WORKFLOW_SNAPSHOT) {
+      key = this.getKey(tableName, {
+        namespace: record.namespace || 'workflows',
+        workflow_name: record.workflow_name,
+        run_id: record.run_id,
+      });
     } else {
       key = this.getKey(tableName, { id: record.id });
     }
@@ -275,12 +281,17 @@ export class UpstashStore extends MastraStorage {
     snapshot: WorkflowRunState;
   }): Promise<void> {
     const { namespace = 'workflows', workflowName, runId, snapshot } = params;
-    const key = this.getKey(MastraStorage.TABLE_WORKFLOW_SNAPSHOT, {
-      namespace,
-      workflow_name: workflowName,
-      run_id: runId,
+    await this.insert({
+      tableName: MastraStorage.TABLE_WORKFLOW_SNAPSHOT,
+      record: {
+        namespace,
+        workflow_name: workflowName,
+        run_id: runId,
+        snapshot,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      },
     });
-    await this.redis.set(key, snapshot); // Store snapshot directly without wrapping
   }
 
   async loadWorkflowSnapshot(params: {
@@ -294,8 +305,14 @@ export class UpstashStore extends MastraStorage {
       workflow_name: workflowName,
       run_id: runId,
     });
-    const data = await this.redis.get<WorkflowRunState>(key);
-    return data || null;
+    const data = await this.redis.get<{
+      namespace: string;
+      workflow_name: string;
+      run_id: string;
+      snapshot: WorkflowRunState;
+    }>(key);
+    if (!data) return null;
+    return data.snapshot;
   }
 
   async getWorkflows({
