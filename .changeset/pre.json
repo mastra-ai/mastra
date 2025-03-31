@@ -137,14 +137,24 @@
     "@mastra/voice-openai-realtime": "0.1.0",
     "@mastra/voice-playai": "0.1.9",
     "@mastra/voice-sarvam": "0.1.4",
-    "@mastra/voice-speechify": "0.1.9"
+    "@mastra/voice-speechify": "0.1.9",
+    "memory-with-processors": "0.0.0"
   },
   "changesets": [
+    "beige-games-wink",
     "blue-candles-brush",
+    "bumpy-fans-tickle",
     "chatty-teeth-joke",
     "cool-papers-check",
     "dirty-worms-relate",
+    "four-walls-talk",
+    "full-views-wonder",
+    "hungry-pugs-camp",
+    "odd-impalas-create",
+    "soft-readers-chew",
     "swift-worms-give",
+    "tame-clocks-tap",
+    "thirty-sloths-guess",
     "three-crews-travel",
     "tiny-eels-rule",
     "yellow-mugs-lose"
