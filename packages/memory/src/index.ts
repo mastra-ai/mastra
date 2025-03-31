@@ -41,7 +41,9 @@ export class Memory extends MastraMemory {
     resourceId,
     selectBy,
     threadConfig,
-  }: StorageGetMessagesArg): Promise<{ messages: CoreMessage[]; uiMessages: AiMessageType[] }> {
+  }: StorageGetMessagesArg & {
+    threadConfig?: MemoryConfig;
+  }): Promise<{ messages: CoreMessage[]; uiMessages: AiMessageType[] }> {
     if (resourceId) await this.validateThreadIsOwnedByResource(threadId, resourceId);
 
     const vectorResults: {
@@ -148,7 +150,7 @@ export class Memory extends MastraMemory {
       };
     }
 
-    const messages = await this.query({
+    const messagesResult = await this.query({
       threadId,
       selectBy: {
         last: threadConfig.lastMessages,
@@ -157,11 +159,11 @@ export class Memory extends MastraMemory {
       threadConfig: config,
     });
 
-    this.logger.debug(`Remembered message history includes ${messages.messages.length} messages.`);
+    this.logger.debug(`Remembered message history includes ${messagesResult.messages.length} messages.`);
     return {
       threadId,
-      messages: messages.messages,
-      uiMessages: messages.uiMessages,
+      messages: messagesResult.messages,
+      uiMessages: messagesResult.uiMessages,
     };
   }
 
