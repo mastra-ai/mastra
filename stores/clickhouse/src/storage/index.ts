@@ -58,6 +58,11 @@ export class ClickhouseStore extends MastraStorage {
       url: config.url,
       username: config.username,
       password: config.password,
+      clickhouse_settings: {
+        date_time_input_format: 'best_effort',
+        date_time_output_format: 'iso', // This is crucial
+        use_client_time_zone: 1,
+      },
     });
   }
 
@@ -69,7 +74,11 @@ export class ClickhouseStore extends MastraStorage {
     try {
       await this.db.insert({
         table: tableName,
-        values: records,
+        values: records.map(record => ({
+          ...record,
+          createdAt: record.createdAt.toISOString(),
+          updatedAt: record.updatedAt.toISOString(),
+        })),
         format: 'JSONEachRow',
         clickhouse_settings: {
           // Allows to insert serialized JS Dates (such as '2023-12-06T10:54:48.000Z')
@@ -137,6 +146,7 @@ export class ClickhouseStore extends MastraStorage {
       clickhouse_settings: {
         // Allows to insert serialized JS Dates (such as '2023-12-06T10:54:48.000Z')
         date_time_input_format: 'best_effort',
+        date_time_output_format: 'iso',
         use_client_time_zone: 1,
       },
     });
@@ -146,7 +156,7 @@ export class ClickhouseStore extends MastraStorage {
     }
 
     const rows = await result.json();
-    return rows.data;
+    return transformRows(rows.data);
   }
 
   async createTable({
@@ -181,6 +191,7 @@ export class ClickhouseStore extends MastraStorage {
         clickhouse_settings: {
           // Allows to insert serialized JS Dates (such as '2023-12-06T10:54:48.000Z')
           date_time_input_format: 'best_effort',
+          date_time_output_format: 'iso',
           use_client_time_zone: 1,
         },
       });
@@ -197,6 +208,7 @@ export class ClickhouseStore extends MastraStorage {
         clickhouse_settings: {
           // Allows to insert serialized JS Dates (such as '2023-12-06T10:54:48.000Z')
           date_time_input_format: 'best_effort',
+          date_time_output_format: 'iso',
           use_client_time_zone: 1,
         },
       });
@@ -210,7 +222,13 @@ export class ClickhouseStore extends MastraStorage {
     try {
       await this.db.insert({
         table: tableName,
-        values: [record],
+        values: [
+          {
+            ...record,
+            createdAt: record.createdAt.toISOString(),
+            updatedAt: record.updatedAt.toISOString(),
+          },
+        ],
         format: 'JSONEachRow',
         clickhouse_settings: {
           // Allows to insert serialized JS Dates (such as '2023-12-06T10:54:48.000Z')
@@ -243,6 +261,7 @@ export class ClickhouseStore extends MastraStorage {
         clickhouse_settings: {
           // Allows to insert serialized JS Dates (such as '2023-12-06T10:54:48.000Z')
           date_time_input_format: 'best_effort',
+          date_time_output_format: 'iso',
           use_client_time_zone: 1,
         },
       });
@@ -263,7 +282,7 @@ export class ClickhouseStore extends MastraStorage {
         return snapshot;
       }
 
-      const data: R = transformRow<R>(rows.data[0] as any);
+      const data: R = transformRow(rows.data[0]);
       return data;
     } catch (error) {
       console.error(`Error loading from ${tableName}:`, error);
@@ -287,12 +306,13 @@ export class ClickhouseStore extends MastraStorage {
         clickhouse_settings: {
           // Allows to insert serialized JS Dates (such as '2023-12-06T10:54:48.000Z')
           date_time_input_format: 'best_effort',
+          date_time_output_format: 'iso',
           use_client_time_zone: 1,
         },
       });
 
       const rows = await result.json();
-      const thread = rows.data[0] as StorageThreadType;
+      const thread = transformRow(rows.data[0]) as StorageThreadType;
 
       if (!thread) {
         return null;
@@ -326,12 +346,13 @@ export class ClickhouseStore extends MastraStorage {
         clickhouse_settings: {
           // Allows to insert serialized JS Dates (such as '2023-12-06T10:54:48.000Z')
           date_time_input_format: 'best_effort',
+          date_time_output_format: 'iso',
           use_client_time_zone: 1,
         },
       });
 
       const rows = await result.json();
-      const threads = rows.data as StorageThreadType[];
+      const threads = transformRows(rows.data) as StorageThreadType[];
 
       return threads.map((thread: StorageThreadType) => ({
         ...thread,
@@ -349,7 +370,13 @@ export class ClickhouseStore extends MastraStorage {
     try {
       await this.db.insert({
         table: TABLE_THREADS,
-        values: [thread],
+        values: [
+          {
+            ...thread,
+            createdAt: thread.createdAt.toISOString(),
+            updatedAt: thread.updatedAt.toISOString(),
+          },
+        ],
         format: 'JSONEachRow',
         clickhouse_settings: {
           // Allows to insert serialized JS Dates (such as '2023-12-06T10:54:48.000Z')
@@ -393,12 +420,13 @@ export class ClickhouseStore extends MastraStorage {
         clickhouse_settings: {
           // Allows to insert serialized JS Dates (such as '2023-12-06T10:54:48.000Z')
           date_time_input_format: 'best_effort',
+          date_time_output_format: 'iso',
           use_client_time_zone: 1,
         },
       });
 
       const rows = await queryResult.json();
-      const thread = rows.data[0] as StorageThreadType;
+      const thread = transformRow(rows.data[0]) as StorageThreadType;
 
       if (!thread) {
         throw new Error(`Thread ${id} not found`);
@@ -414,7 +442,13 @@ export class ClickhouseStore extends MastraStorage {
 
       await this.db.insert({
         table: TABLE_THREADS,
-        values: [updatedThread],
+        values: [
+          {
+            ...updatedThread,
+            createdAt: updatedThread.createdAt.toISOString(),
+            updatedAt: updatedThread.updatedAt.toISOString(),
+          },
+        ],
         format: 'JSONEachRow',
         clickhouse_settings: {
           // Allows to insert serialized JS Dates (such as '2023-12-06T10:54:48.000Z')
@@ -439,6 +473,7 @@ export class ClickhouseStore extends MastraStorage {
         clickhouse_settings: {
           // Allows to insert serialized JS Dates (such as '2023-12-06T10:54:48.000Z')
           date_time_input_format: 'best_effort',
+          date_time_output_format: 'iso',
           use_client_time_zone: 1,
         },
       });
@@ -450,6 +485,7 @@ export class ClickhouseStore extends MastraStorage {
         clickhouse_settings: {
           // Allows to insert serialized JS Dates (such as '2023-12-06T10:54:48.000Z')
           date_time_input_format: 'best_effort',
+          date_time_output_format: 'iso',
           use_client_time_zone: 1,
         },
       });
@@ -509,12 +545,13 @@ export class ClickhouseStore extends MastraStorage {
           clickhouse_settings: {
             // Allows to insert serialized JS Dates (such as '2023-12-06T10:54:48.000Z')
             date_time_input_format: 'best_effort',
+            date_time_output_format: 'iso',
             use_client_time_zone: 1,
           },
         });
 
         const rows = await includeResult.json();
-        messages.push(...transformRows<T>(rows.data));
+        messages.push(...transformRows(rows.data));
       }
 
       // Then get the remaining messages, excluding the ids we just fetched
@@ -541,12 +578,13 @@ export class ClickhouseStore extends MastraStorage {
         clickhouse_settings: {
           // Allows to insert serialized JS Dates (such as '2023-12-06T10:54:48.000Z')
           date_time_input_format: 'best_effort',
+          date_time_output_format: 'iso',
           use_client_time_zone: 1,
         },
       });
 
       const rows = await result.json();
-      messages.push(...transformRows<T>(rows.data));
+      messages.push(...transformRows(rows.data));
 
       // Sort all messages by creation date
       messages.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
@@ -591,7 +629,7 @@ export class ClickhouseStore extends MastraStorage {
           id: message.id,
           thread_id: threadId,
           content: typeof message.content === 'string' ? message.content : JSON.stringify(message.content),
-          createdAt: message.createdAt,
+          createdAt: message.createdAt.toISOString(),
           role: message.role,
           type: message.type,
         })),
@@ -628,8 +666,8 @@ export class ClickhouseStore extends MastraStorage {
             workflow_name: workflowName,
             run_id: runId,
             snapshot: JSON.stringify(snapshot),
-            createdAt: now,
-            updatedAt: now,
+            createdAt: now.toISOString(),
+            updatedAt: now.toISOString(),
           },
         ],
         clickhouse_settings: {

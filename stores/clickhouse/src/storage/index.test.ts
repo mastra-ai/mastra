@@ -120,7 +120,7 @@ describe('ClickhouseStore', () => {
   });
 
   describe('Message Operations', () => {
-    it.only('should save and retrieve messages', async () => {
+    it('should save and retrieve messages', async () => {
       const thread = createSampleThread();
       await store.__saveThread({ thread });
 
