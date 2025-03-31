@@ -13,9 +13,9 @@
   "dependencies": {
     "@ai-sdk/openai": "latest",
     "@ai-sdk/react": "^1.1.21",
-    "@mastra/core": "workspace:^",
-    "@mastra/memory": "workspace:^",
-    "@mastra/pg": "workspace:^",
+    "@mastra/core": "link:../../packages/core",
+    "@mastra/memory": "link:../../packages/memory",
+    "@mastra/pg": "link:../../stores/pg",
     "@next/env": "^15.2.2",
     "@radix-ui/react-alert-dialog": "^1.1.6",
     "@radix-ui/react-dialog": "^1.1.6",
