@@ -361,6 +361,7 @@ export abstract class MastraMemory extends MastraBase {
    */
   async addMessage({
     threadId,
+    resourceId,
     config,
     content,
     role,
@@ -370,6 +371,7 @@ export abstract class MastraMemory extends MastraBase {
     toolCallIds,
   }: {
     threadId: string;
+    resourceId: string;
     config?: MemoryConfig;
     content: UserContent | AssistantContent;
     role: 'user' | 'assistant';
@@ -384,6 +386,7 @@ export abstract class MastraMemory extends MastraBase {
       role,
       createdAt: new Date(),
       threadId,
+      resourceId,
       type,
       toolNames,
       toolCallArgs,

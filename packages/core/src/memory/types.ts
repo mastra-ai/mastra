@@ -12,6 +12,7 @@ export type MessageType = {
   role: 'system' | 'user' | 'assistant' | 'tool';
   createdAt: Date;
   threadId: string;
+  resourceId: string;
   toolCallIds?: string[];
   toolCallArgs?: Record<string, unknown>[];
   toolNames?: string[];

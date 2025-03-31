@@ -26,7 +26,7 @@ import { MastraLLM } from '../llm/model';
 import { RegisteredLogger } from '../logger';
 import type { Mastra } from '../mastra';
 import type { MastraMemory } from '../memory/memory';
-import type { MemoryConfig } from '../memory/types';
+import type { MemoryConfig, StorageThreadType } from '../memory/types';
 import { InstrumentClass } from '../telemetry';
 import type { CoreTool } from '../tools/types';
 import { makeCoreTool, createMastraProxy, ensureToolProperties, ensureAllMessagesAreCoreMessages } from '../utils';
@@ -359,6 +359,7 @@ export class Agent<
                 return {
                   id: messageId,
                   threadId: threadId,
+                  resourceId: resourceId,
                   role: message.role as any,
                   content: message.content as any,
                   createdAt: new Date(Date.now() + index), // use Date.now() + index to make sure every message is atleast one millisecond apart
@@ -638,6 +639,7 @@ export class Agent<
 
         let coreMessages = messages;
         let threadIdToUse = threadId;
+        let thread: StorageThreadType | null | undefined;
 
         const memory = this.getMemory();
 
@@ -658,7 +660,8 @@ export class Agent<
             },
           );
 
-          let thread = threadIdToUse ? await memory.getThreadById({ threadId: threadIdToUse }) : undefined;
+          thread = threadIdToUse ? await memory.getThreadById({ threadId: threadIdToUse }) : undefined;
+
           if (!thread) {
             thread = await memory.createThread({
               threadId: threadIdToUse,
@@ -707,10 +710,11 @@ export class Agent<
 
         const messageObjects = [systemMessage, ...(context || []), ...coreMessages];
 
-        return { messageObjects, convertedTools, threadId: threadIdToUse as string };
+        return { messageObjects, convertedTools, threadId: threadIdToUse as string, thread };
       },
       after: async ({
         result,
+        thread: threadAfter,
         threadId,
         memoryConfig,
         outputText,
@@ -718,6 +722,7 @@ export class Agent<
       }: {
         runId: string;
         result: Record<string, any>;
+        thread: StorageThreadType | null | undefined;
         threadId: string;
         memoryConfig: MemoryConfig | undefined;
         outputText: string;
@@ -745,7 +750,8 @@ export class Agent<
           threadId,
         });
         const memory = this.getMemory();
-        const thread = threadId ? await memory?.getThreadById({ threadId }) : undefined;
+        const thread = threadAfter || (threadId ? await memory?.getThreadById({ threadId }) : undefined);
+
         if (memory && resourceId && thread) {
           try {
             const userMessage = this.getMostRecentUserMessage(messages);
@@ -755,6 +761,7 @@ export class Agent<
                 id: this.getMemory()?.generateId()!,
                 createdAt: new Date(),
                 threadId: thread.id,
+                resourceId: resourceId,
                 ...u,
                 content: u.content as UserContent | AssistantContent,
                 role: u.role as 'user' | 'assistant',
@@ -895,7 +902,7 @@ export class Agent<
       toolsets,
     });
 
-    const { threadId, messageObjects, convertedTools } = await before();
+    const { threadId, thread, messageObjects, convertedTools } = await before();
 
     if (!output && experimental_output) {
       const result = await this.llm.__text({
@@ -918,7 +925,7 @@ export class Agent<
 
       const outputText = result.text;
 
-      await after({ result, threadId, memoryConfig: memoryOptions, outputText, runId: runIdToUse });
+      await after({ result, threadId, thread, memoryConfig: memoryOptions, outputText, runId: runIdToUse });
 
       const newResult = result as any;
 
@@ -948,7 +955,7 @@ export class Agent<
 
       const outputText = result.text;
 
-      await after({ result, threadId, memoryConfig: memoryOptions, outputText, runId: runIdToUse });
+      await after({ result, thread, threadId, memoryConfig: memoryOptions, outputText, runId: runIdToUse });
 
       return result as unknown as GenerateReturn<Z>;
     }
@@ -972,7 +979,7 @@ export class Agent<
 
     const outputText = JSON.stringify(result.object);
 
-    await after({ result, threadId, memoryConfig: memoryOptions, outputText, runId: runIdToUse });
+    await after({ result, thread, threadId, memoryConfig: memoryOptions, outputText, runId: runIdToUse });
 
     return result as unknown as GenerateReturn<Z>;
   }
@@ -1054,7 +1061,7 @@ export class Agent<
       toolsets,
     });
 
-    const { threadId, messageObjects, convertedTools } = await before();
+    const { threadId, thread, messageObjects, convertedTools } = await before();
 
     if (!output && experimental_output) {
       this.logger.debug(`Starting agent ${this.name} llm stream call`, {
@@ -1072,7 +1079,7 @@ export class Agent<
         onFinish: async (result: any) => {
           try {
             const outputText = result.text;
-            await after({ result, threadId, memoryConfig: memoryOptions, outputText, runId: runIdToUse });
+            await after({ result, thread, threadId, memoryConfig: memoryOptions, outputText, runId: runIdToUse });
           } catch (e) {
             this.logger.error('Error saving memory on finish', {
               error: e,
@@ -1107,7 +1114,7 @@ export class Agent<
         onFinish: async (result: any) => {
           try {
             const outputText = result.text;
-            await after({ result, threadId, memoryConfig: memoryOptions, outputText, runId: runIdToUse });
+            await after({ result, thread, threadId, memoryConfig: memoryOptions, outputText, runId: runIdToUse });
           } catch (e) {
             this.logger.error('Error saving memory on finish', {
               error: e,
@@ -1141,7 +1148,7 @@ export class Agent<
       onFinish: async (result: any) => {
         try {
           const outputText = JSON.stringify(result.object);
-          await after({ result, threadId, memoryConfig: memoryOptions, outputText, runId: runIdToUse });
+          await after({ result, thread, threadId, memoryConfig: memoryOptions, outputText, runId: runIdToUse });
         } catch (e) {
           this.logger.error('Error saving memory on finish', {
             error: e,
