@@ -1,6 +1,7 @@
 import { spawn as nodeSpawn } from 'child_process';
-import { readFileSync } from 'fs';
-import { resolve } from 'path';
+import { link, readFileSync } from 'fs';
+import { dirname, resolve } from 'path';
+import { fileURLToPath } from 'url';
 
 /**
  * Promisified version of Node.js spawn function
@@ -40,10 +41,11 @@ function spawn(command, args = [], options = {}) {
  * Reads the package.json file and returns all dependencies that use local links.
  * @returns {Object} An object containing all linked dependencies
  */
-function findLinkedDependencies() {
+function findLinkedDependencies(dir, protocol = 'link:') {
   try {
     // Read package.json from current working directory
-    const packageJson = JSON.parse(readFileSync('./package.json', 'utf8'));
+    const packageJson = JSON.parse(readFileSync(`${dir}/package.json`, 'utf8'));
+    console.log({ dir, packageJson });
 
     // Initialize an object to store linked dependencies
     const linkedDependencies = {};
@@ -51,7 +53,7 @@ function findLinkedDependencies() {
     // Check regular dependencies
     if (packageJson.dependencies) {
       for (const [name, version] of Object.entries(packageJson.dependencies)) {
-        if (typeof version === 'string' && version.startsWith('link:')) {
+        if (typeof version === 'string' && version.startsWith(protocol)) {
           linkedDependencies[name] = version;
         }
       }
@@ -60,7 +62,7 @@ function findLinkedDependencies() {
     // Check dev dependencies
     if (packageJson.devDependencies) {
       for (const [name, version] of Object.entries(packageJson.devDependencies)) {
-        if (typeof version === 'string' && version.startsWith('link:')) {
+        if (typeof version === 'string' && version.startsWith(protocol)) {
           linkedDependencies[name] = version;
         }
       }
@@ -69,7 +71,7 @@ function findLinkedDependencies() {
     // Check peer dependencies
     if (packageJson.peerDependencies) {
       for (const [name, version] of Object.entries(packageJson.peerDependencies)) {
-        if (typeof version === 'string' && version.startsWith('link:')) {
+        if (typeof version === 'string' && version.startsWith(protocol)) {
           linkedDependencies[name] = version;
         }
       }
@@ -83,11 +85,19 @@ function findLinkedDependencies() {
 }
 
 // Example usage
-const linkedDeps = Object.keys(findLinkedDependencies());
+const linkedDeps = Object.keys(findLinkedDependencies('.'));
 
 console.log('Found linked dependencies:', linkedDeps);
 
-await spawn(`pnpm`, ['install', ...linkedDeps.map(dep => `--filter ${dep}`)], {
+const depsToInstall = new Set(linkedDeps);
+for (const dep of linkedDeps) {
+  const depDir = dirname(fileURLToPath(import.meta.resolve(`${dep}/package.json`)));
+  const depDeps = findLinkedDependencies(depDir, 'workspace:');
+  for (const depDep of Object.keys(depDeps)) {
+    depsToInstall.add(depDep);
+  }
+}
+await spawn(`pnpm`, ['install', ...[...depsToInstall].map(dep => `--filter ${dep}`)], {
   cwd: resolve(process.cwd(), '..', '..'),
   shell: true,
   stdio: 'inherit',
