@@ -1,11 +1,11 @@
 import type { Mastra } from '@mastra/core';
 import type { Context } from 'hono';
+import { HTTPException } from 'hono/http-exception';
 import { streamText } from 'hono/streaming';
 import { stringify } from 'superjson';
 import zodToJsonSchema from 'zod-to-json-schema';
 
 import { handleError } from './error';
-import { HTTPException } from 'hono/http-exception';
 
 export async function getWorkflowsHandler(c: Context) {
   try {
@@ -240,5 +240,18 @@ export async function resumeWorkflowHandler(c: Context) {
     return c.json({ message: 'Workflow run resumed' });
   } catch (error) {
     return handleError(error, 'Error resuming workflow');
+  }
+}
+
+export async function getWorkflowRunsHandler(c: Context) {
+  try {
+    const mastra: Mastra = c.get('mastra');
+    const workflowId = c.req.query('workflowId');
+    const workflowRuns = (await mastra.storage?.getWorkflowRuns?.({
+      ...(workflowId ? { workflowName: workflowId } : {}),
+    })) || { runs: [], total: 0 };
+    return c.json(workflowRuns);
+  } catch (error) {
+    return handleError(error, 'Error getting workflow runs');
   }
 }
