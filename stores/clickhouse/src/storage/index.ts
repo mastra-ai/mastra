@@ -278,6 +278,9 @@ export class ClickhouseStore extends MastraStorage {
       // If this is a workflow snapshot, parse the snapshot field
       if (tableName === TABLE_WORKFLOW_SNAPSHOT) {
         const snapshot = rows.data[0] as any;
+        if (!snapshot) {
+          return null;
+        }
         if (typeof snapshot.snapshot === 'string') {
           snapshot.snapshot = JSON.parse(snapshot.snapshot);
         }
@@ -303,6 +306,7 @@ export class ClickhouseStore extends MastraStorage {
           toDateTime64(createdAt, 3) as createdAt,
           toDateTime64(updatedAt, 3) as updatedAt
         FROM "${TABLE_THREADS}"
+        FINAL
         WHERE id = {var_id:String}`,
         query_params: { var_id: threadId },
         clickhouse_settings: {
@@ -416,30 +420,11 @@ export class ClickhouseStore extends MastraStorage {
         ...metadata,
       };
 
-      const queryResult = await this.db.query({
-        query: `SELECT toDateTime64(createdAt, 3) as createdAt, toDateTime64(updatedAt, 3) as updatedAt FROM "${TABLE_THREADS}" WHERE id = {var_id:String}`,
-        query_params: { var_id: id },
-        clickhouse_settings: {
-          // Allows to insert serialized JS Dates (such as '2023-12-06T10:54:48.000Z')
-          date_time_input_format: 'best_effort',
-          date_time_output_format: 'iso',
-          use_client_time_zone: 1,
-        },
-      });
-
-      const rows = await queryResult.json();
-      const thread = transformRow(rows.data[0]) as StorageThreadType;
-
-      if (!thread) {
-        throw new Error(`Thread ${id} not found`);
-      }
-
       const updatedThread = {
-        ...thread,
+        ...existingThread,
         title,
         metadata: mergedMetadata,
         updatedAt: new Date(),
-        COLUMN_TYPES,
       };
 
       await this.db.insert({
@@ -447,7 +432,6 @@ export class ClickhouseStore extends MastraStorage {
         values: [
           {
             ...updatedThread,
-            createdAt: updatedThread.createdAt.toISOString(),
             updatedAt: updatedThread.updatedAt.toISOString(),
           },
         ],
@@ -513,17 +497,19 @@ export class ClickhouseStore extends MastraStorage {
               toDateTime64(updatedAt, 3) as updatedAt,
               ROW_NUMBER() OVER (ORDER BY "createdAt" DESC) as row_num
             FROM "${TABLE_MESSAGES}"
+            FINAL
             WHERE thread_id = {var_thread_id:String}
           )
           SELECT
-            m.id, 
-            m.content, 
-            m.role, 
-            m.type,
-            m.createdAt, 
-            m.updatedAt,
+            m.id AS id, 
+            m.content as content, 
+            m.role as role, 
+            m.type as type,
+            m.createdAt as createdAt, 
+            m.updatedAt as updatedAt,
             m.thread_id AS "threadId"
           FROM ordered_messages m
+          FINAL
           WHERE m.id = ANY({var_include:Array(String)})
           OR EXISTS (
             SELECT 1 FROM ordered_messages target
@@ -567,6 +553,7 @@ export class ClickhouseStore extends MastraStorage {
             toDateTime64(createdAt, 3) as createdAt,
             thread_id AS "threadId"
         FROM "${TABLE_MESSAGES}"
+        FINAL
         WHERE thread_id = {threadId:String}
         AND id NOT IN ({exclude:Array(String)})
         ORDER BY "createdAt" DESC
