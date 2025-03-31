@@ -32,7 +32,7 @@ const audioFilePath = path.join(process.cwd(), "/audio.m4a");
 const audioStream = createReadStream(audioFilePath);
 
 try {
-  const transcription = await agent.listen(audioStream, { filetype: "m4a" });
+  const transcription = await agent.voice.listen(audioStream, { filetype: "m4a" });
 } catch (error) {
   console.error("Error transcribing audio:", error);
 }
@@ -73,7 +73,7 @@ import { createWriteStream } from "fs";
 import path from "path";
 
 // Generate speech and save to file
-const audio = await agent.speak("Hello, World!");
+const audio = await agent.voice.speak("Hello, World!");
 const filePath = path.join(process.cwd(), "agent.mp3");
 const writer = createWriteStream(filePath);
 
@@ -97,7 +97,7 @@ const audioStream = createReadStream(audioFilePath);
 
 try {
   console.log("Transcribing audio file...");
-  const transcription = await agent.listen(audioStream, { filetype: "m4a" });
+  const transcription = await agent.voice.listen(audioStream, { filetype: "m4a" });
   console.log("Transcription:", transcription);
 } catch (error) {
   console.error("Error transcribing audio:", error);

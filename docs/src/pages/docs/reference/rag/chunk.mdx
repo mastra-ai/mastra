@@ -31,10 +31,8 @@ const chunksWithMetadata = await doc.chunk({
   strategy: 'markdown',
   headers: [['#', 'title'], ['##', 'section']],
   extract: {
-    fields: [
-      { name: 'summary', description: 'A brief summary of the chunk content' },
-      { name: 'keywords', description: 'Key terms found in the chunk' }
-    ]
+    summary: true, // Extract summaries with default settings
+    keywords: true  // Extract keywords with default settings
   }
 });
 ```

@@ -145,11 +145,12 @@ export class AgentInstructions<TSchemaDeps extends ZodSchema | undefined> {
 }
 
 export interface AgentConfig<
+  TAgentId extends string = string, 
   TSchemaDeps extends ZodSchema | undefined = undefined,
   TTools extends ToolsInput<TSchemaDeps> = ToolsInput<TSchemaDeps>,
   TMetrics extends Record<string, Metric> = Record<string, Metric>,
 > {
-  name: string;
+  name: TAgentId;
   instructions: string | InstructionsBuilder<TSchemaDeps>;
   model: MastraLanguageModel;
   dependenciesSchema?: TSchemaDeps;

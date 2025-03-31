@@ -5,10 +5,11 @@ import type { AgentConfig, ToolsInput } from './types';
 import { Agent as BaseAgent } from './index';
 
 export class Agent<
+  TAgentId extends string = string,
   TSchemaDeps extends ZodSchema | undefined = undefined,
   TTools extends ToolsInput<TSchemaDeps> = ToolsInput<TSchemaDeps>,
   TMetrics extends Record<string, Metric> = Record<string, Metric>,
-> extends BaseAgent<TSchemaDeps, TTools, TMetrics> {
+> extends BaseAgent<TAgentId, TSchemaDeps, TTools, TMetrics> {
   constructor(config: AgentConfig<TSchemaDeps, TTools, TMetrics>) {
     super(config);
 

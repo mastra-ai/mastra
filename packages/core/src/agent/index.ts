@@ -26,7 +26,7 @@ import { MastraLLM } from '../llm/model';
 import { RegisteredLogger } from '../logger';
 import type { Mastra } from '../mastra';
 import type { MastraMemory } from '../memory/memory';
-import type { MemoryConfig } from '../memory/types';
+import type { MemoryConfig, StorageThreadType } from '../memory/types';
 import { InstrumentClass } from '../telemetry';
 import type { CoreTool, ToolExecutionContext } from '../tools/types';
 import type { DependenciesType, InferZodType } from '../utils';
@@ -39,18 +39,7 @@ import {
   validateDependencies,
 } from '../utils';
 import type { CompositeVoice } from '../voice';
-
-import type {
-  AgentConfig,
-  AgentGenerateOptions,
-  AgentStreamOptions,
-  AiMessageType,
-  InstructionsBuilder,
-  MastraLanguageModel,
-  ToolsetsInput,
-  ToolsInput,
-} from './types';
-import { AgentInstructions } from './types';
+import { agentToStep, Step } from '../workflows';
 
 export * from './types';
 
@@ -59,11 +48,12 @@ export * from './types';
   excludeMethods: ['hasOwnMemory', 'getMemory', '__primitive', '__setTools', '__setLogger', '__setTelemetry', 'log'],
 })
 export class Agent<
+  TAgentId extends string = string,
   TSchemaDeps extends ZodSchema | undefined = undefined,
   TTools extends ToolsInput<TSchemaDeps> = ToolsInput<TSchemaDeps>,
   TMetrics extends Record<string, Metric> = Record<string, Metric>,
 > extends MastraBase {
-  public name: string;
+  public name: TAgentId;
   readonly llm: MastraLLMBase;
   #instructions: AgentInstructions<TSchemaDeps>;
   readonly model?: MastraLanguageModel;
@@ -81,7 +71,7 @@ export class Agent<
     return this.#instructions;
   }
 
-  constructor(config: AgentConfig<TSchemaDeps, TTools, TMetrics>) {
+  constructor(config: AgentConfig<TAgentId, TSchemaDeps, TTools, TMetrics>) {
     super({ component: RegisteredLogger.AGENT });
 
     this.name = config.name;
@@ -379,6 +369,7 @@ export class Agent<
                 return {
                   id: messageId,
                   threadId: threadId,
+                  resourceId: resourceId,
                   role: message.role as any,
                   content: message.content as any,
                   createdAt: new Date(Date.now() + index), // use Date.now() + index to make sure every message is atleast one millisecond apart
@@ -675,6 +666,7 @@ export class Agent<
 
         let coreMessages = messages;
         let threadIdToUse = threadId;
+        let thread: StorageThreadType | null | undefined;
 
         const memory = this.getMemory();
 
@@ -695,7 +687,8 @@ export class Agent<
             },
           );
 
-          let thread = threadIdToUse ? await memory.getThreadById({ threadId: threadIdToUse }) : undefined;
+          thread = threadIdToUse ? await memory.getThreadById({ threadId: threadIdToUse }) : undefined;
+
           if (!thread) {
             thread = await memory.createThread({
               threadId: threadIdToUse,
@@ -745,10 +738,11 @@ export class Agent<
 
         const messageObjects = [systemMessage, ...(context || []), ...coreMessages];
 
-        return { messageObjects, convertedTools, threadId: threadIdToUse as string };
+        return { messageObjects, convertedTools, threadId: threadIdToUse as string, thread };
       },
       after: async ({
         result,
+        thread: threadAfter,
         threadId,
         memoryConfig,
         outputText,
@@ -756,6 +750,7 @@ export class Agent<
       }: {
         runId: string;
         result: Record<string, any>;
+        thread: StorageThreadType | null | undefined;
         threadId: string;
         memoryConfig: MemoryConfig | undefined;
         outputText: string;
@@ -783,7 +778,8 @@ export class Agent<
           threadId,
         });
         const memory = this.getMemory();
-        const thread = threadId ? await memory?.getThreadById({ threadId }) : undefined;
+        const thread = threadAfter || (threadId ? await memory?.getThreadById({ threadId }) : undefined);
+
         if (memory && resourceId && thread) {
           try {
             const userMessage = this.getMostRecentUserMessage(messages);
@@ -793,6 +789,7 @@ export class Agent<
                 id: this.getMemory()?.generateId()!,
                 createdAt: new Date(),
                 threadId: thread.id,
+                resourceId: resourceId,
                 ...u,
                 content: u.content as UserContent | AssistantContent,
                 role: u.role as 'user' | 'assistant',
@@ -937,7 +934,7 @@ export class Agent<
       dependencies,
     });
 
-    const { threadId, messageObjects, convertedTools } = await before();
+    const { threadId, thread, messageObjects, convertedTools } = await before();
 
     if (!output && experimental_output) {
       const result = await this.llm.__text({
@@ -961,7 +958,7 @@ export class Agent<
 
       const outputText = result.text;
 
-      await after({ result, threadId, memoryConfig: memoryOptions, outputText, runId: runIdToUse });
+      await after({ result, threadId, thread, memoryConfig: memoryOptions, outputText, runId: runIdToUse });
 
       const newResult = result as any;
 
@@ -992,7 +989,7 @@ export class Agent<
 
       const outputText = result.text;
 
-      await after({ result, threadId, memoryConfig: memoryOptions, outputText, runId: runIdToUse });
+      await after({ result, thread, threadId, memoryConfig: memoryOptions, outputText, runId: runIdToUse });
 
       return result as unknown as GenerateReturn<Z>;
     }
@@ -1017,7 +1014,7 @@ export class Agent<
 
     const outputText = JSON.stringify(result.object);
 
-    await after({ result, threadId, memoryConfig: memoryOptions, outputText, runId: runIdToUse });
+    await after({ result, thread, threadId, memoryConfig: memoryOptions, outputText, runId: runIdToUse });
 
     return result as unknown as GenerateReturn<Z>;
   }
@@ -1095,7 +1092,7 @@ export class Agent<
       dependencies: dependencies,
     });
 
-    const { threadId, messageObjects, convertedTools } = await before();
+    const { threadId, thread, messageObjects, convertedTools } = await before();
 
     if (!output && experimental_output) {
       this.logger.debug(`Starting agent ${this.name} llm stream call`, {
@@ -1113,7 +1110,7 @@ export class Agent<
         onFinish: async (result: any) => {
           try {
             const outputText = result.text;
-            await after({ result, threadId, memoryConfig: memoryOptions, outputText, runId: runIdToUse });
+            await after({ result, thread, threadId, memoryConfig: memoryOptions, outputText, runId: runIdToUse });
           } catch (e) {
             this.logger.error('Error saving memory on finish', {
               error: e,
@@ -1149,7 +1146,7 @@ export class Agent<
         onFinish: async (result: any) => {
           try {
             const outputText = result.text;
-            await after({ result, threadId, memoryConfig: memoryOptions, outputText, runId: runIdToUse });
+            await after({ result, thread, threadId, memoryConfig: memoryOptions, outputText, runId: runIdToUse });
           } catch (e) {
             this.logger.error('Error saving memory on finish', {
               error: e,
@@ -1184,7 +1181,7 @@ export class Agent<
       onFinish: async (result: any) => {
         try {
           const outputText = JSON.stringify(result.object);
-          await after({ result, threadId, memoryConfig: memoryOptions, outputText, runId: runIdToUse });
+          await after({ result, thread, threadId, memoryConfig: memoryOptions, outputText, runId: runIdToUse });
         } catch (e) {
           this.logger.error('Error saving memory on finish', {
             error: e,
@@ -1282,5 +1279,10 @@ export class Agent<
       });
       throw e;
     }
+  }
+
+  toStep(): Step<TAgentId, z.ZodObject<{ prompt: z.ZodString }>, z.ZodObject<{ text: z.ZodString }>, any> {
+    const x = agentToStep(this);
+    return new Step(x);
   }
 }

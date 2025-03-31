@@ -21,9 +21,10 @@ import type {
   WorkflowRunState,
 } from './types';
 import { WhenConditionReturnValue } from './types';
-import { isVariableReference, isWorkflow, workflowToStep } from './utils';
+import { agentToStep, isAgent, isVariableReference, isWorkflow, updateStepInHierarchy, workflowToStep } from './utils';
 import type { WorkflowResultReturn } from './workflow-instance';
 import { WorkflowInstance } from './workflow-instance';
+import type { Agent } from '../agent';
 
 type WorkflowBuilder<T extends Workflow<any, any>> = Pick<
   T,
@@ -109,24 +110,39 @@ export class Workflow<
     config?: StepConfig<ReturnType<TWorkflow['toStep']>, CondStep, VarStep, TTriggerSchema, Steps>,
   ): WorkflowBuilder<this>;
   step<
+    TAgent extends Agent<any, any, any>,
+    CondStep extends StepVariableType<any, any, any, any>,
+    VarStep extends StepVariableType<any, any, any, any>,
+    Steps extends StepAction<any, any, any, any>[] = TSteps,
+  >(
+    next: TAgent,
+    config?: StepConfig<ReturnType<TAgent['toStep']>, CondStep, VarStep, TTriggerSchema, Steps>,
+  ): WorkflowBuilder<this>;
+  step<
     TStep extends StepAction<any, any, any, any>,
     CondStep extends StepVariableType<any, any, any, any>,
     VarStep extends StepVariableType<any, any, any, any>,
     Steps extends StepAction<any, any, any, any>[] = TSteps,
   >(step: TStep, config?: StepConfig<TStep, CondStep, VarStep, TTriggerSchema, Steps>): WorkflowBuilder<this>;
   step<
-    TStepLike extends StepAction<string, any, any, any> | Workflow<TSteps, any, any, any>,
+    TStepLike extends StepAction<string, any, any, any> | Workflow<TSteps, any, any, any> | Agent<any, any, any>,
     CondStep extends StepVariableType<any, any, any, any>,
     VarStep extends StepVariableType<any, any, any, any>,
     Steps extends StepAction<any, any, any, any>[] = TSteps,
   >(
-    next: TStepLike extends StepAction<string, any, any, any> ? TStepLike : Workflow<TSteps, any, any, any>,
+    next: TStepLike extends StepAction<string, any, any, any>
+      ? TStepLike
+      : TStepLike extends Workflow<TSteps, any, any, any>
+        ? Workflow<TSteps, any, any, any>
+        : Agent<any, any, any>,
     config?: StepConfig<
       TStepLike extends StepAction<string, any, any, any>
         ? TStepLike
         : TStepLike extends Workflow<TSteps, any, any, any>
           ? ReturnType<TStepLike['toStep']>
-          : never,
+          : TStepLike extends Agent<any, any, any>
+            ? ReturnType<TStepLike['toStep']>
+            : never,
       CondStep,
       VarStep,
       TTriggerSchema,
@@ -138,6 +154,8 @@ export class Workflow<
         if (isWorkflow(step)) {
           const asStep = step.toStep();
           return asStep;
+        } else if (isAgent(step)) {
+          return agentToStep(step);
         } else {
           return step as StepAction<string, any, any, any>;
         }
@@ -169,7 +187,10 @@ export class Workflow<
     const step: StepAction<string, any, any, any> = isWorkflow(next)
       ? // @ts-ignore
         workflowToStep(next, { mastra: this.#mastra })
-      : (next as StepAction<string, any, any, any>);
+      : isAgent(next)
+        ? // @ts-ignore
+          agentToStep(next, { mastra: this.#mastra })
+        : (next as StepAction<string, any, any, any>);
 
     const stepKey = this.#makeStepKey(step);
     const when = config?.['#internal']?.when || config?.when;
@@ -355,7 +376,15 @@ export class Workflow<
     config?: StepConfig<StepAction<string, any, any, any>, CondStep, VarStep, TTriggerSchema>,
   ): this;
   then<
-    TStep extends StepAction<string, any, any, any> | Workflow<any, any, any, any>,
+    TAgent extends Agent<any, any, any>,
+    CondStep extends StepVariableType<any, any, any, any>,
+    VarStep extends StepVariableType<any, any, any, any>,
+  >(
+    next: TAgent | TAgent[],
+    config?: StepConfig<StepAction<string, any, any, any>, CondStep, VarStep, TTriggerSchema>,
+  ): this;
+  then<
+    TStep extends StepAction<string, any, any, any> | Workflow<any, any, any, any> | Agent<any, any, any>,
     CondStep extends StepVariableType<any, any, any, any>,
     VarStep extends StepVariableType<any, any, any, any>,
   >(next: TStep | TStep[], config?: StepConfig<StepAction<string, any, any, any>, CondStep, VarStep, TTriggerSchema>) {
@@ -368,7 +397,14 @@ export class Workflow<
       this.after(lastStep);
       const nextSteps = next.map(step => {
         if (isWorkflow(step)) {
+          // types possibly infinite issue here
+          // @ts-ignore
           return workflowToStep(step, { mastra: this.#mastra });
+        }
+        if (isAgent(step)) {
+          // types possibly infinite issue here
+          // @ts-ignore
+          return agentToStep(step);
         }
         return step;
       });
@@ -402,7 +438,9 @@ export class Workflow<
 
     const step: StepAction<string, any, any, any> = isWorkflow(next)
       ? workflowToStep(next, { mastra: this.#mastra })
-      : (next as StepAction<string, any, any, any>);
+      : isAgent(next)
+        ? agentToStep(next)
+        : (next as StepAction<string, any, any, any>);
 
     const stepKey = this.#makeStepKey(step);
     const when = config?.['#internal']?.when || config?.when;
@@ -752,6 +790,7 @@ export class Workflow<
   after<TWorkflow extends Workflow<any, any, any, any>>(
     steps: TWorkflow | TWorkflow[],
   ): Omit<WorkflowBuilder<this>, 'then' | 'after'>;
+  after<TAgent extends Agent<any, any, any>>(steps: TAgent | TAgent[]): Omit<WorkflowBuilder<this>, 'then' | 'after'>;
   after<TStep extends StepAction<string, any, any, any> | Workflow<any, any, any, any>>(
     steps: TStep | Workflow | (TStep | Workflow)[],
   ): Omit<WorkflowBuilder<this>, 'then' | 'after'> {
