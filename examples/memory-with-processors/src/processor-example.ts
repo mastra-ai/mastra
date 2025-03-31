@@ -4,7 +4,8 @@ import { Mastra } from '@mastra/core';
 import { createLogger } from '@mastra/core/logger';
 import { createTool } from '@mastra/core/tools';
 import { Agent } from '@mastra/core/agent';
-import { Memory, TokenLimiter } from '@mastra/memory';
+import { Memory } from '@mastra/memory';
+import { TokenLimiter } from '@mastra/memory/processors';
 import { readFileSync, existsSync } from 'fs';
 import { resolve } from 'path';
 import chalk from 'chalk';
@@ -179,4 +180,3 @@ async function main() {
 }
 
 main().catch(console.error);
-

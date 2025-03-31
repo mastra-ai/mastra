@@ -22,7 +22,8 @@ yarn add @mastra/memory
 ## Basic Memory Setup with Processors
 
 ```typescript
-import { Memory, TokenLimiter, ToolCallFilter } from "@mastra/memory";
+import { Memory } from "@mastra/memory";
+import { TokenLimiter, ToolCallFilter } from "@mastra/memory/processors";
 
 // Create memory with processors
 const memory = new Memory({
@@ -35,7 +36,8 @@ const memory = new Memory({
 The `TokenLimiter` helps you stay within your model's context window:
 
 ```typescript
-import { Memory, TokenLimiter } from "@mastra/memory";
+import { Memory } from "@mastra/memory";
+import { TokenLimiter } from "@mastra/memory/processors";
 
 // Set up memory with a token limit
 const memory = new Memory({
@@ -49,7 +51,8 @@ const memory = new Memory({
 You can also specify a different encoding if needed:
 
 ```typescript
-import { Memory, TokenLimiter } from "@mastra/memory";
+import { Memory } from "@mastra/memory";
+import { TokenLimiter } from "@mastra/memory/processors";
 import cl100k_base from "js-tiktoken/ranks/cl100k_base";
 
 const memory = new Memory({
@@ -67,7 +70,8 @@ const memory = new Memory({
 The `ToolCallFilter` processor removes tool calls and their results from memory:
 
 ```typescript
-import { Memory, ToolCallFilter } from "@mastra/memory";
+import { Memory } from "@mastra/memory";
+import { ToolCallFilter } from "@mastra/memory/processors";
 
 // Filter out all tool calls
 const memoryNoTools = new Memory({
@@ -89,7 +93,8 @@ const memorySelectiveFilter = new Memory({
 Processors run in the order they are defined:
 
 ```typescript
-import { Memory, TokenLimiter, ToolCallFilter } from "@mastra/memory";
+import { Memory } from "@mastra/memory";
+import { TokenLimiter, ToolCallFilter } from "@mastra/memory/processors";
 
 const memory = new Memory({
   processors: [
@@ -106,7 +111,9 @@ const memory = new Memory({
 You can create your own processors by extending the `MemoryProcessor` class:
 
 ```typescript
-import { Memory, MemoryProcessor, CoreMessage } from "@mastra/memory";
+import type { CoreMessage } from "@mastra/core";
+import { MemoryProcessor } from "@mastra/core/memory";
+import { Memory } from "@mastra/memory";
 
 // Simple processor that keeps only the most recent messages
 class RecentMessagesProcessor extends MemoryProcessor {

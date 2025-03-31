@@ -2,7 +2,8 @@ import 'dotenv/config';
 import { makeSend, searchTool } from './utils';
 import { openai } from '@ai-sdk/openai';
 import { Agent } from '@mastra/core/agent';
-import { Memory, TokenLimiter } from '@mastra/memory';
+import { Memory } from '@mastra/memory';
+import { TokenLimiter } from '@mastra/memory/processors';
 import { createLogger, Mastra } from '@mastra/core';
 
 const memory = new Memory({

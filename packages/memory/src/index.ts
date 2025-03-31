@@ -7,8 +7,6 @@ import { MDocument } from '@mastra/rag';
 import { embedMany } from 'ai';
 import { updateWorkingMemoryTool } from './tools/working-memory';
 
-export * from './processors';
-
 /**
  * Concrete implementation of MastraMemory that adds support for thread configuration
  * and message injection.

@@ -29,12 +29,13 @@ The `TokenLimiter` processor helps prevent context window overflow.
 - Setting the max context window size your model supports will help prevent API errors
 
 ```typescript copy showLineNumbers
-import { Memory, TokenLimiter } from "@mastra/memory";
+import { Memory } from "@mastra/memory";
+import { TokenLimiter } from "@mastra/memory/processors";
 
 const memory = new Memory({
   processors: [
-    // Limit message history to approximately 128000 tokens (ex. for gpt-4o)
-    new TokenLimiter(128000),
+    // Limit message history to approximately 127000 tokens (ex. for gpt-4o)
+    new TokenLimiter(127000),
   ],
 });
 ```
@@ -68,7 +69,8 @@ The `ToolCallFilter` processor removes tool calls and their results.
 - Preserves all other content in messages
 
 ```typescript copy showLineNumbers
-import { Memory, ToolCallFilter } from "@mastra/memory";
+import { Memory } from "@mastra/memory";
+import { ToolCallFilter } from "@mastra/memory/processors";
 
 const memory = new Memory({
   processors: [
@@ -88,7 +90,7 @@ const memory = new Memory({
 You can combine multiple processors, each will run after the previous one.
 
 ```typescript copy showLineNumbers
-import { TokenLimiter, ToolCallFilter } from "@mastra/memory";
+import { TokenLimiter, ToolCallFilter } from "@mastra/memory/processors";
 
 // Multiple processors can be combined
 const memory = new Memory({
@@ -120,11 +122,22 @@ The message processor system is designed to be flexible and extensible, allowing
 You can create custom processors by extending the `MemoryProcessor` class:
 
 ```typescript copy showLineNumbers
-import { Memory, MemoryProcessor, CoreMessage } from "@mastra/memory";
+import { Memory, CoreMessage } from "@mastra/memory";
+import {
+  MemoryProcessor,
+  SharedMemoryProcessorOpts,
+} from "@mastra/core/memory";
 
 // Simple example of implementing the MemoryProcessor interface
 class SimpleMessageFilter extends MemoryProcessor {
-  process(messages: CoreMessage[]): CoreMessage[] {
+  constructor() {
+    super({ name: "SimpleMessageFilter" });
+  }
+
+  process(
+    messages: CoreMessage[],
+    _opts: SharedMemoryProcessorOpts = {},
+  ): CoreMessage[] {
     // Return a subset of messages based on your criteria
     return messages.slice(0, 10); // For example, just keep the first 10 messages
   }
