@@ -619,13 +619,13 @@ export class PostgresStore extends MastraStorage {
     }
 
     if (fromDate) {
-      conditions.push(`created_at >= $${paramIndex}`);
+      conditions.push(`"createdAt" >= $${paramIndex}`);
       values.push(fromDate);
       paramIndex++;
     }
 
     if (toDate) {
-      conditions.push(`created_at <= $${paramIndex}`);
+      conditions.push(`"createdAt" <= $${paramIndex}`);
       values.push(toDate);
       paramIndex++;
     }
@@ -646,7 +646,7 @@ export class PostgresStore extends MastraStorage {
     const query = `
       SELECT * FROM mastra_workflow_snapshot 
       ${whereClause} 
-      ORDER BY created_at DESC
+      ORDER BY "createdAt" DESC
       ${limit !== undefined && offset !== undefined ? ` LIMIT $${paramIndex} OFFSET $${paramIndex + 1}` : ''}
     `;
 
@@ -667,8 +667,8 @@ export class PostgresStore extends MastraStorage {
         workflowName: row.workflow_name,
         runId: row.run_id,
         snapshot: parsedSnapshot,
-        createdAt: row.created_at,
-        updatedAt: row.updated_at,
+        createdAt: row.createdAt,
+        updatedAt: row.updatedAt,
       };
     });
 

@@ -1,4 +1,5 @@
 import type { MessageType, StorageThreadType } from '../memory/types';
+import type { WorkflowRunState } from '../workflows';
 import { MastraStorage } from './base';
 import type { TABLE_NAMES } from './constants';
 import type { DefaultStorage, LibSQLConfig } from './libsql';
@@ -120,5 +121,25 @@ export class DefaultProxyStorage extends MastraStorage {
   }): Promise<any[]> {
     await this.setupStorage();
     return this.storage!.getTraces(options);
+  }
+
+  async getWorkflows(args?: {
+    workflowName?: string;
+    fromDate?: Date;
+    toDate?: Date;
+    limit?: number;
+    offset?: number;
+  }): Promise<{
+    runs: Array<{
+      workflowName: string;
+      runId: string;
+      snapshot: WorkflowRunState | string;
+      createdAt: Date;
+      updatedAt: Date;
+    }>;
+    total: number;
+  }> {
+    await this.setupStorage();
+    return this.storage!.getWorkflows(args);
   }
 }
