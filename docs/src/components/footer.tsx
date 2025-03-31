@@ -104,7 +104,7 @@ export const Footer = () => {
               htmlFor="email"
               className="text-[#939393] mb-0.5 mt-[1px] block text-xs"
             >
-              Mastra Newsletter
+              Follow along with us:
             </label>
             <SubscribeForm
               idleIcon={
