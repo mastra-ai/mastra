@@ -6,6 +6,7 @@ import type { BaseLogMessage, RegisteredLogger } from '../logger';
 import type { Mastra } from '../mastra';
 import type { Step } from './step';
 import type { Workflow } from './workflow';
+import type { DataStreamWriter } from 'ai';
 
 export interface WorkflowOptions<
   TWorkflowName extends string = string,
@@ -33,6 +34,7 @@ export interface StepExecutionContext<
   TContext extends WorkflowContext = WorkflowContext,
 > extends IExecutionContext<TSchemaIn> {
   context: TSchemaIn extends z.ZodSchema ? { inputData: z.infer<TSchemaIn> } & TContext : TContext;
+  streamWriter?: DataStreamWriter;
   suspend: (payload?: unknown, softSuspend?: any) => Promise<void>;
   runId: string;
   emit: (event: string, data: any) => void;

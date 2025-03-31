@@ -1,4 +1,4 @@
-import { Workflow } from '@mastra/core/workflows';
+import { Step, Workflow } from '@mastra/core/workflows';
 import { z } from 'zod';
 import { webSearchAgent } from '../agents';
 
@@ -10,6 +10,15 @@ export const agentWorkflow = new Workflow({
   }),
 });
 
+const nextStep = new Step({
+  id: 'nextStep',
+  execute: async ({ streamWriter }) => {
+    const data = { foo: 'bar' };
+    streamWriter?.writeData({ type: 'data', value: data });
+    return { executed: true };
+  },
+});
+
 agentWorkflow
   .step(webSearchAgent, {
     variables: {
@@ -19,4 +28,5 @@ agentWorkflow
       },
     },
   })
+  .then(nextStep)
   .commit();

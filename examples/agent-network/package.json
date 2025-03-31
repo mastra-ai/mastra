@@ -13,6 +13,7 @@
   "license": "ISC",
   "dependencies": {
     "@ai-sdk/openai": "^1.2.5",
+    "@ai-sdk/ui-utils": "^1.1.19",
     "@mastra/client-js": "workspace:*",
     "@mastra/core": "workspace:*",
     "zod": "^3.24.2"

@@ -114,6 +114,33 @@ export async function createRunHandler(c: Context) {
   }
 }
 
+export async function streamGenerateHandler(c: Context): Promise<Response | undefined> {
+  try {
+    const mastra = c.get('mastra');
+    const workflowId = c.req.param('workflowId');
+    const workflow = mastra.getWorkflow(workflowId);
+    const runId = c.req.query('runId');
+
+    if (!runId) {
+      throw new HTTPException(400, { message: 'runId required to start run' });
+    }
+
+    const run = workflow.getRun(runId);
+
+    if (!run) {
+      throw new HTTPException(404, { message: 'Workflow run not found' });
+    }
+
+    const streamResult = await run.stream({
+      triggerData: await c.req.json(),
+    });
+
+    return streamResult;
+  } catch (error) {
+    return handleError(error, 'Error streaming from agent');
+  }
+}
+
 export async function startWorkflowRunHandler(c: Context) {
   try {
     const mastra: Mastra = c.get('mastra');
@@ -132,9 +159,13 @@ export async function startWorkflowRunHandler(c: Context) {
       throw new HTTPException(404, { message: 'Workflow run not found' });
     }
 
-    run.start({
-      triggerData: body,
-    });
+    run
+      .start({
+        triggerData: body,
+      })
+      .catch(e => {
+        return handleError(e, 'Error starting workflow run');
+      });
 
     return c.json({ message: 'Workflow run started' });
   } catch (e) {
@@ -232,10 +263,14 @@ export async function resumeWorkflowHandler(c: Context) {
       throw new HTTPException(404, { message: 'Workflow run not found' });
     }
 
-    run.resume({
-      stepId,
-      context,
-    });
+    run
+      .resume({
+        stepId,
+        context,
+      })
+      .catch(e => {
+        return handleError(e, 'Error resuming workflow step');
+      });
 
     return c.json({ message: 'Workflow run resumed' });
   } catch (error) {

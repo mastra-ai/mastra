@@ -258,7 +258,7 @@ export function agentToStep<
     outputSchema: z.object({
       text: z.string(),
     }),
-    execute: async ({ context, runId, mastra }) => {
+    execute: async ({ context, runId, mastra, streamWriter }) => {
       if (!mastra) {
         throw new Error('Mastra instance not found');
       }
@@ -269,14 +269,34 @@ export function agentToStep<
         telemetry: mastra.getTelemetry(),
       });
 
-      const result = await agent.generate(context.inputData.prompt, {
-        runId,
-        resourceId: context.inputData.resourceId,
-        threadId: context.inputData.threadId,
-      });
+      let agentResponse: string;
+
+      if (streamWriter) {
+        agentResponse = await new Promise(async (resolve, reject) => {
+          const stream = await agent.stream(context.inputData.prompt, {
+            runId,
+            resourceId: context.inputData.resourceId,
+            threadId: context.inputData.threadId,
+            onFinish: result => {
+              resolve(result.text);
+            },
+            onError: error => {
+              reject(error);
+            },
+          });
+          stream.mergeIntoDataStream(streamWriter);
+        });
+      } else {
+        const result = await agent.generate(context.inputData.prompt, {
+          runId,
+          resourceId: context.inputData.resourceId,
+          threadId: context.inputData.threadId,
+        });
+        agentResponse = result.text;
+      }
 
       return {
-        text: result.text,
+        text: agentResponse,
       };
     },
   };

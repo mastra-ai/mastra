@@ -21,10 +21,11 @@ import type {
   WorkflowRunState,
 } from './types';
 import { WhenConditionReturnValue } from './types';
-import { agentToStep, isAgent, isVariableReference, isWorkflow, updateStepInHierarchy, workflowToStep } from './utils';
+import { agentToStep, isAgent, isVariableReference, isWorkflow, workflowToStep } from './utils';
 import type { WorkflowResultReturn } from './workflow-instance';
 import { WorkflowInstance } from './workflow-instance';
 import type { Agent } from '../agent';
+import type { createDataStream } from 'ai';
 
 type WorkflowBuilder<T extends Workflow<any, any>> = Pick<
   T,
@@ -874,6 +875,9 @@ export class Workflow<
     });
     this.#runs.set(run.runId, run);
     return {
+      stream: run.stream.bind(run) as (
+        props?: { triggerData?: z.infer<TTriggerSchema> } | undefined,
+      ) => Promise<ReadableStream<Uint8Array>>,
       start: run.start.bind(run) as (
         props?: { triggerData?: z.infer<TTriggerSchema> } | undefined,
       ) => Promise<WorkflowRunResult<TTriggerSchema, TSteps, TResultSchema>>,

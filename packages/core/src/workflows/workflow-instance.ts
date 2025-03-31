@@ -25,6 +25,7 @@ import {
   resolveVariables,
   updateStepInHierarchy,
 } from './utils';
+import { createDataStream, type DataStreamWriter } from 'ai';
 
 export interface WorkflowResultReturn<
   TResult extends z.ZodObject<any>,
@@ -32,6 +33,7 @@ export interface WorkflowResultReturn<
   TSteps extends Step<any, any, any>[],
 > {
   runId: string;
+  stream: (props?: { triggerData?: z.infer<T> } | undefined) => Promise<ReadableStream<Uint8Array>>;
   start: (props?: { triggerData?: z.infer<T> } | undefined) => Promise<WorkflowRunResult<T, TSteps, TResult>>;
   watch: (
     onTransition: (state: Pick<WorkflowRunResult<T, TSteps, TResult>, 'results' | 'activePaths' | 'runId'>) => void,
@@ -168,6 +170,21 @@ export class WorkflowInstance<
     };
   }
 
+  async stream({ triggerData }: { triggerData?: z.infer<TTriggerSchema> } = {}) {
+    const dataStream = createDataStream({
+      execute: async streamWriter => {
+        streamWriter.writeData({ type: 'runId', value: this.runId });
+        await this.execute({ triggerData, streamWriter });
+      },
+    });
+
+    if (this.#onFinish) {
+      this.#onFinish();
+    }
+
+    return dataStream.pipeThrough(new TextEncoderStream());
+  }
+
   async start({ triggerData }: { triggerData?: z.infer<TTriggerSchema> } = {}) {
     const results = await this.execute({ triggerData });
 
@@ -192,11 +209,13 @@ export class WorkflowInstance<
 
   async execute({
     triggerData,
+    streamWriter,
     snapshot,
     stepId,
     resumeData,
   }: {
     stepId?: string;
+    streamWriter?: DataStreamWriter;
     triggerData?: z.infer<TTriggerSchema>;
     snapshot?: Snapshot<any>;
     resumeData?: any; // TODO: once we have a resume schema plug that in here
@@ -234,6 +253,7 @@ export class WorkflowInstance<
       logger: this.logger,
       mastra: this.#mastra,
       workflowInstance: this,
+      streamWriter,
       name: this.name,
       runId: this.runId,
       steps: this.#steps,

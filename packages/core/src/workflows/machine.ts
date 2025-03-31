@@ -42,6 +42,7 @@ import {
   recursivelyCheckForFinalState,
 } from './utils';
 import type { WorkflowInstance } from './workflow-instance';
+import type { DataStreamWriter } from 'ai';
 
 export class Machine<
   TSteps extends Step<any, any, any>[] = any,
@@ -51,6 +52,7 @@ export class Machine<
   logger: Logger;
   #mastra?: Mastra;
   #workflowInstance: WorkflowInstance;
+  #streamWriter?: DataStreamWriter;
   #executionSpan?: Span | undefined;
 
   #stepGraph: StepGraph;
@@ -66,6 +68,7 @@ export class Machine<
   constructor({
     logger,
     mastra,
+    streamWriter,
     workflowInstance,
     executionSpan,
     name,
@@ -77,6 +80,7 @@ export class Machine<
   }: {
     logger: Logger;
     mastra?: Mastra;
+    streamWriter?: DataStreamWriter;
     workflowInstance: WorkflowInstance;
     executionSpan?: Span;
     name: string;
@@ -89,6 +93,7 @@ export class Machine<
     super();
 
     this.#mastra = mastra;
+    this.#streamWriter = streamWriter;
     this.#workflowInstance = workflowInstance;
     this.#executionSpan = executionSpan;
     this.logger = logger;
@@ -139,6 +144,7 @@ export class Machine<
     const actorSnapshot = snapshot
       ? {
           ...snapshot,
+          streamWriter: this.#streamWriter,
           context: {
             ...input,
             inputData: { ...((snapshot as any)?.context?.inputData || {}), ...resumeData },
@@ -390,6 +396,7 @@ export class Machine<
               // console.log(this.#workflowInstance.name, 'emitting', event, ...args);
               this.emit(event, ...args);
             },
+            streamWriter: this.#streamWriter,
             suspend: async (payload?: any, softSuspend?: any) => {
               await this.#workflowInstance.suspend(stepNode.step.id, this);
               if (this.#actor) {

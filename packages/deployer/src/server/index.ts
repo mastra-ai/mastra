@@ -63,6 +63,7 @@ import {
   resumeWorkflowHandler,
   watchWorkflowHandler,
   createRunHandler,
+  streamGenerateHandler as streamGenerateWorkflowHandler,
 } from './handlers/workflows.js';
 import { html } from './welcome.js';
 
@@ -1574,6 +1575,40 @@ export async function createHonoServer(
       },
     }),
     startWorkflowRunHandler,
+  );
+
+  app.post(
+    '/api/workflows/:workflowId/stream',
+    describeRoute({
+      description: 'Stream generate from a workflow run',
+      tags: ['workflows'],
+      parameters: [
+        {
+          name: 'workflowId',
+          in: 'path',
+          required: true,
+          schema: { type: 'string' },
+        },
+        {
+          name: 'runId',
+          in: 'query',
+          required: true,
+          schema: { type: 'string' },
+        },
+      ],
+      responses: {
+        200: {
+          description: 'Workflow stream started',
+        },
+        404: {
+          description: 'Workflow not found',
+        },
+        400: {
+          description: 'Bad request',
+        },
+      },
+    }),
+    streamGenerateWorkflowHandler,
   );
 
   app.get(
