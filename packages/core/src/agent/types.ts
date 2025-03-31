@@ -33,10 +33,11 @@ export type ToolsetsInput = Record<string, ToolsInput>;
 export type MastraLanguageModel = LanguageModelV1;
 
 export interface AgentConfig<
+  TAgentId extends string = string,
   TTools extends ToolsInput = ToolsInput,
   TMetrics extends Record<string, Metric> = Record<string, Metric>,
 > {
-  name: string;
+  name: TAgentId;
   instructions: string;
   model: MastraLanguageModel;
   tools?: TTools;
