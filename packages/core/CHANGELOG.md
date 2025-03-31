@@ -1,5 +1,19 @@
 # @mastra/core
 
+## 0.8.0-alpha.1
+
+### Minor Changes
+
+- 619c39d: Added support for agents as steps
+
+### Patch Changes
+
+- fe56be0: exclude \_\_primitive, getMemory, hasOwnMemory from traces since they create noisy traces
+- a0967a0: Added new "Memory Processor" feature to @mastra/core and @mastra/memory, allowing devs to modify Mastra Memory before it's sent to the LLM
+- fca3b21: fix server in mastra not to be mandatory
+- 0118361: Add resourceId to memory metadata
+- 619c39d: AgentStep -> Agent as a workflow step (WIP)
+
 ## 0.7.1-alpha.0
 
 ### Patch Changes
