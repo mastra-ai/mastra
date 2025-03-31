@@ -39,6 +39,23 @@ const memory = new Memory({
 });
 ```
 
+The `TokenLimiter` uses `o200k_base` encoding by default, which is used by GPT-4o models. If you need to use a different encoding:
+
+```typescript copy showLineNumbers
+// Import the encoding you need
+import cl100k_base from "js-tiktoken/ranks/cl100k_base";
+
+// Use it with the TokenLimiter
+const memory = new Memory({
+  processors: [
+    new TokenLimiter({
+      limit: 16000,
+      encoding: cl100k_base,
+    }),
+  ],
+});
+```
+
 ### ToolCallFilter
 
 The `ToolCallFilter` processor removes tool calls and their results.

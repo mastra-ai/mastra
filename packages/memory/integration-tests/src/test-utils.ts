@@ -29,7 +29,8 @@ export function generateConversationHistory({
   messageCount?: number;
   toolFrequency?: number;
   toolNames?: (keyof typeof toolArgs)[];
-}): MessageType[] {
+}): { messages: MessageType[]; counts: { messages: number; toolCalls: number; toolResults: number } } {
+  const counts = { messages: 0, toolCalls: 0, toolResults: 0 };
   // Create some words that will each be about one token
   const words = ['apple', 'banana', 'orange', 'grape'];
   // Arguments for different tools
@@ -51,6 +52,7 @@ export function generateConversationHistory({
       createdAt: new Date(startTime + i * 2000), // Each pair 2 seconds apart
       type: 'text',
     });
+    counts.messages++;
 
     // Determine if this assistant message should include a tool call
     const includeTool = i > 0 && i % toolFrequency === 0;
@@ -76,6 +78,9 @@ export function generateConversationHistory({
         createdAt: new Date(startTime + i * 2000 + 1000), // 1 second after user message
         type: 'tool-call',
       });
+      counts.messages++;
+      counts.toolCalls++;
+
       messages.push({
         role: 'tool',
         type: `tool-result`,
@@ -91,6 +96,7 @@ export function generateConversationHistory({
           },
         ],
       });
+      counts.toolResults++;
     } else {
       // Regular assistant text message
       messages.push({
@@ -101,6 +107,7 @@ export function generateConversationHistory({
         createdAt: new Date(startTime + i * 2000 + 1000), // 1 second after user message
         type: 'text',
       });
+      counts.messages++;
     }
   }
 
@@ -114,9 +121,10 @@ export function generateConversationHistory({
       createdAt: new Date(startTime + messages.length + 1 * 2000), // Each pair 2 seconds apart
       type: 'text',
     });
+    counts.messages++;
   }
 
-  return messages;
+  return { messages, counts };
 }
 
 export function filterToolCallsByName(messages: CoreMessage[], name: string) {

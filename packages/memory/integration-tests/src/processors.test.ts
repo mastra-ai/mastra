@@ -56,7 +56,7 @@ describe('Memory with Processors', () => {
     });
 
     // Generate conversation with 10 turn pairs (20 messages total)
-    const messages = generateConversationHistory({
+    const { messages } = generateConversationHistory({
       threadId: thread.id,
       messageCount: 10,
       toolFrequency: 3,
@@ -114,7 +114,7 @@ describe('Memory with Processors', () => {
     });
 
     // Generate conversation with tool calls
-    const messages = generateConversationHistory({
+    const { messages } = generateConversationHistory({
       threadId: thread.id,
       messageCount: 5,
       toolFrequency: 2, // Every other assistant response is a tool call
@@ -187,7 +187,7 @@ describe('Memory with Processors', () => {
     });
 
     // Generate conversation with tool calls
-    const messages = generateConversationHistory({
+    const { messages } = generateConversationHistory({
       threadId: thread.id,
       messageCount: 8,
       toolFrequency: 2, // Every other assistant response is a tool call
