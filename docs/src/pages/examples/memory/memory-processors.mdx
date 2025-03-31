@@ -1,0 +1,184 @@
+---
+title: Memory Processors
+description: Example of using memory processors to filter and transform recalled messages
+---
+
+# Memory Processors
+
+This example demonstrates how to use memory processors to limit token usage, filter out tool calls, and create a simple custom processor.
+
+## Setup
+
+First, install the memory package:
+
+```bash
+npm install @mastra/memory
+# or
+pnpm add @mastra/memory
+# or
+yarn add @mastra/memory
+```
+
+## Basic Memory Setup with Processors
+
+```typescript
+import { Memory, TokenLimiter, ToolCallFilter } from "@mastra/memory";
+
+// Create memory with processors
+const memory = new Memory({
+  processors: [new TokenLimiter(127000), new ToolCallFilter()],
+});
+```
+
+## Using Token Limiting
+
+The `TokenLimiter` helps you stay within your model's context window:
+
+```typescript
+import { Memory, TokenLimiter } from "@mastra/memory";
+
+// Set up memory with a token limit
+const memory = new Memory({
+  processors: [
+    // Limit to approximately 12700 tokens (for GPT-4o)
+    new TokenLimiter(127000),
+  ],
+});
+```
+
+You can also specify a different encoding if needed:
+
+```typescript
+import { Memory, TokenLimiter } from "@mastra/memory";
+import cl100k_base from "js-tiktoken/ranks/cl100k_base";
+
+const memory = new Memory({
+  processors: [
+    new TokenLimiter({
+      limit: 16000,
+      encoding: cl100k_base, // Specific encoding for certain models eg GPT-3.5
+    }),
+  ],
+});
+```
+
+## Filtering Tool Calls
+
+The `ToolCallFilter` processor removes tool calls and their results from memory:
+
+```typescript
+import { Memory, ToolCallFilter } from "@mastra/memory";
+
+// Filter out all tool calls
+const memoryNoTools = new Memory({
+  processors: [new ToolCallFilter()],
+});
+
+// Filter specific tool calls
+const memorySelectiveFilter = new Memory({
+  processors: [
+    new ToolCallFilter({
+      exclude: ["imageGenTool", "clipboardTool"],
+    }),
+  ],
+});
+```
+
+## Combining Multiple Processors
+
+Processors run in the order they are defined:
+
+```typescript
+import { Memory, TokenLimiter, ToolCallFilter } from "@mastra/memory";
+
+const memory = new Memory({
+  processors: [
+    // First filter out tool calls
+    new ToolCallFilter({ exclude: ["imageGenTool"] }),
+    // Then limit tokens (always put token limiter last for accurate measuring after other filters/transforms)
+    new TokenLimiter(16000),
+  ],
+});
+```
+
+## Creating a Simple Custom Processor
+
+You can create your own processors by extending the `MemoryProcessor` class:
+
+```typescript
+import { Memory, MemoryProcessor, CoreMessage } from "@mastra/memory";
+
+// Simple processor that keeps only the most recent messages
+class RecentMessagesProcessor extends MemoryProcessor {
+  private limit: number;
+
+  constructor(limit: number = 10) {
+    super();
+    this.limit = limit;
+  }
+
+  process(messages: CoreMessage[]): CoreMessage[] {
+    // Keep only the most recent messages
+    return messages.slice(-this.limit);
+  }
+}
+
+// Use the custom processor
+const memory = new Memory({
+  processors: [
+    new RecentMessagesProcessor(5), // Keep only the last 5 messages
+    new TokenLimiter(16000),
+  ],
+});
+```
+
+Note: this example is for simplicity of understanding how custom processors work - you can limit messages more efficiently using `new Memory({ options: { lastMessages: 5 } })`. Memory processors are applied after memories are retrieved from storage, while `options.lastMessages` is applied before messages are fetched from storage.
+
+## Integration with an Agent
+
+Here's how to use memory with processors in an agent:
+
+```typescript
+import { Agent } from "@mastra/core";
+import { Memory, TokenLimiter, ToolCallFilter } from "@mastra/memory";
+import { openai } from "@ai-sdk/openai";
+
+// Set up memory with processors
+const memory = new Memory({
+  processors: [
+    new ToolCallFilter({ exclude: ["debugTool"] }),
+    new TokenLimiter(16000),
+  ],
+});
+
+// Create an agent with the memory
+const agent = new Agent({
+  name: "ProcessorAgent",
+  instructions: "You are a helpful assistant with processed memory.",
+  model: openai("gpt-4o-mini"),
+  memory,
+});
+
+// Use the agent
+const response = await agent.stream("Hi, can you remember our conversation?", {
+  threadId: "unique-thread-id",
+  resourceId: "user-123",
+});
+
+for await (const chunk of response.textStream) {
+  process.stdout.write(chunk);
+}
+```
+
+## Summary
+
+This example demonstrates:
+
+1. Setting up memory with token limiting to prevent context window overflow
+2. Filtering out tool calls to reduce noise and token usage
+3. Creating a simple custom processor to keep only recent messages
+4. Combining multiple processors in the correct order
+5. Integrating processed memory with an agent
+
+For more details on memory processors, check out the [Memory Processors documentation](/docs/reference/memory/memory-processors).
+
