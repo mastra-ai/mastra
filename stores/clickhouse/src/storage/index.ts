@@ -497,7 +497,6 @@ export class ClickhouseStore extends MastraStorage {
               toDateTime64(updatedAt, 3) as updatedAt,
               ROW_NUMBER() OVER (ORDER BY "createdAt" DESC) as row_num
             FROM "${TABLE_MESSAGES}"
-            FINAL
             WHERE thread_id = {var_thread_id:String}
           )
           SELECT
@@ -509,7 +508,6 @@ export class ClickhouseStore extends MastraStorage {
             m.updatedAt as updatedAt,
             m.thread_id AS "threadId"
           FROM ordered_messages m
-          FINAL
           WHERE m.id = ANY({var_include:Array(String)})
           OR EXISTS (
             SELECT 1 FROM ordered_messages target
@@ -553,7 +551,6 @@ export class ClickhouseStore extends MastraStorage {
             toDateTime64(createdAt, 3) as createdAt,
             thread_id AS "threadId"
         FROM "${TABLE_MESSAGES}"
-        FINAL
         WHERE thread_id = {threadId:String}
         AND id NOT IN ({exclude:Array(String)})
         ORDER BY "createdAt" DESC
