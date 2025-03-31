@@ -10,12 +10,12 @@ import { UpstashStore } from './index';
 // Increase timeout for all tests in this file to 30 seconds
 vi.setConfig({ testTimeout: 60_000, hookTimeout: 60_000 });
 
-const createSampleThread = () => ({
+const createSampleThread = (date?: Date) => ({
   id: `thread-${randomUUID()}`,
   resourceId: `resource-${randomUUID()}`,
   title: 'Test Thread',
-  createdAt: new Date(),
-  updatedAt: new Date(),
+  createdAt: date || new Date(),
+  updatedAt: date || new Date(),
   metadata: { key: 'value' },
 });
 
@@ -127,7 +127,7 @@ describe('UpstashStore', () => {
 
     it('should create and retrieve a thread', async () => {
       const now = new Date();
-      const thread = createSampleThread();
+      const thread = createSampleThread(now);
 
       const savedThread = await store.__saveThread({ thread });
       expect(savedThread).toEqual(thread);
@@ -186,7 +186,7 @@ describe('UpstashStore', () => {
 
     it('should handle Date objects in thread operations', async () => {
       const now = new Date();
-      const thread = createSampleThread();
+      const thread = createSampleThread(now);
 
       await store.saveThread({ thread });
       const retrievedThread = await store.getThreadById({ threadId: thread.id });
@@ -198,7 +198,7 @@ describe('UpstashStore', () => {
 
     it('should handle ISO string dates in thread operations', async () => {
       const now = new Date();
-      const thread = createSampleThread();
+      const thread = createSampleThread(now);
 
       await store.saveThread({ thread });
       const retrievedThread = await store.getThreadById({ threadId: thread.id });
@@ -210,7 +210,7 @@ describe('UpstashStore', () => {
 
     it('should handle mixed date formats in thread operations', async () => {
       const now = new Date();
-      const thread = createSampleThread();
+      const thread = createSampleThread(now);
 
       await store.saveThread({ thread });
       const retrievedThread = await store.getThreadById({ threadId: thread.id });
@@ -222,8 +222,8 @@ describe('UpstashStore', () => {
 
     it('should handle date serialization in getThreadsByResourceId', async () => {
       const now = new Date();
-      const thread1 = createSampleThread();
-      const thread2 = { ...createSampleThread(), resourceId: thread1.resourceId };
+      const thread1 = createSampleThread(now);
+      const thread2 = { ...createSampleThread(now), resourceId: thread1.resourceId };
       const threads = [thread1, thread2];
 
       await Promise.all(threads.map(thread => store.saveThread({ thread })));
@@ -357,7 +357,7 @@ describe('UpstashStore', () => {
       await store.clearTable({ tableName: TABLE_WORKFLOW_SNAPSHOT });
     });
     it('returns empty array when no workflows exist', async () => {
-      const { runs, total } = await store.__getWorkflows({});
+      const { runs, total } = await store.__getWorkflows();
       expect(runs).toEqual([]);
       expect(total).toBe(0);
     });

@@ -4,7 +4,7 @@ import type { WorkflowRunState } from '../workflows';
 
 import { TABLE_WORKFLOW_SNAPSHOT, TABLE_EVALS, TABLE_MESSAGES, TABLE_THREADS, TABLE_TRACES } from './constants';
 import type { TABLE_NAMES } from './constants';
-import type { EvalRow, StorageColumn, StorageGetMessagesArg } from './types';
+import type { EvalRow, StorageColumn, StorageGetMessagesArg, WorkflowRuns } from './types';
 
 export abstract class MastraStorage extends MastraBase {
   /** @deprecated import from { TABLE_WORKFLOW_SNAPSHOT } '@mastra/core/storage' instead */
@@ -314,38 +314,22 @@ export abstract class MastraStorage extends MastraBase {
   }
 
   abstract getWorkflows(args?: {
+    namespace?: string;
     workflowName?: string;
     fromDate?: Date;
     toDate?: Date;
     limit?: number;
     offset?: number;
-  }): Promise<{
-    runs: Array<{
-      workflowName: string;
-      runId: string;
-      snapshot: WorkflowRunState | string;
-      createdAt: Date;
-      updatedAt: Date;
-    }>;
-    total: number;
-  }>;
+  }): Promise<WorkflowRuns>;
 
   async __getWorkflows(args?: {
+    namespace?: string;
     workflowName?: string;
     fromDate?: Date;
     toDate?: Date;
     limit?: number;
     offset?: number;
-  }): Promise<{
-    runs: Array<{
-      workflowName: string;
-      runId: string;
-      snapshot: WorkflowRunState | string;
-      createdAt: Date;
-      updatedAt: Date;
-    }>;
-    total: number;
-  }> {
+  }): Promise<WorkflowRuns> {
     if (!this.hasInitialized) {
       await this.init();
     }

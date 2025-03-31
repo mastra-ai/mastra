@@ -1,9 +1,8 @@
 import type { MessageType, StorageThreadType } from '../memory/types';
-import type { WorkflowRunState } from '../workflows';
 import { MastraStorage } from './base';
 import type { TABLE_NAMES } from './constants';
 import type { DefaultStorage, LibSQLConfig } from './libsql';
-import type { EvalRow, StorageColumn, StorageGetMessagesArg } from './types';
+import type { EvalRow, StorageColumn, StorageGetMessagesArg, WorkflowRuns } from './types';
 
 /**
  * A proxy for the DefaultStorage (LibSQLStore) to allow for dynamically loading the storage in a constructor
@@ -129,16 +128,7 @@ export class DefaultProxyStorage extends MastraStorage {
     toDate?: Date;
     limit?: number;
     offset?: number;
-  }): Promise<{
-    runs: Array<{
-      workflowName: string;
-      runId: string;
-      snapshot: WorkflowRunState | string;
-      createdAt: Date;
-      updatedAt: Date;
-    }>;
-    total: number;
-  }> {
+  }): Promise<WorkflowRuns> {
     await this.setupStorage();
     return this.storage!.getWorkflows(args);
   }

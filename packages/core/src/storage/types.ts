@@ -20,6 +20,17 @@ export interface WorkflowRow {
   updated_at: Date;
 }
 
+export interface WorkflowRuns {
+  runs: Array<{
+    workflowName: string;
+    runId: string;
+    snapshot: WorkflowRunState | string;
+    createdAt: Date;
+    updatedAt: Date;
+  }>;
+  total: number;
+}
+
 export type StorageGetMessagesArg = {
   threadId: string;
   resourceId?: string;

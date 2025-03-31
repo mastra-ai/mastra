@@ -315,21 +315,23 @@ export class UpstashStore extends MastraStorage {
     return data.snapshot;
   }
 
-  async getWorkflows({
-    namespace = 'workflows',
-    workflowName,
-    fromDate,
-    toDate,
-    limit,
-    offset,
-  }: {
-    namespace?: string;
-    workflowName?: string;
-    fromDate?: Date;
-    toDate?: Date;
-    limit?: number;
-    offset?: number;
-  } = {}): Promise<{
+  async getWorkflows(
+    {
+      namespace,
+      workflowName,
+      fromDate,
+      toDate,
+      limit,
+      offset,
+    }: {
+      namespace: string;
+      workflowName?: string;
+      fromDate?: Date;
+      toDate?: Date;
+      limit?: number;
+      offset?: number;
+    } = { namespace: 'workflows' },
+  ): Promise<{
     runs: Array<{
       workflowName: string;
       runId: string;
