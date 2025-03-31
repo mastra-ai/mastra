@@ -313,7 +313,7 @@ export abstract class MastraStorage extends MastraBase {
     return this.getEvalsByAgentName(agentName, type);
   }
 
-  abstract getWorkflows(args: {
+  abstract getWorkflows(args?: {
     workflowName?: string;
     fromDate?: Date;
     toDate?: Date;
@@ -323,14 +323,14 @@ export abstract class MastraStorage extends MastraBase {
     runs: Array<{
       workflowName: string;
       runId: string;
-      snapshot: WorkflowRunState;
+      snapshot: WorkflowRunState | string;
       createdAt: Date;
       updatedAt: Date;
     }>;
     total: number;
   }>;
 
-  async __getWorkflows(args: {
+  async __getWorkflows(args?: {
     workflowName?: string;
     fromDate?: Date;
     toDate?: Date;
@@ -340,7 +340,7 @@ export abstract class MastraStorage extends MastraBase {
     runs: Array<{
       workflowName: string;
       runId: string;
-      snapshot: WorkflowRunState;
+      snapshot: WorkflowRunState | string;
       createdAt: Date;
       updatedAt: Date;
     }>;

@@ -573,7 +573,7 @@ export class LibSQLStore extends MastraStorage {
     runs: Array<{
       workflowName: string;
       runId: string;
-      snapshot: WorkflowRunState;
+      snapshot: WorkflowRunState | string;
       createdAt: Date;
       updatedAt: Date;
     }>;
@@ -615,13 +615,23 @@ export class LibSQLStore extends MastraStorage {
       args: limit !== undefined && offset !== undefined ? [...args, limit, offset] : args,
     });
 
-    const runs = (result.rows || []).map(row => ({
-      workflowName: row.workflow_name as string,
-      runId: row.run_id as string,
-      snapshot: row.snapshot as unknown as WorkflowRunState,
-      createdAt: new Date(row.createdAt as string),
-      updatedAt: new Date(row.updatedAt as string),
-    }));
+    const runs = (result.rows || []).map(row => {
+      let parsedSnapshot: WorkflowRunState | string = row.snapshot as string;
+      try {
+        parsedSnapshot = JSON.parse(row.snapshot as string) as WorkflowRunState;
+      } catch (e) {
+        // If parsing fails, return the raw snapshot string
+        console.warn(`Failed to parse snapshot for workflow ${row.workflow_name}: ${e}`);
+      }
+
+      return {
+        workflowName: row.workflow_name as string,
+        runId: row.run_id as string,
+        snapshot: parsedSnapshot,
+        createdAt: new Date(row.createdAt as string),
+        updatedAt: new Date(row.updatedAt as string),
+      };
+    });
 
     // Use runs.length as total when not paginating
     return { runs, total: total || runs.length };

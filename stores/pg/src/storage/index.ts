@@ -602,7 +602,7 @@ export class PostgresStore extends MastraStorage {
     runs: Array<{
       workflowName: string;
       runId: string;
-      snapshot: WorkflowRunState;
+      snapshot: WorkflowRunState | string;
       createdAt: Date;
       updatedAt: Date;
     }>;
@@ -654,13 +654,23 @@ export class PostgresStore extends MastraStorage {
 
     const result = await this.db.manyOrNone(query, queryValues);
 
-    const runs = (result || []).map(row => ({
-      workflowName: row.workflow_name,
-      runId: row.run_id,
-      snapshot: row.snapshot as unknown as WorkflowRunState,
-      createdAt: row.created_at,
-      updatedAt: row.updated_at,
-    }));
+    const runs = (result || []).map(row => {
+      let parsedSnapshot: WorkflowRunState | string = row.snapshot as string;
+      try {
+        parsedSnapshot = JSON.parse(row.snapshot as string) as WorkflowRunState;
+      } catch (e) {
+        // If parsing fails, return the raw snapshot string
+        console.warn(`Failed to parse snapshot for workflow ${row.workflow_name}: ${e}`);
+      }
+
+      return {
+        workflowName: row.workflow_name,
+        runId: row.run_id,
+        snapshot: parsedSnapshot,
+        createdAt: row.created_at,
+        updatedAt: row.updated_at,
+      };
+    });
 
     // Use runs.length as total when not paginating
     return { runs, total: total || runs.length };

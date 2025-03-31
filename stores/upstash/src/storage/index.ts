@@ -299,12 +299,14 @@ export class UpstashStore extends MastraStorage {
   }
 
   async getWorkflows({
+    namespace = 'workflows',
     workflowName,
     fromDate,
     toDate,
     limit,
     offset,
   }: {
+    namespace?: string;
     workflowName?: string;
     fromDate?: Date;
     toDate?: Date;
@@ -314,7 +316,7 @@ export class UpstashStore extends MastraStorage {
     runs: Array<{
       workflowName: string;
       runId: string;
-      snapshot: WorkflowRunState;
+      snapshot: WorkflowRunState | string;
       createdAt: Date;
       updatedAt: Date;
     }>;
@@ -322,8 +324,8 @@ export class UpstashStore extends MastraStorage {
   }> {
     // Get all workflow keys
     const pattern = workflowName
-      ? this.getKey(MastraStorage.TABLE_WORKFLOW_SNAPSHOT, { workflow_name: workflowName }) + ':*'
-      : this.getKey(MastraStorage.TABLE_WORKFLOW_SNAPSHOT, {}) + ':*';
+      ? this.getKey(MastraStorage.TABLE_WORKFLOW_SNAPSHOT, { namespace, workflow_name: workflowName }) + ':*'
+      : this.getKey(MastraStorage.TABLE_WORKFLOW_SNAPSHOT, { namespace }) + ':*';
 
     const keys = await this.redis.keys(pattern);
 
@@ -333,7 +335,7 @@ export class UpstashStore extends MastraStorage {
         const data = await this.redis.get<{
           workflow_name: string;
           run_id: string;
-          snapshot: WorkflowRunState;
+          snapshot: WorkflowRunState | string;
           createdAt: string | Date;
           updatedAt: string | Date;
         }>(key);
@@ -344,13 +346,22 @@ export class UpstashStore extends MastraStorage {
     // Filter and transform results
     let runs = workflows
       .filter(w => w !== null)
-      .map(w => ({
-        workflowName: w!.workflow_name,
-        runId: w!.run_id,
-        snapshot: w!.snapshot,
-        createdAt: this.ensureDate(w!.createdAt)!,
-        updatedAt: this.ensureDate(w!.updatedAt)!,
-      }))
+      .map(w => {
+        let parsedSnapshot: WorkflowRunState | string = w!.snapshot as string;
+        try {
+          parsedSnapshot = JSON.parse(w!.snapshot as string) as WorkflowRunState;
+        } catch (e) {
+          // If parsing fails, return the raw snapshot string
+          console.warn(`Failed to parse snapshot for workflow ${w!.workflow_name}: ${e}`);
+        }
+        return {
+          workflowName: w!.workflow_name,
+          runId: w!.run_id,
+          snapshot: parsedSnapshot,
+          createdAt: this.ensureDate(w!.createdAt)!,
+          updatedAt: this.ensureDate(w!.updatedAt)!,
+        };
+      })
       .filter(w => {
         if (fromDate && w.createdAt < fromDate) return false;
         if (toDate && w.createdAt > toDate) return false;

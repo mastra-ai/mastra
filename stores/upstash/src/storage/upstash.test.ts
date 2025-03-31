@@ -1,10 +1,37 @@
-import { MastraStorage } from '@mastra/core/storage';
+import { randomUUID } from 'crypto';
+import { MastraStorage, TABLE_WORKFLOW_SNAPSHOT } from '@mastra/core/storage';
+import type { WorkflowRunState } from '@mastra/core/workflows';
 import { describe, it, expect, beforeAll, beforeEach, afterAll, vi } from 'vitest';
 
 import { UpstashStore } from './index';
 
 // Increase timeout for all tests in this file to 30 seconds
 vi.setConfig({ testTimeout: 60_000, hookTimeout: 60_000 });
+
+const createSampleWorkflowSnapshot = (status: string, createdAt?: Date) => {
+  const runId = `run-${randomUUID()}`;
+  const stepId = `step-${randomUUID()}`;
+  const timestamp = createdAt || new Date();
+  const snapshot = {
+    result: { success: true },
+    value: {},
+    context: {
+      steps: {
+        [stepId]: {
+          status,
+          payload: {},
+          error: undefined,
+        },
+      },
+      triggerData: {},
+      attempts: {},
+    },
+    activePaths: [],
+    runId,
+    timestamp: timestamp.getTime(),
+  } as WorkflowRunState;
+  return { snapshot, runId, stepId };
+};
 
 describe('UpstashStore', () => {
   let store: UpstashStore;
@@ -343,7 +370,7 @@ describe('UpstashStore', () => {
     const testRunId = 'test-run';
 
     beforeEach(async () => {
-      await store.clearTable({ tableName: MastraStorage.TABLE_WORKFLOW_SNAPSHOT });
+      await store.clearTable({ tableName: TABLE_WORKFLOW_SNAPSHOT });
     });
 
     it('should persist and load workflow snapshots', async () => {
@@ -384,6 +411,186 @@ describe('UpstashStore', () => {
         runId: 'non-existent',
       });
       expect(result).toBeNull();
+    });
+  });
+
+  describe('getWorkflows', () => {
+    const testNamespace = 'test-namespace';
+    beforeEach(async () => {
+      await store.clearTable({ tableName: TABLE_WORKFLOW_SNAPSHOT });
+    });
+    it('returns empty array when no workflows exist', async () => {
+      const { runs, total } = await store.__getWorkflows({});
+      expect(runs).toEqual([]);
+      expect(total).toBe(0);
+    });
+
+    it('returns all workflows by default', async () => {
+      const workflowName1 = 'default_test_1';
+      const workflowName2 = 'default_test_2';
+
+      const { snapshot: workflow1, runId: runId1, stepId: stepId1 } = createSampleWorkflowSnapshot('completed');
+      const { snapshot: workflow2, runId: runId2, stepId: stepId2 } = createSampleWorkflowSnapshot('running');
+
+      await store.persistWorkflowSnapshot({
+        namespace: testNamespace,
+        workflowName: workflowName1,
+        runId: runId1,
+        snapshot: workflow1,
+      });
+      await new Promise(resolve => setTimeout(resolve, 10)); // Small delay to ensure different timestamps
+      await store.persistWorkflowSnapshot({
+        namespace: testNamespace,
+        workflowName: workflowName2,
+        runId: runId2,
+        snapshot: workflow2,
+      });
+
+      const { runs, total } = await store.__getWorkflows();
+      expect(runs).toHaveLength(2);
+      expect(total).toBe(2);
+      expect(runs[0]!.workflowName).toBe(workflowName2); // Most recent first
+      expect(runs[1]!.workflowName).toBe(workflowName1);
+      const firstSnapshot = runs[0]!.snapshot as WorkflowRunState;
+      const secondSnapshot = runs[1]!.snapshot as WorkflowRunState;
+      expect(firstSnapshot.context?.steps[stepId2]?.status).toBe('running');
+      expect(secondSnapshot.context?.steps[stepId1]?.status).toBe('completed');
+    });
+
+    it('filters by workflow name', async () => {
+      const workflowName1 = 'filter_test_1';
+      const workflowName2 = 'filter_test_2';
+
+      const { snapshot: workflow1, runId: runId1, stepId: stepId1 } = createSampleWorkflowSnapshot('completed');
+      const { snapshot: workflow2, runId: runId2 } = createSampleWorkflowSnapshot('failed');
+
+      await store.persistWorkflowSnapshot({
+        namespace: testNamespace,
+        workflowName: workflowName1,
+        runId: runId1,
+        snapshot: workflow1,
+      });
+      await new Promise(resolve => setTimeout(resolve, 10)); // Small delay to ensure different timestamps
+      await store.persistWorkflowSnapshot({
+        namespace: testNamespace,
+        workflowName: workflowName2,
+        runId: runId2,
+        snapshot: workflow2,
+      });
+
+      const { runs, total } = await store.getWorkflows({ namespace: testNamespace, workflowName: workflowName1 });
+      expect(runs).toHaveLength(1);
+      expect(total).toBe(1);
+      expect(runs[0]!.workflowName).toBe(workflowName1);
+      const snapshot = runs[0]!.snapshot as WorkflowRunState;
+      expect(snapshot.context?.steps[stepId1]?.status).toBe('completed');
+    });
+
+    it('filters by date range', async () => {
+      const now = new Date();
+      const yesterday = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+      const twoDaysAgo = new Date(now.getTime() - 2 * 24 * 60 * 60 * 1000);
+      const workflowName1 = 'date_test_1';
+      const workflowName2 = 'date_test_2';
+      const workflowName3 = 'date_test_3';
+
+      const { snapshot: workflow1, runId: runId1 } = createSampleWorkflowSnapshot('completed');
+      const { snapshot: workflow2, runId: runId2, stepId: stepId2 } = createSampleWorkflowSnapshot('running');
+      const { snapshot: workflow3, runId: runId3, stepId: stepId3 } = createSampleWorkflowSnapshot('waiting');
+
+      await store.insert({
+        tableName: TABLE_WORKFLOW_SNAPSHOT,
+        record: {
+          workflow_name: workflowName1,
+          run_id: runId1,
+          snapshot: workflow1,
+          createdAt: twoDaysAgo,
+          updatedAt: twoDaysAgo,
+        },
+      });
+      await store.insert({
+        tableName: TABLE_WORKFLOW_SNAPSHOT,
+        record: {
+          workflow_name: workflowName2,
+          run_id: runId2,
+          snapshot: workflow2,
+          createdAt: yesterday,
+          updatedAt: yesterday,
+        },
+      });
+      await store.insert({
+        tableName: TABLE_WORKFLOW_SNAPSHOT,
+        record: {
+          workflow_name: workflowName3,
+          run_id: runId3,
+          snapshot: workflow3,
+          createdAt: now,
+          updatedAt: now,
+        },
+      });
+
+      const { runs } = await store.__getWorkflows({
+        fromDate: yesterday,
+        toDate: now,
+      });
+
+      expect(runs).toHaveLength(2);
+      expect(runs[0]!.workflowName).toBe(workflowName3);
+      expect(runs[1]!.workflowName).toBe(workflowName2);
+      const firstSnapshot = runs[0]!.snapshot as WorkflowRunState;
+      const secondSnapshot = runs[1]!.snapshot as WorkflowRunState;
+      expect(firstSnapshot.context?.steps[stepId3]?.status).toBe('waiting');
+      expect(secondSnapshot.context?.steps[stepId2]?.status).toBe('running');
+    });
+
+    it('handles pagination', async () => {
+      const workflowName1 = 'page_test_1';
+      const workflowName2 = 'page_test_2';
+      const workflowName3 = 'page_test_3';
+
+      const { snapshot: workflow1, runId: runId1, stepId: stepId1 } = createSampleWorkflowSnapshot('completed');
+      const { snapshot: workflow2, runId: runId2, stepId: stepId2 } = createSampleWorkflowSnapshot('running');
+      const { snapshot: workflow3, runId: runId3, stepId: stepId3 } = createSampleWorkflowSnapshot('waiting');
+
+      await store.persistWorkflowSnapshot({
+        namespace: testNamespace,
+        workflowName: workflowName1,
+        runId: runId1,
+        snapshot: workflow1,
+      });
+      await new Promise(resolve => setTimeout(resolve, 10)); // Small delay to ensure different timestamps
+      await store.persistWorkflowSnapshot({
+        namespace: testNamespace,
+        workflowName: workflowName2,
+        runId: runId2,
+        snapshot: workflow2,
+      });
+      await new Promise(resolve => setTimeout(resolve, 10)); // Small delay to ensure different timestamps
+      await store.persistWorkflowSnapshot({
+        namespace: testNamespace,
+        workflowName: workflowName3,
+        runId: runId3,
+        snapshot: workflow3,
+      });
+
+      // Get first page
+      const page1 = await store.__getWorkflows({ limit: 2, offset: 0 });
+      expect(page1.runs).toHaveLength(2);
+      expect(page1.total).toBe(3); // Total count of all records
+      expect(page1.runs[0]!.workflowName).toBe(workflowName3);
+      expect(page1.runs[1]!.workflowName).toBe(workflowName2);
+      const firstSnapshot = page1.runs[0]!.snapshot as WorkflowRunState;
+      const secondSnapshot = page1.runs[1]!.snapshot as WorkflowRunState;
+      expect(firstSnapshot.context?.steps[stepId3]?.status).toBe('waiting');
+      expect(secondSnapshot.context?.steps[stepId2]?.status).toBe('running');
+
+      // Get second page
+      const page2 = await store.__getWorkflows({ limit: 2, offset: 2 });
+      expect(page2.runs).toHaveLength(1);
+      expect(page2.total).toBe(3);
+      expect(page2.runs[0]!.workflowName).toBe(workflowName1);
+      const snapshot = page2.runs[0]!.snapshot as WorkflowRunState;
+      expect(snapshot.context?.steps[stepId1]?.status).toBe('completed');
     });
   });
 });

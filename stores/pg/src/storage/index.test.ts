@@ -34,24 +34,29 @@ const createSampleMessage = (threadId: string) =>
     createdAt: new Date(),
   }) as any;
 
-const createSampleWorkflowSnapshot = (workflowName: string, createdAt?: Date) => {
+const createSampleWorkflowSnapshot = (status: string, createdAt?: Date) => {
   const runId = `run-${randomUUID()}`;
+  const stepId = `step-${randomUUID()}`;
   const timestamp = createdAt || new Date();
-  return {
-    workflow_name: workflowName,
-    run_id: runId,
-    snapshot: {
-      state: 'completed',
-      result: { success: true },
-      value: {},
-      context: {},
-      activePaths: [],
-      runId,
-      timestamp: timestamp.toISOString(),
-    } as unknown as WorkflowRunState,
-    createdAt: timestamp,
-    updatedAt: timestamp,
-  };
+  const snapshot = {
+    result: { success: true },
+    value: {},
+    context: {
+      steps: {
+        [stepId]: {
+          status,
+          payload: {},
+          error: undefined,
+        },
+      },
+      triggerData: {},
+      attempts: {},
+    },
+    activePaths: [],
+    runId,
+    timestamp: timestamp.getTime(),
+  } as WorkflowRunState;
+  return { snapshot, runId, stepId };
 };
 
 describe('PostgresStore', () => {
@@ -396,83 +401,146 @@ describe('PostgresStore', () => {
   });
 
   describe('getWorkflows', () => {
+    beforeEach(async () => {
+      await store.clearTable({ tableName: TABLE_WORKFLOW_SNAPSHOT });
+    });
     it('returns empty array when no workflows exist', async () => {
-      const { runs, total } = await store.getWorkflows({});
+      const { runs, total } = await store.__getWorkflows();
       expect(runs).toEqual([]);
       expect(total).toBe(0);
     });
 
     it('returns all workflows by default', async () => {
-      const workflow1 = createSampleWorkflowSnapshot('test1');
-      const workflow2 = createSampleWorkflowSnapshot('test2');
+      const workflowName1 = 'default_test_1';
+      const workflowName2 = 'default_test_2';
 
-      await store.insert({ tableName: TABLE_WORKFLOW_SNAPSHOT, record: workflow1 });
-      await store.insert({ tableName: TABLE_WORKFLOW_SNAPSHOT, record: workflow2 });
+      const { snapshot: workflow1, runId: runId1, stepId: stepId1 } = createSampleWorkflowSnapshot('completed');
+      const { snapshot: workflow2, runId: runId2, stepId: stepId2 } = createSampleWorkflowSnapshot('running');
 
-      const { runs, total } = await store.getWorkflows({});
+      await store.persistWorkflowSnapshot({ workflowName: workflowName1, runId: runId1, snapshot: workflow1 });
+      await new Promise(resolve => setTimeout(resolve, 10)); // Small delay to ensure different timestamps
+      await store.persistWorkflowSnapshot({ workflowName: workflowName2, runId: runId2, snapshot: workflow2 });
+
+      const { runs, total } = await store.__getWorkflows();
       expect(runs).toHaveLength(2);
       expect(total).toBe(2);
-      expect(runs[0]?.workflowName).toBe('test2'); // Most recent first
-      expect(runs[1]?.workflowName).toBe('test1');
+      expect(runs[0]!.workflowName).toBe(workflowName2); // Most recent first
+      expect(runs[1]!.workflowName).toBe(workflowName1);
+      const firstSnapshot = runs[0]!.snapshot as WorkflowRunState;
+      const secondSnapshot = runs[1]!.snapshot as WorkflowRunState;
+      expect(firstSnapshot.context?.steps[stepId2]?.status).toBe('running');
+      expect(secondSnapshot.context?.steps[stepId1]?.status).toBe('completed');
     });
 
     it('filters by workflow name', async () => {
-      const workflow1 = createSampleWorkflowSnapshot('test1');
-      const workflow2 = createSampleWorkflowSnapshot('test2');
+      const workflowName1 = 'filter_test_1';
+      const workflowName2 = 'filter_test_2';
 
-      await store.insert({ tableName: TABLE_WORKFLOW_SNAPSHOT, record: workflow1 });
-      await store.insert({ tableName: TABLE_WORKFLOW_SNAPSHOT, record: workflow2 });
+      const { snapshot: workflow1, runId: runId1, stepId: stepId1 } = createSampleWorkflowSnapshot('completed');
+      const { snapshot: workflow2, runId: runId2 } = createSampleWorkflowSnapshot('failed');
 
-      const { runs, total } = await store.getWorkflows({ workflowName: 'test1' });
+      await store.persistWorkflowSnapshot({ workflowName: workflowName1, runId: runId1, snapshot: workflow1 });
+      await new Promise(resolve => setTimeout(resolve, 10)); // Small delay to ensure different timestamps
+      await store.persistWorkflowSnapshot({ workflowName: workflowName2, runId: runId2, snapshot: workflow2 });
+
+      const { runs, total } = await store.__getWorkflows({ workflowName: workflowName1 });
       expect(runs).toHaveLength(1);
       expect(total).toBe(1);
-      expect(runs[0]?.workflowName).toBe('test1');
+      expect(runs[0]!.workflowName).toBe(workflowName1);
+      const snapshot = runs[0]!.snapshot as WorkflowRunState;
+      expect(snapshot.context?.steps[stepId1]?.status).toBe('completed');
     });
 
     it('filters by date range', async () => {
       const now = new Date();
       const yesterday = new Date(now.getTime() - 24 * 60 * 60 * 1000);
       const twoDaysAgo = new Date(now.getTime() - 2 * 24 * 60 * 60 * 1000);
+      const workflowName1 = 'date_test_1';
+      const workflowName2 = 'date_test_2';
+      const workflowName3 = 'date_test_3';
 
-      const workflow1 = createSampleWorkflowSnapshot('test1', twoDaysAgo);
-      const workflow2 = createSampleWorkflowSnapshot('test2', yesterday);
-      const workflow3 = createSampleWorkflowSnapshot('test3', now);
+      const { snapshot: workflow1, runId: runId1 } = createSampleWorkflowSnapshot('completed');
+      const { snapshot: workflow2, runId: runId2, stepId: stepId2 } = createSampleWorkflowSnapshot('running');
+      const { snapshot: workflow3, runId: runId3, stepId: stepId3 } = createSampleWorkflowSnapshot('waiting');
 
-      await store.insert({ tableName: TABLE_WORKFLOW_SNAPSHOT, record: workflow1 });
-      await store.insert({ tableName: TABLE_WORKFLOW_SNAPSHOT, record: workflow2 });
-      await store.insert({ tableName: TABLE_WORKFLOW_SNAPSHOT, record: workflow3 });
+      await store.insert({
+        tableName: TABLE_WORKFLOW_SNAPSHOT,
+        record: {
+          workflow_name: workflowName1,
+          run_id: runId1,
+          snapshot: workflow1,
+          createdAt: twoDaysAgo,
+          updatedAt: twoDaysAgo,
+        },
+      });
+      await store.insert({
+        tableName: TABLE_WORKFLOW_SNAPSHOT,
+        record: {
+          workflow_name: workflowName2,
+          run_id: runId2,
+          snapshot: workflow2,
+          createdAt: yesterday,
+          updatedAt: yesterday,
+        },
+      });
+      await store.insert({
+        tableName: TABLE_WORKFLOW_SNAPSHOT,
+        record: {
+          workflow_name: workflowName3,
+          run_id: runId3,
+          snapshot: workflow3,
+          createdAt: now,
+          updatedAt: now,
+        },
+      });
 
-      const { runs } = await store.getWorkflows({
+      const { runs } = await store.__getWorkflows({
         fromDate: yesterday,
         toDate: now,
       });
 
       expect(runs).toHaveLength(2);
-      expect(runs[0]?.workflowName).toBe('test3');
-      expect(runs[1]?.workflowName).toBe('test2');
+      expect(runs[0]!.workflowName).toBe(workflowName3);
+      expect(runs[1]!.workflowName).toBe(workflowName2);
+      const firstSnapshot = runs[0]!.snapshot as WorkflowRunState;
+      const secondSnapshot = runs[1]!.snapshot as WorkflowRunState;
+      expect(firstSnapshot.context?.steps[stepId3]?.status).toBe('waiting');
+      expect(secondSnapshot.context?.steps[stepId2]?.status).toBe('running');
     });
 
     it('handles pagination', async () => {
-      const workflow1 = createSampleWorkflowSnapshot('test1');
-      const workflow2 = createSampleWorkflowSnapshot('test2');
-      const workflow3 = createSampleWorkflowSnapshot('test3');
+      const workflowName1 = 'page_test_1';
+      const workflowName2 = 'page_test_2';
+      const workflowName3 = 'page_test_3';
 
-      await store.insert({ tableName: TABLE_WORKFLOW_SNAPSHOT, record: workflow1 });
-      await store.insert({ tableName: TABLE_WORKFLOW_SNAPSHOT, record: workflow2 });
-      await store.insert({ tableName: TABLE_WORKFLOW_SNAPSHOT, record: workflow3 });
+      const { snapshot: workflow1, runId: runId1, stepId: stepId1 } = createSampleWorkflowSnapshot('completed');
+      const { snapshot: workflow2, runId: runId2, stepId: stepId2 } = createSampleWorkflowSnapshot('running');
+      const { snapshot: workflow3, runId: runId3, stepId: stepId3 } = createSampleWorkflowSnapshot('waiting');
+
+      await store.persistWorkflowSnapshot({ workflowName: workflowName1, runId: runId1, snapshot: workflow1 });
+      await new Promise(resolve => setTimeout(resolve, 10)); // Small delay to ensure different timestamps
+      await store.persistWorkflowSnapshot({ workflowName: workflowName2, runId: runId2, snapshot: workflow2 });
+      await new Promise(resolve => setTimeout(resolve, 10)); // Small delay to ensure different timestamps
+      await store.persistWorkflowSnapshot({ workflowName: workflowName3, runId: runId3, snapshot: workflow3 });
 
       // Get first page
-      const page1 = await store.getWorkflows({ limit: 2, offset: 0 });
+      const page1 = await store.__getWorkflows({ limit: 2, offset: 0 });
       expect(page1.runs).toHaveLength(2);
       expect(page1.total).toBe(3); // Total count of all records
-      expect(page1.runs[0]?.workflowName).toBe('test3');
-      expect(page1.runs[1]?.workflowName).toBe('test2');
+      expect(page1.runs[0]!.workflowName).toBe(workflowName3);
+      expect(page1.runs[1]!.workflowName).toBe(workflowName2);
+      const firstSnapshot = page1.runs[0]!.snapshot as WorkflowRunState;
+      const secondSnapshot = page1.runs[1]!.snapshot as WorkflowRunState;
+      expect(firstSnapshot.context?.steps[stepId3]?.status).toBe('waiting');
+      expect(secondSnapshot.context?.steps[stepId2]?.status).toBe('running');
 
       // Get second page
-      const page2 = await store.getWorkflows({ limit: 2, offset: 2 });
+      const page2 = await store.__getWorkflows({ limit: 2, offset: 2 });
       expect(page2.runs).toHaveLength(1);
       expect(page2.total).toBe(3);
-      expect(page2.runs[0]?.workflowName).toBe('test1');
+      expect(page2.runs[0]!.workflowName).toBe(workflowName1);
+      const snapshot = page2.runs[0]!.snapshot as WorkflowRunState;
+      expect(snapshot.context?.steps[stepId1]?.status).toBe('completed');
     });
   });
 
