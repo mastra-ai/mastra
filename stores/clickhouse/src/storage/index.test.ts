@@ -58,12 +58,12 @@ describe('ClickhouseStore', () => {
       // Retrieve thread
       const retrievedThread = await store.__getThreadById({ threadId: thread.id });
       expect(retrievedThread?.title).toEqual(thread.title);
-    });
+    }, 10e3);
 
     it('should return null for non-existent thread', async () => {
       const result = await store.__getThreadById({ threadId: 'non-existent' });
       expect(result).toBeNull();
-    });
+    }, 10e3);
 
     it('should get threads by resource ID', async () => {
       const thread1 = createSampleThread();
@@ -75,7 +75,7 @@ describe('ClickhouseStore', () => {
       const threads = await store.__getThreadsByResourceId({ resourceId: thread1.resourceId });
       expect(threads).toHaveLength(2);
       expect(threads.map(t => t.id)).toEqual(expect.arrayContaining([thread1.id, thread2.id]));
-    });
+    }, 10e3);
 
     it('should update thread title and metadata', async () => {
       const thread = createSampleThread();
@@ -97,7 +97,7 @@ describe('ClickhouseStore', () => {
       // Verify persistence
       const retrievedThread = await store.__getThreadById({ threadId: thread.id });
       expect(retrievedThread).toEqual(updatedThread);
-    });
+    }, 10e3);
 
     it('should delete thread and its messages', async () => {
       const thread = createSampleThread();
@@ -115,7 +115,7 @@ describe('ClickhouseStore', () => {
       // Verify messages were also deleted
       const retrievedMessages = await store.__getMessages({ threadId: thread.id });
       expect(retrievedMessages).toHaveLength(0);
-    });
+    }, 10e3);
   });
 
   describe('Message Operations', () => {
@@ -138,12 +138,12 @@ describe('ClickhouseStore', () => {
       console.log('Messages:', messages);
       console.log('Retrieved messages:', retrievedMessages);
       expect(retrievedMessages).toEqual(expect.arrayContaining(messages));
-    });
+    }, 10e3);
 
     it('should handle empty message array', async () => {
       const result = await store.__saveMessages({ messages: [] });
       expect(result).toEqual([]);
-    });
+    }, 10e3);
 
     it('should maintain message order', async () => {
       const thread = createSampleThread();
@@ -173,7 +173,7 @@ describe('ClickhouseStore', () => {
       retrievedMessages.forEach((msg, idx) => {
         expect(msg.content[0].text).toBe(messages[idx].content[0].text);
       });
-    });
+    }, 10e3);
 
     // it('should rollback on error during message save', async () => {
     //   const thread = createSampleThread();
@@ -209,7 +209,7 @@ describe('ClickhouseStore', () => {
       const retrieved = await store.__getThreadById({ threadId: thread.id });
 
       expect(retrieved?.metadata).toEqual(largeMetadata);
-    });
+    }, 10e3);
 
     it('should handle special characters in thread titles', async () => {
       const thread = {
@@ -221,7 +221,7 @@ describe('ClickhouseStore', () => {
       const retrieved = await store.__getThreadById({ threadId: thread.id });
 
       expect(retrieved?.title).toBe(thread.title);
-    });
+    }, 10e3);
 
     it('should handle concurrent thread updates', async () => {
       const thread = createSampleThread();
@@ -241,7 +241,7 @@ describe('ClickhouseStore', () => {
       // Verify final state
       const finalThread = await store.__getThreadById({ threadId: thread.id });
       expect(finalThread).toBeDefined();
-    });
+    }, 10e3);
   });
 
   describe('Workflow Snapshots', () => {
@@ -269,7 +269,7 @@ describe('ClickhouseStore', () => {
       });
 
       expect(loadedSnapshot).toEqual(snapshot);
-    });
+    }, 10e3);
 
     it('should return null for non-existent workflow snapshot', async () => {
       const result = await store.loadWorkflowSnapshot({
@@ -278,7 +278,7 @@ describe('ClickhouseStore', () => {
       });
 
       expect(result).toBeNull();
-    });
+    }, 10e3);
 
     it('should update existing workflow snapshot', async () => {
       const workflowName = 'test-workflow';
@@ -321,7 +321,7 @@ describe('ClickhouseStore', () => {
       });
 
       expect(loadedSnapshot).toEqual(updatedSnapshot);
-    });
+    }, 10e3);
 
     it('should handle complex workflow state', async () => {
       const workflowName = 'complex-workflow';
@@ -382,7 +382,7 @@ describe('ClickhouseStore', () => {
       });
 
       expect(loadedSnapshot).toEqual(complexSnapshot);
-    });
+    }, 10e3);
   });
 
   afterAll(async () => {

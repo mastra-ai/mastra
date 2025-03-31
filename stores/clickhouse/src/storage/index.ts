@@ -633,19 +633,30 @@ export class ClickhouseStore extends MastraStorage {
     snapshot: WorkflowRunState;
   }): Promise<void> {
     try {
+      const currentSnapshot = await this.load({
+        tableName: TABLE_WORKFLOW_SNAPSHOT,
+        keys: { workflow_name: workflowName, run_id: runId },
+      });
+
       const now = new Date();
-      await this.db.insert({
-        table: TABLE_WORKFLOW_SNAPSHOT,
-        format: 'JSONEachRow',
-        values: [
-          {
+      const persisting = currentSnapshot
+        ? {
+            ...currentSnapshot,
+            snapshot: JSON.stringify(snapshot),
+            updatedAt: now.toISOString(),
+          }
+        : {
             workflow_name: workflowName,
             run_id: runId,
             snapshot: JSON.stringify(snapshot),
             createdAt: now.toISOString(),
             updatedAt: now.toISOString(),
-          },
-        ],
+          };
+
+      await this.db.insert({
+        table: TABLE_WORKFLOW_SNAPSHOT,
+        format: 'JSONEachRow',
+        values: [persisting],
         clickhouse_settings: {
           // Allows to insert serialized JS Dates (such as '2023-12-06T10:54:48.000Z')
           date_time_input_format: 'best_effort',
