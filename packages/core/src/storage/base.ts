@@ -312,4 +312,43 @@ export abstract class MastraStorage extends MastraBase {
     await this.init();
     return this.getEvalsByAgentName(agentName, type);
   }
+
+  abstract getWorkflows(args: {
+    workflowName?: string;
+    fromDate?: Date;
+    toDate?: Date;
+    limit?: number;
+    offset?: number;
+  }): Promise<{
+    runs: Array<{
+      workflowName: string;
+      runId: string;
+      snapshot: WorkflowRunState;
+      createdAt: Date;
+      updatedAt: Date;
+    }>;
+    total: number;
+  }>;
+
+  async __getWorkflows(args: {
+    workflowName?: string;
+    fromDate?: Date;
+    toDate?: Date;
+    limit?: number;
+    offset?: number;
+  }): Promise<{
+    runs: Array<{
+      workflowName: string;
+      runId: string;
+      snapshot: WorkflowRunState;
+      createdAt: Date;
+      updatedAt: Date;
+    }>;
+    total: number;
+  }> {
+    if (!this.hasInitialized) {
+      await this.init();
+    }
+    return this.getWorkflows(args);
+  }
 }

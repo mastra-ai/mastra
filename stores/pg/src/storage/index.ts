@@ -586,6 +586,86 @@ export class PostgresStore extends MastraStorage {
     }
   }
 
+  async getWorkflows({
+    workflowName,
+    fromDate,
+    toDate,
+    limit,
+    offset,
+  }: {
+    workflowName?: string;
+    fromDate?: Date;
+    toDate?: Date;
+    limit?: number;
+    offset?: number;
+  } = {}): Promise<{
+    runs: Array<{
+      workflowName: string;
+      runId: string;
+      snapshot: WorkflowRunState;
+      createdAt: Date;
+      updatedAt: Date;
+    }>;
+    total: number;
+  }> {
+    const conditions: string[] = [];
+    const values: any[] = [];
+    let paramIndex = 1;
+
+    if (workflowName) {
+      conditions.push(`workflow_name = $${paramIndex}`);
+      values.push(workflowName);
+      paramIndex++;
+    }
+
+    if (fromDate) {
+      conditions.push(`created_at >= $${paramIndex}`);
+      values.push(fromDate);
+      paramIndex++;
+    }
+
+    if (toDate) {
+      conditions.push(`created_at <= $${paramIndex}`);
+      values.push(toDate);
+      paramIndex++;
+    }
+
+    const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+
+    let total = 0;
+    // Only get total count when using pagination
+    if (limit !== undefined && offset !== undefined) {
+      const countResult = await this.db.one(
+        `SELECT COUNT(*) as count FROM mastra_workflow_snapshot ${whereClause}`,
+        values,
+      );
+      total = Number(countResult.count);
+    }
+
+    // Get results
+    const query = `
+      SELECT * FROM mastra_workflow_snapshot 
+      ${whereClause} 
+      ORDER BY created_at DESC
+      ${limit !== undefined && offset !== undefined ? ` LIMIT $${paramIndex} OFFSET $${paramIndex + 1}` : ''}
+    `;
+
+    const queryValues = limit !== undefined && offset !== undefined ? [...values, limit, offset] : values;
+
+    const result = await this.db.manyOrNone(query, queryValues);
+
+    const runs = (result || []).map(row => ({
+      workflowName: row.workflow_name,
+      runId: row.run_id,
+      snapshot: row.snapshot as unknown as WorkflowRunState,
+      createdAt: row.created_at,
+      updatedAt: row.updated_at,
+    }));
+
+    // Use runs.length as total when not paginating
+    return { runs, total: total || runs.length };
+  }
+
   async close(): Promise<void> {
     this.pgp.end();
   }

@@ -298,6 +298,76 @@ export class UpstashStore extends MastraStorage {
     return data || null;
   }
 
+  async getWorkflows({
+    workflowName,
+    fromDate,
+    toDate,
+    limit,
+    offset,
+  }: {
+    workflowName?: string;
+    fromDate?: Date;
+    toDate?: Date;
+    limit?: number;
+    offset?: number;
+  } = {}): Promise<{
+    runs: Array<{
+      workflowName: string;
+      runId: string;
+      snapshot: WorkflowRunState;
+      createdAt: Date;
+      updatedAt: Date;
+    }>;
+    total: number;
+  }> {
+    // Get all workflow keys
+    const pattern = workflowName
+      ? this.getKey(MastraStorage.TABLE_WORKFLOW_SNAPSHOT, { workflow_name: workflowName }) + ':*'
+      : this.getKey(MastraStorage.TABLE_WORKFLOW_SNAPSHOT, {}) + ':*';
+
+    const keys = await this.redis.keys(pattern);
+
+    // Get all workflow data
+    const workflows = await Promise.all(
+      keys.map(async key => {
+        const data = await this.redis.get<{
+          workflow_name: string;
+          run_id: string;
+          snapshot: WorkflowRunState;
+          createdAt: string | Date;
+          updatedAt: string | Date;
+        }>(key);
+        return data;
+      }),
+    );
+
+    // Filter and transform results
+    let runs = workflows
+      .filter(w => w !== null)
+      .map(w => ({
+        workflowName: w!.workflow_name,
+        runId: w!.run_id,
+        snapshot: w!.snapshot,
+        createdAt: this.ensureDate(w!.createdAt)!,
+        updatedAt: this.ensureDate(w!.updatedAt)!,
+      }))
+      .filter(w => {
+        if (fromDate && w.createdAt < fromDate) return false;
+        if (toDate && w.createdAt > toDate) return false;
+        return true;
+      })
+      .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+
+    const total = runs.length;
+
+    // Apply pagination if requested
+    if (limit !== undefined && offset !== undefined) {
+      runs = runs.slice(offset, offset + limit);
+    }
+
+    return { runs, total };
+  }
+
   async close(): Promise<void> {
     // No explicit cleanup needed for Upstash Redis
   }

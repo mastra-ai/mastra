@@ -4,6 +4,7 @@ import type { Client, InValue } from '@libsql/client';
 
 import type { MetricResult, TestInfo } from '../../eval';
 import type { MessageType, StorageThreadType } from '../../memory/types';
+import type { WorkflowRunState } from '../../workflows';
 import { MastraStorage } from '../base';
 import { TABLE_EVALS, TABLE_MESSAGES, TABLE_THREADS, TABLE_TRACES, TABLE_WORKFLOW_SNAPSHOT } from '../constants';
 import type { TABLE_NAMES } from '../constants';
@@ -554,6 +555,76 @@ export class LibSQLStore extends MastraStorage {
       other: safelyParseJSON(row.other as string),
       createdAt: row.createdAt,
     })) as any;
+  }
+
+  async getWorkflows({
+    workflowName,
+    fromDate,
+    toDate,
+    limit,
+    offset,
+  }: {
+    workflowName?: string;
+    fromDate?: Date;
+    toDate?: Date;
+    limit?: number;
+    offset?: number;
+  } = {}): Promise<{
+    runs: Array<{
+      workflowName: string;
+      runId: string;
+      snapshot: WorkflowRunState;
+      createdAt: Date;
+      updatedAt: Date;
+    }>;
+    total: number;
+  }> {
+    const conditions: string[] = [];
+    const args: InValue[] = [];
+
+    if (workflowName) {
+      conditions.push('workflow_name = ?');
+      args.push(workflowName);
+    }
+
+    if (fromDate) {
+      conditions.push('createdAt >= ?');
+      args.push(fromDate.toISOString());
+    }
+
+    if (toDate) {
+      conditions.push('createdAt <= ?');
+      args.push(toDate.toISOString());
+    }
+
+    const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+
+    let total = 0;
+    // Only get total count when using pagination
+    if (limit !== undefined && offset !== undefined) {
+      const countResult = await this.client.execute({
+        sql: `SELECT COUNT(*) as count FROM ${TABLE_WORKFLOW_SNAPSHOT} ${whereClause}`,
+        args,
+      });
+      total = Number(countResult.rows?.[0]?.count ?? 0);
+    }
+
+    // Get results
+    const result = await this.client.execute({
+      sql: `SELECT * FROM ${TABLE_WORKFLOW_SNAPSHOT} ${whereClause} ORDER BY createdAt DESC${limit !== undefined && offset !== undefined ? ` LIMIT ? OFFSET ?` : ''}`,
+      args: limit !== undefined && offset !== undefined ? [...args, limit, offset] : args,
+    });
+
+    const runs = (result.rows || []).map(row => ({
+      workflowName: row.workflow_name as string,
+      runId: row.run_id as string,
+      snapshot: row.snapshot as unknown as WorkflowRunState,
+      createdAt: new Date(row.createdAt as string),
+      updatedAt: new Date(row.updatedAt as string),
+    }));
+
+    // Use runs.length as total when not paginating
+    return { runs, total: total || runs.length };
   }
 }
 

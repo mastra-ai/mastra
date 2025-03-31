@@ -4,7 +4,7 @@ import { describe, it, expect, beforeAll, beforeEach, afterAll } from 'vitest';
 import type { WorkflowRunState } from '../../workflows';
 
 import type { MastraStorage } from '../base';
-import { TABLE_WORKFLOW_SNAPSHOT } from '../constants';
+import { TABLE_WORKFLOW_SNAPSHOT, TABLE_EVALS, TABLE_MESSAGES, TABLE_THREADS } from '../constants';
 
 export function createTestSuite(storage: MastraStorage) {
   describe('DefaultStorage', () => {
@@ -37,6 +37,21 @@ export function createTestSuite(storage: MastraStorage) {
         createdAt: new Date(),
       }) as any;
 
+    const createSampleWorkflowSnapshot = (state: string, createdAt?: Date) => {
+      const runId = `run-${randomUUID()}`;
+      const timestamp = createdAt || new Date();
+      const snapshot = {
+        state,
+        result: { success: true },
+        value: {},
+        context: {},
+        activePaths: [],
+        runId,
+        timestamp: timestamp.toISOString(),
+      } as unknown as WorkflowRunState;
+      return { snapshot, runId };
+    };
+
     beforeAll(async () => {
       await storage.init();
     });
@@ -44,17 +59,17 @@ export function createTestSuite(storage: MastraStorage) {
     beforeEach(async () => {
       // Clear tables before each test
       await storage.clearTable({ tableName: TABLE_WORKFLOW_SNAPSHOT });
-      await storage.clearTable({ tableName: 'mastra_evals' });
-      await storage.clearTable({ tableName: 'mastra_messages' });
-      await storage.clearTable({ tableName: 'mastra_threads' });
+      await storage.clearTable({ tableName: TABLE_EVALS });
+      await storage.clearTable({ tableName: TABLE_MESSAGES });
+      await storage.clearTable({ tableName: TABLE_THREADS });
     });
 
     afterAll(async () => {
       // Clear tables after tests
       await storage.clearTable({ tableName: TABLE_WORKFLOW_SNAPSHOT });
-      await storage.clearTable({ tableName: 'mastra_evals' });
-      await storage.clearTable({ tableName: 'mastra_messages' });
-      await storage.clearTable({ tableName: 'mastra_threads' });
+      await storage.clearTable({ tableName: TABLE_EVALS });
+      await storage.clearTable({ tableName: TABLE_MESSAGES });
+      await storage.clearTable({ tableName: TABLE_THREADS });
     });
 
     describe('Thread Operations', () => {
@@ -408,6 +423,99 @@ export function createTestSuite(storage: MastraStorage) {
         });
 
         expect(loadedSnapshot).toEqual(complexSnapshot);
+      });
+    });
+    describe('getWorkflows', () => {
+      it('returns empty array when no workflows exist', async () => {
+        const { runs, total } = await storage.getWorkflows({});
+        expect(runs).toEqual([]);
+        expect(total).toBe(0);
+      });
+
+      it('returns all workflows by default', async () => {
+        const workflowName1 = 'test1';
+        const workflowName2 = 'test2';
+
+        const { snapshot: workflow1, runId: runId1 } = createSampleWorkflowSnapshot('completed');
+        const { snapshot: workflow2, runId: runId2 } = createSampleWorkflowSnapshot('completed');
+
+        await storage.persistWorkflowSnapshot({ workflowName: workflowName1, runId: runId1, snapshot: workflow1 });
+        await storage.persistWorkflowSnapshot({ workflowName: workflowName2, runId: runId2, snapshot: workflow2 });
+
+        const { runs, total } = await storage.getWorkflows({});
+        expect(runs).toHaveLength(2);
+        expect(total).toBe(2);
+        expect(runs[0]?.workflowName).toBe(workflowName2); // Most recent first
+        expect(runs[1]?.workflowName).toBe(workflowName1);
+      });
+
+      it('filters by workflow name', async () => {
+        const workflowName1 = 'test3';
+        const workflowName2 = 'test4';
+
+        const { snapshot: workflow1, runId: runId1 } = createSampleWorkflowSnapshot('completed');
+        const { snapshot: workflow2, runId: runId2 } = createSampleWorkflowSnapshot('completed');
+
+        await storage.persistWorkflowSnapshot({ workflowName: workflowName1, runId: runId1, snapshot: workflow1 });
+        await storage.persistWorkflowSnapshot({ workflowName: workflowName2, runId: runId2, snapshot: workflow2 });
+
+        const { runs, total } = await storage.getWorkflows({ workflowName: workflowName1 });
+        expect(runs).toHaveLength(1);
+        expect(total).toBe(1);
+        expect(runs[0]?.workflowName).toBe(workflowName1);
+      });
+
+      it('filters by date range', async () => {
+        const now = new Date();
+        const yesterday = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+        const twoDaysAgo = new Date(now.getTime() - 2 * 24 * 60 * 60 * 1000);
+        const workflowName1 = 'test5';
+        const workflowName2 = 'test6';
+        const workflowName3 = 'test7';
+
+        const { snapshot: workflow1, runId: runId1 } = createSampleWorkflowSnapshot('completed', twoDaysAgo);
+        const { snapshot: workflow2, runId: runId2 } = createSampleWorkflowSnapshot('completed', yesterday);
+        const { snapshot: workflow3, runId: runId3 } = createSampleWorkflowSnapshot('completed', now);
+
+        await storage.persistWorkflowSnapshot({ workflowName: workflowName1, runId: runId1, snapshot: workflow1 });
+        await storage.persistWorkflowSnapshot({ workflowName: workflowName2, runId: runId2, snapshot: workflow2 });
+        await storage.persistWorkflowSnapshot({ workflowName: workflowName3, runId: runId3, snapshot: workflow3 });
+
+        const { runs } = await storage.getWorkflows({
+          fromDate: yesterday,
+          toDate: now,
+        });
+
+        expect(runs).toHaveLength(2);
+        expect(runs[0]?.workflowName).toBe(workflowName3);
+        expect(runs[1]?.workflowName).toBe(workflowName2);
+      });
+
+      it('handles pagination', async () => {
+        const workflowName1 = 'test1';
+        const workflowName2 = 'test2';
+        const workflowName3 = 'test3';
+
+        const { snapshot: workflow1, runId: runId1 } = createSampleWorkflowSnapshot('completed');
+        const { snapshot: workflow2, runId: runId2 } = createSampleWorkflowSnapshot('completed');
+        const { snapshot: workflow3, runId: runId3 } = createSampleWorkflowSnapshot('completed');
+
+        await storage.persistWorkflowSnapshot({ workflowName: workflowName1, runId: runId1, snapshot: workflow1 });
+        await storage.persistWorkflowSnapshot({ workflowName: workflowName2, runId: runId2, snapshot: workflow2 });
+        await storage.persistWorkflowSnapshot({ workflowName: workflowName3, runId: runId3, snapshot: workflow3 });
+
+        // Get first page
+        const page1 = await storage.getWorkflows({ limit: 2, offset: 0 });
+        expect(page1.runs).toHaveLength(2);
+        expect(page1.total).toBe(3); // Total count of all records
+        expect(page1.runs[0]?.workflowName).toBe(workflowName3);
+        expect(page1.runs[1]?.workflowName).toBe(workflowName2);
+
+        // Get second page
+        const page2 = await storage.getWorkflows({ limit: 2, offset: 2 });
+        expect(page2.runs).toHaveLength(1);
+        expect(page2.total).toBe(3);
+        expect(page2.runs[0]?.workflowName).toBe(workflowName1);
       });
     });
   });

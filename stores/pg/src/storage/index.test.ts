@@ -1,4 +1,5 @@
 import { randomUUID } from 'crypto';
+import { TABLE_WORKFLOW_SNAPSHOT, TABLE_MESSAGES, TABLE_THREADS } from '@mastra/core/storage';
 import type { WorkflowRunState } from '@mastra/core/workflows';
 import { describe, it, expect, beforeAll, beforeEach, afterAll } from 'vitest';
 
@@ -33,6 +34,26 @@ const createSampleMessage = (threadId: string) =>
     createdAt: new Date(),
   }) as any;
 
+const createSampleWorkflowSnapshot = (workflowName: string, createdAt?: Date) => {
+  const runId = `run-${randomUUID()}`;
+  const timestamp = createdAt || new Date();
+  return {
+    workflow_name: workflowName,
+    run_id: runId,
+    snapshot: {
+      state: 'completed',
+      result: { success: true },
+      value: {},
+      context: {},
+      activePaths: [],
+      runId,
+      timestamp: timestamp.toISOString(),
+    } as unknown as WorkflowRunState,
+    createdAt: timestamp,
+    updatedAt: timestamp,
+  };
+};
+
 describe('PostgresStore', () => {
   let store: PostgresStore;
 
@@ -43,9 +64,9 @@ describe('PostgresStore', () => {
 
   beforeEach(async () => {
     // Clear tables before each test
-    await store.clearTable({ tableName: 'mastra_workflow_snapshot' });
-    await store.clearTable({ tableName: 'mastra_messages' });
-    await store.clearTable({ tableName: 'mastra_threads' });
+    await store.clearTable({ tableName: TABLE_WORKFLOW_SNAPSHOT });
+    await store.clearTable({ tableName: TABLE_MESSAGES });
+    await store.clearTable({ tableName: TABLE_THREADS });
   });
 
   describe('Thread Operations', () => {
@@ -362,7 +383,7 @@ describe('PostgresStore', () => {
       await store.persistWorkflowSnapshot({
         workflowName,
         runId,
-        snapshot: complexSnapshot as WorkflowRunState,
+        snapshot: complexSnapshot as unknown as WorkflowRunState,
       });
 
       const loadedSnapshot = await store.loadWorkflowSnapshot({
@@ -371,6 +392,87 @@ describe('PostgresStore', () => {
       });
 
       expect(loadedSnapshot).toEqual(complexSnapshot);
+    });
+  });
+
+  describe('getWorkflows', () => {
+    it('returns empty array when no workflows exist', async () => {
+      const { runs, total } = await store.getWorkflows({});
+      expect(runs).toEqual([]);
+      expect(total).toBe(0);
+    });
+
+    it('returns all workflows by default', async () => {
+      const workflow1 = createSampleWorkflowSnapshot('test1');
+      const workflow2 = createSampleWorkflowSnapshot('test2');
+
+      await store.insert({ tableName: TABLE_WORKFLOW_SNAPSHOT, record: workflow1 });
+      await store.insert({ tableName: TABLE_WORKFLOW_SNAPSHOT, record: workflow2 });
+
+      const { runs, total } = await store.getWorkflows({});
+      expect(runs).toHaveLength(2);
+      expect(total).toBe(2);
+      expect(runs[0]?.workflowName).toBe('test2'); // Most recent first
+      expect(runs[1]?.workflowName).toBe('test1');
+    });
+
+    it('filters by workflow name', async () => {
+      const workflow1 = createSampleWorkflowSnapshot('test1');
+      const workflow2 = createSampleWorkflowSnapshot('test2');
+
+      await store.insert({ tableName: TABLE_WORKFLOW_SNAPSHOT, record: workflow1 });
+      await store.insert({ tableName: TABLE_WORKFLOW_SNAPSHOT, record: workflow2 });
+
+      const { runs, total } = await store.getWorkflows({ workflowName: 'test1' });
+      expect(runs).toHaveLength(1);
+      expect(total).toBe(1);
+      expect(runs[0]?.workflowName).toBe('test1');
+    });
+
+    it('filters by date range', async () => {
+      const now = new Date();
+      const yesterday = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+      const twoDaysAgo = new Date(now.getTime() - 2 * 24 * 60 * 60 * 1000);
+
+      const workflow1 = createSampleWorkflowSnapshot('test1', twoDaysAgo);
+      const workflow2 = createSampleWorkflowSnapshot('test2', yesterday);
+      const workflow3 = createSampleWorkflowSnapshot('test3', now);
+
+      await store.insert({ tableName: TABLE_WORKFLOW_SNAPSHOT, record: workflow1 });
+      await store.insert({ tableName: TABLE_WORKFLOW_SNAPSHOT, record: workflow2 });
+      await store.insert({ tableName: TABLE_WORKFLOW_SNAPSHOT, record: workflow3 });
+
+      const { runs } = await store.getWorkflows({
+        fromDate: yesterday,
+        toDate: now,
+      });
+
+      expect(runs).toHaveLength(2);
+      expect(runs[0]?.workflowName).toBe('test3');
+      expect(runs[1]?.workflowName).toBe('test2');
+    });
+
+    it('handles pagination', async () => {
+      const workflow1 = createSampleWorkflowSnapshot('test1');
+      const workflow2 = createSampleWorkflowSnapshot('test2');
+      const workflow3 = createSampleWorkflowSnapshot('test3');
+
+      await store.insert({ tableName: TABLE_WORKFLOW_SNAPSHOT, record: workflow1 });
+      await store.insert({ tableName: TABLE_WORKFLOW_SNAPSHOT, record: workflow2 });
+      await store.insert({ tableName: TABLE_WORKFLOW_SNAPSHOT, record: workflow3 });
+
+      // Get first page
+      const page1 = await store.getWorkflows({ limit: 2, offset: 0 });
+      expect(page1.runs).toHaveLength(2);
+      expect(page1.total).toBe(3); // Total count of all records
+      expect(page1.runs[0]?.workflowName).toBe('test3');
+      expect(page1.runs[1]?.workflowName).toBe('test2');
+
+      // Get second page
+      const page2 = await store.getWorkflows({ limit: 2, offset: 2 });
+      expect(page2.runs).toHaveLength(1);
+      expect(page2.total).toBe(3);
+      expect(page2.runs[0]?.workflowName).toBe('test1');
     });
   });
 
