@@ -30,7 +30,8 @@ import type { MemoryConfig } from '../memory/types';
 import { InstrumentClass } from '../telemetry';
 import type { CoreTool } from '../tools/types';
 import { makeCoreTool, createMastraProxy, ensureToolProperties, ensureAllMessagesAreCoreMessages } from '../utils';
-import { CompositeVoice } from '../voice';
+import type { CompositeVoice } from '../voice';
+import { DefaultVoice } from '../voice';
 
 import type {
   AgentConfig,
@@ -114,7 +115,7 @@ export class Agent<
       this.voice?.addTools(this.tools);
       this.voice?.addInstructions(config.instructions);
     } else {
-      this.voice = new CompositeVoice({});
+      this.voice = new DefaultVoice();
     }
   }
 
