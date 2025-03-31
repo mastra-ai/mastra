@@ -557,7 +557,7 @@ export class LibSQLStore extends MastraStorage {
     })) as any;
   }
 
-  async getWorkflows({
+  async getWorkflowRuns({
     workflowName,
     fromDate,
     toDate,

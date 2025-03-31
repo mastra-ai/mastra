@@ -440,7 +440,7 @@ export function createTestSuite(storage: MastraStorage) {
         await storage.clearTable({ tableName: TABLE_WORKFLOW_SNAPSHOT });
       });
       it('returns empty array when no workflows exist', async () => {
-        const { runs, total } = await storage.__getWorkflows();
+        const { runs, total } = await storage.__getWorkflowRuns();
         expect(runs).toEqual([]);
         expect(total).toBe(0);
       });
@@ -456,7 +456,7 @@ export function createTestSuite(storage: MastraStorage) {
         await new Promise(resolve => setTimeout(resolve, 10)); // Small delay to ensure different timestamps
         await storage.persistWorkflowSnapshot({ workflowName: workflowName2, runId: runId2, snapshot: workflow2 });
 
-        const { runs, total } = await storage.__getWorkflows();
+        const { runs, total } = await storage.__getWorkflowRuns();
         expect(runs).toHaveLength(2);
         expect(total).toBe(2);
         expect(runs[0]!.workflowName).toBe(workflowName2); // Most recent first
@@ -478,7 +478,7 @@ export function createTestSuite(storage: MastraStorage) {
         await new Promise(resolve => setTimeout(resolve, 10)); // Small delay to ensure different timestamps
         await storage.persistWorkflowSnapshot({ workflowName: workflowName2, runId: runId2, snapshot: workflow2 });
 
-        const { runs, total } = await storage.__getWorkflows({ workflowName: workflowName1 });
+        const { runs, total } = await storage.__getWorkflowRuns({ workflowName: workflowName1 });
         expect(runs).toHaveLength(1);
         expect(total).toBe(1);
         expect(runs[0]!.workflowName).toBe(workflowName1);
@@ -529,7 +529,7 @@ export function createTestSuite(storage: MastraStorage) {
           },
         });
 
-        const { runs } = await storage.__getWorkflows({
+        const { runs } = await storage.__getWorkflowRuns({
           fromDate: yesterday,
           toDate: now,
         });
@@ -559,7 +559,7 @@ export function createTestSuite(storage: MastraStorage) {
         await storage.persistWorkflowSnapshot({ workflowName: workflowName3, runId: runId3, snapshot: workflow3 });
 
         // Get first page
-        const page1 = await storage.__getWorkflows({ limit: 2, offset: 0 });
+        const page1 = await storage.__getWorkflowRuns({ limit: 2, offset: 0 });
         expect(page1.runs).toHaveLength(2);
         expect(page1.total).toBe(3); // Total count of all records
         expect(page1.runs[0]!.workflowName).toBe(workflowName3);
@@ -570,7 +570,7 @@ export function createTestSuite(storage: MastraStorage) {
         expect(secondSnapshot.context?.steps[stepId2]?.status).toBe('running');
 
         // Get second page
-        const page2 = await storage.__getWorkflows({ limit: 2, offset: 2 });
+        const page2 = await storage.__getWorkflowRuns({ limit: 2, offset: 2 });
         expect(page2.runs).toHaveLength(1);
         expect(page2.total).toBe(3);
         expect(page2.runs[0]!.workflowName).toBe(workflowName1);

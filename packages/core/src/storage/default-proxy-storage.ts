@@ -122,7 +122,7 @@ export class DefaultProxyStorage extends MastraStorage {
     return this.storage!.getTraces(options);
   }
 
-  async getWorkflows(args?: {
+  async getWorkflowRuns(args?: {
     workflowName?: string;
     fromDate?: Date;
     toDate?: Date;
@@ -130,6 +130,6 @@ export class DefaultProxyStorage extends MastraStorage {
     offset?: number;
   }): Promise<WorkflowRuns> {
     await this.setupStorage();
-    return this.storage!.getWorkflows(args);
+    return this.storage!.getWorkflowRuns(args);
   }
 }

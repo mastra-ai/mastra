@@ -315,7 +315,7 @@ export class UpstashStore extends MastraStorage {
     return data.snapshot;
   }
 
-  async getWorkflows(
+  async getWorkflowRuns(
     {
       namespace,
       workflowName,

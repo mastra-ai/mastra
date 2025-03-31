@@ -586,7 +586,7 @@ export class PostgresStore extends MastraStorage {
     }
   }
 
-  async getWorkflows({
+  async getWorkflowRuns({
     workflowName,
     fromDate,
     toDate,

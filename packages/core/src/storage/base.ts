@@ -313,7 +313,7 @@ export abstract class MastraStorage extends MastraBase {
     return this.getEvalsByAgentName(agentName, type);
   }
 
-  abstract getWorkflows(args?: {
+  abstract getWorkflowRuns(args?: {
     namespace?: string;
     workflowName?: string;
     fromDate?: Date;
@@ -322,7 +322,7 @@ export abstract class MastraStorage extends MastraBase {
     offset?: number;
   }): Promise<WorkflowRuns>;
 
-  async __getWorkflows(args?: {
+  async __getWorkflowRuns(args?: {
     namespace?: string;
     workflowName?: string;
     fromDate?: Date;
@@ -333,6 +333,6 @@ export abstract class MastraStorage extends MastraBase {
     if (!this.hasInitialized) {
       await this.init();
     }
-    return this.getWorkflows(args);
+    return this.getWorkflowRuns(args);
   }
 }

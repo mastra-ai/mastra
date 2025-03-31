@@ -405,7 +405,7 @@ describe('PostgresStore', () => {
       await store.clearTable({ tableName: TABLE_WORKFLOW_SNAPSHOT });
     });
     it('returns empty array when no workflows exist', async () => {
-      const { runs, total } = await store.__getWorkflows();
+      const { runs, total } = await store.__getWorkflowRuns();
       expect(runs).toEqual([]);
       expect(total).toBe(0);
     });
@@ -421,7 +421,7 @@ describe('PostgresStore', () => {
       await new Promise(resolve => setTimeout(resolve, 10)); // Small delay to ensure different timestamps
       await store.persistWorkflowSnapshot({ workflowName: workflowName2, runId: runId2, snapshot: workflow2 });
 
-      const { runs, total } = await store.__getWorkflows();
+      const { runs, total } = await store.__getWorkflowRuns();
       expect(runs).toHaveLength(2);
       expect(total).toBe(2);
       expect(runs[0]!.workflowName).toBe(workflowName2); // Most recent first
@@ -443,7 +443,7 @@ describe('PostgresStore', () => {
       await new Promise(resolve => setTimeout(resolve, 10)); // Small delay to ensure different timestamps
       await store.persistWorkflowSnapshot({ workflowName: workflowName2, runId: runId2, snapshot: workflow2 });
 
-      const { runs, total } = await store.__getWorkflows({ workflowName: workflowName1 });
+      const { runs, total } = await store.__getWorkflowRuns({ workflowName: workflowName1 });
       expect(runs).toHaveLength(1);
       expect(total).toBe(1);
       expect(runs[0]!.workflowName).toBe(workflowName1);
@@ -494,7 +494,7 @@ describe('PostgresStore', () => {
         },
       });
 
-      const { runs } = await store.__getWorkflows({
+      const { runs } = await store.__getWorkflowRuns({
         fromDate: yesterday,
         toDate: now,
       });
@@ -524,7 +524,7 @@ describe('PostgresStore', () => {
       await store.persistWorkflowSnapshot({ workflowName: workflowName3, runId: runId3, snapshot: workflow3 });
 
       // Get first page
-      const page1 = await store.__getWorkflows({ limit: 2, offset: 0 });
+      const page1 = await store.__getWorkflowRuns({ limit: 2, offset: 0 });
       expect(page1.runs).toHaveLength(2);
       expect(page1.total).toBe(3); // Total count of all records
       expect(page1.runs[0]!.workflowName).toBe(workflowName3);
@@ -535,7 +535,7 @@ describe('PostgresStore', () => {
       expect(secondSnapshot.context?.steps[stepId2]?.status).toBe('running');
 
       // Get second page
-      const page2 = await store.__getWorkflows({ limit: 2, offset: 2 });
+      const page2 = await store.__getWorkflowRuns({ limit: 2, offset: 2 });
       expect(page2.runs).toHaveLength(1);
       expect(page2.total).toBe(3);
       expect(page2.runs[0]!.workflowName).toBe(workflowName1);
