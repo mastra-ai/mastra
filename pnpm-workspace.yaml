@@ -16,3 +16,4 @@ packages:
   - "packages/cli/src/playground"
   - "packages/*/integration-tests"
   - "!examples/crypto-chatbot"
+  - "!examples/travel-app"
