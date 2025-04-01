@@ -299,12 +299,13 @@ export function workflowToStep<
   return {
     id: workflow.name,
     workflow,
-    execute: async ({ context, suspend, emit }) => {
-      if (mastra) {
-        workflow.__registerMastra(mastra);
+    execute: async ({ context, suspend, emit, mastra: mastraFromExecute }) => {
+      const realMastra = mastraFromExecute ?? mastra;
+      if (realMastra) {
+        workflow.__registerMastra(realMastra);
         workflow.__registerPrimitives({
-          logger: mastra.getLogger(),
-          telemetry: mastra.getTelemetry(),
+          logger: realMastra.getLogger(),
+          telemetry: realMastra.getTelemetry(),
         });
       }
 
