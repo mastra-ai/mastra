@@ -29,8 +29,8 @@ For comprehensive documentation, visit our [official documentation](https://mast
 Agents are autonomous AI entities that can understand instructions, use tools, and complete tasks. They encapsulate LLM interactions and can maintain conversation history, use provided tools, and follow specific behavioral guidelines through instructions.
 
 ```typescript
-import { openai } from '@ai-sdk/openai';
 import { Agent } from '@mastra/core/agent';
+import { openai } from '@ai-sdk/openai';
 
 const agent = new Agent({
   name: 'my-agent',
@@ -40,73 +40,7 @@ const agent = new Agent({
 });
 ```
 
-[More agent documentation →](https://mastra.ai/docs/reference/agents/overview)
-
-### Embeddings (`/embeddings`)
-
-The embeddings module provides a unified interface for converting text into vector representations across multiple AI providers. These vectors are essential for semantic search, similarity comparisons, and other NLP tasks.
-
-```typescript
-import { openai } from '@ai-sdk/openai';
-import { embed } from 'ai';
-
-const embeddings = await embed({
-  model: openai.embedding('text-embedding-3-small'),
-  value: 'text to embed',
-});
-```
-
-Supported providers right now are OpenAI, Cohere, Amazon Bedrock, Google AI, Mistral, and Voyage.
-
-[More embeddings documentation →](https://mastra.ai/docs/reference/embeddings/overview)
-
-### Evaluations (`/eval`)
-
-The evaluation system enables quantitative assessment of AI outputs. Create custom metrics to measure specific aspects of AI performance, from response quality to task completion accuracy.
-
-```typescript
-import { Metric, evaluate } from '@mastra/core';
-
-class CustomMetric extends Metric {
-  async measure(input: string, output: string): Promise<MetricResult> {
-    // Your evaluation logic
-    return { score: 0.95 };
-  }
-}
-```
-
-[More evaluations documentation →](https://mastra.ai/docs/reference/eval/overview)
-
-### Memory (`/memory`)
-
-Memory management provides persistent storage and retrieval of AI interactions. It supports different storage backends and enables context-aware conversations and long-term learning.
-
-```typescript
-import { MastraMemory } from '@mastra/core';
-
-const memory = new MastraMemory({
-  // Memory configuration
-});
-```
-
-**Note:** this is the base `MastraMemory` class. This class in `@mastra/core` is intended to be extended when developing custom agent memory strategies.
-To use a premade memory strategy (recommended), with long and short term memory built in, use `import { Memory } from "@mastra/memory"` instead.
-
-[Visit the memory documentation to use Memory in your project →](https://mastra.ai/docs/reference/memory/overview)
-
-### Vector Stores (`/vector`)
-
-Vector stores provide the infrastructure for storing and querying vector embeddings. They support semantic search, similarity matching, and efficient vector operations across different backend implementations.
-
-```typescript
-import { MastraVector } from '@mastra/core';
-
-class CustomVectorStore extends MastraVector {
-  // Vector store implementation
-}
-```
-
-[More vector stores documentation →](https://mastra.ai/docs/reference/vector/overview)
+[Agent documentation →](https://mastra.ai/docs/agents/00-overview)
 
 ### Workflows (`/workflows`)
 
@@ -123,25 +57,82 @@ const workflow = new Workflow({
 });
 ```
 
-[More workflows documentation →](https://mastra.ai/docs/reference/workflows/overview)
+[Workflow documentation →](https://mastra.ai/docs/workflows/00-overview)
+
+### Memory (`/memory`)
+
+Memory management provides persistent storage and retrieval of AI interactions. It supports different storage backends and enables context-aware conversations and long-term learning.
+
+```typescript
+import { Memory } from '@mastra/memory';
+import { Agent } from '@mastra/core/agent';
+import { openai } from '@ai-sdk/openai';
+
+const agent = new Agent({
+  name: 'Project Manager',
+  instructions: 'You are a project manager assistant.',
+  model: openai('gpt-4o-mini'),
+  memory: new Memory({
+    options: {
+      lastMessages: 20,
+      semanticRecall: {
+        topK: 3,
+        messageRange: { before: 2, after: 1 },
+      },
+    },
+  }),
+});
+```
+
+[Memory documentation →](https://mastra.ai/docs/reference/memory/Memory)
 
 ### Tools (`/tools`)
 
 Tools are functions that agents can use to interact with external systems or perform specific tasks. Each tool has a clear description and schema, making it easy for AI to understand and use them effectively.
 
 ```typescript
-import { ToolAction } from '@mastra/core';
+import { createTool } from '@mastra/core/tools';
+import { z } from 'zod';
 
-const tool = new ToolAction({
-  name: 'tool-name',
-  description: 'Tool description',
-  execute: async context => {
+const weatherInfo = createTool({
+  id: 'Get Weather Information',
+  inputSchema: z.object({
+    city: z.string(),
+  }),
+  description: 'Fetches the current weather information for a given city',
+  execute: async ({ context: { city } }) => {
     // Tool implementation
   },
 });
 ```
 
-[More tools documentation →](https://mastra.ai/docs/reference/tools/overview)
+[Tools documentation →](https://mastra.ai/docs/agents/02-adding-tools)
+
+### Evals (`/eval`)
+
+The evaluation system enables quantitative assessment of AI outputs. Create custom metrics to measure specific aspects of AI performance, from response quality to task completion accuracy.
+
+```typescript
+import { Agent } from '@mastra/core/agent';
+import { openai } from '@ai-sdk/openai';
+import { SummarizationMetric } from '@mastra/evals/llm';
+import { ContentSimilarityMetric, ToneConsistencyMetric } from '@mastra/evals/nlp';
+
+const model = openai('gpt-4o');
+
+const agent = new Agent({
+  name: 'ContentWriter',
+  instructions: 'You are a content writer that creates accurate summaries',
+  model,
+  evals: {
+    summarization: new SummarizationMetric(model),
+    contentSimilarity: new ContentSimilarityMetric(),
+    tone: new ToneConsistencyMetric()
+  }
+});
+```
+
+[More evals documentation →](https://mastra.ai/docs/evals/00-overview)
 
 ### Logger (`/logger`)
 
@@ -160,13 +151,24 @@ const logger = createLogger({
 
 ### Telemetry (`/telemetry`)
 
-Telemetry provides OpenTelemetry integration for comprehensive monitoring of your AI systems. Track latency, success rates, and system health with distributed tracing and metrics collection.
+Telemetry provides OpenTelemetry (Otel) integration for comprehensive monitoring of your AI systems. Track latency, success rates, and system health with distributed tracing and metrics collection.
 
 ```typescript
-import { Telemetry } from '@mastra/core';
+import { Mastra } from '@mastra/core';
 
-const telemetry = Telemetry.init({
-  serviceName: 'my-service',
+const mastra = new Mastra({
+  telemetry: {
+    serviceName: 'my-service',
+    enabled: true,
+    sampling: {
+      type: 'ratio',
+      probability: 0.5,
+    },
+    export: {
+      type: 'otlp',
+      endpoint: 'https://otel-collector.example.com/v1/traces',
+    },
+  },
 });
 ```
 
