@@ -99,7 +99,7 @@ This is a high level overview for the new info arch for Mastra Memory documentat
        - [ ] Pair review / edits
        - [ ] Move into actual docs page
    - [ ] 5.3. Deployment options
-       - [ ] Initial draft ./new-docs/5-configuring-memory/5.3-deployment-options.md
+       - [x] Initial draft ./new-docs/5-configuring-memory/5.3-deployment-options.md
        - [ ] Pair review / edits
        - [ ] Move into actual docs page
        - [ ] Add sections for Mastra Cloud, Vercel, and Cloudflare
@@ -139,19 +139,19 @@ This is a high level overview for the new info arch for Mastra Memory documentat
    - [ ] Test code examples
 
 4. Frontend
-   - [ ] Initial draft ./new-docs/examples/frontend.md
+   - [x] Initial draft ./new-docs/examples/frontend.md
    - [ ] Pair review / edits
    - [ ] Move into actual docs page
    - [ ] Test code examples
 
 5. Auth ? (w/ JWT and thread management)
-   - [ ] Initial draft ./new-docs/examples/auth.md
+   - [x] Initial draft ./new-docs/examples/auth.md
    - [ ] Pair review / edits
    - [ ] Move into actual docs page
    - [ ] Test code examples
 
 6. DBs (Default, PG, Upstash, ?)
-   - [ ] Initial draft ./new-docs/examples/database.md
+   - [x] Initial draft ./new-docs/examples/database.md
    - [ ] Pair review / edits
    - [ ] Move into actual docs page
    - [ ] Test code examples
