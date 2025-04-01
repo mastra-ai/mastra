@@ -75,7 +75,6 @@ describe('ClickhouseStore', () => {
   describe('Thread Operations', () => {
     it('should create and retrieve a thread', async () => {
       const thread = createSampleThread();
-      console.log('Saving thread:', thread);
 
       // Save thread
       const savedThread = await store.__saveThread({ thread });
@@ -161,8 +160,6 @@ describe('ClickhouseStore', () => {
       // Retrieve messages
       const retrievedMessages = await store.__getMessages({ threadId: thread.id });
       expect(retrievedMessages).toHaveLength(2);
-      console.log('Messages:', messages);
-      console.log('Retrieved messages:', retrievedMessages);
       expect(retrievedMessages).toEqual(expect.arrayContaining(messages));
     }, 10e3);
 
@@ -588,7 +585,7 @@ describe('ClickhouseStore', () => {
       expect(page2.runs[0]!.workflowName).toBe(workflowName1);
       const snapshot = page2.runs[0]!.snapshot as WorkflowRunState;
       expect(snapshot.context?.steps[stepId1]?.status).toBe('completed');
-    });
+    }, 10e3);
   });
 
   afterAll(async () => {

@@ -763,54 +763,45 @@ export class ClickhouseStore extends MastraStorage {
       let total = 0;
       // Only get total count when using pagination
       if (limit !== undefined && offset !== undefined) {
-        try {
-          const countResult = await Promise.race([
-            this.db.query({
-              query: `SELECT COUNT(*) as count FROM ${TABLE_WORKFLOW_SNAPSHOT} ${TABLE_ENGINES[TABLE_WORKFLOW_SNAPSHOT].startsWith('ReplacingMergeTree') ? 'FINAL' : ''} ${whereClause}`,
-              query_params: values,
-              format: 'JSONEachRow',
-            }),
-            new Promise((_, reject) => setTimeout(() => reject(new Error('Count query timeout')), 3000)),
-          ]);
-          const countRows = await countResult.json();
-          total = (countRows as Array<{ count: number }>)[0]?.count ?? 0;
-        } catch (error) {
-          console.warn('Error getting count:', error);
-          total = 0; // Default to 0 if count query fails
-        }
+        const countResult = await this.db.query({
+          query: `SELECT COUNT(*) as count FROM ${TABLE_WORKFLOW_SNAPSHOT} ${TABLE_ENGINES[TABLE_WORKFLOW_SNAPSHOT].startsWith('ReplacingMergeTree') ? 'FINAL' : ''} ${whereClause}`,
+          query_params: values,
+          format: 'JSONEachRow',
+        });
+        const countRows = await countResult.json();
+        total = Number((countRows as Array<{ count: string | number }>)[0]?.count ?? 0);
       }
 
       // Get results
-      const result = await Promise.race([
-        this.db.query({
-          query: `
-            SELECT 
-              workflow_name,
-              run_id,
-              snapshot,
-              toDateTime64(createdAt, 3) as createdAt,
-              toDateTime64(updatedAt, 3) as updatedAt
-            FROM ${TABLE_WORKFLOW_SNAPSHOT} ${TABLE_ENGINES[TABLE_WORKFLOW_SNAPSHOT].startsWith('ReplacingMergeTree') ? 'FINAL' : ''}
-            ${whereClause}
-            ORDER BY createdAt DESC
-            ${limitClause}
-            ${offsetClause}
-          `,
-          query_params: values,
-          format: 'JSONEachRow',
-        }),
-        new Promise((_, reject) => setTimeout(() => reject(new Error('Query timeout')), 4000)),
-      ]);
+      const result = await this.db.query({
+        query: `
+          SELECT 
+            workflow_name,
+            run_id,
+            snapshot,
+            toDateTime64(createdAt, 3) as createdAt,
+            toDateTime64(updatedAt, 3) as updatedAt
+          FROM ${TABLE_WORKFLOW_SNAPSHOT} ${TABLE_ENGINES[TABLE_WORKFLOW_SNAPSHOT].startsWith('ReplacingMergeTree') ? 'FINAL' : ''}
+          ${whereClause}
+          ORDER BY createdAt DESC
+          ${limitClause}
+          ${offsetClause}
+        `,
+        query_params: values,
+        format: 'JSONEachRow',
+      });
 
       const resultJson = await result.json();
-      const rows = resultJson as WorkflowRow[];
+      const rows = resultJson as any[];
       const runs = rows.map(row => {
         let parsedSnapshot: WorkflowRunState | string = row.snapshot;
-        try {
-          parsedSnapshot = JSON.parse(row.snapshot) as WorkflowRunState;
-        } catch (e) {
-          // If parsing fails, return the raw snapshot string
-          console.warn(`Failed to parse snapshot for workflow ${row.workflow_name}: ${e}`);
+        if (typeof parsedSnapshot === 'string') {
+          try {
+            parsedSnapshot = JSON.parse(row.snapshot) as WorkflowRunState;
+          } catch (e) {
+            // If parsing fails, return the raw snapshot string
+            console.warn(`Failed to parse snapshot for workflow ${row.workflow_name}: ${e}`);
+          }
         }
 
         return {

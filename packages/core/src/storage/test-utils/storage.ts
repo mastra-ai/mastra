@@ -435,7 +435,7 @@ export function createTestSuite(storage: MastraStorage) {
         expect(loadedSnapshot).toEqual(complexSnapshot);
       });
     });
-    describe('getWorkflows', () => {
+    describe('getWorkflowRuns', () => {
       beforeEach(async () => {
         await storage.clearTable({ tableName: TABLE_WORKFLOW_SNAPSHOT });
       });

@@ -367,11 +367,13 @@ export class UpstashStore extends MastraStorage {
       .filter(w => w !== null)
       .map(w => {
         let parsedSnapshot: WorkflowRunState | string = w!.snapshot as string;
-        try {
-          parsedSnapshot = JSON.parse(w!.snapshot as string) as WorkflowRunState;
-        } catch (e) {
-          // If parsing fails, return the raw snapshot string
-          console.warn(`Failed to parse snapshot for workflow ${w!.workflow_name}: ${e}`);
+        if (typeof parsedSnapshot === 'string') {
+          try {
+            parsedSnapshot = JSON.parse(w!.snapshot as string) as WorkflowRunState;
+          } catch (e) {
+            // If parsing fails, return the raw snapshot string
+            console.warn(`Failed to parse snapshot for workflow ${w!.workflow_name}: ${e}`);
+          }
         }
         return {
           workflowName: w!.workflow_name,

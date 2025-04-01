@@ -617,11 +617,13 @@ export class LibSQLStore extends MastraStorage {
 
     const runs = (result.rows || []).map(row => {
       let parsedSnapshot: WorkflowRunState | string = row.snapshot as string;
-      try {
-        parsedSnapshot = JSON.parse(row.snapshot as string) as WorkflowRunState;
-      } catch (e) {
-        // If parsing fails, return the raw snapshot string
-        console.warn(`Failed to parse snapshot for workflow ${row.workflow_name}: ${e}`);
+      if (typeof parsedSnapshot === 'string') {
+        try {
+          parsedSnapshot = JSON.parse(row.snapshot as string) as WorkflowRunState;
+        } catch (e) {
+          // If parsing fails, return the raw snapshot string
+          console.warn(`Failed to parse snapshot for workflow ${row.workflow_name}: ${e}`);
+        }
       }
 
       return {

@@ -77,7 +77,6 @@ describe('PostgresStore', () => {
   describe('Thread Operations', () => {
     it('should create and retrieve a thread', async () => {
       const thread = createSampleThread();
-      console.log('Saving thread:', thread);
 
       // Save thread
       const savedThread = await store.__saveThread({ thread });
@@ -107,7 +106,6 @@ describe('PostgresStore', () => {
 
     it('should update thread title and metadata', async () => {
       const thread = createSampleThread();
-      console.log('Saving thread:', thread);
       await store.__saveThread({ thread });
 
       const newMetadata = { newKey: 'newValue' };
