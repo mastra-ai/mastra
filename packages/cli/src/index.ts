@@ -1,7 +1,9 @@
 #! /usr/bin/env node
 import { Command } from 'commander';
 
-import { PosthogAnalytics, type CLI_ORIGIN } from './analytics/index';
+import { config } from 'dotenv';
+import { PosthogAnalytics } from './analytics/index';
+import type { CLI_ORIGIN } from './analytics/index';
 import { build } from './commands/build/build';
 import { create } from './commands/create/create';
 import { deploy } from './commands/deploy/index';
@@ -10,7 +12,6 @@ import { init } from './commands/init/init';
 import { checkAndInstallCoreDeps, checkPkgJson, interactivePrompt } from './commands/init/utils';
 import { DepsService } from './services/service.deps';
 import { logger } from './utils/logger';
-import { config } from 'dotenv';
 
 const depsService = new DepsService();
 const version = await depsService.getPackageVersion();
