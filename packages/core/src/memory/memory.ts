@@ -230,7 +230,7 @@ export abstract class MastraMemory extends MastraBase {
       if (typeof content === 'string' && (content.startsWith('[') || content.startsWith('{'))) {
         try {
           content = JSON.parse(content);
-        } catch (e) {
+        } catch {
           // Keep the original string if it's not valid JSON
         }
       } else if (typeof content === 'number') {
