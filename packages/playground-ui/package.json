@@ -56,7 +56,7 @@
     "@radix-ui/react-tooltip": "^1.1.8",
     "@tanstack/react-table": "^8.21.2",
     "@types/react-syntax-highlighter": "^15.5.13",
-    "@uiw/codemirror-theme-github": "^4.23.8",
+    "@uiw/codemirror-theme-github": "^4.23.10",
     "@uiw/react-codemirror": "^4.23.8",
     "@xyflow/react": "^12.3.6",
     "cmdk": "^1.0.0",
