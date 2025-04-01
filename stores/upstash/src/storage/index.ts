@@ -1,5 +1,5 @@
 import type { StorageThreadType, MessageType } from '@mastra/core/memory';
-import { MastraStorage } from '@mastra/core/storage';
+import { MastraStorage, TABLE_MESSAGES, TABLE_THREADS, TABLE_WORKFLOW_SNAPSHOT } from '@mastra/core/storage';
 import type { TABLE_NAMES, StorageColumn, StorageGetMessagesArg, EvalRow } from '@mastra/core/storage';
 import type { WorkflowRunState } from '@mastra/core/workflows';
 import { Redis } from '@upstash/redis';
@@ -76,9 +76,15 @@ export class UpstashStore extends MastraStorage {
   async insert({ tableName, record }: { tableName: TABLE_NAMES; record: Record<string, any> }): Promise<void> {
     let key: string;
 
-    if (tableName === MastraStorage.TABLE_MESSAGES) {
+    if (tableName === TABLE_MESSAGES) {
       // For messages, use threadId as the primary key component
       key = this.getKey(tableName, { threadId: record.threadId, id: record.id });
+    } else if (tableName === TABLE_WORKFLOW_SNAPSHOT) {
+      key = this.getKey(tableName, {
+        namespace: record.namespace || 'workflows',
+        workflow_name: record.workflow_name,
+        run_id: record.run_id,
+      });
     } else {
       key = this.getKey(tableName, { id: record.id });
     }
@@ -101,7 +107,7 @@ export class UpstashStore extends MastraStorage {
 
   async getThreadById({ threadId }: { threadId: string }): Promise<StorageThreadType | null> {
     const thread = await this.load<StorageThreadType>({
-      tableName: MastraStorage.TABLE_THREADS,
+      tableName: TABLE_THREADS,
       keys: { id: threadId },
     });
 
@@ -116,7 +122,7 @@ export class UpstashStore extends MastraStorage {
   }
 
   async getThreadsByResourceId({ resourceId }: { resourceId: string }): Promise<StorageThreadType[]> {
-    const pattern = `${MastraStorage.TABLE_THREADS}:*`;
+    const pattern = `${TABLE_THREADS}:*`;
     const keys = await this.redis.keys(pattern);
     const threads = await Promise.all(
       keys.map(async key => {
@@ -137,7 +143,7 @@ export class UpstashStore extends MastraStorage {
 
   async saveThread({ thread }: { thread: StorageThreadType }): Promise<StorageThreadType> {
     await this.insert({
-      tableName: MastraStorage.TABLE_THREADS,
+      tableName: TABLE_THREADS,
       record: thread,
     });
     return thread;
@@ -171,12 +177,12 @@ export class UpstashStore extends MastraStorage {
   }
 
   async deleteThread({ threadId }: { threadId: string }): Promise<void> {
-    const key = this.getKey(MastraStorage.TABLE_THREADS, { id: threadId });
+    const key = this.getKey(TABLE_THREADS, { id: threadId });
     await this.redis.del(key);
   }
 
   private getMessageKey(threadId: string, messageId: string): string {
-    return this.getKey(MastraStorage.TABLE_MESSAGES, { threadId, id: messageId });
+    return this.getKey(TABLE_MESSAGES, { threadId, id: messageId });
   }
 
   private getThreadMessagesKey(threadId: string): string {
@@ -275,12 +281,17 @@ export class UpstashStore extends MastraStorage {
     snapshot: WorkflowRunState;
   }): Promise<void> {
     const { namespace = 'workflows', workflowName, runId, snapshot } = params;
-    const key = this.getKey(MastraStorage.TABLE_WORKFLOW_SNAPSHOT, {
-      namespace,
-      workflow_name: workflowName,
-      run_id: runId,
+    await this.insert({
+      tableName: TABLE_WORKFLOW_SNAPSHOT,
+      record: {
+        namespace,
+        workflow_name: workflowName,
+        run_id: runId,
+        snapshot,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      },
     });
-    await this.redis.set(key, snapshot); // Store snapshot directly without wrapping
   }
 
   async loadWorkflowSnapshot(params: {
@@ -289,13 +300,104 @@ export class UpstashStore extends MastraStorage {
     runId: string;
   }): Promise<WorkflowRunState | null> {
     const { namespace = 'workflows', workflowName, runId } = params;
-    const key = this.getKey(MastraStorage.TABLE_WORKFLOW_SNAPSHOT, {
+    const key = this.getKey(TABLE_WORKFLOW_SNAPSHOT, {
       namespace,
       workflow_name: workflowName,
       run_id: runId,
     });
-    const data = await this.redis.get<WorkflowRunState>(key);
-    return data || null;
+    const data = await this.redis.get<{
+      namespace: string;
+      workflow_name: string;
+      run_id: string;
+      snapshot: WorkflowRunState;
+    }>(key);
+    if (!data) return null;
+    return data.snapshot;
+  }
+
+  async getWorkflowRuns(
+    {
+      namespace,
+      workflowName,
+      fromDate,
+      toDate,
+      limit,
+      offset,
+    }: {
+      namespace: string;
+      workflowName?: string;
+      fromDate?: Date;
+      toDate?: Date;
+      limit?: number;
+      offset?: number;
+    } = { namespace: 'workflows' },
+  ): Promise<{
+    runs: Array<{
+      workflowName: string;
+      runId: string;
+      snapshot: WorkflowRunState | string;
+      createdAt: Date;
+      updatedAt: Date;
+    }>;
+    total: number;
+  }> {
+    // Get all workflow keys
+    const pattern = workflowName
+      ? this.getKey(TABLE_WORKFLOW_SNAPSHOT, { namespace, workflow_name: workflowName }) + ':*'
+      : this.getKey(TABLE_WORKFLOW_SNAPSHOT, { namespace }) + ':*';
+
+    const keys = await this.redis.keys(pattern);
+
+    // Get all workflow data
+    const workflows = await Promise.all(
+      keys.map(async key => {
+        const data = await this.redis.get<{
+          workflow_name: string;
+          run_id: string;
+          snapshot: WorkflowRunState | string;
+          createdAt: string | Date;
+          updatedAt: string | Date;
+        }>(key);
+        return data;
+      }),
+    );
+
+    // Filter and transform results
+    let runs = workflows
+      .filter(w => w !== null)
+      .map(w => {
+        let parsedSnapshot: WorkflowRunState | string = w!.snapshot as string;
+        if (typeof parsedSnapshot === 'string') {
+          try {
+            parsedSnapshot = JSON.parse(w!.snapshot as string) as WorkflowRunState;
+          } catch (e) {
+            // If parsing fails, return the raw snapshot string
+            console.warn(`Failed to parse snapshot for workflow ${w!.workflow_name}: ${e}`);
+          }
+        }
+        return {
+          workflowName: w!.workflow_name,
+          runId: w!.run_id,
+          snapshot: parsedSnapshot,
+          createdAt: this.ensureDate(w!.createdAt)!,
+          updatedAt: this.ensureDate(w!.updatedAt)!,
+        };
+      })
+      .filter(w => {
+        if (fromDate && w.createdAt < fromDate) return false;
+        if (toDate && w.createdAt > toDate) return false;
+        return true;
+      })
+      .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+
+    const total = runs.length;
+
+    // Apply pagination if requested
+    if (limit !== undefined && offset !== undefined) {
+      runs = runs.slice(offset, offset + limit);
+    }
+
+    return { runs, total };
   }
 
   async close(): Promise<void> {

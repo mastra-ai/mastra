@@ -12,6 +12,7 @@ import {
   watchWorkflowHandler,
   resumeAsyncWorkflowHandler,
   resumeWorkflowHandler,
+  getWorkflowRunsHandler,
 } from './workflows';
 
 function createMockWorkflow(name: string) {
@@ -20,12 +21,15 @@ function createMockWorkflow(name: string) {
     execute: vi.fn(),
   });
 
-  return new Workflow({
+  const workflow = new Workflow({
     name,
     steps: [stepA],
   })
     .step(stepA)
     .commit();
+
+  workflow.getWorkflowRuns = vi.fn();
+  return workflow;
 }
 function createReusableMockWorkflow(name: string) {
   const stepA = new Step({
@@ -415,6 +419,65 @@ describe('Workflow Handlers', () => {
       });
 
       expect(result).toEqual({ message: 'Workflow run resumed' });
+    });
+  });
+
+  describe('getWorkflowRunsHandler', () => {
+    it('should throw error when workflowId is not provided', async () => {
+      await expect(getWorkflowRunsHandler({ mastra: mockMastra })).rejects.toThrow(
+        new HTTPException(400, { message: 'Workflow ID is required' }),
+      );
+    });
+
+    it('should get workflow runs successfully (empty)', async () => {
+      // Mock the workflow's getWorkflowRuns to return empty result
+      mockWorkflow.getWorkflowRuns.mockResolvedValue({
+        runs: [],
+        total: 0,
+      });
+
+      const result = await getWorkflowRunsHandler({
+        mastra: mockMastra,
+        workflowId: 'test-workflow',
+      });
+
+      expect(result).toEqual({
+        runs: [],
+        total: 0,
+      });
+      expect(mockWorkflow.getWorkflowRuns).toHaveBeenCalled();
+    });
+
+    it('should get workflow runs with data', async () => {
+      const mockRuns = {
+        runs: [
+          {
+            runId: 'test-run-1',
+            status: 'completed',
+          },
+        ],
+        total: 1,
+      };
+      mockWorkflow.getWorkflowRuns.mockResolvedValue(mockRuns);
+
+      const result = await getWorkflowRunsHandler({
+        mastra: mockMastra,
+        workflowId: 'test-workflow',
+      });
+
+      expect(result).toEqual(mockRuns);
+      expect(mockWorkflow.getWorkflowRuns).toHaveBeenCalled();
+    });
+
+    it('should handle errors from workflow', async () => {
+      mockWorkflow.getWorkflowRuns.mockRejectedValue(new Error('Workflow error'));
+
+      await expect(
+        getWorkflowRunsHandler({
+          mastra: mockMastra,
+          workflowId: 'test-workflow',
+        }),
+      ).rejects.toThrow(new HTTPException(500, { message: 'Workflow error' }));
     });
   });
 });

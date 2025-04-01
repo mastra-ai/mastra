@@ -11,7 +11,7 @@ import {
   TABLE_SCHEMAS,
 } from './constants';
 import type { TABLE_NAMES } from './constants';
-import type { EvalRow, StorageColumn, StorageGetMessagesArg } from './types';
+import type { EvalRow, StorageColumn, StorageGetMessagesArg, WorkflowRuns } from './types';
 
 export abstract class MastraStorage extends MastraBase {
   /** @deprecated import from { TABLE_WORKFLOW_SNAPSHOT } '@mastra/core/storage' instead */
@@ -241,5 +241,28 @@ export abstract class MastraStorage extends MastraBase {
   async __getEvalsByAgentName(agentName: string, type?: 'test' | 'live'): Promise<EvalRow[]> {
     await this.init();
     return this.getEvalsByAgentName(agentName, type);
+  }
+
+  abstract getWorkflowRuns(args?: {
+    namespace?: string;
+    workflowName?: string;
+    fromDate?: Date;
+    toDate?: Date;
+    limit?: number;
+    offset?: number;
+  }): Promise<WorkflowRuns>;
+
+  async __getWorkflowRuns(args?: {
+    namespace?: string;
+    workflowName?: string;
+    fromDate?: Date;
+    toDate?: Date;
+    limit?: number;
+    offset?: number;
+  }): Promise<WorkflowRuns> {
+    if (!this.hasInitialized) {
+      await this.init();
+    }
+    return this.getWorkflowRuns(args);
   }
 }
