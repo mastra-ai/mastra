@@ -26,30 +26,45 @@ describe('createTool', () => {
     },
   });
 
+  const toolExecutionOptions = {
+    toolCallId: 'test-tool',
+    messages: [],
+  };
+
   it('should call mockFindUser', async () => {
-    await testTool.execute?.({
-      context: { name: 'Dero Israel' },
-      dependencies: {},
-    });
+    await testTool.execute?.(
+      {
+        context: { name: 'Dero Israel' },
+        dependencies: {},
+      },
+      toolExecutionOptions,
+    );
 
     expect(mockFindUser).toHaveBeenCalledTimes(1);
     expect(mockFindUser).toHaveBeenCalledWith('Dero Israel');
   });
 
   it("should return an object containing 'Dero Israel' as name and 'dero@mail.com' as email", async () => {
-    const user = await testTool.execute?.({
-      context: { name: 'Dero Israel' },
-      dependencies: {},
-    });
+    const user = await testTool.execute?.(
+      {
+        context: { name: 'Dero Israel' },
+        dependencies: {},
+      },
+      toolExecutionOptions,
+    );
 
     expect(user).toStrictEqual({ name: 'Dero Israel', email: 'dero@mail.com' });
   });
 
   it("should return an object containing 'User not found' message", async () => {
-    const user = await testTool.execute?.({
-      context: { name: 'Taofeeq Oluderu' },
-      dependencies: {},
-    });
+    const user = await testTool.execute?.(
+      {
+        context: { name: 'Taofeeq Oluderu' },
+        dependencies: {},
+      },
+      toolExecutionOptions,
+    );
+
     expect(user).toStrictEqual({ message: 'User not found' });
   });
 });
