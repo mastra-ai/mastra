@@ -112,7 +112,10 @@ export async function generateHandler({
   body,
 }: Context & {
   agentId: string;
-  body: GetBody<'generate'>;
+  body: GetBody<'generate'> & {
+    // @deprecated use resourceId
+    resourceid?: string;
+  };
 }) {
   try {
     const agent = mastra.getAgent(agentId);
@@ -121,11 +124,16 @@ export async function generateHandler({
       throw new HTTPException(404, { message: 'Agent not found' });
     }
 
-    const { messages, ...rest } = body;
+    const { messages, resourceId, resourceid, ...rest } = body;
+    // Use resourceId if provided, fall back to resourceid (deprecated)
+    const finalResourceId = resourceId ?? resourceid;
     validateBody({ messages });
 
-    // @ts-expect-error TODO fix types
-    const result = await agent.generate(messages, rest);
+    const result = await agent.generate(messages, {
+      ...rest,
+      // @ts-expect-error TODO fix types
+      resourceId: finalResourceId,
+    });
 
     return result;
   } catch (error) {
@@ -137,7 +145,13 @@ export async function streamGenerateHandler({
   mastra,
   agentId,
   body,
-}: Context & { agentId: string; body: GetBody<'stream'> }): Promise<Response | undefined> {
+}: Context & {
+  agentId: string;
+  body: GetBody<'stream'> & {
+    // @deprecated use resourceId
+    resourceid?: string;
+  };
+}): Promise<Response | undefined> {
   try {
     const agent = mastra.getAgent(agentId);
 
@@ -145,13 +159,18 @@ export async function streamGenerateHandler({
       throw new HTTPException(404, { message: 'Agent not found' });
     }
 
-    const { messages, output, ...rest } = body;
+    const { messages, resourceId, resourceid, ...rest } = body;
+    // Use resourceId if provided, fall back to resourceid (deprecated)
+    const finalResourceId = resourceId ?? resourceid;
     validateBody({ messages });
 
-    // @ts-expect-error TODO fix types
-    const streamResult = await agent.stream(messages, { output, ...rest });
+    const streamResult = await agent.stream(messages, {
+      ...rest,
+      // @ts-expect-error TODO fix types
+      resourceId: finalResourceId,
+    });
 
-    const streamResponse = output
+    const streamResponse = rest.output
       ? streamResult.toTextStreamResponse()
       : streamResult.toDataStreamResponse({
           sendUsage: true,

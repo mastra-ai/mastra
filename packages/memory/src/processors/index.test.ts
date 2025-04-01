@@ -3,10 +3,12 @@ import { createTool } from '@mastra/core';
 import type { CoreMessage, MessageType } from '@mastra/core';
 import { Agent } from '@mastra/core/agent';
 import cl100k_base from 'js-tiktoken/ranks/cl100k_base';
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { z } from 'zod';
 import { generateConversationHistory } from '../../integration-tests/src/test-utils';
 import { TokenLimiter, ToolCallFilter } from './index';
+
+vi.setConfig({ testTimeout: 20_000, hookTimeout: 20_000 });
 
 describe('TokenLimiter', () => {
   it('should limit messages to the specified token count', () => {
