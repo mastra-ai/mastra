@@ -66,14 +66,14 @@ export class PostgresStore extends MastraStorage {
     page,
     perPage,
     attributes,
-    columnFilters,
+    filters,
   }: {
     name?: string;
     scope?: string;
     page: number;
     perPage: number;
     attributes?: Record<string, string>;
-    columnFilters?: Record<string, any>;
+    filters?: Record<string, any>;
   }): Promise<any[]> {
     let idx = 1;
     const limit = perPage;
@@ -94,8 +94,8 @@ export class PostgresStore extends MastraStorage {
       });
     }
 
-    if (columnFilters) {
-      Object.entries(columnFilters).forEach(([key, value]) => {
+    if (filters) {
+      Object.entries(filters).forEach(([key, value]) => {
         conditions.push(`${key} = \$${idx++}`);
       });
     }
@@ -116,8 +116,8 @@ export class PostgresStore extends MastraStorage {
       }
     }
 
-    if (columnFilters) {
-      for (const [key, value] of Object.entries(columnFilters)) {
+    if (filters) {
+      for (const [key, value] of Object.entries(filters)) {
         args.push(value);
       }
     }

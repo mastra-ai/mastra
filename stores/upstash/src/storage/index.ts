@@ -22,7 +22,7 @@ export class UpstashStore extends MastraStorage {
     page: number;
     perPage: number;
     attributes?: Record<string, string>;
-    columnFilters?: Record<string, any>;
+    filters?: Record<string, any>;
   }): Promise<any[]> {
     throw new Error('Method not implemented.');
   }
