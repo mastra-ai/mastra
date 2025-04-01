@@ -1,5 +1,5 @@
 import type { Mastra } from '@mastra/core';
-import type { MastraVector, QueryResult, IndexStats } from '@mastra/core/vector';
+import type { MastraVector, QueryResult } from '@mastra/core/vector';
 import {
   upsertVectors as getOriginalUpsertVectorsHandler,
   createIndex as getOriginalCreateIndexHandler,

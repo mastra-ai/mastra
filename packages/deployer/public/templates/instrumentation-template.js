@@ -1,6 +1,3 @@
-import { createLogger } from '@mastra/core/logger';
-import { LibSQLStore } from '@mastra/core/storage/libsql';
-import { OTLPStorageExporter } from '@mastra/core/telemetry';
 import {
   NodeSDK,
   getNodeAutoInstrumentations,
@@ -41,11 +38,11 @@ function getSampler(config) {
 
 async function getExporter(config) {
   if (config.export?.type === 'otlp') {
-    if(config.export?.protocol === "grpc") {
+    if (config.export?.protocol === 'grpc') {
       return new OTLPGrpcExporter({
         url: config.export.endpoint,
         headers: config.export.headers,
-      })
+      });
     }
     return new OTLPHttpExporter({
       url: config.export.endpoint,
@@ -80,4 +77,3 @@ process.on('SIGTERM', () => {
     // do nothing
   });
 });
-

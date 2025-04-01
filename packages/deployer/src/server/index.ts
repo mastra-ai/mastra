@@ -138,7 +138,7 @@ export async function createHonoServer(
         'http.request_id': requestId,
       });
 
-      await new Promise((resolve, reject) => {
+      await new Promise(resolve => {
         Telemetry.withContext(newCtx, async () => {
           await next();
           resolve(true);

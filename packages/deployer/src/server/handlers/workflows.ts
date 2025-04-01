@@ -11,7 +11,7 @@ import {
 } from '@mastra/server/handlers/workflows';
 import type { Context } from 'hono';
 import { HTTPException } from 'hono/http-exception';
-import { stream, streamText } from 'hono/streaming';
+import { stream } from 'hono/streaming';
 
 import { handleError } from './error';
 
