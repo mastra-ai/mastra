@@ -88,29 +88,29 @@ export class MastraLLMBase extends MastraBase {
 
   async __text<
     Z extends ZodSchema | JSONSchema7 | undefined,
-    TSchemaDeps extends ZodSchema | undefined = undefined,
-    TTools extends ToolsInput<TSchemaDeps> | undefined = undefined,
-  >(input: LLMTextOptions<Z, TSchemaDeps, TTools>): Promise<GenerateTextResult<any, any>> {
+    TSchemaVariables extends ZodSchema | undefined = undefined,
+    TTools extends ToolsInput<TSchemaVariables> | undefined = undefined,
+  >(input: LLMTextOptions<Z, TSchemaVariables, TTools>): Promise<GenerateTextResult<any, any>> {
     this.logger.debug(`[LLMs:${this.name}] Generating text.`, { input });
     throw new Error('Method not implemented.');
   }
 
   async __textObject<
     T extends ZodSchema | JSONSchema7 | undefined,
-    TSchemaDeps extends ZodSchema | undefined = undefined,
-    TTools extends ToolsInput<TSchemaDeps> | undefined = undefined,
-  >(input: LLMTextObjectOptions<T, TSchemaDeps, TTools>): Promise<GenerateObjectResult<T>> {
+    TSchemaVariables extends ZodSchema | undefined = undefined,
+    TTools extends ToolsInput<TSchemaVariables> | undefined = undefined,
+  >(input: LLMTextObjectOptions<T, TSchemaVariables, TTools>): Promise<GenerateObjectResult<T>> {
     this.logger.debug(`[LLMs:${this.name}] Generating object.`, { input });
     throw new Error('Method not implemented.');
   }
 
   async generate<
     Z extends ZodSchema | JSONSchema7 | undefined = undefined,
-    TSchemaDeps extends ZodSchema | undefined = undefined,
-    TTools extends ToolsInput<TSchemaDeps> | undefined = undefined,
+    TSchemaVariables extends ZodSchema | undefined = undefined,
+    TTools extends ToolsInput<TSchemaVariables> | undefined = undefined,
   >(
     messages: string | string[] | CoreMessage[],
-    options: LLMStreamOptions<Z, TSchemaDeps, TTools> = {},
+    options: LLMStreamOptions<Z, TSchemaVariables, TTools> = {},
   ): Promise<GenerateReturn<Z>> {
     this.logger.debug(`[LLMs:${this.name}] Generating text.`, { messages, options });
     throw new Error('Method not implemented.');
@@ -118,29 +118,29 @@ export class MastraLLMBase extends MastraBase {
 
   async __stream<
     Z extends ZodSchema | JSONSchema7 | undefined = undefined,
-    TSchemaDeps extends ZodSchema | undefined = undefined,
-    TTools extends ToolsInput<TSchemaDeps> | undefined = undefined,
-  >(input: LLMInnerStreamOptions<Z, TSchemaDeps, TTools>): Promise<StreamTextResult<any, any>> {
+    TSchemaVariables extends ZodSchema | undefined = undefined,
+    TTools extends ToolsInput<TSchemaVariables> | undefined = undefined,
+  >(input: LLMInnerStreamOptions<Z, TSchemaVariables, TTools>): Promise<StreamTextResult<any, any>> {
     this.logger.debug(`[LLMs:${this.name}] Streaming text.`, { input });
     throw new Error('Method not implemented.');
   }
 
   async __streamObject<
     T extends ZodSchema | JSONSchema7 | undefined,
-    TSchemaDeps extends ZodSchema | undefined = undefined,
-    TTools extends ToolsInput<TSchemaDeps> | undefined = undefined,
-  >(input: LLMStreamObjectOptions<T, TSchemaDeps, TTools>): Promise<StreamObjectResult<DeepPartial<T>, T, never>> {
+    TSchemaVariables extends ZodSchema | undefined = undefined,
+    TTools extends ToolsInput<TSchemaVariables> | undefined = undefined,
+  >(input: LLMStreamObjectOptions<T, TSchemaVariables, TTools>): Promise<StreamObjectResult<DeepPartial<T>, T, never>> {
     this.logger.debug(`[LLMs:${this.name}] Streaming object.`, { input });
     throw new Error('Method not implemented.');
   }
 
   async stream<
     Z extends ZodSchema | JSONSchema7 | undefined = undefined,
-    TSchemaDeps extends ZodSchema | undefined = undefined,
-    TTools extends ToolsInput<TSchemaDeps> | undefined = undefined,
+    TSchemaVariables extends ZodSchema | undefined = undefined,
+    TTools extends ToolsInput<TSchemaVariables> | undefined = undefined,
   >(
     messages: string | string[] | CoreMessage[],
-    options: LLMStreamOptions<Z, TSchemaDeps, TTools> = {},
+    options: LLMStreamOptions<Z, TSchemaVariables, TTools> = {},
   ): Promise<StreamReturn<Z>> {
     this.logger.debug(`[LLMs:${this.name}] Streaming text.`, { messages, options });
     throw new Error('Method not implemented.');

@@ -4,7 +4,7 @@ import type { ZodSchema, z } from 'zod';
 import type { IAction, IExecutionContext, MastraUnion } from '../action';
 import type { Mastra } from '../mastra';
 import type { MastraMemory } from '../memory';
-import type { DependenciesType, InferZodType } from '../utils';
+import type { InferZodType, VariablesType } from '../utils';
 
 export type VercelTool = Tool;
 
@@ -27,9 +27,9 @@ export type CoreTool = {
 
 export interface ToolExecutionContext<
   TSchemaIn extends z.ZodSchema | undefined = undefined,
-  TSchemaDeps extends z.ZodSchema | undefined = undefined,
+  TSchemaVariables extends z.ZodSchema | undefined = undefined,
 > extends IExecutionContext<TSchemaIn> {
-  dependencies: DependenciesType<TSchemaDeps>;
+  variables: VariablesType<TSchemaVariables>;
   memory?: MastraMemory;
   mastra?: MastraUnion;
 }
@@ -37,22 +37,30 @@ export interface ToolExecutionContext<
 export interface ToolAction<
   TSchemaIn extends z.ZodSchema | undefined = undefined,
   TSchemaOut extends z.ZodSchema | undefined = undefined,
-  TSchemaDeps extends z.ZodSchema | undefined = undefined,
-  TContext extends ToolExecutionContext<TSchemaIn, TSchemaDeps> = ToolExecutionContext<TSchemaIn, TSchemaDeps>,
+  TSchemaVariables extends z.ZodSchema | undefined = undefined,
+  TContext extends ToolExecutionContext<TSchemaIn, TSchemaVariables> = ToolExecutionContext<
+    TSchemaIn,
+    TSchemaVariables
+  >,
   TExtraArgs extends unknown[] = [options: ToolExecutionOptions],
 > extends IAction<string, TSchemaIn, TSchemaOut, TContext, TExtraArgs> {
   description: string;
-  dependenciesSchema?: TSchemaDeps;
+  variablesSchema?: TSchemaVariables;
   execute?: (context: TContext, ...extraArgs: TExtraArgs) => Promise<InferZodType<TSchemaOut, unknown>>;
   mastra?: Mastra;
 }
 
 /**
- * Any tool action is a tool action with any input, output, dependencies, context, and options.
+ * Any tool action is a tool action with any input, output, variables, context, and options.
  */
 export type AnyToolAction = ToolAction<any, any, any, any>;
 
 /**
- * A tool action with a defined dependencies schema, and any input, output, context, and options.
+ * A tool action with a defined variables schema, and any input, output, context, and options.
  */
-export type ToolActionWithDeps<TSchemaDeps extends z.ZodSchema | undefined> = ToolAction<any, any, TSchemaDeps, any>;
+export type ToolActionWithVars<TSchemaVariables extends z.ZodSchema | undefined> = ToolAction<
+  any,
+  any,
+  TSchemaVariables,
+  any
+>;

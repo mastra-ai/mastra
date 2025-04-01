@@ -21,27 +21,32 @@ import type {
 import type { Mastra } from '../mastra';
 import type { MastraMemory } from '../memory/memory';
 import type { MemoryConfig } from '../memory/types';
-import type { ToolActionWithDeps, VercelTool } from '../tools';
-import type { DependenciesType } from '../utils';
+import type { ToolActionWithVars, VercelTool } from '../tools';
+import type { VariablesType } from '../utils';
 import type { CompositeVoice } from '../voice';
 
 export type { Message as AiMessageType } from 'ai';
 
-export type Tools<TSchemaDeps extends ZodSchema | undefined> = ToolActionWithDeps<TSchemaDeps> | VercelTool;
-export type ToolsInput<TSchemaDeps extends ZodSchema | undefined> = Record<string, Tools<TSchemaDeps>>;
-export type ToolsetsInput<TSchemaDeps extends ZodSchema | undefined> = Record<string, ToolsInput<TSchemaDeps>>;
+export type StringRecord<T> = Record<string, T>;
+
+export type Tools<TSchemaVariables extends ZodSchema | undefined> = ToolActionWithVars<TSchemaVariables> | VercelTool;
+
+export type ToolsInput<TSchemaVariables extends ZodSchema | undefined> = StringRecord<Tools<TSchemaVariables>>;
+
+export type ToolsetsInput<TSchemaVariables extends ZodSchema | undefined> = StringRecord<ToolsInput<TSchemaVariables>>;
+
 export type MastraLanguageModel = LanguageModelV1;
 
 export interface AgentConfig<
   TAgentId extends string = string,
-  TSchemaDeps extends ZodSchema | undefined = undefined,
-  TTools extends ToolsInput<TSchemaDeps> = ToolsInput<TSchemaDeps>,
+  TSchemaVariables extends ZodSchema | undefined = undefined,
+  TTools extends ToolsInput<TSchemaVariables> = ToolsInput<TSchemaVariables>,
   TMetrics extends Record<string, Metric> = Record<string, Metric>,
 > {
   name: TAgentId;
   instructions: string;
   model: MastraLanguageModel;
-  dependenciesSchema?: TSchemaDeps;
+  variablesSchema?: TSchemaVariables;
   tools?: TTools;
   mastra?: Mastra;
   /** @deprecated This property is deprecated. Use evals instead to add evaluation metrics. */
@@ -54,16 +59,16 @@ export interface AgentConfig<
 /**
  * Options for generating responses with an agent
  * @template Z - The schema type for structured output (Zod schema or JSON schema)
- * @template TSchemaDeps - The schema type for runtime dependencies (Zod schema)
+ * @template TSchemaVariables - The schema type for runtime variables (Zod schema)
  */
 export type AgentGenerateOptions<
   Z extends ZodSchema | JSONSchema7 | undefined = undefined,
-  TSchemaDeps extends ZodSchema | undefined = undefined,
+  TSchemaVariables extends ZodSchema | undefined = undefined,
 > = {
   /** Optional instructions to override the agent's default instructions */
   instructions?: string;
   /** Additional tool sets that can be used for this generation */
-  toolsets?: ToolsetsInput<TSchemaDeps>;
+  toolsets?: ToolsetsInput<TSchemaVariables>;
   /** Additional context messages to include */
   context?: CoreMessage[];
   /** Memory configuration options */
@@ -82,24 +87,24 @@ export type AgentGenerateOptions<
   toolChoice?: 'auto' | 'none' | 'required' | { type: 'tool'; toolName: string };
   /** Telemetry settings */
   telemetry?: TelemetrySettings;
-  /** Dependencies to use in tool execution or instruction builder */
-  dependencies?: DependenciesType<TSchemaDeps>;
+  /** Dynamic variables passed at runtime for use within tool execution context */
+  variables?: VariablesType<TSchemaVariables>;
 } & ({ resourceId?: undefined; threadId?: undefined } | { resourceId: string; threadId: string }) &
   (Z extends undefined ? DefaultLLMTextOptions : DefaultLLMTextObjectOptions);
 
 /**
  * Options for streaming responses with an agent
  * @template Z - The schema type for structured output (Zod schema or JSON schema)
- * @template TSchemaDeps - The schema type for runtime dependencies (Zod schema)
+ * @template TSchemaVariables - The schema type for runtime variables (Zod schema)
  */
 export type AgentStreamOptions<
   Z extends ZodSchema | JSONSchema7 | undefined = undefined,
-  TSchemaDeps extends ZodSchema | undefined = undefined,
+  TSchemaVariables extends ZodSchema | undefined = undefined,
 > = {
   /** Optional instructions to override the agent's default instructions */
   instructions?: string;
   /** Additional tool sets that can be used for this generation */
-  toolsets?: ToolsetsInput<TSchemaDeps>;
+  toolsets?: ToolsetsInput<TSchemaVariables>;
   /** Additional context messages to include */
   context?: CoreMessage[];
   /** Memory configuration options */
@@ -126,7 +131,7 @@ export type AgentStreamOptions<
   experimental_output?: Z;
   /** Telemetry settings */
   telemetry?: TelemetrySettings;
-  /** Dependencies to use in tool execution or instruction builder */
-  dependencies?: DependenciesType<TSchemaDeps>;
+  /** Dynamic variables passed at runtime for use within tool execution context */
+  variables?: VariablesType<TSchemaVariables>;
 } & ({ resourceId?: undefined; threadId?: undefined } | { resourceId: string; threadId: string }) &
   (Z extends undefined ? DefaultLLMStreamOptions : DefaultLLMStreamObjectOptions);

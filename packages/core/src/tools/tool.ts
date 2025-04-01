@@ -6,24 +6,27 @@ import type { ToolAction, ToolExecutionContext } from './types';
 export class Tool<
   TSchemaIn extends z.ZodSchema | undefined = undefined,
   TSchemaOut extends z.ZodSchema | undefined = undefined,
-  TSchemaDeps extends z.ZodSchema | undefined = undefined,
-  TContext extends ToolExecutionContext<TSchemaIn, TSchemaDeps> = ToolExecutionContext<TSchemaIn, TSchemaDeps>,
-> implements ToolAction<TSchemaIn, TSchemaOut, TSchemaDeps, TContext>
+  TSchemaVariables extends z.ZodSchema | undefined = undefined,
+  TContext extends ToolExecutionContext<TSchemaIn, TSchemaVariables> = ToolExecutionContext<
+    TSchemaIn,
+    TSchemaVariables
+  >,
+> implements ToolAction<TSchemaIn, TSchemaOut, TSchemaVariables, TContext>
 {
   id: string;
   description: string;
   inputSchema?: TSchemaIn;
   outputSchema?: TSchemaOut;
-  dependenciesSchema?: TSchemaDeps;
-  execute?: ToolAction<TSchemaIn, TSchemaOut, TSchemaDeps, TContext>['execute'];
+  variablesSchema?: TSchemaVariables;
+  execute?: ToolAction<TSchemaIn, TSchemaOut, TSchemaVariables, TContext>['execute'];
   mastra?: Mastra;
 
-  constructor(opts: ToolAction<TSchemaIn, TSchemaOut, TSchemaDeps, TContext>) {
+  constructor(opts: ToolAction<TSchemaIn, TSchemaOut, TSchemaVariables, TContext>) {
     this.id = opts.id;
     this.description = opts.description;
     this.inputSchema = opts.inputSchema;
     this.outputSchema = opts.outputSchema;
-    this.dependenciesSchema = opts.dependenciesSchema;
+    this.variablesSchema = opts.variablesSchema;
     this.execute = opts.execute;
     this.mastra = opts.mastra;
   }
@@ -32,8 +35,11 @@ export class Tool<
 export function createTool<
   TSchemaIn extends z.ZodSchema | undefined = undefined,
   TSchemaOut extends z.ZodSchema | undefined = undefined,
-  TSchemaDeps extends z.ZodSchema | undefined = undefined,
-  TContext extends ToolExecutionContext<TSchemaIn, TSchemaDeps> = ToolExecutionContext<TSchemaIn, TSchemaDeps>,
->(opts: ToolAction<TSchemaIn, TSchemaOut, TSchemaDeps, TContext>) {
+  TSchemaVariables extends z.ZodSchema | undefined = undefined,
+  TContext extends ToolExecutionContext<TSchemaIn, TSchemaVariables> = ToolExecutionContext<
+    TSchemaIn,
+    TSchemaVariables
+  >,
+>(opts: ToolAction<TSchemaIn, TSchemaOut, TSchemaVariables, TContext>) {
   return new Tool(opts);
 }

@@ -38,8 +38,8 @@ export abstract class MastraVoice<
   TOptions = unknown,
   TSpeakOptions = unknown,
   TListenOptions = unknown,
-  TSchemaDeps extends ZodSchema | undefined = undefined,
-  TTools extends ToolsInput<TSchemaDeps> = ToolsInput<TSchemaDeps>,
+  TSchemaVariables extends ZodSchema | undefined = undefined,
+  TTools extends ToolsInput<TSchemaVariables> = ToolsInput<TSchemaVariables>,
   TEventArgs extends VoiceEventMap = VoiceEventMap,
   TSpeakerMetadata = unknown,
 > extends MastraBase {

@@ -2,8 +2,8 @@ import { get } from 'radash';
 import type { ZodSchema } from 'zod';
 import { z } from 'zod';
 import type { Mastra } from '..';
-import { Agent } from '../agent';
 import type { ToolsInput } from '../agent';
+import { Agent } from '../agent';
 import type { Metric } from '../eval';
 import type { Logger } from '../logger';
 import type { Step } from './step';
@@ -245,11 +245,11 @@ export function resolveVariables({
 
 export function agentToStep<
   TAgentId extends string = string,
-  TSchemaDeps extends ZodSchema | undefined = undefined,
-  TTools extends ToolsInput<TSchemaDeps> = ToolsInput<TSchemaDeps>,
+  TSchemaVariables extends ZodSchema | undefined = undefined,
+  TTools extends ToolsInput<TSchemaVariables> = ToolsInput<TSchemaVariables>,
   TMetrics extends Record<string, Metric> = Record<string, Metric>,
 >(
-  agent: Agent<TAgentId, TSchemaDeps, TTools, TMetrics>,
+  agent: Agent<TAgentId, TSchemaVariables, TTools, TMetrics>,
   { mastra }: { mastra?: Mastra } = {},
 ): StepAction<TAgentId, z.ZodObject<{ prompt: z.ZodString }>, z.ZodObject<{ text: z.ZodString }>, any> {
   return {

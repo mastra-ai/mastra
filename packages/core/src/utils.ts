@@ -308,7 +308,7 @@ export function isVercelTool(tool?: ToolToConvert): tool is VercelTool {
   return !(tool instanceof Tool);
 }
 
-interface ToolOptions<TSchemaDeps extends ZodSchema | undefined = undefined> {
+interface ToolOptions<TSchemaVariables extends ZodSchema | undefined = undefined> {
   name: string;
   runId?: string;
   threadId?: string;
@@ -318,7 +318,7 @@ interface ToolOptions<TSchemaDeps extends ZodSchema | undefined = undefined> {
   mastra?: (Mastra & MastraPrimitives) | MastraPrimitives;
   memory?: MastraMemory;
   agentName?: string;
-  dependencies?: DependenciesType<TSchemaDeps>;
+  variables?: VariablesType<TSchemaVariables>;
 }
 
 type ToolToConvert = VercelTool | AnyToolAction;
@@ -371,13 +371,13 @@ function createExecute(tool: ToolToConvert, options: ToolOptions, logType?: 'too
     }
 
     const context = args;
-    const dependencies = validateDependencies(tool.dependenciesSchema, options.dependencies);
+    const variables = validateVariables(tool.variablesSchema, options.variables);
 
     return (
       tool?.execute?.(
         {
           context,
-          dependencies,
+          variables,
           threadId: options.threadId,
           resourceId: options.resourceId,
           mastra: options.mastra,
@@ -401,65 +401,65 @@ function createExecute(tool: ToolToConvert, options: ToolOptions, logType?: 'too
 }
 
 /**
- * The type of dependencies that can be used in a tool.
+ * The type of runtime variables that can be used in a tool.
  */
-export type DependenciesType<TSchema extends ZodSchema | undefined> = InferZodType<TSchema, Record<string, unknown>>;
+export type VariablesType<TSchema extends ZodSchema | undefined> = InferZodType<TSchema, Record<string, unknown>>;
 
 /**
- * Creates an empty dependencies object.
+ * Creates an empty variables object.
  *
  * @template TSchema - The Zod schema to validate against.
- * @returns The empty dependencies object.
+ * @returns The empty variables object.
  */
-export function createEmptyDependencies<TSchema extends ZodSchema | undefined>(): DependenciesType<TSchema> {
-  return {} as DependenciesType<TSchema>;
+export function createEmptyVariables<TSchema extends ZodSchema | undefined>(): VariablesType<TSchema> {
+  return {} as VariablesType<TSchema>;
 }
 
 /**
- * Creates a dependencies object from an existing object.
+ * Creates a variables object from an existing object.
  *
  * @template TSchema - The Zod schema to validate against.
- * @param fromValue - The object to create the dependencies from.
- * @returns The dependencies object.
+ * @param fromValue - The object to create the variables from.
+ * @returns The variables object.
  */
-export function createDependenciesFrom<TSchema extends ZodSchema | undefined>(
-  fromValue?: DependenciesType<TSchema>,
-): DependenciesType<TSchema> {
-  return fromValue ?? createEmptyDependencies<TSchema>();
+export function createVariablesFrom<TSchema extends ZodSchema | undefined>(
+  fromValue?: VariablesType<TSchema>,
+): VariablesType<TSchema> {
+  return fromValue ?? createEmptyVariables<TSchema>();
 }
 
 /**
- * Validates the provided dependencies against an optional Zod schema.
+ * Validates the provided variables against an optional Zod schema.
  *
- * If a schema is provided, dependencies are validated against it. Without a schema,
- * dependencies are returned directly if they're a non-null object, otherwise `{}`.
+ * If a schema is provided, variables are validated against it. Without a schema,
+ * variables are returned directly if they're a non-null object, otherwise `{}`.
  *
- * @param schema - Optional Zod schema defining the structure of the dependencies.
- * @param dependencies - Optional dependencies object to validate.
- * @returns Validated dependencies matching the schema, or original/empty object when schema isn't provided.
+ * @param schema - Optional Zod schema defining the structure of the variables.
+ * @param variables - Optional variables object to validate.
+ * @returns Validated variables matching the schema, or original/empty object when schema isn't provided.
  *
  * @throws Error if validation fails or the schema isn't a valid Zod schema.
  */
-export function validateDependencies<TSchema extends ZodSchema | undefined>(
+export function validateVariables<TSchema extends ZodSchema | undefined>(
   schema?: TSchema,
-  dependencies?: DependenciesType<TSchema>,
-): DependenciesType<TSchema> {
+  variables?: VariablesType<TSchema>,
+): VariablesType<TSchema> {
   if (!schema) {
-    if (typeof dependencies === 'object' && dependencies !== null) {
-      return dependencies;
+    if (typeof variables === 'object' && variables !== null) {
+      return variables;
     }
 
-    return createEmptyDependencies<TSchema>();
+    return createEmptyVariables<TSchema>();
   }
 
   try {
     if (isZodType(schema)) {
-      return schema.parse(dependencies);
+      return schema.parse(variables);
     } else {
-      throw new Error('Dependencies schema is not a Zod schema');
+      throw new Error('Variables schema is not a Zod schema');
     }
   } catch (error) {
-    throw new Error(`Dependencies validation failed: ${error}`);
+    throw new Error(`Variables validation failed: ${error}`);
   }
 }
 
@@ -522,10 +522,10 @@ function setVercelToolProperties(tool: VercelTool) {
  * @param tool - The tool to ensure has an ID and inputSchema.
  * @returns The tool with an ID and inputSchema.
  */
-export function ensureToolProperties<TSchemaDeps extends ZodSchema | undefined = undefined>(
-  tools: ToolsInput<TSchemaDeps>,
-): ToolsInput<TSchemaDeps> {
-  const toolsWithProperties = Object.keys(tools).reduce<ToolsInput<TSchemaDeps>>((acc, key) => {
+export function ensureToolProperties<TSchemaVariables extends ZodSchema | undefined = undefined>(
+  tools: ToolsInput<TSchemaVariables>,
+): ToolsInput<TSchemaVariables> {
+  const toolsWithProperties = Object.keys(tools).reduce<ToolsInput<TSchemaVariables>>((acc, key) => {
     const tool = tools?.[key];
     if (tool) {
       if (isVercelTool(tool)) {
