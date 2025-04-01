@@ -5,6 +5,7 @@ import esbuild from 'rollup-plugin-esbuild';
 import { removeAllOptionsExceptServer } from './babel/remove-all-options-server';
 import commonjs from '@rollup/plugin-commonjs';
 import { recursiveRemoveNonReferencedNodes } from './plugins/remove-unused-references';
+import type { Config, Mastra } from '@mastra/core';
 
 export function getServerOptionsBundler(
   entryFile: string,
@@ -87,12 +88,7 @@ export function getServerOptionsBundler(
   });
 }
 
-export async function writeServerOptionsConfig(
-  entryFile: string,
-  outputDir: string,
-): Promise<{
-  hasCustomConfig: boolean;
-}> {
+export async function getServerOptions(entryFile: string, outputDir: string): Promise<Config['server'] | null> {
   const result = {
     hasCustomConfig: false,
   } as const;
@@ -105,5 +101,9 @@ export async function writeServerOptionsConfig(
     entryFileNames: '[name].mjs',
   });
 
-  return result;
+  if (result.hasCustomConfig) {
+    return (await import(`file:${outputDir}/server-config.mjs`)).server as unknown as Config['server'];
+  }
+
+  return null;
 }
