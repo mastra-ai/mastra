@@ -7,18 +7,51 @@ Memory in Mastra is organized using **threads** and **resources**. Understanding
 - **Thread**: A conversation context or discussion topic. Each thread represents a separate conversation flow.
 - **Resource**: An entity (typically a user) associated with threads. Resources can have multiple conversation threads.
 
-```
-┌───────────────┐
-│   Resource    │
-│   (user_123)  │
-└───────┬───────┘
-        │
-        ▼
-┌──────────────────────────────────────┐
-│               Threads                │
-├──────────────┬──────────┬────────────┤
-│ support_001  │ sales_002│ billing_003│
-└──────────────┴──────────┴────────────┘
+```text
+┌───────────────────┐     ┌───────────────────┐     ┌───────────────────┐
+│     RESOURCE A    │     │     RESOURCE B    │     │     RESOURCE C    │
+│    (individual)   │     │    (individual)   │     │  (organization)   │
+│    user_123       │     │    user_456       │     │    org_789        │
+└────────┬──────────┘     └────────┬──────────┘     └────────┬──────────┘
+         │                         │                         │
+         ▼                         ▼                         ▼
+    ┌─────────┐               ┌─────────┐               ┌─────────┐
+    │ THREADS │               │ THREADS │               │ THREADS │
+    └────┬────┘               └────┬────┘               └────┬────┘
+         │                         │                         │
+┌────────┼────────────┐   ┌────────┼────────────┐   ┌────────┼────────────┐
+│        ▼            │   │        ▼            │   │        ▼            │
+│  ┌───────────────┐  │   │  ┌───────────────┐  │   │  ┌───────────────┐  │
+│  │  Thread #1    │  │   │  │  Thread #1    │  │   │  │  Thread #1    │  │
+│  │ support_123   │  │   │  │ feedback_456  │  │   │  │ project_789   │  │
+│  │ (tech support)│  │   │  │ (product      │  │   │  │ (team         │  │
+│  │               │  │   │  │  feedback)     │  │   │  │  discussion)  │  │
+│  └───────────────┘  │   │  └───────────────┘  │   │  └───────────────┘  │
+│                     │   │                     │   │                     │
+│        ▼            │   │        ▼            │   │        ▼            │
+│  ┌───────────────┐  │   │  ┌───────────────┐  │   │  ┌───────────────┐  │
+│  │  Thread #2    │  │   │  │  Thread #2    │  │   │  │  Thread #2    │  │
+│  │ billing_345   │  │   │  │ support_567   │  │   │  │ onboarding_890│  │
+│  │ (billing      │  │   │  │ (account      │  │   │  │ (new member   │  │
+│  │  questions)   │  │   │  │  issues)      │  │   │  │  onboarding)   │  │
+│  └───────────────┘  │   │  └───────────────┘  │   │  └───────────────┘  │
+│                     │   │                     │   │                     │
+│        ▼            │   │        ▼            │   │        ▼            │
+│  ┌───────────────┐  │   │                     │   │  ┌───────────────┐  │
+│  │  Thread #3    │  │   │                     │   │  │  Thread #3    │  │
+│  │ sales_678     │  │   │                     │   │  │ support_901   │  │
+│  │ (upgrade      │  │   │                     │   │  │ (technical    │  │
+│  │  discussion)  │  │   │                     │   │  │  assistance)  │  │
+│  └───────────────┘  │   │                     │   │  └───────────────┘  │
+└─────────────────────┘   └─────────────────────┘   └─────────────────────┘
+
+           │                       │                        │
+           ▼                       ▼                        ▼
+┌─────────────────────┐   ┌─────────────────────┐   ┌─────────────────────┐
+│     MESSAGES &      │   │     MESSAGES &      │   │     MESSAGES &      │
+│   WORKING MEMORY    │   │   WORKING MEMORY    │   │   WORKING MEMORY    │
+│   (per thread)      │   │   (per thread)      │   │   (per thread)      │
+└─────────────────────┘   └─────────────────────┘   └─────────────────────┘
 ```
 
 This organization enables:

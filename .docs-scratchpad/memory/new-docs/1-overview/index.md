@@ -26,22 +26,54 @@ Information that persists across conversation sessions, like user preferences, i
 
 Mastra's memory system consists of several components working together:
 
-```
-┌───────────────┐    ┌──────────────┐    ┌───────────────┐
-│   Agent API   │───►│  Memory API  │───►│  Storage API  │
-└───────────────┘    └──────────────┘    └───────────────┘
-                           │  ▲                   ▲
-                           ▼  │                   │
-                     ┌──────────────┐    ┌───────────────┐
-                     │ Vector Store │◄───┤  Embeddings   │
-                     └──────────────┘    └───────────────┘
+```text
+┌───────────────────────────────────────────────────────────────────────┐
+│                        MASTRA MEMORY SYSTEM                            │
+└───────────────────────────────────────────────────────────────────────┘
+                                   │
+                                   ▼
+          ┌─────────────────────────────────────────────┐
+          │              Memory Instance                 │
+          └─────────────────────────────────────────────┘
+                │                 │                │
+                ▼                 ▼                ▼
+┌────────────────────┐  ┌──────────────────┐  ┌──────────────────┐
+│  Storage Backend   │  │   Vector Store   │  │    Embedder      │
+│  ----------------  │  │  --------------  │  │  --------------  │
+│  • LibSQL          │  │  • PgVector      │  │  • FastEmbed     │
+│  • PostgreSQL      │  │  • LibSQLVector  │  │  • OpenAI        │
+│  • Upstash Redis   │  │  • Pinecone      │  │  • Cohere        │
+└────────────────────┘  └──────────────────┘  └──────────────────┘
+        │                        │                      │
+        └────────────┬───────────┴──────────┬──────────┘
+                     │                      │
+        ┌────────────▼──────────┐  ┌────────▼────────────┐
+        │  Message Management   │  │ Semantic Processing │
+        │  ------------------   │  │ ------------------  │
+        │  • Thread Storage     │  │  • Vector Indexing  │
+        │  • Message Storage    │  │  • Similarity Search│
+        │  • Working Memory     │  │  • Query Processing │
+        └─────────────────────┬─┘  └────────────────────┘
+                            │
+            ┌───────────────┴───────────────┐
+            ▼                               ▼
+┌─────────────────────────┐      ┌─────────────────────────┐
+│      Context Window     │      │    Response Generation   │
+│      --------------     │      │    ------------------    │
+│  • Last Messages        │      │  • Text Stream           │
+│  • Semantic Results     │◄────►│  • Working Memory Update │
+│  • Working Memory       │      │  • Message Storage       │
+└─────────────────────────┘      └─────────────────────────┘
 ```
 
-- **Agent API**: The entry point for interaction with your Mastra agents
-- **Memory API**: Manages storage, retrieval, and processing of memory
-- **Storage API**: Persists conversation data in your chosen database
-- **Vector Store**: Enables semantic search of past messages
-- **Embeddings**: Converts text to vector representations for similarity search
+- **Memory Instance**: Central configuration point for all memory components
+- **Storage Backend**: Persists conversation data in your chosen database (LibSQL, PostgreSQL, Upstash)
+- **Vector Store**: Specialized database for semantic search capabilities
+- **Embedder**: Converts text to vector representations for similarity search
+- **Message Management**: Handles thread and message operations
+- **Semantic Processing**: Performs vector indexing and similarity matching
+- **Context Window**: Assembles relevant information for the agent
+- **Response Generation**: Produces agent responses and updates memory
 
 This architecture allows for flexibility in:
 - Storage backends (LibSQL, PostgreSQL, Upstash)
