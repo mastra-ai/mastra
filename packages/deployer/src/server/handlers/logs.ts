@@ -1,7 +1,10 @@
 import type { Mastra } from '@mastra/core';
+import {
+  getLogsHandler as getOriginalLogsHandler,
+  getLogsByRunIdHandler as getOriginalLogsByRunIdHandler,
+  getLogTransports as getOriginalLogTransportsHandler,
+} from '@mastra/server/handlers/logs';
 import type { Context } from 'hono';
-
-import { HTTPException } from 'hono/http-exception';
 
 import { handleError } from './error';
 
@@ -10,11 +13,11 @@ export async function getLogsHandler(c: Context) {
     const mastra: Mastra = c.get('mastra');
     const transportId = c.req.query('transportId');
 
-    if (!transportId) {
-      throw new HTTPException(400, { message: 'transportId is required' });
-    }
+    const logs = await getOriginalLogsHandler({
+      mastra,
+      transportId,
+    });
 
-    const logs = await mastra.getLogs(transportId);
     return c.json(logs);
   } catch (error) {
     return handleError(error, 'Error getting logs');
@@ -27,11 +30,12 @@ export async function getLogsByRunIdHandler(c: Context) {
     const runId = c.req.param('runId');
     const transportId = c.req.query('transportId');
 
-    if (!transportId) {
-      throw new HTTPException(400, { message: 'transportId is required' });
-    }
+    const logs = await getOriginalLogsByRunIdHandler({
+      mastra,
+      runId,
+      transportId,
+    });
 
-    const logs = await mastra.getLogsByRunId({ runId, transportId });
     return c.json(logs);
   } catch (error) {
     return handleError(error, 'Error getting logs by run ID');
@@ -41,12 +45,13 @@ export async function getLogsByRunIdHandler(c: Context) {
 export async function getLogTransports(c: Context) {
   try {
     const mastra: Mastra = c.get('mastra');
-    const logger = mastra.getLogger();
-    const transports = logger.transports;
-    return c.json({
-      transports: Object.keys(transports),
+
+    const result = await getOriginalLogTransportsHandler({
+      mastra,
     });
-  } catch (e) {
-    return handleError(e, 'Error getting log Transports ');
+
+    return c.json(result);
+  } catch (error) {
+    return handleError(error, 'Error getting log Transports');
   }
 }
