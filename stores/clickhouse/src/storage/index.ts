@@ -748,12 +748,12 @@ export class ClickhouseStore extends MastraStorage {
 
       if (fromDate) {
         conditions.push(`createdAt >= {var_from_date:DateTime64(3)}`);
-        values.var_from_date = fromDate.toISOString().slice(0, -1); // Remove trailing Z
+        values.var_from_date = fromDate.getTime() / 1000; // Convert to Unix timestamp
       }
 
       if (toDate) {
         conditions.push(`createdAt <= {var_to_date:DateTime64(3)}`);
-        values.var_to_date = toDate.toISOString().slice(0, -1); // Remove trailing Z
+        values.var_to_date = toDate.getTime() / 1000; // Convert to Unix timestamp
       }
 
       const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
