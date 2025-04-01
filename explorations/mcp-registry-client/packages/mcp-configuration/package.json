@@ -14,7 +14,7 @@
 	},
 	"dependencies": {
 		"@mcp/registry": "workspace:*",
-		"@mastra/mcp": "^0.3.5",
+		"@mastra/mcp": "^0.3.6",
 		"zod": "^3.22.4"
 	},
 	"devDependencies": {
