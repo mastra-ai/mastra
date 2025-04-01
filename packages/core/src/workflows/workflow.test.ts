@@ -12,9 +12,8 @@ import { Telemetry } from '../telemetry';
 import { createTool } from '../tools';
 
 import { Step } from './step';
-import { WhenConditionReturnValue } from './types';
 import type { WorkflowContext, WorkflowResumeResult } from './types';
-import { StepConfig, WhenConditionReturnValue } from './types';
+import { WhenConditionReturnValue } from './types';
 import { Workflow } from './workflow';
 
 const storage = new DefaultStorage({
