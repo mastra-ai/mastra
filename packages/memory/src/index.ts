@@ -332,15 +332,6 @@ export class Memory extends MastraMemory {
       this.threadConfig.workingMemory.template ||
       this.defaultWorkingMemoryTemplate;
 
-    // For backward compatibility - if it contains XML tags, use the old compression
-    if (memory.includes('><')) {
-      return memory
-        .split(`>\n`)
-        .map(c => c.trim()) // remove extra whitespace
-        .join(`>`); // and linebreaks
-    }
-
-    // For Markdown, just trim whitespace but preserve linebreaks as they're important
     return memory.trim();
   }
 
@@ -442,7 +433,7 @@ Notes:
 - This system is here so that you can maintain the conversation when your context window is very short. Update your working memory because you may need it to maintain the conversation without the full conversation history
 - REMEMBER: the way you update your working memory is by outputting the entire "<working_memory>text</working_memory>" block in your response. The system will pick this up and store it for you. The user will not see it.
 - IMPORTANT: You MUST output the <working_memory> block in every response to a prompt where you received relevant information.
-- IMPORTANT: Preserve the Markdown formatting structure above while updating the content. If the working memory was previously in XML format, convert it to Markdown while preserving the information.`;
+- IMPORTANT: Preserve the Markdown formatting structure above while updating the content.`;
   }
 
   private getWorkingMemoryToolInstruction(workingMemoryBlock: string) {
@@ -465,7 +456,7 @@ Notes:
 - Do not remove empty sections - you must include the empty sections along with the ones you're filling in
 - REMEMBER: the way you update your working memory is by calling the updateWorkingMemory tool with the entire Markdown content. The system will store it for you. The user will not see it.
 - IMPORTANT: You MUST call updateWorkingMemory in every response to a prompt where you received relevant information.
-- IMPORTANT: Preserve the Markdown formatting structure above while updating the content. If the working memory was previously in XML format, convert it to Markdown while preserving the information.`;
+- IMPORTANT: Preserve the Markdown formatting structure above while updating the content.`;
   }
 
   public getTools(config?: MemoryConfig): Record<string, CoreTool> {
