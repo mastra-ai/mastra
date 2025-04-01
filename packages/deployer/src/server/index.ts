@@ -58,6 +58,7 @@ import {
   resumeWorkflowHandler,
   watchWorkflowHandler,
   createRunHandler,
+  getWorkflowRunsHandler,
 } from './handlers/workflows.js';
 import { html } from './welcome.js';
 
@@ -1409,6 +1410,28 @@ export async function createHonoServer(
       },
     }),
     getWorkflowByIdHandler,
+  );
+
+  app.get(
+    '/api/workflows/:workflowId/runs',
+    describeRoute({
+      description: 'Get all runs for a workflow',
+      tags: ['workflows'],
+      parameters: [
+        {
+          name: 'workflowId',
+          in: 'path',
+          required: true,
+          schema: { type: 'string' },
+        },
+      ],
+      responses: {
+        200: {
+          description: 'List of workflow runs from storage',
+        },
+      },
+    }),
+    getWorkflowRunsHandler,
   );
 
   app.post(
