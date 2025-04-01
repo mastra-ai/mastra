@@ -127,8 +127,8 @@ const agent = new Agent({
   evals: {
     summarization: new SummarizationMetric(model),
     contentSimilarity: new ContentSimilarityMetric(),
-    tone: new ToneConsistencyMetric()
-  }
+    tone: new ToneConsistencyMetric(),
+  },
 });
 ```
 

@@ -1,7 +1,5 @@
 import { PassThrough } from 'stream';
 import { createOpenAI } from '@ai-sdk/openai';
-import { InMemorySpanExporter, SimpleSpanProcessor } from '@opentelemetry/sdk-trace-base';
-import { NodeTracerProvider } from '@opentelemetry/sdk-trace-node';
 import { config } from 'dotenv';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
@@ -282,7 +280,7 @@ describe('agent', () => {
 
   describe('voice capabilities', () => {
     class MockVoice extends MastraVoice {
-      async speak(_input: string | NodeJS.ReadableStream): Promise<NodeJS.ReadableStream> {
+      async speak(): Promise<NodeJS.ReadableStream> {
         const stream = new PassThrough();
         stream.end('mock audio');
         return stream;
