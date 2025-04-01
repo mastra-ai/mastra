@@ -64,6 +64,10 @@ const renovateConfig = {
   ignorePaths: ['docs/**'],
   packageRules: [
     {
+      packagePatterns: ['*'],
+      enabled: false,
+    },
+    {
       groupName: 'examples',
       commitMessageTopic: 'examples',
       groupSlug: 'examples-minor',
@@ -129,10 +133,10 @@ const excludedPackages = renovateConfig.packageRules
 
 excludedPackages.push('vitest');
 
-renovateConfig.packageRules.unshift({
-  matchPackageNames: Array.from(new Set(excludedPackages)),
-  enabled: false,
-});
+// renovateConfig.packageRules.unshift({
+//   matchPackageNames: Array.from(new Set(excludedPackages)),
+//   enabled: false,
+// });
 
 for (const pkg of listOfPackages) {
   const packageJsonPath = `${pkg}/package.json`;
