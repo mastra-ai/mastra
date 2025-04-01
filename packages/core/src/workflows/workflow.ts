@@ -926,19 +926,6 @@ export class Workflow<
     }
   }
 
-  async #loadWorkflowSnapshot(runId: string) {
-    if (!this.#mastra?.storage) {
-      this.logger.debug('Snapshot cannot be loaded. Mastra engine is not initialized', { runId });
-      return;
-    }
-
-    const activeRun = this.#runs.get(runId);
-    if (activeRun) {
-      await activeRun.persistWorkflowSnapshot();
-    }
-    return this.#mastra.storage.loadWorkflowSnapshot({ runId, workflowName: this.name });
-  }
-
   getExecutionSpan(runId: string) {
     return this.#runs.get(runId)?.executionSpan;
   }
@@ -1068,7 +1055,8 @@ export class Workflow<
     }
 
     // If workflow is suspended/stored, get from storage
-    const storedSnapshot = await this.#mastra?.storage?.loadWorkflowSnapshot({
+    const storage = this.#mastra?.getStorage();
+    const storedSnapshot = await storage?.loadWorkflowSnapshot({
       runId,
       workflowName: this.name,
     });

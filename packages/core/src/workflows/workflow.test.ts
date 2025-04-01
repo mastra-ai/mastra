@@ -2830,9 +2830,6 @@ describe('Workflow', async () => {
 
   describe('Agent as step', () => {
     it('should be able to use an agent as a step', async () => {
-      // const execute = vi.fn<any>().mockResolvedValue({ result: 'success' });
-      // const step1 = new Step({ id: 'step1', execute });
-
       const workflow = new Workflow({
         name: 'test-workflow',
         triggerSchema: z.object({
@@ -2853,7 +2850,7 @@ describe('Workflow', async () => {
         model: openai('gpt-4'),
       });
 
-      const mastra = new Mastra({
+      new Mastra({
         logger,
         workflows: { 'test-workflow': workflow },
         agents: { 'test-agent-1': agent, 'test-agent-2': agent2 },
@@ -2878,8 +2875,6 @@ describe('Workflow', async () => {
           },
         })
         .commit();
-
-      workflow.__registerMastra(mastra);
 
       const run = workflow.createRun();
       const result = await run.start({
@@ -2923,12 +2918,12 @@ describe('Workflow', async () => {
         model: openai('gpt-4'),
       });
 
-      // const mastra = new Mastra({
-      //   logger,
-      //   workflows: { 'test-workflow': workflow },
-      //   agents: { 'test-agent-1': agent, 'test-agent-2': agent2 },
-      //   storage,
-      // });
+      new Mastra({
+        logger,
+        workflows: { 'test-workflow': workflow },
+        agents: { 'test-agent-1': agent, 'test-agent-2': agent2 },
+        storage,
+      });
 
       workflow
         .step(agent, {
@@ -2955,8 +2950,6 @@ describe('Workflow', async () => {
       const result = await run.start({
         triggerData: { prompt1: 'Capital of France, just the name', prompt2: 'Capital of UK, just the name' },
       });
-
-      console.log(result);
 
       expect(execute).toHaveBeenCalledTimes(1);
       expect(result.results['finalStep']).toEqual({
@@ -3928,10 +3921,10 @@ describe('Workflow', async () => {
           )
           .commit();
 
-        // const mastra = new Mastra({
-        //   logger,
-        //   workflows: { counterWorkflow },
-        // });
+        new Mastra({
+          logger,
+          workflows: { counterWorkflow },
+        });
 
         const run = counterWorkflow.createRun();
         const { results } = await run.start({ triggerData: { startValue: 1 } });
@@ -4058,21 +4051,21 @@ describe('Workflow', async () => {
           )
           .commit();
 
-        // const mastra = new Mastra({
-        //   logger,
-        //   workflows: { counterWorkflow },
-        // });
+        new Mastra({
+          logger,
+          workflows: { counterWorkflow },
+        });
 
         const run = counterWorkflow.createRun();
         const data = await run.start({ triggerData: { startValue: 1 } });
         const { results } = data;
-        console.dir(data, { depth: null });
 
         expect(begin).toHaveBeenCalledTimes(1);
         expect(start).toHaveBeenCalledTimes(1);
         expect(other).toHaveBeenCalledTimes(1);
         expect(final).toHaveBeenCalledTimes(0);
         expect(last).toHaveBeenCalledTimes(0);
+
         // @ts-ignore
         expect(results['nested-workflow-a']).toMatchObject({
           status: 'suspended',
