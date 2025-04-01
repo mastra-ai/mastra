@@ -1,5 +1,4 @@
 import type { Mastra } from '@mastra/core';
-import type { MastraMemory } from '@mastra/core/memory';
 import {
   getMemoryStatusHandler as getOriginalMemoryStatusHandler,
   getThreadsHandler as getOriginalThreadsHandler,
