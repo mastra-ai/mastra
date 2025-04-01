@@ -29,7 +29,7 @@
   },
   "dependencies": {
     "@mastra/core": "workspace:^",
-    "cloudflare": "^4.1.0"
+    "cloudflare": "^4.2.0"
   },
   "devDependencies": {
     "@internal/lint": "workspace:*",

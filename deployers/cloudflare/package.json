@@ -44,7 +44,7 @@
     "@mastra/core": "workspace:^",
     "@mastra/deployer": "workspace:^",
     "@rollup/plugin-virtual": "^3.0.2",
-    "cloudflare": "^4.1.0",
+    "cloudflare": "^4.2.0",
     "date-fns": "^4.1.0",
     "execa": "^9.5.2",
     "rollup-plugin-polyfill-node": "^0.13.0",
