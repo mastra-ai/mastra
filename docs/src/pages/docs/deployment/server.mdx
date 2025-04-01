@@ -16,6 +16,23 @@ The server provides:
 - API endpoints for all registered workflows
 - Custom api route supports
 - Custom middleware support
+- Configuration of timeout
+- Configuration of port
+
+## Server configuration
+
+You can configure server `port` and `timeout` in the Mastra instance.
+
+```typescript copy showLineNumbers
+import { Mastra } from '@mastra/core';
+
+export const mastra = new Mastra({
+  server: {
+    port: 3000, // Defaults to 4111
+    timeout: 10000, // Defaults to 5000 (5s)
+  },
+});
+```
 
 ## Custom API Routes
 
