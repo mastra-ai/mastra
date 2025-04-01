@@ -183,7 +183,8 @@ export function createTestSuite(storage: MastraStorage) {
 
         // Verify order is maintained
         retrievedMessages.forEach((msg, idx) => {
-          expect(msg.content[0]).toBe(messages[idx].content.text);
+          // @ts-expect-error
+          expect(msg.content[0].text).toBe(messages[idx].content[0].text);
         });
       });
 

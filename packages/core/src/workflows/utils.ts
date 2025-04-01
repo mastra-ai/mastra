@@ -248,6 +248,7 @@ export function agentToStep<
   TMetrics extends Record<string, Metric> = Record<string, Metric>,
 >(
   agent: Agent<TAgentId, TTools, TMetrics>,
+  { mastra }: { mastra?: Mastra } = {},
 ): StepAction<TAgentId, z.ZodObject<{ prompt: z.ZodString }>, z.ZodObject<{ text: z.ZodString }>, any> {
   return {
     id: agent.name,
@@ -259,15 +260,16 @@ export function agentToStep<
     outputSchema: z.object({
       text: z.string(),
     }),
-    execute: async ({ context, runId, mastra }) => {
-      if (!mastra) {
+    execute: async ({ context, runId, mastra: mastraFromExecute }) => {
+      const realMastra = mastraFromExecute ?? mastra;
+      if (!realMastra) {
         throw new Error('Mastra instance not found');
       }
 
-      agent.__registerMastra(mastra);
+      agent.__registerMastra(realMastra);
       agent.__registerPrimitives({
-        logger: mastra.getLogger(),
-        telemetry: mastra.getTelemetry(),
+        logger: realMastra.getLogger(),
+        telemetry: realMastra.getTelemetry(),
       });
 
       const result = await agent.generate(context.inputData.prompt, {

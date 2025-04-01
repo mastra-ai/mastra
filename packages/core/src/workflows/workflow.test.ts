@@ -2853,12 +2853,12 @@ describe('Workflow', async () => {
         model: openai('gpt-4'),
       });
 
-      // const mastra = new Mastra({
-      //   logger,
-      //   workflows: { 'test-workflow': workflow },
-      //   agents: { 'test-agent-1': agent, 'test-agent-2': agent2 },
-      //   storage,
-      // });
+      const mastra = new Mastra({
+        logger,
+        workflows: { 'test-workflow': workflow },
+        agents: { 'test-agent-1': agent, 'test-agent-2': agent2 },
+        storage,
+      });
 
       workflow
         .step(agent, {
@@ -2878,6 +2878,8 @@ describe('Workflow', async () => {
           },
         })
         .commit();
+
+      workflow.__registerMastra(mastra);
 
       const run = workflow.createRun();
       const result = await run.start({
