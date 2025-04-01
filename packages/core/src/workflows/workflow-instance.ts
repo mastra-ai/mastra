@@ -14,7 +14,6 @@ import type {
   StepAction,
   StepDef,
   StepGraph,
-  WorkflowContext,
   WorkflowRunResult,
   WorkflowRunState,
 } from './types';
@@ -588,7 +587,7 @@ export class WorkflowInstance<
     // Reattach the step handler
     // TODO: need types
     if (parsedSnapshot.children) {
-      Object.entries(parsedSnapshot.children).forEach(([_childId, child]: [string, any]) => {
+      Object.entries(parsedSnapshot.children).forEach(([, child]: [string, any]) => {
         if (child.snapshot?.input?.stepNode) {
           // Reattach handler
           const stepDef = this.#makeStepDef(child.snapshot.input.stepNode.step.id);

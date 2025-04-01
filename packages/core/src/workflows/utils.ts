@@ -1,12 +1,13 @@
 import { get } from 'radash';
 import { z } from 'zod';
 import type { Mastra } from '..';
+import { Agent } from '../agent';
+import type { ToolsInput } from '../agent';
+import type { Metric } from '../eval';
 import type { Logger } from '../logger';
 import type { Step } from './step';
 import type { StepAction, StepResult, VariableReference, WorkflowContext, WorkflowRunResult } from './types';
 import { Workflow } from './workflow';
-import { Agent, type ToolsInput } from '../agent';
-import type { Metric } from '../eval';
 
 export function isErrorEvent(stateEvent: any): stateEvent is {
   type: `xstate.error.actor.${string}`;
@@ -193,7 +194,7 @@ export function isAgent(
   return step instanceof Agent;
 }
 
-export function resolveVariables<TSteps extends Step<any, any, any>[]>({
+export function resolveVariables({
   runId,
   logger,
   variables,
@@ -296,7 +297,7 @@ export function workflowToStep<
   return {
     id: workflow.name,
     workflow,
-    execute: async ({ context, suspend, emit, runId, mastra }) => {
+    execute: async ({ context, suspend, emit }) => {
       if (mastra) {
         workflow.__registerMastra(mastra);
         workflow.__registerPrimitives({
@@ -325,7 +326,7 @@ export function workflowToStep<
       }
 
       if (awaitedResult.activePaths?.size > 0) {
-        const suspendedStep = [...awaitedResult.activePaths.entries()].find(([stepId, { status }]) => {
+        const suspendedStep = [...awaitedResult.activePaths.entries()].find(([, { status }]) => {
           return status === 'suspended';
         });
 

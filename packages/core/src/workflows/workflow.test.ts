@@ -1,8 +1,10 @@
 import fs from 'fs';
 import path from 'path';
+import { openai } from '@ai-sdk/openai';
 import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 
+import { Agent } from '../agent';
 import { createLogger } from '../logger';
 import { Mastra } from '../mastra';
 import { DefaultStorage } from '../storage/libsql';
@@ -10,11 +12,9 @@ import { Telemetry } from '../telemetry';
 import { createTool } from '../tools';
 
 import { Step } from './step';
-import { StepConfig, WhenConditionReturnValue } from './types';
+import { WhenConditionReturnValue } from './types';
 import type { WorkflowContext, WorkflowResumeResult } from './types';
 import { Workflow } from './workflow';
-import { openai } from '@ai-sdk/openai';
-import { Agent } from '../agent';
 
 const storage = new DefaultStorage({
   config: {
@@ -901,7 +901,7 @@ describe('Workflow', async () => {
     it('should run a `.step` call once after a while loop', async () => {
       const step1Action = vi.fn();
       const step2Action = vi.fn();
-      const step3Action = vi.fn().mockImplementation(async ({ context }) => {
+      const step3Action = vi.fn().mockImplementation(async () => {
         count++;
         return { count };
       });
@@ -983,7 +983,7 @@ describe('Workflow', async () => {
         execute: start,
       });
 
-      const other = vi.fn().mockImplementation(async ({ context }) => {
+      const other = vi.fn().mockImplementation(async () => {
         return { other: 26 };
       });
       const otherStep = new Step({
@@ -1054,7 +1054,7 @@ describe('Workflow', async () => {
         execute: start,
       });
 
-      const other = vi.fn().mockImplementation(async ({ context }) => {
+      const other = vi.fn().mockImplementation(async () => {
         return { other: 26 };
       });
       const otherStep = new Step({
@@ -1128,7 +1128,7 @@ describe('Workflow', async () => {
         execute: start,
       });
 
-      const other = vi.fn().mockImplementation(async ({ context }) => {
+      const other = vi.fn().mockImplementation(async () => {
         return { other: 26 };
       });
       const otherStep = new Step({
@@ -1202,7 +1202,7 @@ describe('Workflow', async () => {
         execute: start,
       });
 
-      const other = vi.fn().mockImplementation(async ({ context }) => {
+      const other = vi.fn().mockImplementation(async () => {
         return { other: 26 };
       });
       const otherStep = new Step({
@@ -1282,7 +1282,7 @@ describe('Workflow', async () => {
         execute: start,
       });
 
-      const other = vi.fn().mockImplementation(async ({ context }) => {
+      const other = vi.fn().mockImplementation(async () => {
         return { other: 26 };
       });
       const otherStep = new Step({
@@ -1354,7 +1354,7 @@ describe('Workflow', async () => {
 
         return { newValue };
       });
-      const other = vi.fn().mockImplementation(async ({ context }) => {
+      const other = vi.fn().mockImplementation(async () => {
         return { other: 26 };
       });
       const incrementStep = new Step({
@@ -1395,7 +1395,7 @@ describe('Workflow', async () => {
 
       counterWorkflow
         .step(incrementStep)
-        .if(async ({ context }) => {
+        .if(async () => {
           return false;
         })
         .then(incrementStep)
@@ -2687,7 +2687,7 @@ describe('Workflow', async () => {
       const getUserInputAction = vi.fn().mockResolvedValue({ userInput: 'test input' });
       const promptAgentAction = vi
         .fn()
-        .mockImplementationOnce(async ({ suspend }) => {
+        .mockImplementationOnce(async () => {
           return { test: 'yes' };
         })
         .mockImplementationOnce(() => ({ modelOutput: 'test output' }));
@@ -2820,7 +2820,7 @@ describe('Workflow', async () => {
 
       // Access new instance properties directly - should work without warning
       const run = wf.createRun();
-      run.watch(data => {});
+      run.watch(() => {});
       await run.start();
 
       expect(telemetry).toBeDefined();
@@ -2830,8 +2830,8 @@ describe('Workflow', async () => {
 
   describe('Agent as step', () => {
     it('should be able to use an agent as a step', async () => {
-      const execute = vi.fn<any>().mockResolvedValue({ result: 'success' });
-      const step1 = new Step({ id: 'step1', execute });
+      // const execute = vi.fn<any>().mockResolvedValue({ result: 'success' });
+      // const step1 = new Step({ id: 'step1', execute });
 
       const workflow = new Workflow({
         name: 'test-workflow',
@@ -2853,12 +2853,12 @@ describe('Workflow', async () => {
         model: openai('gpt-4'),
       });
 
-      const mastra = new Mastra({
-        logger,
-        workflows: { 'test-workflow': workflow },
-        agents: { 'test-agent-1': agent, 'test-agent-2': agent2 },
-        storage,
-      });
+      // const mastra = new Mastra({
+      //   logger,
+      //   workflows: { 'test-workflow': workflow },
+      //   agents: { 'test-agent-1': agent, 'test-agent-2': agent2 },
+      //   storage,
+      // });
 
       workflow
         .step(agent, {
@@ -2921,12 +2921,12 @@ describe('Workflow', async () => {
         model: openai('gpt-4'),
       });
 
-      const mastra = new Mastra({
-        logger,
-        workflows: { 'test-workflow': workflow },
-        agents: { 'test-agent-1': agent, 'test-agent-2': agent2 },
-        storage,
-      });
+      // const mastra = new Mastra({
+      //   logger,
+      //   workflows: { 'test-workflow': workflow },
+      //   agents: { 'test-agent-1': agent, 'test-agent-2': agent2 },
+      //   storage,
+      // });
 
       workflow
         .step(agent, {
@@ -2995,7 +2995,7 @@ describe('Workflow', async () => {
         execute: start,
       });
 
-      const other = vi.fn().mockImplementation(async ({ context }) => {
+      const other = vi.fn().mockImplementation(async () => {
         return { other: 26 };
       });
       const otherStep = new Step({
@@ -3009,7 +3009,7 @@ describe('Workflow', async () => {
         const otherVal = context.getStepResult('other')?.other ?? 0;
         return { finalValue: startVal + otherVal };
       });
-      const last = vi.fn().mockImplementation(async ({ context }) => {
+      const last = vi.fn().mockImplementation(async () => {
         return { success: true };
       });
       const finalStep = new Step({
@@ -3085,7 +3085,7 @@ describe('Workflow', async () => {
         execute: start,
       });
 
-      const other = vi.fn().mockImplementation(async ({ context }) => {
+      const other = vi.fn().mockImplementation(async () => {
         return { other: 26 };
       });
       const otherStep = new Step({
@@ -3099,7 +3099,7 @@ describe('Workflow', async () => {
         const otherVal = context.getStepResult('other')?.other ?? 0;
         return { finalValue: startVal + otherVal };
       });
-      const last = vi.fn().mockImplementation(async ({ context }) => {
+      const last = vi.fn().mockImplementation(async () => {
         return { success: true };
       });
       const finalStep = new Step({
@@ -3118,7 +3118,7 @@ describe('Workflow', async () => {
       const wfA = new Workflow({ name: 'nested-workflow-a' }).step(startStep).then(otherStep).then(finalStep).commit();
       const wfB = new Workflow({ name: 'nested-workflow-b' })
         .step(startStep)
-        .if(async ({ context }) => false)
+        .if(async () => false)
         .then(otherStep)
         .else()
         .then(finalStep)
@@ -3191,7 +3191,7 @@ describe('Workflow', async () => {
           execute: start,
         });
 
-        const other = vi.fn().mockImplementation(async ({ context }) => {
+        const other = vi.fn().mockImplementation(async () => {
           return { other: 26 };
         });
         const otherStep = new Step({
@@ -3205,10 +3205,10 @@ describe('Workflow', async () => {
           const otherVal = context.getStepResult('other')?.other ?? 0;
           return { finalValue: startVal + otherVal };
         });
-        const first = vi.fn().mockImplementation(async ({ context }) => {
+        const first = vi.fn().mockImplementation(async () => {
           return { success: true };
         });
-        const last = vi.fn().mockImplementation(async ({ context }) => {
+        const last = vi.fn().mockImplementation(async () => {
           return { success: true };
         });
         const finalStep = new Step({
@@ -3238,7 +3238,7 @@ describe('Workflow', async () => {
               execute: first,
             }),
           )
-          .if(async ({ context }) => true, wfA, wfB)
+          .if(async () => true, wfA, wfB)
           .then(
             new Step({
               id: 'last-step',
@@ -3297,7 +3297,7 @@ describe('Workflow', async () => {
           execute: start,
         });
 
-        const other = vi.fn().mockImplementation(async ({ context }) => {
+        const other = vi.fn().mockImplementation(async () => {
           return { other: 26 };
         });
         const otherStep = new Step({
@@ -3311,10 +3311,10 @@ describe('Workflow', async () => {
           const otherVal = context.getStepResult('other')?.other ?? 0;
           return { finalValue: startVal + otherVal };
         });
-        const first = vi.fn().mockImplementation(async ({ context }) => {
+        const first = vi.fn().mockImplementation(async () => {
           return { success: true };
         });
-        const last = vi.fn().mockImplementation(async ({ context }) => {
+        const last = vi.fn().mockImplementation(async () => {
           return { success: true };
         });
         const finalStep = new Step({
@@ -3344,7 +3344,7 @@ describe('Workflow', async () => {
               execute: first,
             }),
           )
-          .if(async ({ context }) => false, wfA, wfB)
+          .if(async () => false, wfA, wfB)
           .then(
             new Step({
               id: 'last-step',
@@ -3403,7 +3403,7 @@ describe('Workflow', async () => {
           execute: start,
         });
 
-        const other = vi.fn().mockImplementation(async ({ context }) => {
+        const other = vi.fn().mockImplementation(async () => {
           return { other: 26 };
         });
         const otherStep = new Step({
@@ -3417,10 +3417,10 @@ describe('Workflow', async () => {
           const otherVal = context.getStepResult('other')?.other ?? 0;
           return { finalValue: startVal + otherVal };
         });
-        const first = vi.fn().mockImplementation(async ({ context }) => {
+        const first = vi.fn().mockImplementation(async () => {
           return { success: true };
         });
-        const last = vi.fn().mockImplementation(async ({ context }) => {
+        const last = vi.fn().mockImplementation(async () => {
           return { success: true };
         });
         const finalStep = new Step({
@@ -3458,7 +3458,7 @@ describe('Workflow', async () => {
               execute: first,
             }),
           )
-          .if(async ({ context }) => false, wfA, wfB)
+          .if(async () => false, wfA, wfB)
           .then(
             new Step({
               id: 'last-step',
@@ -3547,7 +3547,7 @@ describe('Workflow', async () => {
           execute: start,
         });
 
-        const other = vi.fn().mockImplementation(async ({ context }) => {
+        const other = vi.fn().mockImplementation(async () => {
           return { other: 26 };
         });
         const otherStep = new Step({
@@ -3561,7 +3561,7 @@ describe('Workflow', async () => {
           const otherVal = context.getStepResult('other')?.other ?? 0;
           return { finalValue: startVal + otherVal };
         });
-        const last = vi.fn().mockImplementation(async ({ context }) => {
+        const last = vi.fn().mockImplementation(async () => {
           return { success: true };
         });
         const finalStep = new Step({
@@ -3639,7 +3639,7 @@ describe('Workflow', async () => {
           execute: start,
         });
 
-        const other = vi.fn().mockImplementation(async ({ context }) => {
+        const other = vi.fn().mockImplementation(async () => {
           return { other: 26 };
         });
         const otherStep = new Step({
@@ -3653,7 +3653,7 @@ describe('Workflow', async () => {
           const otherVal = context.getStepResult('other')?.other ?? 0;
           return { finalValue: startVal + otherVal };
         });
-        const last = vi.fn().mockImplementation(async ({ context }) => {
+        const last = vi.fn().mockImplementation(async () => {
           return { success: true };
         });
         const finalStep = new Step({
@@ -3754,7 +3754,7 @@ describe('Workflow', async () => {
           execute: start,
         });
 
-        const other = vi.fn().mockImplementation(async ({ context }) => {
+        const other = vi.fn().mockImplementation(async () => {
           return { other: 26 };
         });
         const otherStep = new Step({
@@ -3768,7 +3768,7 @@ describe('Workflow', async () => {
           const otherVal = context.getStepResult('other')?.other ?? 0;
           return { finalValue: startVal + otherVal };
         });
-        const last = vi.fn().mockImplementation(async ({ context }) => {
+        const last = vi.fn().mockImplementation(async () => {
           return { success: true };
         });
         const finalStep = new Step({
@@ -3854,7 +3854,7 @@ describe('Workflow', async () => {
         });
 
         let wasSuspended = false;
-        const other = vi.fn().mockImplementation(async ({ context, suspend }) => {
+        const other = vi.fn().mockImplementation(async ({ suspend }) => {
           if (!wasSuspended) {
             wasSuspended = true;
             await suspend();
@@ -3872,10 +3872,10 @@ describe('Workflow', async () => {
           const otherVal = context.getStepResult('other')?.other ?? 0;
           return { finalValue: startVal + otherVal };
         });
-        const last = vi.fn().mockImplementation(async ({ context }) => {
+        const last = vi.fn().mockImplementation(async () => {
           return { success: true };
         });
-        const begin = vi.fn().mockImplementation(async ({ context }) => {
+        const begin = vi.fn().mockImplementation(async () => {
           return { success: true };
         });
         const finalStep = new Step({
@@ -3926,13 +3926,13 @@ describe('Workflow', async () => {
           )
           .commit();
 
-        const mastra = new Mastra({
-          logger,
-          workflows: { counterWorkflow },
-        });
+        // const mastra = new Mastra({
+        //   logger,
+        //   workflows: { counterWorkflow },
+        // });
 
         const run = counterWorkflow.createRun();
-        const { runId, results, activePaths } = await run.start({ triggerData: { startValue: 1 } });
+        const { results } = await run.start({ triggerData: { startValue: 1 } });
 
         expect(begin).toHaveBeenCalledTimes(1);
         expect(start).toHaveBeenCalledTimes(1);
@@ -3984,7 +3984,7 @@ describe('Workflow', async () => {
         });
 
         let wasSuspended = false;
-        const other = vi.fn().mockImplementation(async ({ context, suspend }) => {
+        const other = vi.fn().mockImplementation(async ({ suspend }) => {
           if (!wasSuspended) {
             wasSuspended = true;
             await suspend();
@@ -4002,10 +4002,10 @@ describe('Workflow', async () => {
           const otherVal = context.getStepResult('other')?.other ?? 0;
           return { finalValue: startVal + otherVal };
         });
-        const last = vi.fn().mockImplementation(async ({ context }) => {
+        const last = vi.fn().mockImplementation(async () => {
           return { success: true };
         });
-        const begin = vi.fn().mockImplementation(async ({ context }) => {
+        const begin = vi.fn().mockImplementation(async () => {
           return { success: true };
         });
         const finalStep = new Step({
@@ -4056,14 +4056,14 @@ describe('Workflow', async () => {
           )
           .commit();
 
-        const mastra = new Mastra({
-          logger,
-          workflows: { counterWorkflow },
-        });
+        // const mastra = new Mastra({
+        //   logger,
+        //   workflows: { counterWorkflow },
+        // });
 
         const run = counterWorkflow.createRun();
         const data = await run.start({ triggerData: { startValue: 1 } });
-        const { runId, results, activePaths } = data;
+        const { results } = data;
         console.dir(data, { depth: null });
 
         expect(begin).toHaveBeenCalledTimes(1);
@@ -4134,7 +4134,7 @@ describe('Workflow', async () => {
           execute: start,
         });
 
-        const other = vi.fn().mockImplementation(async ({ context, suspend }) => {
+        const other = vi.fn().mockImplementation(async () => {
           return { other: 26 };
         });
         const otherStep = new Step({
@@ -4148,7 +4148,7 @@ describe('Workflow', async () => {
           const otherVal = context.getStepResult('other')?.other ?? 0;
           return { finalValue: startVal + otherVal };
         });
-        const last = vi.fn().mockImplementation(async ({ context }) => {
+        const last = vi.fn().mockImplementation(async () => {
           return { success: true };
         });
         const finalStep = new Step({
@@ -4199,19 +4199,19 @@ describe('Workflow', async () => {
           },
         });
 
-        const myStep = new Step({
-          id: 'my-step',
-          inputSchema: z.object({
-            input: z.string(),
-          }),
-          outputSchema: z.object({
-            output: z.string(),
-          }),
-          description: 'My step',
-          execute: async ({ context }) => {
-            return { output: 'lolo' };
-          },
-        });
+        // const myStep = new Step({
+        //   id: 'my-step',
+        //   inputSchema: z.object({
+        //     input: z.string(),
+        //   }),
+        //   outputSchema: z.object({
+        //     output: z.string(),
+        //   }),
+        //   description: 'My step',
+        //   execute: async () => {
+        //     return { output: 'lolo' };
+        //   },
+        // });
 
         counterWorkflow
           .step(wfA)
@@ -4226,7 +4226,7 @@ describe('Workflow', async () => {
         const run = counterWorkflow.createRun();
         const result = await run.start({ triggerData: { startValue: 1 } });
         const results = result.results;
-        const x = result.results['nested-workflow-a'];
+        // const x = result.results['nested-workflow-a'];
         // if (x.status === 'success') {
         //   const lastStepVal =
         //     x.output.results.final.status === 'success' ? x.output.results.final.output.finalValue : undefined;

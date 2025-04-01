@@ -28,7 +28,7 @@ export abstract class OpenAPIToolset {
   }
 
   protected _generateIntegrationTools<T>() {
-    const { client, ...clientMethods } = this.baseClient;
+    const { client: _client, ...clientMethods } = this.baseClient;
     const schemas = this.toolSchemas;
     const documentations = this.toolDocumentations;
 

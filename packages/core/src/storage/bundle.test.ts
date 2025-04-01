@@ -1,5 +1,5 @@
 import { spawn as spwn } from 'child_process';
-import path, { dirname, join } from 'path';
+import { dirname, join } from 'path';
 import { fileURLToPath } from 'url';
 import type { RollupOutput } from 'rollup';
 import { rollup } from 'rollup';
