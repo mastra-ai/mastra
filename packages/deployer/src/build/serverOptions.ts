@@ -1,11 +1,12 @@
 import * as babel from '@babel/core';
 import { rollup } from 'rollup';
 import esbuild from 'rollup-plugin-esbuild';
+
+import { removeAllOptionsExceptServer } from './babel/remove-all-options-server';
 import commonjs from '@rollup/plugin-commonjs';
-import { removeAllOptionsExceptTelemetry } from './babel/remove-all-options-telemetry';
 import { recursiveRemoveNonReferencedNodes } from './plugins/remove-unused-references';
 
-export function getTelemetryBundler(
+export function getServerOptionsBundler(
   entryFile: string,
   result: {
     hasCustomConfig: false;
@@ -14,7 +15,7 @@ export function getTelemetryBundler(
   return rollup({
     logLevel: 'silent',
     input: {
-      'telemetry-config': entryFile,
+      'server-config': entryFile,
     },
     treeshake: 'smallest',
     plugins: [
@@ -31,7 +32,7 @@ export function getTelemetryBundler(
         ignoreTryCatch: false,
       }),
       {
-        name: 'get-telemetry-config',
+        name: 'get-server-config',
         transform(code, id) {
           if (id !== entryFile) {
             return;
@@ -44,7 +45,7 @@ export function getTelemetryBundler(
                 babelrc: false,
                 configFile: false,
                 filename: id,
-                plugins: [removeAllOptionsExceptTelemetry(result)],
+                plugins: [removeAllOptionsExceptServer(result)],
               },
               (err, result) => {
                 if (err) {
@@ -86,7 +87,7 @@ export function getTelemetryBundler(
   });
 }
 
-export async function writeTelemetryConfig(
+export async function writeServerOptionsConfig(
   entryFile: string,
   outputDir: string,
 ): Promise<{
@@ -96,7 +97,7 @@ export async function writeTelemetryConfig(
     hasCustomConfig: false,
   } as const;
 
-  const bundle = await getTelemetryBundler(entryFile, result);
+  const bundle = await getServerOptionsBundler(entryFile, result);
 
   await bundle.write({
     dir: outputDir,
