@@ -138,14 +138,19 @@ program
   .option('-d, --dir <dir>', 'Path to your mastra folder')
   .option('-r, --root <root>', 'Path to your root folder')
   .option('-t, --tools <toolsDirs>', 'Comma-separated list of paths to tool files to include')
-  .option('-p, --port <port>', 'Port number for the development server (defaults to 4111)')
+  .option('-p, --port <port>', 'deprecated: Port number for the development server (defaults to 4111)')
   .action(args => {
     analytics.trackCommand({
       command: 'dev',
       origin,
     });
+
+    if (args?.port) {
+      logger.warn('The --port option is deprecated. Use the server key in the Mastra instance instead.');
+    }
+
     dev({
-      port: args?.port ? parseInt(args.port) : 4111,
+      port: args?.port ? parseInt(args.port) : null,
       dir: args?.dir,
       root: args?.root,
       tools: args?.tools ? args.tools.split(',') : [],

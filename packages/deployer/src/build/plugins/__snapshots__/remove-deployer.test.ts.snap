@@ -3,7 +3,7 @@
 exports[`Remove deployer > should remove the deployer from ./__fixtures__/basic.js 1`] = `
 "import { Mastra } from '@mastra/core/mastra';
 import { createLogger } from '@mastra/core/logger';
-import { weatherAgent } from './agents';
+import { weatherAgent } from '@/agents';
 
 const mastra = new Mastra({
   agents: {
@@ -12,7 +12,16 @@ const mastra = new Mastra({
   logger: createLogger({
     name: "Mastra",
     level: "info"
-  })
+  }),
+  telemetry: {
+    enabled: true,
+    serviceName: "my-app",
+    export: {
+      type: "otlp",
+      endpoint: "http://localhost:4318"
+      // SigNoz local endpoint
+    }
+  }
 });
 
 export { mastra };
@@ -22,8 +31,29 @@ export { mastra };
 exports[`Remove deployer > should remove the deployer from ./__fixtures__/basic-with-const.js 1`] = `
 "import { Mastra } from '@mastra/core/mastra';
 import { createLogger } from '@mastra/core/logger';
-import { weatherAgent } from './agents';
+import { createApiRoute } from '@mastra/core/server';
+import { weatherAgent } from '@/agents';
 
+const telemetry = {
+  enabled: true,
+  serviceName: "my-app",
+  export: {
+    type: "otlp",
+    endpoint: "http://localhost:4318"
+    // SigNoz local endpoint
+  }
+};
+const server = {
+  port: 3e3,
+  timeout: 5e3,
+  apiRoutes: [createApiRoute({
+    path: "/hello",
+    method: "get",
+    handler: async (req, res) => {
+      res.send("Hello World");
+    }
+  })]
+};
 const mastra = new Mastra({
   agents: {
     weatherAgent
@@ -31,7 +61,9 @@ const mastra = new Mastra({
   logger: createLogger({
     name: "Mastra",
     level: "info"
-  })
+  }),
+  telemetry,
+  server
 });
 
 export { mastra };
@@ -41,8 +73,19 @@ export { mastra };
 exports[`Remove deployer > should remove the deployer from ./__fixtures__/basic-with-function.js 1`] = `
 "import { Mastra } from '@mastra/core/mastra';
 import { createLogger } from '@mastra/core/logger';
-import { weatherAgent } from './agents';
+import { weatherAgent } from '@/agents';
 
+function getTelemetryConfig() {
+  return {
+    enabled: true,
+    serviceName: "my-app",
+    export: {
+      type: "otlp",
+      endpoint: "http://localhost:4318"
+      // SigNoz local endpoint
+    }
+  };
+}
 const mastra = new Mastra({
   agents: {
     weatherAgent
@@ -50,7 +93,8 @@ const mastra = new Mastra({
   logger: createLogger({
     name: "Mastra",
     level: "info"
-  })
+  }),
+  telemetry: getTelemetryConfig()
 });
 
 export { mastra };
@@ -60,7 +104,8 @@ export { mastra };
 exports[`Remove deployer > should remove the deployer from ./__fixtures__/basic-with-import.js 1`] = `
 "import { Mastra } from '@mastra/core/mastra';
 import { createLogger } from '@mastra/core/logger';
-import { weatherAgent } from './agents';
+import { weatherAgent } from '@/agents';
+import { telemetryConfig } from '@/telemetry';
 
 const mastra = new Mastra({
   agents: {
@@ -69,7 +114,8 @@ const mastra = new Mastra({
   logger: createLogger({
     name: "Mastra",
     level: "info"
-  })
+  }),
+  telemetry: telemetryConfig
 });
 
 export { mastra };

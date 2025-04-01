@@ -13,8 +13,8 @@ export type ApiRoute = {
 type Middleware = MiddlewareHandler | { path: string; handler: MiddlewareHandler };
 
 export type ServerConfig = {
-  // TOOD add support for port
-  // port?: number;
+  port?: number;
+  timeout?: number;
   apiRoutes?: ApiRoute[];
   middleware?: Middleware | Middleware[];
 };

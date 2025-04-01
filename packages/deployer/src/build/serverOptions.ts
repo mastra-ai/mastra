@@ -1,11 +1,13 @@
 import * as babel from '@babel/core';
 import { rollup } from 'rollup';
 import esbuild from 'rollup-plugin-esbuild';
-import commonjs from '@rollup/plugin-commonjs';
-import { removeAllOptionsExceptTelemetry } from './babel/remove-all-options-telemetry';
-import { recursiveRemoveNonReferencedNodes } from './plugins/remove-unused-references';
 
-export function getTelemetryBundler(
+import { removeAllOptionsExceptServer } from './babel/remove-all-options-server';
+import commonjs from '@rollup/plugin-commonjs';
+import { recursiveRemoveNonReferencedNodes } from './plugins/remove-unused-references';
+import type { Config, Mastra } from '@mastra/core';
+
+export function getServerOptionsBundler(
   entryFile: string,
   result: {
     hasCustomConfig: false;
@@ -14,7 +16,7 @@ export function getTelemetryBundler(
   return rollup({
     logLevel: 'silent',
     input: {
-      'telemetry-config': entryFile,
+      'server-config': entryFile,
     },
     treeshake: 'smallest',
     plugins: [
@@ -31,7 +33,7 @@ export function getTelemetryBundler(
         ignoreTryCatch: false,
       }),
       {
-        name: 'get-telemetry-config',
+        name: 'get-server-config',
         transform(code, id) {
           if (id !== entryFile) {
             return;
@@ -44,7 +46,7 @@ export function getTelemetryBundler(
                 babelrc: false,
                 configFile: false,
                 filename: id,
-                plugins: [removeAllOptionsExceptTelemetry(result)],
+                plugins: [removeAllOptionsExceptServer(result)],
               },
               (err, result) => {
                 if (err) {
@@ -86,17 +88,12 @@ export function getTelemetryBundler(
   });
 }
 
-export async function writeTelemetryConfig(
-  entryFile: string,
-  outputDir: string,
-): Promise<{
-  hasCustomConfig: boolean;
-}> {
+export async function getServerOptions(entryFile: string, outputDir: string): Promise<Config['server'] | null> {
   const result = {
     hasCustomConfig: false,
   } as const;
 
-  const bundle = await getTelemetryBundler(entryFile, result);
+  const bundle = await getServerOptionsBundler(entryFile, result);
 
   await bundle.write({
     dir: outputDir,
@@ -104,5 +101,9 @@ export async function writeTelemetryConfig(
     entryFileNames: '[name].mjs',
   });
 
-  return result;
+  if (result.hasCustomConfig) {
+    return (await import(`file:${outputDir}/server-config.mjs`)).server as unknown as Config['server'];
+  }
+
+  return null;
 }
