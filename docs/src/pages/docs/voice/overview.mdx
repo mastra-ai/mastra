@@ -52,7 +52,7 @@ import { PlayAIVoice } from "@mastra/voice-playai";
 import { CompositeVoice } from "@mastra/core/voice";
 
 // Initialize OpenAI voice for STT
-const listeningProvider = new OpenAIVoice({
+const input = new OpenAIVoice({
   listeningModel: {
     name: "whisper-1",
     apiKey: process.env.OPENAI_API_KEY,
@@ -60,7 +60,7 @@ const listeningProvider = new OpenAIVoice({
 });
 
 // Initialize PlayAI voice for TTS
-const speakingProvider = new PlayAIVoice({
+const output = new PlayAIVoice({
   speechModel: {
     name: "playai-voice",
     apiKey: process.env.PLAYAI_API_KEY,
@@ -69,8 +69,8 @@ const speakingProvider = new PlayAIVoice({
 
 // Combine the providers using CompositeVoice
 const voice = new CompositeVoice({
-  listeningProvider,
-  speakingProvider,
+  input,
+  output,
 });
 
 // Implement voice interactions using the combined voice provider
