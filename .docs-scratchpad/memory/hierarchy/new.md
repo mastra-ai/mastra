@@ -12,7 +12,7 @@ This is a high level proposal for the new info arch for Mastra Memory documentat
    3. Trying it out (playground)
 3. Using memory
    1. Conversations and turn based interactions (Last messages)
-   2. Recalling old messages (Semantic recall)
+   2. Recalling old messages (Semantic recall) [add section on embedding perf]
    3. Continuously relevant information (Working memory)
    4. Frontend UI (Matra client + useChat)
    5. Tuning for your LLM (token limits + tool call filters)
@@ -26,6 +26,10 @@ This is a high level proposal for the new info arch for Mastra Memory documentat
 5. Configuring memory
    1. Database adapters (storage, vector, and embedder)
    2. Defaults and recommended settings
+6. Debugging memory
+   1. Common issues and solutions
+   2. Viewing thread data for debugging
+   3. Troubleshooting semantic search
 
 ## Examples
 
