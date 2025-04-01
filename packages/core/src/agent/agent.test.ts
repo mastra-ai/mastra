@@ -501,19 +501,19 @@ describe('agent', () => {
     });
   });
 
-  describe('agent dependency handling', () => {
-    it('should pass dependencies to tools', async () => {
-      const dependenciesSchema = z.object({
+  describe('agent variable handling', () => {
+    it('should pass variables to tools', async () => {
+      const variablesSchema = z.object({
         weatherApiKey: z.string(),
         temperatureUnit: z.enum(['celsius', 'fahrenheit']),
       });
 
-      type WeatherDependencies = z.infer<typeof dependenciesSchema>;
+      type WeatherVariables = z.infer<typeof variablesSchema>;
 
-      const mockWeatherTool = vi.fn().mockImplementation(async ({ context, dependencies }) => {
+      const mockWeatherTool = vi.fn().mockImplementation(async ({ context, variables }) => {
         const location = context.location;
-        const unit = dependencies.temperatureUnit;
-        const apiKey = dependencies.weatherApiKey;
+        const unit = variables.temperatureUnit;
+        const apiKey = variables.weatherApiKey;
 
         return {
           result: {
@@ -535,7 +535,7 @@ describe('agent', () => {
         inputSchema: z.object({
           location: z.string().describe('The city or location to get weather for'),
         }),
-        dependenciesSchema: dependenciesSchema,
+        variablesSchema: variablesSchema,
         execute: mockWeatherTool,
       });
 
@@ -544,26 +544,26 @@ describe('agent', () => {
         instructions: 'You are an agent that can fetch weather information',
         model: openai('gpt-4o'),
         tools: { weatherTool },
-        dependenciesSchema: dependenciesSchema,
+        variablesSchema: variablesSchema,
       });
 
-      const dependencies: WeatherDependencies = {
+      const variables: WeatherVariables = {
         weatherApiKey: 'weather-api-123456',
         temperatureUnit: 'celsius',
       };
 
       await agent.generate('What is the weather in San Francisco?', {
-        dependencies,
+        variables,
         toolChoice: 'required',
       });
 
       expect(mockWeatherTool).toHaveBeenCalled();
-      expect(mockWeatherTool.mock.calls[0][0].dependencies).toEqual(dependencies);
+      expect(mockWeatherTool.mock.calls[0][0].variables).toEqual(variables);
       expect(mockWeatherTool.mock.calls[0][0].context.location).toBe('San Francisco');
     }, 500000);
 
-    it('should handle tools with different dependency schemas than the agent', async () => {
-      const agentDepsSchema = z.object({
+    it('should handle tools with different variable schemas than the agent', async () => {
+      const agentVarsSchema = z.object({
         apiKey: z.string(),
         userId: z.number(),
         preferences: z.object({
@@ -571,60 +571,60 @@ describe('agent', () => {
         }),
       });
 
-      const subsetDepsSchema = z.object({
+      const subsetVarsSchema = z.object({
         apiKey: z.string(),
         userId: z.number(),
       });
 
-      const differentDepsSchema = z.object({
+      const differentVarsSchema = z.object({
         databaseUrl: z.string(),
         timeout: z.number(),
       });
 
-      const subsetToolMock = vi.fn().mockImplementation(async ({ dependencies }) => {
+      const subsetToolMock = vi.fn().mockImplementation(async ({ variables }) => {
         return {
           result: {
-            apiKey: dependencies.apiKey,
-            userId: dependencies.userId,
+            apiKey: variables.apiKey,
+            userId: variables.userId,
           },
         };
       });
 
-      const differentToolMock = vi.fn().mockImplementation(async ({ dependencies }) => {
+      const differentToolMock = vi.fn().mockImplementation(async ({ variables }) => {
         return {
           result: {
-            databaseUrl: dependencies.databaseUrl,
-            timeout: dependencies.timeout,
+            databaseUrl: variables.databaseUrl,
+            timeout: variables.timeout,
           },
         };
       });
 
       const subsetTool = createTool({
         id: 'subsetTool',
-        description: 'Tool with subset of agent dependencies',
-        dependenciesSchema: subsetDepsSchema,
+        description: 'Tool with subset of agent variables',
+        variablesSchema: subsetVarsSchema,
         execute: subsetToolMock,
       });
 
       const differentTool = createTool({
         id: 'differentTool',
-        description: 'Tool with different dependencies',
-        dependenciesSchema: differentDepsSchema,
+        description: 'Tool with different variables',
+        variablesSchema: differentVarsSchema,
         execute: differentToolMock,
       });
 
       const agent = new Agent({
         name: 'MultiSchemaAgent',
-        instructions: 'You are an agent with tools that have different dependency schemas',
+        instructions: 'You are an agent with tools that have different variable schemas',
         model: openai('gpt-4o'),
         tools: {
           subsetTool: subsetTool as any,
           differentTool: differentTool as any,
         },
-        dependenciesSchema: agentDepsSchema,
+        variablesSchema: agentVarsSchema,
       });
 
-      const agentDependencies = {
+      const agentVariables = {
         apiKey: 'agent-api-key',
         userId: 123,
         preferences: {
@@ -633,12 +633,12 @@ describe('agent', () => {
       };
 
       await agent.generate('Use the subset tool', {
-        dependencies: agentDependencies,
+        variables: agentVariables,
         toolChoice: { type: 'tool', toolName: 'subsetTool' },
       });
 
       expect(subsetToolMock).toHaveBeenCalled();
-      expect(subsetToolMock.mock.calls[0][0].dependencies).toEqual({
+      expect(subsetToolMock.mock.calls[0][0].variables).toEqual({
         apiKey: 'agent-api-key',
         userId: 123,
       });
@@ -646,8 +646,8 @@ describe('agent', () => {
       subsetToolMock.mockClear();
       differentToolMock.mockClear();
 
-      // Testing with dependencies that satisfy both schemas
-      const combinedDependencies = {
+      // Testing with variables that satisfy both schemas
+      const combinedVariables = {
         apiKey: 'agent-api-key',
         userId: 123,
         preferences: {
@@ -658,70 +658,72 @@ describe('agent', () => {
       };
 
       await agent.generate('Use the different tool', {
-        dependencies: combinedDependencies,
+        variables: combinedVariables,
         toolChoice: { type: 'tool', toolName: 'differentTool' },
       });
 
       expect(differentToolMock).toHaveBeenCalled();
-      expect(differentToolMock.mock.calls[0][0].dependencies).toEqual({
+      expect(differentToolMock.mock.calls[0][0].variables).toEqual({
         databaseUrl: 'mongodb://localhost:27017',
         timeout: 5000,
       });
     }, 500000);
 
-    it('should validate dependencies at the tool level', async () => {
-      const toolDepsSchema = z.object({
+    it('should validate variables at the tool level', async () => {
+      const toolVarsSchema = z.object({
         apiKey: z.string(),
         maxResults: z.number().min(1).max(100),
         filters: z.array(z.string()),
       });
 
-      const toolWithValidationMock = vi.fn().mockImplementation(async ({ dependencies }) => {
-        if (dependencies.maxResults > 50) {
-          throw new Error('maxResults exceeds recommended limit of 50');
-        }
+      const toolWithValidationMock = vi
+        .fn()
+        .mockImplementation(async ({ variables }: { variables: z.infer<typeof toolVarsSchema> }) => {
+          if (variables.maxResults > 50) {
+            throw new Error('maxResults exceeds recommended limit of 50');
+          }
 
-        return {
-          result: {
-            success: true,
-            usedFilters: dependencies.filters,
-            resultCount: dependencies.maxResults,
-          },
-        };
-      });
+          return {
+            result: {
+              success: true,
+              usedFilters: variables.filters,
+              resultCount: variables.maxResults,
+            },
+          };
+        });
 
       const toolWithValidation = createTool({
         id: 'validationTool',
-        description: 'Tool that validates its dependencies',
-        dependenciesSchema: toolDepsSchema,
+        description: 'Tool that validates its variables',
+        variablesSchema: toolVarsSchema,
         execute: toolWithValidationMock,
       });
 
       const agent = new Agent({
         name: 'ValidationAgent',
-        instructions: 'You are an agent with a tool that validates dependencies',
+        instructions: 'You are an agent with a tool that validates variables',
         model: openai('gpt-4o'),
         tools: { toolWithValidation },
-        dependenciesSchema: toolDepsSchema,
+        variablesSchema: toolVarsSchema,
       });
 
-      const validDependencies = {
+      const validVariables = {
         apiKey: 'valid-api-key',
         maxResults: 20,
         filters: ['active', 'recent'],
       };
 
       await agent.generate('Use the validation tool', {
-        dependencies: validDependencies,
+        variables: validVariables,
         toolChoice: { type: 'tool', toolName: 'toolWithValidation' },
       });
 
       expect(toolWithValidationMock).toHaveBeenCalled();
-      expect(toolWithValidationMock.mock.calls[0][0].dependencies).toEqual(validDependencies);
+      expect(toolWithValidationMock.mock.calls[0][0].variables).toEqual(validVariables);
 
       toolWithValidationMock.mockClear();
 
-      const invalidDependencies = {
+      const invalidVariables = {
         apiKey: 'valid-api-key',
         maxResults: 75, // Exceeds the tool's internal limit of 50
         filters: ['active', 'recent'],
@@ -729,47 +731,47 @@ describe('agent', () => {
 
       await withSilentLogging(agent, async () => {
         await expect(
-          agent.generate('Use the validation tool with invalid dependencies', {
-            dependencies: invalidDependencies,
+          agent.generate('Use the validation tool with invalid variables', {
+            variables: invalidVariables,
             toolChoice: { type: 'tool', toolName: 'toolWithValidation' },
           }),
         ).rejects.toThrow('maxResults exceeds recommended limit of 50');
       });
     }, 500000);
 
-    it('should handle errors when tools have incompatible dependency schemas', async () => {
-      const agentDepsSchema = z.object({
+    it('should handle errors when tools have incompatible variable schemas', async () => {
+      const agentVarsSchema = z.object({
         apiKey: z.string(),
         userId: z.number(),
       });
 
-      const incompatibleDepsSchema = z.object({
+      const incompatibleVarsSchema = z.object({
         apiKey: z.number(), // Different type than agent's string
         userId: z.string(), // Different type than agent's number
       });
 
-      const incompatibleToolMock = vi.fn().mockImplementation(async ({ dependencies }) => {
+      const incompatibleToolMock = vi.fn().mockImplementation(async ({ variables }) => {
         return {
-          result: dependencies,
+          result: variables,
         };
       });
 
       const incompatibleTool = createTool({
         id: 'incompatibleTool',
-        description: 'Tool with incompatible dependency schema',
-        dependenciesSchema: incompatibleDepsSchema,
+        description: 'Tool with incompatible variable schema',
+        variablesSchema: incompatibleVarsSchema,
         execute: incompatibleToolMock,
       });
 
       const agent = new Agent({
         name: 'ErrorHandlingAgent',
-        instructions: 'You are an agent with a tool that has incompatible dependencies',
+        instructions: 'You are an agent with a tool that has incompatible variables',
         model: openai('gpt-4o'),
         tools: { incompatibleTool: incompatibleTool as any },
-        dependenciesSchema: agentDepsSchema,
+        variablesSchema: agentVarsSchema,
       });
 
-      const agentDependencies = {
+      const agentVariables = {
         apiKey: 'agent-api-key',
         userId: 123,
       };
@@ -777,16 +779,16 @@ describe('agent', () => {
       await withSilentLogging(agent, async () => {
         await expect(
           agent.generate('Use the incompatible tool', {
-            dependencies: agentDependencies,
+            variables: agentVariables,
             toolChoice: { type: 'tool', toolName: 'incompatibleTool' },
           }),
-        ).rejects.toThrow('Dependencies validation failed');
+        ).rejects.toThrow('Variables validation failed');
       });
     }, 500000);
   });
 
-  it('should handle stream method with dependencies', async () => {
-    const depsSchema = z.object({
+  it('should handle stream method with variables', async () => {
+    const varsSchema = z.object({
       apiKey: z.string(),
       region: z.string(),
       userName: z.string(),
@@ -796,17 +798,17 @@ describe('agent', () => {
       name: 'StreamAgent',
       instructions: 'You are an assistant who responds with location information',
       model: openai('gpt-4o'),
-      dependenciesSchema: depsSchema,
+      variablesSchema: varsSchema,
     });
 
-    const streamDependencies = {
+    const streamVariables = {
       apiKey: 'stream-api-key-123',
       region: 'Western Europe',
       userName: 'Carlos',
     };
 
     const response = await agent.stream('Could you introduce yourself briefly?', {
-      dependencies: streamDependencies,
+      variables: streamVariables,
     });
 
     let finalText = '';
