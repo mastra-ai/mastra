@@ -35,7 +35,7 @@
     "@modelcontextprotocol/sdk": "^1.7.0",
     "date-fns": "^4.1.0",
     "exit-hook": "^4.0.0",
-    "fastmcp": "^1.20.4",
+    "fastmcp": "^1.20.5",
     "jsdom": "^26.0.0",
     "turndown": "^7.1.2",
     "tylerbarnes-fastmcp-fix": "^1.0.0",
