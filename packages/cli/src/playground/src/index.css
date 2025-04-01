@@ -194,7 +194,7 @@ code[class^='language-'] {
   font-family: var(--commit-mono) !important;
 }
 
-th:has(header){
-  height:var(--top-bar-height) !important;
+th:has(header) {
+  height: var(--top-bar-height) !important;
   padding-block: 0 !important ;
 }
