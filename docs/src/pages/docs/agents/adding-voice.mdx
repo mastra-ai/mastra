@@ -56,8 +56,8 @@ export const agent = new Agent({
 
   // Create a composite voice using OpenAI for listening and PlayAI for speaking
   voice: new CompositeVoice({
-    listenProvider: new OpenAIVoice(),
-    speakProvider: new PlayAIVoice(),
+    input: new OpenAIVoice(),
+    output: new PlayAIVoice(),
   }),
 });
 ```

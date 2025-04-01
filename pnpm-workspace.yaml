@@ -6,7 +6,6 @@ packages:
   - "voice/*"
   - "client-sdks/*"
   - "!packages/cli/admin"
-  - "integration-generator/*"
   - "integrations/*"
   - "examples/*"
   - "examples/voice/*"

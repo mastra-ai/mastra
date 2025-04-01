@@ -19,6 +19,14 @@ import type {
 import type { WorkflowRunState } from '@mastra/core/workflows';
 import { createClient, ClickHouseClient } from '@clickhouse/client';
 
+function safelyParseJSON(jsonString: string): any {
+  try {
+    return JSON.parse(jsonString);
+  } catch {
+    return {};
+  }
+}
+
 export type ClickhouseConfig = {
   url: string;
   username: string;
@@ -73,6 +81,7 @@ export class ClickhouseStore extends MastraStorage {
         date_time_input_format: 'best_effort',
         date_time_output_format: 'iso', // This is crucial
         use_client_time_zone: 1,
+        output_format_json_quote_64bit_integers: 0,
       },
     });
   }
@@ -86,15 +95,21 @@ export class ClickhouseStore extends MastraStorage {
       await this.db.insert({
         table: tableName,
         values: records.map(record => ({
-          ...record,
-          createdAt: record.createdAt.toISOString(),
-          updatedAt: record.updatedAt.toISOString(),
+          ...Object.fromEntries(
+            Object.entries(record).map(([key, value]) => [
+              key,
+              TABLE_SCHEMAS[tableName as TABLE_NAMES]?.[key]?.type === 'timestamp'
+                ? new Date(value).toISOString()
+                : value,
+            ]),
+          ),
         })),
         format: 'JSONEachRow',
         clickhouse_settings: {
           // Allows to insert serialized JS Dates (such as '2023-12-06T10:54:48.000Z')
           date_time_input_format: 'best_effort',
           use_client_time_zone: 1,
+          output_format_json_quote_64bit_integers: 0,
         },
       });
     } catch (error) {
@@ -124,41 +139,31 @@ export class ClickhouseStore extends MastraStorage {
 
     const conditions: string[] = [];
     if (name) {
-      conditions.push(`name LIKE CONCAT(\$${idx++}, '%')`);
+      conditions.push(`name LIKE CONCAT({var_name:String}, '%')`);
+      args.var_name = name;
     }
     if (scope) {
-      conditions.push(`scope = \$${idx++}`);
+      conditions.push(`scope = {var_scope:String}`);
+      args.var_scope = scope;
     }
     if (attributes) {
-      Object.keys(attributes).forEach(key => {
-        conditions.push(`attributes->>'${key}' = \$${idx++}`);
+      Object.entries(attributes).forEach(([key, value]) => {
+        conditions.push(`JSONExtractString(attributes, '${key}') = {var_${key}:String}`);
+        args[`var_${key}`] = value;
       });
     }
 
     const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
 
-    if (name) {
-      args[name] = 'String';
-    }
-
-    if (scope) {
-      args[scope] = 'String';
-    }
-
-    if (attributes) {
-      for (const [_key, value] of Object.entries(attributes)) {
-        args[value] = 'String';
-      }
-    }
-
     const result = await this.db.query({
-      query: `SELECT toDateTime64(createdAt, 3) as createdAt, toDateTime64(updatedAt, 3) as updatedAt FROM ${TABLE_TRACES} ${whereClause} ORDER BY "createdAt" DESC LIMIT ${limit} OFFSET ${offset}`,
+      query: `SELECT *, toDateTime64(createdAt, 3) as createdAt FROM ${TABLE_TRACES} ${whereClause} ORDER BY "createdAt" DESC LIMIT ${limit} OFFSET ${offset}`,
       query_params: args,
       clickhouse_settings: {
         // Allows to insert serialized JS Dates (such as '2023-12-06T10:54:48.000Z')
         date_time_input_format: 'best_effort',
         date_time_output_format: 'iso',
         use_client_time_zone: 1,
+        output_format_json_quote_64bit_integers: 0,
       },
     });
 
@@ -166,8 +171,24 @@ export class ClickhouseStore extends MastraStorage {
       return [];
     }
 
-    const rows = await result.json();
-    return transformRows(rows.data);
+    const resp = await result.json();
+    const rows: any[] = resp.data;
+    return rows.map(row => ({
+      id: row.id,
+      parentSpanId: row.parentSpanId,
+      traceId: row.traceId,
+      name: row.name,
+      scope: row.scope,
+      kind: row.kind,
+      status: safelyParseJSON(row.status as string),
+      events: safelyParseJSON(row.events as string),
+      links: safelyParseJSON(row.links as string),
+      attributes: safelyParseJSON(row.attributes as string),
+      startTime: row.startTime,
+      endTime: row.endTime,
+      other: safelyParseJSON(row.other as string),
+      createdAt: row.createdAt,
+    }));
   }
 
   async createTable({
@@ -216,6 +237,7 @@ export class ClickhouseStore extends MastraStorage {
           date_time_input_format: 'best_effort',
           date_time_output_format: 'iso',
           use_client_time_zone: 1,
+          output_format_json_quote_64bit_integers: 0,
         },
       });
     } catch (error) {
@@ -233,6 +255,7 @@ export class ClickhouseStore extends MastraStorage {
           date_time_input_format: 'best_effort',
           date_time_output_format: 'iso',
           use_client_time_zone: 1,
+          output_format_json_quote_64bit_integers: 0,
         },
       });
     } catch (error) {
@@ -255,6 +278,7 @@ export class ClickhouseStore extends MastraStorage {
         format: 'JSONEachRow',
         clickhouse_settings: {
           // Allows to insert serialized JS Dates (such as '2023-12-06T10:54:48.000Z')
+          output_format_json_quote_64bit_integers: 0,
           date_time_input_format: 'best_effort',
           use_client_time_zone: 1,
         },
@@ -286,6 +310,7 @@ export class ClickhouseStore extends MastraStorage {
           date_time_input_format: 'best_effort',
           date_time_output_format: 'iso',
           use_client_time_zone: 1,
+          output_format_json_quote_64bit_integers: 0,
         },
       });
 
@@ -333,6 +358,7 @@ export class ClickhouseStore extends MastraStorage {
           date_time_input_format: 'best_effort',
           date_time_output_format: 'iso',
           use_client_time_zone: 1,
+          output_format_json_quote_64bit_integers: 0,
         },
       });
 
@@ -373,6 +399,7 @@ export class ClickhouseStore extends MastraStorage {
           date_time_input_format: 'best_effort',
           date_time_output_format: 'iso',
           use_client_time_zone: 1,
+          output_format_json_quote_64bit_integers: 0,
         },
       });
 
@@ -407,6 +434,7 @@ export class ClickhouseStore extends MastraStorage {
           // Allows to insert serialized JS Dates (such as '2023-12-06T10:54:48.000Z')
           date_time_input_format: 'best_effort',
           use_client_time_zone: 1,
+          output_format_json_quote_64bit_integers: 0,
         },
       });
 
@@ -459,6 +487,7 @@ export class ClickhouseStore extends MastraStorage {
           // Allows to insert serialized JS Dates (such as '2023-12-06T10:54:48.000Z')
           date_time_input_format: 'best_effort',
           use_client_time_zone: 1,
+          output_format_json_quote_64bit_integers: 0,
         },
       });
 
@@ -475,14 +504,18 @@ export class ClickhouseStore extends MastraStorage {
       await this.db.command({
         query: `DELETE FROM "${TABLE_MESSAGES}" WHERE thread_id = '${threadId}';`,
         query_params: { var_thread_id: threadId },
-        clickhouse_settings: {},
+        clickhouse_settings: {
+          output_format_json_quote_64bit_integers: 0,
+        },
       });
 
       // Then delete the thread
       await this.db.command({
         query: `DELETE FROM "${TABLE_THREADS}" WHERE id = {var_id:String};`,
         query_params: { var_id: threadId },
-        clickhouse_settings: {},
+        clickhouse_settings: {
+          output_format_json_quote_64bit_integers: 0,
+        },
       });
     } catch (error) {
       console.error('Error deleting thread:', error);
@@ -542,6 +575,7 @@ export class ClickhouseStore extends MastraStorage {
             date_time_input_format: 'best_effort',
             date_time_output_format: 'iso',
             use_client_time_zone: 1,
+            output_format_json_quote_64bit_integers: 0,
           },
         });
 
@@ -575,6 +609,7 @@ export class ClickhouseStore extends MastraStorage {
           date_time_input_format: 'best_effort',
           date_time_output_format: 'iso',
           use_client_time_zone: 1,
+          output_format_json_quote_64bit_integers: 0,
         },
       });
 
@@ -632,6 +667,7 @@ export class ClickhouseStore extends MastraStorage {
           // Allows to insert serialized JS Dates (such as '2023-12-06T10:54:48.000Z')
           date_time_input_format: 'best_effort',
           use_client_time_zone: 1,
+          output_format_json_quote_64bit_integers: 0,
         },
       });
 
@@ -680,6 +716,7 @@ export class ClickhouseStore extends MastraStorage {
           // Allows to insert serialized JS Dates (such as '2023-12-06T10:54:48.000Z')
           date_time_input_format: 'best_effort',
           use_client_time_zone: 1,
+          output_format_json_quote_64bit_integers: 0,
         },
       });
     } catch (error) {

@@ -1,5 +1,19 @@
 # mastra
 
+## 0.4.5-alpha.2
+
+### Patch Changes
+
+- 706e6aa: Remove unused dependencies
+- Updated dependencies [56c31b7]
+- Updated dependencies [4c98129]
+- Updated dependencies [dbbbf80]
+- Updated dependencies [84fe241]
+- Updated dependencies [84fe241]
+- Updated dependencies [99d43b9]
+  - @mastra/core@0.8.0-alpha.2
+  - @mastra/deployer@0.2.6-alpha.2
+
 ## 0.4.5-alpha.1
 
 ### Patch Changes

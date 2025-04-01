@@ -14,7 +14,6 @@ import type {
   StepAction,
   StepDef,
   StepGraph,
-  WorkflowContext,
   WorkflowRunResult,
   WorkflowRunState,
 } from './types';
@@ -391,7 +390,13 @@ export class WorkflowInstance<
    * Persists the workflow state to the database
    */
   async persistWorkflowSnapshot(): Promise<void> {
-    const existingSnapshot = (await this.#mastra?.storage?.loadWorkflowSnapshot({
+    const storage = this.#mastra?.getStorage();
+    if (!storage) {
+      this.logger.debug('Snapshot cannot be persisted. Mastra engine is not initialized', { runId: this.#runId });
+      return;
+    }
+
+    const existingSnapshot = (await storage.loadWorkflowSnapshot({
       workflowName: this.name,
       runId: this.#runId,
     })) as WorkflowRunState;
@@ -418,7 +423,7 @@ export class WorkflowInstance<
     if (!snapshot && existingSnapshot) {
       existingSnapshot.childStates = { ...existingSnapshot.childStates, ...machineSnapshots };
       existingSnapshot.suspendedSteps = { ...existingSnapshot.suspendedSteps, ...suspendedSteps };
-      await this.#mastra?.storage?.persistWorkflowSnapshot({
+      await storage.persistWorkflowSnapshot({
         workflowName: this.name,
         runId: this.#runId,
         snapshot: existingSnapshot,
@@ -428,7 +433,7 @@ export class WorkflowInstance<
     } else if (snapshot && !existingSnapshot) {
       snapshot.suspendedSteps = suspendedSteps;
       snapshot.childStates = { ...machineSnapshots };
-      await this.#mastra?.storage?.persistWorkflowSnapshot({
+      await storage.persistWorkflowSnapshot({
         workflowName: this.name,
         runId: this.#runId,
         snapshot,
@@ -442,7 +447,7 @@ export class WorkflowInstance<
     snapshot.suspendedSteps = { ...existingSnapshot.suspendedSteps, ...suspendedSteps };
 
     if (!existingSnapshot || snapshot === existingSnapshot) {
-      await this.#mastra?.storage?.persistWorkflowSnapshot({
+      await storage.persistWorkflowSnapshot({
         workflowName: this.name,
         runId: this.#runId,
         snapshot,
@@ -457,7 +462,7 @@ export class WorkflowInstance<
       snapshot.childStates = machineSnapshots;
     }
 
-    await this.#mastra?.storage?.persistWorkflowSnapshot({
+    await storage.persistWorkflowSnapshot({
       workflowName: this.name,
       runId: this.#runId,
       snapshot,
@@ -529,14 +534,15 @@ export class WorkflowInstance<
   }
 
   async #loadWorkflowSnapshot(runId: string) {
-    if (!this.#mastra?.storage) {
+    const storage = this.#mastra?.getStorage();
+    if (!storage) {
       this.logger.debug('Snapshot cannot be loaded. Mastra engine is not initialized', { runId });
       return;
     }
 
     await this.persistWorkflowSnapshot();
 
-    return this.#mastra.getStorage()?.loadWorkflowSnapshot({ runId, workflowName: this.name });
+    return storage.loadWorkflowSnapshot({ runId, workflowName: this.name });
   }
 
   async _resume({ stepId, context: resumeContext }: { stepId: string; context?: Record<string, any> }) {
@@ -588,7 +594,7 @@ export class WorkflowInstance<
     // Reattach the step handler
     // TODO: need types
     if (parsedSnapshot.children) {
-      Object.entries(parsedSnapshot.children).forEach(([_childId, child]: [string, any]) => {
+      Object.entries(parsedSnapshot.children).forEach(([, child]: [string, any]) => {
         if (child.snapshot?.input?.stepNode) {
           // Reattach handler
           const stepDef = this.#makeStepDef(child.snapshot.input.stepNode.step.id);

@@ -98,7 +98,7 @@ export class Logger {
               singleLine: false,
             })
           : pino.multistream([
-              ...transportsAry.map(([_, transport]) => ({
+              ...transportsAry.map(([, transport]) => ({
                 stream: transport,
                 level: options.level || LogLevel.INFO,
               })),
