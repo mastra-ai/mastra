@@ -35,7 +35,7 @@ describe('createTool', () => {
     await testTool.execute?.(
       {
         context: { name: 'Dero Israel' },
-        dependencies: {},
+        variables: {},
       },
       toolExecutionOptions,
     );
@@ -48,7 +48,7 @@ describe('createTool', () => {
     const user = await testTool.execute?.(
       {
         context: { name: 'Dero Israel' },
-        dependencies: {},
+        variables: {},
       },
       toolExecutionOptions,
     );
@@ -60,7 +60,7 @@ describe('createTool', () => {
     const user = await testTool.execute?.(
       {
         context: { name: 'Taofeeq Oluderu' },
-        dependencies: {},
+        variables: {},
       },
       toolExecutionOptions,
     );
