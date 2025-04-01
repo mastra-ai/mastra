@@ -1,10 +1,13 @@
 import fs from 'fs';
 import path from 'path';
+import { openai } from '@ai-sdk/openai';
 import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 
+import { Agent } from '../agent';
 import { createLogger } from '../logger';
 import { Mastra } from '../mastra';
+import { TABLE_WORKFLOW_SNAPSHOT } from '../storage';
 import { DefaultStorage } from '../storage/libsql';
 import { Telemetry } from '../telemetry';
 import { createTool } from '../tools';
@@ -13,8 +16,6 @@ import { Step } from './step';
 import { StepConfig, WhenConditionReturnValue } from './types';
 import type { WorkflowContext, WorkflowResumeResult } from './types';
 import { Workflow } from './workflow';
-import { openai } from '@ai-sdk/openai';
-import { Agent } from '../agent';
 
 const storage = new DefaultStorage({
   config: {
@@ -2762,6 +2763,54 @@ describe('Workflow', async () => {
           },
         },
       });
+    });
+  });
+
+  describe('Workflow Runs', () => {
+    beforeEach(async () => {
+      await storage.clearTable({ tableName: TABLE_WORKFLOW_SNAPSHOT });
+    });
+
+    it('should return empty result when mastra is not initialized', async () => {
+      const workflow = new Workflow({ name: 'test' });
+      const result = await workflow.getWorkflowRuns();
+      expect(result).toEqual({ runs: [], total: 0 });
+    });
+
+    it('should get workflow runs from storage', async () => {
+      await storage.init();
+
+      const step1Action = vi.fn<any>().mockResolvedValue({ result: 'success1' });
+      const step2Action = vi.fn<any>().mockResolvedValue({ result: 'success2' });
+
+      const step1 = new Step({ id: 'step1', execute: step1Action });
+      const step2 = new Step({ id: 'step2', execute: step2Action });
+
+      const workflow = new Workflow({ name: 'test-workflow' });
+      workflow.step(step1).then(step2).commit();
+
+      const mastra = new Mastra({
+        logger,
+        storage,
+        workflows: {
+          'test-workflow': workflow,
+        },
+      });
+
+      const testWorkflow = mastra.getWorkflow('test-workflow');
+
+      // Create a few runs
+      const run1 = await testWorkflow.createRun();
+      await run1.start();
+
+      const run2 = await testWorkflow.createRun();
+      await run2.start();
+
+      const { runs, total } = await testWorkflow.getWorkflowRuns();
+      expect(total).toBe(2);
+      expect(runs).toHaveLength(2);
+      expect(runs.map(r => r.runId)).toEqual(expect.arrayContaining([run1.runId, run2.runId]));
+      expect(runs[0]?.workflowName).toBe('test-workflow');
     });
   });
 

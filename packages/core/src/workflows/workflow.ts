@@ -3,6 +3,7 @@ import { context as otlpContext, trace } from '@opentelemetry/api';
 import { z } from 'zod';
 
 import type { MastraPrimitives } from '../action';
+import type { Agent } from '../agent';
 import { MastraBase } from '../base';
 
 import type { Mastra } from '../mastra';
@@ -24,7 +25,6 @@ import { WhenConditionReturnValue } from './types';
 import { agentToStep, isAgent, isVariableReference, isWorkflow, updateStepInHierarchy, workflowToStep } from './utils';
 import type { WorkflowResultReturn } from './workflow-instance';
 import { WorkflowInstance } from './workflow-instance';
-import type { Agent } from '../agent';
 
 type WorkflowBuilder<T extends Workflow<any, any>> = Pick<
   T,
@@ -937,6 +937,15 @@ export class Workflow<
       await activeRun.persistWorkflowSnapshot();
     }
     return this.#mastra.storage.loadWorkflowSnapshot({ runId, workflowName: this.name });
+  }
+
+  async getWorkflowRuns() {
+    if (!this.#mastra?.storage) {
+      this.logger.debug('Cannot get workflow runs. Mastra engine is not initialized');
+      return { runs: [], total: 0 };
+    }
+
+    return this.#mastra.storage.getWorkflowRuns({ workflowName: this.name });
   }
 
   getExecutionSpan(runId: string) {
