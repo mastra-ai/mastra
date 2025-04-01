@@ -1,5 +1,11 @@
 # @mastra/deployer
 
+## 0.2.6-alpha.3
+
+### Patch Changes
+
+- 0deb356: Fixed a bug where the hono body wasn't properly passed into stream+generate API handlers resulting in "cannot destructure property messages of body"
+
 ## 0.2.6-alpha.2
 
 ### Patch Changes
