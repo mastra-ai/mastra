@@ -24,7 +24,7 @@ const instructions = `
     short stories with user choices that influence the narrative. // omitted for brevity
 `;
 
-export const storyTellerAgent = new Agent({`
+export const storyTellerAgent = new Agent({
   name: 'Story Teller Agent',
   instructions: instructions,
   model: openai('gpt-4o'),
