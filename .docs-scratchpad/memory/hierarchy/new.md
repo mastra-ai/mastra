@@ -8,15 +8,18 @@ This is a high level overview for the new info arch for Mastra Memory documentat
    - [ ] 1.1. What is memory? Memory is the LLM context window
        - [x] Initial draft ./new-docs/1-overview/index.md
        - [ ] Pair review / edits
+       - [ ] Compare with user feedback
        - [ ] Move into actual docs page
        - [ ] Add diagrams / illustrations
    - [ ] 1.2. Types of memory (long/short term)
        - [x] Initial draft ./new-docs/1-overview/index.md
        - [ ] Pair review / edits
+       - [ ] Compare with user feedback
        - [ ] Move into actual docs page
    - [ ] 1.3. How Mastra handles memory (architecture overview)
        - [x] Initial draft ./new-docs/1-overview/index.md
        - [ ] Pair review / edits
+       - [ ] Compare with user feedback
        - [ ] Move into actual docs page
        - [ ] Refine architecture diagram
 
@@ -24,14 +27,17 @@ This is a high level overview for the new info arch for Mastra Memory documentat
    - [ ] 2.1. Installation
        - [x] Initial draft ./new-docs/2-getting-started/index.md
        - [ ] Pair review / edits
+       - [ ] Compare with user feedback
        - [ ] Move into actual docs page
    - [ ] 2.2. Adding memory to an agent
        - [x] Initial draft ./new-docs/2-getting-started/index.md
        - [ ] Pair review / edits
+       - [ ] Compare with user feedback
        - [ ] Move into actual docs page
    - [ ] 2.3. Trying it out (playground)
        - [x] Initial draft ./new-docs/2-getting-started/index.md
        - [ ] Pair review / edits
+       - [ ] Compare with user feedback
        - [ ] Move into actual docs page
        - [ ] Add screenshots of playground
 
@@ -39,68 +45,82 @@ This is a high level overview for the new info arch for Mastra Memory documentat
    - [ ] 3.1. Conversations and turn based interactions (Last messages)
        - [x] Initial draft ./new-docs/3-using-memory/3.1-last-messages.md
        - [ ] Pair review / edits
+       - [ ] Compare with user feedback
        - [ ] Move into actual docs page
    - [ ] 3.2. Recalling old messages (Semantic recall)
        - [x] Initial draft ./new-docs/3-using-memory/3.2-semantic-recall.md
        - [ ] Pair review / edits
+       - [ ] Compare with user feedback
        - [ ] Move into actual docs page
        - [ ] Add section on embedding performance
    - [ ] 3.3. Continuously relevant information (Working memory)
        - [x] Initial draft ./new-docs/3-using-memory/3.3-working-memory.md
        - [ ] Pair review / edits
+       - [ ] Compare with user feedback
        - [ ] Move into actual docs page
        - [ ] Add diagrams illustrating working memory flow
    - [ ] 3.4. Frontend UI (Matra client + useChat)
        - [x] Initial draft ./new-docs/3-using-memory/3.4-frontend-integration.md
        - [ ] Pair review / edits
+       - [ ] Compare with user feedback (omicrxn threads)
        - [ ] Move into actual docs page
        - [ ] Add React/Next.js example
    - [ ] 3.5. Tuning for your LLM (token limits + tool call filters)
        - [x] Initial draft ./new-docs/3-using-memory/3.5-token-management.md
        - [ ] Pair review / edits
+       - [ ] Compare with user feedback
        - [ ] Move into actual docs page
        - [ ] Add performance metrics for different models
    - [ ] 3.6. Memory in workflows
        - [x] Initial draft ./new-docs/3-using-memory/3.6-memory-workflows.md
        - [ ] Pair review / edits
+       - [ ] Compare with user feedback
        - [ ] Move into actual docs page
 
 4. Memory Threads
    - [ ] 4.1. What's a thread? What's a resource?
        - [x] Initial draft ./new-docs/4-memory-threads/index.md
        - [ ] Pair review / edits
+       - [ ] Compare with user feedback
        - [ ] Move into actual docs page
    - [ ] 4.2. How agents interact with memory threads
        - [x] Initial draft ./new-docs/4-memory-threads/index.md
        - [ ] Pair review / edits
+       - [ ] Compare with user feedback
        - [ ] Move into actual docs page
    - [ ] 4.3. Handling multiple users
        - [x] Initial draft ./new-docs/4-memory-threads/4.3-multiple-users.md
        - [ ] Pair review / edits
+       - [ ] Compare with user feedback
        - [ ] Move into actual docs page
    - [ ] 4.4. Building admin UIs to manage threads
        - [x] Initial draft ./new-docs/4-memory-threads/4.4-admin-ui.md
        - [ ] Pair review / edits
+       - [ ] Compare with user feedback
        - [ ] Move into actual docs page
        - [ ] Add UI mockups or screenshots
    - [ ] 4.5. Auth?
        - [x] Initial draft ./new-docs/4-memory-threads/4.5-auth.md
        - [ ] Pair review / edits
+       - [ ] Compare with user feedback
        - [ ] Move into actual docs page
 
 5. Configuring memory
    - [ ] 5.1. Database adapters (storage, vector, and embedder)
        - [x] Initial draft ./new-docs/5-configuring-memory/index.md
        - [ ] Pair review / edits
+       - [ ] Compare with user feedback (satvik thread)
        - [ ] Move into actual docs page
        - [ ] Add performance comparison table
    - [ ] 5.2. Defaults and recommended settings
        - [x] Initial draft ./new-docs/5-configuring-memory/index.md
        - [ ] Pair review / edits
+       - [ ] Compare with user feedback
        - [ ] Move into actual docs page
    - [ ] 5.3. Deployment options
        - [x] Initial draft ./new-docs/5-configuring-memory/5.3-deployment-options.md
        - [ ] Pair review / edits
+       - [ ] Compare with user feedback (cristiandley, jpvaillancourt threads)
        - [ ] Move into actual docs page
        - [ ] Add sections for Mastra Cloud, Vercel, and Cloudflare
 
@@ -108,14 +128,17 @@ This is a high level overview for the new info arch for Mastra Memory documentat
    - [ ] 6.1. Common issues and solutions
        - [x] Initial draft ./new-docs/6-debugging-memory/index.md
        - [ ] Pair review / edits
+       - [ ] Compare with user feedback (omicrxn, mundume threads)
        - [ ] Move into actual docs page
    - [ ] 6.2. Viewing thread data for debugging
        - [x] Initial draft ./new-docs/6-debugging-memory/index.md
        - [ ] Pair review / edits
+       - [ ] Compare with user feedback
        - [ ] Move into actual docs page
    - [ ] 6.3. Troubleshooting semantic search
        - [x] Initial draft ./new-docs/6-debugging-memory/index.md
        - [ ] Pair review / edits
+       - [ ] Compare with user feedback
        - [ ] Move into actual docs page
 
 ## Examples
@@ -123,36 +146,42 @@ This is a high level overview for the new info arch for Mastra Memory documentat
 1. Conversation
    - [x] Initial draft ./new-docs/examples/conversation.md
    - [ ] Pair review / edits
+   - [ ] Compare with user feedback
    - [ ] Move into actual docs page
    - [ ] Test code examples
 
 2. Semantic Recall (RAG)
    - [x] Initial draft ./new-docs/examples/semantic-recall.md
    - [ ] Pair review / edits
+   - [ ] Compare with user feedback
    - [ ] Move into actual docs page
    - [ ] Test code examples
 
 3. Working memory
    - [x] Initial draft ./new-docs/examples/working-memory.md
    - [ ] Pair review / edits
+   - [ ] Compare with user feedback
    - [ ] Move into actual docs page
    - [ ] Test code examples
 
 4. Frontend
    - [x] Initial draft ./new-docs/examples/frontend.md
    - [ ] Pair review / edits
+   - [ ] Compare with user feedback (omicrxn threads)
    - [ ] Move into actual docs page
    - [ ] Test code examples
 
 5. Auth ? (w/ JWT and thread management)
    - [x] Initial draft ./new-docs/examples/auth.md
    - [ ] Pair review / edits
+   - [ ] Compare with user feedback
    - [ ] Move into actual docs page
    - [ ] Test code examples
 
 6. DBs (Default, PG, Upstash, ?)
    - [x] Initial draft ./new-docs/examples/database.md
    - [ ] Pair review / edits
+   - [ ] Compare with user feedback (mundume, jpvaillancourt, cristiandley threads)
    - [ ] Move into actual docs page
    - [ ] Test code examples
 
