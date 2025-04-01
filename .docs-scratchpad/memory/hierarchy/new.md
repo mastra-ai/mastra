@@ -98,6 +98,11 @@ This is a high level overview for the new info arch for Mastra Memory documentat
        - [x] Initial draft ./new-docs/5-configuring-memory/index.md
        - [ ] Pair review / edits
        - [ ] Move into actual docs page
+   - [ ] 5.3. Deployment options
+       - [ ] Initial draft ./new-docs/5-configuring-memory/5.3-deployment-options.md
+       - [ ] Pair review / edits
+       - [ ] Move into actual docs page
+       - [ ] Add sections for Mastra Cloud, Vercel, and Cloudflare
 
 6. Debugging memory
    - [ ] 6.1. Common issues and solutions
