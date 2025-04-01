@@ -117,12 +117,14 @@ export class ClickhouseStore extends MastraStorage {
     page,
     perPage,
     attributes,
+    columnFilters,
   }: {
     name?: string;
     scope?: string;
     page: number;
     perPage: number;
     attributes?: Record<string, string>;
+    columnFilters?: Record<string, any>;
   }): Promise<any[]> {
     let idx = 1;
     const limit = perPage;
@@ -141,8 +143,17 @@ export class ClickhouseStore extends MastraStorage {
     }
     if (attributes) {
       Object.entries(attributes).forEach(([key, value]) => {
-        conditions.push(`JSONExtractString(attributes, '${key}') = {var_${key}:String}`);
-        args[`var_${key}`] = value;
+        conditions.push(`JSONExtractString(attributes, '${key}') = {var_attr_${key}:String}`);
+        args[`var_attr_${key}`] = value;
+      });
+    }
+
+    if (columnFilters) {
+      Object.entries(columnFilters).forEach(([key, value]) => {
+        conditions.push(
+          `${key} = {var_col_${key}:${COLUMN_TYPES[TABLE_SCHEMAS.mastra_traces?.[key]?.type ?? 'text']}}`,
+        );
+        args[`var_col_${key}`] = value;
       });
     }
 
