@@ -51,7 +51,11 @@ const memory = new Memory({
     // Working memory configuration
     workingMemory: {
       enabled: true,
-      template: "<user><first_name></first_name><last_name></last_name></user>",
+      template: `
+# User
+- First Name:
+- Last Name:
+`,
     },
   },
 });
@@ -134,10 +138,10 @@ const agent = new Agent({
       name: "workingMemory",
       type: "{ enabled: boolean; template?: string; use?: 'text-stream' | 'tool-call' }",
       description:
-        "Configuration for working memory feature that allows persistent storage of user information across conversations. The 'use' setting determines how working memory updates are handled - either through text stream tags or tool calls.",
+        "Configuration for working memory feature that allows persistent storage of user information across conversations. The 'use' setting determines how working memory updates are handled - either through text stream tags or tool calls. Working memory uses Markdown format to structure and store continuously relevant information.",
       isOptional: true,
       defaultValue:
-        "{ enabled: false, template: '<user><first_name></first_name><last_name></last_name>...</user>', use: 'text-stream' }",
+        "{ enabled: false, template: '# User Information\\n- **First Name**:\\n- **Last Name**:\\n...', use: 'text-stream' }",
     },
     {
       name: "threads",
@@ -167,14 +171,14 @@ const memory = new Memory({
   options: {
     workingMemory: {
       enabled: true,
-      template: "<user><first_name></first_name><last_name></last_name></user>",
+      template: "# User\n- **First Name**:\n- **Last Name**:",
       use: "tool-call", // or 'text-stream'
     },
   },
 });
 ```
 
-If no template is provided, the Memory class uses a default template that includes fields for user details, preferences, goals, and other contextual information. See the [Agent Memory Guide](/docs/agents/agent-memory#working-memory) for detailed usage examples and best practices.
+If no template is provided, the Memory class uses a default template that includes fields for user details, preferences, goals, and other contextual information in Markdown format. See the [Agent Memory Guide](/docs/agents/agent-memory#working-memory) for detailed usage examples and best practices.
 
 ### embedder
 

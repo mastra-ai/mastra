@@ -20,7 +20,7 @@ const memory = new Memory({
   options: {
     workingMemory: {
       enabled: true,
-      use: 'text-stream', // this is the default mode
+      use: "text-stream", // this is the default mode
     },
   },
 });
@@ -35,7 +35,7 @@ const toolCallMemory = new Memory({
   options: {
     workingMemory: {
       enabled: true,
-      use: 'tool-call', // Required for toDataStream() compatibility
+      use: "tool-call", // Required for toDataStream() compatibility
     },
   },
 });
@@ -75,7 +75,10 @@ const response = await agent.stream("Hello, my name is Jane", {
 });
 
 // Process response stream, hiding working memory tags
-for await (const chunk of maskStreamTags(response.textStream, "working_memory")) {
+for await (const chunk of maskStreamTags(
+  response.textStream,
+  "working_memory",
+)) {
   process.stdout.write(chunk);
 }
 ```
@@ -98,7 +101,7 @@ for await (const chunk of toolCallResponse.textStream) {
 
 ### Handling response data
 
-In text stream mode, the response stream will contain xml-like `<working_memory>$data</working_memory>` tagged data.
+In text stream mode, the response stream will contain `<working_memory>$data</working_memory>` tagged data where `$data` is Markdown-formatted content.
 Mastra picks up these tags and automatically updates working memory with the data returned by the LLM.
 
 To prevent showing this data to users you can use the `maskStreamTags` util as shown above.

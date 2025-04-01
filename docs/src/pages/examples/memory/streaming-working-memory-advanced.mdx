@@ -30,7 +30,7 @@ const memory = new Memory({
 
 ### 2. Defining the Working Memory Template
 
-Next, we'll define a template that shows the agent how to structure the todo list data. The template uses XML-like tags to represent the data structure. This helps the agent understand what information to track for each todo item.
+Next, we'll define a template that shows the agent how to structure the todo list data. The template uses Markdown to represent the data structure. This helps the agent understand what information to track for each todo item.
 
 ```typescript
 const memory = new Memory({
@@ -39,10 +39,13 @@ const memory = new Memory({
     workingMemory: {
       enabled: true,
       template: `
-<todolist>
-  <info>this is an example list - replace it with whatever the user needs</info>
-  <item status="ACTIVE" title="Example" due="Feb 7 3028" started="Feb 7 2025">example description</item>
-</todolist>
+# Todo List
+## Item Status
+- Active items:
+  - Example (Due: Feb 7 3028, Started: Feb 7 2025)
+    - Description: This is an example task
+## Completed
+- None yet
 `,
     },
   },
