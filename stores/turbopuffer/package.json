@@ -29,7 +29,7 @@
   },
   "dependencies": {
     "@mastra/core": "workspace:^",
-    "@turbopuffer/turbopuffer": "^0.6.4"
+    "@turbopuffer/turbopuffer": "^0.6.12"
   },
   "devDependencies": {
     "@internal/lint": "workspace:*",
