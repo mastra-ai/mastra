@@ -8,6 +8,7 @@ import {
   watchWorkflowHandler as getOriginalWatchWorkflowHandler,
   resumeAsyncWorkflowHandler as getOriginalResumeAsyncWorkflowHandler,
   resumeWorkflowHandler as getOriginalResumeWorkflowHandler,
+  getWorkflowRunsHandler as getOriginalGetWorkflowRunsHandler,
 } from '@mastra/server/handlers/workflows';
 import type { Context } from 'hono';
 import { HTTPException } from 'hono/http-exception';
@@ -190,5 +191,20 @@ export async function resumeWorkflowHandler(c: Context) {
     return c.json({ message: 'Workflow run resumed' });
   } catch (error) {
     return handleError(error, 'Error resuming workflow');
+  }
+}
+
+export async function getWorkflowRunsHandler(c: Context) {
+  try {
+    const mastra: Mastra = c.get('mastra');
+    const workflowId = c.req.param('workflowId');
+    const workflowRuns = await getOriginalGetWorkflowRunsHandler({
+      mastra,
+      workflowId,
+    });
+
+    return c.json(workflowRuns);
+  } catch (error) {
+    return handleError(error, 'Error getting workflow runs');
   }
 }

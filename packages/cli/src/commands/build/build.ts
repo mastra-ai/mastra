@@ -14,7 +14,6 @@ export async function build({ dir }: { dir?: string }) {
     join(mastraDir, 'src', 'mastra', 'index.js'),
   ]);
 
-  console.log(join(mastraDir, 'index.ts'), join(mastraDir, 'index.js'));
   await deployer.prepare(outputDirectory);
 
   await deployer.bundle(mastraEntryFile, outputDirectory);

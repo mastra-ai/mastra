@@ -1,11 +1,10 @@
-import { MastraBase } from '@mastra/core/base';
 import fs from 'fs';
-import path, { dirname } from 'path';
-import type { PackageJson } from 'type-fest';
-import { fileURLToPath } from 'url';
-
-import fsExtra from 'fs-extra/esm';
 import fsPromises from 'fs/promises';
+import path, { dirname } from 'path';
+import { fileURLToPath } from 'url';
+import { MastraBase } from '@mastra/core/base';
+import fsExtra from 'fs-extra/esm';
+import type { PackageJson } from 'type-fest';
 
 import { createChildProcessLogger } from '../deploy/log.js';
 
@@ -153,3 +152,5 @@ export class Deps extends MastraBase {
     await fsPromises.writeFile('package.json', JSON.stringify(packageJson, null, 2));
   }
 }
+
+export class DepsService extends Deps {}

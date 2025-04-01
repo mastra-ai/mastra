@@ -1,10 +1,11 @@
-import babel, { NodePath, type Node } from '@babel/core';
+import babel from '@babel/core';
+import type { NodePath, types } from '@babel/core';
 
-export function removeAllExceptTelemetryConfig(result: { hasCustomConfig: boolean }) {
+export function removeAllOptionsFromMastraExcept(result: { hasCustomConfig: boolean }, option: 'telemetry' | 'server') {
   const t = babel.types;
 
   return {
-    name: 'remove-all-except-telemetry-config',
+    name: 'remove-all-except-' + option + '-config',
     visitor: {
       ExportNamedDeclaration: {
         // remove all exports
@@ -33,11 +34,11 @@ export function removeAllExceptTelemetryConfig(result: { hasCustomConfig: boolea
 
         let telemetry = mastraArgs.properties.find(
           // @ts-ignore
-          prop => prop.key.name === 'telemetry',
+          prop => prop.key.name === option,
         );
-        let telemetryValue: babel.types.Expression = t.objectExpression([]);
+        let telemetryValue: types.Expression = t.objectExpression([]);
 
-        const programPath = path.scope.getProgramParent().path as NodePath<babel.types.Program> | undefined;
+        const programPath = path.scope.getProgramParent().path as NodePath<types.Program> | undefined;
         if (!programPath) {
           return;
         }
@@ -46,11 +47,11 @@ export function removeAllExceptTelemetryConfig(result: { hasCustomConfig: boolea
           result.hasCustomConfig = true;
           telemetryValue = telemetry.value;
 
-          if (t.isIdentifier(telemetry.value) && telemetry.value.name === 'telemetry') {
-            const telemetryBinding = state.file.scope.getBinding('telemetry')!;
+          if (t.isIdentifier(telemetry.value) && telemetry.value.name === option) {
+            const telemetryBinding = state.file.scope.getBinding(option)!;
 
             if (telemetryBinding && t.isVariableDeclarator(telemetryBinding.path.node)) {
-              const id = path.scope.generateUidIdentifier('telemetry');
+              const id = path.scope.generateUidIdentifier(option);
 
               telemetryBinding.path.replaceWith(t.variableDeclarator(id, telemetryBinding.path.node.init!));
               telemetryValue = id;
@@ -60,7 +61,7 @@ export function removeAllExceptTelemetryConfig(result: { hasCustomConfig: boolea
 
         // add the deployer export
         const exportDeclaration = t.exportNamedDeclaration(
-          t.variableDeclaration('const', [t.variableDeclarator(t.identifier('telemetry'), telemetryValue)]),
+          t.variableDeclaration('const', [t.variableDeclarator(t.identifier(option), telemetryValue)]),
           [],
         );
 

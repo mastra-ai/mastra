@@ -318,3 +318,20 @@ export async function resumeWorkflowHandler({
     return handleError(error, 'Error resuming workflow');
   }
 }
+
+export async function getWorkflowRunsHandler({ mastra, workflowId }: WorkflowContext) {
+  try {
+    if (!workflowId) {
+      throw new HTTPException(400, { message: 'Workflow ID is required' });
+    }
+
+    const workflow = mastra.getWorkflow(workflowId);
+    const workflowRuns = (await workflow.getWorkflowRuns()) || {
+      runs: [],
+      total: 0,
+    };
+    return workflowRuns;
+  } catch (error) {
+    return handleError(error, 'Error getting workflow runs');
+  }
+}

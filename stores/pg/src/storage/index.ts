@@ -603,6 +603,98 @@ export class PostgresStore extends MastraStorage {
     }
   }
 
+  async getWorkflowRuns({
+    workflowName,
+    fromDate,
+    toDate,
+    limit,
+    offset,
+  }: {
+    workflowName?: string;
+    fromDate?: Date;
+    toDate?: Date;
+    limit?: number;
+    offset?: number;
+  } = {}): Promise<{
+    runs: Array<{
+      workflowName: string;
+      runId: string;
+      snapshot: WorkflowRunState | string;
+      createdAt: Date;
+      updatedAt: Date;
+    }>;
+    total: number;
+  }> {
+    const conditions: string[] = [];
+    const values: any[] = [];
+    let paramIndex = 1;
+
+    if (workflowName) {
+      conditions.push(`workflow_name = $${paramIndex}`);
+      values.push(workflowName);
+      paramIndex++;
+    }
+
+    if (fromDate) {
+      conditions.push(`"createdAt" >= $${paramIndex}`);
+      values.push(fromDate);
+      paramIndex++;
+    }
+
+    if (toDate) {
+      conditions.push(`"createdAt" <= $${paramIndex}`);
+      values.push(toDate);
+      paramIndex++;
+    }
+
+    const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+
+    let total = 0;
+    // Only get total count when using pagination
+    if (limit !== undefined && offset !== undefined) {
+      const countResult = await this.db.one(
+        `SELECT COUNT(*) as count FROM ${TABLE_WORKFLOW_SNAPSHOT} ${whereClause}`,
+        values,
+      );
+      total = Number(countResult.count);
+    }
+
+    // Get results
+    const query = `
+      SELECT * FROM ${TABLE_WORKFLOW_SNAPSHOT} 
+      ${whereClause} 
+      ORDER BY "createdAt" DESC
+      ${limit !== undefined && offset !== undefined ? ` LIMIT $${paramIndex} OFFSET $${paramIndex + 1}` : ''}
+    `;
+
+    const queryValues = limit !== undefined && offset !== undefined ? [...values, limit, offset] : values;
+
+    const result = await this.db.manyOrNone(query, queryValues);
+
+    const runs = (result || []).map(row => {
+      let parsedSnapshot: WorkflowRunState | string = row.snapshot as string;
+      if (typeof parsedSnapshot === 'string') {
+        try {
+          parsedSnapshot = JSON.parse(row.snapshot as string) as WorkflowRunState;
+        } catch (e) {
+          // If parsing fails, return the raw snapshot string
+          console.warn(`Failed to parse snapshot for workflow ${row.workflow_name}: ${e}`);
+        }
+      }
+
+      return {
+        workflowName: row.workflow_name,
+        runId: row.run_id,
+        snapshot: parsedSnapshot,
+        createdAt: row.createdAt,
+        updatedAt: row.updatedAt,
+      };
+    });
+
+    // Use runs.length as total when not paginating
+    return { runs, total: total || runs.length };
+  }
+
   async close(): Promise<void> {
     this.pgp.end();
   }
