@@ -26,6 +26,9 @@ This is a high level overview for the new info arch for Mastra Memory documentat
 2. Getting started
    - [ ] 2.1. Installation
        - [x] Initial draft ./new-docs/2-getting-started/index.md
+       - [ ] Add package manager instructions (npm, pnpm, yarn)
+       - [ ] Clarify that @mastra/memory needs to be installed separately
+       - [ ] Add troubleshooting for common installation issues
        - [ ] Pair review / edits
        - [ ] Compare with user feedback
        - [ ] Move into actual docs page
@@ -52,9 +55,12 @@ This is a high level overview for the new info arch for Mastra Memory documentat
        - [ ] Pair review / edits
        - [ ] Compare with user feedback
        - [ ] Move into actual docs page
-       - [ ] Add section on embedding performance
    - [ ] 3.3. Continuously relevant information (Working memory)
        - [x] Initial draft ./new-docs/3-using-memory/3.3-working-memory.md
+       - [ ] Add clearer explanation of working memory modes (text-stream vs tool-call)
+       - [ ] Explain working memory scoping (per thread, not per agent)
+       - [ ] Add template design best practices
+       - [ ] Include code examples for programmatically accessing/modifying working memory
        - [ ] Pair review / edits
        - [ ] Compare with user feedback
        - [ ] Move into actual docs page
@@ -80,11 +86,16 @@ This is a high level overview for the new info arch for Mastra Memory documentat
 4. Memory Threads
    - [ ] 4.1. What's a thread? What's a resource?
        - [x] Initial draft ./new-docs/4-memory-threads/index.md
+       - [ ] Add diagrams showing resource/thread relationship
+       - [ ] Clarify why both resourceId and threadId are required
+       - [ ] Explain best practices for ID formatting
        - [ ] Pair review / edits
        - [ ] Compare with user feedback
        - [ ] Move into actual docs page
    - [ ] 4.2. How agents interact with memory threads
        - [x] Initial draft ./new-docs/4-memory-threads/index.md
+       - [ ] Add examples of multiple agents using the same thread
+       - [ ] Explain memory sharing vs. isolation strategies
        - [ ] Pair review / edits
        - [ ] Compare with user feedback
        - [ ] Move into actual docs page
@@ -137,6 +148,28 @@ This is a high level overview for the new info arch for Mastra Memory documentat
        - [ ] Move into actual docs page
    - [ ] 6.3. Troubleshooting semantic search
        - [x] Initial draft ./new-docs/6-debugging-memory/index.md
+       - [ ] Pair review / edits
+       - [ ] Compare with user feedback
+       - [ ] Move into actual docs page
+
+7. Frequently Asked Questions
+   - [ ] 7.1. Common questions about memory
+       - [x] Initial draft .docs-scratchpad/memory/new-docs/7-faq/index.md
+       - [ ] Pair review / edits
+       - [ ] Compare with user feedback
+       - [ ] Move into actual docs page
+   - [ ] 7.2. Working memory questions and best practices
+       - [x] Combined into .docs-scratchpad/memory/new-docs/7-faq/index.md
+       - [ ] Pair review / edits
+       - [ ] Compare with user feedback
+       - [ ] Move into actual docs page
+   - [ ] 7.3. Thread and resource management
+       - [x] Included in .docs-scratchpad/memory/new-docs/7-faq/index.md
+       - [ ] Pair review / edits
+       - [ ] Compare with user feedback
+       - [ ] Move into actual docs page
+   - [ ] 7.4. Database and deployment troubleshooting
+       - [x] Included in .docs-scratchpad/memory/new-docs/7-faq/index.md
        - [ ] Pair review / edits
        - [ ] Compare with user feedback
        - [ ] Move into actual docs page
@@ -198,4 +231,5 @@ This is a high level overview for the new info arch for Mastra Memory documentat
 
 3. User experience
    - [ ] 3.1. User feedback collection setup
-   - [ ] 3.2. Create FAQ section based on common questions
+   - [ ] 3.2. Ensure documentation addresses common Discord questions
+   - [ ] 3.3. Link FAQ answers to relevant documentation sections
