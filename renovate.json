@@ -18,20 +18,7 @@
   "ignorePaths": ["docs/**"],
   "packageRules": [
     {
-      "matchPackageNames": [
-        "@types/node",
-        "ai",
-        "/^@ai-sdk//",
-        "typescript",
-        "/^@typescript-eslint//",
-        "eslint",
-        "prettier",
-        "/^eslint-/",
-        "@microsoft/api-extractor",
-        "tsup",
-        "rollup",
-        "vitest"
-      ],
+      "packagePatterns": ["*"],
       "enabled": false
     },
     {
@@ -756,20 +743,6 @@
       "matchDepTypes": ["dependencies", "devDependencies"]
     },
     {
-      "groupName": "integrations/composio",
-      "commitMessageTopic": "integrations/composio",
-      "matchFileNames": ["integrations/composio/package.json"],
-      "matchUpdateTypes": ["minor", "patch"],
-      "matchDepTypes": ["dependencies", "devDependencies"]
-    },
-    {
-      "groupName": "major-integrations/composio",
-      "commitMessageTopic": "integrations/composio",
-      "matchFileNames": ["integrations/composio/package.json"],
-      "matchUpdateTypes": ["major"],
-      "matchDepTypes": ["dependencies", "devDependencies"]
-    },
-    {
       "groupName": "Mastra firecrawl",
       "commitMessageTopic": "Mastra firecrawl",
       "matchFileNames": ["integrations/firecrawl/*/package.json"],
@@ -822,20 +795,6 @@
       "groupName": "major-Mastra ragie",
       "commitMessageTopic": "Mastra ragie",
       "matchFileNames": ["integrations/ragie/package.json"],
-      "matchUpdateTypes": ["major"],
-      "matchDepTypes": ["dependencies", "devDependencies"]
-    },
-    {
-      "groupName": "integrations/stabilityai",
-      "commitMessageTopic": "integrations/stabilityai",
-      "matchFileNames": ["integrations/stabilityai/package.json"],
-      "matchUpdateTypes": ["minor", "patch"],
-      "matchDepTypes": ["dependencies", "devDependencies"]
-    },
-    {
-      "groupName": "major-integrations/stabilityai",
-      "commitMessageTopic": "integrations/stabilityai",
-      "matchFileNames": ["integrations/stabilityai/package.json"],
       "matchUpdateTypes": ["major"],
       "matchDepTypes": ["dependencies", "devDependencies"]
     },
