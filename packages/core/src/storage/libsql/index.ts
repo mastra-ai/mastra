@@ -1,7 +1,6 @@
 import { join, resolve, isAbsolute } from 'node:path';
 import { createClient } from '@libsql/client';
 import type { Client, InValue } from '@libsql/client';
-
 import type { MetricResult, TestInfo } from '../../eval';
 import type { MessageType, StorageThreadType } from '../../memory/types';
 import { MastraStorage } from '../base';
@@ -398,19 +397,18 @@ export class LibSQLStore extends MastraStorage {
   async saveMessages({ messages }: { messages: MessageType[] }): Promise<MessageType[]> {
     if (messages.length === 0) return messages;
 
-    const tx = await this.client.transaction('write');
-
     try {
       const threadId = messages[0]?.threadId;
       if (!threadId) {
         throw new Error('Thread ID is required');
       }
 
-      for (const message of messages) {
+      // Prepare batch statements for all messages
+      const batchStatements = messages.map(message => {
         const time = message.createdAt || new Date();
-        await tx.execute({
+        return {
           sql: `INSERT INTO ${TABLE_MESSAGES} (id, thread_id, content, role, type, createdAt) 
-                              VALUES (?, ?, ?, ?, ?, ?)`,
+                VALUES (?, ?, ?, ?, ?, ?)`,
           args: [
             message.id,
             threadId,
@@ -419,15 +417,15 @@ export class LibSQLStore extends MastraStorage {
             message.type,
             time instanceof Date ? time.toISOString() : time,
           ],
-        });
-      }
+        };
+      });
 
-      await tx.commit();
+      // Execute all inserts in a single batch
+      await this.client.batch(batchStatements, 'write');
 
       return messages;
     } catch (error) {
-      this.logger.error('Failed to save messages in database: ' + (error as any)?.message);
-      await tx.rollback();
+      this.logger.error('Failed to save messages in database: ' + (error as { message: string })?.message);
       throw error;
     }
   }
@@ -520,7 +518,7 @@ export class LibSQLStore extends MastraStorage {
     }
 
     if (columnFilters) {
-      Object.entries(columnFilters).forEach(([key, value]) => {
+      Object.entries(columnFilters).forEach(([key, _value]) => {
         conditions.push(`${key} = ?`);
       });
     }
@@ -535,7 +533,13 @@ export class LibSQLStore extends MastraStorage {
     }
 
     if (attributes) {
-      for (const [_key, value] of Object.entries(attributes)) {
+      for (const [, value] of Object.entries(attributes)) {
+        args.push(value);
+      }
+    }
+
+    if (columnFilters) {
+      for (const [key, value] of Object.entries(columnFilters)) {
         args.push(value);
       }
     }

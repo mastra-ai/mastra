@@ -1,5 +1,26 @@
 # @mastra/deployer
 
+## 0.2.6-alpha.3
+
+### Patch Changes
+
+- 0deb356: Fixed a bug where the hono body wasn't properly passed into stream+generate API handlers resulting in "cannot destructure property messages of body"
+
+## 0.2.6-alpha.2
+
+### Patch Changes
+
+- 4c98129: Upgrade babel-core
+- 84fe241: Decoupled handlers from hono
+- 84fe241: Improve streaming of workflows
+- Updated dependencies [56c31b7]
+- Updated dependencies [dbbbf80]
+- Updated dependencies [84fe241]
+- Updated dependencies [84fe241]
+- Updated dependencies [99d43b9]
+  - @mastra/core@0.8.0-alpha.2
+  - @mastra/server@0.0.1-alpha.0
+
 ## 0.2.6-alpha.1
 
 ### Patch Changes

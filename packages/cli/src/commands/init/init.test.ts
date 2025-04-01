@@ -44,16 +44,18 @@ vi.mock('../../services/service.deps', () => {
 
 describe('CLI', () => {
   test('creates the mastra directory and components directories', async () => {
-    const mockCreateMastraDir = vi.spyOn(utils, 'createMastraDir').mockImplementation(async (directory) => {
+    const mockCreateMastraDir = vi.spyOn(utils, 'createMastraDir').mockImplementation(async directory => {
       const dirPath = `${directory}/mastra`;
       fs.mkdirSync(dirPath, { recursive: true }); // Simulate directory creation
       return { ok: true, dirPath };
     });
 
-    const mockCreateComponentsDir = vi.spyOn(utils, 'createComponentsDir').mockImplementation(async (dirPath, component) => {
-      const componentPath = `${dirPath}/${component}`;
-      fs.mkdirSync(componentPath, { recursive: true }); // Simulate component directory creation
-    });
+    const mockCreateComponentsDir = vi
+      .spyOn(utils, 'createComponentsDir')
+      .mockImplementation(async (dirPath, component) => {
+        const componentPath = `${dirPath}/${component}`;
+        fs.mkdirSync(componentPath, { recursive: true }); // Simulate component directory creation
+      });
 
     await init({
       directory: '/mock',
@@ -73,7 +75,7 @@ describe('CLI', () => {
   });
 
   test('generates correct index file content', async () => {
-    vi.spyOn(utils, 'createMastraDir').mockImplementation(async (directory) => {
+    vi.spyOn(utils, 'createMastraDir').mockImplementation(async directory => {
       const dirPath = `${directory}/mastra`;
       fs.mkdirSync(dirPath, { recursive: true });
       return { ok: true, dirPath };
@@ -105,7 +107,7 @@ describe('CLI', () => {
   test('generates env file', async () => {
     DepsService.prototype.checkDependencies = vi.fn(() => Promise.resolve('ok'));
 
-    vi.spyOn(utils, 'createMastraDir').mockImplementation(async (directory) => {
+    vi.spyOn(utils, 'createMastraDir').mockImplementation(async directory => {
       const dirPath = `${directory}/mastra`;
       fs.mkdirSync(dirPath, { recursive: true });
       return { ok: true, dirPath };
@@ -175,9 +177,9 @@ describe('CLI', () => {
   test('stops initialization if mastra is already setup', async () => {
     DepsService.prototype.checkDependencies = vi.fn(() => Promise.resolve('ok'));
 
-    fs.mkdirSync('/mock/mastra', { recursive: true })
+    fs.mkdirSync('/mock/mastra', { recursive: true });
 
-    vi.spyOn(utils, 'createMastraDir').mockImplementation(async (directory) => {
+    vi.spyOn(utils, 'createMastraDir').mockImplementation(async directory => {
       const dirPath = `${directory}/mastra`;
       fs.mkdirSync(dirPath, { recursive: true });
       return { ok: false };
@@ -200,4 +202,3 @@ describe('CLI', () => {
     expect(fs.existsSync('/mock/mastra')).toBe(true);
   });
 });
-

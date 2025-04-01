@@ -3,6 +3,7 @@ import { context as otlpContext, trace } from '@opentelemetry/api';
 import { z } from 'zod';
 
 import type { MastraPrimitives } from '../action';
+import type { Agent } from '../agent';
 import { MastraBase } from '../base';
 
 import type { Mastra } from '../mastra';
@@ -21,10 +22,9 @@ import type {
   WorkflowRunState,
 } from './types';
 import { WhenConditionReturnValue } from './types';
-import { agentToStep, isAgent, isVariableReference, isWorkflow, updateStepInHierarchy, workflowToStep } from './utils';
+import { agentToStep, isAgent, isVariableReference, isWorkflow, workflowToStep } from './utils';
 import type { WorkflowResultReturn } from './workflow-instance';
 import { WorkflowInstance } from './workflow-instance';
-import type { Agent } from '../agent';
 
 type WorkflowBuilder<T extends Workflow<any, any>> = Pick<
   T,
@@ -165,7 +165,7 @@ export class Workflow<
       this.step(
         new Step({
           id: `__after_${next.map(step => step?.id ?? step?.name).join('_')}`,
-          execute: async ({ context }) => {
+          execute: async () => {
             return { success: true };
           },
         }),
@@ -288,7 +288,7 @@ export class Workflow<
       this.#__internalStep(
         new Step({
           id: `__after_${next.map(step => step?.id ?? step?.name).join('_')}`,
-          execute: async ({ context }) => {
+          execute: async () => {
             return { success: true };
           },
         }),
@@ -561,7 +561,7 @@ export class Workflow<
     const loopFinishedStepKey = `__${fallbackStepKey}_${loopType}_loop_finished`;
     const loopFinishedStep = {
       id: loopFinishedStepKey,
-      execute: async ({ context }: any) => {
+      execute: async () => {
         return { success: true };
       },
     };
@@ -926,19 +926,6 @@ export class Workflow<
     }
   }
 
-  async #loadWorkflowSnapshot(runId: string) {
-    if (!this.#mastra?.storage) {
-      this.logger.debug('Snapshot cannot be loaded. Mastra engine is not initialized', { runId });
-      return;
-    }
-
-    const activeRun = this.#runs.get(runId);
-    if (activeRun) {
-      await activeRun.persistWorkflowSnapshot();
-    }
-    return this.#mastra.storage.loadWorkflowSnapshot({ runId, workflowName: this.name });
-  }
-
   getExecutionSpan(runId: string) {
     return this.#runs.get(runId)?.executionSpan;
   }
@@ -1068,7 +1055,8 @@ export class Workflow<
     }
 
     // If workflow is suspended/stored, get from storage
-    const storedSnapshot = await this.#mastra?.storage?.loadWorkflowSnapshot({
+    const storage = this.#mastra?.getStorage();
+    const storedSnapshot = await storage?.loadWorkflowSnapshot({
       runId,
       workflowName: this.name,
     });

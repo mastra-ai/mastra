@@ -75,7 +75,7 @@ const startServer = async (dotMastraPath: string, port: number, env: Map<string,
   }
 };
 
-async function rebundleAndRestart(dotMastraPath: string, port: number, bundler: DevBundler, tools?: string[]) {
+async function rebundleAndRestart(dotMastraPath: string, port: number, bundler: DevBundler) {
   if (isRestarting) {
     return;
   }
@@ -131,7 +131,11 @@ export async function dev({ port, dir, root, tools }: { dir?: string; root?: str
       currentServerProcess.kill();
     }
 
-    watcher.close();
-    process.exit(0);
+    watcher
+      .close()
+      .catch(() => {})
+      .finally(() => {
+        process.exit(0);
+      });
   });
 }
