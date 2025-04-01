@@ -61,7 +61,7 @@
     "@xyflow/react": "^12.3.6",
     "cmdk": "^1.0.0",
     "date-fns": "^4.1.0",
-    "json-schema-to-zod": "^2.5.0",
+    "json-schema-to-zod": "^2.6.0",
     "motion": "^12.4.2",
     "prism-react-renderer": "^2.4.0",
     "react-code-block": "1.1.1",
