@@ -1,5 +1,13 @@
 # @mastra/core
 
+## 0.8.0-alpha.2
+
+### Patch Changes
+
+- 56c31b7: Batch insert messages for libsql adapter
+- dbbbf80: Added clickhouse storage
+- 99d43b9: Updated evaluate to include agent output
+
 ## 0.8.0-alpha.1
 
 ### Minor Changes

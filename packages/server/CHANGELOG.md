@@ -1,5 +1,16 @@
 # @mastra/deployer
 
+## 0.0.1-alpha.0
+
+### Patch Changes
+
+- 84fe241: Decoupled handlers from hono
+- 84fe241: Improve streaming of workflows
+- Updated dependencies [56c31b7]
+- Updated dependencies [dbbbf80]
+- Updated dependencies [99d43b9]
+  - @mastra/core@0.8.0-alpha.2
+
 ## 0.2.5-alpha.0
 
 ### Patch Changes
