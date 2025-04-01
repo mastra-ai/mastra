@@ -390,9 +390,9 @@ describe('agent', () => {
           model: openai('gpt-4o'),
         });
 
-        await expect(agentWithoutVoice.getSpeakers()).rejects.toThrow('No voice provider configured');
-        await expect(agentWithoutVoice.speak('Test')).rejects.toThrow('No voice provider configured');
-        await expect(agentWithoutVoice.listen(new PassThrough())).rejects.toThrow('No voice provider configured');
+        await expect(agentWithoutVoice.voice.getSpeakers()).rejects.toThrow('No voice provider configured');
+        await expect(agentWithoutVoice.voice.speak('Test')).rejects.toThrow('No voice provider configured');
+        await expect(agentWithoutVoice.voice.listen(new PassThrough())).rejects.toThrow('No voice provider configured');
       });
     });
   });
