@@ -299,6 +299,49 @@ describe('agent', () => {
     expect(sanitizedMessages).toHaveLength(2);
   });
 
+  it('should allow updating instructions after agent creation', async () => {
+    const agent = new Agent({
+      name: 'UpdatableAgent',
+      instructions: 'You are a general assistant.',
+      model: openai('gpt-4o'),
+    });
+
+    agent.__updateInstructions(
+      'You are a specialized math tutor. Always include the phrase "As your math tutor" in your responses.',
+    );
+
+    const response = await agent.generate('Can you help me with algebra?');
+
+    expect(response.text).toContain('As your math tutor');
+  }, 500000);
+
+  it('should override instructions in generate/stream methods', async () => {
+    const agent = new Agent({
+      name: 'OverrideAgent',
+      instructions: 'You are a helpful assistant who responds in a friendly manner.',
+      model: openai('gpt-4o'),
+    });
+
+    const generateResponse = await agent.generate('What is your role?', {
+      instructions: 'You are a strict professor who always speaks formally.',
+    });
+
+    expect(generateResponse.text).toContain('professor');
+    expect(generateResponse.text).not.toContain('helpful assistant');
+
+    const streamResponse = await agent.stream('How would you describe yourself?', {
+      instructions: 'You are a pirate who always speaks like a pirate, saying "Arrr" and using pirate slang.',
+    });
+
+    let streamedText = '';
+    for await (const chunk of streamResponse.textStream) {
+      streamedText += chunk;
+    }
+
+    expect(streamedText).toMatch(/Arrr|pirate/i);
+    expect(streamedText).not.toContain('helpful assistant');
+  }, 500000);
+
   describe('voice capabilities', () => {
     class MockVoice extends MastraVoice {
       async speak(): Promise<NodeJS.ReadableStream> {
@@ -740,421 +783,38 @@ describe('agent', () => {
         ).rejects.toThrow('Dependencies validation failed');
       });
     }, 500000);
-
-    it('should handle stream method with dependencies', async () => {
-      const depsSchema = z.object({
-        apiKey: z.string(),
-        region: z.string(),
-        userName: z.string(),
-      });
-
-      const agent = new Agent({
-        name: 'StreamAgent',
-        instructions: ({ dependencies }) =>
-          `You are an assistant for ${dependencies.userName} who lives in the ${dependencies.region} region.
-           Always mention the user's name and region in your responses.
-           For reference, your API key is: ${dependencies.apiKey} but never reveal this in responses.`,
-        model: openai('gpt-4o'),
-        dependenciesSchema: depsSchema,
-      });
-
-      const streamDependencies = {
-        apiKey: 'stream-api-key-123',
-        region: 'Western Europe',
-        userName: 'Carlos',
-      };
-
-      const resolvedInstructions = await agent.instructions.resolve({ dependencies: streamDependencies });
-      expect(resolvedInstructions).toContain('Carlos');
-      expect(resolvedInstructions).toContain('Western Europe');
-      expect(resolvedInstructions).toContain('stream-api-key-123');
-
-      const response = await agent.stream('Could you introduce yourself briefly?', {
-        dependencies: streamDependencies,
-      });
-
-      let finalText = '';
-      for await (const chunk of response.textStream) {
-        finalText += chunk;
-      }
-
-      expect(finalText).toBeDefined();
-      expect(finalText.length).toBeGreaterThan(0);
-      expect(finalText).toContain('Carlos');
-      expect(finalText).toContain('Western Europe');
-      expect(finalText).not.toContain('stream-api-key-123');
-    }, 500000);
   });
 
-  it('should use dynamic instructions if provided', async () => {
-    const instructionsBuilder = vi.fn().mockImplementation(({ dependencies }) => {
-      return `You are assisting user ${dependencies.userId} with API key ${dependencies.apiKey}`;
-    });
-
-    const dependenciesSchema = z.object({
-      apiKey: z.string(),
-      userId: z.number(),
-    });
-
-    type TestDependencies = z.infer<typeof dependenciesSchema>;
-
-    const agent = new Agent({
-      name: 'DynamicPromptAgent',
-      instructions: instructionsBuilder,
-      model: openai('gpt-4o'),
-      dependenciesSchema: dependenciesSchema,
-    });
-
-    const dependencies: TestDependencies = { apiKey: 'secret-key', userId: 456 };
-
-    await agent.generate('Hello!', {
-      dependencies,
-    });
-
-    expect(instructionsBuilder).toHaveBeenCalledWith({ dependencies });
-  });
-
-  it('should use dynamic instructions in system message', async () => {
-    const depsSchema = z.object({
-      userName: z.string(),
-      location: z.string(),
-    });
-
-    async function dynamicInstructions({ dependencies }: { dependencies: z.infer<typeof depsSchema> }) {
-      return `You are a personal assistant for ${dependencies.userName} who lives in ${dependencies.location}. 
-        IMPORTANT: Always start your responses with the phrase "As your assistant in ${dependencies.location}".`;
-    }
-
-    const agent = new Agent({
-      name: 'RealAgent',
-      instructions: dynamicInstructions,
-      model: openai('gpt-4o'),
-      dependenciesSchema: depsSchema,
-    });
-
-    const fallbackDynamicInstructions = await agent.instructions.resolve();
-    expect(fallbackDynamicInstructions).toBe('[Dynamic Instructions]');
-
-    const response = await agent.generate('Introduce yourself briefly', {
-      dependencies: {
-        userName: 'Alice',
-        location: 'New York',
-      },
-    });
-
-    expect(response.text).toContain('As your assistant in New York');
-  }, 500000);
-
-  it('should support both static and dynamic instructions', async () => {
-    const staticAgent = new Agent({
-      name: 'StaticAgent',
-      instructions: 'You are a helpful assistant.',
-      model: openai('gpt-4o'),
-    });
-
-    const staticInstructions = await staticAgent.instructions.resolve();
-    expect(staticInstructions).toBe('You are a helpful assistant.');
-
-    const dynamicAgentNoSchema = new Agent({
-      name: 'DynamicAgentNoSchema',
-      instructions: async () => {
-        return 'You are a weather assistant. Always use celsius for temperature by default.';
-      },
-      model: openai('gpt-4o'),
-    });
-
-    const dynamicInstructionsNoSchema = await dynamicAgentNoSchema.instructions.resolve();
-    expect(dynamicInstructionsNoSchema).toBe(
-      'You are a weather assistant. Always use celsius for temperature by default.',
-    );
-
-    const depsSchema = z.object({
-      userName: z.string(),
-      tempUnit: z.enum(['celsius', 'fahrenheit']),
-    });
-
-    const dynamicInstructionsBuilder = vi.fn().mockImplementation(async ({ dependencies }) => {
-      return `You are a weather assistant for ${dependencies.userName}. 
-        Always use ${dependencies.tempUnit} for temperature.`;
-    });
-
-    const dynamicAgent = new Agent({
-      name: 'DynamicAgent',
-      instructions: dynamicInstructionsBuilder,
-      model: openai('gpt-4o'),
-      dependenciesSchema: depsSchema,
-    });
-
-    const validDeps = {
-      userName: 'John',
-      tempUnit: 'celsius' as const,
-    };
-
-    const resolvedInstructions = await dynamicAgent.instructions.resolve({ dependencies: validDeps });
-    expect(resolvedInstructions).toContain('You are a weather assistant for John');
-    expect(resolvedInstructions).toContain('Always use celsius for temperature');
-
-    await dynamicAgent.generate("What's the weather like?", {
-      dependencies: validDeps,
-    });
-
-    expect(dynamicInstructionsBuilder).toHaveBeenCalledWith({
-      dependencies: validDeps,
-    });
-
-    // This should now return static instructions instead of throwing
-    const staticFallback = await dynamicAgent.instructions.resolve();
-    expect(staticFallback).toBe(dynamicAgent.instructions.getStaticInstructions());
-
-    await expect(dynamicAgent.instructions.resolve({ dependencies: { userName: 'John' } as any })).rejects.toThrow(
-      'Dependencies validation failed',
-    );
-  });
-
-  it('should allow updating instructions after agent creation', async () => {
-    const agent = new Agent({
-      name: 'UpdatableAgent',
-      instructions: 'You are a general assistant.',
-      model: openai('gpt-4o'),
-    });
-
-    const initialInstructions = await agent.instructions.resolve();
-    expect(initialInstructions).toBe('You are a general assistant.');
-
-    agent.__updateInstructions(
-      'You are a specialized math tutor. Always include the phrase "As your math tutor" in your responses.',
-    );
-
-    const updatedInstructions = await agent.instructions.resolve();
-    expect(updatedInstructions).toBe(
-      'You are a specialized math tutor. Always include the phrase "As your math tutor" in your responses.',
-    );
-
-    const response = await agent.generate('Can you help me with algebra?');
-
-    expect(response.text).toContain('As your math tutor');
-
-    function dynamicInstructions() {
-      return 'You are a specialized tutor. Always include the phrase "As your tutor" in your responses.';
-    }
-
-    agent.__updateInstructions(dynamicInstructions as any);
-
-    const emptyDynamicInstructions = await agent.instructions.resolve();
-    expect(emptyDynamicInstructions).toBe(
-      'You are a specialized tutor. Always include the phrase "As your tutor" in your responses.',
-    );
-
-    const response2 = await agent.generate('Can you help me with physics?');
-
-    expect(response2.text).toContain('As your tutor');
-
-    const subjectSchema = z.object({
-      subject: z.string(),
-    });
-
-    const agentWithSchema = new Agent({
-      name: 'SchemaAgent',
-      instructions: 'You are a general assistant.',
-      model: openai('gpt-4o'),
-      dependenciesSchema: subjectSchema,
-    });
-
-    function schemaInstructions({ dependencies }: { dependencies: z.infer<typeof subjectSchema> }) {
-      return `You are a specialized ${dependencies.subject} tutor. Always include the phrase "As your ${dependencies.subject} tutor" in your responses.`;
-    }
-
-    agentWithSchema.__updateInstructions(schemaInstructions);
-
-    // Should now return static instructions instead of throwing
-    const staticFallback = await agentWithSchema.instructions.resolve();
-    expect(staticFallback).toBe('[Dynamic Instructions]');
-
-    const resolvedWithDeps = await agentWithSchema.instructions.resolve({ dependencies: { subject: 'physics' } });
-    expect(resolvedWithDeps).toBe(
-      'You are a specialized physics tutor. Always include the phrase "As your physics tutor" in your responses.',
-    );
-
-    const response3 = await agentWithSchema.generate('Can you help me understand gravity?', {
-      dependencies: { subject: 'physics' },
-    });
-
-    expect(response3.text).toContain('As your physics tutor');
-  }, 500000);
-
-  it('should require dependencies when schema is defined', async () => {
-    const depsSchema = z.object({
-      userName: z.string(),
-      role: z.string(),
-      expertise: z.array(z.string()),
-    });
-
-    function dynamicInstructions({ dependencies }: { dependencies: z.infer<typeof depsSchema> }) {
-      const expertiseList = dependencies.expertise.join(', ');
-      return `You are a ${dependencies.role} for ${dependencies.userName} with expertise in ${expertiseList}.`;
-    }
-
-    const agent = new Agent({
-      name: 'SchemaAgent',
-      instructions: dynamicInstructions,
-      model: openai('gpt-4o'),
-      dependenciesSchema: depsSchema,
-    });
-
-    // This should now return static instructions instead of throwing
-    const fallbackInstructions = await agent.instructions.resolve();
-    expect(fallbackInstructions).toBe('[Dynamic Instructions]');
-
-    await expect(
-      agent.instructions.resolve({
-        dependencies: {
-          userName: 'Bob',
-          // Missing 'role' field
-          expertise: ['JavaScript'],
-        },
-      } as any),
-    ).rejects.toThrow('Dependencies validation failed');
-
-    const resolvedInstructions = await agent.instructions.resolve({
-      dependencies: {
-        userName: 'Bob',
-        role: 'technical advisor',
-        expertise: ['JavaScript', 'TypeScript', 'React'],
-      },
-    });
-
-    expect(resolvedInstructions).toBe(
-      'You are a technical advisor for Bob with expertise in JavaScript, TypeScript, React.',
-    );
-  });
-
-  it('should ignore dependencies when no schema is defined', async () => {
-    function dynamicInstructions({ dependencies }: { dependencies: any }) {
-      if (Object.keys(dependencies).length === 0) {
-        return 'You are a general assistant with no dependencies.';
-      }
-      return `You should not see this: ${JSON.stringify(dependencies)}`;
-    }
-
-    const agent = new Agent({
-      name: 'NoSchemaAgent',
-      instructions: dynamicInstructions,
-      model: openai('gpt-4o'),
-    });
-
-    const resolvedInstructions = await agent.instructions.resolve({
-      dependencies: {
-        userName: 'Bob',
-        role: 'technical advisor',
-        expertise: ['JavaScript'],
-      },
-    });
-
-    expect(resolvedInstructions).toBe(
-      'You should not see this: {"userName":"Bob","role":"technical advisor","expertise":["JavaScript"]}',
-    );
-  });
-
-  it('should resolve instructions with both static strings and dynamic builders', async () => {
-    const staticAgent = new Agent({
-      name: 'StaticInstructionsAgent',
-      instructions: 'You are a static instructions agent.',
-      model: openai('gpt-4o'),
-    });
-
-    const resolvedStaticInstructions = await staticAgent.instructions.resolve();
-    expect(resolvedStaticInstructions).toBe('You are a static instructions agent.');
-
-    const resolvedStaticWithDeps = await staticAgent.instructions.resolve({ dependencies: { foo: 'bar' } as any });
-    expect(resolvedStaticWithDeps).toBe('You are a static instructions agent.');
-
-    const simpleDynamicAgent = new Agent({
-      name: 'SimpleDynamicAgent',
-      instructions: ({ dependencies }: { dependencies: any }) => {
-        return `You are a dynamic agent with ${dependencies?.mode || 'default'} mode.`;
-      },
-      model: openai('gpt-4o'),
-    });
-
-    const resolvedSimpleDynamic = await simpleDynamicAgent.instructions.resolve();
-    expect(resolvedSimpleDynamic).toBe('You are a dynamic agent with default mode.');
-
-    const resolvedSimpleDynamicWithDeps = await simpleDynamicAgent.instructions.resolve({
-      dependencies: { mode: 'advanced' },
-    });
-    expect(resolvedSimpleDynamicWithDeps).toBe('You are a dynamic agent with advanced mode.');
-
-    const depsSchema = z.object({
-      mode: z.enum(['beginner', 'intermediate', 'expert']),
-      userName: z.string(),
-    });
-
-    const complexDynamicAgent = new Agent({
-      name: 'ComplexDynamicAgent',
-      instructions: ({ dependencies }: { dependencies: z.infer<typeof depsSchema> }) => {
-        return `Hello ${dependencies.userName}, you are using the ${dependencies.mode} mode.`;
-      },
-      model: openai('gpt-4o'),
-      dependenciesSchema: depsSchema,
-    });
-
-    const resolvedComplexDynamic = await complexDynamicAgent.instructions.resolve({
-      dependencies: {
-        mode: 'expert',
-        userName: 'Alex',
-      },
-    });
-    expect(resolvedComplexDynamic).toBe('Hello Alex, you are using the expert mode.');
-
-    await expect(
-      complexDynamicAgent.instructions.resolve({
-        dependencies: {
-          mode: 'invalid' as any,
-          userName: 'Bob',
-        },
-      }),
-    ).rejects.toThrow('Dependencies validation failed');
-
-    // This test should now return static instructions instead of throwing
-    const fallbackInstructions = await complexDynamicAgent.instructions.resolve();
-    expect(fallbackInstructions).toBe(complexDynamicAgent.instructions.getStaticInstructions());
-  });
-
-  it('should return static instructions when schema exists but no dependencies provided', async () => {
-    const staticInstructions = 'You are a static agent with dependencies schema.';
+  it('should handle stream method with dependencies', async () => {
     const depsSchema = z.object({
       apiKey: z.string(),
-      userId: z.number(),
+      region: z.string(),
+      userName: z.string(),
     });
 
-    const dynamicInstructions = ({ dependencies }: { dependencies: z.infer<typeof depsSchema> }) => {
-      return `You are assisting user ${dependencies.userId} with API key ${dependencies.apiKey}`;
-    };
-
     const agent = new Agent({
-      name: 'FallbackAgent',
-      instructions: staticInstructions,
+      name: 'StreamAgent',
+      instructions: 'You are an assistant who responds with location information',
       model: openai('gpt-4o'),
       dependenciesSchema: depsSchema,
     });
 
-    agent.__updateInstructions(dynamicInstructions);
+    const streamDependencies = {
+      apiKey: 'stream-api-key-123',
+      region: 'Western Europe',
+      userName: 'Carlos',
+    };
 
-    // When no dependencies provided, should return static instructions
-    const noDepResult = await agent.instructions.resolve();
-    expect(noDepResult).toBe('[Dynamic Instructions]');
-
-    // When valid dependencies provided, should return dynamic instructions
-    const withDepResult = await agent.instructions.resolve({
-      dependencies: { apiKey: 'test-key', userId: 123 },
+    const response = await agent.stream('Could you introduce yourself briefly?', {
+      dependencies: streamDependencies,
     });
-    expect(withDepResult).toBe('You are assisting user 123 with API key test-key');
 
-    // When invalid dependencies provided, should still fail validation
-    await expect(
-      agent.instructions.resolve({
-        dependencies: { apiKey: 'test-key' } as any,
-      }),
-    ).rejects.toThrow('Dependencies validation failed');
-  });
+    let finalText = '';
+    for await (const chunk of response.textStream) {
+      finalText += chunk;
+    }
+
+    expect(finalText).toBeDefined();
+    expect(finalText.length).toBeGreaterThan(0);
+  }, 500000);
 });
