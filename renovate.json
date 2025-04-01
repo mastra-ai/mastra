@@ -18,8 +18,8 @@
   "ignorePaths": ["docs/**"],
   "packageRules": [
     {
-      "packagePatterns": ["*"],
-      "enabled": false
+      "enabled": false,
+      "matchPackageNames": ["*"]
     },
     {
       "matchDepTypes": ["engines"],
@@ -59,7 +59,12 @@
     },
     {
       "groupName": "typescript",
-      "matchFileNames": ["+(package.json)", "**/package.json", "!./examples/**", "!./docs/**"],
+      "matchFileNames": [
+        "+(package.json)",
+        "**/package.json",
+        "!./examples/**",
+        "!./docs/**"
+      ],
       "matchPackageNames": ["typescript", "/^@typescript-eslint//"],
       "matchUpdateTypes": ["major", "minor", "patch"],
       "matchDepTypes": ["dependencies", "devDependencies"],
@@ -70,8 +75,12 @@
       "groupName": "formatting & linting",
       "commitMessageTopic": "Formatting & linting",
       "matchFileNames": ["+(package.json)", "**/package.json"],
-      "matchPackageNames": ["eslint", "prettier", "/^eslint-/"],
-      "excludePackageNames": ["@typescript-eslint/"],
+      "matchPackageNames": [
+        "eslint",
+        "prettier",
+        "/^eslint-/",
+        "!@typescript-eslint/"
+      ],
       "matchUpdateTypes": ["major", "minor", "patch"],
       "matchDepTypes": ["dependencies", "devDependencies"],
       "dependencyDashboardApproval": false,
