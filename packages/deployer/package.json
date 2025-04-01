@@ -95,7 +95,7 @@
     "builtins": "^5.1.0",
     "detect-libc": "^2.0.3",
     "dotenv": "^16.4.7",
-    "esbuild": "^0.25.1",
+    "esbuild": "^0.25.2",
     "fs-extra": "^11.3.0",
     "hono": "^4.7.4",
     "resolve-from": "^5.0.0",
