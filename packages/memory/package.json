@@ -43,7 +43,7 @@
   "dependencies": {
     "@mastra/core": "workspace:^",
     "@mastra/rag": "workspace:^",
-    "@upstash/redis": "^1.34.5",
+    "@upstash/redis": "^1.34.6",
     "js-tiktoken": "^1.0.19",
     "ai": "^4.2.2",
     "pg": "^8.13.3",
