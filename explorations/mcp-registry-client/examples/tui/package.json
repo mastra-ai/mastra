@@ -36,7 +36,7 @@
 		"eslint-plugin-react-hooks": "^4.6.0",
 		"ink-testing-library": "^3.0.0",
 		"prettier": "^2.8.7",
-		"ts-node": "^10.9.1",
+		"ts-node": "^10.9.2",
 		"tsx": "^4.19.3",
 		"typescript": "^5.0.3",
 		"xo": "^0.53.1"
