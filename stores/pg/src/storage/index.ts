@@ -1,5 +1,11 @@
 import type { MessageType, StorageThreadType } from '@mastra/core/memory';
-import { MastraStorage } from '@mastra/core/storage';
+import {
+  MastraStorage,
+  TABLE_MESSAGES,
+  TABLE_THREADS,
+  TABLE_TRACES,
+  TABLE_WORKFLOW_SNAPSHOT,
+} from '@mastra/core/storage';
 import type { EvalRow, StorageColumn, StorageGetMessagesArg, TABLE_NAMES } from '@mastra/core/storage';
 import type { WorkflowRunState } from '@mastra/core/workflows';
 import pgPromise from 'pg-promise';
@@ -104,7 +110,7 @@ export class PostgresStore extends MastraStorage {
 
     console.log(
       'QUERY',
-      `SELECT * FROM ${MastraStorage.TABLE_TRACES} ${whereClause} ORDER BY "createdAt" DESC LIMIT ${limit} OFFSET ${offset}`,
+      `SELECT * FROM ${TABLE_TRACES} ${whereClause} ORDER BY "createdAt" DESC LIMIT ${limit} OFFSET ${offset}`,
       args,
     );
 
@@ -123,10 +129,7 @@ export class PostgresStore extends MastraStorage {
       endTime: string;
       other: any;
       createdAt: string;
-    }>(
-      `SELECT * FROM ${MastraStorage.TABLE_TRACES} ${whereClause} ORDER BY "createdAt" DESC LIMIT ${limit} OFFSET ${offset}`,
-      args,
-    );
+    }>(`SELECT * FROM ${TABLE_TRACES} ${whereClause} ORDER BY "createdAt" DESC LIMIT ${limit} OFFSET ${offset}`, args);
 
     if (!result) {
       return [];
@@ -172,7 +175,7 @@ export class PostgresStore extends MastraStorage {
           ${columns}
         );
         ${
-          tableName === MastraStorage.TABLE_WORKFLOW_SNAPSHOT
+          tableName === TABLE_WORKFLOW_SNAPSHOT
             ? `
         DO $$ BEGIN
           IF NOT EXISTS (
@@ -233,7 +236,7 @@ export class PostgresStore extends MastraStorage {
       }
 
       // If this is a workflow snapshot, parse the snapshot field
-      if (tableName === MastraStorage.TABLE_WORKFLOW_SNAPSHOT) {
+      if (tableName === TABLE_WORKFLOW_SNAPSHOT) {
         const snapshot = result as any;
         if (typeof snapshot.snapshot === 'string') {
           snapshot.snapshot = JSON.parse(snapshot.snapshot);
@@ -258,7 +261,7 @@ export class PostgresStore extends MastraStorage {
           metadata,
           "createdAt",
           "updatedAt"
-        FROM "${MastraStorage.TABLE_THREADS}"
+        FROM "${TABLE_THREADS}"
         WHERE id = $1`,
         [threadId],
       );
@@ -289,7 +292,7 @@ export class PostgresStore extends MastraStorage {
           metadata,
           "createdAt",
           "updatedAt"
-        FROM "${MastraStorage.TABLE_THREADS}"
+        FROM "${TABLE_THREADS}"
         WHERE "resourceId" = $1`,
         [resourceId],
       );
@@ -309,7 +312,7 @@ export class PostgresStore extends MastraStorage {
   async saveThread({ thread }: { thread: StorageThreadType }): Promise<StorageThreadType> {
     try {
       await this.db.none(
-        `INSERT INTO "${MastraStorage.TABLE_THREADS}" (
+        `INSERT INTO "${TABLE_THREADS}" (
           id,
           "resourceId",
           title,
@@ -363,7 +366,7 @@ export class PostgresStore extends MastraStorage {
       };
 
       const thread = await this.db.one<StorageThreadType>(
-        `UPDATE "${MastraStorage.TABLE_THREADS}"
+        `UPDATE "${TABLE_THREADS}"
         SET title = $1,
             metadata = $2,
             "updatedAt" = $3
@@ -388,10 +391,10 @@ export class PostgresStore extends MastraStorage {
     try {
       await this.db.tx(async t => {
         // First delete all messages associated with this thread
-        await t.none(`DELETE FROM "${MastraStorage.TABLE_MESSAGES}" WHERE thread_id = $1`, [threadId]);
+        await t.none(`DELETE FROM "${TABLE_MESSAGES}" WHERE thread_id = $1`, [threadId]);
 
         // Then delete the thread
-        await t.none(`DELETE FROM "${MastraStorage.TABLE_THREADS}" WHERE id = $1`, [threadId]);
+        await t.none(`DELETE FROM "${TABLE_THREADS}" WHERE id = $1`, [threadId]);
       });
     } catch (error) {
       console.error('Error deleting thread:', error);
@@ -412,7 +415,7 @@ export class PostgresStore extends MastraStorage {
             SELECT 
               *,
               ROW_NUMBER() OVER (ORDER BY "createdAt" DESC) as row_num
-            FROM "${MastraStorage.TABLE_MESSAGES}"
+            FROM "${TABLE_MESSAGES}"
             WHERE thread_id = $1
           )
           SELECT
@@ -458,7 +461,7 @@ export class PostgresStore extends MastraStorage {
             type,
             "createdAt", 
             thread_id AS "threadId"
-        FROM "${MastraStorage.TABLE_MESSAGES}"
+        FROM "${TABLE_MESSAGES}"
         WHERE thread_id = $1
         AND id != ALL($2)
         ORDER BY "createdAt" DESC
@@ -508,7 +511,7 @@ export class PostgresStore extends MastraStorage {
       await this.db.tx(async t => {
         for (const message of messages) {
           await t.none(
-            `INSERT INTO "${MastraStorage.TABLE_MESSAGES}" (id, thread_id, content, "createdAt", role, type) 
+            `INSERT INTO "${TABLE_MESSAGES}" (id, thread_id, content, "createdAt", role, type) 
              VALUES ($1, $2, $3, $4, $5, $6)`,
             [
               message.id,
@@ -541,7 +544,7 @@ export class PostgresStore extends MastraStorage {
     try {
       const now = new Date().toISOString();
       await this.db.none(
-        `INSERT INTO "${MastraStorage.TABLE_WORKFLOW_SNAPSHOT}" (
+        `INSERT INTO "${TABLE_WORKFLOW_SNAPSHOT}" (
           workflow_name,
           run_id,
           snapshot,
@@ -568,7 +571,7 @@ export class PostgresStore extends MastraStorage {
   }): Promise<WorkflowRunState | null> {
     try {
       const result = await this.load({
-        tableName: MastraStorage.TABLE_WORKFLOW_SNAPSHOT,
+        tableName: TABLE_WORKFLOW_SNAPSHOT,
         keys: {
           workflow_name: workflowName,
           run_id: runId,
@@ -636,7 +639,7 @@ export class PostgresStore extends MastraStorage {
     // Only get total count when using pagination
     if (limit !== undefined && offset !== undefined) {
       const countResult = await this.db.one(
-        `SELECT COUNT(*) as count FROM mastra_workflow_snapshot ${whereClause}`,
+        `SELECT COUNT(*) as count FROM ${TABLE_WORKFLOW_SNAPSHOT} ${whereClause}`,
         values,
       );
       total = Number(countResult.count);
@@ -644,7 +647,7 @@ export class PostgresStore extends MastraStorage {
 
     // Get results
     const query = `
-      SELECT * FROM mastra_workflow_snapshot 
+      SELECT * FROM ${TABLE_WORKFLOW_SNAPSHOT} 
       ${whereClause} 
       ORDER BY "createdAt" DESC
       ${limit !== undefined && offset !== undefined ? ` LIMIT $${paramIndex} OFFSET $${paramIndex + 1}` : ''}

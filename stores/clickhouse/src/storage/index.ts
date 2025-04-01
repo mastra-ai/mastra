@@ -8,7 +8,14 @@ import {
   TABLE_TRACES,
   TABLE_WORKFLOW_SNAPSHOT,
 } from '@mastra/core/storage';
-import type { EvalRow, StorageColumn, StorageGetMessagesArg, TABLE_NAMES } from '@mastra/core/storage';
+import type {
+  EvalRow,
+  StorageColumn,
+  StorageGetMessagesArg,
+  TABLE_NAMES,
+  WorkflowRow,
+  WorkflowRuns,
+} from '@mastra/core/storage';
 import type { WorkflowRunState } from '@mastra/core/workflows';
 import { createClient, ClickHouseClient } from '@clickhouse/client';
 
@@ -704,6 +711,121 @@ export class ClickhouseStore extends MastraStorage {
       return (result as any).snapshot;
     } catch (error) {
       console.error('Error loading workflow snapshot:', error);
+      throw error;
+    }
+  }
+
+  async getWorkflowRuns({
+    workflowName,
+    fromDate,
+    toDate,
+    limit,
+    offset,
+  }: {
+    workflowName?: string;
+    fromDate?: Date;
+    toDate?: Date;
+    limit?: number;
+    offset?: number;
+  } = {}): Promise<{
+    runs: Array<{
+      workflowName: string;
+      runId: string;
+      snapshot: WorkflowRunState | string;
+      createdAt: Date;
+      updatedAt: Date;
+    }>;
+    total: number;
+  }> {
+    try {
+      const conditions: string[] = [];
+      const values: Record<string, any> = {};
+
+      if (workflowName) {
+        conditions.push(`workflow_name = {var_workflow_name:String}`);
+        values.var_workflow_name = workflowName;
+      }
+
+      if (fromDate) {
+        conditions.push(`createdAt >= {var_from_date:DateTime64(3)}`);
+        values.var_from_date = fromDate.toISOString().slice(0, -1); // Remove trailing Z
+      }
+
+      if (toDate) {
+        conditions.push(`createdAt <= {var_to_date:DateTime64(3)}`);
+        values.var_to_date = toDate.toISOString().slice(0, -1); // Remove trailing Z
+      }
+
+      const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+      const limitClause = limit !== undefined ? `LIMIT ${limit}` : '';
+      const offsetClause = offset !== undefined ? `OFFSET ${offset}` : '';
+
+      let total = 0;
+      // Only get total count when using pagination
+      if (limit !== undefined && offset !== undefined) {
+        try {
+          const countResult = await Promise.race([
+            this.db.query({
+              query: `SELECT COUNT(*) as count FROM ${TABLE_WORKFLOW_SNAPSHOT} ${TABLE_ENGINES[TABLE_WORKFLOW_SNAPSHOT].startsWith('ReplacingMergeTree') ? 'FINAL' : ''} ${whereClause}`,
+              query_params: values,
+              format: 'JSONEachRow',
+            }),
+            new Promise((_, reject) => setTimeout(() => reject(new Error('Count query timeout')), 3000)),
+          ]);
+          const countRows = await countResult.json();
+          total = (countRows as Array<{ count: number }>)[0]?.count ?? 0;
+        } catch (error) {
+          console.warn('Error getting count:', error);
+          total = 0; // Default to 0 if count query fails
+        }
+      }
+
+      // Get results
+      const result = await Promise.race([
+        this.db.query({
+          query: `
+            SELECT 
+              workflow_name,
+              run_id,
+              snapshot,
+              toDateTime64(createdAt, 3) as createdAt,
+              toDateTime64(updatedAt, 3) as updatedAt
+            FROM ${TABLE_WORKFLOW_SNAPSHOT} ${TABLE_ENGINES[TABLE_WORKFLOW_SNAPSHOT].startsWith('ReplacingMergeTree') ? 'FINAL' : ''}
+            ${whereClause}
+            ORDER BY createdAt DESC
+            ${limitClause}
+            ${offsetClause}
+          `,
+          query_params: values,
+          format: 'JSONEachRow',
+        }),
+        new Promise((_, reject) => setTimeout(() => reject(new Error('Query timeout')), 4000)),
+      ]);
+
+      const resultJson = await result.json();
+      const rows = resultJson as WorkflowRow[];
+      const runs = rows.map(row => {
+        let parsedSnapshot: WorkflowRunState | string = row.snapshot;
+        try {
+          parsedSnapshot = JSON.parse(row.snapshot) as WorkflowRunState;
+        } catch (e) {
+          // If parsing fails, return the raw snapshot string
+          console.warn(`Failed to parse snapshot for workflow ${row.workflow_name}: ${e}`);
+        }
+
+        return {
+          workflowName: row.workflow_name,
+          runId: row.run_id,
+          snapshot: parsedSnapshot,
+          createdAt: new Date(row.createdAt),
+          updatedAt: new Date(row.updatedAt),
+        };
+      });
+
+      // Use runs.length as total when not paginating
+      return { runs, total: total || runs.length };
+    } catch (error) {
+      console.error('Error getting workflow runs:', error);
       throw error;
     }
   }

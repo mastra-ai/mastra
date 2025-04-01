@@ -1,7 +1,7 @@
 import { randomUUID } from 'crypto';
 import type { MessageType } from '@mastra/core/memory';
 import type { TABLE_NAMES } from '@mastra/core/storage';
-import { MastraStorage, TABLE_WORKFLOW_SNAPSHOT } from '@mastra/core/storage';
+import { TABLE_MESSAGES, TABLE_THREADS, TABLE_WORKFLOW_SNAPSHOT } from '@mastra/core/storage';
 import type { WorkflowRunState } from '@mastra/core/workflows';
 import { describe, it, expect, beforeAll, beforeEach, afterAll, vi } from 'vitest';
 
@@ -76,8 +76,8 @@ describe('UpstashStore', () => {
     // Clean up test tables
     await store.clearTable({ tableName: testTableName as TABLE_NAMES });
     await store.clearTable({ tableName: testTableName2 as TABLE_NAMES });
-    await store.clearTable({ tableName: MastraStorage.TABLE_THREADS });
-    await store.clearTable({ tableName: MastraStorage.TABLE_MESSAGES });
+    await store.clearTable({ tableName: TABLE_THREADS });
+    await store.clearTable({ tableName: TABLE_MESSAGES });
   });
 
   describe('Table Operations', () => {
@@ -122,7 +122,7 @@ describe('UpstashStore', () => {
 
   describe('Thread Operations', () => {
     beforeEach(async () => {
-      await store.clearTable({ tableName: MastraStorage.TABLE_THREADS });
+      await store.clearTable({ tableName: TABLE_THREADS });
     });
 
     it('should create and retrieve a thread', async () => {
@@ -181,7 +181,7 @@ describe('UpstashStore', () => {
 
   describe('Date Handling', () => {
     beforeEach(async () => {
-      await store.clearTable({ tableName: MastraStorage.TABLE_THREADS });
+      await store.clearTable({ tableName: TABLE_THREADS });
     });
 
     it('should handle Date objects in thread operations', async () => {
@@ -243,8 +243,8 @@ describe('UpstashStore', () => {
     const threadId = 'test-thread';
 
     beforeEach(async () => {
-      await store.clearTable({ tableName: MastraStorage.TABLE_MESSAGES });
-      await store.clearTable({ tableName: MastraStorage.TABLE_THREADS });
+      await store.clearTable({ tableName: TABLE_MESSAGES });
+      await store.clearTable({ tableName: TABLE_THREADS });
 
       // Create a test thread
       await store.__saveThread({
@@ -351,7 +351,7 @@ describe('UpstashStore', () => {
     });
   });
 
-  describe('getWorkflows', () => {
+  describe('getWorkflowRuns', () => {
     const testNamespace = 'test-namespace';
     beforeEach(async () => {
       await store.clearTable({ tableName: TABLE_WORKFLOW_SNAPSHOT });

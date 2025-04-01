@@ -1,5 +1,5 @@
 import type { StorageThreadType, MessageType } from '@mastra/core/memory';
-import { MastraStorage } from '@mastra/core/storage';
+import { MastraStorage, TABLE_MESSAGES, TABLE_THREADS, TABLE_WORKFLOW_SNAPSHOT } from '@mastra/core/storage';
 import type { TABLE_NAMES, StorageColumn, StorageGetMessagesArg, EvalRow } from '@mastra/core/storage';
 import type { WorkflowRunState } from '@mastra/core/workflows';
 import { Redis } from '@upstash/redis';
@@ -76,10 +76,10 @@ export class UpstashStore extends MastraStorage {
   async insert({ tableName, record }: { tableName: TABLE_NAMES; record: Record<string, any> }): Promise<void> {
     let key: string;
 
-    if (tableName === MastraStorage.TABLE_MESSAGES) {
+    if (tableName === TABLE_MESSAGES) {
       // For messages, use threadId as the primary key component
       key = this.getKey(tableName, { threadId: record.threadId, id: record.id });
-    } else if (tableName === MastraStorage.TABLE_WORKFLOW_SNAPSHOT) {
+    } else if (tableName === TABLE_WORKFLOW_SNAPSHOT) {
       key = this.getKey(tableName, {
         namespace: record.namespace || 'workflows',
         workflow_name: record.workflow_name,
@@ -107,7 +107,7 @@ export class UpstashStore extends MastraStorage {
 
   async getThreadById({ threadId }: { threadId: string }): Promise<StorageThreadType | null> {
     const thread = await this.load<StorageThreadType>({
-      tableName: MastraStorage.TABLE_THREADS,
+      tableName: TABLE_THREADS,
       keys: { id: threadId },
     });
 
@@ -122,7 +122,7 @@ export class UpstashStore extends MastraStorage {
   }
 
   async getThreadsByResourceId({ resourceId }: { resourceId: string }): Promise<StorageThreadType[]> {
-    const pattern = `${MastraStorage.TABLE_THREADS}:*`;
+    const pattern = `${TABLE_THREADS}:*`;
     const keys = await this.redis.keys(pattern);
     const threads = await Promise.all(
       keys.map(async key => {
@@ -143,7 +143,7 @@ export class UpstashStore extends MastraStorage {
 
   async saveThread({ thread }: { thread: StorageThreadType }): Promise<StorageThreadType> {
     await this.insert({
-      tableName: MastraStorage.TABLE_THREADS,
+      tableName: TABLE_THREADS,
       record: thread,
     });
     return thread;
@@ -177,12 +177,12 @@ export class UpstashStore extends MastraStorage {
   }
 
   async deleteThread({ threadId }: { threadId: string }): Promise<void> {
-    const key = this.getKey(MastraStorage.TABLE_THREADS, { id: threadId });
+    const key = this.getKey(TABLE_THREADS, { id: threadId });
     await this.redis.del(key);
   }
 
   private getMessageKey(threadId: string, messageId: string): string {
-    return this.getKey(MastraStorage.TABLE_MESSAGES, { threadId, id: messageId });
+    return this.getKey(TABLE_MESSAGES, { threadId, id: messageId });
   }
 
   private getThreadMessagesKey(threadId: string): string {
@@ -282,7 +282,7 @@ export class UpstashStore extends MastraStorage {
   }): Promise<void> {
     const { namespace = 'workflows', workflowName, runId, snapshot } = params;
     await this.insert({
-      tableName: MastraStorage.TABLE_WORKFLOW_SNAPSHOT,
+      tableName: TABLE_WORKFLOW_SNAPSHOT,
       record: {
         namespace,
         workflow_name: workflowName,
@@ -300,7 +300,7 @@ export class UpstashStore extends MastraStorage {
     runId: string;
   }): Promise<WorkflowRunState | null> {
     const { namespace = 'workflows', workflowName, runId } = params;
-    const key = this.getKey(MastraStorage.TABLE_WORKFLOW_SNAPSHOT, {
+    const key = this.getKey(TABLE_WORKFLOW_SNAPSHOT, {
       namespace,
       workflow_name: workflowName,
       run_id: runId,
@@ -343,8 +343,8 @@ export class UpstashStore extends MastraStorage {
   }> {
     // Get all workflow keys
     const pattern = workflowName
-      ? this.getKey(MastraStorage.TABLE_WORKFLOW_SNAPSHOT, { namespace, workflow_name: workflowName }) + ':*'
-      : this.getKey(MastraStorage.TABLE_WORKFLOW_SNAPSHOT, { namespace }) + ':*';
+      ? this.getKey(TABLE_WORKFLOW_SNAPSHOT, { namespace, workflow_name: workflowName }) + ':*'
+      : this.getKey(TABLE_WORKFLOW_SNAPSHOT, { namespace }) + ':*';
 
     const keys = await this.redis.keys(pattern);
 

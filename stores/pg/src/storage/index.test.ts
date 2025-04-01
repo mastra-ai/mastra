@@ -400,7 +400,7 @@ describe('PostgresStore', () => {
     });
   });
 
-  describe('getWorkflows', () => {
+  describe('getWorkflowRuns', () => {
     beforeEach(async () => {
       await store.clearTable({ tableName: TABLE_WORKFLOW_SNAPSHOT });
     });
