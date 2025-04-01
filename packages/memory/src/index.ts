@@ -462,6 +462,7 @@ Notes:
 - Update memory whenever referenced information changes
 - If you're unsure whether to store something, store it (eg if the user tells you information about themselves, call updateWorkingMemory immediately to update it)
 - This system is here so that you can maintain the conversation when your context window is very short. Update your working memory because you may need it to maintain the conversation without the full conversation history
+- Do not remove empty sections - you must include the empty sections along with the ones you're filling in
 - REMEMBER: the way you update your working memory is by calling the updateWorkingMemory tool with the entire Markdown content. The system will store it for you. The user will not see it.
 - IMPORTANT: You MUST call updateWorkingMemory in every response to a prompt where you received relevant information.
 - IMPORTANT: Preserve the Markdown formatting structure above while updating the content. If the working memory was previously in XML format, convert it to Markdown while preserving the information.`;
