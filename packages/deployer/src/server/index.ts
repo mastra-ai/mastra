@@ -9,10 +9,10 @@ import { Telemetry } from '@mastra/core';
 import type { Mastra } from '@mastra/core';
 import { Hono } from 'hono';
 import type { Context, MiddlewareHandler } from 'hono';
-
 import { bodyLimit } from 'hono/body-limit';
 import { cors } from 'hono/cors';
 import { logger } from 'hono/logger';
+import { timeout } from 'hono/timeout';
 import { describeRoute, openAPISpecs } from 'hono-openapi';
 
 import {
@@ -77,6 +77,7 @@ export async function createHonoServer(
 ) {
   // Create typed Hono app
   const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
+  const server = mastra.getServer();
 
   // Initialize tools
   const mastraToolsPaths = process.env.MASTRA_TOOLS_PATH;
@@ -98,6 +99,7 @@ export async function createHonoServer(
   // Middleware
   app.use(
     '*',
+    timeout(server?.timeout ?? 5000),
     cors({
       origin: '*',
       allowMethods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
@@ -155,7 +157,6 @@ export async function createHonoServer(
     onError: (c: Context) => c.json({ error: 'Request body too large' }, 413),
   };
 
-  const server = mastra.getServer();
   const routes = server?.apiRoutes;
 
   if (server?.middleware) {
@@ -2081,10 +2082,14 @@ export async function createNodeServer(
   options: { playground?: boolean; swaggerUI?: boolean; apiReqLogs?: boolean } = {},
 ) {
   const app = await createHonoServer(mastra, options);
+  const serverOptions = mastra.getServer();
+
+  const port = serverOptions?.port ?? (Number(process.env.PORT) || 4111);
+
   return serve(
     {
       fetch: app.fetch,
-      port: Number(process.env.PORT) || 4111,
+      port,
     },
     () => {
       const logger = mastra.getLogger();
