@@ -48,7 +48,7 @@
     "@microsoft/api-extractor": "^7.52.1",
     "@rollup/plugin-commonjs": "^28.0.3",
     "@rollup/plugin-json": "^6.1.0",
-    "@rollup/plugin-node-resolve": "^16.0.0",
+    "@rollup/plugin-node-resolve": "^16.0.1",
     "@types/fs-extra": "^11.0.4",
     "@types/node": "^20.17.27",
     "esbuild": "^0.25.0",
