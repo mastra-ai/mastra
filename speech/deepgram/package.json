@@ -24,7 +24,7 @@
     "test": "echo deprecated"
   },
   "dependencies": {
-    "@deepgram/sdk": "^3.11.2",
+    "@deepgram/sdk": "^3.11.3",
     "@mastra/core": "workspace:^",
     "zod": "^3.24.2"
   },
