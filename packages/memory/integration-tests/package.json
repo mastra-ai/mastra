@@ -31,9 +31,9 @@
     "ai": "^4.2.2",
     "mastra": "workspace:*",
     "jsdom": "^26.0.0",
-    "next": "^15.2.3",
-    "react": "^19.0.0",
-    "react-dom": "^19.0.0",
+    "next": "^15.2.4",
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0",
     "typescript": "^5.8.2",
     "vitest": "^1.6.1"
   }
