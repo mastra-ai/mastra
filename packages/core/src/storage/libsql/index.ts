@@ -539,7 +539,7 @@ export class LibSQLStore extends MastraStorage {
     }
 
     if (columnFilters) {
-      for (const [key, value] of Object.entries(columnFilters)) {
+      for (const [, value] of Object.entries(columnFilters)) {
         args.push(value);
       }
     }
