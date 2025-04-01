@@ -47,12 +47,10 @@ import type {
   AgentGenerateOptions,
   AgentStreamOptions,
   AiMessageType,
-  InstructionsBuilder,
   MastraLanguageModel,
   ToolsetsInput,
   ToolsInput,
 } from './types';
-import { AgentInstructions } from './types';
 
 export * from './types';
 
@@ -68,7 +66,7 @@ export class Agent<
 > extends MastraBase {
   public name: TAgentId;
   readonly llm: MastraLLMBase;
-  instructions: AgentInstructions<TSchemaDeps>;
+  instructions: string;
   readonly model?: MastraLanguageModel;
   #mastra?: Mastra;
   #memory?: MastraMemory;
@@ -84,7 +82,7 @@ export class Agent<
     super({ component: RegisteredLogger.AGENT });
 
     this.name = config.name;
-    this.instructions = AgentInstructions.from(config.instructions, { dependenciesSchema: config.dependenciesSchema });
+    this.instructions = config.instructions;
 
     if (!config.model) {
       throw new Error(`LanguageModel is required to create an Agent. Please provide the 'model'.`);
@@ -126,7 +124,7 @@ export class Agent<
     if (config.voice) {
       this.voice = config.voice;
       this.voice?.addTools(this.tools);
-      this.voice?.addInstructions(this.instructions.toString()); // TODO: support dynamic instructions in voice providers
+      this.voice?.addInstructions(this.instructions);
     } else {
       this.voice = new DefaultVoice();
     }
@@ -143,9 +141,9 @@ export class Agent<
     return this.#memory ?? this.#mastra?.memory;
   }
 
-  __updateInstructions(newInstructions: string | InstructionsBuilder<TSchemaDeps>) {
-    this.instructions = AgentInstructions.from(newInstructions, { dependenciesSchema: this.#dependenciesSchema });
-    this.voice?.addInstructions(this.instructions.toString()); // TODO: support dynamic instructions in voice providers
+  __updateInstructions(newInstructions: string) {
+    this.instructions = newInstructions;
+    this.voice?.addInstructions(this.instructions);
     this.logger.debug(`[Agents:${this.name}] Instructions updated.`, { model: this.model, name: this.name });
   }
 
@@ -678,14 +676,9 @@ export class Agent<
           createDependenciesFrom(dependencies),
         );
 
-        const resolvedInstructions = await this.instructions.resolve({
-          dependencies: this.#currentDependencies,
-          instructions,
-        });
-
         const systemMessage: CoreMessage = {
           role: 'system',
-          content: `${resolvedInstructions}.`,
+          content: `${instructions || this.instructions}.`,
         };
 
         let coreMessages = messages;
@@ -865,11 +858,6 @@ export class Agent<
         if (Object.keys(this.evals || {}).length > 0) {
           const input = messages.map(message => message.content).join('\n');
           const runIdToUse = runId || crypto.randomUUID();
-          const resolvedInstructions = await this.instructions.resolve({
-            dependencies: this.#currentDependencies,
-            instructions,
-          });
-
           for (const metric of Object.values(this.evals || {})) {
             executeHook(AvailableHooks.ON_GENERATION, {
               input,
@@ -877,7 +865,7 @@ export class Agent<
               runId: runIdToUse,
               metric,
               agentName: this.name,
-              instructions: resolvedInstructions,
+              instructions: instructions || this.instructions,
             });
           }
         }
