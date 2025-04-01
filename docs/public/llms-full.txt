@@ -22819,18 +22819,18 @@ Now let's demonstrate a basic interaction between the agents:
 
 ```ts showLineNumbers copy
 // Step 1: Agent 1 speaks a question and saves it to a file
-const audio1 = await agent1.speak('What is the meaning of life in one sentence?');
+const audio1 = await agent1.voice.speak('What is the meaning of life in one sentence?');
 await saveAudioToFile(audio1, 'agent1-question.mp3');
 
 // Step 2: Agent 2 listens to Agent 1's question
 const audioFilePath = path.join(process.cwd(), 'agent1-question.mp3');
 const audioStream = createReadStream(audioFilePath);
-const audio2 = await agent2.listen(audioStream);
+const audio2 = await agent2.voice.listen(audioStream);
 const text = await convertToText(audio2);
 
 // Step 3: Agent 2 generates and speaks a response
 const agent2Response = await agent2.generate(text);
-const agent2ResponseAudio = await agent2.speak(agent2Response.text);
+const agent2ResponseAudio = await agent2.voice.speak(agent2Response.text);
 await saveAudioToFile(agent2ResponseAudio, 'agent2-response.mp3');
 ```
 

@@ -1,6 +1,6 @@
 {
   "name": "@mastra/core",
-  "version": "0.7.1-alpha.0",
+  "version": "0.8.0-alpha.2",
   "license": "ISC",
   "type": "module",
   "main": "dist/index.js",
@@ -134,7 +134,7 @@
   },
   "devDependencies": {
     "@ai-sdk/openai": "^1.2.1",
-    "@babel/core": "^7.26.9",
+    "@babel/core": "^7.26.10",
     "@internal/lint": "workspace:*",
     "@microsoft/api-extractor": "^7.52.1",
     "@size-limit/preset-small-lib": "^11.2.0",

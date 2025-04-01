@@ -2,8 +2,8 @@ import { get } from 'radash';
 import type { ZodSchema } from 'zod';
 import { z } from 'zod';
 import type { Mastra } from '..';
-import type { ToolsInput } from '../agent';
 import { Agent } from '../agent';
+import type { ToolsInput } from '../agent';
 import type { Metric } from '../eval';
 import type { Logger } from '../logger';
 import type { Step } from './step';
@@ -195,7 +195,7 @@ export function isAgent(
   return step instanceof Agent;
 }
 
-export function resolveVariables<TSteps extends Step<any, any, any>[]>({
+export function resolveVariables({
   runId,
   logger,
   variables,
@@ -250,6 +250,7 @@ export function agentToStep<
   TMetrics extends Record<string, Metric> = Record<string, Metric>,
 >(
   agent: Agent<TAgentId, TSchemaDeps, TTools, TMetrics>,
+  { mastra }: { mastra?: Mastra } = {},
 ): StepAction<TAgentId, z.ZodObject<{ prompt: z.ZodString }>, z.ZodObject<{ text: z.ZodString }>, any> {
   return {
     id: agent.name,
@@ -261,15 +262,16 @@ export function agentToStep<
     outputSchema: z.object({
       text: z.string(),
     }),
-    execute: async ({ context, runId, mastra }) => {
-      if (!mastra) {
+    execute: async ({ context, runId, mastra: mastraFromExecute }) => {
+      const realMastra = mastraFromExecute ?? mastra;
+      if (!realMastra) {
         throw new Error('Mastra instance not found');
       }
 
-      agent.__registerMastra(mastra);
+      agent.__registerMastra(realMastra);
       agent.__registerPrimitives({
-        logger: mastra.getLogger(),
-        telemetry: mastra.getTelemetry(),
+        logger: realMastra.getLogger(),
+        telemetry: realMastra.getTelemetry(),
       });
 
       const result = await agent.generate(context.inputData.prompt, {
@@ -299,14 +301,16 @@ export function workflowToStep<
   return {
     id: workflow.name,
     workflow,
-    execute: async ({ context, suspend, emit, runId, mastra }) => {
-      if (mastra) {
-        workflow.__registerMastra(mastra);
+    execute: async ({ context, suspend, emit, mastra: mastraFromExecute }) => {
+      const realMastra = mastraFromExecute ?? mastra;
+      if (realMastra) {
+        workflow.__registerMastra(realMastra);
         workflow.__registerPrimitives({
-          logger: mastra.getLogger(),
-          telemetry: mastra.getTelemetry(),
+          logger: realMastra.getLogger(),
+          telemetry: realMastra.getTelemetry(),
         });
       }
+
       const run = context.isResume ? workflow.createRun({ runId: context.isResume.runId }) : workflow.createRun();
       const unwatch = run.watch(state => {
         emit('state-update', workflow.name, state.results, { ...context, ...{ [workflow.name]: state.results } });
@@ -328,7 +332,7 @@ export function workflowToStep<
       }
 
       if (awaitedResult.activePaths?.size > 0) {
-        const suspendedStep = [...awaitedResult.activePaths.entries()].find(([stepId, { status }]) => {
+        const suspendedStep = [...awaitedResult.activePaths.entries()].find(([, { status }]) => {
           return status === 'suspended';
         });
 

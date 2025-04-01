@@ -39,6 +39,7 @@ import {
   validateDependencies,
 } from '../utils';
 import type { CompositeVoice } from '../voice';
+import { DefaultVoice } from '../voice';
 import { agentToStep, Step } from '../workflows';
 
 import type {
@@ -75,7 +76,7 @@ export class Agent<
   /** @deprecated This property is deprecated. Use evals instead. */
   metrics: TMetrics;
   evals: TMetrics;
-  voice?: CompositeVoice;
+  voice: CompositeVoice;
   #dependenciesSchema?: TSchemaDeps;
   #currentDependencies?: DependenciesType<TSchemaDeps>;
 
@@ -130,6 +131,8 @@ export class Agent<
       this.voice = config.voice;
       this.voice?.addTools(this.tools);
       this.voice?.addInstructions(this.#instructions.toString()); // TODO: support dynamic instructions in voice providers
+    } else {
+      this.voice = new DefaultVoice();      
     }
 
     if (config.dependenciesSchema) {
@@ -227,12 +230,14 @@ export class Agent<
     memoryConfig,
     resourceId,
     userMessages,
+    systemMessage,
     runId,
   }: {
     resourceId: string;
     threadId: string;
     memoryConfig?: MemoryConfig;
     userMessages: CoreMessage[];
+    systemMessage: CoreMessage;
     time?: Date;
     keyword?: string;
     runId?: string;
@@ -266,6 +271,7 @@ export class Agent<
                   threadId,
                   resourceId,
                   config: memoryConfig,
+                  systemMessage,
                   vectorMessageSearch: messages
                     .slice(-1)
                     .map(m => {
@@ -286,6 +292,13 @@ export class Agent<
         runId,
       });
 
+      const processedMessages = memory.processMessages({
+        messages: this.sanitizeResponseMessages(memoryMessages),
+        newMessages,
+        systemMessage: typeof systemMessage?.content === `string` ? systemMessage.content : undefined,
+        memorySystemMessage: memorySystemMessage ?? ``,
+      });
+
       return {
         threadId: thread.id,
         messages: [
@@ -295,7 +308,7 @@ export class Agent<
                 content: memorySystemMessage,
               }
             : null,
-          ...this.sanitizeResponseMessages(memoryMessages),
+          ...processedMessages,
           ...newMessages,
         ].filter((message): message is NonNullable<typeof message> => Boolean(message)),
       };
@@ -611,12 +624,14 @@ export class Agent<
     threadId,
     memoryConfig,
     messages,
+    systemMessage,
   }: {
     runId?: string;
     threadId: string;
     memoryConfig?: MemoryConfig;
     messages: CoreMessage[];
     resourceId: string;
+    systemMessage: CoreMessage;
   }) {
     let coreMessages: CoreMessage[] = [];
     let threadIdToUse = threadId;
@@ -627,6 +642,7 @@ export class Agent<
       resourceId,
       userMessages: messages,
       memoryConfig,
+      systemMessage,
     });
 
     coreMessages = saveMessageResponse.messages;
@@ -716,6 +732,7 @@ export class Agent<
             threadId: threadIdToUse,
             memoryConfig,
             messages,
+            systemMessage,
           });
 
           coreMessages = preExecuteResult.coreMessages;

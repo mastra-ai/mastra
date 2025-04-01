@@ -301,7 +301,7 @@ describe('agent', () => {
 
   describe('voice capabilities', () => {
     class MockVoice extends MastraVoice {
-      async speak(_input: string | NodeJS.ReadableStream): Promise<NodeJS.ReadableStream> {
+      async speak(): Promise<NodeJS.ReadableStream> {
         const stream = new PassThrough();
         stream.end('mock audio');
         return stream;
@@ -409,9 +409,9 @@ describe('agent', () => {
           model: openai('gpt-4o'),
         });
 
-        await expect(agentWithoutVoice.getSpeakers()).rejects.toThrow('No voice provider configured');
-        await expect(agentWithoutVoice.speak('Test')).rejects.toThrow('No voice provider configured');
-        await expect(agentWithoutVoice.listen(new PassThrough())).rejects.toThrow('No voice provider configured');
+        await expect(agentWithoutVoice.voice.getSpeakers()).rejects.toThrow('No voice provider configured');
+        await expect(agentWithoutVoice.voice.speak('Test')).rejects.toThrow('No voice provider configured');
+        await expect(agentWithoutVoice.voice.listen(new PassThrough())).rejects.toThrow('No voice provider configured');
       });
     });
   });

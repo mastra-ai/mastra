@@ -1,3 +1,7 @@
-# @mastra/memory
+# Mastra Memory
 
-Experimental
+Memory management for Mastra agents. Visit [the docs](https://mastra.ai/docs/agents/01-agent-memory) for more information.
+
+## License
+
+MIT

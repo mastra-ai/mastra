@@ -17,6 +17,7 @@ import { MastraBase } from '../base';
 import { RegisteredLogger } from '../logger';
 import type { Mastra } from '../mastra';
 import { createTool } from '../tools';
+import type { ToolAction } from '../tools';
 import type { AgentNetworkConfig } from './types';
 
 export class AgentNetwork extends MastraBase {
@@ -44,7 +45,7 @@ export class AgentNetwork extends MastraBase {
       name: config.name,
       instructions: this.getInstructions(),
       model: this.#model,
-      tools: this.getTools(),
+      tools: this.getTools() as Record<string, ToolAction>,
     });
   }
 
@@ -103,7 +104,7 @@ export class AgentNetwork extends MastraBase {
           }
         },
       }),
-    };
+    } as const;
   }
 
   #addToAgentHistory(agentId: string, interaction: { input: string; output: string }) {

@@ -1,6 +1,6 @@
 import type { ToolsInput } from '../agent';
-import type { VoiceEventMap, VoiceEventType } from '.';
-import { MastraVoice } from '.';
+import { MastraVoice } from './voice';
+import type { VoiceEventType, VoiceEventMap } from '.';
 
 export class CompositeVoice extends MastraVoice {
   protected speakProvider?: MastraVoice;
