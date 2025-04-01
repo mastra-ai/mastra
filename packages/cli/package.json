@@ -53,7 +53,7 @@
     "@mastra/core": "workspace:^",
     "@mastra/deployer": "workspace:^",
     "@opentelemetry/instrumentation": "^0.57.2",
-    "@swc/core": "^1.11.8",
+    "@swc/core": "^1.11.15",
     "chokidar": "^4.0.3",
     "commander": "^12.1.0",
     "dotenv": "^16.4.7",
