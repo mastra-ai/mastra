@@ -1,5 +1,62 @@
 # @mastra/memory
 
+## 0.2.7-alpha.1
+
+### Patch Changes
+
+- a0967a0: Added new "Memory Processor" feature to @mastra/core and @mastra/memory, allowing devs to modify Mastra Memory before it's sent to the LLM
+- 0118361: Add resourceId to memory metadata
+- Updated dependencies [619c39d]
+- Updated dependencies [fe56be0]
+- Updated dependencies [a0967a0]
+- Updated dependencies [e47f529]
+- Updated dependencies [fca3b21]
+- Updated dependencies [0118361]
+- Updated dependencies [619c39d]
+  - @mastra/core@0.8.0-alpha.1
+  - @mastra/rag@0.1.15-alpha.1
+
+## 0.2.7-alpha.0
+
+### Patch Changes
+
+- 7599d77: fix(deps): update ai sdk to ^4.2.2
+- Updated dependencies [107bcfe]
+- Updated dependencies [5b4e19f]
+- Updated dependencies [7599d77]
+- Updated dependencies [cafae83]
+- Updated dependencies [8076ecf]
+- Updated dependencies [304397c]
+  - @mastra/core@0.7.1-alpha.0
+  - @mastra/rag@0.1.15-alpha.0
+
+## 0.2.6
+
+### Patch Changes
+
+- 05095e9: Fixed an issue where very long messages would cause Memory semantic recall to throw errors
+- 394dfad: Removed working memory tool calls from thread history after the working memory has been updated. This is to prevent updates from polluting the context history and confusing agents. They should only see the most recent copy of working memory.
+  Also made memory.getWorkingMemory() public since it's useful for testing, debugging, and building UIs.
+- Updated dependencies [b4fbc59]
+- Updated dependencies [a838fde]
+- Updated dependencies [a8bd4cf]
+- Updated dependencies [7a3eeb0]
+- Updated dependencies [0b54522]
+- Updated dependencies [b3b34f5]
+- Updated dependencies [1af25d5]
+- Updated dependencies [a4686e8]
+- Updated dependencies [6530ad1]
+- Updated dependencies [27439ad]
+  - @mastra/core@0.7.0
+  - @mastra/rag@0.1.14
+
+## 0.2.6-alpha.4
+
+### Patch Changes
+
+- 394dfad: Removed working memory tool calls from thread history after the working memory has been updated. This is to prevent updates from polluting the context history and confusing agents. They should only see the most recent copy of working memory.
+  Also made memory.getWorkingMemory() public since it's useful for testing, debugging, and building UIs.
+
 ## 0.2.6-alpha.3
 
 ### Patch Changes

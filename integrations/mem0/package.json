@@ -1,0 +1,51 @@
+{
+  "name": "@mastra/mem0",
+  "version": "0.0.2-alpha.1",
+  "description": "Mem0 is a memory-based AI platform that allows you to store, search your memories based on the user's query.",
+  "type": "module",
+  "keywords": [],
+  "license": "ISC",
+  "author": "https://mem0.ai",
+  "main": "dist/index.js",
+  "typings": "dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "exports": {
+    ".": {
+      "import": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      },
+      "require": {
+        "types": "./dist/index.d.cts",
+        "default": "./dist/index.cjs"
+      }
+    },
+    "./package.json": "./package.json"
+  },
+  "scripts": {
+    "check": "tsc --noEmit",
+    "build": "tsup src/index.ts --format esm,cjs --dts --clean --treeshake",
+    "build:watch": "pnpm build --watch",
+    "lint": "eslint .",
+    "start": "dts watch",
+    "test": "vitest"
+  },
+  "devDependencies": {
+    "@internal/lint": "workspace:*",
+    "@microsoft/api-extractor": "^7.52.1",
+    "@types/node": "^20.17.27",
+    "@types/pg": "^8.11.11",
+    "eslint": "^9.23.0",
+    "tsup": "^8.4.0",
+    "typescript": "^5.8.2",
+    "typescript-eslint": "^8.26.1",
+    "vitest": "^3.0.9"
+  },
+  "dependencies": {
+    "@mastra/core": "workspace:^",
+    "mem0ai": "^2.1.2",
+    "zod": "^3.24.0"
+  }
+}

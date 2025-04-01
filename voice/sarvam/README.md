@@ -47,7 +47,7 @@ export const agent = new Agent({
 const speakers = await voice.getSpeakers();
 
 // Generate speech and save to file
-const audio = await agent.speak("Hello, I'm your AI assistant!");
+const audio = await agent.voice.speak("Hello, I'm your AI assistant!");
 const filePath = path.join(process.cwd(), 'agent.wav');
 const writer = createWriteStream(filePath);
 

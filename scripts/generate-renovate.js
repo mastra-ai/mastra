@@ -106,7 +106,7 @@ const renovateConfig = {
       commitMessageTopic: 'Formatting & linting',
       matchPaths: ['+(package.json)', '**/package.json'],
       matchPackageNames: ['eslint', 'prettier', '/^eslint-/'],
-      excludedMatchPackageNames: ['@typescript-eslint/'],
+      excludePackageNames: ['@typescript-eslint/'],
       matchUpdateTypes: ['major', 'minor', 'patch'],
       matchDepTypes: ['dependencies', 'devDependencies'],
       dependencyDashboardApproval: false,

@@ -84,7 +84,7 @@
       "commitMessageTopic": "Formatting & linting",
       "matchPaths": ["+(package.json)", "**/package.json"],
       "matchPackageNames": ["eslint", "prettier", "/^eslint-/"],
-      "excludedMatchPackageNames": ["@typescript-eslint/"],
+      "excludePackageNames": ["@typescript-eslint/"],
       "matchUpdateTypes": ["major", "minor", "patch"],
       "matchDepTypes": ["dependencies", "devDependencies"],
       "dependencyDashboardApproval": false
@@ -252,15 +252,15 @@
       "matchDepTypes": ["dependencies", "devDependencies"]
     },
     {
-      "groupName": "packages/server",
-      "commitMessageTopic": "packages/server",
-      "matchFileNames": ["packages/server/package.json"],
+      "groupName": "Mastra server",
+      "commitMessageTopic": "Mastra server",
+      "matchFileNames": ["packages/server/*/package.json"],
       "matchUpdateTypes": ["minor", "patch"],
       "matchDepTypes": ["dependencies", "devDependencies"]
     },
     {
-      "groupName": "major-packages/server",
-      "commitMessageTopic": "packages/server",
+      "groupName": "major-Mastra server",
+      "commitMessageTopic": "Mastra server",
       "matchFileNames": ["packages/server/package.json"],
       "matchUpdateTypes": ["major"],
       "matchDepTypes": ["dependencies", "devDependencies"]
@@ -346,6 +346,20 @@
       "groupName": "major-Mastra chroma",
       "commitMessageTopic": "Mastra chroma",
       "matchFileNames": ["stores/chroma/package.json"],
+      "matchUpdateTypes": ["major"],
+      "matchDepTypes": ["dependencies", "devDependencies"]
+    },
+    {
+      "groupName": "Mastra clickhouse",
+      "commitMessageTopic": "Mastra clickhouse",
+      "matchFileNames": ["stores/clickhouse/*/package.json"],
+      "matchUpdateTypes": ["minor", "patch"],
+      "matchDepTypes": ["dependencies", "devDependencies"]
+    },
+    {
+      "groupName": "major-Mastra clickhouse",
+      "commitMessageTopic": "Mastra clickhouse",
+      "matchFileNames": ["stores/clickhouse/package.json"],
       "matchUpdateTypes": ["major"],
       "matchDepTypes": ["dependencies", "devDependencies"]
     },
@@ -742,15 +756,15 @@
       "matchDepTypes": ["dependencies", "devDependencies"]
     },
     {
-      "groupName": "Mastra composio",
-      "commitMessageTopic": "Mastra composio",
-      "matchFileNames": ["integrations/composio/*/package.json"],
+      "groupName": "integrations/composio",
+      "commitMessageTopic": "integrations/composio",
+      "matchFileNames": ["integrations/composio/package.json"],
       "matchUpdateTypes": ["minor", "patch"],
       "matchDepTypes": ["dependencies", "devDependencies"]
     },
     {
-      "groupName": "major-Mastra composio",
-      "commitMessageTopic": "Mastra composio",
+      "groupName": "major-integrations/composio",
+      "commitMessageTopic": "integrations/composio",
       "matchFileNames": ["integrations/composio/package.json"],
       "matchUpdateTypes": ["major"],
       "matchDepTypes": ["dependencies", "devDependencies"]
@@ -784,6 +798,20 @@
       "matchDepTypes": ["dependencies", "devDependencies"]
     },
     {
+      "groupName": "Mastra mem0",
+      "commitMessageTopic": "Mastra mem0",
+      "matchFileNames": ["integrations/mem0/*/package.json"],
+      "matchUpdateTypes": ["minor", "patch"],
+      "matchDepTypes": ["dependencies", "devDependencies"]
+    },
+    {
+      "groupName": "major-Mastra mem0",
+      "commitMessageTopic": "Mastra mem0",
+      "matchFileNames": ["integrations/mem0/package.json"],
+      "matchUpdateTypes": ["major"],
+      "matchDepTypes": ["dependencies", "devDependencies"]
+    },
+    {
       "groupName": "Mastra ragie",
       "commitMessageTopic": "Mastra ragie",
       "matchFileNames": ["integrations/ragie/*/package.json"],
@@ -798,15 +826,15 @@
       "matchDepTypes": ["dependencies", "devDependencies"]
     },
     {
-      "groupName": "Mastra stabilityai",
-      "commitMessageTopic": "Mastra stabilityai",
-      "matchFileNames": ["integrations/stabilityai/*/package.json"],
+      "groupName": "integrations/stabilityai",
+      "commitMessageTopic": "integrations/stabilityai",
+      "matchFileNames": ["integrations/stabilityai/package.json"],
       "matchUpdateTypes": ["minor", "patch"],
       "matchDepTypes": ["dependencies", "devDependencies"]
     },
     {
-      "groupName": "major-Mastra stabilityai",
-      "commitMessageTopic": "Mastra stabilityai",
+      "groupName": "major-integrations/stabilityai",
+      "commitMessageTopic": "integrations/stabilityai",
       "matchFileNames": ["integrations/stabilityai/package.json"],
       "matchUpdateTypes": ["major"],
       "matchDepTypes": ["dependencies", "devDependencies"]
@@ -980,15 +1008,15 @@
       "matchDepTypes": ["dependencies", "devDependencies"]
     },
     {
-      "groupName": "packages/server",
-      "commitMessageTopic": "packages/server",
-      "matchFileNames": ["packages/server/package.json"],
+      "groupName": "Mastra server",
+      "commitMessageTopic": "Mastra server",
+      "matchFileNames": ["packages/server/*/package.json"],
       "matchUpdateTypes": ["minor", "patch"],
       "matchDepTypes": ["dependencies", "devDependencies"]
     },
     {
-      "groupName": "major-packages/server",
-      "commitMessageTopic": "packages/server",
+      "groupName": "major-Mastra server",
+      "commitMessageTopic": "Mastra server",
       "matchFileNames": ["packages/server/package.json"],
       "matchUpdateTypes": ["major"],
       "matchDepTypes": ["dependencies", "devDependencies"]

@@ -42,6 +42,11 @@ export class Telemetry {
     }
   }
 
+  static getActiveSpan() {
+    const span = trace.getActiveSpan();
+    return span;
+  }
+
   /**
    * Get the global telemetry instance
    * @throws {Error} If telemetry has not been initialized
@@ -108,6 +113,17 @@ export class Telemetry {
     });
   }
 
+  static setBaggage(baggage: Record<string, string>, ctx: Context = otlpContext.active()) {
+    const currentBaggage = propagation.getBaggage(ctx);
+    // @ts-ignore
+    const newCtx = propagation.setBaggage(ctx, { ...currentBaggage, ...baggage });
+    return newCtx;
+  }
+
+  static withContext(ctx: Context, fn: () => void) {
+    return otlpContext.with(ctx, fn);
+  }
+
   /**
    * method to trace individual methods with proper context
    * @param method The method to trace
@@ -144,9 +160,18 @@ export class Telemetry {
         throw error;
       }
       try {
+        // @ts-ignore
+        const currentBaggage = propagation.getBaggage(ctx);
+
         // Add all context attributes to span
         if (context.attributes) {
           span.setAttributes(context.attributes);
+        }
+
+        // @ts-ignore
+        if (currentBaggage?.['http.request_id']) {
+          // @ts-ignore
+          span.setAttribute('http.request_id', currentBaggage?.['http.request_id']);
         }
 
         if (context.attributes?.componentName) {
@@ -155,10 +180,10 @@ export class Telemetry {
             // @ts-ignore
             componentName: context.attributes.componentName,
             runId: context.attributes.runId,
+            // @ts-ignore
+            'http.request_id': currentBaggage?.['http.request_id'],
           });
         } else {
-          // @ts-ignore
-          const currentBaggage = propagation.getBaggage(ctx);
           // @ts-ignore
           if (currentBaggage?.componentName) {
             // @ts-ignore
@@ -172,7 +197,14 @@ export class Telemetry {
             // @ts-ignore
             span.setAttribute('runId', this.runId);
             // @ts-ignore
-            ctx = propagation.setBaggage(ctx, { componentName: this.name, runId: this.runId });
+            ctx = propagation.setBaggage(ctx, {
+              // @ts-ignore
+              componentName: this.name,
+              // @ts-ignore
+              runId: this.runId,
+              // @ts-ignore
+              'http.request_id': currentBaggage?.['http.request_id'],
+            });
           }
         }
 
@@ -233,6 +265,8 @@ class BaggageTracer implements Tracer {
     span.setAttribute('componentName', currentBaggage?.componentName);
     // @ts-ignore
     span.setAttribute('runId', currentBaggage?.runId);
+    // @ts-ignore
+    span.setAttribute('http.request_id', currentBaggage?.['http.request_id']);
 
     return span;
   }
@@ -256,6 +290,10 @@ class BaggageTracer implements Tracer {
         const currentBaggage = propagation.getBaggage(otlpContext.active());
         // @ts-ignore
         span.setAttribute('componentName', currentBaggage?.componentName);
+        // @ts-ignore
+        span.setAttribute('runId', currentBaggage?.runId);
+        // @ts-ignore
+        span.setAttribute('http.request_id', currentBaggage?.['http.request_id']);
 
         return optionsOrFn(span);
       };
@@ -266,6 +304,10 @@ class BaggageTracer implements Tracer {
         const currentBaggage = propagation.getBaggage(otlpContext.active());
         // @ts-ignore
         span.setAttribute('componentName', currentBaggage?.componentName);
+        // @ts-ignore
+        span.setAttribute('runId', currentBaggage?.runId);
+        // @ts-ignore
+        span.setAttribute('http.request_id', currentBaggage?.['http.request_id']);
 
         return ctxOrFn(span);
       };
@@ -275,6 +317,10 @@ class BaggageTracer implements Tracer {
       const currentBaggage = propagation.getBaggage(ctxOrFn ?? otlpContext.active());
       // @ts-ignore
       span.setAttribute('componentName', currentBaggage?.componentName);
+      // @ts-ignore
+      span.setAttribute('runId', currentBaggage?.runId);
+      // @ts-ignore
+      span.setAttribute('http.request_id', currentBaggage?.['http.request_id']);
 
       return fn!(span);
     };

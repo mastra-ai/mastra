@@ -1,6 +1,6 @@
 {
   "name": "@mastra/pg",
-  "version": "0.2.6-alpha.3",
+  "version": "0.2.7-alpha.1",
   "description": "Postgres provider for Mastra - includes both vector and db storage capabilities",
   "type": "module",
   "main": "dist/index.js",

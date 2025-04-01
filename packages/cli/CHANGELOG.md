@@ -1,5 +1,66 @@
 # mastra
 
+## 0.4.5-alpha.1
+
+### Patch Changes
+
+- Updated dependencies [619c39d]
+- Updated dependencies [fe56be0]
+- Updated dependencies [a0967a0]
+- Updated dependencies [fca3b21]
+- Updated dependencies [0118361]
+- Updated dependencies [619c39d]
+  - @mastra/core@0.8.0-alpha.1
+  - @mastra/deployer@0.2.6-alpha.1
+
+## 0.4.5-alpha.0
+
+### Patch Changes
+
+- 8076ecf: Unify workflow watch/start response
+- Updated dependencies [05d58cc]
+- Updated dependencies [107bcfe]
+- Updated dependencies [5b4e19f]
+- Updated dependencies [7599d77]
+- Updated dependencies [cafae83]
+- Updated dependencies [8076ecf]
+- Updated dependencies [304397c]
+  - @mastra/deployer@0.2.6-alpha.0
+  - @mastra/core@0.7.1-alpha.0
+
+## 0.4.4
+
+### Patch Changes
+
+- 6d5d9c6: Show tool calls in playground chat
+- 2447900: Show No input for steps without input on traces UI
+- c30787b: Stop automatically scrolling to bottom in agent chat if user has scrolled up
+- e05e7cc: Add origin to cli tracking
+- 214e7ce: Only mark required fields as required on the playground
+- 3811029: Add identifying header
+- 0b496ff: Load env vars on mastra deploy
+- 2134786: Fix traces navigation not working in playground
+- Updated dependencies [cdc0498]
+- Updated dependencies [b4fbc59]
+- Updated dependencies [a838fde]
+- Updated dependencies [a8bd4cf]
+- Updated dependencies [7a3eeb0]
+- Updated dependencies [0b54522]
+- Updated dependencies [b3b34f5]
+- Updated dependencies [1af25d5]
+- Updated dependencies [a4686e8]
+- Updated dependencies [6530ad1]
+- Updated dependencies [0b496ff]
+- Updated dependencies [27439ad]
+  - @mastra/deployer@0.2.5
+  - @mastra/core@0.7.0
+
+## 0.4.4-alpha.4
+
+### Patch Changes
+
+- 6d5d9c6: Show tool calls in playground chat
+
 ## 0.4.4-alpha.3
 
 ### Patch Changes

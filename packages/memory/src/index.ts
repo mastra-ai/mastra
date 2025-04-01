@@ -41,7 +41,9 @@ export class Memory extends MastraMemory {
     resourceId,
     selectBy,
     threadConfig,
-  }: StorageGetMessagesArg): Promise<{ messages: CoreMessage[]; uiMessages: AiMessageType[] }> {
+  }: StorageGetMessagesArg & {
+    threadConfig?: MemoryConfig;
+  }): Promise<{ messages: CoreMessage[]; uiMessages: AiMessageType[] }> {
     if (resourceId) await this.validateThreadIsOwnedByResource(threadId, resourceId);
 
     const vectorResults: {
@@ -148,7 +150,7 @@ export class Memory extends MastraMemory {
       };
     }
 
-    const messages = await this.query({
+    const messagesResult = await this.query({
       threadId,
       selectBy: {
         last: threadConfig.lastMessages,
@@ -157,11 +159,11 @@ export class Memory extends MastraMemory {
       threadConfig: config,
     });
 
-    this.logger.debug(`Remembered message history includes ${messages.messages.length} messages.`);
+    this.logger.debug(`Remembered message history includes ${messagesResult.messages.length} messages.`);
     return {
       threadId,
-      messages: messages.messages,
-      uiMessages: messages.uiMessages,
+      messages: messagesResult.messages,
+      uiMessages: messagesResult.uiMessages,
     };
   }
 
@@ -271,6 +273,7 @@ export class Memory extends MastraMemory {
           metadata: chunks.map(() => ({
             message_id: message.id,
             thread_id: message.threadId,
+            resource_id: message.resourceId,
           })),
         });
       }
@@ -281,13 +284,21 @@ export class Memory extends MastraMemory {
 
   protected mutateMessagesToHideWorkingMemory(messages: MessageType[]) {
     const workingMemoryRegex = /<working_memory>([^]*?)<\/working_memory>/g;
-    for (const message of messages) {
+
+    for (const [index, message] of messages.entries()) {
       if (typeof message?.content === `string`) {
         message.content = message.content.replace(workingMemoryRegex, ``).trim();
       } else if (Array.isArray(message?.content)) {
         for (const content of message.content) {
           if (content.type === `text`) {
             content.text = content.text.replace(workingMemoryRegex, ``).trim();
+          }
+
+          if (
+            (content.type === `tool-call` || content.type === `tool-result`) &&
+            content.toolName === `updateWorkingMemory`
+          ) {
+            delete messages[index];
           }
         }
       }
@@ -308,7 +319,7 @@ export class Memory extends MastraMemory {
     return null;
   }
 
-  protected async getWorkingMemory({ threadId }: { threadId: string }): Promise<string | null> {
+  public async getWorkingMemory({ threadId }: { threadId: string }): Promise<string | null> {
     if (!this.threadConfig.workingMemory?.enabled) return null;
 
     // Get thread from storage

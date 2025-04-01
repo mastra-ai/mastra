@@ -1054,14 +1054,14 @@ export const agent = new Agent({
 });
 
 // The agent can now use voice for interaction
-await agent.speak("Hello, I'm your AI assistant!");
+await agent.voice.speak("Hello, I'm your AI assistant!");
 
 // Read audio file and transcribe
 const audioFilePath = path.join(process.cwd(), "/audio.m4a");
 const audioStream = createReadStream(audioFilePath);
 
 try {
-  const transcription = await agent.listen(audioStream, { filetype: "m4a" });
+  const transcription = await agent.voice.listen(audioStream, { filetype: "m4a" });
 } catch (error) {
   console.error("Error transcribing audio:", error);
 }
@@ -1102,7 +1102,7 @@ import { createWriteStream } from "fs";
 import path from "path";
 
 // Generate speech and save to file
-const audio = await agent.speak("Hello, World!");
+const audio = await agent.voice.speak("Hello, World!");
 const filePath = path.join(process.cwd(), "agent.mp3");
 const writer = createWriteStream(filePath);
 
@@ -1126,7 +1126,7 @@ const audioStream = createReadStream(audioFilePath);
 
 try {
   console.log("Transcribing audio file...");
-  const transcription = await agent.listen(audioStream, { filetype: "m4a" });
+  const transcription = await agent.voice.listen(audioStream, { filetype: "m4a" });
   console.log("Transcription:", transcription);
 } catch (error) {
   console.error("Error transcribing audio:", error);
@@ -15780,7 +15780,7 @@ npm install @mastra/pg
 ```typescript copy showLineNumbers
 import { PostgresStore } from "@mastra/pg";
 
-const storage = new PostgresStorage({
+const storage = new PostgresStore({
   connectionString: process.env.DATABASE_URL,
 });
 ```
@@ -22819,18 +22819,18 @@ Now let's demonstrate a basic interaction between the agents:
 
 ```ts showLineNumbers copy
 // Step 1: Agent 1 speaks a question and saves it to a file
-const audio1 = await agent1.speak('What is the meaning of life in one sentence?');
+const audio1 = await agent1.voice.speak('What is the meaning of life in one sentence?');
 await saveAudioToFile(audio1, 'agent1-question.mp3');
 
 // Step 2: Agent 2 listens to Agent 1's question
 const audioFilePath = path.join(process.cwd(), 'agent1-question.mp3');
 const audioStream = createReadStream(audioFilePath);
-const audio2 = await agent2.listen(audioStream);
+const audio2 = await agent2.voice.listen(audioStream);
 const text = await convertToText(audio2);
 
 // Step 3: Agent 2 generates and speaks a response
 const agent2Response = await agent2.generate(text);
-const agent2ResponseAudio = await agent2.speak(agent2Response.text);
+const agent2ResponseAudio = await agent2.voice.speak(agent2Response.text);
 await saveAudioToFile(agent2ResponseAudio, 'agent2-response.mp3');
 ```
 

@@ -1,5 +1,70 @@
 # @mastra/dane
 
+## 0.0.12-alpha.1
+
+### Patch Changes
+
+- Updated dependencies [619c39d]
+- Updated dependencies [fe56be0]
+- Updated dependencies [a0967a0]
+- Updated dependencies [e47f529]
+- Updated dependencies [fca3b21]
+- Updated dependencies [0118361]
+- Updated dependencies [619c39d]
+  - @mastra/core@0.8.0-alpha.1
+  - @mastra/memory@0.2.7-alpha.1
+  - @mastra/rag@0.1.15-alpha.1
+  - @mastra/github@1.1.15-alpha.1
+  - @mastra/mcp@0.3.7-alpha.1
+  - @mastra/upstash@0.2.2-alpha.1
+
+## 0.0.12-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [107bcfe]
+- Updated dependencies [5b4e19f]
+- Updated dependencies [7599d77]
+- Updated dependencies [cafae83]
+- Updated dependencies [8076ecf]
+- Updated dependencies [304397c]
+  - @mastra/core@0.7.1-alpha.0
+  - @mastra/memory@0.2.7-alpha.0
+  - @mastra/rag@0.1.15-alpha.0
+  - @mastra/github@1.1.15-alpha.0
+  - @mastra/mcp@0.3.7-alpha.0
+  - @mastra/upstash@0.2.2-alpha.0
+
+## 0.0.11
+
+### Patch Changes
+
+- Updated dependencies [05095e9]
+- Updated dependencies [b4fbc59]
+- Updated dependencies [a838fde]
+- Updated dependencies [a8bd4cf]
+- Updated dependencies [7a3eeb0]
+- Updated dependencies [0b54522]
+- Updated dependencies [394dfad]
+- Updated dependencies [b3b34f5]
+- Updated dependencies [1af25d5]
+- Updated dependencies [a4686e8]
+- Updated dependencies [6530ad1]
+- Updated dependencies [27439ad]
+  - @mastra/memory@0.2.6
+  - @mastra/core@0.7.0
+  - @mastra/github@1.1.14
+  - @mastra/mcp@0.3.6
+  - @mastra/rag@0.1.14
+  - @mastra/upstash@0.2.1
+
+## 0.0.11-alpha.4
+
+### Patch Changes
+
+- Updated dependencies [394dfad]
+  - @mastra/memory@0.2.6-alpha.4
+
 ## 0.0.11-alpha.3
 
 ### Patch Changes
