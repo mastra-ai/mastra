@@ -302,10 +302,10 @@ describe('agent', () => {
         instructions: 'You are an agent with voice capabilities',
         model: openai('gpt-4o'),
         voice: new CompositeVoice({
-          speakProvider: new MockVoice({
+          output: new MockVoice({
             speaker: 'mock-voice',
           }),
-          listenProvider: new MockVoice({
+          input: new MockVoice({
             speaker: 'mock-voice',
           }),
         }),
