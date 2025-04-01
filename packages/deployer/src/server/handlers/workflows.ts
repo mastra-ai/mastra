@@ -246,10 +246,12 @@ export async function resumeWorkflowHandler(c: Context) {
 export async function getWorkflowRunsHandler(c: Context) {
   try {
     const mastra: Mastra = c.get('mastra');
-    const workflowId = c.req.query('workflowId');
-    const workflowRuns = (await mastra.storage?.getWorkflowRuns?.({
-      ...(workflowId ? { workflowName: workflowId } : {}),
-    })) || { runs: [], total: 0 };
+    const workflowId = c.req.param('workflowId');
+    const workflow = mastra.getWorkflow(workflowId);
+    const workflowRuns = (await workflow.getWorkflowRuns()) || {
+      runs: [],
+      total: 0,
+    };
     return c.json(workflowRuns);
   } catch (error) {
     return handleError(error, 'Error getting workflow runs');

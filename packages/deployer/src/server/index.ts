@@ -1,10 +1,12 @@
+import { randomUUID } from 'crypto';
 import { readFile } from 'fs/promises';
 import { join } from 'path';
 import { pathToFileURL } from 'url';
 import { serve } from '@hono/node-server';
 import { serveStatic } from '@hono/node-server/serve-static';
 import { swaggerUI } from '@hono/swagger-ui';
-import { Telemetry, type Mastra } from '@mastra/core';
+import { Telemetry } from '@mastra/core';
+import type { Mastra } from '@mastra/core';
 import { Hono } from 'hono';
 import type { Context, MiddlewareHandler } from 'hono';
 
@@ -66,7 +68,6 @@ import {
   getWorkflowRunsHandler,
 } from './handlers/workflows.js';
 import { html } from './welcome.js';
-import { randomUUID } from 'crypto';
 
 type Bindings = {};
 
@@ -1419,15 +1420,15 @@ export async function createHonoServer(
   );
 
   app.get(
-    '/api/workflowRuns',
+    '/api/workflows/:workflowId/runs',
     describeRoute({
       description: 'Get all runs for a workflow',
       tags: ['workflows'],
       parameters: [
         {
           name: 'workflowId',
-          in: 'query',
-          required: false,
+          in: 'path',
+          required: true,
           schema: { type: 'string' },
         },
       ],
