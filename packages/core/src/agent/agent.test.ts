@@ -247,7 +247,9 @@ describe('agent', () => {
       instructions: 'Test agent',
       model: openai('gpt-4o'),
       tools: integration.getStaticTools(),
-      defaultMaxSteps: 7,
+      defaultGenerateOptions: {
+        maxSteps: 7,
+      },
     });
 
     const response = await agent.generate('Call testTool 10 times.', {

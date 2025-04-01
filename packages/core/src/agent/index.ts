@@ -58,7 +58,8 @@ export class Agent<
   readonly model?: MastraLanguageModel;
   #mastra?: Mastra;
   #memory?: MastraMemory;
-  #defaultMaxSteps: number;
+  #defaultGenerateOptions: AgentGenerateOptions;
+  #defaultStreamOptions: AgentStreamOptions;
   tools: TTools;
   /** @deprecated This property is deprecated. Use evals instead. */
   metrics: TMetrics;
@@ -77,7 +78,8 @@ export class Agent<
 
     this.llm = new MastraLLM({ model: config.model, mastra: config.mastra });
 
-    this.#defaultMaxSteps = config.defaultMaxSteps || 5;
+    this.#defaultGenerateOptions = config.defaultGenerateOptions || {};
+    this.#defaultStreamOptions = config.defaultStreamOptions || {};
 
     this.tools = {} as TTools;
 
@@ -839,13 +841,18 @@ export class Agent<
   >;
   async generate<Z extends ZodSchema | JSONSchema7 | undefined = undefined>(
     messages: string | string[] | CoreMessage[] | AiMessageType[],
-    {
+    generateOptions: AgentGenerateOptions<Z> = {},
+  ): Promise<
+    | GenerateTextResult<any, Z extends ZodSchema ? z.infer<Z> : unknown>
+    | GenerateObjectResult<Z extends ZodSchema ? z.infer<Z> : unknown>
+  > {
+    const {
       instructions,
       context,
       threadId: threadIdInFn,
       memoryOptions,
       resourceId,
-      maxSteps = this.#defaultMaxSteps,
+      maxSteps,
       onStepFinish,
       runId,
       output,
@@ -855,11 +862,7 @@ export class Agent<
       experimental_output,
       telemetry,
       ...rest
-    }: AgentGenerateOptions<Z> = {},
-  ): Promise<
-    | GenerateTextResult<any, Z extends ZodSchema ? z.infer<Z> : unknown>
-    | GenerateObjectResult<Z extends ZodSchema ? z.infer<Z> : unknown>
-  > {
+    }: AgentGenerateOptions<Z> = Object.assign({}, this.#defaultGenerateOptions, generateOptions);
     let messagesToUse: CoreMessage[] = [];
 
     if (typeof messages === `string`) {
@@ -999,13 +1002,18 @@ export class Agent<
   >;
   async stream<Z extends ZodSchema | JSONSchema7 | undefined = undefined>(
     messages: string | string[] | CoreMessage[] | AiMessageType[],
-    {
+    streamOptions: AgentStreamOptions<Z> = {},
+  ): Promise<
+    | StreamTextResult<any, Z extends ZodSchema ? z.infer<Z> : unknown>
+    | StreamObjectResult<any, Z extends ZodSchema ? z.infer<Z> : unknown, any>
+  > {
+    const {
       instructions,
       context,
       threadId: threadIdInFn,
       memoryOptions,
       resourceId,
-      maxSteps = this.#defaultMaxSteps,
+      maxSteps,
       onFinish,
       onStepFinish,
       runId,
@@ -1016,11 +1024,7 @@ export class Agent<
       experimental_output,
       telemetry,
       ...rest
-    }: AgentStreamOptions<Z> = {},
-  ): Promise<
-    | StreamTextResult<any, Z extends ZodSchema ? z.infer<Z> : unknown>
-    | StreamObjectResult<any, Z extends ZodSchema ? z.infer<Z> : unknown, any>
-  > {
+    }: AgentStreamOptions<Z> = Object.assign({}, this.#defaultStreamOptions, streamOptions);
     const runIdToUse = runId || randomUUID();
 
     let messagesToUse: CoreMessage[] = [];
