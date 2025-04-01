@@ -27,10 +27,31 @@ function safelyParseJSON(jsonString: string): any {
   }
 }
 
+type IntervalUnit =
+  | 'NANOSECOND'
+  | 'MICROSECOND'
+  | 'MILLISECOND'
+  | 'SECOND'
+  | 'MINUTE'
+  | 'HOUR'
+  | 'DAY'
+  | 'WEEK'
+  | 'MONTH'
+  | 'QUARTER'
+  | 'YEAR';
+
 export type ClickhouseConfig = {
   url: string;
   username: string;
   password: string;
+  ttl?: {
+    [TableKey in TABLE_NAMES]?: {
+      row?: { interval: number; unit: IntervalUnit };
+      columns?: Partial<{
+        [ColumnKey in keyof (typeof TABLE_SCHEMAS)[TableKey]]: { interval: number; unit: IntervalUnit };
+      }>;
+    };
+  };
 };
 
 const TABLE_ENGINES: Record<TABLE_NAMES, string> = {
@@ -70,6 +91,7 @@ function transformRow<R>(row: any): R {
 
 export class ClickhouseStore extends MastraStorage {
   private db: ClickHouseClient;
+  private ttl: ClickhouseConfig['ttl'] = {};
 
   constructor(config: ClickhouseConfig) {
     super({ name: 'ClickhouseStore' });
@@ -84,6 +106,7 @@ export class ClickhouseStore extends MastraStorage {
         output_format_json_quote_64bit_integers: 0,
       },
     });
+    this.ttl = config.ttl;
   }
 
   getEvalsByAgentName(_agentName: string, _type?: 'test' | 'live'): Promise<EvalRow[]> {
@@ -214,7 +237,7 @@ export class ClickhouseStore extends MastraStorage {
         .map(([name, def]) => {
           const constraints = [];
           if (!def.nullable) constraints.push('NOT NULL');
-          return `"${name}" ${COLUMN_TYPES[def.type]} ${constraints.join(' ')}`;
+          return `"${name}" ${COLUMN_TYPES[def.type]} ${constraints.join(' ')} ${this.ttl?.[tableName]?.columns?.[name] ? `TTL ${name} + INTERVAL ${this.ttl[tableName].columns[name].interval} ${this.ttl[tableName].columns[name].unit}` : ''}`;
         })
         .join(',\n');
 
@@ -229,6 +252,7 @@ export class ClickhouseStore extends MastraStorage {
         PRIMARY KEY (createdAt, run_id, workflow_name)
         ORDER BY (createdAt, run_id, workflow_name)
         SETTINGS index_granularity = 8192;
+        ${this.ttl?.[tableName]?.row ? `TTL createdAt + INTERVAL ${this.ttl[tableName].row.interval} ${this.ttl[tableName].row.unit}` : ''}
           `
           : `
         CREATE TABLE IF NOT EXISTS ${tableName} (
@@ -239,6 +263,7 @@ export class ClickhouseStore extends MastraStorage {
         PRIMARY KEY (createdAt, id)
         ORDER BY (createdAt, id)
         SETTINGS index_granularity = 8192;
+        ${this.ttl?.[tableName]?.row ? `TTL createdAt + INTERVAL ${this.ttl[tableName].row.interval} ${this.ttl[tableName].row.unit}` : ''}
       `;
 
       await this.db.query({
