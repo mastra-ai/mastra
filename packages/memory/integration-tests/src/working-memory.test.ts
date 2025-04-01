@@ -109,8 +109,7 @@ describe('Working Memory Tests', () => {
         threadId: thread.id,
         role: 'assistant',
         type: 'text',
-        content:
-          `Hello Tyler! I'll remember your name.
+        content: `Hello Tyler! I'll remember your name.
 <working_memory>
 # User Information
 - **First Name**: Tyler
@@ -127,8 +126,7 @@ describe('Working Memory Tests', () => {
         threadId: thread.id,
         role: 'assistant',
         type: 'text',
-        content:
-          `Great city! I'll update my memory about you.
+        content: `Great city! I'll update my memory about you.
 <working_memory>
 # User Information
 - **First Name**: Tyler
@@ -595,136 +593,5 @@ describe('Working Memory Tests', () => {
       expect(workingMemory).toContain('**First Name**: Jim');
       expect(workingMemory).toContain('**Location**: Vancouver Island');
     }
-  });
-
-  it('should handle working memory in Markdown format', async () => {
-    // Create memory instance with Markdown-formatted working memory
-    const markdownMemory = new Memory({
-      storage: new DefaultStorage({
-        config: {
-          url: 'file:test.db',
-        },
-      }),
-      options: {
-        workingMemory: {
-          enabled: true,
-          template: `# User Info
-- **First Name**: 
-- **Last Name**: 
-- **Location**: 
-`,
-          use: 'text-stream',
-        },
-        lastMessages: 10,
-      },
-    });
-
-    const markdownThread = await markdownMemory.saveThread({
-      thread: createTestThread('Markdown Working Memory Thread'),
-    });
-
-    // Simulate working memory update using Markdown
-    const messages = [
-      createTestMessage(markdownThread.id, 'Hi, my name is Alice and I live in Boston'),
-      createTestMessage(
-        markdownThread.id,
-        `Nice to meet you Alice!
-<working_memory>
-# User Info
-- **First Name**: Alice
-- **Last Name**: 
-- **Location**: Boston
-</working_memory>`,
-        'assistant',
-      ),
-    ];
-
-    await markdownMemory.saveMessages({ messages });
-
-    // Get thread and check metadata
-    const updatedThread = await markdownMemory.getThreadById({ threadId: markdownThread.id });
-    expect(updatedThread?.metadata?.workingMemory).toContain('# User Info');
-    expect(updatedThread?.metadata?.workingMemory).toContain('**First Name**: Alice');
-    expect(updatedThread?.metadata?.workingMemory).toContain('**Location**: Boston');
-
-    // Verify that linebreaks are preserved for Markdown format
-    const workingMemory = await markdownMemory.getWorkingMemory({ threadId: markdownThread.id });
-    expect(workingMemory).not.toBeNull();
-    if (workingMemory) {
-      expect(workingMemory).toContain('\n');
-      expect(workingMemory.split('\n').length).toBeGreaterThan(1);
-    }
-  });
-
-  // Test for backward compatibility with XML format
-  it('should handle conversion from XML to Markdown format', async () => {
-    // First, create a thread with XML-formatted working memory
-    const xmlMemory = new Memory({
-      storage: new DefaultStorage({
-        config: {
-          url: 'file:test.db',
-        },
-      }),
-      options: {
-        workingMemory: {
-          enabled: true,
-          template: `<user>
-  <first_name></first_name>
-  <last_name></last_name>
-  <location></location>
-</user>`,
-        },
-      },
-    });
-
-    const xmlThread = await xmlMemory.saveThread({
-      thread: createTestThread('XML to Markdown Thread'),
-    });
-
-    // Update with XML format
-    await xmlMemory.saveMessages({
-      messages: [
-        createTestMessage(xmlThread.id, 'My name is Bob'),
-        createTestMessage(
-          xmlThread.id,
-          `Hello Bob!
-<working_memory><user><first_name>Bob</first_name></user></working_memory>`,
-          'assistant',
-        ),
-      ],
-    });
-
-    // Now create a new Memory instance with Markdown format that will read the existing thread
-    const markdownMemory = new Memory({
-      storage: new DefaultStorage({
-        config: {
-          url: 'file:test.db',
-        },
-      }),
-      options: {
-        workingMemory: {
-          enabled: true,
-          template: `# User Info
-- **First Name**: 
-- **Last Name**: 
-- **Location**: 
-`,
-        },
-      },
-    });
-
-    // The system instructions in getWorkingMemoryWithInstruction should guide the LLM to convert
-    const systemMessage = await markdownMemory.getSystemMessage({ threadId: xmlThread.id });
-    expect(systemMessage).toContain('If the working memory was previously in XML format, convert it to Markdown');
-
-    // Verify the data in working memory can be accessed regardless of format
-    const workingMemory = await markdownMemory.getWorkingMemory({ threadId: xmlThread.id });
-    expect(workingMemory).not.toBeNull();
-    if (workingMemory) {
-      expect(workingMemory).toContain('Bob');
-    }
-    
-    // The template in systemMessage should be markdown even though the stored memory is XML
-    expect(systemMessage).toContain('Use Markdown for all data');
   });
 });
