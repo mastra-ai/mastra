@@ -544,12 +544,6 @@ export class LibSQLStore extends MastraStorage {
       }
     }
 
-    if (columnFilters) {
-      for (const [key, value] of Object.entries(columnFilters)) {
-        args.push(value);
-      }
-    }
-
     args.push(limit, offset);
 
     const result = await this.client.execute({
