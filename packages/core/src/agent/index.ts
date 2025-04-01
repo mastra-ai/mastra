@@ -68,7 +68,7 @@ export class Agent<
 > extends MastraBase {
   public name: TAgentId;
   readonly llm: MastraLLMBase;
-  #instructions: AgentInstructions<TSchemaDeps>;
+  instructions: AgentInstructions<TSchemaDeps>;
   readonly model?: MastraLanguageModel;
   #mastra?: Mastra;
   #memory?: MastraMemory;
@@ -80,15 +80,11 @@ export class Agent<
   #dependenciesSchema?: TSchemaDeps;
   #currentDependencies?: DependenciesType<TSchemaDeps>;
 
-  get instructions(): AgentInstructions<TSchemaDeps> {
-    return this.#instructions;
-  }
-
   constructor(config: AgentConfig<TAgentId, TSchemaDeps, TTools, TMetrics>) {
     super({ component: RegisteredLogger.AGENT });
 
     this.name = config.name;
-    this.#instructions = AgentInstructions.from(config.instructions, { dependenciesSchema: config.dependenciesSchema });
+    this.instructions = AgentInstructions.from(config.instructions, { dependenciesSchema: config.dependenciesSchema });
 
     if (!config.model) {
       throw new Error(`LanguageModel is required to create an Agent. Please provide the 'model'.`);
@@ -130,9 +126,9 @@ export class Agent<
     if (config.voice) {
       this.voice = config.voice;
       this.voice?.addTools(this.tools);
-      this.voice?.addInstructions(this.#instructions.toString()); // TODO: support dynamic instructions in voice providers
+      this.voice?.addInstructions(this.instructions.toString()); // TODO: support dynamic instructions in voice providers
     } else {
-      this.voice = new DefaultVoice();      
+      this.voice = new DefaultVoice();
     }
 
     if (config.dependenciesSchema) {
@@ -148,8 +144,8 @@ export class Agent<
   }
 
   __updateInstructions(newInstructions: string | InstructionsBuilder<TSchemaDeps>) {
-    this.#instructions = AgentInstructions.from(newInstructions, { dependenciesSchema: this.#dependenciesSchema });
-    this.voice?.addInstructions(this.#instructions.toString()); // TODO: support dynamic instructions in voice providers
+    this.instructions = AgentInstructions.from(newInstructions, { dependenciesSchema: this.#dependenciesSchema });
+    this.voice?.addInstructions(this.instructions.toString()); // TODO: support dynamic instructions in voice providers
     this.logger.debug(`[Agents:${this.name}] Instructions updated.`, { model: this.model, name: this.name });
   }
 
