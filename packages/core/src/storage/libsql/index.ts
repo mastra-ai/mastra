@@ -487,7 +487,15 @@ export class LibSQLStore extends MastraStorage {
       page,
       perPage,
       attributes,
-    }: { name?: string; scope?: string; page: number; perPage: number; attributes?: Record<string, string> } = {
+      filters,
+    }: {
+      name?: string;
+      scope?: string;
+      page: number;
+      perPage: number;
+      attributes?: Record<string, string>;
+      filters?: Record<string, any>;
+    } = {
       page: 0,
       perPage: 100,
     },
@@ -510,6 +518,11 @@ export class LibSQLStore extends MastraStorage {
       });
     }
 
+    if (filters) {
+      Object.entries(filters).forEach(([key, _value]) => {
+        conditions.push(`${key} = ?`);
+      });
+    }
     const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
 
     if (name) {
@@ -522,6 +535,12 @@ export class LibSQLStore extends MastraStorage {
 
     if (attributes) {
       for (const [, value] of Object.entries(attributes)) {
+        args.push(value);
+      }
+    }
+
+    if (filters) {
+      for (const [, value] of Object.entries(filters)) {
         args.push(value);
       }
     }
