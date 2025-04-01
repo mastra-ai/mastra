@@ -32,7 +32,7 @@
     "@radix-ui/react-switch": "^1.1.3",
     "@radix-ui/react-tabs": "^1.1.3",
     "@radix-ui/react-tooltip": "^1.1.8",
-    "@tanstack/react-virtual": "^3.13.2",
+    "@tanstack/react-virtual": "^3.13.6",
     "@uiw/codemirror-theme-github": "^4.23.10",
     "@uiw/react-codemirror": "^4.23.10",
     "@xyflow/react": "^12.4.4",
