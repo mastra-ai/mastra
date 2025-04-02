@@ -4384,6 +4384,15 @@ describe('Workflow', async () => {
         },
       });
 
+      const mockAction4 = vi.fn<any>().mockResolvedValue({ result: 'success' });
+      const dummyStep4 = new Step({
+        id: 'dummy4',
+        description: 'Dummy step',
+        execute: async (...rest) => {
+          return mockAction4(...rest);
+        },
+      });
+
       const counterWorkflow = new Workflow({
         name: 'counter-workflow',
         triggerSchema: z.object({
@@ -4419,16 +4428,31 @@ describe('Workflow', async () => {
             return isPassed;
           },
         })
+        .then(dummyStep4, { id: 'dummyStep4' })
+        .then(dummyStep4, { id: 'dummyStep4-2' })
         .commit();
 
       const run = counterWorkflow.createRun();
-      await run.start({ triggerData: { target: 10, startValue: 0 } });
+      const result = await run.start({ triggerData: { target: 10, startValue: 0 } });
+      const results = result.results;
 
       expect(increment).toHaveBeenCalledTimes(10);
       expect(mockAction).toHaveBeenCalledTimes(10);
       expect(mockAction2).toHaveBeenCalledTimes(10);
       expect(mockAction3).toHaveBeenCalledTimes(10);
+      expect(mockAction4).toHaveBeenCalledTimes(2);
       expect(final).toHaveBeenCalledTimes(1);
+      expect(results).toMatchObject(
+        expect.objectContaining({
+          incrementStep: { status: 'skipped' },
+          dummyStep: { status: 'success', output: { result: 'success' } },
+          dummyStep2: { status: 'success', output: { result: 'success' } },
+          dummyStep3: { status: 'success', output: { result: 'success' } },
+          finalStep: { status: 'success', output: { finalValue: undefined } },
+          dummyStep4: { status: 'success', output: { result: 'success' } },
+          'dummyStep4-2': { status: 'success', output: { result: 'success' } },
+        }),
+      );
     });
 
     it('should resolve variables from previous steps using step id from config', async () => {
