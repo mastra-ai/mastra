@@ -61,6 +61,7 @@ type PgDefineIndexArgs = [string, 'cosine' | 'euclidean' | 'dotproduct', IndexCo
 export class PgVector extends MastraVector {
   private pool: pg.Pool;
   private indexCache: Map<string, PGIndexStats> = new Map();
+  private createdIndexes = new Set<string>();
   private createMutex = new Mutex();
   private buildMutex = new Mutex();
 
@@ -83,6 +84,14 @@ export class PgVector extends MastraVector {
           'vector.type': 'postgres',
         },
       }) ?? basePool;
+
+    void (async () => {
+      // warm the created indexes cache so we don't need to check if indexes exist every time
+      const existingIndexes = await this.listIndexes();
+      for (const index of existingIndexes) {
+        this.createdIndexes.add(index);
+      }
+    })();
   }
 
   transformFilter(filter?: VectorFilter) {
@@ -207,13 +216,20 @@ export class PgVector extends MastraVector {
 
     const { indexName, dimension, metric = 'cosine', indexConfig = {}, buildIndex = true } = params;
 
+    if (this.createdIndexes.has(indexName)) {
+      return;
+    }
+    this.createdIndexes.add(indexName);
+
     const client = await this.pool.connect();
     try {
       // Validate inputs
       if (!indexName.match(/^[a-zA-Z_][a-zA-Z0-9_]*$/)) {
+        this.createdIndexes.delete(indexName);
         throw new Error('Invalid index name format');
       }
       if (!Number.isInteger(dimension) || dimension <= 0) {
+        this.createdIndexes.delete(indexName);
         throw new Error('Dimension must be a positive integer');
       }
 
@@ -225,6 +241,7 @@ export class PgVector extends MastraVector {
       `);
 
       if (!extensionCheck.rows[0].exists) {
+        this.createdIndexes.delete(indexName);
         throw new Error('PostgreSQL vector extension is not available. Please install it first.');
       }
 
@@ -251,6 +268,7 @@ export class PgVector extends MastraVector {
         await this.setupIndex({ indexName, metric, indexConfig }, client);
       }
     } catch (error: any) {
+      this.createdIndexes.delete(indexName);
       console.error('Failed to create vector table:', error);
       throw error;
     } finally {
@@ -429,6 +447,7 @@ export class PgVector extends MastraVector {
     try {
       // Drop the table
       await client.query(`DROP TABLE IF EXISTS ${indexName} CASCADE`);
+      this.createdIndexes.delete(indexName);
     } catch (error: any) {
       await client.query('ROLLBACK');
       throw new Error(`Failed to delete vector table: ${error.message}`);
