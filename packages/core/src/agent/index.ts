@@ -209,6 +209,7 @@ export class Agent<
 
   async fetchMemory({
     threadId,
+    thread: passedThread,
     memoryConfig,
     resourceId,
     userMessages,
@@ -217,6 +218,7 @@ export class Agent<
   }: {
     resourceId: string;
     threadId: string;
+    thread?: StorageThreadType;
     memoryConfig?: MemoryConfig;
     userMessages: CoreMessage[];
     systemMessage: CoreMessage;
@@ -226,7 +228,8 @@ export class Agent<
   }) {
     const memory = this.getMemory();
     if (memory) {
-      const thread = await memory.getThreadById({ threadId });
+      const thread = passedThread ?? (await memory.getThreadById({ threadId }));
+
       if (!thread) {
         return { threadId: threadId || '', messages: userMessages };
       }
@@ -565,12 +568,14 @@ export class Agent<
     resourceId,
     runId,
     threadId,
+    thread,
     memoryConfig,
     messages,
     systemMessage,
   }: {
     runId?: string;
     threadId: string;
+    thread?: StorageThreadType;
     memoryConfig?: MemoryConfig;
     messages: CoreMessage[];
     resourceId: string;
@@ -582,6 +587,7 @@ export class Agent<
     this.logger.debug(`Saving user messages in memory for agent ${this.name}`, { runId });
     const saveMessageResponse = await this.fetchMemory({
       threadId,
+      thread,
       resourceId,
       userMessages: messages,
       memoryConfig,
@@ -661,6 +667,7 @@ export class Agent<
             resourceId,
             runId,
             threadId: threadIdToUse,
+            thread,
             memoryConfig,
             messages,
             systemMessage,
