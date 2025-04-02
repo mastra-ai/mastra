@@ -794,9 +794,8 @@ export class Workflow<
     return this as WorkflowBuilder<this>;
   }
 
-  after<TStep extends string>(steps: TStep | TStep[]): Omit<WorkflowBuilder<this>, 'then' | 'after'>;
   after<TStep extends StepAction<string, any, any, any>>(
-    steps: TStep | TStep[],
+    steps: string | TStep | TStep[] | (TStep | string)[],
   ): Omit<WorkflowBuilder<this>, 'then' | 'after'>;
   after<TWorkflow extends Workflow<any, any, any, any>>(
     steps: TWorkflow | TWorkflow[],

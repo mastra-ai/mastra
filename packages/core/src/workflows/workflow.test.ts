@@ -13,8 +13,8 @@ import { Telemetry } from '../telemetry';
 import { createTool } from '../tools';
 
 import { Step } from './step';
-import { WhenConditionReturnValue } from './types';
 import type { WorkflowContext, WorkflowResumeResult } from './types';
+import { WhenConditionReturnValue } from './types';
 import { Workflow } from './workflow';
 
 const storage = new DefaultStorage({
@@ -1910,7 +1910,6 @@ describe('Workflow', async () => {
         .step(dummyStep3)
         .after(dummyStep3)
         .step(incrementStep, {
-          id: 'incrementStep',
           when: async ({ context }) => {
             const isPassed = context.getStepResult(incrementStep)?.newValue < 10;
             if (isPassed) {
@@ -1939,7 +1938,7 @@ describe('Workflow', async () => {
       expect(final).toHaveBeenCalledTimes(1);
     });
 
-    // don't unskip this please.. actually unskip it 😈
+    // don't unskip
     it.skip('should spawn cyclic subscribers for each step (legacy)', async () => {
       const step1Action = vi.fn<any>().mockResolvedValue({ result: 'success1' });
       const step3Action = vi.fn<any>().mockResolvedValue({ result: 'success3' });
@@ -4323,6 +4322,113 @@ describe('Workflow', async () => {
           finalValue: 26 + 1,
         });
       });
+    });
+  });
+
+  describe('Unique step IDs', () => {
+    it('should run compound subscribers on a loop using step id config', async () => {
+      const increment = vi.fn().mockImplementation(async ({ context }) => {
+        // Get the current value (either from trigger or previous increment)
+        const currentValue =
+          context.getStepResult('incrementStep')?.newValue || context.getStepResult('trigger')?.startValue || 0;
+
+        // Increment the value
+        const newValue = currentValue + 1;
+
+        return { newValue };
+      });
+      const incrementStep = new Step({
+        id: 'increment',
+        description: 'Increments the current value by 1',
+        outputSchema: z.object({
+          newValue: z.number(),
+        }),
+        execute: increment,
+      });
+
+      const final = vi.fn().mockImplementation(async ({ context }) => {
+        return { finalValue: context.getStepResult('incrementStep')?.newValue };
+      });
+      const finalStep = new Step({
+        id: 'final',
+        description: 'Final step that prints the result',
+        execute: async (...rest) => {
+          return final(...rest);
+        },
+      });
+
+      const mockAction = vi.fn<any>().mockResolvedValue({ result: 'success' });
+      const dummyStep = new Step({
+        id: 'dummy',
+        description: 'Dummy step',
+        execute: async (...rest) => {
+          return mockAction(...rest);
+        },
+      });
+
+      const mockAction2 = vi.fn<any>().mockResolvedValue({ result: 'success' });
+      const dummyStep2 = new Step({
+        id: 'dummy2',
+        description: 'Dummy step',
+        execute: async (...rest) => {
+          return mockAction2(...rest);
+        },
+      });
+
+      const mockAction3 = vi.fn<any>().mockResolvedValue({ result: 'success' });
+      const dummyStep3 = new Step({
+        id: 'dummy3',
+        description: 'Dummy step',
+        execute: async (...rest) => {
+          return mockAction3(...rest);
+        },
+      });
+
+      const counterWorkflow = new Workflow({
+        name: 'counter-workflow',
+        triggerSchema: z.object({
+          target: z.number(),
+          startValue: z.number(),
+        }),
+      });
+
+      counterWorkflow
+        .step(incrementStep, { id: 'incrementStep' })
+        .after('incrementStep')
+        .step(dummyStep, { id: 'dummyStep' })
+        .after('incrementStep')
+        .step(dummyStep2, { id: 'dummyStep2' })
+        .after(['dummyStep', 'dummyStep2'])
+        .step(dummyStep3, { id: 'dummyStep3' })
+        .after('dummyStep3')
+        .step(incrementStep, {
+          id: 'incrementStep',
+          when: async ({ context }) => {
+            const isPassed = context.getStepResult('incrementStep')?.newValue < 10;
+            if (isPassed) {
+              return true;
+            } else {
+              return WhenConditionReturnValue.LIMBO;
+            }
+          },
+        })
+        .step(finalStep, {
+          id: 'finalStep',
+          when: async ({ context }) => {
+            const isPassed = context.getStepResult('incrementStep')?.newValue >= 10;
+            return isPassed;
+          },
+        })
+        .commit();
+
+      const run = counterWorkflow.createRun();
+      await run.start({ triggerData: { target: 10, startValue: 0 } });
+
+      expect(increment).toHaveBeenCalledTimes(10);
+      expect(mockAction).toHaveBeenCalledTimes(10);
+      expect(mockAction2).toHaveBeenCalledTimes(10);
+      expect(mockAction3).toHaveBeenCalledTimes(10);
+      expect(final).toHaveBeenCalledTimes(1);
     });
   });
 });
