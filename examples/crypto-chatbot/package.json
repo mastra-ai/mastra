@@ -75,7 +75,7 @@
     "@types/pdf-parse": "^1.1.4",
     "@types/react": "^19.0.10",
     "@types/react-dom": "^19.0.4",
-    "drizzle-kit": "^0.25.0",
+    "drizzle-kit": "^0.30.1",
     "eslint": "^8.57.1",
     "eslint-config-next": "14.2.5",
     "eslint-config-prettier": "^9.1.0",
