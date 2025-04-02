@@ -1,3 +1,4 @@
+import type { MetricResult } from '@mastra/core/eval';
 import type { MessageType, StorageThreadType } from '@mastra/core/memory';
 import {
   MastraStorage,
@@ -5,6 +6,7 @@ import {
   TABLE_THREADS,
   TABLE_TRACES,
   TABLE_WORKFLOW_SNAPSHOT,
+  TABLE_EVALS,
 } from '@mastra/core/storage';
 import type { EvalRow, StorageColumn, StorageGetMessagesArg, TABLE_NAMES } from '@mastra/core/storage';
 import type { WorkflowRunState } from '@mastra/core/workflows';
@@ -45,8 +47,51 @@ export class PostgresStore extends MastraStorage {
     );
   }
 
-  getEvalsByAgentName(_agentName: string, _type?: 'test' | 'live'): Promise<EvalRow[]> {
-    throw new Error('Method not implemented.');
+  getEvalsByAgentName(agentName: string, type?: 'test' | 'live'): Promise<EvalRow[]> {
+    try {
+      const baseQuery = `SELECT * FROM ${TABLE_EVALS} WHERE agent_name = $1`;
+      const typeCondition =
+        type === 'test'
+          ? " AND test_info IS NOT NULL AND test_info->>'testPath' IS NOT NULL"
+          : type === 'live'
+            ? " AND (test_info IS NULL OR test_info->>'testPath' IS NULL)"
+            : '';
+
+      const query = `${baseQuery}${typeCondition} ORDER BY created_at DESC`;
+
+      return this.db.manyOrNone(query, [agentName]).then(rows => rows?.map(row => this.transformEvalRow(row)) ?? []);
+    } catch (error) {
+      // Handle case where table doesn't exist yet
+      if (error instanceof Error && error.message.includes('relation') && error.message.includes('does not exist')) {
+        return Promise.resolve([]);
+      }
+      console.error('Failed to get evals for the specified agent: ' + (error as any)?.message);
+      throw error;
+    }
+  }
+
+  private transformEvalRow(row: Record<string, any>): EvalRow {
+    let testInfoValue = null;
+    if (row.test_info) {
+      try {
+        testInfoValue = typeof row.test_info === 'string' ? JSON.parse(row.test_info) : row.test_info;
+      } catch (e) {
+        console.warn('Failed to parse test_info:', e);
+      }
+    }
+
+    return {
+      agentName: row.agent_name as string,
+      input: row.input as string,
+      output: row.output as string,
+      result: row.result as MetricResult,
+      metricName: row.metric_name as string,
+      instructions: row.instructions as string,
+      testInfo: testInfoValue,
+      globalRunId: row.global_run_id as string,
+      runId: row.run_id as string,
+      createdAt: row.created_at as string,
+    };
   }
 
   async batchInsert({ tableName, records }: { tableName: TABLE_NAMES; records: Record<string, any>[] }): Promise<void> {
