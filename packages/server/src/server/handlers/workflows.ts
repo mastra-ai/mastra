@@ -17,6 +17,7 @@ export async function getWorkflowsHandler({ mastra }: WorkflowContext) {
   try {
     const workflows = mastra.getWorkflows({ serialized: false });
     const _workflows = Object.entries(workflows).reduce<any>((acc, [key, workflow]) => {
+      if (workflow.isNested) return acc;
       acc[key] = {
         stepGraph: workflow.stepGraph,
         stepSubscriberGraph: workflow.stepSubscriberGraph,

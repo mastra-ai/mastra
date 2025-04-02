@@ -94,6 +94,9 @@ const getLayoutedElements = (nodes: Node[], edges: Edge[]) => {
 
   Dagre.layout(g);
 
+  const fullWidth = g.graph()?.width ? g.graph().width! / 2 : 0;
+  const fullHeight = g.graph()?.height ? g.graph().height! / 2 : 0;
+
   return {
     nodes: nodes.map(node => {
       const position = g.node(node.id);
@@ -105,8 +108,57 @@ const getLayoutedElements = (nodes: Node[], edges: Edge[]) => {
       return { ...node, position: { x, y } };
     }),
     edges,
+    fullWidth,
+    fullHeight,
   };
 };
+
+// const getLayoutedElements = (nodes: Node[], edges: Edge[]) => {
+//   const g = new Dagre.graphlib.Graph().setDefaultEdgeLabel(() => ({}));
+//   g.setGraph({ rankdir: 'TB' });
+
+//   edges.forEach(edge => g.setEdge(edge.source, edge.target));
+
+//   nodes.forEach(node => {
+//     const childrenNodes = nodes?.filter(_node => _node.parentId === node.id);
+//     console.log(`children nodes of ${node.id} in node.forEach==`, childrenNodes);
+//     return g.setNode(node.id, {
+//       ...node,
+//       width: (node.measured?.width ?? 274) * (childrenNodes?.length ?? 1),
+//       height: (node.measured?.height ?? (node?.data?.isLarge ? 260 : 100)) * (childrenNodes?.length ?? 1),
+//     });
+//   });
+
+//   Dagre.layout(g);
+
+//   return {
+//     nodes: nodes.map(node => {
+//       const childrenNodes = nodes?.filter(_node => _node.parentId === node.id);
+//       const position = g.node(node.id);
+//       // We are shifting the dagre node position (anchor=center center) to the top left
+//       // so it matches the React Flow node anchor point (top left).
+//       console.log(`children nodes of ${node.id} in node.map==`, childrenNodes);
+//       const width = (node.measured?.width ?? 274) * (childrenNodes?.length ?? 1);
+//       const height = (node.measured?.height ?? (node?.data?.isLarge ? 260 : 100)) * (childrenNodes?.length ?? 1);
+//       const x = position.x - width / 2;
+//       const y = position.y - height / 2;
+
+//       return {
+//         ...node,
+//         ...(node.type === 'nested-node'
+//           ? {
+//               measured: {
+//                 width,
+//                 height,
+//               },
+//             }
+//           : {}),
+//         position: { x, y },
+//       };
+//     }),
+//     edges,
+//   };
+// };
 
 const defaultEdgeOptions = {
   animated: true,
@@ -118,35 +170,103 @@ const defaultEdgeOptions = {
   },
 };
 
+export type WStep = {
+  [key: string]: {
+    id: string;
+    description: string;
+    workflowId?: string;
+    stepGraph?: any;
+    stepSubscriberGraph?: any;
+  };
+};
+
+// type ContructNodesAndEdgesProps = {
+//   stepGraph: any;
+//   stepSubscriberGraph: any;
+//   steps?: WStep;
+//   isNested?: never;
+//   parentId?: never
+// }
+
 export const contructNodesAndEdges = ({
   stepGraph,
   stepSubscriberGraph,
+  steps: mainSteps = {},
+  parentId,
 }: {
   stepGraph: any;
   stepSubscriberGraph: any;
-}): { nodes: Node[]; edges: Edge[] } => {
+  steps?: WStep;
+  parentId?: string;
+}): { nodes: Node[]; edges: Edge[]; allSteps: any[]; specialEdges?: Edge[] } => {
   if (!stepGraph) {
-    return { nodes: [], edges: [] };
+    return { nodes: [], edges: [], allSteps: [] };
   }
   const { initial, ...stepsList } = stepGraph;
   if (!initial.length) {
-    return { nodes: [], edges: [] };
+    return { nodes: [], edges: [], allSteps: [] };
   }
 
   let nodes: Node[] = [];
   let edges: Edge[] = [];
   let allSteps: any[] = [];
+  let specialEdges: Edge[] = [];
 
   for (const [_index, _step] of initial.entries()) {
     const step = _step.step;
     const stepId = step.id;
     const steps = [_step, ...(stepsList?.[stepId] || [])]?.reduce((acc, step, i) => {
+      const { stepGraph: stepWflowGraph, stepSubscriberGraph: stepWflowSubscriberGraph } =
+        mainSteps[step.step.id] || {};
+      const hasGraph = !!stepWflowGraph;
+
+      const nodeId = nodes.some(node => node.id === step.step.id) ? `${step.step.id}-${i}` : step.step.id;
+      // let fullWidth = 274;
+      // let fullHeight = 100;
+
+      let childrenSteps: any[] = [];
+
+      if (hasGraph) {
+        const {
+          // nodes: _nodes,
+          specialEdges: childrenEdges,
+          // fullWidth: _fullWidth,
+          // fullHeight: _fullHeight,
+          allSteps: _allSteps,
+        } = contructNodesAndEdges({
+          stepGraph: stepWflowGraph,
+          stepSubscriberGraph: stepWflowSubscriberGraph,
+          parentId: nodeId,
+        });
+
+        // const _allNodesWithParentId = _nodes.map(__node => ({
+        //   ...__node,
+        //   data: {
+        //     ...__node.data,
+        //     workflowName: step.step.id,
+        //     parentId: nodeId,
+        //   },
+        // }));
+        // childrenNodes = [...childrenNodes, ..._allNodesWithParentId];
+        const _allStepsWithParentId = _allSteps.map(__step => ({
+          ...__step,
+          workflowName: step.step.id,
+          parentId: nodeId,
+        }));
+        childrenSteps = [...childrenSteps, ..._allStepsWithParentId];
+        edges = [...edges, ...(childrenEdges || [])];
+        // fullWidth = _fullWidth as number;
+        // fullHeight = _fullHeight as number;
+      }
+
       let newStep = {
         ...step.step,
         label: step.step.id,
         originalId: step.step.id,
         type: 'default-node',
-        id: nodes.some(node => node.id === step.step.id) ? `${step.step.id}-${i}` : step.step.id,
+        id: parentId ? `${parentId}-${nodeId}` : nodeId,
+        // height: fullHeight,
+        // width: fullWidth,
       };
       let conditionType: ConditionConditionType = 'when';
       if (step.config?.serializedWhen) {
@@ -172,7 +292,12 @@ export const contructNodesAndEdges = ({
         ...newStep,
         label: step.config?.loopLabel || newStep.label,
       };
-      acc.push(newStep);
+      if (hasGraph) {
+        acc.push(...childrenSteps);
+      } else {
+        acc.push(newStep);
+      }
+
       return acc;
     }, []);
 
@@ -180,10 +305,18 @@ export const contructNodesAndEdges = ({
 
     const newNodes = [...steps].map((step: any, index: number) => {
       const subscriberGraph = stepSubscriberGraph?.[step.id];
+
       return {
         id: step.id,
-        position: { x: _index * 300, y: index * 100 },
+        position: { x: _index * 300 + (parentId ? 150 : 0), y: index * 100 },
         type: step.type,
+        // measured: { height: step.isLarge ? 260 : (step.height ?? 100), width: step.width ?? 274 },
+        // ...(parentId
+        //   ? {
+        //       parentId,
+        //       extent: 'parent',
+        //     }
+        //   : {}),
         data: {
           conditions: step.conditions,
           label: step.label,
@@ -191,10 +324,13 @@ export const contructNodesAndEdges = ({
           withoutTopHandle: subscriberGraph?.[step.id] ? false : index === 0,
           withoutBottomHandle: subscriberGraph ? false : index === steps.length - 1,
           isLarge: step.isLarge,
+          parentId: step.parentId,
+          workflow: step.workflowName,
         },
       };
-    });
+    }) as Node[];
 
+    // nodes = [...nodes, ...newNodes];
     nodes = [...nodes, ...newNodes];
 
     const edgeSteps = [...steps].slice(0, -1);
@@ -211,7 +347,7 @@ export const contructNodesAndEdges = ({
 
   if (!stepSubscriberGraph || !Object.keys(stepSubscriberGraph).length) {
     const { nodes: layoutedNodes, edges: layoutedEdges } = getLayoutedElements(nodes, edges);
-    return { nodes: layoutedNodes, edges: layoutedEdges };
+    return { nodes: layoutedNodes, edges: layoutedEdges, allSteps };
   }
 
   for (const [connectingStepId, stepInfoGraph] of Object.entries(stepSubscriberGraph)) {
@@ -227,12 +363,57 @@ export const contructNodesAndEdges = ({
         const step = _step.step;
         const stepId = step.id;
         const steps = [_step, ...(stepsList?.[stepId] || [])]?.reduce((acc, step, i) => {
+          const { stepGraph: stepWflowGraph, stepSubscriberGraph: stepWflowSubscriberGraph } =
+            mainSteps[step.step.id] || {};
+          const hasGraph = !!stepWflowGraph;
+          const nodeId = nodes.some(node => node.id === step.step.id) ? `${step.step.id}-${i}` : step.step.id;
+
+          // let fullWidth = 274;
+          // let fullHeight = 100;
+
+          let childrenSteps: any[] = [];
+
+          if (hasGraph) {
+            const {
+              // nodes: _nodes,
+              specialEdges: childrenEdges,
+              // fullWidth: _fullWidth,
+              // fullHeight: _fullHeight,
+              allSteps: _allSteps,
+            } = contructNodesAndEdges({
+              stepGraph: stepWflowGraph,
+              stepSubscriberGraph: stepWflowSubscriberGraph,
+              parentId: nodeId,
+            });
+
+            // const _allNodesWithParentId = _nodes.map(__node => ({
+            //   ...__node,
+            //   data: {
+            //     ...__node.data,
+            //     workflowName: step.step.id,
+            //     parentId: nodeId,
+            //   },
+            // }));
+            // childrenNodes = [...childrenNodes, ..._allNodesWithParentId];
+            // fullWidth = _fullWidth as number;
+            // fullHeight = _fullHeight as number;
+            const _allStepsWithParentId = _allSteps.map(__step => ({
+              ...__step,
+              workflowName: step.step.id,
+              parentId: nodeId,
+            }));
+            childrenSteps = [...childrenSteps, ..._allStepsWithParentId];
+            edges = [...edges, ...(childrenEdges || [])];
+          }
+
           let newStep = {
             ...step.step,
             originalId: step.step.id,
             label: step.step.id,
             type: 'default-node',
-            id: nodes.some(node => node.id === step.step.id) ? `${step.step.id}-${i}` : step.step.id,
+            id: parentId ? `${parentId}-${nodeId}` : nodeId,
+            // height: fullHeight,
+            // width: fullWidth,
           };
           let conditionType: ConditionConditionType = 'when';
           const isFinishedLoop = step.config?.loopLabel?.endsWith('loop finished');
@@ -295,7 +476,11 @@ export const contructNodesAndEdges = ({
             loopType: isFinishedLoop ? 'finished' : step.config.loopType,
             label: step.config?.loopLabel || newStep.label,
           };
-          acc.push(newStep);
+          if (hasGraph) {
+            acc.push(...childrenSteps);
+          } else {
+            acc.push(newStep);
+          }
           return acc;
         }, []);
 
@@ -319,6 +504,13 @@ export const contructNodesAndEdges = ({
             id: step.id,
             position: { x: _index * 300 + 300, y: index * 100 + 100 },
             type: step.type,
+            // measured: { height: step.isLarge ? 260 : (step.height ?? 100), width: step.width ?? 274 },
+            // ...(parentId
+            //   ? {
+            //       parentId,
+            //       extent: 'parent',
+            //     }
+            //   : {}),
             data: {
               conditions: step.conditions,
               label: step.label,
@@ -326,23 +518,46 @@ export const contructNodesAndEdges = ({
               result: step.loopResult,
               loopType: step.loopType,
               steps: step.steps,
+              parentId: step.parentId,
               withoutBottomHandle: withBottomHandle ? false : index === steps.length - 1,
               isLarge: step.isLarge,
+              workflow: step.workflowName,
             },
           };
-        });
+        }) as Node[];
+
+        // console.log('afterStepStepList==', afterStepStepList);
+        const newAfterStepList = nodes
+          ?.filter((node: any) => node.data.withoutBottomHandle && afterStepStepList?.includes(node.data.parentId))
+          ?.map((node: any) => node.id);
+
+        // console.log('newAfterStepList from node data', newAfterStepList);
+
+        const _afterStepStepList = newAfterStepList?.length ? newAfterStepList : afterStepStepList;
+
+        // console.log('latest after step steplist==', _afterStepStepList);
 
         nodes = [...nodes, ...newNodes].map(node => ({
           ...node,
           data: {
             ...node.data,
-            withoutBottomHandle: afterStepStepList.includes(node.id) ? false : node.data.withoutBottomHandle,
+            withoutBottomHandle: _afterStepStepList.includes(node.id) ? false : node.data.withoutBottomHandle,
           },
         }));
+        // nodes = [...nodes, ...newNodes, ...childrenNodes].map(node => ({
+        //   ...node,
+        //   data: {
+        //     ...node.data,
+        //     withoutBottomHandle: afterStepStepList.includes(node.id) ? false : node.data.withoutBottomHandle,
+        //   },
+        // }));
 
         const edgeSteps = [...steps].slice(0, -1);
 
-        const afterEdges = afterStepStepList.map((step: any) => ({
+        const firstEdgeStep = steps[0];
+        const lastEdgeStep = steps[steps.length - 1];
+
+        const afterEdges = _afterStepStepList?.map((step: any) => ({
           id: `e${step}-${connectingStepId}`,
           source: step,
           target: connectingStepId,
@@ -360,10 +575,6 @@ export const contructNodesAndEdges = ({
             ...defaultEdgeOptions,
           }))
           ?.filter((edge: any) => !edge.remove);
-
-        const firstEdgeStep = steps[0];
-        const lastEdgeStep = steps[steps.length - 1];
-
         const connectingEdge =
           connectingStepId === firstEdgeStep.id
             ? []
@@ -393,6 +604,9 @@ export const contructNodesAndEdges = ({
 
         allSteps = [...allSteps, ...steps];
       }
+
+      // lastNodeIds = nodes.filter(node => node?.data?.withoutBottomHandle).map(node => node?.id);
+      // firstNodeIds = nodes.filter(node => node?.data?.withoutTopHandle).map(node => node?.id);
       if (untilOrWhileConditionId && loopResultSteps.length && finishedLoopStep && otherLoopStep) {
         const loopResultStepsEdges = loopResultSteps.map(step => ({
           id: `e${untilOrWhileConditionId}-${step.id}`,
@@ -419,10 +633,11 @@ export const contructNodesAndEdges = ({
         };
 
         edges = [...edges, ...loopResultStepsEdges, otherLoopEdge, finishedLoopEdge];
+        specialEdges = [...specialEdges, ...loopResultStepsEdges, otherLoopEdge, finishedLoopEdge];
       }
     }
   }
   const { nodes: layoutedNodes, edges: layoutedEdges } = getLayoutedElements(nodes, edges);
 
-  return { nodes: layoutedNodes, edges: layoutedEdges };
+  return { nodes: layoutedNodes, edges: layoutedEdges, allSteps, specialEdges };
 };

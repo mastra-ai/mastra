@@ -1,6 +1,7 @@
 import { Skeleton } from '@/components/ui/skeleton';
 
 import { useWorkflow } from '@/hooks/use-workflows';
+import '../../../index.css';
 
 import { WorkflowGraphInner } from './workflow-graph-inner';
 import { lodashTitleCase } from '@/lib/string';

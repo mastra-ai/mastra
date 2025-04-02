@@ -9,3 +9,14 @@
 .unset-position {
   position: unset;
 }
+
+.react-flow__controls-button {
+  color: #e6e6e6 !important;
+  background-color: #121212 !important;
+  border: none !important;
+}
+
+.react-flow__node-nested-node {
+  width: 100% !important;
+  height: 100% !important;
+}

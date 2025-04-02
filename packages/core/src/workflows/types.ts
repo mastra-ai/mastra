@@ -50,6 +50,7 @@ export interface StepAction<
   execute: (context: TContext) => Promise<TSchemaOut extends z.ZodSchema ? z.infer<TSchemaOut> : unknown>;
   retryConfig?: RetryConfig;
   workflow?: Workflow;
+  workflowId?: string;
 }
 
 // For the simple key-value condition

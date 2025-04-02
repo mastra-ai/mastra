@@ -1,24 +1,24 @@
 import { Handle, Position } from '@xyflow/react';
 import type { NodeProps, Node } from '@xyflow/react';
-import { Footprints } from 'lucide-react';
+import { Footprints, Workflow } from 'lucide-react';
 
 import { Text } from '@/components/ui/text';
 
 import { cn } from '@/lib/utils';
 
-export type DefaultNode = Node<
+export type NestedNode = Node<
   {
+    workflow: string;
     label: string;
     description?: string;
-    workflow?: string;
     withoutTopHandle?: boolean;
     withoutBottomHandle?: boolean;
   },
-  'default-node'
+  'nested-node'
 >;
 
-export function WorkflowDefaultNode({ data }: NodeProps<DefaultNode>) {
-  const { label, description, workflow, withoutTopHandle, withoutBottomHandle } = data;
+export function WorkflowNestedNode({ data }: NodeProps<NestedNode>) {
+  const { workflow, label, description, withoutTopHandle, withoutBottomHandle } = data;
   return (
     <div className={cn('bg-mastra-bg-8 rounded-md w-[274px]')}>
       {!withoutTopHandle && <Handle type="target" position={Position.Top} style={{ visibility: 'hidden' }} />}
@@ -26,7 +26,7 @@ export function WorkflowDefaultNode({ data }: NodeProps<DefaultNode>) {
         <div className="text-sm bg-mastra-bg-9 flex items-center gap-[6px] rounded-sm  p-2">
           <Footprints className="text-current w-4 h-4" />
           <Text size="xs" weight="medium" className="text-mastra-el-6 capitalize">
-            {workflow ? `${workflow}.${label}` : label}
+            {workflow}.{label}
           </Text>
         </div>
       </div>

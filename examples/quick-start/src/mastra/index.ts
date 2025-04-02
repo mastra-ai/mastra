@@ -1,11 +1,55 @@
 import { createLogger, Mastra } from '@mastra/core';
 
 import { catOne } from './agents/agent';
-import { logCatWorkflow } from './workflow';
+import {
+  logCatWorkflow,
+  simpleConditionalWorkflow,
+  simpleStringConditionalWorkflow,
+  functionConditionalWorkflow,
+  complexConditionalWorkflow,
+  untilLoopWorkflow,
+  whileLoopWorkflow,
+  whileLoopWithConditionFunctionWorkflow,
+  ifThenWorkflow,
+  ifElseWithRefConditionWorkflow,
+  nestedIfThenWorkflow,
+  nestedIfAndNestedElseWorkflow,
+  ifThenWithUntilLoopWorkflow,
+  parallelWorkflow,
+  simpleAfterWorkflow,
+  afterWithConditionalWorkflow,
+  compoundAfterWorkflow,
+  complexCompoundAfterWorkflow,
+  fullNestedWorkflow,
+  fullNestedWorkflowWithCondition,
+  nestedWithNewIfWorkflow,
+} from './workflow';
 
 export const mastra = new Mastra({
   agents: { catOne },
-  workflows: { logCatWorkflow },
+  workflows: {
+    logCatWorkflow,
+    simpleConditionalWorkflow,
+    simpleStringConditionalWorkflow,
+    functionConditionalWorkflow,
+    complexConditionalWorkflow,
+    untilLoopWorkflow,
+    whileLoopWorkflow,
+    whileLoopWithConditionFunctionWorkflow,
+    ifThenWorkflow,
+    ifElseWithRefConditionWorkflow,
+    nestedIfThenWorkflow,
+    nestedIfAndNestedElseWorkflow,
+    ifThenWithUntilLoopWorkflow,
+    parallelWorkflow,
+    simpleAfterWorkflow,
+    afterWithConditionalWorkflow,
+    compoundAfterWorkflow,
+    complexCompoundAfterWorkflow,
+    fullNestedWorkflow,
+    fullNestedWorkflowWithCondition,
+    nestedWithNewIfWorkflow,
+  },
   logger: createLogger({
     name: 'Mastra',
     level: 'debug',
