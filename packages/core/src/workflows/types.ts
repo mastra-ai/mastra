@@ -64,7 +64,7 @@ export type StepVariableType<
   TContext extends StepExecutionContext<TSchemaIn>,
 > = StepAction<TId, TSchemaIn, TSchemaOut, TContext> | 'trigger' | { id: string };
 
-export type StepNode = { step: StepAction<any, any, any, any>; config: StepDef<any, any, any, any>[any] };
+export type StepNode = { id: string; step: StepAction<any, any, any, any>; config: StepDef<any, any, any, any>[any] };
 
 export type StepGraph = {
   initial: StepNode[];
@@ -129,6 +129,7 @@ export type StepDef<
 > = Record<
   TStepId,
   {
+    id?: string;
     when?:
       | Condition<any, any>
       | ((args: { context: WorkflowContext; mastra?: Mastra }) => Promise<boolean | WhenConditionReturnValue>);
@@ -185,6 +186,7 @@ export interface StepConfig<
     loopLabel?: string;
     loopType?: 'while' | 'until' | undefined;
   };
+  id?: string;
 }
 
 type StepSuccess<T> = {

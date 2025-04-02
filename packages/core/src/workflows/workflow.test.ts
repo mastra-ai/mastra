@@ -13,8 +13,8 @@ import { Telemetry } from '../telemetry';
 import { createTool } from '../tools';
 
 import { Step } from './step';
-import { WhenConditionReturnValue } from './types';
 import type { WorkflowContext, WorkflowResumeResult } from './types';
+import { WhenConditionReturnValue } from './types';
 import { Workflow } from './workflow';
 
 const storage = new DefaultStorage({
@@ -145,17 +145,20 @@ describe('Workflow', async () => {
 
       workflow
         .step(step1, {
+          id: 'step1',
           variables: {
             status: { step: 'trigger', path: 'status' },
           },
         })
         .then(step2, {
+          id: 'step2',
           when: {
             ref: { step: step1, path: 'status' },
             query: { $eq: 'success' },
           },
         })
         .then(step3, {
+          id: 'step3',
           when: {
             ref: { step: step1, path: 'status' },
             query: { $eq: 'failed' },
@@ -216,11 +219,13 @@ describe('Workflow', async () => {
       workflow
         .step(step1)
         .then(step2, {
+          id: 'step2',
           when: {
             'step1.status': 'success',
           },
         })
         .then(step3, {
+          id: 'step3',
           when: {
             'step2.status': 'unexpected value',
           },
@@ -258,6 +263,7 @@ describe('Workflow', async () => {
       workflow
         .step(step1)
         .then(step2, {
+          id: 'step2',
           when: async ({ context }) => {
             const step1Result = context.getStepResult(step1);
 
@@ -298,6 +304,7 @@ describe('Workflow', async () => {
 
       workflow
         .step(step1, {
+          id: 'step1',
           variables: {
             inputData: { step: 'trigger', path: 'inputData' },
           },
@@ -415,6 +422,7 @@ describe('Workflow', async () => {
 
       workflow
         .step(step1, {
+          id: 'step1',
           variables: {
             tData: { step: 'trigger', path: '.' },
           },
@@ -469,6 +477,7 @@ describe('Workflow', async () => {
       workflow
         .step(step1)
         .then(step2, {
+          id: 'step2',
           variables: {
             previousValue: { step: step1, path: 'nested.value' },
           },
@@ -550,6 +559,7 @@ describe('Workflow', async () => {
       workflow
         .step(step1)
         .then(step2, {
+          id: 'step2',
           variables: {
             data: { step: step1, path: 'data' },
           },
@@ -608,6 +618,7 @@ describe('Workflow', async () => {
       workflow
         .step(step1)
         .then(step2, {
+          id: 'step2',
           when: {
             and: [
               {
@@ -638,6 +649,7 @@ describe('Workflow', async () => {
           },
         })
         .then(step3, {
+          id: 'step3',
           when: {
             or: [
               {
@@ -1684,6 +1696,7 @@ describe('Workflow', async () => {
         .then(step5)
         .after(step1)
         .step(step3, {
+          id: 'step3',
           when: {
             ref: { step: step1, path: 'status' },
             query: { $eq: 'failed' },
@@ -1772,12 +1785,12 @@ describe('Workflow', async () => {
       const step5 = new Step({ id: 'step5', execute: step5Action });
       const workflow = new Workflow({ name: 'test-workflow' });
       workflow
-        .step(step1, { when: async () => true })
-        .then(step2, { when: async () => false })
+        .step(step1, { id: 'step1' })
+        .then(step2, { id: 'step2', when: async () => false })
         .after([step1, step2])
-        .step(step3)
-        .then(step4)
-        .then(step5)
+        .step(step3, { id: 'step3' })
+        .then(step4, { id: 'step4' })
+        .then(step5, { id: 'step5' })
         .commit();
 
       const run = workflow.createRun();
@@ -1931,6 +1944,7 @@ describe('Workflow', async () => {
           },
         })
         .step(finalStep, {
+          id: 'finalStep',
           when: async ({ context }) => {
             const isPassed = context.getStepResult(incrementStep)?.newValue >= 10;
             return isPassed;
@@ -1948,7 +1962,7 @@ describe('Workflow', async () => {
       expect(final).toHaveBeenCalledTimes(1);
     });
 
-    // don't unskip this please.. actually unskip it 😈
+    // don't unskip
     it.skip('should spawn cyclic subscribers for each step (legacy)', async () => {
       const step1Action = vi.fn<any>().mockResolvedValue({ result: 'success1' });
       const step3Action = vi.fn<any>().mockResolvedValue({ result: 'success3' });
@@ -2329,9 +2343,11 @@ describe('Workflow', async () => {
         .then(evaluateTone)
         .after(evaluateTone)
         .step(humanIntervention, {
+          id: 'humanIntervention',
           when: () => Promise.resolve(true),
         })
         .step(explainResponse, {
+          id: 'explainResponse',
           when: () => Promise.resolve(false),
         })
         .commit();
@@ -2480,9 +2496,11 @@ describe('Workflow', async () => {
         .then(evaluateImproved)
         .after(evaluateImproved)
         .step(humanIntervention, {
+          id: 'humanIntervention',
           when: () => Promise.resolve(true),
         })
         .step(explainResponse, {
+          id: 'explainResponse',
           when: () => Promise.resolve(false),
         })
         .commit();
@@ -4328,6 +4346,201 @@ describe('Workflow', async () => {
           finalValue: 26 + 1,
         });
       });
+    });
+  });
+
+  describe('Unique step IDs', () => {
+    it('should run compound subscribers on a loop using step id from config', async () => {
+      const increment = vi.fn().mockImplementation(async ({ context }) => {
+        // Get the current value (either from trigger or previous increment)
+        const currentValue =
+          context.getStepResult('incrementStep')?.newValue || context.getStepResult('trigger')?.startValue || 0;
+
+        // Increment the value
+        const newValue = currentValue + 1;
+
+        return { newValue };
+      });
+      const incrementStep = new Step({
+        id: 'increment',
+        description: 'Increments the current value by 1',
+        outputSchema: z.object({
+          newValue: z.number(),
+        }),
+        execute: increment,
+      });
+
+      const final = vi.fn().mockImplementation(async ({ context }) => {
+        return { finalValue: context.getStepResult('incrementStep')?.newValue };
+      });
+      const finalStep = new Step({
+        id: 'final',
+        description: 'Final step that prints the result',
+        execute: async (...rest) => {
+          return final(...rest);
+        },
+      });
+
+      const mockAction = vi.fn<any>().mockResolvedValue({ result: 'success' });
+      const dummyStep = new Step({
+        id: 'dummy',
+        description: 'Dummy step',
+        execute: async (...rest) => {
+          return mockAction(...rest);
+        },
+      });
+
+      const mockAction2 = vi.fn<any>().mockResolvedValue({ result: 'success' });
+      const dummyStep2 = new Step({
+        id: 'dummy2',
+        description: 'Dummy step',
+        execute: async (...rest) => {
+          return mockAction2(...rest);
+        },
+      });
+
+      const mockAction3 = vi.fn<any>().mockResolvedValue({ result: 'success' });
+      const dummyStep3 = new Step({
+        id: 'dummy3',
+        description: 'Dummy step',
+        execute: async (...rest) => {
+          return mockAction3(...rest);
+        },
+      });
+
+      const mockAction4 = vi.fn<any>().mockResolvedValue({ result: 'success' });
+      const dummyStep4 = new Step({
+        id: 'dummy4',
+        description: 'Dummy step',
+        execute: async (...rest) => {
+          return mockAction4(...rest);
+        },
+      });
+
+      const counterWorkflow = new Workflow({
+        name: 'counter-workflow',
+        triggerSchema: z.object({
+          target: z.number(),
+          startValue: z.number(),
+        }),
+      });
+
+      counterWorkflow
+        .step(incrementStep, { id: 'incrementStep' })
+        .after('incrementStep')
+        .step(dummyStep, { id: 'dummyStep' })
+        .after('incrementStep')
+        .step(dummyStep2, { id: 'dummyStep2' })
+        .after(['dummyStep', 'dummyStep2'])
+        .step(dummyStep3, { id: 'dummyStep3' })
+        .after('dummyStep3')
+        .step(incrementStep, {
+          id: 'incrementStep',
+          when: async ({ context }) => {
+            const isPassed = context.getStepResult('incrementStep')?.newValue < 10;
+            if (isPassed) {
+              return true;
+            } else {
+              return WhenConditionReturnValue.LIMBO;
+            }
+          },
+        })
+        .step(finalStep, {
+          id: 'finalStep',
+          when: async ({ context }) => {
+            const isPassed = context.getStepResult('incrementStep')?.newValue >= 10;
+            return isPassed;
+          },
+        })
+        .then(dummyStep4, { id: 'dummyStep4' })
+        .then(dummyStep4, { id: 'dummyStep4-2' })
+        .commit();
+
+      const run = counterWorkflow.createRun();
+      const result = await run.start({ triggerData: { target: 10, startValue: 0 } });
+      const results = result.results;
+
+      expect(increment).toHaveBeenCalledTimes(10);
+      expect(mockAction).toHaveBeenCalledTimes(10);
+      expect(mockAction2).toHaveBeenCalledTimes(10);
+      expect(mockAction3).toHaveBeenCalledTimes(10);
+      expect(mockAction4).toHaveBeenCalledTimes(2);
+      expect(final).toHaveBeenCalledTimes(1);
+      expect(results).toMatchObject(
+        expect.objectContaining({
+          incrementStep: { status: 'skipped' },
+          dummyStep: { status: 'success', output: { result: 'success' } },
+          dummyStep2: { status: 'success', output: { result: 'success' } },
+          dummyStep3: { status: 'success', output: { result: 'success' } },
+          finalStep: { status: 'success', output: { finalValue: undefined } },
+          dummyStep4: { status: 'success', output: { result: 'success' } },
+          'dummyStep4-2': { status: 'success', output: { result: 'success' } },
+        }),
+      );
+    });
+
+    it('should resolve variables from previous steps using step id from config', async () => {
+      const step1Action = vi.fn<any>().mockResolvedValue({
+        nested: { value: 'step1-data' },
+      });
+      const step2Action = vi.fn<any>().mockResolvedValue({ result: 'success' });
+
+      const step1 = new Step({
+        id: 'step1',
+        execute: step1Action,
+        outputSchema: z.object({ nested: z.object({ value: z.string() }) }),
+      });
+      const step2 = new Step({
+        id: 'step2',
+        execute: step2Action,
+        inputSchema: z.object({ previousValue: z.string() }),
+      });
+
+      const workflow = new Workflow({
+        name: 'test-workflow',
+      });
+
+      workflow
+        .step(step1, { id: 'steppy1' })
+        .then(step2, {
+          id: 'steppy2',
+          variables: {
+            previousValue: { step: { id: 'steppy1' }, path: 'nested.value' },
+          },
+        })
+        .commit();
+
+      const run = workflow.createRun();
+      const results = await run.start();
+
+      const baseContext = {
+        attempts: { steppy1: 0, steppy2: 0 },
+        steps: {},
+        triggerData: {},
+        getStepResult: expect.any(Function),
+      };
+
+      expect(step2Action).toHaveBeenCalledWith(
+        expect.objectContaining({
+          context: expect.objectContaining({
+            ...baseContext,
+            steps: {
+              steppy1: {
+                output: {
+                  nested: {
+                    value: 'step1-data',
+                  },
+                },
+                status: 'success',
+              },
+            },
+            inputData: {
+              previousValue: 'step1-data',
+            },
+          }),
+          runId: results.runId,
+        }),
+      );
     });
   });
 });
