@@ -168,19 +168,20 @@ const response = await myAgent.generate(
   [
     {
       role: "user",
-      content: "Please analyze this repository and provide a summary and keywords...",
+      content:
+        "Please analyze this repository and provide a summary and keywords...",
     },
   ],
   {
     // Use experimental_output to enable both structured output and tool calls
-    experimental_output: schema,  
+    experimental_output: schema,
   },
 );
 
 console.log("Structured Output:", response.object);
 ```
-<br/>
 
+<br />
 
 This allows you to have strong typing and validation for the structured data returned by the agent.
 
@@ -206,19 +207,22 @@ export const myAgent = new Agent({
     calculate: {
       description: "Calculator for mathematical expressions",
       schema: z.object({ expression: z.string() }),
-      execute: async ({ expression }) => mathjs.evaluate(expression)
-    }
-  }
+      execute: async ({ expression }) => mathjs.evaluate(expression),
+    },
+  },
 });
 
 const response = await myAgent.generate(
-  [{
-    role: "user",
-    content: "If a taxi driver earns $9461 per hour and works 12 hours a day, how much does they earn in one day?"
-  }],
+  [
+    {
+      role: "user",
+      content:
+        "If a taxi driver earns $9461 per hour and works 12 hours a day, how much does they earn in one day?",
+    },
+  ],
   {
-    maxSteps: 5 // Allow up to 5 tool usage steps
-  }
+    maxSteps: 5, // Allow up to 5 tool usage steps
+  },
 );
 ```
 
@@ -234,35 +238,35 @@ const response = await myAgent.generate(
     maxSteps: 5,
     onStepFinish: ({ text, toolCalls, toolResults }) => {
       console.log("Step completed:", { text, toolCalls, toolResults });
-    }
-  }
+    },
+  },
 );
 ```
 
 ### Using onFinish
 
 The `onFinish` callback is available when streaming responses and provides detailed information about the completed interaction. It is called after the LLM has finished generating its response and all tool executions have completed.
- This callback receives the final response text, execution steps, token usage statistics, and other metadata that can be useful for monitoring and logging:
+This callback receives the final response text, execution steps, token usage statistics, and other metadata that can be useful for monitoring and logging:
 
 ```ts showLineNumbers filename="src/mastra/agents/index.ts" copy
 const stream = await myAgent.stream(
   [{ role: "user", content: "Calculate the taxi driver's daily earnings." }],
   {
     maxSteps: 5,
-    onFinish: ({ 
-      steps, 
+    onFinish: ({
+      steps,
       text,
-      finishReason,  // 'complete', 'length', 'tool', etc.
-      usage,         // token usage statistics
-      reasoningDetails // additional context about the agent's decisions
+      finishReason, // 'complete', 'length', 'tool', etc.
+      usage, // token usage statistics
+      reasoningDetails, // additional context about the agent's decisions
     }) => {
-      console.log("Stream complete:", { 
-        totalSteps: steps.length, 
+      console.log("Stream complete:", {
+        totalSteps: steps.length,
         finishReason,
-        usage 
+        usage,
       });
-    }
-  }
+    },
+  },
 );
 ```
 
