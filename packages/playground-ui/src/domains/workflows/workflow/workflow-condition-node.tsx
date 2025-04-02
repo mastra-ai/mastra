@@ -85,8 +85,8 @@ export function WorkflowConditionNode({ data }: NodeProps<ConditionNode>) {
                 </Highlight>
 
                 <Dialog open={openDialog} onOpenChange={setOpenDialog}>
-                  <DialogTitle className="sr-only">Condition Function</DialogTitle>
                   <DialogContent className="max-w-[30rem] bg-[#121212] p-[0.5rem]">
+                    <DialogTitle className="sr-only">Condition Function</DialogTitle>
                     <ScrollArea className="w-full p-2" maxHeight="400px">
                       <Highlight theme={themes.oneDark} code={String(condition.fnString).trim()} language="javascript">
                         {({ className, style, tokens, getLineProps, getTokenProps }) => (

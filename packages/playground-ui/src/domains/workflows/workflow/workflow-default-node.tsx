@@ -10,7 +10,6 @@ export type DefaultNode = Node<
   {
     label: string;
     description?: string;
-    workflow?: string;
     withoutTopHandle?: boolean;
     withoutBottomHandle?: boolean;
   },
@@ -18,7 +17,7 @@ export type DefaultNode = Node<
 >;
 
 export function WorkflowDefaultNode({ data }: NodeProps<DefaultNode>) {
-  const { label, description, workflow, withoutTopHandle, withoutBottomHandle } = data;
+  const { label, description, withoutTopHandle, withoutBottomHandle } = data;
   return (
     <div className={cn('bg-mastra-bg-8 rounded-md w-[274px]')}>
       {!withoutTopHandle && <Handle type="target" position={Position.Top} style={{ visibility: 'hidden' }} />}
@@ -26,7 +25,7 @@ export function WorkflowDefaultNode({ data }: NodeProps<DefaultNode>) {
         <div className="text-sm bg-mastra-bg-9 flex items-center gap-[6px] rounded-sm  p-2">
           <Footprints className="text-current w-4 h-4" />
           <Text size="xs" weight="medium" className="text-mastra-el-6 capitalize">
-            {workflow ? `${workflow}.${label}` : label}
+            {label}
           </Text>
         </div>
       </div>

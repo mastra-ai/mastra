@@ -34,9 +34,6 @@ export function WorkflowGraphInner({ workflow }: { workflow: Workflow }) {
     'nested-node': WorkflowNestedNode,
   };
 
-  // console.log('nodes===>', nodes);
-  // console.log('edges===>', edges);
-
   return (
     <div className="w-full h-full">
       <ReactFlow

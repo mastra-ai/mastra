@@ -6,6 +6,8 @@ import '../../../index.css';
 import { WorkflowGraphInner } from './workflow-graph-inner';
 import { lodashTitleCase } from '@/lib/string';
 import { AlertCircleIcon } from 'lucide-react';
+import { WorkflowNestedGraphProvider } from '../context/workflow-nested-graph-context';
+import { ReactFlowProvider } from '@xyflow/react';
 
 export function WorkflowGraph({ workflowId, baseUrl }: { workflowId: string; baseUrl: string }) {
   const { workflow, isLoading } = useWorkflow(workflowId, baseUrl);
@@ -29,5 +31,11 @@ export function WorkflowGraph({ workflowId, baseUrl }: { workflowId: string; bas
     );
   }
 
-  return <WorkflowGraphInner workflow={workflow} />;
+  return (
+    <WorkflowNestedGraphProvider>
+      <ReactFlowProvider>
+        <WorkflowGraphInner workflow={workflow} />
+      </ReactFlowProvider>
+    </WorkflowNestedGraphProvider>
+  );
 }
