@@ -172,7 +172,13 @@ workflow
       ref: { step: incrementStep, path: 'value' },
       query: { $gte: 10 },
     },
-    incrementStep
+    incrementStep,
+    {
+      counter: {
+        step: incrementStep,
+        path: 'counter'
+      }
+    }
   )
   .then(finalStep);
 ```
@@ -228,7 +234,13 @@ workflow
       ref: { step: incrementStep, path: 'value' },
       query: { $lt: 10 },
     },
-    incrementStep
+    incrementStep,
+    {
+      counter: {
+        step: incrementStep,
+        path: 'counter'
+      }
+    }
   )
   .then(finalStep);
 ```
