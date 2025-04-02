@@ -299,6 +299,7 @@ export function workflowToStep<
   return {
     id: workflow.name,
     workflow,
+    workflowId: toCamelCaseWithRandomSuffix(workflow.name),
     execute: async ({ context, suspend, emit, mastra: mastraFromExecute }) => {
       const realMastra = mastraFromExecute ?? mastra;
       if (realMastra) {
@@ -346,4 +347,56 @@ export function workflowToStep<
       return { ...awaitedResult, runId: run.runId };
     },
   };
+}
+/**
+ * Converts a string to camelCase and appends a random three-letter string
+ * @param {string} str - The input string to convert
+ * @returns {string} - The camelCase string with a random three-letter suffix
+ */
+function toCamelCaseWithRandomSuffix(str: string) {
+  // Handle null or empty strings
+  if (!str) return '';
+
+  // Replace various delimiters with spaces
+  const normalizedStr = str.replace(/[-_]/g, ' ');
+
+  // Split by spaces and filter out empty strings
+  const words = normalizedStr.split(' ').filter(word => word.length > 0);
+
+  // Convert to camelCase
+  const camelCase = words
+    .map((word, index) => {
+      // Remove any non-alphanumeric characters
+      word = word.replace(/[^a-zA-Z0-9]/g, '');
+
+      if (index === 0) {
+        // First word should be lowercase
+        return word.toLowerCase();
+      }
+      // Capitalize first letter of other words
+      return word.charAt(0).toUpperCase() + word.slice(1).toLowerCase();
+    })
+    .join('');
+
+  // Generate random three-letter string
+  const randomString = generateRandomLetters(3);
+
+  return camelCase + randomString;
+}
+
+/**
+ * Generates a random string of letters with specified length
+ * @param {number} length - The length of the random string
+ * @returns {string} - Random string of specified length
+ */
+function generateRandomLetters(length: number) {
+  const characters = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ';
+  let result = '';
+
+  for (let i = 0; i < length; i++) {
+    const randomIndex = Math.floor(Math.random() * characters.length);
+    result += characters.charAt(randomIndex);
+  }
+
+  return result;
 }
