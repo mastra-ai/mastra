@@ -7,7 +7,7 @@ import type { ZodObject } from 'zod';
 
 import type { MastraPrimitives } from './action';
 import type { ToolsInput } from './agent';
-import { Container } from './di/container';
+import { Container } from './di';
 import type { Logger } from './logger';
 import type { Mastra } from './mastra';
 import type { AiMessageType, MastraMemory } from './memory';

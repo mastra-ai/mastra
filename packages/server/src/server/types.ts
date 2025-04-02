@@ -7,5 +7,5 @@ export interface ApiError extends Error {
 
 export interface Context {
   mastra: Mastra;
-  container?: Container;
+  container: Container;
 }
