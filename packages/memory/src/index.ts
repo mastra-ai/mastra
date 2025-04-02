@@ -77,8 +77,16 @@ export class Memory extends MastraMemory {
           };
 
     if (config?.semanticRecall && selectBy?.vectorSearchString && this.vector && !!selectBy.vectorSearchString) {
-      const { indexName } = await this.createEmbeddingIndex();
-      const { embeddings } = await this.embedMessageContent(selectBy.vectorSearchString);
+      const [indexName, embeddings] = await Promise.all([
+        (async () => {
+          const { indexName } = await this.createEmbeddingIndex();
+          return indexName;
+        })(),
+        (async () => {
+          const { embeddings } = await this.embedMessageContent(selectBy.vectorSearchString!);
+          return embeddings;
+        })(),
+      ]);
 
       await Promise.all(
         embeddings.map(async embedding => {
