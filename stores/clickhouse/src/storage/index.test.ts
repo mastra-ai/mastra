@@ -267,7 +267,7 @@ describe('ClickhouseStore', () => {
       expect(traces).toHaveLength(0);
     }, 60e3);
 
-    // FIXME: unable to clear column level TTLs for the test case nicely, but it does seem to get applied correctly
+    // NOTE: unable to clear column level TTLs for the test case nicely, but it does seem to get applied correctly
     it.skip('should create and retrieve a trace, but not expired columns when column level ttl expires', async () => {
       await store.clearTable({ tableName: 'mastra_evals' });
       const ev = createSampleEval();
