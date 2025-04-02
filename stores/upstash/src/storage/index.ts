@@ -1,5 +1,12 @@
+import type { MetricResult, TestInfo } from '@mastra/core/eval';
 import type { StorageThreadType, MessageType } from '@mastra/core/memory';
-import { MastraStorage, TABLE_MESSAGES, TABLE_THREADS, TABLE_WORKFLOW_SNAPSHOT } from '@mastra/core/storage';
+import {
+  MastraStorage,
+  TABLE_MESSAGES,
+  TABLE_THREADS,
+  TABLE_WORKFLOW_SNAPSHOT,
+  TABLE_EVALS,
+} from '@mastra/core/storage';
 import type { TABLE_NAMES, StorageColumn, StorageGetMessagesArg, EvalRow } from '@mastra/core/storage';
 import type { WorkflowRunState } from '@mastra/core/workflows';
 import { Redis } from '@upstash/redis';
@@ -13,9 +20,113 @@ export class UpstashStore extends MastraStorage {
   batchInsert(_input: { tableName: TABLE_NAMES; records: Record<string, any>[] }): Promise<void> {
     throw new Error('Method not implemented.');
   }
-  getEvalsByAgentName(_agentName: string, _type?: 'test' | 'live'): Promise<EvalRow[]> {
-    throw new Error('Method not implemented.');
+
+  async getEvalsByAgentName(agentName: string, type?: 'test' | 'live'): Promise<EvalRow[]> {
+    try {
+      // Get all keys that match the evals table pattern
+      const pattern = `${TABLE_EVALS}:*`;
+      const keys = await this.redis.keys(pattern);
+
+      // Fetch all eval records
+      const evalRecords = await Promise.all(
+        keys.map(async key => {
+          const data = await this.redis.get<Record<string, any>>(key);
+          return data;
+        }),
+      );
+
+      // Filter by agent name and remove nulls
+      const nonNullRecords = evalRecords.filter(
+        (record): record is Record<string, any> =>
+          record !== null && typeof record === 'object' && 'agent_name' in record && record.agent_name === agentName,
+      );
+
+      // Apply additional filtering based on type
+      let filteredEvals = nonNullRecords;
+
+      if (type === 'test') {
+        filteredEvals = filteredEvals.filter(record => {
+          if (!record.test_info) return false;
+
+          // Handle test_info as a JSON string
+          try {
+            if (typeof record.test_info === 'string') {
+              const parsedTestInfo = JSON.parse(record.test_info);
+              return parsedTestInfo && typeof parsedTestInfo === 'object' && 'testPath' in parsedTestInfo;
+            }
+
+            // Handle test_info as an object
+            return typeof record.test_info === 'object' && 'testPath' in record.test_info;
+          } catch (_e) {
+            return false;
+          }
+        });
+      } else if (type === 'live') {
+        filteredEvals = filteredEvals.filter(record => {
+          if (!record.test_info) return true;
+
+          // Handle test_info as a JSON string
+          try {
+            if (typeof record.test_info === 'string') {
+              const parsedTestInfo = JSON.parse(record.test_info);
+              return !(parsedTestInfo && typeof parsedTestInfo === 'object' && 'testPath' in parsedTestInfo);
+            }
+
+            // Handle test_info as an object
+            return !(typeof record.test_info === 'object' && 'testPath' in record.test_info);
+          } catch (_e) {
+            return true;
+          }
+        });
+      }
+
+      // Transform to EvalRow format
+      return filteredEvals.map(record => this.transformEvalRecord(record));
+    } catch (error) {
+      console.error('Failed to get evals for the specified agent:', error);
+      return [];
+    }
   }
+
+  private transformEvalRecord(record: Record<string, any>): EvalRow {
+    // Parse JSON strings if needed
+    let result = record.result;
+    if (typeof result === 'string') {
+      try {
+        result = JSON.parse(result);
+      } catch (_e) {
+        console.warn('Failed to parse result JSON:');
+      }
+    }
+
+    let testInfo = record.test_info;
+    if (typeof testInfo === 'string') {
+      try {
+        testInfo = JSON.parse(testInfo);
+      } catch (_e) {
+        console.warn('Failed to parse test_info JSON:');
+      }
+    }
+
+    return {
+      agentName: record.agent_name,
+      input: record.input,
+      output: record.output,
+      result: result as MetricResult,
+      metricName: record.metric_name,
+      instructions: record.instructions,
+      testInfo: testInfo as TestInfo | undefined,
+      globalRunId: record.global_run_id,
+      runId: record.run_id,
+      createdAt:
+        typeof record.created_at === 'string'
+          ? record.created_at
+          : record.created_at instanceof Date
+            ? record.created_at.toISOString()
+            : new Date().toISOString(),
+    };
+  }
+
   getTraces(_input: {
     name?: string;
     scope?: string;
@@ -26,6 +137,7 @@ export class UpstashStore extends MastraStorage {
   }): Promise<any[]> {
     throw new Error('Method not implemented.');
   }
+
   private redis: Redis;
 
   constructor(config: UpstashConfig) {
@@ -371,9 +483,9 @@ export class UpstashStore extends MastraStorage {
         if (typeof parsedSnapshot === 'string') {
           try {
             parsedSnapshot = JSON.parse(w!.snapshot as string) as WorkflowRunState;
-          } catch (e) {
+          } catch (_e) {
             // If parsing fails, return the raw snapshot string
-            console.warn(`Failed to parse snapshot for workflow ${w!.workflow_name}: ${e}`);
+            console.warn(`Failed to parse snapshot for workflow ${w!.workflow_name}:`);
           }
         }
         return {

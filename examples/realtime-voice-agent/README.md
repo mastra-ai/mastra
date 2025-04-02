@@ -8,4 +8,4 @@ Source code: [Realtime-Voice-Agent](https://github.com/mastra-ai/Realtime-Voice-
 
 Blog Post: [Giving Agents a Voice](https://mastra.ai/blog/giving-agents-a-voice)
 
-Docs: [Adding Voice to Agents](https://mastra.ai/docs/agents/03-adding-voice)
+Docs: [Adding Voice to Agents](https://mastra.ai/docs/agents/adding-voice)
