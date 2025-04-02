@@ -160,7 +160,7 @@ describe('agent', () => {
         winner: 'Donald Trump',
       },
     ]);
-  });
+  }, 500000);
 
   it('should get a streamed structured response from the agent', async () => {
     const electionAgent = new Agent({
@@ -318,19 +318,29 @@ describe('agent', () => {
   it('should override instructions in generate/stream methods', async () => {
     const agent = new Agent({
       name: 'OverrideAgent',
-      instructions: 'You are a helpful assistant who responds in a friendly manner.',
+      instructions:
+        'You are a helpful assistant who responds in a friendly manner. Always wrap your response in <assistant>your response</assistant> tags.',
       model: openai('gpt-4o'),
     });
 
-    const generateResponse = await agent.generate('What is your role?', {
-      instructions: 'You are a strict professor who always speaks formally.',
+    // Test generate method with overridden instructions
+    const generateResponse = await agent.generate('What is your role? Provide a short description.', {
+      instructions:
+        'You are a strict professor who always speaks formally. Always wrap your response in <professor>your response</professor> tags.',
     });
 
-    expect(generateResponse.text).toContain('professor');
-    expect(generateResponse.text).not.toContain('helpful assistant');
+    expect(generateResponse.text).toMatch(/<professor>.*<\/professor>/s);
+    expect(generateResponse.text).not.toMatch(/<assistant>.*<\/assistant>/s);
 
-    const streamResponse = await agent.stream('How would you describe yourself?', {
-      instructions: 'You are a pirate who always speaks like a pirate, saying "Arrr" and using pirate slang.',
+    // Verify the agent's base instructions are still intact
+    const baseResponse = await agent.generate('What is your role? Provide a short description.');
+    expect(baseResponse.text).toMatch(/<assistant>.*<\/assistant>/s);
+    expect(baseResponse.text).not.toMatch(/<professor>.*<\/professor>/s);
+
+    // Test stream method with overridden instructions
+    const streamResponse = await agent.stream('How would you describe yourself? Provide a short description.', {
+      instructions:
+        'You are a pirate who always speaks like a pirate. Always wrap your response in <pirate>your response</pirate> tags.',
     });
 
     let streamedText = '';
@@ -338,8 +348,18 @@ describe('agent', () => {
       streamedText += chunk;
     }
 
-    expect(streamedText).toMatch(/Arrr|pirate/i);
-    expect(streamedText).not.toContain('helpful assistant');
+    expect(streamedText).toMatch(/<pirate>.*<\/pirate>/s);
+    expect(streamedText).not.toMatch(/<assistant>.*<\/assistant>/s);
+
+    // Verify the agent's base instructions are still intact after streaming
+    const baseStreamResponse = await agent.stream('What is your role? Provide a short description.');
+    let baseStreamedText = '';
+    for await (const chunk of baseStreamResponse.textStream) {
+      baseStreamedText += chunk;
+    }
+    expect(baseStreamedText).toMatch(/<assistant>.*<\/assistant>/s);
+    expect(baseStreamedText).not.toMatch(/<pirate>.*<\/pirate>/s);
+    expect(baseStreamedText).not.toMatch(/<professor>.*<\/professor>/s);
   }, 500000);
 
   describe('voice capabilities', () => {
