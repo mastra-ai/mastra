@@ -1,36 +1,36 @@
 ---
-title: "Agent Dependencies | Agent Documentation | Mastra"
-description: Learn how to use Mastra's dependency injection system to provide runtime configuration to agents and tools in a type-safe manner.
+title: "Agent Variables | Agent Documentation | Mastra"
+description: Learn how to use Mastra's variable injection system to provide runtime configuration to agents and tools in a type-safe manner.
 ---
 
-# Agent Dependencies
+# Agent Variables
 
-Mastra's Agent class supports a powerful dependency injection system that allows you to securely pass runtime configuration to tools in a type-safe manner. With strong type safety through Zod schemas, you can ensure your agents have everything they need at runtime.
+Mastra's Agent class supports a powerful variable injection system that allows you to securely pass runtime configuration to tools in a type-safe manner. With strong type safety through Zod schemas, you can ensure your agents have everything they need at runtime.
 
 ## Overview
 
-The dependency system allows you to:
+The variables system allows you to:
 
-1. Define a schema for dependencies using Zod
-2. Pass dependencies to the agent at runtime
-3. Access those dependencies in tools
+1. Define a schema for variables using Zod
+2. Pass variables to the agent at runtime
+3. Access those variables in tools execution context
 
 The type and runtime systems work together to ensure:
 
-- The type system helps you define the correct shape of dependencies, but doesn't strictly enforce their presence
-- Dependencies you provide must match the schema you defined
-- Dependencies are properly passed to tools and are validated against each tool's own schema at runtime
+- The type system helps you define the correct shape of variables
+- Variables you provide must match the schema you defined
+- Tools must use the same variables schema as their agent to ensure compatibility
 
-This approach gives you flexibility while still providing validation where it matters most - when the agent is actually executing.
+This approach provides type safety and validation where it matters most - when the agent is actually executing.
 
 ## Basic Usage
 
-### 1. Define a dependencies schema
+### 1. Define a variables schema
 
 ```typescript
 import { z } from "zod";
 
-export const weatherDepsSchema = z.object({
+export const weatherVarsSchema = z.object({
   apiKey: z.string(),
   userId: z.number(),
   temperatureUnit: z.enum(['celsius', 'fahrenheit']),
@@ -42,24 +42,24 @@ export const weatherDepsSchema = z.object({
 ```typescript
 import { Agent } from "@mastra/core/agent";
 import { openai } from "@ai-sdk/openai";
-import { weatherDepsSchema } from "../schemas/dependencies";
+import { weatherVarsSchema } from "../schemas/variables";
 
 export const weatherAgent = new Agent({
   name: "WeatherAgent",
   instructions: "You are a helpful agent that provides weather information",
   model: openai("gpt-4o"),
-  dependenciesSchema: weatherDepsSchema,
+  variablesSchema: weatherVarsSchema,
 });
 ```
 
-### 3. Provide dependencies when generating responses
+### 3. Provide variables when generating responses
 
 ```typescript
 const agent = mastra.getAgent("weatherAgent");
 
-// TypeScript enforces that the provided dependencies match the schema
+// TypeScript enforces that the provided variables match the schema
 const response = await agent.generate("What's the weather like today?", {
-  dependencies: {
+  variables: {
     apiKey: process.env.WEATHER_API_KEY,
     userId: 123,
     temperatureUnit: 'celsius',
@@ -69,16 +69,16 @@ const response = await agent.generate("What's the weather like today?", {
 console.log(response.text);
 ```
 
-> ⚠️ Validation Errors: If dependencies are missing or incorrect, Mastra throws clear validation errors at runtime.
+> ⚠️ Validation Errors: If variables are missing or incorrect, Mastra throws clear validation errors at runtime.
 
-## Creating Tools with Dependencies
+## Creating Tools with Variables
 
-Tools can access the dependencies:
+Tools can access the variables and must use the same schema as their agent:
 
 ```typescript
 import { createTool } from "@mastra/core/tools";
 import { z } from "zod";
-import { weatherDepsSchema } from "../schemas/dependencies";
+import { weatherVarsSchema } from "../schemas/variables";
 
 export const weatherTool = createTool({
   id: "getWeather",
@@ -86,9 +86,9 @@ export const weatherTool = createTool({
   inputSchema: z.object({
     location: z.string().describe("The location to get weather for"),
   }),
-  dependenciesSchema: weatherDepsSchema, // Same schema as the agent
-  execute: async ({ context, dependencies }) => {
-    const { apiKey, userId, temperatureUnit } = dependencies;
+  variablesSchema: weatherVarsSchema, // Same schema as the agent
+  execute: async ({ context, variables }) => {
+    const { apiKey, userId, temperatureUnit } = variables;
 
     console.log(`User ${userId} requested weather for ${context.location}`);
 
@@ -117,39 +117,39 @@ async function fetchWeather(
 
 ## Type Safety Examples
 
-### With Dependencies Schema
+### With Variables Schema
 
 ```typescript
-// Agent with dependencies schema
-const agentWithDeps = new Agent({
+// Agent with variables schema
+const agentWithVars = new Agent({
   name: "WeatherAgent",
   instructions: "You are an agent that can fetch weather information",
   model: openai("gpt-4o"),
-  dependenciesSchema: weatherDepsSchema,
+  variablesSchema: weatherVarsSchema,
 });
 
-// CORRECT: Providing required dependencies
-await agentWithDeps.generate("What is the weather?", {
-  dependencies: {
+// CORRECT: Providing required variables
+await agentWithVars.generate("What is the weather?", {
+  variables: {
     apiKey: process.env.WEATHER_API_KEY,
     userId: 123,
     temperatureUnit: 'celsius',
   },
 });
 
-// ERROR: Missing required dependencies
-await agentWithDeps.generate("What is the weather?");
-// ⚠️ Will throw: "Dependencies validation failed"
+// ERROR: Missing required variables
+await agentWithVars.generate("What is the weather?");
+// ⚠️ Will throw: "Variables validation failed"
 
-// ERROR: Wrong dependency structure
-await agentWithDeps.generate("What is the weather?", {
-  dependencies: {
+// ERROR: Wrong variable structure
+await agentWithVars.generate("What is the weather?", {
+  variables: {
     key: process.env.WEATHER_API_KEY, // Wrong property name
     id: 123, // Wrong property name
     unit: 'celsius', // Wrong property name
   },
 });
-// ⚠️ Will throw: "Dependencies validation failed"
+// ⚠️ Will throw: "Variables validation failed"
 ```
 
 ## Full Example
@@ -163,14 +163,14 @@ import { z } from 'zod';
 
 config();
 
-// Step 1: Define your dependencies schema
-const depsSchema = z.object({
+// Step 1: Define your variables schema
+const varsSchema = z.object({
   weatherApiKey: z.string(),
   temperatureUnit: z.enum(['celsius', 'fahrenheit']),
   userName: z.string().optional(),
 });
 
-type DependenciesType = z.infer<typeof depsSchema>;
+type VariablesType = z.infer<typeof varsSchema>;
 
 // Step 2: Define a function to fetch real weather data using OpenWeatherMap API
 async function fetchWeather(
@@ -217,11 +217,11 @@ const weatherTool = createTool({
   inputSchema: z.object({
     location: z.string().describe('The city or location to get weather for'),
   }),
-  dependenciesSchema: depsSchema,
-  execute: async ({ context, dependencies }) => {
+  variablesSchema: varsSchema,
+  execute: async ({ context, variables }) => {
     return await fetchWeather(context.location, {
-      weatherApiKey: dependencies.weatherApiKey,
-      temperatureUnit: dependencies.temperatureUnit,
+      weatherApiKey: variables.weatherApiKey,
+      temperatureUnit: variables.temperatureUnit,
     });
   },
 });
@@ -231,18 +231,18 @@ const agent = new Agent({
   name: 'WeatherAgent',
   instructions: '', // Start with empty instructions
   model: openai('gpt-4o'),
-  dependenciesSchema: depsSchema,
+  variablesSchema: varsSchema,
   tools: { weatherTool },
 });
 
-// Step 5: Function to build instructions with dependencies
-function buildInstructions(deps: DependenciesType): string {
+// Step 5: Function to build instructions with variables
+function buildInstructions(vars: VariablesType): string {
   return `You are an agent that can fetch weather information.
-  If the user's name is provided (${deps.userName}), greet them by name.
-  Always display temperatures in ${deps.temperatureUnit}.`;
+  If the user's name is provided (${vars.userName}), greet them by name.
+  Always display temperatures in ${vars.temperatureUnit}.`;
 }
 
-// Step 6: Run the agent with provided dependencies and runtime instructions
+// Step 6: Run the agent with provided variables and runtime instructions
 async function main() {
   const apiKey = process.env.WEATHER_API_KEY;
   if (!apiKey) {
@@ -253,8 +253,8 @@ async function main() {
 
   try {
     const result = await agent.generate('What is the weather in San Francisco?', {
-      instructions: buildInstructions(dependencies),
-      dependencies: {
+      instructions: buildInstructions(variables),
+      variables: {
         weatherApiKey: apiKey,
         temperatureUnit: 'fahrenheit' as const,
         userName: 'John',
@@ -278,7 +278,7 @@ Hello John! The current weather in San Francisco is 45.9°F with a few clouds an
 
 ## Override Instructions at Runtime
 
-While dependencies are primarily used for tools, you can also provide custom instructions at runtime:
+While variables are primarily used for tools, you can also provide custom instructions at runtime:
 
 ```typescript
 const agent = mastra.getAgent("weatherAgent");
@@ -286,7 +286,7 @@ const agent = mastra.getAgent("weatherAgent");
 // Override instructions when generating a response
 const response = await agent.generate("What's the weather like today?", {
   instructions: "You are a pirate weather forecaster. Always speak like a pirate when giving weather information.",
-  dependencies: {
+  variables: {
     apiKey: process.env.WEATHER_API_KEY,
     userId: 123,
     temperatureUnit: 'celsius',
@@ -300,29 +300,29 @@ console.log(response.text); // Outputs a pirate-themed weather forecast
 
 ### Behavior Without a Schema
 
-If you create an agent without a dependencies schema:
+If you create an agent without a variables schema:
 
 ```typescript
 const agent = new Agent({
   name: "SimpleAgent",
   instructions: "You are a simple agent",
   model: openai("gpt-4o"),
-  // No dependenciesSchema defined
+  // No variablesSchema defined
 });
 ```
 
 At runtime:
 
-1. If you pass dependencies, they will be passed through to tools
+1. If you pass variables, they will be passed through to tools
 2. No validation is performed when no schema is defined
-3. If you don't pass dependencies or pass undefined/null, an empty object `{}` will be provided instead
+3. If you don't pass variables or pass undefined/null, an empty object `{}` will be provided instead
 
 However, at the compile-time level:
 
 ```typescript
 // This is allowed when no schema is defined
 await agent.generate("Tell me a joke", {
-  dependencies: {
+  variables: {
     someValue: "some-data", // Works in runtime but may not be type-safe
   },
 });
@@ -330,13 +330,13 @@ await agent.generate("Tell me a joke", {
 // TypeScript WILL produce errors when you try to use tools that expect a specific schema
 const toolWithSchema = createTool({
   id: "toolWithSchema",
-  dependenciesSchema: z.object({
+  variablesSchema: z.object({
     apiKey: z.string(),
   }),
   // ... other properties
 });
 
-// This causes TypeScript errors even though runtime works
+// This causes TypeScript errors
 const agentWithoutSchema = new Agent({
   name: "NoSchemaAgent",
   tools: {
@@ -346,46 +346,29 @@ const agentWithoutSchema = new Agent({
 });
 ```
 
-### Tools with Different Dependency Schemas
+## Schema Compatibility
 
-At the compile-time level, Mastra enforces that agent and tools have matching dependency schemas. However, there are two runtime nuances:
+Mastra enforces that tools must use the exact same variables schema as their agent. This is enforced at both:
 
-1. **Subset Schemas**: If a tool's schema is a subset of the agent's schema, it will work properly at runtime.
+1. Compile-time by TypeScript
+2. Runtime through schema validation
 
-2. **Incompatible Schemas**: If a tool's schema is completely different from the agent's schema, it will fail at runtime.
-
-For tools with different schemas, you may need to use type casting, but **this approach is not recommended** and should be used with caution:
-
-```typescript
-// This type casting lets TypeScript compile but may fail at runtime
-const agent = new Agent({
-  tools: {
-    differentTool: differentTool as any, // Not recommended
-  },
-  dependenciesSchema: agentDepsSchema,
-});
-```
+This strict requirement ensures complete type safety and prevents runtime errors caused by mismatched schemas.
 
 ## Runtime Validation
 
-Mastra performs runtime validation of dependencies using the Zod schema:
-
-1. Agent-level validation when the agent has a dependencies schema
-2. Tool-level validation when a tool has its own dependencies schema
-3. Custom validation inside tools (e.g., checking value ranges)
+Mastra validates variables at runtime against the agent's schema. While schema mismatches between agent and tool variables are logged as errors, tool execution will still continue with the provided variables.
 
 ## Best Practices
 
-1. **Define clear schemas**: Make your dependency schemas clear and specific.
+1. **Define clear schemas**: Make your variable schemas clear and specific.
 
-2. **Match agent and tool schemas**: Tools should generally use the exact same dependency schema as the agent they'll be registered with. This ensures full type safety and prevents runtime errors.
+2. **Use the same schema everywhere**: Always use the same variables schema for both your agent and all its tools.
 
-3. **Use caution with subset schemas**: While it's technically possible to use subset schemas for tools, this approach is error-prone and requires explicit type casting. Only use this approach when absolutely necessary, and carefully test for runtime errors.
+3. **Avoid type casting**: Never use type casting (especially `as any`) to bypass TypeScript's type checks as this will likely lead to runtime errors.
 
-4. **Avoid type casting when possible**: Type casting (especially using `as any`) bypasses TypeScript's safety checks and can lead to runtime errors. When a tool truly needs different dependencies, consider creating a wrapper that properly maps agent dependencies to tool dependencies.
+4. **Test error cases**: Ensure your code handles validation failures gracefully.
 
-5. **Test error cases**: Ensure your code handles validation failures gracefully.
+5. **Document variables**: Clearly document what each variable is for and which tools require them.
 
-6. **Document dependencies**: Clearly document what each dependency is for and which tools require which dependencies.
-
-7. **Use consistent naming**: Use consistent naming conventions across your application to avoid confusion when dependencies are passed between components.
+6. **Use consistent naming**: Use consistent naming conventions across your application to avoid confusion when variables are passed between components.
