@@ -123,18 +123,29 @@ While this approach still works, the newer `until` and `while` methods provide a
 
 ### Using `until` for Condition-Based Loops
 
-The `until` method repeats a step until a specified condition becomes true. It takes two arguments:
+The `until` method repeats a step until a specified condition becomes true. It takes these arguments:
 1. A condition that determines when to stop looping
 2. The step to repeat
+3. Optional variables to pass to the repeated step
 
 ```typescript
 workflow
   .step(incrementStep)
-  .until(async ({ context }) => {
-    // Stop when the value reaches or exceeds 10
-    const result = context.getStepResult(incrementStep);
-    return (result?.value ?? 0) >= 10;
-  }, incrementStep)
+  .until(
+    async ({ context }) => {
+      // Stop when the value reaches or exceeds 10
+      const result = context.getStepResult(incrementStep);
+      return (result?.value ?? 0) >= 10;
+    },
+    incrementStep,
+    {
+      // Pass variables to the repeated step
+      prevValue: {
+        step: incrementStep,
+        path: 'value'
+      }
+    }
+  )
   .then(finalStep);
 ```
 
@@ -158,15 +169,26 @@ workflow
 The `while` method repeats a step as long as a specified condition remains true. It takes the same arguments as `until`:
 1. A condition that determines when to continue looping
 2. The step to repeat
+3. Optional variables to pass to the repeated step
 
 ```typescript
 workflow
   .step(incrementStep)
-  .while(async ({ context }) => {
-    // Continue as long as the value is less than 10
-    const result = context.getStepResult(incrementStep);
-    return (result?.value ?? 0) < 10;
-  }, incrementStep)
+  .while(
+    async ({ context }) => {
+      // Continue as long as the value is less than 10
+      const result = context.getStepResult(incrementStep);
+      return (result?.value ?? 0) < 10;
+    },
+    incrementStep,
+    {
+      // Pass variables to the repeated step
+      prevValue: {
+        step: incrementStep,
+        path: 'value'
+      }
+    }
+  )
   .then(finalStep);
 ```
 
