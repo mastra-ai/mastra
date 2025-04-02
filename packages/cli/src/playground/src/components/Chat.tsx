@@ -187,7 +187,7 @@ export function Chat({ agentId, initialMessages = [], agentName, threadId, memor
             <span className="text-xs text-gray-300/60">
               Agent will not remember previous messages. To enable memory for agent see{' '}
               <a
-                href="https://mastra.ai/docs/agents/01-agent-memory"
+                href="https://mastra.ai/docs/agents/agent-memory"
                 target="_blank"
                 rel="noopener"
                 className="text-gray-300/60 hover:text-gray-100 underline"
