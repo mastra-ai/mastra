@@ -181,7 +181,7 @@ export default registrationWorkflow;
 3. Execute the workflow:
 
 ```bash
-curl --location 'http://localhost:4111/api/workflows/user-registration/execute' \
+curl --location 'http://localhost:4111/api/workflows/user-registration/start-async' \
      --header 'Content-Type: application/json' \
      --data '{
        "email": "user@example.com",
