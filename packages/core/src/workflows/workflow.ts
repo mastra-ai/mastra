@@ -149,6 +149,7 @@ export class Workflow<
       Steps
     >,
   ): WorkflowBuilder<this> {
+    const that = this;
     if (Array.isArray(next)) {
       const nextSteps: StepAction<string, any, any, any>[] = next.map(step => {
         if (isWorkflow(step)) {
@@ -164,7 +165,7 @@ export class Workflow<
       this.after(nextSteps);
       this.step(
         new Step({
-          id: `__after_${next.map(step => step?.id ?? step?.name).join('_')}`,
+          id: `__after_${next.map(step => config?.id ?? step?.id ?? step?.name).join('_')}`,
           execute: async () => {
             return { success: true };
           },
@@ -192,7 +193,7 @@ export class Workflow<
           agentToStep(next, { mastra: this.#mastra })
         : (next as StepAction<string, any, any, any>);
 
-    const stepKey = this.#makeStepKey(step);
+    const stepKey = this.#makeStepKey(step, config);
     const when = config?.['#internal']?.when || config?.when;
 
     const graphEntry: StepNode = {
@@ -205,6 +206,9 @@ export class Workflow<
         serializedWhen: typeof when === 'function' ? when.toString() : when,
         data: requiredData,
       },
+      get id() {
+        return that.#makeStepKey(this.step, this.config);
+      },
     };
 
     this.#steps[stepKey] = step;
@@ -216,7 +220,7 @@ export class Workflow<
     // if we are in an after chain and we have a stepGraph
     if (parentStepKey && stepGraph) {
       // if the stepGraph has an initial, but it doesn't contain the current step, add it to the initial
-      if (!stepGraph.initial.some(step => step.step.id === stepKey)) {
+      if (!stepGraph.initial.some(step => step.config.id === stepKey || step.step.id === stepKey)) {
         stepGraph.initial.push(graphEntry);
         if (serializedStepGraph) serializedStepGraph.initial.push(graphEntry);
       }
@@ -274,6 +278,7 @@ export class Workflow<
     >,
     internalUse?: boolean,
   ): WorkflowBuilder<this> {
+    const that = this;
     if (Array.isArray(next)) {
       const nextSteps: StepAction<string, any, any, any>[] = next.map(step => {
         if (isWorkflow(step)) {
@@ -314,7 +319,7 @@ export class Workflow<
         workflowToStep(next, { mastra: this.#mastra })
       : (next as StepAction<string, any, any, any>);
 
-    const stepKey = this.#makeStepKey(step);
+    const stepKey = this.#makeStepKey(step, config);
     const when = config?.['#internal']?.when || config?.when;
 
     const graphEntry: StepNode = {
@@ -326,6 +331,9 @@ export class Workflow<
         loopType: config?.['#internal']?.loopType,
         serializedWhen: typeof when === 'function' ? when.toString() : when,
         data: requiredData,
+      },
+      get id() {
+        return that.#makeStepKey(this.step, this.config);
       },
     };
 
@@ -356,10 +364,10 @@ export class Workflow<
     return this as WorkflowBuilder<this>;
   }
 
-  #makeStepKey(step: Step<any, any, any> | Workflow<any, any>) {
-    // return `${step.id}${this.#delimiter}${Object.keys(this.steps2).length}`;
+  #makeStepKey(step: Step<any, any, any> | string | Workflow<any, any>, config?: StepConfig<any, any, any, any, any>) {
+    if (typeof step === 'string') return step;
     // @ts-ignore
-    return `${step.id ?? step.name}`;
+    return `${config?.id ?? step.id ?? step.name}`;
   }
 
   then<
@@ -388,6 +396,7 @@ export class Workflow<
     CondStep extends StepVariableType<any, any, any, any>,
     VarStep extends StepVariableType<any, any, any, any>,
   >(next: TStep | TStep[], config?: StepConfig<StepAction<string, any, any, any>, CondStep, VarStep, TTriggerSchema>) {
+    const that = this;
     if (Array.isArray(next)) {
       const lastStep = this.#steps[this.#lastStepStack[this.#lastStepStack.length - 1] ?? ''];
       if (!lastStep) {
@@ -442,7 +451,7 @@ export class Workflow<
         ? agentToStep(next)
         : (next as StepAction<string, any, any, any>);
 
-    const stepKey = this.#makeStepKey(step);
+    const stepKey = this.#makeStepKey(step, config);
     const when = config?.['#internal']?.when || config?.when;
 
     const graphEntry: StepNode = {
@@ -454,6 +463,9 @@ export class Workflow<
         loopType: config?.['#internal']?.loopType,
         serializedWhen: typeof when === 'function' ? when.toString() : when,
         data: requiredData,
+      },
+      get id() {
+        return that.#makeStepKey(this.step, this.config);
       },
     };
 
@@ -565,10 +577,11 @@ export class Workflow<
         return { success: true };
       },
     };
-    this.#steps[checkStepKey] = checkStep;
+    this.#steps[loopFinishedStepKey] = loopFinishedStep;
 
     // First add the check step after the last step
     this.then(checkStep, {
+      id: checkStepKey,
       '#internal': {
         loopLabel: `${fallbackStepKey} ${loopType} loop check`,
       },
@@ -592,11 +605,13 @@ export class Workflow<
         loopType: loopType!,
       },
     }).then(checkStep, {
+      id: checkStepKey,
       '#internal': {
         loopLabel: `${fallbackStepKey} ${loopType} loop check`,
       },
     });
     this.#__internalStep<typeof loopFinishedStep, any, any, [typeof checkStep]>(loopFinishedStep, {
+      id: loopFinishedStepKey,
       when: async ({ context }) => {
         const checkStepResult = context.steps?.[checkStepKey];
         if (checkStepResult?.status !== 'success') {
@@ -620,7 +635,10 @@ export class Workflow<
     FallbackStep extends StepAction<string, any, any, any>,
     CondStep extends StepVariableType<any, any, any, any>,
     VarStep extends StepVariableType<any, any, any, any>,
-  >(condition: StepConfig<FallbackStep, CondStep, VarStep, TTriggerSchema>['when'], fallbackStep: FallbackStep) {
+  >(
+    condition: StepConfig<FallbackStep, CondStep, VarStep, TTriggerSchema, TSteps>['when'],
+    fallbackStep: FallbackStep,
+  ) {
     const applyOperator = (operator: string, value: any, target: any) => {
       switch (operator) {
         case '$eq':
@@ -700,6 +718,7 @@ export class Workflow<
       const _ifStep = isWorkflow(ifStep) ? workflowToStep(ifStep, { mastra: this.#mastra }) : (ifStep as TStep);
 
       this.step(_ifStep, {
+        id: _ifStep.id,
         when: condition,
       });
 
@@ -708,6 +727,7 @@ export class Workflow<
           ? workflowToStep(elseStep, { mastra: this.#mastra })
           : (elseStep as TStep);
         this.step(_elseStep, {
+          id: _elseStep.id,
           when:
             typeof condition === 'function'
               ? async payload => {
@@ -744,6 +764,7 @@ export class Workflow<
         },
       },
       {
+        id: ifStepKey,
         when: condition,
       },
     );
@@ -769,6 +790,7 @@ export class Workflow<
         },
       },
       {
+        id: activeCondition.elseStepKey,
         when:
           typeof activeCondition.condition === 'function'
             ? async payload => {
@@ -785,7 +807,7 @@ export class Workflow<
   }
 
   after<TStep extends StepAction<string, any, any, any>>(
-    steps: TStep | TStep[],
+    steps: string | TStep | TStep[] | (TStep | string)[],
   ): Omit<WorkflowBuilder<this>, 'then' | 'after'>;
   after<TWorkflow extends Workflow<any, any, any, any>>(
     steps: TWorkflow | TWorkflow[],
