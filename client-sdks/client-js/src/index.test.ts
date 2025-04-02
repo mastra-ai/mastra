@@ -635,7 +635,7 @@ describe('MastraClient Resources', () => {
       const result = await workflow.startAsync({ triggerData: { test: 'test' } });
       expect(result).toEqual(mockResponse);
       expect(global.fetch).toHaveBeenCalledWith(
-        `${clientOptions.baseUrl}/api/workflows/test-workflow/startAsync?`,
+        `${clientOptions.baseUrl}/api/workflows/test-workflow/start-async?`,
         expect.objectContaining({
           method: 'POST',
           headers: expect.objectContaining(clientOptions.headers),

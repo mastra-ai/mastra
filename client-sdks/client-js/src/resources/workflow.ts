@@ -98,7 +98,7 @@ export class Workflow extends BaseResource {
       searchParams.set('runId', params.runId);
     }
 
-    return this.request(`/api/workflows/${this.workflowId}/startAsync?${searchParams.toString()}`, {
+    return this.request(`/api/workflows/${this.workflowId}/start-async?${searchParams.toString()}`, {
       method: 'POST',
       body: params?.triggerData,
     });
@@ -110,7 +110,7 @@ export class Workflow extends BaseResource {
    * @returns Promise containing the workflow resume results
    */
   resumeAsync(params: { runId: string; stepId: string; context: Record<string, any> }): Promise<WorkflowRunResult> {
-    return this.request(`/api/workflows/${this.workflowId}/resumeAsync?runId=${params.runId}`, {
+    return this.request(`/api/workflows/${this.workflowId}/resume-async?runId=${params.runId}`, {
       method: 'POST',
       body: {
         stepId: params.stepId,
