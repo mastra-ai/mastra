@@ -119,7 +119,7 @@ voice.speak('Hello, how can I help you today?', {
 ```
 
 **Notes:**
-- Emits 'speaking' events rather than returning an audio stream
+- Emits 'speaker' event rather than returning an audio stream
 
 ### listen(audioInput, options?)
 
@@ -241,13 +241,13 @@ voice.close();
 Registers an event listener for voice events.
 
 **Parameters:**
-- `event`: Event name ('speaking', 'writing', or 'error')
+- `event`: Event name ('speaker', 'writing', or 'error')
 - `callback`: Function to call when the event occurs
 
 **Usage:**
 ```typescript
-voice.on('speaking', ({ audio }) => {
-  playAudio(audio);
+voice.on('speaker', (stream) => {
+  stream.pipe(speaker)
 });
 ```
 
@@ -268,16 +268,16 @@ voice.off('speaking', callbackFunction);
 
 The `OpenAIRealtimeVoice` class emits the following events:
 
-### speaking
+### speaker
 
 Emitted when audio data is received from the model.
 
 **Event payload:**
-- `audio`: A chunk of audio data as a readable stream
+- `stream`: A stream of audio data as a readable stream
 
 ```typescript
-agent.voice.on('speaking', ({ audio }) => {
-  playAudio(audio); // Handle audio chunks as they're generated
+agent.voice.on('speaker', (stream) => {
+  stream.pipe(speaker)
 });
 ```
 
