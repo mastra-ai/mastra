@@ -37,7 +37,7 @@ const meta = {
     title: "Voice",
   },
   integrations: "Integrations",
-  faq: "FAQ",
+  community: "Community",
   reference: "Reference",
 };
 

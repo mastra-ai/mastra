@@ -27,13 +27,14 @@ Evals need to be added to an agent. Here's an example using the summarization, c
 ```typescript copy showLineNumbers filename="src/mastra/agents/index.ts"
 import { Agent } from "@mastra/core/agent";
 import { openai } from "@ai-sdk/openai";
-import { 
-  SummarizationMetric,
-} from "@mastra/evals/llm";
-import { ContentSimilarityMetric, ToneConsistencyMetric } from "@mastra/evals/nlp";
+import { SummarizationMetric } from "@mastra/evals/llm";
+import {
+  ContentSimilarityMetric,
+  ToneConsistencyMetric,
+} from "@mastra/evals/nlp";
 
 const model = openai("gpt-4o");
- 
+
 export const myAgent = new Agent({
   name: "ContentWriter",
   instructions: "You are a content writer that creates accurate summaries",
@@ -41,8 +42,8 @@ export const myAgent = new Agent({
   evals: {
     summarization: new SummarizationMetric(model),
     contentSimilarity: new ContentSimilarityMetric(),
-    tone: new ToneConsistencyMetric()
-  }
+    tone: new ToneConsistencyMetric(),
+  },
 });
 ```
 
@@ -61,21 +62,27 @@ While automated evals are valuable, high-performing AI teams often combine them 
 Each eval metric measures a specific aspect of your agent's output. Here's how to interpret and improve your results:
 
 ### Understanding Scores
+
 For any metric:
+
 1. Check the metric documentation to understand the scoring process
 2. Look for patterns in when scores change
 3. Compare scores across different inputs and contexts
 4. Track changes over time to spot trends
 
 ### Improving Results
+
 When scores aren't meeting your targets:
+
 1. Check your instructions - Are they clear? Try making them more specific
 2. Look at your context - Is it giving the agent what it needs?
 3. Simplify your prompts - Break complex tasks into smaller steps
 4. Add guardrails - Include specific rules for tricky cases
 
 ### Maintaining Quality
+
 Once you're hitting your targets:
+
 1. Monitor stability - Do scores remain consistent?
 2. Document what works - Keep notes on successful approaches
 3. Test edge cases - Add examples that cover unusual scenarios

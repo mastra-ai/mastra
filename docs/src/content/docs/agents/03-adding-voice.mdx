@@ -117,21 +117,22 @@ import { search, calculate } from "../tools";
 const voice = new OpenAIRealtimeVoice({
   chatModel: {
     apiKey: process.env.OPENAI_API_KEY,
-    model: 'gpt-4o-mini-realtime',
+    model: "gpt-4o-mini-realtime",
   },
-  speaker: 'alloy'
+  speaker: "alloy",
 });
 
 // Create an agent with speech-to-speech voice capabilities
 export const agent = new Agent({
-  name: 'Agent',
+  name: "Agent",
   instructions: `You are a helpful assistant with speech-to-speech capabilities.`,
-  model: openai('gpt-4o'),
-  tools: { // Tools configured on Agent are passed to voice provider
+  model: openai("gpt-4o"),
+  tools: {
+    // Tools configured on Agent are passed to voice provider
     search,
-    calculate
+    calculate,
   },
-  voice
+  voice,
 });
 
 // Establish a WebSocket connection
@@ -154,17 +155,17 @@ The realtime voice provider emits several events you can listen for:
 
 ```typescript
 // Listen for speech audio data sent from voice provider
-agent.voice.on('speaking', ({ audio }) => {
+agent.voice.on("speaking", ({ audio }) => {
   // audio contains ReadableStream or Int16Array audio data
 });
 
 // Listen for transcribed text sent from both voice provider and user
-agent.voice.on('writing', ({ text, role }) => {
+agent.voice.on("writing", ({ text, role }) => {
   console.log(`${role} said: ${text}`);
 });
 
 // Listen for errors
-agent.voice.on('error', (error) => {
-  console.error('Voice error:', error);
+agent.voice.on("error", (error) => {
+  console.error("Voice error:", error);
 });
 ```

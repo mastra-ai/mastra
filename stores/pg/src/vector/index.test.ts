@@ -229,7 +229,10 @@ describe('PgVector', () => {
 
       it('should throw error if vector dimensions dont match', async () => {
         const vectors = [[1, 2, 3, 4]]; // 4D vector for 3D index
-        await expect(vectorDB.upsert({ indexName: testIndexName, vectors })).rejects.toThrow();
+        await expect(vectorDB.upsert({ indexName: testIndexName, vectors })).rejects.toThrow(
+          `Vector dimension mismatch: Index "${testIndexName}" expects 3 dimensions but got 4 dimensions. ` +
+            `Either use a matching embedding model or delete and recreate the index with the new dimension.`,
+        );
       });
     });
 
@@ -307,7 +310,7 @@ describe('PgVector', () => {
         expect(ids).toHaveLength(3);
 
         const idToBeUpdated = ids[0];
-        const newVector = [1, 2, 3];
+        const newVector = [4, 4, 4];
 
         const update = {
           vector: newVector,

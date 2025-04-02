@@ -175,6 +175,16 @@ export class LibSQLVector extends MastraVector {
       return vectorIds;
     } catch (error) {
       await tx.rollback();
+      if (error instanceof Error && error.message?.includes('dimensions are different')) {
+        const match = error.message.match(/dimensions are different: (\d+) != (\d+)/);
+        if (match) {
+          const [, actual, expected] = match;
+          throw new Error(
+            `Vector dimension mismatch: Index "${indexName}" expects ${expected} dimensions but got ${actual} dimensions. ` +
+              `Either use a matching embedding model or delete and recreate the index with the new dimension.`,
+          );
+        }
+      }
       throw error;
     }
   }

@@ -31,7 +31,7 @@ Here's how you define a workflow in Mastra. The `name` field determines the work
 
 ```ts filename="src/mastra/workflow/index.ts"
 const myWorkflow = new Workflow({
-  name: 'my-workflow',
+  name: "my-workflow",
   triggerSchema: z.object({
     inputValue: z.number(),
   }),
@@ -44,7 +44,7 @@ Now, we'll define the workflow's steps. Each step can have its own input and out
 
 ```ts filename="src/mastra/workflow/index.ts"
 const stepOne = new Step({
-  id: 'stepOne',
+  id: "stepOne",
   outputSchema: z.object({
     doubledValue: z.number(),
   }),
@@ -73,10 +73,7 @@ const stepTwo = new Step({
 Now, let's create the control flow, and "commit" (finalize the workflow). In this case, `stepOne` runs first and is followed by `stepTwo`.
 
 ```ts filename="src/mastra/workflow/index.ts"
-myWorkflow
-  .step(stepOne)
-  .then(stepTwo)
-  .commit();
+myWorkflow.step(stepOne).then(stepTwo).commit();
 ```
 
 ### Register the Workflow
@@ -99,7 +96,7 @@ import { Mastra } from "@mastra/core";
 const mastra = new Mastra();
 
 const myWorkflow = new Workflow({
-  name: 'my-workflow',
+  name: "my-workflow",
   mastra,
 });
 ```
@@ -112,7 +109,7 @@ Execute your workflow programmatically or via API:
 import { mastra } from "./index";
 
 // Get the workflow
-const myWorkflow = mastra.getWorkflow('myWorkflow');
+const myWorkflow = mastra.getWorkflow("myWorkflow");
 const { runId, start } = myWorkflow.createRun();
 
 // Start the workflow execution
@@ -122,7 +119,6 @@ await start({ triggerData: { inputValue: 45 } });
 Or use the API (requires running `mastra dev`):
 
 // Create workflow run
-
 
 ```bash
 curl --location 'http://localhost:4111/api/workflows/myWorkflow/execute' \

@@ -4,11 +4,13 @@ description: "Learn how Mastra leverages the AI SDK library and how you can leve
 ---
 
 # AI SDK
-Mastra leverages AI SDK's model routing (a unified interface on top of OpenAI, Anthropic, etc), structured output, and tool calling. 
+
+Mastra leverages AI SDK's model routing (a unified interface on top of OpenAI, Anthropic, etc), structured output, and tool calling.
 
 We explain this in greater detail in [this blog post](https://mastra.ai/blog/using-ai-sdk-with-mastra)
 
 ## Mastra + AI SDK
+
 Mastra acts as a layer on top of AI SDK to help teams productionize their proof-of-concepts quickly and easily.
 
 <img
@@ -20,7 +22,6 @@ Mastra acts as a layer on top of AI SDK to help teams productionize their proof-
   width={800}
   height={400}
 />
-
 
 ## Model routing
 
@@ -50,20 +51,18 @@ The `useChat` hook enables real-time chat interactions in your frontend applicat
 - Works with agent data streams i.e. `.toDataStreamResponse()`
 - The useChat `api` defaults to `/api/chat`
 - Works with the Mastra REST API agent stream endpoint `{MASTRA_BASE_URL}/agents/:agentId/stream` for data streams,
-i.e. no structured output is defined. 
+  i.e. no structured output is defined.
 
 ```typescript filename="app/api/chat/route.ts" copy
-
-import { mastra } from '@/src/mastra';
+import { mastra } from "@/src/mastra";
 
 export async function POST(req: Request) {
   const { messages } = await req.json();
-  const myAgent = mastra.getAgent('weatherAgent');
+  const myAgent = mastra.getAgent("weatherAgent");
   const stream = await myAgent.stream(messages);
 
   return stream.toDataStreamResponse();
 }
-
 ```
 
 ```typescript copy
@@ -102,20 +101,18 @@ For single-turn completions, use the `useCompletion` hook:
 - Works with agent data streams i.e. `.toDataStreamResponse()`
 - The useCompletion `api` defaults to `/api/completion`
 - Works with the Mastra REST API agent stream endpoint `{MASTRA_BASE_URL}/agents/:agentId/stream` for data streams,
-i.e. no structured output is defined. 
+  i.e. no structured output is defined.
 
 ```typescript filename="app/api/completion/route.ts" copy
-
-import { mastra } from '@/src/mastra';
+import { mastra } from "@/src/mastra";
 
 export async function POST(req: Request) {
   const { messages } = await req.json();
-  const myAgent = mastra.getAgent('weatherAgent');
+  const myAgent = mastra.getAgent("weatherAgent");
   const stream = await myAgent.stream(messages);
 
   return stream.toDataStreamResponse();
 }
-
 ```
 
 ```typescript
@@ -146,9 +143,6 @@ export function CompletionComponent() {
 }
 ```
 
-
-
-
 ### useObject
 
 For consuming text streams that represent JSON objects and parsing them into a complete object based on a schema.
@@ -156,15 +150,14 @@ For consuming text streams that represent JSON objects and parsing them into a c
 - Works with agent text streams i.e. `.toTextStreamResponse()`
 - The useObject `api` defaults to `/api/completion`
 - Works with the Mastra REST API agent stream endpoint `{MASTRA_BASE_URL}/agents/:agentId/stream` for text streams,
-i.e. structured output is defined. 
+  i.e. structured output is defined.
 
 ```typescript filename="app/api/use-object/route.ts" copy
-
-import { mastra } from '@/src/mastra';
+import { mastra } from "@/src/mastra";
 
 export async function POST(req: Request) {
   const { messages } = await req.json();
-  const myAgent = mastra.getAgent('weatherAgent');
+  const myAgent = mastra.getAgent("weatherAgent");
   const stream = await myAgent.stream(messages, {
     output: z.object({
       weather: z.string(),
@@ -199,20 +192,16 @@ export default function Page() {
 
 ### AI SDK Tool Format
 
-Mastra  supports tools created using the AI SDK format, so you can use
+Mastra supports tools created using the AI SDK format, so you can use
 them directly with Mastra agents. See our tools doc on [Vercel AI SDK Tool Format
 ](/docs/agents/02-adding-tools#vercel-ai-sdk-tool-format) for more details.
 
-
 ### Client-side tool calling
 
-Mastra leverages AI SDK's tool calling, so what applies in AI SDK applies here still. 
+Mastra leverages AI SDK's tool calling, so what applies in AI SDK applies here still.
 [Agent Tools](/docs/agents/02-adding-tools) in Mastra are 100% percent compatible with AI SDK tools.
 
 Mastra tools also expose an optional `execute` async function. It is optional because you might want to forward tool calls to the client or to a queue instead of executing them in the same process.
 
 One way to then leverage client-side tool calling is to use the `@ai-sdk/react` `useChat` hook's `onToolCall` property for
 client-side tool execution
-
-
-
