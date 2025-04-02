@@ -1,6 +1,6 @@
 import { randomUUID } from 'crypto';
-import type { WorkflowRunState } from '@mastra/core/workflows';
 import { TABLE_THREADS, TABLE_MESSAGES, TABLE_WORKFLOW_SNAPSHOT } from '@mastra/core/storage';
+import type { WorkflowRunState } from '@mastra/core/workflows';
 import { describe, it, expect, beforeAll, beforeEach, afterAll } from 'vitest';
 
 import { ClickhouseStore } from '.';

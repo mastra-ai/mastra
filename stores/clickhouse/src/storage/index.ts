@@ -1,3 +1,6 @@
+import type { ClickHouseClient } from '@clickhouse/client';
+import { createClient } from '@clickhouse/client';
+import type { MetricResult, TestInfo } from '@mastra/core/eval';
 import type { MessageType, StorageThreadType } from '@mastra/core/memory';
 import {
   MastraStorage,
@@ -8,17 +11,8 @@ import {
   TABLE_TRACES,
   TABLE_WORKFLOW_SNAPSHOT,
 } from '@mastra/core/storage';
-import type {
-  EvalRow,
-  StorageColumn,
-  StorageGetMessagesArg,
-  TABLE_NAMES,
-  WorkflowRow,
-  WorkflowRuns,
-} from '@mastra/core/storage';
+import type { EvalRow, StorageColumn, StorageGetMessagesArg, TABLE_NAMES } from '@mastra/core/storage';
 import type { WorkflowRunState } from '@mastra/core/workflows';
-import { createClient, ClickHouseClient } from '@clickhouse/client';
-import type { MetricResult, TestInfo } from '@mastra/core/eval';
 
 function safelyParseJSON(jsonString: string): any {
   try {
