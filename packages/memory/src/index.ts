@@ -77,16 +77,8 @@ export class Memory extends MastraMemory {
           };
 
     if (config?.semanticRecall && selectBy?.vectorSearchString && this.vector && !!selectBy.vectorSearchString) {
-      const [indexName, embeddings] = await Promise.all([
-        (async () => {
-          const { indexName } = await this.createEmbeddingIndex();
-          return indexName;
-        })(),
-        (async () => {
-          const { embeddings } = await this.embedMessageContent(selectBy.vectorSearchString!);
-          return embeddings;
-        })(),
-      ]);
+      const { embeddings, dimension } = await this.embedMessageContent(selectBy.vectorSearchString!);
+      const { indexName } = await this.createEmbeddingIndex(dimension);
 
       await Promise.all(
         embeddings.map(async embedding => {
@@ -151,7 +143,6 @@ export class Memory extends MastraMemory {
     uiMessages: AiMessageType[];
   }> {
     if (resourceId) await this.validateThreadIsOwnedByResource(threadId, resourceId);
-
     const threadConfig = this.getMergedThreadConfig(config || {});
 
     if (!threadConfig.lastMessages && !threadConfig.semanticRecall) {
@@ -266,6 +257,7 @@ export class Memory extends MastraMemory {
     {
       chunks: string[];
       embeddings: Awaited<ReturnType<typeof embedMany>>['embeddings'];
+      dimension: number | undefined;
     }
   >();
   private async embedMessageContent(content: string) {
@@ -284,6 +276,7 @@ export class Memory extends MastraMemory {
     const result = {
       embeddings,
       chunks,
+      dimension: embeddings[0]?.length,
     };
     this.embeddingCache.set(key, result);
     return result;
@@ -307,18 +300,21 @@ export class Memory extends MastraMemory {
     const result = this.storage.__saveMessages({ messages });
 
     if (this.vector && config.semanticRecall) {
-      const { indexName } = await this.createEmbeddingIndex();
-
+      let indexName: Promise<string>;
       // don't await for perf reasons. we can upsert vectorized messages without blocking the response
       void messages.map(async message => {
         {
           if (typeof message.content !== `string` || message.content === '') return;
 
-          const { embeddings, chunks } = await this.embedMessageContent(message.content);
+          const { embeddings, chunks, dimension } = await this.embedMessageContent(message.content);
           console.log(`Created ${embeddings.length} embeddings for message save`);
 
+          if (typeof indexName === `undefined`) {
+            indexName = this.createEmbeddingIndex(dimension).then(result => result.indexName);
+          }
+
           await this.vector.upsert({
-            indexName,
+            indexName: await indexName,
             vectors: embeddings,
             metadata: chunks.map(() => ({
               message_id: message.id,
