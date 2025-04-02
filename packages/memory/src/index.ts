@@ -307,7 +307,6 @@ export class Memory extends MastraMemory {
           if (typeof message.content !== `string` || message.content === '') return;
 
           const { embeddings, chunks, dimension } = await this.embedMessageContent(message.content);
-          console.log(`Created ${embeddings.length} embeddings for message save`);
 
           if (typeof indexName === `undefined`) {
             indexName = this.createEmbeddingIndex(dimension).then(result => result.indexName);
