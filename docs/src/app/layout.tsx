@@ -12,6 +12,7 @@ import { logo } from "@/components/logo";
 import { GithubStarCount } from "@/components/github-star-count";
 import { Footer } from "@/components/footer";
 import { PostHogProvider } from "@/analytics/posthog-provider";
+import { CookieConsent } from "@/components/cookie-consent";
 
 const navbar = (
   <Navbar
@@ -74,6 +75,7 @@ export default async function RootLayout({
           </Layout>
         </PostHogProvider>
         <Toaster />
+        <CookieConsent />
       </body>
       <Analytics />
     </html>
