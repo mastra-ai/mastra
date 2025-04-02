@@ -77,9 +77,9 @@ Workflows are expected to be exported from `src/mastra/workflows` (or the config
 - **POST `/api/workflows/:workflowName/:instanceId/event`**: Sends an event or trigger signal to an existing workflow instance.
 - **GET `/api/workflows/:workflowName/:instanceId/status`**: Returns status info for a running workflow instance.
 - **POST `/api/workflows/:workflowId/resume`**: Resume a suspended workflow step.
-- **POST `/api/workflows/:workflowId/resumeAsync`**: Resume a suspended workflow step asynchronously.
+- **POST `/api/workflows/:workflowId/resume-async`**: Resume a suspended workflow step asynchronously.
 - **POST `/api/workflows/:workflowId/createRun`**: Create a new workflow run.
-- **POST `/api/workflows/:workflowId/startAsync`**: Execute/Start a workflow asynchronously.
+- **POST `/api/workflows/:workflowId/start-async`**: Execute/Start a workflow asynchronously.
 - **GET `/api/workflows/:workflowId/watch`**: Watch workflow transitions in real-time.
 
 ### Memory Routes
