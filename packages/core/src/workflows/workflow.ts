@@ -756,6 +756,7 @@ export class Workflow<
     return this as WorkflowBuilder<this>;
   }
 
+  after<TStep extends string>(steps: TStep | TStep[]): Omit<WorkflowBuilder<this>, 'then' | 'after'>;
   after<TStep extends StepAction<string, any, any, any>>(
     steps: TStep | TStep[],
   ): Omit<WorkflowBuilder<this>, 'then' | 'after'>;
@@ -766,7 +767,7 @@ export class Workflow<
     steps: TStep | Workflow | (TStep | Workflow)[],
   ): Omit<WorkflowBuilder<this>, 'then' | 'after'> {
     const stepsArray = Array.isArray(steps) ? steps : [steps];
-    const stepKeys = stepsArray.map(step => this.#makeStepKey(step));
+    const stepKeys = stepsArray.map(step => (typeof step === 'string' ? step : this.#makeStepKey(step)));
 
     // Create a compound key for multiple steps
     const compoundKey = stepKeys.join('&&');
