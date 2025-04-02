@@ -5,6 +5,7 @@ const meta = {
     href: "https://mastra.ai/blog",
     newWindow: true,
   },
+  showcase: { title: "Showcase", type: "page" },
   examples: { title: "Examples", type: "page" },
   docs: { title: "Docs", type: "page" },
 };

@@ -1,5 +1,172 @@
 # @mastra/core
 
+## 0.8.0-alpha.2
+
+### Patch Changes
+
+- 56c31b7: Batch insert messages for libsql adapter
+- dbbbf80: Added clickhouse storage
+- 99d43b9: Updated evaluate to include agent output
+
+## 0.8.0-alpha.1
+
+### Minor Changes
+
+- 619c39d: Added support for agents as steps
+
+### Patch Changes
+
+- fe56be0: exclude \_\_primitive, getMemory, hasOwnMemory from traces since they create noisy traces
+- a0967a0: Added new "Memory Processor" feature to @mastra/core and @mastra/memory, allowing devs to modify Mastra Memory before it's sent to the LLM
+- fca3b21: fix server in mastra not to be mandatory
+- 0118361: Add resourceId to memory metadata
+- 619c39d: AgentStep -> Agent as a workflow step (WIP)
+
+## 0.7.1-alpha.0
+
+### Patch Changes
+
+- 107bcfe: Fixed JSON parsing in memory component to prevent crashes when encountering strings that start with '[' or '{' but are not valid JSON
+- 5b4e19f: fix hanging and excessive workflow execution
+- 7599d77: fix(deps): update ai sdk to ^4.2.2
+- cafae83: Changed error messages for vector mismatch with index
+- 8076ecf: Unify workflow watch/start response
+- 304397c: Add support for custom api routes in mastra
+
+## 0.7.0
+
+### Minor Changes
+
+- 1af25d5: Added nested workflows API
+
+### Patch Changes
+
+- b4fbc59: Fixed an issue where sending CoreMessages to AI SDK would result in "Unsupported role: tool" errors
+- a838fde: Update memory.ts
+- a8bd4cf: Fixed JSON Schema generation for null types to prevent duplicate null entries in type arrays
+- 7a3eeb0: Fixed a memory issue when using useChat where new messages were formatted as ui messages, were mixed with stored core messages in memory, and a mixed list was sent to AI SDK, causing it to error
+- 0b54522: AgentNetwork logs
+- b3b34f5: Fix agent generate,stream returnType with experimental_output
+- a4686e8: Realtime event queue
+- 6530ad1: Correct agent onFinish interface
+- 27439ad: Updated the jsonSchemaPropertiesToTSTypes function to properly handle JSON Schema definitions where type can be an array of strings. Previously, the function only handled single string types, but according to the JSON Schema specification, type can be an array of possible types.
+
+## 0.7.0-alpha.3
+
+### Patch Changes
+
+- b3b34f5: Fix agent generate,stream returnType with experimental_output
+- a4686e8: Realtime event queue
+
+## 0.7.0-alpha.2
+
+### Patch Changes
+
+- a838fde: Update memory.ts
+- a8bd4cf: Fixed JSON Schema generation for null types to prevent duplicate null entries in type arrays
+- 7a3eeb0: Fixed a memory issue when using useChat where new messages were formatted as ui messages, were mixed with stored core messages in memory, and a mixed list was sent to AI SDK, causing it to error
+- 6530ad1: Correct agent onFinish interface
+
+## 0.7.0-alpha.1
+
+### Minor Changes
+
+- 1af25d5: Added nested workflows API
+
+### Patch Changes
+
+- 0b54522: AgentNetwork logs
+- 27439ad: Updated the jsonSchemaPropertiesToTSTypes function to properly handle JSON Schema definitions where type can be an array of strings. Previously, the function only handled single string types, but according to the JSON Schema specification, type can be an array of possible types.
+
+## 0.6.5-alpha.0
+
+### Patch Changes
+
+- b4fbc59: Fixed an issue where sending CoreMessages to AI SDK would result in "Unsupported role: tool" errors
+
+## 0.6.4
+
+### Patch Changes
+
+- 6794797: Check for eval values before inserting into storage
+- fb68a80: Inject mastra instance into llm class
+- b56a681: Update README and some tests for vector stores
+- 248cb07: Allow ai-sdk Message type for messages in agent generate and stream
+  Fix sidebar horizontal overflow in playground
+
+## 0.6.4-alpha.1
+
+### Patch Changes
+
+- 6794797: Check for eval values before inserting into storage
+
+## 0.6.4-alpha.0
+
+### Patch Changes
+
+- fb68a80: Inject mastra instance into llm class
+- b56a681: Update README and some tests for vector stores
+- 248cb07: Allow ai-sdk Message type for messages in agent generate and stream
+  Fix sidebar horizontal overflow in playground
+
+## 0.6.3
+
+### Patch Changes
+
+- 404640e: AgentNetwork changeset
+- 3bce733: fix: agent.generate only get thread if there is threadID
+
+## 0.6.3-alpha.1
+
+### Patch Changes
+
+- 3bce733: fix: agent.generate only get thread if there is threadID
+
+## 0.6.3-alpha.0
+
+### Patch Changes
+
+- 404640e: AgentNetwork changeset
+
+## 0.6.2
+
+### Patch Changes
+
+- beaf1c2: createTool type fixes
+- 3084e13: More parallel memory operations
+
+## 0.6.2-alpha.0
+
+### Patch Changes
+
+- beaf1c2: createTool type fixes
+- 3084e13: More parallel memory operations
+
+## 0.6.1
+
+### Patch Changes
+
+- fc2f89c: Insert static payload into inputData
+- dfbb131: Fix after method on multiple passes
+- f4854ee: Fix else branch execution when if-branch has loops
+- afaf73f: Add fix for vercel tools and optional instructions
+- 0850b4c: Watch and resume per run
+- 7bcfaee: Remove node_modules-path dir which calls \_\_dirname at the top level and breaks some esm runtimes
+- 44631b1: Fix after usage with skipped conditions on the awaited steps
+- 9116d70: Handle the different workflow methods in workflow graph
+- 6e559a0: Update Voice for realtime providers
+- 5f43505: feat: OpenAI realtime voice provider for speech to speech communication
+  Update voice speaking event type
+
+## 0.6.1-alpha.2
+
+### Patch Changes
+
+- fc2f89c: Insert static payload into inputData
+- dfbb131: Fix after method on multiple passes
+- 0850b4c: Watch and resume per run
+- 9116d70: Handle the different workflow methods in workflow graph
+
 ## 0.6.1-alpha.1
 
 ### Patch Changes

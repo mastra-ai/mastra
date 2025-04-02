@@ -1,0 +1,38 @@
+---
+title: "Logging | Mastra Observability Documentation"
+description: Documentation on effective logging in Mastra, crucial for understanding application behavior and improving AI accuracy.
+---
+
+import Image from "next/image";
+
+# Logging
+
+In Mastra, logs can detail when certain functions run, what input data they receive, and how they respond.
+
+## Basic Setup
+
+Here's a minimal example that sets up a **console logger** at the `INFO` level. This will print out informational messages and above (i.e., `DEBUG`, `INFO`, `WARN`, `ERROR`) to the console.
+
+```typescript filename="mastra.config.ts" showLineNumbers copy
+import { Mastra } from "@mastra/core";
+import { createLogger } from "@mastra/core/logger";
+
+export const mastra = new Mastra({
+  // Other Mastra configuration...
+  logger: createLogger({
+    name: "Mastra",
+    level: "info",
+  }),
+});
+```
+
+In this configuration:
+
+- `name: "Mastra"` specifies the name to group logs under.
+- `level: "info"` sets the minimum severity of logs to record.
+
+## Configuration
+
+- For more details on the options you can pass to `createLogger()`, see the [createLogger reference documentation](/docs/reference/observability/create-logger.mdx).
+- Once you have a `Logger` instance, you can call its methods (e.g., `.info()`, `.warn()`, `.error()`) in the [Logger instance reference documentation](/docs/reference/observability/logger.mdx).
+- If you want to send your logs to an external service for centralized collection, analysis, or storage, you can configure other logger types such as Upstash Redis. Consult the [createLogger reference documentation](/docs/reference/observability/create-logger.mdx) for details on parameters like `url`, `token`, and `key` when using the `UPSTASH` logger type.

@@ -1,16 +1,18 @@
+import { randomUUID } from 'crypto';
 import { readFile } from 'fs/promises';
 import { join } from 'path';
 import { pathToFileURL } from 'url';
 import { serve } from '@hono/node-server';
 import { serveStatic } from '@hono/node-server/serve-static';
 import { swaggerUI } from '@hono/swagger-ui';
+import { Telemetry } from '@mastra/core';
 import type { Mastra } from '@mastra/core';
 import { Hono } from 'hono';
-import type { Context } from 'hono';
-
+import type { Context, MiddlewareHandler } from 'hono';
 import { bodyLimit } from 'hono/body-limit';
 import { cors } from 'hono/cors';
 import { logger } from 'hono/logger';
+import { timeout } from 'hono/timeout';
 import { describeRoute, openAPISpecs } from 'hono-openapi';
 
 import {
@@ -21,10 +23,10 @@ import {
   getLiveEvalsByAgentIdHandler,
   setAgentInstructionsHandler,
   streamGenerateHandler,
-} from './handlers/agents.js';
-import { handleClientsRefresh, handleTriggerClientsRefresh } from './handlers/client.js';
-import { errorHandler } from './handlers/error.js';
-import { getLogsByRunIdHandler, getLogsHandler, getLogTransports } from './handlers/logs.js';
+} from './handlers/agents';
+import { handleClientsRefresh, handleTriggerClientsRefresh } from './handlers/client';
+import { errorHandler } from './handlers/error';
+import { getLogsByRunIdHandler, getLogsHandler, getLogTransports } from './handlers/logs';
 import {
   createThreadHandler,
   deleteThreadHandler,
@@ -34,27 +36,29 @@ import {
   getThreadsHandler,
   saveMessagesHandler,
   updateThreadHandler,
-} from './handlers/memory.js';
-import { generateSystemPromptHandler } from './handlers/prompt.js';
-import { rootHandler } from './handlers/root.js';
-import { getTelemetryHandler } from './handlers/telemetry.js';
-import { executeAgentToolHandler, executeToolHandler, getToolByIdHandler, getToolsHandler } from './handlers/tools.js';
+} from './handlers/memory';
 import {
-  upsertVectors,
-  createIndex,
-  queryVectors,
-  listIndexes,
-  describeIndex,
-  deleteIndex,
-} from './handlers/vector.js';
-import { getSpeakersHandler, speakHandler, listenHandler } from './handlers/voice.js';
+  getNetworkByIdHandler,
+  getNetworksHandler,
+  generateHandler as generateNetworkHandler,
+  streamGenerateHandler as streamGenerateNetworkHandler,
+} from './handlers/network';
+import { generateSystemPromptHandler } from './handlers/prompt';
+import { rootHandler } from './handlers/root';
+import { getTelemetryHandler, storeTelemetryHandler } from './handlers/telemetry';
+import { executeAgentToolHandler, executeToolHandler, getToolByIdHandler, getToolsHandler } from './handlers/tools';
+import { upsertVectors, createIndex, queryVectors, listIndexes, describeIndex, deleteIndex } from './handlers/vector';
+import { getSpeakersHandler, speakHandler, listenHandler } from './handlers/voice';
 import {
   startWorkflowRunHandler,
-  executeWorkflowHandler,
+  resumeAsyncWorkflowHandler,
+  startAsyncWorkflowHandler,
   getWorkflowByIdHandler,
   getWorkflowsHandler,
   resumeWorkflowHandler,
   watchWorkflowHandler,
+  createRunHandler,
+  getWorkflowRunsHandler,
 } from './handlers/workflows.js';
 import { html } from './welcome.js';
 
@@ -73,6 +77,7 @@ export async function createHonoServer(
 ) {
   // Create typed Hono app
   const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
+  const server = mastra.getServer();
 
   // Initialize tools
   const mastraToolsPaths = process.env.MASTRA_TOOLS_PATH;
@@ -94,10 +99,11 @@ export async function createHonoServer(
   // Middleware
   app.use(
     '*',
+    timeout(server?.timeout ?? 5000),
     cors({
       origin: '*',
       allowMethods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-      allowHeaders: ['Content-Type', 'Authorization'],
+      allowHeaders: ['Content-Type', 'Authorization', 'x-mastra-client-type'],
       exposeHeaders: ['Content-Length', 'X-Requested-With'],
       credentials: false,
       maxAge: 3600,
@@ -124,13 +130,75 @@ export async function createHonoServer(
     c.set('mastra', mastra);
     c.set('tools', tools);
     c.set('playground', options.playground === true);
-    await next();
+
+    const requestId = c.req.header('x-request-id') ?? randomUUID();
+    const span = Telemetry.getActiveSpan();
+    if (span) {
+      span.setAttribute('http.request_id', requestId);
+      span.updateName(`${c.req.method} ${c.req.path}`);
+
+      const newCtx = Telemetry.setBaggage({
+        'http.request_id': requestId,
+      });
+
+      await new Promise(resolve => {
+        Telemetry.withContext(newCtx, async () => {
+          await next();
+          resolve(true);
+        });
+      });
+    } else {
+      await next();
+    }
   });
 
   const bodyLimitOptions = {
     maxSize: 4.5 * 1024 * 1024, // 4.5 MB,
     onError: (c: Context) => c.json({ error: 'Request body too large' }, 413),
   };
+
+  const routes = server?.apiRoutes;
+
+  if (server?.middleware) {
+    const normalizedMiddlewares = Array.isArray(server.middleware) ? server.middleware : [server.middleware];
+    const middlewares = normalizedMiddlewares.map(middleware => {
+      if (typeof middleware === 'function') {
+        return {
+          path: '*',
+          handler: middleware,
+        };
+      }
+
+      return middleware;
+    });
+
+    for (const middleware of middlewares) {
+      app.use(middleware.path, middleware.handler);
+    }
+  }
+
+  if (routes) {
+    for (const route of routes) {
+      const middlewares: MiddlewareHandler[] = [];
+
+      if (route.middleware) {
+        middlewares.push(...(Array.isArray(route.middleware) ? route.middleware : [route.middleware]));
+      }
+      if (route.openapi) {
+        middlewares.push(describeRoute(route.openapi));
+      }
+      console.log({ path: route.path, middlewares });
+      if (route.method === 'GET') {
+        app.get(route.path, ...middlewares, route.handler);
+      } else if (route.method === 'POST') {
+        app.post(route.path, ...middlewares, route.handler);
+      } else if (route.method === 'PUT') {
+        app.put(route.path, ...middlewares, route.handler);
+      } else if (route.method === 'DELETE') {
+        app.delete(route.path, ...middlewares, route.handler);
+      }
+    }
+  }
 
   // API routes
   app.get(
@@ -160,6 +228,144 @@ export async function createHonoServer(
       },
     }),
     getAgentsHandler,
+  );
+
+  // Network routes
+  app.get(
+    '/api/networks',
+    describeRoute({
+      description: 'Get all available networks',
+      tags: ['networks'],
+      responses: {
+        200: {
+          description: 'List of all networks',
+        },
+      },
+    }),
+    getNetworksHandler,
+  );
+
+  app.get(
+    '/api/networks/:networkId',
+    describeRoute({
+      description: 'Get network by ID',
+      tags: ['networks'],
+      parameters: [
+        {
+          name: 'networkId',
+          in: 'path',
+          required: true,
+          schema: { type: 'string' },
+        },
+      ],
+      responses: {
+        200: {
+          description: 'Network details',
+        },
+        404: {
+          description: 'Network not found',
+        },
+      },
+    }),
+    getNetworkByIdHandler,
+  );
+
+  app.post(
+    '/api/networks/:networkId/generate',
+    bodyLimit(bodyLimitOptions),
+    describeRoute({
+      description: 'Generate a response from a network',
+      tags: ['networks'],
+      parameters: [
+        {
+          name: 'networkId',
+          in: 'path',
+          required: true,
+          schema: { type: 'string' },
+        },
+      ],
+      requestBody: {
+        required: true,
+        content: {
+          'application/json': {
+            schema: {
+              type: 'object',
+              properties: {
+                input: {
+                  oneOf: [
+                    { type: 'string' },
+                    {
+                      type: 'array',
+                      items: { type: 'object' },
+                    },
+                  ],
+                  description: 'Input for the network, can be a string or an array of CoreMessage objects',
+                },
+              },
+              required: ['input'],
+            },
+          },
+        },
+      },
+      responses: {
+        200: {
+          description: 'Generated response',
+        },
+        404: {
+          description: 'Network not found',
+        },
+      },
+    }),
+    generateNetworkHandler,
+  );
+
+  app.post(
+    '/api/networks/:networkId/stream',
+    bodyLimit(bodyLimitOptions),
+    describeRoute({
+      description: 'Generate a response from a network',
+      tags: ['networks'],
+      parameters: [
+        {
+          name: 'networkId',
+          in: 'path',
+          required: true,
+          schema: { type: 'string' },
+        },
+      ],
+      requestBody: {
+        required: true,
+        content: {
+          'application/json': {
+            schema: {
+              type: 'object',
+              properties: {
+                input: {
+                  oneOf: [
+                    { type: 'string' },
+                    {
+                      type: 'array',
+                      items: { type: 'object' },
+                    },
+                  ],
+                  description: 'Input for the network, can be a string or an array of CoreMessage objects',
+                },
+              },
+              required: ['input'],
+            },
+          },
+        },
+      },
+      responses: {
+        200: {
+          description: 'Generated response',
+        },
+        404: {
+          description: 'Network not found',
+        },
+      },
+    }),
+    streamGenerateNetworkHandler,
   );
 
   app.get(
@@ -454,6 +660,55 @@ export async function createHonoServer(
 
   app.get(
     '/api/agents/:agentId/speakers',
+    async (c, next) => {
+      c.header('Deprecation', 'true');
+      c.header('Warning', '299 - "This endpoint is deprecated, use /api/agents/:agentId/voice/speakers instead"');
+      c.header('Link', '</api/agents/:agentId/voice/speakers>; rel="successor-version"');
+      return next();
+    },
+    describeRoute({
+      description: '[DEPRECATED] Use /api/agents/:agentId/voice/speakers instead. Get available speakers for an agent',
+      tags: ['agents'],
+      parameters: [
+        {
+          name: 'agentId',
+          in: 'path',
+          required: true,
+          schema: { type: 'string' },
+        },
+      ],
+      responses: {
+        200: {
+          description: 'List of available speakers',
+          content: {
+            'application/json': {
+              schema: {
+                type: 'array',
+                items: {
+                  type: 'object',
+                  description: 'Speaker information depending on the voice provider',
+                  properties: {
+                    voiceId: { type: 'string' },
+                  },
+                  additionalProperties: true,
+                },
+              },
+            },
+          },
+        },
+        400: {
+          description: 'Agent does not have voice capabilities',
+        },
+        404: {
+          description: 'Agent not found',
+        },
+      },
+    }),
+    getSpeakersHandler,
+  );
+
+  app.get(
+    '/api/agents/:agentId/voice/speakers',
     describeRoute({
       description: 'Get available speakers for an agent',
       tags: ['agents'],
@@ -498,8 +753,15 @@ export async function createHonoServer(
   app.post(
     '/api/agents/:agentId/speak',
     bodyLimit(bodyLimitOptions),
+    async (c, next) => {
+      c.header('Deprecation', 'true');
+      c.header('Warning', '299 - "This endpoint is deprecated, use /api/agents/:agentId/voice/speak instead"');
+      c.header('Link', '</api/agents/:agentId/voice/speak>; rel="successor-version"');
+      return next();
+    },
     describeRoute({
-      description: "Convert text to speech using the agent's voice provider",
+      description:
+        "[DEPRECATED] Use /api/agents/:agentId/voice/speak instead. Convert text to speech using the agent's voice provider",
       tags: ['agents'],
       parameters: [
         {
@@ -567,7 +829,147 @@ export async function createHonoServer(
   );
 
   app.post(
+    '/api/agents/:agentId/voice/speak',
+    bodyLimit(bodyLimitOptions),
+    describeRoute({
+      description: "Convert text to speech using the agent's voice provider",
+      tags: ['agents'],
+      parameters: [
+        {
+          name: 'agentId',
+          in: 'path',
+          required: true,
+          schema: { type: 'string' },
+        },
+      ],
+      requestBody: {
+        required: true,
+        content: {
+          'application/json': {
+            schema: {
+              type: 'object',
+              properties: {
+                input: {
+                  type: 'string',
+                  description: 'Text to convert to speech',
+                },
+                options: {
+                  type: 'object',
+                  description: 'Provider-specific options for speech generation',
+                  properties: {
+                    speaker: {
+                      type: 'string',
+                      description: 'Speaker ID to use for speech generation',
+                    },
+                    options: {
+                      type: 'object',
+                      description: 'Provider-specific options for speech generation',
+                      additionalProperties: true,
+                    },
+                  },
+                  additionalProperties: true,
+                },
+              },
+              required: ['text'],
+            },
+          },
+        },
+      },
+      responses: {
+        200: {
+          description: 'Audio stream',
+          content: {
+            'audio/mpeg': {
+              schema: {
+                format: 'binary',
+                description: 'Audio stream containing the generated speech',
+              },
+            },
+            'audio/*': {
+              schema: {
+                format: 'binary',
+                description: 'Audio stream depending on the provider',
+              },
+            },
+          },
+        },
+        400: {
+          description: 'Agent does not have voice capabilities or invalid request',
+        },
+        404: {
+          description: 'Agent not found',
+        },
+      },
+    }),
+    speakHandler,
+  );
+
+  app.post(
     '/api/agents/:agentId/listen',
+    bodyLimit({
+      ...bodyLimitOptions,
+      maxSize: 10 * 1024 * 1024, // 10 MB for audio files
+    }),
+    async (c, next) => {
+      c.header('Deprecation', 'true');
+      c.header('Warning', '299 - "This endpoint is deprecated, use /api/agents/:agentId/voice/listen instead"');
+      c.header('Link', '</api/agents/:agentId/voice/listen>; rel="successor-version"');
+      return next();
+    },
+    describeRoute({
+      description:
+        "[DEPRECATED] Use /api/agents/:agentId/voice/listen instead. Convert speech to text using the agent's voice provider. Additional provider-specific options can be passed as query parameters.",
+      tags: ['agents'],
+      parameters: [
+        {
+          name: 'agentId',
+          in: 'path',
+          required: true,
+          schema: { type: 'string' },
+        },
+      ],
+      requestBody: {
+        required: true,
+        content: {
+          'audio/mpeg': {
+            schema: {
+              format: 'binary',
+              description:
+                'Audio data stream to transcribe (supports various formats depending on provider like mp3, wav, webm, flac)',
+            },
+          },
+        },
+      },
+      responses: {
+        200: {
+          description: 'Transcription result',
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                properties: {
+                  text: {
+                    type: 'string',
+                    description: 'Transcribed text',
+                  },
+                },
+              },
+            },
+          },
+        },
+        400: {
+          description: 'Agent does not have voice capabilities or invalid request',
+        },
+        404: {
+          description: 'Agent not found',
+        },
+      },
+    }),
+    listenHandler,
+  );
+
+  app.post(
+    '/api/agents/:agentId/voice/listen',
     bodyLimit({
       ...bodyLimitOptions,
       maxSize: 10 * 1024 * 1024, // 10 MB for audio files
@@ -587,11 +989,23 @@ export async function createHonoServer(
       requestBody: {
         required: true,
         content: {
-          'audio/mpeg': {
+          'multipart/form-data': {
             schema: {
-              format: 'binary',
-              description:
-                'Audio data stream to transcribe (supports various formats depending on provider like mp3, wav, webm, flac)',
+              type: 'object',
+              required: ['audio'],
+              properties: {
+                audio: {
+                  type: 'string',
+                  format: 'binary',
+                  description:
+                    'Audio data stream to transcribe (supports various formats depending on provider like mp3, wav, webm, flac)',
+                },
+                options: {
+                  type: 'object',
+                  description: 'Provider-specific options for speech-to-text',
+                  additionalProperties: true,
+                },
+              },
             },
           },
         },
@@ -945,6 +1359,20 @@ export async function createHonoServer(
     getTelemetryHandler,
   );
 
+  app.post(
+    '/api/telemetry',
+    describeRoute({
+      description: 'Store telemetry',
+      tags: ['telemetry'],
+      responses: {
+        200: {
+          description: 'Traces stored',
+        },
+      },
+    }),
+    storeTelemetryHandler,
+  );
+
   // Workflow routes
   app.get(
     '/api/workflows',
@@ -985,11 +1413,10 @@ export async function createHonoServer(
     getWorkflowByIdHandler,
   );
 
-  app.post(
-    '/api/workflows/:workflowId/execute',
-    bodyLimit(bodyLimitOptions),
+  app.get(
+    '/api/workflows/:workflowId/runs',
     describeRoute({
-      description: 'Execute/Start a workflow',
+      description: 'Get all runs for a workflow',
       tags: ['workflows'],
       parameters: [
         {
@@ -999,29 +1426,13 @@ export async function createHonoServer(
           schema: { type: 'string' },
         },
       ],
-      requestBody: {
-        required: true,
-        content: {
-          'application/json': {
-            schema: {
-              type: 'object',
-              properties: {
-                input: { type: 'object' },
-              },
-            },
-          },
-        },
-      },
       responses: {
         200: {
-          description: 'Workflow execution result',
-        },
-        404: {
-          description: 'Workflow not found',
+          description: 'List of workflow runs from storage',
         },
       },
     }),
-    executeWorkflowHandler,
+    getWorkflowRunsHandler,
   );
 
   app.post(
@@ -1062,7 +1473,118 @@ export async function createHonoServer(
   );
 
   app.post(
-    '/api/workflows/:workflowId/startRun',
+    '/api/workflows/:workflowId/resumeAsync',
+    bodyLimit(bodyLimitOptions),
+    describeRoute({
+      description: 'Resume a suspended workflow step',
+      tags: ['workflows'],
+      parameters: [
+        {
+          name: 'workflowId',
+          in: 'path',
+          required: true,
+          schema: { type: 'string' },
+        },
+        {
+          name: 'runId',
+          in: 'query',
+          required: true,
+          schema: { type: 'string' },
+        },
+      ],
+      requestBody: {
+        required: true,
+        content: {
+          'application/json': {
+            schema: {
+              type: 'object',
+              properties: {
+                stepId: { type: 'string' },
+                context: { type: 'object' },
+              },
+            },
+          },
+        },
+      },
+    }),
+    resumeAsyncWorkflowHandler,
+  );
+
+  app.post(
+    '/api/workflows/:workflowId/createRun',
+    describeRoute({
+      description: 'Create a new workflow run',
+      tags: ['workflows'],
+      parameters: [
+        {
+          name: 'workflowId',
+          in: 'path',
+          required: true,
+          schema: { type: 'string' },
+        },
+        {
+          name: 'runId',
+          in: 'query',
+          required: false,
+          schema: { type: 'string' },
+        },
+      ],
+      responses: {
+        200: {
+          description: 'New workflow run created',
+        },
+      },
+    }),
+    createRunHandler,
+  );
+
+  app.post(
+    '/api/workflows/:workflowId/startAsync',
+    bodyLimit(bodyLimitOptions),
+    describeRoute({
+      description: 'Execute/Start a workflow',
+      tags: ['workflows'],
+      parameters: [
+        {
+          name: 'workflowId',
+          in: 'path',
+          required: true,
+          schema: { type: 'string' },
+        },
+        {
+          name: 'runId',
+          in: 'query',
+          required: false,
+          schema: { type: 'string' },
+        },
+      ],
+      requestBody: {
+        required: true,
+        content: {
+          'application/json': {
+            schema: {
+              type: 'object',
+              properties: {
+                input: { type: 'object' },
+              },
+            },
+          },
+        },
+      },
+      responses: {
+        200: {
+          description: 'Workflow execution result',
+        },
+        404: {
+          description: 'Workflow not found',
+        },
+      },
+    }),
+    startAsyncWorkflowHandler,
+  );
+
+  app.post(
+    '/api/workflows/:workflowId/start',
     describeRoute({
       description: 'Create and start a new workflow run',
       tags: ['workflows'],
@@ -1073,10 +1595,16 @@ export async function createHonoServer(
           required: true,
           schema: { type: 'string' },
         },
+        {
+          name: 'runId',
+          in: 'query',
+          required: true,
+          schema: { type: 'string' },
+        },
       ],
       responses: {
         200: {
-          description: 'New workflow run created and started',
+          description: 'Workflow run started',
         },
         404: {
           description: 'Workflow not found',
@@ -1554,10 +2082,14 @@ export async function createNodeServer(
   options: { playground?: boolean; swaggerUI?: boolean; apiReqLogs?: boolean } = {},
 ) {
   const app = await createHonoServer(mastra, options);
+  const serverOptions = mastra.getServer();
+
+  const port = serverOptions?.port ?? (Number(process.env.PORT) || 4111);
+
   return serve(
     {
       fetch: app.fetch,
-      port: Number(process.env.PORT) || 4111,
+      port,
     },
     () => {
       const logger = mastra.getLogger();

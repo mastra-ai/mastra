@@ -9,8 +9,8 @@ export * from './index';
 export class Workflow<
   TSteps extends Step<any, any, any>[] = any,
   TTriggerSchema extends z.ZodObject<any> = any,
-> extends BaseWorkflow<TSteps, TTriggerSchema> {
-  constructor(args: WorkflowOptions<TTriggerSchema>) {
+> extends BaseWorkflow<TSteps, string, TTriggerSchema> {
+  constructor(args: WorkflowOptions<string, TSteps, TTriggerSchema>) {
     super(args);
 
     this.logger.warn('Please import "Workflow" from "@mastra/core/workflows" instead of "@mastra/core"');

@@ -7,6 +7,7 @@ import type { Run } from '../run/types';
 // Constants and Types (keeping from original implementation)
 export const RegisteredLogger = {
   AGENT: 'AGENT',
+  NETWORK: 'NETWORK',
   WORKFLOW: 'WORKFLOW',
   LLM: 'LLM',
   TTS: 'TTS',
@@ -97,7 +98,7 @@ export class Logger {
               singleLine: false,
             })
           : pino.multistream([
-              ...transportsAry.map(([_, transport]) => ({
+              ...transportsAry.map(([, transport]) => ({
                 stream: transport,
                 level: options.level || LogLevel.INFO,
               })),

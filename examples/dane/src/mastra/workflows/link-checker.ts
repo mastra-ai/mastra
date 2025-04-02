@@ -33,7 +33,7 @@ const getBrokenLinks = new Step({
     brokenLinks: z.array(linkSchema),
   }),
   execute: async ({ context }) => {
-    const targetUrl = context.targetUrl;
+    const targetUrl = context?.triggerData?.targetUrl;
 
     const res = await exec(`npx linkinator ${targetUrl} --format json`, {
       encoding: 'utf-8',

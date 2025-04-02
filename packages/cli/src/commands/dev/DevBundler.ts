@@ -1,5 +1,5 @@
-import { basename, dirname, join } from 'node:path';
 import { stat } from 'node:fs/promises';
+import { basename, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { FileService } from '@mastra/deployer';
 import { createWatcher, getWatcherInputOptions, writeTelemetryConfig } from '@mastra/deployer/build';
@@ -114,6 +114,8 @@ export class DevBundler extends Bundler {
       }
     }
 
+    const outputDir = join(outputDirectory, this.outputDir);
+    const copyPublic = this.copyPublic.bind(this);
     const watcher = await createWatcher(
       {
         ...inputOptions,
@@ -139,13 +141,22 @@ export class DevBundler extends Bundler {
               }
             },
           },
+          {
+            name: 'public-dir-watcher',
+            buildStart() {
+              this.addWatchFile(join(dirname(entryFile), 'public'));
+            },
+            buildEnd() {
+              return copyPublic(dirname(entryFile), outputDirectory);
+            },
+          },
         ],
         input: {
           index: join(__dirname, 'templates', 'dev.entry.js'),
         },
       },
       {
-        dir: join(outputDirectory, this.outputDir),
+        dir: outputDir,
       },
     );
 

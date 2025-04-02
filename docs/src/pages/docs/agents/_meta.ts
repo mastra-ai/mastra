@@ -1,8 +1,9 @@
 const meta = {
-  "00-overview": "Overview",
-  "01-agent-memory": "Memory",
-  "02-adding-tools": "Tools",
-  "03-adding-voice": "Voice",
+  overview: "Overview",
+  "agent-memory": "Agent Memory",
+  "adding-tools": "Adding Tools",
+  "mcp-guide": "Using MCP",
+  "adding-voice": "Adding Voice",
 };
 
 export default meta;

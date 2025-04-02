@@ -22,14 +22,14 @@ const vectorStore = new ChromaVector({
 });
 
 // Create a new collection
-await vectorStore.createIndex({ indexName: 'my-collection', dimension: 1536, metric: 'cosine' });
+await vectorStore.createIndex({ indexName: 'myCollection', dimension: 1536, metric: 'cosine' });
 
 // Add vectors with documents
 const vectors = [[0.1, 0.2, ...], [0.3, 0.4, ...]];
 const metadata = [{ text: 'doc1' }, { text: 'doc2' }];
 const documents = ['full text 1', 'full text 2'];
 const ids = await vectorStore.upsert({
-  indexName: 'my-collection',
+  indexName: 'myCollection',
   vectors,
   metadata,
   documents, // store original text
@@ -37,7 +37,7 @@ const ids = await vectorStore.upsert({
 
 // Query vectors with document filtering
 const results = await vectorStore.query({
-  indexName: 'my-collection',
+  indexName: 'myCollection',
   queryVector: [0.1, 0.2, ...],
   topK: 10, // topK
   filter: { text: { $eq: 'doc1' } }, // metadata filter

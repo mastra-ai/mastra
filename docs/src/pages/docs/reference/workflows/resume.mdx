@@ -1,16 +1,16 @@
 ---
-title: "Reference: Workflow.resume() | Running Workflows | Mastra Docs"
+title: "Reference: run.resume() | Running Workflows | Mastra Docs"
 description: Documentation for the `.resume()` method in workflows, which continues execution of a suspended workflow step.
 ---
 
-# Workflow.resume()
+# run.resume()
 
-The `.resume()` method continues execution of a suspended workflow step, optionally providing new context data that can be accessed by the step on the resumeData property.
+The `.resume()` method continues execution of a suspended workflow step, optionally providing new context data that can be accessed by the step on the inputData property.
 
 ## Usage
 
 ```typescript copy showLineNumbers
-await workflow.resume({
+await run.resume({
   runId: "abc-123",
   stepId: "stepTwo",
   context: {
@@ -51,7 +51,7 @@ await workflow.resume({
     {
       name: "context",
       type: "Record<string, any>",
-      description: "New context data to merge with existing step results",
+      description: "New context data to inject into the step's inputData property",
       isOptional: true
     }
   ]}
@@ -79,16 +79,16 @@ const reviewStep = new Step({
   id: "review",
   execute: async ({ context, suspend }) => {
     // First part of execution
-    const initialAnalysis = analyzeData(context.data);
+    const initialAnalysis = analyzeData(context.inputData.data);
 
     if (initialAnalysis.needsReview) {
       // Suspend execution here
       await suspend({ analysis: initialAnalysis });
 
       // This code runs after resume() is called
-      // context now contains any data provided during resume
+      // context.inputData now contains any data provided during resume
       return {
-        reviewedData: enhanceWithFeedback(initialAnalysis, context.feedback)
+        reviewedData: enhanceWithFeedback(initialAnalysis, context.inputData.feedback)
       };
     }
 
@@ -96,12 +96,20 @@ const reviewStep = new Step({
   }
 });
 
+const { runId, resume, start } = workflow.createRun();
+
+await start({
+  inputData: {
+    data: "some data"
+  }
+});
+
 // Later, resume the workflow
-const result = await workflow.resume({
+const result = await resume({
   runId: "workflow-123",
   stepId: "review",
   context: {
-    // This data will be available in `context.resumeData`
+    // This data will be available in `context.inputData`
     feedback: "Looks good, but improve section 3"
   }
 });
@@ -111,9 +119,9 @@ const result = await workflow.resume({
 
 1. The workflow runs until it hits `await suspend()` in the `review` step
 2. The workflow state is persisted and execution pauses
-3. Later, `workflow.resume()` is called with new context data
+3. Later, `run.resume()` is called with new context data
 4. Execution continues from the point after `suspend()` in the `review` step
-5. The new context data (`feedback`) is available to the step
+5. The new context data (`feedback`) is available to the step on the `inputData` property
 6. The step completes and returns its result
 7. The workflow continues with subsequent steps
 
@@ -123,7 +131,7 @@ The resume function may throw several types of errors:
 
 ```typescript
 try {
-  await workflow.resume({
+  await run.resume({
     runId,
     stepId: "stepTwo",
     context: newData

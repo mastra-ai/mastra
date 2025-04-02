@@ -34,7 +34,7 @@ const stepTwo = new Step({
   }),
   execute: async ({ context, suspend }) => {
 
-    const secondValue = context.resumeData?.secondValue ?? 0;
+    const secondValue = context.inputData?.secondValue ?? 0;
     const doubledValue = context.getStepResult(stepOne)?.doubledValue ?? 0;
 
     const incrementedValue = doubledValue + secondValue;
@@ -114,15 +114,13 @@ const getUserInput = new Step({
 const promptAgent = new Step({
   id: 'promptAgent',
   inputSchema: z.object({
-    resumeData: z.object({
-      guidance: z.string(),
-    }),
+    guidance: z.string(),
   }),
   execute: async ({ context, suspend }) => {
     const userInput = context.getStepResult(getUserInput)?.userInput;
     console.log(`Generating content based on: ${userInput}`);
 
-    const guidance = context.resumeData?.guidance;
+    const guidance = context.inputData?.guidance;
 
     // Simulate AI generating content
     const initialDraft = generateInitialDraft(userInput);
@@ -174,10 +172,8 @@ const evaluateTone = new Step({
 const improveResponse = new Step({
   id: 'improveResponse',
   inputSchema: z.object({
-    resumeData: z.object({
-      improvedContent: z.string(),
-      resumeAttempts: z.number(),
-    }),
+    improvedContent: z.string(),
+    resumeAttempts: z.number(),
   }),
   execute: async ({ context, suspend }) => {
     const content = context.getStepResult(promptAgent)?.modelOutput;
@@ -186,8 +182,8 @@ const improveResponse = new Step({
     const completenessScore =
       context.getStepResult(evaluateTone)?.completenessScore.score ?? 0;
 
-    const improvedContent = context.resumeData?.improvedContent;
-    const resumeAttempts = context.resumeData?.resumeAttempts ?? 0;
+    const improvedContent = context.inputData.improvedContent;
+    const resumeAttempts = context.inputData.resumeAttempts ?? 0;
 
     // If scores are above threshold, make minor improvements
     if (toneScore > 0.8 && completenessScore > 0.8) {

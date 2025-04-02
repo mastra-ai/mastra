@@ -28,11 +28,21 @@ describe('createVectorQueryTool', () => {
         // Mock vector store methods
       },
     },
+    getVector: vi.fn(() => ({
+      testStore: {
+        // Mock vector store methods
+      },
+    })),
     logger: {
       debug: vi.fn(),
       warn: vi.fn(),
       info: vi.fn(),
     },
+    getLogger: vi.fn(() => ({
+      debug: vi.fn(),
+      warn: vi.fn(),
+      info: vi.fn(),
+    })),
   };
 
   beforeEach(() => {
@@ -78,7 +88,7 @@ describe('createVectorQueryTool', () => {
       // Get the Zod schema
       const schema = tool.__inputSchema;
 
-      // Test various filter inputs that should all work
+      // Test various filter inputs that should coerce to string
       const testCases = [
         // String inputs
         { filter: '{"field": "value"}' },
@@ -86,9 +96,6 @@ describe('createVectorQueryTool', () => {
         { filter: 'simple-string' },
         // Empty
         { filter: '' },
-      ];
-
-      const invalidTestCases = [
         { filter: { field: 'value' } },
         { filter: {} },
         { filter: 123 },
@@ -104,16 +111,6 @@ describe('createVectorQueryTool', () => {
             filter,
           }),
         ).not.toThrow();
-      });
-
-      invalidTestCases.forEach(({ filter }) => {
-        expect(() =>
-          schema.parse({
-            queryText: 'test query',
-            topK: 5,
-            filter,
-          }),
-        ).toThrow();
       });
 
       // Verify that all parsed values are strings
@@ -176,12 +173,12 @@ describe('createVectorQueryTool', () => {
       });
 
       // Execute with no filter
-      await tool.execute({
+      await tool.execute?.({
         context: {
           queryText: 'test query',
           topK: 5,
         },
-        mastra: mockMastra,
+        mastra: mockMastra as any,
       });
 
       // Check that vectorQuerySearch was called with undefined queryFilter
@@ -204,13 +201,13 @@ describe('createVectorQueryTool', () => {
       const filterJson = '{"field": "value"}';
 
       // Execute with filter
-      await tool.execute({
+      await tool.execute?.({
         context: {
           queryText: 'test query',
           topK: 5,
           filter: filterJson,
         },
-        mastra: mockMastra,
+        mastra: mockMastra as any,
       });
 
       // Check that vectorQuerySearch was called with the parsed filter
@@ -233,13 +230,13 @@ describe('createVectorQueryTool', () => {
       const stringFilter = 'string-filter';
 
       // Execute with string filter
-      await tool.execute({
+      await tool.execute?.({
         context: {
           queryText: 'test query',
           topK: 5,
           filter: stringFilter,
         },
-        mastra: mockMastra,
+        mastra: mockMastra as any,
       });
 
       // Since this is not a valid filter, it should be ignored

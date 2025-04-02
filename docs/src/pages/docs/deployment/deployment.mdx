@@ -1,14 +1,13 @@
 ---
-title: "Deployment"
+title: "Serverless Deployment"
 description: "Build and deploy Mastra applications using platform-specific deployers or standard HTTP servers"
 ---
 
-# Deploying Mastra Applications
+# Serverless Deployment
 
-Mastra applications can be deployed in two ways:
+This guide covers deploying Mastra to Cloudflare Workers, Vercel, and Netlify using platform-specific deployers
 
-1. **Direct Platform Deployment**: Using platform-specific deployers for Cloudflare Workers, Vercel, or Netlify
-2. **Universal Deployment**: Using `mastra build` to generate a standard Node.js server that can run anywhere
+For self-hosted Node.js server deployment, see the [Creating A Mastra Server](/docs/deployment/server) guide.
 
 ## Prerequisites
 
@@ -19,7 +18,7 @@ Before you begin, ensure you have:
   - An account with your chosen platform
   - Required API keys or credentials
 
-## Direct Platform Deployment
+## Serverless Platform Deployers
 
 Platform-specific deployers handle configuration and deployment for:
 - **[Cloudflare Workers](/docs/reference/deployer/cloudflare)**
@@ -78,7 +77,7 @@ new CloudflareDeployer({
 
 ```typescript copy showLineNumbers
 new VercelDeployer({
-  teamId: 'your-vercel-team-id',
+  teamSlug: 'your-vercel-team-slug',
   projectName: 'your-project-name',
   token: 'your-vercel-token'
   // For complete configuration options, see the reference documentation
@@ -98,42 +97,6 @@ new NetlifyDeployer({
 ```
 
 [View Netlify Deployer Reference →](/docs/reference/deployer/netlify)
-
-## Universal Deployment
-
-Since Mastra builds to a standard Node.js server, you can deploy to any platform that runs Node.js applications:
-- Cloud VMs (AWS EC2, DigitalOcean Droplets, GCP Compute Engine)
-- Container platforms (Docker, Kubernetes)
-- Platform as a Service (Heroku, Railway)
-- Self-hosted servers
-
-### Building
-
-Build the application:
-
-```bash copy
-# Build from current directory
-mastra build
-
-# Or specify a directory
-mastra build --dir ./my-project
-```
-
-The build process:
-1. Locates entry file (`src/mastra/index.ts` or `src/mastra/index.js`)
-2. Creates `.mastra` output directory
-3. Bundles code using Rollup with tree shaking and source maps
-4. Generates [Hono](https://hono.dev) HTTP server
-
-See [`mastra build`](/docs/reference/cli/build) for all options.
-
-### Running the Server
-
-Start the HTTP server:
-
-```bash copy
-node .mastra/index.js
-```
 
 ## Environment Variables
 

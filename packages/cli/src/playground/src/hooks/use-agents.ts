@@ -1,14 +1,11 @@
 import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
-import { GetAgentResponse, MastraClient } from '@mastra/client-js';
+import { GetAgentResponse } from '@mastra/client-js';
+import { client } from '@/lib/client';
 
 export const useAgents = () => {
   const [agents, setAgents] = useState<Record<string, GetAgentResponse>>({});
   const [isLoading, setIsLoading] = useState(true);
-
-  const client = new MastraClient({
-    baseUrl: '',
-  });
 
   useEffect(() => {
     const fetchAgents = async () => {
@@ -34,10 +31,6 @@ export const useAgents = () => {
 export const useAgent = (agentId: string) => {
   const [agent, setAgent] = useState<GetAgentResponse | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-
-  const client = new MastraClient({
-    baseUrl: '',
-  });
 
   useEffect(() => {
     const fetchAgent = async () => {

@@ -32,11 +32,24 @@ const meta = {
     title: "Deployment",
     collapsed: false,
   },
+  observability: {
+    title: "Observability",
+    collapsed: false,
+  },
   evals: {
     title: "Evals",
     collapsed: false,
   },
-  faq: "FAQ",
+  storage: {
+    title: "Storage",
+    collapsed: false,
+  },
+  voice: {
+    title: "Voice",
+    collapsed: false,
+  },
+  integrations: "Integrations",
+  community: "Community",
   reference: "Reference",
 };
 

@@ -15,11 +15,35 @@ import Tool from './pages/tools/tool';
 import Workflows from './pages/workflows';
 import Workflow from './pages/workflows/workflow';
 import WorkflowTracesPage from './pages/workflows/workflow/traces';
+import Networks from './pages/networks';
+import { NetworkLayout } from './domains/networks/network-layout';
+import Network from './pages/networks/network';
 
 function App() {
   return (
     <BrowserRouter>
       <Routes>
+        <Route
+          element={
+            <Layout>
+              <Outlet />
+            </Layout>
+          }
+        >
+          <Route path="/networks" element={<Networks />} />
+          <Route path="/networks/:networkId" element={<Navigate to="/networks/:networkId/chat" />} />
+          <Route
+            path="/networks/:networkId"
+            element={
+              <NetworkLayout>
+                <Outlet />
+              </NetworkLayout>
+            }
+          >
+            <Route path="chat" element={<Network />} />
+          </Route>
+        </Route>
+
         <Route
           element={
             <Layout>

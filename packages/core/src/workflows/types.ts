@@ -5,10 +5,24 @@ import type { IAction, IExecutionContext, MastraUnion } from '../action';
 import type { BaseLogMessage, RegisteredLogger } from '../logger';
 import type { Mastra } from '../mastra';
 import type { Step } from './step';
+import type { Workflow } from './workflow';
 
-export interface WorkflowOptions<TTriggerSchema extends z.ZodObject<any> = any> {
-  name: string;
+export interface WorkflowOptions<
+  TWorkflowName extends string = string,
+  TSteps extends Step<string, any, any, any>[] = Step<string, any, any, any>[],
+  TTriggerSchema extends z.ZodObject<any> = any,
+  TResultSchema extends z.ZodObject<any> = any,
+> {
+  steps?: TSteps;
+  name: TWorkflowName;
   triggerSchema?: TTriggerSchema;
+  result?: {
+    schema: TResultSchema;
+    mapping?: {
+      // TODO: fix types
+      [K in keyof z.infer<TResultSchema>]?: any; // VariableReference<VarStep, TTriggerSchema>; // TODO: fix types
+    };
+  };
   events?: Record<string, { schema: z.ZodObject<any> }>;
   retryConfig?: RetryConfig;
   mastra?: Mastra;
@@ -18,9 +32,10 @@ export interface StepExecutionContext<
   TSchemaIn extends z.ZodSchema | undefined = undefined,
   TContext extends WorkflowContext = WorkflowContext,
 > extends IExecutionContext<TSchemaIn> {
-  context: TSchemaIn extends z.ZodSchema ? z.infer<TSchemaIn> & TContext : TContext;
-  suspend: (payload?: unknown) => Promise<void>;
+  context: TSchemaIn extends z.ZodSchema ? { inputData: z.infer<TSchemaIn> } & TContext : TContext;
+  suspend: (payload?: unknown, softSuspend?: any) => Promise<void>;
   runId: string;
+  emit: (event: string, data: any) => void;
   mastra?: MastraUnion;
 }
 
@@ -34,6 +49,7 @@ export interface StepAction<
   payload?: TSchemaIn extends z.ZodSchema ? Partial<z.infer<TSchemaIn>> : unknown;
   execute: (context: TContext) => Promise<TSchemaOut extends z.ZodSchema ? z.infer<TSchemaOut> : unknown>;
   retryConfig?: RetryConfig;
+  workflow?: Workflow;
 }
 
 // For the simple key-value condition
@@ -117,6 +133,8 @@ export type StepDef<
       | Condition<any, any>
       | ((args: { context: WorkflowContext; mastra?: Mastra }) => Promise<boolean | WhenConditionReturnValue>);
     serializedWhen?: Condition<any, any> | string;
+    loopLabel?: string;
+    loopType?: 'while' | 'until';
     data: TSchemaIn;
     handler: (args: ActionContext<TSchemaIn>) => Promise<z.infer<TSchemaOut>>;
   }
@@ -157,6 +175,16 @@ export interface StepConfig<
     : {
         [K in keyof StepInputType<TStep, 'inputSchema'>]?: VariableReference<VarStep, TTriggerSchema>;
       };
+  '#internal'?: {
+    when?:
+      | Condition<CondStep, TTriggerSchema>
+      | ((args: {
+          context: WorkflowContext<TTriggerSchema, TSteps>;
+          mastra?: Mastra;
+        }) => Promise<boolean | WhenConditionReturnValue>);
+    loopLabel?: string;
+    loopType?: 'while' | 'until' | undefined;
+  };
 }
 
 type StepSuccess<T> = {
@@ -164,9 +192,10 @@ type StepSuccess<T> = {
   output: T;
 };
 
-type StepSuspended = {
+type StepSuspended<T> = {
   status: 'suspended';
   suspendPayload?: any;
+  output?: T;
 };
 type StepWaiting = {
   status: 'waiting';
@@ -181,7 +210,7 @@ type StepSkipped = {
   status: 'skipped';
 };
 
-export type StepResult<T> = StepSuccess<T> | StepFailure | StepSuspended | StepWaiting | StepSkipped;
+export type StepResult<T> = StepSuccess<T> | StepFailure | StepSuspended<T> | StepWaiting | StepSkipped;
 
 // Define a type for mapping step IDs to their respective steps[]
 export type StepsRecord<T extends readonly Step<any, any, z.ZodType<any> | undefined>[]> = {
@@ -189,24 +218,29 @@ export type StepsRecord<T extends readonly Step<any, any, z.ZodType<any> | undef
 };
 
 export interface WorkflowRunResult<
-  T extends z.ZodType<any>,
+  T extends z.ZodObject<any>,
   TSteps extends Step<string, any, z.ZodType<any> | undefined>[],
+  TResult extends z.ZodObject<any>,
 > {
   triggerData?: z.infer<T>;
+  result?: z.infer<TResult>;
   results: {
     [K in keyof StepsRecord<TSteps>]: StepsRecord<TSteps>[K]['outputSchema'] extends undefined
       ? StepResult<unknown>
       : StepResult<z.infer<NonNullable<StepsRecord<TSteps>[K]['outputSchema']>>>;
   };
   runId: string;
-  activePaths: Map<keyof StepsRecord<TSteps>, { status: string; suspendPayload?: any }>;
+  timestamp: number;
+  activePaths: Map<keyof StepsRecord<TSteps>, { status: string; suspendPayload?: any; stepPath: string[] }>;
 }
 
 // Update WorkflowContext
 export interface WorkflowContext<
   TTrigger extends z.ZodObject<any> = any,
   TSteps extends Step<string, any, any, any>[] = Step<string, any, any, any>[],
+  TInputData extends Record<string, any> = Record<string, any>,
 > {
+  isResume?: { runId: string; stepId: string };
   mastra?: MastraUnion;
   steps: {
     [K in keyof StepsRecord<TSteps>]: StepsRecord<TSteps>[K]['outputSchema'] extends undefined
@@ -214,7 +248,7 @@ export interface WorkflowContext<
       : StepResult<z.infer<NonNullable<StepsRecord<TSteps>[K]['outputSchema']>>>;
   };
   triggerData: z.infer<TTrigger>;
-  resumeData?: any; // TODO: once we have a resume schema plug that in here
+  inputData: TInputData;
   attempts: Record<string, number>;
   getStepResult(stepId: 'trigger'): z.infer<TTrigger>;
   getStepResult<T extends keyof StepsRecord<TSteps> | unknown>(
@@ -241,7 +275,7 @@ export type WorkflowEvent =
   | { type: 'RESET_TO_PENDING'; stepId: string }
   | { type: 'CONDITIONS_MET'; stepId: string }
   | { type: 'CONDITION_FAILED'; stepId: string; error: string }
-  | { type: 'SUSPENDED'; stepId: string; suspendPayload?: any }
+  | { type: 'SUSPENDED'; stepId: string; suspendPayload?: any; softSuspend?: any }
   | { type: 'WAITING'; stepId: string }
   | { type: `xstate.error.actor.${string}`; error: Error }
   | { type: `xstate.done.actor.${string}`; output: ResolverFunctionOutput };

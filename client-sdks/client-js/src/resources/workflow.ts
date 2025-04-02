@@ -2,6 +2,8 @@ import type { GetWorkflowResponse, ClientOptions, WorkflowRunResult } from '../t
 
 import { BaseResource } from './base';
 
+const RECORD_SEPARATOR = '\x1E';
+
 export class Workflow extends BaseResource {
   constructor(
     options: ClientOptions,
@@ -31,19 +33,35 @@ export class Workflow extends BaseResource {
   }
 
   /**
-   * Creates a new workflow run instance and starts it
-   * @param params - Parameters required for the workflow run
+   * Creates a new workflow run
    * @returns Promise containing the generated run ID
    */
-  startRun(params: Record<string, any>): Promise<{ runId: string }> {
-    return this.request(`/api/workflows/${this.workflowId}/startRun`, {
+  createRun(params?: { runId?: string }): Promise<{ runId: string }> {
+    const searchParams = new URLSearchParams();
+
+    if (!!params?.runId) {
+      searchParams.set('runId', params.runId);
+    }
+
+    return this.request(`/api/workflows/${this.workflowId}/createRun?${searchParams.toString()}`, {
       method: 'POST',
-      body: params,
     });
   }
 
   /**
-   * Resumes a suspended workflow step
+   * Starts a workflow run synchronously without waiting for the workflow to complete
+   * @param params - Object containing the runId and triggerData
+   * @returns Promise containing success message
+   */
+  start(params: { runId: string; triggerData: Record<string, any> }): Promise<{ message: string }> {
+    return this.request(`/api/workflows/${this.workflowId}/start?runId=${params.runId}`, {
+      method: 'POST',
+      body: params?.triggerData,
+    });
+  }
+
+  /**
+   * Resumes a suspended workflow step synchronously without waiting for the workflow to complete
    * @param stepId - ID of the step to resume
    * @param runId - ID of the workflow run
    * @param context - Context to resume the workflow with
@@ -57,12 +75,39 @@ export class Workflow extends BaseResource {
     stepId: string;
     runId: string;
     context: Record<string, any>;
-  }): Promise<Record<string, any>> {
+  }): Promise<{ message: string }> {
     return this.request(`/api/workflows/${this.workflowId}/resume?runId=${runId}`, {
       method: 'POST',
       body: {
         stepId,
         context,
+      },
+    });
+  }
+
+  /**
+   * Starts a workflow run asynchronously and returns a promise that resolves when the workflow is complete
+   * @param params - Object containing the runId and triggerData
+   * @returns Promise containing the workflow execution results
+   */
+  startAsync(params: { runId: string; triggerData: Record<string, any> }): Promise<WorkflowRunResult> {
+    return this.request(`/api/workflows/${this.workflowId}/startAsync?runId=${params.runId}`, {
+      method: 'POST',
+      body: params?.triggerData,
+    });
+  }
+
+  /**
+   * Resumes a suspended workflow step asynchronously and returns a promise that resolves when the workflow is complete
+   * @param params - Object containing the runId, stepId, and context
+   * @returns Promise containing the workflow resume results
+   */
+  resumeAsync(params: { runId: string; stepId: string; context: Record<string, any> }): Promise<WorkflowRunResult> {
+    return this.request(`/api/workflows/${this.workflowId}/resumeAsync?runId=${params.runId}`, {
+      method: 'POST',
+      body: {
+        stepId: params.stepId,
+        context: params.context,
       },
     });
   }
@@ -76,57 +121,57 @@ export class Workflow extends BaseResource {
    */
   private async *streamProcessor(stream: ReadableStream): AsyncGenerator<WorkflowRunResult, void, unknown> {
     const reader = stream.getReader();
+
+    // Track if we've finished reading from the stream
+    let doneReading = false;
+    // Buffer to accumulate partial chunks
     let buffer = '';
 
     try {
-      while (true) {
+      while (!doneReading) {
+        // Read the next chunk from the stream
         const { done, value } = await reader.read();
+        doneReading = done;
 
-        if (done) {
-          // Process any remaining data in buffer before finishing
-          if (buffer.trim().length > 0) {
-            try {
-              const record = JSON.parse(buffer);
-              yield record;
-            } catch (e) {
-              console.warn('Could not parse final buffer content:', buffer);
+        // Skip processing if we're done and there's no value
+        if (done && !value) continue;
+
+        try {
+          // Decode binary data to text
+          const decoded = value ? new TextDecoder().decode(value) : '';
+
+          // Split the combined buffer and new data by record separator
+          const chunks = (buffer + decoded).split(RECORD_SEPARATOR);
+
+          // The last chunk might be incomplete, so save it for the next iteration
+          buffer = chunks.pop() || '';
+
+          // Process complete chunks
+          for (const chunk of chunks) {
+            if (chunk) {
+              // Only process non-empty chunks
+              yield JSON.parse(chunk);
             }
           }
-          break;
+        } catch (error) {
+          // Silently ignore parsing errors to maintain stream processing
+          // This allows the stream to continue even if one record is malformed
         }
+      }
 
-        // Decode and add to buffer
-        buffer += new TextDecoder().decode(value);
-
-        // Split the buffer into records
-        const records = buffer.split('\x1E');
-
-        // Keep the last (potentially incomplete) chunk in the buffer
-        buffer = records.pop() || '';
-
-        // Process each complete record
-        for (const record of records) {
-          if (record.trim().length > 0) {
-            try {
-              // Assuming the records are JSON strings
-              const parsedRecord = JSON.parse(record);
-
-              //Check to see if all steps are completed and cancel reader
-              const isWorkflowCompleted = parsedRecord?.activePaths?.every(
-                (path: any) => path.status === 'completed' || path.status === 'suspended' || path.status === 'failed',
-              );
-              if (isWorkflowCompleted) {
-                reader.cancel();
-              }
-              yield parsedRecord;
-            } catch (e) {
-              throw new Error(`Could not parse record: ${record}`);
-            }
-          }
+      // Process any remaining data in the buffer after stream is done
+      if (buffer) {
+        try {
+          yield JSON.parse(buffer);
+        } catch {
+          // Ignore parsing error for final chunk
         }
       }
     } finally {
-      reader.cancel();
+      // Always ensure we clean up the reader
+      reader.cancel().catch(() => {
+        // Ignore cancel errors
+      });
     }
   }
 
@@ -135,7 +180,7 @@ export class Workflow extends BaseResource {
    * @param runId - Optional run ID to filter the watch stream
    * @returns AsyncGenerator that yields parsed records from the workflow watch stream
    */
-  async *watch({ runId }: { runId?: string }) {
+  async watch({ runId }: { runId?: string }, onRecord: (record: WorkflowRunResult) => void) {
     const response: Response = await this.request(`/api/workflows/${this.workflowId}/watch?runId=${runId}`, {
       stream: true,
     });
@@ -148,6 +193,8 @@ export class Workflow extends BaseResource {
       throw new Error('Response body is null');
     }
 
-    yield* this.streamProcessor(response.body);
+    for await (const record of this.streamProcessor(response.body)) {
+      onRecord(record);
+    }
   }
 }

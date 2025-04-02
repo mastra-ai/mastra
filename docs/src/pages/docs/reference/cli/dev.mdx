@@ -5,7 +5,7 @@ description: Documentation for the mastra dev command, which starts a developmen
 
 # `mastra dev` Reference
 
-The `mastra dev` command starts a development server that exposes REST endpoints for your agents, tools, and workflows,
+The `mastra dev` command starts a development server that exposes REST routes for your agents, tools, and workflows,
 
 ## Parameters
 
@@ -37,39 +37,81 @@ The `mastra dev` command starts a development server that exposes REST endpoints
 
 ## Routes
 
-Starting the server with `mastra dev` exposes a set of REST endpoints by default:
+Starting the server with `mastra dev` exposes a set of REST routes by default:
+
+### System Routes
+- **GET `/api`**: Get API status.
 
 ### Agent Routes
 
 Agents are expected to be exported from `src/mastra/agents`.
 
-• `GET /api/agents`
-  - Lists the registered agents found in your Mastra folder.
-• `POST /api/agents/:agentId/generate`
-  - Sends a text-based prompt to the specified agent, returning the agent's response.
+- **GET `/api/agents`**: Lists the registered agents found in your Mastra folder.
+- **GET `/api/agents/:agentId`**: Get agent by ID.
+- **GET `/api/agents/:agentId/evals/ci`**: Get CI evals by agent ID.
+- **GET `/api/agents/:agentId/evals/live`**: Get live evals by agent ID.
+- **POST `/api/agents/:agentId/generate`**: Sends a text-based prompt to the specified agent, returning the agent's response.
+- **POST `/api/agents/:agentId/stream`**: Stream a response from an agent.
+- **POST `/api/agents/:agentId/instructions`**: Update an agent's instructions.
+- **POST `/api/agents/:agentId/instructions/enhance`**: Generate an improved system prompt from instructions.
+- **GET `/api/agents/:agentId/speakers`**: Get available speakers for an agent.
+- **POST `/api/agents/:agentId/speak`**: Convert text to speech using the agent's voice provider.
+- **POST `/api/agents/:agentId/listen`**: Convert speech to text using the agent's voice provider.
+- **POST `/api/agents/:agentId/tools/:toolId/execute`**: Execute a tool through an agent.
 
 ### Tool Routes
 
 Tools are expected to be exported from `src/mastra/tools` (or the configured tools directory).
 
-• `POST /api/tools/:toolName`
-  - Invokes a specific tool by name, passing input data in the request body.
+- **GET `/api/tools`**: Get all tools.
+- **GET `/api/tools/:toolId`**: Get tool by ID.
+- **POST `/api/tools/:toolId/execute`**: Invokes a specific tool by name, passing input data in the request body.
 
 ### Workflow Routes
 
 Workflows are expected to be exported from `src/mastra/workflows` (or the configured workflows directory).
 
-• `POST /api/workflows/:workflowName/start`
-  - Starts the specified workflow.
-• `POST /api/workflows/:workflowName/:instanceId/event`
-  - Sends an event or trigger signal to an existing workflow instance.
-• `GET /api/workflows/:workflowName/:instanceId/status`
-  - Returns status info for a running workflow instance.
+- **GET `/api/workflows`**: Get all workflows.
+- **GET `/api/workflows/:workflowId`**: Get workflow by ID.
+- **POST `/api/workflows/:workflowName/start`**: Starts the specified workflow.
+- **POST `/api/workflows/:workflowName/:instanceId/event`**: Sends an event or trigger signal to an existing workflow instance.
+- **GET `/api/workflows/:workflowName/:instanceId/status`**: Returns status info for a running workflow instance.
+- **POST `/api/workflows/:workflowId/resume`**: Resume a suspended workflow step.
+- **POST `/api/workflows/:workflowId/resumeAsync`**: Resume a suspended workflow step asynchronously.
+- **POST `/api/workflows/:workflowId/createRun`**: Create a new workflow run.
+- **POST `/api/workflows/:workflowId/startAsync`**: Execute/Start a workflow asynchronously.
+- **GET `/api/workflows/:workflowId/watch`**: Watch workflow transitions in real-time.
+
+### Memory Routes
+- **GET `/api/memory/status`**: Get memory status.
+- **GET `/api/memory/threads`**: Get all threads.
+- **GET `/api/memory/threads/:threadId`**: Get thread by ID.
+- **GET `/api/memory/threads/:threadId/messages`**: Get messages for a thread.
+- **POST `/api/memory/threads`**: Create a new thread.
+- **PATCH `/api/memory/threads/:threadId`**: Update a thread.
+- **DELETE `/api/memory/threads/:threadId`**: Delete a thread.
+- **POST `/api/memory/save-messages`**: Save messages.
+
+### Telemetry Routes
+- **GET `/api/telemetry`**: Get all traces.
+
+### Log Routes
+- **GET `/api/logs`**: Get all logs.
+- **GET `/api/logs/transports`**: List of all log transports.
+- **GET `/api/logs/:runId`**: Get logs by run ID.
+
+### Vector Routes
+- **POST `/api/vector/:vectorName/upsert`**: Upsert vectors into an index.
+- **POST `/api/vector/:vectorName/create-index`**: Create a new vector index.
+- **POST `/api/vector/:vectorName/query`**: Query vectors from an index.
+- **GET `/api/vector/:vectorName/indexes`**: List all indexes for a vector store.
+- **GET `/api/vector/:vectorName/indexes/:indexName`**: Get details about a specific index.
+- **DELETE `/api/vector/:vectorName/indexes/:indexName`**: Delete a specific index.
 
 ### OpenAPI Specification
 
-• `GET /openapi.json`
-  - Returns an auto-generated OpenAPI specification for your project's endpoints.
+- **GET `/openapi.json`**: Returns an auto-generated OpenAPI specification for your project's routes.
+- **GET `/swagger-ui`**: Access Swagger UI for API documentation.
 
 ## Additional Notes
 
@@ -90,8 +132,3 @@ curl -X POST http://localhost:4111/api/agents/myAgent/generate \
     ]
   }'
 ```
-
-## Related Docs
-
-- [REST Endpoints Overview](../../local-dev/mastra-dev.mdx) – More detailed usage of the dev server and agent endpoints.
-- [mastra deploy](../../deployment/deployment.mdx) – Deploy your project to Vercel or Cloudflare.

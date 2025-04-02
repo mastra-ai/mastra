@@ -14,9 +14,14 @@ const meta = {
   start: ".start()",
   execute: ".execute()",
   suspend: ".suspend()",
+  snapshots: "Snapshots",
   resume: ".resume()",
   commit: ".commit()",
   watch: ".watch()",
+  events: "Event-Driven Workflows",
+  afterEvent: ".afterEvent()",
+  resumeWithEvent: ".resumeWithEvent()",
+  "step-retries": "Step Retries",
 };
 
 export default meta;

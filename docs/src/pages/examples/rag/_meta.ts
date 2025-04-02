@@ -1,33 +1,22 @@
 const meta = {
-  "chunk-text": "Chunk Text",
-  "chunk-markdown": "Chunk Markdown",
-  "chunk-html": "Chunk HTML",
-  "chunk-json": "Chunk JSON",
-  "embed-text-chunk": "Embed Text Chunk",
-  "embed-chunk-array": "Embed Chunk Array",
-  "adjust-chunk-size": "Adjust Chunk Size",
-  "adjust-chunk-delimiters": "Adjust Chunk Delimiters",
-  "embed-text-with-cohere": "Embed Text with Cohere",
-  "metadata-extraction": "Metadata Extraction",
-  "hybrid-vector-search": "Hybrid Vector Search",
-  "insert-embedding-in-pinecone": "Insert Embedding in Pinecone",
-  "insert-embedding-in-pgvector": "Insert Embedding in PgVector",
-  "insert-embedding-in-upstash": "Insert Embedding in Upstash",
-  "insert-embedding-in-vectorize": "Insert Embedding in Vectorize",
-  "insert-embedding-in-libsql": "Insert Embedding in LibSQL",
-  "insert-embedding-in-chroma": "Insert Embedding in Chroma",
-  "insert-embedding-in-qdrant": "Insert Embedding in Qdrant",
-  "insert-embedding-in-astra": "Insert Embedding in Astra",
-  "retrieve-results": "Retrieve Results",
-  "basic-rag": "Basic RAG",
-  "cleanup-rag": "Optimizing Information Density",
-  "filter-rag": "Metadata Filtering",
-  rerank: "Re-ranking Results",
-  "rerank-rag": "Re-ranking Results with Tools",
-  "cot-rag": "Chain of Thought Prompting",
-  "cot-workflow-rag": "Chain of Thought Prompting w/Workflow",
-  "graph-rag": "Graph RAG",
-  "reranking-with-cohere": "Re-ranking results with Cohere",
+  chunking: {
+    title: "Chunking",
+  },
+  embedding: {
+    title: "Embedding",
+  },
+  upsert: {
+    title: "Upsert",
+  },
+  query: {
+    title: "Query",
+  },
+  rerank: {
+    title: "Rerank",
+  },
+  usage: {
+    title: "Usage",
+  },
 };
 
 export default meta;

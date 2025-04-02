@@ -46,6 +46,7 @@ import type { WorkflowInstance } from './workflow-instance';
 export class Machine<
   TSteps extends Step<any, any, any>[] = any,
   TTriggerSchema extends z.ZodObject<any> = any,
+  TResultSchema extends z.ZodObject<any> = any,
 > extends EventEmitter {
   logger: Logger;
   #mastra?: Mastra;
@@ -110,11 +111,15 @@ export class Machine<
     stepId,
     input,
     snapshot,
+    resumeData,
   }: {
     stepId?: string;
     input?: any;
     snapshot?: Snapshot<any>;
-  } = {}): Promise<Pick<WorkflowRunResult<TTriggerSchema, TSteps>, 'results' | 'activePaths'>> {
+    resumeData?: any;
+  } = {}): Promise<
+    Pick<WorkflowRunResult<TTriggerSchema, TSteps, TResultSchema>, 'results' | 'activePaths' | 'runId' | 'timestamp'>
+  > {
     if (snapshot) {
       // First, let's log the incoming snapshot for debugging
       this.logger.debug(`Workflow snapshot received`, { runId: this.#runId, snapshot });
@@ -134,7 +139,13 @@ export class Machine<
     const actorSnapshot = snapshot
       ? {
           ...snapshot,
-          context: input,
+          context: {
+            ...input,
+            inputData: { ...((snapshot as any)?.context?.inputData || {}), ...resumeData },
+            // ts-ignore is needed here because our snapshot types don't really match xstate snapshot types right now. We should fix this in general.
+            // @ts-ignore
+            isResume: { runId: snapshot?.context?.steps[stepId.split('.')?.[0]]?.output?.runId || this.#runId, stepId },
+          },
         }
       : undefined;
 
@@ -153,7 +164,10 @@ export class Machine<
           runId: this.#runId,
         });
       },
-      input,
+      input: {
+        ...input,
+        inputData: { ...((snapshot as any)?.context?.inputData || {}), ...resumeData },
+      },
       snapshot: actorSnapshot,
     });
 
@@ -177,7 +191,7 @@ export class Machine<
 
       const suspendedPaths: Set<string> = new Set();
       this.#actor.subscribe(async state => {
-        this.emit('state-update', this.#startStepId, state.value, state.context);
+        this.emit('state-update', this.#startStepId, state);
 
         getSuspendedPaths({
           value: state.value as Record<string, string>,
@@ -216,10 +230,12 @@ export class Machine<
           this.#cleanup();
           this.#executionSpan?.end();
           resolve({
+            runId: this.#runId,
             results: isResumedInitialStep ? { ...origSteps, ...state.context.steps } : state.context.steps,
             activePaths: getResultActivePaths(
               state as unknown as { value: Record<string, string>; context: { steps: Record<string, any> } },
             ),
+            timestamp: Date.now(),
           });
         } catch (error) {
           // If snapshot persistence fails, we should still resolve
@@ -229,10 +245,12 @@ export class Machine<
           this.#cleanup();
           this.#executionSpan?.end();
           resolve({
+            runId: this.#runId,
             results: isResumedInitialStep ? { ...origSteps, ...state.context.steps } : state.context.steps,
             activePaths: getResultActivePaths(
               state as unknown as { value: Record<string, string>; context: { steps: Record<string, any> } },
             ),
+            timestamp: Date.now(),
           });
         }
       });
@@ -352,17 +370,42 @@ export class Machine<
 
         try {
           result = await stepNode.config.handler({
-            context: resolvedData,
-            suspend: async (payload?: any) => {
+            context: {
+              ...context,
+              inputData: { ...(context?.inputData || {}), ...resolvedData },
+              getStepResult: ((stepId: string | Step<any, any, any, any>) => {
+                const resolvedStepId = typeof stepId === 'string' ? stepId : stepId.id;
+
+                if (resolvedStepId === 'trigger') {
+                  return context.triggerData;
+                }
+                const result = context.steps[resolvedStepId];
+                if (result && result.status === 'success') {
+                  return result.output;
+                }
+                return undefined;
+              }) satisfies WorkflowContext<TTriggerSchema>['getStepResult'],
+            } as WorkflowContext,
+            emit: (event: string, ...args: any[]) => {
+              // console.log(this.#workflowInstance.name, 'emitting', event, ...args);
+              this.emit(event, ...args);
+            },
+            suspend: async (payload?: any, softSuspend?: any) => {
               await this.#workflowInstance.suspend(stepNode.step.id, this);
               if (this.#actor) {
                 // Update context with current result
                 context.steps[stepNode.step.id] = {
                   status: 'suspended',
                   suspendPayload: payload,
+                  output: softSuspend,
                 };
                 this.logger.debug(`Sending SUSPENDED event for step ${stepNode.step.id}`);
-                this.#actor?.send({ type: 'SUSPENDED', suspendPayload: payload, stepId: stepNode.step.id });
+                this.#actor?.send({
+                  type: 'SUSPENDED',
+                  suspendPayload: payload,
+                  stepId: stepNode.step.id,
+                  softSuspend,
+                });
               } else {
                 this.logger.debug(`Actor not available for step ${stepNode.step.id}`);
               }
@@ -512,21 +555,7 @@ export class Machine<
       runId: this.#runId,
     });
 
-    const resolvedData: Record<string, any> = {
-      ...context,
-      getStepResult: ((stepId: string | Step<any, any, any, any>) => {
-        const resolvedStepId = typeof stepId === 'string' ? stepId : stepId.id;
-
-        if (resolvedStepId === 'trigger') {
-          return context.triggerData;
-        }
-        const result = context.steps[resolvedStepId];
-        if (result && result.status === 'success') {
-          return result.output;
-        }
-        return undefined;
-      }) satisfies WorkflowContext<TTriggerSchema>['getStepResult'],
-    };
+    const resolvedData: Record<string, any> = {};
 
     for (const [key, variable] of Object.entries(stepConfig.data)) {
       // Check if variable comes from trigger data or a previous step's result
@@ -643,6 +672,16 @@ export class Machine<
                   assign({
                     steps: ({ context, event }) => {
                       if (event.output.type !== 'SUSPENDED') return context.steps;
+                      if (event.output.softSuspend) {
+                        return {
+                          ...context.steps,
+                          [stepNode.step.id]: {
+                            status: 'suspended',
+                            ...(context.steps?.[stepNode.step.id] || {}),
+                            output: event.output.softSuspend,
+                          },
+                        };
+                      }
                       return {
                         ...context.steps,
                         [stepNode.step.id]: {
@@ -820,6 +859,7 @@ export class Machine<
                     ...(context?.steps?.[stepNode.step.id] || {}),
                     status: 'suspended',
                     suspendPayload: event.type === 'SUSPENDED' ? event.suspendPayload : undefined,
+                    output: event.type === 'SUSPENDED' ? event.softSuspend : undefined,
                   },
                 };
               },
@@ -844,6 +884,7 @@ export class Machine<
                       [stepNode.step.id]: {
                         status: 'suspended',
                         suspendPayload: event.type === 'SUSPENDED' ? event.suspendPayload : undefined,
+                        output: event.type === 'SUSPENDED' ? event.softSuspend : undefined,
                       },
                     };
                   },

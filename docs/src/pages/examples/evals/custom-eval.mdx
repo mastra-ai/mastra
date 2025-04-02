@@ -7,17 +7,16 @@ import { GithubLink } from "../../../components/github-link";
 
 # Custom Eval with LLM as a Judge
 
-This example demonstrates how to create a custom LLM-based evaluation metric in Mastra to assess recipe completeness using an AI chef agent.
+This example demonstrates how to create a custom LLM-based evaluation metric in Mastra to check recipes for gluten content using an AI chef agent.
 
 ## Overview
 
 The example shows how to:
 
-1. Create a custom LLM-based metric class
-2. Set up a specialized judge for evaluation
-3. Define evaluation prompts
-4. Use an agent to generate and evaluate recipes
-5. Handle structured evaluation results
+1. Create a custom LLM-based metric
+2. Use an agent to generate and evaluate recipes
+3. Check recipes for gluten content
+4. Provide detailed feedback about gluten sources
 
 ## Setup
 
@@ -29,16 +28,6 @@ Make sure to set up your environment variables:
 OPENAI_API_KEY=your_api_key_here
 ```
 
-### Dependencies
-
-Import the necessary dependencies:
-
-```typescript copy showLineNumbers filename="src/mastra/evals/recipe-completeness/metricJudge.ts"
-import { type LanguageModel } from '@mastra/core/llm';
-import { MastraAgentJudge } from '@mastra/evals/judge';
-import { z } from 'zod';
-```
-
 ## Defining Prompts
 
 The evaluation system uses three different prompts, each serving a specific purpose:
@@ -48,46 +37,43 @@ The evaluation system uses three different prompts, each serving a specific purp
 This prompt sets the role and context for the judge:
 
 ```typescript copy showLineNumbers filename="src/mastra/evals/recipe-completeness/prompts.ts"
-export const RECIPE_COMPLETENESS_INSTRUCTIONS = `You are a Master Chef that evaluates recipes for completeness. Your role is to ensure recipes include all essential information needed for successful cooking.`;
+export const GLUTEN_INSTRUCTIONS = `You are a Master Chef that identifies if recipes contain gluten.`;
 ```
 
-#### 2. Completeness Evaluation Prompt
+#### 2. Gluten Evaluation Prompt
 
-This prompt creates a structured evaluation of recipe completeness, checking for specific components:
+This prompt creates a structured evaluation of gluten content, checking for specific components:
 
-```typescript copy showLineNumbers filename="src/mastra/evals/recipe-completeness/prompts.ts"
-export const generateCompletenessPrompt = ({
-  input,
-  output,
-}: {
-  input: string;
-  output: string;
-}) => `Analyze if this recipe includes all essential components for successful cooking.
+```typescript copy showLineNumbers{3} filename="src/mastra/evals/recipe-completeness/prompts.ts"
+export const generateGlutenPrompt = ({ output }: { output: string }) => `Check if this recipe is gluten-free.
 
-Essential components to check:
-1. Ingredient Quantities
-   - All ingredients must have specific measurements
-   - Example of incomplete: "add tomatoes"
-   - Example of complete: "add 2 diced tomatoes"
+Check for:
+- Wheat
+- Barley
+- Rye
+- Common sources like flour, pasta, bread
 
-2. Cooking Times
-   - Each cooking step needs a specific duration
-   - Example of incomplete: "cook until done"
-   - Example of complete: "cook for 15-20 minutes"
+Example with gluten:
+"Mix flour and water to make dough"
+Response: {
+  "isGlutenFree": false,
+  "glutenSources": ["flour"]
+}
 
-3. Cooking Temperatures
-   - All heating steps need specific temperatures
-   - Example of incomplete: "bake in oven"
-   - Example of complete: "bake at 350°F (175°C)"
+Example gluten-free:
+"Mix rice, beans, and vegetables"
+Response: {
+  "isGlutenFree": true,
+  "glutenSources": []
+}
 
-User input: ${input}
-Analyze this recipe:
+Recipe to analyze:
 ${output}
 
 Return your response in this format:
 {
-  "missing": ["list each missing element"],
-  "verdict": "Complete or Incomplete"
+  "isGlutenFree": boolean,
+  "glutenSources": ["list ingredients containing gluten"]
 }`;
 ```
 
@@ -95,73 +81,54 @@ Return your response in this format:
 
 This prompt generates detailed explanations about why a recipe is considered complete or incomplete:
 
-```typescript copy showLineNumbers filename="src/mastra/evals/recipe-completeness/prompts.ts"
+```typescript copy showLineNumbers{34} filename="src/mastra/evals/recipe-completeness/prompts.ts"
 export const generateReasonPrompt = ({
-  input,
-  output,
-  missing,
-  verdict,
+  isGlutenFree,
+  glutenSources,
 }: {
-  input: string;
-  output: string;
-  missing: string[];
-  verdict: string;
-}) => `Explain why this recipe is ${verdict} based on its completeness.
+  isGlutenFree: boolean;
+  glutenSources: string[];
+}) => `Explain why this recipe is${isGlutenFree ? '' : ' not'} gluten-free.
 
-${missing.length > 0 ? `The recipe is missing: ${missing.join(', ')}` : 'The recipe includes all essential components'}
-
-Example responses:
-1. For incomplete recipe:
-{
-    "reason": "The recipe is incomplete because it lacks several essential components: flour quantity, baking temperature, and cooking time. These missing elements would make it difficult for someone to successfully recreate the dish."
-}
-
-2. For complete recipe:
-{
-    "reason": "The recipe is complete as it provides all necessary measurements, cooking times, and temperatures needed to successfully prepare the dish."
-}
-
-User input: ${input}
-
-Recipe to analyze: ${output}
+${glutenSources.length > 0 ? `Sources of gluten: ${glutenSources.join(', ')}` : 'No gluten-containing ingredients found'}
 
 Return your response in this format:
 {
-    "reason": "The recipe is ${verdict} because [reason]"
+  "reason": "This recipe is [gluten-free/contains gluten] because [explanation]"
 }`;
 ```
 
 ## Creating the Judge
 
-We can create a specialized judge that will evaluate recipe completeness. We can import the prompts defined above and use them in the judge:
+We can create a specialized judge that will evaluate recipe gluten content. We can import the prompts defined above and use them in the judge:
 
-```typescript copy showLineNumbers filename="src/mastra/evals/recipe-completeness/metricJudge.ts"
-import { RECIPE_COMPLETENESS_INSTRUCTIONS, generateCompletenessPrompt, generateReasonPrompt } from './prompts';
+```typescript copy showLineNumbers filename="src/mastra/evals/gluten-checker/metricJudge.ts"
+import { type LanguageModel } from '@mastra/core/llm';
+import { MastraAgentJudge } from '@mastra/evals/judge';
+import { z } from 'zod';
+import { GLUTEN_INSTRUCTIONS, generateGlutenPrompt, generateReasonPrompt } from './prompts';
 
 export class RecipeCompletenessJudge extends MastraAgentJudge {
   constructor(model: LanguageModel) {
-    super('Recipe Completeness', RECIPE_COMPLETENESS_INSTRUCTIONS, model);
+    super('Gluten Checker', GLUTEN_INSTRUCTIONS, model);
   }
 
-  async evaluate(
-    input: string,
-    output: string,
-  ): Promise<{
-    missing: string[];
-    verdict: string;
+  async evaluate(output: string): Promise<{
+    isGlutenFree: boolean;
+    glutenSources: string[];
   }> {
-    const completenessPrompt = generateCompletenessPrompt({ input, output });
-    const result = await this.agent.generate(completenessPrompt, {
+    const glutenPrompt = generateGlutenPrompt({ output });
+    const result = await this.agent.generate(glutenPrompt, {
       output: z.object({
-        missing: z.array(z.string()),
-        verdict: z.string(),
+        isGlutenFree: z.boolean(),
+        glutenSources: z.array(z.string()),
       }),
     });
 
     return result.object;
   }
 
-  async getReason(args: { input: string; output: string; missing: string[]; verdict: string }): Promise<string> {
+  async getReason(args: { isGlutenFree: boolean; glutenSources: string[] }): Promise<string> {
     const prompt = generateReasonPrompt(args);
     const result = await this.agent.generate(prompt, {
       output: z.object({
@@ -176,60 +143,56 @@ export class RecipeCompletenessJudge extends MastraAgentJudge {
 
 The judge class handles the core evaluation logic through two main methods:
 
-- `evaluate()`: Analyzes recipe completeness and returns missing elements with verdict
+- `evaluate()`: Analyzes recipe gluten content and returns gluten content with verdict
 - `getReason()`: Provides human-readable explanation for the evaluation results
 
 ## Creating the Metric
 
 Create the metric class that uses the judge:
 
-```typescript copy showLineNumbers filename="src/mastra/evals/recipe-completeness/index.ts"
+```typescript copy showLineNumbers filename="src/mastra/evals/gluten-checker/index.ts"
 export interface MetricResultWithInfo extends MetricResult {
   info: {
     reason: string;
-    missing: string[];
+    glutenSources: string[];
   };
 }
 
-export class RecipeCompletenessMetric extends Metric {
-  private judge: RecipeCompletenessJudge;
-  private scale: number;
-
-  constructor(model: LanguageModel, { scale = 1 }: RecipeCompletenessMetricOptions = {}) {
+export class GlutenCheckerMetric extends Metric {
+  private judge: GlutenCheckerJudge;
+  constructor(model: LanguageModel) {
     super();
-    this.judge = new RecipeCompletenessJudge(model);
-    this.scale = scale;
+
+    this.judge = new GlutenCheckerJudge(model);
   }
 
-  async measure(input: string, output: string): Promise<MetricResultWithInfo> {
-    const { verdict, missing } = await this.judge.evaluate(input, output);
-    const score = this.calculateScore({ verdict });
+  async measure(output: string): Promise<MetricResultWithInfo> {
+    const { isGlutenFree, glutenSources } = await this.judge.evaluate(output);
+    const score = await this.calculateScore(isGlutenFree);
     const reason = await this.judge.getReason({
-      input,
-      output,
-      verdict,
-      missing,
+      isGlutenFree,
+      glutenSources,
     });
 
     return {
       score,
       info: {
-        missing,
+        glutenSources,
         reason,
       },
     };
   }
 
-  private calculateScore(verdict: { verdict: string }): number {
-    return verdict.verdict.toLowerCase() === 'incomplete' ? 0 : 1;
+  async calculateScore(isGlutenFree: boolean): Promise<number> {
+    return isGlutenFree ? 1 : 0;
   }
 }
 ```
 
-The metric class serves as the main interface for recipe evaluation with two key methods:
+The metric class serves as the main interface for gluten content evaluation with the following methods:
 
 - `measure()`: Orchestrates the entire evaluation process and returns a comprehensive result
-- `calculateScore()`: Converts the evaluation verdict to a binary score (1 for complete, 0 for incomplete)
+- `calculateScore()`: Converts the evaluation verdict to a binary score (1 for gluten-free, 0 for contains gluten)
 
 ## Setting Up the Agent
 
@@ -239,7 +202,7 @@ Create an agent and attach the metric:
 import { openai } from '@ai-sdk/openai';
 import { Agent } from '@mastra/core/agent';
 
-import { RecipeCompletenessMetric } from '../evals';
+import { GlutenCheckerMetric } from '../evals';
 
 export const chefAgent = new Agent({
   name: 'chef-agent',
@@ -248,7 +211,7 @@ export const chefAgent = new Agent({
     'You help people cook with whatever ingredients they have available.',
   model: openai('gpt-4o-mini'),
   evals: {
-    recipeCompleteness: new RecipeCompletenessMetric(openai('gpt-4o-mini')),
+    glutenChecker: new GlutenCheckerMetric(openai('gpt-4o-mini')),
   },
 });
 ```
@@ -261,33 +224,31 @@ Here's how to use the metric with an agent:
 import { mastra } from './mastra';
 
 const chefAgent = mastra.getAgent('chefAgent');
-const metric = chefAgent.evals.recipeCompleteness;
+const metric = chefAgent.evals.glutenChecker;
 
 // Example: Evaluate a recipe
-const input = 'Can you give me a simple pasta recipe with exact measurements and timing?';
+const input = 'What is a quick way to make rice and beans?';
 const response = await chefAgent.generate(input);
 const result = await metric.measure(input, response.text);
 
 console.log('Metric Result:', {
   score: result.score,
-  missing: result.info.missing,
+  glutenSources: result.info.glutenSources,
   reason: result.info.reason,
 });
 
 // Example Output:
-// Metric Result: { score: 1, missing: [], reason: 'The recipe is complete as it provides all necessary measurements, cooking times, and temperatures needed to successfully prepare the dish.' }
+// Metric Result: { score: 1, glutenSources: [], reason: 'The recipe is gluten-free as it does not contain any gluten-containing ingredients.' }
 ```
 
 ## Understanding the Results
 
 The metric provides:
-- A score of 1 for complete recipes and 0 for incomplete ones
-- List of missing essential components (if any)
-- Detailed reasoning about the recipe's completeness
+- A score of 1 for gluten-free recipes and 0 for recipes containing gluten
+- List of gluten sources (if any)
+- Detailed reasoning about the recipe's gluten content
 - Evaluation based on:
-  - Ingredient quantities
-  - Cooking times
-  - Temperature specifications
+  - Ingredient list
 
 <br />
 <br />

@@ -1,0 +1,192 @@
+---
+title: "Using MCP With Mastra | Agents | Mastra Docs"
+description: "Use MCP in Mastra to integrate third party tools and resources in your AI agents."
+---
+
+# Using MCP With Mastra
+
+[Model Context Protocol (MCP)](https://modelcontextprotocol.io/introduction) is a standardized way for AI models to discover and interact with external tools and resources.
+
+## Overview
+
+MCP in Mastra provides a standardized way to connect to tool servers and supports both stdio and SSE-based connections.
+
+## Installation
+
+Using pnpm:
+
+```bash
+pnpm add @mastra/mcp@latest
+```
+
+Using npm:
+
+```bash
+npm install @mastra/mcp@latest
+```
+
+## Using MCP in Your Code
+
+The `MCPConfiguration` class provides a way to manage multiple tool servers in your Mastra applications without managing multiple MCP clients. You can configure both stdio-based and SSE-based servers:
+
+```typescript
+import { MCPConfiguration } from "@mastra/mcp";
+import { Agent } from "@mastra/core/agent";
+import { openai } from "@ai-sdk/openai";
+
+const mcp = new MCPConfiguration({
+  servers: {
+    // stdio example
+    sequential: {
+      name: "sequential-thinking",
+      server: {
+        command: "npx",
+        args: ["-y", "@modelcontextprotocol/server-sequential-thinking"],
+      },
+    },
+    // SSE example
+    weather: {
+      url: new URL("http://localhost:8080/sse"),
+      requestInit: {
+        headers: {
+          Authorization: "Bearer your-token",
+        },
+      },
+    },
+  },
+});
+```
+
+### Tools vs Toolsets
+
+The `MCPConfiguration` class provides two ways to access MCP tools, each suited for different use cases:
+
+#### Using Tools (`getTools()`)
+
+Use this approach when:
+
+- You have a single MCP connection
+- The tools are used by a single user/context
+- Tool configuration (API keys, credentials) remains constant
+- You want to initialize an Agent with a fixed set of tools
+
+```typescript
+const agent = new Agent({
+  name: "CLI Assistant",
+  instructions: "You help users with CLI tasks",
+  model: openai("gpt-4o-mini"),
+  tools: await mcp.getTools(), // Tools are fixed at agent creation
+});
+```
+
+#### Using Toolsets (`getToolsets()`)
+
+Use this approach when:
+
+- You need per-request tool configuration
+- Tools need different credentials per user
+- Running in a multi-user environment (web app, API, etc)
+- Tool configuration needs to change dynamically
+
+```typescript
+const mcp = new MCPConfiguration({
+  servers: {
+    example: {
+      command: "npx",
+      args: ["-y", "@example/fakemcp"],
+      env: {
+        API_KEY: "your-api-key",
+      },
+    },
+  },
+});
+
+// Get the current toolsets configured for this user
+const toolsets = await mcp.getToolsets();
+
+// Use the agent with user-specific tool configurations
+const response = await agent.stream(
+  "What's new in Mastra and how's the weather?",
+  {
+    toolsets,
+  },
+);
+```
+
+## MCP Registries
+
+MCP servers can be accessed through registries that provide curated collections of tools. Here's how to use tools from different registries:
+
+### Composio.dev Registry
+
+[Composio.dev](https://composio.dev) provides a registry of [SSE-based MCP servers](https://mcp.composio.dev) that can be easily integrated with Mastra. The SSE URL that's generated for Cursor is compatible with Mastra - you can use it directly in your configuration:
+
+```typescript
+const mcp = new MCPConfiguration({
+  servers: {
+    googleSheets: {
+      url: new URL("https://mcp.composio.dev/googlesheets/[private-url-path]"),
+    },
+    gmail: {
+      url: new URL("https://mcp.composio.dev/gmail/[private-url-path]"),
+    },
+  },
+});
+```
+
+When using Composio-provided tools, you can authenticate with services (like Google Sheets or Gmail) directly through conversation with your agent. The tools include authentication capabilities that guide you through the process while chatting.
+
+Note: The Composio.dev integration is best suited for single-user scenarios like personal automation, as the SSE URL is tied to your account and can't be used for multiple users. Each URL represents a single account's authentication context.
+
+### Smithery.ai Registry
+
+[Smithery.ai](https://smithery.ai) provides a registry of MCP servers that you can easily use with Mastra:
+
+```typescript
+// Unix/Mac
+const mcp = new MCPConfiguration({
+  servers: {
+    sequentialThinking: {
+      command: "npx",
+      args: [
+        "-y",
+        "@smithery/cli@latest",
+        "run",
+        "@smithery-ai/server-sequential-thinking",
+        "--config",
+        "{}",
+      ],
+    },
+  },
+});
+
+// Windows
+const mcp = new MCPConfiguration({
+  servers: {
+    sequentialThinking: {
+      command: "cmd",
+      args: [
+        "/c",
+        "npx",
+        "-y",
+        "@smithery/cli@latest",
+        "run",
+        "@smithery-ai/server-sequential-thinking",
+        "--config",
+        "{}",
+      ],
+    },
+  },
+});
+```
+
+This example is adapted from the Claude integration example in the Smithery documentation.
+
+## Using the Mastra Documentation Server
+
+Looking to use Mastra's MCP documentation server in your IDE? Check out our [MCP Documentation Server guide](/docs/getting-started/mcp-docs-server) to get started.
+
+## Next Steps
+
+- Learn more about [MCPConfiguration](/docs/reference/tools/mcp-configuration)
+- Check out our [example projects](/examples) that use MCP

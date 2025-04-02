@@ -5,7 +5,8 @@ import { InstrumentClass } from '../telemetry';
 export type VoiceEventType = 'speaking' | 'writing' | 'error' | string;
 
 export interface VoiceEventMap {
-  speaking: { audio?: NodeJS.ReadableStream };
+  speaker: NodeJS.ReadableStream;
+  speaking: { audio?: string };
   writing: { text: string; role: 'assistant' | 'user' };
   error: { message: string; code?: string; details?: unknown };
   [key: string]: unknown;
@@ -137,6 +138,15 @@ export abstract class MastraVoice<
   answer(_options?: Record<string, unknown>): Promise<void> {
     this.logger.warn('answer not implemented by this voice provider');
     return Promise.resolve();
+  }
+
+  /**
+   * Equip the voice provider with instructions
+   * @param instructions Instructions to add
+   */
+  addInstructions(_instructions?: string): void {
+    // Default implementation - voice providers can override if they support this feature
+    this.logger.warn('addInstructions not implemented by this voice provider');
   }
 
   /**

@@ -9,7 +9,6 @@ import pdfParse from 'pdf-parse/lib/pdf-parse.js';
 
 export const readPDF = createTool({
   id: 'readPDF',
-  name: 'Read PDF',
   description: 'Read PDF file and extract information',
   inputSchema: z.object({
     pdfPath: z.string(),

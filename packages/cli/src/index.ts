@@ -1,7 +1,9 @@
 #! /usr/bin/env node
 import { Command } from 'commander';
 
+import { config } from 'dotenv';
 import { PosthogAnalytics } from './analytics/index';
+import type { CLI_ORIGIN } from './analytics/index';
 import { build } from './commands/build/build';
 import { create } from './commands/create/create';
 import { deploy } from './commands/deploy/index';
@@ -22,6 +24,8 @@ const analytics = new PosthogAnalytics({
 
 const program = new Command();
 
+const origin = process.env.MASTRA_ANALYTICS_ORIGIN as CLI_ORIGIN;
+
 program
   .version(`${version}`, '-v, --version')
   .description(`Mastra CLI ${version}`)
@@ -29,6 +33,7 @@ program
     try {
       analytics.trackCommand({
         command: 'version',
+        origin,
       });
       console.log(`Mastra CLI: ${version}`);
     } catch {
@@ -73,6 +78,7 @@ program
           projectName: args.projectName,
         });
       },
+      origin,
     });
   });
 
@@ -122,6 +128,7 @@ program
         });
         return;
       },
+      origin,
     });
   });
 
@@ -131,13 +138,19 @@ program
   .option('-d, --dir <dir>', 'Path to your mastra folder')
   .option('-r, --root <root>', 'Path to your root folder')
   .option('-t, --tools <toolsDirs>', 'Comma-separated list of paths to tool files to include')
-  .option('-p, --port <port>', 'Port number for the development server (defaults to 4111)')
+  .option('-p, --port <port>', 'deprecated: Port number for the development server (defaults to 4111)')
   .action(args => {
     analytics.trackCommand({
       command: 'dev',
+      origin,
     });
+
+    if (args?.port) {
+      logger.warn('The --port option is deprecated. Use the server key in the Mastra instance instead.');
+    }
+
     dev({
-      port: args?.port ? parseInt(args.port) : 4111,
+      port: args?.port ? parseInt(args.port) : null,
       dir: args?.dir,
       root: args?.root,
       tools: args?.tools ? args.tools.split(',') : [],
@@ -157,6 +170,7 @@ program
       execution: async () => {
         await build({ dir: args.dir });
       },
+      origin,
     });
   });
 
@@ -165,12 +179,14 @@ program
   .description('Deploy your Mastra project')
   .option('-d, --dir <path>', 'Path to directory')
   .action(async args => {
+    config({ path: ['.env', '.env.production'] });
     await analytics.trackCommandExecution({
       command: 'mastra deploy',
       args,
       execution: async () => {
         await deploy({ dir: args.dir });
       },
+      origin,
     });
   });
 

@@ -1,4 +1,13 @@
-import type { StepResult, VariableReference } from './types';
+import { get } from 'radash';
+import { z } from 'zod';
+import type { Mastra } from '..';
+import { Agent } from '../agent';
+import type { ToolsInput } from '../agent';
+import type { Metric } from '../eval';
+import type { Logger } from '../logger';
+import type { Step } from './step';
+import type { StepAction, StepResult, VariableReference, WorkflowContext, WorkflowRunResult } from './types';
+import { Workflow } from './workflow';
 
 export function isErrorEvent(stateEvent: any): stateEvent is {
   type: `xstate.error.actor.${string}`;
@@ -109,6 +118,7 @@ export function mergeChildValue(
 ): Record<string, any> {
   const traverse = (current: Record<string, any>) => {
     const obj: Record<string, any> = {};
+
     for (const [key, value] of Object.entries(current)) {
       if (key === startStepId) {
         // Found child state
@@ -153,13 +163,187 @@ export function getResultActivePaths(state: {
   value: Record<string, string>;
   context: { steps: Record<string, any> };
 }) {
-  return getActivePathsAndStatus(state.value).reduce((acc, curr) => {
-    const entry: { status: string; suspendPayload?: any } = { status: curr.status };
+  const activePaths = getActivePathsAndStatus(state.value);
+  const activePathsAndStatus = activePaths.reduce((acc, curr) => {
+    const entry: { status: string; suspendPayload?: any; stepPath: string[] } = {
+      status: curr.status,
+      stepPath: curr.stepPath,
+    };
     if (curr.status === 'suspended') {
       // @ts-ignore
       entry.suspendPayload = state.context.steps[curr.stepId].suspendPayload;
+      entry.stepPath = curr.stepPath;
     }
     acc.set(curr.stepId, entry);
     return acc;
-  }, new Map<string, { status: string; suspendPayload?: any }>());
+  }, new Map<string, { status: string; suspendPayload?: any; stepPath: string[] }>());
+  return activePathsAndStatus;
+}
+
+export function isWorkflow(
+  step: Step<any, any, any, any> | Workflow<any, any, any, any> | Agent<any, any, any>,
+): step is Workflow<any, any, any, any> {
+  // @ts-ignore
+  return step instanceof Workflow;
+}
+
+export function isAgent(
+  step: Step<any, any, any, any> | Agent<any, any, any> | Workflow<any, any, any, any>,
+): step is Agent<any, any, any> {
+  // @ts-ignore
+  return step instanceof Agent;
+}
+
+export function resolveVariables({
+  runId,
+  logger,
+  variables,
+  context,
+}: {
+  runId: string;
+  logger: Logger;
+  variables: Record<string, VariableReference<any, any>>;
+  context: WorkflowContext;
+}): Record<string, any> {
+  const resolvedData: Record<string, any> = {};
+
+  for (const [key, variable] of Object.entries(variables)) {
+    // Check if variable comes from trigger data or a previous step's result
+    const sourceData =
+      variable.step === 'trigger'
+        ? context.triggerData
+        : getStepResult(context.steps[variable.step.id ?? variable.step.name]);
+
+    logger.debug(
+      `Got source data for ${key} variable from ${variable.step === 'trigger' ? 'trigger' : (variable.step.id ?? variable.step.name)}`,
+      {
+        sourceData,
+        path: variable.path,
+        runId: runId,
+      },
+    );
+
+    if (!sourceData && variable.step !== 'trigger') {
+      resolvedData[key] = undefined;
+      continue;
+    }
+
+    // If path is empty or '.', return the entire source data
+    const value = variable.path === '' || variable.path === '.' ? sourceData : get(sourceData, variable.path);
+
+    logger.debug(`Resolved variable ${key}`, {
+      value,
+      runId: runId,
+    });
+
+    resolvedData[key] = value;
+  }
+
+  return resolvedData;
+}
+
+export function agentToStep<
+  TAgentId extends string = string,
+  TTools extends ToolsInput = ToolsInput,
+  TMetrics extends Record<string, Metric> = Record<string, Metric>,
+>(
+  agent: Agent<TAgentId, TTools, TMetrics>,
+  { mastra }: { mastra?: Mastra } = {},
+): StepAction<TAgentId, z.ZodObject<{ prompt: z.ZodString }>, z.ZodObject<{ text: z.ZodString }>, any> {
+  return {
+    id: agent.name,
+    inputSchema: z.object({
+      prompt: z.string(),
+      resourceId: z.string().optional(),
+      threadId: z.string().optional(),
+    }),
+    outputSchema: z.object({
+      text: z.string(),
+    }),
+    execute: async ({ context, runId, mastra: mastraFromExecute }) => {
+      const realMastra = mastraFromExecute ?? mastra;
+      if (!realMastra) {
+        throw new Error('Mastra instance not found');
+      }
+
+      agent.__registerMastra(realMastra);
+      agent.__registerPrimitives({
+        logger: realMastra.getLogger(),
+        telemetry: realMastra.getTelemetry(),
+      });
+
+      const result = await agent.generate(context.inputData.prompt, {
+        runId,
+        resourceId: context.inputData.resourceId,
+        threadId: context.inputData.threadId,
+      });
+
+      return {
+        text: result.text,
+      };
+    },
+  };
+}
+
+export function workflowToStep<
+  TSteps extends Step<any, any, any, any>[],
+  TStepId extends string = any,
+  TTriggerSchema extends z.ZodObject<any> = any,
+  TResultSchema extends z.ZodObject<any> = any,
+>(
+  workflow: Workflow<TSteps, TStepId, TTriggerSchema, TResultSchema>,
+  { mastra }: { mastra?: Mastra },
+): StepAction<TStepId, TTriggerSchema, z.ZodType<WorkflowRunResult<TTriggerSchema, TSteps, TResultSchema>>, any> {
+  workflow.setNested(true);
+
+  return {
+    id: workflow.name,
+    workflow,
+    execute: async ({ context, suspend, emit, mastra: mastraFromExecute }) => {
+      const realMastra = mastraFromExecute ?? mastra;
+      if (realMastra) {
+        workflow.__registerMastra(realMastra);
+        workflow.__registerPrimitives({
+          logger: realMastra.getLogger(),
+          telemetry: realMastra.getTelemetry(),
+        });
+      }
+
+      const run = context.isResume ? workflow.createRun({ runId: context.isResume.runId }) : workflow.createRun();
+      const unwatch = run.watch(state => {
+        emit('state-update', workflow.name, state.results, { ...context, ...{ [workflow.name]: state.results } });
+      });
+
+      const awaitedResult =
+        context.isResume && context.isResume.stepId.includes('.')
+          ? await run.resume({
+              stepId: context.isResume.stepId.split('.').slice(1).join('.'),
+              context: context.inputData,
+            })
+          : await run.start({
+              triggerData: context.inputData,
+            });
+
+      unwatch();
+      if (!awaitedResult) {
+        throw new Error('Workflow run failed');
+      }
+
+      if (awaitedResult.activePaths?.size > 0) {
+        const suspendedStep = [...awaitedResult.activePaths.entries()].find(([, { status }]) => {
+          return status === 'suspended';
+        });
+
+        if (suspendedStep) {
+          await suspend(suspendedStep[1].suspendPayload, { ...awaitedResult, runId: run.runId });
+          // await suspend({
+          //   ...suspendedStep[1].suspendPayload,
+          //   __meta: { nestedRunId: run.runId, nestedRunPaths: awaitedResult.activePaths },
+          // });
+        }
+      }
+
+      return { ...awaitedResult, runId: run.runId };
+    },
+  };
 }

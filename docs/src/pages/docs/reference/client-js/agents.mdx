@@ -48,7 +48,8 @@ const response = await agent.generate({
 
 ### Stream Response
 
-Stream a response from the agent for real-time interactions:
+Stream responses from the agent for real-time interactions:
+
 
 ```typescript
 const response = await agent.stream({
@@ -60,7 +61,23 @@ const response = await agent.stream({
   ],
 });
 
-// Read from response body
+// Process data stream with the processDataStream util
+ response.processDataStream({
+      onTextPart: (text) => {
+        process.stdout.write(text);
+      },
+      onFilePart: (file) => {
+        console.log(file);
+      },
+      onDataPart: (data) => {
+        console.log(data);
+      },
+      onErrorPart: (error) => {
+        console.error(error);
+      },
+  });
+
+// You can also read from response body directly
 const reader = response.body.getReader();
 while (true) {
   const { done, value } = await reader.read();

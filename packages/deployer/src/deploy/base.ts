@@ -1,11 +1,11 @@
 import type { IDeployer } from '@mastra/core/deployer';
 
-import { Deps } from '../build/deps.js';
-import { FileService } from '../build/fs';
 import { Bundler } from '../bundler';
+import { DepsService } from '../services/deps.js';
+import { FileService } from '../services/fs.js';
 
 export abstract class Deployer extends Bundler implements IDeployer {
-  deps: Deps = new Deps();
+  deps: DepsService = new DepsService();
 
   constructor(args: { name: string }) {
     super(args.name, 'DEPLOYER');

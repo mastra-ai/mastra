@@ -23,7 +23,10 @@ export const ragAgent = new Agent({
 2. CONNECTIONS MADE: List the relationships you found between different parts of the text (2-3 bullet points)
 3. CONCLUSION: One sentence summary that ties everything together
 
-Keep each section brief and focus on the most important points.`,
+Keep each section brief and focus on the most important points.
+
+Important: When asked to answer a question, please base your answer only on the context provided in the tool. 
+If the context doesn't contain enough information to fully answer the question, please state that explicitly.`,
   model: openai('gpt-4o-mini'),
   tools: {
     graphRagTool,
@@ -94,38 +97,26 @@ await vectorStore.upsert({
   metadata: chunks?.map((chunk: any) => ({ text: chunk.text })),
 });
 
-async function generateResponse(query: string) {
-  const prompt = `
-        Please answer the following question using both semantic and graph-based context:
-        ${query}
+const queryOne =
+  "What are the direct and indirect effects of early railway decisions on Riverdale Heights' current state?";
+const answerOne = await ragAgent.generate(queryOne);
+console.log('\nQuery:', queryOne);
+console.log('Response:', answerOne.text);
 
-        Please base your answer only on the context provided in the tool. If the context doesn't contain enough information to fully answer the question, please state that explicitly.
-        `;
+const queryTwo =
+  'How have changes in transportation infrastructure affected different generations of local businesses and community spaces?';
+const answerTwo = await ragAgent.generate(queryTwo);
+console.log('\nQuery:', queryTwo);
+console.log('Response:', answerTwo.text);
 
-  const completion = await ragAgent.generate(prompt);
-  return completion.text;
-}
+const queryThree =
+  'Compare how the Rossi family business and Thompson Steel Works responded to major infrastructure changes, and how their responses affected the community.';
+const answerThree = await ragAgent.generate(queryThree);
+console.log('\nQuery:', queryThree);
+console.log('Response:', answerThree.text);
 
-async function answerQueries(queries: string[]) {
-  for (const query of queries) {
-    try {
-      const answer = await generateResponse(query);
-      console.log('\nQuery:', query);
-      console.log('Response:', answer);
-    } catch (error) {
-      console.error(`Error processing query "${query}":`, error);
-    }
-  }
-}
-
-const queries = [
-  "What are the direct and indirect effects of early railway decisions on Riverdale Heights' current state?",
-
-  'How have changes in transportation infrastructure affected different generations of local businesses and community spaces?',
-
-  'Compare how the Rossi family business and Thompson Steel Works responded to major infrastructure changes, and how their responses affected the community.',
-
-  'Trace how the transformation of the Thompson Steel Works site has influenced surrounding businesses and cultural spaces from 1932 to present.',
-];
-
-await answerQueries(queries);
+const queryFour =
+  'Trace how the transformation of the Thompson Steel Works site has influenced surrounding businesses and cultural spaces from 1932 to present.';
+const answerFour = await ragAgent.generate(queryFour);
+console.log('\nQuery:', queryFour);
+console.log('Response:', answerFour.text);

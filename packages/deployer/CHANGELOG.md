@@ -1,5 +1,227 @@
 # @mastra/deployer
 
+## 0.2.6-alpha.3
+
+### Patch Changes
+
+- 0deb356: Fixed a bug where the hono body wasn't properly passed into stream+generate API handlers resulting in "cannot destructure property messages of body"
+
+## 0.2.6-alpha.2
+
+### Patch Changes
+
+- 4c98129: Upgrade babel-core
+- 84fe241: Decoupled handlers from hono
+- 84fe241: Improve streaming of workflows
+- Updated dependencies [56c31b7]
+- Updated dependencies [dbbbf80]
+- Updated dependencies [84fe241]
+- Updated dependencies [84fe241]
+- Updated dependencies [99d43b9]
+  - @mastra/core@0.8.0-alpha.2
+  - @mastra/server@0.0.1-alpha.0
+
+## 0.2.6-alpha.1
+
+### Patch Changes
+
+- Updated dependencies [619c39d]
+- Updated dependencies [fe56be0]
+- Updated dependencies [a0967a0]
+- Updated dependencies [fca3b21]
+- Updated dependencies [0118361]
+- Updated dependencies [619c39d]
+  - @mastra/core@0.8.0-alpha.1
+
+## 0.2.6-alpha.0
+
+### Patch Changes
+
+- 05d58cc: fix: add 'x-mastra-client-type' to allowed headers in CORS configuration
+- 8076ecf: Unify workflow watch/start response
+- 304397c: Add support for custom api routes in mastra
+- Updated dependencies [107bcfe]
+- Updated dependencies [5b4e19f]
+- Updated dependencies [7599d77]
+- Updated dependencies [cafae83]
+- Updated dependencies [8076ecf]
+- Updated dependencies [304397c]
+  - @mastra/core@0.7.1-alpha.0
+
+## 0.2.5
+
+### Patch Changes
+
+- cdc0498: Fix process.versions.node.split in cloudflare deployer
+- 0b496ff: Load env vars on mastra deploy
+- Updated dependencies [b4fbc59]
+- Updated dependencies [a838fde]
+- Updated dependencies [a8bd4cf]
+- Updated dependencies [7a3eeb0]
+- Updated dependencies [0b54522]
+- Updated dependencies [b3b34f5]
+- Updated dependencies [1af25d5]
+- Updated dependencies [a4686e8]
+- Updated dependencies [6530ad1]
+- Updated dependencies [27439ad]
+  - @mastra/core@0.7.0
+
+## 0.2.5-alpha.3
+
+### Patch Changes
+
+- Updated dependencies [b3b34f5]
+- Updated dependencies [a4686e8]
+  - @mastra/core@0.7.0-alpha.3
+
+## 0.2.5-alpha.2
+
+### Patch Changes
+
+- Updated dependencies [a838fde]
+- Updated dependencies [a8bd4cf]
+- Updated dependencies [7a3eeb0]
+- Updated dependencies [6530ad1]
+  - @mastra/core@0.7.0-alpha.2
+
+## 0.2.5-alpha.1
+
+### Patch Changes
+
+- cdc0498: Fix process.versions.node.split in cloudflare deployer
+- 0b496ff: Load env vars on mastra deploy
+- Updated dependencies [0b54522]
+- Updated dependencies [1af25d5]
+- Updated dependencies [27439ad]
+  - @mastra/core@0.7.0-alpha.1
+
+## 0.2.5-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [b4fbc59]
+  - @mastra/core@0.6.5-alpha.0
+
+## 0.2.4
+
+### Patch Changes
+
+- e764fd1: Fix telemetry when side-effects are added to the mastra file
+- 709aa2c: fix building externals
+- e764fd1: Fix deployer when side-effects are added to the mastra file
+- 05ef3e0: Support voice for mastra client
+- 95c5745: Fix symlink resolving and externals
+- 85a2461: Fix cloudflare deployer
+- Updated dependencies [6794797]
+- Updated dependencies [fb68a80]
+- Updated dependencies [b56a681]
+- Updated dependencies [248cb07]
+  - @mastra/core@0.6.4
+
+## 0.2.4-alpha.1
+
+### Patch Changes
+
+- 709aa2c: fix building externals
+- 85a2461: Fix cloudflare deployer
+- Updated dependencies [6794797]
+  - @mastra/core@0.6.4-alpha.1
+
+## 0.2.4-alpha.0
+
+### Patch Changes
+
+- e764fd1: Fix telemetry when side-effects are added to the mastra file
+- e764fd1: Fix deployer when side-effects are added to the mastra file
+- 05ef3e0: Support voice for mastra client
+- 95c5745: Fix symlink resolving and externals
+- Updated dependencies [fb68a80]
+- Updated dependencies [b56a681]
+- Updated dependencies [248cb07]
+  - @mastra/core@0.6.4-alpha.0
+
+## 0.2.3
+
+### Patch Changes
+
+- 404640e: AgentNetwork changeset
+- Updated dependencies [404640e]
+- Updated dependencies [3bce733]
+  - @mastra/core@0.6.3
+
+## 0.2.3-alpha.1
+
+### Patch Changes
+
+- Updated dependencies [3bce733]
+  - @mastra/core@0.6.3-alpha.1
+
+## 0.2.3-alpha.0
+
+### Patch Changes
+
+- 404640e: AgentNetwork changeset
+- Updated dependencies [404640e]
+  - @mastra/core@0.6.3-alpha.0
+
+## 0.2.2
+
+### Patch Changes
+
+- 4e6732b: Add support for tsconfig paths aliases
+- Updated dependencies [beaf1c2]
+- Updated dependencies [3084e13]
+  - @mastra/core@0.6.2
+
+## 0.2.2-alpha.1
+
+### Patch Changes
+
+- Updated dependencies [beaf1c2]
+- Updated dependencies [3084e13]
+  - @mastra/core@0.6.2-alpha.0
+
+## 0.2.2-alpha.0
+
+### Patch Changes
+
+- 4e6732b: Add support for tsconfig paths aliases
+
+## 0.2.1
+
+### Patch Changes
+
+- cc7f392: Fix babel transformation in deployer
+- 0850b4c: Watch and resume per run
+- da8d9bb: Enable public dir copying if it exists
+- 9116d70: Handle the different workflow methods in workflow graph
+- 61ad5a4: Move esbuild plugin higher than commonjs for telemetry extraction
+- Updated dependencies [fc2f89c]
+- Updated dependencies [dfbb131]
+- Updated dependencies [f4854ee]
+- Updated dependencies [afaf73f]
+- Updated dependencies [0850b4c]
+- Updated dependencies [7bcfaee]
+- Updated dependencies [44631b1]
+- Updated dependencies [9116d70]
+- Updated dependencies [6e559a0]
+- Updated dependencies [5f43505]
+  - @mastra/core@0.6.1
+
+## 0.2.1-alpha.2
+
+### Patch Changes
+
+- cc7f392: Fix babel transformation in deployer
+- 0850b4c: Watch and resume per run
+- da8d9bb: Enable public dir copying if it exists
+- 9116d70: Handle the different workflow methods in workflow graph
+- Updated dependencies [fc2f89c]
+- Updated dependencies [dfbb131]
+- Updated dependencies [0850b4c]
+- Updated dependencies [9116d70]
+  - @mastra/core@0.6.1-alpha.2
+
 ## 0.2.1-alpha.1
 
 ### Patch Changes

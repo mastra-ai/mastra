@@ -39,9 +39,8 @@ myWorkflow
   .after(stepA)
     .step(stepC)
     .then(stepE)
-  .after(stepD)
+  .after([stepD, stepE])
     .step(stepF);
-    .step(stepE)
 ```
 
 In this example:
@@ -266,43 +265,448 @@ myWorkflow.step(
 );
 ```
 
-## Accessing Previous Step Results
+## Data Access Patterns
 
-Steps access data from previous steps through the `context` object. The context contains a record of all step results and their payloads.
+Mastra provides several ways to pass data between steps:
 
-### Using getStepResult
+1. **Context Object** - Access step results directly through the context object
+2. **Variable Mapping** - Explicitly map outputs from one step to inputs of another
+3. **getStepResult Method** - Type-safe method to retrieve step outputs
 
-`getStepResult` retrieves a step's output with type safety:
+Each approach has its advantages depending on your use case and requirements for type safety.
 
-```typescript copy showLineNumbers
-workflow.step(
-  new Step({
-    id: "processOrder",
-    execute: async ({ context }) => {
-      const userData = context.getStepResult<{ userId: string }>("fetchUser");
-      return {
-        userId: userData?.userId,
-        status: "processing"
-      };
-    },
-  })
-);
+### Using getStepResult Method
+
+The `getStepResult` method provides a type-safe way to access step results. This is the recommended approach when working with TypeScript as it preserves type information.
+
+#### Basic Usage
+
+For better type safety, you can provide a type parameter to `getStepResult`:
+
+```typescript showLineNumbers filename="src/mastra/workflows/get-step-result.ts" copy
+import { Step, Workflow } from "@mastra/core/workflows";
+import { z } from "zod";
+
+const fetchUserStep = new Step({
+  id: 'fetchUser',
+  outputSchema: z.object({
+    name: z.string(),
+    userId: z.string(),
+  }),
+  execute: async ({ context }) => {
+    return { name: 'John Doe', userId: '123' };
+  },
+});
+
+const analyzeDataStep = new Step({
+  id: "analyzeData",
+  execute: async ({ context }) => {
+    // Type-safe access to previous step result
+    const userData = context.getStepResult<{ name: string, userId: string }>("fetchUser");
+
+    if (!userData) {
+      return { status: "error", message: "User data not found" };
+    }
+
+    return {
+      analysis: `Analyzed data for user ${userData.name}`,
+      userId: userData.userId
+    };
+  },
+});
 ```
 
-### Using Path Notation
 
-Path notation accesses step results through the machine context. For example, to access the status of the `processOrder` step:
+#### Using Step References
 
-```typescript copy showLineNumbers
-workflow.step(
-  new Step({
-    id: "sendEmail",
-    execute: async ({ context }) => {
-      const orderStatus = context.steps.processOrder.output.status;
-      console.log(orderStatus);
-    },
-  })
-);
+The most type-safe approach is to reference the step directly in the `getStepResult` call:
+
+```typescript showLineNumbers filename="src/mastra/workflows/step-reference.ts" copy
+import { Step, Workflow } from "@mastra/core/workflows";
+import { z } from "zod";
+
+// Define step with output schema
+const fetchUserStep = new Step({
+  id: "fetchUser",
+  outputSchema: z.object({
+    userId: z.string(),
+    name: z.string(),
+    email: z.string(),
+  }),
+  execute: async () => {
+    return {
+      userId: "user123",
+      name: "John Doe",
+      email: "john@example.com"
+    };
+  },
+});
+
+const processUserStep = new Step({
+  id: "processUser",
+  execute: async ({ context }) => {
+    // TypeScript will infer the correct type from fetchUserStep's outputSchema
+    const userData = context.getStepResult(fetchUserStep);
+
+    return {
+      processed: true,
+      userName: userData?.name
+    };
+  },
+});
+
+const workflow = new Workflow({
+  name: "user-workflow",
+});
+
+workflow
+  .step(fetchUserStep)
+  .then(processUserStep)
+  .commit();
 ```
 
-The context object maintains type information when used with TypeScript. Nested objects in step outputs can be accessed with either method.
+
+
+
+
+### Using Variable Mapping
+
+Variable mapping is an explicit way to define data flow between steps.
+This approach makes dependencies clear and provides good type safety.
+The data injected into the step is available in the `context.inputData` object, and typed based on the `inputSchema` of the step.
+
+```typescript showLineNumbers filename="src/mastra/workflows/variable-mapping.ts" copy
+import { Step, Workflow } from "@mastra/core/workflows";
+import { z } from "zod";
+
+const fetchUserStep = new Step({
+  id: "fetchUser",
+  outputSchema: z.object({
+    userId: z.string(),
+    name: z.string(),
+    email: z.string(),
+  }),
+  execute: async () => {
+    return {
+      userId: "user123",
+      name: "John Doe",
+      email: "john@example.com"
+    };
+  },
+});
+
+const sendEmailStep = new Step({
+  id: "sendEmail",
+  inputSchema: z.object({
+    recipientEmail: z.string(),
+    recipientName: z.string(),
+  }),
+  execute: async ({ context }) => {
+    const { recipientEmail, recipientName } = context.inputData;
+
+    // Send email logic here
+    return {
+      status: "sent",
+      to: recipientEmail
+    };
+  },
+});
+
+const workflow = new Workflow({
+  name: "email-workflow",
+});
+
+workflow
+  .step(fetchUserStep)
+  .then(sendEmailStep, {
+    variables: {
+      // Map specific fields from fetchUser to sendEmail inputs
+      recipientEmail: { step: fetchUserStep, path: 'email' },
+      recipientName: { step: fetchUserStep, path: 'name' }
+    }
+  })
+  .commit();
+```
+
+For more details on variable mapping, see the [Data Mapping with Workflow Variables](./variables.mdx) documentation.
+
+### Using the Context Object
+
+The context object provides direct access to all step results and their outputs. This approach is more flexible but requires careful handling to maintain type safety.
+You can access step results directly through the `context.steps` object:
+
+```typescript showLineNumbers filename="src/mastra/workflows/context-access.ts" copy
+import { Step, Workflow } from "@mastra/core/workflows";
+import { z } from "zod";
+
+const processOrderStep = new Step({
+  id: 'processOrder',
+  execute: async ({ context }) => {
+    // Access data from a previous step
+    let userData: { name: string, userId: string };
+    if (context.steps['fetchUser']?.status === 'success') {
+      userData = context.steps.fetchUser.output;
+    } else {
+      throw new Error('User data not found');
+    }
+
+    return {
+      orderId: 'order123',
+      userId: userData.userId,
+      status: 'processing',
+    };
+  },
+});
+
+const workflow = new Workflow({
+  name: "order-workflow",
+});
+
+workflow
+  .step(fetchUserStep)
+  .then(processOrderStep)
+  .commit();
+```
+
+### Workflow-Level Type Safety
+
+For comprehensive type safety across your entire workflow, you can define types for all steps and pass them to the Workflow
+This allows you to get type safety for the context object on conditions, and on step results in the final workflow output.
+
+```typescript showLineNumbers filename="src/mastra/workflows/workflow-typing.ts" copy
+import { Step, Workflow } from "@mastra/core/workflows";
+import { z } from "zod";
+
+
+// Create steps with typed outputs
+const fetchUserStep = new Step({
+  id: "fetchUser",
+  outputSchema: z.object({
+    userId: z.string(),
+    name: z.string(),
+    email: z.string(),
+  }),
+  execute: async () => {
+    return {
+      userId: "user123",
+      name: "John Doe",
+      email: "john@example.com"
+    };
+  },
+});
+
+const processOrderStep = new Step({
+  id: "processOrder",
+  execute: async ({ context }) => {
+    // TypeScript knows the shape of userData
+    const userData = context.getStepResult(fetchUserStep);
+
+    return {
+      orderId: "order123",
+      status: "processing"
+    };
+  },
+});
+
+const workflow = new Workflow<[typeof fetchUserStep, typeof processOrderStep]>({
+  name: "typed-workflow",
+});
+
+workflow
+  .step(fetchUserStep)
+  .then(processOrderStep)
+  .until(async ({ context }) => {
+    // TypeScript knows the shape of userData here
+    const res = context.getStepResult('fetchUser');
+    return res?.userId === '123';
+  }, processOrderStep)
+  .commit();
+```
+
+### Accessing Trigger Data
+
+In addition to step results, you can access the original trigger data that started the workflow:
+
+```typescript showLineNumbers filename="src/mastra/workflows/trigger-data.ts" copy
+import { Step, Workflow } from "@mastra/core/workflows";
+import { z } from "zod";
+
+// Define trigger schema
+const triggerSchema = z.object({
+  customerId: z.string(),
+  orderItems: z.array(z.string()),
+});
+
+type TriggerType = z.infer<typeof triggerSchema>;
+
+const processOrderStep = new Step({
+  id: "processOrder",
+  execute: async ({ context }) => {
+    // Access trigger data with type safety
+    const triggerData = context.getStepResult<TriggerType>('trigger');
+
+    return {
+      customerId: triggerData?.customerId,
+      itemCount: triggerData?.orderItems.length || 0,
+      status: "processing"
+    };
+  },
+});
+
+const workflow = new Workflow({
+  name: "order-workflow",
+  triggerSchema,
+});
+
+workflow
+  .step(processOrderStep)
+  .commit();
+```
+
+### Accessing Resume Data
+
+The data injected into the step is available in the `context.inputData` object, and typed based on the `inputSchema` of the step.
+
+```typescript showLineNumbers filename="src/mastra/workflows/resume-data.ts" copy
+import { Step, Workflow } from "@mastra/core/workflows";
+import { z } from "zod";
+
+const processOrderStep = new Step({
+  id: "processOrder",
+  inputSchema: z.object({
+    orderId: z.string(),
+  }),
+  execute: async ({ context, suspend }) => {
+    const { orderId } = context.inputData;
+
+    if (!orderId) {
+      await suspend();
+      return;
+    }
+
+    return {
+      orderId,
+      status: "processed"
+    };
+  },
+});
+
+const workflow = new Workflow({
+  name: "order-workflow",
+});
+
+workflow
+  .step(processOrderStep)
+  .commit();
+
+const run = workflow.createRun();
+const result = await run.start();
+
+const resumedResult = await workflow.resume({
+  runId: result.runId,
+  stepId: 'processOrder',
+  inputData: {
+    orderId: '123',
+  },
+});
+
+console.log({resumedResult});
+```
+
+### Accessing Workflow Results
+
+You can get typed access to the results of a workflow by injecting the step types into the `Workflow` type params:
+
+```typescript showLineNumbers filename="src/mastra/workflows/get-results.ts" copy
+import { Workflow } from "@mastra/core/workflows";
+
+const fetchUserStep = new Step({
+  id: "fetchUser",
+  outputSchema: z.object({
+    userId: z.string(),
+    name: z.string(),
+    email: z.string(),
+  }),
+  execute: async () => {
+    return {
+      userId: "user123",
+      name: "John Doe",
+      email: "john@example.com"
+    };
+  },
+});
+
+const processOrderStep = new Step({
+  id: "processOrder",
+  outputSchema: z.object({
+    orderId: z.string(),
+    status: z.string(),
+  }),
+  execute: async ({ context }) => {
+    const userData = context.getStepResult(fetchUserStep);
+    return {
+      orderId: "order123",
+      status: "processing"
+    };
+  },
+});
+
+const workflow = new Workflow<[typeof fetchUserStep, typeof processOrderStep]>({
+  name: "typed-workflow",
+});
+
+workflow
+  .step(fetchUserStep)
+  .then(processOrderStep)
+  .commit();
+
+const run = workflow.createRun();
+const result = await run.start();
+
+// The result is a discriminated union of the step results
+// So it needs to be narrowed down via status checks
+if (result.results.processOrder.status === 'success') {
+  // TypeScript will know the shape of the results
+  const orderId = result.results.processOrder.output.orderId;
+  console.log({orderId});
+}
+
+if (result.results.fetchUser.status === 'success') {
+  const userId = result.results.fetchUser.output.userId;
+  console.log({userId});
+}
+```
+
+### Best Practices for Data Flow
+
+1. **Use getStepResult with Step References for Type Safety**
+   - Ensures TypeScript can infer the correct types
+   - Catches type errors at compile time
+
+2. **Use Variable Mapping for Explicit Dependencies*
+   - Makes data flow clear and maintainable
+   - Provides good documentation of step dependencies
+
+3. **Define Output Schemas for Steps**
+   - Validates data at runtime
+	 - Validates return type of the `execute` function
+   - Improves type inference in TypeScript
+
+4. **Handle Missing Data Gracefully**
+   - Always check if step results exist before accessing properties
+   - Provide fallback values for optional data
+
+5. **Keep Data Transformations Simple**
+   - Transform data in dedicated steps rather than in variable mappings
+   - Makes workflows easier to test and debug
+
+### Comparison of Data Flow Methods
+
+| Method | Type Safety | Explicitness | Use Case |
+|--------|------------|--------------|----------|
+| getStepResult | Highest | High | Complex workflows with strict typing requirements |
+| Variable Mapping | High | High | When dependencies need to be clear and explicit |
+| context.steps | Medium | Low | Quick access to step data in simple workflows |
+
+By choosing the right data flow method for your use case, you can create workflows that are both type-safe and maintainable.
+

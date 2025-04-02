@@ -10,7 +10,8 @@ Retrieve all memory threads for a specific resource:
 
 ```typescript
 const threads = await client.getMemoryThreads({
-  resourceid: "resource-1",
+  resourceId: "resource-1",
+  agentId: "agent-1"
 });
 ```
 
@@ -23,6 +24,7 @@ const thread = await client.createMemoryThread({
   title: "New Conversation",
   metadata: { category: "support" },
   resourceid: "resource-1",
+  agentId: "agent-1"
 });
 ```
 
@@ -31,7 +33,7 @@ const thread = await client.createMemoryThread({
 Get an instance of a specific memory thread:
 
 ```typescript
-const thread = client.getMemoryThread("thread-id");
+const thread = client.getMemoryThread("thread-id", "agent-id");
 ```
 
 ## Thread Methods
@@ -82,6 +84,7 @@ const savedMessages = await client.saveMessageToMemory({
       type: "text",
     },
   ],
+  agentId: "agent-1"
 });
 ```
 
@@ -90,5 +93,5 @@ const savedMessages = await client.saveMessageToMemory({
 Check the status of the memory system:
 
 ```typescript
-const status = await client.getMemoryStatus();
+const status = await client.getMemoryStatus("agent-id");
 ```

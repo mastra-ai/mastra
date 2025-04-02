@@ -129,6 +129,7 @@ function resolveSchemaComponent({
         errors,
         handleFieldChange,
         isNullable: true,
+        isOptional,
       });
     }
 
@@ -190,6 +191,7 @@ function resolveSchemaComponent({
         errors,
         renderFieldMap: getDefaultFieldMap(),
         onFieldChange: handleFieldChange,
+        isOptional,
       })}
     </div>
   );

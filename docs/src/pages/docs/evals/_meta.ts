@@ -1,7 +1,8 @@
 const meta = {
-  "00-overview": "Overview",
-  "01-supported-evals": "Supported Evals",
-  "02-custom-eval": "Custom Evals",
+  overview: "Overview",
+  "textual-evals": "Textual Evals",
+  "custom-eval": "Custom Evals",
+  "running-in-ci": "Running in CI",
 };
 
 export default meta;

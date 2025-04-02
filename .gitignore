@@ -26,5 +26,6 @@ memory.db
 .netlify
 .npmrc
 
-# Test output directories
-voice/**/test-output*/
+# Test directories
+voice/**/test-outputs/
+voice/**/test-data/
