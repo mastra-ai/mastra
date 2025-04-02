@@ -42,11 +42,13 @@ export async function getNetworkByIdHandler(c: Context) {
 export async function generateHandler(c: Context) {
   try {
     const mastra: Mastra = c.get('mastra');
+    const container: Container = c.get('container');
     const networkId = c.req.param('networkId');
     const body = await c.req.json();
 
     const result = await getOriginalGenerateHandler({
       mastra,
+      container,
       networkId,
       body,
     });
@@ -60,11 +62,13 @@ export async function generateHandler(c: Context) {
 export async function streamGenerateHandler(c: Context): Promise<Response | undefined> {
   try {
     const mastra: Mastra = c.get('mastra');
+    const container: Container = c.get('container');
     const networkId = c.req.param('networkId');
     const body = await c.req.json();
 
     const streamResponse = await getOriginalStreamGenerateHandler({
       mastra,
+      container,
       networkId,
       body,
     });

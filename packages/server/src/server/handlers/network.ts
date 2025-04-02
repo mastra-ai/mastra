@@ -76,6 +76,7 @@ export async function getNetworkByIdHandler({ mastra, networkId }: Pick<NetworkC
 
 export async function generateHandler({
   mastra,
+  container,
   networkId,
   body,
 }: NetworkContext & {
@@ -91,7 +92,7 @@ export async function generateHandler({
     validateBody({ messages: body.messages });
 
     const { messages, ...rest } = body;
-    const result = await network.generate(messages!, rest);
+    const result = await network.generate(messages!, { ...rest, container });
 
     return result;
   } catch (error) {

@@ -108,6 +108,7 @@ export async function getLiveEvalsByAgentIdHandler({ mastra, agentId }: Context 
 
 export async function generateHandler({
   mastra,
+  container,
   agentId,
   body,
 }: Context & {
@@ -133,6 +134,7 @@ export async function generateHandler({
       ...rest,
       // @ts-expect-error TODO fix types
       resourceId: finalResourceId,
+      container,
     });
 
     return result;
@@ -143,6 +145,7 @@ export async function generateHandler({
 
 export async function streamGenerateHandler({
   mastra,
+  container,
   agentId,
   body,
 }: Context & {
@@ -168,6 +171,7 @@ export async function streamGenerateHandler({
       ...rest,
       // @ts-expect-error TODO fix types
       resourceId: finalResourceId,
+      container,
     });
 
     const streamResponse = rest.output
