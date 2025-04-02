@@ -359,7 +359,7 @@ export class WorkflowInstance<
           return;
         }
 
-        this.#initializeCompoundDependencies();
+        this.#resetCompoundDependency(key);
 
         const machine = new Machine({
           logger: this.logger,
@@ -643,6 +643,19 @@ export class WorkflowInstance<
         );
       }
     });
+  }
+
+  #resetCompoundDependency(key: string) {
+    if (this.#isCompoundKey(key)) {
+      const requiredSteps = key.split('&&');
+      this.#compoundDependencies[key] = requiredSteps.reduce(
+        (acc, step) => {
+          acc[step] = false;
+          return acc;
+        },
+        {} as Record<string, boolean>,
+      );
+    }
   }
 
   #makeStepDef<TStepId extends TSteps[number]['id'], TSteps extends Step<any, any, any>[]>(
