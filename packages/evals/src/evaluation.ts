@@ -25,7 +25,7 @@ export async function evaluate<T extends Agent>(agent: T, input: Parameters<T['g
     globalRunId,
     runId,
     testInfo,
-    instructions: await agent.instructions.resolve(),
+    instructions: agent.instructions,
   });
 
   return metricResult;
