@@ -304,27 +304,33 @@ export class Memory extends MastraMemory {
 
     const config = this.getMergedThreadConfig(memoryConfig);
 
+    const result = this.storage.__saveMessages({ messages });
+
     if (this.vector && config.semanticRecall) {
       const { indexName } = await this.createEmbeddingIndex();
 
-      for (const message of messages) {
-        if (typeof message.content !== `string` || message.content === '') continue;
+      // don't await for perf reasons. we can upsert vectorized messages without blocking the response
+      void messages.map(async message => {
+        {
+          if (typeof message.content !== `string` || message.content === '') return;
 
-        const { embeddings, chunks } = await this.embedMessageContent(message.content);
+          const { embeddings, chunks } = await this.embedMessageContent(message.content);
+          console.log(`Created ${embeddings.length} embeddings for message save`);
 
-        await this.vector.upsert({
-          indexName,
-          vectors: embeddings,
-          metadata: chunks.map(() => ({
-            message_id: message.id,
-            thread_id: message.threadId,
-            resource_id: message.resourceId,
-          })),
-        });
-      }
+          await this.vector.upsert({
+            indexName,
+            vectors: embeddings,
+            metadata: chunks.map(() => ({
+              message_id: message.id,
+              thread_id: message.threadId,
+              resource_id: message.resourceId,
+            })),
+          });
+        }
+      });
     }
 
-    return this.storage.__saveMessages({ messages });
+    return result;
   }
 
   protected mutateMessagesToHideWorkingMemory(messages: MessageType[]) {
