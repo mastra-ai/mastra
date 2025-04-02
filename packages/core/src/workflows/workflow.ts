@@ -1172,10 +1172,6 @@ export class Workflow<
     this.isNested = isNested;
   }
 
-  // get isNested() {
-  //   return this.#isNested;
-  // }
-
   toStep(): Step<TStepId, TTriggerSchema, z.ZodType<WorkflowRunResult<TTriggerSchema, TSteps, TResultSchema>>, any> {
     const x = workflowToStep<TSteps, TStepId, TTriggerSchema, TResultSchema>(this, { mastra: this.#mastra });
     return new Step(x);
