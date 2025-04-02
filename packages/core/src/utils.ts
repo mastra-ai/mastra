@@ -370,14 +370,26 @@ function createExecute(tool: ToolToConvert, options: ToolOptions, logType?: 'too
       return tool?.execute?.(args, execOptions) ?? undefined;
     }
 
-    const context = args;
-    const variables = validateVariables(tool.variablesSchema, options.variables);
+    if (tool.variablesSchema) {
+      try {
+        options.variables = validateVariables(tool.variablesSchema, createVariablesFrom(options.variables));
+      } catch (error) {
+        const toolName = options.name || 'unknown';
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        logger.error(`[Agent:${options.agentName}] - Failed to validate variables for tool "${toolName}"`, {
+          ...rest,
+          toolName,
+          error: errorMessage,
+          hint: 'This is likely due to a schema mismatch between agent and tool. Check that both schemas are compatible.',
+        });
+      }
+    }
 
     return (
       tool?.execute?.(
         {
-          context,
-          variables,
+          context: args,
+          variables: options.variables,
           threadId: options.threadId,
           resourceId: options.resourceId,
           mastra: options.mastra,
@@ -459,7 +471,9 @@ export function validateVariables<TSchema extends ZodSchema | undefined>(
       throw new Error('Variables schema is not a Zod schema');
     }
   } catch (error) {
-    throw new Error(`Variables validation failed: ${error}`);
+    throw new Error(`Variables validation failed: ${error instanceof Error ? error.message : String(error)}`, {
+      cause: error,
+    });
   }
 }
 
