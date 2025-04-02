@@ -1,10 +1,10 @@
 import { randomUUID } from 'crypto';
 import type { WorkflowRunState } from '@mastra/core/workflows';
+import { TABLE_THREADS, TABLE_MESSAGES, TABLE_WORKFLOW_SNAPSHOT } from '@mastra/core/storage';
 import { describe, it, expect, beforeAll, beforeEach, afterAll } from 'vitest';
 
 import { ClickhouseStore } from '.';
 import type { ClickhouseConfig } from '.';
-import { TABLE_THREADS, TABLE_MESSAGES, TABLE_WORKFLOW_SNAPSHOT } from '@mastra/core/storage';
 
 const TEST_CONFIG: ClickhouseConfig = {
   url: process.env.CLICKHOUSE_URL || 'http://localhost:8123',
