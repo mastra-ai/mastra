@@ -975,7 +975,7 @@ describe('Workflow', async () => {
     });
   });
 
-  describe.only('testing variables in loops', () => {
+  describe('testing variables in loops', () => {
     // Common test setup
     const setupTest = () => {
       const step1Action = vi.fn().mockImplementation(async () => {
