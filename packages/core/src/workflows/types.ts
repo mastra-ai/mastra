@@ -64,7 +64,7 @@ export type StepVariableType<
   TContext extends StepExecutionContext<TSchemaIn>,
 > = StepAction<TId, TSchemaIn, TSchemaOut, TContext> | 'trigger' | { id: string };
 
-export type StepNode = { step: StepAction<any, any, any, any>; config: StepDef<any, any, any, any>[any] };
+export type StepNode = { id: string; step: StepAction<any, any, any, any>; config: StepDef<any, any, any, any>[any] };
 
 export type StepGraph = {
   initial: StepNode[];

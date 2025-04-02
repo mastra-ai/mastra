@@ -149,6 +149,7 @@ export class Workflow<
       Steps
     >,
   ): WorkflowBuilder<this> {
+    const that = this;
     if (Array.isArray(next)) {
       const nextSteps: StepAction<string, any, any, any>[] = next.map(step => {
         if (isWorkflow(step)) {
@@ -204,6 +205,9 @@ export class Workflow<
         loopType: config?.['#internal']?.loopType,
         serializedWhen: typeof when === 'function' ? when.toString() : when,
         data: requiredData,
+      },
+      get id() {
+        return that.#makeStepKey(this.step, this.config);
       },
     };
 
@@ -274,6 +278,7 @@ export class Workflow<
     >,
     internalUse?: boolean,
   ): WorkflowBuilder<this> {
+    const that = this;
     if (Array.isArray(next)) {
       const nextSteps: StepAction<string, any, any, any>[] = next.map(step => {
         if (isWorkflow(step)) {
@@ -326,6 +331,9 @@ export class Workflow<
         loopType: config?.['#internal']?.loopType,
         serializedWhen: typeof when === 'function' ? when.toString() : when,
         data: requiredData,
+      },
+      get id() {
+        return that.#makeStepKey(this.step, this.config);
       },
     };
 
@@ -388,6 +396,7 @@ export class Workflow<
     CondStep extends StepVariableType<any, any, any, any>,
     VarStep extends StepVariableType<any, any, any, any>,
   >(next: TStep | TStep[], config?: StepConfig<StepAction<string, any, any, any>, CondStep, VarStep, TTriggerSchema>) {
+    const that = this;
     if (Array.isArray(next)) {
       const lastStep = this.#steps[this.#lastStepStack[this.#lastStepStack.length - 1] ?? ''];
       if (!lastStep) {
@@ -454,6 +463,9 @@ export class Workflow<
         loopType: config?.['#internal']?.loopType,
         serializedWhen: typeof when === 'function' ? when.toString() : when,
         data: requiredData,
+      },
+      get id() {
+        return that.#makeStepKey(this.step, this.config);
       },
     };
 
