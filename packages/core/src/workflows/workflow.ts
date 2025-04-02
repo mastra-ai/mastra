@@ -364,8 +364,8 @@ export class Workflow<
     return this as WorkflowBuilder<this>;
   }
 
-  #makeStepKey(step: Step<any, any, any> | Workflow<any, any>, config?: StepConfig<any, any, any, any, any>) {
-    // return `${step.id}${this.#delimiter}${Object.keys(this.steps2).length}`;
+  #makeStepKey(step: Step<any, any, any> | string | Workflow<any, any>, config?: StepConfig<any, any, any, any, any>) {
+    if (typeof step === 'string') return step;
     // @ts-ignore
     return `${config?.id ?? step.id ?? step.name}`;
   }
@@ -817,7 +817,7 @@ export class Workflow<
     steps: TStep | Workflow | (TStep | Workflow)[],
   ): Omit<WorkflowBuilder<this>, 'then' | 'after'> {
     const stepsArray = Array.isArray(steps) ? steps : [steps];
-    const stepKeys = stepsArray.map(step => (typeof step === 'string' ? step : this.#makeStepKey(step)));
+    const stepKeys = stepsArray.map(step => this.#makeStepKey(step));
 
     // Create a compound key for multiple steps
     const compoundKey = stepKeys.join('&&');
