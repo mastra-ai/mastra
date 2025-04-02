@@ -4,7 +4,8 @@ import {
   keywordResearcherAgent, 
   contentPlannerAgent, 
   blogWriterAgent, 
-  editorAgent 
+  editorAgent,
+  contentPublisherAgent
 } from '../agents';
 
 // 学童えすこーと専用ブログ生成ワークフロー（改善版）
@@ -141,59 +142,93 @@ const writerStep = new Step({
   },
 });
 
-// Step 4: 編集・最適化のステップ（改善版）
+// Step 4: 編集ステップ
 const editorStep = new Step({
   id: "editingStep",
   execute: async ({ context }) => {
     const draft = context.getStepResult("blogWritingStep")?.draft;
-    const keywords = context.getStepResult("keywordResearchStep")?.keywords;
-    const contentPlan = context.getStepResult("contentPlanningStep")?.contentPlan;
     const topic = context.triggerData.topic;
+    const keywords = context.getStepResult("keywordResearchStep")?.keywords;
     
     const editResult = await editorAgent.generate(`
-      以下の学童えすこーとサービスのブログ記事を編集・最適化してください。
+      以下のブログ記事を編集・改善してください。
       
-      【元の記事】
-      ${draft}
+      【記事情報】
+      トピック：${topic}
       
       【キーワード情報】
       ${keywords}
       
-      【コンテンツプラン】
-      ${contentPlan}
+      【編集対象の記事】
+      ${draft}
       
-      【トピック】
-      ${topic}
+      【編集・改善のポイント】
+      1. SEOの最適化（キーワードの適切な配置と密度）
+      2. 読みやすさの向上（文章構造、段落分け）
+      3. 内容の充実と正確性
+      4. 論理的な流れの改善
+      5. 文法・誤字脱字の修正
+      6. 保護者目線での不安解消ポイントの強化
+      7. えすこーとサービスの具体的メリットの強調
+      8. 行動喚起（CTA）の明確化
       
-      【編集のポイント】
-      1. SEO最適化
-         - メタディスクリプション、キーワード配置の確認
-         - 内部リンクの提案
-         - 画像のalt属性の提案
-         - 推奨URLスラッグの提案
-      
-      2. 読みやすさの向上
-         - 文章の簡潔化と読みやすさの向上
-         - 専門用語の平易な説明
-         - 段落構成の最適化
-         - 一貫したトーン
-      
-      3. 説得力の強化
-         - 具体例や数字の追加
-         - 専門的な観点の強化
-         - コールトゥアクションの効果的な配置
-         - 文法や表現の統一性
-
-      4. 安全対策と教育価値の強調
-         - 安全対策の具体的な記述の確認
-         - 教育プログラムの価値説明の確認
-         - 保護者の不安解消ポイントの確認
-      
-      完成した記事をマークダウン形式で出力し、メタディスクリプション候補、推奨URL、内部リンク提案、
-      画像alt属性案、キーワード配置状況、編集者コメントも含めてください。
+      編集した完成版の記事をマークダウン形式で出力してください。
     `);
     
-    return { finalArticle: editResult.text };
+    return { final_article: editResult.text };
+  },
+});
+
+// Step 5: データベース保存とWordPress投稿ステップ
+const publishStep = new Step({
+  id: "publishingStep",
+  execute: async ({ context }) => {
+    const article = context.getStepResult("editingStep")?.final_article;
+    const topic = context.triggerData.topic;
+    const keywords = context.getStepResult("keywordResearchStep")?.keywords;
+    
+    // タイトルを抽出（マークダウンから最初の # 行を取得）
+    const titleMatch = article.match(/^#\s(.+)$/m);
+    const title = titleMatch ? titleMatch[1] : topic;
+    
+    // メタディスクリプションを生成（最初の数行を使用）
+    const firstParagraph = article.split('\n\n')[1] || '';
+    const metaDescription = firstParagraph.substring(0, 155) + '...';
+    
+    const publishResult = await contentPublisherAgent.generate(`
+      以下のブログ記事をSupabaseデータベースに保存し、WordPressに投稿してください。
+      
+      【記事情報】
+      タイトル：${title}
+      キーワード：${keywords}
+      
+      【記事内容】
+      ${article}
+      
+      【公開指示】
+      1. 既存のWordPressカテゴリーを使用してください：
+         - ID: 10, 名前: 小学校 (elementary)
+         - ID: 1, 名前: 未分類 (uncategorized)
+         - 基本的には「小学校」(ID: 10)カテゴリーを使用してください
+      2. 記事をSupabaseデータベースに保存してください
+      3. 次に記事をWordPressに「下書き」として投稿してください
+      4. 以下のSEO情報を設定してください：
+         - メタタイトル：${title} | プリエスコート公式ブログ
+         - メタディスクリプション：${metaDescription}
+         - フォーカスキーワード：${keywords.split(',')[0] || topic}
+      
+      注意:
+      - **新しいカテゴリーを作成しないでください** - 権限エラーが発生します
+      - 既存のカテゴリー（小学校または未分類）を使用してください
+      - データベース操作やWordPress投稿でエラーが発生した場合は、エラーの詳細を報告してください
+      
+      処理結果を報告してください。WordPressの記事URL、ステータス、DBへの保存結果などを含めてください。
+    `);
+    
+    return { 
+      title: title,
+      publishing_result: publishResult.text 
+    };
   },
 });
 
@@ -203,4 +238,5 @@ escortBlogWorkflow
   .then(plannerStep)
   .then(writerStep)
   .then(editorStep)
+  .then(publishStep)
   .commit(); 

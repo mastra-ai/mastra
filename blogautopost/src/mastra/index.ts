@@ -6,7 +6,8 @@ import {
   keywordResearcherAgent, 
   contentPlannerAgent, 
   blogWriterAgent, 
-  editorAgent 
+  editorAgent,
+  contentPublisherAgent 
 } from './agents';
 import { escortBlogWorkflow } from './workflows/blogWorkflow';
 
@@ -16,7 +17,8 @@ export const mastra = new Mastra({
     keywordResearcherAgent,
     contentPlannerAgent,
     blogWriterAgent,
-    editorAgent
+    editorAgent,
+    contentPublisherAgent
   },
   workflows: {
     escortBlogWorkflow
