@@ -64,19 +64,23 @@ const renovateConfig = {
   ignorePaths: ['docs/**'],
   packageRules: [
     {
+      packagePatterns: ['*'],
+      enabled: false,
+    },
+    {
+      matchDepTypes: ['engines'],
+      enabled: false,
+    },
+    {
       groupName: 'examples',
       commitMessageTopic: 'examples',
       groupSlug: 'examples-minor',
       matchFileNames: ['examples/**'],
       schedule: 'before 7am on Monday',
       matchUpdateTypes: ['patch', 'minor'],
+      enabled: true,
     },
-    {
-      matchDepTypes: ['engines'],
-      enabled: false,
-    },
-    { matchPackageNames: ['@types/node'], matchUpdateTypes: ['major'], enabled: false },
-    { matchPackageNames: ['@types/node'], matchUpdateTypes: ['minor', 'patch'] },
+    { matchPackageNames: ['@types/node'], matchUpdateTypes: ['minor', 'patch'], enabled: true },
     {
       groupName: 'AI SDK',
       commitMessageTopic: 'AI SDK',
@@ -85,6 +89,7 @@ const renovateConfig = {
       matchUpdateTypes: ['major', 'minor', 'patch'],
       matchDepTypes: ['dependencies', 'devDependencies'],
       dependencyDashboardApproval: false,
+      enabled: true,
     },
     {
       groupName: 'E2E tests',
@@ -92,6 +97,7 @@ const renovateConfig = {
       matchFileNames: ['e2e-tests/**/package.json'],
       matchDepTypes: ['dependencies', 'devDependencies'],
       dependencyDashboardApproval: false,
+      enabled: true,
     },
     {
       groupName: 'typescript',
@@ -100,24 +106,27 @@ const renovateConfig = {
       matchUpdateTypes: ['major', 'minor', 'patch'],
       matchDepTypes: ['dependencies', 'devDependencies'],
       dependencyDashboardApproval: false,
+      enabled: true,
     },
     {
       groupName: 'formatting & linting',
       commitMessageTopic: 'Formatting & linting',
-      matchPaths: ['+(package.json)', '**/package.json'],
+      matchFileNames: ['+(package.json)', '**/package.json'],
       matchPackageNames: ['eslint', 'prettier', '/^eslint-/'],
-      excludedMatchPackageNames: ['@typescript-eslint/'],
+      excludePackageNames: ['@typescript-eslint/'],
       matchUpdateTypes: ['major', 'minor', 'patch'],
       matchDepTypes: ['dependencies', 'devDependencies'],
       dependencyDashboardApproval: false,
+      enabled: true,
     },
     {
       groupName: 'Build tools',
       commitMessageTopic: 'Build tools',
-      matchPaths: ['+(package.json)', '**/package.json'],
+      matchFileNames: ['+(package.json)', '**/package.json'],
       matchUpdateTypes: ['major', 'minor', 'patch'],
       matchDepTypes: ['devDependencies'],
       matchPackageNames: ['@microsoft/api-extractor', 'tsup', 'rollup'],
+      enabled: true,
     },
   ],
 };
@@ -129,10 +138,10 @@ const excludedPackages = renovateConfig.packageRules
 
 excludedPackages.push('vitest');
 
-renovateConfig.packageRules.unshift({
-  matchPackageNames: Array.from(new Set(excludedPackages)),
-  enabled: false,
-});
+// renovateConfig.packageRules.unshift({
+//   matchPackageNames: Array.from(new Set(excludedPackages)),
+//   enabled: false,
+// });
 
 for (const pkg of listOfPackages) {
   const packageJsonPath = `${pkg}/package.json`;
@@ -149,6 +158,7 @@ for (const pkg of listOfPackages) {
       matchFileNames: [`${pkg}/*/package.json`],
       matchUpdateTypes: ['minor', 'patch'],
       matchDepTypes: ['dependencies', 'devDependencies'],
+      enabled: true,
     });
 
     renovateConfig.packageRules.push({
@@ -157,6 +167,7 @@ for (const pkg of listOfPackages) {
       matchFileNames: [`${pkg}/package.json`],
       matchUpdateTypes: ['major'],
       matchDepTypes: ['dependencies', 'devDependencies'],
+      enabled: true,
     });
   } catch (error) {
     console.warn(`Could not read package.json for ${pkg}, using directory name instead`);
@@ -166,6 +177,7 @@ for (const pkg of listOfPackages) {
       matchFileNames: [`${pkg}/package.json`],
       matchUpdateTypes: ['minor', 'patch'],
       matchDepTypes: ['dependencies', 'devDependencies'],
+      enabled: true,
     });
 
     renovateConfig.packageRules.push({
@@ -174,6 +186,7 @@ for (const pkg of listOfPackages) {
       matchFileNames: [`${pkg}/package.json`],
       matchUpdateTypes: ['major'],
       matchDepTypes: ['dependencies', 'devDependencies'],
+      enabled: true,
     });
   }
 }

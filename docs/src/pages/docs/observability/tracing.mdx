@@ -105,6 +105,11 @@ Here's what a traced agent interaction looks like in [SigNoz](https://signoz.io)
 
 For a complete list of supported observability providers and their configuration details, see the [Observability Providers reference](../reference/observability/providers/).
 
-### Framework-Specific Setup
+### Next.js-specific Tracing steps
 
-For Next.js applications, see our [Next.js Tracing](/docs/observability/nextjs-tracing) guide.
+If you're using Next.js, you have three additional configuration steps:
+1. Enable the instrumentation hook in `next.config.ts`
+2. Configure Mastra telemetry settings
+3. Set up an OpenTelemetry exporter
+
+For implementation details, see the [Next.js Tracing](./nextjs-tracing) guide.

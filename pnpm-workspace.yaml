@@ -6,7 +6,6 @@ packages:
   - "voice/*"
   - "client-sdks/*"
   - "!packages/cli/admin"
-  - "integration-generator/*"
   - "integrations/*"
   - "examples/*"
   - "examples/voice/*"
@@ -15,3 +14,5 @@ packages:
   - "examples/voice/*"
   - "packages/cli/src/playground"
   - "packages/*/integration-tests"
+  - "!examples/crypto-chatbot"
+  - "!examples/travel-app"

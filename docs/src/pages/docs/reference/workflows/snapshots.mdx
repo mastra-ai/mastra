@@ -36,31 +36,37 @@ A Mastra workflow snapshot consists of several key components:
 ```typescript
 export interface WorkflowRunState {
   // Core state info
-  value: Record<string, string>;      // Current state machine value
-  context: {                          // Workflow context
-    steps: Record<string, {           // Step execution results
-      status: 'success' | 'failed' | 'suspended' | 'waiting' | 'skipped';
-      payload?: any;                  // Step-specific data
-      error?: string;                 // Error info if failed
-    }>;
+  value: Record<string, string>; // Current state machine value
+  context: {
+    // Workflow context
+    steps: Record<
+      string,
+      {
+        // Step execution results
+        status: "success" | "failed" | "suspended" | "waiting" | "skipped";
+        payload?: any; // Step-specific data
+        error?: string; // Error info if failed
+      }
+    >;
     triggerData: Record<string, any>; // Initial trigger data
     attempts: Record<string, number>; // Remaining retry attempts
-    inputData: Record<string, any>; 	// Initial input data
+    inputData: Record<string, any>; // Initial input data
   };
 
-  activePaths: Array<{               // Currently active execution paths
+  activePaths: Array<{
+    // Currently active execution paths
     stepPath: string[];
     stepId: string;
     status: string;
   }>;
 
   // Metadata
-  runId: string;                     // Unique run identifier
-  timestamp: number;                 // Time snapshot was created
+  runId: string; // Unique run identifier
+  timestamp: number; // Time snapshot was created
 
   // For nested workflows and suspended steps
-  childStates?: Record<string, WorkflowRunState>;  // Child workflow states
-  suspendedSteps?: Record<string, string>;         // Mapping of suspended steps
+  childStates?: Record<string, WorkflowRunState>; // Child workflow states
+  suspendedSteps?: Record<string, string>; // Mapping of suspended steps
 }
 ```
 
@@ -81,7 +87,6 @@ When a workflow is suspended, Mastra automatically persists the workflow snapsho
 3. `persistWorkflowSnapshot()` is called to save the current state
 4. The snapshot is serialized and stored in the configured database in the `workflow_snapshots` table
 5. The storage record includes the workflow name, run ID, and the serialized snapshot
-
 
 ### Retrieving Snapshots
 
@@ -105,8 +110,8 @@ This means that storage is shared across all workflows registered with the same 
 The default storage option is LibSQL, a SQLite-compatible database:
 
 ```typescript
-import { Mastra } from '@mastra/core/mastra';
-import { DefaultStorage } from '@mastra/core/storage/libsql';
+import { Mastra } from "@mastra/core/mastra";
+import { DefaultStorage } from "@mastra/core/storage/libsql";
 
 const mastra = new Mastra({
   storage: new DefaultStorage({
@@ -115,12 +120,12 @@ const mastra = new Mastra({
       // For production:
       // url: process.env.DATABASE_URL,
       // authToken: process.env.DATABASE_AUTH_TOKEN,
-    }
+    },
   }),
   workflows: {
     weatherWorkflow,
     travelWorkflow,
-  }
+  },
 });
 ```
 
@@ -129,7 +134,7 @@ const mastra = new Mastra({
 For serverless environments:
 
 ```typescript
-import { Mastra } from '@mastra/core/mastra';
+import { Mastra } from "@mastra/core/mastra";
 import { UpstashStore } from "@mastra/upstash";
 
 const mastra = new Mastra({
@@ -140,7 +145,7 @@ const mastra = new Mastra({
   workflows: {
     weatherWorkflow,
     travelWorkflow,
-  }
+  },
 });
 ```
 
@@ -168,7 +173,7 @@ await suspend({
   requiredApprovers: ["manager", "finance"],
   requestedBy: currentUser,
   urgency: "high",
-  expires: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)
+  expires: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
 });
 ```
 
@@ -179,18 +184,16 @@ This metadata is stored with the snapshot and available when resuming.
 You can implement conditional logic based on the suspend payload when resuming:
 
 ```typescript
-run.watch(async ({ context, activePaths }) => {
-  for (const path of activePaths) {
-    const approvalStep = context.steps?.approval;
-    if (approvalStep?.status === 'suspended') {
-      const payload = approvalStep.suspendPayload;
-
-      if (payload.urgency === "high" && currentUser.role === "manager") {
-        await resume({
-          stepId: 'approval',
-          context: { approved: true, approver: currentUser.id },
-        });
-      }
+run.watch(async ({ activePaths }) => {
+  const isApprovalStepSuspended =
+    activePaths.get("approval")?.status === "suspended";
+  if (isApprovalStepSuspended) {
+    const payload = activePaths.get("approval")?.suspendPayload;
+    if (payload.urgency === "high" && currentUser.role === "manager") {
+      await resume({
+        stepId: "approval",
+        context: { approved: true, approver: currentUser.id },
+      });
     }
   }
 });

@@ -6,8 +6,12 @@ on:
     paths:
       - "packages/memory/**"
       - "packages/memory/*/package.json"
-      - "storage/**"
-      - "storage/*/package.json"
+      - "stores/**"
+      - "stores/*/package.json"
+      - "packages/core/**"
+      - "packages/deployer/**"
+      - "packages/server/**"
+      - "client-sdks/client-js/**"
       - ".github/workflows/test-memory.yml"
 
 jobs:

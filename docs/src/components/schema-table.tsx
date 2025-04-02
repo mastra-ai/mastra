@@ -12,6 +12,7 @@ interface SchemaColumn {
   type: string;
   description: string;
   constraints?: ColumnConstraint[];
+  example?: string;
 }
 
 interface SchemaTableProps {
@@ -86,13 +87,36 @@ export const SchemaTable: React.FC<SchemaTableProps> = ({ columns = [] }) => {
                 {column.type}
               </div>
             </div>
-            <div className="text-sm text-zinc-500">
-              <MDXText>{column.description ?? ""}</MDXText>
-            </div>
             {renderConstraints(column.constraints)}
+            <div className="text-sm text-zinc-400">
+              <MDXText>{column.description ?? ""}</MDXText>
+              {column.example && (
+                <div className="mt-1 flex flex-col gap-1">
+                  <MDXExample>
+                    {JSON.stringify(column.example, null, 2)}
+                  </MDXExample>
+                </div>
+              )}
+            </div>
           </div>
         ))}
       </div>
+    </div>
+  );
+};
+
+const MDXExample = ({ children }: { children: string }) => {
+  const components = useMDXComponents();
+
+  return (
+    <div className="my-2">
+      {components.pre && components.code && (
+        <components.pre>
+          <components.code>
+            <div className="pl-5">{children}</div>
+          </components.code>
+        </components.pre>
+      )}
     </div>
   );
 };
