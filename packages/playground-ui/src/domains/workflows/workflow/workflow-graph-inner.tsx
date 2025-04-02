@@ -10,16 +10,18 @@ import {
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 
-import { contructNodesAndEdges } from './utils';
+import { contructNodesAndEdges, WStep } from './utils';
 import { WorkflowConditionNode } from './workflow-condition-node';
 import { WorkflowDefaultNode } from './workflow-default-node';
 import { WorkflowAfterNode } from './workflow-after-node';
 import { WorkflowLoopResultNode } from './workflow-loop-result-node';
+import { WorkflowNestedNode } from './workflow-nested-node';
 
 export function WorkflowGraphInner({ workflow }: { workflow: Workflow }) {
   const { nodes: initialNodes, edges: initialEdges } = contructNodesAndEdges({
     stepGraph: workflow.serializedStepGraph || workflow.stepGraph,
     stepSubscriberGraph: workflow.serializedStepSubscriberGraph || workflow.stepSubscriberGraph,
+    steps: workflow.steps as WStep,
   });
   const [nodes, _, onNodesChange] = useNodesState(initialNodes);
   const [edges] = useEdgesState(initialEdges);
@@ -29,6 +31,7 @@ export function WorkflowGraphInner({ workflow }: { workflow: Workflow }) {
     'condition-node': WorkflowConditionNode,
     'after-node': WorkflowAfterNode,
     'loop-result-node': WorkflowLoopResultNode,
+    'nested-node': WorkflowNestedNode,
   };
 
   return (
