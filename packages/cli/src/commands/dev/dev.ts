@@ -125,7 +125,7 @@ export async function dev({
   const watcher = await bundler.watch(entryFile, dotMastraPath, discoveredTools);
 
   const env = await bundler.loadEnvVars();
-  const formattedEnv = convertToViteEnvVar(env, ['NO_MASTRA_TELEMETRY']);
+  const formattedEnv = convertToViteEnvVar(env, ['MASTRA_TELEMETRY_DISABLED']);
 
   const serverOptions = await getServerOptions(entryFile, join(dotMastraPath, 'output'));
 
