@@ -1,5 +1,6 @@
+"use client";
 import React from "react";
-import { useMDXComponents } from "nextra/mdx";
+import { useMDXComponents } from "nextra-theme-docs";
 
 interface ColumnConstraint {
   type: "nullable" | "primaryKey" | "foreignKey" | "unique" | "default";
