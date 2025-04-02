@@ -2,7 +2,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { fromPackageRoot, fromRepoRoot, log } from '../utils.js';
 
-const DOCS_SOURCE = fromRepoRoot('docs/src/pages/docs');
+const DOCS_SOURCE = fromRepoRoot('docs/src/content/docs');
 const DOCS_DEST = fromPackageRoot('.docs/raw');
 
 async function copyDir(src: string, dest: string) {
