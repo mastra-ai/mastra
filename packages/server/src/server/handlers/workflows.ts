@@ -89,12 +89,16 @@ export async function startAsyncWorkflowHandler({
 
     const workflow = mastra.getWorkflow(workflowId);
 
-    if (!runId) {
-      throw new HTTPException(400, { message: 'runId required to start run' });
-    }
-
     if (!workflow) {
       throw new HTTPException(404, { message: 'Workflow not found' });
+    }
+
+    if (!runId) {
+      const { start } = workflow.createRun();
+      const result = await start({
+        triggerData,
+      });
+      return result;
     }
 
     const run = workflow.getRun(runId);

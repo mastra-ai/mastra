@@ -1,25 +1,14 @@
 /** @type {import('next').NextConfig} */
-import nextra from 'nextra';
+import nextra from "nextra";
 
 const withNextra = nextra({
   search: {
-    codeblocks: true
-  },
-  theme: 'nextra-theme-docs',
-  themeConfig: './theme.config.tsx',
-  mdxOptions: {
-    rehypePrettyCodeOptions: {
-      theme: {
-        dark: 'github-dark',
-        light: 'github-light',
-      },
-    },
+    codeblocks: true,
   },
 });
 
 export default withNextra({
   assetPrefix: process.env.NODE_ENV === "production" ? "/docs" : "",
-
   async rewrites() {
     return {
       beforeFiles: [

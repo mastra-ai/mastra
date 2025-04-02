@@ -9,6 +9,7 @@ import {
 import type { EvalRow, StorageColumn, StorageGetMessagesArg, TABLE_NAMES } from '@mastra/core/storage';
 import type { WorkflowRunState } from '@mastra/core/workflows';
 import pgPromise from 'pg-promise';
+import type { ISSLConfig } from 'pg-promise/typescript/pg-subset';
 
 export type PostgresConfig =
   | {
@@ -17,6 +18,7 @@ export type PostgresConfig =
       database: string;
       user: string;
       password: string;
+      ssl?: boolean | ISSLConfig;
     }
   | {
       connectionString: string;
@@ -38,6 +40,7 @@ export class PostgresStore extends MastraStorage {
             database: config.database,
             user: config.user,
             password: config.password,
+            ssl: config.ssl,
           },
     );
   }
