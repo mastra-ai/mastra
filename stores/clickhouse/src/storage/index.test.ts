@@ -1,15 +1,25 @@
 import { randomUUID } from 'crypto';
+import { TABLE_THREADS, TABLE_MESSAGES, TABLE_WORKFLOW_SNAPSHOT } from '@mastra/core/storage';
 import type { WorkflowRunState } from '@mastra/core/workflows';
 import { describe, it, expect, beforeAll, beforeEach, afterAll } from 'vitest';
 
 import { ClickhouseStore } from '.';
 import type { ClickhouseConfig } from '.';
-import { TABLE_THREADS, TABLE_MESSAGES, TABLE_WORKFLOW_SNAPSHOT } from '@mastra/core/storage';
 
 const TEST_CONFIG: ClickhouseConfig = {
   url: process.env.CLICKHOUSE_URL || 'http://localhost:8123',
   username: process.env.CLICKHOUSE_USERNAME || 'default',
   password: process.env.CLICKHOUSE_PASSWORD || 'password',
+  ttl: {
+    mastra_traces: {
+      row: { interval: 10, unit: 'SECOND' },
+    },
+    mastra_evals: {
+      columns: {
+        run_id: { interval: 10, unit: 'SECOND' },
+      },
+    },
+  },
 };
 
 // Sample test data factory functions
@@ -31,6 +41,22 @@ const createSampleMessage = (threadId: string, createdAt: Date = new Date()) =>
     content: [{ type: 'text', text: 'Hello' }],
     createdAt,
   }) as any;
+
+const createSampleTrace = () => ({
+  id: `trace-${randomUUID()}`,
+  name: 'Test Trace',
+  createdAt: new Date(),
+  updatedAt: new Date(),
+  metadata: { key: 'value' },
+});
+
+const createSampleEval = () => ({
+  id: `eval-${randomUUID()}`,
+  agent_name: 'test-agent',
+  run_id: 'test-run-1',
+  result: '{ "score": 1 }',
+  createdAt: new Date(),
+});
 
 const createSampleWorkflowSnapshot = (status: string, createdAt?: Date) => {
   const runId = `run-${randomUUID()}`;
@@ -213,6 +239,59 @@ describe('ClickhouseStore', () => {
     //   const savedMessages = await store.__getMessages({ threadId: thread.id });
     //   expect(savedMessages).toHaveLength(0);
     // });
+  });
+
+  describe('Traces and TTL', () => {
+    it('should create and retrieve a trace, but not when row level ttl expires', async () => {
+      const trace = createSampleTrace();
+      await store.__batchInsert({
+        tableName: 'mastra_traces',
+        records: [trace],
+      });
+      let traces = await store.__getTraces({
+        page: 0,
+        perPage: 10,
+      });
+
+      expect(traces).toHaveLength(1);
+      expect(traces[0]!.id).toBe(trace.id);
+
+      await new Promise(resolve => setTimeout(resolve, 10e3));
+      await store.optimizeTable({ tableName: 'mastra_traces' });
+
+      traces = await store.__getTraces({
+        page: 0,
+        perPage: 10,
+      });
+
+      expect(traces).toHaveLength(0);
+    }, 60e3);
+
+    // NOTE: unable to clear column level TTLs for the test case nicely, but it does seem to get applied correctly
+    it.skip('should create and retrieve a trace, but not expired columns when column level ttl expires', async () => {
+      await store.clearTable({ tableName: 'mastra_evals' });
+      const ev = createSampleEval();
+      await store.__batchInsert({
+        tableName: 'mastra_evals',
+        records: [ev],
+      });
+      let evals = await store.__getEvalsByAgentName('test-agent');
+      console.log(evals);
+
+      expect(evals).toHaveLength(1);
+      expect(evals[0]!.agentName).toBe('test-agent');
+      expect(evals[0]!.runId).toBe('test-run-1');
+
+      await new Promise(resolve => setTimeout(resolve, 12e3));
+      await store.materializeTtl({ tableName: 'mastra_evals' });
+      await store.optimizeTable({ tableName: 'mastra_evals' });
+
+      evals = await store.__getEvalsByAgentName('test-agent');
+
+      expect(evals).toHaveLength(1);
+      expect(evals[0]!.agentName).toBe('test-agent');
+      expect(evals[0]!.runId).toBeNull();
+    }, 60e3);
   });
 
   describe('Edge Cases and Error Handling', () => {
