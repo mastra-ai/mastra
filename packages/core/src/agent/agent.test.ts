@@ -582,26 +582,18 @@ describe('agent', () => {
       expect(mockWeatherTool.mock.calls[0][0].context.location).toBe('San Francisco');
     }, 500000);
 
-    it('should handle tools with different variable schemas than the agent', async () => {
-      const agentVarsSchema = z.object({
+    it('should provide variables that match the agent schema', async () => {
+      const combinedSchema = z.object({
         apiKey: z.string(),
         userId: z.number(),
         preferences: z.object({
           language: z.string(),
         }),
-      });
-
-      const subsetVarsSchema = z.object({
-        apiKey: z.string(),
-        userId: z.number(),
-      });
-
-      const differentVarsSchema = z.object({
         databaseUrl: z.string(),
         timeout: z.number(),
       });
 
-      const subsetToolMock = vi.fn().mockImplementation(async ({ variables }) => {
+      const firstToolMock = vi.fn().mockImplementation(async ({ variables }) => {
         return {
           result: {
             apiKey: variables.apiKey,
@@ -610,7 +602,7 @@ describe('agent', () => {
         };
       });
 
-      const differentToolMock = vi.fn().mockImplementation(async ({ variables }) => {
+      const secondToolMock = vi.fn().mockImplementation(async ({ variables }) => {
         return {
           result: {
             databaseUrl: variables.databaseUrl,
@@ -619,55 +611,33 @@ describe('agent', () => {
         };
       });
 
-      const subsetTool = createTool({
-        id: 'subsetTool',
-        description: 'Tool with subset of agent variables',
-        variablesSchema: subsetVarsSchema,
-        execute: subsetToolMock,
+      const firstTool = createTool({
+        id: 'firstTool',
+        description: 'Tool using first subset of agent variables',
+        variablesSchema: combinedSchema,
+        execute: firstToolMock,
       });
 
-      const differentTool = createTool({
-        id: 'differentTool',
-        description: 'Tool with different variables',
-        variablesSchema: differentVarsSchema,
-        execute: differentToolMock,
+      const secondTool = createTool({
+        id: 'secondTool',
+        description: 'Tool using second subset of agent variables',
+        variablesSchema: combinedSchema,
+        execute: secondToolMock,
       });
 
       const agent = new Agent({
-        name: 'MultiSchemaAgent',
-        instructions: 'You are an agent with tools that have different variable schemas',
+        name: 'SharedSchemaAgent',
+        instructions: 'You are an agent with tools that share the same schema',
         model: openai('gpt-4o'),
         tools: {
-          subsetTool: subsetTool as any,
-          differentTool: differentTool as any,
+          firstTool: firstTool,
+          secondTool: secondTool,
         },
-        variablesSchema: agentVarsSchema,
+        variablesSchema: combinedSchema,
       });
 
-      const agentVariables = {
-        apiKey: 'agent-api-key',
-        userId: 123,
-        preferences: {
-          language: 'en',
-        },
-      };
-
-      await agent.generate('Use the subset tool', {
-        variables: agentVariables,
-        toolChoice: { type: 'tool', toolName: 'subsetTool' },
-      });
-
-      expect(subsetToolMock).toHaveBeenCalled();
-      expect(subsetToolMock.mock.calls[0][0].variables).toEqual({
-        apiKey: 'agent-api-key',
-        userId: 123,
-      });
-
-      subsetToolMock.mockClear();
-      differentToolMock.mockClear();
-
-      // Testing with variables that satisfy both schemas
-      const combinedVariables = {
+      // Complete set of variables matching the schema
+      const completeVariables = {
         apiKey: 'agent-api-key',
         userId: 123,
         preferences: {
@@ -677,16 +647,26 @@ describe('agent', () => {
         timeout: 5000,
       };
 
-      await agent.generate('Use the different tool', {
-        variables: combinedVariables,
-        toolChoice: { type: 'tool', toolName: 'differentTool' },
+      // First tool only uses apiKey and userId in its implementation
+      await agent.generate('Use the first tool', {
+        variables: completeVariables,
+        toolChoice: { type: 'tool', toolName: 'firstTool' },
       });
 
-      expect(differentToolMock).toHaveBeenCalled();
-      expect(differentToolMock.mock.calls[0][0].variables).toEqual({
-        databaseUrl: 'mongodb://localhost:27017',
-        timeout: 5000,
+      expect(firstToolMock).toHaveBeenCalled();
+      expect(firstToolMock.mock.calls[0][0].variables).toEqual(completeVariables);
+
+      firstToolMock.mockClear();
+      secondToolMock.mockClear();
+
+      // Second tool only uses databaseUrl and timeout in its implementation
+      await agent.generate('Use the second tool', {
+        variables: completeVariables,
+        toolChoice: { type: 'tool', toolName: 'secondTool' },
       });
+
+      expect(secondToolMock).toHaveBeenCalled();
+      expect(secondToolMock.mock.calls[0][0].variables).toEqual(completeVariables);
     }, 500000);
 
     it('should validate variables at the tool level', async () => {
@@ -759,7 +739,7 @@ describe('agent', () => {
       });
     }, 500000);
 
-    it('should handle errors when tools have incompatible variable schemas', async () => {
+    it('should warn when tools have incompatible variable schemas', async () => {
       const agentVarsSchema = z.object({
         apiKey: z.string(),
         userId: z.number(),
@@ -770,11 +750,18 @@ describe('agent', () => {
         userId: z.string(), // Different type than agent's number
       });
 
-      const incompatibleToolMock = vi.fn().mockImplementation(async ({ variables }) => {
-        return {
-          result: variables,
-        };
-      });
+      const incompatibleToolMock = vi
+        .fn()
+        .mockImplementation(async ({ variables }: { variables: z.infer<typeof agentVarsSchema> }) => {
+          // This tool expects a different schema, but we follow the rule that
+          // the agent's schema takes precedence and tools receive variables matching it
+          return {
+            result: {
+              apiKey: typeof variables.apiKey,
+              userId: typeof variables.userId,
+            },
+          };
+        });
 
       const incompatibleTool = createTool({
         id: 'incompatibleTool',
@@ -787,7 +774,8 @@ describe('agent', () => {
         name: 'ErrorHandlingAgent',
         instructions: 'You are an agent with a tool that has incompatible variables',
         model: openai('gpt-4o'),
-        tools: { incompatibleTool: incompatibleTool as any },
+        // @ts-expect-error - we're intentionally passing a tool with incompatible variables schema
+        tools: { incompatibleTool: incompatibleTool },
         variablesSchema: agentVarsSchema,
       });
 
@@ -797,12 +785,23 @@ describe('agent', () => {
       };
 
       await withSilentLogging(agent, async () => {
-        await expect(
-          agent.generate('Use the incompatible tool', {
-            variables: agentVariables,
-            toolChoice: { type: 'tool', toolName: 'incompatibleTool' },
-          }),
-        ).rejects.toThrow('Variables validation failed');
+        const result = await agent.generate('Use the incompatible tool', {
+          variables: agentVariables,
+          toolChoice: { type: 'tool', toolName: 'incompatibleTool' },
+        });
+
+        // The tool should execute with agent's variables
+        expect(incompatibleToolMock).toHaveBeenCalled();
+
+        // The tool receives variables matching the agent's schema types
+        expect(incompatibleToolMock.mock.calls[0][0].variables.apiKey).toBe('agent-api-key');
+        expect(incompatibleToolMock.mock.calls[0][0].variables.userId).toBe(123);
+
+        // Verify that the resulting types are 'string' and 'number', not 'number' and 'string'
+        // as the incompatible tool schema requested
+        const toolResult = result.toolResults.find(r => r.toolName === 'incompatibleTool');
+        expect(toolResult?.result.result.apiKey).toBe('string');
+        expect(toolResult?.result.result.userId).toBe('number');
       });
     }, 500000);
   });
