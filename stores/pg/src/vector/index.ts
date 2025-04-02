@@ -124,19 +124,19 @@ export class PgVector extends MastraVector {
       // Get index type and configuration
       const indexInfo = await this.getIndexInfo(indexName);
 
-      // Set HNSW search parameter if applicable
-      if (indexInfo.type === 'hnsw') {
-        // Calculate ef and clamp between 1 and 1000
-        const calculatedEf = ef ?? Math.max(topK, (indexInfo?.config?.m ?? 16) * topK);
-        const searchEf = Math.min(1000, Math.max(1, calculatedEf));
-        await client.query(`SET LOCAL hnsw.ef_search = ${searchEf}`);
-      }
+      // Build parameters for search settings
+      const hnsw_setting =
+        indexInfo.type === 'hnsw'
+          ? `SET LOCAL hnsw.ef_search = ${Math.min(1000, Math.max(1, ef ?? Math.max(topK, (indexInfo?.config?.m ?? 16) * topK)))};`
+          : '';
 
-      if (indexInfo.type === 'ivfflat' && probes) {
-        await client.query(`SET LOCAL ivfflat.probes = ${probes}`);
-      }
+      const ivf_setting = indexInfo.type === 'ivfflat' && probes ? `SET LOCAL ivfflat.probes = ${probes};` : '';
 
+      // Combine settings and query into one statement
       const query = `
+        ${hnsw_setting}
+        ${ivf_setting}
+        
         WITH vector_scores AS (
           SELECT
             vector_id as id,
@@ -151,6 +151,7 @@ export class PgVector extends MastraVector {
         WHERE score > $1
         ORDER BY score DESC
         LIMIT ${topK}`;
+
       const result = await client.query(query, filterValues);
 
       return result.rows.map(({ id, score, metadata, embedding }) => ({
