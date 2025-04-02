@@ -1472,8 +1472,49 @@ export async function createHonoServer(
     resumeWorkflowHandler,
   );
 
+  /**
+   * @deprecated Use /api/workflows/:workflowId/resume-async instead
+   */
   app.post(
     '/api/workflows/:workflowId/resumeAsync',
+    bodyLimit(bodyLimitOptions),
+    describeRoute({
+      description: '@deprecated Use /api/workflows/:workflowId/resume-async instead',
+      tags: ['workflows'],
+      parameters: [
+        {
+          name: 'workflowId',
+          in: 'path',
+          required: true,
+          schema: { type: 'string' },
+        },
+        {
+          name: 'runId',
+          in: 'query',
+          required: true,
+          schema: { type: 'string' },
+        },
+      ],
+      requestBody: {
+        required: true,
+        content: {
+          'application/json': {
+            schema: {
+              type: 'object',
+              properties: {
+                stepId: { type: 'string' },
+                context: { type: 'object' },
+              },
+            },
+          },
+        },
+      },
+    }),
+    resumeAsyncWorkflowHandler,
+  );
+
+  app.post(
+    '/api/workflows/:workflowId/resume-async',
     bodyLimit(bodyLimitOptions),
     describeRoute({
       description: 'Resume a suspended workflow step',
@@ -1543,6 +1584,54 @@ export async function createHonoServer(
     bodyLimit(bodyLimitOptions),
     describeRoute({
       description: 'Execute/Start a workflow',
+      tags: ['workflows'],
+      parameters: [
+        {
+          name: 'workflowId',
+          in: 'path',
+          required: true,
+          schema: { type: 'string' },
+        },
+        {
+          name: 'runId',
+          in: 'query',
+          required: false,
+          schema: { type: 'string' },
+        },
+      ],
+      requestBody: {
+        required: true,
+        content: {
+          'application/json': {
+            schema: {
+              type: 'object',
+              properties: {
+                input: { type: 'object' },
+              },
+            },
+          },
+        },
+      },
+      responses: {
+        200: {
+          description: 'Workflow execution result',
+        },
+        404: {
+          description: 'Workflow not found',
+        },
+      },
+    }),
+    startAsyncWorkflowHandler,
+  );
+
+  /**
+   * @deprecated Use /api/workflows/:workflowId/start-async instead
+   */
+  app.post(
+    '/api/workflows/:workflowId/start-async',
+    bodyLimit(bodyLimitOptions),
+    describeRoute({
+      description: '@deprecated Use /api/workflows/:workflowId/start-async instead',
       tags: ['workflows'],
       parameters: [
         {
