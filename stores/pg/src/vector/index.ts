@@ -248,21 +248,25 @@ export class PgVector extends MastraVector {
       // Use async-mutex instead of advisory lock for perf (over 2x as fast)
       await this.createMutex.runExclusive(async () => {
         // Try to create extension
-        await client.query('CREATE EXTENSION IF NOT EXISTS vector');
-
-        // Create the table with explicit schema
-        await client.query(`
-        CREATE TABLE IF NOT EXISTS ${indexName} (
-          id SERIAL PRIMARY KEY,
-          vector_id TEXT UNIQUE NOT NULL,
-          embedding vector(${dimension}),
-          metadata JSONB DEFAULT '{}'::jsonb
-        );
-      `);
-      } finally {
-        // Always release lock
-        await client.query('SELECT pg_advisory_unlock($1)', [lockId]);
-      }
+        try {
+          await client.query(`
+          DO $$ 
+          BEGIN
+            CREATE EXTENSION IF NOT EXISTS vector;
+            
+            CREATE TABLE IF NOT EXISTS ${indexName} (
+              id SERIAL PRIMARY KEY,
+              vector_id TEXT UNIQUE NOT NULL,
+              embedding vector(${dimension}),
+              metadata JSONB DEFAULT '{}'::jsonb
+            );
+          END $$;
+        `);
+        } catch (e) {
+          this.createdIndexes.delete(indexName);
+          throw e;
+        }
+      });
 
       if (buildIndex) {
         await this.setupIndex({ indexName, metric, indexConfig }, client);
