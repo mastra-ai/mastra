@@ -1,7 +1,8 @@
 import { randomUUID } from 'crypto';
+import type { MetricResult, TestInfo } from '@mastra/core/eval';
 import type { MessageType } from '@mastra/core/memory';
 import type { TABLE_NAMES } from '@mastra/core/storage';
-import { TABLE_MESSAGES, TABLE_THREADS, TABLE_WORKFLOW_SNAPSHOT } from '@mastra/core/storage';
+import { TABLE_MESSAGES, TABLE_THREADS, TABLE_WORKFLOW_SNAPSHOT, TABLE_EVALS } from '@mastra/core/storage';
 import type { WorkflowRunState } from '@mastra/core/workflows';
 import { describe, it, expect, beforeAll, beforeEach, afterAll, vi } from 'vitest';
 
@@ -54,6 +55,24 @@ const createSampleWorkflowSnapshot = (status: string, createdAt?: Date) => {
   return { snapshot, runId, stepId };
 };
 
+const createSampleEval = (agentName: string, isTest = false) => {
+  const testInfo = isTest ? { testPath: 'test/path.ts', testName: 'Test Name' } : undefined;
+
+  return {
+    id: randomUUID(),
+    agent_name: agentName,
+    input: 'Sample input',
+    output: 'Sample output',
+    result: JSON.stringify({ score: 0.8 }),
+    metric_name: 'sample-metric',
+    instructions: 'Sample instructions',
+    test_info: testInfo ? JSON.stringify(testInfo) : undefined,
+    global_run_id: `global-${randomUUID()}`,
+    run_id: `run-${randomUUID()}`,
+    created_at: new Date().toISOString(),
+  };
+};
+
 describe('UpstashStore', () => {
   let store: UpstashStore;
   const testTableName = 'test_table';
@@ -78,6 +97,8 @@ describe('UpstashStore', () => {
     await store.clearTable({ tableName: testTableName2 as TABLE_NAMES });
     await store.clearTable({ tableName: TABLE_THREADS });
     await store.clearTable({ tableName: TABLE_MESSAGES });
+    await store.clearTable({ tableName: TABLE_WORKFLOW_SNAPSHOT });
+    await store.clearTable({ tableName: TABLE_EVALS });
   });
 
   describe('Table Operations', () => {
@@ -348,6 +369,62 @@ describe('UpstashStore', () => {
         runId: 'non-existent',
       });
       expect(result).toBeNull();
+    });
+  });
+
+  describe('Eval Operations', () => {
+    beforeEach(async () => {
+      await store.clearTable({ tableName: TABLE_EVALS });
+    });
+
+    it('should retrieve evals by agent name', async () => {
+      const agentName = `test-agent-${randomUUID()}`;
+
+      // Create sample evals
+      const liveEval = createSampleEval(agentName, false);
+      const testEval = createSampleEval(agentName, true);
+      const otherAgentEval = createSampleEval(`other-agent-${randomUUID()}`, false);
+
+      // Insert evals
+      await store.insert({
+        tableName: TABLE_EVALS,
+        record: liveEval,
+      });
+
+      await store.insert({
+        tableName: TABLE_EVALS,
+        record: testEval,
+      });
+
+      await store.insert({
+        tableName: TABLE_EVALS,
+        record: otherAgentEval,
+      });
+
+      // Test getting all evals for the agent
+      const allEvals = await store.getEvalsByAgentName(agentName);
+      expect(allEvals).toHaveLength(2);
+      expect(allEvals.map(e => e.runId)).toEqual(expect.arrayContaining([liveEval.run_id, testEval.run_id]));
+
+      // Test getting only live evals
+      const liveEvals = await store.getEvalsByAgentName(agentName, 'live');
+      expect(liveEvals).toHaveLength(1);
+      expect(liveEvals[0].runId).toBe(liveEval.run_id);
+
+      // Test getting only test evals
+      const testEvals = await store.getEvalsByAgentName(agentName, 'test');
+      expect(testEvals).toHaveLength(1);
+      expect(testEvals[0].runId).toBe(testEval.run_id);
+
+      // Verify the test_info was properly parsed
+      if (testEval.test_info) {
+        const expectedTestInfo = JSON.parse(testEval.test_info);
+        expect(testEvals[0].testInfo).toEqual(expectedTestInfo);
+      }
+
+      // Test getting evals for non-existent agent
+      const nonExistentEvals = await store.getEvalsByAgentName('non-existent-agent');
+      expect(nonExistentEvals).toHaveLength(0);
     });
   });
 
