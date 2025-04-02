@@ -18,35 +18,42 @@ import { getWeather } from '@/lib/ai/tools/get-weather';
 export const maxDuration = 60;
 
 export async function POST(request: Request) {
-  const { id, messages, selectedChatModel }: { id: string; messages: Array<Message>; selectedChatModel: string } =
-    await request.json();
-
-  const session = await auth();
-
-  if (!session || !session.user || !session.user.id) {
-    return new Response('Unauthorized', { status: 401 });
-  }
-
-  const userMessage = getMostRecentUserMessage(messages);
-
-  if (!userMessage) {
-    return new Response('No user message found', { status: 400 });
-  }
-
-  const chat = await getChatById({ id });
-
-  if (!chat) {
-    const title = await generateTitleFromUserMessage({ message: userMessage });
-    await saveChat({ id, userId: session.user.id, title });
-  }
-
-  await saveMessages({
-    messages: [{ ...userMessage, createdAt: new Date(), chatId: id }],
-  });
-
   try {
+    const { id, messages, selectedChatModel }: { id: string; messages: Array<Message>; selectedChatModel: string } =
+      await request.json();
+
+    const session = await auth();
+
+    if (!session || !session.user || !session.user.id) {
+      return new Response('Unauthorized', { status: 401 });
+    }
+
+    const userMessage = getMostRecentUserMessage(messages);
+
+    if (!userMessage) {
+      return new Response('No user message found', { status: 400 });
+    }
+
+    // const thread = await memory.getThreadById({ threadId: id });
+
+    // if (!thread) {
+    //   const title = await generateTitleFromUserMessage({ message: userMessage });
+    //   await saveChat({ id, userId: session.user.id, title });
+    // }
+
+    // await saveMessages({
+    //   messages: [{ ...userMessage, createdAt: new Date(), chatId: id }],
+    // });
     const agent = mastra.getAgent('weatherAgent');
-    const result = await agent.stream(messages as any);
+
+    if (!agent) {
+      return Response.json('Agent not found', { status: 404 });
+    }
+
+    const result = await agent.stream(messages, {
+      threadId: id,
+      resourceId: session.user.id,
+    });
 
     return result.toDataStreamResponse();
   } catch (error: any) {
@@ -124,27 +131,42 @@ export async function POST(request: Request) {
 }
 
 export async function DELETE(request: Request) {
-  const { searchParams } = new URL(request.url);
-  const id = searchParams.get('id');
-
-  if (!id) {
-    return new Response('Not Found', { status: 404 });
-  }
-
-  const session = await auth();
-
-  if (!session || !session.user) {
-    return new Response('Unauthorized', { status: 401 });
-  }
-
   try {
-    const chat = await getChatById({ id });
+    const { searchParams } = new URL(request.url);
+    const id = searchParams.get('id');
 
-    if (chat.userId !== session.user.id) {
+    if (!id) {
+      return new Response('Not Found', { status: 404 });
+    }
+
+    const session = await auth();
+
+    if (!session || !session.user) {
+      return new Response('Unauthorized', { status: 401 });
+    }
+    const agent = mastra.getAgent('weatherAgent');
+
+    if (!agent) {
+      return Response.json('Agent not found', { status: 404 });
+    }
+
+    const memory = agent.getMemory();
+
+    if (!memory) {
+      return Response.json('Memory not initialized', { status: 400 });
+    }
+
+    const thread = await memory.getThreadById({ threadId: id });
+
+    if (!thread) {
+      return Response.json('Thread not found', { status: 404 });
+    }
+
+    if (thread.resourceId !== session.user.id) {
       return new Response('Unauthorized', { status: 401 });
     }
 
-    await deleteChatById({ id });
+    await memory.deleteThread(id);
 
     return new Response('Chat deleted', { status: 200 });
   } catch (error) {

@@ -11,7 +11,7 @@ const nextConfig: NextConfig = {
       },
     ],
   },
-  serverExternalPackages: ['@mastra/*'],
+  serverExternalPackages: ['@mastra/*', '@libsql/*'],
 };
 
 export default nextConfig;

@@ -7,6 +7,7 @@ import { getChatById, getMessagesByChatId } from '@/lib/db/queries';
 import { convertToUIMessages } from '@/lib/utils';
 import { DataStreamHandler } from '@/components/data-stream-handler';
 import { DEFAULT_CHAT_MODEL } from '@/lib/ai/models';
+import { mastra } from '@/src/mastra';
 
 export default async function Page(props: { params: Promise<{ id: string }> }) {
   const params = await props.params;
@@ -29,9 +30,23 @@ export default async function Page(props: { params: Promise<{ id: string }> }) {
     }
   }
 
-  const messagesFromDb = await getMessagesByChatId({
-    id,
-  });
+  const agent = mastra.getAgent('weatherAgent');
+
+  if (!agent) {
+    return notFound();
+  }
+
+  const memory = agent.getMemory();
+
+  if (!memory) {
+    return notFound();
+  }
+
+  // const messagesFromDb = await getMessagesByChatId({
+  //   id,
+  // });
+
+  const messagesFromDb = await memory.query({ threadId: id });
 
   const cookieStore = await cookies();
   const chatModelFromCookie = cookieStore.get('chat-model');
@@ -41,7 +56,7 @@ export default async function Page(props: { params: Promise<{ id: string }> }) {
       <>
         <Chat
           id={chat.id}
-          initialMessages={convertToUIMessages(messagesFromDb)}
+          initialMessages={messagesFromDb.uiMessages || []}
           selectedChatModel={DEFAULT_CHAT_MODEL}
           selectedVisibilityType={chat.visibility}
           isReadonly={session?.user?.id !== chat.userId}
