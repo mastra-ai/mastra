@@ -129,20 +129,33 @@ The `until` method repeats a step until a specified condition becomes true. It t
 3. Optional variables to pass to the repeated step
 
 ```typescript
+// Step that increments a counter until target is reached
+const incrementStep = new Step({
+  id: 'increment',
+  inputSchema: z.object({
+    // Current counter value
+    counter: z.number().optional(),
+  }),
+  execute: async ({ context }) => {
+    const { counter = 0 } = context.inputData;
+    return { counter: counter + 1 };
+  },
+});
+
 workflow
   .step(incrementStep)
   .until(
     async ({ context }) => {
-      // Stop when the value reaches or exceeds 10
+      // Stop when counter reaches 10
       const result = context.getStepResult(incrementStep);
-      return (result?.value ?? 0) >= 10;
+      return (result?.counter ?? 0) >= 10;
     },
     incrementStep,
     {
-      // Pass variables to the repeated step
-      prevValue: {
+      // Pass current counter to next iteration
+      counter: {
         step: incrementStep,
-        path: 'value'
+        path: 'counter'
       }
     }
   )
@@ -172,20 +185,33 @@ The `while` method repeats a step as long as a specified condition remains true.
 3. Optional variables to pass to the repeated step
 
 ```typescript
+// Step that increments a counter while below target
+const incrementStep = new Step({
+  id: 'increment',
+  inputSchema: z.object({
+    // Current counter value
+    counter: z.number().optional(),
+  }),
+  execute: async ({ context }) => {
+    const { counter = 0 } = context.inputData;
+    return { counter: counter + 1 };
+  },
+});
+
 workflow
   .step(incrementStep)
   .while(
     async ({ context }) => {
-      // Continue as long as the value is less than 10
+      // Continue while counter is less than 10
       const result = context.getStepResult(incrementStep);
-      return (result?.value ?? 0) < 10;
+      return (result?.counter ?? 0) < 10;
     },
     incrementStep,
     {
-      // Pass variables to the repeated step
-      prevValue: {
+      // Pass current counter to next iteration
+      counter: {
         step: incrementStep,
-        path: 'value'
+        path: 'counter'
       }
     }
   )
