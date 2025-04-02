@@ -21,6 +21,7 @@ export class Workflow extends BaseResource {
   }
 
   /**
+   * @deprecated Use `startAsync` instead
    * Executes the workflow with the provided parameters
    * @param params - Parameters required for workflow execution
    * @returns Promise containing the workflow execution results
@@ -87,11 +88,17 @@ export class Workflow extends BaseResource {
 
   /**
    * Starts a workflow run asynchronously and returns a promise that resolves when the workflow is complete
-   * @param params - Object containing the runId and triggerData
+   * @param params - Object containing the optional runId and triggerData
    * @returns Promise containing the workflow execution results
    */
-  startAsync(params: { runId: string; triggerData: Record<string, any> }): Promise<WorkflowRunResult> {
-    return this.request(`/api/workflows/${this.workflowId}/startAsync?runId=${params.runId}`, {
+  startAsync(params: { runId?: string; triggerData: Record<string, any> }): Promise<WorkflowRunResult> {
+    const searchParams = new URLSearchParams();
+
+    if (!!params?.runId) {
+      searchParams.set('runId', params.runId);
+    }
+
+    return this.request(`/api/workflows/${this.workflowId}/startAsync?${searchParams.toString()}`, {
       method: 'POST',
       body: params?.triggerData,
     });
