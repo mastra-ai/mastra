@@ -299,103 +299,69 @@ export class Agent<
     return { threadId: threadId || '', messages: userMessages };
   }
 
-  async saveResponse({
-    result,
+  private getResponseMessages({
+    response,
     threadId,
     resourceId,
-    runId,
-    memoryConfig,
   }: {
-    runId: string;
-    resourceId: string;
-    result: Record<string, any>;
+    response: any; // why??
     threadId: string;
-    memoryConfig: MemoryConfig | undefined;
+    resourceId: string;
   }) {
-    const { response } = result;
-    try {
-      if (response.messages) {
-        const ms = Array.isArray(response.messages) ? response.messages : [response.messages];
+    if (!response.messages) return [];
+    const messagesArray = Array.isArray(response.messages) ? response.messages : [response.messages];
 
-        const responseMessagesWithoutIncompleteToolCalls = this.sanitizeResponseMessages(ms);
+    return this.sanitizeResponseMessages(messagesArray).map((message: CoreMessage | CoreAssistantMessage, index) => {
+      const messageId = randomUUID();
+      let toolCallIds: string[] | undefined;
+      let toolCallArgs: Record<string, unknown>[] | undefined;
+      let toolNames: string[] | undefined;
+      let type: 'text' | 'tool-call' | 'tool-result' = 'text';
 
-        const memory = this.getMemory();
-
-        if (memory) {
-          this.logger.debug(
-            `[Agent:${this.name}] - Memory persistence: store=${this.getMemory()?.constructor.name} threadId=${threadId}`,
-            {
-              runId,
-              resourceId,
-              threadId,
-              memoryStore: this.getMemory()?.constructor.name,
-            },
-          );
-
-          await memory.saveMessages({
-            memoryConfig,
-            messages: responseMessagesWithoutIncompleteToolCalls.map(
-              (message: CoreMessage | CoreAssistantMessage, index) => {
-                const messageId = randomUUID();
-                let toolCallIds: string[] | undefined;
-                let toolCallArgs: Record<string, unknown>[] | undefined;
-                let toolNames: string[] | undefined;
-                let type: 'text' | 'tool-call' | 'tool-result' = 'text';
-
-                if (message.role === 'tool') {
-                  toolCallIds = (message as CoreToolMessage).content.map(content => content.toolCallId);
-                  type = 'tool-result';
-                }
-                if (message.role === 'assistant') {
-                  const assistantContent = (message as CoreAssistantMessage).content as Array<TextPart | ToolCallPart>;
-
-                  const assistantToolCalls = assistantContent
-                    .map(content => {
-                      if (content.type === 'tool-call') {
-                        return {
-                          toolCallId: content.toolCallId,
-                          toolArgs: content.args,
-                          toolName: content.toolName,
-                        };
-                      }
-                      return undefined;
-                    })
-                    ?.filter(Boolean) as Array<{
-                    toolCallId: string;
-                    toolArgs: Record<string, unknown>;
-                    toolName: string;
-                  }>;
-
-                  toolCallIds = assistantToolCalls?.map(toolCall => toolCall.toolCallId);
-
-                  toolCallArgs = assistantToolCalls?.map(toolCall => toolCall.toolArgs);
-                  toolNames = assistantToolCalls?.map(toolCall => toolCall.toolName);
-                  type = assistantContent?.[0]?.type as 'text' | 'tool-call' | 'tool-result';
-                }
-
-                return {
-                  id: messageId,
-                  threadId: threadId,
-                  resourceId: resourceId,
-                  role: message.role as any,
-                  content: message.content as any,
-                  createdAt: new Date(Date.now() + index), // use Date.now() + index to make sure every message is atleast one millisecond apart
-                  toolCallIds: toolCallIds?.length ? toolCallIds : undefined,
-                  toolCallArgs: toolCallArgs?.length ? toolCallArgs : undefined,
-                  toolNames: toolNames?.length ? toolNames : undefined,
-                  type,
-                };
-              },
-            ),
-          });
-        }
+      if (message.role === 'tool') {
+        toolCallIds = (message as CoreToolMessage).content.map(content => content.toolCallId);
+        type = 'tool-result';
       }
-    } catch (err) {
-      this.logger.error(`[Agent:${this.name}] - Failed to save assistant response`, {
-        error: err,
-        runId: runId,
-      });
-    }
+      if (message.role === 'assistant') {
+        const assistantContent = (message as CoreAssistantMessage).content as Array<TextPart | ToolCallPart>;
+
+        const assistantToolCalls = assistantContent
+          .map(content => {
+            if (content.type === 'tool-call') {
+              return {
+                toolCallId: content.toolCallId,
+                toolArgs: content.args,
+                toolName: content.toolName,
+              };
+            }
+            return undefined;
+          })
+          ?.filter(Boolean) as Array<{
+          toolCallId: string;
+          toolArgs: Record<string, unknown>;
+          toolName: string;
+        }>;
+
+        toolCallIds = assistantToolCalls?.map(toolCall => toolCall.toolCallId);
+
+        toolCallArgs = assistantToolCalls?.map(toolCall => toolCall.toolArgs);
+        toolNames = assistantToolCalls?.map(toolCall => toolCall.toolName);
+        type = assistantContent?.[0]?.type as 'text' | 'tool-call' | 'tool-result';
+      }
+
+      return {
+        id: messageId,
+        threadId: threadId,
+        resourceId: resourceId,
+        role: message.role as any,
+        content: message.content as any,
+        createdAt: new Date(Date.now() + index), // use Date.now() + index to make sure every message is atleast one millisecond apart
+        toolCallIds: toolCallIds?.length ? toolCallIds : undefined,
+        toolCallArgs: toolCallArgs?.length ? toolCallArgs : undefined,
+        toolNames: toolNames?.length ? toolNames : undefined,
+        type,
+      };
+    });
   }
 
   sanitizeResponseMessages(messages: Array<CoreMessage>): Array<CoreMessage> {
@@ -792,13 +758,12 @@ export class Agent<
 
             await Promise.all([
               (async () => {
-                await memory.saveMessages({ messages: threadMessages, memoryConfig });
-                await this.saveResponse({
-                  result,
-                  threadId,
-                  resourceId,
+                await memory.saveMessages({
+                  messages: [
+                    ...threadMessages,
+                    ...this.getResponseMessages({ threadId, resourceId, response: result.response }),
+                  ],
                   memoryConfig,
-                  runId,
                 });
               })(),
               (async () => {
