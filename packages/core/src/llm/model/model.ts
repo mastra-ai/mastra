@@ -15,7 +15,7 @@ import type {
 } from '../';
 import type { MastraPrimitives } from '../../action';
 import type { AiMessageType, ToolsInput } from '../../agent/types';
-import type { Container } from '../../di/container';
+import type { Container } from '../../di';
 import type { Mastra } from '../../mastra';
 import type { MessageType } from '../../memory';
 import type { MastraMemory } from '../../memory/memory';

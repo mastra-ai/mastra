@@ -7,6 +7,7 @@ import { assign, createActor, fromPromise, setup } from 'xstate';
 import type { z } from 'zod';
 
 import type { MastraUnion } from '../action';
+import type { Container } from '../di';
 import type { Logger } from '../logger';
 
 import type { Mastra } from '../mastra';
@@ -50,6 +51,7 @@ export class Machine<
 > extends EventEmitter {
   logger: Logger;
   #mastra?: Mastra;
+  #container: Container;
   #workflowInstance: WorkflowInstance;
   #executionSpan?: Span | undefined;
 
@@ -66,6 +68,7 @@ export class Machine<
   constructor({
     logger,
     mastra,
+    container,
     workflowInstance,
     executionSpan,
     name,
@@ -77,6 +80,7 @@ export class Machine<
   }: {
     logger: Logger;
     mastra?: Mastra;
+    container: Container;
     workflowInstance: WorkflowInstance;
     executionSpan?: Span;
     name: string;
@@ -90,6 +94,7 @@ export class Machine<
 
     this.#mastra = mastra;
     this.#workflowInstance = workflowInstance;
+    this.#container = container;
     this.#executionSpan = executionSpan;
     this.logger = logger;
 
@@ -412,6 +417,7 @@ export class Machine<
             },
             runId: this.#runId,
             mastra: mastraProxy as MastraUnion | undefined,
+            container: this.#container,
           });
         } catch (error) {
           this.logger.debug(`Step ${stepNode.id} failed`, {
@@ -526,7 +532,7 @@ export class Machine<
           };
         }) => {
           const { parentStepId, context } = input;
-          const result = await this.#workflowInstance.runMachine(parentStepId, context);
+          const result = await this.#workflowInstance.runMachine(parentStepId, context, this.#container);
           return Promise.resolve({
             steps: result.reduce((acc, r) => {
               return { ...acc, ...r?.results };

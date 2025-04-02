@@ -1,4 +1,5 @@
 import type { Mastra } from '@mastra/core';
+import type { Container } from '@mastra/core/di';
 import {
   getWorkflowsHandler as getOriginalWorkflowsHandler,
   getWorkflowByIdHandler as getOriginalWorkflowByIdHandler,
@@ -49,12 +50,14 @@ export async function getWorkflowByIdHandler(c: Context) {
 export async function startAsyncWorkflowHandler(c: Context) {
   try {
     const mastra: Mastra = c.get('mastra');
+    const container: Container = c.get('container');
     const workflowId = c.req.param('workflowId');
     const triggerData = await c.req.json();
     const runId = c.req.query('runId');
 
     const result = await getOriginalStartAsyncWorkflowHandler({
       mastra,
+      container,
       workflowId,
       runId,
       triggerData,
@@ -70,10 +73,12 @@ export async function createRunHandler(c: Context) {
   try {
     const mastra: Mastra = c.get('mastra');
     const workflowId = c.req.param('workflowId');
+    const container: Container = c.get('container');
     const prevRunId = c.req.query('runId');
 
     const result = await getOriginalCreateRunHandler({
       mastra,
+      container,
       workflowId,
       runId: prevRunId,
     });
@@ -87,12 +92,14 @@ export async function createRunHandler(c: Context) {
 export async function startWorkflowRunHandler(c: Context) {
   try {
     const mastra: Mastra = c.get('mastra');
+    const container: Container = c.get('container');
     const workflowId = c.req.param('workflowId');
     const triggerData = await c.req.json();
     const runId = c.req.query('runId');
 
     await getOriginalStartWorkflowRunHandler({
       mastra,
+      container,
       workflowId,
       runId,
       triggerData,
@@ -149,6 +156,7 @@ export function watchWorkflowHandler(c: Context) {
 export async function resumeAsyncWorkflowHandler(c: Context) {
   try {
     const mastra: Mastra = c.get('mastra');
+    const container: Container = c.get('container');
     const workflowId = c.req.param('workflowId');
     const runId = c.req.query('runId');
     const { stepId, context } = await c.req.json();
@@ -159,6 +167,7 @@ export async function resumeAsyncWorkflowHandler(c: Context) {
 
     const result = await getOriginalResumeAsyncWorkflowHandler({
       mastra,
+      container,
       workflowId,
       runId,
       body: { stepId, context },
@@ -173,6 +182,7 @@ export async function resumeAsyncWorkflowHandler(c: Context) {
 export async function resumeWorkflowHandler(c: Context) {
   try {
     const mastra: Mastra = c.get('mastra');
+    const container: Container = c.get('container');
     const workflowId = c.req.param('workflowId');
     const runId = c.req.query('runId');
     const { stepId, context } = await c.req.json();
@@ -183,6 +193,7 @@ export async function resumeWorkflowHandler(c: Context) {
 
     await getOriginalResumeWorkflowHandler({
       mastra,
+      container,
       workflowId,
       runId,
       body: { stepId, context },

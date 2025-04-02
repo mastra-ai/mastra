@@ -9,7 +9,7 @@ import type {
 import type { JSONSchema7 } from 'json-schema';
 import type { z, ZodSchema } from 'zod';
 
-import type { Container } from '../di/container';
+import type { Container } from '../di';
 import type { Metric } from '../eval';
 import type {
   CoreMessage,
