@@ -1,10 +1,13 @@
 import { get } from 'radash';
-import type { z } from 'zod';
+import { z } from 'zod';
 import type { Mastra } from '..';
+import { Agent } from '../agent';
+import type { ToolsInput } from '../agent';
+import type { Metric } from '../eval';
 import type { Logger } from '../logger';
 import type { Step } from './step';
 import type { StepAction, StepResult, VariableReference, WorkflowContext, WorkflowRunResult } from './types';
-import type { Workflow } from './workflow';
+import { Workflow } from './workflow';
 
 export function isErrorEvent(stateEvent: any): stateEvent is {
   type: `xstate.error.actor.${string}`;
@@ -178,13 +181,20 @@ export function getResultActivePaths(state: {
 }
 
 export function isWorkflow(
-  step: Step<any, any, any, any> | Workflow<any, any, any, any>,
+  step: Step<any, any, any, any> | Workflow<any, any, any, any> | Agent<any, any, any>,
 ): step is Workflow<any, any, any, any> {
   // @ts-ignore
-  return !!step?.name;
+  return step instanceof Workflow;
 }
 
-export function resolveVariables<TSteps extends Step<any, any, any>[]>({
+export function isAgent(
+  step: Step<any, any, any, any> | Agent<any, any, any> | Workflow<any, any, any, any>,
+): step is Agent<any, any, any> {
+  // @ts-ignore
+  return step instanceof Agent;
+}
+
+export function resolveVariables({
   runId,
   logger,
   variables,
@@ -232,6 +242,49 @@ export function resolveVariables<TSteps extends Step<any, any, any>[]>({
   return resolvedData;
 }
 
+export function agentToStep<
+  TAgentId extends string = string,
+  TTools extends ToolsInput = ToolsInput,
+  TMetrics extends Record<string, Metric> = Record<string, Metric>,
+>(
+  agent: Agent<TAgentId, TTools, TMetrics>,
+  { mastra }: { mastra?: Mastra } = {},
+): StepAction<TAgentId, z.ZodObject<{ prompt: z.ZodString }>, z.ZodObject<{ text: z.ZodString }>, any> {
+  return {
+    id: agent.name,
+    inputSchema: z.object({
+      prompt: z.string(),
+      resourceId: z.string().optional(),
+      threadId: z.string().optional(),
+    }),
+    outputSchema: z.object({
+      text: z.string(),
+    }),
+    execute: async ({ context, runId, mastra: mastraFromExecute }) => {
+      const realMastra = mastraFromExecute ?? mastra;
+      if (!realMastra) {
+        throw new Error('Mastra instance not found');
+      }
+
+      agent.__registerMastra(realMastra);
+      agent.__registerPrimitives({
+        logger: realMastra.getLogger(),
+        telemetry: realMastra.getTelemetry(),
+      });
+
+      const result = await agent.generate(context.inputData.prompt, {
+        runId,
+        resourceId: context.inputData.resourceId,
+        threadId: context.inputData.threadId,
+      });
+
+      return {
+        text: result.text,
+      };
+    },
+  };
+}
+
 export function workflowToStep<
   TSteps extends Step<any, any, any, any>[],
   TStepId extends string = any,
@@ -246,14 +299,16 @@ export function workflowToStep<
   return {
     id: workflow.name,
     workflow,
-    execute: async ({ context, suspend, emit, runId, mastra }) => {
-      if (mastra) {
-        workflow.__registerMastra(mastra);
+    execute: async ({ context, suspend, emit, mastra: mastraFromExecute }) => {
+      const realMastra = mastraFromExecute ?? mastra;
+      if (realMastra) {
+        workflow.__registerMastra(realMastra);
         workflow.__registerPrimitives({
-          logger: mastra.getLogger(),
-          telemetry: mastra.getTelemetry(),
+          logger: realMastra.getLogger(),
+          telemetry: realMastra.getTelemetry(),
         });
       }
+
       const run = context.isResume ? workflow.createRun({ runId: context.isResume.runId }) : workflow.createRun();
       const unwatch = run.watch(state => {
         emit('state-update', workflow.name, state.results, { ...context, ...{ [workflow.name]: state.results } });
@@ -275,7 +330,7 @@ export function workflowToStep<
       }
 
       if (awaitedResult.activePaths?.size > 0) {
-        const suspendedStep = [...awaitedResult.activePaths.entries()].find(([stepId, { status }]) => {
+        const suspendedStep = [...awaitedResult.activePaths.entries()].find(([, { status }]) => {
           return status === 'suspended';
         });
 

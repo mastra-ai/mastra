@@ -310,7 +310,7 @@ describe('PgVector', () => {
         expect(ids).toHaveLength(3);
 
         const idToBeUpdated = ids[0];
-        const newVector = [1, 2, 3];
+        const newVector = [4, 4, 4];
 
         const update = {
           vector: newVector,

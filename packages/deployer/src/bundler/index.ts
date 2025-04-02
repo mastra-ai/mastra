@@ -10,8 +10,8 @@ import type { InputOptions, OutputOptions } from 'rollup';
 
 import { analyzeBundle } from '../build/analyze';
 import { createBundler as createBundlerUtil, getInputOptions } from '../build/bundler';
-import { Deps } from '../build/deps';
 import { writeTelemetryConfig } from '../build/telemetry';
+import { DepsService } from '../services/deps';
 
 export abstract class Bundler extends MastraBundler {
   protected analyzeOutputDir = '.build';
@@ -84,7 +84,7 @@ export abstract class Bundler extends MastraBundler {
   }
 
   protected async installDependencies(outputDirectory: string, rootDir = process.cwd()) {
-    const deps = new Deps(rootDir);
+    const deps = new DepsService(rootDir);
     deps.__setLogger(this.logger);
 
     await deps.install({ dir: join(outputDirectory, this.outputDir) });

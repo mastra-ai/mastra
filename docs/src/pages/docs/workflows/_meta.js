@@ -1,5 +1,5 @@
 const meta = {
-  "00-overview": "Overview",
+  overview: "Overview",
   steps: "Steps",
   "control-flow": "Control Flow",
   variables: "Variables",

@@ -1,0 +1,94 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`getServerOptionsConfig > should be able to extract the server options config from ./__fixtures__/no-server.js 1`] = `
+"const server = {};
+
+export { server };
+"
+`;
+
+exports[`getServerOptionsConfig > should be able to extract the server options config from ./plugins/__fixtures__/basic.js 1`] = `
+"import { createApiRoute } from '@mastra/core/server';
+
+const server = {
+  port: 3e3,
+  timeout: 5e3,
+  apiRoutes: [createApiRoute({
+    path: "/hello",
+    method: "get",
+    handler: async (req, res) => {
+      res.send("Hello World");
+    }
+  })]
+};
+
+export { server };
+"
+`;
+
+exports[`getServerOptionsConfig > should be able to extract the server options config from ./plugins/__fixtures__/basic-with-const.js 1`] = `
+"import { createApiRoute } from '@mastra/core/server';
+
+const _server = {
+  port: 3e3,
+  timeout: 5e3,
+  apiRoutes: [createApiRoute({
+    path: "/hello",
+    method: "get",
+    handler: async (req, res) => {
+      res.send("Hello World");
+    }
+  })]
+};
+const server = _server;
+
+export { server };
+"
+`;
+
+exports[`getServerOptionsConfig > should be able to extract the server options config from ./plugins/__fixtures__/basic-with-function.js 1`] = `
+"import { createApiRoute } from '@mastra/core/server';
+
+function getServerOptions() {
+  return {
+    port: 3e3,
+    timeout: 5e3,
+    apiRoutes: [createApiRoute({
+      path: "/hello",
+      method: "get",
+      handler: async (req, res) => {
+        res.send("Hello World");
+      }
+    })]
+  };
+}
+const server = getServerOptions();
+
+export { server };
+"
+`;
+
+exports[`getServerOptionsConfig > should be able to extract the server options config from ./plugins/__fixtures__/basic-with-import.js 1`] = `
+"import { serverOptions } from '@/server';
+
+const server = serverOptions;
+
+export { server };
+"
+`;
+
+exports[`getServerOptionsConfig > should be able to extract the server options config from ./plugins/__fixtures__/empty-mastra.js 1`] = `
+"const server = {};
+
+export { server };
+"
+`;
+
+exports[`getServerOptionsConfig > should be able to extract the server options config from ./plugins/__fixtures__/mastra-with-extra-code.js 1`] = `
+"const server = {
+  port: 3e3
+};
+
+export { server };
+"
+`;
