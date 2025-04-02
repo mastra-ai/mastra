@@ -9,10 +9,13 @@ const memory = new Memory({
     workingMemory: {
       enabled: true,
       template: `
-<todolist>
-  <info>this is an example list - replace it with whatever the user needs</info>
-  <item status="ACTIVE" due="Feb 7 3028" title="Example" started="Feb 7 2025">example</item>
-</todolist>
+# Todo List
+## Active Items
+- Example (Due: Feb 7 3028, Started: Feb 7 2025)
+  - Description: This is an example task - replace with whatever the user needs
+
+## Completed Items
+- None yet
 `,
     },
   },

@@ -1,3 +1,6 @@
+import type { ClickHouseClient } from '@clickhouse/client';
+import { createClient } from '@clickhouse/client';
+import type { MetricResult, TestInfo } from '@mastra/core/eval';
 import type { MessageType, StorageThreadType } from '@mastra/core/memory';
 import {
   MastraStorage,
@@ -8,16 +11,8 @@ import {
   TABLE_TRACES,
   TABLE_WORKFLOW_SNAPSHOT,
 } from '@mastra/core/storage';
-import type {
-  EvalRow,
-  StorageColumn,
-  StorageGetMessagesArg,
-  TABLE_NAMES,
-  WorkflowRow,
-  WorkflowRuns,
-} from '@mastra/core/storage';
+import type { EvalRow, StorageColumn, StorageGetMessagesArg, TABLE_NAMES } from '@mastra/core/storage';
 import type { WorkflowRunState } from '@mastra/core/workflows';
-import { createClient, ClickHouseClient } from '@clickhouse/client';
 
 function safelyParseJSON(jsonString: string): any {
   try {
@@ -27,10 +22,35 @@ function safelyParseJSON(jsonString: string): any {
   }
 }
 
+type IntervalUnit =
+  | 'NANOSECOND'
+  | 'MICROSECOND'
+  | 'MILLISECOND'
+  | 'SECOND'
+  | 'MINUTE'
+  | 'HOUR'
+  | 'DAY'
+  | 'WEEK'
+  | 'MONTH'
+  | 'QUARTER'
+  | 'YEAR';
+
 export type ClickhouseConfig = {
   url: string;
   username: string;
   password: string;
+  ttl?: {
+    [TableKey in TABLE_NAMES]?: {
+      row?: { interval: number; unit: IntervalUnit; ttlKey?: string };
+      columns?: Partial<{
+        [ColumnKey in keyof (typeof TABLE_SCHEMAS)[TableKey]]: {
+          interval: number;
+          unit: IntervalUnit;
+          ttlKey?: string;
+        };
+      }>;
+    };
+  };
 };
 
 const TABLE_ENGINES: Record<TABLE_NAMES, string> = {
@@ -70,6 +90,7 @@ function transformRow<R>(row: any): R {
 
 export class ClickhouseStore extends MastraStorage {
   private db: ClickHouseClient;
+  private ttl: ClickhouseConfig['ttl'] = {};
 
   constructor(config: ClickhouseConfig) {
     super({ name: 'ClickhouseStore' });
@@ -84,10 +105,67 @@ export class ClickhouseStore extends MastraStorage {
         output_format_json_quote_64bit_integers: 0,
       },
     });
+    this.ttl = config.ttl;
   }
 
-  getEvalsByAgentName(_agentName: string, _type?: 'test' | 'live'): Promise<EvalRow[]> {
-    throw new Error('Method not implemented.');
+  private transformEvalRow(row: Record<string, any>): EvalRow {
+    row = transformRow(row);
+    const resultValue = JSON.parse(row.result as string);
+    const testInfoValue = row.test_info ? JSON.parse(row.test_info as string) : undefined;
+
+    if (!resultValue || typeof resultValue !== 'object' || !('score' in resultValue)) {
+      throw new Error(`Invalid MetricResult format: ${JSON.stringify(resultValue)}`);
+    }
+
+    return {
+      input: row.input as string,
+      output: row.output as string,
+      result: resultValue as MetricResult,
+      agentName: row.agent_name as string,
+      metricName: row.metric_name as string,
+      instructions: row.instructions as string,
+      testInfo: testInfoValue as TestInfo,
+      globalRunId: row.global_run_id as string,
+      runId: row.run_id as string,
+      createdAt: row.created_at as string,
+    };
+  }
+
+  async getEvalsByAgentName(agentName: string, type?: 'test' | 'live'): Promise<EvalRow[]> {
+    try {
+      const baseQuery = `SELECT *, toDateTime64(createdAt, 3) as createdAt FROM ${TABLE_EVALS} WHERE agent_name = {var_agent_name:String}`;
+      const typeCondition =
+        type === 'test'
+          ? " AND test_info IS NOT NULL AND JSONExtractString(test_info, 'testPath') IS NOT NULL"
+          : type === 'live'
+            ? " AND (test_info IS NULL OR JSONExtractString(test_info, 'testPath') IS NULL)"
+            : '';
+
+      const result = await this.db.query({
+        query: `${baseQuery}${typeCondition} ORDER BY createdAt DESC`,
+        query_params: { var_agent_name: agentName },
+        clickhouse_settings: {
+          date_time_input_format: 'best_effort',
+          date_time_output_format: 'iso',
+          use_client_time_zone: 1,
+          output_format_json_quote_64bit_integers: 0,
+        },
+      });
+
+      if (!result) {
+        return [];
+      }
+
+      const rows = await result.json();
+      return rows.data.map((row: any) => this.transformEvalRow(row));
+    } catch (error) {
+      // Handle case where table doesn't exist yet
+      if (error instanceof Error && error.message.includes('no such table')) {
+        return [];
+      }
+      this.logger.error('Failed to get evals for the specified agent: ' + (error as any)?.message);
+      throw error;
+    }
   }
 
   async batchInsert({ tableName, records }: { tableName: TABLE_NAMES; records: Record<string, any>[] }): Promise<void> {
@@ -202,6 +280,18 @@ export class ClickhouseStore extends MastraStorage {
     }));
   }
 
+  async optimizeTable({ tableName }: { tableName: TABLE_NAMES }): Promise<void> {
+    await this.db.command({
+      query: `OPTIMIZE TABLE ${tableName} FINAL`,
+    });
+  }
+
+  async materializeTtl({ tableName }: { tableName: TABLE_NAMES }): Promise<void> {
+    await this.db.command({
+      query: `ALTER TABLE ${tableName} MATERIALIZE TTL;`,
+    });
+  }
+
   async createTable({
     tableName,
     schema,
@@ -214,10 +304,12 @@ export class ClickhouseStore extends MastraStorage {
         .map(([name, def]) => {
           const constraints = [];
           if (!def.nullable) constraints.push('NOT NULL');
-          return `"${name}" ${COLUMN_TYPES[def.type]} ${constraints.join(' ')}`;
+          const columnTtl = this.ttl?.[tableName]?.columns?.[name];
+          return `"${name}" ${COLUMN_TYPES[def.type]} ${constraints.join(' ')} ${columnTtl ? `TTL toDateTime(${columnTtl.ttlKey ?? 'createdAt'}) + INTERVAL ${columnTtl.interval} ${columnTtl.unit}` : ''}`;
         })
         .join(',\n');
 
+      const rowTtl = this.ttl?.[tableName]?.row;
       const sql =
         tableName === TABLE_WORKFLOW_SNAPSHOT
           ? `
@@ -228,7 +320,8 @@ export class ClickhouseStore extends MastraStorage {
         PARTITION BY "createdAt"
         PRIMARY KEY (createdAt, run_id, workflow_name)
         ORDER BY (createdAt, run_id, workflow_name)
-        SETTINGS index_granularity = 8192;
+        ${rowTtl ? `TTL toDateTime(${rowTtl.ttlKey ?? 'createdAt'}) + INTERVAL ${rowTtl.interval} ${rowTtl.unit}` : ''}
+        SETTINGS index_granularity = 8192
           `
           : `
         CREATE TABLE IF NOT EXISTS ${tableName} (
@@ -238,7 +331,8 @@ export class ClickhouseStore extends MastraStorage {
         PARTITION BY "createdAt"
         PRIMARY KEY (createdAt, id)
         ORDER BY (createdAt, id)
-        SETTINGS index_granularity = 8192;
+        ${this.ttl?.[tableName]?.row ? `TTL toDateTime(createdAt) + INTERVAL ${this.ttl[tableName].row.interval} ${this.ttl[tableName].row.unit}` : ''}
+        SETTINGS index_granularity = 8192
       `;
 
       await this.db.query({

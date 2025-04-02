@@ -11,7 +11,7 @@ Agents in Mastra have a sophisticated memory system that stores conversation his
 
 In Mastra, you can organize conversations by a `thread_id`. This allows the system to maintain context and retrieve historical messages that belong to the same discussion.
 
-Mastra also supports the concept of a `resource_id`, which typically represents the user involved in the conversation, ensuring that the agent’s memory and context are correctly associated with the right entity.
+Mastra also supports the concept of a `resource_id`, which typically represents the user involved in the conversation, ensuring that the agent's memory and context are correctly associated with the right entity.
 
 This separation allows you to manage multiple conversations (threads) for a single user or even share conversation context across users if needed.
 
@@ -457,15 +457,15 @@ Inspired by the working memory concept from the MemGPT whitepaper, our implement
 
 #### How It Works
 
-Working memory operates through a system of XML tags and automatic updates:
+Working memory operates through a system of organized data and automatic updates:
 
-1. **Template Structure**: Define what information should be remembered using XML tags. The Memory class comes with a comprehensive default template for user information, or you can create your own template to match your specific needs.
+1. **Template Structure**: Define what information should be remembered using Markdown. The Memory class comes with a comprehensive default template for user information, or you can create your own template to match your specific needs.
 
 2. **Automatic Updates**: The Memory class injects special instructions into the agent's system prompt that tell it to:
 
    - Store relevant information by including `<working_memory>...</working_memory>` tags in its responses
    - Update information proactively when anything changes
-   - Maintain the XML structure while updating values
+   - Maintain the Markdown structure while updating values
    - Keep this process invisible to users
 
 3. **Memory Management**: The system:
@@ -510,13 +510,16 @@ const todoAgent = new Agent({
       workingMemory: {
         enabled: true,
 
-        // optional XML-like template to encourage agent to store specific kinds of info.
+        // optional Markdown template to encourage agent to store specific kinds of info.
         // if you leave this out a default template will be used
-        template: `<todos>
-  <in-progress></in-progress>
-  <pending></pending>
-  <completed></completed>
-</todos>`,
+        template: `# Todo List
+## In Progress
+- 
+## Pending
+- 
+## Completed
+- 
+`,
       },
       lastMessages: 1, // Only keep the last message in context
     },
@@ -526,11 +529,15 @@ const todoAgent = new Agent({
 
 ### Handling Memory Updates in Streaming
 
-When an agent responds, it includes working memory updates directly in its response stream. These updates appear as XML blocks in the text:
+When an agent responds, it includes working memory updates directly in its response stream. These updates appear as tagged blocks in the text:
 
 ```typescript copy showLineNumbers
 // Raw agent response stream:
-Let me help you with that! <working_memory><user><first_name>John</first_name>...</user></working_memory> Based on your question...
+Let me help you with that! <working_memory># User Information
+- **First Name**: John
+- **Last Name**:
+- **Location**:
+...</working_memory> Based on your question...
 ```
 
 To prevent these memory blocks from being visible to users while still allowing the system to process them, use the `maskStreamTags` utility:
