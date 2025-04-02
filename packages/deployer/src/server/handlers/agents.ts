@@ -58,16 +58,12 @@ export async function generateHandler(c: Context) {
   try {
     const mastra: Mastra = c.get('mastra');
     const agentId = c.req.param('agentId');
-    const { resourceId, resourceid, ...body } = await c.req.json();
-
-    // Use resourceId if provided, fall back to resourceid (deprecated)
-    const finalResourceId = resourceId ?? resourceid;
+    const body = await c.req.json();
 
     const result = await getOriginalGenerateHandler({
       mastra,
       agentId,
-      resourceId: finalResourceId,
-      ...body,
+      body,
     });
 
     return c.json(result);
@@ -80,16 +76,12 @@ export async function streamGenerateHandler(c: Context): Promise<Response | unde
   try {
     const mastra = c.get('mastra');
     const agentId = c.req.param('agentId');
-    const { resourceId, resourceid, ...body } = await c.req.json();
-
-    // Use resourceId if provided, fall back to resourceid (deprecated)
-    const finalResourceId = resourceId ?? resourceid;
+    const body = await c.req.json();
 
     const streamResponse = await getOriginalStreamGenerateHandler({
       mastra,
       agentId,
-      resourceId: finalResourceId,
-      ...body,
+      body,
     });
 
     return streamResponse;

@@ -32,6 +32,9 @@ export const mastra = new Mastra({
   telemetry: {
     enabled: true,
   },
+  server: {
+    port: 3000,
+  },
 });
 
 const agent = mastra.getAgent('ragAgent');
