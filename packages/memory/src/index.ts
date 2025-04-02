@@ -3,9 +3,13 @@ import type { AiMessageType, CoreMessage, CoreTool } from '@mastra/core';
 import { MastraMemory } from '@mastra/core/memory';
 import type { MessageType, MemoryConfig, SharedMemoryConfig, StorageThreadType } from '@mastra/core/memory';
 import type { StorageGetMessagesArg } from '@mastra/core/storage';
-import { MDocument } from '@mastra/rag';
 import { embedMany } from 'ai';
+import { Tiktoken } from 'js-tiktoken/lite';
+import o200k_base from 'js-tiktoken/ranks/o200k_base';
+import xxhash from 'xxhash-wasm';
 import { updateWorkingMemoryTool } from './tools/working-memory';
+
+const encoder = new Tiktoken(o200k_base);
 
 /**
  * Concrete implementation of MastraMemory that adds support for thread configuration
@@ -223,25 +227,58 @@ export class Memory extends MastraMemory {
     // }
   }
 
-  private async embedMessageContent(content: string) {
-    const doc = MDocument.fromText(content);
+  private chunkText(text: string, size = 4096) {
+    const tokens = encoder.encode(text);
+    const chunks: string[] = [];
+    let currentChunk: number[] = [];
 
-    const chunks = await doc.chunk({
-      strategy: 'token',
-      size: 4096,
-      overlap: 20,
-    });
+    for (const token of tokens) {
+      currentChunk.push(token);
+
+      // If current chunk reaches size limit, add it to chunks and start a new one
+      if (currentChunk.length >= size) {
+        chunks.push(encoder.decode(currentChunk));
+        currentChunk = [];
+      }
+    }
+
+    // Add any remaining tokens as the final chunk
+    if (currentChunk.length > 0) {
+      chunks.push(encoder.decode(currentChunk));
+    }
+
+    return chunks;
+  }
+
+  private hasher = xxhash();
+
+  // embedding is computationally expensive so cache content -> embeddings/chunks
+  private embeddingCache = new Map<
+    number,
+    {
+      chunks: string[];
+      embeddings: Awaited<ReturnType<typeof embedMany>>['embeddings'];
+    }
+  >();
+  private async embedMessageContent(content: string) {
+    // use fast xxhash for lower memory usage. if we cache by content string we will store all messages in memory for the life of the process
+    const key = (await this.hasher).h32(content);
+    const cached = this.embeddingCache.get(key);
+    if (cached) return cached;
+    const chunks = this.chunkText(content);
 
     const { embeddings } = await embedMany({
-      values: chunks.map(chunk => chunk.text),
+      values: chunks,
       model: this.embedder,
       maxRetries: 3,
     });
 
-    return {
+    const result = {
       embeddings,
       chunks,
     };
+    this.embeddingCache.set(key, result);
+    return result;
   }
 
   async saveMessages({

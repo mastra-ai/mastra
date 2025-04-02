@@ -42,14 +42,14 @@
   "license": "ISC",
   "dependencies": {
     "@mastra/core": "workspace:^",
-    "@mastra/rag": "workspace:^",
     "@upstash/redis": "^1.34.5",
-    "js-tiktoken": "^1.0.19",
     "ai": "^4.2.2",
+    "js-tiktoken": "^1.0.19",
     "pg": "^8.13.3",
     "pg-pool": "^3.7.1",
     "postgres": "^3.4.5",
     "redis": "^4.7.0",
+    "xxhash-wasm": "^1.1.0",
     "zod": "^3.24.2"
   },
   "devDependencies": {
