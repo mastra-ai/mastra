@@ -70,7 +70,16 @@ export default withNextra({
       destination: "/docs/evals/running-in-ci",
       permanent: true,
     },
-
+    {
+      source: "/docs/frameworks/01-next-js",
+      destination: "/docs/frameworks/next-js",
+      permanent: true,
+    },
+    {
+      source: "/docs/frameworks/02-ai-sdk",
+      destination: "/docs/frameworks/ai-sdk",
+      permanent: true,
+    },
     {
       source: "/docs/guides/01-chef-michel",
       destination: "/docs/guides/chef-michel",
