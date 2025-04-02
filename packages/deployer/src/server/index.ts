@@ -1691,6 +1691,19 @@ export async function createHonoServer(
           schema: { type: 'string' },
         },
       ],
+      requestBody: {
+        required: true,
+        content: {
+          'application/json': {
+            schema: {
+              type: 'object',
+              properties: {
+                input: { type: 'object' },
+              },
+            },
+          },
+        },
+      },
       responses: {
         200: {
           description: 'Workflow run started',
