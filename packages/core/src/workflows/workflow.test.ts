@@ -4326,7 +4326,7 @@ describe('Workflow', async () => {
   });
 
   describe('Unique step IDs', () => {
-    it('should run compound subscribers on a loop using step id config', async () => {
+    it('should run compound subscribers on a loop using step id from config', async () => {
       const increment = vi.fn().mockImplementation(async ({ context }) => {
         // Get the current value (either from trigger or previous increment)
         const currentValue =
@@ -4429,6 +4429,70 @@ describe('Workflow', async () => {
       expect(mockAction2).toHaveBeenCalledTimes(10);
       expect(mockAction3).toHaveBeenCalledTimes(10);
       expect(final).toHaveBeenCalledTimes(1);
+    });
+
+    it('should resolve variables from previous steps using step id from config', async () => {
+      const step1Action = vi.fn<any>().mockResolvedValue({
+        nested: { value: 'step1-data' },
+      });
+      const step2Action = vi.fn<any>().mockResolvedValue({ result: 'success' });
+
+      const step1 = new Step({
+        id: 'step1',
+        execute: step1Action,
+        outputSchema: z.object({ nested: z.object({ value: z.string() }) }),
+      });
+      const step2 = new Step({
+        id: 'step2',
+        execute: step2Action,
+        inputSchema: z.object({ previousValue: z.string() }),
+      });
+
+      const workflow = new Workflow({
+        name: 'test-workflow',
+      });
+
+      workflow
+        .step(step1, { id: 'steppy1' })
+        .then(step2, {
+          id: 'steppy2',
+          variables: {
+            previousValue: { step: { id: 'steppy1' }, path: 'nested.value' },
+          },
+        })
+        .commit();
+
+      const run = workflow.createRun();
+      const results = await run.start();
+
+      const baseContext = {
+        attempts: { steppy1: 0, steppy2: 0 },
+        steps: {},
+        triggerData: {},
+        getStepResult: expect.any(Function),
+      };
+
+      expect(step2Action).toHaveBeenCalledWith(
+        expect.objectContaining({
+          context: expect.objectContaining({
+            ...baseContext,
+            steps: {
+              steppy1: {
+                output: {
+                  nested: {
+                    value: 'step1-data',
+                  },
+                },
+                status: 'success',
+              },
+            },
+            inputData: {
+              previousValue: 'step1-data',
+            },
+          }),
+          runId: results.runId,
+        }),
+      );
     });
   });
 });
