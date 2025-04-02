@@ -1,7 +1,8 @@
-import { openai } from '@ai-sdk/openai';
 import { Agent } from '@mastra/core/agent';
 import { weatherTool, rakkoKeywordTool } from '../tools';
+import { geminiModel } from '../models';
 export * from './contentPublisherAgent';
+export * from './browserAgent';
 
 export const weatherAgent = new Agent({
   name: 'Weather Agent',
@@ -17,7 +18,7 @@ export const weatherAgent = new Agent({
 
       Use the weatherTool to fetch current weather data.
   `,
-  model: openai('gpt-4o'),
+  model: geminiModel,
   tools: { weatherTool },
 });
 
@@ -61,7 +62,7 @@ export const keywordResearcherAgent = new Agent({
 5. SEO戦略の提案：
    [キーワードを活用するための具体的な提案を記述]
 `,
-  model: openai("gpt-4o"),
+  model: geminiModel,
   tools: { rakkoKeywordTool },
 });
 
@@ -123,7 +124,7 @@ export const contentPlannerAgent = new Agent({
 ## メタディスクリプション案
 [検索結果に表示される魅力的な説明文を150-160文字程度で]
 `,
-  model: openai("gpt-4o"),
+  model: geminiModel,
 });
 
 // ブログライターエージェント（改善版）
@@ -158,7 +159,7 @@ export const blogWriterAgent = new Agent({
 - 段落、箇条書き、引用などを適切に使用
 - 最後にCTA（Call to Action）を含める
 `,
-  model: openai("gpt-4o"),
+  model: geminiModel,
 });
 
 // 編集・最適化エージェント（改善版）
@@ -204,5 +205,5 @@ export const editorAgent = new Agent({
 ## 編集者コメント
 [記事全体に対するフィードバックや追加提案]
 `,
-  model: openai("gpt-4o"),
+  model: geminiModel,
 });

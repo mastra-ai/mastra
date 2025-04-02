@@ -4,7 +4,8 @@
   "main": "index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-    "dev": "mastra dev"
+    "dev": "mastra dev",
+    "test:browser": "tsx src/test-browser-gemini.ts"
   },
   "keywords": [],
   "author": "",
@@ -13,8 +14,11 @@
   "type": "module",
   "dependencies": {
     "@ai-sdk/anthropic": "^1.2.4",
+    "@ai-sdk/google": "^1.2.5",
     "@ai-sdk/openai": "^1.3.6",
     "@mastra/core": "^0.7.0",
+    "@mastra/mcp": "^0.3.6",
+    "@playwright/mcp": "^0.0.9",
     "@supabase/supabase-js": "^2.49.4",
     "@types/showdown": "^2.0.6",
     "@types/turndown": "^5.0.5",

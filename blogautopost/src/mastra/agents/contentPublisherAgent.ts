@@ -1,5 +1,4 @@
 import { Agent } from '@mastra/core/agent';
-import { openai } from '@ai-sdk/openai';
 import { 
   saveArticleToolDef, 
   createCategoryToolDef, 
@@ -10,6 +9,7 @@ import {
   getWpCategoriesToolDef,
   createWpCategoryToolDef
 } from '../tools/wordpress';
+import { geminiModel } from '../models';
 
 export const contentPublisherAgent = new Agent({
   name: 'ContentPublisherAgent',
@@ -26,32 +26,41 @@ export const contentPublisherAgent = new Agent({
 
 ## 処理手順
 1. 提供された記事コンテンツ、タイトル、カテゴリー、キーワードを確認
-2. WordPressの既存カテゴリーを確認し、適切なものを選択する（新規作成は行わない）
-3. SEOメタデータを準備（メタタイトル、ディスクリプション）
-4. まずSupabaseデータベースに記事を保存
-5. 次にWordPressに記事を公開（通常は下書きとして）
-6. 公開結果を報告（記事URL、ステータスなど）
+2. getCategories ツールを使ってSupabaseの既存カテゴリーを確認する
+3. WordPressの既存カテゴリーを確認する（新規作成は行わない）
+4. SEOメタデータを準備（メタタイトル、ディスクリプション）
+5. まずSupabaseデータベースに記事を保存（Supabaseの有効なカテゴリーIDを使用）
+6. 次にWordPressに記事を公開（通常は下書きとして、WordPressの有効なカテゴリーIDを使用）
+7. 公開結果を報告（記事URL、ステータスなど）
 
 ## 注意事項
 - 親向けコンテンツであることを常に意識し、プロフェッショナルな印象を与える公開設定を行う
 - 記事のSEO要素が適切に設定されていることを確認する
 - データベースとWordPress間で情報が一貫していることを確認する
 - 送迎サービスの専門性と信頼性を反映した公開方法を選択する
-- **WordPressの新規カテゴリー作成は避け、既存カテゴリー（「小学校」(ID:10)または「未分類」(ID:1)）を使用する**
+- **重要：SupabaseとWordPressのカテゴリーIDは異なります**
+  - Supabaseデータベースでは以下のカテゴリーIDを使用：
+    - ID: 2（「学童保育」）を最優先で使用
+    - ID: 1（「General」）を代替として使用
+  - WordPressでは以下のカテゴリーIDを使用：
+    - ID: 10（「小学校」）を最優先で使用
+    - ID: 1（「未分類」）を代替として使用
+- **必ずgetCategoriesツールを使って実際のSupabaseカテゴリーIDを確認してから使用する**
+- 新規カテゴリー作成は避ける - 権限エラーが発生する可能性がある
 - エラーが発生した場合は詳細を報告し、可能な代替策を提案する
 
 ## 利用可能なツール
 1. データベース関連
-   - getCategories: データベースからカテゴリーを取得
-   - createCategory: 新しいカテゴリーをデータベースに作成（Supabase用）
-   - saveArticle: 記事をデータベースに保存
+   - getCategories: データベースからカテゴリーを取得（記事保存前に必ず実行）
+   - createCategory: 新しいカテゴリーをデータベースに作成（Supabase用、通常は使用しない）
+   - saveArticle: 記事をデータベースに保存（有効なSupabaseカテゴリーIDを使用）
 
 2. WordPress関連
    - getWpCategories: WordPressからカテゴリーを取得
-   - createWpPost: WordPressに新しい記事を投稿（カテゴリーIDは10か1を使用）
+   - createWpPost: WordPressに新しい記事を投稿（WordPressカテゴリーIDは10か1を使用）
 `,
 
-  model: openai("gpt-4o"),
+  model: geminiModel,
   tools: {
     // データベースツール
     getCategories: getCategoriesToolDef,
