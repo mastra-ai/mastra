@@ -1,0 +1,32 @@
+node_modules/
+dist/
+.DS_Store
+
+# IDE
+.vscode/
+.idea/
+
+# Dev artifacts
+.dev/db/*
+
+.env
+.env.development
+
+**/tsconfig.tsbuildinfo
+
+.turbo
+
+openapi-ts-error*
+
+.mastra
+memory.db
+
+# github actions
+.secrets
+# Local Netlify folder
+.netlify
+.npmrc
+
+# Test directories
+voice/**/test-outputs/
+voice/**/test-data/
