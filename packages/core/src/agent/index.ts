@@ -76,7 +76,6 @@ export class Agent<
   evals: TMetrics;
   voice: CompositeVoice;
   #variablesSchema?: TSchemaVariables;
-  #currentVariables?: VariablesType<TSchemaVariables>;
 
   constructor(config: AgentConfig<TAgentId, TSchemaVariables, TTools, TMetrics>) {
     super({ component: RegisteredLogger.AGENT });
@@ -604,6 +603,7 @@ export class Agent<
             logger: this.logger,
             agentName: this.name,
           };
+
           toolsFromToolsetsConverted[toolName] = makeCoreTool(toolObj, options, 'toolset');
         });
       });
@@ -671,7 +671,7 @@ export class Agent<
           this.logger.debug(`[Agents:${this.name}] - Starting generation`, { runId });
         }
 
-        this.#currentVariables = validateVariables(this.#variablesSchema, createVariablesFrom(variables));
+        const currentVariables = validateVariables(this.#variablesSchema, createVariablesFrom(variables));
 
         const systemMessage: CoreMessage = {
           role: 'system',
@@ -747,13 +747,13 @@ export class Agent<
             threadId: threadIdToUse,
             resourceId,
             runId,
-            variables: this.#currentVariables,
+            variables: currentVariables,
           });
         }
 
         const messageObjects = [systemMessage, ...(context || []), ...coreMessages];
 
-        return { messageObjects, convertedTools, threadId: threadIdToUse as string, thread };
+        return { messageObjects, convertedTools, threadId: threadIdToUse as string, thread, currentVariables };
       },
       after: async ({
         result,
@@ -944,7 +944,7 @@ export class Agent<
       variables,
     });
 
-    const { threadId, thread, messageObjects, convertedTools } = await before();
+    const { threadId, thread, messageObjects, convertedTools, currentVariables } = await before();
 
     if (!output && experimental_output) {
       const result = await this.llm.__text({
@@ -962,7 +962,7 @@ export class Agent<
         threadId,
         resourceId,
         memory: this.getMemory(),
-        variables,
+        variables: currentVariables,
         ...rest,
       });
 
@@ -993,7 +993,7 @@ export class Agent<
         threadId,
         resourceId,
         memory: this.getMemory(),
-        variables,
+        variables: currentVariables,
         ...rest,
       });
 
@@ -1018,7 +1018,7 @@ export class Agent<
       toolChoice,
       telemetry,
       memory: this.getMemory(),
-      variables,
+      variables: currentVariables,
       ...rest,
     });
 
@@ -1102,7 +1102,7 @@ export class Agent<
       variables,
     });
 
-    const { threadId, thread, messageObjects, convertedTools } = await before();
+    const { threadId, thread, messageObjects, convertedTools, currentVariables } = await before();
 
     if (!output && experimental_output) {
       this.logger.debug(`Starting agent ${this.name} llm stream call`, {
@@ -1134,7 +1134,7 @@ export class Agent<
         toolChoice,
         experimental_output,
         memory: this.getMemory(),
-        variables,
+        variables: currentVariables,
         ...rest,
       });
 
@@ -1170,7 +1170,7 @@ export class Agent<
         toolChoice,
         telemetry,
         memory: this.getMemory(),
-        variables,
+        variables: currentVariables,
         ...rest,
       }) as unknown as StreamReturn<Z>;
     }
@@ -1204,7 +1204,7 @@ export class Agent<
       toolChoice,
       telemetry,
       memory: this.getMemory(),
-      variables,
+      variables: currentVariables,
       ...rest,
     }) as unknown as StreamReturn<Z>;
   }
