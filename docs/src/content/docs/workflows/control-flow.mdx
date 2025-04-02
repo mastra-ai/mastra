@@ -136,9 +136,13 @@ const incrementStep = new Step({
     // Current counter value
     counter: z.number().optional(),
   }),
+  outputSchema: z.object({
+    // Updated counter value
+    updatedCounter: z.number(),
+  }),
   execute: async ({ context }) => {
     const { counter = 0 } = context.inputData;
-    return { counter: counter + 1 };
+    return { updatedCounter: counter + 1 };
   },
 });
 
@@ -148,14 +152,14 @@ workflow
     async ({ context }) => {
       // Stop when counter reaches 10
       const result = context.getStepResult(incrementStep);
-      return (result?.counter ?? 0) >= 10;
+      return (result?.updatedCounter ?? 0) >= 10;
     },
     incrementStep,
     {
       // Pass current counter to next iteration
       counter: {
         step: incrementStep,
-        path: 'counter'
+        path: 'updatedCounter'
       }
     }
   )
@@ -169,14 +173,14 @@ workflow
   .step(incrementStep)
   .until(
     {
-      ref: { step: incrementStep, path: 'value' },
+      ref: { step: incrementStep, path: 'updatedCounter' },
       query: { $gte: 10 },
     },
     incrementStep,
     {
       counter: {
         step: incrementStep,
-        path: 'counter'
+        path: 'updatedCounter'
       }
     }
   )
@@ -198,9 +202,13 @@ const incrementStep = new Step({
     // Current counter value
     counter: z.number().optional(),
   }),
+  outputSchema: z.object({
+    // Updated counter value
+    updatedCounter: z.number(),
+  }),
   execute: async ({ context }) => {
     const { counter = 0 } = context.inputData;
-    return { counter: counter + 1 };
+    return { updatedCounter: counter + 1 };
   },
 });
 
@@ -210,14 +218,14 @@ workflow
     async ({ context }) => {
       // Continue while counter is less than 10
       const result = context.getStepResult(incrementStep);
-      return (result?.counter ?? 0) < 10;
+      return (result?.updatedCounter ?? 0) < 10;
     },
     incrementStep,
     {
       // Pass current counter to next iteration
       counter: {
         step: incrementStep,
-        path: 'counter'
+        path: 'updatedCounter'
       }
     }
   )
@@ -231,14 +239,14 @@ workflow
   .step(incrementStep)
   .while(
     {
-      ref: { step: incrementStep, path: 'value' },
+      ref: { step: incrementStep, path: 'updatedCounter' },
       query: { $lt: 10 },
     },
     incrementStep,
     {
       counter: {
         step: incrementStep,
-        path: 'counter'
+        path: 'updatedCounter'
       }
     }
   )

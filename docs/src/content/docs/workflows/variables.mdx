@@ -94,9 +94,13 @@ const incrementStep = new Step({
     // Previous value from last iteration
     prevValue: z.number().optional(),
   }),
+  outputSchema: z.object({
+    // Updated counter value
+    updatedCounter: z.number(),
+  }),
   execute: async ({ context }) => {
     const { prevValue = 0 } = context.inputData;
-    return { value: prevValue + 1 };
+    return { updatedCounter: prevValue + 1 };
   },
 });
 
@@ -107,16 +111,17 @@ const workflow = new Workflow({
 workflow
   .step(incrementStep)
   .while(
-    {
-      ref: { step: incrementStep, path: 'value' },
-      query: { $lt: 10 }
+    async ({ context }) => {
+      // Continue while counter is less than 10
+      const result = context.getStepResult(incrementStep);
+      return (result?.updatedCounter ?? 0) < 10;
     },
     incrementStep,
     {
       // Pass previous value to next iteration
       prevValue: {
         step: incrementStep,
-        path: 'value'
+        path: 'updatedCounter'
       }
     }
   );
