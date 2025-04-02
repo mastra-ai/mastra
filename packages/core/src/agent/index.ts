@@ -763,35 +763,33 @@ export class Agent<
               };
             });
 
-            await Promise.all([
-              (async () => {
-                await memory.saveMessages({
-                  messages: [
-                    ...threadMessages,
-                    ...this.getResponseMessages({ threadId, resourceId, response: result.response }),
-                  ],
-                  memoryConfig,
-                });
-              })(),
-              (async () => {
-                if (!thread.title?.startsWith('New Thread')) {
-                  return;
-                }
+            // saving messages doesn't need to block responses
+            void memory.saveMessages({
+              messages: [
+                ...threadMessages,
+                ...this.getResponseMessages({ threadId, resourceId, response: result.response }),
+              ],
+              memoryConfig,
+            });
+            // neither does renaming the thread
+            void (async () => {
+              if (!thread.title?.startsWith('New Thread')) {
+                return;
+              }
 
-                const config = memory.getMergedThreadConfig(memoryConfig);
-                const title = config?.threads?.generateTitle ? await this.genTitle(userMessage) : undefined;
-                if (!title) {
-                  return;
-                }
+              const config = memory.getMergedThreadConfig(memoryConfig);
+              const title = config?.threads?.generateTitle ? await this.genTitle(userMessage) : undefined;
+              if (!title) {
+                return;
+              }
 
-                return memory.createThread({
-                  threadId: thread.id,
-                  resourceId,
-                  memoryConfig,
-                  title,
-                });
-              })(),
-            ]);
+              return memory.createThread({
+                threadId: thread.id,
+                resourceId,
+                memoryConfig,
+                title,
+              });
+            })();
           } catch (e) {
             this.logger.error('Error saving response', {
               error: e,
