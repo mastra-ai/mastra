@@ -252,7 +252,7 @@ The `createDataStream` function allows you to stream additional data to the clie
         const agentStream = await weatherAgent.stream('What is the weather')
 
         // Merge agent stream
-        dataStream.merge(agentStream);
+         agentStream.mergeIntoDataStream(dataStream);
       },
       onError: error => `Custom error: ${error.message}`,
   });
@@ -284,7 +284,7 @@ export async function POST(req: Request) {
       dataStream.writeMessageAnnotation({ type: 'status', value: 'processing' });
 
       // Merge agent stream
-      dataStream.merge(agentStream);
+      agentStream.mergeIntoDataStream(dataStream);
     },
     onError: error => `Custom error: ${error.message}`,
   });
