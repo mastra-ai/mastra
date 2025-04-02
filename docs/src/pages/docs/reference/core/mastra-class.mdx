@@ -13,16 +13,15 @@ The Mastra class is the core entry point for your application. It manages agents
   content={[
     {
       name: "agents",
-      type: "Agent[]",
-      description: "Array of Agent instances to register",
+      type: "Record<string, Agent>",
+      description: "Record of Agent instances to register",
       isOptional: true,
-      defaultValue: "[]",
+      defaultValue: "{}",
     },
     {
-      name: "tools",
-      type: "Record<string, ToolApi>",
-      description:
-        "Custom tools to register. Structured as a key-value pair, with keys being the tool name and values being the tool function.",
+      name: "networks",
+      type: "Record<string, AgentNetwork>",
+      description: "Record of AgentNetwork instances to register"
       isOptional: true,
       defaultValue: "{}",
     },
@@ -77,15 +76,14 @@ export const mastra = new Mastra({});
 // Full initialization with all options
 export const mastra = new Mastra({
   agents: {},
-  workflows: [],
-  integrations: [],
+  networks: {},
+  storage: {},
+  vectors: {},
+  workflows: {},
   logger: createLogger({
     name: "My Project",
     level: "info",
   }),
-  storage: {},
-  tools: {},
-  vectors: {},
 });
 ```
 
