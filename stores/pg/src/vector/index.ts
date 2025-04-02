@@ -90,6 +90,7 @@ export class PgVector extends MastraVector {
       const existingIndexes = await this.listIndexes();
       for (const index of existingIndexes) {
         this.createdIndexes.add(index);
+        void this.getIndexInfo(index);
       }
     })();
   }
@@ -349,7 +350,6 @@ export class PgVector extends MastraVector {
       }
 
       await client.query(indexSQL);
-      this.indexCache.delete(indexName);
     });
   }
 
