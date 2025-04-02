@@ -108,14 +108,15 @@ export const Footer = () => {
               Mastra Newsletter
             </label>
             <SubscribeForm
+              placeholder="you@company.com"
               idleIcon={
                 <SendHorizontal className="w-4 h-4" stroke="currentColor" />
               }
               successIcon={<Check className="w-4 h-4" />}
               showLabel={false}
-              inputClassName="min-w-[50px] max-w-[70%] md:min-w-[50px] pl-2 truncate md:max-w-full"
-              buttonClassName="w-fit mr-auto md:w-fit h-[34px] py-0 px-3"
-              className=" md:items-start gap-0 md:gap-2 mt-0 w-[200px]"
+              inputClassName="min-w-[50px] border-[0.5px] h-[34px] max-w-full rounded-r-none md:min-w-[50px] pl-2 truncate md:max-w-full"
+              buttonClassName="w-fit mr-auto rounded-l-none md:w-fit h-[34px] py-0 px-3"
+              className="md:items-start flex-row items-start gap-0  md:gap-0 mt-0"
             />
           </div>
         </div>
