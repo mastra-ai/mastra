@@ -73,12 +73,10 @@ export async function createRunHandler(c: Context) {
   try {
     const mastra: Mastra = c.get('mastra');
     const workflowId = c.req.param('workflowId');
-    const container: Container = c.get('container');
     const prevRunId = c.req.query('runId');
 
     const result = await getOriginalCreateRunHandler({
       mastra,
-      container,
       workflowId,
       runId: prevRunId,
     });
