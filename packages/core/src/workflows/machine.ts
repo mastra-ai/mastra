@@ -37,6 +37,7 @@ import {
   getResultActivePaths,
   getStepResult,
   getSuspendedPaths,
+  isConditionalKey,
   isErrorEvent,
   isTransitionEvent,
   recursivelyCheckForFinalState,
@@ -44,7 +45,7 @@ import {
 import type { WorkflowInstance } from './workflow-instance';
 
 export class Machine<
-  TSteps extends Step<any, any, any>[] = any,
+  TSteps extends Step<any, any, any, any>[] = Step<any, any, any, any>[],
   TTriggerSchema extends z.ZodObject<any> = any,
   TResultSchema extends z.ZodObject<any> = any,
 > extends EventEmitter {
@@ -60,7 +61,7 @@ export class Machine<
   name: string;
 
   #actor: ReturnType<typeof createActor<ReturnType<typeof this.initializeMachine>>> | null = null;
-  #steps: Record<string, StepAction<any, any, any, any>> = {};
+  #steps: Record<string, StepNode> = {};
   #retryConfig?: RetryConfig;
 
   constructor({
@@ -81,7 +82,7 @@ export class Machine<
     executionSpan?: Span;
     name: string;
     runId: string;
-    steps: Record<string, TSteps[0]>;
+    steps: Record<string, StepNode>;
     stepGraph: StepGraph;
     retryConfig?: RetryConfig;
     startStepId: string;
@@ -270,7 +271,7 @@ export class Machine<
     const delayMap: Record<string, number> = {};
 
     Object.keys(this.#steps).forEach(stepId => {
-      delayMap[stepId] = this.#steps[stepId]?.retryConfig?.delay || this.#retryConfig?.delay || 1000;
+      delayMap[stepId] = this.#steps[stepId]?.step?.retryConfig?.delay || this.#retryConfig?.delay || 1000;
     });
 
     return delayMap;
@@ -502,6 +503,11 @@ export class Machine<
             });
             return { type: 'CONDITIONS_MET' as const };
           }
+
+          if (isConditionalKey(stepNode.id)) {
+            return { type: 'CONDITIONS_LIMBO' as const };
+          }
+
           return this.#workflowInstance.hasSubscribers(stepNode.id)
             ? { type: 'CONDITIONS_SKIPPED' as const }
             : { type: 'CONDITIONS_LIMBO' as const };

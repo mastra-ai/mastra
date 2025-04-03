@@ -67,7 +67,7 @@ export class Workflow<
   #serializedStepGraph: StepGraph = { initial: [] };
   #stepSubscriberGraph: Record<string, StepGraph> = {};
   #serializedStepSubscriberGraph: Record<string, StepGraph> = {};
-  #steps: Record<string, StepAction<string, any, any, any>> = {};
+  #steps: Record<string, StepNode> = {};
 
   /**
    * Creates a new Workflow instance
@@ -211,7 +211,7 @@ export class Workflow<
       },
     };
 
-    this.#steps[stepKey] = step;
+    this.#steps[stepKey] = graphEntry;
 
     const parentStepKey = this.#getParentStepKey({ loop_check: true });
     const stepGraph = this.#stepSubscriberGraph[parentStepKey || ''];
@@ -337,7 +337,7 @@ export class Workflow<
       },
     };
 
-    this.#steps[stepKey] = step;
+    this.#steps[stepKey] = graphEntry;
 
     const parentStepKey = this.#getParentStepKey();
     const stepGraph = this.#stepSubscriberGraph[parentStepKey || ''];
@@ -403,7 +403,7 @@ export class Workflow<
         throw new Error('Condition requires a step to be executed after');
       }
 
-      this.after(lastStep);
+      this.after(lastStep.step);
       const nextSteps = next.map(step => {
         if (isWorkflow(step)) {
           // types possibly infinite issue here
@@ -469,7 +469,7 @@ export class Workflow<
       },
     };
 
-    this.#steps[stepKey] = step;
+    this.#steps[stepKey] = graphEntry;
     // if then is called without a step, we are done
     if (!lastStepKey) return this;
 
@@ -515,8 +515,18 @@ export class Workflow<
 
     const fallbackStepKey = this.#makeStepKey(fallbackStep);
 
+    const fallbackStepNode: StepNode = {
+      step: fallbackStep,
+      config: {
+        ...this.#makeStepDef(fallbackStepKey),
+      },
+      get id() {
+        return fallbackStepKey;
+      },
+    };
+
     // Store the fallback step
-    this.#steps[fallbackStepKey] = fallbackStep;
+    this.#steps[fallbackStepKey] = fallbackStepNode;
 
     // Create a check step that evaluates the condition
     const checkStepKey = `__${fallbackStepKey}_${loopType}_loop_check`;
@@ -568,7 +578,17 @@ export class Workflow<
         status: z.enum(['continue', 'complete']),
       }),
     };
-    this.#steps[checkStepKey] = checkStep;
+
+    const checkStepNode: StepNode = {
+      step: checkStep,
+      config: {
+        ...this.#makeStepDef(checkStepKey),
+      },
+      get id() {
+        return checkStepKey;
+      },
+    };
+    this.#steps[checkStepKey] = checkStepNode;
 
     // Loop finished step
     const loopFinishedStepKey = `__${fallbackStepKey}_${loopType}_loop_finished`;
@@ -578,7 +598,16 @@ export class Workflow<
         return { success: true };
       },
     };
-    this.#steps[loopFinishedStepKey] = loopFinishedStep;
+    const loopFinishedStepNode: StepNode = {
+      step: loopFinishedStep,
+      config: {
+        ...this.#makeStepDef(loopFinishedStepKey),
+      },
+      get id() {
+        return loopFinishedStepKey;
+      },
+    };
+    this.#steps[loopFinishedStepKey] = loopFinishedStepNode;
 
     // First add the check step after the last step
     this.then(checkStep, {
@@ -716,7 +745,7 @@ export class Workflow<
       throw new Error('Condition requires a step to be executed after');
     }
 
-    this.after(lastStep);
+    this.after(lastStep.step);
 
     if (ifStep) {
       const _ifStep = isWorkflow(ifStep) ? workflowToStep(ifStep, { mastra: this.#mastra }) : (ifStep as TStep);
@@ -774,7 +803,7 @@ export class Workflow<
     );
 
     const elseStepKey = `__${lastStep.id}_else`;
-    this.#ifStack.push({ condition, elseStepKey, condStep: lastStep });
+    this.#ifStack.push({ condition, elseStepKey, condStep: lastStep.step });
 
     this.#lastBuilderType = 'if';
     return this as WorkflowBuilder<this>;
@@ -861,7 +890,7 @@ export class Workflow<
       },
     });
 
-    this.after(lastStep).step(eventStep).after(eventStep);
+    this.after(lastStep.step).step(eventStep).after(eventStep);
 
     this.#lastBuilderType = 'afterEvent';
     return this as WorkflowBuilder<this>;
@@ -1009,7 +1038,7 @@ export class Workflow<
       const targetStep = this.#steps[stepId];
       if (!targetStep) throw new Error(`Step not found`);
 
-      const { payload = {}, execute = async () => {} } = targetStep;
+      const { payload = {}, execute = async () => {} } = targetStep.step;
 
       // Merge static payload with dynamically resolved variables
       // Variables take precedence over payload values
@@ -1191,7 +1220,7 @@ export class Workflow<
   }
 
   get steps() {
-    return this.#steps;
+    return Object.values(this.#steps).map(step => step.step);
   }
 
   setNested(isNested: boolean) {
