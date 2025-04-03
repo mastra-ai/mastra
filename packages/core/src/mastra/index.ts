@@ -268,6 +268,14 @@ This is a warning for now, but will throw an error in the future
         });
         // @ts-ignore
         this.#workflows[key] = workflow;
+
+        const workflowSteps = Object.values(workflow.steps).filter(step => !!step.workflowId && !!step.workflow);
+        if (workflowSteps.length > 0) {
+          workflowSteps.forEach(step => {
+            // @ts-ignore
+            this.#workflows[step.workflowId] = step.workflow;
+          });
+        }
       });
     }
 
@@ -480,6 +488,11 @@ This is a warning for now, but will throw an error in the future
     if (!transportId) {
       throw new Error('Transport ID is required');
     }
+
+    if (!this.#logger?.getLogsByRunId) {
+      throw new Error('Logger is not set');
+    }
+
     return await this.#logger.getLogsByRunId({ runId, transportId });
   }
 
@@ -487,6 +500,13 @@ This is a warning for now, but will throw an error in the future
     if (!transportId) {
       throw new Error('Transport ID is required');
     }
+
+    if (!this.#logger?.getLogs) {
+      throw new Error('Logger is not set');
+    }
+
+    console.log(this.#logger);
+
     return await this.#logger.getLogs(transportId);
   }
 }

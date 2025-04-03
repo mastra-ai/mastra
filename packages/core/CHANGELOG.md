@@ -1,5 +1,47 @@
 # @mastra/core
 
+## 0.8.0-alpha.4
+
+### Patch Changes
+
+- d7e08e8: createdAt needs to be nullable
+
+## 0.8.0-alpha.3
+
+### Patch Changes
+
+- 5ae0180: Removed prefixed doc references
+- 9bfa12b: Accept ID on step config
+- 515ebfb: Fix compound subscriber bug
+- 88fa727: Added getWorkflowRuns for libsql, pg, clickhouse and upstash as well as added route getWorkflowRunsHandler
+- f37f535: Added variables to while and until loops
+- 4d67826: Fix eval writes, remove id column
+- 6330967: Enable route timeout using server options
+- 8393832: Handle nested workflow view on workflow graph
+- 6330967: Add support for configuration of server port using Mastra instance
+
+## 0.8.0-alpha.2
+
+### Patch Changes
+
+- 56c31b7: Batch insert messages for libsql adapter
+- dbbbf80: Added clickhouse storage
+- 99d43b9: Updated evaluate to include agent output
+
+## 0.8.0-alpha.1
+
+### Minor Changes
+
+- 619c39d: Added support for agents as steps
+
+### Patch Changes
+
+- fe56be0: exclude \_\_primitive, getMemory, hasOwnMemory from traces since they create noisy traces
+- a0967a0: Added new "Memory Processor" feature to @mastra/core and @mastra/memory, allowing devs to modify Mastra Memory before it's sent to the LLM
+- fca3b21: fix server in mastra not to be mandatory
+- 0118361: Add resourceId to memory metadata
+- 619c39d: AgentStep -> Agent as a workflow step (WIP)
+
 ## 0.7.1-alpha.0
 
 ### Patch Changes

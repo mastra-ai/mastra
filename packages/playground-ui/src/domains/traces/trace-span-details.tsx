@@ -115,8 +115,15 @@ function AttributesValues({
   depth?: number;
   keyName?: string | string[];
 }) {
-  if (attributes === null) return null;
-  if (attributes === undefined) return null;
+  // Handle all empty cases consistently
+  if (
+    attributes === null ||
+    attributes === undefined ||
+    (Array.isArray(attributes) && attributes.length === 0) ||
+    (typeof attributes === 'object' && attributes !== null && Object.keys(attributes).length === 0)
+  ) {
+    return <span className="text-sm overflow-x-scroll">N/A</span>;
+  }
 
   if (typeof attributes === 'string') {
     try {

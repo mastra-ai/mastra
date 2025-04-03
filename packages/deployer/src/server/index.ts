@@ -1,16 +1,18 @@
+import { randomUUID } from 'crypto';
 import { readFile } from 'fs/promises';
 import { join } from 'path';
 import { pathToFileURL } from 'url';
 import { serve } from '@hono/node-server';
 import { serveStatic } from '@hono/node-server/serve-static';
 import { swaggerUI } from '@hono/swagger-ui';
+import { Telemetry } from '@mastra/core';
 import type { Mastra } from '@mastra/core';
 import { Hono } from 'hono';
 import type { Context, MiddlewareHandler } from 'hono';
-
 import { bodyLimit } from 'hono/body-limit';
 import { cors } from 'hono/cors';
 import { logger } from 'hono/logger';
+import { timeout } from 'hono/timeout';
 import { describeRoute, openAPISpecs } from 'hono-openapi';
 
 import {
@@ -21,10 +23,10 @@ import {
   getLiveEvalsByAgentIdHandler,
   setAgentInstructionsHandler,
   streamGenerateHandler,
-} from './handlers/agents.js';
-import { handleClientsRefresh, handleTriggerClientsRefresh } from './handlers/client.js';
-import { errorHandler } from './handlers/error.js';
-import { getLogsByRunIdHandler, getLogsHandler, getLogTransports } from './handlers/logs.js';
+} from './handlers/agents';
+import { handleClientsRefresh, handleTriggerClientsRefresh } from './handlers/client';
+import { errorHandler } from './handlers/error';
+import { getLogsByRunIdHandler, getLogsHandler, getLogTransports } from './handlers/logs';
 import {
   createThreadHandler,
   deleteThreadHandler,
@@ -34,26 +36,19 @@ import {
   getThreadsHandler,
   saveMessagesHandler,
   updateThreadHandler,
-} from './handlers/memory.js';
+} from './handlers/memory';
 import {
   getNetworkByIdHandler,
   getNetworksHandler,
   generateHandler as generateNetworkHandler,
   streamGenerateHandler as streamGenerateNetworkHandler,
-} from './handlers/network.js';
-import { generateSystemPromptHandler } from './handlers/prompt.js';
-import { rootHandler } from './handlers/root.js';
-import { getTelemetryHandler, storeTelemetryHandler } from './handlers/telemetry.js';
-import { executeAgentToolHandler, executeToolHandler, getToolByIdHandler, getToolsHandler } from './handlers/tools.js';
-import {
-  upsertVectors,
-  createIndex,
-  queryVectors,
-  listIndexes,
-  describeIndex,
-  deleteIndex,
-} from './handlers/vector.js';
-import { getSpeakersHandler, speakHandler, listenHandler } from './handlers/voice.js';
+} from './handlers/network';
+import { generateSystemPromptHandler } from './handlers/prompt';
+import { rootHandler } from './handlers/root';
+import { getTelemetryHandler, storeTelemetryHandler } from './handlers/telemetry';
+import { executeAgentToolHandler, executeToolHandler, getToolByIdHandler, getToolsHandler } from './handlers/tools';
+import { upsertVectors, createIndex, queryVectors, listIndexes, describeIndex, deleteIndex } from './handlers/vector';
+import { getSpeakersHandler, speakHandler, listenHandler } from './handlers/voice';
 import {
   startWorkflowRunHandler,
   resumeAsyncWorkflowHandler,
@@ -63,6 +58,7 @@ import {
   resumeWorkflowHandler,
   watchWorkflowHandler,
   createRunHandler,
+  getWorkflowRunsHandler,
 } from './handlers/workflows.js';
 import { html } from './welcome.js';
 
@@ -81,6 +77,7 @@ export async function createHonoServer(
 ) {
   // Create typed Hono app
   const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
+  const server = mastra.getServer();
 
   // Initialize tools
   const mastraToolsPaths = process.env.MASTRA_TOOLS_PATH;
@@ -102,6 +99,7 @@ export async function createHonoServer(
   // Middleware
   app.use(
     '*',
+    timeout(server?.timeout ?? 1000 * 30),
     cors({
       origin: '*',
       allowMethods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
@@ -132,7 +130,26 @@ export async function createHonoServer(
     c.set('mastra', mastra);
     c.set('tools', tools);
     c.set('playground', options.playground === true);
-    await next();
+
+    const requestId = c.req.header('x-request-id') ?? randomUUID();
+    const span = Telemetry.getActiveSpan();
+    if (span) {
+      span.setAttribute('http.request_id', requestId);
+      span.updateName(`${c.req.method} ${c.req.path}`);
+
+      const newCtx = Telemetry.setBaggage({
+        'http.request_id': requestId,
+      });
+
+      await new Promise(resolve => {
+        Telemetry.withContext(newCtx, async () => {
+          await next();
+          resolve(true);
+        });
+      });
+    } else {
+      await next();
+    }
   });
 
   const bodyLimitOptions = {
@@ -140,7 +157,6 @@ export async function createHonoServer(
     onError: (c: Context) => c.json({ error: 'Request body too large' }, 413),
   };
 
-  const server = mastra.getServer();
   const routes = server?.apiRoutes;
 
   if (server?.middleware) {
@@ -1397,6 +1413,28 @@ export async function createHonoServer(
     getWorkflowByIdHandler,
   );
 
+  app.get(
+    '/api/workflows/:workflowId/runs',
+    describeRoute({
+      description: 'Get all runs for a workflow',
+      tags: ['workflows'],
+      parameters: [
+        {
+          name: 'workflowId',
+          in: 'path',
+          required: true,
+          schema: { type: 'string' },
+        },
+      ],
+      responses: {
+        200: {
+          description: 'List of workflow runs from storage',
+        },
+      },
+    }),
+    getWorkflowRunsHandler,
+  );
+
   app.post(
     '/api/workflows/:workflowId/resume',
     describeRoute({
@@ -1434,8 +1472,49 @@ export async function createHonoServer(
     resumeWorkflowHandler,
   );
 
+  /**
+   * @deprecated Use /api/workflows/:workflowId/resume-async instead
+   */
   app.post(
     '/api/workflows/:workflowId/resumeAsync',
+    bodyLimit(bodyLimitOptions),
+    describeRoute({
+      description: '@deprecated Use /api/workflows/:workflowId/resume-async instead',
+      tags: ['workflows'],
+      parameters: [
+        {
+          name: 'workflowId',
+          in: 'path',
+          required: true,
+          schema: { type: 'string' },
+        },
+        {
+          name: 'runId',
+          in: 'query',
+          required: true,
+          schema: { type: 'string' },
+        },
+      ],
+      requestBody: {
+        required: true,
+        content: {
+          'application/json': {
+            schema: {
+              type: 'object',
+              properties: {
+                stepId: { type: 'string' },
+                context: { type: 'object' },
+              },
+            },
+          },
+        },
+      },
+    }),
+    resumeAsyncWorkflowHandler,
+  );
+
+  app.post(
+    '/api/workflows/:workflowId/resume-async',
     bodyLimit(bodyLimitOptions),
     describeRoute({
       description: 'Resume a suspended workflow step',
@@ -1545,6 +1624,54 @@ export async function createHonoServer(
     startAsyncWorkflowHandler,
   );
 
+  /**
+   * @deprecated Use /api/workflows/:workflowId/start-async instead
+   */
+  app.post(
+    '/api/workflows/:workflowId/start-async',
+    bodyLimit(bodyLimitOptions),
+    describeRoute({
+      description: '@deprecated Use /api/workflows/:workflowId/start-async instead',
+      tags: ['workflows'],
+      parameters: [
+        {
+          name: 'workflowId',
+          in: 'path',
+          required: true,
+          schema: { type: 'string' },
+        },
+        {
+          name: 'runId',
+          in: 'query',
+          required: false,
+          schema: { type: 'string' },
+        },
+      ],
+      requestBody: {
+        required: true,
+        content: {
+          'application/json': {
+            schema: {
+              type: 'object',
+              properties: {
+                input: { type: 'object' },
+              },
+            },
+          },
+        },
+      },
+      responses: {
+        200: {
+          description: 'Workflow execution result',
+        },
+        404: {
+          description: 'Workflow not found',
+        },
+      },
+    }),
+    startAsyncWorkflowHandler,
+  );
+
   app.post(
     '/api/workflows/:workflowId/start',
     describeRoute({
@@ -1564,6 +1691,19 @@ export async function createHonoServer(
           schema: { type: 'string' },
         },
       ],
+      requestBody: {
+        required: true,
+        content: {
+          'application/json': {
+            schema: {
+              type: 'object',
+              properties: {
+                input: { type: 'object' },
+              },
+            },
+          },
+        },
+      },
       responses: {
         200: {
           description: 'Workflow run started',
@@ -2044,10 +2184,14 @@ export async function createNodeServer(
   options: { playground?: boolean; swaggerUI?: boolean; apiReqLogs?: boolean } = {},
 ) {
   const app = await createHonoServer(mastra, options);
+  const serverOptions = mastra.getServer();
+
+  const port = serverOptions?.port ?? (Number(process.env.PORT) || 4111);
+
   return serve(
     {
       fetch: app.fetch,
-      port: Number(process.env.PORT) || 4111,
+      port,
     },
     () => {
       const logger = mastra.getLogger();

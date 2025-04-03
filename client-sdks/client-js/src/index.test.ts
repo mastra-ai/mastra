@@ -12,6 +12,7 @@ describe('MastraClient Resources', () => {
     baseUrl: 'http://localhost:4111',
     headers: {
       Authorization: 'Bearer test-key',
+      'x-mastra-client-type': 'js',
     },
   };
 
@@ -631,14 +632,14 @@ describe('MastraClient Resources', () => {
       };
       mockFetchResponse(mockResponse);
 
-      const result = await workflow.execute({ trigger: 'test' });
+      const result = await workflow.startAsync({ triggerData: { test: 'test' } });
       expect(result).toEqual(mockResponse);
       expect(global.fetch).toHaveBeenCalledWith(
-        `${clientOptions.baseUrl}/api/workflows/test-workflow/execute`,
+        `${clientOptions.baseUrl}/api/workflows/test-workflow/start-async?`,
         expect.objectContaining({
           method: 'POST',
           headers: expect.objectContaining(clientOptions.headers),
-          body: JSON.stringify({ trigger: 'test' }),
+          body: JSON.stringify({ test: 'test' }),
         }),
       );
     });

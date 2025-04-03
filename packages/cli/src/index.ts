@@ -1,7 +1,9 @@
 #! /usr/bin/env node
 import { Command } from 'commander';
 
-import { PosthogAnalytics, type CLI_ORIGIN } from './analytics/index';
+import { config } from 'dotenv';
+import { PosthogAnalytics } from './analytics/index';
+import type { CLI_ORIGIN } from './analytics/index';
 import { build } from './commands/build/build';
 import { create } from './commands/create/create';
 import { deploy } from './commands/deploy/index';
@@ -10,7 +12,6 @@ import { init } from './commands/init/init';
 import { checkAndInstallCoreDeps, checkPkgJson, interactivePrompt } from './commands/init/utils';
 import { DepsService } from './services/service.deps';
 import { logger } from './utils/logger';
-import { config } from 'dotenv';
 
 const depsService = new DepsService();
 const version = await depsService.getPackageVersion();
@@ -137,14 +138,19 @@ program
   .option('-d, --dir <dir>', 'Path to your mastra folder')
   .option('-r, --root <root>', 'Path to your root folder')
   .option('-t, --tools <toolsDirs>', 'Comma-separated list of paths to tool files to include')
-  .option('-p, --port <port>', 'Port number for the development server (defaults to 4111)')
+  .option('-p, --port <port>', 'deprecated: Port number for the development server (defaults to 4111)')
   .action(args => {
     analytics.trackCommand({
       command: 'dev',
       origin,
     });
+
+    if (args?.port) {
+      logger.warn('The --port option is deprecated. Use the server key in the Mastra instance instead.');
+    }
+
     dev({
-      port: args?.port ? parseInt(args.port) : 4111,
+      port: args?.port ? parseInt(args.port) : null,
       dir: args?.dir,
       root: args?.root,
       tools: args?.tools ? args.tools.split(',') : [],

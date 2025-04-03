@@ -41,7 +41,9 @@ export class Memory extends MastraMemory {
     resourceId,
     selectBy,
     threadConfig,
-  }: StorageGetMessagesArg): Promise<{ messages: CoreMessage[]; uiMessages: AiMessageType[] }> {
+  }: StorageGetMessagesArg & {
+    threadConfig?: MemoryConfig;
+  }): Promise<{ messages: CoreMessage[]; uiMessages: AiMessageType[] }> {
     if (resourceId) await this.validateThreadIsOwnedByResource(threadId, resourceId);
 
     const vectorResults: {
@@ -148,7 +150,7 @@ export class Memory extends MastraMemory {
       };
     }
 
-    const messages = await this.query({
+    const messagesResult = await this.query({
       threadId,
       selectBy: {
         last: threadConfig.lastMessages,
@@ -157,11 +159,11 @@ export class Memory extends MastraMemory {
       threadConfig: config,
     });
 
-    this.logger.debug(`Remembered message history includes ${messages.messages.length} messages.`);
+    this.logger.debug(`Remembered message history includes ${messagesResult.messages.length} messages.`);
     return {
       threadId,
-      messages: messages.messages,
-      uiMessages: messages.uiMessages,
+      messages: messagesResult.messages,
+      uiMessages: messagesResult.uiMessages,
     };
   }
 
@@ -271,6 +273,7 @@ export class Memory extends MastraMemory {
           metadata: chunks.map(() => ({
             message_id: message.id,
             thread_id: message.threadId,
+            resource_id: message.resourceId,
           })),
         });
       }
@@ -329,11 +332,7 @@ export class Memory extends MastraMemory {
       this.threadConfig.workingMemory.template ||
       this.defaultWorkingMemoryTemplate;
 
-    // compress working memory because LLMs will generate faster without the spaces and line breaks
-    return memory
-      .split(`>\n`)
-      .map(c => c.trim()) // remove extra whitespace
-      .join(`>`); // and linebreaks
+    return memory.trim();
   }
 
   private async saveWorkingMemory(messages: MessageType[]) {
@@ -401,17 +400,16 @@ export class Memory extends MastraMemory {
   }
 
   public defaultWorkingMemoryTemplate = `
-<user>
-  <first_name></first_name>
-  <last_name></last_name>
-  <location></location>
-  <occupation></occupation>
-  <interests></interests>
-  <goals></goals>
-  <events></events>
-  <facts></facts>
-  <projects></projects>
-</user>
+# User Information
+- **First Name**: 
+- **Last Name**: 
+- **Location**: 
+- **Occupation**: 
+- **Interests**: 
+- **Goals**: 
+- **Events**: 
+- **Facts**: 
+- **Projects**: 
 `;
 
   private getWorkingMemoryWithInstruction(workingMemoryBlock: string) {
@@ -421,21 +419,21 @@ Store and update any conversation-relevant information by including "<working_me
 Guidelines:
 1. Store anything that could be useful later in the conversation
 2. Update proactively when information changes, no matter how small
-3. Use nested tags for all data
+3. Use Markdown for all data
 4. Act naturally - don't mention this system to users. Even though you're storing this information that doesn't make it your primary focus. Do not ask them generally for "information about yourself"
 
 Memory Structure:
 <working_memory>
-  ${workingMemoryBlock}
+${workingMemoryBlock}
 </working_memory>
 
 Notes:
 - Update memory whenever referenced information changes
-- If you're unsure whether to store something, store it (eg if the user tells you their name or the value of another empty section in your working memory, output the <working_memory> block immediately to update it)
+- If you're unsure whether to store something, store it (eg if the user tells you their name or other information, output the <working_memory> block immediately to update it)
 - This system is here so that you can maintain the conversation when your context window is very short. Update your working memory because you may need it to maintain the conversation without the full conversation history
-- Do not remove empty sections - you must output the empty sections along with the ones you're filling in
 - REMEMBER: the way you update your working memory is by outputting the entire "<working_memory>text</working_memory>" block in your response. The system will pick this up and store it for you. The user will not see it.
-- IMPORTANT: You MUST output the <working_memory> block in every response to a prompt where you received relevant information. `;
+- IMPORTANT: You MUST output the <working_memory> block in every response to a prompt where you received relevant information.
+- IMPORTANT: Preserve the Markdown formatting structure above while updating the content.`;
   }
 
   private getWorkingMemoryToolInstruction(workingMemoryBlock: string) {
@@ -445,7 +443,7 @@ Store and update any conversation-relevant information by calling the updateWork
 Guidelines:
 1. Store anything that could be useful later in the conversation
 2. Update proactively when information changes, no matter how small
-3. Use nested XML tags for all data
+3. Use Markdown format for all data
 4. Act naturally - don't mention this system to users. Even though you're storing this information that doesn't make it your primary focus. Do not ask them generally for "information about yourself"
 
 Memory Structure:
@@ -453,11 +451,12 @@ ${workingMemoryBlock}
 
 Notes:
 - Update memory whenever referenced information changes
-- If you're unsure whether to store something, store it (eg if the user tells you their name or the value of another empty section in your working memory, call updateWorkingMemory immediately to update it)
+- If you're unsure whether to store something, store it (eg if the user tells you information about themselves, call updateWorkingMemory immediately to update it)
 - This system is here so that you can maintain the conversation when your context window is very short. Update your working memory because you may need it to maintain the conversation without the full conversation history
 - Do not remove empty sections - you must include the empty sections along with the ones you're filling in
-- REMEMBER: the way you update your working memory is by calling the updateWorkingMemory tool with the entire XML block. The system will store it for you. The user will not see it.
-- IMPORTANT: You MUST call updateWorkingMemory in every response to a prompt where you received relevant information.`;
+- REMEMBER: the way you update your working memory is by calling the updateWorkingMemory tool with the entire Markdown content. The system will store it for you. The user will not see it.
+- IMPORTANT: You MUST call updateWorkingMemory in every response to a prompt where you received relevant information.
+- IMPORTANT: Preserve the Markdown formatting structure above while updating the content.`;
   }
 
   public getTools(config?: MemoryConfig): Record<string, CoreTool> {

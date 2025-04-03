@@ -27,7 +27,22 @@ export const useWorkflow = (workflowId: string, baseUrl: string) => {
           toast.error('Error fetching workflow');
           return;
         }
-        setWorkflow(res as Workflow);
+        const steps = res.steps;
+        const stepsWithWorkflow = await Promise.all(
+          Object.values(steps)?.map(async step => {
+            if (!step.workflowId) return step;
+
+            const wFlow = await client.getWorkflow(step.workflowId).details();
+
+            if (!res) return step;
+
+            return { ...step, stepGraph: wFlow.stepGraph, stepSubscriberGraph: wFlow.stepSubscriberGraph };
+          }),
+        );
+        const _steps = stepsWithWorkflow.reduce((acc, b) => {
+          return { ...acc, [b.id]: b };
+        }, {});
+        setWorkflow({ ...res, steps: _steps } as Workflow);
       } catch (error) {
         setWorkflow(null);
         console.error('Error fetching workflow', error);

@@ -18,20 +18,11 @@
   "ignorePaths": ["docs/**"],
   "packageRules": [
     {
-      "matchPackageNames": [
-        "@types/node",
-        "ai",
-        "/^@ai-sdk//",
-        "typescript",
-        "/^@typescript-eslint//",
-        "eslint",
-        "prettier",
-        "/^eslint-/",
-        "@microsoft/api-extractor",
-        "tsup",
-        "rollup",
-        "vitest"
-      ],
+      "enabled": false,
+      "matchPackageNames": ["*"]
+    },
+    {
+      "matchDepTypes": ["engines"],
       "enabled": false
     },
     {
@@ -40,20 +31,13 @@
       "groupSlug": "examples-minor",
       "matchFileNames": ["examples/**"],
       "schedule": "before 7am on Monday",
-      "matchUpdateTypes": ["patch", "minor"]
-    },
-    {
-      "matchDepTypes": ["engines"],
-      "enabled": false
+      "matchUpdateTypes": ["patch", "minor"],
+      "enabled": true
     },
     {
       "matchPackageNames": ["@types/node"],
-      "matchUpdateTypes": ["major"],
-      "enabled": false
-    },
-    {
-      "matchPackageNames": ["@types/node"],
-      "matchUpdateTypes": ["minor", "patch"]
+      "matchUpdateTypes": ["minor", "patch"],
+      "enabled": true
     },
     {
       "groupName": "AI SDK",
@@ -62,14 +46,16 @@
       "matchPackageNames": ["ai", "/^@ai-sdk//"],
       "matchUpdateTypes": ["major", "minor", "patch"],
       "matchDepTypes": ["dependencies", "devDependencies"],
-      "dependencyDashboardApproval": false
+      "dependencyDashboardApproval": false,
+      "enabled": true
     },
     {
       "groupName": "E2E tests",
       "commitMessageTopic": "e2e-tests",
       "matchFileNames": ["e2e-tests/**/package.json"],
       "matchDepTypes": ["dependencies", "devDependencies"],
-      "dependencyDashboardApproval": false
+      "dependencyDashboardApproval": false,
+      "enabled": true
     },
     {
       "groupName": "typescript",
@@ -77,935 +63,1067 @@
       "matchPackageNames": ["typescript", "/^@typescript-eslint//"],
       "matchUpdateTypes": ["major", "minor", "patch"],
       "matchDepTypes": ["dependencies", "devDependencies"],
-      "dependencyDashboardApproval": false
+      "dependencyDashboardApproval": false,
+      "enabled": true
     },
     {
       "groupName": "formatting & linting",
       "commitMessageTopic": "Formatting & linting",
-      "matchPaths": ["+(package.json)", "**/package.json"],
-      "matchPackageNames": ["eslint", "prettier", "/^eslint-/"],
-      "excludedMatchPackageNames": ["@typescript-eslint/"],
+      "matchFileNames": ["+(package.json)", "**/package.json"],
+      "matchPackageNames": ["eslint", "prettier", "/^eslint-/", "!@typescript-eslint/"],
       "matchUpdateTypes": ["major", "minor", "patch"],
       "matchDepTypes": ["dependencies", "devDependencies"],
-      "dependencyDashboardApproval": false
+      "dependencyDashboardApproval": false,
+      "enabled": true
     },
     {
       "groupName": "Build tools",
       "commitMessageTopic": "Build tools",
-      "matchPaths": ["+(package.json)", "**/package.json"],
+      "matchFileNames": ["+(package.json)", "**/package.json"],
       "matchUpdateTypes": ["major", "minor", "patch"],
       "matchDepTypes": ["devDependencies"],
-      "matchPackageNames": ["@microsoft/api-extractor", "tsup", "rollup"]
+      "matchPackageNames": ["@microsoft/api-extractor", "tsup", "rollup"],
+      "enabled": true
     },
     {
       "groupName": "mastra",
       "commitMessageTopic": "mastra",
       "matchFileNames": ["packages/cli/*/package.json"],
       "matchUpdateTypes": ["minor", "patch"],
-      "matchDepTypes": ["dependencies", "devDependencies"]
+      "matchDepTypes": ["dependencies", "devDependencies"],
+      "enabled": true
     },
     {
       "groupName": "major-mastra",
       "commitMessageTopic": "mastra",
       "matchFileNames": ["packages/cli/package.json"],
       "matchUpdateTypes": ["major"],
-      "matchDepTypes": ["dependencies", "devDependencies"]
+      "matchDepTypes": ["dependencies", "devDependencies"],
+      "enabled": true
     },
     {
       "groupName": "Mastra core",
       "commitMessageTopic": "Mastra core",
       "matchFileNames": ["packages/core/*/package.json"],
       "matchUpdateTypes": ["minor", "patch"],
-      "matchDepTypes": ["dependencies", "devDependencies"]
+      "matchDepTypes": ["dependencies", "devDependencies"],
+      "enabled": true
     },
     {
       "groupName": "major-Mastra core",
       "commitMessageTopic": "Mastra core",
       "matchFileNames": ["packages/core/package.json"],
       "matchUpdateTypes": ["major"],
-      "matchDepTypes": ["dependencies", "devDependencies"]
+      "matchDepTypes": ["dependencies", "devDependencies"],
+      "enabled": true
     },
     {
       "groupName": "create-mastra",
       "commitMessageTopic": "create-mastra",
       "matchFileNames": ["packages/create-mastra/*/package.json"],
       "matchUpdateTypes": ["minor", "patch"],
-      "matchDepTypes": ["dependencies", "devDependencies"]
+      "matchDepTypes": ["dependencies", "devDependencies"],
+      "enabled": true
     },
     {
       "groupName": "major-create-mastra",
       "commitMessageTopic": "create-mastra",
       "matchFileNames": ["packages/create-mastra/package.json"],
       "matchUpdateTypes": ["major"],
-      "matchDepTypes": ["dependencies", "devDependencies"]
+      "matchDepTypes": ["dependencies", "devDependencies"],
+      "enabled": true
     },
     {
       "groupName": "Mastra deployer",
       "commitMessageTopic": "Mastra deployer",
       "matchFileNames": ["packages/deployer/*/package.json"],
       "matchUpdateTypes": ["minor", "patch"],
-      "matchDepTypes": ["dependencies", "devDependencies"]
+      "matchDepTypes": ["dependencies", "devDependencies"],
+      "enabled": true
     },
     {
       "groupName": "major-Mastra deployer",
       "commitMessageTopic": "Mastra deployer",
       "matchFileNames": ["packages/deployer/package.json"],
       "matchUpdateTypes": ["major"],
-      "matchDepTypes": ["dependencies", "devDependencies"]
+      "matchDepTypes": ["dependencies", "devDependencies"],
+      "enabled": true
     },
     {
       "groupName": "Mastra evals",
       "commitMessageTopic": "Mastra evals",
       "matchFileNames": ["packages/evals/*/package.json"],
       "matchUpdateTypes": ["minor", "patch"],
-      "matchDepTypes": ["dependencies", "devDependencies"]
+      "matchDepTypes": ["dependencies", "devDependencies"],
+      "enabled": true
     },
     {
       "groupName": "major-Mastra evals",
       "commitMessageTopic": "Mastra evals",
       "matchFileNames": ["packages/evals/package.json"],
       "matchUpdateTypes": ["major"],
-      "matchDepTypes": ["dependencies", "devDependencies"]
+      "matchDepTypes": ["dependencies", "devDependencies"],
+      "enabled": true
     },
     {
       "groupName": "Mastra loggers",
       "commitMessageTopic": "Mastra loggers",
       "matchFileNames": ["packages/loggers/*/package.json"],
       "matchUpdateTypes": ["minor", "patch"],
-      "matchDepTypes": ["dependencies", "devDependencies"]
+      "matchDepTypes": ["dependencies", "devDependencies"],
+      "enabled": true
     },
     {
       "groupName": "major-Mastra loggers",
       "commitMessageTopic": "Mastra loggers",
       "matchFileNames": ["packages/loggers/package.json"],
       "matchUpdateTypes": ["major"],
-      "matchDepTypes": ["dependencies", "devDependencies"]
+      "matchDepTypes": ["dependencies", "devDependencies"],
+      "enabled": true
     },
     {
       "groupName": "Mastra mcp",
       "commitMessageTopic": "Mastra mcp",
       "matchFileNames": ["packages/mcp/*/package.json"],
       "matchUpdateTypes": ["minor", "patch"],
-      "matchDepTypes": ["dependencies", "devDependencies"]
+      "matchDepTypes": ["dependencies", "devDependencies"],
+      "enabled": true
     },
     {
       "groupName": "major-Mastra mcp",
       "commitMessageTopic": "Mastra mcp",
       "matchFileNames": ["packages/mcp/package.json"],
       "matchUpdateTypes": ["major"],
-      "matchDepTypes": ["dependencies", "devDependencies"]
+      "matchDepTypes": ["dependencies", "devDependencies"],
+      "enabled": true
     },
     {
       "groupName": "Mastra mcp-docs-server",
       "commitMessageTopic": "Mastra mcp-docs-server",
       "matchFileNames": ["packages/mcp-docs-server/*/package.json"],
       "matchUpdateTypes": ["minor", "patch"],
-      "matchDepTypes": ["dependencies", "devDependencies"]
+      "matchDepTypes": ["dependencies", "devDependencies"],
+      "enabled": true
     },
     {
       "groupName": "major-Mastra mcp-docs-server",
       "commitMessageTopic": "Mastra mcp-docs-server",
       "matchFileNames": ["packages/mcp-docs-server/package.json"],
       "matchUpdateTypes": ["major"],
-      "matchDepTypes": ["dependencies", "devDependencies"]
+      "matchDepTypes": ["dependencies", "devDependencies"],
+      "enabled": true
     },
     {
       "groupName": "Mastra memory",
       "commitMessageTopic": "Mastra memory",
       "matchFileNames": ["packages/memory/*/package.json"],
       "matchUpdateTypes": ["minor", "patch"],
-      "matchDepTypes": ["dependencies", "devDependencies"]
+      "matchDepTypes": ["dependencies", "devDependencies"],
+      "enabled": true
     },
     {
       "groupName": "major-Mastra memory",
       "commitMessageTopic": "Mastra memory",
       "matchFileNames": ["packages/memory/package.json"],
       "matchUpdateTypes": ["major"],
-      "matchDepTypes": ["dependencies", "devDependencies"]
+      "matchDepTypes": ["dependencies", "devDependencies"],
+      "enabled": true
     },
     {
       "groupName": "Mastra playground-ui",
       "commitMessageTopic": "Mastra playground-ui",
       "matchFileNames": ["packages/playground-ui/*/package.json"],
       "matchUpdateTypes": ["minor", "patch"],
-      "matchDepTypes": ["dependencies", "devDependencies"]
+      "matchDepTypes": ["dependencies", "devDependencies"],
+      "enabled": true
     },
     {
       "groupName": "major-Mastra playground-ui",
       "commitMessageTopic": "Mastra playground-ui",
       "matchFileNames": ["packages/playground-ui/package.json"],
       "matchUpdateTypes": ["major"],
-      "matchDepTypes": ["dependencies", "devDependencies"]
+      "matchDepTypes": ["dependencies", "devDependencies"],
+      "enabled": true
     },
     {
       "groupName": "Mastra rag",
       "commitMessageTopic": "Mastra rag",
       "matchFileNames": ["packages/rag/*/package.json"],
       "matchUpdateTypes": ["minor", "patch"],
-      "matchDepTypes": ["dependencies", "devDependencies"]
+      "matchDepTypes": ["dependencies", "devDependencies"],
+      "enabled": true
     },
     {
       "groupName": "major-Mastra rag",
       "commitMessageTopic": "Mastra rag",
       "matchFileNames": ["packages/rag/package.json"],
       "matchUpdateTypes": ["major"],
-      "matchDepTypes": ["dependencies", "devDependencies"]
+      "matchDepTypes": ["dependencies", "devDependencies"],
+      "enabled": true
     },
     {
-      "groupName": "packages/server",
-      "commitMessageTopic": "packages/server",
-      "matchFileNames": ["packages/server/package.json"],
+      "groupName": "Mastra server",
+      "commitMessageTopic": "Mastra server",
+      "matchFileNames": ["packages/server/*/package.json"],
       "matchUpdateTypes": ["minor", "patch"],
-      "matchDepTypes": ["dependencies", "devDependencies"]
+      "matchDepTypes": ["dependencies", "devDependencies"],
+      "enabled": true
     },
     {
-      "groupName": "major-packages/server",
-      "commitMessageTopic": "packages/server",
+      "groupName": "major-Mastra server",
+      "commitMessageTopic": "Mastra server",
       "matchFileNames": ["packages/server/package.json"],
       "matchUpdateTypes": ["major"],
-      "matchDepTypes": ["dependencies", "devDependencies"]
+      "matchDepTypes": ["dependencies", "devDependencies"],
+      "enabled": true
     },
     {
       "groupName": "@internal/lint",
       "commitMessageTopic": "@internal/lint",
       "matchFileNames": ["packages/_config/*/package.json"],
       "matchUpdateTypes": ["minor", "patch"],
-      "matchDepTypes": ["dependencies", "devDependencies"]
+      "matchDepTypes": ["dependencies", "devDependencies"],
+      "enabled": true
     },
     {
       "groupName": "major-@internal/lint",
       "commitMessageTopic": "@internal/lint",
       "matchFileNames": ["packages/_config/package.json"],
       "matchUpdateTypes": ["major"],
-      "matchDepTypes": ["dependencies", "devDependencies"]
+      "matchDepTypes": ["dependencies", "devDependencies"],
+      "enabled": true
     },
     {
       "groupName": "Mastra deployer-cloudflare",
       "commitMessageTopic": "Mastra deployer-cloudflare",
       "matchFileNames": ["deployers/cloudflare/*/package.json"],
       "matchUpdateTypes": ["minor", "patch"],
-      "matchDepTypes": ["dependencies", "devDependencies"]
+      "matchDepTypes": ["dependencies", "devDependencies"],
+      "enabled": true
     },
     {
       "groupName": "major-Mastra deployer-cloudflare",
       "commitMessageTopic": "Mastra deployer-cloudflare",
       "matchFileNames": ["deployers/cloudflare/package.json"],
       "matchUpdateTypes": ["major"],
-      "matchDepTypes": ["dependencies", "devDependencies"]
+      "matchDepTypes": ["dependencies", "devDependencies"],
+      "enabled": true
     },
     {
       "groupName": "Mastra deployer-netlify",
       "commitMessageTopic": "Mastra deployer-netlify",
       "matchFileNames": ["deployers/netlify/*/package.json"],
       "matchUpdateTypes": ["minor", "patch"],
-      "matchDepTypes": ["dependencies", "devDependencies"]
+      "matchDepTypes": ["dependencies", "devDependencies"],
+      "enabled": true
     },
     {
       "groupName": "major-Mastra deployer-netlify",
       "commitMessageTopic": "Mastra deployer-netlify",
       "matchFileNames": ["deployers/netlify/package.json"],
       "matchUpdateTypes": ["major"],
-      "matchDepTypes": ["dependencies", "devDependencies"]
+      "matchDepTypes": ["dependencies", "devDependencies"],
+      "enabled": true
     },
     {
       "groupName": "Mastra deployer-vercel",
       "commitMessageTopic": "Mastra deployer-vercel",
       "matchFileNames": ["deployers/vercel/*/package.json"],
       "matchUpdateTypes": ["minor", "patch"],
-      "matchDepTypes": ["dependencies", "devDependencies"]
+      "matchDepTypes": ["dependencies", "devDependencies"],
+      "enabled": true
     },
     {
       "groupName": "major-Mastra deployer-vercel",
       "commitMessageTopic": "Mastra deployer-vercel",
       "matchFileNames": ["deployers/vercel/package.json"],
       "matchUpdateTypes": ["major"],
-      "matchDepTypes": ["dependencies", "devDependencies"]
+      "matchDepTypes": ["dependencies", "devDependencies"],
+      "enabled": true
     },
     {
       "groupName": "Mastra astra",
       "commitMessageTopic": "Mastra astra",
       "matchFileNames": ["stores/astra/*/package.json"],
       "matchUpdateTypes": ["minor", "patch"],
-      "matchDepTypes": ["dependencies", "devDependencies"]
+      "matchDepTypes": ["dependencies", "devDependencies"],
+      "enabled": true
     },
     {
       "groupName": "major-Mastra astra",
       "commitMessageTopic": "Mastra astra",
       "matchFileNames": ["stores/astra/package.json"],
       "matchUpdateTypes": ["major"],
-      "matchDepTypes": ["dependencies", "devDependencies"]
+      "matchDepTypes": ["dependencies", "devDependencies"],
+      "enabled": true
     },
     {
       "groupName": "Mastra chroma",
       "commitMessageTopic": "Mastra chroma",
       "matchFileNames": ["stores/chroma/*/package.json"],
       "matchUpdateTypes": ["minor", "patch"],
-      "matchDepTypes": ["dependencies", "devDependencies"]
+      "matchDepTypes": ["dependencies", "devDependencies"],
+      "enabled": true
     },
     {
       "groupName": "major-Mastra chroma",
       "commitMessageTopic": "Mastra chroma",
       "matchFileNames": ["stores/chroma/package.json"],
       "matchUpdateTypes": ["major"],
-      "matchDepTypes": ["dependencies", "devDependencies"]
+      "matchDepTypes": ["dependencies", "devDependencies"],
+      "enabled": true
+    },
+    {
+      "groupName": "Mastra clickhouse",
+      "commitMessageTopic": "Mastra clickhouse",
+      "matchFileNames": ["stores/clickhouse/*/package.json"],
+      "matchUpdateTypes": ["minor", "patch"],
+      "matchDepTypes": ["dependencies", "devDependencies"],
+      "enabled": true
+    },
+    {
+      "groupName": "major-Mastra clickhouse",
+      "commitMessageTopic": "Mastra clickhouse",
+      "matchFileNames": ["stores/clickhouse/package.json"],
+      "matchUpdateTypes": ["major"],
+      "matchDepTypes": ["dependencies", "devDependencies"],
+      "enabled": true
     },
     {
       "groupName": "Mastra pg",
       "commitMessageTopic": "Mastra pg",
       "matchFileNames": ["stores/pg/*/package.json"],
       "matchUpdateTypes": ["minor", "patch"],
-      "matchDepTypes": ["dependencies", "devDependencies"]
+      "matchDepTypes": ["dependencies", "devDependencies"],
+      "enabled": true
     },
     {
       "groupName": "major-Mastra pg",
       "commitMessageTopic": "Mastra pg",
       "matchFileNames": ["stores/pg/package.json"],
       "matchUpdateTypes": ["major"],
-      "matchDepTypes": ["dependencies", "devDependencies"]
+      "matchDepTypes": ["dependencies", "devDependencies"],
+      "enabled": true
     },
     {
       "groupName": "Mastra pinecone",
       "commitMessageTopic": "Mastra pinecone",
       "matchFileNames": ["stores/pinecone/*/package.json"],
       "matchUpdateTypes": ["minor", "patch"],
-      "matchDepTypes": ["dependencies", "devDependencies"]
+      "matchDepTypes": ["dependencies", "devDependencies"],
+      "enabled": true
     },
     {
       "groupName": "major-Mastra pinecone",
       "commitMessageTopic": "Mastra pinecone",
       "matchFileNames": ["stores/pinecone/package.json"],
       "matchUpdateTypes": ["major"],
-      "matchDepTypes": ["dependencies", "devDependencies"]
+      "matchDepTypes": ["dependencies", "devDependencies"],
+      "enabled": true
     },
     {
       "groupName": "Mastra qdrant",
       "commitMessageTopic": "Mastra qdrant",
       "matchFileNames": ["stores/qdrant/*/package.json"],
       "matchUpdateTypes": ["minor", "patch"],
-      "matchDepTypes": ["dependencies", "devDependencies"]
+      "matchDepTypes": ["dependencies", "devDependencies"],
+      "enabled": true
     },
     {
       "groupName": "major-Mastra qdrant",
       "commitMessageTopic": "Mastra qdrant",
       "matchFileNames": ["stores/qdrant/package.json"],
       "matchUpdateTypes": ["major"],
-      "matchDepTypes": ["dependencies", "devDependencies"]
+      "matchDepTypes": ["dependencies", "devDependencies"],
+      "enabled": true
     },
     {
       "groupName": "Mastra turbopuffer",
       "commitMessageTopic": "Mastra turbopuffer",
       "matchFileNames": ["stores/turbopuffer/*/package.json"],
       "matchUpdateTypes": ["minor", "patch"],
-      "matchDepTypes": ["dependencies", "devDependencies"]
+      "matchDepTypes": ["dependencies", "devDependencies"],
+      "enabled": true
     },
     {
       "groupName": "major-Mastra turbopuffer",
       "commitMessageTopic": "Mastra turbopuffer",
       "matchFileNames": ["stores/turbopuffer/package.json"],
       "matchUpdateTypes": ["major"],
-      "matchDepTypes": ["dependencies", "devDependencies"]
+      "matchDepTypes": ["dependencies", "devDependencies"],
+      "enabled": true
     },
     {
       "groupName": "Mastra upstash",
       "commitMessageTopic": "Mastra upstash",
       "matchFileNames": ["stores/upstash/*/package.json"],
       "matchUpdateTypes": ["minor", "patch"],
-      "matchDepTypes": ["dependencies", "devDependencies"]
+      "matchDepTypes": ["dependencies", "devDependencies"],
+      "enabled": true
     },
     {
       "groupName": "major-Mastra upstash",
       "commitMessageTopic": "Mastra upstash",
       "matchFileNames": ["stores/upstash/package.json"],
       "matchUpdateTypes": ["major"],
-      "matchDepTypes": ["dependencies", "devDependencies"]
+      "matchDepTypes": ["dependencies", "devDependencies"],
+      "enabled": true
     },
     {
       "groupName": "Mastra vectorize",
       "commitMessageTopic": "Mastra vectorize",
       "matchFileNames": ["stores/vectorize/*/package.json"],
       "matchUpdateTypes": ["minor", "patch"],
-      "matchDepTypes": ["dependencies", "devDependencies"]
+      "matchDepTypes": ["dependencies", "devDependencies"],
+      "enabled": true
     },
     {
       "groupName": "major-Mastra vectorize",
       "commitMessageTopic": "Mastra vectorize",
       "matchFileNames": ["stores/vectorize/package.json"],
       "matchUpdateTypes": ["major"],
-      "matchDepTypes": ["dependencies", "devDependencies"]
+      "matchDepTypes": ["dependencies", "devDependencies"],
+      "enabled": true
     },
     {
       "groupName": "Mastra speech-azure",
       "commitMessageTopic": "Mastra speech-azure",
       "matchFileNames": ["speech/azure/*/package.json"],
       "matchUpdateTypes": ["minor", "patch"],
-      "matchDepTypes": ["dependencies", "devDependencies"]
+      "matchDepTypes": ["dependencies", "devDependencies"],
+      "enabled": true
     },
     {
       "groupName": "major-Mastra speech-azure",
       "commitMessageTopic": "Mastra speech-azure",
       "matchFileNames": ["speech/azure/package.json"],
       "matchUpdateTypes": ["major"],
-      "matchDepTypes": ["dependencies", "devDependencies"]
+      "matchDepTypes": ["dependencies", "devDependencies"],
+      "enabled": true
     },
     {
       "groupName": "Mastra speech-deepgram",
       "commitMessageTopic": "Mastra speech-deepgram",
       "matchFileNames": ["speech/deepgram/*/package.json"],
       "matchUpdateTypes": ["minor", "patch"],
-      "matchDepTypes": ["dependencies", "devDependencies"]
+      "matchDepTypes": ["dependencies", "devDependencies"],
+      "enabled": true
     },
     {
       "groupName": "major-Mastra speech-deepgram",
       "commitMessageTopic": "Mastra speech-deepgram",
       "matchFileNames": ["speech/deepgram/package.json"],
       "matchUpdateTypes": ["major"],
-      "matchDepTypes": ["dependencies", "devDependencies"]
+      "matchDepTypes": ["dependencies", "devDependencies"],
+      "enabled": true
     },
     {
       "groupName": "Mastra speech-elevenlabs",
       "commitMessageTopic": "Mastra speech-elevenlabs",
       "matchFileNames": ["speech/elevenlabs/*/package.json"],
       "matchUpdateTypes": ["minor", "patch"],
-      "matchDepTypes": ["dependencies", "devDependencies"]
+      "matchDepTypes": ["dependencies", "devDependencies"],
+      "enabled": true
     },
     {
       "groupName": "major-Mastra speech-elevenlabs",
       "commitMessageTopic": "Mastra speech-elevenlabs",
       "matchFileNames": ["speech/elevenlabs/package.json"],
       "matchUpdateTypes": ["major"],
-      "matchDepTypes": ["dependencies", "devDependencies"]
+      "matchDepTypes": ["dependencies", "devDependencies"],
+      "enabled": true
     },
     {
       "groupName": "Mastra speech-google",
       "commitMessageTopic": "Mastra speech-google",
       "matchFileNames": ["speech/google/*/package.json"],
       "matchUpdateTypes": ["minor", "patch"],
-      "matchDepTypes": ["dependencies", "devDependencies"]
+      "matchDepTypes": ["dependencies", "devDependencies"],
+      "enabled": true
     },
     {
       "groupName": "major-Mastra speech-google",
       "commitMessageTopic": "Mastra speech-google",
       "matchFileNames": ["speech/google/package.json"],
       "matchUpdateTypes": ["major"],
-      "matchDepTypes": ["dependencies", "devDependencies"]
+      "matchDepTypes": ["dependencies", "devDependencies"],
+      "enabled": true
     },
     {
       "groupName": "Mastra speech-ibm",
       "commitMessageTopic": "Mastra speech-ibm",
       "matchFileNames": ["speech/ibm/*/package.json"],
       "matchUpdateTypes": ["minor", "patch"],
-      "matchDepTypes": ["dependencies", "devDependencies"]
+      "matchDepTypes": ["dependencies", "devDependencies"],
+      "enabled": true
     },
     {
       "groupName": "major-Mastra speech-ibm",
       "commitMessageTopic": "Mastra speech-ibm",
       "matchFileNames": ["speech/ibm/package.json"],
       "matchUpdateTypes": ["major"],
-      "matchDepTypes": ["dependencies", "devDependencies"]
+      "matchDepTypes": ["dependencies", "devDependencies"],
+      "enabled": true
     },
     {
       "groupName": "Mastra speech-murf",
       "commitMessageTopic": "Mastra speech-murf",
       "matchFileNames": ["speech/murf/*/package.json"],
       "matchUpdateTypes": ["minor", "patch"],
-      "matchDepTypes": ["dependencies", "devDependencies"]
+      "matchDepTypes": ["dependencies", "devDependencies"],
+      "enabled": true
     },
     {
       "groupName": "major-Mastra speech-murf",
       "commitMessageTopic": "Mastra speech-murf",
       "matchFileNames": ["speech/murf/package.json"],
       "matchUpdateTypes": ["major"],
-      "matchDepTypes": ["dependencies", "devDependencies"]
+      "matchDepTypes": ["dependencies", "devDependencies"],
+      "enabled": true
     },
     {
       "groupName": "Mastra speech-openai",
       "commitMessageTopic": "Mastra speech-openai",
       "matchFileNames": ["speech/openai/*/package.json"],
       "matchUpdateTypes": ["minor", "patch"],
-      "matchDepTypes": ["dependencies", "devDependencies"]
+      "matchDepTypes": ["dependencies", "devDependencies"],
+      "enabled": true
     },
     {
       "groupName": "major-Mastra speech-openai",
       "commitMessageTopic": "Mastra speech-openai",
       "matchFileNames": ["speech/openai/package.json"],
       "matchUpdateTypes": ["major"],
-      "matchDepTypes": ["dependencies", "devDependencies"]
+      "matchDepTypes": ["dependencies", "devDependencies"],
+      "enabled": true
     },
     {
       "groupName": "Mastra speech-playai",
       "commitMessageTopic": "Mastra speech-playai",
       "matchFileNames": ["speech/playai/*/package.json"],
       "matchUpdateTypes": ["minor", "patch"],
-      "matchDepTypes": ["dependencies", "devDependencies"]
+      "matchDepTypes": ["dependencies", "devDependencies"],
+      "enabled": true
     },
     {
       "groupName": "major-Mastra speech-playai",
       "commitMessageTopic": "Mastra speech-playai",
       "matchFileNames": ["speech/playai/package.json"],
       "matchUpdateTypes": ["major"],
-      "matchDepTypes": ["dependencies", "devDependencies"]
+      "matchDepTypes": ["dependencies", "devDependencies"],
+      "enabled": true
     },
     {
       "groupName": "Mastra speech-replicate",
       "commitMessageTopic": "Mastra speech-replicate",
       "matchFileNames": ["speech/replicate/*/package.json"],
       "matchUpdateTypes": ["minor", "patch"],
-      "matchDepTypes": ["dependencies", "devDependencies"]
+      "matchDepTypes": ["dependencies", "devDependencies"],
+      "enabled": true
     },
     {
       "groupName": "major-Mastra speech-replicate",
       "commitMessageTopic": "Mastra speech-replicate",
       "matchFileNames": ["speech/replicate/package.json"],
       "matchUpdateTypes": ["major"],
-      "matchDepTypes": ["dependencies", "devDependencies"]
+      "matchDepTypes": ["dependencies", "devDependencies"],
+      "enabled": true
     },
     {
       "groupName": "Mastra speech-speechify",
       "commitMessageTopic": "Mastra speech-speechify",
       "matchFileNames": ["speech/speechify/*/package.json"],
       "matchUpdateTypes": ["minor", "patch"],
-      "matchDepTypes": ["dependencies", "devDependencies"]
+      "matchDepTypes": ["dependencies", "devDependencies"],
+      "enabled": true
     },
     {
       "groupName": "major-Mastra speech-speechify",
       "commitMessageTopic": "Mastra speech-speechify",
       "matchFileNames": ["speech/speechify/package.json"],
       "matchUpdateTypes": ["major"],
-      "matchDepTypes": ["dependencies", "devDependencies"]
+      "matchDepTypes": ["dependencies", "devDependencies"],
+      "enabled": true
     },
     {
       "groupName": "Mastra voice-azure",
       "commitMessageTopic": "Mastra voice-azure",
       "matchFileNames": ["voice/azure/*/package.json"],
       "matchUpdateTypes": ["minor", "patch"],
-      "matchDepTypes": ["dependencies", "devDependencies"]
+      "matchDepTypes": ["dependencies", "devDependencies"],
+      "enabled": true
     },
     {
       "groupName": "major-Mastra voice-azure",
       "commitMessageTopic": "Mastra voice-azure",
       "matchFileNames": ["voice/azure/package.json"],
       "matchUpdateTypes": ["major"],
-      "matchDepTypes": ["dependencies", "devDependencies"]
+      "matchDepTypes": ["dependencies", "devDependencies"],
+      "enabled": true
     },
     {
       "groupName": "Mastra voice-cloudflare",
       "commitMessageTopic": "Mastra voice-cloudflare",
       "matchFileNames": ["voice/cloudflare/*/package.json"],
       "matchUpdateTypes": ["minor", "patch"],
-      "matchDepTypes": ["dependencies", "devDependencies"]
+      "matchDepTypes": ["dependencies", "devDependencies"],
+      "enabled": true
     },
     {
       "groupName": "major-Mastra voice-cloudflare",
       "commitMessageTopic": "Mastra voice-cloudflare",
       "matchFileNames": ["voice/cloudflare/package.json"],
       "matchUpdateTypes": ["major"],
-      "matchDepTypes": ["dependencies", "devDependencies"]
+      "matchDepTypes": ["dependencies", "devDependencies"],
+      "enabled": true
     },
     {
       "groupName": "Mastra voice-deepgram",
       "commitMessageTopic": "Mastra voice-deepgram",
       "matchFileNames": ["voice/deepgram/*/package.json"],
       "matchUpdateTypes": ["minor", "patch"],
-      "matchDepTypes": ["dependencies", "devDependencies"]
+      "matchDepTypes": ["dependencies", "devDependencies"],
+      "enabled": true
     },
     {
       "groupName": "major-Mastra voice-deepgram",
       "commitMessageTopic": "Mastra voice-deepgram",
       "matchFileNames": ["voice/deepgram/package.json"],
       "matchUpdateTypes": ["major"],
-      "matchDepTypes": ["dependencies", "devDependencies"]
+      "matchDepTypes": ["dependencies", "devDependencies"],
+      "enabled": true
     },
     {
       "groupName": "Mastra voice-elevenlabs",
       "commitMessageTopic": "Mastra voice-elevenlabs",
       "matchFileNames": ["voice/elevenlabs/*/package.json"],
       "matchUpdateTypes": ["minor", "patch"],
-      "matchDepTypes": ["dependencies", "devDependencies"]
+      "matchDepTypes": ["dependencies", "devDependencies"],
+      "enabled": true
     },
     {
       "groupName": "major-Mastra voice-elevenlabs",
       "commitMessageTopic": "Mastra voice-elevenlabs",
       "matchFileNames": ["voice/elevenlabs/package.json"],
       "matchUpdateTypes": ["major"],
-      "matchDepTypes": ["dependencies", "devDependencies"]
+      "matchDepTypes": ["dependencies", "devDependencies"],
+      "enabled": true
     },
     {
       "groupName": "Mastra voice-google",
       "commitMessageTopic": "Mastra voice-google",
       "matchFileNames": ["voice/google/*/package.json"],
       "matchUpdateTypes": ["minor", "patch"],
-      "matchDepTypes": ["dependencies", "devDependencies"]
+      "matchDepTypes": ["dependencies", "devDependencies"],
+      "enabled": true
     },
     {
       "groupName": "major-Mastra voice-google",
       "commitMessageTopic": "Mastra voice-google",
       "matchFileNames": ["voice/google/package.json"],
       "matchUpdateTypes": ["major"],
-      "matchDepTypes": ["dependencies", "devDependencies"]
+      "matchDepTypes": ["dependencies", "devDependencies"],
+      "enabled": true
     },
     {
       "groupName": "Mastra voice-murf",
       "commitMessageTopic": "Mastra voice-murf",
       "matchFileNames": ["voice/murf/*/package.json"],
       "matchUpdateTypes": ["minor", "patch"],
-      "matchDepTypes": ["dependencies", "devDependencies"]
+      "matchDepTypes": ["dependencies", "devDependencies"],
+      "enabled": true
     },
     {
       "groupName": "major-Mastra voice-murf",
       "commitMessageTopic": "Mastra voice-murf",
       "matchFileNames": ["voice/murf/package.json"],
       "matchUpdateTypes": ["major"],
-      "matchDepTypes": ["dependencies", "devDependencies"]
+      "matchDepTypes": ["dependencies", "devDependencies"],
+      "enabled": true
     },
     {
       "groupName": "Mastra voice-openai",
       "commitMessageTopic": "Mastra voice-openai",
       "matchFileNames": ["voice/openai/*/package.json"],
       "matchUpdateTypes": ["minor", "patch"],
-      "matchDepTypes": ["dependencies", "devDependencies"]
+      "matchDepTypes": ["dependencies", "devDependencies"],
+      "enabled": true
     },
     {
       "groupName": "major-Mastra voice-openai",
       "commitMessageTopic": "Mastra voice-openai",
       "matchFileNames": ["voice/openai/package.json"],
       "matchUpdateTypes": ["major"],
-      "matchDepTypes": ["dependencies", "devDependencies"]
+      "matchDepTypes": ["dependencies", "devDependencies"],
+      "enabled": true
     },
     {
       "groupName": "Mastra voice-openai-realtime",
       "commitMessageTopic": "Mastra voice-openai-realtime",
       "matchFileNames": ["voice/openai-realtime-api/*/package.json"],
       "matchUpdateTypes": ["minor", "patch"],
-      "matchDepTypes": ["dependencies", "devDependencies"]
+      "matchDepTypes": ["dependencies", "devDependencies"],
+      "enabled": true
     },
     {
       "groupName": "major-Mastra voice-openai-realtime",
       "commitMessageTopic": "Mastra voice-openai-realtime",
       "matchFileNames": ["voice/openai-realtime-api/package.json"],
       "matchUpdateTypes": ["major"],
-      "matchDepTypes": ["dependencies", "devDependencies"]
+      "matchDepTypes": ["dependencies", "devDependencies"],
+      "enabled": true
     },
     {
       "groupName": "Mastra voice-playai",
       "commitMessageTopic": "Mastra voice-playai",
       "matchFileNames": ["voice/playai/*/package.json"],
       "matchUpdateTypes": ["minor", "patch"],
-      "matchDepTypes": ["dependencies", "devDependencies"]
+      "matchDepTypes": ["dependencies", "devDependencies"],
+      "enabled": true
     },
     {
       "groupName": "major-Mastra voice-playai",
       "commitMessageTopic": "Mastra voice-playai",
       "matchFileNames": ["voice/playai/package.json"],
       "matchUpdateTypes": ["major"],
-      "matchDepTypes": ["dependencies", "devDependencies"]
+      "matchDepTypes": ["dependencies", "devDependencies"],
+      "enabled": true
     },
     {
       "groupName": "Mastra voice-sarvam",
       "commitMessageTopic": "Mastra voice-sarvam",
       "matchFileNames": ["voice/sarvam/*/package.json"],
       "matchUpdateTypes": ["minor", "patch"],
-      "matchDepTypes": ["dependencies", "devDependencies"]
+      "matchDepTypes": ["dependencies", "devDependencies"],
+      "enabled": true
     },
     {
       "groupName": "major-Mastra voice-sarvam",
       "commitMessageTopic": "Mastra voice-sarvam",
       "matchFileNames": ["voice/sarvam/package.json"],
       "matchUpdateTypes": ["major"],
-      "matchDepTypes": ["dependencies", "devDependencies"]
+      "matchDepTypes": ["dependencies", "devDependencies"],
+      "enabled": true
     },
     {
       "groupName": "Mastra voice-speechify",
       "commitMessageTopic": "Mastra voice-speechify",
       "matchFileNames": ["voice/speechify/*/package.json"],
       "matchUpdateTypes": ["minor", "patch"],
-      "matchDepTypes": ["dependencies", "devDependencies"]
+      "matchDepTypes": ["dependencies", "devDependencies"],
+      "enabled": true
     },
     {
       "groupName": "major-Mastra voice-speechify",
       "commitMessageTopic": "Mastra voice-speechify",
       "matchFileNames": ["voice/speechify/package.json"],
       "matchUpdateTypes": ["major"],
-      "matchDepTypes": ["dependencies", "devDependencies"]
+      "matchDepTypes": ["dependencies", "devDependencies"],
+      "enabled": true
     },
     {
       "groupName": "Mastra client-js",
       "commitMessageTopic": "Mastra client-js",
       "matchFileNames": ["client-sdks/client-js/*/package.json"],
       "matchUpdateTypes": ["minor", "patch"],
-      "matchDepTypes": ["dependencies", "devDependencies"]
+      "matchDepTypes": ["dependencies", "devDependencies"],
+      "enabled": true
     },
     {
       "groupName": "major-Mastra client-js",
       "commitMessageTopic": "Mastra client-js",
       "matchFileNames": ["client-sdks/client-js/package.json"],
       "matchUpdateTypes": ["major"],
-      "matchDepTypes": ["dependencies", "devDependencies"]
-    },
-    {
-      "groupName": "Mastra composio",
-      "commitMessageTopic": "Mastra composio",
-      "matchFileNames": ["integrations/composio/*/package.json"],
-      "matchUpdateTypes": ["minor", "patch"],
-      "matchDepTypes": ["dependencies", "devDependencies"]
-    },
-    {
-      "groupName": "major-Mastra composio",
-      "commitMessageTopic": "Mastra composio",
-      "matchFileNames": ["integrations/composio/package.json"],
-      "matchUpdateTypes": ["major"],
-      "matchDepTypes": ["dependencies", "devDependencies"]
+      "matchDepTypes": ["dependencies", "devDependencies"],
+      "enabled": true
     },
     {
       "groupName": "Mastra firecrawl",
       "commitMessageTopic": "Mastra firecrawl",
       "matchFileNames": ["integrations/firecrawl/*/package.json"],
       "matchUpdateTypes": ["minor", "patch"],
-      "matchDepTypes": ["dependencies", "devDependencies"]
+      "matchDepTypes": ["dependencies", "devDependencies"],
+      "enabled": true
     },
     {
       "groupName": "major-Mastra firecrawl",
       "commitMessageTopic": "Mastra firecrawl",
       "matchFileNames": ["integrations/firecrawl/package.json"],
       "matchUpdateTypes": ["major"],
-      "matchDepTypes": ["dependencies", "devDependencies"]
+      "matchDepTypes": ["dependencies", "devDependencies"],
+      "enabled": true
     },
     {
       "groupName": "Mastra github",
       "commitMessageTopic": "Mastra github",
       "matchFileNames": ["integrations/github/*/package.json"],
       "matchUpdateTypes": ["minor", "patch"],
-      "matchDepTypes": ["dependencies", "devDependencies"]
+      "matchDepTypes": ["dependencies", "devDependencies"],
+      "enabled": true
     },
     {
       "groupName": "major-Mastra github",
       "commitMessageTopic": "Mastra github",
       "matchFileNames": ["integrations/github/package.json"],
       "matchUpdateTypes": ["major"],
-      "matchDepTypes": ["dependencies", "devDependencies"]
+      "matchDepTypes": ["dependencies", "devDependencies"],
+      "enabled": true
+    },
+    {
+      "groupName": "Mastra mem0",
+      "commitMessageTopic": "Mastra mem0",
+      "matchFileNames": ["integrations/mem0/*/package.json"],
+      "matchUpdateTypes": ["minor", "patch"],
+      "matchDepTypes": ["dependencies", "devDependencies"],
+      "enabled": true
+    },
+    {
+      "groupName": "major-Mastra mem0",
+      "commitMessageTopic": "Mastra mem0",
+      "matchFileNames": ["integrations/mem0/package.json"],
+      "matchUpdateTypes": ["major"],
+      "matchDepTypes": ["dependencies", "devDependencies"],
+      "enabled": true
     },
     {
       "groupName": "Mastra ragie",
       "commitMessageTopic": "Mastra ragie",
       "matchFileNames": ["integrations/ragie/*/package.json"],
       "matchUpdateTypes": ["minor", "patch"],
-      "matchDepTypes": ["dependencies", "devDependencies"]
+      "matchDepTypes": ["dependencies", "devDependencies"],
+      "enabled": true
     },
     {
       "groupName": "major-Mastra ragie",
       "commitMessageTopic": "Mastra ragie",
       "matchFileNames": ["integrations/ragie/package.json"],
       "matchUpdateTypes": ["major"],
-      "matchDepTypes": ["dependencies", "devDependencies"]
-    },
-    {
-      "groupName": "Mastra stabilityai",
-      "commitMessageTopic": "Mastra stabilityai",
-      "matchFileNames": ["integrations/stabilityai/*/package.json"],
-      "matchUpdateTypes": ["minor", "patch"],
-      "matchDepTypes": ["dependencies", "devDependencies"]
-    },
-    {
-      "groupName": "major-Mastra stabilityai",
-      "commitMessageTopic": "Mastra stabilityai",
-      "matchFileNames": ["integrations/stabilityai/package.json"],
-      "matchUpdateTypes": ["major"],
-      "matchDepTypes": ["dependencies", "devDependencies"]
+      "matchDepTypes": ["dependencies", "devDependencies"],
+      "enabled": true
     },
     {
       "groupName": "Mastra playground",
       "commitMessageTopic": "Mastra playground",
       "matchFileNames": ["packages/cli/src/playground/*/package.json"],
       "matchUpdateTypes": ["minor", "patch"],
-      "matchDepTypes": ["dependencies", "devDependencies"]
+      "matchDepTypes": ["dependencies", "devDependencies"],
+      "enabled": true
     },
     {
       "groupName": "major-Mastra playground",
       "commitMessageTopic": "Mastra playground",
       "matchFileNames": ["packages/cli/src/playground/package.json"],
       "matchUpdateTypes": ["major"],
-      "matchDepTypes": ["dependencies", "devDependencies"]
+      "matchDepTypes": ["dependencies", "devDependencies"],
+      "enabled": true
     },
     {
       "groupName": "mastra",
       "commitMessageTopic": "mastra",
       "matchFileNames": ["packages/cli/*/package.json"],
       "matchUpdateTypes": ["minor", "patch"],
-      "matchDepTypes": ["dependencies", "devDependencies"]
+      "matchDepTypes": ["dependencies", "devDependencies"],
+      "enabled": true
     },
     {
       "groupName": "major-mastra",
       "commitMessageTopic": "mastra",
       "matchFileNames": ["packages/cli/package.json"],
       "matchUpdateTypes": ["major"],
-      "matchDepTypes": ["dependencies", "devDependencies"]
+      "matchDepTypes": ["dependencies", "devDependencies"],
+      "enabled": true
     },
     {
       "groupName": "Mastra core",
       "commitMessageTopic": "Mastra core",
       "matchFileNames": ["packages/core/*/package.json"],
       "matchUpdateTypes": ["minor", "patch"],
-      "matchDepTypes": ["dependencies", "devDependencies"]
+      "matchDepTypes": ["dependencies", "devDependencies"],
+      "enabled": true
     },
     {
       "groupName": "major-Mastra core",
       "commitMessageTopic": "Mastra core",
       "matchFileNames": ["packages/core/package.json"],
       "matchUpdateTypes": ["major"],
-      "matchDepTypes": ["dependencies", "devDependencies"]
+      "matchDepTypes": ["dependencies", "devDependencies"],
+      "enabled": true
     },
     {
       "groupName": "create-mastra",
       "commitMessageTopic": "create-mastra",
       "matchFileNames": ["packages/create-mastra/*/package.json"],
       "matchUpdateTypes": ["minor", "patch"],
-      "matchDepTypes": ["dependencies", "devDependencies"]
+      "matchDepTypes": ["dependencies", "devDependencies"],
+      "enabled": true
     },
     {
       "groupName": "major-create-mastra",
       "commitMessageTopic": "create-mastra",
       "matchFileNames": ["packages/create-mastra/package.json"],
       "matchUpdateTypes": ["major"],
-      "matchDepTypes": ["dependencies", "devDependencies"]
+      "matchDepTypes": ["dependencies", "devDependencies"],
+      "enabled": true
     },
     {
       "groupName": "Mastra deployer",
       "commitMessageTopic": "Mastra deployer",
       "matchFileNames": ["packages/deployer/*/package.json"],
       "matchUpdateTypes": ["minor", "patch"],
-      "matchDepTypes": ["dependencies", "devDependencies"]
+      "matchDepTypes": ["dependencies", "devDependencies"],
+      "enabled": true
     },
     {
       "groupName": "major-Mastra deployer",
       "commitMessageTopic": "Mastra deployer",
       "matchFileNames": ["packages/deployer/package.json"],
       "matchUpdateTypes": ["major"],
-      "matchDepTypes": ["dependencies", "devDependencies"]
+      "matchDepTypes": ["dependencies", "devDependencies"],
+      "enabled": true
     },
     {
       "groupName": "Mastra evals",
       "commitMessageTopic": "Mastra evals",
       "matchFileNames": ["packages/evals/*/package.json"],
       "matchUpdateTypes": ["minor", "patch"],
-      "matchDepTypes": ["dependencies", "devDependencies"]
+      "matchDepTypes": ["dependencies", "devDependencies"],
+      "enabled": true
     },
     {
       "groupName": "major-Mastra evals",
       "commitMessageTopic": "Mastra evals",
       "matchFileNames": ["packages/evals/package.json"],
       "matchUpdateTypes": ["major"],
-      "matchDepTypes": ["dependencies", "devDependencies"]
+      "matchDepTypes": ["dependencies", "devDependencies"],
+      "enabled": true
     },
     {
       "groupName": "Mastra loggers",
       "commitMessageTopic": "Mastra loggers",
       "matchFileNames": ["packages/loggers/*/package.json"],
       "matchUpdateTypes": ["minor", "patch"],
-      "matchDepTypes": ["dependencies", "devDependencies"]
+      "matchDepTypes": ["dependencies", "devDependencies"],
+      "enabled": true
     },
     {
       "groupName": "major-Mastra loggers",
       "commitMessageTopic": "Mastra loggers",
       "matchFileNames": ["packages/loggers/package.json"],
       "matchUpdateTypes": ["major"],
-      "matchDepTypes": ["dependencies", "devDependencies"]
+      "matchDepTypes": ["dependencies", "devDependencies"],
+      "enabled": true
     },
     {
       "groupName": "Mastra mcp",
       "commitMessageTopic": "Mastra mcp",
       "matchFileNames": ["packages/mcp/*/package.json"],
       "matchUpdateTypes": ["minor", "patch"],
-      "matchDepTypes": ["dependencies", "devDependencies"]
+      "matchDepTypes": ["dependencies", "devDependencies"],
+      "enabled": true
     },
     {
       "groupName": "major-Mastra mcp",
       "commitMessageTopic": "Mastra mcp",
       "matchFileNames": ["packages/mcp/package.json"],
       "matchUpdateTypes": ["major"],
-      "matchDepTypes": ["dependencies", "devDependencies"]
+      "matchDepTypes": ["dependencies", "devDependencies"],
+      "enabled": true
     },
     {
       "groupName": "Mastra mcp-docs-server",
       "commitMessageTopic": "Mastra mcp-docs-server",
       "matchFileNames": ["packages/mcp-docs-server/*/package.json"],
       "matchUpdateTypes": ["minor", "patch"],
-      "matchDepTypes": ["dependencies", "devDependencies"]
+      "matchDepTypes": ["dependencies", "devDependencies"],
+      "enabled": true
     },
     {
       "groupName": "major-Mastra mcp-docs-server",
       "commitMessageTopic": "Mastra mcp-docs-server",
       "matchFileNames": ["packages/mcp-docs-server/package.json"],
       "matchUpdateTypes": ["major"],
-      "matchDepTypes": ["dependencies", "devDependencies"]
+      "matchDepTypes": ["dependencies", "devDependencies"],
+      "enabled": true
     },
     {
       "groupName": "Mastra memory",
       "commitMessageTopic": "Mastra memory",
       "matchFileNames": ["packages/memory/*/package.json"],
       "matchUpdateTypes": ["minor", "patch"],
-      "matchDepTypes": ["dependencies", "devDependencies"]
+      "matchDepTypes": ["dependencies", "devDependencies"],
+      "enabled": true
     },
     {
       "groupName": "major-Mastra memory",
       "commitMessageTopic": "Mastra memory",
       "matchFileNames": ["packages/memory/package.json"],
       "matchUpdateTypes": ["major"],
-      "matchDepTypes": ["dependencies", "devDependencies"]
+      "matchDepTypes": ["dependencies", "devDependencies"],
+      "enabled": true
     },
     {
       "groupName": "Mastra playground-ui",
       "commitMessageTopic": "Mastra playground-ui",
       "matchFileNames": ["packages/playground-ui/*/package.json"],
       "matchUpdateTypes": ["minor", "patch"],
-      "matchDepTypes": ["dependencies", "devDependencies"]
+      "matchDepTypes": ["dependencies", "devDependencies"],
+      "enabled": true
     },
     {
       "groupName": "major-Mastra playground-ui",
       "commitMessageTopic": "Mastra playground-ui",
       "matchFileNames": ["packages/playground-ui/package.json"],
       "matchUpdateTypes": ["major"],
-      "matchDepTypes": ["dependencies", "devDependencies"]
+      "matchDepTypes": ["dependencies", "devDependencies"],
+      "enabled": true
     },
     {
       "groupName": "Mastra rag",
       "commitMessageTopic": "Mastra rag",
       "matchFileNames": ["packages/rag/*/package.json"],
       "matchUpdateTypes": ["minor", "patch"],
-      "matchDepTypes": ["dependencies", "devDependencies"]
+      "matchDepTypes": ["dependencies", "devDependencies"],
+      "enabled": true
     },
     {
       "groupName": "major-Mastra rag",
       "commitMessageTopic": "Mastra rag",
       "matchFileNames": ["packages/rag/package.json"],
       "matchUpdateTypes": ["major"],
-      "matchDepTypes": ["dependencies", "devDependencies"]
+      "matchDepTypes": ["dependencies", "devDependencies"],
+      "enabled": true
     },
     {
-      "groupName": "packages/server",
-      "commitMessageTopic": "packages/server",
-      "matchFileNames": ["packages/server/package.json"],
+      "groupName": "Mastra server",
+      "commitMessageTopic": "Mastra server",
+      "matchFileNames": ["packages/server/*/package.json"],
       "matchUpdateTypes": ["minor", "patch"],
-      "matchDepTypes": ["dependencies", "devDependencies"]
+      "matchDepTypes": ["dependencies", "devDependencies"],
+      "enabled": true
     },
     {
-      "groupName": "major-packages/server",
-      "commitMessageTopic": "packages/server",
+      "groupName": "major-Mastra server",
+      "commitMessageTopic": "Mastra server",
       "matchFileNames": ["packages/server/package.json"],
       "matchUpdateTypes": ["major"],
-      "matchDepTypes": ["dependencies", "devDependencies"]
+      "matchDepTypes": ["dependencies", "devDependencies"],
+      "enabled": true
     },
     {
       "groupName": "@internal/lint",
       "commitMessageTopic": "@internal/lint",
       "matchFileNames": ["packages/_config/*/package.json"],
       "matchUpdateTypes": ["minor", "patch"],
-      "matchDepTypes": ["dependencies", "devDependencies"]
+      "matchDepTypes": ["dependencies", "devDependencies"],
+      "enabled": true
     },
     {
       "groupName": "major-@internal/lint",
       "commitMessageTopic": "@internal/lint",
       "matchFileNames": ["packages/_config/package.json"],
       "matchUpdateTypes": ["major"],
-      "matchDepTypes": ["dependencies", "devDependencies"]
+      "matchDepTypes": ["dependencies", "devDependencies"],
+      "enabled": true
     }
   ]
 }
