@@ -765,15 +765,7 @@ export class Agent<
               },
             );
 
-            // saving messages doesn't need to block responses
-            void memory.saveMessages({
-              messages: [
-                ...threadMessages,
-                ...this.getResponseMessages({ threadId, resourceId, response: result.response }),
-              ],
-              memoryConfig,
-            });
-            // neither does renaming the thread
+            // renaming the thread doesn't need to block finishing the req
             void (async () => {
               if (!thread.title?.startsWith('New Thread')) {
                 return;
@@ -792,6 +784,13 @@ export class Agent<
                 title,
               });
             })();
+            await memory.saveMessages({
+              messages: [
+                ...threadMessages,
+                ...this.getResponseMessages({ threadId, resourceId, response: result.response }),
+              ],
+              memoryConfig,
+            });
           } catch (e) {
             this.logger.error('Error saving response', {
               error: e,
