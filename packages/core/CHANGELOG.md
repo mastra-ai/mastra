@@ -1,5 +1,11 @@
 # @mastra/core
 
+## 0.8.0-alpha.5
+
+### Patch Changes
+
+- 93875ed: Improved the performance of Memory semantic recall by 2 to 3 times when using pg by making tweaks to @mastra/memory @mastra/core and @mastra/pg
+
 ## 0.8.0-alpha.4
 
 ### Patch Changes
