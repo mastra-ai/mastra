@@ -18,74 +18,77 @@ import WorkflowTracesPage from './pages/workflows/workflow/traces';
 import Networks from './pages/networks';
 import { NetworkLayout } from './domains/networks/network-layout';
 import Network from './pages/networks/network';
+import { PostHogProvider } from './lib/analytics';
 
 function App() {
   return (
-    <BrowserRouter>
-      <Routes>
-        <Route
-          element={
-            <Layout>
-              <Outlet />
-            </Layout>
-          }
-        >
-          <Route path="/networks" element={<Networks />} />
-          <Route path="/networks/:networkId" element={<Navigate to="/networks/:networkId/chat" />} />
+    <PostHogProvider>
+      <BrowserRouter>
+        <Routes>
           <Route
-            path="/networks/:networkId"
             element={
-              <NetworkLayout>
+              <Layout>
                 <Outlet />
-              </NetworkLayout>
+              </Layout>
             }
           >
-            <Route path="chat" element={<Network />} />
+            <Route path="/networks" element={<Networks />} />
+            <Route path="/networks/:networkId" element={<Navigate to="/networks/:networkId/chat" />} />
+            <Route
+              path="/networks/:networkId"
+              element={
+                <NetworkLayout>
+                  <Outlet />
+                </NetworkLayout>
+              }
+            >
+              <Route path="chat" element={<Network />} />
+            </Route>
           </Route>
-        </Route>
 
-        <Route
-          element={
-            <Layout>
-              <Outlet />
-            </Layout>
-          }
-        >
-          <Route path="/agents" element={<Agents />} />
-          <Route path="/agents/:agentId" element={<Navigate to="/agents/:agentId/chat" />} />
           <Route
-            path="/agents/:agentId"
             element={
-              <AgentLayout>
+              <Layout>
                 <Outlet />
-              </AgentLayout>
+              </Layout>
             }
           >
-            <Route path="chat" element={<Agent />} />
-            <Route path="chat/:threadId" element={<Agent />} />
-            <Route path="evals" element={<AgentEvalsPage />} />
-            <Route path="traces" element={<AgentTracesPage />} />
+            <Route path="/agents" element={<Agents />} />
+            <Route path="/agents/:agentId" element={<Navigate to="/agents/:agentId/chat" />} />
+            <Route
+              path="/agents/:agentId"
+              element={
+                <AgentLayout>
+                  <Outlet />
+                </AgentLayout>
+              }
+            >
+              <Route path="chat" element={<Agent />} />
+              <Route path="chat/:threadId" element={<Agent />} />
+              <Route path="evals" element={<AgentEvalsPage />} />
+              <Route path="traces" element={<AgentTracesPage />} />
+            </Route>
+            <Route path="/tools" element={<Tools />} />
+            <Route path="/tools/:agentId/:toolId" element={<AgentTool />} />
+            <Route path="/tools/all/:toolId" element={<Tool />} />
+            <Route path="/workflows" element={<Workflows />} />
+            <Route path="/workflows/:workflowId" element={<Navigate to="/workflows/:workflowId/graph" />} />
+            <Route
+              path="/workflows/:workflowId"
+              element={
+                <WorkflowLayout>
+                  <Outlet />
+                </WorkflowLayout>
+              }
+            >
+              <Route path="graph" element={<Workflow />} />
+              <Route path="traces" element={<WorkflowTracesPage />} />
+            </Route>
+            <Route path="/" element={<Navigate to="/agents" />} />
           </Route>
-          <Route path="/tools" element={<Tools />} />
-          <Route path="/tools/:agentId/:toolId" element={<AgentTool />} />
-          <Route path="/tools/all/:toolId" element={<Tool />} />
-          <Route path="/workflows" element={<Workflows />} />
-          <Route path="/workflows/:workflowId" element={<Navigate to="/workflows/:workflowId/graph" />} />
-          <Route
-            path="/workflows/:workflowId"
-            element={
-              <WorkflowLayout>
-                <Outlet />
-              </WorkflowLayout>
-            }
-          >
-            <Route path="graph" element={<Workflow />} />
-            <Route path="traces" element={<WorkflowTracesPage />} />
-          </Route>
-          <Route path="/" element={<Navigate to="/agents" />} />
-        </Route>
-      </Routes>
-    </BrowserRouter>
+        </Routes>
+      </BrowserRouter>
+    </PostHogProvider>
   );
 }
 
