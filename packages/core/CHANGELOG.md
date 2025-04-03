@@ -1,5 +1,19 @@
 # @mastra/core
 
+## 0.8.0-alpha.3
+
+### Patch Changes
+
+- 5ae0180: Removed prefixed doc references
+- 9bfa12b: Accept ID on step config
+- 515ebfb: Fix compound subscriber bug
+- 88fa727: Added getWorkflowRuns for libsql, pg, clickhouse and upstash as well as added route getWorkflowRunsHandler
+- f37f535: Added variables to while and until loops
+- 4d67826: Fix eval writes, remove id column
+- 6330967: Enable route timeout using server options
+- 8393832: Handle nested workflow view on workflow graph
+- 6330967: Add support for configuration of server port using Mastra instance
+
 ## 0.8.0-alpha.2
 
 ### Patch Changes
