@@ -1993,7 +1993,7 @@ describe('Workflow', async () => {
       expect(result.results.step2).toEqual({ status: 'success', output: { result: 'success2' } });
     });
 
-    it('should run compount subscribers with when conditions', async () => {
+    it('should run compound subscribers with when conditions', async () => {
       const step1Action = vi.fn<any>().mockResolvedValue({ result: 'success1' });
       const step2Action = vi.fn<any>().mockResolvedValue({ result: 'success2' });
       const step3Action = vi.fn<any>().mockResolvedValue({ result: 'success3' });
