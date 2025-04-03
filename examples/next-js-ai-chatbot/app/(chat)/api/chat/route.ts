@@ -19,8 +19,7 @@ export const maxDuration = 60;
 
 export async function POST(request: Request) {
   try {
-    const { id, messages, selectedChatModel }: { id: string; messages: Array<Message>; selectedChatModel: string } =
-      await request.json();
+    const { id, messages }: { id: string; messages: Array<Message> } = await request.json();
 
     const session = await auth();
 

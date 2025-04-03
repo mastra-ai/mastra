@@ -26,15 +26,15 @@ export const weatherTool = createTool({
   inputSchema: z.object({
     location: z.string().describe('City name'),
   }),
-  outputSchema: z.object({
-    temperature: z.number(),
-    feelsLike: z.number(),
-    humidity: z.number(),
-    windSpeed: z.number(),
-    windGust: z.number(),
-    conditions: z.string(),
-    location: z.string(),
-  }),
+  // outputSchema: z.object({
+  //   temperature: z.number(),
+  //   feelsLike: z.number(),
+  //   humidity: z.number(),
+  //   windSpeed: z.number(),
+  //   windGust: z.number(),
+  //   conditions: z.string(),
+  //   location: z.string(),
+  // }),
   execute: async ({ context }) => {
     return await getWeather(context.location);
   },
@@ -51,18 +51,13 @@ const getWeather = async (location: string) => {
 
   const { latitude, longitude, name } = geocodingData.results[0];
 
-  const weatherUrl = `https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&current=temperature_2m,apparent_temperature,relative_humidity_2m,wind_speed_10m,wind_gusts_10m,weather_code`;
+  const weatherUrl = `https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&current=temperature_2m&hourly=temperature_2m&daily=sunrise,sunset&timezone=auto`;
 
   const response = await fetch(weatherUrl);
   const data = (await response.json()) as WeatherResponse;
 
   return {
-    temperature: data.current.temperature_2m,
-    feelsLike: data.current.apparent_temperature,
-    humidity: data.current.relative_humidity_2m,
-    windSpeed: data.current.wind_speed_10m,
-    windGust: data.current.wind_gusts_10m,
-    conditions: getWeatherCondition(data.current.weather_code),
+    ...data,
     location: name,
   };
 };

@@ -2,9 +2,15 @@ import { openai } from '@ai-sdk/openai';
 import { Agent } from '@mastra/core/agent';
 import { Memory } from '@mastra/memory';
 import { weatherTool } from '../tools';
-// import { storage } from './storage';
+import { storage } from './storage';
 
-const memory = new Memory();
+const memory = new Memory({
+  storage,
+  options: {
+    semanticRecall: false,
+  },
+  embedder: undefined,
+});
 
 export const weatherAgent = new Agent({
   name: 'Weather Agent',
