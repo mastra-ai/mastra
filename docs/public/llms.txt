@@ -27,6 +27,7 @@ Each section contains detailed markdown files that provide comprehensive informa
 - [Overview](https://mastra.ai/docs/evals/overview): Understanding how to evaluate and measure AI agent quality using Mastra evals.
 - [Running in CI](https://mastra.ai/docs/evals/running-in-ci): Learn how to run Mastra evals in your CI/CD pipeline to monitor agent quality over time.
 - [Textual Evals](https://mastra.ai/docs/evals/textual-evals): Understand how Mastra uses LLM-as-judge methodology to evaluate text quality.
+- [Licensing](https://mastra.ai/docs/faq): Mastra License
 - [Using with AI SDK](https://mastra.ai/docs/frameworks/ai-sdk): Learn how Mastra leverages the AI SDK library and how you can leverage it further with Mastra
 - [Getting started with Mastra and NextJS | Mastra Guides](https://mastra.ai/docs/frameworks/next-js): Guide on integrating Mastra with NextJS.
 - [Installing Mastra Locally | Getting Started | Mastra Docs](https://mastra.ai/docs/getting-started/installation): Guide on installing Mastra and setting up the necessary prerequisites for running it with various LLM providers.
@@ -141,6 +142,12 @@ Each section contains detailed markdown files that provide comprehensive informa
 - [Reference: PlayAI Voice | Voice Providers | Mastra Docs](https://mastra.ai/docs/reference/voice/playai): Documentation for the PlayAI voice implementation, providing text-to-speech capabilities.
 - [Reference: Sarvam Voice | Voice Providers | Mastra Docs](https://mastra.ai/docs/reference/voice/sarvam): Documentation for the Sarvam class, providing text-to-speech and speech-to-text capabilities.
 - [Reference: Speechify Voice | Voice Providers | Mastra Docs](https://mastra.ai/docs/reference/voice/speechify): Documentation for the Speechify voice implementation, providing text-to-speech capabilities.
+- [Reference: voice.answer() | Voice Providers | Mastra Docs](https://mastra.ai/docs/reference/voice/voice.answer): Documentation for the answer() method available in real-time voice providers, which triggers the voice provider to generate a response.
+- [Reference: voice.connect() | Voice Providers | Mastra Docs](https://mastra.ai/docs/reference/voice/voice.connect): Documentation for the connect() method available in real-time voice providers, which establishes a connection for speech-to-speech communication.
+- [Reference: voice.listen() | Voice Providers | Mastra Docs](https://mastra.ai/docs/reference/voice/voice.listen): Documentation for the listen() method available in all Mastra voice providers, which converts speech to text.
+- [Reference: voice.on() | Voice Providers | Mastra Docs](https://mastra.ai/docs/reference/voice/voice.on): Documentation for the on() method available in voice providers, which registers event listeners for voice events.
+- [Reference: voice.send() | Voice Providers | Mastra Docs](https://mastra.ai/docs/reference/voice/voice.send): Documentation for the send() method available in real-time voice providers, which streams audio data for continuous processing.
+- [Reference: voice.speak() | Voice Providers | Mastra Docs](https://mastra.ai/docs/reference/voice/voice.speak): Documentation for the speak() method available in all Mastra voice providers, which converts text to speech.
 - [Reference: .after() | Building Workflows | Mastra Docs](https://mastra.ai/docs/reference/workflows/after): Documentation for the `after()` method in workflows, enabling branching and merging paths.
 - [.afterEvent() Method | Mastra Docs](https://mastra.ai/docs/reference/workflows/afterEvent): Reference for the afterEvent method in Mastra workflows that creates event-based suspension points.
 - [Reference: Workflow.commit() | Running Workflows | Mastra Docs](https://mastra.ai/docs/reference/workflows/commit): Documentation for the `.commit()` method in workflows, which re-initializes the workflow machine with the current step configuration.
