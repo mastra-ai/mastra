@@ -12,34 +12,31 @@ import { fetcher, generateUUID } from '@/lib/utils';
 import { Artifact } from './artifact';
 import { MultimodalInput } from './multimodal-input';
 import { Messages } from './messages';
-import { VisibilityType } from './visibility-selector';
 import { useArtifactSelector } from '@/hooks/use-artifact';
 import { toast } from 'sonner';
 
 export function Chat({
   id,
   initialMessages,
-  selectedChatModel,
-  selectedVisibilityType,
   isReadonly,
 }: {
   id: string;
   initialMessages: Array<Message>;
-  selectedChatModel: string;
-  selectedVisibilityType: VisibilityType;
   isReadonly: boolean;
 }) {
   const { mutate } = useSWRConfig();
 
   const { messages, setMessages, handleSubmit, input, setInput, append, isLoading, stop, reload } = useChat({
     id,
-    body: { id, selectedChatModel: selectedChatModel },
+    body: { id },
     initialMessages,
     experimental_throttle: 100,
     sendExtraMessageFields: true,
     generateId: generateUUID,
     onFinish: () => {
-      mutate('/api/history');
+      setTimeout(() => {
+        mutate('/api/history');
+      }, 500);
     },
     onError: error => {
       toast.error('An error occured, please try again!');
@@ -55,12 +52,7 @@ export function Chat({
   return (
     <>
       <div className="flex flex-col min-w-0 h-dvh bg-background">
-        <ChatHeader
-          chatId={id}
-          selectedModelId={selectedChatModel}
-          selectedVisibilityType={selectedVisibilityType}
-          isReadonly={isReadonly}
-        />
+        <ChatHeader />
 
         <Messages
           chatId={id}

@@ -129,14 +129,8 @@ const PurePreviewMessage = ({
 
                     return (
                       <div key={toolCallId}>
-                        {toolName === 'getWeather' ? (
+                        {toolName === 'weatherTool' ? (
                           <Weather weatherAtLocation={result} />
-                        ) : toolName === 'createDocument' ? (
-                          <DocumentPreview isReadonly={isReadonly} result={result} />
-                        ) : toolName === 'updateDocument' ? (
-                          <DocumentToolResult type="update" result={result} isReadonly={isReadonly} />
-                        ) : toolName === 'requestSuggestions' ? (
-                          <DocumentToolResult type="request-suggestions" result={result} isReadonly={isReadonly} />
                         ) : (
                           <pre>{JSON.stringify(result, null, 2)}</pre>
                         )}
@@ -147,18 +141,10 @@ const PurePreviewMessage = ({
                     <div
                       key={toolCallId}
                       className={cx({
-                        skeleton: ['getWeather'].includes(toolName),
+                        skeleton: ['weatherTool'].includes(toolName),
                       })}
                     >
-                      {toolName === 'getWeather' ? (
-                        <Weather />
-                      ) : toolName === 'createDocument' ? (
-                        <DocumentPreview isReadonly={isReadonly} args={args} />
-                      ) : toolName === 'updateDocument' ? (
-                        <DocumentToolCall type="update" args={args} isReadonly={isReadonly} />
-                      ) : toolName === 'requestSuggestions' ? (
-                        <DocumentToolCall type="request-suggestions" args={args} isReadonly={isReadonly} />
-                      ) : null}
+                      {toolName === 'weatherTool' ? <Weather /> : null}
                     </div>
                   );
                 })}
