@@ -240,41 +240,42 @@ export class PgVector extends MastraVector {
 
     const { indexName, dimension, metric = 'cosine', indexConfig = {}, buildIndex = true } = params;
 
+    // Validate inputs
+    if (!indexName.match(/^[a-zA-Z_][a-zA-Z0-9_]*$/)) {
+      throw new Error('Invalid index name format');
+    }
+    if (!Number.isInteger(dimension) || dimension <= 0) {
+      throw new Error('Dimension must be a positive integer');
+    }
+
     const indexCacheKey = await this.getIndexCacheKey({ indexName, dimension, type: indexConfig.type, metric });
     if (this.cachedIndexExists(indexName, indexCacheKey)) {
       // we already saw this index get created since the process started, no need to recreate it
       return;
     }
 
-    const client = await this.pool.connect();
-    try {
-      // Validate inputs
-      if (!indexName.match(/^[a-zA-Z_][a-zA-Z0-9_]*$/)) {
-        throw new Error('Invalid index name format');
-      }
-      if (!Number.isInteger(dimension) || dimension <= 0) {
-        throw new Error('Dimension must be a positive integer');
+    const mutex = this.getMutexByName(`create-${indexName}`);
+    // Use async-mutex instead of advisory lock for perf (over 2x as fast)
+    await mutex.runExclusive(async () => {
+      if (this.cachedIndexExists(indexName, indexCacheKey)) {
+        // this may have been created while we were waiting to acquire a lock
+        return;
       }
 
-      // First check if vector extension is available
-      const extensionCheck = await client.query(`
+      const client = await this.pool.connect();
+      try {
+        // First check if vector extension is available
+        const extensionCheck = await client.query(`
         SELECT EXISTS (
           SELECT 1 FROM pg_available_extensions WHERE name = 'vector'
         );
       `);
 
-      if (!extensionCheck.rows[0].exists) {
-        this.createdIndexes.delete(indexName);
-        throw new Error('PostgreSQL vector extension is not available. Please install it first.');
-      }
-
-      const mutex = this.getMutexByName(`create-${indexName}`);
-      // Use async-mutex instead of advisory lock for perf (over 2x as fast)
-      await mutex.runExclusive(async () => {
-        if (this.cachedIndexExists(indexName, indexCacheKey)) {
-          // this may have been created while we were waiting to acquire a lock
-          return;
+        if (!extensionCheck.rows[0].exists) {
+          this.createdIndexes.delete(indexName);
+          throw new Error('PostgreSQL vector extension is not available. Please install it first.');
         }
+
         // Try to create extension
         try {
           await client.query(`
@@ -295,18 +296,18 @@ export class PgVector extends MastraVector {
           this.createdIndexes.delete(indexName);
           throw e;
         }
-      });
 
-      if (buildIndex) {
-        await this.setupIndex({ indexName, metric, indexConfig }, client);
+        if (buildIndex) {
+          await this.setupIndex({ indexName, metric, indexConfig }, client);
+        }
+      } catch (error: any) {
+        this.createdIndexes.delete(indexName);
+        console.error('Failed to create vector table:', error);
+        throw error;
+      } finally {
+        client.release();
       }
-    } catch (error: any) {
-      this.createdIndexes.delete(indexName);
-      console.error('Failed to create vector table:', error);
-      throw error;
-    } finally {
-      client.release();
-    }
+    });
   }
 
   /**
