@@ -63,8 +63,7 @@ export class PgVector extends MastraVector {
   private pool: pg.Pool;
   private indexCache: Map<string, PGIndexStats> = new Map();
   private createdIndexes = new Map<string, number>();
-  private createMutex = new Mutex();
-  private buildMutex = new Mutex();
+  private mutexesByName = new Map<string, Mutex>();
 
   constructor(connectionString: string) {
     super();
@@ -100,6 +99,11 @@ export class PgVector extends MastraVector {
         this.createdIndexes.set(indexName, key);
       });
     })();
+  }
+
+  private getMutexByName(indexName: string) {
+    if (!this.mutexesByName.has(indexName)) this.mutexesByName.set(indexName, new Mutex());
+    return this.mutexesByName.get(indexName)!;
   }
 
   transformFilter(filter?: VectorFilter) {
@@ -217,9 +221,13 @@ export class PgVector extends MastraVector {
   }
 
   private hasher = xxhash();
-  async getIndexCacheKey(params: CreateIndexParams & { type: IndexType | undefined }) {
+  private async getIndexCacheKey(params: CreateIndexParams & { type: IndexType | undefined }) {
     const input = params.indexName + params.dimension + params.metric + (params.type || 'ivfflat'); // ivfflat is default
     return (await this.hasher).h32(input);
+  }
+  private cachedIndexExists(indexName: string, newKey: number) {
+    const existingIndexCacheKey = this.createdIndexes.get(indexName);
+    return existingIndexCacheKey && existingIndexCacheKey === newKey;
   }
   async createIndex(...args: ParamsToArgs<PgCreateIndexParams> | PgCreateIndexArgs): Promise<void> {
     const params = this.normalizeArgs<PgCreateIndexParams, PgCreateIndexArgs>('createIndex', args, [
@@ -230,22 +238,18 @@ export class PgVector extends MastraVector {
     const { indexName, dimension, metric = 'cosine', indexConfig = {}, buildIndex = true } = params;
 
     const indexCacheKey = await this.getIndexCacheKey({ indexName, dimension, type: indexConfig.type, metric });
-    const existingIndexCacheKey = this.createdIndexes.get(indexName);
-    if (existingIndexCacheKey && existingIndexCacheKey === indexCacheKey) {
+    if (this.cachedIndexExists(indexName, indexCacheKey)) {
       // we already saw this index get created since the process started, no need to recreate it
       return;
     }
-    this.createdIndexes.set(indexName, indexCacheKey);
 
     const client = await this.pool.connect();
     try {
       // Validate inputs
       if (!indexName.match(/^[a-zA-Z_][a-zA-Z0-9_]*$/)) {
-        this.createdIndexes.delete(indexName);
         throw new Error('Invalid index name format');
       }
       if (!Number.isInteger(dimension) || dimension <= 0) {
-        this.createdIndexes.delete(indexName);
         throw new Error('Dimension must be a positive integer');
       }
 
@@ -261,8 +265,13 @@ export class PgVector extends MastraVector {
         throw new Error('PostgreSQL vector extension is not available. Please install it first.');
       }
 
+      const mutex = this.getMutexByName(`create-${indexName}`);
       // Use async-mutex instead of advisory lock for perf (over 2x as fast)
-      await this.createMutex.runExclusive(async () => {
+      await mutex.runExclusive(async () => {
+        if (this.cachedIndexExists(indexName, indexCacheKey)) {
+          // this may have been created while we were waiting to acquire a lock
+          return;
+        }
         // Try to create extension
         try {
           await client.query(`
@@ -278,6 +287,7 @@ export class PgVector extends MastraVector {
             );
           END $$;
         `);
+          this.createdIndexes.set(indexName, indexCacheKey);
         } catch (e) {
           this.createdIndexes.delete(indexName);
           throw e;
@@ -324,8 +334,9 @@ export class PgVector extends MastraVector {
   }
 
   private async setupIndex({ indexName, metric, indexConfig }: PgDefineIndexParams, client: pg.PoolClient) {
+    const mutex = this.getMutexByName(`build-${indexName}`);
     // Use async-mutex instead of advisory lock for perf (over 2x as fast)
-    await this.buildMutex.runExclusive(async () => {
+    await mutex.runExclusive(async () => {
       await client.query(`DROP INDEX IF EXISTS ${indexName}_vector_idx`);
 
       if (indexConfig.type === 'flat') {
