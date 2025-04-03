@@ -1,5 +1,14 @@
 # mastra
 
+## 0.4.5-alpha.7
+
+### Patch Changes
+
+- 9f529a4: enable geoip in system properties for analytics
+- Updated dependencies [93875ed]
+  - @mastra/core@0.8.0-alpha.5
+  - @mastra/deployer@0.2.6-alpha.7
+
 ## 0.4.5-alpha.6
 
 ### Patch Changes

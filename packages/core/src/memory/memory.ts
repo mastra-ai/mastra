@@ -140,21 +140,16 @@ export abstract class MastraMemory extends MastraBase {
     return {};
   }
 
-  protected async createEmbeddingIndex(): Promise<{ indexName: string }> {
+  protected async createEmbeddingIndex(dimensions?: number): Promise<{ indexName: string }> {
     const defaultDimensions = 1536;
-
-    // AI SDK doesn't expose a way to check how many dimensions a model uses.
-    const dimensionsByModelId: Record<string, number> = {
-      'bge-small-en-v1.5': 384,
-      'bge-base-en-v1.5': 768,
-      'voyage-3-lite': 512,
-    };
-
-    const dimensions = dimensionsByModelId[this.embedder.modelId] || defaultDimensions;
     const isDefault = dimensions === defaultDimensions;
-    const indexName = isDefault ? 'memory_messages' : `memory_messages_${dimensions}`;
+    const usedDimensions = dimensions ?? defaultDimensions;
+    const indexName = isDefault ? 'memory_messages' : `memory_messages_${usedDimensions}`;
 
-    await this.vector.createIndex({ indexName, dimension: dimensions });
+    await this.vector.createIndex({
+      indexName,
+      dimension: usedDimensions,
+    });
     return { indexName };
   }
 
