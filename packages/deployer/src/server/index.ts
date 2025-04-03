@@ -99,7 +99,7 @@ export async function createHonoServer(
   // Middleware
   app.use(
     '*',
-    timeout(server?.timeout ?? 5000),
+    timeout(server?.timeout ?? 1000 * 30),
     cors({
       origin: '*',
       allowMethods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],

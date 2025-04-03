@@ -1871,7 +1871,7 @@ import { Mastra } from '@mastra/core';
 export const mastra = new Mastra({
   server: {
     port: 3000, // Defaults to 4111
-    timeout: 10000, // Defaults to 5000 (5s)
+    timeout: 10000, // Defaults to 30000 (30s)
   },
 });
 ```
