@@ -16,7 +16,7 @@ const TEST_CONFIG: ClickhouseConfig = {
     },
     mastra_evals: {
       columns: {
-        run_id: { interval: 10, unit: 'SECOND' },
+        result: { interval: 10, unit: 'SECOND' },
       },
     },
   },
@@ -51,7 +51,6 @@ const createSampleTrace = () => ({
 });
 
 const createSampleEval = () => ({
-  id: `eval-${randomUUID()}`,
   agent_name: 'test-agent',
   run_id: 'test-run-1',
   result: '{ "score": 1 }',

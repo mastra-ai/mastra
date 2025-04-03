@@ -99,7 +99,7 @@ export async function createHonoServer(
   // Middleware
   app.use(
     '*',
-    timeout(server?.timeout ?? 5000),
+    timeout(server?.timeout ?? 1000 * 30),
     cors({
       origin: '*',
       allowMethods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
@@ -1691,6 +1691,19 @@ export async function createHonoServer(
           schema: { type: 'string' },
         },
       ],
+      requestBody: {
+        required: true,
+        content: {
+          'application/json': {
+            schema: {
+              type: 'object',
+              properties: {
+                input: { type: 'object' },
+              },
+            },
+          },
+        },
+      },
       responses: {
         200: {
           description: 'Workflow run started',

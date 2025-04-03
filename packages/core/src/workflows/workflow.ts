@@ -507,6 +507,7 @@ export class Workflow<
     condition: StepConfig<FallbackStep, CondStep, VarStep, TTriggerSchema, TSteps>['when'],
     fallbackStep: FallbackStep,
     loopType: 'while' | 'until',
+    variables?: StepConfig<FallbackStep, CondStep, VarStep, TTriggerSchema, TSteps>['variables'],
   ) {
     const lastStepKey = this.#lastStepStack[this.#lastStepStack.length - 1];
     // If no last step, we can't do anything
@@ -599,6 +600,7 @@ export class Workflow<
         const status = checkStepResult?.output?.status;
         return status === 'continue' ? WhenConditionReturnValue.CONTINUE : WhenConditionReturnValue.CONTINUE_FAILED;
       },
+      variables,
       '#internal': {
         // @ts-ignore
         when: condition!,
@@ -638,6 +640,7 @@ export class Workflow<
   >(
     condition: StepConfig<FallbackStep, CondStep, VarStep, TTriggerSchema, TSteps>['when'],
     fallbackStep: FallbackStep,
+    variables?: StepConfig<FallbackStep, CondStep, VarStep, TTriggerSchema, TSteps>['variables'],
   ) {
     const applyOperator = (operator: string, value: any, target: any) => {
       switch (operator) {
@@ -658,7 +661,7 @@ export class Workflow<
       }
     };
 
-    const res = this.loop(applyOperator, condition, fallbackStep, 'while') as Pick<
+    const res = this.loop(applyOperator, condition, fallbackStep, 'while', variables) as Pick<
       WorkflowBuilder<this>,
       'then' | 'commit'
     >;
@@ -674,6 +677,7 @@ export class Workflow<
   >(
     condition: StepConfig<FallbackStep, CondStep, VarStep, TTriggerSchema, TSteps>['when'],
     fallbackStep: FallbackStep,
+    variables?: StepConfig<FallbackStep, CondStep, VarStep, TTriggerSchema, TSteps>['variables'],
   ) {
     const applyOperator = (operator: string, value: any, target: any) => {
       switch (operator) {
@@ -694,7 +698,7 @@ export class Workflow<
       }
     };
 
-    const res = this.loop(applyOperator, condition, fallbackStep, 'until') as Pick<
+    const res = this.loop(applyOperator, condition, fallbackStep, 'until', variables) as Pick<
       WorkflowBuilder<this>,
       'then' | 'commit'
     >;

@@ -198,6 +198,8 @@ export class UpstashStore extends MastraStorage {
         workflow_name: record.workflow_name,
         run_id: record.run_id,
       });
+    } else if (tableName === TABLE_EVALS) {
+      key = this.getKey(tableName, { id: record.run_id });
     } else {
       key = this.getKey(tableName, { id: record.id });
     }
