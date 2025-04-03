@@ -1219,8 +1219,14 @@ export class Workflow<
     return this.#serializedStepSubscriberGraph;
   }
 
-  get steps() {
-    return Object.values(this.#steps).map(step => step.step);
+  get steps(): Record<string, StepAction<string, any, any, any>> {
+    return Object.entries(this.#steps).reduce(
+      (acc, [key, step]) => {
+        acc[key] = step.step;
+        return acc;
+      },
+      {} as Record<string, StepAction<string, any, any, any>>,
+    );
   }
 
   setNested(isNested: boolean) {
