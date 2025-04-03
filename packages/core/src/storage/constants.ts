@@ -32,11 +32,6 @@ export const TABLE_SCHEMAS: Record<TABLE_NAMES, Record<string, StorageColumn>> =
     },
   },
   [TABLE_EVALS]: {
-    id: {
-      type: 'text',
-      nullable: false,
-      primaryKey: true,
-    },
     input: {
       type: 'text',
     },
