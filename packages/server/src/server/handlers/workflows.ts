@@ -1,4 +1,5 @@
 import { ReadableStream } from 'node:stream/web';
+import type { Container } from '@mastra/core/di';
 import type { Workflow } from '@mastra/core/workflows';
 import { stringify } from 'superjson';
 import zodToJsonSchema from 'zod-to-json-schema';
@@ -81,7 +82,7 @@ export async function startAsyncWorkflowHandler({
   workflowId,
   runId,
   triggerData,
-}: Pick<WorkflowContext, 'mastra' | 'container' | 'workflowId' | 'runId'> & { triggerData?: unknown }) {
+}: Pick<WorkflowContext, 'mastra' | 'workflowId' | 'runId'> & { triggerData?: unknown; container: Container }) {
   try {
     if (!workflowId) {
       throw new HTTPException(400, { message: 'Workflow ID is required' });
@@ -97,6 +98,7 @@ export async function startAsyncWorkflowHandler({
       const { start } = workflow.createRun();
       const result = await start({
         triggerData,
+        container,
       });
       return result;
     }
@@ -179,7 +181,7 @@ export async function startWorkflowRunHandler({
   workflowId,
   runId,
   triggerData,
-}: Pick<WorkflowContext, 'mastra' | 'container' | 'workflowId' | 'runId'> & { triggerData?: unknown }) {
+}: Pick<WorkflowContext, 'mastra' | 'workflowId' | 'runId'> & { triggerData?: unknown; container: Container }) {
   try {
     if (!workflowId) {
       throw new HTTPException(400, { message: 'Workflow ID is required' });
@@ -266,7 +268,7 @@ export async function resumeAsyncWorkflowHandler({
   runId,
   body,
   container,
-}: WorkflowContext & { body: { stepId: string; context: any } }) {
+}: WorkflowContext & { body: { stepId: string; context: any }; container: Container }) {
   try {
     if (!workflowId) {
       throw new HTTPException(400, { message: 'Workflow ID is required' });
@@ -301,7 +303,7 @@ export async function resumeWorkflowHandler({
   runId,
   body,
   container,
-}: WorkflowContext & { body: { stepId: string; context: any } }) {
+}: WorkflowContext & { body: { stepId: string; context: any }; container: Container }) {
   try {
     if (!workflowId) {
       throw new HTTPException(400, { message: 'Workflow ID is required' });

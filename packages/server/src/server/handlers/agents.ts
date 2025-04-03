@@ -1,4 +1,5 @@
 import type { Agent } from '@mastra/core/agent';
+import type { Container } from '@mastra/core/di';
 import { stringify } from 'superjson';
 import zodToJsonSchema from 'zod-to-json-schema';
 import { HTTPException } from '../http-exception';
@@ -112,6 +113,7 @@ export async function generateHandler({
   agentId,
   body,
 }: Context & {
+  container: Container;
   agentId: string;
   body: GetBody<'generate'> & {
     // @deprecated use resourceId
@@ -149,6 +151,7 @@ export async function streamGenerateHandler({
   agentId,
   body,
 }: Context & {
+  container: Container;
   agentId: string;
   body: GetBody<'stream'> & {
     // @deprecated use resourceId

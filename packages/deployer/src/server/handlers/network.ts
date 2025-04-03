@@ -1,4 +1,5 @@
 import type { Mastra } from '@mastra/core';
+import type { Container } from '@mastra/core/di';
 import {
   getNetworksHandler as getOriginalNetworksHandler,
   getNetworkByIdHandler as getOriginalNetworkByIdHandler,
