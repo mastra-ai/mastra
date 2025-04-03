@@ -12,6 +12,7 @@ import type {
 import type { VectorFilter } from '@mastra/core/vector/filter';
 import { Mutex } from 'async-mutex';
 import pg from 'pg';
+import xxhash from 'xxhash-wasm';
 
 import { PGFilterTranslator } from './filter';
 import { buildFilterQuery } from './sql-builder';
@@ -61,7 +62,7 @@ type PgDefineIndexArgs = [string, 'cosine' | 'euclidean' | 'dotproduct', IndexCo
 export class PgVector extends MastraVector {
   private pool: pg.Pool;
   private indexCache: Map<string, PGIndexStats> = new Map();
-  private createdIndexes = new Set<string>();
+  private createdIndexes = new Map<string, number>();
   private createMutex = new Mutex();
   private buildMutex = new Mutex();
 
@@ -88,10 +89,16 @@ export class PgVector extends MastraVector {
     void (async () => {
       // warm the created indexes cache so we don't need to check if indexes exist every time
       const existingIndexes = await this.listIndexes();
-      for (const index of existingIndexes) {
-        this.createdIndexes.add(index);
-        void this.getIndexInfo(index);
-      }
+      void existingIndexes.map(async indexName => {
+        const info = await this.getIndexInfo(indexName);
+        const key = await this.getIndexCacheKey({
+          indexName,
+          metric: info.metric,
+          dimension: info.dimension,
+          type: info.type,
+        });
+        this.createdIndexes.set(indexName, key);
+      });
     })();
   }
 
@@ -209,6 +216,11 @@ export class PgVector extends MastraVector {
     }
   }
 
+  private hasher = xxhash();
+  async getIndexCacheKey(params: CreateIndexParams & { type: IndexType | undefined }) {
+    const input = params.indexName + params.dimension + params.metric + (params.type || 'ivfflat'); // ivfflat is default
+    return (await this.hasher).h32(input);
+  }
   async createIndex(...args: ParamsToArgs<PgCreateIndexParams> | PgCreateIndexArgs): Promise<void> {
     const params = this.normalizeArgs<PgCreateIndexParams, PgCreateIndexArgs>('createIndex', args, [
       'indexConfig',
@@ -217,10 +229,13 @@ export class PgVector extends MastraVector {
 
     const { indexName, dimension, metric = 'cosine', indexConfig = {}, buildIndex = true } = params;
 
-    if (this.createdIndexes.has(indexName)) {
+    const indexCacheKey = await this.getIndexCacheKey({ indexName, dimension, type: indexConfig.type, metric });
+    const existingIndexCacheKey = this.createdIndexes.get(indexName);
+    if (existingIndexCacheKey && existingIndexCacheKey === indexCacheKey) {
+      // we already saw this index get created since the process started, no need to recreate it
       return;
     }
-    this.createdIndexes.add(indexName);
+    this.createdIndexes.set(indexName, indexCacheKey);
 
     const client = await this.pool.connect();
     try {
