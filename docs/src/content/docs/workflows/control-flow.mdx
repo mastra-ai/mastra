@@ -123,18 +123,46 @@ While this approach still works, the newer `until` and `while` methods provide a
 
 ### Using `until` for Condition-Based Loops
 
-The `until` method repeats a step until a specified condition becomes true. It takes two arguments:
+The `until` method repeats a step until a specified condition becomes true. It takes these arguments:
 1. A condition that determines when to stop looping
 2. The step to repeat
+3. Optional variables to pass to the repeated step
 
 ```typescript
+// Step that increments a counter until target is reached
+const incrementStep = new Step({
+  id: 'increment',
+  inputSchema: z.object({
+    // Current counter value
+    counter: z.number().optional(),
+  }),
+  outputSchema: z.object({
+    // Updated counter value
+    updatedCounter: z.number(),
+  }),
+  execute: async ({ context }) => {
+    const { counter = 0 } = context.inputData;
+    return { updatedCounter: counter + 1 };
+  },
+});
+
 workflow
   .step(incrementStep)
-  .until(async ({ context }) => {
-    // Stop when the value reaches or exceeds 10
-    const result = context.getStepResult(incrementStep);
-    return (result?.value ?? 0) >= 10;
-  }, incrementStep)
+  .until(
+    async ({ context }) => {
+      // Stop when counter reaches 10
+      const result = context.getStepResult(incrementStep);
+      return (result?.updatedCounter ?? 0) >= 10;
+    },
+    incrementStep,
+    {
+      // Pass current counter to next iteration
+      counter: {
+        step: incrementStep,
+        path: 'updatedCounter'
+      }
+    }
+  )
   .then(finalStep);
 ```
 
@@ -145,10 +173,16 @@ workflow
   .step(incrementStep)
   .until(
     {
-      ref: { step: incrementStep, path: 'value' },
+      ref: { step: incrementStep, path: 'updatedCounter' },
       query: { $gte: 10 },
     },
-    incrementStep
+    incrementStep,
+    {
+      counter: {
+        step: incrementStep,
+        path: 'updatedCounter'
+      }
+    }
   )
   .then(finalStep);
 ```
@@ -158,15 +192,43 @@ workflow
 The `while` method repeats a step as long as a specified condition remains true. It takes the same arguments as `until`:
 1. A condition that determines when to continue looping
 2. The step to repeat
+3. Optional variables to pass to the repeated step
 
 ```typescript
+// Step that increments a counter while below target
+const incrementStep = new Step({
+  id: 'increment',
+  inputSchema: z.object({
+    // Current counter value
+    counter: z.number().optional(),
+  }),
+  outputSchema: z.object({
+    // Updated counter value
+    updatedCounter: z.number(),
+  }),
+  execute: async ({ context }) => {
+    const { counter = 0 } = context.inputData;
+    return { updatedCounter: counter + 1 };
+  },
+});
+
 workflow
   .step(incrementStep)
-  .while(async ({ context }) => {
-    // Continue as long as the value is less than 10
-    const result = context.getStepResult(incrementStep);
-    return (result?.value ?? 0) < 10;
-  }, incrementStep)
+  .while(
+    async ({ context }) => {
+      // Continue while counter is less than 10
+      const result = context.getStepResult(incrementStep);
+      return (result?.updatedCounter ?? 0) < 10;
+    },
+    incrementStep,
+    {
+      // Pass current counter to next iteration
+      counter: {
+        step: incrementStep,
+        path: 'updatedCounter'
+      }
+    }
+  )
   .then(finalStep);
 ```
 
@@ -177,10 +239,16 @@ workflow
   .step(incrementStep)
   .while(
     {
-      ref: { step: incrementStep, path: 'value' },
+      ref: { step: incrementStep, path: 'updatedCounter' },
       query: { $lt: 10 },
     },
-    incrementStep
+    incrementStep,
+    {
+      counter: {
+        step: incrementStep,
+        path: 'updatedCounter'
+      }
+    }
   )
   .then(finalStep);
 ```
@@ -197,8 +265,6 @@ When using reference-based conditions, you can use these comparison operators:
 | `$gte`   | Greater than or equal to |
 | `$lt`    | Less than |
 | `$lte`   | Less than or equal to |
-
-See the [Loop Control](../../examples/workflows/loop-control.mdx) example for more details.
 
 ## Conditions
 

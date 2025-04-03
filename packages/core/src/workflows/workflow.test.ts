@@ -975,6 +975,228 @@ describe('Workflow', async () => {
     });
   });
 
+  describe('testing variables in loops', () => {
+    // Common test setup
+    const setupTest = () => {
+      const step1Action = vi.fn().mockImplementation(async () => {
+        return { step1Value: 0 };
+      });
+
+      const step2Action = vi.fn().mockImplementation(async ({ context }) => {
+        const step1Value = context.inputData.step1Value;
+        const step2Value = context.getStepResult('step2')?.step2Value;
+        const currentValue = (step1Value || 0) + (step2Value || 0);
+
+        const newStep2Value = currentValue + (step1Value === undefined ? 0.5 : 1);
+
+        return { step2Value: newStep2Value };
+      });
+
+      const step1 = new Step({
+        id: 'step1',
+        execute: step1Action,
+        inputSchema: z.object({
+          triggerValue: z.number(),
+        }),
+        outputSchema: z.object({
+          step1Value: z.number(),
+        }),
+      });
+
+      const step2 = new Step({
+        id: 'step2',
+        execute: step2Action,
+        inputSchema: z.object({
+          step1Value: z.number(),
+        }),
+        outputSchema: z.object({
+          step2Value: z.number(),
+        }),
+      });
+
+      const workflow = new Workflow({
+        name: 'test-workflow',
+        triggerSchema: z.object({
+          maxValue: z.number(),
+        }),
+      });
+
+      workflow.step(step1);
+
+      return { workflow, step1, step2, step2Action };
+    };
+
+    const runAssertions = async (workflow: any, step2Action: any, hasVariables: boolean = false) => {
+      const run = workflow.createRun();
+      const result = await run.start({ triggerData: { maxValue: 5 } });
+
+      expect(step2Action).toHaveBeenCalledTimes(hasVariables ? 5 : 10); // Without variables, it takes twice as many calls due to 0.5 increments
+
+      // Verify step2Action was called with correct input
+      step2Action.mock.calls.forEach(([args]) => {
+        if (hasVariables) {
+          expect(args.context.inputData.step1Value).toBeDefined();
+          expect(args.context.inputData.step1Value).toBe(0);
+        } else {
+          expect(args.context.inputData.step1Value).toBeUndefined();
+        }
+      });
+
+      const step2Result = result.results['step2'];
+      expect(step2Result.output.step2Value).toBe(5);
+    };
+
+    it('should not include workflow variables across while loop iterations with function condition', async () => {
+      const { workflow, step2, step2Action } = setupTest();
+
+      workflow
+        .while(async ({ context }) => {
+          const currentValue = context.getStepResult('step2')?.step2Value || 0;
+          const maxValue = context.triggerData?.maxValue || 5;
+          return currentValue < maxValue;
+        }, step2)
+        .commit();
+
+      await runAssertions(workflow, step2Action);
+    });
+
+    it('should maintain workflow variables across while loop iterations with function condition', async () => {
+      const { workflow, step1, step2, step2Action } = setupTest();
+
+      workflow
+        .while(
+          async ({ context }) => {
+            const currentValue = context.getStepResult('step2')?.step2Value || 0;
+            const maxValue = context.triggerData?.maxValue || 5;
+            return currentValue < maxValue;
+          },
+          step2,
+          {
+            step1Value: {
+              step: step1,
+              path: 'step1Value',
+            },
+          },
+        )
+        .commit();
+
+      await runAssertions(workflow, step2Action, true);
+    });
+
+    it('should not include workflow variables across while loop iterations with query condition', async () => {
+      const { workflow, step2, step2Action } = setupTest();
+
+      workflow
+        .while(
+          {
+            ref: { step: step2, path: 'step2Value' },
+            query: { $lt: 5 },
+          },
+          step2,
+        )
+        .commit();
+
+      await runAssertions(workflow, step2Action);
+    });
+
+    it('should maintain workflow variables across while loop iterations with query condition', async () => {
+      const { workflow, step1, step2, step2Action } = setupTest();
+
+      workflow
+        .while(
+          {
+            ref: { step: step2, path: 'step2Value' },
+            query: { $lt: 5 },
+          },
+          step2,
+          {
+            step1Value: {
+              step: step1,
+              path: 'step1Value',
+            },
+          },
+        )
+        .commit();
+
+      await runAssertions(workflow, step2Action, true);
+    });
+
+    it('should not include workflow variables across until loop iterations with function condition', async () => {
+      const { workflow, step2, step2Action } = setupTest();
+
+      workflow
+        .until(async ({ context }) => {
+          const currentValue = context.getStepResult('step2')?.step2Value || 0;
+          const maxValue = context.triggerData?.maxValue || 5;
+          return currentValue >= maxValue;
+        }, step2)
+        .commit();
+
+      await runAssertions(workflow, step2Action);
+    });
+
+    it('should maintain workflow variables across until loop iterations with function condition', async () => {
+      const { workflow, step1, step2, step2Action } = setupTest();
+
+      workflow
+        .until(
+          async ({ context }) => {
+            const currentValue = context.getStepResult('step2')?.step2Value || 0;
+            const maxValue = context.triggerData?.maxValue || 5;
+            return currentValue >= maxValue;
+          },
+          step2,
+          {
+            step1Value: {
+              step: step1,
+              path: 'step1Value',
+            },
+          },
+        )
+        .commit();
+
+      await runAssertions(workflow, step2Action, true);
+    });
+
+    it('should not include workflow variables across until loop iterations with query condition', async () => {
+      const { workflow, step2, step2Action } = setupTest();
+
+      workflow
+        .until(
+          {
+            ref: { step: step2, path: 'step2Value' },
+            query: { $gte: 5 },
+          },
+          step2,
+        )
+        .commit();
+
+      await runAssertions(workflow, step2Action);
+    });
+
+    it('should maintain workflow variables across until loop iterations with query condition', async () => {
+      const { workflow, step1, step2, step2Action } = setupTest();
+
+      workflow
+        .until(
+          {
+            ref: { step: step2, path: 'step2Value' },
+            query: { $gte: 5 },
+          },
+          step2,
+          {
+            step1Value: {
+              step: step1,
+              path: 'step1Value',
+            },
+          },
+        )
+        .commit();
+
+      await runAssertions(workflow, step2Action, true);
+    });
+  });
+
   describe('if-else branching', () => {
     it('should run the if-then branch', async () => {
       const start = vi.fn().mockImplementation(async ({ context }) => {
