@@ -1,5 +1,11 @@
 # @mastra/deployer
 
+## 0.2.6-alpha.5
+
+### Patch Changes
+
+- 32ba03c: Make timeout 30s
+
 ## 0.2.6-alpha.4
 
 ### Patch Changes
