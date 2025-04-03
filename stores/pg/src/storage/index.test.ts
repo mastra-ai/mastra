@@ -575,7 +575,6 @@ describe('PostgresStore', () => {
       await store.insert({
         tableName: TABLE_EVALS,
         record: {
-          id: liveEval.id,
           agent_name: liveEval.agentName,
           input: liveEval.input,
           output: liveEval.output,
@@ -593,7 +592,6 @@ describe('PostgresStore', () => {
       await store.insert({
         tableName: TABLE_EVALS,
         record: {
-          id: testEval.id,
           agent_name: testEval.agentName,
           input: testEval.input,
           output: testEval.output,
@@ -611,7 +609,6 @@ describe('PostgresStore', () => {
       await store.insert({
         tableName: TABLE_EVALS,
         record: {
-          id: otherAgentEval.id,
           agent_name: otherAgentEval.agentName,
           input: otherAgentEval.input,
           output: otherAgentEval.output,

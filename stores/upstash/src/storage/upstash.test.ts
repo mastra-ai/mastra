@@ -59,7 +59,6 @@ const createSampleEval = (agentName: string, isTest = false) => {
   const testInfo = isTest ? { testPath: 'test/path.ts', testName: 'Test Name' } : undefined;
 
   return {
-    id: randomUUID(),
     agent_name: agentName,
     input: 'Sample input',
     output: 'Sample output',
