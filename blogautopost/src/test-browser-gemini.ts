@@ -17,13 +17,17 @@ async function testBrowserAgent() {
     console.log("\nTesting Browser Agent with MCP...");
     const mcpBrowser = await createBrowserAgentWithMCP();
     
-    const mcpResult = await mcpBrowser.generate(
-      "「学童保育」について、特に保護者が気にする点や民間学童のメリットについて情報を収集してください。"
-    );
-    
-    console.log("===== MCP Browser Agent Result =====");
-    console.log(mcpResult.text);
-    console.log("====================================");
+    try {
+      const mcpResult = await mcpBrowser.generate(
+        "「学童保育」について、特に保護者が気にする点や民間学童のメリットについて情報を収集してください。"
+      );
+      
+      console.log("===== MCP Browser Agent Result =====");
+      console.log(mcpResult.text);
+      console.log("====================================");
+    } catch (error) {
+      console.error("Error using MCP browser agent:", error);
+    }
     
   } catch (error) {
     console.error("Error testing browser agent:", error);

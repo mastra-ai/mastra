@@ -10,7 +10,7 @@ import {
   contentPublisherAgent,
   browserAgent
 } from './agents';
-import { escortBlogWorkflow } from './workflows/blogWorkflow';
+import { educationBlogWorkflow } from './workflows/blogWorkflow';
 import { browserWorkflow } from './workflows/browserWorkflow';
 
 export const mastra = new Mastra({
@@ -24,7 +24,7 @@ export const mastra = new Mastra({
     browserAgent
   },
   workflows: {
-    escortBlogWorkflow,
+    educationBlogWorkflow,
     browserWorkflow
   },
   logger: createLogger({

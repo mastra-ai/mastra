@@ -88,5 +88,5 @@ export const rakkoKeywordTool = createTool({
 
 export * from './database';
 export * from './wordpress';
-
+export { googleAdsKeywordTool } from './googleAdsKeyword';
 export { browserTool } from './browser';

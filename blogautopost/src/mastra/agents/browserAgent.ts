@@ -123,10 +123,25 @@ export async function createBrowserAgentWithMCP() {
     agent,
     // ストリーミングやジェネレートの際にtoolsetsを渡す必要がある
     async stream(input: string) {
-      return await agent.stream(input, { toolsets });
+      try {
+        return await agent.stream(input, { toolsets });
+      } finally {
+        // なにもしない - disconnectはgenerate後に行う
+      }
     },
     async generate(input: string) {
-      return await agent.generate(input, { toolsets });
+      try {
+        return await agent.generate(input, { toolsets });
+      } finally {
+        // セッション終了後にMCPから切断する
+        await mcpConfiguration.disconnect().catch(err => {
+          console.warn("Failed to disconnect from MCP:", err);
+        });
+      }
+    },
+    // MCPから明示的に切断するためのメソッド
+    async disconnect() {
+      return await mcpConfiguration.disconnect();
     }
   };
 } 
