@@ -6,6 +6,7 @@ import { execa } from 'execa';
 
 import { logger } from '../../utils/logger.js';
 
+import { convertToViteEnvVar } from '../utils.js';
 import { DevBundler } from './DevBundler';
 
 let currentServerProcess: ChildProcess | undefined;
@@ -124,11 +125,12 @@ export async function dev({
   const watcher = await bundler.watch(entryFile, dotMastraPath, discoveredTools);
 
   const env = await bundler.loadEnvVars();
+  const formattedEnv = convertToViteEnvVar(env, ['MASTRA_TELEMETRY_DISABLED']);
 
   const serverOptions = await getServerOptions(entryFile, join(dotMastraPath, 'output'));
 
   const startPort = port ?? serverOptions?.port ?? 4111;
-  await startServer(join(dotMastraPath, 'output'), startPort, env);
+  await startServer(join(dotMastraPath, 'output'), startPort, formattedEnv);
 
   watcher.on('event', (event: { code: string }) => {
     if (event.code === 'BUNDLE_END') {

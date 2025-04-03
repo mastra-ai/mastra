@@ -1,6 +1,6 @@
 # Bird Checker with Express JS
 
-An Express.js server that has an API that can get a random image from [Unsplash](https://unsplash.com/) that matches a selected query and another API that uses [Mastra AI Agent](https://mastra.ai/docs/agents/00-overview) to determine if an image is a bird or not. It also has braintrust eval to use evaluate the llm prompt
+An Express.js server that has an API that can get a random image from [Unsplash](https://unsplash.com/) that matches a selected query and another API that uses [Mastra AI Agent](https://mastra.ai/docs/agents/overview) to determine if an image is a bird or not. It also has braintrust eval to use evaluate the llm prompt
 
 ## Features
 

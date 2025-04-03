@@ -40,6 +40,8 @@ export interface AgentConfig<
   name: TAgentId;
   instructions: string;
   model: MastraLanguageModel;
+  defaultGenerateOptions?: AgentGenerateOptions;
+  defaultStreamOptions?: AgentStreamOptions;
   tools?: TTools;
   mastra?: Mastra;
   /** @deprecated This property is deprecated. Use evals instead to add evaluation metrics. */

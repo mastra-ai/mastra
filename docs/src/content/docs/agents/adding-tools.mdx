@@ -1,0 +1,239 @@
+---
+title: "Agent Tool Selection | Agent Documentation | Mastra"
+description: Tools are typed functions that can be executed by agents or workflows, with built-in integration access and parameter validation. Each tool has a schema that defines its inputs, an executor function that implements its logic, and access to configured integrations.
+---
+
+# Agent Tool Selection
+
+Tools are typed functions that can be executed by agents or workflows, with built-in integration access and parameter validation. Each tool has a schema that defines its inputs, an executor function that implements its logic, and access to configured integrations.
+
+## Creating Tools
+
+In this section, we'll walk through the process of creating a tool that can be used by your agents. Let's create a simple tool that fetches current weather information for a given city.
+
+```typescript filename="src/mastra/tools/weatherInfo.ts" copy
+import { createTool } from "@mastra/core/tools";
+import { z } from "zod";
+
+const getWeatherInfo = async (city: string) => {
+  // Replace with an actual API call to a weather service
+  const data = await fetch(`https://api.example.com/weather?city=${city}`).then(
+    (r) => r.json(),
+  );
+  return data;
+};
+
+export const weatherInfo = createTool({
+  id: "Get Weather Information",
+  inputSchema: z.object({
+    city: z.string(),
+  }),
+  description: `Fetches the current weather information for a given city`,
+  execute: async ({ context: { city } }) => {
+    console.log("Using tool to fetch weather information for", city);
+    return await getWeatherInfo(city);
+  },
+});
+```
+
+## Adding Tools to an Agent
+
+Now we'll add the tool to an agent. We'll create an agent that can answer questions about the weather and configure it to use our `weatherInfo` tool.
+
+```typescript filename="src/mastra/agents/weatherAgent.ts"
+import { Agent } from "@mastra/core/agent";
+import { openai } from "@ai-sdk/openai";
+import * as tools from "../tools/weatherInfo";
+
+export const weatherAgent = new Agent<typeof tools>({
+  name: "Weather Agent",
+  instructions:
+    "You are a helpful assistant that provides current weather information. When asked about the weather, use the weather information tool to fetch the data.",
+  model: openai("gpt-4o-mini"),
+  tools: {
+    weatherInfo: tools.weatherInfo,
+  },
+});
+```
+
+## Registering the Agent
+
+We need to initialize Mastra with our agent.
+
+```typescript filename="src/index.ts"
+import { Mastra } from "@mastra/core";
+import { weatherAgent } from "./agents/weatherAgent";
+
+export const mastra = new Mastra({
+  agents: { weatherAgent },
+});
+```
+
+This registers your agent with Mastra, making it available for use.
+
+## Abort Signals
+
+The abort signals from `generate` and `stream` (text generation) are forwarded to the tool execution. You can access them in the second parameter of the execute function and e.g. abort long-running computations or forward them to fetch calls inside tools.
+
+```typescript
+import { Agent } from "@mastra/core/agent";
+import { createTool } from "@mastra/core/tools";
+import { z } from "zod";
+
+const agent = new Agent({
+  name: "Weather agent",
+  tools: {
+    weather: createTool({
+      id: "Get Weather Information",
+      description: "Get the weather in a location",
+      inputSchema: z.object({ location: z.string() }),
+      execute: async ({ context: { location } }, { abortSignal }) => {
+        return fetch(
+          `https://api.weatherapi.com/v1/current.json?q=${location}`,
+          { signal: abortSignal }, // forward the abort signal to fetch
+        );
+      },
+    }),
+  },
+});
+
+const result = await agent.generate("What is the weather in San Francisco?", {
+  abortSignal: myAbortSignal, // signal that will be forwarded to tools
+});
+```
+
+## Debugging Tools
+
+You can test tools using Vitest or any other testing framework. Writing unit tests for your tools ensures they behave as expected and helps catch errors early.
+
+## Calling an Agent with a Tool
+
+Now we can call the agent, and it will use the tool to fetch the weather information.
+
+## Example: Interacting with the Agent
+
+```typescript filename="src/index.ts"
+import { mastra } from "./index";
+
+async function main() {
+  const agent = mastra.getAgent("weatherAgent");
+  const response = await agent.generate(
+    "What's the weather like in New York City today?",
+  );
+
+  console.log(response.text);
+}
+
+main();
+```
+
+The agent will use the `weatherInfo` tool to get the current weather in New York City and respond accordingly.
+
+## Vercel AI SDK Tool Format
+
+Mastra supports tools created using the Vercel AI SDK format. You can import and use these tools directly:
+
+```typescript filename="src/mastra/tools/vercelTool.ts" copy
+import { tool } from "ai";
+import { z } from "zod";
+
+export const weatherInfo = tool({
+  description: "Fetches the current weather information for a given city",
+  parameters: z.object({
+    city: z.string().describe("The city to get weather for"),
+  }),
+  execute: async ({ city }) => {
+    // Replace with actual API call
+    const data = await fetch(`https://api.example.com/weather?city=${city}`);
+    return data.json();
+  },
+});
+```
+
+You can use Vercel tools alongside Mastra tools in your agents:
+
+```typescript filename="src/mastra/agents/weatherAgent.ts"
+import { Agent } from "@mastra/core/agent";
+import { openai } from "@ai-sdk/openai";
+import { weatherInfo } from "../tools/vercelTool";
+import * as mastraTools from "../tools/mastraTools";
+
+export const weatherAgent = new Agent({
+  name: "Weather Agent",
+  instructions:
+    "You are a helpful assistant that provides weather information.",
+  model: openai("gpt-4"),
+  tools: {
+    weatherInfo, // Vercel tool
+    ...mastraTools, // Mastra tools
+  },
+});
+```
+
+Both tool formats will work seamlessly within your agent's workflow.
+
+## Tool Design Best Practices
+
+When creating tools for your agents, following these guidelines will help ensure reliable and intuitive tool usage:
+
+### Tool Descriptions
+
+Your tool's main description should focus on its purpose and value:
+
+- Keep descriptions simple and focused on **what** the tool does
+- Emphasize the tool's primary use case
+- Avoid implementation details in the main description
+- Focus on helping the agent understand **when** to use the tool
+
+```typescript
+createTool({
+  id: "documentSearch",
+  description:
+    "Access the knowledge base to find information needed to answer user questions",
+  // ... rest of tool configuration
+});
+```
+
+### Parameter Schemas
+
+Technical details belong in the parameter schemas, where they help the agent use the tool correctly:
+
+- Make parameters self-documenting with clear descriptions
+- Include default values and their implications
+- Provide examples where helpful
+- Describe the impact of different parameter choices
+
+```typescript
+inputSchema: z.object({
+  query: z.string().describe("The search query to find relevant information"),
+  limit: z.number().describe(
+    "Number of results to return. Higher values provide more context, lower values focus on best matches"
+  ),
+  options: z.string().describe(
+    "Optional configuration. Example: '{'filter': 'category=news'}'"
+  ),
+}),
+```
+
+### Agent Interaction Patterns
+
+Tools are more likely to be used effectively when:
+
+- Queries or tasks are complex enough to clearly require tool assistance
+- Agent instructions provide clear guidance on tool usage
+- Parameter requirements are well-documented in the schema
+- The tool's purpose aligns with the query's needs
+
+### Common Pitfalls
+
+- Overloading the main description with technical details
+- Mixing implementation details with usage guidance
+- Unclear parameter descriptions or missing examples
+
+Following these practices helps ensure your tools are discoverable and usable by agents while maintaining clean separation between purpose (main description) and implementation details (parameter schemas).
+
+## Model Context Protocol (MCP) Tools
+
+Mastra also supports tools from MCP-compatible servers through the `@mastra/mcp` package. MCP provides a standardized way for AI models to discover and interact with external tools and resources. This makes it easy to integrate third-party tools into your agents without writing custom integrations.
+
+For detailed information about using MCP tools, including configuration options and best practices, see our [MCP guide](/docs/agents/mcp-guide).

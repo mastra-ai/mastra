@@ -17,6 +17,7 @@ export async function getWorkflowsHandler({ mastra }: WorkflowContext) {
   try {
     const workflows = mastra.getWorkflows({ serialized: false });
     const _workflows = Object.entries(workflows).reduce<any>((acc, [key, workflow]) => {
+      if (workflow.isNested) return acc;
       acc[key] = {
         stepGraph: workflow.stepGraph,
         stepSubscriberGraph: workflow.stepSubscriberGraph,
@@ -89,12 +90,16 @@ export async function startAsyncWorkflowHandler({
 
     const workflow = mastra.getWorkflow(workflowId);
 
-    if (!runId) {
-      throw new HTTPException(400, { message: 'runId required to start run' });
-    }
-
     if (!workflow) {
       throw new HTTPException(404, { message: 'Workflow not found' });
+    }
+
+    if (!runId) {
+      const { start } = workflow.createRun();
+      const result = await start({
+        triggerData,
+      });
+      return result;
     }
 
     const run = workflow.getRun(runId);

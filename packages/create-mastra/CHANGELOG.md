@@ -1,5 +1,12 @@
 # create-mastra
 
+## 0.2.4-alpha.1
+
+### Patch Changes
+
+- 789bef3: Make runId optional for workflow startAsync api
+- 8393832: Handle nested workflow view on workflow graph
+
 ## 0.2.4-alpha.0
 
 ### Patch Changes
