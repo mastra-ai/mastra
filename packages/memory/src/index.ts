@@ -260,6 +260,7 @@ export class Memory extends MastraMemory {
       dimension: number | undefined;
     }
   >();
+  private firstEmbed: Promise<any> | undefined;
   private async embedMessageContent(content: string) {
     // use fast xxhash for lower memory usage. if we cache by content string we will store all messages in memory for the life of the process
     const key = (await this.hasher).h32(content);
@@ -267,11 +268,21 @@ export class Memory extends MastraMemory {
     if (cached) return cached;
     const chunks = this.chunkText(content);
 
-    const { embeddings } = await embedMany({
+    // for fastembed multiple initial calls to embed will fail if the model hasn't been downloaded yet.
+    const isFastEmbed = this.embedder.provider === `fastembed`;
+    if (isFastEmbed && this.firstEmbed instanceof Promise) {
+      // so wait for the first one
+      await this.firstEmbed;
+    }
+
+    const promise = embedMany({
       values: chunks,
       model: this.embedder,
       maxRetries: 3,
     });
+
+    if (isFastEmbed && !this.firstEmbed) this.firstEmbed = promise;
+    const { embeddings } = await promise;
 
     const result = {
       embeddings,
