@@ -45,6 +45,13 @@ export class LibSQLVector extends MastraVector {
       authToken,
       syncInterval,
     });
+
+    if (connectionUrl.includes(`file:`) || connectionUrl.includes(`:memory:`)) {
+      void this.turso.execute({
+        sql: 'PRAGMA journal_mode=WAL;',
+        args: {},
+      });
+    }
   }
 
   // If we're in the .mastra/output directory, use the dir outside .mastra dir
