@@ -31,7 +31,7 @@ export interface WorkflowResultReturn<
 > {
   runId: string;
   start: (
-    props?: { triggerData?: z.infer<T>; container: Container } | undefined,
+    props?: { triggerData?: z.infer<T>; container?: Container } | undefined,
   ) => Promise<WorkflowRunResult<T, TSteps, TResult>>;
   watch: (
     onTransition: (state: Pick<WorkflowRunResult<T, TSteps, TResult>, 'results' | 'activePaths' | 'runId'>) => void,
@@ -39,12 +39,12 @@ export interface WorkflowResultReturn<
   resume: (props: {
     stepId: string;
     context?: Record<string, any>;
-    container: Container;
+    container?: Container;
   }) => Promise<Omit<WorkflowRunResult<T, TSteps, TResult>, 'runId'> | undefined>;
   resumeWithEvent: (
     eventName: string,
     data: any,
-    container: Container,
+    container?: Container,
   ) => Promise<Omit<WorkflowRunResult<T, TSteps, TResult>, 'runId'> | undefined>;
 }
 
@@ -170,12 +170,8 @@ export class WorkflowInstance<
     };
   }
 
-  async start(
-    { triggerData, container }: { triggerData?: z.infer<TTriggerSchema>; container: Container } = {
-      container: new Container(),
-    },
-  ) {
-    const results = await this.execute({ triggerData, container });
+  async start({ triggerData, container }: { triggerData?: z.infer<TTriggerSchema>; container?: Container } = {}) {
+    const results = await this.execute({ triggerData, container: container ?? new Container() });
 
     if (this.#onFinish) {
       this.#onFinish();
@@ -547,11 +543,11 @@ export class WorkflowInstance<
   async resume({
     stepId,
     context: resumeContext,
-    container,
+    container = new Container(),
   }: {
     stepId: string;
     context?: Record<string, any>;
-    container: Container;
+    container?: Container;
   }) {
     // NOTE: setTimeout(0) makes sure that if the workflow is still running
     // we'll wait for any state changes to be applied before resuming
