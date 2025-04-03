@@ -314,25 +314,23 @@ export class Memory extends MastraMemory {
       let indexName: Promise<string>;
       await Promise.all(
         messages.map(async message => {
-          {
-            if (typeof message.content !== `string` || message.content === '') return;
+          if (typeof message.content !== `string` || message.content === '') return;
 
-            const { embeddings, chunks, dimension } = await this.embedMessageContent(message.content);
+          const { embeddings, chunks, dimension } = await this.embedMessageContent(message.content);
 
-            if (typeof indexName === `undefined`) {
-              indexName = this.createEmbeddingIndex(dimension).then(result => result.indexName);
-            }
-
-            await this.vector.upsert({
-              indexName: await indexName,
-              vectors: embeddings,
-              metadata: chunks.map(() => ({
-                message_id: message.id,
-                thread_id: message.threadId,
-                resource_id: message.resourceId,
-              })),
-            });
+          if (typeof indexName === `undefined`) {
+            indexName = this.createEmbeddingIndex(dimension).then(result => result.indexName);
           }
+
+          await this.vector.upsert({
+            indexName: await indexName,
+            vectors: embeddings,
+            metadata: chunks.map(() => ({
+              message_id: message.id,
+              thread_id: message.threadId,
+              resource_id: message.resourceId,
+            })),
+          });
         }),
       );
     }
