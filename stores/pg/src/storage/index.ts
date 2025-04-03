@@ -47,7 +47,7 @@ export class PostgresStore extends MastraStorage {
     );
   }
 
-  getEvalsByAgentName(agentName: string, type?: 'test' | 'live'): Promise<EvalRow[]> {
+  async getEvalsByAgentName(agentName: string, type?: 'test' | 'live'): Promise<EvalRow[]> {
     try {
       const baseQuery = `SELECT * FROM ${TABLE_EVALS} WHERE agent_name = $1`;
       const typeCondition =
@@ -59,11 +59,12 @@ export class PostgresStore extends MastraStorage {
 
       const query = `${baseQuery}${typeCondition} ORDER BY created_at DESC`;
 
-      return this.db.manyOrNone(query, [agentName]).then(rows => rows?.map(row => this.transformEvalRow(row)) ?? []);
+      const rows = await this.db.manyOrNone(query, [agentName]);
+      return rows?.map(row => this.transformEvalRow(row)) ?? [];
     } catch (error) {
       // Handle case where table doesn't exist yet
       if (error instanceof Error && error.message.includes('relation') && error.message.includes('does not exist')) {
-        return Promise.resolve([]);
+        return [];
       }
       console.error('Failed to get evals for the specified agent: ' + (error as any)?.message);
       throw error;
@@ -169,12 +170,6 @@ export class PostgresStore extends MastraStorage {
         args.push(value);
       }
     }
-
-    console.log(
-      'QUERY',
-      `SELECT * FROM ${TABLE_TRACES} ${whereClause} ORDER BY "createdAt" DESC LIMIT ${limit} OFFSET ${offset}`,
-      args,
-    );
 
     const result = await this.db.manyOrNone<{
       id: string;
