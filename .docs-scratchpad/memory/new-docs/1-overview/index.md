@@ -76,7 +76,8 @@ Here's how the memory system processes a typical user request to assemble the co
         ┌─────────────────┐
         │ Mastra Agent    │
         └────────┬────────┘
-                 │ invokes
+                 │ invokes with
+                 │ resourceId + threadId
                  ▼
     ┌───────────────────────────┐
     │   Memory System           │
@@ -94,8 +95,17 @@ Here's how the memory system processes a typical user request to assemble the co
 └─────────┘ └───────────┘ └─────────────────┘ └───────────┘
       │            │                │               │
       └────────────┼────────────────┴───────────────┘
-                   │ assembles
+                   │ assembles raw data
                    ▼
+      ┌───────────────────────────┐
+      │ Memory Processors         │
+      │ ----------------------    │
+      │ • Token Limiting          │
+      │ • Tool Call Filtering     │
+      │ • Custom Transformations  │
+      └───────────┬───────────────┘
+                  │ filters and optimizes
+                  ▼
      ┌───────────────────────────┐
      │ Final Context Window      │
      │ ------------------------- │
@@ -175,7 +185,7 @@ Mastra's memory system consists of several components working together:
 └─────────────────────────┘      └──────────────────────────┘
 ```
 
-- **Memory Instance**: Central configuration point for all memory components
+- **Memory Instance**: Central configuration point for all memory components. Memory is segmented by resourceId (user) and threadId (conversation), ensuring proper isolation between different users and chats.
 - **Storage Backend**: Persists conversation data in your chosen database (LibSQL, PostgreSQL, Upstash)
 - **Vector Store**: Specialized database for semantic search capabilities
 - **Embedder**: Converts text to vector representations for similarity search

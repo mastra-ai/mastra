@@ -8,18 +8,18 @@ This is a high level overview for the new info arch for Mastra Memory documentat
    - [ ] 1.1. What is memory? Memory is the LLM context window
        - [x] Initial draft ./new-docs/1-overview/index.md
        - [x] Pair review / edits
-       - [ ] Compare with user feedback
+       - [x] Compare with user feedback
        - [ ] Move into actual docs page
        - [ ] Add diagrams / illustrations
    - [ ] 1.2. Types of memory (long/short term)
        - [x] Initial draft ./new-docs/1-overview/index.md
        - [x] Pair review / edits
-       - [ ] Compare with user feedback
+       - [x] Compare with user feedback
        - [ ] Move into actual docs page
    - [ ] 1.3. How Mastra handles memory (architecture overview)
        - [x] Initial draft ./new-docs/1-overview/index.md
        - [x] Pair review / edits
-       - [ ] Compare with user feedback
+       - [x] Compare with user feedback
        - [ ] Move into actual docs page
        - [ ] Refine architecture diagram
 
