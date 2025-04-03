@@ -4886,7 +4886,7 @@ describe('Workflow', async () => {
       expect(result.results.step1.output.injectedValue).toBe(testValue);
     });
 
-    it.only('should inject container dependencies into steps during resume', async () => {
+    it('should inject container dependencies into steps during resume', async () => {
       const container = new Container();
       const testValue = 'test-dependency';
       container.register('testKey', testValue);
