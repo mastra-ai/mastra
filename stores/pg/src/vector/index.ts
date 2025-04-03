@@ -61,7 +61,7 @@ type PgDefineIndexArgs = [string, 'cosine' | 'euclidean' | 'dotproduct', IndexCo
 
 export class PgVector extends MastraVector {
   private pool: pg.Pool;
-  private indexCache: Map<string, PGIndexStats> = new Map();
+  private describeIndexCache: Map<string, PGIndexStats> = new Map();
   private createdIndexes = new Map<string, number>();
   private mutexesByName = new Map<string, Mutex>();
 
@@ -112,10 +112,10 @@ export class PgVector extends MastraVector {
   }
 
   async getIndexInfo(indexName: string): Promise<PGIndexStats> {
-    if (!this.indexCache.has(indexName)) {
-      this.indexCache.set(indexName, await this.describeIndex(indexName));
+    if (!this.describeIndexCache.has(indexName)) {
+      this.describeIndexCache.set(indexName, await this.describeIndex(indexName));
     }
-    return this.indexCache.get(indexName)!;
+    return this.describeIndexCache.get(indexName)!;
   }
 
   async query(...args: ParamsToArgs<PgQueryVectorParams> | PgQueryVectorArgs): Promise<QueryResult[]> {
@@ -340,7 +340,7 @@ export class PgVector extends MastraVector {
       await client.query(`DROP INDEX IF EXISTS ${indexName}_vector_idx`);
 
       if (indexConfig.type === 'flat') {
-        this.indexCache.delete(indexName);
+        this.describeIndexCache.delete(indexName);
         return;
       }
 
