@@ -1,5 +1,11 @@
 # @mastra/core
 
+## 0.8.0-alpha.4
+
+### Patch Changes
+
+- d7e08e8: createdAt needs to be nullable
+
 ## 0.8.0-alpha.3
 
 ### Patch Changes
