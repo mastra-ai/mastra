@@ -2,7 +2,12 @@
 
 @custom-variant dark (&:where(.dark, .dark *));
 
+@theme {
+  --color-el-3: #939393;
+}
+
 @theme inline {
+  --color-el-3: #939393;
   --font-sans: var(--inter);
   --font-mono: var(--geist-mono);
 }
@@ -11,7 +16,7 @@
   --nextra-navbar-height: 60px;
 }
 
-body:is(html[class~="dark"] *),
+/* body:is(html[class~="dark"] *),
 html:is(html[class~="dark"] *) {
   background: #050505;
 }
@@ -29,7 +34,7 @@ nav {
 /*  max-width: 80rem;*/
 /*}*/
 
-div._transform-gpu > div > ul {
+/* div._transform-gpu > div > ul {
   gap: 0.15rem;
 }
 
@@ -95,7 +100,7 @@ ul._flex > li a {
   padding-inline-start: 0.375rem !important;
 } */
 
-ul._flex {
+/* ul._flex {
   margin-inline-start: 8px !important;
   padding-inline-start: 0px !important;
 }
@@ -111,9 +116,9 @@ button._flex._transition:has(+ div._transform-gpu li.active):is(
     html[class~="dark"] *
   ) {
   color: white !important;
-}
+} */
 
-._font-semibold {
+/* ._font-semibold {
   font-weight: 500 !important;
 }
 
@@ -122,16 +127,14 @@ h2 {
 }
 
 p[class*="not(:first-child)"] {
-  margin-top: 1rem !important; /* mt-4 equivalent */
-}
+  margin-top: 1rem !important; /* mt-4 equivalent} */
 
-ul[class*="not(:first-child)"] {
-  margin-top: 1rem !important; /* mt-4 equivalent */
-}
+/* ul[class*="not(:first-child)"] {
+  margin-top: 1rem !important; /* mt-4 equivalent }*/
 
-.nextra-callout p {
+/* .nextra-callout p {
   margin-top: 0 !important;
-}
+} 
 
 tr {
   background: none !important;
@@ -144,9 +147,9 @@ th {
   &:is(:not(html[class~="dark"] *)) {
     border-bottom: 0.5px solid hsl(0, 0%, 80%) !important;
   }
-}
+} */
 
-td {
+/* td {
   border: none !important;
   border-bottom: 0.5px solid hsl(0, 0%, 20%) !important;
 
@@ -155,9 +158,6 @@ td {
   }
 }
 
-button[title="Hide sidebar"] {
-  display: none;
-}
 
 pre > * {
   font-size: 13px !important;
@@ -165,9 +165,9 @@ pre > * {
 
 div.nextra-scrollbar {
   gap: 4px;
-}
+} */
 
-nav a {
+/* nav a {
   padding-block: 8px;
   padding-inline: 16px;
   font-weight: 500 !important;
@@ -185,18 +185,14 @@ ul[role="listbox"] {
     rgba(255, 255, 255, 0.03) 97.46%
   ) !important;
   margin-right: -13px !important;
-}
+} */
 
 /**
  * 
  * Not the most exciting override but I don't have other solution that tweaking this thing...
  */
-._max-w-\[90rem\] {
-  max-width: 1184px !important;
-  width: 100%;
-}
 
-iframe {
+/* iframe {
   border-radius: 6px !important;
   overflow: hidden;
 }
@@ -204,11 +200,11 @@ iframe {
 pre {
   border: 0.5px solid #343434 !important;
   background: #171717 !important;
-}
+}  */
 
 /* Sidebar */
 
-.nextra-sidebar-container li a {
+/* .nextra-sidebar-container li a {
   border-left: 2px solid transparent;
   border-top-left-radius: 0px;
   border-bottom-left-radius: 0px;
@@ -238,50 +234,65 @@ pre {
 
 .nextra-sidebar-footer:is(html[class~="dark"] *) {
   background: #050505 !important;
-}
+} */
 
+/* Navbar */
 /* Searchbar */
-.nextra-nav-container input[type="search"] {
-  width: 142px;
+.nextra-navbar input[type="search"] {
+  width: 180px;
   height: 34px;
   font-size: 14px;
-}
-
-.nextra-nav-container:is(html[class~="dark"] *) input[type="search"] {
+  border-radius: 0.375rem;
   background: #121212;
   border: 0.5px solid #343434;
+
+  &::placeholder {
+    color: var(--color-el-3);
+  }
 }
 
-.nextra-nav-container kbd {
+.nextra-navbar kbd {
   border-radius: 4px;
   border: unset;
+  color: var(--color-el-3);
 }
 
-.nextra-nav-container:is(html[class~="dark"] *) kbd {
+.nextra-navbar:is(html[class~="dark"] *) kbd {
   background: #000000bf;
 }
 
-.nextra-nav-container:is(html[class~="light"] *) kbd {
+.nextra-navbar:is(html[class~="light"] *) kbd {
   background: #f0f0f0;
 }
 
-/* Navbar */
-
-.nextra-nav-container nav {
+.nextra-navbar nav {
   position: relative;
+  --nextra-content-width: 1220px;
+  padding-inline: 0;
 }
 
 /* Hack for menu */
-.nextra-nav-container nav > div:nth-child(2) {
+.nextra-navbar nav > div:nth-child(2) {
   position: absolute;
   left: 50%;
   transform: translateX(-50%);
-  gap: 0.5rem;
-  margin-top: 1px; /* Compensate for the border */
+  gap: 1rem;
+  margin-top: 1px;
+}
+
+/* Navbar menu items */
+.nextra-navbar nav > div:nth-child(2) > * {
+  padding: 0.62rem;
+  font-weight: 500;
+}
+
+/* Navbar menu items svg */
+.nextra-navbar nav > div:nth-child(2) > * svg {
+  display: none;
 }
 
 @media (max-width: 1024px) {
-  .nextra-nav-container nav > div:nth-child(2) {
+  .nextra-navbar nav > div:nth-child(2) {
     position: relative;
     left: 0;
     transform: translateX(0);
@@ -289,32 +300,114 @@ pre {
 }
 
 @media (min-width: 1024px) {
-  /* Searchbar hacks*/
-  .nextra-nav-container nav > div:nth-child(3) {
-    position: absolute;
-    right: 0;
-  }
-
-  /* Github button*/
-  .nextra-nav-container nav > a {
-    margin-right: 152px; /* search width + padding */
-    height: auto;
+  .nextra-navbar nav > div:nth-child(3) {
   }
 }
 
-.nextra-nav-container nav > a:hover {
-  background: transparent !important;
+/*Main Content*/
+
+aside {
+  --button-gap: 0.38rem;
+  --icon-position: 11.5px;
 }
 
-.nextra-nav-container-blur {
+aside + div {
+  --nextra-content-width: 1220px;
+}
+
+article span.m-tag {
   display: none;
 }
 
-.nextra-nav-container nav {
-  gap: 0;
+/**** Sidebar******/
+aside > * {
+  --x-color-primary-600: #fff;
+  --x-color-primary-400: oklab(
+    18.2% -0.000000000000000147 0.0000000000000000204
+  );
 }
 
-.nextra-nav-container:is(html[class~="dark"] *)
+/*Size of chevron*/
+aside > div:nth-child(1) button svg {
+  width: 1rem;
+  height: 1rem;
+}
+
+aside > div:nth-child(1) ul:before {
+  inset-inline-start: calc(var(--x-spacing) * 0.92);
+}
+
+/*Active link indicator*/
+aside > div:nth-child(1) ul li {
+  position: relative;
+}
+
+aside > div:nth-child(1) ul li a {
+  padding-block: 0.25rem;
+}
+
+aside > div:nth-child(1) ul li.active {
+  &::before {
+    content: "";
+    position: absolute;
+    left: -8px;
+    top: 0px;
+    bottom: 0;
+    height: calc(100%);
+    background: var(--x-color-primary-600);
+    width: 1.5px;
+    transition: opacity 0.1s ease-in-out;
+  }
+}
+
+aside a[href="/docs"],
+aside button[data-href="/docs/reference"] {
+  position: relative;
+  padding-inline-start: calc((var(--button-gap) * 3) + var(--icon-position));
+}
+
+aside a[href="/docs"]::before,
+aside button[data-href="/docs/reference"]::before {
+  content: "";
+  position: absolute;
+  left: var(--icon-position);
+  top: 50%;
+  transform: translateY(-50%);
+  width: 0.7rem;
+  height: 0.8rem;
+  background-size: contain;
+  background-repeat: no-repeat;
+}
+
+aside a[href="/docs"]::before {
+  background-image: url("icons/introduction.svg");
+}
+
+aside button[data-href="/docs/reference"]::before {
+  background-image: url("icons/reference.svg");
+}
+
+button[data-href="/docs/reference"] svg {
+  display: none;
+}
+
+button[title="Collapse sidebar"] {
+  display: none;
+}
+
+aside > div:nth-child(2) {
+  display: none;
+}
+
+aside > div:nth-child(1) button {
+  flex-direction: row-reverse;
+  justify-content: flex-end;
+  gap: var(--button-gap);
+}
+
+/* General Utility modification*/
+
+/* .nextra-nav-container:is(html[class~="dark"] *)
   nav
   a:is([aria-current="true"]) {
   color: white !important;
@@ -332,9 +425,9 @@ pre {
   padding-bottom: 0.5rem;
   padding-left: 0.75rem;
   padding-right: 0.75rem;
-}
+} */
 
-.nextra-nav-container:is(html[class~="dark"] *) a:hover {
+/* .nextra-nav-container:is(html[class~="dark"] *) a:hover {
   color: #fff !important;
   background-color: rgba(41, 41, 41, 0.5);
 }
@@ -347,4 +440,4 @@ pre {
 .nextra-nav-container:is(html[class~="light"] *) {
   background: rgb(250, 250, 250);
   border-bottom: 0.5px solid rgb(220, 220, 220);
-}
+}   */
