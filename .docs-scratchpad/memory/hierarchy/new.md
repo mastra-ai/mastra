@@ -48,7 +48,7 @@ This is a high level overview for the new info arch for Mastra Memory documentat
    - [ ] 3.1. Conversations and turn based interactions (Last messages)
        - [x] Initial draft ./new-docs/3-using-memory/3.1-last-messages.md
        - [x] Pair review / edits
-       - [ ] Compare with user feedback
+       - [x] Compare with user feedback
        - [ ] Move into actual docs page
    - [ ] 3.2. Recalling old messages (Semantic recall)
        - [x] Initial draft ./new-docs/3-using-memory/3.2-semantic-recall.md
