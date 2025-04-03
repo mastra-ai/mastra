@@ -337,7 +337,9 @@ export class PgVector extends MastraVector {
     const mutex = this.getMutexByName(`build-${indexName}`);
     // Use async-mutex instead of advisory lock for perf (over 2x as fast)
     await mutex.runExclusive(async () => {
-      await client.query(`DROP INDEX IF EXISTS ${indexName}_vector_idx`);
+      if (this.createdIndexes.has(indexName)) {
+        await client.query(`DROP INDEX IF EXISTS ${indexName}_vector_idx`);
+      }
 
       if (indexConfig.type === 'flat') {
         this.describeIndexCache.delete(indexName);
