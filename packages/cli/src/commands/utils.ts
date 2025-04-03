@@ -39,3 +39,15 @@ export function getPackageManagerInstallCommand(pm: string): string {
       return 'install';
   }
 }
+
+export function convertToViteEnvVar(envVars: Map<string, string>, keysToConvert: string[]): Map<string, string> {
+  const envEntries: [string, string][] = Array.from(envVars.entries());
+  const formattedEnvEntries: [string, string][] = envEntries.map(([key, value]) => {
+    if (keysToConvert.includes(key)) {
+      return [`VITE_${key.toUpperCase()}`, value];
+    }
+    return [key, value];
+  });
+
+  return new Map(formattedEnvEntries);
+}
