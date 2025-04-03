@@ -82,6 +82,51 @@ workflow
   .commit();
 ```
 
+### Variables in Loops
+
+Variables can also be passed to `while` and `until` loops. This is useful for passing data between iterations or from outside steps:
+
+```typescript showLineNumbers filename="src/mastra/workflows/loop-variables.ts" copy
+// Step that increments a counter
+const incrementStep = new Step({
+  id: 'increment',
+  inputSchema: z.object({
+    // Previous value from last iteration
+    prevValue: z.number().optional(),
+  }),
+  outputSchema: z.object({
+    // Updated counter value
+    updatedCounter: z.number(),
+  }),
+  execute: async ({ context }) => {
+    const { prevValue = 0 } = context.inputData;
+    return { updatedCounter: prevValue + 1 };
+  },
+});
+
+const workflow = new Workflow({
+  name: 'counter'
+});
+
+workflow
+  .step(incrementStep)
+  .while(
+    async ({ context }) => {
+      // Continue while counter is less than 10
+      const result = context.getStepResult(incrementStep);
+      return (result?.updatedCounter ?? 0) < 10;
+    },
+    incrementStep,
+    {
+      // Pass previous value to next iteration
+      prevValue: {
+        step: incrementStep,
+        path: 'updatedCounter'
+      }
+    }
+  );
+```
+
 ## Variable Resolution
 
 When a workflow executes, Mastra resolves variables at runtime by:
