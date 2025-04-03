@@ -311,6 +311,8 @@ export class PgVector extends MastraVector {
   private async setupIndex({ indexName, metric, indexConfig }: PgDefineIndexParams, client: pg.PoolClient) {
     // Use async-mutex instead of advisory lock for perf (over 2x as fast)
     await this.buildMutex.runExclusive(async () => {
+      await client.query(`DROP INDEX IF EXISTS ${indexName}_vector_idx`);
+
       if (indexConfig.type === 'flat') {
         this.indexCache.delete(indexName);
         return;
