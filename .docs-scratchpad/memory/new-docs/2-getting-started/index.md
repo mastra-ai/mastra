@@ -16,6 +16,8 @@ yarn add @mastra/memory
 
 By default, Mastra memory uses LibSQL for storage and FastEmbed for embeddings, which are included in the package.
 
+> For deployment considerations or troubleshooting installation issues, see the [Configuring Memory](../5-configuring-memory/index.md) and [Debugging Memory](../6-debugging-memory/index.md) guides.
+
 ## Adding Memory to an Agent
 
 Basic memory setup requires minimal configuration:
@@ -37,15 +39,17 @@ const agent = new Agent({
 });
 ```
 
+For more advanced configuration options, see the [Configuring Memory](../5-configuring-memory/index.md) guide.
+
 ## Using Memory in Conversations
 
-To use memory, provide `resourceId` and `threadId` when calling the agent:
+To use memory, you **must** provide both `resourceId` and `threadId` when calling the agent:
 
 ```typescript
 // First interaction
 await agent.stream("Hello, my name is Alice.", {
-  resourceId: "user_alice",
-  threadId: "conversation_123",
+  resourceId: "user_alice",  // Identifies the user
+  threadId: "conversation_123",  // Identifies this specific conversation
 });
 
 // Later interaction - memory is automatically retrieved and included
@@ -55,6 +59,8 @@ await agent.stream("What's my name again?", {
 });
 ```
 
+> **Important**: Both parameters are required for memory to function. The `resourceId` typically represents a user ID, while the `threadId` represents a specific conversation. Using consistent IDs ensures continuity across interactions.
+
 The agent will automatically:
 - Store all messages in the conversation
 - Retrieve relevant context in future interactions
@@ -62,11 +68,15 @@ The agent will automatically:
 
 ## Trying It Out (Playground)
 
-The fastest way to experiment with Mastra's memory system is to use the playground:
+The fastest way to experiment with Mastra's memory system is to use the playground, a built-in development environment for testing your agents. The playground provides a chat interface for testing your agent's capabilities in real-time. [Learn more about the playground](/docs/local-dev/mastra-dev#dev-playground).
 
 1. Start a new Mastra project:
    ```bash
-   pnpm create mastra
+   pnpm create mastra@latest
+   # or
+   npm create mastra@latest
+   # or
+   yarn create mastra@latest
    ```
 
 2. In your project's `src/mastra/agents/index.ts` file, add memory to your agent:
@@ -85,11 +95,17 @@ The fastest way to experiment with Mastra's memory system is to use the playgrou
 
 3. Start the development server:
    ```bash
-   pnpm dev
+   pnpm run dev
+   # or
+   npm run dev
+   # or
+   yarn dev
    ```
 
 4. Open the playground at `http://localhost:4111` and interact with your agent.
 
-5. Try referencing earlier parts of the conversation to test the memory functionality.
+5. Try referencing earlier parts of the conversation to test the memory functionality. The playground automatically manages resourceId and threadId for you, so you can focus on testing the memory capabilities.
+
+> **Note**: When you deploy your agent, you'll need to explicitly pass resourceId and threadId as shown in the previous section.
 
 Continue to [Using Memory](../3-using-memory/index.md) to learn more about advanced memory features. 

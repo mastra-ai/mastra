@@ -26,21 +26,21 @@ This is a high level overview for the new info arch for Mastra Memory documentat
 2. Getting started
    - [ ] 2.1. Installation
        - [x] Initial draft ./new-docs/2-getting-started/index.md
-       - [ ] Add package manager instructions (npm, pnpm, yarn)
-       - [ ] Clarify that @mastra/memory needs to be installed separately
+       - [x] Add package manager instructions (npm, pnpm, yarn)
+       - [x] Clarify that @mastra/memory needs to be installed separately
        - [ ] Add troubleshooting for common installation issues
-       - [ ] Pair review / edits
-       - [ ] Compare with user feedback
+       - [x] Pair review / edits
+       - [x] Compare with user feedback
        - [ ] Move into actual docs page
    - [ ] 2.2. Adding memory to an agent
        - [x] Initial draft ./new-docs/2-getting-started/index.md
-       - [ ] Pair review / edits
-       - [ ] Compare with user feedback
+       - [x] Pair review / edits
+       - [x] Compare with user feedback
        - [ ] Move into actual docs page
    - [ ] 2.3. Trying it out (playground)
        - [x] Initial draft ./new-docs/2-getting-started/index.md
-       - [ ] Pair review / edits
-       - [ ] Compare with user feedback
+       - [x] Pair review / edits
+       - [x] Compare with user feedback
        - [ ] Move into actual docs page
        - [ ] Add screenshots of playground
 
