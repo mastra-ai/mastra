@@ -1,6 +1,7 @@
 import { join, resolve, isAbsolute } from 'path';
 import { createClient } from '@libsql/client';
 import type { Client as TursoClient, InValue } from '@libsql/client';
+import { Mutex } from 'async-mutex';
 
 import type { VectorFilter } from '../filter';
 import { MastraVector } from '../index';
@@ -133,17 +134,25 @@ export class LibSQLVector extends MastraVector {
     }
   }
 
+  private mutexesByName = new Map<string, Mutex>();
+  private getMutexByName(name: string) {
+    if (!this.mutexesByName.has(name)) this.mutexesByName.set(name, new Mutex());
+    return this.mutexesByName.get(name)!;
+  }
+
   async upsert(...args: ParamsToArgs<UpsertVectorParams>): Promise<string[]> {
     const params = this.normalizeArgs<UpsertVectorParams>('upsert', args);
 
     const { indexName, vectors, metadata, ids } = params;
-    const tx = await this.turso.transaction('write');
 
-    try {
-      const vectorIds = ids || vectors.map(() => crypto.randomUUID());
+    return await this.getMutexByName(`upsert-${indexName}`).runExclusive(async () => {
+      const tx = await this.turso.transaction('write');
 
-      for (let i = 0; i < vectors.length; i++) {
-        const query = `
+      try {
+        const vectorIds = ids || vectors.map(() => crypto.randomUUID());
+
+        for (let i = 0; i < vectors.length; i++) {
+          const query = `
           INSERT INTO ${indexName} (vector_id, embedding, metadata)
           VALUES (?, vector32(?), ?)
           ON CONFLICT(vector_id) DO UPDATE SET
@@ -151,42 +160,43 @@ export class LibSQLVector extends MastraVector {
             metadata = ?
         `;
 
-        // console.log('INSERTQ', query, [
-        //   vectorIds[i] as InValue,
-        //   JSON.stringify(vectors[i]),
-        //   JSON.stringify(metadata?.[i] || {}),
-        //   JSON.stringify(vectors[i]),
-        //   JSON.stringify(metadata?.[i] || {}),
-        // ]);
-        await tx.execute({
-          sql: query,
-          // @ts-ignore
-          args: [
-            vectorIds[i] as InValue,
-            JSON.stringify(vectors[i]),
-            JSON.stringify(metadata?.[i] || {}),
-            JSON.stringify(vectors[i]),
-            JSON.stringify(metadata?.[i] || {}),
-          ],
-        });
-      }
-
-      await tx.commit();
-      return vectorIds;
-    } catch (error) {
-      await tx.rollback();
-      if (error instanceof Error && error.message?.includes('dimensions are different')) {
-        const match = error.message.match(/dimensions are different: (\d+) != (\d+)/);
-        if (match) {
-          const [, actual, expected] = match;
-          throw new Error(
-            `Vector dimension mismatch: Index "${indexName}" expects ${expected} dimensions but got ${actual} dimensions. ` +
-              `Either use a matching embedding model or delete and recreate the index with the new dimension.`,
-          );
+          // console.log('INSERTQ', query, [
+          //   vectorIds[i] as InValue,
+          //   JSON.stringify(vectors[i]),
+          //   JSON.stringify(metadata?.[i] || {}),
+          //   JSON.stringify(vectors[i]),
+          //   JSON.stringify(metadata?.[i] || {}),
+          // ]);
+          await tx.execute({
+            sql: query,
+            // @ts-ignore
+            args: [
+              vectorIds[i] as InValue,
+              JSON.stringify(vectors[i]),
+              JSON.stringify(metadata?.[i] || {}),
+              JSON.stringify(vectors[i]),
+              JSON.stringify(metadata?.[i] || {}),
+            ],
+          });
         }
+
+        await tx.commit();
+        return vectorIds;
+      } catch (error) {
+        await tx.rollback();
+        if (error instanceof Error && error.message?.includes('dimensions are different')) {
+          const match = error.message.match(/dimensions are different: (\d+) != (\d+)/);
+          if (match) {
+            const [, actual, expected] = match;
+            throw new Error(
+              `Vector dimension mismatch: Index "${indexName}" expects ${expected} dimensions but got ${actual} dimensions. ` +
+                `Either use a matching embedding model or delete and recreate the index with the new dimension.`,
+            );
+          }
+        }
+        throw error;
       }
-      throw error;
-    }
+    });
   }
 
   async createIndex(...args: ParamsToArgs<CreateIndexParams>): Promise<void> {
