@@ -1,7 +1,6 @@
 import { MCPConfiguration } from '@mastra/mcp';
 
 export const mcpConfiguration = new MCPConfiguration({
-  id: "blogautopost-mcp-config",
   servers: {
     playwright: {
       command: 'npx',

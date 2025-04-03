@@ -22,11 +22,7 @@
     "resolveJsonModule": true,
     "skipLibCheck": true,
     "strict": true,
-    "target": "ES2020",
-    "baseUrl": ".",
-    "paths": {
-      "@mastra/core/*": ["node_modules/@mastra/core/dist/*"]
-    }
+    "target": "ES2020"
   },
-  "include": ["eslint.config.js", "prettier.config.js", "src/**/*"]
+  "include": ["eslint.config.js", "prettier.config.js"]
 }
