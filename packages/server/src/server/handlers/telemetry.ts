@@ -68,6 +68,13 @@ export async function storeTelemetryHandler({ mastra, body }: Context & { body: 
     const now = new Date();
 
     const items = body?.resourceSpans?.[0]?.scopeSpans;
+    if (!items?.length) {
+      return {
+        status: 'success',
+        message: 'No spans to process',
+        traceCount: 0,
+      };
+    }
 
     const allSpans: any[] = items.reduce((acc: any, scopedSpans: any) => {
       const { scope, spans } = scopedSpans;
