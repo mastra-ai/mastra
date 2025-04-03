@@ -65,6 +65,7 @@ export const TABLE_SCHEMAS: Record<TABLE_NAMES, Record<string, StorageColumn>> =
     },
     createdAt: {
       type: 'timestamp',
+      nullable: true,
     },
   },
   [TABLE_THREADS]: {
