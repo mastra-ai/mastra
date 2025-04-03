@@ -750,18 +750,20 @@ export class Agent<
           try {
             const userMessage = this.getMostRecentUserMessage(messages);
             const newMessages = userMessage ? [userMessage] : messages;
-            const threadMessages = newMessages.map(u => {
-              return {
-                id: this.getMemory()?.generateId()!,
-                createdAt: new Date(),
-                threadId: thread.id,
-                resourceId: resourceId,
-                ...u,
-                content: u.content as UserContent | AssistantContent,
-                role: u.role as 'user' | 'assistant',
-                type: 'text' as 'text' | 'tool-call' | 'tool-result',
-              };
-            });
+            const threadMessages = this.sanitizeResponseMessages(ensureAllMessagesAreCoreMessages(newMessages)).map(
+              u => {
+                return {
+                  id: this.getMemory()?.generateId()!,
+                  createdAt: new Date(),
+                  threadId: thread.id,
+                  resourceId: resourceId,
+                  ...u,
+                  content: u.content as UserContent | AssistantContent,
+                  role: u.role as 'user' | 'assistant',
+                  type: 'text' as 'text' | 'tool-call' | 'tool-result',
+                };
+              },
+            );
 
             // saving messages doesn't need to block responses
             void memory.saveMessages({
