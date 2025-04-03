@@ -301,28 +301,29 @@ export class Memory extends MastraMemory {
 
     if (this.vector && config.semanticRecall) {
       let indexName: Promise<string>;
-      // don't await for perf reasons. we can upsert vectorized messages without blocking the response
-      void messages.map(async message => {
-        {
-          if (typeof message.content !== `string` || message.content === '') return;
+      await Promise.all(
+        messages.map(async message => {
+          {
+            if (typeof message.content !== `string` || message.content === '') return;
 
-          const { embeddings, chunks, dimension } = await this.embedMessageContent(message.content);
+            const { embeddings, chunks, dimension } = await this.embedMessageContent(message.content);
 
-          if (typeof indexName === `undefined`) {
-            indexName = this.createEmbeddingIndex(dimension).then(result => result.indexName);
+            if (typeof indexName === `undefined`) {
+              indexName = this.createEmbeddingIndex(dimension).then(result => result.indexName);
+            }
+
+            await this.vector.upsert({
+              indexName: await indexName,
+              vectors: embeddings,
+              metadata: chunks.map(() => ({
+                message_id: message.id,
+                thread_id: message.threadId,
+                resource_id: message.resourceId,
+              })),
+            });
           }
-
-          await this.vector.upsert({
-            indexName: await indexName,
-            vectors: embeddings,
-            metadata: chunks.map(() => ({
-              message_id: message.id,
-              thread_id: message.threadId,
-              resource_id: message.resourceId,
-            })),
-          });
-        }
-      });
+        }),
+      );
     }
 
     return result;
