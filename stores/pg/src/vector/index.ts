@@ -135,19 +135,22 @@ export class PgVector extends MastraVector {
       // Get index type and configuration
       const indexInfo = await this.getIndexInfo(indexName);
 
+      let setQuery = ``;
       // Set HNSW search parameter if applicable
       if (indexInfo.type === 'hnsw') {
         // Calculate ef and clamp between 1 and 1000
         const calculatedEf = ef ?? Math.max(topK, (indexInfo?.config?.m ?? 16) * topK);
         const searchEf = Math.min(1000, Math.max(1, calculatedEf));
-        await client.query(`SET LOCAL hnsw.ef_search = ${searchEf}`);
+        setQuery = `SET LOCAL hnsw.ef_search = ${searchEf};`;
       }
 
       if (indexInfo.type === 'ivfflat' && probes) {
-        await client.query(`SET LOCAL ivfflat.probes = ${probes}`);
+        setQuery = `SET LOCAL ivfflat.probes = ${probes};`;
       }
 
       const query = `
+        ${setQuery}
+
         WITH vector_scores AS (
           SELECT
             vector_id as id,
