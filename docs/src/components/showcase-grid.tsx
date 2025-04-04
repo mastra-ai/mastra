@@ -117,7 +117,7 @@ export const ShowcaseGrid = () => {
     {
       title: "Ecommerce RAG",
       description: "A RAG application for an ecommerce website",
-      image: "/showcase/optimized/ecommerce-rag.png",
+      image: "/showcase/optimized/ecommerce-rag.jpg",
       link: "https://nextjs-commerce-nu-eight-83.vercel.app/",
     },
     {
