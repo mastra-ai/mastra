@@ -112,7 +112,7 @@ export const ShowcaseGrid = () => {
       description:
         "A tool that converts whiteboard images into editable Excalidraw diagrams",
       image: "/showcase/excalidraw-app.png",
-      link: "https://excalidraw-app.vercel.app/",
+      link: "https://image2excalidraw.netlify.app/",
     },
     {
       title: "Ecommerce RAG",
