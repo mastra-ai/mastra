@@ -1,5 +1,15 @@
 # mastra
 
+## 0.4.5-alpha.9
+
+### Patch Changes
+
+- 40720d3: Add support for webcontainers like stackblitz
+- Updated dependencies [3c6ae54]
+- Updated dependencies [febc8a6]
+  - @mastra/deployer@0.2.6-alpha.9
+  - @mastra/core@0.8.0-alpha.7
+
 ## 0.4.5-alpha.8
 
 ### Patch Changes
