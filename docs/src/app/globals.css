@@ -7,6 +7,10 @@
 }
 
 @theme inline {
+  --primary-bg: #050505;
+  --secondary-bg: #121212;
+  --tertiary-bg: #171717;
+  --border: #343434;
   --color-el-3: #939393;
   --font-sans: var(--inter);
   --font-mono: var(--geist-mono);
@@ -14,6 +18,11 @@
 
 :root {
   --nextra-navbar-height: 60px;
+}
+
+body:is(html[class~="dark"] *),
+html:is(html[class~="dark"] *) {
+  background: var(--primary-bg);
 }
 
 /* body:is(html[class~="dark"] *),
@@ -238,6 +247,14 @@ pre {
 
 /* Navbar */
 /* Searchbar */
+
+header {
+  background: var(--primary-bg);
+}
+
+header > * {
+  background: var(--primary-bg);
+}
 .nextra-navbar input[type="search"] {
   width: 180px;
   height: 34px;
@@ -304,7 +321,7 @@ pre {
   }
 }
 
-/*Main Content*/
+/*****Main Content******/
 
 aside {
   --button-gap: 0.38rem;
@@ -319,7 +336,52 @@ article span.m-tag {
   display: none;
 }
 
-/**** Sidebar******/
+article a {
+  text-decoration: none;
+
+  &:hover {
+    text-decoration: underline;
+  }
+}
+
+article strong > a {
+  font-weight: 500;
+}
+
+.nextra-breadcrumb {
+  background: var(--secondary-bg);
+  padding: 0.47rem 0.69rem;
+  width: fit-content;
+  border-radius: 0.375rem;
+}
+
+pre code {
+  --x-text-sm: 13px;
+}
+
+pre,
+div:has(+ pre) {
+  border: 0.5px solid var(--border);
+  border-radius: 0.5rem;
+  background: var(--tertiary-bg);
+  box-shadow: none;
+}
+
+div:has(+ pre) {
+  border-bottom-left-radius: 0;
+  border-bottom-right-radius: 0;
+}
+
+div + pre {
+  border-top-left-radius: 0;
+  border-top-right-radius: 0;
+}
+
+button[title="Copy code"] {
+  border: none;
+}
+
+/*****Sidebar******/
 aside > * {
   --x-color-primary-600: #fff;
   --x-color-primary-400: oklab(
@@ -344,6 +406,10 @@ aside > div:nth-child(1) ul li {
 
 aside > div:nth-child(1) ul li a {
   padding-block: 0.25rem;
+
+  &:hover {
+    background: transparent;
+  }
 }
 
 aside > div:nth-child(1) ul li.active {
@@ -357,6 +423,13 @@ aside > div:nth-child(1) ul li.active {
     background: var(--x-color-primary-600);
     width: 1.5px;
     transition: opacity 0.1s ease-in-out;
+  }
+}
+
+aside > div:nth-child(1) ul li.active:has(a[href="/docs"]) {
+  &::before {
+    content: "";
+    background: transparent;
   }
 }
 
