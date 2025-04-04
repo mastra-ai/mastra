@@ -1,6 +1,6 @@
 import { get } from 'radash';
 import { z } from 'zod';
-import type { Mastra } from '..';
+import type { Evaluator, Mastra } from '..';
 import { Agent } from '../agent';
 import type { ToolsInput } from '../agent';
 import type { Metric } from '../eval';
@@ -245,7 +245,7 @@ export function resolveVariables({
 export function agentToStep<
   TAgentId extends string = string,
   TTools extends ToolsInput = ToolsInput,
-  TMetrics extends Record<string, Metric> = Record<string, Metric>,
+  TMetrics extends Record<string, Metric | Evaluator> = Record<string, Metric | Evaluator>,
 >(
   agent: Agent<TAgentId, TTools, TMetrics>,
   { mastra }: { mastra?: Mastra } = {},

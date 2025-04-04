@@ -1,6 +1,6 @@
-import { Metric, type MetricResult } from '@mastra/core/eval';
+import { Metric, type EvaluationResult } from '@mastra/core/eval';
 
-interface WordInclusionResult extends MetricResult {
+interface WordInclusionResult extends EvaluationResult {
   score: number;
   info: {
     totalWords: number;

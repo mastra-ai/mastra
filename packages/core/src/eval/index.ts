@@ -1,3 +1,4 @@
-export { Metric, type MetricResult } from './metric';
+export { Metric } from './metric';
 export { evaluate } from './evaluation';
-export type { TestInfo, EvaluationResult } from './types';
+export type { TestInfo } from './types';
+export { Evaluator, type EvaluatorSettings, type EvaluationResult } from './evaluator';

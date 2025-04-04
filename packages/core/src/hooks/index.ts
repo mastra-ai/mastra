@@ -1,4 +1,5 @@
-import type { Metric, MetricResult } from '../eval/metric';
+import type { Evaluator, EvaluationResult } from '../eval/evaluator';
+import type { Metric } from '../eval/metric';
 import type { TestInfo } from '../eval/types';
 
 import mitt from './mitt';
@@ -14,7 +15,7 @@ const hooks = mitt();
 type EvaluationHookData = {
   input: string;
   output: string;
-  result: MetricResult;
+  result: EvaluationResult;
   agentName: string;
   metricName: string;
   instructions: string;
@@ -26,7 +27,7 @@ type EvaluationHookData = {
 type GenerationHookData = {
   input: string;
   output: string;
-  metric: Metric;
+  metric: Metric | Evaluator;
   runId: string;
   agentName: string;
   instructions: string;
@@ -44,6 +45,7 @@ export function executeHook(hook: AvailableHooks.ON_GENERATION, action: Generati
 export function executeHook(hook: `${AvailableHooks}`, data: unknown): void {
   // do not block the main thread
   setImmediate(() => {
+    console.log('Executing hook', hook, data);
     hooks.emit(hook, data);
   });
 }

@@ -26,7 +26,7 @@ The example shows how to:
 Import the necessary dependencies:
 
 ```typescript copy showLineNumbers filename="src/index.ts"
-import { Metric, type MetricResult } from '@mastra/core/eval';
+import { Metric, type EvaluationResult } from '@mastra/core/eval';
 ```
 
 ## Metric Implementation
@@ -34,7 +34,7 @@ import { Metric, type MetricResult } from '@mastra/core/eval';
 Create the Word Inclusion metric:
 
 ```typescript copy showLineNumbers{3} filename="src/index.ts"
-interface WordInclusionResult extends MetricResult {
+interface WordInclusionResult extends EvaluationResult {
   score: number;
   info: {
     totalWords: number;

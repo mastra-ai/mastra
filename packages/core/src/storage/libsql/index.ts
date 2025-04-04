@@ -1,7 +1,7 @@
 import { join, resolve, isAbsolute } from 'node:path';
 import { createClient } from '@libsql/client';
 import type { Client, InValue } from '@libsql/client';
-import type { MetricResult, TestInfo } from '../../eval';
+import type { EvaluationResult, TestInfo } from '../../eval';
 import type { MessageType, StorageThreadType } from '../../memory/types';
 import type { WorkflowRunState } from '../../workflows';
 import { MastraStorage } from '../base';
@@ -436,13 +436,13 @@ export class LibSQLStore extends MastraStorage {
     const testInfoValue = row.test_info ? JSON.parse(row.test_info as string) : undefined;
 
     if (!resultValue || typeof resultValue !== 'object' || !('score' in resultValue)) {
-      throw new Error(`Invalid MetricResult format: ${JSON.stringify(resultValue)}`);
+      throw new Error(`Invalid EvaluationResult format: ${JSON.stringify(resultValue)}`);
     }
 
     return {
       input: row.input as string,
       output: row.output as string,
-      result: resultValue as MetricResult,
+      result: resultValue as EvaluationResult,
       agentName: row.agent_name as string,
       metricName: row.metric_name as string,
       instructions: row.instructions as string,

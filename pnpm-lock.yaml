@@ -235,6 +235,9 @@ importers:
       '@mastra/core':
         specifier: workspace:*
         version: link:../../packages/core
+      '@mastra/evals':
+        specifier: workspace:*
+        version: link:../../packages/evals
       zod:
         specifier: ^3.24.2
         version: 3.24.2

@@ -29,6 +29,26 @@
         "default": "./dist/metrics/judge/index.cjs"
       }
     },
+    "./evaluators/code": {
+      "import": {
+        "types": "./dist/evaluators/code/index.d.ts",
+        "default": "./dist/evaluators/code/index.js"
+      },
+      "require": {
+        "types": "./dist/evaluators/code/index.d.cts",
+        "default": "./dist/evaluators/code/index.cjs"
+      }
+    },
+    "./evaluators/llm": {
+      "import": {
+        "types": "./dist/evaluators/llm/index.d.ts",
+        "default": "./dist/evaluators/llm/index.js"
+      },
+      "require": {
+        "types": "./dist/evaluators/llm/index.d.cts",
+        "default": "./dist/evaluators/llm/index.cjs"
+      }
+    },
     "./nlp": {
       "import": {
         "types": "./dist/metrics/nlp/index.d.ts",
@@ -53,9 +73,9 @@
   },
   "scripts": {
     "check": "tsc --noEmit",
-    "build": "pnpm check && tsup src/index.ts src/metrics/judge/index.ts src/metrics/llm/index.ts src/metrics/nlp/index.ts --format esm,cjs --experimental-dts --clean --treeshake=smallest --splitting",
+    "build": "pnpm check && tsup src/index.ts src/metrics/judge/index.ts src/metrics/llm/index.ts src/metrics/nlp/index.ts src/evaluators/code/index.ts src/evaluators/llm/index.ts --format esm,cjs --experimental-dts --clean --treeshake=smallest --splitting",
     "build:watch": "pnpm build --watch",
-    "test": "vitest",
+    "test": "vitest run",
     "lint": "eslint ."
   },
   "keywords": [],

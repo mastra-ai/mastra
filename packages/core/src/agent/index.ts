@@ -18,7 +18,7 @@ import type { ZodSchema, z } from 'zod';
 
 import type { MastraPrimitives, MastraUnion } from '../action';
 import { MastraBase } from '../base';
-import type { Metric } from '../eval';
+import type { Evaluator, Metric } from '../eval';
 import { AvailableHooks, executeHook } from '../hooks';
 import type { GenerateReturn, StreamReturn } from '../llm';
 import type { MastraLLMBase } from '../llm/model';
@@ -52,7 +52,7 @@ export * from './types';
 export class Agent<
   TAgentId extends string = string,
   TTools extends ToolsInput = ToolsInput,
-  TMetrics extends Record<string, Metric> = Record<string, Metric>,
+  TMetrics extends Record<string, Metric | Evaluator> = Record<string, Metric>,
 > extends MastraBase {
   public name: TAgentId;
   readonly llm: MastraLLMBase;

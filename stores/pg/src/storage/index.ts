@@ -1,4 +1,4 @@
-import type { MetricResult } from '@mastra/core/eval';
+import type { EvaluationResult } from '@mastra/core/eval';
 import type { MessageType, StorageThreadType } from '@mastra/core/memory';
 import {
   MastraStorage,
@@ -85,7 +85,7 @@ export class PostgresStore extends MastraStorage {
       agentName: row.agent_name as string,
       input: row.input as string,
       output: row.output as string,
-      result: row.result as MetricResult,
+      result: row.result as EvaluationResult,
       metricName: row.metric_name as string,
       instructions: row.instructions as string,
       testInfo: testInfoValue,
