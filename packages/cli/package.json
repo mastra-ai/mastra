@@ -22,6 +22,7 @@
     "copy-templates": "cpy \"src/templates/**/*\" \"dist/templates/\"",
     "build:playground": "cd ../cli/src/playground && pnpm build",
     "dev:playground": "cd src/playground && pnpm dev",
+    "build:with-playground-ui": "cd ../playground-ui && pnpm build && cd ../cli && pnpm build",
     "test": "vitest run",
     "test:watch": "vitest watch",
     "clean": "rm -rf dist && rm -rf node_modules",
