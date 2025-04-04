@@ -3463,13 +3463,13 @@ describe('Workflow', async () => {
       expect(results['nested-workflow-b'].output.results).toEqual({
         start: { output: { newValue: 1 }, status: 'success' },
         final: { output: { finalValue: 1 }, status: 'success' },
-        __start_else: {
+        __start_else_1: {
           output: {
             executed: true,
           },
           status: 'success',
         },
-        __start_if: {
+        __start_if_1: {
           status: 'skipped',
         },
       });

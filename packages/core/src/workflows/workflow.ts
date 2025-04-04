@@ -68,6 +68,7 @@ export class Workflow<
   #stepSubscriberGraph: Record<string, StepGraph> = {};
   #serializedStepSubscriberGraph: Record<string, StepGraph> = {};
   #steps: Record<string, StepNode> = {};
+  #ifCount: number = 0;
 
   /**
    * Creates a new Workflow instance
@@ -739,7 +740,8 @@ export class Workflow<
     ifStep?: TStep | Workflow,
     elseStep?: TStep | Workflow,
   ) {
-    const lastStep = this.#getLastStep({ else_check: this.#lastBuilderType !== 'else' });
+    this.#ifCount++;
+    const lastStep = this.#getLastStep({ if_else_check: this.#lastBuilderType !== 'else' });
     if (!lastStep) {
       throw new Error('Condition requires a step to be executed after');
     }
@@ -787,7 +789,7 @@ export class Workflow<
       return this;
     }
 
-    const ifStepKey = `__${lastStep.id}_if`;
+    const ifStepKey = `__${lastStep.id}_if_${this.#ifCount}`;
     this.step(
       {
         id: ifStepKey,
@@ -801,7 +803,7 @@ export class Workflow<
       },
     );
 
-    const elseStepKey = `__${lastStep.id}_else`;
+    const elseStepKey = `__${lastStep.id}_else_${this.#ifCount}`;
     this.#ifStack.push({ condition, elseStepKey, condStep: lastStep.step });
 
     this.#lastBuilderType = 'if';
@@ -1016,12 +1018,12 @@ export class Workflow<
     return parentStepKey;
   }
 
-  #getLastStep({ else_check }: { else_check: boolean }) {
+  #getLastStep({ if_else_check }: { if_else_check: boolean }) {
     let lastStep = undefined;
     for (let i = this.#lastStepStack.length - 1; i >= 0; i--) {
       const stepKey = this.#lastStepStack[i];
       const step = this.#steps[stepKey ?? ''];
-      if (step && (else_check ? !step.id.includes('_else') : true)) {
+      if (stepKey && step && (if_else_check ? !isConditionalKey(stepKey) : true)) {
         lastStep = step;
         break;
       }
