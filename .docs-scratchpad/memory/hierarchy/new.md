@@ -67,7 +67,7 @@ This is a high level overview for the new info arch for Mastra Memory documentat
        - [ ] Add diagrams illustrating working memory flow
    - [ ] 3.4. Frontend UI (Matra client + useChat)
        - [x] Initial draft ./new-docs/3-using-memory/3.4-frontend-integration.md
-       - [ ] Pair review / edits
+       - [x] Pair review / edits
        - [ ] Compare with user feedback (omicrxn threads)
        - [ ] Move into actual docs page
        - [ ] Add React/Next.js example
