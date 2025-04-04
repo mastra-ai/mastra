@@ -16,7 +16,7 @@ yarn add @mastra/memory
 
 By default, Mastra memory uses LibSQL for storage and FastEmbed for embeddings, which are included in the package.
 
-> For deployment considerations or troubleshooting installation issues, see the [Configuring Memory](../5-configuring-memory/index.md) and [Debugging Memory](../6-debugging-memory/index.md) guides.
+> For deployment considerations or troubleshooting installation issues, see the [Configuring Memory](./configuring-memory.mdx) guide.
 
 ## Adding Memory to an Agent
 
@@ -27,23 +27,20 @@ import { Agent } from "@mastra/core/agent";
 import { Memory } from "@mastra/memory";
 import { openai } from "@ai-sdk/openai";
 
-// Create a memory instance
-const memory = new Memory();
-
-// Attach memory to an agent
+// Create an agent with memory
 const agent = new Agent({
   name: "MyAgent",
   instructions: "You are a helpful assistant.",
   model: openai("gpt-4o"),
-  memory: memory,
+  memory: new Memory(),
 });
 ```
 
-For more advanced configuration options, see the [Configuring Memory](../5-configuring-memory/index.md) guide.
+For more advanced configuration options, see the [Configuring Memory](./configuring-memory.mdx) guide.
 
 ## Using Memory in Conversations
 
-To use memory, you **must** provide both `resourceId` and `threadId` when calling the agent:
+To use memory, you **must** provide both `resourceId` and `threadId` when calling the agent. The `resourceId` typically represents a user ID, while the `threadId` represents a specific conversation. Using consistent IDs ensures continuity across interactions:
 
 ```typescript
 // First interaction
@@ -59,15 +56,13 @@ await agent.stream("What's my name again?", {
 });
 ```
 
-> **Important**: Both parameters are required for memory to function. The `resourceId` typically represents a user ID, while the `threadId` represents a specific conversation. Using consistent IDs ensures continuity across interactions.
-
 The agent will automatically:
 
 - Store all messages in the conversation
 - Retrieve relevant context in future interactions
 - Maintain conversation continuity
 
-## Trying It Out (Playground)
+## Trying It Out
 
 The fastest way to experiment with Mastra's memory system is to use the playground, a built-in development environment for testing your agents. The playground provides a chat interface for testing your agent's capabilities in real-time. [Learn more about the playground](/docs/local-dev/mastra-dev#dev-playground).
 
@@ -112,5 +107,4 @@ The fastest way to experiment with Mastra's memory system is to use the playgrou
 
 > **Note**: When you deploy your agent, you'll need to explicitly pass resourceId and threadId as shown in the previous section.
 
-Continue to [Using Memory](../3-using-memory/index.md) to learn more about advanced memory features.
-
+Continue to [Last Messages](./last-messages.mdx) to learn more about basic memory features.

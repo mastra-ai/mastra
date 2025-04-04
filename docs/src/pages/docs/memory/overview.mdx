@@ -2,7 +2,7 @@
 
 For agents, Memory is an automated system that manages which information the LLM can use to generate each new response. Think of it as the agent's "active awareness" - what it can consider and access when responding to you.
 
-## The Context Window: An Agent's View of the Conversation
+## The Context Window
 
 The context window is the "window" of information visible to the language model at any given time. Anything outside this window is inaccessible to the model when generating its response.
 
@@ -30,26 +30,25 @@ With memory, your agent can:
 **Without Memory:**
 
 ```
-→ User: My name is Jamie, I live in Toronto.
-← Agent: Nice to meet you, Jamie!
-→ User: What's the weather like near me?
-← Agent: I don't know where you're located. Could you please share your location?
+➡️ User: My name is Jamie, I live in Toronto.
+⬅️ Agent: Nice to meet you, Jamie!
+➡️ User: What's the weather like near me?
+⬅️ Agent: I don't know where you're located. Could you please share your location?
 ```
 
 **With Memory:**
 
 ```
-→ User: My name is Jamie, I live in Toronto.
-← Agent: Nice to meet you, Jamie!
-→ User: What's the weather like near me?
-⚡ Tool: checkWeather("Toronto")
-← Agent: Based on the weather data, it's currently 18°C and partly cloudy in Toronto, Jamie.
-
-[The next day...]
-
-→ User: What's the weather like today?
-⚡ Tool: checkWeather("Toronto")
-← Agent: In Toronto today, it's 22°C and sunny. Looks like it's warmer than yesterday!
+➡️ User: My name is Jamie, I live in Toronto.
+⬅️ Agent: Nice to meet you, Jamie!
+➡️ User: What's the weather like near me?
+⚡️ Tool: checkWeather("Toronto")
+⬅️ Agent: Based on the weather data, it's currently 18°C and partly cloudy in Toronto, Jamie.
+⏳ ...
+⌛️ ...
+➡️ User: What's the weather like today?
+⚡️ Tool: checkWeather("Toronto")
+⬅️ Agent: In Toronto today, it's 22°C and sunny. Looks like it's warmer than yesterday!
 ```
 
 ## Types of Memory
