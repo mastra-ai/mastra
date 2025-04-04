@@ -47,11 +47,51 @@ const ShowcaseCard = ({
 export const ShowcaseGrid = () => {
   const showcaseItems: ShowcaseCardProps[] = [
     {
+      title: "Olive",
+      description:
+        "Generate powerful tools and dashboards connected to your data sources in minutes.",
+      image: "/showcase/from-olive.png",
+      link: "https://fromolive.com/",
+    },
+    {
+      title: "Artifact",
+      description:
+        "Artifact is an electrical system design tool that lets you design at any level of fidelity - from concept to connecto",
+      image: "/showcase/artifact-engineer.png",
+      link: "https://www.artifact.engineer/",
+    },
+    {
+      title: "Vetnio",
+      description: "Automatic Medical Notes For Veterinary Professionals",
+      image: "/showcase/vetnio.png",
+      link: "https://vetnio.com/home/en",
+    },
+    {
+      title: "Dalus",
+      description:
+        "AI-Powered Systems Engineering for Mission-Critical Hardware",
+      image: "/showcase/dalus-io.png",
+      link: "https://www.dalus.io/",
+    },
+    {
+      title: "Demeter",
+      description: "Instant portfolio insights across all your investments",
+      image: "/showcase/demeter.png",
+      link: "https://www.demeter.ai/",
+    },
+
+    {
       title: "NotebookLM-Mastra",
       description:
         "NotebookLM is an AI-powered assistant that creates podcasts from the sources you upload",
       image: "/showcase/notebook-lm.png",
       link: "https://notebooklm-mastra.vercel.app/",
+    },
+    {
+      title: "Repo Base",
+      description: "Chat with any GitHub repository. Understand code faster.",
+      image: "/showcase/repo-base.png",
+      link: "https://repo-base.vercel.app/",
     },
     {
       title: "AI Beats Lab",
@@ -76,9 +116,15 @@ export const ShowcaseGrid = () => {
     },
     {
       title: "Ecommerce RAG",
-      description: "An RAG application for an ecommerce website",
+      description: "A RAG application for an ecommerce website",
       image: "/showcase/ecommerce-rag.png",
       link: "https://nextjs-commerce-nu-eight-83.vercel.app/",
+    },
+    {
+      title: "Text-to-SQL",
+      description: "Generate SQL queries from natural language",
+      image: "/showcase/text-to-sql.png",
+      link: "https://mastra-text-to-sql.vercel.app/",
     },
   ];
 
