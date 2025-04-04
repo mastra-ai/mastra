@@ -3,7 +3,7 @@
 import { format, isValid } from 'date-fns';
 import { CalendarIcon } from 'lucide-react';
 import * as React from 'react';
-import type { PropsSingle } from 'react-day-picker';
+import type { DayPickerSingleProps } from 'react-day-picker';
 import { useDebouncedCallback } from 'use-debounce';
 
 import { cn } from '../../lib/utils';
@@ -13,7 +13,7 @@ import { Calendar } from './calendar';
 import { Input } from './input';
 import { Popover, PopoverContent, PopoverTrigger } from './popover';
 
-type CommonProps = Omit<PropsSingle, 'mode' | 'selected' | 'onSelect'> & {
+type CommonProps = Omit<DayPickerSingleProps, 'mode' | 'selected' | 'onSelect'> & {
   value: Date | undefined | null;
   setValue: (date: Date | undefined | null) => void;
   clearable?: boolean;
