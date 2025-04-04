@@ -538,7 +538,7 @@ describe('agent', () => {
       expect(capturedValue).toBe('container-value');
     }, 500000);
 
-    it.only('should make container available to tools when injected in stream', async () => {
+    it('should make container available to tools when injected in stream', async () => {
       const testContainer = new Container([['test-value', 'container-value']]);
       let capturedValue: string | null = null;
 
