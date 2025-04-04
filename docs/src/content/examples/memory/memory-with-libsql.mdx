@@ -33,7 +33,9 @@ import { LibSQLVector } from "@mastra/core/vector/libsql";
 
 const customMemory = new Memory({
   storage: new LibSQLStore({
-    url: process.env.DATABASE_URL || "file:local.db",
+    config: {
+      url: process.env.DATABASE_URL || "file:local.db",
+    },
   }),
   vector: new LibSQLVector({
     connectionUrl: process.env.DATABASE_URL || "file:local.db",
@@ -52,7 +54,7 @@ const memoryAgent = new Agent({
   instructions:
     "You are an AI agent with the ability to automatically recall memories from previous interactions. You may have conversations that last hours, days, months, or years. If you don't know it already you should ask for the users name and some info about them.",
   model: openai('gpt-4o-mini'),
-  memory,
+  memory: customMemory,
 });
 ```
 

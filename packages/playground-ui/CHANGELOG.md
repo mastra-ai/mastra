@@ -1,5 +1,17 @@
 # @mastra/playground-ui
 
+## 4.0.0-alpha.6
+
+### Patch Changes
+
+- 9d13790: update playground-ui dynamic form, cleanups
+- 40dca45: Fix expanding workflow sidebar not expanding the output section
+- d16ed18: Make playground-ui dynamic forms better
+- Updated dependencies [a3f0e90]
+- Updated dependencies [5646a01]
+  - @mastra/core@0.8.0-alpha.6
+  - @mastra/client-js@0.1.14-alpha.6
+
 ## 4.0.0-alpha.5
 
 ### Patch Changes

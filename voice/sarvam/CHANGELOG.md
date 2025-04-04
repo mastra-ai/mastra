@@ -1,5 +1,12 @@
 # @mastra/voice-sarvam
 
+## 0.1.5-alpha.6
+
+### Patch Changes
+
+- Updated dependencies [a3f0e90]
+  - @mastra/core@0.8.0-alpha.6
+
 ## 0.1.5-alpha.5
 
 ### Patch Changes

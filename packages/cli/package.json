@@ -1,6 +1,6 @@
 {
   "name": "mastra",
-  "version": "0.4.5-alpha.7",
+  "version": "0.4.5-alpha.8",
   "license": "ISC",
   "description": "cli for mastra",
   "type": "module",
@@ -22,6 +22,7 @@
     "copy-templates": "cpy \"src/templates/**/*\" \"dist/templates/\"",
     "build:playground": "cd ../cli/src/playground && pnpm build",
     "dev:playground": "cd src/playground && pnpm dev",
+    "build:with-playground-ui": "cd ../playground-ui && pnpm build && cd ../cli && pnpm build",
     "test": "vitest run",
     "test:watch": "vitest watch",
     "clean": "rm -rf dist && rm -rf node_modules",
@@ -53,6 +54,7 @@
     "@mastra/core": "workspace:^",
     "@mastra/deployer": "workspace:^",
     "@opentelemetry/instrumentation": "^0.57.2",
+    "@webcontainer/env": "^1.1.1",
     "commander": "^12.1.0",
     "dotenv": "^16.4.7",
     "execa": "^9.5.2",

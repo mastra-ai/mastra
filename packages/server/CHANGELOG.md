@@ -1,5 +1,13 @@
 # @mastra/deployer
 
+## 0.0.1-alpha.4
+
+### Patch Changes
+
+- a3f0e90: Update storage initialization to ensure tables are present
+- Updated dependencies [a3f0e90]
+  - @mastra/core@0.8.0-alpha.6
+
 ## 0.0.1-alpha.3
 
 ### Patch Changes
