@@ -11,7 +11,7 @@ export function AgentInformation({ agentId }: { agentId: string }) {
       <TabsList className="flex shrink-0 border-b">
         <TabsTrigger value="details" className="group">
           <p className="text-xs p-3 text-mastra-el-3 group-data-[state=active]:text-mastra-el-5 group-data-[state=active]:border-b-2 group-data-[state=active]:pb-2.5 border-white">
-            Details
+            Overview
           </p>
         </TabsTrigger>
         <TabsTrigger value="instructions" className="group">

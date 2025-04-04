@@ -24,6 +24,7 @@ export function MastraRuntimeProvider({
   threadId,
   baseUrl,
   refreshThreadList,
+  modelSettings = {},
 }: Readonly<{
   children: ReactNode;
 }> &
@@ -31,6 +32,9 @@ export function MastraRuntimeProvider({
   const [isRunning, setIsRunning] = useState(false);
   const [messages, setMessages] = useState<ThreadMessageLike[]>([]);
   const [currentThreadId, setCurrentThreadId] = useState<string | undefined>(threadId);
+
+  const { frequencyPenalty, presencePenalty, maxRetries, maxSteps, maxTokens, temperature, topK, topP, instructions } =
+    modelSettings;
 
   useEffect(() => {
     const hasNewInitialMessages = initialMessages && initialMessages?.length > messages?.length;
@@ -84,6 +88,15 @@ export function MastraRuntimeProvider({
           },
         ],
         runId: agentId,
+        frequencyPenalty,
+        presencePenalty,
+        maxRetries,
+        maxSteps,
+        maxTokens,
+        temperature,
+        topK,
+        topP,
+        instructions,
         ...(memory ? { threadId, resourceId: agentId } : {}),
       });
 
@@ -220,6 +233,10 @@ export function MastraRuntimeProvider({
     } catch (error) {
       console.error('Error occurred in MastraRuntimeProvider', error);
       setIsRunning(false);
+      setMessages(currentConversation => [
+        ...currentConversation,
+        { role: 'assistant', content: [{ type: 'text', text: `Error: ${error}` as string }] },
+      ]);
     }
   };
 
