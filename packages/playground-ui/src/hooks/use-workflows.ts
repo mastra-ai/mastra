@@ -68,7 +68,7 @@ export const useExecuteWorkflow = (baseUrl: string) => {
   const executeWorkflow = async ({ workflowId, input }: { workflowId: string; input: any }) => {
     try {
       setIsExecutingWorkflow(true);
-      const response = await client.getWorkflow(workflowId).execute(input || {});
+      const response = await client.getWorkflow(workflowId).startAsync(input || {});
       return response;
     } catch (error) {
       console.error('Error executing workflow:', error);
