@@ -1,5 +1,12 @@
 # @mastra/clickhouse
 
+## 0.2.7-alpha.5
+
+### Patch Changes
+
+- Updated dependencies [a3f0e90]
+  - @mastra/core@0.8.0-alpha.6
+
 ## 0.2.7-alpha.4
 
 ### Patch Changes

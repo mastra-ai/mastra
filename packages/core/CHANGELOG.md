@@ -1,5 +1,11 @@
 # @mastra/core
 
+## 0.8.0-alpha.6
+
+### Patch Changes
+
+- a3f0e90: Update storage initialization to ensure tables are present
+
 ## 0.8.0-alpha.5
 
 ### Patch Changes
