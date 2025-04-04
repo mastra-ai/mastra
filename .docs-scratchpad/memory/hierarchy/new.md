@@ -57,11 +57,11 @@ This is a high level overview for the new info arch for Mastra Memory documentat
        - [ ] Move into actual docs page
    - [ ] 3.3. Continuously relevant information (Working memory)
        - [x] Initial draft ./new-docs/3-using-memory/3.3-working-memory.md
-       - [ ] Add clearer explanation of working memory modes (text-stream vs tool-call)
-       - [ ] Explain working memory scoping (per thread, not per agent)
-       - [ ] Add template design best practices
-       - [ ] Include code examples for programmatically accessing/modifying working memory
-       - [ ] Pair review / edits
+       - [x] Add clearer explanation of working memory modes (text-stream vs tool-call)
+       - [x] Explain working memory scoping (per thread, not per agent)
+       - [x] Add template design best practices
+       - [x] Include code examples for programmatically accessing/modifying working memory
+       - [x] Pair review / edits
        - [ ] Compare with user feedback
        - [ ] Move into actual docs page
        - [ ] Add diagrams illustrating working memory flow
