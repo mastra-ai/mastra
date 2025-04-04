@@ -1,5 +1,15 @@
 # @mastra/deployer
 
+## 0.2.6-alpha.9
+
+### Patch Changes
+
+- 3c6ae54: Fix fastembed part of dependencies
+- febc8a6: Added dual tracing and fixed local tracing recursion
+- Updated dependencies [febc8a6]
+  - @mastra/server@0.0.1-alpha.5
+  - @mastra/core@0.8.0-alpha.7
+
 ## 0.2.6-alpha.8
 
 ### Patch Changes
