@@ -10,12 +10,33 @@ export class CompositeExporter implements SpanExporter {
   }
 
   export(spans: ReadableSpan[], resultCallback: (result: ExportResult) => void): void {
+    console.log('[CompositeExporter] Exporting spans...');
+    // First collect all traceIds from telemetry endpoint spans
+    const telemetryTraceIds = new Set(
+      spans
+        .filter(span => {
+          const attrs = span.attributes || {};
+          const httpTarget = attrs['http.target'] as string;
+          return httpTarget === '/api/telemetry';
+        })
+        .map(span => span.spanContext().traceId),
+    );
+
+    // Then filter out any spans that have those traceIds
+    const filteredSpans = spans.filter(span => !telemetryTraceIds.has(span.spanContext().traceId));
+
+    // Return early if no spans to export
+    if (filteredSpans.length === 0) {
+      resultCallback({ code: ExportResultCode.SUCCESS });
+      return;
+    }
+
     void Promise.all(
       this.exporters.map(
         exporter =>
           new Promise<ExportResult>(resolve => {
             if (exporter.export) {
-              exporter.export(spans, resolve);
+              exporter.export(filteredSpans, resolve);
             } else {
               resolve({ code: ExportResultCode.FAILED });
             }

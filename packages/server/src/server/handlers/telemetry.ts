@@ -1,4 +1,3 @@
-import { TABLE_TRACES } from '@mastra/core/storage';
 import { HTTPException } from '../http-exception';
 import type { Context } from '../types';
 
@@ -68,6 +67,10 @@ export async function storeTelemetryHandler({ mastra, body }: Context & { body: 
     const now = new Date();
 
     const items = body?.resourceSpans?.[0]?.scopeSpans;
+    console.log('[Telemetry Handler] Received spans:', {
+      totalSpans: items?.reduce((acc: number, scope: { spans: any[] }) => acc + scope.spans.length, 0) || 0,
+      timestamp: now.toISOString(),
+    });
     if (!items?.length) {
       return {
         status: 'success',
@@ -126,8 +129,7 @@ export async function storeTelemetryHandler({ mastra, body }: Context & { body: 
     }, []);
 
     return storage
-      .__batchInsert({
-        tableName: TABLE_TRACES,
+      .__batchTraceInsert({
         records: allSpans,
       })
       .then(() => {
