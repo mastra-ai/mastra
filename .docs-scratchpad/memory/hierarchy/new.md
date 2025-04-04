@@ -1,3 +1,49 @@
+# Monday To-Do List (Memory Documentation Review)
+
+## Documentation Review Tasks
+- [ ] Review all MDX files in the memory documentation section in order
+- [ ] Check content, examples, and cross-links in each file
+- [ ] Ensure consistent tone and formatting across all pages
+- [ ] Verify that code examples are correct and up-to-date
+- [ ] Shorten overly long H1 headings that wrap to multiple lines
+
+## Missing Content to Create
+- [ ] Create deployment options documentation
+  - [ ] Outline considerations for different hosting providers
+  - [ ] Document database requirements for each hosting environment 
+  - [ ] Add specific instructions for Vercel, Netlify, and Cloudflare
+- [ ] Add Mastra memory features list to overview page
+  - [ ] Include links to each feature page with one-sentence descriptions
+- [ ] Consider adding tool calling page under memory section
+  - [ ] Document the tool call filter processor
+  - [ ] Explain how tool calling interacts with memory
+- [ ] Add link to memory processors reference page in token management section
+- [ ] Create text diagram for context window in overview page
+  - [ ] Visualize the structure of a context window and its components
+  - [ ] Show how different types of information are organized in the context
+- [ ] Generate proper images for diagrams
+  - [ ] Use ChatGPT to create professional images for text-based diagrams
+  - [ ] If needed, create mermaid diagrams as an alternative
+- [ ] Streamline Getting Started page
+  - [ ] Address repetition between Installation, Adding Memory, Using Memory, and Trying It Out sections
+  - [ ] Either consolidate similar content or reorganize for better flow
+  - [ ] Consider making Trying It Out the primary example and simplifying earlier sections
+
+## Redirects and Integration
+- [ ] Update the existing agents memory page
+  - [ ] Either redirect to the new memory overview
+  - [ ] Or update with minimal content that links to the new memory section
+- [ ] Reorder pages in _meta.ts
+  - [ ] Move the architecture page above the FAQ in the navigation
+  - [ ] Move memory threads higher in the sidebar (above similarity search or conversation history)
+
+## Final Validation
+- [ ] Test all links between documentation pages
+- [ ] Ensure navigation is intuitive and logical
+- [ ] Review for any missing content or gaps in the documentation
+
+---
+
 # Mastra Memory Documentation Checklist
 
 This is a high level overview for the new info arch for Mastra Memory documentation
