@@ -32,3 +32,4 @@ export * from './database';
 export * from './wordpress';
 
 export { browserTool } from './browser';
+export { serpApiTool } from './serpapi';

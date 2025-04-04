@@ -1,5 +1,5 @@
 import { Agent } from '@mastra/core/agent';
-import { weatherTool } from '../tools';
+import { weatherTool, serpApiTool } from '../tools';
 import { geminiModel } from '../models';
 export * from './contentPublisherAgent';
 export * from './browserAgent';
@@ -20,6 +20,20 @@ export const weatherAgent = new Agent({
   `,
   model: geminiModel,
   tools: { weatherTool },
+});
+
+export const searchAgent = new Agent({
+  name: 'Search Agent',
+  instructions: `
+      You are a helpful search assistant. You search the web and provide relevant information based on queries.
+      
+      - Include titles, links, and snippets from search results
+      - Summarize the information in a clear and concise manner
+      
+      Use the serpApiTool to perform web searches and retrieve information.
+  `,
+  model: geminiModel,
+  tools: { serpApiTool },
 });
 
 // コンテンツプランナーエージェント（改善版）

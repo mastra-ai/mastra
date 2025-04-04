@@ -8,6 +8,7 @@ import {
   editorAgent,
   contentPublisherAgent,
   browserAgent,
+  searchAgent,
 } from './agents';
 import { escortBlogWorkflow } from './workflows/blogWorkflow';
 import { browserWorkflow } from './workflows/browserWorkflow';
@@ -20,6 +21,7 @@ export const mastra = new Mastra({
     editorAgent,
     contentPublisherAgent,
     browserAgent,
+    searchAgent,
   },
   workflows: {
     escortBlogWorkflow,
@@ -33,6 +35,7 @@ export const mastra = new Mastra({
 
 // Browser automation exports
 export * from './mcp';
-export { browserTool } from './tools';
+export { browserTool, serpApiTool } from './tools';
 export { browserAgent, createBrowserAgentWithMCP } from './agents/browserAgent';
+export { searchAgent, weatherAgent } from './agents';
 export { browserWorkflow } from './workflows/browserWorkflow';
