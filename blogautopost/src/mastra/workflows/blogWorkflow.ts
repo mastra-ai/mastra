@@ -1,76 +1,33 @@
 import { Workflow, Step } from '@mastra/core/workflows';
 import { z } from 'zod';
-import { 
-  keywordResearcherAgent, 
-  contentPlannerAgent, 
-  blogWriterAgent, 
-  editorAgent,
-  contentPublisherAgent
-} from '../agents';
+import { contentPlannerAgent, blogWriterAgent, editorAgent, contentPublisherAgent } from '../agents';
 
 // 学童えすこーと専用ブログ生成ワークフロー（改善版）
 export const escortBlogWorkflow = new Workflow({
-  name: "escort-blog-workflow",
+  name: 'escort-blog-workflow',
   triggerSchema: z.object({
-    topic: z.string().describe("学童えすこーとサービスに関連するブログトピック"),
-    targetAge: z.string().optional().describe("対象となる子どもの年齢層（例：低学年、高学年、全学年）"),
-    serviceFeature: z.string().optional().describe("アピールしたいサービスの特徴（例：送迎、習い事、学習支援）"),
-    targetAudience: z.string().optional().describe("主なターゲット層（例：共働き家庭、転勤の多い家庭）"),
-    seasonality: z.string().optional().describe("季節性やイベント（例：夏休み、冬休み、新学期）"),
+    topic: z.string().describe('学童えすこーとサービスに関連するブログトピック'),
+    targetAge: z.string().optional().describe('対象となる子どもの年齢層（例：低学年、高学年、全学年）'),
+    serviceFeature: z.string().optional().describe('アピールしたいサービスの特徴（例：送迎、習い事、学習支援）'),
+    targetAudience: z.string().optional().describe('主なターゲット層（例：共働き家庭、転勤の多い家庭）'),
+    seasonality: z.string().optional().describe('季節性やイベント（例：夏休み、冬休み、新学期）'),
   }),
 });
 
-// Step 1: キーワードリサーチのステップ（改善版）
-const keywordStep = new Step({
-  id: "keywordResearchStep",
-  execute: async ({ context }) => {
-    const topic = context.triggerData.topic;
-    const targetAge = context.triggerData.targetAge || "小学生全般";
-    const serviceFeature = context.triggerData.serviceFeature || "総合的なサービス";
-    const targetAudience = context.triggerData.targetAudience || "共働き家庭";
-    const seasonality = context.triggerData.seasonality || "通年";
-    
-    // ラッコキーワードツールを使ってキーワードリサーチを実行
-    const keywordResult = await keywordResearcherAgent.generate(`
-      「${topic}」について、学童保育・えすこーとサービスの文脈で使えるキーワードを調査してください。
-
-      【調査条件】
-      - 対象年齢：「${targetAge}」
-      - アピールしたいサービス特徴：「${serviceFeature}」
-      - ターゲット層：「${targetAudience}」
-      - 季節性：「${seasonality}」
-
-      rakkoKeywordTool を使って関連キーワードを検索し、以下の情報を整理してください：
-      
-      1. メインキーワード（1-2語）
-      2. 関連キーワード（5-8個）
-      3. 保護者が検索しそうなフレーズ（3-5個）
-      4. 検索ボリュームが高そうなキーワード組み合わせ
-      5. SEO戦略の提案
-    `);
-    
-    return { keywords: keywordResult.text };
-  },
-});
-
-// Step 2: コンテンツプランニングのステップ（改善版）
+// Step 1: コンテンツプランニングのステップ（改善版）
 const plannerStep = new Step({
-  id: "contentPlanningStep",
+  id: 'contentPlanningStep',
   execute: async ({ context }) => {
     const topic = context.triggerData.topic;
-    const keywords = context.getStepResult("keywordResearchStep")?.keywords;
-    const serviceFeature = context.triggerData.serviceFeature || "安全性と学習サポート";
-    const targetAge = context.triggerData.targetAge || "小学生全般";
-    const targetAudience = context.triggerData.targetAudience || "共働き家庭";
-    const seasonality = context.triggerData.seasonality || "通年";
-    
+    const serviceFeature = context.triggerData.serviceFeature || '安全性と学習サポート';
+    const targetAge = context.triggerData.targetAge || '小学生全般';
+    const targetAudience = context.triggerData.targetAudience || '共働き家庭';
+    const seasonality = context.triggerData.seasonality || '通年';
+
     const planResult = await contentPlannerAgent.generate(`
       「${topic}」についての学童えすこーとサービスのブログ記事の構成を作成してください。
       
       【記事作成条件】
-      - キーワード情報：
-      ${keywords}
-      
       - 特にアピールしたいサービスの特徴：${serviceFeature}
       - 対象年齢：${targetAge}
       - 主なターゲット層：${targetAudience}
@@ -92,22 +49,21 @@ const plannerStep = new Step({
       - 情報の流れが論理的かつ自然である
       - 検索意図に合致した内容構成にする
     `);
-    
+
     return { contentPlan: planResult.text };
   },
 });
 
-// Step 3: 記事執筆のステップ（改善版）
+// Step 2: 記事執筆のステップ（改善版）
 const writerStep = new Step({
-  id: "blogWritingStep",
+  id: 'blogWritingStep',
   execute: async ({ context }) => {
     const topic = context.triggerData.topic;
-    const contentPlan = context.getStepResult("contentPlanningStep")?.contentPlan;
-    const keywords = context.getStepResult("keywordResearchStep")?.keywords;
-    const serviceFeature = context.triggerData.serviceFeature || "安全性と学習サポート";
-    const targetAge = context.triggerData.targetAge || "小学生全般";
-    const targetAudience = context.triggerData.targetAudience || "共働き家庭";
-    
+    const contentPlan = context.getStepResult('contentPlanningStep')?.contentPlan;
+    const serviceFeature = context.triggerData.serviceFeature || '安全性と学習サポート';
+    const targetAge = context.triggerData.targetAge || '小学生全般';
+    const targetAudience = context.triggerData.targetAudience || '共働き家庭';
+
     const articleResult = await blogWriterAgent.generate(`
       以下の構成に基づいて、学童えすこーとサービスについての完全なブログ記事を執筆してください。
       
@@ -119,9 +75,6 @@ const writerStep = new Step({
       
       【コンテンツプラン】
       ${contentPlan}
-      
-      【キーワード情報】
-      ${keywords}
       
       【記事作成のガイドライン】
       1. 親しみやすく温かみのある文体で書く
@@ -137,27 +90,23 @@ const writerStep = new Step({
       
       完成した記事は、マークダウン形式で出力してください。
     `);
-    
+
     return { draft: articleResult.text };
   },
 });
 
-// Step 4: 編集ステップ
+// Step 3: 編集ステップ
 const editorStep = new Step({
-  id: "editingStep",
+  id: 'editingStep',
   execute: async ({ context }) => {
-    const draft = context.getStepResult("blogWritingStep")?.draft;
+    const draft = context.getStepResult('blogWritingStep')?.draft;
     const topic = context.triggerData.topic;
-    const keywords = context.getStepResult("keywordResearchStep")?.keywords;
-    
+
     const editResult = await editorAgent.generate(`
       以下のブログ記事を編集・改善してください。
       
       【記事情報】
       トピック：${topic}
-      
-      【キーワード情報】
-      ${keywords}
       
       【編集対象の記事】
       ${draft}
@@ -174,33 +123,31 @@ const editorStep = new Step({
       
       編集した完成版の記事をマークダウン形式で出力してください。
     `);
-    
+
     return { final_article: editResult.text };
   },
 });
 
-// Step 5: データベース保存とWordPress投稿ステップ
+// Step 4: データベース保存とWordPress投稿ステップ
 const publishStep = new Step({
-  id: "publishingStep",
+  id: 'publishingStep',
   execute: async ({ context }) => {
-    const article = context.getStepResult("editingStep")?.final_article;
+    const article = context.getStepResult('editingStep')?.final_article;
     const topic = context.triggerData.topic;
-    const keywords = context.getStepResult("keywordResearchStep")?.keywords;
-    
+
     // タイトルを抽出（マークダウンから最初の # 行を取得）
     const titleMatch = article.match(/^#\s(.+)$/m);
     const title = titleMatch ? titleMatch[1] : topic;
-    
+
     // メタディスクリプションを生成（最初の数行を使用）
     const firstParagraph = article.split('\n\n')[1] || '';
     const metaDescription = firstParagraph.substring(0, 155) + '...';
-    
+
     const publishResult = await contentPublisherAgent.generate(`
       以下のブログ記事をSupabaseデータベースに保存し、WordPressに投稿してください。
       
       【記事情報】
       タイトル：${title}
-      キーワード：${keywords}
       
       【記事内容】
       ${article}
@@ -220,7 +167,7 @@ const publishStep = new Step({
       5. 以下のSEO情報を設定してください：
          - メタタイトル：${title} | プリエスコート公式ブログ
          - メタディスクリプション：${metaDescription}
-         - フォーカスキーワード：${keywords.split(',')[0] || topic}
+         - フォーカスキーワード：${topic}
       
       注意:
       - **新しいカテゴリーを作成しないでください** - 権限エラーが発生します
@@ -229,19 +176,13 @@ const publishStep = new Step({
       
       処理結果を報告してください。WordPressの記事URL、ステータス、DBへの保存結果などを含めてください。
     `);
-    
-    return { 
+
+    return {
       title: title,
-      publishing_result: publishResult.text 
+      publishing_result: publishResult.text,
     };
   },
 });
 
 // ワークフローの構成
-escortBlogWorkflow
-  .step(keywordStep)
-  .then(plannerStep)
-  .then(writerStep)
-  .then(editorStep)
-  .then(publishStep)
-  .commit(); 
+escortBlogWorkflow.step(plannerStep).then(writerStep).then(editorStep).then(publishStep).commit();

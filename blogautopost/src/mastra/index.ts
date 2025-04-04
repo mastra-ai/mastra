@@ -1,31 +1,29 @@
 import { Mastra } from '@mastra/core/mastra';
 import { createLogger } from '@mastra/core/logger';
 
-import { 
-  weatherAgent, 
-  keywordResearcherAgent, 
-  contentPlannerAgent, 
-  blogWriterAgent, 
+import {
+  weatherAgent,
+  contentPlannerAgent,
+  blogWriterAgent,
   editorAgent,
   contentPublisherAgent,
-  browserAgent
+  browserAgent,
 } from './agents';
 import { escortBlogWorkflow } from './workflows/blogWorkflow';
 import { browserWorkflow } from './workflows/browserWorkflow';
 
 export const mastra = new Mastra({
-  agents: { 
+  agents: {
     weatherAgent,
-    keywordResearcherAgent,
     contentPlannerAgent,
     blogWriterAgent,
     editorAgent,
     contentPublisherAgent,
-    browserAgent
+    browserAgent,
   },
   workflows: {
     escortBlogWorkflow,
-    browserWorkflow
+    browserWorkflow,
   },
   logger: createLogger({
     name: 'Mastra',

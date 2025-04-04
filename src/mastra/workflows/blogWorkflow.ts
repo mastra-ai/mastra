@@ -1,62 +1,29 @@
-import { Workflow, Step } from "@mastra/core/workflows";
-import { Agent } from "@mastra/core/agent";
-import { openai } from "@ai-sdk/openai";
-import { anthropic } from "@ai-sdk/anthropic";
-import { z } from "zod";
-import { rakkoKeywordTool } from "../tools/rakkoKeyword";
-import { 
-  keywordResearcherAgent, 
-  contentPlannerAgent, 
-  blogWriterAgent, 
-  editorAgent 
-} from "../agents";
+import { Workflow, Step } from '@mastra/core/workflows';
+import { Agent } from '@mastra/core/agent';
+import { openai } from '@ai-sdk/openai';
+import { anthropic } from '@ai-sdk/anthropic';
+import { z } from 'zod';
+import { contentPlannerAgent, blogWriterAgent, editorAgent } from '../agents';
 
 // 学童えすこーと専用ブログ生成ワークフロー
 export const escortBlogWorkflow = new Workflow({
-  name: "escort-blog-workflow",
+  name: 'escort-blog-workflow',
   triggerSchema: z.object({
-    topic: z.string().describe("学童えすこーとサービスに関連するブログトピック"),
-    targetAge: z.string().optional().describe("対象となる子どもの年齢層"),
-    serviceFeature: z.string().optional().describe("アピールしたいサービスの特徴"),
+    topic: z.string().describe('学童えすこーとサービスに関連するブログトピック'),
+    targetAge: z.string().optional().describe('対象となる子どもの年齢層'),
+    serviceFeature: z.string().optional().describe('アピールしたいサービスの特徴'),
   }),
 });
 
-// Step 1: キーワードリサーチのステップ
-const keywordStep = new Step({
-  id: "keywordResearchStep",
-  execute: async ({ context }) => {
-    const topic = context.triggerData.topic;
-    const targetAge = context.triggerData.targetAge || "小学生全般";
-    
-    // ラッコキーワードツールを使ってキーワードリサーチを実行
-    const keywordResult = await keywordResearcherAgent.generate(`
-      「${topic}」について、学童保育・えすこーとサービスの文脈で使えるキーワードを調査してください。
-      対象年齢は「${targetAge}」です。
-      rakkoKeywordTool を使って関連キーワードを検索し、以下の情報を整理してください：
-      
-      1. メインキーワード（1-2語）
-      2. 関連キーワード（5-8個）
-      3. 保護者が検索しそうなフレーズ（3-5個）
-      4. 検索ボリュームが高そうなキーワード組み合わせ
-    `);
-    
-    return { keywords: keywordResult.text };
-  },
-});
-
-// Step 2: コンテンツプランニングのステップ
+// Step 1: コンテンツプランニングのステップ
 const plannerStep = new Step({
-  id: "contentPlanningStep",
+  id: 'contentPlanningStep',
   execute: async ({ context }) => {
     const topic = context.triggerData.topic;
-    const keywords = context.getStepResult("keywordResearchStep")?.keywords;
-    const serviceFeature = context.triggerData.serviceFeature || "安全性と学習サポート";
-    
+    const serviceFeature = context.triggerData.serviceFeature || '安全性と学習サポート';
+
     const planResult = await contentPlannerAgent.generate(`
       「${topic}」についての学童えすこーとサービスのブログ記事の構成を作成してください。
-      
-      以下のキーワード情報を活用してください：
-      ${keywords}
       
       特にアピールしたいサービスの特徴：${serviceFeature}
       
@@ -69,19 +36,18 @@ const plannerStep = new Step({
       5. 対象読者が抱える不安や疑問とその解決方法
       6. コールトゥアクション（問い合わせや申し込みを促す文章）
     `);
-    
+
     return { contentPlan: planResult.text };
   },
 });
 
-// Step 3: 記事執筆のステップ
+// Step 2: 記事執筆のステップ
 const writerStep = new Step({
-  id: "blogWritingStep",
+  id: 'blogWritingStep',
   execute: async ({ context }) => {
     const topic = context.triggerData.topic;
-    const contentPlan = context.getStepResult("contentPlanningStep")?.contentPlan;
-    const keywords = context.getStepResult("keywordResearchStep")?.keywords;
-    
+    const contentPlan = context.getStepResult('contentPlanningStep')?.contentPlan;
+
     const articleResult = await blogWriterAgent.generate(`
       以下の構成に基づいて、学童えすこーとサービスについての完全なブログ記事を執筆してください。
       
@@ -90,9 +56,6 @@ const writerStep = new Step({
       コンテンツプラン：
       ${contentPlan}
       
-      キーワード情報：
-      ${keywords}
-      
       記事作成のガイドライン：
       1. 親しみやすく温かみのある文体で書く
       2. 安全性と信頼性を強調する
@@ -100,30 +63,26 @@ const writerStep = new Step({
       4. 保護者の不安や懸念に共感し、解決策を提示する
       5. 適切な見出し構造（H1, H2, H3）を使用する
       6. 読みやすい段落構成にする
-      7. 自然な形でキーワードを本文に組み込む
+      7. 自然な形でSEOキーワードを本文に組み込む
       
       完成した記事は、マークダウン形式で出力してください。
     `);
-    
+
     return { draft: articleResult.text };
   },
 });
 
-// Step 4: 編集・最適化のステップ
+// Step 3: 編集・最適化のステップ
 const editorStep = new Step({
-  id: "editingStep",
+  id: 'editingStep',
   execute: async ({ context }) => {
-    const draft = context.getStepResult("blogWritingStep")?.draft;
-    const keywords = context.getStepResult("keywordResearchStep")?.keywords;
-    
+    const draft = context.getStepResult('blogWritingStep')?.draft;
+
     const editResult = await editorAgent.generate(`
       以下の学童えすこーとサービスのブログ記事を編集・最適化してください。
       
       元の記事：
       ${draft}
-      
-      キーワード情報：
-      ${keywords}
       
       編集のポイント：
       1. SEO最適化（メタディスクリプション、キーワード配置の確認）
@@ -135,15 +94,10 @@ const editorStep = new Step({
       
       完成した記事をマークダウン形式で出力してください。メタディスクリプション候補も含めてください。
     `);
-    
+
     return { finalArticle: editResult.text };
   },
 });
 
 // ワークフローの構成
-escortBlogWorkflow
-  .step(keywordStep)
-  .then(plannerStep)
-  .then(writerStep)
-  .then(editorStep)
-  .commit(); 
+escortBlogWorkflow.step(plannerStep).then(writerStep).then(editorStep).commit();
