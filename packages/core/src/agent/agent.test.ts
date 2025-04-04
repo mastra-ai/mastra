@@ -572,12 +572,16 @@ describe('agent', () => {
 
       const testAgent = mastra.getAgent('agent');
 
-      const response = await testAgent.stream('Use the container-test-tool with query "test"', {
+      const stream = await testAgent.stream('Use the container-test-tool with query "test"', {
         toolChoice: 'required',
         container: testContainer,
       });
 
-      const toolCall = (await response.toolResults).find(result => result.toolName === 'testTool');
+      for await (const _chunk of stream.textStream) {
+        // empty line
+      }
+
+      const toolCall = (await stream.toolResults).find(result => result.toolName === 'testTool');
 
       expect(toolCall?.result?.containerAvailable).toBe(true);
       expect(toolCall?.result?.containerValue).toBe('container-value');
