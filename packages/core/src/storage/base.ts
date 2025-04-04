@@ -144,12 +144,14 @@ export abstract class MastraStorage extends MastraBase {
   }): Promise<any[]>;
 
   async __getTraces({
+    name,
     scope,
     page,
     perPage,
     attributes,
     filters,
   }: {
+    name?: string;
     scope?: string;
     page: number;
     perPage: number;
@@ -157,7 +159,7 @@ export abstract class MastraStorage extends MastraBase {
     filters?: Record<string, any>;
   }): Promise<any[]> {
     await this.init();
-    return this.getTraces({ scope, page, perPage, attributes, filters });
+    return this.getTraces({ name, scope, page, perPage, attributes, filters });
   }
 
   async init(): Promise<void> {
