@@ -9,6 +9,7 @@ const meta = {
   "memory-threads": "Memory Threads",
   "configuring-memory": "Configuring Memory",
   "faq": "FAQ",
+  "memory-architecture": "Architecture",
 };
 
 export default meta; 
