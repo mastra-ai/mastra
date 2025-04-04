@@ -4,7 +4,6 @@ import dotenv from 'dotenv';
 import { describe } from 'vitest';
 
 import { getPerformanceTests } from './performance-tests';
-import { getResuableTests } from '../reusable-tests';
 
 dotenv.config({ path: '.env.test' });
 
