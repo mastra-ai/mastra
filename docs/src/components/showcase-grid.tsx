@@ -77,7 +77,7 @@ export const ShowcaseGrid = () => {
       title: "Demeter",
       description: "Instant portfolio insights across all your investments",
       image: "/showcase/demeter.png",
-      link: "https://www.demeter.ai/",
+      link: "https://www.joindemeter.com/",
     },
 
     {
