@@ -3,9 +3,13 @@ import type { AiMessageType, CoreMessage, CoreTool } from '@mastra/core';
 import { MastraMemory } from '@mastra/core/memory';
 import type { MessageType, MemoryConfig, SharedMemoryConfig, StorageThreadType } from '@mastra/core/memory';
 import type { StorageGetMessagesArg } from '@mastra/core/storage';
-import { MDocument } from '@mastra/rag';
 import { embedMany } from 'ai';
+import { Tiktoken } from 'js-tiktoken/lite';
+import o200k_base from 'js-tiktoken/ranks/o200k_base';
+import xxhash from 'xxhash-wasm';
 import { updateWorkingMemoryTool } from './tools/working-memory';
+
+const encoder = new Tiktoken(o200k_base);
 
 /**
  * Concrete implementation of MastraMemory that adds support for thread configuration
@@ -73,8 +77,8 @@ export class Memory extends MastraMemory {
           };
 
     if (config?.semanticRecall && selectBy?.vectorSearchString && this.vector && !!selectBy.vectorSearchString) {
-      const { indexName } = await this.createEmbeddingIndex();
-      const { embeddings } = await this.embedMessageContent(selectBy.vectorSearchString);
+      const { embeddings, dimension } = await this.embedMessageContent(selectBy.vectorSearchString!);
+      const { indexName } = await this.createEmbeddingIndex(dimension);
 
       await Promise.all(
         embeddings.map(async embedding => {
@@ -139,7 +143,6 @@ export class Memory extends MastraMemory {
     uiMessages: AiMessageType[];
   }> {
     if (resourceId) await this.validateThreadIsOwnedByResource(threadId, resourceId);
-
     const threadConfig = this.getMergedThreadConfig(config || {});
 
     if (!threadConfig.lastMessages && !threadConfig.semanticRecall) {
@@ -223,25 +226,71 @@ export class Memory extends MastraMemory {
     // }
   }
 
+  private chunkText(text: string, size = 4096) {
+    const tokens = encoder.encode(text);
+    const chunks: string[] = [];
+    let currentChunk: number[] = [];
+
+    for (const token of tokens) {
+      currentChunk.push(token);
+
+      // If current chunk reaches size limit, add it to chunks and start a new one
+      if (currentChunk.length >= size) {
+        chunks.push(encoder.decode(currentChunk));
+        currentChunk = [];
+      }
+    }
+
+    // Add any remaining tokens as the final chunk
+    if (currentChunk.length > 0) {
+      chunks.push(encoder.decode(currentChunk));
+    }
+
+    return chunks;
+  }
+
+  private hasher = xxhash();
+
+  // embedding is computationally expensive so cache content -> embeddings/chunks
+  private embeddingCache = new Map<
+    number,
+    {
+      chunks: string[];
+      embeddings: Awaited<ReturnType<typeof embedMany>>['embeddings'];
+      dimension: number | undefined;
+    }
+  >();
+  private firstEmbed: Promise<any> | undefined;
   private async embedMessageContent(content: string) {
-    const doc = MDocument.fromText(content);
+    // use fast xxhash for lower memory usage. if we cache by content string we will store all messages in memory for the life of the process
+    const key = (await this.hasher).h32(content);
+    const cached = this.embeddingCache.get(key);
+    if (cached) return cached;
+    const chunks = this.chunkText(content);
 
-    const chunks = await doc.chunk({
-      strategy: 'token',
-      size: 4096,
-      overlap: 20,
-    });
+    // for fastembed multiple initial calls to embed will fail if the model hasn't been downloaded yet.
+    const isFastEmbed = this.embedder.provider === `fastembed`;
+    if (isFastEmbed && this.firstEmbed instanceof Promise) {
+      // so wait for the first one
+      await this.firstEmbed;
+    }
 
-    const { embeddings } = await embedMany({
-      values: chunks.map(chunk => chunk.text),
+    const promise = embedMany({
+      values: chunks,
       model: this.embedder,
       maxRetries: 3,
     });
 
-    return {
+    if (isFastEmbed && !this.firstEmbed) this.firstEmbed = promise;
+    const { embeddings } = await promise;
+
+    const result = {
       embeddings,
       chunks,
+      dimension: embeddings[0]?.length,
     };
+    this.embeddingCache.set(key, result);
+    return result;
   }
 
   async saveMessages({
@@ -259,27 +308,34 @@ export class Memory extends MastraMemory {
 
     const config = this.getMergedThreadConfig(memoryConfig);
 
+    const result = this.storage.__saveMessages({ messages });
+
     if (this.vector && config.semanticRecall) {
-      const { indexName } = await this.createEmbeddingIndex();
+      let indexName: Promise<string>;
+      await Promise.all(
+        messages.map(async message => {
+          if (typeof message.content !== `string` || message.content === '') return;
 
-      for (const message of messages) {
-        if (typeof message.content !== `string` || message.content === '') continue;
+          const { embeddings, chunks, dimension } = await this.embedMessageContent(message.content);
 
-        const { embeddings, chunks } = await this.embedMessageContent(message.content);
+          if (typeof indexName === `undefined`) {
+            indexName = this.createEmbeddingIndex(dimension).then(result => result.indexName);
+          }
 
-        await this.vector.upsert({
-          indexName,
-          vectors: embeddings,
-          metadata: chunks.map(() => ({
-            message_id: message.id,
-            thread_id: message.threadId,
-            resource_id: message.resourceId,
-          })),
-        });
-      }
+          await this.vector.upsert({
+            indexName: await indexName,
+            vectors: embeddings,
+            metadata: chunks.map(() => ({
+              message_id: message.id,
+              thread_id: message.threadId,
+              resource_id: message.resourceId,
+            })),
+          });
+        }),
+      );
     }
 
-    return this.storage.__saveMessages({ messages });
+    return result;
   }
 
   protected mutateMessagesToHideWorkingMemory(messages: MessageType[]) {
