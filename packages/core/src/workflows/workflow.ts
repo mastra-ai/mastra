@@ -22,7 +22,7 @@ import type {
   WorkflowRunState,
 } from './types';
 import { WhenConditionReturnValue } from './types';
-import { agentToStep, isAgent, isVariableReference, isWorkflow, workflowToStep } from './utils';
+import { agentToStep, isAgent, isConditionalKey, isVariableReference, isWorkflow, workflowToStep } from './utils';
 import type { WorkflowResultReturn } from './workflow-instance';
 import { WorkflowInstance } from './workflow-instance';
 
@@ -473,7 +473,7 @@ export class Workflow<
     // if then is called without a step, we are done
     if (!lastStepKey) return this;
 
-    const parentStepKey = this.#afterStepStack[this.#afterStepStack.length - 1];
+    const parentStepKey = this.#getParentStepKey();
     const stepGraph = this.#stepSubscriberGraph[parentStepKey || ''];
     const serializedStepGraph = this.#serializedStepSubscriberGraph[parentStepKey || ''];
 
@@ -485,7 +485,6 @@ export class Workflow<
       stepGraph[lastStepKey].push(graphEntry);
       if (serializedStepGraph && serializedStepGraph[lastStepKey]) serializedStepGraph[lastStepKey].push(graphEntry);
     } else {
-      // add the step to the graph if not already there.. it should be there though, unless magic
       if (!this.#stepGraph[lastStepKey]) this.#stepGraph[lastStepKey] = [];
       if (!this.#serializedStepGraph[lastStepKey]) this.#serializedStepGraph[lastStepKey] = [];
 
@@ -740,7 +739,7 @@ export class Workflow<
     ifStep?: TStep | Workflow,
     elseStep?: TStep | Workflow,
   ) {
-    const lastStep = this.#steps[this.#lastStepStack[this.#lastStepStack.length - 1] ?? ''];
+    const lastStep = this.#getLastStep({ else_check: this.#lastBuilderType !== 'else' });
     if (!lastStep) {
       throw new Error('Condition requires a step to be executed after');
     }
@@ -994,17 +993,41 @@ export class Workflow<
     return this.#runs.get(runId)?.executionSpan;
   }
 
-  #getParentStepKey({ loop_check } = { loop_check: false }) {
+  #getParentStepKey(
+    { loop_check, if_else_check }: { loop_check?: boolean; if_else_check?: boolean } = {
+      loop_check: false,
+      if_else_check: false,
+    },
+  ) {
     let parentStepKey = undefined;
     for (let i = this.#afterStepStack.length - 1; i >= 0; i--) {
       const stepKey = this.#afterStepStack[i];
-      if (stepKey && this.#stepSubscriberGraph[stepKey] && (loop_check ? !stepKey.includes('loop_check') : true)) {
+      if (
+        stepKey &&
+        this.#stepSubscriberGraph[stepKey] &&
+        (loop_check ? !stepKey.includes('loop_check') : true) &&
+        (if_else_check ? !isConditionalKey(stepKey) : true)
+      ) {
         parentStepKey = stepKey;
         break;
       }
     }
 
     return parentStepKey;
+  }
+
+  #getLastStep({ else_check }: { else_check: boolean }) {
+    let lastStep = undefined;
+    for (let i = this.#lastStepStack.length - 1; i >= 0; i--) {
+      const stepKey = this.#lastStepStack[i];
+      const step = this.#steps[stepKey ?? ''];
+      if (step && (else_check ? !step.id.includes('_else') : true)) {
+        lastStep = step;
+        break;
+      }
+    }
+
+    return lastStep;
   }
 
   #makeStepDef<TStepId extends TSteps[number]['id'], TSteps extends Step<any, any, any>[]>(
