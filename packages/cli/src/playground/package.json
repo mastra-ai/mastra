@@ -37,7 +37,6 @@
     "@uiw/codemirror-theme-github": "^4.23.10",
     "@uiw/react-codemirror": "^4.23.10",
     "@xyflow/react": "^12.4.4",
-    "add": "^2.0.6",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "cmdk": "^1.0.4",

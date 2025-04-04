@@ -2491,9 +2491,6 @@ importers:
       '@xyflow/react':
         specifier: ^12.4.4
         version: 12.4.4(@types/react@19.0.10)(react-dom@19.1.0(react@19.1.0))(react@19.1.0)
-      add:
-        specifier: ^2.0.6
-        version: 2.0.6
       class-variance-authority:
         specifier: ^0.7.1
         version: 0.7.1
@@ -11394,9 +11391,6 @@ packages:
     resolution: {integrity: sha512-OvQ/2pUDKmgfCg++xsTX1wGxfTaszcHVcTctW4UJB4hibJx2HXxxO5UmVgyjMa+ZDsiaf5wWLXYpRWMmBI0QHg==}
     engines: {node: '>=0.4.0'}
     hasBin: true
-
-  add@2.0.6:
-    resolution: {integrity: sha512-j5QzrmsokwWWp6kUcJQySpbG+xfOBqqKnup3OIk1pz+kB/80SLorZ9V8zHFLO92Lcd+hbvq8bT+zOGoPkmBV0Q==}
 
   agent-base@5.1.1:
     resolution: {integrity: sha512-TMeqbNl2fMW0nMjTEPOwe3J/PRFP4vqeoNuQMG0HlMrtm5QxKqdvAkZ1pRBQ/ulIyDD5Yq0nJ7YbdD8ey0TO3g==}
@@ -29236,8 +29230,6 @@ snapshots:
   acorn@8.14.0: {}
 
   acorn@8.14.1: {}
-
-  add@2.0.6: {}
 
   agent-base@5.1.1: {}
 
