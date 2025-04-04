@@ -1,4 +1,4 @@
-import { DynamicForm } from '@/components/dynamic-form';
+import { DynamicForm } from '@mastra/playground-ui';
 import { CodeBlockDemo } from '@/components/ui/code-block';
 import { CopyButton } from '@/components/ui/copy-button';
 import { ScrollArea } from '@/components/ui/scroll-area';
