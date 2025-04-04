@@ -57,7 +57,7 @@ export class Deps extends MastraBase {
         runCommand = `${this.packageManager} i`;
         break;
       case 'pnpm':
-        runCommand = `${this.packageManager} --frozen-lockfile install`;
+        runCommand = `${this.packageManager} --ignore-workspace install`;
         break;
       default:
         runCommand = `${this.packageManager} ${packages?.length > 0 ? `add` : `install`}`;
