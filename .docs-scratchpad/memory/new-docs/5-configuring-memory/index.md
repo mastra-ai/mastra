@@ -15,6 +15,7 @@ import { LibSQLStore } from "@mastra/core/storage/libsql";
 import { LibSQLVector } from "@mastra/core/vector/libsql";
 import { Memory } from "@mastra/memory";
 
+// This is the default configuration if you don't specify storage/vector
 const memory = new Memory({
   storage: new LibSQLStore({
     url: "file:memory.db",
@@ -25,9 +26,20 @@ const memory = new Memory({
 });
 ```
 
+You can also use a Turso hosted database by providing a URL instead of a file path:
+
+```typescript
+const memory = new Memory({
+  storage: new LibSQLStore({
+    url: process.env.TURSO_DATABASE_URL!,
+    authToken: process.env.TURSO_AUTH_TOKEN,
+  }),
+});
+```
+
 ### PostgreSQL
 
-For production applications, PostgreSQL provides robust storage and vector capabilities:
+PostgreSQL provides robust storage and vector capabilities:
 
 ```typescript
 import { PostgresStore, PgVector } from "@mastra/pg";
@@ -71,9 +83,9 @@ const memory = new Memory({
 });
 ```
 
-## Default Settings
+## Memory Options
 
-Memory is pre-configured with sensible defaults:
+Memory comes with the following default configuration:
 
 ```typescript
 const defaultSettings = {
@@ -89,7 +101,7 @@ const defaultSettings = {
   // Working memory
   workingMemory: {
     enabled: false,
-    template: "<user>...</user>",
+    template: "## User\n\n...",
     use: "text-stream",
   },
   
@@ -100,54 +112,9 @@ const defaultSettings = {
 };
 ```
 
-## Complete Configuration Example
+For detailed information on each configuration option, see the dedicated documentation pages:
 
-Here's a comprehensive configuration example:
-
-```typescript
-import { Memory } from "@mastra/memory";
-import { PgVector, PostgresStore } from "@mastra/pg";
-import { openai } from "@ai-sdk/openai";
-
-const memory = new Memory({
-  // Storage backend
-  storage: new PostgresStore({
-    connectionString: process.env.DATABASE_URL!,
-  }),
-  
-  // Vector database
-  vector: new PgVector(process.env.DATABASE_URL!),
-  
-  // Embedding model
-  embedder: openai.embedding("text-embedding-3-small"),
-  
-  // Memory options
-  options: {
-    // Recent message settings
-    lastMessages: 20,
-    
-    // Semantic search settings
-    semanticRecall: {
-      topK: 5,
-      messageRange: {
-        before: 1,
-        after: 2,
-      },
-    },
-    
-    // Working memory settings
-    workingMemory: {
-      enabled: true,
-      use: "tool-call",
-      template: "<user><preferences></preferences></user>",
-    },
-    
-    // Thread settings
-    threads: {
-      generateTitle: true,
-    },
-  },
-});
-```
-
-Refer to the specific adapter documentation for additional configuration options and advanced settings. 
+- [Last Messages](../3-using-memory/3.1-last-messages.md) - Configure recent message history
+- [Semantic Recall](../3-using-memory/3.2-semantic-recall.md) - Set up semantic search parameters
+- [Working Memory](../3-using-memory/3.3-working-memory.md) - Learn about persistent memory across conversations
+- [Token Management](../3-using-memory/3.5-token-management.md) - Optimize token usage and context window 

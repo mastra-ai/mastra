@@ -86,22 +86,25 @@ This is a high level overview for the new info arch for Mastra Memory documentat
 4. Memory Threads
    - [ ] 4.1. What's a thread? What's a resource?
        - [x] Initial draft ./new-docs/4-memory-threads/index.md
-       - [ ] Add diagrams showing resource/thread relationship
-       - [ ] Clarify why both resourceId and threadId are required
-       - [ ] Explain best practices for ID formatting
-       - [ ] Pair review / edits
+       - [x] Add diagrams showing resource/thread relationship
+       - [x] Clarify why both resourceId and threadId are required
+       - [x] Explain best practices for ID formatting
+       - [x] Pair review / edits
        - [ ] Compare with user feedback
        - [ ] Move into actual docs page
    - [ ] 4.2. How agents interact with memory threads
        - [x] Initial draft ./new-docs/4-memory-threads/index.md
-       - [ ] Add examples of multiple agents using the same thread
-       - [ ] Explain memory sharing vs. isolation strategies
-       - [ ] Pair review / edits
+       - [x] Add examples of multiple agents using the same thread
+       - [x] Explain memory sharing vs. isolation strategies
+       - [x] Pair review / edits
        - [ ] Compare with user feedback
        - [ ] Move into actual docs page
    - [ ] 4.3. Handling multiple users
-       - [x] Initial draft ./new-docs/4-memory-threads/4.3-multiple-users.md
-       - [ ] Pair review / edits
+       - [x] Content merged into ./new-docs/4-memory-threads/index.md
+       - [x] Add examples of using memory with multiple users
+       - [x] Add examples of multiple threads per user
+       - [x] Add thread management and retrieval section
+       - [x] Pair review / edits
        - [ ] Compare with user feedback
        - [ ] Move into actual docs page
    - [ ] 4.4. Building admin UIs to manage threads
