@@ -1,5 +1,13 @@
 # @mastra/pg
 
+## 0.2.7-alpha.6
+
+### Patch Changes
+
+- a3f0e90: Update storage initialization to ensure tables are present
+- Updated dependencies [a3f0e90]
+  - @mastra/core@0.8.0-alpha.6
+
 ## 0.2.7-alpha.5
 
 ### Patch Changes

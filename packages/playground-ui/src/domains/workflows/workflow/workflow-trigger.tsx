@@ -143,7 +143,7 @@ export function WorkflowTrigger({
               />
             </div>
             <CodeBlockDemo
-              className="w-[368px] overflow-x-auto"
+              className="w-full overflow-x-auto"
               code={JSON.stringify(result ?? {}, null, 2)}
               language="json"
             />
@@ -242,7 +242,7 @@ export function WorkflowTrigger({
               {step.suspendPayload && (
                 <div>
                   <CodeBlockDemo
-                    className="w-[300px] overflow-x-auto p-2"
+                    className="w-full overflow-x-auto p-2"
                     code={JSON.stringify(step.suspendPayload, null, 2)}
                     language="json"
                   />
@@ -275,11 +275,7 @@ export function WorkflowTrigger({
                 content={JSON.stringify(result, null, 2)}
               />
             </div>
-            <CodeBlockDemo
-              className="w-[368px] overflow-x-auto"
-              code={JSON.stringify(result, null, 2)}
-              language="json"
-            />
+            <CodeBlockDemo className="w-full overflow-x-auto" code={JSON.stringify(result, null, 2)} language="json" />
           </div>
         )}
       </div>

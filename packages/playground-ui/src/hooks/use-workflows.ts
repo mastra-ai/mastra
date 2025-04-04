@@ -65,19 +65,6 @@ export const useExecuteWorkflow = (baseUrl: string) => {
     baseUrl: baseUrl || '',
   });
 
-  const executeWorkflow = async ({ workflowId, input }: { workflowId: string; input: any }) => {
-    try {
-      setIsExecutingWorkflow(true);
-      const response = await client.getWorkflow(workflowId).execute(input || {});
-      return response;
-    } catch (error) {
-      console.error('Error executing workflow:', error);
-      throw error;
-    } finally {
-      setIsExecutingWorkflow(false);
-    }
-  };
-
   const createWorkflowRun = async ({ workflowId, prevRunId }: { workflowId: string; prevRunId?: string }) => {
     try {
       const workflow = client.getWorkflow(workflowId);
@@ -99,7 +86,7 @@ export const useExecuteWorkflow = (baseUrl: string) => {
     }
   };
 
-  return { executeWorkflow, startWorkflowRun, createWorkflowRun, isExecutingWorkflow };
+  return { startWorkflowRun, createWorkflowRun, isExecutingWorkflow };
 };
 
 export const useWatchWorkflow = (baseUrl: string) => {

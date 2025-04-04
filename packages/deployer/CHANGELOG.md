@@ -1,5 +1,15 @@
 # @mastra/deployer
 
+## 0.2.6-alpha.8
+
+### Patch Changes
+
+- 4c65a57: Add fastebmed as external
+- a3f0e90: Update storage initialization to ensure tables are present
+- Updated dependencies [a3f0e90]
+  - @mastra/server@0.0.1-alpha.4
+  - @mastra/core@0.8.0-alpha.6
+
 ## 0.2.6-alpha.7
 
 ### Patch Changes

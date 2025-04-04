@@ -153,6 +153,11 @@ export abstract class Bundler extends MastraBundler {
       }
     }
 
+    // temporary fix for mastra-memory and fastembed
+    if (analyzedBundleInfo.externalDependencies.has('@mastra/memory')) {
+      dependenciesToInstall.set('fastembed', 'latest');
+    }
+
     await this.writePackageJson(join(outputDirectory, this.outputDir), dependenciesToInstall);
     await this.writeInstrumentationFile(join(outputDirectory, this.outputDir));
 
