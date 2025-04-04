@@ -258,7 +258,7 @@ importers:
     dependencies:
       '@ai-sdk/anthropic':
         specifier: ^1.1.15
-        version: 1.2.4(zod@3.24.2)
+        version: 1.2.5(zod@3.24.2)
       '@ai-sdk/react':
         specifier: ^1.1.21
         version: 1.2.5(react@19.1.0)(zod@3.24.2)
@@ -1308,7 +1308,7 @@ importers:
     dependencies:
       '@ai-sdk/anthropic':
         specifier: ^1.1.15
-        version: 1.2.4(zod@3.24.2)
+        version: 1.2.5(zod@3.24.2)
       '@inquirer/prompts':
         specifier: ^7.3.3
         version: 7.4.0(@types/node@20.17.27)
@@ -1399,7 +1399,7 @@ importers:
     dependencies:
       '@ai-sdk/anthropic':
         specifier: ^1.1.15
-        version: 1.2.4(zod@3.24.2)
+        version: 1.2.5(zod@3.24.2)
       '@ai-sdk/fireworks':
         specifier: ^0.1.14
         version: 0.1.16(zod@3.24.2)
@@ -1598,7 +1598,7 @@ importers:
         version: link:../../packages/memory
       ai:
         specifier: ^4.2.6
-        version: 4.2.10(react@19.1.0)(zod@3.24.2)
+        version: 4.2.11(react@19.1.0)(zod@3.24.2)
       chalk:
         specifier: ^5.4.1
         version: 5.4.1
@@ -1744,7 +1744,7 @@ importers:
     dependencies:
       '@ai-sdk/anthropic':
         specifier: ^1.1.15
-        version: 1.2.4(zod@3.24.2)
+        version: 1.2.5(zod@3.24.2)
       '@ai-sdk/groq':
         specifier: latest
         version: 1.2.3(zod@3.24.2)
@@ -2638,7 +2638,7 @@ importers:
         version: 1.30.0
       ai:
         specifier: ^4.2.2
-        version: 4.2.10(react@19.1.0)(zod@3.24.2)
+        version: 4.2.11(react@19.1.0)(zod@3.24.2)
       cohere-ai:
         specifier: ^7.16.0
         version: 7.16.0(encoding@0.1.13)
@@ -2649,8 +2649,8 @@ importers:
         specifier: ^16.4.7
         version: 16.4.7
       fastembed:
-        specifier: ^1.14.1
-        version: 1.14.1
+        specifier: ^1.14.3
+        version: 1.14.3
       hono:
         specifier: ^4.5.1
         version: 4.7.4
@@ -2975,7 +2975,7 @@ importers:
         version: 4.0.2
       ai:
         specifier: ^4.2.2
-        version: 4.2.10(react@19.1.0)(zod@3.24.2)
+        version: 4.2.11(react@19.1.0)(zod@3.24.2)
       dotenv:
         specifier: ^16.4.7
         version: 16.4.7
@@ -3040,7 +3040,7 @@ importers:
     devDependencies:
       '@ai-sdk/anthropic':
         specifier: ^1.1.15
-        version: 1.2.4(zod@3.24.2)
+        version: 1.2.5(zod@3.24.2)
       '@internal/lint':
         specifier: workspace:*
         version: link:../_config
@@ -3155,7 +3155,7 @@ importers:
         version: 1.34.5
       ai:
         specifier: ^4.2.2
-        version: 4.2.10(react@19.1.0)(zod@3.24.2)
+        version: 4.2.11(react@19.1.0)(zod@3.24.2)
       js-tiktoken:
         specifier: ^1.0.19
         version: 1.0.19
@@ -3247,7 +3247,7 @@ importers:
         version: 20.17.27
       ai:
         specifier: ^4.2.2
-        version: 4.2.10(react@19.1.0)(zod@3.24.2)
+        version: 4.2.11(react@19.1.0)(zod@3.24.2)
       jsdom:
         specifier: ^26.0.0
         version: 26.0.0(bufferutil@4.0.9)(utf-8-validate@6.0.5)
@@ -3546,7 +3546,7 @@ importers:
         version: 20.17.27
       ai:
         specifier: ^4.2.2
-        version: 4.2.10(react@19.1.0)(zod@3.24.2)
+        version: 4.2.11(react@19.1.0)(zod@3.24.2)
       dotenv:
         specifier: ^16.4.7
         version: 16.4.7
@@ -4600,8 +4600,8 @@ importers:
 
 packages:
 
-  '@ai-sdk/anthropic@1.2.4':
-    resolution: {integrity: sha512-dAN6MXvLffeFVAr2gz3RGvOTgX1KL/Yn5q1l4/Dt0TUeDjQgCt4AbbYxZZB2qIAYzQvoyAFPhlw0sB3nNizG/g==}
+  '@ai-sdk/anthropic@1.2.5':
+    resolution: {integrity: sha512-Y4ZO6kpdgaK3O2HQAyWo1G8OGSSkjrQjGVMEIyzlHl19jBt4HspDr4ujhvo5lZFofz5GhqZWjlwyI9prYpC43Q==}
     engines: {node: '>=18'}
     peerDependencies:
       zod: ^3.0.0
@@ -11390,8 +11390,8 @@ packages:
       zod:
         optional: true
 
-  ai@4.2.10:
-    resolution: {integrity: sha512-rOfKbNRWlzwxbFll6W9oAdnC0R5VVbAJoof+p92CatHzA3reqQZmYn33IBnj+CgqeXYUsH9KX9Wnj7g2wCHc9Q==}
+  ai@4.2.11:
+    resolution: {integrity: sha512-XvYFz+I2MNpkNeso/cEvm2q22cuU7B3EdUxGyhpa94gHbb3HEk73d42+UPJqweSBmoXA52mZ9qvb6jt3P4TITQ==}
     engines: {node: '>=18'}
     peerDependencies:
       react: ^18 || ^19 || ^19.0.0-rc
@@ -11873,6 +11873,10 @@ packages:
 
   boolbase@1.0.0:
     resolution: {integrity: sha512-JZOSA7Mo9sNGB8+UjSgzdLtokWAky1zbztM3WRLCbZ70/3cTANmQmOdR7y2g+J0e2WXywy1yS468tY+IruqEww==}
+
+  boolean@3.2.0:
+    resolution: {integrity: sha512-d0II/GO9uf9lfUHH2BQsjxzRJZBdsjgsBiW4BvhWk/3qoKwQFjIDVN19PfX8F2D/r9PCMTtLWjYVCFrpeYUzsw==}
+    deprecated: Package no longer supported. Contact Support at https://www.npmjs.com/support for more info.
 
   bowser@2.11.0:
     resolution: {integrity: sha512-AlcaJBi/pqqJBIQ8U9Mcpc9i8Aqxn88Skv5d+xBX006BY5u8N3mGLHa5Lgppa7L/HfwgwLgZ6NYs+Ag6uUmJRA==}
@@ -12956,6 +12960,9 @@ packages:
   detect-node-es@1.1.0:
     resolution: {integrity: sha512-ypdmJU/TbBby2Dxibuv7ZLW3Bs1QEmM7nHjEANfohJLvE0XVujisn1qPJcZxg+qDucsr+bP6fLD1rPS3AhJ7EQ==}
 
+  detect-node@2.1.0:
+    resolution: {integrity: sha512-T0NIuQpnTvFDATNuHN5roPwSBG83rFsuO+MXXH9/3N1eFbn4wcPjttvjMLEPWJ0RGUYgQE7cGgS3tNxbqCGM7g==}
+
   detective-amd@5.0.2:
     resolution: {integrity: sha512-XFd/VEQ76HSpym80zxM68ieB77unNuoMwopU2TFT/ErUk5n4KvUTwW4beafAVUugrjV48l4BmmR0rh2MglBaiA==}
     engines: {node: '>=14'}
@@ -13239,6 +13246,9 @@ packages:
   es5-ext@0.10.64:
     resolution: {integrity: sha512-p2snDhiLaXe6dahss1LddxqEm+SkuDvV8dnIQG0MWjyHpcMNfXKPE+/Cc0y+PhxJX3A4xGNeFCj5oc0BUh6deg==}
     engines: {node: '>=0.10'}
+
+  es6-error@4.1.1:
+    resolution: {integrity: sha512-Um/+FxMr9CISWh0bi5Zv0iOD+4cFh5qLeks1qhAopKVAJw3drgKbKySikp7wGhDL0HPeaja0P5ULZrxLkniUVg==}
 
   es6-iterator@2.0.3:
     resolution: {integrity: sha512-zw4SRzoUkd+cl+ZoE15A9o1oQd920Bb0iOJMQkQhl3jNc03YqVjAhG7scf9C5KWRU/R13Orf588uCC6525o02g==}
@@ -13903,8 +13913,8 @@ packages:
     resolution: {integrity: sha512-xkjOecfnKGkSsOwtZ5Pz7Us/T6mrbPQrq0nh+aCO5V9nk5NLWmasAHumTKjiPJPWANe+kAZ84Jc8ooJkzZ88Sw==}
     hasBin: true
 
-  fastembed@1.14.1:
-    resolution: {integrity: sha512-Y14v+FWZwjNUpQ7mRGYu4N5yF+hZkF7zqzPWzzLbwdIEtYsHy0DSpiVJ+Fg6Oi1fQjrBKASQt0hdSMSjw1/Wtw==}
+  fastembed@1.14.3:
+    resolution: {integrity: sha512-ieHaN3k2ZubDaewRTTndZFoItyiDrr6MwvqA+rCYty2kALY8vNbEwyBsLKnm8qDV+5HBpQl5rXEm6IKbwJnqKg==}
 
   fastest-levenshtein@1.0.16:
     resolution: {integrity: sha512-eRnCtTTtGZFpQCwhJiUOuxPQWRXVKYDn0b2PeHfXL6/Zi53SLAzAHfVhVWK2AryC/WH05kGfxhFIPvTF0SXQzg==}
@@ -14410,6 +14420,10 @@ packages:
     resolution: {integrity: sha512-r8hpEjiQEYlF2QU0df3dS+nxxSIreXQS1qRhMJM0Q5NDdR386C7jb7Hwwod8Fgiuex+k0GFjgft18yvxm5XoCQ==}
     engines: {node: '>=12'}
     deprecated: Glob versions prior to v9 are no longer supported
+
+  global-agent@3.0.0:
+    resolution: {integrity: sha512-PT6XReJ+D07JvGoxQMkT6qji/jVNfX/h364XHZOWeRzy64sSFr+xJ5OX7LI3b4MPQzdL4H8Y8M0xzPpsVMwA8Q==}
+    engines: {node: '>=10.0'}
 
   global-directory@4.0.1:
     resolution: {integrity: sha512-wHTUcDUoZ1H5/0iVqEudYW4/kAlN5cZ3j/bXn0Dpbizl9iaUVeWSHqiOjsgk6OW2bkLclbBjzewBz6weQ1zA2Q==}
@@ -15584,6 +15598,9 @@ packages:
   json-stable-stringify-without-jsonify@1.0.1:
     resolution: {integrity: sha512-Bdboy+l7tA3OGW6FjyFHWkP5LuByj1Tk33Ljyq0axyzdk9//JSi2u3fP1QSmd1KNwq6VOKYGlAu87CisVir6Pw==}
 
+  json-stringify-safe@5.0.1:
+    resolution: {integrity: sha512-ZClg6AaYvamvYEE82d3Iyd3vSSIjQ+odgjaTzRuO3s7toCdFKczob2i0zCh7JE8kWn17yvAWhUVxvqGwUalsRA==}
+
   json5@1.0.2:
     resolution: {integrity: sha512-g1MWMLBiz8FKi1e4w0UyVL3w+iJceWAFBAaBnnGKOpNa5f8TLktkbre1+s6oICydWAm+HRUGTmI+//xv2hvXYA==}
     hasBin: true
@@ -16026,6 +16043,10 @@ packages:
 
   markdown-table@3.0.4:
     resolution: {integrity: sha512-wiYz4+JrLyb/DqW2hkFJxP7Vd7JuTDm77fvbM8VfEQdmSMqcImWeeRbHwZjBjIFki/VaMK2BhFi7oUUZeM5bqw==}
+
+  matcher@3.0.0:
+    resolution: {integrity: sha512-OkeDaAZ/bQCxeFAozM55PKcKU0yJMPGifLwV4Qgjitu+5MoAfSQN4lsLJeXZ1b8w0x+/Emda6MZgXS1jvsapng==}
+    engines: {node: '>=10'}
 
   math-intrinsics@1.1.0:
     resolution: {integrity: sha512-/IXtbwEk5HTPyEwyKX6hGkYXxM9nbj64B+ilVJnC/R6B0pH5G4V3b0pVbL7DBj4tkhBAppbQUlf6F6Xl9LHu1g==}
@@ -17113,11 +17134,11 @@ packages:
   onnxruntime-common@1.14.0:
     resolution: {integrity: sha512-3LJpegM2iMNRX2wUmtYfeX/ytfOzNwAWKSq1HbRrKc9+uqG/FsEA0bbKZl1btQeZaXhC26l44NWpNUeXPII7Ew==}
 
-  onnxruntime-common@1.15.1:
-    resolution: {integrity: sha512-Y89eJ8QmaRsPZPWLaX7mfqhj63ny47rSkQe80hIo+lvBQdrdXYR9VO362xvZulk9DFkCnXmGidprvgJ07bKsIQ==}
-
   onnxruntime-common@1.20.1:
     resolution: {integrity: sha512-YiU0s0IzYYC+gWvqD1HzLc46Du1sXpSiwzKb63PACIJr6LfL27VsXSXQvt68EzD3V0D5Bc0vyJTjmMxp0ylQiw==}
+
+  onnxruntime-common@1.21.0:
+    resolution: {integrity: sha512-Q632iLLrtCAVOTO65dh2+mNbQir/QNTVBG3h/QdZBpns7mZ0RYbLRBgGABPbpU9351AgYy7SJf1WaeVwMrBFPQ==}
 
   onnxruntime-common@1.22.0-dev.20250306-aafa8d170a:
     resolution: {integrity: sha512-NfIQnW4lIk/8LnhnYqknYPeet0U0+AADgKQRlKex36QrNoVSCY+aNaX6wyy2VzQ4CNWxsYh0E203ajRD/zxn0g==}
@@ -17126,12 +17147,12 @@ packages:
     resolution: {integrity: sha512-5ba7TWomIV/9b6NH/1x/8QEeowsb+jBEvFzU6z0T4mNsFwdPqXeFUM7uxC6QeSRkEbWu3qEB0VMjrvzN/0S9+w==}
     os: [win32, darwin, linux]
 
-  onnxruntime-node@1.15.1:
-    resolution: {integrity: sha512-wzhVELulmrvNoMZw0/HfV+9iwgHX+kPS82nxodZ37WCXmbeo1jp3thamTsNg8MGhxvv4GmEzRum5mo40oqIsqw==}
-    os: [win32, darwin, linux]
-
   onnxruntime-node@1.20.1:
     resolution: {integrity: sha512-di/I4HDXRw+FLgq+TyHmQEDd3cEp9iFFZm0r4uJ1Wd7b/WE1VXtKWo8yemex347c6GNF/3Pv86ZfPhIWxORr0w==}
+    os: [win32, darwin, linux]
+
+  onnxruntime-node@1.21.0:
+    resolution: {integrity: sha512-NeaCX6WW2L8cRCSqy3bInlo5ojjQqu2fD3D+9W5qb5irwxhEyWKXeH2vZ8W9r6VxaMPUan+4/7NDwZMtouZxEw==}
     os: [win32, darwin, linux]
 
   onnxruntime-web@1.14.0:
@@ -17746,17 +17767,6 @@ packages:
   postgres@3.4.5:
     resolution: {integrity: sha512-cDWgoah1Gez9rN3H4165peY9qfpEo+SA61oQv65O3cRUE1pOEoJWwddwcqKE8XZYjbblOJlYDlLV4h67HrEVDg==}
     engines: {node: '>=12'}
-
-  posthog-js@1.232.7:
-    resolution: {integrity: sha512-9Hqdam80bf41mj30O3ZLgdfDtZqR9TXNpTh7EkJo6C/emerFQEnW7X+E3yyE81KIPON4amSqTj5BL0gg+qZ28w==}
-    peerDependencies:
-      '@rrweb/types': 2.0.0-alpha.17
-      rrweb-snapshot: 2.0.0-alpha.17
-    peerDependenciesMeta:
-      '@rrweb/types':
-        optional: true
-      rrweb-snapshot:
-        optional: true
 
   posthog-js@1.234.6:
     resolution: {integrity: sha512-Hu3fbcWf2oCGoj26uh13GQbW+BJ8230rz2UMOMFUGNZ+/ha/qR+Xfyl+3IgjvSL4ikWDVkCpjFQntGb81qtCUg==}
@@ -18448,6 +18458,10 @@ packages:
     resolution: {integrity: sha512-l0OE8wL34P4nJH/H2ffoaniAokM2qSmrtXHmlpvYr5AVVX8msAyW0l8NVJFDxlSK4u3Uh/f41cQheDVdnYijwQ==}
     hasBin: true
 
+  roarr@2.15.4:
+    resolution: {integrity: sha512-CHhPh+UNHD2GTXNYhPWLnU8ONHdI+5DI+4EYIAOaiD63rHeYlZvyh8P+in5999TTSFgUYuKUAjzRI4mdh/p+2A==}
+    engines: {node: '>=8.0'}
+
   rollup-plugin-delete@2.2.0:
     resolution: {integrity: sha512-REKtDKWvjZlbrWpPvM9X/fadCs3E9I9ge27AK8G0e4bXwSLeABAAwtjiI1u3ihqZxk6mJeB2IVeSbH4DtOcw7A==}
     engines: {node: '>=10'}
@@ -18607,6 +18621,9 @@ packages:
     resolution: {integrity: sha512-O4OZEaNtkMd/K0i6js9SL+gqy0ZCBMgUvlSqHKi4IBdjhe7wB8pwztUk1BbZ1fmrvpwFrPbHzqd2w5pTcJH6LA==}
     engines: {node: '>=0.8.0'}
 
+  semver-compare@1.0.0:
+    resolution: {integrity: sha512-YM3/ITh2MJ5MtzaM429anh+x2jiLVjqILF4m4oyQB18W7Ggea7BfqdH/wGMK7dDiMghv/6WG7znWMwUDzJiXow==}
+
   semver@6.3.1:
     resolution: {integrity: sha512-BR7VvDCVHO+q2xBEWskxS6DJE1qRnb7DxzUrogb71CWoSficBxYsiAGd+Kl0mmq/MprG9yArRkyrQxTO6XjMzA==}
     hasBin: true
@@ -18632,6 +18649,10 @@ packages:
   sentiment@5.0.2:
     resolution: {integrity: sha512-ZeC3y0JsOYTdwujt5uOd7ILJNilbgFzUtg/LEG4wUv43LayFNLZ28ec8+Su+h3saHlJmIwYxBzfDHHZuiMA15g==}
     engines: {node: '>=8.0'}
+
+  serialize-error@7.0.1:
+    resolution: {integrity: sha512-8I8TjW5KMOKsZQTvoxjuSIa7foAwPWGOts+6o7sgjz41/qMD9VQHEDxi6PBvK2l0MXUmqZyNpUK+T2tQaaElvw==}
+    engines: {node: '>=10'}
 
   serialize-javascript@6.0.2:
     resolution: {integrity: sha512-Saa1xPByTTq2gdeFZYLLo+RFE35NHZkAbqZeWNd3BpzppeVisAqpDjcp8dyf6uIvEqJRd46jemmyA4iFIeVk8g==}
@@ -19678,6 +19699,10 @@ packages:
   type-detect@4.1.0:
     resolution: {integrity: sha512-Acylog8/luQ8L7il+geoSxhEkazvkslg7PSNKOX59mbB9cOveP5aq9h74Y7YU8yDpJwetzQQrfIwtf4Wp4LKcw==}
     engines: {node: '>=4'}
+
+  type-fest@0.13.1:
+    resolution: {integrity: sha512-34R7HTnG0XIJcBSn5XhDd7nNFPRcXYRZrBB2O2jdKqYODldSzBAqzsWoZYYvduky73toYS/ESqxPvkDf/F0XMg==}
+    engines: {node: '>=10'}
 
   type-fest@0.20.2:
     resolution: {integrity: sha512-Ne+eE4r0/iWnpAxD852z3A+N0Bt5RN//NjJwRd2VFHEmrywxf5vsZlh4R6lixl6B+wz/8d+maTSAkN1FIkI3LQ==}
@@ -20766,7 +20791,7 @@ packages:
 
 snapshots:
 
-  '@ai-sdk/anthropic@1.2.4(zod@3.24.2)':
+  '@ai-sdk/anthropic@1.2.5(zod@3.24.2)':
     dependencies:
       '@ai-sdk/provider': 1.1.0
       '@ai-sdk/provider-utils': 2.2.3(zod@3.24.2)
@@ -29584,7 +29609,7 @@ snapshots:
       - solid-js
       - vue
 
-  ai@4.2.10(react@19.1.0)(zod@3.24.2):
+  ai@4.2.11(react@19.1.0)(zod@3.24.2):
     dependencies:
       '@ai-sdk/provider': 1.1.0
       '@ai-sdk/provider-utils': 2.2.3(zod@3.24.2)
@@ -30155,6 +30180,8 @@ snapshots:
       - supports-color
 
   boolbase@1.0.0: {}
+
+  boolean@3.2.0: {}
 
   bowser@2.11.0: {}
 
@@ -31271,6 +31298,8 @@ snapshots:
 
   detect-node-es@1.1.0: {}
 
+  detect-node@2.1.0: {}
+
   detective-amd@5.0.2:
     dependencies:
       ast-module-types: 5.0.0
@@ -31727,6 +31756,8 @@ snapshots:
       es6-symbol: 3.1.4
       esniff: 2.0.1
       next-tick: 1.1.0
+
+  es6-error@4.1.1: {}
 
   es6-iterator@2.0.3:
     dependencies:
@@ -32914,10 +32945,10 @@ snapshots:
     dependencies:
       strnum: 1.1.2
 
-  fastembed@1.14.1:
+  fastembed@1.14.3:
     dependencies:
       '@anush008/tokenizers': 0.0.0
-      onnxruntime-node: 1.15.1
+      onnxruntime-node: 1.21.0
       progress: 2.0.3
       tar: 6.2.1
 
@@ -33510,6 +33541,15 @@ snapshots:
       inherits: 2.0.4
       minimatch: 5.1.6
       once: 1.4.0
+
+  global-agent@3.0.0:
+    dependencies:
+      boolean: 3.2.0
+      es6-error: 4.1.1
+      matcher: 3.0.0
+      roarr: 2.15.4
+      semver: 7.7.1
+      serialize-error: 7.0.1
 
   global-directory@4.0.1:
     dependencies:
@@ -35058,6 +35098,8 @@ snapshots:
 
   json-stable-stringify-without-jsonify@1.0.1: {}
 
+  json-stringify-safe@5.0.1: {}
+
   json5@1.0.2:
     dependencies:
       minimist: 1.2.8
@@ -35625,6 +35667,10 @@ snapshots:
 
   markdown-table@3.0.4: {}
 
+  matcher@3.0.0:
+    dependencies:
+      escape-string-regexp: 4.0.0
+
   math-intrinsics@1.1.0: {}
 
   maxstache-stream@1.0.4:
@@ -35832,7 +35878,7 @@ snapshots:
       uuid: 9.0.1
       zod: 3.22.4
     optionalDependencies:
-      posthog-js: 1.232.7
+      posthog-js: 1.234.6
     transitivePeerDependencies:
       - '@rrweb/types'
       - debug
@@ -37039,9 +37085,9 @@ snapshots:
 
   onnxruntime-common@1.14.0: {}
 
-  onnxruntime-common@1.15.1: {}
-
   onnxruntime-common@1.20.1: {}
+
+  onnxruntime-common@1.21.0: {}
 
   onnxruntime-common@1.22.0-dev.20250306-aafa8d170a: {}
 
@@ -37050,13 +37096,15 @@ snapshots:
       onnxruntime-common: 1.14.0
     optional: true
 
-  onnxruntime-node@1.15.1:
-    dependencies:
-      onnxruntime-common: 1.15.1
-
   onnxruntime-node@1.20.1:
     dependencies:
       onnxruntime-common: 1.20.1
+      tar: 7.4.3
+
+  onnxruntime-node@1.21.0:
+    dependencies:
+      global-agent: 3.0.0
+      onnxruntime-common: 1.21.0
       tar: 7.4.3
 
   onnxruntime-web@1.14.0:
@@ -37674,14 +37722,6 @@ snapshots:
   postgres-range@1.1.4: {}
 
   postgres@3.4.5: {}
-
-  posthog-js@1.232.7:
-    dependencies:
-      core-js: 3.41.0
-      fflate: 0.4.8
-      preact: 10.26.4
-      web-vitals: 4.2.4
-    optional: true
 
   posthog-js@1.234.6:
     dependencies:
@@ -38574,6 +38614,15 @@ snapshots:
     dependencies:
       glob: 10.4.5
 
+  roarr@2.15.4:
+    dependencies:
+      boolean: 3.2.0
+      detect-node: 2.1.0
+      globalthis: 1.0.4
+      json-stringify-safe: 5.0.1
+      semver-compare: 1.0.0
+      sprintf-js: 1.1.3
+
   rollup-plugin-delete@2.2.0(rollup@3.29.5):
     dependencies:
       del: 6.1.1
@@ -38762,6 +38811,8 @@ snapshots:
 
   semaphore@1.1.0: {}
 
+  semver-compare@1.0.0: {}
+
   semver@6.3.1: {}
 
   semver@7.5.4:
@@ -38806,6 +38857,10 @@ snapshots:
       - supports-color
 
   sentiment@5.0.2: {}
+
+  serialize-error@7.0.1:
+    dependencies:
+      type-fest: 0.13.1
 
   serialize-javascript@6.0.2:
     dependencies:
@@ -39141,8 +39196,7 @@ snapshots:
 
   sprintf-js@1.0.3: {}
 
-  sprintf-js@1.1.3:
-    optional: true
+  sprintf-js@1.1.3: {}
 
   sqlite3@5.1.7:
     dependencies:
@@ -40058,6 +40112,8 @@ snapshots:
   type-detect@4.0.8: {}
 
   type-detect@4.1.0: {}
+
+  type-fest@0.13.1: {}
 
   type-fest@0.20.2: {}
 
