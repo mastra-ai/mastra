@@ -1,5 +1,19 @@
 # mastra
 
+## 0.4.5-alpha.8
+
+### Patch Changes
+
+- 9d13790: update playground-ui dynamic form, cleanups
+- a3f0e90: Update storage initialization to ensure tables are present
+- 40dca45: Fix expanding workflow sidebar not expanding the output section
+- b311bb7: fix cli build command to use correct Mastra directory
+- d16ed18: Make playground-ui dynamic forms better
+- Updated dependencies [4c65a57]
+- Updated dependencies [a3f0e90]
+  - @mastra/deployer@0.2.6-alpha.8
+  - @mastra/core@0.8.0-alpha.6
+
 ## 0.4.5-alpha.7
 
 ### Patch Changes
