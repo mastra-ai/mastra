@@ -1,5 +1,4 @@
 ---
-'@mastra/deployer': patch
 'mastra': patch
 ---
 
