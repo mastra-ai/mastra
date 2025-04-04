@@ -1,0 +1,209 @@
+# Finding Relevant Past Messages with Semantic Recall
+
+While [conversation history](./last-messages.mdx) provides recent conversation context, semantic recall enables agents to find relevant information from anywhere in the conversation history based on meaning rather than just recency.
+
+## Quick Start
+
+Here's a minimal example of setting up an agent with semantic recall:
+
+```typescript
+import { Agent } from "@mastra/core/agent";
+import { Memory } from "@mastra/memory";
+import { openai } from "@ai-sdk/openai";
+
+// Create agent with memory (semantic recall is enabled by default)
+const agent = new Agent({
+  name: "SupportAgent",
+  instructions: "You are a helpful support agent.",
+  model: openai("gpt-4o"),
+  memory: new Memory(), // Uses default storage, vector, and embedder settings with semantic recall enabled by default
+});
+```
+
+## When to Use Semantic Recall
+
+Semantic recall is particularly valuable when users need to reference information from earlier in the conversation that would no longer be in the recent message history. This feature helps agents maintain context across longer interactions.
+
+Common use cases include:
+
+- Support conversations where users reference previous issues
+- Discussions spanning multiple sessions
+- Any conversation where specific details mentioned earlier remain relevant
+
+## How Semantic Recall Works
+
+Semantic recall uses the newest user message to search for previous messages based on meaning rather than just recency or exact wording:
+
+1. Every new message is converted into a vector representation (embedding)
+2. These embeddings are stored in a vector database
+3. A vector query is made using the embeddings
+4. The most relevant messages and their surrounding context are added to the agent's context window in chronological message order
+
+```text
+                   ┌─────────────────────┐
+                   │  New User Message   │
+                   └─────────┬───────────┘
+                             ▼
+                   ┌─────────────────────┐
+                   │    Generate and     │
+                   │  store embedding    │
+                   └─────────┬───────────┘
+                             ▼
+                ┌────────────────────────────┐
+                │  Search Vector Database    │
+                │   for Similar Messages     │
+                └────────────┬───────────────┘
+                             ▼
+         ┌─────────────────────────────────────┐
+         │    Retrieve Similar Messages        │
+         │    and Surrounding Context          │
+         └────────────────────┬────────────────┘
+                              ▼
+           ┌───────────────────────────────┐
+           │       Context Window          │
+           │  ─────────────────────────    │
+           │  System Instructions          │
+           │  Last Messages                │
+           │  Similar Past Messages        │
+           │  Current User Message         │
+           └───────────────┬───────────────┘
+                           │ sent to
+                           ▼
+                  ┌──────────────────┐
+                  │    LLM Provider  │
+                  └──────────────────┘
+                           ▼
+                  ┌──────────────────┐
+                  │  Agent Response  │
+                  └────────┬─────────┘
+                           ▼
+                  ┌──────────────────┐
+                  │   Store Both     │
+                  │User & Response   │
+                  │    Embeddings    │
+                  └──────────────────┘
+```
+
+This enables the agent to recall and reference specific information mentioned long ago in the conversation, even if it wasn't part of the most recent messages.
+
+## Configuring Semantic Recall
+
+The two main parameters that control semantic recall behavior are:
+
+1. **topK**: How many semantically similar messages to retrieve
+2. **messageRange**: How much surrounding context to include with each match
+
+```typescript
+const agent = new Agent({
+  // Other agent configuration...
+  memory: new Memory({
+    options: {
+      semanticRecall: {
+        topK: 3, // Retrieve 3 most similar messages
+        messageRange: 2, // Include 2 messages before and after each match
+      },
+    },
+  }),
+});
+```
+
+### Disabling Semantic Recall
+
+Semantic recall is enabled by default but can be disabled when not needed:
+
+```typescript
+// Disable globally
+const agent = new Agent({
+  // Other agent configuration...
+  memory: new Memory({
+    options: {
+      semanticRecall: false, // Explicitly disable semantic recall
+    },
+  }),
+});
+
+// Or disable for a specific request
+await agent.stream("Just focus on what I'm asking now", {
+  resourceId: "user_123",
+  threadId: "thread_456",
+  memoryOptions: {
+    semanticRecall: false, // Disable for this request only
+  },
+});
+```
+
+You might want to disable semantic recall in scenarios like:
+
+- When last messages provide sufficient context for the current conversation
+- In performance-sensitive applications where the added latency is a concern
+- For simple question-answering without the need for historical context
+
+### Vector Database Configuration
+
+You can configure a different vector database if you prefer an alternative to the default libsql vector db:
+
+```typescript
+import { Agent } from "@mastra/core/agent";
+import { Memory } from "@mastra/memory";
+import { PgVector, PostgresStore } from "@mastra/pg";
+import { openai } from "@ai-sdk/openai";
+
+const agent = new Agent({
+  name: "SupportAgent",
+  instructions: "You are a helpful support agent.",
+  model: openai("gpt-4o"),
+  memory: new Memory({
+    storage: new PostgresStore({ connectionString: process.env.DATABASE_URL! }),
+    vector: new PgVector(process.env.DATABASE_URL!),
+  }),
+});
+```
+
+For more vector database options, see [Configuring Memory](./configuring-memory.mdx).
+
+### Embedder Configuration
+
+Embedders convert text into numerical vector representations that capture semantic meaning. By default, Mastra uses FastEmbed with the "bge-small-en-v1.5" model, which runs directly on your application server without making external API calls.
+
+For environments where local embedding isn't supported, you can use an API-based embedder:
+
+```typescript
+import { Memory } from "@mastra/memory";
+import { openai } from "@ai-sdk/openai";
+
+// Using OpenAI embeddings (API-based)
+const agent = new Agent({
+  // Other agent configuration...
+  memory: new Memory({
+    embedder: openai.embedding("text-embedding-3-small"), // Adds network request
+  }),
+});
+```
+
+Mastra supports many embedding models through the [Vercel AI SDK](https://sdk.vercel.ai/docs/ai-sdk-core/embeddings), including options from OpenAI, Google, Mistral, and Cohere.
+
+## Performance and Token Considerations
+
+Semantic recall impacts both performance and token usage:
+
+### Performance Impact
+
+- Generating embeddings adds processing time to each interaction
+- Vector database searches introduce additional latency
+- Larger message histories can lead to longer search times
+
+### Token Usage
+
+- Each retrieved message consumes tokens in the context window
+- Higher `topK` values increase token consumption
+- Larger `messageRange` settings further increase token usage
+- You can use the [Token Limiter memory processor](./token-management.mdx) to manage token consumption
+
+## Related Features
+
+Semantic recall works alongside other memory features to enhance agent capabilities:
+
+- **[Conversation History](./last-messages.mdx)**: For recent conversation history
+- **[Working Memory](./working-memory.mdx)**: For storing persistent information
+- **[Token Management](./token-management.mdx)**: For optimizing token usage with memory
+

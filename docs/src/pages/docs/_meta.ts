@@ -16,6 +16,10 @@ const meta = {
     title: "Agents",
     collapsed: false,
   },
+  memory: {
+    title: "Memory",
+    collapsed: false,
+  },
   workflows: {
     title: "Workflows",
     collapsed: false,
