@@ -157,7 +157,15 @@ export class Workflow extends BaseResource {
           for (const chunk of chunks) {
             if (chunk) {
               // Only process non-empty chunks
-              yield JSON.parse(chunk);
+              if (typeof chunk === 'string') {
+                try {
+                  const parsedChunk = JSON.parse(chunk);
+                  yield parsedChunk;
+                } catch {
+                  // Silently ignore parsing errors to maintain stream processing
+                  // This allows the stream to continue even if one record is malformed
+                }
+              }
             }
           }
         } catch (error) {
