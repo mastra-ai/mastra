@@ -73,7 +73,7 @@ This is a high level overview for the new info arch for Mastra Memory documentat
        - [ ] Add React/Next.js example
    - [ ] 3.5. Tuning for your LLM (token limits + tool call filters)
        - [x] Initial draft ./new-docs/3-using-memory/3.5-token-management.md
-       - [ ] Pair review / edits
+       - [x] Pair review / edits
        - [ ] Compare with user feedback
        - [ ] Move into actual docs page
        - [ ] Add performance metrics for different models
