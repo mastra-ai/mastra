@@ -61,8 +61,8 @@ export class CloudflareDeployer extends Deployer {
     const wranglerConfig: Record<string, any> = {
       name: cfWorkerName,
       main: './index.mjs',
-      compatibility_date: '2024-12-02',
-      compatibility_flags: ['nodejs_compat'],
+      compatibility_date: '2025-04-01',
+      compatibility_flags: ['nodejs_compat', 'nodejs_compat_populate_process_env'],
       observability: {
         logs: {
           enabled: true,
@@ -86,11 +86,6 @@ import { createHonoServer } from '#server';
 
 export default {
   fetch: async (request, env, context) => {
-    // fixes process.env
-    Object.keys(env).forEach(key => {
-      process.env[key] = env[key]
-    })
-
     const app = await createHonoServer(mastra)
     return app.fetch(request, env, context);
   }

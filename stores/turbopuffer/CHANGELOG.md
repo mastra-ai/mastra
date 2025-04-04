@@ -1,5 +1,12 @@
 # @mastra/turbopuffer
 
+## 0.0.7-alpha.5
+
+### Patch Changes
+
+- Updated dependencies [93875ed]
+  - @mastra/core@0.8.0-alpha.5
+
 ## 0.0.7-alpha.4
 
 ### Patch Changes

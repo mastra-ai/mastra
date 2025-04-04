@@ -115,7 +115,7 @@ export const useWatchWorkflow = (baseUrl: string) => {
 
       const workflow = client.getWorkflow(workflowId);
 
-      workflow.watch({ runId }, record => {
+      await workflow.watch({ runId }, record => {
         setWatchResult(record);
       });
     } catch (error) {

@@ -43,7 +43,7 @@ export async function getTelemetryHandler({ mastra, body }: TelemetryContext) {
         )
       : undefined;
 
-    const traces = await storage.getTraces({
+    const traces = await storage.__getTraces({
       name,
       scope,
       page: Number(page ?? 0),
@@ -51,7 +51,7 @@ export async function getTelemetryHandler({ mastra, body }: TelemetryContext) {
       attributes,
     });
 
-    return { traces };
+    return traces;
   } catch (error) {
     return handleError(error, 'Error getting telemetry');
   }
