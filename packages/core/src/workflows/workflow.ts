@@ -995,41 +995,45 @@ export class Workflow<
     return this.#runs.get(runId)?.executionSpan;
   }
 
-  #getParentStepKey(
-    { loop_check, if_else_check }: { loop_check?: boolean; if_else_check?: boolean } = {
-      loop_check: false,
-      if_else_check: false,
-    },
-  ) {
-    let parentStepKey = undefined;
+  #getParentStepKey({
+    loop_check = false,
+    if_else_check = false,
+  }: {
+    loop_check?: boolean;
+    if_else_check?: boolean;
+  } = {}) {
+    // Search backwards through afterStepStack for valid parent step
     for (let i = this.#afterStepStack.length - 1; i >= 0; i--) {
       const stepKey = this.#afterStepStack[i];
-      if (
-        stepKey &&
+      if (!stepKey) continue;
+
+      const isValidStep =
         this.#stepSubscriberGraph[stepKey] &&
-        (loop_check ? !stepKey.includes('loop_check') : true) &&
-        (if_else_check ? !isConditionalKey(stepKey) : true)
-      ) {
-        parentStepKey = stepKey;
-        break;
+        (!loop_check || !stepKey.includes('loop_check')) &&
+        (!if_else_check || !isConditionalKey(stepKey));
+
+      if (isValidStep) {
+        return stepKey;
       }
     }
 
-    return parentStepKey;
+    return undefined;
   }
 
   #getLastStep({ if_else_check }: { if_else_check: boolean }) {
-    let lastStep = undefined;
+    // Iterate backwards through the step stack to find the last valid step
     for (let i = this.#lastStepStack.length - 1; i >= 0; i--) {
       const stepKey = this.#lastStepStack[i];
-      const step = this.#steps[stepKey ?? ''];
-      if (stepKey && step && (if_else_check ? !isConditionalKey(stepKey) : true)) {
-        lastStep = step;
-        break;
-      }
+      if (!stepKey) continue;
+
+      const step = this.#steps[stepKey];
+      const isInvalidStep = !step || (if_else_check && isConditionalKey(stepKey));
+      if (isInvalidStep) continue;
+
+      return step;
     }
 
-    return lastStep;
+    return undefined;
   }
 
   #makeStepDef<TStepId extends TSteps[number]['id'], TSteps extends Step<any, any, any>[]>(
