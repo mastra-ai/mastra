@@ -10,7 +10,6 @@ export class CompositeExporter implements SpanExporter {
   }
 
   export(spans: ReadableSpan[], resultCallback: (result: ExportResult) => void): void {
-    console.log('[CompositeExporter] Exporting spans...');
     // First collect all traceIds from telemetry endpoint spans
     const telemetryTraceIds = new Set(
       spans

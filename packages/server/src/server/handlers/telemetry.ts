@@ -59,6 +59,7 @@ export async function getTelemetryHandler({ mastra, body }: TelemetryContext) {
 export async function storeTelemetryHandler({ mastra, body }: Context & { body: { resourceSpans: any[] } }) {
   try {
     const storage = mastra.getStorage();
+    const logger = mastra.getLogger();
 
     if (!storage) {
       throw new HTTPException(400, { message: 'Storage is not initialized' });
@@ -67,7 +68,7 @@ export async function storeTelemetryHandler({ mastra, body }: Context & { body: 
     const now = new Date();
 
     const items = body?.resourceSpans?.[0]?.scopeSpans;
-    console.log('[Telemetry Handler] Received spans:', {
+    logger.debug('[Telemetry Handler] Received spans:', {
       totalSpans: items?.reduce((acc: number, scope: { spans: any[] }) => acc + scope.spans.length, 0) || 0,
       timestamp: now.toISOString(),
     });
