@@ -5,6 +5,18 @@ export interface Message {
   isError?: boolean;
 }
 
+export interface ModelSettings {
+  frequencyPenalty?: number;
+  presencePenalty?: number;
+  maxRetries?: number;
+  maxSteps?: number;
+  maxTokens?: number;
+  temperature?: number;
+  topK?: number;
+  topP?: number;
+  instructions?: string;
+}
+
 export interface ChatProps {
   agentId: string;
   agentName?: string;
@@ -13,6 +25,7 @@ export interface ChatProps {
   memory?: boolean;
   baseUrl?: string;
   refreshThreadList?: () => void;
+  modelSettings?: ModelSettings;
 }
 
 export type SpanStatus = {
