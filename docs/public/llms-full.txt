@@ -2089,7 +2089,7 @@ See [`mastra build`](/docs/reference/cli/build) for all options.
 Start the HTTP server:
 
 ```bash copy
-node .mastra/output/index.mjs
+cd .mastra/output && node index.mjs
 ```
 
 ## Serverless Deployment
