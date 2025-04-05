@@ -5,6 +5,7 @@ import type { WorkflowRunState } from '../../workflows';
 
 import type { MastraStorage } from '../base';
 import { TABLE_WORKFLOW_SNAPSHOT, TABLE_EVALS, TABLE_MESSAGES, TABLE_THREADS } from '../constants';
+import type { MetricResult } from '../../eval';
 
 export function createTestSuite(storage: MastraStorage) {
   describe('DefaultStorage', () => {
@@ -578,6 +579,107 @@ export function createTestSuite(storage: MastraStorage) {
         const snapshot = page2.runs[0]!.snapshot as WorkflowRunState;
         expect(snapshot.context?.steps[stepId1]?.status).toBe('completed');
       });
+    });
+  });
+
+  describe('Eval Operations', () => {
+    const createSampleEval = (agentName: string, isTest = false) => {
+      const testInfo = isTest ? { testPath: 'test/path.ts', testName: 'Test Name' } : undefined;
+
+      return {
+        id: randomUUID(),
+        agentName,
+        input: 'Sample input',
+        output: 'Sample output',
+        result: { score: 0.8 } as MetricResult,
+        metricName: 'sample-metric',
+        instructions: 'Sample instructions',
+        testInfo,
+        globalRunId: `global-${randomUUID()}`,
+        runId: `run-${randomUUID()}`,
+        createdAt: new Date().toISOString(),
+      };
+    };
+
+    it('should retrieve evals by agent name', async () => {
+      const agentName = `test-agent-${randomUUID()}`;
+
+      // Create sample evals
+      const liveEval = createSampleEval(agentName, false);
+      const testEval = createSampleEval(agentName, true);
+      const otherAgentEval = createSampleEval(`other-agent-${randomUUID()}`, false);
+
+      // Insert evals
+      await storage.insert({
+        tableName: TABLE_EVALS,
+        record: {
+          agent_name: liveEval.agentName,
+          input: liveEval.input,
+          output: liveEval.output,
+          result: liveEval.result,
+          metric_name: liveEval.metricName,
+          instructions: liveEval.instructions,
+          test_info: null,
+          global_run_id: liveEval.globalRunId,
+          run_id: liveEval.runId,
+          created_at: liveEval.createdAt,
+          createdAt: new Date(liveEval.createdAt),
+        },
+      });
+
+      await storage.insert({
+        tableName: TABLE_EVALS,
+        record: {
+          agent_name: testEval.agentName,
+          input: testEval.input,
+          output: testEval.output,
+          result: testEval.result,
+          metric_name: testEval.metricName,
+          instructions: testEval.instructions,
+          test_info: JSON.stringify(testEval.testInfo),
+          global_run_id: testEval.globalRunId,
+          run_id: testEval.runId,
+          created_at: testEval.createdAt,
+          createdAt: new Date(testEval.createdAt),
+        },
+      });
+
+      await storage.insert({
+        tableName: TABLE_EVALS,
+        record: {
+          agent_name: otherAgentEval.agentName,
+          input: otherAgentEval.input,
+          output: otherAgentEval.output,
+          result: otherAgentEval.result,
+          metric_name: otherAgentEval.metricName,
+          instructions: otherAgentEval.instructions,
+          test_info: null,
+          global_run_id: otherAgentEval.globalRunId,
+          run_id: otherAgentEval.runId,
+          created_at: otherAgentEval.createdAt,
+          createdAt: new Date(otherAgentEval.createdAt),
+        },
+      });
+
+      // Test getting all evals for the agent
+      const allEvals = await storage.getEvalsByAgentName(agentName);
+      expect(allEvals).toHaveLength(2);
+      expect(allEvals.map(e => e.runId)).toEqual(expect.arrayContaining([liveEval.runId, testEval.runId]));
+
+      // Test getting only live evals
+      const liveEvals = await storage.getEvalsByAgentName(agentName, 'live');
+      expect(liveEvals).toHaveLength(1);
+      expect(liveEvals?.[0]?.runId).toBe(liveEval.runId);
+
+      // Test getting only test evals
+      const testEvals = await storage.getEvalsByAgentName(agentName, 'test');
+      expect(testEvals).toHaveLength(1);
+      expect(testEvals?.[0]?.runId).toBe(testEval.runId);
+      expect(testEvals?.[0]?.testInfo).toEqual(testEval.testInfo);
+
+      // Test getting evals for non-existent agent
+      const nonExistentEvals = await storage.getEvalsByAgentName('non-existent-agent');
+      expect(nonExistentEvals).toHaveLength(0);
     });
   });
 }

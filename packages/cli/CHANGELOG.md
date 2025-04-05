@@ -1,5 +1,75 @@
 # mastra
 
+## 0.4.5-alpha.9
+
+### Patch Changes
+
+- 40720d3: Add support for webcontainers like stackblitz
+- Updated dependencies [3c6ae54]
+- Updated dependencies [febc8a6]
+  - @mastra/deployer@0.2.6-alpha.9
+  - @mastra/core@0.8.0-alpha.7
+
+## 0.4.5-alpha.8
+
+### Patch Changes
+
+- 9d13790: update playground-ui dynamic form, cleanups
+- a3f0e90: Update storage initialization to ensure tables are present
+- 40dca45: Fix expanding workflow sidebar not expanding the output section
+- b311bb7: fix cli build command to use correct Mastra directory
+- d16ed18: Make playground-ui dynamic forms better
+- Updated dependencies [4c65a57]
+- Updated dependencies [a3f0e90]
+  - @mastra/deployer@0.2.6-alpha.8
+  - @mastra/core@0.8.0-alpha.6
+
+## 0.4.5-alpha.7
+
+### Patch Changes
+
+- 9f529a4: enable geoip in system properties for analytics
+- Updated dependencies [93875ed]
+  - @mastra/core@0.8.0-alpha.5
+  - @mastra/deployer@0.2.6-alpha.7
+
+## 0.4.5-alpha.6
+
+### Patch Changes
+
+- Updated dependencies [d7e08e8]
+  - @mastra/core@0.8.0-alpha.4
+  - @mastra/deployer@0.2.6-alpha.6
+
+## 0.4.5-alpha.5
+
+### Patch Changes
+
+- Updated dependencies [32ba03c]
+  - @mastra/deployer@0.2.6-alpha.5
+
+## 0.4.5-alpha.4
+
+### Patch Changes
+
+- 789bef3: Make runId optional for workflow startAsync api
+- 6330967: Enable route timeout using server options
+- 8393832: Handle nested workflow view on workflow graph
+- 6330967: Add support for configuration of server port using Mastra instance
+- Updated dependencies [5ae0180]
+- Updated dependencies [9bfa12b]
+- Updated dependencies [515ebfb]
+- Updated dependencies [88fa727]
+- Updated dependencies [dfb0601]
+- Updated dependencies [f37f535]
+- Updated dependencies [789bef3]
+- Updated dependencies [4d67826]
+- Updated dependencies [6330967]
+- Updated dependencies [8393832]
+- Updated dependencies [6330967]
+  - @mastra/core@0.8.0-alpha.3
+  - @mastra/deployer@0.2.6-alpha.4
+
 ## 0.4.5-alpha.3
 
 ### Patch Changes

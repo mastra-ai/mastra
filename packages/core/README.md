@@ -40,7 +40,7 @@ const agent = new Agent({
 });
 ```
 
-[Agent documentation →](https://mastra.ai/docs/agents/00-overview)
+[Agent documentation →](https://mastra.ai/docs/agents/overview)
 
 ### Workflows (`/workflows`)
 
@@ -57,7 +57,7 @@ const workflow = new Workflow({
 });
 ```
 
-[Workflow documentation →](https://mastra.ai/docs/workflows/00-overview)
+[Workflow documentation →](https://mastra.ai/docs/workflows/overview)
 
 ### Memory (`/memory`)
 
@@ -106,7 +106,7 @@ const weatherInfo = createTool({
 });
 ```
 
-[Tools documentation →](https://mastra.ai/docs/agents/02-adding-tools)
+[Tools documentation →](https://mastra.ai/docs/agents/adding-tools)
 
 ### Evals (`/eval`)
 
@@ -132,7 +132,7 @@ const agent = new Agent({
 });
 ```
 
-[More evals documentation →](https://mastra.ai/docs/evals/00-overview)
+[More evals documentation →](https://mastra.ai/docs/evals/overview)
 
 ### Logger (`/logger`)
 

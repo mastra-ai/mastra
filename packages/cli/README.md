@@ -113,7 +113,7 @@ This CLI collects anonymous usage data (no personal/sensitive info) to help impr
 
 To opt-out:
 
-1. Add `NO_MASTRA_TELEMETRY=1` to commands
+1. Add `MASTRA_TELEMETRY_DISABLED=1` to commands
 
 ## Local development
 

@@ -47,6 +47,8 @@ export interface AgentConfig<
   instructions: string;
   model: MastraLanguageModel;
   variablesSchema?: TSchemaVariables;
+  defaultGenerateOptions?: AgentGenerateOptions;
+  defaultStreamOptions?: AgentStreamOptions;
   tools?: TTools;
   mastra?: Mastra;
   /** @deprecated This property is deprecated. Use evals instead to add evaluation metrics. */

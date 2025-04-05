@@ -27,7 +27,22 @@ export const useWorkflow = (workflowId: string, baseUrl: string) => {
           toast.error('Error fetching workflow');
           return;
         }
-        setWorkflow(res as Workflow);
+        const steps = res.steps;
+        const stepsWithWorkflow = await Promise.all(
+          Object.values(steps)?.map(async step => {
+            if (!step.workflowId) return step;
+
+            const wFlow = await client.getWorkflow(step.workflowId).details();
+
+            if (!res) return step;
+
+            return { ...step, stepGraph: wFlow.stepGraph, stepSubscriberGraph: wFlow.stepSubscriberGraph };
+          }),
+        );
+        const _steps = stepsWithWorkflow.reduce((acc, b) => {
+          return { ...acc, [b.id]: b };
+        }, {});
+        setWorkflow({ ...res, steps: _steps } as Workflow);
       } catch (error) {
         setWorkflow(null);
         console.error('Error fetching workflow', error);
@@ -50,19 +65,6 @@ export const useExecuteWorkflow = (baseUrl: string) => {
     baseUrl: baseUrl || '',
   });
 
-  const executeWorkflow = async ({ workflowId, input }: { workflowId: string; input: any }) => {
-    try {
-      setIsExecutingWorkflow(true);
-      const response = await client.getWorkflow(workflowId).execute(input || {});
-      return response;
-    } catch (error) {
-      console.error('Error executing workflow:', error);
-      throw error;
-    } finally {
-      setIsExecutingWorkflow(false);
-    }
-  };
-
   const createWorkflowRun = async ({ workflowId, prevRunId }: { workflowId: string; prevRunId?: string }) => {
     try {
       const workflow = client.getWorkflow(workflowId);
@@ -84,7 +86,7 @@ export const useExecuteWorkflow = (baseUrl: string) => {
     }
   };
 
-  return { executeWorkflow, startWorkflowRun, createWorkflowRun, isExecutingWorkflow };
+  return { startWorkflowRun, createWorkflowRun, isExecutingWorkflow };
 };
 
 export const useWatchWorkflow = (baseUrl: string) => {
@@ -100,7 +102,7 @@ export const useWatchWorkflow = (baseUrl: string) => {
 
       const workflow = client.getWorkflow(workflowId);
 
-      workflow.watch({ runId }, record => {
+      await workflow.watch({ runId }, record => {
         setWatchResult(record);
       });
     } catch (error) {

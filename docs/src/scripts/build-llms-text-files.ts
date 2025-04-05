@@ -24,7 +24,7 @@ function pathToUrl(filePath: string): string {
   // Remove 'src/pages/' prefix, '.mdx' suffix, and 'index' for index pages
   const cleanPath = filePath
     .replaceAll("\\", "/") // windows support
-    .replace(/^src\/pages\//, "")
+    .replace(/^src\/content\//, "")
     .replace(/\/index\.mdx$|\.mdx$/, "");
   return `https://mastra.ai/${cleanPath}`;
 }
@@ -161,17 +161,17 @@ async function concatenateMDXDocs(sourceDir: string) {
     // Group files by parent directory
     const groupedFiles = mdxFiles.reduce(
       (groups, file) => {
-        const pagesIndex = file.path.indexOf("src/pages/");
+        const pagesIndex = file.path.indexOf("src/content/");
         if (pagesIndex === -1) {
           console.warn(
-            `File ${file.path} is not under src/pages/, skipping from index`,
+            `File ${file.path} is not under src/content/, skipping from index`,
           );
           return groups;
         }
 
         // Get the first directory after 'src/pages/'
         const pathAfterPages = file.path.slice(
-          pagesIndex + "src/pages/".length,
+          pagesIndex + "src/content/".length,
         );
         const firstDir = pathAfterPages.split("/")[0];
 
@@ -230,6 +230,7 @@ async function concatenateMDXDocs(sourceDir: string) {
 }
 
 const docsDir = process.argv[2] || ".";
+console.log(docsDir);
 
 concatenateMDXDocs(docsDir).catch((error) => {
   console.error(

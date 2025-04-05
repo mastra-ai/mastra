@@ -1,5 +1,20 @@
 # create-mastra
 
+## 0.2.4-alpha.2
+
+### Patch Changes
+
+- 9d13790: update playground-ui dynamic form, cleanups
+- 40dca45: Fix expanding workflow sidebar not expanding the output section
+- d16ed18: Make playground-ui dynamic forms better
+
+## 0.2.4-alpha.1
+
+### Patch Changes
+
+- 789bef3: Make runId optional for workflow startAsync api
+- 8393832: Handle nested workflow view on workflow graph
+
 ## 0.2.4-alpha.0
 
 ### Patch Changes

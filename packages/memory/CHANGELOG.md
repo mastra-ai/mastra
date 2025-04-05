@@ -1,5 +1,53 @@
 # @mastra/memory
 
+## 0.2.7-alpha.7
+
+### Patch Changes
+
+- Updated dependencies [febc8a6]
+  - @mastra/core@0.8.0-alpha.7
+
+## 0.2.7-alpha.6
+
+### Patch Changes
+
+- Updated dependencies [a3f0e90]
+  - @mastra/core@0.8.0-alpha.6
+
+## 0.2.7-alpha.5
+
+### Patch Changes
+
+- 93875ed: Improved the performance of Memory semantic recall by 2 to 3 times when using pg by making tweaks to @mastra/memory @mastra/core and @mastra/pg
+- Updated dependencies [93875ed]
+  - @mastra/core@0.8.0-alpha.5
+
+## 0.2.7-alpha.4
+
+### Patch Changes
+
+- Updated dependencies [d7e08e8]
+  - @mastra/core@0.8.0-alpha.4
+  - @mastra/rag@0.1.15-alpha.4
+
+## 0.2.7-alpha.3
+
+### Patch Changes
+
+- 5ae0180: Removed prefixed doc references
+- 3e72f94: Updated the internal working memory system to use MD for formatting instead of nested XML - this is more token efficient and makes it more obvious that it's unstructured text
+- Updated dependencies [5ae0180]
+- Updated dependencies [9bfa12b]
+- Updated dependencies [515ebfb]
+- Updated dependencies [88fa727]
+- Updated dependencies [f37f535]
+- Updated dependencies [4d67826]
+- Updated dependencies [6330967]
+- Updated dependencies [8393832]
+- Updated dependencies [6330967]
+  - @mastra/core@0.8.0-alpha.3
+  - @mastra/rag@0.1.15-alpha.3
+
 ## 0.2.7-alpha.2
 
 ### Patch Changes

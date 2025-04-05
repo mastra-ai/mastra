@@ -1,5 +1,61 @@
 # @mastra/playground-ui
 
+## 4.0.0-alpha.7
+
+### Patch Changes
+
+- Updated dependencies [febc8a6]
+  - @mastra/core@0.8.0-alpha.7
+  - @mastra/client-js@0.1.14-alpha.7
+
+## 4.0.0-alpha.6
+
+### Patch Changes
+
+- 9d13790: update playground-ui dynamic form, cleanups
+- 40dca45: Fix expanding workflow sidebar not expanding the output section
+- d16ed18: Make playground-ui dynamic forms better
+- Updated dependencies [a3f0e90]
+- Updated dependencies [5646a01]
+  - @mastra/core@0.8.0-alpha.6
+  - @mastra/client-js@0.1.14-alpha.6
+
+## 4.0.0-alpha.5
+
+### Patch Changes
+
+- Updated dependencies [93875ed]
+  - @mastra/core@0.8.0-alpha.5
+  - @mastra/client-js@0.1.14-alpha.5
+
+## 4.0.0-alpha.4
+
+### Patch Changes
+
+- Updated dependencies [d7e08e8]
+  - @mastra/core@0.8.0-alpha.4
+  - @mastra/client-js@0.1.14-alpha.4
+
+## 4.0.0-alpha.3
+
+### Patch Changes
+
+- 5ae0180: Removed prefixed doc references
+- 7bdbb64: Show no input when attributs are empty
+- 8393832: Handle nested workflow view on workflow graph
+- Updated dependencies [5ae0180]
+- Updated dependencies [9bfa12b]
+- Updated dependencies [515ebfb]
+- Updated dependencies [88fa727]
+- Updated dependencies [f37f535]
+- Updated dependencies [789bef3]
+- Updated dependencies [4d67826]
+- Updated dependencies [6330967]
+- Updated dependencies [8393832]
+- Updated dependencies [6330967]
+  - @mastra/core@0.8.0-alpha.3
+  - @mastra/client-js@0.1.14-alpha.3
+
 ## 4.0.0-alpha.2
 
 ### Patch Changes
