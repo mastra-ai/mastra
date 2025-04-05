@@ -6,15 +6,15 @@ import type {
   CoreUserMessage as AiCoreUserMessage,
   EmbedManyResult as AiEmbedManyResult,
   EmbedResult as AiEmbedResult,
+  generateObject,
   GenerateObjectResult,
+  generateText,
   GenerateTextResult,
+  streamObject,
   StreamObjectResult,
+  streamText,
   StreamTextResult,
   TelemetrySettings,
-  streamText,
-  streamObject,
-  generateText,
-  generateObject,
 } from 'ai';
 import type { JSONSchema7 } from 'json-schema';
 import type { z, ZodSchema } from 'zod';
@@ -22,6 +22,7 @@ import type { z, ZodSchema } from 'zod';
 import type { MastraLanguageModel, ToolsInput } from '../agent/types';
 import type { Run } from '../run/types';
 import type { CoreTool } from '../tools/types';
+import type { VariablesType } from '../utils';
 
 export type LanguageModel = MastraLanguageModel;
 
@@ -98,39 +99,64 @@ export type DefaultLLMTextObjectOptions = Omit<GenerateObjectOptions, MastraCust
 export type DefaultLLMStreamOptions = Omit<StreamTextOptions, MastraCustomLLMOptionsKeys>;
 export type DefaultLLMStreamObjectOptions = Omit<StreamObjectOptions, MastraCustomLLMOptionsKeys>;
 
-type MastraCustomLLMOptions<Z extends ZodSchema | JSONSchema7 | undefined = undefined> = {
-  tools?: ToolsInput;
+type MastraCustomLLMOptions<
+  Z extends ZodSchema | JSONSchema7 | undefined = undefined,
+  TSchemaVariables extends ZodSchema | undefined = undefined,
+  TTools extends ToolsInput<TSchemaVariables> | undefined = undefined,
+> = {
+  tools?: TTools;
   convertedTools?: Record<string, CoreTool>;
   onStepFinish?: (step: unknown) => void;
   experimental_output?: Z;
   telemetry?: TelemetrySettings;
   threadId?: string;
   resourceId?: string;
+  variables?: VariablesType<TSchemaVariables>;
 } & Run;
 
-export type LLMTextOptions<Z extends ZodSchema | JSONSchema7 | undefined = undefined> = {
+export type LLMTextOptions<
+  Z extends ZodSchema | JSONSchema7 | undefined = undefined,
+  TSchemaVariables extends ZodSchema | undefined = undefined,
+  TTools extends ToolsInput<TSchemaVariables> | undefined = undefined,
+> = {
   messages: CoreMessage[];
-} & MastraCustomLLMOptions<Z> &
+} & MastraCustomLLMOptions<Z, TSchemaVariables, TTools> &
   DefaultLLMTextOptions;
 
-export type LLMTextObjectOptions<T extends ZodSchema | JSONSchema7 | undefined = undefined> = LLMTextOptions<T> &
+export type LLMTextObjectOptions<
+  T extends ZodSchema | JSONSchema7 | undefined = undefined,
+  TSchemaVariables extends ZodSchema | undefined = undefined,
+  TTools extends ToolsInput<TSchemaVariables> | undefined = undefined,
+> = LLMTextOptions<T, TSchemaVariables, TTools> &
   DefaultLLMTextObjectOptions & {
     structuredOutput: JSONSchema7 | z.ZodType<T> | StructuredOutput;
   };
 
-export type LLMStreamOptions<Z extends ZodSchema | JSONSchema7 | undefined = undefined> = {
+export type LLMStreamOptions<
+  Z extends ZodSchema | JSONSchema7 | undefined = undefined,
+  TSchemaVariables extends ZodSchema | undefined = undefined,
+  TTools extends ToolsInput<TSchemaVariables> | undefined = undefined,
+> = {
   output?: OutputType | Z;
   onFinish?: (result: string) => Promise<void> | void;
-} & MastraCustomLLMOptions<Z> &
+} & MastraCustomLLMOptions<Z, TSchemaVariables, TTools> &
   DefaultLLMStreamOptions;
 
-export type LLMInnerStreamOptions<Z extends ZodSchema | JSONSchema7 | undefined = undefined> = {
+export type LLMInnerStreamOptions<
+  Z extends ZodSchema | JSONSchema7 | undefined = undefined,
+  TSchemaVariables extends ZodSchema | undefined = undefined,
+  TTools extends ToolsInput<TSchemaVariables> | undefined = undefined,
+> = {
   messages: CoreMessage[];
   onFinish?: (result: string) => Promise<void> | void;
-} & MastraCustomLLMOptions<Z> &
+} & MastraCustomLLMOptions<Z, TSchemaVariables, TTools> &
   DefaultLLMStreamOptions;
 
-export type LLMStreamObjectOptions<T extends ZodSchema | JSONSchema7 | undefined = undefined> = {
+export type LLMStreamObjectOptions<
+  T extends ZodSchema | JSONSchema7 | undefined = undefined,
+  TSchemaVariables extends ZodSchema | undefined = undefined,
+  TTools extends ToolsInput<TSchemaVariables> | undefined = undefined,
+> = {
   structuredOutput: JSONSchema7 | z.ZodType<T> | StructuredOutput;
-} & LLMInnerStreamOptions<T> &
+} & LLMInnerStreamOptions<T, TSchemaVariables, TTools> &
   DefaultLLMStreamObjectOptions;

@@ -55,7 +55,7 @@ const DEFAULT_MODEL = 'gpt-4o-mini-realtime-preview-2024-12-17';
 //   silence_duration_ms: 1000,
 // } as Realtime.TurnDetection;
 
-type TTools = ToolsInput;
+type TTools = ToolsInput<any>;
 
 /**
  * Available voice options for text-to-speech.

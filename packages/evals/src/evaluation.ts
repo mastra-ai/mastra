@@ -1,5 +1,5 @@
-import { evaluate as coreEvaluate } from '@mastra/core';
 import type { Metric } from '@mastra/core';
+import { evaluate as coreEvaluate } from '@mastra/core';
 import type { Agent } from '@mastra/core/agent';
 
 import { GLOBAL_RUN_ID_ENV_KEY } from './constants';

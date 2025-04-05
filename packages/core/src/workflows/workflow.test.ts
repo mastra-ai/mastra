@@ -1,6 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import { openai } from '@ai-sdk/openai';
+import { config } from 'dotenv';
 import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 
@@ -16,6 +17,8 @@ import { Step } from './step';
 import type { WorkflowContext, WorkflowResumeResult } from './types';
 import { WhenConditionReturnValue } from './types';
 import { Workflow } from './workflow';
+
+config();
 
 const storage = new DefaultStorage({
   config: {
@@ -2321,6 +2324,8 @@ describe('Workflow', async () => {
       });
 
       const workflow = new Workflow({ name: 'test-workflow' });
+
+      // @ts-expect-error - tools are not type-safe compatible with step actions
       workflow.step(step1).after(step1).step(randomTool).commit();
 
       await workflow.createRun().start();

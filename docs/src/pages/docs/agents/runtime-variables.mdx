@@ -1,0 +1,374 @@
+---
+title: "Agent Variables | Agent Documentation | Mastra"
+description: Learn how to use Mastra's variable injection system to provide runtime configuration to agents and tools in a type-safe manner.
+---
+
+# Agent Variables
+
+Mastra's Agent class supports a powerful variable injection system that allows you to securely pass runtime configuration to tools in a type-safe manner. With strong type safety through Zod schemas, you can ensure your agents have everything they need at runtime.
+
+## Overview
+
+The variables system allows you to:
+
+1. Define a schema for variables using Zod
+2. Pass variables to the agent at runtime
+3. Access those variables in tools execution context
+
+The type and runtime systems work together to ensure:
+
+- The type system helps you define the correct shape of variables
+- Variables you provide must match the schema you defined
+- Tools must use the same variables schema as their agent to ensure compatibility
+
+This approach provides type safety and validation where it matters most - when the agent is actually executing.
+
+## Basic Usage
+
+### 1. Define a variables schema
+
+```typescript
+import { z } from "zod";
+
+export const weatherVarsSchema = z.object({
+  apiKey: z.string(),
+  userId: z.number(),
+  temperatureUnit: z.enum(['celsius', 'fahrenheit']),
+});
+```
+
+### 2. Create an agent with the schema
+
+```typescript
+import { Agent } from "@mastra/core/agent";
+import { openai } from "@ai-sdk/openai";
+import { weatherVarsSchema } from "../schemas/variables";
+
+export const weatherAgent = new Agent({
+  name: "WeatherAgent",
+  instructions: "You are a helpful agent that provides weather information",
+  model: openai("gpt-4o"),
+  variablesSchema: weatherVarsSchema,
+});
+```
+
+### 3. Provide variables when generating responses
+
+```typescript
+const agent = mastra.getAgent("weatherAgent");
+
+// TypeScript enforces that the provided variables match the schema
+const response = await agent.generate("What's the weather like today?", {
+  variables: {
+    apiKey: process.env.WEATHER_API_KEY,
+    userId: 123,
+    temperatureUnit: 'celsius',
+  },
+});
+
+console.log(response.text);
+```
+
+> ⚠️ Validation Errors: If variables are missing or incorrect, Mastra throws clear validation errors at runtime.
+
+## Creating Tools with Variables
+
+Tools can access the variables and must use the same schema as their agent:
+
+```typescript
+import { createTool } from "@mastra/core/tools";
+import { z } from "zod";
+import { weatherVarsSchema } from "../schemas/variables";
+
+export const weatherTool = createTool({
+  id: "getWeather",
+  description: "Get the current weather for a location",
+  inputSchema: z.object({
+    location: z.string().describe("The location to get weather for"),
+  }),
+  variablesSchema: weatherVarsSchema, // Same schema as the agent
+  execute: async ({ context, variables }) => {
+    const { apiKey, userId, temperatureUnit } = variables;
+
+    console.log(`User ${userId} requested weather for ${context.location}`);
+
+    const weather = await fetchWeather(context.location, {
+      apiKey, 
+      temperatureUnit
+    });
+    
+    return { result: weather, };
+  },
+});
+
+async function fetchWeather(
+  location: string,
+  { apiKey, temperatureUnit }: { apiKey: string; temperatureUnit: string }
+) {
+  // Implementation would use the apiKey to call a weather API
+  return {
+    location,
+    temperature: "72°F",
+    conditions: "Sunny",
+    unit: temperatureUnit
+  };
+}
+```
+
+## Type Safety Examples
+
+### With Variables Schema
+
+```typescript
+// Agent with variables schema
+const agentWithVars = new Agent({
+  name: "WeatherAgent",
+  instructions: "You are an agent that can fetch weather information",
+  model: openai("gpt-4o"),
+  variablesSchema: weatherVarsSchema,
+});
+
+// CORRECT: Providing required variables
+await agentWithVars.generate("What is the weather?", {
+  variables: {
+    apiKey: process.env.WEATHER_API_KEY,
+    userId: 123,
+    temperatureUnit: 'celsius',
+  },
+});
+
+// ERROR: Missing required variables
+await agentWithVars.generate("What is the weather?");
+// ⚠️ Will throw: "Variables validation failed"
+
+// ERROR: Wrong variable structure
+await agentWithVars.generate("What is the weather?", {
+  variables: {
+    key: process.env.WEATHER_API_KEY, // Wrong property name
+    id: 123, // Wrong property name
+    unit: 'celsius', // Wrong property name
+  },
+});
+// ⚠️ Will throw: "Variables validation failed"
+```
+
+## Full Example
+
+```typescript
+import { openai } from '@ai-sdk/openai';
+import { Agent } from '@mastra/core/agent';
+import { createTool } from '@mastra/core/tools';
+import { config } from 'dotenv';
+import { z } from 'zod';
+
+config();
+
+// Step 1: Define your variables schema
+const varsSchema = z.object({
+  weatherApiKey: z.string(),
+  temperatureUnit: z.enum(['celsius', 'fahrenheit']),
+  userName: z.string().optional(),
+});
+
+type VariablesType = z.infer<typeof varsSchema>;
+
+// Step 2: Define a function to fetch real weather data using OpenWeatherMap API
+async function fetchWeather(
+  location: string,
+  { weatherApiKey, temperatureUnit }: { weatherApiKey: string; temperatureUnit: 'celsius' | 'fahrenheit' },
+) {
+  const units = temperatureUnit === 'celsius' ? 'metric' : 'imperial';
+  const loc = encodeURIComponent(location);
+  const url = `https://api.openweathermap.org/data/2.5/weather?q=${loc}&appid=${weatherApiKey}&units=${units}`;
+
+  const response = await fetch(url);
+  if (!response.ok) {
+    throw new Error(`Error fetching weather: ${response.statusText}`);
+  }
+
+  const dataSchema = z.object({
+    name: z.string(),
+    main: z.object({
+      temp: z.number(),
+      humidity: z.number(),
+    }),
+    weather: z.array(
+      z.object({
+        description: z.string(),
+      }),
+    ),
+  });
+
+  const data = dataSchema.parse(await response.json());
+
+  return {
+    location: data.name,
+    temperature: data.main.temp,
+    conditions: data.weather[0]?.description ?? 'unknown',
+    humidity: `${data.main.humidity}%`,
+    unit: temperatureUnit,
+  };
+}
+
+// Step 3: Create a tool to get the weather forecast
+const weatherTool = createTool({
+  id: 'getWeatherForecast',
+  description: 'Get the current weather forecast for a location',
+  inputSchema: z.object({
+    location: z.string().describe('The city or location to get weather for'),
+  }),
+  variablesSchema: varsSchema,
+  execute: async ({ context, variables }) => {
+    return await fetchWeather(context.location, {
+      weatherApiKey: variables.weatherApiKey,
+      temperatureUnit: variables.temperatureUnit,
+    });
+  },
+});
+
+// Step 4: Create an agent with empty instructions
+const agent = new Agent({
+  name: 'WeatherAgent',
+  instructions: '', // Start with empty instructions
+  model: openai('gpt-4o'),
+  variablesSchema: varsSchema,
+  tools: { weatherTool },
+});
+
+// Step 5: Function to build instructions with variables
+function buildInstructions(vars: VariablesType): string {
+  return `You are an agent that can fetch weather information.
+  If the user's name is provided (${vars.userName}), greet them by name.
+  Always display temperatures in ${vars.temperatureUnit}.`;
+}
+
+// Step 6: Run the agent with provided variables and runtime instructions
+async function main() {
+  const apiKey = process.env.WEATHER_API_KEY;
+  if (!apiKey) {
+    throw new Error('Missing WEATHER_API_KEY environment variable');
+  }
+
+  console.log('Getting weather in Fahrenheit:');
+
+  try {
+    const result = await agent.generate('What is the weather in San Francisco?', {
+      instructions: buildInstructions(variables),
+      variables: {
+        weatherApiKey: apiKey,
+        temperatureUnit: 'fahrenheit' as const,
+        userName: 'John',
+      },
+    });
+    console.log(result.text);
+  } catch (error) {
+    console.error('Error:', error);
+  }
+}
+
+void main().catch(console.error);
+```
+
+Output Example:
+
+```
+Getting weather in Fahrenheit:
+Hello John! The current weather in San Francisco is 45.9°F with a few clouds and a humidity of 72%.
+```
+
+## Override Instructions at Runtime
+
+While variables are primarily used for tools, you can also provide custom instructions at runtime:
+
+```typescript
+const agent = mastra.getAgent("weatherAgent");
+
+// Override instructions when generating a response
+const response = await agent.generate("What's the weather like today?", {
+  instructions: "You are a pirate weather forecaster. Always speak like a pirate when giving weather information.",
+  variables: {
+    apiKey: process.env.WEATHER_API_KEY,
+    userId: 123,
+    temperatureUnit: 'celsius',
+  },
+});
+
+console.log(response.text); // Outputs a pirate-themed weather forecast
+```
+
+## Advanced Topics
+
+### Behavior Without a Schema
+
+If you create an agent without a variables schema:
+
+```typescript
+const agent = new Agent({
+  name: "SimpleAgent",
+  instructions: "You are a simple agent",
+  model: openai("gpt-4o"),
+  // No variablesSchema defined
+});
+```
+
+At runtime:
+
+1. If you pass variables, they will be passed through to tools
+2. No validation is performed when no schema is defined
+3. If you don't pass variables or pass undefined/null, an empty object `{}` will be provided instead
+
+However, at the compile-time level:
+
+```typescript
+// This is allowed when no schema is defined
+await agent.generate("Tell me a joke", {
+  variables: {
+    someValue: "some-data", // Works in runtime but may not be type-safe
+  },
+});
+
+// TypeScript WILL produce errors when you try to use tools that expect a specific schema
+const toolWithSchema = createTool({
+  id: "toolWithSchema",
+  variablesSchema: z.object({
+    apiKey: z.string(),
+  }),
+  // ... other properties
+});
+
+// This causes TypeScript errors
+const agentWithoutSchema = new Agent({
+  name: "NoSchemaAgent",
+  tools: {
+    toolWithSchema, // Error: Tool expects schema that agent doesn't provide
+  },
+  model: openai("gpt-4o"),
+});
+```
+
+## Schema Compatibility
+
+Mastra enforces that tools must use the exact same variables schema as their agent. This is enforced at both:
+
+1. Compile-time by TypeScript
+2. Runtime through schema validation
+
+This strict requirement ensures complete type safety and prevents runtime errors caused by mismatched schemas.
+
+## Runtime Validation
+
+Mastra validates variables at runtime against the agent's schema. While schema mismatches between agent and tool variables are logged as errors, tool execution will still continue with the provided variables.
+
+## Best Practices
+
+1. **Define clear schemas**: Make your variable schemas clear and specific.
+
+2. **Use the same schema everywhere**: Always use the same variables schema for both your agent and all its tools.
+
+3. **Avoid type casting**: Never use type casting (especially `as any`) to bypass TypeScript's type checks as this will likely lead to runtime errors.
+
+4. **Test error cases**: Ensure your code handles validation failures gracefully.
+
+5. **Document variables**: Clearly document what each variable is for and which tools require them.
+
+6. **Use consistent naming**: Use consistent naming conventions across your application to avoid confusion when variables are passed between components.
