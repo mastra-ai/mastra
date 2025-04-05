@@ -31,6 +31,7 @@ const createTestMessage = (
     role,
     type,
     createdAt: new Date(Date.now() + messageCounter * 1000), // Add 1 second per message to prevent messages having the same timestamp
+    resourceId,
   };
 };
 
@@ -135,6 +136,7 @@ export function getResuableTests(memory: Memory) {
                 threadId,
                 id: `long-chunking-message-${Date.now()}`,
                 createdAt: new Date(),
+                resourceId,
               },
             ],
           }),
