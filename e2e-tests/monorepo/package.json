@@ -4,7 +4,7 @@
   "private": true,
   "devDependencies": {
     "rollup": "^4.38.0",
-    "vitest": "^3.0.7"
+    "vitest": "^3.1.1"
   },
   "scripts": {
     "test": "vitest"
