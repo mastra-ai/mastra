@@ -1,5 +1,5 @@
+import type { BaseLogMessage } from '@mastra/core/logger';
 import type { Mastra } from '@mastra/core/mastra';
-
 import { handleError } from './error';
 import { validateBody } from './utils';
 
@@ -9,7 +9,10 @@ type LogsContext = {
   runId?: string;
 };
 
-export async function getLogsHandler({ mastra, transportId }: Pick<LogsContext, 'mastra' | 'transportId'>) {
+export async function getLogsHandler({
+  mastra,
+  transportId,
+}: Pick<LogsContext, 'mastra' | 'transportId'>): Promise<BaseLogMessage[]> {
   try {
     validateBody({ transportId });
 

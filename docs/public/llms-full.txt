@@ -73,6 +73,7 @@ export const mastra = new Mastra({
 This registers your agent with Mastra, making it available for use.
 
 ## Abort Signals
+
 The abort signals from `generate` and `stream` (text generation) are forwarded to the tool execution. You can access them in the second parameter of the execute function and e.g. abort long-running computations or forward them to fetch calls inside tools.
 
 ```typescript
@@ -85,7 +86,7 @@ const agent = new Agent({
   tools: {
     weather: createTool({
       id: "Get Weather Information",
-      description: 'Get the weather in a location',
+      description: "Get the weather in a location",
       inputSchema: z.object({ location: z.string() }),
       execute: async ({ context: { location } }, { abortSignal }) => {
         return fetch(
@@ -94,11 +95,85 @@ const agent = new Agent({
         );
       },
     }),
-  }
-})
+  },
+});
 
-const result = await agent.generate('What is the weather in San Francisco?', {
+const result = await agent.generate("What is the weather in San Francisco?", {
   abortSignal: myAbortSignal, // signal that will be forwarded to tools
+});
+```
+
+## Injecting Request/User-Specific Variables
+
+We support dependency injection for tools and workflows. You can pass a container directly to your `generate` or `stream` function calls, or inject it using [server middleware](/docs/deployment/server#Middleware).
+
+Here's an example where we change the temperature scale between Fahrenheit and Celsius:
+
+```typescript filename="src/agents/weather-agent.ts"
+import { Agent } from "@mastra/core/agent";
+import { createTool } from "@mastra/core/tools";
+import { z } from "zod";
+
+export const agent = new Agent({
+  name: "Weather agent",
+  tools: {
+    weather: createTool({
+      id: "Get Weather Information",
+      description: "Get the weather in a location",
+      inputSchema: z.object({ location: z.string() }),
+      execute: async ({ context: { location }, container }) => {
+        const scale = container.get("temperature-scale");
+
+        const result = await fetch(
+          `https://api.weatherapi.com/v1/current.json?q=${location}`,
+        );
+
+        const json = await result.json();
+
+        return {
+          temperature: scale === "celsius" ? json.temp_c : json.temp_f,
+        };
+      },
+    }),
+  },
+});
+```
+
+```typescript
+import { agent } from "./agents/weather";
+
+const container = new Container();
+container.set("temperature-scale", "celsius");
+
+const result = await agent.generate("What is the weather in San Francisco?", {
+  container,
+});
+```
+
+Let's derive temperature from the user's country using cloudflare ` CF-IPCountry` header. We're keeping the same agent code as the example above
+
+```typescript filename="src/index.ts"
+import { Mastra } from "@mastra/core";
+import { Container } from "@mastra/core/di";
+import { agent as weatherAgent } from "./agents/weather";
+
+export const mastra = new Mastra({
+  agents: {
+    weather: weatherAgent,
+  },
+  server: {
+    middleware: [
+      (c, next) => {
+        const country = c.req.header("CF-IPCountry");
+        const container = c.get("container");
+
+        container.set(
+          "temperature-scale",
+          country === "US" ? "farenheit" : "celsius",
+        );
+      },
+    ],
+  },
 });
 ```
 
@@ -129,25 +204,24 @@ main();
 
 The agent will use the `weatherInfo` tool to get the current weather in New York City and respond accordingly.
 
-
 ## Vercel AI SDK Tool Format
 
 Mastra supports tools created using the Vercel AI SDK format. You can import and use these tools directly:
 
 ```typescript filename="src/mastra/tools/vercelTool.ts" copy
-import { tool } from 'ai';
-import { z } from 'zod';
+import { tool } from "ai";
+import { z } from "zod";
 
 export const weatherInfo = tool({
   description: "Fetches the current weather information for a given city",
   parameters: z.object({
-    city: z.string().describe("The city to get weather for")
+    city: z.string().describe("The city to get weather for"),
   }),
   execute: async ({ city }) => {
     // Replace with actual API call
     const data = await fetch(`https://api.example.com/weather?city=${city}`);
     return data.json();
-  }
+  },
 });
 ```
 
@@ -161,11 +235,12 @@ import * as mastraTools from "../tools/mastraTools";
 
 export const weatherAgent = new Agent({
   name: "Weather Agent",
-  instructions: "You are a helpful assistant that provides weather information.",
+  instructions:
+    "You are a helpful assistant that provides weather information.",
   model: openai("gpt-4"),
   tools: {
-    weatherInfo,  // Vercel tool
-    ...mastraTools  // Mastra tools
+    weatherInfo, // Vercel tool
+    ...mastraTools, // Mastra tools
   },
 });
 ```
@@ -177,22 +252,27 @@ Both tool formats will work seamlessly within your agent's workflow.
 When creating tools for your agents, following these guidelines will help ensure reliable and intuitive tool usage:
 
 ### Tool Descriptions
+
 Your tool's main description should focus on its purpose and value:
-- Keep descriptions simple and focused on __what__ the tool does
+
+- Keep descriptions simple and focused on **what** the tool does
 - Emphasize the tool's primary use case
 - Avoid implementation details in the main description
-- Focus on helping the agent understand __when__ to use the tool
+- Focus on helping the agent understand **when** to use the tool
 
 ```typescript
 createTool({
   id: "documentSearch",
-  description: "Access the knowledge base to find information needed to answer user questions",
+  description:
+    "Access the knowledge base to find information needed to answer user questions",
   // ... rest of tool configuration
 });
 ```
 
 ### Parameter Schemas
+
 Technical details belong in the parameter schemas, where they help the agent use the tool correctly:
+
 - Make parameters self-documenting with clear descriptions
 - Include default values and their implications
 - Provide examples where helpful
@@ -211,13 +291,16 @@ inputSchema: z.object({
 ```
 
 ### Agent Interaction Patterns
+
 Tools are more likely to be used effectively when:
+
 - Queries or tasks are complex enough to clearly require tool assistance
 - Agent instructions provide clear guidance on tool usage
 - Parameter requirements are well-documented in the schema
 - The tool's purpose aligns with the query's needs
 
 ### Common Pitfalls
+
 - Overloading the main description with technical details
 - Mixing implementation details with usage guidance
 - Unclear parameter descriptions or missing examples
@@ -266,7 +349,9 @@ const audioFilePath = path.join(process.cwd(), "/audio.m4a");
 const audioStream = createReadStream(audioFilePath);
 
 try {
-  const transcription = await agent.voice.listen(audioStream, { filetype: "m4a" });
+  const transcription = await agent.voice.listen(audioStream, {
+    filetype: "m4a",
+  });
 } catch (error) {
   console.error("Error transcribing audio:", error);
 }
@@ -331,7 +416,9 @@ const audioStream = createReadStream(audioFilePath);
 
 try {
   console.log("Transcribing audio file...");
-  const transcription = await agent.voice.listen(audioStream, { filetype: "m4a" });
+  const transcription = await agent.voice.listen(audioStream, {
+    filetype: "m4a",
+  });
   console.log("Transcription:", transcription);
 } catch (error) {
   console.error("Error transcribing audio:", error);
@@ -351,21 +438,22 @@ import { search, calculate } from "../tools";
 const voice = new OpenAIRealtimeVoice({
   chatModel: {
     apiKey: process.env.OPENAI_API_KEY,
-    model: 'gpt-4o-mini-realtime',
+    model: "gpt-4o-mini-realtime",
   },
-  speaker: 'alloy'
+  speaker: "alloy",
 });
 
 // Create an agent with speech-to-speech voice capabilities
 export const agent = new Agent({
-  name: 'Agent',
+  name: "Agent",
   instructions: `You are a helpful assistant with speech-to-speech capabilities.`,
-  model: openai('gpt-4o'),
-  tools: { // Tools configured on Agent are passed to voice provider
+  model: openai("gpt-4o"),
+  tools: {
+    // Tools configured on Agent are passed to voice provider
     search,
-    calculate
+    calculate,
   },
-  voice
+  voice,
 });
 
 // Establish a WebSocket connection
@@ -388,18 +476,18 @@ The realtime voice provider emits several events you can listen for:
 
 ```typescript
 // Listen for speech audio data sent from voice provider
-agent.voice.on('speaking', ({ audio }) => {
+agent.voice.on("speaking", ({ audio }) => {
   // audio contains ReadableStream or Int16Array audio data
 });
 
 // Listen for transcribed text sent from both voice provider and user
-agent.voice.on('writing', ({ text, role }) => {
+agent.voice.on("writing", ({ text, role }) => {
   console.log(`${role} said: ${text}`);
 });
 
 // Listen for errors
-agent.voice.on('error', (error) => {
-  console.error('Voice error:', error);
+agent.voice.on("error", (error) => {
+  console.error("Voice error:", error);
 });
 ```
 
@@ -418,7 +506,7 @@ Agents in Mastra have a sophisticated memory system that stores conversation his
 
 In Mastra, you can organize conversations by a `thread_id`. This allows the system to maintain context and retrieve historical messages that belong to the same discussion.
 
-Mastra also supports the concept of a `resource_id`, which typically represents the user involved in the conversation, ensuring that the agent’s memory and context are correctly associated with the right entity.
+Mastra also supports the concept of a `resource_id`, which typically represents the user involved in the conversation, ensuring that the agent's memory and context are correctly associated with the right entity.
 
 This separation allows you to manage multiple conversations (threads) for a single user or even share conversation context across users if needed.
 
@@ -864,15 +952,15 @@ Inspired by the working memory concept from the MemGPT whitepaper, our implement
 
 #### How It Works
 
-Working memory operates through a system of XML tags and automatic updates:
+Working memory operates through a system of organized data and automatic updates:
 
-1. **Template Structure**: Define what information should be remembered using XML tags. The Memory class comes with a comprehensive default template for user information, or you can create your own template to match your specific needs.
+1. **Template Structure**: Define what information should be remembered using Markdown. The Memory class comes with a comprehensive default template for user information, or you can create your own template to match your specific needs.
 
 2. **Automatic Updates**: The Memory class injects special instructions into the agent's system prompt that tell it to:
 
    - Store relevant information by including `<working_memory>...</working_memory>` tags in its responses
    - Update information proactively when anything changes
-   - Maintain the XML structure while updating values
+   - Maintain the Markdown structure while updating values
    - Keep this process invisible to users
 
 3. **Memory Management**: The system:
@@ -917,13 +1005,16 @@ const todoAgent = new Agent({
       workingMemory: {
         enabled: true,
 
-        // optional XML-like template to encourage agent to store specific kinds of info.
+        // optional Markdown template to encourage agent to store specific kinds of info.
         // if you leave this out a default template will be used
-        template: `<todos>
-  <in-progress></in-progress>
-  <pending></pending>
-  <completed></completed>
-</todos>`,
+        template: `# Todo List
+## In Progress
+- 
+## Pending
+- 
+## Completed
+- 
+`,
       },
       lastMessages: 1, // Only keep the last message in context
     },
@@ -933,11 +1024,15 @@ const todoAgent = new Agent({
 
 ### Handling Memory Updates in Streaming
 
-When an agent responds, it includes working memory updates directly in its response stream. These updates appear as XML blocks in the text:
+When an agent responds, it includes working memory updates directly in its response stream. These updates appear as tagged blocks in the text:
 
 ```typescript copy showLineNumbers
 // Raw agent response stream:
-Let me help you with that! <working_memory><user><first_name>John</first_name>...</user></working_memory> Based on your question...
+Let me help you with that! <working_memory># User Information
+- **First Name**: John
+- **Last Name**:
+- **Location**:
+...</working_memory> Based on your question...
 ```
 
 To prevent these memory blocks from being visible to users while still allowing the system to process them, use the `maskStreamTags` utility:
@@ -1383,19 +1478,20 @@ const response = await myAgent.generate(
   [
     {
       role: "user",
-      content: "Please analyze this repository and provide a summary and keywords...",
+      content:
+        "Please analyze this repository and provide a summary and keywords...",
     },
   ],
   {
     // Use experimental_output to enable both structured output and tool calls
-    experimental_output: schema,  
+    experimental_output: schema,
   },
 );
 
 console.log("Structured Output:", response.object);
 ```
-<br/>
 
+<br />
 
 This allows you to have strong typing and validation for the structured data returned by the agent.
 
@@ -1421,19 +1517,22 @@ export const myAgent = new Agent({
     calculate: {
       description: "Calculator for mathematical expressions",
       schema: z.object({ expression: z.string() }),
-      execute: async ({ expression }) => mathjs.evaluate(expression)
-    }
-  }
+      execute: async ({ expression }) => mathjs.evaluate(expression),
+    },
+  },
 });
 
 const response = await myAgent.generate(
-  [{
-    role: "user",
-    content: "If a taxi driver earns $9461 per hour and works 12 hours a day, how much does they earn in one day?"
-  }],
+  [
+    {
+      role: "user",
+      content:
+        "If a taxi driver earns $9461 per hour and works 12 hours a day, how much does they earn in one day?",
+    },
+  ],
   {
-    maxSteps: 5 // Allow up to 5 tool usage steps
-  }
+    maxSteps: 5, // Allow up to 5 tool usage steps
+  },
 );
 ```
 
@@ -1449,35 +1548,35 @@ const response = await myAgent.generate(
     maxSteps: 5,
     onStepFinish: ({ text, toolCalls, toolResults }) => {
       console.log("Step completed:", { text, toolCalls, toolResults });
-    }
-  }
+    },
+  },
 );
 ```
 
 ### Using onFinish
 
 The `onFinish` callback is available when streaming responses and provides detailed information about the completed interaction. It is called after the LLM has finished generating its response and all tool executions have completed.
- This callback receives the final response text, execution steps, token usage statistics, and other metadata that can be useful for monitoring and logging:
+This callback receives the final response text, execution steps, token usage statistics, and other metadata that can be useful for monitoring and logging:
 
 ```ts showLineNumbers filename="src/mastra/agents/index.ts" copy
 const stream = await myAgent.stream(
   [{ role: "user", content: "Calculate the taxi driver's daily earnings." }],
   {
     maxSteps: 5,
-    onFinish: ({ 
-      steps, 
+    onFinish: ({
+      steps,
       text,
-      finishReason,  // 'complete', 'length', 'tool', etc.
-      usage,         // token usage statistics
-      reasoningDetails // additional context about the agent's decisions
+      finishReason, // 'complete', 'length', 'tool', etc.
+      usage, // token usage statistics
+      reasoningDetails, // additional context about the agent's decisions
     }) => {
-      console.log("Stream complete:", { 
-        totalSteps: steps.length, 
+      console.log("Stream complete:", {
+        totalSteps: steps.length,
         finishReason,
-        usage 
+        usage,
       });
-    }
-  }
+    },
+  },
 );
 ```
 
@@ -1854,6 +1953,7 @@ While developing or when you deploy a Mastra application, it runs as an HTTP ser
 Mastra uses [Hono](https://hono.dev) as its underlying HTTP server framework. When you build a Mastra application using `mastra build`, it generates a Hono-based HTTP server in the `.mastra` directory.
 
 The server provides:
+
 - API endpoints for all registered agents
 - API endpoints for all registered workflows
 - Custom api route supports
@@ -1866,7 +1966,7 @@ The server provides:
 You can configure server `port` and `timeout` in the Mastra instance.
 
 ```typescript copy showLineNumbers
-import { Mastra } from '@mastra/core';
+import { Mastra } from "@mastra/core";
 
 export const mastra = new Mastra({
   server: {
@@ -1883,26 +1983,26 @@ Mastra provides a list of api routes that are automatically generated based on t
 These routes can live in the same file as the Mastra instance or in a separate file. We recommend keeping them in a separate file to keep the Mastra instance clean.
 
 ```typescript copy showLineNumbers
-import { Mastra } from '@mastra/core';
-import { registerApiRoute } from "@mastra/core/server"
+import { Mastra } from "@mastra/core";
+import { registerApiRoute } from "@mastra/core/server";
 
 export const mastra = new Mastra({
   server: {
     apiRoutes: [
-      registerApiRoute('/my-custom-route', {
-        method: 'GET',
+      registerApiRoute("/my-custom-route", {
+        method: "GET",
         handler: async (c) => {
           // you have access to mastra instance here
-          const mastra = c.get('mastra')
+          const mastra = c.get("mastra");
 
           // you can use the mastra instance to get agents, workflows, etc.
-          const agents = await mastra.getAgent('my-agent')
+          const agents = await mastra.getAgent("my-agent");
 
-          return c.json({ message: 'Hello, world!' });
-        }
-      })
-    ]
-  }
+          return c.json({ message: "Hello, world!" });
+        },
+      }),
+    ],
+  },
   // Other configuration options
 });
 ```
@@ -1925,7 +2025,7 @@ export const mastra = new Mastra({
         if (!authHeader) {
           return new Response('Unauthorized', { status: 401 });
         }
-        
+
         // Continue to the next middleware or route handler
         await next();
       },
@@ -1944,8 +2044,8 @@ export const mastra = new Mastra({
 if you want to add a middleware to a single route, you can also specify that in the registerApiRoute using `registerApiRoute`.
 
 ```typescript copy showLineNumbers
-registerApiRoute('/my-custom-route', {
-  method: 'GET',
+registerApiRoute("/my-custom-route", {
+  method: "GET",
   middleware: [
     async (c, next) => {
       // Example: Add request logging
@@ -1955,23 +2055,25 @@ registerApiRoute('/my-custom-route', {
   ],
   handler: async (c) => {
     // you have access to mastra instance here
-    const mastra = c.get('mastra')
+    const mastra = c.get("mastra");
 
     // you can use the mastra instance to get agents, workflows, etc.
-    const agents = await mastra.getAgent('my-agent')
+    const agents = await mastra.getAgent("my-agent");
 
-    return c.json({ message: 'Hello, world!' });
-  }
-})
+    return c.json({ message: "Hello, world!" });
+  },
+});
 ```
 
 ### Middleware Behavior
 
 Each middleware function:
+
 - Receives a Hono context object (`c`) and a `next` function
 - Can return a `Response` to short-circuit the request handling
 - Can call `next()` to continue to the next middleware or route handler
-- Can optionally specify a path pattern (defaults to '/api/*')
+- Can optionally specify a path pattern (defaults to '/api/\*')
+- Inject request specific data for agent tool calling or workflows
 
 ### Common Middleware Use Cases
 
@@ -1984,10 +2086,10 @@ Each middleware function:
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
       return new Response('Unauthorized', { status: 401 });
     }
-    
+
     const token = authHeader.split(' ')[1];
     // Validate token here
-    
+
     await next();
   },
   path: '/api/*',
@@ -2000,17 +2102,17 @@ Each middleware function:
 {
   handler: async (c, next) => {
     // Add CORS headers
-    c.header('Access-Control-Allow-Origin', '*');
-    c.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
-    c.header('Access-Control-Allow-Headers', 'Content-Type, Authorization');
-    
+    c.header("Access-Control-Allow-Origin", "*");
+    c.header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
+    c.header("Access-Control-Allow-Headers", "Content-Type, Authorization");
+
     // Handle preflight requests
-    if (c.req.method === 'OPTIONS') {
+    if (c.req.method === "OPTIONS") {
       return new Response(null, { status: 204 });
     }
-    
+
     await next();
-  }
+  };
 }
 ```
 
@@ -2023,7 +2125,7 @@ Each middleware function:
     await next();
     const duration = Date.now() - start;
     console.log(`${c.req.method} ${c.req.url} - ${duration}ms`);
-  }
+  };
 }
 ```
 
@@ -2035,21 +2137,22 @@ When integrating with Mastra Cloud or building custom clients, there are special
 {
   handler: async (c, next) => {
     // Check for Mastra-specific headers in incoming requests
-    const isFromMastraCloud = c.req.header('x-mastra-cloud') === 'true';
-    const clientType = c.req.header('x-mastra-client-type'); // e.g., 'js', 'python'
-    const isDevPlayground = c.req.header('x-mastra-dev-playground') === 'true';
-    
+    const isFromMastraCloud = c.req.header("x-mastra-cloud") === "true";
+    const clientType = c.req.header("x-mastra-client-type"); // e.g., 'js', 'python'
+    const isDevPlayground = c.req.header("x-mastra-dev-playground") === "true";
+
     // Customize behavior based on client information
     if (isFromMastraCloud) {
       // Special handling for Mastra Cloud requests
     }
-    
+
     await next();
-  }
+  };
 }
 ```
 
 These headers have the following purposes:
+
 - `x-mastra-cloud`: Indicates that the request is coming from Mastra Cloud
 - `x-mastra-client-type`: Specifies the client SDK type (e.g., 'js', 'python')
 - `x-mastra-dev-playground`: Indicates that the request is from the development playground
@@ -2059,6 +2162,7 @@ You can use these headers in your middleware to implement client-specific logic 
 ## Deployment
 
 Since Mastra builds to a standard Node.js server, you can deploy to any platform that runs Node.js applications:
+
 - Cloud VMs (AWS EC2, DigitalOcean Droplets, GCP Compute Engine)
 - Container platforms (Docker, Kubernetes)
 - Platform as a Service (Heroku, Railway)
@@ -2077,6 +2181,7 @@ mastra build --dir ./my-project
 ```
 
 The build process:
+
 1. Locates entry file (`src/mastra/index.ts` or `src/mastra/index.js`)
 2. Creates `.mastra` output directory
 3. Bundles code using Rollup with tree shaking and source maps
@@ -2107,10 +2212,9 @@ description: "Mastra allows so create your own evals, here is how."
 # Create your own Eval
 Source: https://mastra.ai/docs/evals/custom-eval
 
-Creating your own eval is as easy as creating a new function. You simply create a class that extends the `Metric` class and implement the `measure` method. 
+Creating your own eval is as easy as creating a new function. You simply create a class that extends the `Metric` class and implement the `measure` method.
 
-
-## Basic example 
+## Basic example
 
 For a simple example of creating a custom metric that checks if the output contains certain words, see our [Word Inclusion example](/examples/evals/word-inclusion).
 
@@ -2155,13 +2259,14 @@ Evals need to be added to an agent. Here's an example using the summarization, c
 ```typescript copy showLineNumbers filename="src/mastra/agents/index.ts"
 import { Agent } from "@mastra/core/agent";
 import { openai } from "@ai-sdk/openai";
-import { 
-  SummarizationMetric,
-} from "@mastra/evals/llm";
-import { ContentSimilarityMetric, ToneConsistencyMetric } from "@mastra/evals/nlp";
+import { SummarizationMetric } from "@mastra/evals/llm";
+import {
+  ContentSimilarityMetric,
+  ToneConsistencyMetric,
+} from "@mastra/evals/nlp";
 
 const model = openai("gpt-4o");
- 
+
 export const myAgent = new Agent({
   name: "ContentWriter",
   instructions: "You are a content writer that creates accurate summaries",
@@ -2169,8 +2274,8 @@ export const myAgent = new Agent({
   evals: {
     summarization: new SummarizationMetric(model),
     contentSimilarity: new ContentSimilarityMetric(),
-    tone: new ToneConsistencyMetric()
-  }
+    tone: new ToneConsistencyMetric(),
+  },
 });
 ```
 
@@ -2189,21 +2294,27 @@ While automated evals are valuable, high-performing AI teams often combine them 
 Each eval metric measures a specific aspect of your agent's output. Here's how to interpret and improve your results:
 
 ### Understanding Scores
+
 For any metric:
+
 1. Check the metric documentation to understand the scoring process
 2. Look for patterns in when scores change
 3. Compare scores across different inputs and contexts
 4. Track changes over time to spot trends
 
 ### Improving Results
+
 When scores aren't meeting your targets:
+
 1. Check your instructions - Are they clear? Try making them more specific
 2. Look at your context - Is it giving the agent what it needs?
 3. Simplify your prompts - Break complex tasks into smaller steps
 4. Add guardrails - Include specific rules for tricky cases
 
 ### Maintaining Quality
+
 Once you're hitting your targets:
+
 1. Monitor stability - Do scores remain consistent?
 2. Document what works - Keep notes on successful approaches
 3. Test edge cases - Add examples that cover unusual scenarios
@@ -2317,6 +2428,7 @@ Mastra provides several eval metrics for assessing Agent outputs. Mastra is not 
 ## Why Use Textual Evals?
 
 Textual evals help ensure your agent:
+
 - Produces accurate and reliable responses
 - Uses context effectively
 - Follows output requirements
@@ -2357,17 +2469,85 @@ These metrics evaluate adherence to format and style requirements:
 
 
 ---
+title: "Licensing"
+description: "Mastra License"
+---
+
+# License
+Source: https://mastra.ai/docs/faq
+
+## Elastic License 2.0 (ELv2)
+
+Mastra is licensed under the Elastic License 2.0 (ELv2), a modern license designed to balance open-source principles with sustainable business practices.
+
+### What is Elastic License 2.0?
+
+The Elastic License 2.0 is a source-available license that grants users broad rights to use, modify, and distribute the software while including specific limitations to protect the project's sustainability. It allows:
+
+- Free use for most purposes
+- Viewing, modifying, and redistributing the source code
+- Creating and distributing derivative works
+- Commercial use within your organization
+
+The primary limitation is that you cannot provide Mastra as a hosted or managed service that offers users access to the substantial functionality of the software.
+
+### Why We Chose Elastic License 2.0
+
+We selected the Elastic License 2.0 for several important reasons:
+
+1. **Sustainability**: It enables us to maintain a healthy balance between openness and the ability to sustain long-term development.
+
+2. **Innovation Protection**: It ensures we can continue investing in innovation without concerns about our work being repackaged as competing services.
+
+3. **Community Focus**: It maintains the spirit of open source by allowing users to view, modify, and learn from our code while protecting our ability to support the community.
+
+4. **Business Clarity**: It provides clear guidelines for how Mastra can be used in commercial contexts.
+
+### Building Your Business with Mastra
+
+Despite the licensing restrictions, there are numerous ways to build successful businesses using Mastra:
+
+#### Allowed Business Models
+
+- **Building Applications**: Create and sell applications built with Mastra
+- **Offering Consulting Services**: Provide expertise, implementation, and customization services
+- **Developing Custom Solutions**: Build bespoke AI solutions for clients using Mastra
+- **Creating Add-ons and Extensions**: Develop and sell complementary tools that extend Mastra's functionality
+- **Training and Education**: Offer courses and educational materials about using Mastra effectively
+
+#### Examples of Compliant Usage
+
+- A company builds an AI-powered customer service application using Mastra and sells it to clients
+- A consulting firm offers implementation and customization services for Mastra
+- A developer creates specialized agents and tools with Mastra and licenses them to other businesses
+- A startup builds a vertical-specific solution (e.g., healthcare AI assistant) powered by Mastra
+
+#### What to Avoid
+
+The main restriction is that you cannot offer Mastra itself as a hosted service where users access its core functionality. This means:
+
+- Don't create a SaaS platform that is essentially Mastra with minimal modifications
+- Don't offer a managed Mastra service where customers are primarily paying to use Mastra's features
+
+### Questions About Licensing?
+
+If you have specific questions about how the Elastic License 2.0 applies to your use case, please [contact us](https://discord.gg/BTYqqHKUrf) on Discord for clarification. We're committed to supporting legitimate business use cases while protecting the sustainability of the project.
+
+
+---
 title: "Using with AI SDK"
 description: "Learn how Mastra leverages the AI SDK library and how you can leverage it further with Mastra"
 ---
 
 # AI SDK
 Source: https://mastra.ai/docs/frameworks/ai-sdk
-Mastra leverages AI SDK's model routing (a unified interface on top of OpenAI, Anthropic, etc), structured output, and tool calling. 
+
+Mastra leverages AI SDK's model routing (a unified interface on top of OpenAI, Anthropic, etc), structured output, and tool calling.
 
 We explain this in greater detail in [this blog post](https://mastra.ai/blog/using-ai-sdk-with-mastra)
 
 ## Mastra + AI SDK
+
 Mastra acts as a layer on top of AI SDK to help teams productionize their proof-of-concepts quickly and easily.
 
 <img
@@ -2379,7 +2559,6 @@ Mastra acts as a layer on top of AI SDK to help teams productionize their proof-
   width={800}
   height={400}
 />
-
 
 ## Model routing
 
@@ -2409,20 +2588,18 @@ The `useChat` hook enables real-time chat interactions in your frontend applicat
 - Works with agent data streams i.e. `.toDataStreamResponse()`
 - The useChat `api` defaults to `/api/chat`
 - Works with the Mastra REST API agent stream endpoint `{MASTRA_BASE_URL}/agents/:agentId/stream` for data streams,
-i.e. no structured output is defined. 
+  i.e. no structured output is defined.
 
 ```typescript filename="app/api/chat/route.ts" copy
-
-import { mastra } from '@/src/mastra';
+import { mastra } from "@/src/mastra";
 
 export async function POST(req: Request) {
   const { messages } = await req.json();
-  const myAgent = mastra.getAgent('weatherAgent');
+  const myAgent = mastra.getAgent("weatherAgent");
   const stream = await myAgent.stream(messages);
 
   return stream.toDataStreamResponse();
 }
-
 ```
 
 ```typescript copy
@@ -2461,20 +2638,18 @@ For single-turn completions, use the `useCompletion` hook:
 - Works with agent data streams i.e. `.toDataStreamResponse()`
 - The useCompletion `api` defaults to `/api/completion`
 - Works with the Mastra REST API agent stream endpoint `{MASTRA_BASE_URL}/agents/:agentId/stream` for data streams,
-i.e. no structured output is defined. 
+  i.e. no structured output is defined.
 
 ```typescript filename="app/api/completion/route.ts" copy
-
-import { mastra } from '@/src/mastra';
+import { mastra } from "@/src/mastra";
 
 export async function POST(req: Request) {
   const { messages } = await req.json();
-  const myAgent = mastra.getAgent('weatherAgent');
+  const myAgent = mastra.getAgent("weatherAgent");
   const stream = await myAgent.stream(messages);
 
   return stream.toDataStreamResponse();
 }
-
 ```
 
 ```typescript
@@ -2505,9 +2680,6 @@ export function CompletionComponent() {
 }
 ```
 
-
-
-
 ### useObject
 
 For consuming text streams that represent JSON objects and parsing them into a complete object based on a schema.
@@ -2515,15 +2687,14 @@ For consuming text streams that represent JSON objects and parsing them into a c
 - Works with agent text streams i.e. `.toTextStreamResponse()`
 - The useObject `api` defaults to `/api/completion`
 - Works with the Mastra REST API agent stream endpoint `{MASTRA_BASE_URL}/agents/:agentId/stream` for text streams,
-i.e. structured output is defined. 
+  i.e. structured output is defined.
 
 ```typescript filename="app/api/use-object/route.ts" copy
-
-import { mastra } from '@/src/mastra';
+import { mastra } from "@/src/mastra";
 
 export async function POST(req: Request) {
   const { messages } = await req.json();
-  const myAgent = mastra.getAgent('weatherAgent');
+  const myAgent = mastra.getAgent("weatherAgent");
   const stream = await myAgent.stream(messages, {
     output: z.object({
       weather: z.string(),
@@ -2558,14 +2729,13 @@ export default function Page() {
 
 ### AI SDK Tool Format
 
-Mastra  supports tools created using the AI SDK format, so you can use
+Mastra supports tools created using the AI SDK format, so you can use
 them directly with Mastra agents. See our tools doc on [Vercel AI SDK Tool Format
 ](/docs/agents/adding-tools#vercel-ai-sdk-tool-format) for more details.
 
-
 ### Client-side tool calling
 
-Mastra leverages AI SDK's tool calling, so what applies in AI SDK applies here still. 
+Mastra leverages AI SDK's tool calling, so what applies in AI SDK applies here still.
 [Agent Tools](/docs/agents/adding-tools) in Mastra are 100% percent compatible with AI SDK tools.
 
 Mastra tools also expose an optional `execute` async function. It is optional because you might want to forward tool calls to the client or to a queue instead of executing them in the same process.
@@ -2573,6 +2743,92 @@ Mastra tools also expose an optional `execute` async function. It is optional be
 One way to then leverage client-side tool calling is to use the `@ai-sdk/react` `useChat` hook's `onToolCall` property for
 client-side tool execution
 
+## Custom DataStream
+In certain scenarios you need to write custom data, message annotations to an agent's dataStream.
+This can be useful for:
+
+- Streaming additional data to the client
+- Passing progress info back to the client in real time
+
+Mastra integrates well with AI SDK to make this possible
+
+### CreateDataStream
+The `createDataStream` function allows you to stream additional data to the client
+
+```typescript  copy
+    import { createDataStream } from "ai"
+    import { Agent } from '@mastra/core/agent';
+
+    export const weatherAgent = new Agent({
+      name: 'Weather Agent',
+      instructions: `
+          You are a helpful weather assistant that provides accurate weather information.
+
+          Your primary function is to help users get weather details for specific locations. When responding:
+          - Always ask for a location if none is provided
+          - If the location name isn’t in English, please translate it
+          - If giving a location with multiple parts (e.g. "New York, NY"), use the most relevant part (e.g. "New York")
+          - Include relevant details like humidity, wind conditions, and precipitation
+          - Keep responses concise but informative
+
+          Use the weatherTool to fetch current weather data.
+    `,
+      model: openai('gpt-4o'),
+      tools: { weatherTool },
+    });
+
+    const stream = createDataStream({
+      async execute(dataStream) {
+        // Write data
+        dataStream.writeData({ value: 'Hello' });
+
+        // Write annotation
+        dataStream.writeMessageAnnotation({ type: 'status', value: 'processing' });
+  
+        //mastra agent stream
+        const agentStream = await weatherAgent.stream('What is the weather')
+
+        // Merge agent stream
+         agentStream.mergeIntoDataStream(dataStream);
+      },
+      onError: error => `Custom error: ${error.message}`,
+  });
+
+```
+### CreateDataStreamResponse
+The `createDataStreamResponse` function creates a Response object that streams data to the client
+
+```typescript filename="app/api/chat/route.ts" copy
+import { mastra } from "@/src/mastra";
+
+export async function POST(req: Request) {
+  const { messages } = await req.json();
+  const myAgent = mastra.getAgent("weatherAgent");
+  //mastra agent stream
+  const agentStream = await myAgent.stream(messages);
+
+  const response = createDataStreamResponse({
+    status: 200,
+    statusText: 'OK',
+    headers: {
+      'Custom-Header': 'value',
+    },
+    async execute(dataStream) {
+      // Write data
+      dataStream.writeData({ value: 'Hello' });
+
+      // Write annotation
+      dataStream.writeMessageAnnotation({ type: 'status', value: 'processing' });
+
+      // Merge agent stream
+      agentStream.mergeIntoDataStream(dataStream);
+    },
+    onError: error => `Custom error: ${error.message}`,
+  });
+
+  return response
+}
+```
 
 
 
@@ -3997,7 +4253,7 @@ Initialize a new Node.js project and install the required dependencies:
 
 ```bash
 npm init -y
-npm install @mastra/core @mastra/rag @mastra/pg @ai-sdk/openai zod
+npm install @mastra/core @mastra/rag @mastra/pg @ai-sdk/openai ai zod
 ```
 
 Set up environment variables for API access and database connection:
@@ -11806,7 +12062,11 @@ const memory = new Memory({
     // Working memory configuration
     workingMemory: {
       enabled: true,
-      template: "<user><first_name></first_name><last_name></last_name></user>",
+      template: `
+# User
+- First Name:
+- Last Name:
+`,
     },
   },
 });
@@ -11889,10 +12149,10 @@ const agent = new Agent({
       name: "workingMemory",
       type: "{ enabled: boolean; template?: string; use?: 'text-stream' | 'tool-call' }",
       description:
-        "Configuration for working memory feature that allows persistent storage of user information across conversations. The 'use' setting determines how working memory updates are handled - either through text stream tags or tool calls.",
+        "Configuration for working memory feature that allows persistent storage of user information across conversations. The 'use' setting determines how working memory updates are handled - either through text stream tags or tool calls. Working memory uses Markdown format to structure and store continuously relevant information.",
       isOptional: true,
       defaultValue:
-        "{ enabled: false, template: '<user><first_name></first_name><last_name></last_name>...</user>', use: 'text-stream' }",
+        "{ enabled: false, template: '# User Information\\n- **First Name**:\\n- **Last Name**:\\n...', use: 'text-stream' }",
     },
     {
       name: "threads",
@@ -11922,14 +12182,14 @@ const memory = new Memory({
   options: {
     workingMemory: {
       enabled: true,
-      template: "<user><first_name></first_name><last_name></last_name></user>",
+      template: "# User\n- **First Name**:\n- **Last Name**:",
       use: "tool-call", // or 'text-stream'
     },
   },
 });
 ```
 
-If no template is provided, the Memory class uses a default template that includes fields for user details, preferences, goals, and other contextual information. See the [Agent Memory Guide](/docs/agents/agent-memory#working-memory) for detailed usage examples and best practices.
+If no template is provided, the Memory class uses a default template that includes fields for user details, preferences, goals, and other contextual information in Markdown format. See the [Agent Memory Guide](/docs/agents/agent-memory#working-memory) for detailed usage examples and best practices.
 
 ### embedder
 
@@ -21271,6 +21531,972 @@ This method is not supported by Speechify and will throw an error. Speechify doe
 
 
 ---
+title: "Reference: voice.answer() | Voice Providers | Mastra Docs"
+description: "Documentation for the answer() method available in real-time voice providers, which triggers the voice provider to generate a response."
+---
+
+# voice.answer()
+Source: https://mastra.ai/docs/reference/voice/voice.answer
+
+The `answer()` method is used in real-time voice providers to trigger the AI to generate a response. This method is particularly useful in speech-to-speech conversations where you need to explicitly signal the AI to respond after receiving user input.
+
+## Usage Example
+
+```typescript
+import { OpenAIRealtimeVoice } from "@mastra/voice-openai-realtime";
+import Speaker from "@mastra/node-speaker";
+
+const speaker = new Speaker({
+  sampleRate: 24100,  // Audio sample rate in Hz - standard for high-quality audio on MacBook Pro
+  channels: 1,        // Mono audio output (as opposed to stereo which would be 2)
+  bitDepth: 16,       // Bit depth for audio quality - CD quality standard (16-bit resolution)
+});
+
+// Initialize a real-time voice provider
+const voice = new OpenAIRealtimeVoice({
+  realtimeConfig: {
+    model: "gpt-4o",
+    apiKey: process.env.OPENAI_API_KEY,
+  },
+  speaker: "alloy", // Default voice
+});
+// Connect to the real-time service
+await voice.connect();
+// Register event listener for responses
+voice.on("speaker", (stream) => {
+  // Handle audio response
+  stream.pipe(speaker);
+});
+// Send user audio input
+const microphoneStream = getMicrophoneStream();
+await voice.send(microphoneStream);
+// Trigger the AI to respond
+await voice.answer();
+// With custom options (provider-specific)
+await voice.answer({
+  options: {
+    content: "Hello, how can I help you today?",
+    voice: "nova",
+  },
+});
+```
+
+
+## Parameters
+
+<PropertiesTable
+  content={[
+    {
+      name: "options",
+      type: "Record<string, unknown>",
+      description: "Provider-specific options for the response",
+      isOptional: true,
+    }
+  ]}
+/>
+
+## Return Value
+
+Returns a `Promise<void>` that resolves when the response has been triggered.
+
+## Provider-Specific Options
+
+Each real-time voice provider may support different options for the `answer()` method:
+
+### OpenAI Realtime
+
+<PropertiesTable
+  content={[
+    {
+      name: "options.content",
+      type: "string",
+      description: "Text content to use for the response instead of generating one",
+      isOptional: true,
+    },
+    {
+      name: "options.voice",
+      type: "string",
+      description: "Voice ID to use for this specific response",
+      isOptional: true,
+    }
+  ]}
+/>
+
+## Using with CompositeVoice
+
+When using `CompositeVoice`, the `answer()` method delegates to the configured real-time provider:
+
+```typescript
+import { CompositeVoice } from "@mastra/core/voice";
+import { OpenAIRealtimeVoice } from "@mastra/voice-openai-realtime";
+const realtimeVoice = new OpenAIRealtimeVoice();
+const voice = new CompositeVoice({
+  realtimeProvider: realtimeVoice,
+});
+// Connect to the real-time service
+await voice.connect();
+// This will use the OpenAIRealtimeVoice provider
+await voice.answer();
+```
+
+## Notes
+
+- This method is only implemented by real-time voice providers that support speech-to-speech capabilities
+- If called on a voice provider that doesn't support this functionality, it will log a warning and resolve immediately
+- The response audio will typically be emitted through the 'speaking' event rather than returned directly
+- For providers that support it, you can use this method to send a specific response instead of having the AI generate one
+- This method is commonly used in conjunction with `send()` to create a conversational flow
+
+## Related Methods
+
+- [voice.connect()](./voice.connect) - Establishes a connection to the real-time service
+- [voice.send()](./voice.send) - Sends audio data to the voice provider
+- [voice.speak()](./voice.speak) - Converts text to speech
+- [voice.listen()](./voice.listen) - Converts speech to text
+
+---
+title: "Reference: voice.connect() | Voice Providers | Mastra Docs"
+description: "Documentation for the connect() method available in real-time voice providers, which establishes a connection for speech-to-speech communication."
+---
+
+# voice.connect()
+Source: https://mastra.ai/docs/reference/voice/voice.connect
+
+The `connect()` method establishes a WebSocket or WebRTC connection for real-time speech-to-speech communication. This method must be called before using other real-time features like `send()` or `answer()`.
+
+## Usage Example
+
+```typescript
+import { OpenAIRealtimeVoice } from "@mastra/voice-openai-realtime";
+import Speaker from "@mastra/node-speaker";
+
+const speaker = new Speaker({
+  sampleRate: 24100,  // Audio sample rate in Hz - standard for high-quality audio on MacBook Pro
+  channels: 1,        // Mono audio output (as opposed to stereo which would be 2)
+  bitDepth: 16,       // Bit depth for audio quality - CD quality standard (16-bit resolution)
+});
+
+// Initialize a real-time voice provider
+const voice = new OpenAIRealtimeVoice({
+  realtimeConfig: {
+    model: "gpt-4o-mini-realtime",
+    apiKey: process.env.OPENAI_API_KEY,
+    options: {
+      sessionConfig: {
+        turn_detection: {
+          type: "server_vad",
+          threshold: 0.6,
+          silence_duration_ms: 1200,
+        },
+      },
+    },
+  },
+  speaker: "alloy", // Default voice
+});
+// Connect to the real-time service
+await voice.connect();
+// Now you can use real-time features
+voice.on("speaker", (stream) => {
+  stream.pipe(speaker);
+});
+// With connection options
+await voice.connect({
+  timeout: 10000, // 10 seconds timeout
+  reconnect: true,
+});
+```
+
+
+## Parameters
+
+<PropertiesTable
+  content={[
+    {
+      name: "options",
+      type: "Record<string, unknown>",
+      description: "Provider-specific connection options",
+      isOptional: true,
+    }
+  ]}
+/>
+
+## Return Value
+
+Returns a `Promise<void>` that resolves when the connection is successfully established.
+
+## Provider-Specific Options
+
+Each real-time voice provider may support different options for the `connect()` method:
+
+### OpenAI Realtime
+
+<PropertiesTable
+  content={[
+    {
+      name: "options.timeout",
+      type: "number",
+      description: "Connection timeout in milliseconds",
+      isOptional: true,
+      defaultValue: "30000",
+    },
+    {
+      name: "options.reconnect",
+      type: "boolean",
+      description: "Whether to automatically reconnect on connection loss",
+      isOptional: true,
+      defaultValue: "false",
+    }
+  ]}
+/>
+
+## Using with CompositeVoice
+
+When using `CompositeVoice`, the `connect()` method delegates to the configured real-time provider:
+
+```typescript
+import { CompositeVoice } from "@mastra/core/voice";
+import { OpenAIRealtimeVoice } from "@mastra/voice-openai-realtime";
+const realtimeVoice = new OpenAIRealtimeVoice();
+const voice = new CompositeVoice({
+  realtimeProvider: realtimeVoice,
+});
+// This will use the OpenAIRealtimeVoice provider
+await voice.connect();
+```
+
+## Notes
+
+- This method is only implemented by real-time voice providers that support speech-to-speech capabilities
+- If called on a voice provider that doesn't support this functionality, it will log a warning and resolve immediately
+- The connection must be established before using other real-time methods like `send()` or `answer()`
+- When you're done with the voice instance, call `close()` to properly clean up resources
+- Some providers may automatically reconnect on connection loss, depending on their implementation
+- Connection errors will typically be thrown as exceptions that should be caught and handled
+
+## Related Methods
+
+- [voice.send()](./voice.send) - Sends audio data to the voice provider
+- [voice.answer()](./voice.answer) - Triggers the voice provider to respond
+- [voice.close()](./voice.close) - Disconnects from the real-time service
+- [voice.on()](./voice.on) - Registers an event listener for voice events
+
+---
+title: "Reference: voice.listen() | Voice Providers | Mastra Docs"
+description: "Documentation for the listen() method available in all Mastra voice providers, which converts speech to text."
+---
+
+# voice.listen()
+Source: https://mastra.ai/docs/reference/voice/voice.listen
+
+The `listen()` method is a core function available in all Mastra voice providers that converts speech to text. It takes an audio stream as input and returns the transcribed text.
+
+## Usage Example
+
+```typescript
+import { OpenAIVoice } from "@mastra/voice-openai";
+import { createReadStream } from "fs";
+import path from "path";
+
+// Initialize a voice provider
+const voice = new OpenAIVoice({
+  listeningModel: {
+    name: "whisper-1",
+    apiKey: process.env.OPENAI_API_KEY,
+  },
+});
+
+// Basic usage with a file stream
+const audioFilePath = path.join(process.cwd(), "audio.mp3");
+const audioStream = createReadStream(audioFilePath);
+const transcript = await voice.listen(audioStream, {
+  filetype: "mp3",
+});
+console.log("Transcribed text:", transcript);
+
+// Using a microphone stream
+const microphoneStream = getMicrophoneStream(); // Assume this function gets audio input
+const transcription = await voice.listen(microphoneStream);
+
+// With provider-specific options
+const transcriptWithOptions = await voice.listen(audioStream, {
+  language: "en",
+  prompt: "This is a conversation about artificial intelligence.",
+});
+```
+
+## Parameters
+
+<PropertiesTable
+  content={[
+    {
+      name: "audioStream",
+      type: "NodeJS.ReadableStream",
+      description: "Audio stream to transcribe. This can be a file stream or a microphone stream.",
+      isOptional: false,
+    },
+    {
+      name: "options",
+      type: "object",
+      description: "Provider-specific options for speech recognition",
+      isOptional: true,
+    }
+  ]}
+/>
+
+## Return Value
+
+Returns one of the following:
+- `Promise<string>`: A promise that resolves to the transcribed text
+- `Promise<NodeJS.ReadableStream>`: A promise that resolves to a stream of transcribed text (for streaming transcription)
+- `Promise<void>`: For real-time providers that emit 'writing' events instead of returning text directly
+
+## Provider-Specific Options
+
+Each voice provider may support additional options specific to their implementation. Here are some examples:
+
+### OpenAI
+
+<PropertiesTable
+  content={[
+    {
+      name: "options.filetype",
+      type: "string",
+      description: "Audio file format (e.g., 'mp3', 'wav', 'm4a')",
+      isOptional: true,
+      defaultValue: "'mp3'",
+    },
+    {
+      name: "options.prompt",
+      type: "string",
+      description: "Text to guide the model's transcription",
+      isOptional: true,
+    },
+    {
+      name: "options.language",
+      type: "string",
+      description: "Language code (e.g., 'en', 'fr', 'de')",
+      isOptional: true,
+    }
+  ]}
+/>
+
+### Google
+
+<PropertiesTable
+  content={[
+    {
+      name: "options.stream",
+      type: "boolean",
+      description: "Whether to use streaming recognition",
+      isOptional: true,
+      defaultValue: "false",
+    },
+    {
+      name: "options.config",
+      type: "object",
+      description: "Recognition configuration from Google Cloud Speech-to-Text API",
+      isOptional: true,
+      defaultValue: "{ encoding: 'LINEAR16', languageCode: 'en-US' }",
+    }
+  ]}
+/>
+
+### Deepgram
+
+<PropertiesTable
+  content={[
+    {
+      name: "options.model",
+      type: "string",
+      description: "Deepgram model to use for transcription",
+      isOptional: true,
+      defaultValue: "'nova-2'",
+    },
+    {
+      name: "options.language",
+      type: "string",
+      description: "Language code for transcription",
+      isOptional: true,
+      defaultValue: "'en'",
+    }
+  ]}
+/>
+
+## Realtime Voice Providers
+
+When using realtime voice providers like `OpenAIRealtimeVoice`, the `listen()` method behaves differently:
+
+- Instead of returning transcribed text, it emits 'writing' events with the transcribed text
+- You need to register an event listener to receive the transcription
+
+```typescript
+import { OpenAIRealtimeVoice } from "@mastra/voice-openai-realtime";
+const voice = new OpenAIRealtimeVoice();
+await voice.connect();
+
+// Register event listener for transcription
+voice.on("writing", ({ text, role }) => {
+  console.log(`${role}: ${text}`);
+});
+
+// This will emit 'writing' events instead of returning text
+const microphoneStream = getMicrophoneStream();
+await voice.listen(microphoneStream);
+```
+
+## Using with CompositeVoice
+
+When using `CompositeVoice`, the `listen()` method delegates to the configured listening provider:
+
+```typescript
+import { CompositeVoice } from "@mastra/core/voice";
+import { OpenAIVoice } from "@mastra/voice-openai";
+import { PlayAIVoice } from "@mastra/voice-playai";
+
+const voice = new CompositeVoice({
+  listenProvider: new OpenAIVoice(),
+  speakProvider: new PlayAIVoice(),
+});
+
+// This will use the OpenAIVoice provider
+const transcript = await voice.listen(audioStream);
+```
+
+## Notes
+
+- Not all voice providers support speech-to-text functionality (e.g., PlayAI, Speechify)
+- The behavior of `listen()` may vary slightly between providers, but all implementations follow the same basic interface
+- When using a realtime voice provider, the method might not return text directly but instead emit a 'writing' event
+- The audio format supported depends on the provider. Common formats include MP3, WAV, and M4A
+- Some providers support streaming transcription, where text is returned as it's transcribed
+- For best performance, consider closing or ending the audio stream when you're done with it
+
+## Related Methods
+
+- [voice.speak()](./voice.speak) - Converts text to speech
+- [voice.send()](./voice.send) - Sends audio data to the voice provider in real-time
+- [voice.on()](./voice.on) - Registers an event listener for voice events
+
+
+---
+title: "Reference: voice.on() | Voice Providers | Mastra Docs"
+description: "Documentation for the on() method available in voice providers, which registers event listeners for voice events."
+---
+
+# voice.on()
+Source: https://mastra.ai/docs/reference/voice/voice.on
+
+The `on()` method registers event listeners for various voice events. This is particularly important for real-time voice providers, where events are used to communicate transcribed text, audio responses, and other state changes.
+
+## Usage Example
+
+```typescript
+import { OpenAIRealtimeVoice } from "@mastra/voice-openai-realtime";
+import Speaker from "@mastra/node-speaker";
+import chalk from "chalk";
+
+const speaker = new Speaker({
+  sampleRate: 24100,  // Audio sample rate in Hz - standard for high-quality audio on MacBook Pro
+  channels: 1,        // Mono audio output (as opposed to stereo which would be 2)
+  bitDepth: 16,       // Bit depth for audio quality - CD quality standard (16-bit resolution)
+});
+
+// Initialize a real-time voice provider
+const voice = new OpenAIRealtimeVoice({
+  realtimeConfig: {
+    model: "gpt-4o-mini-realtime",
+    apiKey: process.env.OPENAI_API_KEY,
+  },
+});
+
+// Connect to the real-time service
+await voice.connect();
+
+// Register event listener for transcribed text
+voice.on("writing", ({ text, role }) => {
+  if (ev.role === 'user') {
+    process.stdout.write(chalk.green(ev.text));
+  } else {
+    process.stdout.write(chalk.blue(ev.text));
+  }
+});
+
+// Register event listener for speaker responses
+voice.on("speaking", (stream) => {
+  // Stream the audio to node speaker
+  stream.pipe(speaker)
+});
+
+// Register event listener for errors
+voice.on("error", ({ message, code, details }) => {
+  console.error(`Error ${code}: ${message}`, details);
+});
+```
+
+## Parameters
+
+<PropertiesTable
+  content={[
+    {
+      name: "event",
+      type: "string",
+      description: "Name of the event to listen for (e.g., 'speaking', 'writing', 'error')",
+      isOptional: false,
+    },
+    {
+      name: "callback",
+      type: "function",
+      description: "Callback function that will be called when the event occurs",
+      isOptional: false,
+    }
+  ]}
+/>
+
+## Return Value
+
+This method does not return a value.
+
+## Standard Events
+
+All voice providers that implement event handling support these standard events:
+
+<PropertiesTable
+  content={[
+    {
+      name: "speaking",
+      type: "event",
+      description: "Emitted when audio data is available. The callback receives { audio } where audio is typically an Int16Array or Buffer.",
+    },
+    {
+      name: "speaker",
+      type: "event",
+      description: "Emitted when a new audio response is ready to be streamed. The callback receives a buffer that can be piped into node-speaker."
+    },
+    {
+      name: "writing",
+      type: "event",
+      description: "Emitted when text is transcribed or generated. The callback receives { text, role } where role is either 'user' or 'assistant'.",
+    },
+    {
+      name: "error",
+      type: "event",
+      description: "Emitted when an error occurs. The callback receives { message, code, details } with information about the error.",
+    }
+  ]}
+/>
+
+## Provider-Specific Events
+
+Different voice providers may emit additional events specific to their implementation:
+
+### OpenAI Realtime
+
+OpenAI Realtime events are prefixed with `openAIRealtime:` and include:
+
+<PropertiesTable
+  content={[
+    {
+      name: "openAIRealtime:conversation.created",
+      type: "event",
+      description: "Emitted when a new conversation is created.",
+    },
+    {
+      name: "openAIRealtime:conversation.interrupted",
+      type: "event",
+      description: "Emitted when a conversation is interrupted.",
+    },
+    {
+      name: "openAIRealtime:conversation.updated",
+      type: "event",
+      description: "Emitted when a conversation is updated.",
+    },
+    {
+      name: "openAIRealtime:conversation.item.appended",
+      type: "event",
+      description: "Emitted when an item is appended to the conversation.",
+    },
+    {
+      name: "openAIRealtime:conversation.item.completed",
+      type: "event",
+      description: "Emitted when an item in the conversation is completed.",
+    }
+  ]}
+/>
+
+## Using with CompositeVoice
+
+When using `CompositeVoice`, the `on()` method delegates to the configured real-time provider:
+
+```typescript
+import { CompositeVoice } from "@mastra/core/voice";
+import { OpenAIRealtimeVoice } from "@mastra/voice-openai-realtime";
+import Speaker from "@mastra/node-speaker";
+
+const speaker = new Speaker({
+  sampleRate: 24100,  // Audio sample rate in Hz - standard for high-quality audio on MacBook Pro
+  channels: 1,        // Mono audio output (as opposed to stereo which would be 2)
+  bitDepth: 16,       // Bit depth for audio quality - CD quality standard (16-bit resolution)
+});
+
+const realtimeVoice = new OpenAIRealtimeVoice();
+const voice = new CompositeVoice({
+  realtimeProvider: realtimeVoice,
+});
+
+// Connect to the real-time service
+await voice.connect();
+
+// This will register the event listener with the OpenAIRealtimeVoice provider
+voice.on("speaker", (stream) => {
+  stream.pipe(speaker)
+});
+```
+
+## Notes
+
+- This method is primarily used with real-time voice providers that support event-based communication
+- If called on a voice provider that doesn't support events, it will log a warning and do nothing
+- Event listeners should be registered before calling methods that might emit events
+- To remove an event listener, use the `off()` method with the same event name and callback function
+- Multiple listeners can be registered for the same event
+- The callback function will receive different data depending on the event type
+- For best performance, consider removing event listeners when they are no longer needed
+
+## Related Methods
+
+- [voice.off()](./voice.off) - Removes an event listener
+- [voice.connect()](./voice.connect) - Establishes a connection to the real-time service
+- [voice.send()](./voice.send) - Sends audio data to the voice provider
+- [voice.answer()](./voice.answer) - Triggers the voice provider to respond
+
+
+---
+title: "Reference: voice.send() | Voice Providers | Mastra Docs"
+description: "Documentation for the send() method available in real-time voice providers, which streams audio data for continuous processing."
+---
+
+# voice.send()
+Source: https://mastra.ai/docs/reference/voice/voice.send
+
+The `send()` method streams audio data in real-time to voice providers for continuous processing. This method is essential for real-time speech-to-speech conversations, allowing you to send microphone input directly to the AI service.
+
+## Usage Example
+
+```typescript
+import { OpenAIRealtimeVoice } from "@mastra/voice-openai-realtime";
+import Speaker from "@mastra/node-speaker";
+
+const speaker = new Speaker({
+  sampleRate: 24100,  // Audio sample rate in Hz - standard for high-quality audio on MacBook Pro
+  channels: 1,        // Mono audio output (as opposed to stereo which would be 2)
+  bitDepth: 16,       // Bit depth for audio quality - CD quality standard (16-bit resolution)
+});
+
+
+// Initialize a real-time voice provider
+const voice = new OpenAIRealtimeVoice({
+  realtimeConfig: {
+    model: "gpt-4o-mini-realtime",
+    apiKey: process.env.OPENAI_API_KEY,
+  },
+});
+
+// Connect to the real-time service
+await voice.connect();
+
+// Set up event listeners for responses
+voice.on("writing", ({ text, role }) => {
+  console.log(`${role}: ${text}`);
+});
+
+voice.on("speaker", (stream) => {
+  stream.pipe(speaker)
+});
+
+// Get microphone stream (implementation depends on your environment)
+const microphoneStream = getMicrophoneStream();
+
+// Send audio data to the voice provider
+await voice.send(microphoneStream);
+
+// You can also send audio data as Int16Array
+const audioBuffer = getAudioBuffer(); // Assume this returns Int16Array
+await voice.send(audioBuffer);
+```
+
+## Parameters
+
+<PropertiesTable
+  content={[
+    {
+      name: "audioData",
+      type: "NodeJS.ReadableStream | Int16Array",
+      description: "Audio data to send to the voice provider. Can be a readable stream (like a microphone stream) or an Int16Array of audio samples.",
+      isOptional: false,
+    }
+  ]}
+/>
+
+## Return Value
+
+Returns a `Promise<void>` that resolves when the audio data has been accepted by the voice provider.
+
+## Provider-Specific Behavior
+
+Different real-time voice providers may handle the audio data in different ways:
+
+### OpenAI Realtime
+
+- Accepts both NodeJS.ReadableStream and Int16Array formats
+- Audio should be in PCM format, 16-bit, mono, 16kHz sample rate
+- Automatically handles voice activity detection (VAD) to determine when the user has finished speaking
+- Emits 'writing' events with transcribed text as it processes the audio
+
+## Using with CompositeVoice
+
+When using `CompositeVoice`, the `send()` method delegates to the configured real-time provider:
+
+```typescript
+import { CompositeVoice } from "@mastra/core/voice";
+import { OpenAIRealtimeVoice } from "@mastra/voice-openai-realtime";
+
+const realtimeVoice = new OpenAIRealtimeVoice();
+const voice = new CompositeVoice({
+  realtimeProvider: realtimeVoice,
+});
+
+// Connect to the real-time service
+await voice.connect();
+
+// This will use the OpenAIRealtimeVoice provider
+const microphoneStream = getMicrophoneStream();
+await voice.send(microphoneStream);
+```
+
+## Notes
+
+- This method is only implemented by real-time voice providers that support speech-to-speech capabilities
+- If called on a voice provider that doesn't support this functionality, it will log a warning and resolve immediately
+- You must call `connect()` before using `send()` to establish the WebSocket connection
+- The audio format requirements depend on the specific voice provider
+- For continuous conversation, you typically call `send()` to transmit user audio, then `answer()` to trigger the AI response
+- The provider will typically emit 'writing' events with transcribed text as it processes the audio
+- When the AI responds, the provider will emit 'speaking' events with the audio response
+
+## Related Methods
+
+- [voice.connect()](./voice.connect) - Establishes a connection to the real-time service
+- [voice.answer()](./voice.answer) - Triggers the voice provider to respond
+- [voice.listen()](./voice.listen) - Converts speech to text (non-streaming)
+- [voice.on()](./voice.on) - Registers an event listener for voice events
+
+
+---
+title: "Reference: voice.speak() | Voice Providers | Mastra Docs"
+description: "Documentation for the speak() method available in all Mastra voice providers, which converts text to speech."
+---
+
+# voice.speak()
+Source: https://mastra.ai/docs/reference/voice/voice.speak
+
+The `speak()` method is a core function available in all Mastra voice providers that converts text to speech. It takes text input and returns an audio stream that can be played or saved.
+
+## Usage Example
+
+```typescript
+import { OpenAIVoice } from "@mastra/voice-openai";
+// Initialize a voice provider
+const voice = new OpenAIVoice({
+  speaker: "alloy", // Default voice
+});
+// Basic usage with default settings
+const audioStream = await voice.speak("Hello, world!");
+// Using a different voice for this specific request
+const audioStreamWithDifferentVoice = await voice.speak("Hello again!", {
+  speaker: "nova",
+});
+// Using provider-specific options
+const audioStreamWithOptions = await voice.speak("Hello with options!", {
+  speaker: "echo",
+  speed: 1.2, // OpenAI-specific option
+});
+// Using a text stream as input
+import { Readable } from "stream";
+const textStream = Readable.from(["Hello", " from", " a", " stream!"]);
+const audioStreamFromTextStream = await voice.speak(textStream);
+```
+
+
+## Parameters
+
+<PropertiesTable
+  content={[
+    {
+      name: "input",
+      type: "string | NodeJS.ReadableStream",
+      description: "Text to convert to speech. Can be a string or a readable stream of text.",
+      isOptional: false,
+    },
+    {
+      name: "options",
+      type: "object",
+      description: "Options for speech synthesis",
+      isOptional: true,
+    },
+    {
+      name: "options.speaker",
+      type: "string",
+      description: "Voice ID to use for this specific request. Overrides the default speaker set in the constructor.",
+      isOptional: true,
+    },
+  ]}
+/>
+
+## Return Value
+
+Returns a `Promise<NodeJS.ReadableStream | void>` where:
+
+- `NodeJS.ReadableStream`: A stream of audio data that can be played or saved
+- `void`: When using a realtime voice provider that emits audio through events instead of returning it directly
+
+## Provider-Specific Options
+
+Each voice provider may support additional options specific to their implementation. Here are some examples:
+
+### OpenAI
+
+<PropertiesTable
+  content={[
+    {
+      name: "options.speed",
+      type: "number",
+      description: "Speech speed multiplier. Values between 0.25 and 4.0 are supported.",
+      isOptional: true,
+      defaultValue: "1.0",
+    }
+  ]}
+/>
+
+### ElevenLabs
+
+<PropertiesTable
+  content={[
+    {
+      name: "options.stability",
+      type: "number",
+      description: "Voice stability. Higher values result in more stable, less expressive speech.",
+      isOptional: true,
+      defaultValue: "0.5",
+    },
+    {
+      name: "options.similarity_boost",
+      type: "number",
+      description: "Voice clarity and similarity to the original voice.",
+      isOptional: true,
+      defaultValue: "0.75",
+    }
+  ]}
+/>
+
+### Google
+
+<PropertiesTable
+  content={[
+    {
+      name: "options.languageCode",
+      type: "string",
+      description: "Language code for the voice (e.g., 'en-US').",
+      isOptional: true,
+    },
+    {
+      name: "options.audioConfig",
+      type: "object",
+      description: "Audio configuration options from Google Cloud Text-to-Speech API.",
+      isOptional: true,
+      defaultValue: "{ audioEncoding: 'LINEAR16' }",
+    }
+  ]}
+/>
+
+### Murf
+
+<PropertiesTable
+  content={[
+    {
+      name: "options.properties.rate",
+      type: "number",
+      description: "Speech rate multiplier.",
+      isOptional: true,
+    },
+    {
+      name: "options.properties.pitch",
+      type: "number",
+      description: "Voice pitch adjustment.",
+      isOptional: true,
+    },
+    {
+      name: "options.properties.format",
+      type: "'MP3' | 'WAV' | 'FLAC' | 'ALAW' | 'ULAW'",
+      description: "Output audio format.",
+      isOptional: true,
+    }
+  ]}
+/>
+
+## Realtime Voice Providers
+
+When using realtime voice providers like `OpenAIRealtimeVoice`, the `speak()` method behaves differently:
+
+- Instead of returning an audio stream, it emits a 'speaking' event with the audio data
+- You need to register an event listener to receive the audio chunks
+
+```typescript
+import { OpenAIRealtimeVoice } from "@mastra/voice-openai-realtime";
+import Speaker from "@mastra/node-speaker";
+
+const speaker = new Speaker({
+  sampleRate: 24100,  // Audio sample rate in Hz - standard for high-quality audio on MacBook Pro
+  channels: 1,        // Mono audio output (as opposed to stereo which would be 2)
+  bitDepth: 16,       // Bit depth for audio quality - CD quality standard (16-bit resolution)
+});
+
+const voice = new OpenAIRealtimeVoice();
+await voice.connect();
+// Register event listener for audio chunks
+voice.on("speaker", (stream) => {
+  // Handle audio chunk (e.g., play it or save it)
+  stream.pipe(speaker)
+});
+// This will emit 'speaking' events instead of returning a stream
+await voice.speak("Hello, this is realtime speech!");
+```
+
+
+## Using with CompositeVoice
+
+When using `CompositeVoice`, the `speak()` method delegates to the configured speaking provider:
+
+```typescript
+import { CompositeVoice } from "@mastra/core/voice";
+import { OpenAIVoice } from "@mastra/voice-openai";
+import { PlayAIVoice } from "@mastra/voice-playai";
+const voice = new CompositeVoice({
+  speakProvider: new PlayAIVoice(),
+  listenProvider: new OpenAIVoice(),
+});
+// This will use the PlayAIVoice provider
+const audioStream = await voice.speak("Hello, world!");
+```
+
+## Notes
+
+- The behavior of `speak()` may vary slightly between providers, but all implementations follow the same basic interface.
+- When using a realtime voice provider, the method might not return an audio stream directly but instead emit a 'speaking' event.
+- If a text stream is provided as input, the provider will typically convert it to a string before processing.
+- The audio format of the returned stream depends on the provider. Common formats include MP3, WAV, and OGG.
+- For best performance, consider closing or ending the audio stream when you're done with it.
+
+---
 title: "Reference: .after() | Building Workflows | Mastra Docs"
 description: Documentation for the `after()` method in workflows, enabling branching and merging paths.
 ---
@@ -24220,9 +25446,10 @@ description: Overview of Mastra's storage system and data persistence capabiliti
 ---
 
 import { Tabs } from "nextra/components";
-import { useTheme } from 'nextra-theme-docs'
-import { PropertiesTable } from '@/components/properties-table'
-import { SchemaTable } from '@/components/schema-table'
+
+import { PropertiesTable } from "@/components/properties-table";
+import { SchemaTable } from "@/components/schema-table";
+import { StorageOverviewImage } from "@/components/storage-overview-image";
 
 # MastraStorage
 Source: https://mastra.ai/docs/storage/overview
@@ -24236,21 +25463,9 @@ Source: https://mastra.ai/docs/storage/overview
 
 <br />
 
-<div>
-  {useTheme().resolvedTheme === 'dark' ? (
-    <img
-      src="/docs/mastra-storage-overview-dark.png"
-      alt="Diagram showing storage in Mastra"
-      width={700}
-    />
-  ) : (
-    <img
-      src="/docs/mastra-storage-overview-light.png"
-      alt="Diagram showing storage in Mastra"
-      width={700}
-    />
-  )}
-</div>
+<br />
+
+<StorageOverviewImage />
 
 Mastra provides different storage providers, but you can treat them as interchangeable. Eg, you could use libsql in development but postgres in production, and your code will work the same both ways.
 
@@ -24259,14 +25474,14 @@ Mastra provides different storage providers, but you can treat them as interchan
 Mastra can be configured with a default storage option:
 
 ```typescript copy
-import { Mastra } from '@mastra/core/mastra';
-import { DefaultStorage } from '@mastra/core/storage/libsql';
+import { Mastra } from "@mastra/core/mastra";
+import { DefaultStorage } from "@mastra/core/storage/libsql";
 
 const mastra = new Mastra({
   storage: new DefaultStorage({
     config: {
       url: "file:.mastra/mastra.db",
-    }
+    },
   }),
 });
 ```
@@ -24598,10 +25813,13 @@ Captures OpenTelemetry traces for monitoring and debugging.
 </Tabs>
 
 ## Storage Providers
+
 Mastra supports the following providers:
+
 - For local development, check out [LibSQL Storage](../reference/storage/libsql.mdx)
 - For production, check out [PostgreSQL Storage](../reference/storage/postgresql.mdx)
 - For serverless deployments, check out [Upstash Storage](../reference/storage/upstash.mdx)
+
 
 ---
 title: Voice in Mastra | Mastra Docs
@@ -24966,7 +26184,7 @@ voice.speak('Hello, how can I help you today?', {
 ```
 
 **Notes:**
-- Emits 'speaking' events rather than returning an audio stream
+- Emits 'speaker' event rather than returning an audio stream
 
 ### listen(audioInput, options?)
 
@@ -25088,13 +26306,13 @@ voice.close();
 Registers an event listener for voice events.
 
 **Parameters:**
-- `event`: Event name ('speaking', 'writing', or 'error')
+- `event`: Event name ('speaker', 'writing', or 'error')
 - `callback`: Function to call when the event occurs
 
 **Usage:**
 ```typescript
-voice.on('speaking', ({ audio }) => {
-  playAudio(audio);
+voice.on('speaker', (stream) => {
+  stream.pipe(speaker)
 });
 ```
 
@@ -25115,16 +26333,16 @@ voice.off('speaking', callbackFunction);
 
 The `OpenAIRealtimeVoice` class emits the following events:
 
-### speaking
+### speaker
 
 Emitted when audio data is received from the model.
 
 **Event payload:**
-- `audio`: A chunk of audio data as a readable stream
+- `stream`: A stream of audio data as a readable stream
 
 ```typescript
-agent.voice.on('speaking', ({ audio }) => {
-  playAudio(audio); // Handle audio chunks as they're generated
+agent.voice.on('speaker', (stream) => {
+  stream.pipe(speaker)
 });
 ```
 
@@ -25283,18 +26501,46 @@ While this approach still works, the newer `until` and `while` methods provide a
 
 ### Using `until` for Condition-Based Loops
 
-The `until` method repeats a step until a specified condition becomes true. It takes two arguments:
+The `until` method repeats a step until a specified condition becomes true. It takes these arguments:
 1. A condition that determines when to stop looping
 2. The step to repeat
+3. Optional variables to pass to the repeated step
 
 ```typescript
+// Step that increments a counter until target is reached
+const incrementStep = new Step({
+  id: 'increment',
+  inputSchema: z.object({
+    // Current counter value
+    counter: z.number().optional(),
+  }),
+  outputSchema: z.object({
+    // Updated counter value
+    updatedCounter: z.number(),
+  }),
+  execute: async ({ context }) => {
+    const { counter = 0 } = context.inputData;
+    return { updatedCounter: counter + 1 };
+  },
+});
+
 workflow
   .step(incrementStep)
-  .until(async ({ context }) => {
-    // Stop when the value reaches or exceeds 10
-    const result = context.getStepResult(incrementStep);
-    return (result?.value ?? 0) >= 10;
-  }, incrementStep)
+  .until(
+    async ({ context }) => {
+      // Stop when counter reaches 10
+      const result = context.getStepResult(incrementStep);
+      return (result?.updatedCounter ?? 0) >= 10;
+    },
+    incrementStep,
+    {
+      // Pass current counter to next iteration
+      counter: {
+        step: incrementStep,
+        path: 'updatedCounter'
+      }
+    }
+  )
   .then(finalStep);
 ```
 
@@ -25305,10 +26551,16 @@ workflow
   .step(incrementStep)
   .until(
     {
-      ref: { step: incrementStep, path: 'value' },
+      ref: { step: incrementStep, path: 'updatedCounter' },
       query: { $gte: 10 },
     },
-    incrementStep
+    incrementStep,
+    {
+      counter: {
+        step: incrementStep,
+        path: 'updatedCounter'
+      }
+    }
   )
   .then(finalStep);
 ```
@@ -25318,15 +26570,43 @@ workflow
 The `while` method repeats a step as long as a specified condition remains true. It takes the same arguments as `until`:
 1. A condition that determines when to continue looping
 2. The step to repeat
+3. Optional variables to pass to the repeated step
 
 ```typescript
+// Step that increments a counter while below target
+const incrementStep = new Step({
+  id: 'increment',
+  inputSchema: z.object({
+    // Current counter value
+    counter: z.number().optional(),
+  }),
+  outputSchema: z.object({
+    // Updated counter value
+    updatedCounter: z.number(),
+  }),
+  execute: async ({ context }) => {
+    const { counter = 0 } = context.inputData;
+    return { updatedCounter: counter + 1 };
+  },
+});
+
 workflow
   .step(incrementStep)
-  .while(async ({ context }) => {
-    // Continue as long as the value is less than 10
-    const result = context.getStepResult(incrementStep);
-    return (result?.value ?? 0) < 10;
-  }, incrementStep)
+  .while(
+    async ({ context }) => {
+      // Continue while counter is less than 10
+      const result = context.getStepResult(incrementStep);
+      return (result?.updatedCounter ?? 0) < 10;
+    },
+    incrementStep,
+    {
+      // Pass current counter to next iteration
+      counter: {
+        step: incrementStep,
+        path: 'updatedCounter'
+      }
+    }
+  )
   .then(finalStep);
 ```
 
@@ -25337,10 +26617,16 @@ workflow
   .step(incrementStep)
   .while(
     {
-      ref: { step: incrementStep, path: 'value' },
+      ref: { step: incrementStep, path: 'updatedCounter' },
       query: { $lt: 10 },
     },
-    incrementStep
+    incrementStep,
+    {
+      counter: {
+        step: incrementStep,
+        path: 'updatedCounter'
+      }
+    }
   )
   .then(finalStep);
 ```
@@ -25357,8 +26643,6 @@ When using reference-based conditions, you can use these comparison operators:
 | `$gte`   | Greater than or equal to |
 | `$lt`    | Less than |
 | `$lte`   | Less than or equal to |
-
-See the [Loop Control](../../examples/workflows/loop-control.mdx) example for more details.
 
 ## Conditions
 
@@ -26686,7 +27970,7 @@ Here's how you define a workflow in Mastra. The `name` field determines the work
 
 ```ts filename="src/mastra/workflow/index.ts"
 const myWorkflow = new Workflow({
-  name: 'my-workflow',
+  name: "my-workflow",
   triggerSchema: z.object({
     inputValue: z.number(),
   }),
@@ -26699,7 +27983,7 @@ Now, we'll define the workflow's steps. Each step can have its own input and out
 
 ```ts filename="src/mastra/workflow/index.ts"
 const stepOne = new Step({
-  id: 'stepOne',
+  id: "stepOne",
   outputSchema: z.object({
     doubledValue: z.number(),
   }),
@@ -26728,10 +28012,7 @@ const stepTwo = new Step({
 Now, let's create the control flow, and "commit" (finalize the workflow). In this case, `stepOne` runs first and is followed by `stepTwo`.
 
 ```ts filename="src/mastra/workflow/index.ts"
-myWorkflow
-  .step(stepOne)
-  .then(stepTwo)
-  .commit();
+myWorkflow.step(stepOne).then(stepTwo).commit();
 ```
 
 ### Register the Workflow
@@ -26754,7 +28035,7 @@ import { Mastra } from "@mastra/core";
 const mastra = new Mastra();
 
 const myWorkflow = new Workflow({
-  name: 'my-workflow',
+  name: "my-workflow",
   mastra,
 });
 ```
@@ -26767,7 +28048,7 @@ Execute your workflow programmatically or via API:
 import { mastra } from "./index";
 
 // Get the workflow
-const myWorkflow = mastra.getWorkflow('myWorkflow');
+const myWorkflow = mastra.getWorkflow("myWorkflow");
 const { runId, start } = myWorkflow.createRun();
 
 // Start the workflow execution
@@ -26777,7 +28058,6 @@ await start({ triggerData: { inputValue: 45 } });
 Or use the API (requires running `mastra dev`):
 
 // Create workflow run
-
 
 ```bash
 curl --location 'http://localhost:4111/api/workflows/myWorkflow/start-async' \
@@ -26814,6 +28094,40 @@ You can:
 - Track the status of each step (e.g., `success`, `error`, or `suspended`).
 - Store run-specific metadata for analysis.
 - Integrate with third-party observability platforms like Datadog or New Relic by forwarding logs.
+
+## Injecting Request/User-Specific Variables
+
+We support dependency injection for tools and workflows. You can pass a container directly to your `start` or `resume` function calls, or inject it using [server middleware](/docs/deployment/server#Middleware).
+
+```ts showLineNumbers filename="src/mastra/run-workflow.ts" copy
+import { mastra } from "./index";
+
+const stepTwo = new Step({
+  id: "stepTwo",
+  execute: async ({ context, container }) => {
+    const multiplier = container.get("multiplier");
+    const doubledValue = context.getStepResult(stepOne)?.doubledValue;
+    if (!doubledValue) {
+      return { incrementedValue: 0 };
+    }
+
+    return {
+      incrementedValue: doubledValue * multiplier,
+    };
+  },
+});
+
+// Get the workflow
+const myWorkflow = mastra.getWorkflow("myWorkflow");
+const { runId, start, resume } = myWorkflow.createRun();
+
+const container = new Container();
+container.set("multiplier", 5);
+
+// Start the workflow execution
+await start({ triggerData: { inputValue: 45 }, container });
+await resume({ stepId: "stepTwo", container });
+```
 
 ## More Resources
 
@@ -27427,6 +28741,51 @@ workflow
     }
   })
   .commit();
+```
+
+### Variables in Loops
+
+Variables can also be passed to `while` and `until` loops. This is useful for passing data between iterations or from outside steps:
+
+```typescript showLineNumbers filename="src/mastra/workflows/loop-variables.ts" copy
+// Step that increments a counter
+const incrementStep = new Step({
+  id: 'increment',
+  inputSchema: z.object({
+    // Previous value from last iteration
+    prevValue: z.number().optional(),
+  }),
+  outputSchema: z.object({
+    // Updated counter value
+    updatedCounter: z.number(),
+  }),
+  execute: async ({ context }) => {
+    const { prevValue = 0 } = context.inputData;
+    return { updatedCounter: prevValue + 1 };
+  },
+});
+
+const workflow = new Workflow({
+  name: 'counter'
+});
+
+workflow
+  .step(incrementStep)
+  .while(
+    async ({ context }) => {
+      // Continue while counter is less than 10
+      const result = context.getStepResult(incrementStep);
+      return (result?.updatedCounter ?? 0) < 10;
+    },
+    incrementStep,
+    {
+      // Pass previous value to next iteration
+      prevValue: {
+        step: incrementStep,
+        path: 'updatedCounter'
+      }
+    }
+  );
 ```
 
 ## Variable Resolution
@@ -31995,7 +33354,6 @@ This example demonstrates:
 For more details on memory processors, check out the [Memory Processors documentation](/docs/reference/memory/memory-processors).
 
 
-
 # Memory with LibSQL
 Source: https://mastra.ai/examples/memory/memory-with-libsql
 
@@ -32345,7 +33703,7 @@ const memory = new Memory({
 
 ### 2. Defining the Working Memory Template
 
-Next, we'll define a template that shows the agent how to structure the todo list data. The template uses XML-like tags to represent the data structure. This helps the agent understand what information to track for each todo item.
+Next, we'll define a template that shows the agent how to structure the todo list data. The template uses Markdown to represent the data structure. This helps the agent understand what information to track for each todo item.
 
 ```typescript
 const memory = new Memory({
@@ -32354,10 +33712,13 @@ const memory = new Memory({
     workingMemory: {
       enabled: true,
       template: `
-<todolist>
-  <info>this is an example list - replace it with whatever the user needs</info>
-  <item status="ACTIVE" title="Example" due="Feb 7 3028" started="Feb 7 2025">example description</item>
-</todolist>
+# Todo List
+## Item Status
+- Active items:
+  - Example (Due: Feb 7 3028, Started: Feb 7 2025)
+    - Description: This is an example task
+## Completed
+- None yet
 `,
     },
   },
@@ -32474,7 +33835,7 @@ const memory = new Memory({
   options: {
     workingMemory: {
       enabled: true,
-      use: 'text-stream', // this is the default mode
+      use: "text-stream", // this is the default mode
     },
   },
 });
@@ -32489,7 +33850,7 @@ const toolCallMemory = new Memory({
   options: {
     workingMemory: {
       enabled: true,
-      use: 'tool-call', // Required for toDataStream() compatibility
+      use: "tool-call", // Required for toDataStream() compatibility
     },
   },
 });
@@ -32529,7 +33890,10 @@ const response = await agent.stream("Hello, my name is Jane", {
 });
 
 // Process response stream, hiding working memory tags
-for await (const chunk of maskStreamTags(response.textStream, "working_memory")) {
+for await (const chunk of maskStreamTags(
+  response.textStream,
+  "working_memory",
+)) {
   process.stdout.write(chunk);
 }
 ```
@@ -32552,7 +33916,7 @@ for await (const chunk of toolCallResponse.textStream) {
 
 ### Handling response data
 
-In text stream mode, the response stream will contain xml-like `<working_memory>$data</working_memory>` tagged data.
+In text stream mode, the response stream will contain `<working_memory>$data</working_memory>` tagged data where `$data` is Markdown-formatted content.
 Mastra picks up these tags and automatically updates working memory with the data returned by the LLM.
 
 To prevent showing this data to users you can use the `maskStreamTags` util as shown above.

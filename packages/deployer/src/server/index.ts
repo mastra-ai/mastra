@@ -7,6 +7,7 @@ import { serveStatic } from '@hono/node-server/serve-static';
 import { swaggerUI } from '@hono/swagger-ui';
 import { Telemetry } from '@mastra/core';
 import type { Mastra } from '@mastra/core';
+import { Container } from '@mastra/core/di';
 import { Hono } from 'hono';
 import type { Context, MiddlewareHandler } from 'hono';
 import { bodyLimit } from 'hono/body-limit';
@@ -14,7 +15,6 @@ import { cors } from 'hono/cors';
 import { logger } from 'hono/logger';
 import { timeout } from 'hono/timeout';
 import { describeRoute, openAPISpecs } from 'hono-openapi';
-
 import {
   generateHandler,
   getAgentByIdHandler,
@@ -66,6 +66,7 @@ type Bindings = {};
 
 type Variables = {
   mastra: Mastra;
+  container: Container;
   clients: Set<{ controller: ReadableStreamDefaultController }>;
   tools: Record<string, any>;
   playground: boolean;
@@ -116,6 +117,18 @@ export async function createHonoServer(
 
   app.onError(errorHandler);
 
+  // Add Mastra to context
+  app.use('*', function setContext(c, next) {
+    const container = new Container();
+
+    c.set('container', container);
+    c.set('mastra', mastra);
+    c.set('tools', tools);
+    c.set('playground', options.playground === true);
+
+    return next();
+  });
+
   // Apply custom server middleware from Mastra instance
   const serverMiddleware = mastra.getServerMiddleware?.();
 
@@ -125,12 +138,7 @@ export async function createHonoServer(
     }
   }
 
-  // Add Mastra to context
-  app.use('*', async (c, next) => {
-    c.set('mastra', mastra);
-    c.set('tools', tools);
-    c.set('playground', options.playground === true);
-
+  app.use('*', async function setTelemetryInfo(c, next) {
     const requestId = c.req.header('x-request-id') ?? randomUUID();
     const span = Telemetry.getActiveSpan();
     if (span) {
@@ -187,7 +195,7 @@ export async function createHonoServer(
       if (route.openapi) {
         middlewares.push(describeRoute(route.openapi));
       }
-      console.log({ path: route.path, middlewares });
+
       if (route.method === 'GET') {
         app.get(route.path, ...middlewares, route.handler);
       } else if (route.method === 'POST') {

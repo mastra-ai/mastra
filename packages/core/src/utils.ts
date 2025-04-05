@@ -7,6 +7,7 @@ import type { ZodObject } from 'zod';
 
 import type { MastraPrimitives } from './action';
 import type { ToolsInput } from './agent';
+import { Container } from './di';
 import type { Logger } from './logger';
 import type { Mastra } from './mastra';
 import type { AiMessageType, MastraMemory } from './memory';
@@ -314,6 +315,7 @@ interface ToolOptions {
   logger: Logger;
   description?: string;
   mastra?: (Mastra & MastraPrimitives) | MastraPrimitives;
+  container: Container;
   memory?: MastraMemory;
   agentName?: string;
 }
@@ -353,7 +355,7 @@ function createLogMessageOptions({ agentName, toolName, tool, type }: LogOptions
 
 function createExecute(tool: ToolToConvert, options: ToolOptions, logType?: 'tool' | 'toolset') {
   // dont't add memory or mastra to logging
-  const { logger, mastra: _mastra, memory: _memory, ...rest } = options;
+  const { logger, mastra: _mastra, memory: _memory, container, ...rest } = options;
 
   const { start, error } = createLogMessageOptions({
     agentName: options.agentName,
@@ -366,6 +368,7 @@ function createExecute(tool: ToolToConvert, options: ToolOptions, logType?: 'too
     if (isVercelTool(tool)) {
       return tool?.execute?.(args, execOptions) ?? undefined;
     }
+
     return (
       tool?.execute?.(
         {
@@ -375,6 +378,7 @@ function createExecute(tool: ToolToConvert, options: ToolOptions, logType?: 'too
           mastra: options.mastra,
           memory: options.memory,
           runId: options.runId,
+          container: container ?? new Container(),
         },
         execOptions,
       ) ?? undefined

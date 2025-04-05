@@ -1,14 +1,13 @@
 import { ReadableStream } from 'node:stream/web';
-import type { Mastra } from '@mastra/core';
+import type { Container } from '@mastra/core/di';
 import type { Workflow } from '@mastra/core/workflows';
 import { stringify } from 'superjson';
 import zodToJsonSchema from 'zod-to-json-schema';
 import { HTTPException } from '../http-exception';
-
+import type { Context } from '../types';
 import { handleError } from './error';
 
-interface WorkflowContext {
-  mastra: Mastra;
+interface WorkflowContext extends Context {
   workflowId?: string;
   runId?: string;
 }
@@ -79,10 +78,11 @@ export async function getWorkflowByIdHandler({ mastra, workflowId }: WorkflowCon
 
 export async function startAsyncWorkflowHandler({
   mastra,
+  container,
   workflowId,
   runId,
   triggerData,
-}: Pick<WorkflowContext, 'mastra' | 'workflowId' | 'runId'> & { triggerData?: unknown }) {
+}: Pick<WorkflowContext, 'mastra' | 'workflowId' | 'runId'> & { triggerData?: unknown; container: Container }) {
   try {
     if (!workflowId) {
       throw new HTTPException(400, { message: 'Workflow ID is required' });
@@ -98,6 +98,7 @@ export async function startAsyncWorkflowHandler({
       const { start } = workflow.createRun();
       const result = await start({
         triggerData,
+        container,
       });
       return result;
     }
@@ -110,6 +111,7 @@ export async function startAsyncWorkflowHandler({
 
     const result = await run.start({
       triggerData,
+      container,
     });
     return result;
   } catch (error) {
@@ -175,10 +177,11 @@ export async function createRunHandler({
 
 export async function startWorkflowRunHandler({
   mastra,
+  container,
   workflowId,
   runId,
   triggerData,
-}: Pick<WorkflowContext, 'mastra' | 'workflowId' | 'runId'> & { triggerData?: unknown }) {
+}: Pick<WorkflowContext, 'mastra' | 'workflowId' | 'runId'> & { triggerData?: unknown; container: Container }) {
   try {
     if (!workflowId) {
       throw new HTTPException(400, { message: 'Workflow ID is required' });
@@ -197,6 +200,7 @@ export async function startWorkflowRunHandler({
 
     await run.start({
       triggerData,
+      container,
     });
 
     return { message: 'Workflow run started' };
@@ -263,7 +267,8 @@ export async function resumeAsyncWorkflowHandler({
   workflowId,
   runId,
   body,
-}: WorkflowContext & { body: { stepId: string; context: any } }) {
+  container,
+}: WorkflowContext & { body: { stepId: string; context: any }; container: Container }) {
   try {
     if (!workflowId) {
       throw new HTTPException(400, { message: 'Workflow ID is required' });
@@ -283,6 +288,7 @@ export async function resumeAsyncWorkflowHandler({
     const result = await run.resume({
       stepId: body.stepId,
       context: body.context,
+      container,
     });
 
     return result;
@@ -296,7 +302,8 @@ export async function resumeWorkflowHandler({
   workflowId,
   runId,
   body,
-}: WorkflowContext & { body: { stepId: string; context: any } }) {
+  container,
+}: WorkflowContext & { body: { stepId: string; context: any }; container: Container }) {
   try {
     if (!workflowId) {
       throw new HTTPException(400, { message: 'Workflow ID is required' });
@@ -316,6 +323,7 @@ export async function resumeWorkflowHandler({
     await run.resume({
       stepId: body.stepId,
       context: body.context,
+      container,
     });
 
     return { message: 'Workflow run resumed' };
