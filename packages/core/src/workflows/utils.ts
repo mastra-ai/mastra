@@ -1,8 +1,8 @@
 import { get } from 'radash';
 import { z } from 'zod';
 import type { Mastra } from '..';
-import { Agent } from '../agent';
 import type { ToolsInput } from '../agent';
+import { Agent } from '../agent';
 import type { Metric } from '../eval';
 import type { Logger } from '../logger';
 import type { Step } from './step';
@@ -399,4 +399,15 @@ function generateRandomLetters(length: number) {
   }
 
   return result;
+}
+
+export function isConditionalKey(key: string) {
+  /**
+   * __step1_else
+   * __step1_if
+   * ____step1_if_if
+   * ____step1_if_else
+   * etc...
+   */
+  return key.startsWith('__') && (key.includes('_if') || key.includes('_else'));
 }

@@ -14,6 +14,8 @@ import type {
   StepAction,
   StepDef,
   StepGraph,
+  StepNode,
+  WorkflowContext,
   WorkflowRunResult,
   WorkflowRunState,
 } from './types';
@@ -46,7 +48,7 @@ export interface WorkflowResultReturn<
 }
 
 export class WorkflowInstance<
-  TSteps extends Step<any, any, any>[] = any,
+  TSteps extends Step<any, any, any, any>[] = Step<any, any, any, any>[],
   TTriggerSchema extends z.ZodObject<any> = any,
   TResult extends z.ZodObject<any> = any,
 > implements WorkflowResultReturn<TResult, TTriggerSchema, TSteps>
@@ -57,7 +59,7 @@ export class WorkflowInstance<
 
   logger: Logger;
 
-  #steps: Record<string, StepAction<any, any, any, any>> = {};
+  #steps: Record<string, StepNode> = {};
   #stepGraph: StepGraph;
   #stepSubscriberGraph: Record<string, StepGraph> = {};
 
@@ -101,7 +103,7 @@ export class WorkflowInstance<
   }: {
     name: string;
     logger: Logger;
-    steps: Record<string, StepAction<any, any, any, any>>;
+    steps: Record<string, StepNode>;
     mastra?: Mastra;
     retryConfig?: RetryConfig;
     runId?: string;
@@ -210,7 +212,7 @@ export class WorkflowInstance<
       triggerData: triggerData || {},
       attempts: Object.keys(this.#steps).reduce(
         (acc, stepKey) => {
-          acc[stepKey] = this.#steps[stepKey]?.retryConfig?.attempts || this.#retryConfig?.attempts || 0;
+          acc[stepKey] = this.#steps[stepKey]?.step?.retryConfig?.attempts || this.#retryConfig?.attempts || 0;
           return acc;
         },
         {} as Record<string, number>,
@@ -229,7 +231,7 @@ export class WorkflowInstance<
       }
     }
 
-    const defaultMachine = new Machine({
+    const defaultMachine = new Machine<TSteps, TTriggerSchema, TResult>({
       logger: this.logger,
       mastra: this.#mastra,
       workflowInstance: this,
@@ -300,6 +302,7 @@ export class WorkflowInstance<
           triggerData: triggerData,
           inputData: {},
           attempts: machineInput.attempts,
+          // @ts-ignore
           getStepResult: (stepId: string) => results[stepId],
         },
       });
@@ -361,7 +364,7 @@ export class WorkflowInstance<
 
         this.#resetCompoundDependency(key);
 
-        const machine = new Machine({
+        const machine = new Machine<TSteps, TTriggerSchema, TResult>({
           logger: this.logger,
           mastra: this.#mastra,
           workflowInstance: this,
@@ -614,7 +617,7 @@ export class WorkflowInstance<
     // Reset attempt count
     if (parsedSnapshot.context?.attempts) {
       parsedSnapshot.context.attempts[stepId] =
-        this.#steps[stepId]?.retryConfig?.attempts || this.#retryConfig?.attempts || 0;
+        this.#steps[stepId]?.step?.retryConfig?.attempts || this.#retryConfig?.attempts || 0;
     }
 
     this.logger.debug('Resuming workflow with updated snapshot', {
@@ -686,7 +689,7 @@ export class WorkflowInstance<
       const targetStep = this.#steps[stepId];
       if (!targetStep) throw new Error(`Step not found`);
 
-      const { payload = {}, execute = async () => {} } = targetStep;
+      const { payload = {}, execute = async () => {} } = targetStep.step;
 
       // Merge static payload with dynamically resolved variables
       // Variables take precedence over payload values
