@@ -1,6 +1,6 @@
 {
   "name": "@mastra/voice-murf",
-  "version": "0.1.10-alpha.7",
+  "version": "0.1.10-alpha.8",
   "description": "Mastra Murf voice integration",
   "type": "module",
   "files": [
