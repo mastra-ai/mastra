@@ -1,0 +1,28 @@
+{
+  "name": "e2e-create-mastra",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "E2E tests for @mastra/create-mastra",
+  "scripts": {
+    "start-verdaccio": "verdaccio --config ./verdaccio.yaml --listen 4873",
+    "stop-verdaccio": "echo \"Stopping Verdaccio needs manual implementation or CI cleanup\"",
+    "publish-local": "echo \"Publishing script needs implementation\"",
+    "test:create": "cross-env NPM_CONFIG_REGISTRY=http://localhost:4873 npx -y @mastra/create-mastra@local ./test-output",
+    "test:verify": "echo \"Verification script needs implementation (e.g., cd ./test-output && vitest run)\"",
+    "test": "pnpm run start-verdaccio & pnpm run publish-local && pnpm run test:create && pnpm run test:verify && pnpm run stop-verdaccio"
+  },
+  "devDependencies": {
+    "cross-env": "^7.0.3",
+    "fkill-cli": "^8.0.0",
+    "get-port": "^7.1.0",
+    "npm-cli-login": "^1.0.0",
+    "tsx": "^4.19.3",
+    "verdaccio": "^5.29.0",
+    "vitest": "^1.4.0"
+  },
+  "dependencies": {
+    "globby": "^14.1.0",
+    "verdaccio-auth-memory": "^10.2.2"
+  }
+}
