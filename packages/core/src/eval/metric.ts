@@ -1,8 +1,5 @@
-export interface MetricResult {
-  score: number;
-  info?: Record<string, any>;
-}
+import type { EvaluationResult } from './evaluator';
 
 export abstract class Metric {
-  abstract measure(input: string, output: string): Promise<MetricResult>;
+  abstract measure(input: string, output: string): Promise<EvaluationResult>;
 }

@@ -1,11 +1,11 @@
-import type { TestInfo, MetricResult } from '@mastra/core/eval';
+import type { TestInfo, EvaluationResult } from '@mastra/core/eval';
 import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
 
 export type Evals = {
   input: string;
   output: string;
-  result: MetricResult;
+  result: EvaluationResult;
   agentName: string;
   createdAt: string;
   metricName: string;

@@ -9,7 +9,7 @@ import type {
 import type { JSONSchema7 } from 'json-schema';
 import type { z, ZodSchema } from 'zod';
 
-import type { Metric } from '../eval';
+import type { Evaluator, Metric } from '../eval';
 import type {
   CoreMessage,
   DefaultLLMStreamOptions,
@@ -35,7 +35,7 @@ export type MastraLanguageModel = LanguageModelV1;
 export interface AgentConfig<
   TAgentId extends string = string,
   TTools extends ToolsInput = ToolsInput,
-  TMetrics extends Record<string, Metric> = Record<string, Metric>,
+  TMetrics extends Record<string, Metric | Evaluator> = Record<string, Metric | Evaluator>,
 > {
   name: TAgentId;
   instructions: string;
