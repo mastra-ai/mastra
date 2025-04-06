@@ -64,9 +64,15 @@ export class PgVector extends MastraVector {
   private describeIndexCache: Map<string, PGIndexStats> = new Map();
   private createdIndexes = new Map<string, number>();
   private mutexesByName = new Map<string, Mutex>();
-
-  constructor(connectionString: string) {
+  private schema?: string;
+  private createSchemaPromise: Promise<void> | null = null;
+  constructor(connectionString: string);
+  constructor(config: { connectionString: string; schema?: string });
+  constructor(config: string | { connectionString: string; schema?: string }) {
     super();
+
+    const connectionString = typeof config === 'string' ? config : config.connectionString;
+    this.schema = typeof config === 'string' ? undefined : config.schema;
 
     const basePool = new pg.Pool({
       connectionString,
@@ -104,6 +110,10 @@ export class PgVector extends MastraVector {
   private getMutexByName(indexName: string) {
     if (!this.mutexesByName.has(indexName)) this.mutexesByName.set(indexName, new Mutex());
     return this.mutexesByName.get(indexName)!;
+  }
+
+  private getTableName(indexName: string) {
+    return this.schema ? `${this.schema}.${indexName}` : indexName;
   }
 
   transformFilter(filter?: VectorFilter) {
@@ -147,6 +157,8 @@ export class PgVector extends MastraVector {
         await client.query(`SET LOCAL ivfflat.probes = ${probes}`);
       }
 
+      const tableName = this.getTableName(indexName);
+
       const query = `
         WITH vector_scores AS (
           SELECT
@@ -154,7 +166,7 @@ export class PgVector extends MastraVector {
             1 - (embedding <=> '${vectorStr}'::vector) as score,
             metadata
             ${includeVector ? ', embedding' : ''}
-          FROM ${indexName}
+          FROM ${tableName}
           ${filterQuery}
         )
         SELECT *
@@ -179,6 +191,7 @@ export class PgVector extends MastraVector {
     const params = this.normalizeArgs<UpsertVectorParams>('upsert', args);
 
     const { indexName, vectors, metadata, ids } = params;
+    const tableName = this.getTableName(indexName);
 
     // Start a transaction
     const client = await this.pool.connect();
@@ -188,7 +201,7 @@ export class PgVector extends MastraVector {
 
       for (let i = 0; i < vectors.length; i++) {
         const query = `
-          INSERT INTO ${indexName} (vector_id, embedding, metadata)
+          INSERT INTO ${tableName} (vector_id, embedding, metadata)
           VALUES ($1, $2::vector, $3::jsonb)
           ON CONFLICT (vector_id)
           DO UPDATE SET
@@ -260,6 +273,19 @@ export class PgVector extends MastraVector {
       }
 
       const client = await this.pool.connect();
+
+      if (this.schema) {
+        // to avoid race condition
+        if (!this.createSchemaPromise) {
+          this.createSchemaPromise = new Promise<void>(resolve => {
+            void client.query(`CREATE SCHEMA IF NOT EXISTS ${this.schema}`).then(() => {
+              resolve();
+            });
+          });
+          await this.createSchemaPromise;
+        }
+      }
+
       try {
         // First check if vector extension is available
         const extensionCheck = await client.query(`
@@ -273,6 +299,8 @@ export class PgVector extends MastraVector {
           throw new Error('PostgreSQL vector extension is not available. Please install it first.');
         }
 
+        const tableName = this.getTableName(indexName);
+
         // Try to create extension
         try {
           await client.query(`
@@ -280,7 +308,7 @@ export class PgVector extends MastraVector {
           BEGIN
             CREATE EXTENSION IF NOT EXISTS vector;
             
-            CREATE TABLE IF NOT EXISTS ${indexName} (
+            CREATE TABLE IF NOT EXISTS ${tableName} (
               id SERIAL PRIMARY KEY,
               vector_id TEXT UNIQUE NOT NULL,
               embedding vector(${dimension}),
@@ -338,8 +366,10 @@ export class PgVector extends MastraVector {
     const mutex = this.getMutexByName(`build-${indexName}`);
     // Use async-mutex instead of advisory lock for perf (over 2x as fast)
     await mutex.runExclusive(async () => {
+      const tableName = this.getTableName(indexName);
+
       if (this.createdIndexes.has(indexName)) {
-        await client.query(`DROP INDEX IF EXISTS ${indexName}_vector_idx`);
+        await client.query(`DROP INDEX IF EXISTS ${tableName}_vector_idx`);
       }
 
       if (indexConfig.type === 'flat') {
@@ -357,7 +387,7 @@ export class PgVector extends MastraVector {
 
         indexSQL = `
           CREATE INDEX IF NOT EXISTS ${indexName}_vector_idx 
-          ON ${indexName} 
+          ON ${tableName} 
           USING hnsw (embedding ${metricOp})
           WITH (
             m = ${m},
@@ -369,12 +399,12 @@ export class PgVector extends MastraVector {
         if (indexConfig.ivf?.lists) {
           lists = indexConfig.ivf.lists;
         } else {
-          const size = (await client.query(`SELECT COUNT(*) FROM ${indexName}`)).rows[0].count;
+          const size = (await client.query(`SELECT COUNT(*) FROM ${tableName}`)).rows[0].count;
           lists = Math.max(100, Math.min(4000, Math.floor(Math.sqrt(size) * 2)));
         }
         indexSQL = `
           CREATE INDEX IF NOT EXISTS ${indexName}_vector_idx
-          ON ${indexName}
+          ON ${tableName}
           USING ivfflat (embedding ${metricOp})
           WITH (lists = ${lists});
         `;
@@ -391,10 +421,10 @@ export class PgVector extends MastraVector {
       const vectorTablesQuery = `
             SELECT DISTINCT table_name
             FROM information_schema.columns
-            WHERE table_schema = 'public'
+            WHERE table_schema = $1
             AND udt_name = 'vector';
         `;
-      const vectorTables = await client.query(vectorTablesQuery);
+      const vectorTables = await client.query(vectorTablesQuery, [this.schema || 'public']);
       return vectorTables.rows.map(row => row.table_name);
     } finally {
       client.release();
@@ -404,6 +434,8 @@ export class PgVector extends MastraVector {
   async describeIndex(indexName: string): Promise<PGIndexStats> {
     const client = await this.pool.connect();
     try {
+      const tableName = this.getTableName(indexName);
+
       // Get vector dimension
       const dimensionQuery = `
                 SELECT atttypmod as dimension
@@ -413,8 +445,9 @@ export class PgVector extends MastraVector {
             `;
 
       // Get row count
-      const countQuery = `                SELECT COUNT(*) as count
-                FROM ${indexName};
+      const countQuery = `
+                SELECT COUNT(*) as count
+                FROM ${tableName};
             `;
 
       // Get index metric type
@@ -427,11 +460,11 @@ export class PgVector extends MastraVector {
             JOIN pg_class c ON i.indexrelid = c.oid
             JOIN pg_am am ON c.relam = am.oid
             JOIN pg_opclass opclass ON i.indclass[0] = opclass.oid
-            WHERE c.relname = '${indexName}_vector_idx';
+            WHERE c.relname = '${tableName}_vector_idx';
             `;
 
       const [dimResult, countResult, indexResult] = await Promise.all([
-        client.query(dimensionQuery, [indexName]),
+        client.query(dimensionQuery, [tableName]),
         client.query(countQuery),
         client.query(indexQuery),
       ]);
@@ -480,8 +513,9 @@ export class PgVector extends MastraVector {
   async deleteIndex(indexName: string): Promise<void> {
     const client = await this.pool.connect();
     try {
+      const tableName = this.getTableName(indexName);
       // Drop the table
-      await client.query(`DROP TABLE IF EXISTS ${indexName} CASCADE`);
+      await client.query(`DROP TABLE IF EXISTS ${tableName} CASCADE`);
       this.createdIndexes.delete(indexName);
     } catch (error: any) {
       await client.query('ROLLBACK');
@@ -494,7 +528,8 @@ export class PgVector extends MastraVector {
   async truncateIndex(indexName: string) {
     const client = await this.pool.connect();
     try {
-      await client.query(`TRUNCATE ${indexName}`);
+      const tableName = this.getTableName(indexName);
+      await client.query(`TRUNCATE ${tableName}`);
     } catch (e: any) {
       await client.query('ROLLBACK');
       throw new Error(`Failed to truncate vector table: ${e.message}`);
@@ -540,10 +575,12 @@ export class PgVector extends MastraVector {
         return;
       }
 
+      const tableName = this.getTableName(indexName);
+
       // query looks like this:
       // UPDATE table SET embedding = $2::vector, metadata = $3::jsonb WHERE id = $1
       const query = `
-        UPDATE ${indexName}
+        UPDATE ${tableName}
         SET ${updateParts.join(', ')}
         WHERE vector_id = $1
       `;
@@ -557,8 +594,9 @@ export class PgVector extends MastraVector {
   async deleteIndexById(indexName: string, id: string): Promise<void> {
     const client = await this.pool.connect();
     try {
+      const tableName = this.getTableName(indexName);
       const query = `
-        DELETE FROM ${indexName}
+        DELETE FROM ${tableName}
         WHERE vector_id = $1
       `;
       await client.query(query, [id]);
