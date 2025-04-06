@@ -1,5 +1,6 @@
 import type { Agent } from '../agent';
 import type { MastraDeployer } from '../deployer';
+import type { Evaluator, Metric } from '../eval';
 import { LogLevel, createLogger, noopLogger } from '../logger';
 import type { Logger } from '../logger';
 import type { MastraMemory } from '../memory/memory';
@@ -508,5 +509,26 @@ This is a warning for now, but will throw an error in the future
     console.log(this.#logger);
 
     return await this.#logger.getLogs(transportId);
+  }
+
+  /**
+   * Returns a record of all evaluators registered on all agents
+   * @returns A record mapping evaluator names to evaluator instances
+   */
+  public getEvaluators(): Record<string, Evaluator | Metric> {
+    const evaluators: Record<string, Evaluator | Metric> = {};
+
+    if (this.#agents) {
+      Object.values(this.#agents).forEach(agent => {
+        if (agent.evals) {
+          Object.entries(agent.evals).forEach(([key, evalItem]) => {
+            // Use the original key from the agent's evals
+            evaluators[key] = evalItem;
+          });
+        }
+      });
+    }
+
+    return evaluators;
   }
 }
