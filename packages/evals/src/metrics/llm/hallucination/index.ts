@@ -1,10 +1,7 @@
 import { Metric } from '@mastra/core/eval';
+import type { EvaluationResult } from '@mastra/core/eval';
 import type { LanguageModel } from '@mastra/core/llm';
-
-import type { MetricResultWithReason } from '../types';
-import { roundToTwoDecimals } from '../utils';
-
-import { HallucinationJudge } from './metricJudge';
+import { Hallucination } from '../../../evaluators/llm/hallucination/index';
 
 export interface HallucinationMetricOptions {
   scale?: number;
@@ -12,49 +9,14 @@ export interface HallucinationMetricOptions {
 }
 
 export class HallucinationMetric extends Metric {
-  private judge: HallucinationJudge;
-  private scale: number;
-  private context: string[];
+  private evaluator: Hallucination;
 
   constructor(model: LanguageModel, { scale = 1, context }: HallucinationMetricOptions) {
     super();
-
-    this.context = context;
-    this.judge = new HallucinationJudge(model);
-    this.scale = scale;
+    this.evaluator = new Hallucination({ model, scale, context });
   }
 
-  async measure(input: string, output: string): Promise<MetricResultWithReason> {
-    const verdicts = await this.judge.evaluate(output, this.context);
-    console.log('verdicts', verdicts);
-    const score = this.calculateScore(verdicts);
-    const reason = await this.judge.getReason({
-      input,
-      output,
-      context: this.context,
-      score,
-      scale: this.scale,
-      verdicts,
-    });
-
-    return {
-      score,
-      info: {
-        reason,
-      },
-    };
-  }
-
-  private calculateScore(verdicts: Array<{ verdict: string; reason: string }>): number {
-    const totalStatements = verdicts.length;
-    const contradictedStatements = verdicts.filter(v => v.verdict === 'yes').length;
-
-    if (totalStatements === 0) {
-      return 0;
-    }
-
-    const score = (contradictedStatements / totalStatements) * this.scale;
-
-    return roundToTwoDecimals(score);
+  async measure(input: string, output: string): Promise<EvaluationResult> {
+    return this.evaluator.score({ input, output });
   }
 }

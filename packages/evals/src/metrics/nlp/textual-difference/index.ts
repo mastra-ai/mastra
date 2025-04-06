@@ -1,38 +1,18 @@
 import { Metric } from '@mastra/core/eval';
-import type { MetricResult } from '@mastra/core/eval';
-import { SequenceMatcher } from 'difflib';
-
-interface TextualDifferenceResult extends MetricResult {
-  info: {
-    ratio: number;
-    changes: number;
-    lengthDiff: number;
-    confidence: number;
-  };
-}
+import type { EvaluationResult } from '@mastra/core/eval';
+import { TextualDifference } from '../../../evaluators/code/textual-difference';
+import type { TextualDifferenceOptions } from '../../../evaluators/code/textual-difference';
 
 export class TextualDifferenceMetric extends Metric {
-  async measure(input: string, output: string): Promise<TextualDifferenceResult> {
-    const matcher = new SequenceMatcher(null, input, output);
-    const ratio = matcher.ratio();
+  private evaluator: TextualDifference;
 
-    // Get detailed operations
-    const ops = matcher.getOpcodes();
-    const changes = ops.filter(([op]) => op !== 'equal').length;
+  constructor(options: TextualDifferenceOptions = {}) {
+    super();
+    this.evaluator = new TextualDifference(options);
+  }
 
-    // Calculate confidence based on text length difference
-    const maxLength = Math.max(input.length, output.length);
-    const lengthDiff = maxLength > 0 ? Math.abs(input.length - output.length) / maxLength : 0;
-    const confidence = 1 - lengthDiff;
-
-    return {
-      score: ratio,
-      info: {
-        confidence,
-        ratio,
-        changes,
-        lengthDiff,
-      },
-    };
+  async measure(input: string, output: string): Promise<EvaluationResult> {
+    const result = await this.evaluator.score({ input, output });
+    return result;
   }
 }

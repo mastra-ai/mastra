@@ -1,10 +1,6 @@
 import { Metric } from '@mastra/core/eval';
 import type { LanguageModel } from '@mastra/core/llm';
-
-import type { MetricResultWithReason } from '../types';
-import { roundToTwoDecimals } from '../utils';
-
-import { AnswerRelevancyJudge } from './metricJudge';
+import { AnswerRelevancy } from '../../../evaluators/llm/answer-relevancy/index';
 
 export interface AnswerRelevancyMetricOptions {
   uncertaintyWeight?: number;
@@ -12,47 +8,14 @@ export interface AnswerRelevancyMetricOptions {
 }
 
 export class AnswerRelevancyMetric extends Metric {
-  private judge: AnswerRelevancyJudge;
-  private uncertaintyWeight: number;
-  private scale: number;
+  private evaluator: AnswerRelevancy;
 
   constructor(model: LanguageModel, { uncertaintyWeight = 0.3, scale = 1 }: AnswerRelevancyMetricOptions = {}) {
     super();
-
-    this.uncertaintyWeight = uncertaintyWeight;
-    this.judge = new AnswerRelevancyJudge(model);
-    this.scale = scale;
+    this.evaluator = new AnswerRelevancy({ model, scale, uncertaintyWeight });
   }
 
-  async measure(input: string, output: string): Promise<MetricResultWithReason> {
-    const verdicts = await this.judge.evaluate(input, output);
-    const score = this.calculateScore(verdicts);
-    const reason = await this.judge.getReason({ input, output, score, scale: this.scale, verdicts });
-
-    return {
-      score,
-      info: {
-        reason,
-      },
-    };
-  }
-
-  private calculateScore(evaluation: { verdict: string; reason: string }[]): number {
-    const numberOfVerdicts = evaluation?.length || 0;
-    if (numberOfVerdicts === 0) {
-      return 1;
-    }
-
-    let relevancyCount = 0;
-    for (const { verdict } of evaluation) {
-      if (verdict.trim().toLowerCase() === 'yes') {
-        relevancyCount++;
-      } else if (verdict.trim().toLowerCase() === 'unsure') {
-        relevancyCount += this.uncertaintyWeight;
-      }
-    }
-
-    const score = relevancyCount / numberOfVerdicts;
-    return roundToTwoDecimals(score * this.scale);
+  async measure(input: string, output: string) {
+    return this.evaluator.score({ input, output });
   }
 }

@@ -1,6 +1,6 @@
 import type { ClickHouseClient } from '@clickhouse/client';
 import { createClient } from '@clickhouse/client';
-import type { MetricResult, TestInfo } from '@mastra/core/eval';
+import type { EvaluationResult, TestInfo } from '@mastra/core/eval';
 import type { MessageType, StorageThreadType } from '@mastra/core/memory';
 import {
   MastraStorage,
@@ -114,13 +114,13 @@ export class ClickhouseStore extends MastraStorage {
     const testInfoValue = row.test_info ? JSON.parse(row.test_info as string) : undefined;
 
     if (!resultValue || typeof resultValue !== 'object' || !('score' in resultValue)) {
-      throw new Error(`Invalid MetricResult format: ${JSON.stringify(resultValue)}`);
+      throw new Error(`Invalid EvaluationResult format: ${JSON.stringify(resultValue)}`);
     }
 
     return {
       input: row.input as string,
       output: row.output as string,
-      result: resultValue as MetricResult,
+      result: resultValue as EvaluationResult,
       agentName: row.agent_name as string,
       metricName: row.metric_name as string,
       instructions: row.instructions as string,

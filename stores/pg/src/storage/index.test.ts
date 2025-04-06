@@ -1,5 +1,5 @@
 import { randomUUID } from 'crypto';
-import type { MetricResult } from '@mastra/core/eval';
+import type { EvaluationResult } from '@mastra/core/eval';
 import { TABLE_WORKFLOW_SNAPSHOT, TABLE_MESSAGES, TABLE_THREADS, TABLE_EVALS } from '@mastra/core/storage';
 import type { WorkflowRunState } from '@mastra/core/workflows';
 import { describe, it, expect, beforeAll, beforeEach, afterAll } from 'vitest';
@@ -68,7 +68,7 @@ const createSampleEval = (agentName: string, isTest = false) => {
     agentName,
     input: 'Sample input',
     output: 'Sample output',
-    result: { score: 0.8 } as MetricResult,
+    result: { score: 0.8 } as EvaluationResult,
     metricName: 'sample-metric',
     instructions: 'Sample instructions',
     testInfo,

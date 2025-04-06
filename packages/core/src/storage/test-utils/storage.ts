@@ -1,11 +1,10 @@
 import { randomUUID } from 'crypto';
 import { describe, it, expect, beforeAll, beforeEach, afterAll } from 'vitest';
-
+import type { EvaluationResult } from '../../eval';
 import type { WorkflowRunState } from '../../workflows';
 
 import type { MastraStorage } from '../base';
 import { TABLE_WORKFLOW_SNAPSHOT, TABLE_EVALS, TABLE_MESSAGES, TABLE_THREADS } from '../constants';
-import type { MetricResult } from '../../eval';
 
 export function createTestSuite(storage: MastraStorage) {
   describe('DefaultStorage', () => {
@@ -591,7 +590,7 @@ export function createTestSuite(storage: MastraStorage) {
         agentName,
         input: 'Sample input',
         output: 'Sample output',
-        result: { score: 0.8 } as MetricResult,
+        result: { score: 0.8 } as EvaluationResult,
         metricName: 'sample-metric',
         instructions: 'Sample instructions',
         testInfo,
