@@ -28,6 +28,13 @@
   - [ ] Address repetition between Installation, Adding Memory, Using Memory, and Trying It Out sections
   - [ ] Either consolidate similar content or reorganize for better flow
   - [ ] Consider making Trying It Out the primary example and simplifying earlier sections
+- [ ] Restructure Memory Features Documentation
+  - [ ] Create new page `/docs/memory/features.mdx`
+  - [ ] Move "Mastra Memory Features" list from `overview.mdx` to `features.mdx`
+  - [ ] Move "Memory Request Flow" diagram from `overview.mdx` to `features.mdx`
+  - [ ] Consider moving `last-messages.mdx`, `semantic-recall.mdx`, `working-memory.mdx` to `/docs/reference/memory/`
+  - [ ] Update links in `overview.mdx` and `features.mdx` to point to new locations (or reference pages)
+  - [ ] Update `/docs/memory/_meta.ts` to place "Features" after "Getting Started" and potentially remove individual feature pages if moved to reference
 
 ## Redirects and Integration
 - [ ] Update the existing agents memory page
@@ -41,6 +48,14 @@
 - [ ] Test all links between documentation pages
 - [ ] Ensure navigation is intuitive and logical
 - [ ] Review for any missing content or gaps in the documentation
+
+## Documentation Writing Guidelines
+- [ ] Avoid marketing adjectives (e.g., "powerful", "built-in", "complete", "out-of-the-box", "hands-on").
+- [ ] Avoid marketing phrases (e.g., "production-ready", "makes it easy", "choose the right...solution").
+- [ ] Avoid overly enthusiastic exhortations (e.g., "Check out", "Learn more", "Explore").
+- [ ] Avoid vague benefit-oriented language (e.g., "without changing your code", "automatically handles").
+- [ ] Focus on technical details, specifics, and "nuts and bolts" rather than high-level benefits.
+- [ ] Use neutral, objective language suitable for an engineering audience.
 
 ---
 
