@@ -1,3 +1,4 @@
+'use client'
 import { useForm } from "react-hook-form";
 
 import { cn } from "@/lib/utils";
@@ -115,7 +116,7 @@ export const SubscribeForm = ({
     <Form {...form}>
       <form
         className={cn(
-          "mt-8 items-end flex flex-col md:flex-row w-full gap-2 ",
+          "mt-[2.38rem] items-end flex flex-col md:flex-row w-full gap-2 ",
           className,
         )}
         onKeyDown={(e) => {
@@ -130,7 +131,7 @@ export const SubscribeForm = ({
           name="email"
           render={({ field }) => (
             <FormItem className="flex-1 w-full">
-              <FormLabel className="text-[13px] text-gray-500 dark:text-[#E6E6E6]">
+              <FormLabel className="text-[13px] mb-[0.69rem] block text-gray-500 dark:text-[#E6E6E6]">
                 {label || "Mastra Newsletter"}
               </FormLabel>
 
@@ -139,11 +140,11 @@ export const SubscribeForm = ({
                   placeholder={placeholder || "you@example.com"}
                   {...field}
                   className={cn(
-                    "bg-transparent placeholder:text-text-[#939393] text-sm placeholder:text-sm flex-1 focus:outline-none focus:ring-1 h-[35px] focus:ring-[#3359BC] w-full py-[0.56rem] px-4 dark:border-[#343434] border rounded-md",
+                    "bg-transparent placeholder:text-text-[#939393] text-sm placeholder:text-sm flex-1 focus:outline-none focus:ring-1 h-[35px] focus:ring-[hsl(var(--tag-green))] w-full py-[0.56rem] px-4 dark:border-[#343434] border rounded-md",
                   )}
                 />
               </FormControl>
-              <span className="md:absolute flex gap-2 items-center">
+              <span className="flex gap-2 items-center">
                 {form.formState.errors.email && (
                   <AlertCircle size={12} className="text-red-500" />
                 )}
