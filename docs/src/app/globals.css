@@ -324,3 +324,10 @@ aside > div:nth-child(1) button {
   --x-color-gray-600: var(--color-el-3);
   font-weight: 500;
 }
+
+
+.showcase-item > *{
+  &:hover{
+    text-decoration: none;
+  }
+}
