@@ -4,12 +4,13 @@ const meta = {
   "last-messages": "Conversation History",
   "semantic-recall": "Semantic Recall",
   "working-memory": "Working Memory",
-  "frontend-integration": "Frontend Integration",
+  "frontend-integration": "UI Integration",
   "token-management": "Token Management",
   "memory-threads": "Memory Threads",
   "configuring-memory": "Configuring Memory",
-  "faq": "FAQ",
+  faq: "FAQ",
   "memory-architecture": "Architecture",
 };
 
-export default meta; 
+export default meta;
+
