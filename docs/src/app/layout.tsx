@@ -13,6 +13,7 @@ import { PostHogProvider } from "@/analytics/posthog-provider";
 import { CookieConsent } from "@/components/cookie-consent";
 import { Footer } from "@/components/footer";
 import { Nav } from "@/components/navbar";
+import { SubscribeForm } from "@/components/subscribe-form";
 
 const footer = <Footer />;
 
@@ -54,6 +55,13 @@ export default async function RootLayout({
             search={<Search placeholder="Search docs" />}
             navbar={<Nav />}
             pageMap={await getPageMap()}
+            toc={{
+              extraContent: (
+                <div className="flex flex-col">
+                  <SubscribeForm className="pt-[1.5rem] mt-0 md:flex-col" placeholder="you@company.com" />
+                </div>
+              ),
+            }}
             docsRepositoryBase="https://github.com/mastra-ai/mastra/blob/main/docs"
             footer={footer}
             // ... Your additional layout options
