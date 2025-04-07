@@ -11,9 +11,15 @@
   --secondary-bg: #121212;
   --tertiary-bg: #171717;
   --border: #343434;
+  --color-primary: #fff;
+  --color-el-2: #707070;
   --color-el-3: #939393;
   --font-sans: var(--inter);
   --font-mono: var(--geist-mono);
+  --tag-blue: 211,69%,49%;
+  --tag-green: 143,97%,54%;
+  --tag-purple: 286,38%,52%;
+
 }
 
 :root {
@@ -25,228 +31,12 @@ html:is(html[class~="dark"] *) {
   background: var(--primary-bg);
 }
 
-/* body:is(html[class~="dark"] *),
-html:is(html[class~="dark"] *) {
-  background: #050505;
-}
 
-.dark\:_bg-black:is(html[class~="dark"] *) {
-  background-color: #050505 !important;
-  border-bottom: 0.5px solid rgb(52, 52, 52);
-}
-
-nav {
-  padding: 0 !important;
-}
-
-/*.nextra-nav-container + div {*/
-/*  max-width: 80rem;*/
-/*}*/
-
-/* div._transform-gpu > div > ul {
-  gap: 0.15rem;
-}
-
-ul li a {
-  padding-block: 0.175rem !important;
-}
-
-ul._inline-block {
-  padding-inline-end: 4rem;
-}
-
-aside.nextra-sidebar-container,
-nav.nextra-toc {
-  width: 226px;
-  padding-inline-end: 0px;
-}
-
-article:has(main) {
-  width: auto !important;
-  justify-content: start !important;
-}
-
-main._max-w-6xl {
-  max-width: 70ch;
-  margin-inline-start: 0;
-}
-
-button._transition:not([title="Copy code"]):is(html[class~="dark"] *),
-li:is(html[class~="dark"] *) {
-  font-weight: 400;
-  color: #fff !important;
-}
-
-button._transition:not([title="Copy code"]),
-a[href="/docs/guide"],
-a[href="/docs/guide/08-running-evals"] {
-  padding-inline: 0.375rem !important;
-  color: #000 !important;
-}
-
-a[href="/docs/guide"]:is(html[class~="dark"] *),
-a[href="/docs/guide/08-running-evals"]:is(html[class~="dark"] *) {
-  color: #fff !important;
-  font-weight: 400;
-  padding-inline: 0.375rem !important;
-}
-
-div._overflow-y-auto {
-  padding-inline-start: 0;
-}
-
-/* ul._flex {
-  padding-inline-start: 0.375rem !important;
-  margin-inline-start: 0 !important;
-  padding-block-start: 0 !important;
-  &::before {
-    content: "";
-    background: transparent !important;
-  }
-}
-
-ul._flex > li a {
-  padding-inline-start: 0.375rem !important;
-} */
-
-/* ul._flex {
-  margin-inline-start: 8px !important;
-  padding-inline-start: 0px !important;
-}
-
-button._transition
-  + div._transform-gpu
-  ul
-  button:not(:has(.active)):is(html[class~="dark"] *) {
-  color: #a3a3a3 !important;
-}
-
-button._flex._transition:has(+ div._transform-gpu li.active):is(
-    html[class~="dark"] *
-  ) {
-  color: white !important;
-} */
-
-/* ._font-semibold {
-  font-weight: 500 !important;
-}
-
-h2 {
-  border-bottom: none !important;
-}
-
-p[class*="not(:first-child)"] {
-  margin-top: 1rem !important; /* mt-4 equivalent} */
-
-/* ul[class*="not(:first-child)"] {
-  margin-top: 1rem !important; /* mt-4 equivalent }*/
-
-/* .nextra-callout p {
-  margin-top: 0 !important;
-} 
-
-tr {
-  background: none !important;
-  border: none;
-}
-
-th {
-  border: none !important;
-  border-bottom: 0.5px solid hsl(0, 0%, 20%) !important;
-  &:is(:not(html[class~="dark"] *)) {
-    border-bottom: 0.5px solid hsl(0, 0%, 80%) !important;
-  }
-} */
-
-/* td {
-  border: none !important;
-  border-bottom: 0.5px solid hsl(0, 0%, 20%) !important;
-
-  &:is(:not(html[class~="dark"] *)) {
-    border-bottom: 0.5px solid hsl(0, 0%, 80%) !important;
-  }
-}
-
-
-pre > * {
-  font-size: 13px !important;
-}
-
-div.nextra-scrollbar {
-  gap: 4px;
-} */
-
-/* nav a {
-  padding-block: 8px;
-  padding-inline: 16px;
-  font-weight: 500 !important;
-}
-
-ul[role="listbox"] {
-  border-radius: 0.375rem !important;
-  box-shadow: none;
-}
-
-.gh-link {
-  background: linear-gradient(
-    90deg,
-    rgba(255, 255, 255, 0.1) 4.66%,
-    rgba(255, 255, 255, 0.03) 97.46%
-  ) !important;
-  margin-right: -13px !important;
-} */
-
-/**
- * 
- * Not the most exciting override but I don't have other solution that tweaking this thing...
- */
-
-/* iframe {
-  border-radius: 6px !important;
-  overflow: hidden;
-}
-
-pre {
-  border: 0.5px solid #343434 !important;
-  background: #171717 !important;
-}  */
-
-/* Sidebar */
-
-/* .nextra-sidebar-container li a {
-  border-left: 2px solid transparent;
-  border-top-left-radius: 0px;
-  border-bottom-left-radius: 0px;
-  padding-inline-start: 14px;
-}
-
-.nextra-sidebar-container ul::before {
-  height: calc(100% - 3px);
-}
-
-.dark\:_bg-primary-400\/10:is(html[class~="dark"] *) {
-  background: transparent;
-  color: white;
-  border-left: 2px solid white;
-}
-
-.dark\:_bg-primary-400\/10:is(html[class~="light"] *) {
-  background: transparent;
-  color: black;
-  border-left: 2px solid black;
-}
-
-.nextra-sidebar-container ul li.active button {
-  border: none;
-  font-weight: 400;
-}
-
-.nextra-sidebar-footer:is(html[class~="dark"] *) {
-  background: #050505 !important;
-} */
 
 /* Navbar */
-/* Searchbar */
+.nextra-navbar-blur {
+  display: none;
+}
 
 header {
   background: var(--primary-bg);
@@ -255,6 +45,11 @@ header {
 header > * {
   background: var(--primary-bg);
 }
+
+.nextra-navbar {
+  border-bottom: 0.5px solid var(--border);
+}
+
 .nextra-navbar input[type="search"] {
   width: 180px;
   height: 34px;
@@ -265,6 +60,11 @@ header > * {
 
   &::placeholder {
     color: var(--color-el-3);
+  }
+
+  &:focus{
+    box-shadow: none;
+    outline: 1px solid hsl(var(--tag-green));
   }
 }
 
@@ -328,6 +128,10 @@ aside {
   --icon-position: 11.5px;
 }
 
+article{
+  --x-color-gray-400: var(--color-el-3);
+}
+
 aside + div {
   --nextra-content-width: 1220px;
 }
@@ -357,6 +161,7 @@ article strong > a {
 
 pre code {
   --x-text-sm: 13px;
+  --x-color-gray-500: var(--color-el-2);
 }
 
 pre,
@@ -367,7 +172,7 @@ div:has(+ pre) {
   box-shadow: none;
 }
 
-div:has(+ pre) {
+div:has(+ pre ) {
   border-bottom-left-radius: 0;
   border-bottom-right-radius: 0;
 }
@@ -381,7 +186,18 @@ button[title="Copy code"] {
   border: none;
 }
 
+.nextra-code span {
+  color: var(--color-primary);
+}
+
+main h3:has(+ div.nextra-code) {
+  display: none;
+}
+
 /*****Sidebar******/
+aside{
+  border-right: 0.5px solid var(--border);
+}
 aside > * {
   --x-color-primary-600: #fff;
   --x-color-primary-400: oklab(
@@ -478,39 +294,34 @@ aside > div:nth-child(1) button {
   gap: var(--button-gap);
 }
 
-/* General Utility modification*/
+/*** Table of Contents ***/
 
-/* .nextra-nav-container:is(html[class~="dark"] *)
-  nav
-  a:is([aria-current="true"]) {
-  color: white !important;
+.nextra-toc > * {
+    --x-color-gray-400: #939393;
 }
 
-.nextra-nav-container:is(html[class~="dark"] *) a {
-  color: #939393 !important;
-  transition-property:
-    color, background-color, border-color, text-decoration-color, fill, stroke;
-  transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
-  transition-duration: 0.15s;
-  border-radius: 0.375rem;
-  font-size: 0.9rem !important;
-  padding-top: 0.5rem;
-  padding-bottom: 0.5rem;
-  padding-left: 0.75rem;
-  padding-right: 0.75rem;
-} */
+.nextra-toc div > p {
+  position: relative;
+  color: var(--color-el-3);
+  font-weight: 500;
+  padding-inline-start: 2.24rem;
 
-/* .nextra-nav-container:is(html[class~="dark"] *) a:hover {
-  color: #fff !important;
-  background-color: rgba(41, 41, 41, 0.5);
+  &::before {
+   content: "";
+   position: absolute;
+   left: 12px;
+   bottom: 1;
+   width: 1rem;
+   height: 1rem;
+   background-size: contain;
+   background-repeat: no-repeat;
+   background-image: url("icons/on-this-page.svg");
+  }
 }
 
-.nextra-nav-container:is(html[class~="dark"] *) {
-  background: #050505;
-  border-bottom: 0.5px solid rgb(52, 52, 52);
+.nextra-toc ul a{
+  --x-color-gray-400: var(--color-el-3);
+  --x-color-primary-600: var(--color-primary);
+  --x-color-gray-600: var(--color-el-3);
+  font-weight: 500;
 }
-
-.nextra-nav-container:is(html[class~="light"] *) {
-  background: rgb(250, 250, 250);
-  border-bottom: 0.5px solid rgb(220, 220, 220);
-}   */
