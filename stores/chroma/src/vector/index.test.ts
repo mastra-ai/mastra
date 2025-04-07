@@ -2,7 +2,6 @@ import type { QueryResult, IndexStats } from '@mastra/core/vector';
 import { describe, expect, beforeEach, afterEach, it, beforeAll, afterAll, vi } from 'vitest';
 
 import { ChromaVector } from './';
-import { Collection } from 'chromadb';
 
 describe('ChromaVector Integration Tests', () => {
   let vectorDB = new ChromaVector({
@@ -196,8 +195,8 @@ describe('ChromaVector Integration Tests', () => {
       expect(results[0]?.vector).toEqual(newVector);
     });
 
-    it('should throw exception when no updates are given', () => {
-      expect(vectorDB.updateIndexById(testIndexName, 'id', {})).rejects.toThrow('No updates provided');
+    it('should throw exception when no updates are given', async () => {
+      await expect(vectorDB.updateIndexById(testIndexName, 'id', {})).rejects.toThrow('No updates provided');
     });
 
     it('should delete the vector by id', async () => {
@@ -759,22 +758,20 @@ describe('ChromaVector Integration Tests', () => {
         expect(results.length).toBeGreaterThan(0);
       });
 
-      it('requires multiple conditions in logical operators', async () => {
-        await expect(
-          vectorDB.query({
-            indexName: testIndexName2,
-            queryVector: [1, 0, 0],
-            filter: { $and: [{ category: 'electronics' }] },
-          }),
-        ).rejects.toThrow();
+      it('accepts single conditions in logical operators', async () => {
+        const results = await vectorDB.query({
+          indexName: testIndexName2,
+          queryVector: [1, 0, 0],
+          filter: { $and: [{ category: 'electronics' }] },
+        });
+        expect(results.length).toBeGreaterThan(0);
 
-        await expect(
-          vectorDB.query({
-            indexName: testIndexName2,
-            queryVector: [1, 0, 0],
-            filter: { $or: [{ price: { $gt: 900 } }] },
-          }),
-        ).rejects.toThrow();
+        const results2 = await vectorDB.query({
+          indexName: testIndexName2,
+          queryVector: [1, 0, 0],
+          filter: { $or: [{ price: { $gt: 900 } }] },
+        });
+        expect(results2.length).toBeGreaterThan(0);
       });
     });
 
@@ -1292,15 +1289,14 @@ describe('ChromaVector Integration Tests', () => {
     });
 
     describe('Edge Cases and Validation', () => {
-      it('should reject empty string in $contains', async () => {
-        await expect(
-          vectorDB.query({
-            indexName: testIndexName3,
-            queryVector: [1.0, 0.0, 0.0],
-            topK: 3,
-            documentFilter: { $contains: '' },
-          }),
-        ).rejects.toThrow('Expected where document operand value for operator $contains to be a non-empty str');
+      it('allows empty string in $contains', async () => {
+        const results = await vectorDB.query({
+          indexName: testIndexName3,
+          queryVector: [1.0, 0.0, 0.0],
+          topK: 3,
+          documentFilter: { $contains: '' },
+        });
+        expect(results).toHaveLength(3);
       });
 
       it('should be case sensitive', async () => {
