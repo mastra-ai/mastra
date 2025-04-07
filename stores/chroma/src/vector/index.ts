@@ -51,7 +51,6 @@ export class ChromaVector extends MastraVector {
 
   async getCollection(indexName: string, throwIfNotExists: boolean = true) {
     try {
-      console.log('Version', await this.client.version());
       const collection = await this.client.getCollection({ name: indexName, embeddingFunction: undefined as any });
       this.collections.set(indexName, collection);
     } catch {
