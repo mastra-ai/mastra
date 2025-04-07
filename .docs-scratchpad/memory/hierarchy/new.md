@@ -9,7 +9,9 @@
 - [ ] Enhance Working Memory template guidance in `working-memory.mdx` (add tips on designing effective templates)
 - [ ] Verify all newly added reference links point to existing/planned pages (e.g., storage adapter references)
 - [ ] Perform final review pass against the full checklist to ensure all reviewed items are marked and identify remaining gaps
+- [ ] Review Overview/Getting Started pages to ensure core concepts (previously in FAQ) are adequately covered.
 
+## Missing Content to Create
 ## Missing Content to Create
 - [ ] Review and expand new Tools and Memory page (`tools-and-memory.mdx`)
   - [ ] Ensure content is comprehensive and accurate
@@ -42,6 +44,16 @@
   - [ ] Consider moving `last-messages.mdx`, `semantic-recall.mdx`, `working-memory.mdx` to `/docs/reference/memory/`
   - [ ] Update links in `overview.mdx` and `features.mdx` to point to new locations (or reference pages)
   - [ ] Update `/docs/memory/_meta.ts` to place "Features" after "Getting Started" and potentially remove individual feature pages if moved to reference
+- [ ] Create Deployment Guide/Section
+  - [ ] Cover production database configuration (Postgres pooling, etc.)
+  - [ ] Detail deployment considerations for Vercel, Netlify, Cloudflare
+  - [ ] Explain transitioning from local dev (LibSQL) to production
+  - [ ] Address common deployment errors (DB connectivity, embedders, resource limits)
+- [ ] Create Debugging Guide/Section
+  - [ ] Consolidate troubleshooting tips (Working Memory updates, Local vs Deployed issues)
+  - [ ] Explain how to inspect memory state
+  - [ ] Add steps for debugging semantic search issues
+  - [ ] Include common error messages (e.g., LlamaIndex constructor check)
 
 ## Redirects and Integration
 - [x] Update the existing agents memory page
@@ -223,27 +235,14 @@ This is a high level overview for the new info arch for Mastra Memory documentat
        - [ ] Compare with user feedback
        - [ ] Move into actual docs page
 
-7. Frequently Asked Questions
-   - [ ] 7.1. Common questions about memory
-       - [x] Initial draft .docs-scratchpad/memory/new-docs/7-faq/index.md
-       - [ ] Pair review / edits
-       - [ ] Compare with user feedback
-       - [ ] Move into actual docs page
-   - [ ] 7.2. Working memory questions and best practices
-       - [x] Combined into .docs-scratchpad/memory/new-docs/7-faq/index.md
-       - [ ] Pair review / edits
-       - [ ] Compare with user feedback
-       - [ ] Move into actual docs page
-   - [ ] 7.3. Thread and resource management
-       - [x] Included in .docs-scratchpad/memory/new-docs/7-faq/index.md
-       - [ ] Pair review / edits
-       - [ ] Compare with user feedback
-       - [ ] Move into actual docs page
-   - [ ] 7.4. Database and deployment troubleshooting
-       - [x] Included in .docs-scratchpad/memory/new-docs/7-faq/index.md
-       - [ ] Pair review / edits
-       - [ ] Compare with user feedback
-       - [ ] Move into actual docs page
+6. Debugging memory
+   // ... existing items ...
+
+7. Frequently Asked Questions (Removed - Content Integrated into other pages or planned for dedicated guides)
+   - [x] 7.1. Common questions about memory
+   - [x] 7.2. Working memory questions and best practices
+   - [x] 7.3. Thread and resource management
+   - [x] 7.4. Database and deployment troubleshooting
 
 ## Examples
 
