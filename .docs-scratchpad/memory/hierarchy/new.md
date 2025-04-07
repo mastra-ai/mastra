@@ -11,6 +11,10 @@
 - [ ] Perform final review pass against the full checklist to ensure all reviewed items are marked and identify remaining gaps
 
 ## Missing Content to Create
+- [ ] Review and expand new Tools and Memory page (`tools-and-memory.mdx`)
+  - [ ] Ensure content is comprehensive and accurate
+  - [ ] Add examples of tools interacting with memory (querying, storing results)
+  - [ ] Explain interaction with memory processors (e.g., ToolCallFilter)
 - [ ] Create deployment options documentation
   - [ ] Outline considerations for different hosting providers
   - [ ] Document database requirements for each hosting environment 
@@ -40,9 +44,9 @@
   - [ ] Update `/docs/memory/_meta.ts` to place "Features" after "Getting Started" and potentially remove individual feature pages if moved to reference
 
 ## Redirects and Integration
-- [ ] Update the existing agents memory page
+- [x] Update the existing agents memory page
   - [ ] Either redirect to the new memory overview
-  - [ ] Or update with minimal content that links to the new memory section
+  - [x] Or update with minimal content that links to the new memory section
 - [ ] Reorder pages in _meta.ts
   - [ ] Move the architecture page above the FAQ in the navigation
   - [ ] Move memory threads higher in the sidebar (above similarity search or conversation history)
