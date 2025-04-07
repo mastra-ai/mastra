@@ -2,7 +2,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { cn } from "@/lib/utils";
 import { Analytics } from "@vercel/analytics/next";
 import type { Metadata } from "next";
-import { Layout } from "nextra-theme-docs";
+import { Layout, ThemeSwitch } from "nextra-theme-docs";
 import "nextra-theme-docs/style.css";
 import { Head, Search } from "nextra/components";
 import { getPageMap } from "nextra/page-map";
@@ -58,7 +58,11 @@ export default async function RootLayout({
             toc={{
               extraContent: (
                 <div className="flex flex-col">
-                  <SubscribeForm className="pt-[1.5rem] mt-0 md:flex-col" placeholder="you@company.com" />
+                  <ThemeSwitch className="!text-[14px] dark:!text-[#A9A9A9] w-full dark:!bg-[#121212] block rounded-[6px] h-[32px] px-3 flex items-center bg-gray-100" />
+                  <SubscribeForm
+                    className="pt-[1.5rem] mt-0 md:flex-col"
+                    placeholder="you@company.com"
+                  />
                 </div>
               ),
             }}
