@@ -80,14 +80,20 @@ export class CloudflareVector extends MastraVector {
       // Index exists with matching dimensions
       return true;
     } catch (error: any) {
-      // All variants of "index not found" or "index deleted" errors:
-      const notFoundCodes = [3000, 3005, 40004];
-      const errorCode = error?.code || error?.errors?.[0]?.code;
-
-      if (notFoundCodes.includes(errorCode)) {
+      // Check if this is an expected "index doesn't exist" error
+      // This covers all variants of not found/deleted errors by checking:
+      // 1. HTTP status (404/410 both mean the index isn't there)
+      // 2. Error message content (contains common patterns)
+      if (
+        error.status === 404 ||
+        error.status === 410 ||
+        error.message?.toLowerCase().includes('not found') ||
+        error.message?.toLowerCase().includes('deleted')
+      ) {
         return false;
       }
 
+      // For any other errors, propagate them up
       throw error;
     }
   }
