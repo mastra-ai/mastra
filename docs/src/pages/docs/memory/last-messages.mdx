@@ -4,7 +4,11 @@ The most fundamental form of memory in Mastra is the ability to maintain convers
 
 ## What is Conversation History?
 
-Conversation History is the core memory feature that automatically saves messages exchanged between a user and an agent within a specific conversation thread. When a new message is sent using the same `resourceId` and `threadId`, Mastra retrieves a set number of the most recent messages from that thread and adds them to the LLM's context window. This allows the agent to understand the immediate conversational context and respond coherently, meaning you only need to send the latest message with each interaction instead of managing the history yourself.
+Conversation History is the core memory feature that saves messages exchanged between a user and an agent within a specific conversation thread.
+
+When a new message is sent, a set number of the most recent messages are retrieved from the thread and are added to the LLM's context window. This allows the agent to understand the immediate conversational context and respond coherently.
+
+When using this feature, you only need to send the latest message in each interaction and won't need to manage the conversation history yourself.
 
 ## Quick Start
 
@@ -24,13 +28,13 @@ const agent = new Agent({
 
 ## When to Use This Feature
 
-Conversation history is the foundation of all memory functionality in Mastra. Even if you don't use more advanced memory features, using this feature alone provides the essential memory context for your agents to be able to maintain coherent conversations.
+Conversation history is the foundation of all memory functionality in Mastra. Even if you don't use more advanced memory features, this feature alone will allow your agents to be able to maintain coherent conversations.
 
-This core feature enables agents to understand and respond to multi-turn conversations naturally. Without it, each message would be treated in isolation, forcing users to provide complete context with every interaction. With conversation history enabled, your agents can follow conversation flow, understand references to previous statements, and maintain coherent discussions across multiple exchanges.
+This core feature enables agents to understand and respond to multi-turn conversations. Without it, each message would be treated in isolation, forcing users to provide complete context with every interaction. With conversation history enabled, your agents can follow conversation flow, understand references to previous statements, and maintain coherent discussions across multiple exchanges.
 
 ## How Conversation History Works
 
-This feature automatically captures and retrieves conversation history. Each time you call an agent with a `resourceId` and `threadId`, the memory system:
+This feature captures and retrieves conversation history. Each time you call an agent with a `resourceId` and `threadId`, the memory system:
 
 - Stores the current message automatically
 - Retrieves recent messages from that thread (by default, the 40 most recent)
@@ -82,7 +86,7 @@ As conversations grow longer, older messages drop out of the context window, mai
                   └──────────────────┘
 ```
 
-**Important:** When using Mastra's memory system, you should **only send the latest message** from the user with each agent call. Do not manage or send the entire message history yourself. Mastra automatically handles retrieving and injecting the necessary conversation history based on your memory configuration. Sending the full history will lead to message duplication and incorrect context.
+**Important:** When using Mastra's memory system, you should **only send the latest message** from the user with each agent call. Do not manage or send the entire message history yourself. Mastra retrieves and injects the necessary conversation history based on your memory configuration. Sending the full history will lead to message duplication and incorrect context.
 
 ## Configuration
 

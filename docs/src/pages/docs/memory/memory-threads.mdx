@@ -1,6 +1,6 @@
 # Memory Threads and Resources
 
-Mastra's memory system is organized around **threads** and **resources**. This architecture provides an efficient way to manage conversations for multiple users while maintaining separate contexts.
+Mastra's memory system is organized around **threads** and **resources**. This architecture provides a way to manage conversations for multiple users while maintaining separate contexts.
 
 Memory threads allow you to build chat UIs where users can view and resume previous conversations, create distinct conversation histories for different topics, manage the lifecycle of conversations (creation, archiving, deletion), and build administrative interfaces for support or moderation. Many of these scenarios involve integrating with a frontend, as detailed in the [UI Integration page](./frontend-integration.mdx).
 
@@ -108,7 +108,7 @@ await agent.stream("Did you find my billing issue?", {
 
 ## Thread Management and Retrieval
 
-You can programmatically access and manage user threads, which is essential for building interactive chat applications. See the [getThreadsByResourceId reference](../reference/memory/getThreadsByResourceId.mdx) for more details on retrieving threads.
+You can programmatically access and manage user threads, which is useful for building interactive chat applications. See the [getThreadsByResourceId reference](../reference/memory/getThreadsByResourceId.mdx) for more details on retrieving threads.
 
 ```typescript
 // Get all threads for a specific user

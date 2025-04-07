@@ -1,6 +1,6 @@
 # Configuring Memory
 
-Mastra's memory system is highly configurable, allowing you to adapt it to your specific requirements. This section covers how to configure storage backends, vector databases, and memory settings.
+Mastra's memory system is configurable, allowing you to adapt it to your specific requirements. This section covers how to configure storage backends, vector databases, and memory settings.
 
 ## Database Adapters
 
@@ -8,7 +8,7 @@ Mastra memory supports multiple storage backends for persistence:
 
 ### LibSQL (Default)
 
-LibSQL is included by default and provides a lightweight, file-based storage solution. See the [LibSQL reference](../reference/storage/libsql.mdx) for configuration details.
+LibSQL is included by default and provides a file-based storage solution. See the [LibSQL reference](../reference/storage/libsql.mdx) for configuration details.
 
 ```typescript
 import { LibSQLStore } from "@mastra/core/storage/libsql";
@@ -39,7 +39,7 @@ const memory = new Memory({
 
 ### PostgreSQL
 
-PostgreSQL provides robust storage and vector capabilities. See the [PostgreSQL reference](../reference/storage/postgres.mdx) for configuration details.
+PostgreSQL provides storage and vector capabilities. See the [PostgreSQL reference](../reference/storage/postgres.mdx) for configuration details.
 
 ```typescript
 import { PostgresStore, PgVector } from "@mastra/pg";
@@ -55,7 +55,7 @@ const memory = new Memory({
 
 ### Upstash Redis
 
-For serverless and edge deployments, Upstash Redis provides a managed solution. See the [Upstash Redis reference](../reference/storage/upstash.mdx) for configuration details.
+For serverless and edge deployments, Upstash Redis is a managed solution. See the [Upstash Redis reference](../reference/storage/upstash.mdx) for configuration details.
 
 ```typescript
 import { UpstashStore } from "@mastra/upstash";

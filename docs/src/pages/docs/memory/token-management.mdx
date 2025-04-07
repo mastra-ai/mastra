@@ -1,6 +1,6 @@
 # Optimizing Token Usage
 
-The context window of language models is a finite resource that affects both cost and performance. You should always use the `TokenLimiter` processor to prevent API errors when there are more tokens than what your model supports. This processor automatically manages your token usage while maintaining response quality. See the [Memory Processors reference](/docs/reference/memory/memory-processors.mdx) for more details on available processors.
+The context window of language models is a finite resource that affects both cost and performance. You should always use the `TokenLimiter` processor to prevent API errors when there are more tokens than what your model supports. This processor manages token usage. See the [Memory Processors reference](/docs/reference/memory/memory-processors.mdx) for more details on available processors.
 
 ## Quick Start
 
@@ -33,7 +33,7 @@ const agent = new Agent({
 
 ## How `TokenLimiter` Works
 
-The `TokenLimiter` processor acts as a safeguard that automatically manages token usage before messages are sent to the LLM:
+The `TokenLimiter` processor acts as a safeguard that manages token usage before messages are sent to the LLM:
 
 ```text
     ┌────────────────────┐
@@ -114,7 +114,7 @@ For example, if your model supports 128,000 tokens (like GPT-4o), you might set 
 
 ## Best Practices
 
-1. **Always use `TokenLimiter`**: This is the most reliable way to prevent context overflow errors
+1. **Always use `TokenLimiter`**: This is a reliable way to prevent context overflow errors
 2. **Set conservative limits**: Choose a limit slightly below your model's context window size
 3. **Start small**: Begin with aggressive token limits and increase as needed
 4. **Test with realistic data**: Verify token usage with typical conversations

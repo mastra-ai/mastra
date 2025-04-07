@@ -1,6 +1,6 @@
 # Continuously Relevant Information
 
-While [conversation history](./last-messages.mdx) and [semantic recall](./semantic-recall.mdx) help agents remember conversations, working memory enables them to maintain persistent information about users across all interactions. Think of it as the agent's active thoughts or scratchpad – the key information they keep readily available about the user or task, like how a person would naturally remember someone's name, preferences, or important details during a conversation. This feature is particularly valuable for maintaining preferences, user details, and ongoing state that should always be available to the agent.
+While [conversation history](./last-messages.mdx) and [semantic recall](./semantic-recall.mdx) help agents remember conversations, working memory allows them to maintain persistent information about users across all interactions. Think of it as the agent's active thoughts or scratchpad – the key information they keep available about the user or task, like how a person would naturally remember someone's name, preferences, or important details during a conversation. This feature is useful for maintaining preferences, user details, and ongoing state that should always be available to the agent.
 
 ## Quick Start
 
@@ -36,7 +36,7 @@ Working memory is ideal for:
 - Keeping important user details readily available
 - Maintaining non-linear information that should always be "top of mind"
 
-## How Working Memory Works
+## How it Works
 
 Working memory uses an unstructured text string that the agent is able to update over time, similar to a state store:
 
@@ -86,9 +86,7 @@ Working memory uses an unstructured text string that the agent is able to update
       └───────────────────────┘
 ```
 
-## Configuring Working Memory
-
-### Memory Templates
+## Memory Templates
 
 Templates guide the agent on what information to track and update in working memory. While a default template is used if none is provided, you'll typically want to define a custom template tailored to your agent's specific use case to ensure it remembers the most relevant information.
 
@@ -116,13 +114,51 @@ const memory = new Memory({
 
 You may also need to include specific instructions in your agent's system prompt to ensure it properly maintains the information defined in your template.
 
-### Update Modes
+### Designing Effective Templates
+
+While a default template exists, crafting a custom template tailored to your agent's purpose significantly improves its ability to manage working memory effectively. Good templates are typically:
+
+1.  **Structured**: Use Markdown headings (`#`, `##`), lists (`-`), and key-value pairs (`Key: Value`) to organize related information logically. This helps the agent parse and update specific pieces of data.
+2.  **Comprehensive**: Include placeholders for all the key pieces of information you expect the agent to track (e.g., user name, preferences, task status, important entities).
+3.  **Clear**: Use descriptive headings and field names so the agent (and you, when debugging) understands the purpose of each part.
+4.  **Flexible**: Allow for storing multiple related items if necessary (e.g., a list of user goals, multiple contact persons).
+
+**Example Template:**
+
+```markdown
+# User Profile
+
+## Personal Info
+
+- Name:
+- Location:
+- Timezone:
+
+## Preferences
+
+- Communication Style: [e.g., Formal, Casual]
+- Project Goal:
+- Key Deadlines:
+  - [Deadline 1]: [Date]
+  - [Deadline 2]: [Date]
+
+## Session State
+
+- Last Task Discussed:
+- Open Questions:
+  - [Question 1]
+  - [Question 2]
+```
+
+Remember to instruct your agent on _how_ and _when_ to use this template in its system prompt.
+
+## Update Modes
 
 Working memory supports two update modes:
 
 1.  **Text Stream Mode** (`text-stream`):
 
-    - **How it works**: The agent includes working memory updates directly in its response stream using special markdown tags (e.g., `<working_memory>...</working_memory>`). Mastra automatically extracts this content and updates the memory.
+    - **How it works**: The agent includes working memory updates directly in its response stream using special markdown tags (e.g., `<working_memory>...</working_memory>`). Mastra extracts this content and updates the memory.
     - **Pros**: Simpler concept, might work well for basic updates.
     - **Cons**: Less reliable with some models, requires masking tags in the UI, not compatible with `toDataStream()`.
     - **Configuration**:
@@ -139,7 +175,7 @@ Working memory supports two update modes:
 
 2.  **Tool Call Mode** (`tool-call`):
     - **How it works**: The agent uses a dedicated internal tool (`updateWorkingMemory`) to explicitly update the working memory content.
-    - **Pros**: More reliable and structured, compatible with `toDataStream()`, easier for agents skilled with tools, recommended approach.
+    - **Pros**: More structured, compatible with `toDataStream()`, suitable for agents skilled with tools, recommended.
     - **Cons**: Slightly more complex interaction flow (involves tool calls).
     - **Configuration**:
       ```typescript
@@ -173,16 +209,6 @@ for await (const chunk of maskStreamTags(
 
 **Note**: Masking is **not** required when using `tool-call` mode, as updates happen via tool calls behind the scenes.
 
-## Working Memory Scope
-
-It's important to understand that working memory is **scoped per thread**, not per agent.
-
-- Each unique combination of `resourceId` and `threadId` has its own distinct working memory.
-- If multiple agents use the same `resourceId` and `threadId`, they will share and potentially overwrite the same working memory content.
-- If you want agents to have separate working memories even when interacting with the same user, assign them different `threadId`s.
-
-This design allows for collaborative scenarios where different agents contribute to a shared understanding (working memory) within a single conversation thread.
-
 ## Related Features
 
 Working memory integrates with other memory features to enhance agent capabilities:
@@ -191,4 +217,3 @@ Working memory integrates with other memory features to enhance agent capabiliti
 - **[Recalling Relevant History](./semantic-recall.mdx)**: For finding relevant past information
 - **[Memory Threads](./memory-threads.mdx)**: For managing conversation organization
 - **[Token Management](./token-management.mdx)**: For optimizing memory token usage
-
