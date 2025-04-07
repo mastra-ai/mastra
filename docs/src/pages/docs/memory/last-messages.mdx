@@ -1,14 +1,10 @@
 # Conversation History
 
-The most fundamental form of memory in Mastra is the ability to maintain conversation history. This page explains how you can use this feature to handle turn-based interactions and conversations.
+Conversation history enables agents to understand and respond to multi-turn conversations.
 
-## What is Conversation History?
+When a new message is sent, a set number of the most recent messages are retrieved from the memory thread and are added to the LLM's context window, and the new message is saved in the DB.
 
-Conversation History is the core memory feature that saves messages exchanged between a user and an agent within a specific conversation thread.
-
-When a new message is sent, a set number of the most recent messages are retrieved from the thread and are added to the LLM's context window. This allows the agent to understand the immediate conversational context and respond coherently.
-
-When using this feature, you only need to send the latest message in each interaction and won't need to manage the conversation history yourself.
+Even if you don't use more advanced memory features, this feature alone will allow your agents to be able to maintain coherent conversations.
 
 ## Quick Start
 
@@ -25,12 +21,6 @@ const agent = new Agent({
   memory: new Memory(), // Uses default setting of 40 most recent messages
 });
 ```
-
-## When to Use This Feature
-
-Conversation history is the foundation of all memory functionality in Mastra. Even if you don't use more advanced memory features, this feature alone will allow your agents to be able to maintain coherent conversations.
-
-This core feature enables agents to understand and respond to multi-turn conversations. Without it, each message would be treated in isolation, forcing users to provide complete context with every interaction. With conversation history enabled, your agents can follow conversation flow, understand references to previous statements, and maintain coherent discussions across multiple exchanges.
 
 ## How Conversation History Works
 
@@ -126,7 +116,7 @@ For automatic token management, consider using the [Token Limiter memory process
 
 Last messages provide the foundation for conversational memory, but additional capabilities can complement this functionality:
 
-- **[Similarity Search](./semantic-recall.mdx)**: Find relevant messages from anywhere in conversation history, not just recent messages
+- **[Semantic Recall](./semantic-recall.mdx)**: Find relevant messages from anywhere in conversation history, not just recent messages
 - **[Working Memory](./working-memory.mdx)**: Store persistent user information in a structured format
 - **[Token Management](./token-management.mdx)**: Optimize token usage across different memory features
 - **[Configuring Memory](./configuring-memory.mdx)**: Configure memory backends and settings
