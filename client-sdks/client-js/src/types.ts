@@ -156,8 +156,48 @@ export type GetLogsResponse = BaseLogMessage[];
 
 export type RequestFunction = (path: string, options?: RequestOptions) => Promise<any>;
 
+type SpanStatus = {
+  code: number;
+};
+
+type SpanOther = {
+  droppedAttributesCount: number;
+  droppedEventsCount: number;
+  droppedLinksCount: number;
+};
+
+type SpanEventAttributes = {
+  key: string;
+  value: { [key: string]: string | number | boolean | null };
+};
+
+type SpanEvent = {
+  attributes: SpanEventAttributes[];
+  name: string;
+  timeUnixNano: string;
+  droppedAttributesCount: number;
+};
+
+type Span = {
+  id: string;
+  parentSpanId: string | null;
+  traceId: string;
+  name: string;
+  scope: string;
+  kind: number;
+  status: SpanStatus;
+  events: SpanEvent[];
+  links: any[];
+  attributes: Record<string, string | number | boolean | null>;
+  startTime: number;
+  endTime: number;
+  duration: number;
+  other: SpanOther;
+  createdAt: string;
+};
+
 export interface GetTelemetryResponse {
-  traces: any[];
+  traces: { traces: Span[] };
 }
 
 export interface GetTelemetryParams {

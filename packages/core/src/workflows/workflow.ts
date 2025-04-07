@@ -22,7 +22,7 @@ import type {
   WorkflowRunState,
 } from './types';
 import { WhenConditionReturnValue } from './types';
-import { agentToStep, isAgent, isVariableReference, isWorkflow, workflowToStep } from './utils';
+import { agentToStep, isAgent, isConditionalKey, isVariableReference, isWorkflow, workflowToStep } from './utils';
 import type { WorkflowResultReturn } from './workflow-instance';
 import { WorkflowInstance } from './workflow-instance';
 
@@ -67,7 +67,8 @@ export class Workflow<
   #serializedStepGraph: StepGraph = { initial: [] };
   #stepSubscriberGraph: Record<string, StepGraph> = {};
   #serializedStepSubscriberGraph: Record<string, StepGraph> = {};
-  #steps: Record<string, StepAction<string, any, any, any>> = {};
+  #steps: Record<string, StepNode> = {};
+  #ifCount: number = 0;
 
   /**
    * Creates a new Workflow instance
@@ -211,7 +212,7 @@ export class Workflow<
       },
     };
 
-    this.#steps[stepKey] = step;
+    this.#steps[stepKey] = graphEntry;
 
     const parentStepKey = this.#getParentStepKey({ loop_check: true });
     const stepGraph = this.#stepSubscriberGraph[parentStepKey || ''];
@@ -337,7 +338,7 @@ export class Workflow<
       },
     };
 
-    this.#steps[stepKey] = step;
+    this.#steps[stepKey] = graphEntry;
 
     const parentStepKey = this.#getParentStepKey();
     const stepGraph = this.#stepSubscriberGraph[parentStepKey || ''];
@@ -403,7 +404,7 @@ export class Workflow<
         throw new Error('Condition requires a step to be executed after');
       }
 
-      this.after(lastStep);
+      this.after(lastStep.step);
       const nextSteps = next.map(step => {
         if (isWorkflow(step)) {
           // types possibly infinite issue here
@@ -469,11 +470,11 @@ export class Workflow<
       },
     };
 
-    this.#steps[stepKey] = step;
+    this.#steps[stepKey] = graphEntry;
     // if then is called without a step, we are done
     if (!lastStepKey) return this;
 
-    const parentStepKey = this.#afterStepStack[this.#afterStepStack.length - 1];
+    const parentStepKey = this.#getParentStepKey();
     const stepGraph = this.#stepSubscriberGraph[parentStepKey || ''];
     const serializedStepGraph = this.#serializedStepSubscriberGraph[parentStepKey || ''];
 
@@ -485,7 +486,6 @@ export class Workflow<
       stepGraph[lastStepKey].push(graphEntry);
       if (serializedStepGraph && serializedStepGraph[lastStepKey]) serializedStepGraph[lastStepKey].push(graphEntry);
     } else {
-      // add the step to the graph if not already there.. it should be there though, unless magic
       if (!this.#stepGraph[lastStepKey]) this.#stepGraph[lastStepKey] = [];
       if (!this.#serializedStepGraph[lastStepKey]) this.#serializedStepGraph[lastStepKey] = [];
 
@@ -515,8 +515,18 @@ export class Workflow<
 
     const fallbackStepKey = this.#makeStepKey(fallbackStep);
 
+    const fallbackStepNode: StepNode = {
+      step: fallbackStep,
+      config: {
+        ...this.#makeStepDef(fallbackStepKey),
+      },
+      get id() {
+        return fallbackStepKey;
+      },
+    };
+
     // Store the fallback step
-    this.#steps[fallbackStepKey] = fallbackStep;
+    this.#steps[fallbackStepKey] = fallbackStepNode;
 
     // Create a check step that evaluates the condition
     const checkStepKey = `__${fallbackStepKey}_${loopType}_loop_check`;
@@ -568,7 +578,17 @@ export class Workflow<
         status: z.enum(['continue', 'complete']),
       }),
     };
-    this.#steps[checkStepKey] = checkStep;
+
+    const checkStepNode: StepNode = {
+      step: checkStep,
+      config: {
+        ...this.#makeStepDef(checkStepKey),
+      },
+      get id() {
+        return checkStepKey;
+      },
+    };
+    this.#steps[checkStepKey] = checkStepNode;
 
     // Loop finished step
     const loopFinishedStepKey = `__${fallbackStepKey}_${loopType}_loop_finished`;
@@ -578,7 +598,16 @@ export class Workflow<
         return { success: true };
       },
     };
-    this.#steps[loopFinishedStepKey] = loopFinishedStep;
+    const loopFinishedStepNode: StepNode = {
+      step: loopFinishedStep,
+      config: {
+        ...this.#makeStepDef(loopFinishedStepKey),
+      },
+      get id() {
+        return loopFinishedStepKey;
+      },
+    };
+    this.#steps[loopFinishedStepKey] = loopFinishedStepNode;
 
     // First add the check step after the last step
     this.then(checkStep, {
@@ -711,12 +740,13 @@ export class Workflow<
     ifStep?: TStep | Workflow,
     elseStep?: TStep | Workflow,
   ) {
-    const lastStep = this.#steps[this.#lastStepStack[this.#lastStepStack.length - 1] ?? ''];
+    this.#ifCount++;
+    const lastStep = this.#getLastStep({ if_else_check: this.#lastBuilderType !== 'else' });
     if (!lastStep) {
       throw new Error('Condition requires a step to be executed after');
     }
 
-    this.after(lastStep);
+    this.after(lastStep.step);
 
     if (ifStep) {
       const _ifStep = isWorkflow(ifStep) ? workflowToStep(ifStep, { mastra: this.#mastra }) : (ifStep as TStep);
@@ -759,7 +789,7 @@ export class Workflow<
       return this;
     }
 
-    const ifStepKey = `__${lastStep.id}_if`;
+    const ifStepKey = `__${lastStep.id}_if_${this.#ifCount}`;
     this.step(
       {
         id: ifStepKey,
@@ -773,8 +803,8 @@ export class Workflow<
       },
     );
 
-    const elseStepKey = `__${lastStep.id}_else`;
-    this.#ifStack.push({ condition, elseStepKey, condStep: lastStep });
+    const elseStepKey = `__${lastStep.id}_else_${this.#ifCount}`;
+    this.#ifStack.push({ condition, elseStepKey, condStep: lastStep.step });
 
     this.#lastBuilderType = 'if';
     return this as WorkflowBuilder<this>;
@@ -861,7 +891,7 @@ export class Workflow<
       },
     });
 
-    this.after(lastStep).step(eventStep).after(eventStep);
+    this.after(lastStep.step).step(eventStep).after(eventStep);
 
     this.#lastBuilderType = 'afterEvent';
     return this as WorkflowBuilder<this>;
@@ -965,17 +995,45 @@ export class Workflow<
     return this.#runs.get(runId)?.executionSpan;
   }
 
-  #getParentStepKey({ loop_check } = { loop_check: false }) {
-    let parentStepKey = undefined;
+  #getParentStepKey({
+    loop_check = false,
+    if_else_check = false,
+  }: {
+    loop_check?: boolean;
+    if_else_check?: boolean;
+  } = {}) {
+    // Search backwards through afterStepStack for valid parent step
     for (let i = this.#afterStepStack.length - 1; i >= 0; i--) {
       const stepKey = this.#afterStepStack[i];
-      if (stepKey && this.#stepSubscriberGraph[stepKey] && (loop_check ? !stepKey.includes('loop_check') : true)) {
-        parentStepKey = stepKey;
-        break;
+      if (!stepKey) continue;
+
+      const isValidStep =
+        this.#stepSubscriberGraph[stepKey] &&
+        (!loop_check || !stepKey.includes('loop_check')) &&
+        (!if_else_check || !isConditionalKey(stepKey));
+
+      if (isValidStep) {
+        return stepKey;
       }
     }
 
-    return parentStepKey;
+    return undefined;
+  }
+
+  #getLastStep({ if_else_check }: { if_else_check: boolean }) {
+    // Iterate backwards through the step stack to find the last valid step
+    for (let i = this.#lastStepStack.length - 1; i >= 0; i--) {
+      const stepKey = this.#lastStepStack[i];
+      if (!stepKey) continue;
+
+      const step = this.#steps[stepKey];
+      const isInvalidStep = !step || (if_else_check && isConditionalKey(stepKey));
+      if (isInvalidStep) continue;
+
+      return step;
+    }
+
+    return undefined;
   }
 
   #makeStepDef<TStepId extends TSteps[number]['id'], TSteps extends Step<any, any, any>[]>(
@@ -1009,7 +1067,7 @@ export class Workflow<
       const targetStep = this.#steps[stepId];
       if (!targetStep) throw new Error(`Step not found`);
 
-      const { payload = {}, execute = async () => {} } = targetStep;
+      const { payload = {}, execute = async () => {} } = targetStep.step;
 
       // Merge static payload with dynamically resolved variables
       // Variables take precedence over payload values
@@ -1190,8 +1248,14 @@ export class Workflow<
     return this.#serializedStepSubscriberGraph;
   }
 
-  get steps() {
-    return this.#steps;
+  get steps(): Record<string, StepAction<string, any, any, any>> {
+    return Object.entries(this.#steps).reduce(
+      (acc, [key, step]) => {
+        acc[key] = step.step;
+        return acc;
+      },
+      {} as Record<string, StepAction<string, any, any, any>>,
+    );
   }
 
   setNested(isNested: boolean) {
