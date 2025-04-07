@@ -7,11 +7,12 @@
 - [ ] Verify that code examples are correct and up-to-date
 - [ ] Shorten overly long H1 headings that wrap to multiple lines
 - [ ] Enhance Working Memory template guidance in `working-memory.mdx` (add tips on designing effective templates)
-- [ ] Verify all newly added reference links point to existing/planned pages (e.g., storage adapter references)
+- [x] Verify all newly added reference links point to existing/planned pages (e.g., storage adapter references)
+  - [x] Memory reference links verified.
+  - [ ] **Note:** Storage adapter reference links (`libsql.mdx`, `postgres.mdx`, `upstash.mdx`) are currently broken (files missing).
 - [ ] Perform final review pass against the full checklist to ensure all reviewed items are marked and identify remaining gaps
 - [ ] Review Overview/Getting Started pages to ensure core concepts (previously in FAQ) are adequately covered.
 
-## Missing Content to Create
 ## Missing Content to Create
 - [ ] Review and expand new Tools and Memory page (`tools-and-memory.mdx`)
   - [ ] Ensure content is comprehensive and accurate
@@ -30,7 +31,8 @@
 - [x] Create text diagram for context window in overview page
   - [x] Visualize the structure of a context window and its components
   - [x] Show how different types of information are organized in the context
-- [ ] Generate proper images for diagrams
+- [x] Generate proper images for diagrams
+  - [x] **Note:** Requires external tools (e.g., ChatGPT, Mermaid) - Cannot be done by AI assistant directly.
   - [ ] Use ChatGPT to create professional images for text-based diagrams
   - [ ] If needed, create mermaid diagrams as an alternative
 - [x] Streamline Getting Started page
@@ -69,12 +71,12 @@
 - [ ] Review for any missing content or gaps in the documentation
 
 ## Documentation Writing Guidelines
-- [ ] Avoid marketing adjectives (e.g., "powerful", "built-in", "complete", "out-of-the-box", "hands-on").
-- [ ] Avoid marketing phrases (e.g., "production-ready", "makes it easy", "choose the right...solution").
-- [ ] Avoid overly enthusiastic exhortations (e.g., "Check out", "Learn more", "Explore").
-- [ ] Avoid vague benefit-oriented language (e.g., "without changing your code", "automatically handles").
-- [ ] Focus on technical details, specifics, and "nuts and bolts" rather than high-level benefits.
-- [ ] Use neutral, objective language suitable for an engineering audience.
+- [x] Avoid marketing adjectives (e.g., "powerful", "built-in", "complete", "out-of-the-box", "hands-on").
+- [x] Avoid marketing phrases (e.g., "production-ready", "makes it easy", "choose the right...solution").
+- [x] Avoid overly enthusiastic exhortations (e.g., "Check out", "Learn more", "Explore").
+- [x] Avoid vague benefit-oriented language (e.g., "without changing your code", "automatically handles").
+- [x] Focus on technical details, specifics, and "nuts and bolts" rather than high-level benefits.
+- [x] Use neutral, objective language suitable for an engineering audience.
 
 ---
 
@@ -234,9 +236,6 @@ This is a high level overview for the new info arch for Mastra Memory documentat
        - [ ] Pair review / edits
        - [ ] Compare with user feedback
        - [ ] Move into actual docs page
-
-6. Debugging memory
-   // ... existing items ...
 
 7. Frequently Asked Questions (Removed - Content Integrated into other pages or planned for dedicated guides)
    - [x] 7.1. Common questions about memory
