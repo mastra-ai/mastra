@@ -242,7 +242,8 @@ aside > div:nth-child(1) ul li.active {
   }
 }
 
-aside > div:nth-child(1) ul li.active:has(a[href="/docs"]) {
+aside > div:nth-child(1) ul li.active:has(a[href="/docs"]),
+aside > div:nth-child(1) ul li.active:has(a[href="/examples"]) {
   &::before {
     content: "";
     background: transparent;
@@ -250,13 +251,15 @@ aside > div:nth-child(1) ul li.active:has(a[href="/docs"]) {
 }
 
 aside a[href="/docs"],
-aside button[data-href="/docs/reference"] {
+aside button[data-href="/docs/reference"],
+aside a[href="/examples"] {
   position: relative;
   padding-inline-start: calc((var(--button-gap) * 3) + var(--icon-position));
 }
 
 aside a[href="/docs"]::before,
-aside button[data-href="/docs/reference"]::before {
+aside button[data-href="/docs/reference"]::before,
+aside a[href="/examples"]::before {
   content: "";
   position: absolute;
   left: var(--icon-position);
@@ -268,7 +271,8 @@ aside button[data-href="/docs/reference"]::before {
   background-repeat: no-repeat;
 }
 
-aside a[href="/docs"]::before {
+aside a[href="/docs"]::before,
+aside a[href="/examples"]::before {
   background-image: url("icons/introduction.svg");
 }
 
