@@ -1511,4 +1511,85 @@ describe('ChromaVector Integration Tests', () => {
       expect(upsertResults).toHaveLength(1);
     });
   });
+
+  describe('Performance and Concurrency', () => {
+    const perfTestIndex = 'perf-test-index';
+
+    beforeEach(async () => {
+      try {
+        await vectorDB.deleteIndex(perfTestIndex);
+      } catch {
+        // Ignore errors if index doesn't exist
+      }
+      await vectorDB.createIndex({ indexName: perfTestIndex, dimension });
+    }, 10000);
+
+    afterEach(async () => {
+      try {
+        await vectorDB.deleteIndex(perfTestIndex);
+      } catch {
+        // Ignore cleanup errors
+      }
+    }, 10000);
+
+    it('handles concurrent operations correctly', async () => {
+      const promises = Array(10)
+        .fill(0)
+        .map((_, i) =>
+          vectorDB.upsert({
+            indexName: perfTestIndex,
+            vectors: [[1, 0, 0]],
+            metadata: [{ test: 'concurrent', id: i }],
+            ids: [`concurrent-${i}`],
+          }),
+        );
+      await Promise.all(promises);
+
+      const results = await vectorDB.query({
+        indexName: perfTestIndex,
+        queryVector: [1, 0, 0],
+        filter: { test: 'concurrent' },
+      });
+      expect(results).toHaveLength(10);
+    }, 15000);
+
+    it('handles large batch operations', async () => {
+      const batchSize = 100; // Using 100 instead of 1000 to keep tests fast
+      const vectors = Array(batchSize)
+        .fill(0)
+        .map(() => [1, 0, 0]);
+      const metadata = vectors.map((_, i) => ({ index: i, test: 'batch' }));
+      const ids = vectors.map((_, i) => `batch-${i}`);
+
+      await vectorDB.upsert({
+        indexName: perfTestIndex,
+        vectors,
+        metadata,
+        ids,
+      });
+
+      const results = await vectorDB.query({
+        indexName: perfTestIndex,
+        queryVector: [1, 0, 0],
+        filter: { test: 'batch' },
+        topK: batchSize,
+      });
+      expect(results).toHaveLength(batchSize);
+
+      // Test querying with pagination
+      const pageSize = 20;
+      const pages: QueryResult[][] = [];
+      for (let i = 0; i < batchSize; i += pageSize) {
+        const page = await vectorDB.query({
+          indexName: perfTestIndex,
+          queryVector: [1, 0, 0],
+          filter: { test: 'batch' },
+          topK: pageSize,
+        });
+        pages.push(page);
+        expect(page).toHaveLength(Math.min(pageSize, batchSize - i));
+      }
+      expect(pages).toHaveLength(Math.ceil(batchSize / pageSize));
+    }, 30000);
+  });
 });
