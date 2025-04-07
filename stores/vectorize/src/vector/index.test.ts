@@ -38,12 +38,12 @@ async function waitForIndexDeletion(vector: CloudflareVector, indexName: string)
         clearInterval(interval);
         reject(error);
       }
-    }, 10000);
+    }, 5000);
 
     setTimeout(() => {
       clearInterval(interval);
       reject(new Error('Global timeout waiting for index deletion'));
-    }, 30000);
+    }, 100000);
   });
 }
 
@@ -71,12 +71,12 @@ function waitUntilReady(vector: CloudflareVector, indexName: string) {
         clearInterval(interval);
         reject(error);
       }
-    }, 10000);
+    }, 5000);
 
     setTimeout(() => {
       clearInterval(interval);
       reject(new Error('Global timeout waiting for index'));
-    }, 90000);
+    }, 200000);
   });
 }
 
@@ -87,7 +87,7 @@ function waitUntilVectorsIndexed(
   exactCount = false,
 ) {
   return new Promise((resolve, reject) => {
-    const maxAttempts = 60;
+    const maxAttempts = 40;
     let attempts = 0;
     let lastCount = 0;
     let stableCount = 0;
@@ -117,12 +117,12 @@ function waitUntilVectorsIndexed(
         clearInterval(interval);
         reject(error);
       }
-    }, 10000);
+    }, 5000);
 
     setTimeout(() => {
       clearInterval(interval);
       reject(new Error('Global timeout waiting for vectors'));
-    }, 90000);
+    }, 200000);
   });
 }
 
@@ -146,12 +146,12 @@ function waitForMetadataIndexes(vector: CloudflareVector, indexName: string, exp
         clearInterval(interval);
         reject(error);
       }
-    }, 10000);
+    }, 5000);
 
     setTimeout(() => {
       clearInterval(interval);
       reject(new Error('Global timeout waiting for metadata indexes'));
-    }, 90000);
+    }, 200000);
   });
 }
 
@@ -208,12 +208,12 @@ async function waitForQueryResults({
         clearInterval(interval);
         reject(error);
       }
-    }, 10000);
+    }, 5000);
 
     setTimeout(() => {
       clearInterval(interval);
       reject(new Error('Global timeout waiting for query results'));
-    }, 90000);
+    }, 200000);
   });
 }
 
@@ -304,7 +304,7 @@ describe('CloudflareVector', () => {
     });
   }, 30000);
 
-  describe.only('Vector Operations', () => {
+  describe('Vector Operations', () => {
     let vectorIds: string[];
     it('should create index before operations', async () => {
       await vectorDB.createIndex({ indexName: testIndexName, dimension: VECTOR_DIMENSION, metric: 'cosine' });
