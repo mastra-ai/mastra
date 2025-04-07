@@ -1,8 +1,11 @@
-import { isVercelTool } from '@mastra/core';
+import type { Mastra } from '@mastra/core';
+import {
+  getToolsHandler as getOriginalToolsHandler,
+  getToolByIdHandler as getOriginalToolByIdHandler,
+  executeToolHandler as getOriginalExecuteToolHandler,
+  executeAgentToolHandler as getOriginalExecuteAgentToolHandler,
+} from '@mastra/server/handlers/tools';
 import type { Context } from 'hono';
-import { HTTPException } from 'hono/http-exception';
-import { stringify } from 'superjson';
-import zodToJsonSchema from 'zod-to-json-schema';
 
 import { handleError } from './error';
 
@@ -11,24 +14,11 @@ export async function getToolsHandler(c: Context) {
   try {
     const tools = c.get('tools');
 
-    if (!tools) {
-      return c.json({});
-    }
+    const result = await getOriginalToolsHandler({
+      tools,
+    });
 
-    const serializedTools = Object.entries(tools).reduce(
-      (acc, [id, _tool]) => {
-        const tool = _tool as any;
-        acc[id] = {
-          ...tool,
-          inputSchema: tool.inputSchema ? stringify(zodToJsonSchema(tool.inputSchema)) : undefined,
-          outputSchema: tool.outputSchema ? stringify(zodToJsonSchema(tool.outputSchema)) : undefined,
-        };
-        return acc;
-      },
-      {} as Record<string, any>,
-    );
-
-    return c.json(serializedTools);
+    return c.json(result);
   } catch (error) {
     return handleError(error, 'Error getting tools');
   }
@@ -38,19 +28,13 @@ export async function getToolByIdHandler(c: Context) {
   try {
     const tools = c.get('tools');
     const toolId = c.req.param('toolId');
-    const tool = Object.values(tools || {}).find((tool: any) => tool.id === toolId) as any;
 
-    if (!tool) {
-      throw new HTTPException(404, { message: 'Tool not found' });
-    }
+    const result = await getOriginalToolByIdHandler({
+      tools,
+      toolId,
+    });
 
-    const serializedTool = {
-      ...tool,
-      inputSchema: tool.inputSchema ? stringify(zodToJsonSchema(tool.inputSchema)) : undefined,
-      outputSchema: tool.outputSchema ? stringify(zodToJsonSchema(tool.outputSchema)) : undefined,
-    };
-
-    return c.json(serializedTool);
+    return c.json(result);
   } catch (error) {
     return handleError(error, 'Error getting tool');
   }
@@ -59,28 +43,16 @@ export async function getToolByIdHandler(c: Context) {
 export function executeToolHandler(tools: Record<string, any>) {
   return async (c: Context) => {
     try {
+      const mastra: Mastra = c.get('mastra');
       const toolId = decodeURIComponent(c.req.param('toolId'));
-      const tool = Object.values(tools || {}).find((tool: any) => tool.id === toolId) as any;
-
-      if (!tool) {
-        return c.json({ error: 'Tool not found' }, 404);
-      }
-
-      if (!tool?.execute) {
-        return c.json({ error: 'Tool is not executable' }, 400);
-      }
-
       const { data } = await c.req.json();
-      const mastra = c.get('mastra');
-      if (isVercelTool(tool)) {
-        const result = await (tool as any).execute(data);
-        return c.json(result);
-      }
-      const result = await tool.execute({
-        context: data,
+
+      const result = await getOriginalExecuteToolHandler(tools)({
         mastra,
-        runId: mastra.runId,
+        toolId,
+        data,
       });
+
       return c.json(result);
     } catch (error) {
       return handleError(error, 'Error executing tool');
@@ -90,29 +62,16 @@ export function executeToolHandler(tools: Record<string, any>) {
 
 export async function executeAgentToolHandler(c: Context) {
   try {
-    const mastra = c.get('mastra');
+    const mastra: Mastra = c.get('mastra');
     const agentId = c.req.param('agentId');
     const toolId = c.req.param('toolId');
-    const agent = mastra.getAgent(agentId);
-    const tool = Object.values(agent?.tools || {}).find((tool: any) => tool.id === toolId) as any;
-
-    if (!tool) {
-      throw new HTTPException(404, { message: 'Tool not found' });
-    }
-
-    if (!tool?.execute) {
-      return c.json({ error: 'Tool is not executable' }, 400);
-    }
-
     const { data } = await c.req.json();
-    if (isVercelTool(tool)) {
-      const result = await (tool as any).execute(data);
-      return c.json(result);
-    }
-    const result = await tool.execute({
-      context: data,
+
+    const result = await getOriginalExecuteAgentToolHandler({
       mastra,
-      runId: agentId,
+      agentId,
+      toolId,
+      data,
     });
 
     return c.json(result);

@@ -4,7 +4,7 @@ import { z } from 'zod';
 export const updateWorkingMemoryTool: CoreTool = {
   description: 'Update the working memory with new information',
   parameters: z.object({
-    memory: z.string().describe('The XML-formatted working memory content to store'),
+    memory: z.string().describe('The Markdown-formatted working memory content to store'),
   }),
   execute: async (params: any) => {
     const { context, threadId, memory } = params;

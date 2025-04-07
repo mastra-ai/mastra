@@ -1,10 +1,13 @@
 import type { ChildProcess } from 'child_process';
 import { join } from 'path';
 import { FileService } from '@mastra/deployer';
+import { getServerOptions } from '@mastra/deployer/build';
+import { isWebContainer } from '@webcontainer/env';
 import { execa } from 'execa';
 
 import { logger } from '../../utils/logger.js';
 
+import { convertToViteEnvVar } from '../utils.js';
 import { DevBundler } from './DevBundler';
 
 let currentServerProcess: ChildProcess | undefined;
@@ -15,21 +18,24 @@ const startServer = async (dotMastraPath: string, port: number, env: Map<string,
     // Restart server
     logger.info('[Mastra Dev] - Starting server...');
 
-    const instrumentation = import.meta.resolve('@opentelemetry/instrumentation/hook.mjs');
-    currentServerProcess = execa(
-      'node',
-      ['--import=./instrumentation.mjs', `--import=${instrumentation}`, 'index.mjs'],
-      {
-        cwd: dotMastraPath,
-        env: {
-          ...Object.fromEntries(env),
-          PORT: port.toString() || process.env.PORT || '4111',
-          MASTRA_DEFAULT_STORAGE_URL: `file:${join(dotMastraPath, '..', 'mastra.db')}`,
-        },
-        stdio: 'inherit',
-        reject: false,
+    const commands = [];
+
+    if (!isWebContainer()) {
+      const instrumentation = import.meta.resolve('@opentelemetry/instrumentation/hook.mjs');
+      commands.push('--import=./instrumentation.mjs', `--import=${instrumentation}`);
+    }
+
+    commands.push('index.mjs');
+    currentServerProcess = execa('node', commands, {
+      cwd: dotMastraPath,
+      env: {
+        ...Object.fromEntries(env),
+        PORT: port.toString() || process.env.PORT || '4111',
+        MASTRA_DEFAULT_STORAGE_URL: `file:${join(dotMastraPath, '..', 'mastra.db')}`,
       },
-    ) as any as ChildProcess;
+      stdio: 'inherit',
+      reject: false,
+    }) as any as ChildProcess;
 
     if (currentServerProcess?.exitCode && currentServerProcess?.exitCode !== 0) {
       if (!currentServerProcess) {
@@ -75,7 +81,7 @@ const startServer = async (dotMastraPath: string, port: number, env: Map<string,
   }
 };
 
-async function rebundleAndRestart(dotMastraPath: string, port: number, bundler: DevBundler, tools?: string[]) {
+async function rebundleAndRestart(dotMastraPath: string, port: number, bundler: DevBundler) {
   if (isRestarting) {
     return;
   }
@@ -96,7 +102,17 @@ async function rebundleAndRestart(dotMastraPath: string, port: number, bundler: 
   }
 }
 
-export async function dev({ port, dir, root, tools }: { dir?: string; root?: string; port: number; tools?: string[] }) {
+export async function dev({
+  port,
+  dir,
+  root,
+  tools,
+}: {
+  dir?: string;
+  root?: string;
+  port: number | null;
+  tools?: string[];
+}) {
   const rootDir = root || process.cwd();
   const mastraDir = join(rootDir, dir || 'src/mastra');
   const dotMastraPath = join(rootDir, '.mastra');
@@ -108,20 +124,23 @@ export async function dev({ port, dir, root, tools }: { dir?: string; root?: str
   const entryFile = fileService.getFirstExistingFile([join(mastraDir, 'index.ts'), join(mastraDir, 'index.js')]);
 
   const bundler = new DevBundler();
-
   await bundler.prepare(dotMastraPath);
 
   const watcher = await bundler.watch(entryFile, dotMastraPath, discoveredTools);
 
   const env = await bundler.loadEnvVars();
+  const formattedEnv = convertToViteEnvVar(env, ['MASTRA_TELEMETRY_DISABLED']);
 
-  await startServer(join(dotMastraPath, 'output'), port, env);
+  const serverOptions = await getServerOptions(entryFile, join(dotMastraPath, 'output'));
+
+  const startPort = port ?? serverOptions?.port ?? 4111;
+  await startServer(join(dotMastraPath, 'output'), startPort, formattedEnv);
 
   watcher.on('event', (event: { code: string }) => {
     if (event.code === 'BUNDLE_END') {
       logger.info('[Mastra Dev] - Bundling finished, restarting server...');
       // eslint-disable-next-line @typescript-eslint/no-floating-promises
-      rebundleAndRestart(dotMastraPath, port, bundler);
+      rebundleAndRestart(dotMastraPath, startPort, bundler);
     }
   });
 
@@ -131,7 +150,11 @@ export async function dev({ port, dir, root, tools }: { dir?: string; root?: str
       currentServerProcess.kill();
     }
 
-    watcher.close();
-    process.exit(0);
+    watcher
+      .close()
+      .catch(() => {})
+      .finally(() => {
+        process.exit(0);
+      });
   });
 }

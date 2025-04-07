@@ -1,5 +1,84 @@
 # @mastra/deployer-vercel
 
+## 0.1.15-alpha.9
+
+### Patch Changes
+
+- Updated dependencies [3c6ae54]
+- Updated dependencies [febc8a6]
+  - @mastra/deployer@0.2.6-alpha.9
+  - @mastra/core@0.8.0-alpha.7
+
+## 0.1.15-alpha.8
+
+### Patch Changes
+
+- Updated dependencies [4c65a57]
+- Updated dependencies [a3f0e90]
+  - @mastra/deployer@0.2.6-alpha.8
+  - @mastra/core@0.8.0-alpha.6
+
+## 0.1.15-alpha.7
+
+### Patch Changes
+
+- Updated dependencies [93875ed]
+  - @mastra/core@0.8.0-alpha.5
+  - @mastra/deployer@0.2.6-alpha.7
+
+## 0.1.15-alpha.6
+
+### Patch Changes
+
+- Updated dependencies [d7e08e8]
+  - @mastra/core@0.8.0-alpha.4
+  - @mastra/deployer@0.2.6-alpha.6
+
+## 0.1.15-alpha.5
+
+### Patch Changes
+
+- Updated dependencies [32ba03c]
+  - @mastra/deployer@0.2.6-alpha.5
+
+## 0.1.15-alpha.4
+
+### Patch Changes
+
+- Updated dependencies [5ae0180]
+- Updated dependencies [9bfa12b]
+- Updated dependencies [515ebfb]
+- Updated dependencies [88fa727]
+- Updated dependencies [dfb0601]
+- Updated dependencies [f37f535]
+- Updated dependencies [789bef3]
+- Updated dependencies [4d67826]
+- Updated dependencies [6330967]
+- Updated dependencies [8393832]
+- Updated dependencies [6330967]
+  - @mastra/core@0.8.0-alpha.3
+  - @mastra/deployer@0.2.6-alpha.4
+
+## 0.1.15-alpha.3
+
+### Patch Changes
+
+- Updated dependencies [0deb356]
+  - @mastra/deployer@0.2.6-alpha.3
+
+## 0.1.15-alpha.2
+
+### Patch Changes
+
+- Updated dependencies [56c31b7]
+- Updated dependencies [4c98129]
+- Updated dependencies [dbbbf80]
+- Updated dependencies [84fe241]
+- Updated dependencies [84fe241]
+- Updated dependencies [99d43b9]
+  - @mastra/core@0.8.0-alpha.2
+  - @mastra/deployer@0.2.6-alpha.2
+
 ## 0.1.15-alpha.1
 
 ### Patch Changes
