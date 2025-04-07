@@ -5,6 +5,7 @@ const meta = {
   "last-messages": "Conversation History",
   "semantic-recall": "Semantic Recall",
   "working-memory": "Working Memory",
+  "tools-and-memory": "Tools and Memory",
   "frontend-integration": "UI Integration",
   "configuring-memory": "Configuring Memory",
   "token-management": "Token Management",
