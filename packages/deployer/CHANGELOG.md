@@ -1,5 +1,33 @@
 # @mastra/deployer
 
+## 0.2.6-alpha.9
+
+### Patch Changes
+
+- 3c6ae54: Fix fastembed part of dependencies
+- febc8a6: Added dual tracing and fixed local tracing recursion
+- Updated dependencies [febc8a6]
+  - @mastra/server@0.0.1-alpha.5
+  - @mastra/core@0.8.0-alpha.7
+
+## 0.2.6-alpha.8
+
+### Patch Changes
+
+- 4c65a57: Add fastebmed as external
+- a3f0e90: Update storage initialization to ensure tables are present
+- Updated dependencies [a3f0e90]
+  - @mastra/server@0.0.1-alpha.4
+  - @mastra/core@0.8.0-alpha.6
+
+## 0.2.6-alpha.7
+
+### Patch Changes
+
+- Updated dependencies [93875ed]
+  - @mastra/core@0.8.0-alpha.5
+  - @mastra/server@0.0.1-alpha.3
+
 ## 0.2.6-alpha.6
 
 ### Patch Changes

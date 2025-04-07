@@ -1,5 +1,27 @@
 # @mastra/client-js
 
+## 0.1.14-alpha.7
+
+### Patch Changes
+
+- Updated dependencies [febc8a6]
+  - @mastra/core@0.8.0-alpha.7
+
+## 0.1.14-alpha.6
+
+### Patch Changes
+
+- 5646a01: Fix parsing chunk in client-js workflow watch method sometimes failing, disrupting the stream process
+- Updated dependencies [a3f0e90]
+  - @mastra/core@0.8.0-alpha.6
+
+## 0.1.14-alpha.5
+
+### Patch Changes
+
+- Updated dependencies [93875ed]
+  - @mastra/core@0.8.0-alpha.5
+
 ## 0.1.14-alpha.4
 
 ### Patch Changes

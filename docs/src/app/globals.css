@@ -2,9 +2,6 @@
 
 @custom-variant dark (&:where(.dark, .dark *));
 
-@theme {
-  --color-el-3: #939393;
-}
 
 @theme inline {
   --primary-bg: #050505;
@@ -26,11 +23,9 @@
   --nextra-navbar-height: 60px;
 }
 
-body:is(html[class~="dark"] *),
-html:is(html[class~="dark"] *) {
+body:is(html[class~="dark"] *){
   background: var(--primary-bg);
 }
-
 
 
 /* Navbar */

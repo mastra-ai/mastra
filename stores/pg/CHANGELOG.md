@@ -1,5 +1,28 @@
 # @mastra/pg
 
+## 0.2.7-alpha.7
+
+### Patch Changes
+
+- Updated dependencies [febc8a6]
+  - @mastra/core@0.8.0-alpha.7
+
+## 0.2.7-alpha.6
+
+### Patch Changes
+
+- a3f0e90: Update storage initialization to ensure tables are present
+- Updated dependencies [a3f0e90]
+  - @mastra/core@0.8.0-alpha.6
+
+## 0.2.7-alpha.5
+
+### Patch Changes
+
+- 93875ed: Improved the performance of Memory semantic recall by 2 to 3 times when using pg by making tweaks to @mastra/memory @mastra/core and @mastra/pg
+- Updated dependencies [93875ed]
+  - @mastra/core@0.8.0-alpha.5
+
 ## 0.2.7-alpha.4
 
 ### Patch Changes
