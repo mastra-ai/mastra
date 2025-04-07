@@ -1,39 +1,33 @@
-//blue
-//green
-//yellow
+type TagProps = {children: React.ReactNode, text?: 'new' | 'experimental' | 'advanced', showAbbr?: boolean}
 
 export const Tag = ({
   children,
   text = "new",
   showAbbr = false,
-}: {
-  children: React.ReactNode;
-  text?: "new" | "experimental" | "advanced";
-  showAbbr?: boolean;
-}) => {
+}: TagProps) => {
   const tags = [
     {
       name: "new",
       abbr: "new",
       color: {
-        bg: "bg-[hsla(143,97%,54%,0.06)]",
-        text: "text-[hsla(143,97%,54%,1)]",
+        bg: "bg-[hsla(var(--tag-green),0.06)]",
+        text: "text-[hsla(var(--tag-green),1)]",
       },
     },
     {
       name: "experimental",
-      abbr: "exp",
+      abbr: "exp.",
       color: {
-        bg: "bg-[hsl(187deg,100%,41.6%,0.06)]",
-        text: "text-[hsl(187deg,100%,41.6%,1)]",
+        bg: "bg-[hsla(var(--tag-purple),0.06)]",
+        text: "text-[hsla(var(--tag-purple),1)]",
       },
     },
     {
       name: "advanced",
-      abbr: "adv",
+      abbr: "adv.",
       color: {
-        bg: "bg-[hsl(231deg,48.4%,47.8%,0.1)]",
-        text: "text-[hsl(231deg,48.4%,47.8%,1)]",
+        bg: "bg-[hsla(var(--tag-blue),0.06)]",
+        text: "text-[hsla(var(--tag-blue),1)]",
       },
     },
   ];
