@@ -36,7 +36,7 @@ const buttonCopy = ({
   loading: (
     <Spinner
       className="w-4 h-4 !duration-300"
-      color={isDark ? "#000" : "#fff"}
+      color={isDark ? "#fff" : "#000"}
     />
   ),
   success: successIcon ? successIcon : "Subscribed!",
@@ -73,6 +73,7 @@ export const SubscribeForm = ({
       return toast.error("Please enter an email");
     }
     setButtonState("loading");
+
     try {
       const response = await fetch(
         `https://api.hsforms.com/submissions/v3/integration/submit/${process.env.NEXT_PUBLIC_HS_PORTAL_ID}/${process.env.NEXT_PUBLIC_HS_FORM_GUID}`,
@@ -166,9 +167,9 @@ export const SubscribeForm = ({
           <AnimatePresence mode="popLayout" initial={false}>
             <motion.span
               transition={{ type: "spring", duration: 0.3, bounce: 0 }}
-              initial={{ opacity: 0, y: -25 }}
+              initial={{ opacity: 0, y: -10 }}
               animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: 25 }}
+              exit={{ opacity: 0, y: 10 }}
               key={buttonState}
             >
               {
