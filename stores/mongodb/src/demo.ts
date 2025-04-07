@@ -420,28 +420,6 @@ async function demo() {
         console.error(`Error creating search index '${indexName}':`, error);
         throw error;
       }
-    }
-
-    async function listSearchIndexes(db: Db, collectionName: string): Promise<void> {
-      try {
-        const collection: Collection = db.collection(collectionName);
-        const indexes = await collection.listSearchIndexes().toArray();
-        console.log(`Search indexes in '${collectionName}':`, indexes);
-      } catch (error) {
-        console.error(`Error listing search indexes for '${collectionName}':`, error);
-        throw error;
-      }
-    }
-
-    await createSearchIndex(db, collectionName, indexName, embeddingField);
-
-    await listSearchIndexes(db, collectionName);
-  } catch (err) {
-    console.error('Error:', err);
-  } finally {
-    await store.disconnect();
-    console.log('Connection closed');
-  }
 }
 
 demo();
