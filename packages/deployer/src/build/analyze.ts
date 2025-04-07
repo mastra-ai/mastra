@@ -89,6 +89,9 @@ async function analyze(
           if (id === '#mastra') {
             return normalizedMastraEntry;
           }
+          if (id.startsWith('@mastra/server')) {
+            return fileURLToPath(import.meta.resolve(id));
+          }
         },
       } satisfies Plugin,
       json(),
