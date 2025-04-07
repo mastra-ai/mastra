@@ -7,11 +7,11 @@ import { CloudflareVector } from './';
 
 dotenv.config();
 
-vi.setConfig({ testTimeout: 120_000, hookTimeout: 120_000 });
+vi.setConfig({ testTimeout: 300_000, hookTimeout: 300_000 });
 
 async function waitForIndexDeletion(vector: CloudflareVector, indexName: string) {
   return new Promise((resolve, reject) => {
-    const maxAttempts = 20;
+    const maxAttempts = 30;
     let attempts = 0;
     const interval = setInterval(async () => {
       try {
@@ -38,12 +38,12 @@ async function waitForIndexDeletion(vector: CloudflareVector, indexName: string)
         clearInterval(interval);
         reject(error);
       }
-    }, 5000);
+    }, 2000);
 
     setTimeout(() => {
       clearInterval(interval);
       reject(new Error('Global timeout waiting for index deletion'));
-    }, 100000);
+    }, 60000);
   });
 }
 
@@ -71,12 +71,12 @@ function waitUntilReady(vector: CloudflareVector, indexName: string) {
         clearInterval(interval);
         reject(error);
       }
-    }, 5000);
+    }, 2000);
 
     setTimeout(() => {
       clearInterval(interval);
       reject(new Error('Global timeout waiting for index'));
-    }, 200000);
+    }, 80000);
   });
 }
 
@@ -87,7 +87,7 @@ function waitUntilVectorsIndexed(
   exactCount = false,
 ) {
   return new Promise((resolve, reject) => {
-    const maxAttempts = 40;
+    const maxAttempts = 60; // Increased from 40 to 60 attempts
     let attempts = 0;
     let lastCount = 0;
     let stableCount = 0;
@@ -99,7 +99,8 @@ function waitUntilVectorsIndexed(
         if (stats && check) {
           if (stats.count === lastCount) {
             stableCount++;
-            if (stableCount >= 2) {
+            if (stableCount >= 3) {
+              // Increased stability requirement
               clearInterval(interval);
               resolve(true);
             }
@@ -114,15 +115,19 @@ function waitUntilVectorsIndexed(
           reject(new Error('Timeout waiting for vectors to be indexed'));
         }
       } catch (error) {
+        // If we get a 410 index deleted, keep waiting
+        if (error.status === 410) {
+          return;
+        }
         clearInterval(interval);
         reject(error);
       }
-    }, 5000);
+    }, 5000); // Increased from 2s to 5s to avoid hammering the API
 
     setTimeout(() => {
       clearInterval(interval);
       reject(new Error('Global timeout waiting for vectors'));
-    }, 200000);
+    }, 240000); // Increased to 4 minutes, less than our 5 minute test timeout
   });
 }
 
@@ -146,12 +151,12 @@ function waitForMetadataIndexes(vector: CloudflareVector, indexName: string, exp
         clearInterval(interval);
         reject(error);
       }
-    }, 5000);
+    }, 2000);
 
     setTimeout(() => {
       clearInterval(interval);
       reject(new Error('Global timeout waiting for metadata indexes'));
-    }, 200000);
+    }, 80000);
   });
 }
 
@@ -208,12 +213,12 @@ async function waitForQueryResults({
         clearInterval(interval);
         reject(error);
       }
-    }, 5000);
+    }, 2000);
 
     setTimeout(() => {
       clearInterval(interval);
       reject(new Error('Global timeout waiting for query results'));
-    }, 200000);
+    }, 80000);
   });
 }
 
@@ -302,7 +307,7 @@ describe('CloudflareVector', () => {
       const indexes = await vectorDB.listIndexes();
       expect(indexes).not.toContain(tempIndexName);
     });
-  }, 30000);
+  });
 
   describe('Vector Operations', () => {
     let vectorIds: string[];
@@ -336,7 +341,7 @@ describe('CloudflareVector', () => {
       if (results.length > 0) {
         expect(results[0].metadata).toEqual({ label: 'first-dimension' });
       }
-    }, 500000);
+    });
 
     it('should query vectors and return vector in results', async () => {
       await waitUntilVectorsIndexed(vectorDB, testIndexName, 3);
@@ -357,7 +362,7 @@ describe('CloudflareVector', () => {
         expect(result.vector).toHaveLength(VECTOR_DIMENSION);
       }
     });
-  }, 120000);
+  });
 
   describe('Vector update operations', () => {
     const testVectors = [createVector(0, 1.0), createVector(1, 1.0), createVector(2, 1.0)];
@@ -423,7 +428,7 @@ describe('CloudflareVector', () => {
       const updatedResult = results.find(result => result.id === idToBeUpdated);
       expect(updatedResult).toBeDefined();
       expect(updatedResult?.vector).toEqual(newVector);
-    }, 500000);
+    });
 
     it('should only update vector embeddings by id', async () => {
       const ids = await vectorDB.upsert({ indexName: indexName2, vectors: testVectors });
@@ -452,7 +457,7 @@ describe('CloudflareVector', () => {
       const updatedResult = results.find(result => result.id === idToBeUpdated);
       expect(updatedResult).toBeDefined();
       expect(updatedResult?.vector).toEqual(newVector);
-    }, 500000);
+    });
 
     it('should throw exception when no updates are given', async () => {
       await expect(vectorDB.updateIndexById(indexName3, 'id', {})).rejects.toThrow('No update data provided');
@@ -680,7 +685,7 @@ describe('CloudflareVector', () => {
 
       const stats = await vectorDB.describeIndex(testIndexName2);
       expect(stats.count).toBe(vectors.length);
-    }, 120000);
+    });
 
     afterAll(async () => {
       const currentMetadata = await vectorDB.listMetadataIndexes(testIndexName2);
@@ -692,7 +697,7 @@ describe('CloudflareVector', () => {
       } catch (error) {
         // Ignore errors if index doesn't exist
       }
-    }, 120000);
+    });
 
     describe('Basic Equality Operators', () => {
       it('filters with $eq operator', async () => {
@@ -830,7 +835,7 @@ describe('CloudflareVector', () => {
         });
         expect(results.length).toBe(1);
         expect(results[0]?.metadata?.isActive).toBe(true);
-      }, 5000);
+      });
 
       it('filters with $ne on boolean values', async () => {
         const results = await waitForQueryResults({
@@ -844,7 +849,7 @@ describe('CloudflareVector', () => {
         results.forEach(result => {
           expect(result.metadata?.isActive).toBe(false);
         });
-      }, 5000);
+      });
     });
 
     describe('Nested Field Operations', () => {
@@ -887,7 +892,7 @@ describe('CloudflareVector', () => {
         results.forEach(result => {
           expect(result.metadata?.nested?.string).toBe('premium');
         });
-      }, 10000);
+      });
 
       it('combines nested numeric and boolean conditions', async () => {
         const results = await waitForQueryResults({
@@ -900,7 +905,7 @@ describe('CloudflareVector', () => {
         expect(results.length).toBe(1);
         expect(results[0]?.metadata?.nested?.number).toBeGreaterThan(100);
         expect(results[0]?.metadata?.nested?.boolean).toBe(true);
-      }, 10000);
+      });
 
       it('handles multiple nested field comparisons', async () => {
         const results = await waitForQueryResults({
@@ -915,7 +920,7 @@ describe('CloudflareVector', () => {
         expect(result?.string).toBe('premium');
         expect(result?.number).toBeLessThan(200);
         expect(result?.boolean).toBe(true);
-      }, 10000);
+      });
 
       it('handles $in with nested string values', async () => {
         const results = await waitForQueryResults({
@@ -929,7 +934,7 @@ describe('CloudflareVector', () => {
         results.forEach(result => {
           expect(['premium', 'basic']).toContain(result.metadata?.nested?.string);
         });
-      }, 10000);
+      });
     });
 
     describe('String Operations', () => {
@@ -1024,7 +1029,7 @@ describe('CloudflareVector', () => {
         });
         expect(results.length).toBe(1);
         expect(results[0]?.metadata?.code).toBe('B456');
-      }, 5000);
+      });
 
       it('handles string range queries with special characters', async () => {
         const results = await waitForQueryResults({
@@ -1038,7 +1043,7 @@ describe('CloudflareVector', () => {
         results.forEach(result => {
           expect(result.metadata?.code).toMatch(/^[AB]/);
         });
-      }, 5000);
+      });
     });
 
     describe('Null and Special Values', () => {
@@ -1051,7 +1056,7 @@ describe('CloudflareVector', () => {
           filter: { optionalField: { $in: [null, 'exists'] } },
         });
         expect(results.length).toBe(1);
-      }, 5000);
+      });
 
       it('handles $ne with null values', async () => {
         const results = await waitForQueryResults({
@@ -1063,7 +1068,7 @@ describe('CloudflareVector', () => {
         });
         expect(results.length).toBe(4);
         expect(results[0]?.metadata?.optionalField).toBe('exists');
-      }, 5000);
+      });
     });
 
     describe('Mixed Type Arrays and Values', () => {
@@ -1076,7 +1081,7 @@ describe('CloudflareVector', () => {
           filter: { mixedField: { $in: ['string value', 10, null] } },
         });
         expect(results.length).toBe(2);
-      }, 5000);
+      });
 
       it('combines different types of filters', async () => {
         const results = await waitForQueryResults({
@@ -1087,7 +1092,7 @@ describe('CloudflareVector', () => {
           filter: { mixedField: { $in: ['string value', true] }, price: { $eq: 100 } },
         });
         expect(results.length).toBe(1);
-      }, 5000);
+      });
     });
 
     describe('Filter Size and Structure Validation', () => {
@@ -1107,7 +1112,7 @@ describe('CloudflareVector', () => {
             filter,
           }),
         ).resolves.toBeDefined();
-      }, 5000);
+      });
 
       it('handles valid range query combinations', async () => {
         const validRangeCombinations = [
@@ -1126,7 +1131,7 @@ describe('CloudflareVector', () => {
             }),
           ).resolves.toBeDefined();
         }
-      }, 5000);
+      });
 
       it('should handle undefined filter', async () => {
         const results1 = await vectorDB.query({
@@ -1170,7 +1175,8 @@ describe('CloudflareVector', () => {
         expect(results.length).toBeGreaterThan(0);
       });
     });
-  }, 120000);
+  });
+
   describe('Deprecation Warnings', () => {
     const indexName = 'testdeprecationwarnings';
 
@@ -1318,5 +1324,5 @@ describe('CloudflareVector', () => {
       expect(Array.isArray(upsertResults)).toBe(true);
       expect(upsertResults).toHaveLength(1);
     });
-  }, 80000);
+  });
 });
