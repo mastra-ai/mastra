@@ -1,5 +1,11 @@
 # create-mastra
 
+## 0.2.4-alpha.3
+
+### Patch Changes
+
+- 055c4ea: Fix traces page showing e.reduce error
+
 ## 0.2.4-alpha.2
 
 ### Patch Changes
