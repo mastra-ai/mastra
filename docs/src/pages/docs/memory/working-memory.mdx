@@ -1,6 +1,6 @@
-# Storing Continuously Relevant Information (Working Memory)
+# Continuously Relevant Information
 
-While [conversation history](./last-messages.mdx) and [similarity search](./semantic-recall.mdx) help agents remember conversations, working memory enables them to maintain persistent information about users across all interactions. This feature is particularly valuable for maintaining preferences, user details, and ongoing state that should always be available to the agent.
+While [conversation history](./last-messages.mdx) and [semantic recall](./semantic-recall.mdx) help agents remember conversations, working memory enables them to maintain persistent information about users across all interactions. Think of it as the agent's active thoughts or scratchpad – the key information they keep readily available about the user or task, like how a person would naturally remember someone's name, preferences, or important details during a conversation. This feature is particularly valuable for maintaining preferences, user details, and ongoing state that should always be available to the agent.
 
 ## Quick Start
 
@@ -28,8 +28,6 @@ const agent = new Agent({
 ```
 
 ## When to Use Working Memory
-
-Unlike message history which focuses on conversation flow, working memory acts like an agent's active thoughts - the key information they keep readily available about the user, like how a person would naturally remember someone's name, preferences, or important details during a conversation.
 
 Working memory is ideal for:
 
@@ -92,7 +90,9 @@ Working memory uses an unstructured text string that the agent is able to update
 
 ### Memory Templates
 
-Templates encourage agents to maintain specific types of information. The template serves as a guide for what information the agent should track and update:
+Templates guide the agent on what information to track and update in working memory. While a default template is used if none is provided, you'll typically want to define a custom template tailored to your agent's specific use case to ensure it remembers the most relevant information.
+
+Here's an example of a custom template:
 
 ```typescript
 const memory = new Memory({
@@ -114,64 +114,81 @@ const memory = new Memory({
 });
 ```
 
-If no template is provided, a default template is used. You may also need to include specific instructions in your agent's system prompt to ensure it properly maintains the information defined in your template.
+You may also need to include specific instructions in your agent's system prompt to ensure it properly maintains the information defined in your template.
 
 ### Update Modes
 
 Working memory supports two update modes:
 
-1. **Text Stream Mode** (Current Default): Updates via markdown blocks in responses
+1.  **Text Stream Mode** (`text-stream`):
 
-```typescript
-const memory = new Memory({
-  options: {
-    workingMemory: {
-      enabled: true,
-      use: "text-stream", // Current default, but will be deprecated
-    },
-  },
-});
-```
+    - **How it works**: The agent includes working memory updates directly in its response stream using special markdown tags (e.g., `<working_memory>...</working_memory>`). Mastra automatically extracts this content and updates the memory.
+    - **Pros**: Simpler concept, might work well for basic updates.
+    - **Cons**: Less reliable with some models, requires masking tags in the UI, not compatible with `toDataStream()`.
+    - **Configuration**:
+      ```typescript
+      const memory = new Memory({
+        options: {
+          workingMemory: {
+            enabled: true,
+            use: "text-stream", // Current default, but will be deprecated
+          },
+        },
+      });
+      ```
 
-2. **Tool Call Mode** (Recommended): Updates via explicit tool calls
+2.  **Tool Call Mode** (`tool-call`):
+    - **How it works**: The agent uses a dedicated internal tool (`updateWorkingMemory`) to explicitly update the working memory content.
+    - **Pros**: More reliable and structured, compatible with `toDataStream()`, easier for agents skilled with tools, recommended approach.
+    - **Cons**: Slightly more complex interaction flow (involves tool calls).
+    - **Configuration**:
+      ```typescript
+      const memory = new Memory({
+        options: {
+          workingMemory: {
+            enabled: true,
+            use: "tool-call", // Recommended as it will become the default in future
+          },
+        },
+      });
+      ```
 
-```typescript
-const memory = new Memory({
-  options: {
-    workingMemory: {
-      enabled: true,
-      use: "tool-call", // Recommended as it will become the default in future
-    },
-  },
-});
-```
-
-We recommend using tool-call mode as it will become the default in future versions, and text-stream mode will eventually be deprecated.
+**Recommendation**: Use `tool-call` mode for better reliability and compatibility, especially with streaming UIs. `text-stream` mode will eventually be deprecated.
 
 ### Handling Updates in Streams
 
-When using text-stream mode, you'll need to prevent markdown blocks from being visible to users:
+When using `text-stream` mode, the agent's response stream will contain `<working_memory>` tags. To prevent these tags from being visible to users in your UI, you can use the `maskStreamTags` utility:
 
 ```typescript
 import { maskStreamTags } from "@mastra/core/utils";
 
-// Only needed for text-stream mode
+// Example of masking tags in text-stream mode
 for await (const chunk of maskStreamTags(
   response.textStream,
-  "working_memory",
+  "working_memory", // The tag name to mask
 )) {
-  process.stdout.write(chunk);
+  process.stdout.write(chunk); // Only user-visible text is processed
 }
 ```
 
-Note: This is only necessary when using text-stream mode. With tool-call mode, memory updates are handled automatically without needing to mask the stream.
+**Note**: Masking is **not** required when using `tool-call` mode, as updates happen via tool calls behind the scenes.
+
+## Working Memory Scope
+
+It's important to understand that working memory is **scoped per thread**, not per agent.
+
+- Each unique combination of `resourceId` and `threadId` has its own distinct working memory.
+- If multiple agents use the same `resourceId` and `threadId`, they will share and potentially overwrite the same working memory content.
+- If you want agents to have separate working memories even when interacting with the same user, assign them different `threadId`s.
+
+This design allows for collaborative scenarios where different agents contribute to a shared understanding (working memory) within a single conversation thread.
 
 ## Related Features
 
 Working memory integrates with other memory features to enhance agent capabilities:
 
 - **[Conversation History](./last-messages.mdx)**: For recent conversation context
-- **[Similarity Search](./semantic-recall.mdx)**: For finding relevant past information
+- **[Recalling Relevant History](./semantic-recall.mdx)**: For finding relevant past information
 - **[Memory Threads](./memory-threads.mdx)**: For managing conversation organization
 - **[Token Management](./token-management.mdx)**: For optimizing memory token usage
 
