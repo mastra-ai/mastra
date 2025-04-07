@@ -6,6 +6,9 @@
 - [ ] Ensure consistent tone and formatting across all pages
 - [ ] Verify that code examples are correct and up-to-date
 - [ ] Shorten overly long H1 headings that wrap to multiple lines
+- [ ] Enhance Working Memory template guidance in `working-memory.mdx` (add tips on designing effective templates)
+- [ ] Verify all newly added reference links point to existing/planned pages (e.g., storage adapter references)
+- [ ] Perform final review pass against the full checklist to ensure all reviewed items are marked and identify remaining gaps
 
 ## Missing Content to Create
 - [ ] Create deployment options documentation
