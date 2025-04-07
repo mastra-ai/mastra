@@ -12,22 +12,22 @@
   - [ ] Outline considerations for different hosting providers
   - [ ] Document database requirements for each hosting environment 
   - [ ] Add specific instructions for Vercel, Netlify, and Cloudflare
-- [ ] Add Mastra memory features list to overview page
-  - [ ] Include links to each feature page with one-sentence descriptions
+- [x] Add Mastra memory features list to overview page
+  - [x] Include links to each feature page with one-sentence descriptions
 - [ ] Consider adding tool calling page under memory section
   - [ ] Document the tool call filter processor
   - [ ] Explain how tool calling interacts with memory
 - [ ] Add link to memory processors reference page in token management section
-- [ ] Create text diagram for context window in overview page
-  - [ ] Visualize the structure of a context window and its components
-  - [ ] Show how different types of information are organized in the context
+- [x] Create text diagram for context window in overview page
+  - [x] Visualize the structure of a context window and its components
+  - [x] Show how different types of information are organized in the context
 - [ ] Generate proper images for diagrams
   - [ ] Use ChatGPT to create professional images for text-based diagrams
   - [ ] If needed, create mermaid diagrams as an alternative
-- [ ] Streamline Getting Started page
-  - [ ] Address repetition between Installation, Adding Memory, Using Memory, and Trying It Out sections
-  - [ ] Either consolidate similar content or reorganize for better flow
-  - [ ] Consider making Trying It Out the primary example and simplifying earlier sections
+- [x] Streamline Getting Started page
+  - [x] Address repetition between Installation, Adding Memory, Using Memory, and Trying It Out sections
+  - [x] Either consolidate similar content or reorganize for better flow
+  - [x] Consider making Trying It Out the primary example and simplifying earlier sections
 - [ ] Restructure Memory Features Documentation
   - [ ] Create new page `/docs/memory/features.mdx`
   - [ ] Move "Mastra Memory Features" list from `overview.mdx` to `features.mdx`
