@@ -1568,6 +1568,10 @@ describe('ChromaVector Integration Tests', () => {
         ids,
       });
 
+      // Verify all vectors were inserted
+      const stats = await vectorDB.describeIndex(perfTestIndex);
+      expect(stats.count).toBe(batchSize);
+
       const results = await vectorDB.query({
         indexName: perfTestIndex,
         queryVector: [1, 0, 0],
