@@ -2,7 +2,7 @@ const meta = {
   overview: "Overview",
   "getting-started": "Getting Started",
   "last-messages": "Conversation History",
-  "semantic-recall": "Similarity Search",
+  "semantic-recall": "Semantic Recall",
   "working-memory": "Working Memory",
   "frontend-integration": "Frontend Integration",
   "token-management": "Token Management",
