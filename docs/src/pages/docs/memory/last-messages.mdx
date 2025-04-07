@@ -1,10 +1,12 @@
-# Conversations and Turn-Based Interactions (Last Messages)
+# Conversation History
 
-The most fundamental form of memory in Mastra is the ability to maintain conversation context through recent message history. This section covers how Mastra handles turn-based interactions using the "last messages" feature.
+The most fundamental form of memory in Mastra is the ability to maintain conversation history. This page explains how you can use this feature to handle turn-based interactions and conversations.
+
+## What is Conversation History?
+
+Conversation History is the core memory feature that automatically saves messages exchanged between a user and an agent within a specific conversation thread. When a new message is sent using the same `resourceId` and `threadId`, Mastra retrieves a set number of the most recent messages from that thread and adds them to the LLM's context window. This allows the agent to understand the immediate conversational context and respond coherently, meaning you only need to send the latest message with each interaction instead of managing the history yourself.
 
 ## Quick Start
-
-Here's a minimal example of setting up an agent with last messages:
 
 ```typescript
 import { Memory } from "@mastra/memory";
@@ -20,15 +22,15 @@ const agent = new Agent({
 });
 ```
 
-## When to Use Last Messages
+## When to Use This Feature
 
-Last messages are the foundation of all memory functionality in Mastra. Even if you don't use more advanced memory features, implementing last messages alone provides essential conversational context for your agents.
+Conversation history is the foundation of all memory functionality in Mastra. Even if you don't use more advanced memory features, using this feature alone provides the essential memory context for your agents to be able to maintain coherent conversations.
 
-This core feature enables agents to understand and respond to multi-turn conversations naturally. Without it, each message would be treated in isolation, forcing users to provide complete context with every interaction. With last messages enabled, your agents can follow conversation flow, understand references to previous statements, and maintain coherent discussions across multiple exchanges.
+This core feature enables agents to understand and respond to multi-turn conversations naturally. Without it, each message would be treated in isolation, forcing users to provide complete context with every interaction. With conversation history enabled, your agents can follow conversation flow, understand references to previous statements, and maintain coherent discussions across multiple exchanges.
 
-## How Last Messages Works
+## How Conversation History Works
 
-The "last messages" feature automatically captures and retrieves conversation history. Each time you call an agent with a `resourceId` and `threadId`, the memory system:
+This feature automatically captures and retrieves conversation history. Each time you call an agent with a `resourceId` and `threadId`, the memory system:
 
 - Stores the current message automatically
 - Retrieves recent messages from that thread (by default, the 40 most recent)
@@ -80,23 +82,12 @@ As conversations grow longer, older messages drop out of the context window, mai
                   └──────────────────┘
 ```
 
-## Configuring Last Messages
+**Important:** When using Mastra's memory system, you should **only send the latest message** from the user with each agent call. Do not manage or send the entire message history yourself. Mastra automatically handles retrieving and injecting the necessary conversation history based on your memory configuration. Sending the full history will lead to message duplication and incorrect context.
+
+## Configuration
 
 You can set the number of last messages when creating your agent:
-
-```typescript
-// Specify a custom number of messages at agent creation
-const agent = new Agent({
-  name: "LimitedContextAgent",
-  instructions: "You are a helpful assistant.",
-  model: openai("gpt-4o"),
-  memory: new Memory({
-    options: {
-      lastMessages: 20, // Use 20 messages instead of default 40
-    },
-  }),
-});
-```
+See the [Memory Class Reference](/docs/reference/memory/Memory.mdx#options) for all available configuration options.
 
 You can also override the setting for individual requests:
 
