@@ -1,5 +1,13 @@
 # @mastra/chroma
 
+## 0.2.7-alpha.8
+
+### Patch Changes
+
+- a3c7b70: Update chroma version and tests
+- Updated dependencies [8df4a77]
+  - @mastra/core@0.8.0-alpha.8
+
 ## 0.2.7-alpha.7
 
 ### Patch Changes

@@ -1,5 +1,16 @@
 # @mastra/playground-ui
 
+## 4.0.0-alpha.8
+
+### Patch Changes
+
+- 055c4ea: Fix traces page showing e.reduce error
+- Updated dependencies [055c4ea]
+- Updated dependencies [bffd64f]
+- Updated dependencies [8df4a77]
+  - @mastra/client-js@0.1.14-alpha.8
+  - @mastra/core@0.8.0-alpha.8
+
 ## 4.0.0-alpha.7
 
 ### Patch Changes
