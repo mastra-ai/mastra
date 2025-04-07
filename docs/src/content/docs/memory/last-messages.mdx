@@ -34,46 +34,26 @@ This feature captures and retrieves conversation history. Each time you call an 
 
 As conversations grow longer, older messages drop out of the context window, maintaining a sliding window of recent context.
 
-```text
-                   ┌─────────────────────┐
-                   │  New User Message   │
-                   └─────────┬───────────┘
-                             │
-                             ▼
-                   ┌─────────────────────┐
-                   │  Agent with Memory  │
-                   └─────────┬───────────┘
-                             │ invokes
-                             ▼
-                ┌────────────────────────────┐
-                │    Memory Last Messages    │
-                │    Retrieval Function      │
-                └────────────┬───────────────┘
-                             │ queries
-                             ▼
-         ┌─────────────────────────────────────┐
-         │       Thread Message Storage        │
-         │  ───────────────────────────────    │
-         │  Message 40 (oldest) - timestamp    │
-         │  Message 39        - timestamp      │
-         │  ...                                │
-         │  Message 2         - timestamp      │
-         │  Message 1 (newest) - timestamp     │
-         └────────────────────┬────────────────┘
-                              │ returns last 40 messages
-                              ▼
-           ┌───────────────────────────────┐
-           │       Context Window          │
-           │  ─────────────────────────    │
-           │  System Instructions          │
-           │  Last 40 Messages             │
-           │  Current User Message         │
-           └───────────────┬───────────────┘
-                           │ sent to
-                           ▼
-                  ┌──────────────────┐
-                  │    LLM Provider  │
-                  └──────────────────┘
+```mermaid
+%%{init: {"flowchart": {"htmlLabels": false}} }%%
+flowchart TD
+    A[New User Message] --> B[Agent with Memory];
+
+    subgraph ContextWindow [Context Window]
+        direction LR
+        E1[System Instructions]
+        E2[Last 40 Messages]
+        E3[Current User Message]
+    end
+
+    B -- assembles --> ContextWindow;
+    ContextWindow -- sent to --> F[LLM Provider];
+
+    %% Define the side query separately
+    E2 -- queries --> D[(Thread Storage)];
+    D -- returns last 40 messages --> E2;
+
+    F --> G[Response]
 ```
 
 **Important:** When using Mastra's memory system, you should **only send the latest message** from the user with each agent call. Do not manage or send the entire message history yourself. Mastra retrieves and injects the necessary conversation history based on your memory configuration. Sending the full history will lead to message duplication and incorrect context.
@@ -120,4 +100,3 @@ Last messages provide the foundation for conversational memory, but additional c
 - **[Working Memory](./working-memory.mdx)**: Store persistent user information in a structured format
 - **[Token Management](./token-management.mdx)**: Optimize token usage across different memory features
 - **[Configuring Memory](./configuring-memory.mdx)**: Configure memory backends and settings
-
