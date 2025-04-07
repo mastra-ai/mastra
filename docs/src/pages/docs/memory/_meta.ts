@@ -6,10 +6,10 @@ const meta = {
   "semantic-recall": "Semantic Recall",
   "working-memory": "Working Memory",
   "frontend-integration": "UI Integration",
-  "token-management": "Token Management",
   "configuring-memory": "Configuring Memory",
-  faq: "FAQ",
+  "token-management": "Token Management",
   "memory-architecture": "Architecture",
+  faq: "FAQ",
 };
 
 export default meta;
