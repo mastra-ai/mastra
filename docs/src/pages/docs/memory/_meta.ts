@@ -10,7 +10,6 @@ const meta = {
   "configuring-memory": "Configuring Memory",
   "token-management": "Token Management",
   "memory-architecture": "Architecture",
-  faq: "FAQ",
 };
 
 export default meta;
