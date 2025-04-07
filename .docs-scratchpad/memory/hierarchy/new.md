@@ -17,7 +17,7 @@
 - [ ] Consider adding tool calling page under memory section
   - [ ] Document the tool call filter processor
   - [ ] Explain how tool calling interacts with memory
-- [ ] Add link to memory processors reference page in token management section
+- [x] Add link to memory processors reference page in token management section
 - [x] Create text diagram for context window in overview page
   - [x] Visualize the structure of a context window and its components
   - [x] Show how different types of information are organized in the context
