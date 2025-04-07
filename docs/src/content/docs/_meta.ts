@@ -14,7 +14,6 @@ const meta = {
   },
   memory: {
     title: "Memory",
-    collapsed: false,
   },
   workflows: {
     title: "Workflows",
