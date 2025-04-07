@@ -10,11 +10,10 @@ import type {
   UpsertVectorArgs,
 } from '@mastra/core/vector';
 
-import { ChromaClient, Collection } from 'chromadb';
-import { ChromaFilterTranslator } from './filter';
-
-import type { UpdateRecordsParams } from 'chromadb';
 import type { VectorFilter } from '@mastra/core/vector/filter';
+import { ChromaClient } from 'chromadb';
+import type { UpdateRecordsParams, Collection } from 'chromadb';
+import { ChromaFilterTranslator } from './filter';
 
 interface ChromaUpsertVectorParams extends UpsertVectorParams {
   documents?: string[];
@@ -52,6 +51,7 @@ export class ChromaVector extends MastraVector {
 
   async getCollection(indexName: string, throwIfNotExists: boolean = true) {
     try {
+      console.log('Version', await this.client.version());
       const collection = await this.client.getCollection({ name: indexName, embeddingFunction: undefined as any });
       this.collections.set(indexName, collection);
     } catch {

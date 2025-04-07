@@ -2,7 +2,6 @@ import type { QueryResult, IndexStats } from '@mastra/core/vector';
 import { describe, expect, beforeEach, afterEach, it, beforeAll, afterAll, vi } from 'vitest';
 
 import { ChromaVector } from './';
-import { Collection } from 'chromadb';
 
 describe('ChromaVector Integration Tests', () => {
   let vectorDB = new ChromaVector({
