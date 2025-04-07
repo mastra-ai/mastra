@@ -152,12 +152,24 @@ const agent = new Agent({
       \`,
 });
 
+const forecastSchema = z.array(
+  z.object({
+    date: z.string(),
+    maxTemp: z.number(),
+    minTemp: z.number(),
+    precipitationChance: z.number(),
+    condition: z.string(),
+    location: z.string(),
+  }),
+);
+
 const fetchWeather = new Step({
   id: 'fetch-weather',
   description: 'Fetches weather forecast for a given city',
   inputSchema: z.object({
     city: z.string().describe('The city to get the weather for'),
   }),
+  outputSchema: forecastSchema,
   execute: async ({ context }) => {
     const triggerData = context?.getStepResult<{ city: string }>('trigger');
 
@@ -202,23 +214,12 @@ const fetchWeather = new Step({
   },
 });
 
-const forecastSchema = z.array(
-  z.object({
-    date: z.string(),
-    maxTemp: z.number(),
-    minTemp: z.number(),
-    precipitationChance: z.number(),
-    condition: z.string(),
-    location: z.string(),
-  }),
-);
 
 const planActivities = new Step({
   id: 'plan-activities',
   description: 'Suggests activities based on weather conditions',
-  inputSchema: forecastSchema,
   execute: async ({ context, mastra }) => {
-    const forecast = context?.getStepResult<z.infer<typeof forecastSchema>>('fetch-weather');
+    const forecast = context?.getStepResult(fetchWeather);
 
     if (!forecast || forecast.length === 0) {
       throw new Error('Forecast data not found');
