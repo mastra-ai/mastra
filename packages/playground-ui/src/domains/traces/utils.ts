@@ -94,7 +94,6 @@ export const refineTraces = (traces: Span[], isWorkflow: boolean = false): Refin
 
     const failedStatus = value.find(span => span.status.code !== 0)?.status;
 
-    console.log('value===', value);
     return {
       traceId: key,
       serviceName: parentSpan?.name || key,
