@@ -1,5 +1,16 @@
 # mastra
 
+## 0.4.5-alpha.10
+
+### Patch Changes
+
+- b08fc42: Fix workflow in getting started
+- 055c4ea: Fix traces page showing e.reduce error
+- Updated dependencies [2135c81]
+- Updated dependencies [8df4a77]
+  - @mastra/deployer@0.2.6-alpha.10
+  - @mastra/core@0.8.0-alpha.8
+
 ## 0.4.5-alpha.9
 
 ### Patch Changes

@@ -1,5 +1,18 @@
 # @mastra/dane
 
+## 0.0.12-alpha.8
+
+### Patch Changes
+
+- Updated dependencies [b7c1319]
+- Updated dependencies [8df4a77]
+  - @mastra/upstash@0.2.2-alpha.8
+  - @mastra/core@0.8.0-alpha.8
+  - @mastra/github@1.1.15-alpha.8
+  - @mastra/mcp@0.3.7-alpha.8
+  - @mastra/memory@0.2.7-alpha.8
+  - @mastra/rag@0.1.15-alpha.8
+
 ## 0.0.12-alpha.7
 
 ### Patch Changes
