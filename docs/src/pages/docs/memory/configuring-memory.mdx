@@ -8,7 +8,7 @@ Mastra memory supports multiple storage backends for persistence:
 
 ### LibSQL (Default)
 
-LibSQL is included by default and provides a lightweight, file-based storage solution:
+LibSQL is included by default and provides a lightweight, file-based storage solution. See the [LibSQL reference](../reference/storage/libsql.mdx) for configuration details.
 
 ```typescript
 import { LibSQLStore } from "@mastra/core/storage/libsql";
@@ -39,7 +39,7 @@ const memory = new Memory({
 
 ### PostgreSQL
 
-PostgreSQL provides robust storage and vector capabilities:
+PostgreSQL provides robust storage and vector capabilities. See the [PostgreSQL reference](../reference/storage/postgres.mdx) for configuration details.
 
 ```typescript
 import { PostgresStore, PgVector } from "@mastra/pg";
@@ -55,7 +55,7 @@ const memory = new Memory({
 
 ### Upstash Redis
 
-For serverless and edge deployments, Upstash Redis provides a managed solution:
+For serverless and edge deployments, Upstash Redis provides a managed solution. See the [Upstash Redis reference](../reference/storage/upstash.mdx) for configuration details.
 
 ```typescript
 import { UpstashStore } from "@mastra/upstash";
@@ -82,6 +82,8 @@ const memory = new Memory({
   embedder: openai.embedding("text-embedding-3-small"),
 });
 ```
+
+Embedders are crucial for converting text into vector representations, which enables the [Semantic Recall](./semantic-recall.mdx) feature. Mastra supports any embedding model compatible with the [Vercel AI SDK](https://sdk.vercel.ai/docs/ai-sdk-core/embeddings#embeddings).
 
 ## Memory Options
 
@@ -114,8 +116,9 @@ const defaultSettings = {
 
 For detailed information on each configuration option, see the dedicated documentation pages:
 
-- [Last Messages](../3-using-memory/3.1-last-messages.md) - Configure recent message history
-- [Semantic Recall](../3-using-memory/3.2-semantic-recall.md) - Set up semantic search parameters
-- [Working Memory](../3-using-memory/3.3-working-memory.md) - Learn about persistent memory across conversations
-- [Token Management](../3-using-memory/3.5-token-management.md) - Optimize token usage and context window
-
+- [`lastMessages`](./last-messages.mdx) - Configure recent message history
+- [`semanticRecall`](./semantic-recall.mdx) - Set up semantic search parameters
+- [`workingMemory`](./working-memory.mdx) - Learn about persistent memory across conversations
+- [`TokenLimiter`](./token-management.mdx) - Optimize token usage and context window
+- [Memory Class Reference](../reference/memory/Memory.mdx) - Full API details for the Memory class
+- [Memory Processors Reference](../reference/memory/memory-processors.mdx) - Learn about filtering and transforming memory messages

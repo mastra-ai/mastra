@@ -181,15 +181,15 @@ This is a high level overview for the new info arch for Mastra Memory documentat
        - [ ] Move into actual docs page
 
 5. Configuring memory
-   - [ ] 5.1. Database adapters (storage, vector, and embedder)
+   - [x] 5.1. Database adapters (storage, vector, and embedder)
        - [x] Initial draft ./new-docs/5-configuring-memory/index.md
-       - [ ] Pair review / edits
+       - [x] Pair review / edits
        - [ ] Compare with user feedback (satvik thread)
        - [ ] Move into actual docs page
        - [ ] Add performance comparison table
-   - [ ] 5.2. Defaults and recommended settings
+   - [x] 5.2. Defaults and recommended settings
        - [x] Initial draft ./new-docs/5-configuring-memory/index.md
-       - [ ] Pair review / edits
+       - [x] Pair review / edits
        - [ ] Compare with user feedback
        - [ ] Move into actual docs page
    - [ ] 5.3. Deployment options
