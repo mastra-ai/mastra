@@ -1,9 +1,9 @@
-import dotenv from 'dotenv';
 import { randomUUID } from 'crypto';
+import type { QueryResult } from '@mastra/core';
+import dotenv from 'dotenv';
 import { describe, it, expect, beforeAll, afterAll, beforeEach, vi, afterEach } from 'vitest';
 
 import { CloudflareVector } from './';
-import type { QueryResult } from '@mastra/core';
 
 dotenv.config();
 
@@ -18,8 +18,8 @@ function waitUntilReady(vector: CloudflareVector, indexName: string) {
           clearInterval(interval);
           resolve(true);
         }
-      } catch (error) {
-        console.log(error);
+      } catch (_error) {
+        console.log(_error);
       }
     }, 5000);
   });
@@ -58,8 +58,8 @@ function waitUntilVectorsIndexed(
           clearInterval(interval);
           reject(new Error('Timeout waiting for vectors to be indexed'));
         }
-      } catch (error) {
-        console.log(error);
+      } catch (_error) {
+        console.log(_error);
       }
     }, 10000);
   });
@@ -81,8 +81,8 @@ function waitForMetadataIndexes(vector: CloudflareVector, indexName: string, exp
           clearInterval(interval);
           reject(new Error('Timeout waiting for metadata indexes to be created'));
         }
-      } catch (error) {
-        console.log(error);
+      } catch (_error) {
+        console.log(_error);
       }
     }, 10000);
   });
@@ -120,8 +120,8 @@ describe('CloudflareVector', () => {
   afterAll(async () => {
     try {
       await vectorDB.deleteIndex(testIndexName);
-    } catch (error) {
-      console.warn('Failed to delete test index:', error);
+    } catch (_error) {
+      console.warn('Failed to delete test index:', _error);
     }
   });
 
@@ -132,7 +132,7 @@ describe('CloudflareVector', () => {
       // Cleanup any existing index before each test
       try {
         await vectorDB.deleteIndex(tempIndexName);
-      } catch (error) {
+      } catch (_error) {
         // Ignore errors if index doesn't exist
       }
     });
@@ -141,7 +141,7 @@ describe('CloudflareVector', () => {
       // Cleanup after each test
       try {
         await vectorDB.deleteIndex(tempIndexName);
-      } catch (error) {
+      } catch (_error) {
         // Ignore errors if index doesn't exist
       }
     });
@@ -358,6 +358,42 @@ describe('CloudflareVector', () => {
   }, 800000);
 
   describe('Error Handling', () => {
+    it('should handle duplicate index creation gracefully', async () => {
+      const duplicateIndexName = `duplicate-test-${randomUUID()}`;
+      const dimension = 768;
+
+      // Create index first time
+      await vectorDB.createIndex({
+        indexName: duplicateIndexName,
+        dimension,
+        metric: 'cosine',
+      });
+      await waitUntilReady(vectorDB, duplicateIndexName);
+
+      // Try to create with same dimensions - should not throw
+      await expect(
+        vectorDB.createIndex({
+          indexName: duplicateIndexName,
+          dimension,
+          metric: 'cosine',
+        }),
+      ).resolves.not.toThrow();
+
+      // Try to create with different dimensions - should throw
+      await expect(
+        vectorDB.createIndex({
+          indexName: duplicateIndexName,
+          dimension: dimension + 1,
+          metric: 'cosine',
+        }),
+      ).rejects.toThrow(
+        `Index "${duplicateIndexName}" already exists with ${dimension} dimensions, but ${dimension + 1} dimensions were requested`,
+      );
+
+      // Cleanup
+      await vectorDB.deleteIndex(duplicateIndexName);
+    });
+
     it('should handle invalid dimension vectors', async () => {
       await expect(vectorDB.upsert({ indexName: testIndexName, vectors: [[1.0, 0.0]] })).rejects.toThrow();
     });
@@ -547,7 +583,7 @@ describe('CloudflareVector', () => {
       }
       try {
         await vectorDB.deleteIndex(testIndexName2);
-      } catch (error) {
+      } catch (_error) {
         // Ignore errors if index doesn't exist
       }
     }, 800000);
@@ -1036,8 +1072,8 @@ describe('CloudflareVector', () => {
       warnSpy.mockRestore();
       try {
         await vectorDB.deleteIndex(indexName2);
-      } catch (error) {
-        console.warn('Failed to delete test index:', error);
+      } catch (_error) {
+        console.warn('Failed to delete test index:', _error);
       }
     });
 

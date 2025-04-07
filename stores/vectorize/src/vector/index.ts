@@ -62,11 +62,53 @@ export class CloudflareVector extends MastraVector {
     return translator.translate(filter);
   }
 
+  private async verifyIndexDimensions(indexName: string, dimension: number): Promise<boolean> {
+    try {
+      // Check if index exists
+      await this.client.vectorize.indexes.get(indexName, {
+        account_id: this.accountId,
+      });
+
+      // If index exists, verify dimensions match
+      const info = await this.client.vectorize.indexes.info(indexName, {
+        account_id: this.accountId,
+      });
+
+      if (!info) {
+        throw new Error(`Failed to get dimensions for existing index "${indexName}"`);
+      }
+      if (info.dimensions !== dimension) {
+        throw new Error(
+          `Index "${indexName}" already exists with ${info.dimensions} dimensions, but ${dimension} dimensions were requested`,
+        );
+      }
+
+      // Index exists with matching dimensions
+      return true;
+    } catch (error: any) {
+      // Handle both 'index not found' and 'index deleted' cases
+      if (error?.code !== 40004 && !(error?.errors?.[0]?.code === 3005)) {
+        throw error;
+      }
+      return false;
+    }
+  }
+
   async createIndex(...args: ParamsToArgs<CreateIndexParams>): Promise<void> {
     const params = this.normalizeArgs<CreateIndexParams>('createIndex', args);
 
     const { indexName, dimension, metric = 'cosine' } = params;
 
+    // Check if index exists with correct dimensions
+    const exists = await this.verifyIndexDimensions(indexName, dimension);
+    if (exists) {
+      this.logger.info(
+        `Index "${indexName}" already exists with ${dimension} dimensions and metric ${metric}, skipping creation.`,
+      );
+      return;
+    }
+
+    // Index doesn't exist, create it
     await this.client.vectorize.indexes.create({
       account_id: this.accountId,
       config: {
