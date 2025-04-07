@@ -73,12 +73,7 @@ class MongoDBStore extends MastraStorage {
   }
 
   private getDatabaseName(): string {
-    if ('connectionString' in this.config) {
-      const match = this.config.connectionString.match(/\/([^/?]+)/);
-      return match && match[1] ? match[1] : 'defaultdb';
-    } else {
-      return this.config.database;
-    }
+    return 'test_db'; // Replace with your database name
   }
 
   async createTable({ tableName, schema }: { tableName: string; schema: Record<string, any> }): Promise<void> {
@@ -365,7 +360,7 @@ class MongoDBStore extends MastraStorage {
 
 async function demo() {
   const config:any = {
-    connectionString: 'mongodb://localhost:27017/?directConnection=true&serverSelectionTimeoutMS=2000', // Replace with your MongoDB URI
+    connectionString: 'mongodb://0.0.0.0:27017/?directConnection=true&serverSelectionTimeoutMS=2000', // Replace with your MongoDB URI
   };
   const store = new MongoDBStore(config);
 
