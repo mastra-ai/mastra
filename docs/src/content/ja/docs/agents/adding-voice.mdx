@@ -1,0 +1,175 @@
+# エージェントに音声を追加する
+
+Mastraエージェントは音声機能を強化することができ、応答を話したりユーザー入力を聞いたりすることができます。エージェントを単一の音声プロバイダーを使用するように設定するか、異なる操作のために複数のプロバイダーを組み合わせることができます。
+
+## 単一のプロバイダーを使用する
+
+エージェントに音声を追加する最も簡単な方法は、発話と聴取の両方に単一のプロバイダーを使用することです：
+
+```typescript
+import { createReadStream } from "fs";
+import path from "path";
+import { Agent } from "@mastra/core/agent";
+import { OpenAIVoice } from "@mastra/voice-openai";
+import { openai } from "@ai-sdk/openai";
+
+// Initialize the voice provider with default settings
+const voice = new OpenAIVoice();
+
+// Create an agent with voice capabilities
+export const agent = new Agent({
+  name: "Agent",
+  instructions: `You are a helpful assistant with both STT and TTS capabilities.`,
+  model: openai("gpt-4o"),
+  voice,
+});
+
+// The agent can now use voice for interaction
+await agent.voice.speak("Hello, I'm your AI assistant!");
+
+// Read audio file and transcribe
+const audioFilePath = path.join(process.cwd(), "/audio.m4a");
+const audioStream = createReadStream(audioFilePath);
+
+try {
+  const transcription = await agent.voice.listen(audioStream, {
+    filetype: "m4a",
+  });
+} catch (error) {
+  console.error("Error transcribing audio:", error);
+}
+```
+
+## 複数のプロバイダーを使用する
+
+より柔軟性を持たせるために、CompositeVoiceクラスを使用して、話すことと聞くことに異なるプロバイダーを使用できます：
+
+```typescript
+import { Agent } from "@mastra/core/agent";
+import { CompositeVoice } from "@mastra/core/voice";
+import { OpenAIVoice } from "@mastra/voice-openai";
+import { PlayAIVoice } from "@mastra/voice-playai";
+import { openai } from "@ai-sdk/openai";
+
+export const agent = new Agent({
+  name: "Agent",
+  instructions: `You are a helpful assistant with both STT and TTS capabilities.`,
+  model: openai("gpt-4o"),
+
+  // Create a composite voice using OpenAI for listening and PlayAI for speaking
+  voice: new CompositeVoice({
+    input: new OpenAIVoice(),
+    output: new PlayAIVoice(),
+  }),
+});
+```
+
+## オーディオストリームの操作
+
+`speak()` と `listen()` メソッドは Node.js ストリームと連携します。オーディオファイルを保存および読み込む方法は次のとおりです。
+
+### 音声出力の保存
+
+```typescript
+import { createWriteStream } from "fs";
+import path from "path";
+
+// 音声を生成してファイルに保存
+const audio = await agent.voice.speak("Hello, World!");
+const filePath = path.join(process.cwd(), "agent.mp3");
+const writer = createWriteStream(filePath);
+
+audio.pipe(writer);
+
+await new Promise<void>((resolve, reject) => {
+  writer.on("finish", () => resolve());
+  writer.on("error", reject);
+});
+```
+
+### オーディオ入力の文字起こし
+
+```typescript
+import { createReadStream } from "fs";
+import path from "path";
+
+// オーディオファイルを読み込み、文字起こし
+const audioFilePath = path.join(process.cwd(), "/agent.m4a");
+const audioStream = createReadStream(audioFilePath);
+
+try {
+  console.log("オーディオファイルを文字起こし中...");
+  const transcription = await agent.voice.listen(audioStream, {
+    filetype: "m4a",
+  });
+  console.log("文字起こし:", transcription);
+} catch (error) {
+  console.error("オーディオの文字起こしエラー:", error);
+}
+```
+
+## リアルタイム音声インタラクション
+
+より動的でインタラクティブな音声体験のために、音声から音声への機能をサポートするリアルタイム音声プロバイダーを使用できます。
+
+```typescript
+import { Agent } from "@mastra/core/agent";
+import { OpenAIRealtimeVoice } from "@mastra/voice-openai-realtime";
+import { search, calculate } from "../tools";
+
+// リアルタイム音声プロバイダーを初期化
+const voice = new OpenAIRealtimeVoice({
+  chatModel: {
+    apiKey: process.env.OPENAI_API_KEY,
+    model: "gpt-4o-mini-realtime",
+  },
+  speaker: "alloy",
+});
+
+// 音声から音声への機能を持つエージェントを作成
+export const agent = new Agent({
+  name: "Agent",
+  instructions: `あなたは音声から音声への機能を持つ役立つアシスタントです。`,
+  model: openai("gpt-4o"),
+  tools: {
+    // エージェントに設定されたツールは音声プロバイダーに渡されます
+    search,
+    calculate,
+  },
+  voice,
+});
+
+// WebSocket接続を確立
+await agent.voice.connect();
+
+// 会話を開始
+agent.voice.speak("こんにちは、私はあなたのAIアシスタントです！");
+
+// マイクから音声をストリーム
+const microphoneStream = getMicrophoneStream();
+agent.voice.send(microphoneStream);
+
+// 会話が終了したら
+agent.voice.close();
+```
+
+### イベントシステム
+
+リアルタイム音声プロバイダーはいくつかのイベントを発行し、それをリッスンできます。
+
+```typescript
+// 音声プロバイダーから送信された音声データをリッスン
+agent.voice.on("speaking", ({ audio }) => {
+  // audioにはReadableStreamまたはInt16Arrayの音声データが含まれます
+});
+
+// 音声プロバイダーとユーザーの両方から送信された文字起こしテキストをリッスン
+agent.voice.on("writing", ({ text, role }) => {
+  console.log(`${role} said: ${text}`);
+});
+
+// エラーをリッスン
+agent.voice.on("error", (error) => {
+  console.error("音声エラー:", error);
+});
+```

@@ -1,0 +1,310 @@
+---
+title: Mastraにおける音声対音声機能 | Mastra ドキュメント
+description: Mastraにおける音声対音声機能の概要、リアルタイムのインタラクションとイベント駆動型アーキテクチャを含む。
+---
+
+# Mastraにおける音声対音声機能
+
+## はじめに
+
+MastraのVoice-to-Voiceは、複数のサービスプロバイダーにわたるリアルタイムの音声対音声インタラクションのための標準化されたインターフェースを提供します。このセクションでは、会話型音声体験を作成するための構成、イベント駆動型アーキテクチャ、および実装方法について説明します。エージェントにVoice-to-Voice機能を統合する方法については、[エージェントに音声を追加する](../agents/adding-voice.mdx)ドキュメントを参照してください。
+
+## リアルタイム音声インタラクション
+
+Mastraのリアルタイム音声システムは、イベント駆動型アーキテクチャを通じて、継続的な双方向の音声通信を可能にします。個別のTTSおよびSTT操作とは異なり、リアルタイム音声は、両方向で音声を継続的に処理するオープンな接続を維持します。
+
+### 実装例
+
+```typescript
+import { Agent } from "@mastra/core/agent";
+import { OpenAIRealtimeVoice } from "@mastra/voice-openai-realtime";
+
+const agent = new Agent({
+  name: 'Agent',
+  instructions: `You are a helpful assistant with real-time voice capabilities.`,
+  model: openai('gpt-4o'),
+  voice: new OpenAIRealtimeVoice(),
+});
+
+// Connect to the voice service
+await agent.voice.connect();
+
+// Listen for agent audio responses
+agent.voice.on('speaking', ({ audio }) => {
+  playAudio(audio);
+});
+
+// Initiate the conversation
+await agent.voice.speak('How can I help you today?');
+
+// Send continuous audio from the microphone
+const micStream = getMicrophoneStream();
+await agent.voice.send(micStream);
+```
+
+## イベント駆動アーキテクチャ
+
+Mastraの音声対音声の実装は、イベント駆動アーキテクチャに基づいています。開発者はイベントリスナーを登録して、受信音声を段階的に処理し、完全な音声応答を待つよりも応答性の高いインタラクションを可能にします。
+
+
+## 設定
+
+音声対音声プロバイダーを初期化する際に、その動作をカスタマイズするための設定オプションを提供できます。
+
+### コンストラクタオプション
+
+- **`chatModel`**: OpenAIリアルタイムモデルの設定。
+  - **`apiKey`**: あなたのOpenAI APIキー。`OPENAI_API_KEY`環境変数にフォールバックします。
+  - **`model`**: リアルタイム音声対話に使用するモデルID（例：`gpt-4o-mini-realtime`）。
+  - **`options`**: セッション設定など、リアルタイムクライアントの追加オプション。
+
+- **`speaker`**: 音声合成のデフォルトの音声ID。これにより、音声出力に使用する音声を指定できます。
+
+### 設定例
+
+```typescript
+const voice = new OpenAIRealtimeVoice({
+  chatModel: {
+    apiKey: 'your-openai-api-key',
+    model: 'gpt-4o-mini-realtime',
+    options: {
+      sessionConfig: {
+        turn_detection: {
+          type: 'server_vad',
+          threshold: 0.6,
+          silence_duration_ms: 1200,
+        },
+      },
+    },
+  },
+  speaker: 'alloy', // デフォルトの音声
+});
+
+// デフォルト設定を使用する場合、設定は次のように簡略化できます:
+const voice = new OpenAIRealtimeVoice();
+```
+
+## コアメソッド
+
+`OpenAIRealtimeVoice` クラスは、音声インタラクションのための以下のコアメソッドを提供します。
+
+### connect()
+
+OpenAIリアルタイムサービスへの接続を確立します。
+
+**使用法:**
+```typescript
+await voice.connect();
+```
+
+**注意:**
+- 他のインタラクションメソッドを使用する前に呼び出す必要があります
+- 接続が確立されると解決されるPromiseを返します
+
+### speak(text, options?)
+
+設定された音声モデルを使用してスピーキングイベントを発生させます。
+
+**パラメータ:**
+- `text`: 発話される文字列コンテンツ
+- `options`: オプションの設定オブジェクト
+  - `speaker`: 使用する音声ID（デフォルトを上書き）
+  - `properties`: 追加のプロバイダー固有のプロパティ
+
+**使用法:**
+```typescript
+voice.speak('こんにちは、今日はどのようにお手伝いできますか？', {
+  speaker: 'alloy'
+});
+```
+
+**注意:**
+- オーディオストリームを返すのではなく、'speaker' イベントを発生させます
+
+### listen(audioInput, options?)
+
+音声認識のために音声入力を処理します。
+
+**パラメータ:**
+- `audioInput`: 音声データの読み取り可能なストリーム
+- `options`: オプションの設定オブジェクト
+  - `filetype`: 音声フォーマット（デフォルト: 'mp3'）
+  - 追加のプロバイダー固有のオプション
+
+**使用法:**
+```typescript
+const audioData = getMicrophoneStream();
+voice.listen(audioData, {
+  filetype: 'wav'
+});
+```
+
+**注意:**
+- 転写されたテキストを含む 'writing' イベントを発生させます
+
+### send(audioStream)
+
+連続処理のためにリアルタイムで音声データをストリームします。
+
+**パラメータ:**
+- `audioStream`: 音声データの読み取り可能なストリーム
+
+**使用法:**
+```typescript
+const micStream = getMicrophoneStream();
+await voice.send(micStream);
+```
+
+**注意:**
+- ライブマイク入力のような連続音声ストリーミングシナリオで使用されます
+- ストリームが受け入れられると解決されるPromiseを返します
+
+### answer(params)
+
+OpenAIリアルタイムAPIに応答を送信します。
+
+**パラメータ:**
+- `params`: パラメータオブジェクト
+  - `options`: 応答の設定オプション
+    - `content`: 応答のテキストコンテンツ
+    - `voice`: 応答に使用する音声ID
+
+**使用法:**
+```typescript
+await voice.answer({
+  options: {
+    content: "こんにちは、今日はどのようにお手伝いできますか？",
+    voice: "alloy"
+  }
+});
+```
+
+**注意:**
+- リアルタイムセッションへの応答をトリガーします
+- 応答が送信されると解決されるPromiseを返します
+
+## ユーティリティメソッド
+
+### updateConfig(config)
+
+音声インスタンスのセッション設定を更新します。
+
+**パラメータ:**
+- `config`: 新しいセッション設定オブジェクト
+
+**使用法:**
+```typescript
+voice.updateConfig({
+  turn_detection: {
+    type: 'server_vad',
+    threshold: 0.6,
+    silence_duration_ms: 1200,
+  }
+});
+```
+
+### addTools(tools)
+
+音声インスタンスに一連のツールを追加します。
+
+**パラメータ:**
+- `tools`: モデルが呼び出すことができるツールオブジェクトの配列
+
+**使用法:**
+```typescript
+voice.addTools([
+  createTool({
+    id: "Get Weather Information",
+    inputSchema: z.object({
+        city: z.string(),
+    }),
+    description: `指定された都市の現在の天気情報を取得します`,
+    execute: async ({ city }) => {...},
+  })
+]);
+```
+
+### close()
+
+OpenAIのリアルタイムセッションから切断し、リソースをクリーンアップします。
+
+**使用法:**
+```typescript
+voice.close();
+```
+
+**注意:**
+- リソースを解放するために、音声インスタンスの使用が終わったら呼び出すべきです
+
+### on(event, callback)
+
+音声イベントのためのイベントリスナーを登録します。
+
+**パラメータ:**
+- `event`: イベント名 ('speaker', 'writing', または 'error')
+- `callback`: イベントが発生したときに呼び出される関数
+
+**使用法:**
+```typescript
+voice.on('speaker', (stream) => {
+  stream.pipe(speaker)
+});
+```
+
+### off(event, callback)
+
+以前に登録されたイベントリスナーを削除します。
+
+**パラメータ:**
+- `event`: イベント名
+- `callback`: 削除するコールバック関数
+
+**使用法:**
+```typescript
+voice.off('speaking', callbackFunction);
+```
+
+## イベント
+
+`OpenAIRealtimeVoice` クラスは以下のイベントを発行します:
+
+### speaker
+
+モデルから音声データが受信されたときに発行されます。
+
+**イベントペイロード:**
+- `stream`: 読み取り可能なストリームとしての音声データのストリーム
+
+```typescript
+agent.voice.on('speaker', (stream) => {
+  stream.pipe(speaker)
+});
+```
+
+### writing
+
+書き起こされたテキストが利用可能になったときに発行されます。
+
+**イベントペイロード:**
+- `text`: 書き起こされたテキスト
+- `role`: 話者の役割（ユーザーまたはアシスタント）
+- `done`: これが最終的な書き起こしであるかを示すブール値
+
+```typescript
+agent.voice.on('writing', ({ text, role }) => {
+  console.log(`${role}: ${text}`); // 誰が何を言ったかをログに記録
+});
+```
+
+### error
+
+エラーが発生したときに発行されます。
+
+**イベントペイロード:**
+- 問題の詳細を含むエラーオブジェクト
+
+```typescript
+agent.voice.on('error', (error) => {
+  console.error('Voice error:', error);
+});
+```

@@ -1,0 +1,227 @@
+---
+title: "メモリプロセッサ | リファレンス | Mastra ドキュメント"
+description: Mastra Memoryでメッセージをフィルタリングおよび変換する方法に関するドキュメント。
+---
+
+# Memory Processors
+
+メモリメッセージプロセッサは、LLMに送信される前にリコールされたメッセージをフィルタリングまたは変換することを可能にします。これは特に次の用途に便利です：
+
+- コンテキストのオーバーフローを防ぐためのトークン使用量の制限
+- 特定のメッセージタイプのフィルタリング（例：オーディオファイル、ツールコール）
+- メッセージ履歴内の長いツール結果の切り捨て（例：base64画像）
+- カスタムフィルタリングロジックの実装
+
+> **重要**: プロセッサはメモリから取得されたメッセージにのみ影響します。ユーザーが現在エージェントに送信している新しいメッセージはフィルタリングされません。
+
+## 組み込みプロセッサ
+
+Mastraは2つの組み込みプロセッサを提供します：
+
+### TokenLimiter
+
+`TokenLimiter`プロセッサは、コンテキストウィンドウのオーバーフローを防ぐのに役立ちます。
+
+- 指定されたトークン制限までメッセージを保持
+- すでに時系列順にあるメッセージと連携
+- トークン制限に達した場合、最新のメッセージを優先して保持
+- コストを削減し、トークン使用をより予測可能にするために使用可能
+- モデルがサポートする最大コンテキストウィンドウサイズを設定することでAPIエラーを防ぐのに役立ちます
+
+```typescript copy showLineNumbers
+import { Memory } from "@mastra/memory";
+import { TokenLimiter } from "@mastra/memory/processors";
+
+const memory = new Memory({
+  processors: [
+    // メッセージ履歴を約127000トークンに制限（例：gpt-4o用）
+    new TokenLimiter(127000),
+  ],
+});
+```
+
+`TokenLimiter`はデフォルトで`o200k_base`エンコーディングを使用し、`gpt-4o`や`gpt-4o-mini`に適しており、他のモデルにも適しているか、あなたのユースケースに十分近いかもしれません。異なるエンコーディングを使用する必要がある場合：
+
+```typescript copy showLineNumbers
+// 必要なエンコーディングをインポート
+import cl100k_base from "js-tiktoken/ranks/cl100k_base";
+
+// TokenLimiterで使用
+const memory = new Memory({
+  processors: [
+    new TokenLimiter({
+      limit: 16000,
+      encoding: cl100k_base,
+    }),
+  ],
+});
+```
+
+トークン推定については[OpenAI cookbook](https://cookbook.openai.com/examples/how_to_count_tokens_with_tiktoken#encodings)または[`js-tiktoken`リポジトリ](https://github.com/dqbd/tiktoken)を参照してください。
+
+### ToolCallFilter
+
+`ToolCallFilter`プロセッサは、ツール呼び出しとその結果を削除します。
+
+- デフォルトでは（引数なしで）、すべてのツール呼び出しとその結果を除外
+- `{ exclude: ['toolName'] }`で特定のツールを名前で除外するように設定可能
+- フィルタリングされたツール呼び出しに対応するツール結果も除外
+- メッセージ内の他のすべてのコンテンツを保持
+
+```typescript copy showLineNumbers
+import { Memory } from "@mastra/memory";
+import { ToolCallFilter } from "@mastra/memory/processors";
+
+const memory = new Memory({
+  processors: [
+    // すべてのツール呼び出しと結果を削除
+    new ToolCallFilter(),
+
+    // または特定のツールのみを除外
+    new ToolCallFilter({
+      exclude: ["imageGenTool"],
+    }),
+  ],
+});
+```
+
+## 複数のプロセッサの適用
+
+複数のプロセッサを組み合わせることができ、それぞれが前のプロセッサの後に実行されます。
+
+```typescript copy showLineNumbers
+import { TokenLimiter, ToolCallFilter } from "@mastra/memory/processors";
+
+// Multiple processors can be combined
+const memory = new Memory({
+  processors: [
+    // First filter out previous image gen tool calls
+    new ToolCallFilter({ exclude: ["imageGenTool"] }),
+    // Then limit the total tokens
+    new TokenLimiter(8000),
+  ],
+});
+```
+
+プロセッサは配列に表示される順序で適用されます。これは、最初のプロセッサの出力が次のプロセッサの入力になることを意味します。順序は重要であり、ここでトークンを制限した後にツールコールを除外すると、トークン制限が後で削除されるツールコールトークンを含むため、意図したよりも多くのトークンを制限することになります。トークンリミッターを最後のプロセッサとして配置することがほとんどの場合、正しい選択です。
+
+## 独自のカスタムプロセッサの作成
+
+このドキュメントの例（以下）は、`MemoryProcessor` クラスを拡張する方法を理解するためのイラストです。特定の使用ケースに合わせた独自のカスタムプロセッサを作成できます。
+
+メッセージプロセッサシステムは柔軟で拡張可能に設計されており、次のようなプロセッサを作成できます：
+
+- 特定のコンテンツタイプを削除する（Geminiモデルのオーディオなど）
+- カスタム基準に基づいてメッセージをフィルタリングする
+- メッセージコンテンツを変換する
+- 複雑なメッセージを簡素化する
+- 機密情報を削除する（これはセキュリティ対策ではなく、LLMは新しいメッセージを引き続き見ることができます）
+
+`MemoryProcessor` クラスを拡張してカスタムプロセッサを作成できます：
+
+```typescript copy showLineNumbers
+import { Memory, CoreMessage } from "@mastra/memory";
+import { MemoryProcessor, MemoryProcessorOpts } from "@mastra/core/memory";
+
+// MemoryProcessor インターフェースを実装する簡単な例
+class SimpleMessageFilter extends MemoryProcessor {
+  constructor() {
+    super({ name: "SimpleMessageFilter" });
+  }
+
+  process(
+    messages: CoreMessage[],
+    _opts: MemoryProcessorOpts = {},
+  ): CoreMessage[] {
+    // あなたの基準に基づいてメッセージのサブセットを返します
+    return messages.slice(0, 10); // 例えば、最初の10件のメッセージだけを保持します
+  }
+}
+
+// プロセッサを使用する
+const memory = new Memory({
+  processors: [new SimpleMessageFilter()],
+});
+```
+
+プロセッサを設計する際には、次の点を覚えておいてください：
+
+1. 不変性 - メッセージをその場で変更せず、新しいものを作成する
+2. 集中性 - 各プロセッサは単一の責任を持つべき
+3. 効率性 - 特に大規模なメッセージ履歴では、不要な処理を避ける
+
+## 実用的なプロセッサの例
+
+ここにカスタムメッセージプロセッサの追加の例があります。これらは擬似コードの例であり、テストされていません。これらの目的は、可能性のあるアイデアを提供することです。
+
+### オーディオメッセージフィルター
+
+これは、Geminiのようなオーディオコンテンツに制限があるモデルに特に有用です：
+
+注意: テストされていない例のコード
+
+```typescript copy showLineNumbers
+class AudioMessageFilter extends MemoryProcessor {
+  process(messages: CoreMessage[]): CoreMessage[] {
+    return messages.filter((message) => {
+      // 文字列メッセージ内のオーディオコンテンツをチェック
+      if (typeof message.content === "string") {
+        return (
+          !message.content.includes("data:audio/") &&
+          !message.content.includes(".mp3") &&
+          !message.content.includes(".wav")
+        );
+      }
+      // メッセージパーツ内のオーディオコンテンツをチェック
+      else if (Array.isArray(message.content)) {
+        return !message.content.some((part) => {
+          if (part.type === "audio") return true;
+          if (
+            part.type === "text" &&
+            (part.text.includes("data:audio/") ||
+              part.text.includes(".mp3") ||
+              part.text.includes(".wav"))
+          )
+            return true;
+          return false;
+        });
+      }
+      return true;
+    });
+  }
+}
+```
+
+### 推論フィルター
+
+メッセージから推論部分を除去し、最終的な応答のみを保持します：
+
+注意: テストされていない例のコード
+
+```typescript copy showLineNumbers
+class ReasoningFilter extends MemoryProcessor {
+  process(messages: CoreMessage[]): CoreMessage[] {
+    return messages
+      .map((message) => {
+        if (Array.isArray(message.content)) {
+          // コンテンツから推論部分を除去
+          return {
+            ...message,
+            content: message.content.filter(
+              (part) =>
+                part.type !== "reasoning" && part.type !== "redacted-reasoning",
+            ),
+          };
+        }
+        return message;
+      })
+      .filter((message) => {
+        // フィルタリング後にコンテンツが残っているメッセージを保持
+        if (Array.isArray(message.content)) {
+          return message.content.length > 0;
+        }
+        return true;
+      });
+  }
+}
+```

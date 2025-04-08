@@ -1,0 +1,773 @@
+---
+title: "ブランチ、マージ、条件 | ワークフロー | Mastra ドキュメント"
+description: "Mastra ワークフローの制御フローにより、ブランチ、マージ、条件を管理して、論理要件を満たすワークフローを構築できます。"
+---
+
+# ワークフローにおける制御フロー: 分岐、マージ、および条件
+
+マルチステップのプロセスを作成する際、ステップを並行して実行したり、順番に連鎖させたり、結果に基づいて異なるパスをたどる必要があるかもしれません。このページでは、分岐、マージ、および条件を管理して、論理要件を満たすワークフローを構築する方法について説明します。コードスニペットは、複雑な制御フローを構築するための主要なパターンを示しています。
+
+## 並列実行
+
+互いに依存しない場合、複数のステップを同時に実行できます。このアプローチは、ステップが独立したタスクを実行する場合にワークフローを高速化することができます。以下のコードは、2つのステップを並列に追加する方法を示しています：
+
+```typescript
+myWorkflow.step(fetchUserData).step(fetchOrderData);
+```
+
+詳細については、[Parallel Steps](../../examples/workflows/parallel-steps.mdx) の例を参照してください。
+
+## 順次実行
+
+時には、あるステップの出力を次のステップの入力にするために、厳密な順序でステップを実行する必要があります。依存する操作をリンクするには、.then() を使用します。以下のコードは、ステップを順次に連鎖させる方法を示しています：
+
+```typescript
+myWorkflow.step(fetchOrderData).then(validateData).then(processOrder);
+```
+
+詳細については、[順次ステップ](../../examples/workflows/sequential-steps.mdx)の例を参照してください。
+
+## 分岐と統合のパス
+
+異なる結果が異なるパスを必要とする場合、分岐が役立ちます。完了後にパスを統合することもできます。以下のコードは、stepAの後に分岐し、後でstepFで収束する方法を示しています：
+
+```typescript
+myWorkflow
+  .step(stepA)
+    .then(stepB)
+    .then(stepD)
+  .after(stepA)
+    .step(stepC)
+    .then(stepE)
+  .after([stepD, stepE])
+    .step(stepF);
+```
+
+この例では：
+
+- stepAはstepBに進み、その後stepDに進みます。
+- 別に、stepAはstepCもトリガーし、それがstepEに進みます。
+- 別に、stepFはstepDとstepEの両方が完了したときにトリガーされます。
+
+詳細については、[Branching Paths](../../examples/workflows/branching-paths.mdx) の例を参照してください。
+
+## 複数のブランチのマージ
+
+時には、複数の他のステップが完了した後にのみ実行されるステップが必要です。Mastraは、ステップに対して複数の依存関係を指定できる複合 `.after([])` 構文を提供します。
+
+```typescript
+myWorkflow
+  .step(fetchUserData)
+  .then(validateUserData)
+  .step(fetchProductData)
+  .then(validateProductData)
+  // このステップは、validateUserData と validateProductData の両方が完了した後にのみ実行されます
+  .after([validateUserData, validateProductData])
+  .step(processOrder)
+```
+
+この例では:
+- `fetchUserData` と `fetchProductData` は並行ブランチで実行されます
+- 各ブランチには独自の検証ステップがあります
+- `processOrder` ステップは、両方の検証ステップが正常に完了した後にのみ実行されます
+
+このパターンは特に次の用途に便利です:
+- 並行実行パスの結合
+- ワークフロー内の同期ポイントの実装
+- すべての必要なデータが利用可能であることを確認してから進行
+
+複数の `.after([])` 呼び出しを組み合わせることで、複雑な依存関係パターンを作成することもできます:
+
+```typescript
+myWorkflow
+  // 最初のブランチ
+  .step(stepA)
+  .then(stepB)
+  .then(stepC)
+
+  // 二番目のブランチ
+  .step(stepD)
+  .then(stepE)
+
+  // 三番目のブランチ
+  .step(stepF)
+  .then(stepG)
+
+  // このステップは、複数のブランチの完了に依存しています
+  .after([stepC, stepE, stepG])
+  .step(finalStep)
+```
+
+## 循環依存関係とループ
+
+ワークフローは、特定の条件が満たされるまでステップを繰り返す必要があることがよくあります。Mastraは、ループを作成するための2つの強力な方法を提供します：`until`と`while`。これらの方法は、繰り返しタスクを実装するための直感的な方法を提供します。
+
+### 手動の循環依存関係を使用する（レガシーアプローチ）
+
+以前のバージョンでは、条件を使用して手動で循環依存関係を定義することでループを作成できました：
+
+```typescript
+myWorkflow
+  .step(fetchData)
+  .then(processData)
+  .after(processData)
+  .step(finalizeData, {
+    when: { "processData.status": "success" },
+  })
+  .step(fetchData, {
+    when: { "processData.status": "retry" },
+  });
+```
+
+このアプローチはまだ機能しますが、新しい`until`と`while`の方法は、ループを作成するためのよりクリーンで保守しやすい方法を提供します。
+
+### `until`を使用した条件ベースのループ
+
+`until`メソッドは、指定された条件が真になるまでステップを繰り返します。次の引数を取ります：
+1. ループを停止する条件
+2. 繰り返すステップ
+3. 繰り返されるステップに渡すオプションの変数
+
+```typescript
+// 目標に達するまでカウンターをインクリメントするステップ
+const incrementStep = new Step({
+  id: 'increment',
+  inputSchema: z.object({
+    // 現在のカウンター値
+    counter: z.number().optional(),
+  }),
+  outputSchema: z.object({
+    // 更新されたカウンター値
+    updatedCounter: z.number(),
+  }),
+  execute: async ({ context }) => {
+    const { counter = 0 } = context.inputData;
+    return { updatedCounter: counter + 1 };
+  },
+});
+
+workflow
+  .step(incrementStep)
+  .until(
+    async ({ context }) => {
+      // カウンターが10に達したら停止
+      const result = context.getStepResult(incrementStep);
+      return (result?.updatedCounter ?? 0) >= 10;
+    },
+    incrementStep,
+    {
+      // 次のイテレーションに現在のカウンターを渡す
+      counter: {
+        step: incrementStep,
+        path: 'updatedCounter'
+      }
+    }
+  )
+  .then(finalStep);
+```
+
+参照ベースの条件を使用することもできます：
+
+```typescript
+workflow
+  .step(incrementStep)
+  .until(
+    {
+      ref: { step: incrementStep, path: 'updatedCounter' },
+      query: { $gte: 10 },
+    },
+    incrementStep,
+    {
+      counter: {
+        step: incrementStep,
+        path: 'updatedCounter'
+      }
+    }
+  )
+  .then(finalStep);
+```
+
+### `while`を使用した条件ベースのループ
+
+`while`メソッドは、指定された条件が真である限りステップを繰り返します。`until`と同じ引数を取ります：
+1. ループを続ける条件
+2. 繰り返すステップ
+3. 繰り返されるステップに渡すオプションの変数
+
+```typescript
+// 目標未満の間カウンターをインクリメントするステップ
+const incrementStep = new Step({
+  id: 'increment',
+  inputSchema: z.object({
+    // 現在のカウンター値
+    counter: z.number().optional(),
+  }),
+  outputSchema: z.object({
+    // 更新されたカウンター値
+    updatedCounter: z.number(),
+  }),
+  execute: async ({ context }) => {
+    const { counter = 0 } = context.inputData;
+    return { updatedCounter: counter + 1 };
+  },
+});
+
+workflow
+  .step(incrementStep)
+  .while(
+    async ({ context }) => {
+      // カウンターが10未満の間続ける
+      const result = context.getStepResult(incrementStep);
+      return (result?.updatedCounter ?? 0) < 10;
+    },
+    incrementStep,
+    {
+      // 次のイテレーションに現在のカウンターを渡す
+      counter: {
+        step: incrementStep,
+        path: 'updatedCounter'
+      }
+    }
+  )
+  .then(finalStep);
+```
+
+参照ベースの条件を使用することもできます：
+
+```typescript
+workflow
+  .step(incrementStep)
+  .while(
+    {
+      ref: { step: incrementStep, path: 'updatedCounter' },
+      query: { $lt: 10 },
+    },
+    incrementStep,
+    {
+      counter: {
+        step: incrementStep,
+        path: 'updatedCounter'
+      }
+    }
+  )
+  .then(finalStep);
+```
+
+### 参照条件の比較演算子
+
+参照ベースの条件を使用する場合、次の比較演算子を使用できます：
+
+| 演算子 | 説明 |
+|----------|-------------|
+| `$eq`    | 等しい |
+| `$ne`    | 等しくない |
+| `$gt`    | より大きい |
+| `$gte`   | 以上 |
+| `$lt`    | より小さい |
+| `$lte`   | 以下 |
+
+## 条件
+
+`when` プロパティを使用して、前のステップからのデータに基づいてステップが実行されるかどうかを制御します。以下は条件を指定する3つの方法です。
+
+### オプション 1: 関数
+
+```typescript
+myWorkflow.step(
+  new Step({
+    id: "processData",
+    execute: async ({ context }) => {
+      // アクションロジック
+    },
+  }),
+  {
+    when: async ({ context }) => {
+      const fetchData = context?.getStepResult<{ status: string }>("fetchData");
+      return fetchData?.status === "success";
+    },
+  },
+);
+```
+
+### オプション 2: クエリオブジェクト
+
+```typescript
+myWorkflow.step(
+  new Step({
+    id: "processData",
+    execute: async ({ context }) => {
+      // アクションロジック
+    },
+  }),
+  {
+    when: {
+      ref: {
+        step: {
+          id: "fetchData",
+        },
+        path: "status",
+      },
+      query: { $eq: "success" },
+    },
+  },
+);
+```
+
+### オプション 3: シンプルなパス比較
+
+```typescript
+myWorkflow.step(
+  new Step({
+    id: "processData",
+    execute: async ({ context }) => {
+      // アクションロジック
+    },
+  }),
+  {
+    when: {
+      "fetchData.status": "success",
+    },
+  },
+);
+```
+
+## データアクセスパターン
+
+Mastraは、ステップ間でデータを渡すためのいくつかの方法を提供します：
+
+1. **コンテキストオブジェクト** - コンテキストオブジェクトを通じてステップの結果に直接アクセス
+2. **変数マッピング** - あるステップの出力を別のステップの入力に明示的にマッピング
+3. **getStepResultメソッド** - ステップの出力を取得するための型安全な方法
+
+各アプローチには、使用ケースや型安全性の要件に応じた利点があります。
+
+### getStepResultメソッドの使用
+
+`getStepResult`メソッドは、ステップの結果にアクセスするための型安全な方法を提供します。これは、TypeScriptを使用する際に型情報を保持するため、推奨されるアプローチです。
+
+#### 基本的な使用法
+
+より良い型安全性のために、`getStepResult`に型パラメータを提供することができます：
+
+```typescript showLineNumbers filename="src/mastra/workflows/get-step-result.ts" copy
+import { Step, Workflow } from "@mastra/core/workflows";
+import { z } from "zod";
+
+const fetchUserStep = new Step({
+  id: 'fetchUser',
+  outputSchema: z.object({
+    name: z.string(),
+    userId: z.string(),
+  }),
+  execute: async ({ context }) => {
+    return { name: 'John Doe', userId: '123' };
+  },
+});
+
+const analyzeDataStep = new Step({
+  id: "analyzeData",
+  execute: async ({ context }) => {
+    // 前のステップの結果への型安全なアクセス
+    const userData = context.getStepResult<{ name: string, userId: string }>("fetchUser");
+
+    if (!userData) {
+      return { status: "error", message: "ユーザーデータが見つかりません" };
+    }
+
+    return {
+      analysis: `ユーザー${userData.name}のデータを分析しました`,
+      userId: userData.userId
+    };
+  },
+});
+```
+
+#### ステップ参照の使用
+
+最も型安全なアプローチは、`getStepResult`呼び出しでステップを直接参照することです：
+
+```typescript showLineNumbers filename="src/mastra/workflows/step-reference.ts" copy
+import { Step, Workflow } from "@mastra/core/workflows";
+import { z } from "zod";
+
+// 出力スキーマを持つステップを定義
+const fetchUserStep = new Step({
+  id: "fetchUser",
+  outputSchema: z.object({
+    userId: z.string(),
+    name: z.string(),
+    email: z.string(),
+  }),
+  execute: async () => {
+    return {
+      userId: "user123",
+      name: "John Doe",
+      email: "john@example.com"
+    };
+  },
+});
+
+const processUserStep = new Step({
+  id: "processUser",
+  execute: async ({ context }) => {
+    // TypeScriptはfetchUserStepのoutputSchemaから正しい型を推論します
+    const userData = context.getStepResult(fetchUserStep);
+
+    return {
+      processed: true,
+      userName: userData?.name
+    };
+  },
+});
+
+const workflow = new Workflow({
+  name: "user-workflow",
+});
+
+workflow
+  .step(fetchUserStep)
+  .then(processUserStep)
+  .commit();
+```
+
+### 変数マッピングの使用
+
+変数マッピングは、ステップ間のデータフローを明示的に定義する方法です。
+このアプローチは依存関係を明確にし、良好な型安全性を提供します。
+ステップに注入されたデータは`context.inputData`オブジェクトで利用可能であり、ステップの`inputSchema`に基づいて型付けされます。
+
+```typescript showLineNumbers filename="src/mastra/workflows/variable-mapping.ts" copy
+import { Step, Workflow } from "@mastra/core/workflows";
+import { z } from "zod";
+
+const fetchUserStep = new Step({
+  id: "fetchUser",
+  outputSchema: z.object({
+    userId: z.string(),
+    name: z.string(),
+    email: z.string(),
+  }),
+  execute: async () => {
+    return {
+      userId: "user123",
+      name: "John Doe",
+      email: "john@example.com"
+    };
+  },
+});
+
+const sendEmailStep = new Step({
+  id: "sendEmail",
+  inputSchema: z.object({
+    recipientEmail: z.string(),
+    recipientName: z.string(),
+  }),
+  execute: async ({ context }) => {
+    const { recipientEmail, recipientName } = context.inputData;
+
+    // ここでメール送信ロジックを実行
+    return {
+      status: "sent",
+      to: recipientEmail
+    };
+  },
+});
+
+const workflow = new Workflow({
+  name: "email-workflow",
+});
+
+workflow
+  .step(fetchUserStep)
+  .then(sendEmailStep, {
+    variables: {
+      // fetchUserからsendEmailの入力に特定のフィールドをマッピング
+      recipientEmail: { step: fetchUserStep, path: 'email' },
+      recipientName: { step: fetchUserStep, path: 'name' }
+    }
+  })
+  .commit();
+```
+
+変数マッピングの詳細については、[ワークフロー変数によるデータマッピング](./variables.mdx)のドキュメントを参照してください。
+
+### コンテキストオブジェクトの使用
+
+コンテキストオブジェクトは、すべてのステップ結果とその出力に直接アクセスを提供します。このアプローチはより柔軟ですが、型の安全性を維持するために注意深い取り扱いが必要です。
+ステップ結果には、`context.steps`オブジェクトを通じて直接アクセスできます。
+
+```typescript showLineNumbers filename="src/mastra/workflows/context-access.ts" copy
+import { Step, Workflow } from "@mastra/core/workflows";
+import { z } from "zod";
+
+const processOrderStep = new Step({
+  id: 'processOrder',
+  execute: async ({ context }) => {
+    // 前のステップからデータにアクセス
+    let userData: { name: string, userId: string };
+    if (context.steps['fetchUser']?.status === 'success') {
+      userData = context.steps.fetchUser.output;
+    } else {
+      throw new Error('User data not found');
+    }
+
+    return {
+      orderId: 'order123',
+      userId: userData.userId,
+      status: 'processing',
+    };
+  },
+});
+
+const workflow = new Workflow({
+  name: "order-workflow",
+});
+
+workflow
+  .step(fetchUserStep)
+  .then(processOrderStep)
+  .commit();
+```
+
+### ワークフローレベルの型安全性
+
+ワークフロー全体で包括的な型安全性を確保するために、すべてのステップの型を定義し、それをワークフローに渡すことができます。
+これにより、条件におけるコンテキストオブジェクトの型安全性と、最終的なワークフロー出力におけるステップ結果の型安全性を得ることができます。
+
+```typescript showLineNumbers filename="src/mastra/workflows/workflow-typing.ts" copy
+import { Step, Workflow } from "@mastra/core/workflows";
+import { z } from "zod";
+
+
+// 型付き出力を持つステップを作成
+const fetchUserStep = new Step({
+  id: "fetchUser",
+  outputSchema: z.object({
+    userId: z.string(),
+    name: z.string(),
+    email: z.string(),
+  }),
+  execute: async () => {
+    return {
+      userId: "user123",
+      name: "John Doe",
+      email: "john@example.com"
+    };
+  },
+});
+
+const processOrderStep = new Step({
+  id: "processOrder",
+  execute: async ({ context }) => {
+    // TypeScriptはuserDataの形状を知っています
+    const userData = context.getStepResult(fetchUserStep);
+
+    return {
+      orderId: "order123",
+      status: "processing"
+    };
+  },
+});
+
+const workflow = new Workflow<[typeof fetchUserStep, typeof processOrderStep]>({
+  name: "typed-workflow",
+});
+
+workflow
+  .step(fetchUserStep)
+  .then(processOrderStep)
+  .until(async ({ context }) => {
+    // TypeScriptはここでuserDataの形状を知っています
+    const res = context.getStepResult('fetchUser');
+    return res?.userId === '123';
+  }, processOrderStep)
+  .commit();
+```
+
+### トリガーデータへのアクセス
+
+ステップ結果に加えて、ワークフローを開始した元のトリガーデータにアクセスすることができます。
+
+```typescript showLineNumbers filename="src/mastra/workflows/trigger-data.ts" copy
+import { Step, Workflow } from "@mastra/core/workflows";
+import { z } from "zod";
+
+// トリガースキーマを定義
+const triggerSchema = z.object({
+  customerId: z.string(),
+  orderItems: z.array(z.string()),
+});
+
+type TriggerType = z.infer<typeof triggerSchema>;
+
+const processOrderStep = new Step({
+  id: "processOrder",
+  execute: async ({ context }) => {
+    // 型安全性を持ってトリガーデータにアクセス
+    const triggerData = context.getStepResult<TriggerType>('trigger');
+
+    return {
+      customerId: triggerData?.customerId,
+      itemCount: triggerData?.orderItems.length || 0,
+      status: "processing"
+    };
+  },
+});
+
+const workflow = new Workflow({
+  name: "order-workflow",
+  triggerSchema,
+});
+
+workflow
+  .step(processOrderStep)
+  .commit();
+```
+
+### レジュームデータへのアクセス
+
+ステップに注入されたデータは、`context.inputData`オブジェクトで利用可能であり、ステップの`inputSchema`に基づいて型付けされています。
+
+```typescript showLineNumbers filename="src/mastra/workflows/resume-data.ts" copy
+import { Step, Workflow } from "@mastra/core/workflows";
+import { z } from "zod";
+
+const processOrderStep = new Step({
+  id: "processOrder",
+  inputSchema: z.object({
+    orderId: z.string(),
+  }),
+  execute: async ({ context, suspend }) => {
+    const { orderId } = context.inputData;
+
+    if (!orderId) {
+      await suspend();
+      return;
+    }
+
+    return {
+      orderId,
+      status: "processed"
+    };
+  },
+});
+
+const workflow = new Workflow({
+  name: "order-workflow",
+});
+
+workflow
+  .step(processOrderStep)
+  .commit();
+
+const run = workflow.createRun();
+const result = await run.start();
+
+const resumedResult = await workflow.resume({
+  runId: result.runId,
+  stepId: 'processOrder',
+  inputData: {
+    orderId: '123',
+  },
+});
+
+console.log({resumedResult});
+```
+
+### ワークフロー結果へのアクセス
+
+`Workflow` 型パラメータにステップタイプを注入することで、ワークフローの結果に型付きでアクセスできます。
+
+```typescript showLineNumbers filename="src/mastra/workflows/get-results.ts" copy
+import { Workflow } from "@mastra/core/workflows";
+
+const fetchUserStep = new Step({
+  id: "fetchUser",
+  outputSchema: z.object({
+    userId: z.string(),
+    name: z.string(),
+    email: z.string(),
+  }),
+  execute: async () => {
+    return {
+      userId: "user123",
+      name: "John Doe",
+      email: "john@example.com"
+    };
+  },
+});
+
+const processOrderStep = new Step({
+  id: "processOrder",
+  outputSchema: z.object({
+    orderId: z.string(),
+    status: z.string(),
+  }),
+  execute: async ({ context }) => {
+    const userData = context.getStepResult(fetchUserStep);
+    return {
+      orderId: "order123",
+      status: "processing"
+    };
+  },
+});
+
+const workflow = new Workflow<[typeof fetchUserStep, typeof processOrderStep]>({
+  name: "typed-workflow",
+});
+
+workflow
+  .step(fetchUserStep)
+  .then(processOrderStep)
+  .commit();
+
+const run = workflow.createRun();
+const result = await run.start();
+
+// 結果はステップ結果の判別可能なユニオンです
+// したがって、ステータスチェックを通じて絞り込む必要があります
+if (result.results.processOrder.status === 'success') {
+  // TypeScriptは結果の形状を認識します
+  const orderId = result.results.processOrder.output.orderId;
+  console.log({orderId});
+}
+
+if (result.results.fetchUser.status === 'success') {
+  const userId = result.results.fetchUser.output.userId;
+  console.log({userId});
+}
+```
+
+### データフローのベストプラクティス
+
+1. **型安全性のためにStep参照でgetStepResultを使用する**
+   - TypeScriptが正しい型を推論できるようにする
+   - コンパイル時に型エラーをキャッチする
+
+2. **明示的な依存関係のために変数マッピングを使用する**
+   - データフローを明確かつ保守可能にする
+   - ステップ依存関係の良いドキュメントを提供する
+
+3. **ステップの出力スキーマを定義する**
+   - 実行時にデータを検証する
+   - `execute`関数の戻り値の型を検証する
+   - TypeScriptでの型推論を改善する
+
+4. **欠損データを優雅に処理する**
+   - プロパティにアクセスする前にステップ結果が存在するか常に確認する
+   - オプションデータに対してフォールバック値を提供する
+
+5. **データ変換をシンプルに保つ**
+   - 変数マッピングではなく専用のステップでデータを変換する
+   - ワークフローをテストしやすく、デバッグしやすくする
+
+### データフロー方法の比較
+
+| 方法 | 型安全性 | 明示性 | 使用ケース |
+|--------|------------|--------------|----------|
+| getStepResult | 最高 | 高 | 厳密な型付け要件を持つ複雑なワークフロー |
+| 変数マッピング | 高 | 高 | 依存関係を明確かつ明示的にする必要がある場合 |
+| context.steps | 中 | 低 | シンプルなワークフローでステップデータに素早くアクセスする場合 |
+
+適切なデータフロー方法を選択することで、型安全で保守可能なワークフローを作成できます。
+

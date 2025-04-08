@@ -1,5 +1,6 @@
 /** @type {import('next').NextConfig} */
 import nextra from "nextra";
+import { initGT } from "gt-next/config";
 
 const withNextra = nextra({
   search: {
@@ -7,11 +8,21 @@ const withNextra = nextra({
   },
 });
 
-export default withNextra({
+const withGT = initGT();
+
+export default withGT(withNextra({
   assetPrefix: process.env.NODE_ENV === "production" ? "/docs" : "",
+  i18n: {
+    locales: ["en", "ja"],
+    defaultLocale: "en",
+  },
   async rewrites() {
     return {
       beforeFiles: [
+        {
+          source: "/:locale/docs/_next/:path+",
+          destination: "/_next/:path+",
+        },
         {
           source: "/docs/_next/:path+",
           destination: "/_next/:path+",
@@ -107,4 +118,4 @@ export default withNextra({
     },
   ],
   trailingSlash: false,
-});
+}));

@@ -1,0 +1,185 @@
+---
+title: "リファレンス: 回答の関連性 | メトリクス | 評価 | Mastra ドキュメント"
+description: Mastraにおける回答の関連性メトリクスのドキュメントで、LLMの出力が入力クエリにどれだけ適切に対応しているかを評価します。
+---
+
+# AnswerRelevancyMetric
+
+`AnswerRelevancyMetric` クラスは、LLM の出力が入力クエリにどの程度答えているか、または対応しているかを評価します。判定ベースのシステムを使用して関連性を判断し、詳細なスコアリングと理由を提供します。
+
+## 基本的な使用法
+
+```typescript
+import { openai } from "@ai-sdk/openai";
+import { AnswerRelevancyMetric } from "@mastra/evals/llm";
+
+// Configure the model for evaluation
+const model = openai("gpt-4o-mini");
+
+const metric = new AnswerRelevancyMetric(model, {
+  uncertaintyWeight: 0.3,
+  scale: 1,
+});
+
+const result = await metric.measure(
+  "What is the capital of France?",
+  "Paris is the capital of France.",
+);
+
+console.log(result.score); // Score from 0-1
+console.log(result.info.reason); // Explanation of the score
+```
+
+## コンストラクタのパラメータ
+
+<PropertiesTable
+  content={[
+    {
+      name: "model",
+      type: "LanguageModel",
+      description: "関連性を評価するために使用されるモデルの設定",
+      isOptional: false,
+    },
+    {
+      name: "options",
+      type: "AnswerRelevancyMetricOptions",
+      description: "メトリックの設定オプション",
+      isOptional: true,
+      defaultValue: "{ uncertaintyWeight: 0.3, scale: 1 }",
+    },
+  ]}
+/>
+
+### AnswerRelevancyMetricOptions
+
+<PropertiesTable
+  content={[
+    {
+      name: "uncertaintyWeight",
+      type: "number",
+      description: "スコアリングにおける「不確実」な判定に与えられる重み (0-1)",
+      isOptional: true,
+      defaultValue: "0.3",
+    },
+    {
+      name: "scale",
+      type: "number",
+      description: "最大スコア値",
+      isOptional: true,
+      defaultValue: "1",
+    },
+  ]}
+/>
+
+## measure() パラメータ
+
+<PropertiesTable
+  content={[
+    {
+      name: "input",
+      type: "string",
+      description: "元のクエリまたはプロンプト",
+      isOptional: false,
+    },
+    {
+      name: "output",
+      type: "string",
+      description: "評価するLLMの応答",
+      isOptional: false,
+    },
+  ]}
+/>
+
+## 戻り値
+
+<PropertiesTable
+  content={[
+    {
+      name: "score",
+      type: "number",
+      description: "関連性スコア（0からスケール、デフォルト0-1）",
+    },
+    {
+      name: "info",
+      type: "object",
+      description: "スコアの理由を含むオブジェクト",
+      properties: [
+        {
+          type: "string",
+          parameters: [
+            {
+              name: "reason",
+              type: "string",
+              description: "スコアの説明",
+            },
+          ],
+        },
+      ],
+    },
+  ]}
+/>
+
+## スコアリングの詳細
+
+この指標は、クエリと回答の整合性を通じて関連性を評価し、完全性、正確性、詳細レベルを考慮します。
+
+### スコアリングプロセス
+
+1. ステートメント分析:
+   - 出力を意味のあるステートメントに分解し、文脈を保持
+   - 各ステートメントをクエリ要件に対して評価
+
+2. 各ステートメントの関連性を評価:
+   - "yes": 直接一致に対して完全な重み
+   - "unsure": おおよその一致に対して部分的な重み（デフォルト: 0.3）
+   - "no": 無関係なコンテンツに対してゼロの重み
+
+最終スコア: `((direct + uncertainty * partial) / total_statements) * scale`
+
+### スコアの解釈
+(0からscale、デフォルト0-1)
+- 1.0: 完全な関連性 - 完全かつ正確
+- 0.7-0.9: 高い関連性 - 小さなギャップや不正確さ
+- 0.4-0.6: 中程度の関連性 - 重大なギャップ
+- 0.1-0.3: 低い関連性 - 重大な問題
+- 0.0: 関連性なし - 不正確またはトピック外
+
+## カスタム設定の例
+
+```typescript
+import { openai } from "@ai-sdk/openai";
+import { AnswerRelevancyMetric } from "@mastra/evals/llm";
+
+// 評価のためのモデルを設定
+const model = openai("gpt-4o-mini");
+
+const metric = new AnswerRelevancyMetric(
+  model,
+  {
+    uncertaintyWeight: 0.5, // 不確実な判定に対する重みを高くする
+    scale: 5, // 0-1の代わりに0-5のスケールを使用
+  },
+);
+
+const result = await metric.measure(
+  "運動の利点は何ですか？",
+  "定期的な運動は心血管の健康を改善し、筋力を高め、精神的な健康を向上させます。",
+);
+
+// 出力例:
+// {
+//   score: 4.5,
+//   info: {
+//     reason: "スコアは5点中4.5です。なぜなら、応答が運動の具体的で正確な利点を
+//           直接的に問いに答えているからです。心血管、筋肉、精神的健康の
+//           複数の側面を明確かつ簡潔にカバーしています。
+//           答えは非常に関連性が高く、不要な情報を含まずに適切な詳細を提供しています。"
+//   }
+// }
+```
+
+## 関連
+
+- [プロンプト整合性メトリック](./prompt-alignment)
+- [コンテキスト精度メトリック](./context-precision)
+- [忠実性メトリック](./faithfulness)

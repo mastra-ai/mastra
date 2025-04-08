@@ -1,0 +1,118 @@
+---
+title: "リファレンス: voice.send() | Voice Providers | Mastra Docs"
+description: "リアルタイム音声プロバイダーで利用可能なsend()メソッドのドキュメントで、音声データをストリーミングして継続的に処理します。"
+---
+
+# voice.send()
+
+`send()` メソッドは、音声プロバイダーにリアルタイムで音声データをストリーミングし、継続的に処理します。このメソッドは、リアルタイムの音声対音声の会話に不可欠であり、マイク入力を直接AIサービスに送信することができます。
+
+## 使用例
+
+```typescript
+import { OpenAIRealtimeVoice } from "@mastra/voice-openai-realtime";
+import Speaker from "@mastra/node-speaker";
+
+const speaker = new Speaker({
+  sampleRate: 24100,  // MacBook Proでの高品質オーディオの標準であるHz単位のオーディオサンプルレート
+  channels: 1,        // モノラルオーディオ出力（ステレオの場合は2）
+  bitDepth: 16,       // オーディオ品質のビット深度 - CD品質標準（16ビット解像度）
+});
+
+
+// リアルタイム音声プロバイダーを初期化
+const voice = new OpenAIRealtimeVoice({
+  realtimeConfig: {
+    model: "gpt-4o-mini-realtime",
+    apiKey: process.env.OPENAI_API_KEY,
+  },
+});
+
+// リアルタイムサービスに接続
+await voice.connect();
+
+// 応答のためのイベントリスナーを設定
+voice.on("writing", ({ text, role }) => {
+  console.log(`${role}: ${text}`);
+});
+
+voice.on("speaker", (stream) => {
+  stream.pipe(speaker)
+});
+
+// マイクストリームを取得（実装は環境に依存）
+const microphoneStream = getMicrophoneStream();
+
+// 音声データを音声プロバイダーに送信
+await voice.send(microphoneStream);
+
+// Int16Arrayとして音声データを送信することも可能
+const audioBuffer = getAudioBuffer(); // これがInt16Arrayを返すと仮定
+await voice.send(audioBuffer);
+```
+
+## パラメーター
+
+<PropertiesTable
+  content={[
+    {
+      name: "audioData",
+      type: "NodeJS.ReadableStream | Int16Array",
+      description: "音声プロバイダーに送信する音声データ。読み取り可能なストリーム（マイクストリームのような）または音声サンプルのInt16Arrayであることができます。",
+      isOptional: false,
+    }
+  ]}
+/>
+
+## 戻り値
+
+音声プロバイダーによって音声データが受け入れられたときに解決される`Promise<void>`を返します。
+
+## プロバイダー固有の動作
+
+異なるリアルタイム音声プロバイダーは、音声データを異なる方法で処理する場合があります：
+
+### OpenAI リアルタイム
+
+- NodeJS.ReadableStream と Int16Array の両方の形式を受け入れます
+- 音声は PCM 形式、16ビット、モノラル、16kHz サンプルレートである必要があります
+- ユーザーが話し終えたことを判断するために、音声活動検出 (VAD) を自動的に処理します
+- 音声を処理する際に、書き起こされたテキストと共に 'writing' イベントを発行します
+
+## CompositeVoiceとの使用
+
+`CompositeVoice`を使用する場合、`send()`メソッドは設定されたリアルタイムプロバイダーに委任されます:
+
+```typescript
+import { CompositeVoice } from "@mastra/core/voice";
+import { OpenAIRealtimeVoice } from "@mastra/voice-openai-realtime";
+
+const realtimeVoice = new OpenAIRealtimeVoice();
+const voice = new CompositeVoice({
+  realtimeProvider: realtimeVoice,
+});
+
+// リアルタイムサービスに接続
+await voice.connect();
+
+// これにより、OpenAIRealtimeVoiceプロバイダーが使用されます
+const microphoneStream = getMicrophoneStream();
+await voice.send(microphoneStream);
+```
+
+## メモ
+
+- このメソッドは、音声から音声への機能をサポートするリアルタイム音声プロバイダーによってのみ実装されています
+- この機能をサポートしていない音声プロバイダーで呼び出された場合、警告を記録し、直ちに解決されます
+- `send()`を使用する前に`connect()`を呼び出してWebSocket接続を確立する必要があります
+- オーディオフォーマットの要件は、特定の音声プロバイダーによって異なります
+- 連続した会話のためには、通常、ユーザーのオーディオを送信するために`send()`を呼び出し、その後AIの応答をトリガーするために`answer()`を呼び出します
+- プロバイダーは通常、オーディオを処理する際に書き起こされたテキストと共に「writing」イベントを発行します
+- AIが応答すると、プロバイダーはオーディオ応答と共に「speaking」イベントを発行します
+
+## 関連メソッド
+
+- [voice.connect()](./voice.connect) - リアルタイムサービスへの接続を確立します
+- [voice.answer()](./voice.answer) - 音声プロバイダーに応答を促します
+- [voice.listen()](./voice.listen) - 音声をテキストに変換します（非ストリーミング）
+- [voice.on()](./voice.on) - 音声イベントのイベントリスナーを登録します

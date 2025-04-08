@@ -1,0 +1,206 @@
+---
+title: "リファレンス: MCPConfiguration | ツール管理 | Mastra ドキュメント"
+description: MCPConfiguration の API リファレンス - 複数の Model Context Protocol サーバーとそのツールを管理するためのクラス。
+---
+
+# MCPConfiguration
+
+`MCPConfiguration` クラスは、Mastra アプリケーションで複数の MCP サーバー接続とそのツールを管理する方法を提供します。接続のライフサイクルを処理し、ツールの名前空間を管理し、すべての設定されたサーバーにわたってツールへの便利なアクセスを提供します。
+
+## コンストラクタ
+
+MCPConfigurationクラスの新しいインスタンスを作成します。
+
+```typescript
+constructor({
+    id?: string;
+    servers: Record<string, MastraMCPServerDefinition>
+}: {
+    servers: {
+        [serverName: string]: {
+            // stdioベースのサーバー用
+            command?: string;
+            args?: string[];
+            env?: Record<string, string>;
+            // SSEベースのサーバー用
+            url?: URL;
+            requestInit?: RequestInit;
+        }
+    }
+})
+```
+
+### パラメータ
+
+<PropertiesTable
+  content={[
+    {
+      name: "id",
+      type: "string",
+      description:
+        "構成インスタンスのオプションの一意識別子。これを使用して、同一の構成で複数のインスタンスを作成する際のメモリリークを防ぎます。",
+    },
+    {
+      name: "servers",
+      type: "Record<string, MastraMCPServerDefinition>",
+      description:
+        "サーバー構成のマップで、各キーは一意のサーバー識別子であり、値はサーバー構成です。",
+    },
+  ]}
+/>
+
+## メソッド
+
+### getTools()
+
+すべての設定されたサーバーからすべてのツールを取得し、ツール名をサーバー名で名前空間化します（形式は `serverName_toolName`）。これにより、競合を防ぎます。
+Agent 定義に渡すことを意図しています。
+
+```ts
+new Agent({ tools: await mcp.getTools() });
+```
+
+### getToolsets()
+
+名前空間化されたツール名（形式は `serverName.toolName`）をツールの実装にマッピングするオブジェクトを返します。
+generate または stream メソッドに動的に渡すことを意図しています。
+
+```typescript
+const res = await agent.stream(prompt, {
+  toolsets: await mcp.getToolsets(),
+});
+```
+
+## 例
+
+### 基本的な使用法
+
+```typescript
+import { MCPConfiguration } from "@mastra/mcp";
+import { Agent } from "@mastra/core/agent";
+import { openai } from "@ai-sdk/openai";
+
+const mcp = new MCPConfiguration({
+  servers: {
+    stockPrice: {
+      command: "npx",
+      args: ["tsx", "stock-price.ts"],
+      env: {
+        API_KEY: "your-api-key",
+      },
+    },
+    weather: {
+      url: new URL("http://localhost:8080/sse"),
+    },
+  },
+});
+
+// すべてのツールにアクセスできるエージェントを作成
+const agent = new Agent({
+  name: "Multi-tool Agent",
+  instructions: "複数のツールサーバーにアクセスできます。",
+  model: openai("gpt-4"),
+  tools: await mcp.getTools(),
+});
+```
+
+### generate() または stream() でのツールセットの使用
+
+```typescript
+import { Agent } from "@mastra/core/agent";
+import { MCPConfiguration } from "@mastra/mcp";
+import { openai } from "@ai-sdk/openai";
+
+// 最初に、ツールなしでエージェントを作成
+const agent = new Agent({
+  name: "Multi-tool Agent",
+  instructions: "ユーザーが株価と天気を確認するのを手伝います。",
+  model: openai("gpt-4"),
+});
+
+// 後で、ユーザー固有の設定でMCPを構成
+const mcp = new MCPConfiguration({
+  servers: {
+    stockPrice: {
+      command: "npx",
+      args: ["tsx", "stock-price.ts"],
+      env: {
+        API_KEY: "user-123-api-key",
+      },
+    },
+    weather: {
+      url: new URL("http://localhost:8080/sse"),
+      requestInit: {
+        headers: {
+          Authorization: `Bearer user-123-token`,
+        },
+      },
+    },
+  },
+});
+
+// すべてのツールセットを stream() または generate() に渡す
+const response = await agent.stream(
+  "AAPLの状況と天気はどうですか？",
+  {
+    toolsets: await mcp.getToolsets(),
+  },
+);
+```
+
+## リソース管理
+
+`MCPConfiguration` クラスには、複数のインスタンスを管理するためのメモリリーク防止機能が組み込まれています：
+
+1. `id` なしで同一の設定を持つ複数のインスタンスを作成すると、メモリリークを防ぐためにエラーが発生します
+2. 同一の設定を持つ複数のインスタンスが必要な場合は、各インスタンスに一意の `id` を指定してください
+3. 同じ設定でインスタンスを再作成する前に `await configuration.disconnect()` を呼び出してください
+4. 1つのインスタンスのみが必要な場合は、再作成を避けるために設定をより高いスコープに移動することを検討してください
+
+例えば、`id` なしで同じ設定で複数のインスタンスを作成しようとすると：
+
+```typescript
+// 最初のインスタンス - OK
+const mcp1 = new MCPConfiguration({
+  servers: {
+    /* ... */
+  },
+});
+
+// 同じ設定での2番目のインスタンス - エラーが発生します
+const mcp2 = new MCPConfiguration({
+  servers: {
+    /* ... */
+  },
+});
+
+// 修正するには、次のいずれかを行います：
+// 1. 一意のIDを追加
+const mcp3 = new MCPConfiguration({
+  id: "instance-1",
+  servers: {
+    /* ... */
+  },
+});
+
+// 2. または再作成前に切断
+await mcp1.disconnect();
+const mcp4 = new MCPConfiguration({
+  servers: {
+    /* ... */
+  },
+});
+```
+
+## サーバーライフサイクル
+
+MCPConfigurationはサーバー接続を優雅に処理します：
+
+1. 複数のサーバーに対する自動接続管理
+2. 開発中のエラーメッセージを防ぐための優雅なサーバーシャットダウン
+3. 切断時のリソースの適切なクリーンアップ
+
+## 関連情報
+
+- 各MCPクライアントの設定の詳細については、[MastraMCPClient ドキュメント](./client)を参照してください
+- モデルコンテキストプロトコルについて詳しくは、[@modelcontextprotocol/sdk ドキュメント](https://github.com/modelcontextprotocol/typescript-sdk)を参照してください

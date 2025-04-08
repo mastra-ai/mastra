@@ -1,0 +1,257 @@
+---
+title: "Mastraサーバーの作成"
+description: "ミドルウェアやその他のオプションでMastraサーバーを設定およびカスタマイズする"
+---
+
+# Mastraサーバーの作成
+
+Mastraアプリケーションを開発中またはデプロイする際、それはHTTPサーバーとして動作し、エージェント、ワークフロー、その他の機能をAPIエンドポイントとして公開します。このページでは、サーバーの動作を設定およびカスタマイズする方法を説明します。
+
+## サーバーアーキテクチャ
+
+Mastraは[Hono](https://hono.dev)を基盤となるHTTPサーバーフレームワークとして使用しています。`mastra build`を使用してMastraアプリケーションをビルドすると、`.mastra`ディレクトリにHonoベースのHTTPサーバーが生成されます。
+
+サーバーは以下を提供します：
+- 登録されたすべてのエージェント用のAPIエンドポイント
+- 登録されたすべてのワークフロー用のAPIエンドポイント
+- カスタムAPIルートのサポート
+- カスタムミドルウェアのサポート
+- タイムアウトの設定
+- ポートの設定
+
+## サーバー設定
+
+Mastraインスタンスでサーバーの`port`と`timeout`を設定できます。
+
+```typescript copy showLineNumbers
+import { Mastra } from '@mastra/core';
+
+export const mastra = new Mastra({
+  server: {
+    port: 3000, // デフォルトは4111
+    timeout: 10000, // デフォルトは30000（30秒）
+  },
+});
+```
+
+## カスタムAPIルート
+
+Mastraは、登録されたエージェントとワークフローに基づいて自動的に生成されるAPIルートのリストを提供します。MastraインスタンスにカスタムAPIルートを定義することもできます。
+
+これらのルートは、Mastraインスタンスと同じファイルに配置することも、別のファイルに配置することもできます。Mastraインスタンスをクリーンに保つために、別のファイルに保管することをお勧めします。
+
+```typescript copy showLineNumbers
+import { Mastra } from '@mastra/core';
+import { registerApiRoute } from "@mastra/core/server"
+
+export const mastra = new Mastra({
+  server: {
+    apiRoutes: [
+      registerApiRoute('/my-custom-route', {
+        method: 'GET',
+        handler: async (c) => {
+          // you have access to mastra instance here
+          const mastra = c.get('mastra')
+
+          // you can use the mastra instance to get agents, workflows, etc.
+          const agents = await mastra.getAgent('my-agent')
+
+          return c.json({ message: 'Hello, world!' });
+        }
+      })
+    ]
+  }
+  // Other configuration options
+});
+```
+
+## ミドルウェア
+
+Mastraでは、APIルートに適用されるカスタムミドルウェア関数を設定することができます。これは認証、ログ記録、CORS、またはその他のHTTPレベルの機能をAPIエンドポイントに追加するのに役立ちます。
+
+```typescript copy showLineNumbers
+import { Mastra } from '@mastra/core';
+
+export const mastra = new Mastra({
+  // Other configuration options
+  server: {
+    middleware: [
+    {
+      handler: async (c, next) => {
+        // Example: Add authentication check
+        const authHeader = c.req.header('Authorization');
+        if (!authHeader) {
+          return new Response('Unauthorized', { status: 401 });
+        }
+        
+        // Continue to the next middleware or route handler
+        await next();
+      },
+      path: '/api/*'
+    },
+    // add middleware to all routes
+    async (c, next) => {
+      // Example: Add request logging
+      console.log(`${c.req.method} ${c.req.url}`);
+      await next();
+    },
+  ]
+});
+```
+
+単一のルートにミドルウェアを追加したい場合は、`registerApiRoute`を使用して指定することもできます。
+
+```typescript copy showLineNumbers
+registerApiRoute('/my-custom-route', {
+  method: 'GET',
+  middleware: [
+    async (c, next) => {
+      // Example: Add request logging
+      console.log(`${c.req.method} ${c.req.url}`);
+      await next();
+    },
+  ],
+  handler: async (c) => {
+    // you have access to mastra instance here
+    const mastra = c.get('mastra')
+
+    // you can use the mastra instance to get agents, workflows, etc.
+    const agents = await mastra.getAgent('my-agent')
+
+    return c.json({ message: 'Hello, world!' });
+  }
+})
+```
+
+### ミドルウェアの動作
+
+各ミドルウェア関数は：
+- Honoコンテキストオブジェクト（`c`）と`next`関数を受け取ります
+- リクエスト処理を短絡するために`Response`を返すことができます
+- 次のミドルウェアやルートハンドラに進むために`next()`を呼び出すことができます
+- オプションでパスパターンを指定できます（デフォルトは'/api/*'）
+
+### 一般的なミドルウェアのユースケース
+
+#### 認証
+
+```typescript copy
+{
+  handler: async (c, next) => {
+    const authHeader = c.req.header('Authorization');
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      return new Response('Unauthorized', { status: 401 });
+    }
+    
+    const token = authHeader.split(' ')[1];
+    // Validate token here
+    
+    await next();
+  },
+  path: '/api/*',
+}
+```
+
+#### CORSサポート
+
+```typescript copy
+{
+  handler: async (c, next) => {
+    // Add CORS headers
+    c.header('Access-Control-Allow-Origin', '*');
+    c.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+    c.header('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+    
+    // Handle preflight requests
+    if (c.req.method === 'OPTIONS') {
+      return new Response(null, { status: 204 });
+    }
+    
+    await next();
+  }
+}
+```
+
+#### リクエストログ記録
+
+```typescript copy
+{
+  handler: async (c, next) => {
+    const start = Date.now();
+    await next();
+    const duration = Date.now() - start;
+    console.log(`${c.req.method} ${c.req.url} - ${duration}ms`);
+  }
+}
+```
+
+### Mastra特別ヘッダー
+
+Mastra Cloudと統合する場合や、カスタムクライアントを構築する場合、クライアントが自身を識別し、特定の機能を有効にするために送信する特別なヘッダーがあります。サーバーミドルウェアでこれらのヘッダーをチェックして、動作をカスタマイズできます：
+
+```typescript copy
+{
+  handler: async (c, next) => {
+    // Check for Mastra-specific headers in incoming requests
+    const isFromMastraCloud = c.req.header('x-mastra-cloud') === 'true';
+    const clientType = c.req.header('x-mastra-client-type'); // e.g., 'js', 'python'
+    const isDevPlayground = c.req.header('x-mastra-dev-playground') === 'true';
+    
+    // Customize behavior based on client information
+    if (isFromMastraCloud) {
+      // Special handling for Mastra Cloud requests
+    }
+    
+    await next();
+  }
+}
+```
+
+これらのヘッダーには以下の目的があります：
+- `x-mastra-cloud`：リクエストがMastra Cloudから来ていることを示します
+- `x-mastra-client-type`：クライアントSDKのタイプを指定します（例：'js'、'python'）
+- `x-mastra-dev-playground`：リクエストが開発プレイグラウンドからのものであることを示します
+
+これらのヘッダーをミドルウェアで使用して、クライアント固有のロジックを実装したり、特定の環境でのみ機能を有効にしたりすることができます。
+
+## デプロイメント
+
+Mastraは標準のNode.jsサーバーにビルドされるため、Node.jsアプリケーションを実行できるあらゆるプラットフォームにデプロイできます：
+- クラウドVM（AWS EC2、DigitalOcean Droplets、GCP Compute Engine）
+- コンテナプラットフォーム（Docker、Kubernetes）
+- Platform as a Service（Heroku、Railway）
+- 自己ホスト型サーバー
+
+### ビルド
+
+アプリケーションをビルドします：
+
+```bash copy
+# 現在のディレクトリからビルド
+mastra build
+
+# またはディレクトリを指定
+mastra build --dir ./my-project
+```
+
+ビルドプロセス：
+1. エントリーファイル（`src/mastra/index.ts`または`src/mastra/index.js`）を特定
+2. `.mastra`出力ディレクトリを作成
+3. ツリーシェイキングとソースマップを使用してRollupでコードをバンドル
+4. [Hono](https://hono.dev) HTTPサーバーを生成
+
+すべてのオプションについては[`mastra build`](/docs/reference/cli/build)を参照してください。
+
+### サーバーの実行
+
+HTTPサーバーを起動します：
+
+```bash copy
+node .mastra/output/index.mjs
+```
+
+## サーバーレスデプロイメント
+
+Mastraは、Cloudflare Workers、Vercel、およびNetlifyでのサーバーレスデプロイメントもサポートしています。
+
+セットアップ手順については、[サーバーレスデプロイメント](/docs/deployment/deployment)ガイドをご覧ください。

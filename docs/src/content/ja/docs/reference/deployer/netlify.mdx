@@ -1,0 +1,88 @@
+---
+title: "Netlify デプロイヤー"
+description: "NetlifyDeployer クラスのドキュメントで、Mastra アプリケーションを Netlify Functions にデプロイします。"
+---
+
+# NetlifyDeployer
+
+NetlifyDeployerは、MastraアプリケーションをNetlify Functionsにデプロイし、サイトの作成、設定、およびデプロイプロセスを処理します。これは、抽象Deployerクラスを拡張して、Netlify固有のデプロイ機能を提供します。
+
+## 使用例
+
+```typescript
+import { Mastra } from '@mastra/core';
+import { NetlifyDeployer } from '@mastra/deployer-netlify';
+
+const mastra = new Mastra({
+  deployer: new NetlifyDeployer({
+    scope: 'your-team-slug',
+    projectName: 'your-project-name',
+    token: 'your-netlify-token'
+  }),
+  // ... other Mastra configuration options
+});
+```
+
+## パラメーター
+
+### コンストラクターパラメーター
+
+<PropertiesTable
+  content={[
+    {
+      name: "scope",
+      type: "string",
+      description: "あなたのNetlifyチームのスラッグまたはID。",
+      isOptional: false,
+    },
+    {
+      name: "projectName",
+      type: "string",
+      description: "あなたのNetlifyサイトの名前（存在しない場合は作成されます）。",
+      isOptional: false,
+    },
+    {
+      name: "token",
+      type: "string",
+      description: "あなたのNetlify認証トークン。",
+      isOptional: false,
+    },
+  ]}
+/>
+
+### Netlify設定
+
+NetlifyDeployerは、以下の設定で`netlify.toml`設定ファイルを自動生成します:
+
+```toml
+[functions]
+node_bundler = "esbuild"            
+directory = "netlify/functions"
+
+[[redirects]]
+force = true
+from = "/*"
+status = 200
+to = "/.netlify/functions/api/:splat"
+```
+
+### 環境変数
+
+NetlifyDeployerは、複数のソースから環境変数を処理します:
+
+1. **環境ファイル**: `.env.production`および`.env`ファイルからの変数。
+2. **設定**: Mastra設定を通じて渡される変数。
+3. **Netlifyダッシュボード**: Netlifyのウェブインターフェースを通じて管理することもできます。
+
+### プロジェクト構造
+
+デプロイヤーは、出力ディレクトリに以下の構造を作成します:
+
+```
+output-directory/
+├── netlify/
+│   └── functions/
+│       └── api/
+│           └── index.mjs    # Honoサーバー統合によるアプリケーションのエントリーポイント
+└── netlify.toml             # デプロイメント設定
+```

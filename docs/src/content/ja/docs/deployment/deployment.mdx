@@ -1,0 +1,119 @@
+---
+title: "サーバーレスデプロイ"
+description: "プラットフォーム固有のデプロイヤーや標準のHTTPサーバーを使用してMastraアプリケーションを構築およびデプロイする"
+---
+
+# サーバーレスデプロイメント
+
+このガイドでは、プラットフォーム固有のデプロイヤーを使用して、MastraをCloudflare Workers、Vercel、およびNetlifyにデプロイする方法を説明します
+
+セルフホスト型Node.jsサーバーのデプロイメントについては、[Mastraサーバーの作成](/docs/deployment/server)ガイドを参照してください。
+
+## 前提条件
+
+始める前に、以下のものを用意してください：
+
+- **Node.js**がインストールされていること（バージョン18以上を推奨）
+- プラットフォーム固有のデプロイヤーを使用する場合：
+  - 選択したプラットフォームのアカウント
+  - 必要なAPIキーまたは認証情報
+
+## サーバーレスプラットフォームデプロイヤー
+
+プラットフォーム固有のデプロイヤーは、以下の設定とデプロイを処理します：
+- **[Cloudflare Workers](/docs/reference/deployer/cloudflare)**
+- **[Vercel](/docs/reference/deployer/vercel)**
+- **[Netlify](/docs/reference/deployer/netlify)**
+
+### デプロイヤーのインストール
+
+```bash copy
+# Cloudflare用
+npm install @mastra/deployer-cloudflare
+
+# Vercel用
+npm install @mastra/deployer-vercel
+
+# Netlify用
+npm install @mastra/deployer-netlify
+```
+
+### デプロイヤーの設定
+
+エントリーファイルでデプロイヤーを設定します：
+
+```typescript copy showLineNumbers
+import { Mastra, createLogger } from '@mastra/core';
+import { CloudflareDeployer } from '@mastra/deployer-cloudflare';
+
+export const mastra = new Mastra({
+  agents: { /* your agents here */ },
+  logger: createLogger({ name: 'MyApp', level: 'debug' }),
+  deployer: new CloudflareDeployer({
+    scope: 'your-cloudflare-scope',
+    projectName: 'your-project-name',
+    // 完全な設定オプションはリファレンスドキュメントを参照してください
+  }),
+});
+```
+
+### デプロイヤーの設定
+
+各デプロイヤーには特定の設定オプションがあります。以下は基本的な例ですが、完全な詳細についてはリファレンスドキュメントを参照してください。
+
+#### Cloudflare デプロイヤー
+
+```typescript copy showLineNumbers
+new CloudflareDeployer({
+  scope: 'your-cloudflare-account-id',
+  projectName: 'your-project-name',
+  // 完全な設定オプションはリファレンスドキュメントを参照してください
+})
+```
+
+[Cloudflare デプロイヤーリファレンスを表示 →](/docs/reference/deployer/cloudflare)
+
+#### Vercel デプロイヤー
+
+```typescript copy showLineNumbers
+new VercelDeployer({
+  teamSlug: 'your-vercel-team-slug',
+  projectName: 'your-project-name',
+  token: 'your-vercel-token'
+  // 完全な設定オプションはリファレンスドキュメントを参照してください
+})
+```
+
+[Vercel デプロイヤーリファレンスを表示 →](/docs/reference/deployer/vercel)
+
+#### Netlify デプロイヤー
+
+```typescript copy showLineNumbers
+new NetlifyDeployer({
+  scope: 'your-netlify-team-slug',
+  projectName: 'your-project-name',
+  token: 'your-netlify-token'
+})
+```
+
+[Netlify デプロイヤーリファレンスを表示 →](/docs/reference/deployer/netlify)
+
+## 環境変数
+
+必要な変数:
+
+1. プラットフォームデプロイヤー変数（プラットフォームデプロイヤーを使用する場合）:
+   - プラットフォームの認証情報
+2. エージェントAPIキー:
+   - `OPENAI_API_KEY`
+   - `ANTHROPIC_API_KEY`
+3. サーバー構成（ユニバーサルデプロイメント用）:
+   - `PORT`: HTTPサーバーポート（デフォルト: 3000）
+   - `HOST`: サーバーホスト（デフォルト: 0.0.0.0）
+
+## プラットフォームドキュメント
+
+プラットフォームデプロイメントの参考資料:
+- [Cloudflare Workers](https://developers.cloudflare.com/workers/)
+- [Vercel](https://vercel.com/docs)
+- [Netlify](https://docs.netlify.com/)

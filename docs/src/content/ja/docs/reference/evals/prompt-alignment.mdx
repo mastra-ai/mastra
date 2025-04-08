@@ -1,0 +1,238 @@
+---
+title: "リファレンス: プロンプトアラインメント | メトリクス | Evals | Mastra ドキュメント"
+description: Mastraにおけるプロンプトアラインメントメトリクスのドキュメントで、LLMの出力が与えられたプロンプト指示にどれだけ従っているかを評価します。
+---
+
+# PromptAlignmentMetric
+
+`PromptAlignmentMetric` クラスは、LLM の出力が与えられたプロンプト指示にどの程度厳密に従っているかを評価します。各指示が正確に従われているかを確認するために、判定ベースのシステムを使用し、逸脱がある場合には詳細な理由を提供します。
+
+## 基本的な使用法
+
+```typescript
+import { openai } from "@ai-sdk/openai";
+import { PromptAlignmentMetric } from "@mastra/evals/llm";
+
+// Configure the model for evaluation
+const model = openai("gpt-4o-mini");
+
+const instructions = [
+  "文を大文字で始める",
+  "各文をピリオドで終える",
+  "現在形を使用する",
+];
+
+const metric = new PromptAlignmentMetric(model, {
+  instructions,
+  scale: 1,
+});
+
+const result = await metric.measure(
+  "天気を説明する",
+  "太陽が輝いています。雲が空に浮かんでいます。穏やかな風が吹いています。",
+);
+
+console.log(result.score); // 0-1の整合スコア
+console.log(result.info.reason); // スコアの説明
+```
+
+## コンストラクターパラメータ
+
+<PropertiesTable
+  content={[
+    {
+      name: "model",
+      type: "LanguageModel",
+      description:
+        "命令の整合性を評価するために使用されるモデルの設定",
+      isOptional: false,
+    },
+    {
+      name: "options",
+      type: "PromptAlignmentOptions",
+      description: "メトリックの設定オプション",
+      isOptional: false,
+    },
+  ]}
+/>
+
+### PromptAlignmentOptions
+
+<PropertiesTable
+  content={[
+    {
+      name: "instructions",
+      type: "string[]",
+      description: "出力が従うべき命令の配列",
+      isOptional: false,
+    },
+    {
+      name: "scale",
+      type: "number",
+      description: "最大スコア値",
+      isOptional: true,
+      defaultValue: "1",
+    },
+  ]}
+/>
+
+## measure() パラメーター
+
+<PropertiesTable
+  content={[
+    {
+      name: "input",
+      type: "string",
+      description: "元のプロンプトまたはクエリ",
+      isOptional: false,
+    },
+    {
+      name: "output",
+      type: "string",
+      description: "評価するLLMの応答",
+      isOptional: false,
+    },
+  ]}
+/>
+
+## 戻り値
+
+<PropertiesTable
+  content={[
+    {
+      name: "score",
+      type: "number",
+      description: "アライメントスコア（0からスケール、デフォルト0-1）",
+    },
+    {
+      name: "info",
+      type: "object",
+      description:
+        "指示の遵守に関する詳細なメトリクスを含むオブジェクト",
+      properties: [
+        {
+          type: "string",
+          parameters: [
+            {
+              name: "reason",
+              type: "string",
+              description:
+                "スコアと指示の遵守に関する詳細な説明",
+            },
+          ],
+        },
+      ],
+    },
+  ]}
+/>
+
+## スコアリングの詳細
+
+このメトリックは、以下を通じて指示の整合性を評価します：
+- 各指示の適用性評価
+- 適用可能な指示の厳格な遵守評価
+- すべての判定に対する詳細な理由付け
+- 適用可能な指示に基づく比例スコアリング
+
+### 指示の判定
+
+各指示は以下の3つの判定のいずれかを受けます：
+- "yes"：指示が適用可能で完全に従われている
+- "no"：指示が適用可能だが従われていない、または部分的にしか従われていない
+- "n/a"：指示が与えられたコンテキストに適用されない
+
+### スコアリングプロセス
+
+1. 指示の適用性を評価：
+   - 各指示がコンテキストに適用されるかを判断
+   - 関連性のない指示を "n/a" としてマーク
+   - ドメイン固有の要件を考慮
+
+2. 適用可能な指示の遵守を評価：
+   - 各適用可能な指示を独立して評価
+   - "yes" の判定には完全な遵守が必要
+   - すべての判定に対する具体的な理由を文書化
+
+3. 整合性スコアを計算：
+   - 従われた指示（"yes" 判定）をカウント
+   - 総適用可能指示数で除算（"n/a" を除く）
+   - 設定された範囲にスケール
+
+最終スコア：`(followed_instructions / applicable_instructions) * scale`
+
+### 重要な考慮事項
+
+- 空の出力：
+  - すべてのフォーマット指示は適用可能と見なされる
+  - 要件を満たせないため "no" とマーク
+- ドメイン固有の指示：
+  - 問い合わせたドメインに関する場合は常に適用可能
+  - 従われていない場合は "no" とマーク、"n/a" ではない
+- "n/a" 判定：
+  - 完全に異なるドメインにのみ使用
+  - 最終スコア計算には影響しない
+
+### スコアの解釈
+(0 からスケール、デフォルト 0-1)
+- 1.0：すべての適用可能な指示が完璧に従われた
+- 0.7-0.9：ほとんどの適用可能な指示が従われた
+- 0.4-0.6：適用可能な指示に対する混合遵守
+- 0.1-0.3：適用可能な指示に対する限定的な遵守
+- 0.0：適用可能な指示がまったく従われていない
+
+## 分析付きの例
+
+```typescript
+import { openai } from "@ai-sdk/openai";
+import { PromptAlignmentMetric } from "@mastra/evals/llm";
+
+// モデルを評価用に設定
+const model = openai("gpt-4o-mini");
+
+const metric = new PromptAlignmentMetric(model, {
+  instructions: [
+    "各項目に箇条書きを使用する",
+    "正確に3つの例を含める",
+    "各ポイントをセミコロンで終える"
+  ],
+  scale: 1
+});
+
+const result = await metric.measure(
+  "3つの果物を挙げてください",
+  "• Appleは赤くて甘いです;
+• Bananaは黄色で曲がっています;
+• Orangeは柑橘系で丸いです。"
+);
+
+// 例の出力:
+// {
+//   score: 1.0,
+//   info: {
+//     reason: "スコアが1.0である理由は、すべての指示が正確に守られたためです:
+//           箇条書きが使用され、正確に3つの例が提供され、
+//           各ポイントがセミコロンで終わっています。"
+//   }
+// }
+
+const result2 = await metric.measure(
+  "3つの果物を挙げてください",
+  "1. Apple
+2. Banana
+3. Orange and Grape"
+);
+
+// 例の出力:
+// {
+//   score: 0.33,
+//   info: {
+//     reason: "スコアが0.33である理由は: 箇条書きの代わりに番号付きリストが使用され、
+//           セミコロンが使用されず、正確に3つではなく4つの果物が挙げられたためです。"
+//   }
+// }
+```
+
+## 関連
+
+- [回答の関連性メトリック](./answer-relevancy)
+- [キーワードカバレッジメトリック](./keyword-coverage)

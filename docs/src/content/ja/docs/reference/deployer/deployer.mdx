@@ -1,0 +1,159 @@
+---
+title: "Mastra デプロイヤー"
+description: Mastra アプリケーションのパッケージングとデプロイを処理する Deployer 抽象クラスのドキュメント。
+---
+
+# Deployer
+
+Deployerは、コードのパッケージ化、環境ファイルの管理、およびHonoフレームワークを使用したアプリケーションの提供によって、Mastraアプリケーションのデプロイを処理します。具体的な実装は、特定のデプロイメントターゲットに対するデプロイメソッドを定義する必要があります。
+
+## 使用例
+
+```typescript
+import { Deployer } from "@mastra/deployer";
+
+// 抽象Deployerクラスを拡張してカスタムデプロイヤーを作成
+class CustomDeployer extends Deployer {
+  constructor() {
+    super({ name: 'custom-deployer' });
+  }
+
+  // 抽象deployメソッドを実装
+  async deploy(outputDirectory: string): Promise<void> {
+    // 出力ディレクトリを準備
+    await this.prepare(outputDirectory);
+    
+    // アプリケーションをバンドル
+    await this._bundle('server.ts', 'mastra.ts', outputDirectory);
+    
+    // カスタムデプロイメントロジック
+    // ...
+  }
+}
+```
+
+## パラメーター
+
+### コンストラクターパラメーター
+
+<PropertiesTable
+  content={[
+    {
+      name: "args",
+      type: "object",
+      description: "Deployerの設定オプション。",
+      isOptional: false,
+    },
+    {
+      name: "args.name",
+      type: "string",
+      description: "デプロイヤーインスタンスの一意の名前。",
+      isOptional: false,
+    },
+  ]}
+/>
+
+### deploy パラメーター
+
+<PropertiesTable
+  content={[
+    {
+      name: "outputDirectory",
+      type: "string",
+      description: "バンドルされ、デプロイ準備が整ったアプリケーションが出力されるディレクトリ。",
+      isOptional: false,
+    },
+  ]}
+/>
+
+## メソッド
+
+<PropertiesTable
+  content={[
+    {
+      name: "getEnvFiles",
+      type: "() => Promise<string[]>",
+      description: "デプロイ中に使用される環境ファイルのリストを返します。デフォルトでは、'.env.production' と '.env' ファイルを探します。",
+    },
+    {
+      name: "deploy",
+      type: "(outputDirectory: string) => Promise<void>",
+      description: "サブクラスによって実装されなければならない抽象メソッドです。指定された出力ディレクトリへのデプロイプロセスを処理します。",
+    },
+  ]}
+/>
+
+## Bundlerから継承されたメソッド
+
+Deployerクラスは、Bundlerクラスから以下の主要なメソッドを継承します:
+
+<PropertiesTable
+  content={[
+    {
+      name: "prepare",
+      type: "(outputDirectory: string) => Promise<void>",
+      description: "出力ディレクトリをクリーンアップし、必要なサブディレクトリを作成して準備します。",
+    },
+    {
+      name: "writeInstrumentationFile",
+      type: "(outputDirectory: string) => Promise<void>",
+      description: "テレメトリ目的で出力ディレクトリに計測ファイルを書き込みます。",
+    },
+    {
+      name: "writePackageJson",
+      type: "(outputDirectory: string, dependencies: Map<string, string>) => Promise<void>",
+      description: "指定された依存関係を持つpackage.jsonファイルを出力ディレクトリに生成します。",
+    },
+    {
+      name: "_bundle",
+      type: "(serverFile: string, mastraEntryFile: string, outputDirectory: string, bundleLocation?: string) => Promise<void>",
+      description: "指定されたサーバーとMastraエントリーファイルを使用してアプリケーションをバンドルします。",
+    },
+  ]}
+/>
+
+## コアコンセプト
+
+### デプロイメントライフサイクル
+
+Deployer 抽象クラスは、構造化されたデプロイメントライフサイクルを実装します：
+
+1. **初期化**: デプロイヤーは名前で初期化され、依存関係管理のために Deps インスタンスを作成します。
+2. **環境設定**: `getEnvFiles` メソッドは、デプロイメント中に使用される環境ファイル (.env.production, .env) を特定します。
+3. **準備**: `prepare` メソッド（Bundler から継承）は、出力ディレクトリをクリーンアップし、必要なサブディレクトリを作成します。
+4. **バンドリング**: `_bundle` メソッド（Bundler から継承）は、アプリケーションコードとその依存関係をパッケージ化します。
+5. **デプロイメント**: 抽象 `deploy` メソッドは、サブクラスによって実装され、実際のデプロイメントプロセスを処理します。
+
+### 環境ファイル管理
+
+Deployer クラスは、`getEnvFiles` メソッドを通じて環境ファイル管理のための組み込みサポートを含んでいます。このメソッドは：
+
+- 定義済みの順序で環境ファイルを探します (.env.production, .env)
+- FileService を使用して最初に存在するファイルを見つけます
+- 見つかった環境ファイルの配列を返します
+- 環境ファイルが見つからない場合は空の配列を返します
+
+```typescript
+getEnvFiles(): Promise<string[]> {
+  const possibleFiles = ['.env.production', '.env.local', '.env'];
+
+  try {
+    const fileService = new FileService();
+    const envFile = fileService.getFirstExistingFile(possibleFiles);
+
+    return Promise.resolve([envFile]);
+  } catch {}
+
+  return Promise.resolve([]);
+}
+```
+
+### バンドリングとデプロイメントの関係
+
+Deployer クラスは Bundler クラスを拡張し、バンドリングとデプロイメントの明確な関係を確立します：
+
+1. **バンドリングは前提条件**: バンドリングはデプロイメントの前提条件であり、アプリケーションコードがデプロイ可能な形式にパッケージ化されます。
+2. **共有インフラストラクチャ**: バンドリングとデプロイメントは、依存関係管理やファイルシステム操作のような共通のインフラストラクチャを共有します。
+3. **特化したデプロイメントロジック**: バンドリングがコードのパッケージ化に焦点を当てる一方で、デプロイメントはバンドルされたコードをデプロイするための環境固有のロジックを追加します。
+4. **拡張性**: 抽象 `deploy` メソッドは、異なるターゲット環境のための特化したデプロイヤーを作成することを可能にします。
+

@@ -1,0 +1,239 @@
+---
+title: "エージェントツールの選択 | エージェントドキュメント | Mastra"
+description: ツールは、エージェントやワークフローによって実行できる型付き関数であり、組み込みの統合アクセスとパラメータ検証を備えています。各ツールには、その入力を定義するスキーマ、ロジックを実装するエグゼキュータ関数、および設定された統合へのアクセスがあります。
+---
+
+# エージェントツールの選択
+
+ツールは、エージェントやワークフローによって実行できる型付き関数であり、組み込みの統合アクセスとパラメータ検証機能を備えています。各ツールには、入力を定義するスキーマ、ロジックを実装する実行関数、および設定された統合へのアクセスがあります。
+
+## ツールの作成
+
+このセクションでは、エージェントが使用できるツールを作成するプロセスを説明します。指定された都市の現在の天気情報を取得するシンプルなツールを作成しましょう。
+
+```typescript filename="src/mastra/tools/weatherInfo.ts" copy
+import { createTool } from "@mastra/core/tools";
+import { z } from "zod";
+
+const getWeatherInfo = async (city: string) => {
+  // Replace with an actual API call to a weather service
+  const data = await fetch(`https://api.example.com/weather?city=${city}`).then(
+    (r) => r.json(),
+  );
+  return data;
+};
+
+export const weatherInfo = createTool({
+  id: "Get Weather Information",
+  inputSchema: z.object({
+    city: z.string(),
+  }),
+  description: `Fetches the current weather information for a given city`,
+  execute: async ({ context: { city } }) => {
+    console.log("Using tool to fetch weather information for", city);
+    return await getWeatherInfo(city);
+  },
+});
+```
+
+## エージェントにツールを追加する
+
+次に、ツールをエージェントに追加します。天気に関する質問に答えることができるエージェントを作成し、それを `weatherInfo` ツールを使用するように設定します。
+
+```typescript filename="src/mastra/agents/weatherAgent.ts"
+import { Agent } from "@mastra/core/agent";
+import { openai } from "@ai-sdk/openai";
+import * as tools from "../tools/weatherInfo";
+
+export const weatherAgent = new Agent<typeof tools>({
+  name: "Weather Agent",
+  instructions:
+    "あなたは現在の天気情報を提供する役立つアシスタントです。天気について尋ねられたときは、天気情報ツールを使用してデータを取得してください。",
+  model: openai("gpt-4o-mini"),
+  tools: {
+    weatherInfo: tools.weatherInfo,
+  },
+});
+```
+
+## エージェントの登録
+
+私たちは、エージェントでMastraを初期化する必要があります。
+
+```typescript filename="src/index.ts"
+import { Mastra } from "@mastra/core";
+import { weatherAgent } from "./agents/weatherAgent";
+
+export const mastra = new Mastra({
+  agents: { weatherAgent },
+});
+```
+
+これにより、エージェントがMastraに登録され、使用可能になります。
+
+## 中止シグナル
+
+`generate` と `stream` (テキスト生成) からの中止シグナルは、ツールの実行に転送されます。これらは、execute 関数の2番目のパラメータでアクセスでき、例えば長時間実行される計算を中止したり、ツール内の fetch 呼び出しに転送したりできます。
+
+```typescript
+import { Agent } from "@mastra/core/agent";
+import { createTool } from "@mastra/core/tools";
+import { z } from "zod";
+
+const agent = new Agent({
+  name: "Weather agent",
+  tools: {
+    weather: createTool({
+      id: "Get Weather Information",
+      description: "Get the weather in a location",
+      inputSchema: z.object({ location: z.string() }),
+      execute: async ({ context: { location } }, { abortSignal }) => {
+        return fetch(
+          `https://api.weatherapi.com/v1/current.json?q=${location}`,
+          { signal: abortSignal }, // forward the abort signal to fetch
+        );
+      },
+    }),
+  },
+});
+
+const result = await agent.generate("What is the weather in San Francisco?", {
+  abortSignal: myAbortSignal, // signal that will be forwarded to tools
+});
+```
+
+## デバッグツール
+
+Vitestやその他のテストフレームワークを使用してツールをテストできます。ツールの単体テストを作成することで、期待通りの動作を確保し、早期にエラーを発見するのに役立ちます。
+
+## ツールを使用したエージェントの呼び出し
+
+これでエージェントを呼び出すことができ、エージェントはツールを使用して天気情報を取得します。
+
+## 例: エージェントとの対話
+
+```typescript filename="src/index.ts"
+import { mastra } from "./index";
+
+async function main() {
+  const agent = mastra.getAgent("weatherAgent");
+  const response = await agent.generate(
+    "What's the weather like in New York City today?",
+  );
+
+  console.log(response.text);
+}
+
+main();
+```
+
+エージェントは `weatherInfo` ツールを使用して、ニューヨーク市の現在の天気を取得し、それに応じて応答します。
+
+## Vercel AI SDK ツール形式
+
+Mastraは、Vercel AI SDK形式で作成されたツールをサポートしています。これらのツールを直接インポートして使用できます：
+
+```typescript filename="src/mastra/tools/vercelTool.ts" copy
+import { tool } from "ai";
+import { z } from "zod";
+
+export const weatherInfo = tool({
+  description: "Fetches the current weather information for a given city",
+  parameters: z.object({
+    city: z.string().describe("The city to get weather for"),
+  }),
+  execute: async ({ city }) => {
+    // Replace with actual API call
+    const data = await fetch(`https://api.example.com/weather?city=${city}`);
+    return data.json();
+  },
+});
+```
+
+Vercelツールを、Mastraツールと一緒にエージェントで使用できます：
+
+```typescript filename="src/mastra/agents/weatherAgent.ts"
+import { Agent } from "@mastra/core/agent";
+import { openai } from "@ai-sdk/openai";
+import { weatherInfo } from "../tools/vercelTool";
+import * as mastraTools from "../tools/mastraTools";
+
+export const weatherAgent = new Agent({
+  name: "Weather Agent",
+  instructions:
+    "You are a helpful assistant that provides weather information.",
+  model: openai("gpt-4"),
+  tools: {
+    weatherInfo, // Vercel tool
+    ...mastraTools, // Mastra tools
+  },
+});
+```
+
+どちらのツール形式も、エージェントのワークフロー内でシームレスに動作します。
+
+## ツール設計のベストプラクティス
+
+エージェントのためにツールを作成する際、これらのガイドラインに従うことで、信頼性が高く直感的なツールの使用を確保できます。
+
+### ツールの説明
+
+ツールの主な説明は、その目的と価値に焦点を当てるべきです。
+
+- 説明はシンプルにし、ツールが**何を**するのかに焦点を当てる
+- ツールの主な使用ケースを強調する
+- 主な説明に実装の詳細を含めない
+- エージェントがツールを**いつ**使用するべきかを理解するのを助けることに焦点を当てる
+
+```typescript
+createTool({
+  id: "documentSearch",
+  description:
+    "ユーザーの質問に答えるために必要な情報を見つけるためにナレッジベースにアクセスする",
+  // ... 残りのツール設定
+});
+```
+
+### パラメータスキーマ
+
+技術的な詳細はパラメータスキーマに含め、エージェントがツールを正しく使用するのを助けます。
+
+- パラメータは明確な説明で自己文書化する
+- デフォルト値とその影響を含める
+- 必要に応じて例を提供する
+- 異なるパラメータ選択の影響を説明する
+
+```typescript
+inputSchema: z.object({
+  query: z.string().describe("関連情報を見つけるための検索クエリ"),
+  limit: z.number().describe(
+    "返す結果の数。高い値はより多くのコンテキストを提供し、低い値は最適な一致に焦点を当てる"
+  ),
+  options: z.string().describe(
+    "オプションの設定。例: '{'filter': 'category=news'}'"
+  ),
+}),
+```
+
+### エージェントのインタラクションパターン
+
+ツールは次の場合に効果的に使用される可能性が高くなります。
+
+- クエリやタスクがツールの支援を明確に必要とするほど複雑である
+- エージェントの指示がツールの使用に関する明確なガイダンスを提供する
+- パラメータの要件がスキーマで十分に文書化されている
+- ツールの目的がクエリのニーズに合致している
+
+### よくある落とし穴
+
+- 主な説明に技術的な詳細を詰め込みすぎる
+- 実装の詳細と使用ガイダンスを混同する
+- 不明確なパラメータの説明や例の欠如
+
+これらのプラクティスに従うことで、ツールがエージェントにとって発見しやすく、使用しやすくなり、目的（主な説明）と実装の詳細（パラメータスキーマ）の間に明確な分離を維持できます。
+
+## Model Context Protocol (MCP) ツール
+
+Mastraは`@mastra/mcp`パッケージを通じてMCP互換サーバーからのツールもサポートしています。MCPは、AIモデルが外部ツールやリソースを発見し、相互作用するための標準化された方法を提供します。これにより、カスタム統合を作成することなく、サードパーティのツールをエージェントに簡単に統合できます。
+
+設定オプションやベストプラクティスを含むMCPツールの使用に関する詳細情報については、[MCPガイド](/docs/agents/mcp-guide)をご覧ください。

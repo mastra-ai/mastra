@@ -1,0 +1,52 @@
+---
+title: Mastraにおけるテキスト読み上げ (TTS) | Mastra ドキュメント
+description: Mastraにおけるテキスト読み上げ機能の概要、設定、使用法、音声プロバイダーとの統合を含みます。
+---
+
+# Text-to-Speech (TTS)
+
+MastraのText-to-Speech (TTS)は、さまざまなプロバイダーサービスを使用してテキストから音声を合成するための統一されたAPIを提供します。このセクションでは、TTSの設定オプションと実装方法について説明します。エージェントにTTS機能を統合するには、[エージェントに音声を追加する](../agents/adding-voice.mdx)ドキュメントを参照してください。
+
+## スピーチ設定
+
+MastraでTTSを使用するには、音声プロバイダーを初期化する際に`speechModel`設定を提供する必要があります。この設定には以下のパラメータが含まれます：
+
+- **`name`**: 使用する特定のTTSモデル。
+- **`apiKey`**: 認証のためのAPIキー。
+- **プロバイダー固有のオプション**: 特定の音声プロバイダーによって必要またはサポートされる追加のオプション。
+
+**`speaker`**オプションは別途指定され、音声合成のために異なる声を選択することができます。
+
+**注意**: これらのパラメータはすべてオプションです。使用している特定のプロバイダーに依存する、音声プロバイダーが提供するデフォルト設定を使用することができます。
+
+### 設定例
+
+```typescript
+const voice = new OpenAIVoice({
+  speechModel: {
+    name: "tts-1-hd",
+    apiKey: process.env.OPENAI_API_KEY
+  },
+  speaker: "alloy",
+});
+
+// デフォルト設定を使用する場合、設定は次のように簡略化できます:
+const voice = new OpenAIVoice();
+```
+
+## Speak メソッドの使用
+
+TTS の主なメソッドは `speak()` メソッドで、テキストを音声に変換します。このメソッドは、スピーカーや他のプロバイダー固有のオプションを指定できるオプションを受け入れることができます。使用方法は次のとおりです：
+
+```typescript
+const readableStream = await voice.speak("Hello, world!", {
+  speaker: "default", // Optional: specify a speaker
+  properties: {
+    speed: 1.0, // Optional: adjust speech speed
+    pitch: "default", // Optional: specify pitch if supported
+  },
+});
+```
+
+**注意**: `OpenAIRealtimeVoice` のような音声対音声プロバイダーを使用している場合、`speak()` メソッドは Readable Stream を返す代わりに "speaking" イベントを発行します。
+

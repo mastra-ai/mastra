@@ -1,0 +1,54 @@
+---
+title: "テキスト評価"
+description: "MastraがLLM-as-judgeの方法論を使用してテキストの品質を評価する方法を理解する。"
+---
+
+# テキスト評価
+
+テキスト評価は、エージェントの出力を評価するためにLLM-as-judgeの方法論を使用します。このアプローチは、言語モデルを活用してテキストの品質のさまざまな側面を評価し、教員助手がルーブリックを使用して課題を採点する方法に似ています。
+
+各評価は特定の品質面に焦点を当て、0から1の間のスコアを返し、非決定的なAI出力のための定量的な指標を提供します。
+
+Mastraは、エージェントの出力を評価するためのいくつかの評価指標を提供します。Mastraはこれらの指標に限定されず、[独自の評価を定義する](/docs/evals/custom-eval)こともできます。
+
+## なぜテキスト評価を使用するのか？
+
+テキスト評価は、あなたのエージェントが以下を確実にするのに役立ちます：
+
+- 正確で信頼性のある応答を生成する
+- コンテキストを効果的に使用する
+- 出力要件に従う
+- 時間をかけて一貫した品質を維持する
+
+## 利用可能なメトリクス
+
+### 正確性と信頼性
+
+これらのメトリクスは、エージェントの回答がどれだけ正確で、真実で、完全であるかを評価します：
+
+- [`hallucination`](/docs/reference/evals/hallucination): 提供されたコンテキストに存在しない事実や主張を検出
+- [`faithfulness`](/docs/reference/evals/faithfulness): 提供されたコンテキストをどれだけ正確に表現しているかを測定
+- [`content-similarity`](/docs/reference/evals/content-similarity): 異なる表現における情報の一貫性を評価
+- [`completeness`](/docs/reference/evals/completeness): 必要な情報がすべて含まれているかを確認
+- [`answer-relevancy`](/docs/reference/evals/answer-relevancy): 元の質問にどれだけ適切に答えているかを評価
+- [`textual-difference`](/docs/reference/evals/textual-difference): 文字列間のテキストの違いを測定
+
+### コンテキストの理解
+
+これらのメトリクスは、エージェントが提供されたコンテキストをどれだけうまく使用しているかを評価します：
+
+- [`context-position`](/docs/reference/evals/context-position): コンテキストが回答のどこに現れるかを分析
+- [`context-precision`](/docs/reference/evals/context-precision): コンテキストのチャンクが論理的にグループ化されているかを評価
+- [`context-relevancy`](/docs/reference/evals/context-relevancy): 適切なコンテキストの部分を使用しているかを測定
+- [`contextual-recall`](/docs/reference/evals/contextual-recall): コンテキスト使用の完全性を評価
+
+### 出力品質
+
+これらのメトリクスは、フォーマットとスタイルの要件への準拠を評価します：
+
+- [`tone`](/docs/reference/evals/tone-consistency): 形式、複雑さ、スタイルの一貫性を測定
+- [`toxicity`](/docs/reference/evals/toxicity): 有害または不適切なコンテンツを検出
+- [`bias`](/docs/reference/evals/bias): 出力に潜在するバイアスを検出
+- [`prompt-alignment`](/docs/reference/evals/prompt-alignment): 長さの制限、フォーマットの要件、その他の制約などの明示的な指示への準拠を確認
+- [`summarization`](/docs/reference/evals/summarization): 情報の保持と簡潔さを評価
+- [`keyword-coverage`](/docs/reference/evals/keyword-coverage): 技術用語の使用を評価

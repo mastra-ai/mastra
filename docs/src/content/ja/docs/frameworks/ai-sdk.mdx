@@ -1,0 +1,289 @@
+---
+title: "AI SDKの使用"
+description: "MastraがAI SDKライブラリを活用する方法と、Mastraでさらに活用する方法を学びましょう"
+---
+
+# AI SDK
+
+Mastraは、AI SDKのモデルルーティング（OpenAI、Anthropicなどの上にある統一インターフェース）、構造化出力、およびツール呼び出しを活用しています。
+
+これについては、[このブログ記事](https://mastra.ai/blog/using-ai-sdk-with-mastra)で詳しく説明しています。
+
+## Mastra + AI SDK
+
+Mastraは、チームが概念実証を迅速かつ容易に製品化するのを支援するために、AI SDKの上に層として機能します。
+
+<img
+  src="/docs/mastra-ai-sdk.png"
+  alt="スパン、LLM呼び出し、ツール実行を示すエージェントインタラクショントレース"
+  style={{ maxWidth: "800px", width: "100%", margin: "8px 0" }}
+  className="nextra-image rounded-md py-8"
+  data-zoom
+  width={800}
+  height={400}
+/>
+
+## モデルルーティング
+
+Mastraでエージェントを作成する際、AI SDKがサポートする任意のモデルを指定できます：
+
+```typescript
+import { openai } from "@ai-sdk/openai";
+import { Agent } from "@mastra/core/agent";
+
+const agent = new Agent({
+  name: "WeatherAgent",
+  instructions: "Instructions for the agent...",
+  model: openai("gpt-4-turbo"), // Model comes directly from AI SDK
+});
+
+const result = await agent.generate("What is the weather like?");
+```
+
+## AI SDK フック
+
+Mastraは、フロントエンドとのシームレスな統合のためにAI SDKのフックと互換性があります：
+
+### useChat
+
+`useChat`フックを使用すると、フロントエンドアプリケーションでリアルタイムチャット対話が可能になります
+
+- エージェントデータストリーム（`.toDataStreamResponse()`）と連携します
+- useChatの`api`はデフォルトで`/api/chat`に設定されています
+- Mastra REST APIのエージェントストリームエンドポイント`{MASTRA_BASE_URL}/agents/:agentId/stream`とデータストリーム用に連携します（構造化された出力が定義されていない場合）
+
+```typescript filename="app/api/chat/route.ts" copy
+import { mastra } from "@/src/mastra";
+
+export async function POST(req: Request) {
+  const { messages } = await req.json();
+  const myAgent = mastra.getAgent("weatherAgent");
+  const stream = await myAgent.stream(messages);
+
+  return stream.toDataStreamResponse();
+}
+```
+
+```typescript copy
+import { useChat } from '@ai-sdk/react';
+
+export function ChatComponent() {
+  const { messages, input, handleInputChange, handleSubmit } = useChat({
+    api: '/path-to-your-agent-stream-api-endpoint'
+  });
+
+  return (
+    <div>
+      {messages.map(m => (
+        <div key={m.id}>
+          {m.role}: {m.content}
+        </div>
+      ))}
+      <form onSubmit={handleSubmit}>
+        <input
+          value={input}
+          onChange={handleInputChange}
+          placeholder="Say something..."
+        />
+      </form>
+    </div>
+  );
+}
+```
+
+> **注意点**: エージェントのメモリ機能と`useChat`を使用する場合は、重要な実装の詳細について[エージェントメモリセクション](/docs/agents/agent-memory#usechat)を確認してください。
+
+### useCompletion
+
+単一ターンの補完には、`useCompletion`フックを使用します：
+
+- エージェントデータストリーム（`.toDataStreamResponse()`）と連携します
+- useCompletionの`api`はデフォルトで`/api/completion`に設定されています
+- Mastra REST APIのエージェントストリームエンドポイント`{MASTRA_BASE_URL}/agents/:agentId/stream`とデータストリーム用に連携します（構造化された出力が定義されていない場合）
+
+```typescript filename="app/api/completion/route.ts" copy
+import { mastra } from "@/src/mastra";
+
+export async function POST(req: Request) {
+  const { messages } = await req.json();
+  const myAgent = mastra.getAgent("weatherAgent");
+  const stream = await myAgent.stream(messages);
+
+  return stream.toDataStreamResponse();
+}
+```
+
+```typescript
+import { useCompletion } from "@ai-sdk/react";
+
+export function CompletionComponent() {
+  const {
+    completion,
+    input,
+    handleInputChange,
+    handleSubmit,
+  } = useCompletion({
+  api: '/path-to-your-agent-stream-api-endpoint'
+  });
+
+  return (
+    <div>
+      <form onSubmit={handleSubmit}>
+        <input
+          value={input}
+          onChange={handleInputChange}
+          placeholder="Enter a prompt..."
+        />
+      </form>
+      <p>Completion result: {completion}</p>
+    </div>
+  );
+}
+```
+
+### useObject
+
+JSONオブジェクトを表すテキストストリームを消費し、スキーマに基づいて完全なオブジェクトに解析するために使用します。
+
+- エージェントテキストストリーム（`.toTextStreamResponse()`）と連携します
+- useObjectの`api`はデフォルトで`/api/completion`に設定されています
+- Mastra REST APIのエージェントストリームエンドポイント`{MASTRA_BASE_URL}/agents/:agentId/stream`とテキストストリーム用に連携します（構造化された出力が定義されている場合）
+
+```typescript filename="app/api/use-object/route.ts" copy
+import { mastra } from "@/src/mastra";
+
+export async function POST(req: Request) {
+  const { messages } = await req.json();
+  const myAgent = mastra.getAgent("weatherAgent");
+  const stream = await myAgent.stream(messages, {
+    output: z.object({
+      weather: z.string(),
+    }),
+  });
+
+  return stream.toTextStreamResponse();
+}
+```
+
+```typescript
+import { experimental_useObject as useObject } from '@ai-sdk/react';
+
+export default function Page() {
+  const { object, submit } = useObject({
+    api: '/api/use-object',
+    schema: z.object({
+      weather: z.string(),
+    }),
+  });
+
+  return (
+    <div>
+      <button onClick={() => submit('example input')}>Generate</button>
+      {object?.content && <p>{object.content}</p>}
+    </div>
+  );
+}
+```
+
+## ツール呼び出し
+
+### AI SDK ツールフォーマット
+
+MastraはAI SDKフォーマットで作成されたツールをサポートしているため、Mastraエージェントで直接使用できます。詳細については、[Vercel AI SDK ツールフォーマット](/docs/agents/adding-tools#vercel-ai-sdk-tool-format)に関するドキュメントをご覧ください。
+
+### クライアントサイドのツール呼び出し
+
+MastraはAI SDKのツール呼び出しを活用しているため、AI SDKで適用されることはここでも適用されます。Mastraの[エージェントツール](/docs/agents/adding-tools)はAI SDKツールと100%互換性があります。
+
+Mastraツールはオプションで`execute`非同期関数を公開します。これはオプションであり、ツール呼び出しをクライアントまたはキューに転送し、同じプロセスで実行しない場合があるためです。
+
+クライアントサイドのツール呼び出しを活用する一つの方法は、`@ai-sdk/react`の`useChat`フックの`onToolCall`プロパティを使用してクライアントサイドでツールを実行することです。
+
+## カスタムデータストリーム
+特定のシナリオでは、エージェントのデータストリームにカスタムデータやメッセージ注釈を書き込む必要があります。
+これは以下の用途に役立ちます：
+
+- クライアントに追加データをストリーミングする
+- 進捗情報をリアルタイムでクライアントに返す
+
+MastraはAI SDKとよく統合され、これを可能にします。
+
+### CreateDataStream
+`createDataStream`関数は、クライアントに追加データをストリーミングすることを可能にします。
+
+```typescript  copy
+    import { createDataStream } from "ai"
+    import { Agent } from '@mastra/core/agent';
+
+    export const weatherAgent = new Agent({
+      name: 'Weather Agent',
+      instructions: `
+          あなたは正確な天気情報を提供する役立つ天気アシスタントです。
+
+          あなたの主な機能は、特定の場所の天気情報をユーザーに提供することです。応答する際には：
+          - 場所が提供されていない場合は必ず尋ねる
+          - 場所の名前が英語でない場合は翻訳する
+          - 複数の部分を持つ場所（例："New York, NY"）を与える場合、最も関連性の高い部分を使用する（例："New York"）
+          - 湿度、風の状態、降水量などの関連する詳細を含める
+          - 応答は簡潔でありながら情報豊富にする
+
+          現在の天気データを取得するためにweatherToolを使用してください。
+    `,
+      model: openai('gpt-4o'),
+      tools: { weatherTool },
+    });
+
+    const stream = createDataStream({
+      async execute(dataStream) {
+        // データを書き込む
+        dataStream.writeData({ value: 'Hello' });
+
+        // 注釈を書き込む
+        dataStream.writeMessageAnnotation({ type: 'status', value: 'processing' });
+  
+        // mastraエージェントストリーム
+        const agentStream = await weatherAgent.stream('What is the weather')
+
+        // エージェントストリームをマージ
+         agentStream.mergeIntoDataStream(dataStream);
+      },
+      onError: error => `カスタムエラー: ${error.message}`,
+  });
+
+```
+### CreateDataStreamResponse
+`createDataStreamResponse`関数は、クライアントにデータをストリーミングするResponseオブジェクトを作成します。
+
+```typescript filename="app/api/chat/route.ts" copy
+import { mastra } from "@/src/mastra";
+
+export async function POST(req: Request) {
+  const { messages } = await req.json();
+  const myAgent = mastra.getAgent("weatherAgent");
+  // mastraエージェントストリーム
+  const agentStream = await myAgent.stream(messages);
+
+  const response = createDataStreamResponse({
+    status: 200,
+    statusText: 'OK',
+    headers: {
+      'Custom-Header': 'value',
+    },
+    async execute(dataStream) {
+      // データを書き込む
+      dataStream.writeData({ value: 'Hello' });
+
+      // 注釈を書き込む
+      dataStream.writeMessageAnnotation({ type: 'status', value: 'processing' });
+
+      // エージェントストリームをマージ
+      agentStream.mergeIntoDataStream(dataStream);
+    },
+    onError: error => `カスタムエラー: ${error.message}`,
+  });
+
+  return response
+}
+```
+
+

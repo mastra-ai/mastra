@@ -1,0 +1,182 @@
+---
+title: "AI株式エージェントの構築 | Mastraエージェント | ガイド"
+description: 指定されたシンボルの前日の終値を取得するためのシンプルな株式エージェントをMastraで作成するガイド。
+---
+
+import { Steps } from "nextra/components";
+import YouTube from "../../../../components/youtube";
+
+# Stock Agent
+
+指定されたシンボルの前日の終値を取得するシンプルなエージェントを作成します。この例では、ツールを作成し、それをエージェントに追加し、エージェントを使用して株価を取得する方法を示します。
+
+<YouTube id="rIaZ4l7y9wo" />
+
+## プロジェクト構造
+
+```
+stock-price-agent/
+├── src/
+│   ├── agents/
+│   │   └── stockAgent.ts
+│   ├── tools/
+│   │   └── stockPrices.ts
+│   └── index.ts
+├── package.json
+└── .env
+```
+
+---
+
+<Steps>
+## プロジェクトの初期化と依存関係のインストール
+
+まず、新しいディレクトリを作成し、その中に移動します:
+
+```bash
+mkdir stock-price-agent
+cd stock-price-agent
+```
+
+新しい Node.js プロジェクトを初期化し、必要な依存関係をインストールします:
+
+```bash
+npm init -y
+npm install @mastra/core zod @ai-sdk/openai
+```
+
+環境変数の設定
+
+プロジェクトのルートに `.env` ファイルを作成し、OpenAI API キーを保存します。
+
+```bash filename=".env" copy
+OPENAI_API_KEY=your_openai_api_key
+```
+
+必要なディレクトリとファイルを作成します:
+
+```bash
+mkdir -p src/agents src/tools
+touch src/agents/stockAgent.ts src/tools/stockPrices.ts src/index.ts
+```
+
+---
+
+## 株価ツールの作成
+
+次に、指定されたシンボルの前日の終値を取得するツールを作成します。
+
+```ts filename="src/tools/stockPrices.ts"
+import { createTool } from "@mastra/core/tools";
+import { z } from "zod";
+
+const getStockPrice = async (symbol: string) => {
+  const data = await fetch(
+    `https://mastra-stock-data.vercel.app/api/stock-data?symbol=${symbol}`,
+  ).then((r) => r.json());
+  return data.prices["4. close"];
+};
+
+export const stockPrices = createTool({
+  id: "Get Stock Price",
+  inputSchema: z.object({
+    symbol: z.string(),
+  }),
+  description: `指定されたシンボルの前日の終値を取得します`,
+  execute: async ({ context: { symbol } }) => {
+    console.log("Using tool to fetch stock price for", symbol);
+    return {
+      symbol,
+      currentPrice: await getStockPrice(symbol),
+    };
+  },
+});
+```
+
+---
+
+## エージェントにツールを追加
+
+エージェントを作成し、`stockPrices` ツールを追加します。
+
+```ts filename="src/agents/stockAgent.ts"
+import { Agent } from "@mastra/core/agent";
+import { openai } from "@ai-sdk/openai";
+
+import * as tools from "../tools/stockPrices";
+
+export const stockAgent = new Agent<typeof tools>({
+  name: "Stock Agent",
+  instructions:
+    "あなたは現在の株価を提供する役立つアシスタントです。株について尋ねられたときは、株価ツールを使用して株価を取得してください。",
+  model: openai("gpt-4o-mini"),
+  tools: {
+    stockPrices: tools.stockPrices,
+  },
+});
+```
+
+---
+
+## Mastra インスタンスの設定
+
+エージェントとツールで Mastra インスタンスを初期化する必要があります。
+
+```ts filename="src/index.ts"
+import { Mastra } from "@mastra/core";
+
+import { stockAgent } from "./agents/stockAgent";
+
+export const mastra = new Mastra({
+  agents: { stockAgent },
+});
+```
+
+## アプリケーションの提供
+
+アプリケーションを直接実行する代わりに、`mastra dev` コマンドを使用してサーバーを開始します。これにより、エージェントを REST API エンドポイントを介して公開し、HTTP 経由で対話できるようになります。
+
+ターミナルで、次のコマンドを実行して Mastra サーバーを開始します:
+
+```bash
+mastra dev --dir src
+```
+
+このコマンドにより、playground 内で stockPrices ツールと stockAgent をテストできます。
+
+また、サーバーを開始し、エージェントを次の場所で利用可能にします:
+
+```
+http://localhost:4111/api/agents/stockAgent/generate
+```
+
+---
+
+## cURL でエージェントをテスト
+
+サーバーが稼働しているので、`curl` を使用してエージェントのエンドポイントをテストできます:
+
+```bash
+curl -X POST http://localhost:4111/api/agents/stockAgent/generate \
+  -H "Content-Type: application/json" \
+  -d '{
+    "messages": [
+      { "role": "user", "content": "Apple (AAPL) の現在の株価はいくらですか？" }
+    ]
+  }'
+```
+
+**期待される応答:**
+
+次のような JSON 応答を受け取るはずです:
+
+```json
+{
+  "text": "Apple (AAPL) の現在の価格は $174.55 です。",
+  "agent": "Stock Agent"
+}
+```
+
+これは、エージェントがリクエストを正常に処理し、`stockPrices` ツールを使用して株価を取得し、結果を返したことを示しています。
+
+</Steps>

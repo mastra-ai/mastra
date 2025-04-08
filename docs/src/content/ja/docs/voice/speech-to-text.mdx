@@ -1,0 +1,45 @@
+---
+title: Mastraにおける音声認識 (STT) | Mastra ドキュメント
+description: Mastraにおける音声認識機能の概要、設定、使用法、音声プロバイダーとの統合について。
+---
+
+# Speech-to-Text (STT)
+
+MastraのSpeech-to-Text (STT)は、複数のサービスプロバイダーにわたって音声入力をテキストに変換するための標準化されたインターフェースを提供します。このセクションでは、STTの設定と使用法について説明します。[エージェントに音声を追加する](../agents/adding-voice.mdx)ドキュメントをチェックして、エージェントでSTTを使用する方法を学んでください。
+
+## スピーチ設定
+
+MastraでSTTを使用するには、音声プロバイダーを初期化する際に`listeningModel`設定を提供する必要があります。この設定には以下のパラメータが含まれます：
+
+- **`name`**: 使用する特定のSTTモデル。
+- **`apiKey`**: 認証用のAPIキー。
+- **プロバイダー固有のオプション**: 特定の音声プロバイダーによって必要またはサポートされる追加オプション。
+
+**注意**: これらのパラメータはすべてオプションです。使用している特定のプロバイダーに依存するデフォルト設定を使用することができます。
+
+### 設定例
+
+```typescript
+const voice = new OpenAIVoice({
+  listeningModel: {
+    name: "whisper-1",
+    apiKey: process.env.OPENAI_API_KEY,
+  },
+});
+
+// デフォルト設定を使用する場合、設定は次のように簡略化できます:
+const voice = new OpenAIVoice();
+```
+
+## Listen メソッドの使用
+
+STT の主なメソッドは `listen()` メソッドで、これは音声をテキストに変換します。使用方法は次のとおりです：
+
+```typescript
+const audioStream = getMicrophoneStream(); // Assume this function gets audio input
+const transcript = await voice.listen(audioStream, {
+  filetype: "m4a", // Optional: specify the audio file type
+});
+```
+
+**注意**: `OpenAIRealtimeVoice` のような音声対音声プロバイダーを使用している場合、`listen()` メソッドは直接トランスクリプトを返すのではなく、「writing」イベントを発行します。

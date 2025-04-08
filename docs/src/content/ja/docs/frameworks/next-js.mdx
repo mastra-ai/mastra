@@ -1,0 +1,238 @@
+---
+title: "MastraとNextJSの始め方 | Mastraガイド"
+description: MastraをNextJSと統合するためのガイド。
+---
+import { Callout, Steps, Tabs } from "nextra/components";
+
+# Next.jsプロジェクトにMastraを統合する
+
+MastraをNext.jsアプリケーションに統合する主な方法は2つあります。別のバックエンドサービスとして統合するか、Next.jsアプリに直接統合するかです。
+
+## 1. 別々のバックエンド統合
+
+次のような大規模プロジェクトに最適です:
+- AIバックエンドを独立してスケールする
+- 関心の分離を明確に保つ
+- より柔軟なデプロイを可能にする
+
+<Steps>
+### Mastra バックエンドの作成
+
+CLIを使用して新しいMastraプロジェクトを作成します:
+
+<Tabs items={["npx", "npm", "yarn", "pnpm"]}>
+  <Tabs.Tab>
+```bash copy
+npx create-mastra@latest
+```
+  </Tabs.Tab>
+  <Tabs.Tab>
+```bash copy
+npm create mastra
+```
+  </Tabs.Tab>
+  <Tabs.Tab>
+```bash copy
+yarn create mastra
+```
+  </Tabs.Tab>
+  <Tabs.Tab>
+```bash copy
+pnpm create mastra
+```
+  </Tabs.Tab>
+</Tabs>
+
+詳細なセットアップ手順については、[インストールガイド](/docs/getting-started/installation)をご覧ください。
+
+### MastraClient のインストール
+
+<Tabs items={["npm", "yarn", "pnpm"]}>
+  <Tabs.Tab>
+```bash copy
+npm install @mastra/client-js
+```
+  </Tabs.Tab>
+  <Tabs.Tab>
+```bash copy
+yarn add @mastra/client-js
+```
+  </Tabs.Tab>
+  <Tabs.Tab>
+```bash copy
+pnpm add @mastra/client-js
+```
+  </Tabs.Tab>
+</Tabs>
+
+### MastraClient の使用
+
+クライアントインスタンスを作成し、Next.jsアプリケーションで使用します:
+
+```typescript filename="lib/mastra.ts" copy
+import { MastraClient } from '@mastra/client-js';
+
+// クライアントを初期化
+export const mastraClient = new MastraClient({
+  baseUrl: process.env.NEXT_PUBLIC_MASTRA_API_URL || 'http://localhost:4111',
+});
+```
+
+Reactコンポーネントでの使用例:
+
+```typescript filename="app/components/SimpleWeather.tsx" copy
+'use client'
+
+import { mastraClient } from '@/lib/mastra'
+
+export function SimpleWeather() {
+  async function handleSubmit(formData: FormData) {
+    const city = formData.get('city')
+    const agent = mastraClient.getAgent('weatherAgent')
+    
+    try {
+      const response = await agent.generate({
+        messages: [{ role: 'user', content: `What's the weather like in ${city}?` }],
+      })
+      // レスポンスを処理
+      console.log(response.text)
+    } catch (error) {
+      console.error('Error:', error)
+    }
+  }
+
+  return (
+    <form action={handleSubmit}>
+      <input name="city" placeholder="都市名を入力" />
+      <button type="submit">天気を取得</button>
+    </form>
+  )
+}
+```
+
+### デプロイ
+
+デプロイの準備ができたら、プラットフォーム固有のデプロイツール（Vercel、Netlify、Cloudflare）を使用するか、任意のNode.jsホスティングプラットフォームにデプロイできます。詳細な手順については、[デプロイメントガイド](/docs/deployment/deployment)をご覧ください。
+</Steps>
+
+## 2. 直接統合
+
+小規模なプロジェクトやプロトタイプに適しています。このアプローチではMastraをNext.jsアプリケーションに直接バンドルします。
+
+<Steps>
+### Next.jsのルートでMastraを初期化する
+
+まず、Next.jsプロジェクトのルートに移動し、Mastraを初期化します：
+
+```bash copy
+cd your-nextjs-app
+```
+
+次に初期化コマンドを実行します：
+
+<Tabs items={["npm", "yarn", "pnpm"]}>
+  <Tabs.Tab>
+```bash copy
+npx mastra@latest init
+```
+  </Tabs.Tab>
+  <Tabs.Tab>
+```bash copy
+yarn dlx mastra@latest init
+```
+  </Tabs.Tab>
+  <Tabs.Tab>
+```bash copy
+pnpm dlx mastra@latest init
+```
+  </Tabs.Tab>
+</Tabs>
+
+これによりNext.jsプロジェクトにMastraがセットアップされます。初期化やその他の設定オプションの詳細については、[mastra init リファレンス](/docs/reference/cli/init)をご覧ください。
+
+### Next.jsの設定
+
+`next.config.js`に以下を追加します：
+
+```js filename="next.config.js" copy
+/** @type {import('next').NextConfig} */
+const nextConfig = {
+  serverExternalPackages: ["@mastra/*"],
+  // ... その他のNext.js設定
+}
+
+module.exports = nextConfig
+```
+
+#### サーバーアクションの例
+
+```typescript filename="app/actions.ts" copy
+'use server'
+
+import { mastra } from '@/mastra'
+
+export async function getWeatherInfo(city: string) {
+  const agent = mastra.getAgent('weatherAgent')
+  
+  const result = await agent.generate(`What's the weather like in ${city}?`)
+
+  return result
+}
+```
+
+コンポーネントでの使用方法：
+
+```typescript filename="app/components/Weather.tsx" copy
+'use client'
+
+import { getWeatherInfo } from '../actions'
+
+export function Weather() {
+  async function handleSubmit(formData: FormData) {
+    const city = formData.get('city') as string
+    const result = await getWeatherInfo(city)
+    // 結果の処理
+    console.log(result)
+  }
+
+  return (
+    <form action={handleSubmit}>
+      <input name="city" placeholder="Enter city name" />
+      <button type="submit">Get Weather</button>
+    </form>
+  )
+}
+```
+
+#### APIルートの例
+
+```typescript filename="app/api/chat/route.ts" copy
+import { mastra } from '@/mastra'
+import { NextResponse } from 'next/server'
+
+export async function POST(req: Request) {
+  const { city } = await req.json()
+  const agent = mastra.getAgent('weatherAgent')
+
+  const result = await agent.stream(`What's the weather like in ${city}?`)
+
+  return result.toDataStreamResponse()
+}
+```
+
+### デプロイメント
+
+直接統合を使用する場合、MastraインスタンスはNext.jsアプリケーションと一緒にデプロイされます。以下を確認してください：
+- デプロイメントプラットフォームでLLM APIキーの環境変数を設定する
+- 本番環境での適切なエラーハンドリングを実装する
+- AIエージェントのパフォーマンスとコストを監視する
+</Steps>
+
+## 可観測性
+
+Mastraは、AIの運用を監視、デバッグ、最適化するための組み込みの可観測性機能を提供します。これには以下が含まれます：
+- AI操作とそのパフォーマンスのトレース
+- プロンプト、完了、およびエラーのログ記録
+- LangfuseやLangSmithのような可観測性プラットフォームとの統合
+
+Next.jsのローカル開発に特化した詳細なセットアップ手順と構成オプションについては、[Next.js可観測性構成ガイド](/docs/deployment/logging-and-tracing#nextjs-configuration)をご覧ください。

@@ -1,0 +1,351 @@
+---
+title: "例: 一時停止と再開 | ワークフロー | Mastra ドキュメント"
+description: 実行中にワークフローステップを一時停止および再開するためのMastraの使用例。
+---
+
+import { GithubLink } from '../../../../components/github-link';
+
+# サスペンドと再開を使用したワークフロー
+
+ワークフローのステップは、ワークフローの実行中の任意の時点でサスペンドおよび再開することができます。この例では、ワークフローステップをサスペンドし、後で再開する方法を示します。
+
+## 基本的な例
+
+```ts showLineNumbers copy
+import { Mastra } from '@mastra/core';
+import { Step, Workflow } from '@mastra/core/workflows';
+import { z } from 'zod';
+
+const stepOne = new Step({
+  id: 'stepOne',
+  outputSchema: z.object({
+    doubledValue: z.number(),
+  }),
+  execute: async ({ context }) => {
+    const doubledValue = context.triggerData.inputValue * 2;
+    return { doubledValue };
+  },
+});
+
+const stepTwo = new Step({
+  id: 'stepTwo',
+  outputSchema: z.object({
+    incrementedValue: z.number(),
+  }),
+  execute: async ({ context, suspend }) => {
+
+    const secondValue = context.inputData?.secondValue ?? 0;
+    const doubledValue = context.getStepResult(stepOne)?.doubledValue ?? 0;
+
+    const incrementedValue = doubledValue + secondValue;
+
+    if (incrementedValue < 100) {
+      await suspend();
+      return { incrementedValue: 0 };
+    }
+    return { incrementedValue };
+  },
+});
+
+// ワークフローを構築する
+const myWorkflow = new Workflow({
+  name: 'my-workflow',
+  triggerSchema: z.object({
+    inputValue: z.number(),
+  }),
+});
+
+// ワークフローを並行して実行する
+myWorkflow
+  .step(stepOne)
+  .then(stepTwo)
+  .commit();
+
+// ワークフローを登録する
+export const mastra = new Mastra({
+  workflows: { registeredWorkflow: myWorkflow },
+})
+
+// Mastraから登録されたワークフローを取得する
+const registeredWorkflow = mastra.getWorkflow('registeredWorkflow');
+const { runId, start } = registeredWorkflow.createRun();
+
+// 実行前にワークフローを監視し始める
+myWorkflow.watch(async ({ context, activePaths }) => {
+  for (const _path of activePaths) {
+    const stepTwoStatus = context.steps?.stepTwo?.status;
+    if (stepTwoStatus === 'suspended') {
+      console.log("ワークフローが一時停止され、新しい値で再開します");
+
+      // 新しいコンテキストでワークフローを再開する
+      await myWorkflow.resume({
+        runId,
+        stepId: 'stepTwo',
+        context: { secondValue: 100 },
+      });
+    }
+  }
+})
+
+// ワークフローの実行を開始する
+await start({ triggerData: { inputValue: 45 } });
+```
+
+## 非同期/待機パターンとサスペンドペイロードを使用した複数のサスペンションポイントを持つ高度な例
+
+この例は、非同期/待機パターンを使用して複数のサスペンションポイントを持つ、より複雑なワークフローを示しています。これは、異なる段階で人間の介入が必要なコンテンツ生成ワークフローをシミュレートします。
+
+```ts showLineNumbers copy
+import { Mastra } from '@mastra/core';
+import { Step, Workflow } from '@mastra/core/workflows';
+import { z } from 'zod';
+
+// ステップ 1: ユーザー入力を取得
+const getUserInput = new Step({
+  id: 'getUserInput',
+  execute: async ({ context }) => {
+    // 実際のアプリケーションでは、フォームやAPIから取得するかもしれません
+    return { userInput: context.triggerData.input };
+  },
+  outputSchema: z.object({ userInput: z.string() }),
+});
+
+// ステップ 2: AIでコンテンツを生成（人間の指導のために一時停止する可能性あり）
+const promptAgent = new Step({
+  id: 'promptAgent',
+  inputSchema: z.object({
+    guidance: z.string(),
+  }),
+  execute: async ({ context, suspend }) => {
+    const userInput = context.getStepResult(getUserInput)?.userInput;
+    console.log(`次に基づいてコンテンツを生成しています: ${userInput}`);
+
+    const guidance = context.inputData?.guidance;
+
+    // AIがコンテンツを生成するシミュレーション
+    const initialDraft = generateInitialDraft(userInput);
+
+    // 信頼度が高い場合、生成されたコンテンツを直接返します
+    if (initialDraft.confidenceScore > 0.7) {
+      return { modelOutput: initialDraft.content };
+    }
+
+    console.log('生成されたコンテンツの信頼度が低いため、人間の指導のために一時停止します', {guidance});
+
+    // 信頼度が低い場合、人間の指導のために一時停止します
+    if (!guidance) {
+      // 指導が提供されていない場合のみ一時停止します
+      await suspend();
+      return undefined;
+    }
+
+    // 人間の指導で再開した後にこのコードが実行されます
+    console.log('人間の指導で再開しました');
+
+    // 人間の指導を使用して出力を改善します
+    return {
+      modelOutput: enhanceWithGuidance(initialDraft.content, guidance),
+    };
+  },
+  outputSchema: z.object({ modelOutput: z.string() }).optional(),
+});
+
+// ステップ 3: コンテンツの品質を評価
+const evaluateTone = new Step({
+  id: 'evaluateToneConsistency',
+  execute: async ({ context }) => {
+    const content = context.getStepResult(promptAgent)?.modelOutput;
+
+    // 評価のシミュレーション
+    return {
+      toneScore: { score: calculateToneScore(content) },
+      completenessScore: { score: calculateCompletenessScore(content) },
+    };
+  },
+  outputSchema: z.object({
+    toneScore: z.any(),
+    completenessScore: z.any(),
+  }),
+});
+
+// ステップ 4: 必要に応じて応答を改善（一時停止する可能性あり）
+const improveResponse = new Step({
+  id: 'improveResponse',
+  inputSchema: z.object({
+    improvedContent: z.string(),
+    resumeAttempts: z.number(),
+  }),
+  execute: async ({ context, suspend }) => {
+    const content = context.getStepResult(promptAgent)?.modelOutput;
+    const toneScore =
+      context.getStepResult(evaluateTone)?.toneScore.score ?? 0;
+    const completenessScore =
+      context.getStepResult(evaluateTone)?.completenessScore.score ?? 0;
+
+    const improvedContent = context.inputData.improvedContent;
+    const resumeAttempts = context.inputData.resumeAttempts ?? 0;
+
+    // スコアがしきい値を超えている場合、軽微な改善を行います
+    if (toneScore > 0.8 && completenessScore > 0.8) {
+      return { improvedOutput: makeMinorImprovements(content) };
+    }
+
+    console.log('コンテンツの品質がしきい値を下回っているため、人間の介入のために一時停止します', {improvedContent, resumeAttempts});
+
+    if (!improvedContent) {
+      // コンテンツと再開試行を含むペイロードで一時停止します
+      await suspend({
+        content,
+        scores: { tone: toneScore, completeness: completenessScore },
+        needsImprovement: toneScore < 0.8 ? 'tone' : 'completeness',
+        resumeAttempts: resumeAttempts + 1,
+      });
+      return { improvedOutput: content ?? '' };
+    }
+
+    console.log('人間の改善で再開しました', improvedContent);
+    return { improvedOutput: improvedContent ?? content ?? '' };
+  },
+  outputSchema: z.object({ improvedOutput: z.string() }).optional(),
+});
+
+// ステップ 5: 最終評価
+const evaluateImproved = new Step({
+  id: 'evaluateImprovedResponse',
+  execute: async ({ context }) => {
+    const improvedContent = context.getStepResult(improveResponse)?.improvedOutput;
+
+    // 最終評価のシミュレーション
+    return {
+      toneScore: { score: calculateToneScore(improvedContent) },
+      completenessScore: { score: calculateCompletenessScore(improvedContent) },
+    };
+  },
+  outputSchema: z.object({
+    toneScore: z.any(),
+    completenessScore: z.any(),
+  }),
+});
+
+// Build the workflow
+const contentWorkflow = new Workflow({
+  name: 'content-generation-workflow',
+  triggerSchema: z.object({ input: z.string() }),
+});
+
+contentWorkflow
+  .step(getUserInput)
+  .then(promptAgent)
+  .then(evaluateTone)
+  .then(improveResponse)
+  .then(evaluateImproved)
+  .commit();
+
+// Register the workflow
+const mastra = new Mastra({
+  workflows: { contentWorkflow },
+});
+
+// Helper functions (simulated)
+function generateInitialDraft(input: string = '') {
+  // Simulate AI generating content
+  return {
+    content: `Generated content based on: ${input}`,
+    confidenceScore: 0.6, // Simulate low confidence to trigger suspension
+  };
+}
+
+function enhanceWithGuidance(content: string = '', guidance: string = '') {
+  return `${content} (Enhanced with guidance: ${guidance})`;
+}
+
+function makeMinorImprovements(content: string = '') {
+  return `${content} (with minor improvements)`;
+}
+
+function calculateToneScore(_: string = '') {
+  return 0.7; // Simulate a score that will trigger suspension
+}
+
+function calculateCompletenessScore(_: string = '') {
+  return 0.9;
+}
+
+// Usage example
+async function runWorkflow() {
+  const workflow = mastra.getWorkflow('contentWorkflow');
+  const { runId, start } = workflow.createRun();
+
+  let finalResult: any;
+
+  // Start the workflow
+  const initialResult = await start({
+    triggerData: { input: 'Create content about sustainable energy' },
+  });
+
+  console.log('初期ワークフローの状態:', initialResult.results);
+
+  const promptAgentStepResult = initialResult.activePaths.get('promptAgent');
+
+  // Check if promptAgent step is suspended
+  if (promptAgentStepResult?.status === 'suspended') {
+    console.log('ワークフローがpromptAgentステップで中断されました');
+    console.log('中断ペイロード:', promptAgentStepResult?.suspendPayload);
+
+    // Resume with human guidance
+    const resumeResult1 = await workflow.resume({
+      runId,
+      stepId: 'promptAgent',
+      context: {
+        guidance: '太陽光と風力エネルギー技術にもっと焦点を当てる',
+      },
+    });
+
+    console.log('ワークフローが再開され、次のステップに進みました');
+
+    let improveResponseResumeAttempts = 0;
+    let improveResponseStatus = resumeResult1?.activePaths.get('improveResponse')?.status;
+
+    // Check if improveResponse step is suspended
+    while (improveResponseStatus === 'suspended') {
+      console.log('ワークフローがimproveResponseステップで中断されました');
+      console.log('中断ペイロード:', resumeResult1?.activePaths.get('improveResponse')?.suspendPayload);
+
+      const improvedContent =
+        improveResponseResumeAttempts < 3
+          ? undefined
+          : '太陽光と風力技術に焦点を当てた持続可能なエネルギーに関する完全に改訂されたコンテンツ';
+
+      // Resume with human improvements
+      finalResult = await workflow.resume({
+        runId,
+        stepId: 'improveResponse',
+        context: {
+          improvedContent,
+          resumeAttempts: improveResponseResumeAttempts,
+        },
+      });
+
+      improveResponseResumeAttempts =
+        finalResult?.activePaths.get('improveResponse')?.suspendPayload?.resumeAttempts ?? 0;
+      improveResponseStatus = finalResult?.activePaths.get('improveResponse')?.status;
+
+      console.log('改善された応答結果:', finalResult?.results);
+    }
+  }
+  return finalResult;
+}
+
+// Run the workflow
+const result = await runWorkflow();
+console.log('ワークフローが完了しました');
+console.log('最終ワークフローの結果:', result);
+
+<br />
+<br />
+<hr className="dark:border-[#404040] border-gray-300" />
+<br />
+<br />
+<GithubLink
+  link={'https://github.com/mastra-ai/mastra/blob/main/examples/basics/workflows/workflow-with-parallel-steps'}
+/>

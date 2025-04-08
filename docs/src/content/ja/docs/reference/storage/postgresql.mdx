@@ -1,0 +1,48 @@
+---
+title: "PostgreSQL ストレージ | ストレージシステム | Mastra Core"
+description: MastraにおけるPostgreSQLストレージ実装のドキュメント。
+---
+
+# PostgreSQL ストレージ
+
+PostgreSQL ストレージの実装は、PostgreSQL データベースを使用した本番環境向けのストレージソリューションを提供します。
+
+## インストール
+
+```bash
+npm install @mastra/pg
+```
+
+## 使用法
+
+```typescript copy showLineNumbers
+import { PostgresStore } from "@mastra/pg";
+
+const storage = new PostgresStore({
+  connectionString: process.env.DATABASE_URL,
+});
+```
+
+## パラメーター
+
+<PropertiesTable
+  content={[
+    {
+      name: "connectionString",
+      type: "string",
+      description:
+        "PostgreSQL接続文字列（例: postgresql://user:pass@host:5432/dbname）",
+      isOptional: false,
+    },
+  ]}
+/>
+
+## 追加の注意事項
+
+### スキーマ管理
+
+ストレージの実装は、スキーマの作成と更新を自動的に処理します。次のテーブルを作成します：
+
+- `threads`: 会話スレッドを保存
+- `messages`: 個々のメッセージを保存
+- `metadata`: スレッドとメッセージの追加メタデータを保存

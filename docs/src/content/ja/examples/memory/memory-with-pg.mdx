@@ -1,0 +1,97 @@
+# Postgresを使用したメモリ
+
+この例では、PostgreSQLをストレージバックエンドとして使用して、Mastraのメモリシステムをどのように使用するかを示します。
+
+## セットアップ
+
+まず、PostgreSQLストレージとベクター機能を使用してメモリシステムをセットアップします：
+
+```typescript
+import { Memory } from "@mastra/memory";
+import { PostgresStore, PgVector } from "@mastra/pg";
+import { Agent } from "@mastra/core/agent";
+import { openai } from "@ai-sdk/openai";
+
+// PostgreSQL接続の詳細
+const host = "localhost";
+const port = 5432;
+const user = "postgres";
+const database = "postgres";
+const password = "postgres";
+const connectionString = `postgresql://${user}:${password}@${host}:${port}`;
+
+// PostgreSQLストレージとベクター検索でメモリを初期化
+const memory = new Memory({
+  storage: new PostgresStore({
+    host,
+    port,
+    user,
+    database,
+    password,
+  }),
+  vector: new PgVector(connectionString),
+  options: {
+    lastMessages: 10,
+    semanticRecall: {
+      topK: 3,
+      messageRange: 2,
+    },
+  },
+});
+
+// メモリ機能を持つエージェントを作成
+const chefAgent = new Agent({
+  name: "chefAgent",
+  instructions:
+    "あなたはMichelです。実用的で経験豊富な家庭料理のシェフで、利用可能な材料で素晴らしい料理を作る手助けをします。",
+  model: openai("gpt-4o-mini"),
+  memory,
+});
+```
+
+## 使用例
+
+```typescript
+import { randomUUID } from "crypto";
+
+// Start a conversation
+const threadId = randomUUID();
+const resourceId = "SOME_USER_ID";
+
+// Ask about ingredients
+const response1 = await chefAgent.stream(
+  "私のキッチンには、パスタ、缶詰のトマト、ニンニク、オリーブオイル、そしていくつかの乾燥ハーブ（バジルとオレガノ）があります。何が作れますか？",
+  {
+    threadId,
+    resourceId,
+  },
+);
+
+// Ask about different ingredients
+const response2 = await chefAgent.stream(
+  "今、私は友達の家にいて、彼らは鶏もも肉、ココナッツミルク、サツマイモ、カレーパウダーを持っています。",
+  {
+    threadId,
+    resourceId,
+  },
+);
+
+// Use memory to recall previous conversation
+const response3 = await chefAgent.stream(
+  "友達の家に行く前に何を料理しましたか？",
+  {
+    threadId,
+    resourceId,
+    memoryOptions: {
+      lastMessages: 3, // Get last 3 messages for context
+    },
+  },
+);
+```
+
+この例は以下を示しています：
+
+1. ベクター検索機能を備えたPostgreSQLストレージの設定
+2. メッセージ履歴とセマンティック検索のためのメモリオプションの設定
+3. メモリ統合を備えたエージェントの作成
+4. 複数のやり取りを通じて会話のコンテキストを維持するためのエージェントの使用

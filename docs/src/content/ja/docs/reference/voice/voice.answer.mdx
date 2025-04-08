@@ -1,0 +1,122 @@
+---
+title: "リファレンス: voice.answer() | Voice Providers | Mastra Docs"
+description: "リアルタイム音声プロバイダーで利用可能なanswer()メソッドのドキュメントで、音声プロバイダーに応答を生成させるトリガーです。"
+---
+
+# voice.answer()
+
+`answer()` メソッドは、リアルタイム音声プロバイダーでAIに応答を生成させるために使用されます。このメソッドは、ユーザー入力を受け取った後にAIに応答を明示的に指示する必要がある音声対音声の会話で特に役立ちます。
+
+## 使用例
+
+```typescript
+import { OpenAIRealtimeVoice } from "@mastra/voice-openai-realtime";
+import Speaker from "@mastra/node-speaker";
+
+const speaker = new Speaker({
+  sampleRate: 24100,  // MacBook Proでの高品質オーディオの標準であるHz単位のオーディオサンプルレート
+  channels: 1,        // モノラルオーディオ出力（ステレオの場合は2）
+  bitDepth: 16,       // オーディオ品質のビット深度 - CD品質標準（16ビット解像度）
+});
+
+// リアルタイム音声プロバイダーを初期化
+const voice = new OpenAIRealtimeVoice({
+  realtimeConfig: {
+    model: "gpt-4o",
+    apiKey: process.env.OPENAI_API_KEY,
+  },
+  speaker: "alloy", // デフォルトの声
+});
+// リアルタイムサービスに接続
+await voice.connect();
+// 応答のためのイベントリスナーを登録
+voice.on("speaker", (stream) => {
+  // オーディオ応答を処理
+  stream.pipe(speaker);
+});
+// ユーザーの音声入力を送信
+const microphoneStream = getMicrophoneStream();
+await voice.send(microphoneStream);
+// AIに応答を促す
+await voice.answer();
+// カスタムオプションで（プロバイダー固有）
+await voice.answer({
+  options: {
+    content: "こんにちは、今日はどのようにお手伝いできますか？",
+    voice: "nova",
+  },
+});
+```
+
+
+## パラメーター
+
+<PropertiesTable
+  content={[
+    {
+      name: "options",
+      type: "Record<string, unknown>",
+      description: "レスポンスのプロバイダー固有のオプション",
+      isOptional: true,
+    }
+  ]}
+/>
+
+## 戻り値
+
+レスポンスがトリガーされたときに解決される`Promise<void>`を返します。
+
+## プロバイダー固有のオプション
+
+各リアルタイム音声プロバイダーは、`answer()` メソッドに対して異なるオプションをサポートする場合があります：
+
+### OpenAI リアルタイム
+
+<PropertiesTable
+  content={[
+    {
+      name: "options.content",
+      type: "string",
+      description: "生成する代わりに応答に使用するテキストコンテンツ",
+      isOptional: true,
+    },
+    {
+      name: "options.voice",
+      type: "string",
+      description: "この特定の応答に使用する音声ID",
+      isOptional: true,
+    }
+  ]}
+/>
+
+## CompositeVoiceと一緒に使用する
+
+`CompositeVoice`を使用する場合、`answer()`メソッドは設定されたリアルタイムプロバイダーに委任されます:
+
+```typescript
+import { CompositeVoice } from "@mastra/core/voice";
+import { OpenAIRealtimeVoice } from "@mastra/voice-openai-realtime";
+const realtimeVoice = new OpenAIRealtimeVoice();
+const voice = new CompositeVoice({
+  realtimeProvider: realtimeVoice,
+});
+// リアルタイムサービスに接続する
+await voice.connect();
+// これにより、OpenAIRealtimeVoiceプロバイダーが使用されます
+await voice.answer();
+```
+
+## メモ
+
+- このメソッドは、音声から音声への機能をサポートするリアルタイム音声プロバイダーによってのみ実装されています
+- この機能をサポートしない音声プロバイダーで呼び出された場合、警告を記録し、即座に解決されます
+- 応答音声は通常、直接返されるのではなく、'speaking' イベントを通じて発信されます
+- サポートするプロバイダーの場合、このメソッドを使用して、AIが生成するのではなく、特定の応答を送信することができます
+- このメソッドは、会話の流れを作成するために `send()` と組み合わせてよく使用されます
+
+## 関連メソッド
+
+- [voice.connect()](./voice.connect) - リアルタイムサービスへの接続を確立します
+- [voice.send()](./voice.send) - 音声データを音声プロバイダーに送信します
+- [voice.speak()](./voice.speak) - テキストを音声に変換します
+- [voice.listen()](./voice.listen) - 音声をテキストに変換します

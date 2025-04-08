@@ -1,0 +1,188 @@
+---
+title: "リファレンス: MastraMCPClient | ツールディスカバリー | Mastra ドキュメント"
+description: MastraMCPClient の API リファレンス - モデルコンテキストプロトコルのクライアント実装。
+---
+
+# MastraMCPClient
+
+`MastraMCPClient` クラスは、Model Context Protocol (MCP) サーバーと対話するためのクライアント実装を提供します。これは、MCP プロトコルを通じて接続管理、リソース発見、およびツール実行を処理します。
+
+## コンストラクタ
+
+MastraMCPClientの新しいインスタンスを作成します。
+
+```typescript
+constructor({
+    name,
+    version = '1.0.0',
+    server,
+    capabilities = {},
+    timeout = 60000,
+}: {
+    name: string;
+    server: StdioServerParameters | SSEClientParameters;
+    capabilities?: ClientCapabilities;
+    version?: string;
+    timeout?: number;
+})
+```
+
+### パラメーター
+
+<PropertiesTable
+  content={[
+    {
+      name: "name",
+      type: "string",
+      description: "このクライアントインスタンスの名前識別子。",
+    },
+    {
+      name: "version",
+      type: "string",
+      isOptional: true,
+      defaultValue: "1.0.0",
+      description: "クライアントのバージョン。",
+    },
+    {
+      name: "server",
+      type: "StdioServerParameters | SSEClientParameters",
+      description:
+        "stdioサーバー接続またはSSEサーバー接続のための構成パラメーター。",
+    },
+    {
+      name: "capabilities",
+      type: "ClientCapabilities",
+      isOptional: true,
+      defaultValue: "{}",
+      description: "クライアントのオプションの機能構成。",
+    },
+    {
+      name: "timeout",
+      type: "number",
+      isOptional: true,
+      defaultValue: 60000,
+      description: "クライアントツール呼び出しのタイムアウト期間（ミリ秒単位）。",
+    },
+  ]}
+/>
+
+## メソッド
+
+### connect()
+
+MCPサーバーとの接続を確立します。
+
+```typescript
+async connect(): Promise<void>
+```
+
+### disconnect()
+
+MCPサーバーとの接続を閉じます。
+
+```typescript
+async disconnect(): Promise<void>
+```
+
+### resources()
+
+サーバーから利用可能なリソースのリストを取得します。
+
+```typescript
+async resources(): Promise<ListResourcesResult>
+```
+
+### tools()
+
+サーバーから利用可能なツールを取得し、Mastra互換のツール形式に変換して初期化します。
+
+```typescript
+async tools(): Promise<Record<string, Tool>>
+```
+
+ツール名を対応するMastraツール実装にマッピングするオブジェクトを返します。
+
+## 例
+
+### Mastra Agentとの使用
+
+#### Stdioサーバーを使用した例
+
+```typescript
+import { Agent } from "@mastra/core/agent";
+import { MastraMCPClient } from "@mastra/mcp";
+import { openai } from "@ai-sdk/openai";
+
+// mcp/fetchを使用してMCPクライアントを初期化する例 https://hub.docker.com/r/mcp/fetch
+// 他の参考用docker mcpサーバーについてはhttps://github.com/docker/mcp-serversを参照してください
+const fetchClient = new MastraMCPClient({
+  name: "fetch",
+  server: {
+    command: "docker",
+    args: ["run", "-i", "--rm", "mcp/fetch"],
+  },
+});
+
+// Mastra Agentを作成
+const agent = new Agent({
+  name: "Fetch agent",
+  instructions:
+    "要求に応じてURLからデータを取得し、ユーザーと応答データについて議論することができます。",
+  model: openai("gpt-4o-mini"),
+});
+
+try {
+  // MCPサーバーに接続
+  await fetchClient.connect();
+
+  // プロセスの終了を優雅に処理し、dockerサブプロセスをクリーンアップ
+  process.on("exit", () => {
+    fetchClient.disconnect();
+  });
+
+  // 利用可能なツールを取得
+  const tools = await fetchClient.tools();
+
+  // MCPツールを使用してエージェントを使用
+  const response = await agent.generate(
+    "mastra.ai/docsについて教えてください。このページが何であるか、含まれている内容を一般的に教えてください。",
+    {
+      toolsets: {
+        fetch: tools,
+      },
+    },
+  );
+
+  console.log("\n\n" + response.text);
+} catch (error) {
+  console.error("エラー:", error);
+} finally {
+  // 完了したら必ず切断
+  await fetchClient.disconnect();
+}
+```
+
+#### SSEサーバーを使用した例
+
+```typescript
+// SSEサーバーを使用してMCPクライアントを初期化
+const sseClient = new MastraMCPClient({
+  name: "sse-client",
+  server: {
+    url: new URL("https://your-mcp-server.com/sse"),
+    // オプションのfetchリクエスト設定
+    requestInit: {
+      headers: {
+        Authorization: "Bearer your-token",
+      },
+    },
+  },
+});
+
+// 使用方法の残りはstdioの例と同じです
+```
+
+## 関連情報
+
+- アプリケーションで複数のMCPサーバーを管理するには、[MCPConfiguration ドキュメント](./mcp-configuration)を参照してください。
+- モデルコンテキストプロトコルの詳細については、[@modelcontextprotocol/sdk ドキュメント](https://github.com/modelcontextprotocol/typescript-sdk)を参照してください。

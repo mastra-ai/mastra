@@ -1,0 +1,167 @@
+---
+title: "例: コンテキスト位置 | Evals | Mastra Docs"
+description: コンテキスト位置メトリックを使用して、応答の順序を評価する例。
+---
+
+import { GithubLink } from "../../../../components/github-link";
+
+# コンテキスト位置
+
+この例では、Mastraのコンテキスト位置メトリックを使用して、応答が情報の順序をどれだけうまく維持しているかを評価する方法を示します。
+
+## 概要
+
+この例では、次の方法を示します：
+
+1. Context Position メトリックを設定する
+2. 位置の順守を評価する
+3. 順序の連続性を分析する
+4. 異なるシーケンスタイプを処理する
+
+## セットアップ
+
+### 環境セットアップ
+
+環境変数を設定してください：
+
+```bash filename=".env"
+OPENAI_API_KEY=your_api_key_here
+```
+
+### 依存関係
+
+必要な依存関係をインポートします：
+
+```typescript copy showLineNumbers filename="src/index.ts"
+import { openai } from '@ai-sdk/openai';
+import { ContextPositionMetric } from '@mastra/evals/llm';
+```
+
+## 使用例
+
+### 高い位置の順守例
+
+順序に従ったステップを評価する:
+
+```typescript copy showLineNumbers{5} filename="src/index.ts"
+const context1 = [
+  'The capital of France is Paris.',
+  'Paris has been the capital since 508 CE.',
+  'Paris serves as France\'s political center.',
+  'The capital city hosts the French government.',
+];
+
+const metric1 = new ContextPositionMetric(openai('gpt-4o-mini'), {
+  context: context1,
+});
+
+const query1 = 'What is the capital of France?';
+const response1 = 'The capital of France is Paris.';
+
+console.log('Example 1 - High Position Adherence:');
+console.log('Context:', context1);
+console.log('Query:', query1);
+console.log('Response:', response1);
+
+const result1 = await metric1.measure(query1, response1);
+console.log('Metric Result:', {
+  score: result1.score,
+  reason: result1.info.reason,
+});
+// Example Output:
+// Metric Result: { score: 1, reason: 'The context is in the correct sequential order.' }
+```
+
+### 混合位置の順守例
+
+関連情報が散在している応答を評価する:
+
+```typescript copy showLineNumbers{31} filename="src/index.ts"
+const context2 = [
+  'Elephants are herbivores.',
+  'Adult elephants can weigh up to 13,000 pounds.',
+  'Elephants are the largest land animals.',
+  'Elephants eat plants and grass.',
+];
+
+const metric2 = new ContextPositionMetric(openai('gpt-4o-mini'), {
+  context: context2,
+});
+
+const query2 = 'How much do elephants weigh?';
+const response2 = 'Adult elephants can weigh up to 13,000 pounds, making them the largest land animals.';
+
+console.log('Example 2 - Mixed Position Adherence:');
+console.log('Context:', context2);
+console.log('Query:', query2);
+console.log('Response:', response2);
+
+const result2 = await metric2.measure(query2, response2);
+console.log('Metric Result:', {
+  score: result2.score,
+  reason: result2.info.reason,
+});
+// Example Output:
+// Metric Result: { score: 0.4, reason: 'The context includes relevant information and irrelevant information and is not in the correct sequential order.' }
+```
+
+### 低い位置の順守例
+
+関連情報が最後に現れる応答を評価する:
+
+```typescript copy showLineNumbers{57} filename="src/index.ts"
+const context3 = [
+  'Rainbows appear in the sky.',
+  'Rainbows have different colors.',
+  'Rainbows are curved in shape.',
+  'Rainbows form when sunlight hits water droplets.',
+];
+
+const metric3 = new ContextPositionMetric(openai('gpt-4o-mini'), {
+  context: context3,
+});
+
+const query3 = 'How do rainbows form?';
+const response3 = 'Rainbows are created when sunlight interacts with water droplets in the air.';
+
+console.log('Example 3 - Low Position Adherence:');
+console.log('Context:', context3);
+console.log('Query:', query3);
+console.log('Response:', response3);
+
+const result3 = await metric3.measure(query3, response3);
+console.log('Metric Result:', {
+  score: result3.score,
+  reason: result3.info.reason,
+});
+// Example Output:
+// Metric Result: { score: 0.12, reason: 'The context includes some relevant information, but most of the relevant information is at the end.' }
+```
+
+## 結果の理解
+
+この指標は以下を提供します：
+
+1. 0から1の間の位置スコア：
+   - 1.0: 完璧な位置の遵守 - 最も関連性の高い情報が最初に表示される
+   - 0.7-0.9: 強い位置の遵守 - 関連情報が主に冒頭にある
+   - 0.4-0.6: 混合された位置の遵守 - 関連情報が全体に散らばっている
+   - 0.1-0.3: 弱い位置の遵守 - 関連情報が主に最後にある
+   - 0.0: 位置の遵守なし - 完全に無関係または逆の位置
+
+2. スコアの詳細な理由、以下を含む分析：
+   - クエリと応答に対する情報の関連性
+   - 文脈における関連情報の位置
+   - 早期 vs. 後期の文脈の重要性
+   - 全体的な文脈の構成
+
+<br />
+<br />
+<hr className="dark:border-[#404040] border-gray-300" />
+<br />
+<br />
+<GithubLink
+  link={
+    "https://github.com/mastra-ai/mastra/blob/main/examples/basics/evals/context-position"
+  }
+/>
