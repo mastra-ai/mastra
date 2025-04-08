@@ -5,6 +5,8 @@ import {
   QuestionsAnsweredExtractor,
   SummaryExtractor,
   TitleExtractor,
+  ObjectType,
+  NodeRelationship,
 } from 'llamaindex';
 
 import { CharacterTransformer, RecursiveCharacterTransformer } from './transformers/character';
@@ -43,6 +45,19 @@ export class MDocument {
 
     if (typeof title !== 'undefined') {
       transformations.push(new TitleExtractor(typeof title === 'boolean' ? {} : title));
+      this.chunks = this.chunks.map(
+        (doc, i) =>
+          new Chunk({
+            ...doc,
+            relationships: {
+              [NodeRelationship.SOURCE]: {
+                nodeId: `doc-${i}`,
+                nodeType: ObjectType.DOCUMENT,
+                metadata: doc.metadata,
+              },
+            },
+          }),
+      );
     }
 
     const pipeline = new IngestionPipeline({

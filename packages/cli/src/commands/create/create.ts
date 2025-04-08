@@ -8,6 +8,7 @@ import type { LLMProvider } from '../init/utils';
 import { createMastraProject } from './utils';
 
 export const create = async (args: {
+  projectName?: string;
   components?: string[];
   llmProvider?: LLMProvider;
   addExample?: boolean;
@@ -16,6 +17,7 @@ export const create = async (args: {
   timeout?: number;
 }) => {
   const { projectName } = await createMastraProject({
+    projectName: args?.projectName,
     createVersionTag: args?.createVersionTag,
     timeout: args?.timeout,
   });

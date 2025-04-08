@@ -7,7 +7,6 @@ import { z } from 'zod';
 
 export const pnpmBuild = createTool({
   id: 'pnpmBuild',
-  name: 'PNPM Build Tool',
   description: 'Used to build the pnpm module',
   inputSchema: z.object({
     name: z.string(),
@@ -39,7 +38,6 @@ export const pnpmBuild = createTool({
 
 export const pnpmChangesetStatus = createTool({
   id: 'pnpmChangesetStatus',
-  name: 'PNPM Changeset Status Tool',
   description: 'Used to check which pnpm modules need to be published',
   inputSchema: z.object({}),
   outputSchema: z.object({
@@ -70,7 +68,6 @@ export const pnpmChangesetStatus = createTool({
 
 export const pnpmChangesetPublish = createTool({
   id: 'pnpmChangesetPublish',
-  name: 'PNPM Changeset Publish Tool',
   description: 'Used to publish the pnpm module',
   inputSchema: z.object({}),
   outputSchema: z.object({
@@ -98,7 +95,6 @@ export const pnpmChangesetPublish = createTool({
 
 export const activeDistTag = createTool({
   id: 'activeDistTag',
-  name: 'PNPM Active Dist Tag Tool',
   description: 'Set active dist tag on pnpm module',
   inputSchema: z.object({
     packagePath: z.string(),

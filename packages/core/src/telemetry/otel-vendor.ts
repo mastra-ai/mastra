@@ -15,3 +15,4 @@ export {
   AlwaysOffSampler,
   type Sampler,
 } from '@opentelemetry/sdk-trace-base';
+export { CompositeExporter } from './composite-exporter';

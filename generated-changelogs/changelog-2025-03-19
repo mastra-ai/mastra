@@ -1,0 +1,558 @@
+## packages/core
+Here's the structured changelog for packages/core covering the period 2025-03-12 to 2025-03-19:
+
+## New Features
+- Added AgentNetwork for coordinating multiple specialized AI agents (#404640e)
+- Added server middleware support for custom API endpoint functionality like auth (#95b4144)
+- Added experimental .afterEvent() support for workflows (#1c8cda4)
+- Added OpenAI realtime voice provider for speech-to-speech communication (#5f43505)
+
+## Improvements
+- Enhanced workflow context handling:
+  - Improved suspend/resume functionality in first workflow steps
+  - Changed suspend metadata location to context.resumeData
+  - Added support for dynamic input data merging (#1c8cda4)
+- Enhanced voice capabilities:
+  - Updated Voice interface for realtime providers
+  - Added new voice speaking event types
+  - Deprecated direct agent voice methods in favor of agent.voice.* (#6e559a0)
+- Improved memory operations parallelization (#3084e13)
+
+## Notable Bug Fixes
+- Fixed agent.generate to only fetch thread when threadID is present (#3bce733)
+- Fixed after method execution with multiple passes (#dfbb131)
+- Fixed else branch execution when if-branch contains loops (#f4854ee)
+- Fixed useChat with client-side tool calling and Memory (#3729dbd)
+- Fixed after usage with skipped conditions on awaited steps (#44631b1)
+
+## Build/Deployment Improvements
+- Enabled dynamic import of default-storage to reduce bundle size when not using default storage (#c2144f4)
+- Removed node_modules-path dir which breaks some ESM runtimes (#7bcfaee)
+- Updated OpenTelemetry dependencies to latest versions
+- Improved storage initialization for in-memory databases
+
+## Performance Optimizations
+- Reduced default step retry attempts for better resource utilization (#16b98d9)
+- Implemented parallel memory operations for improved performance (#3084e13)
+- Enhanced storage operations with better caching and initialization
+
+This release focuses on improving agent coordination, workflow management, and voice capabilities while addressing several critical bugs and performance issues.
+
+## packages/cli
+Here's the structured changelog for the CLI package updates:
+
+### New Features
+- Added support for Agent Networks with routing capabilities and a dedicated UI (#404640e)
+- Added Cerebras and Google AI as LLM providers in create-mastra (#f9b6ab5)
+- Added `--project-name` flag to `mastra create` command for one-line project creation (#5052613)
+- Added Mastra Docs MCP integration for Cursor and Windsurf editors (#65f2a4c)
+
+### Improvements
+- Enhanced playground UI with resizable panels for agent and workflow sidebars (#1291e89)
+- Updated Groq model default to llama-3.3-70b-versatile (#1405e46)
+- Added non-English language support to weather example (#aede1ea)
+- Improved port handling in dev command to prioritize CLI port over environment variables (#2f6a8b6)
+- Enhanced workflow graph visualization to handle different workflow methods (#9116d70)
+- Added animation effects for new traces in the UI (#5baf1ec)
+
+### Notable Bug Fixes
+- Fixed storage initialization getting stuck (#010fc45)
+- Fixed tool discovery feature crash when tools/index.ts is missing (#63cebd4)
+- Fixed hardcoded localhost URL in playground (#c49f798)
+
+### Build/Deployment Improvements
+- Enabled automatic copying of public directory if it exists (#da8d9bb)
+- Deprecated `mastra dev --env` flag (#d3d6fae)
+- Updated playground UI build process for better integration (#9ba1e97)
+
+The most significant changes in this release include the introduction of Agent Networks functionality, expanded LLM provider support, and substantial improvements to the playground UI with resizable panels and better workflow visualization. The release also includes important bug fixes for storage initialization and tool discovery.
+
+## packages/create-mastra
+Here's the structured changelog for create-mastra (March 12-19, 2025):
+
+## New Features
+- Added Cerebras as a new LLM provider option for project creation (#f9b6ab5)
+- Added Google AI as a new LLM provider option for project creation (#0f24546)
+
+## Improvements
+- Enhanced playground UI with resizable panels for agent and workflow sidebars (#1291e89)
+- Added animation support for new trace visualizations (#5baf1ec)
+- Improved workflow graph to handle different workflow methods (#9116d70)
+- Updated playground UI with more dynamic empty state messaging (#0709d99)
+
+## Notable Bug Fixes
+- Removed hardcoded localhost URL in playground for better deployment flexibility (#c49f798)
+
+## Breaking Changes
+- Deprecated the `--env` flag in `mastra dev` command (#d3d6fae)
+
+The main focus this week was on expanding LLM provider support and enhancing the playground UI experience. The addition of Cerebras and Google AI as provider options gives developers more flexibility in choosing their preferred LLM backend. UI improvements focused on better workflow visualization and more intuitive sidebar interactions.
+
+## packages/deployer
+Here's the structured changelog for the deployer module covering March 12-19, 2025:
+
+### New Features
+- Added comprehensive network API endpoints for managing agent networks:
+  - GET `/api/networks` to list all networks
+  - GET `/api/networks/:networkId` to get network details
+  - POST `/api/networks/:networkId/generate` for network-based generation
+  - POST `/api/networks/:networkId/stream` for streaming network responses (#404640e)
+
+- Enhanced workflow management capabilities:
+  - Added new endpoints for async workflow operations
+  - Introduced `createRun` endpoint for better workflow run lifecycle management
+  - Added support for resuming suspended workflow steps (#9116d70)
+
+### Improvements
+- Enhanced voice API endpoints with better structure and deprecation notices:
+  - Added new `/voice` prefixed endpoints for speaking and listening
+  - Improved file handling for audio uploads
+  - Added proper deprecation headers for legacy endpoints
+
+- Improved workflow run management:
+  - Added support for explicit run IDs
+  - Better error handling for missing runs
+  - Enhanced run state management (#0850b4c)
+
+### Notable Bug Fixes
+- Fixed babel transformation issues in deployer (#cc7f392)
+- Fixed handling of different workflow methods in workflow graph (#9116d70)
+- Corrected esbuild plugin ordering for proper telemetry extraction (#61ad5a4)
+
+### Build/Deployment Improvements
+- Added support for tsconfig paths aliases (#4e6732b)
+- Enabled automatic public directory copying if it exists (#da8d9bb)
+- Improved module resolution with custom resolver implementation
+- Enhanced bundle validation with new validation system
+
+### Performance Optimizations
+- Improved treeshaking configuration for smaller bundle sizes
+- Enhanced external dependency handling for better build performance
+- Optimized module resolution for core dependencies
+
+This release significantly improves the deployer's capabilities for handling agent networks, workflows, and voice interactions while enhancing build system reliability and performance.
+
+## packages/evals
+Based on the git diff provided, here's the changelog for the evals package covering March 12-19, 2025:
+
+## Evals Package v0.1.12
+
+### Improvements
+- Removed debug logging statements from contextual recall and summarization metric tests for cleaner test output (#404640e)
+
+### Dependencies
+- Updated @mastra/core dependency to version 0.6.3
+
+Note: This release contains mostly internal maintenance updates and dependency version bumps. The main functional change was the cleanup of test logging.
+
+The changes appear to be relatively minor for this period, focusing on code cleanup and keeping dependencies in sync with the core package.
+
+## packages/rag
+Here's the structured changelog for the RAG package updates:
+
+## Improvements
+
+### Document Chunking
+- Enhanced character chunking with improved overlap handling to ensure consistent chunk sizes and proper text boundaries (#404640e)
+- Added safeguards to prevent tiny fragments at the end of chunks (#b195f6e)
+- Improved text transformer overlap implementation for more accurate document splitting (#f14c830)
+
+### Vector Search Tools
+- Refined vector query and GraphRAG tool schemas for better input validation (#ff1a76c)
+- Added more robust handling of topK parameters with fallback to default value
+- Improved filter parsing with better error handling and logging
+- Enhanced input schema descriptions with clearer usage guidelines
+
+### Testing
+- Added comprehensive test coverage for:
+  - Character chunking overlap behavior
+  - Text transformer overlap implementation
+  - End chunk handling
+  - Filter validation scenarios
+  - Vector query tool input processing
+
+### Documentation
+- Added detailed descriptions for query parameters including:
+  - Query text formatting requirements
+  - TopK parameter usage guidelines
+  - Filter syntax and formatting rules
+
+This release focuses on improving the robustness and reliability of document chunking and vector search operations, with particular attention to proper text overlap handling and input validation.
+
+## packages/memory
+Here's the changelog for the Mastra AI Memory package (v0.2.0 → v0.2.4):
+
+### Bug Fixes
+- Fixed memory integration with `useChat` when using client-side tool calling (#3729dbd)
+- Added validation to prevent processing empty message content in vector embeddings (#241)
+- Improved vector search handling by adding null check for search strings (#73)
+
+### Documentation
+- Added documentation for using Memory with `useChat()` functionality (#3729dbd)
+
+### Dependencies
+- Updated `@mastra/core` dependency to version 0.6.3
+
+This release focuses on improving stability and reliability of the Memory package, particularly around vector search functionality and chat integration. The changes ensure more robust handling of edge cases and better documentation for developers.
+
+## packages/mcp
+Based on the git diff provided, here's the changelog for Mastra AI's MCP package (v0.3.4):
+
+### Improvements
+- Integrated AgentNetwork functionality to enhance agent communication capabilities (#404640e)
+- Removed unnecessary console logging in client tests for cleaner test output
+
+### Dependencies
+- Updated @mastra/core dependency to version 0.6.3
+
+This release primarily focuses on integrating the AgentNetwork system and cleaning up test code, while keeping in sync with the latest core package updates. The changes are relatively minor but lay groundwork for improved agent communication features.
+
+Note: Many of the changes shown in the diff are version bumps and dependency updates through alpha releases, which have been consolidated into the final release notes above for clarity.
+
+## deployers/cloudflare
+Based on the git diff provided, I'll create a changelog for the Cloudflare deployer module covering the period from March 12-19, 2025.
+
+# Cloudflare Deployer Changelog (March 12-19, 2025)
+
+## Improvements
+- Added support for AgentNetwork functionality (#404640e)
+
+## Dependencies
+- Updated @mastra/deployer to version 0.2.3
+- Updated @mastra/core to version 0.6.3
+
+This release primarily focuses on integrating AgentNetwork capabilities and keeping dependencies up to date with the latest Mastra core and deployer versions.
+
+Note: Most changes in this period were version bumps and dependency alignments. The main functional change was the AgentNetwork integration.
+
+## deployers/netlify
+Based on the git diff provided, here's the changelog for the Netlify deployer module covering March 12-19, 2025:
+
+# Netlify Deployer Changelog
+
+## Version 0.1.12
+
+### Improvements
+- Added support for AgentNetwork functionality to enhance deployment workflows (#404640e)
+
+### Dependencies
+- Updated @mastra/deployer to version 0.2.3
+- Updated @mastra/core to version 0.6.3
+
+Note: This release primarily focuses on integrating AgentNetwork capabilities and keeping dependencies up to date with the latest Mastra core and deployer versions. The changes are relatively minor but provide better alignment with the broader Mastra ecosystem.
+
+The version bump from 0.1.8 to 0.1.12 includes several alpha releases that were tested and stabilized before this final release.
+
+## deployers/vercel
+Here's the changelog for the Vercel deployer module (2025-03-12 - 2025-03-19):
+
+### Improvements
+- Updated configuration parameters to use `teamId` instead of `scope` for better clarity in Vercel team identification (#404640e)
+- Added required `token` parameter to Vercel deployer configuration for improved authentication (#404640e)
+
+### Dependencies
+- Updated @mastra/deployer to version 0.2.3
+- Updated @mastra/core to version 0.6.3
+
+Note: This update primarily focuses on improving the configuration interface for the Vercel deployer, making it more intuitive and secure with explicit token requirements. The changes align with Vercel's recommended authentication practices.
+
+For detailed configuration examples, see the [Vercel Deployer documentation](deployers/vercel/README.md).
+
+## speech/azure
+Based on the git diff provided, here's the changelog for the speech/azure module covering March 12-19, 2025:
+
+# Mastra AI Speech Azure Module Changelog
+
+## Version 0.1.12
+
+### Improvements
+- Integrated AgentNetwork functionality to enhance speech processing capabilities (#404640e)
+
+### Build/Deployment
+- Updated dependency on @mastra/core to version 0.6.3
+
+Note: This release primarily focuses on integrating the AgentNetwork system and maintaining compatibility with the latest core module updates. The changes are relatively minor in scope but lay groundwork for future speech processing enhancements.
+
+---
+
+The majority of changes in this period were dependency updates and version alignment with the core module. No significant feature additions or breaking changes were introduced.
+
+## speech/deepgram
+Based on the git diff provided, here's the changelog for the speech/deepgram module for March 12-19, 2025:
+
+# Mastra AI Speech/Deepgram Changelog
+
+## Version 0.1.11
+
+### Important Notice
+This module is deprecated - please use `@mastra/voice-deepgram` instead.
+
+### Improvements
+- Updated integration with AgentNetwork system for better compatibility (#404640e)
+
+### Dependencies
+- Updated to @mastra/core@0.6.3 which includes several core system improvements
+
+Note: Most changes in this release period were internal dependency updates and version alignments. No major functional changes were introduced to this deprecated module as development focus has shifted to the new `@mastra/voice-deepgram` package.
+
+## speech/elevenlabs
+Based on the git diff provided, here's the changelog for the speech/elevenlabs module for March 12-19, 2025:
+
+## Speech/ElevenLabs Module Updates (v0.1.11)
+
+### Build/Deployment Improvements
+- Updated core dependency to version 0.6.3 for improved compatibility (#404640e)
+
+### Note
+This module is now deprecated - please use `@mastra/voice-elevenlabs` instead for future development.
+
+---
+
+The changes in this period were primarily maintenance-related, focusing on dependency updates and internal alignment with the core package. No significant feature additions or breaking changes were introduced.
+
+For users of this module, we strongly recommend migrating to `@mastra/voice-elevenlabs` as this package will no longer receive feature updates.
+
+## speech/google
+Based on the git diff provided, here's the changelog for the speech/google module for March 12-19, 2025:
+
+# Speech Google Module Changelog (v0.1.8 → v0.1.12)
+
+### Important Notice
+This module is deprecated - please use `@mastra/voice-google` instead.
+
+### Improvements
+- Updated AgentNetwork integration for improved compatibility (#404640e)
+
+### Dependencies
+- Updated to @mastra/core@0.6.3 which includes:
+  - Core system stability improvements
+  - Enhanced agent networking capabilities
+
+Note: Most changes in this release are internal dependency updates and maintenance improvements. No major feature changes or breaking changes were introduced in this version.
+
+## speech/ibm
+Based on the git diff provided, here's the changelog for the IBM Speech module covering March 12-19, 2025:
+
+# IBM Speech Module Updates (v0.1.8 → v0.1.12)
+
+### Improvements
+- Enhanced integration with AgentNetwork functionality (#404640e)
+
+### Dependencies
+- Updated to @mastra/core@0.6.3 which includes:
+  - Core system stability improvements (#3bce733)
+  - Network agent communication enhancements (#404640e)
+
+Note: This release primarily focuses on integration improvements and dependency updates to maintain compatibility with the latest Mastra core functionality.
+
+---
+The changes in this period were mostly maintenance-focused, ensuring the IBM Speech module stays in sync with core platform updates. The main functional change was the AgentNetwork integration enhancement, which improves how the speech module interacts with Mastra's agent system.
+
+## speech/murf
+Based on the git diff provided, here's the structured changelog for the speech/murf module covering March 12-19, 2025:
+
+# Mastra AI Speech/Murf Changelog
+
+## Notable Updates
+
+### Build & Dependencies
+- Updated core dependency to version 0.6.3 to support AgentNetwork integration (#404640e)
+- Bumped package version from 0.1.8 to 0.1.12
+
+### Important Notice
+This module (@mastra/speech-murf) is now deprecated. Please migrate to @mastra/voice-murf for future development.
+
+Note: Most changes in this period were internal dependency updates and version alignments. No major feature additions or breaking changes were introduced to the speech/murf module itself.
+
+## speech/openai
+Based on the git diff provided, here's the changelog for the speech/openai module for March 12-19, 2025:
+
+# Speech OpenAI Module Changelog
+
+## Version 0.1.12
+
+### Important Notice
+This module is deprecated - please migrate to `@mastra/voice-openai` for future updates.
+
+### Improvements
+- Integrated AgentNetwork functionality to enhance speech processing capabilities (#404640e)
+
+### Dependencies
+- Updated @mastra/core to version 0.6.3
+
+Note: This update primarily focuses on internal improvements and dependency updates. The module is now in maintenance mode as it has been deprecated in favor of @mastra/voice-openai.
+
+## speech/playai
+Based on the git diff provided, here's the changelog for the speech/playai module covering March 12-19, 2025:
+
+# Mastra AI Speech/PlayAI Changelog
+
+## Notable Changes
+
+### Improvements
+- Integrated AgentNetwork functionality to enhance speech processing capabilities (#404640e)
+
+### Dependencies
+- Updated to @mastra/core@0.6.3 which includes several core improvements
+
+## Additional Notes
+This module is now deprecated - users should migrate to `@mastra/voice-playai` for future updates and improvements.
+
+The changes in this period were primarily focused on maintaining compatibility with core updates and integrating the AgentNetwork system. Most updates were internal improvements and dependency alignments rather than user-facing features.
+
+Version bumped from 0.1.7 to 0.1.11 to maintain alignment with dependency versions.
+
+## speech/replicate
+Based on the git diff provided, here's the changelog for the speech/replicate module covering March 12-19, 2025:
+
+# Mastra Speech Replicate Changelog
+
+## Version 0.1.12
+
+### Improvements
+- Integrated AgentNetwork functionality to enhance speech processing capabilities (#404640e)
+
+### Dependencies
+- Updated @mastra/core dependency to version 0.6.3
+
+Note: This release primarily focuses on integrating the AgentNetwork system and keeping dependencies up to date. The changes are relatively minor but lay groundwork for future speech processing enhancements.
+
+---
+
+I've kept this changelog concise since the main substantive change was the AgentNetwork integration. Most other changes in the diff were version bumps and dependency updates which don't warrant detailed explanation in the user-facing changelog. The AgentNetwork integration appears to be the key functional change that users would care about.
+
+## speech/speechify
+Based on the git diff provided, here's the changelog for the Speechify module covering March 12-19, 2025:
+
+# Speechify Module Updates (v0.1.12)
+
+### Build & Dependencies
+- Updated dependency on @mastra/core to version 0.6.3 (#404640e)
+
+### Important Notice
+This module (@mastra/speech-speechify) is now deprecated. Please use @mastra/voice-speechify instead.
+
+Note: Most changes in this release period were internal dependency updates and version bumps. No significant feature changes, bug fixes, or performance improvements were made to the Speechify module itself during this period.
+
+## stores/pg
+Based on the git diff provided, here's the changelog for the Mastra AI PostgreSQL Store (stores/pg) module for March 12-19, 2025:
+
+# PostgreSQL Store Updates (v0.2.0 → v0.2.4)
+
+### Improvements
+- Added support for AgentNetwork functionality to enhance agent communication capabilities (#404640e)
+
+### Dependencies
+- Updated @mastra/core dependency to version 0.6.3
+
+Note: This release primarily focuses on integrating AgentNetwork capabilities and maintaining compatibility with the latest core module updates. The version bump from 0.2.0 to 0.2.4 includes several alpha releases that were part of the testing process.
+
+Most changes in this period were dependency updates and internal adjustments to maintain compatibility with @mastra/core updates. The main functional change was the addition of AgentNetwork support.
+
+## stores/astra
+Based on the git diff provided, here's the changelog for Mastra AI's Astra module covering March 12-19, 2025:
+
+# Astra Store v0.2.4 Release Notes
+
+## Improvements
+- Added AgentNetwork integration capabilities to enhance distributed agent communication (#404640e)
+
+## Dependencies
+- Updated to @mastra/core@0.6.3 which includes stability improvements
+
+Note: This release primarily focuses on integrating AgentNetwork functionality and keeping dependencies up-to-date with the core package. The version bump from 0.2.0 to 0.2.4 includes several alpha releases that were part of the testing cycle.
+
+The changes in this release lay groundwork for improved agent communication patterns when using Astra as a storage backend. For detailed documentation on using AgentNetwork features, please refer to our [Agent Communication Guide](docs/agent-network.md).
+
+## stores/chroma
+Based on the git diff provided, here's the changelog for the Chroma store module (v0.2.0 → v0.2.4):
+
+# Chroma Store Changelog (March 12-19, 2025)
+
+## Improvements
+- Added support for AgentNetwork integration, enabling better coordination between agents using Chroma vector storage (#404640e)
+
+## Dependencies
+- Updated @mastra/core dependency to version 0.6.3 for improved compatibility and stability
+
+Note: This release primarily focuses on integration improvements and dependency updates to maintain compatibility with the core Mastra AI framework. The main highlight is the AgentNetwork integration which enhances the store's capabilities for multi-agent scenarios.
+
+## stores/pinecone
+Here's the changelog for the Pinecone store module (2025-03-12 - 2025-03-19):
+
+## Pinecone Store Updates
+
+### New Features
+- Added vector update operations to modify existing vectors and metadata in Pinecone indexes
+  - Support for updating vector embeddings by ID
+  - Support for updating metadata by ID
+  - Ability to update both vector and metadata simultaneously
+- Added vector deletion capability to remove vectors by ID from Pinecone indexes
+
+### Improvements
+- Enhanced error handling for vector operations:
+  - Validation for empty update requests
+  - Checks for non-existent indexes
+  - Validation of vector dimensions during updates
+
+### Testing
+- Added comprehensive test suite for new vector operations:
+  - Tests for vector updates with different combinations of embeddings and metadata
+  - Tests for vector deletion functionality
+  - Tests for error handling scenarios
+
+The Pinecone store module has been updated to version 0.2.2, bringing significant improvements to vector management capabilities. These changes enable more flexible handling of vector data in Pinecone indexes, with robust error handling and validation.
+
+## stores/qdrant
+Here's the changelog for the Qdrant store module (2025-03-12 - 2025-03-19):
+
+### New Features
+- Added vector update operations for modifying existing vectors and metadata (#404640e)
+  - Support for updating vector embeddings only
+  - Support for updating metadata only 
+  - Support for updating both vector and metadata together
+- Added vector deletion capability to remove vectors by ID (#404640e)
+- Added Docker Compose configuration for easy Qdrant deployment
+
+### Improvements
+- Enhanced ID handling with smart parsing between string and numeric formats for Qdrant compatibility (#404640e)
+- Added comprehensive test coverage for vector update and delete operations
+
+### Technical Details
+- Vector updates can be performed partially (metadata-only or vector-only) or as full updates
+- ID parsing automatically converts numeric strings to integers while preserving string IDs
+- Docker Compose setup includes:
+  - REST API port (6333)
+  - gRPC port (6334)
+  - Persistent storage volume
+  - Configurable log levels
+
+This release focuses on expanding the Qdrant store's CRUD capabilities with new update and delete operations, making it more flexible for vector database management.
+
+## stores/upstash
+Based on the git diff provided, here's the changelog for the Upstash module (v0.1.8 → v0.1.12):
+
+# Upstash Store Changelog (March 12-19, 2025)
+
+## Improvements
+- Added support for AgentNetwork functionality (#404640e)
+
+## Dependencies
+- Updated @mastra/core dependency to version 0.6.3
+
+Note: This update primarily focused on integrating AgentNetwork capabilities and keeping dependencies in sync with the core package. Most changes were version bumps and dependency alignments rather than direct feature additions to the Upstash store module.
+
+For more information about using Upstash with Mastra AI, please refer to our [documentation](https://docs.mastra.ai/storage/upstash).
+
+## stores/vectorize
+Based on the git diff provided, here's the changelog for the Mastra AI Vectorize module (v0.1.12):
+
+### Improvements
+- Added support for AgentNetwork functionality to enhance agent communication capabilities (#404640e)
+
+### Dependencies
+- Updated @mastra/core dependency to version 0.6.3
+
+Note: This release primarily focuses on integrating AgentNetwork capabilities and keeping dependencies in sync with the core package. Most changes appear to be version bumps and dependency alignments rather than major functional changes to the vectorize module itself.
+
+For more details about AgentNetwork functionality, please refer to our [documentation](https://docs.mastra.ai/agent-network).

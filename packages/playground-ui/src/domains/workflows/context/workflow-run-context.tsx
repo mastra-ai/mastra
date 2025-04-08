@@ -1,7 +1,8 @@
+import { WorkflowRunResult } from '@mastra/client-js';
 import { createContext, useState } from 'react';
 
 type WorkflowRunContextType = {
-  result: any;
+  result: WorkflowRunResult | null;
   setResult: React.Dispatch<React.SetStateAction<any>>;
   payload: any;
   setPayload: React.Dispatch<React.SetStateAction<any>>;
@@ -11,7 +12,7 @@ type WorkflowRunContextType = {
 export const WorkflowRunContext = createContext<WorkflowRunContextType>({} as WorkflowRunContextType);
 
 export function WorkflowRunProvider({ children }: { children: React.ReactNode }) {
-  const [result, setResult] = useState<any>(null);
+  const [result, setResult] = useState<WorkflowRunResult | null>(null);
   const [payload, setPayload] = useState<any>(null);
 
   const clearData = () => {

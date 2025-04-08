@@ -88,6 +88,11 @@ interface DataTableProps<TData, TValue> {
    * loading state
    */
   isLoading?: boolean;
+
+  /**
+   * text to display when there are no results
+   */
+  emptyText?: string;
 }
 
 export const DataTable = <TData, TValue>({
@@ -107,6 +112,7 @@ export const DataTable = <TData, TValue>({
   getRowId,
   selectedRowId,
   isLoading,
+  emptyText,
 }: DataTableProps<TData, TValue>) => {
   const [sorting, setSorting] = useState<SortingState>([]);
   const [{ pageIndex, pageSize }, setPagination] = useState<PaginationState>({
@@ -211,7 +217,7 @@ export const DataTable = <TData, TValue>({
             ) : (
               <TableRow>
                 <TableCell colSpan={columns.length} className={cn('h-24 text-center', emptyStateHeight)}>
-                  No results.
+                  No {emptyText || 'results'}
                 </TableCell>
               </TableRow>
             )}

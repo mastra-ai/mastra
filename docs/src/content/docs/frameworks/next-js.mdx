@@ -1,0 +1,238 @@
+---
+title: "Getting started with Mastra and NextJS | Mastra Guides"
+description: Guide on integrating Mastra with NextJS.
+---
+import { Callout, Steps, Tabs } from "nextra/components";
+
+# Integrate Mastra in your Next.js project
+
+There are two main ways to integrate Mastra with your Next.js application: as a separate backend service or directly integrated into your Next.js app.
+
+## 1. Separate Backend Integration
+
+Best for larger projects where you want to:
+- Scale your AI backend independently
+- Keep clear separation of concerns
+- Have more deployment flexibility
+
+<Steps>
+### Create Mastra Backend
+
+Create a new Mastra project using our CLI:
+
+<Tabs items={["npx", "npm", "yarn", "pnpm"]}>
+  <Tabs.Tab>
+```bash copy
+npx create-mastra@latest
+```
+  </Tabs.Tab>
+  <Tabs.Tab>
+```bash copy
+npm create mastra
+```
+  </Tabs.Tab>
+  <Tabs.Tab>
+```bash copy
+yarn create mastra
+```
+  </Tabs.Tab>
+  <Tabs.Tab>
+```bash copy
+pnpm create mastra
+```
+  </Tabs.Tab>
+</Tabs>
+
+For detailed setup instructions, see our [installation guide](/docs/getting-started/installation).
+
+### Install  MastraClient
+
+<Tabs items={["npm", "yarn", "pnpm"]}>
+  <Tabs.Tab>
+```bash copy
+npm install @mastra/client-js
+```
+  </Tabs.Tab>
+  <Tabs.Tab>
+```bash copy
+yarn add @mastra/client-js
+```
+  </Tabs.Tab>
+  <Tabs.Tab>
+```bash copy
+pnpm add @mastra/client-js
+```
+  </Tabs.Tab>
+</Tabs>
+
+### Use MastraClient
+
+Create a client instance and use it in your Next.js application:
+
+```typescript filename="lib/mastra.ts" copy
+import { MastraClient } from '@mastra/client-js';
+
+// Initialize the client
+export const mastraClient = new MastraClient({
+  baseUrl: process.env.NEXT_PUBLIC_MASTRA_API_URL || 'http://localhost:4111',
+});
+```
+
+Example usage in your React component:
+
+```typescript filename="app/components/SimpleWeather.tsx" copy
+'use client'
+
+import { mastraClient } from '@/lib/mastra'
+
+export function SimpleWeather() {
+  async function handleSubmit(formData: FormData) {
+    const city = formData.get('city')
+    const agent = mastraClient.getAgent('weatherAgent')
+    
+    try {
+      const response = await agent.generate({
+        messages: [{ role: 'user', content: `What's the weather like in ${city}?` }],
+      })
+      // Handle the response
+      console.log(response.text)
+    } catch (error) {
+      console.error('Error:', error)
+    }
+  }
+
+  return (
+    <form action={handleSubmit}>
+      <input name="city" placeholder="Enter city name" />
+      <button type="submit">Get Weather</button>
+    </form>
+  )
+}
+```
+
+### Deployment
+
+When you're ready to deploy, you can use any of our platform-specific deployers (Vercel, Netlify, Cloudflare) or deploy to any Node.js hosting platform. Check our [deployment guide](/docs/deployment/deployment) for detailed instructions.
+</Steps>
+
+## 2. Direct Integration
+
+Better for smaller projects or prototypes. This approach bundles Mastra directly with your Next.js application.
+
+<Steps>
+### Initialize Mastra in your Next.js Root
+
+First, navigate to your Next.js project root and initialize Mastra:
+
+```bash copy
+cd your-nextjs-app
+```
+
+Then run the initialization command:
+
+<Tabs items={["npm", "yarn", "pnpm"]}>
+  <Tabs.Tab>
+```bash copy
+npx mastra@latest init
+```
+  </Tabs.Tab>
+  <Tabs.Tab>
+```bash copy
+yarn dlx mastra@latest init
+```
+  </Tabs.Tab>
+  <Tabs.Tab>
+```bash copy
+pnpm dlx mastra@latest init
+```
+  </Tabs.Tab>
+</Tabs>
+
+This will set up Mastra in your Next.js project. For more details about init and other configuration options, see our [mastra init reference](/docs/reference/cli/init).
+
+### Configure Next.js
+
+Add to your `next.config.js`:
+
+```js filename="next.config.js" copy
+/** @type {import('next').NextConfig} */
+const nextConfig = {
+  serverExternalPackages: ["@mastra/*"],
+  // ... your other Next.js config
+}
+
+module.exports = nextConfig
+```
+
+#### Server Actions Example
+
+```typescript filename="app/actions.ts" copy
+'use server'
+
+import { mastra } from '@/mastra'
+
+export async function getWeatherInfo(city: string) {
+  const agent = mastra.getAgent('weatherAgent')
+  
+  const result = await agent.generate(`What's the weather like in ${city}?`)
+
+  return result
+}
+```
+
+Use it in your component:
+
+```typescript filename="app/components/Weather.tsx" copy
+'use client'
+
+import { getWeatherInfo } from '../actions'
+
+export function Weather() {
+  async function handleSubmit(formData: FormData) {
+    const city = formData.get('city') as string
+    const result = await getWeatherInfo(city)
+    // Handle the result
+    console.log(result)
+  }
+
+  return (
+    <form action={handleSubmit}>
+      <input name="city" placeholder="Enter city name" />
+      <button type="submit">Get Weather</button>
+    </form>
+  )
+}
+```
+
+#### API Routes Example
+
+```typescript filename="app/api/chat/route.ts" copy
+import { mastra } from '@/mastra'
+import { NextResponse } from 'next/server'
+
+export async function POST(req: Request) {
+  const { city } = await req.json()
+  const agent = mastra.getAgent('weatherAgent')
+
+  const result = await agent.stream(`What's the weather like in ${city}?`)
+
+  return result.toDataStreamResponse()
+}
+```
+
+### Deployment
+
+When using direct integration, your Mastra instance will be deployed alongside your Next.js application. Ensure you:
+- Set up environment variables for your LLM API keys in your deployment platform
+- Implement proper error handling for production use
+- Monitor your AI agent's performance and costs
+</Steps>
+
+## Observability
+
+Mastra provides built-in observability features to help you monitor, debug, and optimize your AI operations. This includes:
+- Tracing of AI operations and their performance
+- Logging of prompts, completions, and errors
+- Integration with observability platforms like Langfuse and LangSmith
+
+For detailed setup instructions and configuration options specific to Next.js local development, see our [Next.js Observability Configuration Guide](/docs/deployment/logging-and-tracing#nextjs-configuration).

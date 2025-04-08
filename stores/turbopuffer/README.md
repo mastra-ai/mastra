@@ -54,4 +54,4 @@ Optional:
 ## Related Links
 
 - [Turbopuffer Documentation](https://turbopuffer.com/docs)
-- [Turbopuffer Typescript Client Library](https://github.com/turbopuffer/turbopuffer-typescript)
+- [Turbopuffer TypeScript Client Library](https://github.com/turbopuffer/turbopuffer-typescript)

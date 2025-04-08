@@ -39,7 +39,7 @@ export default defineConfig({
     // Leave minification up to applications.
     minify: false,
     rollupOptions: {
-      external: ['motion'],
+      external: ['motion/react'],
     },
   },
 });

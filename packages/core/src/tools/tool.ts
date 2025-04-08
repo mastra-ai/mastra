@@ -7,17 +7,13 @@ export class Tool<
   TSchemaIn extends z.ZodSchema | undefined = undefined,
   TSchemaOut extends z.ZodSchema | undefined = undefined,
   TContext extends ToolExecutionContext<TSchemaIn> = ToolExecutionContext<TSchemaIn>,
-  TOptions extends unknown = unknown,
-> implements ToolAction<TSchemaIn, TSchemaOut, TContext, TOptions>
+> implements ToolAction<TSchemaIn, TSchemaOut, TContext>
 {
   id: string;
   description: string;
   inputSchema?: TSchemaIn;
   outputSchema?: TSchemaOut;
-  execute?: (
-    context: TContext,
-    options?: TOptions,
-  ) => Promise<TSchemaOut extends z.ZodSchema ? z.infer<TSchemaOut> : unknown>;
+  execute?: ToolAction<TSchemaIn, TSchemaOut, TContext>['execute'];
   mastra?: Mastra;
 
   constructor(opts: ToolAction<TSchemaIn, TSchemaOut, TContext>) {

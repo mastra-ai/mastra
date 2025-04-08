@@ -1,4 +1,9 @@
-import { ActionBarPrimitive, BranchPickerPrimitive, MessagePrimitive } from '@assistant-ui/react';
+import {
+  ActionBarPrimitive,
+  BranchPickerPrimitive,
+  MessagePrimitive,
+  ToolCallContentPartComponent,
+} from '@assistant-ui/react';
 import { CheckIcon, ChevronLeftIcon, ChevronRightIcon, CopyIcon } from 'lucide-react';
 import { FC } from 'react';
 
@@ -6,12 +11,17 @@ import { cn } from '@/lib/utils';
 
 import { MarkdownText } from './markdown-text';
 import { TooltipIconButton } from './tooltip-icon-button';
+import { ToolFallback } from '@/components/assistant-ui/tool-fallback';
 
-export const AssistantMessage: FC = () => {
+export const AssistantMessage: FC<{ ToolFallback?: ToolCallContentPartComponent }> = ({
+  ToolFallback: ToolFallbackCustom,
+}) => {
   return (
-    <MessagePrimitive.Root className="grid group grid-cols-[auto_auto_1fr] grid-rows-[auto_1fr] max-w-[var(--thread-max-width)] relative w-full py-4">
-      <div className="text-foreground max-w-[calc(var(--thread-max-width)*0.8)] sm:max-w-[70%] break-words leading-7 col-span-2 py-2 col-start-2 row-start-1 my-1.5">
-        <MessagePrimitive.Content components={{ Text: MarkdownText }} />
+    <MessagePrimitive.Root className="grid group grid-cols-[auto_auto_1fr] grid-rows-[auto_1fr] max-w-[var(--thread-max-width)] relative w-full">
+      <div className="text-foreground max-w-[calc(var(--thread-max-width)*0.8)] sm:max-w-[70%] break-words leading-7 col-span-2 py-2 col-start-2 row-start-1">
+        <MessagePrimitive.Content
+          components={{ Text: MarkdownText, tools: { Fallback: ToolFallbackCustom || ToolFallback } }}
+        />
       </div>
 
       <AssistantActionBar />

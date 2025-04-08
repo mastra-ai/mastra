@@ -100,18 +100,21 @@ export class CharacterTransformer extends TextTransformer {
 
     while (currentPosition < text.length) {
       let chunkEnd = currentPosition;
-      let currentChunk = '';
 
       // Build chunk up to max size
       while (chunkEnd < text.length && this.lengthFunction(text.slice(currentPosition, chunkEnd + 1)) <= this.size) {
         chunkEnd++;
       }
 
-      currentChunk = text.slice(currentPosition, chunkEnd);
+      const currentChunk = text.slice(currentPosition, chunkEnd);
+      const chunkLength = this.lengthFunction(currentChunk);
       chunks.push(currentChunk);
 
+      // If we're at the end, break to avoid tiny chunks
+      if (chunkEnd >= text.length) break;
+
       // Move position forward by chunk size minus overlap
-      currentPosition += Math.max(1, this.lengthFunction(currentChunk) - this.overlap);
+      currentPosition += Math.max(1, chunkLength - this.overlap);
     }
 
     return chunks;

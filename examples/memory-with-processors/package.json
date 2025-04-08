@@ -1,0 +1,23 @@
+{
+  "name": "memory-with-processors",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "support": "tsx src/support-agent.ts",
+    "interview": "tsx src/forgetful-interviewer.ts",
+    "tokens": "tsx src/processor-example.ts"
+  },
+  "dependencies": {
+    "@ai-sdk/openai": "^1.0.0",
+    "@mastra/core": "workspace:*",
+    "@mastra/memory": "workspace:*",
+    "ai": "^4.2.6",
+    "chalk": "^5.4.1",
+    "dotenv": "^16.3.1",
+    "js-tiktoken": "^1.0.13",
+    "tiktoken": "^1.0.13",
+    "tsx": "^4.6.2",
+    "zod": "^3.22.4"
+  }
+}

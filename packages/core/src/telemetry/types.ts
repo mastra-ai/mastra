@@ -40,6 +40,9 @@ export type OtelConfig = {
   /** Sampling configuration to control trace data volume */
   sampling?: SamplingStrategy;
 
+  /** Whether to disable local export */
+  disableLocalExport?: boolean;
+
   /** Export configuration for sending telemetry data */
   export?:
     | {

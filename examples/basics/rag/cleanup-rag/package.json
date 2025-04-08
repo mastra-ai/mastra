@@ -3,10 +3,11 @@
   "type": "module",
   "private": true,
   "scripts": {
-    "start": "pnpx tsx index.ts"
+    "start": "pnpx tsx --env-file=.env index.ts"
   },
   "dependencies": {
     "@ai-sdk/openai": "latest",
+    "@mastra/core": "workspace:*",
     "@mastra/rag": "workspace:*",
     "@mastra/pg": "workspace:*",
     "ai": "latest"

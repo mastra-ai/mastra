@@ -27,7 +27,22 @@ export const useWorkflow = (workflowId: string, baseUrl: string) => {
           toast.error('Error fetching workflow');
           return;
         }
-        setWorkflow(res as Workflow);
+        const steps = res.steps;
+        const stepsWithWorkflow = await Promise.all(
+          Object.values(steps)?.map(async step => {
+            if (!step.workflowId) return step;
+
+            const wFlow = await client.getWorkflow(step.workflowId).details();
+
+            if (!res) return step;
+
+            return { ...step, stepGraph: wFlow.stepGraph, stepSubscriberGraph: wFlow.stepSubscriberGraph };
+          }),
+        );
+        const _steps = stepsWithWorkflow.reduce((acc, b) => {
+          return { ...acc, [b.id]: b };
+        }, {});
+        setWorkflow({ ...res, steps: _steps } as Workflow);
       } catch (error) {
         setWorkflow(null);
         console.error('Error fetching workflow', error);
@@ -50,30 +65,28 @@ export const useExecuteWorkflow = (baseUrl: string) => {
     baseUrl: baseUrl || '',
   });
 
-  const executeWorkflow = async ({ workflowId, input }: { workflowId: string; input: any }) => {
+  const createWorkflowRun = async ({ workflowId, prevRunId }: { workflowId: string; prevRunId?: string }) => {
     try {
-      setIsExecutingWorkflow(true);
-      const response = await client.getWorkflow(workflowId).execute(input || {});
-      return response;
-    } catch (error) {
-      console.error('Error executing workflow:', error);
-      throw error;
-    } finally {
-      setIsExecutingWorkflow(false);
-    }
-  };
-
-  const createWorkflowRun = async ({ workflowId, input }: { workflowId: string; input: any }) => {
-    try {
-      const response = await client.getWorkflow(workflowId).startRun(input || {});
-      return response;
+      const workflow = client.getWorkflow(workflowId);
+      const { runId: newRunId } = await workflow.createRun({ runId: prevRunId });
+      return { runId: newRunId };
     } catch (error) {
       console.error('Error creating workflow run:', error);
       throw error;
     }
   };
 
-  return { executeWorkflow, createWorkflowRun, isExecutingWorkflow };
+  const startWorkflowRun = async ({ workflowId, runId, input }: { workflowId: string; runId: string; input: any }) => {
+    try {
+      const workflow = client.getWorkflow(workflowId);
+      await workflow.start({ runId, triggerData: input || {} });
+    } catch (error) {
+      console.error('Error starting workflow run:', error);
+      throw error;
+    }
+  };
+
+  return { startWorkflowRun, createWorkflowRun, isExecutingWorkflow };
 };
 
 export const useWatchWorkflow = (baseUrl: string) => {
@@ -87,15 +100,11 @@ export const useWatchWorkflow = (baseUrl: string) => {
         baseUrl,
       });
 
-      const watchSubscription = client.getWorkflow(workflowId).watch({ runId });
+      const workflow = client.getWorkflow(workflowId);
 
-      if (!watchSubscription) {
-        throw new Error('Error watching workflow');
-      }
-
-      for await (const record of watchSubscription) {
+      await workflow.watch({ runId }, record => {
         setWatchResult(record);
-      }
+      });
     } catch (error) {
       console.error('Error watching workflow:', error);
 

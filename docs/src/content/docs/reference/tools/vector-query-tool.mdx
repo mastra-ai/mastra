@@ -1,0 +1,212 @@
+---
+title: "Reference: createVectorQueryTool() | RAG | Mastra Tools Docs"
+description: Documentation for the Vector Query Tool in Mastra, which facilitates semantic search over vector stores with filtering and reranking capabilities.
+---
+
+# createVectorQueryTool()
+
+The `createVectorQueryTool()` function creates a tool for semantic search over vector stores. It supports filtering, reranking, and integrates with various vector store backends.
+
+## Basic Usage
+
+```typescript
+import { openai } from '@ai-sdk/openai';
+import { createVectorQueryTool } from "@mastra/rag";
+
+const queryTool = createVectorQueryTool({
+  vectorStoreName: "pinecone",
+  indexName: "docs",
+  model: openai.embedding('text-embedding-3-small'),
+});
+```
+
+## Parameters
+
+<PropertiesTable
+  content={[
+    {
+      name: "vectorStoreName",
+      type: "string",
+      description: "Name of the vector store to query (must be configured in Mastra)",
+      isOptional: false,
+    },
+    {
+      name: "indexName",
+      type: "string",
+      description: "Name of the index within the vector store",
+      isOptional: false,
+    },
+    {
+      name: "model",
+      type: "EmbeddingModel",
+      description: "Embedding model to use for vector search",
+      isOptional: false,
+    },
+    {
+      name: "reranker",
+      type: "RerankConfig",
+      description: "Options for reranking results",
+      isOptional: true,
+    },
+    {
+      name: "id",
+      type: "string",
+      description: "Custom ID for the tool (defaults to 'VectorQuery {vectorStoreName} {indexName} Tool')",
+      isOptional: true,
+    },
+    {
+      name: "description",
+      type: "string",
+      description: "Custom description for the tool. By default: 'Access the knowledge base to find information needed to answer user questions'",
+      isOptional: true,
+    }
+  ]}
+/>
+
+### RerankConfig
+
+<PropertiesTable
+  content={[
+    {
+      name: "model",
+      type: "MastraLanguageModel",
+      description: "Language model to use for reranking",
+      isOptional: false,
+    },
+    {
+      name: "options",
+      type: "RerankerOptions",
+      description: "Options for the reranking process",
+      isOptional: true,
+      properties: [
+        {
+          type: "object",
+          parameters: [
+            {
+              name: "weights",
+              description: "Weights for scoring components (semantic: 0.4, vector: 0.4, position: 0.2)",
+              isOptional: true,
+              type: "WeightConfig",
+            },
+            {
+              name: "topK",
+              description: "Number of top results to return",
+              isOptional: true,
+              type: "number",
+              defaultValue: "3"
+            }
+          ]
+        }
+      ]
+    }
+  ]}
+/>
+
+## Returns
+
+The tool returns an object with:
+
+<PropertiesTable
+  content={[
+    {
+      name: "relevantContext",
+      type: "string",
+      description: "Combined text from the most relevant document chunks",
+    }
+  ]}
+/>
+
+## Default Tool Description
+
+The default description focuses on:
+- Finding relevant information in stored knowledge
+- Answering user questions
+- Retrieving factual content
+
+## Result Handling
+
+The tool determines the number of results to return based on the user's query, with a default of 10 results. This can be adjusted based on the query requirements.
+
+## Example with Filters
+
+```typescript
+const queryTool = createVectorQueryTool({
+  vectorStoreName: "pinecone",
+  indexName: "docs",
+  model: openai.embedding('text-embedding-3-small'),
+  enableFilters: true,
+});
+```
+
+With filtering enabled, the tool processes queries to construct metadata filters that combine with semantic search. The process works as follows:
+
+1. A user makes a query with specific filter requirements like "Find content where the 'version' field is greater than 2.0"
+2. The agent analyzes the query and constructs the appropriate filters:
+   ```typescript
+   {
+      "version": { "$gt": 2.0 }
+   }
+   ```
+
+This agent-driven approach:
+- Processes natural language queries into filter specifications
+- Implements vector store-specific filter syntax
+- Translates query terms to filter operators
+
+For detailed filter syntax and store-specific capabilities, see the [Metadata Filters](../rag/metadata-filters) documentation.
+
+For an example of how agent-driven filtering works, see the [Agent-Driven Metadata Filtering](../../../examples/rag/usage/filter-rag) example.
+
+## Example with Reranking
+
+```typescript
+const queryTool = createVectorQueryTool({
+  vectorStoreName: "milvus",
+  indexName: "documentation",
+  model: openai.embedding('text-embedding-3-small'),
+  reranker: {
+    model: openai('gpt-4o-mini'),
+    options: {
+      weights: {
+        semantic: 0.5,  // Semantic relevance weight
+        vector: 0.3,    // Vector similarity weight
+        position: 0.2   // Original position weight
+      },
+      topK: 5
+    }
+  }
+});
+```
+
+Reranking improves result quality by combining:
+- Semantic relevance: Using LLM-based scoring of text similarity
+- Vector similarity: Original vector distance scores
+- Position bias: Consideration of original result ordering
+- Query analysis: Adjustments based on query characteristics
+
+The reranker processes the initial vector search results and returns a reordered list optimized for relevance.
+
+## Example with Custom Description
+
+```typescript
+const queryTool = createVectorQueryTool({
+  vectorStoreName: "pinecone",
+  indexName: "docs",
+  model: openai.embedding('text-embedding-3-small'),
+  description: "Search through document archives to find relevant information for answering questions about company policies and procedures"
+});
+```
+
+This example shows how to customize the tool description for a specific use case while maintaining its core purpose of information retrieval.
+
+## Tool Details
+
+The tool is created with:
+- **ID**: `VectorQuery {vectorStoreName} {indexName} Tool`
+- **Input Schema**: Requires queryText and filter objects
+- **Output Schema**: Returns relevantContext string
+
+## Related
+
+- [rerank()](../rag/rerank) 
+- [createGraphRAGTool](./graph-rag-tool) 

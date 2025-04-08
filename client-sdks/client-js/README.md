@@ -79,10 +79,12 @@ const client = new MastraClient({
 - `getWorkflows()`: Get all workflows
 - `getWorkflow(workflowId)`: Get a workflow instance
   - `workflow.details()`: Get workflow details
-  - `workflow.execute(params)`: Execute the workflow and wait for execution results
-  - `workflow.startRun()`: Start a new workflow run
-  - `workflow.watch(params)`: Watch the workflow run
-  - `workflow.resume(params)`: Resume the workflow run
+  - `workflow.createRun()`: Create workflow run
+  - `workflow.startAsync(params)`: Execute the workflow and wait for execution results
+  - `workflow.resumeAsync(parmas)`: Resume suspended workflow step async
+  - `workflow.watch({runId},(record)=>{})`: Watch the step transitions of the workflow run
+  - `workflow.start({runId, triggerData})`: Start a workflow run sync
+  - `workflow.resume(params)`: Resume the workflow run sync
 
 ### Vectors
 

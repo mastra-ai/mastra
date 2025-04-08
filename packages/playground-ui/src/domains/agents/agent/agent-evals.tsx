@@ -30,7 +30,7 @@ type AgentEvalsContextType = {
   isLoading: boolean;
 };
 
-const AgentEvalsContext = createContext<AgentEvalsContextType>({ handleRefresh: () => {}, isLoading: false });
+const AgentEvalsContext = createContext<AgentEvalsContextType>({ handleRefresh: () => {}, isLoading: true });
 
 type GroupedEvals = {
   metricName: string;
@@ -74,6 +74,14 @@ export function AgentEvals({ agentId, baseUrl }: { agentId: string; baseUrl?: st
     isLoading: activeTab === 'live' ? isLiveLoading : isCiLoading,
   };
 
+  function handleRefresh() {
+    if (activeTab === 'live') {
+      refetchLiveEvals();
+    } else {
+      refetchCiEvals();
+    }
+  }
+
   return (
     <AgentEvalsContext.Provider value={contextValue}>
       <Tabs
@@ -81,8 +89,8 @@ export function AgentEvals({ agentId, baseUrl }: { agentId: string; baseUrl?: st
         onValueChange={value => setActiveTab(value as 'live' | 'ci')}
         className="grid grid-rows-[auto_1fr] h-full min-h-0 pb-2"
       >
-        <div className="bg-mastra-bg-2 border-b border-mastra-border/10">
-          <TabsList className="bg-transparent border-0 h-auto mx-4 pt-5">
+        <div className="border-b border-mastra-border/10">
+          <TabsList className="bg-transparent border-0 h-auto mx-4">
             <TabsTrigger value="live" className={tabIndicatorClass}>
               Live
             </TabsTrigger>
@@ -100,14 +108,6 @@ export function AgentEvals({ agentId, baseUrl }: { agentId: string; baseUrl?: st
       </Tabs>
     </AgentEvalsContext.Provider>
   );
-
-  function handleRefresh() {
-    if (activeTab === 'live') {
-      refetchLiveEvals();
-    } else {
-      refetchCiEvals();
-    }
-  }
 }
 
 function EvalTable({ evals, isCIMode = false }: { evals: Evals[]; isCIMode?: boolean }) {
@@ -115,22 +115,10 @@ function EvalTable({ evals, isCIMode = false }: { evals: Evals[]; isCIMode?: boo
   const [expandedMetrics, setExpandedMetrics] = useState<Set<string>>(new Set());
   const [searchTerm, setSearchTerm] = useState('');
   const [sortConfig, setSortConfig] = useState<SortConfig>({ field: 'metricName', direction: 'asc' });
-  const [showLoading, setShowLoading] = useState(false);
-
-  useEffect(() => {
-    if (isTableLoading) {
-      const timer = setTimeout(() => {
-        setShowLoading(true);
-      }, 200); // Only show loading state if load takes more than 200ms
-      return () => clearTimeout(timer);
-    } else {
-      setShowLoading(false);
-    }
-  }, [isTableLoading]);
 
   return (
     <div className="min-h-0 grid grid-rows-[auto_1fr]">
-      <div className="flex items-center gap-4 p-4 bg-mastra-bg-2 rounded-lg">
+      <div className="flex items-center gap-4 p-4 rounded-lg">
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-mastra-el-3" />
           <Input
@@ -144,16 +132,20 @@ function EvalTable({ evals, isCIMode = false }: { evals: Evals[]; isCIMode?: boo
         <Badge variant="secondary" className="text-xs">
           {evals.length} Total Evaluations
         </Badge>
-        <Button variant="ghost" size="icon" onClick={handleRefresh} disabled={showLoading} className="h-9 w-9">
-          {showLoading ? <RefreshCcwIcon className="h-4 w-4 animate-spin" /> : <RefreshCcwIcon className="h-4 w-4" />}
+        <Button variant="ghost" size="icon" onClick={handleRefresh} disabled={isTableLoading} className="h-9 w-9">
+          {isTableLoading ? (
+            <RefreshCcwIcon className="h-4 w-4 animate-spin" />
+          ) : (
+            <RefreshCcwIcon className="h-4 w-4" />
+          )}
         </Button>
       </div>
 
       <div className="overflow-auto">
         <Table className="w-full">
-          <TableHeader className="bg-mastra-bg-2 sticky top-0 z-10">
+          <TableHeader className="bg-mastra-bg-2 h-[var(--table-header-height)] sticky top-0 z-10">
             <TableRow className="border-gray-6 border-b-[0.1px] text-[0.8125rem]">
-              <TableHead className="w-12"></TableHead>
+              <TableHead className="w-12 h-12"></TableHead>
               <TableHead
                 className="min-w-[200px] max-w-[30%] text-mastra-el-3 cursor-pointer"
                 onClick={() => toggleSort('metricName')}
@@ -169,13 +161,13 @@ function EvalTable({ evals, isCIMode = false }: { evals: Evals[]; isCIMode?: boo
           </TableHeader>
           <TableBody className="border-b border-gray-6 relative">
             <AnimatePresence mode="wait" presenceAffectsLayout={false}>
-              {showLoading ? (
+              {isTableLoading ? (
                 Array.from({ length: 3 }).map((_, i) => (
                   <TableRow key={i} className="border-b-gray-6 border-b-[0.1px] text-[0.8125rem]">
-                    <TableCell className="w-12">
+                    <TableCell className="w-12 h-12">
                       <Skeleton className="h-8 w-8 rounded-full" />
                     </TableCell>
-                    <TableCell className="min-w-[200px]">
+                    <TableCell className="min-w-[200px] max-w-[30%]">
                       <Skeleton className="h-4 w-3/4" />
                     </TableCell>
                     <TableCell className="flex-1">
@@ -185,15 +177,16 @@ function EvalTable({ evals, isCIMode = false }: { evals: Evals[]; isCIMode?: boo
                       <Skeleton className="h-4 w-20" />
                     </TableCell>
                     <TableCell className="w-48">
-                      <Skeleton className="h-4 w-16" />
+                      <Skeleton className="h-4 w-20" />
                     </TableCell>
                   </TableRow>
                 ))
               ) : groupEvals(evals).length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={5} className="h-32 text-center text-mastra-el-3">
+                  <TableCell className="h-12 w-16"></TableCell>
+                  <TableCell colSpan={4} className="h-32 px-4 text-center text-mastra-el-3">
                     <div className="flex flex-col items-center gap-2">
-                      <Search className="h-8 w-8" />
+                      <Search className="size-5" />
                       <p>No evaluations found</p>
                       {searchTerm && <p className="text-sm">Try adjusting your search terms</p>}
                     </div>
