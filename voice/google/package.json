@@ -31,11 +31,14 @@
   "dependencies": {
     "@google-cloud/speech": "^6.7.1",
     "@google-cloud/text-to-speech": "^6.0.1",
-    "@mastra/core": "workspace:^",
     "zod": "^3.24.2"
+  },
+  "peerDependencies": {
+    "@mastra/core": "workspace:^"
   },
   "devDependencies": {
     "@internal/lint": "workspace:*",
+    "@mastra/core": "workspace:^",
     "@types/node": "^20.17.27",
     "eslint": "^9.23.0",
     "tsup": "^8.4.0",

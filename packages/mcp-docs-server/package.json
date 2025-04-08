@@ -31,7 +31,6 @@
   "author": "",
   "license": "Elastic-2.0",
   "dependencies": {
-    "@mastra/core": "workspace:^",
     "@mastra/mcp": "workspace:^",
     "@modelcontextprotocol/sdk": "^1.9.0",
     "date-fns": "^4.1.0",
@@ -42,7 +41,11 @@
     "zod": "^3.22.4",
     "zod-to-json-schema": "^3.22.4"
   },
+  "peerDependencies": {
+    "@mastra/core": "workspace:^"
+  },
   "devDependencies": {
+    "@mastra/core": "workspace:^",
     "@hono/node-server": "^1.13.8",
     "@internal/lint": "workspace:*",
     "@types/jsdom": "^21.1.7",

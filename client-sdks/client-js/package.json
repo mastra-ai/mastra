@@ -28,18 +28,19 @@
   },
   "dependencies": {
     "@ai-sdk/ui-utils": "^1.1.19",
-    "@mastra/core": "workspace:^",
     "json-schema": "^0.4.0",
     "zod": "^3.24.2",
     "zod-to-json-schema": "^3.24.3"
   },
   "peerDependencies": {
-    "zod": "^3.24.2"
+    "zod": "^3.24.2",
+    "@mastra/core": "workspace:^"
   },
   "devDependencies": {
     "@babel/preset-env": "^7.26.9",
     "@babel/preset-typescript": "^7.27.0",
     "@internal/lint": "workspace:*",
+    "@mastra/core": "workspace:^",
     "@tsconfig/recommended": "^1.0.8",
     "@types/json-schema": "^7.0.15",
     "@types/node": "^20.17.27",

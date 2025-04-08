@@ -26,11 +26,14 @@
   },
   "license": "Elastic-2.0",
   "dependencies": {
-    "@mastra/core": "workspace:^",
     "ibm-watson": "^8.0.0",
     "zod": "^3.24.2"
   },
+  "peerDependencies": {
+    "@mastra/core": "workspace:^"
+  },
   "devDependencies": {
+    "@mastra/core": "workspace:^",
     "@internal/lint": "workspace:*",
     "@microsoft/api-extractor": "^7.52.2",
     "@types/node": "^20.17.27",
