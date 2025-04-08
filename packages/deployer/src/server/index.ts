@@ -97,18 +97,6 @@ export async function createHonoServer(
   }, {});
 
   // Middleware
-  app.use(
-    '*',
-    timeout(server?.timeout ?? 1000 * 30),
-    cors({
-      origin: '*',
-      allowMethods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-      allowHeaders: ['Content-Type', 'Authorization', 'x-mastra-client-type'],
-      exposeHeaders: ['Content-Length', 'X-Requested-With'],
-      credentials: false,
-      maxAge: 3600,
-    }),
-  );
 
   if (options.apiReqLogs) {
     app.use(logger());
@@ -123,6 +111,21 @@ export async function createHonoServer(
     for (const m of serverMiddleware) {
       app.use(m.path, m.handler);
     }
+  }
+
+  //Global cors config
+  if (server?.cors === false) {
+    app.use('*', timeout(server?.timeout ?? 1000 * 30));
+  } else {
+    const corsConfig = {
+      origin: server?.cors?.origin ?? '*',
+      allowMethods: server?.cors?.allowMethods ?? ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+      credentials: server?.cors?.credentials ?? false,
+      maxAge: server?.cors?.maxAge ?? 3600,
+      allowHeaders: ['Content-Type', 'Authorization', 'x-mastra-client-type', ...(server?.cors?.allowHeaders ?? [])],
+      exposeHeaders: ['Content-Length', 'X-Requested-With', ...(server?.cors?.exposeHeaders ?? [])],
+    };
+    app.use('*', timeout(server?.timeout ?? 1000 * 30), cors(corsConfig));
   }
 
   // Add Mastra to context
