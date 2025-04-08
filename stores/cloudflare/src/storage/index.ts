@@ -7,7 +7,7 @@ import {
   TABLE_EVALS,
   TABLE_TRACES,
 } from '@mastra/core/storage';
-import type { TABLE_NAMES, StorageColumn, StorageGetMessagesArg, EvalRow } from '@mastra/core/storage';
+import type { TABLE_NAMES, StorageColumn, StorageGetMessagesArg, EvalRow, WorkflowRuns } from '@mastra/core/storage';
 import type { WorkflowRunState } from '@mastra/core/workflows';
 import type { KVNamespace } from '@cloudflare/workers-types';
 import Cloudflare from 'cloudflare';
@@ -1163,6 +1163,17 @@ export class CloudflareStore extends MastraStorage {
   }
 
   getEvalsByAgentName(_agentName: string, _type?: 'test' | 'live'): Promise<EvalRow[]> {
+    throw new Error('Method not implemented.');
+  }
+
+  getWorkflowRuns(_args?: {
+    namespace?: string;
+    workflowName?: string;
+    fromDate?: Date;
+    toDate?: Date;
+    limit?: number;
+    offset?: number;
+  }): Promise<WorkflowRuns> {
     throw new Error('Method not implemented.');
   }
 
