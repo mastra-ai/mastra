@@ -262,7 +262,7 @@ export class PgVector extends MastraVector {
       const client = await this.pool.connect();
       try {
         // install vector extension
-        await this.installVectorExtension();
+        await this.installVectorExtension(client);
         try {
           await client.query(`
           DO $$ 
@@ -371,8 +371,7 @@ export class PgVector extends MastraVector {
     });
   }
 
-  private async installVectorExtension() {
-    const client = await this.pool.connect();
+  private async installVectorExtension(client: pg.PoolClient) {
     try {
       // First check if extension is already installed
       const extensionCheck = await client.query(`
@@ -398,8 +397,6 @@ export class PgVector extends MastraVector {
       }
     } catch (error) {
       this.logger.error('Error checking vector extension status', { error });
-    } finally {
-      client.release();
     }
   }
 
