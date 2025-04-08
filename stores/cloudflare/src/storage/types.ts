@@ -1,14 +1,15 @@
+import type { KVNamespace } from '@cloudflare/workers-types';
 import type { StorageThreadType, MessageType } from '@mastra/core/memory';
-import {
+import type {
   TABLE_MESSAGES,
   TABLE_THREADS,
   TABLE_WORKFLOW_SNAPSHOT,
   TABLE_EVALS,
   TABLE_TRACES,
+  TABLE_NAMES,
+  EvalRow,
 } from '@mastra/core/storage';
-import type { TABLE_NAMES, EvalRow } from '@mastra/core/storage';
 import type { WorkflowRunState } from '@mastra/core/workflows';
-import type { KVNamespace } from '@cloudflare/workers-types';
 
 /**
  * Configuration for Cloudflare KV using REST API

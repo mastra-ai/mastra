@@ -1,21 +1,21 @@
 import { randomUUID } from 'crypto';
-import dotenv from 'dotenv';
-import { Miniflare } from 'miniflare';
-import { describe, it, expect, beforeAll, beforeEach, afterAll, vi } from 'vitest';
-import type { WorkflowRunState } from '@mastra/core/workflows';
+import type { KVNamespace } from '@cloudflare/workers-types';
 import type { MessageType, StorageThreadType } from '@mastra/core/memory';
+import type { TABLE_NAMES } from '@mastra/core/storage';
 import {
   TABLE_MESSAGES,
-  TABLE_NAMES,
   TABLE_THREADS,
   TABLE_WORKFLOW_SNAPSHOT,
   TABLE_EVALS,
   TABLE_TRACES,
 } from '@mastra/core/storage';
-import type { KVNamespace } from '@cloudflare/workers-types';
+import type { WorkflowRunState } from '@mastra/core/workflows';
+import dotenv from 'dotenv';
+import { Miniflare } from 'miniflare';
+import { describe, it, expect, beforeAll, beforeEach, afterAll, vi } from 'vitest';
+import type { CloudflareStoreConfig } from './types';
 
 import { CloudflareStore } from '.';
-import type { CloudflareStoreConfig } from './types';
 
 export interface Env {
   [TABLE_THREADS]: KVNamespace;
@@ -36,9 +36,6 @@ const mf = new Miniflare({
   modules: true,
   kvNamespaces: [TABLE_THREADS, TABLE_MESSAGES, TABLE_WORKFLOW_SNAPSHOT, TABLE_EVALS, TABLE_TRACES],
 });
-
-// Get KV namespaces
-let bindings: Env;
 
 const TEST_CONFIG: CloudflareStoreConfig = {
   bindings: {} as Env, // Will be populated in beforeAll
@@ -62,6 +59,7 @@ const createSampleMessage = (threadId: string): MessageType => ({
   threadId,
   content: [{ type: 'text' as const, text: 'Hello' }] as MessageType['content'],
   createdAt: new Date(),
+  resourceId: `resource-${randomUUID()}`,
 });
 
 const createSampleWorkflowSnapshot = (threadId: string): WorkflowRunState => ({

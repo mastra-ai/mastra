@@ -1,3 +1,4 @@
+import type { KVNamespace } from '@cloudflare/workers-types';
 import type { StorageThreadType, MessageType } from '@mastra/core/memory';
 import {
   MastraStorage,
@@ -9,9 +10,9 @@ import {
 } from '@mastra/core/storage';
 import type { TABLE_NAMES, StorageColumn, StorageGetMessagesArg, EvalRow, WorkflowRuns } from '@mastra/core/storage';
 import type { WorkflowRunState } from '@mastra/core/workflows';
-import type { KVNamespace } from '@cloudflare/workers-types';
 import Cloudflare from 'cloudflare';
-import { type CloudflareStoreConfig, isWorkersConfig, type RecordTypes } from './types';
+import { isWorkersConfig } from './types';
+import type { CloudflareStoreConfig, RecordTypes } from './types';
 
 export class CloudflareStore extends MastraStorage {
   private client?: Cloudflare;
@@ -715,7 +716,7 @@ export class CloudflareStore extends MastraStorage {
       } as RecordTypes[T];
 
       // Validate record type
-      this.validateRecord(processedRecord, tableName);
+      await this.validateRecord(processedRecord, tableName);
       await this.putKV({ tableName, key, value: processedRecord });
     } catch (error) {
       this.logger.error(`Failed to insert record for ${tableName}:`, { error });
