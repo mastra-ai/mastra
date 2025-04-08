@@ -78,14 +78,6 @@ export async function createHonoServer(
   // Create typed Hono app
   const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
   const server = mastra.getServer();
-  const corsConfig = {
-    origin: server?.cors?.origin ?? '*',
-    allowMethods: server?.cors?.allowMethods ?? ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-    allowHeaders: ['Content-Type', 'Authorization', 'x-mastra-client-type', ...(server?.cors?.allowHeaders ?? [])],
-    exposeHeaders: ['Content-Length', 'X-Requested-With', ...(server?.cors?.exposeHeaders ?? [])],
-    credentials: server?.cors?.credentials ?? false,
-    maxAge: server?.cors?.maxAge ?? 3600,
-  };
 
   // Initialize tools
   const mastraToolsPaths = process.env.MASTRA_TOOLS_PATH;
@@ -105,7 +97,6 @@ export async function createHonoServer(
   }, {});
 
   // Middleware
-  app.use('*', timeout(server?.timeout ?? 1000 * 30), cors(corsConfig));
 
   if (options.apiReqLogs) {
     app.use(logger());
@@ -121,6 +112,17 @@ export async function createHonoServer(
       app.use(m.path, m.handler);
     }
   }
+
+  //Global cors config
+  const corsConfig = {
+    origin: server?.cors?.origin ?? '*',
+    allowMethods: server?.cors?.allowMethods ?? ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    allowHeaders: ['Content-Type', 'Authorization', 'x-mastra-client-type', ...(server?.cors?.allowHeaders ?? [])],
+    exposeHeaders: ['Content-Length', 'X-Requested-With', ...(server?.cors?.exposeHeaders ?? [])],
+    credentials: server?.cors?.credentials ?? false,
+    maxAge: server?.cors?.maxAge ?? 3600,
+  };
+  app.use('*', timeout(server?.timeout ?? 1000 * 30), cors(corsConfig));
 
   // Add Mastra to context
   app.use('*', async (c, next) => {
