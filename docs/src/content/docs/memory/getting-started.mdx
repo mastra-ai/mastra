@@ -1,43 +1,40 @@
 # Getting Started with Memory
 
-Mastra makes it simple to add memory capabilities to your agents, allowing them to recall past interactions and maintain context. This guide will help you set up and use memory in your application.
+Mastra makes it simple to add memory capabilities to your agents, allowing them to recall past interactions and maintain context across multiple turns in a conversation. This guide covers the essential setup and core concepts.
 
-## Quick Start: Try Memory in 5 Minutes
+## 5 Minute Quick Start
 
-The fastest way to experiment with Mastra's memory system is using the built-in development playground.
+The fastest way to see memory in action is using the built-in development playground.
 
 **1. Setup Your Project:**
 
-If you haven't already, create a Mastra project by following the main [Getting Started guide](/docs/getting-started/installation).
+If you haven't already, create a new Mastra project following the main [Getting Started guide](/docs/getting-started/installation).
 
-Once your project is set up, install the memory package in your project directory:
+Then install the memory package:
 
 ```bash npm2yarn copy
 npm install @mastra/memory
 ```
 
-By default, Mastra memory uses LibSQL for storage and FastEmbed for embeddings, which are included in the package.
-
 **2. Add Memory to Your Agent:**
 
-In your project's `src/mastra/agents/index.ts` file, create an agent and attach a `Memory` instance:
+In `src/mastra/agents/index.ts`, create an agent and attach a `Memory` instance:
 
-```typescript filename="src/mastra/agents/index.ts"
+```typescript filename="src/mastra/agents/index.ts" {10}
 import { Agent } from "@mastra/core/agent";
 import { Memory } from "@mastra/memory";
 import { openai } from "@ai-sdk/openai"; // Or your preferred LLM provider
 
 export const myMemoryAgent = new Agent({
   name: "MemoryAgent",
-  instructions: "You are a helpful assistant with memory capabilities. Remember things I tell you.",
-  model: openai("gpt-4o"), // Ensure you have OPENAI_API_KEY in your .env
-  memory: new Memory(), // Basic memory setup
+  instructions: "...",
+  model: openai("gpt-4o"),
+
+  memory: new Memory(),
 });
 ```
 
 **3. Start the Development Server:**
-
-Run the Mastra development server:
 
 ```bash npm2yarn copy
 npm run dev
@@ -45,11 +42,9 @@ npm run dev
 
 **4. Use the Playground:**
 
-Open the playground in your browser (usually `http://localhost:4111`). Select your `MemoryAgent`.
+Open the playground (http://localhost:4111) and select your `MemoryAgent`.
 
-The playground interface shows a list of memory threads (conversations) in the left sidebar and the main chat area where you interact with the selected agent.
-
-Now, interact with your agent in the main chat area. Try giving it some information and referencing it later:
+Interact with your agent. Notice how it remembers information across turns:
 
 ```
 ➡️ You: My favorite color is blue.
@@ -58,40 +53,37 @@ Now, interact with your agent in the main chat area. Try giving it some informat
 ⬅️ Agent: Your favorite color is blue.
 ```
 
-The playground automatically manages `resourceId` and `threadId` for each conversation thread in the sidebar, making it easy to see memory in action.
+## Memory Threads
 
-## Using Memory in Your Application
+Mastra organizes memory into threads, which are records that identify specific conversation histories, using two identifiers:
 
-When integrating memory into your actual application (e.g., a web app, API), you **must** provide `resourceId` and `threadId` with each agent call. This ensures conversations are correctly associated with users and specific chat sessions.
+1.  **`threadId`**: A specific conversation id (e.g., `support_123`).
+2.  **`resourceId`**: The user or entity id that owns each thread (e.g., `user_123`, `org_456`).
 
-- `resourceId`: Typically identifies the user (e.g., `user_123`, `customer_abc`).
-- `threadId`: Identifies a specific conversation (e.g., a UUID like `conv_f4a7...`).
-
-```typescript
-// Example of calling the agent from your application code
-
-// First interaction in a specific conversation for a user
-await myMemoryAgent.stream("Hello, my name is Alice.", {
-  resourceId: "user_alice",       // Identifies the user
-  threadId: "conversation_123", // Identifies this specific conversation
-});
-
-// Later interaction within the same conversation
-// Memory is automatically retrieved using the same IDs
-await myMemoryAgent.stream("What's my name again?", {
+```typescript {2,3}
+const response = await myMemoryAgent.stream("Hello, my name is Alice.", {
   resourceId: "user_alice",
   threadId: "conversation_123",
-}); // Agent will respond: "Your name is Alice."
+});
 ```
 
-Providing these IDs allows the agent to:
+**Important:** without these ID's your agent will not use memory, even if memory is properly configured. The playground handles this for you, but you need to add ID's yourself when using memory in your application.
 
-- Store messages correctly for each user and conversation.
-- Retrieve the relevant context for future interactions.
-- Maintain conversation continuity.
+## Conversation History
+
+By default, the `Memory` instance includes the [last 40 messages](../reference/memory/Memory.mdx) from the current Memory thread in each new request. This provides the agent with immediate conversational context.
+
+```ts {3}
+const memory = new Memory({
+  options: {
+    lastMessages: 10,
+  },
+});
+```
+
+**Important:** Only send the newest user message in each agent call. Mastra handles retrieving and injecting the necessary history. Sending the full history yourself will cause duplication. See the [AI SDK Memory Example](../../examples/memory/use-chat.mdx) for how to handle this with when using the `useChat` frontend hooks.
 
 ## Next Steps
 
-- **[Memory Threads](./memory-threads.mdx)**: Understand how to manage multiple conversations per user.
-- **[Conversation History](./last-messages.mdx)**: Learn how Mastra manages recent messages.
-- **[Configuring Memory](./configuring-memory.mdx)**: Explore options for storage backends, vector databases, and advanced settings.
+- **[Semantic Recall](./semantic-recall.mdx)**: Retrieve relevant messages based on meaning, not just recency.
+- **[Configuration](../reference/memory/Memory.mdx)**: Full API details for `Memory` class configuration and methods.

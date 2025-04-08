@@ -9,12 +9,12 @@ The context window is the "window" of information visible to the language model 
 The context window consists of several key elements organized in a specific way:
 
 1.  **System Instructions**: Directives that guide the agent's behavior and personality.
-2.  **Relevant Context / History**: Information from the ongoing conversation or retrieved data relevant to the current interaction. This often includes recent messages but can contain other contextual elements.
+2.  **Relevant Context / History**: Information from the ongoing conversation or retrieved data relevant to the current interaction. This often includes recent messages but can contain other contextual elements retrieved via memory features.
 3.  **Current User Message**: The most recent input that the agent needs to respond to.
 
 Each time your agent generates a response, it analyzes the entire context window and produces an appropriate response, which is then added to the message history for future interactions.
 
-Before each interaction, memory logic determines which data should be added to the context window for the current request. The relevancy of each piece of data is determined by different memory features like semantic recall, message history, and working memory, but we'll come back to that later in the docs.
+Before each interaction, memory logic determines which data should be added to the context window for the current request. The relevancy of each piece of data is determined by different memory features like semantic recall, message history, and working memory.
 
 ## Why use Memory?
 
@@ -25,9 +25,9 @@ With memory, your agent can:
 - Remember tool calls it made and their results ("Based on the weather data I retrieved earlier...")
 - Store persistent user information and preferences ("I don't like olives, don't recommend recipes with olives.")
 
-### Example: Memory in a Conversation
+### Example
 
-**Without Memory:**
+**Without Memory:** The agent only sees the latest message.
 
 ```
 ➡️ User: My name is Jamie, I live in Toronto.
@@ -36,7 +36,7 @@ With memory, your agent can:
 ⬅️ Agent: I don't know where you're located. Could you please share your location?
 ```
 
-**With Memory:**
+**With Memory:** The agent can hold a coherent conversation spanning long time periods.
 
 ```
 ➡️ User: My name is Jamie, I live in Toronto.
@@ -51,67 +51,25 @@ With memory, your agent can:
 ⬅️ Agent: In Toronto today, it's 22°C and sunny. Looks like it's warmer than yesterday!
 ```
 
-## Types of Memory
+## Types of Agent Memory
 
 Memory can be broadly categorized into two main types:
 
 - **Short-Term Memory:** Information relevant only to the current conversation, such as recent messages. This memory provides immediate context for the agent's responses.
-- **Long-Term Memory:** Information that persists across conversation sessions, like user preferences, important facts, and recurring topics.
-- **Working Memory:** A specific implementation that provides a structured way to maintain continuously relevant information across conversation turns. This will be covered in more detail in a later section.
+- **Long-Term Memory:** Information that persists across conversation sessions or is retrieved based on relevance rather than recency.
 
-## Mastra Memory Features
+### Mastra Memory Features
 
-Mastra provides several features to manage context effectively:
+Mastra provides several features to handle both types of agent memory:
 
-- **[Conversation History](./last-messages.mdx)**: Manages recent turn-based interactions within the context window.
+- **[Conversation History & Threads](./getting-started.mdx#core-concepts-resources-and-threads)**: Manages recent turn-based interactions and conversations.
 - **[Semantic Recall](./semantic-recall.mdx)**: Retrieves relevant past messages based on semantic meaning, extending beyond recent history.
 - **[Working Memory](./working-memory.mdx)**: Maintains persistent, structured information (like user preferences or task state) across interactions.
-- **[Token Management](./token-management.mdx)**: Optimizes context window size using processors like `TokenLimiter` to prevent errors and manage costs.
-- **[Memory Threads](./memory-threads.mdx)**: Organizes conversations by user (`resourceId`) and topic (`threadId`) for multi-user support and context isolation.
-- **[Configuring Memory](./configuring-memory.mdx)**: Allows customization of storage backends, vector databases, and embedding models.
-- **[Frontend Integration](./frontend-integration.mdx)**: Provides guidance for connecting memory features to UI frameworks like React and Svelte.
+- **[Memory Processors](./memory-processors.mdx)**: Enables post-processing of memory for use-cases like token limiting and tool filtering.
 
-## Memory Request Flow
+## Next Steps
 
-Here's a simplified view of how memory works in Mastra:
+Now that you understand the core concepts, continue to [Getting Started](./getting-started.mdx) to learn how to implement memory in your Mastra agents.
 
-```text
-        ┌─────────────────┐
-        │  User Message   │
-        └────────┬────────┘
-                 ▼
-        ┌─────────────────┐
-        │  Mastra Agent   │
-        └────────┬────────┘
-                 ▼
-    ┌───────────────────────────┐
-    │      Memory System        │
-    └───────────┬───────────────┘
-                │ determines context from...
-   ┌────────────┼────────────────┬───────────────┐
-   │            │                │               │
-   ▼            ▼                ▼               ▼
-┌─────────┐ ┌───────────┐ ┌─────────────────┐ ┌───────────┐
-│ Last    │ │ Semantic  │ │ Working Memory  │ │ System    │
-│ Messages│ │ Recall    │ │                 │ │ Prompt    │
-└─────────┘ └───────────┘ └─────────────────┘ └───────────┘
-      │            │                │               │
-      └────────────┼────────────────┴───────────────┘
-                   │ assembles data
-                   ▼
-     ┌───────────────────────────┐
-     │ Final Context Window      │
-     └───────────┬───────────────┘
-                 │ sent to
-                 ▼
-        ┌─────────────────┐
-        │ LLM Provider    │
-        └─────────────────┘
-```
-
-For a more detailed diagram of the memory architecture, see the [Architecture](./memory-architecture.mdx) page.
-
-Now that you understand what memory is and how it works in Mastra, you're ready to implement it in your own agents.
-
-Continue to [Getting Started](./getting-started.mdx) to learn how to implement memory in your Mastra agents.
+Alternatively you can visit the [configuration reference](../reference/memory/Memory.mdx) for available options, or browse [usage examples](../../examples/memory/use-chat.mdx).
 
