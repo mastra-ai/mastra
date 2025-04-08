@@ -1,0 +1,50 @@
+---
+'@mastra/voice-openai-realtime': minor
+'@mastra/mcp-docs-server': minor
+'@mastra/firecrawl': minor
+'@mastra/client-js': minor
+'@mastra/deployer-cloudflare': minor
+'@mastra/github': minor
+'@mastra/ragie': minor
+'@mastra/turbopuffer': minor
+'@mastra/deployer-netlify': minor
+'@mastra/deployer': minor
+'@mastra/speech-elevenlabs': minor
+'@mastra/clickhouse': minor
+'@mastra/cloudflare': minor
+'@mastra/deployer-vercel': minor
+'@mastra/loggers': minor
+'@mastra/vectorize': minor
+'@mastra/voice-cloudflare': minor
+'@mastra/voice-elevenlabs': minor
+'@mastra/memory': minor
+'@mastra/speech-deepgram': minor
+'@mastra/pinecone': minor
+'@mastra/voice-speechify': minor
+'@mastra/evals': minor
+'@mastra/upstash': minor
+'@mastra/voice-deepgram': minor
+'@mastra/speech-google': minor
+'@mastra/speech-openai': minor
+'@mastra/speech-playai': minor
+'@mastra/chroma': minor
+'@mastra/qdrant': minor
+'@mastra/mcp': minor
+'@mastra/rag': minor
+'@mastra/speech-azure': minor
+'@mastra/astra': minor
+'@mastra/voice-google': minor
+'@mastra/voice-openai': minor
+'@mastra/voice-sarvam': minor
+'@mastra/speech-murf': minor
+'@mastra/speech-ibm': minor
+'@mastra/pg': minor
+'@mastra/server': minor
+'@mastra/speech-replicate': minor
+'@mastra/speech-speechify': minor
+'@mastra/voice-azure': minor
+'@mastra/voice-murf': minor
+'@mastra/voice-playai': minor
+---
+
+Move @mastra/core to peerDependencies
