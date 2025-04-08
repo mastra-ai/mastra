@@ -1,5 +1,73 @@
 # mastra
 
+## 0.4.5
+
+### Patch Changes
+
+- a4a1151: Fix playground freezing when buffer is passed between steps
+- 9f529a4: enable geoip in system properties for analytics
+- 9d13790: update playground-ui dynamic form, cleanups
+- 13ade6a: update favicon shape
+- b08fc42: Fix workflow in getting started
+- 055c4ea: Fix traces page showing e.reduce error
+- 124ce08: Ability to set maxTokens, temperature, and other common features in playground
+- c0f6c98: fix flag for disabling geoip
+- 789bef3: Make runId optional for workflow startAsync api
+- a3f0e90: Update storage initialization to ensure tables are present
+- 40dca45: Fix expanding workflow sidebar not expanding the output section
+- 6330967: Enable route timeout using server options
+- b311bb7: fix cli build command to use correct Mastra directory
+- 8393832: Handle nested workflow view on workflow graph
+- 6330967: Add support for configuration of server port using Mastra instance
+- 40720d3: Add support for webcontainers like stackblitz
+- 23999d4: Add Design System tokens and components into playground ui
+- 706e6aa: Remove unused dependencies
+- 8076ecf: Unify workflow watch/start response
+- 9e7d46a: Fix scroll issue on playground tools page
+- d16ed18: Make playground-ui dynamic forms better
+- Updated dependencies [56c31b7]
+- Updated dependencies [619c39d]
+- Updated dependencies [2135c81]
+- Updated dependencies [5ae0180]
+- Updated dependencies [05d58cc]
+- Updated dependencies [fe56be0]
+- Updated dependencies [93875ed]
+- Updated dependencies [107bcfe]
+- Updated dependencies [9bfa12b]
+- Updated dependencies [515ebfb]
+- Updated dependencies [5b4e19f]
+- Updated dependencies [4c98129]
+- Updated dependencies [4c65a57]
+- Updated dependencies [dbbbf80]
+- Updated dependencies [a0967a0]
+- Updated dependencies [84fe241]
+- Updated dependencies [fca3b21]
+- Updated dependencies [88fa727]
+- Updated dependencies [dfb0601]
+- Updated dependencies [f37f535]
+- Updated dependencies [789bef3]
+- Updated dependencies [a3f0e90]
+- Updated dependencies [4d67826]
+- Updated dependencies [6330967]
+- Updated dependencies [8393832]
+- Updated dependencies [6330967]
+- Updated dependencies [84fe241]
+- Updated dependencies [99d43b9]
+- Updated dependencies [32ba03c]
+- Updated dependencies [d7e08e8]
+- Updated dependencies [3c6ae54]
+- Updated dependencies [febc8a6]
+- Updated dependencies [0deb356]
+- Updated dependencies [7599d77]
+- Updated dependencies [0118361]
+- Updated dependencies [619c39d]
+- Updated dependencies [cafae83]
+- Updated dependencies [8076ecf]
+- Updated dependencies [8df4a77]
+- Updated dependencies [304397c]
+  - @mastra/core@0.8.0
+  - @mastra/deployer@0.2.6
+
 ## 0.4.5-alpha.11
 
 ### Patch Changes
