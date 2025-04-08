@@ -1,7 +1,7 @@
 import type { Handler, MiddlewareHandler } from 'hono';
+import type { cors } from 'hono/cors';
 import type { DescribeRouteOptions } from 'hono-openapi';
 export type Methods = 'GET' | 'POST' | 'PUT' | 'DELETE';
-import type { cors } from 'hono/cors';
 
 export type ApiRoute = {
   path: string;
