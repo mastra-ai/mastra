@@ -1,5 +1,63 @@
 # @mastra/deployer
 
+## 0.2.6
+
+### Patch Changes
+
+- 2135c81: Alias @mastra/server in bundler
+- 05d58cc: fix: add 'x-mastra-client-type' to allowed headers in CORS configuration
+- 4c98129: Upgrade babel-core
+- 4c65a57: Add fastebmed as external
+- 84fe241: Decoupled handlers from hono
+- 88fa727: Added getWorkflowRuns for libsql, pg, clickhouse and upstash as well as added route getWorkflowRunsHandler
+- dfb0601: Add missing triggerData to the openapi.json for the POST /api/workflow/{workflowId}/start endpoint
+- 789bef3: Make runId optional for workflow startAsync api
+- a3f0e90: Update storage initialization to ensure tables are present
+- 6330967: Enable route timeout using server options
+- 8393832: Handle nested workflow view on workflow graph
+- 6330967: Add support for configuration of server port using Mastra instance
+- 84fe241: Improve streaming of workflows
+- 32ba03c: Make timeout 30s
+- 3c6ae54: Fix fastembed part of dependencies
+- febc8a6: Added dual tracing and fixed local tracing recursion
+- 0deb356: Fixed a bug where the hono body wasn't properly passed into stream+generate API handlers resulting in "cannot destructure property messages of body"
+- 8076ecf: Unify workflow watch/start response
+- 304397c: Add support for custom api routes in mastra
+- Updated dependencies [56c31b7]
+- Updated dependencies [619c39d]
+- Updated dependencies [5ae0180]
+- Updated dependencies [fe56be0]
+- Updated dependencies [93875ed]
+- Updated dependencies [107bcfe]
+- Updated dependencies [9bfa12b]
+- Updated dependencies [515ebfb]
+- Updated dependencies [5b4e19f]
+- Updated dependencies [dbbbf80]
+- Updated dependencies [a0967a0]
+- Updated dependencies [84fe241]
+- Updated dependencies [fca3b21]
+- Updated dependencies [88fa727]
+- Updated dependencies [f37f535]
+- Updated dependencies [789bef3]
+- Updated dependencies [a3f0e90]
+- Updated dependencies [4d67826]
+- Updated dependencies [6330967]
+- Updated dependencies [8393832]
+- Updated dependencies [6330967]
+- Updated dependencies [84fe241]
+- Updated dependencies [99d43b9]
+- Updated dependencies [d7e08e8]
+- Updated dependencies [febc8a6]
+- Updated dependencies [7599d77]
+- Updated dependencies [0118361]
+- Updated dependencies [619c39d]
+- Updated dependencies [cafae83]
+- Updated dependencies [8076ecf]
+- Updated dependencies [8df4a77]
+- Updated dependencies [304397c]
+  - @mastra/core@0.8.0
+  - @mastra/server@1.0.0
+
 ## 0.2.6-alpha.10
 
 ### Patch Changes

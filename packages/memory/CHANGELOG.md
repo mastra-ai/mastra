@@ -1,5 +1,46 @@
 # @mastra/memory
 
+## 0.2.7
+
+### Patch Changes
+
+- 5ae0180: Removed prefixed doc references
+- 93875ed: Improved the performance of Memory semantic recall by 2 to 3 times when using pg by making tweaks to @mastra/memory @mastra/core and @mastra/pg
+- 3e72f94: Updated the internal working memory system to use MD for formatting instead of nested XML - this is more token efficient and makes it more obvious that it's unstructured text
+- a0967a0: Added new "Memory Processor" feature to @mastra/core and @mastra/memory, allowing devs to modify Mastra Memory before it's sent to the LLM
+- 7599d77: fix(deps): update ai sdk to ^4.2.2
+- 0118361: Add resourceId to memory metadata
+- Updated dependencies [56c31b7]
+- Updated dependencies [619c39d]
+- Updated dependencies [5ae0180]
+- Updated dependencies [fe56be0]
+- Updated dependencies [93875ed]
+- Updated dependencies [107bcfe]
+- Updated dependencies [9bfa12b]
+- Updated dependencies [515ebfb]
+- Updated dependencies [5b4e19f]
+- Updated dependencies [dbbbf80]
+- Updated dependencies [a0967a0]
+- Updated dependencies [fca3b21]
+- Updated dependencies [88fa727]
+- Updated dependencies [f37f535]
+- Updated dependencies [a3f0e90]
+- Updated dependencies [4d67826]
+- Updated dependencies [6330967]
+- Updated dependencies [8393832]
+- Updated dependencies [6330967]
+- Updated dependencies [99d43b9]
+- Updated dependencies [d7e08e8]
+- Updated dependencies [febc8a6]
+- Updated dependencies [7599d77]
+- Updated dependencies [0118361]
+- Updated dependencies [619c39d]
+- Updated dependencies [cafae83]
+- Updated dependencies [8076ecf]
+- Updated dependencies [8df4a77]
+- Updated dependencies [304397c]
+  - @mastra/core@0.8.0
+
 ## 0.2.7-alpha.8
 
 ### Patch Changes

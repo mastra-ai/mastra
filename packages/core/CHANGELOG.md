@@ -1,5 +1,42 @@
 # @mastra/core
 
+## 0.8.0
+
+### Minor Changes
+
+- 619c39d: Added support for agents as steps
+
+### Patch Changes
+
+- 56c31b7: Batch insert messages for libsql adapter
+- 5ae0180: Removed prefixed doc references
+- fe56be0: exclude \_\_primitive, getMemory, hasOwnMemory from traces since they create noisy traces
+- 93875ed: Improved the performance of Memory semantic recall by 2 to 3 times when using pg by making tweaks to @mastra/memory @mastra/core and @mastra/pg
+- 107bcfe: Fixed JSON parsing in memory component to prevent crashes when encountering strings that start with '[' or '{' but are not valid JSON
+- 9bfa12b: Accept ID on step config
+- 515ebfb: Fix compound subscriber bug
+- 5b4e19f: fix hanging and excessive workflow execution
+- dbbbf80: Added clickhouse storage
+- a0967a0: Added new "Memory Processor" feature to @mastra/core and @mastra/memory, allowing devs to modify Mastra Memory before it's sent to the LLM
+- fca3b21: fix server in mastra not to be mandatory
+- 88fa727: Added getWorkflowRuns for libsql, pg, clickhouse and upstash as well as added route getWorkflowRunsHandler
+- f37f535: Added variables to while and until loops
+- a3f0e90: Update storage initialization to ensure tables are present
+- 4d67826: Fix eval writes, remove id column
+- 6330967: Enable route timeout using server options
+- 8393832: Handle nested workflow view on workflow graph
+- 6330967: Add support for configuration of server port using Mastra instance
+- 99d43b9: Updated evaluate to include agent output
+- d7e08e8: createdAt needs to be nullable
+- febc8a6: Added dual tracing and fixed local tracing recursion
+- 7599d77: fix(deps): update ai sdk to ^4.2.2
+- 0118361: Add resourceId to memory metadata
+- 619c39d: AgentStep -> Agent as a workflow step (WIP)
+- cafae83: Changed error messages for vector mismatch with index
+- 8076ecf: Unify workflow watch/start response
+- 8df4a77: Fix if-else execution order
+- 304397c: Add support for custom api routes in mastra
+
 ## 0.8.0-alpha.8
 
 ### Patch Changes

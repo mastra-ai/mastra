@@ -1,5 +1,7 @@
 # insert-embedding-in-libsql
 
+## 0.0.3
+
 ## 0.0.3-alpha.0
 
 ### Patch Changes
