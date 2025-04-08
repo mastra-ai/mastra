@@ -61,62 +61,61 @@ function Agents() {
   }));
 
   return (
-    <div className="flex flex-col relative overflow-hidden">
-      <section className="flex-1 relative overflow-hidden">
-        <Header>
-          <HeaderTitle>Agents</HeaderTitle>
-        </Header>
-        <ScrollArea className="h-full">
-          <AgentsTable
-            isLoading={false}
-            agentsList={agentListData}
-            columns={[
-              {
-                id: 'name',
-                header: 'Name',
-                cell: ({ row }) => (
+    <section className="overflow-hidden">
+      <Header>
+        <HeaderTitle>Agents</HeaderTitle>
+      </Header>
+
+      <ScrollArea className="h-full">
+        <AgentsTable
+          isLoading={false}
+          agentsList={agentListData}
+          columns={[
+            {
+              id: 'name',
+              header: 'Name',
+              cell: ({ row }) => (
+                <button
+                  className="w-full h-full flex justify-start py-4"
+                  onClick={() => {
+                    navigate(`/agents/${row.original.id}/chat`);
+                  }}
+                >
+                  <span
+                    onClick={() => {
+                      navigate(`/agents/${row.original.id}/chat`);
+                    }}
+                    className="text-mastra-el-5 text-sm  truncate"
+                  >
+                    {row.original.name}
+                  </span>
+                </button>
+              ),
+            },
+
+            {
+              id: 'model',
+              header: 'Model',
+              cell: ({ row }) => {
+                return (
                   <button
-                    className="w-full h-full flex justify-start py-4"
+                    className="w-full h-full flex items-center justify-end p-4"
                     onClick={() => {
                       navigate(`/agents/${row.original.id}/chat`);
                     }}
                   >
-                    <span
-                      onClick={() => {
-                        navigate(`/agents/${row.original.id}/chat`);
-                      }}
-                      className="text-mastra-el-5 text-sm  truncate"
-                    >
-                      {row.original.name}
+                    <span className="text-mastra-el-5 text-sm flex items-center gap-2">
+                      {providerMapToIcon[row.original.provider as keyof typeof providerMapToIcon] ?? null}
+                      <span>{row.original.modelId}</span>
                     </span>
                   </button>
-                ),
+                );
               },
-
-              {
-                id: 'model',
-                header: 'Model',
-                cell: ({ row }) => {
-                  return (
-                    <button
-                      className="w-full h-full flex items-center justify-end p-4"
-                      onClick={() => {
-                        navigate(`/agents/${row.original.id}/chat`);
-                      }}
-                    >
-                      <span className="text-mastra-el-5 text-sm flex items-center gap-2">
-                        {providerMapToIcon[row.original.provider as keyof typeof providerMapToIcon] ?? null}
-                        <span>{row.original.modelId}</span>
-                      </span>
-                    </button>
-                  );
-                },
-              },
-            ]}
-          />
-        </ScrollArea>
-      </section>
-    </div>
+            },
+          ]}
+        />
+      </ScrollArea>
+    </section>
   );
 }
 

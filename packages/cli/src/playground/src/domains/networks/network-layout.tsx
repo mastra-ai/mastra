@@ -11,7 +11,7 @@ export const NetworkLayout = ({ children }: { children: React.ReactNode }) => {
   const { networkId } = useParams();
   const { network, isLoading: isNetworkLoading } = useNetwork(networkId!);
   return (
-    <div className="flex flex-col h-full overflow-hidden">
+    <div className="h-full overflow-hidden">
       {isNetworkLoading ? (
         <Header>
           <HeaderTitle>

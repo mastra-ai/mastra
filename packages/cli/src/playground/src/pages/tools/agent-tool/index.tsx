@@ -1,6 +1,6 @@
 import jsonSchemaToZod from 'json-schema-to-zod';
 import { useState } from 'react';
-import { NavLink, useParams } from 'react-router';
+import { Link, useParams } from 'react-router';
 import { parse } from 'superjson';
 import { z } from 'zod';
 
@@ -38,7 +38,7 @@ const AgentTool = () => {
 
   if (isAgentLoading) {
     return (
-      <div className="flex flex-col h-full w-full bg-mastra-bg-1">
+      <div className="h-full w-full bg-mastra-bg-1">
         <Header>
           <HeaderTitle>Loading...</HeaderTitle>
         </Header>
@@ -69,16 +69,16 @@ const AgentTool = () => {
     : z.object({});
 
   return (
-    <div className="flex flex-col h-full w-full bg-mastra-bg-1 overflow-y-hidden">
+    <div className="h-full w-full bg-mastra-bg-1 overflow-y-hidden">
       <Header>
         <Breadcrumb>
-          <Crumb as={NavLink} href={`/agents`}>
+          <Crumb as={Link} to={`/agents`}>
             Agents
           </Crumb>
-          <Crumb as={NavLink} href={`/agents/${agentId}/chat`}>
+          <Crumb as={Link} to={`/agents/${agentId}/chat`}>
             {agentId}
           </Crumb>
-          <Crumb as={NavLink} href={`/agents/${agentId}/tools/${toolId}`} isCurrent>
+          <Crumb as={Link} to={`/agents/${agentId}/tools/${toolId}`} isCurrent>
             {toolId}
           </Crumb>
         </Breadcrumb>

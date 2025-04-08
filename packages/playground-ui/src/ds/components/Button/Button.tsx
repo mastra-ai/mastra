@@ -5,6 +5,7 @@ export interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElemen
   as?: React.ElementType;
   className?: string;
   href?: string;
+  to?: string;
   prefetch?: boolean | null;
   children: React.ReactNode;
 }

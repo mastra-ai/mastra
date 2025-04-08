@@ -1,6 +1,6 @@
 import { jsonSchemaToZod } from 'json-schema-to-zod';
 import { useState } from 'react';
-import { NavLink, useParams } from 'react-router';
+import { Link, useParams } from 'react-router';
 import { parse } from 'superjson';
 import { z } from 'zod';
 
@@ -33,7 +33,7 @@ const Tool = () => {
 
   if (isLoading) {
     return (
-      <div className="flex flex-col h-full w-full bg-mastra-bg-1">
+      <div className="h-full w-full bg-mastra-bg-1">
         <Header>
           <HeaderTitle>Loading...</HeaderTitle>
         </Header>
@@ -64,13 +64,13 @@ const Tool = () => {
     : z.object({});
 
   return (
-    <div className="flex flex-col h-full w-full bg-mastra-bg-1 overflow-y-hidden">
+    <div className="h-full w-full bg-mastra-bg-1 overflow-y-hidden">
       <Header>
         <Breadcrumb>
-          <Crumb as={NavLink} href={`/tools`}>
+          <Crumb as={Link} to={`/tools`}>
             Tools
           </Crumb>
-          <Crumb as={NavLink} href={`/tools/all/${tool.id}`} isCurrent>
+          <Crumb as={Link} to={`/tools/all/${tool.id}`} isCurrent>
             {toolId}
           </Crumb>
         </Breadcrumb>

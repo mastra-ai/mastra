@@ -18,7 +18,7 @@ function Workflows() {
   }));
 
   return (
-    <div className="flex flex-col h-full relative overflow-hidden">
+    <div className="h-full relative overflow-hidden">
       <Header>
         <HeaderTitle>Workflows</HeaderTitle>
       </Header>

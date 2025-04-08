@@ -201,7 +201,7 @@ export const DataTable = <TData, TValue>({
               ))
             ) : (
               <TableRow>
-                <TableCell colSpan={columns.length} className={cn('h-24 text-center', emptyStateHeight)}>
+                <TableCell colSpan={columns.length} className={cn('h-24 text-center w-full', emptyStateHeight)}>
                   No {emptyText || 'results'}
                 </TableCell>
               </TableRow>

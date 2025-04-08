@@ -1,4 +1,4 @@
-import { NavLink } from 'react-router';
+import { Link } from 'react-router';
 
 import { Header, Breadcrumb, Crumb, HeaderGroup, Button } from '@mastra/playground-ui';
 
@@ -6,24 +6,25 @@ export function AgentHeader({ agentName, agentId }: { agentName: string; agentId
   return (
     <Header>
       <Breadcrumb>
-        <Crumb as={NavLink} href={`/agents`}>
+        <Crumb as={Link} to={`/agents`}>
           Agents
         </Crumb>
-        <Crumb as={NavLink} href={`/agents/${agentId}`} isCurrent>
+        <Crumb as={Link} to={`/agents/${agentId}`} isCurrent>
           {agentName}
         </Crumb>
-        <HeaderGroup>
-          <Button as={NavLink} href={`/agents/${agentId}/chat`}>
-            Chat
-          </Button>
-          <Button as={NavLink} href={`/agents/${agentId}/traces`}>
-            Traces
-          </Button>
-          <Button as={NavLink} href={`/agents/${agentId}/evals`}>
-            Evals
-          </Button>
-        </HeaderGroup>
       </Breadcrumb>
+
+      <HeaderGroup>
+        <Button as={Link} to={`/agents/${agentId}/chat`}>
+          Chat
+        </Button>
+        <Button as={Link} to={`/agents/${agentId}/traces`}>
+          Traces
+        </Button>
+        <Button as={Link} to={`/agents/${agentId}/evals`}>
+          Evals
+        </Button>
+      </HeaderGroup>
     </Header>
   );
 }

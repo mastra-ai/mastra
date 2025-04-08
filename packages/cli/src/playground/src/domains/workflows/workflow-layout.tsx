@@ -13,7 +13,7 @@ export const WorkflowLayout = ({ children }: { children: React.ReactNode }) => {
   const { workflow, isLoading: isWorkflowLoading } = useWorkflow(workflowId!);
   return (
     <WorkflowRunProvider>
-      <div className="flex flex-col h-full overflow-hidden">
+      <div className="h-full overflow-hidden">
         {isWorkflowLoading ? (
           <Header>
             <HeaderTitle>

@@ -21,7 +21,7 @@ const Tools = () => {
 
   if (isLoadingAgents) {
     return (
-      <div className="flex flex-col h-full w-full">
+      <div className="h-full w-full">
         <Header>
           <HeaderTitle>Tools</HeaderTitle>
         </Header>
@@ -64,7 +64,7 @@ const Tools = () => {
 
   if (isLoadingTools || isLoadingAgent) {
     return (
-      <div className="flex flex-col h-full w-full ">
+      <div className="h-full w-full ">
         <Header>
           <HeaderTitle>Tools</HeaderTitle>
         </Header>
@@ -78,7 +78,7 @@ const Tools = () => {
   }
 
   return (
-    <div className="flex flex-col h-full w-full ">
+    <div className="h-full w-full ">
       <Header>
         <HeaderTitle>Tools</HeaderTitle>
       </Header>

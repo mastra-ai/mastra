@@ -1,4 +1,4 @@
-import { NavLink } from 'react-router';
+import { Link } from 'react-router';
 
 import { Crumb, Header, HeaderGroup, Button, Breadcrumb } from '@mastra/playground-ui';
 
@@ -6,18 +6,19 @@ export function WorkflowHeader({ workflowName, workflowId }: { workflowName: str
   return (
     <Header>
       <Breadcrumb>
-        <Crumb as={NavLink} href={`/workflows`}>
+        <Crumb as={Link} to={`/workflows`}>
           Workflows
         </Crumb>
-        <Crumb as={NavLink} href={`/workflows/${workflowId}`} isCurrent>
+        <Crumb as={Link} to={`/workflows/${workflowId}`} isCurrent>
           {workflowName}
         </Crumb>
       </Breadcrumb>
+
       <HeaderGroup>
-        <Button as={NavLink} href={`/workflows/${workflowId}/graph`}>
+        <Button as={Link} to={`/workflows/${workflowId}/graph`}>
           Graph
         </Button>
-        <Button as={NavLink} href={`/workflows/${workflowId}/traces`}>
+        <Button as={Link} to={`/workflows/${workflowId}/traces`}>
           Traces
         </Button>
       </HeaderGroup>
