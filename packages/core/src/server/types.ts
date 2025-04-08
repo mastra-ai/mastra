@@ -17,4 +17,16 @@ export type ServerConfig = {
   timeout?: number;
   apiRoutes?: ApiRoute[];
   middleware?: Middleware | Middleware[];
+  /**
+   * CORS configuration for the server
+   * @default { origin: '*', allowMethods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'], allowHeaders: ['Content-Type', 'Authorization', 'x-mastra-client-type'], exposeHeaders: ['Content-Length', 'X-Requested-With'], credentials: false }
+   */
+  cors?: {
+    origin: string | string[];
+    allowMethods?: string[];
+    allowHeaders?: string[];
+    exposeHeaders?: string[];
+    credentials?: boolean;
+    maxAge?: number;
+  };
 };
