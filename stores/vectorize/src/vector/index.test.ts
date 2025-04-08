@@ -254,8 +254,8 @@ describe('CloudflareVector', () => {
   afterAll(async () => {
     try {
       await vectorDB.deleteIndex(testIndexName);
-    } catch (error) {
-      console.warn('Failed to delete test index:', error);
+    } catch (_error) {
+      console.warn('Failed to delete test index:', _error);
     }
   });
 
@@ -505,6 +505,42 @@ describe('CloudflareVector', () => {
   });
 
   describe('Error Handling', () => {
+    it('should handle duplicate index creation gracefully', async () => {
+      const duplicateIndexName = `duplicate-test-${randomUUID()}`;
+      const dimension = 768;
+
+      // Create index first time
+      await vectorDB.createIndex({
+        indexName: duplicateIndexName,
+        dimension,
+        metric: 'cosine',
+      });
+      await waitUntilReady(vectorDB, duplicateIndexName);
+
+      // Try to create with same dimensions - should not throw
+      await expect(
+        vectorDB.createIndex({
+          indexName: duplicateIndexName,
+          dimension,
+          metric: 'cosine',
+        }),
+      ).resolves.not.toThrow();
+
+      // Try to create with different dimensions - should throw
+      await expect(
+        vectorDB.createIndex({
+          indexName: duplicateIndexName,
+          dimension: dimension + 1,
+          metric: 'cosine',
+        }),
+      ).rejects.toThrow(
+        `Index "${duplicateIndexName}" already exists with ${dimension} dimensions, but ${dimension + 1} dimensions were requested`,
+      );
+
+      // Cleanup
+      await vectorDB.deleteIndex(duplicateIndexName);
+    });
+
     it('should handle invalid dimension vectors', async () => {
       await expect(vectorDB.upsert({ indexName: testIndexName, vectors: [[1.0, 0.0]] })).rejects.toThrow();
     });
@@ -694,7 +730,7 @@ describe('CloudflareVector', () => {
       }
       try {
         await vectorDB.deleteIndex(testIndexName2);
-      } catch (error) {
+      } catch (_error) {
         // Ignore errors if index doesn't exist
       }
     });
@@ -1248,8 +1284,8 @@ describe('CloudflareVector', () => {
       warnSpy.mockRestore();
       try {
         await vectorDB.deleteIndex(indexName2);
-      } catch (error) {
-        console.warn('Failed to delete test index:', error);
+      } catch (_error) {
+        console.warn('Failed to delete test index:', _error);
       }
     });
 
