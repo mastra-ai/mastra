@@ -1,12 +1,11 @@
 import { jsonSchemaToZod } from 'json-schema-to-zod';
 import { useState } from 'react';
-import { useParams } from 'react-router';
+import { NavLink, useParams } from 'react-router';
 import { parse } from 'superjson';
 import { z } from 'zod';
 
 import { resolveSerializedZodOutput } from '@/components/dynamic-form/utils';
-import Breadcrumb from '@/components/ui/breadcrumbs';
-import { Header } from '@/components/ui/header';
+
 import { Skeleton } from '@/components/ui/skeleton';
 import { Text } from '@/components/ui/text';
 
@@ -14,6 +13,7 @@ import { useTool } from '@/hooks/use-all-tools';
 import { useExecuteTool } from '@/hooks/use-execute-tool';
 
 import ToolExecutor from '../tool-executor';
+import { HeaderTitle, Header, Breadcrumb, Crumb } from '@mastra/playground-ui';
 
 const Tool = () => {
   const { toolId } = useParams();
@@ -34,7 +34,9 @@ const Tool = () => {
   if (isLoading) {
     return (
       <div className="flex flex-col h-full w-full bg-mastra-bg-1">
-        <Header title="Loading..." />
+        <Header>
+          <HeaderTitle>Loading...</HeaderTitle>
+        </Header>
         <div className="w-full h-full grid grid-cols-[300px_1fr] p-2 gap-2">
           <div className="flex flex-col gap-4 border-[0.5px] border-mastra-border-1 rounded-[0.25rem] bg-mastra-bg-2 p-4 py-6">
             <Text variant="secondary" className="text-mastra-el-3 px-4" size="xs">
@@ -61,21 +63,18 @@ const Tool = () => {
     ? resolveSerializedZodOutput(jsonSchemaToZod(parse(tool?.inputSchema)))
     : z.object({});
 
-  const breadcrumbItems = [
-    {
-      label: 'Tools',
-      href: '/tools',
-    },
-    {
-      label: toolId,
-      href: `/tools/all/${tool.id}`,
-      isCurrent: true,
-    },
-  ];
-
   return (
     <div className="flex flex-col h-full w-full bg-mastra-bg-1 overflow-y-hidden">
-      <Header title={<Breadcrumb items={breadcrumbItems} />} />
+      <Header>
+        <Breadcrumb>
+          <Crumb as={NavLink} href={`/tools`}>
+            Tools
+          </Crumb>
+          <Crumb as={NavLink} href={`/tools/all/${tool.id}`} isCurrent>
+            {toolId}
+          </Crumb>
+        </Breadcrumb>
+      </Header>
       <ToolExecutor
         executionResult={result}
         isExecutingTool={isExecuting}

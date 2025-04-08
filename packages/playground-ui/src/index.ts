@@ -8,8 +8,8 @@ export * from './components/dynamic-form/index';
 export * from './types';
 export * from './ds/components/Badge/index';
 // export * from './ds/components/Button/index'; already exported, will override in a subsequent PR
-// export * from './ds/components/Breadcrumb/index'; already exported, will override in a subsequent PR
-// export * from './ds/components/Header/index'; already exported, will override in a subsequent PR
+export * from './ds/components/Breadcrumb/index';
+export * from './ds/components/Header/index';
 export * from './ds/components/Logo/index';
 // export * from './ds/components/Table/index'; already exported, will override in a subsequent PR
 export * from './ds/components/Txt/index';

@@ -1,41 +1,26 @@
-import { useMatch, useNavigate } from 'react-router';
+import { NavLink } from 'react-router';
 
-import Breadcrumb from '@/components/ui/breadcrumbs';
-import { Button } from '@/components/ui/button';
-import { Header } from '@/components/ui/header';
+import { Crumb, Header, HeaderGroup, Button, Breadcrumb } from '@mastra/playground-ui';
 
 export function WorkflowHeader({ workflowName, workflowId }: { workflowName: string; workflowId: string }) {
-  const isGraphPage = useMatch(`/workflows/${workflowId}/graph`);
-  const isTracesPage = useMatch(`/workflows/${workflowId}/traces`);
-  const navigate = useNavigate();
-
-  const breadcrumbItems = [
-    {
-      label: 'Workflows',
-      href: '/workflows',
-    },
-    {
-      label: workflowName,
-      href: `/workflows/${workflowId}`,
-      isCurrent: true,
-    },
-  ];
   return (
-    <Header title={<Breadcrumb items={breadcrumbItems} />}>
-      <Button
-        variant={isGraphPage ? 'secondary' : 'outline'}
-        size="slim"
-        onClick={() => navigate(`/workflows/${workflowId}/graph`)}
-      >
-        Graph
-      </Button>
-      <Button
-        variant={isTracesPage ? 'secondary' : 'outline'}
-        size="slim"
-        onClick={() => navigate(`/workflows/${workflowId}/traces`)}
-      >
-        Traces
-      </Button>
+    <Header>
+      <Breadcrumb>
+        <Crumb as={NavLink} href={`/workflows`}>
+          Workflows
+        </Crumb>
+        <Crumb as={NavLink} href={`/workflows/${workflowId}`} isCurrent>
+          {workflowName}
+        </Crumb>
+      </Breadcrumb>
+      <HeaderGroup>
+        <Button as={NavLink} href={`/workflows/${workflowId}/graph`}>
+          Graph
+        </Button>
+        <Button as={NavLink} href={`/workflows/${workflowId}/traces`}>
+          Traces
+        </Button>
+      </HeaderGroup>
     </Header>
   );
 }
