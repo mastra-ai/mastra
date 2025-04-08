@@ -1,6 +1,6 @@
 import type { Workflow } from '@mastra/core/workflows';
 import { useEffect, useState, useCallback } from 'react';
-import debounce from 'lodash/debounce';
+import { useDebouncedCallback } from 'use-debounce';
 import { toast } from 'sonner';
 import { WorkflowRunResult as BaseWorkflowRunResult, MastraClient } from '@mastra/client-js';
 
@@ -103,39 +103,34 @@ export const useWatchWorkflow = (baseUrl: string) => {
   const [watchResult, setWatchResult] = useState<ExtendedWorkflowRunResult | null>(null);
 
   // Debounce the state update to prevent too frequent renders
-  const debouncedSetWatchResult = useCallback(
-    debounce((record: ExtendedWorkflowRunResult) => {
-      // Sanitize and limit the size of large data fields
-      const formattedResults = Object.entries(record.results || {}).reduce(
-        (acc, [key, value]) => {
-          let output = value.status === 'success' ? value.output : undefined;
-          if (output) {
-            output = Object.entries(output).reduce(
-              (_acc, [_key, _value]) => {
-                const val = _value as { type: string; data: unknown };
-                _acc[_key] =
-                  val.type?.toLowerCase() === 'buffer' ? { type: 'Buffer', data: `[...buffered data]` } : val;
-                return _acc;
-              },
-              {} as Record<string, any>,
-            );
-          }
-          acc[key] = { ...value, output };
-          return acc;
-        },
-        {} as Record<string, any>,
-      );
-      const sanitizedRecord: ExtendedWorkflowRunResult = {
-        ...record,
-        // results: formattedResults,
-        sanitizedOutput: record
-          ? JSON.stringify({ ...record, results: formattedResults }, null, 2).slice(0, 50000)
-          : null, // Limit to 50KB
-      };
-      setWatchResult(sanitizedRecord);
-    }, 100), // Debounce for 100ms
-    [],
-  );
+  const debouncedSetWatchResult = useDebouncedCallback((record: ExtendedWorkflowRunResult) => {
+    // Sanitize and limit the size of large data fields
+    const formattedResults = Object.entries(record.results || {}).reduce(
+      (acc, [key, value]) => {
+        let output = value.status === 'success' ? value.output : undefined;
+        if (output) {
+          output = Object.entries(output).reduce(
+            (_acc, [_key, _value]) => {
+              const val = _value as { type: string; data: unknown };
+              _acc[_key] = val.type?.toLowerCase() === 'buffer' ? { type: 'Buffer', data: `[...buffered data]` } : val;
+              return _acc;
+            },
+            {} as Record<string, any>,
+          );
+        }
+        acc[key] = { ...value, output };
+        return acc;
+      },
+      {} as Record<string, any>,
+    );
+    const sanitizedRecord: ExtendedWorkflowRunResult = {
+      ...record,
+      sanitizedOutput: record
+        ? JSON.stringify({ ...record, results: formattedResults }, null, 2).slice(0, 50000) // Limit to 50KB
+        : null,
+    };
+    setWatchResult(sanitizedRecord);
+  }, 100);
 
   const watchWorkflow = async ({ workflowId, runId }: { workflowId: string; runId: string }) => {
     try {
