@@ -261,25 +261,12 @@ export class PgVector extends MastraVector {
 
       const client = await this.pool.connect();
       try {
-        // First check if vector extension is available
-        const extensionCheck = await client.query(`
-        SELECT EXISTS (
-          SELECT 1 FROM pg_available_extensions WHERE name = 'vector'
-        );
-      `);
-
-        if (!extensionCheck.rows[0].exists) {
-          this.createdIndexes.delete(indexName);
-          throw new Error('PostgreSQL vector extension is not available. Please install it first.');
-        }
-
-        // Try to create extension
+        // install vector extension
+        await this.installVectorExtension();
         try {
           await client.query(`
           DO $$ 
           BEGIN
-            CREATE EXTENSION IF NOT EXISTS vector;
-            
             CREATE TABLE IF NOT EXISTS ${indexName} (
               id SERIAL PRIMARY KEY,
               vector_id TEXT UNIQUE NOT NULL,
@@ -382,6 +369,38 @@ export class PgVector extends MastraVector {
 
       await client.query(indexSQL);
     });
+  }
+
+  private async installVectorExtension() {
+    const client = await this.pool.connect();
+    try {
+      // First check if extension is already installed
+      const extensionCheck = await client.query(`
+      SELECT EXISTS (
+        SELECT 1 FROM pg_extension WHERE extname = 'vector'
+      );
+    `);
+
+      const isInstalled = extensionCheck.rows[0].exists;
+
+      if (!isInstalled) {
+        try {
+          await client.query('CREATE EXTENSION IF NOT EXISTS vector');
+          this.logger.info('Vector extension installed successfully');
+        } catch {
+          this.logger.warn(
+            'Could not install vector extension. This requires superuser privileges. ' +
+              'If the extension is already installed globally, you can ignore this warning.',
+          );
+        }
+      } else {
+        this.logger.debug('Vector extension already installed, skipping installation');
+      }
+    } catch (error) {
+      this.logger.error('Error checking vector extension status', { error });
+    } finally {
+      client.release();
+    }
   }
 
   async listIndexes(): Promise<string[]> {
