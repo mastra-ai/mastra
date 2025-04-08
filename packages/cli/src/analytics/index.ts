@@ -110,7 +110,7 @@ export class PosthogAnalytics {
       session_id: this.sessionId,
       cli_version: this.version || 'unknown',
       machine_id: os.hostname(),
-      disableGeoip: false,
+      geoip_disable: false,
     };
   }
 
