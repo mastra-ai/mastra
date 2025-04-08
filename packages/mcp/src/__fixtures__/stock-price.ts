@@ -1,4 +1,5 @@
-import { FastMCP } from 'fastmcp';
+import { Server } from '@modelcontextprotocol/sdk/server/index.js';
+import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { z } from 'zod';
 
 const getStockPrice = async (symbol: string) => {
@@ -9,35 +10,63 @@ const getStockPrice = async (symbol: string) => {
   };
 };
 
-const server = new FastMCP({
-  name: 'Stock Price Server',
-  version: '1.0.0',
-});
+const server = new Server(
+  {
+    name: 'Stock Price Server',
+    version: '1.0.0',
+  },
+  {
+    capabilities: {
+      tools: {},
+    },
+  },
+);
 
 const stockSchema = z.object({
-  symbol: z.string(),
+  method: z.literal('getStockPrice'),
+  symbol: z.string().describe('Stock symbol'),
 });
 
-server.addTool({
-  name: 'getStockPrice',
-  description: "Fetches the last day's closing stock price for a given symbol",
-  parameters: stockSchema,
-  execute: async (args: z.infer<typeof stockSchema>) => {
-    try {
-      const priceData = await getStockPrice(args.symbol);
-      return JSON.stringify(priceData);
-    } catch (error) {
-      if (error instanceof Error) {
-        throw new Error(`Stock price fetch failed: ${error.message}`);
-      }
-      throw error;
+server.setRequestHandler(stockSchema, async args => {
+  try {
+    const priceData = await getStockPrice(args.symbol);
+    return {
+      content: [
+        {
+          type: 'text',
+          text: JSON.stringify(priceData),
+        },
+      ],
+      isError: false,
+    };
+  } catch (error) {
+    if (error instanceof Error) {
+      return {
+        content: [
+          {
+            type: 'text',
+            text: `Stock price fetch failed: ${error.message}`,
+          },
+        ],
+        isError: true,
+      };
     }
-  },
+    return {
+      content: [
+        {
+          type: 'text',
+          text: 'An unknown error occurred.',
+        },
+      ],
+      isError: true,
+    };
+  }
 });
 
-// Start the server with stdio transport
-void server.start({
-  transportType: 'stdio',
-});
+async function runServer() {
+  const transport = new StdioServerTransport();
+  await server.connect(transport);
+  console.error('Stock Price MCP Server running on stdio');
+}
 
-export { server };
+export { runServer, server };

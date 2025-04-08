@@ -1,4 +1,5 @@
-import { FastMCP } from 'fastmcp';
+import { Server } from '@modelcontextprotocol/sdk/server/index.js';
+import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { z } from 'zod';
 
 const getWeather = async (location: string) => {
@@ -14,39 +15,63 @@ const getWeather = async (location: string) => {
   };
 };
 
-const server = new FastMCP({
-  name: 'Weather Server',
-  version: '1.0.0',
-});
+const server = new Server(
+  {
+    name: 'Weather Server',
+    version: '1.0.0',
+  },
+  {
+    capabilities: {
+      tools: {},
+    },
+  },
+);
 
 const weatherSchema = z.object({
+  method: z.literal('getWeather'),
   location: z.string().describe('City name'),
 });
 
-server.addTool({
-  name: 'getWeather',
-  description: 'Get current weather for a location',
-  parameters: weatherSchema,
-  execute: async (args: z.infer<typeof weatherSchema>) => {
-    try {
-      const weatherData = await getWeather(args.location);
-      return JSON.stringify(weatherData);
-    } catch (error) {
-      if (error instanceof Error) {
-        throw new Error(`Weather fetch failed: ${error.message}`);
-      }
-      throw error;
+server.setRequestHandler(weatherSchema, async args => {
+  try {
+    const weatherData = await getWeather(args.location);
+    return {
+      content: [
+        {
+          type: 'text',
+          text: JSON.stringify(weatherData),
+        },
+      ],
+      isError: false,
+    };
+  } catch (error) {
+    if (error instanceof Error) {
+      return {
+        content: [
+          {
+            type: 'text',
+            text: `Weather fetch failed: ${error.message}`,
+          },
+        ],
+        isError: true,
+      };
     }
-  },
+    return {
+      content: [
+        {
+          type: 'text',
+          text: 'An unknown error occurred.',
+        },
+      ],
+      isError: true,
+    };
+  }
 });
 
-// Start the server with SSE support
-void server.start({
-  transportType: 'sse',
-  sse: {
-    endpoint: '/sse',
-    port: 60808,
-  },
-});
+async function runServer() {
+  const transport = new StdioServerTransport();
+  await server.connect(transport);
+  console.error('Weather MCP Server running on stdio');
+}
 
-export { server };
+export { runServer, server };
