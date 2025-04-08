@@ -65,29 +65,47 @@ async function fetchBlogPost(url: string): Promise<string> {
   }
 }
 
+export const blogInputSchema = z.object({
+  url: z
+    .string()
+    .describe(
+      'URL of a specific blog post to fetch. If the string /blog is passed as the url it returns a list of all blog posts.',
+    ),
+});
+
+export type BlogInput = z.infer<typeof blogInputSchema>;
+
 export const blogTool = {
   name: 'mastraBlog',
   description:
     'Get Mastra.ai blog content. Without a URL, returns a list of all blog posts. With a URL, returns the specific blog post content in markdown format. The blog contains changelog posts as well as announcements and posts about Mastra features and AI news',
-  parameters: z.object({
-    url: z
-      .string()
-      .describe(
-        'URL of a specific blog post to fetch. If the string /blog is passed as the url it returns a list of all blog posts.',
-      ),
-  }),
-  execute: async (args: { url: string }) => {
+  execute: async (args: BlogInput) => {
     try {
+      let content: string;
       if (args.url !== `/blog`) {
-        return await fetchBlogPost(`https://mastra.ai${args.url}`);
+        content = await fetchBlogPost(`https://mastra.ai${args.url}`);
       } else {
-        return await fetchBlogPosts();
+        content = await fetchBlogPosts();
       }
+      return {
+        content: [
+          {
+            type: 'text',
+            text: content,
+          },
+        ],
+        isError: false,
+      };
     } catch (error) {
-      if (error instanceof Error) {
-        throw new Error('Failed to fetch blog posts');
-      }
-      throw error;
+      return {
+        content: [
+          {
+            type: 'text',
+            text: `Error: ${error instanceof Error ? error.message : String(error)}`,
+          },
+        ],
+        isError: true,
+      };
     }
   },
 };
