@@ -1,5 +1,12 @@
 # @mastra/core
 
+## 0.8.1-alpha.0
+
+### Patch Changes
+
+- 99e2998: Set default max steps to 5
+- 8fdb414: Custom mastra server cors config
+
 ## 0.8.0
 
 ### Minor Changes
