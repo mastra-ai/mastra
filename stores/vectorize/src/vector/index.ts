@@ -84,7 +84,7 @@ export class CloudflareVector extends MastraVector {
       // This covers all variants of not found/deleted errors by checking:
       // 1. HTTP status (404/410 both mean the index isn't there)
       // 2. Error message content (contains common patterns)
-      const message = error?.message || error.errors?.[0]?.message;
+      const message = error?.errors?.[0]?.message || error?.message;
       if (
         error.status === 404 ||
         error.status === 410 ||
