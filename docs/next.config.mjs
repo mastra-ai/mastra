@@ -105,6 +105,11 @@ export default withNextra({
       destination: "/docs/workflows/overview",
       permanent: true,
     },
+    {
+      source: "/docs/reference/memory/memory-processors",
+      destination: "/docs/memory/memory-processors",
+      permanent: false, // we should have a memory-processors reference
+    },
   ],
   trailingSlash: false,
 });
