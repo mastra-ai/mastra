@@ -132,7 +132,7 @@ export function WorkflowTrigger({
             </Button>
           </div>
 
-          <div>
+          <div className="group relative flex flex-col">
             <Text variant="secondary" className="px-4 text-mastra-el-3" size="xs">
               Output
             </Text>
@@ -144,7 +144,7 @@ export function WorkflowTrigger({
             </div>
             <CodeBlockDemo
               className="w-full overflow-x-auto"
-              code={JSON.stringify(result ?? {}, null, 2)}
+              code={result?.sanitizedOutput || JSON.stringify(result ?? {}, null, 2)}
               language="json"
             />
           </div>
@@ -265,7 +265,7 @@ export function WorkflowTrigger({
           ))}
 
         {result && (
-          <div className="flex flex-col">
+          <div className="flex flex-col group relative">
             <Text variant="secondary" className="px-4 text-mastra-el-3" size="xs">
               Output
             </Text>
@@ -275,7 +275,11 @@ export function WorkflowTrigger({
                 content={JSON.stringify(result, null, 2)}
               />
             </div>
-            <CodeBlockDemo className="w-full overflow-x-auto" code={JSON.stringify(result, null, 2)} language="json" />
+            <CodeBlockDemo
+              className="w-full overflow-x-auto"
+              code={result.sanitizedOutput || JSON.stringify(result, null, 2)}
+              language="json"
+            />
           </div>
         )}
       </div>
