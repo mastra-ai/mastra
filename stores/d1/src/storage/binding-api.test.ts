@@ -1,17 +1,14 @@
 import { randomUUID } from 'crypto';
 import type { D1Database } from '@cloudflare/workers-types';
-import {
-  MastraStorage,
-  TABLE_EVALS,
-  TABLE_MESSAGES,
-  TABLE_THREADS,
-  TABLE_WORKFLOW_SNAPSHOT,
-} from '@mastra/core/storage';
+import { TABLE_EVALS, TABLE_MESSAGES, TABLE_THREADS, TABLE_WORKFLOW_SNAPSHOT } from '@mastra/core/storage';
 import type { WorkflowRunState } from '@mastra/core/workflows';
+import dotenv from 'dotenv';
 import { Miniflare } from 'miniflare';
 import { describe, it, expect, beforeAll, beforeEach, afterAll, vi } from 'vitest';
 
 import { D1Store } from '.';
+
+dotenv.config();
 
 // Increase timeout for all tests in this file
 vi.setConfig({ testTimeout: 30000, hookTimeout: 30000 });
@@ -574,7 +571,7 @@ describe('D1Store', () => {
       await store.withTransaction(async transaction => {
         // Create thread within transaction
         const threadSql = `
-          INSERT INTO ${tablePrefix}${MastraStorage.TABLE_THREADS} 
+          INSERT INTO ${tablePrefix}${TABLE_THREADS} 
           (id, resource_id, title, metadata, created_at, updated_at) 
           VALUES (?, ?, ?, ?, ?, ?)
         `;
@@ -594,7 +591,7 @@ describe('D1Store', () => {
         // Create a message within the same transaction
         const message = createSampleMessage(thread.id);
         const messageSql = `
-          INSERT INTO ${tablePrefix}${MastraStorage.TABLE_MESSAGES}
+          INSERT INTO ${tablePrefix}${TABLE_MESSAGES}
           (id, thread_id, role, type, content, created_at)
           VALUES (?, ?, ?, ?, ?, ?)
         `;
@@ -627,7 +624,7 @@ describe('D1Store', () => {
         await store.withTransaction(async transaction => {
           // First operation: create thread (should succeed)
           const threadSql = `
-            INSERT INTO ${tablePrefix}${MastraStorage.TABLE_THREADS} 
+            INSERT INTO ${tablePrefix}${TABLE_THREADS} 
             (id, resource_id, title, metadata, created_at, updated_at) 
             VALUES (?, ?, ?, ?, ?, ?)
           `;

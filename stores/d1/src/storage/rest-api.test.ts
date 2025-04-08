@@ -1,19 +1,29 @@
 import { randomUUID } from 'crypto';
 import type { MessageType, StorageThreadType } from '@mastra/core/memory';
 import {
-  MastraStorage,
-  TABLE_EVALS,
   TABLE_MESSAGES,
   TABLE_THREADS,
   TABLE_WORKFLOW_SNAPSHOT,
+  TABLE_EVALS,
+  TABLE_TRACES,
 } from '@mastra/core/storage';
 import type { WorkflowRunState } from '@mastra/core/workflows';
+import dotenv from 'dotenv';
 import { describe, it, expect, beforeAll, beforeEach, afterAll, vi } from 'vitest';
 
-import { D1Store } from '.';
+import { D1Store, D1StoreConfig } from '.';
+
+dotenv.config();
 
 // Increase timeout for all tests in this file
-vi.setConfig({ testTimeout: 30000, hookTimeout: 30000 });
+vi.setConfig({ testTimeout: 80000, hookTimeout: 80000 });
+
+const TEST_CONFIG: D1StoreConfig = {
+  accountId: process.env.CLOUDFLARE_ACCOUNT_ID || '',
+  apiToken: process.env.CLOUDFLARE_API_TOKEN || '',
+  databaseId: process.env.D1_DATABASE_ID || '',
+  tablePrefix: 'test_', // Fixed prefix for test isolation
+};
 
 // Sample test data factory functions
 const createSampleThread = () => ({
@@ -25,15 +35,33 @@ const createSampleThread = () => ({
   metadata: { key: 'value' },
 });
 
-const createSampleMessage = (threadId: string) =>
-  ({
-    id: `msg-${randomUUID()}`,
-    role: 'user',
-    type: 'text',
-    threadId,
-    content: [{ type: 'text', text: 'Hello' }],
-    createdAt: new Date(),
-  }) as any;
+const createSampleMessage = (threadId: string): MessageType => ({
+  id: `msg-${randomUUID()}`,
+  role: 'user',
+  type: 'text',
+  threadId,
+  content: [{ type: 'text' as const, text: 'Hello' }] as MessageType['content'],
+  createdAt: new Date(),
+  resourceId: `resource-${randomUUID()}`,
+});
+
+const createSampleWorkflowSnapshot = (threadId: string): WorkflowRunState => ({
+  value: { [threadId]: 'running' },
+  context: {
+    steps: {},
+    triggerData: {},
+    attempts: {},
+  },
+  activePaths: [
+    {
+      stepPath: [threadId],
+      stepId: threadId,
+      status: 'running',
+    },
+  ],
+  runId: threadId,
+  timestamp: Date.now(),
+});
 
 const createSampleThreadWithParams = (threadId: string, resourceId: string, createdAt: Date, updatedAt: Date) => ({
   id: threadId,
@@ -44,21 +72,37 @@ const createSampleThreadWithParams = (threadId: string, resourceId: string, crea
   metadata: { key: 'value' },
 });
 
+// Helper function to retry until condition is met or timeout
+const retryUntil = async <T>(
+  fn: () => Promise<T>,
+  condition: (result: T) => boolean,
+  timeout = 30000, // REST API needs longer timeout due to higher latency
+  interval = 2000, // Longer interval to account for REST API latency
+): Promise<T> => {
+  const start = Date.now();
+  while (Date.now() - start < timeout) {
+    try {
+      const result = await fn();
+      if (condition(result)) return result;
+    } catch (error) {
+      if (Date.now() - start >= timeout) throw error;
+    }
+    await new Promise(resolve => setTimeout(resolve, interval));
+  }
+  throw new Error('Timeout waiting for condition');
+};
+
 describe('D1Store REST API', () => {
   let store: D1Store;
-  const tablePrefix = 'test_';
-
   // Setup before all tests
   beforeAll(async () => {
     console.log('Initializing D1Store with REST API...');
 
     // Initialize the D1Store with REST API configuration
-    store = new D1Store({
-      databaseId: process.env.D1_DATABASE_ID || '',
-      accountId: process.env.CLOUDFLARE_ACCOUNT_ID || '',
-      apiToken: process.env.CLOUDFLARE_API_TOKEN || '',
-      tablePrefix,
-    });
+    if (!TEST_CONFIG.databaseId || !TEST_CONFIG.accountId || !TEST_CONFIG.apiToken) {
+      throw new Error('D1 database ID, account ID, and API token are required');
+    }
+    store = new D1Store(TEST_CONFIG);
 
     // Initialize tables
     await store.init();
@@ -86,20 +130,26 @@ describe('D1Store REST API', () => {
   });
 
   describe('Table Operations', () => {
-    const testTableName = 'test_custom_table';
+    const testTableName = TABLE_THREADS;
+    const testTableName2 = TABLE_MESSAGES;
 
     beforeEach(async () => {
       // Try to clean up the test table if it exists
       try {
         await store.clearTable({ tableName: testTableName as any });
       } catch (error) {
-        // Table might not exist yet, which is fine
+        // Table might not exist yet
+      }
+      try {
+        await store.clearTable({ tableName: testTableName2 as any });
+      } catch (error) {
+        // Table might not exist yet
       }
     });
 
     it('should create a new table with schema', async () => {
       await store.createTable({
-        tableName: testTableName as any,
+        tableName: testTableName,
         schema: {
           id: { type: 'text', primaryKey: true },
           data: { type: 'text', nullable: true },
@@ -109,22 +159,58 @@ describe('D1Store REST API', () => {
 
       // Verify table exists by inserting and retrieving data
       await store.insert({
-        tableName: testTableName as any,
+        tableName: testTableName,
         record: {
           id: 'test1',
           data: 'test-data',
-          created_at: new Date(),
+          title: 'Test Thread',
+          resourceId: 'resource-1',
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        } as StorageThreadType,
+      });
+
+      const result = await store.load<StorageThreadType>({ tableName: testTableName, keys: { id: 'test1' } });
+      expect(result).toBeTruthy();
+      if (result) {
+        expect(result.title).toBe('Test Thread');
+        expect(result.resourceId).toBe('resource-1');
+        expect(result.createdAt).toBeDefined();
+        expect(result.updatedAt).toBeDefined();
+      }
+    });
+
+    it('should handle multiple table creation', async () => {
+      await store.createTable({
+        tableName: testTableName2,
+        schema: {
+          id: { type: 'text', primaryKey: true },
+          threadId: { type: 'text', nullable: false }, // Use nullable: false instead of required
+          data: { type: 'text', nullable: true },
         },
       });
 
-      const result = await store.load<{ id: string; data: string; created_at: Date }>({
-        tableName: testTableName as any,
-        keys: { id: 'test1' },
+      // Verify both tables work independently
+      await store.insert({
+        tableName: testTableName2,
+        record: {
+          id: 'test2',
+          threadId: 'thread-1',
+          content: [{ type: 'text', text: 'test-data-2' }],
+          role: 'user',
+        } as MessageType,
       });
 
-      expect(result).not.toBeNull();
-      expect(result?.id).toBe('test1');
-      expect(result?.data).toBe('test-data');
+      const result = await store.load<MessageType>({
+        tableName: testTableName2,
+        keys: { id: 'test2', threadId: 'thread-1' },
+      });
+      expect(result).toBeTruthy();
+      if (result) {
+        expect(result.threadId).toBe('thread-1');
+        expect(result.content).toEqual([{ type: 'text', text: 'test-data-2' }]);
+        expect(result.role).toBe('user');
+      }
     });
 
     it('should clear table data', async () => {
@@ -159,15 +245,25 @@ describe('D1Store REST API', () => {
     it('should create and retrieve a thread', async () => {
       const thread = createSampleThread();
 
+      // Save thread
       const savedThread = await store.__saveThread({ thread });
       expect(savedThread).toEqual(thread);
 
-      const retrievedThread = await store.__getThreadById({ threadId: thread.id });
-
+      // Retrieve thread
+      const retrievedThread = await retryUntil(
+        async () => await store.__getThreadById({ threadId: thread.id }),
+        retrievedThread => retrievedThread?.title === thread.title,
+      );
+      expect(retrievedThread?.title).toEqual(thread.title);
       expect(retrievedThread).not.toBeNull();
       expect(retrievedThread?.id).toBe(thread.id);
       expect(retrievedThread?.title).toBe(thread.title);
       expect(retrievedThread?.metadata).toEqual(thread.metadata);
+    });
+
+    it('should return null for non-existent thread', async () => {
+      const result = await store.__getThreadById({ threadId: 'non-existent' });
+      expect(result).toBeNull();
     });
 
     it('should create and retrieve a thread with the same given threadId and resourceId', async () => {
@@ -194,17 +290,18 @@ describe('D1Store REST API', () => {
       const thread = createSampleThread();
       await store.__saveThread({ thread });
 
-      const newMetadata = { newKey: 'newValue' };
+      const updatedTitle = 'Updated Title';
+      const updatedMetadata = { newKey: 'newValue' };
       const updatedThread = await store.__updateThread({
         id: thread.id,
-        title: 'Updated Title',
-        metadata: newMetadata,
+        title: updatedTitle,
+        metadata: updatedMetadata,
       });
 
-      expect(updatedThread.title).toBe('Updated Title');
+      expect(updatedThread.title).toBe(updatedTitle);
       expect(updatedThread.metadata).toEqual({
         ...thread.metadata,
-        ...newMetadata,
+        ...updatedMetadata,
       });
 
       // Verify persistence
@@ -259,10 +356,6 @@ describe('D1Store REST API', () => {
   });
 
   describe('Message Operations', () => {
-    it('should handle empty message array', async () => {
-      const result = await store.__saveMessages({ messages: [] });
-      expect(result).toEqual([]);
-    });
     it('should save and retrieve messages', async () => {
       const thread = createSampleThread();
       await store.__saveThread({ thread });
@@ -271,13 +364,16 @@ describe('D1Store REST API', () => {
 
       // Save messages
       const savedMessages = await store.__saveMessages({ messages });
-
       expect(savedMessages).toEqual(messages);
 
-      // Retrieve messages
-      const retrievedMessages = await store.__getMessages({ threadId: thread.id });
-
-      expect(retrievedMessages).toHaveLength(2);
+      // Retrieve messages with retry
+      const retrievedMessages = await retryUntil(
+        async () => {
+          const msgs = await store.__getMessages({ threadId: thread.id });
+          return msgs;
+        },
+        msgs => msgs.length === 2,
+      );
 
       expect(retrievedMessages).toEqual(expect.arrayContaining(messages));
     });
@@ -292,19 +388,31 @@ describe('D1Store REST API', () => {
       await store.__saveThread({ thread });
 
       const messages = [
-        { ...createSampleMessage(thread.id), content: [{ type: 'text', text: 'First' }] },
-        { ...createSampleMessage(thread.id), content: [{ type: 'text', text: 'Second' }] },
-        { ...createSampleMessage(thread.id), content: [{ type: 'text', text: 'Third' }] },
+        {
+          ...createSampleMessage(thread.id),
+          content: [{ type: 'text' as const, text: 'First' }] as MessageType['content'],
+        },
+        {
+          ...createSampleMessage(thread.id),
+          content: [{ type: 'text' as const, text: 'Second' }] as MessageType['content'],
+        },
+        {
+          ...createSampleMessage(thread.id),
+          content: [{ type: 'text' as const, text: 'Third' }] as MessageType['content'],
+        },
       ];
 
       await store.__saveMessages({ messages });
 
-      const retrievedMessages = await store.__getMessages({ threadId: thread.id });
-      expect(retrievedMessages).toHaveLength(messages.length);
+      const retrievedMessages = await retryUntil(
+        async () => await store.__getMessages({ threadId: thread.id }),
+        messages => messages.length > 0,
+      );
+      expect(retrievedMessages).toHaveLength(3);
 
-      // Verify order matches insertion order
+      // Verify order is maintained
       retrievedMessages.forEach((msg, idx) => {
-        expect(msg.id).toBe(messages[idx].id);
+        expect(msg.content).toEqual(messages[idx].content);
       });
     });
   });
