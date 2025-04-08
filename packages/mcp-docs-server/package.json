@@ -31,7 +31,6 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
-    "@mastra/core": "workspace:^",
     "@modelcontextprotocol/sdk": "^1.7.0",
     "date-fns": "^4.1.0",
     "exit-hook": "^4.0.0",
@@ -42,7 +41,11 @@
     "uuid": "^11.1.0",
     "zod": "^3.22.4"
   },
+  "peerDependencies": {
+    "@mastra/core": "workspace:^"
+  },
   "devDependencies": {
+    "@mastra/core": "workspace:^",
     "@hono/node-server": "^1.13.8",
     "@internal/lint": "workspace:*",
     "@mastra/mcp": "workspace:^",
