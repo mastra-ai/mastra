@@ -2,10 +2,12 @@ import type { ChildProcess } from 'child_process';
 import { join } from 'path';
 import { FileService } from '@mastra/deployer';
 import { getServerOptions } from '@mastra/deployer/build';
+import { isWebContainer } from '@webcontainer/env';
 import { execa } from 'execa';
 
 import { logger } from '../../utils/logger.js';
 
+import { convertToViteEnvVar } from '../utils.js';
 import { DevBundler } from './DevBundler';
 
 let currentServerProcess: ChildProcess | undefined;
@@ -16,21 +18,24 @@ const startServer = async (dotMastraPath: string, port: number, env: Map<string,
     // Restart server
     logger.info('[Mastra Dev] - Starting server...');
 
-    const instrumentation = import.meta.resolve('@opentelemetry/instrumentation/hook.mjs');
-    currentServerProcess = execa(
-      'node',
-      ['--import=./instrumentation.mjs', `--import=${instrumentation}`, 'index.mjs'],
-      {
-        cwd: dotMastraPath,
-        env: {
-          ...Object.fromEntries(env),
-          PORT: port.toString() || process.env.PORT || '4111',
-          MASTRA_DEFAULT_STORAGE_URL: `file:${join(dotMastraPath, '..', 'mastra.db')}`,
-        },
-        stdio: 'inherit',
-        reject: false,
+    const commands = [];
+
+    if (!isWebContainer()) {
+      const instrumentation = import.meta.resolve('@opentelemetry/instrumentation/hook.mjs');
+      commands.push('--import=./instrumentation.mjs', `--import=${instrumentation}`);
+    }
+
+    commands.push('index.mjs');
+    currentServerProcess = execa('node', commands, {
+      cwd: dotMastraPath,
+      env: {
+        ...Object.fromEntries(env),
+        PORT: port.toString() || process.env.PORT || '4111',
+        MASTRA_DEFAULT_STORAGE_URL: `file:${join(dotMastraPath, '..', 'mastra.db')}`,
       },
-    ) as any as ChildProcess;
+      stdio: 'inherit',
+      reject: false,
+    }) as any as ChildProcess;
 
     if (currentServerProcess?.exitCode && currentServerProcess?.exitCode !== 0) {
       if (!currentServerProcess) {
@@ -124,11 +129,12 @@ export async function dev({
   const watcher = await bundler.watch(entryFile, dotMastraPath, discoveredTools);
 
   const env = await bundler.loadEnvVars();
+  const formattedEnv = convertToViteEnvVar(env, ['MASTRA_TELEMETRY_DISABLED']);
 
   const serverOptions = await getServerOptions(entryFile, join(dotMastraPath, 'output'));
 
   const startPort = port ?? serverOptions?.port ?? 4111;
-  await startServer(join(dotMastraPath, 'output'), startPort, env);
+  await startServer(join(dotMastraPath, 'output'), startPort, formattedEnv);
 
   watcher.on('event', (event: { code: string }) => {
     if (event.code === 'BUNDLE_END') {

@@ -1,5 +1,79 @@
 # @mastra/deployer
 
+## 0.2.6-alpha.10
+
+### Patch Changes
+
+- 2135c81: Alias @mastra/server in bundler
+- Updated dependencies [8df4a77]
+  - @mastra/core@0.8.0-alpha.8
+  - @mastra/server@0.0.1-alpha.6
+
+## 0.2.6-alpha.9
+
+### Patch Changes
+
+- 3c6ae54: Fix fastembed part of dependencies
+- febc8a6: Added dual tracing and fixed local tracing recursion
+- Updated dependencies [febc8a6]
+  - @mastra/server@0.0.1-alpha.5
+  - @mastra/core@0.8.0-alpha.7
+
+## 0.2.6-alpha.8
+
+### Patch Changes
+
+- 4c65a57: Add fastebmed as external
+- a3f0e90: Update storage initialization to ensure tables are present
+- Updated dependencies [a3f0e90]
+  - @mastra/server@0.0.1-alpha.4
+  - @mastra/core@0.8.0-alpha.6
+
+## 0.2.6-alpha.7
+
+### Patch Changes
+
+- Updated dependencies [93875ed]
+  - @mastra/core@0.8.0-alpha.5
+  - @mastra/server@0.0.1-alpha.3
+
+## 0.2.6-alpha.6
+
+### Patch Changes
+
+- Updated dependencies [d7e08e8]
+  - @mastra/core@0.8.0-alpha.4
+  - @mastra/server@0.0.1-alpha.2
+
+## 0.2.6-alpha.5
+
+### Patch Changes
+
+- 32ba03c: Make timeout 30s
+
+## 0.2.6-alpha.4
+
+### Patch Changes
+
+- 88fa727: Added getWorkflowRuns for libsql, pg, clickhouse and upstash as well as added route getWorkflowRunsHandler
+- dfb0601: Add missing triggerData to the openapi.json for the POST /api/workflow/{workflowId}/start endpoint
+- 789bef3: Make runId optional for workflow startAsync api
+- 6330967: Enable route timeout using server options
+- 8393832: Handle nested workflow view on workflow graph
+- 6330967: Add support for configuration of server port using Mastra instance
+- Updated dependencies [5ae0180]
+- Updated dependencies [9bfa12b]
+- Updated dependencies [515ebfb]
+- Updated dependencies [88fa727]
+- Updated dependencies [f37f535]
+- Updated dependencies [789bef3]
+- Updated dependencies [4d67826]
+- Updated dependencies [6330967]
+- Updated dependencies [8393832]
+- Updated dependencies [6330967]
+  - @mastra/core@0.8.0-alpha.3
+  - @mastra/server@0.0.1-alpha.1
+
 ## 0.2.6-alpha.3
 
 ### Patch Changes

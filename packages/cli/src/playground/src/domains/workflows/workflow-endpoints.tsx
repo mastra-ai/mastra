@@ -14,7 +14,19 @@ export function WorkflowEndpoints({ workflowId }: { workflowId: string }) {
         </div>
         <div className="grid grid-cols-[70px_1fr] gap-2">
           <p className="text-mastra-el-3">POST</p>
-          <p className="text-mastra-el-5">/api/workflows/{workflowId}/execute</p>
+          <p className="text-mastra-el-5">/api/workflows/{workflowId}/</p>
+        </div>
+        <div className="grid grid-cols-[70px_1fr] gap-2">
+          <p className="text-mastra-el-3">POST</p>
+          <p className="text-mastra-el-5">/api/workflows/{workflowId}/createRun</p>
+        </div>
+        <div className="grid grid-cols-[70px_1fr] gap-2">
+          <p className="text-mastra-el-3">POST</p>
+          <p className="text-mastra-el-5">/api/workflows/{workflowId}/resume-async</p>
+        </div>
+        <div className="grid grid-cols-[70px_1fr] gap-2">
+          <p className="text-mastra-el-3">POST</p>
+          <p className="text-mastra-el-5">/api/workflows/{workflowId}/start-async</p>
         </div>
         <div className="grid grid-cols-[70px_1fr] gap-2">
           <p className="text-mastra-el-3">POST</p>
@@ -23,6 +35,10 @@ export function WorkflowEndpoints({ workflowId }: { workflowId: string }) {
         <div className="grid grid-cols-[70px_1fr] gap-2">
           <p className="text-mastra-el-3">POST</p>
           <p className="text-mastra-el-5">/api/workflows/{workflowId}/resume</p>
+        </div>
+        <div className="grid grid-cols-[70px_1fr] gap-2">
+          <p className="text-mastra-el-3">GET</p>
+          <p className="text-mastra-el-5">/api/workflows/{workflowId}/runs</p>
         </div>
       </div>
     </ScrollArea>

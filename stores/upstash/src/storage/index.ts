@@ -1,5 +1,13 @@
+import type { MetricResult, TestInfo } from '@mastra/core/eval';
 import type { StorageThreadType, MessageType } from '@mastra/core/memory';
-import { MastraStorage, TABLE_MESSAGES, TABLE_THREADS, TABLE_WORKFLOW_SNAPSHOT } from '@mastra/core/storage';
+import {
+  MastraStorage,
+  TABLE_MESSAGES,
+  TABLE_THREADS,
+  TABLE_WORKFLOW_SNAPSHOT,
+  TABLE_EVALS,
+  TABLE_TRACES,
+} from '@mastra/core/storage';
 import type { TABLE_NAMES, StorageColumn, StorageGetMessagesArg, EvalRow } from '@mastra/core/storage';
 import type { WorkflowRunState } from '@mastra/core/workflows';
 import { Redis } from '@upstash/redis';
@@ -13,19 +21,224 @@ export class UpstashStore extends MastraStorage {
   batchInsert(_input: { tableName: TABLE_NAMES; records: Record<string, any>[] }): Promise<void> {
     throw new Error('Method not implemented.');
   }
-  getEvalsByAgentName(_agentName: string, _type?: 'test' | 'live'): Promise<EvalRow[]> {
-    throw new Error('Method not implemented.');
+
+  async getEvalsByAgentName(agentName: string, type?: 'test' | 'live'): Promise<EvalRow[]> {
+    try {
+      // Get all keys that match the evals table pattern
+      const pattern = `${TABLE_EVALS}:*`;
+      const keys = await this.redis.keys(pattern);
+
+      // Fetch all eval records
+      const evalRecords = await Promise.all(
+        keys.map(async key => {
+          const data = await this.redis.get<Record<string, any>>(key);
+          return data;
+        }),
+      );
+
+      // Filter by agent name and remove nulls
+      const nonNullRecords = evalRecords.filter(
+        (record): record is Record<string, any> =>
+          record !== null && typeof record === 'object' && 'agent_name' in record && record.agent_name === agentName,
+      );
+
+      // Apply additional filtering based on type
+      let filteredEvals = nonNullRecords;
+
+      if (type === 'test') {
+        filteredEvals = filteredEvals.filter(record => {
+          if (!record.test_info) return false;
+
+          // Handle test_info as a JSON string
+          try {
+            if (typeof record.test_info === 'string') {
+              const parsedTestInfo = JSON.parse(record.test_info);
+              return parsedTestInfo && typeof parsedTestInfo === 'object' && 'testPath' in parsedTestInfo;
+            }
+
+            // Handle test_info as an object
+            return typeof record.test_info === 'object' && 'testPath' in record.test_info;
+          } catch {
+            return false;
+          }
+        });
+      } else if (type === 'live') {
+        filteredEvals = filteredEvals.filter(record => {
+          if (!record.test_info) return true;
+
+          // Handle test_info as a JSON string
+          try {
+            if (typeof record.test_info === 'string') {
+              const parsedTestInfo = JSON.parse(record.test_info);
+              return !(parsedTestInfo && typeof parsedTestInfo === 'object' && 'testPath' in parsedTestInfo);
+            }
+
+            // Handle test_info as an object
+            return !(typeof record.test_info === 'object' && 'testPath' in record.test_info);
+          } catch {
+            return true;
+          }
+        });
+      }
+
+      // Transform to EvalRow format
+      return filteredEvals.map(record => this.transformEvalRecord(record));
+    } catch (error) {
+      console.error('Failed to get evals for the specified agent:', error);
+      return [];
+    }
   }
-  getTraces(_input: {
-    name?: string;
-    scope?: string;
-    page: number;
-    perPage: number;
-    attributes?: Record<string, string>;
-    filters?: Record<string, any>;
-  }): Promise<any[]> {
-    throw new Error('Method not implemented.');
+
+  private transformEvalRecord(record: Record<string, any>): EvalRow {
+    // Parse JSON strings if needed
+    let result = record.result;
+    if (typeof result === 'string') {
+      try {
+        result = JSON.parse(result);
+      } catch {
+        console.warn('Failed to parse result JSON:');
+      }
+    }
+
+    let testInfo = record.test_info;
+    if (typeof testInfo === 'string') {
+      try {
+        testInfo = JSON.parse(testInfo);
+      } catch {
+        console.warn('Failed to parse test_info JSON:');
+      }
+    }
+
+    return {
+      agentName: record.agent_name,
+      input: record.input,
+      output: record.output,
+      result: result as MetricResult,
+      metricName: record.metric_name,
+      instructions: record.instructions,
+      testInfo: testInfo as TestInfo | undefined,
+      globalRunId: record.global_run_id,
+      runId: record.run_id,
+      createdAt:
+        typeof record.created_at === 'string'
+          ? record.created_at
+          : record.created_at instanceof Date
+            ? record.created_at.toISOString()
+            : new Date().toISOString(),
+    };
   }
+
+  async getTraces(
+    {
+      name,
+      scope,
+      page = 0,
+      perPage = 100,
+      attributes,
+      filters,
+    }: {
+      name?: string;
+      scope?: string;
+      page: number;
+      perPage: number;
+      attributes?: Record<string, string>;
+      filters?: Record<string, any>;
+    } = {
+      page: 0,
+      perPage: 100,
+    },
+  ): Promise<any[]> {
+    try {
+      // Get all keys that match the traces table pattern
+      const pattern = `${TABLE_TRACES}:*`;
+      const keys = await this.redis.keys(pattern);
+
+      // Fetch all trace records
+      const traceRecords = await Promise.all(
+        keys.map(async key => {
+          const data = await this.redis.get<Record<string, any>>(key);
+          return data;
+        }),
+      );
+
+      // Filter out nulls and apply filters
+      let filteredTraces = traceRecords.filter(
+        (record): record is Record<string, any> => record !== null && typeof record === 'object',
+      );
+
+      // Apply name filter if provided
+      if (name) {
+        filteredTraces = filteredTraces.filter(record => record.name?.toLowerCase().startsWith(name.toLowerCase()));
+      }
+
+      // Apply scope filter if provided
+      if (scope) {
+        filteredTraces = filteredTraces.filter(record => record.scope === scope);
+      }
+
+      // Apply attributes filter if provided
+      if (attributes) {
+        filteredTraces = filteredTraces.filter(record => {
+          const recordAttributes = record.attributes;
+          if (!recordAttributes) return false;
+
+          // Parse attributes if stored as string
+          const parsedAttributes =
+            typeof recordAttributes === 'string' ? JSON.parse(recordAttributes) : recordAttributes;
+
+          return Object.entries(attributes).every(([key, value]) => parsedAttributes[key] === value);
+        });
+      }
+
+      // Apply custom filters if provided
+      if (filters) {
+        filteredTraces = filteredTraces.filter(record =>
+          Object.entries(filters).every(([key, value]) => record[key] === value),
+        );
+      }
+
+      // Sort traces by creation date (newest first)
+      filteredTraces.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+
+      // Apply pagination
+      const start = page * perPage;
+      const end = start + perPage;
+      const paginatedTraces = filteredTraces.slice(start, end);
+
+      // Transform and return the traces
+      return paginatedTraces.map(record => ({
+        id: record.id,
+        parentSpanId: record.parentSpanId,
+        traceId: record.traceId,
+        name: record.name,
+        scope: record.scope,
+        kind: record.kind,
+        status: this.parseJSON(record.status),
+        events: this.parseJSON(record.events),
+        links: this.parseJSON(record.links),
+        attributes: this.parseJSON(record.attributes),
+        startTime: record.startTime,
+        endTime: record.endTime,
+        other: this.parseJSON(record.other),
+        createdAt: this.ensureDate(record.createdAt),
+      }));
+    } catch (error) {
+      console.error('Failed to get traces:', error);
+      return [];
+    }
+  }
+
+  private parseJSON(value: any): any {
+    if (typeof value === 'string') {
+      try {
+        return JSON.parse(value);
+      } catch {
+        return value;
+      }
+    }
+    return value;
+  }
+
   private redis: Redis;
 
   constructor(config: UpstashConfig) {
@@ -86,6 +299,8 @@ export class UpstashStore extends MastraStorage {
         workflow_name: record.workflow_name,
         run_id: record.run_id,
       });
+    } else if (tableName === TABLE_EVALS) {
+      key = this.getKey(tableName, { id: record.run_id });
     } else {
       key = this.getKey(tableName, { id: record.id });
     }
@@ -371,9 +586,9 @@ export class UpstashStore extends MastraStorage {
         if (typeof parsedSnapshot === 'string') {
           try {
             parsedSnapshot = JSON.parse(w!.snapshot as string) as WorkflowRunState;
-          } catch (e) {
+          } catch {
             // If parsing fails, return the raw snapshot string
-            console.warn(`Failed to parse snapshot for workflow ${w!.workflow_name}: ${e}`);
+            console.warn(`Failed to parse snapshot for workflow ${w!.workflow_name}:`);
           }
         }
         return {

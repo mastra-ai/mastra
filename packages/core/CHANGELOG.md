@@ -1,5 +1,49 @@
 # @mastra/core
 
+## 0.8.0-alpha.8
+
+### Patch Changes
+
+- 8df4a77: Fix if-else execution order
+
+## 0.8.0-alpha.7
+
+### Patch Changes
+
+- febc8a6: Added dual tracing and fixed local tracing recursion
+
+## 0.8.0-alpha.6
+
+### Patch Changes
+
+- a3f0e90: Update storage initialization to ensure tables are present
+
+## 0.8.0-alpha.5
+
+### Patch Changes
+
+- 93875ed: Improved the performance of Memory semantic recall by 2 to 3 times when using pg by making tweaks to @mastra/memory @mastra/core and @mastra/pg
+
+## 0.8.0-alpha.4
+
+### Patch Changes
+
+- d7e08e8: createdAt needs to be nullable
+
+## 0.8.0-alpha.3
+
+### Patch Changes
+
+- 5ae0180: Removed prefixed doc references
+- 9bfa12b: Accept ID on step config
+- 515ebfb: Fix compound subscriber bug
+- 88fa727: Added getWorkflowRuns for libsql, pg, clickhouse and upstash as well as added route getWorkflowRunsHandler
+- f37f535: Added variables to while and until loops
+- 4d67826: Fix eval writes, remove id column
+- 6330967: Enable route timeout using server options
+- 8393832: Handle nested workflow view on workflow graph
+- 6330967: Add support for configuration of server port using Mastra instance
+
 ## 0.8.0-alpha.2
 
 ### Patch Changes

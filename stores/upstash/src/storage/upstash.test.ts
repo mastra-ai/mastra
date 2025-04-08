@@ -1,7 +1,13 @@
 import { randomUUID } from 'crypto';
 import type { MessageType } from '@mastra/core/memory';
 import type { TABLE_NAMES } from '@mastra/core/storage';
-import { TABLE_MESSAGES, TABLE_THREADS, TABLE_WORKFLOW_SNAPSHOT } from '@mastra/core/storage';
+import {
+  TABLE_MESSAGES,
+  TABLE_THREADS,
+  TABLE_WORKFLOW_SNAPSHOT,
+  TABLE_EVALS,
+  TABLE_TRACES,
+} from '@mastra/core/storage';
 import type { WorkflowRunState } from '@mastra/core/workflows';
 import { describe, it, expect, beforeAll, beforeEach, afterAll, vi } from 'vitest';
 
@@ -54,6 +60,40 @@ const createSampleWorkflowSnapshot = (status: string, createdAt?: Date) => {
   return { snapshot, runId, stepId };
 };
 
+const createSampleTrace = (name: string, scope?: string, attributes?: Record<string, string>) => ({
+  id: `trace-${randomUUID()}`,
+  parentSpanId: `span-${randomUUID()}`,
+  traceId: `trace-${randomUUID()}`,
+  name,
+  scope,
+  kind: 'internal',
+  status: JSON.stringify({ code: 'success' }),
+  events: JSON.stringify([{ name: 'start', timestamp: Date.now() }]),
+  links: JSON.stringify([]),
+  attributes: attributes ? JSON.stringify(attributes) : undefined,
+  startTime: new Date().toISOString(),
+  endTime: new Date().toISOString(),
+  other: JSON.stringify({ custom: 'data' }),
+  createdAt: new Date().toISOString(),
+});
+
+const createSampleEval = (agentName: string, isTest = false) => {
+  const testInfo = isTest ? { testPath: 'test/path.ts', testName: 'Test Name' } : undefined;
+
+  return {
+    agent_name: agentName,
+    input: 'Sample input',
+    output: 'Sample output',
+    result: JSON.stringify({ score: 0.8 }),
+    metric_name: 'sample-metric',
+    instructions: 'Sample instructions',
+    test_info: testInfo ? JSON.stringify(testInfo) : undefined,
+    global_run_id: `global-${randomUUID()}`,
+    run_id: `run-${randomUUID()}`,
+    created_at: new Date().toISOString(),
+  };
+};
+
 describe('UpstashStore', () => {
   let store: UpstashStore;
   const testTableName = 'test_table';
@@ -78,6 +118,9 @@ describe('UpstashStore', () => {
     await store.clearTable({ tableName: testTableName2 as TABLE_NAMES });
     await store.clearTable({ tableName: TABLE_THREADS });
     await store.clearTable({ tableName: TABLE_MESSAGES });
+    await store.clearTable({ tableName: TABLE_WORKFLOW_SNAPSHOT });
+    await store.clearTable({ tableName: TABLE_EVALS });
+    await store.clearTable({ tableName: TABLE_TRACES });
   });
 
   describe('Table Operations', () => {
@@ -301,6 +344,97 @@ describe('UpstashStore', () => {
     });
   });
 
+  describe('Trace Operations', () => {
+    beforeEach(async () => {
+      await store.clearTable({ tableName: TABLE_TRACES });
+    });
+
+    it('should retrieve traces with filtering and pagination', async () => {
+      // Insert sample traces
+      const trace1 = createSampleTrace('test-trace-1', 'scope1', { env: 'prod' });
+      const trace2 = createSampleTrace('test-trace-2', 'scope1', { env: 'dev' });
+      const trace3 = createSampleTrace('other-trace', 'scope2', { env: 'prod' });
+
+      await store.insert({ tableName: TABLE_TRACES, record: trace1 });
+      await store.insert({ tableName: TABLE_TRACES, record: trace2 });
+      await store.insert({ tableName: TABLE_TRACES, record: trace3 });
+
+      // Test name filter
+      const testTraces = await store.getTraces({ name: 'test-trace', page: 0, perPage: 10 });
+      expect(testTraces).toHaveLength(2);
+      expect(testTraces.map(t => t.name)).toContain('test-trace-1');
+      expect(testTraces.map(t => t.name)).toContain('test-trace-2');
+
+      // Test scope filter
+      const scope1Traces = await store.getTraces({ scope: 'scope1', page: 0, perPage: 10 });
+      expect(scope1Traces).toHaveLength(2);
+      expect(scope1Traces.every(t => t.scope === 'scope1')).toBe(true);
+
+      // Test attributes filter
+      const prodTraces = await store.getTraces({
+        attributes: { env: 'prod' },
+        page: 0,
+        perPage: 10,
+      });
+      expect(prodTraces).toHaveLength(2);
+      expect(prodTraces.every(t => t.attributes.env === 'prod')).toBe(true);
+
+      // Test pagination
+      const pagedTraces = await store.getTraces({ page: 0, perPage: 2 });
+      expect(pagedTraces).toHaveLength(2);
+
+      // Test combined filters
+      const combinedTraces = await store.getTraces({
+        scope: 'scope1',
+        attributes: { env: 'prod' },
+        page: 0,
+        perPage: 10,
+      });
+      expect(combinedTraces).toHaveLength(1);
+      expect(combinedTraces[0].name).toBe('test-trace-1');
+
+      // Verify trace object structure
+      const trace = combinedTraces[0];
+      expect(trace).toHaveProperty('id');
+      expect(trace).toHaveProperty('parentSpanId');
+      expect(trace).toHaveProperty('traceId');
+      expect(trace).toHaveProperty('name');
+      expect(trace).toHaveProperty('scope');
+      expect(trace).toHaveProperty('kind');
+      expect(trace).toHaveProperty('status');
+      expect(trace).toHaveProperty('events');
+      expect(trace).toHaveProperty('links');
+      expect(trace).toHaveProperty('attributes');
+      expect(trace).toHaveProperty('startTime');
+      expect(trace).toHaveProperty('endTime');
+      expect(trace).toHaveProperty('other');
+      expect(trace).toHaveProperty('createdAt');
+
+      // Verify JSON fields are parsed
+      expect(typeof trace.status).toBe('object');
+      expect(typeof trace.events).toBe('object');
+      expect(typeof trace.links).toBe('object');
+      expect(typeof trace.attributes).toBe('object');
+      expect(typeof trace.other).toBe('object');
+    });
+
+    it('should handle empty results', async () => {
+      const traces = await store.getTraces({ page: 0, perPage: 10 });
+      expect(traces).toHaveLength(0);
+    });
+
+    it('should handle invalid JSON in fields', async () => {
+      const trace = createSampleTrace('test-trace');
+      trace.status = 'invalid-json{'; // Intentionally invalid JSON
+
+      await store.insert({ tableName: TABLE_TRACES, record: trace });
+      const traces = await store.getTraces({ page: 0, perPage: 10 });
+
+      expect(traces).toHaveLength(1);
+      expect(traces[0].status).toBe('invalid-json{'); // Should return raw string when JSON parsing fails
+    });
+  });
+
   describe('Workflow Operations', () => {
     const testNamespace = 'test';
     const testWorkflow = 'test-workflow';
@@ -348,6 +482,62 @@ describe('UpstashStore', () => {
         runId: 'non-existent',
       });
       expect(result).toBeNull();
+    });
+  });
+
+  describe('Eval Operations', () => {
+    beforeEach(async () => {
+      await store.clearTable({ tableName: TABLE_EVALS });
+    });
+
+    it('should retrieve evals by agent name', async () => {
+      const agentName = `test-agent-${randomUUID()}`;
+
+      // Create sample evals
+      const liveEval = createSampleEval(agentName, false);
+      const testEval = createSampleEval(agentName, true);
+      const otherAgentEval = createSampleEval(`other-agent-${randomUUID()}`, false);
+
+      // Insert evals
+      await store.insert({
+        tableName: TABLE_EVALS,
+        record: liveEval,
+      });
+
+      await store.insert({
+        tableName: TABLE_EVALS,
+        record: testEval,
+      });
+
+      await store.insert({
+        tableName: TABLE_EVALS,
+        record: otherAgentEval,
+      });
+
+      // Test getting all evals for the agent
+      const allEvals = await store.getEvalsByAgentName(agentName);
+      expect(allEvals).toHaveLength(2);
+      expect(allEvals.map(e => e.runId)).toEqual(expect.arrayContaining([liveEval.run_id, testEval.run_id]));
+
+      // Test getting only live evals
+      const liveEvals = await store.getEvalsByAgentName(agentName, 'live');
+      expect(liveEvals).toHaveLength(1);
+      expect(liveEvals[0].runId).toBe(liveEval.run_id);
+
+      // Test getting only test evals
+      const testEvals = await store.getEvalsByAgentName(agentName, 'test');
+      expect(testEvals).toHaveLength(1);
+      expect(testEvals[0].runId).toBe(testEval.run_id);
+
+      // Verify the test_info was properly parsed
+      if (testEval.test_info) {
+        const expectedTestInfo = JSON.parse(testEval.test_info);
+        expect(testEvals[0].testInfo).toEqual(expectedTestInfo);
+      }
+
+      // Test getting evals for non-existent agent
+      const nonExistentEvals = await store.getEvalsByAgentName('non-existent-agent');
+      expect(nonExistentEvals).toHaveLength(0);
     });
   });
 

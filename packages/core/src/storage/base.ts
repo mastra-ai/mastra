@@ -60,6 +60,11 @@ export abstract class MastraStorage extends MastraBase {
     return this.batchInsert({ tableName, records });
   }
 
+  async __batchTraceInsert({ records }: { records: Record<string, any>[] }): Promise<void> {
+    await this.init();
+    return this.batchInsert({ tableName: TABLE_TRACES, records });
+  }
+
   abstract load<R>({ tableName, keys }: { tableName: TABLE_NAMES; keys: Record<string, string> }): Promise<R | null>;
 
   abstract getThreadById({ threadId }: { threadId: string }): Promise<StorageThreadType | null>;
@@ -144,12 +149,14 @@ export abstract class MastraStorage extends MastraBase {
   }): Promise<any[]>;
 
   async __getTraces({
+    name,
     scope,
     page,
     perPage,
     attributes,
     filters,
   }: {
+    name?: string;
     scope?: string;
     page: number;
     perPage: number;
@@ -157,7 +164,7 @@ export abstract class MastraStorage extends MastraBase {
     filters?: Record<string, any>;
   }): Promise<any[]> {
     await this.init();
-    return this.getTraces({ scope, page, perPage, attributes, filters });
+    return this.getTraces({ name, scope, page, perPage, attributes, filters });
   }
 
   async init(): Promise<void> {
