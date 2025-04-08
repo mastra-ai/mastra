@@ -141,19 +141,18 @@ describe('D1Store', () => {
     });
 
     it('should clear table data', async () => {
-      // Create table if it doesn't exist
       await store.createTable({
         tableName: testTableName as any,
         schema: {
           id: { type: 'text', primaryKey: true },
-          data: { type: 'text' },
+          data: { type: 'text', nullable: true },
         },
       });
 
       // Insert test data
       await store.insert({
         tableName: testTableName as any,
-        record: { id: 'test2', data: 'to-be-cleared' },
+        record: { id: 'test1', data: 'test-data' },
       });
 
       // Clear the table
@@ -162,7 +161,7 @@ describe('D1Store', () => {
       // Verify data is cleared
       const result = await store.load({
         tableName: testTableName as any,
-        keys: { id: 'test2' },
+        keys: { id: 'test1' },
       });
 
       expect(result).toBeNull();
@@ -263,10 +262,10 @@ describe('D1Store', () => {
       const thread1 = createSampleThread();
       const thread2 = { ...createSampleThread(), resourceId: thread1.resourceId };
 
-      await store.saveThread({ thread: thread1 });
-      await store.saveThread({ thread: thread2 });
+      await store.__saveThread({ thread: thread1 });
+      await store.__saveThread({ thread: thread2 });
 
-      const threads = await store.getThreadsByResourceId({ resourceId: thread1.resourceId });
+      const threads = await store.__getThreadsByResourceId({ resourceId: thread1.resourceId });
       expect(threads).toHaveLength(2);
       expect(threads.map(t => t.id)).toEqual(expect.arrayContaining([thread1.id, thread2.id]));
     });
@@ -296,9 +295,14 @@ describe('D1Store', () => {
       expect(retrievedMessages).toEqual(expect.arrayContaining(messages));
     });
 
+    it('should handle empty message array', async () => {
+      const result = await store.__saveMessages({ messages: [] });
+      expect(result).toEqual([]);
+    });
+
     it('should maintain message order', async () => {
       const thread = createSampleThread();
-      await store.saveThread({ thread });
+      await store.__saveThread({ thread });
 
       const messages = [
         { ...createSampleMessage(thread.id), content: [{ type: 'text', text: 'First' }] },
@@ -306,15 +310,14 @@ describe('D1Store', () => {
         { ...createSampleMessage(thread.id), content: [{ type: 'text', text: 'Third' }] },
       ];
 
-      await store.saveMessages({ messages });
+      await store.__saveMessages({ messages });
 
-      const retrievedMessages = await store.getMessages({ threadId: thread.id });
+      const retrievedMessages = await store.__getMessages({ threadId: thread.id });
+      expect(retrievedMessages).toHaveLength(messages.length);
 
-      expect(retrievedMessages).toHaveLength(3);
-
-      // Verify order is maintained
-      retrievedMessages.forEach((_msg, _idx) => {
-        // expect(msg.content[0]).toBe(messages[idx].content.text)
+      // Verify order matches insertion order
+      retrievedMessages.forEach((msg, idx) => {
+        expect(msg.id).toBe(messages[idx].id);
       });
     });
 
@@ -365,7 +368,6 @@ describe('D1Store', () => {
 
       expect(retrieved?.title).toBe(thread.title);
     });
-
     it('should handle concurrent thread updates', async () => {
       const thread = createSampleThread();
       await store.saveThread({ thread });
@@ -387,18 +389,35 @@ describe('D1Store', () => {
     });
   });
 
-  describe('Workflow Snapshots', () => {
+  describe('Workflow Operations', () => {
+    beforeAll(async () => {
+      // Create workflow_snapshot table
+      await store.createTable({
+        tableName: TABLE_WORKFLOW_SNAPSHOT,
+        schema: {
+          workflow_name: { type: 'text', nullable: false },
+          run_id: { type: 'text', nullable: false },
+          snapshot: { type: 'text', nullable: false },
+          created_at: { type: 'timestamp', nullable: false },
+          updated_at: { type: 'timestamp', nullable: false },
+        },
+      });
+    });
     it('should persist and load workflow snapshots', async () => {
       const workflowName = 'test-workflow';
       const runId = `run-${randomUUID()}`;
       const snapshot = {
-        status: 'running',
+        runId,
+        value: { currentState: 'running' },
+        timestamp: Date.now(),
+        activePaths: [],
         context: {
+          steps: {},
           stepResults: {},
           attempts: {},
           triggerData: { type: 'manual' },
         },
-      } as unknown as WorkflowRunState;
+      } as WorkflowRunState;
 
       await store.persistWorkflowSnapshot({
         namespace: 'default',
@@ -430,24 +449,32 @@ describe('D1Store', () => {
       const workflowName = 'test-workflow';
       const runId = `run-${randomUUID()}`;
       const initialSnapshot = {
-        status: 'running',
+        runId,
+        value: { currentState: 'running' },
+        timestamp: Date.now(),
+        activePaths: [],
         context: {
+          steps: {},
           stepResults: {},
           attempts: {},
           triggerData: { type: 'manual' },
         },
-      } as unknown as WorkflowRunState;
+      } as WorkflowRunState;
 
       const updatedSnapshot = {
-        status: 'completed',
+        runId,
+        value: { currentState: 'completed' },
+        timestamp: Date.now(),
+        activePaths: [],
         context: {
+          steps: {},
           stepResults: {
             'step-1': { status: 'success', result: { data: 'test' } },
           },
           attempts: { 'step-1': 1 },
           triggerData: { type: 'manual' },
         },
-      } as unknown as WorkflowRunState;
+      } as WorkflowRunState;
 
       await store.persistWorkflowSnapshot({
         namespace: 'default',
@@ -471,27 +498,18 @@ describe('D1Store', () => {
 
       expect(loadedSnapshot).toEqual(updatedSnapshot);
     });
-    beforeAll(async () => {
-      // Create workflow_snapshot table
-      await store.createTable({
-        tableName: TABLE_WORKFLOW_SNAPSHOT,
-        schema: {
-          workflow_name: { type: 'text', nullable: false },
-          run_id: { type: 'text', nullable: false },
-          snapshot: { type: 'text', nullable: false },
-          created_at: { type: 'timestamp', nullable: false },
-          updated_at: { type: 'timestamp', nullable: false },
-        },
-      });
-    });
 
     it('should handle complex workflow state', async () => {
-      const workflowName = 'complex-workflow';
       const namespace = 'test-namespace';
       const runId = `run-${randomUUID()}`;
+      const workflowName = 'complex-workflow';
+
       const complexSnapshot = {
+        runId,
         value: { currentState: 'running' },
+        timestamp: Date.now(),
         context: {
+          steps: {},
           stepResults: {
             'step-1': {
               status: 'success',
@@ -529,15 +547,13 @@ describe('D1Store', () => {
             status: 'waiting',
           },
         ],
-        runId: runId,
-        timestamp: Date.now(),
       };
 
       await store.persistWorkflowSnapshot({
         namespace,
         workflowName,
         runId,
-        snapshot: complexSnapshot as unknown as WorkflowRunState,
+        snapshot: complexSnapshot,
       });
 
       const loadedSnapshot = await store.loadWorkflowSnapshot({
