@@ -12,6 +12,9 @@ const meta = {
   agents: {
     title: "Agents",
   },
+  memory: {
+    title: "Memory",
+  },
   workflows: {
     title: "Workflows",
   },
