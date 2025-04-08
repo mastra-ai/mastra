@@ -117,10 +117,10 @@ export async function createHonoServer(
   const corsConfig = {
     origin: server?.cors?.origin ?? '*',
     allowMethods: server?.cors?.allowMethods ?? ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-    allowHeaders: ['Content-Type', 'Authorization', 'x-mastra-client-type', ...(server?.cors?.allowHeaders ?? [])],
-    exposeHeaders: ['Content-Length', 'X-Requested-With', ...(server?.cors?.exposeHeaders ?? [])],
     credentials: server?.cors?.credentials ?? false,
     maxAge: server?.cors?.maxAge ?? 3600,
+    allowHeaders: ['Content-Type', 'Authorization', 'x-mastra-client-type', ...(server?.cors?.allowHeaders ?? [])],
+    exposeHeaders: ['Content-Length', 'X-Requested-With', ...(server?.cors?.exposeHeaders ?? [])],
   };
   app.use('*', timeout(server?.timeout ?? 1000 * 30), cors(corsConfig));
 
