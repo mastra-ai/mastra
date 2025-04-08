@@ -1,6 +1,6 @@
 {
   "name": "@mastra/loggers",
-  "version": "0.1.15-alpha.8",
+  "version": "0.1.15",
   "description": "",
   "type": "module",
   "files": [

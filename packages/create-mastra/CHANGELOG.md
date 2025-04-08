@@ -1,5 +1,22 @@
 # create-mastra
 
+## 0.2.4
+
+### Patch Changes
+
+- a4a1151: Fix playground freezing when buffer is passed between steps
+- 9d13790: update playground-ui dynamic form, cleanups
+- 13ade6a: update favicon shape
+- 055c4ea: Fix traces page showing e.reduce error
+- 124ce08: Ability to set maxTokens, temperature, and other common features in playground
+- 789bef3: Make runId optional for workflow startAsync api
+- 40dca45: Fix expanding workflow sidebar not expanding the output section
+- 8393832: Handle nested workflow view on workflow graph
+- 23999d4: Add Design System tokens and components into playground ui
+- 8076ecf: Unify workflow watch/start response
+- 9e7d46a: Fix scroll issue on playground tools page
+- d16ed18: Make playground-ui dynamic forms better
+
 ## 0.2.4-alpha.4
 
 ### Patch Changes

@@ -1,5 +1,57 @@
 # @mastra/playground-ui
 
+## 4.0.0
+
+### Patch Changes
+
+- 5ae0180: Removed prefixed doc references
+- a4a1151: Fix playground freezing when buffer is passed between steps
+- 7bdbb64: Show no input when attributs are empty
+- 9d13790: update playground-ui dynamic form, cleanups
+- 055c4ea: Fix traces page showing e.reduce error
+- 124ce08: Ability to set maxTokens, temperature, and other common features in playground
+- 40dca45: Fix expanding workflow sidebar not expanding the output section
+- 8393832: Handle nested workflow view on workflow graph
+- 23999d4: Add Design System tokens and components into playground ui
+- 8076ecf: Unify workflow watch/start response
+- d16ed18: Make playground-ui dynamic forms better
+- Updated dependencies [56c31b7]
+- Updated dependencies [619c39d]
+- Updated dependencies [5ae0180]
+- Updated dependencies [fe56be0]
+- Updated dependencies [93875ed]
+- Updated dependencies [107bcfe]
+- Updated dependencies [9bfa12b]
+- Updated dependencies [515ebfb]
+- Updated dependencies [5b4e19f]
+- Updated dependencies [dbbbf80]
+- Updated dependencies [a0967a0]
+- Updated dependencies [055c4ea]
+- Updated dependencies [fca3b21]
+- Updated dependencies [88fa727]
+- Updated dependencies [f37f535]
+- Updated dependencies [789bef3]
+- Updated dependencies [a3f0e90]
+- Updated dependencies [4d67826]
+- Updated dependencies [6330967]
+- Updated dependencies [8393832]
+- Updated dependencies [6330967]
+- Updated dependencies [84fe241]
+- Updated dependencies [5646a01]
+- Updated dependencies [99d43b9]
+- Updated dependencies [d7e08e8]
+- Updated dependencies [febc8a6]
+- Updated dependencies [7599d77]
+- Updated dependencies [0118361]
+- Updated dependencies [bffd64f]
+- Updated dependencies [619c39d]
+- Updated dependencies [cafae83]
+- Updated dependencies [8076ecf]
+- Updated dependencies [8df4a77]
+- Updated dependencies [304397c]
+  - @mastra/core@0.8.0
+  - @mastra/client-js@0.1.14
+
 ## 4.0.0-alpha.9
 
 ### Patch Changes
