@@ -213,7 +213,7 @@ describe('agent', () => {
     expect(name).toBe('Dero Israel');
   }, 500000);
 
-  it.only('should generate with defaul max steps', async () => {
+  it('should generate with defaul max steps', async () => {
     const findUserTool = createTool({
       id: 'Find user tool',
       description: 'This is a test tool that returns the name and email',
