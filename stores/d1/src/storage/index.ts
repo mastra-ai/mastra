@@ -8,7 +8,7 @@ import {
   TABLE_EVALS,
   TABLE_TRACES,
 } from '@mastra/core/storage';
-import type { TABLE_NAMES, StorageColumn, StorageGetMessagesArg, EvalRow } from '@mastra/core/storage';
+import type { TABLE_NAMES, StorageColumn, StorageGetMessagesArg, EvalRow, WorkflowRuns } from '@mastra/core/storage';
 import type { WorkflowRunState } from '@mastra/core/workflows';
 import Cloudflare from 'cloudflare';
 import { createSqlBuilder } from './sql-builder';
@@ -1142,6 +1142,17 @@ export class D1Store extends MastraStorage {
       this.logger.error(`Error getting evals for agent ${agentName}:`, { error });
       return [];
     }
+  }
+
+  getWorkflowRuns(_args?: {
+    namespace?: string;
+    workflowName?: string;
+    fromDate?: Date;
+    toDate?: Date;
+    limit?: number;
+    offset?: number;
+  }): Promise<WorkflowRuns> {
+    throw new Error('Method not implemented.');
   }
 
   /**
