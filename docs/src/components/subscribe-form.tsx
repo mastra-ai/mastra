@@ -138,9 +138,7 @@ export const SubscribeForm = ({
 
               <FormControl>
                 <input
-                  placeholder={
-                    placeholder || "you@example.com"
-                  }
+                  placeholder={placeholder || "you@example.com"}
                   {...field}
                   className={cn(
                     "bg-transparent placeholder:text-text-3 text-sm placeholder:text-sm md:min-w-[400px] flex-1 focus:outline-none focus:ring-1 h-[35px] focus:ring-[#3359BC] w-full py-[0.56rem] px-4 dark:border-neutral-700  border rounded-md",
