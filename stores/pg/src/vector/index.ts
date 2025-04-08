@@ -64,6 +64,8 @@ export class PgVector extends MastraVector {
   private describeIndexCache: Map<string, PGIndexStats> = new Map();
   private createdIndexes = new Map<string, number>();
   private mutexesByName = new Map<string, Mutex>();
+  private installVectorExtensionPromise: Promise<void> | null = null;
+  private vectorExtensionInstalled: boolean | undefined = undefined;
 
   constructor(connectionString: string) {
     super();
@@ -372,34 +374,48 @@ export class PgVector extends MastraVector {
   }
 
   private async installVectorExtension(client: pg.PoolClient) {
-    try {
-      // First check if extension is already installed
-      const extensionCheck = await client.query(`
-      SELECT EXISTS (
-        SELECT 1 FROM pg_extension WHERE extname = 'vector'
-      );
-    `);
-
-      const isInstalled = extensionCheck.rows[0].exists;
-
-      if (!isInstalled) {
+    if (!this.installVectorExtensionPromise) {
+      // Create new promise for the entire installation process
+      this.installVectorExtensionPromise = (async () => {
         try {
-          await client.query('CREATE EXTENSION IF NOT EXISTS vector');
-          this.logger.info('Vector extension installed successfully');
-        } catch {
-          this.logger.warn(
-            'Could not install vector extension. This requires superuser privileges. ' +
-              'If the extension is already installed globally, you can ignore this warning.',
+          // First check if extension is already installed
+          const extensionCheck = await client.query(`
+          SELECT EXISTS (
+            SELECT 1 FROM pg_extension WHERE extname = 'vector'
           );
-        }
-      } else {
-        this.logger.debug('Vector extension already installed, skipping installation');
-      }
-    } catch (error) {
-      this.logger.error('Error checking vector extension status', { error });
-    }
-  }
+        `);
 
+          this.vectorExtensionInstalled = extensionCheck.rows[0].exists;
+
+          if (!this.vectorExtensionInstalled) {
+            try {
+              await client.query('CREATE EXTENSION IF NOT EXISTS vector');
+              this.vectorExtensionInstalled = true;
+              this.logger.info('Vector extension installed successfully');
+            } catch {
+              this.logger.warn(
+                'Could not install vector extension. This requires superuser privileges. ' +
+                  'If the extension is already installed globally, you can ignore this warning.',
+              );
+              // Don't set vectorExtensionInstalled to false here since we're not sure if it failed
+              // due to permissions or if it's already installed globally
+            }
+          } else {
+            this.logger.debug('Vector extension already installed, skipping installation');
+          }
+        } catch (error) {
+          this.logger.error('Error checking vector extension status', { error });
+          // Reset both the promise and the flag so we can retry
+          this.vectorExtensionInstalled = undefined;
+          this.installVectorExtensionPromise = null;
+          throw error; // Re-throw so caller knows it failed
+        }
+      })();
+    }
+
+    // Wait for the installation process to complete
+    await this.installVectorExtensionPromise;
+  }
   async listIndexes(): Promise<string[]> {
     const client = await this.pool.connect();
     try {
