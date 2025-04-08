@@ -1,6 +1,5 @@
 import { randomUUID } from 'crypto';
-import type { WorkflowRunState } from '@mastra/core/workflows';
-import { describe, it, expect, beforeAll, beforeEach, afterAll, vi } from 'vitest';
+import type { D1Database } from '@cloudflare/workers-types';
 import {
   MastraStorage,
   TABLE_EVALS,
@@ -8,9 +7,9 @@ import {
   TABLE_THREADS,
   TABLE_WORKFLOW_SNAPSHOT,
 } from '@mastra/core/storage';
-import type { D1Database } from '@cloudflare/workers-types';
-// Import Miniflare for D1 testing
+import type { WorkflowRunState } from '@mastra/core/workflows';
 import { Miniflare } from 'miniflare';
+import { describe, it, expect, beforeAll, beforeEach, afterAll, vi } from 'vitest';
 
 import { D1Store } from '.';
 

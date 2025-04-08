@@ -1,3 +1,4 @@
+import type { D1Database } from '@cloudflare/workers-types';
 import type { StorageThreadType, MessageType } from '@mastra/core/memory';
 import {
   MastraStorage,
@@ -10,7 +11,6 @@ import {
 import type { TABLE_NAMES, StorageColumn, StorageGetMessagesArg, EvalRow } from '@mastra/core/storage';
 import type { WorkflowRunState } from '@mastra/core/workflows';
 import Cloudflare from 'cloudflare';
-import type { D1Database } from '@cloudflare/workers-types';
 import { createSqlBuilder } from './sql-builder';
 import type { SqlParam } from './sql-builder';
 
