@@ -4,12 +4,12 @@ For agents, Memory is a system that manages which information the LLM can use to
 
 ## The Context Window
 
-The context window is the "window" of information visible to the language model at any given time. Anything outside this window is inaccessible to the model when generating its response.
+The context window is the information visible to the language model at any given time. Anything outside this window is inaccessible to the model when generating its response.
 
 The context window consists of several key elements organized in a specific way:
 
 1.  **System Instructions**: Directives that guide the agent's behavior and personality.
-2.  **Relevant Context / History**: Information from the ongoing conversation or retrieved data relevant to the current interaction. This often includes recent messages but can contain other contextual elements retrieved via memory features.
+2.  **Relevant Context / History**: Information from the ongoing conversation relevant to the current interaction.
 3.  **Current User Message**: The most recent input that the agent needs to respond to.
 
 Each time your agent generates a response, it analyzes the entire context window and produces an appropriate response, which is then added to the message history for future interactions.

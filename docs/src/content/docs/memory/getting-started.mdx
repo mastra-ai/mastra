@@ -23,7 +23,7 @@ In `src/mastra/agents/index.ts`, create an agent and attach a `Memory` instance:
 ```typescript filename="src/mastra/agents/index.ts" {10}
 import { Agent } from "@mastra/core/agent";
 import { Memory } from "@mastra/memory";
-import { openai } from "@ai-sdk/openai"; // Or your preferred LLM provider
+import { openai } from "@ai-sdk/openai";
 
 export const myMemoryAgent = new Agent({
   name: "MemoryAgent",
