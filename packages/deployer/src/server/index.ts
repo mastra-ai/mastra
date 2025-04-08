@@ -114,15 +114,19 @@ export async function createHonoServer(
   }
 
   //Global cors config
-  const corsConfig = {
-    origin: server?.cors?.origin ?? '*',
-    allowMethods: server?.cors?.allowMethods ?? ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-    credentials: server?.cors?.credentials ?? false,
-    maxAge: server?.cors?.maxAge ?? 3600,
-    allowHeaders: ['Content-Type', 'Authorization', 'x-mastra-client-type', ...(server?.cors?.allowHeaders ?? [])],
-    exposeHeaders: ['Content-Length', 'X-Requested-With', ...(server?.cors?.exposeHeaders ?? [])],
-  };
-  app.use('*', timeout(server?.timeout ?? 1000 * 30), cors(corsConfig));
+  if (server?.cors === false) {
+    app.use('*', timeout(server?.timeout ?? 1000 * 30));
+  } else {
+    const corsConfig = {
+      origin: server?.cors?.origin ?? '*',
+      allowMethods: server?.cors?.allowMethods ?? ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+      credentials: server?.cors?.credentials ?? false,
+      maxAge: server?.cors?.maxAge ?? 3600,
+      allowHeaders: ['Content-Type', 'Authorization', 'x-mastra-client-type', ...(server?.cors?.allowHeaders ?? [])],
+      exposeHeaders: ['Content-Length', 'X-Requested-With', ...(server?.cors?.exposeHeaders ?? [])],
+    };
+    app.use('*', timeout(server?.timeout ?? 1000 * 30), cors(corsConfig));
+  }
 
   // Add Mastra to context
   app.use('*', async (c, next) => {
