@@ -1,5 +1,13 @@
 # @mastra/playground-ui
 
+## 4.0.0-alpha.9
+
+### Patch Changes
+
+- a4a1151: Fix playground freezing when buffer is passed between steps
+- 124ce08: Ability to set maxTokens, temperature, and other common features in playground
+- 23999d4: Add Design System tokens and components into playground ui
+
 ## 4.0.0-alpha.8
 
 ### Patch Changes

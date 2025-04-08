@@ -1,5 +1,12 @@
 # @mastra/vectorize
 
+## 0.2.2-alpha.9
+
+### Patch Changes
+
+- bc0c560: Added vectorize index check before index creation
+- 7f1c514: Updated vectorize test timeouts
+
 ## 0.2.2-alpha.8
 
 ### Patch Changes
