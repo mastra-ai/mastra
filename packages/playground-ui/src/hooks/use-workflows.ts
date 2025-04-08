@@ -1,7 +1,16 @@
 import type { Workflow } from '@mastra/core/workflows';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
+import { useDebouncedCallback } from 'use-debounce';
 import { toast } from 'sonner';
-import { WorkflowRunResult, MastraClient } from '@mastra/client-js';
+import { WorkflowRunResult as BaseWorkflowRunResult, MastraClient } from '@mastra/client-js';
+
+export type ExtendedWorkflowRunResult = BaseWorkflowRunResult & {
+  sanitizedOutput?: string | null;
+  sanitizedError?: {
+    message: string;
+    stack?: string;
+  } | null;
+};
 
 export const useWorkflow = (workflowId: string, baseUrl: string) => {
   const [workflow, setWorkflow] = useState<Workflow | null>(null);
@@ -91,7 +100,37 @@ export const useExecuteWorkflow = (baseUrl: string) => {
 
 export const useWatchWorkflow = (baseUrl: string) => {
   const [isWatchingWorkflow, setIsWatchingWorkflow] = useState(false);
-  const [watchResult, setWatchResult] = useState<WorkflowRunResult | null>(null);
+  const [watchResult, setWatchResult] = useState<ExtendedWorkflowRunResult | null>(null);
+
+  // Debounce the state update to prevent too frequent renders
+  const debouncedSetWatchResult = useDebouncedCallback((record: ExtendedWorkflowRunResult) => {
+    // Sanitize and limit the size of large data fields
+    const formattedResults = Object.entries(record.results || {}).reduce(
+      (acc, [key, value]) => {
+        let output = value.status === 'success' ? value.output : undefined;
+        if (output) {
+          output = Object.entries(output).reduce(
+            (_acc, [_key, _value]) => {
+              const val = _value as { type: string; data: unknown };
+              _acc[_key] = val.type?.toLowerCase() === 'buffer' ? { type: 'Buffer', data: `[...buffered data]` } : val;
+              return _acc;
+            },
+            {} as Record<string, any>,
+          );
+        }
+        acc[key] = { ...value, output };
+        return acc;
+      },
+      {} as Record<string, any>,
+    );
+    const sanitizedRecord: ExtendedWorkflowRunResult = {
+      ...record,
+      sanitizedOutput: record
+        ? JSON.stringify({ ...record, results: formattedResults }, null, 2).slice(0, 50000) // Limit to 50KB
+        : null,
+    };
+    setWatchResult(sanitizedRecord);
+  }, 100);
 
   const watchWorkflow = async ({ workflowId, runId }: { workflowId: string; runId: string }) => {
     try {
@@ -103,7 +142,15 @@ export const useWatchWorkflow = (baseUrl: string) => {
       const workflow = client.getWorkflow(workflowId);
 
       await workflow.watch({ runId }, record => {
-        setWatchResult(record);
+        try {
+          debouncedSetWatchResult(record);
+        } catch (err) {
+          console.error('Error processing workflow record:', err);
+          // Set a minimal error state if processing fails
+          setWatchResult({
+            ...record,
+          });
+        }
       });
     } catch (error) {
       console.error('Error watching workflow:', error);
