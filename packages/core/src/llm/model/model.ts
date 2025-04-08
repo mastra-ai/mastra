@@ -117,7 +117,7 @@ export class MastraLLM extends MastraLLMBase {
   async __text<Z extends ZodSchema | JSONSchema7 | undefined>({
     runId,
     messages,
-    maxSteps,
+    maxSteps = 5,
     tools,
     convertedTools,
     temperature,

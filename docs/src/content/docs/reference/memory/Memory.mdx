@@ -66,6 +66,51 @@ const agent = new Agent({
 });
 ```
 
+### Working Memory
+
+The working memory feature allows agents to maintain persistent information across conversations. When enabled, the Memory class will automatically manage working memory updates through either text stream tags or tool calls.
+
+There are two modes for handling working memory updates:
+
+1. **text-stream** (default): The agent includes working memory updates directly in its responses using XML tags containing Markdown (`<working_memory># User \n ## Preferences...</working_memory>`). These tags are automatically processed and stripped from the visible output.
+
+2. **tool-call**: The agent uses a dedicated tool to update working memory. This mode should be used when working with `toDataStream()` as text-stream mode is not compatible with data streaming. Additionally, this mode provides more explicit control over memory updates and may be preferred when working with agents that are better at using tools than managing text tags.
+
+Example configuration:
+
+```typescript copy showLineNumbers
+const memory = new Memory({
+  options: {
+    workingMemory: {
+      enabled: true,
+      template: "# User\n- **First Name**:\n- **Last Name**:",
+      use: "tool-call", // or 'text-stream'
+    },
+  },
+});
+```
+
+If no template is provided, the Memory class uses a default template that includes fields for user details, preferences, goals, and other contextual information in Markdown format. See the [Working Memory guide](/docs/memory/working-memory.mdx#designing-effective-templates) for detailed usage examples and best practices.
+
+### embedder
+
+By default, Memory uses FastEmbed with the `bge-small-en-v1.5` model, which provides a good balance of performance and model size (~130MB). You only need to specify an embedder if you want to use a different model or provider.
+
+For environments where local embedding isn't supported, you can use an API-based embedder:
+
+```typescript {6}
+import { Memory } from "@mastra/memory";
+import { openai } from "@ai-sdk/openai";
+
+const agent = new Agent({
+  memory: new Memory({
+    embedder: openai.embedding("text-embedding-3-small"), // Adds network request
+  }),
+});
+```
+
+Mastra supports many embedding models through the [Vercel AI SDK](https://sdk.vercel.ai/docs/ai-sdk-core/embeddings), including options from OpenAI, Google, Mistral, and Cohere.
+
 ## Parameters
 
 <PropertiesTable
@@ -154,37 +199,14 @@ const agent = new Agent({
   ]}
 />
 
-### Working Memory
-
-The working memory feature allows agents to maintain persistent information across conversations. When enabled, the Memory class will automatically manage XML-based working memory updates through either text stream tags or tool calls.
-
-There are two modes for handling working memory updates:
-
-1. **text-stream** (default): The agent includes working memory updates directly in its responses using XML-like tags (`<working_memory>...</working_memory>`). These tags are automatically processed and stripped from the visible output.
-
-2. **tool-call**: The agent uses a dedicated tool to update working memory. This mode should be used when working with `toDataStream()` as text-stream mode is not compatible with data streaming. Additionally, this mode provides more explicit control over memory updates and may be preferred when working with agents that are better at using tools than managing text tags.
-
-Example configuration:
-
-```typescript copy showLineNumbers
-const memory = new Memory({
-  options: {
-    workingMemory: {
-      enabled: true,
-      template: "# User\n- **First Name**:\n- **Last Name**:",
-      use: "tool-call", // or 'text-stream'
-    },
-  },
-});
-```
-
-If no template is provided, the Memory class uses a default template that includes fields for user details, preferences, goals, and other contextual information in Markdown format. See the [Agent Memory Guide](/docs/agents/agent-memory#working-memory) for detailed usage examples and best practices.
-
-### embedder
-
-By default, Memory uses FastEmbed with the `bge-small-en-v1.5` model, which provides a good balance of performance and model size (~130MB). You only need to specify an embedder if you want to use a different model or provider.
-
 ### Related
 
+- [Getting Started with Memory](/docs/memory/getting-started.mdx)
+- [Semantic Recall](/docs/memory/semantic-recall.mdx)
+- [Working Memory](/docs/memory/working-memory.mdx)
+- [Memory Processors](/docs/memory/memory-processors.mdx)
 - [createThread](/docs/reference/memory/createThread.mdx)
 - [query](/docs/reference/memory/query.mdx)
+- [getThreadById](/docs/reference/memory/getThreadById.mdx)
+- [getThreadsByResourceId](/docs/reference/memory/getThreadsByResourceId.mdx)
+
