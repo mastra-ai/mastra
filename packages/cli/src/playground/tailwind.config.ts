@@ -115,7 +115,7 @@ export default {
       },
       fontFamily: {
         serif: ['var(--tasa-explorer)', ...defaultFont.fontFamily.serif],
-        mono: ['var(--commit-mono)', ...defaultFont.fontFamily.mono],
+        mono: ['var(--geist-mono)', ...defaultFont.fontFamily.mono],
         sans: ['var(--font-inter)', ...defaultFont.fontFamily.sans],
       },
       animation: {
