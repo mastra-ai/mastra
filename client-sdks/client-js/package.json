@@ -29,11 +29,10 @@
   "dependencies": {
     "@ai-sdk/ui-utils": "^1.1.19",
     "json-schema": "^0.4.0",
-    "zod": "^3.24.2",
     "zod-to-json-schema": "^3.24.3"
   },
   "peerDependencies": {
-    "zod": "^3.24.2",
+    "zod": "^3.23.0",
     "@mastra/core": "workspace:^"
   },
   "devDependencies": {
@@ -46,6 +45,7 @@
     "@types/node": "^20.17.27",
     "tsup": "^8.4.0",
     "typescript": "^5.8.2",
-    "vitest": "^3.0.9"
+    "vitest": "^3.0.9",
+    "zod": "^3.24.2"
   }
 }
