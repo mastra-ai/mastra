@@ -1,5 +1,11 @@
 # @mastra/playground-ui
 
+## 4.0.1
+
+### Patch Changes
+
+- 87b96d7: set playground agent maxSteps default to 3
+
 ## 4.0.1-alpha.0
 
 ### Patch Changes
