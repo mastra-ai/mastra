@@ -1,5 +1,15 @@
 # @mastra/deployer
 
+## 0.2.7-alpha.0
+
+### Patch Changes
+
+- 8fdb414: Custom mastra server cors config
+- Updated dependencies [99e2998]
+- Updated dependencies [8fdb414]
+  - @mastra/core@0.8.1-alpha.0
+  - @mastra/server@1.0.1-alpha.0
+
 ## 0.2.6
 
 ### Patch Changes

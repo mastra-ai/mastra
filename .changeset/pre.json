@@ -141,5 +141,9 @@
     "@mastra/voice-sarvam": "0.1.5",
     "@mastra/voice-speechify": "0.1.10"
   },
-  "changesets": []
+  "changesets": [
+    "cool-papers-check",
+    "odd-kings-switch",
+    "sour-oranges-learn"
+  ]
 }
