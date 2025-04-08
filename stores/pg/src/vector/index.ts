@@ -374,16 +374,21 @@ export class PgVector extends MastraVector {
   }
 
   private async installVectorExtension(client: pg.PoolClient) {
+    // If we've already successfully installed, no need to do anything
+    if (this.vectorExtensionInstalled) {
+      return;
+    }
+
+    // If there's no existing installation attempt or the previous one failed
     if (!this.installVectorExtensionPromise) {
-      // Create new promise for the entire installation process
       this.installVectorExtensionPromise = (async () => {
         try {
           // First check if extension is already installed
           const extensionCheck = await client.query(`
-          SELECT EXISTS (
-            SELECT 1 FROM pg_extension WHERE extname = 'vector'
-          );
-        `);
+            SELECT EXISTS (
+              SELECT 1 FROM pg_extension WHERE extname = 'vector'
+            );
+          `);
 
           this.vectorExtensionInstalled = extensionCheck.rows[0].exists;
 
@@ -409,6 +414,9 @@ export class PgVector extends MastraVector {
           this.vectorExtensionInstalled = undefined;
           this.installVectorExtensionPromise = null;
           throw error; // Re-throw so caller knows it failed
+        } finally {
+          // Clear the promise after completion (success or failure)
+          this.installVectorExtensionPromise = null;
         }
       })();
     }
