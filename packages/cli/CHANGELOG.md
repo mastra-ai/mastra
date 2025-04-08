@@ -1,5 +1,16 @@
 # mastra
 
+## 0.4.5-alpha.11
+
+### Patch Changes
+
+- a4a1151: Fix playground freezing when buffer is passed between steps
+- 13ade6a: update favicon shape
+- 124ce08: Ability to set maxTokens, temperature, and other common features in playground
+- c0f6c98: fix flag for disabling geoip
+- 23999d4: Add Design System tokens and components into playground ui
+- 9e7d46a: Fix scroll issue on playground tools page
+
 ## 0.4.5-alpha.10
 
 ### Patch Changes
