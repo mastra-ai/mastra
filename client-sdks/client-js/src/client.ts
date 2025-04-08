@@ -6,6 +6,7 @@ import type {
   CreateMemoryThreadParams,
   CreateMemoryThreadResponse,
   GetAgentResponse,
+  GetEvaluatorResponse,
   GetLogParams,
   GetLogsParams,
   GetLogsResponse,
@@ -227,7 +228,7 @@ export class MastraClient extends BaseResource {
    * Retrieves all available evaluators
    * @returns Promise containing map of evaluator IDs to evaluator details
    */
-  public getEvaluators(): Promise<Record<string, Evaluator | Metric>> {
+  public getEvaluators(): Promise<Record<string, GetEvaluatorResponse>> {
     return this.request('/api/evaluators');
   }
 }

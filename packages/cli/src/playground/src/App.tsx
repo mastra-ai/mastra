@@ -18,6 +18,7 @@ import WorkflowTracesPage from './pages/workflows/workflow/traces';
 import Networks from './pages/networks';
 import { NetworkLayout } from './domains/networks/network-layout';
 import Network from './pages/networks/network';
+import Evaluators from './pages/evaluators';
 
 function App() {
   return (
@@ -82,6 +83,7 @@ function App() {
             <Route path="graph" element={<Workflow />} />
             <Route path="traces" element={<WorkflowTracesPage />} />
           </Route>
+          <Route path="/evaluators" element={<Evaluators />} />
           <Route path="/" element={<Navigate to="/agents" />} />
         </Route>
       </Routes>
