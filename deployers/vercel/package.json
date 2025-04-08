@@ -31,13 +31,16 @@
   "author": "",
   "license": "Elastic-2.0",
   "dependencies": {
-    "@mastra/core": "workspace:^",
     "@mastra/deployer": "workspace:^",
     "@rollup/plugin-virtual": "^3.0.2",
     "fs-extra": "^11.3.0"
   },
+  "peerDependencies": {
+    "@mastra/core": "workspace:^"
+  },
   "devDependencies": {
     "@internal/lint": "workspace:*",
+    "@mastra/core": "workspace:^",
     "@microsoft/api-extractor": "^7.52.1",
     "@types/node": "^20.17.27",
     "eslint": "^9.23.0",

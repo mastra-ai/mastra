@@ -26,11 +26,14 @@
   },
   "license": "Elastic-2.0",
   "dependencies": {
-    "@mastra/core": "workspace:^",
     "microsoft-cognitiveservices-speech-sdk": "^1.43.0"
+  },
+  "peerDependencies": {
+    "@mastra/core": "workspace:^"
   },
   "devDependencies": {
     "@internal/lint": "workspace:*",
+    "@mastra/core": "workspace:^",
     "@microsoft/api-extractor": "^7.52.2",
     "@types/node": "^20.17.27",
     "eslint": "^9.23.0",
