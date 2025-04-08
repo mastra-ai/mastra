@@ -1,28 +1,16 @@
-# Filtering and Transforming Memory
+# Memory Processors
 
-Memory Processors allow you to modify the list of messages retrieved from memory _before_ they are added to the agent's context window and sent to the LLM. This is crucial for managing context size, filtering unwanted content, and optimizing performance.
+Memory Processors allow you to modify the list of messages retrieved from memory _before_ they are added to the agent's context window and sent to the LLM. This is useful for managing context size, filtering content, and optimizing performance.
 
 Processors operate on the messages retrieved based on your memory configuration (e.g., `lastMessages`, `semanticRecall`). They do **not** affect the new incoming user message.
 
-## Why Use Processors?
-
-- **Prevent Context Overflow**: Ensure the total tokens don't exceed the LLM's limit using `TokenLimiter`.
-- **Reduce Costs**: Limit the number of tokens sent to the LLM.
-- **Filter Noise**: Remove irrelevant information like tool calls or specific content types using `ToolCallFilter` or custom processors.
-- **Optimize Context**: Ensure the most relevant information is prioritized within the limited context window.
-- **Transform Content**: Modify message content before it reaches the LLM (e.g., summarizing long tool results - requires custom processor).
-
 ## Built-in Processors
 
-Mastra provides essential built-in processors:
+Mastra provides built-in processors:
 
 ### `TokenLimiter`
 
-This is the **most important processor** and should almost always be used to prevent errors caused by exceeding the LLM's context window limit.
-
-- **Function**: Counts the tokens in the retrieved memory messages and removes the oldest messages until the total count is below the specified `limit`.
-- **Benefit**: Reliably prevents "context window overflow" errors from the LLM API. Helps manage costs.
-- **Configuration**: Pass the desired token limit to the constructor. Choose a limit slightly lower than your model's maximum context window size to leave room for system prompts, the current user message, and potential tool definitions.
+This processor is used to prevent errors caused by exceeding the LLM's context window limit. It counts the tokens in the retrieved memory messages and removes the oldest messages until the total count is below the specified `limit`.
 
 ```typescript copy showLineNumbers {9-12}
 import { Memory } from "@mastra/memory";
@@ -61,14 +49,7 @@ See the [OpenAI cookbook](https://cookbook.openai.com/examples/how_to_count_toke
 
 ### `ToolCallFilter`
 
-This processor removes tool calls and/or their corresponding results from the memory messages sent to the LLM.
-
-- **Function**: Filters out `tool-call` and `tool-result` message parts.
-- **Benefit**: Saves tokens by excluding potentially verbose tool interactions from the context, especially useful if the details aren't needed for future turns. Can help focus the LLM on conversational content.
-- **Configuration**:
-  - No arguments: Removes _all_ tool calls and results.
-  - `{ exclude: ['toolName1', 'toolName2'] }`: Removes only calls and results for the specified tools.
-  - `{ include: ['toolName1'] }`: Removes all tool calls/results _except_ for the specified tools (less common).
+This processor removes tool calls from the memory messages sent to the LLM. It saves tokens by excluding potentially verbose tool interactions from the context, which is useful if the details aren't needed for future interactions. It's also useful if you always want your agent to call a specific tool again and not rely on previous tool results in memory.
 
 ```typescript copy showLineNumbers {5-14}
 import { Memory } from "@mastra/memory";
@@ -77,7 +58,7 @@ import { ToolCallFilter, TokenLimiter } from "@mastra/memory/processors";
 const memoryFilteringTools = new Memory({
   processors: [
     // Example 1: Remove all tool calls/results
-    // new ToolCallFilter(),
+    new ToolCallFilter(),
 
     // Example 2: Remove only noisy image generation tool calls/results
     new ToolCallFilter({ exclude: ["generateImageTool"] }),
@@ -146,14 +127,5 @@ const memoryWithCustomFilter = new Memory({
 });
 ```
 
-When creating custom processors:
-
-1.  **Return New Arrays/Objects**: Avoid mutating the input `messages` array or its objects directly. Create new filtered/transformed arrays and objects.
-2.  **Keep it Focused**: Aim for processors with a single, clear responsibility.
-3.  **Consider Performance**: Be mindful of complex operations, especially on potentially long message histories.
-
-## Related
-
-- **[Getting Started](./getting-started.mdx)**: Introduction to basic memory concepts.
-- **[Memory Reference](../reference/memory/Memory.mdx)**: Configuration options for the `Memory` class.
+When creating custom processors avoid mutating the input `messages` array or its objects directly.
 
