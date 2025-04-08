@@ -1,4 +1,3 @@
-import { TABLE_TRACES } from '@mastra/core/storage';
 import { HTTPException } from '../http-exception';
 import type { Context } from '../types';
 
@@ -60,6 +59,7 @@ export async function getTelemetryHandler({ mastra, body }: TelemetryContext) {
 export async function storeTelemetryHandler({ mastra, body }: Context & { body: { resourceSpans: any[] } }) {
   try {
     const storage = mastra.getStorage();
+    const logger = mastra.getLogger();
 
     if (!storage) {
       throw new HTTPException(400, { message: 'Storage is not initialized' });
@@ -68,6 +68,17 @@ export async function storeTelemetryHandler({ mastra, body }: Context & { body: 
     const now = new Date();
 
     const items = body?.resourceSpans?.[0]?.scopeSpans;
+    logger.debug('[Telemetry Handler] Received spans:', {
+      totalSpans: items?.reduce((acc: number, scope: { spans: any[] }) => acc + scope.spans.length, 0) || 0,
+      timestamp: now.toISOString(),
+    });
+    if (!items?.length) {
+      return {
+        status: 'success',
+        message: 'No spans to process',
+        traceCount: 0,
+      };
+    }
 
     const allSpans: any[] = items.reduce((acc: any, scopedSpans: any) => {
       const { scope, spans } = scopedSpans;
@@ -119,8 +130,7 @@ export async function storeTelemetryHandler({ mastra, body }: Context & { body: 
     }, []);
 
     return storage
-      .__batchInsert({
-        tableName: TABLE_TRACES,
+      .__batchTraceInsert({
         records: allSpans,
       })
       .then(() => {

@@ -101,9 +101,7 @@ export function TableOfContents(props: TOCProps) {
         </div>
       </div>
       <div className="p-4 border dark:border-[0.5px] rounded-md dark:border-neutral-700">
-        <h3 className="text-xl font-semibold">
-          Get our weekly changelog
-        </h3>
+        <h3 className="text-xl font-semibold">Get our weekly changelog</h3>
         <SubscribeForm
           className="md:flex-col md:items-start mt-2"
           inputClassName="md:w-full md:min-w-full pl-2 truncate"

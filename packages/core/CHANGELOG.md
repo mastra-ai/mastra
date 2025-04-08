@@ -1,5 +1,17 @@
 # @mastra/core
 
+## 0.8.0-alpha.8
+
+### Patch Changes
+
+- 8df4a77: Fix if-else execution order
+
+## 0.8.0-alpha.7
+
+### Patch Changes
+
+- febc8a6: Added dual tracing and fixed local tracing recursion
+
 ## 0.8.0-alpha.6
 
 ### Patch Changes

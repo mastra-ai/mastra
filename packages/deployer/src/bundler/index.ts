@@ -154,7 +154,10 @@ export abstract class Bundler extends MastraBundler {
     }
 
     // temporary fix for mastra-memory and fastembed
-    if (analyzedBundleInfo.externalDependencies.has('@mastra/memory')) {
+    if (
+      analyzedBundleInfo.externalDependencies.has('@mastra/memory') ||
+      analyzedBundleInfo.dependencies.has('@mastra/memory')
+    ) {
       dependenciesToInstall.set('fastembed', 'latest');
     }
 

@@ -1,5 +1,21 @@
 # @mastra/client-js
 
+## 0.1.14-alpha.8
+
+### Patch Changes
+
+- 055c4ea: Fix traces page showing e.reduce error
+- bffd64f: Fix mastraClient CORS
+- Updated dependencies [8df4a77]
+  - @mastra/core@0.8.0-alpha.8
+
+## 0.1.14-alpha.7
+
+### Patch Changes
+
+- Updated dependencies [febc8a6]
+  - @mastra/core@0.8.0-alpha.7
+
 ## 0.1.14-alpha.6
 
 ### Patch Changes

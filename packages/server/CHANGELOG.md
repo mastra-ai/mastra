@@ -1,5 +1,20 @@
 # @mastra/deployer
 
+## 0.0.1-alpha.6
+
+### Patch Changes
+
+- Updated dependencies [8df4a77]
+  - @mastra/core@0.8.0-alpha.8
+
+## 0.0.1-alpha.5
+
+### Patch Changes
+
+- febc8a6: Added dual tracing and fixed local tracing recursion
+- Updated dependencies [febc8a6]
+  - @mastra/core@0.8.0-alpha.7
+
 ## 0.0.1-alpha.4
 
 ### Patch Changes
