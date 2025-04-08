@@ -5,11 +5,16 @@ import type { MastraMCPServerDefinition } from './client';
 
 const mastraMCPConfigurationInstances = new Map<string, InstanceType<typeof MCPConfiguration>>();
 
+export interface MCPConfigurationOptions {
+  id?: string;
+  servers: Record<string, MastraMCPServerDefinition>;
+}
+
 export class MCPConfiguration extends MastraBase {
   private serverConfigs: Record<string, MastraMCPServerDefinition> = {};
   private id: string;
 
-  constructor(args: { id?: string; servers: Record<string, MastraMCPServerDefinition> }) {
+  constructor(args: MCPConfigurationOptions) {
     super({ name: 'MCPConfiguration' });
     this.serverConfigs = args.servers;
     this.id = args.id ?? this.makeId();
@@ -97,6 +102,7 @@ To fix this you have three different options:
 
     this.logger.debug(`Connecting to ${name} MCP server`);
 
+    // Create client with server configuration including log handler
     const mcpClient = new MastraMCPClient({
       name,
       server: config,
@@ -107,7 +113,9 @@ To fix this you have three different options:
       await mcpClient.connect();
     } catch (e) {
       this.mcpClientsById.delete(name);
-      this.logger.error(`MCPConfiguration errored connecting to MCP server ${name}`);
+      this.logger.error(`MCPConfiguration errored connecting to MCP server ${name}`, {
+        error: e instanceof Error ? e.message : String(e)
+      });
       throw e;
     }
 
