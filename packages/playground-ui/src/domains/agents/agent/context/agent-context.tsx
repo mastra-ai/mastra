@@ -9,7 +9,7 @@ type AgentContextType = {
 
 const defaultModelSettings: ModelSettings = {
   maxRetries: 2,
-  maxSteps: 1,
+  maxSteps: 3,
   temperature: 0.5,
   topP: 1,
 };
