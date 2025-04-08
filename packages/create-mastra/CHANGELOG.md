@@ -1,5 +1,12 @@
 # create-mastra
 
+## 0.2.6
+
+### Patch Changes
+
+- 99e2998: Set default max steps to 5
+- 8fdb414: Custom mastra server cors config
+
 ## 0.2.6-alpha.0
 
 ### Patch Changes

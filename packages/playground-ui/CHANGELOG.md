@@ -1,5 +1,15 @@
 # @mastra/playground-ui
 
+## 4.0.2
+
+### Patch Changes
+
+- 99e2998: Set default max steps to 5
+- Updated dependencies [99e2998]
+- Updated dependencies [8fdb414]
+  - @mastra/core@0.8.1
+  - @mastra/client-js@0.1.15
+
 ## 4.0.2-alpha.0
 
 ### Patch Changes
