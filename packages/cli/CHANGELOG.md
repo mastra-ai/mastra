@@ -1,5 +1,11 @@
 # mastra
 
+## 0.4.6-alpha.0
+
+### Patch Changes
+
+- 87b96d7: set playground agent maxSteps default to 3
+
 ## 0.4.5
 
 ### Patch Changes
