@@ -13,19 +13,35 @@ permissions:
   pull-requests: read
 
 jobs:
-  test:
+  setup:
     # Only run on the main repository, not on forks
+    if: ${{ github.repository == 'mastra-ai/mastra' }}
+    runs-on: ubuntu-latest
+    outputs:
+      stores: ${{ steps.set-stores.outputs.stores }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: set-stores
+        run: |
+          STORES=$(ls -d stores/*/ | cut -f2 -d'/' | jq -R -s -c 'split("\n")[:-1]')
+          echo "stores=$STORES" >> $GITHUB_OUTPUT
+  test:
+    needs: setup
     if: ${{ github.repository == 'mastra-ai/mastra' }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        store: ${{fromJson(needs.setup.outputs.stores)}}
     services:
       qdrant:
-        image: qdrant/qdrant
+        image: ${{ matrix.store == 'qdrant' && 'qdrant/qdrant' || '' }}
         ports:
           - 6333:6333
       chromadb:
-        image: chromadb/chroma
+        image: ${{ matrix.store == 'chroma' && 'chromadb/chroma' || '' }}
         ports:
           - 8000:8000
 
@@ -52,8 +68,8 @@ jobs:
       - name: Build combined storage packages
         run: pnpm build:combined-stores
 
-      - name: Run combined storage tests
-        run: pnpm test:combined-stores
+      - name: Run ${{ matrix.store }} tests
+        run: pnpm test --filter "@mastra/${{ matrix.store }}"
         env:
           NODE_OPTIONS: "--max_old_space_size=8096"
           PINECONE_API_KEY: ${{ secrets.PINECONE_API_KEY }}

@@ -1,7 +1,7 @@
+import type { QueryResult } from '@mastra/core';
 import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach, vi } from 'vitest';
 
 import { PgVector } from '.';
-import { type QueryResult } from '@mastra/core';
 
 describe('PgVector', () => {
   let vectorDB: PgVector;
@@ -229,7 +229,10 @@ describe('PgVector', () => {
 
       it('should throw error if vector dimensions dont match', async () => {
         const vectors = [[1, 2, 3, 4]]; // 4D vector for 3D index
-        await expect(vectorDB.upsert({ indexName: testIndexName, vectors })).rejects.toThrow();
+        await expect(vectorDB.upsert({ indexName: testIndexName, vectors })).rejects.toThrow(
+          `Vector dimension mismatch: Index "${testIndexName}" expects 3 dimensions but got 4 dimensions. ` +
+            `Either use a matching embedding model or delete and recreate the index with the new dimension.`,
+        );
       });
     });
 
@@ -307,7 +310,7 @@ describe('PgVector', () => {
         expect(ids).toHaveLength(3);
 
         const idToBeUpdated = ids[0];
-        const newVector = [1, 2, 3];
+        const newVector = [4, 4, 4];
 
         const update = {
           vector: newVector,
@@ -1810,6 +1813,49 @@ describe('PgVector', () => {
 
       // BuildIndex
       await expect(vectorDB.buildIndex(indexName, 'cosine', { type: 'flat' })).resolves.not.toThrow();
+    });
+  });
+
+  describe('Concurrent Operations', () => {
+    it('should handle concurrent index creation attempts', async () => {
+      const indexName = 'concurrent_test_index';
+      const dimension = 384;
+
+      // Create multiple promises trying to create the same index
+      const promises = Array(5)
+        .fill(null)
+        .map(() => vectorDB.createIndex({ indexName, dimension }));
+
+      // All should resolve without error - subsequent attempts should be no-ops
+      await expect(Promise.all(promises)).resolves.not.toThrow();
+
+      // Verify only one index was actually created
+      const stats = await vectorDB.describeIndex(indexName);
+      expect(stats.dimension).toBe(dimension);
+
+      await vectorDB.deleteIndex(indexName);
+    });
+
+    it('should handle concurrent buildIndex attempts', async () => {
+      const indexName = 'concurrent_build_test';
+      await vectorDB.createIndex({ indexName, dimension: 384 });
+
+      const promises = Array(5)
+        .fill(null)
+        .map(() =>
+          vectorDB.buildIndex({
+            indexName,
+            metric: 'cosine',
+            indexConfig: { type: 'ivfflat', ivf: { lists: 100 } },
+          }),
+        );
+
+      await expect(Promise.all(promises)).resolves.not.toThrow();
+
+      const stats = await vectorDB.describeIndex(indexName);
+      expect(stats.type).toBe('ivfflat');
+
+      await vectorDB.deleteIndex(indexName);
     });
   });
 });

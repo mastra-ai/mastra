@@ -1,4 +1,4 @@
-import { MastraClient } from '@mastra/client-js';
+import { client } from '@/lib/client';
 import type { BaseLogMessage } from '@mastra/core';
 import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
@@ -10,10 +10,6 @@ export const useLogsByRunId = (runId: string) => {
 
   // TODO: support multiple transports in dev playground
   const transportId = transports[0];
-
-  const client = new MastraClient({
-    baseUrl: '',
-  });
 
   const fetchLogs = async (_runId?: string) => {
     const runIdToUse = _runId ?? runId;
@@ -59,10 +55,6 @@ export const useLogTransports = () => {
   const [isLoading, setIsLoading] = useState(true);
 
   const fetchLogTransports = async () => {
-    const client = new MastraClient({
-      baseUrl: '',
-    });
-
     try {
       const res = await client.getLogTransports();
       setTransports(res.transports);

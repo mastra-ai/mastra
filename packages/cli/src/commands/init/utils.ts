@@ -11,6 +11,7 @@ import yoctoSpinner from 'yocto-spinner';
 import { DepsService } from '../../services/service.deps';
 import { FileService } from '../../services/service.file';
 import { logger } from '../../utils/logger';
+import { globalWindsurfMCPIsAlreadyInstalled, windsurfGlobalMCPConfigPath } from './mcp-docs-server-install';
 
 const exec = util.promisify(child_process.exec);
 
@@ -65,6 +66,7 @@ export async function writeAgentSample(llmProvider: LLMProvider, destPath: strin
 
       Your primary function is to help users get weather details for specific locations. When responding:
       - Always ask for a location if none is provided
+      - If the location name isn’t in English, please translate it
       - If giving a location with multiple parts (e.g. "New York, NY"), use the most relevant part (e.g. "New York")
       - Include relevant details like humidity, wind conditions, and precipitation
       - Keep responses concise but informative
@@ -150,12 +152,24 @@ const agent = new Agent({
       \`,
 });
 
+const forecastSchema = z.array(
+  z.object({
+    date: z.string(),
+    maxTemp: z.number(),
+    minTemp: z.number(),
+    precipitationChance: z.number(),
+    condition: z.string(),
+    location: z.string(),
+  }),
+);
+
 const fetchWeather = new Step({
   id: 'fetch-weather',
   description: 'Fetches weather forecast for a given city',
   inputSchema: z.object({
     city: z.string().describe('The city to get the weather for'),
   }),
+  outputSchema: forecastSchema,
   execute: async ({ context }) => {
     const triggerData = context?.getStepResult<{ city: string }>('trigger');
 
@@ -200,23 +214,12 @@ const fetchWeather = new Step({
   },
 });
 
-const forecastSchema = z.array(
-  z.object({
-    date: z.string(),
-    maxTemp: z.number(),
-    minTemp: z.number(),
-    precipitationChance: z.number(),
-    condition: z.string(),
-    location: z.string(),
-  }),
-);
 
 const planActivities = new Step({
   id: 'plan-activities',
   description: 'Suggests activities based on weather conditions',
-  inputSchema: forecastSchema,
   execute: async ({ context, mastra }) => {
-    const forecast = context?.getStepResult<z.infer<typeof forecastSchema>>('fetch-weather');
+    const forecast = context?.getStepResult(fetchWeather);
 
     if (!forecast || forecast.length === 0) {
       throw new Error('Forecast data not found');
@@ -541,6 +544,49 @@ export const interactivePrompt = async () => {
           message: 'Add example',
           initialValue: false,
         }),
+      configureEditorWithDocsMCP: async () => {
+        const windsurfIsAlreadyInstalled = await globalWindsurfMCPIsAlreadyInstalled();
+
+        const editor = await p.select({
+          message: `Make your AI IDE into a Mastra expert? (installs Mastra docs MCP server)`,
+          options: [
+            { value: 'skip', label: 'Skip for now', hint: 'default' },
+            { value: 'cursor', label: 'Cursor' },
+            {
+              value: 'windsurf',
+              label: 'Windsurf',
+              hint: windsurfIsAlreadyInstalled ? `Already installed` : undefined,
+            },
+          ],
+        });
+
+        if (editor === `skip`) return undefined;
+        if (editor === `windsurf` && windsurfIsAlreadyInstalled) {
+          p.log.message(`\nWindsurf is already installed, skipping.`);
+          return undefined;
+        }
+
+        if (editor === `cursor`) {
+          p.log.message(
+            `\nNote: you will need to go into Cursor Settings -> MCP Settings and manually enable the installed Mastra MCP server.\n`,
+          );
+        }
+
+        if (editor === `windsurf`) {
+          const confirm = await p.select({
+            message: `Windsurf only supports a global MCP config (at ${windsurfGlobalMCPConfigPath}) is it ok to add/update that global config?\nThis means the Mastra docs MCP server will be available in all your Windsurf projects.`,
+            options: [
+              { value: 'yes', label: 'Yes, I understand' },
+              { value: 'skip', label: 'No, skip for now' },
+            ],
+          });
+          if (confirm !== `yes`) {
+            return undefined;
+          }
+        }
+
+        return editor;
+      },
     },
     {
       onCancel: () => {

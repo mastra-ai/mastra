@@ -1,10 +1,13 @@
-import { Readable } from 'stream';
 import type { Mastra } from '@mastra/core';
+import {
+  getSpeakersHandler as getOriginalSpeakersHandler,
+  generateSpeechHandler as getOriginalSpeakHandler,
+  transcribeSpeechHandler as getOriginalListenHandler,
+} from '@mastra/server/handlers/voice';
 import type { Context } from 'hono';
 import { HTTPException } from 'hono/http-exception';
 
 import { handleError } from './error.js';
-import { validateBody } from './utils.js';
 
 /**
  * Get available speakers for an agent
@@ -13,17 +16,12 @@ export async function getSpeakersHandler(c: Context) {
   try {
     const mastra: Mastra = c.get('mastra');
     const agentId = c.req.param('agentId');
-    const agent = mastra.getAgent(agentId);
 
-    if (!agent) {
-      throw new HTTPException(404, { message: 'Agent not found' });
-    }
+    const speakers = await getOriginalSpeakersHandler({
+      mastra,
+      agentId,
+    });
 
-    if (!agent.voice) {
-      throw new HTTPException(400, { message: 'Agent does not have voice capabilities' });
-    }
-
-    const speakers = await agent.getSpeakers();
     return c.json(speakers);
   } catch (error) {
     return handleError(error, 'Error getting speakers');
@@ -37,22 +35,15 @@ export async function speakHandler(c: Context) {
   try {
     const mastra: Mastra = c.get('mastra');
     const agentId = c.req.param('agentId');
-    const agent = mastra.getAgent(agentId);
-
-    if (!agent) {
-      throw new HTTPException(404, { message: 'Agent not found' });
-    }
-
-    if (!agent.voice) {
-      throw new HTTPException(400, { message: 'Agent does not have voice capabilities' });
-    }
-
     const { input, options } = await c.req.json();
-    await validateBody({ input });
 
-    const audioStream = await agent.speak(input, options);
+    const audioStream = await getOriginalSpeakHandler({
+      mastra,
+      agentId,
+      body: { text: input, speakerId: options?.speakerId },
+    });
 
-    c.header('Content-Type', `audio/${options.filetype ?? 'mp3'}`);
+    c.header('Content-Type', `audio/${options?.filetype ?? 'mp3'}`);
     c.header('Transfer-Encoding', 'chunked');
 
     return c.body(audioStream as any);
@@ -68,23 +59,33 @@ export async function listenHandler(c: Context) {
   try {
     const mastra: Mastra = c.get('mastra');
     const agentId = c.req.param('agentId');
-    const agent = mastra.getAgent(agentId);
 
-    if (!agent) {
-      throw new HTTPException(404, { message: 'Agent not found' });
+    const formData = await c.req.formData();
+    const audioFile = formData.get('audio');
+    const options = formData.get('options');
+
+    if (!audioFile || !(audioFile instanceof File)) {
+      throw new HTTPException(400, { message: 'Audio file is required' });
     }
 
-    if (!agent.voice) {
-      throw new HTTPException(400, { message: 'Agent does not have voice capabilities' });
+    const audioData = await audioFile.arrayBuffer();
+    let parsedOptions = {};
+
+    try {
+      parsedOptions = options ? JSON.parse(options as string) : {};
+    } catch {
+      // Ignore parsing errors and use empty options
     }
 
-    const audioData = await c.req.arrayBuffer();
-    const audioStream = new Readable();
-    audioStream.push(Buffer.from(audioData));
-    audioStream.push(null);
+    const transcription = await getOriginalListenHandler({
+      mastra,
+      agentId,
+      body: {
+        audioData: Buffer.from(audioData),
+        options: parsedOptions,
+      },
+    });
 
-    const options = c.req.query();
-    const transcription = await agent.listen(audioStream, options);
     return c.json({ text: transcription });
   } catch (error) {
     return handleError(error, 'Error transcribing speech');

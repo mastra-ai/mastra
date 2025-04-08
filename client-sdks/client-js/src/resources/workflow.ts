@@ -2,6 +2,8 @@ import type { GetWorkflowResponse, ClientOptions, WorkflowRunResult } from '../t
 
 import { BaseResource } from './base';
 
+const RECORD_SEPARATOR = '\x1E';
+
 export class Workflow extends BaseResource {
   constructor(
     options: ClientOptions,
@@ -19,6 +21,7 @@ export class Workflow extends BaseResource {
   }
 
   /**
+   * @deprecated Use `startAsync` instead
    * Executes the workflow with the provided parameters
    * @param params - Parameters required for workflow execution
    * @returns Promise containing the workflow execution results
@@ -85,11 +88,17 @@ export class Workflow extends BaseResource {
 
   /**
    * Starts a workflow run asynchronously and returns a promise that resolves when the workflow is complete
-   * @param params - Object containing the runId and triggerData
+   * @param params - Object containing the optional runId and triggerData
    * @returns Promise containing the workflow execution results
    */
-  startAsync(params: { runId: string; triggerData: Record<string, any> }): Promise<WorkflowRunResult> {
-    return this.request(`/api/workflows/${this.workflowId}/startAsync?runId=${params.runId}`, {
+  startAsync(params: { runId?: string; triggerData: Record<string, any> }): Promise<WorkflowRunResult> {
+    const searchParams = new URLSearchParams();
+
+    if (!!params?.runId) {
+      searchParams.set('runId', params.runId);
+    }
+
+    return this.request(`/api/workflows/${this.workflowId}/start-async?${searchParams.toString()}`, {
       method: 'POST',
       body: params?.triggerData,
     });
@@ -101,7 +110,7 @@ export class Workflow extends BaseResource {
    * @returns Promise containing the workflow resume results
    */
   resumeAsync(params: { runId: string; stepId: string; context: Record<string, any> }): Promise<WorkflowRunResult> {
-    return this.request(`/api/workflows/${this.workflowId}/resumeAsync?runId=${params.runId}`, {
+    return this.request(`/api/workflows/${this.workflowId}/resume-async?runId=${params.runId}`, {
       method: 'POST',
       body: {
         stepId: params.stepId,
@@ -119,61 +128,65 @@ export class Workflow extends BaseResource {
    */
   private async *streamProcessor(stream: ReadableStream): AsyncGenerator<WorkflowRunResult, void, unknown> {
     const reader = stream.getReader();
+
+    // Track if we've finished reading from the stream
+    let doneReading = false;
+    // Buffer to accumulate partial chunks
     let buffer = '';
 
     try {
-      while (true) {
+      while (!doneReading) {
+        // Read the next chunk from the stream
         const { done, value } = await reader.read();
+        doneReading = done;
 
-        if (done) {
-          // Process any remaining data in buffer before finishing
-          if (buffer.trim().length > 0) {
-            try {
-              const record = JSON.parse(buffer);
-              yield record;
-            } catch (e) {
-              console.warn('Could not parse final buffer content:', buffer);
-            }
-          }
-          break;
-        }
+        // Skip processing if we're done and there's no value
+        if (done && !value) continue;
 
-        // Decode and add to buffer
-        buffer += new TextDecoder().decode(value);
+        try {
+          // Decode binary data to text
+          const decoded = value ? new TextDecoder().decode(value) : '';
 
-        // Split the buffer into records
-        const records = buffer.split('\x1E');
+          // Split the combined buffer and new data by record separator
+          const chunks = (buffer + decoded).split(RECORD_SEPARATOR);
 
-        // Keep the last (potentially incomplete) chunk in the buffer
-        buffer = records.pop() || '';
+          // The last chunk might be incomplete, so save it for the next iteration
+          buffer = chunks.pop() || '';
 
-        // Process each complete record
-        for (const record of records) {
-          if (record.trim().length > 0) {
-            try {
-              // Assuming the records are JSON strings
-              const parsedRecord = JSON.parse(record);
-
-              //Check to see if all steps are completed and cancel reader
-              const isWorkflowCompleted = parsedRecord?.activePaths?.every(
-                (path: any) =>
-                  path.status === 'completed' ||
-                  path.status === 'suspended' ||
-                  path.status === 'failed' ||
-                  path.status === 'skipped',
-              );
-              if (isWorkflowCompleted) {
-                reader.cancel();
+          // Process complete chunks
+          for (const chunk of chunks) {
+            if (chunk) {
+              // Only process non-empty chunks
+              if (typeof chunk === 'string') {
+                try {
+                  const parsedChunk = JSON.parse(chunk);
+                  yield parsedChunk;
+                } catch {
+                  // Silently ignore parsing errors to maintain stream processing
+                  // This allows the stream to continue even if one record is malformed
+                }
               }
-              yield parsedRecord;
-            } catch (e) {
-              throw new Error(`Could not parse record: ${record}`);
             }
           }
+        } catch (error) {
+          // Silently ignore parsing errors to maintain stream processing
+          // This allows the stream to continue even if one record is malformed
+        }
+      }
+
+      // Process any remaining data in the buffer after stream is done
+      if (buffer) {
+        try {
+          yield JSON.parse(buffer);
+        } catch {
+          // Ignore parsing error for final chunk
         }
       }
     } finally {
-      reader.cancel();
+      // Always ensure we clean up the reader
+      reader.cancel().catch(() => {
+        // Ignore cancel errors
+      });
     }
   }
 

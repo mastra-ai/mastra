@@ -10,8 +10,8 @@ import type { InputOptions, OutputOptions } from 'rollup';
 
 import { analyzeBundle } from '../build/analyze';
 import { createBundler as createBundlerUtil, getInputOptions } from '../build/bundler';
-import { Deps } from '../build/deps';
 import { writeTelemetryConfig } from '../build/telemetry';
+import { DepsService } from '../services/deps';
 
 export abstract class Bundler extends MastraBundler {
   protected analyzeOutputDir = '.build';
@@ -84,7 +84,7 @@ export abstract class Bundler extends MastraBundler {
   }
 
   protected async installDependencies(outputDirectory: string, rootDir = process.cwd()) {
-    const deps = new Deps(rootDir);
+    const deps = new DepsService(rootDir);
     deps.__setLogger(this.logger);
 
     await deps.install({ dir: join(outputDirectory, this.outputDir) });
@@ -102,6 +102,29 @@ export abstract class Bundler extends MastraBundler {
     await copy(publicDir, join(outputDirectory, this.outputDir));
   }
 
+  protected async getBundlerOptions(
+    serverFile: string,
+    mastraEntryFile: string,
+    analyzedBundleInfo: Awaited<ReturnType<typeof analyzeBundle>>,
+  ) {
+    const inputOptions: InputOptions = await getInputOptions(mastraEntryFile, analyzedBundleInfo, 'node');
+    const isVirtual = serverFile.includes('\n') || existsSync(serverFile);
+
+    if (isVirtual) {
+      inputOptions.input = { index: '#entry' };
+
+      if (Array.isArray(inputOptions.plugins)) {
+        inputOptions.plugins.unshift(virtual({ '#entry': serverFile }));
+      } else {
+        inputOptions.plugins = [virtual({ '#entry': serverFile })];
+      }
+    } else {
+      inputOptions.input = { index: serverFile };
+    }
+
+    return inputOptions;
+  }
+
   protected async _bundle(
     serverFile: string,
     mastraEntryFile: string,
@@ -109,7 +132,6 @@ export abstract class Bundler extends MastraBundler {
     bundleLocation: string = join(outputDirectory, this.outputDir),
   ): Promise<void> {
     this.logger.info('Start bundling Mastra');
-    const isVirtual = serverFile.includes('\n') || existsSync(serverFile);
 
     const analyzedBundleInfo = await analyzeBundle(
       serverFile,
@@ -131,24 +153,19 @@ export abstract class Bundler extends MastraBundler {
       }
     }
 
+    // temporary fix for mastra-memory and fastembed
+    if (
+      analyzedBundleInfo.externalDependencies.has('@mastra/memory') ||
+      analyzedBundleInfo.dependencies.has('@mastra/memory')
+    ) {
+      dependenciesToInstall.set('fastembed', 'latest');
+    }
+
     await this.writePackageJson(join(outputDirectory, this.outputDir), dependenciesToInstall);
     await this.writeInstrumentationFile(join(outputDirectory, this.outputDir));
 
     this.logger.info('Bundling Mastra application');
-    const inputOptions: InputOptions = await getInputOptions(mastraEntryFile, analyzedBundleInfo, 'node');
-
-    if (isVirtual) {
-      inputOptions.input = { index: '#entry' };
-
-      if (Array.isArray(inputOptions.plugins)) {
-        inputOptions.plugins.unshift(virtual({ '#entry': serverFile }));
-      } else {
-        inputOptions.plugins = [virtual({ '#entry': serverFile })];
-      }
-    } else {
-      inputOptions.input = { index: serverFile };
-    }
-
+    const inputOptions: InputOptions = await this.getBundlerOptions(serverFile, mastraEntryFile, analyzedBundleInfo);
     const bundler = await this.createBundler(inputOptions, { dir: bundleLocation });
 
     await bundler.write();

@@ -1,4 +1,10 @@
-import { ActionBarPrimitive, ComposerPrimitive, ThreadPrimitive } from '@assistant-ui/react';
+import {
+  ActionBarPrimitive,
+  ComposerPrimitive,
+  MessagePrimitive,
+  ThreadPrimitive,
+  ToolCallContentPartComponent,
+} from '@assistant-ui/react';
 import { ArrowDownIcon, ArrowUp, PencilIcon, SendHorizontalIcon } from 'lucide-react';
 import type { FC } from 'react';
 
@@ -8,10 +14,21 @@ import { Button } from '@/components/ui/button';
 
 import { AssistantMessage } from './assistant-message';
 import { UserMessage } from './user-message';
+import { useRef } from 'react';
+import { useAutoscroll } from '@/hooks/use-autoscroll';
 
 const suggestions = ['What capabilities do you have?', 'How can you help me?', 'Tell me about yourself'];
 
-export const Thread: FC<{ memory?: boolean }> = ({ memory }) => {
+export const Thread: FC<{ memory?: boolean; ToolFallback?: ToolCallContentPartComponent }> = ({
+  memory,
+  ToolFallback,
+}) => {
+  function WrappedAssistantMessage(props: MessagePrimitive.Root.Props) {
+    return <AssistantMessage {...props} ToolFallback={ToolFallback} />;
+  }
+  const areaRef = useRef<HTMLDivElement>(null);
+  useAutoscroll(areaRef, { enabled: true });
+
   return (
     <ThreadPrimitive.Root
       style={{
@@ -31,6 +48,8 @@ export const Thread: FC<{ memory?: boolean }> = ({ memory }) => {
           height: memory ? 'calc(100vh - 65px)' : 'calc(100vh - 90px)',
           paddingBottom: '108px',
         }}
+        ref={areaRef}
+        autoScroll={false}
       >
         <div style={{ width: '100%', maxWidth: '48rem', paddingInline: '1.5rem' }}>
           <ThreadWelcome />
@@ -38,7 +57,7 @@ export const Thread: FC<{ memory?: boolean }> = ({ memory }) => {
             components={{
               UserMessage: UserMessage,
               EditComposer: EditComposer,
-              AssistantMessage: AssistantMessage,
+              AssistantMessage: WrappedAssistantMessage,
             }}
           />
         </div>
@@ -88,7 +107,7 @@ export const Thread: FC<{ memory?: boolean }> = ({ memory }) => {
               <span className="text-xs text-gray-300/60">
                 Agent will not remember previous messages. To enable memory for agent see{' '}
                 <a
-                  href="https://mastra.ai/docs/agents/01-agent-memory"
+                  href="https://mastra.ai/docs/agents/agent-memory"
                   target="_blank"
                   rel="noopener"
                   className="text-gray-300/60 hover:text-gray-100 underline"

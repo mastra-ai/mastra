@@ -1,6 +1,3 @@
-import { createLogger } from '@mastra/core/logger';
-import { LibSQLStore } from '@mastra/core/storage/libsql';
-import { OTLPStorageExporter } from '@mastra/core/telemetry';
 import {
   NodeSDK,
   getNodeAutoInstrumentations,
@@ -12,6 +9,7 @@ import {
   AlwaysOffSampler,
   OTLPHttpExporter,
   OTLPGrpcExporter,
+  CompositeExporter,
 } from '@mastra/core/telemetry/otel-vendor';
 import { telemetry } from './telemetry-config.mjs';
 
@@ -39,47 +37,45 @@ function getSampler(config) {
   }
 }
 
-async function getExporter(config) {
+async function getExporters(config) {
+  const exporters = [];
+
+  // Add local exporter by default
+  if (!config.disableLocalExport) {
+    exporters.push(new OTLPHttpExporter({
+      url: `http://localhost:${process.env.PORT ?? 4111}/api/telemetry`,
+    }));
+  }
+
   if (config.export?.type === 'otlp') {
-    if(config.export?.protocol === "grpc") {
-      return new OTLPGrpcExporter({
+    if (config.export?.protocol === 'grpc') {
+      exporters.push(new OTLPGrpcExporter({
         url: config.export.endpoint,
         headers: config.export.headers,
-      })
+      }));
+    } else {
+      exporters.push(new OTLPHttpExporter({
+        url: config.export.endpoint,
+        headers: config.export.headers,
+      }));
     }
-    return new OTLPHttpExporter({
-      url: config.export.endpoint,
-      headers: config.export.headers,
-    });
   } else if (config.export?.type === 'custom') {
-    return config.export.exporter;
-  } else {
-    const storage = new LibSQLStore({
-      config: {
-        url: 'file:.mastra/mastra.db',
-      },
-    });
-    await storage.init();
-
-    return new OTLPStorageExporter({
-      logger: createLogger({
-        name: 'telemetry',
-        level: 'silent',
-      }),
-      storage,
-    });
+    exporters.push(config.export.exporter);
   }
+
+  return exporters
 }
 
 const sampler = getSampler(telemetry);
-const exporter = await getExporter(telemetry);
+const exporters = await getExporters(telemetry);
+const compositeExporter = new CompositeExporter(exporters);
 
 const sdk = new NodeSDK({
   resource: new Resource({
     [ATTR_SERVICE_NAME]: telemetry.serviceName || 'default-service',
   }),
   sampler,
-  traceExporter: exporter,
+  traceExporter: compositeExporter,
   instrumentations: [getNodeAutoInstrumentations()],
 });
 
@@ -91,4 +87,3 @@ process.on('SIGTERM', () => {
     // do nothing
   });
 });
-

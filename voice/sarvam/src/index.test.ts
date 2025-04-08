@@ -1,4 +1,4 @@
-import { createWriteStream, mkdirSync } from 'fs';
+import { createWriteStream, createReadStream, mkdirSync } from 'fs';
 import { writeFile } from 'fs/promises';
 import path from 'path';
 import { Readable } from 'stream';
@@ -43,8 +43,7 @@ describe('Sarvam AI Voice Integration Tests', () => {
     const longText = 'This is a longer text that will be streamed. '.repeat(5);
 
     const audioStream = await voice.speak(longText, { speaker: voiceId });
-
-    const outputPath = path.join(outputDir, 'sarvam-streaming-output.mp3');
+    const outputPath = path.join(outputDir, 'sarvam-streaming-output.wav');
     const writeStream = createWriteStream(outputPath);
 
     let firstChunkTime: number | null = null;
@@ -77,7 +76,7 @@ describe('Sarvam AI Voice Integration Tests', () => {
     }
     const audioBuffer = Buffer.concat(chunks);
 
-    await writeFile(path.join(outputDir, 'sarvam-generate-output.mp3'), audioBuffer);
+    await writeFile(path.join(outputDir, 'sarvam-generate-output.wav'), audioBuffer);
     expect(audioBuffer.length).toBeGreaterThan(0);
   }, 30000);
 
@@ -92,7 +91,7 @@ describe('Sarvam AI Voice Integration Tests', () => {
     }
     const audioBuffer = Buffer.concat(chunks);
 
-    await writeFile(path.join(outputDir, 'sarvam-stream-input-output.mp3'), audioBuffer);
+    await writeFile(path.join(outputDir, 'sarvam-stream-input-output.wav'), audioBuffer);
     expect(audioBuffer.length).toBeGreaterThan(0);
   }, 30000);
 
@@ -114,10 +113,32 @@ describe('Sarvam AI Voice Integration Tests', () => {
     }
     const audioBuffer = Buffer.concat(chunks);
 
-    await writeFile(path.join(outputDir, 'sarvam-default-config-output.mp3'), audioBuffer);
+    await writeFile(path.join(outputDir, 'sarvam-default-config-output.wav'), audioBuffer);
     expect(audioBuffer.length).toBeGreaterThan(0);
-
     const speakers = await defaultVoice.getSpeakers();
     expect(speakers.length).toBeGreaterThan(0);
   }, 30000);
+
+  it('should listen with default parameters', async () => {
+    const defaultVoice = new SarvamVoice();
+    const audioStream = await defaultVoice.speak('Listening test with defaults');
+
+    const text = await defaultVoice.listen(audioStream);
+    console.log(text);
+    expect(text).toBeTruthy();
+    expect(typeof text).toBe('string');
+    expect(text.toLowerCase()).toContain('listening test');
+  });
+
+  it('should transcribe audio from fixture file', async () => {
+    const fixturePath = path.join(process.cwd(), '__fixtures__', 'voice-test.m4a');
+
+    const audioStream = createReadStream(fixturePath);
+
+    const text = await voice.listen(audioStream);
+    console.log(text);
+    expect(text).toBeTruthy();
+    expect(typeof text).toBe('string');
+    expect(text.length).toBeGreaterThan(0);
+  }, 15000);
 });

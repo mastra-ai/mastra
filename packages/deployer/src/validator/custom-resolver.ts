@@ -1,9 +1,10 @@
-// loader.ts
+import { readFile } from 'node:fs/promises';
 import type { ResolveHookContext } from 'node:module';
 import { builtinModules } from 'node:module';
+import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { silent as resolveFrom } from 'resolve-from';
-// Configuration can be provided through environment variables or a config file
+
+const cache = new Map<string, Record<string, string>>();
 
 /**
  * Check if a module is a Node.js builtin module
@@ -32,6 +33,34 @@ function isRelativePath(specifier: string): boolean {
   ); // Windows absolute path
 }
 
+/**
+ * Get the path to resolve any external packages from
+ *
+ * @param url
+ * @returns
+ */
+async function getParentPath(specifier: string, url: string): Promise<string | null> {
+  if (!cache.size) {
+    const moduleResolveMap = JSON.parse(
+      // cwd refers to the output/build directory
+      await readFile(join(process.cwd(), 'module-resolve-map.json'), 'utf-8'),
+    ) as Record<string, Record<string, string>>;
+
+    for (const [id, rest] of Object.entries(moduleResolveMap)) {
+      cache.set(pathToFileURL(id).toString(), rest);
+    }
+  }
+
+  const importers = cache.get(url);
+  if (!importers || !importers[specifier]) {
+    return null;
+  }
+
+  const specifierParent = importers[specifier];
+
+  return pathToFileURL(specifierParent).toString();
+}
+
 export async function resolve(
   specifier: string,
   context: ResolveHookContext,
@@ -46,16 +75,17 @@ export async function resolve(
     return nextResolve(specifier, context);
   }
 
-  // TODO make dynamic
-  if (specifier === 'pino' || specifier === 'pino-pretty') {
-    const pkgPackagePath = resolveFrom(process.cwd(), '@mastra/core/package.json');
-    if (pkgPackagePath) {
+  if (context.parentURL) {
+    const parentPath = await getParentPath(specifier, context.parentURL);
+
+    if (parentPath) {
       return nextResolve(specifier, {
         ...context,
-        parentURL: pathToFileURL(pkgPackagePath).toString(),
+        parentURL: parentPath,
       });
     }
   }
+
   // Continue resolution with the modified path
   return nextResolve(specifier, context);
 }

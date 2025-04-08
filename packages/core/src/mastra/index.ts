@@ -3,6 +3,8 @@ import type { MastraDeployer } from '../deployer';
 import { LogLevel, createLogger, noopLogger } from '../logger';
 import type { Logger } from '../logger';
 import type { MastraMemory } from '../memory/memory';
+import type { AgentNetwork } from '../network';
+import type { ServerConfig } from '../server/types';
 import type { MastraStorage } from '../storage';
 import { DefaultProxyStorage } from '../storage/default-proxy-storage';
 import { InstrumentClass, Telemetry } from '../telemetry';
@@ -17,8 +19,10 @@ export interface Config<
   TVectors extends Record<string, MastraVector> = Record<string, MastraVector>,
   TTTS extends Record<string, MastraTTS> = Record<string, MastraTTS>,
   TLogger extends Logger = Logger,
+  TNetworks extends Record<string, AgentNetwork> = Record<string, AgentNetwork>,
 > {
   agents?: TAgents;
+  networks?: TNetworks;
   storage?: MastraStorage;
   vectors?: TVectors;
   logger?: TLogger | false;
@@ -26,10 +30,12 @@ export interface Config<
   tts?: TTTS;
   telemetry?: OtelConfig;
   deployer?: MastraDeployer;
+  server?: ServerConfig;
 
   /**
    * Server middleware functions to be applied to API routes
    * Each middleware can specify a path pattern (defaults to '/api/*')
+   * @deprecated use server.middleware instead
    */
   serverMiddleware?: Array<{
     handler: (c: any, next: () => Promise<void>) => Promise<Response | void>;
@@ -50,6 +56,7 @@ export class Mastra<
   TVectors extends Record<string, MastraVector> = Record<string, MastraVector>,
   TTTS extends Record<string, MastraTTS> = Record<string, MastraTTS>,
   TLogger extends Logger = Logger,
+  TNetworks extends Record<string, AgentNetwork> = Record<string, AgentNetwork>,
 > {
   #vectors?: TVectors;
   #agents: TAgents;
@@ -64,6 +71,8 @@ export class Mastra<
   #telemetry?: Telemetry;
   #storage?: MastraStorage;
   #memory?: MastraMemory;
+  #networks?: TNetworks;
+  #server?: ServerConfig;
 
   /**
    * @deprecated use getTelemetry() instead
@@ -131,7 +140,7 @@ export class Mastra<
     */
     if (this.#telemetry) {
       this.#storage = this.#telemetry.traceClass(storage, {
-        excludeMethods: ['__setTelemetry', '__getTelemetry'],
+        excludeMethods: ['__setTelemetry', '__getTelemetry', '__batchTraceInsert'],
       });
       this.#storage.__setTelemetry(this.#telemetry);
     } else {
@@ -209,6 +218,7 @@ This is a warning for now, but will throw an error in the future
         if (agents[key]) {
           throw new Error(`Agent with name ID:${key} already exists`);
         }
+        agent.__registerMastra(this);
 
         agent.__registerPrimitives({
           logger: this.getLogger(),
@@ -220,13 +230,24 @@ This is a warning for now, but will throw an error in the future
           vectors: this.#vectors,
         });
 
-        agent.__registerMastra(this);
-
         agents[key] = agent;
       });
     }
 
     this.#agents = agents as TAgents;
+
+    /*
+    Networks
+    */
+    this.#networks = {} as TNetworks;
+
+    if (config?.networks) {
+      Object.entries(config.networks).forEach(([key, network]) => {
+        network.__registerMastra(this);
+        // @ts-ignore
+        this.#networks[key] = network;
+      });
+    }
 
     /*
     Workflows
@@ -247,8 +268,21 @@ This is a warning for now, but will throw an error in the future
         });
         // @ts-ignore
         this.#workflows[key] = workflow;
+
+        const workflowSteps = Object.values(workflow.steps).filter(step => !!step.workflowId && !!step.workflow);
+        if (workflowSteps.length > 0) {
+          workflowSteps.forEach(step => {
+            // @ts-ignore
+            this.#workflows[step.workflowId] = step.workflow;
+          });
+        }
       });
     }
+
+    if (config?.server) {
+      this.#server = config.server;
+    }
+
     this.setLogger({ logger });
   }
 
@@ -386,7 +420,7 @@ This is a warning for now, but will throw an error in the future
 
     if (this.#storage) {
       this.#storage = this.#telemetry.traceClass(this.#storage, {
-        excludeMethods: ['__setTelemetry', '__getTelemetry'],
+        excludeMethods: ['__setTelemetry', '__getTelemetry', '__batchTraceInsert'],
       });
       this.#storage.__setTelemetry(this.#telemetry);
     }
@@ -429,10 +463,36 @@ This is a warning for now, but will throw an error in the future
     return this.#serverMiddleware;
   }
 
+  public getNetworks() {
+    return Object.values(this.#networks || {});
+  }
+
+  public getServer() {
+    return this.#server;
+  }
+
+  /**
+   * Get a specific network by ID
+   * @param networkId - The ID of the network to retrieve
+   * @returns The network with the specified ID, or undefined if not found
+   */
+  public getNetwork(networkId: string): AgentNetwork | undefined {
+    const networks = this.getNetworks();
+    return networks.find(network => {
+      const routingAgent = network.getRoutingAgent();
+      return network.formatAgentId(routingAgent.name) === networkId;
+    });
+  }
+
   public async getLogsByRunId({ runId, transportId }: { runId: string; transportId: string }) {
     if (!transportId) {
       throw new Error('Transport ID is required');
     }
+
+    if (!this.#logger?.getLogsByRunId) {
+      throw new Error('Logger is not set');
+    }
+
     return await this.#logger.getLogsByRunId({ runId, transportId });
   }
 
@@ -440,6 +500,13 @@ This is a warning for now, but will throw an error in the future
     if (!transportId) {
       throw new Error('Transport ID is required');
     }
+
+    if (!this.#logger?.getLogs) {
+      throw new Error('Logger is not set');
+    }
+
+    console.log(this.#logger);
+
     return await this.#logger.getLogs(transportId);
   }
 }

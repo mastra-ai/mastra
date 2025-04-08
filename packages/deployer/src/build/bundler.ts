@@ -8,6 +8,8 @@ import esbuild from 'rollup-plugin-esbuild';
 
 import type { analyzeBundle } from './analyze';
 import { removeDeployer } from './plugins/remove-deployer';
+import { tsConfigPaths } from './plugins/tsconfig-paths';
+
 export async function getInputOptions(
   entryFile: string,
   analyzedBundleInfo: Awaited<ReturnType<typeof analyzeBundle>>,
@@ -50,6 +52,7 @@ export async function getInputOptions(
     preserveSymlinks: true,
     external: externals,
     plugins: [
+      tsConfigPaths(),
       {
         name: 'alias-optimized-deps',
         // @ts-ignore
@@ -77,6 +80,17 @@ export async function getInputOptions(
           {
             find: /^\#server$/,
             replacement: fileURLToPath(import.meta.resolve('@mastra/deployer/server')).replaceAll('\\', '/'),
+          },
+          {
+            find: /^\@mastra\/server\/(.*)/,
+            replacement: `@mastra/server/$1`,
+            customResolver: id => {
+              if (id.startsWith('@mastra/server')) {
+                return {
+                  id: fileURLToPath(import.meta.resolve(id)),
+                };
+              }
+            },
           },
           { find: /^\#mastra$/, replacement: normalizedEntryFile },
         ],

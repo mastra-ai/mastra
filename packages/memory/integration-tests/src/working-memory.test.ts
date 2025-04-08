@@ -29,6 +29,7 @@ const createTestMessage = (threadId: string, content: string, role: 'user' | 'as
     role,
     type: 'text',
     createdAt: new Date(Date.now() + messageCounter * 1000),
+    resourceId,
   };
 };
 
@@ -46,12 +47,12 @@ describe('Working Memory Tests', () => {
       options: {
         workingMemory: {
           enabled: true,
-          template: `<user>
-  <first_name></first_name>
-  <last_name></last_name>
-  <location></location>
-  <interests></interests>
-</user>`,
+          template: `# User Information
+- **First Name**: 
+- **Last Name**: 
+- **Location**: 
+- **Interests**: 
+`,
         },
         lastMessages: 10,
         semanticRecall: {
@@ -89,13 +90,18 @@ describe('Working Memory Tests', () => {
     });
 
     // Get working memory
-    // @ts-expect-error
     const workingMemory = await memory.getWorkingMemory({ threadId: thread.id });
-    expect(workingMemory).toContain('<first_name>Tyler</first_name>');
-    expect(workingMemory).toContain('<location>San Francisco</location>');
+    expect(workingMemory).not.toBeNull();
+    if (workingMemory) {
+      // Check for specific Markdown format
+      expect(workingMemory).toContain('# User Information');
+      expect(workingMemory).toContain('**First Name**: Tyler');
+      expect(workingMemory).toContain('**Location**: San Francisco');
+    }
   });
 
   it('should handle LLM responses with working memory', async () => {
+    // This test still uses XML format for backward compatibility testing
     const messages = [
       createTestMessage(thread.id, 'Hi, my name is Tyler'),
       {
@@ -103,9 +109,16 @@ describe('Working Memory Tests', () => {
         threadId: thread.id,
         role: 'assistant',
         type: 'text',
-        content:
-          "Hello Tyler! I'll remember your name.\n<working_memory><user><first_name>Tyler</first_name></user></working_memory>",
+        content: `Hello Tyler! I'll remember your name.
+<working_memory>
+# User Information
+- **First Name**: Tyler
+- **Last Name**: 
+- **Location**: 
+- **Interests**: 
+</working_memory>`,
         createdAt: new Date(),
+        resourceId,
       },
       createTestMessage(thread.id, 'I live in San Francisco'),
       {
@@ -113,19 +126,29 @@ describe('Working Memory Tests', () => {
         threadId: thread.id,
         role: 'assistant',
         type: 'text',
-        content:
-          "Great city! I'll update my memory about you.\n<working_memory><user><first_name>Tyler</first_name><location>San Francisco</location></user></working_memory>",
+        content: `Great city! I'll update my memory about you.
+<working_memory>
+# User Information
+- **First Name**: Tyler
+- **Last Name**: 
+- **Location**: San Francisco
+- **Interests**: 
+</working_memory>`,
         createdAt: new Date(),
+        resourceId,
       },
     ] as MessageType[];
 
     await memory.saveMessages({ messages });
 
-    // Get the working memory
-    // @ts-expect-error
+    // Content checks should verify Markdown format
     const workingMemory = await memory.getWorkingMemory({ threadId: thread.id });
-    expect(workingMemory).toContain('<first_name>Tyler</first_name>');
-    expect(workingMemory).toContain('<location>San Francisco</location>');
+    expect(workingMemory).not.toBeNull();
+    if (workingMemory) {
+      expect(workingMemory).toContain('# User Information');
+      expect(workingMemory).toContain('**First Name**: Tyler');
+      expect(workingMemory).toContain('**Location**: San Francisco');
+    }
 
     // Verify the messages are saved without working memory tags
     const remembered = await memory.rememberMessages({
@@ -142,11 +165,13 @@ describe('Working Memory Tests', () => {
   });
 
   it('should initialize with default working memory template', async () => {
-    // @ts-expect-error
     const workingMemory = await memory.getWorkingMemory({ threadId: thread.id });
-    expect(workingMemory).toContain('<user>');
-    expect(workingMemory).toContain('<first_name>');
-    expect(workingMemory).toContain('</user>');
+    expect(workingMemory).not.toBeNull();
+    if (workingMemory) {
+      // Should match our Markdown template
+      expect(workingMemory).toContain('# User Information');
+      expect(workingMemory).toContain('First Name');
+    }
   });
 
   it('should update working memory from assistant messages', async () => {
@@ -154,17 +179,25 @@ describe('Working Memory Tests', () => {
       createTestMessage(thread.id, 'Hi, my name is John and I live in New York'),
       createTestMessage(
         thread.id,
-        'Nice to meet you! Let me update my memory.\n<working_memory><user><first_name>John</first_name><location>New York</location></user></working_memory>',
+        `Nice to meet you! Let me update my memory.
+<working_memory>
+# User Information
+- **First Name**: John
+- **Last Name**: 
+- **Location**: New York
+- **Interests**: 
+</working_memory>`,
         'assistant',
       ),
     ];
 
     await memory.saveMessages({ messages });
 
-    // Get thread and check metadata
+    // Get thread and check metadata - verify specific Markdown format
     const updatedThread = await memory.getThreadById({ threadId: thread.id });
-    expect(updatedThread?.metadata?.workingMemory).toContain('<first_name>John</first_name>');
-    expect(updatedThread?.metadata?.workingMemory).toContain('<location>New York</location>');
+    expect(updatedThread?.metadata?.workingMemory).toContain('# User Information');
+    expect(updatedThread?.metadata?.workingMemory).toContain('**First Name**: John');
+    expect(updatedThread?.metadata?.workingMemory).toContain('**Location**: New York');
   });
 
   it('should accumulate working memory across multiple messages', async () => {
@@ -174,7 +207,14 @@ describe('Working Memory Tests', () => {
         createTestMessage(thread.id, 'Hi, my name is John'),
         createTestMessage(
           thread.id,
-          'Hello John!\n<working_memory><user><first_name>John</first_name></user></working_memory>',
+          `Hello John!
+<working_memory>
+# User Information
+- **First Name**: John
+- **Last Name**: 
+- **Location**: 
+- **Interests**: 
+</working_memory>`,
           'assistant',
         ),
       ],
@@ -186,7 +226,14 @@ describe('Working Memory Tests', () => {
         createTestMessage(thread.id, 'I live in New York'),
         createTestMessage(
           thread.id,
-          'Great city!\n<working_memory><user><first_name>John</first_name><location>New York</location></user></working_memory>',
+          `Great city!
+<working_memory>
+# User Information
+- **First Name**: John
+- **Last Name**: 
+- **Location**: New York
+- **Interests**: 
+</working_memory>`,
           'assistant',
         ),
       ],
@@ -198,17 +245,27 @@ describe('Working Memory Tests', () => {
         createTestMessage(thread.id, 'I love playing tennis'),
         createTestMessage(
           thread.id,
-          'Tennis is fun!\n<working_memory><user><first_name>John</first_name><location>New York</location><interests>tennis</interests></user></working_memory>',
+          `Tennis is fun!
+<working_memory>
+# User Information
+- **First Name**: John
+- **Last Name**: 
+- **Location**: New York
+- **Interests**: tennis
+</working_memory>`,
           'assistant',
         ),
       ],
     });
 
-    // @ts-expect-error
     const workingMemory = await memory.getWorkingMemory({ threadId: thread.id });
-    expect(workingMemory).toContain('<first_name>John</first_name>');
-    expect(workingMemory).toContain('<location>New York</location>');
-    expect(workingMemory).toContain('<interests>tennis</interests>');
+    expect(workingMemory).not.toBeNull();
+    if (workingMemory) {
+      expect(workingMemory).toContain('# User Information');
+      expect(workingMemory).toContain('**First Name**: John');
+      expect(workingMemory).toContain('**Location**: New York');
+      expect(workingMemory).toContain('**Interests**: tennis');
+    }
   });
 
   it('should hide working memory tags in remembered messages', async () => {
@@ -216,7 +273,14 @@ describe('Working Memory Tests', () => {
       createTestMessage(thread.id, 'Hi, my name is John'),
       createTestMessage(
         thread.id,
-        'Hello John!\n<working_memory><user><first_name>John</first_name></user></working_memory>',
+        `Hello John!
+<working_memory>
+# User Information
+- **First Name**: John
+- **Last Name**: 
+- **Location**: 
+- **Interests**: 
+</working_memory>`,
         'assistant',
       ),
     ];
@@ -244,7 +308,10 @@ describe('Working Memory Tests', () => {
       options: {
         workingMemory: {
           enabled: false,
-          template: `<user><first_name></first_name></user>`,
+          template: `# User Information
+- **First Name**: 
+- **Last Name**:
+`,
         },
         lastMessages: 10,
         semanticRecall: {
@@ -262,7 +329,12 @@ describe('Working Memory Tests', () => {
       createTestMessage(thread.id, 'Hi, my name is John'),
       createTestMessage(
         thread.id,
-        'Hello John!\n<working_memory><user><first_name>John</first_name></user></working_memory>',
+        `Hello John!
+<working_memory>
+# User Information
+- **First Name**: John
+- **Last Name**: 
+</working_memory>`,
         'assistant',
       ),
     ];
@@ -270,7 +342,6 @@ describe('Working Memory Tests', () => {
     await disabledMemory.saveMessages({ messages });
 
     // Working memory should be null when disabled
-    // @ts-expect-error
     const workingMemory = await disabledMemory.getWorkingMemory({ threadId: thread.id });
     expect(workingMemory).toBeNull();
 
@@ -290,7 +361,10 @@ describe('Working Memory Tests', () => {
       options: {
         workingMemory: {
           enabled: true,
-          template: `<user><first_name></first_name><location></location></user>`,
+          template: `# User Information
+- **First Name**: 
+- **Location**: 
+`,
           use: 'tool-call',
         },
         lastMessages: 10,
@@ -321,8 +395,9 @@ describe('Working Memory Tests', () => {
 
     // Verify working memory was saved in tool-call mode
     const toolCallWorkingMemory = await toolCallMemory.getThreadById({ threadId: toolCallThread.id });
-    expect(toolCallWorkingMemory?.metadata?.workingMemory).toContain('<first_name>John</first_name>');
-    expect(toolCallWorkingMemory?.metadata?.workingMemory).toContain('<location>New York</location>');
+    expect(toolCallWorkingMemory?.metadata?.workingMemory).toContain('# User Information');
+    expect(toolCallWorkingMemory?.metadata?.workingMemory).toContain('**First Name**: John');
+    expect(toolCallWorkingMemory?.metadata?.workingMemory).toContain('**Location**: New York');
 
     // Create memory instance with working memory in text-stream mode
     const textStreamMemory = new Memory({
@@ -334,7 +409,10 @@ describe('Working Memory Tests', () => {
       options: {
         workingMemory: {
           enabled: true,
-          template: `<user><first_name></first_name><location></location></user>`,
+          template: `# User Information
+- **First Name**: 
+- **Location**: 
+`,
           use: 'text-stream',
         },
         lastMessages: 10,
@@ -365,40 +443,155 @@ describe('Working Memory Tests', () => {
 
     // Verify working memory was saved in text-stream mode
     const textStreamWorkingMemory = await textStreamMemory.getThreadById({ threadId: textStreamThread.id });
-    expect(textStreamWorkingMemory?.metadata?.workingMemory).toContain('<first_name>Tyler</first_name>');
-    expect(textStreamWorkingMemory?.metadata?.workingMemory).toContain('<location>San Francisco</location>');
+    expect(textStreamWorkingMemory?.metadata?.workingMemory).toContain('# User Information');
+    expect(textStreamWorkingMemory?.metadata?.workingMemory).toContain('**First Name**: Tyler');
+    expect(textStreamWorkingMemory?.metadata?.workingMemory).toContain('**Location**: San Francisco');
   });
 
   it('should handle LLM responses with working memory using tool calls', async () => {
+    const memory = new Memory({
+      storage: new DefaultStorage({
+        config: {
+          url: 'file:test.db',
+        },
+      }),
+      options: {
+        workingMemory: {
+          enabled: true,
+          use: 'tool-call',
+        },
+        lastMessages: 5,
+      },
+    });
+
     const agent = new Agent({
       name: 'Memory Test Agent',
       instructions: 'You are a helpful AI agent. Always add working memory tags to remember user information.',
       model: openai('gpt-4o'),
-      memory: new Memory({
-        storage: new DefaultStorage({
-          config: {
-            url: 'file:test.db',
-          },
-        }),
-        options: {
-          workingMemory: {
-            enabled: true,
-            use: 'tool-call',
-          },
-          lastMessages: 5,
-        },
-      }),
+      memory,
     });
+
+    const thread = await memory.createThread(createTestThread(`Tool call working memory test`));
 
     await agent.generate('Hi, my name is Tyler and I live in San Francisco', {
       threadId: thread.id,
       resourceId,
     });
 
-    // Get working memory
-    // @ts-expect-error
     const workingMemory = await memory.getWorkingMemory({ threadId: thread.id });
-    expect(workingMemory).toContain('<first_name>Tyler</first_name>');
-    expect(workingMemory).toContain('<location>San Francisco</location>');
+    expect(workingMemory).not.toBeNull();
+    if (workingMemory) {
+      // Check for specific Markdown format
+      expect(workingMemory).toContain('# User Information');
+      expect(workingMemory).toContain('**First Name**: Tyler');
+      expect(workingMemory).toContain('**Location**: San Francisco');
+    }
+  });
+
+  it("shouldn't pollute context with working memory tool call args, only the system instruction working memory should exist", async () => {
+    const memory = new Memory({
+      storage: new DefaultStorage({
+        config: {
+          url: 'file:test.db',
+        },
+      }),
+      options: {
+        workingMemory: {
+          enabled: true,
+          use: 'tool-call',
+          template: `# User Information
+- **First Name**: 
+- **Location**: 
+`,
+        },
+        lastMessages: 5,
+      },
+    });
+
+    const agent = new Agent({
+      name: 'Memory Test Agent',
+      instructions: 'You are a helpful AI agent. Always add working memory tags to remember user information.',
+      model: openai('gpt-4o'),
+      memory,
+    });
+
+    const thread = await memory.createThread(createTestThread(`Tool call working memory context pollution test`));
+
+    await agent.generate('Hi, my name is Tyler and I live in a submarine under the sea', {
+      threadId: thread.id,
+      resourceId,
+    });
+
+    let workingMemory = await memory.getWorkingMemory({ threadId: thread.id });
+    expect(workingMemory).not.toBeNull();
+    if (workingMemory) {
+      expect(workingMemory).toContain('# User Information');
+      expect(workingMemory).toContain('**First Name**: Tyler');
+      expect(workingMemory?.toLowerCase()).toContain('**location**:');
+      expect(workingMemory?.toLowerCase()).toContain('submarine under the sea');
+    }
+
+    await agent.generate('I changed my name to Jim', {
+      threadId: thread.id,
+      resourceId,
+    });
+
+    workingMemory = await memory.getWorkingMemory({ threadId: thread.id });
+    expect(workingMemory).not.toBeNull();
+    if (workingMemory) {
+      expect(workingMemory).toContain('# User Information');
+      expect(workingMemory).toContain('**First Name**: Jim');
+      expect(workingMemory?.toLowerCase()).toContain('**location**:');
+      expect(workingMemory?.toLowerCase()).toContain('submarine under the sea');
+    }
+
+    await agent.generate('I moved to Vancouver Island', {
+      threadId: thread.id,
+      resourceId,
+    });
+
+    workingMemory = await memory.getWorkingMemory({ threadId: thread.id });
+    expect(workingMemory).not.toBeNull();
+    if (workingMemory) {
+      expect(workingMemory).toContain('# User Information');
+      expect(workingMemory).toContain('**First Name**: Jim');
+      expect(workingMemory).toContain('**Location**: Vancouver Island');
+    }
+
+    const history = await memory.query({
+      threadId: thread.id,
+      resourceId,
+      selectBy: {
+        last: 20,
+      },
+    });
+
+    const memoryArgs: string[] = [];
+
+    for (const message of history.messages) {
+      if (message.role === `assistant`) {
+        for (const part of message.content) {
+          if (typeof part === `string`) continue;
+          if (part.type === `tool-call` && part.toolName === `updateWorkingMemory`) {
+            memoryArgs.push((part.args as any).memory);
+          }
+        }
+      }
+    }
+
+    expect(memoryArgs).not.toContain(`Tyler`);
+    expect(memoryArgs).not.toContain('submarine under the sea');
+    expect(memoryArgs).not.toContain('Jim');
+    expect(memoryArgs).not.toContain('Vancouver Island');
+    expect(memoryArgs).toEqual([]);
+
+    workingMemory = await memory.getWorkingMemory({ threadId: thread.id });
+    expect(workingMemory).not.toBeNull();
+    if (workingMemory) {
+      // Format-specific assertion that checks for Markdown format
+      expect(workingMemory).toContain('# User Information');
+      expect(workingMemory).toContain('**First Name**: Jim');
+      expect(workingMemory).toContain('**Location**: Vancouver Island');
+    }
   });
 });

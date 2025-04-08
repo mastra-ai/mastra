@@ -7,12 +7,12 @@ import type {
   StepGraph,
   StorageThreadType,
   BaseLogMessage,
-  OutputType,
+  WorkflowRunResult as CoreWorkflowRunResult,
 } from '@mastra/core';
 
 import type { AgentGenerateOptions, AgentStreamOptions } from '@mastra/core/agent';
 import type { JSONSchema7 } from 'json-schema';
-import { ZodSchema } from 'zod';
+import type { ZodSchema } from 'zod';
 
 export interface ClientOptions {
   /** Base URL for API requests */
@@ -45,12 +45,12 @@ export interface GetAgentResponse {
 }
 
 export type GenerateParams<T extends JSONSchema7 | ZodSchema | undefined = undefined> = {
-  messages: string | string[] | CoreMessage[];
+  messages: string | string[] | CoreMessage[] | AiMessageType[];
 } & Partial<AgentGenerateOptions<T>>;
 
 export type StreamParams<T extends JSONSchema7 | ZodSchema | undefined = undefined> = {
-  messages: string | string[] | CoreMessage[];
-} & Partial<AgentStreamOptions<T>>;
+  messages: string | string[] | CoreMessage[] | AiMessageType[];
+} & Omit<AgentStreamOptions<T>, 'onFinish' | 'onStepFinish' | 'telemetry'>;
 
 export interface GetEvalsByAgentIdResponse extends GetAgentResponse {
   evals: any[];
@@ -69,38 +69,15 @@ export interface GetWorkflowResponse {
   steps: Record<string, StepAction<any, any, any, any>>;
   stepGraph: StepGraph;
   stepSubscriberGraph: Record<string, StepGraph>;
+  workflowId?: string;
 }
 
 export type WorkflowRunResult = {
-  activePaths: Array<{
-    stepId: string;
-    stepPath: string[];
-    status: 'completed' | 'suspended' | 'pending';
-  }>;
-  context: {
-    steps: Record<
-      string,
-      | {
-          status: 'success';
-          output: any;
-          [key: string]: any;
-        }
-      | {
-          status: 'pending';
-          [key: string]: any;
-        }
-      | {
-          status: 'suspended';
-          suspendPayload: any;
-          [key: string]: any;
-        }
-    >;
-  };
+  activePaths: Record<string, { status: string; suspendPayload?: any; stepPath: string[] }>;
+  results: CoreWorkflowRunResult<any, any, any>['results'];
   timestamp: number;
-  suspendedSteps: Record<string, any>;
   runId: string;
 };
-
 export interface UpsertVectorParams {
   indexName: string;
   vectors: number[][];
@@ -179,8 +156,48 @@ export type GetLogsResponse = BaseLogMessage[];
 
 export type RequestFunction = (path: string, options?: RequestOptions) => Promise<any>;
 
+type SpanStatus = {
+  code: number;
+};
+
+type SpanOther = {
+  droppedAttributesCount: number;
+  droppedEventsCount: number;
+  droppedLinksCount: number;
+};
+
+type SpanEventAttributes = {
+  key: string;
+  value: { [key: string]: string | number | boolean | null };
+};
+
+type SpanEvent = {
+  attributes: SpanEventAttributes[];
+  name: string;
+  timeUnixNano: string;
+  droppedAttributesCount: number;
+};
+
+type Span = {
+  id: string;
+  parentSpanId: string | null;
+  traceId: string;
+  name: string;
+  scope: string;
+  kind: number;
+  status: SpanStatus;
+  events: SpanEvent[];
+  links: any[];
+  attributes: Record<string, string | number | boolean | null>;
+  startTime: number;
+  endTime: number;
+  duration: number;
+  other: SpanOther;
+  createdAt: string;
+};
+
 export interface GetTelemetryResponse {
-  traces: any[];
+  traces: { traces: Span[] };
 }
 
 export interface GetTelemetryParams {
@@ -189,4 +206,19 @@ export interface GetTelemetryParams {
   page?: number;
   perPage?: number;
   attribute?: Record<string, string>;
+}
+
+export interface GetNetworkResponse {
+  name: string;
+  instructions: string;
+  agents: Array<{
+    name: string;
+    provider: string;
+    modelId: string;
+  }>;
+  routingModel: {
+    provider: string;
+    modelId: string;
+  };
+  state?: Record<string, any>;
 }

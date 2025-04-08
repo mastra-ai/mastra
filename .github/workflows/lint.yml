@@ -15,6 +15,8 @@ jobs:
       TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
       TURBO_TEAM: ${{ secrets.TURBO_TEAM }}
       TURBO_REMOTE_ONLY: true
+    permissions:
+      pull-requests: read
 
     steps:
       - name: Checkout repo
@@ -35,7 +37,7 @@ jobs:
         run: pnpm install
 
       - name: Lint
-        run: pnpm turbo --filter "!./examples/*" --filter "!./docs/*" --filter "!./integrations/*" --filter "!@mastra/playground" lint
+        run: pnpm turbo --filter "!./examples/**/*" --filter "!./docs/**/*" --filter "!./integrations/**/*" --filter "!@mastra/playground" lint
 
   check-bundle:
     name: Validate build outputs
@@ -46,6 +48,8 @@ jobs:
       TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
       TURBO_TEAM: ${{ secrets.TURBO_TEAM }}
       TURBO_REMOTE_ONLY: true
+    permissions:
+      pull-requests: read
 
     steps:
       - name: Checkout repo
@@ -66,7 +70,7 @@ jobs:
         run: pnpm install
 
       - name: Build
-        run: pnpm turbo --filter "!./examples/*" --filter "!./docs" build
+        run: pnpm turbo --filter "!./examples/**/*" --filter "!./docs/" build
 
       - name: Install test dependencies
         working-directory: ./e2e-tests/pkg-outputs
@@ -74,4 +78,78 @@ jobs:
 
       - name: Check bundles
         working-directory: ./e2e-tests/pkg-outputs
+        run: pnpm test
+
+  unit:
+    name: Unit tests
+    runs-on: ubuntu-latest
+    if: ${{ github.repository == 'mastra-ai/mastra' }} && ${{ !contains(github.event.pull_request.files.*.path, 'examples/') && !contains(github.event.pull_request.files.*.path, 'docs/') && !contains(github.event.pull_request.files.*.path, '.changeset/') && !contains(github.event.pull_request.files.*.path, 'generated-changesets/') }}
+    env:
+      TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
+      TURBO_TEAM: ${{ secrets.TURBO_TEAM }}
+      TURBO_REMOTE_ONLY: true
+
+    needs: lint
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        name: Install pnpm
+        with:
+          run_install: false
+
+      - name: Setup Node.js 20.x
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20.x
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install
+
+      - name: Build
+        run: pnpm turbo test --affected
+
+  e2e-monorepo:
+    name: E2E monorepo
+    runs-on: ubuntu-latest
+    # Run on main repository or for trusted bot PRs
+    if: ${{ github.repository == 'mastra-ai/mastra' }} && ${{ !contains(github.event.pull_request.files.*.path, 'examples/') && !contains(github.event.pull_request.files.*.path, 'docs/') && !contains(github.event.pull_request.files.*.path, '.changeset/') && !contains(github.event.pull_request.files.*.path, 'generated-changesets/') }}
+    env:
+      TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
+      TURBO_TEAM: ${{ secrets.TURBO_TEAM }}
+      TURBO_REMOTE_ONLY: true
+
+    permissions:
+      pull-requests: read
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        name: Install pnpm
+        with:
+          run_install: false
+
+      - name: Setup Node.js 20.x
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20.x
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install
+
+      - name: Build
+        run: pnpm turbo --filter "./packages/core" --filter "./packages/cli" build
+
+      - name: Install e2e test dependencies
+        working-directory: ./e2e-tests/monorepo
+        run: pnpm install --ignore-workspace
+
+      - name: Test
+        working-directory: ./e2e-tests/monorepo
         run: pnpm test

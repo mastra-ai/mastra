@@ -1,4 +1,4 @@
-import { Agent, MemoryThread, Tool, Workflow, Vector, BaseResource } from './resources';
+import { Agent, MemoryThread, Tool, Workflow, Vector, BaseResource, Network } from './resources';
 import type {
   ClientOptions,
   CreateMemoryThreadParams,
@@ -9,6 +9,7 @@ import type {
   GetLogsResponse,
   GetMemoryThreadParams,
   GetMemoryThreadResponse,
+  GetNetworkResponse,
   GetTelemetryParams,
   GetTelemetryResponse,
   GetToolResponse,
@@ -201,5 +202,22 @@ export class MastraClient extends BaseResource {
     } else {
       return this.request(`/api/telemetry`);
     }
+  }
+
+  /**
+   * Retrieves all available networks
+   * @returns Promise containing map of network IDs to network details
+   */
+  public getNetworks(): Promise<Record<string, GetNetworkResponse>> {
+    return this.request('/api/networks');
+  }
+
+  /**
+   * Gets a network instance by ID
+   * @param networkId - ID of the network to retrieve
+   * @returns Network instance
+   */
+  public getNetwork(networkId: string) {
+    return new Network(this.options, networkId);
   }
 }

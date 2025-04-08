@@ -37,6 +37,7 @@ import {
   getResultActivePaths,
   getStepResult,
   getSuspendedPaths,
+  isConditionalKey,
   isErrorEvent,
   isTransitionEvent,
   recursivelyCheckForFinalState,
@@ -44,8 +45,9 @@ import {
 import type { WorkflowInstance } from './workflow-instance';
 
 export class Machine<
-  TSteps extends Step<any, any, any>[] = any,
+  TSteps extends Step<any, any, any, any>[] = Step<any, any, any, any>[],
   TTriggerSchema extends z.ZodObject<any> = any,
+  TResultSchema extends z.ZodObject<any> = any,
 > extends EventEmitter {
   logger: Logger;
   #mastra?: Mastra;
@@ -59,7 +61,7 @@ export class Machine<
   name: string;
 
   #actor: ReturnType<typeof createActor<ReturnType<typeof this.initializeMachine>>> | null = null;
-  #steps: Record<string, StepAction<any, any, any, any>> = {};
+  #steps: Record<string, StepNode> = {};
   #retryConfig?: RetryConfig;
 
   constructor({
@@ -80,7 +82,7 @@ export class Machine<
     executionSpan?: Span;
     name: string;
     runId: string;
-    steps: Record<string, TSteps[0]>;
+    steps: Record<string, StepNode>;
     stepGraph: StepGraph;
     retryConfig?: RetryConfig;
     startStepId: string;
@@ -116,7 +118,9 @@ export class Machine<
     input?: any;
     snapshot?: Snapshot<any>;
     resumeData?: any;
-  } = {}): Promise<Pick<WorkflowRunResult<TTriggerSchema, TSteps>, 'results' | 'activePaths'>> {
+  } = {}): Promise<
+    Pick<WorkflowRunResult<TTriggerSchema, TSteps, TResultSchema>, 'results' | 'activePaths' | 'runId' | 'timestamp'>
+  > {
     if (snapshot) {
       // First, let's log the incoming snapshot for debugging
       this.logger.debug(`Workflow snapshot received`, { runId: this.#runId, snapshot });
@@ -136,7 +140,13 @@ export class Machine<
     const actorSnapshot = snapshot
       ? {
           ...snapshot,
-          context: { ...input, inputData: { ...((snapshot as any)?.context?.inputData || {}), ...resumeData } },
+          context: {
+            ...input,
+            inputData: { ...((snapshot as any)?.context?.inputData || {}), ...resumeData },
+            // ts-ignore is needed here because our snapshot types don't really match xstate snapshot types right now. We should fix this in general.
+            // @ts-ignore
+            isResume: { runId: snapshot?.context?.steps[stepId.split('.')?.[0]]?.output?.runId || this.#runId, stepId },
+          },
         }
       : undefined;
 
@@ -182,7 +192,7 @@ export class Machine<
 
       const suspendedPaths: Set<string> = new Set();
       this.#actor.subscribe(async state => {
-        this.emit('state-update', this.#startStepId, state.value, state.context);
+        this.emit('state-update', this.#startStepId, state);
 
         getSuspendedPaths({
           value: state.value as Record<string, string>,
@@ -221,10 +231,12 @@ export class Machine<
           this.#cleanup();
           this.#executionSpan?.end();
           resolve({
+            runId: this.#runId,
             results: isResumedInitialStep ? { ...origSteps, ...state.context.steps } : state.context.steps,
             activePaths: getResultActivePaths(
               state as unknown as { value: Record<string, string>; context: { steps: Record<string, any> } },
             ),
+            timestamp: Date.now(),
           });
         } catch (error) {
           // If snapshot persistence fails, we should still resolve
@@ -234,10 +246,12 @@ export class Machine<
           this.#cleanup();
           this.#executionSpan?.end();
           resolve({
+            runId: this.#runId,
             results: isResumedInitialStep ? { ...origSteps, ...state.context.steps } : state.context.steps,
             activePaths: getResultActivePaths(
               state as unknown as { value: Record<string, string>; context: { steps: Record<string, any> } },
             ),
+            timestamp: Date.now(),
           });
         }
       });
@@ -257,7 +271,7 @@ export class Machine<
     const delayMap: Record<string, number> = {};
 
     Object.keys(this.#steps).forEach(stepId => {
-      delayMap[stepId] = this.#steps[stepId]?.retryConfig?.delay || this.#retryConfig?.delay || 1000;
+      delayMap[stepId] = this.#steps[stepId]?.step?.retryConfig?.delay || this.#retryConfig?.delay || 1000;
     });
 
     return delayMap;
@@ -333,15 +347,15 @@ export class Machine<
     return {
       resolverFunction: fromPromise(async ({ input }: { input: ResolverFunctionInput }) => {
         const { stepNode, context } = input;
-        const attemptCount = context.attempts[stepNode.step.id];
+        const attemptCount = context.attempts[stepNode.id];
 
         const resolvedData = this.#resolveVariables({
           stepConfig: stepNode.config,
           context,
-          stepId: stepNode.step.id,
+          stepId: stepNode.id,
         });
 
-        this.logger.debug(`Resolved variables for ${stepNode.step.id}`, {
+        this.logger.debug(`Resolved variables for ${stepNode.id}`, {
           resolvedData,
           runId: this.#runId,
         });
@@ -373,50 +387,60 @@ export class Machine<
                 return undefined;
               }) satisfies WorkflowContext<TTriggerSchema>['getStepResult'],
             } as WorkflowContext,
-            suspend: async (payload?: any) => {
-              await this.#workflowInstance.suspend(stepNode.step.id, this);
+            emit: (event: string, ...args: any[]) => {
+              // console.log(this.#workflowInstance.name, 'emitting', event, ...args);
+              this.emit(event, ...args);
+            },
+            suspend: async (payload?: any, softSuspend?: any) => {
+              await this.#workflowInstance.suspend(stepNode.id, this);
               if (this.#actor) {
                 // Update context with current result
-                context.steps[stepNode.step.id] = {
+                context.steps[stepNode.id] = {
                   status: 'suspended',
                   suspendPayload: payload,
+                  output: softSuspend,
                 };
-                this.logger.debug(`Sending SUSPENDED event for step ${stepNode.step.id}`);
-                this.#actor?.send({ type: 'SUSPENDED', suspendPayload: payload, stepId: stepNode.step.id });
+                this.logger.debug(`Sending SUSPENDED event for step ${stepNode.id}`);
+                this.#actor?.send({
+                  type: 'SUSPENDED',
+                  suspendPayload: payload,
+                  stepId: stepNode.id,
+                  softSuspend,
+                });
               } else {
-                this.logger.debug(`Actor not available for step ${stepNode.step.id}`);
+                this.logger.debug(`Actor not available for step ${stepNode.id}`);
               }
             },
             runId: this.#runId,
             mastra: mastraProxy as MastraUnion | undefined,
           });
         } catch (error) {
-          this.logger.debug(`Step ${stepNode.step.id} failed`, {
-            stepId: stepNode.step.id,
+          this.logger.debug(`Step ${stepNode.id} failed`, {
+            stepId: stepNode.id,
             error,
             runId: this.#runId,
           });
 
-          this.logger.debug(`Attempt count for step ${stepNode.step.id}`, {
+          this.logger.debug(`Attempt count for step ${stepNode.id}`, {
             attemptCount,
             attempts: context.attempts,
             runId: this.#runId,
-            stepId: stepNode.step.id,
+            stepId: stepNode.id,
           });
 
           if (!attemptCount || attemptCount < 0) {
             return {
               type: 'STEP_FAILED' as const,
-              error: error instanceof Error ? error.message : `Step:${stepNode.step.id} failed with error: ${error}`,
-              stepId: stepNode.step.id,
+              error: error instanceof Error ? error.message : `Step:${stepNode.id} failed with error: ${error}`,
+              stepId: stepNode.id,
             };
           }
 
-          return { type: 'STEP_WAITING' as const, stepId: stepNode.step.id };
+          return { type: 'STEP_WAITING' as const, stepId: stepNode.id };
         }
 
-        this.logger.debug(`Step ${stepNode.step.id} result`, {
-          stepId: stepNode.step.id,
+        this.logger.debug(`Step ${stepNode.id} result`, {
+          stepId: stepNode.id,
           result,
           runId: this.#runId,
         });
@@ -424,15 +448,15 @@ export class Machine<
         return {
           type: 'STEP_SUCCESS' as const,
           result,
-          stepId: stepNode.step.id,
+          stepId: stepNode.id,
         };
       }),
       conditionCheck: fromPromise(async ({ input }: { input: { context: WorkflowContext; stepNode: StepNode } }) => {
         const { context, stepNode } = input;
         const stepConfig = stepNode.config;
 
-        this.logger.debug(`Checking conditions for step ${stepNode.step.id}`, {
-          stepId: stepNode.step.id,
+        this.logger.debug(`Checking conditions for step ${stepNode.id}`, {
+          stepId: stepNode.id,
           runId: this.#runId,
         });
 
@@ -440,8 +464,8 @@ export class Machine<
           return { type: 'CONDITIONS_MET' as const };
         }
 
-        this.logger.debug(`Checking conditions for step ${stepNode.step.id}`, {
-          stepId: stepNode.step.id,
+        this.logger.debug(`Checking conditions for step ${stepNode.id}`, {
+          stepId: stepNode.id,
           runId: this.#runId,
         });
 
@@ -473,13 +497,18 @@ export class Machine<
           } else if (conditionMet === WhenConditionReturnValue.LIMBO) {
             return { type: 'CONDITIONS_LIMBO' as const };
           } else if (conditionMet) {
-            this.logger.debug(`Condition met for step ${stepNode.step.id}`, {
-              stepId: stepNode.step.id,
+            this.logger.debug(`Condition met for step ${stepNode.id}`, {
+              stepId: stepNode.id,
               runId: this.#runId,
             });
             return { type: 'CONDITIONS_MET' as const };
           }
-          return this.#workflowInstance.hasSubscribers(stepNode.step.id)
+
+          if (isConditionalKey(stepNode.id)) {
+            return { type: 'CONDITIONS_LIMBO' as const };
+          }
+
+          return this.#workflowInstance.hasSubscribers(stepNode.id)
             ? { type: 'CONDITIONS_SKIPPED' as const }
             : { type: 'CONDITIONS_LIMBO' as const };
         } else {
@@ -487,7 +516,7 @@ export class Machine<
           if (!conditionMet) {
             return {
               type: 'CONDITION_FAILED' as const,
-              error: `Step:${stepNode.step.id} condition check failed`,
+              error: `Step:${stepNode.id} condition check failed`,
             };
           }
         }
@@ -596,9 +625,9 @@ export class Machine<
     const states: Record<string, any> = {};
 
     stepGraph.initial.forEach(stepNode => {
-      const nextSteps = [...(stepGraph[stepNode.step.id] || [])];
+      const nextSteps = [...(stepGraph[stepNode.id] || [])];
       // TODO: For identical steps, use index to create unique key
-      states[stepNode.step.id] = {
+      states[stepNode.id] = {
         ...this.#buildBaseState(stepNode, nextSteps),
       };
     });
@@ -620,14 +649,14 @@ export class Machine<
       states: {
         pending: {
           entry: () => {
-            this.logger.debug(`Step ${stepNode.step.id} pending`, {
-              stepId: stepNode.step.id,
+            this.logger.debug(`Step ${stepNode.id} pending`, {
+              stepId: stepNode.id,
               runId: this.#runId,
             });
           },
           exit: () => {
-            this.logger.debug(`Step ${stepNode.step.id} finished pending`, {
-              stepId: stepNode.step.id,
+            this.logger.debug(`Step ${stepNode.id} finished pending`, {
+              stepId: stepNode.id,
               runId: this.#runId,
             });
           },
@@ -649,18 +678,31 @@ export class Machine<
                   assign({
                     steps: ({ context, event }) => {
                       if (event.output.type !== 'SUSPENDED') return context.steps;
+                      if (event.output.softSuspend) {
+                        return {
+                          ...context.steps,
+                          [stepNode.id]: {
+                            status: 'suspended',
+                            ...(context.steps?.[stepNode.id] || {}),
+                            output: event.output.softSuspend,
+                          },
+                        };
+                      }
                       return {
                         ...context.steps,
-                        [stepNode.step.id]: {
+                        [stepNode.id]: {
                           status: 'suspended',
-                          ...(context.steps?.[stepNode.step.id] || {}),
+                          ...(context.steps?.[stepNode.id] || {}),
                         },
                       };
                     },
                     attempts: ({ context, event }) => {
                       if (event.output.type !== 'SUSPENDED') return context.attempts;
                       // if the step is suspended, reset the attempt count
-                      return { ...context.attempts, [stepNode.step.id]: stepNode.step.retryConfig?.attempts || 0 };
+                      return {
+                        ...context.attempts,
+                        [stepNode.id]: stepNode.step.retryConfig?.attempts || 0,
+                      };
                     },
                   }),
                 ],
@@ -671,13 +713,13 @@ export class Machine<
                 },
                 target: 'waiting',
                 actions: [
-                  { type: 'decrementAttemptCount', params: { stepId: stepNode.step.id } },
+                  { type: 'decrementAttemptCount', params: { stepId: stepNode.id } },
                   assign({
                     steps: ({ context, event }) => {
                       if (event.output.type !== 'WAITING') return context.steps;
                       return {
                         ...context.steps,
-                        [stepNode.step.id]: {
+                        [stepNode.id]: {
                           status: 'waiting',
                         },
                       };
@@ -705,13 +747,13 @@ export class Machine<
                   steps: ({ context }) => {
                     const newStep = {
                       ...context.steps,
-                      [stepNode.step.id]: {
+                      [stepNode.id]: {
                         status: 'skipped',
                       },
                     };
 
-                    this.logger.debug(`Step ${stepNode.step.id} skipped`, {
-                      stepId: stepNode.step.id,
+                    this.logger.debug(`Step ${stepNode.id} skipped`, {
+                      stepId: stepNode.id,
                       runId: this.#runId,
                     });
 
@@ -730,13 +772,13 @@ export class Machine<
                   steps: ({ context }) => {
                     const newStep = {
                       ...context.steps,
-                      [stepNode.step.id]: {
+                      [stepNode.id]: {
                         status: 'skipped',
                       },
                     };
 
-                    this.logger.debug(`Step ${stepNode.step.id} skipped`, {
-                      stepId: stepNode.step.id,
+                    this.logger.debug(`Step ${stepNode.id} skipped`, {
+                      stepId: stepNode.id,
                       runId: this.#runId,
                     });
 
@@ -755,12 +797,12 @@ export class Machine<
 
                     this.logger.debug(`Workflow condition check failed`, {
                       error: event.output.error,
-                      stepId: stepNode.step.id,
+                      stepId: stepNode.id,
                     });
 
                     return {
                       ...context.steps,
-                      [stepNode.step.id]: {
+                      [stepNode.id]: {
                         status: 'failed',
                         error: event.output.error,
                       },
@@ -773,21 +815,21 @@ export class Machine<
         },
         waiting: {
           entry: () => {
-            this.logger.debug(`Step ${stepNode.step.id} waiting`, {
-              stepId: stepNode.step.id,
+            this.logger.debug(`Step ${stepNode.id} waiting`, {
+              stepId: stepNode.id,
               timestamp: new Date().toISOString(),
               runId: this.#runId,
             });
           },
           exit: () => {
-            this.logger.debug(`Step ${stepNode.step.id} finished waiting`, {
-              stepId: stepNode.step.id,
+            this.logger.debug(`Step ${stepNode.id} finished waiting`, {
+              stepId: stepNode.id,
               timestamp: new Date().toISOString(),
               runId: this.#runId,
             });
           },
           after: {
-            [stepNode.step.id]: {
+            [stepNode.id]: {
               target: 'pending',
             },
           },
@@ -795,15 +837,15 @@ export class Machine<
         limbo: {
           // no target, will stay in limbo indefinitely
           entry: () => {
-            this.logger.debug(`Step ${stepNode.step.id} limbo`, {
-              stepId: stepNode.step.id,
+            this.logger.debug(`Step ${stepNode.id} limbo`, {
+              stepId: stepNode.id,
               timestamp: new Date().toISOString(),
               runId: this.#runId,
             });
           },
           exit: () => {
-            this.logger.debug(`Step ${stepNode.step.id} finished limbo`, {
-              stepId: stepNode.step.id,
+            this.logger.debug(`Step ${stepNode.id} finished limbo`, {
+              stepId: stepNode.id,
               timestamp: new Date().toISOString(),
               runId: this.#runId,
             });
@@ -813,8 +855,8 @@ export class Machine<
           type: 'final',
           entry: [
             () => {
-              this.logger.debug(`Step ${stepNode.step.id} suspended`, {
-                stepId: stepNode.step.id,
+              this.logger.debug(`Step ${stepNode.id} suspended`, {
+                stepId: stepNode.id,
                 runId: this.#runId,
               });
             },
@@ -822,10 +864,11 @@ export class Machine<
               steps: ({ context, event }: { context: WorkflowContext; event: WorkflowEvent }) => {
                 return {
                   ...context.steps,
-                  [stepNode.step.id]: {
-                    ...(context?.steps?.[stepNode.step.id] || {}),
+                  [stepNode.id as any]: {
+                    ...(context?.steps?.[stepNode.id] || {}),
                     status: 'suspended',
                     suspendPayload: event.type === 'SUSPENDED' ? event.suspendPayload : undefined,
+                    output: event.type === 'SUSPENDED' ? event.softSuspend : undefined,
                   },
                 };
               },
@@ -834,8 +877,8 @@ export class Machine<
         },
         executing: {
           entry: () => {
-            this.logger.debug(`Step ${stepNode.step.id} executing`, {
-              stepId: stepNode.step.id,
+            this.logger.debug(`Step ${stepNode.id} executing`, {
+              stepId: stepNode.id,
               runId: this.#runId,
             });
           },
@@ -847,9 +890,10 @@ export class Machine<
                   steps: ({ context, event }: { context: WorkflowContext; event: WorkflowEvent }) => {
                     return {
                       ...context.steps,
-                      [stepNode.step.id]: {
+                      [stepNode.id as any]: {
                         status: 'suspended',
                         suspendPayload: event.type === 'SUSPENDED' ? event.suspendPayload : undefined,
+                        output: event.type === 'SUSPENDED' ? event.softSuspend : undefined,
                       },
                     };
                   },
@@ -875,15 +919,15 @@ export class Machine<
 
                     const newStep = {
                       ...context.steps,
-                      [stepNode.step.id]: {
+                      [stepNode.id]: {
                         status: 'failed',
                         error: event.output.error,
                       },
                     };
 
-                    this.logger.debug(`Step ${stepNode.step.id} failed`, {
+                    this.logger.debug(`Step ${stepNode.id} failed`, {
                       error: event.output.error,
-                      stepId: stepNode.step.id,
+                      stepId: stepNode.id,
                     });
 
                     return newStep;
@@ -896,14 +940,14 @@ export class Machine<
                 },
                 actions: [
                   ({ event }: { event: { output: StepResolverOutput } }) => {
-                    this.logger.debug(`Step ${stepNode.step.id} finished executing`, {
-                      stepId: stepNode.step.id,
+                    this.logger.debug(`Step ${stepNode.id} finished executing`, {
+                      stepId: stepNode.id,
                       output: event.output,
                       runId: this.#runId,
                     });
                   },
-                  { type: 'updateStepResult', params: { stepId: stepNode.step.id } },
-                  { type: 'spawnSubscribers', params: { stepId: stepNode.step.id } },
+                  { type: 'updateStepResult', params: { stepId: stepNode.id } },
+                  { type: 'spawnSubscribers', params: { stepId: stepNode.id } },
                 ],
                 target: 'runningSubscribers',
               },
@@ -913,13 +957,13 @@ export class Machine<
                 },
                 target: 'waiting',
                 actions: [
-                  { type: 'decrementAttemptCount', params: { stepId: stepNode.step.id } },
+                  { type: 'decrementAttemptCount', params: { stepId: stepNode.id } },
                   assign({
                     steps: ({ context, event }) => {
                       if (event.output.type !== 'STEP_WAITING') return context.steps;
                       return {
                         ...context.steps,
-                        [stepNode.step.id]: {
+                        [stepNode.id]: {
                           status: 'waiting',
                         },
                       };
@@ -930,31 +974,31 @@ export class Machine<
             ],
             onError: {
               target: 'failed',
-              actions: [{ type: 'setStepError', params: { stepId: stepNode.step.id } }],
+              actions: [{ type: 'setStepError', params: { stepId: stepNode.id } }],
             },
           },
         },
         runningSubscribers: {
           entry: () => {
-            this.logger.debug(`Step ${stepNode.step.id} running subscribers`, {
-              stepId: stepNode.step.id,
+            this.logger.debug(`Step ${stepNode.id} running subscribers`, {
+              stepId: stepNode.id,
               runId: this.#runId,
             });
           },
           exit: () => {
-            this.logger.debug(`Step ${stepNode.step.id} finished running subscribers`, {
-              stepId: stepNode.step.id,
+            this.logger.debug(`Step ${stepNode.id} finished running subscribers`, {
+              stepId: stepNode.id,
               runId: this.#runId,
             });
           },
           invoke: {
             src: 'spawnSubscriberFunction',
             input: ({ context }: { context: WorkflowContext }) => ({
-              parentStepId: stepNode.step.id,
+              parentStepId: stepNode.id,
               context,
             }),
             onDone: {
-              target: nextStep ? nextStep.step.id : 'completed',
+              target: nextStep ? nextStep.id : 'completed',
               actions: [
                 assign({
                   steps: ({ context, event }: { context: WorkflowContext; event: any }) => ({
@@ -962,15 +1006,18 @@ export class Machine<
                     ...event.output.steps,
                   }),
                 }),
-                () => this.logger.debug(`Subscriber execution completed`, { stepId: stepNode.step.id }),
+                () =>
+                  this.logger.debug(`Subscriber execution completed`, {
+                    stepId: stepNode.id,
+                  }),
               ],
             },
             onError: {
-              target: nextStep ? nextStep.step.id : 'completed',
+              target: nextStep ? nextStep.id : 'completed',
               actions: ({ event }: { context: WorkflowContext; event: any }) => {
                 this.logger.debug(`Subscriber execution failed`, {
                   error: event.error,
-                  stepId: stepNode.step.id,
+                  stepId: stepNode.id,
                 });
               },
             },
@@ -979,21 +1026,21 @@ export class Machine<
         completed: {
           type: 'final',
           entry: [
-            { type: 'notifyStepCompletion', params: { stepId: stepNode.step.id } },
-            { type: 'snapshotStep', params: { stepId: stepNode.step.id } },
+            { type: 'notifyStepCompletion', params: { stepId: stepNode.id } },
+            { type: 'snapshotStep', params: { stepId: stepNode.id } },
             { type: 'persistSnapshot' },
           ],
         },
         failed: {
           type: 'final',
           entry: [
-            { type: 'notifyStepCompletion', params: { stepId: stepNode.step.id } },
-            { type: 'snapshotStep', params: { stepId: stepNode.step.id } },
+            { type: 'notifyStepCompletion', params: { stepId: stepNode.id } },
+            { type: 'snapshotStep', params: { stepId: stepNode.id } },
             { type: 'persistSnapshot' },
           ],
         },
         // build chain of next steps recursively
-        ...(nextStep ? { [nextStep.step.id]: { ...this.#buildBaseState(nextStep, nextSteps) } } : {}),
+        ...(nextStep ? { [nextStep.id]: { ...this.#buildBaseState(nextStep, nextSteps) } } : {}),
       },
     };
   }

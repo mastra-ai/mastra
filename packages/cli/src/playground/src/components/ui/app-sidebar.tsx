@@ -1,6 +1,6 @@
 'use client';
 
-import { DraftingCompass, Workflow } from 'lucide-react';
+import { DraftingCompass, Network, Workflow } from 'lucide-react';
 import { Link, useLocation } from 'react-router';
 
 import {
@@ -133,6 +133,11 @@ const links = [
     name: 'Agents',
     url: '/agents',
     icon: Agent,
+  },
+  {
+    name: 'Networks',
+    url: '/networks',
+    icon: Network,
   },
   {
     name: 'Tools',

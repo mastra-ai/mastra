@@ -1,5 +1,311 @@
 # @mastra/playground-ui
 
+## 4.0.0-alpha.8
+
+### Patch Changes
+
+- 055c4ea: Fix traces page showing e.reduce error
+- Updated dependencies [055c4ea]
+- Updated dependencies [bffd64f]
+- Updated dependencies [8df4a77]
+  - @mastra/client-js@0.1.14-alpha.8
+  - @mastra/core@0.8.0-alpha.8
+
+## 4.0.0-alpha.7
+
+### Patch Changes
+
+- Updated dependencies [febc8a6]
+  - @mastra/core@0.8.0-alpha.7
+  - @mastra/client-js@0.1.14-alpha.7
+
+## 4.0.0-alpha.6
+
+### Patch Changes
+
+- 9d13790: update playground-ui dynamic form, cleanups
+- 40dca45: Fix expanding workflow sidebar not expanding the output section
+- d16ed18: Make playground-ui dynamic forms better
+- Updated dependencies [a3f0e90]
+- Updated dependencies [5646a01]
+  - @mastra/core@0.8.0-alpha.6
+  - @mastra/client-js@0.1.14-alpha.6
+
+## 4.0.0-alpha.5
+
+### Patch Changes
+
+- Updated dependencies [93875ed]
+  - @mastra/core@0.8.0-alpha.5
+  - @mastra/client-js@0.1.14-alpha.5
+
+## 4.0.0-alpha.4
+
+### Patch Changes
+
+- Updated dependencies [d7e08e8]
+  - @mastra/core@0.8.0-alpha.4
+  - @mastra/client-js@0.1.14-alpha.4
+
+## 4.0.0-alpha.3
+
+### Patch Changes
+
+- 5ae0180: Removed prefixed doc references
+- 7bdbb64: Show no input when attributs are empty
+- 8393832: Handle nested workflow view on workflow graph
+- Updated dependencies [5ae0180]
+- Updated dependencies [9bfa12b]
+- Updated dependencies [515ebfb]
+- Updated dependencies [88fa727]
+- Updated dependencies [f37f535]
+- Updated dependencies [789bef3]
+- Updated dependencies [4d67826]
+- Updated dependencies [6330967]
+- Updated dependencies [8393832]
+- Updated dependencies [6330967]
+  - @mastra/core@0.8.0-alpha.3
+  - @mastra/client-js@0.1.14-alpha.3
+
+## 4.0.0-alpha.2
+
+### Patch Changes
+
+- Updated dependencies [56c31b7]
+- Updated dependencies [dbbbf80]
+- Updated dependencies [84fe241]
+- Updated dependencies [99d43b9]
+  - @mastra/core@0.8.0-alpha.2
+  - @mastra/client-js@0.1.14-alpha.2
+
+## 4.0.0-alpha.1
+
+### Patch Changes
+
+- Updated dependencies [619c39d]
+- Updated dependencies [fe56be0]
+- Updated dependencies [a0967a0]
+- Updated dependencies [fca3b21]
+- Updated dependencies [0118361]
+- Updated dependencies [619c39d]
+  - @mastra/core@0.8.0-alpha.1
+  - @mastra/client-js@0.1.14-alpha.1
+
+## 3.0.1-alpha.0
+
+### Patch Changes
+
+- 8076ecf: Unify workflow watch/start response
+- Updated dependencies [107bcfe]
+- Updated dependencies [5b4e19f]
+- Updated dependencies [7599d77]
+- Updated dependencies [cafae83]
+- Updated dependencies [8076ecf]
+- Updated dependencies [304397c]
+  - @mastra/core@0.7.1-alpha.0
+  - @mastra/client-js@0.1.14-alpha.0
+
+## 3.0.0
+
+### Patch Changes
+
+- 6d5d9c6: Show tool calls in playground chat
+- 2447900: Show No input for steps without input on traces UI
+- c30787b: Stop automatically scrolling to bottom in agent chat if user has scrolled up
+- 214e7ce: Only mark required fields as required on the playground
+- 2134786: Fix traces navigation not working in playground
+- Updated dependencies [b4fbc59]
+- Updated dependencies [0206617]
+- Updated dependencies [a838fde]
+- Updated dependencies [a8bd4cf]
+- Updated dependencies [7a3eeb0]
+- Updated dependencies [0b54522]
+- Updated dependencies [160f88e]
+- Updated dependencies [b3b34f5]
+- Updated dependencies [3811029]
+- Updated dependencies [1af25d5]
+- Updated dependencies [a4686e8]
+- Updated dependencies [6530ad1]
+- Updated dependencies [27439ad]
+  - @mastra/core@0.7.0
+  - @mastra/client-js@0.1.13
+
+## 3.0.0-alpha.4
+
+### Patch Changes
+
+- 6d5d9c6: Show tool calls in playground chat
+
+## 3.0.0-alpha.3
+
+### Patch Changes
+
+- 2134786: Fix traces navigation not working in playground
+- Updated dependencies [160f88e]
+- Updated dependencies [b3b34f5]
+- Updated dependencies [a4686e8]
+  - @mastra/client-js@0.1.13-alpha.3
+  - @mastra/core@0.7.0-alpha.3
+
+## 3.0.0-alpha.2
+
+### Patch Changes
+
+- Updated dependencies [a838fde]
+- Updated dependencies [a8bd4cf]
+- Updated dependencies [7a3eeb0]
+- Updated dependencies [6530ad1]
+  - @mastra/core@0.7.0-alpha.2
+  - @mastra/client-js@0.1.13-alpha.2
+
+## 3.0.0-alpha.1
+
+### Patch Changes
+
+- 2447900: Show No input for steps without input on traces UI
+- c30787b: Stop automatically scrolling to bottom in agent chat if user has scrolled up
+- 214e7ce: Only mark required fields as required on the playground
+- Updated dependencies [0b54522]
+- Updated dependencies [1af25d5]
+- Updated dependencies [27439ad]
+  - @mastra/core@0.7.0-alpha.1
+  - @mastra/client-js@0.1.13-alpha.1
+
+## 2.0.5-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [b4fbc59]
+- Updated dependencies [0206617]
+- Updated dependencies [3811029]
+  - @mastra/core@0.6.5-alpha.0
+  - @mastra/client-js@0.1.13-alpha.0
+
+## 2.0.4
+
+### Patch Changes
+
+- 933ea4d: Fix messages in thread not showing latest when switching between threads
+- 9cba774: Fix new thread title not reflecting until refresh or new message is sent
+- 77e4c35: Pop a dialog showing the functional condition when a functional condition is clicked on workflow graph
+- 248cb07: Allow ai-sdk Message type for messages in agent generate and stream
+  Fix sidebar horizontal overflow in playground
+- Updated dependencies [6794797]
+- Updated dependencies [fb68a80]
+- Updated dependencies [05ef3e0]
+- Updated dependencies [b56a681]
+- Updated dependencies [248cb07]
+  - @mastra/core@0.6.4
+  - @mastra/client-js@0.1.12
+
+## 2.0.4-alpha.1
+
+### Patch Changes
+
+- 77e4c35: Pop a dialog showing the functional condition when a functional condition is clicked on workflow graph
+- Updated dependencies [6794797]
+  - @mastra/core@0.6.4-alpha.1
+  - @mastra/client-js@0.1.12-alpha.1
+
+## 2.0.4-alpha.0
+
+### Patch Changes
+
+- 933ea4d: Fix messages in thread not showing latest when switching between threads
+- 9cba774: Fix new thread title not reflecting until refresh or new message is sent
+- 248cb07: Allow ai-sdk Message type for messages in agent generate and stream
+  Fix sidebar horizontal overflow in playground
+- Updated dependencies [fb68a80]
+- Updated dependencies [05ef3e0]
+- Updated dependencies [b56a681]
+- Updated dependencies [248cb07]
+  - @mastra/core@0.6.4-alpha.0
+  - @mastra/client-js@0.1.12-alpha.0
+
+## 2.0.3
+
+### Patch Changes
+
+- 404640e: AgentNetwork changeset
+- Updated dependencies [404640e]
+- Updated dependencies [3bce733]
+  - @mastra/client-js@0.1.11
+  - @mastra/core@0.6.3
+
+## 2.0.3-alpha.1
+
+### Patch Changes
+
+- Updated dependencies [3bce733]
+  - @mastra/core@0.6.3-alpha.1
+  - @mastra/client-js@0.1.11-alpha.1
+
+## 2.0.3-alpha.0
+
+### Patch Changes
+
+- 404640e: AgentNetwork changeset
+- Updated dependencies [404640e]
+  - @mastra/client-js@0.1.11-alpha.0
+  - @mastra/core@0.6.3-alpha.0
+
+## 2.0.2
+
+### Patch Changes
+
+- Updated dependencies [beaf1c2]
+- Updated dependencies [3084e13]
+  - @mastra/core@0.6.2
+  - @mastra/client-js@0.1.10
+
+## 2.0.2-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [beaf1c2]
+- Updated dependencies [3084e13]
+  - @mastra/core@0.6.2-alpha.0
+  - @mastra/client-js@0.1.10-alpha.0
+
+## 2.0.1
+
+### Patch Changes
+
+- 1291e89: Add resizable-panel to playground-ui and use in agent and workflow sidebars
+- 0850b4c: Watch and resume per run
+- 5baf1ec: animate new traces
+- 9116d70: Handle the different workflow methods in workflow graph
+- 0709d99: add prop for dynamic empty text
+- 9ba1e97: fix loading state for evals page
+- Updated dependencies [fc2f89c]
+- Updated dependencies [dfbb131]
+- Updated dependencies [f4854ee]
+- Updated dependencies [afaf73f]
+- Updated dependencies [0850b4c]
+- Updated dependencies [7bcfaee]
+- Updated dependencies [4356859]
+- Updated dependencies [44631b1]
+- Updated dependencies [9116d70]
+- Updated dependencies [6e559a0]
+- Updated dependencies [5f43505]
+  - @mastra/core@0.6.1
+  - @mastra/client-js@0.1.9
+
+## 2.0.1-alpha.2
+
+### Patch Changes
+
+- 0850b4c: Watch and resume per run
+- 5baf1ec: animate new traces
+- 9116d70: Handle the different workflow methods in workflow graph
+- 0709d99: add prop for dynamic empty text
+- Updated dependencies [fc2f89c]
+- Updated dependencies [dfbb131]
+- Updated dependencies [0850b4c]
+- Updated dependencies [9116d70]
+  - @mastra/core@0.6.1-alpha.2
+  - @mastra/client-js@0.1.9-alpha.2
+
 ## 2.0.1-alpha.1
 
 ### Patch Changes

@@ -39,3 +39,20 @@ const deployer = testDeployer;
 export { deployer };
 "
 `;
+
+exports[`getDeployer > should be able to extract the deployer from ./plugins/__fixtures__/empty-mastra.js 1`] = `
+"
+"
+`;
+
+exports[`getDeployer > should be able to extract the deployer from ./plugins/__fixtures__/mastra-with-extra-code.js 1`] = `
+"import { testDeployer } from '@mastra/deployer/test';
+
+function getDeployer() {
+  return testDeployer;
+}
+const deployer = getDeployer();
+
+export { deployer };
+"
+`;

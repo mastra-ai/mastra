@@ -4,7 +4,6 @@ import { browserTool, googleSearch } from '../tools/browser.js';
 import { listEvents } from '../tools/calendar.js';
 import { execaTool } from '../tools/execa.js';
 import { fsTool } from '../tools/fs.js';
-import { imageTool } from '../tools/image.js';
 import { readPDF } from '../tools/pdf.js';
 
 import { memory } from './memory.js';
@@ -113,6 +112,5 @@ export const dane = new Agent({
     googleSearch,
     readPDF,
     listEvents,
-    imageTool,
   },
 });
