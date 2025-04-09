@@ -121,10 +121,8 @@ server.setRequestHandler(CallToolRequestSchema, async request => {
   }
 });
 
-async function runServer() {
-  const transport = new StdioServerTransport();
-  await server.connect(transport);
-  console.error('Stock Price MCP Server running on stdio');
-}
+// Start the server
+const transport = new StdioServerTransport();
+await server.connect(transport);
 
-export { runServer, server };
+export { server };
