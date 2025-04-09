@@ -1,16 +1,16 @@
 import fs from 'node:fs/promises';
-import { Server } from '@modelcontextprotocol/sdk/server/index.js';
-import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
-import { CallToolRequestSchema, ListToolsRequestSchema } from '@modelcontextprotocol/sdk/types.js';
+import { Server } from '@modelcontextprotocol/sdk/server/index';
+import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio';
+import { CallToolRequestSchema, ListToolsRequestSchema } from '@modelcontextprotocol/sdk/types';
 import { z } from 'zod';
 import { zodToJsonSchema } from 'zod-to-json-schema';
 
-import { prepare } from './prepare-docs/prepare.js';
-import { blogTool, blogInputSchema } from './tools/blog.js';
-import { changesTool, changesInputSchema } from './tools/changes.js';
-import { docsTool, docsInputSchema } from './tools/docs.js';
-import { examplesTool, examplesInputSchema } from './tools/examples.js';
-import { fromPackageRoot } from './utils.js';
+import { prepare } from './prepare-docs/prepare';
+import { blogTool, blogInputSchema } from './tools/blog';
+import { changesTool, changesInputSchema } from './tools/changes';
+import { docsTool, docsInputSchema } from './tools/docs';
+import { examplesTool, examplesInputSchema } from './tools/examples';
+import { fromPackageRoot } from './utils';
 
 if (process.env.REBUILD_DOCS_ON_START === 'true') {
   await prepare();
