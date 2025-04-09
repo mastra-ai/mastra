@@ -786,7 +786,6 @@ export class Agent<
                 title,
               });
             })();
-            console.log('threadMessages length==', threadMessages?.length);
             await memory.saveMessages({
               messages: [
                 ...threadMessages,
