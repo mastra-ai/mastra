@@ -1,34 +1,17 @@
 import type { LanguageModel } from '@mastra/core';
 import { Agent } from '@mastra/core/agent';
+import type { EvaluationResult, EvaluatorSettings } from '@mastra/core/eval';
 import { Evaluator } from '@mastra/core/eval';
-import type { EvaluatorSettings, EvaluationResult } from '@mastra/core/eval';
 import { z } from 'zod';
 import type { EvaluatorType } from '../types';
 import type {
+  EvaluatorConfig,
+  LLMEvaluatorEvalPrompt,
+  LLMEvaluatorReasonPrompt,
   LLMEvaluatorScorer,
   LLMEvaluatorScoreResult,
-  LLMEvaluatorReasonPromptArgs,
   Outcome,
-  LLMEvaluatorEvalPromptArgs,
 } from './types';
-
-export interface LLMEvaluatorPrompt<T> {
-  template: string;
-  format?: (args: T) => Promise<string> | string;
-}
-
-export type LLMEvaluatorReasonPrompt = LLMEvaluatorPrompt<LLMEvaluatorReasonPromptArgs>;
-export type LLMEvaluatorEvalPrompt = LLMEvaluatorPrompt<LLMEvaluatorEvalPromptArgs>;
-
-export interface EvaluatorConfig {
-  name: string;
-  instructions: string;
-  reasonPrompt?: LLMEvaluatorReasonPrompt;
-  evalPrompt?: LLMEvaluatorEvalPrompt;
-  scorer: LLMEvaluatorScorer;
-  model: LanguageModel;
-  settings?: EvaluatorSettings;
-}
 
 /**
  * Base Evaluator class that combines the functionality of metrics and judges.
@@ -125,8 +108,6 @@ export class LLMEvaluator extends Evaluator {
     context?: string[];
     outcomes: Outcome[];
   }): Promise<string> {
-    // @TODO: FIX THIS
-    // get result from format, and pass to this.formatTemplate
     const prompt = this.reasonPrompt?.format
       ? await Promise.resolve(
           this.reasonPrompt.format({
@@ -137,16 +118,11 @@ export class LLMEvaluator extends Evaluator {
             settings: this.settings,
             outcomes,
             context,
+            formatter: this.formatTemplate,
+            template: this.reasonPrompt?.template,
           }),
         )
-      : this.formatTemplate(this.reasonPrompt?.template || '', {
-          input,
-          output,
-          eval_result: String(eval_result.score),
-          scale: String(this.settings.scale),
-          outcomes: JSON.stringify(outcomes),
-          context: context?.join(', ') || '',
-        });
+      : this.reasonPrompt?.template;
 
     if (!prompt) {
       throw new Error('Reason prompt not generated.');
@@ -170,8 +146,6 @@ export class LLMEvaluator extends Evaluator {
     output: string;
     context?: string[];
   }): Promise<Outcome[]> {
-    // @TODO: FIX THIS
-    // get result from format, and pass to this.formatTemplate
     let prompt = this.evalPrompt?.format
       ? await Promise.resolve(
           this.evalPrompt.format({
@@ -181,15 +155,11 @@ export class LLMEvaluator extends Evaluator {
             context,
             agent: this.agent,
             output,
+            formatter: this.formatTemplate,
+            template: this.evalPrompt?.template,
           }),
         )
-      : this.formatTemplate(this.evalPrompt?.template || '', {
-          input,
-          statements: [output]?.join(','),
-          ...this.settings,
-          context: context?.join(', ') || '',
-          output,
-        });
+      : this.evalPrompt?.template;
 
     if (!prompt) {
       return [];
