@@ -1,4 +1,3 @@
-import { createHash } from 'crypto';
 import { MastraVector } from '@mastra/core/vector';
 import type {
   IndexStats,
