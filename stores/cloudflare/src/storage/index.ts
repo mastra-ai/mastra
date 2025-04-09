@@ -1199,8 +1199,6 @@ export class CloudflareStore extends MastraStorage {
         }),
       );
 
-      console.log(traceRecords, 'SUH');
-
       // Filter out nulls and apply filters
       let filteredTraces = traceRecords.filter(
         (record): record is Record<string, any> => record !== null && typeof record === 'object',
@@ -1261,13 +1259,15 @@ export class CloudflareStore extends MastraStorage {
     }
   }
 
-  private parseJSON<T>(value: string | undefined | null): T | undefined {
-    if (!value) return undefined;
-    try {
-      return JSON.parse(value) as T;
-    } catch {
-      return undefined;
+  private parseJSON(value: any): any {
+    if (typeof value === 'string') {
+      try {
+        return JSON.parse(value);
+      } catch {
+        return value;
+      }
     }
+    return value;
   }
 
   getEvalsByAgentName(_agentName: string, _type?: 'test' | 'live'): Promise<EvalRow[]> {

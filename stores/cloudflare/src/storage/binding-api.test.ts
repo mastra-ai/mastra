@@ -258,7 +258,7 @@ describe('CloudflareStore Workers Binding', () => {
       const traces = await store.getTraces({ page: 0, perPage: 10 });
 
       expect(traces).toHaveLength(1);
-      expect(traces[0].status).toBe(undefined); // Should return raw string when JSON parsing fails
+      expect(traces[0].status).toBe('invalid-json{'); // Should return raw string when JSON parsing fails
     });
   });
 
