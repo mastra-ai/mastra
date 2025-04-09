@@ -124,39 +124,6 @@ export function WorkflowTrigger({
 
   const isSuspendedSteps = suspendedSteps.length > 0;
 
-  // if (!triggerSchema) {
-  //   return (
-  //     <ScrollArea className="h-[calc(100vh-126px)] pt-2 px-4 pb-4 text-xs w-full">
-  //       <div className="space-y-4">
-  //         {!isSuspendedSteps && (
-  //           <div className="px-4 space-y-4">
-  //             <Button className="w-full" disabled={isRunning} onClick={() => handleExecuteWorkflow(null)}>
-  //               {isRunning ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Trigger'}
-  //             </Button>
-  //           </div>
-  //         )}
-
-  //         <div className="group relative flex flex-col">
-  //           <Text variant="secondary" className="px-4 text-mastra-el-3" size="xs">
-  //             Output
-  //           </Text>
-  //           <div className="flex flex-col gap-2">
-  //             <CopyButton
-  //               classname="absolute z-40 w-8 h-8 p-0 transition-opacity duration-150 ease-in-out opacity-0 top-4 right-4 group-hover:opacity-100"
-  //               content={JSON.stringify(result ?? {}, null, 2)}
-  //             />
-  //           </div>
-  //           <CodeBlockDemo
-  //             className="w-full overflow-x-auto"
-  //             code={result?.sanitizedOutput || JSON.stringify(result ?? {}, null, 2)}
-  //             language="json"
-  //           />
-  //         </div>
-  //       </div>
-  //     </ScrollArea>
-  //   );
-  // }
-
   const zodInputSchema = triggerSchema ? resolveSerializedZodOutput(jsonSchemaToZod(parse(triggerSchema))) : null;
 
   return (
