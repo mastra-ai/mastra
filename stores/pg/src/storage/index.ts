@@ -171,12 +171,6 @@ export class PostgresStore extends MastraStorage {
       }
     }
 
-    if (filters) {
-      for (const [key, value] of Object.entries(filters)) {
-        args.push(value);
-      }
-    }
-
     const result = await this.db.manyOrNone<{
       id: string;
       parentSpanId: string;
