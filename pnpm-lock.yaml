@@ -3156,9 +3156,6 @@ importers:
       '@mastra/core':
         specifier: workspace:^
         version: link:../core
-      '@mastra/rag':
-        specifier: workspace:^
-        version: link:../rag
       '@upstash/redis':
         specifier: ^1.34.5
         version: 1.34.5
