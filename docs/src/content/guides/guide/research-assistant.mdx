@@ -90,7 +90,7 @@ Now we'll create our RAG-enabled research assistant. The agent uses:
 - GPT-4o-mini for understanding queries and generating responses
 - Custom instructions that guide the agent on how to analyze papers, use retrieved content effectively, and acknowledge limitations
 
-```typescript copy showLineNumbers filename="src/mastra/agents/researchAgent.ts"
+```ts copy showLineNumbers filename="src/mastra/agents/researchAgent.ts"
 import { Agent } from '@mastra/core/agent';
 import { openai } from '@ai-sdk/openai';
 import { createVectorQueryTool } from '@mastra/rag';
@@ -119,7 +119,7 @@ export const researchAgent = new Agent({
 
 ### Set Up the Mastra Instance and Vector Store
 
-```typescript copy showLineNumbers filename="src/mastra/index.ts"
+```ts copy showLineNumbers filename="src/mastra/index.ts"
 import { Mastra } from '@mastra/core';
 import { PgVector } from '@mastra/pg';
 
@@ -140,7 +140,7 @@ This step handles the initial document processing. We:
 2. Convert it into a document object
 3. Split it into smaller, manageable chunks for better processing
 
-```typescript copy showLineNumbers filename="src/store.ts"
+```ts copy showLineNumbers filename="src/store.ts"
 import { openai } from "@ai-sdk/openai";
 import { MDocument } from '@mastra/rag';
 import { embedMany } from 'ai';
@@ -175,7 +175,7 @@ Finally, we'll prepare our content for RAG by:
 
 This allows our agent to efficiently search and retrieve relevant information.
 
-```typescript copy showLineNumbers{23} filename="src/store.ts"
+```ts copy showLineNumbers{23} filename="src/store.ts"
 // Generate embeddings
 const { embeddings } = await embedMany({
   model: openai.embedding('text-embedding-3-small'),
@@ -218,7 +218,7 @@ npx bun src/store.ts
 
 Let's test our research assistant with different types of queries:
 
-```typescript filename="src/index.ts" showLineNumbers copy
+```ts filename="src/index.ts" showLineNumbers copy
 import { mastra } from "./mastra";
 const agent = mastra.getAgent('researchAgent');
 
@@ -246,7 +246,7 @@ Response: Sequence modeling with neural networks faces several key challenges:
 ```
 
 Let's try another question:
-```typescript filename="src/index.ts" showLineNumbers{10} copy
+```ts filename="src/index.ts" showLineNumbers{10} copy
 // Query about specific findings
 const query2 = "What improvements were achieved in translation quality?";
 const response2 = await agent.generate(query2);

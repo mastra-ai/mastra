@@ -5,10 +5,8 @@ import sift from 'sift';
 import type { MachineContext, Snapshot } from 'xstate';
 import { assign, createActor, fromPromise, setup } from 'xstate';
 import type { z } from 'zod';
-
 import type { MastraUnion } from '../action';
 import type { Logger } from '../logger';
-
 import type { Mastra } from '../mastra';
 import { createMastraProxy } from '../utils';
 import type { Step } from './step';
@@ -17,7 +15,6 @@ import type {
   ResolverFunctionInput,
   ResolverFunctionOutput,
   RetryConfig,
-  StepAction,
   StepCondition,
   StepDef,
   StepGraph,

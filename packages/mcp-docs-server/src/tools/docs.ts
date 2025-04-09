@@ -64,7 +64,7 @@ async function readMdxContent(docPath: string): Promise<string> {
 
     // If it's a file, just read it
     return fs.readFile(fullPath, 'utf-8');
-  } catch (error) {
+  } catch {
     throw new Error(`Path not found: ${docPath}`);
   }
 }

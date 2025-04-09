@@ -1,9 +1,9 @@
+import type { QueryResult } from '@mastra/core/vector';
 import dotenv from 'dotenv';
 
 import { describe, it, expect, beforeAll, afterAll, beforeEach, vi, afterEach } from 'vitest';
 
 import { UpstashVector } from './';
-import type { QueryResult } from '@mastra/core';
 
 dotenv.config();
 
@@ -159,7 +159,6 @@ describe.skipIf(!process.env.UPSTASH_VECTOR_URL || !process.env.UPSTASH_VECTOR_T
         const ids = await vectorStore.upsert({ indexName: testIndexName, vectors: testVectors });
         expect(ids).toHaveLength(3);
 
-        const idToBeUpdated = ids[0];
         const newMetaData = {
           test: 'updates',
         };

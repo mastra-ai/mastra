@@ -3,7 +3,7 @@ import fsPromises from 'fs/promises';
 import path, { dirname } from 'path';
 import { fileURLToPath } from 'url';
 import { MastraBase } from '@mastra/core/base';
-import fsExtra from 'fs-extra/esm';
+import { readJSON, writeJSON, ensureFile } from 'fs-extra/esm';
 import type { PackageJson } from 'type-fest';
 
 import { createChildProcessLogger } from '../deploy/log.js';
@@ -49,18 +49,18 @@ export class Deps extends MastraBase {
     }
   }
 
-  public async install({ dir = this.rootDir, packages = [] }: { dir?: string; packages?: string[] }) {
+  public async install({ dir = this.rootDir }: { dir?: string }) {
     let runCommand = this.packageManager;
 
     switch (this.packageManager) {
-      case 'npm':
-        runCommand = `${this.packageManager} i`;
-        break;
       case 'pnpm':
         runCommand = `${this.packageManager} --ignore-workspace install`;
         break;
+      case 'yarn':
+        // similar to --ignore-workspace but for yarn
+        await ensureFile(path.join(dir, 'yarn.lock'));
       default:
-        runCommand = `${this.packageManager} ${packages?.length > 0 ? `add` : `install`}`;
+        runCommand = `${this.packageManager} install`;
     }
 
     const cpLogger = createChildProcessLogger({
@@ -70,7 +70,7 @@ export class Deps extends MastraBase {
 
     return cpLogger({
       cmd: runCommand,
-      args: packages,
+      args: [],
       env: {
         PATH: process.env.PATH!,
       },
@@ -109,7 +109,7 @@ export class Deps extends MastraBase {
         return 'No package.json file found in the current directory';
       }
 
-      const packageJson = JSON.parse(await fsPromises.readFile(packageJsonPath, 'utf-8'));
+      const packageJson = await readJSON(packageJsonPath);
       for (const dependency of dependencies) {
         if (!packageJson.dependencies || !packageJson.dependencies[dependency]) {
           return `Please install ${dependency} before running this command (${this.packageManager} install ${dependency})`;
@@ -126,8 +126,7 @@ export class Deps extends MastraBase {
   public async getProjectName() {
     try {
       const packageJsonPath = path.join(this.rootDir, 'package.json');
-      const packageJson = await fsPromises.readFile(packageJsonPath, 'utf-8');
-      const pkg = JSON.parse(packageJson);
+      const pkg = await readJSON(packageJsonPath);
       return pkg.name;
     } catch (err) {
       throw err;
@@ -139,17 +138,17 @@ export class Deps extends MastraBase {
     const __dirname = dirname(__filename);
     const pkgJsonPath = path.join(__dirname, '..', '..', 'package.json');
 
-    const content = (await fsExtra.readJSON(pkgJsonPath)) as PackageJson;
+    const content = (await readJSON(pkgJsonPath)) as PackageJson;
     return content.version;
   }
 
   public async addScriptsToPackageJson(scripts: Record<string, string>) {
-    const packageJson = JSON.parse(await fsPromises.readFile('package.json', 'utf-8'));
+    const packageJson = await readJSON('package.json');
     packageJson.scripts = {
       ...packageJson.scripts,
       ...scripts,
     };
-    await fsPromises.writeFile('package.json', JSON.stringify(packageJson, null, 2));
+    await writeJSON('package.json', packageJson, { spaces: 2 });
   }
 }
 

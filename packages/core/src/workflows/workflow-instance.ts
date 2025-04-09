@@ -2,9 +2,7 @@ import type { Span } from '@opentelemetry/api';
 import { context as otlpContext, trace } from '@opentelemetry/api';
 import type { Snapshot } from 'xstate';
 import type { z } from 'zod';
-
 import type { Logger } from '../logger';
-
 import type { Mastra } from '../mastra';
 import { Machine } from './machine';
 import type { Step } from './step';
@@ -15,7 +13,6 @@ import type {
   StepDef,
   StepGraph,
   StepNode,
-  WorkflowContext,
   WorkflowRunResult,
   WorkflowRunState,
 } from './types';

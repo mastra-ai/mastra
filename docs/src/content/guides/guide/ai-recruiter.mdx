@@ -15,8 +15,7 @@ Below is a concise version of the workflow. It starts by importing the necessary
 
 You need to import Mastra tools and Zod to handle workflow definitions and data validation.
 
-```typescript filename="src/mastra/index.ts" copy
-
+```ts filename="src/mastra/index.ts" copy
 import { Mastra } from "@mastra/core";
 import { Step, Workflow } from "@mastra/core/workflows";
 import { z } from "zod";
@@ -32,7 +31,7 @@ OPENAI_API_KEY=<your-openai-key>
 
 You want to extract candidate details from the resume text and classify them as technical or non-technical. This step calls an LLM to parse the resume and return structured JSON, including the name, technical status, specialty, and the original resume text. The code reads resumeText from trigger data, prompts the LLM, and returns organized fields for use in subsequent steps.
 
-```typescript filename="src/mastra/index.ts" copy
+```ts filename="src/mastra/index.ts" copy
 import { Agent } from '@mastra/core/agent';
 import { openai } from "@ai-sdk/openai";
 
@@ -81,7 +80,7 @@ const gatherCandidateInfo = new Step({
 
 This step prompts a candidate who is identified as technical for more information about how they got into their specialty. It uses the entire resume text so the LLM can craft a relevant follow-up question. The code generates a question about the candidate's specialty.
 
-```typescript filename="src/mastra/index.ts" copy
+```ts filename="src/mastra/index.ts" copy
 interface CandidateInfo {
   candidateName: string;
   isTechnical: boolean;
@@ -115,7 +114,7 @@ const askAboutSpecialty = new Step({
 
 If the candidate is non-technical, you want a different follow-up question. This step asks what interests them most about the role, again referencing their complete resume text. The code solicits a role-focused query from the LLM.
 
-```typescript filename="src/mastra/index.ts" copy
+```ts filename="src/mastra/index.ts" copy
 const askAboutRole = new Step({
   id: "askAboutRole",
   outputSchema: z.object({
@@ -141,7 +140,7 @@ const askAboutRole = new Step({
 
 You now combine the steps to implement branching logic based on the candidate's technical status. The workflow first gathers candidate data, then either asks about their specialty or about their role, depending on isTechnical. The code chains gatherCandidateInfo with askAboutSpecialty and askAboutRole, and commits the workflow.
 
-```typescript filename="src/mastra/index.ts" copy
+```ts filename="src/mastra/index.ts" copy
 const candidateWorkflow = new Workflow({
   name: "candidate-workflow",
   triggerSchema: z.object({
@@ -164,7 +163,7 @@ candidateWorkflow.commit();
 
 ## 6. Execute the Workflow
 
-```typescript filename="src/mastra/index.ts" copy
+```ts filename="src/mastra/index.ts" copy
 const mastra = new Mastra({
   workflows: {
     candidateWorkflow,

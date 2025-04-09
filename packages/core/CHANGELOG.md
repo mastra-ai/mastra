@@ -1,5 +1,11 @@
 # @mastra/core
 
+## 0.8.2-alpha.0
+
+### Patch Changes
+
+- a06aadc: Upgrade fastembed to fix bug where fastembe cannot be imported
+
 ## 0.8.1
 
 ### Patch Changes

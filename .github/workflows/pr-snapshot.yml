@@ -1,0 +1,96 @@
+name: PR Snapshot version
+
+on:
+  workflow_dispatch:
+    branches:
+      - '**'
+    inputs:
+      tag:
+        description: 'Optional tag for snapshot version and npm publish (defaults to slugified branch name)'
+        required: false
+        type: string
+
+jobs:
+  snapshot:
+    runs-on: ubuntu-latest
+    env:
+      TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
+      TURBO_TEAM: ${{ secrets.TURBO_TEAM }}
+      TURBO_CACHE: remote:r
+
+    permissions:
+      pull-requests: read
+
+    steps:
+      - name: Check if branch is main
+        if: github.ref == 'refs/heads/main'
+        run: |
+          echo "Error: This workflow cannot be run on the main branch."
+          exit 1
+
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        name: Install pnpm
+        with:
+          run_install: false
+
+      - name: Setup Node.js 20.x
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20.x
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install
+
+      - name: Setup npm auth
+        run: |
+          echo "//registry.npmjs.org/:_authToken=${{ secrets.NPM_TOKEN }}" > .npmrc
+
+      - name: Generate slugified branch name
+        id: slugify
+        run: |
+          BRANCH_NAME="$GITHUB_REF_NAME"
+          # Simple slugification: replace non-alphanumeric with -, remove leading/trailing -, lowercase
+          SLUG=$(echo "$BRANCH_NAME" | iconv -t ascii//TRANSLIT | sed -r 's/[^a-zA-Z0-9]+/-/g' | sed -r 's/^-+\|-+$//g' | tr 'A-Z' 'a-z')
+          echo "SLUG_BRANCH_NAME=$SLUG" >> "$GITHUB_ENV"
+          echo "Slugified branch name: $SLUG"
+
+      - name: Determine final tag
+        id: determine_tag
+        run: |
+          if [[ -z "${{ github.event.inputs.tag }}" ]]; then
+            echo "Using slugified branch name as tag: ${{ env.SLUG_BRANCH_NAME }}"
+            echo "FINAL_TAG=${{ env.SLUG_BRANCH_NAME }}" >> "$GITHUB_ENV"
+          else
+            echo "Using provided tag: ${{ github.event.inputs.tag }}"
+            echo "FINAL_TAG=${{ github.event.inputs.tag }}" >> "$GITHUB_ENV"
+          fi
+
+      - name: Update workspace dependencies
+        run: |
+          for file in $(find . -type f -name package.json -not -path "./node_modules/*" -not -path "./package.json"); do
+            content="$(< "$file")"
+            updated="$(echo "$content" | sed -E 's/"workspace:\^"/"workspace:*"/g')"
+            if [ "$content" != "$updated" ]; then
+              echo "Updating $file"
+              echo "$updated" > "$file"
+              changed_count=$((changed_count + 1))
+            fi
+          done
+          echo "Finished updating workspace dependencies. $changed_count files updated."
+        shell: bash
+
+      - name: Build
+        run: pnpm turbo --filter "!./examples/**/*" --filter "!./docs/" build
+
+      - name: Run Changeset Pre Exit
+        run: pnpm changeset pre exit
+
+      - name: Run Changeset Version Snapshot
+        run: pnpm changeset version --snapshot ${{ env.FINAL_TAG }}
+
+      - name: Publish to npm
+        run: pnpm publish -r --no-git-checks --tag ${{ env.FINAL_TAG }}

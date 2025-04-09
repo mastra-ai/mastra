@@ -1,5 +1,12 @@
 # @mastra/voice-openai-realtime
 
+## 0.1.3-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [a06aadc]
+  - @mastra/core@0.8.2-alpha.0
+
 ## 0.1.2
 
 ### Patch Changes
