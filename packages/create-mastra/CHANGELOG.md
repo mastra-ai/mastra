@@ -1,5 +1,11 @@
 # create-mastra
 
+## 0.2.7-alpha.1
+
+### Patch Changes
+
+- df5989d: Correct playground model setting maxSteps reset value
+
 ## 0.2.7-alpha.0
 
 ### Patch Changes

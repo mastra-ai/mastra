@@ -1,5 +1,11 @@
 # @mastra/deployer
 
+## 0.2.8-alpha.1
+
+### Patch Changes
+
+- 94cd5c1: Fix yarn workspace isolation
+
 ## 0.2.8-alpha.0
 
 ### Patch Changes
