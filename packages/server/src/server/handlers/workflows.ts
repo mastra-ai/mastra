@@ -1,5 +1,6 @@
 import { ReadableStream } from 'node:stream/web';
 import type { Container } from '@mastra/core/di';
+import type { WorkflowRuns } from '@mastra/core/storage';
 import type { Workflow } from '@mastra/core/workflows';
 import { stringify } from 'superjson';
 import zodToJsonSchema from 'zod-to-json-schema';
@@ -332,7 +333,7 @@ export async function resumeWorkflowHandler({
   }
 }
 
-export async function getWorkflowRunsHandler({ mastra, workflowId }: WorkflowContext) {
+export async function getWorkflowRunsHandler({ mastra, workflowId }: WorkflowContext): Promise<WorkflowRuns> {
   try {
     if (!workflowId) {
       throw new HTTPException(400, { message: 'Workflow ID is required' });
