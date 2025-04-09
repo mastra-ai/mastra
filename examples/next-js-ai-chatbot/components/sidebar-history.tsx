@@ -4,11 +4,11 @@ import { isToday, isYesterday, subMonths, subWeeks } from 'date-fns';
 import Link from 'next/link';
 import { useParams, usePathname, useRouter } from 'next/navigation';
 import type { User } from 'next-auth';
-import { memo, useEffect, useState } from 'react';
+import { useMemo, useEffect, useState } from 'react';
 import { toast } from 'sonner';
 import useSWR from 'swr';
 
-import { CheckCircleFillIcon, GlobeIcon, LockIcon, MoreHorizontalIcon, ShareIcon, TrashIcon } from '@/components/icons';
+import { MoreHorizontalIcon, TrashIcon } from '@/components/icons';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -23,11 +23,6 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuPortal,
-  DropdownMenuSeparator,
-  DropdownMenuSub,
-  DropdownMenuSubContent,
-  DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import {
@@ -39,11 +34,8 @@ import {
   SidebarMenuItem,
   useSidebar,
 } from '@/components/ui/sidebar';
-import type { Chat } from '@/lib/db/schema';
 import { fetcher } from '@/lib/utils';
-import { useChatVisibility } from '@/hooks/use-chat-visibility';
 import { StorageThreadType } from '@mastra/core/memory';
-import { useMemo } from 'react';
 
 type GroupedHistory = {
   today: StorageThreadType[];
@@ -53,7 +45,7 @@ type GroupedHistory = {
   older: StorageThreadType[];
 };
 
-const ChatItem = ({
+const ThreadItem = ({
   chat,
   isActive,
   onDelete,
@@ -64,11 +56,6 @@ const ChatItem = ({
   onDelete: (chatId: string) => void;
   setOpenMobile: (open: boolean) => void;
 }) => {
-  // const { visibilityType, setVisibilityType } = useChatVisibility({
-  //   chatId: chat.id,
-  //   initialVisibility: chat.visibility,
-  // });
-
   return (
     <SidebarMenuItem>
       <SidebarMenuButton asChild isActive={isActive}>
@@ -89,41 +76,6 @@ const ChatItem = ({
         </DropdownMenuTrigger>
 
         <DropdownMenuContent side="bottom" align="end">
-          {/* <DropdownMenuSub>
-            <DropdownMenuSubTrigger className="cursor-pointer">
-              <ShareIcon />
-              <span>Share</span>
-            </DropdownMenuSubTrigger>
-            <DropdownMenuPortal>
-              <DropdownMenuSubContent>
-                <DropdownMenuItem
-                  className="cursor-pointer flex-row justify-between"
-                  onClick={() => {
-                    setVisibilityType('private');
-                  }}
-                >
-                  <div className="flex flex-row gap-2 items-center">
-                    <LockIcon size={12} />
-                    <span>Private</span>
-                  </div>
-                  {visibilityType === 'private' ? <CheckCircleFillIcon /> : null}
-                </DropdownMenuItem>
-                <DropdownMenuItem
-                  className="cursor-pointer flex-row justify-between"
-                  onClick={() => {
-                    setVisibilityType('public');
-                  }}
-                >
-                  <div className="flex flex-row gap-2 items-center">
-                    <GlobeIcon />
-                    <span>Public</span>
-                  </div>
-                  {visibilityType === 'public' ? <CheckCircleFillIcon /> : null}
-                </DropdownMenuItem>
-              </DropdownMenuSubContent>
-            </DropdownMenuPortal>
-          </DropdownMenuSub> */}
-
           <DropdownMenuItem
             className="cursor-pointer text-destructive focus:bg-destructive/15 focus:text-destructive dark:text-red-500"
             onSelect={() => onDelete(chat.id)}
@@ -142,10 +94,10 @@ export function SidebarHistory({ user }: { user: User | undefined }) {
   const { id } = useParams();
   const pathname = usePathname();
   const {
-    data: history,
+    data: threads,
     isLoading,
     mutate,
-  } = useSWR<Array<StorageThreadType>>(user ? '/api/history' : null, fetcher, {
+  } = useSWR<Array<StorageThreadType>>(user ? '/api/threads' : null, fetcher, {
     fallbackData: [],
   });
 
@@ -162,15 +114,15 @@ export function SidebarHistory({ user }: { user: User | undefined }) {
         }
       }
     };
-    if (history?.length) {
-      const lastThread = history[history.length - 1];
+    if (threads?.length) {
+      const lastThread = threads[threads.length - 1];
       if (lastThread?.title?.toLowerCase()?.includes('new thread')) {
         setTimeout(() => {
           refetchThreads();
         }, 500);
       }
     }
-  }, [history, mutate]);
+  }, [threads, mutate]);
 
   useEffect(() => {
     mutate();
@@ -180,7 +132,7 @@ export function SidebarHistory({ user }: { user: User | undefined }) {
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const router = useRouter();
   const handleDelete = async () => {
-    const deletePromise = fetch(`/api/chat?id=${deleteId}`, {
+    const deletePromise = fetch(`/api/threads?id=${deleteId}`, {
       method: 'DELETE',
     });
 
@@ -204,13 +156,13 @@ export function SidebarHistory({ user }: { user: User | undefined }) {
     }
   };
 
-  const groupedHistoryByDate = useMemo(() => {
-    if (!history || !history.length) return { today: [], yesterday: [], lastWeek: [], lastMonth: [], older: [] };
+  const groupedThreadsByDate = useMemo(() => {
+    if (!threads || !threads.length) return { today: [], yesterday: [], lastWeek: [], lastMonth: [], older: [] };
     const now = new Date();
     const oneWeekAgo = subWeeks(now, 1);
     const oneMonthAgo = subMonths(now, 1);
 
-    return history.reduce(
+    return threads.reduce(
       (groups, chat) => {
         const chatDate = new Date(chat.createdAt);
 
@@ -236,7 +188,7 @@ export function SidebarHistory({ user }: { user: User | undefined }) {
         older: [],
       } as GroupedHistory,
     );
-  }, [history]);
+  }, [threads]);
 
   if (!user) {
     return (
@@ -293,11 +245,11 @@ export function SidebarHistory({ user }: { user: User | undefined }) {
           <SidebarMenu>
             {history && (
               <>
-                {groupedHistoryByDate.today.length > 0 && (
+                {groupedThreadsByDate.today.length > 0 && (
                   <>
                     <div className="px-2 py-1 text-xs text-sidebar-foreground/50">Today</div>
-                    {groupedHistoryByDate.today.map(chat => (
-                      <ChatItem
+                    {groupedThreadsByDate.today.map(chat => (
+                      <ThreadItem
                         key={chat.id}
                         chat={chat}
                         isActive={chat.id === id}
@@ -311,11 +263,11 @@ export function SidebarHistory({ user }: { user: User | undefined }) {
                   </>
                 )}
 
-                {groupedHistoryByDate.yesterday.length > 0 && (
+                {groupedThreadsByDate.yesterday.length > 0 && (
                   <>
                     <div className="px-2 py-1 text-xs text-sidebar-foreground/50 mt-6">Yesterday</div>
-                    {groupedHistoryByDate.yesterday.map(chat => (
-                      <ChatItem
+                    {groupedThreadsByDate.yesterday.map(chat => (
+                      <ThreadItem
                         key={chat.id}
                         chat={chat}
                         isActive={chat.id === id}
@@ -329,11 +281,11 @@ export function SidebarHistory({ user }: { user: User | undefined }) {
                   </>
                 )}
 
-                {groupedHistoryByDate.lastWeek.length > 0 && (
+                {groupedThreadsByDate.lastWeek.length > 0 && (
                   <>
                     <div className="px-2 py-1 text-xs text-sidebar-foreground/50 mt-6">Last 7 days</div>
-                    {groupedHistoryByDate.lastWeek.map(chat => (
-                      <ChatItem
+                    {groupedThreadsByDate.lastWeek.map(chat => (
+                      <ThreadItem
                         key={chat.id}
                         chat={chat}
                         isActive={chat.id === id}
@@ -347,11 +299,11 @@ export function SidebarHistory({ user }: { user: User | undefined }) {
                   </>
                 )}
 
-                {groupedHistoryByDate.lastMonth.length > 0 && (
+                {groupedThreadsByDate.lastMonth.length > 0 && (
                   <>
                     <div className="px-2 py-1 text-xs text-sidebar-foreground/50 mt-6">Last 30 days</div>
-                    {groupedHistoryByDate.lastMonth.map(chat => (
-                      <ChatItem
+                    {groupedThreadsByDate.lastMonth.map(chat => (
+                      <ThreadItem
                         key={chat.id}
                         chat={chat}
                         isActive={chat.id === id}
@@ -365,11 +317,11 @@ export function SidebarHistory({ user }: { user: User | undefined }) {
                   </>
                 )}
 
-                {groupedHistoryByDate.older.length > 0 && (
+                {groupedThreadsByDate.older.length > 0 && (
                   <>
                     <div className="px-2 py-1 text-xs text-sidebar-foreground/50 mt-6">Older</div>
-                    {groupedHistoryByDate.older.map(chat => (
-                      <ChatItem
+                    {groupedThreadsByDate.older.map(chat => (
+                      <ThreadItem
                         key={chat.id}
                         chat={chat}
                         isActive={chat.id === id}
