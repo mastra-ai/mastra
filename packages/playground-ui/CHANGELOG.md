@@ -1,5 +1,15 @@
 # @mastra/playground-ui
 
+## 4.0.3-alpha.0
+
+### Patch Changes
+
+- d3c372c: Show status UI of steps on playground workflow when workflow has no triggerSchema
+  Show number of steps on workflows table
+- Updated dependencies [a06aadc]
+  - @mastra/core@0.8.2-alpha.0
+  - @mastra/client-js@0.1.16-alpha.0
+
 ## 4.0.2
 
 ### Patch Changes

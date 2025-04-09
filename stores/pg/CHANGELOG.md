@@ -1,5 +1,12 @@
 # @mastra/pg
 
+## 0.2.9-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [a06aadc]
+  - @mastra/core@0.8.2-alpha.0
+
 ## 0.2.8
 
 ### Patch Changes

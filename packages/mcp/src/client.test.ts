@@ -38,7 +38,7 @@ describe.skip('MastraMCPClient', () => {
     // The MCP server tools are now available to your Mastra Agents
     const tools = await everArtClient.tools();
 
-    const response = await agent.generate('Can you make me a picture of a dog?', {
+    await agent.generate('Can you make me a picture of a dog?', {
       toolsets: {
         everart: tools,
       },

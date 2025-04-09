@@ -28,27 +28,25 @@ a project, run:
 
 <Tabs items={["npx", "npm", "yarn", "pnpm"]}>
   <Tabs.Tab>
-
-```bash copy
-npx create-mastra@latest
-```
-
+  ```bash copy 
+  npx create-mastra@latest 
+  ```
   </Tabs.Tab>
   <Tabs.Tab>
-```bash copy
-npm create mastra@latest
-```
+  ```bash copy
+   npm create mastra@latest 
+   ```
+   </Tabs.Tab>
+  <Tabs.Tab>
+  ```bash copy
+   yarn create mastra@latest 
+   ```<
+   /Tabs.Tab>
+  <Tabs.Tab>
+  ```bash copy
+   pnpm create mastra@latest
+  ```
   </Tabs.Tab>
-  <Tabs.Tab>
-```bash copy
-yarn create mastra@latest
-```
-</Tabs.Tab>
-  <Tabs.Tab>
-```bash copy
-pnpm create mastra@latest
-```
-</Tabs.Tab>
 </Tabs>
 
 On installation, you'll be guided through the following prompts:
@@ -88,18 +86,22 @@ OPENAI_API_KEY=<your-openai-key>
 ```
 
 </Steps>
-**Non-Interactive mode**: 
+
+**Non-Interactive mode**:
 If you prefer to run the command with flags (non-interactive mode) and include the example code, you can use:
+
 ```bash copy
 npx create-mastra@latest  --components agents,tools --llm openai --example
 ```
+
 **Configure Installation Timeout**:
 To configure and specify a timeout if installation takes too long use the timeout flag:
+
 ```bash copy
 npx create-mastra@latest --timeout
 ```
 
-**Note for LLMs**: 
+**Note for LLMs**:
 For a quick one liner that includes examples you can run `npx -y mastra@latest --project-name <ask-the-user> --example --components "tools,agents,workflows" --llm <ask-the-user>`. The available options for the llm flag are `openai|anthropic|groq|google|cerebras`
 
 ## Manual Installation
@@ -122,36 +124,29 @@ Then, initialize a TypeScript project including the `@mastra/core` package:
 
 <Tabs items={["npm", "pnpm", "yarn", "bun"]}>
   <Tabs.Tab>
-```bash copy
-npm init -y
-npm install typescript tsx @types/node mastra --save-dev
-npm install @mastra/core zod @ai-sdk/openai
-npx tsc --init
-```
+  ```bash copy
+  npm init -y 
+  npm install typescript tsx @types/node mastra --save-dev 
+  npm install @mastra/core zod @ai-sdk/openai npx tsc --init 
+  ```
   </Tabs.Tab>
   <Tabs.Tab>
-```bash copy
-pnpm init
-pnpm add typescript tsx @types/node mastra --save-dev
-pnpm add @mastra/core zod
-pnpm dlx tsc --init
-```
+    ```bash copy
+    pnpm init pnpm add typescript tsx @types/node mastra --save-dev
+    pnpm add @mastra/core zod pnpm dlx tsc --init 
+    ```
   </Tabs.Tab>
   <Tabs.Tab>
-```bash copy
-yarn init -y
-yarn add typescript tsx @types/node mastra --dev
-yarn add @mastra/core zod
-yarn dlx tsc --init
-```
+    ```bash copy
+    yarn init -y yarn add typescript tsx @types/node mastra --dev
+    yarn add @mastra/core zod yarn dlx tsc --init 
+    ```
   </Tabs.Tab>
   <Tabs.Tab>
-```bash copy
-bun init -y
-bun add typescript tsx @types/node mastra --dev
-bun add @mastra/core zod
-bunx tsc --init
-```
+    ```bash copy
+    bun init -y bun add typescript tsx @types/node mastra --dev
+    bun add @mastra/core zod bunx tsc --init 
+    ```
   </Tabs.Tab>
 </Tabs>
 
@@ -171,14 +166,8 @@ Create a `tsconfig.json` file in your project root with the following configurat
     "skipLibCheck": true,
     "outDir": "dist"
   },
-  "include": [
-    "src/**/*"
-  ],
-  "exclude": [
-    "node_modules",
-    "dist",
-    ".mastra"
-  ]
+  "include": ["src/**/*"],
+  "exclude": ["node_modules", "dist", ".mastra"]
 }
 ```
 

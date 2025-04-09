@@ -267,7 +267,7 @@ describe('CloudflareVector', () => {
       try {
         await vectorDB.deleteIndex(tempIndexName);
         await waitForIndexDeletion(vectorDB, tempIndexName);
-      } catch (error) {
+      } catch {
         // Ignore errors if index doesn't exist
       }
     });
@@ -277,7 +277,7 @@ describe('CloudflareVector', () => {
       try {
         await vectorDB.deleteIndex(tempIndexName);
         await waitForIndexDeletion(vectorDB, tempIndexName);
-      } catch (error) {
+      } catch {
         // Ignore errors if index doesn't exist
       }
     });
@@ -382,17 +382,17 @@ describe('CloudflareVector', () => {
     afterAll(async () => {
       try {
         await vectorDB.deleteIndex(indexName1);
-      } catch (error) {
+      } catch {
         // Ignore errors if index doesn't exist
       }
       try {
         await vectorDB.deleteIndex(indexName2);
-      } catch (error) {
+      } catch {
         // Ignore errors if index doesn't exist
       }
       try {
         await vectorDB.deleteIndex(indexName3);
-      } catch (error) {
+      } catch {
         // Ignore errors if index doesn't exist
       }
     });
@@ -478,7 +478,7 @@ describe('CloudflareVector', () => {
       try {
         await vectorDB.deleteIndex(indexName);
         await waitForIndexDeletion(vectorDB, indexName);
-      } catch (error) {
+      } catch {
         // Ignore errors if index doesn't exist
       }
     });
@@ -730,7 +730,7 @@ describe('CloudflareVector', () => {
       }
       try {
         await vectorDB.deleteIndex(testIndexName2);
-      } catch (_error) {
+      } catch {
         // Ignore errors if index doesn't exist
       }
     });
