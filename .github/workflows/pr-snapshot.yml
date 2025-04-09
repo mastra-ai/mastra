@@ -19,6 +19,10 @@ jobs:
       TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
       TURBO_TEAM: ${{ secrets.TURBO_TEAM }}
       TURBO_CACHE: remote:r
+
+    permissions:
+      pull-requests: read
+
     steps:
       - name: Check if branch is main
         if: github.event.inputs.branch == 'main'
