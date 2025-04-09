@@ -1,5 +1,12 @@
 # @mastra/speech-elevenlabs
 
+## 0.1.16
+
+### Patch Changes
+
+- Updated dependencies [a06aadc]
+  - @mastra/core@0.8.2
+
 ## 0.1.16-alpha.0
 
 ### Patch Changes
