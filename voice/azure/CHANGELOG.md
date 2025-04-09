@@ -1,5 +1,12 @@
 # @mastra/voice-azure
 
+## 0.1.4
+
+### Patch Changes
+
+- Updated dependencies [a06aadc]
+  - @mastra/core@0.8.2
+
 ## 0.1.4-alpha.0
 
 ### Patch Changes
