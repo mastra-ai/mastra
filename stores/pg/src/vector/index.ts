@@ -265,23 +265,15 @@ export class PgVector extends MastraVector {
       try {
         // install vector extension
         await this.installVectorExtension(client);
-        try {
-          await client.query(`
-          DO $$ 
-          BEGIN
-            CREATE TABLE IF NOT EXISTS ${indexName} (
-              id SERIAL PRIMARY KEY,
-              vector_id TEXT UNIQUE NOT NULL,
-              embedding vector(${dimension}),
-              metadata JSONB DEFAULT '{}'::jsonb
-            );
-          END $$;
-        `);
-          this.createdIndexes.set(indexName, indexCacheKey);
-        } catch (e) {
-          this.createdIndexes.delete(indexName);
-          throw e;
-        }
+        await client.query(`
+          CREATE TABLE IF NOT EXISTS ${indexName} (
+            id SERIAL PRIMARY KEY,
+            vector_id TEXT UNIQUE NOT NULL,
+            embedding vector(${dimension}),
+            metadata JSONB DEFAULT '{}'::jsonb
+          );
+      `);
+        this.createdIndexes.set(indexName, indexCacheKey);
 
         if (buildIndex) {
           await this.setupIndex({ indexName, metric, indexConfig }, client);
