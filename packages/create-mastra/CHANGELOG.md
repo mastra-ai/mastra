@@ -1,5 +1,13 @@
 # create-mastra
 
+## 0.2.7
+
+### Patch Changes
+
+- d3c372c: Show status UI of steps on playground workflow when workflow has no triggerSchema
+  Show number of steps on workflows table
+- df5989d: Correct playground model setting maxSteps reset value
+
 ## 0.2.7-alpha.1
 
 ### Patch Changes

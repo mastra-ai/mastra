@@ -1,5 +1,12 @@
 # @mastra/voice-elevenlabs
 
+## 0.1.12
+
+### Patch Changes
+
+- Updated dependencies [a06aadc]
+  - @mastra/core@0.8.2
+
 ## 0.1.12-alpha.0
 
 ### Patch Changes

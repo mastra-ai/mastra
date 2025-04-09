@@ -1,5 +1,15 @@
 # @mastra/deployer
 
+## 0.2.8
+
+### Patch Changes
+
+- ae6c5ce: Fix await loop inside mastra entrypoint
+- 94cd5c1: Fix yarn workspace isolation
+- Updated dependencies [a06aadc]
+  - @mastra/core@0.8.2
+  - @mastra/server@1.0.2
+
 ## 0.2.8-alpha.1
 
 ### Patch Changes

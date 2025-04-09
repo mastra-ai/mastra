@@ -1,5 +1,12 @@
 # @mastra/voice-cloudflare
 
+## 0.1.5
+
+### Patch Changes
+
+- Updated dependencies [a06aadc]
+  - @mastra/core@0.8.2
+
 ## 0.1.5-alpha.0
 
 ### Patch Changes
