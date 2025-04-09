@@ -7,11 +7,18 @@ on:
         description: 'Branch to run on (cannot be main)'
         required: true
         type: string
+      tag:
+        description: 'Optional tag for snapshot version and npm publish (defaults to slugified branch name)'
+        required: false
+        type: string
 
 jobs:
   build:
     runs-on: ubuntu-latest
-
+    env:
+      TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
+      TURBO_TEAM: ${{ secrets.TURBO_TEAM }}
+      TURBO_CACHE: remote:r
     steps:
       - name: Check if branch is main
         if: github.event.inputs.branch == 'main'
@@ -38,6 +45,10 @@ jobs:
       - name: Install dependencies
         run: pnpm install
 
+      - name: Setup npm auth
+        run: |
+          echo "//registry.npmjs.org/:_authToken=${{ secrets.NPM_TOKEN }}" > .npmrc
+
       - name: Generate slugified branch name
         id: slugify
         run: |
@@ -46,6 +57,17 @@ jobs:
           SLUG=$(echo "$BRANCH_NAME" | iconv -t ascii//TRANSLIT | sed -r 's/[^a-zA-Z0-9]+/-/g' | sed -r 's/^-+\|-+$//g' | tr 'A-Z' 'a-z')
           echo "SLUG_BRANCH_NAME=$SLUG" >> "$GITHUB_ENV"
           echo "Slugified branch name: $SLUG"
+
+      - name: Determine final tag
+        id: determine_tag
+        run: |
+          if [[ -z "${{ github.event.inputs.tag }}" ]]; then
+            echo "Using slugified branch name as tag: ${{ env.SLUG_BRANCH_NAME }}"
+            echo "FINAL_TAG=${{ env.SLUG_BRANCH_NAME }}" >> "$GITHUB_ENV"
+          else
+            echo "Using provided tag: ${{ github.event.inputs.tag }}"
+            echo "FINAL_TAG=${{ github.event.inputs.tag }}" >> "$GITHUB_ENV"
+          fi
 
       - name: Update workspace dependencies
         run: |
@@ -65,9 +87,7 @@ jobs:
         run: pnpm changeset pre exit
 
       - name: Run Changeset Version Snapshot
-        run: pnpm changeset version --snapshot ${{ env.SLUG_BRANCH_NAME }}
+        run: pnpm changeset version --snapshot ${{ env.FINAL_TAG }}
 
       # - name: Publish to npm
-      #   run: pnpm publish -r --no-git-checks --tag ${{ env.SLUG_BRANCH_NAME }}
-      #   env:
-      #     NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+      #   run: pnpm publish -r --no-git-checks --tag ${{ env.FINAL_TAG }}
