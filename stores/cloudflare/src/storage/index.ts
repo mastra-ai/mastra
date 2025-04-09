@@ -538,6 +538,9 @@ export class CloudflareStore extends MastraStorage {
           throw new Error('Namespace, workflow name, and run ID are required');
         }
         return `${prefix}${tableName}:${record.namespace}:${record.workflow_name}:${record.run_id}`;
+      case TABLE_TRACES:
+        if (!record.id) throw new Error('Trace ID is required');
+        return `${prefix}${tableName}:${record.id}`;
       default:
         throw new Error(`Unsupported table: ${tableName}`);
     }
@@ -648,6 +651,11 @@ export class CloudflareStore extends MastraStorage {
         case TABLE_WORKFLOW_SNAPSHOT:
           if (!('namespace' in recordTyped) || !('workflowName' in recordTyped) || !('runId' in recordTyped)) {
             throw new Error('Workflow record missing required fields');
+          }
+          break;
+        case TABLE_TRACES:
+          if (!('id' in recordTyped)) {
+            throw new Error('Trace record missing required fields');
           }
           break;
         default:
@@ -1153,14 +1161,113 @@ export class CloudflareStore extends MastraStorage {
       throw error;
     }
   }
-  getTraces(_input: {
+
+  async getTraces({
+    name,
+    scope,
+    page = 0,
+    perPage = 100,
+    attributes,
+  }: {
     name?: string;
     scope?: string;
     page: number;
     perPage: number;
     attributes?: Record<string, string>;
   }): Promise<any[]> {
-    throw new Error('Method not implemented.');
+    try {
+      // Get all keys for traces table
+      let keys: string[];
+      if (this.bindings) {
+        keys = (await this.listKV(TABLE_TRACES))?.map(k => k.name) || [];
+      } else {
+        const namespaceId = await this.getNamespaceId(TABLE_TRACES);
+        const result = await this.client!.kv.namespaces.keys.list(namespaceId, {
+          prefix: '',
+          limit: 1000,
+          account_id: this.accountId!,
+        });
+        keys = result.result?.map(k => k.name) || [];
+      }
+
+      // Fetch all trace records
+      const traceRecords = await Promise.all(
+        keys.map(async key => {
+          const record = await this.getKV(TABLE_TRACES, key);
+          if (!record) return null;
+          return record;
+        }),
+      );
+
+      // Filter out nulls and apply filters
+      let filteredTraces = traceRecords.filter(
+        (record): record is Record<string, any> => record !== null && typeof record === 'object',
+      );
+
+      // Apply name filter if provided
+      if (name) {
+        filteredTraces = filteredTraces.filter(record => record.name?.toLowerCase().startsWith(name.toLowerCase()));
+      }
+
+      // Apply scope filter if provided
+      if (scope) {
+        filteredTraces = filteredTraces.filter(record => record.scope === scope);
+      }
+
+      // Apply attribute filters if provided
+      if (attributes) {
+        filteredTraces = filteredTraces.filter(record => {
+          if (!record.attributes) return false;
+          const recordAttrs: Record<string, any> | undefined = this.parseJSON(record.attributes);
+          if (!recordAttrs) return false;
+          return Object.entries(attributes).every(([key, value]) => recordAttrs[key] === value);
+        });
+      }
+
+      // Sort by createdAt desc
+      filteredTraces.sort((a, b) => {
+        const dateA = new Date(a.createdAt).getTime();
+        const dateB = new Date(b.createdAt).getTime();
+        return dateB - dateA;
+      });
+
+      // Apply pagination
+      const start = page * perPage;
+      const end = start + perPage;
+      const paginatedTraces = filteredTraces.slice(start, end);
+
+      // Parse JSON fields and return traces
+      return paginatedTraces.map(record => ({
+        id: record.id,
+        parentSpanId: record.parentSpanId,
+        traceId: record.traceId,
+        name: record.name,
+        scope: record.scope,
+        kind: record.kind,
+        status: this.parseJSON(record.status),
+        events: this.parseJSON(record.events) || [],
+        links: this.parseJSON(record.links) || [],
+        attributes: this.parseJSON(record?.attributes) || {},
+        startTime: record.startTime,
+        endTime: record.endTime,
+        other: this.parseJSON(record.other) || {},
+        createdAt: record.createdAt,
+      }));
+    } catch (error) {
+      this.logger.error('Failed to get traces:', { message: error instanceof Error ? error.message : String(error) });
+      return [];
+    }
+  }
+
+  private parseJSON(value: any): any {
+    if (typeof value === 'string') {
+      try {
+        return JSON.parse(value);
+      } catch {
+        return value;
+      }
+    }
+    return value;
   }
 
   getEvalsByAgentName(_agentName: string, _type?: 'test' | 'live'): Promise<EvalRow[]> {
