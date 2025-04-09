@@ -1247,7 +1247,7 @@ export class CloudflareStore extends MastraStorage {
         status: this.parseJSON(record.status),
         events: this.parseJSON(record.events) || [],
         links: this.parseJSON(record.links) || [],
-        attributes: this.parseJSON<Record<string, string>>(record.attributes) || {},
+        attributes: this.parseJSON(record?.attributes) || {},
         startTime: record.startTime,
         endTime: record.endTime,
         other: this.parseJSON(record.other) || {},
