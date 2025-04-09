@@ -12,6 +12,7 @@ import { cn } from '@/lib/utils';
 import { MarkdownText } from './markdown-text';
 import { TooltipIconButton } from './tooltip-icon-button';
 import { ToolFallback } from '@/components/assistant-ui/tool-fallback';
+import { ImageComponent } from './image-component';
 
 export const AssistantMessage: FC<{ ToolFallback?: ToolCallContentPartComponent }> = ({
   ToolFallback: ToolFallbackCustom,
@@ -20,7 +21,11 @@ export const AssistantMessage: FC<{ ToolFallback?: ToolCallContentPartComponent 
     <MessagePrimitive.Root className="grid group grid-cols-[auto_auto_1fr] grid-rows-[auto_1fr] max-w-[var(--thread-max-width)] relative w-full">
       <div className="text-foreground max-w-[calc(var(--thread-max-width)*0.8)] sm:max-w-[70%] break-words leading-7 col-span-2 py-2 col-start-2 row-start-1">
         <MessagePrimitive.Content
-          components={{ Text: MarkdownText, tools: { Fallback: ToolFallbackCustom || ToolFallback } }}
+          components={{
+            Text: MarkdownText,
+            tools: { Fallback: ToolFallbackCustom || ToolFallback },
+            Image: ImageComponent,
+          }}
         />
       </div>
 
