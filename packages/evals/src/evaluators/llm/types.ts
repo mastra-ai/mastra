@@ -30,15 +30,23 @@ export type LLMEvaluatorReasonPromptArgs = InputOutputPair & {
   outcomes: Outcome[];
 };
 
-export type LLMEvaluatorReasonPrompt = (args: LLMEvaluatorReasonPromptArgs) => Promise<string> | string;
+export interface LLMEvaluatorPrompt<T> {
+  template: string;
+  format?: (args: T) => Promise<string> | string;
+}
 
-export type LLMEvaluatorPromptArgs = InputOutputPair & {
+export type LLMEvaluatorReasonPrompt = LLMEvaluatorPrompt<LLMEvaluatorReasonPromptArgs>;
+
+export type LLMEvaluatorEvalPromptArgs = {
+  input: string;
+  output: string;
+  statements?: string[];
   agent: Agent;
+  settings: EvaluatorSettings;
   context?: string[];
-  [key: string]: any;
 };
 
-export type LLMEvaluatorEvalPrompt = (args: LLMEvaluatorPromptArgs) => Promise<string> | string;
+export type LLMEvaluatorEvalPrompt = LLMEvaluatorPrompt<LLMEvaluatorEvalPromptArgs>;
 
 export type LLMEvaluatorScorerArgs = InputOutputPair & {
   agent: Agent;

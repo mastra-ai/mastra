@@ -26,10 +26,14 @@ export class AnswerRelevancy extends LLMEvaluator {
       name: 'Answer Relevancy',
       instructions: ANSWER_RELEVANCY_INSTRUCTIONS,
       model,
-      reasonTemplate: REASON_TEMPLATE,
-      evalTemplate: EVAL_TEMPLATE,
-      reasonPrompt: generateReasonPrompt,
-      evalPrompt: generateEvaluationPrompt,
+      reasonPrompt: {
+        template: REASON_TEMPLATE,
+        format: generateReasonPrompt,
+      },
+      evalPrompt: {
+        template: EVAL_TEMPLATE,
+        format: generateEvaluationPrompt,
+      },
       scorer: calculateAnswerRelevancyScore,
       settings: {
         scale: scale ?? 1,

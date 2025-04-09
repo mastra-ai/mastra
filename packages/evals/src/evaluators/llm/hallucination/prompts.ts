@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import type { LLMEvaluatorPromptArgs, LLMEvaluatorReasonPromptArgs } from '../types';
+import type { LLMEvaluatorEvalPromptArgs, LLMEvaluatorReasonPromptArgs } from '../types';
 
 export const AGENT_INSTRUCTIONS = `You are a precise and thorough hallucination evaluator. Your job is to determine if an LLM's output contains information not supported by or contradicts the provided context.
 
@@ -172,7 +172,7 @@ export function generateReasonPrompt({
   }`;
 }
 
-export async function generateEvaluationPrompt({ agent, output, context }: LLMEvaluatorPromptArgs) {
+export async function generateEvaluationPrompt({ agent, output, context }: LLMEvaluatorEvalPromptArgs) {
   const claimsPrompt = generateClaimExtractionPrompt({ output });
   const claimsResult = await agent.generate(claimsPrompt, {
     output: z.object({

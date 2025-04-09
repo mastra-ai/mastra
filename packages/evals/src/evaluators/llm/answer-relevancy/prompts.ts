@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import type { LLMEvaluatorPromptArgs, LLMEvaluatorReasonPromptArgs } from '../types';
+import type { LLMEvaluatorReasonPromptArgs, LLMEvaluatorEvalPromptArgs } from '../types';
 
 export const ANSWER_RELEVANCY_INSTRUCTIONS = `
     You are a balanced and nuanced answer relevancy evaluator. Your job is to determine if LLM outputs are relevant to the input, including handling partially relevant or uncertain cases.
@@ -173,7 +173,7 @@ export function generateEvaluatePrompt({ input, statements }: { input: string; s
     `;
 }
 
-export async function generateEvaluationPrompt({ agent, input, output }: LLMEvaluatorPromptArgs) {
+export async function generateEvaluationPrompt({ input, output, agent }: LLMEvaluatorEvalPromptArgs) {
   const statementPrompt = generateEvaluationStatementsPrompt({ output });
   const statements = await agent.generate(statementPrompt, {
     output: z.object({
