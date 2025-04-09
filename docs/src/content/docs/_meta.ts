@@ -3,14 +3,14 @@ const meta = {
   "getting-started": {
     title: "Getting Started",
   },
-  guides: {
-    title: "Guides",
-  },
   frameworks: {
     title: "Frameworks",
   },
   agents: {
     title: "Agents",
+  },
+  memory: {
+    title: "Memory",
   },
   workflows: {
     title: "Workflows",
@@ -38,7 +38,6 @@ const meta = {
   },
   integrations: "Integrations",
   community: "Community",
-  reference: "Reference",
 };
 
 export default meta;

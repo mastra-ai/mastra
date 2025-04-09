@@ -1,6 +1,5 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import type { Tool, Context } from 'tylerbarnes-fastmcp-fix';
 import { z } from 'zod';
 import { fromPackageRoot } from '../utils';
 
@@ -42,7 +41,7 @@ const examplesListing =
     ? '\n\nAvailable examples: ' + initialExamples.map(ex => ex.name).join(', ')
     : '\n\nNo examples available yet. Run the documentation preparation script first.';
 
-const examplesSchema = z.object({
+export const examplesInputSchema = z.object({
   example: z
     .string()
     .optional()
@@ -51,21 +50,48 @@ const examplesSchema = z.object({
     ),
 });
 
-type ExamplesParams = z.infer<typeof examplesSchema>;
+export type ExamplesInput = z.infer<typeof examplesInputSchema>;
 
-export const examplesTool: Tool<any, typeof examplesSchema> = {
+export const examplesTool = {
   name: 'mastraExamples',
   description:
     'Get code examples from the Mastra.ai examples directory. Without a specific example name, lists all available examples. With an example name, returns the full source code of that example.',
-  parameters: examplesSchema,
-  execute: async (args: ExamplesParams, _context: Context<any>) => {
-    if (!args.example) {
-      const examples = await listCodeExamples();
-      return ['Available code examples:', '', ...examples.map(ex => `- ${ex.name}`)].join('\n');
-    }
+  execute: async (args: ExamplesInput) => {
+    try {
+      if (!args.example) {
+        const examples = await listCodeExamples();
+        return {
+          content: [
+            {
+              type: 'text',
+              text: ['Available code examples:', '', ...examples.map(ex => `- ${ex.name}`)].join('\n'),
+            },
+          ],
+          isError: false,
+        };
+      }
 
-    const filename = args.example.endsWith('.md') ? args.example : `${args.example}.md`;
-    const content = await readCodeExample(filename);
-    return content;
+      const filename = args.example.endsWith('.md') ? args.example : `${args.example}.md`;
+      const content = await readCodeExample(filename);
+      return {
+        content: [
+          {
+            type: 'text',
+            text: content,
+          },
+        ],
+        isError: false,
+      };
+    } catch (error) {
+      return {
+        content: [
+          {
+            type: 'text',
+            text: `Error: ${error instanceof Error ? error.message : String(error)}`,
+          },
+        ],
+        isError: true,
+      };
+    }
   },
 };

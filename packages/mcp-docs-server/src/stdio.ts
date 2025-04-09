@@ -1,6 +1,7 @@
 #!/usr/bin/env node
-import { server } from './index.js';
+import { runServer } from './index';
 
-void server.start({
-  transportType: 'stdio',
+runServer().catch(error => {
+  console.error('Fatal error running server:', error);
+  process.exit(1);
 });

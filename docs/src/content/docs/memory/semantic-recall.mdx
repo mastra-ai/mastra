@@ -1,0 +1,122 @@
+# Recalling Relevant History
+
+If you ask your friend what they did last weekend, they will search in their memory for events associated with "last weekend" and then tell you what they did. That's sort of like how semantic recall works in Mastra.
+
+## How Semantic Recall Works
+
+Semantic recall is RAG-based search that helps agents maintain context across longer interactions when messages are no longer within [recent conversation history](./overview.mdx#conversation-history).
+
+It uses vector embeddings of messages for similarity search, integrates with various vector stores, and has configurable context windows around retrieved messages.
+
+<br />
+<img
+  src="/docs/semantic-recall.png"
+  alt="Diagram showing Mastra Memory semantic recall"
+  width={800}
+/>
+
+## Quick Start
+
+Semantic recall is enabled by default, so if you give your agent memory it will be included:
+
+```typescript {9}
+import { Agent } from "@mastra/core/agent";
+import { Memory } from "@mastra/memory";
+import { openai } from "@ai-sdk/openai";
+
+const agent = new Agent({
+  name: "SupportAgent",
+  instructions: "You are a helpful support agent.",
+  model: openai("gpt-4o"),
+  memory: new Memory(),
+});
+```
+
+## Recall configuration
+
+The two main parameters that control semantic recall behavior are:
+
+1. **topK**: How many semantically similar messages to retrieve
+2. **messageRange**: How much surrounding context to include with each match
+
+```typescript {5-6}
+const agent = new Agent({
+  memory: new Memory({
+    options: {
+      semanticRecall: {
+        topK: 3, // Retrieve 3 most similar messages
+        messageRange: 2, // Include 2 messages before and after each match
+      },
+    },
+  }),
+});
+```
+
+### Storage configuration
+
+Semantic recall relies on a [storage and vector db](/reference/memory/Memory#parameters) to store messages and their embeddings.
+
+```ts {8-17}
+import { Memory } from "@mastra/memory";
+import { Agent } from "@mastra/core/agent";
+import { LibSQLStore } from "@mastra/core/storage/libsql";
+import { LibSQLVector } from "@mastra/core/vector/libsql";
+
+const agent = new Agent({
+  memory: new Memory({
+    // this is the default storage db if omitted
+    storage: new LibSQLStore({
+      config: {
+        url: "file:local.db",
+      },
+    }),
+    // this is the default vector db if omitted
+    vector: new LibSQLVector({
+      connectionUrl: "file:local.db",
+    }),
+  }),
+});
+```
+
+**Storage/vector code Examples**:
+
+- [LibSQL](/examples/memory/memory-with-libsql)
+- [Postgres](/examples/memory/memory-with-pg)
+- [Upstash](/examples/memory/memory-with-upstash)
+
+### Embedder configuration
+
+Semantic recall relies an [embedding model](/reference/memory/Memory#embedder) to convert messages into embeddings. By default Mastra uses FastEmbed but you can specify another [embedding model](https://sdk.vercel.ai/docs/ai-sdk-core/embeddings).
+
+```ts {7}
+import { Memory } from "@mastra/memory";
+import { Agent } from "@mastra/core/agent";
+import { openai } from "@ai-sdk/openai";
+
+const agent = new Agent({
+  memory: new Memory({
+    embedder: openai.embedding("text-embedding-3-small"),
+  }),
+});
+```
+
+### Disabling
+
+There is a performance impact to using semantic recall. New messages are converted into embeddings and used to query a vector database before new messages are sent to the LLM.
+
+Semantic recall is enabled by default but can be disabled when not needed:
+
+```typescript {4}
+const agent = new Agent({
+  memory: new Memory({
+    options: {
+      semanticRecall: false,
+    },
+  }),
+});
+```
+
+You might want to disable semantic recall in scenarios like:
+
+- When [conversation history](./getting-started.mdx#conversation-history-last-messages) provide sufficient context for the current conversation.
+- In performance-sensitive applications, like realtime two-way audio, where the added latency of creating embeddings and running vector queries is noticeable.

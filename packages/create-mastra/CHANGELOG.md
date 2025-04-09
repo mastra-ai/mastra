@@ -1,5 +1,85 @@
 # create-mastra
 
+## 0.2.7
+
+### Patch Changes
+
+- d3c372c: Show status UI of steps on playground workflow when workflow has no triggerSchema
+  Show number of steps on workflows table
+- df5989d: Correct playground model setting maxSteps reset value
+
+## 0.2.7-alpha.1
+
+### Patch Changes
+
+- df5989d: Correct playground model setting maxSteps reset value
+
+## 0.2.7-alpha.0
+
+### Patch Changes
+
+- d3c372c: Show status UI of steps on playground workflow when workflow has no triggerSchema
+  Show number of steps on workflows table
+
+## 0.2.6
+
+### Patch Changes
+
+- 99e2998: Set default max steps to 5
+- 8fdb414: Custom mastra server cors config
+
+## 0.2.6-alpha.0
+
+### Patch Changes
+
+- 99e2998: Set default max steps to 5
+- 8fdb414: Custom mastra server cors config
+
+## 0.2.5
+
+### Patch Changes
+
+- 87b96d7: set playground agent maxSteps default to 3
+
+## 0.2.5-alpha.0
+
+### Patch Changes
+
+- 87b96d7: set playground agent maxSteps default to 3
+
+## 0.2.4
+
+### Patch Changes
+
+- a4a1151: Fix playground freezing when buffer is passed between steps
+- 9d13790: update playground-ui dynamic form, cleanups
+- 13ade6a: update favicon shape
+- 055c4ea: Fix traces page showing e.reduce error
+- 124ce08: Ability to set maxTokens, temperature, and other common features in playground
+- 789bef3: Make runId optional for workflow startAsync api
+- 40dca45: Fix expanding workflow sidebar not expanding the output section
+- 8393832: Handle nested workflow view on workflow graph
+- 23999d4: Add Design System tokens and components into playground ui
+- 8076ecf: Unify workflow watch/start response
+- 9e7d46a: Fix scroll issue on playground tools page
+- d16ed18: Make playground-ui dynamic forms better
+
+## 0.2.4-alpha.4
+
+### Patch Changes
+
+- a4a1151: Fix playground freezing when buffer is passed between steps
+- 13ade6a: update favicon shape
+- 124ce08: Ability to set maxTokens, temperature, and other common features in playground
+- 23999d4: Add Design System tokens and components into playground ui
+- 9e7d46a: Fix scroll issue on playground tools page
+
+## 0.2.4-alpha.3
+
+### Patch Changes
+
+- 055c4ea: Fix traces page showing e.reduce error
+
 ## 0.2.4-alpha.2
 
 ### Patch Changes

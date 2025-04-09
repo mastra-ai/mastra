@@ -65,6 +65,25 @@ export const mastra = new Mastra({
 });
 ```
 
+## Custom CORS Config
+
+Mastra allows you to configure CORS (Cross-Origin Resource Sharing) settings for your server.
+
+```typescript copy showLineNumbers
+import { Mastra } from '@mastra/core';
+
+export const mastra = new Mastra({
+  server: {
+    cors: {
+      origin: ['https://example.com'], // Allow specific origins or '*' for all
+      allowMethods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+      allowHeaders: ['Content-Type', 'Authorization'],
+      credentials: false,
+    }
+  }
+});
+```
+
 ## Middleware
 
 Mastra allows you to configure custom middleware functions that will be applied to API routes. This is useful for adding authentication, logging, CORS, or other HTTP-level functionality to your API endpoints.

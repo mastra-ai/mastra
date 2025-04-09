@@ -9,7 +9,6 @@ import {
   getWorkflowRunHandler,
   createRunHandler,
   startWorkflowRunHandler,
-  watchWorkflowHandler,
   resumeAsyncWorkflowHandler,
   resumeWorkflowHandler,
   getWorkflowRunsHandler,

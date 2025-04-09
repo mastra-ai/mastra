@@ -152,7 +152,7 @@ export class PostgresStore extends MastraStorage {
     }
 
     if (filters) {
-      Object.entries(filters).forEach(([key, value]) => {
+      Object.entries(filters).forEach(([key]) => {
         conditions.push(`${key} = \$${idx++}`);
       });
     }
@@ -174,7 +174,7 @@ export class PostgresStore extends MastraStorage {
     }
 
     if (filters) {
-      for (const [key, value] of Object.entries(filters)) {
+      for (const [, value] of Object.entries(filters)) {
         args.push(value);
       }
     }

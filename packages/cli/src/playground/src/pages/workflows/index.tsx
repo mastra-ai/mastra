@@ -1,4 +1,4 @@
-import { Workflow } from 'lucide-react';
+import { Footprints, Workflow } from 'lucide-react';
 import { useNavigate } from 'react-router';
 
 import { Button } from '@/components/ui/button';
@@ -16,6 +16,7 @@ function Workflows() {
   const workflowList = Object.entries(workflows).map(([key, workflow]) => ({
     id: key,
     name: workflow.name,
+    stepsCount: Object.keys(workflow.steps)?.length,
   }));
   ``;
   return (
@@ -31,29 +32,33 @@ function Workflows() {
                 id: 'name',
                 header: 'Name',
                 cell: ({ row }) => (
-                  <button className="w-full h-full flex justify-start py-4">
-                    <span className="text-mastra-el-5 text-sm  truncate">{row.original.name}</span>
-                  </button>
+                  <div className="w-full h-full flex justify-start py-4">
+                    <span className="text-mastra-el-5 text-sm truncate">{row.original.name}</span>
+                  </div>
                 ),
               },
-
               {
-                id: 'model',
-                header: 'Model',
+                id: 'action',
+                header: 'Action',
                 cell: ({ row }) => (
-                  <button
-                    className="w-full h-full flex justify-start py-4"
-                    onClick={() => {
-                      navigate(`/workflows/${row.original.id}/graph`);
-                    }}
-                  >
-                    <span className="hover:no-underline">
-                      <Button size="sm" variant="outline">
-                        <Workflow className="h-4 w-4 text-inherit" />
-                        View Workflow
-                      </Button>
-                    </span>
-                  </button>
+                  <div className="flex justify-end items-center gap-5 py-4">
+                    <div className="bg-accent w-fit flex items-center gap-1 rounded-md py-1 px-2">
+                      <Footprints className="text-inherit w-4 h-4" />
+                      <span className="text-mastra-el-5 text-sm">
+                        {row.original.stepsCount} step{row.original.stepsCount > 1 ? 's' : ''}
+                      </span>
+                    </div>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => {
+                        navigate(`/workflows/${row.original.id}/graph`);
+                      }}
+                    >
+                      <Workflow className="h-4 w-4 text-inherit" />
+                      View Workflow
+                    </Button>
+                  </div>
                 ),
               },
             ]}

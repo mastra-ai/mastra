@@ -1,8 +1,8 @@
-import { WorkflowRunResult } from '@mastra/client-js';
+import { ExtendedWorkflowRunResult } from '@/hooks/use-workflows';
 import { createContext, useState } from 'react';
 
 type WorkflowRunContextType = {
-  result: WorkflowRunResult | null;
+  result: ExtendedWorkflowRunResult | null;
   setResult: React.Dispatch<React.SetStateAction<any>>;
   payload: any;
   setPayload: React.Dispatch<React.SetStateAction<any>>;
@@ -12,7 +12,7 @@ type WorkflowRunContextType = {
 export const WorkflowRunContext = createContext<WorkflowRunContextType>({} as WorkflowRunContextType);
 
 export function WorkflowRunProvider({ children }: { children: React.ReactNode }) {
-  const [result, setResult] = useState<WorkflowRunResult | null>(null);
+  const [result, setResult] = useState<ExtendedWorkflowRunResult | null>(null);
   const [payload, setPayload] = useState<any>(null);
 
   const clearData = () => {

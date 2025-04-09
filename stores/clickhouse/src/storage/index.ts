@@ -211,7 +211,6 @@ export class ClickhouseStore extends MastraStorage {
     attributes?: Record<string, string>;
     filters?: Record<string, any>;
   }): Promise<any[]> {
-    let idx = 1;
     const limit = perPage;
     const offset = page * perPage;
 
@@ -399,7 +398,7 @@ export class ClickhouseStore extends MastraStorage {
       const keyEntries = Object.entries(keys);
       const conditions = keyEntries
         .map(
-          ([key], index) =>
+          ([key]) =>
             `"${key}" = {var_${key}:${COLUMN_TYPES[TABLE_SCHEMAS[tableName as TABLE_NAMES]?.[key]?.type ?? 'text']}}`,
         )
         .join(' AND ');

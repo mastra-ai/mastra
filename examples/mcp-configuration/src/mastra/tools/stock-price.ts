@@ -1,35 +1,129 @@
-import { FastMCP } from 'fastmcp';
+import { Server } from '@modelcontextprotocol/sdk/server/index.js';
+import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
+import { CallToolRequestSchema, ListToolsRequestSchema } from '@modelcontextprotocol/sdk/types.js';
 import { z } from 'zod';
+import { zodToJsonSchema } from 'zod-to-json-schema';
 
 const getStockPrice = async (symbol: string) => {
   const data = await fetch(`https://mastra-stock-data.vercel.app/api/stock-data?symbol=${symbol}`).then(r => r.json());
   return data.prices['4. close'];
 };
 
-const server = new FastMCP({
-  name: 'Stock Price Server',
-  version: '1.0.0',
+const server = new Server(
+  {
+    name: 'Stock Price Server',
+    version: '1.0.0',
+  },
+  {
+    capabilities: {
+      tools: {},
+    },
+  },
+);
+
+const stockInputSchema = z.object({
+  symbol: z.string().describe('Stock symbol'),
 });
 
-server.addTool({
+const stockTool = {
   name: 'getStockPrice',
   description: "Fetches the last day's closing stock price for a given symbol",
-  parameters: z.object({
-    symbol: z.string(),
-  }),
-  execute: async args => {
-    console.log('Using tool to fetch stock price for', args.symbol);
-    const price = await getStockPrice(args.symbol);
-    return JSON.stringify({
-      symbol: args.symbol,
-      currentPrice: price,
-    });
+  execute: async (args: z.infer<typeof stockInputSchema>) => {
+    try {
+      console.log('Using tool to fetch stock price for', args.symbol);
+      const price = await getStockPrice(args.symbol);
+      return {
+        content: [
+          {
+            type: 'text',
+            text: JSON.stringify({
+              symbol: args.symbol,
+              currentPrice: price,
+            }),
+          },
+        ],
+        isError: false,
+      };
+    } catch (error) {
+      if (error instanceof Error) {
+        return {
+          content: [
+            {
+              type: 'text',
+              text: `Stock price fetch failed: ${error.message}`,
+            },
+          ],
+          isError: true,
+        };
+      }
+      return {
+        content: [
+          {
+            type: 'text',
+            text: 'An unknown error occurred.',
+          },
+        ],
+        isError: true,
+      };
+    }
   },
+};
+
+// Set up request handlers
+server.setRequestHandler(ListToolsRequestSchema, async () => ({
+  tools: [
+    {
+      name: stockTool.name,
+      description: stockTool.description,
+      inputSchema: zodToJsonSchema(stockInputSchema),
+    },
+  ],
+}));
+
+server.setRequestHandler(CallToolRequestSchema, async request => {
+  try {
+    switch (request.params.name) {
+      case 'getStockPrice': {
+        const args = stockInputSchema.parse(request.params.arguments);
+        return await stockTool.execute(args);
+      }
+      default:
+        return {
+          content: [
+            {
+              type: 'text',
+              text: `Unknown tool: ${request.params.name}`,
+            },
+          ],
+          isError: true,
+        };
+    }
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      return {
+        content: [
+          {
+            type: 'text',
+            text: `Invalid arguments: ${error.errors.map(e => `${e.path.join('.')}: ${e.message}`).join(', ')}`,
+          },
+        ],
+        isError: true,
+      };
+    }
+    return {
+      content: [
+        {
+          type: 'text',
+          text: `Error: ${error instanceof Error ? error.message : String(error)}`,
+        },
+      ],
+      isError: true,
+    };
+  }
 });
 
-// Start the server with stdio transport
-server.start({
-  transportType: 'stdio',
-});
+// Start the server
+const transport = new StdioServerTransport();
+await server.connect(transport);
 
 export { server };
