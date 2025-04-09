@@ -12,6 +12,14 @@ import type {
   Outcome,
 } from './types';
 
+export type PromptTemplate = string;
+
+export interface PromptVariables {
+  [key: string]: string | number | boolean | object;
+}
+
+export type PromptFormatter = (vars: PromptVariables) => string;
+
 export interface EvaluatorConfig {
   name: string;
   instructions: string;
@@ -20,6 +28,9 @@ export interface EvaluatorConfig {
   scorer: LLMEvaluatorScorer;
   model: LanguageModel;
   settings?: EvaluatorSettings;
+  // Static templates for UI display
+  reasonTemplate?: PromptTemplate;
+  evalTemplate?: PromptTemplate;
 }
 
 /**
@@ -30,6 +41,8 @@ export class LLMEvaluator extends Evaluator {
   protected agent: Agent;
   protected settings: EvaluatorSettings;
   protected _name: string;
+  protected reasonTemplate?: string;
+  protected evalTemplate?: string;
   protected reasonPrompt?: LLMEvaluatorReasonPrompt;
   protected evalPrompt?: LLMEvaluatorEvalPrompt;
   protected scorer: LLMEvaluatorScorer;
@@ -49,6 +62,8 @@ export class LLMEvaluator extends Evaluator {
       instructions: config.instructions,
       model: config.model,
     });
+    this.reasonTemplate = config.reasonTemplate;
+    this.evalTemplate = config.evalTemplate;
     this.reasonPrompt = config.reasonPrompt;
     this.evalPrompt = config.evalPrompt;
     this.scorer = config.scorer;
@@ -70,6 +85,30 @@ export class LLMEvaluator extends Evaluator {
 
   get modelId(): string {
     return this.agent.llm.getModelId();
+  }
+
+  /**
+   * Get the static template for the reasoning prompt
+   */
+  getReasonTemplate(): PromptTemplate | undefined {
+    return this.reasonTemplate;
+  }
+
+  /**
+   * Get the static template for the evaluation prompt
+   */
+  getEvalTemplate(): PromptTemplate | undefined {
+    return this.evalTemplate;
+  }
+
+  /**
+   * Format a template with variables
+   */
+  protected formatTemplate(template: PromptTemplate, vars: PromptVariables): string {
+    return template.replace(/\{([^}]+)\}/g, (_, key) => {
+      const value = vars[key];
+      return value !== undefined ? String(value) : `{${key}}`;
+    });
   }
 
   get provider(): string {

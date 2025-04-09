@@ -1,6 +1,12 @@
 import type { LanguageModel } from '@mastra/core/llm';
 import { LLMEvaluator } from '../evaluator';
-import { ANSWER_RELEVANCY_INSTRUCTIONS, generateReasonPrompt, generateEvaluationPrompt } from './prompts';
+import {
+  ANSWER_RELEVANCY_INSTRUCTIONS,
+  generateReasonPrompt,
+  generateEvaluationPrompt,
+  REASON_TEMPLATE,
+  EVAL_TEMPLATE,
+} from './prompts';
 import { calculateAnswerRelevancyScore } from './score';
 
 export interface AnswerRelevancyOptions {
@@ -20,6 +26,8 @@ export class AnswerRelevancy extends LLMEvaluator {
       name: 'Answer Relevancy',
       instructions: ANSWER_RELEVANCY_INSTRUCTIONS,
       model,
+      reasonTemplate: REASON_TEMPLATE,
+      evalTemplate: EVAL_TEMPLATE,
       reasonPrompt: generateReasonPrompt,
       evalPrompt: generateEvaluationPrompt,
       scorer: calculateAnswerRelevancyScore,

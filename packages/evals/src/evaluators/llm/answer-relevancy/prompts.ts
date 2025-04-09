@@ -13,68 +13,26 @@ export const ANSWER_RELEVANCY_INSTRUCTIONS = `
     6. Responses that discuss the type of information being asked show partial relevance
 `;
 
+export const STATEMENT_TEMPLATE =
+  'Given the text, break it down into meaningful statements while preserving context and relationships.\n  Don\'t split too aggressively.\n  \n  Split compound statements particularly when they:\n  - Are joined by "and"\n  - Contain multiple distinct facts or claims\n  - Have multiple descriptive elements about the subject\n  \n  \n  Handle special cases:\n  - A single word answer should be treated as a complete statement\n  - Error messages should be treated as a single statement\n  - Empty strings should return an empty list\n  - When splitting text, keep related information together\n  \n  Example:\n  Example text: Look! A bird! Birds are an interesting animal.\n  \n  {{\n      "statements": ["Look!", "A bird!", "Birds are interesting animals."]\n  }}\n  \n  Please return only JSON format with "statements" array.\n  Return empty list for empty input.\n  \n  Text:\n  {output}\n  \n  JSON:\n  ';
+
 export function generateEvaluationStatementsPrompt({ output }: { output: string }) {
-  return `Given the text, break it down into meaningful statements while preserving context and relationships.
-  Don't split too aggressively.
-  
-  Split compound statements particularly when they:
-  - Are joined by "and"
-  - Contain multiple distinct facts or claims
-  - Have multiple descriptive elements about the subject
-  
-  
-  Handle special cases:
-  - A single word answer should be treated as a complete statement
-  - Error messages should be treated as a single statement
-  - Empty strings should return an empty list
-  - When splitting text, keep related information together
-  
-  Example:
-  Example text: Look! A bird! Birds are an interesting animal.
-  
-  {{
-      "statements": ["Look!", "A bird!", "Birds are interesting animals."]
-  }}
-  
-  Please return only JSON format with "statements" array.
-  Return empty list for empty input.
-  
-  Text:
-  ${output}
-  
-  JSON:
-  `;
+  return STATEMENT_TEMPLATE.replace('{output}', output);
 }
 
+export const REASON_TEMPLATE =
+  'Explain the irrelevancy score where 0 is the lowest and {scale} is the highest for the LLM\'s response using this context:\n    Context:\n    Input: {input}\n    Output: {output}\n    Score: {score}\n    Outcomes: {outcomes}\n    \n    Rules:\n    - Explain score based on mix of direct answers and related context\n    - Consider both full and partial relevance\n    - Keep explanation concise and focused\n    - Use given score, don\'t recalculate\n    - Don\'t judge factual correctness\n    - Explain both relevant and irrelevant aspects\n    - For mixed responses, explain the balance\n      Format:\n      {\n          "reason": "The score is {score} because {explanation of overall relevance}"\n      }\n      Example Responses:\n      {\n          "reason": "The score is 7 because while the first statement directly answers the question, the additional context is only partially relevant"\n      }\n      {\n          "reason": "The score is 3 because while the answer discusses the right topic, it doesn\'t directly address the question"\n      }\n      ';
+
 export function generateReasonPrompt({ input, output, eval_result, settings, outcomes }: LLMEvaluatorReasonPromptArgs) {
-  return `Explain the irrelevancy score where 0 is the lowest and ${settings.scale} is the highest for the LLM's response using this context:
-    Context:
-    Input: ${input}
-    Output: ${output}
-    Score: ${eval_result.score}
-    Outcomes: ${JSON.stringify(outcomes)}
-    
-    Rules:
-    - Explain score based on mix of direct answers and related context
-    - Consider both full and partial relevance
-    - Keep explanation concise and focused
-    - Use given score, don't recalculate
-    - Don't judge factual correctness
-    - Explain both relevant and irrelevant aspects
-    - For mixed responses, explain the balance
-      Format:
-      {
-          "reason": "The score is {score} because {explanation of overall relevance}"
-      }
-      Example Responses:
-      {
-          "reason": "The score is 7 because while the first statement directly answers the question, the additional context is only partially relevant"
-      }
-      {
-          "reason": "The score is 3 because while the answer discusses the right topic, it doesn't directly address the question"
-      }
-      `;
+  return REASON_TEMPLATE.replace('{scale}', String(settings.scale))
+    .replace('{input}', input)
+    .replace('{output}', output)
+    .replace('{score}', String(eval_result.score))
+    .replace('{outcomes}', JSON.stringify(outcomes));
 }
+
+export const EVAL_TEMPLATE =
+  'Evaluate each statement\'s relevance to the input question, considering direct answers, related context, and uncertain cases.\n\n      Return JSON with array of outcome objects. Each outcome must include:\n      - "outcome": "yes", "no", or "unsure"\n      - "reason": Clear explanation of the outcome\n      - "claim": The statement being evaluated\n\n      Outcome Guidelines:\n      - "yes": Statement explicitly and directly answers the input question when it:\n          * Contains specific answer to the question asked (e.g., "The color of the sky is blue")\n          * States explicit relationship between key concepts (e.g., "X is the CEO of company Y")\n          * Can stand alone as a complete answer\n          * Contains appropriate question-type response (e.g., location for "where", person for "who")\n          * Note: If statement is incorrect but directly addresses the question, mark as "unsure"\n\n      - "unsure": Statement shows partial relevance when it:\n          * Contains related information but not a direct answer\n          * Discusses the topic without addressing the specific question\n          * Provides context that helps understand the answer\n          * Contains incorrect information but addresses the question\n          * Mentions key concepts without clear relationships\n\n      - "no": Statement is irrelevant when it:\n          * Does not address the question at all\n          * Contains unrelated information\n          * Is empty or meaningless\n          * Only mentions topics without connection to question\n\n      Evaluation Guidelines:\n      - Subject mentions alone are NOT enough for relevance - they must connect to what\'s being asked about\n      - Empty or meaningless statements are always "no"\n      - General facts about the subject without connection to the question type should be marked as "no"\n      - ALWAYS mark a statement as "no" if it discusses the topic without any connection to the question type\n      - Statements that mention neither the subject nor the type of information are always "no"\n      - Type-level relevance overrides topic-only content\n      - Measurement/quantity relevance counts as type-level relevance\n      - Administrative/governance terms are only relevant if they relate to the question type\n      - Descriptive facts about the subject should be marked as "no" unless they directly relate to the question type\n\n\n      Examples of "no" statements:\n          * "Japan has beautiful seasons" for "What is Japan\'s largest city?"\n          * "Trees grow tall" for "How tall is Mount Everest?"\n          * "The weather is nice" for "Who is the president?"\n\n      Example:\n      Input: "What color is the sky during daytime?"\n      Statements: [\n        "The sky is blue during daytime",\n        "The sky is full of clouds", \n        "I had breakfast today",\n        "Blue is a beautiful color",\n        "Many birds fly in the sky",\n        "",\n        "The sky is purple during daytime",\n        "Daytime is when the sun is up",\n      ]\n      JSON:\n      {{\n          "outcomes": [\n              {{\n                  "outcome": "yes",\n                  "reason": "This statement explicitly answers what color the sky is during daytime",\n                  "claim": "The sky is blue during daytime"\n              }},\n              {{\n                  "outcome": "unsure",\n                  "reason": "This statement describes the sky but doesn\'t address its color",\n                  "claim": "The sky is full of clouds"\n              }},\n              {{\n                  "outcome": "no",\n                  "reason": "This statement about breakfast is completely unrelated to the sky",\n                  "claim": "I had breakfast today"\n              }},\n              {{\n                  "outcome": "unsure",\n                  "reason": "This statement about blue is related to color but doesn\'t address the sky",\n                  "claim": "Blue is a beautiful color"\n              }},\n              {{\n                  "outcome": "unsure",\n                  "reason": "This statement is about the sky but doesn\'t address its color",\n                  "claim": "Many birds fly in the sky"\n              }},\n              {{\n                  "outcome": "no",\n                  "reason": "This statement is empty",\n                  "claim": ""\n              }},\n              {{\n                  "outcome": "unsure",\n                  "reason": "This statement is incorrect but contains relevant information and still addresses the question",\n                  "claim": "The sky is purple during daytime"\n              }},\n              {{\n                  "outcome": "no",\n                  "reason": "This statement is about daytime but doesn\'t address the sky",\n                  "claim": "Daytime is when the sun is up"\n              }}\n          ]\n      }}\n\n  The number of outcomes MUST MATCH the number of statements exactly.\n\n    Input:\n    {input}\n\n    Number of statements: {statementCount}\n\n    Statements:\n    {statements}\n\n    JSON:\n    ';
 
 export function generateEvaluatePrompt({ input, statements }: { input: string; statements: string[] }) {
   return `Evaluate each statement's relevance to the input question, considering direct answers, related context, and uncertain cases.
