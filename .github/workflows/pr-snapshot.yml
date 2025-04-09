@@ -1,12 +1,8 @@
-name: Manual Branch Run
+name: PR Snapshot version
 
 on:
   workflow_dispatch:
     inputs:
-      branch:
-        description: 'Branch to run on (cannot be main)'
-        required: true
-        type: string
       tag:
         description: 'Optional tag for snapshot version and npm publish (defaults to slugified branch name)'
         required: false
@@ -25,15 +21,13 @@ jobs:
 
     steps:
       - name: Check if branch is main
-        if: github.event.inputs.branch == 'main'
+        if: github.ref == 'refs/heads/main'
         run: |
           echo "Error: This workflow cannot be run on the main branch."
           exit 1
 
       - name: Checkout code
         uses: actions/checkout@v4
-        with:
-          ref: ${{ github.event.inputs.branch }}
 
       - uses: pnpm/action-setup@v4
         name: Install pnpm
@@ -56,7 +50,7 @@ jobs:
       - name: Generate slugified branch name
         id: slugify
         run: |
-          BRANCH_NAME="${{ github.event.inputs.branch }}"
+          BRANCH_NAME="$GITHUB_REF_NAME"
           # Simple slugification: replace non-alphanumeric with -, remove leading/trailing -, lowercase
           SLUG=$(echo "$BRANCH_NAME" | iconv -t ascii//TRANSLIT | sed -r 's/[^a-zA-Z0-9]+/-/g' | sed -r 's/^-+\|-+$//g' | tr 'A-Z' 'a-z')
           echo "SLUG_BRANCH_NAME=$SLUG" >> "$GITHUB_ENV"
