@@ -416,7 +416,7 @@ export class CloudflareStore extends MastraStorage {
       const threadMessagesKey = this.getThreadMessagesKey(threadId);
       const latestIds = await this.getLastN(threadMessagesKey, limit);
       latestIds.forEach(id => messageIds.add(id));
-    } catch (error) {
+    } catch {
       console.log(`No message order found for thread ${threadId}, skipping latest messages`);
     }
   }

@@ -52,9 +52,9 @@ export const createConfig = async () =>
       rules: {
         'no-unexpected-multiline': ERROR,
         'no-warning-comments': [ERROR, { terms: ['FIXME'], location: 'anywhere' }],
-        'import/no-duplicates': [WARN, { 'prefer-inline': false }],
+        'import/no-duplicates': [ERROR, { 'prefer-inline': false }],
         'import/order': [
-          WARN,
+          ERROR,
           {
             alphabetize: { order: 'asc', caseInsensitive: true },
             pathGroups: [{ pattern: '#*/**', group: 'internal' }],
@@ -109,7 +109,7 @@ export const createConfig = async () =>
         // we could enable this :(
         // 'import/no-unresolved': ERROR,
         'no-unused-vars': [
-          WARN,
+          ERROR,
           {
             args: 'after-used',
             argsIgnorePattern: '^_',
@@ -137,7 +137,7 @@ export const createConfig = async () =>
           },
           rules: {
             '@typescript-eslint/no-unused-vars': [
-              WARN,
+              ERROR,
               {
                 args: 'after-used',
                 argsIgnorePattern: '^_',
@@ -147,9 +147,9 @@ export const createConfig = async () =>
                 ignoreRestSiblings: true,
               },
             ],
-            'import/consistent-type-specifier-style': [WARN, 'prefer-top-level'],
+            'import/consistent-type-specifier-style': [ERROR, 'prefer-top-level'],
             '@typescript-eslint/consistent-type-imports': [
-              WARN,
+              ERROR,
               {
                 prefer: 'type-imports',
                 disallowTypeAnnotations: true,

@@ -230,6 +230,7 @@ describe.skip('CloudflareStore REST API', () => {
     });
   });
 
+  // eslint-disable-next-line vitest/no-focused-tests
   describe.only('Trace Operations', () => {
     beforeEach(async () => {
       await store.clearTable({ tableName: TABLE_TRACES });
