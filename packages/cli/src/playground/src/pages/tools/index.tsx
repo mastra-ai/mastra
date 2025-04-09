@@ -76,7 +76,7 @@ const Tools = () => {
   return (
     <div className="flex flex-col h-full w-full ">
       <Header title={`Tools`} />
-      <div className="w-full h-full grid grid-cols-[300px_1fr]  ">
+      <div className="w-full h-full grid grid-cols-[300px_1fr] overflow-hidden">
         <div className="w-full h-full border-r-[0.5px] border-mastra-border-1 py-6 px-4">
           <ul className=" flex flex-col gap-4">
             {Object.keys(tools).length > 0 && (
@@ -136,7 +136,7 @@ const Tools = () => {
             ))}
           </ul>
         </div>
-        <div className="flex flex-col gap-4 py-6 px-4">
+        <div className="flex flex-col gap-4 py-6 px-4 h-full overflow-y-scroll">
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-2">
             {isLoadingAgent ? (
               <>
@@ -164,10 +164,10 @@ const Tools = () => {
                     navigate(`/tools/all/${tool.id}`);
                   }}
                   key={index}
-                  className=" hover:bg-mastra-bg-4/80 transition-colors flex flex-col  gap-[0.62rem] bg-mastra-bg-13 px-[0.62rem] py-2 rounded-[0.375rem] cursor-pointer border-[0.5px] border-mastra-border-1"
+                  className=" hover:bg-mastra-bg-4/80 transition-colors flex flex-col gap-[0.62rem] bg-mastra-bg-13 px-[0.62rem] py-2 rounded-[0.375rem] cursor-pointer border-[0.5px] border-mastra-border-1"
                 >
                   <h3 className="text-sm text-mastra-el-6">{name}</h3>
-                  <p className="text-sm text-mastra-el-2">{tool.description}</p>
+                  <p className="text-sm text-mastra-el-2 max-h-72 overflow-y-scroll">{tool.description}</p>
                 </div>
               ))
             ) : (
@@ -177,10 +177,10 @@ const Tools = () => {
                     navigate(`/tools/${selectedAgentId}/${tool.id}`);
                   }}
                   key={index}
-                  className=" hover:bg-mastra-bg-4/80 transition-colors flex flex-col  gap-[0.62rem] bg-mastra-bg-13 px-[0.62rem] py-2 rounded-[0.375rem] cursor-pointer border-[0.5px] border-mastra-border-1"
+                  className=" hover:bg-mastra-bg-4/80 transition-colors flex flex-col gap-[0.62rem] bg-mastra-bg-13 px-[0.62rem] py-2 rounded-[0.375rem] cursor-pointer border-[0.5px] border-mastra-border-1"
                 >
                   <h3 className="text-sm text-mastra-el-6">{name}</h3>
-                  <p className="text-sm text-mastra-el-2">{tool.description}</p>
+                  <p className="text-sm text-mastra-el-2 max-h-72 overflow-y-scroll">{tool.description}</p>
                 </div>
               ))
             )}

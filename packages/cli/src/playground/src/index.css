@@ -16,16 +16,16 @@
 }
 
 @font-face {
-  font-family: 'CommitMono';
+  font-family: 'GeistMonoVF';
   src:
-    local('CommitMono'),
-    url('./assets/fonts/CommitMono.ttf') format('truetype');
+    local('GeistMonoVF'),
+    url('./assets/fonts/GeistMonoVF.woff') format('woff');
 }
 
 :root {
   --font-inter: 'Inter', sans-serif;
   --tasa-explorer: 'TasaExplorer', sans-serif;
-  --commit-mono: 'CommitMono', monospace;
+  --geist-mono: 'GeistMonoVF', monospace;
 }
 
 /* width */
@@ -191,10 +191,10 @@
 div[class^='language-'],
 pre[class^='language-'],
 code[class^='language-'] {
-  font-family: var(--commit-mono) !important;
+  font-family: var(--geist-mono) !important;
 }
 
-th:has(header){
-  height:var(--top-bar-height) !important;
+th:has(header) {
+  height: var(--top-bar-height) !important;
   padding-block: 0 !important ;
 }

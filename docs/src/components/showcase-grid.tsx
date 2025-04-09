@@ -16,7 +16,7 @@ const ShowcaseCard = ({
   image,
   link,
 }: ShowcaseCardProps) => (
-  <div className="group rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 overflow-hidden transition-all">
+  <div className="group showcase-item rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 overflow-hidden transition-all">
     <a href={link} className="block" target="_blank" rel="noopener noreferrer">
       <div className="aspect-video relative overflow-hidden bg-zinc-900">
         <Image
@@ -47,38 +47,84 @@ const ShowcaseCard = ({
 export const ShowcaseGrid = () => {
   const showcaseItems: ShowcaseCardProps[] = [
     {
+      title: "Olive",
+      description:
+        "Generate powerful tools and dashboards connected to your data sources in minutes.",
+      image: "/showcase/optimized/from-olive.png",
+      link: "https://fromolive.com/",
+    },
+    {
+      title: "Artifact",
+      description:
+        "Artifact is an electrical system design tool that lets you design at any level of fidelity - from concept to connecto",
+      image: "/showcase/optimized/artifact-engineer.png",
+      link: "https://www.artifact.engineer/",
+    },
+    {
+      title: "Vetnio",
+      description: "Automatic Medical Notes For Veterinary Professionals",
+      image: "/showcase/optimized/vetnio.png",
+      link: "https://vetnio.com/home/en",
+    },
+    {
+      title: "Dalus",
+      description:
+        "AI-Powered Systems Engineering for Mission-Critical Hardware",
+      image: "/showcase/optimized/dalus-io.png",
+      link: "https://www.dalus.io/",
+    },
+    {
+      title: "Demeter",
+      description: "Instant portfolio insights across all your investments",
+      image: "/showcase/optimized/demeter.png",
+      link: "https://www.joindemeter.com/",
+    },
+
+    {
       title: "NotebookLM-Mastra",
       description:
         "NotebookLM is an AI-powered assistant that creates podcasts from the sources you upload",
-      image: "/showcase/notebook-lm.png",
+      image: "/showcase/optimized/notebook-lm.png",
       link: "https://notebooklm-mastra.vercel.app/",
+    },
+    {
+      title: "Repo Base",
+      description: "Chat with any GitHub repository. Understand code faster.",
+      image: "/showcase/optimized/repo-base.png",
+      link: "https://repo-base.vercel.app/",
     },
     {
       title: "AI Beats Lab",
       description:
         "The AI Beats Laboratory is an interactive web application that generates musical beats and melodies using AI agents.",
-      image: "/showcase/ai-beats-lab.png",
+      image: "/showcase/optimized/ai-beats-lab.png",
       link: "https://ai-beat-lab.lovable.app/",
     },
     {
       title: "TravelAI",
       description:
         "TravelAI is a travel assistant that helps you plan your next trip.",
-      image: "/showcase/travel-ai.png",
+      image: "/showcase/optimized/travel-ai.png",
       link: "https://mastra-eight.vercel.app/",
     },
     {
       title: "Excalidraw app",
       description:
         "A tool that converts whiteboard images into editable Excalidraw diagrams",
-      image: "/showcase/excalidraw-app.png",
-      link: "https://excalidraw-app.vercel.app/",
+      image: "/showcase/optimized/excalidraw-app.png",
+      link: "https://image2excalidraw.netlify.app/",
     },
     {
       title: "Ecommerce RAG",
-      description: "An RAG application for an ecommerce website",
-      image: "/showcase/ecommerce-rag.png",
+      description: "A RAG application for an ecommerce website",
+      image: "/showcase/optimized/ecommerce-rag.jpg",
       link: "https://nextjs-commerce-nu-eight-83.vercel.app/",
+    },
+    {
+      title: "Text-to-SQL",
+      description: "Generate SQL queries from natural language",
+      image: "/showcase/optimized/text-to-sql.png",
+      link: "https://mastra-text-to-sql.vercel.app/",
     },
   ];
 

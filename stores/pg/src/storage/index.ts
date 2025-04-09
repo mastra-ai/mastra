@@ -1,8 +1,17 @@
+import type { MetricResult } from '@mastra/core/eval';
 import type { MessageType, StorageThreadType } from '@mastra/core/memory';
-import { MastraStorage } from '@mastra/core/storage';
+import {
+  MastraStorage,
+  TABLE_MESSAGES,
+  TABLE_THREADS,
+  TABLE_TRACES,
+  TABLE_WORKFLOW_SNAPSHOT,
+  TABLE_EVALS,
+} from '@mastra/core/storage';
 import type { EvalRow, StorageColumn, StorageGetMessagesArg, TABLE_NAMES } from '@mastra/core/storage';
 import type { WorkflowRunState } from '@mastra/core/workflows';
 import pgPromise from 'pg-promise';
+import type { ISSLConfig } from 'pg-promise/typescript/pg-subset';
 
 export type PostgresConfig =
   | {
@@ -11,6 +20,7 @@ export type PostgresConfig =
       database: string;
       user: string;
       password: string;
+      ssl?: boolean | ISSLConfig;
     }
   | {
       connectionString: string;
@@ -32,12 +42,57 @@ export class PostgresStore extends MastraStorage {
             database: config.database,
             user: config.user,
             password: config.password,
+            ssl: config.ssl,
           },
     );
   }
 
-  getEvalsByAgentName(_agentName: string, _type?: 'test' | 'live'): Promise<EvalRow[]> {
-    throw new Error('Method not implemented.');
+  async getEvalsByAgentName(agentName: string, type?: 'test' | 'live'): Promise<EvalRow[]> {
+    try {
+      const baseQuery = `SELECT * FROM ${TABLE_EVALS} WHERE agent_name = $1`;
+      const typeCondition =
+        type === 'test'
+          ? " AND test_info IS NOT NULL AND test_info->>'testPath' IS NOT NULL"
+          : type === 'live'
+            ? " AND (test_info IS NULL OR test_info->>'testPath' IS NULL)"
+            : '';
+
+      const query = `${baseQuery}${typeCondition} ORDER BY created_at DESC`;
+
+      const rows = await this.db.manyOrNone(query, [agentName]);
+      return rows?.map(row => this.transformEvalRow(row)) ?? [];
+    } catch (error) {
+      // Handle case where table doesn't exist yet
+      if (error instanceof Error && error.message.includes('relation') && error.message.includes('does not exist')) {
+        return [];
+      }
+      console.error('Failed to get evals for the specified agent: ' + (error as any)?.message);
+      throw error;
+    }
+  }
+
+  private transformEvalRow(row: Record<string, any>): EvalRow {
+    let testInfoValue = null;
+    if (row.test_info) {
+      try {
+        testInfoValue = typeof row.test_info === 'string' ? JSON.parse(row.test_info) : row.test_info;
+      } catch (e) {
+        console.warn('Failed to parse test_info:', e);
+      }
+    }
+
+    return {
+      agentName: row.agent_name as string,
+      input: row.input as string,
+      output: row.output as string,
+      result: row.result as MetricResult,
+      metricName: row.metric_name as string,
+      instructions: row.instructions as string,
+      testInfo: testInfoValue,
+      globalRunId: row.global_run_id as string,
+      runId: row.run_id as string,
+      createdAt: row.created_at as string,
+    };
   }
 
   async batchInsert({ tableName, records }: { tableName: TABLE_NAMES; records: Record<string, any>[] }): Promise<void> {
@@ -60,12 +115,14 @@ export class PostgresStore extends MastraStorage {
     page,
     perPage,
     attributes,
+    filters,
   }: {
     name?: string;
     scope?: string;
     page: number;
     perPage: number;
     attributes?: Record<string, string>;
+    filters?: Record<string, any>;
   }): Promise<any[]> {
     let idx = 1;
     const limit = perPage;
@@ -86,6 +143,12 @@ export class PostgresStore extends MastraStorage {
       });
     }
 
+    if (filters) {
+      Object.entries(filters).forEach(([key]) => {
+        conditions.push(`${key} = \$${idx++}`);
+      });
+    }
+
     const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
 
     if (name) {
@@ -102,11 +165,11 @@ export class PostgresStore extends MastraStorage {
       }
     }
 
-    console.log(
-      'QUERY',
-      `SELECT * FROM ${MastraStorage.TABLE_TRACES} ${whereClause} ORDER BY "createdAt" DESC LIMIT ${limit} OFFSET ${offset}`,
-      args,
-    );
+    if (filters) {
+      for (const [, value] of Object.entries(filters)) {
+        args.push(value);
+      }
+    }
 
     const result = await this.db.manyOrNone<{
       id: string;
@@ -123,10 +186,7 @@ export class PostgresStore extends MastraStorage {
       endTime: string;
       other: any;
       createdAt: string;
-    }>(
-      `SELECT * FROM ${MastraStorage.TABLE_TRACES} ${whereClause} ORDER BY "createdAt" DESC LIMIT ${limit} OFFSET ${offset}`,
-      args,
-    );
+    }>(`SELECT * FROM ${TABLE_TRACES} ${whereClause} ORDER BY "createdAt" DESC LIMIT ${limit} OFFSET ${offset}`, args);
 
     if (!result) {
       return [];
@@ -172,7 +232,7 @@ export class PostgresStore extends MastraStorage {
           ${columns}
         );
         ${
-          tableName === MastraStorage.TABLE_WORKFLOW_SNAPSHOT
+          tableName === TABLE_WORKFLOW_SNAPSHOT
             ? `
         DO $$ BEGIN
           IF NOT EXISTS (
@@ -233,7 +293,7 @@ export class PostgresStore extends MastraStorage {
       }
 
       // If this is a workflow snapshot, parse the snapshot field
-      if (tableName === MastraStorage.TABLE_WORKFLOW_SNAPSHOT) {
+      if (tableName === TABLE_WORKFLOW_SNAPSHOT) {
         const snapshot = result as any;
         if (typeof snapshot.snapshot === 'string') {
           snapshot.snapshot = JSON.parse(snapshot.snapshot);
@@ -258,7 +318,7 @@ export class PostgresStore extends MastraStorage {
           metadata,
           "createdAt",
           "updatedAt"
-        FROM "${MastraStorage.TABLE_THREADS}"
+        FROM "${TABLE_THREADS}"
         WHERE id = $1`,
         [threadId],
       );
@@ -289,7 +349,7 @@ export class PostgresStore extends MastraStorage {
           metadata,
           "createdAt",
           "updatedAt"
-        FROM "${MastraStorage.TABLE_THREADS}"
+        FROM "${TABLE_THREADS}"
         WHERE "resourceId" = $1`,
         [resourceId],
       );
@@ -309,7 +369,7 @@ export class PostgresStore extends MastraStorage {
   async saveThread({ thread }: { thread: StorageThreadType }): Promise<StorageThreadType> {
     try {
       await this.db.none(
-        `INSERT INTO "${MastraStorage.TABLE_THREADS}" (
+        `INSERT INTO "${TABLE_THREADS}" (
           id,
           "resourceId",
           title,
@@ -363,7 +423,7 @@ export class PostgresStore extends MastraStorage {
       };
 
       const thread = await this.db.one<StorageThreadType>(
-        `UPDATE "${MastraStorage.TABLE_THREADS}"
+        `UPDATE "${TABLE_THREADS}"
         SET title = $1,
             metadata = $2,
             "updatedAt" = $3
@@ -388,10 +448,10 @@ export class PostgresStore extends MastraStorage {
     try {
       await this.db.tx(async t => {
         // First delete all messages associated with this thread
-        await t.none(`DELETE FROM "${MastraStorage.TABLE_MESSAGES}" WHERE thread_id = $1`, [threadId]);
+        await t.none(`DELETE FROM "${TABLE_MESSAGES}" WHERE thread_id = $1`, [threadId]);
 
         // Then delete the thread
-        await t.none(`DELETE FROM "${MastraStorage.TABLE_THREADS}" WHERE id = $1`, [threadId]);
+        await t.none(`DELETE FROM "${TABLE_THREADS}" WHERE id = $1`, [threadId]);
       });
     } catch (error) {
       console.error('Error deleting thread:', error);
@@ -412,7 +472,7 @@ export class PostgresStore extends MastraStorage {
             SELECT 
               *,
               ROW_NUMBER() OVER (ORDER BY "createdAt" DESC) as row_num
-            FROM "${MastraStorage.TABLE_MESSAGES}"
+            FROM "${TABLE_MESSAGES}"
             WHERE thread_id = $1
           )
           SELECT
@@ -458,7 +518,7 @@ export class PostgresStore extends MastraStorage {
             type,
             "createdAt", 
             thread_id AS "threadId"
-        FROM "${MastraStorage.TABLE_MESSAGES}"
+        FROM "${TABLE_MESSAGES}"
         WHERE thread_id = $1
         AND id != ALL($2)
         ORDER BY "createdAt" DESC
@@ -508,7 +568,7 @@ export class PostgresStore extends MastraStorage {
       await this.db.tx(async t => {
         for (const message of messages) {
           await t.none(
-            `INSERT INTO "${MastraStorage.TABLE_MESSAGES}" (id, thread_id, content, "createdAt", role, type) 
+            `INSERT INTO "${TABLE_MESSAGES}" (id, thread_id, content, "createdAt", role, type) 
              VALUES ($1, $2, $3, $4, $5, $6)`,
             [
               message.id,
@@ -541,7 +601,7 @@ export class PostgresStore extends MastraStorage {
     try {
       const now = new Date().toISOString();
       await this.db.none(
-        `INSERT INTO "${MastraStorage.TABLE_WORKFLOW_SNAPSHOT}" (
+        `INSERT INTO "${TABLE_WORKFLOW_SNAPSHOT}" (
           workflow_name,
           run_id,
           snapshot,
@@ -568,7 +628,7 @@ export class PostgresStore extends MastraStorage {
   }): Promise<WorkflowRunState | null> {
     try {
       const result = await this.load({
-        tableName: MastraStorage.TABLE_WORKFLOW_SNAPSHOT,
+        tableName: TABLE_WORKFLOW_SNAPSHOT,
         keys: {
           workflow_name: workflowName,
           run_id: runId,
@@ -584,6 +644,98 @@ export class PostgresStore extends MastraStorage {
       console.error('Error loading workflow snapshot:', error);
       throw error;
     }
+  }
+
+  async getWorkflowRuns({
+    workflowName,
+    fromDate,
+    toDate,
+    limit,
+    offset,
+  }: {
+    workflowName?: string;
+    fromDate?: Date;
+    toDate?: Date;
+    limit?: number;
+    offset?: number;
+  } = {}): Promise<{
+    runs: Array<{
+      workflowName: string;
+      runId: string;
+      snapshot: WorkflowRunState | string;
+      createdAt: Date;
+      updatedAt: Date;
+    }>;
+    total: number;
+  }> {
+    const conditions: string[] = [];
+    const values: any[] = [];
+    let paramIndex = 1;
+
+    if (workflowName) {
+      conditions.push(`workflow_name = $${paramIndex}`);
+      values.push(workflowName);
+      paramIndex++;
+    }
+
+    if (fromDate) {
+      conditions.push(`"createdAt" >= $${paramIndex}`);
+      values.push(fromDate);
+      paramIndex++;
+    }
+
+    if (toDate) {
+      conditions.push(`"createdAt" <= $${paramIndex}`);
+      values.push(toDate);
+      paramIndex++;
+    }
+
+    const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+
+    let total = 0;
+    // Only get total count when using pagination
+    if (limit !== undefined && offset !== undefined) {
+      const countResult = await this.db.one(
+        `SELECT COUNT(*) as count FROM ${TABLE_WORKFLOW_SNAPSHOT} ${whereClause}`,
+        values,
+      );
+      total = Number(countResult.count);
+    }
+
+    // Get results
+    const query = `
+      SELECT * FROM ${TABLE_WORKFLOW_SNAPSHOT} 
+      ${whereClause} 
+      ORDER BY "createdAt" DESC
+      ${limit !== undefined && offset !== undefined ? ` LIMIT $${paramIndex} OFFSET $${paramIndex + 1}` : ''}
+    `;
+
+    const queryValues = limit !== undefined && offset !== undefined ? [...values, limit, offset] : values;
+
+    const result = await this.db.manyOrNone(query, queryValues);
+
+    const runs = (result || []).map(row => {
+      let parsedSnapshot: WorkflowRunState | string = row.snapshot as string;
+      if (typeof parsedSnapshot === 'string') {
+        try {
+          parsedSnapshot = JSON.parse(row.snapshot as string) as WorkflowRunState;
+        } catch (e) {
+          // If parsing fails, return the raw snapshot string
+          console.warn(`Failed to parse snapshot for workflow ${row.workflow_name}: ${e}`);
+        }
+      }
+
+      return {
+        workflowName: row.workflow_name,
+        runId: row.run_id,
+        snapshot: parsedSnapshot,
+        createdAt: row.createdAt,
+        updatedAt: row.updatedAt,
+      };
+    });
+
+    // Use runs.length as total when not paginating
+    return { runs, total: total || runs.length };
   }
 
   async close(): Promise<void> {

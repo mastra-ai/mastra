@@ -5,7 +5,9 @@ import { logCatWorkflow } from './workflow';
 
 export const mastra = new Mastra({
   agents: { catOne },
-  workflows: { logCatWorkflow },
+  workflows: {
+    logCatWorkflow,
+  },
   logger: createLogger({
     name: 'Mastra',
     level: 'debug',

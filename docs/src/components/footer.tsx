@@ -1,7 +1,6 @@
-import { Check, SendHorizontal } from "lucide-react";
+"use client";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { SubscribeForm } from "./subscribe-form";
 import { logo } from "./logo";
 
 const links = [
@@ -58,7 +57,7 @@ export const Footer = () => {
   return (
     <footer
       data-state={!showFooter}
-      className="flex z-30 max-w-[90rem] mx-auto px-1 bg-[#fafafa] dark:bg-[#0a0a0a] dark:border-t-[#222222] relative w-full border-t-[0.5px] flex-col items-center pt-8 lg:pt-[5rem] pb-24 md:pb-32 footer data-[state=false]:mt-8 "
+      className="flex z-30 max-w-[1184px] mx-auto px-1 bg-[#fafafa] dark:bg-transparent  border-t-[var(--border)] relative w-full border-t-[0.5px] flex-col items-center pt-8 lg:pt-[5rem] pb-24 md:pb-32 footer data-[state=false]:mt-8 "
     >
       <div className="flex flex-col lg:flex-row gap-16 lg:gap-0 w-full justify-between px-6 md:px-0 md:pl-3 md:pr-4">
         <div className="flex gap-2 dark:text-white">{logo}</div>
@@ -98,24 +97,6 @@ export const Footer = () => {
                 );
               })}
             </ul>
-          </div>
-          <div className="">
-            <label
-              htmlFor="email"
-              className="text-[#939393] mb-0.5 mt-[1px] block text-xs"
-            >
-              Mastra Newsletter
-            </label>
-            <SubscribeForm
-              idleIcon={
-                <SendHorizontal className="w-4 h-4" stroke="currentColor" />
-              }
-              successIcon={<Check className="w-4 h-4" />}
-              showLabel={false}
-              inputClassName="min-w-[50px] max-w-full rounded-r-none md:min-w-[50px] pl-2 truncate md:max-w-full"
-              buttonClassName="w-fit mr-auto rounded-l-none md:w-fit h-[34px] py-0 px-3"
-              className="md:items-start flex-row items-start gap-0  md:gap-0 mt-0"
-            />
           </div>
         </div>
       </div>

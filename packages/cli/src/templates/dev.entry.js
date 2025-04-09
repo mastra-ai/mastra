@@ -21,6 +21,10 @@ registerHook(AvailableHooks.ON_GENERATION, ({ input, output, metric, runId, agen
   });
 });
 
+if (mastra.storage) {
+  await mastra.storage.init();
+}
+
 registerHook(AvailableHooks.ON_EVALUATION, async traceObject => {
   if (mastra.storage) {
     // Check for required fields

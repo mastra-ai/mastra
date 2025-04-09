@@ -1,7 +1,5 @@
 import { PassThrough } from 'stream';
 import { createOpenAI } from '@ai-sdk/openai';
-import { InMemorySpanExporter, SimpleSpanProcessor } from '@opentelemetry/sdk-trace-base';
-import { NodeTracerProvider } from '@opentelemetry/sdk-trace-node';
 import { config } from 'dotenv';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
@@ -20,6 +18,7 @@ const mockFindUser = vi.fn().mockImplementation(async data => {
     { name: 'Dero Israel', email: 'dero@mail.com' },
     { name: 'Ife Dayo', email: 'dayo@mail.com' },
     { name: 'Tao Feeq', email: 'feeq@mail.com' },
+    { name: 'Joe', email: 'joe@mail.com' },
   ];
 
   const userInfo = list?.find(({ name }) => name === (data as { name: string }).name);
@@ -214,6 +213,43 @@ describe('agent', () => {
     expect(name).toBe('Dero Israel');
   }, 500000);
 
+  it('should generate with defaul max steps', async () => {
+    const findUserTool = createTool({
+      id: 'Find user tool',
+      description: 'This is a test tool that returns the name and email',
+      inputSchema: z.object({
+        name: z.string(),
+      }),
+      execute: async ({ context }) => {
+        return mockFindUser(context) as Promise<Record<string, any>>;
+      },
+    });
+
+    const userAgent = new Agent({
+      name: 'User agent',
+      instructions: 'You are an agent that can get list of users using findUserTool.',
+      model: openai('gpt-4o'),
+      tools: { findUserTool },
+    });
+
+    const mastra = new Mastra({
+      agents: { userAgent },
+    });
+
+    const agentOne = mastra.getAgent('userAgent');
+
+    const res = await agentOne.generate(
+      'Use the "findUserTool" to Find the user with name - Joe and return the name and email',
+    );
+
+    const toolCall: any = res.steps[0].toolResults.find((result: any) => result.toolName === 'findUserTool');
+
+    expect(res.steps.length > 1);
+    expect(res.text.includes('joe@mail.com'));
+    expect(toolCall?.result?.email).toBe('joe@mail.com');
+    expect(mockFindUser).toHaveBeenCalled();
+  });
+
   it('should call testTool from TestIntegration', async () => {
     const testAgent = new Agent({
       name: 'Test agent',
@@ -239,6 +275,23 @@ describe('agent', () => {
     const message = toolCall?.result?.message;
 
     expect(message).toBe('Executed successfully');
+  }, 500000);
+
+  it('should reach default max steps', async () => {
+    const agent = new Agent({
+      name: 'Test agent',
+      instructions: 'Test agent',
+      model: openai('gpt-4o'),
+      tools: integration.getStaticTools(),
+      defaultGenerateOptions: {
+        maxSteps: 7,
+      },
+    });
+
+    const response = await agent.generate('Call testTool 10 times.', {
+      toolChoice: 'required',
+    });
+    expect(response.steps.length).toBe(7);
   }, 500000);
 
   it('should properly sanitize incomplete tool calls from memory messages', () => {
@@ -282,7 +335,7 @@ describe('agent', () => {
 
   describe('voice capabilities', () => {
     class MockVoice extends MastraVoice {
-      async speak(_input: string | NodeJS.ReadableStream): Promise<NodeJS.ReadableStream> {
+      async speak(): Promise<NodeJS.ReadableStream> {
         const stream = new PassThrough();
         stream.end('mock audio');
         return stream;
@@ -304,10 +357,10 @@ describe('agent', () => {
         instructions: 'You are an agent with voice capabilities',
         model: openai('gpt-4o'),
         voice: new CompositeVoice({
-          speakProvider: new MockVoice({
+          output: new MockVoice({
             speaker: 'mock-voice',
           }),
-          listenProvider: new MockVoice({
+          input: new MockVoice({
             speaker: 'mock-voice',
           }),
         }),
@@ -390,9 +443,9 @@ describe('agent', () => {
           model: openai('gpt-4o'),
         });
 
-        await expect(agentWithoutVoice.getSpeakers()).rejects.toThrow('No voice provider configured');
-        await expect(agentWithoutVoice.speak('Test')).rejects.toThrow('No voice provider configured');
-        await expect(agentWithoutVoice.listen(new PassThrough())).rejects.toThrow('No voice provider configured');
+        await expect(agentWithoutVoice.voice.getSpeakers()).rejects.toThrow('No voice provider configured');
+        await expect(agentWithoutVoice.voice.speak('Test')).rejects.toThrow('No voice provider configured');
+        await expect(agentWithoutVoice.voice.listen(new PassThrough())).rejects.toThrow('No voice provider configured');
       });
     });
   });

@@ -1,6 +1,5 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import type { Tool, Context } from 'tylerbarnes-fastmcp-fix';
 import { z } from 'zod';
 import { fromPackageRoot } from '../utils';
 
@@ -64,7 +63,7 @@ async function readMdxContent(docPath: string): Promise<string> {
 
     // If it's a file, just read it
     return fs.readFile(fullPath, 'utf-8');
-  } catch (error) {
+  } catch {
     throw new Error(`Path not found: ${docPath}`);
   }
 }
@@ -133,22 +132,20 @@ async function getAvailablePaths(): Promise<string> {
 // Initialize available paths
 const availablePaths = await getAvailablePaths();
 
-const docsSchema = z.object({
+export const docsInputSchema = z.object({
   paths: z
     .array(z.string())
     .min(1)
     .describe(`One or more documentation paths to fetch\nAvailable paths:\n${availablePaths}`),
 });
 
-type DocsParams = z.infer<typeof docsSchema>;
+export type DocsInput = z.infer<typeof docsInputSchema>;
 
-export const docsTool: Tool<any, typeof docsSchema> = {
+export const docsTool = {
   name: 'mastraDocs',
   description:
     'Get Mastra.ai documentation. Request paths to explore the docs. References contain API docs. Other paths contain guides. The user doesn\'t know about files and directories. This is your internal knowledge the user can\'t read. If the user asks about a feature check general docs as well as reference docs for that feature. Ex: with evals check in evals/ and in reference/evals/. Provide code examples so the user understands. If you build a URL from the path, only paths ending in .mdx exist. Note that docs about MCP are currently in reference/tools/. IMPORTANT: Be concise with your answers. The user will ask for more info. If packages need to be installed, provide the pnpm command to install them. Ex. if you see `import { X } from "@mastra/$PACKAGE_NAME"` in an example, show an install command. Always install latest tag, not alpha unless requested. If you scaffold a new project it may be in a subdir',
-
-  parameters: docsSchema,
-  execute: async (args: DocsParams, _context: Context<any>) => {
+  execute: async (args: DocsInput) => {
     try {
       const results = await Promise.all(
         args.paths.map(async (path: string) => {
@@ -187,12 +184,25 @@ export const docsTool: Tool<any, typeof docsSchema> = {
         })
         .join('\n');
 
-      return output;
+      return {
+        content: [
+          {
+            type: 'text',
+            text: output,
+          },
+        ],
+        isError: false,
+      };
     } catch (error) {
-      if (error instanceof Error) {
-        throw new Error(`Failed to fetch documentation: ${error.message}`);
-      }
-      throw error;
+      return {
+        content: [
+          {
+            type: 'text',
+            text: `Error: ${error instanceof Error ? error.message : String(error)}`,
+          },
+        ],
+        isError: true,
+      };
     }
   },
 };

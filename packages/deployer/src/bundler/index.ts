@@ -10,8 +10,8 @@ import type { InputOptions, OutputOptions } from 'rollup';
 
 import { analyzeBundle } from '../build/analyze';
 import { createBundler as createBundlerUtil, getInputOptions } from '../build/bundler';
-import { Deps } from '../build/deps';
 import { writeTelemetryConfig } from '../build/telemetry';
+import { DepsService } from '../services/deps';
 
 export abstract class Bundler extends MastraBundler {
   protected analyzeOutputDir = '.build';
@@ -84,7 +84,7 @@ export abstract class Bundler extends MastraBundler {
   }
 
   protected async installDependencies(outputDirectory: string, rootDir = process.cwd()) {
-    const deps = new Deps(rootDir);
+    const deps = new DepsService(rootDir);
     deps.__setLogger(this.logger);
 
     await deps.install({ dir: join(outputDirectory, this.outputDir) });
@@ -153,12 +153,25 @@ export abstract class Bundler extends MastraBundler {
       }
     }
 
+    // temporary fix for mastra-memory and fastembed
+    if (
+      analyzedBundleInfo.externalDependencies.has('@mastra/memory') ||
+      analyzedBundleInfo.dependencies.has('@mastra/memory')
+    ) {
+      dependenciesToInstall.set('fastembed', 'latest');
+    }
+
     await this.writePackageJson(join(outputDirectory, this.outputDir), dependenciesToInstall);
     await this.writeInstrumentationFile(join(outputDirectory, this.outputDir));
 
     this.logger.info('Bundling Mastra application');
     const inputOptions: InputOptions = await this.getBundlerOptions(serverFile, mastraEntryFile, analyzedBundleInfo);
-    const bundler = await this.createBundler(inputOptions, { dir: bundleLocation });
+    const bundler = await this.createBundler(inputOptions, {
+      dir: bundleLocation,
+      manualChunks: {
+        mastra: ['#mastra'],
+      },
+    });
 
     await bundler.write();
     this.logger.info('Bundling Mastra done');

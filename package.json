@@ -23,6 +23,7 @@
     "build:speech": "pnpm turbo build --filter \"./speech/*\"",
     "build:cli": "pnpm turbo build --filter ./packages/cli",
     "build:deployer": "pnpm turbo build --filter ./packages/deployer",
+    "build:server": "pnpm turbo build --filter ./packages/server",
     "build:core": "pnpm turbo build --filter ./packages/core",
     "build:rag": "pnpm turbo build --filter ./packages/rag",
     "build:memory": "pnpm turbo build --filter ./packages/memory",
@@ -64,5 +65,5 @@
     "typescript": "^5.7.3",
     "@types/node": "^20.17.27"
   },
-  "packageManager": "pnpm@10.4.1+sha512.c753b6c3ad7afa13af388fa6d808035a008e30ea9993f58c6663e2bc5ff21679aa834db094987129aa4d488b86df57f7b634981b2f827cdcacc698cc0cfb88af"
+  "packageManager": "pnpm@10.8.0+sha512.0e82714d1b5b43c74610193cb20734897c1d00de89d0e18420aebc5977fa13d780a9cb05734624e81ebd81cc876cd464794850641c48b9544326b5622ca29971"
 }

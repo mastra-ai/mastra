@@ -9,7 +9,7 @@ export const useCodemirrorTheme = () => {
     () =>
       githubDarkInit({
         settings: {
-          fontFamily: 'var(--commit-mono)',
+          fontFamily: 'var(--geist-mono)',
           fontSize: '0.8rem',
           foreground: '#030712',
           background: '#1a1a1a',

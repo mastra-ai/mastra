@@ -17,9 +17,10 @@
     "@mastra/core": "workspace:*",
     "@mastra/mcp": "workspace:*",
     "@mastra/memory": "workspace:*",
+    "@modelcontextprotocol/sdk": "^1.7.0",
     "chalk": "^5.4.1",
-    "fastmcp": "^1.20.4",
-    "zod": "^3.24.2"
+    "zod": "^3.24.2",
+    "zod-to-json-schema": "^3.22.4"
   },
   "devDependencies": {
     "@jest/globals": "^29.7.0",

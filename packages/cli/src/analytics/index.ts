@@ -87,7 +87,7 @@ export class PosthogAnalytics {
 
   private isTelemetryEnabled(): boolean {
     // Check environment variable first
-    if (process.env.NO_MASTRA_TELEMETRY) {
+    if (process.env.MASTRA_TELEMETRY_DISABLED) {
       return false;
     }
     // Default to enabled
@@ -110,6 +110,7 @@ export class PosthogAnalytics {
       session_id: this.sessionId,
       cli_version: this.version || 'unknown',
       machine_id: os.hostname(),
+      geoip_disable: false,
     };
   }
 
