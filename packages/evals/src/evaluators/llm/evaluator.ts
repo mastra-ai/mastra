@@ -3,6 +3,7 @@ import { Agent } from '@mastra/core/agent';
 import { Evaluator } from '@mastra/core/eval';
 import type { EvaluatorSettings, EvaluationResult } from '@mastra/core/eval';
 import { z } from 'zod';
+import type { EvaluatorType } from '../types';
 import type {
   LLMEvaluatorEvalPrompt,
   LLMEvaluatorReasonPrompt,
@@ -32,6 +33,8 @@ export class LLMEvaluator extends Evaluator {
   protected reasonPrompt?: LLMEvaluatorReasonPrompt;
   protected evalPrompt?: LLMEvaluatorEvalPrompt;
   protected scorer: LLMEvaluatorScorer;
+  protected _type: EvaluatorType;
+  protected _instructions: string;
 
   constructor(config: EvaluatorConfig) {
     super();
@@ -49,10 +52,32 @@ export class LLMEvaluator extends Evaluator {
     this.reasonPrompt = config.reasonPrompt;
     this.evalPrompt = config.evalPrompt;
     this.scorer = config.scorer;
+    this._type = 'llm';
+    this._instructions = config.instructions;
   }
 
   get name(): string {
     return this._name;
+  }
+
+  get type(): EvaluatorType {
+    return this._type;
+  }
+
+  get model(): LanguageModel {
+    return this.agent.llm.getModel();
+  }
+
+  get modelId(): string {
+    return this.agent.llm.getModelId();
+  }
+
+  get provider(): string {
+    return this.agent.llm.getProvider();
+  }
+
+  get instructions(): string {
+    return this._instructions;
   }
 
   async reason({

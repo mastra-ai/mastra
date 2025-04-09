@@ -27,3 +27,30 @@ export const useEvaluators = () => {
 
   return { evaluators, isLoading };
 };
+
+export const useEvaluator = (evaluatorId: string) => {
+  const [evaluators, setEvaluators] = useState<Record<string, GetEvaluatorResponse>>({});
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchEvaluators = async () => {
+      setIsLoading(true);
+      try {
+        const res = await client.getEvaluators();
+        setEvaluators(res);
+      } catch (error) {
+        setEvaluators({});
+        console.error('Error fetching evaluators', error);
+        toast.error('Error fetching evaluators');
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchEvaluators();
+  }, []);
+
+  const evaluator = evaluators[evaluatorId];
+
+  return { evaluator, isLoading };
+};

@@ -13,16 +13,24 @@ type EvaluatorsContext = {
 export async function getEvaluatorsHandler({ mastra }: EvaluatorsContext): Promise<Record<string, Evaluator | Metric>> {
   try {
     const evaluators = mastra.getEvaluators();
-    const constructedEvaluators = Object.entries(evaluators).reduce((acc, [key, value]) => {
-      const newEvalObject = {
-        ...(value as Evaluator),
-        name: (value as Evaluator)?.name,
-        score: (value as Evaluator)?.score
-      }
+    const constructedEvaluators = Object.entries(evaluators).reduce(
+      (acc, [key, value]) => {
+        const newEvalObject = {
+          ...(value as Evaluator),
+          name: (value as Evaluator)?.name,
+          score: (value as Evaluator)?.score,
+          type: (value as any)?.type,
+          model: (value as any)?.model,
+          modelId: (value as any)?.modelId,
+          provider: (value as any)?.provider,
+          instructions: (value as any)?.instructions,
+        };
 
-      acc[key] = newEvalObject
-      return acc
-    }, {} as Record<string, Evaluator | Metric>)
+        acc[key] = newEvalObject;
+        return acc;
+      },
+      {} as Record<string, Evaluator | Metric>,
+    );
     return constructedEvaluators;
   } catch (error) {
     return handleError(error, 'Error getting evaluators');

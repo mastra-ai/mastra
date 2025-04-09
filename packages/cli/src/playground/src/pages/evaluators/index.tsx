@@ -4,6 +4,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { EvaluatorsTable } from '@mastra/playground-ui';
 import { useEvaluators } from '@/hooks/use-evaluators';
 import { Metric, Evaluator } from '@mastra/core';
+import { useNavigate } from 'react-router';
 
 function isEvaluator(evaluator: Metric | Evaluator): evaluator is Evaluator {
   return 'name' in evaluator;
@@ -11,7 +12,7 @@ function isEvaluator(evaluator: Metric | Evaluator): evaluator is Evaluator {
 
 function Evaluators() {
   const { evaluators, isLoading } = useEvaluators();
-  // const navigate = useNavigate();
+  const navigate = useNavigate();
 
   const evaluatorList = Object.entries(evaluators)
     .filter(([_, evaluator]) => isEvaluator(evaluator))
@@ -37,12 +38,13 @@ function Evaluators() {
                   <button
                     className="flex justify-start w-full h-full py-4"
                     onClick={() => {
-                      // navigate(`/evaluators/${row.original.id}`);
+                      console.log('clicked', row.original.id);
+                      navigate(`/evaluators/${row.original.id}/overview`);
                     }}
                   >
                     <span
                       onClick={() => {
-                        // navigate(`/evaluators/${row.original.id}`);
+                        navigate(`/evaluators/${row.original.id}/overview`);
                       }}
                       className="text-sm truncate text-mastra-el-5"
                     >
@@ -58,12 +60,13 @@ function Evaluators() {
                   <button
                     className="flex justify-start w-full h-full py-4"
                     onClick={() => {
-                      // navigate(`/evaluators/${row.original.id}`);
+                      console.log('clicked', row.original.id);
+                      navigate(`/evaluators/${row.original.id}/overview`);
                     }}
                   >
                     <span
                       onClick={() => {
-                        // navigate(`/evaluators/${row.original.id}`);
+                        navigate(`/evaluators/${row.original.id}/overview`);
                       }}
                       className="text-sm truncate text-mastra-el-5"
                     >
@@ -72,7 +75,6 @@ function Evaluators() {
                   </button>
                 ),
               },
-
             ]}
           />
         </ScrollArea>
