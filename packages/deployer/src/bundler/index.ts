@@ -166,7 +166,12 @@ export abstract class Bundler extends MastraBundler {
 
     this.logger.info('Bundling Mastra application');
     const inputOptions: InputOptions = await this.getBundlerOptions(serverFile, mastraEntryFile, analyzedBundleInfo);
-    const bundler = await this.createBundler(inputOptions, { dir: bundleLocation });
+    const bundler = await this.createBundler(inputOptions, {
+      dir: bundleLocation,
+      manualChunks: {
+        mastra: ['#mastra'],
+      },
+    });
 
     await bundler.write();
     this.logger.info('Bundling Mastra done');
