@@ -35,12 +35,11 @@
     "@modelcontextprotocol/sdk": "^1.7.0",
     "date-fns": "^4.1.0",
     "exit-hook": "^4.0.0",
-    "fastmcp": "^1.20.4",
     "jsdom": "^26.0.0",
     "turndown": "^7.1.2",
-    "tylerbarnes-fastmcp-fix": "^1.0.0",
     "uuid": "^11.1.0",
-    "zod": "^3.22.4"
+    "zod": "^3.22.4",
+    "zod-to-json-schema": "^3.22.4"
   },
   "devDependencies": {
     "@hono/node-server": "^1.13.8",
