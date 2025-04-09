@@ -3,9 +3,6 @@ const meta = {
   "getting-started": {
     title: "Getting Started",
   },
-  guides: {
-    title: "Guides",
-  },
   frameworks: {
     title: "Frameworks",
   },
@@ -41,7 +38,6 @@ const meta = {
   },
   integrations: "Integrations",
   community: "Community",
-  reference: "Reference",
 };
 
 export default meta;
