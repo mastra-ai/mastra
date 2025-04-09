@@ -2,6 +2,8 @@ name: PR Snapshot version
 
 on:
   workflow_dispatch:
+    branches:
+      - '**'
     inputs:
       tag:
         description: 'Optional tag for snapshot version and npm publish (defaults to slugified branch name)'
