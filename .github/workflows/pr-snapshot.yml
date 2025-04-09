@@ -13,7 +13,7 @@ on:
         type: string
 
 jobs:
-  build:
+  snapshot:
     runs-on: ubuntu-latest
     env:
       TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
