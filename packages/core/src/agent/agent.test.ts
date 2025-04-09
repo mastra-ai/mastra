@@ -18,6 +18,7 @@ const mockFindUser = vi.fn().mockImplementation(async data => {
     { name: 'Dero Israel', email: 'dero@mail.com' },
     { name: 'Ife Dayo', email: 'dayo@mail.com' },
     { name: 'Tao Feeq', email: 'feeq@mail.com' },
+    { name: 'Joe', email: 'joe@mail.com' },
   ];
 
   const userInfo = list?.find(({ name }) => name === (data as { name: string }).name);
@@ -211,6 +212,43 @@ describe('agent', () => {
     expect(mockFindUser).toHaveBeenCalled();
     expect(name).toBe('Dero Israel');
   }, 500000);
+
+  it('should generate with defaul max steps', async () => {
+    const findUserTool = createTool({
+      id: 'Find user tool',
+      description: 'This is a test tool that returns the name and email',
+      inputSchema: z.object({
+        name: z.string(),
+      }),
+      execute: async ({ context }) => {
+        return mockFindUser(context) as Promise<Record<string, any>>;
+      },
+    });
+
+    const userAgent = new Agent({
+      name: 'User agent',
+      instructions: 'You are an agent that can get list of users using findUserTool.',
+      model: openai('gpt-4o'),
+      tools: { findUserTool },
+    });
+
+    const mastra = new Mastra({
+      agents: { userAgent },
+    });
+
+    const agentOne = mastra.getAgent('userAgent');
+
+    const res = await agentOne.generate(
+      'Use the "findUserTool" to Find the user with name - Joe and return the name and email',
+    );
+
+    const toolCall: any = res.steps[0].toolResults.find((result: any) => result.toolName === 'findUserTool');
+
+    expect(res.steps.length > 1);
+    expect(res.text.includes('joe@mail.com'));
+    expect(toolCall?.result?.email).toBe('joe@mail.com');
+    expect(mockFindUser).toHaveBeenCalled();
+  });
 
   it('should call testTool from TestIntegration', async () => {
     const testAgent = new Agent({

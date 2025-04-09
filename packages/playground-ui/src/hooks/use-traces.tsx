@@ -32,7 +32,7 @@ export const useTraces = (componentName: string, baseUrl: string, isWorkflow: bo
       if (!res.traces) {
         throw new Error('Error fetching traces');
       }
-      const refinedTraces = refineTraces(res?.traces || [], isWorkflow);
+      const refinedTraces = refineTraces(res?.traces?.traces || [], isWorkflow);
       return refinedTraces;
     } catch (error) {
       throw error;

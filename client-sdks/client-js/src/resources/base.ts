@@ -26,7 +26,8 @@ export class BaseResource {
           headers: {
             ...headers,
             ...options.headers,
-            'x-mastra-client-type': 'js',
+            // TODO: Bring this back once we figure out what we/users need to do to make this work with cross-origin requests
+            // 'x-mastra-client-type': 'js',
           },
           body:
             options.body instanceof FormData ? options.body : options.body ? JSON.stringify(options.body) : undefined,

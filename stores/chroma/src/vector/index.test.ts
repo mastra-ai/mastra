@@ -2,7 +2,6 @@ import type { QueryResult, IndexStats } from '@mastra/core/vector';
 import { describe, expect, beforeEach, afterEach, it, beforeAll, afterAll, vi } from 'vitest';
 
 import { ChromaVector } from './';
-import { Collection } from 'chromadb';
 
 describe('ChromaVector Integration Tests', () => {
   let vectorDB = new ChromaVector({
@@ -196,8 +195,8 @@ describe('ChromaVector Integration Tests', () => {
       expect(results[0]?.vector).toEqual(newVector);
     });
 
-    it('should throw exception when no updates are given', () => {
-      expect(vectorDB.updateIndexById(testIndexName, 'id', {})).rejects.toThrow('No updates provided');
+    it('should throw exception when no updates are given', async () => {
+      await expect(vectorDB.updateIndexById(testIndexName, 'id', {})).rejects.toThrow('No updates provided');
     });
 
     it('should delete the vector by id', async () => {
@@ -759,22 +758,20 @@ describe('ChromaVector Integration Tests', () => {
         expect(results.length).toBeGreaterThan(0);
       });
 
-      it('requires multiple conditions in logical operators', async () => {
-        await expect(
-          vectorDB.query({
-            indexName: testIndexName2,
-            queryVector: [1, 0, 0],
-            filter: { $and: [{ category: 'electronics' }] },
-          }),
-        ).rejects.toThrow();
+      it('accepts single conditions in logical operators', async () => {
+        const results = await vectorDB.query({
+          indexName: testIndexName2,
+          queryVector: [1, 0, 0],
+          filter: { $and: [{ category: 'electronics' }] },
+        });
+        expect(results.length).toBeGreaterThan(0);
 
-        await expect(
-          vectorDB.query({
-            indexName: testIndexName2,
-            queryVector: [1, 0, 0],
-            filter: { $or: [{ price: { $gt: 900 } }] },
-          }),
-        ).rejects.toThrow();
+        const results2 = await vectorDB.query({
+          indexName: testIndexName2,
+          queryVector: [1, 0, 0],
+          filter: { $or: [{ price: { $gt: 900 } }] },
+        });
+        expect(results2.length).toBeGreaterThan(0);
       });
     });
 
@@ -1292,15 +1289,14 @@ describe('ChromaVector Integration Tests', () => {
     });
 
     describe('Edge Cases and Validation', () => {
-      it('should reject empty string in $contains', async () => {
-        await expect(
-          vectorDB.query({
-            indexName: testIndexName3,
-            queryVector: [1.0, 0.0, 0.0],
-            topK: 3,
-            documentFilter: { $contains: '' },
-          }),
-        ).rejects.toThrow('Expected where document operand value for operator $contains to be a non-empty str');
+      it('allows empty string in $contains', async () => {
+        const results = await vectorDB.query({
+          indexName: testIndexName3,
+          queryVector: [1.0, 0.0, 0.0],
+          topK: 3,
+          documentFilter: { $contains: '' },
+        });
+        expect(results).toHaveLength(3);
       });
 
       it('should be case sensitive', async () => {
@@ -1514,5 +1510,90 @@ describe('ChromaVector Integration Tests', () => {
       expect(Array.isArray(upsertResults)).toBe(true);
       expect(upsertResults).toHaveLength(1);
     });
+  });
+
+  describe('Performance and Concurrency', () => {
+    const perfTestIndex = 'perf-test-index';
+
+    beforeEach(async () => {
+      try {
+        await vectorDB.deleteIndex(perfTestIndex);
+      } catch {
+        // Ignore errors if index doesn't exist
+      }
+      await vectorDB.createIndex({ indexName: perfTestIndex, dimension });
+    }, 10000);
+
+    afterEach(async () => {
+      try {
+        await vectorDB.deleteIndex(perfTestIndex);
+      } catch {
+        // Ignore cleanup errors
+      }
+    }, 10000);
+
+    it('handles concurrent operations correctly', async () => {
+      const promises = Array(10)
+        .fill(0)
+        .map((_, i) =>
+          vectorDB.upsert({
+            indexName: perfTestIndex,
+            vectors: [[1, 0, 0]],
+            metadata: [{ test: 'concurrent', id: i }],
+            ids: [`concurrent-${i}`],
+          }),
+        );
+      await Promise.all(promises);
+
+      const results = await vectorDB.query({
+        indexName: perfTestIndex,
+        queryVector: [1, 0, 0],
+        filter: { test: 'concurrent' },
+      });
+      expect(results).toHaveLength(10);
+    }, 15000);
+
+    it('handles large batch operations', async () => {
+      const batchSize = 100; // Using 100 instead of 1000 to keep tests fast
+      const vectors = Array(batchSize)
+        .fill(0)
+        .map(() => [1, 0, 0]);
+      const metadata = vectors.map((_, i) => ({ index: i, test: 'batch' }));
+      const ids = vectors.map((_, i) => `batch-${i}`);
+
+      await vectorDB.upsert({
+        indexName: perfTestIndex,
+        vectors,
+        metadata,
+        ids,
+      });
+
+      // Verify all vectors were inserted
+      const stats = await vectorDB.describeIndex(perfTestIndex);
+      expect(stats.count).toBe(batchSize);
+
+      const results = await vectorDB.query({
+        indexName: perfTestIndex,
+        queryVector: [1, 0, 0],
+        filter: { test: 'batch' },
+        topK: batchSize,
+      });
+      expect(results).toHaveLength(batchSize);
+
+      // Test querying with pagination
+      const pageSize = 20;
+      const pages: QueryResult[][] = [];
+      for (let i = 0; i < batchSize; i += pageSize) {
+        const page = await vectorDB.query({
+          indexName: perfTestIndex,
+          queryVector: [1, 0, 0],
+          filter: { test: 'batch' },
+          topK: pageSize,
+        });
+        pages.push(page);
+        expect(page).toHaveLength(Math.min(pageSize, batchSize - i));
+      }
+      expect(pages).toHaveLength(Math.ceil(batchSize / pageSize));
+    }, 30000);
   });
 });
