@@ -58,7 +58,7 @@ export type SharedMemoryConfig = {
 
   options?: MemoryConfig;
 
-  vector?: MastraVector;
+  vector?: MastraVector | false;
   embedder?: EmbeddingModel<string>;
 
   processors?: MemoryProcessor[];
