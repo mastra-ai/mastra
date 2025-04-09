@@ -14,6 +14,7 @@ import { CookieConsent } from "@/components/cookie-consent";
 import { Footer } from "@/components/footer";
 import { Nav } from "@/components/navbar";
 import { SubscribeForm } from "@/components/subscribe-form";
+import { TabSwitcher } from "@/components/tab-switcher";
 
 const footer = <Footer />;
 
@@ -53,7 +54,12 @@ export default async function RootLayout({
         <PostHogProvider>
           <Layout
             search={<Search placeholder="Search docs" />}
-            navbar={<Nav />}
+            navbar={
+              <div className="flex  sticky top-0 z-30 bg-[var(--primary-bg)] flex-col">
+                <Nav />
+                <TabSwitcher />
+              </div>
+            }
             pageMap={await getPageMap()}
             nextThemes={{
               forcedTheme: "dark",
