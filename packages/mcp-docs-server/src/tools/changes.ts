@@ -1,6 +1,5 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import type { Tool, Context } from 'tylerbarnes-fastmcp-fix';
 import { z } from 'zod';
 import { fromPackageRoot } from '../utils';
 
@@ -55,26 +54,53 @@ const packagesListing =
     ? '\n\nAvailable packages: ' + initialPackages.map(pkg => pkg.name).join(', ')
     : '\n\nNo package changelogs available yet. Run the documentation preparation script first.';
 
-const changesSchema = z.object({
+export const changesInputSchema = z.object({
   package: z
     .string()
     .optional()
     .describe('Name of the specific package to fetch changelog for. If not provided, lists all available packages.'),
 });
 
-type ChangesParams = z.infer<typeof changesSchema>;
+export type ChangesInput = z.infer<typeof changesInputSchema>;
 
-export const changesTool: Tool<any, typeof changesSchema> = {
+export const changesTool = {
   name: 'mastraChanges',
-  description: 'Get changelog information for Mastra.ai packages. ' + packagesListing,
-  parameters: changesSchema,
-  execute: async (args: ChangesParams, _context: Context<any>) => {
-    if (!args.package) {
-      const packages = await listPackageChangelogs();
-      return ['Available package changelogs:', '', ...packages.map(pkg => `- ${pkg.name}`)].join('\n');
-    }
+  description: `Get changelog information for Mastra.ai packages. ${packagesListing}`,
+  execute: async (args: ChangesInput) => {
+    try {
+      if (!args.package) {
+        const packages = await listPackageChangelogs();
+        return {
+          content: [
+            {
+              type: 'text',
+              text: ['Available package changelogs:', '', ...packages.map(pkg => `- ${pkg.name}`)].join('\n'),
+            },
+          ],
+          isError: false,
+        };
+      }
 
-    const content = await readPackageChangelog(args.package);
-    return content;
+      const content = await readPackageChangelog(args.package);
+      return {
+        content: [
+          {
+            type: 'text',
+            text: content,
+          },
+        ],
+        isError: false,
+      };
+    } catch (error) {
+      return {
+        content: [
+          {
+            type: 'text',
+            text: `Error: ${error instanceof Error ? error.message : String(error)}`,
+          },
+        ],
+        isError: true,
+      };
+    }
   },
 };
