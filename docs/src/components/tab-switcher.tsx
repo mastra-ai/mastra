@@ -1,4 +1,4 @@
-"use client";
+'use client'
 import { cn } from "@/lib/utils";
 import { BookMarked, BookText, BookType, CodeXml, File } from "lucide-react";
 import { motion } from "motion/react";
@@ -28,7 +28,7 @@ const docsTabs = [
     id: "API Reference",
     label: "API Reference",
     href: "/reference",
-    icon: <CodeXml className="w-4 h-4" />,
+    icon: <CodeXml className="w-4 h-4"  />,
   },
   {
     id: "Showcase",
@@ -38,16 +38,16 @@ const docsTabs = [
   },
 ];
 
-export const TabSwitcher = ({ className }: { className?: string }) => {
-  const pathname = usePathname();
 
+export const TabSwitcher = ({className}: {className?: string}) => {
+  const pathname = usePathname();
+  
   return (
-    <div className={cn("border-b-[0.5px] border-b-[var(--border)]", className)}>
+    <div
+      className={cn("border-b-[0.5px] border-b-[var(--border)]", className)}
+    >
       <div className="max-w-[var(--nextra-content-width)] mx-auto ">
-        <nav
-          className="flex gap-6 overflow-x-auto py-2 px-5 -ml-3"
-          aria-label="Documentation tabs"
-        >
+        <nav className="flex gap-6 overflow-x-auto py-2 px-5 -ml-3" aria-label="Documentation tabs">
           {docsTabs.map((tab) => {
             const isActive =
               pathname === tab.href || pathname?.startsWith(`${tab.href}/`);
@@ -81,3 +81,4 @@ export const TabSwitcher = ({ className }: { className?: string }) => {
     </div>
   );
 };
+

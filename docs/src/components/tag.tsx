@@ -1,10 +1,10 @@
-type TagProps = {
-  children: React.ReactNode;
-  text?: "new" | "experimental" | "advanced";
-  showAbbr?: boolean;
-};
+type TagProps = {children: React.ReactNode, text?: 'new' | 'experimental' | 'advanced', showAbbr?: boolean}
 
-export const Tag = ({ children, text = "new", showAbbr = false }: TagProps) => {
+export const Tag = ({
+  children,
+  text = "new",
+  showAbbr = false,
+}: TagProps) => {
   const tags = [
     {
       name: "new",

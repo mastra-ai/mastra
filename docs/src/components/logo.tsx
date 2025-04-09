@@ -52,12 +52,5 @@ export const logo = (
 );
 
 export const LogoWithSuffix = () => {
-  return (
-    <div className="flex items-center gap-2">
-      {logo}{" "}
-      <span className="px-1.5 font-medium tracking-wider py-0.5 text-xs rounded border border-[var(--border)] uppercase">
-        Docs
-      </span>
-    </div>
-  );
-};
+  return <div className="flex items-center gap-2">{logo} <span className="px-1.5 font-medium tracking-wider py-0.5 text-xs rounded border border-[var(--border)] uppercase">Docs</span></div>
+}
