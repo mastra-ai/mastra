@@ -83,11 +83,14 @@ jobs:
           echo "Finished updating workspace dependencies. $changed_count files updated."
         shell: bash
 
+      - name: Build
+        run: pnpm turbo --filter "!./examples/**/*" --filter "!./docs/" build
+
       - name: Run Changeset Pre Exit
         run: pnpm changeset pre exit
 
       - name: Run Changeset Version Snapshot
         run: pnpm changeset version --snapshot ${{ env.FINAL_TAG }}
 
-      # - name: Publish to npm
-      #   run: pnpm publish -r --no-git-checks --tag ${{ env.FINAL_TAG }}
+      - name: Publish to npm
+        run: pnpm publish -r --no-git-checks --tag ${{ env.FINAL_TAG }}
