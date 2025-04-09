@@ -1,5 +1,12 @@
 # @mastra/deployer-vercel
 
+## 0.1.17-alpha.1
+
+### Patch Changes
+
+- Updated dependencies [94cd5c1]
+  - @mastra/deployer@0.2.8-alpha.1
+
 ## 0.1.17-alpha.0
 
 ### Patch Changes

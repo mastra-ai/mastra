@@ -1,5 +1,13 @@
 # mastra
 
+## 0.4.8-alpha.1
+
+### Patch Changes
+
+- df5989d: Correct playground model setting maxSteps reset value
+- Updated dependencies [94cd5c1]
+  - @mastra/deployer@0.2.8-alpha.1
+
 ## 0.4.8-alpha.0
 
 ### Patch Changes

@@ -1,5 +1,11 @@
 # @mastra/cloudflare
 
+## 0.0.3-alpha.1
+
+### Patch Changes
+
+- 3f90868: Add missing getTraces method to Cloudflare KV
+
 ## 0.0.3-alpha.0
 
 ### Patch Changes
