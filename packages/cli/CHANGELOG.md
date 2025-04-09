@@ -1,5 +1,38 @@
 # mastra
 
+## 0.4.8-alpha.0
+
+### Patch Changes
+
+- d3c372c: Show status UI of steps on playground workflow when workflow has no triggerSchema
+  Show number of steps on workflows table
+- Updated dependencies [a06aadc]
+- Updated dependencies [ae6c5ce]
+  - @mastra/core@0.8.2-alpha.0
+  - @mastra/deployer@0.2.8-alpha.0
+
+## 0.4.7
+
+### Patch Changes
+
+- 99e2998: Set default max steps to 5
+- 8fdb414: Custom mastra server cors config
+- Updated dependencies [99e2998]
+- Updated dependencies [8fdb414]
+  - @mastra/core@0.8.1
+  - @mastra/deployer@0.2.7
+
+## 0.4.7-alpha.0
+
+### Patch Changes
+
+- 99e2998: Set default max steps to 5
+- 8fdb414: Custom mastra server cors config
+- Updated dependencies [99e2998]
+- Updated dependencies [8fdb414]
+  - @mastra/core@0.8.1-alpha.0
+  - @mastra/deployer@0.2.7-alpha.0
+
 ## 0.4.6
 
 ### Patch Changes

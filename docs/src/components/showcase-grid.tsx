@@ -16,7 +16,7 @@ const ShowcaseCard = ({
   image,
   link,
 }: ShowcaseCardProps) => (
-  <div className="group rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 overflow-hidden transition-all">
+  <div className="group showcase-item rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 overflow-hidden transition-all">
     <a href={link} className="block" target="_blank" rel="noopener noreferrer">
       <div className="aspect-video relative overflow-hidden bg-zinc-900">
         <Image

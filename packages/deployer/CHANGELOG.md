@@ -1,5 +1,34 @@
 # @mastra/deployer
 
+## 0.2.8-alpha.0
+
+### Patch Changes
+
+- ae6c5ce: Fix await loop inside mastra entrypoint
+- Updated dependencies [a06aadc]
+  - @mastra/core@0.8.2-alpha.0
+  - @mastra/server@1.0.2-alpha.0
+
+## 0.2.7
+
+### Patch Changes
+
+- 8fdb414: Custom mastra server cors config
+- Updated dependencies [99e2998]
+- Updated dependencies [8fdb414]
+  - @mastra/core@0.8.1
+  - @mastra/server@1.0.1
+
+## 0.2.7-alpha.0
+
+### Patch Changes
+
+- 8fdb414: Custom mastra server cors config
+- Updated dependencies [99e2998]
+- Updated dependencies [8fdb414]
+  - @mastra/core@0.8.1-alpha.0
+  - @mastra/server@1.0.1-alpha.0
+
 ## 0.2.6
 
 ### Patch Changes

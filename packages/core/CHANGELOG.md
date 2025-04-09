@@ -1,5 +1,25 @@
 # @mastra/core
 
+## 0.8.2-alpha.0
+
+### Patch Changes
+
+- a06aadc: Upgrade fastembed to fix bug where fastembe cannot be imported
+
+## 0.8.1
+
+### Patch Changes
+
+- 99e2998: Set default max steps to 5
+- 8fdb414: Custom mastra server cors config
+
+## 0.8.1-alpha.0
+
+### Patch Changes
+
+- 99e2998: Set default max steps to 5
+- 8fdb414: Custom mastra server cors config
+
 ## 0.8.0
 
 ### Minor Changes

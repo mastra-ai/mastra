@@ -1,4 +1,5 @@
 import type { Handler, MiddlewareHandler } from 'hono';
+import type { cors } from 'hono/cors';
 import type { DescribeRouteOptions } from 'hono-openapi';
 export type Methods = 'GET' | 'POST' | 'PUT' | 'DELETE';
 
@@ -17,4 +18,9 @@ export type ServerConfig = {
   timeout?: number;
   apiRoutes?: ApiRoute[];
   middleware?: Middleware | Middleware[];
+  /**
+   * CORS configuration for the server
+   * @default { origin: '*', allowMethods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'], allowHeaders: ['Content-Type', 'Authorization', 'x-mastra-client-type'], exposeHeaders: ['Content-Length', 'X-Requested-With'], credentials: false }
+   */
+  cors?: Parameters<typeof cors>[0] | false;
 };

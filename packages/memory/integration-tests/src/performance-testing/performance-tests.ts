@@ -1,8 +1,8 @@
 import { randomUUID } from 'node:crypto';
-import { Memory } from '@mastra/memory';
+import { faker } from '@faker-js/faker';
+import type { Memory } from '@mastra/memory';
 import type { TextPart, ImagePart, FilePart, ToolCallPart } from 'ai';
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
-import { faker } from '@faker-js/faker';
 
 const resourceId = 'resource';
 // Test helpers
@@ -74,7 +74,7 @@ export function getPerformanceTests(memory: Memory) {
       // Now create messages in batches for each thread
       for (let i = 0; i < threadCount; i++) {
         const thread = threads[i];
-        const allMessages = Array.from({ length: messagesPerThread }, (_, j) => {
+        const allMessages = Array.from({ length: messagesPerThread }, () => {
           // Generate a realistic conversation about various topics
           const topic = faker.helpers.arrayElement([
             'machine learning',
