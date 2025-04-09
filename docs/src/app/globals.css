@@ -47,11 +47,10 @@ header > * {
   background: var(--primary-bg);
 }
 
-@media screen and (min-width: 1024px) {
-  header nav > div:nth-child(2){
+ header nav > div:nth-child(2){
     display: none;
-  }
 }
+
 /* mobile nav */
 .nextra-mobile-nav{
   padding-block-start: calc(var(--nextra-navbar-height) * 2);
@@ -218,6 +217,11 @@ aside > * {
   --x-color-primary-400: oklab(
     18.2% -0.000000000000000147 0.0000000000000000204
   );
+}
+
+aside>div:first-child button{
+  font-weight: 500;
+  color: var(--color-primary);
 }
 
 /*Size of chevron*/
