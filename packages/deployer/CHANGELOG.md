@@ -1,5 +1,14 @@
 # @mastra/deployer
 
+## 0.2.8-alpha.0
+
+### Patch Changes
+
+- ae6c5ce: Fix await loop inside mastra entrypoint
+- Updated dependencies [a06aadc]
+  - @mastra/core@0.8.2-alpha.0
+  - @mastra/server@1.0.2-alpha.0
+
 ## 0.2.7
 
 ### Patch Changes
