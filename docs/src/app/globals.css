@@ -21,6 +21,7 @@
 
 :root {
   --nextra-navbar-height: 60px;
+  --nextra-content-width: 1220px;
 }
 
 body:is(html[class~="dark"] *){
@@ -33,7 +34,12 @@ body:is(html[class~="dark"] *){
   display: none;
 }
 
+header + div{
+  --nextra-content-width: 1220px;
+}
+
 header {
+  position: static;
   background: var(--primary-bg);
 }
 
@@ -41,8 +47,25 @@ header > * {
   background: var(--primary-bg);
 }
 
+@media screen and (min-width: 1024px) {
+  header nav > div:nth-child(2){
+    display: none;
+  }
+}
+/* mobile nav */
+.nextra-mobile-nav{
+  padding-block-start: calc(var(--nextra-navbar-height) * 2);
+}
+
 .nextra-navbar {
   border-bottom: 0.5px solid var(--border);
+}
+
+.nextra-navbar nav > a {
+  &:hover{
+    transition: none;
+    opacity: 1;
+  }
 }
 
 .nextra-navbar input[type="search"] {
@@ -238,7 +261,9 @@ aside > div:nth-child(1) ul li.active {
 }
 
 aside > div:nth-child(1) ul li.active:has(a[href="/docs"]),
-aside > div:nth-child(1) ul li.active:has(a[href="/examples"]) {
+aside > div:nth-child(1) ul li.active:has(a[href="/examples"]),
+aside > div:nth-child(1) ul li.active:has(a[href="/guides"]),
+aside > div:nth-child(1) ul li.active:has(a[href="/reference"]) {
   &::before {
     content: "";
     background: transparent;
@@ -247,14 +272,18 @@ aside > div:nth-child(1) ul li.active:has(a[href="/examples"]) {
 
 aside a[href="/docs"],
 aside button[data-href="/docs/reference"],
-aside a[href="/examples"] {
+aside a[href="/examples"],
+aside a[href="/guides"],
+aside a[href="/reference"] {
   position: relative;
   padding-inline-start: calc((var(--button-gap) * 3) + var(--icon-position));
 }
 
 aside a[href="/docs"]::before,
 aside button[data-href="/docs/reference"]::before,
-aside a[href="/examples"]::before {
+aside a[href="/examples"]::before,
+aside a[href="/guides"]::before,
+aside a[href="/reference"]::before {
   content: "";
   position: absolute;
   left: var(--icon-position);
@@ -267,11 +296,13 @@ aside a[href="/examples"]::before {
 }
 
 aside a[href="/docs"]::before,
-aside a[href="/examples"]::before {
+aside a[href="/examples"]::before,
+aside a[href="/guides"]::before
+{
   background-image: url("icons/introduction.svg");
 }
 
-aside button[data-href="/docs/reference"]::before {
+aside button[data-href="/docs/reference"]::before,aside a[href="/reference"]::before  {
   background-image: url("icons/reference.svg");
 }
 
@@ -330,4 +361,10 @@ aside > div:nth-child(1) button {
   &:hover{
     text-decoration: none;
   }
+}
+
+/** one off utility **/
+
+a:focus-visible{
+  border-radius:4px;
 }
