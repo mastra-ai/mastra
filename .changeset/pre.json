@@ -141,5 +141,10 @@
     "@mastra/voice-sarvam": "0.1.6",
     "@mastra/voice-speechify": "0.1.11"
   },
-  "changesets": []
+  "changesets": [
+    "breezy-tigers-walk",
+    "cool-papers-check",
+    "icy-donkeys-exist",
+    "strong-beans-end"
+  ]
 }
