@@ -188,7 +188,7 @@ export function AgentDetails({ agentId }: { agentId: string }) {
                     frequencyPenalty: undefined,
                     presencePenalty: undefined,
                     maxRetries: 2,
-                    maxSteps: 1,
+                    maxSteps: 5,
                     maxTokens: undefined,
                     temperature: 0.5,
                     topP: 1,
