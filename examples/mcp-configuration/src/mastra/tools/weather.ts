@@ -1,6 +1,9 @@
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
-import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
+import { SSEServerTransport } from '@modelcontextprotocol/sdk/server/sse.js';
+import { CallToolRequestSchema, ListToolsRequestSchema } from '@modelcontextprotocol/sdk/types.js';
 import { z } from 'zod';
+import { zodToJsonSchema } from 'zod-to-json-schema';
+import { createServer, IncomingMessage, ServerResponse } from 'http';
 
 interface WeatherResponse {
   current: {
@@ -87,30 +90,86 @@ const server = new Server(
   },
 );
 
-const weatherSchema = z.object({
-  method: z.literal('getWeather'),
+const weatherInputSchema = z.object({
   location: z.string().describe('City name'),
 });
 
-server.setRequestHandler(weatherSchema, async args => {
-  try {
-    const weatherData = await getWeather(args.location);
-    return {
-      content: [
-        {
-          type: 'text',
-          text: JSON.stringify(weatherData),
-        },
-      ],
-      isError: false,
-    };
-  } catch (error) {
-    if (error instanceof Error) {
+const weatherTool = {
+  name: 'getWeather',
+  description: 'Get current weather for a location',
+  execute: async (args: z.infer<typeof weatherInputSchema>) => {
+    try {
+      const weatherData = await getWeather(args.location);
       return {
         content: [
           {
             type: 'text',
-            text: `Weather fetch failed: ${error.message}`,
+            text: JSON.stringify(weatherData),
+          },
+        ],
+        isError: false,
+      };
+    } catch (error) {
+      if (error instanceof Error) {
+        return {
+          content: [
+            {
+              type: 'text',
+              text: `Weather fetch failed: ${error.message}`,
+            },
+          ],
+          isError: true,
+        };
+      }
+      return {
+        content: [
+          {
+            type: 'text',
+            text: 'An unknown error occurred.',
+          },
+        ],
+        isError: true,
+      };
+    }
+  },
+};
+
+// Set up request handlers
+server.setRequestHandler(ListToolsRequestSchema, async () => ({
+  tools: [
+    {
+      name: weatherTool.name,
+      description: weatherTool.description,
+      inputSchema: zodToJsonSchema(weatherInputSchema),
+    },
+  ],
+}));
+
+server.setRequestHandler(CallToolRequestSchema, async request => {
+  try {
+    switch (request.params.name) {
+      case 'getWeather': {
+        const args = weatherInputSchema.parse(request.params.arguments);
+        return await weatherTool.execute(args);
+      }
+      default:
+        return {
+          content: [
+            {
+              type: 'text',
+              text: `Unknown tool: ${request.params.name}`,
+            },
+          ],
+          isError: true,
+        };
+    }
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      return {
+        content: [
+          {
+            type: 'text',
+            text: `Invalid arguments: ${error.errors.map(e => `${e.path.join('.')}: ${e.message}`).join(', ')}`,
           },
         ],
         isError: true,
@@ -120,7 +179,7 @@ server.setRequestHandler(weatherSchema, async args => {
       content: [
         {
           type: 'text',
-          text: 'An unknown error occurred.',
+          text: `Error: ${error instanceof Error ? error.message : String(error)}`,
         },
       ],
       isError: true,
@@ -128,10 +187,39 @@ server.setRequestHandler(weatherSchema, async args => {
   }
 });
 
-async function runServer() {
-  const transport = new StdioServerTransport();
-  await server.connect(transport);
-  console.error('Weather MCP Server running on SSE');
-}
+// Start the server with SSE support
+let transport: SSEServerTransport;
 
-export { runServer, server };
+const httpServer = createServer(async (req: IncomingMessage, res: ServerResponse) => {
+  const url = new URL(req.url || '', `http://${req.headers.host}`);
+
+  if (url.pathname === '/sse') {
+    console.log('Received SSE connection');
+    transport = new SSEServerTransport('/message', res);
+    await server.connect(transport);
+
+    server.onclose = async () => {
+      await server.close();
+      process.exit(0);
+    };
+  } else if (url.pathname === '/message') {
+    console.log('Received message');
+    if (!transport) {
+      res.writeHead(503);
+      res.end('SSE connection not established');
+      return;
+    }
+    await transport.handlePostMessage(req, res);
+  } else {
+    console.log('Unknown path:', url.pathname);
+    res.writeHead(404);
+    res.end();
+  }
+});
+
+const PORT = process.env.PORT || 8080;
+httpServer.listen(PORT, () => {
+  console.log(`Weather server is running on SSE at http://localhost:${PORT}`);
+});
+
+export { server };
