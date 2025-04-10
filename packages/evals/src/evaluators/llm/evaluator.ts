@@ -63,18 +63,12 @@ export class LLMEvaluator extends Evaluator {
     return this.agent.llm.getModelId();
   }
 
-  /**
-   * Get the static template for the reasoning prompt
-   */
-  getReasonTemplate(): string | undefined {
-    return this.reasonPrompt?.template;
+  get evalTemplate(): string | undefined {
+    return this.evalPrompt?.template;
   }
 
-  /**
-   * Get the static template for the evaluation prompt
-   */
-  getEvalTemplate(): string | undefined {
-    return this.evalPrompt?.template;
+  get reasonTemplate(): string | undefined {
+    return this.reasonPrompt?.template;
   }
 
   /**
@@ -191,6 +185,8 @@ export class LLMEvaluator extends Evaluator {
   }): Promise<EvaluationResult> {
     const context = options?.context || this.settings.context;
     const outcomes = await this.evaluate({ input, output, context });
+
+    console.log('outcomes', outcomes);
 
     const eval_result = await Promise.resolve(
       this.scorer({
