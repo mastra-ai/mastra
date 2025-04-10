@@ -84,7 +84,7 @@ program
 
 program
   .command('init')
-  .description('Initixalize Mastra in your project')
+  .description('Initialize Mastra in your project')
   .option('--default', 'Quick start with defaults(src, OpenAI, no examples)')
   .option('-d, --dir <directory>', 'Directory for Mastra files to (defaults to src/)')
   .option('-c, --components <components>', 'Comma-separated list of components (agents, tools, workflows)')
