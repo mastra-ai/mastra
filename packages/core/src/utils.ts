@@ -1,5 +1,5 @@
 import { createHash } from 'crypto';
-import { convertToCoreMessages, jsonSchema } from 'ai';
+import { convertToCoreMessages } from 'ai';
 import type { CoreMessage, ToolExecutionOptions } from 'ai';
 import jsonSchemaToZod from 'json-schema-to-zod';
 import { z } from 'zod';
@@ -12,7 +12,6 @@ import type { Mastra } from './mastra';
 import type { AiMessageType, MastraMemory } from './memory';
 import { Tool } from './tools';
 import type { CoreTool, ToolAction, VercelTool } from './tools';
-import type { JSONSchema7 } from 'json-schema';
 
 export const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
