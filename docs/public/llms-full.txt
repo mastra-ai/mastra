@@ -11748,7 +11748,7 @@ description: "Mastra API Reference"
 ---
 
 # Reference
-Source: https://mastra.ai/docs/reference
+Source: https://mastra.ai/reference
 
 The Reference section provides documentation of Mastra's API, including parameters, types and usage examples.
 
