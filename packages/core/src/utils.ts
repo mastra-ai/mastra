@@ -325,7 +325,7 @@ interface LogOptions {
   agentName?: string;
   toolName: string;
   tool?: ToolToConvert;
-  type?: 'tool' | 'toolset';
+  type?: 'tool' | 'toolset' | 'client-tool';
 }
 
 interface LogMessageOptions {
@@ -352,7 +352,7 @@ function createLogMessageOptions({ agentName, toolName, tool, type }: LogOptions
   };
 }
 
-function createExecute(tool: ToolToConvert, options: ToolOptions, logType?: 'tool' | 'toolset') {
+function createExecute(tool: ToolToConvert, options: ToolOptions, logType?: 'tool' | 'toolset' | 'client-tool') {
   // dont't add memory or mastra to logging
   const { logger, mastra: _mastra, memory: _memory, ...rest } = options;
 
@@ -476,7 +476,11 @@ function convertInputSchema(tool: ToolAction<any, any, any>): z.ZodType {
  * @param logType - Type of tool to log (tool or toolset)
  * @returns A CoreTool that can be used by the system
  */
-export function makeCoreTool(tool: ToolToConvert, options: ToolOptions, logType?: 'tool' | 'toolset'): CoreTool {
+export function makeCoreTool(
+  tool: ToolToConvert,
+  options: ToolOptions,
+  logType?: 'tool' | 'toolset' | 'client-tool',
+): CoreTool {
   // Helper to get parameters based on tool type
   const getParameters = () => {
     console.log(isVercelTool(tool), tool);

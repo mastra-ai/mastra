@@ -19,50 +19,44 @@ function App() {
 
   const clientSideToolCallsMap: Record<string, any> = {
     changeColor: {
-      tool: {
-        id: 'changeColor',
-        description: 'Changes the background color',
-        inputSchema: {
-          type: 'object',
-          properties: {
-            color: { type: 'string' },
-          },
-          required: ['color'], // Now name is required
+      id: 'changeColor',
+      description: 'Changes the background color',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          color: { type: 'string' },
         },
+        required: ['color'], // Now name is required
       },
       execute: (props: { color: string }) => {
         setColor(props.color);
       },
     },
     changeLogoSize: {
-      tool: {
-        id: 'changeLogoSize',
-        description: 'Changes the size of the logo',
-        inputSchema: {
-          type: 'object',
-          properties: {
-            height: { type: 'string' },
-            width: { type: 'string' },
-          },
-          required: ['height', 'width'],
+      id: 'changeLogoSize',
+      description: 'Changes the size of the logo',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          height: { type: 'string' },
+          width: { type: 'string' },
         },
+        required: ['height', 'width'],
       },
       execute: (props: { height: string; width: string }) => {
         setLogoSize({ height: props.height, width: props.width });
       },
     },
     addPost: {
-      tool: {
-        id: 'addPost',
-        description: 'Add a new post',
-        inputSchema: {
-          type: 'object',
-          properties: {
-            color: { type: 'string' },
-            name: { type: 'string' },
-          },
-          required: ['color', 'name'], // Now name is required
+      id: 'addPost',
+      description: 'Add a new post',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          color: { type: 'string' },
+          name: { type: 'string' },
         },
+        required: ['color', 'name'], // Now name is required
       },
       execute: (props: { color: string; name: string }) => {
         setPosts(prev => [...prev, props]);
@@ -74,13 +68,7 @@ function App() {
     const agent = client.getAgent('agent');
     const response = await agent.stream({
       messages: prompt,
-      toolsets: {
-        browser: {
-          changeColor: clientSideToolCallsMap.changeColor.tool,
-          addPost: clientSideToolCallsMap.addPost.tool,
-          changeLogoSize: clientSideToolCallsMap.changeLogoSize.tool,
-        },
-      },
+      client_tools: clientSideToolCallsMap,
     });
 
     response.processDataStream({
