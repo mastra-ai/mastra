@@ -4,7 +4,7 @@ import { describe, expect, beforeEach, afterEach, it, beforeAll, afterAll, vi } 
 import { MongoDBVector } from '@mastra/mongodb';
 import type { MongoDBQueryVectorParams, MongoDBUpsertVectorParams } from '@mastra/mongodb';
 
-describe('MongoDBVector Integration Tests', () => {
+describe('ChromaVector Integration Tests', () => {
   const mongoUri = 'mongodb://localhost:27017/?directConnection=true&serverSelectionTimeoutMS=2000';  
   const dbName = 'mastra_vector_db';  
   

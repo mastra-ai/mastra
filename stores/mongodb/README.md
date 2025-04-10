@@ -13,16 +13,10 @@ npm install @mastra/mongodb
 ```typescript
 import { MongoDBStore } from '@mastra/mongodb';
 
-const vectorStore = new MongoDBStore({
-
-});
+const vectorDB = new MongoDBVector({ uri: mongoUri, dbName });  
 
 // Create a new index
-await vectorStore.createIndex({
-  indexName: 'my-index',
-  dimension: 1536,
-  metric: 'cosine'
-});
+await vectorDB.createIndex({ indexName: testIndexName, dimension });
 
 // Add vectors
 const vectors = [[0.1, 0.2, ...], [0.3, 0.4, ...]];

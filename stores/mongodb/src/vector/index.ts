@@ -200,25 +200,22 @@ export class MongoDBVector extends MastraVector {
     const embeddingField = this.embeddingFieldName;  
     const numDimensions = dimension;  
   
-    const searchIndexModel = {  
-      name: indexNameInternal,  
-      definition: {  
-        mappings: {  
-          dynamic: false,  
-          fields: {  
-            [embeddingField]: {  
-              type: 'knnVector',  
-              dimensions: numDimensions,  
-              similarity: mongoMetric,  
-            },  
-          },  
-        },  
-      },  
-    };  
-  
     try {  
       // Create the search index  
-      await (collection as any).createSearchIndex(searchIndexModel);  
+      await (collection as any).createSearchIndex({
+        "definition": {
+          "fields": [
+            {
+              "type": "vector",
+              "path": embeddingField,
+              "numDimensions": numDimensions,
+              "similarity": mongoMetric
+            }
+          ]
+        },
+        "name": indexNameInternal,
+        "type": "vectorSearch"
+      });  
     } catch (error: any) {  
       if (error.codeName !== 'IndexAlreadyExists') {  
         throw error;  
