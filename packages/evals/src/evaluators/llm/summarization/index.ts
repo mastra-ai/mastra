@@ -1,6 +1,12 @@
 import type { LanguageModel } from '@mastra/core/llm';
 import { LLMEvaluator } from '../evaluator';
-import { generateReasonPrompt, SUMMARIZATION_AGENT_INSTRUCTIONS } from './prompts';
+import {
+  generateReasonPrompt,
+  SUMMARIZATION_AGENT_INSTRUCTIONS,
+  REASON_TEMPLATE,
+  EVAL_TEMPLATE,
+  generateEvaluationPrompt,
+} from './prompts';
 import { score } from './score';
 
 export class Summarization extends LLMEvaluator {
@@ -10,7 +16,14 @@ export class Summarization extends LLMEvaluator {
       instructions: SUMMARIZATION_AGENT_INSTRUCTIONS,
       scorer: score,
       model: model,
-      reasonPrompt: generateReasonPrompt,
+      reasonPrompt: {
+        template: REASON_TEMPLATE,
+        format: generateReasonPrompt,
+      },
+      evalPrompt: {
+        template: EVAL_TEMPLATE,
+        format: generateEvaluationPrompt,
+      },
       settings: {
         scale: scale ?? 1,
       },
