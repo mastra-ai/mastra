@@ -184,7 +184,7 @@ program
       command: 'mastra deploy',
       args,
       execution: async () => {
-        console.warn(`DEPRECATED: The deploy command is deprecated.
+        logger.warn(`DEPRECATED: The deploy command is deprecated.
           Please use the mastra build command instead.
           And deploy .mastra/output to your platform of choice.
           `);
