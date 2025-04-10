@@ -263,6 +263,11 @@ export default withNextra({
       permanent: true,
     },
     {
+      source: "/examples/rag/chunk-json",
+      destination: "/examples/rag/chunking/chunk-json",
+      permanent: true,
+    },
+    {
       source: "/examples/rag/hybrid-vector-search",
       destination: "/examples/rag/query/hybrid-vector-search",
       permanent: true,
@@ -283,8 +288,38 @@ export default withNextra({
       permanent: true,
     },
     {
+      source: "/examples/rag/embed-chunk-array",
+      destination: "/examples/rag/chunking/chunk-json",
+      permanent: true,
+    },
+    {
+      source: "/examples/rag/embed-text-chunk",
+      destination: "/examples/rag/chunking/chunk-text",
+      permanent: true,
+    },
+    {
+      source: "/examples/rag/filter-rag",
+      destination: "/docs/rag/retrieval#metadata-filtering",
+      permanent: true,
+    },
+    {
       source: "/docs/workflows/data-flow",
       destination: "/docs/workflows/variables",
+      permanent: true,
+    },
+    {
+      source: "/examples/rag/insert-embedding-in-astra",
+      destination: "/examples/rag/upsert/upsert-embeddings#astra-db",
+      permanent: true,
+    },
+    {
+      source: "/examples/rag/insert-embedding-in-pgvector",
+      destination: "/examples/rag/upsert/upsert-embeddings#pgvector",
+      permanent: true,
+    },
+    {
+      source: "/examples/rag/insert-embedding-in-chroma",
+      destination: "/examples/rag/upsert/upsert-embeddings#chroma",
       permanent: true,
     },
     {
@@ -295,6 +330,16 @@ export default withNextra({
     {
       source: "/examples/rag/usage/rerank-rag",
       destination: "/examples/rag/rerank/rerank-rag",
+      permanent: true,
+    },
+    {
+      source: "/docs/showcase",
+      destination: "/showcase",
+      permanent: true,
+    },
+    {
+      source: "/docs/evals/01-supported-evals",
+      destination: "/docs/evals/overview",
       permanent: true,
     },
   ],
