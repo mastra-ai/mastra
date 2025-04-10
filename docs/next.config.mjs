@@ -213,6 +213,11 @@ export default withNextra({
       permanent: true,
     },
     {
+      source: "/docs/workflows/index",
+      destination: "/docs/workflows/overview",
+      permanent: true,
+    },
+    {
       source: "/docs/reference/memory/memory-processors",
       destination: "/docs/memory/memory-processors",
       permanent: false, // we should have a memory-processors reference
@@ -230,6 +235,131 @@ export default withNextra({
     {
       source: "/docs/guides/:path*",
       destination: "/guides/guide/:path*",
+      permanent: true,
+    },
+    {
+      source: "/docs/deployment/logging-and-tracing",
+      destination: "/docs/observability/logging",
+      permanent: true,
+    },
+    {
+      source: "/examples/memory",
+      destination: "/examples/memory/memory-with-libsql",
+      permanent: true,
+    },
+    {
+      source: "/examples/rag/rerank",
+      destination: "/examples/rag/rerank/rerank-rag",
+      permanent: true,
+    },
+    {
+      source: "/examples/rag/rerank-rag",
+      destination: "/examples/rag/rerank/rerank-rag",
+      permanent: true,
+    },
+    {
+      source: "/examples/rag/chunking",
+      destination: "/examples/rag/chunking/chunk-text",
+      permanent: true,
+    },
+    {
+      source: "/examples/rag/chunk-json",
+      destination: "/examples/rag/chunking/chunk-json",
+      permanent: true,
+    },
+    {
+      source: "/examples/rag/hybrid-vector-search",
+      destination: "/examples/rag/query/hybrid-vector-search",
+      permanent: true,
+    },
+    {
+      source: "/docs/local-dev/mastra-init",
+      destination: "/docs/getting-started/installation",
+      permanent: true,
+    },
+    {
+      source: "/examples/rag/retrieve-results",
+      destination: "/examples/rag/query/retrieve-results",
+      permanent: true,
+    },
+    {
+      source: "/examples/rag/basic-rag",
+      destination: "/examples/rag/query/hybrid-vector-search",
+      permanent: true,
+    },
+    {
+      source: "/examples/rag/embed-chunk-array",
+      destination: "/examples/rag/chunking/chunk-json",
+      permanent: true,
+    },
+    {
+      source: "/examples/rag/embed-text-chunk",
+      destination: "/examples/rag/chunking/chunk-text",
+      permanent: true,
+    },
+    {
+      source: "/examples/rag/filter-rag",
+      destination: "/docs/rag/retrieval#metadata-filtering",
+      permanent: true,
+    },
+    {
+      source: "/docs/workflows/data-flow",
+      destination: "/docs/workflows/variables",
+      permanent: true,
+    },
+    {
+      source: "/examples/rag/insert-embedding-in-astra",
+      destination: "/examples/rag/upsert/upsert-embeddings#astra-db",
+      permanent: true,
+    },
+    {
+      source: "/examples/rag/insert-embedding-in-pgvector",
+      destination: "/examples/rag/upsert/upsert-embeddings#pgvector",
+      permanent: true,
+    },
+    {
+      source: "/examples/rag/insert-embedding-in-chroma",
+      destination: "/examples/rag/upsert/upsert-embeddings#chroma",
+      permanent: true,
+    },
+    {
+      source: "/examples/rag/insert-embedding-in-pinecone",
+      destination: "/examples/rag/upsert/upsert-embeddings#pinecone",
+      permanent: true,
+    },
+    {
+      source: "/examples/rag/usage/rerank-rag",
+      destination: "/examples/rag/rerank/rerank-rag",
+      permanent: true,
+    },
+    {
+      source: "/examples/rag/reranking-with-cohere",
+      destination: "/examples/rag/rerank/reranking-with-cohere",
+      permanent: true,
+    },
+    {
+      source: "/examples/memory/short-term-working-memory",
+      destination: "/examples/memory/memory-with-libsql",
+      permanent: true,
+    },
+    {
+      source: "/examples/rag/query/metadata-extraction",
+      destination: "/examples/rag/query/retrieve-results",
+      permanent: true,
+    },
+    {
+      source: "/docs/showcase",
+      destination: "/showcase",
+      permanent: true,
+    },
+    {
+      source: "/docs/local-dev/integrations",
+      destination: "/docs/integrations",
+      permanent: true,
+    },
+    {
+      source: "/docs/evals/01-supported-evals",
+      destination: "/docs/evals/overview",
       permanent: true,
     },
   ],

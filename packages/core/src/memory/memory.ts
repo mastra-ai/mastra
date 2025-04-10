@@ -336,6 +336,7 @@ export abstract class MastraMemory extends MastraBase {
           role: message.role as AiMessageType['role'],
           content: textContent,
           toolInvocations,
+          createdAt: message.createdAt,
         });
 
         return obj;
