@@ -1,4 +1,5 @@
 import { Badge } from '@/components/ui/badge';
+import { Input } from '@/components/ui/input';
 import { providerMapToIcon } from '@/pages/agents';
 import { GetEvaluatorResponse } from '@mastra/client-js';
 
@@ -49,7 +50,7 @@ function EvaluatorInstruction({ instructions }: { instructions: string }) {
   return (
     <div className="flex flex-col gap-2">
       <p className="text-xs text-mastra-el-5">Instructions</p>
-      <p className="text-sm text-mastra-el-5">{instructions}</p>
+      <Input value={instructions} variant="filled" className="text-sm" disabled />
     </div>
   );
 }
