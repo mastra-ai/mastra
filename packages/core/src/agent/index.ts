@@ -556,7 +556,14 @@ export class Agent<
             logger: this.logger,
             agentName: this.name,
           };
-          toolsFromToolsetsConverted[toolName] = makeCoreTool(toolObj, options, 'toolset');
+
+          console.log(toolObj);
+
+          const convertedToCoreTool = makeCoreTool(toolObj, options, 'toolset');
+
+          console.log('convertedToCoreTool', convertedToCoreTool);
+
+          toolsFromToolsetsConverted[toolName] = convertedToCoreTool;
         });
       });
     }

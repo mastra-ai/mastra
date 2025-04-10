@@ -1,5 +1,5 @@
 import { createHash } from 'crypto';
-import { convertToCoreMessages } from 'ai';
+import { convertToCoreMessages, jsonSchema } from 'ai';
 import type { CoreMessage, ToolExecutionOptions } from 'ai';
 import jsonSchemaToZod from 'json-schema-to-zod';
 import { z } from 'zod';
@@ -12,6 +12,7 @@ import type { Mastra } from './mastra';
 import type { AiMessageType, MastraMemory } from './memory';
 import { Tool } from './tools';
 import type { CoreTool, ToolAction, VercelTool } from './tools';
+import type { JSONSchema7 } from 'json-schema';
 
 export const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
@@ -303,7 +304,7 @@ export function resolveSerializedZodOutput(schema: string): z.ZodType {
  */
 export function isVercelTool(tool?: ToolToConvert): tool is VercelTool {
   // Checks if this tool is not an instance of Tool
-  return !(tool instanceof Tool);
+  return !!(tool && !(tool instanceof Tool) && 'parameters' in tool);
 }
 
 interface ToolOptions {
@@ -462,6 +463,12 @@ function convertVercelToolParameters(tool: VercelTool): z.ZodType {
   return isZodType(schema) ? schema : resolveSerializedZodOutput(jsonSchemaToZod(schema));
 }
 
+function convertInputSchema(tool: ToolAction<any, any, any>): z.ZodType {
+  console.log('HELLO', tool);
+  const schema = tool.inputSchema ?? z.object({});
+  return isZodType(schema) ? schema : resolveSerializedZodOutput(jsonSchemaToZod(schema));
+}
+
 /**
  * Converts a Vercel Tool or Mastra Tool into a CoreTool format
  * @param tool - The tool to convert (either VercelTool or ToolAction)
@@ -472,10 +479,13 @@ function convertVercelToolParameters(tool: VercelTool): z.ZodType {
 export function makeCoreTool(tool: ToolToConvert, options: ToolOptions, logType?: 'tool' | 'toolset'): CoreTool {
   // Helper to get parameters based on tool type
   const getParameters = () => {
+    console.log(isVercelTool(tool), tool);
+
     if (isVercelTool(tool)) {
       return convertVercelToolParameters(tool);
     }
-    return tool.inputSchema ?? z.object({});
+
+    return convertInputSchema(tool);
   };
 
   // Check if this is a provider-defined tool
@@ -496,6 +506,13 @@ export function makeCoreTool(tool: ToolToConvert, options: ToolOptions, logType?
       parameters: getParameters(),
       execute: tool.execute ? createExecute(tool, { ...options, description: tool.description }, logType) : undefined,
     };
+  }
+
+  const params = getParameters();
+  if (params instanceof z.ZodObject) {
+    console.log('Schema shape:', params.shape);
+  } else {
+    console.log('Non-object schema:', params);
   }
 
   // For function tools
