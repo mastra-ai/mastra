@@ -84,7 +84,7 @@ program
 
 program
   .command('init')
-  .description('Initialize Mastra in your project')
+  .description('Initixalize Mastra in your project')
   .option('--default', 'Quick start with defaults(src, OpenAI, no examples)')
   .option('-d, --dir <directory>', 'Directory for Mastra files to (defaults to src/)')
   .option('-c, --components <components>', 'Comma-separated list of components (agents, tools, workflows)')
@@ -184,6 +184,10 @@ program
       command: 'mastra deploy',
       args,
       execution: async () => {
+        console.warn(`DEPRECATED: The deploy command is deprecated.
+          Please use the mastra build command instead.
+          And deploy .mastra/output to your platform of choice.
+          `);
         await deploy({ dir: args.dir });
       },
       origin,
