@@ -73,7 +73,7 @@ For an example of how to use the basic retrieval method, see the [Retrieve Resul
 
 Filter results based on metadata fields to narrow down the search space. This is useful when you have documents from different sources, time periods, or with specific attributes. Mastra provides a unified MongoDB-style query syntax that works across all supported vector stores.
 
-For detailed information about available operators and syntax, see the [Metadata Filters Reference](/docs/reference/rag/metadata-filters).
+For detailed information about available operators and syntax, see the [Metadata Filters Reference](/reference/rag/metadata-filters).
 
 Basic filtering examples:
 
@@ -167,7 +167,7 @@ This is particularly useful when:
 - The retrieval process requires complex decision-making
 - You want the agent to combine multiple retrieval strategies based on context
 
-For detailed configuration options and advanced usage, see the [Vector Query Tool Reference](/docs/reference/tools/vector-query-tool).
+For detailed configuration options and advanced usage, see the [Vector Query Tool Reference](/reference/tools/vector-query-tool).
 
 ### Vector Store Prompts
 
@@ -335,7 +335,7 @@ const rerankedResults = await rerank(initialResults, query, openai('gpt-4o-mini'
 
 The re-ranked results combine vector similarity with semantic understanding to improve retrieval quality.
 
-For more details about re-ranking, see the [rerank()](/docs/reference/rag/rerank) method.
+For more details about re-ranking, see the [rerank()](/reference/rag/rerank) method.
 
 For an example of how to use the re-ranking method, see the [Re-ranking Results](../../examples/rag/rerank/rerank.mdx) example.
 
@@ -360,6 +360,6 @@ const graphQueryTool = createGraphQueryTool({
 });
 ```
 
-For more details about graph-based retrieval, see the [GraphRAG](/docs/reference/rag/graph-rag) class and the [createGraphQueryTool()](/reference/tools/graph-rag-tool) function.
+For more details about graph-based retrieval, see the [GraphRAG](/reference/rag/graph-rag) class and the [createGraphQueryTool()](/reference/tools/graph-rag-tool) function.
 
 For an example of how to use the graph-based retrieval method, see the [Graph-based Retrieval](../../examples/rag/usage/graph-rag.mdx) example.
