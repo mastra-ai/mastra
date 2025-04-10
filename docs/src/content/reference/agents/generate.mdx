@@ -70,6 +70,13 @@ An optional object that can include configuration for output structure, memory m
       description: "Maximum number of execution steps allowed.",
     },
     {
+      name: "maxRetries",
+      type: "number",
+      isOptional: true,
+      defaultValue: "2",
+      description: "Maximum number of retries. Set to 0 to disable retries.",
+    },
+    {
       name: "memoryOptions",
       type: "MemoryConfig",
       isOptional: true,
