@@ -85,13 +85,15 @@ export async function getThreadByIdHandler({
   }
 }
 
+type SaveMessagesArg = Parameters<MastraMemory['saveMessages']>[0];
 export async function saveMessagesHandler({
   mastra,
   agentId,
   body,
 }: Pick<MemoryContext, 'mastra' | 'agentId'> & {
   body: {
-    messages: Parameters<MastraMemory['saveMessages']>[0]['messages'];
+    messages: SaveMessagesArg['messages'];
+    memoryConfig?: SaveMessagesArg['memoryConfig'];
   };
 }) {
   try {
@@ -115,7 +117,10 @@ export async function saveMessagesHandler({
       createdAt: message.createdAt ? new Date(message.createdAt) : new Date(),
     }));
 
-    const result = await memory.saveMessages({ messages: processedMessages, memoryConfig: {} });
+    const result = await memory.saveMessages({
+      messages: processedMessages,
+      memoryConfig: body.memoryConfig || {},
+    });
     return result;
   } catch (error) {
     return handleError(error, 'Error saving messages');

@@ -124,7 +124,7 @@ export function jsonSchemaToModel(jsonSchema: Record<string, any>): ZodObject<an
 /**
  * Deep merges two objects, recursively merging nested objects and arrays
  */
-export function deepMerge<T extends object = object>(target: T, source: Partial<T>): T {
+export function deepMerge<T extends object = object>(target: T, source?: Partial<T>): T {
   const output = { ...target };
 
   if (!source) return output;

@@ -12,9 +12,9 @@ This is useful for maintaining ongoing state that's always relevant and should a
 
 Here's a minimal example of setting up an agent with working memory:
 
-```typescript {12-15}
+```typescript {12-14}
 import { Agent } from "@mastra/core/agent";
-import { Memory } from "@mastra/memory";
+import { Memory } from "@mastra/memory/vnext";
 import { openai } from "@ai-sdk/openai";
 
 // Create agent with working memory enabled
@@ -26,7 +26,6 @@ const agent = new Agent({
     options: {
       workingMemory: {
         enabled: true,
-        use: "tool-call", // Recommended setting
       },
     },
   }),

@@ -17,7 +17,7 @@ npm install @mastra/memory
 
 ```typescript
 import { Agent } from "@mastra/core/agent";
-import { Memory } from "@mastra/memory";
+import { Memory } from "@mastra/memory/vnext";
 import { openai } from "@ai-sdk/openai";
 
 // Basic memory setup
@@ -31,7 +31,7 @@ const agent = new Agent({
 });
 ```
 
-This basic setup uses default settings, including LibSQL for storage and FastEmbed for embeddings. For detailed setup instructions, see the [Memory Getting Started guide](/docs/memory/getting-started).
+This basic setup uses default settings, including LibSQL for storage and FastEmbed for embeddings. For detailed setup instructions, see the [Memory Getting Started guide](/docs/memory/getting-started). For additional configuration options, see the [Memory Reference](/docs/reference/memory/Memory.mdx).
 
 ## Using Memory in Agent Calls
 

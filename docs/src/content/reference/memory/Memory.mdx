@@ -5,7 +5,7 @@ The `Memory` class provides a robust system for managing conversation history an
 ## Basic Usage
 
 ```typescript copy showLineNumbers
-import { Memory } from "@mastra/memory";
+import { Memory } from "@mastra/memory/vnext";
 import { Agent } from "@mastra/core/agent";
 
 const agent = new Agent({
@@ -14,10 +14,27 @@ const agent = new Agent({
 });
 ```
 
+## Improved Memory Defaults
+
+Based on extensive user feedback and testing, we've created an improved configuration for Memory with more efficient defaults. This implementation is available now via the `/vnext` import path and will become the standard in a future release.
+
+```typescript copy showLineNumbers
+import { Memory } from "@mastra/memory/vnext";
+```
+
+The key improvements in the defaults:
+
+- **Smaller context window**: Reduced `lastMessages` from 40 to 10, providing a better balance between context and token usage
+- **Disabled semantic recall by default**: Many users weren't aware this feature was active and incurring embedding costs
+- **Disabled thread title generation**: This removes unnecessary latency when creating new threads  
+- **Using tool-calls for working memory**: More reliable than text-stream mode, especially with structured data streams
+
+You can still enable any of these features through configuration when needed.
+
 ## Custom Configuration
 
 ```typescript copy showLineNumbers
-import { Memory } from "@mastra/memory";
+import { Memory } from "@mastra/memory/vnext";
 import { LibSQLStore } from "@mastra/core/storage/libsql";
 import { LibSQLVector } from "@mastra/core/vector/libsql";
 import { Agent } from "@mastra/core/agent";
@@ -39,13 +56,11 @@ const memory = new Memory({
     lastMessages: 20,
 
     // Semantic search configuration
-    semanticRecall: {
-      topK: 3, // Number of similar messages to retrieve
-      messageRange: {
-        // Messages to include around each result
-        before: 2,
-        after: 1,
-      },
+    semanticRecall: true,
+    
+    // Title generation for threads
+    threads: {
+      generateTitle: true,
     },
 
     // Working memory configuration
@@ -70,21 +85,16 @@ const agent = new Agent({
 
 The working memory feature allows agents to maintain persistent information across conversations. When enabled, the Memory class will automatically manage working memory updates through either text stream tags or tool calls.
 
-There are two modes for handling working memory updates:
-
-1. **text-stream** (default): The agent includes working memory updates directly in its responses using XML tags containing Markdown (`<working_memory># User \n ## Preferences...</working_memory>`). These tags are automatically processed and stripped from the visible output.
-
-2. **tool-call**: The agent uses a dedicated tool to update working memory. This mode should be used when working with `toDataStream()` as text-stream mode is not compatible with data streaming. Additionally, this mode provides more explicit control over memory updates and may be preferred when working with agents that are better at using tools than managing text tags.
-
 Example configuration:
 
 ```typescript copy showLineNumbers
+import { Memory } from "@mastra/memory/vnext";
+
 const memory = new Memory({
   options: {
     workingMemory: {
       enabled: true,
       template: "# User\n- **First Name**:\n- **Last Name**:",
-      use: "tool-call", // or 'text-stream'
     },
   },
 });
@@ -99,12 +109,12 @@ By default, Memory uses FastEmbed with the `bge-small-en-v1.5` model, which prov
 For environments where local embedding isn't supported, you can use an API-based embedder:
 
 ```typescript {6}
-import { Memory } from "@mastra/memory";
+import { Memory } from "@mastra/memory/vnext";
 import { openai } from "@ai-sdk/openai";
 
 const agent = new Agent({
   memory: new Memory({
-    embedder: openai.embedding("text-embedding-3-small"), // Adds network request
+    embedder: openai.embedding("text-embedding-3-small"),
   }),
 });
 ```
@@ -153,7 +163,7 @@ Mastra supports many embedding models through the [Vercel AI SDK](https://sdk.ve
       description:
         "Number of most recent messages to retrieve. Set to false to disable.",
       isOptional: true,
-      defaultValue: "40",
+      defaultValue: "40 (10 in vNext)",
     },
     {
       name: "semanticRecall",
@@ -161,7 +171,7 @@ Mastra supports many embedding models through the [Vercel AI SDK](https://sdk.ve
       description:
         "Enable semantic search in message history. Automatically enabled when vector store is provided.",
       isOptional: true,
-      defaultValue: "false (true if vector store provided)",
+      defaultValue: "true (false in vNext)",
     },
     {
       name: "topK",
@@ -186,7 +196,7 @@ Mastra supports many embedding models through the [Vercel AI SDK](https://sdk.ve
         "Configuration for working memory feature that allows persistent storage of user information across conversations. The 'use' setting determines how working memory updates are handled - either through text stream tags or tool calls. Working memory uses Markdown format to structure and store continuously relevant information.",
       isOptional: true,
       defaultValue:
-        "{ enabled: false, template: '# User Information\\n- **First Name**:\\n- **Last Name**:\\n...', use: 'text-stream' }",
+        "{ enabled: false, template: '# User Information\\n- **First Name**:\\n- **Last Name**:\\n...', use: 'text-stream' (use: 'tool-call' in vNext) }",
     },
     {
       name: "threads",
@@ -194,7 +204,7 @@ Mastra supports many embedding models through the [Vercel AI SDK](https://sdk.ve
       description:
         "Settings related to memory thread creation. `generateTitle` will cause the thread.title to be generated from an llm summary of the users first message.",
       isOptional: true,
-      defaultValue: "{ generateTitle: true }",
+      defaultValue: "{ generateTitle: true } (false in vNext)",
     },
   ]}
 />

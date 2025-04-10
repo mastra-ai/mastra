@@ -11,6 +11,19 @@ import { updateWorkingMemoryTool } from './tools/working-memory';
 
 const encoder = new Tiktoken(o200k_base);
 
+export const defaultWorkingMemoryTemplate = `
+# User Information
+- **First Name**: 
+- **Last Name**: 
+- **Location**: 
+- **Occupation**: 
+- **Interests**: 
+- **Goals**: 
+- **Events**: 
+- **Facts**: 
+- **Projects**: 
+`;
+
 /**
  * Concrete implementation of MastraMemory that adds support for thread configuration
  * and message injection.
@@ -465,18 +478,7 @@ export class Memory extends MastraMemory {
     return this.getWorkingMemoryWithInstruction(workingMemory);
   }
 
-  public defaultWorkingMemoryTemplate = `
-# User Information
-- **First Name**: 
-- **Last Name**: 
-- **Location**: 
-- **Occupation**: 
-- **Interests**: 
-- **Goals**: 
-- **Events**: 
-- **Facts**: 
-- **Projects**: 
-`;
+  public defaultWorkingMemoryTemplate = defaultWorkingMemoryTemplate;
 
   private getWorkingMemoryWithInstruction(workingMemoryBlock: string) {
     return `WORKING_MEMORY_SYSTEM_INSTRUCTION:

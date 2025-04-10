@@ -97,7 +97,15 @@ export function MastraRuntimeProvider({
         topK,
         topP,
         instructions,
-        ...(memory ? { threadId, resourceId: agentId } : {}),
+        ...(memory ? { 
+          threadId, 
+          resourceId: agentId,
+          memoryOptions: {
+            threads: {
+              generateTitle: true,
+            }
+          }
+        } : {}),
       });
 
       if (!response.body) {

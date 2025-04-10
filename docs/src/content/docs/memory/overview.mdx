@@ -24,9 +24,9 @@ npm install @mastra/memory
 
 **2. Create an agent and attach a `Memory` instance:**
 
-```typescript filename="src/mastra/agents/index.ts" {10}
+```typescript filename="src/mastra/agents/index.ts"
 import { Agent } from "@mastra/core/agent";
-import { Memory } from "@mastra/memory";
+import { Memory } from "@mastra/memory/vnext";
 import { openai } from "@ai-sdk/openai";
 
 export const myMemoryAgent = new Agent({
@@ -73,12 +73,12 @@ const response = await myMemoryAgent.stream("Hello, my name is Alice.", {
 
 ## Conversation History
 
-By default, the `Memory` instance includes the [last 40 messages](../reference/memory/Memory.mdx) from the current Memory thread in each new request. This provides the agent with immediate conversational context.
+By default, the `Memory` instance includes the [last 10 messages](../reference/memory/Memory.mdx) from the current Memory thread in each new request. This provides the agent with immediate conversational context.
 
 ```ts {3}
 const memory = new Memory({
   options: {
-    lastMessages: 10,
+    lastMessages: 20, // Increase from default of 10 if needed
   },
 });
 ```
@@ -90,7 +90,7 @@ const memory = new Memory({
 Conversation history relies on a [storage adapter](/docs/reference/memory/Memory#parameters) to store messages.
 
 ```ts {7-12}
-import { Memory } from "@mastra/memory";
+import { Memory } from "@mastra/memory/vnext";
 import { Agent } from "@mastra/core/agent";
 import { LibSQLStore } from "@mastra/core/storage/libsql";
 

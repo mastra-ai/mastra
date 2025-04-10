@@ -17,18 +17,22 @@ It uses vector embeddings of messages for similarity search, integrates with var
 
 ## Quick Start
 
-Semantic recall is enabled by default, so if you give your agent memory it will be included:
+Semantic recall is disabled by default (in vnext) but can be easily enabled:
 
 ```typescript {9}
 import { Agent } from "@mastra/core/agent";
-import { Memory } from "@mastra/memory";
+import { Memory } from "@mastra/memory/vnext";
 import { openai } from "@ai-sdk/openai";
 
 const agent = new Agent({
   name: "SupportAgent",
   instructions: "You are a helpful support agent.",
   model: openai("gpt-4o"),
-  memory: new Memory(),
+  memory: new Memory({
+    options: {
+      semanticRecall: true, // Enable semantic recall. Enabled by default in @mastra/memory, disabled by default in @mastra/memory/vnext
+    },
+  }),
 });
 ```
 
@@ -57,7 +61,7 @@ const agent = new Agent({
 Semantic recall relies on a [storage and vector db](/reference/memory/Memory#parameters) to store messages and their embeddings.
 
 ```ts {8-17}
-import { Memory } from "@mastra/memory";
+import { Memory } from "@mastra/memory/vnext";
 import { Agent } from "@mastra/core/agent";
 import { LibSQLStore } from "@mastra/core/storage/libsql";
 import { LibSQLVector } from "@mastra/core/vector/libsql";
@@ -74,6 +78,9 @@ const agent = new Agent({
     vector: new LibSQLVector({
       connectionUrl: "file:local.db",
     }),
+    options: {
+      semanticRecall: true, // Don't forget to enable semantic recall
+    },
   }),
 });
 ```
@@ -89,34 +96,25 @@ const agent = new Agent({
 Semantic recall relies an [embedding model](/reference/memory/Memory#embedder) to convert messages into embeddings. By default Mastra uses FastEmbed but you can specify another [embedding model](https://sdk.vercel.ai/docs/ai-sdk-core/embeddings).
 
 ```ts {7}
-import { Memory } from "@mastra/memory";
+import { Memory } from "@mastra/memory/vnext";
 import { Agent } from "@mastra/core/agent";
 import { openai } from "@ai-sdk/openai";
 
 const agent = new Agent({
   memory: new Memory({
     embedder: openai.embedding("text-embedding-3-small"),
-  }),
-});
-```
-
-### Disabling
-
-There is a performance impact to using semantic recall. New messages are converted into embeddings and used to query a vector database before new messages are sent to the LLM.
-
-Semantic recall is enabled by default but can be disabled when not needed:
-
-```typescript {4}
-const agent = new Agent({
-  memory: new Memory({
     options: {
-      semanticRecall: false,
+      semanticRecall: true,
     },
   }),
 });
 ```
 
-You might want to disable semantic recall in scenarios like:
+### Performance
+
+There is a performance impact to using semantic recall. New messages are converted into embeddings and used to query a vector database before new messages are sent to the LLM.
+
+Semantic recall is disabled by default (in vnext) and you might want to keep it disabled in scenarios like:
 
 - When [conversation history](./getting-started.mdx#conversation-history-last-messages) provide sufficient context for the current conversation.
 - In performance-sensitive applications, like realtime two-way audio, where the added latency of creating embeddings and running vector queries is noticeable.
