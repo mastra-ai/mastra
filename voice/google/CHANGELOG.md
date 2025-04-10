@@ -1,5 +1,12 @@
 # @mastra/voice-google
 
+## 0.1.13-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [359b089]
+  - @mastra/core@0.8.3-alpha.0
+
 ## 0.1.12
 
 ### Patch Changes
