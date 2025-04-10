@@ -22,7 +22,7 @@ const links = [
   },
   {
     text: "MCP Registry Registry",
-    url: "/mcp-registry-registry",
+    url: "https://mastra.ai/mcp-registry-registry",
   },
 ];
 
