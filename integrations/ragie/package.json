@@ -50,8 +50,12 @@
       "limit": "10 KB"
     }
   ],
+  "peerDependencies": {
+    "@mastra/core": "workspace:^"
+  },
   "devDependencies": {
     "@jest/globals": "^29.7.0",
+    "@mastra/core": "workspace:^",
     "@microsoft/api-extractor": "^7.52.1",
     "@rollup/plugin-image": "^3.0.3",
     "@size-limit/preset-small-lib": "^11.2.0",
@@ -66,13 +70,12 @@
     "tsup": "^8.4.0",
     "typescript": "^5.8.2"
   },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
   "dependencies": {
     "@hey-api/client-fetch": "^0.3.4",
-    "@mastra/core": "workspace:^",
     "ts-to-zod": "^3.15.0",
     "zod": "^3.24.2"
-  }
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC"
 }

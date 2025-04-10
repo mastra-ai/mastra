@@ -28,10 +28,13 @@
     "lint": "eslint ."
   },
   "dependencies": {
-    "@mastra/core": "workspace:^",
     "@turbopuffer/turbopuffer": "^0.6.4"
   },
+  "peerDependencies": {
+    "@mastra/core": "workspace:^"
+  },
   "devDependencies": {
+    "@mastra/core": "workspace:^",
     "@internal/lint": "workspace:*",
     "@microsoft/api-extractor": "^7.52.1",
     "@types/node": "^20.17.27",
