@@ -1,2 +1,1 @@
-export * from './vector';
-export * from './storage';
+export * from './vector/index';

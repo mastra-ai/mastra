@@ -90,16 +90,22 @@ export class MongoDBVector extends MastraVector {
   }  
   
   private async validateVectorDimensions(vectors: number[][], dimension: number): Promise<void> {  
+    if (vectors.length === 0) {  
+      throw new Error('No vectors provided for validation');  
+    }
+    // make sure vectors[0] is not empty
+    // 
     if (dimension === 0) {  
       // If dimension is not set, retrieve and set it from the vectors  
-      dimension = vectors[0].length;  
-      await this.setIndexDimension(vectors[0].length);  
+      dimension = vectors[0] ? vectors[0].length : 0;  
+      await this.setIndexDimension(dimension);  
     }  
   
     for (let i = 0; i < vectors.length; i++) {  
-      if (vectors[i].length !== dimension) {  
+      let v = vectors[i]?.length;
+      if (v !== dimension) {  
         throw new Error(  
-          `Vector at index ${i} has invalid dimension ${vectors[i].length}. Expected ${dimension} dimensions.`,  
+          `Vector at index ${i} has invalid dimension ${v}. Expected ${dimension} dimensions.`,  
         );  
       }  
     }  
