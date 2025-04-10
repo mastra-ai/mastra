@@ -13,14 +13,13 @@ export const Nav = () => {
       chatIcon={null}
       chatLink={""}
       className="relative"
-      children={
-        <Link
-          href="/docs"
-          className="px-1.5 absolute left-[130px] text-[var(--x-color-primary-600)] font-medium tracking-wider py-0.5 text-xs rounded border border-[var(--border)] uppercase"
-        >
-          Docs
-        </Link>
-      }
-    />
+    >
+      <Link
+        href="/docs"
+        className="px-1.5 absolute left-[130px] text-[var(--x-color-primary-600)] font-medium tracking-wider py-0.5 text-xs rounded border border-[var(--border)] uppercase"
+      >
+        Docs
+      </Link>
+    </Navbar>
   );
 };
