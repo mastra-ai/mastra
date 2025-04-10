@@ -7,7 +7,6 @@ import type { MongoDBQueryVectorParams, MongoDBUpsertVectorParams } from '@mastr
 describe('ChromaVector Integration Tests', () => {
   const mongoUri = 'mongodb://localhost:27017/?directConnection=true&serverSelectionTimeoutMS=2000';  
   const dbName = 'mastra_vector_db';  
-  const indexName = 'my_index';  
   
   const vectorDB = new MongoDBVector({ uri: mongoUri, dbName });  
   
