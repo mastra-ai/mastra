@@ -91,11 +91,17 @@ describe('PostgresStore', () => {
   });
 
   beforeEach(async () => {
-    // Clear tables before each test
-    await store.clearTable({ tableName: TABLE_WORKFLOW_SNAPSHOT });
-    await store.clearTable({ tableName: TABLE_MESSAGES });
-    await store.clearTable({ tableName: TABLE_THREADS });
-    await store.clearTable({ tableName: TABLE_EVALS });
+    // Only clear tables if store is initialized
+    try {
+      // Clear tables before each test
+      await store.clearTable({ tableName: TABLE_WORKFLOW_SNAPSHOT });
+      await store.clearTable({ tableName: TABLE_MESSAGES });
+      await store.clearTable({ tableName: TABLE_THREADS });
+      await store.clearTable({ tableName: TABLE_EVALS });
+    } catch (error) {
+      // Ignore errors during table clearing
+      console.warn('Error clearing tables:', error);
+    }
   });
 
   describe('Thread Operations', () => {
@@ -718,7 +724,7 @@ describe('PostgresStore', () => {
   });
 
   describe('Permission Handling', () => {
-    const schemaRestrictedUser = 'mastra_schema_restricted';
+    const schemaRestrictedUser = 'mastra_schema_restricted_storage';
     const restrictedPassword = 'test123';
     const testSchema = 'test_schema';
     let adminDb: pgPromise.IDatabase<{}>;
@@ -732,23 +738,6 @@ describe('PostgresStore', () => {
         await adminDb.tx(async t => {
           // Drop the test schema if it exists from previous runs
           await t.none(`DROP SCHEMA IF EXISTS ${testSchema} CASCADE`);
-          // Drop the user if it exists from previous runs
-          await t.none(`
-            DO $$
-            BEGIN
-              IF EXISTS (SELECT FROM pg_catalog.pg_roles WHERE rolname = '${schemaRestrictedUser}') THEN
-                -- Terminate any existing connections from this user
-                PERFORM pg_terminate_backend(pid) 
-                FROM pg_stat_activity 
-                WHERE usename = '${schemaRestrictedUser}';
-                
-                -- Drop owned objects and the user
-                DROP OWNED BY ${schemaRestrictedUser};
-                DROP USER IF EXISTS ${schemaRestrictedUser};
-              END IF;
-            END
-            $$;
-          `);
 
           // Create schema restricted user with minimal permissions
           await t.none(`CREATE USER ${schemaRestrictedUser} WITH PASSWORD '${restrictedPassword}' NOCREATEDB`);
@@ -770,125 +759,61 @@ describe('PostgresStore', () => {
 
     afterAll(async () => {
       try {
+        // First close any store connections
+        if (store) {
+          await store.close();
+        }
+
+        // Then clean up test user in admin connection
         await adminDb.tx(async t => {
-          // First terminate all connections from this user
           await t.none(`
-            SELECT pg_terminate_backend(pid) 
-            FROM pg_stat_activity 
-            WHERE usename = '${schemaRestrictedUser}'
-          `);
-
-          // Drop all objects and clean up in a single transaction with proper ordering
-          await t.none(`
-            DO $$
-            DECLARE
-              obj RECORD;
-              schema_name TEXT;
-            BEGIN
-              -- Revoke all privileges from the user first
-              FOR schema_name IN (SELECT nspname FROM pg_namespace WHERE nspname NOT IN ('pg_catalog', 'information_schema'))
-              LOOP
-                BEGIN
-                  EXECUTE format('REVOKE ALL PRIVILEGES ON ALL TABLES IN SCHEMA %I FROM %I CASCADE', schema_name, '${schemaRestrictedUser}');
-                  EXECUTE format('REVOKE ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA %I FROM %I CASCADE', schema_name, '${schemaRestrictedUser}');
-                  EXECUTE format('REVOKE ALL PRIVILEGES ON ALL FUNCTIONS IN SCHEMA %I FROM %I CASCADE', schema_name, '${schemaRestrictedUser}');
-                  EXECUTE format('REVOKE ALL PRIVILEGES ON SCHEMA %I FROM %I CASCADE', schema_name, '${schemaRestrictedUser}');
-                EXCEPTION 
-                  WHEN OTHERS THEN
-                    -- Ignore errors during revoke
-                    NULL;
-                END;
-              END LOOP;
-
-              -- Revoke database privileges
-              REVOKE ALL PRIVILEGES ON DATABASE ${TEST_CONFIG.database} FROM "${schemaRestrictedUser}" CASCADE;
-
-              -- Drop all objects owned by the user in each schema
-              FOR obj IN (
-                SELECT schemaname, tablename 
-                FROM pg_tables 
-                WHERE tableowner = '${schemaRestrictedUser}'
-              )
-              LOOP
-                BEGIN
-                  EXECUTE format('DROP TABLE IF EXISTS %I.%I CASCADE', obj.schemaname, obj.tablename);
-                EXCEPTION 
-                  WHEN OTHERS THEN
-                    -- Ignore errors during drop
-                    NULL;
-                END;
-              END LOOP;
-
-              -- Drop all schemas owned by the user
-              FOR obj IN (
-                SELECT nspname 
-                FROM pg_namespace 
-                WHERE nspowner = (SELECT oid FROM pg_roles WHERE rolname = '${schemaRestrictedUser}')
-              )
-              LOOP
-                BEGIN
-                  EXECUTE format('DROP SCHEMA IF EXISTS %I CASCADE', obj.nspname);
-                EXCEPTION 
-                  WHEN OTHERS THEN
-                    -- Ignore errors during drop
-                    NULL;
-                END;
-              END LOOP;
-
-              -- Reassign any remaining owned objects to postgres
-              BEGIN
-                REASSIGN OWNED BY "${schemaRestrictedUser}" TO postgres;
-              EXCEPTION 
-                WHEN OTHERS THEN
-                  -- Ignore errors during reassign
-                  NULL;
-              END;
-              
-              -- Drop any remaining owned objects
-              BEGIN
-                DROP OWNED BY "${schemaRestrictedUser}" CASCADE;
-              EXCEPTION 
-                WHEN OTHERS THEN
-                  -- Ignore errors during drop owned
-                  NULL;
-              END;
-
-              -- Finally drop the user
-              DROP USER IF EXISTS "${schemaRestrictedUser}";
-            END $$;
+            REASSIGN OWNED BY ${schemaRestrictedUser} TO postgres;
+            DROP OWNED BY ${schemaRestrictedUser};
+            DROP USER IF EXISTS ${schemaRestrictedUser};
           `);
         });
-      } catch (error) {
-        console.error('Error cleaning up test user:', error);
-      } finally {
-        // Clean up the admin database connection
+
+        // Finally clean up admin connection
         if (pgpAdmin) {
-          await adminDb.none('SELECT 1'); // Ensure connection is still alive
           pgpAdmin.end();
         }
-        // Re-initialize the main store for subsequent tests
-        store = new PostgresStore(TEST_CONFIG);
-        await store.init();
+      } catch (error) {
+        console.error('Error cleaning up test user:', error);
+        // Still try to clean up connections even if user cleanup fails
+        if (store) await store.close();
+        if (pgpAdmin) pgpAdmin.end();
       }
     });
 
     describe('Schema Creation', () => {
       beforeEach(async () => {
-        // Ensure schema doesn't exist before each test
-        await adminDb.none(`DROP SCHEMA IF EXISTS ${testSchema} CASCADE`);
+        // Create a fresh connection for each test
+        const tempPgp = pgPromise();
+        const tempDb = tempPgp(connectionString);
 
-        // Ensure no active connections from restricted user
-        await adminDb.none(`
-          SELECT pg_terminate_backend(pid) 
-          FROM pg_stat_activity 
-          WHERE usename = '${schemaRestrictedUser}'
-        `);
+        try {
+          // Ensure schema doesn't exist before each test
+          await tempDb.none(`DROP SCHEMA IF EXISTS ${testSchema} CASCADE`);
+
+          // Ensure no active connections from restricted user
+          await tempDb.none(`
+            SELECT pg_terminate_backend(pid) 
+            FROM pg_stat_activity 
+            WHERE usename = '${schemaRestrictedUser}'
+          `);
+        } finally {
+          tempPgp.end(); // Always clean up the connection
+        }
       });
 
       afterEach(async () => {
+        // Create a fresh connection for cleanup
+        const tempPgp = pgPromise();
+        const tempDb = tempPgp(connectionString);
+
         try {
           // Clean up any connections from the restricted user and drop schema
-          await adminDb.none(`
+          await tempDb.none(`
             DO $$
             BEGIN
               -- Terminate connections
@@ -902,6 +827,8 @@ describe('PostgresStore', () => {
           `);
         } catch (error) {
           console.error('Error in afterEach cleanup:', error);
+        } finally {
+          tempPgp.end(); // Always clean up the connection
         }
       });
 
@@ -913,6 +840,10 @@ describe('PostgresStore', () => {
           schema: testSchema,
         });
 
+        // Create a fresh connection for verification
+        const tempPgp = pgPromise();
+        const tempDb = tempPgp(connectionString);
+
         try {
           // Test schema creation by initializing the store
           await expect(async () => {
@@ -922,13 +853,14 @@ describe('PostgresStore', () => {
           );
 
           // Verify schema was not created
-          const exists = await adminDb.oneOrNone(
+          const exists = await tempDb.oneOrNone(
             `SELECT EXISTS (SELECT 1 FROM information_schema.schemata WHERE schema_name = $1)`,
             [testSchema],
           );
           expect(exists?.exists).toBe(false);
         } finally {
           await restrictedDB.close();
+          tempPgp.end(); // Clean up the verification connection
         }
       });
 
@@ -940,8 +872,11 @@ describe('PostgresStore', () => {
           schema: testSchema,
         });
 
+        // Create a fresh connection for verification
+        const tempPgp = pgPromise();
+        const tempDb = tempPgp(connectionString);
+
         try {
-          // This should fail with the schema creation error
           await expect(async () => {
             await restrictedDB.init();
             const thread = createSampleThread();
@@ -951,19 +886,24 @@ describe('PostgresStore', () => {
           );
 
           // Verify schema was not created
-          const exists = await adminDb.oneOrNone(
+          const exists = await tempDb.oneOrNone(
             `SELECT EXISTS (SELECT 1 FROM information_schema.schemata WHERE schema_name = $1)`,
             [testSchema],
           );
           expect(exists?.exists).toBe(false);
         } finally {
           await restrictedDB.close();
+          tempPgp.end(); // Clean up the verification connection
         }
       });
     });
   });
 
   afterAll(async () => {
-    await store.close();
+    try {
+      await store.close();
+    } catch (error) {
+      console.warn('Error closing store:', error);
+    }
   });
 });

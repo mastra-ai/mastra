@@ -2141,53 +2141,23 @@ describe('PgVector', () => {
         await adminClient.query('BEGIN');
 
         // Helper function to drop user and their objects
-        const dropUser = async (username: string) => {
-          // First drop all objects owned by the user
-          await adminClient.query(`
-            DO $$
-            DECLARE
-              r RECORD;
-            BEGIN
-              -- Drop tables and their dependent objects (including indexes)
-              FOR r IN (
-                SELECT schemaname, tablename 
-                FROM pg_tables 
-                WHERE tableowner = '${username}'
-              )
-              LOOP
-                EXECUTE 'DROP TABLE IF EXISTS ' || quote_ident(r.schemaname) || '.' || quote_ident(r.tablename) || ' CASCADE';
-              END LOOP;
-              
-              -- Drop schemas
-              FOR r IN (
-                SELECT schema_name 
-                FROM information_schema.schemata 
-                WHERE schema_owner = '${username}'
-              )
-              LOOP
-                EXECUTE 'DROP SCHEMA IF EXISTS ' || quote_ident(r.schema_name) || ' CASCADE';
-              END LOOP;
-            END $$;
-          `);
-
-          // Revoke all privileges
-          await adminClient.query(`
+        const dropUser = async username => {
+          // First revoke all possible privileges and reassign objects
+          await adminClient.query(
+            `
+            -- Handle object ownership (CASCADE is critical here)
             REASSIGN OWNED BY ${username} TO postgres;
-            DROP OWNED BY ${username};
-            REVOKE ALL PRIVILEGES ON ALL TABLES IN SCHEMA public FROM ${username};
-            REVOKE ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public FROM ${username};
-            REVOKE ALL PRIVILEGES ON ALL FUNCTIONS IN SCHEMA public FROM ${username};
-            REVOKE ALL PRIVILEGES ON SCHEMA public FROM ${username};
-            REVOKE ALL PRIVILEGES ON DATABASE ${connectionString.split('/').pop()} FROM ${username};
-          `);
+            DROP OWNED BY ${username} CASCADE;
 
-          // Now we can safely drop the user
-          await adminClient.query(`DROP USER IF EXISTS ${username}`);
+            -- Finally drop the user
+            DROP ROLE ${username};
+            `,
+          );
         };
 
         // Drop both users
-        await dropUser(schemaRestrictedUser);
         await dropUser(vectorRestrictedUser);
+        await dropUser(schemaRestrictedUser);
 
         await adminClient.query('COMMIT');
       } catch (e) {
