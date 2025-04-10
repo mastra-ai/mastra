@@ -49,7 +49,7 @@
     "pg-pool": "^3.7.1",
     "postgres": "^3.4.5",
     "redis": "^4.7.0",
-    "xxhash-wasm": "^1.1.0",
+    "xxhashjs": "^0.2.2",
     "zod": "^3.24.2"
   },
   "devDependencies": {
@@ -58,6 +58,7 @@
     "@microsoft/api-extractor": "^7.52.1",
     "@types/node": "^20.17.27",
     "@types/pg": "^8.11.11",
+    "@types/xxhashjs": "^0.2.4",
     "eslint": "^9.23.0",
     "tsup": "^8.4.0",
     "typescript": "^5.8.2",

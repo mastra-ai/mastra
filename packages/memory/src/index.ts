@@ -6,7 +6,7 @@ import type { StorageGetMessagesArg } from '@mastra/core/storage';
 import { embedMany } from 'ai';
 import { Tiktoken } from 'js-tiktoken/lite';
 import o200k_base from 'js-tiktoken/ranks/o200k_base';
-import xxhash from 'xxhash-wasm';
+import XXH from 'xxhashjs';
 import { updateWorkingMemoryTool } from './tools/working-memory';
 
 const encoder = new Tiktoken(o200k_base);
@@ -250,8 +250,6 @@ export class Memory extends MastraMemory {
     return chunks;
   }
 
-  private hasher = xxhash();
-
   // embedding is computationally expensive so cache content -> embeddings/chunks
   private embeddingCache = new Map<
     number,
@@ -264,7 +262,7 @@ export class Memory extends MastraMemory {
   private firstEmbed: Promise<any> | undefined;
   private async embedMessageContent(content: string) {
     // use fast xxhash for lower memory usage. if we cache by content string we will store all messages in memory for the life of the process
-    const key = (await this.hasher).h32(content);
+    const key = XXH.h32(content, 0xabcd).toNumber();
     const cached = this.embeddingCache.get(key);
     if (cached) return cached;
     const chunks = this.chunkText(content);
