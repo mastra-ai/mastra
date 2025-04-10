@@ -1,0 +1,26 @@
+storage: ./storage
+
+packages:
+  '@mastra/*':
+    access: $all
+    publish: $authenticated
+    unpublish: $authenticated
+
+  '**':
+    access: $all
+    publish: $authenticated
+    unpublish: $authenticated
+
+web:
+  enable: true
+
+auth:
+  auth-memory:
+    users:
+      admin:
+        name: mastra
+        password: mastra-ai
+
+logs:
+  - { type: stdout, format: pretty, level: info }
+_debug: true
