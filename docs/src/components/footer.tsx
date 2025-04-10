@@ -10,7 +10,7 @@ const links = [
   },
   {
     text: "Book",
-    url: "/book",
+    url: "https://mastra.ai/book",
   },
   {
     text: "llms.txt",
