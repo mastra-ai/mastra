@@ -9,7 +9,7 @@
   },
   "keywords": [],
   "author": "",
-  "license": "Elastic-2.0",
+  "license": "MIT",
   "description": "",
   "type": "module",
   "dependencies": {

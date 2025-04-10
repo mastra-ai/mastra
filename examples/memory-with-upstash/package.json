@@ -12,7 +12,7 @@
   },
   "keywords": [],
   "author": "",
-  "license": "Elastic-2.0",
+  "license": "MIT",
   "dependencies": {
     "@ai-sdk/openai": "latest",
     "@mastra/core": "workspace:*",

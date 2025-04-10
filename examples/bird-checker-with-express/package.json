@@ -10,7 +10,7 @@
   "private": true,
   "keywords": [],
   "author": "",
-  "license": "Elastic-2.0",
+  "license": "MIT",
   "devDependencies": {
     "@types/express": "^4.0.0",
     "@types/node": "^20.17.27",
