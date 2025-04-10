@@ -25,7 +25,7 @@
     "lint": "eslint ."
   },
   "author": "",
-  "license": "ISC",
+  "license": "Elastic-2.0",
   "dependencies": {
     "@llamaindex/core": "^0.4.23",
     "@llamaindex/env": "^0.1.29",

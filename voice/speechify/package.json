@@ -27,6 +27,7 @@
     "lint": "eslint .",
     "test": "vitest run"
   },
+  "license": "Elastic-2.0",
   "dependencies": {
     "@mastra/core": "workspace:^",
     "@speechify/api-sdk": "^2.4.1",

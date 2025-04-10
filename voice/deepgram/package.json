@@ -27,6 +27,7 @@
     "test": "vitest run",
     "lint": "eslint ."
   },
+  "license": "Elastic-2.0",
   "dependencies": {
     "@deepgram/sdk": "^3.11.2",
     "@mastra/core": "workspace:^",

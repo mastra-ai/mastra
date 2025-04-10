@@ -9,7 +9,7 @@
   },
   "keywords": [],
   "author": "",
-  "license": "ISC",
+  "license": "MIT",
   "dependencies": {
     "@ai-sdk/openai": "latest",
     "@mastra/core": "workspace:^",

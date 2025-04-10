@@ -20,7 +20,7 @@
     "./package.json": "./package.json"
   },
   "repository": "github:mastra-ai/client-js",
-  "license": "ISC",
+  "license": "Elastic-2.0",
   "scripts": {
     "build": "tsup src/index.ts --format esm,cjs --dts --clean --treeshake=smallest --splitting",
     "dev": "pnpm build --watch",

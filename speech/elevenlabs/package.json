@@ -23,6 +23,7 @@
     "build": "tsup src/index.ts --format esm,cjs --experimental-dts --clean --treeshake=smallest --splitting",
     "test": "echo deprecated"
   },
+  "license": "Elastic-2.0",
   "dependencies": {
     "@mastra/core": "workspace:^",
     "elevenlabs": "^1.54.0",

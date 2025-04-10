@@ -24,6 +24,7 @@
     "test": "vitest run",
     "lint": "eslint ."
   },
+  "license": "Elastic-2.0",
   "dependencies": {
     "@mastra/core": "workspace:^",
     "chromadb": "^2.2.0"

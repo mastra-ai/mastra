@@ -27,6 +27,7 @@
     "test": "vitest run",
     "lint": "eslint ."
   },
+  "license": "Elastic-2.0",
   "dependencies": {
     "@mastra/core": "workspace:^",
     "openai": "^4.89.0",

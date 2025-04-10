@@ -69,7 +69,7 @@
   },
   "keywords": [],
   "author": "",
-  "license": "ISC",
+  "license": "Elastic-2.0",
   "dependencies": {
     "@hey-api/client-fetch": "^0.3.4",
     "@mastra/core": "workspace:^",
