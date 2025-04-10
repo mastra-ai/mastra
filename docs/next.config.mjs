@@ -222,6 +222,16 @@ export default withNextra({
       destination: "/reference/:path*",
       permanent: true,
     },
+    {
+      source: "/docs/memory/getting-started",
+      destination: "/docs/memory/overview",
+      permanent: true,
+    },
+    {
+      source: "/docs/guides/:path*",
+      destination: "/docs/guides/guide/:path*",
+      permanent: true,
+    },
   ],
   trailingSlash: false,
 });
