@@ -740,7 +740,14 @@ describe('PostgresStore', () => {
           await t.none(`DROP SCHEMA IF EXISTS ${testSchema} CASCADE`);
 
           // Create schema restricted user with minimal permissions
-          await t.none(`CREATE USER ${schemaRestrictedUser} WITH PASSWORD '${restrictedPassword}' NOCREATEDB`);
+          await t.none(`          
+          DO $$
+          BEGIN
+            IF NOT EXISTS (SELECT FROM pg_catalog.pg_roles WHERE rolname = '${schemaRestrictedUser}') THEN
+              CREATE USER ${schemaRestrictedUser} WITH PASSWORD '${restrictedPassword}' NOCREATEDB;
+            END IF;
+          END
+          $$;`);
 
           // Grant only connect and usage to schema restricted user
           await t.none(`
