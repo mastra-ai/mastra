@@ -1,7 +1,9 @@
 import { spawn } from 'child_process';
 import path from 'path';
-import { describe, it, expect, beforeEach, afterEach, afterAll, beforeAll } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, afterAll, beforeAll, vi } from 'vitest';
 import { MCPConfiguration } from './configuration';
+
+vi.setConfig({ testTimeout: 80000, hookTimeout: 80000 });
 
 describe('MCPConfiguration', () => {
   let mcp: MCPConfiguration;
@@ -177,5 +179,21 @@ describe('MCPConfiguration', () => {
 
       await existingConfig.disconnect();
     });
+  });
+
+  describe('Connection Timeout', () => {
+    it('should throw timeout error for slow starting server', async () => {
+      const slowConfig = new MCPConfiguration({
+        servers: {
+          slowServer: {
+            command: 'node',
+            args: ['-e', 'setTimeout(() => process.exit(0), 65000)'], // Simulate a server that takes 65 seconds to start
+          },
+        },
+      });
+
+      await expect(slowConfig.getTools()).rejects.toThrow(/Request timed out/);
+      await slowConfig.disconnect();
+    }); // Increase test timeout to allow for slow server simulation
   });
 });
