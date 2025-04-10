@@ -29,6 +29,7 @@
     "posttest:watch": "docker compose down -v",
     "lint": "eslint ."
   },
+  "license": "Elastic-2.0",
   "dependencies": {
     "@mastra/core": "workspace:^",
     "@clickhouse/client": "^1.11.0"

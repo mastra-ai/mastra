@@ -28,6 +28,7 @@
     "test:watch": "vitest watch",
     "lint": "eslint ."
   },
+  "license": "Elastic-2.0",
   "dependencies": {
     "@mastra/core": "workspace:^",
     "zod": "^3.24.2"
