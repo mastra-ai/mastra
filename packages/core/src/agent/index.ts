@@ -559,11 +559,7 @@ export class Agent<
             agentName: this.name,
           };
 
-          console.log(toolObj);
-
           const convertedToCoreTool = makeCoreTool(toolObj, options, 'toolset');
-
-          console.log('convertedToCoreTool', convertedToCoreTool);
 
           toolsFromToolsetsConverted[toolName] = convertedToCoreTool;
         });
