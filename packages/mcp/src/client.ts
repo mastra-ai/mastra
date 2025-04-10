@@ -14,28 +14,10 @@ import { CallToolResultSchema, ListResourcesResultSchema } from '@modelcontextpr
 
 import { asyncExitHook, gracefulExit } from 'exit-hook';
 
-type EventSourceInit = SSEClientTransportOptions['eventSourceInit'];
-
 // Omit the fields we want to control from the SDK options
-type SSEClientParametersBase = Omit<SSEClientTransportOptions, 'requestInit' | 'eventSourceInit'> & {
+type SSEClientParameters = {
   url: URL;
-};
-
-type SSEClientParameters = SSEClientParametersBase &
-  (
-    | {
-        // No headers case
-        requestInit?: Omit<RequestInit, 'headers'>;
-        eventSourceInit?: EventSourceInit;
-      }
-    | {
-        // With headers case - both must be present
-        requestInit: RequestInit & { headers: RequestInit['headers'] };
-        eventSourceInit: EventSourceInit & {
-          fetch: NonNullable<EventSourceInit>['fetch'];
-        };
-      }
-  );
+} & SSEClientTransportOptions;
 
 export type MastraMCPServerDefinition = StdioServerParameters | SSEClientParameters;
 
