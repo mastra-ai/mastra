@@ -12,6 +12,7 @@ const defaultModelSettings: ModelSettings = {
   maxSteps: 5,
   temperature: 0.5,
   topP: 1,
+  useGenerate: true,
 };
 
 export const AgentContext = createContext<AgentContextType>({} as AgentContextType);

@@ -15,6 +15,7 @@ export interface ModelSettings {
   topK?: number;
   topP?: number;
   instructions?: string;
+  useGenerate?: boolean;
 }
 
 export interface ChatProps {
