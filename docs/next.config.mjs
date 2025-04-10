@@ -267,6 +267,36 @@ export default withNextra({
       destination: "/examples/rag/query/hybrid-vector-search",
       permanent: true,
     },
+    {
+      source: "/docs/local-dev/mastra-init",
+      destination: "/docs/getting-started/installation",
+      permanent: true,
+    },
+    {
+      source: "/examples/rag/retrieve-results",
+      destination: "/examples/rag/query/retrieve-results",
+      permanent: true,
+    },
+    {
+      source: "/examples/rag/basic-rag",
+      destination: "/examples/rag/query/hybrid-vector-search",
+      permanent: true,
+    },
+    {
+      source: "/docs/workflows/data-flow",
+      destination: "/docs/workflows/variables",
+      permanent: true,
+    },
+    {
+      source: "/examples/rag/insert-embedding-in-pinecone",
+      destination: "/examples/rag/upsert/upsert-embeddings#pinecone",
+      permanent: true,
+    },
+    {
+      source: "/examples/rag/usage/rerank-rag",
+      destination: "/examples/rag/rerank/rerank-rag",
+      permanent: true,
+    },
   ],
   trailingSlash: false,
 });
