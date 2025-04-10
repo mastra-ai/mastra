@@ -1,8 +1,10 @@
 import { randomUUID } from 'crypto';
 import type { MetricResult } from '@mastra/core/eval';
+import type { MessageType } from '@mastra/core/memory';
 import { TABLE_WORKFLOW_SNAPSHOT, TABLE_MESSAGES, TABLE_THREADS, TABLE_EVALS } from '@mastra/core/storage';
 import type { WorkflowRunState } from '@mastra/core/workflows';
-import { describe, it, expect, beforeAll, beforeEach, afterAll } from 'vitest';
+import pgPromise from 'pg-promise';
+import { describe, it, expect, beforeAll, beforeEach, afterAll, afterEach } from 'vitest';
 
 import { PostgresStore } from '.';
 import type { PostgresConfig } from '.';
@@ -14,6 +16,8 @@ const TEST_CONFIG: PostgresConfig = {
   user: process.env.POSTGRES_USER || 'postgres',
   password: process.env.POSTGRES_PASSWORD || 'postgres',
 };
+
+const connectionString = `postgresql://${TEST_CONFIG.user}:${TEST_CONFIG.password}@${TEST_CONFIG.host}:${TEST_CONFIG.port}/${TEST_CONFIG.database}`;
 
 // Sample test data factory functions
 const createSampleThread = () => ({
@@ -192,9 +196,9 @@ describe('PostgresStore', () => {
       await store.__saveThread({ thread });
 
       const messages = [
-        { ...createSampleMessage(thread.id), content: [{ type: 'text', text: 'First' }] },
-        { ...createSampleMessage(thread.id), content: [{ type: 'text', text: 'Second' }] },
-        { ...createSampleMessage(thread.id), content: [{ type: 'text', text: 'Third' }] },
+        { ...createSampleMessage(thread.id), content: [{ type: 'text', text: 'First' }] as MessageType['content'] },
+        { ...createSampleMessage(thread.id), content: [{ type: 'text', text: 'Second' }] as MessageType['content'] },
+        { ...createSampleMessage(thread.id), content: [{ type: 'text', text: 'Third' }] as MessageType['content'] },
       ];
 
       await store.__saveMessages({ messages });
@@ -204,7 +208,7 @@ describe('PostgresStore', () => {
 
       // Verify order is maintained
       retrievedMessages.forEach((msg, idx) => {
-        expect(msg.content[0].text).toBe(messages[idx].content[0].text);
+        expect((msg.content[0] as any).text).toBe((messages[idx].content[0] as any).text);
       });
     });
 
@@ -214,7 +218,7 @@ describe('PostgresStore', () => {
 
       const messages = [
         createSampleMessage(thread.id),
-        { ...createSampleMessage(thread.id), id: null }, // This will cause an error
+        { ...createSampleMessage(thread.id), id: null } as any, // This will cause an error
       ];
 
       await expect(store.__saveMessages({ messages })).rejects.toThrow();
@@ -642,6 +646,320 @@ describe('PostgresStore', () => {
       // Test getting evals for non-existent agent
       const nonExistentEvals = await store.getEvalsByAgentName('non-existent-agent');
       expect(nonExistentEvals).toHaveLength(0);
+    });
+  });
+
+  describe('Schema Support', () => {
+    const customSchema = 'mastra_test';
+    let customSchemaStore: PostgresStore;
+
+    beforeAll(async () => {
+      customSchemaStore = new PostgresStore({
+        ...TEST_CONFIG,
+        schema: customSchema,
+      });
+
+      await customSchemaStore.init();
+    });
+
+    afterAll(async () => {
+      await customSchemaStore.close();
+      // Re-initialize the main store for subsequent tests
+      store = new PostgresStore(TEST_CONFIG);
+      await store.init();
+    });
+
+    describe('Constructor and Initialization', () => {
+      it('should accept connectionString directly', () => {
+        // Use existing store instead of creating new one
+        expect(store).toBeInstanceOf(PostgresStore);
+      });
+
+      it('should accept config object with schema', () => {
+        // Use existing custom schema store
+        expect(customSchemaStore).toBeInstanceOf(PostgresStore);
+      });
+    });
+
+    describe('Schema Operations', () => {
+      it('should create and query tables in custom schema', async () => {
+        // Create thread in custom schema
+        const thread = createSampleThread();
+        await customSchemaStore.__saveThread({ thread });
+
+        // Verify thread exists in custom schema
+        const retrieved = await customSchemaStore.__getThreadById({ threadId: thread.id });
+        expect(retrieved?.title).toBe(thread.title);
+      });
+
+      it('should allow same table names in different schemas', async () => {
+        // Create threads in both schemas
+        const defaultThread = createSampleThread();
+        const customThread = createSampleThread();
+
+        await store.__saveThread({ thread: defaultThread });
+        await customSchemaStore.__saveThread({ thread: customThread });
+
+        // Verify threads exist in respective schemas
+        const defaultResult = await store.__getThreadById({ threadId: defaultThread.id });
+        const customResult = await customSchemaStore.__getThreadById({ threadId: customThread.id });
+
+        expect(defaultResult?.id).toBe(defaultThread.id);
+        expect(customResult?.id).toBe(customThread.id);
+
+        // Verify cross-schema isolation
+        const defaultInCustom = await customSchemaStore.__getThreadById({ threadId: defaultThread.id });
+        const customInDefault = await store.__getThreadById({ threadId: customThread.id });
+
+        expect(defaultInCustom).toBeNull();
+        expect(customInDefault).toBeNull();
+      });
+    });
+  });
+
+  describe('Permission Handling', () => {
+    const schemaRestrictedUser = 'mastra_schema_restricted';
+    const restrictedPassword = 'test123';
+    const testSchema = 'test_schema';
+    let adminDb: pgPromise.IDatabase<{}>;
+    let pgpAdmin: pgPromise.IMain;
+
+    beforeAll(async () => {
+      // Create a separate pg-promise instance for admin operations
+      pgpAdmin = pgPromise();
+      adminDb = pgpAdmin(connectionString);
+      try {
+        await adminDb.tx(async t => {
+          // Drop the test schema if it exists from previous runs
+          await t.none(`DROP SCHEMA IF EXISTS ${testSchema} CASCADE`);
+          // Drop the user if it exists from previous runs
+          await t.none(`
+            DO $$
+            BEGIN
+              IF EXISTS (SELECT FROM pg_catalog.pg_roles WHERE rolname = '${schemaRestrictedUser}') THEN
+                -- Terminate any existing connections from this user
+                PERFORM pg_terminate_backend(pid) 
+                FROM pg_stat_activity 
+                WHERE usename = '${schemaRestrictedUser}';
+                
+                -- Drop owned objects and the user
+                DROP OWNED BY ${schemaRestrictedUser};
+                DROP USER IF EXISTS ${schemaRestrictedUser};
+              END IF;
+            END
+            $$;
+          `);
+
+          // Create schema restricted user with minimal permissions
+          await t.none(`CREATE USER ${schemaRestrictedUser} WITH PASSWORD '${restrictedPassword}' NOCREATEDB`);
+
+          // Grant only connect and usage to schema restricted user
+          await t.none(`
+            REVOKE ALL ON DATABASE ${TEST_CONFIG.database} FROM ${schemaRestrictedUser};
+            GRANT CONNECT ON DATABASE ${TEST_CONFIG.database} TO ${schemaRestrictedUser};
+            REVOKE ALL ON SCHEMA public FROM ${schemaRestrictedUser};
+            GRANT USAGE ON SCHEMA public TO ${schemaRestrictedUser};
+          `);
+        });
+      } catch (error) {
+        // Clean up the database connection on error
+        pgpAdmin.end();
+        throw error;
+      }
+    });
+
+    afterAll(async () => {
+      try {
+        await adminDb.tx(async t => {
+          // First terminate all connections from this user
+          await t.none(`
+            SELECT pg_terminate_backend(pid) 
+            FROM pg_stat_activity 
+            WHERE usename = '${schemaRestrictedUser}'
+          `);
+
+          // Drop all objects and clean up in a single transaction with proper ordering
+          await t.none(`
+            DO $$
+            DECLARE
+              obj RECORD;
+              schema_name TEXT;
+            BEGIN
+              -- Revoke all privileges from the user first
+              FOR schema_name IN (SELECT nspname FROM pg_namespace WHERE nspname NOT IN ('pg_catalog', 'information_schema'))
+              LOOP
+                BEGIN
+                  EXECUTE format('REVOKE ALL PRIVILEGES ON ALL TABLES IN SCHEMA %I FROM %I CASCADE', schema_name, '${schemaRestrictedUser}');
+                  EXECUTE format('REVOKE ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA %I FROM %I CASCADE', schema_name, '${schemaRestrictedUser}');
+                  EXECUTE format('REVOKE ALL PRIVILEGES ON ALL FUNCTIONS IN SCHEMA %I FROM %I CASCADE', schema_name, '${schemaRestrictedUser}');
+                  EXECUTE format('REVOKE ALL PRIVILEGES ON SCHEMA %I FROM %I CASCADE', schema_name, '${schemaRestrictedUser}');
+                EXCEPTION 
+                  WHEN OTHERS THEN
+                    -- Ignore errors during revoke
+                    NULL;
+                END;
+              END LOOP;
+
+              -- Revoke database privileges
+              REVOKE ALL PRIVILEGES ON DATABASE ${TEST_CONFIG.database} FROM "${schemaRestrictedUser}" CASCADE;
+
+              -- Drop all objects owned by the user in each schema
+              FOR obj IN (
+                SELECT schemaname, tablename 
+                FROM pg_tables 
+                WHERE tableowner = '${schemaRestrictedUser}'
+              )
+              LOOP
+                BEGIN
+                  EXECUTE format('DROP TABLE IF EXISTS %I.%I CASCADE', obj.schemaname, obj.tablename);
+                EXCEPTION 
+                  WHEN OTHERS THEN
+                    -- Ignore errors during drop
+                    NULL;
+                END;
+              END LOOP;
+
+              -- Drop all schemas owned by the user
+              FOR obj IN (
+                SELECT nspname 
+                FROM pg_namespace 
+                WHERE nspowner = (SELECT oid FROM pg_roles WHERE rolname = '${schemaRestrictedUser}')
+              )
+              LOOP
+                BEGIN
+                  EXECUTE format('DROP SCHEMA IF EXISTS %I CASCADE', obj.nspname);
+                EXCEPTION 
+                  WHEN OTHERS THEN
+                    -- Ignore errors during drop
+                    NULL;
+                END;
+              END LOOP;
+
+              -- Reassign any remaining owned objects to postgres
+              BEGIN
+                REASSIGN OWNED BY "${schemaRestrictedUser}" TO postgres;
+              EXCEPTION 
+                WHEN OTHERS THEN
+                  -- Ignore errors during reassign
+                  NULL;
+              END;
+              
+              -- Drop any remaining owned objects
+              BEGIN
+                DROP OWNED BY "${schemaRestrictedUser}" CASCADE;
+              EXCEPTION 
+                WHEN OTHERS THEN
+                  -- Ignore errors during drop owned
+                  NULL;
+              END;
+
+              -- Finally drop the user
+              DROP USER IF EXISTS "${schemaRestrictedUser}";
+            END $$;
+          `);
+        });
+      } catch (error) {
+        console.error('Error cleaning up test user:', error);
+      } finally {
+        // Clean up the admin database connection
+        if (pgpAdmin) {
+          await adminDb.none('SELECT 1'); // Ensure connection is still alive
+          pgpAdmin.end();
+        }
+        // Re-initialize the main store for subsequent tests
+        store = new PostgresStore(TEST_CONFIG);
+        await store.init();
+      }
+    });
+
+    describe('Schema Creation', () => {
+      beforeEach(async () => {
+        // Ensure schema doesn't exist before each test
+        await adminDb.none(`DROP SCHEMA IF EXISTS ${testSchema} CASCADE`);
+
+        // Ensure no active connections from restricted user
+        await adminDb.none(`
+          SELECT pg_terminate_backend(pid) 
+          FROM pg_stat_activity 
+          WHERE usename = '${schemaRestrictedUser}'
+        `);
+      });
+
+      afterEach(async () => {
+        try {
+          // Clean up any connections from the restricted user and drop schema
+          await adminDb.none(`
+            DO $$
+            BEGIN
+              -- Terminate connections
+              PERFORM pg_terminate_backend(pid) 
+              FROM pg_stat_activity 
+              WHERE usename = '${schemaRestrictedUser}';
+
+              -- Drop schema
+              DROP SCHEMA IF EXISTS ${testSchema} CASCADE;
+            END $$;
+          `);
+        } catch (error) {
+          console.error('Error in afterEach cleanup:', error);
+        }
+      });
+
+      it('should fail when user lacks CREATE privilege', async () => {
+        const restrictedDB = new PostgresStore({
+          ...TEST_CONFIG,
+          user: schemaRestrictedUser,
+          password: restrictedPassword,
+          schema: testSchema,
+        });
+
+        try {
+          // Test schema creation by initializing the store
+          await expect(async () => {
+            await restrictedDB.init();
+          }).rejects.toThrow(
+            `Unable to create schema "${testSchema}". This requires CREATE privilege on the database.`,
+          );
+
+          // Verify schema was not created
+          const exists = await adminDb.oneOrNone(
+            `SELECT EXISTS (SELECT 1 FROM information_schema.schemata WHERE schema_name = $1)`,
+            [testSchema],
+          );
+          expect(exists?.exists).toBe(false);
+        } finally {
+          await restrictedDB.close();
+        }
+      });
+
+      it('should fail with schema creation error when saving thread', async () => {
+        const restrictedDB = new PostgresStore({
+          ...TEST_CONFIG,
+          user: schemaRestrictedUser,
+          password: restrictedPassword,
+          schema: testSchema,
+        });
+
+        try {
+          // This should fail with the schema creation error
+          await expect(async () => {
+            await restrictedDB.init();
+            const thread = createSampleThread();
+            await restrictedDB.__saveThread({ thread });
+          }).rejects.toThrow(
+            `Unable to create schema "${testSchema}". This requires CREATE privilege on the database.`,
+          );
+
+          // Verify schema was not created
+          const exists = await adminDb.oneOrNone(
+            `SELECT EXISTS (SELECT 1 FROM information_schema.schemata WHERE schema_name = $1)`,
+            [testSchema],
+          );
+          expect(exists?.exists).toBe(false);
+        } finally {
+          await restrictedDB.close();
+        }
+      });
     });
   });
 

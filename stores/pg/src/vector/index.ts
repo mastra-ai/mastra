@@ -65,9 +65,10 @@ export class PgVector extends MastraVector {
   private createdIndexes = new Map<string, number>();
   private mutexesByName = new Map<string, Mutex>();
   private schema?: string;
-  private createSchemaPromise: Promise<void> | null = null;
+  private setupSchemaPromise: Promise<void> | null = null;
   private installVectorExtensionPromise: Promise<void> | null = null;
   private vectorExtensionInstalled: boolean | undefined = undefined;
+  private schemaSetupComplete: boolean | undefined = undefined;
 
   constructor(connectionString: string);
   constructor(config: { connectionString: string; schema?: string });
@@ -245,6 +246,57 @@ export class PgVector extends MastraVector {
     const existingIndexCacheKey = this.createdIndexes.get(indexName);
     return existingIndexCacheKey && existingIndexCacheKey === newKey;
   }
+  private async setupSchema(client: pg.PoolClient) {
+    if (!this.schema || this.schemaSetupComplete) {
+      return;
+    }
+
+    if (!this.setupSchemaPromise) {
+      this.setupSchemaPromise = (async () => {
+        try {
+          // First check if schema exists and we have usage permission
+          const schemaCheck = await client.query(
+            `
+            SELECT EXISTS (
+              SELECT 1 FROM information_schema.schemata 
+              WHERE schema_name = $1
+            )
+          `,
+            [this.schema],
+          );
+
+          const schemaExists = schemaCheck.rows[0].exists;
+
+          if (!schemaExists) {
+            try {
+              await client.query(`CREATE SCHEMA IF NOT EXISTS ${this.schema}`);
+              this.logger.info(`Schema "${this.schema}" created successfully`);
+            } catch (error) {
+              this.logger.error(`Failed to create schema "${this.schema}"`, { error });
+              throw new Error(
+                `Unable to create schema "${this.schema}". This requires CREATE privilege on the database. ` +
+                  `Either create the schema manually or grant CREATE privilege to the user.`,
+              );
+            }
+          }
+
+          // If we got here, schema exists and we can use it
+          this.schemaSetupComplete = true;
+          this.logger.debug(`Schema "${this.schema}" is ready for use`);
+        } catch (error) {
+          // Reset flags so we can retry
+          this.schemaSetupComplete = undefined;
+          this.setupSchemaPromise = null;
+          throw error;
+        } finally {
+          this.setupSchemaPromise = null;
+        }
+      })();
+    }
+
+    await this.setupSchemaPromise;
+  }
+
   async createIndex(...args: ParamsToArgs<PgCreateIndexParams> | PgCreateIndexArgs): Promise<void> {
     const params = this.normalizeArgs<PgCreateIndexParams, PgCreateIndexArgs>('createIndex', args, [
       'indexConfig',
@@ -252,6 +304,7 @@ export class PgVector extends MastraVector {
     ]);
 
     const { indexName, dimension, metric = 'cosine', indexConfig = {}, buildIndex = true } = params;
+    const tableName = this.getTableName(indexName);
 
     // Validate inputs
     if (!indexName.match(/^[a-zA-Z_][a-zA-Z0-9_]*$/)) {
@@ -277,29 +330,20 @@ export class PgVector extends MastraVector {
 
       const client = await this.pool.connect();
 
-      if (this.schema) {
-        // to avoid race condition
-        if (!this.createSchemaPromise) {
-          this.createSchemaPromise = new Promise<void>(resolve => {
-            void client.query(`CREATE SCHEMA IF NOT EXISTS ${this.schema}`).then(() => {
-              resolve();
-            });
-          });
-          await this.createSchemaPromise;
-        }
-      }
-
       try {
-        // install vector extension
+        // Setup schema if needed
+        await this.setupSchema(client);
+
+        // Install vector extension first (needs to be in public schema)
         await this.installVectorExtension(client);
         await client.query(`
-          CREATE TABLE IF NOT EXISTS ${indexName} (
+          CREATE TABLE IF NOT EXISTS ${tableName} (
             id SERIAL PRIMARY KEY,
             vector_id TEXT UNIQUE NOT NULL,
             embedding vector(${dimension}),
             metadata JSONB DEFAULT '{}'::jsonb
           );
-      `);
+        `);
         this.createdIndexes.set(indexName, indexCacheKey);
 
         if (buildIndex) {
@@ -307,7 +351,6 @@ export class PgVector extends MastraVector {
         }
       } catch (error: any) {
         this.createdIndexes.delete(indexName);
-        console.error('Failed to create vector table:', error);
         throw error;
       } finally {
         client.release();

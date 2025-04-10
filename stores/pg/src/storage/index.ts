@@ -31,7 +31,8 @@ export class PostgresStore extends MastraStorage {
   private db: pgPromise.IDatabase<{}>;
   private pgp: pgPromise.IMain;
   private schema?: string;
-  private createSchemaPromise: Promise<void> | null = null;
+  private setupSchemaPromise: Promise<void> | null = null;
+  private schemaSetupComplete: boolean | undefined = undefined;
 
   constructor(config: PostgresConfig) {
     super({ name: 'PostgresStore' });
@@ -221,6 +222,55 @@ export class PostgresStore extends MastraStorage {
     })) as any;
   }
 
+  private async setupSchema() {
+    if (!this.schema || this.schemaSetupComplete) {
+      return;
+    }
+
+    if (!this.setupSchemaPromise) {
+      this.setupSchemaPromise = (async () => {
+        try {
+          // First check if schema exists and we have usage permission
+          const schemaExists = await this.db.oneOrNone(
+            `
+            SELECT EXISTS (
+              SELECT 1 FROM information_schema.schemata 
+              WHERE schema_name = $1
+            )
+          `,
+            [this.schema],
+          );
+
+          if (!schemaExists?.exists) {
+            try {
+              await this.db.none(`CREATE SCHEMA IF NOT EXISTS ${this.schema}`);
+              this.logger.info(`Schema "${this.schema}" created successfully`);
+            } catch (error) {
+              this.logger.error(`Failed to create schema "${this.schema}"`, { error });
+              throw new Error(
+                `Unable to create schema "${this.schema}". This requires CREATE privilege on the database. ` +
+                  `Either create the schema manually or grant CREATE privilege to the user.`,
+              );
+            }
+          }
+
+          // If we got here, schema exists and we can use it
+          this.schemaSetupComplete = true;
+          this.logger.debug(`Schema "${this.schema}" is ready for use`);
+        } catch (error) {
+          // Reset flags so we can retry
+          this.schemaSetupComplete = undefined;
+          this.setupSchemaPromise = null;
+          throw error;
+        } finally {
+          this.setupSchemaPromise = null;
+        }
+      })();
+    }
+
+    await this.setupSchemaPromise;
+  }
+
   async createTable({
     tableName,
     schema,
@@ -240,15 +290,7 @@ export class PostgresStore extends MastraStorage {
 
       // Create schema if it doesn't exist
       if (this.schema) {
-        // to avoid race condition
-        if (!this.createSchemaPromise) {
-          this.createSchemaPromise = new Promise<void>(resolve => {
-            void this.db.none(`CREATE SCHEMA IF NOT EXISTS ${this.schema}`).then(() => {
-              resolve();
-            });
-          });
-          await this.createSchemaPromise;
-        }
+        await this.setupSchema();
       }
 
       const sql = `
