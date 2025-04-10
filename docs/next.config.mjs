@@ -229,7 +229,7 @@ export default withNextra({
     },
     {
       source: "/docs/guides/:path*",
-      destination: "/docs/guides/guide/:path*",
+      destination: "/guides/guide/:path*",
       permanent: true,
     },
   ],
