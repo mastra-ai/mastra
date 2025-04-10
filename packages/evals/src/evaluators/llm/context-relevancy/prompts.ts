@@ -1,4 +1,4 @@
-import type { LLMEvaluatorPromptArgs, LLMEvaluatorReasonPromptArgs } from '../types';
+import type { LLMEvaluatorEvalPromptArgs, LLMEvaluatorReasonPromptArgs } from '../types';
 
 export const AGENT_INSTRUCTIONS = `You are a balanced and nuanced context relevancy evaluator. Your job is to determine if retrieved context nodes are overall relevant to given input.
 
@@ -13,16 +13,7 @@ Key Principles:
 4. Recognize that some nodes may be partially relevant
 5. Empty or error nodes should be marked as not relevant`;
 
-export function generateEvaluatePrompt({
-  input,
-  output,
-  context,
-}: {
-  input: string;
-  output: string;
-  context: string[];
-}) {
-  return `Based on the input and context, please generate a JSON object to indicate whether each statement found in the context is relevant to the provided input. First extract high-level statements from the context, then evaluate each for relevance.
+export const EVAL_TEMPLATE = `Based on the input and context, please generate a JSON object to indicate whether each statement found in the context is relevant to the provided input. First extract high-level statements from the context, then evaluate each for relevance.
 You should first extract statements found in the context, which are high level information found in the context, before deciding on a outcome, reason, and claim for each statement.
 
 Each outcome in the JSON must have:
@@ -66,37 +57,30 @@ Example:
 **
 
 Input:
-${input}
+{input}
 
 Output:
-${output}
+{output}
 
 Context:
-${context}
+{context}
 
 JSON:
 `;
-}
 
-export function generateReasonPrompt({ input, output, eval_result, outcomes, settings }: LLMEvaluatorReasonPromptArgs) {
-  // Extract relevant and irrelevant statements from outcomes
-  const relevantStatements = outcomes.filter(v => v.outcome.toLowerCase() === 'yes').map(v => v.reason);
+export const REASON_TEMPLATE = `Explain the context relevancy score where 0 is the lowest and {scale} is the highest for the LLM's response using this context:
 
-  const irrelevancies = outcomes.filter(v => v.outcome.toLowerCase() === 'no').map(v => v.reason);
-
-  return `Explain the context relevancy score where 0 is the lowest and ${settings.scale} is the highest for the LLM's response using this context:
-  
   Context:
-  Input: ${input}
-  Output: ${output}
-  Score: ${eval_result?.score}
-  
+  Input: {input}
+  Output: {output}
+  Score: {score}
+
   Relevant statements:
-  ${relevantStatements.length > 0 ? relevantStatements.join('\n') : 'None'}
-  
+  {relevantStatements}
+
   Irrelevant statements:
-  ${irrelevancies.length > 0 ? irrelevancies.join('\n') : 'None'}
-  
+  {irrelevantStatements}
+
   Rules:
   - Explain score based on the relevance of the retrieved context to the input
   - Consider how many of the retrieved context pieces were actually relevant
@@ -117,14 +101,34 @@ export function generateReasonPrompt({ input, output, eval_result, outcomes, set
         "reason": "The score is 0.3 because only 3 out of 10 context pieces were relevant to the input query, with many irrelevant pieces that didn't help answer the question."
     }
     `;
-}
 
-export async function generateEvaluationPrompt({ input, output, context }: LLMEvaluatorPromptArgs) {
-  const prompt = generateEvaluatePrompt({
+export function generateReasonPrompt({
+  input,
+  output,
+  eval_result,
+  outcomes,
+  settings,
+  formatter,
+  template,
+}: LLMEvaluatorReasonPromptArgs) {
+  // Extract relevant and irrelevant statements from outcomes
+  const relevantStatements = outcomes.filter(v => v.outcome.toLowerCase() === 'yes').map(v => v.reason);
+  const irrelevantStatements = outcomes.filter(v => v.outcome.toLowerCase() === 'no').map(v => v.reason);
+
+  return formatter(template, {
     input,
     output,
-    context: context || [],
+    score: String(eval_result.score),
+    scale: String(settings.scale),
+    relevantStatements: relevantStatements.length > 0 ? relevantStatements.join('\n') : 'None',
+    irrelevantStatements: irrelevantStatements.length > 0 ? irrelevantStatements.join('\n') : 'None',
   });
+}
 
-  return prompt;
+export function generateEvaluationPrompt({ input, output, context, formatter, template }: LLMEvaluatorEvalPromptArgs) {
+  return formatter(template, {
+    input,
+    output,
+    context: (context || []).join('\n'),
+  });
 }

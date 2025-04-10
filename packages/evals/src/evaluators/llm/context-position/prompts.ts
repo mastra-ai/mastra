@@ -1,4 +1,4 @@
-import type { LLMEvaluatorPromptArgs, LLMEvaluatorReasonPromptArgs } from '../types';
+import type { LLMEvaluatorEvalPromptArgs, LLMEvaluatorReasonPromptArgs } from '../types';
 
 export const AGENT_INSTRUCTIONS = `You are a balanced and nuanced context position evaluator. Your job is to determine if retrieved context nodes are relevant to generating the expected output, with special attention to their ordering.
 
@@ -14,16 +14,7 @@ Key Principles:
 5. Be inclusive rather than exclusive in determining relevance - if the information supports or reinforces the output in any way, consider it relevant
 6. Empty or error nodes should be marked as not relevant`;
 
-export function generateEvaluatePrompt({
-  input,
-  output,
-  context,
-}: {
-  input: string;
-  output: string;
-  context: string[];
-}) {
-  return `Given the input, output, and context, evaluate each context piece's relevance by generating a list of JSON objects.
+export const EVAL_TEMPLATE = `Given the input, output, and context, evaluate each context piece's relevance by generating a list of JSON objects.
 
 **
 IMPORTANT: Your response must be in JSON format with a 'outcomes' key containing a list. Each outcome must have only three   fields: \`outcome\` with either 'yes' or 'no', \`reason\` explaining the outcome, and \`claim\` containing the context piece. Your reason should include relevant quotes from the context.
@@ -71,7 +62,7 @@ Example:
             "reason": "The context 'The Sun gives light to planets' demonstrates the light-producing property mentioned in the output.",
             "claim": "The Sun gives light to planets"
         }
-    ]  
+    ]
 }
 
 Consider context relevant if it:
@@ -84,29 +75,27 @@ The number of outcomes MUST MATCH the number of context pieces exactly.
 **
 
 Input:
-${input}
+{input}
 
 Output:
-${output}
+{output}
 
-Number of context pieces: ${context.length === 0 ? '1' : context.length}
+Number of context pieces: {contextCount}
 
 Context:
-${context}
+{context}
 
 JSON:
 `;
-}
 
-export function generateReasonPrompt({ eval_result, outcomes, input, output, settings }: LLMEvaluatorReasonPromptArgs) {
-  return `Explain the context position score where 0 is the lowest and ${settings.scale} is the highest for the LLM's response using this context:
-  
+export const REASON_TEMPLATE = `Explain the context position score where 0 is the lowest and {scale} is the highest for the LLM's response using this context:
+
   Context:
-  Input: ${input}
-  Output: ${output}
-  Score: ${eval_result.score}
-  Outcomes: ${JSON.stringify(outcomes)}
-  
+  Input: {input}
+  Output: {output}
+  Score: {score}
+  Outcomes: {outcomes}
+
   Rules:
   - Explain score based on mix of direct answers and related context
   - Consider both full and partial relevance
@@ -127,14 +116,30 @@ export function generateReasonPrompt({ eval_result, outcomes, input, output, set
         "reason": "The score is 3 because while the answer discusses the right topic, it doesn't directly address the question"
     }
     `;
-}
 
-export async function generateEvaluationPrompt({ input, output, context }: LLMEvaluatorPromptArgs) {
-  const prompt = generateEvaluatePrompt({
+export function generateReasonPrompt({
+  input,
+  output,
+  eval_result,
+  outcomes,
+  settings,
+  formatter,
+  template,
+}: LLMEvaluatorReasonPromptArgs) {
+  return formatter(template, {
     input,
     output,
-    context: context || [],
+    score: String(eval_result.score),
+    scale: String(settings.scale),
+    outcomes: JSON.stringify(outcomes),
   });
+}
 
-  return prompt;
+export function generateEvaluationPrompt({ input, output, context, formatter, template }: LLMEvaluatorEvalPromptArgs) {
+  return formatter(template, {
+    input,
+    output,
+    context: (context || []).join('\n'),
+    contextCount: String(context?.length || 0),
+  });
 }

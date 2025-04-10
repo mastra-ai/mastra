@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import type { LLMEvaluatorPromptArgs, LLMEvaluatorReasonPromptArgs } from '../types';
+import type { LLMEvaluatorEvalPromptArgs, LLMEvaluatorReasonPromptArgs } from '../types';
 
 export const AGENT_INSTRUCTIONS = `You are a precise and thorough faithfulness evaluator. Your job is to determine if LLM outputs are factually consistent with the provided context, focusing on claim verification.
 
@@ -14,8 +14,7 @@ Key Principles:
 8. Never use prior knowledge in judgments
 9. Claims with speculative language (may, might, possibly) should be marked as "unsure"`;
 
-export function generateClaimExtractionPrompt({ output }: { output: string }) {
-  return `Extract all claims from the given output. A claim is any statement that asserts information, including both factual and speculative assertions.
+export const CLAIM_EXTRACTION_TEMPLATE = `Extract all claims from the given output. A claim is any statement that asserts information, including both factual and speculative assertions.
 
 Guidelines for claim extraction:
 - Break down compound statements into individual claims
@@ -45,14 +44,12 @@ Please return only JSON format with "claims" array.
 Return empty list for empty input.
 
 Text:
-${output}
+{output}
 
 JSON:
 `;
-}
 
-export function generateEvaluatePrompt({ claims, context }: { claims: string[]; context: string[] }) {
-  return `For each claim, determine if it is supported by the provided context. Generate a list of JSON objects with three keys: \`claim\`, \`outcome\`, and \`reason\`.
+export const EVAL_TEMPLATE = `For each claim, determine if it is supported by the provided context. Generate a list of JSON objects with three keys: \`claim\`, \`outcome\`, and \`reason\`.
 
 For the \`outcome\` key, use ONLY one of these values:
 - "yes" - The claim is explicitly supported by the context
@@ -121,10 +118,54 @@ IMPORTANT GUIDELINES:
 **
 
 Claims:
-${claims.map((claim, i) => `${i + 1}. ${claim}`).join('\n')}
+{claims}
 
 Context:
-${context.map((c, i) => `${i + 1}. ${c}`).join('\n')}`;
+{context}`;
+
+export const REASON_TEMPLATE = `Explain the faithfulness score where 0 is the lowest and {scale} is the highest:
+
+  Input: {input}
+
+  Output: {output}
+
+  Context:
+  {context}
+
+  Score: {score}
+
+  Supported Claims:
+  {supportedClaims}
+
+  Contradicted Claims:
+  {contradictedClaims}
+
+  Unsure Claims:
+  {unsureClaims}
+
+  Rules:
+  - Explain score based on the proportion of supported claims
+  - Keep explanation concise and focused
+  - Use given score, don't recalculate
+  - Explain both supported and unsupported aspects
+  - For mixed responses, explain the balance
+
+  Format:
+  {
+      "reason": "The score is {score} because {explanation of faithfulness}"
+  }
+
+  Example Responses:
+  {
+      "reason": "The score is 0.8 because 8 out of 10 claims in the output are directly supported by the context, with only 2 claims being unsupported or contradicted."
+  }
+  {
+      "reason": "The score is 0.0 because none of the claims in the output are supported by the context, indicating a complete lack of faithfulness to the provided information."
+  }
+  `;
+
+export function generateClaimExtractionPrompt({ output }: { output: string }) {
+  return CLAIM_EXTRACTION_TEMPLATE.replace('{output}', output);
 }
 
 export function generateReasonPrompt({
@@ -134,57 +175,44 @@ export function generateReasonPrompt({
   eval_result,
   settings,
   outcomes,
+  formatter,
+  template,
 }: LLMEvaluatorReasonPromptArgs) {
   // Filter outcomes by type
   const supportedClaims = outcomes.filter(v => v.outcome === 'yes').map(v => v.claim);
-
   const contradictedClaims = outcomes.filter(v => v.outcome === 'no').map(v => v.claim);
-
   const unsureClaims = outcomes.filter(v => v.outcome === 'unsure').map(v => v.claim);
 
-  return `Explain the faithfulness score where 0 is the lowest and ${settings.scale} is the highest:
-  
-  Input: ${input}
-  
-  Output: ${output}
-  
-  Context:
-  ${context?.join('\n\n') || 'No context provided'}
-  
-  Score: ${eval_result?.score}
-  
-  Supported Claims:
-  ${supportedClaims.length > 0 ? supportedClaims.map((claim, i) => `${i + 1}. ${claim}`).join('\n') : 'None'}
-  
-  Contradicted Claims:
-  ${contradictedClaims.length > 0 ? contradictedClaims.map((claim, i) => `${i + 1}. ${claim}`).join('\n') : 'None'}
-  
-  Unsure Claims:
-  ${unsureClaims.length > 0 ? unsureClaims.map((claim, i) => `${i + 1}. ${claim}`).join('\n') : 'None'}
-  
-  Rules:
-  - Explain score based on the proportion of supported claims
-  - Keep explanation concise and focused
-  - Use given score, don't recalculate
-  - Explain both supported and unsupported aspects
-  - For mixed responses, explain the balance
-  
-  Format:
-  {
-      "reason": "The score is {score} because {explanation of faithfulness}"
-  }
-  
-  Example Responses:
-  {
-      "reason": "The score is 0.8 because 8 out of 10 claims in the output are directly supported by the context, with only 2 claims being unsupported or contradicted."
-  }
-  {
-      "reason": "The score is 0.0 because none of the claims in the output are supported by the context, indicating a complete lack of faithfulness to the provided information."
-  }
-  `;
+  const supportedClaimsFormatted =
+    supportedClaims.length > 0 ? supportedClaims.map((claim, i) => `${i + 1}. ${claim}`).join('\n') : 'None';
+
+  const contradictedClaimsFormatted =
+    contradictedClaims.length > 0 ? contradictedClaims.map((claim, i) => `${i + 1}. ${claim}`).join('\n') : 'None';
+
+  const unsureClaimsFormatted =
+    unsureClaims.length > 0 ? unsureClaims.map((claim, i) => `${i + 1}. ${claim}`).join('\n') : 'None';
+
+  return formatter(template, {
+    input,
+    output,
+    score: String(eval_result.score),
+    scale: String(settings.scale),
+    context: context?.join('\n\n') || 'No context provided',
+    supportedClaims: supportedClaimsFormatted,
+    contradictedClaims: contradictedClaimsFormatted,
+    unsureClaims: unsureClaimsFormatted,
+  });
 }
 
-export async function generateEvaluationPrompt({ agent, output, context }: LLMEvaluatorPromptArgs) {
+export async function generateEvaluationPrompt({
+  input,
+  output,
+  agent,
+  context,
+  settings,
+  formatter,
+  template,
+}: LLMEvaluatorEvalPromptArgs) {
   const claimsPrompt = generateClaimExtractionPrompt({ output });
   const claimsResult = await agent.generate(claimsPrompt, {
     output: z.object({
@@ -198,8 +226,14 @@ export async function generateEvaluationPrompt({ agent, output, context }: LLMEv
     return '';
   }
 
-  const evaluatePrompt = generateEvaluatePrompt({ claims, context: context ?? [] });
+  const claimsFormatted = claims.map((claim, i) => `${i + 1}. ${claim}`).join('\n');
+  const contextFormatted = (context ?? []).map((c, i) => `${i + 1}. ${c}`).join('\n');
 
-  // This will be handled by the evaluator's evaluate method
-  return evaluatePrompt;
+  return formatter(template, {
+    input,
+    output,
+    claims: claimsFormatted,
+    ...settings,
+    context: contextFormatted,
+  });
 }
