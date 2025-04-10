@@ -213,6 +213,11 @@ export default withNextra({
       permanent: true,
     },
     {
+      source: "/docs/workflows/index",
+      destination: "/docs/workflows/overview",
+      permanent: true,
+    },
+    {
       source: "/docs/reference/memory/memory-processors",
       destination: "/docs/memory/memory-processors",
       permanent: false, // we should have a memory-processors reference
@@ -240,6 +245,11 @@ export default withNextra({
     {
       source: "/examples/memory",
       destination: "/examples/memory/memory-with-libsql",
+      permanent: true,
+    },
+    {
+      source: "/examples/rag/rerank",
+      destination: "/examples/rag/rerank/rerank-rag",
       permanent: true,
     },
     {
