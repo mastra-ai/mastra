@@ -217,6 +217,21 @@ export default withNextra({
       destination: "/docs/memory/memory-processors",
       permanent: false, // we should have a memory-processors reference
     },
+    {
+      source: "/docs/reference/:path*",
+      destination: "/reference/:path*",
+      permanent: true,
+    },
+    {
+      source: "/docs/memory/getting-started",
+      destination: "/docs/memory/overview",
+      permanent: true,
+    },
+    {
+      source: "/docs/guides/:path*",
+      destination: "/guides/guide/:path*",
+      permanent: true,
+    },
   ],
   trailingSlash: false,
 });
