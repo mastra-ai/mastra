@@ -85,7 +85,7 @@ Each section contains detailed markdown files that provide comprehensive informa
 - [Reference: Textual Difference | Evals | Mastra Docs](https://mastra.ai/reference/evals/textual-difference): Documentation for the Textual Difference Metric in Mastra, which measures textual differences between strings using sequence matching.
 - [Reference: Tone Consistency | Metrics | Evals | Mastra Docs](https://mastra.ai/reference/evals/tone-consistency): Documentation for the Tone Consistency Metric in Mastra, which evaluates emotional tone and sentiment consistency in text.
 - [Reference: Toxicity | Metrics | Evals | Mastra Docs](https://mastra.ai/reference/evals/toxicity): Documentation for the Toxicity Metric in Mastra, which evaluates LLM outputs for racist, biased, or toxic elements.
-- [API Reference](https://mastra.ai/docs/reference): Mastra API Reference
+- [API Reference](https://mastra.ai/reference): Mastra API Reference
 - [Memory](https://mastra.ai/reference/memory/Memory)
 - [createThread](https://mastra.ai/reference/memory/createThread)
 - [getThreadById](https://mastra.ai/reference/memory/getThreadById)
