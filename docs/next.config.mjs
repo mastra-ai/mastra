@@ -333,8 +333,28 @@ export default withNextra({
       permanent: true,
     },
     {
+      source: "/examples/rag/reranking-with-cohere",
+      destination: "/examples/rag/rerank/reranking-with-cohere",
+      permanent: true,
+    },
+    {
+      source: "/examples/memory/short-term-working-memory",
+      destination: "/examples/memory/memory-with-libsql",
+      permanent: true,
+    },
+    {
+      source: "/examples/rag/query/metadata-extraction",
+      destination: "/examples/rag/query/retrieve-results",
+      permanent: true,
+    },
+    {
       source: "/docs/showcase",
       destination: "/showcase",
+      permanent: true,
+    },
+    {
+      source: "/docs/local-dev/integrations",
+      destination: "/docs/integrations",
       permanent: true,
     },
     {
