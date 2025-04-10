@@ -17,9 +17,14 @@ import { asyncExitHook, gracefulExit } from 'exit-hook';
 // Omit the fields we want to control from the SDK options
 type SSEClientParameters = {
   url: URL;
+  timeout?: number;
 } & SSEClientTransportOptions;
 
-export type MastraMCPServerDefinition = StdioServerParameters | SSEClientParameters;
+type StdioServerParametersWithTimeout = StdioServerParameters & {
+  timeout?: number;
+};
+
+export type MastraMCPServerDefinition = StdioServerParametersWithTimeout | SSEClientParameters;
 
 export class MastraMCPClient extends MastraBase {
   name: string;
@@ -72,7 +77,9 @@ export class MastraMCPClient extends MastraBase {
   async connect() {
     if (this.isConnected) return;
     try {
-      await this.client.connect(this.transport);
+      await this.client.connect(this.transport, {
+        timeout: this.timeout,
+      });
       this.isConnected = true;
       const originalOnClose = this.client.onclose;
       this.client.onclose = () => {
@@ -106,11 +113,13 @@ export class MastraMCPClient extends MastraBase {
   // TODO: do the type magic to return the right method type. Right now we get infinitely deep infered type errors from Zod without using "any"
 
   async resources(): Promise<ReturnType<Protocol<any, any, any>['request']>> {
-    return await this.client.request({ method: 'resources/list' }, ListResourcesResultSchema);
+    return await this.client.request({ method: 'resources/list' }, ListResourcesResultSchema, {
+      timeout: this.timeout,
+    });
   }
 
   async tools() {
-    const { tools } = await this.client.listTools();
+    const { tools } = await this.client.listTools({ timeout: this.timeout });
     const toolsRes: Record<string, any> = {};
     tools.forEach(tool => {
       const s = jsonSchemaToModel(tool.inputSchema);
