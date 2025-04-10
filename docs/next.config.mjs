@@ -227,6 +227,11 @@ export default withNextra({
       destination: "/docs/memory/overview",
       permanent: true,
     },
+    {
+      source: "/docs/guides/:path*",
+      destination: "/docs/guides/guide/:path*",
+      permanent: true,
+    },
   ],
   trailingSlash: false,
 });
