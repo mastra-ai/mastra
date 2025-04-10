@@ -3,6 +3,7 @@ import { createTool } from '@mastra/core/tools';
 import { jsonSchemaToModel } from '@mastra/core/utils';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { SSEClientTransport } from '@modelcontextprotocol/sdk/client/sse.js';
+import type { SSEClientTransportOptions } from '@modelcontextprotocol/sdk/client/sse.js';
 import { getDefaultEnvironment, StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
 import type { StdioServerParameters } from '@modelcontextprotocol/sdk/client/stdio.js';
 import { DEFAULT_REQUEST_TIMEOUT_MSEC } from '@modelcontextprotocol/sdk/shared/protocol.js';
@@ -13,9 +14,28 @@ import { CallToolResultSchema, ListResourcesResultSchema } from '@modelcontextpr
 
 import { asyncExitHook, gracefulExit } from 'exit-hook';
 
-type SSEClientParameters = {
+type EventSourceInit = SSEClientTransportOptions['eventSourceInit'];
+
+// Omit the fields we want to control from the SDK options
+type SSEClientParametersBase = Omit<SSEClientTransportOptions, 'requestInit' | 'eventSourceInit'> & {
   url: URL;
-} & ConstructorParameters<typeof SSEClientTransport>[1];
+};
+
+type SSEClientParameters = SSEClientParametersBase &
+  (
+    | {
+        // No headers case
+        requestInit?: Omit<RequestInit, 'headers'>;
+        eventSourceInit?: EventSourceInit;
+      }
+    | {
+        // With headers case - both must be present
+        requestInit: RequestInit & { headers: RequestInit['headers'] };
+        eventSourceInit: EventSourceInit & {
+          fetch: NonNullable<EventSourceInit>['fetch'];
+        };
+      }
+  );
 
 export type MastraMCPServerDefinition = StdioServerParameters | SSEClientParameters;
 
