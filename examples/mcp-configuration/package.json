@@ -10,7 +10,7 @@
   },
   "keywords": [],
   "author": "",
-  "license": "ISC",
+  "license": "Elastic-2.0",
   "description": "",
   "dependencies": {
     "@ai-sdk/openai": "latest",
