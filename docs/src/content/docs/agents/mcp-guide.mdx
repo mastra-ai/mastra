@@ -118,6 +118,28 @@ const response = await agent.stream(
 MCP servers can be accessed through registries that provide curated collections of tools.
 We've curated an [MCP Registry Registry](/mcp-registry-registry) to help you find the best places to source MCP servers, but here's how you can use tools from some of our favorites:
 
+### mcp.run Registry
+
+[mcp.run](https://www.mcp.run/) makes it easy for you to call pre-authenticated, secure MCP Servers. The tools from mcp.run are free, and entirely managed, so your agent only needs a SSE URL and can use any tools a user has installed. MCP Servers are grouped into [Profiles](https://docs.mcp.run/user-guide/manage-profiles), and accessed with a unique SSE URL.
+
+For each Profile, you can copy/paste unique, signed URLs into your `MCPConfiguration` like this:
+
+```typescript
+const mcp = new MCPConfiguration({
+  servers: {
+    marketing: {
+      url: new URL(process.env.MCP_RUN_SSE_URL!),
+    },
+  },
+});
+```
+
+> Important: Each SSE URL on on [mcp.run](https://mcp.run) contains a unique signature, that should be treated like a password. It's best to read your SSE URL as an environment variable and manage it outside of your application code.
+
+```bash filename=".env" copy
+MCP_RUN_SSE_URL=https://www.mcp.run/api/mcp/sse?nonce=...
+```
+
 ### Composio.dev Registry
 
 [Composio.dev](https://composio.dev) provides a registry of [SSE-based MCP servers](https://mcp.composio.dev) that can be easily integrated with Mastra. The SSE URL that's generated for Cursor is compatible with Mastra - you can use it directly in your configuration:
