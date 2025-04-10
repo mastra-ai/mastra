@@ -1208,7 +1208,7 @@ Looking to use Mastra's MCP documentation server in your IDE? Check out our [MCP
 
 ## Next Steps
 
-- Learn more about [MCPConfiguration](/docs/reference/tools/mcp-configuration)
+- Learn more about [MCPConfiguration](/reference/tools/mcp-configuration)
 - Check out our [example projects](/examples) that use MCP
 
 
@@ -1278,7 +1278,7 @@ const response = await myAgent.generate([
 console.log("Agent:", response.text);
 ```
 
-For more details about the generate method and its options, see the [generate reference documentation](/docs/reference/agents/generate).
+For more details about the generate method and its options, see the [generate reference documentation](/reference/agents/generate).
 
 ### Streaming responses
 
@@ -1296,7 +1296,7 @@ for await (const chunk of stream.textStream) {
 }
 ```
 
-For more details about streaming responses, see the [stream reference documentation](/docs/reference/agents/stream).
+For more details about streaming responses, see the [stream reference documentation](/reference/agents/stream).
 
 ## 3. Structured Output
 
@@ -1690,11 +1690,11 @@ const response = await agent.generate({
 
 Mastra client exposes all resources served by the Mastra Server
 
-- [**Agents**](/docs/reference/client-js/agents): Create and manage AI agents, generate responses, and handle streaming interactions
-- [**Memory**](/docs/reference/client-js/memory): Manage conversation threads and message history
-- [**Tools**](/docs/reference/client-js/tools): Access and execute tools available to agents
-- [**Workflows**](/docs/reference/client-js/workflows): Create and manage automated workflows
-- [**Vectors**](/docs/reference/client-js/vectors): Handle vector operations for semantic search and similarity matching
+- [**Agents**](/reference/client-js/agents): Create and manage AI agents, generate responses, and handle streaming interactions
+- [**Memory**](/reference/client-js/memory): Manage conversation threads and message history
+- [**Tools**](/reference/client-js/tools): Access and execute tools available to agents
+- [**Workflows**](/reference/client-js/workflows): Create and manage automated workflows
+- [**Vectors**](/reference/client-js/vectors): Handle vector operations for semantic search and similarity matching
 
 
 ## Best Practices
@@ -1741,9 +1741,9 @@ Before you begin, ensure you have:
 ## Serverless Platform Deployers
 
 Platform-specific deployers handle configuration and deployment for:
-- **[Cloudflare Workers](/docs/reference/deployer/cloudflare)**
-- **[Vercel](/docs/reference/deployer/vercel)**
-- **[Netlify](/docs/reference/deployer/netlify)**
+- **[Cloudflare Workers](/reference/deployer/cloudflare)**
+- **[Vercel](/reference/deployer/vercel)**
+- **[Netlify](/reference/deployer/netlify)**
 
 ### Installing Deployers
 
@@ -1791,7 +1791,7 @@ new CloudflareDeployer({
 })
 ```
 
-[View Cloudflare Deployer Reference →](/docs/reference/deployer/cloudflare)
+[View Cloudflare Deployer Reference →](/reference/deployer/cloudflare)
 
 #### Vercel Deployer
 
@@ -1804,7 +1804,7 @@ new VercelDeployer({
 })
 ```
 
-[View Vercel Deployer Reference →](/docs/reference/deployer/vercel)
+[View Vercel Deployer Reference →](/reference/deployer/vercel)
 
 #### Netlify Deployer
 
@@ -1816,7 +1816,7 @@ new NetlifyDeployer({
 })
 ```
 
-[View Netlify Deployer Reference →](/docs/reference/deployer/netlify)
+[View Netlify Deployer Reference →](/reference/deployer/netlify)
 
 ## Environment Variables
 
@@ -2082,7 +2082,7 @@ The build process:
 3. Bundles code using Rollup with tree shaking and source maps
 4. Generates [Hono](https://hono.dev) HTTP server
 
-See [`mastra build`](/docs/reference/cli/build) for all options.
+See [`mastra build`](/reference/cli/build) for all options.
 
 ### Running the Server
 
@@ -2328,32 +2328,32 @@ Textual evals help ensure your agent:
 
 These metrics evaluate how correct, truthful, and complete your agent's answers are:
 
-- [`hallucination`](/docs/reference/evals/hallucination): Detects facts or claims not present in provided context
-- [`faithfulness`](/docs/reference/evals/faithfulness): Measures how accurately responses represent provided context
-- [`content-similarity`](/docs/reference/evals/content-similarity): Evaluates consistency of information across different phrasings
-- [`completeness`](/docs/reference/evals/completeness): Checks if responses include all necessary information
-- [`answer-relevancy`](/docs/reference/evals/answer-relevancy): Assesses how well responses address the original query
-- [`textual-difference`](/docs/reference/evals/textual-difference): Measures textual differences between strings
+- [`hallucination`](/reference/evals/hallucination): Detects facts or claims not present in provided context
+- [`faithfulness`](/reference/evals/faithfulness): Measures how accurately responses represent provided context
+- [`content-similarity`](/reference/evals/content-similarity): Evaluates consistency of information across different phrasings
+- [`completeness`](/reference/evals/completeness): Checks if responses include all necessary information
+- [`answer-relevancy`](/reference/evals/answer-relevancy): Assesses how well responses address the original query
+- [`textual-difference`](/reference/evals/textual-difference): Measures textual differences between strings
 
 ### Understanding Context
 
 These metrics evaluate how well your agent uses provided context:
 
-- [`context-position`](/docs/reference/evals/context-position): Analyzes where context appears in responses
-- [`context-precision`](/docs/reference/evals/context-precision): Evaluates whether context chunks are grouped logically
-- [`context-relevancy`](/docs/reference/evals/context-relevancy): Measures use of appropriate context pieces
-- [`contextual-recall`](/docs/reference/evals/contextual-recall): Assesses completeness of context usage
+- [`context-position`](/reference/evals/context-position): Analyzes where context appears in responses
+- [`context-precision`](/reference/evals/context-precision): Evaluates whether context chunks are grouped logically
+- [`context-relevancy`](/reference/evals/context-relevancy): Measures use of appropriate context pieces
+- [`contextual-recall`](/reference/evals/contextual-recall): Assesses completeness of context usage
 
 ### Output Quality
 
 These metrics evaluate adherence to format and style requirements:
 
-- [`tone`](/docs/reference/evals/tone-consistency): Measures consistency in formality, complexity, and style
-- [`toxicity`](/docs/reference/evals/toxicity): Detects harmful or inappropriate content
-- [`bias`](/docs/reference/evals/bias): Detects potential biases in the output
-- [`prompt-alignment`](/docs/reference/evals/prompt-alignment): Checks adherence to explicit instructions like length restrictions, formatting requirements, or other constraints
-- [`summarization`](/docs/reference/evals/summarization): Evaluates information retention and conciseness
-- [`keyword-coverage`](/docs/reference/evals/keyword-coverage): Assesses technical terminology usage
+- [`tone`](/reference/evals/tone-consistency): Measures consistency in formality, complexity, and style
+- [`toxicity`](/reference/evals/toxicity): Detects harmful or inappropriate content
+- [`bias`](/reference/evals/bias): Detects potential biases in the output
+- [`prompt-alignment`](/reference/evals/prompt-alignment): Checks adherence to explicit instructions like length restrictions, formatting requirements, or other constraints
+- [`summarization`](/reference/evals/summarization): Evaluates information retention and conciseness
+- [`keyword-coverage`](/reference/evals/keyword-coverage): Assesses technical terminology usage
 
 
 ---
@@ -2728,7 +2728,7 @@ pnpm dlx mastra@latest init
   </Tabs.Tab>
 </Tabs>
 
-This will set up Mastra in your Next.js project. For more details about init and other configuration options, see our [mastra init reference](/docs/reference/cli/init).
+This will set up Mastra in your Next.js project. For more details about init and other configuration options, see our [mastra init reference](/reference/cli/init).
 
 ### Configure Next.js
 
@@ -2833,7 +2833,7 @@ To run Mastra, you need access to an LLM. Typically, you'll want to get an API k
 ## Prerequisites
 
 - Node.js `v20.0` or higher
-- Access to a [supported large language model (LLM)](/docs/reference/llm/providers-and-models)
+- Access to a [supported large language model (LLM)](/reference/llm/providers-and-models)
 
 ## Automatic Installation
 
@@ -4018,7 +4018,7 @@ touch src/mastra/index.ts src/store.ts src/index.ts
 ### Create the Research Assistant Agent
 
 Now we'll create our RAG-enabled research assistant. The agent uses:
-- A [Vector Query Tool](/docs/reference/tools/vector-query-tool) for performing semantic search over our vector store to find relevant content in our papers.
+- A [Vector Query Tool](/reference/tools/vector-query-tool) for performing semantic search over our vector store to find relevant content in our papers.
 - GPT-4o-mini for understanding queries and generating responses
 - Custom instructions that guide the agent on how to analyze papers, use retrieved content effectively, and acknowledge limitations
 
@@ -4697,7 +4697,7 @@ Arguments:
   --llm-api-key    Provider API key
   --dir            Directory for Mastra files (defaults to src/)
 ```
-For more details, refer to the [mastra init CLI documentation](/docs/reference/cli/init).
+For more details, refer to the [mastra init CLI documentation](/reference/cli/init).
 
 
 
@@ -4840,7 +4840,7 @@ The Tools playground allows you to test your custom tools in isolation:
 
 ## REST API Endpoints
 
-`mastra dev` also spins up REST API routes for your agents and workflows via the local [Mastra Server](/docs/deployment/server). This allows you to test your API endpoints before deployment. See [Mastra Dev reference](/docs/reference/cli/dev#routes) for more details about all endpoints.
+`mastra dev` also spins up REST API routes for your agents and workflows via the local [Mastra Server](/docs/deployment/server). This allows you to test your API endpoints before deployment. See [Mastra Dev reference](/reference/cli/dev#routes) for more details about all endpoints.
 
 You can then leverage the [Mastra Client](/docs/deployment/client) SDK to interact with your served REST API routes seamlessly.
 
@@ -4910,9 +4910,9 @@ In this configuration:
 
 ## Configuration
 
-- For more details on the options you can pass to `createLogger()`, see the [createLogger reference documentation](/docs/reference/observability/create-logger.mdx).
-- Once you have a `Logger` instance, you can call its methods (e.g., `.info()`, `.warn()`, `.error()`) in the [Logger instance reference documentation](/docs/reference/observability/logger.mdx).
-- If you want to send your logs to an external service for centralized collection, analysis, or storage, you can configure other logger types such as Upstash Redis. Consult the [createLogger reference documentation](/docs/reference/observability/create-logger.mdx) for details on parameters like `url`, `token`, and `key` when using the `UPSTASH` logger type.
+- For more details on the options you can pass to `createLogger()`, see the [createLogger reference documentation](/reference/observability/create-logger.mdx).
+- Once you have a `Logger` instance, you can call its methods (e.g., `.info()`, `.warn()`, `.error()`) in the [Logger instance reference documentation](/reference/observability/logger.mdx).
+- If you want to send your logs to an external service for centralized collection, analysis, or storage, you can configure other logger types such as Upstash Redis. Consult the [createLogger reference documentation](/reference/observability/create-logger.mdx) for details on parameters like `url`, `token`, and `key` when using the `UPSTASH` logger type.
 
 
 ---
@@ -5089,7 +5089,7 @@ type OtelConfig = {
 };
 ```
 
-See the [OtelConfig reference documentation](/docs/reference/observability/otel-config.mdx) for more details.
+See the [OtelConfig reference documentation](/reference/observability/otel-config.mdx) for more details.
 
 ### Environment Variables
 
@@ -5189,7 +5189,7 @@ const chunks = await doc.chunk({
 
 **Note:** Metadata extraction may use LLM calls, so ensure your API key is set.
 
-We go deeper into chunking strategies in our [chunk documentation](/docs/reference/rag/chunk.mdx).
+We go deeper into chunking strategies in our [chunk documentation](/reference/rag/chunk.mdx).
 
 ## Step 2: Embedding Generation
 
@@ -5298,9 +5298,9 @@ await vectorStore.upsert({
 ##
 For more examples of different chunking strategies and embedding configurations, see:
 
-- [Adjust Chunk Size](/docs/reference/rag/chunk.mdx#adjust-chunk-size)
-- [Adjust Chunk Delimiters](/docs/reference/rag/chunk.mdx#adjust-chunk-delimiters)
-- [Embed Text with Cohere](/docs/reference/rag/embeddings.mdx#using-cohere)
+- [Adjust Chunk Size](/reference/rag/chunk.mdx#adjust-chunk-size)
+- [Adjust Chunk Delimiters](/reference/rag/chunk.mdx#adjust-chunk-delimiters)
+- [Embed Text with Cohere](/reference/rag/embeddings.mdx#using-cohere)
 
 
 ---
@@ -5467,7 +5467,7 @@ For an example of how to use the basic retrieval method, see the [Retrieve Resul
 
 Filter results based on metadata fields to narrow down the search space. This is useful when you have documents from different sources, time periods, or with specific attributes. Mastra provides a unified MongoDB-style query syntax that works across all supported vector stores.
 
-For detailed information about available operators and syntax, see the [Metadata Filters Reference](/docs/reference/rag/metadata-filters).
+For detailed information about available operators and syntax, see the [Metadata Filters Reference](/reference/rag/metadata-filters).
 
 Basic filtering examples:
 
@@ -5561,7 +5561,7 @@ This is particularly useful when:
 - The retrieval process requires complex decision-making
 - You want the agent to combine multiple retrieval strategies based on context
 
-For detailed configuration options and advanced usage, see the [Vector Query Tool Reference](/docs/reference/tools/vector-query-tool).
+For detailed configuration options and advanced usage, see the [Vector Query Tool Reference](/reference/tools/vector-query-tool).
 
 ### Vector Store Prompts
 
@@ -5729,7 +5729,7 @@ const rerankedResults = await rerank(initialResults, query, openai('gpt-4o-mini'
 
 The re-ranked results combine vector similarity with semantic understanding to improve retrieval quality.
 
-For more details about re-ranking, see the [rerank()](/docs/reference/rag/rerank) method.
+For more details about re-ranking, see the [rerank()](/reference/rag/rerank) method.
 
 For an example of how to use the re-ranking method, see the [Re-ranking Results](../../examples/rag/rerank/rerank.mdx) example.
 
@@ -5754,7 +5754,7 @@ const graphQueryTool = createGraphQueryTool({
 });
 ```
 
-For more details about graph-based retrieval, see the [GraphRAG](/docs/reference/rag/graph-rag) class and the [createGraphQueryTool()](/docs/reference/tools/graph-rag-tool) function.
+For more details about graph-based retrieval, see the [GraphRAG](/reference/rag/graph-rag) class and the [createGraphQueryTool()](/reference/tools/graph-rag-tool) function.
 
 For an example of how to use the graph-based retrieval method, see the [Graph-based Retrieval](../../examples/rag/usage/graph-rag.mdx) example.
 
@@ -6108,7 +6108,7 @@ description: Documentation for the createTool function in Mastra, which creates 
 ---
 
 # `createTool()`
-Source: https://mastra.ai/docs/reference/agents/createTool
+Source: https://mastra.ai/reference/agents/createTool
 
 The `createTool()` function creates typed tools that can be executed by agents or workflows. Tools have built-in schema validation, execution context, and integration with the Mastra ecosystem.
 
@@ -6340,7 +6340,7 @@ description: "Documentation for the `.generate()` method in Mastra agents, which
 ---
 
 # Agent.generate()
-Source: https://mastra.ai/docs/reference/agents/generate
+Source: https://mastra.ai/reference/agents/generate
 
 The `generate()` method is used to interact with an agent to produce text or structured responses. This method accepts `messages` and an optional `options` object as parameters.
 
@@ -6670,7 +6670,7 @@ description: API Reference for getAgent.
 ---
 
 # `getAgent()`
-Source: https://mastra.ai/docs/reference/agents/getAgent
+Source: https://mastra.ai/reference/agents/getAgent
 
 Retrieve an agent based on the provided configuration
 
@@ -6727,7 +6727,7 @@ description: Documentation for the `.stream()` method in Mastra agents, which en
 ---
 
 # `stream()`
-Source: https://mastra.ai/docs/reference/agents/stream
+Source: https://mastra.ai/reference/agents/stream
 
 The `stream()` method enables real-time streaming of responses from an agent. This method accepts `messages` and an optional `options` object as parameters, similar to `generate()`.
 
@@ -7094,7 +7094,7 @@ description: "Build your Mastra project for production deployment"
 The `mastra build` command bundles your Mastra project into a production-ready Hono server. Hono is a lightweight web framework that provides type-safe routing and middleware support, making it ideal for deploying Mastra agents as HTTP endpoints.
 
 ## Usage
-Source: https://mastra.ai/docs/reference/cli/build
+Source: https://mastra.ai/reference/cli/build
 
 ```bash
 mastra build [options]
@@ -7143,7 +7143,7 @@ description: Documentation for the mastra deploy command, which deploys Mastra p
 ---
 
 # `mastra deploy` Reference
-Source: https://mastra.ai/docs/reference/cli/deploy
+Source: https://mastra.ai/reference/cli/deploy
 
 ## `mastra deploy vercel`
 
@@ -7168,7 +7168,7 @@ description: Documentation for the mastra dev command, which starts a developmen
 ---
 
 # `mastra dev` Reference
-Source: https://mastra.ai/docs/reference/cli/dev
+Source: https://mastra.ai/reference/cli/dev
 
 The `mastra dev` command starts a development server that exposes REST routes for your agents, tools, and workflows,
 
@@ -7305,7 +7305,7 @@ description: Documentation for the mastra init command, which creates a new Mast
 ---
 
 # `mastra init` Reference
-Source: https://mastra.ai/docs/reference/cli/init
+Source: https://mastra.ai/reference/cli/init
 
 ## `mastra init`
 
@@ -7346,7 +7346,7 @@ This creates a new Mastra project. You can run it in three different ways:
 
 
 # Agents API
-Source: https://mastra.ai/docs/reference/client-js/agents
+Source: https://mastra.ai/reference/client-js/agents
 
 The Agents API provides methods to interact with Mastra AI agents, including generating responses, streaming interactions, and managing agent tools.
 
@@ -7456,7 +7456,7 @@ const liveEvals = await agent.liveEvals();
 
 
 # Error Handling
-Source: https://mastra.ai/docs/reference/client-js/error-handling
+Source: https://mastra.ai/reference/client-js/error-handling
 
 The Mastra Client SDK includes built-in retry mechanism and error handling capabilities.
 
@@ -7497,7 +7497,7 @@ const client = new MastraClient({
 
 
 # Logs API
-Source: https://mastra.ai/docs/reference/client-js/logs
+Source: https://mastra.ai/reference/client-js/logs
 
 The Logs API provides methods to access and query system logs and debugging information in Mastra.
 
@@ -7524,7 +7524,7 @@ const runLogs = await client.getLogForRun({
 
 
 # Memory API
-Source: https://mastra.ai/docs/reference/client-js/memory
+Source: https://mastra.ai/reference/client-js/memory
 
 The Memory API provides methods to manage conversation threads and message history in Mastra.
 
@@ -7624,7 +7624,7 @@ const status = await client.getMemoryStatus("agent-id");
 
 
 # Telemetry API
-Source: https://mastra.ai/docs/reference/client-js/telemetry
+Source: https://mastra.ai/reference/client-js/telemetry
 
 The Telemetry API provides methods to retrieve and analyze traces from your Mastra application. This helps you monitor and debug your application's behavior and performance.
 
@@ -7647,7 +7647,7 @@ const telemetry = await client.getTelemetry({
 
 
 # Tools API
-Source: https://mastra.ai/docs/reference/client-js/tools
+Source: https://mastra.ai/reference/client-js/tools
 
 The Tools API provides methods to interact with and execute tools available in the Mastra platform.
 
@@ -7694,7 +7694,7 @@ const result = await tool.execute({
 
 
 # Vectors API
-Source: https://mastra.ai/docs/reference/client-js/vectors
+Source: https://mastra.ai/reference/client-js/vectors
 
 The Vectors API provides methods to work with vector embeddings for semantic search and similarity matching in Mastra.
 
@@ -7776,7 +7776,7 @@ const result = await vector.delete("index-name");
 
 
 # Workflows API
-Source: https://mastra.ai/docs/reference/client-js/workflows
+Source: https://mastra.ai/reference/client-js/workflows
 
 The Workflows API provides methods to interact with and execute automated workflows in Mastra.
 
@@ -7920,7 +7920,7 @@ description: Documentation for the Mastra Class, the core entry point for managi
 ---
 
 # The Mastra Class
-Source: https://mastra.ai/docs/reference/core/mastra-class
+Source: https://mastra.ai/reference/core/mastra-class
 
 The Mastra class is the core entry point for your application. It manages agents, workflows, and server endpoints.
 
@@ -8155,7 +8155,7 @@ description: "Documentation for the CloudflareDeployer class, which deploys Mast
 ---
 
 # CloudflareDeployer
-Source: https://mastra.ai/docs/reference/deployer/cloudflare
+Source: https://mastra.ai/reference/deployer/cloudflare
 
 The CloudflareDeployer deploys Mastra applications to Cloudflare Workers, handling configuration, environment variables, and route management. It extends the abstract Deployer class to provide Cloudflare-specific deployment functionality.
 
@@ -8334,7 +8334,7 @@ description: Documentation for the Deployer abstract class, which handles packag
 ---
 
 # Deployer
-Source: https://mastra.ai/docs/reference/deployer/deployer
+Source: https://mastra.ai/reference/deployer/deployer
 
 The Deployer handles the deployment of Mastra applications by packaging code, managing environment files, and serving applications using the Hono framework. Concrete implementations must define the deploy method for specific deployment targets.
 
@@ -8496,7 +8496,7 @@ description: "Documentation for the NetlifyDeployer class, which deploys Mastra 
 ---
 
 # NetlifyDeployer
-Source: https://mastra.ai/docs/reference/deployer/netlify
+Source: https://mastra.ai/reference/deployer/netlify
 
 The NetlifyDeployer deploys Mastra applications to Netlify Functions, handling site creation, configuration, and deployment processes. It extends the abstract Deployer class to provide Netlify-specific deployment functionality.
 
@@ -8587,7 +8587,7 @@ description: "Documentation for the VercelDeployer class, which deploys Mastra a
 ---
 
 # VercelDeployer
-Source: https://mastra.ai/docs/reference/deployer/vercel
+Source: https://mastra.ai/reference/deployer/vercel
 
 The VercelDeployer deploys Mastra applications to Vercel, handling configuration, environment variable synchronization, and deployment processes. It extends the abstract Deployer class to provide Vercel-specific deployment functionality.
 
@@ -8687,7 +8687,7 @@ description: Documentation for the Answer Relevancy Metric in Mastra, which eval
 ---
 
 # AnswerRelevancyMetric
-Source: https://mastra.ai/docs/reference/evals/answer-relevancy
+Source: https://mastra.ai/reference/evals/answer-relevancy
 
 The `AnswerRelevancyMetric` class evaluates how well an LLM's output answers or addresses the input query. It uses a judge-based system to determine relevancy and provides detailed scoring and reasoning.
 
@@ -8875,7 +8875,7 @@ description: Documentation for the Bias Metric in Mastra, which evaluates LLM ou
 ---
 
 # BiasMetric
-Source: https://mastra.ai/docs/reference/evals/bias
+Source: https://mastra.ai/reference/evals/bias
 
 The `BiasMetric` class evaluates whether an LLM's output contains various forms of bias, including gender, political, racial/ethnic, or geographical bias. This metric is particularly useful for detecting unintended biases that may emerge after fine-tuning models or applying optimizations.
 
@@ -9063,7 +9063,7 @@ description: Documentation for the Completeness Metric in Mastra, which evaluate
 ---
 
 # CompletenessMetric
-Source: https://mastra.ai/docs/reference/evals/completeness
+Source: https://mastra.ai/reference/evals/completeness
 
 The `CompletenessMetric` class evaluates how thoroughly an LLM's output covers the key elements present in the input. It analyzes nouns, verbs, topics, and terms to determine coverage and provides a detailed completeness score.
 
@@ -9239,7 +9239,7 @@ description: Documentation for the Content Similarity Metric in Mastra, which me
 ---
 
 # ContentSimilarityMetric
-Source: https://mastra.ai/docs/reference/evals/content-similarity
+Source: https://mastra.ai/reference/evals/content-similarity
 
 The `ContentSimilarityMetric` class measures the textual similarity between two strings, providing a score that indicates how closely they match. It supports configurable options for case sensitivity and whitespace handling.
 
@@ -9424,7 +9424,7 @@ description: Documentation for the Context Position Metric in Mastra, which eval
 ---
 
 # ContextPositionMetric
-Source: https://mastra.ai/docs/reference/evals/context-position
+Source: https://mastra.ai/reference/evals/context-position
 
 The `ContextPositionMetric` class evaluates how well context nodes are ordered based on their relevance to the query and output. It uses position-weighted scoring to emphasize the importance of having the most relevant context pieces appear earlier in the sequence.
 
@@ -9616,7 +9616,7 @@ description: Documentation for the Context Precision Metric in Mastra, which eva
 ---
 
 # ContextPrecisionMetric
-Source: https://mastra.ai/docs/reference/evals/context-precision
+Source: https://mastra.ai/reference/evals/context-precision
 
 The `ContextPrecisionMetric` class evaluates how relevant and precise the retrieved context nodes are for generating the expected output. It uses a judge-based system to analyze each context piece's contribution and provides weighted scoring based on position.
 
@@ -9807,7 +9807,7 @@ description: Documentation for the Context Relevancy Metric, which evaluates the
 ---
 
 # ContextRelevancyMetric
-Source: https://mastra.ai/docs/reference/evals/context-relevancy
+Source: https://mastra.ai/reference/evals/context-relevancy
 
 The `ContextRelevancyMetric` class evaluates the quality of your RAG (Retrieval-Augmented Generation) pipeline's retriever by measuring how relevant the retrieved context is to the input query. It uses an LLM-based evaluation system that first extracts statements from the context and then assesses their relevance to the input.
 
@@ -9997,7 +9997,7 @@ description: Documentation for the Contextual Recall Metric, which evaluates the
 ---
 
 # ContextualRecallMetric
-Source: https://mastra.ai/docs/reference/evals/contextual-recall
+Source: https://mastra.ai/reference/evals/contextual-recall
 
 The `ContextualRecallMetric` class evaluates how effectively an LLM's response incorporates all relevant information from the provided context. It measures whether important information from the reference documents was successfully included in the response, focusing on completeness rather than precision.
 
@@ -10190,7 +10190,7 @@ description: Documentation for the Faithfulness Metric in Mastra, which evaluate
 ---
 
 # FaithfulnessMetric Reference
-Source: https://mastra.ai/docs/reference/evals/faithfulness
+Source: https://mastra.ai/reference/evals/faithfulness
 
 The `FaithfulnessMetric` in Mastra evaluates how factually accurate an LLM's output is compared to the provided context. It extracts claims from the output and verifies them against the context, making it essential to measure RAG pipeline responses' reliability.
 
@@ -10385,7 +10385,7 @@ description: Documentation for the Hallucination Metric in Mastra, which evaluat
 ---
 
 # HallucinationMetric
-Source: https://mastra.ai/docs/reference/evals/hallucination
+Source: https://mastra.ai/reference/evals/hallucination
 
 The `HallucinationMetric` evaluates whether an LLM generates factually correct information by comparing its output against the provided context. This metric measures hallucination by identifying direct contradictions between the context and the output.
 
@@ -10606,7 +10606,7 @@ description: Documentation for the Keyword Coverage Metric in Mastra, which eval
 ---
 
 # KeywordCoverageMetric
-Source: https://mastra.ai/docs/reference/evals/keyword-coverage
+Source: https://mastra.ai/reference/evals/keyword-coverage
 
 The `KeywordCoverageMetric` class evaluates how well an LLM's output covers the important keywords from the input. It analyzes keyword presence and matches while ignoring common words and stop words.
 
@@ -10784,7 +10784,7 @@ description: Documentation for the Prompt Alignment Metric in Mastra, which eval
 ---
 
 # PromptAlignmentMetric
-Source: https://mastra.ai/docs/reference/evals/prompt-alignment
+Source: https://mastra.ai/reference/evals/prompt-alignment
 
 The `PromptAlignmentMetric` class evaluates how strictly an LLM's output follows a set of given prompt instructions. It uses a judge-based system to verify each instruction is followed exactly and provides detailed reasoning for any deviations.
 
@@ -11025,7 +11025,7 @@ description: Documentation for the Summarization Metric in Mastra, which evaluat
 ---
 
 # SummarizationMetric
-Source: https://mastra.ai/docs/reference/evals/summarization
+Source: https://mastra.ai/reference/evals/summarization
 ,
 The `SummarizationMetric` evaluates how well an LLM's summary captures the original text's content while maintaining factual accuracy. It combines two aspects: alignment (factual correctness) and coverage (inclusion of key information), using the minimum scores to ensure both qualities are necessary for a good summary.
 
@@ -11233,7 +11233,7 @@ description: Documentation for the Textual Difference Metric in Mastra, which me
 ---
 
 # TextualDifferenceMetric
-Source: https://mastra.ai/docs/reference/evals/textual-difference
+Source: https://mastra.ai/reference/evals/textual-difference
 
 The `TextualDifferenceMetric` class uses sequence matching to measure the textual differences between two strings. It provides detailed information about changes, including the number of operations needed to transform one text into another.
 
@@ -11396,7 +11396,7 @@ description: Documentation for the Tone Consistency Metric in Mastra, which eval
 ---
 
 # ToneConsistencyMetric
-Source: https://mastra.ai/docs/reference/evals/tone-consistency
+Source: https://mastra.ai/reference/evals/tone-consistency
 
 The `ToneConsistencyMetric` class evaluates the text's emotional tone and sentiment consistency.  It can operate in two modes: comparing tone between input/output pairs or analyzing tone stability within a single text.
 
@@ -11580,7 +11580,7 @@ description: Documentation for the Toxicity Metric in Mastra, which evaluates LL
 ---
 
 # ToxicityMetric
-Source: https://mastra.ai/docs/reference/evals/toxicity
+Source: https://mastra.ai/reference/evals/toxicity
 
 The `ToxicityMetric` class evaluates whether an LLM's output contains racist, biased, or toxic elements. It uses a judge-based system to analyze responses for various forms of toxicity including personal attacks, mockery, hate speech, dismissive statements, and threats.
 
@@ -11753,7 +11753,7 @@ Source: https://mastra.ai/docs/reference
 The Reference section provides documentation of Mastra's API, including parameters, types and usage examples.
 
 # Memory Class Reference
-Source: https://mastra.ai/docs/reference/memory/Memory
+Source: https://mastra.ai/reference/memory/Memory
 
 The `Memory` class provides a robust system for managing conversation history and thread-based message storage in Mastra. It enables persistent storage of conversations, semantic search capabilities, and efficient message retrieval. By default, it uses LibSQL for storage and vector search, and FastEmbed for embeddings.
 
@@ -11937,12 +11937,12 @@ By default, Memory uses FastEmbed with the `bge-small-en-v1.5` model, which prov
 
 ### Related
 
-- [createThread](/docs/reference/memory/createThread.mdx)
-- [query](/docs/reference/memory/query.mdx)
+- [createThread](/reference/memory/createThread.mdx)
+- [query](/reference/memory/query.mdx)
 
 
 # createThread
-Source: https://mastra.ai/docs/reference/memory/createThread
+Source: https://mastra.ai/reference/memory/createThread
 
 Creates a new conversation thread in the memory system. Each thread represents a distinct conversation or context and can contain multiple messages.
 
@@ -12032,13 +12032,13 @@ const thread = await memory.createThread({
 
 ### Related
 
-- [Memory](/docs/reference/memory/Memory.mdx)
-- [getThreadById](/docs/reference/memory/getThreadById.mdx)
-- [getThreadsByResourceId](/docs/reference/memory/getThreadsByResourceId.mdx)
+- [Memory](/reference/memory/Memory.mdx)
+- [getThreadById](/reference/memory/getThreadById.mdx)
+- [getThreadsByResourceId](/reference/memory/getThreadsByResourceId.mdx)
 
 
 # getThreadById Reference
-Source: https://mastra.ai/docs/reference/memory/getThreadById
+Source: https://mastra.ai/reference/memory/getThreadById
 
 The `getThreadById` function retrieves a specific thread by its ID from storage.
 
@@ -12080,11 +12080,11 @@ const thread = await memory.getThreadById({ threadId: "thread-123" });
 
 ### Related
 
-- [Memory](/docs/reference/memory/Memory.mdx)
+- [Memory](/reference/memory/Memory.mdx)
 
 
 # getThreadsByResourceId Reference
-Source: https://mastra.ai/docs/reference/memory/getThreadsByResourceId
+Source: https://mastra.ai/reference/memory/getThreadsByResourceId
 
 The `getThreadsByResourceId` function retrieves all threads associated with a specific resource ID from storage.
 
@@ -12128,7 +12128,7 @@ const threads = await memory.getThreadsByResourceId({
 
 ### Related
 
-- [Memory](/docs/reference/memory/Memory.mdx)
+- [Memory](/reference/memory/Memory.mdx)
 
 
 ---
@@ -12137,7 +12137,7 @@ description: Documentation on how to filter and transform messages in Mastra Mem
 ---
 
 # Memory Processors
-Source: https://mastra.ai/docs/reference/memory/memory-processors
+Source: https://mastra.ai/reference/memory/memory-processors
 
 Memory message processors allow you to filter or transform recalled messages before they're sent to the LLM. This is particularly useful for:
 
@@ -12364,7 +12364,7 @@ class ReasoningFilter extends MemoryProcessor {
 
 
 # query
-Source: https://mastra.ai/docs/reference/memory/query
+Source: https://mastra.ai/reference/memory/query
 
 Retrieves messages from a specific thread, with support for pagination and filtering options.
 
@@ -12527,7 +12527,7 @@ The `query` function returns two different message formats:
 
 ### Related
 
-- [Memory](/docs/reference/memory/Memory.mdx)
+- [Memory](/reference/memory/Memory.mdx)
 
 
 ---
@@ -12536,7 +12536,7 @@ description: 'Reference documentation for the AgentNetwork class'
 ---
 
 # AgentNetwork (Experimental)
-Source: https://mastra.ai/docs/reference/networks/agent-network
+Source: https://mastra.ai/reference/networks/agent-network
 
 > **Note:** The AgentNetwork feature is experimental and may change in future releases.
 
@@ -12698,7 +12698,7 @@ description: Documentation for the createLogger function, which instantiates a l
 ---
 
 # createLogger()
-Source: https://mastra.ai/docs/reference/observability/create-logger
+Source: https://mastra.ai/reference/observability/create-logger
 
 The `createLogger()` function is used to instantiate a logger based on a given configuration. You can create console-based, file-based, or Upstash Redis-based loggers by specifying the type and any additional parameters relevant to that type.
 
@@ -12807,7 +12807,7 @@ description: Documentation for Logger instances, which provide methods to record
 ---
 
 # Logger Instance
-Source: https://mastra.ai/docs/reference/observability/logger
+Source: https://mastra.ai/reference/observability/logger
 
 A Logger instance is created by `createLogger()` and provides methods to record events at various severity levels. Depending on the logger type, messages may be written to the console, file, or an external service.
 
@@ -12865,7 +12865,7 @@ description: Documentation for the OtelConfig object, which configures OpenTelem
 ---
 
 # `OtelConfig`
-Source: https://mastra.ai/docs/reference/observability/otel-config
+Source: https://mastra.ai/reference/observability/otel-config
 
 The `OtelConfig` object is used to configure OpenTelemetry instrumentation, tracing, and exporting behavior within your application. By adjusting its properties, you can control how telemetry data (such as traces) is collected, sampled, and exported. 
 
@@ -12987,7 +12987,7 @@ description: Documentation for integrating Braintrust with Mastra, an evaluation
 ---
 
 # Braintrust
-Source: https://mastra.ai/docs/reference/observability/providers/braintrust
+Source: https://mastra.ai/reference/observability/providers/braintrust
 
 Braintrust is an evaluation and monitoring platform for LLM applications.
 
@@ -13030,7 +13030,7 @@ description: Documentation for integrating Mastra with Dash0, an Open Telementry
 ---
 
 # Dash0
-Source: https://mastra.ai/docs/reference/observability/providers/dash0
+Source: https://mastra.ai/reference/observability/providers/dash0
 
 Dash0, an Open Telementry native observability solution that provides full-stack monitoring capabilities as well as integrations with other CNCF projects like Perses and Prometheus.
 
@@ -13073,7 +13073,7 @@ description: Overview of observability providers supported by Mastra, including 
 ---
 
 # Observability Providers
-Source: https://mastra.ai/docs/reference/observability/providers
+Source: https://mastra.ai/reference/observability/providers
 
 Observability providers include:
 - [Braintrust](./providers/braintrust.mdx)
@@ -13092,7 +13092,7 @@ description: Documentation for integrating Laminar with Mastra, a specialized ob
 ---
 
 # Laminar
-Source: https://mastra.ai/docs/reference/observability/providers/laminar
+Source: https://mastra.ai/reference/observability/providers/laminar
 
 Laminar is a specialized observability platform for LLM applications.
 
@@ -13136,7 +13136,7 @@ description: Documentation for integrating Langfuse with Mastra, an open-source 
 ---
 
 # Langfuse
-Source: https://mastra.ai/docs/reference/observability/providers/langfuse
+Source: https://mastra.ai/reference/observability/providers/langfuse
 
 Langfuse is an open-source observability platform designed specifically for LLM applications.
 
@@ -13190,7 +13190,7 @@ description: Documentation for integrating LangSmith with Mastra, a platform for
 ---
 
 # LangSmith
-Source: https://mastra.ai/docs/reference/observability/providers/langsmith
+Source: https://mastra.ai/reference/observability/providers/langsmith
 
 LangSmith is LangChain's platform for debugging, testing, evaluating, and monitoring LLM applications.
 
@@ -13241,7 +13241,7 @@ description: Documentation for integrating LangWatch with Mastra, a specialized 
 ---
 
 # LangWatch
-Source: https://mastra.ai/docs/reference/observability/providers/langwatch
+Source: https://mastra.ai/reference/observability/providers/langwatch
 
 LangWatch is a specialized observability platform for LLM applications.
 
@@ -13289,7 +13289,7 @@ description: Documentation for integrating New Relic with Mastra, a comprehensiv
 ---
 
 # New Relic
-Source: https://mastra.ai/docs/reference/observability/providers/new-relic
+Source: https://mastra.ai/reference/observability/providers/new-relic
 
 New Relic is a comprehensive observability platform that supports OpenTelemetry (OTLP) for full-stack monitoring.
 
@@ -13332,7 +13332,7 @@ description: Documentation for integrating SigNoz with Mastra, an open-source AP
 ---
 
 # SigNoz
-Source: https://mastra.ai/docs/reference/observability/providers/signoz
+Source: https://mastra.ai/reference/observability/providers/signoz
 
 SigNoz is an open-source APM and observability platform that provides full-stack monitoring capabilities through OpenTelemetry.
 
@@ -13375,7 +13375,7 @@ description: Documentation for integrating Traceloop with Mastra, an OpenTelemet
 ---
 
 # Traceloop
-Source: https://mastra.ai/docs/reference/observability/providers/traceloop
+Source: https://mastra.ai/reference/observability/providers/traceloop
 
 Traceloop is an OpenTelemetry-native observability platform specifically designed for LLM applications.
 
@@ -13418,7 +13418,7 @@ description: Documentation for the AstraVector class in Mastra, which provides v
 ---
 
 # Astra Vector Store
-Source: https://mastra.ai/docs/reference/rag/astra
+Source: https://mastra.ai/reference/rag/astra
 
 The AstraVector class provides vector search using [DataStax Astra DB](https://www.datastax.com/products/datastax-astra), a cloud-native, serverless database built on Apache Cassandra.
 It provides vector search capabilities with enterprise-grade scalability and high availability.
@@ -13679,7 +13679,7 @@ description: Documentation for the ChromaVector class in Mastra, which provides 
 ---
 
 # Chroma Vector Store
-Source: https://mastra.ai/docs/reference/rag/chroma
+Source: https://mastra.ai/reference/rag/chroma
 
 The ChromaVector class provides vector search using [ChromaDB](https://www.trychroma.com/), an open-source embedding database.
 It offers efficient vector search with metadata filtering and hybrid search capabilities.
@@ -13963,7 +13963,7 @@ description: Documentation for the chunk function in Mastra, which splits docume
 ---
 
 # Reference: .chunk()
-Source: https://mastra.ai/docs/reference/rag/chunk
+Source: https://mastra.ai/reference/rag/chunk
 
 The `.chunk()` function splits documents into smaller segments using various strategies and options.
 
@@ -14200,7 +14200,7 @@ description: Documentation for the MDocument class in Mastra, which handles docu
 ---
 
 # MDocument
-Source: https://mastra.ai/docs/reference/rag/document
+Source: https://mastra.ai/reference/rag/document
 
 The MDocument class processes documents for RAG applications. The main methods are `.chunk()` and `.extractMetadata()`.
 
@@ -14329,7 +14329,7 @@ description: Documentation for embedding functionality in Mastra using the AI SD
 ---
 
 # Embed
-Source: https://mastra.ai/docs/reference/rag/embeddings
+Source: https://mastra.ai/reference/rag/embeddings
 
 Mastra uses the AI SDK's `embed` and `embedMany` functions to generate vector embeddings for text inputs, enabling similarity search and RAG workflows.
 
@@ -14482,8 +14482,8 @@ const multipleResult = await embedMany({
 
 For more detailed information about embeddings in the Vercel AI SDK, see:
 - [AI SDK Embeddings Overview](https://sdk.vercel.ai/docs/ai-sdk-core/embeddings)
-- [embed()](https://sdk.vercel.ai/docs/reference/ai-sdk-core/embed)
-- [embedMany()](https://sdk.vercel.ai/docs/reference/ai-sdk-core/embed-many)
+- [embed()](https://sdk.vercel.ai/reference/ai-sdk-core/embed)
+- [embedMany()](https://sdk.vercel.ai/reference/ai-sdk-core/embed-many)
 
 
 ---
@@ -14492,7 +14492,7 @@ description: Documentation for metadata extraction configuration in Mastra.
 ---
 
 # ExtractParams
-Source: https://mastra.ai/docs/reference/rag/extract-params
+Source: https://mastra.ai/reference/rag/extract-params
 
 ExtractParams configures metadata extraction from document chunks using LLM analysis.
 
@@ -14721,7 +14721,7 @@ description: Documentation for the GraphRAG class in Mastra, which implements a 
 ---
 
 # GraphRAG
-Source: https://mastra.ai/docs/reference/rag/graph-rag
+Source: https://mastra.ai/reference/rag/graph-rag
 
 The `GraphRAG` class implements a graph-based approach to retrieval augmented generation. It creates a knowledge graph from document chunks where nodes represent documents and edges represent semantic relationships, enabling both direct similarity matching and discovery of related content through graph traversal.
 
@@ -14906,7 +14906,7 @@ description: Documentation for the LibSQLVector class in Mastra, which provides 
 ---
 
 # LibSQLVector Store
-Source: https://mastra.ai/docs/reference/rag/libsql
+Source: https://mastra.ai/reference/rag/libsql
 
 The LibSQL storage implementation provides a SQLite-compatible vector search [LibSQL](https://github.com/tursodatabase/libsql), a fork of SQLite with vector extensions, and [Turso](https://turso.tech/) with vector extensions, offering a lightweight and efficient vector database solution.
 It's part of the `@mastra/core` package and offers efficient vector similarity search with metadata filtering.
@@ -15266,7 +15266,7 @@ description: Documentation for metadata filtering capabilities in Mastra, which 
 ---
 
 # Metadata Filters
-Source: https://mastra.ai/docs/reference/rag/metadata-filters
+Source: https://mastra.ai/reference/rag/metadata-filters
 
 Mastra provides a unified metadata filtering syntax across all vector stores, based on MongoDB/Sift query syntax. Each vector store translates these filters into their native format.
 
@@ -15567,7 +15567,7 @@ description: Documentation for the PgVector class in Mastra, which provides vect
 ---
 
 # PG Vector Store
-Source: https://mastra.ai/docs/reference/rag/pg
+Source: https://mastra.ai/reference/rag/pg
 
 The PgVector class provides vector search using [PostgreSQL](https://www.postgresql.org/) with [pgvector](https://github.com/pgvector/pgvector) extension.
 It provides robust vector similarity search capabilities within your existing PostgreSQL database.
@@ -16047,7 +16047,7 @@ description: Documentation for the PineconeVector class in Mastra, which provide
 ---
 
 # Pinecone Vector Store
-Source: https://mastra.ai/docs/reference/rag/pinecone
+Source: https://mastra.ai/reference/rag/pinecone
 
 The PineconeVector class provides an interface to [Pinecone](https://www.pinecone.io/)'s vector database.
 It provides real-time vector search, with features like hybrid search, metadata filtering, and namespace management.
@@ -16331,7 +16331,7 @@ description: Documentation for integrating Qdrant with Mastra, a vector similari
 ---
 
 # Qdrant Vector Store
-Source: https://mastra.ai/docs/reference/rag/qdrant
+Source: https://mastra.ai/reference/rag/qdrant
 
 The QdrantVector class provides vector search using [Qdrant](https://qdrant.tech/), a vector similarity search engine.
 It provides a production-ready service with a convenient API to store, search, and manage vectors with additional payload and extended filtering support.
@@ -16570,7 +16570,7 @@ description: Documentation for the rerank function in Mastra, which provides adv
 ---
 
 # rerank()
-Source: https://mastra.ai/docs/reference/rag/rerank
+Source: https://mastra.ai/reference/rag/rerank
 
 The `rerank()` function provides advanced reranking capabilities for vector search results by combining semantic relevance, vector similarity, and position-based scoring. 
 
@@ -16785,7 +16785,7 @@ description: Documentation for integrating Turbopuffer with Mastra, a high-perfo
 ---
 
 # Turbopuffer Vector Store
-Source: https://mastra.ai/docs/reference/rag/turbopuffer
+Source: https://mastra.ai/reference/rag/turbopuffer
 
 The TurbopufferVector class provides vector search using [Turbopuffer](https://turbopuffer.com/), a high-performance vector database optimized for RAG applications. Turbopuffer offers fast vector similarity search with advanced filtering capabilities and efficient storage management.
 
@@ -17037,7 +17037,7 @@ description: Documentation for the UpstashVector class in Mastra, which provides
 ---
 
 # Upstash Vector Store
-Source: https://mastra.ai/docs/reference/rag/upstash
+Source: https://mastra.ai/reference/rag/upstash
 
 The UpstashVector class provides vector search using [Upstash Vector](https://upstash.com/vector), a serverless vector database service that provides vector similarity search with metadata filtering capabilities.
 
@@ -17287,7 +17287,7 @@ description: Documentation for the CloudflareVector class in Mastra, which provi
 ---
 
 # Cloudflare Vector Store
-Source: https://mastra.ai/docs/reference/rag/vectorize
+Source: https://mastra.ai/reference/rag/vectorize
 
 The CloudflareVector class provides vector search using [Cloudflare Vectorize](https://developers.cloudflare.com/vectorize/), a vector database service integrated with Cloudflare's edge network.
 
@@ -17588,7 +17588,7 @@ description: Documentation for the LibSQL storage implementation in Mastra.
 ---
 
 # LibSQL Storage
-Source: https://mastra.ai/docs/reference/storage/libsql
+Source: https://mastra.ai/reference/storage/libsql
 
 The LibSQL storage implementation provides a SQLite-compatible storage solution that can run both in-memory and as a persistent database.
 
@@ -17665,7 +17665,7 @@ description: Documentation for the PostgreSQL storage implementation in Mastra.
 ---
 
 # PostgreSQL Storage
-Source: https://mastra.ai/docs/reference/storage/postgresql
+Source: https://mastra.ai/reference/storage/postgresql
 
 The PostgreSQL storage implementation provides a production-ready storage solution using PostgreSQL databases.
 
@@ -17716,7 +17716,7 @@ description: Documentation for the Upstash storage implementation in Mastra.
 ---
 
 # Upstash Storage
-Source: https://mastra.ai/docs/reference/storage/upstash
+Source: https://mastra.ai/reference/storage/upstash
 
 The Upstash storage implementation provides a serverless-friendly storage solution using Upstash's Redis-compatible key-value store.
 
@@ -17805,7 +17805,7 @@ description: API Reference for MastraMCPClient - A client implementation for the
 ---
 
 # MastraMCPClient
-Source: https://mastra.ai/docs/reference/tools/client
+Source: https://mastra.ai/reference/tools/client
 
 The `MastraMCPClient` class provides a client implementation for interacting with Model Context Protocol (MCP) servers. It handles connection management, resource discovery, and tool execution through the MCP protocol.
 
@@ -17996,7 +17996,7 @@ description: Documentation for the Document Chunker Tool in Mastra, which splits
 ---
 
 # createDocumentChunkerTool()
-Source: https://mastra.ai/docs/reference/tools/document-chunker-tool
+Source: https://mastra.ai/reference/tools/document-chunker-tool
 
 The `createDocumentChunkerTool()` function creates a tool for splitting documents into smaller chunks for efficient processing and retrieval. It supports different chunking strategies and configurable parameters.
 
@@ -18140,7 +18140,7 @@ description: Documentation for the Graph RAG Tool in Mastra, which enhances RAG 
 ---
 
 # createGraphRAGTool()
-Source: https://mastra.ai/docs/reference/tools/graph-rag-tool
+Source: https://mastra.ai/reference/tools/graph-rag-tool
 
 The `createGraphRAGTool()` creates a tool that enhances RAG by building a graph of semantic relationships between documents. It uses the `GraphRAG` system under the hood to provide graph-based retrieval, finding relevant content through both direct similarity and connected relationships.
 
@@ -18296,7 +18296,7 @@ description: API Reference for MCPConfiguration - A class for managing multiple 
 ---
 
 # MCPConfiguration
-Source: https://mastra.ai/docs/reference/tools/mcp-configuration
+Source: https://mastra.ai/reference/tools/mcp-configuration
 
 The `MCPConfiguration` class provides a way to manage multiple MCP server connections and their tools in a Mastra application. It handles connection lifecycle, tool namespacing, and provides convenient access to tools across all configured servers.
 
@@ -18505,7 +18505,7 @@ description: Documentation for the Vector Query Tool in Mastra, which facilitate
 ---
 
 # createVectorQueryTool()
-Source: https://mastra.ai/docs/reference/tools/vector-query-tool
+Source: https://mastra.ai/reference/tools/vector-query-tool
 
 The `createVectorQueryTool()` function creates a tool for semantic search over vector stores. It supports filtering, reranking, and integrates with various vector store backends.
 
@@ -18719,7 +18719,7 @@ description: "Documentation for the CompositeVoice class, which enables combinin
 ---
 
 # CompositeVoice
-Source: https://mastra.ai/docs/reference/voice/composite-voice
+Source: https://mastra.ai/reference/voice/composite-voice
 
 The CompositeVoice class allows you to combine different voice providers for text-to-speech and speech-to-text operations. This is particularly useful when you want to use the best provider for each operation - for example, using OpenAI for speech-to-text and PlayAI for text-to-speech.
 
@@ -18862,7 +18862,7 @@ description: "Documentation for the Deepgram voice implementation, providing tex
 ---
 
 # Deepgram
-Source: https://mastra.ai/docs/reference/voice/deepgram
+Source: https://mastra.ai/reference/voice/deepgram
 
 The Deepgram voice implementation in Mastra provides text-to-speech (TTS) and speech-to-text (STT) capabilities using Deepgram's API. It supports multiple voice models and languages, with configurable options for both speech synthesis and transcription.
 
@@ -19028,7 +19028,7 @@ description: "Documentation for the ElevenLabs voice implementation, offering hi
 ---
 
 # ElevenLabs
-Source: https://mastra.ai/docs/reference/voice/elevenlabs
+Source: https://mastra.ai/reference/voice/elevenlabs
 
 The ElevenLabs voice implementation in Mastra provides high-quality text-to-speech (TTS) and speech-to-text (STT) capabilities using the ElevenLabs API.
 
@@ -19247,7 +19247,7 @@ description: "Documentation for the Google Voice implementation, providing text-
 ---
 
 # Google
-Source: https://mastra.ai/docs/reference/voice/google
+Source: https://mastra.ai/reference/voice/google
 
 The Google Voice implementation in Mastra provides both text-to-speech (TTS) and speech-to-text (STT) capabilities using Google Cloud services. It supports multiple voices, languages, and advanced audio configuration options.
 
@@ -19448,7 +19448,7 @@ description: "Documentation for the MastraVoice abstract base class, which defin
 ---
 
 # MastraVoice
-Source: https://mastra.ai/docs/reference/voice/mastra-voice
+Source: https://mastra.ai/reference/voice/mastra-voice
 
 The MastraVoice class is an abstract base class that defines the core interface for voice services in Mastra. All voice provider implementations (like OpenAI, Deepgram, PlayAI, Speechify) extend this class to provide their specific functionality. The class now includes support for real-time speech-to-speech capabilities through WebSocket connections.
 
@@ -19845,7 +19845,7 @@ description: "Documentation for the Murf voice implementation, providing text-to
 ---
 
 # Murf
-Source: https://mastra.ai/docs/reference/voice/murf
+Source: https://mastra.ai/reference/voice/murf
 
 The Murf voice implementation in Mastra provides text-to-speech (TTS) capabilities using Murf's AI voice service. It supports multiple voices across different languages.
 
@@ -20099,7 +20099,7 @@ description: "Documentation for the OpenAIRealtimeVoice class, providing real-ti
 ---
 
 # OpenAI Realtime Voice
-Source: https://mastra.ai/docs/reference/voice/openai-realtime
+Source: https://mastra.ai/reference/voice/openai-realtime
 
 The OpenAIRealtimeVoice class provides real-time voice interaction capabilities using OpenAI's WebSocket-based API. It supports real time speech to speech, voice activity detection, and event-based audio streaming.
 
@@ -20532,7 +20532,7 @@ description: "Documentation for the OpenAIVoice class, providing text-to-speech 
 ---
 
 # OpenAI
-Source: https://mastra.ai/docs/reference/voice/openai
+Source: https://mastra.ai/reference/voice/openai
 
 The OpenAIVoice class in Mastra provides text-to-speech and speech-to-text capabilities using OpenAI's models.
 
@@ -20703,7 +20703,7 @@ description: "Documentation for the PlayAI voice implementation, providing text-
 ---
 
 # PlayAI
-Source: https://mastra.ai/docs/reference/voice/playai
+Source: https://mastra.ai/reference/voice/playai
 
 The PlayAI voice implementation in Mastra provides text-to-speech capabilities using PlayAI's API.
 
@@ -20865,7 +20865,7 @@ description: "Documentation for the Sarvam class, providing text-to-speech and s
 ---
 
 # Sarvam
-Source: https://mastra.ai/docs/reference/voice/sarvam
+Source: https://mastra.ai/reference/voice/sarvam
 
 The SarvamVoice class in Mastra provides text-to-speech and speech-to-text capabilities using Sarvam AI models.
 
@@ -21128,7 +21128,7 @@ description: "Documentation for the Speechify voice implementation, providing te
 ---
 
 # Speechify
-Source: https://mastra.ai/docs/reference/voice/speechify
+Source: https://mastra.ai/reference/voice/speechify
 
 The Speechify voice implementation in Mastra provides text-to-speech capabilities using Speechify's API.
 
@@ -21276,7 +21276,7 @@ description: Documentation for the `after()` method in workflows, enabling branc
 ---
 
 # .after()
-Source: https://mastra.ai/docs/reference/workflows/after
+Source: https://mastra.ai/reference/workflows/after
 
 The `.after()` method defines explicit dependencies between workflow steps, enabling branching and merging paths in your workflow execution.
 
@@ -21367,7 +21367,7 @@ description: "Reference for the afterEvent method in Mastra workflows that creat
 ---
 
 # afterEvent()
-Source: https://mastra.ai/docs/reference/workflows/afterEvent
+Source: https://mastra.ai/reference/workflows/afterEvent
 
 The `afterEvent()` method creates a suspension point in your workflow that waits for a specific event to occur before continuing execution.
 
@@ -21446,7 +21446,7 @@ description: Documentation for the `.commit()` method in workflows, which re-ini
 ---
 
 # Workflow.commit()
-Source: https://mastra.ai/docs/reference/workflows/commit
+Source: https://mastra.ai/reference/workflows/commit
 
 The `.commit()` method re-initializes the workflow's state machine with the current step configuration.
 
@@ -21486,7 +21486,7 @@ description: "Documentation for the `.createRun()` method in workflows, which in
 ---
 
 # Workflow.createRun()
-Source: https://mastra.ai/docs/reference/workflows/createRun
+Source: https://mastra.ai/reference/workflows/createRun
 
 The `.createRun()` method initializes a new workflow run instance. It generates a unique run ID for tracking and returns a start function that begins workflow execution when called.
 
@@ -21566,7 +21566,7 @@ description: "Documentation for the `.else()` method in Mastra workflows, which 
 ---
 
 # Workflow.else()
-Source: https://mastra.ai/docs/reference/workflows/else
+Source: https://mastra.ai/reference/workflows/else
 
 > Experimental
 
@@ -21641,7 +21641,7 @@ description: "Learn how to create event-driven workflows using afterEvent and re
 ---
 
 # Event-Driven Workflows
-Source: https://mastra.ai/docs/reference/workflows/events
+Source: https://mastra.ai/reference/workflows/events
 
 Mastra provides built-in support for event-driven workflows through the `afterEvent` and `resumeWithEvent` methods. These methods allow you to create workflows that pause execution while waiting for specific events to occur, then resume with the event data when it's available.
 
@@ -21949,7 +21949,7 @@ description: "Documentation for the `.execute()` method in Mastra workflows, whi
 ---
 
 # Workflow.execute()
-Source: https://mastra.ai/docs/reference/workflows/execute
+Source: https://mastra.ai/reference/workflows/execute
 
 Executes a workflow with the provided trigger data and returns the results. The workflow must be committed before execution.
 
@@ -22061,7 +22061,7 @@ description: "Documentation for the `.if()` method in Mastra workflows, which cr
 ---
 
 # Workflow.if()
-Source: https://mastra.ai/docs/reference/workflows/if
+Source: https://mastra.ai/reference/workflows/if
 
 > Experimental
 
@@ -22171,7 +22171,7 @@ description: Documentation for the `.resume()` method in workflows, which contin
 ---
 
 # run.resume()
-Source: https://mastra.ai/docs/reference/workflows/resume
+Source: https://mastra.ai/reference/workflows/resume
 
 The `.resume()` method continues execution of a suspended workflow step, optionally providing new context data that can be accessed by the step on the inputData property.
 
@@ -22329,7 +22329,7 @@ description: "Reference for the resumeWithEvent method that resumes suspended wo
 ---
 
 # resumeWithEvent()
-Source: https://mastra.ai/docs/reference/workflows/resumeWithEvent
+Source: https://mastra.ai/reference/workflows/resumeWithEvent
 
 The `resumeWithEvent()` method resumes workflow execution by providing data for a specific event that the workflow is waiting for.
 
@@ -22465,7 +22465,7 @@ description: "Technical reference on snapshots in Mastra - the serialized workfl
 ---
 
 # Snapshots
-Source: https://mastra.ai/docs/reference/workflows/snapshots
+Source: https://mastra.ai/reference/workflows/snapshots
 
 In Mastra, a snapshot is a serializable representation of a workflow's complete execution state at a specific point in time. Snapshots capture all the information needed to resume a workflow from exactly where it left off, including:
 
@@ -22675,7 +22675,7 @@ description: "Documentation for the `start()` method in workflows, which begins 
 ---
 
 # start()
-Source: https://mastra.ai/docs/reference/workflows/start
+Source: https://mastra.ai/reference/workflows/start
 
 The start function begins execution of a workflow run. It processes all steps in the defined workflow order, handling parallel execution, branching logic, and step dependencies.
 
@@ -22761,7 +22761,7 @@ title: "Reference: Step | Building Workflows | Mastra Docs"
 description: Documentation for the Step class, which defines individual units of work within a workflow.
 ---
 # Step
-Source: https://mastra.ai/docs/reference/workflows/step-class
+Source: https://mastra.ai/reference/workflows/step-class
 
 The Step class defines individual units of work within a workflow, encapsulating execution logic, data validation, and input/output handling.
 
@@ -22865,7 +22865,7 @@ description: Documentation for the step condition class in workflows, which dete
 ---
 
 # StepCondition
-Source: https://mastra.ai/docs/reference/workflows/step-condition
+Source: https://mastra.ai/reference/workflows/step-condition
 
 Conditions determine whether a step should execute based on the output of previous steps or trigger data.
 
@@ -23002,7 +23002,7 @@ description: Documentation for the `.step()` method in workflows, which adds a n
 ---
 
 # Workflow.step()
-Source: https://mastra.ai/docs/reference/workflows/step-function
+Source: https://mastra.ai/reference/workflows/step-function
 
 The `.step()` method adds a new step to the workflow, optionally configuring its variables and execution conditions.
 
@@ -23097,7 +23097,7 @@ description: Documentation for the step options in workflows, which control vari
 ---
 
 # StepOptions
-Source: https://mastra.ai/docs/reference/workflows/step-options
+Source: https://mastra.ai/reference/workflows/step-options
 
 Configuration options for workflow steps that control variable mapping, execution conditions, and other runtime behavior.
 
@@ -23168,7 +23168,7 @@ description: "Automatically retry failed steps in Mastra workflows with configur
 ---
 
 # Step Retries
-Source: https://mastra.ai/docs/reference/workflows/step-retries
+Source: https://mastra.ai/reference/workflows/step-retries
 
 Mastra provides built-in retry mechanisms to handle transient failures in workflow steps. This allows workflows to recover gracefully from temporary issues without requiring manual intervention.
 
@@ -23374,7 +23374,7 @@ description: "Documentation for the suspend function in Mastra workflows, which 
 ---
 
 # suspend()
-Source: https://mastra.ai/docs/reference/workflows/suspend
+Source: https://mastra.ai/reference/workflows/suspend
 
 Pauses workflow execution at the current step until explicitly resumed. The workflow state is persisted and can be continued later.
 
@@ -23447,7 +23447,7 @@ description: Documentation for the `.then()` method in workflows, which creates 
 ---
 
 # Workflow.then()
-Source: https://mastra.ai/docs/reference/workflows/then
+Source: https://mastra.ai/reference/workflows/then
 
 The `.then()` method creates a sequential dependency between workflow steps, ensuring steps execute in a specific order.
 
@@ -23524,7 +23524,7 @@ description: "Documentation for the `.until()` method in Mastra workflows, which
 ---
 
 # Workflow.until()
-Source: https://mastra.ai/docs/reference/workflows/until
+Source: https://mastra.ai/reference/workflows/until
 
 The `.until()` method repeats a step until a specified condition becomes true. This creates a loop that continues executing the specified step until the condition is satisfied.
 
@@ -23692,7 +23692,7 @@ description: Documentation for the `.watch()` method in workflows, which monitor
 ---
 
 # run.watch()
-Source: https://mastra.ai/docs/reference/workflows/watch
+Source: https://mastra.ai/reference/workflows/watch
 
 The `.watch()` function subscribes to state changes on a mastra run, allowing you to monitor execution progress and react to state updates.
 
@@ -23803,8 +23803,8 @@ run.watch(({results, activePaths}) => {
 
 ### Related
 
-- [Workflow Creation](/docs/reference/workflows/createRun)
-- [Step Configuration](/docs/reference/workflows/step-class)
+- [Workflow Creation](/reference/workflows/createRun)
+- [Step Configuration](/reference/workflows/step-class)
 
 
 ---
@@ -23813,7 +23813,7 @@ description: "Documentation for the `.while()` method in Mastra workflows, which
 ---
 
 # Workflow.while()
-Source: https://mastra.ai/docs/reference/workflows/while
+Source: https://mastra.ai/reference/workflows/while
 
 The `.while()` method repeats a step as long as a specified condition remains true. This creates a loop that continues executing the specified step until the condition becomes false.
 
@@ -23984,7 +23984,7 @@ description: Documentation for the Workflow class in Mastra, which enables you t
 ---
 
 # Workflow Class
-Source: https://mastra.ai/docs/reference/workflows/workflow
+Source: https://mastra.ai/reference/workflows/workflow
 
 The Workflow class enables you to create state machines for complex sequences of operations with conditional branching and data validation.
 
@@ -31429,7 +31429,7 @@ import { GithubLink } from "../../../components/github-link";
 Source: https://mastra.ai/examples/evals/word-inclusion
 
 This example demonstrates how to create a custom metric in Mastra that evaluates whether specific words appear in the output text.
-This is a simplified version of our own [keyword coverage eval](/docs/reference/evals/keyword-coverage).
+This is a simplified version of our own [keyword coverage eval](/reference/evals/keyword-coverage).
 
 ## Overview
 
@@ -31992,7 +31992,7 @@ This example demonstrates:
 4. Combining multiple processors in the correct order
 5. Integrating processed memory with an agent
 
-For more details on memory processors, check out the [Memory Processors documentation](/docs/reference/memory/memory-processors).
+For more details on memory processors, check out the [Memory Processors documentation](/reference/memory/memory-processors).
 
 
 
@@ -33578,7 +33578,7 @@ const results = rerank(
 
 ## Links
 
-- [rerank() reference](/docs/reference/rag/rerank.mdx)
+- [rerank() reference](/reference/rag/rerank.mdx)
 - [Retrieval docs](/docs/rag/retrieval.mdx)
 
 
