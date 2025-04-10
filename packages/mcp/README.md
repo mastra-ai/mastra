@@ -37,6 +37,16 @@ const sseClient = new MastraMCPClient({
     requestInit: {
       headers: { Authorization: 'Bearer your-token' },
     },
+    eventSourceInit: {
+      fetch(input: Request | URL | string, init?: RequestInit) {
+        const headers = new Headers(init?.headers || {});
+        headers.set('Authorization', 'Bearer your-token');
+        return fetch(input, {
+          ...init,
+          headers,
+        });
+      },
+    },
   },
   timeout: 60000, // optional timeout for tool calls in milliseconds
 });
@@ -140,6 +150,16 @@ const mcp = new MCPConfiguration({
           Authorization: 'Bearer user-1-token',
         },
       },
+      eventSourceInit: {
+        fetch(input: Request | URL | string, init?: RequestInit) {
+          const headers = new Headers(init?.headers || {});
+          headers.set('Authorization', 'Bearer user-1-token');
+          return fetch(input, {
+            ...init,
+            headers,
+          });
+        },
+      },
     },
   },
 });
@@ -161,6 +181,44 @@ The `MCPConfiguration` class automatically:
 - Namespaces tools to prevent naming conflicts
 - Handles connection lifecycle and cleanup
 - Provides both flat and grouped access to tools
+
+## SSE Authentication and Headers
+
+When using SSE (Server-Sent Events) connections with authentication or custom headers, you need to configure headers in a specific way. The standard `requestInit` headers won't work alone because SSE connections use the browser's `EventSource` API, which doesn't support custom headers directly.
+
+The `eventSourceInit` configuration allows you to customize the underlying fetch request used for the SSE connection, ensuring your authentication headers are properly included.
+
+To properly include authentication headers or other custom headers in SSE connections, you need to use both `requestInit` and `eventSourceInit`:
+
+```typescript
+const sseClient = new MastraMCPClient({
+  name: 'authenticated-sse-client',
+  server: {
+    url: new URL('https://your-mcp-server.com/sse'),
+    // requestInit alone isn't enough for SSE connections
+    requestInit: {
+      headers: { Authorization: 'Bearer your-token' },
+    },
+    // eventSourceInit is required to include headers in the SSE connection
+    eventSourceInit: {
+      fetch(input: Request | URL | string, init?: RequestInit) {
+        const headers = new Headers(init?.headers || {});
+        headers.set('Authorization', 'Bearer your-token');
+        return fetch(input, {
+          ...init,
+          headers,
+        });
+      },
+    },
+  },
+});
+```
+
+This configuration ensures that:
+
+1. The authentication headers are properly included in the SSE connection request
+2. The connection can be established with the required credentials
+3. Subsequent messages can be received through the authenticated connection
 
 ## Configuration
 
