@@ -111,9 +111,15 @@ Required variables:
    - `PORT`: HTTP server port (default: 3000)
    - `HOST`: Server host (default: 0.0.0.0)
 
-## Platform Documentation
+## Build Mastra Project
 
-Platform deployment references:
-- [Cloudflare Workers](https://developers.cloudflare.com/workers/)
-- [Vercel](https://vercel.com/docs)
-- [Netlify](https://docs.netlify.com/)
+To build your Mastra project for your target platform run:
+
+```bash
+npx mastra build
+```
+
+When a Deployer is used, the build output is automatically prepared for the target platform.
+You can then deploy the build output `.mastra/output` via your platform's (Vercel, netlify, cloudfare e.t.c) 
+CLI/UI.
+

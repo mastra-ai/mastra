@@ -125,6 +125,31 @@ const mastra = new Mastra({
   ]}
 />
 
+### Environment Variables
+
+The CloudflareDeployer handles environment variables from multiple sources:
+
+1. **Environment Files**: Variables from `.env.production` and `.env` files.
+2. **Configuration**: Variables passed through the `env` parameter.
+
+
+## Build Mastra Project
+
+To build your Mastra project for cloudflare deployment:
+
+```bash
+npx mastra build
+```
+
+The build process generates the following output structure in the `.mastra/output` directory:
+
+```
+.mastra/output/
+├── index.mjs        # Main worker entry point
+├── wrangler.json    # Cloudflare Worker configuration
+└── assets/          # Static assets and dependencies
+```
+
 ### Wrangler Configuration
 
 The CloudflareDeployer automatically generates a `wrangler.json` configuration file with the following settings:
@@ -167,10 +192,16 @@ const routes = [
 ];
 ```
 
-### Environment Variables
 
-The CloudflareDeployer handles environment variables from multiple sources:
+## Deployment Options
 
-1. **Environment Files**: Variables from `.env.production` and `.env` files.
-2. **Configuration**: Variables passed through the `env` parameter.
+After building, you can deploy your Mastra application `.mastra/output`  to Cloudflare Workers using any of these methods:
 
+1. **Wrangler CLI**: Deploy directly using Cloudflare's official CLI tool
+
+2. **Cloudflare Dashboard**: Upload the build output manually through the Cloudflare dashboard
+
+
+## Platform Documentation
+
+- [Cloudflare Workers](https://developers.cloudflare.com/workers/)
