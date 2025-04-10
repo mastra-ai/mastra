@@ -463,7 +463,6 @@ function convertVercelToolParameters(tool: VercelTool): z.ZodType {
 }
 
 function convertInputSchema(tool: ToolAction<any, any, any>): z.ZodType {
-  console.log('HELLO', tool);
   const schema = tool.inputSchema ?? z.object({});
   return isZodType(schema) ? schema : resolveSerializedZodOutput(jsonSchemaToZod(schema));
 }
@@ -482,8 +481,6 @@ export function makeCoreTool(
 ): CoreTool {
   // Helper to get parameters based on tool type
   const getParameters = () => {
-    console.log(isVercelTool(tool), tool);
-
     if (isVercelTool(tool)) {
       return convertVercelToolParameters(tool);
     }
@@ -509,13 +506,6 @@ export function makeCoreTool(
       parameters: getParameters(),
       execute: tool.execute ? createExecute(tool, { ...options, description: tool.description }, logType) : undefined,
     };
-  }
-
-  const params = getParameters();
-  if (params instanceof z.ZodObject) {
-    console.log('Schema shape:', params.shape);
-  } else {
-    console.log('Non-object schema:', params);
   }
 
   // For function tools

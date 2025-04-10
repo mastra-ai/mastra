@@ -589,8 +589,6 @@ export class Agent<
 
         const convertedToCoreTool = makeCoreTool(rest, options, 'client-tool');
 
-        console.log('convertedToCoreTool', convertedToCoreTool);
-
         toolsFromToolsetsConverted[toolName] = convertedToCoreTool;
       });
     }
@@ -936,6 +934,7 @@ export class Agent<
       resourceId,
       runId: runIdToUse,
       toolsets,
+      client_tools,
     });
 
     const { threadId, thread, messageObjects, convertedTools } = await before();
