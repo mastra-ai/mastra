@@ -5,12 +5,10 @@ import { DataTable } from '@/components/ui/data-table';
 import { ColumnDef } from '@tanstack/react-table';
 
 export const WorkflowsTable = ({
-  title,
   workflowsList,
   columns,
   isLoading,
 }: {
-  title?: React.ReactNode;
   workflowsList: any[];
   columns: ColumnDef<any>[];
   isLoading?: boolean;
@@ -18,7 +16,6 @@ export const WorkflowsTable = ({
   return (
     <DataTable
       emptyText="Workflows"
-      title={title}
       withoutBorder
       withoutRadius
       isLoading={isLoading}

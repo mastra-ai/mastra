@@ -1,5 +1,18 @@
 # @mastra/core
 
+## 0.8.3-alpha.2
+
+### Patch Changes
+
+- 0bcc862: Fixed an issue where we were sanitizing response message content and filter on a value that may not always be an array
+
+## 0.8.3-alpha.1
+
+### Patch Changes
+
+- 32e7b71: Add support for dependency injection
+- 37bb612: Add Elastic-2.0 licensing for packages
+
 ## 0.8.3-alpha.0
 
 ### Patch Changes

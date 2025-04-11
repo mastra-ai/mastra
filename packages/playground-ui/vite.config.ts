@@ -28,10 +28,14 @@ export default defineConfig({
   },
   build: {
     lib: {
-      entry: resolve(__dirname, 'src/index.ts'),
-      name: 'MastraPlayground',
-      formats: ['es'],
-      fileName: format => `index.${format}.js`,
+      entry: {
+        index: resolve(__dirname, 'src/index.ts'),
+        tokens: resolve(__dirname, 'src/ds/tokens/index.ts'),
+      },
+      formats: ['es', 'cjs'],
+      fileName: (format, entryName) => {
+        return `${entryName}.${format}.js`;
+      },
     },
     sourcemap: true,
     // Reduce bloat from legacy polyfills.

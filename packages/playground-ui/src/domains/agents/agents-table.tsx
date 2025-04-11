@@ -5,12 +5,10 @@ import { DataTable } from '@/components/ui/data-table';
 import { ColumnDef } from '@tanstack/react-table';
 
 export const AgentsTable = ({
-  title,
   agentsList,
   columns,
   isLoading,
 }: {
-  title?: React.ReactNode;
   agentsList: any[];
   columns: ColumnDef<any>[];
   isLoading?: boolean;
@@ -18,7 +16,6 @@ export const AgentsTable = ({
   return (
     <DataTable
       emptyText="Agents"
-      title={title}
       isLoading={isLoading}
       withoutBorder
       withoutRadius
