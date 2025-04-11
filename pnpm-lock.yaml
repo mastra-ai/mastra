@@ -235,12 +235,6 @@ importers:
       '@mastra/core':
         specifier: workspace:*
         version: link:../../packages/core
-      '@mastra/mcp':
-        specifier: workspace:*
-        version: link:../../packages/mcp
-      '@mastra/mcp-registry-registry':
-        specifier: workspace:*
-        version: link:../../packages/mcp-registry-registry
       zod:
         specifier: ^3.24.2
         version: 3.24.2
@@ -1495,6 +1489,24 @@ importers:
       tsx:
         specifier: ^4.19.3
         version: 4.19.3
+
+  examples/mcp-registry-registry:
+    dependencies:
+      '@ai-sdk/openai':
+        specifier: latest
+        version: 1.3.10(zod@3.24.2)
+      '@mastra/core':
+        specifier: workspace:*
+        version: link:../../packages/core
+      '@mastra/mcp':
+        specifier: workspace:*
+        version: link:../../packages/mcp
+      '@mastra/mcp-registry-registry':
+        specifier: workspace:*
+        version: link:../../packages/mcp-registry-registry
+      zod:
+        specifier: ^3.24.2
+        version: 3.24.2
 
   examples/memory-todo-agent:
     dependencies:
@@ -4748,6 +4760,12 @@ packages:
 
   '@ai-sdk/openai@1.2.5':
     resolution: {integrity: sha512-COK7LzspgQQh5Yq070xfDdVMvp8WX592rXRaMaYNNqu1xpzahxDcM24aF9xgKYWuYH0UMoOw4UmWGwGxr6ygIg==}
+    engines: {node: '>=18'}
+    peerDependencies:
+      zod: ^3.0.0
+
+  '@ai-sdk/openai@1.3.10':
+    resolution: {integrity: sha512-XO0wF2lmAMWCYjkM5bLpWTKoXet61fBiIimTi+blqEGiLUjAvivt/1zZL1Lzhrv9+p19IC1rn9EWZI1dCelV8w==}
     engines: {node: '>=18'}
     peerDependencies:
       zod: ^3.0.0
@@ -20961,6 +20979,12 @@ snapshots:
       '@ai-sdk/provider-utils': 2.1.13(zod@3.24.2)
       zod: 3.24.2
 
+  '@ai-sdk/openai@1.3.10(zod@3.24.2)':
+    dependencies:
+      '@ai-sdk/provider': 1.1.2
+      '@ai-sdk/provider-utils': 2.2.6(zod@3.24.2)
+      zod: 3.24.2
+
   '@ai-sdk/openai@1.3.6(zod@3.24.2)':
     dependencies:
       '@ai-sdk/provider': 1.1.0
@@ -20977,7 +21001,7 @@ snapshots:
     dependencies:
       '@ai-sdk/provider': 0.0.26
       eventsource-parser: 1.1.2
-      nanoid: 3.3.10
+      nanoid: 3.3.11
       secure-json-parse: 2.7.0
     optionalDependencies:
       zod: 3.24.2
