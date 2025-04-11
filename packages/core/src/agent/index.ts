@@ -695,7 +695,6 @@ export class Agent<
           if (this.getMemory() && resourceId) {
             reasons.push('memory and resourceId available');
           }
-          console.log({ container });
           this.logger.debug(`[Agent:${this.name}] - Enhancing tools: ${reasons.join(', ')}`, {
             runId,
             toolsets: toolsets ? Object.keys(toolsets) : undefined,
