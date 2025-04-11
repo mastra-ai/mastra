@@ -1,12 +1,14 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { z } from 'zod';
+import { logger } from '../logger';
 import { fromPackageRoot } from '../utils';
 
 const examplesDir = fromPackageRoot('.docs/organized/code-examples');
 
 // Helper function to list code examples
 async function listCodeExamples(): Promise<Array<{ name: string; path: string }>> {
+  void logger.debug('Listing code examples');
   try {
     const files = await fs.readdir(examplesDir);
     return files
@@ -24,6 +26,7 @@ async function listCodeExamples(): Promise<Array<{ name: string; path: string }>
 // Helper function to read a code example
 async function readCodeExample(filename: string): Promise<string> {
   const filePath = path.join(examplesDir, filename);
+  void logger.debug(`Reading example: ${filename}`);
 
   try {
     return await fs.readFile(filePath, 'utf-8');
@@ -57,6 +60,7 @@ export const examplesTool = {
   description:
     'Get code examples from the Mastra.ai examples directory. Without a specific example name, lists all available examples. With an example name, returns the full source code of that example.',
   execute: async (args: ExamplesInput) => {
+    void logger.debug('Executing mastraExamples tool', { example: args.example });
     try {
       if (!args.example) {
         const examples = await listCodeExamples();
@@ -83,6 +87,7 @@ export const examplesTool = {
         isError: false,
       };
     } catch (error) {
+      void logger.error('Failed to execute mastraExamples tool', error);
       return {
         content: [
           {
