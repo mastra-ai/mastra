@@ -141,7 +141,9 @@ export const agent = new Agent({
 ```typescript
 import { agent } from "./agents/weather";
 
-const container = new Container();
+type MyContainer = {"temperature-scale", "celsius" | "farenheit"}
+
+const container = new Container<MyContainer>();
 container.set("temperature-scale", "celsius");
 
 const result = await agent.generate("What is the weather in San Francisco?", {
@@ -156,6 +158,8 @@ import { Mastra } from "@mastra/core";
 import { Container } from "@mastra/core/di";
 import { agent as weatherAgent } from "./agents/weather";
 
+type MyContainer = {"temperature-scale", "celsius" | "farenheit"}
+
 export const mastra = new Mastra({
   agents: {
     weather: weatherAgent,
@@ -164,7 +168,7 @@ export const mastra = new Mastra({
     middleware: [
       (c, next) => {
         const country = c.req.header("CF-IPCountry");
-        const container = c.get("container");
+        const container: MyContainer = c.get("container");
 
         container.set(
           "temperature-scale",

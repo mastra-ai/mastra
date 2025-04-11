@@ -4869,7 +4869,7 @@ describe('Workflow', async () => {
     it('should inject container dependencies into steps during run', async () => {
       const container = new Container();
       const testValue = 'test-dependency';
-      container.register('testKey', testValue);
+      container.set('testKey', testValue);
 
       const execute = vi.fn(({ container }) => {
         const value = container.get('testKey');
@@ -4889,7 +4889,7 @@ describe('Workflow', async () => {
     it('should inject container dependencies into steps during resume', async () => {
       const container = new Container();
       const testValue = 'test-dependency';
-      container.register('testKey', testValue);
+      container.set('testKey', testValue);
 
       const mastra = new Mastra({
         logger: false,
@@ -4913,7 +4913,7 @@ describe('Workflow', async () => {
       await run.start({ container });
 
       const resumeContainer = new Container();
-      resumeContainer.register('testKey', testValue + '2');
+      resumeContainer.set('testKey', testValue + '2');
 
       const result = await run.resume({
         stepId: 'step1',

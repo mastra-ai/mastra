@@ -14,9 +14,9 @@ export class Container<Values extends Record<string, any> | unknown = unknown> {
   }
 
   /**
-   * Register a value with strict typing if `Values` is a Record and the key exists in it.
+   * set a value with strict typing if `Values` is a Record and the key exists in it.
    */
-  public register<K extends Values extends Record<string, any> ? keyof Values : string>(
+  public set<K extends Values extends Record<string, any> ? keyof Values : string>(
     key: K,
     value: Values extends Record<string, any> ? (K extends keyof Values ? Values[K] : never) : unknown,
   ): void {
@@ -92,28 +92,3 @@ export class Container<Values extends Record<string, any> | unknown = unknown> {
     this.registry.forEach(callbackfn as any);
   }
 }
-
-const x = new Container<{ b: number; c: string }>([
-  ['b', 1],
-  ['c', 'hello'],
-]);
-
-x.register('a', 'hello');
-x.register('b', 1);
-
-const v = x.get('b');
-
-const z = x.entries();
-// ^?
-
-const y = new Container([
-  ['a', 'hello'],
-  ['b', 1],
-]);
-
-y.register('a', 'hello');
-y.register('b', 1);
-
-const vy: number = y.get('a');
-const zy = y.keys();
-// ^?
