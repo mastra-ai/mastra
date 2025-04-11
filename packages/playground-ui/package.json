@@ -16,7 +16,17 @@
         "default": "./dist/index.es.js"
       }
     },
-    "./style.css": "./dist/style.css"
+    "./style.css": "./dist/style.css",
+    "./tokens": {
+      "import": {
+        "types": "./dist/tokens.d.ts",
+        "default": "./dist/tokens.es.js"
+      },
+      "require": {
+        "default": "./dist/tokens.cjs.js",
+        "types": "./dist/tokens.d.ts"
+      }
+    }
   },
   "scripts": {
     "dev": "vite",
