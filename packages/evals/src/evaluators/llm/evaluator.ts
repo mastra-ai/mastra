@@ -217,7 +217,7 @@ export class LLMEvaluator extends Evaluator {
       score: eval_result.score,
       info: {
         reason,
-        ...(eval_result.details ?? {}),
+        details: eval_result.details ?? {},
       },
     };
   }

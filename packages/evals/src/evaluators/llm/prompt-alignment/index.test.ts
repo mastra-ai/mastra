@@ -222,7 +222,7 @@ describe(
 
       const result = await metric.score({ input: testCase.input, output: testCase.output });
       expect(result.score).toBe(testCase.expectedResult.score);
-      expect(result.info.details).toEqual(testCase.expectedResult.scoreDetails);
+      expect(result.info?.details).toEqual(testCase.expectedResult.scoreDetails);
     });
 
     it('should measure zero alignment with single instruction', async () => {
@@ -235,7 +235,7 @@ describe(
       const result = await metric.score({ input: testCase.input, output: testCase.output });
 
       expect(result.score).toBe(testCase.expectedResult.score);
-      expect(result.info.details).toEqual(testCase.expectedResult.scoreDetails);
+      expect(result.info?.details).toEqual(testCase.expectedResult.scoreDetails);
     });
 
     it('should measure perfect alignment with multiple instructions', async () => {
@@ -248,7 +248,7 @@ describe(
       const result = await metric.score({ input: testCase.input, output: testCase.output });
 
       expect(result.score).toBe(testCase.expectedResult.score);
-      expect(result.info.details).toEqual(testCase.expectedResult.scoreDetails);
+      expect(result.info?.details).toEqual(testCase.expectedResult.scoreDetails);
     });
 
     it('should measure partial alignment with multiple instructions', async () => {
@@ -261,7 +261,7 @@ describe(
       const result = await metric.score({ input: testCase.input, output: testCase.output });
 
       expect(result.score).toBe(testCase.expectedResult.score);
-      expect(result.info.details).toEqual(testCase.expectedResult.scoreDetails);
+      expect(result.info?.details).toEqual(testCase.expectedResult.scoreDetails);
     });
 
     it('should measure alignment with complex formatting instructions', async () => {
@@ -274,7 +274,7 @@ describe(
       const result = await metric.score({ input: testCase.input, output: testCase.output });
 
       expect(result.score).toBe(testCase.expectedResult.score);
-      expect(result.info.details).toEqual(testCase.expectedResult.scoreDetails);
+      expect(result.info?.details).toEqual(testCase.expectedResult.scoreDetails);
     });
 
     it('should handle empty output', async () => {
@@ -286,7 +286,7 @@ describe(
 
       const result = await metric.score({ input: testCase.input, output: testCase.output });
       expect(result.score).toBe(testCase.expectedResult.score);
-      expect(result.info.details).toEqual(testCase.expectedResult.scoreDetails);
+      expect(result.info?.details).toEqual(testCase.expectedResult.scoreDetails);
     });
 
     it('should handle all instructions being not applicable', async () => {
@@ -298,7 +298,7 @@ describe(
 
       const result = await metric.score({ input: testCase.input, output: testCase.output });
       expect(result.score).toBe(testCase.expectedResult.score);
-      expect(result.info.details).toEqual(testCase.expectedResult.scoreDetails);
+      expect(result.info?.details).toEqual(testCase.expectedResult.scoreDetails);
     });
 
     it('should handle mix of applicable and not applicable instructions', async () => {
@@ -310,7 +310,7 @@ describe(
 
       const result = await metric.score({ input: testCase.input, output: testCase.output });
       expect(result.score).toBe(testCase.expectedResult.score);
-      expect(result.info.details).toEqual(testCase.expectedResult.scoreDetails);
+      expect(result.info?.details).toEqual(testCase.expectedResult.scoreDetails);
     });
 
     it('should calculate correct score with mix of yes, no, and n/a outcomes', async () => {
@@ -322,7 +322,7 @@ describe(
 
       const result = await metric.score({ input: testCase.input, output: testCase.output });
       expect(result.score).toBeCloseTo(testCase.expectedResult.score, 2);
-      expect(result.info.details).toEqual(testCase.expectedResult.scoreDetails);
+      expect(result.info?.details).toEqual(testCase.expectedResult.scoreDetails);
     });
 
     it('should calculate correct score with complex formatting instructions', async () => {
@@ -334,7 +334,7 @@ describe(
 
       const result = await metric.score({ input: testCase.input, output: testCase.output });
       expect(result.score).toBeCloseTo(testCase.expectedResult.score, 2);
-      expect(result.info.details).toEqual(testCase.expectedResult.scoreDetails);
+      expect(result.info?.details).toEqual(testCase.expectedResult.scoreDetails);
     });
   },
   {

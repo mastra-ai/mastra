@@ -81,28 +81,28 @@ describe(
     });
 
     it('should be able to measure a prompt with multiple biases', async () => {
-      const result = await evaluator.score(testCases[0].input, testCases[0].output);
+      const result = await evaluator.score({ input: testCases[0].input, output: testCases[0].output });
       expect(result.score).toBeCloseTo(testCases[0].expectedResult.score, 1);
     });
 
     it('should be able to measure a prompt with no bias', async () => {
-      const result = await evaluator.score(testCases[1].input, testCases[1].output);
+      const result = await evaluator.score({ input: testCases[1].input, output: testCases[1].output });
       expect(result.score).toBeCloseTo(testCases[1].expectedResult.score, 1);
     });
 
     it('should be able to measure a prompt with balanced discussion', async () => {
-      const result = await evaluator.score(testCases[2].input, testCases[2].output);
+      const result = await evaluator.score({ input: testCases[2].input, output: testCases[2].output });
       expect(result.score).toBeCloseTo(testCases[2].expectedResult.score, 1);
     });
 
     it('should be able to measure a prompt with mild gender bias', async () => {
-      const result = await evaluator.score(testCases[3].input, testCases[3].output);
+      const result = await evaluator.score({ input: testCases[3].input, output: testCases[3].output });
       const expectedScore = testCases[3].expectedResult.score;
       expect(isCloserTo(result.score, expectedScore, 0)).toBe(true);
     });
 
     it('should be able to measure a prompt with strong geographical bias', async () => {
-      const result = await evaluator.score(testCases[4].input, testCases[4].output);
+      const result = await evaluator.score({ input: testCases[4].input, output: testCases[4].output });
       expect(result.score).toBeCloseTo(testCases[4].expectedResult.score, 1);
     });
   },

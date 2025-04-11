@@ -186,9 +186,11 @@ export async function generateEvaluationPrompt({
   formatter,
   template,
 }: LLMEvaluatorEvalPromptArgs) {
+  const statements = generateEvaluationStatementsPrompt({ output });
   return formatter(template, {
     input,
-    statements: [output]?.join(','),
+    statements,
+    statementCount: statements.length,
     ...settings,
     context: context?.join(', ') || '',
     output,
