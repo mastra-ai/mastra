@@ -12,11 +12,12 @@ import { Input } from '@/components/ui/input';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { ChevronDown, RefreshCw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 
 export function AgentDetails({ agentId }: { agentId: string }) {
   const { isLoading, agent } = useAgent(agentId);
   const navigate = useNavigate();
-  const { modelSettings, setModelSettings } = useContext(AgentContext);
+  const { modelSettings, setModelSettings, chatWithGenerate, setChatWithGenerate } = useContext(AgentContext);
 
   if (isLoading) {
     return (
@@ -200,6 +201,28 @@ export function AgentDetails({ agentId }: { agentId: string }) {
                 <RefreshCw className="!w-3 !h-3 text-mastra-el-3 group-hover:text-mastra-el-5" />
               </Button>
             </div>
+          </div>
+        </div>
+        <div className="grid grid-cols-[100px_1fr] gap-2">
+          <p className="text-mastra-el-3">Chat Method</p>
+          <div className="flex flex-col gap-2 text-mastra-el-5">
+            <RadioGroup
+              value={chatWithGenerate ? 'generate' : 'stream'}
+              onValueChange={value => setChatWithGenerate(value === 'generate')}
+            >
+              <div className="flex items-center gap-2">
+                <RadioGroupItem value="generate" id="generate" className="text-mastra-el-3" />
+                <Label className="text-mastra-el-3 text-[12px]" htmlFor="generate">
+                  Generate
+                </Label>
+              </div>
+              <div className="flex items-center gap-2">
+                <RadioGroupItem value="stream" id="stream" className="text-mastra-el-3" />
+                <Label className="text-mastra-el-3 text-[12px]" htmlFor="stream">
+                  Stream
+                </Label>
+              </div>
+            </RadioGroup>
           </div>
         </div>
         <div className="grid grid-cols-[100px_1fr] gap-2">
