@@ -1,6 +1,6 @@
 import { describe, expect, it, afterAll } from 'vitest';
 import { getServersFromRegistry } from '../fetch-servers';
-import { ServerEntry } from '../types';
+import type { ServerEntry } from '../types';
 
 // This is an integration test that doesn't use mocking
 // Note: This test requires internet access and will make actual API calls

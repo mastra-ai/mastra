@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
-import { processMcpRunServers } from '../../processors/mcprun';
-import { ServerEntry } from '../../types';
 import { getServersFromRegistry } from '../../fetch-servers';
+import { processMcpRunServers } from '../../processors/mcprun';
+import type { ServerEntry } from '../../types';
 
 describe('MCP Run processor', () => {
   it('should process MCP Run server data correctly', async () => {

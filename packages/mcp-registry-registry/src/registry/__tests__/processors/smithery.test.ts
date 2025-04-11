@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
-import { processSmitheryServers } from '../../processors/smithery';
-import { ServerEntry } from '../../types';
 import { getServersFromRegistry } from '../../fetch-servers';
+import { processSmitheryServers } from '../../processors/smithery';
+import type { ServerEntry } from '../../types';
 
 describe('Smithery processor', () => {
   it('should process Smithery server data correctly', async () => {

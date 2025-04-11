@@ -1,10 +1,10 @@
-import { processApiTrackerServers } from './processors/apitracker';
 import { processApifyServers } from './processors/apify';
+import { processApiTrackerServers } from './processors/apitracker';
 import { processFleurServers } from './processors/fleur';
 import { processMcpRunServers } from './processors/mcprun';
 import { processPulseMcpServers } from './processors/pulse';
 // import { processSmitheryServers } from './processors/smithery';
-import { RegistryFile } from './types';
+import type { RegistryFile } from './types';
 
 // Registry data with post-processing functions
 export const registryData: RegistryFile = {

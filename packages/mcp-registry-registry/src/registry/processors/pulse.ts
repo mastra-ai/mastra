@@ -1,4 +1,4 @@
-import { ServerEntry } from '../types';
+import type { ServerEntry } from '../types';
 
 /**
  * Post-processor for Pulse MCP registry

@@ -1,4 +1,4 @@
-import { ServerEntry } from '../types';
+import type { ServerEntry } from '../types';
 import { createServerEntry } from './utils';
 
 /**

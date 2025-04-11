@@ -1,5 +1,5 @@
 import { registryData } from './registry';
-import { ServerEntry, ServerEntrySchema } from './types';
+import type { ServerEntry } from './types';
 
 /**
  * Fetches servers from a registry's servers_url endpoint

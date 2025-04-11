@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { registryData } from './registry';
-import { RegistryEntry, RegistryFile } from './types';
+import type { RegistryEntry, RegistryFile } from './types';
 
 // Define the schema for registry entries for validation
 const RegistryEntrySchema = z.object({

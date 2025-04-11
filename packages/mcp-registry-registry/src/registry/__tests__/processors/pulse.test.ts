@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
-import { processPulseMcpServers } from '../../processors/pulse';
-import { ServerEntry } from '../../types';
 import { getServersFromRegistry } from '../../fetch-servers';
+import { processPulseMcpServers } from '../../processors/pulse';
+import type { ServerEntry } from '../../types';
 
 describe('Pulse MCP processor', () => {
   it('should process Pulse MCP server data correctly', async () => {

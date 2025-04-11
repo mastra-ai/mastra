@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
-import { processApiTrackerServers } from '../../processors/apitracker';
-import { ServerEntry } from '../../types';
 import { getServersFromRegistry } from '../../fetch-servers';
+import { processApiTrackerServers } from '../../processors/apitracker';
+import type { ServerEntry } from '../../types';
 
 describe('APITracker processor', () => {
   it('should process APITracker server data correctly', async () => {

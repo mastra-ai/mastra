@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
-import { processFleurServers } from '../../processors/fleur';
-import { ServerEntry } from '../../types';
 import { getServersFromRegistry } from '../../fetch-servers';
+import { processFleurServers } from '../../processors/fleur';
+import type { ServerEntry } from '../../types';
 
 describe('Fleur processor', () => {
   it('should process Fleur server data correctly', async () => {

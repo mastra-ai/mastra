@@ -1,4 +1,4 @@
-import { ServerEntry } from '../types';
+import type { ServerEntry } from '../types';
 
 // Helper function to create a basic server entry from partial data
 export function createServerEntry(data: Record<string, unknown>): ServerEntry {

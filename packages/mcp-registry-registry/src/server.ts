@@ -5,8 +5,8 @@ import { CallToolRequestSchema, ListToolsRequestSchema } from '@modelcontextprot
 import { z } from 'zod';
 import { zodToJsonSchema } from 'zod-to-json-schema';
 
-import { serversTool, serversInputSchema } from './tools/servers';
 import { listTool, listInputSchema } from './tools/list';
+import { serversTool, serversInputSchema } from './tools/servers';
 import { fromPackageRoot } from './utils';
 
 const server = new Server(

@@ -1,4 +1,4 @@
-import { ServerEntry } from '../types';
+import type { ServerEntry } from '../types';
 
 // Post-processor for MCP Run registry
 export function processMcpRunServers(data: any): ServerEntry[] {
