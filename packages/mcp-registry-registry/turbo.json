@@ -2,20 +2,16 @@
   "$schema": "https://turbo.build/schema.json",
   "extends": ["//"],
   "tasks": {
-    "prepare-docs": {
-      "cache": false,
-      "outputs": [".docs/**"],
-      "dependsOn": ["build:cli"]
-    },
     "build": {
-      "dependsOn": ["build:cli", "prepare-docs", "^build"]
+      "outputs": ["dist/**"],
+      "dependsOn": ["^build"]
     },
     "build:cli": {
       "outputs": ["dist/**"],
       "dependsOn": ["^build"]
     },
     "test": {
-      "dependsOn": ["build", "build:cli", "prepare-docs"],
+      "dependsOn": ["build", "build:cli"],
       "outputs": []
     }
   }
