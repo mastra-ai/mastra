@@ -228,18 +228,8 @@ export default withNextra({
       permanent: false, // we should have a memory-processors reference
     },
     {
-      source: "/docs/reference/:path*",
-      destination: "/reference/:path*",
-      permanent: true,
-    },
-    {
       source: "/docs/memory/getting-started",
       destination: "/docs/memory/overview",
-      permanent: true,
-    },
-    {
-      source: "/docs/guides/:path*",
-      destination: "/guides/guide/:path*",
       permanent: true,
     },
     {
@@ -546,6 +536,11 @@ export default withNextra({
     {
       source: "/docs/local-dev/syncing-projects",
       destination: "/docs/local-dev/syncing-projects",
+      permanent: true,
+    },
+    {
+      source: "/docs/guides/:path*",
+      destination: "/guides/guide/:path*",
       permanent: true,
     },
   ],
