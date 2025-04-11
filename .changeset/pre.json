@@ -142,9 +142,17 @@
     "@mastra/voice-speechify": "0.1.12"
   },
   "changesets": [
+    "clever-words-enjoy",
     "cool-papers-check",
     "famous-knives-hug",
     "floppy-oranges-laugh",
-    "slow-heads-open"
+    "pink-memes-tie",
+    "plain-bananas-fry",
+    "silver-cases-make",
+    "slow-heads-open",
+    "thick-eggs-nail",
+    "tidy-moose-turn",
+    "tiny-candles-laugh",
+    "upset-banks-shop"
   ]
 }
