@@ -128,6 +128,11 @@ export default withNextra({
   },
   redirects: () => [
     {
+      source: "/examples/memory/short-term-working-memory",
+      destination: "/examples/memory/memory-with-libsql",
+      permanent: true,
+    },
+    {
       source: "/docs/08-running-evals",
       destination: "/docs/evals/overview",
       permanent: true,
@@ -418,6 +423,77 @@ export default withNextra({
       permanent: true,
     },
     {
+      source: "/docs/reference/cli/engine",
+      destination: "/reference",
+      permanent: true,
+    },
+    {
+      source: "/docs/reference/client-js",
+      destination: "/reference/client-js/agents",
+      permanent: true,
+    },
+    {
+      source: "/docs/reference/memory/addMessage",
+      destination: "/reference/memory/createThread",
+      permanent: true,
+    },
+    {
+      source: "/docs/reference/memory/rememberMessages",
+      destination: "/reference/memory/createThread",
+      permanent: true,
+    },
+    {
+      source: "/docs/reference/observability/combine-loggers",
+      destination: "/reference/observability/logger",
+      permanent: true,
+    },
+    {
+      source: "/docs/reference/rag/pgstore",
+      destination: "/reference/rag/pg",
+      permanent: true,
+    },
+    {
+      source: "/docs/reference/rag/reranker",
+      destination: "/reference/rag/rerank",
+      permanent: true,
+    },
+    {
+      source: "/docs/reference/storage/mastra-storage",
+      destination: "/reference/storage/libsql",
+      permanent: true,
+    },
+    {
+      source: "/docs/reference/tts/generate",
+      destination: "/reference/voice/mastra-voice",
+      permanent: true,
+    },
+    {
+      source: "/docs/reference/tts/providers-and-models",
+      destination: "/reference/voice/mastra-voice",
+      permanent: true,
+    },
+    {
+      source: "/docs/reference/tts/stream",
+      destination: "/reference/voice/mastra-voice",
+      permanent: true,
+    },
+    {
+      source: "/docs/reference/tts/provider-and-models",
+      destination: "/reference/voice/mastra-voice",
+      permanent: true,
+    },
+    {
+      source: "/docs/reference/voice/voice.close",
+      destination: "/reference/voice/mastra-voice",
+      permanent: true,
+    },
+    {
+      source: "/docs/reference/voice/voice.off",
+      destination: "/reference/voice/mastra-voice",
+      permanent: true,
+    },
+
+    {
       source: "/docs/guide",
       destination: "/guides",
       permanent: true,
@@ -455,6 +531,16 @@ export default withNextra({
     {
       source: "/docs/local-dev/creating-projects",
       destination: "/docs/getting-started/creating-a-new-project",
+      permanent: true,
+    },
+    {
+      source: "/docs/local-dev/sync",
+      destination: "/docs/integrations",
+      permanent: true,
+    },
+    {
+      source: "/docs/local-dev/syncing-projects",
+      destination: "/docs/local-dev/syncing-projects",
       permanent: true,
     },
   ],
