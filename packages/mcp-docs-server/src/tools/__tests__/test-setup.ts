@@ -22,7 +22,7 @@ app.get('/blog/principles-of-ai-engineering', (c: Context) => {
   return c.html(blogPostFixture);
 });
 
-app.get('/blog/rate-limited', (c: Context) => {
+app.get('/blog/rate-limited', (_c: Context) => {
   console.log('Rate limit exceeded');
   return new Response('Rate limit exceeded', {
     status: 429,

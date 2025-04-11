@@ -166,7 +166,6 @@ export class MastraMCPClient extends MastraBase {
     if (this.isConnected) return;
     try {
       this.log('debug', `Connecting to MCP server`);
-      await this.client.connect(this.transport);
       await this.client.connect(this.transport, {
         timeout: this.timeout,
       });

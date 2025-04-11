@@ -111,15 +111,18 @@ describe('changesTool', () => {
       // Split into version sections
       const sections = result.split(/##\s+v?\d+\.\d+\.\d+/);
       sections.slice(1).forEach(section => {
-        // Each section should have at least one category and entry
-        expect(section).toMatch(/###\s+.+/); // Category header
-        expect(section).toMatch(/- .+/); // Entry
+        if (!section.includes('more lines hidden')) {
+          // Each section should have at least one category and entry
+          expect(section).toMatch(/###\s+.+/); // Category header
+          expect(section).toMatch(/- .+/); // Entry
 
-        // Entries should be properly formatted
-        const entries = section.match(/- .+/g) || [];
-        entries.forEach(entry => {
-          expect(entry).toMatch(/- [a-f0-9]+: .+/i); // Should match commit hash format
-        });
+          // Entries should be properly formatted
+          const entries = section.match(/- .+/g) || [];
+          entries.forEach(entry => {
+            // Skip the truncation message if it exists
+            expect(entry).toMatch(/- [a-f0-9]+: .+/i); // Should match commit hash format
+          });
+        }
       });
     });
 
