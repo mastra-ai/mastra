@@ -1,10 +1,43 @@
+import { spawn } from 'child_process';
 import path from 'path';
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach, beforeAll, afterAll } from 'vitest';
 import type { LogMessage, LoggingLevel } from './client';
 import { MCPConfiguration } from './configuration';
 
+// Increase test timeout for server operations
+vi.setConfig({ testTimeout: 80000, hookTimeout: 80000 });
+
 describe('MCP Server Logging', () => {
   let consoleLogSpy: ReturnType<typeof vi.spyOn>;
+  let weatherProcess: ReturnType<typeof spawn>;
+
+  beforeAll(async () => {
+    // Start the weather SSE server
+    weatherProcess = spawn('npx', ['-y', 'tsx', path.join(__dirname, '__fixtures__/weather.ts')], {
+      env: { ...process.env, PORT: '60809' },
+    });
+
+    // Wait for SSE server to be ready
+    let resolved = false;
+    await new Promise<void>((resolve, reject) => {
+      weatherProcess.on(`exit`, () => {
+        if (!resolved) reject();
+      });
+      if (weatherProcess.stderr) {
+        weatherProcess.stderr.on(`data`, chunk => {
+          console.error(chunk.toString());
+        });
+      }
+      if (weatherProcess.stdout) {
+        weatherProcess.stdout.on('data', chunk => {
+          if (chunk.toString().includes('server is running on SSE')) {
+            resolve();
+            resolved = true;
+          }
+        });
+      }
+    });
+  });
 
   beforeEach(() => {
     consoleLogSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
@@ -13,6 +46,11 @@ describe('MCP Server Logging', () => {
   afterEach(() => {
     consoleLogSpy.mockRestore();
     vi.clearAllMocks();
+  });
+
+  afterAll(async () => {
+    // Kill the weather SSE server
+    weatherProcess.kill('SIGINT');
   });
 
   it('should log events from specific servers to their handlers', async () => {
@@ -24,8 +62,7 @@ describe('MCP Server Logging', () => {
       id: 'server-log-test',
       servers: {
         weather: {
-          command: 'npx',
-          args: ['-y', 'tsx', path.join(__dirname, '__fixtures__/weather.ts')],
+          url: new URL('http://localhost:60809/sse'),
           log: weatherLogHandler,
         },
         stock: {
@@ -39,7 +76,6 @@ describe('MCP Server Logging', () => {
       },
     });
 
-    // Getting tools should trigger connection and logging
     await config.getTools();
 
     // Verify weather logs went to weather handler only
