@@ -29,7 +29,7 @@
   "license": "Elastic-2.0",
   "dependencies": {
     "@mastra/core": "workspace:^",
-    "@modelcontextprotocol/sdk": "^1.7.0",
+    "@modelcontextprotocol/sdk": "^1.9.0",
     "date-fns": "^4.1.0",
     "exit-hook": "^4.0.0",
     "uuid": "^11.1.0"
