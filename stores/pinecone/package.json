@@ -24,7 +24,7 @@
     "test": "vitest run",
     "lint": "eslint ."
   },
-  "license": "Elastic-2.0",
+  "license": "MIT",
   "dependencies": {
     "@mastra/core": "workspace:^",
     "@pinecone-database/pinecone": "^3.0.3"

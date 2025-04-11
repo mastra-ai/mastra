@@ -32,7 +32,7 @@
     "posttest:watch": "docker compose down -v",
     "lint": "eslint ."
   },
-  "license": "Elastic-2.0",
+  "license": "MIT",
   "dependencies": {
     "@mastra/core": "workspace:^",
     "async-mutex": "^0.5.0",
