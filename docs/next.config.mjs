@@ -403,6 +403,21 @@ export default withNextra({
       permanent: true,
     },
     {
+      source: "/docs/guide/local-dev/integrations",
+      destination: "/docs/local-dev/mastra-dev-environment",
+      permanent: true,
+    },
+    {
+      source: "/docs/guide/rag/vector-databases",
+      destination: "/docs/rag/vector-databases",
+      permanent: true,
+    },
+    {
+      source: "/docs/guide/rag/retrieval",
+      destination: "/docs/rag/retrieval",
+      permanent: true,
+    },
+    {
       source: "/docs/guide",
       destination: "/guides",
       permanent: true,
