@@ -141,5 +141,10 @@
     "@mastra/voice-sarvam": "0.1.7",
     "@mastra/voice-speechify": "0.1.12"
   },
-  "changesets": []
+  "changesets": [
+    "cool-papers-check",
+    "famous-knives-hug",
+    "floppy-oranges-laugh",
+    "slow-heads-open"
+  ]
 }
