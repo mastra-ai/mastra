@@ -57,12 +57,8 @@ To fix this you have three different options:
   public async disconnect() {
     mastraMCPConfigurationInstances.delete(this.id);
 
-    for (const serverName of Object.keys(this.serverConfigs)) {
-      const client = this.mcpClientsById.get(serverName);
-      if (client) {
-        await client.disconnect();
-      }
-    }
+    await Promise.all(Array.from(this.mcpClientsById.values()).map(client => client.disconnect()));
+    this.mcpClientsById.clear();
   }
 
   public async getTools() {
@@ -131,14 +127,12 @@ To fix this you have three different options:
       client: InstanceType<typeof MastraMCPClient>;
     }) => Promise<void>,
   ) {
-    for (const [serverName, serverConfig] of Object.entries(this.serverConfigs)) {
-      const client = await this.getConnectedClient(serverName, serverConfig);
-      const tools = await client.tools();
-      await cb({
-        serverName,
-        tools,
-        client,
-      });
-    }
+    await Promise.all(
+      Object.entries(this.serverConfigs).map(async ([serverName, serverConfig]) => {
+        const client = await this.getConnectedClient(serverName, serverConfig);
+        const tools = await client.tools();
+        await cb({ serverName, tools, client });
+      }),
+    );
   }
 }
