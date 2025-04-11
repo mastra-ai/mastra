@@ -20,11 +20,7 @@ export async function fetchServersFromRegistry(registryId: string): Promise<Serv
     console.log(`Fetching servers from ${registry.name} at ${registry.servers_url}`);
 
     // Fetch the servers from the registry's servers_url
-    const response = await fetch(registry.servers_url, {
-      headers: {
-        Authorization: `Bearer f7a51ac6-9f07-4b62-84fb-0471fc326bff`,
-      },
-    });
+    const response = await fetch(registry.servers_url);
 
     if (!response.ok) {
       throw new Error(`Failed to fetch servers from ${registry.servers_url}: ${response.statusText}`);
