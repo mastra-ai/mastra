@@ -6,7 +6,7 @@ const mcp = new MCPConfiguration({
   servers: {
     registry: {
       command: 'node',
-      args: ['/Users/abhiramaiyer/PlatformFirst/mastra/packages/mcp-registry-registry/dist/stdio.js'],
+      args: ['../../packages/mcp-registry-registry/dist/stdio.js'],
     },
   },
 });
