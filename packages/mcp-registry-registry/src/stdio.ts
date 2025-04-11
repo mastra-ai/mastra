@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { runServer } from './index.js';
+import { runServer } from './server.js';
 
 runServer().catch(error => {
   console.error('Failed to start server:', error);
