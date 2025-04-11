@@ -2,12 +2,10 @@ import { Footprints, Workflow } from 'lucide-react';
 import { useNavigate } from 'react-router';
 
 import { Button } from '@/components/ui/button';
-import { Header } from '@/components/ui/header';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Skeleton } from '@/components/ui/skeleton';
 
 import { useWorkflows } from '@/hooks/use-workflows';
-import { WorkflowsTable } from '@mastra/playground-ui';
+import { Header, HeaderTitle, WorkflowsTable } from '@mastra/playground-ui';
 
 function Workflows() {
   const { workflows, isLoading } = useWorkflows();
@@ -18,13 +16,15 @@ function Workflows() {
     name: workflow.name,
     stepsCount: Object.keys(workflow.steps)?.length,
   }));
-  ``;
+
   return (
-    <div className="flex flex-col h-full relative overflow-hidden">
+    <div className="h-full relative overflow-hidden">
+      <Header>
+        <HeaderTitle>Workflows</HeaderTitle>
+      </Header>
       <section className="flex-1 relative overflow-hidden">
         <ScrollArea className="h-full">
           <WorkflowsTable
-            title={<Header title="Workflows" className="border-0" />}
             isLoading={isLoading}
             workflowsList={workflowList}
             columns={[

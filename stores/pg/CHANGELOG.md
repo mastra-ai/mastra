@@ -1,5 +1,13 @@
 # @mastra/pg
 
+## 0.2.10-alpha.0
+
+### Patch Changes
+
+- 4ac6f31: Updated permissions check for creating vector extension
+- Updated dependencies [359b089]
+  - @mastra/core@0.8.3-alpha.0
+
 ## 0.2.9
 
 ### Patch Changes

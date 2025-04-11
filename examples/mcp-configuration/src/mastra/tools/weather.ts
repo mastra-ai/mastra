@@ -188,7 +188,7 @@ server.setRequestHandler(CallToolRequestSchema, async request => {
 });
 
 // Start the server with SSE support
-let transport: SSEServerTransport;
+let transport: SSEServerTransport | undefined;
 
 const httpServer = createServer(async (req: IncomingMessage, res: ServerResponse) => {
   const url = new URL(req.url || '', `http://${req.headers.host}`);
@@ -200,8 +200,13 @@ const httpServer = createServer(async (req: IncomingMessage, res: ServerResponse
 
     server.onclose = async () => {
       await server.close();
-      process.exit(0);
+      transport = undefined;
     };
+
+    // Handle client disconnection
+    res.on('close', () => {
+      transport = undefined;
+    });
   } else if (url.pathname === '/message') {
     console.log('Received message');
     if (!transport) {
@@ -220,6 +225,20 @@ const httpServer = createServer(async (req: IncomingMessage, res: ServerResponse
 const PORT = process.env.PORT || 8080;
 httpServer.listen(PORT, () => {
   console.log(`Weather server is running on SSE at http://localhost:${PORT}`);
+});
+
+// Handle graceful shutdown
+process.on('SIGINT', async () => {
+  console.log('Shutting down weather server...');
+  if (transport) {
+    await server.close();
+    transport = undefined;
+  }
+  // Close the HTTP server
+  httpServer.close(() => {
+    console.log('Weather server shut down complete');
+    process.exit(0);
+  });
 });
 
 export { server };

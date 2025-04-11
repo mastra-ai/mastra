@@ -4,6 +4,7 @@ import { config } from 'dotenv';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 
+import { Container } from '../di';
 import { TestIntegration } from '../integration/openapi-toolset.mock';
 import { Mastra } from '../mastra';
 import { createTool } from '../tools';
@@ -490,5 +491,101 @@ describe('agent', () => {
       expect(mastraExecute).toHaveBeenCalled();
       expect(vercelExecute).toHaveBeenCalled();
     });
+
+    it('should make container available to tools when injected in generate', async () => {
+      const testContainer = new Container([['test-value', 'container-value']]);
+      let capturedValue: string | null = null;
+
+      const testTool = createTool({
+        id: 'container-test-tool',
+        description: 'A tool that verifies container is available',
+        inputSchema: z.object({
+          query: z.string(),
+        }),
+        execute: ({ container }) => {
+          capturedValue = container.get('test-value')!;
+
+          return Promise.resolve({
+            success: true,
+            containerAvailable: !!container,
+            containerValue: capturedValue,
+          });
+        },
+      });
+
+      const agent = new Agent({
+        name: 'container-test-agent',
+        instructions: 'You are an agent that tests container availability.',
+        model: openai('gpt-4o'),
+        tools: { testTool },
+      });
+
+      const mastra = new Mastra({
+        agents: { agent },
+      });
+
+      const testAgent = mastra.getAgent('agent');
+
+      const response = await testAgent.generate('Use the container-test-tool with query "test"', {
+        toolChoice: 'required',
+        container: testContainer,
+      });
+
+      const toolCall = response.toolResults.find(result => result.toolName === 'testTool');
+
+      expect(toolCall?.result?.containerAvailable).toBe(true);
+      expect(toolCall?.result?.containerValue).toBe('container-value');
+      expect(capturedValue).toBe('container-value');
+    }, 500000);
+
+    it('should make container available to tools when injected in stream', async () => {
+      const testContainer = new Container([['test-value', 'container-value']]);
+      let capturedValue: string | null = null;
+
+      const testTool = createTool({
+        id: 'container-test-tool',
+        description: 'A tool that verifies container is available',
+        inputSchema: z.object({
+          query: z.string(),
+        }),
+        execute: ({ container }) => {
+          capturedValue = container.get('test-value')!;
+
+          return Promise.resolve({
+            success: true,
+            containerAvailable: !!container,
+            containerValue: capturedValue,
+          });
+        },
+      });
+
+      const agent = new Agent({
+        name: 'container-test-agent',
+        instructions: 'You are an agent that tests container availability.',
+        model: openai('gpt-4o'),
+        tools: { testTool },
+      });
+
+      const mastra = new Mastra({
+        agents: { agent },
+      });
+
+      const testAgent = mastra.getAgent('agent');
+
+      const stream = await testAgent.stream('Use the container-test-tool with query "test"', {
+        toolChoice: 'required',
+        container: testContainer,
+      });
+
+      for await (const _chunk of stream.textStream) {
+        // empty line
+      }
+
+      const toolCall = (await stream.toolResults).find(result => result.toolName === 'testTool');
+
+      expect(toolCall?.result?.containerAvailable).toBe(true);
+      expect(toolCall?.result?.containerValue).toBe('container-value');
+      expect(capturedValue).toBe('container-value');
+    }, 500000);
   });
 });
