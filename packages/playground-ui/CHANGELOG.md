@@ -1,5 +1,19 @@
 # @mastra/playground-ui
 
+## 4.0.4-alpha.1
+
+### Patch Changes
+
+- f5451a4: bundle tokens as CJS in playground UI for tailwind usage
+- 37bb612: Add Elastic-2.0 licensing for packages
+- bc4acb3: updated traces to not be wrapped in traces object
+- c8fe5f0: change the header of all pages with the one from the DS
+- Updated dependencies [32e7b71]
+- Updated dependencies [37bb612]
+- Updated dependencies [bc4acb3]
+  - @mastra/core@0.8.3-alpha.1
+  - @mastra/client-js@0.1.17-alpha.1
+
 ## 4.0.4-alpha.0
 
 ### Patch Changes

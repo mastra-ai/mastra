@@ -1,5 +1,17 @@
 # mastra
 
+## 0.4.9-alpha.1
+
+### Patch Changes
+
+- a2318cd: Revamp mastra deply dx, Make mastra build command output deployment ready build
+- 37bb612: Add Elastic-2.0 licensing for packages
+- c8fe5f0: change the header of all pages with the one from the DS
+- Updated dependencies [32e7b71]
+- Updated dependencies [37bb612]
+  - @mastra/deployer@0.2.9-alpha.1
+  - @mastra/core@0.8.3-alpha.1
+
 ## 0.4.9-alpha.0
 
 ### Patch Changes

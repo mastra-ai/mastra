@@ -1,5 +1,15 @@
 # @mastra/firecrawl
 
+## 1.1.18-alpha.1
+
+### Patch Changes
+
+- 37bb612: Add Elastic-2.0 licensing for packages
+- Updated dependencies [32e7b71]
+- Updated dependencies [37bb612]
+  - @mastra/core@0.8.3-alpha.1
+  - @mastra/rag@0.1.18-alpha.1
+
 ## 1.1.18-alpha.0
 
 ### Patch Changes
