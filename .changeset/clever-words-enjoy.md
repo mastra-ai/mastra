@@ -3,4 +3,4 @@
 'create-mastra': patch
 ---
 
-Changeset - mastra build deployer build
+Revamp mastra deply dx, Make mastra build command output deployment ready build
