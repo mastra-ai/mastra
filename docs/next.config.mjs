@@ -404,7 +404,7 @@ export default withNextra({
     },
     {
       source: "/docs/guide/local-dev/integrations",
-      destination: "/docs/local-dev/mastra-dev-environment",
+      destination: "/docs/local-dev/mastra-dev",
       permanent: true,
     },
     {
@@ -450,6 +450,11 @@ export default withNextra({
     {
       source: "/docs/workflows/data-flow",
       destination: "/docs/workflows/control-flow",
+      permanent: true,
+    },
+    {
+      source: "/docs/local-dev/creating-projects",
+      destination: "/docs/getting-started/creating-a-new-project",
       permanent: true,
     },
   ],
