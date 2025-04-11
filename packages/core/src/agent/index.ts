@@ -14,7 +14,7 @@ import type {
   UserContent,
 } from 'ai';
 import type { JSONSchema7 } from 'json-schema';
-import type { ZodSchema, z } from 'zod';
+import type { z, ZodSchema } from 'zod';
 
 import type { MastraPrimitives, MastraUnion } from '../action';
 import { MastraBase } from '../base';
@@ -28,11 +28,20 @@ import type { Mastra } from '../mastra';
 import type { MastraMemory } from '../memory/memory';
 import type { MemoryConfig, StorageThreadType } from '../memory/types';
 import { InstrumentClass } from '../telemetry';
-import type { CoreTool } from '../tools/types';
-import { makeCoreTool, createMastraProxy, ensureToolProperties, ensureAllMessagesAreCoreMessages } from '../utils';
+import type { CoreTool, ToolExecutionContext } from '../tools/types';
+import type { InferZodType, VariablesType } from '../utils';
+import {
+  createMastraProxy,
+  createVariablesFrom,
+  ensureAllMessagesAreCoreMessages,
+  ensureToolProperties,
+  makeCoreTool,
+  validateVariables,
+} from '../utils';
 import type { CompositeVoice } from '../voice';
 import { DefaultVoice } from '../voice';
 import { agentToStep, Step } from '../workflows';
+
 import type {
   AgentConfig,
   AgentGenerateOptions,
@@ -51,7 +60,8 @@ export * from './types';
 })
 export class Agent<
   TAgentId extends string = string,
-  TTools extends ToolsInput = ToolsInput,
+  TSchemaVariables extends ZodSchema | undefined = undefined,
+  TTools extends ToolsInput<TSchemaVariables> = ToolsInput<TSchemaVariables>,
   TMetrics extends Record<string, Metric> = Record<string, Metric>,
 > extends MastraBase {
   public name: TAgentId;
@@ -67,8 +77,9 @@ export class Agent<
   metrics: TMetrics;
   evals: TMetrics;
   voice: CompositeVoice;
+  #variablesSchema?: TSchemaVariables;
 
-  constructor(config: AgentConfig<TAgentId, TTools, TMetrics>) {
+  constructor(config: AgentConfig<TAgentId, TSchemaVariables, TTools, TMetrics>) {
     super({ component: RegisteredLogger.AGENT });
 
     this.name = config.name;
@@ -117,9 +128,13 @@ export class Agent<
     if (config.voice) {
       this.voice = config.voice;
       this.voice?.addTools(this.tools);
-      this.voice?.addInstructions(config.instructions);
+      this.voice?.addInstructions(this.instructions);
     } else {
       this.voice = new DefaultVoice();
+    }
+
+    if (config.variablesSchema) {
+      this.#variablesSchema = config.variablesSchema;
     }
   }
 
@@ -132,6 +147,7 @@ export class Agent<
 
   __updateInstructions(newInstructions: string) {
     this.instructions = newInstructions;
+    this.voice?.addInstructions(this.instructions);
     this.logger.debug(`[Agents:${this.name}] Instructions updated.`, { model: this.model, name: this.name });
   }
 
@@ -443,11 +459,13 @@ export class Agent<
     threadId,
     resourceId,
     runId,
+    variables,
   }: {
-    toolsets?: ToolsetsInput;
+    toolsets?: ToolsetsInput<TSchemaVariables>;
     threadId?: string;
     resourceId?: string;
     runId?: string;
+    variables?: VariablesType<TSchemaVariables>;
   }): Record<string, CoreTool> {
     this.logger.debug(`[Agents:${this.name}] - Assigning tools`, { runId, threadId, resourceId });
 
@@ -476,9 +494,12 @@ export class Agent<
             mastra: mastraProxy as MastraUnion | undefined,
             memory,
             agentName: this.name,
+            variables,
           };
+
           memo[k] = makeCoreTool(tool, options);
         }
+
         return memo;
       },
       {} as Record<string, CoreTool>,
@@ -503,19 +524,18 @@ export class Agent<
                           threadId,
                           resourceId,
                         });
-                        return (
-                          tool?.execute?.(
-                            {
-                              context: args,
-                              mastra: mastraProxy as MastraUnion | undefined,
-                              memory,
-                              runId,
-                              threadId,
-                              resourceId,
-                            },
-                            options,
-                          ) ?? undefined
-                        );
+
+                        const params: ToolExecutionContext = {
+                          context: args,
+                          variables: variables ?? {},
+                          mastra: mastraProxy,
+                          memory,
+                          runId,
+                          threadId,
+                          resourceId,
+                        };
+
+                        return tool?.execute?.(params, options) ?? undefined;
                       } catch (err) {
                         this.logger.error(`[Agent:${this.name}] - Failed memory tool execution`, {
                           error: err,
@@ -528,6 +548,7 @@ export class Agent<
                     }
                   : undefined,
             };
+
             return memo;
           },
           {} as Record<string, CoreTool>,
@@ -556,6 +577,7 @@ export class Agent<
             logger: this.logger,
             agentName: this.name,
           };
+
           toolsFromToolsetsConverted[toolName] = makeCoreTool(toolObj, options, 'toolset');
         });
       });
@@ -608,15 +630,17 @@ export class Agent<
     resourceId,
     runId,
     toolsets,
+    variables,
   }: {
     instructions?: string;
-    toolsets?: ToolsetsInput;
+    toolsets?: ToolsetsInput<TSchemaVariables>;
     resourceId?: string;
     threadId?: string;
     memoryConfig?: MemoryConfig;
     context?: CoreMessage[];
     runId?: string;
     messages: CoreMessage[];
+    variables?: VariablesType<TSchemaVariables>;
   }) {
     return {
       before: async () => {
@@ -624,9 +648,11 @@ export class Agent<
           this.logger.debug(`[Agents:${this.name}] - Starting generation`, { runId });
         }
 
+        const currentVariables = validateVariables(this.#variablesSchema, createVariablesFrom(variables));
+
         const systemMessage: CoreMessage = {
           role: 'system',
-          content: instructions || `${this.instructions}.`,
+          content: `${instructions || this.instructions}.`,
         };
 
         let coreMessages = messages;
@@ -699,12 +725,13 @@ export class Agent<
             threadId: threadIdToUse,
             resourceId,
             runId,
+            variables: currentVariables,
           });
         }
 
         const messageObjects = [systemMessage, ...(context || []), ...coreMessages];
 
-        return { messageObjects, convertedTools, threadId: threadIdToUse as string, thread };
+        return { messageObjects, convertedTools, threadId: threadIdToUse as string, thread, currentVariables };
       },
       after: async ({
         result,
@@ -821,23 +848,23 @@ export class Agent<
 
   async generate<Z extends ZodSchema | JSONSchema7 | undefined = undefined>(
     messages: string | string[] | CoreMessage[] | AiMessageType[],
-    args?: AgentGenerateOptions<Z> & { output?: never; experimental_output?: never },
-  ): Promise<GenerateTextResult<any, Z extends ZodSchema ? z.infer<Z> : unknown>>;
+    args?: AgentGenerateOptions<Z, TSchemaVariables> & { output?: never; experimental_output?: never },
+  ): Promise<GenerateTextResult<any, InferZodType<Z, unknown>>>;
   async generate<Z extends ZodSchema | JSONSchema7 | undefined = undefined>(
     messages: string | string[] | CoreMessage[] | AiMessageType[],
-    args?: AgentGenerateOptions<Z> & { output?: Z; experimental_output?: never },
-  ): Promise<GenerateObjectResult<Z extends ZodSchema ? z.infer<Z> : unknown>>;
+    args?: AgentGenerateOptions<Z, TSchemaVariables> & { output?: Z; experimental_output?: never },
+  ): Promise<GenerateObjectResult<InferZodType<Z, unknown>>>;
   async generate<Z extends ZodSchema | JSONSchema7 | undefined = undefined>(
     messages: string | string[] | CoreMessage[] | AiMessageType[],
-    args?: AgentGenerateOptions<Z> & { output?: never; experimental_output?: Z },
+    args?: AgentGenerateOptions<Z, TSchemaVariables> & { output?: never; experimental_output?: Z },
   ): Promise<
-    GenerateTextResult<any, Z extends ZodSchema ? z.infer<Z> : unknown> & {
-      object: Z extends ZodSchema ? z.infer<Z> : unknown;
+    GenerateTextResult<any, InferZodType<Z, unknown>> & {
+      object: InferZodType<Z, unknown>;
     }
   >;
   async generate<Z extends ZodSchema | JSONSchema7 | undefined = undefined>(
     messages: string | string[] | CoreMessage[] | AiMessageType[],
-    generateOptions: AgentGenerateOptions<Z> = {},
+    generateOptions: AgentGenerateOptions<Z, TSchemaVariables> = {},
   ): Promise<
     | GenerateTextResult<any, Z extends ZodSchema ? z.infer<Z> : unknown>
     | GenerateObjectResult<Z extends ZodSchema ? z.infer<Z> : unknown>
@@ -857,8 +884,9 @@ export class Agent<
       toolChoice = 'auto',
       experimental_output,
       telemetry,
+      variables,
       ...rest
-    }: AgentGenerateOptions<Z> = Object.assign({}, this.#defaultGenerateOptions, generateOptions);
+    }: AgentGenerateOptions<Z, TSchemaVariables> = Object.assign({}, this.#defaultGenerateOptions, generateOptions);
     let messagesToUse: CoreMessage[] = [];
 
     if (typeof messages === `string`) {
@@ -893,9 +921,10 @@ export class Agent<
       resourceId,
       runId: runIdToUse,
       toolsets,
+      variables,
     });
 
-    const { threadId, thread, messageObjects, convertedTools } = await before();
+    const { threadId, thread, messageObjects, convertedTools, currentVariables } = await before();
 
     if (!output && experimental_output) {
       const result = await this.llm.__text({
@@ -913,6 +942,7 @@ export class Agent<
         threadId,
         resourceId,
         memory: this.getMemory(),
+        variables: currentVariables,
         ...rest,
       });
 
@@ -943,6 +973,7 @@ export class Agent<
         threadId,
         resourceId,
         memory: this.getMemory(),
+        variables: currentVariables,
         ...rest,
       });
 
@@ -967,6 +998,7 @@ export class Agent<
       toolChoice,
       telemetry,
       memory: this.getMemory(),
+      variables: currentVariables,
       ...rest,
     });
 
@@ -979,26 +1011,23 @@ export class Agent<
 
   async stream<Z extends ZodSchema | JSONSchema7 | undefined = undefined>(
     messages: string | string[] | CoreMessage[] | AiMessageType[],
-    args?: AgentStreamOptions<Z> & { output?: never; experimental_output?: never },
-  ): Promise<StreamTextResult<any, Z extends ZodSchema ? z.infer<Z> : unknown>>;
+    args?: AgentStreamOptions<Z, TSchemaVariables> & { output?: never; experimental_output?: never },
+  ): Promise<StreamTextResult<any, InferZodType<Z, unknown>>>;
   async stream<Z extends ZodSchema | JSONSchema7 | undefined = undefined>(
     messages: string | string[] | CoreMessage[] | AiMessageType[],
-    args?: AgentStreamOptions<Z> & { output?: Z; experimental_output?: never },
-  ): Promise<StreamObjectResult<any, Z extends ZodSchema ? z.infer<Z> : unknown, any>>;
+    args?: AgentStreamOptions<Z, TSchemaVariables> & { output?: Z; experimental_output?: never },
+  ): Promise<StreamObjectResult<any, InferZodType<Z, unknown>, any>>;
   async stream<Z extends ZodSchema | JSONSchema7 | undefined = undefined>(
     messages: string | string[] | CoreMessage[] | AiMessageType[],
-    args?: AgentStreamOptions<Z> & { output?: never; experimental_output?: Z },
+    args?: AgentStreamOptions<Z, TSchemaVariables> & { output?: never; experimental_output?: Z },
   ): Promise<
-    StreamTextResult<any, Z extends ZodSchema ? z.infer<Z> : unknown> & {
-      partialObjectStream: StreamTextResult<
-        any,
-        Z extends ZodSchema ? z.infer<Z> : unknown
-      >['experimental_partialOutputStream'];
+    StreamTextResult<any, InferZodType<Z, unknown>> & {
+      partialObjectStream: StreamTextResult<any, InferZodType<Z, unknown>>['experimental_partialOutputStream'];
     }
   >;
   async stream<Z extends ZodSchema | JSONSchema7 | undefined = undefined>(
     messages: string | string[] | CoreMessage[] | AiMessageType[],
-    streamOptions: AgentStreamOptions<Z> = {},
+    streamOptions: AgentStreamOptions<Z, TSchemaVariables> = {},
   ): Promise<
     | StreamTextResult<any, Z extends ZodSchema ? z.infer<Z> : unknown>
     | StreamObjectResult<any, Z extends ZodSchema ? z.infer<Z> : unknown, any>
@@ -1019,8 +1048,9 @@ export class Agent<
       toolChoice = 'auto',
       experimental_output,
       telemetry,
+      variables,
       ...rest
-    }: AgentStreamOptions<Z> = Object.assign({}, this.#defaultStreamOptions, streamOptions);
+    }: AgentStreamOptions<Z, TSchemaVariables> = Object.assign({}, this.#defaultStreamOptions, streamOptions);
     const runIdToUse = runId || randomUUID();
 
     let messagesToUse: CoreMessage[] = [];
@@ -1053,9 +1083,10 @@ export class Agent<
       resourceId,
       runId: runIdToUse,
       toolsets,
+      variables,
     });
 
-    const { threadId, thread, messageObjects, convertedTools } = await before();
+    const { threadId, thread, messageObjects, convertedTools, currentVariables } = await before();
 
     if (!output && experimental_output) {
       this.logger.debug(`Starting agent ${this.name} llm stream call`, {
@@ -1087,6 +1118,7 @@ export class Agent<
         toolChoice,
         experimental_output,
         memory: this.getMemory(),
+        variables: currentVariables,
         ...rest,
       });
 
@@ -1122,6 +1154,7 @@ export class Agent<
         toolChoice,
         telemetry,
         memory: this.getMemory(),
+        variables: currentVariables,
         ...rest,
       }) as unknown as StreamReturn<Z>;
     }
@@ -1155,6 +1188,7 @@ export class Agent<
       toolChoice,
       telemetry,
       memory: this.getMemory(),
+      variables: currentVariables,
       ...rest,
     }) as unknown as StreamReturn<Z>;
   }

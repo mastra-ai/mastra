@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 
 import { createTool } from './tool';
@@ -26,27 +26,45 @@ describe('createTool', () => {
     },
   });
 
+  const toolExecutionOptions = {
+    toolCallId: 'test-tool',
+    messages: [],
+  };
+
   it('should call mockFindUser', async () => {
-    await testTool.execute({
-      context: { name: 'Dero Israel' },
-    });
+    await testTool.execute?.(
+      {
+        context: { name: 'Dero Israel' },
+        variables: {},
+      },
+      toolExecutionOptions,
+    );
 
     expect(mockFindUser).toHaveBeenCalledTimes(1);
     expect(mockFindUser).toHaveBeenCalledWith('Dero Israel');
   });
 
   it("should return an object containing 'Dero Israel' as name and 'dero@mail.com' as email", async () => {
-    const user = await testTool.execute({
-      context: { name: 'Dero Israel' },
-    });
+    const user = await testTool.execute?.(
+      {
+        context: { name: 'Dero Israel' },
+        variables: {},
+      },
+      toolExecutionOptions,
+    );
 
     expect(user).toStrictEqual({ name: 'Dero Israel', email: 'dero@mail.com' });
   });
 
   it("should return an object containing 'User not found' message", async () => {
-    const user = await testTool.execute({
-      context: { name: 'Taofeeq Oluderu' },
-    });
+    const user = await testTool.execute?.(
+      {
+        context: { name: 'Taofeeq Oluderu' },
+        variables: {},
+      },
+      toolExecutionOptions,
+    );
+
     expect(user).toStrictEqual({ message: 'User not found' });
   });
 });

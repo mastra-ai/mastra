@@ -2,7 +2,7 @@ import type { ToolsInput } from '../agent';
 import { MastraVoice } from './voice';
 import type { VoiceEventType, VoiceEventMap } from '.';
 
-export class CompositeVoice extends MastraVoice<unknown, unknown, unknown, ToolsInput, VoiceEventMap> {
+export class CompositeVoice extends MastraVoice {
   protected speakProvider?: MastraVoice;
   protected listenProvider?: MastraVoice;
   protected realtimeProvider?: MastraVoice;
@@ -125,7 +125,7 @@ export class CompositeVoice extends MastraVoice<unknown, unknown, unknown, Tools
    * Equip the voice provider with tools
    * @param tools Array of tools to add
    */
-  addTools(tools: ToolsInput): void {
+  addTools(tools: ToolsInput<any>): void {
     if (!this.realtimeProvider) {
       return;
     }

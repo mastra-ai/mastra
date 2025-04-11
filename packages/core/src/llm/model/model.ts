@@ -19,6 +19,7 @@ import type { Mastra } from '../../mastra';
 import type { MessageType } from '../../memory';
 import type { MastraMemory } from '../../memory/memory';
 import type { CoreTool } from '../../tools';
+import type { VariablesType } from '../../utils';
 import { createMastraProxy, delay, makeCoreTool } from '../../utils';
 
 import { MastraLLMBase } from './base';
@@ -66,20 +67,29 @@ export class MastraLLM extends MastraLLMBase {
     return this.#model;
   }
 
-  convertTools({
+  convertTools<
+    TSchemaVariables extends ZodSchema | undefined = undefined,
+    TTools extends ToolsInput<TSchemaVariables> | undefined = undefined,
+  >({
     tools,
     runId,
     threadId,
     resourceId,
     memory,
+    variables,
   }: {
-    tools?: ToolsInput;
+    tools?: TTools;
     runId?: string;
     threadId?: string;
     resourceId?: string;
     memory?: MastraMemory;
+    variables?: VariablesType<TSchemaVariables>;
   } = {}): Record<string, CoreTool> {
     this.logger.debug('Starting tool conversion for LLM');
+
+    if (!tools) {
+      return {};
+    }
 
     let mastraProxy = undefined;
     const logger = this.logger;
@@ -99,6 +109,7 @@ export class MastraLLM extends MastraLLMBase {
             threadId,
             resourceId,
             logger: this.logger,
+            variables,
             memory,
             mastra: mastraProxy,
           };
@@ -114,7 +125,11 @@ export class MastraLLM extends MastraLLMBase {
     return converted;
   }
 
-  async __text<Z extends ZodSchema | JSONSchema7 | undefined>({
+  async __text<
+    Z extends ZodSchema | JSONSchema7 | undefined,
+    TSchemaVariables extends ZodSchema | undefined = undefined,
+    TTools extends ToolsInput<TSchemaVariables> | undefined = undefined,
+  >({
     runId,
     messages,
     maxSteps = 5,
@@ -128,8 +143,9 @@ export class MastraLLM extends MastraLLMBase {
     threadId,
     resourceId,
     memory,
+    variables,
     ...rest
-  }: LLMTextOptions<Z> & { memory?: MastraMemory }) {
+  }: LLMTextOptions<Z, TSchemaVariables, TTools> & { memory?: MastraMemory }) {
     const model = this.#model;
 
     this.logger.debug(`[LLM] - Generating text`, {
@@ -141,7 +157,7 @@ export class MastraLLM extends MastraLLMBase {
       tools: Object.keys(tools || convertedTools || {}),
     });
 
-    const finalTools = convertedTools || this.convertTools({ tools, runId, threadId, resourceId, memory });
+    const finalTools = convertedTools || this.convertTools({ tools, runId, threadId, resourceId, memory, variables });
 
     const argsForExecute = {
       model,
@@ -205,7 +221,11 @@ export class MastraLLM extends MastraLLMBase {
     });
   }
 
-  async __textObject<T extends ZodSchema | JSONSchema7 | undefined>({
+  async __textObject<
+    T extends ZodSchema | JSONSchema7 | undefined,
+    TSchemaVariables extends ZodSchema | undefined = undefined,
+    TTools extends ToolsInput<TSchemaVariables> | undefined = undefined,
+  >({
     messages,
     onStepFinish,
     maxSteps = 5,
@@ -219,13 +239,14 @@ export class MastraLLM extends MastraLLMBase {
     threadId,
     resourceId,
     memory,
+    variables,
     ...rest
-  }: LLMTextObjectOptions<T> & { memory?: MastraMemory }) {
+  }: LLMTextObjectOptions<T, TSchemaVariables, TTools> & { memory?: MastraMemory }) {
     const model = this.#model;
 
     this.logger.debug(`[LLM] - Generating a text object`, { runId });
 
-    const finalTools = convertedTools || this.convertTools({ tools, runId, threadId, resourceId, memory });
+    const finalTools = convertedTools || this.convertTools({ tools, runId, threadId, resourceId, memory, variables });
 
     const argsForExecute = {
       model,
@@ -283,7 +304,11 @@ export class MastraLLM extends MastraLLMBase {
     });
   }
 
-  async __stream<Z extends ZodSchema | JSONSchema7 | undefined = undefined>({
+  async __stream<
+    Z extends ZodSchema | JSONSchema7 | undefined = undefined,
+    TSchemaVariables extends ZodSchema | undefined = undefined,
+    TTools extends ToolsInput<TSchemaVariables> | undefined = undefined,
+  >({
     messages,
     onStepFinish,
     onFinish,
@@ -298,8 +323,9 @@ export class MastraLLM extends MastraLLMBase {
     threadId,
     resourceId,
     memory,
+    variables,
     ...rest
-  }: LLMInnerStreamOptions<Z> & { memory?: MastraMemory }) {
+  }: LLMInnerStreamOptions<Z, TSchemaVariables, TTools> & { memory?: MastraMemory }) {
     const model = this.#model;
     this.logger.debug(`[LLM] - Streaming text`, {
       runId,
@@ -310,7 +336,7 @@ export class MastraLLM extends MastraLLMBase {
       tools: Object.keys(tools || convertedTools || {}),
     });
 
-    const finalTools = convertedTools || this.convertTools({ tools, runId, threadId, resourceId, memory });
+    const finalTools = convertedTools || this.convertTools({ tools, runId, threadId, resourceId, memory, variables });
 
     const argsForExecute = {
       model,
@@ -388,7 +414,11 @@ export class MastraLLM extends MastraLLMBase {
     });
   }
 
-  async __streamObject<T extends ZodSchema | JSONSchema7 | undefined>({
+  async __streamObject<
+    T extends ZodSchema | JSONSchema7 | undefined,
+    TSchemaVariables extends ZodSchema | undefined = undefined,
+    TTools extends ToolsInput<TSchemaVariables> | undefined = undefined,
+  >({
     messages,
     onStepFinish,
     onFinish,
@@ -403,8 +433,9 @@ export class MastraLLM extends MastraLLMBase {
     threadId,
     resourceId,
     memory,
+    variables,
     ...rest
-  }: LLMStreamObjectOptions<T> & { memory?: MastraMemory }) {
+  }: LLMStreamObjectOptions<T, TSchemaVariables, TTools> & { memory?: MastraMemory }) {
     const model = this.#model;
     this.logger.debug(`[LLM] - Streaming structured output`, {
       runId,
@@ -413,7 +444,7 @@ export class MastraLLM extends MastraLLMBase {
       tools: Object.keys(tools || convertedTools || {}),
     });
 
-    const finalTools = convertedTools || this.convertTools({ tools, runId, threadId, resourceId, memory });
+    const finalTools = convertedTools || this.convertTools({ tools, runId, threadId, resourceId, memory, variables });
 
     const argsForExecute = {
       model,
@@ -487,7 +518,11 @@ export class MastraLLM extends MastraLLMBase {
     });
   }
 
-  async generate<Z extends ZodSchema | JSONSchema7 | undefined = undefined>(
+  async generate<
+    Z extends ZodSchema | JSONSchema7 | undefined = undefined,
+    TSchemaVariables extends ZodSchema | undefined = undefined,
+    TTools extends ToolsInput<TSchemaVariables> | undefined = undefined,
+  >(
     messages: string | string[] | CoreMessage[],
     {
       maxSteps = 5,
@@ -499,8 +534,9 @@ export class MastraLLM extends MastraLLMBase {
       temperature,
       telemetry,
       memory,
+      variables,
       ...rest
-    }: LLMStreamOptions<Z> & { memory?: MastraMemory } = {},
+    }: LLMStreamOptions<Z, TSchemaVariables, TTools> & { memory?: MastraMemory } = {},
   ): Promise<GenerateReturn<Z>> {
     const msgs = this.convertToMessages(messages);
 
@@ -514,6 +550,7 @@ export class MastraLLM extends MastraLLMBase {
         runId,
         temperature,
         memory,
+        variables,
         ...rest,
       })) as unknown as GenerateReturn<Z>;
     }
@@ -528,11 +565,16 @@ export class MastraLLM extends MastraLLMBase {
       runId,
       telemetry,
       memory,
+      variables,
       ...rest,
     })) as unknown as GenerateReturn<Z>;
   }
 
-  async stream<Z extends ZodSchema | JSONSchema7 | undefined = undefined>(
+  async stream<
+    Z extends ZodSchema | JSONSchema7 | undefined = undefined,
+    TSchemaVariables extends ZodSchema | undefined = undefined,
+    TTools extends ToolsInput<TSchemaVariables> | undefined = undefined,
+  >(
     messages: string | string[] | CoreMessage[],
     {
       maxSteps = 5,
@@ -544,8 +586,9 @@ export class MastraLLM extends MastraLLMBase {
       output,
       temperature,
       telemetry,
+      variables,
       ...rest
-    }: LLMStreamOptions<Z> = {},
+    }: LLMStreamOptions<Z, TSchemaVariables, TTools> = {},
   ) {
     const msgs = this.convertToMessages(messages);
 
@@ -560,6 +603,7 @@ export class MastraLLM extends MastraLLMBase {
         runId,
         temperature,
         telemetry,
+        variables,
         ...rest,
       })) as unknown as StreamReturn<Z>;
     }
@@ -575,6 +619,7 @@ export class MastraLLM extends MastraLLMBase {
       runId,
       temperature,
       telemetry,
+      variables,
       ...rest,
     })) as unknown as StreamReturn<Z>;
   }
