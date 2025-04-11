@@ -156,10 +156,10 @@ describe('getServersFromRegistry integration test', () => {
       const result = await getServersFromRegistry('mcp-run', { search: searchWord });
 
       // We should find at least the server we got the word from
-      expect(result.servers.length).toBeGreaterThan(0);
+      expect(result.length).toBeGreaterThan(0);
 
       // At least one server should contain our search term in name or description
-      const hasMatch = result.servers.some(
+      const hasMatch = result.some(
         (server: ServerEntry) =>
           server.name.toLowerCase().includes(searchWord.toLowerCase()) ||
           server.description.toLowerCase().includes(searchWord.toLowerCase()),

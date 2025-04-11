@@ -1,7 +1,7 @@
 import { processApiTrackerServers } from './processors/apitracker';
 import { processFleurServers } from './processors/fleur';
 import { processMcpRunServers } from './processors/mcprun';
-import { processSmitheryServers } from './processors/smithery';
+// import { processSmitheryServers } from './processors/smithery';
 import { RegistryFile } from './types';
 
 // Registry data with post-processing functions
@@ -152,7 +152,7 @@ export const registryData: RegistryFile = {
       servers_url: 'https://registry.smithery.ai/servers',
       tags: ['verified'],
       count: 2208,
-      postProcessServers: processSmitheryServers,
+      // postProcessServers: processSmitheryServers,
     },
     {
       id: 'zapier-mcp',

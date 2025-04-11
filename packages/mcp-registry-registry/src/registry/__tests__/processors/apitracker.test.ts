@@ -7,19 +7,15 @@ describe('APITracker processor', () => {
   it('should process APITracker server data correctly', async () => {
     // Use our getServersFromRegistry function to fetch data
     const result = await getServersFromRegistry('apitracker');
-    const data = result.servers;
-
-    // Process the data
-    const servers = processApiTrackerServers(data);
 
     // Verify the result
-    expect(Array.isArray(servers)).toBe(true);
+    expect(Array.isArray(result)).toBe(true);
 
     // Check that we got some servers
-    expect(servers.length).toBeGreaterThan(0);
+    expect(result.length).toBeGreaterThan(0);
 
     // Verify each server has the required fields
-    servers.forEach((server: ServerEntry) => {
+    result.forEach((server: ServerEntry) => {
       expect(server).toHaveProperty('id');
       expect(server).toHaveProperty('name');
       expect(server).toHaveProperty('description');

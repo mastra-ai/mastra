@@ -6,6 +6,8 @@ import { createServerEntry } from './utils';
  * Handles the specific format of Fleur's app data
  */
 export function processFleurServers(data: unknown): ServerEntry[] {
+  console.log(data);
+
   if (!data || typeof data !== 'object') {
     return [];
   }
