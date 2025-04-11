@@ -27,7 +27,7 @@
     "test": "vitest run",
     "lint": "eslint ."
   },
-  "license": "Elastic-2.0",
+  "license": "MIT",
   "dependencies": {
     "@mastra/core": "workspace:^",
     "@turbopuffer/turbopuffer": "^0.6.4"
