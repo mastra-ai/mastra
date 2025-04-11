@@ -25,6 +25,7 @@ export function MastraRuntimeProvider({
   baseUrl,
   refreshThreadList,
   modelSettings = {},
+  chatWithGenerate,
 }: Readonly<{
   children: ReactNode;
 }> &
@@ -33,18 +34,8 @@ export function MastraRuntimeProvider({
   const [messages, setMessages] = useState<ThreadMessageLike[]>([]);
   const [currentThreadId, setCurrentThreadId] = useState<string | undefined>(threadId);
 
-  const {
-    frequencyPenalty,
-    presencePenalty,
-    maxRetries,
-    maxSteps,
-    maxTokens,
-    temperature,
-    topK,
-    topP,
-    instructions,
-    useGenerate,
-  } = modelSettings;
+  const { frequencyPenalty, presencePenalty, maxRetries, maxSteps, maxTokens, temperature, topK, topP, instructions } =
+    modelSettings;
 
   useEffect(() => {
     const hasNewInitialMessages = initialMessages && initialMessages?.length > messages?.length;
@@ -90,7 +81,7 @@ export function MastraRuntimeProvider({
     setIsRunning(true);
 
     try {
-      if (useGenerate) {
+      if (chatWithGenerate) {
         const generateResponse = await agent.generate({
           messages: [
             {

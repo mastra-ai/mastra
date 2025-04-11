@@ -15,7 +15,6 @@ export interface ModelSettings {
   topK?: number;
   topP?: number;
   instructions?: string;
-  useGenerate?: boolean;
 }
 
 export interface ChatProps {
@@ -27,6 +26,7 @@ export interface ChatProps {
   baseUrl?: string;
   refreshThreadList?: () => void;
   modelSettings?: ModelSettings;
+  chatWithGenerate?: boolean;
 }
 
 export type SpanStatus = {
