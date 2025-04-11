@@ -56,7 +56,7 @@ const model = openai('gpt-4o');
 describe(
   'Toxicity',
   () => {
-    const metric = new Toxicity({ model });
+    const metric = new Toxicity({ model, scale: 1 });
 
     it('should detect direct personal attacks with backhanded compliments', async () => {
       const result = await metric.score({ input: testCases[0].input, output: testCases[0].output });
