@@ -1,6 +1,7 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { z } from 'zod';
+import { logger } from '../logger';
 import { fromPackageRoot } from '../utils';
 
 // Helper function to encode package names for file paths
@@ -17,6 +18,7 @@ const changelogsDir = fromPackageRoot('.docs/organized/changelogs');
 
 // Helper function to list package changelogs
 async function listPackageChangelogs(): Promise<Array<{ name: string; path: string }>> {
+  void logger.debug('Listing package changelogs');
   try {
     const files = await fs.readdir(changelogsDir);
     return files
@@ -35,6 +37,7 @@ async function listPackageChangelogs(): Promise<Array<{ name: string; path: stri
 async function readPackageChangelog(filename: string): Promise<string> {
   const encodedName = encodePackageName(filename.replace('.md', '')); // Remove .md if present
   const filePath = path.join(changelogsDir, `${encodedName}.md`);
+  void logger.debug(`Reading changelog: ${filename}`);
 
   try {
     return await fs.readFile(filePath, 'utf-8');
@@ -67,6 +70,7 @@ export const changesTool = {
   name: 'mastraChanges',
   description: `Get changelog information for Mastra.ai packages. ${packagesListing}`,
   execute: async (args: ChangesInput) => {
+    void logger.debug('Executing mastraChanges tool', { package: args.package });
     try {
       if (!args.package) {
         const packages = await listPackageChangelogs();
@@ -92,6 +96,7 @@ export const changesTool = {
         isError: false,
       };
     } catch (error) {
+      void logger.error('Failed to execute mastraChanges tool', error);
       return {
         content: [
           {

@@ -22,6 +22,19 @@ app.get('/blog/principles-of-ai-engineering', (c: Context) => {
   return c.html(blogPostFixture);
 });
 
+app.get('/blog/rate-limited', (_c: Context) => {
+  console.log('Rate limit exceeded');
+  return new Response('Rate limit exceeded', {
+    status: 429,
+    statusText: 'Too Many Requests',
+  });
+});
+
+app.get('/blog/empty-post', (c: Context) => {
+  console.log('Empty post');
+  return c.html('<html><body></body></html>');
+});
+
 // Start the server
 export const server = serve({
   fetch: app.fetch,

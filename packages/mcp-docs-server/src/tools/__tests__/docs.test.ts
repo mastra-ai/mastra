@@ -59,5 +59,21 @@ describe('docsTool', () => {
       const result = await callTool(tools.mastra_mastraDocs, { paths: ['reference/tools/'] });
       expect(result).toContain('Directory contents of reference/tools');
     });
+
+    it('should handle MDX files with frontmatter', async () => {
+      const result = await callTool(tools.mastra_mastraDocs, { paths: ['reference/rag/document.mdx'] });
+      expect(result).toContain('title: "Reference: MDocument | Document Processing | RAG | Mastra Docs"');
+      expect(result).toContain('description: Documentation for the MDocument class in Mastra');
+      expect(result).toContain('# MDocument');
+    });
+
+    it('should handle MDX files with custom components', async () => {
+      const result = await callTool(tools.mastra_mastraDocs, { paths: ['reference/rag/document.mdx'] });
+      expect(result).toContain('<PropertiesTable');
+      expect(result).toContain('content={[');
+      expect(result).toContain('name:');
+      expect(result).toContain('type:');
+      expect(result).toContain('description:');
+    });
   });
 });
