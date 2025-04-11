@@ -142,6 +142,7 @@
     "@mastra/voice-speechify": "0.1.12"
   },
   "changesets": [
+    "breezy-ducks-exist",
     "clever-words-enjoy",
     "cool-papers-check",
     "famous-knives-hug",
