@@ -1,5 +1,11 @@
 # @mastra/core
 
+## 0.8.3-alpha.3
+
+### Patch Changes
+
+- 10a8caf: Removed an extra console log that made it into core
+
 ## 0.8.3-alpha.2
 
 ### Patch Changes
