@@ -128,6 +128,11 @@ export default withNextra({
   },
   redirects: () => [
     {
+      source: "/examples/memory/short-term-working-memory",
+      destination: "/examples/memory/memory-with-libsql",
+      permanent: true,
+    },
+    {
       source: "/docs/08-running-evals",
       destination: "/docs/evals/overview",
       permanent: true,
@@ -223,18 +228,8 @@ export default withNextra({
       permanent: false, // we should have a memory-processors reference
     },
     {
-      source: "/docs/reference/:path*",
-      destination: "/reference/:path*",
-      permanent: true,
-    },
-    {
       source: "/docs/memory/getting-started",
       destination: "/docs/memory/overview",
-      permanent: true,
-    },
-    {
-      source: "/docs/guides/:path*",
-      destination: "/guides/guide/:path*",
       permanent: true,
     },
     {
@@ -360,6 +355,192 @@ export default withNextra({
     {
       source: "/docs/evals/01-supported-evals",
       destination: "/docs/evals/overview",
+      permanent: true,
+    },
+    {
+      source: "/docs/agents/02b-discord-mcp-bot",
+      destination: "/docs/agents/mcp-guide",
+      permanent: true,
+    },
+    {
+      source: "/docs/api/memory",
+      destination: "/docs/agents/agent-memory",
+      permanent: true,
+    },
+    {
+      source: "/docs/guide/deployment/deployment",
+      destination: "/docs/deployment/deployment",
+      permanent: true,
+    },
+    {
+      source: "/docs/guide/deployment/logging-and-tracing",
+      destination: "/docs/observability/logging",
+      permanent: true,
+    },
+    {
+      source: "/docs/guide/engine/:path*",
+      destination: "/docs",
+      permanent: true,
+    },
+    {
+      source: "/docs/guide/guides/01-harry-potter",
+      destination: "/guides",
+      permanent: true,
+    },
+    {
+      source: "/docs/guide/guides/02-chef-michel",
+      destination: "/guides/guide/chef-michel",
+      permanent: true,
+    },
+    {
+      source: "/docs/guide/guides/03-stock-agent",
+      destination: "/guides/guide/stock-agent",
+      permanent: true,
+    },
+    {
+      source: "/docs/guide/local-dev/integrations",
+      destination: "/docs/local-dev/mastra-dev",
+      permanent: true,
+    },
+    {
+      source: "/docs/guide/rag/vector-databases",
+      destination: "/docs/rag/vector-databases",
+      permanent: true,
+    },
+    {
+      source: "/docs/guide/rag/retrieval",
+      destination: "/docs/rag/retrieval",
+      permanent: true,
+    },
+    {
+      source: "/docs/reference/cli/engine",
+      destination: "/reference",
+      permanent: true,
+    },
+    {
+      source: "/docs/reference/client-js",
+      destination: "/reference/client-js/agents",
+      permanent: true,
+    },
+    {
+      source: "/docs/reference/memory/addMessage",
+      destination: "/reference/memory/createThread",
+      permanent: true,
+    },
+    {
+      source: "/docs/reference/memory/rememberMessages",
+      destination: "/reference/memory/createThread",
+      permanent: true,
+    },
+    {
+      source: "/docs/reference/observability/combine-loggers",
+      destination: "/reference/observability/logger",
+      permanent: true,
+    },
+    {
+      source: "/docs/reference/rag/pgstore",
+      destination: "/reference/rag/pg",
+      permanent: true,
+    },
+    {
+      source: "/docs/reference/rag/reranker",
+      destination: "/reference/rag/rerank",
+      permanent: true,
+    },
+    {
+      source: "/docs/reference/storage/mastra-storage",
+      destination: "/reference/storage/libsql",
+      permanent: true,
+    },
+    {
+      source: "/docs/reference/tts/generate",
+      destination: "/reference/voice/mastra-voice",
+      permanent: true,
+    },
+    {
+      source: "/docs/reference/tts/providers-and-models",
+      destination: "/reference/voice/mastra-voice",
+      permanent: true,
+    },
+    {
+      source: "/docs/reference/tts/stream",
+      destination: "/reference/voice/mastra-voice",
+      permanent: true,
+    },
+    {
+      source: "/docs/reference/tts/provider-and-models",
+      destination: "/reference/voice/mastra-voice",
+      permanent: true,
+    },
+    {
+      source: "/docs/reference/voice/voice.close",
+      destination: "/reference/voice/mastra-voice",
+      permanent: true,
+    },
+    {
+      source: "/docs/reference/voice/voice.off",
+      destination: "/reference/voice/mastra-voice",
+      permanent: true,
+    },
+
+    {
+      source: "/docs/guide",
+      destination: "/guides",
+      permanent: true,
+    },
+    {
+      source: "/docs/guide/:path*",
+      destination: "/guides/guide/:path*",
+      permanent: true,
+    },
+    {
+      source: "/docs/reference",
+      destination: "/reference",
+      permanent: true,
+    },
+    {
+      source: "/docs/reference/:path*",
+      destination: "/reference/:path*",
+      permanent: true,
+    },
+    {
+      source: "/docs/showcase",
+      destination: "/showcase",
+      permanent: true,
+    },
+    {
+      source: "/docs/showcase/:path*",
+      destination: "/showcase/:path*",
+      permanent: true,
+    },
+    {
+      source: "/docs/workflows/data-flow",
+      destination: "/docs/workflows/control-flow",
+      permanent: true,
+    },
+    {
+      source: "/docs/local-dev/creating-projects",
+      destination: "/docs/local-dev/creating-a-new-project",
+      permanent: true,
+    },
+    {
+      source: "/docs/local-dev/sync",
+      destination: "/docs/integrations",
+      permanent: true,
+    },
+    {
+      source: "/docs/local-dev/syncs",
+      destination: "/docs/integrations",
+      permanent: true,
+    },
+    {
+      source: "/docs/local-dev/syncing-projects",
+      destination: "/docs/local-dev/syncing-projects",
+      permanent: true,
+    },
+    {
+      source: "/docs/guides/:path*",
+      destination: "/guides/guide/:path*",
       permanent: true,
     },
   ],
