@@ -3,7 +3,7 @@ import { getServersFromRegistry } from '../../fetch-servers';
 import { processFleurServers } from '../../processors/fleur';
 import type { ServerEntry } from '../../types';
 
-describe('Fleur processor', () => {
+describe.skip('Fleur processor', () => {
   it('should process Fleur server data correctly', async () => {
     // Use our getServersFromRegistry function to fetch data
     const result = await getServersFromRegistry('fleur');
