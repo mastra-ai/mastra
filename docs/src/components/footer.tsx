@@ -20,6 +20,10 @@ const links = [
     text: "llms-full.txt",
     url: "/llms-full.txt",
   },
+  {
+    text: "MCP Registry Registry",
+    url: "https://mastra.ai/mcp-registry-registry",
+  },
 ];
 
 const socials: Array<{
