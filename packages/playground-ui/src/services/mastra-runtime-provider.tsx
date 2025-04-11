@@ -109,6 +109,7 @@ export function MastraRuntimeProvider({
                 return {
                   ...acc,
                   content: [
+                    ..._content,
                     {
                       type: 'text',
                       text: message.content,
