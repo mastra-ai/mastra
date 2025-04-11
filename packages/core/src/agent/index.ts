@@ -396,7 +396,7 @@ export class Agent<
     const messagesBySanitizedContent = messages.map(message => {
       if (message.role !== 'assistant' && message.role !== `tool` && message.role !== `user`) return message;
 
-      if (!message.content || typeof message.content === 'string' || typeof message.content === 'number') {
+      if (!Array.isArray(message.content)) {
         return message;
       }
 
