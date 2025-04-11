@@ -1,4 +1,4 @@
-'use client'
+"use client";
 import { useForm } from "react-hook-form";
 
 import { cn } from "@/lib/utils";
@@ -156,7 +156,7 @@ export const SubscribeForm = ({
         />
         <button
           className={cn(
-            "dark:bg-[#121212] bg-[#2a2a2a] w-full rounded-md hover:opacity-90 h-[32px] justify-end flex items-center px-4 text-white dark:text-white text-[14px]",
+            "dark:bg-[#121212] bg-[#2a2a2a] w-full rounded-md hover:opacity-90 h-[32px] justify-center flex items-center px-4 text-white dark:text-white text-[14px]",
           )}
           onClick={(e) => {
             e.preventDefault();

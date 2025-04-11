@@ -156,6 +156,42 @@ You can:
 - Store run-specific metadata for analysis.
 - Integrate with third-party observability platforms like Datadog or New Relic by forwarding logs.
 
+## Injecting Request/User-Specific Variables
+
+We support dependency injection for tools and workflows. You can pass a container directly to your `start` or `resume` function calls, or inject it using [server middleware](/docs/deployment/server#Middleware).
+
+```ts showLineNumbers filename="src/mastra/run-workflow.ts" copy
+import { mastra } from "./index";
+
+const stepTwo = new Step({
+  id: "stepTwo",
+  execute: async ({ context, container }) => {
+    const multiplier = (container.get("multiplier");
+    const doubledValue = context.getStepResult(stepOne)?.doubledValue;
+    if (!doubledValue) {
+      return { incrementedValue: 0 };
+    }
+
+    return {
+      incrementedValue: doubledValue * multiplier,
+    };
+  },
+});
+
+// Get the workflow
+const myWorkflow = mastra.getWorkflow("myWorkflow");
+const { runId, start, resume } = myWorkflow.createRun();
+
+type MyContainer = { multiplier; number };
+
+const container = new Container<MyContainer>();
+container.set("multiplier", 5);
+
+// Start the workflow execution
+await start({ triggerData: { inputValue: 45 }, container });
+await resume({ stepId: "stepTwo", container });
+```
+
 ## More Resources
 
 - The [Workflow Guide](../guides/ai-recruiter.mdx) in the Guides section is a tutorial that covers the main concepts.
