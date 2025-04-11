@@ -1,0 +1,22 @@
+{
+  "name": "examples-mcp-registry-registry",
+  "type": "module",
+  "private": true,
+  "description": "",
+  "main": "index.js",
+  "version": "0.0.1",
+  "scripts": {
+    "start-deployed": "npx bun src/with-deployed.ts",
+    "start": "npx bun src/index.ts"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "@ai-sdk/openai": "latest",
+    "@mastra/mcp": "workspace:*",
+    "@mastra/mcp-registry-registry": "workspace:*",
+    "@mastra/core": "workspace:*",
+    "zod": "^3.24.2"
+  }
+}
