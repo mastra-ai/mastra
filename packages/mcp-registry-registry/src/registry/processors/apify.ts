@@ -8,8 +8,6 @@ export function processApifyServers(data: any): ServerEntry[] {
   // Get the data array from the response
   const apifyData = data?.data?.items || [];
 
-  console.log(apifyData);
-
   if (!Array.isArray(apifyData)) {
     return [];
   }
