@@ -373,18 +373,43 @@ export default withNextra({
       permanent: true,
     },
     {
-      source: "/docs/deployment/logging-and-tracing",
+      source: "/docs/guide/deployment/deployment",
       destination: "/docs/deployment/deployment",
       permanent: true,
     },
     {
+      source: "/docs/guide/deployment/logging-and-tracing",
+      destination: "/docs/observability/logging",
+      permanent: true,
+    },
+    {
+      source: "/docs/guide/engine/:path*",
+      destination: "/docs",
+      permanent: true,
+    },
+    {
+      source: "/docs/guide/guides/01-harry-potter",
+      destination: "/guides",
+      permanent: true,
+    },
+    {
+      source: "/docs/guide/guides/02-chef-michel",
+      destination: "/guides/guide/chef-michel",
+      permanent: true,
+    },
+    {
+      source: "/docs/guide/guides/03-stock-agent",
+      destination: "/guides/guide/stock-agent",
+      permanent: true,
+    },
+    {
       source: "/docs/guide",
-      destination: "/guide",
+      destination: "/guides",
       permanent: true,
     },
     {
       source: "/docs/guide/:path*",
-      destination: "/guide/:path*",
+      destination: "/guides/guide/:path*",
       permanent: true,
     },
     {
