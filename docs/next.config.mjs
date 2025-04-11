@@ -362,6 +362,56 @@ export default withNextra({
       destination: "/docs/evals/overview",
       permanent: true,
     },
+    {
+      source: "/docs/agents/02b-discord-mcp-bot",
+      destination: "/docs/agents/mcp-guide",
+      permanent: true,
+    },
+    {
+      source: "/docs/api/memory",
+      destination: "/docs/agents/agent-memory",
+      permanent: true,
+    },
+    {
+      source: "/docs/deployment/logging-and-tracing",
+      destination: "/docs/deployment/deployment",
+      permanent: true,
+    },
+    {
+      source: "/docs/guide",
+      destination: "/guide",
+      permanent: true,
+    },
+    {
+      source: "/docs/guide/:path*",
+      destination: "/guide/:path*",
+      permanent: true,
+    },
+    {
+      source: "/docs/reference",
+      destination: "/reference",
+      permanent: true,
+    },
+    {
+      source: "/docs/reference/:path*",
+      destination: "/reference/:path*",
+      permanent: true,
+    },
+    {
+      source: "/docs/showcase",
+      destination: "/showcase",
+      permanent: true,
+    },
+    {
+      source: "/docs/showcase/:path*",
+      destination: "/showcase/:path*",
+      permanent: true,
+    },
+    {
+      source: "/docs/workflows/data-flow",
+      destination: "/docs/workflows/control-flow",
+      permanent: true,
+    },
   ],
   trailingSlash: false,
 });
