@@ -50,7 +50,7 @@
   },
   "keywords": [],
   "author": "",
-  "license": "ISC",
+  "license": "Elastic-2.0",
   "dependencies": {},
   "peerDependencies": {
     "@mastra/core": "workspace:^"

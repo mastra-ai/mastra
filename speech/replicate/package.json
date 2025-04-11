@@ -24,6 +24,7 @@
     "build:watch": "pnpm build --watch",
     "test": "vitest run"
   },
+  "license": "Elastic-2.0",
   "dependencies": {
     "@mastra/core": "workspace:^",
     "replicate": "^0.34.1",
