@@ -127,15 +127,12 @@ To fix this you have three different options:
       client: InstanceType<typeof MastraMCPClient>;
     }) => Promise<void>,
   ) {
-    // Fetch tools in parallel
-    const results = await Promise.all(
+    await Promise.all(
       Object.entries(this.serverConfigs).map(async ([serverName, serverConfig]) => {
         const client = await this.getConnectedClient(serverName, serverConfig);
         const tools = await client.tools();
-        return { serverName, tools, client };
+        await cb({ serverName, tools, client });
       }),
     );
-    // run callbacks for each result in parallel
-    await Promise.all(results.map(result => cb(result)));
   }
 }
