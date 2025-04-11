@@ -12,6 +12,7 @@ While developing or when you deploy a Mastra application, it runs as an HTTP ser
 Mastra uses [Hono](https://hono.dev) as its underlying HTTP server framework. When you build a Mastra application using `mastra build`, it generates a Hono-based HTTP server in the `.mastra` directory.
 
 The server provides:
+
 - API endpoints for all registered agents
 - API endpoints for all registered workflows
 - Custom api route supports
@@ -24,7 +25,7 @@ The server provides:
 You can configure server `port` and `timeout` in the Mastra instance.
 
 ```typescript copy showLineNumbers
-import { Mastra } from '@mastra/core';
+import { Mastra } from "@mastra/core";
 
 export const mastra = new Mastra({
   server: {
@@ -41,26 +42,26 @@ Mastra provides a list of api routes that are automatically generated based on t
 These routes can live in the same file as the Mastra instance or in a separate file. We recommend keeping them in a separate file to keep the Mastra instance clean.
 
 ```typescript copy showLineNumbers
-import { Mastra } from '@mastra/core';
-import { registerApiRoute } from "@mastra/core/server"
+import { Mastra } from "@mastra/core";
+import { registerApiRoute } from "@mastra/core/server";
 
 export const mastra = new Mastra({
   server: {
     apiRoutes: [
-      registerApiRoute('/my-custom-route', {
-        method: 'GET',
+      registerApiRoute("/my-custom-route", {
+        method: "GET",
         handler: async (c) => {
           // you have access to mastra instance here
-          const mastra = c.get('mastra')
+          const mastra = c.get("mastra");
 
           // you can use the mastra instance to get agents, workflows, etc.
-          const agents = await mastra.getAgent('my-agent')
+          const agents = await mastra.getAgent("my-agent");
 
-          return c.json({ message: 'Hello, world!' });
-        }
-      })
-    ]
-  }
+          return c.json({ message: "Hello, world!" });
+        },
+      }),
+    ],
+  },
   // Other configuration options
 });
 ```
@@ -102,7 +103,7 @@ export const mastra = new Mastra({
         if (!authHeader) {
           return new Response('Unauthorized', { status: 401 });
         }
-        
+
         // Continue to the next middleware or route handler
         await next();
       },
@@ -121,8 +122,8 @@ export const mastra = new Mastra({
 if you want to add a middleware to a single route, you can also specify that in the registerApiRoute using `registerApiRoute`.
 
 ```typescript copy showLineNumbers
-registerApiRoute('/my-custom-route', {
-  method: 'GET',
+registerApiRoute("/my-custom-route", {
+  method: "GET",
   middleware: [
     async (c, next) => {
       // Example: Add request logging
@@ -132,23 +133,25 @@ registerApiRoute('/my-custom-route', {
   ],
   handler: async (c) => {
     // you have access to mastra instance here
-    const mastra = c.get('mastra')
+    const mastra = c.get("mastra");
 
     // you can use the mastra instance to get agents, workflows, etc.
-    const agents = await mastra.getAgent('my-agent')
+    const agents = await mastra.getAgent("my-agent");
 
-    return c.json({ message: 'Hello, world!' });
-  }
-})
+    return c.json({ message: "Hello, world!" });
+  },
+});
 ```
 
 ### Middleware Behavior
 
 Each middleware function:
+
 - Receives a Hono context object (`c`) and a `next` function
 - Can return a `Response` to short-circuit the request handling
 - Can call `next()` to continue to the next middleware or route handler
-- Can optionally specify a path pattern (defaults to '/api/*')
+- Can optionally specify a path pattern (defaults to '/api/\*')
+- Inject request specific data for agent tool calling or workflows
 
 ### Common Middleware Use Cases
 
@@ -161,10 +164,10 @@ Each middleware function:
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
       return new Response('Unauthorized', { status: 401 });
     }
-    
+
     const token = authHeader.split(' ')[1];
     // Validate token here
-    
+
     await next();
   },
   path: '/api/*',
@@ -177,17 +180,17 @@ Each middleware function:
 {
   handler: async (c, next) => {
     // Add CORS headers
-    c.header('Access-Control-Allow-Origin', '*');
-    c.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
-    c.header('Access-Control-Allow-Headers', 'Content-Type, Authorization');
-    
+    c.header("Access-Control-Allow-Origin", "*");
+    c.header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
+    c.header("Access-Control-Allow-Headers", "Content-Type, Authorization");
+
     // Handle preflight requests
-    if (c.req.method === 'OPTIONS') {
+    if (c.req.method === "OPTIONS") {
       return new Response(null, { status: 204 });
     }
-    
+
     await next();
-  }
+  };
 }
 ```
 
@@ -200,7 +203,7 @@ Each middleware function:
     await next();
     const duration = Date.now() - start;
     console.log(`${c.req.method} ${c.req.url} - ${duration}ms`);
-  }
+  };
 }
 ```
 
@@ -212,21 +215,22 @@ When integrating with Mastra Cloud or building custom clients, there are special
 {
   handler: async (c, next) => {
     // Check for Mastra-specific headers in incoming requests
-    const isFromMastraCloud = c.req.header('x-mastra-cloud') === 'true';
-    const clientType = c.req.header('x-mastra-client-type'); // e.g., 'js', 'python'
-    const isDevPlayground = c.req.header('x-mastra-dev-playground') === 'true';
-    
+    const isFromMastraCloud = c.req.header("x-mastra-cloud") === "true";
+    const clientType = c.req.header("x-mastra-client-type"); // e.g., 'js', 'python'
+    const isDevPlayground = c.req.header("x-mastra-dev-playground") === "true";
+
     // Customize behavior based on client information
     if (isFromMastraCloud) {
       // Special handling for Mastra Cloud requests
     }
-    
+
     await next();
-  }
+  };
 }
 ```
 
 These headers have the following purposes:
+
 - `x-mastra-cloud`: Indicates that the request is coming from Mastra Cloud
 - `x-mastra-client-type`: Specifies the client SDK type (e.g., 'js', 'python')
 - `x-mastra-dev-playground`: Indicates that the request is from the development playground
@@ -236,6 +240,7 @@ You can use these headers in your middleware to implement client-specific logic 
 ## Deployment
 
 Since Mastra builds to a standard Node.js server, you can deploy to any platform that runs Node.js applications:
+
 - Cloud VMs (AWS EC2, DigitalOcean Droplets, GCP Compute Engine)
 - Container platforms (Docker, Kubernetes)
 - Platform as a Service (Heroku, Railway)
@@ -254,6 +259,7 @@ mastra build --dir ./my-project
 ```
 
 The build process:
+
 1. Locates entry file (`src/mastra/index.ts` or `src/mastra/index.js`)
 2. Creates `.mastra` output directory
 3. Bundles code using Rollup with tree shaking and source maps
