@@ -1,6 +1,8 @@
 import { processApiTrackerServers } from './processors/apitracker';
+import { processApifyServers } from './processors/apify';
 import { processFleurServers } from './processors/fleur';
 import { processMcpRunServers } from './processors/mcprun';
+import { processPulseMcpServers } from './processors/pulse';
 // import { processSmitheryServers } from './processors/smithery';
 import { RegistryFile } from './types';
 
@@ -23,6 +25,7 @@ export const registryData: RegistryFile = {
       url: 'https://apify.com/',
       servers_url: 'https://api.apify.com/v2/store',
       tags: ['verified'],
+      postProcessServers: processApifyServers,
     },
     {
       id: 'fleur',
@@ -141,8 +144,10 @@ export const registryData: RegistryFile = {
       name: 'Pulse MCP',
       description: 'Browse and discover MCP use cases, servers, clients, and news.',
       url: 'https://www.pulsemcp.com/',
+      servers_url: 'https://api.pulsemcp.com/v0beta/servers',
       tags: ['verified'],
       count: 3653,
+      postProcessServers: processPulseMcpServers,
     },
     {
       id: 'smithery',
