@@ -211,12 +211,16 @@ export function AgentDetails({ agentId }: { agentId: string }) {
               onValueChange={value => setChatWithGenerate(value === 'generate')}
             >
               <div className="flex items-center gap-2">
-                <RadioGroupItem value="generate" className="text-mastra-el-3" />
-                <Label className="text-mastra-el-3 text-[12px]">Generate</Label>
+                <RadioGroupItem value="generate" id="generate" className="text-mastra-el-3" />
+                <Label className="text-mastra-el-3 text-[12px]" htmlFor="generate">
+                  Generate
+                </Label>
               </div>
               <div className="flex items-center gap-2">
-                <RadioGroupItem value="stream" className="text-mastra-el-3" />
-                <Label className="text-mastra-el-3 text-[12px]">Stream</Label>
+                <RadioGroupItem value="stream" id="stream" className="text-mastra-el-3" />
+                <Label className="text-mastra-el-3 text-[12px]" htmlFor="stream">
+                  Stream
+                </Label>
               </div>
             </RadioGroup>
           </div>
