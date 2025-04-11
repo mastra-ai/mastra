@@ -1,5 +1,11 @@
 # @mastra/core
 
+## 0.8.3-alpha.2
+
+### Patch Changes
+
+- 0bcc862: Fixed an issue where we were sanitizing response message content and filter on a value that may not always be an array
+
 ## 0.8.3-alpha.1
 
 ### Patch Changes
