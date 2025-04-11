@@ -26,6 +26,7 @@ import {
 } from './handlers/agents';
 import { handleClientsRefresh, handleTriggerClientsRefresh } from './handlers/client';
 import { errorHandler } from './handlers/error';
+import { getEvaluatorsHandler } from './handlers/evaluators';
 import { getLogsByRunIdHandler, getLogsHandler, getLogTransports } from './handlers/logs';
 import {
   createThreadHandler,
@@ -50,11 +51,11 @@ import { executeAgentToolHandler, executeToolHandler, getToolByIdHandler, getToo
 import { upsertVectors, createIndex, queryVectors, listIndexes, describeIndex, deleteIndex } from './handlers/vector';
 import { getSpeakersHandler, speakHandler, listenHandler } from './handlers/voice';
 import {
+  getWorkflowsHandler,
   startWorkflowRunHandler,
   resumeAsyncWorkflowHandler,
   startAsyncWorkflowHandler,
   getWorkflowByIdHandler,
-  getWorkflowsHandler,
   resumeWorkflowHandler,
   watchWorkflowHandler,
   createRunHandler,
@@ -1887,6 +1888,21 @@ export async function createHonoServer(
       },
     }),
     executeToolHandler(tools),
+  );
+
+  // Evaluators routes
+  app.get(
+    '/api/evaluators',
+    describeRoute({
+      description: 'Get all evaluators registered on agents',
+      tags: ['evaluators'],
+      responses: {
+        200: {
+          description: 'List of all evaluators',
+        },
+      },
+    }),
+    getEvaluatorsHandler,
   );
 
   // Vector routes

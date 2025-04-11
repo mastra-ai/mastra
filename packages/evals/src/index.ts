@@ -1,2 +1,4 @@
 export { evaluate } from './evaluation';
 export { attachListeners, globalSetup } from './attachListeners';
+export * from './evaluators'
+export * from './metrics'

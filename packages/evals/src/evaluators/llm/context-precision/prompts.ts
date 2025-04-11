@@ -1,4 +1,4 @@
-import type { LLMEvaluatorPromptArgs, LLMEvaluatorReasonPromptArgs } from '../types';
+import type { LLMEvaluatorEvalPromptArgs, LLMEvaluatorReasonPromptArgs } from '../types';
 
 export const AGENT_INSTRUCTIONS = `You are a balanced and nuanced context precision evaluator. Your job is to determine if retrieved context nodes are relevant to generating the expected output.
 
@@ -13,16 +13,7 @@ Key Principles:
 4. Recognize that some nodes may be partially relevant
 5. Empty or error nodes should be marked as not relevant`;
 
-export function generateEvaluatePrompt({
-  input,
-  output,
-  context,
-}: {
-  input: string;
-  output: string;
-  context: string[];
-}) {
-  return `Given the input, output, and context, evaluate each context piece's relevance by generating a list of JSON objects.
+export const EVAL_TEMPLATE = `Given the input, output, and context, evaluate each context piece's relevance by generating a list of JSON objects.
 
 **
 IMPORTANT: Your response must be in JSON format with a 'outcomes' key containing a list. Each outcome must have only three   fields: \`outcome\` with either 'yes' or 'no', \`reason\` explaining the outcome, and \`claim\` with the context piece. Your reason should include relevant quotes from the context.
@@ -70,7 +61,7 @@ Example:
             "reason": "The context 'The Sun gives light to planets' demonstrates the light-producing property mentioned in the output.",
             "claim": "The Sun gives light to planets."
         }
-    ]  
+    ]
 }
 
 Consider context relevant if it:
@@ -83,29 +74,27 @@ The number of outcomes MUST MATCH the number of context pieces exactly.
 **
 
 Input:
-${input}
+{input}
 
 Output:
-${output}
+{output}
 
-Number of context pieces: ${context.length === 0 ? '1' : context.length}
+Number of context pieces: {contextCount}
 
 Context:
-${context}
+{context}
 
 JSON:
 `;
-}
 
-export function generateReasonPrompt({ input, output, eval_result, outcomes, settings }: LLMEvaluatorReasonPromptArgs) {
-  return `Explain the context precision score where 0 is the lowest and ${settings.scale} is the highest for the LLM's response using this context:
-  
+export const REASON_TEMPLATE = `Explain the context precision score where 0 is the lowest and {scale} is the highest for the LLM's response using this context:
+
   Context:
-  Input: ${input}
-  Output: ${output}
-  Score: ${eval_result.score}
-  Outcomes: ${JSON.stringify(outcomes)}
-  
+  Input: {input}
+  Output: {output}
+  Score: {score}
+  Outcomes: {outcomes}
+
   Rules:
   - Explain score based on the precision of the retrieved context
   - Consider how many of the retrieved context pieces were actually relevant
@@ -126,14 +115,30 @@ export function generateReasonPrompt({ input, output, eval_result, outcomes, set
         "reason": "The score is 0.3 because only 3 out of 10 context pieces were relevant to the query, with many irrelevant pieces mixed in."
     }
     `;
-}
 
-export async function generateEvaluationPrompt({ input, output, context }: LLMEvaluatorPromptArgs) {
-  const prompt = generateEvaluatePrompt({
+export function generateReasonPrompt({
+  input,
+  output,
+  eval_result,
+  outcomes,
+  settings,
+  formatter,
+  template,
+}: LLMEvaluatorReasonPromptArgs) {
+  return formatter(template, {
     input,
     output,
-    context: context || [],
+    score: String(eval_result.score),
+    scale: String(settings.scale),
+    outcomes: JSON.stringify(outcomes),
   });
+}
 
-  return prompt;
+export function generateEvaluationPrompt({ input, output, context, formatter, template }: LLMEvaluatorEvalPromptArgs) {
+  return formatter(template, {
+    input,
+    output,
+    context: (context || []).join('\n'),
+    contextCount: String(context?.length || 0),
+  });
 }

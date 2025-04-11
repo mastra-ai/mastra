@@ -128,6 +128,26 @@ export const Agent = () => {
     </svg>
   );
 };
+
+const EvaluatorIcon = () => {
+  return (
+    <svg
+      width="13"
+      height="13"
+      viewBox="0 0 13 13"
+      fill="none"
+      xmlns="http://www.w3.org/2000/svg"
+    >
+      <path
+        fillRule="evenodd"
+        clipRule="evenodd"
+        d="M12.1322 0.84375C11.7426 0.84375 11.4268 1.15959 11.4268 1.54919V5.89612C11.4268 6.28572 11.7426 6.60156 12.1322 6.60156C12.5218 6.60156 12.8376 6.28572 12.8376 5.89612V1.54919C12.8376 1.15959 12.5218 0.84375 12.1322 0.84375ZM1.39829 2.35617C1.77336 1.9811 2.28207 1.77039 2.8125 1.77039C3.34293 1.77039 3.85164 1.9811 4.22671 2.35617C4.60179 2.73124 4.8125 3.23995 4.8125 3.77039V4.27039C4.8125 4.80082 4.60179 5.30953 4.22671 5.6846C3.85164 6.05967 3.34293 6.27039 2.8125 6.27039C2.28207 6.27039 1.77336 6.05967 1.39829 5.6846C1.02321 5.30953 0.8125 4.80082 0.8125 4.27039V3.77039C0.8125 3.23995 1.02321 2.73124 1.39829 2.35617ZM4.51212 7.77039C4.80049 7.77039 5.07482 7.89488 5.26471 8.1119L7.805 11.0153C8.37073 11.6618 7.91155 12.6737 7.0524 12.6737H1.87806C1.32577 12.6737 0.878059 12.226 0.878059 11.6737V9.06351C0.878059 8.79835 0.978608 8.53756 1.1901 8.37761C1.39315 8.22405 1.61537 8.09662 1.85161 7.99876C2.21571 7.84794 2.60596 7.77034 3.00006 7.77039H4.51212ZM7.12537 5.07715C6.73576 5.07715 6.41992 5.39299 6.41992 5.78259V5.93944C6.41992 6.32904 6.73576 6.64488 7.12537 6.64488C7.51497 6.64488 7.83081 6.32904 7.83081 5.93944V5.78259C7.83081 5.39299 7.51497 5.07715 7.12537 5.07715ZM8.92383 3.66608C8.92383 3.27647 9.23967 2.96063 9.62927 2.96063C10.0189 2.96063 10.3347 3.27647 10.3347 3.66608V5.98517C10.3347 6.37477 10.0189 6.69061 9.62927 6.69061C9.23967 6.69061 8.92383 6.37477 8.92383 5.98517V3.66608Z"
+        fill="currentColor"
+      />
+    </svg>
+  );
+};
+
 const links = [
   {
     name: 'Agents',
@@ -149,6 +169,11 @@ const links = [
     url: '/workflows',
     icon: Workflow,
   },
+  {
+    name: 'Evaluators',
+    url: '/evaluators',
+    icon: EvaluatorIcon,
+  },
 ];
 
 export function AppSidebar() {
@@ -158,13 +183,13 @@ export function AppSidebar() {
 
   return (
     <Sidebar collapsible="icon">
-      <SidebarHeader className="w-full pb-4 pl-1 pt-4">
+      <SidebarHeader className="w-full pt-4 pb-4 pl-1">
         <span className="flex shrink-0">
           {state === 'collapsed' ? (
-            <LogoWithoutText className="h-10 w-10 shrink-0 pl-0" />
+            <LogoWithoutText className="w-10 h-10 pl-0 shrink-0" />
           ) : (
             <span className="flex items-center gap-0.5">
-              <LogoWithoutText className="h-10 w-10 shrink-0 pl-0" />
+              <LogoWithoutText className="w-10 h-10 pl-0 shrink-0" />
               <span className="font-serif text-sm">Mastra</span>
             </span>
           )}
@@ -239,7 +264,7 @@ export function AppSidebar() {
                       href="https://github.com/mastra-ai/mastra"
                       target="_blank"
                       rel="noopener"
-                      className="text-sm text-gray-300/60  hover:text-gray-100"
+                      className="text-sm text-gray-300/60 hover:text-gray-100"
                     >
                       GH
                     </a>

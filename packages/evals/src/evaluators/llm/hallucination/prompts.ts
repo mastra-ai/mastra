@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import type { LLMEvaluatorPromptArgs, LLMEvaluatorReasonPromptArgs } from '../types';
+import type { LLMEvaluatorEvalPromptArgs, LLMEvaluatorReasonPromptArgs } from '../types';
 
 export const AGENT_INSTRUCTIONS = `You are a precise and thorough hallucination evaluator. Your job is to determine if an LLM's output contains information not supported by or contradicts the provided context.
 
@@ -18,41 +18,55 @@ Key Principles:
    - Omitting additional details while maintaining factual accuracy
 10. Subjective claims ("made history", "pioneering", "leading") are hallucinations unless explicitly stated in context`;
 
-export function generateClaimExtractionPrompt({ output }: { output: string }) {
-  return `Extract all factual and speculative claims from the following text. Break down complex statements into individual claims.
+export const REASON_TEMPLATE = `Explain the hallucination score where 0 is the lowest and {scale} is the highest for the LLM's response using this context:
 
-Text:
-${output}
+  Context:
+  {context}
 
-Rules:
-1. Extract all factual assertions
-2. Extract speculative claims (using words like may, might, could)
-3. Separate compound statements into individual claims
-4. Ignore purely subjective opinions without factual components
-5. For empty text, return an empty array
+  Input:
+  {input}
 
-Format:
-{
-    "claims": [
-        "claim 1",
-        "claim 2",
-        ...
-    ]
-}`;
-}
+  Output:
+  {output}
 
-export function generateEvaluatePrompt({ claims, context }: { claims: string[]; context: string[] }) {
-  return `Verify if the claims contain any information not supported by or contradicting the provided context. A hallucination occurs when a claim either:
+  Score: {score}
+
+  Outcomes:
+  {outcomes}
+
+  Rules:
+  - Explain score based on ratio of hallucinated statements to total statements
+  - Focus on factual inconsistencies with context
+  - Keep explanation concise and focused
+  - Use given score, don't recalculate
+  - Explain both hallucinated and non-hallucinated aspects
+  - For mixed cases, explain the balance
+  - Base explanation only on the verified statements, not prior knowledge
+
+  Format:
+  {
+      "reason": "The score is {score} because {explanation of hallucination}"
+  }
+
+  Example Responses:
+  {
+      "reason": "The score is 0.0 because none of the statements in the output contained hallucinations or contradicted the context"
+  }
+  {
+      "reason": "The score is 0.5 because half of the claims in the output were hallucinations not supported by the context"
+  }`;
+
+export const EVAL_TEMPLATE = `Verify if the claims contain any information not supported by or contradicting the provided context. A hallucination occurs when a claim either:
 1. Contradicts the context
 2. Makes assertions not supported by the context
 
 Claims to verify:
-${claims.join('\n')}
+{claims}
 
-Number of context statements: ${context.length}
+Number of context statements: {contextCount}
 
 Context statements:
-${context.join('\n')}
+{context}
 
 For each claim, determine if it is supported by the context. When evaluating:
 
@@ -123,6 +137,30 @@ Format:
         }
     ]
 }`;
+
+export const CLAIM_EXTRACTION_TEMPLATE = `Extract all factual and speculative claims from the following text. Break down complex statements into individual claims.
+
+Text:
+{output}
+
+Rules:
+1. Extract all factual assertions
+2. Extract speculative claims (using words like may, might, could)
+3. Separate compound statements into individual claims
+4. Ignore purely subjective opinions without factual components
+5. For empty text, return an empty array
+
+Format:
+{
+    "claims": [
+        "claim 1",
+        "claim 2",
+        ...
+    ]
+}`;
+
+export function generateClaimExtractionPrompt({ output }: { output: string }) {
+  return CLAIM_EXTRACTION_TEMPLATE.replace('{output}', output);
 }
 
 export function generateReasonPrompt({
@@ -132,47 +170,28 @@ export function generateReasonPrompt({
   eval_result,
   settings,
   outcomes,
+  formatter,
+  template,
 }: LLMEvaluatorReasonPromptArgs) {
-  return `Explain the hallucination score where 0 is the lowest and ${settings.scale} is the highest for the LLM's response using this context:
-  
-  Context:
-  ${context?.join('\n')}
-  
-  Input:
-  ${input}
-  
-  Output:
-  ${output}
-  
-  Score: ${eval_result?.score}
-  
-  Outcomes:
-  ${JSON.stringify(outcomes)}
-  
-  Rules:
-  - Explain score based on ratio of hallucinated statements to total statements
-  - Focus on factual inconsistencies with context
-  - Keep explanation concise and focused
-  - Use given score, don't recalculate
-  - Explain both hallucinated and non-hallucinated aspects
-  - For mixed cases, explain the balance
-  - Base explanation only on the verified statements, not prior knowledge
-  
-  Format:
-  {
-      "reason": "The score is {score} because {explanation of hallucination}"
-  }
-  
-  Example Responses:
-  {
-      "reason": "The score is 0.0 because none of the statements in the output contained hallucinations or contradicted the context"
-  }
-  {
-      "reason": "The score is 0.5 because half of the claims in the output were hallucinations not supported by the context"
-  }`;
+  return formatter(template, {
+    input,
+    output,
+    score: String(eval_result.score),
+    scale: String(settings.scale),
+    context: context ? context.join('\n') : '',
+    outcomes: JSON.stringify(outcomes),
+  });
 }
 
-export async function generateEvaluationPrompt({ agent, output, context }: LLMEvaluatorPromptArgs) {
+export async function generateEvaluationPrompt({
+  input,
+  output,
+  context,
+  agent,
+  settings,
+  formatter,
+  template,
+}: LLMEvaluatorEvalPromptArgs) {
   const claimsPrompt = generateClaimExtractionPrompt({ output });
   const claimsResult = await agent.generate(claimsPrompt, {
     output: z.object({
@@ -186,7 +205,12 @@ export async function generateEvaluationPrompt({ agent, output, context }: LLMEv
     return '';
   }
 
-  const evaluatePrompt = generateEvaluatePrompt({ claims, context: context ?? [] });
-
-  return evaluatePrompt;
+  return formatter(template, {
+    input,
+    output,
+    claims: claims.join('\n'),
+    contextCount: String(context?.length ?? 0),
+    ...settings,
+    context: context?.join('\n') || '',
+  });
 }

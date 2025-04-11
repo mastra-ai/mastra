@@ -1,6 +1,12 @@
 import type { LanguageModel } from '@mastra/core/llm';
 import { LLMEvaluator } from '../evaluator';
-import { AGENT_INSTRUCTIONS, generateReasonPrompt, generateEvaluationPrompt } from './prompts';
+import {
+  AGENT_INSTRUCTIONS,
+  generateReasonPrompt,
+  generateEvaluationPrompt,
+  REASON_TEMPLATE,
+  EVAL_TEMPLATE,
+} from './prompts';
 import { calculateContextualRecallScore } from './score';
 
 export interface ContextualRecallOptions {
@@ -20,8 +26,14 @@ export class ContextualRecall extends LLMEvaluator {
       name: 'Contextual Recall',
       instructions: AGENT_INSTRUCTIONS,
       model: options.model,
-      reasonPrompt: generateReasonPrompt,
-      evalPrompt: generateEvaluationPrompt,
+      reasonPrompt: {
+        template: REASON_TEMPLATE,
+        format: generateReasonPrompt,
+      },
+      evalPrompt: {
+        template: EVAL_TEMPLATE,
+        format: generateEvaluationPrompt,
+      },
       scorer: calculateContextualRecallScore,
       settings: {
         scale: options.scale ?? 1,

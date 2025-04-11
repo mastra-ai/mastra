@@ -1,9 +1,12 @@
+import type { Evaluator } from '@mastra/core/eval';
+import type { Metric } from '@mastra/core/eval';
 import { Agent, MemoryThread, Tool, Workflow, Vector, BaseResource, Network } from './resources';
 import type {
   ClientOptions,
   CreateMemoryThreadParams,
   CreateMemoryThreadResponse,
   GetAgentResponse,
+  GetEvaluatorResponse,
   GetLogParams,
   GetLogsParams,
   GetLogsResponse,
@@ -219,5 +222,13 @@ export class MastraClient extends BaseResource {
    */
   public getNetwork(networkId: string) {
     return new Network(this.options, networkId);
+  }
+
+  /**
+   * Retrieves all available evaluators
+   * @returns Promise containing map of evaluator IDs to evaluator details
+   */
+  public getEvaluators(): Promise<Record<string, GetEvaluatorResponse>> {
+    return this.request('/api/evaluators');
   }
 }

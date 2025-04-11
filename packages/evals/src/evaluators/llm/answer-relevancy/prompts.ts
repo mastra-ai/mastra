@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import type { LLMEvaluatorPromptArgs, LLMEvaluatorReasonPromptArgs } from '../types';
+import type { LLMEvaluatorReasonPromptArgs, LLMEvaluatorEvalPromptArgs } from '../types';
 
 export const ANSWER_RELEVANCY_INSTRUCTIONS = `
     You are a balanced and nuanced answer relevancy evaluator. Your job is to determine if LLM outputs are relevant to the input, including handling partially relevant or uncertain cases.
@@ -13,77 +13,41 @@ export const ANSWER_RELEVANCY_INSTRUCTIONS = `
     6. Responses that discuss the type of information being asked show partial relevance
 `;
 
+export const STATEMENT_TEMPLATE =
+  'Given the text, break it down into meaningful statements while preserving context and relationships.\n  Don\'t split too aggressively.\n  \n  Split compound statements particularly when they:\n  - Are joined by "and"\n  - Contain multiple distinct facts or claims\n  - Have multiple descriptive elements about the subject\n  \n  \n  Handle special cases:\n  - A single word answer should be treated as a complete statement\n  - Error messages should be treated as a single statement\n  - Empty strings should return an empty list\n  - When splitting text, keep related information together\n  \n  Example:\n  Example text: Look! A bird! Birds are an interesting animal.\n  \n  {{\n      "statements": ["Look!", "A bird!", "Birds are interesting animals."]\n  }}\n  \n  Please return only JSON format with "statements" array.\n  Return empty list for empty input.\n  \n  Text:\n  {output}\n  \n  JSON:\n  ';
+
 export function generateEvaluationStatementsPrompt({ output }: { output: string }) {
-  return `Given the text, break it down into meaningful statements while preserving context and relationships.
-  Don't split too aggressively.
-  
-  Split compound statements particularly when they:
-  - Are joined by "and"
-  - Contain multiple distinct facts or claims
-  - Have multiple descriptive elements about the subject
-  
-  
-  Handle special cases:
-  - A single word answer should be treated as a complete statement
-  - Error messages should be treated as a single statement
-  - Empty strings should return an empty list
-  - When splitting text, keep related information together
-  
-  Example:
-  Example text: Look! A bird! Birds are an interesting animal.
-  
-  {{
-      "statements": ["Look!", "A bird!", "Birds are interesting animals."]
-  }}
-  
-  Please return only JSON format with "statements" array.
-  Return empty list for empty input.
-  
-  Text:
-  ${output}
-  
-  JSON:
-  `;
+  return STATEMENT_TEMPLATE.replace('{output}', output);
 }
 
-export function generateReasonPrompt({ input, output, eval_result, settings, outcomes }: LLMEvaluatorReasonPromptArgs) {
-  return `Explain the irrelevancy score where 0 is the lowest and ${settings.scale} is the highest for the LLM's response using this context:
-    Context:
-    Input: ${input}
-    Output: ${output}
-    Score: ${eval_result.score}
-    Outcomes: ${JSON.stringify(outcomes)}
-    
-    Rules:
-    - Explain score based on mix of direct answers and related context
-    - Consider both full and partial relevance
-    - Keep explanation concise and focused
-    - Use given score, don't recalculate
-    - Don't judge factual correctness
-    - Explain both relevant and irrelevant aspects
-    - For mixed responses, explain the balance
-      Format:
-      {
-          "reason": "The score is {score} because {explanation of overall relevance}"
-      }
-      Example Responses:
-      {
-          "reason": "The score is 7 because while the first statement directly answers the question, the additional context is only partially relevant"
-      }
-      {
-          "reason": "The score is 3 because while the answer discusses the right topic, it doesn't directly address the question"
-      }
-      `;
+export const REASON_TEMPLATE =
+  'Explain the irrelevancy score where 0 is the lowest and {scale} is the highest for the LLM\'s response using this context:\n    Context:\n    Input: {input}\n    Output: {output}\n    Score: {score}\n    Outcomes: {outcomes}\n    \n    Rules:\n    - Explain score based on mix of direct answers and related context\n    - Consider both full and partial relevance\n    - Keep explanation concise and focused\n    - Use given score, don\'t recalculate\n    - Don\'t judge factual correctness\n    - Explain both relevant and irrelevant aspects\n    - For mixed responses, explain the balance\n      Format:\n      {\n          "reason": "The score is {score} because {explanation of overall relevance}"\n      }\n      Example Responses:\n      {\n          "reason": "The score is 7 because while the first statement directly answers the question, the additional context is only partially relevant"\n      }\n      {\n          "reason": "The score is 3 because while the answer discusses the right topic, it doesn\'t directly address the question"\n      }\n      ';
+
+export function generateReasonPrompt({
+  input,
+  output,
+  eval_result,
+  settings,
+  outcomes,
+  formatter,
+  template,
+}: LLMEvaluatorReasonPromptArgs) {
+  return formatter(template, {
+    input,
+    output,
+    eval_result: String(eval_result.score),
+    scale: String(settings.scale),
+    outcomes: JSON.stringify(outcomes),
+  });
 }
 
-export function generateEvaluatePrompt({ input, statements }: { input: string; statements: string[] }) {
-  return `Evaluate each statement's relevance to the input question, considering direct answers, related context, and uncertain cases.
-  
+export const EVAL_TEMPLATE = `Evaluate each statement's relevance to the input question, considering direct answers, related context, and uncertain cases.
+
       Return JSON with array of outcome objects. Each outcome must include:
       - "outcome": "yes", "no", or "unsure"
       - "reason": Clear explanation of the outcome
       - "claim": The statement being evaluated
-  
+
       Outcome Guidelines:
       - "yes": Statement explicitly and directly answers the input question when it:
           * Contains specific answer to the question asked (e.g., "The color of the sky is blue")
@@ -91,7 +55,7 @@ export function generateEvaluatePrompt({ input, statements }: { input: string; s
           * Can stand alone as a complete answer
           * Contains appropriate question-type response (e.g., location for "where", person for "who")
           * Note: If statement is incorrect but directly addresses the question, mark as "unsure"
-  
+
       - "unsure": Statement shows partial relevance when it:
           * Discusses the type of information being asked about (e.g., mentions temperatures when asked about temperature)
           * Contains information about the answer without explicit statement
@@ -107,8 +71,8 @@ export function generateEvaluatePrompt({ input, statements }: { input: string; s
           * References locations or entities in the same category as what's being asked about
           * Provides relevant information without using explicit question-type terminology
           * Contains references to properties of the subject that relate to the question type
-  
-  
+
+
       - "no": Statement lacks meaningful connection to question when it:
           * Contains neither the subject nor the type of information being requested
           * Contains no terms related to what's being asked about
@@ -118,13 +82,13 @@ export function generateEvaluatePrompt({ input, statements }: { input: string; s
           * Discusses the subject but not the specific attribute being asked about
           * Note: Assessment is about connection to what's being asked, not factual accuracy
           * Contains no connection to what's being asked about (neither the subject nor the type of information requested)
-  
-      REMEMBER: 
+
+      REMEMBER:
       - If the statement contains words or phrases that are relevant to the input, it is partially relevant.
       - If the statement is a direct answer to the input, it is relevant.
       - If the statement is completely unrelated to the input or contains nothing, it is not relevant.
       - DO NOT MAKE A JUDGEMENT ON THE CORRECTNESS OF THE STATEMENT, JUST THE RELEVANCY.
-  
+
       STRICT RULES:
       - If a statement mentions the type of information being requested, it should be marked as "unsure" ONLY if it's discussing that type meaningfully (not just mentioning it)
       - Subject mentions alone are NOT enough for relevance - they must connect to what's being asked about
@@ -136,18 +100,18 @@ export function generateEvaluatePrompt({ input, statements }: { input: string; s
       - Measurement/quantity relevance counts as type-level relevance
       - Administrative/governance terms are only relevant if they relate to the question type
       - Descriptive facts about the subject should be marked as "no" unless they directly relate to the question type
-  
-  
+
+
       Examples of "no" statements:
           * "Japan has beautiful seasons" for "What is Japan's largest city?"
           * "Trees grow tall" for "How tall is Mount Everest?"
           * "The weather is nice" for "Who is the president?"
-  
+
       Example:
       Input: "What color is the sky during daytime?"
       Statements: [
         "The sky is blue during daytime",
-        "The sky is full of clouds", 
+        "The sky is full of clouds",
         "I had breakfast today",
         "Blue is a beautiful color",
         "Many birds fly in the sky",
@@ -200,28 +164,35 @@ export function generateEvaluatePrompt({ input, statements }: { input: string; s
               }}
           ]
       }}
-  
+
   The number of outcomes MUST MATCH the number of statements exactly.
-  
+
     Input:
-    ${input}
-  
-    Number of statements: ${statements.length === 0 ? '1' : statements.length}
-  
+    {input}
+
+    Number of statements: {statementCount}
+
     Statements:
-    ${statements}
-  
+    {statements}
+
     JSON:
     `;
-}
 
-export async function generateEvaluationPrompt({ agent, input, output }: LLMEvaluatorPromptArgs) {
-  const statementPrompt = generateEvaluationStatementsPrompt({ output });
-  const statements = await agent.generate(statementPrompt, {
-    output: z.object({
-      statements: z.array(z.string()),
-    }),
+export async function generateEvaluationPrompt({
+  input,
+  context,
+  settings,
+  output,
+  formatter,
+  template,
+}: LLMEvaluatorEvalPromptArgs) {
+  const statements = generateEvaluationStatementsPrompt({ output });
+  return formatter(template, {
+    input,
+    statements,
+    statementCount: statements.length,
+    ...settings,
+    context: context?.join(', ') || '',
+    output,
   });
-  const prompt = generateEvaluatePrompt({ input, statements: statements.object.statements });
-  return prompt;
 }
