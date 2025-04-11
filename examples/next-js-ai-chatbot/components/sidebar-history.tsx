@@ -42,13 +42,14 @@ import {
 import type { Chat } from '@/lib/db/schema';
 import { fetcher } from '@/lib/utils';
 import { useChatVisibility } from '@/hooks/use-chat-visibility';
+import { StorageThreadType } from '@mastra/core';
 
 type GroupedChats = {
-  today: Chat[];
-  yesterday: Chat[];
-  lastWeek: Chat[];
-  lastMonth: Chat[];
-  older: Chat[];
+  today: StorageThreadType[];
+  yesterday: StorageThreadType[];
+  lastWeek: StorageThreadType[];
+  lastMonth: StorageThreadType[];
+  older: StorageThreadType[];
 };
 
 const PureChatItem = ({
@@ -57,15 +58,15 @@ const PureChatItem = ({
   onDelete,
   setOpenMobile,
 }: {
-  chat: Chat;
+  chat: StorageThreadType;
   isActive: boolean;
   onDelete: (chatId: string) => void;
   setOpenMobile: (open: boolean) => void;
 }) => {
-  const { visibilityType, setVisibilityType } = useChatVisibility({
-    chatId: chat.id,
-    initialVisibility: chat.visibility,
-  });
+  // const { visibilityType, setVisibilityType } = useChatVisibility({
+  //   chatId: chat.id,
+  //   initialVisibility: chat.visibility,
+  // });
 
   return (
     <SidebarMenuItem>
@@ -87,7 +88,7 @@ const PureChatItem = ({
         </DropdownMenuTrigger>
 
         <DropdownMenuContent side="bottom" align="end">
-          <DropdownMenuSub>
+          {/* <DropdownMenuSub>
             <DropdownMenuSubTrigger className="cursor-pointer">
               <ShareIcon />
               <span>Share</span>
@@ -120,7 +121,7 @@ const PureChatItem = ({
                 </DropdownMenuItem>
               </DropdownMenuSubContent>
             </DropdownMenuPortal>
-          </DropdownMenuSub>
+          </DropdownMenuSub> */}
 
           <DropdownMenuItem
             className="cursor-pointer text-destructive focus:bg-destructive/15 focus:text-destructive dark:text-red-500"
@@ -148,7 +149,7 @@ export function SidebarHistory({ user }: { user: User | undefined }) {
     data: history,
     isLoading,
     mutate,
-  } = useSWR<Array<Chat>>(user ? '/api/history' : null, fetcher, {
+  } = useSWR<Array<StorageThreadType>>(user ? '/api/history' : null, fetcher, {
     fallbackData: [],
   });
 
@@ -232,7 +233,7 @@ export function SidebarHistory({ user }: { user: User | undefined }) {
     );
   }
 
-  const groupChatsByDate = (chats: Chat[]): GroupedChats => {
+  const groupChatsByDate = (chats: StorageThreadType[]): GroupedChats => {
     const now = new Date();
     const oneWeekAgo = subWeeks(now, 1);
     const oneMonthAgo = subMonths(now, 1);
