@@ -1,35 +1,50 @@
-export class Container {
+type RecordToTuple<T> = {
+  [K in keyof T]: [K, T[K]];
+}[keyof T][];
+
+export class Container<Values extends Record<string, any> | unknown = unknown> {
   private registry = new Map<string, unknown>();
 
-  constructor(iterable?: Iterable<readonly [string, unknown]> | null) {
+  constructor(
+    iterable?: Values extends Record<string, any>
+      ? RecordToTuple<Partial<Values>>
+      : Iterable<readonly [string, unknown]>,
+  ) {
     this.registry = new Map(iterable);
   }
 
   /**
-   * Register a value with a specific type
+   * Register a value with strict typing if `Values` is a Record and the key exists in it.
    */
-  public register<T>(key: string, value: T): void {
-    this.registry.set(key, value);
+  public register<K extends Values extends Record<string, any> ? keyof Values : string>(
+    key: K,
+    value: Values extends Record<string, any> ? (K extends keyof Values ? Values[K] : never) : unknown,
+  ): void {
+    // The type assertion `key as string` is safe because K always extends string ultimately.
+    this.registry.set(key as string, value);
   }
 
   /**
    * Get a value with its type
    */
-  public get<T>(key: string): T | undefined {
-    return this.registry.get(key) as T | undefined;
+  public get<
+    K extends Values extends Record<string, any> ? keyof Values : string,
+    R = Values extends Record<string, any> ? (K extends keyof Values ? Values[K] : never) : unknown,
+  >(key: string): R {
+    return this.registry.get(key) as R;
   }
 
   /**
    * Check if a key exists in the container
    */
-  public has(key: string): boolean {
+  public has<K extends Values extends Record<string, any> ? keyof Values : string>(key: K): boolean {
     return this.registry.has(key);
   }
 
   /**
    * Delete a value by key
    */
-  public delete(key: string): boolean {
+  public delete<K extends Values extends Record<string, any> ? keyof Values : string>(key: K): boolean {
     return this.registry.delete(key);
   }
 
@@ -43,22 +58,24 @@ export class Container {
   /**
    * Get all keys in the container
    */
-  public keys(): IterableIterator<string> {
-    return this.registry.keys();
+  public keys<R = Values extends Record<string, any> ? keyof Values : string>(): IterableIterator<R> {
+    return this.registry.keys() as IterableIterator<R>;
   }
 
   /**
    * Get all values in the container
    */
-  public values<T = any>(): IterableIterator<T> {
-    return this.registry.values() as IterableIterator<T>;
+  public values<R = Values extends Record<string, any> ? Values[keyof Values] : unknown>(): IterableIterator<R> {
+    return this.registry.values() as IterableIterator<R>;
   }
 
   /**
    * Get all entries in the container
    */
-  public entries<T = any>(): IterableIterator<[string, T]> {
-    return this.registry.entries() as IterableIterator<[string, T]>;
+  public entries<R = Values extends Record<string, any> ? Values[keyof Values] : unknown>(): IterableIterator<
+    [string, R]
+  > {
+    return this.registry.entries() as IterableIterator<[string, R]>;
   }
 
   /**
@@ -75,3 +92,28 @@ export class Container {
     this.registry.forEach(callbackfn as any);
   }
 }
+
+const x = new Container<{ b: number; c: string }>([
+  ['b', 1],
+  ['c', 'hello'],
+]);
+
+x.register('a', 'hello');
+x.register('b', 1);
+
+const v = x.get('b');
+
+const z = x.entries();
+// ^?
+
+const y = new Container([
+  ['a', 'hello'],
+  ['b', 1],
+]);
+
+y.register('a', 'hello');
+y.register('b', 1);
+
+const vy: number = y.get('a');
+const zy = y.keys();
+// ^?
