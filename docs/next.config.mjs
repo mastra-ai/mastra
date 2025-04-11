@@ -530,11 +530,16 @@ export default withNextra({
     },
     {
       source: "/docs/local-dev/creating-projects",
-      destination: "/docs/getting-started/creating-a-new-project",
+      destination: "/docs/local-dev/creating-a-new-project",
       permanent: true,
     },
     {
       source: "/docs/local-dev/sync",
+      destination: "/docs/integrations",
+      permanent: true,
+    },
+    {
+      source: "/docs/local-dev/syncs",
       destination: "/docs/integrations",
       permanent: true,
     },
