@@ -235,6 +235,12 @@ importers:
       '@mastra/core':
         specifier: workspace:*
         version: link:../../packages/core
+      '@mastra/mcp':
+        specifier: workspace:*
+        version: link:../../packages/mcp
+      '@mastra/mcp-registry-registry':
+        specifier: workspace:*
+        version: link:../../packages/mcp-registry-registry
       zod:
         specifier: ^3.24.2
         version: 3.24.2

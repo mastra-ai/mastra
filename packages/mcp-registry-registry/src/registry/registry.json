@@ -1,6 +1,22 @@
 {
   "registries": [
     {
+      "id": "apitracker",
+      "name": "apitracker",
+      "description": "Discover the best APIs and developer resources",
+      "url": "https://apitracker.com/",
+      "servers_url": "https://apitracker.io/api/mcp-servers",
+      "tags": ["verified"]
+    },
+    {
+      "id": "fleur",
+      "name": "Fleur",
+      "description": "Fleur is the app store for Claude",
+      "url": "https://www.fleurmcp.com/",
+      "servers_url": "https://raw.githubusercontent.com/fleuristes/app-registry/refs/heads/main/apps.json",
+      "tags": ["verified"]
+    },
+    {
       "id": "modelcontextprotocol-servers",
       "name": "modelcontextprotocol/servers",
       "description": "This repository is a collection of reference implementations for the Model Context Protocol (MCP).",
@@ -67,6 +83,7 @@
       "name": "MCP Run",
       "description": "One platform for vertical AI across your entire organization.",
       "url": "https://www.mcp.run/",
+      "servers_url": "https://www.mcp.run/api/servlets",
       "tags": ["verified"]
     },
     {
@@ -114,6 +131,7 @@
       "name": "Smithery",
       "description": "Extend your agent with 4,274 capabilities via Model Context Protocol servers.",
       "url": "https://smithery.ai/",
+      "servers_url": "https://registry.smithery.ai/servers",
       "tags": ["verified"],
       "count": 2208
     },

@@ -5,8 +5,8 @@ import { CallToolRequestSchema, ListToolsRequestSchema } from '@modelcontextprot
 import { z } from 'zod';
 import { zodToJsonSchema } from 'zod-to-json-schema';
 
-import { helloTool, helloInputSchema } from './tools/hello';
-import { registryTool, registryInputSchema } from './tools/registry';
+import { serversTool, serversInputSchema } from './tools/servers';
+import { listTool, listInputSchema } from './tools/list';
 import { fromPackageRoot } from './utils';
 
 const server = new Server(
@@ -25,14 +25,14 @@ const server = new Server(
 server.setRequestHandler(ListToolsRequestSchema, async () => ({
   tools: [
     {
-      name: 'registryHello',
-      description: helloTool.description,
-      inputSchema: zodToJsonSchema(helloInputSchema),
+      name: 'registryList',
+      description: listTool.description,
+      inputSchema: zodToJsonSchema(listInputSchema),
     },
     {
-      name: 'registryInfo',
-      description: registryTool.description,
-      inputSchema: zodToJsonSchema(registryInputSchema),
+      name: 'registryServers',
+      description: serversTool.description,
+      inputSchema: zodToJsonSchema(serversInputSchema),
     },
   ],
 }));
@@ -40,13 +40,13 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
 server.setRequestHandler(CallToolRequestSchema, async request => {
   try {
     switch (request.params.name) {
-      case 'registryHello': {
-        const args = helloInputSchema.parse(request.params.arguments);
-        return await helloTool.execute(args);
+      case 'registryList': {
+        const args = listInputSchema.parse(request.params.arguments);
+        return await listTool.execute(args);
       }
-      case 'registryInfo': {
-        const args = registryInputSchema.parse(request.params.arguments);
-        return await registryTool.execute(args);
+      case 'registryServers': {
+        const args = serversInputSchema.parse(request.params.arguments);
+        return await serversTool.execute(args);
       }
       default:
         return {
