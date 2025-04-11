@@ -26,6 +26,7 @@ export async function getEvaluatorsHandler({ mastra }: EvaluatorsContext): Promi
           instructions: (value as any)?.instructions,
           reasonTemplate: (value as any)?.reasonTemplate,
           evalTemplate: (value as any)?.evalTemplate,
+          settings: (value as any)?.settings,
         };
 
         acc[key] = newEvalObject;

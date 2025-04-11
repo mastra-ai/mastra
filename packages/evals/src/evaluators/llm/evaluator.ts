@@ -19,7 +19,7 @@ import type {
  */
 export class LLMEvaluator extends Evaluator {
   protected agent: Agent;
-  protected settings: EvaluatorSettings;
+  protected _settings: EvaluatorSettings;
   protected _name: string;
   protected reasonPrompt?: LLMEvaluatorReasonPrompt;
   protected evalPrompt?: LLMEvaluatorEvalPrompt;
@@ -30,7 +30,7 @@ export class LLMEvaluator extends Evaluator {
   constructor(config: EvaluatorConfig) {
     super();
     this._name = config.name;
-    this.settings = config.settings || {
+    this._settings = config.settings || {
       scale: 1,
       uncertaintyWeight: 0,
       context: [],
@@ -69,6 +69,10 @@ export class LLMEvaluator extends Evaluator {
 
   get reasonTemplate(): string | undefined {
     return this.reasonPrompt?.template;
+  }
+
+  get settings(): EvaluatorSettings {
+    return this._settings;
   }
 
   /**
@@ -158,6 +162,8 @@ export class LLMEvaluator extends Evaluator {
     if (!prompt) {
       return [];
     }
+
+    console.log('prompt', prompt);
 
     const result = await this.agent.generate(prompt, {
       output: z.object({
