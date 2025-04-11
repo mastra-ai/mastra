@@ -1,14 +1,8 @@
-import * as fs from 'node:fs/promises';
-import * as path from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { z } from 'zod';
-import { fromPackageRoot } from '../utils';
+import { registryData } from './registry';
+import { RegistryEntry, RegistryFile } from './types';
 
-// Get the directory name in ES modules
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-
-// Define the schema for registry entries
+// Define the schema for registry entries for validation
 const RegistryEntrySchema = z.object({
   id: z.string(),
   name: z.string(),
@@ -19,94 +13,18 @@ const RegistryEntrySchema = z.object({
   count: z.union([z.number(), z.string()]).optional(),
 });
 
-// Define the schema for the registry file
+// Define the schema for the registry file for validation
 const RegistryFileSchema = z.object({
   registries: z.array(RegistryEntrySchema),
 });
 
-export type RegistryEntry = z.infer<typeof RegistryEntrySchema>;
-export type RegistryFile = z.infer<typeof RegistryFileSchema>;
-
 /**
- * Reads the registry.json file and returns the parsed registry data
+ * Returns the registry data from the registry.ts file
  */
 export async function loadRegistryData(): Promise<RegistryFile> {
   try {
-    // Try multiple possible locations for the registry.json file
-    const possiblePaths = [
-      // Development path (in src directory)
-      path.join(__dirname, 'registry.json'),
-      // Production path (in dist directory)
-      path.join(process.cwd(), 'dist', 'registry', 'registry.json'),
-      // Root package path
-      path.join(process.cwd(), 'registry.json'),
-      // Try one directory up (for when running from dist)
-      path.join(process.cwd(), '..', 'registry.json'),
-      // Try src directory
-      path.join(process.cwd(), 'src', 'registry', 'registry.json'),
-    ];
-
-    let registryPath = '';
-    let data = '';
-
-    // Try each path until we find one that works
-    for (const tryPath of possiblePaths) {
-      try {
-        console.log('Trying to load registry from:', tryPath);
-        data = await fs.readFile(tryPath, 'utf-8');
-        registryPath = tryPath;
-        console.log('Successfully loaded registry from:', registryPath);
-        break;
-      } catch (e) {
-        // Continue to the next path
-      }
-    }
-
-    if (!data) {
-      // If we couldn't find the file, use the embedded registry data
-      console.log('Could not find registry.json file, using embedded registry data');
-      // Include the registry data directly in the code as a fallback
-      data = JSON.stringify({
-        registries: [
-          {
-            id: 'apitracker',
-            name: 'apitracker',
-            description: 'Discover the best APIs and developer resources',
-            url: 'https://apitracker.com/',
-            servers_url: 'https://apitracker.io/api/mcp-servers',
-            tags: ['verified'],
-          },
-          {
-            id: 'fleur',
-            name: 'Fleur',
-            description: 'Fleur is the app store for Claude',
-            url: 'https://www.fleurmcp.com/',
-            servers_url: 'https://raw.githubusercontent.com/fleuristes/app-registry/refs/heads/main/apps.json',
-            tags: ['verified'],
-          },
-          {
-            id: 'mcp-run',
-            name: 'MCP Run',
-            description: 'One platform for vertical AI across your entire organization.',
-            url: 'https://www.mcp.run/',
-            servers_url: 'https://www.mcp.run/api/servlets',
-            tags: ['verified'],
-          },
-          {
-            id: 'smithery',
-            name: 'Smithery',
-            description: 'Extend your agent with 4,274 capabilities via Model Context Protocol servers.',
-            url: 'https://smithery.ai/',
-            servers_url: 'https://registry.smithery.ai/servers',
-            tags: ['verified'],
-            count: 2208,
-          },
-        ],
-      });
-    }
-
-    const parsedData = JSON.parse(data);
-    return RegistryFileSchema.parse(parsedData);
+    // Validate the registry data against our schema
+    return RegistryFileSchema.parse(registryData);
   } catch (error) {
     console.error('Error loading registry data:', error);
     return { registries: [] };
