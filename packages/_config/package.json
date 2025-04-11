@@ -12,7 +12,7 @@
   "scripts": {},
   "keywords": [],
   "author": "",
-  "license": "ISC",
+  "license": "Elastic-2.0",
   "dependencies": {
     "@vitest/eslint-plugin": "^1.1.38",
     "eslint-plugin-import-x": "^4.6.1",

@@ -54,10 +54,6 @@ interface DataTableProps<TData, TValue> {
    */
   gotoPreviousPage?: () => void;
   /**
-   * table max height
-   */
-  maxHeight?: string;
-  /**
    * disable table container radius
    * @default false
    */
@@ -96,7 +92,6 @@ interface DataTableProps<TData, TValue> {
 }
 
 export const DataTable = <TData, TValue>({
-  title,
   icon,
   withoutBorder = false,
   columns,
@@ -105,7 +100,6 @@ export const DataTable = <TData, TValue>({
   pagination,
   gotoNextPage,
   gotoPreviousPage,
-  maxHeight,
   withoutRadius = false,
   disabledFlex,
   emptyStateHeight,
@@ -149,33 +143,24 @@ export const DataTable = <TData, TValue>({
         <Table>
           <TableHeader className="sticky top-0">
             {table.getHeaderGroups().map(headerGroup => (
-              <TableRow key={headerGroup.id} className={cn('z-50 bg-[#0f0f0f]', title && 'hover:bg-transparent')}>
-                {icon && !title ? <TableHead className="w-9 rounded-tl-md"></TableHead> : null}
-                {title ? (
-                  <TableHead
-                    className={cn('px-0', !withoutRadius && 'rounded-tl-md rounded-tr-md')}
-                    colSpan={headerGroup.headers.length + (icon ? 1 : 0)}
-                  >
-                    {title}
-                  </TableHead>
-                ) : (
-                  headerGroup.headers.map(header => {
-                    return (
-                      <TableHead
-                        className={cn(
-                          'last:pr-3',
-                          !icon && 'first:pl-3',
-                          !withoutBorder && 'border-r last:border-r-0',
-                          !withoutRadius && 'last:rounded-tr-md',
-                          !withoutRadius && !icon && 'first:rounded-tl-md',
-                        )}
-                        key={header.id}
-                      >
-                        {header.isPlaceholder ? null : flexRender(header.column.columnDef.header, header.getContext())}
-                      </TableHead>
-                    );
-                  })
-                )}
+              <TableRow key={headerGroup.id} className={cn('z-50 bg-[#0f0f0f]', 'hover:bg-transparent')}>
+                {icon ? <TableHead className="w-9 rounded-tl-md"></TableHead> : null}
+                {headerGroup.headers.map(header => {
+                  return (
+                    <TableHead
+                      className={cn(
+                        'last:pr-3',
+                        !icon && 'first:pl-3',
+                        !withoutBorder && 'border-r last:border-r-0',
+                        !withoutRadius && 'last:rounded-tr-md',
+                        !withoutRadius && !icon && 'first:rounded-tl-md',
+                      )}
+                      key={header.id}
+                    >
+                      {header.isPlaceholder ? null : flexRender(header.column.columnDef.header, header.getContext())}
+                    </TableHead>
+                  );
+                })}
               </TableRow>
             ))}
           </TableHeader>
@@ -216,7 +201,7 @@ export const DataTable = <TData, TValue>({
               ))
             ) : (
               <TableRow>
-                <TableCell colSpan={columns.length} className={cn('h-24 text-center', emptyStateHeight)}>
+                <TableCell colSpan={columns.length} className={cn('h-24 text-center w-full', emptyStateHeight)}>
                   No {emptyText || 'results'}
                 </TableCell>
               </TableRow>

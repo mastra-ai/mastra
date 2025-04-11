@@ -170,10 +170,21 @@ const sseClient = new MastraMCPClient({
   name: "sse-client",
   server: {
     url: new URL("https://your-mcp-server.com/sse"),
-    // Optional fetch request configuration
+    // Optional fetch request configuration - Note: requestInit alone isn't enough for SSE
     requestInit: {
       headers: {
         Authorization: "Bearer your-token",
+      },
+    },
+    // Required for SSE connections with custom headers
+    eventSourceInit: {
+      fetch(input: Request | URL | string, init?: RequestInit) {
+        const headers = new Headers(init?.headers || {});
+        headers.set('Authorization', 'Bearer your-token');
+        return fetch(input, {
+          ...init,
+          headers,
+        });
       },
     },
   },
@@ -181,6 +192,14 @@ const sseClient = new MastraMCPClient({
 
 // The rest of the usage is identical to the stdio example
 ```
+
+### Important Note About SSE Authentication
+
+When using SSE connections with authentication or custom headers, you need to configure both `requestInit` and `eventSourceInit`. This is because SSE connections use the browser's EventSource API, which doesn't support custom headers directly. 
+
+
+The `eventSourceInit` configuration allows you to customize the underlying fetch request used for the SSE connection, ensuring your authentication headers are properly included.
+Without `eventSourceInit`, authentication headers specified in `requestInit` won't be included in the connection request, leading to 401 Unauthorized errors.
 
 ## Related Information
 

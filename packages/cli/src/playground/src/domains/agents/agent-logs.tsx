@@ -21,7 +21,7 @@ export function AgentLogs({ agentId }: { agentId: string }) {
           <p className="text-gray-300/60">
             No log drains. By default, logs are sent to the console. To configure log drains see{' '}
             <a
-              href="https://mastra.ai/docs/reference/observability/create-logger#upstash-logger-remote-log-drain"
+              href="https://mastra.ai/reference/observability/create-logger#upstash-logger-remote-log-drain"
               target="_blank"
               rel="noopener"
               className=" hover:text-gray-100 underline"
