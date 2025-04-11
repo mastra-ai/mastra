@@ -36,7 +36,7 @@ export default function Network() {
           initialMessages={isMessagesLoading ? undefined : (messages as Message[])}
         />
       </div>
-      <div className="flex flex-col">
+      <div>
         <NetworkInformation networkId={networkId!} />
       </div>
     </section>
