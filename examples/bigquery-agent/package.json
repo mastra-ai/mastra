@@ -1,0 +1,22 @@
+{
+  "name": "bigquery-agent",
+  "type": "module",
+  "private": true,
+  "description": "",
+  "main": "index.js",
+  "version": "0.0.1",
+  "scripts": {
+    "dev": "mastra dev"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "@ai-sdk/openai": "latest",
+    "@google-cloud/bigquery": "^7.9.3",
+    "@mastra/core": "workspace:*",
+    "@mastra/memory": "workspace:*",
+    "mastra": "workspace:*",
+    "zod": "^3.24.2"
+  }
+}
