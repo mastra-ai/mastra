@@ -23,7 +23,8 @@
         "default": "./dist/tokens.es.js"
       },
       "require": {
-        "default": "./dist/tokens.cjs.js"
+        "default": "./dist/tokens.cjs.js",
+        "types": "./dist/tokens.d.ts"
       }
     }
   },
