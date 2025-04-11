@@ -11,6 +11,7 @@ import type {
   GetToolResponse,
   ClientOptions,
   StreamParams,
+  AgentStreamParams,
 } from '../types';
 
 import { BaseResource } from './base';
@@ -144,7 +145,7 @@ export class Agent extends BaseResource {
     params: StreamParams<T>,
   ): Promise<
     Response & {
-      processDataStream: (options?: Omit<Parameters<typeof processDataStream>[0], 'stream'>) => Promise<void>;
+      processDataStream: (options?: AgentStreamParams) => Promise<void>;
     }
   > {
     const processedParams = {
@@ -157,7 +158,7 @@ export class Agent extends BaseResource {
     };
 
     const response: Response & {
-      processDataStream: (options?: Omit<Parameters<typeof processDataStream>[0], 'stream'>) => Promise<void>;
+      processDataStream: (options?: AgentStreamParams) => Promise<void>;
     } = await this.request(`/api/agents/${this.agentId}/stream`, {
       method: 'POST',
       body: processedParams,

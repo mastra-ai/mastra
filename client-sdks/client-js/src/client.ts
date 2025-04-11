@@ -1,4 +1,4 @@
-import { Agent, MemoryThread, Tool, Workflow, Vector, BaseResource, Network } from './resources';
+import { Agent, MemoryThread, Tool, Workflow, Vector, BaseResource, Network, RealtimeConnection } from './resources';
 import type {
   ClientOptions,
   CreateMemoryThreadParams,
@@ -17,8 +17,10 @@ import type {
   RequestOptions,
   SaveMessageToMemoryParams,
   SaveMessageToMemoryResponse,
+  RealtimeClientConnectOptions,
+  BrowserTool,
 } from './types';
-
+import { z } from 'zod';
 export class MastraClient extends BaseResource {
   constructor(options: ClientOptions) {
     super(options);
@@ -219,5 +221,24 @@ export class MastraClient extends BaseResource {
    */
   public getNetwork(networkId: string) {
     return new Network(this.options, networkId);
+  }
+
+  /**
+   * Executes a tool
+   * @param toolId - ID of the tool to execute
+   * @param data - Input for the tool
+   * @returns Promise containing the tool response
+   */
+  public executeTool(toolId: string, data: any) {
+    return this.request(`/api/tools/${toolId}/execute`, { method: 'POST', body: { data } });
+  }
+
+  /**
+   * Creates a new realtime connection
+   * @param connectOptions - Options for the realtime connection
+   * @returns RealtimeConnection instance
+   */
+  public createRealtimeConnection(connectOptions: RealtimeClientConnectOptions) {
+    return new RealtimeConnection(this.options, connectOptions).connect();
   }
 }

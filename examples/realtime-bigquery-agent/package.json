@@ -1,0 +1,45 @@
+{
+  "name": "examples-realtime-bigquery-agent",
+  "private": true,
+  "scripts": {
+    "dev": "next dev --turbo",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint"
+  },
+  "dependencies": {
+    "@ai-sdk/openai": "latest",
+    "@assistant-ui/react": "0.7.85",
+    "@assistant-ui/react-markdown": "^0.7.21",
+    "@assistant-ui/react-ui": "^0.1.8",
+    "@mastra/client-js": "workspace:*",
+    "@mastra/playground-ui": "workspace:*",
+    "@radix-ui/react-slot": "^1.1.2",
+    "@radix-ui/react-tooltip": "^1.1.8",
+    "axios": "^1.8.2",
+    "class-variance-authority": "^0.7.1",
+    "clsx": "^2.1.1",
+    "lucide-react": "^0.486.0",
+    "next": "15.0.3",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "react-markdown": "^9.1.0",
+    "recharts": "^2.15.1",
+    "remark-gfm": "^4.0.1",
+    "tailwind-merge": "^3.1.0",
+    "tailwindcss-animate": "^1.0.7",
+    "zod": "^3.24.2",
+    "zod-to-json-schema": "^3.24.4"
+  },
+  "devDependencies": {
+    "@types/node": "^22.13.10",
+    "@types/react": "^19.0.10",
+    "@types/react-dom": "^19.0.4",
+    "eslint": "^8.57.1",
+    "eslint-config-next": "15.0.3",
+    "postcss": "^8.5.3",
+    "tailwindcss": "^3.4.17",
+    "typescript": "^5.8.2"
+  },
+  "version": "0.0.0"
+}

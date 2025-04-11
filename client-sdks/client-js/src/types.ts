@@ -13,7 +13,8 @@ import type {
 import type { AgentGenerateOptions, AgentStreamOptions } from '@mastra/core/agent';
 import type { JSONSchema7 } from 'json-schema';
 import type { ZodSchema } from 'zod';
-
+import type { processDataStream } from '@ai-sdk/ui-utils';
+import { z } from 'zod';
 export interface ClientOptions {
   /** Base URL for API requests */
   baseUrl: string;
@@ -221,4 +222,34 @@ export interface GetNetworkResponse {
     modelId: string;
   };
   state?: Record<string, any>;
+}
+
+export type AgentStreamParams = Omit<Parameters<typeof processDataStream>[0], 'stream'>;
+
+export type RealtimeClientConnectOptions = {
+  model: string;
+  voice: string;
+  browserTools: Record<string, BrowserTool<any>>;
+  instructions: string;
+  initialMessage: string;
+  onMessage?: (data: { type: string; data: unknown }) => void;
+} & AgentStreamParams;
+
+export type ExecuteToolInputFn<T = unknown> = (input: T, { connection }: { connection: RealtimeConnection }) => void;
+
+export interface BrowserTool<TSchemaIn extends z.ZodSchema> {
+  id: string;
+  description: string;
+  inputSchema: TSchemaIn;
+  execute: ExecuteToolInputFn<z.infer<TSchemaIn>>;
+}
+
+export interface RealtimeConnection {
+  sendMessage: (message: unknown) => void;
+  sendResponse: (instructions: string) => void;
+  sendSessionUpdate: (session: {
+    instructions?: string;
+    tools?: unknown[];
+    tool_choice?: 'auto' | 'none' | 'required';
+  }) => void;
 }

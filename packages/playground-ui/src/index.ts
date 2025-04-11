@@ -13,3 +13,4 @@ export * from './ds/components/Header/index';
 export * from './ds/components/Logo/index';
 export * from './ds/components/Table/index';
 export * from './ds/components/Txt/index';
+export * from './components/assistant-ui/tool-fallback';
