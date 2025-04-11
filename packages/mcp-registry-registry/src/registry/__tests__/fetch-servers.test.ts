@@ -18,15 +18,6 @@ describe('getServersFromRegistry integration test', () => {
     console.log('==========================\n');
   });
 
-  // Helper function to validate server entries
-  const validateServerEntries = (servers: ServerEntry[]) => {
-    servers.forEach((server: ServerEntry) => {
-      expect(server.id).toBeDefined();
-      expect(server.name).toBeDefined();
-      expect(server.description).toBeDefined();
-    });
-  };
-
   it('should search servers by name or description', async () => {
     try {
       // First get all servers
