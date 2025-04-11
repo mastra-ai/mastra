@@ -104,7 +104,7 @@ const withNextra = nextra({
           {
             scope: "token.link",
             settings: {
-              foreground: "",
+              foreground: "#fff",
             },
           },
         ],
@@ -541,6 +541,191 @@ export default withNextra({
     {
       source: "/docs/guides/:path*",
       destination: "/guides/guide/:path*",
+      permanent: true,
+    },
+    {
+      source: "/examples/rag/adjust-chunk-delimiters",
+      destination: "/examples/rag/chunking/adjust-chunk-delimiters",
+      permanent: true,
+    },
+    {
+      source: "/examples/rag/adjust-chunk-size",
+      destination: "/examples/rag/chunking/adjust-chunk-size",
+      permanent: true,
+    },
+    {
+      source: "/examples/rag/basic-rag",
+      destination: "/examples/rag/usage/basic-rag",
+      permanent: true,
+    },
+    {
+      source: "/examples/rag/chunk-html",
+      destination: "/examples/rag/chunking/chunk-html",
+      permanent: true,
+    },
+    {
+      source: "/examples/rag/chunk-json",
+      destination: "/examples/rag/chunking/chunk-json",
+      permanent: true,
+    },
+    {
+      source: "/examples/rag/chunk-markdown",
+      destination: "/examples/rag/chunking/chunk-markdown",
+      permanent: true,
+    },
+    {
+      source: "/examples/rag/chunk-text",
+      destination: "/examples/rag/chunking/chunk-text",
+      permanent: true,
+    },
+    {
+      source: "/examples/rag/chunking",
+      destination: "/examples/rag/chunking/chunk-text",
+      permanent: true,
+    },
+    {
+      source: "/examples/rag/cleanup-rag",
+      destination: "/examples/rag/usage/cleanup-rag",
+      permanent: true,
+    },
+    {
+      source: "/examples/rag/cot-rag",
+      destination: "/examples/rag/usage/cot-rag",
+      permanent: true,
+    },
+    {
+      source: "/examples/rag/cot-workflow-rag",
+      destination: "/examples/rag/usage/cot-workflow-rag",
+      permanent: true,
+    },
+    {
+      source: "/examples/rag/embed-chunk-array",
+      destination: "/examples/rag/embedding/embed-chunk-array",
+      permanent: true,
+    },
+    {
+      source: "/examples/rag/embed-text-chunk",
+      destination: "/examples/rag/embedding/embed-text-chunk",
+      permanent: true,
+    },
+    {
+      source: "/examples/rag/embed-text-with-cohere",
+      destination: "/examples/rag/embedding/embed-text-with-cohere",
+      permanent: true,
+    },
+    {
+      source: "/examples/rag/filter-rag",
+      destination: "/examples/rag/usage/filter-rag",
+      permanent: true,
+    },
+    {
+      source: "/examples/rag/graph-rag",
+      destination: "/examples/rag/usage/graph-rag",
+      permanent: true,
+    },
+    {
+      source: "/examples/rag/hybrid-vector-search",
+      destination: "/examples/rag/query/hybrid-vector-search",
+      permanent: true,
+    },
+    {
+      source: "/examples/rag/insert-embedding-in-astra",
+      destination: "/reference/rag/astra",
+      permanent: true,
+    },
+    {
+      source: "/examples/rag/insert-embedding-in-pgvector",
+      destination: "/reference/rag/pg",
+      permanent: true,
+    },
+    {
+      source: "/examples/rag/insert-embedding-in-chroma",
+      destination: "/reference/rag/chroma",
+      permanent: true,
+    },
+    {
+      source: "/examples/rag/insert-embedding-in-libsql",
+      destination: "/reference/rag/libsql",
+      permanent: true,
+    },
+    {
+      source: "/examples/rag/insert-embedding-in-pinecone",
+      destination: "/reference/rag/pinecone",
+      permanent: true,
+    },
+    {
+      source: "/examples/rag/insert-embedding-in-qdrant",
+      destination: "/reference/rag/qdrant",
+      permanent: true,
+    },
+    {
+      source: "/examples/rag/insert-embedding-in-upstash",
+      destination: "/reference/rag/upstash",
+      permanent: true,
+    },
+    {
+      source: "/examples/rag/insert-embedding-in-vectorize",
+      destination: "/reference/rag/pg",
+      permanent: true,
+    },
+    {
+      source: "/examples/rag/metadata-extraction",
+      destination: "/examples/rag/embedding/metadata-extraction",
+      permanent: true,
+    },
+    {
+      source: "/examples/rag/metadata-extraction",
+      destination: "/examples/rag/embedding/metadata-extraction",
+      permanent: true,
+    },
+    {
+      source: "/examples/rag/query/metadata-extraction",
+      destination: "/examples/rag/embedding/metadata-extraction",
+      permanent: true,
+    },
+    {
+      source: "/examples/rag/rerank",
+      destination: "/examples/rag/rerank/rerank",
+      permanent: true,
+    },
+    {
+      source: "/examples/rag/rerank-rag",
+      destination: "/examples/rag/rerank/rerank",
+      permanent: true,
+    },
+    {
+      source: "/examples/rag/reranking-with-cohere",
+      destination: "/examples/rag/rerank/reranking-with-cohere",
+      permanent: true,
+    },
+    {
+      source: "/examples/rag/retrieve-results",
+      destination: "/examples/rag/query/retrieve-results",
+      permanent: true,
+    },
+    {
+      source: "/examples/rag/retrieve-results",
+      destination: "/examples/rag/query/retrieve-results",
+      permanent: true,
+    },
+    {
+      source: "/examples/rag/usage/rerank-rag",
+      destination: "/examples/rag/rerank/rerank",
+      permanent: true,
+    },
+    {
+      source: "/examples/rag/retrieve-results",
+      destination: "/examples/rag/query/retrieve-results",
+      permanent: true,
+    },
+    {
+      source: "/examples/voice",
+      destination: "/examples/voice/text-to-speech",
+      permanent: true,
+    },
+    {
+      source: "/examples/workflows/subscribed-steps",
+      destination: "/examples/workflows/sequential-steps",
       permanent: true,
     },
   ],
