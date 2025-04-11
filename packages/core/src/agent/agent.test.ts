@@ -9,6 +9,7 @@ import { TestIntegration } from '../integration/openapi-toolset.mock';
 import { Mastra } from '../mastra';
 import { createTool } from '../tools';
 import { CompositeVoice, MastraVoice } from '../voice';
+import { DefaultRealtime } from '../realtime';
 
 import { Agent } from './index';
 
