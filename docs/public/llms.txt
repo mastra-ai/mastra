@@ -27,20 +27,21 @@ Each section contains detailed markdown files that provide comprehensive informa
 - [Overview](https://mastra.ai/docs/evals/overview): Understanding how to evaluate and measure AI agent quality using Mastra evals.
 - [Running in CI](https://mastra.ai/docs/evals/running-in-ci): Learn how to run Mastra evals in your CI/CD pipeline to monitor agent quality over time.
 - [Textual Evals](https://mastra.ai/docs/evals/textual-evals): Understand how Mastra uses LLM-as-judge methodology to evaluate text quality.
+- [Licensing](https://mastra.ai/docs/faq): Mastra License
 - [Using with AI SDK](https://mastra.ai/docs/frameworks/ai-sdk): Learn how Mastra leverages the AI SDK library and how you can leverage it further with Mastra
 - [Getting started with Mastra and NextJS | Mastra Guides](https://mastra.ai/docs/frameworks/next-js): Guide on integrating Mastra with NextJS.
 - [Installing Mastra Locally | Getting Started | Mastra Docs](https://mastra.ai/docs/getting-started/installation): Guide on installing Mastra and setting up the necessary prerequisites for running it with various LLM providers.
 - [Using with Cursor/Windsurf | Getting Started | Mastra Docs](https://mastra.ai/docs/getting-started/mcp-docs-server): Learn how to use the Mastra MCP documentation server in your IDE to turn it into an agentic Mastra expert.
 - [Local Project Structure | Getting Started | Mastra Docs](https://mastra.ai/docs/getting-started/project-structure): Guide on organizing folders and files in Mastra, including best practices and recommended structures.
-- [Building an AI Recruiter | Mastra Workflows | Guides](https://mastra.ai/docs/guides/ai-recruiter): Guide on building a recruiter workflow in Mastra to gather and process candidate information using LLMs.
-- [Building an AI Chef Assistant | Mastra Agent Guides](https://mastra.ai/docs/guides/chef-michel): Guide on creating a Chef Assistant agent in Mastra to help users cook meals with available ingredients.
-- [Building a Research Paper Assistant | Mastra RAG Guides](https://mastra.ai/docs/guides/research-assistant): Guide on creating an AI research assistant that can analyze and answer questions about academic papers using RAG.
-- [Building an AI Stock Agent | Mastra Agents | Guides](https://mastra.ai/docs/guides/stock-agent): Guide on creating a simple stock agent in Mastra to fetch the last days closing stock price for a given symbol.
 - [Introduction | Mastra Docs](https://mastra.ai/docs): Mastra is a TypeScript agent framework. It helps you build AI applications and features quickly. It gives you the set of primitives you need: workflows, agents, RAG, integrations, syncs and evals.
 - [Using Mastra Integrations | Mastra Local Development Docs](https://mastra.ai/docs/integrations): Documentation for Mastra integrations, which are auto-generated, type-safe API clients for third-party services.
 - [Adding to an Existing Project | Mastra Local Development Docs](https://mastra.ai/docs/local-dev/add-to-existing-project): Add Mastra to your existing Node.js applications
 - [Creating a new Project | Mastra Local Development Docs](https://mastra.ai/docs/local-dev/creating-a-new-project): Create new Mastra projects or add Mastra to existing Node.js applications using the CLI
 - [Inspecting Agents with `mastra dev` | Mastra Local Dev Docs](https://mastra.ai/docs/local-dev/mastra-dev): Documentation for the Mastra local development environment for Mastra applications.
+- [memory-processors](https://mastra.ai/docs/memory/memory-processors)
+- [overview](https://mastra.ai/docs/memory/overview)
+- [semantic-recall](https://mastra.ai/docs/memory/semantic-recall)
+- [working-memory](https://mastra.ai/docs/memory/working-memory)
 - [Logging | Mastra Observability Documentation](https://mastra.ai/docs/observability/logging): Documentation on effective logging in Mastra, crucial for understanding application behavior and improving AI accuracy.
 - [Next.js Tracing | Mastra Observability Documentation](https://mastra.ai/docs/observability/nextjs-tracing): Set up OpenTelemetry tracing for Next.js applications
 - [Tracing | Mastra Observability Documentation](https://mastra.ai/docs/observability/tracing): Set up OpenTelemetry tracing for Mastra applications
@@ -48,6 +49,98 @@ Each section contains detailed markdown files that provide comprehensive informa
 - [RAG (Retrieval-Augmented Generation) in Mastra | Mastra Docs](https://mastra.ai/docs/rag/overview): Overview of Retrieval-Augmented Generation (RAG) in Mastra, detailing its capabilities for enhancing LLM outputs with relevant context.
 - [Retrieval, Semantic Search, Reranking | RAG | Mastra Docs](https://mastra.ai/docs/rag/retrieval): Guide on retrieval processes in Mastras RAG systems, including semantic search, filtering, and re-ranking.
 - [Storing Embeddings in A Vector Database | Mastra Docs](https://mastra.ai/docs/rag/vector-databases): Guide on vector storage options in Mastra, including embedded and dedicated vector databases for similarity search.
+- [Storage in Mastra | Mastra Docs](https://mastra.ai/docs/storage/overview): Overview of Mastras storage system and data persistence capabilities.
+- [Voice in Mastra | Mastra Docs](https://mastra.ai/docs/voice/overview): Overview of voice capabilities in Mastra, including text-to-speech, speech-to-text, and real-time voice-to-voice interactions.
+- [Speech-to-Text (STT) in Mastra | Mastra Docs](https://mastra.ai/docs/voice/speech-to-text): Overview of Speech-to-Text capabilities in Mastra, including configuration, usage, and integration with voice providers.
+- [Text-to-Speech (TTS) in Mastra | Mastra Docs](https://mastra.ai/docs/voice/text-to-speech): Overview of Text-to-Speech capabilities in Mastra, including configuration, usage, and integration with voice providers.
+- [Voice-to-Voice Capabilities in Mastra | Mastra Docs](https://mastra.ai/docs/voice/voice-to-voice): Overview of voice-to-voice capabilities in Mastra, including real-time interactions and event-driven architecture.
+- [Branching, Merging, Conditions | Workflows | Mastra Docs](https://mastra.ai/docs/workflows/control-flow): Control flow in Mastra workflows allows you to manage branching, merging, and conditions to construct workflows that meet your logic requirements.
+- [Dynamic Workflows | Mastra Docs](https://mastra.ai/docs/workflows/dynamic-workflows): Learn how to create dynamic workflows within workflow steps, allowing for flexible workflow creation based on runtime conditions.
+- [Error Handling in Workflows | Mastra Docs](https://mastra.ai/docs/workflows/error-handling): Learn how to handle errors in Mastra workflows using step retries, conditional branching, and monitoring.
+- [nested-workflows](https://mastra.ai/docs/workflows/nested-workflows)
+- [Handling Complex LLM Operations | Workflows | Mastra](https://mastra.ai/docs/workflows/overview): Workflows in Mastra help you orchestrate complex sequences of operations with features like branching, parallel execution, resource suspension, and more.
+- [Creating Steps and Adding to Workflows | Mastra Docs](https://mastra.ai/docs/workflows/steps): Steps in Mastra workflows provide a structured way to manage operations by defining inputs, outputs, and execution logic.
+- [Suspend & Resume Workflows | Human-in-the-Loop | Mastra Docs](https://mastra.ai/docs/workflows/suspend-and-resume): Suspend and resume in Mastra workflows allows you to pause execution while waiting for external input or resources.
+- [Data Mapping with Workflow Variables | Mastra Docs](https://mastra.ai/docs/workflows/variables): Learn how to use workflow variables to map data between steps and create dynamic data flows in your Mastra workflows.
+
+## examples
+- [Example: Adding Voice Capabilities | Agents | Mastra](https://mastra.ai/examples/agents/adding-voice-capabilities): Example of adding voice capabilities to Mastra agents, enabling them to speak and listen using different voice providers.
+- [Example: Calling Agentic Workflows | Agents | Mastra Docs](https://mastra.ai/examples/agents/agentic-workflows): Example of creating AI workflows in Mastra, demonstrating integration of external APIs with LLM-powered planning.
+- [Example: Categorizing Birds | Agents | Mastra Docs](https://mastra.ai/examples/agents/bird-checker): Example of using a Mastra AI Agent to determine if an image from Unsplash depicts a bird.
+- [Example: Hierarchical Multi-Agent System | Agents | Mastra](https://mastra.ai/examples/agents/hierarchical-multi-agent): Example of creating a hierarchical multi-agent system using Mastra, where agents interact through tool functions.
+- [Example: Multi-Agent Workflow | Agents | Mastra Docs](https://mastra.ai/examples/agents/multi-agent-workflow): Example of creating an agentic workflow in Mastra, where work product is passed between multiple agents.
+- [Example: Agents with a System Prompt | Agents | Mastra Docs](https://mastra.ai/examples/agents/system-prompt): Example of creating an AI agent in Mastra with a system prompt to define its personality and capabilities.
+- [Example: Giving an Agent a Tool | Agents | Mastra Docs](https://mastra.ai/examples/agents/using-a-tool): Example of creating an AI agent in Mastra that uses a dedicated tool to provide weather information.
+- [Example: Answer Relevancy | Evals | Mastra Docs](https://mastra.ai/examples/evals/answer-relevancy): Example of using the Answer Relevancy metric to evaluate response relevancy to queries.
+- [Example: Bias | Evals | Mastra Docs](https://mastra.ai/examples/evals/bias): Example of using the Bias metric to evaluate responses for various forms of bias.
+- [Example: Completeness | Evals | Mastra Docs](https://mastra.ai/examples/evals/completeness): Example of using the Completeness metric to evaluate how thoroughly responses cover input elements.
+- [Example: Content Similarity | Evals | Mastra Docs](https://mastra.ai/examples/evals/content-similarity): Example of using the Content Similarity metric to evaluate text similarity between content.
+- [Example: Context Position | Evals | Mastra Docs](https://mastra.ai/examples/evals/context-position): Example of using the Context Position metric to evaluate sequential ordering in responses.
+- [Example: Context Precision | Evals | Mastra Docs](https://mastra.ai/examples/evals/context-precision): Example of using the Context Precision metric to evaluate how precisely context information is used.
+- [Example: Context Relevancy | Evals | Mastra Docs](https://mastra.ai/examples/evals/context-relevancy): Example of using the Context Relevancy metric to evaluate how relevant context information is to a query.
+- [Example: Contextual Recall | Evals | Mastra Docs](https://mastra.ai/examples/evals/contextual-recall): Example of using the Contextual Recall metric to evaluate how well responses incorporate context information.
+- [Example: Custom Eval | Evals | Mastra Docs](https://mastra.ai/examples/evals/custom-eval): Example of creating custom LLM-based evaluation metrics in Mastra.
+- [Example: Faithfulness | Evals | Mastra Docs](https://mastra.ai/examples/evals/faithfulness): Example of using the Faithfulness metric to evaluate how factually accurate responses are compared to context.
+- [Example: Hallucination | Evals | Mastra Docs](https://mastra.ai/examples/evals/hallucination): Example of using the Hallucination metric to evaluate factual contradictions in responses.
+- [Example: Keyword Coverage | Evals | Mastra Docs](https://mastra.ai/examples/evals/keyword-coverage): Example of using the Keyword Coverage metric to evaluate how well responses cover important keywords from input text.
+- [Example: Prompt Alignment | Evals | Mastra Docs](https://mastra.ai/examples/evals/prompt-alignment): Example of using the Prompt Alignment metric to evaluate instruction adherence in responses.
+- [Example: Summarization | Evals | Mastra Docs](https://mastra.ai/examples/evals/summarization): Example of using the Summarization metric to evaluate how well LLM-generated summaries capture content while maintaining factual accuracy.
+- [Example: Textual Difference | Evals | Mastra Docs](https://mastra.ai/examples/evals/textual-difference): Example of using the Textual Difference metric to evaluate similarity between text strings by analyzing sequence differences and changes.
+- [Example: Tone Consistency | Evals | Mastra Docs](https://mastra.ai/examples/evals/tone-consistency): Example of using the Tone Consistency metric to evaluate emotional tone patterns and sentiment consistency in text.
+- [Example: Toxicity | Evals | Mastra Docs](https://mastra.ai/examples/evals/toxicity): Example of using the Toxicity metric to evaluate responses for harmful content and toxic language.
+- [Example: Word Inclusion | Evals | Mastra Docs](https://mastra.ai/examples/evals/word-inclusion): Example of creating a custom metric to evaluate word inclusion in output text.
+- [Examples List: Workflows, Agents, RAG | Mastra Docs](https://mastra.ai/examples): Explore practical examples of AI development with Mastra, including text generation, RAG implementations, structured outputs, and multi-modal interactions. Learn how to build AI applications using OpenAI, Anthropic, and Google Gemini.
+- [Memory Processors](https://mastra.ai/examples/memory/memory-processors): Example of using memory processors to filter and transform recalled messages
+- [memory-with-libsql](https://mastra.ai/examples/memory/memory-with-libsql)
+- [memory-with-pg](https://mastra.ai/examples/memory/memory-with-pg)
+- [memory-with-upstash](https://mastra.ai/examples/memory/memory-with-upstash)
+- [Streaming Working Memory (advanced)](https://mastra.ai/examples/memory/streaming-working-memory-advanced): Example of using working memory to maintain a todo list across conversations
+- [Streaming Working Memory](https://mastra.ai/examples/memory/streaming-working-memory): Example of using working memory with an agent
+- [AI SDK useChat Hook](https://mastra.ai/examples/memory/use-chat): Example showing how to integrate Mastra memory with the Vercel AI SDK useChat hook.
+- [Example: Adjusting Chunk Delimiters | RAG | Mastra Docs](https://mastra.ai/examples/rag/chunking/adjust-chunk-delimiters): Adjust chunk delimiters in Mastra to better match your content structure.
+- [Example: Adjusting The Chunk Size | RAG | Mastra Docs](https://mastra.ai/examples/rag/chunking/adjust-chunk-size): Adjust chunk size in Mastra to better match your content and memory requirements.
+- [Example: Semantically Chunking HTML | RAG | Mastra Docs](https://mastra.ai/examples/rag/chunking/chunk-html): Chunk HTML content in Mastra to semantically chunk the document.
+- [Example: Semantically Chunking JSON | RAG | Mastra Docs](https://mastra.ai/examples/rag/chunking/chunk-json): Chunk JSON data in Mastra to semantically chunk the document.
+- [Example: Semantically Chunking Markdown | RAG | Mastra Docs](https://mastra.ai/examples/rag/chunking/chunk-markdown): Example of using Mastra to chunk markdown documents for search or retrieval purposes.
+- [Example: Semantically Chunking Text | RAG | Mastra Docs](https://mastra.ai/examples/rag/chunking/chunk-text): Example of using Mastra to split large text documents into smaller chunks for processing.
+- [Example: Embedding Chunk Arrays | RAG | Mastra Docs](https://mastra.ai/examples/rag/embedding/embed-chunk-array): Example of using Mastra to generate embeddings for an array of text chunks for similarity search.
+- [Example: Embedding Text Chunks | RAG | Mastra Docs](https://mastra.ai/examples/rag/embedding/embed-text-chunk): Example of using Mastra to generate an embedding for a single text chunk for similarity search.
+- [Example: Embedding Text with Cohere | RAG | Mastra Docs](https://mastra.ai/examples/rag/embedding/embed-text-with-cohere): Example of using Mastra to generate embeddings using Coheres embedding model.
+- [Example: Metadata Extraction | Retrieval | RAG | Mastra Docs](https://mastra.ai/examples/rag/embedding/metadata-extraction): Example of extracting and utilizing metadata from documents in Mastra for enhanced document processing and retrieval.
+- [Example: Hybrid Vector Search | RAG | Mastra Docs](https://mastra.ai/examples/rag/query/hybrid-vector-search): Example of using metadata filters with PGVector to enhance vector search results in Mastra.
+- [Example: Retrieving Top-K Results | RAG | Mastra Docs](https://mastra.ai/examples/rag/query/retrieve-results): Example of using Mastra to query a vector database and retrieve semantically similar chunks.
+- [Example: Re-ranking Results with Tools | Retrieval | RAG | Mastra Docs](https://mastra.ai/examples/rag/rerank/rerank-rag): Example of implementing a RAG system with re-ranking in Mastra using OpenAI embeddings and PGVector for vector storage.
+- [Example: Re-ranking Results | Retrieval | RAG | Mastra Docs](https://mastra.ai/examples/rag/rerank/rerank): Example of implementing semantic re-ranking in Mastra using OpenAI embeddings and PGVector for vector storage.
+- [Example: Reranking with Cohere | RAG | Mastra Docs](https://mastra.ai/examples/rag/rerank/reranking-with-cohere): Example of using Mastra to improve document retrieval relevance with Coheres reranking service.
+- [Example: Upsert Embeddings | RAG | Mastra Docs](https://mastra.ai/examples/rag/upsert/upsert-embeddings): Examples of using Mastra to store embeddings in various vector databases for similarity search.
+- [Example: Using the Vector Query Tool | RAG | Mastra Docs](https://mastra.ai/examples/rag/usage/basic-rag): Example of implementing a basic RAG system in Mastra using OpenAI embeddings and PGVector for vector storage.
+- [Example: Optimizing Information Density | RAG | Mastra Docs](https://mastra.ai/examples/rag/usage/cleanup-rag): Example of implementing a RAG system in Mastra to optimize information density and deduplicate data using LLM-based processing.
+- [Example: Chain of Thought Prompting | RAG | Mastra Docs](https://mastra.ai/examples/rag/usage/cot-rag): Example of implementing a RAG system in Mastra with chain-of-thought reasoning using OpenAI and PGVector.
+- [Example: Structured Reasoning with Workflows | RAG | Mastra Docs](https://mastra.ai/examples/rag/usage/cot-workflow-rag): Example of implementing structured reasoning in a RAG system using Mastras workflow capabilities.
+- [Example: Agent-Driven Metadata Filtering | Retrieval | RAG | Mastra Docs](https://mastra.ai/examples/rag/usage/filter-rag): Example of using a Mastra agent in a RAG system to construct and apply metadata filters for document retrieval.
+- [Example: A Complete Graph RAG System | RAG | Mastra Docs](https://mastra.ai/examples/rag/usage/graph-rag): Example of implementing a Graph RAG system in Mastra using OpenAI embeddings and PGVector for vector storage.
+- [Example: Speech to Text | Voice | Mastra Docs](https://mastra.ai/examples/voice/speech-to-text): Example of using Mastra to create a speech to text application.
+- [Example: Text to Speech | Voice | Mastra Docs](https://mastra.ai/examples/voice/text-to-speech): Example of using Mastra to create a text to speech application.
+- [Example: Branching Paths | Workflows | Mastra Docs](https://mastra.ai/examples/workflows/branching-paths): Example of using Mastra to create workflows with branching paths based on intermediate results.
+- [Example: Calling an Agent from a Workflow | Mastra Docs](https://mastra.ai/examples/workflows/calling-agent): Example of using Mastra to call an AI agent from within a workflow step.
+- [Example: Conditional Branching (experimental) | Workflows | Mastra Docs](https://mastra.ai/examples/workflows/conditional-branching): Example of using Mastra to create conditional branches in workflows using if/else statements.
+- [Example: Creating a Workflow | Workflows | Mastra Docs](https://mastra.ai/examples/workflows/creating-a-workflow): Example of using Mastra to define and execute a simple workflow with a single step.
+- [Example: Cyclical Dependencies | Workflows | Mastra Docs](https://mastra.ai/examples/workflows/cyclical-dependencies): Example of using Mastra to create workflows with cyclical dependencies and conditional loops.
+- [Example: Human in the Loop | Workflows | Mastra Docs](https://mastra.ai/examples/workflows/human-in-the-loop): Example of using Mastra to create workflows with human intervention points.
+- [Example: Parallel Execution | Workflows | Mastra Docs](https://mastra.ai/examples/workflows/parallel-steps): Example of using Mastra to execute multiple independent tasks in parallel within a workflow.
+- [Example: Sequential Steps | Workflows | Mastra Docs](https://mastra.ai/examples/workflows/sequential-steps): Example of using Mastra to chain workflow steps in a specific sequence, passing data between them.
+- [Example: Suspend and Resume | Workflows | Mastra Docs](https://mastra.ai/examples/workflows/suspend-and-resume): Example of using Mastra to suspend and resume workflow steps during execution.
+- [Example: Using a Tool as a Step | Workflows | Mastra Docs](https://mastra.ai/examples/workflows/using-a-tool-as-a-step): Example of using Mastra to integrate a custom tool as a step in a workflow.
+- [Data Mapping with Workflow Variables | Mastra Examples](https://mastra.ai/examples/workflows/workflow-variables): Learn how to use workflow variables to map data between steps in Mastra workflows.
+
+## guides
+- [Building an AI Recruiter | Mastra Workflows | Guides](https://mastra.ai/guides/guide/ai-recruiter): Guide on building a recruiter workflow in Mastra to gather and process candidate information using LLMs.
+- [Building an AI Chef Assistant | Mastra Agent Guides](https://mastra.ai/guides/guide/chef-michel): Guide on creating a Chef Assistant agent in Mastra to help users cook meals with available ingredients.
+- [Building a Research Paper Assistant | Mastra RAG Guides](https://mastra.ai/guides/guide/research-assistant): Guide on creating an AI research assistant that can analyze and answer questions about academic papers using RAG.
+- [Building an AI Stock Agent | Mastra Agents | Guides](https://mastra.ai/guides/guide/stock-agent): Guide on creating a simple stock agent in Mastra to fetch the last days closing stock price for a given symbol.
+- [Overview](https://mastra.ai/guides): Guides on building with Mastra
+
+## reference
 - [Reference: createTool() | Tools | Agents | Mastra Docs](https://mastra.ai/reference/agents/createTool): Documentation for the createTool function in Mastra, which creates custom tools for agents and workflows.
 - [Reference: Agent.generate() | Agents | Mastra Docs](https://mastra.ai/reference/agents/generate): Documentation for the `.generate()` method in Mastra agents, which produces text or structured responses.
 - [Reference: getAgent() | Agent Config | Agents | Mastra Docs](https://mastra.ai/reference/agents/getAgent): API Reference for getAgent.
@@ -90,7 +183,6 @@ Each section contains detailed markdown files that provide comprehensive informa
 - [createThread](https://mastra.ai/reference/memory/createThread)
 - [getThreadById](https://mastra.ai/reference/memory/getThreadById)
 - [getThreadsByResourceId](https://mastra.ai/reference/memory/getThreadsByResourceId)
-- [Memory Processors | Reference | Mastra Docs](https://mastra.ai/reference/memory/memory-processors): Documentation on how to filter and transform messages in Mastra Memory.
 - [query](https://mastra.ai/reference/memory/query)
 - [AgentNetwork (Experimental)](https://mastra.ai/reference/networks/agent-network): Reference documentation for the AgentNetwork class
 - [Reference: createLogger() | Mastra Observability Docs](https://mastra.ai/reference/observability/create-logger): Documentation for the createLogger function, which instantiates a logger based on a given configuration.
@@ -141,6 +233,12 @@ Each section contains detailed markdown files that provide comprehensive informa
 - [Reference: PlayAI Voice | Voice Providers | Mastra Docs](https://mastra.ai/reference/voice/playai): Documentation for the PlayAI voice implementation, providing text-to-speech capabilities.
 - [Reference: Sarvam Voice | Voice Providers | Mastra Docs](https://mastra.ai/reference/voice/sarvam): Documentation for the Sarvam class, providing text-to-speech and speech-to-text capabilities.
 - [Reference: Speechify Voice | Voice Providers | Mastra Docs](https://mastra.ai/reference/voice/speechify): Documentation for the Speechify voice implementation, providing text-to-speech capabilities.
+- [Reference: voice.answer() | Voice Providers | Mastra Docs](https://mastra.ai/reference/voice/voice.answer): Documentation for the answer() method available in real-time voice providers, which triggers the voice provider to generate a response.
+- [Reference: voice.connect() | Voice Providers | Mastra Docs](https://mastra.ai/reference/voice/voice.connect): Documentation for the connect() method available in real-time voice providers, which establishes a connection for speech-to-speech communication.
+- [Reference: voice.listen() | Voice Providers | Mastra Docs](https://mastra.ai/reference/voice/voice.listen): Documentation for the listen() method available in all Mastra voice providers, which converts speech to text.
+- [Reference: voice.on() | Voice Providers | Mastra Docs](https://mastra.ai/reference/voice/voice.on): Documentation for the on() method available in voice providers, which registers event listeners for voice events.
+- [Reference: voice.send() | Voice Providers | Mastra Docs](https://mastra.ai/reference/voice/voice.send): Documentation for the send() method available in real-time voice providers, which streams audio data for continuous processing.
+- [Reference: voice.speak() | Voice Providers | Mastra Docs](https://mastra.ai/reference/voice/voice.speak): Documentation for the speak() method available in all Mastra voice providers, which converts text to speech.
 - [Reference: .after() | Building Workflows | Mastra Docs](https://mastra.ai/reference/workflows/after): Documentation for the `after()` method in workflows, enabling branching and merging paths.
 - [.afterEvent() Method | Mastra Docs](https://mastra.ai/reference/workflows/afterEvent): Reference for the afterEvent method in Mastra workflows that creates event-based suspension points.
 - [Reference: Workflow.commit() | Running Workflows | Mastra Docs](https://mastra.ai/reference/workflows/commit): Documentation for the `.commit()` method in workflows, which re-initializes the workflow machine with the current step configuration.
@@ -164,88 +262,6 @@ Each section contains detailed markdown files that provide comprehensive informa
 - [Reference: run.watch() | Workflows | Mastra Docs](https://mastra.ai/reference/workflows/watch): Documentation for the `.watch()` method in workflows, which monitors the status of a workflow run.
 - [Reference: Workflow.while() | Looping in Workflows | Mastra Docs](https://mastra.ai/reference/workflows/while): Documentation for the `.while()` method in Mastra workflows, which repeats a step as long as a specified condition remains true.
 - [Reference: Workflow Class | Building Workflows | Mastra Docs](https://mastra.ai/reference/workflows/workflow): Documentation for the Workflow class in Mastra, which enables you to create state machines for complex sequences of operations with conditional branching and data validation.
-- [Storage in Mastra | Mastra Docs](https://mastra.ai/docs/storage/overview): Overview of Mastras storage system and data persistence capabilities.
-- [Voice in Mastra | Mastra Docs](https://mastra.ai/docs/voice/overview): Overview of voice capabilities in Mastra, including text-to-speech, speech-to-text, and real-time voice-to-voice interactions.
-- [Speech-to-Text (STT) in Mastra | Mastra Docs](https://mastra.ai/docs/voice/speech-to-text): Overview of Speech-to-Text capabilities in Mastra, including configuration, usage, and integration with voice providers.
-- [Text-to-Speech (TTS) in Mastra | Mastra Docs](https://mastra.ai/docs/voice/text-to-speech): Overview of Text-to-Speech capabilities in Mastra, including configuration, usage, and integration with voice providers.
-- [Voice-to-Voice Capabilities in Mastra | Mastra Docs](https://mastra.ai/docs/voice/voice-to-voice): Overview of voice-to-voice capabilities in Mastra, including real-time interactions and event-driven architecture.
-- [Branching, Merging, Conditions | Workflows | Mastra Docs](https://mastra.ai/docs/workflows/control-flow): Control flow in Mastra workflows allows you to manage branching, merging, and conditions to construct workflows that meet your logic requirements.
-- [Dynamic Workflows | Mastra Docs](https://mastra.ai/docs/workflows/dynamic-workflows): Learn how to create dynamic workflows within workflow steps, allowing for flexible workflow creation based on runtime conditions.
-- [Error Handling in Workflows | Mastra Docs](https://mastra.ai/docs/workflows/error-handling): Learn how to handle errors in Mastra workflows using step retries, conditional branching, and monitoring.
-- [nested-workflows](https://mastra.ai/docs/workflows/nested-workflows)
-- [Handling Complex LLM Operations | Workflows | Mastra](https://mastra.ai/docs/workflows/overview): Workflows in Mastra help you orchestrate complex sequences of operations with features like branching, parallel execution, resource suspension, and more.
-- [Creating Steps and Adding to Workflows | Mastra Docs](https://mastra.ai/docs/workflows/steps): Steps in Mastra workflows provide a structured way to manage operations by defining inputs, outputs, and execution logic.
-- [Suspend & Resume Workflows | Human-in-the-Loop | Mastra Docs](https://mastra.ai/docs/workflows/suspend-and-resume): Suspend and resume in Mastra workflows allows you to pause execution while waiting for external input or resources.
-- [Data Mapping with Workflow Variables | Mastra Docs](https://mastra.ai/docs/workflows/variables): Learn how to use workflow variables to map data between steps and create dynamic data flows in your Mastra workflows.
-
-## examples
-- [Example: Adding Voice Capabilities | Agents | Mastra](https://mastra.ai/examples/agents/adding-voice-capabilities): Example of adding voice capabilities to Mastra agents, enabling them to speak and listen using different voice providers.
-- [Example: Calling Agentic Workflows | Agents | Mastra Docs](https://mastra.ai/examples/agents/agentic-workflows): Example of creating AI workflows in Mastra, demonstrating integration of external APIs with LLM-powered planning.
-- [Example: Categorizing Birds | Agents | Mastra Docs](https://mastra.ai/examples/agents/bird-checker): Example of using a Mastra AI Agent to determine if an image from Unsplash depicts a bird.
-- [Example: Hierarchical Multi-Agent System | Agents | Mastra](https://mastra.ai/examples/agents/hierarchical-multi-agent): Example of creating a hierarchical multi-agent system using Mastra, where agents interact through tool functions.
-- [Example: Multi-Agent Workflow | Agents | Mastra Docs](https://mastra.ai/examples/agents/multi-agent-workflow): Example of creating an agentic workflow in Mastra, where work product is passed between multiple agents.
-- [Example: Agents with a System Prompt | Agents | Mastra Docs](https://mastra.ai/examples/agents/system-prompt): Example of creating an AI agent in Mastra with a system prompt to define its personality and capabilities.
-- [Example: Giving an Agent a Tool | Agents | Mastra Docs](https://mastra.ai/examples/agents/using-a-tool): Example of creating an AI agent in Mastra that uses a dedicated tool to provide weather information.
-- [Example: Answer Relevancy | Evals | Mastra Docs](https://mastra.ai/examples/evals/answer-relevancy): Example of using the Answer Relevancy metric to evaluate response relevancy to queries.
-- [Example: Bias | Evals | Mastra Docs](https://mastra.ai/examples/evals/bias): Example of using the Bias metric to evaluate responses for various forms of bias.
-- [Example: Completeness | Evals | Mastra Docs](https://mastra.ai/examples/evals/completeness): Example of using the Completeness metric to evaluate how thoroughly responses cover input elements.
-- [Example: Content Similarity | Evals | Mastra Docs](https://mastra.ai/examples/evals/content-similarity): Example of using the Content Similarity metric to evaluate text similarity between content.
-- [Example: Context Position | Evals | Mastra Docs](https://mastra.ai/examples/evals/context-position): Example of using the Context Position metric to evaluate sequential ordering in responses.
-- [Example: Context Precision | Evals | Mastra Docs](https://mastra.ai/examples/evals/context-precision): Example of using the Context Precision metric to evaluate how precisely context information is used.
-- [Example: Context Relevancy | Evals | Mastra Docs](https://mastra.ai/examples/evals/context-relevancy): Example of using the Context Relevancy metric to evaluate how relevant context information is to a query.
-- [Example: Contextual Recall | Evals | Mastra Docs](https://mastra.ai/examples/evals/contextual-recall): Example of using the Contextual Recall metric to evaluate how well responses incorporate context information.
-- [Example: Custom Eval | Evals | Mastra Docs](https://mastra.ai/examples/evals/custom-eval): Example of creating custom LLM-based evaluation metrics in Mastra.
-- [Example: Faithfulness | Evals | Mastra Docs](https://mastra.ai/examples/evals/faithfulness): Example of using the Faithfulness metric to evaluate how factually accurate responses are compared to context.
-- [Example: Hallucination | Evals | Mastra Docs](https://mastra.ai/examples/evals/hallucination): Example of using the Hallucination metric to evaluate factual contradictions in responses.
-- [Example: Keyword Coverage | Evals | Mastra Docs](https://mastra.ai/examples/evals/keyword-coverage): Example of using the Keyword Coverage metric to evaluate how well responses cover important keywords from input text.
-- [Example: Prompt Alignment | Evals | Mastra Docs](https://mastra.ai/examples/evals/prompt-alignment): Example of using the Prompt Alignment metric to evaluate instruction adherence in responses.
-- [Example: Summarization | Evals | Mastra Docs](https://mastra.ai/examples/evals/summarization): Example of using the Summarization metric to evaluate how well LLM-generated summaries capture content while maintaining factual accuracy.
-- [Example: Textual Difference | Evals | Mastra Docs](https://mastra.ai/examples/evals/textual-difference): Example of using the Textual Difference metric to evaluate similarity between text strings by analyzing sequence differences and changes.
-- [Example: Tone Consistency | Evals | Mastra Docs](https://mastra.ai/examples/evals/tone-consistency): Example of using the Tone Consistency metric to evaluate emotional tone patterns and sentiment consistency in text.
-- [Example: Toxicity | Evals | Mastra Docs](https://mastra.ai/examples/evals/toxicity): Example of using the Toxicity metric to evaluate responses for harmful content and toxic language.
-- [Example: Word Inclusion | Evals | Mastra Docs](https://mastra.ai/examples/evals/word-inclusion): Example of creating a custom metric to evaluate word inclusion in output text.
-- [Examples List: Workflows, Agents, RAG | Mastra Docs](https://mastra.ai/examples): Explore practical examples of AI development with Mastra, including text generation, RAG implementations, structured outputs, and multi-modal interactions. Learn how to build AI applications using OpenAI, Anthropic, and Google Gemini.
-- [Memory Processors](https://mastra.ai/examples/memory/memory-processors): Example of using memory processors to filter and transform recalled messages
-- [memory-with-libsql](https://mastra.ai/examples/memory/memory-with-libsql)
-- [memory-with-pg](https://mastra.ai/examples/memory/memory-with-pg)
-- [memory-with-upstash](https://mastra.ai/examples/memory/memory-with-upstash)
-- [Streaming Working Memory (advanced)](https://mastra.ai/examples/memory/streaming-working-memory-advanced): Example of using working memory to maintain a todo list across conversations
-- [Streaming Working Memory](https://mastra.ai/examples/memory/streaming-working-memory): Example of using working memory with an agent
-- [Example: Adjusting Chunk Delimiters | RAG | Mastra Docs](https://mastra.ai/examples/rag/chunking/adjust-chunk-delimiters): Adjust chunk delimiters in Mastra to better match your content structure.
-- [Example: Adjusting The Chunk Size | RAG | Mastra Docs](https://mastra.ai/examples/rag/chunking/adjust-chunk-size): Adjust chunk size in Mastra to better match your content and memory requirements.
-- [Example: Semantically Chunking HTML | RAG | Mastra Docs](https://mastra.ai/examples/rag/chunking/chunk-html): Chunk HTML content in Mastra to semantically chunk the document.
-- [Example: Semantically Chunking JSON | RAG | Mastra Docs](https://mastra.ai/examples/rag/chunking/chunk-json): Chunk JSON data in Mastra to semantically chunk the document.
-- [Example: Semantically Chunking Markdown | RAG | Mastra Docs](https://mastra.ai/examples/rag/chunking/chunk-markdown): Example of using Mastra to chunk markdown documents for search or retrieval purposes.
-- [Example: Semantically Chunking Text | RAG | Mastra Docs](https://mastra.ai/examples/rag/chunking/chunk-text): Example of using Mastra to split large text documents into smaller chunks for processing.
-- [Example: Embedding Chunk Arrays | RAG | Mastra Docs](https://mastra.ai/examples/rag/embedding/embed-chunk-array): Example of using Mastra to generate embeddings for an array of text chunks for similarity search.
-- [Example: Embedding Text Chunks | RAG | Mastra Docs](https://mastra.ai/examples/rag/embedding/embed-text-chunk): Example of using Mastra to generate an embedding for a single text chunk for similarity search.
-- [Example: Embedding Text with Cohere | RAG | Mastra Docs](https://mastra.ai/examples/rag/embedding/embed-text-with-cohere): Example of using Mastra to generate embeddings using Coheres embedding model.
-- [Example: Metadata Extraction | Retrieval | RAG | Mastra Docs](https://mastra.ai/examples/rag/embedding/metadata-extraction): Example of extracting and utilizing metadata from documents in Mastra for enhanced document processing and retrieval.
-- [Example: Hybrid Vector Search | RAG | Mastra Docs](https://mastra.ai/examples/rag/query/hybrid-vector-search): Example of using metadata filters with PGVector to enhance vector search results in Mastra.
-- [Example: Retrieving Top-K Results | RAG | Mastra Docs](https://mastra.ai/examples/rag/query/retrieve-results): Example of using Mastra to query a vector database and retrieve semantically similar chunks.
-- [Example: Re-ranking Results with Tools | Retrieval | RAG | Mastra Docs](https://mastra.ai/examples/rag/rerank/rerank-rag): Example of implementing a RAG system with re-ranking in Mastra using OpenAI embeddings and PGVector for vector storage.
-- [Example: Re-ranking Results | Retrieval | RAG | Mastra Docs](https://mastra.ai/examples/rag/rerank/rerank): Example of implementing semantic re-ranking in Mastra using OpenAI embeddings and PGVector for vector storage.
-- [Example: Reranking with Cohere | RAG | Mastra Docs](https://mastra.ai/examples/rag/rerank/reranking-with-cohere): Example of using Mastra to improve document retrieval relevance with Coheres reranking service.
-- [Example: Upsert Embeddings | RAG | Mastra Docs](https://mastra.ai/examples/rag/upsert/upsert-embeddings): Examples of using Mastra to store embeddings in various vector databases for similarity search.
-- [Example: Using the Vector Query Tool | RAG | Mastra Docs](https://mastra.ai/examples/rag/usage/basic-rag): Example of implementing a basic RAG system in Mastra using OpenAI embeddings and PGVector for vector storage.
-- [Example: Optimizing Information Density | RAG | Mastra Docs](https://mastra.ai/examples/rag/usage/cleanup-rag): Example of implementing a RAG system in Mastra to optimize information density and deduplicate data using LLM-based processing.
-- [Example: Chain of Thought Prompting | RAG | Mastra Docs](https://mastra.ai/examples/rag/usage/cot-rag): Example of implementing a RAG system in Mastra with chain-of-thought reasoning using OpenAI and PGVector.
-- [Example: Structured Reasoning with Workflows | RAG | Mastra Docs](https://mastra.ai/examples/rag/usage/cot-workflow-rag): Example of implementing structured reasoning in a RAG system using Mastras workflow capabilities.
-- [Example: Agent-Driven Metadata Filtering | Retrieval | RAG | Mastra Docs](https://mastra.ai/examples/rag/usage/filter-rag): Example of using a Mastra agent in a RAG system to construct and apply metadata filters for document retrieval.
-- [Example: A Complete Graph RAG System | RAG | Mastra Docs](https://mastra.ai/examples/rag/usage/graph-rag): Example of implementing a Graph RAG system in Mastra using OpenAI embeddings and PGVector for vector storage.
-- [Example: Speech to Text | Voice | Mastra Docs](https://mastra.ai/examples/voice/speech-to-text): Example of using Mastra to create a speech to text application.
-- [Example: Text to Speech | Voice | Mastra Docs](https://mastra.ai/examples/voice/text-to-speech): Example of using Mastra to create a text to speech application.
-- [Example: Branching Paths | Workflows | Mastra Docs](https://mastra.ai/examples/workflows/branching-paths): Example of using Mastra to create workflows with branching paths based on intermediate results.
-- [Example: Calling an Agent from a Workflow | Mastra Docs](https://mastra.ai/examples/workflows/calling-agent): Example of using Mastra to call an AI agent from within a workflow step.
-- [Example: Conditional Branching (experimental) | Workflows | Mastra Docs](https://mastra.ai/examples/workflows/conditional-branching): Example of using Mastra to create conditional branches in workflows using if/else statements.
-- [Example: Creating a Workflow | Workflows | Mastra Docs](https://mastra.ai/examples/workflows/creating-a-workflow): Example of using Mastra to define and execute a simple workflow with a single step.
-- [Example: Cyclical Dependencies | Workflows | Mastra Docs](https://mastra.ai/examples/workflows/cyclical-dependencies): Example of using Mastra to create workflows with cyclical dependencies and conditional loops.
-- [Example: Human in the Loop | Workflows | Mastra Docs](https://mastra.ai/examples/workflows/human-in-the-loop): Example of using Mastra to create workflows with human intervention points.
-- [Example: Parallel Execution | Workflows | Mastra Docs](https://mastra.ai/examples/workflows/parallel-steps): Example of using Mastra to execute multiple independent tasks in parallel within a workflow.
-- [Example: Sequential Steps | Workflows | Mastra Docs](https://mastra.ai/examples/workflows/sequential-steps): Example of using Mastra to chain workflow steps in a specific sequence, passing data between them.
-- [Example: Suspend and Resume | Workflows | Mastra Docs](https://mastra.ai/examples/workflows/suspend-and-resume): Example of using Mastra to suspend and resume workflow steps during execution.
-- [Example: Using a Tool as a Step | Workflows | Mastra Docs](https://mastra.ai/examples/workflows/using-a-tool-as-a-step): Example of using Mastra to integrate a custom tool as a step in a workflow.
-- [Data Mapping with Workflow Variables | Mastra Examples](https://mastra.ai/examples/workflows/workflow-variables): Learn how to use workflow variables to map data between steps in Mastra workflows.
 
 ## showcase
 - [Showcase](https://mastra.ai/showcase): Check out these applications built with Mastra

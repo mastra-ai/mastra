@@ -74,7 +74,7 @@ export const Thread: FC<{ memory?: boolean; ToolFallback?: ToolCallContentPartCo
           bottom: 0,
           margin: '0 auto',
           zIndex: 10,
-          paddingBottom: '0.5em',
+          paddingBottom: '4rem',
           left: '50%',
           transform: 'translate(-50%)',
           background: '#0f0f0f',
