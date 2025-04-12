@@ -145,9 +145,7 @@ async function runServer() {
   try {
     const transport = new StdioServerTransport();
     await server.connect(transport);
-
-    // Send initial logs after connection is established
-    void logger.info('Starting Mastra Docs MCP Server');
+    void logger.info('Started Mastra Docs MCP Server');
   } catch (error) {
     void logger.error('Failed to start server', error);
     process.exit(1);

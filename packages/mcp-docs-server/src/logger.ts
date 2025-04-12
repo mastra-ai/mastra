@@ -31,11 +31,18 @@ export function convertLogLevelToLoggerMethod(level: LoggingLevel): 'debug' | 'i
 
 // Create logger factory to inject server instance
 export function createLogger(server?: Server): Logger {
-  const writeLog = (level: string, message: string, data?: any) => {
-    const timestamp = new Date().toISOString().replace('T', ' ').replace('Z', '');
-    const logData = data ? ` ${JSON.stringify(data)}` : '';
-    process.stderr.write(`${timestamp} [${level}]: ${message}${logData}\n`);
-  };
+  // const writeLog = (level: string, message: string, data?: any) => {
+  //   const logMessage = {
+  //     jsonrpc: '2.0',
+  //     method: 'notifications/tools',
+  //     params: {
+  //       level,
+  //       message,
+  //       ...(data ? (typeof data === 'object' ? data : { data }) : {}),
+  //     },
+  //   };
+  //   process.stdout.write(JSON.stringify(logMessage) + '\n');
+  // };
 
   const sendLog = async (level: 'error' | 'debug' | 'info' | 'warning', message: string, data?: any) => {
     if (!server) return;
