@@ -1,5 +1,18 @@
 # @mastra/mcp
 
+## 0.3.10-alpha.4
+
+### Patch Changes
+
+- Updated dependencies [10a8caf]
+  - @mastra/core@0.8.3-alpha.3
+
+## 0.3.10-alpha.3
+
+### Patch Changes
+
+- 492e370: Updated MCPConfiguration to connect/disconnect to all clients simultaneously instead of one at a time
+
 ## 0.3.10-alpha.2
 
 ### Patch Changes
