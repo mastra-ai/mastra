@@ -35,14 +35,14 @@ export const registryData: RegistryFile = {
       count: 370,
     },
     {
-      id: 'cline-bot',
+      id: 'cline',
       name: 'Cline.bot',
       description: 'MCP servers for Cline.bot',
       url: 'https://cline.bot/mcp-marketplace',
       tags: ['verified'],
     },
     {
-      id: 'cursor-mcp-registry',
+      id: 'cursor',
       name: 'Cursor MCP Registry',
       description: 'Browse MCPs or post a MCP to reach 250,000+ monthly active developers.',
       url: 'https://cursor.directory/mcp',
@@ -50,7 +50,7 @@ export const registryData: RegistryFile = {
       count: '1800+',
     },
     {
-      id: 'dexter-mcp',
+      id: 'dextermcp',
       name: 'Dexter MCP',
       description: 'Enhance your AI with specialized MCP servers for various tasks',
       url: 'https://www.dextermcp.net/',
@@ -66,7 +66,7 @@ export const registryData: RegistryFile = {
       postProcessServers: processFleurServers,
     },
     {
-      id: 'glama-mcp-server',
+      id: 'glama',
       name: 'Glama MCP Server',
       description: 'Production-ready and experimental MCP servers that extend AI capabilities.',
       url: 'https://glama.ai/mcp/servers',
@@ -89,7 +89,7 @@ export const registryData: RegistryFile = {
       tags: ['verified'],
     },
     {
-      id: 'mcp-composio',
+      id: 'composio',
       name: 'MCP Composio',
       description: 'Instantly Connect to 100+ Managed MCP Servers with Built-In Auth',
       url: 'https://mcp.composio.dev/',
@@ -97,7 +97,7 @@ export const registryData: RegistryFile = {
       count: '100+',
     },
     {
-      id: 'mcp-get',
+      id: 'mcpget',
       name: 'MCP-Get',
       description: 'mcp-get helps you easily install protocol servers.',
       url: 'https://mcp-get.com/',
@@ -105,28 +105,28 @@ export const registryData: RegistryFile = {
       count: 69,
     },
     {
-      id: 'mcp-market',
+      id: 'mcpmarket',
       name: 'MCP Market',
       description: 'Explore our curated collection of MCP servers to connect AI to your favorite tools.',
       url: 'https://mcpmarket.com/',
       count: 12454,
     },
     {
-      id: 'mcp-repository',
+      id: 'mcprepository',
       name: 'MCP Repository',
       description: 'Discover the ultimate resource for Model Context Protocol at MCP Repository',
       url: 'https://mcprepository.com',
       tags: ['verified'],
     },
     {
-      id: 'mcp-resolver',
+      id: 'mcpresolver',
       name: 'MCP Resolver',
       description: 'Find and connect to the right MCP servers for your AI applications',
       url: 'https://mcpresolver.com/',
       tags: ['verified'],
     },
     {
-      id: 'mcp-run',
+      id: 'mcprun',
       name: 'MCP Run',
       description: 'One platform for vertical AI across your entire organization.',
       url: 'https://www.mcp.run/',
@@ -135,7 +135,7 @@ export const registryData: RegistryFile = {
       postProcessServers: processMcpRunServers,
     },
     {
-      id: 'mcp-servers-org',
+      id: 'mcpserversorg',
       name: 'MCP Servers',
       description: 'A collection of servers for the Model Context Protocol.',
       url: 'https://mcpservers.org/',
@@ -143,7 +143,7 @@ export const registryData: RegistryFile = {
       count: 212,
     },
     {
-      id: 'mcp-so',
+      id: 'mcpso',
       name: 'MCP.so',
       description: 'Find Awesome MCP Servers and Clients',
       url: 'https://mcp.so/',
@@ -181,7 +181,7 @@ export const registryData: RegistryFile = {
       tags: ['verified'],
     },
     {
-      id: 'pulse-mcp',
+      id: 'pulse',
       name: 'Pulse MCP',
       description: 'Browse and discover MCP use cases, servers, clients, and news.',
       url: 'https://www.pulsemcp.com/',
@@ -207,7 +207,7 @@ export const registryData: RegistryFile = {
       tags: ['verified'],
     },
     {
-      id: 'zapier-mcp',
+      id: 'zapier',
       name: 'Zapier MCP',
       description: 'Connect your AI to any app with Zapier MCP',
       url: 'https://zapier.com/mcp',
