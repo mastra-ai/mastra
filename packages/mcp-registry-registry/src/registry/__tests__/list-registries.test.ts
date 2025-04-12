@@ -10,16 +10,16 @@ describe('getRegistryListings integration test', () => {
     expect(result.count).toBeGreaterThan(0);
     expect(result.registries.length).toBeGreaterThan(0);
     // Check for some known registries
-    expect(result.registries.map((r: any) => r.id)).toContain('mcp-run');
+    expect(result.registries.map((r: any) => r.id)).toContain('mcprun');
     expect(result.registries.map((r: any) => r.id)).toContain('modelcontextprotocol-servers');
   });
 
   it('should filter registries by id', async () => {
-    const result = await getRegistryListings({ id: 'mcp-run' });
+    const result = await getRegistryListings({ id: 'mcprun' });
 
     expect(result.count).toBe(1);
     expect(result.registries.length).toBe(1);
-    expect(result.registries[0].id).toBe('mcp-run');
+    expect(result.registries[0].id).toBe('mcprun');
     expect(result.registries[0].name).toBe('MCP Run');
   });
 
@@ -29,7 +29,7 @@ describe('getRegistryListings integration test', () => {
     expect(result.count).toBeGreaterThan(0);
     expect(result.registries.length).toBeGreaterThan(0);
     // Check for some known verified registries
-    expect(result.registries.map((r: any) => r.id)).toContain('mcp-run');
+    expect(result.registries.map((r: any) => r.id)).toContain('mcprun');
     expect(result.registries.map((r: any) => r.id)).toContain('apitracker');
     // Official is a different tag
     expect(result.registries.map((r: any) => r.id)).not.toContain('modelcontextprotocol-servers');
@@ -41,8 +41,8 @@ describe('getRegistryListings integration test', () => {
     expect(result.count).toBeGreaterThan(0);
     expect(result.registries.length).toBeGreaterThan(0);
     // Check for registries with MCP in the name
-    expect(result.registries.map((r: any) => r.id)).toContain('mcp-run');
-    expect(result.registries.map((r: any) => r.id)).toContain('mcp-so');
+    expect(result.registries.map((r: any) => r.id)).toContain('mcprun');
+    expect(result.registries.map((r: any) => r.id)).toContain('mcpso');
     // This registry doesn't have MCP in the name
     expect(result.registries.map((r: any) => r.id)).not.toContain('opentools');
   });
@@ -56,17 +56,17 @@ describe('getRegistryListings integration test', () => {
     expect(result.count).toBeGreaterThan(0);
     expect(result.registries.length).toBeGreaterThan(0);
     // Check for registries with MCP in the name and verified tag
-    expect(result.registries.map((r: any) => r.id)).toContain('mcp-run');
-    expect(result.registries.map((r: any) => r.id)).toContain('mcp-so');
+    expect(result.registries.map((r: any) => r.id)).toContain('mcprun');
+    expect(result.registries.map((r: any) => r.id)).toContain('mcpso');
     // This registry has the verified tag but not MCP in the name
     expect(result.registries.map((r: any) => r.id)).not.toContain('opentools');
   });
 
   it('should return detailed information when detailed option is true', async () => {
-    const result = await getRegistryListings({ id: 'mcp-run' }, { detailed: true });
+    const result = await getRegistryListings({ id: 'mcprun' }, { detailed: true });
 
     expect(result.count).toBe(1);
-    expect(result.registries[0].id).toBe('mcp-run');
+    expect(result.registries[0].id).toBe('mcprun');
     expect(result.registries[0].name).toBe('MCP Run');
     expect(result.registries[0].description).toBe('One platform for vertical AI across your entire organization.');
     expect(result.registries[0].url).toBe('https://www.mcp.run/');
@@ -75,10 +75,10 @@ describe('getRegistryListings integration test', () => {
   });
 
   it('should return only basic information when detailed option is false', async () => {
-    const result = await getRegistryListings({ id: 'mcp-run' }, { detailed: false });
+    const result = await getRegistryListings({ id: 'mcprun' }, { detailed: false });
 
     expect(result.count).toBe(1);
-    expect(result.registries[0].id).toBe('mcp-run');
+    expect(result.registries[0].id).toBe('mcprun');
     expect(result.registries[0].name).toBe('MCP Run');
     expect(result.registries[0].description).toBe('One platform for vertical AI across your entire organization.');
     expect(result.registries[0].url).toBeUndefined();
@@ -99,7 +99,7 @@ describe('getRegistryListings integration test', () => {
 
     expect(result.count).toBeGreaterThan(0);
     // Should find registries with 'mcp' in the name regardless of case
-    expect(result.registries.map((r: any) => r.id)).toContain('mcp-run');
-    expect(result.registries.map((r: any) => r.id)).toContain('mcp-so');
+    expect(result.registries.map((r: any) => r.id)).toContain('mcprun');
+    expect(result.registries.map((r: any) => r.id)).toContain('mcpso');
   });
 });
