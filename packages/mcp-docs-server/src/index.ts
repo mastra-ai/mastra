@@ -33,6 +33,7 @@ server = new Server(
   {
     capabilities: {
       tools: {},
+      logging: { enabled: true },
     },
   },
 );
@@ -142,10 +143,11 @@ server.setRequestHandler(CallToolRequestSchema, async request => {
 
 async function runServer() {
   try {
-    void logger.info('Starting Mastra Docs MCP Server');
     const transport = new StdioServerTransport();
     await server.connect(transport);
-    void logger.info('Mastra Docs MCP Server running on stdio');
+
+    // Send initial logs after connection is established
+    void logger.info('Starting Mastra Docs MCP Server');
   } catch (error) {
     void logger.error('Failed to start server', error);
     process.exit(1);

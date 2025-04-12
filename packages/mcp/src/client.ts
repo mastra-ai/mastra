@@ -9,10 +9,11 @@ import type { StdioServerParameters } from '@modelcontextprotocol/sdk/client/std
 import { DEFAULT_REQUEST_TIMEOUT_MSEC } from '@modelcontextprotocol/sdk/shared/protocol.js';
 import type { Protocol } from '@modelcontextprotocol/sdk/shared/protocol.js';
 import type { Transport } from '@modelcontextprotocol/sdk/shared/transport.js';
-import type { ClientCapabilities, LoggingLevel, LoggingMessageNotification } from '@modelcontextprotocol/sdk/types.js';
+import type { ClientCapabilities, LoggingLevel } from '@modelcontextprotocol/sdk/types.js';
 import { CallToolResultSchema, ListResourcesResultSchema } from '@modelcontextprotocol/sdk/types.js';
 
 import { asyncExitHook, gracefulExit } from 'exit-hook';
+import { z } from 'zod';
 
 // Re-export MCP SDK LoggingLevel for convenience
 export type { LoggingLevel } from '@modelcontextprotocol/sdk/types.js';
@@ -35,14 +36,9 @@ type SSEClientParameters = {
 export type MastraMCPServerDefinition = (StdioServerParameters | SSEClientParameters) & {
   log?: LogHandler;
   timeout?: number;
+  capabilities?: ClientCapabilities;
+  enableServerLogs?: boolean;
 };
-
-// Type guard to check if a Client has onLogMessage method
-function hasLogMessageSupport(client: any): client is Client & {
-  onLogMessage: (callback: (message: LoggingMessageNotification) => void) => void;
-} {
-  return client && typeof client.onLogMessage === 'function';
-}
 
 /**
  * Convert an MCP LoggingLevel to a logger method name that exists in our logger
@@ -73,6 +69,7 @@ export class MastraMCPClient extends MastraBase {
   private client: Client;
   private readonly timeout: number;
   private logHandler?: LogHandler;
+  private enableServerLogs?: boolean;
 
   constructor({
     name,
@@ -91,9 +88,10 @@ export class MastraMCPClient extends MastraBase {
     this.name = name;
     this.timeout = timeout;
     this.logHandler = server.log;
+    this.enableServerLogs = server.enableServerLogs;
 
     // Extract log handler from server config to avoid passing it to transport
-    const { log, ...serverConfig } = server;
+    const { log, enableServerLogs, ...serverConfig } = server;
 
     if (`url` in serverConfig) {
       this.transport = new SSEClientTransport(serverConfig.url, {
@@ -148,15 +146,21 @@ export class MastraMCPClient extends MastraBase {
   }
 
   private setupLogging(): void {
-    // Check if the client supports logging
-    if (hasLogMessageSupport(this.client)) {
-      this.client.onLogMessage(message => {
-        // Convert from MCP SDK log message to our log format
-        const level = message.params.level as LoggingLevel;
-        this.log(level, `MCP server message: ${message.params.data}`, {
-          mcpMessage: message,
-        });
-      });
+    if (this.enableServerLogs) {
+      this.client.setNotificationHandler(
+        z.object({
+          method: z.literal('notifications/message'),
+          params: z
+            .object({
+              level: z.string(),
+            })
+            .passthrough(),
+        }),
+        notification => {
+          const { level, ...params } = notification.params;
+          this.log(level as LoggingLevel, '[MCP SERVER LOG]', params);
+        },
+      );
     }
   }
 
