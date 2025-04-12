@@ -192,6 +192,8 @@ export function WorkflowTrigger({
                       const statusIcon =
                         status === 'Completed' ? (
                           <div className="w-2 h-2 bg-green-500 rounded-full" />
+                        ) : status === 'Failed' ? (
+                          <div className="w-2 h-2 bg-red-500 rounded-full" />
                         ) : (
                           <div className="w-2 h-2 bg-yellow-500 rounded-full animate-pulse" />
                         );
