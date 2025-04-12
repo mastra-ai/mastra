@@ -21,7 +21,7 @@ describe('getServersFromRegistry integration test', () => {
   it('should search servers by name or description', async () => {
     try {
       // First get all servers
-      const allServers = await getServersFromRegistry('mcp-run');
+      const allServers = await getServersFromRegistry('mcprun');
 
       if (allServers.count === 0) {
         console.warn('No servers found, skipping test');
@@ -38,7 +38,7 @@ describe('getServersFromRegistry integration test', () => {
       }
 
       // Search for that word
-      const result = await getServersFromRegistry('mcp-run', { search: searchWord });
+      const result = await getServersFromRegistry('mcprun', { search: searchWord });
 
       // We should find at least the server we got the word from
       expect(result.length).toBeGreaterThan(0);
