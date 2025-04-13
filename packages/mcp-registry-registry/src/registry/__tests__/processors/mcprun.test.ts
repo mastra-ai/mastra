@@ -6,7 +6,7 @@ import type { ServerEntry } from '../../types';
 describe('MCP Run processor', () => {
   it('should process MCP Run server data correctly', async () => {
     // Use our getServersFromRegistry function to fetch data
-    const result = await getServersFromRegistry('mcp-run');
+    const result = await getServersFromRegistry('mcprun');
 
     // Verify the result
     expect(Array.isArray(result)).toBe(true);

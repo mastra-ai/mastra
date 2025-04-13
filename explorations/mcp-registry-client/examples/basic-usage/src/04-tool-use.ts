@@ -3,7 +3,7 @@
  *
  */
 
-import { Agent } from "@mastra/core"
+import { Agent } from "@mastra/core/agent"
 import { openai } from "@ai-sdk/openai"
 import { RegistryClient } from "@mcp/registry"
 import { McpConfiguration } from "@mastra/mcp-configuration"
