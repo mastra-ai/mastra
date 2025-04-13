@@ -7,7 +7,6 @@ import { readJSON, writeJSON, ensureFile } from 'fs-extra/esm';
 import type { PackageJson } from 'type-fest';
 
 import { createChildProcessLogger } from '../deploy/log.js';
-import { exec } from 'child_process';
 
 export class Deps extends MastraBase {
   private packageManager: string;
