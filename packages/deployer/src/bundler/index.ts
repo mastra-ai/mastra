@@ -88,7 +88,6 @@ export abstract class Bundler extends MastraBundler {
     const deps = new DepsService(rootDir);
     deps.__setLogger(this.logger);
 
-    console.log(`Installing dependencies in ${join(outputDirectory, this.outputDir)}`);
     await deps.install({ dir: join(outputDirectory, this.outputDir) });
   }
 
