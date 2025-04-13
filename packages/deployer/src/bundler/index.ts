@@ -7,11 +7,13 @@ import virtual from '@rollup/plugin-virtual';
 import { copy, ensureDir, readJSON, emptyDir } from 'fs-extra/esm';
 import resolveFrom from 'resolve-from';
 import type { InputOptions, OutputOptions } from 'rollup';
+import { findWorkspaces, createWorkspacesCache } from 'find-workspaces';
 
 import { analyzeBundle } from '../build/analyze';
 import { createBundler as createBundlerUtil, getInputOptions } from '../build/bundler';
 import { writeTelemetryConfig } from '../build/telemetry';
 import { DepsService } from '../services/deps';
+import { exec, execSync } from 'node:child_process';
 
 export abstract class Bundler extends MastraBundler {
   protected analyzeOutputDir = '.build';
@@ -87,6 +89,7 @@ export abstract class Bundler extends MastraBundler {
     const deps = new DepsService(rootDir);
     deps.__setLogger(this.logger);
 
+    console.log(`Installing dependencies in ${join(outputDirectory, this.outputDir)}`);
     await deps.install({ dir: join(outputDirectory, this.outputDir) });
   }
 
@@ -142,14 +145,71 @@ export abstract class Bundler extends MastraBundler {
     );
 
     await writeTelemetryConfig(mastraEntryFile, join(outputDirectory, this.outputDir));
+    const workspaces = await findWorkspaces();
+    const workspaceMap = new Map(
+      workspaces?.map(workspace => [
+        workspace.package.name,
+        {
+          location: workspace.location,
+          dependencies: workspace.package.dependencies,
+          version: workspace.package.version,
+        },
+      ]) ?? [],
+    );
     const dependenciesToInstall = new Map<string, string>();
+    const queue: string[] = [];
     for (const dep of analyzedBundleInfo.externalDependencies) {
       try {
         const pkgPath = resolveFrom(mastraEntryFile, `${dep}/package.json`);
         const pkg = await readJSON(pkgPath);
+
+        if (workspaceMap.has(pkg.name)) {
+          if (!queue.includes(pkg.name)) {
+            queue.push(pkg.name);
+          }
+          continue;
+        }
+
         dependenciesToInstall.set(dep, pkg.version);
       } catch {
         dependenciesToInstall.set(dep, 'latest');
+      }
+    }
+
+    const seen = new Set<string>();
+    while (queue.length > 0) {
+      const len = queue.length;
+      for (let i = 0; i < len; i += 1) {
+        const pkgName = queue.shift();
+
+        if (!pkgName || seen.has(pkgName)) {
+          continue;
+        }
+        dependenciesToInstall.set(
+          pkgName,
+          `file:./workspace-module/${pkgName.replace(/\//g, '-').replace(/@/g, '')}-${workspaceMap.get(pkgName)?.version}.tgz`,
+        );
+        seen.add(pkgName);
+        const dep = workspaceMap.get(pkgName);
+
+        for (const [depName, _depVersion] of Object.entries(dep?.dependencies ?? {})) {
+          if (!seen.has(depName) && workspaceMap.has(depName)) {
+            queue.push(depName);
+          }
+        }
+      }
+    }
+
+    if (seen.size > 0) {
+      const workspaceDirPath = join(outputDirectory, this.outputDir, 'workspace-module');
+      await ensureDir(workspaceDirPath);
+      for (const pkgName of seen.values()) {
+        const dep = workspaceMap.get(pkgName);
+        if (!dep) {
+          continue;
+        }
+
+        execSync(`cd ${dep.location} && pnpm pack --pack-destination ${workspaceDirPath} && echo "${pkgName} packed"`);
       }
     }
 
@@ -181,7 +241,7 @@ export abstract class Bundler extends MastraBundler {
     this.logger.info('Done copying public files');
 
     this.logger.info('Installing dependencies');
-    await this.installDependencies(outputDirectory);
+    // await this.installDependencies(outputDirectory);
     this.logger.info('Done installing dependencies');
   }
 }

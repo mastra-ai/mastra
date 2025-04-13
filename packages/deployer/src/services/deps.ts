@@ -63,6 +63,7 @@ export class Deps extends MastraBase {
         runCommand = `${this.packageManager} install`;
     }
 
+    console.log(`Installing dependencies in ${dir}`, runCommand);
     const cpLogger = createChildProcessLogger({
       logger: this.logger,
       root: dir,
