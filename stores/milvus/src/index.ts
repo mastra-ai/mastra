@@ -1,5 +1,2 @@
-function milvus() {
-  return 'Milvus';
-}
-
-export default milvus;
+export * from './vector';
+export * from './storage';

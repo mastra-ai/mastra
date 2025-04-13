@@ -26,7 +26,8 @@
     "lint": "eslint ."
   },
   "dependencies": {
-    "@mastra/core": "workspace:^"
+    "@mastra/core": "workspace:^",
+    "@zilliz/milvus2-sdk-node": "^2.5.7"
   },
   "devDependencies": {
     "@internal/lint": "workspace:*",
