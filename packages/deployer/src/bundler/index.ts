@@ -7,13 +7,12 @@ import virtual from '@rollup/plugin-virtual';
 import { copy, ensureDir, readJSON, emptyDir } from 'fs-extra/esm';
 import resolveFrom from 'resolve-from';
 import type { InputOptions, OutputOptions } from 'rollup';
-import { findWorkspaces, createWorkspacesCache } from 'find-workspaces';
+import { findWorkspaces, findWorkspacesRoot } from 'find-workspaces';
 
 import { analyzeBundle } from '../build/analyze';
 import { createBundler as createBundlerUtil, getInputOptions } from '../build/bundler';
 import { writeTelemetryConfig } from '../build/telemetry';
 import { DepsService } from '../services/deps';
-import { exec, execSync } from 'node:child_process';
 
 export abstract class Bundler extends MastraBundler {
   protected analyzeOutputDir = '.build';
@@ -145,6 +144,7 @@ export abstract class Bundler extends MastraBundler {
     );
 
     await writeTelemetryConfig(mastraEntryFile, join(outputDirectory, this.outputDir));
+
     const workspaces = await findWorkspaces();
     const workspaceMap = new Map(
       workspaces?.map(workspace => [
@@ -156,17 +156,16 @@ export abstract class Bundler extends MastraBundler {
         },
       ]) ?? [],
     );
+
     const dependenciesToInstall = new Map<string, string>();
-    const queue: string[] = [];
+    const workspaceDependencies = new Set<string>();
     for (const dep of analyzedBundleInfo.externalDependencies) {
       try {
         const pkgPath = resolveFrom(mastraEntryFile, `${dep}/package.json`);
         const pkg = await readJSON(pkgPath);
 
         if (workspaceMap.has(pkg.name)) {
-          if (!queue.includes(pkg.name)) {
-            queue.push(pkg.name);
-          }
+          workspaceDependencies.add(pkg.name);
           continue;
         }
 
@@ -176,41 +175,13 @@ export abstract class Bundler extends MastraBundler {
       }
     }
 
-    const seen = new Set<string>();
-    while (queue.length > 0) {
-      const len = queue.length;
-      for (let i = 0; i < len; i += 1) {
-        const pkgName = queue.shift();
-
-        if (!pkgName || seen.has(pkgName)) {
-          continue;
-        }
-        dependenciesToInstall.set(
-          pkgName,
-          `file:./workspace-module/${pkgName.replace(/\//g, '-').replace(/@/g, '')}-${workspaceMap.get(pkgName)?.version}.tgz`,
-        );
-        seen.add(pkgName);
-        const dep = workspaceMap.get(pkgName);
-
-        for (const [depName, _depVersion] of Object.entries(dep?.dependencies ?? {})) {
-          if (!seen.has(depName) && workspaceMap.has(depName)) {
-            queue.push(depName);
-          }
-        }
-      }
-    }
-
-    if (seen.size > 0) {
-      const workspaceDirPath = join(outputDirectory, this.outputDir, 'workspace-module');
-      await ensureDir(workspaceDirPath);
-      for (const pkgName of seen.values()) {
-        const dep = workspaceMap.get(pkgName);
-        if (!dep) {
-          continue;
-        }
-
-        execSync(`cd ${dep.location} && pnpm pack --pack-destination ${workspaceDirPath} && echo "${pkgName} packed"`);
-      }
+    if (workspaceDependencies.size > 0) {
+      await this.resolveAndPackWorkspaceDependencies(
+        workspaceMap,
+        workspaceDependencies,
+        outputDirectory,
+        dependenciesToInstall,
+      );
     }
 
     // temporary fix for mastra-memory and fastembed
@@ -239,5 +210,95 @@ export abstract class Bundler extends MastraBundler {
     this.logger.info('Copying public files');
     await this.copyPublic(dirname(mastraEntryFile), outputDirectory);
     this.logger.info('Done copying public files');
+  }
+
+  /**
+   * Resolves and packages workspace dependencies
+   * Finds all transitive dependencies and creates TGZ packages for them
+   * Adds workspace packages to dependenciesToInstall with file: references to the packaged TGZ files
+   */
+  private async resolveAndPackWorkspaceDependencies(
+    workspaceMap: Map<
+      string,
+      { location: string; dependencies: Record<string, string> | undefined; version: string | undefined }
+    >,
+    initialDependencies: Set<string>,
+    outputDirectory: string,
+    dependenciesToInstall: Map<string, string>,
+  ): Promise<void> {
+    const seen = new Set<string>();
+    const queue: string[] = Array.from(initialDependencies);
+
+    // find all transitive workspace dependencies
+    while (queue.length > 0) {
+      const len = queue.length;
+      for (let i = 0; i < len; i += 1) {
+        const pkgName = queue.shift();
+        if (!pkgName || seen.has(pkgName)) {
+          continue;
+        }
+
+        const dep = workspaceMap.get(pkgName);
+        if (!dep) continue;
+
+        const sanitizedName = pkgName.replace(/^@/, '').replace(/\//, '-');
+        const tgzPath = `file:./workspace-module/${sanitizedName}-${dep.version}.tgz`;
+        dependenciesToInstall.set(pkgName, tgzPath);
+        seen.add(pkgName);
+
+        for (const [depName, _depVersion] of Object.entries(dep?.dependencies ?? {})) {
+          if (!seen.has(depName) && workspaceMap.has(depName)) {
+            queue.push(depName);
+          }
+        }
+      }
+    }
+
+    const root = findWorkspacesRoot();
+    if (!root) {
+      this.logger.error('Could not find workspace root');
+      return;
+    }
+
+    const depsService = new DepsService(root.location);
+    depsService.__setLogger(this.logger);
+
+    // package all transitive workspace dependencies
+    if (seen.size > 0) {
+      const workspaceDirPath = join(outputDirectory, this.outputDir, 'workspace-module');
+      await ensureDir(workspaceDirPath);
+
+      this.logger.info(`Packaging ${seen.size} workspace dependencies...`);
+
+      const batchSize = 5;
+      const packages = Array.from(seen.values());
+
+      for (let i = 0; i < packages.length; i += batchSize) {
+        const batch = packages.slice(i, i + batchSize);
+        this.logger.info(
+          `Packaging batch ${Math.floor(i / batchSize) + 1}/${Math.ceil(packages.length / batchSize)}: ${batch.join(', ')}`,
+        );
+        await Promise.all(
+          batch.map(async pkgName => {
+            const dep = workspaceMap.get(pkgName);
+            if (!dep) return;
+
+            try {
+              if (!dependenciesToInstall.has(pkgName)) {
+                const sanitizedName = pkgName.replace(/^@/, '').replace(/\//, '-');
+                const tgzPath = `file:./workspace-module/${sanitizedName}-${dep.version}.tgz`;
+                dependenciesToInstall.set(pkgName, tgzPath);
+              }
+
+              await depsService.pack({ dir: dep.location, destination: workspaceDirPath });
+            } catch (error) {
+              this.logger.error(`Failed to package ${pkgName}: ${error}`);
+            }
+          }),
+        );
+      }
+
+      this.logger.info(`Successfully packaged ${seen.size} workspace dependencies`);
+    }
   }
 }

@@ -7,6 +7,7 @@ import { readJSON, writeJSON, ensureFile } from 'fs-extra/esm';
 import type { PackageJson } from 'type-fest';
 
 import { createChildProcessLogger } from '../deploy/log.js';
+import { exec } from 'child_process';
 
 export class Deps extends MastraBase {
   private packageManager: string;
@@ -47,6 +48,21 @@ export class Deps extends MastraBase {
       default:
         return 'npm';
     }
+  }
+
+  public async pack({ dir, destination }: { dir: string; destination: string }) {
+    const cpLogger = createChildProcessLogger({
+      logger: this.logger,
+      root: dir,
+    });
+
+    return cpLogger({
+      cmd: `${this.packageManager} pack --pack-destination ${destination}`,
+      args: [],
+      env: {
+        PATH: process.env.PATH!,
+      },
+    });
   }
 
   public async install({ dir = this.rootDir }: { dir?: string }) {
