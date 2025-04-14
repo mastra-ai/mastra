@@ -8,6 +8,19 @@ export interface Logger {
   debug: (message: string, data?: any) => Promise<void>;
 }
 
+export const writeErrorLog = (message: string, data?: any) => {
+  const logMessage = {
+    jsonrpc: '2.0',
+    method: 'notifications/tools',
+    params: {
+      level: 'error',
+      message,
+      ...(data ? (typeof data === 'object' ? data : { data }) : {}),
+    },
+  };
+  process.stdout.write(JSON.stringify(logMessage) + '\n');
+};
+
 // Create logger factory to inject server instance
 export function createLogger(server?: Server): Logger {
   const sendLog = async (level: 'error' | 'debug' | 'info' | 'warning', message: string, data?: any) => {
@@ -50,6 +63,7 @@ export function createLogger(server?: Server): Logger {
               name: error.name,
             }
           : error;
+      writeErrorLog(message, errorData);
       await sendLog('error', message, errorData);
     },
     debug: async (message: string, data?: any) => {
