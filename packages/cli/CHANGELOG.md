@@ -1,5 +1,16 @@
 # mastra
 
+## 0.4.9-alpha.4
+
+### Patch Changes
+
+- 1ebbfbf: Ability to toggle stream vs generate in playground
+- ea0725e: make sure to put the geoip argument in the right spot (client init) and not at the properties level
+- Updated dependencies [1ebbfbf]
+- Updated dependencies [7f1b291]
+  - @mastra/deployer@0.2.9-alpha.4
+  - @mastra/core@0.8.3-alpha.4
+
 ## 0.4.9-alpha.3
 
 ### Patch Changes
