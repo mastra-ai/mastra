@@ -15,6 +15,10 @@ It uses vector embeddings of messages for similarity search, integrates with var
   width={800}
 />
 
+When it's enabled, new messages are used to query a vector DB for semantically similar messages.
+
+After getting a response from the LLM, all new messages (user, assistant, and tool calls/results) are inserted into the vector DB to be recalled in later interactions.
+
 ## Quick Start
 
 Semantic recall is enabled by default, so if you give your agent memory it will be included:

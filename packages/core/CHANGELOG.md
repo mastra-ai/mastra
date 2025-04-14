@@ -1,5 +1,11 @@
 # @mastra/core
 
+## 0.8.3-alpha.4
+
+### Patch Changes
+
+- 7f1b291: Client Side tool call passing
+
 ## 0.8.3-alpha.3
 
 ### Patch Changes

@@ -1,5 +1,14 @@
 # @mastra/deployer
 
+## 0.2.9-alpha.4
+
+### Patch Changes
+
+- 1ebbfbf: Add 3 minutes timeout to deployer server
+- Updated dependencies [7f1b291]
+  - @mastra/core@0.8.3-alpha.4
+  - @mastra/server@1.0.3-alpha.4
+
 ## 0.2.9-alpha.3
 
 ### Patch Changes
