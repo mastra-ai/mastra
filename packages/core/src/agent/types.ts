@@ -61,6 +61,7 @@ export type AgentGenerateOptions<Z extends ZodSchema | JSONSchema7 | undefined =
   instructions?: string;
   /** Additional tool sets that can be used for this generation */
   toolsets?: ToolsetsInput;
+  clientTools?: ToolsInput;
   /** Additional context messages to include */
   context?: CoreMessage[];
   /** Memory configuration options */
@@ -93,6 +94,7 @@ export type AgentStreamOptions<Z extends ZodSchema | JSONSchema7 | undefined = u
   instructions?: string;
   /** Additional tool sets that can be used for this generation */
   toolsets?: ToolsetsInput;
+  clientTools?: ToolsInput;
   /** Additional context messages to include */
   context?: CoreMessage[];
   /** Memory configuration options */
