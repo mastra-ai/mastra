@@ -6,6 +6,7 @@ import type { Mock } from 'vitest';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { HTTPException } from '../http-exception';
 import { getToolsHandler, getToolByIdHandler, executeToolHandler, executeAgentToolHandler } from './tools';
+import { Container } from '@mastra/core/di';
 
 describe('Tools Handlers', () => {
   const mockTool: ToolAction = createTool({
@@ -137,6 +138,7 @@ describe('Tools Handlers', () => {
           agentId: 'non-existent',
           toolId: mockTool.id,
           data: {},
+          container: new Container(),
         }),
       ).rejects.toThrow('Agent with name non-existent not found');
     });
@@ -151,6 +153,7 @@ describe('Tools Handlers', () => {
           agentId: 'test-agent',
           toolId: 'non-existent',
           data: {},
+          container: new Container(),
         }),
       ).rejects.toThrow('Tool not found');
     });
@@ -173,6 +176,7 @@ describe('Tools Handlers', () => {
           agentId: 'test-agent',
           toolId: nonExecutableTool.id,
           data: {},
+          container: new Container(),
         }),
       ).rejects.toThrow('Tool is not executable');
     });
@@ -195,6 +199,7 @@ describe('Tools Handlers', () => {
         agentId: 'test-agent',
         toolId: mockTool.id,
         data: context,
+        container: new Container(),
       });
 
       expect(result).toEqual(mockResult);
@@ -220,6 +225,7 @@ describe('Tools Handlers', () => {
         agentId: 'test-agent',
         toolId: mockVercelTool.id,
         data: {},
+        container: new Container(),
       });
 
       expect(result).toEqual(mockResult);
