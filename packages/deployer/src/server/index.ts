@@ -26,7 +26,7 @@ import {
 } from './handlers/agents';
 import { handleClientsRefresh, handleTriggerClientsRefresh } from './handlers/client';
 import { errorHandler } from './handlers/error';
-import { getEvaluatorsHandler } from './handlers/evaluators';
+import { getEvaluatorsHandler, executeEvaluatorHandler } from './handlers/evaluators';
 import { getLogsByRunIdHandler, getLogsHandler, getLogTransports } from './handlers/logs';
 import {
   createThreadHandler,
@@ -1903,6 +1903,49 @@ export async function createHonoServer(
       },
     }),
     getEvaluatorsHandler,
+  );
+
+  // Add route for executing an evaluator
+  app.post(
+    '/api/evaluators/:evaluatorId/execute',
+    bodyLimit(bodyLimitOptions),
+    describeRoute({
+      description: 'Execute a specific evaluator',
+      tags: ['evaluators'],
+      parameters: [
+        {
+          name: 'evaluatorId',
+          in: 'path',
+          required: true,
+          schema: { type: 'string' },
+        },
+      ],
+      requestBody: {
+        required: true,
+        content: {
+          'application/json': {
+            schema: {
+              type: 'object',
+              properties: {
+                input: { type: 'string', description: 'Input text to evaluate' },
+                output: { type: 'string', description: 'Output text to evaluate' },
+                options: { type: 'object', description: 'Optional evaluation settings' },
+              },
+              required: ['input', 'output'],
+            },
+          },
+        },
+      },
+      responses: {
+        200: {
+          description: 'Evaluation result',
+        },
+        404: {
+          description: 'Evaluator not found',
+        },
+      },
+    }),
+    executeEvaluatorHandler,
   );
 
   // Vector routes

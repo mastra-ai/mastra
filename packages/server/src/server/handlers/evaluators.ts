@@ -1,4 +1,4 @@
-import type { Evaluator, Metric } from '@mastra/core/eval';
+import type { Evaluator, EvaluationResult, Metric } from '@mastra/core/eval';
 import type { Mastra } from '@mastra/core/mastra';
 import { handleError } from './error';
 
@@ -37,5 +37,56 @@ export async function getEvaluatorsHandler({ mastra }: EvaluatorsContext): Promi
     return constructedEvaluators;
   } catch (error) {
     return handleError(error, 'Error getting evaluators');
+  }
+}
+
+type ExecuteEvaluatorContext = {
+  mastra: Mastra;
+  evaluatorId: string;
+  input: string;
+  output: string;
+  options?: Record<string, any>;
+};
+
+/**
+ * Handler to execute a specific evaluator by its ID
+ * @param context The execution context containing Mastra instance, evaluator ID, input, output, and options
+ * @returns EvaluationResult from the executed evaluator
+ */
+export async function executeEvaluatorHandler({
+  mastra,
+  evaluatorId,
+  input,
+  output,
+  options,
+}: ExecuteEvaluatorContext): Promise<EvaluationResult | { status: number; message: string }> {
+  try {
+    const evaluators = mastra.getEvaluators();
+    const evaluator = evaluators[evaluatorId];
+
+    if (!evaluator) {
+      return {
+        status: 404,
+        message: `Evaluator with ID "${evaluatorId}" not found`,
+      };
+    }
+
+    // Check if the evaluator is an Evaluator (has score method) or a Metric (has measure method)
+    if ('score' in evaluator) {
+      // Execute the evaluator's score method
+      const result = await evaluator.score({ input, output, options });
+      return result;
+    } else if ('measure' in evaluator) {
+      // Execute the metric's measure method
+      const result = await evaluator.measure(input, output);
+      return result;
+    } else {
+      return {
+        status: 400,
+        message: `Invalid evaluator type for "${evaluatorId}"`,
+      };
+    }
+  } catch (error) {
+    return handleError(error, `Error executing evaluator "${evaluatorId}"`);
   }
 }

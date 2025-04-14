@@ -1,6 +1,5 @@
-import type { Evaluator } from '@mastra/core/eval';
-import type { Metric } from '@mastra/core/eval';
-import { Agent, MemoryThread, Tool, Workflow, Vector, BaseResource, Network } from './resources';
+import type { EvaluationResult } from '@mastra/core/eval';
+import { Agent, BaseResource, MemoryThread, Network, Tool, Vector, Workflow } from './resources';
 import type {
   ClientOptions,
   CreateMemoryThreadParams,
@@ -17,7 +16,6 @@ import type {
   GetTelemetryResponse,
   GetToolResponse,
   GetWorkflowResponse,
-  RequestOptions,
   SaveMessageToMemoryParams,
   SaveMessageToMemoryResponse,
 } from './types';
@@ -230,5 +228,25 @@ export class MastraClient extends BaseResource {
    */
   public getEvaluators(): Promise<Record<string, GetEvaluatorResponse>> {
     return this.request('/api/evaluators');
+  }
+
+  /**
+   * Executes a specific evaluator
+   * @param evaluatorId - ID of the evaluator to execute
+   * @param input - Input text to evaluate
+   * @param output - Output text to evaluate
+   * @param options - Optional evaluation settings
+   * @returns Promise containing evaluation result
+   */
+  public executeEvaluator(
+    evaluatorId: string,
+    input: string,
+    output: string,
+    options?: Record<string, any>,
+  ): Promise<EvaluationResult> {
+    return this.request(`/api/evaluators/${evaluatorId}/execute`, {
+      method: 'POST',
+      body: JSON.stringify({ input, output, options }),
+    });
   }
 }
