@@ -1,6 +1,6 @@
 {
   "name": "@mastra/ragie",
-  "version": "1.1.17",
+  "version": "1.1.18-alpha.3",
   "description": "",
   "main": "dist/index.js",
   "typings": "dist/index.d.ts",
@@ -68,7 +68,7 @@
   },
   "keywords": [],
   "author": "",
-  "license": "ISC",
+  "license": "Elastic-2.0",
   "dependencies": {
     "@hey-api/client-fetch": "^0.3.4",
     "@mastra/core": "workspace:^",

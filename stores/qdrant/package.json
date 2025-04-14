@@ -1,6 +1,6 @@
 {
   "name": "@mastra/qdrant",
-  "version": "0.2.8",
+  "version": "0.2.9-alpha.3",
   "description": "Qdrant vector store provider for Mastra",
   "type": "module",
   "main": "dist/index.js",
@@ -24,6 +24,7 @@
     "test": "vitest run",
     "lint": "eslint ."
   },
+  "license": "Elastic-2.0",
   "dependencies": {
     "@mastra/core": "workspace:^",
     "@qdrant/js-client-rest": "^1.13.0"

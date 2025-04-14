@@ -1,6 +1,6 @@
 {
   "name": "@mastra/voice-elevenlabs",
-  "version": "0.1.12",
+  "version": "0.1.13-alpha.3",
   "description": "Mastra ElevenLabs voice integration",
   "type": "module",
   "files": [
@@ -27,6 +27,7 @@
     "test": "vitest run",
     "lint": "eslint ."
   },
+  "license": "Elastic-2.0",
   "dependencies": {
     "@mastra/core": "workspace:^",
     "elevenlabs": "^1.54.0",

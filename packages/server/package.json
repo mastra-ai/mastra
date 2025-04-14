@@ -1,6 +1,6 @@
 {
   "name": "@mastra/server",
-  "version": "1.0.2",
+  "version": "1.0.3-alpha.3",
   "description": "",
   "type": "module",
   "files": [
@@ -50,7 +50,7 @@
   },
   "keywords": [],
   "author": "",
-  "license": "ISC",
+  "license": "Elastic-2.0",
   "dependencies": {},
   "peerDependencies": {
     "@mastra/core": "workspace:^"

@@ -1,5 +1,7 @@
+import type { IncomingMessage, ServerResponse } from 'http';
+import { createServer } from 'http';
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
-import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
+import { SSEServerTransport } from '@modelcontextprotocol/sdk/server/sse.js';
 import { CallToolRequestSchema, ListToolsRequestSchema } from '@modelcontextprotocol/sdk/types.js';
 import { z } from 'zod';
 import { zodToJsonSchema } from 'zod-to-json-schema';
@@ -127,7 +129,57 @@ server.setRequestHandler(CallToolRequestSchema, async request => {
 });
 
 // Start the server
-const transport = new StdioServerTransport();
-await server.connect(transport);
+let transport: SSEServerTransport | undefined;
+
+const httpServer = createServer(async (req: IncomingMessage, res: ServerResponse) => {
+  const url = new URL(req.url || '', `http://${req.headers.host}`);
+
+  if (url.pathname === '/sse') {
+    console.log('Received SSE connection');
+    transport = new SSEServerTransport('/message', res);
+    await server.connect(transport);
+
+    server.onclose = async () => {
+      await server.close();
+      transport = undefined;
+    };
+
+    // Handle client disconnection
+    res.on('close', () => {
+      transport = undefined;
+    });
+  } else if (url.pathname === '/message') {
+    console.log('Received message');
+    if (!transport) {
+      res.writeHead(503);
+      res.end('SSE connection not established');
+      return;
+    }
+    await transport.handlePostMessage(req, res);
+  } else {
+    console.log('Unknown path:', url.pathname);
+    res.writeHead(404);
+    res.end();
+  }
+});
+
+const PORT = process.env.PORT || 60808;
+httpServer.listen(PORT, () => {
+  console.log(`Weather server is running on SSE at http://localhost:${PORT}`);
+});
+
+// Handle graceful shutdown
+process.on('SIGINT', async () => {
+  console.log('Shutting down weather server...');
+  if (transport) {
+    await server.close();
+    transport = undefined;
+  }
+  // Close the HTTP server
+  httpServer.close(() => {
+    console.log('Weather server shut down complete');
+    process.exit(0);
+  });
+});
 
 export { server };

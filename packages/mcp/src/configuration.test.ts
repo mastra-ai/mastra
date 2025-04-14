@@ -1,7 +1,9 @@
 import { spawn } from 'child_process';
 import path from 'path';
-import { describe, it, expect, beforeEach, afterEach, afterAll, beforeAll } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, afterAll, beforeAll, vi } from 'vitest';
 import { MCPConfiguration } from './configuration';
+
+vi.setConfig({ testTimeout: 80000, hookTimeout: 80000 });
 
 describe('MCPConfiguration', () => {
   let mcp: MCPConfiguration;
@@ -176,6 +178,134 @@ describe('MCPConfiguration', () => {
       ).toThrow(/MCPConfiguration was initialized multiple times/);
 
       await existingConfig.disconnect();
+    });
+  });
+  describe('MCPConfiguration Operation Timeouts', () => {
+    it('should respect custom timeout in configuration', async () => {
+      const config = new MCPConfiguration({
+        id: 'test-timeout-config',
+        timeout: 3000, // 3 second timeout
+        servers: {
+          test: {
+            command: 'node',
+            args: [
+              '-e',
+              `
+            const { Server } = require('@modelcontextprotocol/sdk/server/index.js');
+            const server = new Server({ name: 'test', version: '1.0.0' });
+            setTimeout(() => process.exit(0), 2000); // 2 second delay
+          `,
+            ],
+          },
+        },
+      });
+
+      const error = await config.getTools().catch(e => e);
+      expect(error).toBeDefined(); // Will throw since server exits before responding
+      expect(error.message).not.toMatch(/Request timed out/);
+
+      await config.disconnect();
+    });
+
+    it('should respect per-server timeout override', async () => {
+      const config = new MCPConfiguration({
+        id: 'test-server-timeout-config',
+        timeout: 500, // Global timeout of 500ms
+        servers: {
+          test: {
+            command: 'node',
+            args: [
+              '-e',
+              `
+            const { Server } = require('@modelcontextprotocol/sdk/server/index.js');
+            const server = new Server({ name: 'test', version: '1.0.0' });
+            setTimeout(() => process.exit(0), 2000); // 2 second delay
+          `,
+            ],
+            timeout: 3000, // Server-specific timeout of 3s
+          },
+        },
+      });
+
+      // This should succeed since server timeout (3s) is longer than delay (2s)
+      const error = await config.getTools().catch(e => e);
+      expect(error).toBeDefined(); // Will throw since server exits before responding
+      expect(error.message).not.toMatch(/Request timed out/);
+
+      await config.disconnect();
+    });
+  });
+
+  describe('MCPConfiguration Connection Timeout', () => {
+    it('should throw timeout error for slow starting server', async () => {
+      const slowConfig = new MCPConfiguration({
+        id: 'test-slow-server',
+        servers: {
+          slowServer: {
+            command: 'node',
+            args: ['-e', 'setTimeout(() => process.exit(0), 65000)'], // Simulate a server that takes 65 seconds to start
+          },
+        },
+      });
+
+      await expect(slowConfig.getTools()).rejects.toThrow(/Request timed out/);
+      await slowConfig.disconnect();
+    });
+
+    it('timeout should be longer than default timeout', async () => {
+      const slowConfig = new MCPConfiguration({
+        id: 'test-slow-server',
+        timeout: 70000,
+        servers: {
+          slowServer: {
+            command: 'node',
+            args: ['-e', 'setTimeout(() => process.exit(0), 65000)'], // Simulate a server that takes 65 seconds to start
+          },
+        },
+      });
+
+      const error = await slowConfig.getTools().catch(e => e);
+      expect(error).toBeDefined();
+      expect(error.message).not.toMatch(/Request timed out/);
+      await slowConfig.disconnect();
+    });
+
+    it('should respect custom timeout configuration', async () => {
+      const quickConfig = new MCPConfiguration({
+        id: 'test-quick-timeout',
+        timeout: 1000, // Very short global timeout
+        servers: {
+          slowServer: {
+            command: 'node',
+            args: ['-e', 'setTimeout(() => process.exit(0), 30000)'], // Takes 30 seconds to exit
+          },
+        },
+      });
+
+      await expect(quickConfig.getTools()).rejects.toThrow(/Request timed out/);
+      await quickConfig.disconnect();
+    });
+
+    it('should respect per-server timeout configuration', async () => {
+      const mixedConfig = new MCPConfiguration({
+        id: 'test-mixed-timeout',
+        timeout: 1000, // Short global timeout
+        servers: {
+          quickServer: {
+            command: 'node',
+            args: ['-e', 'setTimeout(() => process.exit(0), 2000)'], // Takes 2 seconds to exit
+          },
+          slowServer: {
+            command: 'node',
+            args: ['-e', 'setTimeout(() => process.exit(0), 2000)'], // Takes 2 seconds to exit
+            timeout: 3000, // But has a longer timeout
+          },
+        },
+      });
+
+      // Quick server should timeout
+      await expect(mixedConfig.getTools()).rejects.toThrow(/Request timed out/);
+      await mixedConfig.disconnect();
     });
   });
 });

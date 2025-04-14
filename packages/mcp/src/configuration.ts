@@ -1,4 +1,5 @@
 import { MastraBase } from '@mastra/core/base';
+import { DEFAULT_REQUEST_TIMEOUT_MSEC } from '@modelcontextprotocol/sdk/shared/protocol.js';
 import { v5 as uuidv5 } from 'uuid';
 import { MastraMCPClient } from './client';
 import type { MastraMCPServerDefinition } from './client';
@@ -8,9 +9,15 @@ const mastraMCPConfigurationInstances = new Map<string, InstanceType<typeof MCPC
 export class MCPConfiguration extends MastraBase {
   private serverConfigs: Record<string, MastraMCPServerDefinition> = {};
   private id: string;
+  private defaultTimeout: number;
 
-  constructor(args: { id?: string; servers: Record<string, MastraMCPServerDefinition> }) {
+  constructor(args: {
+    id?: string;
+    servers: Record<string, MastraMCPServerDefinition>;
+    timeout?: number; // Optional global timeout
+  }) {
     super({ name: 'MCPConfiguration' });
+    this.defaultTimeout = args.timeout ?? DEFAULT_REQUEST_TIMEOUT_MSEC;
     this.serverConfigs = args.servers;
     this.id = args.id ?? this.makeId();
 
@@ -50,12 +57,8 @@ To fix this you have three different options:
   public async disconnect() {
     mastraMCPConfigurationInstances.delete(this.id);
 
-    for (const serverName of Object.keys(this.serverConfigs)) {
-      const client = this.mcpClientsById.get(serverName);
-      if (client) {
-        await client.disconnect();
-      }
-    }
+    await Promise.all(Array.from(this.mcpClientsById.values()).map(client => client.disconnect()));
+    this.mcpClientsById.clear();
   }
 
   public async getTools() {
@@ -100,6 +103,7 @@ To fix this you have three different options:
     const mcpClient = new MastraMCPClient({
       name,
       server: config,
+      timeout: config.timeout ?? this.defaultTimeout,
     });
 
     this.mcpClientsById.set(name, mcpClient);
@@ -123,14 +127,12 @@ To fix this you have three different options:
       client: InstanceType<typeof MastraMCPClient>;
     }) => Promise<void>,
   ) {
-    for (const [serverName, serverConfig] of Object.entries(this.serverConfigs)) {
-      const client = await this.getConnectedClient(serverName, serverConfig);
-      const tools = await client.tools();
-      await cb({
-        serverName,
-        tools,
-        client,
-      });
-    }
+    await Promise.all(
+      Object.entries(this.serverConfigs).map(async ([serverName, serverConfig]) => {
+        const client = await this.getConnectedClient(serverName, serverConfig);
+        const tools = await client.tools();
+        await cb({ serverName, tools, client });
+      }),
+    );
   }
 }

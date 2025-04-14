@@ -1,6 +1,6 @@
 {
   "name": "@mastra/astra",
-  "version": "0.2.9",
+  "version": "0.2.10-alpha.3",
   "description": "Astra DB provider for Mastra - includes vector store capabilities",
   "type": "module",
   "main": "dist/index.js",
@@ -24,6 +24,7 @@
     "test": "vitest run",
     "lint": "eslint ."
   },
+  "license": "Elastic-2.0",
   "dependencies": {
     "@datastax/astra-db-ts": "^1.5.0",
     "@mastra/core": "workspace:^"

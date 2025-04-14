@@ -1,5 +1,35 @@
 # @mastra/mem0
 
+## 0.0.5-alpha.3
+
+### Patch Changes
+
+- Updated dependencies [10a8caf]
+  - @mastra/core@0.8.3-alpha.3
+
+## 0.0.5-alpha.2
+
+### Patch Changes
+
+- Updated dependencies [0bcc862]
+  - @mastra/core@0.8.3-alpha.2
+
+## 0.0.5-alpha.1
+
+### Patch Changes
+
+- 37bb612: Add Elastic-2.0 licensing for packages
+- Updated dependencies [32e7b71]
+- Updated dependencies [37bb612]
+  - @mastra/core@0.8.3-alpha.1
+
+## 0.0.5-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [359b089]
+  - @mastra/core@0.8.3-alpha.0
+
 ## 0.0.4
 
 ### Patch Changes

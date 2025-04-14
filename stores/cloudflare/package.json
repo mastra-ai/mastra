@@ -1,6 +1,6 @@
 {
   "name": "@mastra/cloudflare",
-  "version": "0.0.3",
+  "version": "0.0.4-alpha.3",
   "description": "Cloudflare provider for Mastra - includes db storage capabilities",
   "type": "module",
   "files": [
@@ -27,6 +27,7 @@
     "test": "vitest run",
     "lint": "eslint ."
   },
+  "license": "Elastic-2.0",
   "dependencies": {
     "@mastra/core": "workspace:^",
     "cloudflare": "^4.1.0"

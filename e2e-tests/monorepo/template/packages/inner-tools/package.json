@@ -9,7 +9,7 @@
   },
   "keywords": [],
   "author": "",
-  "license": "ISC",
+  "license": "MIT",
   "dependencies": {
     "@mastra/core": "link:%%MASTRA_DIR%%/packages/core"
   }

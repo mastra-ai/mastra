@@ -1,6 +1,6 @@
 {
   "name": "@mastra/chroma",
-  "version": "0.2.9",
+  "version": "0.2.10-alpha.3",
   "description": "Chroma vector store provider for Mastra",
   "type": "module",
   "main": "dist/index.js",
@@ -24,6 +24,7 @@
     "test": "vitest run",
     "lint": "eslint ."
   },
+  "license": "Elastic-2.0",
   "dependencies": {
     "@mastra/core": "workspace:^",
     "chromadb": "^2.2.0"

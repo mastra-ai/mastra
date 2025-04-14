@@ -9,7 +9,7 @@
   },
   "keywords": [],
   "author": "",
-  "license": "ISC",
+  "license": "MIT",
   "dependencies": {
     "@ai-sdk/anthropic": "^1.1.15",
     "@ai-sdk/fireworks": "^0.1.14",

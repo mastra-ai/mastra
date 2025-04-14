@@ -1,6 +1,6 @@
 {
   "name": "@mastra/voice-google",
-  "version": "0.1.12",
+  "version": "0.1.13-alpha.3",
   "description": "Mastra Google voice integration",
   "type": "module",
   "files": [
@@ -27,6 +27,7 @@
     "test": "vitest run",
     "lint": "eslint ."
   },
+  "license": "Elastic-2.0",
   "dependencies": {
     "@google-cloud/speech": "^6.7.1",
     "@google-cloud/text-to-speech": "^6.0.1",

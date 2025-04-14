@@ -1,8 +1,6 @@
 import { openai } from '@ai-sdk/openai';
 import { Agent } from '@mastra/core/agent';
-
 import { cookingTool } from '../tools/index.js';
-import { makeCoreTool } from '@mastra/core';
 
 export const chefAgent = new Agent({
   name: 'Chef Agent',

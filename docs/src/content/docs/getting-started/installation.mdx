@@ -40,8 +40,8 @@ a project, run:
   <Tabs.Tab>
   ```bash copy
    yarn create mastra@latest 
-   ```<
-   /Tabs.Tab>
+   ```
+   </Tabs.Tab>
   <Tabs.Tab>
   ```bash copy
    pnpm create mastra@latest
@@ -131,22 +131,28 @@ Then, initialize a TypeScript project including the `@mastra/core` package:
   ```
   </Tabs.Tab>
   <Tabs.Tab>
-    ```bash copy
-    pnpm init pnpm add typescript tsx @types/node mastra --save-dev
-    pnpm add @mastra/core zod pnpm dlx tsc --init 
-    ```
+  ```bash copy
+  pnpm init
+  pnpm add typescript tsx @types/node mastra --save-dev
+  pnpm add @mastra/core zod @ai-sdk/openai
+  pnpm dlx tsc --init 
+  ```
   </Tabs.Tab>
   <Tabs.Tab>
-    ```bash copy
-    yarn init -y yarn add typescript tsx @types/node mastra --dev
-    yarn add @mastra/core zod yarn dlx tsc --init 
-    ```
+  ```bash copy
+  yarn init -y
+  yarn add typescript tsx @types/node mastra --dev
+  yarn add @mastra/core zod @ai-sdk/openai
+  yarn dlx tsc --init 
+  ```
   </Tabs.Tab>
   <Tabs.Tab>
-    ```bash copy
-    bun init -y bun add typescript tsx @types/node mastra --dev
-    bun add @mastra/core zod bunx tsc --init 
-    ```
+  ```bash copy
+  bun init -y
+  bun add typescript tsx @types/node mastra --dev
+  bun add @mastra/core zod @ai-sdk/openai
+  bunx tsc --init 
+  ```
   </Tabs.Tab>
 </Tabs>
 

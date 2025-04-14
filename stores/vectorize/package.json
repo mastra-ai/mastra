@@ -1,6 +1,6 @@
 {
   "name": "@mastra/vectorize",
-  "version": "0.2.4",
+  "version": "0.2.5-alpha.3",
   "description": "Cloudflare Vectorize store provider for Mastra",
   "type": "module",
   "files": [
@@ -27,6 +27,7 @@
     "test": "vitest run",
     "lint": "eslint ."
   },
+  "license": "Elastic-2.0",
   "dependencies": {
     "@mastra/core": "workspace:^",
     "cloudflare": "^4.1.0"

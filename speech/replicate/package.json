@@ -1,6 +1,6 @@
 {
   "name": "@mastra/speech-replicate",
-  "version": "0.1.17",
+  "version": "0.1.18-alpha.3",
   "description": "Mastra Replicate speech integration",
   "type": "module",
   "main": "dist/index.js",
@@ -24,6 +24,7 @@
     "build:watch": "pnpm build --watch",
     "test": "vitest run"
   },
+  "license": "Elastic-2.0",
   "dependencies": {
     "@mastra/core": "workspace:^",
     "replicate": "^0.34.1",

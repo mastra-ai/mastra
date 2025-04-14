@@ -1,5 +1,30 @@
 # @mastra/core
 
+## 0.8.3-alpha.3
+
+### Patch Changes
+
+- 10a8caf: Removed an extra console log that made it into core
+
+## 0.8.3-alpha.2
+
+### Patch Changes
+
+- 0bcc862: Fixed an issue where we were sanitizing response message content and filter on a value that may not always be an array
+
+## 0.8.3-alpha.1
+
+### Patch Changes
+
+- 32e7b71: Add support for dependency injection
+- 37bb612: Add Elastic-2.0 licensing for packages
+
+## 0.8.3-alpha.0
+
+### Patch Changes
+
+- 359b089: Allowed explicitly disabling vector/embedder in Memory by passing vector: false or options.semanticRecall: false
+
 ## 0.8.2
 
 ### Patch Changes
