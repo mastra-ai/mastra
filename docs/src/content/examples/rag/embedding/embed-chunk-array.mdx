@@ -18,7 +18,7 @@ const doc = MDocument.fromText("Your text content...");
 
 const chunks = await doc.chunk();
 
-const { embeddings } = await embed({
+const { embeddings } = await embedMany({
   model: openai.embedding('text-embedding-3-small'),
   values: chunks.map(chunk => chunk.text),
 });

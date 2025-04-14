@@ -27,15 +27,8 @@ export class BuildBundler extends Bundler {
 
   async prepare(outputDirectory: string): Promise<void> {
     await super.prepare(outputDirectory);
-
-    const __filename = fileURLToPath(import.meta.url);
-    const __dirname = dirname(__filename);
-
-    const playgroundServePath = join(outputDirectory, this.outputDir, 'playground');
-    await fsExtra.copy(join(dirname(__dirname), 'src/playground/dist'), playgroundServePath, {
-      overwrite: true,
-    });
   }
+
   bundle(entryFile: string, outputDirectory: string): Promise<void> {
     return this._bundle(this.getEntry(), entryFile, outputDirectory);
   }

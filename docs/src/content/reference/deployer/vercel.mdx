@@ -50,9 +50,36 @@ const mastra = new Mastra({
   ]}
 />
 
+
+### Environment Variables
+
+The VercelDeployer handles environment variables from multiple sources:
+
+1. **Environment Files**: Variables from `.env.production` and `.env` files.
+2. **Configuration**: Variables passed through the Mastra configuration.
+3. **Vercel Dashboard**: Variables can also be managed through Vercel's web interface.
+
+The deployer automatically synchronizes environment variables between your local development environment and Vercel's environment variable system, ensuring consistency across all deployment environments (production, preview, and development).
+
+## Build Mastra Project
+
+To build your Mastra project for Vercel deployment:
+
+```bash
+npx mastra build
+```
+
+The build process generates the following output structure in the `.mastra/output` directory:
+
+```
+.mastra/output/
+├── vercel.json     # Vercel configuration
+└── index.mjs       # Application entry point
+```
+
 ### Vercel Configuration
 
-The VercelDeployer automatically generates a `vercel.json` configuration file with the following settings:
+The VercelDeployer automatically generates a `vercel.json` configuration file in `.mastra/output` with the following settings:
 
 ```json
 {
@@ -76,22 +103,15 @@ The VercelDeployer automatically generates a `vercel.json` configuration file wi
 }
 ```
 
-### Environment Variables
+## Deployment Options
 
-The VercelDeployer handles environment variables from multiple sources:
+After building, you can deploy your Mastra application `.mastra/output` to Vercel using any of these methods:
 
-1. **Environment Files**: Variables from `.env.production` and `.env` files.
-2. **Configuration**: Variables passed through the Mastra configuration.
-3. **Vercel Dashboard**: Variables can also be managed through Vercel's web interface.
+1. **Vercel CLI**: Deploy directly using Vercel's official CLI tool
 
-The deployer automatically synchronizes environment variables between your local development environment and Vercel's environment variable system, ensuring consistency across all deployment environments (production, preview, and development).
+2. **Vercel Dashboard**: Connect your Git repository or drag-and-drop the build output through the Vercel dashboard
 
-### Project Structure
 
-The deployer creates the following structure in your output directory:
+## Platform Documentation
 
-```
-output-directory/
-├── vercel.json     # Deployment configuration
-└── index.mjs       # Application entry point with Hono server integration
-```
+- [Vercel](https://vercel.com/docs)

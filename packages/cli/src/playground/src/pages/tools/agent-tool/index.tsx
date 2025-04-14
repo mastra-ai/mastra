@@ -1,12 +1,11 @@
 import jsonSchemaToZod from 'json-schema-to-zod';
 import { useState } from 'react';
-import { useParams } from 'react-router';
+import { Link, useParams } from 'react-router';
 import { parse } from 'superjson';
 import { z } from 'zod';
 
 import { resolveSerializedZodOutput } from '@/components/dynamic-form/utils';
-import Breadcrumb from '@/components/ui/breadcrumbs';
-import { Header } from '@/components/ui/header';
+
 import { Skeleton } from '@/components/ui/skeleton';
 import { Text } from '@/components/ui/text';
 
@@ -14,6 +13,7 @@ import { useAgent } from '@/hooks/use-agents';
 import { useExecuteTool } from '@/hooks/use-execute-agent-tool';
 
 import ToolExecutor from '../tool-executor';
+import { HeaderTitle, Header, Crumb, Breadcrumb } from '@mastra/playground-ui';
 
 const AgentTool = () => {
   const { toolId, agentId } = useParams();
@@ -38,8 +38,10 @@ const AgentTool = () => {
 
   if (isAgentLoading) {
     return (
-      <div className="flex flex-col h-full w-full bg-mastra-bg-1">
-        <Header title="Loading..." />
+      <div className="h-full w-full bg-mastra-bg-1">
+        <Header>
+          <HeaderTitle>Loading...</HeaderTitle>
+        </Header>
         <div className="w-full h-full grid grid-cols-[300px_1fr] p-2 gap-2">
           <div className="flex flex-col gap-4 border-[0.5px] border-mastra-border-1 rounded-[0.25rem] bg-mastra-bg-2 p-4 py-6">
             <Text variant="secondary" className="text-mastra-el-3 px-4" size="xs">
@@ -66,25 +68,22 @@ const AgentTool = () => {
     ? resolveSerializedZodOutput(jsonSchemaToZod(parse(tool?.inputSchema)))
     : z.object({});
 
-  const breadcrumbItems = [
-    {
-      label: 'Agents',
-      href: '/agents',
-    },
-    {
-      label: agentId,
-      href: `/agents/${agentId}/chat`,
-    },
-    {
-      label: toolId,
-      href: `/agents/${agentId}/tools/${toolId}`,
-      isCurrent: true,
-    },
-  ];
-
   return (
-    <div className="flex flex-col h-full w-full bg-mastra-bg-1 overflow-y-hidden">
-      <Header title={<Breadcrumb items={breadcrumbItems} />} />
+    <div className="h-full w-full bg-mastra-bg-1 overflow-y-hidden">
+      <Header>
+        <Breadcrumb>
+          <Crumb as={Link} to={`/agents`}>
+            Agents
+          </Crumb>
+          <Crumb as={Link} to={`/agents/${agentId}/chat`}>
+            {agentId}
+          </Crumb>
+          <Crumb as={Link} to={`/agents/${agentId}/tools/${toolId}`} isCurrent>
+            {toolId}
+          </Crumb>
+        </Breadcrumb>
+      </Header>
+
       <ToolExecutor
         executionResult={result}
         isExecutingTool={isExecutingTool}

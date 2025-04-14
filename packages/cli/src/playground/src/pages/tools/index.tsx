@@ -1,13 +1,13 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router';
 
-import { Header } from '@/components/ui/header';
 import { Skeleton } from '@/components/ui/skeleton';
 
 import { cn } from '@/lib/utils';
 
 import { useAgent, useAgents } from '@/hooks/use-agents';
 import { useTools } from '@/hooks/use-all-tools';
+import { Header, HeaderTitle } from '@mastra/playground-ui';
 
 const Tools = () => {
   const { agents, isLoading: isLoadingAgents } = useAgents();
@@ -21,8 +21,10 @@ const Tools = () => {
 
   if (isLoadingAgents) {
     return (
-      <div className="flex flex-col h-full w-full">
-        <Header title="Tools" />
+      <div className="h-full w-full">
+        <Header>
+          <HeaderTitle>Tools</HeaderTitle>
+        </Header>
         <div className="w-full h-full grid grid-cols-[300px_1fr] py-6 px-4">
           <div className="flex flex-col gap-4">
             <div className="flex flex-col gap-2">
@@ -62,8 +64,10 @@ const Tools = () => {
 
   if (isLoadingTools || isLoadingAgent) {
     return (
-      <div className="flex flex-col h-full w-full ">
-        <Header title={`Tools`} />
+      <div className="h-full w-full ">
+        <Header>
+          <HeaderTitle>Tools</HeaderTitle>
+        </Header>
         <div className="w-full h-full grid grid-cols-[300px_1fr] ">
           <div className="w-full h-full border-r-[0.5px] border-mastra-border-1 py-6 px-4">
             <Skeleton className="h-full w-full rounded-md" />
@@ -74,9 +78,11 @@ const Tools = () => {
   }
 
   return (
-    <div className="flex flex-col h-full w-full ">
-      <Header title={`Tools`} />
-      <div className="w-full h-full grid grid-cols-[300px_1fr] overflow-hidden">
+    <div className="h-full w-full ">
+      <Header>
+        <HeaderTitle>Tools</HeaderTitle>
+      </Header>
+      <div className="w-full h-full grid grid-cols-[300px_1fr]  ">
         <div className="w-full h-full border-r-[0.5px] border-mastra-border-1 py-6 px-4">
           <ul className=" flex flex-col gap-4">
             {Object.keys(tools).length > 0 && (

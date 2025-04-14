@@ -9,6 +9,7 @@ import type {
 import type { JSONSchema7 } from 'json-schema';
 import type { z, ZodSchema } from 'zod';
 
+import type { Container } from '../di';
 import type { Metric } from '../eval';
 import type {
   CoreMessage,
@@ -79,6 +80,8 @@ export type AgentGenerateOptions<Z extends ZodSchema | JSONSchema7 | undefined =
   toolChoice?: 'auto' | 'none' | 'required' | { type: 'tool'; toolName: string };
   /** Telemetry settings */
   telemetry?: TelemetrySettings;
+  /** Container for dependency injection */
+  container?: Container;
 } & ({ resourceId?: undefined; threadId?: undefined } | { resourceId: string; threadId: string }) &
   (Z extends undefined ? DefaultLLMTextOptions : DefaultLLMTextObjectOptions);
 
@@ -118,5 +121,7 @@ export type AgentStreamOptions<Z extends ZodSchema | JSONSchema7 | undefined = u
   experimental_output?: Z;
   /** Telemetry settings */
   telemetry?: TelemetrySettings;
+  /** Container for dependency injection */
+  container?: Container;
 } & ({ resourceId?: undefined; threadId?: undefined } | { resourceId: string; threadId: string }) &
   (Z extends undefined ? DefaultLLMStreamOptions : DefaultLLMStreamObjectOptions);

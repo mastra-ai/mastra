@@ -1,8 +1,7 @@
 import { useParams } from 'react-router';
 
-import { WorkflowRunProvider } from '@mastra/playground-ui';
+import { WorkflowRunProvider, Header, HeaderTitle } from '@mastra/playground-ui';
 
-import { Header } from '@/components/ui/header';
 import { Skeleton } from '@/components/ui/skeleton';
 
 import { useWorkflow } from '@/hooks/use-workflows';
@@ -14,9 +13,13 @@ export const WorkflowLayout = ({ children }: { children: React.ReactNode }) => {
   const { workflow, isLoading: isWorkflowLoading } = useWorkflow(workflowId!);
   return (
     <WorkflowRunProvider>
-      <div className="flex flex-col h-full overflow-hidden">
+      <div className="h-full overflow-hidden">
         {isWorkflowLoading ? (
-          <Header title={<Skeleton className="h-6 w-[200px]" />} />
+          <Header>
+            <HeaderTitle>
+              <Skeleton className="h-6 w-[200px]" />
+            </HeaderTitle>
+          </Header>
         ) : (
           <WorkflowHeader workflowName={workflow?.name!} workflowId={workflowId!} />
         )}

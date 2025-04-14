@@ -50,9 +50,38 @@ const mastra = new Mastra({
   ]}
 />
 
+
+### Environment Variables
+
+The NetlifyDeployer handles environment variables from multiple sources:
+
+1. **Environment Files**: Variables from `.env.production` and `.env` files.
+2. **Configuration**: Variables passed through the Mastra configuration.
+3. **Netlify Dashboard**: Variables can also be managed through Netlify's web interface.
+
+
+## Build Mastra Project
+
+To build your Mastra project for Netlify deployment:
+
+```bash
+npx mastra build
+```
+
+The build process generates the following output structure in the `.mastra/output` directory:
+
+```
+.mastra/output/
+├── netlify/
+│   └── functions/
+│       └── api/
+│           └── index.mjs    # Application entry point
+└── netlify.toml             # Netlify configuration
+```
+
 ### Netlify Configuration
 
-The NetlifyDeployer automatically generates a `netlify.toml` configuration file with the following settings:
+The NetlifyDeployer automatically generates a `netlify.toml` configuration file in `.mastra/output` with the following settings:
 
 ```toml
 [functions]
@@ -66,23 +95,15 @@ status = 200
 to = "/.netlify/functions/api/:splat"
 ```
 
-### Environment Variables
+## Deployment Options
 
-The NetlifyDeployer handles environment variables from multiple sources:
+After building, you can deploy your Mastra application `.mastra/output` to Netlify using any of these methods:
 
-1. **Environment Files**: Variables from `.env.production` and `.env` files.
-2. **Configuration**: Variables passed through the Mastra configuration.
-3. **Netlify Dashboard**: Variables can also be managed through Netlify's web interface.
+1. **Netlify CLI**: Deploy directly using Netlify's official CLI tool
 
-### Project Structure
+2. **Netlify Dashboard**: Connect your Git repository or drag-and-drop the build output through the Netlify dashboard
 
-The deployer creates the following structure in your output directory:
 
-```
-output-directory/
-├── netlify/
-│   └── functions/
-│       └── api/
-│           └── index.mjs    # Application entry point with Hono server integration
-└── netlify.toml             # Deployment configuration
-```
+## Platform Documentation
+
+- [Netlify](https://docs.netlify.com/)
