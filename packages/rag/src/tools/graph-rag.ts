@@ -67,7 +67,7 @@ export const createGraphRAGTool = ({
       const logger = mastra?.getLogger();
       if (!logger) {
         console.warn(
-          '[GraphRAGTool] Logger integration missing: no debug or error logs will be recorded for this tool execution.',
+          '[GraphRAGTool] Logger not initialized: no debug or error logs will be recorded for this tool execution.',
         );
       }
       if (logger) {

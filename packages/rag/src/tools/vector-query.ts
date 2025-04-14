@@ -55,7 +55,7 @@ export const createVectorQueryTool = ({
       const logger = mastra?.getLogger();
       if (!logger) {
         console.warn(
-          '[VectorQueryTool] Logger integration missing: no debug or error logs will be recorded for this tool execution.',
+          '[VectorQueryTool] Logger not initialized: no debug or error logs will be recorded for this tool execution.',
         );
       }
       if (logger) {
