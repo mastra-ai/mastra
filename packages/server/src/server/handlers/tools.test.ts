@@ -1,4 +1,5 @@
 import { Agent } from '@mastra/core/agent';
+import { Container } from '@mastra/core/di';
 import { Mastra } from '@mastra/core/mastra';
 import { createTool } from '@mastra/core/tools';
 import type { ToolAction, VercelTool } from '@mastra/core/tools';
@@ -6,7 +7,6 @@ import type { Mock } from 'vitest';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { HTTPException } from '../http-exception';
 import { getToolsHandler, getToolByIdHandler, executeToolHandler, executeAgentToolHandler } from './tools';
-import { Container } from '@mastra/core/di';
 
 describe('Tools Handlers', () => {
   const mockTool: ToolAction = createTool({

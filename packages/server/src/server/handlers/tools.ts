@@ -1,3 +1,4 @@
+import type { Container } from '@mastra/core/di';
 import { isVercelTool } from '@mastra/core/tools';
 import type { ToolAction, VercelTool } from '@mastra/core/tools';
 import { stringify } from 'superjson';
@@ -7,7 +8,6 @@ import type { Context } from '../types';
 
 import { handleError } from './error';
 import { validateBody } from './utils';
-import type { Container } from '@mastra/core/di';
 
 interface ToolsContext extends Context {
   tools?: Record<string, ToolAction | VercelTool>;
