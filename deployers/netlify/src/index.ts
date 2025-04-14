@@ -5,6 +5,7 @@ import { Deployer } from '@mastra/deployer';
 import { execa } from 'execa';
 
 import { getOrCreateSite } from './helpers.js';
+import { DepsService } from '@mastra/deployer/services';
 
 export class NetlifyDeployer extends Deployer {
   protected scope: string;
@@ -38,6 +39,20 @@ status = 200
 to = "/.netlify/functions/api/:splat"
 `,
     );
+  }
+
+  protected async installDependencies(outputDirectory: string, rootDir = process.cwd()) {
+    const deps = new DepsService(rootDir);
+    deps.__setLogger(this.logger);
+
+    await deps.install({
+      dir: join(outputDirectory, this.outputDir),
+      architecture: {
+        os: ['linux'],
+        cpu: ['x64'],
+        libc: ['gnu'],
+      },
+    });
   }
 
   async deploy(outputDirectory: string): Promise<void> {
