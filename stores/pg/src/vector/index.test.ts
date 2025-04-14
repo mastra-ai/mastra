@@ -1884,7 +1884,7 @@ describe('PgVector', () => {
       // Now create the custom schema vectorDB instance
       customSchemaVectorDB = new PgVector({
         connectionString,
-        schema: customSchema,
+        schemaName: customSchema,
       });
     });
 
@@ -1925,7 +1925,7 @@ describe('PgVector', () => {
       });
 
       it('should accept config object with schema', () => {
-        const db = new PgVector({ connectionString, schema: customSchema });
+        const db = new PgVector({ connectionString, schemaName: customSchema });
         expect(db).toBeInstanceOf(PgVector);
       });
     });
@@ -2187,7 +2187,7 @@ describe('PgVector', () => {
       it('should fail when user lacks CREATE privilege', async () => {
         const restrictedDB = new PgVector({
           connectionString: getConnectionString(schemaRestrictedUser),
-          schema: testSchema,
+          schemaName: testSchema,
         });
 
         // Test schema creation directly by accessing private method
@@ -2218,7 +2218,7 @@ describe('PgVector', () => {
       it('should fail with schema creation error when creating index', async () => {
         const restrictedDB = new PgVector({
           connectionString: getConnectionString(schemaRestrictedUser),
-          schema: testSchema,
+          schemaName: testSchema,
         });
 
         // This should fail with the schema creation error

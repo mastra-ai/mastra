@@ -35,10 +35,10 @@ const storage = new PostgresStore({
       isOptional: false,
     },
     {
-      name: "schema",
+      name: "schemaName",
       type: "string",
       description: 
-        "The schema you want the storage to use. Will use the default schema if not provided.",
+        "The name of the schema you want the storage to use. Will use the default schema if not provided.",
       isOptional: true,
     }
   ]}

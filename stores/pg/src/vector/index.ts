@@ -71,12 +71,12 @@ export class PgVector extends MastraVector {
   private schemaSetupComplete: boolean | undefined = undefined;
 
   constructor(connectionString: string);
-  constructor(config: { connectionString: string; schema?: string });
-  constructor(config: string | { connectionString: string; schema?: string }) {
+  constructor(config: { connectionString: string; schemaName?: string });
+  constructor(config: string | { connectionString: string; schemaName?: string }) {
     super();
 
     const connectionString = typeof config === 'string' ? config : config.connectionString;
-    this.schema = typeof config === 'string' ? undefined : config.schema;
+    this.schema = typeof config === 'string' ? undefined : config.schemaName;
 
     const basePool = new pg.Pool({
       connectionString,
