@@ -15,17 +15,9 @@ It uses vector embeddings of messages for similarity search, integrates with var
   width={800}
 />
 
-**When sending a message to the LLM:**
+When it's enabled, new messages are used to query a vector DB for semantically similar messages.
 
-1. All new input messages are converted to embeddings.
-2. The attached vector DB is queried to find semantically similar messages using the input message embeddings.
-3. The queried messages are added to the conversation history in chronological order so the LLM can see them.
-
-**After the LLM responds:**
-
-1. All new messages (user, assistant, and tool calls/results) are converted to embeddings.
-2. Those embeddings are inserted into the vector DB.
-3. Future interactions with the LLM will now include semantic search against these newly inserted messages.
+After getting a response from the LLM, all new messages (user, assistant, and tool calls/results) are inserted into the vector DB to be recalled in later interactions.
 
 ## Quick Start
 
