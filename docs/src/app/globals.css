@@ -350,12 +350,6 @@ aside > div:nth-child(1) button {
   }
 }
 
-@media screen and (max-width: 1279px) {
-  .footer-form{
-    display: block;
-  }
-}
-
 .nextra-toc ul a{
   --x-color-gray-400: var(--color-el-3);
   --x-color-primary-600: var(--color-primary);
