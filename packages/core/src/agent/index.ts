@@ -440,13 +440,13 @@ export class Agent<
 
   convertTools({
     toolsets,
-    client_tools,
+    clientTools,
     threadId,
     resourceId,
     runId,
   }: {
     toolsets?: ToolsetsInput;
-    client_tools?: ToolsInput;
+    clientTools?: ToolsInput;
     threadId?: string;
     resourceId?: string;
     runId?: string;
@@ -570,13 +570,13 @@ export class Agent<
       });
     }
 
-    const clientTools = Object.entries(client_tools || {});
+    const clientToolsForInput = Object.entries(clientTools || {});
 
-    if (clientTools.length > 0) {
-      this.logger.debug(`[Agent:${this.name}] - Adding client tools ${Object.keys(client_tools || {}).join(', ')}`, {
+    if (clientToolsForInput.length > 0) {
+      this.logger.debug(`[Agent:${this.name}] - Adding client tools ${Object.keys(clientTools || {}).join(', ')}`, {
         runId,
       });
-      clientTools.forEach(([toolName, tool]) => {
+      clientToolsForInput.forEach(([toolName, tool]) => {
         const { execute, ...rest } = tool;
         const options = {
           name: toolName,
@@ -640,11 +640,11 @@ export class Agent<
     resourceId,
     runId,
     toolsets,
-    client_tools,
+    clientTools,
   }: {
     instructions?: string;
     toolsets?: ToolsetsInput;
-    client_tools?: ToolsInput;
+    clientTools?: ToolsInput;
     resourceId?: string;
     threadId?: string;
     memoryConfig?: MemoryConfig;
@@ -714,7 +714,7 @@ export class Agent<
         let convertedTools: Record<string, CoreTool> | undefined;
 
         if (
-          (client_tools && Object.keys(client_tools || {}).length > 0) ||
+          (clientTools && Object.keys(clientTools || {}).length > 0) ||
           (toolsets && Object.keys(toolsets || {}).length > 0) ||
           (this.getMemory() && resourceId)
         ) {
@@ -729,13 +729,13 @@ export class Agent<
           this.logger.debug(`[Agent:${this.name}] - Enhancing tools: ${reasons.join(', ')}`, {
             runId,
             toolsets: toolsets ? Object.keys(toolsets) : undefined,
-            client_tools: client_tools ? Object.keys(client_tools) : undefined,
+            clientTools: clientTools ? Object.keys(clientTools) : undefined,
             hasMemory: !!this.getMemory(),
             hasResourceId: !!resourceId,
           });
           convertedTools = this.convertTools({
             toolsets,
-            client_tools,
+            clientTools,
             threadId: threadIdToUse,
             resourceId,
             runId,
@@ -893,7 +893,7 @@ export class Agent<
       runId,
       output,
       toolsets,
-      client_tools,
+      clientTools,
       temperature,
       toolChoice = 'auto',
       experimental_output,
@@ -934,7 +934,7 @@ export class Agent<
       resourceId,
       runId: runIdToUse,
       toolsets,
-      client_tools,
+      clientTools,
     });
 
     const { threadId, thread, messageObjects, convertedTools } = await before();
@@ -1056,7 +1056,7 @@ export class Agent<
       onStepFinish,
       runId,
       toolsets,
-      client_tools,
+      clientTools,
       output,
       temperature,
       toolChoice = 'auto',
@@ -1096,7 +1096,7 @@ export class Agent<
       resourceId,
       runId: runIdToUse,
       toolsets,
-      client_tools,
+      clientTools,
     });
 
     const { threadId, thread, messageObjects, convertedTools } = await before();

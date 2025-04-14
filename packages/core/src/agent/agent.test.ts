@@ -221,7 +221,7 @@ describe('agent', () => {
     });
 
     const result = await userAgent.generate('Make it green', {
-      client_tools: {
+      clientTools: {
         changeColor: {
           id: 'changeColor',
           description: 'This is a test tool that returns the name and email',
@@ -246,7 +246,7 @@ describe('agent', () => {
     });
 
     const result = await userAgent.stream('Make it green', {
-      client_tools: {
+      clientTools: {
         changeColor: {
           id: 'changeColor',
           description: 'This is a test tool that returns the name and email',

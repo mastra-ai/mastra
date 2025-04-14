@@ -68,7 +68,7 @@ function App() {
     const agent = client.getAgent('agent');
     const response = await agent.stream({
       messages: prompt,
-      client_tools: clientSideToolCallsMap,
+      clientTools: clientSideToolCallsMap,
     });
 
     response.processDataStream({
