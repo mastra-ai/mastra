@@ -67,8 +67,7 @@ export function executeToolHandler(tools: ToolsContext['tools']) {
     runId,
     toolId,
     data,
-    container,
-  }: Pick<ToolsContext, 'mastra' | 'toolId' | 'runId'> & { data?: unknown; container: Container }) => {
+  }: Pick<ToolsContext, 'mastra' | 'toolId' | 'runId'> & { data?: unknown }) => {
     try {
       if (!toolId) {
         throw new HTTPException(400, { message: 'Tool ID is required' });
@@ -93,7 +92,6 @@ export function executeToolHandler(tools: ToolsContext['tools']) {
 
       const result = await tool.execute({
         context: data!,
-        container,
         mastra,
         runId,
       });
@@ -133,7 +131,7 @@ export async function executeAgentToolHandler({
     // }
 
     const result = await tool.execute({
-      context: data,
+      context: { data },
       container,
       mastra,
       runId: agentId,
