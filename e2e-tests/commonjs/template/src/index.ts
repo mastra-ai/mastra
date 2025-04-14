@@ -1,3 +1,3 @@
 import { mastra } from './mastra';
 
-console.log(mastra.getAgents());
+console.log(JSON.stringify(mastra.getAgents(), null, 2));
