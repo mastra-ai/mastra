@@ -2200,7 +2200,7 @@ export async function createNodeServer(
 
   const port = serverOptions?.port ?? (Number(process.env.PORT) || 4111);
 
-  return serve(
+  const server = serve(
     {
       fetch: app.fetch,
       port,
@@ -2217,4 +2217,8 @@ export async function createNodeServer(
       }
     },
   );
+
+  server.setTimeout?.(3 * 60 * 1000); // 3-minute timeout
+
+  return server;
 }
