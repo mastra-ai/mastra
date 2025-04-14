@@ -224,7 +224,7 @@ export function WorkflowTrigger({
         {isSuspendedSteps &&
           suspendedSteps?.map(step => {
             const stepDefinition = workflow.steps[step.stepId];
-            const stepSchema = stepDefinition.inputSchema
+            const stepSchema = stepDefinition?.inputSchema
               ? resolveSerializedZodOutput(jsonSchemaToZod(parse(stepDefinition.inputSchema)))
               : z.record(z.string(), z.any());
             return (
