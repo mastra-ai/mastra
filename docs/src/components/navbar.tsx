@@ -1,8 +1,7 @@
-import { Navbar } from "nextra-theme-docs";
-import { LogoWithSuffix } from "@/components/logo";
 import { GithubStarCount } from "@/components/github-star-count";
-import Link from "next/link";
 import Image from "next/image";
+import Link from "next/link";
+import { Navbar } from "nextra-theme-docs";
 export const Nav = () => {
   return (
     <Navbar

@@ -1,11 +1,9 @@
 "use client";
+import { Check, SendHorizontal } from "lucide-react";
+import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { logo } from "./logo";
-import { Check } from "lucide-react";
-import { SendHorizontal } from "lucide-react";
 import { SubscribeForm } from "./subscribe-form";
-import Image from "next/image";
 
 const links = [
   {
