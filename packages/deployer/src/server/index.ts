@@ -150,7 +150,7 @@ export async function createHonoServer(
 
   //Global cors config
   if (server?.cors === false) {
-    app.use('*', timeout(server?.timeout ?? 1000 * 30));
+    app.use('*', timeout(server?.timeout ?? 3 * 60 * 1000));
   } else {
     const corsConfig = {
       origin: '*',
@@ -161,7 +161,7 @@ export async function createHonoServer(
       allowHeaders: ['Content-Type', 'Authorization', 'x-mastra-client-type', ...(server?.cors?.allowHeaders ?? [])],
       exposeHeaders: ['Content-Length', 'X-Requested-With', ...(server?.cors?.exposeHeaders ?? [])],
     };
-    app.use('*', timeout(server?.timeout ?? 1000 * 30), cors(corsConfig));
+    app.use('*', timeout(server?.timeout ?? 3 * 60 * 1000), cors(corsConfig));
   }
 
   const bodyLimitOptions = {
@@ -2200,7 +2200,7 @@ export async function createNodeServer(
 
   const port = serverOptions?.port ?? (Number(process.env.PORT) || 4111);
 
-  return serve(
+  const server = serve(
     {
       fetch: app.fetch,
       port,
@@ -2217,4 +2217,6 @@ export async function createNodeServer(
       }
     },
   );
+
+  return server;
 }

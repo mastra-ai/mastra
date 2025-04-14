@@ -52,5 +52,5 @@ export const logo = (
 );
 
 export const LogoWithSuffix = () => (
-  <div className="flex items-center gap-2">{logo} </div>
+  <div className="flex items-center gap-2">{logo}</div>
 );

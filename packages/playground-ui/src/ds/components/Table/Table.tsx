@@ -29,15 +29,16 @@ export const Thead = ({ className, children }: TheadProps) => {
   );
 };
 
-export interface ThProps {
+export interface ThProps extends React.TdHTMLAttributes<HTMLTableCellElement> {
   className?: string;
   children: React.ReactNode;
 }
 
-export const Th = ({ className, children }: ThProps) => {
+export const Th = ({ className, children, ...props }: ThProps) => {
   return (
     <th
       className={clsx('text-icon3 text-ui-sm h-full text-left font-normal uppercase first:pl-5 last:pr-5', className)}
+      {...props}
     >
       {children}
     </th>

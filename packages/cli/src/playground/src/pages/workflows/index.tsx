@@ -1,15 +1,11 @@
-import { Footprints, Workflow } from 'lucide-react';
-import { useNavigate } from 'react-router';
-
-import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 
 import { useWorkflows } from '@/hooks/use-workflows';
-import { Header, HeaderTitle, WorkflowsTable } from '@mastra/playground-ui';
+import { DataTable, Header, HeaderTitle } from '@mastra/playground-ui';
+import { workflowsTableColumns } from '@/domains/workflows/table.columns';
 
 function Workflows() {
   const { workflows, isLoading } = useWorkflows();
-  const navigate = useNavigate();
 
   const workflowList = Object.entries(workflows).map(([key, workflow]) => ({
     id: key,
@@ -24,45 +20,7 @@ function Workflows() {
       </Header>
       <section className="flex-1 relative overflow-hidden">
         <ScrollArea className="h-full">
-          <WorkflowsTable
-            isLoading={isLoading}
-            workflowsList={workflowList}
-            columns={[
-              {
-                id: 'name',
-                header: 'Name',
-                cell: ({ row }) => (
-                  <div className="w-full h-full flex justify-start py-4">
-                    <span className="text-mastra-el-5 text-sm truncate">{row.original.name}</span>
-                  </div>
-                ),
-              },
-              {
-                id: 'action',
-                header: 'Action',
-                cell: ({ row }) => (
-                  <div className="flex justify-end items-center gap-5 py-4">
-                    <div className="bg-accent w-fit flex items-center gap-1 rounded-md py-1 px-2">
-                      <Footprints className="text-inherit w-4 h-4" />
-                      <span className="text-mastra-el-5 text-sm">
-                        {row.original.stepsCount} step{row.original.stepsCount > 1 ? 's' : ''}
-                      </span>
-                    </div>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => {
-                        navigate(`/workflows/${row.original.id}/graph`);
-                      }}
-                    >
-                      <Workflow className="h-4 w-4 text-inherit" />
-                      View Workflow
-                    </Button>
-                  </div>
-                ),
-              },
-            ]}
-          />
+          <DataTable emptyText="Workflows" isLoading={isLoading} columns={workflowsTableColumns} data={workflowList} />
         </ScrollArea>
       </section>
     </div>

@@ -34,7 +34,7 @@ body:is(html[class~="dark"] *){
   display: none;
 }
 
-header + div{
+header + div, footer{
   --nextra-content-width: 1220px;
 }
 
@@ -247,7 +247,7 @@ aside > div:nth-child(1) ul li a {
   }
 }
 
-aside > div:nth-child(1) ul li.active {
+aside > div:nth-child(1) ul li.active:has(> a) {
   &::before {
     content: "";
     position: absolute;

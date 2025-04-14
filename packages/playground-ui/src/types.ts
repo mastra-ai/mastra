@@ -26,6 +26,7 @@ export interface ChatProps {
   baseUrl?: string;
   refreshThreadList?: () => void;
   modelSettings?: ModelSettings;
+  chatWithGenerate?: boolean;
 }
 
 export type SpanStatus = {

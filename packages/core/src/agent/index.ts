@@ -442,12 +442,14 @@ export class Agent<
 
   convertTools({
     toolsets,
+    clientTools,
     threadId,
     resourceId,
     runId,
     container,
   }: {
     toolsets?: ToolsetsInput;
+    clientTools?: ToolsInput;
     threadId?: string;
     resourceId?: string;
     runId?: string;
@@ -562,8 +564,35 @@ export class Agent<
             agentName: this.name,
             container,
           };
-          toolsFromToolsetsConverted[toolName] = makeCoreTool(toolObj, options, 'toolset');
+
+          const convertedToCoreTool = makeCoreTool(toolObj, options, 'toolset');
+
+          toolsFromToolsetsConverted[toolName] = convertedToCoreTool;
         });
+      });
+    }
+
+    const clientToolsForInput = Object.entries(clientTools || {});
+
+    if (clientToolsForInput.length > 0) {
+      this.logger.debug(`[Agent:${this.name}] - Adding client tools ${Object.keys(clientTools || {}).join(', ')}`, {
+        runId,
+      });
+      clientToolsForInput.forEach(([toolName, tool]) => {
+        const { execute, ...rest } = tool;
+        const options = {
+          name: toolName,
+          runId,
+          threadId,
+          resourceId,
+          logger: this.logger,
+          agentName: this.name,
+          container,
+        };
+
+        const convertedToCoreTool = makeCoreTool(rest, options, 'client-tool');
+
+        toolsFromToolsetsConverted[toolName] = convertedToCoreTool;
       });
     }
 
@@ -614,10 +643,12 @@ export class Agent<
     resourceId,
     runId,
     toolsets,
+    clientTools,
     container,
   }: {
     instructions?: string;
     toolsets?: ToolsetsInput;
+    clientTools?: ToolsInput;
     resourceId?: string;
     threadId?: string;
     memoryConfig?: MemoryConfig;
@@ -687,7 +718,11 @@ export class Agent<
 
         let convertedTools: Record<string, CoreTool> | undefined;
 
-        if ((toolsets && Object.keys(toolsets || {}).length > 0) || (this.getMemory() && resourceId)) {
+        if (
+          (clientTools && Object.keys(clientTools || {}).length > 0) ||
+          (toolsets && Object.keys(toolsets || {}).length > 0) ||
+          (this.getMemory() && resourceId)
+        ) {
           const reasons = [];
           if (toolsets && Object.keys(toolsets || {}).length > 0) {
             reasons.push(`toolsets present (${Object.keys(toolsets || {}).length} tools)`);
@@ -698,11 +733,13 @@ export class Agent<
           this.logger.debug(`[Agent:${this.name}] - Enhancing tools: ${reasons.join(', ')}`, {
             runId,
             toolsets: toolsets ? Object.keys(toolsets) : undefined,
+            clientTools: clientTools ? Object.keys(clientTools) : undefined,
             hasMemory: !!this.getMemory(),
             hasResourceId: !!resourceId,
           });
           convertedTools = this.convertTools({
             toolsets,
+            clientTools,
             threadId: threadIdToUse,
             resourceId,
             runId,
@@ -861,6 +898,7 @@ export class Agent<
       runId,
       output,
       toolsets,
+      clientTools,
       temperature,
       toolChoice = 'auto',
       experimental_output,
@@ -903,6 +941,7 @@ export class Agent<
       resourceId,
       runId: runIdToUse,
       toolsets,
+      clientTools,
       container: normalizedContainer,
     });
 
@@ -1028,6 +1067,7 @@ export class Agent<
       onStepFinish,
       runId,
       toolsets,
+      clientTools,
       output,
       temperature,
       toolChoice = 'auto',
@@ -1069,6 +1109,7 @@ export class Agent<
       resourceId,
       runId: runIdToUse,
       toolsets,
+      clientTools,
       container: normalizedContainer,
     });
 

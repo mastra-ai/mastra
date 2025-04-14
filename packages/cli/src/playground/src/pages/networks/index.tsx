@@ -1,6 +1,6 @@
 import { useNavigate } from 'react-router';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { AgentsTable, HeaderTitle, Header } from '@mastra/playground-ui';
+import { DataTable, Header, HeaderTitle } from '@mastra/playground-ui';
 import { Users, Brain, Info } from 'lucide-react';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { Badge } from '@/components/ui/badge';
@@ -16,9 +16,9 @@ function Networks() {
         <HeaderTitle>Networks</HeaderTitle>
       </Header>
       <ScrollArea className="h-full">
-        <AgentsTable
+        <DataTable
           isLoading={isLoading}
-          agentsList={networks}
+          data={networks}
           columns={[
             {
               id: 'name',

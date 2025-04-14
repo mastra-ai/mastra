@@ -222,35 +222,41 @@ export function WorkflowTrigger({
         )}
 
         {isSuspendedSteps &&
-          suspendedSteps?.map(step => (
-            <div className="flex flex-col px-4">
-              <Text variant="secondary" className="text-mastra-el-3" size="xs">
-                {step.stepId}
-              </Text>
-              {step.suspendPayload && (
-                <div>
-                  <CodeBlockDemo
-                    className="w-full overflow-x-auto p-2"
-                    code={JSON.stringify(step.suspendPayload, null, 2)}
-                    language="json"
-                  />
-                </div>
-              )}
-              <DynamicForm
-                schema={z.record(z.string(), z.any())}
-                isSubmitLoading={isResumingWorkflow}
-                submitButtonLabel="Resume"
-                onSubmit={data => {
-                  handleResumeWorkflow({
-                    stepId: step.stepId,
-                    runId: step.runId,
-                    suspendPayload: step.suspendPayload,
-                    context: data,
-                  });
-                }}
-              />
-            </div>
-          ))}
+          suspendedSteps?.map(step => {
+            const stepDefinition = workflow.steps[step.stepId];
+            const stepSchema = stepDefinition?.inputSchema
+              ? resolveSerializedZodOutput(jsonSchemaToZod(parse(stepDefinition.inputSchema)))
+              : z.record(z.string(), z.any());
+            return (
+              <div className="flex flex-col px-4">
+                <Text variant="secondary" className="text-mastra-el-3" size="xs">
+                  {step.stepId}
+                </Text>
+                {step.suspendPayload && (
+                  <div>
+                    <CodeBlockDemo
+                      className="w-full overflow-x-auto p-2"
+                      code={JSON.stringify(step.suspendPayload, null, 2)}
+                      language="json"
+                    />
+                  </div>
+                )}
+                <DynamicForm
+                  schema={stepSchema}
+                  isSubmitLoading={isResumingWorkflow}
+                  submitButtonLabel="Resume"
+                  onSubmit={data => {
+                    handleResumeWorkflow({
+                      stepId: step.stepId,
+                      runId: step.runId,
+                      suspendPayload: step.suspendPayload,
+                      context: data,
+                    });
+                  }}
+                />
+              </div>
+            );
+          })}
 
         {result && (
           <div className="flex flex-col group relative">
