@@ -5,7 +5,6 @@ dist/
 .env
 memory:
 *.d.ts
-tools/
 vector/
 telemetry/
 storage/
