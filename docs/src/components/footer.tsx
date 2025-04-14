@@ -129,22 +129,16 @@ export const Footer = () => {
             </ul>
           </div>
           <div className="hidden md:block xl:hidden">
-            <label
-              htmlFor="email"
-              className="text-[#939393] mb-0.5 mt-[1px] block text-xs"
-            >
-              Follow along with us:
-            </label>
             <SubscribeForm
               placeholder="you@company.com"
               idleIcon={
                 <SendHorizontal className="w-4 h-4" stroke="currentColor" />
               }
+              label="Follow along with us:"
               successIcon={<Check className="w-4 h-4" />}
-              showLabel={false}
-              inputClassName="min-w-[50px] border-[0.5px] h-[34px] max-w-full rounded-r-none md:min-w-[50px] pl-2 truncate md:max-w-full"
-              buttonClassName="w-fit mr-auto rounded-l-none md:w-fit h-[34px] py-0 px-3"
-              className="md:items-start flex-row items-start gap-0  md:gap-0 mt-0"
+              inputClassName="min-w-[50px] border-[0.5px] md:mb-0 h-[34px] max-w-full rounded-r-none md:min-w-[50px] pl-2 truncate md:max-w-full"
+              buttonClassName="w-fit mr-auto mt-auto rounded-l-none md:w-fit h-[34px] py-0 px-3"
+              className="md:items-start flex-col items-start gap-0  md:gap-0 mt-0"
             />
           </div>
         </div>
