@@ -131,7 +131,7 @@ export async function executeAgentToolHandler({
     // }
 
     const result = await tool.execute({
-      context: { data },
+      context: data,
       container,
       mastra,
       runId: agentId,
