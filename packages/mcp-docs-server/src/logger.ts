@@ -1,3 +1,6 @@
+import * as fs from 'fs';
+import * as os from 'os';
+import * as path from 'path';
 import type { Server } from '@modelcontextprotocol/sdk/server/index.js';
 
 // Logger interface for type safety
@@ -9,16 +12,32 @@ export interface Logger {
 }
 
 export const writeErrorLog = (message: string, data?: any) => {
+  const now = new Date();
+  const timestamp = now.toISOString();
+  const hourTimestamp = timestamp.slice(0, 13); // YYYY-MM-DDTHH
+
+  // Create log message
   const logMessage = {
-    jsonrpc: '2.0',
-    method: 'notifications/tools',
-    params: {
-      level: 'error',
-      message,
-      ...(data ? (typeof data === 'object' ? data : { data }) : {}),
-    },
+    timestamp,
+    message,
+    ...(data ? (typeof data === 'object' ? data : { data }) : {}),
   };
-  process.stdout.write(JSON.stringify(logMessage) + '\n');
+
+  // Write to file
+  try {
+    // Ensure cache directory exists
+    const cacheDir = path.join(os.homedir(), '.cache', 'mastra', 'mcp-docs-server-logs');
+    fs.mkdirSync(cacheDir, { recursive: true });
+
+    // Create log file path with timestamp
+    const logFile = path.join(cacheDir, `${hourTimestamp}.log`);
+
+    // Append log entry to file
+    fs.appendFileSync(logFile, JSON.stringify(logMessage) + '\n', 'utf8');
+  } catch (err) {
+    // If file writing fails, at least we still have stdout
+    console.error('Failed to write to log file:', err);
+  }
 };
 
 // Create logger factory to inject server instance
