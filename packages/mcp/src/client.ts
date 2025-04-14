@@ -34,7 +34,7 @@ type SSEClientParameters = {
 } & SSEClientTransportOptions;
 
 export type MastraMCPServerDefinition = (StdioServerParameters | SSEClientParameters) & {
-  log?: LogHandler;
+  logger?: LogHandler;
   timeout?: number;
   capabilities?: ClientCapabilities;
   enableServerLogs?: boolean;
@@ -87,11 +87,11 @@ export class MastraMCPClient extends MastraBase {
     super({ name: 'MastraMCPClient' });
     this.name = name;
     this.timeout = timeout;
-    this.logHandler = server.log;
-    this.enableServerLogs = server.enableServerLogs;
+    this.logHandler = server.logger;
+    this.enableServerLogs = server.enableServerLogs ?? true;
 
     // Extract log handler from server config to avoid passing it to transport
-    const { log, enableServerLogs, ...serverConfig } = server;
+    const { logger, enableServerLogs, ...serverConfig } = server;
 
     if (`url` in serverConfig) {
       this.transport = new SSEClientTransport(serverConfig.url, {

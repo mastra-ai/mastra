@@ -110,10 +110,10 @@ MCP servers can be configured as either stdio-based or SSE-based servers. The co
       description: "For SSE servers: Custom fetch configuration for SSE connections. Required when using custom headers.",
     },
     {
-      name: "log",
+      name: "logger",
       type: "LogHandler",
       isOptional: true,
-      description: "Optional handler for server log messages.",
+      description: "Optional additional handler for logging.",
     },
     {
       name: "timeout",
@@ -131,6 +131,7 @@ MCP servers can be configured as either stdio-based or SSE-based servers. The co
       name: "enableServerLogs",
       type: "boolean",
       isOptional: true,
+      defaultValue: "true",
       description: "Whether to enable logging for this server.",
     },
   ]}
@@ -225,10 +226,9 @@ const fetchClient = new MastraMCPClient({
   server: {
     command: "docker",
     args: ["run", "-i", "--rm", "mcp/fetch"],
-    log: (logMessage) => {
+    logger: (logMessage) => {
       console.log(`[${logMessage.level}] ${logMessage.message}`);
     },
-    enableServerLogs: true
   },
 });
 
@@ -296,11 +296,12 @@ const sseClient = new MastraMCPClient({
         });
       },
     },
-    // Optional logging configuration
-    log: (logMessage) => {
+    // Optional additional logging configuration
+    logger: (logMessage) => {
       console.log(`[${logMessage.level}] ${logMessage.serverName}: ${logMessage.message}`);
     },
-    enableServerLogs: true
+    // Disable server logs
+    enableServerLogs: false
   },
 });
 

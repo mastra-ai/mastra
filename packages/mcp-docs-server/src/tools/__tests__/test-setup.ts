@@ -53,7 +53,6 @@ export const mcp = new MCPConfiguration({
       env: {
         BLOG_URL: `http://localhost:${port}`,
       },
-      enableServerLogs: true,
     },
   },
 });
