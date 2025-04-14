@@ -67,7 +67,8 @@ export function executeToolHandler(tools: ToolsContext['tools']) {
     runId,
     toolId,
     data,
-  }: Pick<ToolsContext, 'mastra' | 'toolId' | 'runId'> & { data?: unknown }) => {
+    container,
+  }: Pick<ToolsContext, 'mastra' | 'toolId' | 'runId'> & { data?: unknown; container: Container }) => {
     try {
       if (!toolId) {
         throw new HTTPException(400, { message: 'Tool ID is required' });
@@ -94,6 +95,7 @@ export function executeToolHandler(tools: ToolsContext['tools']) {
         context: data!,
         mastra,
         runId,
+        container,
       });
       return result;
     } catch (error) {
