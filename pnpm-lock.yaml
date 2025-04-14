@@ -383,7 +383,7 @@ importers:
     dependencies:
       '@ai-sdk/anthropic':
         specifier: latest
-        version: 1.2.8(zod@3.24.2)
+        version: 1.2.9(zod@3.24.2)
       '@mastra/core':
         specifier: workspace:*
         version: link:../../../../packages/core
@@ -395,7 +395,7 @@ importers:
     dependencies:
       '@ai-sdk/anthropic':
         specifier: latest
-        version: 1.2.8(zod@3.24.2)
+        version: 1.2.9(zod@3.24.2)
       '@ai-sdk/openai':
         specifier: latest
         version: 1.3.9(zod@3.24.2)
@@ -410,7 +410,7 @@ importers:
     dependencies:
       '@ai-sdk/anthropic':
         specifier: latest
-        version: 1.2.8(zod@3.24.2)
+        version: 1.2.9(zod@3.24.2)
       '@ai-sdk/openai':
         specifier: latest
         version: 1.3.9(zod@3.24.2)
@@ -1122,7 +1122,7 @@ importers:
     dependencies:
       '@ai-sdk/anthropic':
         specifier: latest
-        version: 1.2.8(zod@3.24.2)
+        version: 1.2.9(zod@3.24.2)
       '@mastra/core':
         specifier: workspace:*
         version: link:../../packages/core
@@ -1165,7 +1165,7 @@ importers:
     dependencies:
       '@ai-sdk/anthropic':
         specifier: latest
-        version: 1.2.8(zod@3.24.2)
+        version: 1.2.9(zod@3.24.2)
       '@mastra/core':
         specifier: workspace:*
         version: link:../../packages/core
@@ -1235,7 +1235,7 @@ importers:
     dependencies:
       '@ai-sdk/anthropic':
         specifier: latest
-        version: 1.2.8(zod@3.24.2)
+        version: 1.2.9(zod@3.24.2)
       '@mastra/core':
         specifier: workspace:*
         version: link:../../packages/core
@@ -1303,6 +1303,61 @@ importers:
       typescript:
         specifier: ^5.7.3
         version: 5.8.2
+
+  examples/client-side-tools:
+    dependencies:
+      '@ai-sdk/openai':
+        specifier: ^1.3.9
+        version: 1.3.9(zod@3.24.2)
+      '@mastra/client-js':
+        specifier: workspace:*
+        version: link:../../client-sdks/client-js
+      '@mastra/core':
+        specifier: workspace:*
+        version: link:../../packages/core
+      react:
+        specifier: ^19.0.0
+        version: 19.1.0
+      react-dom:
+        specifier: ^19.0.0
+        version: 19.1.0(react@19.1.0)
+      zod:
+        specifier: ^3.24.2
+        version: 3.24.2
+    devDependencies:
+      '@eslint/js':
+        specifier: ^9.21.0
+        version: 9.23.0
+      '@types/react':
+        specifier: ^19.0.10
+        version: 19.0.10
+      '@types/react-dom':
+        specifier: ^19.0.4
+        version: 19.0.4(@types/react@19.0.10)
+      '@vitejs/plugin-react':
+        specifier: ^4.3.4
+        version: 4.3.4(vite@6.2.3(@types/node@20.17.30)(jiti@2.4.2)(lightningcss@1.29.2)(terser@5.39.0)(tsx@4.19.3)(yaml@2.7.0))
+      eslint:
+        specifier: ^9.21.0
+        version: 9.23.0(jiti@2.4.2)
+      eslint-plugin-react-hooks:
+        specifier: ^5.1.0
+        version: 5.2.0(eslint@9.23.0(jiti@2.4.2))
+      eslint-plugin-react-refresh:
+        specifier: ^0.4.19
+        version: 0.4.19(eslint@9.23.0(jiti@2.4.2))
+      globals:
+        specifier: ^15.15.0
+        version: 15.15.0
+      typescript:
+        specifier: ^5.7.3
+        version: 5.8.2
+      typescript-eslint:
+        specifier: ^8.24.1
+        version: 8.26.1(eslint@9.23.0(jiti@2.4.2))(typescript@5.8.2)
+      vite:
+        specifier: ^6.2.0
+        version: 6.2.3(@types/node@20.17.30)(jiti@2.4.2)(lightningcss@1.29.2)(terser@5.39.0)(tsx@4.19.3)(yaml@2.7.0)
 
   examples/dane:
     dependencies:
@@ -4728,8 +4783,8 @@ packages:
     peerDependencies:
       zod: ^3.0.0
 
-  '@ai-sdk/anthropic@1.2.8':
-    resolution: {integrity: sha512-UchR+xGtTASkHyJ5uX4jVJGfxo2SCoqxtHJQzuO8INYEbpFwa9cUD06934tNqICxsNOhupS9y4b1sd/Uep6OXw==}
+  '@ai-sdk/anthropic@1.2.9':
+    resolution: {integrity: sha512-IsPKFt45rEhrAIeJisNr5hS1N6NPiVD/sBcS6wqJc2eKp32Q74SqDn6hmEgk4MlqxuWzpUCQ2kjsa75gAV3Hew==}
     engines: {node: '>=18'}
     peerDependencies:
       zod: ^3.0.0
@@ -20942,7 +20997,7 @@ snapshots:
       '@ai-sdk/provider-utils': 2.2.3(zod@3.24.2)
       zod: 3.24.2
 
-  '@ai-sdk/anthropic@1.2.8(zod@3.24.2)':
+  '@ai-sdk/anthropic@1.2.9(zod@3.24.2)':
     dependencies:
       '@ai-sdk/provider': 1.1.2
       '@ai-sdk/provider-utils': 2.2.6(zod@3.24.2)
