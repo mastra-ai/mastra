@@ -2,10 +2,10 @@ import { existsSync, mkdirSync, writeFileSync } from 'fs';
 import { join } from 'path';
 
 import { Deployer } from '@mastra/deployer';
+import { DepsService } from '@mastra/deployer/services';
 import { execa } from 'execa';
 
 import { getOrCreateSite } from './helpers.js';
-import { DepsService } from '@mastra/deployer/services';
 
 export class NetlifyDeployer extends Deployer {
   protected scope: string;
