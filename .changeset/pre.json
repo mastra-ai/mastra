@@ -141,26 +141,32 @@
     "@mastra/voice-sarvam": "0.1.7",
     "@mastra/voice-speechify": "0.1.12",
     "examples-mcp-registry-registry": "0.0.1",
-    "@mastra/mcp-registry-registry": "0.0.1-alpha.0"
+    "@mastra/mcp-registry-registry": "0.0.1-alpha.0",
+    "examples-client-side-tools": "0.0.0"
   },
   "changesets": [
     "breezy-ducks-exist",
+    "brown-ants-count",
     "clever-words-enjoy",
     "cool-papers-check",
     "cyan-cycles-knock",
     "empty-suns-train",
     "famous-knives-hug",
     "floppy-oranges-laugh",
+    "hot-lamps-begin",
     "pink-memes-tie",
     "plain-bananas-fry",
     "rude-ducks-attack",
     "shaggy-readers-begin",
+    "short-brooms-cover",
     "silver-cases-make",
+    "silver-pens-smile",
     "slow-heads-open",
     "thick-eggs-nail",
     "three-phones-attack",
     "tidy-moose-turn",
     "tiny-candles-laugh",
-    "upset-banks-shop"
+    "upset-banks-shop",
+    "wet-masks-wink"
   ]
 }
