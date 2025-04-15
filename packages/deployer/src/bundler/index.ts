@@ -187,7 +187,7 @@ export abstract class Bundler extends MastraBundler {
         outputDirectory,
         dependenciesToInstall,
       );
-      resolutions = res?.resolutions ?? {};
+      resolutions = res ?? {};
     }
 
     // temporary fix for mastra-memory and fastembed
@@ -236,7 +236,7 @@ export abstract class Bundler extends MastraBundler {
     initialDependencies: Set<string>,
     outputDirectory: string,
     dependenciesToInstall: Map<string, string>,
-  ): Promise<{ resolutions: Record<string, string> } | undefined> {
+  ): Promise<Record<string, string> | undefined> {
     const seen = new Set<string>();
     const queue: string[] = Array.from(initialDependencies);
     const resolutions: Record<string, string> = {};
@@ -327,6 +327,6 @@ export abstract class Bundler extends MastraBundler {
       this.logger.info(`Successfully packaged ${seen.size} workspace dependencies`);
     }
 
-    return { resolutions };
+    return resolutions;
   }
 }
