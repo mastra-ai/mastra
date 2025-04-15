@@ -1,5 +1,11 @@
 # @mastra/rag
 
+## 0.1.18-alpha.5
+
+### Patch Changes
+
+- 18d0758: [MASTRA-3073] added error logging and more debug logs to vector-query and graph-rag
+
 ## 0.1.18-alpha.4
 
 ### Patch Changes
