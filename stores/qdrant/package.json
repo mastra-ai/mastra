@@ -24,7 +24,7 @@
     "test": "vitest run",
     "lint": "eslint ."
   },
-  "license": "Elastic-2.0",
+  "license": "MIT",
   "dependencies": {
     "@mastra/core": "workspace:^",
     "@qdrant/js-client-rest": "^1.13.0"
