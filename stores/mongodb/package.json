@@ -1,11 +1,8 @@
 {
   "name": "@mastra/mongodb",
   "version": "0.0.1",
-  "description": "MongoDB store provider for Mastra",
+  "description": "MongoDB provider for Mastra - includes vector store capabilities",
   "type": "module",
-  "files": [
-    "dist"
-  ],
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "exports": {
@@ -31,13 +28,13 @@
     "@mastra/core": "workspace:^",
     "@types/mongodb": "^4.0.7",
     "cloudflare": "^4.1.0",
-    "mongodb": "^6.15.0"
+    "mongodb": "^6.15.0",
+    "uuid": "^11.1.0"
   },
   "devDependencies": {
     "@internal/lint": "workspace:*",
     "@microsoft/api-extractor": "^7.52.1",
     "@types/node": "^20.17.27",
-    "dotenv": "^16.4.7",
     "eslint": "^9.23.0",
     "tsup": "^8.4.0",
     "typescript": "^5.8.2",

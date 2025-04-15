@@ -1,1 +1,1 @@
-export * from './vector/index';
+export * from './vector';
