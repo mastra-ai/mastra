@@ -1,7 +1,8 @@
 {
-  "name": "weather-agent-template",
+  "name": "examples-weather-agent-template",
   "version": "1.0.0",
   "main": "index.js",
+  "private": true,
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
     "dev": "mastra dev"
@@ -13,8 +14,8 @@
   "type": "module",
   "dependencies": {
     "@ai-sdk/openai": "^1.3.12",
-    "@mastra/core": "^0.8.2",
-    "mastra": "^0.4.8",
+    "@mastra/core": "workspace:^",
+    "mastra": "workspace:^",
     "zod": "^3.24.2"
   },
   "devDependencies": {

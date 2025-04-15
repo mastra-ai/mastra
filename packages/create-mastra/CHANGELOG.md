@@ -1,5 +1,14 @@
 # create-mastra
 
+## 0.2.8
+
+### Patch Changes
+
+- 1ebbfbf: Ability to toggle stream vs generate in playground
+- a2318cd: Revamp mastra deply dx, Make mastra build command output deployment ready build
+- 37bb612: Add Elastic-2.0 licensing for packages
+- c8fe5f0: change the header of all pages with the one from the DS
+
 ## 0.2.8-alpha.1
 
 ### Patch Changes
