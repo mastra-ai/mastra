@@ -1,5 +1,11 @@
 # @mastra/playground-ui
 
+## 4.0.4-alpha.5
+
+### Patch Changes
+
+- ed52379: enum-type trigger schemas could not be submitted in the Playground UI has been resolved.
+
 ## 4.0.4-alpha.4
 
 ### Patch Changes

@@ -1,5 +1,13 @@
 # @mastra/deployer-netlify
 
+## 0.1.18-alpha.6
+
+### Patch Changes
+
+- 67aff42: Fix netlify deployer missing @libsql/linux-x64-gnu bug
+- Updated dependencies [67aff42]
+  - @mastra/deployer@0.2.9-alpha.6
+
 ## 0.1.18-alpha.5
 
 ### Patch Changes
