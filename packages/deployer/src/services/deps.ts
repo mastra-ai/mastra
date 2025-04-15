@@ -49,6 +49,19 @@ export class Deps extends MastraBase {
     }
   }
 
+  public getWorkspaceDependencyPath({ pkgName, version }: { pkgName: string; version: string }) {
+    switch (this.packageManager) {
+      case 'npm':
+        return `file:./workspace-module/${pkgName}-${version}.tgz`;
+      case 'pnpm':
+        return `link:./workspace-module/${pkgName}-${version}.tgz`;
+      case 'yarn':
+        return `link:./workspace-module/${pkgName}-${version}.tgz`;
+      default:
+        throw new Error(`Unsupported package manager: ${this.packageManager}`);
+    }
+  }
+
   public async pack({ dir, destination }: { dir: string; destination: string }) {
     const cpLogger = createChildProcessLogger({
       logger: this.logger,

@@ -285,7 +285,10 @@ export abstract class Bundler extends MastraBundler {
             try {
               if (!dependenciesToInstall.has(pkgName)) {
                 const sanitizedName = pkgName.replace(/^@/, '').replace(/\//, '-');
-                const tgzPath = `file:./workspace-module/${sanitizedName}-${dep.version}.tgz`;
+                const tgzPath = depsService.getWorkspaceDependencyPath({
+                  pkgName: sanitizedName,
+                  version: dep.version!,
+                });
                 dependenciesToInstall.set(pkgName, tgzPath);
               }
 
