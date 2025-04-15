@@ -9,22 +9,22 @@ export function AgentInformation({ agentId }: { agentId: string }) {
   return (
     <Tabs defaultValue="details" className="border-l-[1px] h-full">
       <TabsList className="flex shrink-0 border-b">
-        <TabsTrigger value="details" className="group">
+        <TabsTrigger value="details" className="group shrink-0">
           <p className="text-xs p-3 text-mastra-el-3 group-data-[state=active]:text-mastra-el-5 group-data-[state=active]:border-b-2 group-data-[state=active]:pb-2.5 border-white">
             Overview
           </p>
         </TabsTrigger>
-        <TabsTrigger value="instructions" className="group">
+        <TabsTrigger value="instructions" className="group shrink-0">
           <p className="text-xs p-3 text-mastra-el-3 group-data-[state=active]:text-mastra-el-5 group-data-[state=active]:border-b-2 group-data-[state=active]:pb-2.5 border-white">
             Instructions
           </p>
         </TabsTrigger>
-        <TabsTrigger value="endpoints" className="group">
+        <TabsTrigger value="endpoints" className="group shrink-0">
           <p className="text-xs p-3 text-mastra-el-3 group-data-[state=active]:text-mastra-el-5 group-data-[state=active]:border-b-2 group-data-[state=active]:pb-2.5 border-white">
             Endpoints
           </p>
         </TabsTrigger>
-        <TabsTrigger value="logs" className="group">
+        <TabsTrigger value="logs" className="group shrink-0">
           <p className="text-xs p-3 text-mastra-el-3 group-data-[state=active]:text-mastra-el-5 group-data-[state=active]:border-b-2 group-data-[state=active]:pb-2.5 border-white">
             Log Drains
           </p>

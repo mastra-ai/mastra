@@ -70,6 +70,8 @@ The `speak()` and `listen()` methods work with Node.js streams. Here's how to sa
 
 ### Saving Speech Output
 
+The `speak` method returns a stream that you can pipe to a file or speaker.
+
 ```typescript
 import { createWriteStream } from "fs";
 import path from "path";
@@ -88,6 +90,8 @@ await new Promise<void>((resolve, reject) => {
 ```
 
 ### Transcribing Audio Input
+
+The `listen` method expects a stream of audio data from a microphone or file.
 
 ```typescript
 import { createReadStream } from "fs";
