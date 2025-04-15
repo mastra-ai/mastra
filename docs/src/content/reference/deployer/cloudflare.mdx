@@ -139,7 +139,6 @@ To build your Mastra project for cloudflare deployment:
 
 ```bash
 npx mastra build
-```
 
 The build process generates the following output structure in the `.mastra/output` directory:
 
@@ -198,9 +197,15 @@ const routes = [
 After building, you can deploy your Mastra application `.mastra/output`  to Cloudflare Workers using any of these methods:
 
 1. **Wrangler CLI**: Deploy directly using Cloudflare's official CLI tool
+   - Install the CLI: `npm install -g wrangler`
+   - Navigate to the output directory: `cd .mastra/output`
+   - Login to your Cloudflare account: `wrangler login`
+   - Deploy to preview environment: `wrangler deploy`
+   - For production deployment: `wrangler deploy --env production`
 
 2. **Cloudflare Dashboard**: Upload the build output manually through the Cloudflare dashboard
 
+> You can also run `wrangler dev` in your output directory `.mastra/output` to test your Mastra application locally.
 
 ## Platform Documentation
 
