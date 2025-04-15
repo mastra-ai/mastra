@@ -13,6 +13,9 @@ type QuestionAnswerExtractArgs = {
 };
 
 type ExtractQuestion = {
+  /**
+   * Questions extracted from the node as a string (may be empty if extraction fails).
+   */
   questionsThisExcerptCanAnswer: string;
 };
 
@@ -50,8 +53,8 @@ export class QuestionsAnsweredExtractor extends BaseExtractor {
    * Constructor for the QuestionsAnsweredExtractor class.
    * @param {MastraLanguageModel} llm MastraLanguageModel instance.
    * @param {number} questions Number of questions to generate.
-   * @param {QuestionExtractPrompt} promptTemplate The prompt template to use for the question extractor.
-   * @param {boolean} embeddingOnly Wheter to use metadata for embeddings only.
+   * @param {QuestionExtractPrompt['template']} promptTemplate Optional custom prompt template (should include {context}).
+   * @param {boolean} embeddingOnly Whether to use metadata for embeddings only.
    */
   constructor(options: QuestionAnswerExtractArgs) {
     if (options?.questions && options.questions < 1) throw new Error('Questions must be greater than 0');
@@ -99,8 +102,18 @@ export class QuestionsAnsweredExtractor extends BaseExtractor {
       ],
     });
 
+    let result = '';
+    try {
+      if (typeof questions.text === 'string') {
+        result = questions.text.replace(STRIP_REGEX, '').trim();
+      } else {
+        console.warn('Question extraction LLM output was not a string:', questions.text);
+      }
+    } catch (err) {
+      console.warn('Question extraction failed:', err);
+    }
     return {
-      questionsThisExcerptCanAnswer: questions.text?.replace(STRIP_REGEX, '') ?? '',
+      questionsThisExcerptCanAnswer: result,
     };
   }
 

@@ -159,7 +159,13 @@ export class TitleExtractor extends BaseExtractor {
         ],
       });
 
-      titlesByDocument[key] = completion.text!;
+      let title = '';
+      if (typeof completion.text === 'string') {
+        title = completion.text.trim();
+      } else {
+        console.warn('Title extraction LLM output was not a string:', completion.text);
+      }
+      titlesByDocument[key] = title;
     }
 
     return titlesByDocument;
@@ -185,7 +191,12 @@ export class TitleExtractor extends BaseExtractor {
         ],
       });
 
-      return completion.text!;
+      if (typeof completion.text === 'string') {
+        return completion.text.trim();
+      } else {
+        console.warn('Title candidate extraction LLM output was not a string:', completion.text);
+        return '';
+      }
     });
 
     return await Promise.all(titleJobs);

@@ -12,6 +12,9 @@ type KeywordExtractArgs = {
 };
 
 type ExtractKeyword = {
+  /**
+   * Comma-separated keywords extracted from the node. May be empty if extraction fails.
+   */
   excerptKeywords: string;
 };
 
@@ -42,6 +45,7 @@ export class KeywordExtractor extends BaseExtractor {
    * Constructor for the KeywordExtractor class.
    * @param {MastraLanguageModel} llm MastraLanguageModel instance.
    * @param {number} keywords Number of keywords to extract.
+   * @param {string} [promptTemplate] Optional custom prompt template (must include {context})
    * @throws {Error} If keywords is less than 1.
    */
   constructor(options: KeywordExtractArgs) {
@@ -64,33 +68,44 @@ export class KeywordExtractor extends BaseExtractor {
    * @param node Node to extract keywords from.
    * @returns Keywords extracted from the node.
    */
-  async extractKeywordsFromNodes(node: BaseNode): Promise<ExtractKeyword | object> {
+  /**
+   * Extract keywords from a node. Returns an object with a comma-separated string of keywords, or an empty string if extraction fails.
+   * Adds error handling for malformed/empty LLM output.
+   */
+  async extractKeywordsFromNodes(node: BaseNode): Promise<ExtractKeyword> {
     if (this.isTextNodeOnly && !(node instanceof TextNode)) {
-      return {};
+      return { excerptKeywords: '' };
     }
 
-    const completion = await this.llm.doGenerate({
-      inputFormat: 'messages',
-      mode: { type: 'regular' },
-      prompt: [
-        {
-          role: 'user',
-          content: [
-            {
-              type: 'text',
-              text: this.promptTemplate.format({
-                context: node.getContent(MetadataMode.ALL),
-                maxKeywords: this.keywords.toString(),
-              }),
-            },
-          ],
-        },
-      ],
-    });
-
-    return {
-      excerptKeywords: completion.text,
-    };
+    let keywords = '';
+    try {
+      const completion = await this.llm.doGenerate({
+        inputFormat: 'messages',
+        mode: { type: 'regular' },
+        prompt: [
+          {
+            role: 'user',
+            content: [
+              {
+                type: 'text',
+                text: this.promptTemplate.format({
+                  context: node.getContent(MetadataMode.ALL),
+                  maxKeywords: this.keywords.toString(),
+                }),
+              },
+            ],
+          },
+        ],
+      });
+      if (typeof completion.text === 'string') {
+        keywords = completion.text.trim();
+      } else {
+        console.warn('Keyword extraction LLM output was not a string:', completion.text);
+      }
+    } catch (err) {
+      console.warn('Keyword extraction failed:', err);
+    }
+    return { excerptKeywords: keywords };
   }
 
   /**
@@ -98,7 +113,13 @@ export class KeywordExtractor extends BaseExtractor {
    * @param nodes Nodes to extract keywords from.
    * @returns Keywords extracted from the nodes.
    */
-  async extract(nodes: BaseNode[]): Promise<Array<ExtractKeyword> | Array<object>> {
+  /**
+   * Extract keywords from an array of nodes. Always returns an array (may be empty).
+   * @param nodes Nodes to extract keywords from.
+   * @returns Array of keyword extraction results.
+   */
+  async extract(nodes: BaseNode[]): Promise<Array<ExtractKeyword>> {
+    if (!Array.isArray(nodes) || nodes.length === 0) return [];
     const results = await Promise.all(nodes.map(node => this.extractKeywordsFromNodes(node)));
     return results;
   }

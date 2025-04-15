@@ -94,7 +94,12 @@ export class SummaryExtractor extends BaseExtractor {
       ],
     });
 
-    let summary = result.text?.trim() ?? '';
+    let summary = '';
+    if (typeof result.text === 'string') {
+      summary = result.text.trim();
+    } else {
+      console.warn('Summary extraction LLM output was not a string:', result.text);
+    }
 
     return summary.replace(STRIP_REGEX, '');
   }
