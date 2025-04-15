@@ -1,5 +1,11 @@
 # @mastra/pg
 
+## 0.2.10-alpha.5
+
+### Patch Changes
+
+- 5e846ee: feat(@mastra/pg): schema support
+
 ## 0.2.10-alpha.4
 
 ### Patch Changes
