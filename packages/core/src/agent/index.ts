@@ -308,10 +308,12 @@ export class Agent<
     response,
     threadId,
     resourceId,
+    startIndex,
   }: {
     response: any; // why??
     threadId: string;
     resourceId: string;
+    startIndex: number;
   }) {
     if (!response.messages) return [];
     const messagesArray = Array.isArray(response.messages) ? response.messages : [response.messages];
@@ -360,7 +362,7 @@ export class Agent<
         resourceId: resourceId,
         role: message.role as any,
         content: message.content as any,
-        createdAt: new Date(Date.now() + index), // use Date.now() + index to make sure every message is atleast one millisecond apart
+        createdAt: new Date(Date.now() + index + startIndex), // use Date.now() + index to make sure every message is atleast one millisecond apart, + startIndex to account for previous messages
         toolCallIds: toolCallIds?.length ? toolCallIds : undefined,
         toolCallArgs: toolCallArgs?.length ? toolCallArgs : undefined,
         toolNames: toolNames?.length ? toolNames : undefined,
@@ -832,7 +834,12 @@ export class Agent<
             await memory.saveMessages({
               messages: [
                 ...threadMessages,
-                ...this.getResponseMessages({ threadId, resourceId, response: result.response }),
+                ...this.getResponseMessages({
+                  threadId,
+                  resourceId,
+                  response: result.response,
+                  startIndex: threadMessages?.length,
+                }),
               ],
               memoryConfig,
             });
