@@ -8,7 +8,11 @@ import type {
   StorageThreadType,
   BaseLogMessage,
   WorkflowRunResult as CoreWorkflowRunResult,
+  Evaluator,
+  Metric,
 } from '@mastra/core';
+
+import { LLMEvaluator } from '@mastra/evals'
 
 import type { AgentGenerateOptions, AgentStreamOptions } from '@mastra/core/agent';
 import type { JSONSchema7 } from 'json-schema';
@@ -43,6 +47,8 @@ export interface GetAgentResponse {
   provider: string;
   modelId: string;
 }
+
+export type GetEvaluatorResponse<T extends Evaluator | Metric = LLMEvaluator> = T;
 
 export type GenerateParams<T extends JSONSchema7 | ZodSchema | undefined = undefined> = {
   messages: string | string[] | CoreMessage[] | AiMessageType[];

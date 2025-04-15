@@ -1,5 +1,6 @@
 import type { Agent } from '@mastra/core/agent';
 import type { EvaluatorSettings } from '@mastra/core/eval';
+import type { LanguageModel } from '@mastra/core/llm';
 
 export type InputOutputPair = {
   input: string;
@@ -28,17 +29,29 @@ export type LLMEvaluatorReasonPromptArgs = InputOutputPair & {
   settings: EvaluatorSettings;
   context?: string[];
   outcomes: Outcome[];
+  formatter: (template: string, vars: Record<string, string | number>) => string;
+  template: string;
 };
 
-export type LLMEvaluatorReasonPrompt = (args: LLMEvaluatorReasonPromptArgs) => Promise<string> | string;
+export interface LLMEvaluatorPrompt<T> {
+  template: string;
+  format?: (args: T) => Promise<string> | string;
+}
 
-export type LLMEvaluatorPromptArgs = InputOutputPair & {
+export type LLMEvaluatorReasonPrompt = LLMEvaluatorPrompt<LLMEvaluatorReasonPromptArgs>;
+
+export type LLMEvaluatorEvalPromptArgs = {
+  input: string;
+  output: string;
+  statements?: string[];
   agent: Agent;
+  settings: EvaluatorSettings;
   context?: string[];
-  [key: string]: any;
+  formatter: (template: string, vars: Record<string, string | number>) => string;
+  template: string;
 };
 
-export type LLMEvaluatorEvalPrompt = (args: LLMEvaluatorPromptArgs) => Promise<string> | string;
+export type LLMEvaluatorEvalPrompt = LLMEvaluatorPrompt<LLMEvaluatorEvalPromptArgs>;
 
 export type LLMEvaluatorScorerArgs = InputOutputPair & {
   agent: Agent;
@@ -50,3 +63,13 @@ export type LLMEvaluatorScorerArgs = InputOutputPair & {
 export type LLMEvaluatorScorer = (
   args: LLMEvaluatorScorerArgs,
 ) => Promise<LLMEvaluatorScoreResult> | LLMEvaluatorScoreResult;
+
+export interface EvaluatorConfig {
+  name: string;
+  instructions: string;
+  reasonPrompt?: LLMEvaluatorReasonPrompt;
+  evalPrompt?: LLMEvaluatorEvalPrompt;
+  scorer: LLMEvaluatorScorer;
+  model: LanguageModel;
+  settings?: EvaluatorSettings;
+}

@@ -1,4 +1,4 @@
-import type { LLMEvaluatorPromptArgs, LLMEvaluatorReasonPromptArgs } from '../types';
+import type { LLMEvaluatorEvalPromptArgs, LLMEvaluatorReasonPromptArgs } from '../types';
 
 export const AGENT_INSTRUCTIONS = `You are a strict and thorough prompt alignment evaluator. Your job is to determine if LLM outputs follow their given prompt instructions exactly.
 
@@ -17,16 +17,7 @@ Remember:
 - Reasons are REQUIRED for ALL outcome to explain the evaluation
 - The number of outcomes must match the number of instructions exactly`;
 
-export function generateEvaluatePrompt({
-  instructions,
-  input,
-  output,
-}: {
-  instructions: string[];
-  input: string;
-  output: string;
-}) {
-  return `For the provided list of prompt instructions, determine whether each instruction has been followed in the LLM output.
+export const EVAL_TEMPLATE = `For the provided list of prompt instructions, determine whether each instruction has been followed in the LLM output.
 First determine if each instruction is applicable to the given context, then evaluate compliance for applicable instructions.
 Important Guidelines:
 1. For empty outputs:
@@ -96,43 +87,36 @@ Instructions: [
 }
 
 Now evaluate the following:
-Input: ${JSON.stringify(input)}
-Output: ${JSON.stringify(output)}
-Instructions: ${JSON.stringify(instructions, null, 2)}
+Input: {input}
+Output: {output}
+Instructions: {instructions}
 
 The number of outcomes MUST MATCH the number of instructions exactly.
 `;
-}
 
-export function generateReasonPrompt({ input, output, eval_result, outcomes, settings }: LLMEvaluatorReasonPromptArgs) {
-  // Extract followed, not followed, and not applicable instructions
-  const followedInstructions = outcomes.filter(v => v.outcome === 'yes').map(v => v.claim);
-  const notFollowedInstructions = outcomes.filter(v => v.outcome === 'no').map(v => v.claim);
-  const notApplicableInstructions = outcomes.filter(v => v.outcome === 'n/a').map(v => v.claim);
+export const REASON_TEMPLATE = `Explain the instruction following score where 0 is the lowest and {scale} is the highest for the LLM's response using this context:
 
-  return `Explain the instruction following score where 0 is the lowest and ${settings.scale} is the highest for the LLM's response using this context:
-  
   Context:
-  Input: ${input}
-  Output: ${output}
-  Score: ${eval_result?.score}
-  
-  Followed Instructions: ${JSON.stringify(followedInstructions)}
-  Not Followed Instructions: ${JSON.stringify(notFollowedInstructions)}
-  Not Applicable Instructions: ${JSON.stringify(notApplicableInstructions)}
-  
+  Input: {input}
+  Output: {output}
+  Score: {score}
+
+  Followed Instructions: {followedInstructions}
+  Not Followed Instructions: {notFollowedInstructions}
+  Not Applicable Instructions: {notApplicableInstructions}
+
   Rules:
   - Explain score based on ratio of followed instructions to total applicable instructions
   - Focus on specific instructions that were or weren't followed
   - Keep explanation concise and focused
   - Use given score, don't recalculate
   - For mixed cases, explain the balance
-  
+
   Format:
   {
       "reason": "The score is {score} because {explanation of instruction following}"
   }
-  
+
   Example Responses:
   {
       "reason": "The score is 0.0 because none of the applicable instructions were followed in the output"
@@ -143,9 +127,39 @@ export function generateReasonPrompt({ input, output, eval_result, outcomes, set
   {
       "reason": "The score is 1.0 because all applicable instructions were followed perfectly"
   }`;
+
+export function generateReasonPrompt({
+  input,
+  output,
+  eval_result,
+  outcomes,
+  settings,
+  formatter,
+  template,
+}: LLMEvaluatorReasonPromptArgs) {
+  // Extract followed, not followed, and not applicable instructions
+  const followedInstructions = outcomes.filter(v => v.outcome === 'yes').map(v => v.claim);
+  const notFollowedInstructions = outcomes.filter(v => v.outcome === 'no').map(v => v.claim);
+  const notApplicableInstructions = outcomes.filter(v => v.outcome === 'n/a').map(v => v.claim);
+
+  return formatter(template, {
+    input,
+    output,
+    score: String(eval_result.score),
+    scale: String(settings.scale),
+    followedInstructions: JSON.stringify(followedInstructions),
+    notFollowedInstructions: JSON.stringify(notFollowedInstructions),
+    notApplicableInstructions: JSON.stringify(notApplicableInstructions),
+  });
 }
 
-export async function generateEvaluationPrompt({ input, output, context }: LLMEvaluatorPromptArgs) {
+export async function generateEvaluationPrompt({
+  input,
+  output,
+  context,
+  formatter,
+  template,
+}: LLMEvaluatorEvalPromptArgs) {
   // For prompt alignment, the context is a list of instructions
   const instructions = context || [];
 
@@ -153,11 +167,9 @@ export async function generateEvaluationPrompt({ input, output, context }: LLMEv
     return '';
   }
 
-  const prompt = generateEvaluatePrompt({
-    input,
-    output,
-    instructions,
+  return formatter(template, {
+    input: JSON.stringify(input),
+    output: JSON.stringify(output),
+    instructions: JSON.stringify(instructions, null, 2),
   });
-
-  return prompt;
 }

@@ -4,6 +4,7 @@ import { Layout } from '@/components/layout';
 
 import { AgentLayout } from '@/domains/agents/agent-layout';
 import { WorkflowLayout } from '@/domains/workflows/workflow-layout';
+import { EvaluatorLayout } from '@/domains/evaluators/evaluator-layout';
 import Tools from '@/pages/tools';
 
 import Agents from './pages/agents';
@@ -18,6 +19,8 @@ import WorkflowTracesPage from './pages/workflows/workflow/traces';
 import Networks from './pages/networks';
 import { NetworkLayout } from './domains/networks/network-layout';
 import Network from './pages/networks/network';
+import Evaluators from './pages/evaluators';
+import Evaluator from './pages/evaluators/evaluator';
 
 function App() {
   return (
@@ -82,6 +85,19 @@ function App() {
             <Route path="graph" element={<Workflow />} />
             <Route path="traces" element={<WorkflowTracesPage />} />
           </Route>
+          <Route path="/evaluators/:evaluatorId" element={<Navigate to="/evaluators/:evaluatorId/overview" />} />
+          <Route
+            path="/evaluators/:evaluatorId"
+            element={
+              <EvaluatorLayout>
+                <Outlet />
+              </EvaluatorLayout>
+            }
+          >
+            <Route path="overview" element={<Evaluator />} />
+            {/* <Route path="logs" element={<EvaluatorLogsPage />} /> */}
+          </Route>
+          <Route path="/evaluators" element={<Evaluators />} />
           <Route path="/" element={<Navigate to="/agents" />} />
         </Route>
       </Routes>
