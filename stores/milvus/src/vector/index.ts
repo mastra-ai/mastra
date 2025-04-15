@@ -10,7 +10,7 @@ import type {
   UpsertVectorParams,
 } from '@mastra/core';
 import { MastraVector } from '@mastra/core/vector';
-import { MilvusClient } from '@zilliz/milvus2-sdk-node';
+import { IndexType, MetricType, MilvusClient } from '@zilliz/milvus2-sdk-node';
 import type {
   CheckHealthResponse,
   DescribeCollectionResponse,
@@ -18,6 +18,7 @@ import type {
   GetVersionResponse,
   ResStatus,
 } from '@zilliz/milvus2-sdk-node';
+import type { IndexConfig } from './types';
 
 export type CollectionOptions = {
   description?: string;
@@ -27,6 +28,14 @@ export type CollectionOptions = {
   enable_dynamic_field?: boolean;
 };
 
+export interface MilvusCreateIndexParams extends CreateIndexParams {
+  collectionName?: string;
+  fieldName?: string;
+  indexConfig?: IndexConfig;
+  metricType?: MetricType;
+}
+
+type MilvusCreateIndexArgs = [...CreateIndexArgs, IndexConfig?, boolean?];
 export class MilvusVectorStore extends MastraVector {
   private client: MilvusClient;
   constructor({
@@ -88,27 +97,70 @@ export class MilvusVectorStore extends MastraVector {
     }
   }
 
+  async listCollections(): Promise<string[]> {
+    try {
+      const response = await this.client.showCollections();
+      return response.data.map(collection => collection.name);
+    } catch (error) {
+      throw new Error('Failed to list collections: ' + error);
+    }
+  }
+
   query<E extends QueryVectorArgs = QueryVectorArgs>(
     ...args: ParamsToArgs<QueryVectorParams> | E
   ): Promise<QueryResult[]> {
     throw new Error('Method not implemented.' + args);
   }
+
   upsert<E extends UpsertVectorArgs = UpsertVectorArgs>(
     ...args: ParamsToArgs<UpsertVectorParams> | E
   ): Promise<string[]> {
     throw new Error('Method not implemented.' + args);
   }
-  createIndex<E extends CreateIndexArgs = CreateIndexArgs>(
-    ...args: ParamsToArgs<CreateIndexParams> | E
-  ): Promise<void> {
-    throw new Error('Method not implemented.' + args);
+
+  async createIndex(...args: ParamsToArgs<MilvusCreateIndexParams> | MilvusCreateIndexArgs): Promise<void> {
+    try {
+      const params = this.normalizeArgs<MilvusCreateIndexParams, MilvusCreateIndexArgs>('createIndex', args, [
+        'collectionName',
+        'fieldName',
+        'indexConfig',
+        'metricType',
+      ]);
+
+      const {
+        collectionName,
+        fieldName,
+        indexName,
+        indexConfig = {},
+        dimension,
+        metricType = MetricType.COSINE,
+      } = params;
+
+      if (!collectionName || !fieldName) {
+        throw new Error('Missing required parameters: collectionName, fieldName, indexName');
+      }
+
+      await this.client.createIndex({
+        collection_name: collectionName,
+        field_name: fieldName,
+        index_name: indexName,
+        index_type: indexConfig.type ?? IndexType.FLAT,
+        metric_type: metricType,
+        params: { dimension },
+      });
+    } catch (error) {
+      throw new Error('Failed to create index: ' + error);
+    }
   }
+
   listIndexes(): Promise<string[]> {
     throw new Error('Method not implemented.');
   }
+
   describeIndex(indexName: string): Promise<IndexStats> {
     throw new Error('Method not implemented.' + indexName);
   }
+
   deleteIndex(indexName: string): Promise<void> {
     throw new Error('Method not implemented.' + indexName);
   }

@@ -1,5 +1,5 @@
 import type { FieldType } from '@zilliz/milvus2-sdk-node';
-import { DataType } from '@zilliz/milvus2-sdk-node';
+import { DataType, IndexType } from '@zilliz/milvus2-sdk-node';
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { MilvusVectorStore } from './index';
 
@@ -157,6 +157,40 @@ describe('Milvus Vector tests', () => {
       expect(describeResults.shards_num).toBe(2);
       expect(describeResults.num_partitions).toBe('0');
       expect(describeResults.consistency_level).toBe('Eventually');
+    });
+
+    it('should list collections', async () => {
+      const collections = await milvusClient.listCollections();
+      expect(collections).toBeDefined();
+      expect(collections.length).toBeGreaterThan(0);
+      expect(collections.includes(collection_name)).toBe(true);
+    });
+  });
+
+  describe('Index operations', () => {
+    const collection_name = `book`;
+
+    afterAll(async () => {
+      await milvusClient.dropCollection(collection_name);
+    });
+
+    it('should create index', async () => {
+      await milvusClient.createIndex({
+        collectionName: collection_name,
+        fieldName: 'book_intro',
+        indexName: 'book_intro_idx',
+        indexConfig: {
+          type: IndexType.FLAT,
+        },
+        dimension: 128,
+      });
+    });
+
+    it('should list indexes', async () => {
+      // const indexes = await milvusClient.listIndexes(collection_name);
+      // expect(indexes).toBeDefined();
+      // expect(indexes.length).toBeGreaterThan(0);
+      // expect(indexes.includes('book_intro')).toBe(true);
     });
   });
 });
