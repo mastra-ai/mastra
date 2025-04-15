@@ -1,5 +1,11 @@
 # create-mastra
 
+## 0.2.8-alpha.1
+
+### Patch Changes
+
+- 1ebbfbf: Ability to toggle stream vs generate in playground
+
 ## 0.2.8-alpha.0
 
 ### Patch Changes
