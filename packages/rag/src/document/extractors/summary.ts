@@ -47,17 +47,38 @@ export class SummaryExtractor {
     for (let i = 0; i < chunks.length; ++i) {
       for (const summaryType of this.summaries) {
         let context = '';
-        if (summaryType === 'self') {
-          context = chunks[i].text;
-        } else if (summaryType === 'prev' && i > 0) {
-          context = chunks[i - 1].text;
-        } else if (summaryType === 'next' && i < chunks.length - 1) {
-          context = chunks[i + 1].text;
+        const chunk = chunks[i];
+        const prev = chunks[i - 1];
+        const next = chunks[i + 1];
+        if (summaryType === 'self' && chunk?.text) {
+          context = chunk.text;
+        } else if (summaryType === 'prev' && prev?.text && i > 0) {
+          context = prev.text;
+        } else if (summaryType === 'next' && next?.text && i < chunks.length - 1) {
+          context = next.text;
         } else {
           continue; // skip if no context available
         }
         const prompt = this.promptTemplate.replace('{context}', context);
-        const summary = await this.llm.doGenerate(prompt);
+        const result = await this.llm.doGenerate({
+          inputFormat: 'messages',
+          mode: { type: 'regular' },
+          prompt: [
+            {
+              role: 'user',
+              content: [{ type: 'text', text: prompt }],
+            },
+          ],
+        });
+        // Extract summary string from result (handle various return types)
+        let summary: string;
+        if (typeof result === 'string') {
+          summary = result;
+        } else if (result && typeof result === 'object' && 'text' in result && typeof result.text === 'string') {
+          summary = result.text;
+        } else {
+          summary = JSON.stringify(result);
+        }
         results.push({ summary, type: summaryType, chunkIndex: i });
       }
     }
