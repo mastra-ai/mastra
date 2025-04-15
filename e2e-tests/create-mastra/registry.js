@@ -1,5 +1,9 @@
 import { fork, execSync } from 'node:child_process';
-import { fileURLToPath } from 'node:url';
+import { createRequire } from 'node:module';
+
+if (typeof require === 'undefined') {
+  global.require = createRequire(import.meta.url);
+}
 
 /**
  *
@@ -9,7 +13,10 @@ import { fileURLToPath } from 'node:url';
  */
 export function runRegistry(args = [], childOptions) {
   return new Promise((resolve, reject) => {
-    const childFork = fork(fileURLToPath(import.meta.resolve('verdaccio/bin/verdaccio')), args, childOptions);
+    const childFork = fork(require.resolve('verdaccio/bin/verdaccio'), args, {
+      stdio: ['ignore', 'ignore', 'ignore', 'ipc'],
+      ...childOptions,
+    });
     childFork.on('message', msg => {
       if (msg.verdaccio_started) {
         resolve(childFork);

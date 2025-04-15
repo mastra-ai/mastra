@@ -1,7 +1,16 @@
 storage: ./storage
 
+uplinks:
+  npmjs:
+    url: https://registry.npmjs.org/
+
 packages:
   '@mastra/*':
+    access: $all
+    publish: $authenticated
+    unpublish: $authenticated
+
+  'create-mastra':
     access: $all
     publish: $authenticated
     unpublish: $authenticated
@@ -10,6 +19,7 @@ packages:
     access: $all
     publish: $authenticated
     unpublish: $authenticated
+    proxy: npmjs
 
 web:
   enable: true
@@ -21,6 +31,5 @@ auth:
         name: mastra
         password: mastra-ai
 
-logs:
-  - { type: stdout, format: pretty, level: info }
-_debug: true
+log:
+  - { type: stdout, format: pretty, level: error }
