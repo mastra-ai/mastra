@@ -1,5 +1,11 @@
 # @mastra/core
 
+## 0.8.4-alpha.0
+
+### Patch Changes
+
+- 03f3cd0: Propagate context to passed in tools
+
 ## 0.8.3
 
 ### Patch Changes

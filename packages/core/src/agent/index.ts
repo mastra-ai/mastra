@@ -521,6 +521,9 @@ export class Agent<
                               runId,
                               threadId,
                               resourceId,
+                              logger: this.logger,
+                              agentName: this.name,
+                              container,
                             },
                             options,
                           ) ?? undefined
@@ -557,12 +560,15 @@ export class Agent<
       toolsFromToolsets.forEach(toolset => {
         Object.entries(toolset).forEach(([toolName, tool]) => {
           const toolObj = tool;
+
           const options = {
             name: toolName,
             runId,
             threadId,
             resourceId,
             logger: this.logger,
+            mastra: mastraProxy as MastraUnion | undefined,
+            memory,
             agentName: this.name,
             container,
           };
@@ -588,6 +594,8 @@ export class Agent<
           threadId,
           resourceId,
           logger: this.logger,
+          mastra: mastraProxy as MastraUnion | undefined,
+          memory,
           agentName: this.name,
           container,
         };
