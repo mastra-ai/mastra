@@ -14,7 +14,7 @@ export const AgentChat = ({
   baseUrl,
   refreshThreadList,
 }: ChatProps) => {
-  const { modelSettings } = useContext(AgentContext);
+  const { modelSettings, chatWithGenerate } = useContext(AgentContext);
   return (
     <MastraRuntimeProvider
       agentId={agentId}
@@ -25,6 +25,7 @@ export const AgentChat = ({
       baseUrl={baseUrl}
       refreshThreadList={refreshThreadList}
       modelSettings={modelSettings}
+      chatWithGenerate={chatWithGenerate}
     >
       <Thread memory={memory} />
     </MastraRuntimeProvider>

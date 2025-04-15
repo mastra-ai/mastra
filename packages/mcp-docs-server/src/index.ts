@@ -5,6 +5,7 @@ import { CallToolRequestSchema, ListToolsRequestSchema } from '@modelcontextprot
 import { z } from 'zod';
 import { zodToJsonSchema } from 'zod-to-json-schema';
 
+import { logger, createLogger } from './logger';
 import { prepare } from './prepare-docs/prepare';
 import { blogTool, blogInputSchema } from './tools/blog';
 import { changesTool, changesInputSchema } from './tools/changes';
@@ -12,11 +13,19 @@ import { docsTool, docsInputSchema } from './tools/docs';
 import { examplesTool, examplesInputSchema } from './tools/examples';
 import { fromPackageRoot } from './utils';
 
+let server: Server;
+
 if (process.env.REBUILD_DOCS_ON_START === 'true') {
-  await prepare();
+  void logger.info('Rebuilding docs on start');
+  try {
+    await prepare();
+    void logger.info('Docs rebuilt successfully');
+  } catch (error) {
+    void logger.error('Failed to rebuild docs', error);
+  }
 }
 
-const server = new Server(
+server = new Server(
   {
     name: 'Mastra Documentation Server',
     version: JSON.parse(await fs.readFile(fromPackageRoot(`package.json`), 'utf8')).version,
@@ -24,9 +33,13 @@ const server = new Server(
   {
     capabilities: {
       tools: {},
+      logging: { enabled: true },
     },
   },
 );
+
+// Update logger with server instance
+Object.assign(logger, createLogger(server));
 
 // Set up request handlers
 server.setRequestHandler(ListToolsRequestSchema, async () => ({
@@ -55,25 +68,32 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
 }));
 
 server.setRequestHandler(CallToolRequestSchema, async request => {
+  const startTime = Date.now();
   try {
+    let result;
     switch (request.params.name) {
       case 'mastraBlog': {
         const args = blogInputSchema.parse(request.params.arguments);
-        return await blogTool.execute(args);
+        result = await blogTool.execute(args);
+        break;
       }
       case 'mastraDocs': {
         const args = docsInputSchema.parse(request.params.arguments);
-        return await docsTool.execute(args);
+        result = await docsTool.execute(args);
+        break;
       }
       case 'mastraExamples': {
         const args = examplesInputSchema.parse(request.params.arguments);
-        return await examplesTool.execute(args);
+        result = await examplesTool.execute(args);
+        break;
       }
       case 'mastraChanges': {
         const args = changesInputSchema.parse(request.params.arguments);
-        return await changesTool.execute(args);
+        result = await changesTool.execute(args);
+        break;
       }
-      default:
+      default: {
+        void logger.warning(`Unknown tool requested: ${request.params.name}`);
         return {
           content: [
             {
@@ -83,9 +103,20 @@ server.setRequestHandler(CallToolRequestSchema, async request => {
           ],
           isError: true,
         };
+      }
     }
+
+    const duration = Date.now() - startTime;
+    void logger.debug(`Tool execution completed`, { tool: request.params.name, duration: `${duration}ms` });
+    return result;
   } catch (error) {
+    const duration = Date.now() - startTime;
     if (error instanceof z.ZodError) {
+      void logger.warning('Invalid tool arguments', {
+        tool: request.params.name,
+        errors: error.errors,
+        duration: `${duration}ms`,
+      });
       return {
         content: [
           {
@@ -96,6 +127,8 @@ server.setRequestHandler(CallToolRequestSchema, async request => {
         isError: true,
       };
     }
+
+    void logger.error(`Tool execution failed: ${request.params.name}`, error);
     return {
       content: [
         {
@@ -109,9 +142,14 @@ server.setRequestHandler(CallToolRequestSchema, async request => {
 });
 
 async function runServer() {
-  const transport = new StdioServerTransport();
-  await server.connect(transport);
-  console.error('Mastra Docs MCP Server running on stdio');
+  try {
+    const transport = new StdioServerTransport();
+    await server.connect(transport);
+    void logger.info('Started Mastra Docs MCP Server');
+  } catch (error) {
+    void logger.error('Failed to start server', error);
+    process.exit(1);
+  }
 }
 
 export { runServer, server };

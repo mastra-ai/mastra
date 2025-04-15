@@ -52,18 +52,32 @@ export const createVectorQueryTool = ({
     }),
     description: toolDescription,
     execute: async ({ context: { queryText, topK, filter }, mastra }) => {
-      const topKValue =
-        typeof topK === 'number' && !isNaN(topK)
-          ? topK
-          : typeof topK === 'string' && !isNaN(Number(topK))
-            ? Number(topK)
-            : 10;
-
-      const vectorStore = mastra?.getVector(vectorStoreName);
       const logger = mastra?.getLogger();
+      if (!logger) {
+        console.warn(
+          '[VectorQueryTool] Logger not initialized: no debug or error logs will be recorded for this tool execution.',
+        );
+      }
+      if (logger) {
+        logger.debug('[VectorQueryTool] execute called with:', { queryText, topK, filter });
+      }
+      try {
+        const topKValue =
+          typeof topK === 'number' && !isNaN(topK)
+            ? topK
+            : typeof topK === 'string' && !isNaN(Number(topK))
+              ? Number(topK)
+              : 10;
 
-      // Get relevant chunks from the vector database
-      if (vectorStore) {
+        const vectorStore = mastra?.getVector(vectorStoreName);
+
+        if (!vectorStore) {
+          if (logger) {
+            logger.error('Vector store not found', { vectorStoreName });
+          }
+          return { relevantContext: [] };
+        }
+        // Get relevant chunks from the vector database
         let queryFilter = {};
         if (enableFilter && filter) {
           queryFilter = (() => {
@@ -79,7 +93,7 @@ export const createVectorQueryTool = ({
           })();
         }
         if (logger) {
-          logger.debug('Using this filter and topK:', { queryFilter, topK: topKValue });
+          logger.debug('Prepared vector query parameters', { queryText, topK: topKValue, queryFilter });
         }
 
         const { results } = await vectorQuerySearch({
@@ -90,23 +104,44 @@ export const createVectorQueryTool = ({
           queryFilter: Object.keys(queryFilter || {}).length > 0 ? queryFilter : undefined,
           topK: topKValue,
         });
+        if (logger) {
+          logger.debug('vectorQuerySearch returned results', { count: results.length });
+        }
         if (reranker) {
+          if (logger) {
+            logger.debug('Reranking results', { rerankerModel: reranker.model, rerankerOptions: reranker.options });
+          }
           const rerankedResults = await rerank(results, queryText, reranker.model, {
             ...reranker.options,
             topK: reranker.options?.topK || topKValue,
           });
+          if (logger) {
+            logger.debug('Reranking complete', { rerankedCount: rerankedResults.length });
+          }
           const relevantChunks = rerankedResults.map(({ result }) => result?.metadata);
+          if (logger) {
+            logger.debug('Returning reranked relevant context chunks', { count: relevantChunks.length });
+          }
           return { relevantContext: relevantChunks };
         }
 
         const relevantChunks = results.map(result => result?.metadata);
+        if (logger) {
+          logger.debug('Returning relevant context chunks', { count: relevantChunks.length });
+        }
         return {
           relevantContext: relevantChunks,
         };
+      } catch (err) {
+        if (logger) {
+          logger.error('Unexpected error in VectorQueryTool execute', {
+            error: err,
+            errorMessage: err instanceof Error ? err.message : String(err),
+            errorStack: err instanceof Error ? err.stack : undefined,
+          });
+        }
+        return { relevantContext: [] };
       }
-      return {
-        relevantContext: [],
-      };
     },
   });
 };

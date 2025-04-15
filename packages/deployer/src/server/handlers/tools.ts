@@ -44,6 +44,7 @@ export function executeToolHandler(tools: Record<string, any>) {
   return async (c: Context) => {
     try {
       const mastra: Mastra = c.get('mastra');
+      const container = c.get('container');
       const toolId = decodeURIComponent(c.req.param('toolId'));
       const { data } = await c.req.json();
 
@@ -51,6 +52,7 @@ export function executeToolHandler(tools: Record<string, any>) {
         mastra,
         toolId,
         data,
+        container,
       });
 
       return c.json(result);
@@ -63,6 +65,7 @@ export function executeToolHandler(tools: Record<string, any>) {
 export async function executeAgentToolHandler(c: Context) {
   try {
     const mastra: Mastra = c.get('mastra');
+    const container = c.get('container');
     const agentId = c.req.param('agentId');
     const toolId = c.req.param('toolId');
     const { data } = await c.req.json();
@@ -72,6 +75,7 @@ export async function executeAgentToolHandler(c: Context) {
       agentId,
       toolId,
       data,
+      container,
     });
 
     return c.json(result);
