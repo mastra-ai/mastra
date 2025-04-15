@@ -10,7 +10,7 @@ By incorporating TTS into your applications, you can enhance user experience wit
 
 TTS is a core component of any voice application. Combined with STT (Speech-to-Text), it forms the foundation of voice interaction systems. Newer models support STS ([Speech-to-Speech](./speech-to-speech)) which can be used for real-time interactions but come at high cost ($). 
 
-## Speech Configuration
+## Configuration
 
 To use TTS in Mastra, you need to provide a `speechModel` when initializing the voice provider. This includes parameters such as:
 
@@ -22,7 +22,6 @@ The **`speaker`** option allows you to select different voices for speech synthe
 
 **Note**: All of these parameters are optional. You can use the default settings provided by the voice provider, which will depend on the specific provider you are using.
 
-### Example Configuration
 
 ```typescript
 const voice = new OpenAIVoice({

@@ -7,23 +7,16 @@ description: Overview of speech-to-speech capabilities in Mastra, including real
 
 ## Introduction
 
-Speech to Speech (STS) in Mastra provides a standardized interface for real-time interactions across multiple providers.  
+Speech-to-Speech (STS) in Mastra provides a standardized interface for real-time interactions across multiple providers.  
 STS enables continuous bidirectional audio communication through listening to events from Realtime models. Unlike separate TTS and STT operations, STS maintains an open connection that processes speech continuously in both directions.
 
 ## Configuration
 
-When initializing a voice-to-voice provider, you can provide configuration options to customize its behavior:
-
-### Constructor Options
-
-- **`chatModel`**: Configuration for the OpenAI realtime model.
+- **`chatModel`**: Configuration for the realtime model.
   - **`apiKey`**: Your OpenAI API key. Falls back to the `OPENAI_API_KEY` environment variable.
   - **`model`**: The model ID to use for real-time voice interactions (e.g., `gpt-4o-mini-realtime`).
   - **`options`**: Additional options for the realtime client, such as session configuration.
-
 - **`speaker`**: The default voice ID for speech synthesis. This allows you to specify which voice to use for the speech output.
-
-### Example Configuration
 
 ```typescript
 const voice = new OpenAIRealtimeVoice({

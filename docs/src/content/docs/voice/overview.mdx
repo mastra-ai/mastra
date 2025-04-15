@@ -19,18 +19,12 @@ import { openai } from '@ai-sdk/openai';
 import { OpenAIVoice } from "@mastra/voice-openai";
 
 // Initialize OpenAI voice for TTS
-const voice = new OpenAIVoice({
-  speechModel: {
-    name: "tts-1-hd", // Specify the TTS model
-    apiKey: process.env.OPENAI_API_KEY, // Your OpenAI API key
-  },
-});
 
 const voiceAgent = new Agent({
   name: "Voice Agent",
   instructions: "You are a voice assistant that can help users with their tasks.",
   model: openai("gpt-4o"),
-  voice,
+  voice: new OpenAIVoice(),
 });
 ```
 
@@ -51,13 +45,11 @@ import { openai } from '@ai-sdk/openai';
 import { OpenAIVoice } from "@mastra/voice-openai";
 import { playAudio } from "@mastra/node-audio";
 
-const voice = new OpenAIVoice();
-
 const voiceAgent = new Agent({
   name: "Voice Agent",
   instructions: "You are a voice assistant that can help users with their tasks.",
   model: openai("gpt-4o"),
-  voice,
+  voice: new OpenAIVoice(),
 });
 
 const { text } = await voiceAgent.generate('What color is the sky?');
@@ -80,13 +72,11 @@ import { openai } from '@ai-sdk/openai';
 import { AzureVoice } from "@mastra/voice-azure";
 import { playAudio } from "@mastra/node-audio";
 
-const voice = new AzureVoice();
-
 const voiceAgent = new Agent({
   name: "Voice Agent",
   instructions: "You are a voice assistant that can help users with their tasks.",
   model: openai("gpt-4o"),
-  voice,
+  voice: new AzureVoice(),
 });
 
 const { text } = await voiceAgent.generate('What color is the sky?');
@@ -108,13 +98,11 @@ import { openai } from '@ai-sdk/openai';
 import { ElevenLabsVoice } from "@mastra/voice-elevenlabs";
 import { playAudio } from "@mastra/node-audio";
 
-const voice = new ElevenLabsVoice();
-
 const voiceAgent = new Agent({
   name: "Voice Agent",
   instructions: "You are a voice assistant that can help users with their tasks.",
   model: openai("gpt-4o"),
-  voice,
+  voice: new ElevenLabsVoice(),
 });
 
 const { text } = await voiceAgent.generate('What color is the sky?');
@@ -135,13 +123,12 @@ import { Agent } from '@mastra/core/agent';
 import { openai } from '@ai-sdk/openai';
 import { PlayAIVoice } from "@mastra/voice-playai";
 import { playAudio } from "@mastra/node-audio";
-const voice = new PlayAIVoice();
 
 const voiceAgent = new Agent({
   name: "Voice Agent",
   instructions: "You are a voice assistant that can help users with their tasks.",
   model: openai("gpt-4o"),
-  voice,
+  voice: new PlayAIVoice(),
 });
 
 const { text } = await voiceAgent.generate('What color is the sky?');
@@ -163,13 +150,11 @@ import { openai } from '@ai-sdk/openai';
 import { GoogleVoice } from "@mastra/voice-google";
 import { playAudio } from "@mastra/node-audio";
 
-const voice = new GoogleVoice();
-
 const voiceAgent = new Agent({
   name: "Voice Agent",
   instructions: "You are a voice assistant that can help users with their tasks.",
   model: openai("gpt-4o"),
-  voice,
+  voice: new GoogleVoice(),
 });
 
 const { text } = await voiceAgent.generate('What color is the sky?');
@@ -190,13 +175,12 @@ import { Agent } from '@mastra/core/agent';
 import { openai } from '@ai-sdk/openai';
 import { CloudflareVoice } from "@mastra/voice-cloudflare";
 import { playAudio } from "@mastra/node-audio";
-const voice = new CloudflareVoice();
 
 const voiceAgent = new Agent({
   name: "Voice Agent",
   instructions: "You are a voice assistant that can help users with their tasks.",
   model: openai("gpt-4o"),
-  voice,
+  voice: new CloudflareVoice(),
 });
 
 const { text } = await voiceAgent.generate('What color is the sky?');
@@ -218,13 +202,11 @@ import { openai } from '@ai-sdk/openai';
 import { DeepgramVoice } from "@mastra/voice-deepgram";
 import { playAudio } from "@mastra/node-audio";
 
-const voice = new DeepgramVoice();
-
 const voiceAgent = new Agent({
   name: "Voice Agent",
   instructions: "You are a voice assistant that can help users with their tasks.",
   model: openai("gpt-4o"),
-  voice,
+  voice: new DeepgramVoice(),
 });
 
 const { text } = await voiceAgent.generate('What color is the sky?');
@@ -246,13 +228,11 @@ import { openai } from '@ai-sdk/openai';
 import { SpeechifyVoice } from "@mastra/voice-speechify";
 import { playAudio } from "@mastra/node-audio";
 
-const voice = new SpeechifyVoice();
-
 const voiceAgent = new Agent({
   name: "Voice Agent",
   instructions: "You are a voice assistant that can help users with their tasks.",
   model: openai("gpt-4o"),
-  voice,
+  voice: new SpeechifyVoice(),
 });
 
 const { text } = await voiceAgent.generate('What color is the sky?');
@@ -274,13 +254,11 @@ import { openai } from '@ai-sdk/openai';
 import { SarvamVoice } from "@mastra/voice-sarvam";
 import { playAudio } from "@mastra/node-audio";
 
-const voice = new SarvamVoice();
-
 const voiceAgent = new Agent({
   name: "Voice Agent",
   instructions: "You are a voice assistant that can help users with their tasks.",
   model: openai("gpt-4o"),
-  voice,
+  voice: new SarvamVoice(),
 });
 
 const { text } = await voiceAgent.generate('What color is the sky?');
@@ -302,13 +280,11 @@ import { openai } from '@ai-sdk/openai';
 import { MurfVoice } from "@mastra/voice-murf";
 import { playAudio } from "@mastra/node-audio";
 
-const voice = new MurfVoice();
-
 const voiceAgent = new Agent({
   name: "Voice Agent",
   instructions: "You are a voice assistant that can help users with their tasks.",
   model: openai("gpt-4o"),
-  voice,
+  voice: new MurfVoice(),
 });
 
 const { text } = await voiceAgent.generate('What color is the sky?');
@@ -341,13 +317,11 @@ import { openai } from '@ai-sdk/openai';
 import { OpenAIVoice } from "@mastra/voice-openai";
 import { createReadStream } from 'fs';
 
-const voice = new OpenAIVoice();
-
 const voiceAgent = new Agent({
   name: "Voice Agent",
   instructions: "You are a voice assistant that can help users with their tasks.",
   model: openai("gpt-4o"),
-  voice,
+  voice: new OpenAIVoice(),
 });
 
 // Use an audio file from a URL
@@ -371,13 +345,11 @@ import { openai } from '@ai-sdk/openai';
 import { AzureVoice } from "@mastra/voice-azure";
 import { createReadStream } from 'fs';
 
-const voice = new AzureVoice();
-
 const voiceAgent = new Agent({
   name: "Voice Agent",
   instructions: "You are a voice assistant that can help users with their tasks.",
   model: openai("gpt-4o"),
-  voice,
+  voice: new AzureVoice(),
 });
 
 // Use an audio file from a URL
@@ -400,13 +372,11 @@ import { openai } from '@ai-sdk/openai';
 import { ElevenLabsVoice } from "@mastra/voice-elevenlabs";
 import { createReadStream } from 'fs';
 
-const voice = new ElevenLabsVoice();
-
 const voiceAgent = new Agent({
   name: "Voice Agent",
   instructions: "You are a voice assistant that can help users with their tasks.",
   model: openai("gpt-4o"),
-  voice,
+  voice: new ElevenLabsVoice(),
 });
 
 // Use an audio file from a URL
@@ -429,13 +399,11 @@ import { openai } from '@ai-sdk/openai';
 import { GoogleVoice } from "@mastra/voice-google";
 import { createReadStream } from 'fs';
 
-const voice = new GoogleVoice();
-
 const voiceAgent = new Agent({
   name: "Voice Agent",
   instructions: "You are a voice assistant that can help users with their tasks.",
   model: openai("gpt-4o"),
-  voice,
+  voice: new GoogleVoice(),
 });
 
 // Use an audio file from a URL
@@ -458,13 +426,11 @@ import { openai } from '@ai-sdk/openai';
 import { CloudflareVoice } from "@mastra/voice-cloudflare";
 import { createReadStream } from 'fs';
 
-const voice = new CloudflareVoice();
-
 const voiceAgent = new Agent({
   name: "Voice Agent",
   instructions: "You are a voice assistant that can help users with their tasks.",
   model: openai("gpt-4o"),
-  voice,
+  voice: new CloudflareVoice(),
 });
 
 // Use an audio file from a URL
@@ -487,13 +453,11 @@ import { openai } from '@ai-sdk/openai';
 import { DeepgramVoice } from "@mastra/voice-deepgram";
 import { createReadStream } from 'fs';
 
-const voice = new DeepgramVoice();
-
 const voiceAgent = new Agent({
   name: "Voice Agent",
   instructions: "You are a voice assistant that can help users with their tasks.",
   model: openai("gpt-4o"),
-  voice,
+  voice: new DeepgramVoice(),
 });
 
 // Use an audio file from a URL
@@ -516,13 +480,11 @@ import { openai } from '@ai-sdk/openai';
 import { SarvamVoice } from "@mastra/voice-sarvam";
 import { createReadStream } from 'fs';
 
-const voice = new SarvamVoice();
-
 const voiceAgent = new Agent({
   name: "Voice Agent",
   instructions: "You are a voice assistant that can help users with their tasks.",
   model: openai("gpt-4o"),
-  voice,
+  voice: new SarvamVoice(),
 });
 
 // Use an audio file from a URL
@@ -553,13 +515,11 @@ import { openai } from '@ai-sdk/openai';
 import { playAudio, getMicrophoneStream } from '@mastra/node-audio';
 import { OpenAIRealtimeVoice } from "@mastra/voice-openai-realtime";
 
-const voice = new OpenAIRealtimeVoice();
-
 const voiceAgent = new Agent({
   name: "Voice Agent",
   instructions: "You are a voice assistant that can help users with their tasks.",
   model: openai("gpt-4o"),
-  voice,
+  voice: new OpenAIRealtimeVoice(),
 });
 
 // Listen for agent audio responses
