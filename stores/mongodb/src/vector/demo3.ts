@@ -1,4 +1,3 @@
-// latest working demo
 /**    
  * demo.ts    
  * This demo showcases how to use MongoDBVector and MongoFilterTranslator together.    
@@ -10,15 +9,16 @@ import type { MongoClientOptions, Document } from 'mongodb';
 import { BaseFilterTranslator } from '@mastra/core/vector/filter';  
 import type { FieldCondition, VectorFilter, OperatorSupport, QueryOperator } from '@mastra/core/vector/filter';  
 import { v4 as uuidv4 } from 'uuid';    
-import type {    
-    QueryResult,    
-    IndexStats,    
-    CreateIndexParams,    
-    UpsertVectorParams,    
-    QueryVectorParams,    
-    ParamsToArgs,    
-    QueryVectorArgs,    
-    UpsertVectorArgs,    
+import {    
+    type QueryResult,    
+    type IndexStats,    
+    type CreateIndexParams,    
+    type UpsertVectorParams,    
+    type QueryVectorParams,    
+    type ParamsToArgs,    
+    type QueryVectorArgs,    
+    type UpsertVectorArgs,
+    MastraVector,    
   } from '@mastra/core/vector';    
   
 // Define necessary types and interfaces    
@@ -280,8 +280,8 @@ class MongoFilterTranslator extends BaseFilterTranslator {
 }    
   
 // The MongoDBVector class    
-class MongoDBVector {    
-  // Private member variables  
+
+export class MongoDBVector extends MastraVector {  
   private client: MongoClient;    
   private db: Db;    
   private collections: Map<string, Collection<MongoDBDocument>>;    
@@ -295,18 +295,11 @@ class MongoDBVector {
     dotproduct: 'dotProduct',    
   };    
   
-  constructor({    
-    uri,    
-    dbName,    
-    options,    
-  }: {    
-    uri: string;    
-    dbName: string;    
-    options?: MongoClientOptions;    
-  }) {    
-    this.client = new MongoClient(uri, options);    
-    this.db = this.client.db(dbName);    
-    this.collections = new Map();    
+  constructor({ uri, dbName, options }: { uri: string; dbName: string; options?: MongoClientOptions }) {  
+    super();  
+    this.client = new MongoClient(uri, options);  
+    this.db = this.client.db(dbName);  
+    this.collections = new Map();  
   }    
     
   // Public methods  
@@ -523,8 +516,7 @@ class MongoDBVector {
   }    
     
   async deleteIndex(indexName: string): Promise<void> {    
-    await this.db.dropCollection(indexName);    
-    this.collections.delete(indexName);    
+    // TODO  
   }    
     
   async updateIndexById(    
@@ -535,23 +527,11 @@ class MongoDBVector {
     if (!update.vector && !update.metadata) {    
       throw new Error('No updates provided');    
     }    
-    
-    const collection = await this.getCollection(indexName, true);    
-    
-    const updateFields: Partial<MongoDBDocument> = {};    
-    if (update.vector) {    
-      updateFields[this.embeddingFieldName] = update.vector;    
-    }    
-    if (update.metadata) {    
-      updateFields[this.metadataFieldName] = update.metadata;    
-    }    
-    
-    await collection.updateOne({ _id: id }, { $set: updateFields });    
+    //TODO
   }    
     
   async deleteIndexById(indexName: string, id: string): Promise<void> {    
-    const collection = await this.getCollection(indexName, true);    
-    await collection.deleteOne({ _id: id });    
+    //TODO
   }    
   
   // Private methods  
@@ -758,35 +738,3 @@ async function main() {
 }    
   
 main().catch(console.error);    
-
-/*
-Connected to MongoDB
-Index 'my_vectors' created
-Index 'my_vectors' is ready
-Documents inserted with embeddings
-Search Results:
-[
-  {
-    "id": "doc3",
-    "score": 0.8979873657226562,
-    "metadata": {
-      "category": "A"
-    },
-    "document": "Another document for testing."
-  },
-  {
-    "id": "doc1",
-    "score": 0.8872531652450562,
-    "metadata": {
-      "category": "A"
-    },
-    "document": "This is the first document."
-  }
-]
-Translate equality filter: Passed
-Translate $in operator: Passed
-Translate $gt operator: Passed
-Translate $exists operator: Passed
-Translate logical $and operator: Passed
-Connection closed
-*/
