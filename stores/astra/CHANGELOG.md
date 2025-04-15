@@ -1,5 +1,13 @@
 # @mastra/astra
 
+## 0.2.10-alpha.5
+
+### Patch Changes
+
+- ec3cbf9: add MIT license for stores/vector packages
+- Updated dependencies [d72318f]
+  - @mastra/core@0.8.3-alpha.5
+
 ## 0.2.10-alpha.4
 
 ### Patch Changes

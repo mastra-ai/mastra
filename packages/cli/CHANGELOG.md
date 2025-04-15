@@ -1,5 +1,14 @@
 # mastra
 
+## 0.4.9-alpha.7
+
+### Patch Changes
+
+- d72318f: Refactored the evals table to use the DS tables
+- Updated dependencies [d72318f]
+  - @mastra/core@0.8.3-alpha.5
+  - @mastra/deployer@0.2.9-alpha.7
+
 ## 0.4.9-alpha.6
 
 ### Patch Changes

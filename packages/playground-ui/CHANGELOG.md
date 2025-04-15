@@ -1,5 +1,14 @@
 # @mastra/playground-ui
 
+## 4.0.4-alpha.6
+
+### Patch Changes
+
+- d72318f: Refactored the evals table to use the DS tables
+- Updated dependencies [d72318f]
+  - @mastra/core@0.8.3-alpha.5
+  - @mastra/client-js@0.1.17-alpha.5
+
 ## 4.0.4-alpha.5
 
 ### Patch Changes
