@@ -226,6 +226,7 @@ export abstract class Bundler extends MastraBundler {
    * Resolves and packages workspace dependencies
    * Finds all transitive dependencies and creates TGZ packages for them
    * Adds workspace packages to dependenciesToInstall with file: references to the packaged TGZ files
+   * Returns resolutions for workspace dependencies
    */
   private async resolveAndPackWorkspaceDependencies(
     workspaceMap: Map<
