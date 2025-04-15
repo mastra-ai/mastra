@@ -1,5 +1,14 @@
 # @mastra/memory
 
+## 0.2.11-alpha.1
+
+### Patch Changes
+
+- 6f92295: Fixed an issue where some user messages and llm messages would have the exact same createdAt date, leading to incorrect message ordering. Added a fix for new messages as well as any that were saved before the fix in the wrong order
+- Updated dependencies [8a8a73b]
+- Updated dependencies [6f92295]
+  - @mastra/core@0.8.4-alpha.1
+
 ## 0.2.11-alpha.0
 
 ### Patch Changes
