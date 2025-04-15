@@ -15,6 +15,7 @@ const isToolCallWithId = (message: MessageType | undefined, targetToolCallId: st
 
 /**
  * Self-heals message ordering to ensure tool calls are directly before their matching tool results.
+ * This is needed due to a bug where messages were saved in the wrong order. That bug is fixed, but this code ensures any tool calls saved in the wrong order in the past will still be usable now.
  */
 export function reorderToolCallsAndResults(messages: MessageType[]): MessageType[] {
   if (!messages.length) return messages;
