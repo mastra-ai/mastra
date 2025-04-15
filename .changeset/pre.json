@@ -145,5 +145,8 @@
     "@mastra/voice-sarvam": "0.1.8",
     "@mastra/voice-speechify": "0.1.13"
   },
-  "changesets": []
+  "changesets": [
+    "cool-papers-check",
+    "free-news-fly"
+  ]
 }
