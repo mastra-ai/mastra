@@ -7,4 +7,4 @@ export * as tools from './handlers/tools';
 export * as workflows from './handlers/workflows';
 export * as vector from './handlers/vector';
 export * as voice from './handlers/voice';
-export * from './handlers/evaluators';
+export * as evaluators from './handlers/evaluators';

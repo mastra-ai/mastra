@@ -2,7 +2,7 @@ import type { Mastra } from '@mastra/core';
 import {
   getEvaluatorsHandler as getOriginalEvaluatorsHandler,
   executeEvaluatorHandler as executeOriginalEvaluatorHandler,
-} from '@mastra/server/handlers';
+} from '@mastra/server/handlers/evaluators';
 import type { Context } from 'hono';
 import { handleError } from './error';
 
