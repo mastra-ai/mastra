@@ -108,9 +108,14 @@ The VercelDeployer automatically generates a `vercel.json` configuration file in
 After building, you can deploy your Mastra application `.mastra/output` to Vercel using any of these methods:
 
 1. **Vercel CLI**: Deploy directly using Vercel's official CLI tool
+   - Install the CLI: `npm install -g vercel`
+   - Navigate to the output directory: `cd .mastra/output`
+   - Deploy to preview environment: `vercel`
+   - For production deployment: `vercel --prod`
 
 2. **Vercel Dashboard**: Connect your Git repository or drag-and-drop the build output through the Vercel dashboard
 
+> You can also run `vercel dev` in your output directory `.mastra/output` to test your Mastra application locally.
 
 ## Platform Documentation
 

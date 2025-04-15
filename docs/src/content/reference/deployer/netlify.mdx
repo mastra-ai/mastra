@@ -100,9 +100,16 @@ to = "/.netlify/functions/api/:splat"
 After building, you can deploy your Mastra application `.mastra/output` to Netlify using any of these methods:
 
 1. **Netlify CLI**: Deploy directly using Netlify's official CLI tool
+   - Install the CLI: `npm install -g netlify-cli`
+   - Navigate to the output directory: `cd .mastra/output`
+   - Deploy with functions directory specified: `netlify deploy --dir . --functions ./netlify/functions`
+   - For production deployment add `--prod` flag: `netlify deploy --prod --dir . --functions ./netlify/functions`
 
 2. **Netlify Dashboard**: Connect your Git repository or drag-and-drop the build output through the Netlify dashboard
 
+3. **Netlify Dev**: Run your Mastra application locally with Netlify's development environment
+
+> You can also run `netlify dev` in your output directory `.mastra/output` to test your Mastra application locally.
 
 ## Platform Documentation
 
