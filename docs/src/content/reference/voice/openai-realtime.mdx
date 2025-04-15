@@ -11,6 +11,7 @@ The OpenAIRealtimeVoice class provides real-time voice interaction capabilities 
 
 ```typescript
 import { OpenAIRealtimeVoice } from "@mastra/voice-openai-realtime";
+import { playAudio, getMicrophoneStream } from "@mastra/node-audio";
 
 // Initialize with default configuration using environment variables
 const voice = new OpenAIRealtimeVoice();
@@ -37,7 +38,7 @@ const voiceWithConfig = new OpenAIRealtimeVoice({
 await voice.connect();
 
 // Set up event listeners
-voice.on('speaking', ({ audio }) => {
+voice.on('speaker', ({ audio }) => {
   // Handle audio data (Int16Array) pcm format by default
   playAudio(audio);
 });

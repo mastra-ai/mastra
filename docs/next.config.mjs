@@ -728,6 +728,11 @@ export default withNextra({
       destination: "/examples/workflows/sequential-steps",
       permanent: true,
     },
+    {
+      source: "/docs/voice/voice-to-voice",
+      destination: "/docs/voice/speech-to-speech",
+      permanent: true,
+    },
   ],
   trailingSlash: false,
 });
