@@ -1,5 +1,49 @@
 # @mastra/deployer
 
+## 0.2.9-alpha.5
+
+### Patch Changes
+
+- 9f6f6dd: Fix container for tools execution api
+- Updated dependencies [9f6f6dd]
+  - @mastra/server@1.0.3-alpha.5
+
+## 0.2.9-alpha.4
+
+### Patch Changes
+
+- 1ebbfbf: Add 3 minutes timeout to deployer server
+- Updated dependencies [7f1b291]
+  - @mastra/core@0.8.3-alpha.4
+  - @mastra/server@1.0.3-alpha.4
+
+## 0.2.9-alpha.3
+
+### Patch Changes
+
+- Updated dependencies [10a8caf]
+  - @mastra/core@0.8.3-alpha.3
+  - @mastra/server@1.0.3-alpha.3
+
+## 0.2.9-alpha.2
+
+### Patch Changes
+
+- Updated dependencies [0bcc862]
+  - @mastra/core@0.8.3-alpha.2
+  - @mastra/server@1.0.3-alpha.2
+
+## 0.2.9-alpha.1
+
+### Patch Changes
+
+- 32e7b71: Add support for dependency injection
+- 37bb612: Add Elastic-2.0 licensing for packages
+- Updated dependencies [32e7b71]
+- Updated dependencies [37bb612]
+  - @mastra/server@1.0.3-alpha.1
+  - @mastra/core@0.8.3-alpha.1
+
 ## 0.2.9-alpha.0
 
 ### Patch Changes

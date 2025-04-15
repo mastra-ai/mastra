@@ -1,9 +1,12 @@
 import { JSDOM } from 'jsdom';
 import { z } from 'zod';
+import { logger } from '../logger';
 
+const BLOG_BASE_URL = process.env.BLOG_URL || 'https://mastra.ai';
 // Helper function to fetch blog posts as markdown
 async function fetchBlogPosts(): Promise<string> {
-  const response = await fetch('https://mastra.ai/blog');
+  void logger.debug('Fetching list of blog posts');
+  const response = await fetch(`${BLOG_BASE_URL}/blog`);
   if (!response.ok) {
     throw new Error('Failed to fetch blog posts');
   }
@@ -35,8 +38,12 @@ async function fetchBlogPosts(): Promise<string> {
 
 // Helper function to fetch and convert a blog post to markdown
 async function fetchBlogPost(url: string): Promise<string> {
+  void logger.debug(`Fetching blog post: ${url}`);
   const response = await fetch(url);
   if (!response.ok) {
+    if (response.status === 429) {
+      throw new Error('Rate limit exceeded');
+    }
     throw new Error('Failed to fetch blog post');
   }
   const html = await response.text();
@@ -72,10 +79,11 @@ export const blogTool = {
   description:
     'Get Mastra.ai blog content. Without a URL, returns a list of all blog posts. With a URL, returns the specific blog post content in markdown format. The blog contains changelog posts as well as announcements and posts about Mastra features and AI news',
   execute: async (args: BlogInput) => {
+    void logger.debug('Executing mastraBlog tool', { url: args.url });
     try {
       let content: string;
       if (args.url !== `/blog`) {
-        content = await fetchBlogPost(`https://mastra.ai${args.url}`);
+        content = await fetchBlogPost(`${BLOG_BASE_URL}${args.url}`);
       } else {
         content = await fetchBlogPosts();
       }
@@ -89,6 +97,7 @@ export const blogTool = {
         isError: false,
       };
     } catch (error) {
+      void logger.error('Failed to execute mastraBlog tool', error);
       return {
         content: [
           {

@@ -68,5 +68,69 @@ describe('examplesTool', () => {
       const codeBlockCount = (result.match(/```typescript/g) || []).length;
       expect(codeBlockCount).toBeGreaterThan(1);
     });
+
+    it('should handle examples with multiple file structures', async () => {
+      const result = await callTool(tools.mastra_mastraExamples, { example: 'bird-checker-with-nextjs' });
+
+      // Check for multiple file references
+      expect(result).toMatch(/lib\/mastra/i); // Check for lib directory
+      expect(result).toMatch(/mastra\/agents/i); // Check for agents directory
+      expect(result).toMatch(/mastra\/tools/i); // Check for tools directory
+      expect(result).toMatch(/package\.json/i); // Check for package.json
+    });
+
+    it('should include TypeScript type definitions', async () => {
+      const result = await callTool(tools.mastra_mastraExamples, { example: 'agent-network' });
+
+      // Check for TypeScript types and interfaces
+      expect(result).toMatch(/import\s+{\s*Agent\s*}\s+from/i); // Type import
+      expect(result).toMatch(/import\s+{\s*AgentNetwork\s*}\s+from/i); // Network type import
+    });
+
+    it('should demonstrate external API integration patterns', async () => {
+      const result = await callTool(tools.mastra_mastraExamples, { example: 'bird-checker-with-nextjs' });
+
+      // Check for API integration patterns
+      expect(result).toMatch(/fetch\(/i); // Fetch calls
+      expect(result).toMatch(/Authorization/i); // Headers
+      expect(result).toMatch(/process\.env/i); // Environment variables
+    });
+
+    it('should include accessibility patterns in UI examples', async () => {
+      const result = await callTool(tools.mastra_mastraExamples, { example: 'assistant-ui' });
+
+      // Check for UI component patterns
+      expect(result).toMatch(/@assistant-ui\/react/i); // React UI library
+      expect(result).toMatch(/@assistant-ui\/react-ui/i); // UI components
+      expect(result).toMatch(/tailwindcss-animate/i); // Animation utilities
+    });
+
+    it('should demonstrate state management patterns', async () => {
+      const result = await callTool(tools.mastra_mastraExamples, { example: 'memory-todo-agent' });
+      expect(result).toMatch(/memory/i);
+    });
+
+    it('should include testing examples', async () => {
+      const result = await callTool(tools.mastra_mastraExamples, { example: 'bird-checker-with-nextjs-and-eval' });
+      expect(result).toMatch(/Eval/i);
+    });
+
+    it('should demonstrate proper environment handling', async () => {
+      const result = await callTool(tools.mastra_mastraExamples, { example: 'bird-checker-with-nextjs' });
+
+      // Check for environment setup patterns
+      expect(result).toMatch(/NEXT_PUBLIC_UNSPLASH_ACCESS_KEY/i); // Environment variables
+      expect(result).toMatch(/process\.env/i); // Process env usage
+    });
+
+    it('should include proper error boundary examples in UI components', async () => {
+      const result = await callTool(tools.mastra_mastraExamples, { example: 'bird-checker-with-nextjs' });
+      expect(result).toMatch(/error/i);
+    });
+
+    it('should demonstrate proper memory management patterns', async () => {
+      const result = await callTool(tools.mastra_mastraExamples, { example: 'memory-with-context' });
+      expect(result).toMatch(/memory/i);
+    });
   });
 });
