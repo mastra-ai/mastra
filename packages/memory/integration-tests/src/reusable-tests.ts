@@ -316,12 +316,9 @@ export function getResuableTests(memory: Memory) {
         ]);
       });
 
-      it.only('should reorder tool calls to be directly before their matching tool results', async () => {
+      it('should reorder tool calls to be directly before their matching tool results', async () => {
         // Create a unique tool call ID for matching tool calls with results
         const toolCallId = `test-call-${randomUUID()}`;
-
-        // First create a standard text message from the user
-        const userMessage = createTestMessage(thread.id, 'A user message to start the conversation', 'user');
 
         // Create an assistant message with a tool call
         const toolCallMessage = {
@@ -342,6 +339,9 @@ export function getResuableTests(memory: Memory) {
           ],
         };
 
+        // First create a standard text message from the user
+        const userMessage = createTestMessage(thread.id, 'A user message to start the conversation', 'user');
+
         // Create a tool result message
         const toolResultMessage = {
           id: randomUUID(),
@@ -349,7 +349,7 @@ export function getResuableTests(memory: Memory) {
           resourceId,
           role: 'assistant' as const,
           type: 'text' as const,
-          createdAt: new Date(),
+          createdAt: new Date(Date.now() + 2000),
           content: [
             {
               type: 'tool-result' as const,
@@ -360,8 +360,9 @@ export function getResuableTests(memory: Memory) {
           ],
         };
 
+        // PART 1: Test the utility function directly
         // Create a mock of what these messages would look like when retrieved directly from storage
-        // In storage, they would maintain the insertion order: user, tool result, tool call
+        // In storage, they would be in the wrong order: tool call, user, tool result
         const rawMessages = [toolCallMessage, userMessage, toolResultMessage];
 
         // Verify the reordering function works correctly directly
@@ -371,12 +372,59 @@ export function getResuableTests(memory: Memory) {
         // 1. All messages should still be present
         expect(reorderedMessages.length).toBe(3);
 
-        console.log(reorderedMessages);
-        // 2. User message should remain first
-        expect(reorderedMessages[0]?.id).toBe(userMessage.id);
+        // 2. User message should remain in place (middle)
+        expect(reorderedMessages[0]).toBe(userMessage);
+
         // 3. Tool call should come directly before tool result
-        expect(reorderedMessages[1]?.id).toBe(toolCallMessage.id);
-        expect(reorderedMessages[2]?.id).toBe(toolResultMessage.id);
+        expect(reorderedMessages[1]).toBe(toolCallMessage);
+        expect(reorderedMessages[2]).toBe(toolResultMessage);
+
+        // PART 2: INTEGRATION TEST - Save the messages and verify through Memory APIs
+
+        // Create a new thread for this part of the test to avoid interference
+        const integrationThread = await memory.createThread({
+          resourceId,
+          title: 'Tool Order Integration Test',
+        });
+
+        // Create copies of our test messages with the correct new threadId
+        const integrationToolCallMessage = {
+          ...toolCallMessage,
+          id: randomUUID(), // New ID to avoid conflicts
+          threadId: integrationThread.id,
+        };
+
+        const integrationUserMessage = {
+          ...userMessage,
+          id: randomUUID(), // New ID to avoid conflicts
+          threadId: integrationThread.id,
+        };
+
+        const integrationToolResultMessage = {
+          ...toolResultMessage,
+          id: randomUUID(), // New ID to avoid conflicts
+          threadId: integrationThread.id,
+        };
+
+        // Save messages in the wrong order intentionally
+        await memory.saveMessages({ messages: [integrationToolCallMessage] });
+        await memory.saveMessages({ messages: [integrationUserMessage] });
+        await memory.saveMessages({ messages: [integrationToolResultMessage] });
+
+        // Retrieve messages through rememberMessages
+        const result = await memory.rememberMessages({
+          threadId: integrationThread.id,
+          config: { lastMessages: 10 },
+        });
+
+        // Check that all messages are present
+        expect(result.messages.length).toBe(3);
+
+        // Verify message order directly by index
+        // We expect: [userMessage, toolCallMessage, toolResultMessage]
+        expect(result.messages[0].id).toBe(integrationUserMessage.id);
+        expect(result.messages[1].id).toBe(integrationToolCallMessage.id);
+        expect(result.messages[2].id).toBe(integrationToolResultMessage.id);
       });
 
       it('should handle complex message content', async () => {
