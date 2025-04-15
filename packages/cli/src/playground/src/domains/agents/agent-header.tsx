@@ -18,6 +18,7 @@ export function AgentHeader({ agentName, agentId }: { agentName: string; agentId
         <Button as={Link} to={`/agents/${agentId}/chat`}>
           Chat
         </Button>
+
         <Button as={Link} to={`/agents/${agentId}/traces`}>
           Traces
         </Button>
