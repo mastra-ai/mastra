@@ -1982,6 +1982,31 @@ importers:
         specifier: ^3.24.2
         version: 3.24.2
 
+  examples/weather-agent-template:
+    dependencies:
+      '@ai-sdk/openai':
+        specifier: ^1.3.12
+        version: 1.3.12(zod@3.24.2)
+      '@mastra/core':
+        specifier: ^0.8.2
+        version: 0.8.2(bufferutil@4.0.9)(openapi-types@12.1.3)(react@19.1.0)(utf-8-validate@6.0.5)
+      mastra:
+        specifier: ^0.4.8
+        version: 0.4.8(@opentelemetry/api@1.9.0)(bufferutil@4.0.9)(openapi-types@12.1.3)(react@19.1.0)(typescript@5.8.2)(utf-8-validate@6.0.5)
+      zod:
+        specifier: ^3.24.2
+        version: 3.24.2
+    devDependencies:
+      '@types/node':
+        specifier: ^20.17.27
+        version: 20.17.30
+      tsx:
+        specifier: ^4.19.3
+        version: 4.19.3
+      typescript:
+        specifier: ^5.7.3
+        version: 5.8.2
+
   examples/workflow-ai-recruiter:
     dependencies:
       '@ai-sdk/openai':
@@ -4400,31 +4425,6 @@ importers:
       vitest:
         specifier: ^3.0.9
         version: 3.0.9(@edge-runtime/vm@3.2.0)(@types/debug@4.1.12)(@types/node@20.17.27)(jiti@2.4.2)(jsdom@26.0.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))(lightningcss@1.29.2)(terser@5.39.0)(tsx@4.19.3)(yaml@2.7.0)
-
-  templates/weather-agent:
-    dependencies:
-      '@ai-sdk/openai':
-        specifier: ^1.3.12
-        version: 1.3.12(zod@3.24.2)
-      '@mastra/core':
-        specifier: ^0.8.2
-        version: 0.8.2(bufferutil@4.0.9)(openapi-types@12.1.3)(react@19.1.0)(utf-8-validate@6.0.5)
-      mastra:
-        specifier: ^0.4.8
-        version: 0.4.8(@opentelemetry/api@1.9.0)(bufferutil@4.0.9)(openapi-types@12.1.3)(react@19.1.0)(typescript@5.8.2)(utf-8-validate@6.0.5)
-      zod:
-        specifier: ^3.24.2
-        version: 3.24.2
-    devDependencies:
-      '@types/node':
-        specifier: ^20.17.27
-        version: 20.17.30
-      tsx:
-        specifier: ^4.19.3
-        version: 4.19.3
-      typescript:
-        specifier: ^5.7.3
-        version: 5.8.2
 
   voice/azure:
     dependencies:
@@ -28563,7 +28563,7 @@ snapshots:
   '@types/fs-extra@11.0.4':
     dependencies:
       '@types/jsonfile': 6.1.4
-      '@types/node': 20.17.27
+      '@types/node': 20.17.30
 
   '@types/glob@7.2.0':
     dependencies:
@@ -28617,7 +28617,7 @@ snapshots:
 
   '@types/jsdom@21.1.7':
     dependencies:
-      '@types/node': 20.17.27
+      '@types/node': 20.17.30
       '@types/tough-cookie': 4.0.5
       parse5: 7.2.1
 
@@ -28684,7 +28684,7 @@ snapshots:
 
   '@types/pg@8.11.11':
     dependencies:
-      '@types/node': 20.17.27
+      '@types/node': 20.17.30
       pg-protocol: 1.8.0
       pg-types: 4.0.2
 
@@ -28704,7 +28704,7 @@ snapshots:
 
   '@types/prompt@1.1.9':
     dependencies:
-      '@types/node': 20.17.27
+      '@types/node': 20.17.30
       '@types/revalidator': 0.3.12
 
   '@types/prop-types@15.7.14': {}
