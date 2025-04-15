@@ -15,7 +15,7 @@ This processor is used to prevent errors caused by exceeding the LLM's context w
 ```typescript copy showLineNumbers {9-12}
 import { Memory } from "@mastra/memory";
 import { TokenLimiter } from "@mastra/memory/processors";
-import { Agent } from "@mastra/core";
+import { Agent } from "@mastra/core/agent";
 import { openai } from "@ai-sdk/openai";
 
 const agent = new Agent({

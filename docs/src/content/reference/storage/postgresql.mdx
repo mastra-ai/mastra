@@ -34,6 +34,13 @@ const storage = new PostgresStore({
         "PostgreSQL connection string (e.g., postgresql://user:pass@host:5432/dbname)",
       isOptional: false,
     },
+    {
+      name: "schemaName",
+      type: "string",
+      description: 
+        "The name of the schema you want the storage to use. Will use the default schema if not provided.",
+      isOptional: true,
+    }
   ]}
 />
 
