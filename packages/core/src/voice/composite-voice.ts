@@ -24,6 +24,8 @@ export class CompositeVoice extends MastraVoice<unknown, unknown, unknown, Tools
 
     input?: MastraVoice;
     output?: MastraVoice;
+
+    /** @deprecated use mastra.realtime instead */
     realtime?: MastraVoice;
   }) {
     super();

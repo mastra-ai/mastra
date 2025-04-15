@@ -3761,6 +3761,46 @@ importers:
         specifier: ^3.24.3
         version: 3.24.5(zod@3.24.2)
 
+  realtime/openai:
+    dependencies:
+      '@mastra/core':
+        specifier: workspace:^
+        version: link:../../packages/core
+      openai-realtime-api:
+        specifier: ^1.0.7
+        version: 1.0.7(bufferutil@4.0.9)(utf-8-validate@6.0.5)
+      ws:
+        specifier: ^8.18.1
+        version: 8.18.1(bufferutil@4.0.9)(utf-8-validate@6.0.5)
+      zod-to-json-schema:
+        specifier: ^3.24.5
+        version: 3.24.5(zod@3.24.2)
+    devDependencies:
+      '@internal/lint':
+        specifier: workspace:*
+        version: link:../../packages/_config
+      '@microsoft/api-extractor':
+        specifier: ^7.52.2
+        version: 7.52.2(@types/node@20.17.30)
+      '@types/node':
+        specifier: ^20.17.27
+        version: 20.17.30
+      '@types/ws':
+        specifier: ^8.18.0
+        version: 8.18.1
+      eslint:
+        specifier: ^9.23.0
+        version: 9.23.0(jiti@2.4.2)
+      tsup:
+        specifier: ^8.4.0
+        version: 8.4.0(@microsoft/api-extractor@7.52.2(@types/node@20.17.30))(@swc/core@1.11.10(@swc/helpers@0.5.15))(jiti@2.4.2)(postcss@8.5.3)(tsx@4.19.3)(typescript@5.8.2)(yaml@2.7.0)
+      typescript:
+        specifier: ^5.7.3
+        version: 5.8.2
+      vitest:
+        specifier: ^2.1.9
+        version: 2.1.9(@edge-runtime/vm@3.2.0)(@types/node@20.17.30)(jsdom@26.0.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))(lightningcss@1.29.2)(terser@5.39.0)
+
   speech/azure:
     dependencies:
       '@mastra/core':
@@ -24587,7 +24627,7 @@ snapshots:
 
   '@libsql/isomorphic-ws@0.1.5(bufferutil@4.0.9)(utf-8-validate@6.0.5)':
     dependencies:
-      '@types/ws': 8.18.0
+      '@types/ws': 8.18.1
       ws: 8.18.1(bufferutil@4.0.9)(utf-8-validate@6.0.5)
     transitivePeerDependencies:
       - bufferutil
@@ -29418,6 +29458,14 @@ snapshots:
       magic-string: 0.30.17
     optionalDependencies:
       vite: 6.2.3(@types/node@20.17.27)(jiti@2.4.2)(lightningcss@1.29.2)(terser@5.39.0)(tsx@4.19.3)(yaml@2.7.0)
+
+  '@vitest/mocker@3.0.9(vite@6.2.3(@types/node@20.17.30)(jiti@2.4.2)(lightningcss@1.29.2)(terser@5.39.0)(tsx@4.19.3)(yaml@2.7.0))':
+    dependencies:
+      '@vitest/spy': 3.0.9
+      estree-walker: 3.0.3
+      magic-string: 0.30.17
+    optionalDependencies:
+      vite: 6.2.3(@types/node@20.17.30)(jiti@2.4.2)(lightningcss@1.29.2)(terser@5.39.0)(tsx@4.19.3)(yaml@2.7.0)
 
   '@vitest/pretty-format@2.1.9':
     dependencies:
@@ -41232,7 +41280,7 @@ snapshots:
   vitest@3.0.9(@edge-runtime/vm@3.2.0)(@types/debug@4.1.12)(@types/node@20.17.30)(jiti@2.4.2)(jsdom@26.0.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))(lightningcss@1.29.2)(terser@5.39.0)(tsx@4.19.3)(yaml@2.7.0):
     dependencies:
       '@vitest/expect': 3.0.9
-      '@vitest/mocker': 3.0.9(vite@6.2.3(@types/node@20.17.27)(jiti@2.4.2)(lightningcss@1.29.2)(terser@5.39.0)(tsx@4.19.3)(yaml@2.7.0))
+      '@vitest/mocker': 3.0.9(vite@6.2.3(@types/node@20.17.30)(jiti@2.4.2)(lightningcss@1.29.2)(terser@5.39.0)(tsx@4.19.3)(yaml@2.7.0))
       '@vitest/pretty-format': 3.0.9
       '@vitest/runner': 3.0.9
       '@vitest/snapshot': 3.0.9

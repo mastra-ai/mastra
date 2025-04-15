@@ -12,6 +12,7 @@ export const RegisteredLogger = {
   LLM: 'LLM',
   TTS: 'TTS',
   VOICE: 'VOICE',
+  REALTIME: 'REALTIME',
   VECTOR: 'VECTOR',
   BUNDLER: 'BUNDLER',
   DEPLOYER: 'DEPLOYER',
