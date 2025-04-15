@@ -1,8 +1,13 @@
+import { createOpenAI } from '@ai-sdk/openai';
 import { defaultNodeTextTemplate } from '@llamaindex/core/prompts';
 import type { BaseNode } from '@llamaindex/core/schema';
 import { MetadataMode, TextNode, TransformComponent } from '@llamaindex/core/schema';
+import type { MastraLanguageModel } from '@mastra/core/agent';
 
 export const STRIP_REGEX = /(\r\n|\n|\r)/gm;
+
+const openai = createOpenAI({ apiKey: process.env.OPENAI_API_KEY });
+export const baseLLM: MastraLanguageModel = openai('gpt-4o');
 
 /*
  * Abstract class for all extractors.

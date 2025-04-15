@@ -3,14 +3,8 @@ import type { QuestionExtractPrompt } from '@llamaindex/core/prompts';
 import { TextNode } from '@llamaindex/core/schema';
 import type { BaseNode } from '@llamaindex/core/schema';
 import type { MastraLanguageModel } from '@mastra/core/agent';
-import { BaseExtractor, STRIP_REGEX } from './base';
-
-type QuestionAnswerExtractArgs = {
-  llm: MastraLanguageModel;
-  questions?: number;
-  promptTemplate?: QuestionExtractPrompt['template'];
-  embeddingOnly?: boolean;
-};
+import { BaseExtractor, baseLLM, STRIP_REGEX } from './base';
+import type { QuestionAnswerExtractArgs } from './types';
 
 type ExtractQuestion = {
   /**
@@ -56,12 +50,12 @@ export class QuestionsAnsweredExtractor extends BaseExtractor {
    * @param {QuestionExtractPrompt['template']} promptTemplate Optional custom prompt template (should include {context}).
    * @param {boolean} embeddingOnly Whether to use metadata for embeddings only.
    */
-  constructor(options: QuestionAnswerExtractArgs) {
+  constructor(options?: QuestionAnswerExtractArgs) {
     if (options?.questions && options.questions < 1) throw new Error('Questions must be greater than 0');
 
     super();
 
-    this.llm = options?.llm;
+    this.llm = options?.llm ?? baseLLM;
     this.questions = options?.questions ?? 5;
     this.promptTemplate = options?.promptTemplate
       ? new PromptTemplate({

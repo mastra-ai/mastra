@@ -3,13 +3,8 @@ import type { KeywordExtractPrompt } from '@llamaindex/core/prompts';
 import { MetadataMode, TextNode } from '@llamaindex/core/schema';
 import type { BaseNode } from '@llamaindex/core/schema';
 import type { MastraLanguageModel } from '@mastra/core/agent';
-import { BaseExtractor } from './base';
-
-type KeywordExtractArgs = {
-  llm: MastraLanguageModel;
-  keywords?: number;
-  promptTemplate?: KeywordExtractPrompt['template'];
-};
+import { BaseExtractor, baseLLM } from './base';
+import type { KeywordExtractArgs } from './types';
 
 type ExtractKeyword = {
   /**
@@ -48,12 +43,12 @@ export class KeywordExtractor extends BaseExtractor {
    * @param {string} [promptTemplate] Optional custom prompt template (must include {context})
    * @throws {Error} If keywords is less than 1.
    */
-  constructor(options: KeywordExtractArgs) {
+  constructor(options?: KeywordExtractArgs) {
     if (options?.keywords && options.keywords < 1) throw new Error('Keywords must be greater than 0');
 
     super();
 
-    this.llm = options.llm;
+    this.llm = options?.llm ?? baseLLM;
     this.keywords = options?.keywords ?? 5;
     this.promptTemplate = options?.promptTemplate
       ? new PromptTemplate({

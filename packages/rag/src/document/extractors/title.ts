@@ -7,14 +7,8 @@ import type { TitleCombinePrompt, TitleExtractorPrompt } from '@llamaindex/core/
 import { MetadataMode, TextNode } from '@llamaindex/core/schema';
 import type { BaseNode } from '@llamaindex/core/schema';
 import type { MastraLanguageModel } from '@mastra/core/agent';
-import { BaseExtractor } from './base';
-
-type TitleExtractorsArgs = {
-  llm: MastraLanguageModel;
-  nodes?: number;
-  nodeTemplate?: TitleExtractorPrompt['template'];
-  combineTemplate?: TitleCombinePrompt['template'];
-};
+import { BaseExtractor, baseLLM } from './base';
+import type { TitleExtractorsArgs } from './types';
 
 type ExtractTitle = {
   documentTitle: string;
@@ -63,10 +57,10 @@ export class TitleExtractor extends BaseExtractor {
    * @param {TitleExtractorPrompt} nodeTemplate The prompt template to use for the title extractor.
    * @param {string} combineTemplate The prompt template to merge title with..
    */
-  constructor(options: TitleExtractorsArgs) {
+  constructor(options?: TitleExtractorsArgs) {
     super();
 
-    this.llm = options.llm;
+    this.llm = options?.llm ?? baseLLM;
     this.nodes = options?.nodes ?? 5;
 
     this.nodeTemplate = options?.nodeTemplate

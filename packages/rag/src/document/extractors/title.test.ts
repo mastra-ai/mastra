@@ -10,6 +10,16 @@ const openai = createOpenAI({
 const model = openai('gpt-4o');
 
 describe('TitleExtractor', () => {
+  it('can use a custom model from the test suite', async () => {
+    const extractor = new TitleExtractor({ llm: model });
+    const node = new TextNode({ text: 'A title test using a custom model.' });
+    const titles = await extractor.extract([node]);
+    expect(Array.isArray(titles)).toBe(true);
+    expect(titles[0]).toHaveProperty('documentTitle');
+    expect(typeof titles[0].documentTitle).toBe('string');
+    expect(titles[0].documentTitle.length).toBeGreaterThan(0);
+  });
+
   it('extracts title', async () => {
     const extractor = new TitleExtractor({ llm: model });
     const node = new TextNode({ text: 'This is a test document.' });
@@ -32,6 +42,8 @@ describe('TitleExtractor', () => {
     const node = new TextNode({ text: 'Test document for prompt customization.' });
     const titles = await extractor.extract([node]);
     expect(titles[0]).toHaveProperty('documentTitle');
+    expect(typeof titles[0].documentTitle).toBe('string');
+    expect(titles[0].documentTitle.length).toBeGreaterThan(0);
   });
 
   it('handles very long input', async () => {
@@ -40,6 +52,8 @@ describe('TitleExtractor', () => {
     const node = new TextNode({ text: longText });
     const titles = await extractor.extract([node]);
     expect(titles[0]).toHaveProperty('documentTitle');
+    expect(typeof titles[0].documentTitle).toBe('string');
+    expect(titles[0].documentTitle.length).toBeGreaterThan(0);
   });
 
   it('handles whitespace only input', async () => {
@@ -54,6 +68,8 @@ describe('TitleExtractor', () => {
     const node = new TextNode({ text: '🚀✨🔥' });
     const titles = await extractor.extract([node]);
     expect(titles[0]).toHaveProperty('documentTitle');
+    expect(typeof titles[0].documentTitle).toBe('string');
+    expect(titles[0].documentTitle.length).toBeGreaterThan(0);
   });
 
   it('handles numbers only', async () => {
@@ -61,6 +77,8 @@ describe('TitleExtractor', () => {
     const node = new TextNode({ text: '1234567890' });
     const titles = await extractor.extract([node]);
     expect(titles[0]).toHaveProperty('documentTitle');
+    expect(typeof titles[0].documentTitle).toBe('string');
+    expect(titles[0].documentTitle.length).toBeGreaterThan(0);
   });
 
   it('handles HTML tags', async () => {
@@ -68,6 +86,8 @@ describe('TitleExtractor', () => {
     const node = new TextNode({ text: '<h1>Test</h1>' });
     const titles = await extractor.extract([node]);
     expect(titles[0]).toHaveProperty('documentTitle');
+    expect(typeof titles[0].documentTitle).toBe('string');
+    expect(titles[0].documentTitle.length).toBeGreaterThan(0);
   });
 
   it('handles non-English text', async () => {
@@ -75,6 +95,8 @@ describe('TitleExtractor', () => {
     const node = new TextNode({ text: '这是一个测试文档。' });
     const titles = await extractor.extract([node]);
     expect(titles[0]).toHaveProperty('documentTitle');
+    expect(typeof titles[0].documentTitle).toBe('string');
+    expect(titles[0].documentTitle.length).toBeGreaterThan(0);
   });
 
   it('handles duplicate/repeated text', async () => {
@@ -82,6 +104,8 @@ describe('TitleExtractor', () => {
     const node = new TextNode({ text: 'repeat repeat repeat' });
     const titles = await extractor.extract([node]);
     expect(titles[0]).toHaveProperty('documentTitle');
+    expect(typeof titles[0].documentTitle).toBe('string');
+    expect(titles[0].documentTitle.length).toBeGreaterThan(0);
   });
 
   it('handles only punctuation', async () => {
@@ -89,5 +113,7 @@ describe('TitleExtractor', () => {
     const node = new TextNode({ text: '!!!???...' });
     const titles = await extractor.extract([node]);
     expect(titles[0]).toHaveProperty('documentTitle');
+    expect(typeof titles[0].documentTitle).toBe('string');
+    expect(titles[0].documentTitle.length).toBeGreaterThan(0);
   });
 });

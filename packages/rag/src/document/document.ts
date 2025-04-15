@@ -1,13 +1,6 @@
-import {
-  Document as Chunk,
-  IngestionPipeline,
-  KeywordExtractor,
-  QuestionsAnsweredExtractor,
-  SummaryExtractor,
-  TitleExtractor,
-  ObjectType,
-  NodeRelationship,
-} from 'llamaindex';
+import { Document as Chunk, IngestionPipeline, ObjectType, NodeRelationship } from 'llamaindex';
+
+import { TitleExtractor, SummaryExtractor, QuestionsAnsweredExtractor, KeywordExtractor } from './extractors';
 
 import { CharacterTransformer, RecursiveCharacterTransformer } from './transformers/character';
 import { HTMLHeaderTransformer, HTMLSectionTransformer } from './transformers/html';

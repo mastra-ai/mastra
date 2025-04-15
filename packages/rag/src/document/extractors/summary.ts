@@ -3,18 +3,13 @@ import type { SummaryPrompt } from '@llamaindex/core/prompts';
 import { TextNode } from '@llamaindex/core/schema';
 import type { BaseNode } from '@llamaindex/core/schema';
 import type { MastraLanguageModel } from '@mastra/core/agent';
-import { BaseExtractor, STRIP_REGEX } from './base';
+import { BaseExtractor, baseLLM, STRIP_REGEX } from './base';
+import type { SummaryExtractArgs } from './types';
 
-export interface ExtractSummary {
+type ExtractSummary = {
   sectionSummary?: string;
   prevSectionSummary?: string;
   nextSectionSummary?: string;
-}
-
-type SummaryExtractArgs = {
-  llm: MastraLanguageModel;
-  summaries?: string[];
-  promptTemplate?: SummaryPrompt['template'];
 };
 
 /**
@@ -46,7 +41,7 @@ export class SummaryExtractor extends BaseExtractor {
   private prevSummary: boolean;
   private nextSummary: boolean;
 
-  constructor(options: SummaryExtractArgs) {
+  constructor(options?: SummaryExtractArgs) {
     const summaries = options?.summaries ?? ['self'];
 
     if (summaries && !summaries.some(s => ['self', 'prev', 'next'].includes(s)))
@@ -54,7 +49,7 @@ export class SummaryExtractor extends BaseExtractor {
 
     super();
 
-    this.llm = options.llm;
+    this.llm = options?.llm ?? baseLLM;
     this.summaries = summaries;
     this.promptTemplate = options?.promptTemplate
       ? new PromptTemplate({
