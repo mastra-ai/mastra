@@ -1,5 +1,11 @@
 # @mastra/core
 
+## 0.8.3-alpha.5
+
+### Patch Changes
+
+- d72318f: Refactored the evals table to use the DS tables
+
 ## 0.8.3-alpha.4
 
 ### Patch Changes

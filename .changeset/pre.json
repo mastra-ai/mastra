@@ -146,6 +146,7 @@
     "weather-agent-template": "1.0.0"
   },
   "changesets": [
+    "brave-cycles-look",
     "breezy-ducks-exist",
     "brown-ants-count",
     "clever-words-enjoy",
@@ -159,6 +160,7 @@
     "neat-yaks-call",
     "pink-memes-tie",
     "plain-bananas-fry",
+    "polite-mirrors-do",
     "purple-yaks-attend",
     "rude-dingos-taste",
     "rude-ducks-attack",
