@@ -13,6 +13,20 @@ const isToolCallWithId = (message: MessageType | undefined, targetToolCallId: st
   );
 };
 
+const getToolResultIndexById = (id: string, results: MessageType[]) =>
+  results.findIndex(message => {
+    if (!Array.isArray(message?.content)) return false;
+    return message.content.some(
+      part =>
+        part &&
+        typeof part === 'object' &&
+        'type' in part &&
+        part.type === 'tool-result' &&
+        'toolCallId' in part &&
+        part.toolCallId === id,
+    );
+  });
+
 /**
  * Self-heals message ordering to ensure tool calls are directly before their matching tool results.
  * This is needed due to a bug where messages were saved in the wrong order. That bug is fixed, but this code ensures any tool calls saved in the wrong order in the past will still be usable now.
@@ -46,21 +60,7 @@ export function reorderToolCallsAndResults(messages: MessageType[]): MessageType
   // Second loop: for each tool ID, ensure tool calls come before tool results
   for (const toolCallId of toolCallIds) {
     // Find tool result index
-    const resultIndex = results.findIndex(message => {
-      if (!Array.isArray(message?.content)) return false;
-      return message.content.some(
-        part =>
-          part &&
-          typeof part === 'object' &&
-          'type' in part &&
-          part.type === 'tool-result' &&
-          'toolCallId' in part &&
-          part.toolCallId === toolCallId,
-      );
-    });
-
-    // If no tool result found or it's the first message, continue to next ID
-    if (resultIndex <= 0) continue;
+    const resultIndex = getToolResultIndexById(toolCallId, results);
 
     // Check if tool call is at resultIndex - 1
     const oneMessagePrev = results[resultIndex - 1];
@@ -80,7 +80,7 @@ export function reorderToolCallsAndResults(messages: MessageType[]): MessageType
       results.splice(toolCallIndex, 1);
 
       // Insert right before the tool result
-      results.splice(resultIndex - 1, 0, toolCall);
+      results.splice(getToolResultIndexById(toolCallId, results), 0, toolCall);
     }
   }
 

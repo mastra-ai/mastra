@@ -434,6 +434,117 @@ export function getResuableTests(memory: Memory) {
         expect(result.messages[2].id).toBe(integrationToolResultMessage.id);
       });
 
+      it('should reorder tool calls that appear after their results', async () => {
+        // Create a unique tool call ID for matching tool calls with results
+        const toolCallId = `test-call-${randomUUID()}`;
+
+        let count = 0;
+        const start = Date.now();
+        const getCreatedAt = () => new Date(start + ++count * 1000);
+
+        // Create a tool result message that appears first
+        const toolResultMessage = {
+          id: randomUUID(),
+          threadId: thread.id,
+          resourceId,
+          role: 'assistant' as const,
+          type: 'text' as const,
+          createdAt: getCreatedAt(),
+          content: [
+            {
+              type: 'tool-result' as const,
+              toolCallId,
+              toolName: 'test-tool',
+              result: 'test result',
+            },
+          ],
+        };
+
+        // Create a user message that appears second
+        const userMessage = {
+          ...createTestMessage(thread.id, 'A user message in between', 'user'),
+          createdAt: getCreatedAt(),
+        };
+
+        // Create an assistant message with a tool call that appears last
+        const toolCallMessage = {
+          id: randomUUID(),
+          threadId: thread.id as string,
+          resourceId,
+          role: 'assistant' as const,
+          type: 'text' as const,
+          createdAt: getCreatedAt(),
+          content: [
+            { type: 'text' as const, text: 'I will call a tool' },
+            {
+              type: 'tool-call' as const,
+              toolCallId,
+              toolName: 'test-tool',
+              args: { test: true },
+            },
+          ],
+        };
+
+        // Create messages in the wrong order: tool result, user, tool call
+        const rawMessages = [toolResultMessage, userMessage, toolCallMessage];
+
+        // Verify the reordering function works correctly
+        const reorderedMessages = reorderToolCallsAndResults(rawMessages);
+
+        // Now verify the reordering:
+        // 1. All messages should still be present
+        expect(reorderedMessages.length).toBe(3);
+
+        // 2. Tool call should come first, followed by tool result, then user message
+        expect(reorderedMessages[0]).toBe(toolCallMessage);
+        expect(reorderedMessages[1]).toBe(toolResultMessage);
+        expect(reorderedMessages[2]).toBe(userMessage);
+
+        // PART 2: INTEGRATION TEST
+        const integrationThread = await memory.createThread({
+          resourceId,
+          title: 'Reversed Tool Order Test',
+        });
+
+        // Create copies of our test messages with the correct new threadId
+        const integrationToolResultMessage = {
+          ...toolResultMessage,
+          id: randomUUID(),
+          threadId: integrationThread.id,
+        };
+
+        const integrationUserMessage = {
+          ...userMessage,
+          id: randomUUID(),
+          threadId: integrationThread.id,
+        };
+
+        const integrationToolCallMessage = {
+          ...toolCallMessage,
+          id: randomUUID(),
+          threadId: integrationThread.id,
+        };
+
+        // Save messages in the wrong order intentionally
+        await memory.saveMessages({ messages: [integrationToolResultMessage] });
+        await memory.saveMessages({ messages: [integrationUserMessage] });
+        await memory.saveMessages({ messages: [integrationToolCallMessage] });
+
+        // Retrieve messages through rememberMessages
+        const result = await memory.rememberMessages({
+          threadId: integrationThread.id,
+          config: { lastMessages: 10 },
+        });
+
+        // Check that all messages are present
+        expect(result.messages.length).toBe(3);
+
+        // Verify message order directly by index
+        expect(result.messages[0].id).toBe(integrationToolCallMessage.id);
+        expect(result.messages[1].id).toBe(integrationToolResultMessage.id);
+        expect(result.messages[2].id).toBe(integrationUserMessage.id);
+      });
+
       it('should handle complex message content', async () => {
         const complexMessage = [
           { type: 'text' as const, text: 'This is a complex message with multiple parts' },
