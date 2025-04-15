@@ -21,9 +21,11 @@ Before you begin, ensure you have:
 ## Serverless Platform Deployers
 
 Platform-specific deployers handle configuration and deployment for:
-- **[Cloudflare Workers](/docs/reference/deployer/cloudflare)**
-- **[Vercel](/docs/reference/deployer/vercel)**
-- **[Netlify](/docs/reference/deployer/netlify)**
+- **[Cloudflare Workers](/reference/deployer/cloudflare)**
+- **[Vercel](/reference/deployer/vercel)**
+- **[Netlify](/reference/deployer/netlify)**
+
+As of April 2025, Mastra also offers [Mastra Cloud](https://mastra.ai/cloud-beta), a serverless agent environment with atomic deployments. You can sign up for the waitlist [here](https://mastra.ai/cloud-beta).
 
 ### Installing Deployers
 
@@ -71,7 +73,7 @@ new CloudflareDeployer({
 })
 ```
 
-[View Cloudflare Deployer Reference →](/docs/reference/deployer/cloudflare)
+[View Cloudflare Deployer Reference →](/reference/deployer/cloudflare)
 
 #### Vercel Deployer
 
@@ -84,7 +86,7 @@ new VercelDeployer({
 })
 ```
 
-[View Vercel Deployer Reference →](/docs/reference/deployer/vercel)
+[View Vercel Deployer Reference →](/reference/deployer/vercel)
 
 #### Netlify Deployer
 
@@ -96,7 +98,7 @@ new NetlifyDeployer({
 })
 ```
 
-[View Netlify Deployer Reference →](/docs/reference/deployer/netlify)
+[View Netlify Deployer Reference →](/reference/deployer/netlify)
 
 ## Environment Variables
 
@@ -111,9 +113,15 @@ Required variables:
    - `PORT`: HTTP server port (default: 3000)
    - `HOST`: Server host (default: 0.0.0.0)
 
-## Platform Documentation
+## Build Mastra Project
 
-Platform deployment references:
-- [Cloudflare Workers](https://developers.cloudflare.com/workers/)
-- [Vercel](https://vercel.com/docs)
-- [Netlify](https://docs.netlify.com/)
+To build your Mastra project for your target platform run:
+
+```bash
+npx mastra build
+```
+
+When a Deployer is used, the build output is automatically prepared for the target platform.
+You can then deploy the build output `.mastra/output` via your platform's (Vercel, netlify, cloudfare e.t.c) 
+CLI/UI.
+

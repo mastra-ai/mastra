@@ -5,6 +5,7 @@ import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 
 import { Agent } from '../agent';
+import { Container } from '../di';
 import { createLogger } from '../logger';
 import { Mastra } from '../mastra';
 import { TABLE_WORKFLOW_SNAPSHOT } from '../storage';
@@ -4861,6 +4862,69 @@ describe('Workflow', async () => {
           runId: results.runId,
         }),
       );
+    });
+  });
+
+  describe('Dependency Injection', () => {
+    it('should inject container dependencies into steps during run', async () => {
+      const container = new Container();
+      const testValue = 'test-dependency';
+      container.set('testKey', testValue);
+
+      const execute = vi.fn(({ container }) => {
+        const value = container.get('testKey');
+        return { injectedValue: value };
+      });
+
+      const step = new Step({ id: 'step1', execute });
+      const workflow = new Workflow({ name: 'test-workflow' });
+      workflow.step(step).commit();
+
+      const run = workflow.createRun();
+      const result = await run.start({ container });
+
+      expect(result.results.step1.output.injectedValue).toBe(testValue);
+    });
+
+    it('should inject container dependencies into steps during resume', async () => {
+      const container = new Container();
+      const testValue = 'test-dependency';
+      container.set('testKey', testValue);
+
+      const mastra = new Mastra({
+        logger: false,
+        storage,
+      });
+
+      const execute = vi.fn(async ({ container, suspend, context }) => {
+        if (!context.inputData.human) {
+          await suspend();
+        }
+
+        const value = container.get('testKey');
+        return { injectedValue: value };
+      });
+
+      const step = new Step({ id: 'step1', execute });
+      const workflow = new Workflow({ name: 'test-workflow', mastra });
+      workflow.step(step).commit();
+
+      const run = workflow.createRun();
+      await run.start({ container });
+
+      const resumeContainer = new Container();
+      resumeContainer.set('testKey', testValue + '2');
+
+      const result = await run.resume({
+        stepId: 'step1',
+        context: {
+          human: true,
+        },
+        container: resumeContainer,
+      });
+
+      console.log(result);
+      expect(result?.results.step1.output.injectedValue).toBe(testValue + '2');
     });
   });
 });

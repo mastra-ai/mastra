@@ -34,7 +34,7 @@ body:is(html[class~="dark"] *){
   display: none;
 }
 
-header + div{
+header + div, footer{
   --nextra-content-width: 1220px;
 }
 
@@ -47,11 +47,10 @@ header > * {
   background: var(--primary-bg);
 }
 
-@media screen and (min-width: 1024px) {
-  header nav > div:nth-child(2){
+ header nav > div:nth-child(2){
     display: none;
-  }
 }
+
 /* mobile nav */
 .nextra-mobile-nav{
   padding-block-start: calc(var(--nextra-navbar-height) * 2);
@@ -220,6 +219,11 @@ aside > * {
   );
 }
 
+aside>div:first-child button{
+  font-weight: 500;
+  color: var(--color-primary);
+}
+
 /*Size of chevron*/
 aside > div:nth-child(1) button svg {
   width: 1rem;
@@ -243,7 +247,7 @@ aside > div:nth-child(1) ul li a {
   }
 }
 
-aside > div:nth-child(1) ul li.active {
+aside > div:nth-child(1) ul li.active:has(> a) {
   &::before {
     content: "";
     position: absolute;

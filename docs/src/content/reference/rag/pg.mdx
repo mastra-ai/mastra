@@ -17,6 +17,13 @@ It provides robust vector similarity search capabilities within your existing Po
       type: "string",
       description: "PostgreSQL connection URL",
     },
+    {
+      name: "schemaName",
+      type: "string",
+      description: 
+        "The name of the schema you want the vector store to use. Will use the default schema if not provided.",
+      isOptional: true,
+    }
   ]}
 />
 

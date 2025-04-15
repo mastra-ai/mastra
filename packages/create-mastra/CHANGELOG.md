@@ -1,5 +1,33 @@
 # create-mastra
 
+## 0.2.8-alpha.1
+
+### Patch Changes
+
+- 1ebbfbf: Ability to toggle stream vs generate in playground
+
+## 0.2.8-alpha.0
+
+### Patch Changes
+
+- a2318cd: Revamp mastra deply dx, Make mastra build command output deployment ready build
+- 37bb612: Add Elastic-2.0 licensing for packages
+- c8fe5f0: change the header of all pages with the one from the DS
+
+## 0.2.7
+
+### Patch Changes
+
+- d3c372c: Show status UI of steps on playground workflow when workflow has no triggerSchema
+  Show number of steps on workflows table
+- df5989d: Correct playground model setting maxSteps reset value
+
+## 0.2.7-alpha.1
+
+### Patch Changes
+
+- df5989d: Correct playground model setting maxSteps reset value
+
 ## 0.2.7-alpha.0
 
 ### Patch Changes

@@ -1,0 +1,1386 @@
+Getting links from: https://mastra.ai/docs
+├───OK─── https://mastra.ai/
+├───OK─── https://mastra.ai/examples
+├───OK─── https://mastra.ai/guides
+├───OK─── https://mastra.ai/reference
+├───OK─── https://mastra.ai/showcase
+├───OK─── https://mastra.ai/docs/getting-started/installation
+├───OK─── https://mastra.ai/docs/getting-started/project-structure
+├───OK─── https://mastra.ai/docs/getting-started/mcp-docs-server
+├───OK─── https://mastra.ai/docs/frameworks/ai-sdk
+├───OK─── https://mastra.ai/docs/frameworks/next-js
+├───OK─── https://mastra.ai/docs/agents/overview
+├───OK─── https://mastra.ai/docs/agents/agent-memory
+├───OK─── https://mastra.ai/docs/agents/adding-tools
+├───OK─── https://mastra.ai/docs/agents/mcp-guide
+├───OK─── https://mastra.ai/docs/agents/adding-voice
+├───OK─── https://mastra.ai/docs/memory/overview
+├───OK─── https://mastra.ai/docs/memory/semantic-recall
+├───OK─── https://mastra.ai/docs/memory/working-memory
+├───OK─── https://mastra.ai/docs/memory/memory-processors
+├───OK─── https://mastra.ai/docs/workflows/overview
+├───OK─── https://mastra.ai/docs/workflows/steps
+├───OK─── https://mastra.ai/docs/workflows/control-flow
+├───OK─── https://mastra.ai/docs/workflows/variables
+├───OK─── https://mastra.ai/docs/workflows/suspend-and-resume
+├───OK─── https://mastra.ai/docs/workflows/dynamic-workflows
+├───OK─── https://mastra.ai/docs/workflows/error-handling
+├───OK─── https://mastra.ai/docs/workflows/nested-workflows
+├───OK─── https://mastra.ai/docs/rag/overview
+├───OK─── https://mastra.ai/docs/rag/chunking-and-embedding
+├───OK─── https://mastra.ai/docs/rag/vector-databases
+├───OK─── https://mastra.ai/docs/rag/retrieval
+├───OK─── https://mastra.ai/docs/local-dev/creating-a-new-project
+├───OK─── https://mastra.ai/docs/local-dev/add-to-existing-project
+├───OK─── https://mastra.ai/docs/local-dev/mastra-dev
+├───OK─── https://mastra.ai/docs/deployment/server
+├───OK─── https://mastra.ai/docs/deployment/deployment
+├───OK─── https://mastra.ai/docs/deployment/client
+├───OK─── https://mastra.ai/docs/observability/logging
+├───OK─── https://mastra.ai/docs/observability/tracing
+├───OK─── https://mastra.ai/docs/evals/overview
+├───OK─── https://mastra.ai/docs/evals/textual-evals
+├───OK─── https://mastra.ai/docs/evals/custom-eval
+├───OK─── https://mastra.ai/docs/evals/running-in-ci
+├───OK─── https://mastra.ai/docs/storage/overview
+├───OK─── https://mastra.ai/docs/voice/overview
+├───OK─── https://mastra.ai/docs/voice/text-to-speech
+├───OK─── https://mastra.ai/docs/voice/speech-to-text
+├───OK─── https://mastra.ai/docs/voice/voice-to-voice
+├───OK─── https://mastra.ai/docs/integrations
+├───OK─── https://mastra.ai/docs/community/licensing
+├───OK─── https://mastra.ai/docs/community/discord
+├───OK─── https://mastra.ai/docs/faq
+├───OK─── https://mastra.ai/examples/agents/system-prompt
+├───OK─── https://mastra.ai/examples/agents/agentic-workflows
+├───OK─── https://mastra.ai/examples/agents/using-a-tool
+├───OK─── https://mastra.ai/examples/agents/hierarchical-multi-agent
+├───OK─── https://mastra.ai/examples/agents/multi-agent-workflow
+├───OK─── https://mastra.ai/examples/agents/bird-checker
+├───OK─── https://mastra.ai/examples/agents/adding-voice-capabilities
+├───OK─── https://mastra.ai/examples/workflows/creating-a-workflow
+├───OK─── https://mastra.ai/examples/workflows/sequential-steps
+├───OK─── https://mastra.ai/examples/workflows/parallel-steps
+├───OK─── https://mastra.ai/examples/workflows/branching-paths
+├───OK─── https://mastra.ai/examples/workflows/conditional-branching
+├───OK─── https://mastra.ai/examples/workflows/calling-agent
+├───OK─── https://mastra.ai/examples/workflows/using-a-tool-as-a-step
+├───OK─── https://mastra.ai/examples/workflows/cyclical-dependencies
+├───OK─── https://mastra.ai/examples/workflows/suspend-and-resume
+├───OK─── https://mastra.ai/examples/workflows/workflow-variables
+├───OK─── https://mastra.ai/examples/workflows/human-in-the-loop
+├───OK─── https://mastra.ai/examples/rag/chunking/chunk-text
+├───OK─── https://mastra.ai/examples/rag/chunking/chunk-markdown
+├───OK─── https://mastra.ai/examples/rag/chunking/chunk-html
+├───OK─── https://mastra.ai/examples/rag/chunking/chunk-json
+├───OK─── https://mastra.ai/examples/rag/chunking/adjust-chunk-size
+├───OK─── https://mastra.ai/examples/rag/chunking/adjust-chunk-delimiters
+├───OK─── https://mastra.ai/examples/rag/embedding/embed-text-chunk
+├───OK─── https://mastra.ai/examples/rag/embedding/embed-chunk-array
+├───OK─── https://mastra.ai/examples/rag/embedding/embed-text-with-cohere
+├───OK─── https://mastra.ai/examples/rag/embedding/metadata-extraction
+├───OK─── https://mastra.ai/examples/rag/upsert/upsert-embeddings
+├───OK─── https://mastra.ai/examples/rag/query/hybrid-vector-search
+├───OK─── https://mastra.ai/examples/rag/query/retrieve-results
+├───OK─── https://mastra.ai/examples/rag/rerank/rerank
+├───OK─── https://mastra.ai/examples/rag/rerank/rerank-rag
+├───OK─── https://mastra.ai/examples/rag/rerank/reranking-with-cohere
+├───OK─── https://mastra.ai/examples/rag/usage/basic-rag
+├───OK─── https://mastra.ai/examples/rag/usage/cleanup-rag
+├───OK─── https://mastra.ai/examples/rag/usage/filter-rag
+├───OK─── https://mastra.ai/examples/rag/usage/cot-rag
+├───OK─── https://mastra.ai/examples/rag/usage/cot-workflow-rag
+├───OK─── https://mastra.ai/examples/rag/usage/graph-rag
+├───OK─── https://mastra.ai/examples/memory/memory-with-libsql
+├───OK─── https://mastra.ai/examples/memory/memory-with-pg
+├───OK─── https://mastra.ai/examples/memory/memory-with-upstash
+├───OK─── https://mastra.ai/examples/memory/streaming-working-memory
+├───OK─── https://mastra.ai/examples/memory/streaming-working-memory-advanced
+├───OK─── https://mastra.ai/examples/memory/memory-processors
+├───OK─── https://mastra.ai/examples/memory/use-chat
+├───OK─── https://mastra.ai/examples/evals/answer-relevancy
+├───OK─── https://mastra.ai/examples/evals/bias
+├───OK─── https://mastra.ai/examples/evals/completeness
+├───OK─── https://mastra.ai/examples/evals/content-similarity
+├───OK─── https://mastra.ai/examples/evals/context-position
+├───OK─── https://mastra.ai/examples/evals/context-precision
+├───OK─── https://mastra.ai/examples/evals/context-relevancy
+├───OK─── https://mastra.ai/examples/evals/contextual-recall
+├───OK─── https://mastra.ai/examples/evals/custom-eval
+├───OK─── https://mastra.ai/examples/evals/faithfulness
+├───OK─── https://mastra.ai/examples/evals/hallucination
+├───OK─── https://mastra.ai/examples/evals/keyword-coverage
+├───OK─── https://mastra.ai/examples/evals/prompt-alignment
+├───OK─── https://mastra.ai/examples/evals/summarization
+├───OK─── https://mastra.ai/examples/evals/textual-difference
+├───OK─── https://mastra.ai/examples/evals/tone-consistency
+├───OK─── https://mastra.ai/examples/evals/toxicity
+├───OK─── https://mastra.ai/examples/evals/word-inclusion
+├───OK─── https://mastra.ai/examples/voice/text-to-speech
+├───OK─── https://mastra.ai/examples/voice/speech-to-text
+├───OK─── https://mastra.ai/guides/guide/chef-michel
+├───OK─── https://mastra.ai/guides/guide/stock-agent
+├───OK─── https://mastra.ai/guides/guide/ai-recruiter
+├───OK─── https://mastra.ai/guides/guide/research-assistant
+├───OK─── https://mastra.ai/reference/core/mastra-class
+├───OK─── https://mastra.ai/reference/cli/init
+├───OK─── https://mastra.ai/reference/cli/dev
+├───OK─── https://mastra.ai/reference/cli/deploy
+├───OK─── https://mastra.ai/reference/cli/build
+├───OK─── https://mastra.ai/reference/agents/getAgent
+├───OK─── https://mastra.ai/reference/agents/createTool
+├───OK─── https://mastra.ai/reference/agents/generate
+├───OK─── https://mastra.ai/reference/agents/stream
+├───OK─── https://mastra.ai/reference/tools/document-chunker-tool
+├───OK─── https://mastra.ai/reference/tools/graph-rag-tool
+├───OK─── https://mastra.ai/reference/tools/vector-query-tool
+├───OK─── https://mastra.ai/reference/tools/client
+├───OK─── https://mastra.ai/reference/tools/mcp-configuration
+├───OK─── https://mastra.ai/reference/workflows/workflow
+├───OK─── https://mastra.ai/reference/workflows/step-class
+├───OK─── https://mastra.ai/reference/workflows/step-options
+├───OK─── https://mastra.ai/reference/workflows/step-condition
+├───OK─── https://mastra.ai/reference/workflows/step-function
+├───OK─── https://mastra.ai/reference/workflows/after
+├───OK─── https://mastra.ai/reference/workflows/then
+├───OK─── https://mastra.ai/reference/workflows/until
+├───OK─── https://mastra.ai/reference/workflows/while
+├───OK─── https://mastra.ai/reference/workflows/if
+├───OK─── https://mastra.ai/reference/workflows/else
+├───OK─── https://mastra.ai/reference/workflows/createRun
+├───OK─── https://mastra.ai/reference/workflows/start
+├───OK─── https://mastra.ai/reference/workflows/execute
+├───OK─── https://mastra.ai/reference/workflows/suspend
+├───OK─── https://mastra.ai/reference/workflows/snapshots
+├───OK─── https://mastra.ai/reference/workflows/resume
+├───OK─── https://mastra.ai/reference/workflows/commit
+├───OK─── https://mastra.ai/reference/workflows/watch
+├───OK─── https://mastra.ai/reference/workflows/events
+├───OK─── https://mastra.ai/reference/workflows/afterEvent
+├───OK─── https://mastra.ai/reference/workflows/resumeWithEvent
+├───OK─── https://mastra.ai/reference/workflows/step-retries
+├───OK─── https://mastra.ai/reference/networks/agent-network
+├───OK─── https://mastra.ai/reference/memory/Memory
+├───OK─── https://mastra.ai/reference/memory/createThread
+├───OK─── https://mastra.ai/reference/memory/query
+├───OK─── https://mastra.ai/reference/memory/getThreadById
+├───OK─── https://mastra.ai/reference/memory/getThreadsByResourceId
+├───OK─── https://mastra.ai/reference/storage/libsql
+├───OK─── https://mastra.ai/reference/storage/postgresql
+├───OK─── https://mastra.ai/reference/storage/upstash
+├───OK─── https://mastra.ai/reference/rag/chunk
+├───OK─── https://mastra.ai/reference/rag/embeddings
+├───OK─── https://mastra.ai/reference/rag/extract-params
+├───OK─── https://mastra.ai/reference/rag/rerank
+├───OK─── https://mastra.ai/reference/rag/document
+├───OK─── https://mastra.ai/reference/rag/metadata-filters
+├───OK─── https://mastra.ai/reference/rag/graph-rag
+├───OK─── https://mastra.ai/reference/rag/astra
+├───OK─── https://mastra.ai/reference/rag/chroma
+├───OK─── https://mastra.ai/reference/rag/vectorize
+├───OK─── https://mastra.ai/reference/rag/pg
+├───OK─── https://mastra.ai/reference/rag/libsql
+├───OK─── https://mastra.ai/reference/rag/pinecone
+├───OK─── https://mastra.ai/reference/rag/qdrant
+├───OK─── https://mastra.ai/reference/rag/turbopuffer
+├───OK─── https://mastra.ai/reference/rag/upstash
+├───OK─── https://mastra.ai/reference/evals/answer-relevancy
+├───OK─── https://mastra.ai/reference/evals/bias
+├───OK─── https://mastra.ai/reference/evals/completeness
+├───OK─── https://mastra.ai/reference/evals/content-similarity
+├───OK─── https://mastra.ai/reference/evals/context-position
+├───OK─── https://mastra.ai/reference/evals/context-precision
+├───OK─── https://mastra.ai/reference/evals/context-relevancy
+├───OK─── https://mastra.ai/reference/evals/contextual-recall
+├───OK─── https://mastra.ai/reference/evals/faithfulness
+├───OK─── https://mastra.ai/reference/evals/hallucination
+├───OK─── https://mastra.ai/reference/evals/keyword-coverage
+├───OK─── https://mastra.ai/reference/evals/prompt-alignment
+├───OK─── https://mastra.ai/reference/evals/summarization
+├───OK─── https://mastra.ai/reference/evals/textual-difference
+├───OK─── https://mastra.ai/reference/evals/tone-consistency
+├───OK─── https://mastra.ai/reference/evals/toxicity
+├───OK─── https://mastra.ai/reference/voice/mastra-voice
+├───OK─── https://mastra.ai/reference/voice/composite-voice
+├───OK─── https://mastra.ai/reference/voice/voice.speak
+├───OK─── https://mastra.ai/reference/voice/voice.listen
+├───OK─── https://mastra.ai/reference/voice/voice.connect
+├───OK─── https://mastra.ai/reference/voice/voice.send
+├───OK─── https://mastra.ai/reference/voice/voice.answer
+├───OK─── https://mastra.ai/reference/voice/voice.on
+├───OK─── https://mastra.ai/reference/voice/deepgram
+├───OK─── https://mastra.ai/reference/voice/elevenlabs
+├───OK─── https://mastra.ai/reference/voice/google
+├───OK─── https://mastra.ai/reference/voice/murf
+├───OK─── https://mastra.ai/reference/voice/openai
+├───OK─── https://mastra.ai/reference/voice/openai-realtime
+├───OK─── https://mastra.ai/reference/voice/playai
+├───OK─── https://mastra.ai/reference/voice/sarvam
+├───OK─── https://mastra.ai/reference/voice/speechify
+├───OK─── https://mastra.ai/reference/observability/providers
+├───OK─── https://mastra.ai/reference/observability/providers/dash0
+├───OK─── https://mastra.ai/reference/observability/providers/signoz
+├───OK─── https://mastra.ai/reference/observability/providers/braintrust
+├───OK─── https://mastra.ai/reference/observability/providers/langsmith
+├───OK─── https://mastra.ai/reference/observability/providers/langfuse
+├───OK─── https://mastra.ai/reference/observability/providers/langwatch
+├───OK─── https://mastra.ai/reference/observability/providers/new-relic
+├───OK─── https://mastra.ai/reference/observability/providers/traceloop
+├───OK─── https://mastra.ai/reference/observability/providers/laminar
+├───OK─── https://mastra.ai/reference/observability/logger
+├───OK─── https://mastra.ai/reference/observability/otel-config
+├───OK─── https://mastra.ai/reference/observability/create-logger
+├───OK─── https://mastra.ai/reference/client-js/agents
+├───OK─── https://mastra.ai/reference/client-js/memory
+├───OK─── https://mastra.ai/reference/client-js/tools
+├───OK─── https://mastra.ai/reference/client-js/workflows
+├───OK─── https://mastra.ai/reference/client-js/vectors
+├───OK─── https://mastra.ai/reference/client-js/logs
+├───OK─── https://mastra.ai/reference/client-js/telemetry
+├───OK─── https://mastra.ai/reference/client-js/error-handling
+├───OK─── https://mastra.ai/reference/deployer/deployer
+├───OK─── https://mastra.ai/reference/deployer/cloudflare
+├───OK─── https://mastra.ai/reference/deployer/netlify
+├───OK─── https://mastra.ai/reference/deployer/vercel
+├───OK─── https://mastra.ai/book
+├───OK─── https://mastra.ai/llms.txt
+├───OK─── https://mastra.ai/llms-full.txt
+Finished! 349 links found. 103 excluded. 0 broken.
+
+Getting links from: https://mastra.ai/
+├───OK─── https://mastra.ai/logo.svg
+├───OK─── https://mastra.ai/blog
+├───OK─── https://mastra.ai/cloud-beta
+├───OK─── https://mastra.ai/blog/notebooklm-clone-with-agent-orchestration
+├───OK─── https://mastra.ai/blog/travel-ai
+├───OK─── https://mastra.ai/_next/image?url=%2F_next%2Fstatic%2Fmedia%2Fbg-dots.2749b1d2.png&w=828&q=75
+├───OK─── https://mastra.ai/_next/image?url=%2F_next%2Fstatic%2Fmedia%2Fbg-dots.c66fc63a.png&w=384&q=75
+├───OK─── https://mastra.ai/illustration-frame.svg
+├───OK─── https://mastra.ai/blog/txt-to-sql
+├───OK─── https://mastra.ai/blog/changelog-2025-04-02
+├───OK─── https://mastra.ai/blog/mastra-storage
+├───OK─── https://mastra.ai/blog/changelog-2025-03-27
+├───OK─── https://mastra.ai/blog/speech-to-speech
+Finished! 80 links found. 67 excluded. 0 broken.
+
+Getting links from: https://mastra.ai/examples
+Finished! 362 links found. 362 excluded. 0 broken.
+
+Getting links from: https://mastra.ai/guides
+Finished! 293 links found. 293 excluded. 0 broken.
+
+Getting links from: https://mastra.ai/reference
+Finished! 409 links found. 409 excluded. 0 broken.
+
+Getting links from: https://mastra.ai/showcase
+├───OK─── https://mastra.ai/_next/image?url=%2Fshowcase%2Foptimized%2Ffrom-olive.png&w=3840&q=75
+├───OK─── https://mastra.ai/_next/image?url=%2Fshowcase%2Foptimized%2Fartifact-engineer.png&w=3840&q=75
+├───OK─── https://mastra.ai/_next/image?url=%2Fshowcase%2Foptimized%2Fvetnio.png&w=3840&q=75
+├───OK─── https://mastra.ai/_next/image?url=%2Fshowcase%2Foptimized%2Fdalus-io.png&w=3840&q=75
+├───OK─── https://mastra.ai/_next/image?url=%2Fshowcase%2Foptimized%2Fdemeter.png&w=3840&q=75
+├───OK─── https://mastra.ai/_next/image?url=%2Fshowcase%2Foptimized%2Fnotebook-lm.png&w=3840&q=75
+├───OK─── https://mastra.ai/_next/image?url=%2Fshowcase%2Foptimized%2Frepo-base.png&w=3840&q=75
+├───OK─── https://mastra.ai/_next/image?url=%2Fshowcase%2Foptimized%2Fai-beats-lab.png&w=3840&q=75
+├───OK─── https://mastra.ai/_next/image?url=%2Fshowcase%2Foptimized%2Ftravel-ai.png&w=3840&q=75
+├───OK─── https://mastra.ai/_next/image?url=%2Fshowcase%2Foptimized%2Fexcalidraw-app.png&w=3840&q=75
+├───OK─── https://mastra.ai/_next/image?url=%2Fshowcase%2Foptimized%2Fecommerce-rag.jpg&w=3840&q=75
+├───OK─── https://mastra.ai/_next/image?url=%2Fshowcase%2Foptimized%2Ftext-to-sql.png&w=3840&q=75
+Finished! 311 links found. 299 excluded. 0 broken.
+
+Getting links from: https://mastra.ai/docs/getting-started/installation
+Finished! 383 links found. 383 excluded. 0 broken.
+
+Getting links from: https://mastra.ai/docs/getting-started/project-structure
+Finished! 347 links found. 347 excluded. 0 broken.
+
+Getting links from: https://mastra.ai/docs/getting-started/mcp-docs-server
+Finished! 374 links found. 374 excluded. 0 broken.
+
+Getting links from: https://mastra.ai/docs/frameworks/ai-sdk
+├───OK─── https://mastra.ai/blog/using-ai-sdk-with-mastra
+├───OK─── https://mastra.ai/docs/mastra-ai-sdk.png
+Finished! 368 links found. 366 excluded. 0 broken.
+
+Getting links from: https://mastra.ai/docs/frameworks/next-js
+├─BROKEN─ https://mastra.ai/docs/deployment/logging-and-tracing#nextjs-configuration (HTTP_308)
+Finished! 367 links found. 366 excluded. 1 broken.
+
+Getting links from: https://mastra.ai/docs/agents/overview
+├─BROKEN─ https://mastra.ai/docs/guides/chef-michel (HTTP_308)
+Finished! 378 links found. 377 excluded. 1 broken.
+
+Getting links from: https://mastra.ai/docs/agents/agent-memory
+Finished! 347 links found. 347 excluded. 0 broken.
+
+Getting links from: https://mastra.ai/docs/agents/adding-tools
+Finished! 368 links found. 368 excluded. 0 broken.
+
+Getting links from: https://mastra.ai/docs/agents/mcp-guide
+Finished! 368 links found. 368 excluded. 0 broken.
+
+Getting links from: https://mastra.ai/docs/agents/adding-voice
+Finished! 353 links found. 353 excluded. 0 broken.
+
+Getting links from: https://mastra.ai/docs/memory/overview
+Finished! 367 links found. 367 excluded. 0 broken.
+
+Getting links from: https://mastra.ai/docs/memory/semantic-recall
+├───OK─── https://mastra.ai/docs/semantic-recall.png
+├─BROKEN─ https://mastra.ai/docs/memory/getting-started#conversation-history-last-messages (HTTP_308)
+Finished! 361 links found. 359 excluded. 1 broken.
+
+Getting links from: https://mastra.ai/docs/memory/working-memory
+Finished! 352 links found. 352 excluded. 0 broken.
+
+Getting links from: https://mastra.ai/docs/memory/memory-processors
+Finished! 351 links found. 351 excluded. 0 broken.
+
+Getting links from: https://mastra.ai/docs/workflows/overview
+├─BROKEN─ https://mastra.ai/docs/guides/ai-recruiter (HTTP_308)
+Finished! 378 links found. 377 excluded. 1 broken.
+
+Getting links from: https://mastra.ai/docs/workflows/steps
+Finished! 343 links found. 343 excluded. 0 broken.
+
+Getting links from: https://mastra.ai/docs/workflows/control-flow
+Finished! 393 links found. 393 excluded. 0 broken.
+
+Getting links from: https://mastra.ai/docs/workflows/variables
+Finished! 365 links found. 365 excluded. 0 broken.
+
+Getting links from: https://mastra.ai/docs/workflows/suspend-and-resume
+Finished! 386 links found. 386 excluded. 0 broken.
+
+Getting links from: https://mastra.ai/docs/workflows/dynamic-workflows
+Finished! 353 links found. 353 excluded. 0 broken.
+
+Getting links from: https://mastra.ai/docs/workflows/error-handling
+├─BROKEN─ https://mastra.ai/docs/reference/workflows/step-retries (HTTP_308)
+Finished! 364 links found. 363 excluded. 1 broken.
+
+Getting links from: https://mastra.ai/docs/workflows/nested-workflows
+Finished! 361 links found. 361 excluded. 0 broken.
+
+Getting links from: https://mastra.ai/docs/rag/overview
+├─BROKEN─ https://mastra.ai/docs/reference/observability/otel-config (HTTP_308)
+├─BROKEN─ https://mastra.ai/examples/ (HTTP_308)
+Finished! 353 links found. 351 excluded. 2 broken.
+
+Getting links from: https://mastra.ai/docs/rag/chunking-and-embedding
+Finished! 358 links found. 358 excluded. 0 broken.
+
+Getting links from: https://mastra.ai/docs/rag/vector-databases
+Finished! 359 links found. 359 excluded. 0 broken.
+
+Getting links from: https://mastra.ai/docs/rag/retrieval
+Finished! 366 links found. 366 excluded. 0 broken.
+
+Getting links from: https://mastra.ai/docs/local-dev/creating-a-new-project
+Finished! 342 links found. 342 excluded. 0 broken.
+
+Getting links from: https://mastra.ai/docs/local-dev/add-to-existing-project
+Finished! 344 links found. 344 excluded. 0 broken.
+
+Getting links from: https://mastra.ai/docs/local-dev/mastra-dev
+Finished! 369 links found. 369 excluded. 0 broken.
+
+Getting links from: https://mastra.ai/docs/deployment/server
+Finished! 372 links found. 372 excluded. 0 broken.
+
+Getting links from: https://mastra.ai/docs/deployment/deployment
+Finished! 369 links found. 369 excluded. 0 broken.
+
+Getting links from: https://mastra.ai/docs/deployment/client
+Finished! 359 links found. 359 excluded. 0 broken.
+
+Getting links from: https://mastra.ai/docs/observability/logging
+Finished! 345 links found. 345 excluded. 0 broken.
+
+Getting links from: https://mastra.ai/docs/observability/tracing
+├───OK─── https://mastra.ai/docs/signoz-telemetry-demo.png
+├─BROKEN─ https://mastra.ai/reference/observability/providers/ (HTTP_308)
+├───OK─── https://mastra.ai/docs/observability/nextjs-tracing
+Finished! 357 links found. 354 excluded. 1 broken.
+
+Getting links from: https://mastra.ai/docs/evals/overview
+Finished! 355 links found. 355 excluded. 0 broken.
+
+Getting links from: https://mastra.ai/docs/evals/textual-evals
+Finished! 366 links found. 366 excluded. 0 broken.
+
+Getting links from: https://mastra.ai/docs/evals/custom-eval
+├─BROKEN─ https://mastra.ai/docs/guides/chef-michel (HTTP_308)
+Finished! 346 links found. 345 excluded. 1 broken.
+
+Getting links from: https://mastra.ai/docs/evals/running-in-ci
+Finished! 350 links found. 350 excluded. 0 broken.
+
+Getting links from: https://mastra.ai/docs/storage/overview
+├───OK─── https://mastra.ai/_next/image?url=%2Fdocs%2Fmastra-storage-overview-light.png&w=1920&q=75
+Finished! 348 links found. 347 excluded. 0 broken.
+
+Getting links from: https://mastra.ai/docs/voice/overview
+Finished! 361 links found. 361 excluded. 0 broken.
+
+Getting links from: https://mastra.ai/docs/voice/text-to-speech
+Finished! 346 links found. 346 excluded. 0 broken.
+
+Getting links from: https://mastra.ai/docs/voice/speech-to-text
+Finished! 346 links found. 346 excluded. 0 broken.
+
+Getting links from: https://mastra.ai/docs/voice/voice-to-voice
+Finished! 386 links found. 386 excluded. 0 broken.
+
+Getting links from: https://mastra.ai/docs/integrations
+Finished! 356 links found. 356 excluded. 0 broken.
+
+Getting links from: https://mastra.ai/docs/community/licensing
+Finished! 355 links found. 355 excluded. 0 broken.
+
+Getting links from: https://mastra.ai/docs/community/discord
+Finished! 343 links found. 343 excluded. 0 broken.
+
+Getting links from: https://mastra.ai/docs/faq
+Finished! 354 links found. 354 excluded. 0 broken.
+
+Getting links from: https://mastra.ai/examples/agents/system-prompt
+Finished! 359 links found. 359 excluded. 0 broken.
+
+Getting links from: https://mastra.ai/examples/agents/agentic-workflows
+Finished! 360 links found. 360 excluded. 0 broken.
+
+Getting links from: https://mastra.ai/examples/agents/using-a-tool
+Finished! 360 links found. 360 excluded. 0 broken.
+
+Getting links from: https://mastra.ai/examples/agents/hierarchical-multi-agent
+Finished! 360 links found. 360 excluded. 0 broken.
+
+Getting links from: https://mastra.ai/examples/agents/multi-agent-workflow
+Finished! 360 links found. 360 excluded. 0 broken.
+
+Getting links from: https://mastra.ai/examples/agents/bird-checker
+Finished! 362 links found. 362 excluded. 0 broken.
+
+Getting links from: https://mastra.ai/examples/agents/adding-voice-capabilities
+Finished! 362 links found. 362 excluded. 0 broken.
+
+Getting links from: https://mastra.ai/examples/workflows/creating-a-workflow
+Finished! 359 links found. 359 excluded. 0 broken.
+
+Getting links from: https://mastra.ai/examples/workflows/sequential-steps
+├───OK─── https://mastra.ai/sequential-chains.png
+Finished! 368 links found. 367 excluded. 0 broken.
+
+Getting links from: https://mastra.ai/examples/workflows/parallel-steps
+├───OK─── https://mastra.ai/parallel-chains.png
+Finished! 368 links found. 367 excluded. 0 broken.
+
+Getting links from: https://mastra.ai/examples/workflows/branching-paths
+├───OK─── https://mastra.ai/subscribed-chains.png
+Finished! 370 links found. 369 excluded. 0 broken.
+
+Getting links from: https://mastra.ai/examples/workflows/conditional-branching
+Finished! 364 links found. 364 excluded. 0 broken.
+
+Getting links from: https://mastra.ai/examples/workflows/calling-agent
+Finished! 360 links found. 360 excluded. 0 broken.
+
+Getting links from: https://mastra.ai/examples/workflows/using-a-tool-as-a-step
+Finished! 360 links found. 360 excluded. 0 broken.
+
+Getting links from: https://mastra.ai/examples/workflows/cyclical-dependencies
+Finished! 360 links found. 360 excluded. 0 broken.
+
+Getting links from: https://mastra.ai/examples/workflows/suspend-and-resume
+Finished! 364 links found. 364 excluded. 0 broken.
+
+Getting links from: https://mastra.ai/examples/workflows/workflow-variables
+Finished! 368 links found. 368 excluded. 0 broken.
+
+Getting links from: https://mastra.ai/examples/workflows/human-in-the-loop
+Finished! 369 links found. 369 excluded. 0 broken.
+
+Getting links from: https://mastra.ai/examples/rag/chunking/chunk-text
+Finished! 359 links found. 359 excluded. 0 broken.
+
+Getting links from: https://mastra.ai/examples/rag/chunking/chunk-markdown
+Finished! 360 links found. 360 excluded. 0 broken.
+
+Getting links from: https://mastra.ai/examples/rag/chunking/chunk-html
+Finished! 360 links found. 360 excluded. 0 broken.
+
+Getting links from: https://mastra.ai/examples/rag/chunking/chunk-json
+Finished! 360 links found. 360 excluded. 0 broken.
+
+Getting links from: https://mastra.ai/examples/rag/chunking/adjust-chunk-size
+Finished! 360 links found. 360 excluded. 0 broken.
+
+Getting links from: https://mastra.ai/examples/rag/chunking/adjust-chunk-delimiters
+Finished! 360 links found. 360 excluded. 0 broken.
+
+Getting links from: https://mastra.ai/examples/rag/embedding/embed-text-chunk
+├─BROKEN─ https://mastra.ai/examples/rag/chunking (HTTP_308)
+Finished! 360 links found. 359 excluded. 1 broken.
+
+Getting links from: https://mastra.ai/examples/rag/embedding/embed-chunk-array
+├─BROKEN─ https://mastra.ai/examples/rag/chunking (HTTP_308)
+Finished! 361 links found. 360 excluded. 1 broken.
+
+Getting links from: https://mastra.ai/examples/rag/embedding/embed-text-with-cohere
+├─BROKEN─ https://mastra.ai/examples/rag/chunking (HTTP_308)
+Finished! 361 links found. 360 excluded. 1 broken.
+
+Getting links from: https://mastra.ai/examples/rag/embedding/metadata-extraction
+├─BROKEN─ https://mastra.ai/examples/rag/chunking (HTTP_308)
+Finished! 373 links found. 372 excluded. 1 broken.
+
+Getting links from: https://mastra.ai/examples/rag/upsert/upsert-embeddings
+├─BROKEN─ https://mastra.ai/examples/rag/chunking (HTTP_308)
+Finished! 363 links found. 362 excluded. 1 broken.
+
+Getting links from: https://mastra.ai/examples/rag/query/hybrid-vector-search
+├─BROKEN─ https://mastra.ai/examples/rag/chunking (HTTP_308)
+├─BROKEN─ https://mastra.ai/examples/rag/query/metadata-extraction (HTTP_404)
+Finished! 376 links found. 374 excluded. 2 broken.
+
+Getting links from: https://mastra.ai/examples/rag/query/retrieve-results
+├─BROKEN─ https://mastra.ai/examples/rag/chunking (HTTP_308)
+Finished! 361 links found. 360 excluded. 1 broken.
+
+Getting links from: https://mastra.ai/examples/rag/rerank/rerank
+├─BROKEN─ https://mastra.ai/examples/rag/chunking (HTTP_308)
+Finished! 376 links found. 375 excluded. 1 broken.
+
+Getting links from: https://mastra.ai/examples/rag/rerank/rerank-rag
+├─BROKEN─ https://mastra.ai/examples/rag/chunking (HTTP_308)
+Finished! 381 links found. 380 excluded. 1 broken.
+
+Getting links from: https://mastra.ai/examples/rag/rerank/reranking-with-cohere
+├─BROKEN─ https://mastra.ai/examples/rag/chunking (HTTP_308)
+├─BROKEN─ https://mastra.ai/reference/rag/retrieval (HTTP_404)
+Finished! 364 links found. 362 excluded. 2 broken.
+
+Getting links from: https://mastra.ai/examples/rag/usage/basic-rag
+├─BROKEN─ https://mastra.ai/examples/rag/chunking (HTTP_308)
+Finished! 377 links found. 376 excluded. 1 broken.
+
+Getting links from: https://mastra.ai/examples/rag/usage/cleanup-rag
+├─BROKEN─ https://mastra.ai/examples/rag/chunking (HTTP_308)
+Finished! 387 links found. 386 excluded. 1 broken.
+
+Getting links from: https://mastra.ai/examples/rag/usage/filter-rag
+├─BROKEN─ https://mastra.ai/examples/rag/chunking (HTTP_308)
+Finished! 384 links found. 383 excluded. 1 broken.
+
+Getting links from: https://mastra.ai/examples/rag/usage/cot-rag
+├─BROKEN─ https://mastra.ai/examples/rag/chunking (HTTP_308)
+Finished! 381 links found. 380 excluded. 1 broken.
+
+Getting links from: https://mastra.ai/examples/rag/usage/cot-workflow-rag
+├─BROKEN─ https://mastra.ai/examples/rag/chunking (HTTP_308)
+Finished! 397 links found. 396 excluded. 1 broken.
+
+Getting links from: https://mastra.ai/examples/rag/usage/graph-rag
+├─BROKEN─ https://mastra.ai/examples/rag/chunking (HTTP_308)
+Finished! 381 links found. 380 excluded. 1 broken.
+
+Getting links from: https://mastra.ai/examples/memory/memory-with-libsql
+Finished! 364 links found. 364 excluded. 0 broken.
+
+Getting links from: https://mastra.ai/examples/memory/memory-with-pg
+Finished! 363 links found. 363 excluded. 0 broken.
+
+Getting links from: https://mastra.ai/examples/memory/memory-with-upstash
+Finished! 365 links found. 365 excluded. 0 broken.
+
+Getting links from: https://mastra.ai/examples/memory/streaming-working-memory
+Finished! 380 links found. 380 excluded. 0 broken.
+
+Getting links from: https://mastra.ai/examples/memory/streaming-working-memory-advanced
+├─BROKEN─ https://mastra.ai/examples/memory/short-term-working-memory (HTTP_404)
+Finished! 376 links found. 375 excluded. 1 broken.
+
+Getting links from: https://mastra.ai/examples/memory/memory-processors
+├─BROKEN─ https://mastra.ai/reference/memory/memory-processors (HTTP_404)
+Finished! 376 links found. 375 excluded. 1 broken.
+
+Getting links from: https://mastra.ai/examples/memory/use-chat
+Finished! 368 links found. 368 excluded. 0 broken.
+
+Getting links from: https://mastra.ai/examples/evals/answer-relevancy
+Finished! 379 links found. 379 excluded. 0 broken.
+
+Getting links from: https://mastra.ai/examples/evals/bias
+Finished! 380 links found. 380 excluded. 0 broken.
+
+Getting links from: https://mastra.ai/examples/evals/completeness
+Finished! 378 links found. 378 excluded. 0 broken.
+
+Getting links from: https://mastra.ai/examples/evals/content-similarity
+Finished! 378 links found. 378 excluded. 0 broken.
+
+Getting links from: https://mastra.ai/examples/evals/context-position
+Finished! 378 links found. 378 excluded. 0 broken.
+
+Getting links from: https://mastra.ai/examples/evals/context-precision
+Finished! 378 links found. 378 excluded. 0 broken.
+
+Getting links from: https://mastra.ai/examples/evals/context-relevancy
+Finished! 378 links found. 378 excluded. 0 broken.
+
+Getting links from: https://mastra.ai/examples/evals/contextual-recall
+Finished! 378 links found. 378 excluded. 0 broken.
+
+Getting links from: https://mastra.ai/examples/evals/custom-eval
+Finished! 384 links found. 384 excluded. 0 broken.
+
+Getting links from: https://mastra.ai/examples/evals/faithfulness
+Finished! 378 links found. 378 excluded. 0 broken.
+
+Getting links from: https://mastra.ai/examples/evals/hallucination
+Finished! 378 links found. 378 excluded. 0 broken.
+
+Getting links from: https://mastra.ai/examples/evals/keyword-coverage
+Finished! 378 links found. 378 excluded. 0 broken.
+
+Getting links from: https://mastra.ai/examples/evals/prompt-alignment
+Finished! 378 links found. 378 excluded. 0 broken.
+
+Getting links from: https://mastra.ai/examples/evals/summarization
+Finished! 380 links found. 380 excluded. 0 broken.
+
+Getting links from: https://mastra.ai/examples/evals/textual-difference
+Finished! 378 links found. 378 excluded. 0 broken.
+
+Getting links from: https://mastra.ai/examples/evals/tone-consistency
+Finished! 378 links found. 378 excluded. 0 broken.
+
+Getting links from: https://mastra.ai/examples/evals/toxicity
+Finished! 380 links found. 380 excluded. 0 broken.
+
+Getting links from: https://mastra.ai/examples/evals/word-inclusion
+Finished! 379 links found. 379 excluded. 0 broken.
+
+Getting links from: https://mastra.ai/examples/voice/text-to-speech
+Finished! 371 links found. 371 excluded. 0 broken.
+
+Getting links from: https://mastra.ai/examples/voice/speech-to-text
+Finished! 366 links found. 366 excluded. 0 broken.
+
+Getting links from: https://mastra.ai/guides/guide/chef-michel
+Finished! 322 links found. 322 excluded. 0 broken.
+
+Getting links from: https://mastra.ai/guides/guide/stock-agent
+Finished! 311 links found. 311 excluded. 0 broken.
+
+Getting links from: https://mastra.ai/guides/guide/ai-recruiter
+Finished! 308 links found. 308 excluded. 0 broken.
+
+Getting links from: https://mastra.ai/guides/guide/research-assistant
+├─BROKEN─ https://mastra.ai/examples/rag/usage/rerank-rag (HTTP_404)
+Finished! 321 links found. 320 excluded. 1 broken.
+
+Getting links from: https://mastra.ai/reference/core/mastra-class
+Finished! 419 links found. 419 excluded. 0 broken.
+
+Getting links from: https://mastra.ai/reference/cli/init
+Finished! 413 links found. 413 excluded. 0 broken.
+
+Getting links from: https://mastra.ai/reference/cli/dev
+Finished! 438 links found. 438 excluded. 0 broken.
+
+Getting links from: https://mastra.ai/reference/cli/deploy
+Finished! 420 links found. 420 excluded. 0 broken.
+
+Getting links from: https://mastra.ai/reference/cli/build
+Finished! 422 links found. 422 excluded. 0 broken.
+
+Getting links from: https://mastra.ai/reference/agents/getAgent
+Finished! 417 links found. 417 excluded. 0 broken.
+
+Getting links from: https://mastra.ai/reference/agents/createTool
+Finished! 426 links found. 426 excluded. 0 broken.
+
+Getting links from: https://mastra.ai/reference/agents/generate
+Finished! 431 links found. 431 excluded. 0 broken.
+
+Getting links from: https://mastra.ai/reference/agents/stream
+Finished! 432 links found. 432 excluded. 0 broken.
+
+Getting links from: https://mastra.ai/reference/tools/document-chunker-tool
+Finished! 427 links found. 427 excluded. 0 broken.
+
+Getting links from: https://mastra.ai/reference/tools/graph-rag-tool
+Finished! 430 links found. 430 excluded. 0 broken.
+
+Getting links from: https://mastra.ai/reference/tools/vector-query-tool
+Finished! 438 links found. 438 excluded. 0 broken.
+
+Getting links from: https://mastra.ai/reference/tools/client
+Finished! 438 links found. 438 excluded. 0 broken.
+
+Getting links from: https://mastra.ai/reference/tools/mcp-configuration
+Finished! 436 links found. 436 excluded. 0 broken.
+
+Getting links from: https://mastra.ai/reference/workflows/workflow
+Finished! 448 links found. 448 excluded. 0 broken.
+
+Getting links from: https://mastra.ai/reference/workflows/step-class
+├─BROKEN─ https://mastra.ai/workflows/steps (HTTP_404)
+├─BROKEN─ https://mastra.ai/workflows/control-flow (HTTP_404)
+Finished! 423 links found. 421 excluded. 2 broken.
+
+Getting links from: https://mastra.ai/reference/workflows/step-options
+├─BROKEN─ https://mastra.ai/workflows/control-flow#path-comparison (HTTP_404)
+├─BROKEN─ https://mastra.ai/workflows/control-flow (HTTP_404)
+Finished! 425 links found. 423 excluded. 2 broken.
+
+Getting links from: https://mastra.ai/reference/workflows/step-condition
+├─BROKEN─ https://mastra.ai/workflows/control-flow (HTTP_404)
+Finished! 429 links found. 428 excluded. 1 broken.
+
+Getting links from: https://mastra.ai/reference/workflows/step-function
+├─BROKEN─ https://mastra.ai/workflows/steps (HTTP_404)
+├─BROKEN─ https://mastra.ai/workflows/control-flow (HTTP_404)
+Finished! 426 links found. 424 excluded. 2 broken.
+
+Getting links from: https://mastra.ai/reference/workflows/after
+├─BROKEN─ https://mastra.ai/workflows/control-flow#merging-multiple-branches (HTTP_404)
+Finished! 434 links found. 433 excluded. 1 broken.
+
+Getting links from: https://mastra.ai/reference/workflows/then
+├─BROKEN─ https://mastra.ai/workflows/control-flow (HTTP_404)
+Finished! 428 links found. 427 excluded. 1 broken.
+
+Getting links from: https://mastra.ai/reference/workflows/until
+├─BROKEN─ https://mastra.ai/workflows/control-flow#loop-control-with-until-and-while (HTTP_404)
+Finished! 433 links found. 432 excluded. 1 broken.
+
+Getting links from: https://mastra.ai/reference/workflows/while
+├─BROKEN─ https://mastra.ai/workflows/control-flow#loop-control-with-until-and-while (HTTP_404)
+Finished! 433 links found. 432 excluded. 1 broken.
+
+Getting links from: https://mastra.ai/reference/workflows/if
+├─BROKEN─ https://mastra.ai/workflows/control-flow (HTTP_404)
+Finished! 432 links found. 431 excluded. 1 broken.
+
+Getting links from: https://mastra.ai/reference/workflows/else
+├─BROKEN─ https://mastra.ai/workflows/control-flow (HTTP_404)
+Finished! 428 links found. 427 excluded. 1 broken.
+
+Getting links from: https://mastra.ai/reference/workflows/createRun
+Finished! 423 links found. 423 excluded. 0 broken.
+
+Getting links from: https://mastra.ai/reference/workflows/start
+Finished! 429 links found. 429 excluded. 0 broken.
+
+Getting links from: https://mastra.ai/reference/workflows/execute
+Finished! 425 links found. 425 excluded. 0 broken.
+
+Getting links from: https://mastra.ai/reference/workflows/suspend
+├─BROKEN─ https://mastra.ai/workflows/suspend-and-resume (HTTP_404)
+Finished! 425 links found. 424 excluded. 1 broken.
+
+Getting links from: https://mastra.ai/reference/workflows/snapshots
+├─BROKEN─ https://mastra.ai/workflows/suspend-and-resume (HTTP_404)
+Finished! 444 links found. 443 excluded. 1 broken.
+
+Getting links from: https://mastra.ai/reference/workflows/resume
+├─BROKEN─ https://mastra.ai/workflows/suspend-and-resume (HTTP_404)
+Finished! 432 links found. 431 excluded. 1 broken.
+
+Getting links from: https://mastra.ai/reference/workflows/commit
+├─BROKEN─ https://mastra.ai/workflows/control-flow (HTTP_404)
+Finished! 422 links found. 421 excluded. 1 broken.
+
+Getting links from: https://mastra.ai/reference/workflows/watch
+Finished! 426 links found. 426 excluded. 0 broken.
+
+Getting links from: https://mastra.ai/reference/workflows/events
+├─BROKEN─ https://mastra.ai/workflows/suspend-and-resume (HTTP_404)
+Finished! 458 links found. 457 excluded. 1 broken.
+
+Getting links from: https://mastra.ai/reference/workflows/afterEvent
+├─BROKEN─ https://mastra.ai/workflows/suspend-and-resume (HTTP_404)
+Finished! 432 links found. 431 excluded. 1 broken.
+
+Getting links from: https://mastra.ai/reference/workflows/resumeWithEvent
+├─BROKEN─ https://mastra.ai/workflows/suspend-and-resume (HTTP_404)
+Finished! 437 links found. 436 excluded. 1 broken.
+
+Getting links from: https://mastra.ai/reference/workflows/step-retries
+├─BROKEN─ https://mastra.ai/workflows/error-handling (HTTP_404)
+Finished! 441 links found. 440 excluded. 1 broken.
+
+Getting links from: https://mastra.ai/reference/networks/agent-network
+Finished! 441 links found. 441 excluded. 0 broken.
+
+Getting links from: https://mastra.ai/reference/memory/Memory
+Finished! 435 links found. 435 excluded. 0 broken.
+
+Getting links from: https://mastra.ai/reference/memory/createThread
+Finished! 425 links found. 425 excluded. 0 broken.
+
+Getting links from: https://mastra.ai/reference/memory/query
+Finished! 430 links found. 430 excluded. 0 broken.
+
+Getting links from: https://mastra.ai/reference/memory/getThreadById
+Finished! 424 links found. 424 excluded. 0 broken.
+
+Getting links from: https://mastra.ai/reference/memory/getThreadsByResourceId
+Finished! 424 links found. 424 excluded. 0 broken.
+
+Getting links from: https://mastra.ai/reference/storage/libsql
+Finished! 423 links found. 423 excluded. 0 broken.
+
+Getting links from: https://mastra.ai/reference/storage/postgresql
+Finished! 422 links found. 422 excluded. 0 broken.
+
+Getting links from: https://mastra.ai/reference/storage/upstash
+Finished! 428 links found. 428 excluded. 0 broken.
+
+Getting links from: https://mastra.ai/reference/rag/chunk
+Finished! 427 links found. 427 excluded. 0 broken.
+
+Getting links from: https://mastra.ai/reference/rag/embeddings
+Finished! 429 links found. 429 excluded. 0 broken.
+
+Getting links from: https://mastra.ai/reference/rag/extract-params
+Finished! 428 links found. 428 excluded. 0 broken.
+
+Getting links from: https://mastra.ai/reference/rag/rerank
+Finished! 425 links found. 425 excluded. 0 broken.
+
+Getting links from: https://mastra.ai/reference/rag/document
+Finished! 440 links found. 440 excluded. 0 broken.
+
+Getting links from: https://mastra.ai/reference/rag/metadata-filters
+Finished! 446 links found. 446 excluded. 0 broken.
+
+Getting links from: https://mastra.ai/reference/rag/graph-rag
+Finished! 433 links found. 433 excluded. 0 broken.
+
+Getting links from: https://mastra.ai/reference/rag/astra
+Finished! 442 links found. 442 excluded. 0 broken.
+
+Getting links from: https://mastra.ai/reference/rag/chroma
+Finished! 442 links found. 442 excluded. 0 broken.
+
+Getting links from: https://mastra.ai/reference/rag/vectorize
+Finished! 448 links found. 448 excluded. 0 broken.
+
+Getting links from: https://mastra.ai/reference/rag/pg
+Finished! 451 links found. 451 excluded. 0 broken.
+
+Getting links from: https://mastra.ai/reference/rag/libsql
+Finished! 447 links found. 447 excluded. 0 broken.
+
+Getting links from: https://mastra.ai/reference/rag/pinecone
+Finished! 444 links found. 444 excluded. 0 broken.
+
+Getting links from: https://mastra.ai/reference/rag/qdrant
+Finished! 440 links found. 440 excluded. 0 broken.
+
+Getting links from: https://mastra.ai/reference/rag/turbopuffer
+Finished! 438 links found. 438 excluded. 0 broken.
+
+Getting links from: https://mastra.ai/reference/rag/upstash
+Finished! 442 links found. 442 excluded. 0 broken.
+
+Getting links from: https://mastra.ai/reference/evals/answer-relevancy
+Finished! 434 links found. 434 excluded. 0 broken.
+
+Getting links from: https://mastra.ai/reference/evals/bias
+Finished! 438 links found. 438 excluded. 0 broken.
+
+Getting links from: https://mastra.ai/reference/evals/completeness
+Finished! 434 links found. 434 excluded. 0 broken.
+
+Getting links from: https://mastra.ai/reference/evals/content-similarity
+Finished! 436 links found. 436 excluded. 0 broken.
+
+Getting links from: https://mastra.ai/reference/evals/context-position
+Finished! 436 links found. 436 excluded. 0 broken.
+
+Getting links from: https://mastra.ai/reference/evals/context-precision
+Finished! 436 links found. 436 excluded. 0 broken.
+
+Getting links from: https://mastra.ai/reference/evals/context-relevancy
+Finished! 435 links found. 435 excluded. 0 broken.
+
+Getting links from: https://mastra.ai/reference/evals/contextual-recall
+Finished! 435 links found. 435 excluded. 0 broken.
+
+Getting links from: https://mastra.ai/reference/evals/faithfulness
+Finished! 435 links found. 435 excluded. 0 broken.
+
+Getting links from: https://mastra.ai/reference/evals/hallucination
+Finished! 438 links found. 438 excluded. 0 broken.
+
+Getting links from: https://mastra.ai/reference/evals/keyword-coverage
+Finished! 435 links found. 435 excluded. 0 broken.
+
+Getting links from: https://mastra.ai/reference/evals/prompt-alignment
+Finished! 438 links found. 438 excluded. 0 broken.
+
+Getting links from: https://mastra.ai/reference/evals/summarization
+Finished! 436 links found. 436 excluded. 0 broken.
+
+Getting links from: https://mastra.ai/reference/evals/textual-difference
+Finished! 431 links found. 431 excluded. 0 broken.
+
+Getting links from: https://mastra.ai/reference/evals/tone-consistency
+Finished! 434 links found. 434 excluded. 0 broken.
+
+Getting links from: https://mastra.ai/reference/evals/toxicity
+Finished! 434 links found. 434 excluded. 0 broken.
+
+Getting links from: https://mastra.ai/reference/voice/mastra-voice
+Finished! 451 links found. 451 excluded. 0 broken.
+
+Getting links from: https://mastra.ai/reference/voice/composite-voice
+Finished! 424 links found. 424 excluded. 0 broken.
+
+Getting links from: https://mastra.ai/reference/voice/voice.speak
+Finished! 434 links found. 434 excluded. 0 broken.
+
+Getting links from: https://mastra.ai/reference/voice/voice.listen
+Finished! 437 links found. 437 excluded. 0 broken.
+
+Getting links from: https://mastra.ai/reference/voice/voice.connect
+├─BROKEN─ https://mastra.ai/reference/voice/voice.close (HTTP_404)
+Finished! 432 links found. 431 excluded. 1 broken.
+
+Getting links from: https://mastra.ai/reference/voice/voice.send
+Finished! 432 links found. 432 excluded. 0 broken.
+
+Getting links from: https://mastra.ai/reference/voice/voice.answer
+Finished! 432 links found. 432 excluded. 0 broken.
+
+Getting links from: https://mastra.ai/reference/voice/voice.on
+├─BROKEN─ https://mastra.ai/reference/voice/voice.off (HTTP_404)
+Finished! 434 links found. 433 excluded. 1 broken.
+
+Getting links from: https://mastra.ai/reference/voice/deepgram
+Finished! 426 links found. 426 excluded. 0 broken.
+
+Getting links from: https://mastra.ai/reference/voice/elevenlabs
+Finished! 428 links found. 428 excluded. 0 broken.
+
+Getting links from: https://mastra.ai/reference/voice/google
+Finished! 428 links found. 428 excluded. 0 broken.
+
+Getting links from: https://mastra.ai/reference/voice/murf
+Finished! 430 links found. 430 excluded. 0 broken.
+
+Getting links from: https://mastra.ai/reference/voice/openai
+Finished! 430 links found. 430 excluded. 0 broken.
+
+Getting links from: https://mastra.ai/reference/voice/openai-realtime
+Finished! 455 links found. 455 excluded. 0 broken.
+
+Getting links from: https://mastra.ai/reference/voice/playai
+Finished! 428 links found. 428 excluded. 0 broken.
+
+Getting links from: https://mastra.ai/reference/voice/sarvam
+Finished! 435 links found. 435 excluded. 0 broken.
+
+Getting links from: https://mastra.ai/reference/voice/speechify
+Finished! 428 links found. 428 excluded. 0 broken.
+
+Getting links from: https://mastra.ai/reference/observability/providers
+Finished! 419 links found. 419 excluded. 0 broken.
+
+Getting links from: https://mastra.ai/reference/observability/providers/dash0
+Finished! 421 links found. 421 excluded. 0 broken.
+
+Getting links from: https://mastra.ai/reference/observability/providers/signoz
+Finished! 419 links found. 419 excluded. 0 broken.
+
+Getting links from: https://mastra.ai/reference/observability/providers/braintrust
+Finished! 419 links found. 419 excluded. 0 broken.
+
+Getting links from: https://mastra.ai/reference/observability/providers/langsmith
+Finished! 419 links found. 419 excluded. 0 broken.
+
+Getting links from: https://mastra.ai/reference/observability/providers/langfuse
+Finished! 419 links found. 419 excluded. 0 broken.
+
+Getting links from: https://mastra.ai/reference/observability/providers/langwatch
+Finished! 419 links found. 419 excluded. 0 broken.
+
+Getting links from: https://mastra.ai/reference/observability/providers/new-relic
+Finished! 419 links found. 419 excluded. 0 broken.
+
+Getting links from: https://mastra.ai/reference/observability/providers/traceloop
+Finished! 419 links found. 419 excluded. 0 broken.
+
+Getting links from: https://mastra.ai/reference/observability/providers/laminar
+Finished! 419 links found. 419 excluded. 0 broken.
+
+Getting links from: https://mastra.ai/reference/observability/logger
+Finished! 416 links found. 416 excluded. 0 broken.
+
+Getting links from: https://mastra.ai/reference/observability/otel-config
+Finished! 414 links found. 414 excluded. 0 broken.
+
+Getting links from: https://mastra.ai/reference/observability/create-logger
+Finished! 422 links found. 422 excluded. 0 broken.
+
+Getting links from: https://mastra.ai/reference/client-js/agents
+Finished! 427 links found. 427 excluded. 0 broken.
+
+Getting links from: https://mastra.ai/reference/client-js/memory
+Finished! 434 links found. 434 excluded. 0 broken.
+
+Getting links from: https://mastra.ai/reference/client-js/tools
+Finished! 422 links found. 422 excluded. 0 broken.
+
+Getting links from: https://mastra.ai/reference/client-js/workflows
+Finished! 430 links found. 430 excluded. 0 broken.
+
+Getting links from: https://mastra.ai/reference/client-js/vectors
+Finished! 428 links found. 428 excluded. 0 broken.
+
+Getting links from: https://mastra.ai/reference/client-js/logs
+Finished! 416 links found. 416 excluded. 0 broken.
+
+Getting links from: https://mastra.ai/reference/client-js/telemetry
+Finished! 414 links found. 414 excluded. 0 broken.
+
+Getting links from: https://mastra.ai/reference/client-js/error-handling
+Finished! 418 links found. 418 excluded. 0 broken.
+
+Getting links from: https://mastra.ai/reference/deployer/deployer
+Finished! 431 links found. 431 excluded. 0 broken.
+
+Getting links from: https://mastra.ai/reference/deployer/cloudflare
+Finished! 428 links found. 428 excluded. 0 broken.
+
+Getting links from: https://mastra.ai/reference/deployer/netlify
+Finished! 424 links found. 424 excluded. 0 broken.
+
+Getting links from: https://mastra.ai/reference/deployer/vercel
+Finished! 423 links found. 423 excluded. 0 broken.
+
+Getting links from: https://mastra.ai/book
+├───OK─── https://mastra.ai/_next/image?url=%2Fsam-book-image.jpg&w=2048&q=100
+Finished! 48 links found. 47 excluded. 0 broken.
+
+Getting links from: https://mastra.ai/llms.txt
+Error: Expected type "text/html" but got "text/plain; charset=utf-8"
+
+Getting links from: https://mastra.ai/llms-full.txt
+Error: Expected type "text/html" but got "text/plain; charset=utf-8"
+
+Getting links from: https://mastra.ai/blog
+├───OK─── https://mastra.ai/blog/seamless-edge-deployments
+├───OK─── https://mastra.ai/blog/changelog-2025-03-20
+├───OK─── https://mastra.ai/blog/introducing-mastra-mcp
+├───OK─── https://mastra.ai/blog/changelog-2025-03-14
+├───OK─── https://mastra.ai/blog/principles-of-ai-engineering
+├───OK─── https://mastra.ai/blog/ai-beats-lab
+├───OK─── https://mastra.ai/blog/nextjs-integration-guide
+├───OK─── https://mastra.ai/blog/mastra-mcp
+├───OK─── https://mastra.ai/blog/repo-base
+├───OK─── https://mastra.ai/blog/changelog-2025-03-04
+├───OK─── https://mastra.ai/blog/whiteboard-to-excalidraw-converter
+├───OK─── https://mastra.ai/blog/giving-agents-a-voice
+├───OK─── https://mastra.ai/blog/pgvector-perf
+├───OK─── https://mastra.ai/blog/beta-launch
+├───OK─── https://mastra.ai/blog/solving-the-hardest-problem-in-cs
+├───OK─── https://mastra.ai/blog/changelog-2025-02-10
+├───OK─── https://mastra.ai/blog/agent-memory-guide
+├───OK─── https://mastra.ai/blog/changelog-2025-01-31
+├───OK─── https://mastra.ai/blog/ai-ops
+├───OK─── https://mastra.ai/blog/api-endpoints
+├───OK─── https://mastra.ai/blog/changelog-2025-01-24
+├───OK─── https://mastra.ai/blog/introducing-mastra-evals
+├───OK─── https://mastra.ai/blog/tts-support
+├───OK─── https://mastra.ai/blog/changelog-2025-01-17
+├───OK─── https://mastra.ai/blog/build-rag-workflow
+├───OK─── https://mastra.ai/blog/building-workflows
+├───OK─── https://mastra.ai/blog/changelog-2025-01-10
+├───OK─── https://mastra.ai/blog/the-next-million-ai-developers
+├───OK─── https://mastra.ai/blog/ai-engineering
+Finished! 84 links found. 55 excluded. 0 broken.
+
+Getting links from: https://mastra.ai/cloud-beta
+├───OK─── https://mastra.ai/_next/image?url=%2Fvideo-preview.jpg&w=2048&q=100
+Finished! 48 links found. 47 excluded. 0 broken.
+
+Getting links from: https://mastra.ai/blog/notebooklm-clone-with-agent-orchestration
+├───OK─── https://mastra.ai/tags/agents
+├───OK─── https://mastra.ai/tags/examples
+├───OK─── https://mastra.ai/authors/sam-bhagwat
+Finished! 57 links found. 54 excluded. 0 broken.
+
+Getting links from: https://mastra.ai/blog/travel-ai
+Finished! 54 links found. 54 excluded. 0 broken.
+
+Getting links from: https://mastra.ai/blog/txt-to-sql
+├───OK─── https://mastra.ai/tags/tools
+├───OK─── https://mastra.ai/authors/shane-thomas
+Finished! 55 links found. 53 excluded. 0 broken.
+
+Getting links from: https://mastra.ai/blog/changelog-2025-04-02
+├───OK─── https://mastra.ai/tags/changelog
+├───OK─── https://mastra.ai/docs/reference/memory/memory-processors
+Finished! 54 links found. 52 excluded. 0 broken.
+
+Getting links from: https://mastra.ai/blog/mastra-storage
+├───OK─── https://mastra.ai/tags/storage
+├───OK─── https://mastra.ai/_next/image?url=%2Fimages%2Fmastra-storage%2Fmastra-storage-overview-light.png&w=1920&q=75
+├───OK─── https://mastra.ai/_next/image?url=%2Fimages%2Fmastra-storage%2Fmastra-storage-overview-dark.png&w=1920&q=75
+├───OK─── https://mastra.ai/authors/nik-aiyer
+Finished! 61 links found. 57 excluded. 0 broken.
+
+Getting links from: https://mastra.ai/blog/changelog-2025-03-27
+Finished! 59 links found. 59 excluded. 0 broken.
+
+Getting links from: https://mastra.ai/blog/speech-to-speech
+├───OK─── https://mastra.ai/tags/announcements
+├───OK─── https://mastra.ai/tags/voice
+├───OK─── https://mastra.ai/authors/yujohn-nattrass
+Finished! 58 links found. 55 excluded. 0 broken.
+
+Getting links from: https://mastra.ai/blog/using-ai-sdk-with-mastra
+├───OK─── https://mastra.ai/tags/integrations
+├───OK─── https://mastra.ai/mastra-ai-sdk.png
+├───OK─── https://mastra.ai/memory-retrieval-dark.png
+├───OK─── https://mastra.ai/images/mastra-dev.png
+├─BROKEN─ https://mastra.ai/docs/evals/00-overview (HTTP_308)
+Finished! 71 links found. 66 excluded. 1 broken.
+
+Getting links from: https://mastra.ai/docs/observability/nextjs-tracing
+Finished! 353 links found. 353 excluded. 0 broken.
+
+Getting links from: https://mastra.ai/blog/seamless-edge-deployments
+├───OK─── https://mastra.ai/tags/deployments
+├───OK─── https://mastra.ai/_next/image?url=%2Fimages%2Fnode_modules.png&w=1920&q=75
+├───OK─── https://mastra.ai/authors/ward-peeters
+Finished! 59 links found. 56 excluded. 0 broken.
+
+Getting links from: https://mastra.ai/blog/changelog-2025-03-20
+├─BROKEN─ https://mastra.ai/docs/reference/networks/agent-network (HTTP_308)
+Finished! 55 links found. 54 excluded. 1 broken.
+
+Getting links from: https://mastra.ai/blog/introducing-mastra-mcp
+├─BROKEN─ https://mastra.ai/docs/reference/tools/mcp-configuration (HTTP_308)
+├───OK─── https://mastra.ai/authors/tyler-barnes
+Finished! 61 links found. 59 excluded. 1 broken.
+
+Getting links from: https://mastra.ai/blog/changelog-2025-03-14
+Finished! 56 links found. 56 excluded. 0 broken.
+
+Getting links from: https://mastra.ai/blog/principles-of-ai-engineering
+├───OK─── https://mastra.ai/_next/image?url=%2Fimages%2Fbooklaunch.jpg&w=1920&q=75
+Finished! 54 links found. 53 excluded. 0 broken.
+
+Getting links from: https://mastra.ai/blog/ai-beats-lab
+├───OK─── https://mastra.ai/authors/abhi-aiyer
+Finished! 59 links found. 58 excluded. 0 broken.
+
+Getting links from: https://mastra.ai/blog/nextjs-integration-guide
+├─BROKEN─ https://mastra.ai/docs/frameworks/01-next-js (HTTP_308)
+├───OK─── https://mastra.ai/images/nextjs/MastraNextJSIntegration.png
+├─BROKEN─ https://mastra.ai/docs/frameworks/01-next-js (HTTP_308)
+├───OK─── https://mastra.ai/authors/ehindero-israel
+Finished! 60 links found. 56 excluded. 2 broken.
+
+Getting links from: https://mastra.ai/blog/mastra-mcp
+Finished! 87 links found. 87 excluded. 0 broken.
+
+Getting links from: https://mastra.ai/blog/repo-base
+├───OK─── https://mastra.ai/tags/rag
+├───OK─── https://mastra.ai/_next/image?url=%2Fimages%2Frepo-base.gif&w=1200&q=75
+Finished! 60 links found. 58 excluded. 0 broken.
+
+Getting links from: https://mastra.ai/blog/changelog-2025-03-04
+Finished! 58 links found. 58 excluded. 0 broken.
+
+Getting links from: https://mastra.ai/blog/whiteboard-to-excalidraw-converter
+├───OK─── https://mastra.ai/tags/deploying
+├───OK─── https://mastra.ai/_next/image?url=%2Fimages%2Fexcalidraw%2FImage2Excalidraw.gif&w=1200&q=75
+├───OK─── https://mastra.ai/images/excalidraw/WhiteboardingCollageCropped.png
+├───OK─── https://mastra.ai/images/excalidraw/ExcalidrawConverterWorkflow.png
+Finished! 72 links found. 68 excluded. 0 broken.
+
+Getting links from: https://mastra.ai/blog/giving-agents-a-voice
+├───OK─── https://mastra.ai/voice-providers.png
+├───OK─── https://mastra.ai/voice-demo.mp4
+├─BROKEN─ https://mastra.ai/docs/reference/voice/mastra-voice (HTTP_308)
+Finished! 57 links found. 54 excluded. 1 broken.
+
+Getting links from: https://mastra.ai/blog/pgvector-perf
+├───OK─── https://mastra.ai/images/pgvector-research/avgrecalloriginal.webp
+├───OK─── https://mastra.ai/images/pgvector-research/avgrecallafter.webp
+├───OK─── https://mastra.ai/images/pgvector-research/avgrecallflat.webp
+├───OK─── https://mastra.ai/images/pgvector-research/avgrecallhnsw.webp
+├───OK─── https://mastra.ai/images/pgvector-research/p95latencyoriginal.webp
+├───OK─── https://mastra.ai/images/pgvector-research/p95latencyafter.webp
+├───OK─── https://mastra.ai/images/pgvector-research/p95latencyflat.webp
+├───OK─── https://mastra.ai/images/pgvector-research/p95latencyhnsw.webp
+Finished! 70 links found. 62 excluded. 0 broken.
+
+Getting links from: https://mastra.ai/blog/beta-launch
+├─BROKEN─ https://mastra.ai/docs/agents/00-overview (HTTP_308)
+├─BROKEN─ https://mastra.ai/docs/guides/03-stock-agent (HTTP_308)
+├─BROKEN─ https://mastra.ai/docs/workflows/00-overview (HTTP_308)
+Finished! 83 links found. 80 excluded. 3 broken.
+
+Getting links from: https://mastra.ai/blog/solving-the-hardest-problem-in-cs
+Finished! 50 links found. 50 excluded. 0 broken.
+
+Getting links from: https://mastra.ai/blog/changelog-2025-02-10
+Finished! 55 links found. 55 excluded. 0 broken.
+
+Getting links from: https://mastra.ai/blog/agent-memory-guide
+├───OK─── https://mastra.ai/tags/memory
+├─BROKEN─ https://mastra.ai/docs/agents/01-agent-memory#basic-configuration (HTTP_308)
+├─BROKEN─ https://mastra.ai/docs/agents/01-agent-memory (HTTP_308)
+├─BROKEN─ https://mastra.ai/examples/memory (HTTP_308)
+├─BROKEN─ https://mastra.ai/docs/api/memory (HTTP_404)
+├─BROKEN─ https://mastra.ai/docs/agents/01-agent-memory#storage-options (HTTP_308)
+Finished! 64 links found. 58 excluded. 5 broken.
+
+Getting links from: https://mastra.ai/blog/changelog-2025-01-31
+Finished! 58 links found. 58 excluded. 0 broken.
+
+Getting links from: https://mastra.ai/blog/ai-ops
+├───OK─── https://mastra.ai/tags/observability
+├───OK─── https://mastra.ai/tags/tracing
+Finished! 61 links found. 59 excluded. 0 broken.
+
+Getting links from: https://mastra.ai/blog/api-endpoints
+Finished! 52 links found. 52 excluded. 0 broken.
+
+Getting links from: https://mastra.ai/blog/changelog-2025-01-24
+├───OK─── https://mastra.ai/mastra-dev-evals.png
+├───OK─── https://mastra.ai/mastra-hierarchical-memory.png
+Finished! 72 links found. 70 excluded. 0 broken.
+
+Getting links from: https://mastra.ai/blog/introducing-mastra-evals
+├───OK─── https://mastra.ai/tags/anouncements
+├───OK─── https://mastra.ai/tags/evals
+Finished! 63 links found. 61 excluded. 0 broken.
+
+Getting links from: https://mastra.ai/blog/tts-support
+Finished! 59 links found. 59 excluded. 0 broken.
+
+Getting links from: https://mastra.ai/blog/changelog-2025-01-17
+Finished! 65 links found. 65 excluded. 0 broken.
+
+Getting links from: https://mastra.ai/blog/build-rag-workflow
+├───OK─── https://mastra.ai/rag-image.png
+Finished! 58 links found. 57 excluded. 0 broken.
+
+Getting links from: https://mastra.ai/blog/building-workflows
+├───OK─── https://mastra.ai/tags/workflows
+├─BROKEN─ https://mastra.ai/docs/workflows/00-overview#sequential-execution (HTTP_308)
+├─BROKEN─ https://mastra.ai/docs/workflows/00-overview#parallel-execution (HTTP_308)
+├─BROKEN─ https://mastra.ai/examples/workflows/subscribed-steps (HTTP_404)
+├─BROKEN─ https://mastra.ai/docs/workflows/00-overview#branching-and-merging-paths (HTTP_308)
+├───OK─── https://mastra.ai/suspend.png
+├───OK─── https://mastra.ai/resume.png
+├───OK─── https://mastra.ai/orchestrator-workflows.png
+Finished! 68 links found. 60 excluded. 4 broken.
+
+Getting links from: https://mastra.ai/blog/changelog-2025-01-10
+├───OK─── https://mastra.ai/2025-01-10-examples.gif
+Finished! 57 links found. 56 excluded. 0 broken.
+
+Getting links from: https://mastra.ai/blog/the-next-million-ai-developers
+├─BROKEN─ https://mastra.ai/docs/ (HTTP_308)
+Finished! 56 links found. 55 excluded. 1 broken.
+
+Getting links from: https://mastra.ai/blog/ai-engineering
+├───OK─── https://mastra.ai/knowledge-and-rag.jpg
+├───OK─── https://mastra.ai/tracing.jpg
+Finished! 63 links found. 61 excluded. 0 broken.
+
+Getting links from: https://mastra.ai/tags/agents
+Finished! 52 links found. 52 excluded. 0 broken.
+
+Getting links from: https://mastra.ai/tags/examples
+Finished! 52 links found. 52 excluded. 0 broken.
+
+Getting links from: https://mastra.ai/authors/sam-bhagwat
+├───OK─── https://mastra.ai/_next/image?url=%2Fauthors%2Fcalcsam.jpeg&w=256&q=75
+Finished! 65 links found. 64 excluded. 0 broken.
+
+Getting links from: https://mastra.ai/tags/tools
+Finished! 49 links found. 49 excluded. 0 broken.
+
+Getting links from: https://mastra.ai/authors/shane-thomas
+├───OK─── https://mastra.ai/_next/image?url=%2Fauthors%2Fshane.jpeg&w=256&q=75
+Finished! 56 links found. 55 excluded. 0 broken.
+
+Getting links from: https://mastra.ai/tags/changelog
+Finished! 56 links found. 56 excluded. 0 broken.
+
+Getting links from: https://mastra.ai/tags/storage
+Finished! 47 links found. 47 excluded. 0 broken.
+
+Getting links from: https://mastra.ai/authors/nik-aiyer
+├───OK─── https://mastra.ai/_next/image?url=%2Fauthors%2Fnik.jpeg&w=256&q=75
+Finished! 53 links found. 52 excluded. 0 broken.
+
+Getting links from: https://mastra.ai/tags/announcements
+Finished! 57 links found. 57 excluded. 0 broken.
+
+Getting links from: https://mastra.ai/tags/voice
+Finished! 49 links found. 49 excluded. 0 broken.
+
+Getting links from: https://mastra.ai/authors/yujohn-nattrass
+├───OK─── https://mastra.ai/_next/image?url=%2Fauthors%2Fyujohn.jpeg&w=256&q=75
+Finished! 50 links found. 49 excluded. 0 broken.
+
+Getting links from: https://mastra.ai/tags/integrations
+Finished! 48 links found. 48 excluded. 0 broken.
+
+Getting links from: https://mastra.ai/tags/deployments
+Finished! 47 links found. 47 excluded. 0 broken.
+
+Getting links from: https://mastra.ai/authors/ward-peeters
+├───OK─── https://mastra.ai/_next/image?url=%2Fauthors%2Fward.jpeg&w=256&q=75
+Finished! 50 links found. 49 excluded. 0 broken.
+
+Getting links from: https://mastra.ai/authors/tyler-barnes
+├───OK─── https://mastra.ai/_next/image?url=%2Fauthors%2Ftyler.png&w=256&q=75
+Finished! 52 links found. 51 excluded. 0 broken.
+
+Getting links from: https://mastra.ai/authors/abhi-aiyer
+├───OK─── https://mastra.ai/_next/image?url=%2Fauthors%2Fabhi.jpeg&w=256&q=75
+Finished! 52 links found. 51 excluded. 0 broken.
+
+Getting links from: https://mastra.ai/authors/ehindero-israel
+├───OK─── https://mastra.ai/_next/image?url=%2Fauthors%2Fdero.jpeg&w=256&q=75
+Finished! 50 links found. 49 excluded. 0 broken.
+
+Getting links from: https://mastra.ai/tags/rag
+Finished! 49 links found. 49 excluded. 0 broken.
+
+Getting links from: https://mastra.ai/tags/deploying
+Finished! 48 links found. 48 excluded. 0 broken.
+
+Getting links from: https://mastra.ai/tags/memory
+Finished! 47 links found. 47 excluded. 0 broken.
+
+Getting links from: https://mastra.ai/tags/observability
+Finished! 47 links found. 47 excluded. 0 broken.
+
+Getting links from: https://mastra.ai/tags/tracing
+Finished! 47 links found. 47 excluded. 0 broken.
+
+Getting links from: https://mastra.ai/tags/anouncements
+Finished! 47 links found. 47 excluded. 0 broken.
+
+Getting links from: https://mastra.ai/tags/evals
+Finished! 47 links found. 47 excluded. 0 broken.
+
+Getting links from: https://mastra.ai/tags/workflows
+Finished! 47 links found. 47 excluded. 0 broken.
+
+Finished! 100540 links found. 100092 excluded. 72 broken.
+Elapsed time: 1 minute, 47 seconds
