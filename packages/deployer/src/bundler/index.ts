@@ -209,6 +209,10 @@ export abstract class Bundler extends MastraBundler {
     this.logger.info('Copying public files');
     await this.copyPublic(dirname(mastraEntryFile), outputDirectory);
     this.logger.info('Done copying public files');
+
+    this.logger.info('Installing dependencies');
+    await this.installDependencies(outputDirectory);
+    this.logger.info('Done installing dependencies');
   }
 
   /**
