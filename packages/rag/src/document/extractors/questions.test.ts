@@ -38,4 +38,60 @@ describe('QuestionsAnsweredExtractor', () => {
     expect(typeof result.questionsThisExcerptCanAnswer).toBe('string');
     expect(result.questionsThisExcerptCanAnswer.length).toBeGreaterThan(0);
   });
+  it('handles very long input', async () => {
+    const extractor = new QuestionsAnsweredExtractor({ llm: model });
+    const longText = 'A'.repeat(1000);
+    const node = new TextNode({ text: longText });
+    const result = await extractor.extractQuestionsFromNode(node);
+    expect(result).toHaveProperty('questionsThisExcerptCanAnswer');
+  });
+
+  it('handles whitespace only input', async () => {
+    const extractor = new QuestionsAnsweredExtractor({ llm: model });
+    const node = new TextNode({ text: '    ' });
+    const result = await extractor.extractQuestionsFromNode(node);
+    expect(result.questionsThisExcerptCanAnswer).toBe('');
+  });
+
+  it('handles special characters and emojis', async () => {
+    const extractor = new QuestionsAnsweredExtractor({ llm: model });
+    const node = new TextNode({ text: '🚀✨🔥' });
+    const result = await extractor.extractQuestionsFromNode(node);
+    expect(result).toHaveProperty('questionsThisExcerptCanAnswer');
+  });
+
+  it('handles numbers only', async () => {
+    const extractor = new QuestionsAnsweredExtractor({ llm: model });
+    const node = new TextNode({ text: '1234567890' });
+    const result = await extractor.extractQuestionsFromNode(node);
+    expect(result).toHaveProperty('questionsThisExcerptCanAnswer');
+  });
+
+  it('handles HTML tags', async () => {
+    const extractor = new QuestionsAnsweredExtractor({ llm: model });
+    const node = new TextNode({ text: '<h1>Test</h1>' });
+    const result = await extractor.extractQuestionsFromNode(node);
+    expect(result).toHaveProperty('questionsThisExcerptCanAnswer');
+  });
+
+  it('handles non-English text', async () => {
+    const extractor = new QuestionsAnsweredExtractor({ llm: model });
+    const node = new TextNode({ text: '这是一个测试文档。' });
+    const result = await extractor.extractQuestionsFromNode(node);
+    expect(result).toHaveProperty('questionsThisExcerptCanAnswer');
+  });
+
+  it('handles duplicate/repeated text', async () => {
+    const extractor = new QuestionsAnsweredExtractor({ llm: model });
+    const node = new TextNode({ text: 'repeat repeat repeat' });
+    const result = await extractor.extractQuestionsFromNode(node);
+    expect(result).toHaveProperty('questionsThisExcerptCanAnswer');
+  });
+
+  it('handles only punctuation', async () => {
+    const extractor = new QuestionsAnsweredExtractor({ llm: model });
+    const node = new TextNode({ text: '!!!???...' });
+    const result = await extractor.extractQuestionsFromNode(node);
+    expect(result).toHaveProperty('questionsThisExcerptCanAnswer');
+  });
 });
