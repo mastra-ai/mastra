@@ -134,7 +134,11 @@ export const createVectorQueryTool = ({
         };
       } catch (err) {
         if (logger) {
-          logger.error('Unexpected error in VectorQueryTool execute', { error: err });
+          logger.error('Unexpected error in VectorQueryTool execute', {
+            error: err,
+            errorMessage: err instanceof Error ? err.message : String(err),
+            errorStack: err instanceof Error ? err.stack : undefined,
+          });
         }
         return { relevantContext: [] };
       }
