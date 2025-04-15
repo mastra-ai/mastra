@@ -127,12 +127,14 @@ export class Memory extends MastraMemory {
       threadConfig: config,
     });
 
-    // Self-heal message ordering to ensure tool calls are directly before tool results
-    const reorderedMessages = reorderToolCallsAndResults(rawMessages);
+    // First sort messages by date
+    const orderedByDate = rawMessages.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+    // Then reorder tool calls to be directly before their results
+    const reorderedToolCalls = reorderToolCallsAndResults(orderedByDate);
 
     // Parse and convert messages
-    const messages = this.parseMessages(reorderedMessages);
-    const uiMessages = this.convertToUIMessages(reorderedMessages);
+    const messages = this.parseMessages(reorderedToolCalls);
+    const uiMessages = this.convertToUIMessages(reorderedToolCalls);
 
     return { messages, uiMessages };
   }
