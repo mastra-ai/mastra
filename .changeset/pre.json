@@ -142,7 +142,8 @@
     "@mastra/voice-speechify": "0.1.12",
     "examples-mcp-registry-registry": "0.0.1",
     "@mastra/mcp-registry-registry": "0.0.1-alpha.0",
-    "examples-client-side-tools": "0.0.0"
+    "examples-client-side-tools": "0.0.0",
+    "weather-agent-template": "1.0.0"
   },
   "changesets": [
     "breezy-ducks-exist",
@@ -158,6 +159,7 @@
     "neat-yaks-call",
     "pink-memes-tie",
     "plain-bananas-fry",
+    "purple-yaks-attend",
     "rude-dingos-taste",
     "rude-ducks-attack",
     "shaggy-readers-begin",
@@ -165,6 +167,7 @@
     "silver-cases-make",
     "silver-pens-smile",
     "slow-heads-open",
+    "social-geckos-sort",
     "thick-eggs-nail",
     "three-phones-attack",
     "tidy-moose-turn",
