@@ -238,10 +238,11 @@ export class Agent<
 
       const newMessages = ensureAllMessagesAreCoreMessages(userMessages);
 
-      const messages = newMessages.map(u => {
+      const now = Date.now();
+      const messages = newMessages.map((u, index) => {
         return {
           id: this.getMemory()?.generateId()!,
-          createdAt: new Date(),
+          createdAt: new Date(now + index),
           threadId: threadId,
           ...u,
           content: u.content as UserContent | AssistantContent,
@@ -316,6 +317,7 @@ export class Agent<
     if (!response.messages) return [];
     const messagesArray = Array.isArray(response.messages) ? response.messages : [response.messages];
 
+    const now = Date.now();
     return this.sanitizeResponseMessages(messagesArray).map((message: CoreMessage | CoreAssistantMessage, index) => {
       const messageId = randomUUID();
       let toolCallIds: string[] | undefined;
@@ -360,7 +362,7 @@ export class Agent<
         resourceId: resourceId,
         role: message.role as any,
         content: message.content as any,
-        createdAt: new Date(Date.now() + index), // use Date.now() + index to make sure every message is atleast one millisecond apart
+        createdAt: new Date(now + index), // use Date.now() + index to make sure every message is atleast one millisecond apart
         toolCallIds: toolCallIds?.length ? toolCallIds : undefined,
         toolCallArgs: toolCallArgs?.length ? toolCallArgs : undefined,
         toolNames: toolNames?.length ? toolNames : undefined,
@@ -803,11 +805,12 @@ export class Agent<
           try {
             const userMessage = this.getMostRecentUserMessage(messages);
             const newMessages = userMessage ? [userMessage] : messages;
+            const now = Date.now();
             const threadMessages = this.sanitizeResponseMessages(ensureAllMessagesAreCoreMessages(newMessages)).map(
-              u => {
+              (u, index) => {
                 return {
                   id: this.getMemory()?.generateId()!,
-                  createdAt: new Date(),
+                  createdAt: new Date(now + index),
                   threadId: thread.id,
                   resourceId: resourceId,
                   ...u,

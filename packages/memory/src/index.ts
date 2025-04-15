@@ -7,6 +7,7 @@ import { embedMany } from 'ai';
 
 import xxhash from 'xxhash-wasm';
 import { updateWorkingMemoryTool } from './tools/working-memory';
+import { reorderToolCallsAndResults } from './utils';
 
 // Average characters per token based on OpenAI's tokenization
 const CHARS_PER_TOKEN = 4;
@@ -126,9 +127,14 @@ export class Memory extends MastraMemory {
       threadConfig: config,
     });
 
+    // First sort messages by date
+    const orderedByDate = rawMessages.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+    // Then reorder tool calls to be directly before their results
+    const reorderedToolCalls = reorderToolCallsAndResults(orderedByDate);
+
     // Parse and convert messages
-    const messages = this.parseMessages(rawMessages);
-    const uiMessages = this.convertToUIMessages(rawMessages);
+    const messages = this.parseMessages(reorderedToolCalls);
+    const uiMessages = this.convertToUIMessages(reorderedToolCalls);
 
     return { messages, uiMessages };
   }

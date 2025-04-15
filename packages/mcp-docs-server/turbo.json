@@ -5,7 +5,7 @@
     "prepare-docs": {
       "cache": false,
       "outputs": [".docs/**"],
-      "dependsOn": ["build:cli"]
+      "dependsOn": ["build:cli", "^build"]
     },
     "build": {
       "dependsOn": ["build:cli", "prepare-docs", "^build"]
