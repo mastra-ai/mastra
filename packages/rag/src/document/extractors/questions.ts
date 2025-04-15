@@ -1,60 +1,117 @@
+import { PromptTemplate, defaultQuestionExtractPrompt } from '@llamaindex/core/prompts';
+import type { QuestionExtractPrompt } from '@llamaindex/core/prompts';
+import { TextNode } from '@llamaindex/core/schema';
+import type { BaseNode } from '@llamaindex/core/schema';
 import type { MastraLanguageModel } from '@mastra/core/agent';
+import { BaseExtractor, STRIP_REGEX } from './base';
 
-export interface ChunkLike {
-  text: string;
-  metadata?: Record<string, any>;
-}
-
-export interface QuestionsExtractOptions {
+type QuestionAnswerExtractArgs = {
   llm: MastraLanguageModel;
-  promptTemplate?: string; // must include {context}
-}
+  questions?: number;
+  promptTemplate?: QuestionExtractPrompt['template'];
+  embeddingOnly?: boolean;
+};
 
-export interface QuestionsResult {
-  questions: string[];
-  chunkIndex: number;
-}
+type ExtractQuestion = {
+  questionsThisExcerptCanAnswer: string;
+};
 
-export class QuestionsAnsweredExtractor {
-  private llm: MastraLanguageModel;
-  private promptTemplate: string;
+/**
+ * Extract questions from a list of nodes.
+ */
+export class QuestionsAnsweredExtractor extends BaseExtractor {
+  /**
+   * MastraLanguageModel instance.
+   * @type {MastraLanguageModel}
+   */
+  llm: MastraLanguageModel;
 
-  constructor(options: QuestionsExtractOptions) {
-    this.llm = options.llm;
-    this.promptTemplate =
-      options.promptTemplate ?? 'List all questions answered by the following content as a numbered list:\n{context}';
+  /**
+   * Number of questions to generate.
+   * @type {number}
+   * @default 5
+   */
+  questions: number = 5;
+
+  /**
+   * The prompt template to use for the question extractor.
+   * @type {string}
+   */
+  promptTemplate: QuestionExtractPrompt;
+
+  /**
+   * Wheter to use metadata for embeddings only
+   * @type {boolean}
+   * @default false
+   */
+  embeddingOnly: boolean = false;
+
+  /**
+   * Constructor for the QuestionsAnsweredExtractor class.
+   * @param {MastraLanguageModel} llm MastraLanguageModel instance.
+   * @param {number} questions Number of questions to generate.
+   * @param {QuestionExtractPrompt} promptTemplate The prompt template to use for the question extractor.
+   * @param {boolean} embeddingOnly Wheter to use metadata for embeddings only.
+   */
+  constructor(options: QuestionAnswerExtractArgs) {
+    if (options?.questions && options.questions < 1) throw new Error('Questions must be greater than 0');
+
+    super();
+
+    this.llm = options?.llm;
+    this.questions = options?.questions ?? 5;
+    this.promptTemplate = options?.promptTemplate
+      ? new PromptTemplate({
+          templateVars: ['numQuestions', 'context'],
+          template: options.promptTemplate,
+        }).partialFormat({
+          numQuestions: '5',
+        })
+      : defaultQuestionExtractPrompt;
+    this.embeddingOnly = options?.embeddingOnly ?? false;
   }
 
-  async run(chunks: ChunkLike[]): Promise<QuestionsResult[]> {
-    const results: QuestionsResult[] = [];
-    for (let i = 0; i < chunks.length; ++i) {
-      const chunk = chunks[i];
-      if (!chunk?.text) continue;
-      const prompt = this.promptTemplate.replace('{context}', chunk.text);
-      const result = await this.llm.doGenerate({
-        inputFormat: 'messages',
-        mode: { type: 'regular' },
-        prompt: [
-          {
-            role: 'user',
-            content: [{ type: 'text', text: prompt }],
-          },
-        ],
-      });
-      let questions: string[] = [];
-      if (typeof result === 'string') {
-        questions = (result as string)
-          .split(/\n|\r/)
-          .map(q => q.replace(/^\d+\.?\s*/, '').trim())
-          .filter(Boolean);
-      } else if (result && typeof result === 'object' && 'text' in result && typeof (result as any).text === 'string') {
-        questions = (result as any).text
-          .split(/\n|\r/)
-          .map((q: string) => q.replace(/^\d+\.?\s*/, '').trim())
-          .filter(Boolean);
-      }
-      results.push({ questions, chunkIndex: i });
+  /**
+   * Extract answered questions from a node.
+   * @param {BaseNode} node Node to extract questions from.
+   * @returns {Promise<Array<ExtractQuestion> | Array<{}>>} Questions extracted from the node.
+   */
+  async extractQuestionsFromNode(node: BaseNode): Promise<ExtractQuestion | object> {
+    if (this.isTextNodeOnly && !(node instanceof TextNode)) {
+      return {};
     }
+
+    const contextStr = node.getContent(this.metadataMode);
+
+    const prompt = this.promptTemplate.format({
+      context: contextStr,
+      numQuestions: this.questions.toString(),
+    });
+
+    const questions = await this.llm.doGenerate({
+      inputFormat: 'messages',
+      mode: { type: 'regular' },
+      prompt: [
+        {
+          role: 'user',
+          content: [{ type: 'text', text: prompt }],
+        },
+      ],
+    });
+
+    return {
+      questionsThisExcerptCanAnswer: questions.text?.replace(STRIP_REGEX, '') ?? '',
+    };
+  }
+
+  /**
+   * Extract answered questions from a list of nodes.
+   * @param {BaseNode[]} nodes Nodes to extract questions from.
+   * @returns {Promise<Array<ExtractQuestion> | Array<{}>>} Questions extracted from the nodes.
+   */
+  async extract(nodes: BaseNode[]): Promise<Array<ExtractQuestion> | Array<object>> {
+    const results = await Promise.all(nodes.map(node => this.extractQuestionsFromNode(node)));
+
     return results;
   }
 }
