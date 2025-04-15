@@ -37,7 +37,11 @@ export abstract class Bundler extends MastraBundler {
     await copy(join(__dirname, 'templates', 'instrumentation-template.js'), instrumentationFile);
   }
 
-  async writePackageJson(outputDirectory: string, dependencies: Map<string, string>) {
+  async writePackageJson(
+    outputDirectory: string,
+    dependencies: Map<string, string>,
+    resolutions?: Record<string, string>,
+  ) {
     this.logger.debug(`Writing project's package.json`);
     await ensureDir(outputDirectory);
     const pkgPath = join(outputDirectory, 'package.json');
@@ -69,6 +73,7 @@ export abstract class Bundler extends MastraBundler {
           author: 'Mastra',
           license: 'ISC',
           dependencies: Object.fromEntries(dependenciesMap.entries()),
+          ...(Object.keys(resolutions ?? {}).length > 0 && { resolutions }),
         },
         null,
         2,
@@ -174,13 +179,15 @@ export abstract class Bundler extends MastraBundler {
       }
     }
 
+    let resolutions: Record<string, string> = {};
     if (workspaceDependencies.size > 0) {
-      await this.resolveAndPackWorkspaceDependencies(
+      const res = await this.resolveAndPackWorkspaceDependencies(
         workspaceMap,
         workspaceDependencies,
         outputDirectory,
         dependenciesToInstall,
       );
+      resolutions = res?.resolutions ?? {};
     }
 
     // temporary fix for mastra-memory and fastembed
@@ -191,7 +198,7 @@ export abstract class Bundler extends MastraBundler {
       dependenciesToInstall.set('fastembed', 'latest');
     }
 
-    await this.writePackageJson(join(outputDirectory, this.outputDir), dependenciesToInstall);
+    await this.writePackageJson(join(outputDirectory, this.outputDir), dependenciesToInstall, resolutions);
     await this.writeInstrumentationFile(join(outputDirectory, this.outputDir));
 
     this.logger.info('Bundling Mastra application');
@@ -228,10 +235,10 @@ export abstract class Bundler extends MastraBundler {
     initialDependencies: Set<string>,
     outputDirectory: string,
     dependenciesToInstall: Map<string, string>,
-  ): Promise<void> {
+  ): Promise<{ resolutions: Record<string, string> } | undefined> {
     const seen = new Set<string>();
     const queue: string[] = Array.from(initialDependencies);
-
+    const resolutions: Record<string, string> = {};
     // find all transitive workspace dependencies
     while (queue.length > 0) {
       const len = queue.length;
@@ -244,9 +251,21 @@ export abstract class Bundler extends MastraBundler {
         const dep = workspaceMap.get(pkgName);
         if (!dep) continue;
 
+        const root = findWorkspacesRoot();
+        if (!root) {
+          this.logger.error('Could not find workspace root');
+          return;
+        }
+        const depsService = new DepsService(root.location);
+        depsService.__setLogger(this.logger);
         const sanitizedName = pkgName.replace(/^@/, '').replace(/\//, '-');
-        const tgzPath = `file:./workspace-module/${sanitizedName}-${dep.version}.tgz`;
+
+        const tgzPath = depsService.getWorkspaceDependencyPath({
+          pkgName: sanitizedName,
+          version: dep.version!,
+        });
         dependenciesToInstall.set(pkgName, tgzPath);
+        resolutions[pkgName] = tgzPath;
         seen.add(pkgName);
 
         for (const [depName, _depVersion] of Object.entries(dep?.dependencies ?? {})) {
@@ -306,5 +325,7 @@ export abstract class Bundler extends MastraBundler {
 
       this.logger.info(`Successfully packaged ${seen.size} workspace dependencies`);
     }
+
+    return { resolutions };
   }
 }
