@@ -143,7 +143,8 @@
     "examples-mcp-registry-registry": "0.0.1",
     "@mastra/mcp-registry-registry": "0.0.1-alpha.0",
     "examples-client-side-tools": "0.0.0",
-    "weather-agent-template": "1.0.0"
+    "weather-agent-template": "1.0.0",
+    "examples-weather-agent-template": "1.0.0"
   },
   "changesets": [
     "brave-cycles-look",
@@ -158,6 +159,7 @@
     "hot-lamps-begin",
     "khaki-trams-kneel",
     "neat-yaks-call",
+    "new-clouds-shave",
     "pink-memes-tie",
     "plain-bananas-fry",
     "polite-mirrors-do",

@@ -1,5 +1,11 @@
 # @mastra/voice-openai
 
+## 0.1.14-alpha.6
+
+### Patch Changes
+
+- e3f5127: Voice overview docs rehaul
+
 ## 0.1.14-alpha.5
 
 ### Patch Changes
