@@ -22,7 +22,7 @@ export async function getCreateVersionTag(): Promise<string | undefined> {
     const tag = tagLine ? tagLine.split(':')[0].trim() : 'latest';
 
     return tag;
-  } catch (err) {
+  } catch {
     console.error('We could not resolve the create-mastra version tag, falling back to "latest"');
   }
 
