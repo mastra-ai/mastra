@@ -79,9 +79,13 @@ export class QuestionsAnsweredExtractor extends BaseExtractor {
    * @param {BaseNode} node Node to extract questions from.
    * @returns {Promise<Array<ExtractQuestion> | Array<{}>>} Questions extracted from the node.
    */
-  async extractQuestionsFromNode(node: BaseNode): Promise<ExtractQuestion | object> {
+  async extractQuestionsFromNode(node: BaseNode): Promise<ExtractQuestion> {
+    const text = node.getContent(this.metadataMode);
+    if (!text || text.trim() === '') {
+      return { questionsThisExcerptCanAnswer: '' };
+    }
     if (this.isTextNodeOnly && !(node instanceof TextNode)) {
-      return {};
+      return { questionsThisExcerptCanAnswer: '' };
     }
 
     const contextStr = node.getContent(this.metadataMode);

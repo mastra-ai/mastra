@@ -90,20 +90,39 @@ export class TitleExtractor extends BaseExtractor {
    * @returns {Promise<BaseNode<ExtractTitle>[]>} Titles extracted from the nodes.
    */
   async extract(nodes: BaseNode[]): Promise<Array<ExtractTitle>> {
-    const nodesToExtractTitle = this.filterNodes(nodes);
+    // Prepare output array in original node order
+    const results: ExtractTitle[] = new Array(nodes.length);
+    // Keep track of nodes with content to extract
+    const nodesToExtractTitle: BaseNode[] = [];
+    const nodeIndexes: number[] = [];
 
-    if (!nodesToExtractTitle.length) {
-      return [];
-    }
-
-    const nodesByDocument = this.separateNodesByDocument(nodesToExtractTitle);
-    const titlesByDocument = await this.extractTitles(nodesByDocument);
-
-    return nodesToExtractTitle.map(node => {
-      return {
-        documentTitle: titlesByDocument[node.sourceNode?.nodeId ?? '']!,
-      };
+    nodes.forEach((node, idx) => {
+      const text = node.getContent(this.metadataMode);
+      if (!text || text.trim() === '') {
+        results[idx] = { documentTitle: '' };
+      } else {
+        nodesToExtractTitle.push(node);
+        nodeIndexes.push(idx);
+      }
     });
+
+    if (nodesToExtractTitle.length) {
+      const filteredNodes = this.filterNodes(nodesToExtractTitle);
+      if (filteredNodes.length) {
+        const nodesByDocument = this.separateNodesByDocument(filteredNodes);
+        const titlesByDocument = await this.extractTitles(nodesByDocument);
+        filteredNodes.forEach((node, i) => {
+          const nodeIndex = nodeIndexes[i];
+          const groupKey = node.sourceNode?.nodeId ?? node.id_;
+          if (typeof nodeIndex === 'number') {
+            results[nodeIndex] = {
+              documentTitle: titlesByDocument[groupKey] ?? '',
+            };
+          }
+        });
+      }
+    }
+    return results;
   }
 
   private filterNodes(nodes: BaseNode[]): BaseNode[] {
@@ -119,17 +138,9 @@ export class TitleExtractor extends BaseExtractor {
     const nodesByDocument: Record<string, BaseNode[]> = {};
 
     for (const node of nodes) {
-      const parentNode = node.sourceNode?.nodeId;
-
-      if (!parentNode) {
-        continue;
-      }
-
-      if (!nodesByDocument[parentNode]) {
-        nodesByDocument[parentNode] = [];
-      }
-
-      nodesByDocument[parentNode].push(node);
+      const groupKey = node.sourceNode?.nodeId ?? node.id_;
+      nodesByDocument[groupKey] = nodesByDocument[groupKey] || [];
+      nodesByDocument[groupKey].push(node);
     }
 
     return nodesByDocument;

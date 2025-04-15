@@ -73,6 +73,10 @@ export class KeywordExtractor extends BaseExtractor {
    * Adds error handling for malformed/empty LLM output.
    */
   async extractKeywordsFromNodes(node: BaseNode): Promise<ExtractKeyword> {
+    const text = node.getContent(this.metadataMode);
+    if (!text || text.trim() === '') {
+      return { excerptKeywords: '' };
+    }
     if (this.isTextNodeOnly && !(node instanceof TextNode)) {
       return { excerptKeywords: '' };
     }

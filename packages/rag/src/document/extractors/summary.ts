@@ -74,6 +74,10 @@ export class SummaryExtractor extends BaseExtractor {
    * @returns {Promise<string>} Summary extracted from the node.
    */
   async generateNodeSummary(node: BaseNode): Promise<string> {
+    const text = node.getContent(this.metadataMode);
+    if (!text || text.trim() === '') {
+      return '';
+    }
     if (this.isTextNodeOnly && !(node instanceof TextNode)) {
       return '';
     }
