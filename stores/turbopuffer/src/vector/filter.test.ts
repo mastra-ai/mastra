@@ -1,5 +1,5 @@
 import type { VectorFilter } from '@mastra/core/vector/filter';
-import { Filters } from '@turbopuffer/turbopuffer';
+import type { Filters } from '@turbopuffer/turbopuffer';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { TurbopufferFilterTranslator } from './filter';
 

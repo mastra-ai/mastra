@@ -1,6 +1,6 @@
 {
   "name": "@mastra/pinecone",
-  "version": "0.2.5",
+  "version": "0.2.8-alpha.5",
   "description": "Pinecone vector store provider for Mastra",
   "type": "module",
   "main": "dist/index.js",
@@ -24,6 +24,7 @@
     "test": "vitest run",
     "lint": "eslint ."
   },
+  "license": "MIT",
   "dependencies": {
     "@mastra/core": "workspace:^",
     "@pinecone-database/pinecone": "^3.0.3"

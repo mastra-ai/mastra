@@ -82,6 +82,12 @@ export class Memory extends MastraMemory {
 
       await Promise.all(
         embeddings.map(async embedding => {
+          if (typeof this.vector === `undefined`) {
+            throw new Error(
+              `Tried to query vector index ${indexName} but this Memory instance doesn't have an attached vector db.`,
+            );
+          }
+
           vectorResults.push(
             ...(await this.vector.query({
               indexName,
@@ -219,11 +225,6 @@ export class Memory extends MastraMemory {
 
   async deleteThread(threadId: string): Promise<void> {
     await this.storage.__deleteThread({ threadId });
-
-    // TODO: Also clean up vector storage if it exists
-    // if (this.vector) {
-    //   await this.vector.deleteThread(threadId); ?? filter by thread attributes and delete all returned messages?
-    // }
   }
 
   private chunkText(text: string, size = 4096) {
@@ -268,6 +269,9 @@ export class Memory extends MastraMemory {
     if (cached) return cached;
     const chunks = this.chunkText(content);
 
+    if (typeof this.embedder === `undefined`) {
+      throw new Error(`Tried to embed message content but this Memory instance doesn't have an attached embedder.`);
+    }
     // for fastembed multiple initial calls to embed will fail if the model hasn't been downloaded yet.
     const isFastEmbed = this.embedder.provider === `fastembed`;
     if (isFastEmbed && this.firstEmbed instanceof Promise) {
@@ -320,6 +324,12 @@ export class Memory extends MastraMemory {
 
           if (typeof indexName === `undefined`) {
             indexName = this.createEmbeddingIndex(dimension).then(result => result.indexName);
+          }
+
+          if (typeof this.vector === `undefined`) {
+            throw new Error(
+              `Tried to upsert embeddings to index ${indexName} but this Memory instance doesn't have an attached vector db.`,
+            );
           }
 
           await this.vector.upsert({

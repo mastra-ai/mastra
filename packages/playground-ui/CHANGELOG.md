@@ -1,5 +1,120 @@
 # @mastra/playground-ui
 
+## 4.0.4-alpha.6
+
+### Patch Changes
+
+- d72318f: Refactored the evals table to use the DS tables
+- Updated dependencies [d72318f]
+  - @mastra/core@0.8.3-alpha.5
+  - @mastra/client-js@0.1.17-alpha.5
+
+## 4.0.4-alpha.5
+
+### Patch Changes
+
+- ed52379: enum-type trigger schemas could not be submitted in the Playground UI has been resolved.
+
+## 4.0.4-alpha.4
+
+### Patch Changes
+
+- 1ebbfbf: Ability to toggle stream vs generate in playground
+- 9b47dfa: Fix dynamic form for suspended workflow in playground ui
+- Updated dependencies [7f1b291]
+  - @mastra/core@0.8.3-alpha.4
+  - @mastra/client-js@0.1.17-alpha.4
+
+## 4.0.4-alpha.3
+
+### Patch Changes
+
+- Updated dependencies [10a8caf]
+  - @mastra/core@0.8.3-alpha.3
+  - @mastra/client-js@0.1.17-alpha.3
+
+## 4.0.4-alpha.2
+
+### Patch Changes
+
+- Updated dependencies [0bcc862]
+  - @mastra/core@0.8.3-alpha.2
+  - @mastra/client-js@0.1.17-alpha.2
+
+## 4.0.4-alpha.1
+
+### Patch Changes
+
+- f5451a4: bundle tokens as CJS in playground UI for tailwind usage
+- 37bb612: Add Elastic-2.0 licensing for packages
+- bc4acb3: updated traces to not be wrapped in traces object
+- c8fe5f0: change the header of all pages with the one from the DS
+- Updated dependencies [32e7b71]
+- Updated dependencies [37bb612]
+- Updated dependencies [bc4acb3]
+  - @mastra/core@0.8.3-alpha.1
+  - @mastra/client-js@0.1.17-alpha.1
+
+## 4.0.4-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [359b089]
+  - @mastra/core@0.8.3-alpha.0
+  - @mastra/client-js@0.1.17-alpha.0
+
+## 4.0.3
+
+### Patch Changes
+
+- d3c372c: Show status UI of steps on playground workflow when workflow has no triggerSchema
+  Show number of steps on workflows table
+- Updated dependencies [a06aadc]
+  - @mastra/core@0.8.2
+  - @mastra/client-js@0.1.16
+
+## 4.0.3-alpha.0
+
+### Patch Changes
+
+- d3c372c: Show status UI of steps on playground workflow when workflow has no triggerSchema
+  Show number of steps on workflows table
+- Updated dependencies [a06aadc]
+  - @mastra/core@0.8.2-alpha.0
+  - @mastra/client-js@0.1.16-alpha.0
+
+## 4.0.2
+
+### Patch Changes
+
+- 99e2998: Set default max steps to 5
+- Updated dependencies [99e2998]
+- Updated dependencies [8fdb414]
+  - @mastra/core@0.8.1
+  - @mastra/client-js@0.1.15
+
+## 4.0.2-alpha.0
+
+### Patch Changes
+
+- 99e2998: Set default max steps to 5
+- Updated dependencies [99e2998]
+- Updated dependencies [8fdb414]
+  - @mastra/core@0.8.1-alpha.0
+  - @mastra/client-js@0.1.15-alpha.0
+
+## 4.0.1
+
+### Patch Changes
+
+- 87b96d7: set playground agent maxSteps default to 3
+
+## 4.0.1-alpha.0
+
+### Patch Changes
+
+- 87b96d7: set playground agent maxSteps default to 3
+
 ## 4.0.0
 
 ### Patch Changes

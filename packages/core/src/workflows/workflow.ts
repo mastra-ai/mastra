@@ -6,6 +6,7 @@ import type { MastraPrimitives } from '../action';
 import type { Agent } from '../agent';
 import { MastraBase } from '../base';
 
+import { Container } from '../di/index';
 import type { Mastra } from '../mastra';
 import { Step } from './step';
 import type {
@@ -907,11 +908,10 @@ export class Workflow<
   createRun({
     runId,
     events,
-  }: { runId?: string; events?: Record<string, { schema: z.ZodObject<any> }> } = {}): WorkflowResultReturn<
-    TResultSchema,
-    TTriggerSchema,
-    TSteps
-  > {
+  }: {
+    runId?: string;
+    events?: Record<string, { schema: z.ZodObject<any> }>;
+  } = {}): WorkflowResultReturn<TResultSchema, TTriggerSchema, TSteps> {
     const run = new WorkflowInstance<TSteps, TTriggerSchema, TResultSchema>({
       logger: this.logger,
       name: this.name,
@@ -1175,20 +1175,22 @@ export class Workflow<
     runId,
     stepId,
     context: resumeContext,
+    container = new Container(),
   }: {
     runId: string;
     stepId: string;
     context?: Record<string, any>;
+    container: Container;
   }) {
     this.logger.warn(`Please use 'resume' on the 'createRun' call instead, resume is deprecated`);
 
     const activeRun = this.#runs.get(runId);
     if (activeRun) {
-      return activeRun.resume({ stepId, context: resumeContext });
+      return activeRun.resume({ stepId, context: resumeContext, container });
     }
 
     const run = this.createRun({ runId });
-    return run.resume({ stepId, context: resumeContext });
+    return run.resume({ stepId, context: resumeContext, container });
   }
 
   watch(
@@ -1214,7 +1216,12 @@ export class Workflow<
       throw new Error(`Event ${eventName} not found`);
     }
 
-    const results = await this.resume({ runId, stepId: `__${eventName}_event`, context: { resumedEvent: data } });
+    const results = await this.resume({
+      runId,
+      stepId: `__${eventName}_event`,
+      context: { resumedEvent: data },
+      container: new Container(),
+    });
     return results;
   }
 
