@@ -1,5 +1,5 @@
 import bcrypt from 'bcrypt';
 
-export const comparePassword = async (plainTextPassword: string, password: string, hash: string) => {
+export const comparePassword = async (plainTextPassword, password, hash) => {
   return plainTextPassword === (await bcrypt.compare(password, hash));
 };

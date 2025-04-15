@@ -20,8 +20,8 @@ export const toolUsingNativeBindings = createTool({
 export const toolWithNativeBindingPackageDep = createTool({
   id: 'compare-password',
   description: 'A tool that compares a password',
-  execute: async (context: { plainTextPassword: string; password: string; hash: string }) => {
-    const password = await comparePassword(context.plainTextPassword, context.password, 10);
+  execute: async context => {
+    const password = await comparePassword(`password`, `password`, 10);
     return password;
   },
 });
