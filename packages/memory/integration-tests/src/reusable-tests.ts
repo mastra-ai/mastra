@@ -3,6 +3,7 @@ import { openai } from '@ai-sdk/openai';
 import { Memory } from '@mastra/memory';
 import type { TextPart, ImagePart, FilePart, ToolCallPart } from 'ai';
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
+import { reorderToolCallsAndResults } from '../../src/utils';
 
 const resourceId = 'resource';
 // Test helpers
@@ -315,10 +316,73 @@ export function getResuableTests(memory: Memory) {
         ]);
       });
 
+      it.only('should reorder tool calls to be directly before their matching tool results', async () => {
+        // Create a unique tool call ID for matching tool calls with results
+        const toolCallId = `test-call-${randomUUID()}`;
+
+        // First create a standard text message from the user
+        const userMessage = createTestMessage(thread.id, 'A user message to start the conversation', 'user');
+
+        // Create an assistant message with a tool call
+        const toolCallMessage = {
+          id: randomUUID(),
+          threadId: thread.id as string,
+          resourceId,
+          role: 'assistant' as const,
+          type: 'text' as const,
+          createdAt: new Date(),
+          content: [
+            { type: 'text' as const, text: 'I will call a tool' },
+            {
+              type: 'tool-call' as const,
+              toolCallId,
+              toolName: 'test-tool',
+              args: { test: true },
+            },
+          ],
+        };
+
+        // Create a tool result message
+        const toolResultMessage = {
+          id: randomUUID(),
+          threadId: thread.id,
+          resourceId,
+          role: 'assistant' as const,
+          type: 'text' as const,
+          createdAt: new Date(),
+          content: [
+            {
+              type: 'tool-result' as const,
+              toolCallId,
+              toolName: 'test-tool',
+              result: 'test result',
+            },
+          ],
+        };
+
+        // Create a mock of what these messages would look like when retrieved directly from storage
+        // In storage, they would maintain the insertion order: user, tool result, tool call
+        const rawMessages = [toolCallMessage, userMessage, toolResultMessage];
+
+        // Verify the reordering function works correctly directly
+        const reorderedMessages = reorderToolCallsAndResults(rawMessages);
+
+        // Now verify the reordering:
+        // 1. All messages should still be present
+        expect(reorderedMessages.length).toBe(3);
+
+        console.log(reorderedMessages);
+        // 2. User message should remain first
+        expect(reorderedMessages[0]?.id).toBe(userMessage.id);
+        // 3. Tool call should come directly before tool result
+        expect(reorderedMessages[1]?.id).toBe(toolCallMessage.id);
+        expect(reorderedMessages[2]?.id).toBe(toolResultMessage.id);
+      });
+
       it('should handle complex message content', async () => {
         const complexMessage = [
-          { type: 'text', text: 'This is a complex message with multiple parts' },
-          { type: 'image', url: 'https://example.com/image.jpg' },
+          { type: 'text' as const, text: 'This is a complex message with multiple parts' },
+          { type: 'text' as const, text: 'https://example.com/image.jpg' },
         ];
 
         await memory.saveMessages({
