@@ -238,15 +238,15 @@ export class MastraClient extends BaseResource {
    * @param options - Optional evaluation settings
    * @returns Promise containing evaluation result
    */
-  public executeEvaluator(
-    evaluatorId: string,
-    input: string,
-    output: string,
-    options?: Record<string, any>,
-  ): Promise<EvaluationResult> {
-    return this.request(`/api/evaluators/${evaluatorId}/execute`, {
+  public executeEvaluator(params: {
+    evaluatorId: string;
+    input: string;
+    output: string;
+    options?: Record<string, any>;
+  }): Promise<EvaluationResult> {
+    return this.request(`/api/evaluators/${params.evaluatorId}/execute`, {
       method: 'POST',
-      body: JSON.stringify({ input, output, options }),
+      body: params,
     });
   }
 }

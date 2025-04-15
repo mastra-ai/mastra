@@ -19,19 +19,19 @@ function Evaluator() {
   }
 
   return (
-    <main className="relative flex flex-1 w-full h-full">
-      <ScrollArea className="min-w-[325px] grow h-full">
-        <div className="min-w-[325px] grow">
-          <EvaluatorOverview evaluator={evaluator} id={evaluatorId!} />
-        </div>
+    <main className="relative flex justify-between w-full h-full">
+      <ScrollArea className="w-2/3 h-full">
+        <EvaluatorOverview evaluator={evaluator} id={evaluatorId!} />
       </ScrollArea>
       <MastraResizablePanel
         defaultWidth={20}
         minimumWidth={20}
         maximumWidth={60}
-        className="flex flex-col min-w-[325px] right-0 top-0 h-full z-20 bg-[#121212] [&>div:first-child]:-left-[1px] [&>div:first-child]:-right-[1px] [&>div:first-child]:w-[1px] [&>div:first-child]:bg-[#424242] [&>div:first-child]:hover:w-[2px] [&>div:first-child]:active:w-[2px]"
+        className="flex flex-col grow right-0 top-0 h-full z-20 bg-[#121212] [&>div:first-child]:-left-[1px] [&>div:first-child]:-right-[1px] [&>div:first-child]:w-[1px] [&>div:first-child]:bg-[#424242] [&>div:first-child]:hover:w-[2px] [&>div:first-child]:active:w-[2px]"
       >
-        <EvaluatorSidebar evaluator={evaluator} />
+        <ScrollArea className="w-full h-full">
+          <EvaluatorSidebar evaluator={evaluator} />
+        </ScrollArea>
       </MastraResizablePanel>
     </main>
   );
