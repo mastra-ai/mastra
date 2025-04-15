@@ -26,7 +26,7 @@
     "build": "tsup src/index.ts --format esm,cjs --experimental-dts --clean --treeshake=smallest --splitting",
     "build:watch": "pnpm build --watch"
   },
-  "license": "Elastic-2.0",
+  "license": "MIT",
   "dependencies": {
     "@mastra/core": "workspace:^",
     "@upstash/redis": "^1.34.5",
