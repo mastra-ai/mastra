@@ -67,12 +67,19 @@ export function reorderToolCallsAndResults(messages: MessageType[]): MessageType
       continue; // Tool call is already in the correct position
     }
 
-    // Check if tool call is at resultIndex - 2
-    const secondMessagePrev = results[resultIndex - 2];
-    if (secondMessagePrev && isToolCallWithId(secondMessagePrev, toolCallId)) {
-      // Move the tool call to be directly before the tool result
-      results.splice(resultIndex - 2, 1); // Remove from -2 position
-      results.splice(resultIndex - 1, 0, secondMessagePrev); // Insert at the new -1 position
+    // Find the tool call anywhere in the array
+    const toolCallIndex = results.findIndex(message => isToolCallWithId(message, toolCallId));
+
+    if (toolCallIndex !== -1 && toolCallIndex !== resultIndex - 1) {
+      // Store the tool call message
+      const toolCall = results[toolCallIndex];
+      if (!toolCall) continue;
+
+      // Remove the tool call from its current position
+      results.splice(toolCallIndex, 1);
+
+      // Insert right before the tool result
+      results.splice(resultIndex - 1, 0, toolCall);
     }
   }
 
