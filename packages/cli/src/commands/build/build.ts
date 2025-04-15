@@ -6,7 +6,17 @@ import { BuildBundler } from './BuildBundler';
 import { getDeployer } from '@mastra/deployer';
 import { logger } from '../../utils/logger';
 
-export async function build({ dir }: { dir?: string }) {
+export async function build({
+  dir,
+  excludePlayground,
+  excludeSwaggerUI,
+  excludeOpenAPI,
+}: {
+  dir?: string;
+  excludePlayground?: boolean;
+  excludeSwaggerUI?: boolean;
+  excludeOpenAPI?: boolean;
+}) {
   const mastraDir = dir ?? join(process.cwd(), 'src', 'mastra');
   const outputDirectory = join(process.cwd(), '.mastra');
 
@@ -19,7 +29,12 @@ export async function build({ dir }: { dir?: string }) {
     if (!platformDeployer) {
       const deployer = new BuildBundler();
       await deployer.prepare(outputDirectory);
-      await deployer.bundle(mastraEntryFile, outputDirectory);
+
+      await deployer.bundle(mastraEntryFile, outputDirectory, {
+        playground: excludePlayground ? false : true,
+        swaggerUI: excludeSwaggerUI ? false : true,
+        openAPI: excludeOpenAPI ? false : true,
+      });
       return;
     }
 

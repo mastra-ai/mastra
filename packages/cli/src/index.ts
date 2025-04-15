@@ -163,12 +163,20 @@ program
   .command('build')
   .description('Build your Mastra project')
   .option('-d, --dir <path>', 'Path to directory')
+  .option('--exclude-playground', 'Whether to exclude playground routes')
+  .option('--exclude-swaggerUI', 'Whether to exclude swagger UI routes')
+  .option('--exclude-openAPI', 'Whether to exclude Open API spec')
   .action(async args => {
     await analytics.trackCommandExecution({
       command: 'mastra build',
       args,
       execution: async () => {
-        await build({ dir: args.dir });
+        await build({
+          dir: args.dir,
+          excludePlayground: Boolean(args.excludePlayground),
+          excludeSwaggerUI: Boolean(args.excludeSwaggerUI),
+          excludeOpenAPI: Boolean(args.excludeOpenAPI),
+        });
       },
       origin,
     });

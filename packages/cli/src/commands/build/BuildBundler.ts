@@ -1,9 +1,9 @@
 import { FileService } from '@mastra/deployer/build';
 import { Bundler } from '@mastra/deployer/bundler';
-import * as fsExtra from 'fs-extra';
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import type { BundlerOptions } from '@mastra/core/bundler';
 
 export class BuildBundler extends Bundler {
   constructor() {
@@ -29,13 +29,21 @@ export class BuildBundler extends Bundler {
     await super.prepare(outputDirectory);
   }
 
-  bundle(entryFile: string, outputDirectory: string): Promise<void> {
-    return this._bundle(this.getEntry(), entryFile, outputDirectory);
+  bundle(entryFile: string, outputDirectory: string, options: BundlerOptions): Promise<void> {
+    return this._bundle(this.getEntry(options), entryFile, outputDirectory);
   }
 
-  protected getEntry(): string {
+  protected getEntry(options: BundlerOptions): string {
     const __filename = fileURLToPath(import.meta.url);
     const __dirname = dirname(__filename);
-    return readFileSync(join(__dirname, 'templates', 'dev.entry.js'), 'utf8');
+    const devEntryFile = readFileSync(join(__dirname, 'templates', 'dev.entry.js'), 'utf8');
+    return `
+    const options = {
+      playground: ${options.playground},
+      swaggerUI: ${options.swaggerUI},
+      openAPI: ${options.openAPI},
+    }
+    ${devEntryFile}
+    `;
   }
 }

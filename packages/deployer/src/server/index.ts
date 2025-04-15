@@ -74,7 +74,7 @@ type Variables = {
 
 export async function createHonoServer(
   mastra: Mastra,
-  options: { playground?: boolean; swaggerUI?: boolean; apiReqLogs?: boolean } = {},
+  options: { playground?: boolean; swaggerUI?: boolean; openAPI?: boolean; apiReqLogs?: boolean } = {},
 ) {
   // Create typed Hono app
   const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
@@ -2118,16 +2118,16 @@ export async function createHonoServer(
     deleteIndex,
   );
 
-  app.get(
-    '/openapi.json',
-    openAPISpecs(app, {
-      documentation: {
-        info: { title: 'Mastra API', version: '1.0.0', description: 'Mastra API' },
-      },
-    }),
-  );
-
-  app.get('/swagger-ui', swaggerUI({ url: '/openapi.json' }));
+  if (options?.openAPI) {
+    app.get(
+      '/openapi.json',
+      openAPISpecs(app, {
+        documentation: {
+          info: { title: 'Mastra API', version: '1.0.0', description: 'Mastra API' },
+        },
+      }),
+    );
+  }
 
   if (options?.swaggerUI) {
     app.get('/swagger-ui', swaggerUI({ url: '/openapi.json' }));
@@ -2185,6 +2185,7 @@ export async function createHonoServer(
       return c.newResponse(indexHtml, 200, { 'Content-Type': 'text/html' });
     }
 
+    // QUESTION: Should we still serve this now that we have custom routes?
     return c.newResponse(html, 200, { 'Content-Type': 'text/html' });
   });
 
@@ -2193,7 +2194,7 @@ export async function createHonoServer(
 
 export async function createNodeServer(
   mastra: Mastra,
-  options: { playground?: boolean; swaggerUI?: boolean; apiReqLogs?: boolean } = {},
+  options: { playground?: boolean; swaggerUI?: boolean; openAPI?: boolean; apiReqLogs?: boolean } = {},
 ) {
   const app = await createHonoServer(mastra, options);
   const serverOptions = mastra.getServer();
@@ -2208,7 +2209,9 @@ export async function createNodeServer(
     () => {
       const logger = mastra.getLogger();
       logger.info(`🦄 Mastra API running on port ${process.env.PORT || 4111}/api`);
-      logger.info(`📚 Open API documentation available at http://localhost:${process.env.PORT || 4111}/openapi.json`);
+      if (options?.openAPI) {
+        logger.info(`📚 Open API documentation available at http://localhost:${process.env.PORT || 4111}/openapi.json`);
+      }
       if (options?.swaggerUI) {
         logger.info(`🧪 Swagger UI available at http://localhost:${process.env.PORT || 4111}/swagger-ui`);
       }
