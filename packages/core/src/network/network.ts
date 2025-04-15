@@ -14,6 +14,7 @@ import { Agent } from '../agent';
 import type { AgentGenerateOptions, AgentStreamOptions } from '../agent';
 import { MastraBase } from '../base';
 
+import type { Container } from '../di';
 import { RegisteredLogger } from '../logger';
 import type { Mastra } from '../mastra';
 import { createTool } from '../tools';
@@ -200,7 +201,7 @@ export class AgentNetwork extends MastraBase {
     );
   }
 
-  async executeAgent(agentId: string, input: CoreMessage[], includeHistory = false) {
+  async executeAgent(agentId: string, input: CoreMessage[], includeHistory = false, container?: Container) {
     try {
       // Find the agent by its formatted ID
       const agent = this.#agents.find(agent => this.formatAgentId(agent.name) === agentId);
@@ -240,7 +241,7 @@ export class AgentNetwork extends MastraBase {
       }
 
       // Generate a response from the agent
-      const result = await agent.generate(messagesWithContext);
+      const result = await agent.generate(messagesWithContext, { container });
 
       return result.text;
     } catch (err) {
