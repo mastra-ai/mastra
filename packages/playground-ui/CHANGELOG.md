@@ -1,5 +1,28 @@
 # @mastra/playground-ui
 
+## 4.0.4
+
+### Patch Changes
+
+- d72318f: Refactored the evals table to use the DS tables
+- 1ebbfbf: Ability to toggle stream vs generate in playground
+- 9b47dfa: Fix dynamic form for suspended workflow in playground ui
+- f5451a4: bundle tokens as CJS in playground UI for tailwind usage
+- ed52379: enum-type trigger schemas could not be submitted in the Playground UI has been resolved.
+- 37bb612: Add Elastic-2.0 licensing for packages
+- bc4acb3: updated traces to not be wrapped in traces object
+- c8fe5f0: change the header of all pages with the one from the DS
+- Updated dependencies [d72318f]
+- Updated dependencies [0bcc862]
+- Updated dependencies [10a8caf]
+- Updated dependencies [359b089]
+- Updated dependencies [32e7b71]
+- Updated dependencies [37bb612]
+- Updated dependencies [bc4acb3]
+- Updated dependencies [7f1b291]
+  - @mastra/core@0.8.3
+  - @mastra/client-js@0.1.17
+
 ## 4.0.4-alpha.6
 
 ### Patch Changes

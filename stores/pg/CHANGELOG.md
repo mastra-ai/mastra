@@ -1,5 +1,22 @@
 # @mastra/pg
 
+## 0.2.10
+
+### Patch Changes
+
+- 5e846ee: feat(@mastra/pg): schema support
+- ec3cbf9: add MIT license for stores/vector packages
+- 37bb612: Add Elastic-2.0 licensing for packages
+- 4ac6f31: Updated permissions check for creating vector extension
+- Updated dependencies [d72318f]
+- Updated dependencies [0bcc862]
+- Updated dependencies [10a8caf]
+- Updated dependencies [359b089]
+- Updated dependencies [32e7b71]
+- Updated dependencies [37bb612]
+- Updated dependencies [7f1b291]
+  - @mastra/core@0.8.3
+
 ## 0.2.10-alpha.6
 
 ### Patch Changes

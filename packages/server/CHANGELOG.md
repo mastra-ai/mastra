@@ -1,5 +1,21 @@
 # @mastra/deployer
 
+## 1.0.3
+
+### Patch Changes
+
+- 9f6f6dd: Fix container for tools execution api
+- 32e7b71: Add support for dependency injection
+- 37bb612: Add Elastic-2.0 licensing for packages
+- Updated dependencies [d72318f]
+- Updated dependencies [0bcc862]
+- Updated dependencies [10a8caf]
+- Updated dependencies [359b089]
+- Updated dependencies [32e7b71]
+- Updated dependencies [37bb612]
+- Updated dependencies [7f1b291]
+  - @mastra/core@0.8.3
+
 ## 1.0.3-alpha.6
 
 ### Patch Changes
