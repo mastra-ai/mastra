@@ -1,5 +1,5 @@
 {
-  "name": "@inner/inner-tools",
+  "name": "@inner/native-binding-package",
   "version": "1.0.0",
   "description": "",
   "type": "module",
@@ -11,8 +11,6 @@
   "author": "",
   "license": "MIT",
   "dependencies": {
-    "@mastra/core": "link:%%MASTRA_DIR%%/packages/core",
-    "bcrypt": "^5.1.1",
-    "@inner/native-binding-package": "workspace:*"
+    "bcrypt": "^5.1.1"
   }
 }
