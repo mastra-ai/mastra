@@ -511,7 +511,6 @@ export function getResuableTests(memory: Memory) {
 
         // Create messages in the wrong order: tool call, user1, user2, tool result
         const rawMessages = [toolCallMessage, userMessage1, userMessage2, toolResultMessage];
-        console.log(JSON.stringify({ rawMessages }, null, 2));
 
         // Verify the reordering function works correctly
         const reorderedMessages = reorderToolCallsAndResults(rawMessages);
@@ -573,8 +572,6 @@ export function getResuableTests(memory: Memory) {
 
         // Check that all messages are present
         expect(result.messages.length).toBe(4);
-
-        console.log(JSON.stringify({ result: result.messages }, null, 2));
 
         // Verify message order directly by index
         expect(result.messages[0].id).toBe(integrationUserMessage1.id);
