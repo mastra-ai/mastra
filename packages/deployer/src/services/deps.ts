@@ -8,6 +8,12 @@ import type { PackageJson } from 'type-fest';
 
 import { createChildProcessLogger } from '../deploy/log.js';
 
+interface ArchitectureOptions {
+  os?: string[];
+  cpu?: string[];
+  libc?: string[];
+}
+
 export class Deps extends MastraBase {
   private packageManager: string;
   private rootDir: string;
@@ -49,16 +55,76 @@ export class Deps extends MastraBase {
     }
   }
 
-  public async install({ dir = this.rootDir }: { dir?: string }) {
+  private async writePnpmConfig(dir: string, options: ArchitectureOptions) {
+    const packageJsonPath = path.join(dir, 'package.json');
+    const packageJson = await readJSON(packageJsonPath);
+
+    packageJson.pnpm = {
+      ...packageJson.pnpm,
+      supportedArchitectures: {
+        os: options.os || [],
+        cpu: options.cpu || [],
+        libc: options.libc || [],
+      },
+    };
+
+    await writeJSON(packageJsonPath, packageJson, { spaces: 2 });
+  }
+
+  private async writeYarnConfig(dir: string, options: ArchitectureOptions) {
+    const yarnrcPath = path.join(dir, '.yarnrc.yml');
+    const config = {
+      supportedArchitectures: {
+        cpu: options.cpu || [],
+        os: options.os || [],
+        libc: options.libc || [],
+      },
+    };
+
+    await fsPromises.writeFile(
+      yarnrcPath,
+      `supportedArchitectures:\n${Object.entries(config.supportedArchitectures)
+        .map(([key, value]) => `  ${key}: ${JSON.stringify(value)}`)
+        .join('\n')}`,
+    );
+  }
+
+  private getNpmArgs(options: ArchitectureOptions): string[] {
+    const args: string[] = [];
+    if (options.cpu) args.push(`--cpu=${options.cpu.join(',')}`);
+    if (options.os) args.push(`--os=${options.os.join(',')}`);
+    if (options.libc) args.push(`--libc=${options.libc.join(',')}`);
+    return args;
+  }
+
+  public async install({
+    dir = this.rootDir,
+    architecture,
+  }: { dir?: string; architecture?: ArchitectureOptions } = {}) {
     let runCommand = this.packageManager;
+    let args: string[] = [];
 
     switch (this.packageManager) {
       case 'pnpm':
         runCommand = `${this.packageManager} --ignore-workspace install`;
+        if (architecture) {
+          await this.writePnpmConfig(dir, architecture);
+        }
         break;
       case 'yarn':
         // similar to --ignore-workspace but for yarn
         await ensureFile(path.join(dir, 'yarn.lock'));
+        if (architecture) {
+          await this.writeYarnConfig(dir, architecture);
+        }
+        runCommand = `${this.packageManager} install`;
+        break;
+      case 'npm':
+        runCommand = `${this.packageManager} install`;
+        if (architecture) {
+          args = this.getNpmArgs(architecture);
+        }
+        break;
       default:
         runCommand = `${this.packageManager} install`;
     }
@@ -70,7 +136,7 @@ export class Deps extends MastraBase {
 
     return cpLogger({
       cmd: runCommand,
-      args: [],
+      args,
       env: {
         PATH: process.env.PATH!,
       },

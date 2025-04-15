@@ -1,5 +1,13 @@
 # @mastra/deployer
 
+## 0.2.9-alpha.5
+
+### Patch Changes
+
+- 9f6f6dd: Fix container for tools execution api
+- Updated dependencies [9f6f6dd]
+  - @mastra/server@1.0.3-alpha.5
+
 ## 0.2.9-alpha.4
 
 ### Patch Changes

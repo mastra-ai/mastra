@@ -1,5 +1,12 @@
 # @mastra/dane
 
+## 0.0.15-alpha.6
+
+### Patch Changes
+
+- Updated dependencies [18d0758]
+  - @mastra/rag@0.1.18-alpha.5
+
 ## 0.0.15-alpha.5
 
 ### Patch Changes
