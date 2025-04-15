@@ -1,3 +1,4 @@
+import type { Container } from '@mastra/core/di';
 import { isVercelTool } from '@mastra/core/tools';
 import type { ToolAction, VercelTool } from '@mastra/core/tools';
 import { stringify } from 'superjson';
@@ -66,7 +67,8 @@ export function executeToolHandler(tools: ToolsContext['tools']) {
     runId,
     toolId,
     data,
-  }: Pick<ToolsContext, 'mastra' | 'toolId' | 'runId'> & { data?: unknown }) => {
+    container,
+  }: Pick<ToolsContext, 'mastra' | 'toolId' | 'runId'> & { data?: unknown; container: Container }) => {
     try {
       if (!toolId) {
         throw new HTTPException(400, { message: 'Tool ID is required' });
@@ -93,6 +95,7 @@ export function executeToolHandler(tools: ToolsContext['tools']) {
         context: data!,
         mastra,
         runId,
+        container,
       });
       return result;
     } catch (error) {
@@ -106,7 +109,8 @@ export async function executeAgentToolHandler({
   agentId,
   toolId,
   data,
-}: Pick<ToolsContext, 'mastra' | 'toolId'> & { agentId?: string; data: any }) {
+  container,
+}: Pick<ToolsContext, 'mastra' | 'toolId'> & { agentId?: string; data: any; container: Container }) {
   try {
     const agent = agentId ? mastra.getAgent(agentId) : null;
     if (!agent) {
@@ -130,6 +134,7 @@ export async function executeAgentToolHandler({
 
     const result = await tool.execute({
       context: data,
+      container,
       mastra,
       runId: agentId,
     });
