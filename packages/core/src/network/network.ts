@@ -71,7 +71,7 @@ export class AgentNetwork extends MastraBase {
             }),
           ),
         }),
-        execute: async ({ context }) => {
+        execute: async ({ context, container }) => {
           try {
             // Extract the actions from the context
             const actions = context.actions;
@@ -81,7 +81,12 @@ export class AgentNetwork extends MastraBase {
             // Execute each agent in parallel and collect results
             const results = await Promise.all(
               actions.map(action =>
-                this.executeAgent(action.agent, [{ role: 'user', content: action.input }], action.includeHistory),
+                this.executeAgent(
+                  action.agent,
+                  [{ role: 'user', content: action.input }],
+                  action.includeHistory,
+                  container,
+                ),
               ),
             );
 
