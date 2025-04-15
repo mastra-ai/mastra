@@ -13,30 +13,21 @@ Creates a new instance of the MCPConfiguration class.
 
 ```typescript
 constructor({
-    id?: string;
-    servers: Record<string, MastraMCPServerDefinition>
-}: {
-    servers: {
-        [serverName: string]: {
-            // For stdio-based servers
-            command?: string;
-            args?: string[];
-            env?: Record<string, string>;
-            // For SSE-based servers
-            url?: URL;
-            requestInit?: RequestInit;
-        }
-    }
-})
+  id?: string;
+  servers: Record<string, MastraMCPServerDefinition>;
+  timeout?: number;
+}: MCPConfigurationOptions)
 ```
 
-### Parameters
+### MCPConfigurationOptions
 
+<br />
 <PropertiesTable
   content={[
     {
       name: "id",
       type: "string",
+      isOptional: true,
       description:
         "Optional unique identifier for the configuration instance. Use this to prevent memory leaks when creating multiple instances with identical configurations.",
     },
@@ -46,8 +37,20 @@ constructor({
       description:
         "A map of server configurations, where each key is a unique server identifier and the value is the server configuration.",
     },
+    {
+      name: "timeout",
+      type: "number",
+      isOptional: true,
+      defaultValue: "60000",
+      description: "Global timeout value in milliseconds for all servers unless overridden in individual server configs.",
+    },
   ]}
 />
+
+### MastraMCPServerDefinition
+
+Each server in the `servers` map can be configured as either a stdio-based server or an SSE-based server. 
+For details about the available configuration options, see [MastraMCPServerDefinition](./client#mastramcpserverdefinition) in the MastraMCPClient documentation.
 
 ## Methods
 
@@ -71,6 +74,14 @@ const res = await agent.stream(prompt, {
 });
 ```
 
+### disconnect()
+
+Disconnects from all MCP servers and cleans up resources.
+
+```typescript
+async disconnect(): Promise<void>
+```
+
 ## Examples
 
 ### Basic Usage
@@ -88,11 +99,15 @@ const mcp = new MCPConfiguration({
       env: {
         API_KEY: "your-api-key",
       },
+      log: (logMessage) => {
+        console.log(`[${logMessage.level}] ${logMessage.message}`);
+      },
     },
     weather: {
-      url: new URL("http://localhost:8080/sse"),
+      url: new URL("http://localhost:8080/sse"),∂
     },
   },
+  timeout: 30000, // Global 30s timeout
 });
 
 // Create an agent with access to all tools
@@ -127,6 +142,7 @@ const mcp = new MCPConfiguration({
       env: {
         API_KEY: "user-123-api-key",
       },
+      timeout: 20000, // Server-specific timeout
     },
     weather: {
       url: new URL("http://localhost:8080/sse"),

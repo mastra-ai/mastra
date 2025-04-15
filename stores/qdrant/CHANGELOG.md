@@ -1,5 +1,12 @@
 # @mastra/qdrant
 
+## 0.2.9-alpha.4
+
+### Patch Changes
+
+- Updated dependencies [7f1b291]
+  - @mastra/core@0.8.3-alpha.4
+
 ## 0.2.9-alpha.3
 
 ### Patch Changes

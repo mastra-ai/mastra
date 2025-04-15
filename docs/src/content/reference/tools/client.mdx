@@ -20,7 +20,7 @@ constructor({
     timeout = 60000,
 }: {
     name: string;
-    server: StdioServerParameters | SSEClientParameters;
+    server: MastraMCPServerDefinition;
     capabilities?: ClientCapabilities;
     version?: string;
     timeout?: number;
@@ -29,6 +29,7 @@ constructor({
 
 ### Parameters
 
+<br />
 <PropertiesTable
   content={[
     {
@@ -45,9 +46,9 @@ constructor({
     },
     {
       name: "server",
-      type: "StdioServerParameters | SSEClientParameters",
+      type: "MastraMCPServerDefinition",
       description:
-        "Configuration parameters for either a stdio server connection or an SSE server connection.",
+        "Configuration parameters for either a stdio server connection or an SSE server connection. Can include log handler and server logs configuration.",
     },
     {
       name: "capabilities",
@@ -62,6 +63,111 @@ constructor({
       isOptional: true,
       defaultValue: 60000,
       description: "The timeout duration, in milliseconds, for client tool calls.",
+    },
+  ]}
+/>
+
+### MastraMCPServerDefinition
+
+MCP servers can be configured as either stdio-based or SSE-based servers. The configuration includes both server-specific settings and common options:
+<br />
+<PropertiesTable
+  content={[
+    {
+      name: "command",
+      type: "string",
+      isOptional: true,
+      description: "For stdio servers: The command to execute.",
+    },
+    {
+      name: "args",
+      type: "string[]",
+      isOptional: true,
+      description: "For stdio servers: Arguments to pass to the command.",
+    },
+    {
+      name: "env",
+      type: "Record<string, string>",
+      isOptional: true,
+      description: "For stdio servers: Environment variables to set for the command.",
+    },
+    {
+      name: "url",
+      type: "URL",
+      isOptional: true,
+      description: "For SSE servers: The URL of the server.",
+    },
+    {
+      name: "requestInit",
+      type: "RequestInit",
+      isOptional: true,
+      description: "For SSE servers: Request configuration for the fetch API.",
+    },
+    {
+      name: "eventSourceInit",
+      type: "EventSourceInit",
+      isOptional: true,
+      description: "For SSE servers: Custom fetch configuration for SSE connections. Required when using custom headers.",
+    },
+    {
+      name: "logger",
+      type: "LogHandler",
+      isOptional: true,
+      description: "Optional additional handler for logging.",
+    },
+    {
+      name: "timeout",
+      type: "number",
+      isOptional: true,
+      description: "Server-specific timeout in milliseconds.",
+    },
+    {
+      name: "capabilities",
+      type: "ClientCapabilities",
+      isOptional: true,
+      description: "Server-specific capabilities configuration.",
+    },
+    {
+      name: "enableServerLogs",
+      type: "boolean",
+      isOptional: true,
+      defaultValue: "true",
+      description: "Whether to enable logging for this server.",
+    },
+  ]}
+/>
+
+### LogHandler
+
+The `LogHandler` function takes a `LogMessage` object as its parameter and returns void. The `LogMessage` object has the following properties. The `LoggingLevel` type is a string enum with values: `debug`, `info`, `warn`, and `error`.
+<br />
+<PropertiesTable
+  content={[
+    {
+      name: "level",
+      type: "LoggingLevel",
+      description: "Log level (debug, info, warn, error)",
+    },
+    {
+      name: "message",
+      type: "string",
+      description: "Log message content",
+    },
+    {
+      name: "timestamp",
+      type: "Date",
+      description: "When the log was generated",
+    },
+    {
+      name: "serverName",
+      type: "string",
+      description: "Name of the server that generated the log",
+    },
+    {
+      name: "details",
+      type: "Record<string, any>",
+      isOptional: true,
+      description: "Optional additional log details",
     },
   ]}
 />
@@ -120,6 +226,9 @@ const fetchClient = new MastraMCPClient({
   server: {
     command: "docker",
     args: ["run", "-i", "--rm", "mcp/fetch"],
+    logger: (logMessage) => {
+      console.log(`[${logMessage.level}] ${logMessage.message}`);
+    },
   },
 });
 
@@ -162,7 +271,7 @@ try {
 }
 ```
 
-#### Example with SSE Server
+### Example with SSE Server
 
 ```typescript
 // Initialize the MCP client using an SSE server
@@ -187,6 +296,12 @@ const sseClient = new MastraMCPClient({
         });
       },
     },
+    // Optional additional logging configuration
+    logger: (logMessage) => {
+      console.log(`[${logMessage.level}] ${logMessage.serverName}: ${logMessage.message}`);
+    },
+    // Disable server logs
+    enableServerLogs: false
   },
 });
 
@@ -196,7 +311,6 @@ const sseClient = new MastraMCPClient({
 ### Important Note About SSE Authentication
 
 When using SSE connections with authentication or custom headers, you need to configure both `requestInit` and `eventSourceInit`. This is because SSE connections use the browser's EventSource API, which doesn't support custom headers directly. 
-
 
 The `eventSourceInit` configuration allows you to customize the underlying fetch request used for the SSE connection, ensuring your authentication headers are properly included.
 Without `eventSourceInit`, authentication headers specified in `requestInit` won't be included in the connection request, leading to 401 Unauthorized errors.

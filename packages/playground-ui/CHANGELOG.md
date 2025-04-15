@@ -1,5 +1,21 @@
 # @mastra/playground-ui
 
+## 4.0.4-alpha.5
+
+### Patch Changes
+
+- ed52379: enum-type trigger schemas could not be submitted in the Playground UI has been resolved.
+
+## 4.0.4-alpha.4
+
+### Patch Changes
+
+- 1ebbfbf: Ability to toggle stream vs generate in playground
+- 9b47dfa: Fix dynamic form for suspended workflow in playground ui
+- Updated dependencies [7f1b291]
+  - @mastra/core@0.8.3-alpha.4
+  - @mastra/client-js@0.1.17-alpha.4
+
 ## 4.0.4-alpha.3
 
 ### Patch Changes
