@@ -42,7 +42,7 @@ export async function getTelemetryHandler({ mastra, body }: TelemetryContext) {
         )
       : undefined;
 
-    const traces = await storage.__getTraces({
+    const traces = await storage.getTraces({
       name,
       scope,
       page: Number(page ?? 0),
@@ -130,7 +130,7 @@ export async function storeTelemetryHandler({ mastra, body }: Context & { body: 
     }, []);
 
     return storage
-      .__batchTraceInsert({
+      .batchTraceInsert({
         records: allSpans,
       })
       .then(() => {
