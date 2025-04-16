@@ -10,6 +10,8 @@ on:
 
 jobs:
   sync-templates:
+    name: Sync Template Repositories
+    if: ${{ github.repository == 'mastra-ai/mastra' }}
     runs-on: ubuntu-latest
 
     steps:
