@@ -117,7 +117,7 @@ To fix this you have three different options:
       this.logger.error(`MCPConfiguration errored connecting to MCP server ${name}`, {
         error: e instanceof Error ? e.message : String(e),
       });
-      throw e;
+      throw new Error(`Failed to connect to MCP server ${name}: ${e instanceof Error ? e.message : String(e)}`);
     }
 
     this.logger.debug(`Connected to ${name} MCP server`);
