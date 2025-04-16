@@ -146,7 +146,6 @@ export abstract class MastraVoice<
    */
   addInstructions(_instructions?: string): void {
     // Default implementation - voice providers can override if they support this feature
-    this.logger.warn('addInstructions not implemented by this voice provider');
   }
 
   /**
@@ -155,7 +154,6 @@ export abstract class MastraVoice<
    */
   addTools(_tools: TTools): void {
     // Default implementation - voice providers can override if they support this feature
-    this.logger.warn('addTools not implemented by this voice provider');
   }
 
   /**
