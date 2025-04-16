@@ -627,20 +627,32 @@ export class OpenAIRealtimeVoice extends MastraVoice {
         console.warn(`Tool "${output.name}" not found`);
         return;
       }
+
+      if (tool?.execute) {
+        this.emit('tool-call-start', {
+          toolCallId: output.call_id,
+          toolName: output.name,
+          toolDescription: tool.description,
+          args: context,
+        });
+      }
+
       const result = await tool?.execute?.(
         { context },
         {
-          toolCallId: 'unknown',
+          toolCallId: output.call_id,
           messages: [],
         },
       );
-      this.emit('tool-result', {
+
+      this.emit('tool-call-result', {
         toolCallId: output.call_id,
         toolName: output.name,
         toolDescription: tool.description,
         args: context,
         result,
       });
+
       this.sendEvent('conversation.item.create', {
         item: {
           type: 'function_call_output',
