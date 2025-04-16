@@ -1,5 +1,11 @@
 # @mastra/voice-openai-realtime
 
+## 0.2.0-alpha.4
+
+### Minor Changes
+
+- 1ef0f1f: Disconnect
+
 ## 0.2.0-alpha.3
 
 ### Minor Changes
