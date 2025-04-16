@@ -234,15 +234,15 @@ jobs:
         working-directory: ./e2e-tests/create-mastra
         run: pnpm test
 
-e2e-commonjs:
-  name: E2E CommonJS
-  runs-on: ubuntu-latest
-  # Run on main repository or for trusted bot PRs
-  if: ${{ github.repository == 'mastra-ai/mastra' }} && ${{ !contains(github.event.pull_request.files.*.path, 'examples/') && !contains(github.event.pull_request.files.*.path, 'docs/') && !contains(github.event.pull_request.files.*.path, '.changeset/') && !contains(github.event.pull_request.files.*.path, 'generated-changesets/') }}
-  env:
-    TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
-    TURBO_TEAM: ${{ secrets.TURBO_TEAM }}
-    TURBO_CACHE: remote:r
+  e2e-commonjs:
+    name: E2E CommonJS
+    runs-on: ubuntu-latest
+    # Run on main repository or for trusted bot PRs
+    if: ${{ github.repository == 'mastra-ai/mastra' }} && ${{ !contains(github.event.pull_request.files.*.path, 'examples/') && !contains(github.event.pull_request.files.*.path, 'docs/') && !contains(github.event.pull_request.files.*.path, '.changeset/') && !contains(github.event.pull_request.files.*.path, 'generated-changesets/') }}
+    env:
+      TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
+      TURBO_TEAM: ${{ secrets.TURBO_TEAM }}
+      TURBO_CACHE: remote:r
 
     permissions:
       pull-requests: read
