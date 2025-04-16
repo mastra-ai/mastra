@@ -1,6 +1,6 @@
 import { createOpenAI } from '@ai-sdk/openai';
 import { embedMany } from 'ai';
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 
 import { MDocument } from './document';
 import { Language } from './types';
@@ -19,6 +19,8 @@ Welcome to our comprehensive guide on modern web development. This resource cove
 const openai = createOpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
+
+vi.setConfig({ testTimeout: 10_000, hookTimeout: 10_000 });
 
 describe('MDocument', () => {
   describe('basics', () => {
