@@ -4,13 +4,13 @@ import { MastraMemory } from '@mastra/core/memory';
 import type { MessageType, MemoryConfig, SharedMemoryConfig, StorageThreadType } from '@mastra/core/memory';
 import type { StorageGetMessagesArg } from '@mastra/core/storage';
 import { embedMany } from 'ai';
-import { Tiktoken } from 'js-tiktoken/lite';
-import o200k_base from 'js-tiktoken/ranks/o200k_base';
+
 import xxhash from 'xxhash-wasm';
 import { updateWorkingMemoryTool } from './tools/working-memory';
 import { reorderToolCallsAndResults } from './utils';
 
-const encoder = new Tiktoken(o200k_base);
+// Average characters per token based on OpenAI's tokenization
+const CHARS_PER_TOKEN = 4;
 
 /**
  * Concrete implementation of MastraMemory that adds support for thread configuration
@@ -233,24 +233,31 @@ export class Memory extends MastraMemory {
     await this.storage.__deleteThread({ threadId });
   }
 
-  private chunkText(text: string, size = 4096) {
-    const tokens = encoder.encode(text);
+  private chunkText(text: string, tokenSize = 4096) {
+    // Convert token size to character size with some buffer
+    const charSize = tokenSize * CHARS_PER_TOKEN;
     const chunks: string[] = [];
-    let currentChunk: number[] = [];
+    let currentChunk = '';
 
-    for (const token of tokens) {
-      currentChunk.push(token);
+    // Split text into words to avoid breaking words
+    const words = text.split(/\s+/);
 
-      // If current chunk reaches size limit, add it to chunks and start a new one
-      if (currentChunk.length >= size) {
-        chunks.push(encoder.decode(currentChunk));
-        currentChunk = [];
+    for (const word of words) {
+      // Add space before word unless it's the first word in the chunk
+      const wordWithSpace = currentChunk ? ' ' + word : word;
+
+      // If adding this word would exceed the chunk size, start a new chunk
+      if (currentChunk.length + wordWithSpace.length > charSize) {
+        chunks.push(currentChunk);
+        currentChunk = word;
+      } else {
+        currentChunk += wordWithSpace;
       }
     }
 
-    // Add any remaining tokens as the final chunk
-    if (currentChunk.length > 0) {
-      chunks.push(encoder.decode(currentChunk));
+    // Add the final chunk if not empty
+    if (currentChunk) {
+      chunks.push(currentChunk);
     }
 
     return chunks;
