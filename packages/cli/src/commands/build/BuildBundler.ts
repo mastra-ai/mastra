@@ -29,13 +29,24 @@ export class BuildBundler extends Bundler {
     await super.prepare(outputDirectory);
   }
 
-  bundle(entryFile: string, outputDirectory: string): Promise<void> {
-    return this._bundle(this.getEntry(), entryFile, outputDirectory);
+  async bundle(entryFile: string, outputDirectory: string, bundleOptions?: Record<string, any>): Promise<void> {
+    const { swaggerUI } = bundleOptions ?? {};
+    return this._bundle(
+      this.getEntry({
+        swaggerUI,
+      }),
+      entryFile,
+      outputDirectory,
+    );
   }
 
-  protected getEntry(): string {
+  protected getEntry({ playground, swaggerUI }: { playground?: boolean; swaggerUI?: boolean }): string {
     const __filename = fileURLToPath(import.meta.url);
     const __dirname = dirname(__filename);
-    return readFileSync(join(__dirname, 'templates', 'dev.entry.js'), 'utf8');
+    const template = readFileSync(join(__dirname, 'templates', 'build.entry.js'), 'utf8');
+    const options = JSON.stringify({
+      swaggerUI: swaggerUI ?? false,
+    });
+    return template.replace('__SERVER_OPTIONS__', options);
   }
 }

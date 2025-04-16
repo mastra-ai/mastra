@@ -2127,8 +2127,6 @@ export async function createHonoServer(
     }),
   );
 
-  app.get('/swagger-ui', swaggerUI({ url: '/openapi.json' }));
-
   if (options?.swaggerUI) {
     app.get('/swagger-ui', swaggerUI({ url: '/openapi.json' }));
   }
@@ -2207,7 +2205,7 @@ export async function createNodeServer(
     },
     () => {
       const logger = mastra.getLogger();
-      logger.info(`🦄 Mastra API running on port ${process.env.PORT || 4111}/api`);
+      logger.info(`🦄 Mastra API running on port http://localhost:${process.env.PORT || 4111}/api`);
       logger.info(`📚 Open API documentation available at http://localhost:${process.env.PORT || 4111}/openapi.json`);
       if (options?.swaggerUI) {
         logger.info(`🧪 Swagger UI available at http://localhost:${process.env.PORT || 4111}/swagger-ui`);

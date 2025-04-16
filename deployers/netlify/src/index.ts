@@ -88,22 +88,23 @@ to = "/.netlify/functions/api/:splat"
     this.writeFiles({ dir: join(outputDirectory, this.outputDir) });
   }
 
-  async bundle(entryFile: string, outputDirectory: string): Promise<void> {
+  async bundle(entryFile: string, outputDirectory: string, bundleOptions?: Record<string, any>): Promise<void> {
+    const { swaggerUI } = bundleOptions ?? {};
     return this._bundle(
-      this.getEntry(),
+      this.getEntry({ swaggerUI }),
       entryFile,
       outputDirectory,
       join(outputDirectory, this.outputDir, 'netlify', 'functions', 'api'),
     );
   }
 
-  private getEntry(): string {
+  private getEntry({ swaggerUI }: { swaggerUI: boolean }): string {
     return `
 import { handle } from 'hono/netlify'
 import { mastra } from '#mastra';
 import { createHonoServer } from '#server';
 
-const app = await createHonoServer(mastra);
+const app = await createHonoServer(mastra, { swaggerUI: ${swaggerUI} });
 
 export default handle(app)
 `;
