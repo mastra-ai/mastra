@@ -1,5 +1,11 @@
 # @mastra/core
 
+## 0.9.0-alpha.3
+
+### Minor Changes
+
+- fe3ae4d: Remove \_\_ functions in storage and move to storage proxy to make sure init is called
+
 ## 0.8.4-alpha.2
 
 ### Patch Changes
