@@ -1,9 +1,7 @@
-import { PromptTemplate, defaultQuestionExtractPrompt } from '@llamaindex/core/prompts';
-import type { QuestionExtractPrompt } from '@llamaindex/core/prompts';
-import { TextNode } from '@llamaindex/core/schema';
-import type { BaseNode } from '@llamaindex/core/schema';
 import type { MastraLanguageModel } from '@mastra/core/agent';
-import { BaseExtractor, baseLLM, STRIP_REGEX } from './base';
+import { PromptTemplate, defaultQuestionExtractPrompt, TextNode, BaseExtractor } from 'llamaindex';
+import type { QuestionExtractPrompt, BaseNode } from 'llamaindex';
+import { baseLLM, STRIP_REGEX } from './types';
 import type { QuestionAnswerExtractArgs } from './types';
 
 type ExtractQuestion = {

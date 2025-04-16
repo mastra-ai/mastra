@@ -1,11 +1,12 @@
+import { createOpenAI } from '@ai-sdk/openai';
+import type { MastraLanguageModel } from '@mastra/core/agent';
 import type {
   KeywordExtractPrompt,
   QuestionExtractPrompt,
   SummaryPrompt,
   TitleExtractorPrompt,
   TitleCombinePrompt,
-} from '@llamaindex/core/prompts';
-import type { MastraLanguageModel } from '@mastra/core/agent';
+} from 'llamaindex';
 
 export type KeywordExtractArgs = {
   llm?: MastraLanguageModel;
@@ -32,3 +33,8 @@ export type TitleExtractorsArgs = {
   nodeTemplate?: TitleExtractorPrompt['template'];
   combineTemplate?: TitleCombinePrompt['template'];
 };
+
+export const STRIP_REGEX = /(\r\n|\n|\r)/gm;
+
+const openai = createOpenAI({ apiKey: process.env.OPENAI_API_KEY });
+export const baseLLM: MastraLanguageModel = openai('gpt-4o');

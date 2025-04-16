@@ -1,9 +1,7 @@
-import { PromptTemplate, defaultKeywordExtractPrompt } from '@llamaindex/core/prompts';
-import type { KeywordExtractPrompt } from '@llamaindex/core/prompts';
-import { MetadataMode, TextNode } from '@llamaindex/core/schema';
-import type { BaseNode } from '@llamaindex/core/schema';
 import type { MastraLanguageModel } from '@mastra/core/agent';
-import { BaseExtractor, baseLLM } from './base';
+import { PromptTemplate, defaultKeywordExtractPrompt, MetadataMode, TextNode, BaseExtractor } from 'llamaindex';
+import type { KeywordExtractPrompt, BaseNode } from 'llamaindex';
+import { baseLLM } from './types';
 import type { KeywordExtractArgs } from './types';
 
 type ExtractKeyword = {
