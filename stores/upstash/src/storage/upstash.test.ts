@@ -172,10 +172,10 @@ describe('UpstashStore', () => {
       const now = new Date();
       const thread = createSampleThread(now);
 
-      const savedThread = await store.__saveThread({ thread });
+      const savedThread = await store.saveThread({ thread });
       expect(savedThread).toEqual(thread);
 
-      const retrievedThread = await store.__getThreadById({ threadId: thread.id });
+      const retrievedThread = await store.getThreadById({ threadId: thread.id });
       expect(retrievedThread).toEqual({
         ...thread,
         createdAt: new Date(now.toISOString()),
@@ -208,7 +208,7 @@ describe('UpstashStore', () => {
 
       await store.saveThread({ thread });
 
-      const updatedThread = await store.__updateThread({
+      const updatedThread = await store.updateThread({
         id: thread.id,
         title: 'Updated Title',
         metadata: { updated: 'value' },
@@ -290,7 +290,7 @@ describe('UpstashStore', () => {
       await store.clearTable({ tableName: TABLE_THREADS });
 
       // Create a test thread
-      await store.__saveThread({
+      await store.saveThread({
         thread: {
           id: threadId,
           resourceId: 'resource-1',
@@ -309,15 +309,15 @@ describe('UpstashStore', () => {
         createSampleMessage(threadId, 'Third'),
       ];
 
-      await store.__saveMessages({ messages: messages as MessageType[] });
+      await store.saveMessages({ messages: messages as MessageType[] });
 
-      const retrievedMessages = await store.__getMessages({ threadId });
+      const retrievedMessages = await store.getMessages({ threadId });
       expect(retrievedMessages).toHaveLength(3);
       expect(retrievedMessages.map(m => m.content[0].text)).toEqual(['First', 'Second', 'Third']);
     });
 
     it('should handle empty message array', async () => {
-      const result = await store.__saveMessages({ messages: [] });
+      const result = await store.saveMessages({ messages: [] });
       expect(result).toEqual([]);
     });
 
@@ -337,9 +337,9 @@ describe('UpstashStore', () => {
         },
       ];
 
-      await store.__saveMessages({ messages: messages as MessageType[] });
+      await store.saveMessages({ messages: messages as MessageType[] });
 
-      const retrievedMessages = await store.__getMessages({ threadId });
+      const retrievedMessages = await store.getMessages({ threadId });
       expect(retrievedMessages[0].content).toEqual(messages[0].content);
     });
   });
@@ -547,7 +547,7 @@ describe('UpstashStore', () => {
       await store.clearTable({ tableName: TABLE_WORKFLOW_SNAPSHOT });
     });
     it('returns empty array when no workflows exist', async () => {
-      const { runs, total } = await store.__getWorkflowRuns();
+      const { runs, total } = await store.getWorkflowRuns();
       expect(runs).toEqual([]);
       expect(total).toBe(0);
     });
@@ -573,7 +573,7 @@ describe('UpstashStore', () => {
         snapshot: workflow2,
       });
 
-      const { runs, total } = await store.__getWorkflowRuns({ namespace: testNamespace });
+      const { runs, total } = await store.getWorkflowRuns({ namespace: testNamespace });
       expect(runs).toHaveLength(2);
       expect(total).toBe(2);
       expect(runs[0]!.workflowName).toBe(workflowName2); // Most recent first
@@ -605,7 +605,7 @@ describe('UpstashStore', () => {
         snapshot: workflow2,
       });
 
-      const { runs, total } = await store.__getWorkflowRuns({ namespace: testNamespace, workflowName: workflowName1 });
+      const { runs, total } = await store.getWorkflowRuns({ namespace: testNamespace, workflowName: workflowName1 });
       expect(runs).toHaveLength(1);
       expect(total).toBe(1);
       expect(runs[0]!.workflowName).toBe(workflowName1);
@@ -659,7 +659,7 @@ describe('UpstashStore', () => {
         },
       });
 
-      const { runs } = await store.__getWorkflowRuns({
+      const { runs } = await store.getWorkflowRuns({
         namespace: testNamespace,
         fromDate: yesterday,
         toDate: now,
@@ -705,7 +705,7 @@ describe('UpstashStore', () => {
       });
 
       // Get first page
-      const page1 = await store.__getWorkflowRuns({
+      const page1 = await store.getWorkflowRuns({
         namespace: testNamespace,
         limit: 2,
         offset: 0,
@@ -720,7 +720,7 @@ describe('UpstashStore', () => {
       expect(secondSnapshot.context?.steps[stepId2]?.status).toBe('running');
 
       // Get second page
-      const page2 = await store.__getWorkflowRuns({
+      const page2 = await store.getWorkflowRuns({
         namespace: testNamespace,
         limit: 2,
         offset: 2,

@@ -1,5 +1,13 @@
 # @mastra/core
 
+## 0.8.4-alpha.2
+
+### Patch Changes
+
+- 9ee4293: Improve commonjs support
+
+  Add types files in the root directory to make sure typescript can resolve it without an exportsmap
+
 ## 0.8.4-alpha.1
 
 ### Patch Changes
