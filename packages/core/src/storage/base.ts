@@ -49,19 +49,7 @@ export abstract class MastraStorage extends MastraBase {
     records: Record<string, any>[];
   }): Promise<void>;
 
-  async __batchInsert({
-    tableName,
-    records,
-  }: {
-    tableName: TABLE_NAMES;
-    records: Record<string, any>[];
-  }): Promise<void> {
-    await this.init();
-    return this.batchInsert({ tableName, records });
-  }
-
-  async __batchTraceInsert({ records }: { records: Record<string, any>[] }): Promise<void> {
-    await this.init();
+  batchTraceInsert({ records }: { records: Record<string, any>[] }): Promise<void> {
     return this.batchInsert({ tableName: TABLE_TRACES, records });
   }
 
@@ -69,24 +57,9 @@ export abstract class MastraStorage extends MastraBase {
 
   abstract getThreadById({ threadId }: { threadId: string }): Promise<StorageThreadType | null>;
 
-  async __getThreadById({ threadId }: { threadId: string }): Promise<StorageThreadType | null> {
-    await this.init();
-    return this.getThreadById({ threadId });
-  }
-
   abstract getThreadsByResourceId({ resourceId }: { resourceId: string }): Promise<StorageThreadType[]>;
 
-  async __getThreadsByResourceId({ resourceId }: { resourceId: string }): Promise<StorageThreadType[]> {
-    await this.init();
-    return this.getThreadsByResourceId({ resourceId });
-  }
-
   abstract saveThread({ thread }: { thread: StorageThreadType }): Promise<StorageThreadType>;
-
-  async __saveThread({ thread }: { thread: StorageThreadType }): Promise<StorageThreadType> {
-    await this.init();
-    return this.saveThread({ thread });
-  }
 
   abstract updateThread({
     id,
@@ -98,39 +71,11 @@ export abstract class MastraStorage extends MastraBase {
     metadata: Record<string, unknown>;
   }): Promise<StorageThreadType>;
 
-  async __updateThread({
-    id,
-    title,
-    metadata,
-  }: {
-    id: string;
-    title: string;
-    metadata: Record<string, unknown>;
-  }): Promise<StorageThreadType> {
-    await this.init();
-    return this.updateThread({ id, title, metadata });
-  }
-
   abstract deleteThread({ threadId }: { threadId: string }): Promise<void>;
-
-  async __deleteThread({ threadId }: { threadId: string }): Promise<void> {
-    await this.init();
-    return this.deleteThread({ threadId });
-  }
 
   abstract getMessages({ threadId, selectBy, threadConfig }: StorageGetMessagesArg): Promise<MessageType[]>;
 
-  async __getMessages({ threadId, selectBy, threadConfig }: StorageGetMessagesArg): Promise<MessageType[]> {
-    await this.init();
-    return this.getMessages({ threadId, selectBy, threadConfig });
-  }
-
   abstract saveMessages({ messages }: { messages: MessageType[] }): Promise<MessageType[]>;
-
-  async __saveMessages({ messages }: { messages: MessageType[] }): Promise<MessageType[]> {
-    await this.init();
-    return this.saveMessages({ messages });
-  }
 
   abstract getTraces({
     name,
@@ -147,25 +92,6 @@ export abstract class MastraStorage extends MastraBase {
     attributes?: Record<string, string>;
     filters?: Record<string, any>;
   }): Promise<any[]>;
-
-  async __getTraces({
-    name,
-    scope,
-    page,
-    perPage,
-    attributes,
-    filters,
-  }: {
-    name?: string;
-    scope?: string;
-    page: number;
-    perPage: number;
-    attributes?: Record<string, string>;
-    filters?: Record<string, any>;
-  }): Promise<any[]> {
-    await this.init();
-    return this.getTraces({ name, scope, page, perPage, attributes, filters });
-  }
 
   async init(): Promise<void> {
     // to prevent race conditions, await any current init
@@ -249,11 +175,6 @@ export abstract class MastraStorage extends MastraBase {
 
   abstract getEvalsByAgentName(agentName: string, type?: 'test' | 'live'): Promise<EvalRow[]>;
 
-  async __getEvalsByAgentName(agentName: string, type?: 'test' | 'live'): Promise<EvalRow[]> {
-    await this.init();
-    return this.getEvalsByAgentName(agentName, type);
-  }
-
   abstract getWorkflowRuns(args?: {
     namespace?: string;
     workflowName?: string;
@@ -262,18 +183,4 @@ export abstract class MastraStorage extends MastraBase {
     limit?: number;
     offset?: number;
   }): Promise<WorkflowRuns>;
-
-  async __getWorkflowRuns(args?: {
-    namespace?: string;
-    workflowName?: string;
-    fromDate?: Date;
-    toDate?: Date;
-    limit?: number;
-    offset?: number;
-  }): Promise<WorkflowRuns> {
-    if (!this.hasInitialized) {
-      await this.init();
-    }
-    return this.getWorkflowRuns(args);
-  }
 }

@@ -102,16 +102,16 @@ describe('ClickhouseStore', () => {
       const thread = createSampleThread();
 
       // Save thread
-      const savedThread = await store.__saveThread({ thread });
+      const savedThread = await store.saveThread({ thread });
       expect(savedThread).toEqual(thread);
 
       // Retrieve thread
-      const retrievedThread = await store.__getThreadById({ threadId: thread.id });
+      const retrievedThread = await store.getThreadById({ threadId: thread.id });
       expect(retrievedThread?.title).toEqual(thread.title);
     }, 10e3);
 
     it('should return null for non-existent thread', async () => {
-      const result = await store.__getThreadById({ threadId: 'non-existent' });
+      const result = await store.getThreadById({ threadId: 'non-existent' });
       expect(result).toBeNull();
     }, 10e3);
 
@@ -119,20 +119,20 @@ describe('ClickhouseStore', () => {
       const thread1 = createSampleThread();
       const thread2 = { ...createSampleThread(), resourceId: thread1.resourceId };
 
-      await store.__saveThread({ thread: thread1 });
-      await store.__saveThread({ thread: thread2 });
+      await store.saveThread({ thread: thread1 });
+      await store.saveThread({ thread: thread2 });
 
-      const threads = await store.__getThreadsByResourceId({ resourceId: thread1.resourceId });
+      const threads = await store.getThreadsByResourceId({ resourceId: thread1.resourceId });
       expect(threads).toHaveLength(2);
       expect(threads.map(t => t.id)).toEqual(expect.arrayContaining([thread1.id, thread2.id]));
     }, 10e3);
 
     it('should update thread title and metadata', async () => {
       const thread = createSampleThread();
-      await store.__saveThread({ thread });
+      await store.saveThread({ thread });
 
       const newMetadata = { newKey: 'newValue' };
-      const updatedThread = await store.__updateThread({
+      const updatedThread = await store.updateThread({
         id: thread.id,
         title: 'Updated Title',
         metadata: newMetadata,
@@ -145,25 +145,25 @@ describe('ClickhouseStore', () => {
       });
 
       // Verify persistence
-      const retrievedThread = await store.__getThreadById({ threadId: thread.id });
+      const retrievedThread = await store.getThreadById({ threadId: thread.id });
       expect(retrievedThread).toEqual(updatedThread);
     }, 10e3);
 
     it('should delete thread and its messages', async () => {
       const thread = createSampleThread();
-      await store.__saveThread({ thread });
+      await store.saveThread({ thread });
 
       // Add some messages
       const messages = [createSampleMessage(thread.id), createSampleMessage(thread.id)];
-      await store.__saveMessages({ messages });
+      await store.saveMessages({ messages });
 
-      await store.__deleteThread({ threadId: thread.id });
+      await store.deleteThread({ threadId: thread.id });
 
-      const retrievedThread = await store.__getThreadById({ threadId: thread.id });
+      const retrievedThread = await store.getThreadById({ threadId: thread.id });
       expect(retrievedThread).toBeNull();
 
       // Verify messages were also deleted
-      const retrievedMessages = await store.__getMessages({ threadId: thread.id });
+      const retrievedMessages = await store.getMessages({ threadId: thread.id });
       expect(retrievedMessages).toHaveLength(0);
     }, 10e3);
   });
@@ -171,7 +171,7 @@ describe('ClickhouseStore', () => {
   describe('Message Operations', () => {
     it('should save and retrieve messages', async () => {
       const thread = createSampleThread();
-      await store.__saveThread({ thread });
+      await store.saveThread({ thread });
 
       const messages = [
         createSampleMessage(thread.id, new Date(Date.now() - 1000 * 60 * 60 * 24)),
@@ -179,23 +179,23 @@ describe('ClickhouseStore', () => {
       ];
 
       // Save messages
-      const savedMessages = await store.__saveMessages({ messages });
+      const savedMessages = await store.saveMessages({ messages });
       expect(savedMessages).toEqual(messages);
 
       // Retrieve messages
-      const retrievedMessages = await store.__getMessages({ threadId: thread.id });
+      const retrievedMessages = await store.getMessages({ threadId: thread.id });
       expect(retrievedMessages).toHaveLength(2);
       expect(retrievedMessages).toEqual(expect.arrayContaining(messages));
     }, 10e3);
 
     it('should handle empty message array', async () => {
-      const result = await store.__saveMessages({ messages: [] });
+      const result = await store.saveMessages({ messages: [] });
       expect(result).toEqual([]);
     }, 10e3);
 
     it('should maintain message order', async () => {
       const thread = createSampleThread();
-      await store.__saveThread({ thread });
+      await store.saveThread({ thread });
 
       const messages = [
         {
@@ -212,9 +212,9 @@ describe('ClickhouseStore', () => {
         },
       ];
 
-      await store.__saveMessages({ messages });
+      await store.saveMessages({ messages });
 
-      const retrievedMessages = await store.__getMessages({ threadId: thread.id });
+      const retrievedMessages = await store.getMessages({ threadId: thread.id });
       expect(retrievedMessages).toHaveLength(3);
 
       // Verify order is maintained
@@ -225,17 +225,17 @@ describe('ClickhouseStore', () => {
 
     // it('should rollback on error during message save', async () => {
     //   const thread = createSampleThread();
-    //   await store.__saveThread({ thread });
+    //   await store.saveThread({ thread });
 
     //   const messages = [
     //     createSampleMessage(thread.id),
     //     { ...createSampleMessage(thread.id), id: null }, // This will cause an error
     //   ];
 
-    //   await expect(store.__saveMessages({ messages })).rejects.toThrow();
+    //   await expect(store.saveMessages({ messages })).rejects.toThrow();
 
     //   // Verify no messages were saved
-    //   const savedMessages = await store.__getMessages({ threadId: thread.id });
+    //   const savedMessages = await store.getMessages({ threadId: thread.id });
     //   expect(savedMessages).toHaveLength(0);
     // });
   });
@@ -243,11 +243,11 @@ describe('ClickhouseStore', () => {
   describe('Traces and TTL', () => {
     it('should create and retrieve a trace, but not when row level ttl expires', async () => {
       const trace = createSampleTrace();
-      await store.__batchInsert({
+      await store.batchInsert({
         tableName: 'mastra_traces',
         records: [trace],
       });
-      let traces = await store.__getTraces({
+      let traces = await store.getTraces({
         page: 0,
         perPage: 10,
       });
@@ -258,7 +258,7 @@ describe('ClickhouseStore', () => {
       await new Promise(resolve => setTimeout(resolve, 10e3));
       await store.optimizeTable({ tableName: 'mastra_traces' });
 
-      traces = await store.__getTraces({
+      traces = await store.getTraces({
         page: 0,
         perPage: 10,
       });
@@ -270,11 +270,11 @@ describe('ClickhouseStore', () => {
     it.skip('should create and retrieve a trace, but not expired columns when column level ttl expires', async () => {
       await store.clearTable({ tableName: 'mastra_evals' });
       const ev = createSampleEval();
-      await store.__batchInsert({
+      await store.batchInsert({
         tableName: 'mastra_evals',
         records: [ev],
       });
-      let evals = await store.__getEvalsByAgentName('test-agent');
+      let evals = await store.getEvalsByAgentName('test-agent');
       console.log(evals);
 
       expect(evals).toHaveLength(1);
@@ -285,7 +285,7 @@ describe('ClickhouseStore', () => {
       await store.materializeTtl({ tableName: 'mastra_evals' });
       await store.optimizeTable({ tableName: 'mastra_evals' });
 
-      evals = await store.__getEvalsByAgentName('test-agent');
+      evals = await store.getEvalsByAgentName('test-agent');
 
       expect(evals).toHaveLength(1);
       expect(evals[0]!.agentName).toBe('test-agent');
@@ -306,8 +306,8 @@ describe('ClickhouseStore', () => {
         metadata: largeMetadata,
       };
 
-      await store.__saveThread({ thread: threadWithLargeMetadata });
-      const retrieved = await store.__getThreadById({ threadId: thread.id });
+      await store.saveThread({ thread: threadWithLargeMetadata });
+      const retrieved = await store.getThreadById({ threadId: thread.id });
 
       expect(retrieved?.metadata).toEqual(largeMetadata);
     }, 10e3);
@@ -318,19 +318,19 @@ describe('ClickhouseStore', () => {
         title: 'Special \'quotes\' and "double quotes" and emoji 🎉',
       };
 
-      await store.__saveThread({ thread });
-      const retrieved = await store.__getThreadById({ threadId: thread.id });
+      await store.saveThread({ thread });
+      const retrieved = await store.getThreadById({ threadId: thread.id });
 
       expect(retrieved?.title).toBe(thread.title);
     }, 10e3);
 
     it('should handle concurrent thread updates', async () => {
       const thread = createSampleThread();
-      await store.__saveThread({ thread });
+      await store.saveThread({ thread });
 
       // Perform multiple updates concurrently
       const updates = Array.from({ length: 5 }, (_, i) =>
-        store.__updateThread({
+        store.updateThread({
           id: thread.id,
           title: `Update ${i}`,
           metadata: { update: i },
@@ -340,7 +340,7 @@ describe('ClickhouseStore', () => {
       await expect(Promise.all(updates)).resolves.toBeDefined();
 
       // Verify final state
-      const finalThread = await store.__getThreadById({ threadId: thread.id });
+      const finalThread = await store.getThreadById({ threadId: thread.id });
       expect(finalThread).toBeDefined();
     }, 10e3);
   });
@@ -491,7 +491,7 @@ describe('ClickhouseStore', () => {
       await store.clearTable({ tableName: TABLE_WORKFLOW_SNAPSHOT });
     });
     it('returns empty array when no workflows exist', async () => {
-      const { runs, total } = await store.__getWorkflowRuns();
+      const { runs, total } = await store.getWorkflowRuns();
       expect(runs).toEqual([]);
       expect(total).toBe(0);
     });
@@ -515,7 +515,7 @@ describe('ClickhouseStore', () => {
         snapshot: workflow2,
       });
 
-      const { runs, total } = await store.__getWorkflowRuns();
+      const { runs, total } = await store.getWorkflowRuns();
       expect(runs).toHaveLength(2);
       expect(total).toBe(2);
       expect(runs[0]!.workflowName).toBe(workflowName2); // Most recent first
@@ -545,7 +545,7 @@ describe('ClickhouseStore', () => {
         snapshot: workflow2,
       });
 
-      const { runs, total } = await store.__getWorkflowRuns({
+      const { runs, total } = await store.getWorkflowRuns({
         workflowName: workflowName1,
       });
       expect(runs).toHaveLength(1);
@@ -598,7 +598,7 @@ describe('ClickhouseStore', () => {
         },
       });
 
-      const { runs } = await store.__getWorkflowRuns({
+      const { runs } = await store.getWorkflowRuns({
         fromDate: yesterday,
         toDate: now,
       });
@@ -640,7 +640,7 @@ describe('ClickhouseStore', () => {
       });
 
       // Get first page
-      const page1 = await store.__getWorkflowRuns({
+      const page1 = await store.getWorkflowRuns({
         limit: 2,
         offset: 0,
       });
@@ -654,7 +654,7 @@ describe('ClickhouseStore', () => {
       expect(secondSnapshot.context?.steps[stepId2]?.status).toBe('running');
 
       // Get second page
-      const page2 = await store.__getWorkflowRuns({
+      const page2 = await store.getWorkflowRuns({
         limit: 2,
         offset: 2,
       });

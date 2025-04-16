@@ -1,6 +1,6 @@
 const meta = {
-  "ai-sdk": "AI SDK",
-  "next-js": "Integrate with Next.js",
+  "ai-sdk": "With Vercel AI SDK",
+  "next-js": "With Next.js",
 };
 
 export default meta;

@@ -92,7 +92,7 @@ export class OTLPTraceExporter implements SpanExporter {
     }, []);
 
     return this.storage
-      .__batchInsert({
+      .batchInsert({
         tableName: TABLE_TRACES,
         records: allSpans,
       })
