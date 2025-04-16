@@ -5,7 +5,7 @@
   "type": "module",
   "description": "E2E tests for @mastra/create-mastra",
   "scripts": {
-    "test": "vitest"
+    "test": "vitest run"
   },
   "devDependencies": {
     "cross-env": "^7.0.3",
