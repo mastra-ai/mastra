@@ -223,7 +223,7 @@ jobs:
         run: pnpm install
 
       - name: Build
-        run: pnpm turbo --filter "./packages/core" --filter "./packages/cli" build
+        run: pnpm turbo --filter "create-mastra" build
 
       - name: Install e2e test dependencies
         working-directory: ./e2e-tests/create-mastra
