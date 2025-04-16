@@ -1714,6 +1714,97 @@ describe('MDocument', () => {
       ).rejects.toThrow("Summaries must be one of 'self', 'prev', 'next'");
     }, 15000);
   });
+
+  describe('metadata preservation', () => {
+    const baseText = 'This is a test document for metadata extraction.';
+    const baseMetadata = { source: 'unit-test', customField: 123 };
+
+    it('preserves metadata with KeywordExtractor', async () => {
+      const doc = MDocument.fromText(baseText, { ...baseMetadata });
+      const chunks = await doc.chunk({ extract: { keywords: true } });
+      const metadata = chunks[0].metadata;
+      expect(metadata.source).toBe('unit-test');
+      expect(metadata.customField).toBe(123);
+      expect(metadata.excerptKeywords).toBeDefined();
+    });
+
+    it('preserves metadata with SummaryExtractor', async () => {
+      const doc = MDocument.fromText(baseText, { ...baseMetadata });
+      const chunks = await doc.chunk({ extract: { summary: true } });
+      const metadata = chunks[0].metadata;
+      expect(metadata.source).toBe('unit-test');
+      expect(metadata.customField).toBe(123);
+      expect(metadata.sectionSummary).toBeDefined();
+    });
+
+    it('preserves metadata with QuestionsAnsweredExtractor', async () => {
+      const doc = MDocument.fromText(baseText, { ...baseMetadata });
+      const chunks = await doc.chunk({ extract: { questions: true } });
+      const metadata = chunks[0].metadata;
+      expect(metadata.source).toBe('unit-test');
+      expect(metadata.customField).toBe(123);
+      expect(metadata.questionsThisExcerptCanAnswer).toBeDefined();
+    });
+
+    it('preserves metadata with TitleExtractor', async () => {
+      const doc = MDocument.fromText(baseText, { ...baseMetadata });
+      const chunks = await doc.chunk({ extract: { title: true } });
+      const metadata = chunks[0].metadata;
+      expect(metadata.source).toBe('unit-test');
+      expect(metadata.customField).toBe(123);
+      expect(metadata.documentTitle).toBeDefined();
+    });
+
+    it('preserves metadata with multiple extractors', async () => {
+      const doc = MDocument.fromText(baseText, { ...baseMetadata });
+      const chunks = await doc.chunk({
+        extract: {
+          keywords: true,
+          summary: true,
+          questions: true,
+          title: true,
+        },
+      });
+      const metadata = chunks[0].metadata;
+      expect(metadata.source).toBe('unit-test');
+      expect(metadata.customField).toBe(123);
+      expect(metadata.excerptKeywords).toBeDefined();
+      expect(metadata.sectionSummary).toBeDefined();
+      expect(metadata.questionsThisExcerptCanAnswer).toBeDefined();
+      expect(metadata.documentTitle).toBeDefined();
+    });
+    it('preserves metadata on all chunks when multiple are created', async () => {
+      const text = 'Chunk one.\n\nChunk two.\n\nChunk three.';
+      const doc = MDocument.fromText(text, { source: 'multi-chunk', customField: 42 });
+      const chunks = await doc.chunk({
+        strategy: 'character',
+        separator: '\n\n',
+        size: 20,
+        overlap: 0,
+        extract: { keywords: true },
+      });
+      expect(chunks.length).toBeGreaterThan(1);
+      for (const chunk of chunks) {
+        const metadata = chunk.metadata;
+        expect(metadata.source).toBe('multi-chunk');
+        expect(metadata.customField).toBe(42);
+        expect(metadata.excerptKeywords).toBeDefined();
+      }
+    });
+
+    it('overwrites only the matching metadata field with extractor output', async () => {
+      const doc = MDocument.fromText('Test for overwrite', {
+        excerptKeywords: 'original,keywords',
+        unrelatedField: 'should stay',
+        source: 'unit-test',
+      });
+      const chunks = await doc.chunk({ extract: { keywords: true } });
+      const metadata = chunks[0].metadata;
+      expect(metadata.source).toBe('unit-test');
+      expect(metadata.unrelatedField).toBe('should stay');
+      expect(metadata.excerptKeywords).not.toBe('original,keywords'); // Should be new keywords
+    });
+  });
 });
 
 // Helper function to find the longest common substring between two strings

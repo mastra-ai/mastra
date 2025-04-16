@@ -1,6 +1,6 @@
 import { createOpenAI } from '@ai-sdk/openai';
 import { TextNode } from '@llamaindex/core/schema';
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { SummaryExtractor } from './summary';
 
 const openai = createOpenAI({
@@ -8,6 +8,8 @@ const openai = createOpenAI({
 });
 
 const model = openai('gpt-4o');
+
+vi.setConfig({ testTimeout: 10_000, hookTimeout: 10_000 });
 
 describe('SummaryExtractor', () => {
   it('can use a custom model from the test suite', async () => {
