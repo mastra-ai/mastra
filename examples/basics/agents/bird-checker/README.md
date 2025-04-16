@@ -44,5 +44,5 @@ A simple example agent to determine if an image contains a bird.
 4. Run the example:
 
    ```bash
-   pnpm start
+   pnpm run dev
    ```

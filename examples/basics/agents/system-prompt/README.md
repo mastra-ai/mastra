@@ -38,5 +38,5 @@ A simple example showing how to create an agent with system prompt.
 4. Run the example:
 
    ```bash
-   pnpm start
+   pnpm run dev
    ```
