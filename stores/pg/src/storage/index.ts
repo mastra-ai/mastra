@@ -13,7 +13,7 @@ import type { WorkflowRunState } from '@mastra/core/workflows';
 import pgPromise from 'pg-promise';
 import type { ISSLConfig } from 'pg-promise/typescript/pg-subset';
 
-export type PostgresConfig = { schema?: string } & (
+export type PostgresConfig = { schemaName?: string } & (
   | {
       host: string;
       port: number;
@@ -37,7 +37,7 @@ export class PostgresStore extends MastraStorage {
   constructor(config: PostgresConfig) {
     super({ name: 'PostgresStore' });
     this.pgp = pgPromise();
-    this.schema = config.schema;
+    this.schema = config.schemaName;
     this.db = this.pgp(
       `connectionString` in config
         ? { connectionString: config.connectionString }

@@ -662,7 +662,7 @@ describe('PostgresStore', () => {
     beforeAll(async () => {
       customSchemaStore = new PostgresStore({
         ...TEST_CONFIG,
-        schema: customSchema,
+        schemaName: customSchema,
       });
 
       await customSchemaStore.init();
@@ -844,7 +844,7 @@ describe('PostgresStore', () => {
           ...TEST_CONFIG,
           user: schemaRestrictedUser,
           password: restrictedPassword,
-          schema: testSchema,
+          schemaName: testSchema,
         });
 
         // Create a fresh connection for verification
@@ -876,7 +876,7 @@ describe('PostgresStore', () => {
           ...TEST_CONFIG,
           user: schemaRestrictedUser,
           password: restrictedPassword,
-          schema: testSchema,
+          schemaName: testSchema,
         });
 
         // Create a fresh connection for verification
