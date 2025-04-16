@@ -83,15 +83,30 @@ const createSampleEval = (agentName: string, isTest = false) => {
 };
 
 describe('PostgresStore', () => {
+  let store: PostgresStore;
+
+  beforeAll(async () => {
+    store = new PostgresStore(TEST_CONFIG);
+    await store.init();
+  });
+
+  beforeEach(async () => {
+    // Only clear tables if store is initialized
+    try {
+      // Clear tables before each test
+      await store.clearTable({ tableName: TABLE_WORKFLOW_SNAPSHOT });
+      await store.clearTable({ tableName: TABLE_MESSAGES });
+      await store.clearTable({ tableName: TABLE_THREADS });
+      await store.clearTable({ tableName: TABLE_EVALS });
+    } catch (error) {
+      // Ignore errors during table clearing
+      console.warn('Error clearing tables:', error);
+    }
+  });
+
   // --- Validation tests ---
   describe('Validation', () => {
-    const validConfig = {
-      host: 'localhost',
-      port: 5432,
-      database: 'testdb',
-      user: 'testuser',
-      password: 'testpass',
-    };
+    const validConfig = TEST_CONFIG;
     it('throws if connectionString is empty', () => {
       expect(() => new PostgresStore({ connectionString: '' })).toThrow(
         /connectionString must be provided and cannot be empty/,
@@ -128,30 +143,9 @@ describe('PostgresStore', () => {
     it('does not throw on valid config (host-based)', () => {
       expect(() => new PostgresStore(validConfig)).not.toThrow();
     });
-    it('does not throw on valid config (connectionString)', () => {
-      expect(() => new PostgresStore({ connectionString: 'postgresql://user:pass@localhost:5432/db' })).not.toThrow();
+    it('does not throw on non-empty connection string', () => {
+      expect(() => new PostgresStore({ connectionString })).not.toThrow();
     });
-  });
-
-  let store: PostgresStore;
-
-  beforeAll(async () => {
-    store = new PostgresStore(TEST_CONFIG);
-    await store.init();
-  });
-
-  beforeEach(async () => {
-    // Only clear tables if store is initialized
-    try {
-      // Clear tables before each test
-      await store.clearTable({ tableName: TABLE_WORKFLOW_SNAPSHOT });
-      await store.clearTable({ tableName: TABLE_MESSAGES });
-      await store.clearTable({ tableName: TABLE_THREADS });
-      await store.clearTable({ tableName: TABLE_EVALS });
-    } catch (error) {
-      // Ignore errors during table clearing
-      console.warn('Error clearing tables:', error);
-    }
   });
 
   describe('Thread Operations', () => {
