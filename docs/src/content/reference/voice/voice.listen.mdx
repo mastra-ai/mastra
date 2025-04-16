@@ -11,6 +11,7 @@ The `listen()` method is a core function available in all Mastra voice providers
 
 ```typescript
 import { OpenAIVoice } from "@mastra/voice-openai";
+import { getMicrophoneStream } from "@mastra/node-audio";
 import { createReadStream } from "fs";
 import path from "path";
 
@@ -148,6 +149,8 @@ When using realtime voice providers like `OpenAIRealtimeVoice`, the `listen()` m
 
 ```typescript
 import { OpenAIRealtimeVoice } from "@mastra/voice-openai-realtime";
+import { getMicrophoneStream } from "@mastra/node-audio";
+
 const voice = new OpenAIRealtimeVoice();
 await voice.connect();
 
