@@ -39,6 +39,31 @@ const execWithTimeout = async (command: string, timeoutMs?: number) => {
   }
 };
 
+async function installMastraDependency(
+  pm: string,
+  dependency: string,
+  versionTag: string,
+  isDev: boolean,
+  timeout?: number,
+) {
+  let installCommand = getPackageManagerInstallCommand(pm);
+
+  if (isDev) {
+    installCommand = `${installCommand} --save-dev`;
+  }
+
+  try {
+    await execWithTimeout(`${pm} ${installCommand} ${dependency}${versionTag}`, timeout);
+  } catch (err) {
+    console.log('err', err);
+    if (versionTag === '@latest') {
+      throw err;
+    }
+
+    await execWithTimeout(`${pm} ${installCommand} ${dependency}@latest`, timeout);
+  }
+}
+
 export const createMastraProject = async ({
   projectName: name,
   createVersionTag,
@@ -88,13 +113,14 @@ export const createMastraProject = async ({
   const depsService = new DepsService();
   await depsService.addScriptsToPackageJson({
     dev: 'mastra dev',
+    build: 'mastra build',
   });
 
   s.stop('Project created');
 
   s.start(`Installing ${pm} dependencies`);
   await exec(`${pm} ${installCommand} zod`);
-  await exec(`${pm} ${installCommand} typescript tsx @types/node --save-dev`);
+  await exec(`${pm} ${installCommand} typescript @types/node --save-dev`);
   await exec(`echo '{
   "compilerOptions": {
     "target": "ES2022",
@@ -104,26 +130,22 @@ export const createMastraProject = async ({
     "forceConsistentCasingInFileNames": true,
     "strict": true,
     "skipLibCheck": true,
+    "noEmit": true,
     "outDir": "dist"
   },
   "include": [
     "src/**/*"
-  ],
-  "exclude": [
-    "node_modules",
-    "dist",
-    ".mastra"
   ]
 }' > tsconfig.json`);
 
   s.stop(`${pm} dependencies installed`);
   s.start('Installing mastra');
   const versionTag = createVersionTag ? `@${createVersionTag}` : '@latest';
-  await execWithTimeout(`${pm} ${installCommand} mastra${versionTag}`, timeout);
+  await installMastraDependency(pm, 'mastra', versionTag, true, timeout);
   s.stop('mastra installed');
 
   s.start('Installing @mastra/core');
-  await execWithTimeout(`${pm} ${installCommand} @mastra/core${versionTag}`, timeout);
+  await installMastraDependency(pm, '@mastra/core', versionTag, false, timeout);
   s.stop('@mastra/core installed');
 
   s.start('Adding .gitignore');

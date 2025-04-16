@@ -626,6 +626,12 @@ export class OpenAIRealtimeVoice extends MastraVoice {
           messages: [],
         },
       );
+      this.emit('tool-result', {
+        toolCallId: output.call_id,
+        toolName: output.name,
+        args: context,
+        result,
+      });
       this.sendEvent('conversation.item.create', {
         item: {
           type: 'function_call_output',
