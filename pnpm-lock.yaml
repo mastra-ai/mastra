@@ -3669,9 +3669,6 @@ importers:
       '@llamaindex/core':
         specifier: ^0.6.2
         version: 0.6.2(@huggingface/transformers@3.4.0)(gpt-tokenizer@2.9.0)
-      '@llamaindex/env':
-        specifier: ^0.1.29
-        version: 0.1.29(@huggingface/transformers@3.4.0)(gpt-tokenizer@2.9.0)
       '@mastra/core':
         specifier: workspace:^
         version: link:../core
