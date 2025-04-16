@@ -378,8 +378,7 @@ export class OpenAIRealtimeVoice extends MastraVoice {
     });
 
     this.setupEventListeners();
-    await this.waitForOpen();
-    await this.waitForSessionCreated();
+    await Promise.all([this.waitForOpen(), this.waitForSessionCreated()]);
 
     const openaiTools = transformTools(this.tools);
     this.updateConfig({
@@ -391,6 +390,11 @@ export class OpenAIRealtimeVoice extends MastraVoice {
       voice: this.speaker,
     });
     this.state = 'open';
+  }
+
+  disconnect() {
+    this.state = 'close';
+    this.ws?.close();
   }
 
   /**
