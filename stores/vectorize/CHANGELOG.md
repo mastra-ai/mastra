@@ -1,5 +1,43 @@
 # @mastra/vectorize
 
+## 0.2.6-alpha.1
+
+### Patch Changes
+
+- Updated dependencies [8a8a73b]
+- Updated dependencies [6f92295]
+  - @mastra/core@0.8.4-alpha.1
+
+## 0.2.6-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [03f3cd0]
+  - @mastra/core@0.8.4-alpha.0
+
+## 0.2.5
+
+### Patch Changes
+
+- ec3cbf9: add MIT license for stores/vector packages
+- 37bb612: Add Elastic-2.0 licensing for packages
+- Updated dependencies [d72318f]
+- Updated dependencies [0bcc862]
+- Updated dependencies [10a8caf]
+- Updated dependencies [359b089]
+- Updated dependencies [32e7b71]
+- Updated dependencies [37bb612]
+- Updated dependencies [7f1b291]
+  - @mastra/core@0.8.3
+
+## 0.2.5-alpha.5
+
+### Patch Changes
+
+- ec3cbf9: add MIT license for stores/vector packages
+- Updated dependencies [d72318f]
+  - @mastra/core@0.8.3-alpha.5
+
 ## 0.2.5-alpha.4
 
 ### Patch Changes

@@ -1,5 +1,68 @@
 # @mastra/dane
 
+## 0.0.16-alpha.1
+
+### Patch Changes
+
+- Updated dependencies [8a8a73b]
+- Updated dependencies [6f92295]
+  - @mastra/core@0.8.4-alpha.1
+  - @mastra/memory@0.2.11-alpha.1
+  - @mastra/github@1.1.19-alpha.1
+  - @mastra/mcp@0.3.11-alpha.1
+  - @mastra/rag@0.1.19-alpha.1
+  - @mastra/upstash@0.2.6-alpha.1
+
+## 0.0.16-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [03f3cd0]
+  - @mastra/core@0.8.4-alpha.0
+  - @mastra/github@1.1.19-alpha.0
+  - @mastra/mcp@0.3.11-alpha.0
+  - @mastra/memory@0.2.11-alpha.0
+  - @mastra/rag@0.1.19-alpha.0
+  - @mastra/upstash@0.2.6-alpha.0
+
+## 0.0.15
+
+### Patch Changes
+
+- 37bb612: Add Elastic-2.0 licensing for packages
+- Updated dependencies [d72318f]
+- Updated dependencies [0bcc862]
+- Updated dependencies [10a8caf]
+- Updated dependencies [f6f7345]
+- Updated dependencies [359b089]
+- Updated dependencies [32e7b71]
+- Updated dependencies [ec3cbf9]
+- Updated dependencies [18d0758]
+- Updated dependencies [492e370]
+- Updated dependencies [37bb612]
+- Updated dependencies [3e8e000]
+- Updated dependencies [476ce7c]
+- Updated dependencies [7f1b291]
+  - @mastra/core@0.8.3
+  - @mastra/memory@0.2.10
+  - @mastra/upstash@0.2.5
+  - @mastra/rag@0.1.18
+  - @mastra/mcp@0.3.10
+  - @mastra/github@1.1.18
+
+## 0.0.15-alpha.7
+
+### Patch Changes
+
+- Updated dependencies [d72318f]
+- Updated dependencies [ec3cbf9]
+  - @mastra/core@0.8.3-alpha.5
+  - @mastra/upstash@0.2.5-alpha.5
+  - @mastra/github@1.1.18-alpha.5
+  - @mastra/mcp@0.3.10-alpha.6
+  - @mastra/memory@0.2.10-alpha.5
+  - @mastra/rag@0.1.18-alpha.6
+
 ## 0.0.15-alpha.6
 
 ### Patch Changes

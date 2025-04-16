@@ -1,5 +1,44 @@
 # @mastra/mcp
 
+## 0.3.11-alpha.1
+
+### Patch Changes
+
+- Updated dependencies [8a8a73b]
+- Updated dependencies [6f92295]
+  - @mastra/core@0.8.4-alpha.1
+
+## 0.3.11-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [03f3cd0]
+  - @mastra/core@0.8.4-alpha.0
+
+## 0.3.10
+
+### Patch Changes
+
+- 492e370: Updated MCPConfiguration to connect/disconnect to all clients simultaneously instead of one at a time
+- 37bb612: Add Elastic-2.0 licensing for packages
+- 3e8e000: Added configurable test timeouts to mcp configuration, and updated mcp version
+- 476ce7c: [MASTRA-2997] added documentation on authorization headers in sse connections
+- Updated dependencies [d72318f]
+- Updated dependencies [0bcc862]
+- Updated dependencies [10a8caf]
+- Updated dependencies [359b089]
+- Updated dependencies [32e7b71]
+- Updated dependencies [37bb612]
+- Updated dependencies [7f1b291]
+  - @mastra/core@0.8.3
+
+## 0.3.10-alpha.6
+
+### Patch Changes
+
+- Updated dependencies [d72318f]
+  - @mastra/core@0.8.3-alpha.5
+
 ## 0.3.10-alpha.5
 
 ### Patch Changes
