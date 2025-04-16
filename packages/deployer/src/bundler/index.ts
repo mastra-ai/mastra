@@ -1,12 +1,12 @@
 import { existsSync } from 'node:fs';
 import { stat, writeFile } from 'node:fs/promises';
-import { basename, dirname, join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { MastraBundler } from '@mastra/core/bundler';
 import virtual from '@rollup/plugin-virtual';
 import fsExtra, { copy, ensureDir, readJSON, emptyDir } from 'fs-extra/esm';
 import resolveFrom from 'resolve-from';
-import type { InputOptions, OutputOptions, RollupWatcherEvent } from 'rollup';
+import type { InputOptions, OutputOptions } from 'rollup';
 
 import { analyzeBundle } from '../build/analyze';
 import { createBundler as createBundlerUtil, getInputOptions } from '../build/bundler';
