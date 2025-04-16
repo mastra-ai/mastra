@@ -1,10 +1,10 @@
-type TagProps = {children: React.ReactNode, text?: 'new' | 'experimental' | 'advanced', showAbbr?: boolean}
+type TagProps = {
+  children: React.ReactNode;
+  text?: "new" | "experimental" | "advanced" | "realtime";
+  showAbbr?: boolean;
+};
 
-export const Tag = ({
-  children,
-  text = "new",
-  showAbbr = false,
-}: TagProps) => {
+export const Tag = ({ children, text = "new", showAbbr = false }: TagProps) => {
   const tags = [
     {
       name: "new",
@@ -20,6 +20,14 @@ export const Tag = ({
       color: {
         bg: "bg-[hsla(var(--tag-purple),0.06)]",
         text: "text-[hsla(var(--tag-purple),1)]",
+      },
+    },
+    {
+      name: "realtime",
+      abbr: "RT",
+      color: {
+        bg: "bg-[hsla(var(--tag-green),0.06)]",
+        text: "text-[hsla(var(--tag-green),1)]",
       },
     },
     {
