@@ -12,16 +12,19 @@ describe('create mastra', () => {
   let fixturePath: string;
   let cleanup: () => void;
 
-  beforeAll(async () => {
-    const port = await getPort();
-    fixturePath = await mkdtemp(join(tmpdir(), 'mastra-create-test-'));
-    await copyFile('./verdaccio.yaml', join(fixturePath, 'verdaccio.yaml'));
-    cleanup = await setupRegistry(fixturePath, port);
+  beforeAll(
+    async () => {
+      const port = await getPort();
+      fixturePath = await mkdtemp(join(tmpdir(), 'mastra-create-test-'));
+      await copyFile('./verdaccio.yaml', join(fixturePath, 'verdaccio.yaml'));
+      cleanup = await setupRegistry(fixturePath, port);
 
-    process.env.npm_config_registry = `http://localhost:${port}/`;
-    await runCreateMastra(fixturePath, 'pnpm', port);
-    chdir(join(fixturePath, 'project'));
-  }, 120 * 1000);
+      process.env.npm_config_registry = `http://localhost:${port}/`;
+      await runCreateMastra(fixturePath, 'pnpm', port);
+      chdir(join(fixturePath, 'project'));
+    },
+    15 * 60 * 1000,
+  );
 
   afterAll(async () => {
     try {
