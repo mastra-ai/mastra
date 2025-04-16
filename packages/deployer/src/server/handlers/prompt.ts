@@ -31,8 +31,8 @@ export async function generateSystemPromptHandler(c: Context) {
 
     try {
       // Get both test and live evals
-      const testEvals = (await mastra.storage?.__getEvalsByAgentName?.(agent.name, 'test')) || [];
-      const liveEvals = (await mastra.storage?.__getEvalsByAgentName?.(agent.name, 'live')) || [];
+      const testEvals = (await mastra.getStorage()?.getEvalsByAgentName?.(agent.name, 'test')) || [];
+      const liveEvals = (await mastra.getStorage()?.getEvalsByAgentName?.(agent.name, 'live')) || [];
       // Format eval results for the prompt
       const evalsMapped = [...testEvals, ...liveEvals].filter(
         ({ instructions: evalInstructions }) => evalInstructions === instructions,
