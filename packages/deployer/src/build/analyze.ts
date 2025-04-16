@@ -307,9 +307,9 @@ async function validateOutput(
       result.invalidChunks.add(file.fileName);
       if (file.isEntry && reverseVirtualReferenceMap.has(file.name)) {
         const reference = reverseVirtualReferenceMap.get(file.name)!;
-        const dep = reference.startsWith('@') ? reference.split('/').slice(0, 2) : reference.split('/')[0];
+        const dep = reference.startsWith('@') ? reference.split('/').slice(0, 2).join('/') : reference.split('/')[0];
 
-        result.externalDependencies.add(dep);
+        result.externalDependencies.add(dep!);
       }
 
       // we might need this on other projects but not sure so let's keep it commented out for now
