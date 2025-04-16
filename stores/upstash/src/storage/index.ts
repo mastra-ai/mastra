@@ -388,7 +388,7 @@ export class UpstashStore extends MastraStorage {
       },
     };
 
-    await this.__saveThread({ thread: updatedThread });
+    await this.saveThread({ thread: updatedThread });
     return updatedThread;
   }
 
