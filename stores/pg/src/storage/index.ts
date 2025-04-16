@@ -35,6 +35,27 @@ export class PostgresStore extends MastraStorage {
   private schemaSetupComplete: boolean | undefined = undefined;
 
   constructor(config: PostgresConfig) {
+    // Validation: connectionString or host/database/user/password must not be empty
+    if ('connectionString' in config) {
+      if (
+        !config.connectionString ||
+        typeof config.connectionString !== 'string' ||
+        config.connectionString.trim() === ''
+      ) {
+        throw new Error(
+          'PostgresStore: connectionString must be provided and cannot be empty. Passing an empty string may cause fallback to local Postgres defaults.',
+        );
+      }
+    } else {
+      const required = ['host', 'database', 'user', 'password'];
+      for (const key of required) {
+        if (!(key in config) || typeof (config as any)[key] !== 'string' || (config as any)[key].trim() === '') {
+          throw new Error(
+            `PostgresStore: ${key} must be provided and cannot be empty. Passing an empty string may cause fallback to local Postgres defaults.`,
+          );
+        }
+      }
+    }
     super({ name: 'PostgresStore' });
     this.pgp = pgPromise();
     this.schema = config.schemaName;

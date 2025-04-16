@@ -83,6 +83,56 @@ const createSampleEval = (agentName: string, isTest = false) => {
 };
 
 describe('PostgresStore', () => {
+  // --- Validation tests ---
+  describe('Validation', () => {
+    const validConfig = {
+      host: 'localhost',
+      port: 5432,
+      database: 'testdb',
+      user: 'testuser',
+      password: 'testpass',
+    };
+    it('throws if connectionString is empty', () => {
+      expect(() => new PostgresStore({ connectionString: '' })).toThrow(
+        /connectionString must be provided and cannot be empty/,
+      );
+    });
+    it('throws if host is missing or empty', () => {
+      expect(() => new PostgresStore({ ...validConfig, host: '' })).toThrow(
+        /host must be provided and cannot be empty/,
+      );
+      const { host, ...rest } = validConfig;
+      expect(() => new PostgresStore(rest as any)).toThrow(/host must be provided and cannot be empty/);
+    });
+    it('throws if user is missing or empty', () => {
+      expect(() => new PostgresStore({ ...validConfig, user: '' })).toThrow(
+        /user must be provided and cannot be empty/,
+      );
+      const { user, ...rest } = validConfig;
+      expect(() => new PostgresStore(rest as any)).toThrow(/user must be provided and cannot be empty/);
+    });
+    it('throws if database is missing or empty', () => {
+      expect(() => new PostgresStore({ ...validConfig, database: '' })).toThrow(
+        /database must be provided and cannot be empty/,
+      );
+      const { database, ...rest } = validConfig;
+      expect(() => new PostgresStore(rest as any)).toThrow(/database must be provided and cannot be empty/);
+    });
+    it('throws if password is missing or empty', () => {
+      expect(() => new PostgresStore({ ...validConfig, password: '' })).toThrow(
+        /password must be provided and cannot be empty/,
+      );
+      const { password, ...rest } = validConfig;
+      expect(() => new PostgresStore(rest as any)).toThrow(/password must be provided and cannot be empty/);
+    });
+    it('does not throw on valid config (host-based)', () => {
+      expect(() => new PostgresStore(validConfig)).not.toThrow();
+    });
+    it('does not throw on valid config (connectionString)', () => {
+      expect(() => new PostgresStore({ connectionString: 'postgresql://user:pass@localhost:5432/db' })).not.toThrow();
+    });
+  });
+
   let store: PostgresStore;
 
   beforeAll(async () => {

@@ -5,6 +5,24 @@ import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach, vi } 
 import { PgVector } from '.';
 
 describe('PgVector', () => {
+  // --- Validation tests ---
+  describe('Validation', () => {
+    it('throws if connectionString is empty (string)', () => {
+      expect(() => new PgVector('')).toThrow(/connectionString must be provided and cannot be empty/);
+    });
+    it('throws if connectionString is empty (object)', () => {
+      expect(() => new PgVector({ connectionString: '' })).toThrow(
+        /connectionString must be provided and cannot be empty/,
+      );
+    });
+    it('does not throw on valid connection string (string)', () => {
+      expect(() => new PgVector('postgresql://user:pass@localhost:5432/db')).not.toThrow();
+    });
+    it('does not throw on valid connection string (object)', () => {
+      expect(() => new PgVector({ connectionString: 'postgresql://user:pass@localhost:5432/db' })).not.toThrow();
+    });
+  });
+
   let vectorDB: PgVector;
   const testIndexName = 'test_vectors';
   const testIndexName2 = 'test_vectors1';
