@@ -39,5 +39,5 @@ A simple supervisor planning agent that orchestrates calls to other agents using
 4. Run the example:
 
    ```bash
-   pnpm run dev
+   pnpm start
    ```

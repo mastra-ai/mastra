@@ -38,5 +38,5 @@ A simple example showing how to create an agentic workflow.
 4. Run the example:
 
    ```bash
-   pnpm run dev
+   pnpm start
    ```

@@ -39,5 +39,5 @@ A sequential agentic workflow that calls two agents to create blog post content.
 4. Run the example:
 
    ```bash
-   pnpm run dev
+   pnpm start
    ```

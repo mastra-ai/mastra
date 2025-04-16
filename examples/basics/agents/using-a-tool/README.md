@@ -38,5 +38,5 @@ A simple example showing how to use a tool.
 4. Run the example:
 
    ```bash
-   pnpm run dev
+   pnpm start
    ```
