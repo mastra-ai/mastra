@@ -170,6 +170,29 @@ describe('Milvus Vector tests', () => {
   describe('Index operations', () => {
     const collection_name = `book`;
 
+    beforeAll(async () => {
+      await milvusClient.createCollection(collection_name, [
+        {
+          name: `book_id`,
+          description: `customized primary id`,
+          data_type: DataType.Int64,
+          is_primary_key: true,
+          autoID: false,
+        },
+        {
+          name: `word_count`,
+          description: `word count`,
+          data_type: DataType.Int64,
+        },
+        {
+          name: `book_intro`,
+          description: `word count`,
+          data_type: DataType.FloatVector,
+          dim: 128,
+        },
+      ]);
+    });
+
     afterAll(async () => {
       await milvusClient.dropCollection(collection_name);
     });
@@ -180,10 +203,20 @@ describe('Milvus Vector tests', () => {
         fieldName: 'book_intro',
         indexName: 'book_intro_idx',
         indexConfig: {
-          type: IndexType.FLAT,
+          type: IndexType.IVF_FLAT,
         },
         dimension: 128,
       });
+
+      const describeResult = await milvusClient.describeIndex(collection_name);
+
+      expect(describeResult).toBeDefined();
+      expect(describeResult.indexDescription).toBeDefined();
+      expect(describeResult.indexDescription.status.error_code).toBe('Success');
+      expect(describeResult.indexDescription.index_descriptions[0].field_name).toBe('book_intro');
+      expect(describeResult.indexDescription.index_descriptions[0].indexID).toBeDefined();
+      expect(describeResult.indexDescription.index_descriptions[0].params).toBeDefined();
+      expect(describeResult.indexDescription.index_descriptions[0].params).toHaveLength(3);
     });
 
     it('should list indexes', async () => {

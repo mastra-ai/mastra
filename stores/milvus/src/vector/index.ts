@@ -14,6 +14,7 @@ import { IndexType, MetricType, MilvusClient } from '@zilliz/milvus2-sdk-node';
 import type {
   CheckHealthResponse,
   DescribeCollectionResponse,
+  DescribeIndexResponse,
   FieldType,
   GetVersionResponse,
   ResStatus,
@@ -33,6 +34,10 @@ export interface MilvusCreateIndexParams extends CreateIndexParams {
   fieldName?: string;
   indexConfig?: IndexConfig;
   metricType?: MetricType;
+}
+
+export interface MilvusIndexStats extends IndexStats {
+  indexDescription: DescribeIndexResponse;
 }
 
 type MilvusCreateIndexArgs = [...CreateIndexArgs, IndexConfig?, boolean?];
@@ -127,26 +132,21 @@ export class MilvusVectorStore extends MastraVector {
         'metricType',
       ]);
 
-      const {
-        collectionName,
-        fieldName,
-        indexName,
-        indexConfig = {},
-        dimension,
-        metricType = MetricType.COSINE,
-      } = params;
+      const { collectionName, fieldName, dimension, indexName, indexConfig = {}, metricType = MetricType.L2 } = params;
 
       if (!collectionName || !fieldName) {
-        throw new Error('Missing required parameters: collectionName, fieldName, indexName');
+        throw new Error('Missing required parameters: collectionName, fieldName');
       }
 
       await this.client.createIndex({
         collection_name: collectionName,
         field_name: fieldName,
-        index_name: indexName,
-        index_type: indexConfig.type ?? IndexType.FLAT,
+        index_name: indexName ?? '',
+        index_type: indexConfig.type ?? IndexType.IVF_FLAT,
         metric_type: metricType,
-        params: { dimension },
+        params: {
+          nlist: dimension,
+        },
       });
     } catch (error) {
       throw new Error('Failed to create index: ' + error);
@@ -157,8 +157,20 @@ export class MilvusVectorStore extends MastraVector {
     throw new Error('Method not implemented.');
   }
 
-  describeIndex(indexName: string): Promise<IndexStats> {
-    throw new Error('Method not implemented.' + indexName);
+  async describeIndex(collectionName: string): Promise<MilvusIndexStats> {
+    try {
+      const response: DescribeIndexResponse = await this.client.describeIndex({
+        collection_name: collectionName,
+      });
+
+      return {
+        indexDescription: response,
+        dimension: 0,
+        count: 0,
+      };
+    } catch (error) {
+      throw new Error('Failed to describe index: ' + error);
+    }
   }
 
   deleteIndex(indexName: string): Promise<void> {
