@@ -1,5 +1,11 @@
 # @mastra/mcp
 
+## 0.4.0-alpha.2
+
+### Minor Changes
+
+- a3b2fb3: send mcp name on error connecting to it
+
 ## 0.3.11-alpha.1
 
 ### Patch Changes

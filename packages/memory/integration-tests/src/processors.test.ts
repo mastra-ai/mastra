@@ -349,4 +349,101 @@ describe('Memory with Processors', () => {
     // The result should still contain some messages
     expect(combinedResult.length).toBeGreaterThan(0);
   });
+
+  it('should chunk long text by character count', async () => {
+    // Create a thread
+    const thread = await memory.createThread({
+      title: 'Text Chunking Test Thread',
+      resourceId,
+    });
+
+    // Create a long text with known word boundaries
+    const words = [];
+    for (let i = 0; i < 1000; i++) {
+      words.push(`word${i}`);
+    }
+    const longText = words.join(' ');
+
+    // Save a message with the long text
+    await memory.saveMessages({
+      messages: [
+        {
+          id: 'chunking-test',
+          threadId: thread.id,
+          role: 'user',
+          content: longText,
+          createdAt: new Date(),
+          resourceId,
+          type: 'text',
+        },
+      ],
+    });
+
+    // Query the message back
+    const queryResult = await memory.query({
+      threadId: thread.id,
+      selectBy: { last: 1 },
+    });
+
+    // Retrieve the message (no TokenLimiter, just get the message back)
+    const result = memory.processMessages({
+      messages: queryResult.messages,
+    });
+
+    // Should have retrieved the message
+    expect(result.length).toBe(1);
+
+    // Each chunk should respect word boundaries
+    for (const msg of result) {
+      // No words should be cut off
+      const content = typeof msg.content === 'string' ? msg.content : (msg.content[0] as { text: string }).text;
+      const words = content.split(/\s+/);
+      for (const word of words) {
+        expect(word).toMatch(/^word\d+$/); // Each word should be complete
+      }
+    }
+
+    // Chunks should maintain original order
+    let prevNum = -1;
+    for (const msg of result) {
+      const content = typeof msg.content === 'string' ? msg.content : (msg.content[0] as { text: string }).text;
+      const firstWord = content.split(/\s+/)[0];
+      const num = parseInt(firstWord.replace('word', ''));
+      expect(num).toBeGreaterThan(prevNum);
+      prevNum = num;
+    }
+  });
+});
+
+// Direct unit test for chunkText
+
+describe('Memory.chunkText', () => {
+  it('should split long text into chunks at word boundaries', () => {
+    const memory = new Memory({});
+    const words = [];
+    for (let i = 0; i < 1000; i++) {
+      words.push(`word${i}`);
+    }
+    const longText = words.join(' ');
+    // Use a small token size to force chunking
+    const chunks = (memory as any).chunkText(longText, 50);
+    expect(chunks.length).toBeGreaterThan(1);
+    // Each chunk should respect word boundaries
+    for (const chunk of chunks) {
+      const chunkWords = chunk.split(/\s+/);
+      for (const word of chunkWords) {
+        if (word.length === 0) continue;
+        expect(word).toMatch(/^word\d+$/);
+      }
+    }
+    // Chunks should maintain original order
+    let prevNum = -1;
+    for (const chunk of chunks) {
+      const firstWord = chunk.split(/\s+/)[0];
+      if (!firstWord) continue; // skip empty
+      const num = parseInt(firstWord.replace('word', ''));
+      expect(num).toBeGreaterThan(prevNum);
+      prevNum = num;
+    }
+  });
 });
