@@ -1,0 +1,33 @@
+name: Sync Template Repositories
+
+on:
+  push:
+    branches:
+      - main # Or your default branch
+    paths:
+      - 'templates/**' # Only trigger when templates change
+  workflow_dispatch: # Allow manual triggers
+
+jobs:
+  sync-templates:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 0 # Fetch all history
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+
+      - name: Install dependencies
+        run: npm install @octokit/rest fs-extra
+
+      - name: Run Template Sync Script
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ORGANIZATION: 'mastra-ai'
+        run: node .github/scripts/sync-templates.js
