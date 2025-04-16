@@ -1,5 +1,26 @@
 # @mastra/voice-openai-realtime
 
+## 0.2.0-alpha.2
+
+### Minor Changes
+
+- 185f8e9: Emit add tools and silence warnings
+
+## 0.1.5-alpha.1
+
+### Patch Changes
+
+- Updated dependencies [8a8a73b]
+- Updated dependencies [6f92295]
+  - @mastra/core@0.8.4-alpha.1
+
+## 0.1.5-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [03f3cd0]
+  - @mastra/core@0.8.4-alpha.0
+
 ## 0.1.4
 
 ### Patch Changes

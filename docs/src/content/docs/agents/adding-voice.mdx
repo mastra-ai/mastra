@@ -25,16 +25,15 @@ export const agent = new Agent({
 });
 
 // The agent can now use voice for interaction
-await agent.voice.speak("Hello, I'm your AI assistant!");
+const audioStream = await agent.voice.speak("Hello, I'm your AI assistant!", {
+  filetype: "m4a",
+});
 
-// Read audio file and transcribe
-const audioFilePath = path.join(process.cwd(), "/audio.m4a");
-const audioStream = createReadStream(audioFilePath);
+playAudio(audioStream!);
 
 try {
-  const transcription = await agent.voice.listen(audioStream, {
-    filetype: "m4a",
-  });
+  const transcription = await agent.voice.listen(audioStream);
+  console.log(transcription)
 } catch (error) {
   console.error("Error transcribing audio:", error);
 }
@@ -89,6 +88,7 @@ await new Promise<void>((resolve, reject) => {
 });
 ```
 
+
 ### Transcribing Audio Input
 
 The `listen` method expects a stream of audio data from a microphone or file.
@@ -112,12 +112,13 @@ try {
 }
 ```
 
-## Real-time Voice Interactions
+## Speech-to-Speech Voice Interactions
 
 For more dynamic and interactive voice experiences, you can use real-time voice providers that support speech-to-speech capabilities:
 
 ```typescript
 import { Agent } from "@mastra/core/agent";
+import { getMicrophoneStream } from "@mastra/node-audio";
 import { OpenAIRealtimeVoice } from "@mastra/voice-openai-realtime";
 import { search, calculate } from "../tools";
 
@@ -177,3 +178,23 @@ agent.voice.on("error", (error) => {
   console.error("Voice error:", error);
 });
 ```
+
+## Supported Voice Providers
+
+Mastra supports multiple voice providers for text-to-speech (TTS) and speech-to-text (STT) capabilities:
+
+| Provider | Package | Features | Reference |
+|----------|---------|----------|-----------|
+| OpenAI | `@mastra/voice-openai` | TTS, STT | [Documentation](/reference/voice/openai) |
+| OpenAI Realtime | `@mastra/voice-openai-realtime` | Realtime speech-to-speech | [Documentation](/reference/voice/openai-realtime) |
+| ElevenLabs | `@mastra/voice-elevenlabs` | High-quality TTS | [Documentation](/reference/voice/elevenlabs) |
+| PlayAI | `@mastra/voice-playai` | TTS | [Documentation](/reference/voice/playai) |
+| Google | `@mastra/voice-google` | TTS, STT | [Documentation](/reference/voice/google) |
+| Deepgram | `@mastra/voice-deepgram` | STT | [Documentation](/reference/voice/deepgram) |
+| Murf | `@mastra/voice-murf` | TTS | [Documentation](/reference/voice/murf) |
+| Speechify | `@mastra/voice-speechify` | TTS | [Documentation](/reference/voice/speechify) |
+| Sarvam | `@mastra/voice-sarvam` | TTS, STT | [Documentation](/reference/voice/sarvam) |
+| Azure | `@mastra/voice-azure` | TTS, STT | [Documentation](/reference/voice/mastra-voice) |
+| Cloudflare | `@mastra/voice-cloudflare` | TTS | [Documentation](/reference/voice/mastra-voice) |
+
+For more details on voice capabilities, see the [Voice API Reference](/reference/voice/mastra-voice).
