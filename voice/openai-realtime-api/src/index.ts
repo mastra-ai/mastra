@@ -637,6 +637,7 @@ export class OpenAIRealtimeVoice extends MastraVoice {
       this.emit('tool-result', {
         toolCallId: output.call_id,
         toolName: output.name,
+        toolDescription: tool.description,
         args: context,
         result,
       });
