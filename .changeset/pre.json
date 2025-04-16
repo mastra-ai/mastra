@@ -146,8 +146,12 @@
     "@mastra/voice-speechify": "0.1.13"
   },
   "changesets": [
+    "brave-hornets-refuse",
+    "cold-boxes-end",
     "cool-papers-check",
+    "flat-pears-invent",
     "free-news-fly",
+    "heavy-donkeys-glow",
     "honest-maps-write",
     "stale-moments-camp",
     "violet-dogs-peel"

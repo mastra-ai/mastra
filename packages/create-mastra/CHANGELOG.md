@@ -1,5 +1,11 @@
 # create-mastra
 
+## 0.2.9-alpha.0
+
+### Patch Changes
+
+- 7184dc5: Add support to pass project path directly to create-mastra and improve tag handling
+
 ## 0.2.8
 
 ### Patch Changes

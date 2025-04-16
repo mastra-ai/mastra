@@ -1,5 +1,11 @@
 # @mastra/memory
 
+## 0.2.11-alpha.2
+
+### Patch Changes
+
+- 5c6825c: [MASTRA-2782] removed tiktoken from memory chunktext
+
 ## 0.2.11-alpha.1
 
 ### Patch Changes
