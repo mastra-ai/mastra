@@ -4,3 +4,7 @@ node_modules/
 dist/
 .env
 memory:
+*.d.ts
+vector/
+telemetry/
+storage/

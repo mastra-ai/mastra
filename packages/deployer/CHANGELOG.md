@@ -1,5 +1,11 @@
 # @mastra/deployer
 
+## 0.2.10-alpha.2
+
+### Patch Changes
+
+- 3527610: Fix multi slash imports during bundling
+
 ## 0.2.10-alpha.1
 
 ### Patch Changes

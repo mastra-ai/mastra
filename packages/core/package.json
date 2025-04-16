@@ -6,7 +6,8 @@
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "files": [
-    "dist"
+    "dist",
+    "./**/*.d.ts"
   ],
   "exports": {
     ".": {
@@ -145,6 +146,7 @@
     "@types/pino": "^7.0.5",
     "@types/qs": "^6.9.18",
     "eslint": "^9.23.0",
+    "globby": "^14.1.0",
     "rollup": "^4.35.0",
     "size-limit": "^11.2.0",
     "tsup": "^8.4.0",

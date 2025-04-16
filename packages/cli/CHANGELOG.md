@@ -1,5 +1,13 @@
 # mastra
 
+## 0.4.10-alpha.2
+
+### Patch Changes
+
+- 7184dc5: Add support to pass project path directly to create-mastra and improve tag handling
+- Updated dependencies [3527610]
+  - @mastra/deployer@0.2.10-alpha.2
+
 ## 0.4.10-alpha.1
 
 ### Patch Changes
