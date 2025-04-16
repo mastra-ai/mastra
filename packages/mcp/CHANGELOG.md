@@ -1,5 +1,18 @@
 # @mastra/mcp
 
+## 0.4.0-alpha.3
+
+### Patch Changes
+
+- Updated dependencies [9ee4293]
+  - @mastra/core@0.8.4-alpha.2
+
+## 0.4.0-alpha.2
+
+### Minor Changes
+
+- a3b2fb3: send mcp name on error connecting to it
+
 ## 0.3.11-alpha.1
 
 ### Patch Changes
