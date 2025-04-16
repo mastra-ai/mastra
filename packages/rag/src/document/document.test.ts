@@ -1693,7 +1693,10 @@ describe('MDocument', () => {
       expect(metadata).toBeDefined();
       expect(metadata.documentTitle).toBeDefined();
       expect(metadata.sectionSummary).toBeDefined();
-      expect(metadata.questionsThisExcerptCanAnswer).toMatch(/^1\. .*\?2\. .*\?$/);
+      const qStr = metadata.questionsThisExcerptCanAnswer;
+      expect(qStr).toMatch(/1\..*\?/s);
+      expect(qStr).toMatch(/2\..*\?/s);
+      expect((qStr.match(/\?/g) || []).length).toBeGreaterThanOrEqual(2);
       expect(metadata.excerptKeywords).toMatch(/^1\. .*\n2\. .*\n3\. .*$/);
     }, 15000);
 

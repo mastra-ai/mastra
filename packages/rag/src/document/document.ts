@@ -1,4 +1,4 @@
-import { Document as Chunk, IngestionPipeline, ObjectType, NodeRelationship } from 'llamaindex';
+import { Document as Chunk, IngestionPipeline } from 'llamaindex';
 
 import { TitleExtractor, SummaryExtractor, QuestionsAnsweredExtractor, KeywordExtractor } from './extractors';
 
@@ -38,19 +38,6 @@ export class MDocument {
 
     if (typeof title !== 'undefined') {
       transformations.push(new TitleExtractor(typeof title === 'boolean' ? {} : title));
-      this.chunks = this.chunks.map(
-        (doc, i) =>
-          new Chunk({
-            ...doc,
-            relationships: {
-              [NodeRelationship.SOURCE]: {
-                nodeId: `doc-${i}`,
-                nodeType: ObjectType.DOCUMENT,
-                metadata: doc.metadata,
-              },
-            },
-          }),
-      );
     }
 
     const pipeline = new IngestionPipeline({
