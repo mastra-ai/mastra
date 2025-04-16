@@ -7,6 +7,7 @@ import type { AgentNetwork } from '../network';
 import type { ServerConfig } from '../server/types';
 import type { MastraStorage } from '../storage';
 import { DefaultProxyStorage } from '../storage/default-proxy-storage';
+import { augmentWithInit } from '../storage/storageWithInit';
 import { InstrumentClass, Telemetry } from '../telemetry';
 import type { OtelConfig } from '../telemetry';
 import type { MastraTTS } from '../tts';
@@ -129,6 +130,8 @@ export class Mastra<
         },
       });
     }
+
+    storage = augmentWithInit(storage);
 
     /*
     Telemetry
@@ -343,7 +346,7 @@ This is a warning for now, but will throw an error in the future
   }
 
   public setStorage(storage: MastraStorage) {
-    this.#storage = storage;
+    this.#storage = augmentWithInit(storage);
   }
 
   public setLogger({ logger }: { logger: TLogger }) {
