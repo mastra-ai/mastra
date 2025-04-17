@@ -20,6 +20,7 @@ OPENAI_API_KEY=your_api_key
 
 ```typescript
 import { OpenAIRealtimeVoice } from '@mastra/voice-openai-realtime';
+import { getMicrophoneStream } from '@mastra/node-audio';
 
 // Create a voice instance with default configuration
 const voice = new OpenAIRealtimeVoice();

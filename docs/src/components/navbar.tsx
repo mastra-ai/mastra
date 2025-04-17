@@ -1,4 +1,5 @@
 import { GithubStarCount } from "@/components/github-star-count";
+
 import Image from "next/image";
 import Link from "next/link";
 import { Navbar } from "nextra-theme-docs";
@@ -19,11 +20,11 @@ export const Nav = () => {
       projectLink="https://github.com/mastra-ai/mastra"
       chatIcon={null}
       chatLink={""}
-      className="relative !px-4 !md:px-0"
+      className="relative"
     >
       <Link
         href="/docs"
-        className="px-1.5 absolute left-[115px] md:left-[140px] text-[var(--x-color-primary-600)] font-medium tracking-wider py-0.5 text-xs rounded border border-[var(--border)] uppercase"
+        className="px-1.5 absolute left-[115px] md:left-[125px] text-[var(--x-color-primary-600)] font-medium tracking-wider py-0.5 text-xs rounded border border-[var(--border)] uppercase"
       >
         Docs
       </Link>

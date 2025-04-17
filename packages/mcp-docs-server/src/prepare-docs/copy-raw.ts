@@ -2,8 +2,8 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { fromPackageRoot, fromRepoRoot, log } from '../utils.js';
 
-const DOCS_SOURCE = fromRepoRoot('docs/src/content/docs');
-const REFERENCE_SOURCE = fromRepoRoot('docs/src/content/reference');
+const DOCS_SOURCE = fromRepoRoot('docs/src/content/en/docs');
+const REFERENCE_SOURCE = fromRepoRoot('docs/src/content/en/reference');
 const DOCS_DEST = fromPackageRoot('.docs/raw');
 const REFERENCE_DEST = path.join(DOCS_DEST, 'reference');
 

@@ -1,5 +1,40 @@
 # @mastra/deployer
 
+## 0.3.0-alpha.5
+
+### Patch Changes
+
+- 7e92011: Include tools with deployment builds
+- Updated dependencies [7e92011]
+  - @mastra/core@0.9.0-alpha.4
+  - @mastra/server@2.0.0-alpha.4
+
+## 0.3.0-alpha.4
+
+### Minor Changes
+
+- fe3ae4d: Remove \_\_ functions in storage and move to storage proxy to make sure init is called
+
+### Patch Changes
+
+- Updated dependencies [fe3ae4d]
+  - @mastra/server@2.0.0-alpha.3
+  - @mastra/core@0.9.0-alpha.3
+
+## 0.2.10-alpha.3
+
+### Patch Changes
+
+- Updated dependencies [9ee4293]
+  - @mastra/core@0.8.4-alpha.2
+  - @mastra/server@1.0.4-alpha.2
+
+## 0.2.10-alpha.2
+
+### Patch Changes
+
+- 3527610: Fix multi slash imports during bundling
+
 ## 0.2.10-alpha.1
 
 ### Patch Changes

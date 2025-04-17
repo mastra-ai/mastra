@@ -1,0 +1,111 @@
+---
+title: "Example: Using the Vector Query Tool | RAG | Mastra Docs"
+description: Example of implementing a basic RAG system in Mastra using OpenAI embeddings and PGVector for vector storage.
+---
+
+import { GithubLink } from "@/components/github-link";
+
+# Using the Vector Query Tool
+
+This example demonstrates how to implement and use `createVectorQueryTool` for semantic search in a RAG system. It shows how to configure the tool, manage vector storage, and retrieve relevant context effectively.
+
+## Overview
+
+The system implements RAG using Mastra and OpenAI. Here's what it does:
+
+1. Sets up a Mastra agent with gpt-4o-mini for response generation
+2. Creates a vector query tool to manage vector store interactions
+3. Uses existing embeddings to retrieve relevant context
+4. Generates context-aware responses using the Mastra agent
+
+> **Note**: To learn how to create and store embeddings, see the [Upsert Embeddings](/examples/rag/upsert/upsert-embeddings) guide.
+
+## Setup
+
+### Environment Setup
+
+Make sure to set up your environment variables:
+
+```bash filename=".env"
+OPENAI_API_KEY=your_openai_api_key_here
+POSTGRES_CONNECTION_STRING=your_connection_string_here
+```
+
+### Dependencies
+
+Import the necessary dependencies:
+
+```typescript copy showLineNumbers filename="src/index.ts"
+import { openai } from '@ai-sdk/openai';
+import { Mastra } from '@mastra/core';
+import { Agent } from '@mastra/core/agent';
+import { createVectorQueryTool } from '@mastra/rag';
+import { PgVector } from '@mastra/pg';
+```
+
+## Vector Query Tool Creation
+
+Create a tool that can query the vector database:
+
+```typescript copy showLineNumbers{7} filename="src/index.ts"
+const vectorQueryTool = createVectorQueryTool({
+  vectorStoreName: 'pgVector',
+  indexName: 'embeddings',
+  model: openai.embedding('text-embedding-3-small'),
+});
+```
+
+## Agent Configuration
+
+Set up the Mastra agent that will handle the responses:
+
+```typescript copy showLineNumbers{13} filename="src/index.ts"
+export const ragAgent = new Agent({
+  name: 'RAG Agent',
+  instructions:
+    'You are a helpful assistant that answers questions based on the provided context. Keep your answers concise and relevant.',
+  model: openai('gpt-4o-mini'),
+  tools: {
+    vectorQueryTool,
+  },
+});
+```
+
+## Instantiate PgVector and Mastra
+
+Instantiate PgVector and Mastra with all components:
+
+```typescript copy showLineNumbers{23} filename="src/index.ts"
+const pgVector = new PgVector(process.env.POSTGRES_CONNECTION_STRING!);
+
+export const mastra = new Mastra({
+  agents: { ragAgent },
+  vectors: { pgVector },
+});
+
+const agent = mastra.getAgent('ragAgent');
+```
+
+## Example Usage
+
+```typescript copy showLineNumbers{32} filename="src/index.ts"
+const prompt = `
+[Insert query based on document here]
+Please base your answer only on the context provided in the tool. 
+If the context doesn't contain enough information to fully answer the question, please state that explicitly.
+`;
+
+const completion = await agent.generate(prompt);
+console.log(completion.text);
+```
+
+<br />
+<br />
+<hr className="dark:border-[#404040] border-gray-300" />
+<br />
+<br />
+<GithubLink
+  link={
+    "https://github.com/mastra-ai/mastra/blob/main/examples/basics/rag/basic-rag"
+  }
+/>

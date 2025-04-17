@@ -73,9 +73,14 @@ export class PgVector extends MastraVector {
   constructor(connectionString: string);
   constructor(config: { connectionString: string; schemaName?: string });
   constructor(config: string | { connectionString: string; schemaName?: string }) {
+    const connectionString = typeof config === 'string' ? config : config.connectionString;
+    if (!connectionString || typeof connectionString !== 'string' || connectionString.trim() === '') {
+      throw new Error(
+        'PgVector: connectionString must be provided and cannot be empty. Passing an empty string may cause fallback to local Postgres defaults.',
+      );
+    }
     super();
 
-    const connectionString = typeof config === 'string' ? config : config.connectionString;
     this.schema = typeof config === 'string' ? undefined : config.schemaName;
 
     const basePool = new pg.Pool({

@@ -1,5 +1,5 @@
-import { stat } from 'node:fs/promises';
-import { basename, dirname, join } from 'node:path';
+import { writeFile } from 'node:fs/promises';
+import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { FileService } from '@mastra/deployer';
 import { createWatcher, getWatcherInputOptions, writeTelemetryConfig } from '@mastra/deployer/build';
@@ -8,8 +8,6 @@ import * as fsExtra from 'fs-extra';
 import type { RollupWatcherEvent } from 'rollup';
 
 export class DevBundler extends Bundler {
-  private mastraToolsPaths: string[] = [];
-
   constructor() {
     super('Dev');
   }
@@ -29,14 +27,6 @@ export class DevBundler extends Bundler {
     return Promise.resolve([]);
   }
 
-  async loadEnvVars(): Promise<Map<string, string>> {
-    const superEnvVars = await super.loadEnvVars();
-
-    superEnvVars.set('MASTRA_TOOLS_PATH', this.mastraToolsPaths.join(','));
-
-    return superEnvVars;
-  }
-
   async writePackageJson() {}
 
   async prepare(outputDirectory: string): Promise<void> {
@@ -51,68 +41,16 @@ export class DevBundler extends Bundler {
     });
   }
 
-  async watch(entryFile: string, outputDirectory: string, toolsPaths?: string[]): ReturnType<typeof createWatcher> {
+  async watch(entryFile: string, outputDirectory: string, toolsPaths: string[]): ReturnType<typeof createWatcher> {
     const __filename = fileURLToPath(import.meta.url);
     const __dirname = dirname(__filename);
 
     const envFiles = await this.getEnvFiles();
     const inputOptions = await getWatcherInputOptions(entryFile, 'node');
+    const toolsInputOptions = await this.getToolsInputOptions(toolsPaths);
 
     await writeTelemetryConfig(entryFile, join(outputDirectory, this.outputDir));
     await this.writeInstrumentationFile(join(outputDirectory, this.outputDir));
-
-    if (toolsPaths?.length) {
-      for (const toolPath of toolsPaths) {
-        if (await fsExtra.pathExists(toolPath)) {
-          const toolName = basename(toolPath);
-          const toolOutputPath = join(outputDirectory, this.outputDir, 'tools', toolName);
-
-          const fileService = new FileService();
-          const entryFile = fileService.getFirstExistingFile([
-            join(toolPath, 'index.ts'),
-            join(toolPath, 'index.js'),
-            toolPath, // if toolPath itself is a file
-          ]);
-
-          // if it doesn't exist or is a dir skip it. using a dir as a tool will crash the process
-          if (!entryFile || (await stat(entryFile)).isDirectory()) {
-            this.logger.warn(`No entry file found in ${toolPath}, skipping...`);
-            continue;
-          }
-
-          const toolInputOptions = await getWatcherInputOptions(entryFile, 'node');
-          const watcher = await createWatcher(
-            {
-              ...toolInputOptions,
-              input: {
-                index: entryFile,
-              },
-            },
-            {
-              dir: toolOutputPath,
-            },
-          );
-
-          await new Promise((resolve, reject) => {
-            const cb = (event: RollupWatcherEvent) => {
-              if (event.code === 'BUNDLE_END') {
-                watcher.off('event', cb);
-                resolve(undefined);
-              }
-              if (event.code === 'ERROR') {
-                watcher.off('event', cb);
-                reject(event);
-              }
-            };
-            watcher.on('event', cb);
-          });
-
-          this.mastraToolsPaths.push(join(toolOutputPath, 'index.mjs'));
-        } else {
-          this.logger.warn(`Tool path ${toolPath} does not exist, skipping...`);
-        }
-      }
-    }
 
     const outputDir = join(outputDirectory, this.outputDir);
     const copyPublic = this.copyPublic.bind(this);
@@ -132,16 +70,6 @@ export class DevBundler extends Bundler {
             },
           },
           {
-            name: 'tools-watcher',
-            buildStart() {
-              if (toolsPaths?.length) {
-                for (const toolPath of toolsPaths) {
-                  this.addWatchFile(toolPath);
-                }
-              }
-            },
-          },
-          {
             name: 'public-dir-watcher',
             buildStart() {
               this.addWatchFile(join(dirname(entryFile), 'public'));
@@ -150,9 +78,22 @@ export class DevBundler extends Bundler {
               return copyPublic(dirname(entryFile), outputDirectory);
             },
           },
+          {
+            name: 'tools-watcher',
+            async buildEnd() {
+              const toolsInputOptions = Array.from(Object.keys(inputOptions.input || {}))
+                .filter(key => key.startsWith('tools/'))
+                .map(key => `./${key}.mjs`);
+              await writeFile(
+                join(outputDir, 'tools.mjs'),
+                `export const tools = ${JSON.stringify(toolsInputOptions)};`,
+              );
+            },
+          },
         ],
         input: {
           index: join(__dirname, 'templates', 'dev.entry.js'),
+          ...toolsInputOptions,
         },
       },
       {
