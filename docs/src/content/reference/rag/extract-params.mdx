@@ -74,9 +74,9 @@ The `extract` parameter accepts the following fields:
   content={[
     {
       name: "llm",
-      type: "LLM",
+      type: "MastraLanguageModel",
       isOptional: true,
-      description: "Custom LLM instance to use for title extraction"
+      description: "AI SDK language model to use for title extraction"
     },
     {
       name: "nodes",
@@ -105,9 +105,9 @@ The `extract` parameter accepts the following fields:
   content={[
     {
       name: "llm",
-      type: "LLM",
+      type: "MastraLanguageModel",
       isOptional: true,
-      description: "Custom LLM instance to use for summary extraction"
+      description: "AI SDK language model to use for summary extraction"
     },
     {
       name: "summaries",
@@ -130,9 +130,9 @@ The `extract` parameter accepts the following fields:
   content={[
     {
       name: "llm",
-      type: "LLM",
+      type: "MastraLanguageModel",
       isOptional: true,
-      description: "Custom LLM instance to use for question generation"
+      description: "AI SDK language model to use for question generation"
     },
     {
       name: "questions",
@@ -161,9 +161,9 @@ The `extract` parameter accepts the following fields:
   content={[
     {
       name: "llm",
-      type: "LLM",
+      type: "MastraLanguageModel",
       isOptional: true,
-      description: "Custom LLM instance to use for keyword extraction"
+      description: "AI SDK language model to use for keyword extraction"
     },
     {
       name: "keywords",
@@ -224,3 +224,26 @@ const chunks = await doc.chunk({
 //   excerptKeywords: "1. Machine learning\n2. Neural networks\n3. Training data"
 // }
 ```
+
+## Document Grouping for Title Extraction
+
+When using the `TitleExtractor`, you can group multiple chunks together for title extraction by specifying a shared `docId` in the `metadata` field of each chunk. All chunks with the same `docId` will receive the same extracted title. If no `docId` is set, each chunk is treated as its own document for title extraction.
+
+**Example:**
+
+```ts
+import { MDocument } from "@mastra/rag";
+
+const doc = new MDocument({
+  docs: [
+    { text: "chunk 1", metadata: { docId: "docA" } },
+    { text: "chunk 2", metadata: { docId: "docA" } },
+    { text: "chunk 3", metadata: { docId: "docB" } },
+  ],
+  type: "text",
+});
+
+await doc.extractMetadata({ title: true });
+// The first two chunks will share a title, while the third chunk will be assigned a separate title.
+```
+
