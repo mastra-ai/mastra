@@ -21,22 +21,30 @@ jobs:
         with:
           app-id: ${{ vars.DANE_APP_ID }}
           private-key: ${{ secrets.DANE_APP_PRIVATE_KEY }}
-
+          owner: mastra-ai
       - name: Get GitHub App User ID
         id: get-user-id
         run: echo "user-id=$(gh api "/users/${{ steps.app-token.outputs.app-slug }}[bot]" --jq .id)" >> "$GITHUB_OUTPUT"
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
 
+      - run: |
+          cat <<- EOF > $HOME/.netrc
+            machine github.com
+            login ${{ steps.app-token.outputs.app-slug }}
+            password ${{ steps.app-token.outputs.token }}
+            machine api.github.com
+            login ${{ steps.app-token.outputs.app-slug }}
+            password ${{ steps.app-token.outputs.token }}
+          EOF
+
       - name: Checkout repository
         uses: actions/checkout@v3
-        with:
-          fetch-depth: 0 # Fetch all history
 
       - name: Set up Node.js
         uses: actions/setup-node@v3
         with:
-          node-version: '18'
+          node-version: '22'
 
       - name: Install dependencies
         run: npm install @octokit/rest fs-extra dotenv
