@@ -1,5 +1,12 @@
 # @mastra/speech-murf
 
+## 0.1.19-alpha.4
+
+### Patch Changes
+
+- Updated dependencies [7e92011]
+  - @mastra/core@0.9.0-alpha.4
+
 ## 0.1.19-alpha.3
 
 ### Patch Changes
