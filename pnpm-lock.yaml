@@ -4243,6 +4243,37 @@ importers:
         specifier: ^3.0.9
         version: 3.0.9(@edge-runtime/vm@3.2.0)(@types/debug@4.1.12)(@types/node@20.17.30)(jiti@2.4.2)(jsdom@26.0.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))(lightningcss@1.29.2)(terser@5.39.0)(tsx@4.19.3)(yaml@2.7.0)
 
+  stores/libsql:
+    dependencies:
+      '@libsql/client':
+        specifier: ^0.15.4
+        version: 0.15.4(bufferutil@4.0.9)(utf-8-validate@6.0.5)
+      '@mastra/core':
+        specifier: workspace:^
+        version: link:../../packages/core
+    devDependencies:
+      '@internal/lint':
+        specifier: workspace:*
+        version: link:../../packages/_config
+      '@microsoft/api-extractor':
+        specifier: ^7.52.1
+        version: 7.52.2(@types/node@20.17.30)
+      '@types/node':
+        specifier: ^20.17.27
+        version: 20.17.30
+      eslint:
+        specifier: ^9.23.0
+        version: 9.23.0(jiti@2.4.2)
+      tsup:
+        specifier: ^8.4.0
+        version: 8.4.0(@microsoft/api-extractor@7.52.2(@types/node@20.17.30))(@swc/core@1.11.10(@swc/helpers@0.5.15))(jiti@2.4.2)(postcss@8.5.3)(tsx@4.19.3)(typescript@5.8.2)(yaml@2.7.0)
+      typescript:
+        specifier: ^5.7.3
+        version: 5.8.2
+      vitest:
+        specifier: ^3.0.9
+        version: 3.0.9(@edge-runtime/vm@3.2.0)(@types/debug@4.1.12)(@types/node@20.17.30)(jiti@2.4.2)(jsdom@26.0.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))(lightningcss@1.29.2)(terser@5.39.0)(tsx@4.19.3)(yaml@2.7.0)
+
   stores/pg:
     dependencies:
       '@mastra/core':
@@ -7869,16 +7900,32 @@ packages:
   '@libsql/client@0.14.0':
     resolution: {integrity: sha512-/9HEKfn6fwXB5aTEEoMeFh4CtG0ZzbncBb1e++OCdVpgKZ/xyMsIVYXm0w7Pv4RUel803vE6LwniB3PqD72R0Q==}
 
+  '@libsql/client@0.15.4':
+    resolution: {integrity: sha512-m8a7giWlhLdfKVIZFd3UlBptWTS+H0toSOL09BxbqzBeFHwuVC+5ewyi4LMBxoy2TLNQGE4lO8cwpsTWmu695w==}
+
   '@libsql/core@0.14.0':
     resolution: {integrity: sha512-nhbuXf7GP3PSZgdCY2Ecj8vz187ptHlZQ0VRc751oB2C1W8jQUXKKklvt7t1LJiUTQBVJuadF628eUk+3cRi4Q==}
+
+  '@libsql/core@0.15.4':
+    resolution: {integrity: sha512-NMvh6xnn3vrcd7DNehj0HiJcRWB2a8hHhJUTkOBej3Pf3KB21HOmdOUjXxJ5pGbjWXh4ezQBmHtF5ozFhocXaA==}
 
   '@libsql/darwin-arm64@0.4.7':
     resolution: {integrity: sha512-yOL742IfWUlUevnI5PdnIT4fryY3LYTdLm56bnY0wXBw7dhFcnjuA7jrH3oSVz2mjZTHujxoITgAE7V6Z+eAbg==}
     cpu: [arm64]
     os: [darwin]
 
+  '@libsql/darwin-arm64@0.5.6':
+    resolution: {integrity: sha512-N0lt/I6xCTW6zE3J1I0/YH+TFnoMeZyeSorfLWg1wQi6QrB2PQ3je4R/bGViaU1uMEXaCc5OyI3GrrXJIDOLWg==}
+    cpu: [arm64]
+    os: [darwin]
+
   '@libsql/darwin-x64@0.4.7':
     resolution: {integrity: sha512-ezc7V75+eoyyH07BO9tIyJdqXXcRfZMbKcLCeF8+qWK5nP8wWuMcfOVywecsXGRbT99zc5eNra4NEx6z5PkSsA==}
+    cpu: [x64]
+    os: [darwin]
+
+  '@libsql/darwin-x64@0.5.6':
+    resolution: {integrity: sha512-v8YYImGB3klHvLViWAqsmgYuG32iO+Mt52VSfuqM5m8KzI2XQ2CRxKdBGYnLI9D3Q1T7upYGuHVTSoK3GpKoXQ==}
     cpu: [x64]
     os: [darwin]
 
@@ -7897,8 +7944,18 @@ packages:
     cpu: [arm64]
     os: [linux]
 
+  '@libsql/linux-arm64-gnu@0.5.6':
+    resolution: {integrity: sha512-2SdnSd/Tg+l5qN4yuc7Fh9Uvy/TakL8RiBJMSZEQkFta4FBk9H/Cp49SF9YRx9g2jItTlzOGJ+PAfnkU5HbabA==}
+    cpu: [arm64]
+    os: [linux]
+
   '@libsql/linux-arm64-musl@0.4.7':
     resolution: {integrity: sha512-6kK9xAArVRlTCpWeqnNMCoXW1pe7WITI378n4NpvU5EJ0Ok3aNTIC2nRPRjhro90QcnmLL1jPcrVwO4WD1U0xw==}
+    cpu: [arm64]
+    os: [linux]
+
+  '@libsql/linux-arm64-musl@0.5.6':
+    resolution: {integrity: sha512-DhfDtTWksAGXe70fA4cyhJHGYBB2BpLnF9EB1Rli2ACHrQbgWFHCiSrSg91tk4UVCVRDZ91KkXqU5bWL16Kwcg==}
     cpu: [arm64]
     os: [linux]
 
@@ -7907,13 +7964,28 @@ packages:
     cpu: [x64]
     os: [linux]
 
+  '@libsql/linux-x64-gnu@0.5.6':
+    resolution: {integrity: sha512-lB6zcJw0u+Y3d2rN4ruxJtqxq9UjtzsoA+naJFmYEiDcls1p6OZQ+0OphO5qzTuet/MwbmiHrda/Kk15brBQBw==}
+    cpu: [x64]
+    os: [linux]
+
   '@libsql/linux-x64-musl@0.4.7':
     resolution: {integrity: sha512-nI6tpS1t6WzGAt1Kx1n1HsvtBbZ+jHn0m7ogNNT6pQHZQj7AFFTIMeDQw/i/Nt5H38np1GVRNsFe99eSIMs9XA==}
     cpu: [x64]
     os: [linux]
 
+  '@libsql/linux-x64-musl@0.5.6':
+    resolution: {integrity: sha512-gNbiJg0GGhKZSCTiRpbd9cD2/xT1Nj8bnXra+5ZvPYxiIaphE9xy3ELPIZjGIzBLX9dnn5E920K2tIOrBMRVBw==}
+    cpu: [x64]
+    os: [linux]
+
   '@libsql/win32-x64-msvc@0.4.7':
     resolution: {integrity: sha512-7pJzOWzPm6oJUxml+PCDRzYQ4A1hTMHAciTAHfFK4fkbDZX33nWPVG7Y3vqdKtslcwAzwmrNDc6sXy2nwWnbiw==}
+    cpu: [x64]
+    os: [win32]
+
+  '@libsql/win32-x64-msvc@0.5.6':
+    resolution: {integrity: sha512-8PtI2LrcacvFvzGOkm1CFCGWR5Y5eJDliAlZUEv7BTSAWf07FIVi21mEAyB9VG5y3VpWtY0f+6JYblrwqgqD3A==}
     cpu: [x64]
     os: [win32]
 
@@ -15751,6 +15823,10 @@ packages:
 
   libsql@0.4.7:
     resolution: {integrity: sha512-T9eIRCs6b0J1SHKYIvD8+KCJMcWZ900iZyxdnSCdqxN12Z1ijzT+jY5nrk72Jw4B0HGzms2NgpryArlJqvc3Lw==}
+    os: [darwin, linux, win32]
+
+  libsql@0.5.6:
+    resolution: {integrity: sha512-k0qHpyU47iWBplT4IJKEcMgUbms8jl9cNGE6aqsdOYmSJjtZIaYkn8f4ku5DzxRHpk1+o4FK7ZwGVCExYboZqQ==}
     os: [darwin, linux, win32]
 
   light-my-request@5.14.0:
@@ -24025,14 +24101,35 @@ snapshots:
       - bufferutil
       - utf-8-validate
 
+  '@libsql/client@0.15.4(bufferutil@4.0.9)(utf-8-validate@6.0.5)':
+    dependencies:
+      '@libsql/core': 0.15.4
+      '@libsql/hrana-client': 0.7.0(bufferutil@4.0.9)(utf-8-validate@6.0.5)
+      js-base64: 3.7.7
+      libsql: 0.5.6
+      promise-limit: 2.7.0
+    transitivePeerDependencies:
+      - bufferutil
+      - utf-8-validate
+
   '@libsql/core@0.14.0':
+    dependencies:
+      js-base64: 3.7.7
+
+  '@libsql/core@0.15.4':
     dependencies:
       js-base64: 3.7.7
 
   '@libsql/darwin-arm64@0.4.7':
     optional: true
 
+  '@libsql/darwin-arm64@0.5.6':
+    optional: true
+
   '@libsql/darwin-x64@0.4.7':
+    optional: true
+
+  '@libsql/darwin-x64@0.5.6':
     optional: true
 
   '@libsql/hrana-client@0.7.0(bufferutil@4.0.9)(utf-8-validate@6.0.5)':
@@ -24058,16 +24155,31 @@ snapshots:
   '@libsql/linux-arm64-gnu@0.4.7':
     optional: true
 
+  '@libsql/linux-arm64-gnu@0.5.6':
+    optional: true
+
   '@libsql/linux-arm64-musl@0.4.7':
+    optional: true
+
+  '@libsql/linux-arm64-musl@0.5.6':
     optional: true
 
   '@libsql/linux-x64-gnu@0.4.7':
     optional: true
 
+  '@libsql/linux-x64-gnu@0.5.6':
+    optional: true
+
   '@libsql/linux-x64-musl@0.4.7':
     optional: true
 
+  '@libsql/linux-x64-musl@0.5.6':
+    optional: true
+
   '@libsql/win32-x64-msvc@0.4.7':
+    optional: true
+
+  '@libsql/win32-x64-msvc@0.5.6':
     optional: true
 
   '@llamaindex/cloud@4.0.3(@llamaindex/core@0.6.2(@huggingface/transformers@3.4.0)(gpt-tokenizer@2.9.0))(@llamaindex/env@0.1.29(@huggingface/transformers@3.4.0)(gpt-tokenizer@2.9.0))':
@@ -27683,7 +27795,7 @@ snapshots:
       '@types/node': 20.17.30
     optional: true
 
-  '@typescript-eslint/eslint-plugin@5.62.0(@typescript-eslint/parser@5.62.0(eslint@9.23.0(jiti@2.4.2))(typescript@5.8.2))(eslint@9.23.0(jiti@2.4.2))(typescript@5.8.2)':
+  '@typescript-eslint/eslint-plugin@5.62.0(@typescript-eslint/parser@5.62.0(eslint@8.57.1)(typescript@5.8.2))(eslint@8.57.1)(typescript@5.8.2)':
     dependencies:
       '@eslint-community/regexpp': 4.12.1
       '@typescript-eslint/parser': 5.62.0(eslint@8.57.1)(typescript@5.8.2)
@@ -27691,7 +27803,7 @@ snapshots:
       '@typescript-eslint/type-utils': 5.62.0(eslint@8.57.1)(typescript@5.8.2)
       '@typescript-eslint/utils': 5.62.0(eslint@8.57.1)(typescript@5.8.2)
       debug: 4.4.0(supports-color@8.1.1)
-      eslint: 9.23.0(jiti@2.4.2)
+      eslint: 8.57.1
       graphemer: 1.4.0
       ignore: 5.3.2
       natural-compare-lite: 1.4.0
@@ -30401,7 +30513,7 @@ snapshots:
       '@rollup/plugin-replace': 5.0.7(rollup@3.29.5)
       '@rollup/plugin-terser': 0.4.4(rollup@3.29.5)
       '@types/jest': 29.5.14
-      '@typescript-eslint/eslint-plugin': 5.62.0(@typescript-eslint/parser@5.62.0(eslint@9.23.0(jiti@2.4.2))(typescript@5.8.2))(eslint@9.23.0(jiti@2.4.2))(typescript@5.8.2)
+      '@typescript-eslint/eslint-plugin': 5.62.0(@typescript-eslint/parser@5.62.0(eslint@8.57.1)(typescript@5.8.2))(eslint@8.57.1)(typescript@5.8.2)
       '@typescript-eslint/parser': 5.62.0(eslint@8.57.1)(typescript@5.8.2)
       ansi-escapes: 4.3.2
       asyncro: 3.0.0
@@ -31280,7 +31392,7 @@ snapshots:
       '@typescript-eslint/utils': 5.62.0(eslint@8.57.1)(typescript@5.8.2)
       eslint: 8.57.1
     optionalDependencies:
-      '@typescript-eslint/eslint-plugin': 5.62.0(@typescript-eslint/parser@5.62.0(eslint@9.23.0(jiti@2.4.2))(typescript@5.8.2))(eslint@9.23.0(jiti@2.4.2))(typescript@5.8.2)
+      '@typescript-eslint/eslint-plugin': 5.62.0(@typescript-eslint/parser@5.62.0(eslint@8.57.1)(typescript@5.8.2))(eslint@8.57.1)(typescript@5.8.2)
       jest: 29.7.0(@types/node@20.17.30)(babel-plugin-macros@3.1.0)(ts-node@10.9.2(@swc/core@1.11.10(@swc/helpers@0.5.15))(@types/node@20.17.30)(typescript@5.8.2))
     transitivePeerDependencies:
       - supports-color
@@ -34152,6 +34264,19 @@ snapshots:
       '@libsql/linux-x64-gnu': 0.4.7
       '@libsql/linux-x64-musl': 0.4.7
       '@libsql/win32-x64-msvc': 0.4.7
+
+  libsql@0.5.6:
+    dependencies:
+      '@neon-rs/load': 0.0.4
+      detect-libc: 2.0.2
+    optionalDependencies:
+      '@libsql/darwin-arm64': 0.5.6
+      '@libsql/darwin-x64': 0.5.6
+      '@libsql/linux-arm64-gnu': 0.5.6
+      '@libsql/linux-arm64-musl': 0.5.6
+      '@libsql/linux-x64-gnu': 0.5.6
+      '@libsql/linux-x64-musl': 0.5.6
+      '@libsql/win32-x64-msvc': 0.5.6
 
   light-my-request@5.14.0:
     dependencies:
