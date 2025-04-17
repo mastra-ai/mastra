@@ -63,20 +63,17 @@ Semantic recall relies on a [storage and vector db](/reference/memory/Memory#par
 ```ts {8-17}
 import { Memory } from "@mastra/memory";
 import { Agent } from "@mastra/core/agent";
-import { LibSQLStore } from "@mastra/core/storage/libsql";
-import { LibSQLVector } from "@mastra/core/vector/libsql";
+import { LibSQLStore, LibSQLVector } from "@mastra/libsql";
 
 const agent = new Agent({
   memory: new Memory({
     // this is the default storage db if omitted
     storage: new LibSQLStore({
-      config: {
-        url: "file:local.db",
-      },
+      url: "file:./local.db",
     }),
     // this is the default vector db if omitted
     vector: new LibSQLVector({
-      connectionUrl: "file:local.db",
+      connectionUrl: "file:./local.db",
     }),
   }),
 });
