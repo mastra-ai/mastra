@@ -1,0 +1,136 @@
+---
+title: "Example: Content Similarity | Evals | Mastra Docs"
+description: Example of using the Content Similarity metric to evaluate text similarity between content.
+---
+
+import { GithubLink } from "@/components/github-link";
+
+# Content Similarity
+
+This example demonstrates how to use Mastra's Content Similarity metric to evaluate the textual similarity between two pieces of content.
+
+## Overview
+
+The example shows how to:
+
+1. Configure the Content Similarity metric
+2. Compare different text variations
+3. Analyze similarity scores
+4. Handle different similarity scenarios
+
+## Setup
+
+### Dependencies
+
+Import the necessary dependencies:
+
+```typescript copy showLineNumbers filename="src/index.ts"
+import { ContentSimilarityMetric } from '@mastra/evals/nlp';
+```
+
+## Metric Configuration
+
+Set up the Content Similarity metric:
+
+```typescript copy showLineNumbers{4} filename="src/index.ts"
+const metric = new ContentSimilarityMetric();
+```
+
+## Example Usage
+
+### High Similarity Example
+
+Compare nearly identical texts:
+
+```typescript copy showLineNumbers{7} filename="src/index.ts"
+const text1 = 'The quick brown fox jumps over the lazy dog.';
+const reference1 = 'A quick brown fox jumped over a lazy dog.';
+
+console.log('Example 1 - High Similarity:');
+console.log('Text:', text1);
+console.log('Reference:', reference1);
+
+const result1 = await metric.measure(reference1, text1);
+console.log('Metric Result:', {
+  score: result1.score,
+  info: {
+    similarity: result1.info.similarity,
+  },
+});
+// Example Output:
+// Metric Result: { score: 0.7761194029850746, info: { similarity: 0.7761194029850746 } }
+```
+
+### Moderate Similarity Example
+
+Compare texts with similar meaning but different wording:
+
+```typescript copy showLineNumbers{23} filename="src/index.ts"
+const text2 = 'A brown fox quickly leaps across a sleeping dog.';
+const reference2 = 'The quick brown fox jumps over the lazy dog.';
+
+console.log('Example 2 - Moderate Similarity:');
+console.log('Text:', text2);
+console.log('Reference:', reference2);
+
+const result2 = await metric.measure(reference2, text2);
+console.log('Metric Result:', {
+  score: result2.score,
+  info: {
+    similarity: result2.info.similarity,
+  },
+});
+// Example Output:
+// Metric Result: {
+//   score: 0.40540540540540543,
+//   info: { similarity: 0.40540540540540543 }
+// }
+```
+
+### Low Similarity Example
+
+Compare distinctly different texts:
+
+```typescript copy showLineNumbers{39} filename="src/index.ts"
+const text3 = 'The cat sleeps on the windowsill.';
+const reference3 = 'The quick brown fox jumps over the lazy dog.';
+
+console.log('Example 3 - Low Similarity:');
+console.log('Text:', text3);
+console.log('Reference:', reference3);
+
+const result3 = await metric.measure(reference3, text3);
+console.log('Metric Result:', {
+  score: result3.score,
+  info: {
+    similarity: result3.info.similarity,
+  },
+});
+// Example Output:
+// Metric Result: {
+//   score: 0.25806451612903225,
+//   info: { similarity: 0.25806451612903225 }
+// }
+```
+
+## Understanding the Results
+
+The metric provides:
+
+1. A similarity score between 0 and 1:
+   - 1.0: Perfect match - texts are identical
+   - 0.7-0.9: High similarity - minor variations in wording
+   - 0.4-0.6: Moderate similarity - same topic with different phrasing
+   - 0.1-0.3: Low similarity - some shared words but different meaning
+   - 0.0: No similarity - completely different texts
+
+<br />
+<br />
+<hr className="dark:border-[#404040] border-gray-300" />
+<br />
+<br />
+<GithubLink
+  link={
+    "https://github.com/mastra-ai/mastra/blob/main/examples/basics/evals/content-similarity"
+  }
+/>

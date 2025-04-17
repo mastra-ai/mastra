@@ -1,0 +1,57 @@
+---
+title: "Example: Creating a Workflow | Workflows | Mastra Docs"
+description: Example of using Mastra to define and execute a simple workflow with a single step.
+---
+
+import { GithubLink } from "@/components/github-link";
+
+# Creating a Simple Workflow
+
+A workflow allows you to define and execute sequences of operations in a structured path. This example shows a workflow with a single step.
+
+```ts showLineNumbers copy
+import { Step, Workflow } from "@mastra/core/workflows";
+import { z } from "zod";
+
+const myWorkflow = new Workflow({
+  name: "my-workflow",
+  triggerSchema: z.object({
+    input: z.number(),
+  }),
+});
+
+const stepOne = new Step({
+  id: "stepOne",
+  inputSchema: z.object({
+    value: z.number(),
+  }),
+  outputSchema: z.object({
+    doubledValue: z.number(),
+  }),
+  execute: async ({ context }) => {
+    const doubledValue = context?.triggerData?.input * 2;
+    return { doubledValue };
+  },
+});
+
+myWorkflow.step(stepOne).commit();
+
+const { runId, start } = myWorkflow.createRun();
+
+const res = await start({
+  triggerData: { input: 90 },
+});
+
+console.log(res.results);
+```
+
+<br />
+<br />
+<hr className="dark:border-[#404040] border-gray-300" />
+<br />
+<br />
+<GithubLink
+  link={
+    "https://github.com/mastra-ai/mastra/blob/main/examples/basics/workflows/create-workflow"
+  }
+/>

@@ -1,0 +1,164 @@
+---
+title: "Example: Faithfulness | Evals | Mastra Docs"
+description: Example of using the Faithfulness metric to evaluate how factually accurate responses are compared to context.
+---
+
+import { GithubLink } from "@/components/github-link";
+
+# Faithfulness
+
+This example demonstrates how to use Mastra's Faithfulness metric to evaluate how factually accurate responses are compared to the provided context.
+
+## Overview
+
+The example shows how to:
+
+1. Configure the Faithfulness metric
+2. Evaluate factual accuracy
+3. Analyze faithfulness scores
+4. Handle different accuracy levels
+
+## Setup
+
+### Environment Setup
+
+Make sure to set up your environment variables:
+
+```bash filename=".env"
+OPENAI_API_KEY=your_api_key_here
+```
+
+### Dependencies
+
+Import the necessary dependencies:
+
+```typescript copy showLineNumbers filename="src/index.ts"
+import { openai } from '@ai-sdk/openai';
+import { FaithfulnessMetric } from '@mastra/evals/llm';
+```
+
+## Example Usage
+
+### High Faithfulness Example
+
+Evaluate a response where all claims are supported by context:
+
+```typescript copy showLineNumbers{5} filename="src/index.ts"
+const context1 = [
+  'The Tesla Model 3 was launched in 2017.',
+  'It has a range of up to 358 miles.',
+  'The base model accelerates 0-60 mph in 5.8 seconds.',
+];
+
+const metric1 = new FaithfulnessMetric(openai('gpt-4o-mini'), {
+  context: context1,
+});
+
+const query1 = 'Tell me about the Tesla Model 3.';
+const response1 = 'The Tesla Model 3 was introduced in 2017. It can travel up to 358 miles on a single charge and the base version goes from 0 to 60 mph in 5.8 seconds.';
+
+console.log('Example 1 - High Faithfulness:');
+console.log('Context:', context1);
+console.log('Query:', query1);
+console.log('Response:', response1);
+
+const result1 = await metric1.measure(query1, response1);
+console.log('Metric Result:', {
+  score: result1.score,
+  reason: result1.info.reason,
+});
+// Example Output:
+// Metric Result: { score: 1, reason: 'All claims are supported by the context.' }
+```
+
+### Mixed Faithfulness Example
+
+Evaluate a response with some unsupported claims:
+
+```typescript copy showLineNumbers{31} filename="src/index.ts"
+const context2 = [
+  'Python was created by Guido van Rossum.',
+  'The first version was released in 1991.',
+  'Python emphasizes code readability.',
+];
+
+const metric2 = new FaithfulnessMetric(openai('gpt-4o-mini'), {
+  context: context2,
+});
+
+const query2 = 'What can you tell me about Python?';
+const response2 = 'Python was created by Guido van Rossum and released in 1991. It is the most popular programming language today and is used by millions of developers worldwide.';
+
+console.log('Example 2 - Mixed Faithfulness:');
+console.log('Context:', context2);
+console.log('Query:', query2);
+console.log('Response:', response2);
+
+const result2 = await metric2.measure(query2, response2);
+console.log('Metric Result:', {
+  score: result2.score,
+  reason: result2.info.reason,
+});
+// Example Output:
+// Metric Result: { score: 0.5, reason: 'Only half of the claims are supported by the context.' }
+```
+
+### Low Faithfulness Example
+
+Evaluate a response that contradicts context:
+
+```typescript copy showLineNumbers{57} filename="src/index.ts"
+const context3 = [
+  'Mars is the fourth planet from the Sun.',
+  'It has a thin atmosphere of mostly carbon dioxide.',
+  'Two small moons orbit Mars: Phobos and Deimos.',
+];
+
+const metric3 = new FaithfulnessMetric(openai('gpt-4o-mini'), {
+  context: context3,
+});
+
+const query3 = 'What do we know about Mars?';
+const response3 = 'Mars is the third planet from the Sun. It has a thick atmosphere rich in oxygen and nitrogen, and is orbited by three large moons.';
+
+console.log('Example 3 - Low Faithfulness:');
+console.log('Context:', context3);
+console.log('Query:', query3);
+console.log('Response:', response3);
+
+const result3 = await metric3.measure(query3, response3);
+console.log('Metric Result:', {
+  score: result3.score,
+  reason: result3.info.reason,
+});
+// Example Output:
+// Metric Result: { score: 0, reason: 'The response contradicts the context.' }
+```
+
+## Understanding the Results
+
+The metric provides:
+
+1. A faithfulness score between 0 and 1:
+   - 1.0: Perfect faithfulness - all claims supported by context
+   - 0.7-0.9: High faithfulness - most claims supported
+   - 0.4-0.6: Mixed faithfulness - some claims unsupported
+   - 0.1-0.3: Low faithfulness - most claims unsupported
+   - 0.0: No faithfulness - claims contradict context
+
+2. Detailed reason for the score, including analysis of:
+   - Claim verification
+   - Factual accuracy
+   - Contradictions
+   - Overall faithfulness
+
+<br />
+<br />
+<hr className="dark:border-[#404040] border-gray-300" />
+<br />
+<br />
+<GithubLink
+  link={
+    "https://github.com/mastra-ai/mastra/blob/main/examples/basics/evals/faithfulness"
+  }
+/>

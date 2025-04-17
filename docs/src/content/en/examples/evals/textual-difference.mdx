@@ -1,0 +1,170 @@
+---
+title: "Example: Textual Difference | Evals | Mastra Docs"
+description: Example of using the Textual Difference metric to evaluate similarity between text strings by analyzing sequence differences and changes.
+---
+
+import { GithubLink } from "@/components/github-link";
+
+# Textual Difference Evaluation
+
+This example demonstrates how to use Mastra's Textual Difference metric to evaluate the similarity between text strings by analyzing sequence differences and changes.
+
+## Overview
+
+The example shows how to:
+
+1. Configure the Textual Difference metric
+2. Compare text sequences for differences
+3. Analyze similarity scores and changes
+4. Handle different comparison scenarios
+
+## Setup
+
+### Dependencies
+
+Import the necessary dependencies:
+
+```typescript copy showLineNumbers filename="src/index.ts"
+import { TextualDifferenceMetric } from '@mastra/evals/nlp';
+```
+
+## Metric Configuration
+
+Set up the Textual Difference metric:
+
+```typescript copy showLineNumbers{4} filename="src/index.ts"
+const metric = new TextualDifferenceMetric();
+```
+
+## Example Usage
+
+### Identical Texts Example
+
+Evaluate texts that are exactly the same:
+
+```typescript copy showLineNumbers{7} filename="src/index.ts"
+const input1 = 'The quick brown fox jumps over the lazy dog';
+const output1 = 'The quick brown fox jumps over the lazy dog';
+
+console.log('Example 1 - Identical Texts:');
+console.log('Input:', input1);
+console.log('Output:', output1);
+
+const result1 = await metric.measure(input1, output1);
+console.log('Metric Result:', {
+  score: result1.score,
+  info: {
+    confidence: result1.info.confidence,
+    ratio: result1.info.ratio,
+    changes: result1.info.changes,
+    lengthDiff: result1.info.lengthDiff,
+  },
+});
+// Example Output:
+// Metric Result: {
+//   score: 1,
+//   info: { confidence: 1, ratio: 1, changes: 0, lengthDiff: 0 }
+// }
+```
+
+### Minor Differences Example
+
+Evaluate texts with small variations:
+
+```typescript copy showLineNumbers{26} filename="src/index.ts"
+const input2 = 'Hello world! How are you?';
+const output2 = 'Hello there! How is it going?';
+
+console.log('Example 2 - Minor Differences:');
+console.log('Input:', input2);
+console.log('Output:', output2);
+
+const result2 = await metric.measure(input2, output2);
+console.log('Metric Result:', {
+  score: result2.score,
+  info: {
+    confidence: result2.info.confidence,
+    ratio: result2.info.ratio,
+    changes: result2.info.changes,
+    lengthDiff: result2.info.lengthDiff,
+  },
+});
+// Example Output:
+// Metric Result: {
+//   score: 0.5925925925925926,
+//   info: {
+//     confidence: 0.8620689655172413,
+//     ratio: 0.5925925925925926,
+//     changes: 5,
+//     lengthDiff: 0.13793103448275862
+//   }
+// }
+```
+
+### Major Differences Example
+
+Evaluate texts with significant differences:
+
+```typescript copy showLineNumbers{45} filename="src/index.ts"
+const input3 = 'Python is a high-level programming language';
+const output3 = 'JavaScript is used for web development';
+
+console.log('Example 3 - Major Differences:');
+console.log('Input:', input3);
+console.log('Output:', output3);
+
+const result3 = await metric.measure(input3, output3);
+console.log('Metric Result:', {
+  score: result3.score,
+  info: {
+    confidence: result3.info.confidence,
+    ratio: result3.info.ratio,
+    changes: result3.info.changes,
+    lengthDiff: result3.info.lengthDiff,
+  },
+});
+// Example Output:
+// Metric Result: {
+//   score: 0.32098765432098764,
+//   info: {
+//     confidence: 0.8837209302325582,
+//     ratio: 0.32098765432098764,
+//     changes: 8,
+//     lengthDiff: 0.11627906976744186
+//   }
+// }
+```
+
+## Understanding the Results
+
+The metric provides:
+
+1. A similarity score between 0 and 1:
+   - 1.0: Identical texts - no differences
+   - 0.7-0.9: Minor differences - few changes needed
+   - 0.4-0.6: Moderate differences - significant changes
+   - 0.1-0.3: Major differences - extensive changes
+   - 0.0: Completely different texts
+
+2. Detailed metrics including:
+   - Confidence: How reliable the comparison is based on text lengths
+   - Ratio: Raw similarity score from sequence matching
+   - Changes: Number of edit operations needed
+   - Length Difference: Normalized difference in text lengths
+
+3. Analysis of:
+   - Character-level differences
+   - Sequence matching patterns
+   - Edit distance calculations
+   - Length normalization effects
+
+<br />
+<br />
+<hr className="dark:border-[#404040] border-gray-300" />
+<br />
+<br />
+<GithubLink
+  link={
+    "https://github.com/mastra-ai/mastra/blob/main/examples/basics/evals/textual-difference"
+  }
+/> 

@@ -1,0 +1,139 @@
+---
+title: "Example: Keyword Coverage | Evals | Mastra Docs"
+description: Example of using the Keyword Coverage metric to evaluate how well responses cover important keywords from input text.
+---
+
+import { GithubLink } from "@/components/github-link";
+
+# Keyword Coverage Evaluation
+
+This example demonstrates how to use Mastra's Keyword Coverage metric to evaluate how well responses include important keywords from the input text.
+
+## Overview
+
+The example shows how to:
+
+1. Configure the Keyword Coverage metric
+2. Evaluate responses for keyword matching
+3. Analyze coverage scores
+4. Handle different coverage scenarios
+
+## Setup
+
+### Dependencies
+
+Import the necessary dependencies:
+
+```typescript copy showLineNumbers filename="src/index.ts"
+import { KeywordCoverageMetric } from '@mastra/evals/nlp';
+```
+
+## Metric Configuration
+
+Set up the Keyword Coverage metric:
+
+```typescript copy showLineNumbers{4} filename="src/index.ts"
+const metric = new KeywordCoverageMetric();
+```
+
+## Example Usage
+
+### Full Coverage Example
+
+Evaluate a response that includes all key terms:
+
+```typescript copy showLineNumbers{7} filename="src/index.ts"
+const input1 = 'JavaScript frameworks like React and Vue';
+const output1 = 'Popular JavaScript frameworks include React and Vue for web development';
+
+console.log('Example 1 - Full Coverage:');
+console.log('Input:', input1);
+console.log('Output:', output1);
+
+const result1 = await metric.measure(input1, output1);
+console.log('Metric Result:', {
+  score: result1.score,
+  info: {
+    totalKeywords: result1.info.totalKeywords,
+    matchedKeywords: result1.info.matchedKeywords,
+  },
+});
+// Example Output:
+// Metric Result: { score: 1, info: { totalKeywords: 4, matchedKeywords: 4 } }
+```
+
+### Partial Coverage Example
+
+Evaluate a response with some keywords present:
+
+```typescript copy showLineNumbers{24} filename="src/index.ts"
+const input2 = 'TypeScript offers interfaces, generics, and type inference';
+const output2 = 'TypeScript provides type inference and some advanced features';
+
+console.log('Example 2 - Partial Coverage:');
+console.log('Input:', input2);
+console.log('Output:', output2);
+
+const result2 = await metric.measure(input2, output2);
+console.log('Metric Result:', {
+  score: result2.score,
+  info: {
+    totalKeywords: result2.info.totalKeywords,
+    matchedKeywords: result2.info.matchedKeywords,
+  },
+});
+// Example Output:
+// Metric Result: { score: 0.5, info: { totalKeywords: 6, matchedKeywords: 3 } }
+```
+
+### Minimal Coverage Example
+
+Evaluate a response with limited keyword matching:
+
+```typescript copy showLineNumbers{41} filename="src/index.ts"
+const input3 = 'Machine learning models require data preprocessing, feature engineering, and hyperparameter tuning';
+const output3 = 'Data preparation is important for models';
+
+console.log('Example 3 - Minimal Coverage:');
+console.log('Input:', input3);
+console.log('Output:', output3);
+
+const result3 = await metric.measure(input3, output3);
+console.log('Metric Result:', {
+  score: result3.score,
+  info: {
+    totalKeywords: result3.info.totalKeywords,
+    matchedKeywords: result3.info.matchedKeywords,
+  },
+});
+// Example Output:
+// Metric Result: { score: 0.2, info: { totalKeywords: 10, matchedKeywords: 2 } }
+```
+
+## Understanding the Results
+
+The metric provides:
+
+1. A coverage score between 0 and 1:
+   - 1.0: Complete coverage - all keywords present
+   - 0.7-0.9: High coverage - most keywords included
+   - 0.4-0.6: Partial coverage - some keywords present
+   - 0.1-0.3: Low coverage - few keywords matched
+   - 0.0: No coverage - no keywords found
+
+2. Detailed statistics including:
+   - Total keywords from input
+   - Number of matched keywords
+   - Coverage ratio calculation
+   - Technical term handling
+
+<br />
+<br />
+<hr className="dark:border-[#404040] border-gray-300" />
+<br />
+<br />
+<GithubLink
+  link={
+    "https://github.com/mastra-ai/mastra/blob/main/examples/basics/evals/keyword-coverage"
+  }
+/> 

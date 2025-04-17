@@ -1,0 +1,188 @@
+---
+title: "Example: Summarization | Evals | Mastra Docs"
+description: Example of using the Summarization metric to evaluate how well LLM-generated summaries capture content while maintaining factual accuracy.
+---
+
+import { GithubLink } from "@/components/github-link";
+
+# Summarization Evaluation
+
+This example demonstrates how to use Mastra's Summarization metric to evaluate how well LLM-generated summaries capture content while maintaining factual accuracy.
+
+## Overview
+
+The example shows how to:
+
+1. Configure the Summarization metric with an LLM
+2. Evaluate summary quality and factual accuracy
+3. Analyze alignment and coverage scores
+4. Handle different summary scenarios
+
+## Setup
+
+### Environment Setup
+
+Make sure to set up your environment variables:
+
+```bash filename=".env"
+OPENAI_API_KEY=your_api_key_here
+```
+
+### Dependencies
+
+Import the necessary dependencies:
+
+```typescript copy showLineNumbers filename="src/index.ts"
+import { openai } from '@ai-sdk/openai';
+import { SummarizationMetric } from '@mastra/evals/llm';
+```
+
+## Metric Configuration
+
+Set up the Summarization metric with an OpenAI model:
+
+```typescript copy showLineNumbers{4} filename="src/index.ts"
+const metric = new SummarizationMetric(openai('gpt-4o-mini'));
+```
+
+## Example Usage
+
+### High-quality Summary Example
+
+Evaluate a summary that maintains both factual accuracy and complete coverage:
+
+```typescript copy showLineNumbers{7} filename="src/index.ts"
+const input1 = `The electric car company Tesla was founded in 2003 by Martin Eberhard and Marc Tarpenning. 
+Elon Musk joined in 2004 as the largest investor and became CEO in 2008. The company's first car, 
+the Roadster, was launched in 2008.`;
+
+const output1 = `Tesla, founded by Martin Eberhard and Marc Tarpenning in 2003, launched its first car, 
+the Roadster, in 2008. Elon Musk joined as the largest investor in 2004 and became CEO in 2008.`;
+
+console.log('Example 1 - High-quality Summary:');
+console.log('Input:', input1);
+console.log('Output:', output1);
+
+const result1 = await metric.measure(input1, output1);
+console.log('Metric Result:', {
+  score: result1.score,
+  info: {
+    reason: result1.info.reason,
+    alignmentScore: result1.info.alignmentScore,
+    coverageScore: result1.info.coverageScore,
+  },
+});
+// Example Output:
+// Metric Result: {
+//   score: 1,
+//   info: {
+//     reason: "The score is 1 because the summary maintains perfect factual accuracy and includes all key information from the source text.",
+//     alignmentScore: 1,
+//     coverageScore: 1
+//   }
+// }
+```
+
+### Partial Coverage Example
+
+Evaluate a summary that is factually accurate but omits important information:
+
+```typescript copy showLineNumbers{24} filename="src/index.ts"
+const input2 = `The Python programming language was created by Guido van Rossum and was first released 
+in 1991. It emphasizes code readability with its notable use of significant whitespace. Python is 
+dynamically typed and garbage-collected. It supports multiple programming paradigms, including 
+structured, object-oriented, and functional programming.`;
+
+const output2 = `Python, created by Guido van Rossum, is a programming language known for its readable 
+code and use of whitespace. It was released in 1991.`;
+
+console.log('Example 2 - Partial Coverage:');
+console.log('Input:', input2);
+console.log('Output:', output2);
+
+const result2 = await metric.measure(input2, output2);
+console.log('Metric Result:', {
+  score: result2.score,
+  info: {
+    reason: result2.info.reason,
+    alignmentScore: result2.info.alignmentScore,
+    coverageScore: result2.info.coverageScore,
+  },
+});
+// Example Output:
+// Metric Result: {
+//   score: 0.4,
+//   info: {
+//     reason: "The score is 0.4 because while the summary is factually accurate (alignment score: 1), it only covers a portion of the key information from the source text (coverage score: 0.4), omitting several important technical details.",
+//     alignmentScore: 1,
+//     coverageScore: 0.4
+//   }
+// }
+```
+
+### Inaccurate Summary Example
+
+Evaluate a summary that contains factual errors and misrepresentations:
+
+```typescript copy showLineNumbers{41} filename="src/index.ts"
+const input3 = `The World Wide Web was invented by Tim Berners-Lee in 1989 while working at CERN. 
+He published the first website in 1991. Berners-Lee made the Web freely available, with no patent 
+and no royalties due.`;
+
+const output3 = `The Internet was created by Tim Berners-Lee at MIT in the early 1990s, and he went 
+on to commercialize the technology through patents.`;
+
+console.log('Example 3 - Inaccurate Summary:');
+console.log('Input:', input3);
+console.log('Output:', output3);
+
+const result3 = await metric.measure(input3, output3);
+console.log('Metric Result:', {
+  score: result3.score,
+  info: {
+    reason: result3.info.reason,
+    alignmentScore: result3.info.alignmentScore,
+    coverageScore: result3.info.coverageScore,
+  },
+});
+// Example Output:
+// Metric Result: {
+//   score: 0,
+//   info: {
+//     reason: "The score is 0 because the summary contains multiple factual errors and misrepresentations of key details from the source text, despite covering some of the basic information.",
+//     alignmentScore: 0,
+//     coverageScore: 0.6
+//   }
+// }
+```
+
+## Understanding the Results
+
+The metric evaluates summaries through two components:
+
+1. Alignment Score (0-1):
+   - 1.0: Perfect factual accuracy
+   - 0.7-0.9: Minor factual discrepancies
+   - 0.4-0.6: Some factual errors
+   - 0.1-0.3: Significant inaccuracies
+   - 0.0: Complete factual misrepresentation
+
+2. Coverage Score (0-1):
+   - 1.0: Complete information coverage
+   - 0.7-0.9: Most key information included
+   - 0.4-0.6: Partial coverage of key points
+   - 0.1-0.3: Missing most important details
+   - 0.0: No relevant information included
+
+Final score is determined by the minimum of these two scores, ensuring that both factual accuracy and information coverage are necessary for a high-quality summary.
+
+<br />
+<br />
+<hr className="dark:border-[#404040] border-gray-300" />
+<br />
+<br />
+<GithubLink
+  link={
+    "https://github.com/mastra-ai/mastra/blob/main/examples/basics/evals/summarization"
+  }
+/> 

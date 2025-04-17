@@ -1,0 +1,165 @@
+---
+title: "Example: Hallucination | Evals | Mastra Docs"
+description: Example of using the Hallucination metric to evaluate factual contradictions in responses.
+---
+
+import { GithubLink } from "@/components/github-link";
+
+# Hallucination
+
+This example demonstrates how to use Mastra's Hallucination metric to evaluate whether responses contradict information provided in the context.
+
+## Overview
+
+The example shows how to:
+
+1. Configure the Hallucination metric
+2. Evaluate factual contradictions
+3. Analyze hallucination scores
+4. Handle different accuracy levels
+
+## Setup
+
+### Environment Setup
+
+Make sure to set up your environment variables:
+
+```bash filename=".env"
+OPENAI_API_KEY=your_api_key_here
+```
+
+### Dependencies
+
+Import the necessary dependencies:
+
+```typescript copy showLineNumbers filename="src/index.ts"
+import { openai } from '@ai-sdk/openai';
+import { HallucinationMetric } from '@mastra/evals/llm';
+```
+
+## Example Usage
+
+### No Hallucination Example
+
+Evaluate a response that matches context exactly:
+
+```typescript copy showLineNumbers{5} filename="src/index.ts"
+const context1 = [
+  'The iPhone was first released in 2007.',
+  'Steve Jobs unveiled it at Macworld.',
+  'The original model had a 3.5-inch screen.',
+];
+
+const metric1 = new HallucinationMetric(openai('gpt-4o-mini'), {
+  context: context1,
+});
+
+const query1 = 'When was the first iPhone released?';
+const response1 = 'The iPhone was first released in 2007, when Steve Jobs unveiled it at Macworld. The original iPhone featured a 3.5-inch screen.';
+
+console.log('Example 1 - No Hallucination:');
+console.log('Context:', context1);
+console.log('Query:', query1);
+console.log('Response:', response1);
+
+const result1 = await metric1.measure(query1, response1);
+console.log('Metric Result:', {
+  score: result1.score,
+  reason: result1.info.reason,
+});
+// Example Output:
+// Metric Result: { score: 0, reason: 'The response matches the context exactly.' }
+```
+
+### Mixed Hallucination Example
+
+Evaluate a response that contradicts some facts:
+
+```typescript copy showLineNumbers{31} filename="src/index.ts"
+const context2 = [
+  'The first Star Wars movie was released in 1977.',
+  'It was directed by George Lucas.',
+  'The film earned $775 million worldwide.',
+  'The movie was filmed in Tunisia and England.',
+];
+
+const metric2 = new HallucinationMetric(openai('gpt-4o-mini'), {
+  context: context2,
+});
+
+const query2 = 'Tell me about the first Star Wars movie.';
+const response2 = 'The first Star Wars movie came out in 1977 and was directed by George Lucas. It made over $1 billion at the box office and was filmed entirely in California.';
+
+console.log('Example 2 - Mixed Hallucination:');
+console.log('Context:', context2);
+console.log('Query:', query2);
+console.log('Response:', response2);
+
+const result2 = await metric2.measure(query2, response2);
+console.log('Metric Result:', {
+  score: result2.score,
+  reason: result2.info.reason,
+});
+// Example Output:
+// Metric Result: { score: 0.5, reason: 'The response contradicts some facts in the context.' }
+```
+
+### Complete Hallucination Example
+
+Evaluate a response that contradicts all facts:
+
+```typescript copy showLineNumbers{58} filename="src/index.ts"
+const context3 = [
+  'The Wright brothers made their first flight in 1903.',
+  'The flight lasted 12 seconds.',
+  'It covered a distance of 120 feet.',
+];
+
+const metric3 = new HallucinationMetric(openai('gpt-4o-mini'), {
+  context: context3,
+});
+
+const query3 = 'When did the Wright brothers first fly?';
+const response3 = 'The Wright brothers achieved their historic first flight in 1908. The flight lasted about 2 minutes and covered nearly a mile.';
+
+console.log('Example 3 - Complete Hallucination:');
+console.log('Context:', context3);
+console.log('Query:', query3);
+console.log('Response:', response3);
+
+const result3 = await metric3.measure(query3, response3);
+console.log('Metric Result:', {
+  score: result3.score,
+  reason: result3.info.reason,
+});
+// Example Output:
+// Metric Result: { score: 1, reason: 'The response completely contradicts the context.' }
+```
+
+## Understanding the Results
+
+The metric provides:
+
+1. A hallucination score between 0 and 1:
+   - 0.0: No hallucination - no contradictions with context
+   - 0.3-0.4: Low hallucination - few contradictions
+   - 0.5-0.6: Mixed hallucination - some contradictions
+   - 0.7-0.8: High hallucination - many contradictions
+   - 0.9-1.0: Complete hallucination - contradicts all context
+
+2. Detailed reason for the score, including analysis of:
+   - Statement verification
+   - Contradictions found
+   - Factual accuracy
+   - Overall hallucination level
+
+<br />
+<br />
+<hr className="dark:border-[#404040] border-gray-300" />
+<br />
+<br />
+<GithubLink
+  link={
+    "https://github.com/mastra-ai/mastra/blob/main/examples/basics/evals/hallucination"
+  }
+/>
