@@ -75,3 +75,17 @@ export const retryUntil = async <T>(
   }
   throw new Error('Timeout waiting for condition');
 };
+
+export const createSampleThreadWithParams = (
+  threadId: string,
+  resourceId: string,
+  createdAt: Date,
+  updatedAt: Date,
+) => ({
+  id: threadId,
+  resourceId,
+  title: 'Test Thread with given ThreadId and ResourceId',
+  createdAt,
+  updatedAt,
+  metadata: { key: 'value' },
+});
