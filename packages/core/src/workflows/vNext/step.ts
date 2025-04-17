@@ -8,7 +8,9 @@ export type ExecuteFunction<TStepInput, TStepOutput, TResumeSchema, TSuspendSche
   mastra: Mastra;
   inputData: TStepInput;
   resumeData?: TResumeSchema;
-  getInitData<T extends NewWorkflow<any, any, any, any, any>>(): z.infer<NonNullable<T['inputSchema']>>;
+  getInitData<T extends NewWorkflow<any, any, any, any, any>>(): T extends undefined
+    ? unknown
+    : z.infer<NonNullable<T['inputSchema']>>;
   getStepResult<T extends NewStep<any, any, any>>(
     stepId: T,
   ): T['outputSchema'] extends undefined ? unknown : z.infer<NonNullable<T['outputSchema']>>;
