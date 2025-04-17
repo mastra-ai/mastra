@@ -1,5 +1,6 @@
 "use client";
 import React from "react";
+import { Var, T } from "gt-next/client";
 
 interface Operator {
   name: string;
@@ -77,68 +78,74 @@ export const OperatorsTable: React.FC<OperatorsTableProps> = ({
   };
 
   return (
-    <div className="my-6">
-      {title && (
-        <h3 className="text-xl font-semibold mb-6 text-zinc-900 dark:text-zinc-100">
-          {title}
-        </h3>
-      )}
-      <div className="overflow-x-auto">
-        <table className="w-full text-left border-collapse">
-          <thead>
-            <tr className="border-b border-zinc-900/10 dark:border-zinc-100/10">
-              <th className="py-3 pr-8 text-sm font-semibold text-zinc-900 dark:text-zinc-100">
-                Operator
-              </th>
-              <th className="py-3 pr-8 text-sm font-semibold text-zinc-900 dark:text-zinc-100">
-                Description
-              </th>
-              <th className="py-3 pr-8 text-sm font-semibold text-zinc-900 dark:text-zinc-100">
-                Example
-              </th>
-              <th className="py-3 text-sm font-semibold text-zinc-900 dark:text-zinc-100">
-                Supported By
-              </th>
-            </tr>
-          </thead>
-          <tbody>
-            {operators.map((operator, idx) => (
-              <tr
-                key={idx}
-                className="border-b border-zinc-900/5 dark:border-zinc-100/5 last:border-none"
-              >
-                <td className="py-4 pr-8 align-top">
-                  <code className="bg-zinc-900/10 dark:bg-white/10 px-1.5 py-0.5 rounded text-sm font-mono text-zinc-900 dark:text-zinc-100">
-                    {operator.name}
-                  </code>
-                </td>
-                <td className="py-4 pr-8 align-top text-sm text-zinc-600 dark:text-zinc-400 max-w-[200px]">
-                  {operator.description}
-                </td>
-                <td className="py-4 pr-8 align-top min-w-[50px]">
-                  <div className="bg-zinc-900/10 dark:bg-white/10 rounded-lg">
-                    <pre className="p-3 text-sm font-mono text-zinc-900 dark:text-zinc-100 whitespace-pre">
-                      <code>{formatExample(operator.example)}</code>
-                    </pre>
-                  </div>
-                </td>
-                <td className="py-4 align-top">
-                  <div className="flex flex-wrap gap-1.5">
-                    {operator.supportedBy.map((store, storeIdx) => (
-                      <span
-                        key={storeIdx}
-                        className="bg-zinc-900/10 dark:bg-white/10 px-2 py-0.5 rounded text-sm text-zinc-900 dark:text-zinc-100"
-                      >
-                        {store}
-                      </span>
-                    ))}
-                  </div>
-                </td>
+    <T id="components.operators_table.0">
+      <div className="my-6">
+        <Var>
+          {title && (
+            <h3 className="text-xl font-semibold mb-6 text-zinc-900 dark:text-zinc-100">
+              {title}
+            </h3>
+          )}
+        </Var>
+        <div className="overflow-x-auto">
+          <table className="w-full text-left border-collapse">
+            <thead>
+              <tr className="border-b border-zinc-900/10 dark:border-zinc-100/10">
+                <th className="py-3 pr-8 text-sm font-semibold text-zinc-900 dark:text-zinc-100">
+                  Operator
+                </th>
+                <th className="py-3 pr-8 text-sm font-semibold text-zinc-900 dark:text-zinc-100">
+                  Description
+                </th>
+                <th className="py-3 pr-8 text-sm font-semibold text-zinc-900 dark:text-zinc-100">
+                  Example
+                </th>
+                <th className="py-3 text-sm font-semibold text-zinc-900 dark:text-zinc-100">
+                  Supported By
+                </th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              <Var>
+                {operators.map((operator, idx) => (
+                  <tr
+                    key={idx}
+                    className="border-b border-zinc-900/5 dark:border-zinc-100/5 last:border-none"
+                  >
+                    <td className="py-4 pr-8 align-top">
+                      <code className="bg-zinc-900/10 dark:bg-white/10 px-1.5 py-0.5 rounded text-sm font-mono text-zinc-900 dark:text-zinc-100">
+                        {operator.name}
+                      </code>
+                    </td>
+                    <td className="py-4 pr-8 align-top text-sm text-zinc-600 dark:text-zinc-400 max-w-[200px]">
+                      {operator.description}
+                    </td>
+                    <td className="py-4 pr-8 align-top min-w-[50px]">
+                      <div className="bg-zinc-900/10 dark:bg-white/10 rounded-lg">
+                        <pre className="p-3 text-sm font-mono text-zinc-900 dark:text-zinc-100 whitespace-pre">
+                          <code>{formatExample(operator.example)}</code>
+                        </pre>
+                      </div>
+                    </td>
+                    <td className="py-4 align-top">
+                      <div className="flex flex-wrap gap-1.5">
+                        {operator.supportedBy.map((store, storeIdx) => (
+                          <span
+                            key={storeIdx}
+                            className="bg-zinc-900/10 dark:bg-white/10 px-2 py-0.5 rounded text-sm text-zinc-900 dark:text-zinc-100"
+                          >
+                            {store}
+                          </span>
+                        ))}
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </Var>
+            </tbody>
+          </table>
+        </div>
       </div>
-    </div>
+    </T>
   );
 };

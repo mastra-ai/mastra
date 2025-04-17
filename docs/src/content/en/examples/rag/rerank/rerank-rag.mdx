@@ -1,0 +1,180 @@
+---
+title: "Example: Re-ranking Results with Tools | Retrieval | RAG | Mastra Docs"
+description: Example of implementing a RAG system with re-ranking in Mastra using OpenAI embeddings and PGVector for vector storage.
+---
+
+import { GithubLink } from "@/components/github-link";
+
+# Re-ranking Results with Tools
+
+This example demonstrates how to use Mastra's vector query tool to implement a Retrieval-Augmented Generation (RAG) system with re-ranking using OpenAI embeddings and PGVector for vector storage.
+
+## Overview
+
+The system implements RAG with re-ranking using Mastra and OpenAI. Here's what it does:
+
+1. Sets up a Mastra agent with gpt-4o-mini for response generation
+2. Creates a vector query tool with re-ranking capabilities
+3. Chunks text documents into smaller segments and creates embeddings from them
+4. Stores them in a PostgreSQL vector database
+5. Retrieves and re-ranks relevant chunks based on queries
+6. Generates context-aware responses using the Mastra agent
+
+## Setup
+
+### Environment Setup
+
+Make sure to set up your environment variables:
+
+```bash filename=".env"
+OPENAI_API_KEY=your_openai_api_key_here
+POSTGRES_CONNECTION_STRING=your_connection_string_here
+```
+
+### Dependencies
+
+Then, import the necessary dependencies:
+
+```typescript copy showLineNumbers filename="index.ts"
+import { openai } from "@ai-sdk/openai";
+import { Mastra } from "@mastra/core";
+import { Agent } from "@mastra/core/agent";
+import { PgVector } from "@mastra/pg";
+import { MDocument, createVectorQueryTool } from "@mastra/rag";
+import { embedMany } from "ai";
+```
+
+## Vector Query Tool Creation with Re-ranking
+
+Using createVectorQueryTool imported from @mastra/rag, you can create a tool that can query the vector database and re-rank results:
+
+```typescript copy showLineNumbers{8} filename="index.ts"
+const vectorQueryTool = createVectorQueryTool({
+  vectorStoreName: "pgVector",
+  indexName: "embeddings",
+  model: openai.embedding("text-embedding-3-small"),
+  reranker: {
+    model: openai("gpt-4o-mini"),
+  },
+});
+```
+
+## Agent Configuration
+
+Set up the Mastra agent that will handle the responses:
+
+```typescript copy showLineNumbers{17} filename="index.ts"
+export const ragAgent = new Agent({
+  name: "RAG Agent",
+  instructions: `You are a helpful assistant that answers questions based on the provided context. Keep your answers concise and relevant.
+    Important: When asked to answer a question, please base your answer only on the context provided in the tool. 
+    If the context doesn't contain enough information to fully answer the question, please state that explicitly.`,
+  model: openai("gpt-4o-mini"),
+  tools: {
+    vectorQueryTool,
+  },
+});
+```
+
+## Instantiate PgVector and Mastra
+
+Instantiate PgVector and Mastra with the components:
+
+```typescript copy showLineNumbers{29} filename="index.ts"
+const pgVector = new PgVector(process.env.POSTGRES_CONNECTION_STRING!);
+
+export const mastra = new Mastra({
+  agents: { ragAgent },
+  vectors: { pgVector },
+});
+const agent = mastra.getAgent("ragAgent");
+```
+
+## Document Processing
+
+Create a document and process it into chunks:
+
+```typescript copy showLineNumbers{38} filename="index.ts"
+const doc1 = MDocument.fromText(`
+market data shows price resistance levels.
+technical charts display moving averages.
+support levels guide trading decisions.
+breakout patterns signal entry points.
+price action determines trade timing.
+
+baseball cards show gradual value increase.
+rookie cards command premium prices.
+card condition affects resale value.
+authentication prevents fake trading.
+grading services verify card quality.
+
+volume analysis confirms price trends.
+sports cards track seasonal demand.
+chart patterns predict movements.
+mint condition doubles card worth.
+resistance breaks trigger orders.
+rare cards appreciate yearly.
+`);
+
+const chunks = await doc1.chunk({
+  strategy: "recursive",
+  size: 150,
+  overlap: 20,
+  separator: "\n",
+});
+```
+
+## Creating and Storing Embeddings
+
+Generate embeddings for the chunks and store them in the vector database:
+
+```typescript copy showLineNumbers{66} filename="index.ts"
+const { embeddings } = await embedMany({
+  model: openai.embedding("text-embedding-3-small"),
+  values: chunks.map(chunk => chunk.text),
+});
+
+const vectorStore = mastra.getVector("pgVector");
+await vectorStore.createIndex({
+  indexName: "embeddings",
+  dimension: 1536,
+});
+
+await vectorStore.upsert({
+  indexName: "embeddings",
+  vectors: embeddings,
+  metadata: chunks?.map((chunk: any) => ({ text: chunk.text })),
+});
+```
+
+## Querying with Re-ranking
+
+Try different queries to see how the re-ranking affects results:
+
+```typescript copy showLineNumbers{82} filename="index.ts"
+const queryOne = 'explain technical trading analysis';
+const answerOne = await agent.generate(queryOne);
+console.log('\nQuery:', queryOne);
+console.log('Response:', answerOne.text);
+
+const queryTwo = 'explain trading card valuation';
+const answerTwo = await agent.generate(queryTwo);
+console.log('\nQuery:', queryTwo);
+console.log('Response:', answerTwo.text);
+
+const queryThree = 'how do you analyze market resistance';
+const answerThree = await agent.generate(queryThree);
+console.log('\nQuery:', queryThree);
+console.log('Response:', answerThree.text);
+```
+
+<br />
+<br />
+<hr className="dark:border-[#404040] border-gray-300" />
+<br />
+<br />
+<GithubLink
+  link={
+    "https://github.com/mastra-ai/mastra/blob/main/examples/basics/rag/rerank-rag"
+  }
+/> 
