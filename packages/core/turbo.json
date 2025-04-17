@@ -3,8 +3,12 @@
   "extends": ["//"],
   "tasks": {
     "build": {
+      "dependsOn": ["pre-build"],
+      "outputs": ["./**/*.d.ts"]
+    },
+    "pre-build": {
       "dependsOn": ["^build"],
-      "outputs": ["dist/**", "./**/*.d.ts"],
+      "outputs": ["dist/**"],
       "inputs": ["$TURBO_DEFAULT$", "./tsup.config.ts"]
     }
   }
