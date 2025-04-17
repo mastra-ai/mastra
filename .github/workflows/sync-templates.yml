@@ -15,11 +15,18 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/create-github-app-token@v1
+      - name: Get Github App Token
+        uses: actions/create-github-app-token@v1
         id: app-token
         with:
           app-id: ${{ vars.DANE_APP_ID }}
           private-key: ${{ secrets.DANE_APP_PRIVATE_KEY }}
+
+      - name: Get GitHub App User ID
+        id: get-user-id
+        run: echo "user-id=$(gh api "/users/${{ steps.app-token.outputs.app-slug }}[bot]" --jq .id)" >> "$GITHUB_OUTPUT"
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
 
       - name: Checkout repository
         uses: actions/checkout@v3
@@ -38,4 +45,6 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}
           ORGANIZATION: 'mastra-ai'
+          USERNAME: '${{ steps.app-token.outputs.app-slug }}[bot]'
+          EMAIL: '${{ steps.get-user-id.outputs.user-id }}+${{ steps.app-token.outputs.app-slug }}[bot]@users.noreply.github.com'
         run: node .github/scripts/sync-templates.js
