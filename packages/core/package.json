@@ -50,6 +50,16 @@
         "default": "./dist/storage/libsql/index.cjs"
       }
     },
+    "./storage/test-utils": {
+      "import": {
+        "types": "./dist/storage/test-utils/storage.d.ts",
+        "default": "./dist/storage/test-utils/storage.js"
+      },
+      "require": {
+        "types": "./dist/storage/test-utils/storage.d.cts",
+        "default": "./dist/storage/test-utils/storage.cjs"
+      }
+    },
     "./vector/libsql": {
       "import": {
         "types": "./dist/vector/libsql/index.d.ts",
