@@ -15,6 +15,12 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      - uses: actions/create-github-app-token@v1
+        id: app-token
+        with:
+          app-id: ${{ vars.DANE_APP_ID }}
+          private-key: ${{ secrets.DANE_APP_PRIVATE_KEY }}
+
       - name: Checkout repository
         uses: actions/checkout@v3
         with:
@@ -30,6 +36,6 @@ jobs:
 
       - name: Run Template Sync Script
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}
           ORGANIZATION: 'mastra-ai'
         run: node .github/scripts/sync-templates.js
