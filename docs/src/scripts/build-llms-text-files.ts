@@ -161,17 +161,17 @@ async function concatenateMDXDocs(sourceDir: string) {
     // Group files by parent directory
     const groupedFiles = mdxFiles.reduce(
       (groups, file) => {
-        const pagesIndex = file.path.indexOf("src/content/");
+        const pagesIndex = file.path.indexOf("src/content/en/");
         if (pagesIndex === -1) {
           console.warn(
-            `File ${file.path} is not under src/content/, skipping from index`,
+            `File ${file.path} is not under src/content/en/, skipping from index`,
           );
           return groups;
         }
 
         // Get the first directory after 'src/pages/'
         const pathAfterPages = file.path.slice(
-          pagesIndex + "src/content/".length,
+          pagesIndex + "src/content/en/".length,
         );
         const firstDir = pathAfterPages.split("/")[0];
 

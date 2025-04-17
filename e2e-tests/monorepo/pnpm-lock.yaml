@@ -11,6 +11,9 @@ importers:
       execa:
         specifier: ^9.5.2
         version: 9.5.2
+      get-port:
+        specifier: ^7.1.0
+        version: 7.1.0
       rollup:
         specifier: ^4.40.0
         version: 4.40.0
@@ -372,6 +375,10 @@ packages:
     resolution: {integrity: sha512-5xoDfX+fL7faATnagmWPpbFtwh/R77WmMMqqHGS65C3vvB0YHrgF+B1YmZ3441tMj5n63k0212XNoJwzlhffQw==}
     engines: {node: ^8.16.0 || ^10.6.0 || >=11.0.0}
     os: [darwin]
+
+  get-port@7.1.0:
+    resolution: {integrity: sha512-QB9NKEeDg3xxVwCCwJQ9+xycaz6pBB6iQ76wiWMl1927n0Kir6alPiP+yuiICLLU4jpMe08dXfpebuQppFA2zw==}
+    engines: {node: '>=16'}
 
   get-stream@9.0.1:
     resolution: {integrity: sha512-kVCxPF3vQM/N0B1PmoqVUqgHP+EeVjmZSQn+1oCRPxd2P21P2F19lIgbR3HBosbB1PUhOAoctJnfEn2GbN2eZA==}
@@ -855,6 +862,8 @@ snapshots:
 
   fsevents@2.3.3:
     optional: true
+
+  get-port@7.1.0: {}
 
   get-stream@9.0.1:
     dependencies:
