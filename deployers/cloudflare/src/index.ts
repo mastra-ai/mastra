@@ -101,8 +101,9 @@ export default {
     serverFile: string,
     mastraEntryFile: string,
     analyzedBundleInfo: Awaited<ReturnType<typeof analyzeBundle>>,
+    toolsPaths: string[],
   ) {
-    const inputOptions = await super.getBundlerOptions(serverFile, mastraEntryFile, analyzedBundleInfo);
+    const inputOptions = await super.getBundlerOptions(serverFile, mastraEntryFile, analyzedBundleInfo, toolsPaths);
 
     if (Array.isArray(inputOptions.plugins)) {
       inputOptions.plugins = [
@@ -119,8 +120,8 @@ process.versions.node = '${process.versions.node}';
     return inputOptions;
   }
 
-  async bundle(entryFile: string, outputDirectory: string): Promise<void> {
-    return this._bundle(this.getEntry(), entryFile, outputDirectory);
+  async bundle(entryFile: string, outputDirectory: string, toolsPaths: string[]): Promise<void> {
+    return this._bundle(this.getEntry(), entryFile, outputDirectory, toolsPaths);
   }
 
   async deploy(outputDirectory: string): Promise<void> {
