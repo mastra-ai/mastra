@@ -12,7 +12,6 @@ import {
   createMastraDir,
   getAISDKPackage,
   getAPIKey,
-  installCoreDeps,
   writeAPIKey,
   writeCodeSample,
   writeIndexFile,
