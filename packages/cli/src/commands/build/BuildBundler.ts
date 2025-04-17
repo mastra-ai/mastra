@@ -29,8 +29,8 @@ export class BuildBundler extends Bundler {
     await super.prepare(outputDirectory);
   }
 
-  bundle(entryFile: string, outputDirectory: string): Promise<void> {
-    return this._bundle(this.getEntry(), entryFile, outputDirectory);
+  bundle(entryFile: string, outputDirectory: string, toolsPaths: string[]): Promise<void> {
+    return this._bundle(this.getEntry(), entryFile, outputDirectory, toolsPaths);
   }
 
   protected getEntry(): string {
