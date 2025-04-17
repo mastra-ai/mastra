@@ -11,6 +11,8 @@ dotenv.config();
 const TEMPLATES_DIR = path.join(process.cwd(), 'templates');
 const ORGANIZATION = process.env.ORGANIZATION;
 const GITHUB_TOKEN = process.env.GITHUB_TOKEN;
+const USERNAME = process.env.USERNAME;
+const EMAIL = process.env.EMAIL;
 
 // Initialize Octokit
 const octokit = new Octokit({
@@ -113,10 +115,11 @@ async function pushToRepo(repoName) {
       `
       cd ${tempDir} &&
       git init &&
-      git config user.name "GitHub Actions" &&
-      git config user.email "actions@github.com" &&
+      git config user.name "${USERNAME}" &&
+      git config user.email "${EMAIL}" &&
       git add . &&
       git commit -m "Update template from monorepo" &&
+      git branch -M main &&
       git remote add origin https://x-access-token:${GITHUB_TOKEN}@github.com/${ORGANIZATION}/${repoName}.git &&
       git push -u origin main --force
     `,
