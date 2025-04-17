@@ -18,12 +18,12 @@ Let's understand how RAG works and how we'll implement each component:
 1. Knowledge Store/Index
    - Converting text into vector representations
    - Creating numerical representations of content
-   - Implementation: We'll use OpenAI's text-embedding-3-small to create embeddings and store them in PgVector
+   - Implementation: We'll use OpenAI's text-embedding-3-small to create embeddings and store them in libSQLVector
 
 2. Retriever
    - Finding relevant content via similarity search
    - Matching query embeddings with stored vectors
-   - Implementation: We'll use PgVector to perform similarity searches on our stored embeddings
+   - Implementation: We'll use libSQLVector to perform similarity searches on our stored embeddings
 
 3. Generator
    - Processing retrieved content with an LLM
@@ -32,7 +32,7 @@ Let's understand how RAG works and how we'll implement each component:
 
 Our implementation will:
 1. Process the proxy statement into embeddings
-2. Store them in PgVector for quick retrieval
+2. Store them in libSQLVector for quick retrieval
 3. Use similarity search to find relevant sections
 4. Generate accurate responses using retrieved context
 
@@ -65,24 +65,14 @@ Initialize a new Node.js project and install the required dependencies:
 
 ```bash
 npm init -y
-npm install @mastra/core @mastra/rag @mastra/pg @ai-sdk/openai ai zod pdf.js-extract
-```
-
-Set up PgVector using Docker. If you don't have Docker installed, you can download and install it from the [official Docker website](https://docs.docker.com/engine/install/)
-```bash
-docker run -e POSTGRES_USER=ai \
-           -e POSTGRES_PASSWORD=ai \
-           -e POSTGRES_DB=ai \
-           --name my_postgres \
-           -p 5432:5432 \
-           -d ankane/pgvector
+npm install @mastra/core @mastra/rag @ai-sdk/openai ai zod pdf.js-extract
 ```
 
 Set up environment variables for API access and database connection:
 
 ```bash filename=".env" copy
 OPENAI_API_KEY=your_openai_api_key
-POSTGRES_CONNECTION_STRING=postgresql://ai:ai@localhost:5532/ai
+DATABASE_URL=file:local.db
 ```
 
 Create the necessary files for our project:
@@ -107,15 +97,15 @@ import { createVectorQueryTool } from '@mastra/rag';
 
 // Create a tool for semantic search over our statement embeddings
 const vectorQueryTool = createVectorQueryTool({
-  vectorStoreName: 'pgVector',
+  vectorStoreName: 'libSQL',
   indexName: 'statements',
   model: openai.embedding('text-embedding-3-small'),
 });
 
 export const ragAgent = new Agent({
-  name: 'RAG Agent',
+  name: 'RAG Assistant',
   instructions: 
-    `You are a helpful rag agent that analyzes annual meeting statements.
+    `You are a helpful rag assistant that analyzes annual meeting statements.
     Use the provided vector query tool to find relevant information from your knowledge base, 
     and provide accurate, well-supported answers based on the retrieved content.
     Focus on the specific content available in the tool and acknowledge if you cannot find sufficient information to answer a question.
@@ -131,15 +121,18 @@ export const ragAgent = new Agent({
 
 ```ts copy showLineNumbers filename="src/mastra/index.ts"
 import { Mastra } from '@mastra/core';
-import { PgVector } from '@mastra/pg';
+import { LibSQLVector } from "@mastra/core/vector/libsql";
 
 import { ragAgent } from './agents/payfinderAgent';
 
 // Initialize Mastra instance
-const pgVector = new PgVector(process.env.POSTGRES_CONNECTION_STRING!);
+const libSQL = new LibSQLVector({
+  connectionUrl: process.env.DATABASE_URL!
+})
+
 export const mastra = new Mastra({
   agents: { ragAgent },
-  vectors: { pgVector },
+  vectors: { libSQL },
 });
 ```
 
@@ -229,7 +222,7 @@ const { embeddings } = await embedMany({
   });
   
 // Get the vector store instance from Mastra
-const vectorStore = mastra.getVector('pgVector');
+const vectorStore = mastra.getVector('libSQL');
 
 try {
   // Create an index for our statement chunks
