@@ -61,8 +61,8 @@ import {
   createRunHandler,
   getWorkflowRunsHandler,
 } from './handlers/workflows.js';
-import { html } from './welcome.js';
 import type { ServerBundleOptions } from './types';
+import { html } from './welcome.js';
 
 type Bindings = {};
 
