@@ -21,6 +21,24 @@ describe('PgVector', () => {
     await vectorDB.disconnect();
   });
 
+  // --- Validation tests ---
+  describe('Validation', () => {
+    it('throws if connectionString is empty (string)', () => {
+      expect(() => new PgVector('')).toThrow(/connectionString must be provided and cannot be empty/);
+    });
+    it('throws if connectionString is empty (object)', () => {
+      expect(() => new PgVector({ connectionString: '' })).toThrow(
+        /connectionString must be provided and cannot be empty/,
+      );
+    });
+    it('does not throw on non-empty connection string (string)', () => {
+      expect(() => new PgVector(connectionString)).not.toThrow();
+    });
+    it('does not throw on non-empty connection string (object)', () => {
+      expect(() => new PgVector({ connectionString })).not.toThrow();
+    });
+  });
+
   // Index Management Tests
   describe('Index Management', () => {
     describe('createIndex', () => {
@@ -329,8 +347,8 @@ describe('PgVector', () => {
         expect(results[0]?.vector).toEqual(newVector);
       });
 
-      it('should throw exception when no updates are given', () => {
-        expect(vectorDB.updateIndexById(testIndexName, 'id', {})).rejects.toThrow('No updates provided');
+      it('should throw exception when no updates are given', async () => {
+        await expect(vectorDB.updateIndexById(testIndexName, 'id', {})).rejects.toThrow('No updates provided');
       });
     });
 

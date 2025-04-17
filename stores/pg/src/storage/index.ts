@@ -13,7 +13,13 @@ import type { WorkflowRunState } from '@mastra/core/workflows';
 import pgPromise from 'pg-promise';
 import type { ISSLConfig } from 'pg-promise/typescript/pg-subset';
 
-export type PostgresConfig = { schema?: string } & (
+export type PostgresConfig = {
+  schemaName?: string;
+  /**
+   * @deprecated Use `schemaName` instead. Support for `schema` will be removed in a future release.
+   */
+  schema?: string;
+} & (
   | {
       host: string;
       port: number;
@@ -35,9 +41,36 @@ export class PostgresStore extends MastraStorage {
   private schemaSetupComplete: boolean | undefined = undefined;
 
   constructor(config: PostgresConfig) {
+    // Validation: connectionString or host/database/user/password must not be empty
+    if ('connectionString' in config) {
+      if (
+        !config.connectionString ||
+        typeof config.connectionString !== 'string' ||
+        config.connectionString.trim() === ''
+      ) {
+        throw new Error(
+          'PostgresStore: connectionString must be provided and cannot be empty. Passing an empty string may cause fallback to local Postgres defaults.',
+        );
+      }
+    } else {
+      const required = ['host', 'database', 'user', 'password'];
+      for (const key of required) {
+        if (!(key in config) || typeof (config as any)[key] !== 'string' || (config as any)[key].trim() === '') {
+          throw new Error(
+            `PostgresStore: ${key} must be provided and cannot be empty. Passing an empty string may cause fallback to local Postgres defaults.`,
+          );
+        }
+      }
+    }
     super({ name: 'PostgresStore' });
     this.pgp = pgPromise();
-    this.schema = config.schema;
+    // Deprecation notice for schema (old option)
+    if ('schema' in config && config.schema) {
+      console.warn(
+        '[DEPRECATION NOTICE] The "schema" option in PostgresStore is deprecated. Please use "schemaName" instead. Support for "schema" will be removed in a future release.',
+      );
+    }
+    this.schema = config.schemaName ?? config.schema;
     this.db = this.pgp(
       `connectionString` in config
         ? { connectionString: config.connectionString }
