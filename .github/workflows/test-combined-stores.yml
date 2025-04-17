@@ -4,9 +4,10 @@ on:
   pull_request:
     branches: [main]
     paths:
-      - "stores/**"
-      - "stores/*/package.json"
-      - ".github/workflows/test-combined-stores.yml"
+      - 'stores/**'
+      - 'packages/core/**'
+      - 'stores/*/package.json'
+      - '.github/workflows/test-combined-stores.yml'
 
 permissions:
   contents: read
@@ -56,8 +57,8 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: "20"
-          cache: "pnpm"
+          node-version: '20'
+          cache: 'pnpm'
 
       - name: Install dependencies
         run: pnpm install
@@ -71,7 +72,7 @@ jobs:
       - name: Run ${{ matrix.store }} tests
         run: pnpm test --filter "@mastra/${{ matrix.store }}"
         env:
-          NODE_OPTIONS: "--max_old_space_size=8096"
+          NODE_OPTIONS: '--max_old_space_size=8096'
           PINECONE_API_KEY: ${{ secrets.PINECONE_API_KEY }}
           ASTRA_DB_ENDPOINT: ${{ secrets.ASTRA_DB_ENDPOINT }}
           ASTRA_DB_TOKEN: ${{ secrets.ASTRA_DB_TOKEN }}
