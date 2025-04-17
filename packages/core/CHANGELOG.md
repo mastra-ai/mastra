@@ -1,5 +1,19 @@
 # @mastra/core
 
+## 0.9.0-alpha.3
+
+### Minor Changes
+
+- fe3ae4d: Remove \_\_ functions in storage and move to storage proxy to make sure init is called
+
+## 0.8.4-alpha.2
+
+### Patch Changes
+
+- 9ee4293: Improve commonjs support
+
+  Add types files in the root directory to make sure typescript can resolve it without an exportsmap
+
 ## 0.8.4-alpha.1
 
 ### Patch Changes

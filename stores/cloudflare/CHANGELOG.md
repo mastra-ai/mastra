@@ -1,5 +1,23 @@
 # @mastra/cloudflare
 
+## 0.1.0-alpha.3
+
+### Minor Changes
+
+- fe3ae4d: Remove \_\_ functions in storage and move to storage proxy to make sure init is called
+
+### Patch Changes
+
+- Updated dependencies [fe3ae4d]
+  - @mastra/core@0.9.0-alpha.3
+
+## 0.0.5-alpha.2
+
+### Patch Changes
+
+- Updated dependencies [9ee4293]
+  - @mastra/core@0.8.4-alpha.2
+
 ## 0.0.5-alpha.1
 
 ### Patch Changes

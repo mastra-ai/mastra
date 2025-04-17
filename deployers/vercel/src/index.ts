@@ -147,9 +147,14 @@ export const POST = handle(app);
 `;
   }
 
-  async bundle(entryFile: string, outputDirectory: string, bundleOptions?: Record<string, any>): Promise<void> {
+  async bundle(
+    entryFile: string,
+    outputDirectory: string,
+    toolsPaths: string[],
+    bundleOptions?: Record<string, any>,
+  ): Promise<void> {
     const { swaggerUI } = bundleOptions ?? {};
-    return this._bundle(this.getEntry({ swaggerUI }), entryFile, outputDirectory);
+    return this._bundle(this.getEntry({ swaggerUI }), entryFile, outputDirectory, toolsPaths);
   }
 
   async deploy(outputDirectory: string): Promise<void> {

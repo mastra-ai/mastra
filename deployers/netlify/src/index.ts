@@ -88,12 +88,18 @@ to = "/.netlify/functions/api/:splat"
     this.writeFiles({ dir: join(outputDirectory, this.outputDir) });
   }
 
-  async bundle(entryFile: string, outputDirectory: string, bundleOptions?: Record<string, any>): Promise<void> {
+  async bundle(
+    entryFile: string,
+    outputDirectory: string,
+    toolsPaths: string[],
+    bundleOptions?: Record<string, any>,
+  ): Promise<void> {
     const { swaggerUI } = bundleOptions ?? {};
     return this._bundle(
       this.getEntry({ swaggerUI }),
       entryFile,
       outputDirectory,
+      toolsPaths,
       join(outputDirectory, this.outputDir, 'netlify', 'functions', 'api'),
     );
   }

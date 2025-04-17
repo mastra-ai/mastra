@@ -29,7 +29,12 @@ export class BuildBundler extends Bundler {
     await super.prepare(outputDirectory);
   }
 
-  async bundle(entryFile: string, outputDirectory: string, bundleOptions?: Record<string, any>): Promise<void> {
+  async bundle(
+    entryFile: string,
+    outputDirectory: string,
+    toolsPaths: string[],
+    bundleOptions?: Record<string, any>,
+  ): Promise<void> {
     const { swaggerUI } = bundleOptions ?? {};
     return this._bundle(
       this.getEntry({
@@ -37,6 +42,7 @@ export class BuildBundler extends Bundler {
       }),
       entryFile,
       outputDirectory,
+      toolsPaths,
     );
   }
 

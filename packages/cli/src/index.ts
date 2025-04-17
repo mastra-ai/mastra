@@ -163,13 +163,14 @@ program
   .command('build')
   .description('Build your Mastra project')
   .option('-d, --dir <path>', 'Path to directory')
+  .option('-t, --tools <toolsDirs>', 'Comma-separated list of paths to tool files to include')
   .option('-s, --swaggerui', 'Enable swaggerUI')
   .action(async args => {
     await analytics.trackCommandExecution({
       command: 'mastra build',
       args,
       execution: async () => {
-        await build({ dir: args.dir, swaggerUI: args?.swaggerui });
+        await build({ dir: args.dir, tools: args.tools ? args.tools.split(',') : [], swaggerUI: args?.swaggerui });
       },
       origin,
     });

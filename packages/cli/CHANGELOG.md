@@ -1,5 +1,25 @@
 # mastra
 
+## 0.5.0-alpha.4
+
+### Minor Changes
+
+- fe3ae4d: Remove \_\_ functions in storage and move to storage proxy to make sure init is called
+
+### Patch Changes
+
+- Updated dependencies [fe3ae4d]
+  - @mastra/deployer@0.3.0-alpha.4
+  - @mastra/core@0.9.0-alpha.3
+
+## 0.4.10-alpha.3
+
+### Patch Changes
+
+- Updated dependencies [9ee4293]
+  - @mastra/core@0.8.4-alpha.2
+  - @mastra/deployer@0.2.10-alpha.3
+
 ## 0.4.10-alpha.2
 
 ### Patch Changes

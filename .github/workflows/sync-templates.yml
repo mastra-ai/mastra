@@ -1,0 +1,41 @@
+name: Sync Template Repositories
+
+on:
+  push:
+    branches:
+      - main # Or your default branch
+    paths:
+      - 'templates/**' # Only trigger when templates change
+  workflow_dispatch: # Allow manual triggers
+
+jobs:
+  sync-templates:
+    name: Sync Template Repositories
+    if: ${{ github.repository == 'mastra-ai/mastra' }}
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/create-github-app-token@v1
+        id: app-token
+        with:
+          app-id: ${{ vars.DANE_APP_ID }}
+          private-key: ${{ secrets.DANE_APP_PRIVATE_KEY }}
+
+      - name: Checkout repository
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 0 # Fetch all history
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+
+      - name: Install dependencies
+        run: npm install @octokit/rest fs-extra dotenv
+
+      - name: Run Template Sync Script
+        env:
+          GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}
+          ORGANIZATION: 'mastra-ai'
+        run: node .github/scripts/sync-templates.js

@@ -32,6 +32,7 @@ Each section contains detailed markdown files that provide comprehensive informa
 - [Getting started with Mastra and NextJS | Mastra Guides](https://mastra.ai/docs/frameworks/next-js): Guide on integrating Mastra with NextJS.
 - [Installing Mastra Locally | Getting Started | Mastra Docs](https://mastra.ai/docs/getting-started/installation): Guide on installing Mastra and setting up the necessary prerequisites for running it with various LLM providers.
 - [Using with Cursor/Windsurf | Getting Started | Mastra Docs](https://mastra.ai/docs/getting-started/mcp-docs-server): Learn how to use the Mastra MCP documentation server in your IDE to turn it into an agentic Mastra expert.
+- [model-capability](https://mastra.ai/docs/getting-started/model-capability)
 - [Local Project Structure | Getting Started | Mastra Docs](https://mastra.ai/docs/getting-started/project-structure): Guide on organizing folders and files in Mastra, including best practices and recommended structures.
 - [Introduction | Mastra Docs](https://mastra.ai/docs): Mastra is a TypeScript agent framework. It helps you build AI applications and features quickly. It gives you the set of primitives you need: workflows, agents, RAG, integrations, syncs and evals.
 - [Using Mastra Integrations | Mastra Local Development Docs](https://mastra.ai/docs/integrations): Documentation for Mastra integrations, which are auto-generated, type-safe API clients for third-party services.
@@ -50,10 +51,10 @@ Each section contains detailed markdown files that provide comprehensive informa
 - [Retrieval, Semantic Search, Reranking | RAG | Mastra Docs](https://mastra.ai/docs/rag/retrieval): Guide on retrieval processes in Mastras RAG systems, including semantic search, filtering, and re-ranking.
 - [Storing Embeddings in A Vector Database | Mastra Docs](https://mastra.ai/docs/rag/vector-databases): Guide on vector storage options in Mastra, including embedded and dedicated vector databases for similarity search.
 - [Storage in Mastra | Mastra Docs](https://mastra.ai/docs/storage/overview): Overview of Mastras storage system and data persistence capabilities.
-- [Voice in Mastra | Mastra Docs](https://mastra.ai/docs/voice/overview): Overview of voice capabilities in Mastra, including text-to-speech, speech-to-text, and real-time voice-to-voice interactions.
+- [Voice in Mastra | Mastra Docs](https://mastra.ai/docs/voice/overview): Overview of voice capabilities in Mastra, including text-to-speech, speech-to-text, and real-time speech-to-speech interactions.
+- [Speech-to-Speech Capabilities in Mastra | Mastra Docs](https://mastra.ai/docs/voice/speech-to-speech): Overview of speech-to-speech capabilities in Mastra, including real-time interactions and event-driven architecture.
 - [Speech-to-Text (STT) in Mastra | Mastra Docs](https://mastra.ai/docs/voice/speech-to-text): Overview of Speech-to-Text capabilities in Mastra, including configuration, usage, and integration with voice providers.
 - [Text-to-Speech (TTS) in Mastra | Mastra Docs](https://mastra.ai/docs/voice/text-to-speech): Overview of Text-to-Speech capabilities in Mastra, including configuration, usage, and integration with voice providers.
-- [Voice-to-Voice Capabilities in Mastra | Mastra Docs](https://mastra.ai/docs/voice/voice-to-voice): Overview of voice-to-voice capabilities in Mastra, including real-time interactions and event-driven architecture.
 - [Branching, Merging, Conditions | Workflows | Mastra Docs](https://mastra.ai/docs/workflows/control-flow): Control flow in Mastra workflows allows you to manage branching, merging, and conditions to construct workflows that meet your logic requirements.
 - [Dynamic Workflows | Mastra Docs](https://mastra.ai/docs/workflows/dynamic-workflows): Learn how to create dynamic workflows within workflow steps, allowing for flexible workflow creation based on runtime conditions.
 - [Error Handling in Workflows | Mastra Docs](https://mastra.ai/docs/workflows/error-handling): Learn how to handle errors in Mastra workflows using step retries, conditional branching, and monitoring.
@@ -146,7 +147,6 @@ Each section contains detailed markdown files that provide comprehensive informa
 - [Reference: getAgent() | Agent Config | Agents | Mastra Docs](https://mastra.ai/reference/agents/getAgent): API Reference for getAgent.
 - [Reference: Agent.stream() | Streaming | Agents | Mastra Docs](https://mastra.ai/reference/agents/stream): Documentation for the `.stream()` method in Mastra agents, which enables real-time streaming of responses.
 - [mastra build](https://mastra.ai/reference/cli/build): Build your Mastra project for production deployment
-- [`mastra deploy` Reference | Deployment | Mastra CLI](https://mastra.ai/reference/cli/deploy): Documentation for the mastra deploy command, which deploys Mastra projects to platforms like Vercel and Cloudflare.
 - [`mastra dev` Reference | Local Development | Mastra CLI](https://mastra.ai/reference/cli/dev): Documentation for the mastra dev command, which starts a development server for agents, tools, and workflows.
 - [`mastra init` reference | Project Creation | Mastra CLI](https://mastra.ai/reference/cli/init): Documentation for the mastra init command, which creates a new Mastra project with interactive setup options.
 - [agents](https://mastra.ai/reference/client-js/agents)

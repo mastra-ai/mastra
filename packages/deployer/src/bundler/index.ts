@@ -4,7 +4,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { MastraBundler } from '@mastra/core/bundler';
 import virtual from '@rollup/plugin-virtual';
-import { copy, ensureDir, readJSON, emptyDir } from 'fs-extra/esm';
+import fsExtra, { copy, ensureDir, readJSON, emptyDir } from 'fs-extra/esm';
 import resolveFrom from 'resolve-from';
 import type { InputOptions, OutputOptions } from 'rollup';
 
@@ -12,6 +12,7 @@ import { analyzeBundle } from '../build/analyze';
 import { createBundler as createBundlerUtil, getInputOptions } from '../build/bundler';
 import { writeTelemetryConfig } from '../build/telemetry';
 import { DepsService } from '../services/deps';
+import { FileService } from '../services/fs';
 
 export abstract class Bundler extends MastraBundler {
   protected analyzeOutputDir = '.build';
@@ -106,12 +107,15 @@ export abstract class Bundler extends MastraBundler {
     serverFile: string,
     mastraEntryFile: string,
     analyzedBundleInfo: Awaited<ReturnType<typeof analyzeBundle>>,
+    toolsPaths: string[],
   ) {
     const inputOptions: InputOptions = await getInputOptions(mastraEntryFile, analyzedBundleInfo, 'node');
     const isVirtual = serverFile.includes('\n') || existsSync(serverFile);
 
+    const toolsInputOptions = await this.getToolsInputOptions(toolsPaths);
+
     if (isVirtual) {
-      inputOptions.input = { index: '#entry' };
+      inputOptions.input = { index: '#entry', ...toolsInputOptions };
 
       if (Array.isArray(inputOptions.plugins)) {
         inputOptions.plugins.unshift(virtual({ '#entry': serverFile }));
@@ -119,16 +123,46 @@ export abstract class Bundler extends MastraBundler {
         inputOptions.plugins = [virtual({ '#entry': serverFile })];
       }
     } else {
-      inputOptions.input = { index: serverFile };
+      inputOptions.input = { index: serverFile, ...toolsInputOptions };
     }
 
     return inputOptions;
+  }
+
+  async getToolsInputOptions(toolsPaths: string[]) {
+    const inputs: Record<string, string> = {};
+
+    for (const toolPath of toolsPaths) {
+      if (await fsExtra.pathExists(toolPath)) {
+        const fileService = new FileService();
+        const entryFile = fileService.getFirstExistingFile([
+          join(toolPath, 'index.ts'),
+          join(toolPath, 'index.js'),
+          toolPath, // if toolPath itself is a file
+        ]);
+
+        // if it doesn't exist or is a dir skip it. using a dir as a tool will crash the process
+        if (!entryFile || (await stat(entryFile)).isDirectory()) {
+          this.logger.warn(`No entry file found in ${toolPath}, skipping...`);
+          continue;
+        }
+
+        const uniqueToolID = crypto.randomUUID();
+
+        inputs[`tools/${uniqueToolID}`] = entryFile;
+      } else {
+        this.logger.warn(`Tool path ${toolPath} does not exist, skipping...`);
+      }
+    }
+
+    return inputs;
   }
 
   protected async _bundle(
     serverFile: string,
     mastraEntryFile: string,
     outputDirectory: string,
+    toolsPaths: string[] = [],
     bundleLocation: string = join(outputDirectory, this.outputDir),
   ): Promise<void> {
     this.logger.info('Start bundling Mastra');
@@ -165,7 +199,12 @@ export abstract class Bundler extends MastraBundler {
     await this.writeInstrumentationFile(join(outputDirectory, this.outputDir));
 
     this.logger.info('Bundling Mastra application');
-    const inputOptions: InputOptions = await this.getBundlerOptions(serverFile, mastraEntryFile, analyzedBundleInfo);
+    const inputOptions: InputOptions = await this.getBundlerOptions(
+      serverFile,
+      mastraEntryFile,
+      analyzedBundleInfo,
+      toolsPaths,
+    );
     const bundler = await this.createBundler(inputOptions, {
       dir: bundleLocation,
       manualChunks: {
@@ -174,6 +213,14 @@ export abstract class Bundler extends MastraBundler {
     });
 
     await bundler.write();
+    const toolsInputOptions = Array.from(Object.keys(inputOptions.input || {}))
+      .filter(key => key.startsWith('tools/'))
+      .map(key => `./${key}.mjs`);
+
+    await writeFile(
+      join(outputDirectory, this.outputDir, 'tools.mjs'),
+      `export const tools = ${JSON.stringify(toolsInputOptions)};`,
+    );
     this.logger.info('Bundling Mastra done');
 
     this.logger.info('Copying public files');

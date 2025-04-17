@@ -1,5 +1,30 @@
 # @mastra/voice-openai-realtime
 
+## 0.2.0-alpha.5
+
+### Patch Changes
+
+- 6cf1417: Voice reference and tool-call-start
+- Updated dependencies [fe3ae4d]
+  - @mastra/core@0.9.0-alpha.3
+
+## 0.2.0-alpha.4
+
+### Minor Changes
+
+- 1ef0f1f: Disconnect
+
+## 0.2.0-alpha.3
+
+### Minor Changes
+
+- 9aaa64b: Don't connect the ws connection until connect is called
+
+### Patch Changes
+
+- Updated dependencies [9ee4293]
+  - @mastra/core@0.8.4-alpha.2
+
 ## 0.2.0-alpha.2
 
 ### Minor Changes

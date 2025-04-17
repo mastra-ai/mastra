@@ -1,6 +1,6 @@
 {
   "name": "@mastra/rag",
-  "version": "0.1.19-alpha.1",
+  "version": "0.1.19-alpha.3",
   "description": "",
   "type": "module",
   "main": "dist/index.js",
@@ -27,8 +27,6 @@
   "author": "",
   "license": "Elastic-2.0",
   "dependencies": {
-    "@llamaindex/core": "^0.6.2",
-    "@llamaindex/env": "^0.1.29",
     "@mastra/core": "workspace:^",
     "@paralleldrive/cuid2": "^2.2.2",
     "js-tiktoken": "^1.0.19",

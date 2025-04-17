@@ -56,6 +56,7 @@ The primary method for STT is the `listen()` method, which converts spoken audio
 import { Agent } from '@mastra/core/agent';
 import { openai } from '@ai-sdk/openai';
 import { OpenAIVoice } from '@mastra/voice-openai';
+import { getMicrophoneStream } from "@mastra/node-audio";
 
 const voice = new OpenAIVoice();
 

@@ -3,7 +3,7 @@
   "version": "0.0.1",
   "private": true,
   "devDependencies": {
-    "rollup": "^4.38.0",
+    "rollup": "^4.40.0",
     "vitest": "^3.0.7"
   },
   "scripts": {

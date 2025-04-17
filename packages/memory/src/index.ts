@@ -104,7 +104,7 @@ export class Memory extends MastraMemory {
     }
 
     // Get raw messages from storage
-    const rawMessages = await this.storage.__getMessages({
+    const rawMessages = await this.storage.getMessages({
       threadId,
       selectBy: {
         ...selectBy,
@@ -183,11 +183,11 @@ export class Memory extends MastraMemory {
   }
 
   async getThreadById({ threadId }: { threadId: string }): Promise<StorageThreadType | null> {
-    return this.storage.__getThreadById({ threadId });
+    return this.storage.getThreadById({ threadId });
   }
 
   async getThreadsByResourceId({ resourceId }: { resourceId: string }): Promise<StorageThreadType[]> {
-    return this.storage.__getThreadsByResourceId({ resourceId });
+    return this.storage.getThreadsByResourceId({ resourceId });
   }
 
   async saveThread({
@@ -201,7 +201,7 @@ export class Memory extends MastraMemory {
 
     if (config.workingMemory?.enabled && !thread?.metadata?.workingMemory) {
       // if working memory is enabled but the thread doesn't have it, we need to set it
-      return this.storage.__saveThread({
+      return this.storage.saveThread({
         thread: deepMerge(thread, {
           metadata: {
             workingMemory: config.workingMemory.template || this.defaultWorkingMemoryTemplate,
@@ -210,7 +210,7 @@ export class Memory extends MastraMemory {
       });
     }
 
-    return this.storage.__saveThread({ thread });
+    return this.storage.saveThread({ thread });
   }
 
   async updateThread({
@@ -222,7 +222,7 @@ export class Memory extends MastraMemory {
     title: string;
     metadata: Record<string, unknown>;
   }): Promise<StorageThreadType> {
-    return this.storage.__updateThread({
+    return this.storage.updateThread({
       id,
       title,
       metadata,
@@ -230,7 +230,7 @@ export class Memory extends MastraMemory {
   }
 
   async deleteThread(threadId: string): Promise<void> {
-    await this.storage.__deleteThread({ threadId });
+    await this.storage.deleteThread({ threadId });
   }
 
   private chunkText(text: string, tokenSize = 4096) {
@@ -325,7 +325,7 @@ export class Memory extends MastraMemory {
 
     const config = this.getMergedThreadConfig(memoryConfig);
 
-    const result = this.storage.__saveMessages({ messages });
+    const result = this.storage.saveMessages({ messages });
 
     if (this.vector && config.semanticRecall) {
       let indexName: Promise<string>;
@@ -402,7 +402,7 @@ export class Memory extends MastraMemory {
     if (!this.threadConfig.workingMemory?.enabled) return null;
 
     // Get thread from storage
-    const thread = await this.storage.__getThreadById({ threadId });
+    const thread = await this.storage.getThreadById({ threadId });
     if (!thread) return this.threadConfig?.workingMemory?.template || this.defaultWorkingMemoryTemplate;
 
     // Return working memory from metadata
@@ -440,11 +440,11 @@ export class Memory extends MastraMemory {
       return;
     }
 
-    const thread = await this.storage.__getThreadById({ threadId });
+    const thread = await this.storage.getThreadById({ threadId });
     if (!thread) return;
 
     // Update thread metadata with new working memory
-    await this.storage.__updateThread({
+    await this.storage.updateThread({
       id: thread.id,
       title: thread.title || '',
       metadata: deepMerge(thread.metadata || {}, {

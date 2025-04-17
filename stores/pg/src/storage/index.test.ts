@@ -104,21 +104,65 @@ describe('PostgresStore', () => {
     }
   });
 
+  // --- Validation tests ---
+  describe('Validation', () => {
+    const validConfig = TEST_CONFIG;
+    it('throws if connectionString is empty', () => {
+      expect(() => new PostgresStore({ connectionString: '' })).toThrow(
+        /connectionString must be provided and cannot be empty/,
+      );
+    });
+    it('throws if host is missing or empty', () => {
+      expect(() => new PostgresStore({ ...validConfig, host: '' })).toThrow(
+        /host must be provided and cannot be empty/,
+      );
+      const { host, ...rest } = validConfig;
+      expect(() => new PostgresStore(rest as any)).toThrow(/host must be provided and cannot be empty/);
+    });
+    it('throws if user is missing or empty', () => {
+      expect(() => new PostgresStore({ ...validConfig, user: '' })).toThrow(
+        /user must be provided and cannot be empty/,
+      );
+      const { user, ...rest } = validConfig;
+      expect(() => new PostgresStore(rest as any)).toThrow(/user must be provided and cannot be empty/);
+    });
+    it('throws if database is missing or empty', () => {
+      expect(() => new PostgresStore({ ...validConfig, database: '' })).toThrow(
+        /database must be provided and cannot be empty/,
+      );
+      const { database, ...rest } = validConfig;
+      expect(() => new PostgresStore(rest as any)).toThrow(/database must be provided and cannot be empty/);
+    });
+    it('throws if password is missing or empty', () => {
+      expect(() => new PostgresStore({ ...validConfig, password: '' })).toThrow(
+        /password must be provided and cannot be empty/,
+      );
+      const { password, ...rest } = validConfig;
+      expect(() => new PostgresStore(rest as any)).toThrow(/password must be provided and cannot be empty/);
+    });
+    it('does not throw on valid config (host-based)', () => {
+      expect(() => new PostgresStore(validConfig)).not.toThrow();
+    });
+    it('does not throw on non-empty connection string', () => {
+      expect(() => new PostgresStore({ connectionString })).not.toThrow();
+    });
+  });
+
   describe('Thread Operations', () => {
     it('should create and retrieve a thread', async () => {
       const thread = createSampleThread();
 
       // Save thread
-      const savedThread = await store.__saveThread({ thread });
+      const savedThread = await store.saveThread({ thread });
       expect(savedThread).toEqual(thread);
 
       // Retrieve thread
-      const retrievedThread = await store.__getThreadById({ threadId: thread.id });
+      const retrievedThread = await store.getThreadById({ threadId: thread.id });
       expect(retrievedThread?.title).toEqual(thread.title);
     });
 
     it('should return null for non-existent thread', async () => {
-      const result = await store.__getThreadById({ threadId: 'non-existent' });
+      const result = await store.getThreadById({ threadId: 'non-existent' });
       expect(result).toBeNull();
     });
 
@@ -126,20 +170,20 @@ describe('PostgresStore', () => {
       const thread1 = createSampleThread();
       const thread2 = { ...createSampleThread(), resourceId: thread1.resourceId };
 
-      await store.__saveThread({ thread: thread1 });
-      await store.__saveThread({ thread: thread2 });
+      await store.saveThread({ thread: thread1 });
+      await store.saveThread({ thread: thread2 });
 
-      const threads = await store.__getThreadsByResourceId({ resourceId: thread1.resourceId });
+      const threads = await store.getThreadsByResourceId({ resourceId: thread1.resourceId });
       expect(threads).toHaveLength(2);
       expect(threads.map(t => t.id)).toEqual(expect.arrayContaining([thread1.id, thread2.id]));
     });
 
     it('should update thread title and metadata', async () => {
       const thread = createSampleThread();
-      await store.__saveThread({ thread });
+      await store.saveThread({ thread });
 
       const newMetadata = { newKey: 'newValue' };
-      const updatedThread = await store.__updateThread({
+      const updatedThread = await store.updateThread({
         id: thread.id,
         title: 'Updated Title',
         metadata: newMetadata,
@@ -152,25 +196,25 @@ describe('PostgresStore', () => {
       });
 
       // Verify persistence
-      const retrievedThread = await store.__getThreadById({ threadId: thread.id });
+      const retrievedThread = await store.getThreadById({ threadId: thread.id });
       expect(retrievedThread).toEqual(updatedThread);
     });
 
     it('should delete thread and its messages', async () => {
       const thread = createSampleThread();
-      await store.__saveThread({ thread });
+      await store.saveThread({ thread });
 
       // Add some messages
       const messages = [createSampleMessage(thread.id), createSampleMessage(thread.id)];
-      await store.__saveMessages({ messages });
+      await store.saveMessages({ messages });
 
-      await store.__deleteThread({ threadId: thread.id });
+      await store.deleteThread({ threadId: thread.id });
 
-      const retrievedThread = await store.__getThreadById({ threadId: thread.id });
+      const retrievedThread = await store.getThreadById({ threadId: thread.id });
       expect(retrievedThread).toBeNull();
 
       // Verify messages were also deleted
-      const retrievedMessages = await store.__getMessages({ threadId: thread.id });
+      const retrievedMessages = await store.getMessages({ threadId: thread.id });
       expect(retrievedMessages).toHaveLength(0);
     });
   });
@@ -178,28 +222,28 @@ describe('PostgresStore', () => {
   describe('Message Operations', () => {
     it('should save and retrieve messages', async () => {
       const thread = createSampleThread();
-      await store.__saveThread({ thread });
+      await store.saveThread({ thread });
 
       const messages = [createSampleMessage(thread.id), createSampleMessage(thread.id)];
 
       // Save messages
-      const savedMessages = await store.__saveMessages({ messages });
+      const savedMessages = await store.saveMessages({ messages });
       expect(savedMessages).toEqual(messages);
 
       // Retrieve messages
-      const retrievedMessages = await store.__getMessages({ threadId: thread.id });
+      const retrievedMessages = await store.getMessages({ threadId: thread.id });
       expect(retrievedMessages).toHaveLength(2);
       expect(retrievedMessages).toEqual(expect.arrayContaining(messages));
     });
 
     it('should handle empty message array', async () => {
-      const result = await store.__saveMessages({ messages: [] });
+      const result = await store.saveMessages({ messages: [] });
       expect(result).toEqual([]);
     });
 
     it('should maintain message order', async () => {
       const thread = createSampleThread();
-      await store.__saveThread({ thread });
+      await store.saveThread({ thread });
 
       const messages = [
         { ...createSampleMessage(thread.id), content: [{ type: 'text', text: 'First' }] as MessageType['content'] },
@@ -207,9 +251,9 @@ describe('PostgresStore', () => {
         { ...createSampleMessage(thread.id), content: [{ type: 'text', text: 'Third' }] as MessageType['content'] },
       ];
 
-      await store.__saveMessages({ messages });
+      await store.saveMessages({ messages });
 
-      const retrievedMessages = await store.__getMessages({ threadId: thread.id });
+      const retrievedMessages = await store.getMessages({ threadId: thread.id });
       expect(retrievedMessages).toHaveLength(3);
 
       // Verify order is maintained
@@ -220,17 +264,17 @@ describe('PostgresStore', () => {
 
     it('should rollback on error during message save', async () => {
       const thread = createSampleThread();
-      await store.__saveThread({ thread });
+      await store.saveThread({ thread });
 
       const messages = [
         createSampleMessage(thread.id),
         { ...createSampleMessage(thread.id), id: null } as any, // This will cause an error
       ];
 
-      await expect(store.__saveMessages({ messages })).rejects.toThrow();
+      await expect(store.saveMessages({ messages })).rejects.toThrow();
 
       // Verify no messages were saved
-      const savedMessages = await store.__getMessages({ threadId: thread.id });
+      const savedMessages = await store.getMessages({ threadId: thread.id });
       expect(savedMessages).toHaveLength(0);
     });
   });
@@ -248,8 +292,8 @@ describe('PostgresStore', () => {
         metadata: largeMetadata,
       };
 
-      await store.__saveThread({ thread: threadWithLargeMetadata });
-      const retrieved = await store.__getThreadById({ threadId: thread.id });
+      await store.saveThread({ thread: threadWithLargeMetadata });
+      const retrieved = await store.getThreadById({ threadId: thread.id });
 
       expect(retrieved?.metadata).toEqual(largeMetadata);
     });
@@ -260,19 +304,19 @@ describe('PostgresStore', () => {
         title: 'Special \'quotes\' and "double quotes" and emoji 🎉',
       };
 
-      await store.__saveThread({ thread });
-      const retrieved = await store.__getThreadById({ threadId: thread.id });
+      await store.saveThread({ thread });
+      const retrieved = await store.getThreadById({ threadId: thread.id });
 
       expect(retrieved?.title).toBe(thread.title);
     });
 
     it('should handle concurrent thread updates', async () => {
       const thread = createSampleThread();
-      await store.__saveThread({ thread });
+      await store.saveThread({ thread });
 
       // Perform multiple updates concurrently
       const updates = Array.from({ length: 5 }, (_, i) =>
-        store.__updateThread({
+        store.updateThread({
           id: thread.id,
           title: `Update ${i}`,
           metadata: { update: i },
@@ -282,7 +326,7 @@ describe('PostgresStore', () => {
       await expect(Promise.all(updates)).resolves.toBeDefined();
 
       // Verify final state
-      const finalThread = await store.__getThreadById({ threadId: thread.id });
+      const finalThread = await store.getThreadById({ threadId: thread.id });
       expect(finalThread).toBeDefined();
     });
   });
@@ -433,7 +477,7 @@ describe('PostgresStore', () => {
       await store.clearTable({ tableName: TABLE_WORKFLOW_SNAPSHOT });
     });
     it('returns empty array when no workflows exist', async () => {
-      const { runs, total } = await store.__getWorkflowRuns();
+      const { runs, total } = await store.getWorkflowRuns();
       expect(runs).toEqual([]);
       expect(total).toBe(0);
     });
@@ -449,7 +493,7 @@ describe('PostgresStore', () => {
       await new Promise(resolve => setTimeout(resolve, 10)); // Small delay to ensure different timestamps
       await store.persistWorkflowSnapshot({ workflowName: workflowName2, runId: runId2, snapshot: workflow2 });
 
-      const { runs, total } = await store.__getWorkflowRuns();
+      const { runs, total } = await store.getWorkflowRuns();
       expect(runs).toHaveLength(2);
       expect(total).toBe(2);
       expect(runs[0]!.workflowName).toBe(workflowName2); // Most recent first
@@ -471,7 +515,7 @@ describe('PostgresStore', () => {
       await new Promise(resolve => setTimeout(resolve, 10)); // Small delay to ensure different timestamps
       await store.persistWorkflowSnapshot({ workflowName: workflowName2, runId: runId2, snapshot: workflow2 });
 
-      const { runs, total } = await store.__getWorkflowRuns({ workflowName: workflowName1 });
+      const { runs, total } = await store.getWorkflowRuns({ workflowName: workflowName1 });
       expect(runs).toHaveLength(1);
       expect(total).toBe(1);
       expect(runs[0]!.workflowName).toBe(workflowName1);
@@ -522,7 +566,7 @@ describe('PostgresStore', () => {
         },
       });
 
-      const { runs } = await store.__getWorkflowRuns({
+      const { runs } = await store.getWorkflowRuns({
         fromDate: yesterday,
         toDate: now,
       });
@@ -552,7 +596,7 @@ describe('PostgresStore', () => {
       await store.persistWorkflowSnapshot({ workflowName: workflowName3, runId: runId3, snapshot: workflow3 });
 
       // Get first page
-      const page1 = await store.__getWorkflowRuns({ limit: 2, offset: 0 });
+      const page1 = await store.getWorkflowRuns({ limit: 2, offset: 0 });
       expect(page1.runs).toHaveLength(2);
       expect(page1.total).toBe(3); // Total count of all records
       expect(page1.runs[0]!.workflowName).toBe(workflowName3);
@@ -563,7 +607,7 @@ describe('PostgresStore', () => {
       expect(secondSnapshot.context?.steps[stepId2]?.status).toBe('running');
 
       // Get second page
-      const page2 = await store.__getWorkflowRuns({ limit: 2, offset: 2 });
+      const page2 = await store.getWorkflowRuns({ limit: 2, offset: 2 });
       expect(page2.runs).toHaveLength(1);
       expect(page2.total).toBe(3);
       expect(page2.runs[0]!.workflowName).toBe(workflowName1);
@@ -662,7 +706,7 @@ describe('PostgresStore', () => {
     beforeAll(async () => {
       customSchemaStore = new PostgresStore({
         ...TEST_CONFIG,
-        schema: customSchema,
+        schemaName: customSchema,
       });
 
       await customSchemaStore.init();
@@ -691,10 +735,10 @@ describe('PostgresStore', () => {
       it('should create and query tables in custom schema', async () => {
         // Create thread in custom schema
         const thread = createSampleThread();
-        await customSchemaStore.__saveThread({ thread });
+        await customSchemaStore.saveThread({ thread });
 
         // Verify thread exists in custom schema
-        const retrieved = await customSchemaStore.__getThreadById({ threadId: thread.id });
+        const retrieved = await customSchemaStore.getThreadById({ threadId: thread.id });
         expect(retrieved?.title).toBe(thread.title);
       });
 
@@ -703,19 +747,19 @@ describe('PostgresStore', () => {
         const defaultThread = createSampleThread();
         const customThread = createSampleThread();
 
-        await store.__saveThread({ thread: defaultThread });
-        await customSchemaStore.__saveThread({ thread: customThread });
+        await store.saveThread({ thread: defaultThread });
+        await customSchemaStore.saveThread({ thread: customThread });
 
         // Verify threads exist in respective schemas
-        const defaultResult = await store.__getThreadById({ threadId: defaultThread.id });
-        const customResult = await customSchemaStore.__getThreadById({ threadId: customThread.id });
+        const defaultResult = await store.getThreadById({ threadId: defaultThread.id });
+        const customResult = await customSchemaStore.getThreadById({ threadId: customThread.id });
 
         expect(defaultResult?.id).toBe(defaultThread.id);
         expect(customResult?.id).toBe(customThread.id);
 
         // Verify cross-schema isolation
-        const defaultInCustom = await customSchemaStore.__getThreadById({ threadId: defaultThread.id });
-        const customInDefault = await store.__getThreadById({ threadId: customThread.id });
+        const defaultInCustom = await customSchemaStore.getThreadById({ threadId: defaultThread.id });
+        const customInDefault = await store.getThreadById({ threadId: customThread.id });
 
         expect(defaultInCustom).toBeNull();
         expect(customInDefault).toBeNull();
@@ -844,7 +888,7 @@ describe('PostgresStore', () => {
           ...TEST_CONFIG,
           user: schemaRestrictedUser,
           password: restrictedPassword,
-          schema: testSchema,
+          schemaName: testSchema,
         });
 
         // Create a fresh connection for verification
@@ -876,7 +920,7 @@ describe('PostgresStore', () => {
           ...TEST_CONFIG,
           user: schemaRestrictedUser,
           password: restrictedPassword,
-          schema: testSchema,
+          schemaName: testSchema,
         });
 
         // Create a fresh connection for verification
@@ -887,7 +931,7 @@ describe('PostgresStore', () => {
           await expect(async () => {
             await restrictedDB.init();
             const thread = createSampleThread();
-            await restrictedDB.__saveThread({ thread });
+            await restrictedDB.saveThread({ thread });
           }).rejects.toThrow(
             `Unable to create schema "${testSchema}". This requires CREATE privilege on the database.`,
           );
