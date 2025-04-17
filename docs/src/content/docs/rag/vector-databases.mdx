@@ -178,17 +178,12 @@ await store.createIndex({
   indexName: 'myCollection',
   dimension: 1536,
 });
-
-// For other models, use their corresponding dimensions:
-// - text-embedding-3-large: 3072
-// - text-embedding-ada-002: 1536
-// - cohere-embed-multilingual-v3: 1024
 ```
 
 The dimension size must match the output dimension of your chosen embedding model. Common dimension sizes are:
-- OpenAI text-embedding-3-small: 1536 dimensions
-- OpenAI text-embedding-3-large: 3072 dimensions
+- OpenAI text-embedding-3-small: 1536 dimensions (or custom, e.g., 256)
 - Cohere embed-multilingual-v3: 1024 dimensions
+- Google `text-embedding-004`: 768 dimensions (or custom)
 
 > **Important**: Index dimensions cannot be changed after creation. To use a different model, delete and recreate the index with the new dimension size.
 
