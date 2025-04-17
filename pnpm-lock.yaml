@@ -45,9 +45,6 @@ importers:
       '@ai-sdk/ui-utils':
         specifier: ^1.1.19
         version: 1.2.4(zod@3.24.2)
-      '@mastra/core':
-        specifier: workspace:^
-        version: link:../../packages/core
       json-schema:
         specifier: ^0.4.0
         version: 0.4.0
@@ -67,6 +64,9 @@ importers:
       '@internal/lint':
         specifier: workspace:*
         version: link:../../packages/_config
+      '@mastra/core':
+        specifier: workspace:^
+        version: link:../../packages/core
       '@tsconfig/recommended':
         specifier: ^1.0.8
         version: 1.0.8
@@ -88,9 +88,6 @@ importers:
 
   deployers/cloudflare:
     dependencies:
-      '@mastra/core':
-        specifier: workspace:^
-        version: link:../../packages/core
       '@mastra/deployer':
         specifier: workspace:^
         version: link:../../packages/deployer
@@ -122,6 +119,9 @@ importers:
       '@internal/lint':
         specifier: workspace:*
         version: link:../../packages/_config
+      '@mastra/core':
+        specifier: workspace:^
+        version: link:../../packages/core
       '@microsoft/api-extractor':
         specifier: ^7.52.1
         version: 7.52.2(@types/node@20.17.27)
@@ -143,9 +143,6 @@ importers:
 
   deployers/netlify:
     dependencies:
-      '@mastra/core':
-        specifier: workspace:^
-        version: link:../../packages/core
       '@mastra/deployer':
         specifier: workspace:^
         version: link:../../packages/deployer
@@ -168,6 +165,9 @@ importers:
       '@internal/lint':
         specifier: workspace:*
         version: link:../../packages/_config
+      '@mastra/core':
+        specifier: workspace:^
+        version: link:../../packages/core
       '@microsoft/api-extractor':
         specifier: ^7.52.1
         version: 7.52.2(@types/node@20.17.27)
@@ -189,9 +189,6 @@ importers:
 
   deployers/vercel:
     dependencies:
-      '@mastra/core':
-        specifier: workspace:^
-        version: link:../../packages/core
       '@mastra/deployer':
         specifier: workspace:^
         version: link:../../packages/deployer
@@ -205,6 +202,9 @@ importers:
       '@internal/lint':
         specifier: workspace:*
         version: link:../../packages/_config
+      '@mastra/core':
+        specifier: workspace:^
+        version: link:../../packages/core
       '@microsoft/api-extractor':
         specifier: ^7.52.1
         version: 7.52.2(@types/node@20.17.27)
@@ -2140,9 +2140,6 @@ importers:
       '@hey-api/client-fetch':
         specifier: ^0.3.4
         version: 0.3.4
-      '@mastra/core':
-        specifier: workspace:^
-        version: link:../../packages/core
       '@mastra/rag':
         specifier: workspace:^
         version: link:../../packages/rag
@@ -2159,6 +2156,9 @@ importers:
       '@jest/globals':
         specifier: ^29.7.0
         version: 29.7.0
+      '@mastra/core':
+        specifier: workspace:^
+        version: link:../../packages/core
       '@microsoft/api-extractor':
         specifier: ^7.52.1
         version: 7.52.2(@types/node@20.17.27)
@@ -2207,9 +2207,6 @@ importers:
       '@hey-api/client-fetch':
         specifier: ^0.3.4
         version: 0.3.4
-      '@mastra/core':
-        specifier: workspace:^
-        version: link:../../packages/core
       ts-to-zod:
         specifier: ^3.15.0
         version: 3.15.0
@@ -2223,6 +2220,9 @@ importers:
       '@jest/globals':
         specifier: ^29.7.0
         version: 29.7.0
+      '@mastra/core':
+        specifier: workspace:^
+        version: link:../../packages/core
       '@microsoft/api-extractor':
         specifier: ^7.52.1
         version: 7.52.2(@types/node@20.17.27)
@@ -2314,9 +2314,6 @@ importers:
       '@hey-api/client-fetch':
         specifier: ^0.3.4
         version: 0.3.4
-      '@mastra/core':
-        specifier: workspace:^
-        version: link:../../packages/core
       ts-to-zod:
         specifier: ^3.15.0
         version: 3.15.0
@@ -2327,6 +2324,9 @@ importers:
       '@jest/globals':
         specifier: ^29.7.0
         version: 29.7.0
+      '@mastra/core':
+        specifier: workspace:^
+        version: link:../../packages/core
       '@microsoft/api-extractor':
         specifier: ^7.52.1
         version: 7.52.2(@types/node@20.17.27)
@@ -2919,9 +2919,6 @@ importers:
       '@babel/helper-module-imports':
         specifier: ^7.25.9
         version: 7.25.9
-      '@mastra/core':
-        specifier: workspace:^
-        version: link:../core
       '@mastra/server':
         specifier: workspace:^
         version: link:../server
@@ -2989,6 +2986,9 @@ importers:
       '@internal/lint':
         specifier: workspace:*
         version: link:../_config
+      '@mastra/core':
+        specifier: workspace:^
+        version: link:../core
       '@microsoft/api-extractor':
         specifier: ^7.52.1
         version: 7.52.2(@types/node@20.17.27)
@@ -3037,9 +3037,6 @@ importers:
 
   packages/evals:
     dependencies:
-      '@mastra/core':
-        specifier: workspace:^
-        version: link:../core
       compromise:
         specifier: ^14.14.4
         version: 14.14.4
@@ -3068,6 +3065,9 @@ importers:
       '@internal/lint':
         specifier: workspace:*
         version: link:../_config
+      '@mastra/core':
+        specifier: workspace:^
+        version: link:../core
       '@microsoft/api-extractor':
         specifier: ^7.52.1
         version: 7.52.2(@types/node@20.17.30)
@@ -3103,14 +3103,13 @@ importers:
         version: 3.0.9(@edge-runtime/vm@3.2.0)(@types/debug@4.1.12)(@types/node@20.17.30)(jiti@2.4.2)(jsdom@26.0.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))(lightningcss@1.29.2)(terser@5.39.0)(tsx@4.19.3)(yaml@2.7.0)
 
   packages/loggers:
-    dependencies:
-      '@mastra/core':
-        specifier: workspace:^
-        version: link:../core
     devDependencies:
       '@internal/lint':
         specifier: workspace:*
         version: link:../_config
+      '@mastra/core':
+        specifier: workspace:^
+        version: link:../core
       '@microsoft/api-extractor':
         specifier: ^7.52.1
         version: 7.52.2(@types/node@20.17.27)
@@ -3132,9 +3131,6 @@ importers:
 
   packages/mcp:
     dependencies:
-      '@mastra/core':
-        specifier: workspace:^
-        version: link:../core
       '@modelcontextprotocol/sdk':
         specifier: ^1.9.0
         version: 1.9.0
@@ -3154,6 +3150,9 @@ importers:
       '@internal/lint':
         specifier: workspace:*
         version: link:../_config
+      '@mastra/core':
+        specifier: workspace:^
+        version: link:../core
       '@microsoft/api-extractor':
         specifier: ^7.52.1
         version: 7.52.2(@types/node@20.17.27)
@@ -3181,9 +3180,6 @@ importers:
 
   packages/mcp-docs-server:
     dependencies:
-      '@mastra/core':
-        specifier: workspace:^
-        version: link:../core
       '@modelcontextprotocol/sdk':
         specifier: ^1.9.0
         version: 1.9.0
@@ -3215,6 +3211,9 @@ importers:
       '@internal/lint':
         specifier: workspace:*
         version: link:../_config
+      '@mastra/core':
+        specifier: workspace:^
+        version: link:../core
       '@mastra/mcp':
         specifier: workspace:^
         version: link:../mcp
@@ -3309,9 +3308,6 @@ importers:
 
   packages/memory:
     dependencies:
-      '@mastra/core':
-        specifier: workspace:^
-        version: link:../core
       '@upstash/redis':
         specifier: ^1.34.5
         version: 1.34.5
@@ -3346,6 +3342,9 @@ importers:
       '@internal/lint':
         specifier: workspace:*
         version: link:../_config
+      '@mastra/core':
+        specifier: workspace:^
+        version: link:../core
       '@microsoft/api-extractor':
         specifier: ^7.52.1
         version: 7.52.2(@types/node@20.17.27)
@@ -3672,9 +3671,6 @@ importers:
       '@llamaindex/env':
         specifier: ^0.1.29
         version: 0.1.29(@huggingface/transformers@3.4.0)(gpt-tokenizer@2.9.0)
-      '@mastra/core':
-        specifier: workspace:^
-        version: link:../core
       '@paralleldrive/cuid2':
         specifier: ^2.2.2
         version: 2.2.2
@@ -3703,6 +3699,9 @@ importers:
       '@internal/lint':
         specifier: workspace:*
         version: link:../_config
+      '@mastra/core':
+        specifier: workspace:^
+        version: link:../core
       '@microsoft/api-extractor':
         specifier: ^7.52.1
         version: 7.52.2(@types/node@20.17.27)
@@ -3766,9 +3765,6 @@ importers:
 
   speech/azure:
     dependencies:
-      '@mastra/core':
-        specifier: workspace:^
-        version: link:../../packages/core
       microsoft-cognitiveservices-speech-sdk:
         specifier: ^1.43.0
         version: 1.43.0(bufferutil@4.0.9)(utf-8-validate@5.0.10)
@@ -3779,6 +3775,9 @@ importers:
       '@internal/lint':
         specifier: workspace:*
         version: link:../../packages/_config
+      '@mastra/core':
+        specifier: workspace:^
+        version: link:../../packages/core
       '@microsoft/api-extractor':
         specifier: ^7.52.2
         version: 7.52.2(@types/node@20.17.27)
@@ -3803,9 +3802,6 @@ importers:
       '@deepgram/sdk':
         specifier: ^3.11.2
         version: 3.11.2(bufferutil@4.0.9)(encoding@0.1.13)(utf-8-validate@6.0.5)
-      '@mastra/core':
-        specifier: workspace:^
-        version: link:../../packages/core
       zod:
         specifier: ^3.24.2
         version: 3.24.2
@@ -3813,6 +3809,9 @@ importers:
       '@internal/lint':
         specifier: workspace:*
         version: link:../../packages/_config
+      '@mastra/core':
+        specifier: workspace:^
+        version: link:../../packages/core
       '@microsoft/api-extractor':
         specifier: ^7.52.2
         version: 7.52.2(@types/node@20.17.27)
@@ -3831,9 +3830,6 @@ importers:
 
   speech/elevenlabs:
     dependencies:
-      '@mastra/core':
-        specifier: workspace:^
-        version: link:../../packages/core
       elevenlabs:
         specifier: ^1.54.0
         version: 1.54.0(encoding@0.1.13)
@@ -3844,6 +3840,9 @@ importers:
       '@internal/lint':
         specifier: workspace:*
         version: link:../../packages/_config
+      '@mastra/core':
+        specifier: workspace:^
+        version: link:../../packages/core
       '@microsoft/api-extractor':
         specifier: ^7.52.2
         version: 7.52.2(@types/node@20.17.27)
@@ -3865,9 +3864,6 @@ importers:
       '@google-cloud/text-to-speech':
         specifier: ^6.0.1
         version: 6.0.1
-      '@mastra/core':
-        specifier: workspace:^
-        version: link:../../packages/core
       zod:
         specifier: ^3.24.2
         version: 3.24.2
@@ -3875,6 +3871,9 @@ importers:
       '@internal/lint':
         specifier: workspace:*
         version: link:../../packages/_config
+      '@mastra/core':
+        specifier: workspace:^
+        version: link:../../packages/core
       '@microsoft/api-extractor':
         specifier: ^7.52.2
         version: 7.52.2(@types/node@20.17.27)
@@ -3896,9 +3895,6 @@ importers:
 
   speech/ibm:
     dependencies:
-      '@mastra/core':
-        specifier: workspace:^
-        version: link:../../packages/core
       ibm-watson:
         specifier: ^8.0.0
         version: 8.0.0
@@ -3909,6 +3905,9 @@ importers:
       '@internal/lint':
         specifier: workspace:*
         version: link:../../packages/_config
+      '@mastra/core':
+        specifier: workspace:^
+        version: link:../../packages/core
       '@microsoft/api-extractor':
         specifier: ^7.52.2
         version: 7.52.2(@types/node@20.17.27)
@@ -3930,9 +3929,6 @@ importers:
 
   speech/murf:
     dependencies:
-      '@mastra/core':
-        specifier: workspace:^
-        version: link:../../packages/core
       ky:
         specifier: ^1.7.5
         version: 1.7.5
@@ -3943,6 +3939,9 @@ importers:
       '@internal/lint':
         specifier: workspace:*
         version: link:../../packages/_config
+      '@mastra/core':
+        specifier: workspace:^
+        version: link:../../packages/core
       '@microsoft/api-extractor':
         specifier: ^7.52.2
         version: 7.52.2(@types/node@20.17.27)
@@ -3961,9 +3960,6 @@ importers:
 
   speech/openai:
     dependencies:
-      '@mastra/core':
-        specifier: workspace:^
-        version: link:../../packages/core
       openai:
         specifier: ^4.89.0
         version: 4.89.0(encoding@0.1.13)(ws@8.18.1(bufferutil@4.0.9)(utf-8-validate@6.0.5))(zod@3.24.2)
@@ -3974,6 +3970,9 @@ importers:
       '@internal/lint':
         specifier: workspace:*
         version: link:../../packages/_config
+      '@mastra/core':
+        specifier: workspace:^
+        version: link:../../packages/core
       '@microsoft/api-extractor':
         specifier: ^7.52.2
         version: 7.52.2(@types/node@20.17.27)
@@ -3992,9 +3991,6 @@ importers:
 
   speech/playai:
     dependencies:
-      '@mastra/core':
-        specifier: workspace:^
-        version: link:../../packages/core
       zod:
         specifier: ^3.24.2
         version: 3.24.2
@@ -4002,6 +3998,9 @@ importers:
       '@internal/lint':
         specifier: workspace:*
         version: link:../../packages/_config
+      '@mastra/core':
+        specifier: workspace:^
+        version: link:../../packages/core
       '@microsoft/api-extractor':
         specifier: ^7.52.2
         version: 7.52.2(@types/node@20.17.27)
@@ -4020,9 +4019,6 @@ importers:
 
   speech/replicate:
     dependencies:
-      '@mastra/core':
-        specifier: workspace:^
-        version: link:../../packages/core
       replicate:
         specifier: ^0.34.1
         version: 0.34.1
@@ -4033,6 +4029,9 @@ importers:
       '@internal/lint':
         specifier: workspace:*
         version: link:../../packages/_config
+      '@mastra/core':
+        specifier: workspace:^
+        version: link:../../packages/core
       '@microsoft/api-extractor':
         specifier: ^7.52.2
         version: 7.52.2(@types/node@20.17.27)
@@ -4054,9 +4053,6 @@ importers:
 
   speech/speechify:
     dependencies:
-      '@mastra/core':
-        specifier: workspace:^
-        version: link:../../packages/core
       '@speechify/api-sdk':
         specifier: ^2.4.1
         version: 2.4.1
@@ -4067,6 +4063,9 @@ importers:
       '@internal/lint':
         specifier: workspace:*
         version: link:../../packages/_config
+      '@mastra/core':
+        specifier: workspace:^
+        version: link:../../packages/core
       '@microsoft/api-extractor':
         specifier: ^7.52.2
         version: 7.52.2(@types/node@20.17.27)
@@ -4088,13 +4087,13 @@ importers:
       '@datastax/astra-db-ts':
         specifier: ^1.5.0
         version: 1.5.0
-      '@mastra/core':
-        specifier: workspace:^
-        version: link:../../packages/core
     devDependencies:
       '@internal/lint':
         specifier: workspace:*
         version: link:../../packages/_config
+      '@mastra/core':
+        specifier: workspace:^
+        version: link:../../packages/core
       '@microsoft/api-extractor':
         specifier: ^7.52.1
         version: 7.52.2(@types/node@20.17.27)
@@ -4116,9 +4115,6 @@ importers:
 
   stores/chroma:
     dependencies:
-      '@mastra/core':
-        specifier: workspace:^
-        version: link:../../packages/core
       chromadb:
         specifier: ^2.2.0
         version: 2.2.0(encoding@0.1.13)(ws@8.18.1(bufferutil@4.0.9)(utf-8-validate@6.0.5))(zod@3.24.2)
@@ -4126,6 +4122,9 @@ importers:
       '@internal/lint':
         specifier: workspace:*
         version: link:../../packages/_config
+      '@mastra/core':
+        specifier: workspace:^
+        version: link:../../packages/core
       '@microsoft/api-extractor':
         specifier: ^7.52.1
         version: 7.52.2(@types/node@20.17.27)
@@ -4150,13 +4149,13 @@ importers:
       '@clickhouse/client':
         specifier: ^1.11.0
         version: 1.11.0
-      '@mastra/core':
-        specifier: workspace:^
-        version: link:../../packages/core
     devDependencies:
       '@internal/lint':
         specifier: workspace:*
         version: link:../../packages/_config
+      '@mastra/core':
+        specifier: workspace:^
+        version: link:../../packages/core
       '@microsoft/api-extractor':
         specifier: ^7.52.1
         version: 7.52.2(@types/node@20.17.27)
@@ -4178,9 +4177,6 @@ importers:
 
   stores/cloudflare:
     dependencies:
-      '@mastra/core':
-        specifier: workspace:^
-        version: link:../../packages/core
       cloudflare:
         specifier: ^4.1.0
         version: 4.2.0(encoding@0.1.13)
@@ -4191,6 +4187,9 @@ importers:
       '@internal/lint':
         specifier: workspace:*
         version: link:../../packages/_config
+      '@mastra/core':
+        specifier: workspace:^
+        version: link:../../packages/core
       '@microsoft/api-extractor':
         specifier: ^7.52.1
         version: 7.52.2(@types/node@20.17.27)
@@ -4218,9 +4217,6 @@ importers:
 
   stores/pg:
     dependencies:
-      '@mastra/core':
-        specifier: workspace:^
-        version: link:../../packages/core
       async-mutex:
         specifier: ^0.5.0
         version: 0.5.0
@@ -4237,6 +4233,9 @@ importers:
       '@internal/lint':
         specifier: workspace:*
         version: link:../../packages/_config
+      '@mastra/core':
+        specifier: workspace:^
+        version: link:../../packages/core
       '@microsoft/api-extractor':
         specifier: ^7.52.1
         version: 7.52.2(@types/node@20.17.27)
@@ -4261,9 +4260,6 @@ importers:
 
   stores/pinecone:
     dependencies:
-      '@mastra/core':
-        specifier: workspace:^
-        version: link:../../packages/core
       '@pinecone-database/pinecone':
         specifier: ^3.0.3
         version: 3.0.3
@@ -4271,6 +4267,9 @@ importers:
       '@internal/lint':
         specifier: workspace:*
         version: link:../../packages/_config
+      '@mastra/core':
+        specifier: workspace:^
+        version: link:../../packages/core
       '@microsoft/api-extractor':
         specifier: ^7.52.1
         version: 7.52.2(@types/node@20.17.27)
@@ -4295,9 +4294,6 @@ importers:
 
   stores/qdrant:
     dependencies:
-      '@mastra/core':
-        specifier: workspace:^
-        version: link:../../packages/core
       '@qdrant/js-client-rest':
         specifier: ^1.13.0
         version: 1.13.0(typescript@5.8.2)
@@ -4305,6 +4301,9 @@ importers:
       '@internal/lint':
         specifier: workspace:*
         version: link:../../packages/_config
+      '@mastra/core':
+        specifier: workspace:^
+        version: link:../../packages/core
       '@microsoft/api-extractor':
         specifier: ^7.52.1
         version: 7.52.2(@types/node@20.17.27)
@@ -4326,9 +4325,6 @@ importers:
 
   stores/turbopuffer:
     dependencies:
-      '@mastra/core':
-        specifier: workspace:^
-        version: link:../../packages/core
       '@turbopuffer/turbopuffer':
         specifier: ^0.6.4
         version: 0.6.11
@@ -4336,6 +4332,9 @@ importers:
       '@internal/lint':
         specifier: workspace:*
         version: link:../../packages/_config
+      '@mastra/core':
+        specifier: workspace:^
+        version: link:../../packages/core
       '@microsoft/api-extractor':
         specifier: ^7.52.1
         version: 7.52.2(@types/node@20.17.27)
@@ -4360,9 +4359,6 @@ importers:
 
   stores/upstash:
     dependencies:
-      '@mastra/core':
-        specifier: workspace:^
-        version: link:../../packages/core
       '@upstash/redis':
         specifier: ^1.34.5
         version: 1.34.5
@@ -4373,6 +4369,9 @@ importers:
       '@internal/lint':
         specifier: workspace:*
         version: link:../../packages/_config
+      '@mastra/core':
+        specifier: workspace:^
+        version: link:../../packages/core
       '@microsoft/api-extractor':
         specifier: ^7.52.1
         version: 7.52.2(@types/node@20.17.27)
@@ -4397,9 +4396,6 @@ importers:
 
   stores/vectorize:
     dependencies:
-      '@mastra/core':
-        specifier: workspace:^
-        version: link:../../packages/core
       cloudflare:
         specifier: ^4.1.0
         version: 4.2.0(encoding@0.1.13)
@@ -4407,6 +4403,9 @@ importers:
       '@internal/lint':
         specifier: workspace:*
         version: link:../../packages/_config
+      '@mastra/core':
+        specifier: workspace:^
+        version: link:../../packages/core
       '@microsoft/api-extractor':
         specifier: ^7.52.1
         version: 7.52.2(@types/node@20.17.27)
@@ -4431,9 +4430,6 @@ importers:
 
   voice/azure:
     dependencies:
-      '@mastra/core':
-        specifier: workspace:^
-        version: link:../../packages/core
       microsoft-cognitiveservices-speech-sdk:
         specifier: ^1.43.0
         version: 1.43.0(bufferutil@4.0.9)(utf-8-validate@5.0.10)
@@ -4441,6 +4437,9 @@ importers:
       '@internal/lint':
         specifier: workspace:*
         version: link:../../packages/_config
+      '@mastra/core':
+        specifier: workspace:^
+        version: link:../../packages/core
       '@microsoft/api-extractor':
         specifier: ^7.52.2
         version: 7.52.2(@types/node@20.17.27)
@@ -4462,9 +4461,6 @@ importers:
 
   voice/cloudflare:
     dependencies:
-      '@mastra/core':
-        specifier: workspace:^
-        version: link:../../packages/core
       cloudflare:
         specifier: ^4.2.0
         version: 4.2.0(encoding@0.1.13)
@@ -4478,6 +4474,9 @@ importers:
       '@internal/lint':
         specifier: workspace:*
         version: link:../../packages/_config
+      '@mastra/core':
+        specifier: workspace:^
+        version: link:../../packages/core
       '@microsoft/api-extractor':
         specifier: ^7.52.2
         version: 7.52.2(@types/node@20.17.27)
@@ -4502,9 +4501,6 @@ importers:
       '@deepgram/sdk':
         specifier: ^3.11.2
         version: 3.11.2(bufferutil@4.0.9)(encoding@0.1.13)(utf-8-validate@6.0.5)
-      '@mastra/core':
-        specifier: workspace:^
-        version: link:../../packages/core
       zod:
         specifier: ^3.24.2
         version: 3.24.2
@@ -4512,6 +4508,9 @@ importers:
       '@internal/lint':
         specifier: workspace:*
         version: link:../../packages/_config
+      '@mastra/core':
+        specifier: workspace:^
+        version: link:../../packages/core
       '@microsoft/api-extractor':
         specifier: ^7.52.2
         version: 7.52.2(@types/node@20.17.27)
@@ -4533,9 +4532,6 @@ importers:
 
   voice/elevenlabs:
     dependencies:
-      '@mastra/core':
-        specifier: workspace:^
-        version: link:../../packages/core
       elevenlabs:
         specifier: ^1.54.0
         version: 1.54.0(encoding@0.1.13)
@@ -4546,6 +4542,9 @@ importers:
       '@internal/lint':
         specifier: workspace:*
         version: link:../../packages/_config
+      '@mastra/core':
+        specifier: workspace:^
+        version: link:../../packages/core
       '@microsoft/api-extractor':
         specifier: ^7.52.2
         version: 7.52.2(@types/node@20.17.27)
@@ -4573,9 +4572,6 @@ importers:
       '@google-cloud/text-to-speech':
         specifier: ^6.0.1
         version: 6.0.1
-      '@mastra/core':
-        specifier: workspace:^
-        version: link:../../packages/core
       zod:
         specifier: ^3.24.2
         version: 3.24.2
@@ -4583,6 +4579,9 @@ importers:
       '@internal/lint':
         specifier: workspace:*
         version: link:../../packages/_config
+      '@mastra/core':
+        specifier: workspace:^
+        version: link:../../packages/core
       '@types/node':
         specifier: ^20.17.27
         version: 20.17.27
@@ -4601,9 +4600,6 @@ importers:
 
   voice/murf:
     dependencies:
-      '@mastra/core':
-        specifier: workspace:^
-        version: link:../../packages/core
       ky:
         specifier: ^1.7.5
         version: 1.7.5
@@ -4614,6 +4610,9 @@ importers:
       '@internal/lint':
         specifier: workspace:*
         version: link:../../packages/_config
+      '@mastra/core':
+        specifier: workspace:^
+        version: link:../../packages/core
       '@microsoft/api-extractor':
         specifier: ^7.52.2
         version: 7.52.2(@types/node@20.17.27)
@@ -4635,19 +4634,16 @@ importers:
 
   voice/openai:
     dependencies:
-      '@mastra/core':
-        specifier: workspace:^
-        version: link:../../packages/core
       openai:
-        specifier: ^4.89.0
-        version: 4.89.0(encoding@0.1.13)(ws@8.18.1(bufferutil@4.0.9)(utf-8-validate@6.0.5))(zod@3.24.2)
-      zod:
-        specifier: ^3.24.2
-        version: 3.24.2
+        specifier: ^4.90.0
+        version: 4.92.1(encoding@0.1.13)(ws@8.18.1(bufferutil@4.0.9)(utf-8-validate@6.0.5))(zod@3.24.2)
     devDependencies:
       '@internal/lint':
         specifier: workspace:*
         version: link:../../packages/_config
+      '@mastra/core':
+        specifier: workspace:^
+        version: link:../../packages/core
       '@microsoft/api-extractor':
         specifier: ^7.52.2
         version: 7.52.2(@types/node@20.17.27)
@@ -4666,12 +4662,12 @@ importers:
       vitest:
         specifier: ^2.1.9
         version: 2.1.9(@edge-runtime/vm@3.2.0)(@types/node@20.17.27)(jsdom@26.0.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))(lightningcss@1.29.2)(terser@5.39.0)
+      zod:
+        specifier: ^3.24.2
+        version: 3.24.2
 
   voice/openai-realtime-api:
     dependencies:
-      '@mastra/core':
-        specifier: workspace:^
-        version: link:../../packages/core
       openai-realtime-api:
         specifier: ^1.0.7
         version: 1.0.7(bufferutil@4.0.9)(utf-8-validate@6.0.5)
@@ -4685,6 +4681,9 @@ importers:
       '@internal/lint':
         specifier: workspace:*
         version: link:../../packages/_config
+      '@mastra/core':
+        specifier: workspace:^
+        version: link:../../packages/core
       '@microsoft/api-extractor':
         specifier: ^7.52.2
         version: 7.52.2(@types/node@20.17.27)
@@ -4709,9 +4708,6 @@ importers:
 
   voice/playai:
     dependencies:
-      '@mastra/core':
-        specifier: workspace:^
-        version: link:../../packages/core
       zod:
         specifier: ^3.24.2
         version: 3.24.2
@@ -4719,6 +4715,9 @@ importers:
       '@internal/lint':
         specifier: workspace:*
         version: link:../../packages/_config
+      '@mastra/core':
+        specifier: workspace:^
+        version: link:../../packages/core
       '@microsoft/api-extractor':
         specifier: ^7.52.2
         version: 7.52.2(@types/node@20.17.27)
@@ -4740,9 +4739,6 @@ importers:
 
   voice/sarvam:
     dependencies:
-      '@mastra/core':
-        specifier: workspace:^
-        version: link:../../packages/core
       zod:
         specifier: ^3.24.2
         version: 3.24.2
@@ -4750,6 +4746,9 @@ importers:
       '@internal/lint':
         specifier: workspace:*
         version: link:../../packages/_config
+      '@mastra/core':
+        specifier: workspace:^
+        version: link:../../packages/core
       '@microsoft/api-extractor':
         specifier: ^7.52.2
         version: 7.52.2(@types/node@20.17.27)
@@ -4771,9 +4770,6 @@ importers:
 
   voice/speechify:
     dependencies:
-      '@mastra/core':
-        specifier: workspace:^
-        version: link:../../packages/core
       '@speechify/api-sdk':
         specifier: ^2.4.1
         version: 2.4.1
@@ -4784,6 +4780,9 @@ importers:
       '@internal/lint':
         specifier: workspace:*
         version: link:../../packages/_config
+      '@mastra/core':
+        specifier: workspace:*
+        version: link:../../packages/core
       '@microsoft/api-extractor':
         specifier: ^7.52.2
         version: 7.52.2(@types/node@20.17.27)
@@ -17114,6 +17113,18 @@ packages:
 
   openai@4.89.0:
     resolution: {integrity: sha512-XNI0q2l8/Os6jmojxaID5EhyQjxZgzR2gWcpEjYWK5hGKwE7AcifxEY7UNwFDDHJQXqeiosQ0CJwQN+rvnwdjA==}
+    hasBin: true
+    peerDependencies:
+      ws: ^8.18.0
+      zod: ^3.23.8
+    peerDependenciesMeta:
+      ws:
+        optional: true
+      zod:
+        optional: true
+
+  openai@4.92.1:
+    resolution: {integrity: sha512-rFjyiQF/eHXIuzyoT2qkCY/xmI+zyq9xlMZmOEFkSsyGhc8tpNaf7rW25m5uTddnk6B5gRfRX640onMhAQyTww==}
     hasBin: true
     peerDependencies:
       ws: ^8.18.0
@@ -30581,7 +30592,7 @@ snapshots:
       eslint-config-prettier: 8.10.0(eslint@8.57.1)
       eslint-plugin-flowtype: 8.0.3(@babel/plugin-syntax-flow@7.26.0(@babel/core@7.26.10))(@babel/plugin-transform-react-jsx@7.25.9(@babel/core@7.26.10))(eslint@8.57.1)
       eslint-plugin-import: 2.31.0(@typescript-eslint/parser@5.62.0(eslint@9.23.0(jiti@2.4.2))(typescript@5.8.2))(eslint@8.57.1)
-      eslint-plugin-jest: 27.9.0(@typescript-eslint/eslint-plugin@5.62.0(@typescript-eslint/parser@5.62.0(eslint@8.57.1)(typescript@5.8.2))(eslint@8.57.1)(typescript@5.8.2))(eslint@8.57.1)(jest@29.7.0(@types/node@20.17.27)(babel-plugin-macros@3.1.0)(ts-node@10.9.2(@swc/core@1.11.10(@swc/helpers@0.5.15))(@types/node@20.17.27)(typescript@5.8.2)))(typescript@5.8.2)
+      eslint-plugin-jest: 27.9.0(@typescript-eslint/eslint-plugin@5.62.0(@typescript-eslint/parser@5.62.0(eslint@9.23.0(jiti@2.4.2))(typescript@5.8.2))(eslint@8.57.1)(typescript@5.8.2))(eslint@8.57.1)(jest@29.7.0(@types/node@20.17.27)(babel-plugin-macros@3.1.0)(ts-node@10.9.2(@swc/core@1.11.10(@swc/helpers@0.5.15))(@types/node@20.17.27)(typescript@5.8.2)))(typescript@5.8.2)
       eslint-plugin-jsx-a11y: 6.10.2(eslint@8.57.1)
       eslint-plugin-prettier: 4.2.1(eslint-config-prettier@8.10.0(eslint@8.57.1))(eslint@8.57.1)(prettier@2.8.8)
       eslint-plugin-react: 7.37.4(eslint@8.57.1)
@@ -31437,7 +31448,7 @@ snapshots:
       - eslint-import-resolver-webpack
       - supports-color
 
-  eslint-plugin-jest@27.9.0(@typescript-eslint/eslint-plugin@5.62.0(@typescript-eslint/parser@5.62.0(eslint@8.57.1)(typescript@5.8.2))(eslint@8.57.1)(typescript@5.8.2))(eslint@8.57.1)(jest@29.7.0(@types/node@20.17.27)(babel-plugin-macros@3.1.0)(ts-node@10.9.2(@swc/core@1.11.10(@swc/helpers@0.5.15))(@types/node@20.17.27)(typescript@5.8.2)))(typescript@5.8.2):
+  eslint-plugin-jest@27.9.0(@typescript-eslint/eslint-plugin@5.62.0(@typescript-eslint/parser@5.62.0(eslint@9.23.0(jiti@2.4.2))(typescript@5.8.2))(eslint@8.57.1)(typescript@5.8.2))(eslint@8.57.1)(jest@29.7.0(@types/node@20.17.27)(babel-plugin-macros@3.1.0)(ts-node@10.9.2(@swc/core@1.11.10(@swc/helpers@0.5.15))(@types/node@20.17.27)(typescript@5.8.2)))(typescript@5.8.2):
     dependencies:
       '@typescript-eslint/utils': 5.62.0(eslint@8.57.1)(typescript@5.8.2)
       eslint: 8.57.1
@@ -36187,6 +36198,21 @@ snapshots:
   openai@4.89.0(encoding@0.1.13)(ws@8.18.1(bufferutil@4.0.9)(utf-8-validate@6.0.5))(zod@3.24.2):
     dependencies:
       '@types/node': 20.17.30
+      '@types/node-fetch': 2.6.12
+      abort-controller: 3.0.0
+      agentkeepalive: 4.6.0
+      form-data-encoder: 1.7.2
+      formdata-node: 4.4.1
+      node-fetch: 2.7.0(encoding@0.1.13)
+    optionalDependencies:
+      ws: 8.18.1(bufferutil@4.0.9)(utf-8-validate@6.0.5)
+      zod: 3.24.2
+    transitivePeerDependencies:
+      - encoding
+
+  openai@4.92.1(encoding@0.1.13)(ws@8.18.1(bufferutil@4.0.9)(utf-8-validate@6.0.5))(zod@3.24.2):
+    dependencies:
+      '@types/node': 20.17.27
       '@types/node-fetch': 2.6.12
       abort-controller: 3.0.0
       agentkeepalive: 4.6.0

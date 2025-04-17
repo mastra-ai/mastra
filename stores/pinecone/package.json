@@ -26,10 +26,13 @@
   },
   "license": "MIT",
   "dependencies": {
-    "@mastra/core": "workspace:^",
     "@pinecone-database/pinecone": "^3.0.3"
   },
+  "peerDependencies": {
+    "@mastra/core": "workspace:^"
+  },
   "devDependencies": {
+    "@mastra/core": "workspace:^",
     "@internal/lint": "workspace:*",
     "@microsoft/api-extractor": "^7.52.1",
     "@types/node": "^20.17.27",

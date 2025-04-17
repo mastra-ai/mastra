@@ -29,10 +29,13 @@
   },
   "license": "MIT",
   "dependencies": {
-    "@mastra/core": "workspace:^",
     "cloudflare": "^4.1.0"
   },
+  "peerDependencies": {
+    "@mastra/core": "workspace:^"
+  },
   "devDependencies": {
+    "@mastra/core": "workspace:^",
     "@internal/lint": "workspace:*",
     "@microsoft/api-extractor": "^7.52.1",
     "@types/node": "^20.17.27",

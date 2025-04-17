@@ -26,14 +26,17 @@
   },
   "license": "Elastic-2.0",
   "dependencies": {
-    "@mastra/core": "workspace:^",
     "openai-realtime-api": "^1.0.7",
     "ws": "^8.18.1",
     "zod-to-json-schema": "^3.24.5"
   },
+  "peerDependencies": {
+    "@mastra/core": "workspace:^"
+  },
   "devDependencies": {
     "@internal/lint": "workspace:*",
     "@microsoft/api-extractor": "^7.52.2",
+    "@mastra/core": "workspace:^",
     "@types/node": "^22.13.1",
     "@types/ws": "^8.18.0",
     "eslint": "^9.23.0",
