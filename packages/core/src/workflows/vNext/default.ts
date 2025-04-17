@@ -190,6 +190,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
           mastra: this.mastra!,
           inputData: prevOutput,
           resumeData: resume?.steps[0]!.id === step.id ? resume?.resumePayload : undefined,
+          getInitData: () => stepResults?.input as any,
           getStepResult: (step: any) => {
             const result = stepResults[step.id];
             if (result?.status === 'success') {
@@ -326,6 +327,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
             const result = await cond({
               mastra: this.mastra!,
               inputData: prevOutput,
+              getInitData: () => stepResults?.input as any,
               getStepResult: (step: any) => {
                 if (!step?.id) {
                   return null;
@@ -442,6 +444,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
       isTrue = await condition({
         mastra: this.mastra!,
         inputData: result.output,
+        getInitData: () => stepResults?.input as any,
         getStepResult: (step: any) => {
           if (!step?.id) {
             return null;
