@@ -147,8 +147,8 @@ export const POST = handle(app);
 `;
   }
 
-  async bundle(entryFile: string, outputDirectory: string): Promise<void> {
-    return this._bundle(this.getEntry(), entryFile, outputDirectory);
+  async bundle(entryFile: string, outputDirectory: string, toolsPaths: string[]): Promise<void> {
+    return this._bundle(this.getEntry(), entryFile, outputDirectory, toolsPaths);
   }
 
   async deploy(outputDirectory: string): Promise<void> {
