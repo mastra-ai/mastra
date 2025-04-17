@@ -6,7 +6,7 @@ import type { MastraStorage } from '../base';
 import { TABLE_WORKFLOW_SNAPSHOT, TABLE_EVALS, TABLE_MESSAGES, TABLE_THREADS } from '../constants';
 
 export function createTestSuite(storage: MastraStorage) {
-  describe('DefaultStorage', () => {
+  describe(storage.constructor.name, () => {
     // Sample test data factory functions to ensure unique records
     const createSampleThread = () => ({
       id: `thread-${randomUUID()}`,
