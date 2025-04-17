@@ -37,5 +37,5 @@ export type ServerConfig = {
    * Enable OpenAPI documentation
    * @default false
    */
-  openapi?: boolean;
+  openAPIDocs?: boolean;
 };

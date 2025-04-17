@@ -2121,7 +2121,7 @@ export async function createHonoServer(mastra: Mastra, options: ServerBundleOpti
     deleteIndex,
   );
 
-  if (server?.openapi || server?.swaggerUI) {
+  if (server?.openAPIDocs || server?.swaggerUI) {
     app.get(
       '/openapi.json',
       openAPISpecs(app, {
