@@ -5,12 +5,14 @@
   "main": "index.js",
   "type": "module",
   "scripts": {
+    "dev": "mastra dev",
     "build": "mastra build"
   },
   "keywords": [],
   "author": "",
   "license": "MIT",
   "dependencies": {
+    "@ai-sdk/openai": "^1.2.1",
     "@mastra/core": "link:%%MASTRA_DIR%%/packages/core",
     "@inner/inner-tools": "workspace:*"
   },
