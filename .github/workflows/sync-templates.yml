@@ -21,7 +21,7 @@ jobs:
         with:
           app-id: ${{ vars.DANE_APP_ID }}
           private-key: ${{ secrets.DANE_APP_PRIVATE_KEY }}
-
+          owner: mastra-ai
       - name: Get GitHub App User ID
         id: get-user-id
         run: echo "user-id=$(gh api "/users/${{ steps.app-token.outputs.app-slug }}[bot]" --jq .id)" >> "$GITHUB_OUTPUT"
