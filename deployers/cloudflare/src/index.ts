@@ -1,10 +1,10 @@
 import { writeFile } from 'fs/promises';
 import { join } from 'path';
-
-import { Deployer, createChildProcessLogger, type ServerBundleOptions } from '@mastra/deployer';
-import type { analyzeBundle } from '@mastra/deployer/analyze';
-import virtual from '@rollup/plugin-virtual';
 import { Cloudflare } from 'cloudflare';
+import virtual from '@rollup/plugin-virtual';
+import { Deployer, createChildProcessLogger } from '@mastra/deployer';
+import type { ServerBundleOptions } from '@mastra/deployer';
+import type { analyzeBundle } from '@mastra/deployer/analyze';
 
 interface CFRoute {
   pattern: string;

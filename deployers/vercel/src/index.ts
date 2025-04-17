@@ -1,8 +1,10 @@
 import * as child_process from 'child_process';
-import { Deployer, type ServerBundleOptions } from '@mastra/deployer';
 import { readFileSync, writeFileSync } from 'fs';
 import { join } from 'path';
 import process from 'process';
+import { Deployer } from '@mastra/deployer';
+import type { ServerBundleOptions } from '@mastra/deployer';
+
 interface EnvVar {
   key: string;
   value: string;
