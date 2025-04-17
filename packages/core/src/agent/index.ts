@@ -18,6 +18,7 @@ import type { ZodSchema, z } from 'zod';
 
 import type { MastraPrimitives, MastraUnion } from '../action';
 import { MastraBase } from '../base';
+import { Container } from '../di';
 import type { Metric } from '../eval';
 import { AvailableHooks, executeHook } from '../hooks';
 import type { GenerateReturn, StreamReturn } from '../llm';
@@ -166,6 +167,7 @@ export class Agent<
   async generateTitleFromUserMessage({ message }: { message: CoreUserMessage }) {
     // need to use text, not object output or it will error for models that don't support structured output (eg Deepseek R1)
     const { text } = await this.llm.__text<{ title: string }>({
+      container: new Container(),
       messages: [
         {
           role: 'system',
@@ -236,10 +238,11 @@ export class Agent<
 
       const newMessages = ensureAllMessagesAreCoreMessages(userMessages);
 
-      const messages = newMessages.map(u => {
+      const now = Date.now();
+      const messages = newMessages.map((u, index) => {
         return {
           id: this.getMemory()?.generateId()!,
-          createdAt: new Date(),
+          createdAt: new Date(now + index),
           threadId: threadId,
           ...u,
           content: u.content as UserContent | AssistantContent,
@@ -314,6 +317,7 @@ export class Agent<
     if (!response.messages) return [];
     const messagesArray = Array.isArray(response.messages) ? response.messages : [response.messages];
 
+    const now = Date.now();
     return this.sanitizeResponseMessages(messagesArray).map((message: CoreMessage | CoreAssistantMessage, index) => {
       const messageId = randomUUID();
       let toolCallIds: string[] | undefined;
@@ -358,7 +362,7 @@ export class Agent<
         resourceId: resourceId,
         role: message.role as any,
         content: message.content as any,
-        createdAt: new Date(Date.now() + index), // use Date.now() + index to make sure every message is atleast one millisecond apart
+        createdAt: new Date(now + index), // use Date.now() + index to make sure every message is atleast one millisecond apart
         toolCallIds: toolCallIds?.length ? toolCallIds : undefined,
         toolCallArgs: toolCallArgs?.length ? toolCallArgs : undefined,
         toolNames: toolNames?.length ? toolNames : undefined,
@@ -394,7 +398,7 @@ export class Agent<
     const messagesBySanitizedContent = messages.map(message => {
       if (message.role !== 'assistant' && message.role !== `tool` && message.role !== `user`) return message;
 
-      if (!message.content || typeof message.content === 'string' || typeof message.content === 'number') {
+      if (!Array.isArray(message.content)) {
         return message;
       }
 
@@ -440,14 +444,18 @@ export class Agent<
 
   convertTools({
     toolsets,
+    clientTools,
     threadId,
     resourceId,
     runId,
+    container,
   }: {
     toolsets?: ToolsetsInput;
+    clientTools?: ToolsInput;
     threadId?: string;
     resourceId?: string;
     runId?: string;
+    container: Container;
   }): Record<string, CoreTool> {
     this.logger.debug(`[Agents:${this.name}] - Assigning tools`, { runId, threadId, resourceId });
 
@@ -476,6 +484,7 @@ export class Agent<
             mastra: mastraProxy as MastraUnion | undefined,
             memory,
             agentName: this.name,
+            container,
           };
           memo[k] = makeCoreTool(tool, options);
         }
@@ -512,6 +521,9 @@ export class Agent<
                               runId,
                               threadId,
                               resourceId,
+                              logger: this.logger,
+                              agentName: this.name,
+                              container,
                             },
                             options,
                           ) ?? undefined
@@ -548,16 +560,49 @@ export class Agent<
       toolsFromToolsets.forEach(toolset => {
         Object.entries(toolset).forEach(([toolName, tool]) => {
           const toolObj = tool;
+
           const options = {
             name: toolName,
             runId,
             threadId,
             resourceId,
             logger: this.logger,
+            mastra: mastraProxy as MastraUnion | undefined,
+            memory,
             agentName: this.name,
+            container,
           };
-          toolsFromToolsetsConverted[toolName] = makeCoreTool(toolObj, options, 'toolset');
+
+          const convertedToCoreTool = makeCoreTool(toolObj, options, 'toolset');
+
+          toolsFromToolsetsConverted[toolName] = convertedToCoreTool;
         });
+      });
+    }
+
+    const clientToolsForInput = Object.entries(clientTools || {});
+
+    if (clientToolsForInput.length > 0) {
+      this.logger.debug(`[Agent:${this.name}] - Adding client tools ${Object.keys(clientTools || {}).join(', ')}`, {
+        runId,
+      });
+      clientToolsForInput.forEach(([toolName, tool]) => {
+        const { execute, ...rest } = tool;
+        const options = {
+          name: toolName,
+          runId,
+          threadId,
+          resourceId,
+          logger: this.logger,
+          mastra: mastraProxy as MastraUnion | undefined,
+          memory,
+          agentName: this.name,
+          container,
+        };
+
+        const convertedToCoreTool = makeCoreTool(rest, options, 'client-tool');
+
+        toolsFromToolsetsConverted[toolName] = convertedToCoreTool;
       });
     }
 
@@ -608,15 +653,19 @@ export class Agent<
     resourceId,
     runId,
     toolsets,
+    clientTools,
+    container,
   }: {
     instructions?: string;
     toolsets?: ToolsetsInput;
+    clientTools?: ToolsInput;
     resourceId?: string;
     threadId?: string;
     memoryConfig?: MemoryConfig;
     context?: CoreMessage[];
     runId?: string;
     messages: CoreMessage[];
+    container: Container;
   }) {
     return {
       before: async () => {
@@ -679,7 +728,11 @@ export class Agent<
 
         let convertedTools: Record<string, CoreTool> | undefined;
 
-        if ((toolsets && Object.keys(toolsets || {}).length > 0) || (this.getMemory() && resourceId)) {
+        if (
+          (clientTools && Object.keys(clientTools || {}).length > 0) ||
+          (toolsets && Object.keys(toolsets || {}).length > 0) ||
+          (this.getMemory() && resourceId)
+        ) {
           const reasons = [];
           if (toolsets && Object.keys(toolsets || {}).length > 0) {
             reasons.push(`toolsets present (${Object.keys(toolsets || {}).length} tools)`);
@@ -687,18 +740,20 @@ export class Agent<
           if (this.getMemory() && resourceId) {
             reasons.push('memory and resourceId available');
           }
-
           this.logger.debug(`[Agent:${this.name}] - Enhancing tools: ${reasons.join(', ')}`, {
             runId,
             toolsets: toolsets ? Object.keys(toolsets) : undefined,
+            clientTools: clientTools ? Object.keys(clientTools) : undefined,
             hasMemory: !!this.getMemory(),
             hasResourceId: !!resourceId,
           });
           convertedTools = this.convertTools({
             toolsets,
+            clientTools,
             threadId: threadIdToUse,
             resourceId,
             runId,
+            container,
           });
         }
 
@@ -750,11 +805,12 @@ export class Agent<
           try {
             const userMessage = this.getMostRecentUserMessage(messages);
             const newMessages = userMessage ? [userMessage] : messages;
+            const now = Date.now();
             const threadMessages = this.sanitizeResponseMessages(ensureAllMessagesAreCoreMessages(newMessages)).map(
-              u => {
+              (u, index) => {
                 return {
                   id: this.getMemory()?.generateId()!,
-                  createdAt: new Date(),
+                  createdAt: new Date(now + index),
                   threadId: thread.id,
                   resourceId: resourceId,
                   ...u,
@@ -853,10 +909,12 @@ export class Agent<
       runId,
       output,
       toolsets,
+      clientTools,
       temperature,
       toolChoice = 'auto',
       experimental_output,
       telemetry,
+      container,
       ...rest
     }: AgentGenerateOptions<Z> = Object.assign({}, this.#defaultGenerateOptions, generateOptions);
     let messagesToUse: CoreMessage[] = [];
@@ -884,6 +942,7 @@ export class Agent<
 
     const runIdToUse = runId || randomUUID();
 
+    const normalizedContainer = container ?? new Container();
     const { before, after } = this.__primitive({
       instructions,
       messages: messagesToUse,
@@ -893,6 +952,8 @@ export class Agent<
       resourceId,
       runId: runIdToUse,
       toolsets,
+      clientTools,
+      container: normalizedContainer,
     });
 
     const { threadId, thread, messageObjects, convertedTools } = await before();
@@ -913,6 +974,7 @@ export class Agent<
         threadId,
         resourceId,
         memory: this.getMemory(),
+        container: normalizedContainer,
         ...rest,
       });
 
@@ -943,6 +1005,7 @@ export class Agent<
         threadId,
         resourceId,
         memory: this.getMemory(),
+        container: normalizedContainer,
         ...rest,
       });
 
@@ -967,6 +1030,7 @@ export class Agent<
       toolChoice,
       telemetry,
       memory: this.getMemory(),
+      container: normalizedContainer,
       ...rest,
     });
 
@@ -1014,13 +1078,16 @@ export class Agent<
       onStepFinish,
       runId,
       toolsets,
+      clientTools,
       output,
       temperature,
       toolChoice = 'auto',
       experimental_output,
       telemetry,
+      container,
       ...rest
     }: AgentStreamOptions<Z> = Object.assign({}, this.#defaultStreamOptions, streamOptions);
+    const normalizedContainer = container ?? new Container();
     const runIdToUse = runId || randomUUID();
 
     let messagesToUse: CoreMessage[] = [];
@@ -1053,6 +1120,8 @@ export class Agent<
       resourceId,
       runId: runIdToUse,
       toolsets,
+      clientTools,
+      container: normalizedContainer,
     });
 
     const { threadId, thread, messageObjects, convertedTools } = await before();
@@ -1087,6 +1156,7 @@ export class Agent<
         toolChoice,
         experimental_output,
         memory: this.getMemory(),
+        container: normalizedContainer,
         ...rest,
       });
 
@@ -1122,6 +1192,7 @@ export class Agent<
         toolChoice,
         telemetry,
         memory: this.getMemory(),
+        container: normalizedContainer,
         ...rest,
       }) as unknown as StreamReturn<Z>;
     }
@@ -1155,6 +1226,7 @@ export class Agent<
       toolChoice,
       telemetry,
       memory: this.getMemory(),
+      container: normalizedContainer,
       ...rest,
     }) as unknown as StreamReturn<Z>;
   }

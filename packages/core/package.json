@@ -1,12 +1,13 @@
 {
   "name": "@mastra/core",
-  "version": "0.8.1",
-  "license": "ISC",
+  "version": "0.9.0-alpha.3",
+  "license": "Elastic-2.0",
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "files": [
-    "dist"
+    "dist",
+    "./**/*.d.ts"
   ],
   "exports": {
     ".": {
@@ -120,7 +121,7 @@
     "cohere-ai": "^7.16.0",
     "date-fns": "^3.6.0",
     "dotenv": "^16.4.7",
-    "fastembed": "^1.14.3",
+    "fastembed": "^1.14.4",
     "json-schema": "^0.4.0",
     "json-schema-to-zod": "^2.6.0",
     "hono": "^4.5.1",
@@ -145,6 +146,7 @@
     "@types/pino": "^7.0.5",
     "@types/qs": "^6.9.18",
     "eslint": "^9.23.0",
+    "globby": "^14.1.0",
     "rollup": "^4.35.0",
     "size-limit": "^11.2.0",
     "tsup": "^8.4.0",

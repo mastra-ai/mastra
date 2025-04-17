@@ -13,6 +13,7 @@ import type {
 import { MastraBase } from '../base';
 import type { MastraStorage, StorageGetMessagesArg } from '../storage';
 import { DefaultProxyStorage } from '../storage/default-proxy-storage';
+import { augmentWithInit } from '../storage/storageWithInit';
 import type { CoreTool } from '../tools';
 import { deepMerge } from '../utils';
 import type { MastraVector } from '../vector';
@@ -49,8 +50,8 @@ export abstract class MastraMemory extends MastraBase {
   MAX_CONTEXT_TOKENS?: number;
 
   storage: MastraStorage;
-  vector: MastraVector;
-  embedder: EmbeddingModel<string>;
+  vector?: MastraVector;
+  embedder?: EmbeddingModel<string>;
   private processors: MemoryProcessor[] = [];
 
   protected threadConfig: MemoryConfig = {
@@ -64,17 +65,34 @@ export abstract class MastraMemory extends MastraBase {
   constructor(config: { name: string } & SharedMemoryConfig) {
     super({ component: 'MEMORY', name: config.name });
 
-    this.storage =
-      config.storage ||
-      new DefaultProxyStorage({
+    if (config.options) {
+      this.threadConfig = this.getMergedThreadConfig(config.options);
+    }
+
+    if (config.storage) {
+      this.storage = config.storage;
+    } else {
+      this.storage = new DefaultProxyStorage({
         config: {
           url: 'file:memory.db',
         },
       });
+    }
 
-    if (config.vector) {
+    this.storage = augmentWithInit(this.storage);
+
+    const semanticRecallIsEnabled = this.threadConfig.semanticRecall !== false; // default is to have it enabled, so any value except false means it's on
+
+    if (config.vector && semanticRecallIsEnabled) {
       this.vector = config.vector;
-    } else {
+    } else if (
+      // if there's no configured vector store
+      // and the vector store hasn't been explicitly disabled with vector: false
+      config.vector !== false &&
+      // and semanticRecall is enabled
+      semanticRecallIsEnabled
+      // add the default vector store
+    ) {
       // for backwards compat reasons, check if there's a memory-vector.db in cwd or in cwd/.mastra
       // if it's there we need to use it, otherwise use the same file:memory.db
       // We used to need two separate DBs because we would get schema errors
@@ -96,12 +114,15 @@ export abstract class MastraMemory extends MastraBase {
 
     if (config.embedder) {
       this.embedder = config.embedder;
-    } else {
+    } else if (
+      // if there's no configured embedder
+      // and there's a vector store
+      typeof this.vector !== `undefined` &&
+      // and semanticRecall is enabled
+      semanticRecallIsEnabled
+    ) {
+      // add the default embedder
       this.embedder = defaultEmbedder('bge-small-en-v1.5'); // https://huggingface.co/BAAI/bge-small-en-v1.5#model-list we're using small 1.5 because it's much faster than base 1.5 and only scores slightly worse despite being roughly 100MB smaller - small is ~130MB while base is ~220MB
-    }
-
-    if (config.options) {
-      this.threadConfig = this.getMergedThreadConfig(config.options);
     }
 
     // Initialize processors if provided
@@ -146,6 +167,9 @@ export abstract class MastraMemory extends MastraBase {
     const usedDimensions = dimensions ?? defaultDimensions;
     const indexName = isDefault ? 'memory_messages' : `memory_messages_${usedDimensions}`;
 
+    if (typeof this.vector === `undefined`) {
+      throw new Error(`Tried to create embedding index but no vector db is attached to this Memory instance.`);
+    }
     await this.vector.createIndex({
       indexName,
       dimension: usedDimensions,
@@ -315,6 +339,7 @@ export abstract class MastraMemory extends MastraBase {
           role: message.role as AiMessageType['role'],
           content: textContent,
           toolInvocations,
+          createdAt: message.createdAt,
         });
 
         return obj;

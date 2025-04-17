@@ -1,5 +1,93 @@
 # @mastra/core
 
+## 0.9.0-alpha.3
+
+### Minor Changes
+
+- fe3ae4d: Remove \_\_ functions in storage and move to storage proxy to make sure init is called
+
+## 0.8.4-alpha.2
+
+### Patch Changes
+
+- 9ee4293: Improve commonjs support
+
+  Add types files in the root directory to make sure typescript can resolve it without an exportsmap
+
+## 0.8.4-alpha.1
+
+### Patch Changes
+
+- 8a8a73b: fix container to network sub agent
+- 6f92295: Fixed an issue where some user messages and llm messages would have the exact same createdAt date, leading to incorrect message ordering. Added a fix for new messages as well as any that were saved before the fix in the wrong order
+
+## 0.8.4-alpha.0
+
+### Patch Changes
+
+- 03f3cd0: Propagate context to passed in tools
+
+## 0.8.3
+
+### Patch Changes
+
+- d72318f: Refactored the evals table to use the DS tables
+- 0bcc862: Fixed an issue where we were sanitizing response message content and filter on a value that may not always be an array
+- 10a8caf: Removed an extra console log that made it into core
+- 359b089: Allowed explicitly disabling vector/embedder in Memory by passing vector: false or options.semanticRecall: false
+- 32e7b71: Add support for dependency injection
+- 37bb612: Add Elastic-2.0 licensing for packages
+- 7f1b291: Client Side tool call passing
+
+## 0.8.3-alpha.5
+
+### Patch Changes
+
+- d72318f: Refactored the evals table to use the DS tables
+
+## 0.8.3-alpha.4
+
+### Patch Changes
+
+- 7f1b291: Client Side tool call passing
+
+## 0.8.3-alpha.3
+
+### Patch Changes
+
+- 10a8caf: Removed an extra console log that made it into core
+
+## 0.8.3-alpha.2
+
+### Patch Changes
+
+- 0bcc862: Fixed an issue where we were sanitizing response message content and filter on a value that may not always be an array
+
+## 0.8.3-alpha.1
+
+### Patch Changes
+
+- 32e7b71: Add support for dependency injection
+- 37bb612: Add Elastic-2.0 licensing for packages
+
+## 0.8.3-alpha.0
+
+### Patch Changes
+
+- 359b089: Allowed explicitly disabling vector/embedder in Memory by passing vector: false or options.semanticRecall: false
+
+## 0.8.2
+
+### Patch Changes
+
+- a06aadc: Upgrade fastembed to fix bug where fastembe cannot be imported
+
+## 0.8.2-alpha.0
+
+### Patch Changes
+
+- a06aadc: Upgrade fastembed to fix bug where fastembe cannot be imported
+
 ## 0.8.1
 
 ### Patch Changes

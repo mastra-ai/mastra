@@ -6,13 +6,8 @@ import type {
   UpsertVectorParams,
 } from '@mastra/core/vector';
 import { MastraVector } from '@mastra/core/vector';
-import {
-  Turbopuffer,
-  type DistanceMetric,
-  type QueryResults,
-  type Schema,
-  type Vector,
-} from '@turbopuffer/turbopuffer';
+import { Turbopuffer } from '@turbopuffer/turbopuffer';
+import type { DistanceMetric, QueryResults, Schema, Vector } from '@turbopuffer/turbopuffer';
 import { TurbopufferFilterTranslator } from './filter';
 
 export interface TurbopufferVectorOptions {

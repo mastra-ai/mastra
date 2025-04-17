@@ -1,6 +1,5 @@
 import type { Mastra } from '@mastra/core';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { HTTPException } from '../http-exception';
 import { getTelemetryHandler } from './telemetry';
 
 describe('Telemetry Handler', () => {

@@ -12,6 +12,7 @@ import type { WorkflowRunState } from '@mastra/core/workflows';
 import dotenv from 'dotenv';
 import { describe, it, expect, beforeAll, beforeEach, afterAll, vi } from 'vitest';
 
+import { createSampleTrace } from './test-utils';
 import type { CloudflareStoreConfig } from './types';
 import { CloudflareStore } from '.';
 
@@ -231,24 +232,116 @@ describe.skip('CloudflareStore REST API', () => {
     });
   });
 
+  // eslint-disable-next-line vitest/no-focused-tests
+  describe.only('Trace Operations', () => {
+    beforeEach(async () => {
+      await store.clearTable({ tableName: TABLE_TRACES });
+    });
+
+    it('should retrieve traces with filtering and pagination', async () => {
+      // Insert sample traces
+      const trace1 = createSampleTrace('test-trace-1', 'scope1', { env: 'prod' });
+      const trace2 = createSampleTrace('test-trace-2', 'scope1', { env: 'dev' });
+      const trace3 = createSampleTrace('other-trace', 'scope2', { env: 'prod' });
+
+      await store.insert({ tableName: TABLE_TRACES, record: trace1 });
+      await store.insert({ tableName: TABLE_TRACES, record: trace2 });
+      await store.insert({ tableName: TABLE_TRACES, record: trace3 });
+
+      // Test name filter
+      const testTraces = await store.getTraces({ name: 'test-trace', page: 0, perPage: 10 });
+      expect(testTraces).toHaveLength(2);
+      expect(testTraces.map(t => t.name)).toContain('test-trace-1');
+      expect(testTraces.map(t => t.name)).toContain('test-trace-2');
+
+      // Test scope filter
+      const scope1Traces = await store.getTraces({ scope: 'scope1', page: 0, perPage: 10 });
+      expect(scope1Traces).toHaveLength(2);
+      expect(scope1Traces.every(t => t.scope === 'scope1')).toBe(true);
+
+      // Test attributes filter
+      const prodTraces = await store.getTraces({
+        attributes: { env: 'prod' },
+        page: 0,
+        perPage: 10,
+      });
+      expect(prodTraces).toHaveLength(2);
+      expect(prodTraces.every(t => t.attributes.env === 'prod')).toBe(true);
+
+      // Test pagination
+      const pagedTraces = await store.getTraces({ page: 0, perPage: 2 });
+      expect(pagedTraces).toHaveLength(2);
+
+      // Test combined filters
+      const combinedTraces = await store.getTraces({
+        scope: 'scope1',
+        attributes: { env: 'prod' },
+        page: 0,
+        perPage: 10,
+      });
+      expect(combinedTraces).toHaveLength(1);
+      expect(combinedTraces[0].name).toBe('test-trace-1');
+
+      // Verify trace object structure
+      const trace = combinedTraces[0];
+      expect(trace).toHaveProperty('id');
+      expect(trace).toHaveProperty('parentSpanId');
+      expect(trace).toHaveProperty('traceId');
+      expect(trace).toHaveProperty('name');
+      expect(trace).toHaveProperty('scope');
+      expect(trace).toHaveProperty('kind');
+      expect(trace).toHaveProperty('status');
+      expect(trace).toHaveProperty('events');
+      expect(trace).toHaveProperty('links');
+      expect(trace).toHaveProperty('attributes');
+      expect(trace).toHaveProperty('startTime');
+      expect(trace).toHaveProperty('endTime');
+      expect(trace).toHaveProperty('other');
+      expect(trace).toHaveProperty('createdAt');
+
+      // Verify JSON fields are parsed
+      expect(typeof trace.status).toBe('object');
+      expect(typeof trace.events).toBe('object');
+      expect(typeof trace.links).toBe('object');
+      expect(typeof trace.attributes).toBe('object');
+      expect(typeof trace.other).toBe('object');
+    });
+
+    it('should handle empty results', async () => {
+      const traces = await store.getTraces({ page: 0, perPage: 10 });
+      expect(traces).toHaveLength(0);
+    });
+
+    it('should handle invalid JSON in fields', async () => {
+      const trace = createSampleTrace('test-trace');
+      trace.status = 'invalid-json{'; // Intentionally invalid JSON
+
+      await store.insert({ tableName: TABLE_TRACES, record: trace });
+      const traces = await store.getTraces({ page: 0, perPage: 10 });
+
+      expect(traces).toHaveLength(1);
+      expect(traces[0].status).toBe('invalid-json{'); // Should return raw string when JSON parsing fails
+    });
+  });
+
   describe('Thread Operations', () => {
     it('should create and retrieve a thread', async () => {
       const thread = createSampleThread();
 
       // Save thread
-      const savedThread = await store.__saveThread({ thread });
+      const savedThread = await store.saveThread({ thread });
       expect(savedThread).toEqual(thread);
 
       // Retrieve thread
       const retrievedThread = await retryUntil(
-        async () => await store.__getThreadById({ threadId: thread.id }),
+        async () => await store.getThreadById({ threadId: thread.id }),
         retrievedThread => retrievedThread?.title === thread.title,
       );
       expect(retrievedThread?.title).toEqual(thread.title);
     });
 
     it('should return null for non-existent thread', async () => {
-      const result = await store.__getThreadById({ threadId: 'non-existent' });
+      const result = await store.getThreadById({ threadId: 'non-existent' });
       expect(result).toBeNull();
     });
 
@@ -256,11 +349,11 @@ describe.skip('CloudflareStore REST API', () => {
       const thread1 = createSampleThread();
       const thread2 = { ...createSampleThread(), resourceId: thread1.resourceId };
 
-      await store.__saveThread({ thread: thread1 });
-      await store.__saveThread({ thread: thread2 });
+      await store.saveThread({ thread: thread1 });
+      await store.saveThread({ thread: thread2 });
 
       const threads = await retryUntil(
-        async () => await store.__getThreadsByResourceId({ resourceId: thread1.resourceId }),
+        async () => await store.getThreadsByResourceId({ resourceId: thread1.resourceId }),
         threads => threads?.length === 2,
       );
       expect(threads).toHaveLength(2);
@@ -269,11 +362,11 @@ describe.skip('CloudflareStore REST API', () => {
 
     it('should update thread title and metadata', async () => {
       const thread = createSampleThread();
-      await store.__saveThread({ thread });
+      await store.saveThread({ thread });
 
       const updatedTitle = 'Updated Title';
       const updatedMetadata = { newKey: 'newValue' };
-      const updatedThread = await store.__updateThread({
+      const updatedThread = await store.updateThread({
         id: thread.id,
         title: updatedTitle,
         metadata: updatedMetadata,
@@ -307,23 +400,23 @@ describe.skip('CloudflareStore REST API', () => {
 
     it('should delete thread and its messages', async () => {
       const thread = createSampleThread();
-      await store.__saveThread({ thread });
+      await store.saveThread({ thread });
 
       // Add some messages
       const messages = [createSampleMessage(thread.id), createSampleMessage(thread.id)];
-      await store.__saveMessages({ messages });
+      await store.saveMessages({ messages });
 
-      await store.__deleteThread({ threadId: thread.id });
+      await store.deleteThread({ threadId: thread.id });
 
       // Verify thread deletion with retry
       await retryUntil(
-        async () => await store.__getThreadById({ threadId: thread.id }),
+        async () => await store.getThreadById({ threadId: thread.id }),
         thread => thread === null,
       );
 
       // Verify messages were also deleted with retry
       const retrievedMessages = await retryUntil(
-        async () => await store.__getMessages({ threadId: thread.id }),
+        async () => await store.getMessages({ threadId: thread.id }),
         messages => messages.length === 0,
       );
       expect(retrievedMessages).toHaveLength(0);
@@ -333,18 +426,18 @@ describe.skip('CloudflareStore REST API', () => {
   describe('Message Operations', () => {
     it('should save and retrieve messages', async () => {
       const thread = createSampleThread();
-      await store.__saveThread({ thread });
+      await store.saveThread({ thread });
 
       const messages = [createSampleMessage(thread.id), createSampleMessage(thread.id)];
 
       // Save messages
-      const savedMessages = await store.__saveMessages({ messages });
+      const savedMessages = await store.saveMessages({ messages });
       expect(savedMessages).toEqual(messages);
 
       // Retrieve messages with retry
       const retrievedMessages = await retryUntil(
         async () => {
-          const msgs = await store.__getMessages({ threadId: thread.id });
+          const msgs = await store.getMessages({ threadId: thread.id });
           return msgs;
         },
         msgs => msgs.length === 2,
@@ -354,13 +447,13 @@ describe.skip('CloudflareStore REST API', () => {
     });
 
     it('should handle empty message array', async () => {
-      const result = await store.__saveMessages({ messages: [] });
+      const result = await store.saveMessages({ messages: [] });
       expect(result).toEqual([]);
     });
 
     it('should maintain message order', async () => {
       const thread = createSampleThread();
-      await store.__saveThread({ thread });
+      await store.saveThread({ thread });
 
       const messages = [
         {
@@ -377,10 +470,10 @@ describe.skip('CloudflareStore REST API', () => {
         },
       ];
 
-      await store.__saveMessages({ messages });
+      await store.saveMessages({ messages });
 
       const retrievedMessages = await retryUntil(
-        async () => await store.__getMessages({ threadId: thread.id }),
+        async () => await store.getMessages({ threadId: thread.id }),
         messages => messages.length > 0,
       );
       expect(retrievedMessages).toHaveLength(3);
@@ -478,9 +571,9 @@ describe.skip('CloudflareStore REST API', () => {
         metadata: {},
       };
 
-      await store.__saveThread({ thread });
+      await store.saveThread({ thread });
       const retrievedThread = await retryUntil(
-        async () => await store.__getThreadById({ threadId: thread.id }),
+        async () => await store.getThreadById({ threadId: thread.id }),
         retrievedThread => retrievedThread?.id === thread.id,
       );
       expect(retrievedThread?.createdAt).toBeInstanceOf(Date);
@@ -500,9 +593,9 @@ describe.skip('CloudflareStore REST API', () => {
         metadata: {},
       };
 
-      await store.__saveThread({ thread: thread as any });
+      await store.saveThread({ thread: thread as any });
       const retrievedThread = await retryUntil(
-        async () => await store.__getThreadById({ threadId: thread.id }),
+        async () => await store.getThreadById({ threadId: thread.id }),
         retrievedThread => retrievedThread?.id === thread.id,
       );
       expect(retrievedThread?.createdAt).toBeInstanceOf(Date);
@@ -515,7 +608,7 @@ describe.skip('CloudflareStore REST API', () => {
   describe('Message Ordering', () => {
     it('should handle duplicate timestamps gracefully', async () => {
       const thread = createSampleThread();
-      await store.__saveThread({ thread });
+      await store.saveThread({ thread });
 
       // Create messages with identical timestamps
       const timestamp = new Date();
@@ -524,7 +617,7 @@ describe.skip('CloudflareStore REST API', () => {
         createdAt: timestamp,
       }));
 
-      await store.__saveMessages({ messages });
+      await store.saveMessages({ messages });
 
       // Verify order is maintained based on insertion order
       const orderKey = store['getThreadMessagesKey'](thread.id);
@@ -539,7 +632,7 @@ describe.skip('CloudflareStore REST API', () => {
 
     it('should preserve write order when messages are saved concurrently', async () => {
       const thread = createSampleThread();
-      await store.__saveThread({ thread });
+      await store.saveThread({ thread });
 
       // Create messages with different timestamps
       const now = Date.now();
@@ -551,7 +644,7 @@ describe.skip('CloudflareStore REST API', () => {
       // Save messages in reverse order to verify write order is preserved
       const reversedMessages = [...messages].reverse(); // newest -> oldest
       for (const msg of reversedMessages) {
-        await store.__saveMessages({ messages: [msg] });
+        await store.saveMessages({ messages: [msg] });
       }
       // Verify all messages are saved successfully
       const orderKey = store['getThreadMessagesKey'](thread.id);
@@ -573,11 +666,11 @@ describe.skip('CloudflareStore REST API', () => {
 
     it('should handle score updates correctly', async () => {
       const thread = createSampleThread();
-      await store.__saveThread({ thread });
+      await store.saveThread({ thread });
 
       // Create initial messages
       const messages = Array.from({ length: 3 }, () => createSampleMessage(thread.id));
-      await store.__saveMessages({ messages });
+      await store.saveMessages({ messages });
 
       // Update scores to reverse order
       const orderKey = store['getThreadMessagesKey'](thread.id);
@@ -599,7 +692,7 @@ describe.skip('CloudflareStore REST API', () => {
 
     it('should maintain message order using sorted sets', async () => {
       const thread = createSampleThread();
-      await store.__saveThread({ thread });
+      await store.saveThread({ thread });
 
       // Create messages with explicit timestamps to test chronological ordering
       const baseTime = new Date('2025-03-14T23:30:20.930Z').getTime();
@@ -621,7 +714,7 @@ describe.skip('CloudflareStore REST API', () => {
         },
       ] as MessageType[];
 
-      await store.__saveMessages({ messages });
+      await store.saveMessages({ messages });
 
       await new Promise(resolve => setTimeout(resolve, 5000));
 
@@ -851,11 +944,11 @@ describe.skip('CloudflareStore REST API', () => {
         ...createSampleThread(),
         metadata: undefined, // Optional field
       };
-      await store.__saveThread({ thread });
+      await store.saveThread({ thread });
 
       // Should be able to retrieve thread
       const threads = await retryUntil(
-        async () => await store.__getThreadsByResourceId({ resourceId: thread.resourceId }),
+        async () => await store.getThreadsByResourceId({ resourceId: thread.resourceId }),
         threads => threads.length > 0,
       );
       expect(threads).toHaveLength(1);
@@ -870,12 +963,12 @@ describe.skip('CloudflareStore REST API', () => {
         content: [{ type: 'text' as const, text: '特殊字符 !@#$%^&*()' }] as MessageType['content'],
       };
 
-      await store.__saveThread({ thread });
-      await store.__saveMessages({ messages: [message] });
+      await store.saveThread({ thread });
+      await store.saveMessages({ messages: [message] });
 
       // Should retrieve correctly
       const messages = await retryUntil(
-        async () => await store.__getMessages({ threadId: thread.id }),
+        async () => await store.getMessages({ threadId: thread.id }),
         messages => messages.length > 0,
       );
       expect(messages).toHaveLength(1);
@@ -889,7 +982,7 @@ describe.skip('CloudflareStore REST API', () => {
       };
 
       // Should throw on invalid data
-      await expect(store.__saveThread({ thread: invalidThread })).rejects.toThrow();
+      await expect(store.saveThread({ thread: invalidThread })).rejects.toThrow();
     });
   });
 
@@ -934,8 +1027,8 @@ describe.skip('CloudflareStore REST API', () => {
       const message = createSampleMessage(thread.id);
 
       // Save thread and message
-      await store.__saveThread({ thread });
-      await store.__saveMessages({ messages: [message] });
+      await store.saveThread({ thread });
+      await store.saveMessages({ messages: [message] });
 
       // Verify message key format
       const msgKey = store['getKey'](TABLE_MESSAGES, { threadId: thread.id, id: message.id });
@@ -964,7 +1057,7 @@ describe.skip('CloudflareStore REST API', () => {
   describe('Sequential Operations', () => {
     it('should handle concurrent message updates sequentially', async () => {
       const thread = createSampleThread();
-      await store.__saveThread({ thread });
+      await store.saveThread({ thread });
 
       // Create messages with sequential timestamps (but write order will be preserved)
       const now = Date.now();
@@ -975,9 +1068,7 @@ describe.skip('CloudflareStore REST API', () => {
 
       // Save messages sequentially to avoid race conditions in REST API
       for (const msg of messages) {
-        await store.__saveMessages({ messages: [msg] });
-        // add a wait for eventual consistency
-        await new Promise(resolve => setTimeout(resolve, 1000));
+        await store.saveMessages({ messages: [msg] });
       }
       // Verify all messages are saved
       const orderKey = store['getThreadMessagesKey'](thread.id);
@@ -997,11 +1088,11 @@ describe.skip('CloudflareStore REST API', () => {
 
     it('should maintain order with concurrent score updates', async () => {
       const thread = createSampleThread();
-      await store.__saveThread({ thread });
+      await store.saveThread({ thread });
 
       // Create initial messages
       const messages = Array.from({ length: 3 }, () => createSampleMessage(thread.id));
-      await store.__saveMessages({ messages });
+      await store.saveMessages({ messages });
 
       const orderKey = store['getThreadMessagesKey'](thread.id);
 
@@ -1038,8 +1129,8 @@ describe.skip('CloudflareStore REST API', () => {
       const thread = createSampleThread();
       const messages = Array.from({ length: 3 }, () => createSampleMessage(thread.id));
 
-      await store.__saveThread({ thread });
-      await store.__saveMessages({ messages });
+      await store.saveThread({ thread });
+      await store.saveMessages({ messages });
 
       // Verify messages exist
       const orderKey = store['getThreadMessagesKey'](thread.id);
@@ -1050,7 +1141,7 @@ describe.skip('CloudflareStore REST API', () => {
       expect(initialOrder).toHaveLength(messages.length);
 
       // Delete thread
-      await store.__deleteThread({ threadId: thread.id });
+      await store.deleteThread({ threadId: thread.id });
 
       await new Promise(resolve => setTimeout(resolve, 5000));
 
@@ -1062,31 +1153,31 @@ describe.skip('CloudflareStore REST API', () => {
       expect(finalOrder).toHaveLength(0);
 
       // Verify thread is gone
-      const threads = await store.__getThreadsByResourceId({ resourceId: thread.resourceId });
+      const threads = await store.getThreadsByResourceId({ resourceId: thread.resourceId });
       expect(threads).toHaveLength(0);
     });
 
     it('should handle namespace cleanup edge cases', async () => {
       // Create test data
       const thread = createSampleThread();
-      await store.__saveThread({ thread });
+      await store.saveThread({ thread });
 
       // Create test messages with unique timestamps
       const testMessages = Array.from({ length: 10 }, (_, i) => ({
         ...createSampleMessage(thread.id),
         createdAt: new Date(Date.now() + i * 1000),
       }));
-      await store.__saveMessages({ messages: testMessages });
+      await store.saveMessages({ messages: testMessages });
 
       // Verify messages are saved
       const initialMessages = await retryUntil(
-        async () => await store.__getMessages({ threadId: thread.id }),
+        async () => await store.getMessages({ threadId: thread.id }),
         messages => messages.length === testMessages.length,
       );
       expect(initialMessages).toHaveLength(testMessages.length);
 
       // Delete thread
-      await store.__deleteThread({ threadId: thread.id });
+      await store.deleteThread({ threadId: thread.id });
 
       // Verify cleanup with retries
       await retryUntil(
@@ -1102,14 +1193,14 @@ describe.skip('CloudflareStore REST API', () => {
 
       // Verify all data is cleaned up
       const remainingMessages = await retryUntil(
-        async () => await store.__getMessages({ threadId: thread.id }),
+        async () => await store.getMessages({ threadId: thread.id }),
         messages => messages.length === 0,
       );
       expect(remainingMessages).toHaveLength(0);
 
       // Verify thread is gone
       const threads = await retryUntil(
-        async () => await store.__getThreadsByResourceId({ resourceId: thread.resourceId }),
+        async () => await store.getThreadsByResourceId({ resourceId: thread.resourceId }),
         threads => threads.length === 0,
       );
       expect(threads).toHaveLength(0);
@@ -1150,9 +1241,9 @@ describe.skip('CloudflareStore REST API', () => {
         metadata: largeMetadata,
       };
 
-      await store.__saveThread({ thread: threadWithLargeMetadata });
+      await store.saveThread({ thread: threadWithLargeMetadata });
       const retrieved = await retryUntil(
-        async () => await store.__getThreadById({ threadId: thread.id }),
+        async () => await store.getThreadById({ threadId: thread.id }),
         retrievedThread => retrievedThread?.id === thread.id,
       );
 
@@ -1163,10 +1254,10 @@ describe.skip('CloudflareStore REST API', () => {
       const threads = Array.from({ length: 10 }, () => createSampleThread());
 
       // Save all threads concurrently
-      await Promise.all(threads.map(thread => store.__saveThread({ thread })));
+      await Promise.all(threads.map(thread => store.saveThread({ thread })));
 
       // Retrieve all threads concurrently
-      const retrievedThreads = await Promise.all(threads.map(thread => store.__getThreadById({ threadId: thread.id })));
+      const retrievedThreads = await Promise.all(threads.map(thread => store.getThreadById({ threadId: thread.id })));
 
       expect(retrievedThreads.length).toBe(threads.length);
       retrievedThreads.forEach((retrieved, i) => {
@@ -1178,7 +1269,7 @@ describe.skip('CloudflareStore REST API', () => {
   describe('Error Handling', () => {
     it('should handle race conditions in getSortedOrder', async () => {
       const thread = createSampleThread();
-      await store.__saveThread({ thread });
+      await store.saveThread({ thread });
 
       // Create messages with sequential timestamps
       const now = Date.now();
@@ -1189,7 +1280,7 @@ describe.skip('CloudflareStore REST API', () => {
 
       // Save messages sequentially to avoid race conditions in REST API
       for (const msg of messages) {
-        await store.__saveMessages({ messages: [msg] });
+        await store.saveMessages({ messages: [msg] });
       }
       // For REST API, just verify all messages are eventually saved
       const orderKey = store['getThreadMessagesKey'](thread.id);
@@ -1210,7 +1301,7 @@ describe.skip('CloudflareStore REST API', () => {
 
     it('should handle invalid message data', async () => {
       const thread = createSampleThread();
-      await store.__saveThread({ thread });
+      await store.saveThread({ thread });
 
       // Try to save invalid message
       const invalidMessage = {
@@ -1219,7 +1310,7 @@ describe.skip('CloudflareStore REST API', () => {
       };
 
       await expect(
-        store.__saveMessages({
+        store.saveMessages({
           messages: [invalidMessage as any],
         }),
       ).rejects.toThrow();
@@ -1228,7 +1319,7 @@ describe.skip('CloudflareStore REST API', () => {
     it('should handle missing thread gracefully', async () => {
       const message = createSampleMessage('non-existent-thread');
       await expect(
-        store.__saveMessages({
+        store.saveMessages({
           messages: [message],
         }),
       ).rejects.toThrow();
@@ -1236,7 +1327,7 @@ describe.skip('CloudflareStore REST API', () => {
 
     it('should handle malformed data gracefully', async () => {
       const thread = createSampleThread();
-      await store.__saveThread({ thread });
+      await store.saveThread({ thread });
 
       // Test with various malformed data
       const malformedMessage = {
@@ -1244,11 +1335,11 @@ describe.skip('CloudflareStore REST API', () => {
         content: [{ type: 'text' as const, text: ''.padStart(1024 * 1024, 'x') }] as MessageType['content'], // Very large content
       };
 
-      await store.__saveMessages({ messages: [malformedMessage] });
+      await store.saveMessages({ messages: [malformedMessage] });
 
       // Should still be able to retrieve and handle the message
       const messages = await retryUntil(
-        async () => await store.__getMessages({ threadId: thread.id }),
+        async () => await store.getMessages({ threadId: thread.id }),
         messages => messages.length === 1,
       );
       expect(messages).toHaveLength(1);
@@ -1257,11 +1348,11 @@ describe.skip('CloudflareStore REST API', () => {
 
     it('should handle concurrent updates to sorted order', async () => {
       const thread = createSampleThread();
-      await store.__saveThread({ thread });
+      await store.saveThread({ thread });
 
       // Create initial messages
       const messages = Array.from({ length: 3 }, () => createSampleMessage(thread.id));
-      await store.__saveMessages({ messages });
+      await store.saveMessages({ messages });
 
       // Perform multiple concurrent updates
       const orderKey = store['getThreadMessagesKey'](thread.id);

@@ -1,4 +1,5 @@
 import type { Agent } from '@mastra/core/agent';
+import type { Container } from '@mastra/core/di';
 import { stringify } from 'superjson';
 import zodToJsonSchema from 'zod-to-json-schema';
 import { HTTPException } from '../http-exception';
@@ -78,7 +79,7 @@ export async function getAgentByIdHandler({ mastra, agentId }: Context & { agent
 export async function getEvalsByAgentIdHandler({ mastra, agentId }: Context & { agentId: string }) {
   try {
     const agent = mastra.getAgent(agentId);
-    const evals = (await mastra.getStorage()?.__getEvalsByAgentName?.(agent.name, 'test')) || [];
+    const evals = (await mastra.getStorage()?.getEvalsByAgentName?.(agent.name, 'test')) || [];
     return {
       id: agentId,
       name: agent.name,
@@ -93,7 +94,7 @@ export async function getEvalsByAgentIdHandler({ mastra, agentId }: Context & { 
 export async function getLiveEvalsByAgentIdHandler({ mastra, agentId }: Context & { agentId: string }) {
   try {
     const agent = mastra.getAgent(agentId);
-    const evals = (await mastra.getStorage()?.__getEvalsByAgentName?.(agent.name, 'live')) || [];
+    const evals = (await mastra.getStorage()?.getEvalsByAgentName?.(agent.name, 'live')) || [];
 
     return {
       id: agentId,
@@ -108,9 +109,11 @@ export async function getLiveEvalsByAgentIdHandler({ mastra, agentId }: Context 
 
 export async function generateHandler({
   mastra,
+  container,
   agentId,
   body,
 }: Context & {
+  container: Container;
   agentId: string;
   body: GetBody<'generate'> & {
     // @deprecated use resourceId
@@ -133,6 +136,7 @@ export async function generateHandler({
       ...rest,
       // @ts-expect-error TODO fix types
       resourceId: finalResourceId,
+      container,
     });
 
     return result;
@@ -143,9 +147,11 @@ export async function generateHandler({
 
 export async function streamGenerateHandler({
   mastra,
+  container,
   agentId,
   body,
 }: Context & {
+  container: Container;
   agentId: string;
   body: GetBody<'stream'> & {
     // @deprecated use resourceId
@@ -168,6 +174,7 @@ export async function streamGenerateHandler({
       ...rest,
       // @ts-expect-error TODO fix types
       resourceId: finalResourceId,
+      container,
     });
 
     const streamResponse = rest.output

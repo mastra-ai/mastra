@@ -5,7 +5,6 @@ import { Mastra } from '@mastra/core/mastra';
 import type { MastraStorage } from '@mastra/core/storage';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { HTTPException } from '../http-exception';
-import type { Context } from '../types';
 import {
   getAgentsHandler,
   getAgentByIdHandler,

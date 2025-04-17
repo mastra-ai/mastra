@@ -1,7 +1,7 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import type { Tool, Context } from 'tylerbarnes-fastmcp-fix';
 import { z } from 'zod';
+import { logger } from '../logger';
 import { fromPackageRoot } from '../utils';
 
 // Helper function to encode package names for file paths
@@ -18,6 +18,7 @@ const changelogsDir = fromPackageRoot('.docs/organized/changelogs');
 
 // Helper function to list package changelogs
 async function listPackageChangelogs(): Promise<Array<{ name: string; path: string }>> {
+  void logger.debug('Listing package changelogs');
   try {
     const files = await fs.readdir(changelogsDir);
     return files
@@ -36,6 +37,7 @@ async function listPackageChangelogs(): Promise<Array<{ name: string; path: stri
 async function readPackageChangelog(filename: string): Promise<string> {
   const encodedName = encodePackageName(filename.replace('.md', '')); // Remove .md if present
   const filePath = path.join(changelogsDir, `${encodedName}.md`);
+  void logger.debug(`Reading changelog: ${filename}`);
 
   try {
     return await fs.readFile(filePath, 'utf-8');
@@ -55,26 +57,55 @@ const packagesListing =
     ? '\n\nAvailable packages: ' + initialPackages.map(pkg => pkg.name).join(', ')
     : '\n\nNo package changelogs available yet. Run the documentation preparation script first.';
 
-const changesSchema = z.object({
+export const changesInputSchema = z.object({
   package: z
     .string()
     .optional()
     .describe('Name of the specific package to fetch changelog for. If not provided, lists all available packages.'),
 });
 
-type ChangesParams = z.infer<typeof changesSchema>;
+export type ChangesInput = z.infer<typeof changesInputSchema>;
 
-export const changesTool: Tool<any, typeof changesSchema> = {
+export const changesTool = {
   name: 'mastraChanges',
-  description: 'Get changelog information for Mastra.ai packages. ' + packagesListing,
-  parameters: changesSchema,
-  execute: async (args: ChangesParams, _context: Context<any>) => {
-    if (!args.package) {
-      const packages = await listPackageChangelogs();
-      return ['Available package changelogs:', '', ...packages.map(pkg => `- ${pkg.name}`)].join('\n');
-    }
+  description: `Get changelog information for Mastra.ai packages. ${packagesListing}`,
+  execute: async (args: ChangesInput) => {
+    void logger.debug('Executing mastraChanges tool', { package: args.package });
+    try {
+      if (!args.package) {
+        const packages = await listPackageChangelogs();
+        return {
+          content: [
+            {
+              type: 'text',
+              text: ['Available package changelogs:', '', ...packages.map(pkg => `- ${pkg.name}`)].join('\n'),
+            },
+          ],
+          isError: false,
+        };
+      }
 
-    const content = await readPackageChangelog(args.package);
-    return content;
+      const content = await readPackageChangelog(args.package);
+      return {
+        content: [
+          {
+            type: 'text',
+            text: content,
+          },
+        ],
+        isError: false,
+      };
+    } catch (error) {
+      void logger.error('Failed to execute mastraChanges tool', error);
+      return {
+        content: [
+          {
+            type: 'text',
+            text: `Error: ${error instanceof Error ? error.message : String(error)}`,
+          },
+        ],
+        isError: true,
+      };
+    }
   },
 };

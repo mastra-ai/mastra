@@ -197,7 +197,7 @@ type Span = {
 };
 
 export interface GetTelemetryResponse {
-  traces: { traces: Span[] };
+  traces: Span[];
 }
 
 export interface GetTelemetryParams {

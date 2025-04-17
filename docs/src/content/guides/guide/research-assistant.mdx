@@ -1,0 +1,297 @@
+---
+title: "Building a Research Paper Assistant | Mastra RAG Guides"
+description: Guide on creating an AI research assistant that can analyze and answer questions about academic papers using RAG.
+---
+
+import { Steps } from "nextra/components";
+
+# Building a Research Paper Assistant with RAG
+
+In this guide, we'll create an AI research assistant that can analyze academic papers and answer specific questions about their content using Retrieval Augmented Generation (RAG).
+
+We'll use the foundational Transformer paper [Attention Is All You Need](https://arxiv.org/html/1706.03762) as our example.
+
+## Understanding RAG Components
+
+Let's understand how RAG works and how we'll implement each component:
+
+1. Knowledge Store/Index
+   - Converting text into vector representations
+   - Creating numerical representations of content
+   - Implementation: We'll use OpenAI's text-embedding-3-small to create embeddings and store them in PgVector
+
+2. Retriever
+   - Finding relevant content via similarity search
+   - Matching query embeddings with stored vectors
+   - Implementation: We'll use PgVector to perform similarity searches on our stored embeddings
+
+3. Generator
+   - Processing retrieved content with an LLM
+   - Creating contextually informed responses
+   - Implementation: We'll use GPT-4o-mini to generate answers based on retrieved content
+
+Our implementation will:
+1. Process the Transformer paper into embeddings
+2. Store them in PgVector for quick retrieval
+3. Use similarity search to find relevant sections
+4. Generate accurate responses using retrieved context
+
+## Project Structure
+
+```
+research-assistant/
+├── src/
+│   ├── mastra/
+│   │   ├── agents/
+│   │   │   └── researchAgent.ts
+│   │   └── index.ts
+│   ├── index.ts
+│   └── store.ts
+├── package.json
+└── .env
+```
+
+<Steps>
+### Initialize Project and Install Dependencies
+
+First, create a new directory for your project and navigate into it:
+
+```bash
+mkdir research-assistant
+cd research-assistant
+```
+
+Initialize a new Node.js project and install the required dependencies:
+
+```bash
+npm init -y
+npm install @mastra/core @mastra/rag @mastra/pg @ai-sdk/openai ai zod
+```
+
+Set up environment variables for API access and database connection:
+
+```bash filename=".env" copy
+OPENAI_API_KEY=your_openai_api_key
+POSTGRES_CONNECTION_STRING=your_connection_string
+```
+
+Create the necessary files for our project:
+
+```bash copy
+mkdir -p src/mastra/agents
+touch src/mastra/agents/researchAgent.ts
+touch src/mastra/index.ts src/store.ts src/index.ts
+```
+
+### Create the Research Assistant Agent
+
+Now we'll create our RAG-enabled research assistant. The agent uses:
+- A [Vector Query Tool](/reference/tools/vector-query-tool) for performing semantic search over our vector store to find relevant content in our papers.
+- GPT-4o-mini for understanding queries and generating responses
+- Custom instructions that guide the agent on how to analyze papers, use retrieved content effectively, and acknowledge limitations
+
+```ts copy showLineNumbers filename="src/mastra/agents/researchAgent.ts"
+import { Agent } from '@mastra/core/agent';
+import { openai } from '@ai-sdk/openai';
+import { createVectorQueryTool } from '@mastra/rag';
+
+// Create a tool for semantic search over our paper embeddings
+const vectorQueryTool = createVectorQueryTool({
+  vectorStoreName: 'pgVector',
+  indexName: 'papers',
+  model: openai.embedding('text-embedding-3-small'),
+});
+
+export const researchAgent = new Agent({
+  name: 'Research Assistant',
+  instructions: 
+    `You are a helpful research assistant that analyzes academic papers and technical documents.
+    Use the provided vector query tool to find relevant information from your knowledge base, 
+    and provide accurate, well-supported answers based on the retrieved content.
+    Focus on the specific content available in the tool and acknowledge if you cannot find sufficient information to answer a question.
+    Base your responses only on the content provided, not on general knowledge.`,
+  model: openai('gpt-4o-mini'),
+  tools: {
+    vectorQueryTool,
+  },
+});
+```
+
+### Set Up the Mastra Instance and Vector Store
+
+```ts copy showLineNumbers filename="src/mastra/index.ts"
+import { Mastra } from '@mastra/core';
+import { PgVector } from '@mastra/pg';
+
+import { researchAgent } from './agents/researchAgent';
+
+// Initialize Mastra instance
+const pgVector = new PgVector(process.env.POSTGRES_CONNECTION_STRING!);
+export const mastra = new Mastra({
+  agents: { researchAgent },
+  vectors: { pgVector },
+});
+```
+
+### Load and Process the Paper
+
+This step handles the initial document processing. We:
+1. Fetch the research paper from its URL
+2. Convert it into a document object
+3. Split it into smaller, manageable chunks for better processing
+
+```ts copy showLineNumbers filename="src/store.ts"
+import { openai } from "@ai-sdk/openai";
+import { MDocument } from '@mastra/rag';
+import { embedMany } from 'ai';
+import { mastra } from "./mastra";
+
+// Load the paper
+const paperUrl = "https://arxiv.org/html/1706.03762";
+const response = await fetch(paperUrl);
+const paperText = await response.text();
+
+// Create document and chunk it
+const doc = MDocument.fromText(paperText);
+const chunks = await doc.chunk({
+  strategy: 'recursive',
+  size: 512,
+  overlap: 50,
+  separator: '\n',
+});
+
+console.log("Number of chunks:", chunks.length);
+// Number of chunks: 893
+```
+
+### Create and Store Embeddings
+
+Finally, we'll prepare our content for RAG by:
+1. Generating embeddings for each chunk of text
+2. Creating a vector store index to hold our embeddings
+3. Storing both the embeddings and metadata (original text and source information) in our vector database
+
+> **Note**: This metadata is crucial as it allows us to return the actual content when the vector store finds relevant matches.
+
+This allows our agent to efficiently search and retrieve relevant information.
+
+```ts copy showLineNumbers{23} filename="src/store.ts"
+// Generate embeddings
+const { embeddings } = await embedMany({
+  model: openai.embedding('text-embedding-3-small'),
+  values: chunks.map(chunk => chunk.text),
+});
+
+// Get the vector store instance from Mastra
+const vectorStore = mastra.getVector('pgVector');
+
+// Create an index for our paper chunks
+await vectorStore.createIndex({
+  indexName: 'papers',
+  dimension: 1536,
+});
+
+// Store embeddings
+await vectorStore.upsert({
+  indexName: 'papers',
+  vectors: embeddings,
+  metadata: chunks.map(chunk => ({
+    text: chunk.text,
+    source: 'transformer-paper'
+  })),
+});
+```
+
+This will:
+1. Load the paper from the URL
+2. Split it into manageable chunks
+3. Generate embeddings for each chunk
+4. Store both the embeddings and text in our vector database
+
+To run the script and store the embeddings:
+
+```bash
+npx bun src/store.ts
+```
+
+### Test the Assistant
+
+Let's test our research assistant with different types of queries:
+
+```ts filename="src/index.ts" showLineNumbers copy
+import { mastra } from "./mastra";
+const agent = mastra.getAgent('researchAgent');
+
+// Basic query about concepts
+const query1 = "What problems does sequence modeling face with neural networks?";
+const response1 = await agent.generate(query1);
+console.log("\nQuery:", query1);
+console.log("Response:", response1.text);
+```
+
+Run the script:
+
+```bash copy
+npx bun src/index.ts
+```
+
+You should see output like:
+```
+Query: What problems does sequence modeling face with neural networks?
+Response: Sequence modeling with neural networks faces several key challenges:
+1. Vanishing and exploding gradients during training, especially with long sequences
+2. Difficulty handling long-term dependencies in the input
+3. Limited computational efficiency due to sequential processing
+4. Challenges in parallelizing computations, resulting in longer training times
+```
+
+Let's try another question:
+```ts filename="src/index.ts" showLineNumbers{10} copy
+// Query about specific findings
+const query2 = "What improvements were achieved in translation quality?";
+const response2 = await agent.generate(query2);
+console.log("\nQuery:", query2);
+console.log("Response:", response2.text);
+```
+
+Output:
+```
+Query: What improvements were achieved in translation quality?
+Response: The model showed significant improvements in translation quality, achieving more than 2.0 
+BLEU points improvement over previously reported models on the WMT 2014 English-to-German translation 
+task, while also reducing training costs.
+```
+
+### Serve the Application
+
+Start the Mastra server to expose your research assistant via API:
+
+```bash
+mastra dev
+```
+
+Your research assistant will be available at:
+```
+http://localhost:4111/api/agents/researchAgent/generate
+```
+
+Test with curl:
+
+```bash
+curl -X POST http://localhost:4111/api/agents/researchAgent/generate \
+  -H "Content-Type: application/json" \
+  -d '{
+    "messages": [
+      { "role": "user", "content": "What were the main findings about model parallelization?" }
+    ]
+  }'
+```
+</Steps>
+
+## Advanced RAG Examples
+
+Explore these examples for more advanced RAG techniques:
+- [Filter RAG](/examples/rag/usage/filter-rag) for filtering results using metadata
+- [Cleanup RAG](/examples/rag/usage/cleanup-rag) for optimizing information density
+- [Chain of Thought RAG](/examples/rag/usage/cot-rag) for complex reasoning queries using workflows
+- [Rerank RAG](/examples/rag/usage/rerank-rag) for improved result relevance

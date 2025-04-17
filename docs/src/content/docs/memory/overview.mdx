@@ -1,4 +1,4 @@
-## Overview
+# Memory overview
 
 Memory is how agents manage the context that's available to them, it's a condensation of all chat messages into their context window.
 
@@ -73,7 +73,7 @@ const response = await myMemoryAgent.stream("Hello, my name is Alice.", {
 
 ## Conversation History
 
-By default, the `Memory` instance includes the [last 40 messages](../reference/memory/Memory.mdx) from the current Memory thread in each new request. This provides the agent with immediate conversational context.
+By default, the `Memory` instance includes the [last 40 messages](../../reference/memory/Memory.mdx) from the current Memory thread in each new request. This provides the agent with immediate conversational context.
 
 ```ts {3}
 const memory = new Memory({
@@ -87,7 +87,7 @@ const memory = new Memory({
 
 ### Storage Configuration
 
-Conversation history relies on a [storage adapter](/docs/reference/memory/Memory#parameters) to store messages.
+Conversation history relies on a [storage adapter](/reference/memory/Memory#parameters) to store messages.
 
 ```ts {7-12}
 import { Memory } from "@mastra/memory";
@@ -116,5 +116,4 @@ const agent = new Agent({
 
 Now that you understand the core concepts, continue to [semantic recall](./semantic-recall.mdx) to learn how to add RAG memory to your Mastra agents.
 
-Alternatively you can visit the [configuration reference](../reference/memory/Memory.mdx) for available options, or browse [usage examples](../../examples/memory/use-chat.mdx).
-
+Alternatively you can visit the [configuration reference](../../reference/memory/Memory.mdx) for available options, or browse [usage examples](../../examples/memory/use-chat.mdx).

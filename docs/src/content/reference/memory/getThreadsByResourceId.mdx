@@ -1,0 +1,48 @@
+# getThreadsByResourceId Reference
+
+The `getThreadsByResourceId` function retrieves all threads associated with a specific resource ID from storage.
+
+## Usage Example
+
+```typescript
+import { Memory } from "@mastra/core/memory";
+
+const memory = new Memory(config);
+
+const threads = await memory.getThreadsByResourceId({
+  resourceId: "resource-123",
+});
+```
+
+## Parameters
+
+<PropertiesTable
+  content={[
+    {
+      name: "resourceId",
+      type: "string",
+      description: "The ID of the resource whose threads are to be retrieved.",
+      isOptional: false,
+    },
+  ]}
+/>
+
+## Returns
+
+<PropertiesTable
+  content={[
+    {
+      name: "StorageThreadType[]",
+      type: "Promise",
+      description:
+        "A promise that resolves to an array of threads associated with the given resource ID.",
+    },
+  ]}
+/>
+
+### Related
+
+- [Memory Class Reference](/reference/memory/Memory.mdx)
+- [Getting Started with Memory](/docs/memory/overview.mdx) (Covers threads/resources concept)
+- [createThread](/reference/memory/createThread.mdx)
+- [getThreadById](/reference/memory/getThreadById.mdx)

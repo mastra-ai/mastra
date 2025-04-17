@@ -1,16 +1,25 @@
 import { MastraBase } from '@mastra/core/base';
+import { DEFAULT_REQUEST_TIMEOUT_MSEC } from '@modelcontextprotocol/sdk/shared/protocol.js';
 import { v5 as uuidv5 } from 'uuid';
 import { MastraMCPClient } from './client';
 import type { MastraMCPServerDefinition } from './client';
 
 const mastraMCPConfigurationInstances = new Map<string, InstanceType<typeof MCPConfiguration>>();
 
+export interface MCPConfigurationOptions {
+  id?: string;
+  servers: Record<string, MastraMCPServerDefinition>;
+  timeout?: number; // Optional global timeout
+}
+
 export class MCPConfiguration extends MastraBase {
   private serverConfigs: Record<string, MastraMCPServerDefinition> = {};
   private id: string;
+  private defaultTimeout: number;
 
-  constructor(args: { id?: string; servers: Record<string, MastraMCPServerDefinition> }) {
+  constructor(args: MCPConfigurationOptions) {
     super({ name: 'MCPConfiguration' });
+    this.defaultTimeout = args.timeout ?? DEFAULT_REQUEST_TIMEOUT_MSEC;
     this.serverConfigs = args.servers;
     this.id = args.id ?? this.makeId();
 
@@ -50,12 +59,8 @@ To fix this you have three different options:
   public async disconnect() {
     mastraMCPConfigurationInstances.delete(this.id);
 
-    for (const serverName of Object.keys(this.serverConfigs)) {
-      const client = this.mcpClientsById.get(serverName);
-      if (client) {
-        await client.disconnect();
-      }
-    }
+    await Promise.all(Array.from(this.mcpClientsById.values()).map(client => client.disconnect()));
+    this.mcpClientsById.clear();
   }
 
   public async getTools() {
@@ -97,9 +102,11 @@ To fix this you have three different options:
 
     this.logger.debug(`Connecting to ${name} MCP server`);
 
+    // Create client with server configuration including log handler
     const mcpClient = new MastraMCPClient({
       name,
       server: config,
+      timeout: config.timeout ?? this.defaultTimeout,
     });
 
     this.mcpClientsById.set(name, mcpClient);
@@ -107,8 +114,10 @@ To fix this you have three different options:
       await mcpClient.connect();
     } catch (e) {
       this.mcpClientsById.delete(name);
-      this.logger.error(`MCPConfiguration errored connecting to MCP server ${name}`);
-      throw e;
+      this.logger.error(`MCPConfiguration errored connecting to MCP server ${name}`, {
+        error: e instanceof Error ? e.message : String(e),
+      });
+      throw new Error(`Failed to connect to MCP server ${name}: ${e instanceof Error ? e.message : String(e)}`);
     }
 
     this.logger.debug(`Connected to ${name} MCP server`);
@@ -123,14 +132,12 @@ To fix this you have three different options:
       client: InstanceType<typeof MastraMCPClient>;
     }) => Promise<void>,
   ) {
-    for (const [serverName, serverConfig] of Object.entries(this.serverConfigs)) {
-      const client = await this.getConnectedClient(serverName, serverConfig);
-      const tools = await client.tools();
-      await cb({
-        serverName,
-        tools,
-        client,
-      });
-    }
+    await Promise.all(
+      Object.entries(this.serverConfigs).map(async ([serverName, serverConfig]) => {
+        const client = await this.getConnectedClient(serverName, serverConfig);
+        const tools = await client.tools();
+        await cb({ serverName, tools, client });
+      }),
+    );
   }
 }

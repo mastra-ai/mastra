@@ -1,6 +1,6 @@
 {
   "name": "@mastra/deployer-cloudflare",
-  "version": "0.1.16",
+  "version": "0.1.19-alpha.4",
   "description": "",
   "type": "module",
   "files": [
@@ -39,7 +39,7 @@
   },
   "keywords": [],
   "author": "",
-  "license": "ISC",
+  "license": "Elastic-2.0",
   "dependencies": {
     "@mastra/core": "workspace:^",
     "@mastra/deployer": "workspace:^",

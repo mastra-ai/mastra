@@ -1,0 +1,13 @@
+{
+  "name": "pkg-outputs",
+  "version": "0.0.1",
+  "private": true,
+  "devDependencies": {
+    "execa": "^9.5.2",
+    "rollup": "^4.40.0",
+    "vitest": "^3.0.7"
+  },
+  "scripts": {
+    "test": "vitest"
+  }
+}

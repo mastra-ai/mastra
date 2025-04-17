@@ -146,7 +146,7 @@ Note: this example is for simplicity of understanding how custom processors work
 Here's how to use memory with processors in an agent:
 
 ```typescript
-import { Agent } from "@mastra/core";
+import { Agent } from "@mastra/core/agent";
 import { Memory, TokenLimiter, ToolCallFilter } from "@mastra/memory";
 import { openai } from "@ai-sdk/openai";
 
@@ -187,4 +187,4 @@ This example demonstrates:
 4. Combining multiple processors in the correct order
 5. Integrating processed memory with an agent
 
-For more details on memory processors, check out the [Memory Processors documentation](/docs/reference/memory/memory-processors).
+For more details on memory processors, check out the [Memory Processors documentation](/reference/memory/memory-processors).

@@ -1,4 +1,5 @@
 import type { QueryResult } from '@mastra/core';
+import * as pg from 'pg';
 import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach, vi } from 'vitest';
 
 import { PgVector } from '.';
@@ -18,6 +19,24 @@ describe('PgVector', () => {
     // Clean up test tables
     await vectorDB.deleteIndex(testIndexName);
     await vectorDB.disconnect();
+  });
+
+  // --- Validation tests ---
+  describe('Validation', () => {
+    it('throws if connectionString is empty (string)', () => {
+      expect(() => new PgVector('')).toThrow(/connectionString must be provided and cannot be empty/);
+    });
+    it('throws if connectionString is empty (object)', () => {
+      expect(() => new PgVector({ connectionString: '' })).toThrow(
+        /connectionString must be provided and cannot be empty/,
+      );
+    });
+    it('does not throw on non-empty connection string (string)', () => {
+      expect(() => new PgVector(connectionString)).not.toThrow();
+    });
+    it('does not throw on non-empty connection string (object)', () => {
+      expect(() => new PgVector({ connectionString })).not.toThrow();
+    });
   });
 
   // Index Management Tests
@@ -328,8 +347,8 @@ describe('PgVector', () => {
         expect(results[0]?.vector).toEqual(newVector);
       });
 
-      it('should throw exception when no updates are given', () => {
-        expect(vectorDB.updateIndexById(testIndexName, 'id', {})).rejects.toThrow('No updates provided');
+      it('should throw exception when no updates are given', async () => {
+        await expect(vectorDB.updateIndexById(testIndexName, 'id', {})).rejects.toThrow('No updates provided');
       });
     });
 
@@ -1856,6 +1875,488 @@ describe('PgVector', () => {
       expect(stats.type).toBe('ivfflat');
 
       await vectorDB.deleteIndex(indexName);
+    });
+  });
+
+  describe('Schema Support', () => {
+    const customSchema = 'mastra_test';
+    let vectorDB: PgVector;
+    let customSchemaVectorDB: PgVector;
+
+    beforeAll(async () => {
+      // Initialize default vectorDB first
+      vectorDB = new PgVector(connectionString);
+
+      // Create schema using the default vectorDB connection
+      const client = await vectorDB['pool'].connect();
+      try {
+        await client.query(`CREATE SCHEMA IF NOT EXISTS ${customSchema}`);
+        await client.query('COMMIT');
+      } catch (e) {
+        await client.query('ROLLBACK');
+        throw e;
+      } finally {
+        client.release();
+      }
+
+      // Now create the custom schema vectorDB instance
+      customSchemaVectorDB = new PgVector({
+        connectionString,
+        schemaName: customSchema,
+      });
+    });
+
+    afterAll(async () => {
+      // Clean up test tables and schema
+      try {
+        await customSchemaVectorDB.deleteIndex('schema_test_vectors');
+      } catch {
+        // Ignore errors if index doesn't exist
+      }
+
+      // Drop schema using the default vectorDB connection
+      const client = await vectorDB['pool'].connect();
+      try {
+        await client.query(`DROP SCHEMA IF EXISTS ${customSchema} CASCADE`);
+        await client.query('COMMIT');
+      } catch (e) {
+        await client.query('ROLLBACK');
+        throw e;
+      } finally {
+        client.release();
+      }
+
+      // Disconnect in reverse order
+      await customSchemaVectorDB.disconnect();
+      await vectorDB.disconnect();
+    });
+
+    describe('Constructor', () => {
+      it('should accept connectionString directly', () => {
+        const db = new PgVector(connectionString);
+        expect(db).toBeInstanceOf(PgVector);
+      });
+
+      it('should accept config object with connectionString', () => {
+        const db = new PgVector({ connectionString });
+        expect(db).toBeInstanceOf(PgVector);
+      });
+
+      it('should accept config object with schema', () => {
+        const db = new PgVector({ connectionString, schemaName: customSchema });
+        expect(db).toBeInstanceOf(PgVector);
+      });
+    });
+
+    describe('Schema Operations', () => {
+      const testIndexName = 'schema_test_vectors';
+
+      beforeEach(async () => {
+        // Clean up any existing indexes
+        try {
+          await customSchemaVectorDB.deleteIndex(testIndexName);
+        } catch {
+          // Ignore if doesn't exist
+        }
+        try {
+          await vectorDB.deleteIndex(testIndexName);
+        } catch {
+          // Ignore if doesn't exist
+        }
+      });
+
+      afterEach(async () => {
+        // Clean up indexes after each test
+        try {
+          await customSchemaVectorDB.deleteIndex(testIndexName);
+        } catch {
+          // Ignore if doesn't exist
+        }
+        try {
+          await vectorDB.deleteIndex(testIndexName);
+        } catch {
+          // Ignore if doesn't exist
+        }
+      });
+
+      it('should create and query index in custom schema', async () => {
+        // Create index in custom schema
+        await customSchemaVectorDB.createIndex({ indexName: testIndexName, dimension: 3 });
+
+        // Insert test vectors
+        const vectors = [
+          [1, 2, 3],
+          [4, 5, 6],
+        ];
+        const metadata = [{ test: 'custom_schema_1' }, { test: 'custom_schema_2' }];
+        await customSchemaVectorDB.upsert({ indexName: testIndexName, vectors, metadata });
+
+        // Query and verify results
+        const results = await customSchemaVectorDB.query({
+          indexName: testIndexName,
+          queryVector: [1, 2, 3],
+          topK: 2,
+        });
+        expect(results).toHaveLength(2);
+        expect(results[0]?.metadata?.test).toMatch(/custom_schema_/);
+
+        // Verify table exists in correct schema
+        const client = await customSchemaVectorDB['pool'].connect();
+        try {
+          const res = await client.query(
+            `
+            SELECT EXISTS (
+              SELECT FROM information_schema.tables 
+              WHERE table_schema = $1 
+              AND table_name = $2
+            )`,
+            [customSchema, testIndexName],
+          );
+          expect(res.rows[0].exists).toBe(true);
+        } finally {
+          client.release();
+        }
+      });
+
+      it('should allow same index name in different schemas', async () => {
+        // Create same index name in both schemas
+        await vectorDB.createIndex({ indexName: testIndexName, dimension: 3 });
+        await customSchemaVectorDB.createIndex({ indexName: testIndexName, dimension: 3 });
+
+        // Insert different test data in each schema
+        await vectorDB.upsert({
+          indexName: testIndexName,
+          vectors: [[1, 2, 3]],
+          metadata: [{ test: 'default_schema' }],
+        });
+
+        await customSchemaVectorDB.upsert({
+          indexName: testIndexName,
+          vectors: [[1, 2, 3]],
+          metadata: [{ test: 'custom_schema' }],
+        });
+
+        // Query both schemas and verify different results
+        const defaultResults = await vectorDB.query({
+          indexName: testIndexName,
+          queryVector: [1, 2, 3],
+          topK: 1,
+        });
+        const customResults = await customSchemaVectorDB.query({
+          indexName: testIndexName,
+          queryVector: [1, 2, 3],
+          topK: 1,
+        });
+
+        expect(defaultResults[0]?.metadata?.test).toBe('default_schema');
+        expect(customResults[0]?.metadata?.test).toBe('custom_schema');
+      });
+
+      it('should maintain schema separation for all operations', async () => {
+        // Create index in custom schema
+        await customSchemaVectorDB.createIndex({ indexName: testIndexName, dimension: 3 });
+
+        // Test index operations
+        const stats = await customSchemaVectorDB.describeIndex(testIndexName);
+        expect(stats.dimension).toBe(3);
+
+        // Test list operation
+        const indexes = await customSchemaVectorDB.listIndexes();
+        expect(indexes).toContain(testIndexName);
+
+        // Test update operation
+        const vectors = [[7, 8, 9]];
+        const metadata = [{ test: 'updated_in_custom_schema' }];
+        const [id] = await customSchemaVectorDB.upsert({
+          indexName: testIndexName,
+          vectors,
+          metadata,
+        });
+
+        // Test delete operation
+        await customSchemaVectorDB.deleteIndexById(testIndexName, id!);
+
+        // Verify deletion
+        const results = await customSchemaVectorDB.query({
+          indexName: testIndexName,
+          queryVector: [7, 8, 9],
+          topK: 1,
+        });
+        expect(results).toHaveLength(0);
+      });
+    });
+  });
+
+  describe('Permission Handling', () => {
+    const schemaRestrictedUser = 'mastra_schema_restricted';
+    const vectorRestrictedUser = 'mastra_vector_restricted';
+    const restrictedPassword = 'test123';
+    const testSchema = 'test_schema';
+
+    const getConnectionString = (username: string) =>
+      connectionString.replace(/(postgresql:\/\/)[^:]+:[^@]+@/, `$1${username}:${restrictedPassword}@`);
+
+    beforeAll(async () => {
+      // First ensure the test schema doesn't exist from previous runs
+      const adminClient = await new pg.Pool({ connectionString }).connect();
+      try {
+        await adminClient.query('BEGIN');
+
+        // Drop the test schema if it exists from previous runs
+        await adminClient.query(`DROP SCHEMA IF EXISTS ${testSchema} CASCADE`);
+
+        // Create schema restricted user with minimal permissions
+        await adminClient.query(`
+          DO $$
+          BEGIN
+            IF NOT EXISTS (SELECT FROM pg_catalog.pg_roles WHERE rolname = '${schemaRestrictedUser}') THEN
+              CREATE USER ${schemaRestrictedUser} WITH PASSWORD '${restrictedPassword}' NOCREATEDB;
+            END IF;
+          END
+          $$;
+        `);
+
+        // Grant only connect and usage to schema restricted user
+        await adminClient.query(`
+          REVOKE ALL ON DATABASE ${connectionString.split('/').pop()} FROM ${schemaRestrictedUser};
+          GRANT CONNECT ON DATABASE ${connectionString.split('/').pop()} TO ${schemaRestrictedUser};
+          REVOKE ALL ON SCHEMA public FROM ${schemaRestrictedUser};
+          GRANT USAGE ON SCHEMA public TO ${schemaRestrictedUser};
+        `);
+
+        // Create vector restricted user with table creation permissions
+        await adminClient.query(`
+          DO $$
+          BEGIN
+            IF NOT EXISTS (SELECT FROM pg_catalog.pg_roles WHERE rolname = '${vectorRestrictedUser}') THEN
+              CREATE USER ${vectorRestrictedUser} WITH PASSWORD '${restrictedPassword}' NOCREATEDB;
+            END IF;
+          END
+          $$;
+        `);
+
+        // Grant connect, usage, and create to vector restricted user
+        await adminClient.query(`
+          REVOKE ALL ON DATABASE ${connectionString.split('/').pop()} FROM ${vectorRestrictedUser};
+          GRANT CONNECT ON DATABASE ${connectionString.split('/').pop()} TO ${vectorRestrictedUser};
+          REVOKE ALL ON SCHEMA public FROM ${vectorRestrictedUser};
+          GRANT USAGE, CREATE ON SCHEMA public TO ${vectorRestrictedUser};
+        `);
+
+        await adminClient.query('COMMIT');
+      } catch (e) {
+        await adminClient.query('ROLLBACK');
+        throw e;
+      } finally {
+        adminClient.release();
+      }
+    });
+
+    afterAll(async () => {
+      // Clean up test users and any objects they own
+      const adminClient = await new pg.Pool({ connectionString }).connect();
+      try {
+        await adminClient.query('BEGIN');
+
+        // Helper function to drop user and their objects
+        const dropUser = async username => {
+          // First revoke all possible privileges and reassign objects
+          await adminClient.query(
+            `
+            -- Handle object ownership (CASCADE is critical here)
+            REASSIGN OWNED BY ${username} TO postgres;
+            DROP OWNED BY ${username} CASCADE;
+
+            -- Finally drop the user
+            DROP ROLE ${username};
+            `,
+          );
+        };
+
+        // Drop both users
+        await dropUser(vectorRestrictedUser);
+        await dropUser(schemaRestrictedUser);
+
+        await adminClient.query('COMMIT');
+      } catch (e) {
+        await adminClient.query('ROLLBACK');
+        throw e;
+      } finally {
+        adminClient.release();
+      }
+    });
+
+    describe('Schema Creation', () => {
+      beforeEach(async () => {
+        // Ensure schema doesn't exist before each test
+        const adminClient = await new pg.Pool({ connectionString }).connect();
+        try {
+          await adminClient.query('BEGIN');
+          await adminClient.query(`DROP SCHEMA IF EXISTS ${testSchema} CASCADE`);
+          await adminClient.query('COMMIT');
+        } catch (e) {
+          await adminClient.query('ROLLBACK');
+          throw e;
+        } finally {
+          adminClient.release();
+        }
+      });
+
+      it('should fail when user lacks CREATE privilege', async () => {
+        const restrictedDB = new PgVector({
+          connectionString: getConnectionString(schemaRestrictedUser),
+          schemaName: testSchema,
+        });
+
+        // Test schema creation directly by accessing private method
+        await expect(async () => {
+          const client = await restrictedDB['pool'].connect();
+          try {
+            await restrictedDB['setupSchema'](client);
+          } finally {
+            client.release();
+          }
+        }).rejects.toThrow(`Unable to create schema "${testSchema}". This requires CREATE privilege on the database.`);
+
+        // Verify schema was not created
+        const adminClient = await new pg.Pool({ connectionString }).connect();
+        try {
+          const res = await adminClient.query(
+            `SELECT EXISTS (SELECT 1 FROM information_schema.schemata WHERE schema_name = $1)`,
+            [testSchema],
+          );
+          expect(res.rows[0].exists).toBe(false);
+        } finally {
+          adminClient.release();
+        }
+
+        await restrictedDB.disconnect();
+      });
+
+      it('should fail with schema creation error when creating index', async () => {
+        const restrictedDB = new PgVector({
+          connectionString: getConnectionString(schemaRestrictedUser),
+          schemaName: testSchema,
+        });
+
+        // This should fail with the schema creation error
+        await expect(async () => {
+          await restrictedDB.createIndex({ indexName: 'test', dimension: 3 });
+        }).rejects.toThrow(`Unable to create schema "${testSchema}". This requires CREATE privilege on the database.`);
+
+        // Verify schema was not created
+        const adminClient = await new pg.Pool({ connectionString }).connect();
+        try {
+          const res = await adminClient.query(
+            `SELECT EXISTS (SELECT 1 FROM information_schema.schemata WHERE schema_name = $1)`,
+            [testSchema],
+          );
+          expect(res.rows[0].exists).toBe(false);
+        } finally {
+          adminClient.release();
+        }
+
+        await restrictedDB.disconnect();
+      });
+    });
+
+    describe('Vector Extension', () => {
+      beforeEach(async () => {
+        // Create test table and grant necessary permissions
+        const adminClient = await new pg.Pool({ connectionString }).connect();
+        try {
+          await adminClient.query('BEGIN');
+
+          // First install vector extension
+          await adminClient.query('CREATE EXTENSION IF NOT EXISTS vector');
+
+          // Drop existing table if any
+          await adminClient.query('DROP TABLE IF EXISTS test CASCADE');
+
+          // Create test table as admin
+          await adminClient.query('CREATE TABLE IF NOT EXISTS test (id SERIAL PRIMARY KEY, embedding vector(3))');
+
+          // Grant ALL permissions including index creation
+          await adminClient.query(`
+            GRANT ALL ON TABLE test TO ${vectorRestrictedUser};
+            GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO ${vectorRestrictedUser};
+            ALTER TABLE test OWNER TO ${vectorRestrictedUser};
+          `);
+
+          await adminClient.query('COMMIT');
+        } catch (e) {
+          await adminClient.query('ROLLBACK');
+          throw e;
+        } finally {
+          adminClient.release();
+        }
+      });
+
+      afterEach(async () => {
+        // Clean up test table
+        const adminClient = await new pg.Pool({ connectionString }).connect();
+        try {
+          await adminClient.query('BEGIN');
+          await adminClient.query('DROP TABLE IF EXISTS test CASCADE');
+          await adminClient.query('COMMIT');
+        } catch (e) {
+          await adminClient.query('ROLLBACK');
+          throw e;
+        } finally {
+          adminClient.release();
+        }
+      });
+
+      it('should handle lack of superuser privileges gracefully', async () => {
+        // First ensure vector extension is not installed
+        const adminClient = await new pg.Pool({ connectionString }).connect();
+        try {
+          await adminClient.query('DROP EXTENSION IF EXISTS vector CASCADE');
+        } finally {
+          adminClient.release();
+        }
+
+        const restrictedDB = new PgVector({
+          connectionString: getConnectionString(vectorRestrictedUser),
+        });
+
+        try {
+          const warnSpy = vi.spyOn(restrictedDB['logger'], 'warn');
+
+          // Try to create index which will trigger vector extension installation attempt
+          await expect(restrictedDB.createIndex({ indexName: 'test', dimension: 3 })).rejects.toThrow();
+
+          expect(warnSpy).toHaveBeenCalledWith(
+            expect.stringContaining('Could not install vector extension. This requires superuser privileges'),
+          );
+
+          warnSpy.mockRestore();
+        } finally {
+          // Ensure we wait for any pending operations before disconnecting
+          await new Promise(resolve => setTimeout(resolve, 100));
+          await restrictedDB.disconnect();
+        }
+      });
+
+      it('should continue if vector extension is already installed', async () => {
+        const restrictedDB = new PgVector({
+          connectionString: getConnectionString(vectorRestrictedUser),
+        });
+
+        try {
+          const debugSpy = vi.spyOn(restrictedDB['logger'], 'debug');
+
+          await restrictedDB.createIndex({ indexName: 'test', dimension: 3 });
+
+          expect(debugSpy).toHaveBeenCalledWith('Vector extension already installed, skipping installation');
+
+          debugSpy.mockRestore();
+        } finally {
+          // Ensure we wait for any pending operations before disconnecting
+          await new Promise(resolve => setTimeout(resolve, 100));
+          await restrictedDB.disconnect();
+        }
+      });
     });
   });
 });

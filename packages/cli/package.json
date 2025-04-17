@@ -1,7 +1,7 @@
 {
   "name": "mastra",
-  "version": "0.4.7",
-  "license": "ISC",
+  "version": "0.5.0-alpha.4",
+  "license": "Elastic-2.0",
   "description": "cli for mastra",
   "type": "module",
   "main": "dist/index.js",

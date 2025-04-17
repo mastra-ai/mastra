@@ -1,4 +1,5 @@
 import { Agent } from '@mastra/core/agent';
+import { Container } from '@mastra/core/di';
 import { Mastra } from '@mastra/core/mastra';
 import { createTool } from '@mastra/core/tools';
 import type { ToolAction, VercelTool } from '@mastra/core/tools';
@@ -137,6 +138,7 @@ describe('Tools Handlers', () => {
           agentId: 'non-existent',
           toolId: mockTool.id,
           data: {},
+          container: new Container(),
         }),
       ).rejects.toThrow('Agent with name non-existent not found');
     });
@@ -151,6 +153,7 @@ describe('Tools Handlers', () => {
           agentId: 'test-agent',
           toolId: 'non-existent',
           data: {},
+          container: new Container(),
         }),
       ).rejects.toThrow('Tool not found');
     });
@@ -173,6 +176,7 @@ describe('Tools Handlers', () => {
           agentId: 'test-agent',
           toolId: nonExecutableTool.id,
           data: {},
+          container: new Container(),
         }),
       ).rejects.toThrow('Tool is not executable');
     });
@@ -195,6 +199,7 @@ describe('Tools Handlers', () => {
         agentId: 'test-agent',
         toolId: mockTool.id,
         data: context,
+        container: new Container(),
       });
 
       expect(result).toEqual(mockResult);
@@ -220,6 +225,7 @@ describe('Tools Handlers', () => {
         agentId: 'test-agent',
         toolId: mockVercelTool.id,
         data: {},
+        container: new Container(),
       });
 
       expect(result).toEqual(mockResult);

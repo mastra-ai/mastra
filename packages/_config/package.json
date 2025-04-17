@@ -1,6 +1,6 @@
 {
   "name": "@internal/lint",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "description": "",
   "type": "module",
   "main": "src/index.js",
@@ -12,7 +12,7 @@
   "scripts": {},
   "keywords": [],
   "author": "",
-  "license": "ISC",
+  "license": "Elastic-2.0",
   "dependencies": {
     "@vitest/eslint-plugin": "^1.1.38",
     "eslint-plugin-import-x": "^4.6.1",

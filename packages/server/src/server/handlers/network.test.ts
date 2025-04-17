@@ -1,20 +1,9 @@
 import { Agent } from '@mastra/core/agent';
 import { Mastra } from '@mastra/core/mastra';
 import { AgentNetwork } from '@mastra/core/network';
-import type { JSONSchema7 } from 'json-schema';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import type { ZodType } from 'zod';
 import { HTTPException } from '../http-exception';
 import { getNetworksHandler, getNetworkByIdHandler, generateHandler, streamGenerateHandler } from './network';
-
-interface NetworkContext {
-  mastra: Mastra;
-  networkId?: string;
-  resourceId: string;
-  threadId: string;
-  messages?: string[];
-  experimental_output?: JSONSchema7 | ZodType<any, any, any>;
-}
 
 function createMockAgent(name: string) {
   return new Agent({
