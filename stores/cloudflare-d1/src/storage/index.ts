@@ -29,20 +29,6 @@ export interface SqlQueryOptions {
 }
 
 /**
- * Interface for transaction operations with generic type support
- */
-export interface Transaction {
-  /** Execute a query within the transaction and return multiple results */
-  executeQuery(options: SqlQueryOptions): Promise<Record<string, any>[]>;
-  /** Execute a query within the transaction and return a single result */
-  executeQuerySingle(options: SqlQueryOptions): Promise<Record<string, any> | null>;
-  /** Commit the transaction */
-  commit(): Promise<void>;
-  /** Rollback the transaction */
-  rollback(): Promise<void>;
-}
-
-/**
  * Configuration for D1 using the REST API
  */
 export interface D1Config {
@@ -149,7 +135,9 @@ export class D1Store extends MastraStorage {
         this.logger.debug(`Created index ${indexName} on ${fullTableName}(${columnName})`);
       }
     } catch (error) {
-      this.logger.error(`Error creating index on ${fullTableName}(${columnName}):`, { error });
+      this.logger.error(`Error creating index on ${fullTableName}(${columnName}):`, {
+        message: error instanceof Error ? error.message : String(error),
+      });
       // Non-fatal error, continue execution
     }
   }
@@ -227,7 +215,10 @@ export class D1Store extends MastraStorage {
         }
       }
     } catch (workerError: any) {
-      this.logger.error('Workers Binding API error', { error: workerError, sql });
+      this.logger.error('Workers Binding API error', {
+        message: workerError instanceof Error ? workerError.message : String(workerError),
+        sql,
+      });
       throw new Error(`D1 Workers API error: ${workerError.message}`);
     }
   }
@@ -272,7 +263,10 @@ export class D1Store extends MastraStorage {
 
       return results;
     } catch (restError: any) {
-      this.logger.error('REST API error', { error: restError, sql });
+      this.logger.error('REST API error', {
+        message: restError instanceof Error ? restError.message : String(restError),
+        sql,
+      });
       throw new Error(`D1 REST API error: ${restError.message}`);
     }
   }
@@ -298,82 +292,13 @@ export class D1Store extends MastraStorage {
         throw new Error('No valid D1 configuration provided');
       }
     } catch (error: any) {
-      this.logger.error('Error executing SQL query', { error, sql, params, first });
+      this.logger.error('Error executing SQL query', {
+        message: error instanceof Error ? error.message : String(error),
+        sql,
+        params,
+        first,
+      });
       throw new Error(`D1 query error: ${error.message}`);
-    }
-  }
-
-  /**
-   * Begin a new transaction
-   * @returns A transaction object that can be used to execute queries within the transaction
-   */
-  async beginTransaction(): Promise<Transaction> {
-    try {
-      const beginQuery = createSqlBuilder().beginTransaction();
-      const { sql: beginSql, params: beginParams } = beginQuery.build();
-      await this.executeQuery({ sql: beginSql, params: beginParams });
-
-      // Return a transaction object with methods to execute queries, commit, or rollback
-      return {
-        executeQuery: async (options: SqlQueryOptions): Promise<Record<string, any>[]> => {
-          const result = await this.executeQuery({
-            ...options,
-            first: false, // Ensure we get an array of results
-          });
-          return result as Record<string, any>[];
-        },
-        executeQuerySingle: async (options: SqlQueryOptions): Promise<Record<string, any> | null> => {
-          // Use a type assertion to handle the potential undefined return type
-          const result = await this.executeQuery({
-            ...options,
-            first: true, // Ensure we get a single result
-          });
-
-          // The result could be an array or a single item, ensure we return a single item or null
-          if (isArrayOfRecords(result)) {
-            return result[0] || null;
-          }
-          return result;
-        },
-        commit: async (): Promise<void> => {
-          const commitQuery = createSqlBuilder().commitTransaction();
-          const { sql: commitSql, params: commitParams } = commitQuery.build();
-          await this.executeQuery({ sql: commitSql, params: commitParams });
-          this.logger.debug('Transaction committed');
-        },
-        rollback: async (): Promise<void> => {
-          const rollbackQuery = createSqlBuilder().rollbackTransaction();
-          const { sql: rollbackSql, params: rollbackParams } = rollbackQuery.build();
-          await this.executeQuery({ sql: rollbackSql, params: rollbackParams });
-          this.logger.debug('Transaction rolled back');
-        },
-      };
-    } catch (error: any) {
-      this.logger.error('Error beginning transaction:', { error });
-      throw new Error(`Failed to begin transaction: ${error.message}`);
-    }
-  }
-
-  /**
-   * Execute a function within a transaction
-   * @param fn Function to execute within the transaction
-   * @returns The result of the function
-   */
-  async withTransaction<T>(fn: (transaction: Transaction) => Promise<T>): Promise<T> {
-    const transaction = await this.beginTransaction();
-
-    try {
-      // Execute the function with the transaction
-      const result = await fn(transaction);
-
-      // Commit the transaction if successful
-      await transaction.commit();
-
-      return result;
-    } catch (error) {
-      // Rollback the transaction on error
-      await transaction.rollback();
-      throw error;
     }
   }
 
@@ -473,7 +398,9 @@ export class D1Store extends MastraStorage {
       await this.executeQuery({ sql, params });
       this.logger.debug(`Created table ${fullTableName}`);
     } catch (error) {
-      this.logger.error(`Error creating table ${fullTableName}:`, { error });
+      this.logger.error(`Error creating table ${fullTableName}:`, {
+        message: error instanceof Error ? error.message : String(error),
+      });
       throw new Error(`Failed to create table ${fullTableName}: ${error}`);
     }
   }
@@ -488,19 +415,26 @@ export class D1Store extends MastraStorage {
       await this.executeQuery({ sql, params });
       this.logger.debug(`Cleared table ${fullTableName}`);
     } catch (error) {
-      this.logger.error(`Error clearing table ${fullTableName}:`, { error });
+      this.logger.error(`Error clearing table ${fullTableName}:`, {
+        message: error instanceof Error ? error.message : String(error),
+      });
       throw new Error(`Failed to clear table ${fullTableName}: ${error}`);
     }
+  }
+
+  private async processRecord(record: Record<string, any>): Promise<Record<string, any>> {
+    const processedRecord: Record<string, any> = {};
+    for (const [key, value] of Object.entries(record)) {
+      processedRecord[key] = this.serializeValue(value);
+    }
+    return processedRecord;
   }
 
   async insert({ tableName, record }: { tableName: TABLE_NAMES; record: Record<string, any> }): Promise<void> {
     const fullTableName = this.getTableName(tableName);
 
     // Process record for SQL insertion
-    const processedRecord: Record<string, any> = {};
-    for (const [key, value] of Object.entries(record)) {
-      processedRecord[key] = this.serializeValue(value);
-    }
+    const processedRecord = await this.processRecord(record);
 
     // Extract columns and values
     const columns = Object.keys(processedRecord);
@@ -552,7 +486,9 @@ export class D1Store extends MastraStorage {
 
       return processedResult as R;
     } catch (error) {
-      this.logger.error(`Error loading from ${fullTableName}:`, { error });
+      this.logger.error(`Error loading from ${fullTableName}:`, {
+        message: error instanceof Error ? error.message : String(error),
+      });
       return null;
     }
   }
@@ -576,7 +512,9 @@ export class D1Store extends MastraStorage {
             : thread.metadata || {},
       };
     } catch (error) {
-      this.logger.error(`Error processing thread ${threadId}:`, { error });
+      this.logger.error(`Error processing thread ${threadId}:`, {
+        message: error instanceof Error ? error.message : String(error),
+      });
       return null;
     }
   }
@@ -600,26 +538,55 @@ export class D1Store extends MastraStorage {
             : thread.metadata || {},
       }));
     } catch (error) {
-      this.logger.error(`Error getting threads by resourceId ${resourceId}:`, { error });
+      this.logger.error(`Error getting threads by resourceId ${resourceId}:`, {
+        message: error instanceof Error ? error.message : String(error),
+      });
       return [];
     }
   }
 
   async saveThread({ thread }: { thread: StorageThreadType }): Promise<StorageThreadType> {
-    const now = new Date();
+    const fullTableName = this.getTableName(TABLE_THREADS);
+
+    // Prepare the record for SQL insertion
     const threadToSave = {
-      ...thread,
-      createdAt: thread.createdAt || now,
-      updatedAt: now,
-      metadata: thread.metadata || ({} as Record<string, any>),
+      id: thread.id,
+      resourceId: thread.resourceId,
+      title: thread.title,
+      metadata: thread.metadata ? JSON.stringify(thread.metadata) : null,
+      createdAt: thread.createdAt,
+      updatedAt: thread.updatedAt,
     };
 
-    await this.insert({
-      tableName: TABLE_THREADS,
-      record: threadToSave as Record<string, any>,
-    });
-    return threadToSave;
+    // Process record for SQL insertion
+    const processedRecord = await this.processRecord(threadToSave);
+
+    const columns = Object.keys(processedRecord);
+    const values = Object.values(processedRecord);
+
+    // Specify which columns to update on conflict (all except id)
+    const updateMap: Record<string, string> = {
+      resourceId: 'excluded.resourceId',
+      title: 'excluded.title',
+      metadata: 'excluded.metadata',
+      createdAt: 'excluded.createdAt',
+      updatedAt: 'excluded.updatedAt',
+    };
+
+    // Use the new insert method with ON CONFLICT
+    const query = createSqlBuilder().insert(fullTableName, columns, values, ['id'], updateMap);
+
+    const { sql, params } = query.build();
+
+    try {
+      await this.executeQuery({ sql, params });
+      return thread;
+    } catch (error) {
+      this.logger.error(`Error saving thread to ${fullTableName}:`, { error });
+      throw error;
+    }
   }
+
   async updateThread({
     id,
     title,
@@ -633,20 +600,36 @@ export class D1Store extends MastraStorage {
     if (!thread) {
       throw new Error(`Thread ${id} not found`);
     }
-    const updatedThread = {
-      ...thread,
-      title,
-      metadata: {
-        ...(thread.metadata as Record<string, any>),
-        ...(metadata as Record<string, any>),
-      },
-      updatedAt: new Date(),
+    const fullTableName = this.getTableName(TABLE_THREADS);
+
+    const mergedMetadata = {
+      ...(typeof thread.metadata === 'string' ? JSON.parse(thread.metadata) : thread.metadata),
+      ...(metadata as Record<string, any>),
     };
-    await this.insert({
-      tableName: TABLE_THREADS,
-      record: updatedThread,
-    });
-    return updatedThread;
+
+    const columns = ['title', 'metadata', 'updatedAt'];
+    const values = [title, JSON.stringify(mergedMetadata), new Date().toISOString()];
+
+    const query = createSqlBuilder().update(fullTableName, columns, values).where('id = ?', id);
+
+    const { sql, params } = query.build();
+
+    try {
+      await this.executeQuery({ sql, params });
+
+      return {
+        ...thread,
+        title,
+        metadata: {
+          ...(typeof thread.metadata === 'string' ? JSON.parse(thread.metadata) : thread.metadata),
+          ...(metadata as Record<string, any>),
+        },
+        updatedAt: new Date(),
+      };
+    } catch (error) {
+      this.logger.error('Error updating thread:', { error });
+      throw error;
+    }
   }
 
   async deleteThread({ threadId }: { threadId: string }): Promise<void> {
@@ -666,7 +649,9 @@ export class D1Store extends MastraStorage {
       const { sql: messagesSql, params: messagesParams } = deleteMessagesQuery.build();
       await this.executeQuery({ sql: messagesSql, params: messagesParams });
     } catch (error) {
-      this.logger.error(`Error deleting thread ${threadId}:`, { error });
+      this.logger.error(`Error deleting thread ${threadId}:`, {
+        message: error instanceof Error ? error.message : String(error),
+      });
       throw new Error(`Failed to delete thread ${threadId}: ${error}`);
     }
   }
@@ -678,84 +663,41 @@ export class D1Store extends MastraStorage {
 
     try {
       const now = new Date();
-      // Group messages by thread for better organization
-      const messagesByThread = new Map<string, MessageType[]>();
 
-      // Process and save each message
-      for (const message of messages) {
-        // Ensure timestamps are set
-        const messageToSave = {
-          ...message,
-          thread_id: message.threadId,
-          createdAt: message.createdAt || now,
-          updatedAt: now,
-        };
-
-        // Group by thread for later processing
-        if (!messagesByThread.has(message.threadId)) {
-          messagesByThread.set(message.threadId, []);
+      // Validate all messages before insert
+      for (const [i, message] of messages.entries()) {
+        if (!message.id) throw new Error(`Message at index ${i} missing id`);
+        if (!message.threadId) throw new Error(`Message at index ${i} missing threadId`);
+        if (!message.content) throw new Error(`Message at index ${i} missing content`);
+        if (!message.role) throw new Error(`Message at index ${i} missing role`);
+        const thread = await this.getThreadById({ threadId: message.threadId });
+        if (!thread) {
+          throw new Error(`Thread ${message.threadId} not found`);
         }
-        messagesByThread.get(message.threadId)!.push(messageToSave);
-
-        console.log('Saving message:', messageToSave);
-
-        // Save the message to the database
-        await this.insert({
-          tableName: TABLE_MESSAGES,
-          record: messageToSave as Record<string, any>,
-        });
       }
 
-      // Update thread metadata to reflect the latest message
-      await Promise.all(
-        Array.from(messagesByThread.entries()).map(async ([threadId, threadMessages]) => {
-          try {
-            // Get the thread to update its metadata
-            const thread = await this.getThreadById({ threadId });
-            if (thread) {
-              // Find the latest message in this batch
-              if (threadMessages.length > 0) {
-                // Sort messages by creation time and get the latest one
-                const sortedMessages = [...threadMessages].sort((a, b) => {
-                  const timeA = new Date(a.createdAt || 0).getTime();
-                  const timeB = new Date(b.createdAt || 0).getTime();
-                  return timeB - timeA; // Descending order (newest first)
-                });
+      // Prepare all messages for insertion (set timestamps, thread_id, etc.)
+      const messagesToInsert = messages.map(message => {
+        const createdAt = message.createdAt ? new Date(message.createdAt) : now;
+        return {
+          id: message.id,
+          thread_id: message.threadId,
+          content: typeof message.content === 'string' ? message.content : JSON.stringify(message.content),
+          createdAt: createdAt.toISOString(),
+          role: message.role,
+          type: message.type,
+        };
+      });
 
-                const latestMessage = sortedMessages[0]; // This is safer than using reduce
+      await this.batchInsert({
+        tableName: TABLE_MESSAGES,
+        records: messagesToInsert,
+      });
 
-                // Ensure latestMessage is defined before proceeding
-                if (latestMessage) {
-                  // Ensure we have valid values for the thread metadata
-                  const createdAt = latestMessage.createdAt || new Date().toISOString();
-                  const messageId = latestMessage.id || '';
-
-                  if (messageId) {
-                    // Update thread with latest message info
-                    await this.updateThread({
-                      id: threadId,
-                      title: thread.title || '', // Ensure title is never undefined
-                      metadata: {
-                        ...thread.metadata,
-                        lastMessageAt: createdAt,
-                        lastMessageId: messageId,
-                        messageCount: ((thread.metadata as any)?.messageCount || 0) + threadMessages.length,
-                      },
-                    });
-                  }
-                }
-              }
-            }
-          } catch (error) {
-            this.logger.error(`Error updating thread ${threadId} metadata:`, { error });
-          }
-        }),
-      );
-
-      this.logger.debug(`Saved ${messages.length} messages across ${messagesByThread.size} threads`);
+      this.logger.debug(`Saved ${messages.length} messages`);
       return messages;
     } catch (error) {
-      this.logger.error('Error saving messages:', { error });
+      this.logger.error('Error saving messages:', { message: error instanceof Error ? error.message : String(error) });
       throw error;
     }
   }
@@ -781,12 +723,12 @@ export class D1Store extends MastraStorage {
 
           // If we need context (previous/next messages)
           if (item.withPreviousMessages || item.withNextMessages) {
-            // First, get the current message's position (using created_at as the ordering)
+            // First, get the current message's position (using createdAt as the ordering)
             const sqlBuilder = createSqlBuilder();
 
             // Build position query
             sqlBuilder
-              .select('created_at')
+              .select('createdAt')
               .from(fullTableName)
               .where('thread_id = ?', threadId)
               .andWhere('id = ?', item.id)
@@ -799,8 +741,8 @@ export class D1Store extends MastraStorage {
               first: true,
             });
 
-            if (positionResult && 'created_at' in positionResult) {
-              const messageTimestamp = positionResult.created_at;
+            if (positionResult && 'createdAt' in positionResult) {
+              const messageTimestamp = positionResult.createdAt;
 
               // Get previous messages if requested
               if (item.withPreviousMessages && item.withPreviousMessages > 0) {
@@ -809,8 +751,8 @@ export class D1Store extends MastraStorage {
                   .select('id')
                   .from(fullTableName)
                   .where('thread_id = ?', threadId)
-                  .andWhere('created_at < ?', messageTimestamp)
-                  .orderBy('created_at', 'DESC')
+                  .andWhere('createdAt < ?', messageTimestamp)
+                  .orderBy('createdAt', 'DESC')
                   .limit(item.withPreviousMessages);
 
                 const { sql: prevQuery, params: prevParams } = sqlBuilder.build();
@@ -832,8 +774,8 @@ export class D1Store extends MastraStorage {
                     .select('id')
                     .from(fullTableName)
                     .where('thread_id = ?', threadId)
-                    .andWhere('created_at > ?', messageTimestamp)
-                    .orderBy('created_at', 'ASC')
+                    .andWhere('createdAt > ?', messageTimestamp)
+                    .orderBy('createdAt', 'ASC')
                     .limit(item.withNextMessages);
 
                   const { sql: nextQuery, params: nextParams } = sqlBuilder.build();
@@ -859,7 +801,7 @@ export class D1Store extends MastraStorage {
         let limitQuery = `
           SELECT id FROM ${fullTableName} 
           WHERE thread_id = ? 
-          ORDER BY created_at DESC 
+          ORDER BY createdAt DESC 
           LIMIT ?
         `;
         const limitParams = [threadId, limit];
@@ -886,12 +828,12 @@ export class D1Store extends MastraStorage {
         query
           .where('thread_id = ?', threadId)
           .andWhere(`id IN (${placeholders})`, ...messageIds)
-          .orderBy('created_at', 'ASC');
+          .orderBy('createdAt', 'ASC');
       } else {
         // Fallback to getting the latest messages
         query
           .where('thread_id = ?', threadId)
-          .orderBy('created_at', 'ASC')
+          .orderBy('createdAt', 'ASC')
           .limit(limit > 0 ? limit : 40);
       }
 
@@ -918,57 +860,89 @@ export class D1Store extends MastraStorage {
       messages.sort((a, b) => {
         const aRecord = a as Record<string, any>;
         const bRecord = b as Record<string, any>;
-        const timeA = new Date((aRecord.created_at as string) || (aRecord.createdAt as string)).getTime();
-        const timeB = new Date((bRecord.created_at as string) || (bRecord.createdAt as string)).getTime();
+        const timeA = new Date(aRecord.createdAt as string).getTime();
+        const timeB = new Date(bRecord.createdAt as string).getTime();
         return timeA - timeB;
       });
 
       this.logger.debug(`Retrieved ${messages.length} messages for thread ${threadId}`);
       return messages;
     } catch (error) {
-      this.logger.error(`Error retrieving messages for thread ${threadId}:`, { error });
+      this.logger.error(`Error retrieving messages for thread ${threadId}:`, {
+        message: error instanceof Error ? error.message : String(error),
+      });
       return [];
     }
   }
 
-  async persistWorkflowSnapshot(params: {
-    namespace: string;
+  async persistWorkflowSnapshot({
+    workflowName,
+    runId,
+    snapshot,
+  }: {
     workflowName: string;
     runId: string;
     snapshot: WorkflowRunState;
   }): Promise<void> {
-    const { namespace, workflowName, runId, snapshot } = params;
+    const fullTableName = this.getTableName(TABLE_WORKFLOW_SNAPSHOT);
+    const now = new Date().toISOString();
 
-    const data = {
-      namespace,
-      workflow_name: workflowName,
-      run_id: runId,
-      snapshot: snapshot as Record<string, any>,
-      createdAt: new Date(),
-      updatedAt: new Date(),
+    const currentSnapshot = await this.load({
+      tableName: TABLE_WORKFLOW_SNAPSHOT,
+      keys: { workflow_name: workflowName, run_id: runId },
+    });
+
+    const persisting = currentSnapshot
+      ? {
+          ...currentSnapshot,
+          snapshot: JSON.stringify(snapshot),
+          updatedAt: now,
+        }
+      : {
+          workflow_name: workflowName,
+          run_id: runId,
+          snapshot: snapshot as Record<string, any>,
+          createdAt: now,
+          updatedAt: now,
+        };
+
+    // Process record for SQL insertion
+    const processedRecord = await this.processRecord(persisting);
+
+    const columns = Object.keys(processedRecord);
+    const values = Object.values(processedRecord);
+
+    // Specify which columns to update on conflict (all except PKs)
+    const updateMap: Record<string, string> = {
+      snapshot: 'excluded.snapshot',
+      updatedAt: 'excluded.updatedAt',
     };
 
     this.logger.debug('Persisting workflow snapshot', { workflowName, runId });
 
-    await this.insert({
-      tableName: TABLE_WORKFLOW_SNAPSHOT,
-      record: data,
-    });
+    // Use the new insert method with ON CONFLICT
+    const query = createSqlBuilder().insert(fullTableName, columns, values, ['workflow_name', 'run_id'], updateMap);
+
+    const { sql, params } = query.build();
+
+    try {
+      await this.executeQuery({ sql, params });
+    } catch (error) {
+      this.logger.error('Error persisting workflow snapshot:', {
+        message: error instanceof Error ? error.message : String(error),
+      });
+      throw error;
+    }
   }
 
-  async loadWorkflowSnapshot(params: {
-    namespace: string;
-    workflowName: string;
-    runId: string;
-  }): Promise<WorkflowRunState | null> {
-    const { namespace, workflowName, runId } = params;
+  async loadWorkflowSnapshot(params: { workflowName: string; runId: string }): Promise<WorkflowRunState | null> {
+    const { workflowName, runId } = params;
 
     this.logger.debug('Loading workflow snapshot', { workflowName, runId });
 
     const d = await this.load<{ snapshot: unknown }>({
       tableName: TABLE_WORKFLOW_SNAPSHOT,
       keys: {
-        namespace,
         workflow_name: workflowName,
         run_id: runId,
       },
@@ -987,59 +961,50 @@ export class D1Store extends MastraStorage {
 
     const fullTableName = this.getTableName(tableName);
 
-    // Use the withTransaction helper to manage the transaction
-    return this.withTransaction(async transaction => {
-      try {
-        // Process records in batches for better performance
-        const batchSize = 50; // Adjust based on performance testing
+    try {
+      // Process records in batches for better performance
+      const batchSize = 50; // Adjust based on performance testing
 
-        for (let i = 0; i < records.length; i += batchSize) {
-          const batch = records.slice(i, i + batchSize);
+      for (let i = 0; i < records.length; i += batchSize) {
+        const batch = records.slice(i, i + batchSize);
 
-          // Prepare all records with timestamps
-          const now = new Date();
-          const recordsToInsert = batch.map(record => ({
-            ...record,
-            createdAt: record.createdAt || now,
-            updatedAt: record.updatedAt || now,
-          }));
+        const recordsToInsert = batch;
 
-          // For bulk insert, we need to determine the columns from the first record
-          if (recordsToInsert.length > 0) {
-            const firstRecord = recordsToInsert[0];
-            // Ensure firstRecord is not undefined before calling Object.keys
-            const columns = Object.keys(firstRecord || {});
+        // For bulk insert, we need to determine the columns from the first record
+        if (recordsToInsert.length > 0) {
+          const firstRecord = recordsToInsert[0];
+          // Ensure firstRecord is not undefined before calling Object.keys
+          const columns = Object.keys(firstRecord || {});
 
-            // Create a bulk insert statement
-            // For D1, we'll use multiple single inserts in one transaction as a workaround
-            // since it doesn't support true bulk inserts like some other databases
-            for (const record of recordsToInsert) {
-              // Use type-safe approach to extract values
-              const values = columns.map(col => {
-                if (!record) return null;
-                // Safely access the record properties
-                const value = typeof col === 'string' ? record[col as keyof typeof record] : null;
-                return this.serializeValue(value);
-              });
+          // Create a bulk insert statement
+          for (const record of recordsToInsert) {
+            // Use type-safe approach to extract values
+            const values = columns.map(col => {
+              if (!record) return null;
+              // Safely access the record properties
+              const value = typeof col === 'string' ? record[col as keyof typeof record] : null;
+              return this.serializeValue(value);
+            });
 
-              const query = createSqlBuilder().insert(fullTableName, columns, values);
+            const query = createSqlBuilder().insert(fullTableName, columns, values);
 
-              const { sql, params } = query.build();
-              await transaction.executeQuery({ sql, params });
-            }
+            const { sql, params } = query.build();
+            await this.executeQuery({ sql, params });
           }
-
-          this.logger.debug(
-            `Processed batch ${Math.floor(i / batchSize) + 1} of ${Math.ceil(records.length / batchSize)}`,
-          );
         }
 
-        this.logger.debug(`Successfully batch inserted ${records.length} records into ${tableName}`);
-      } catch (error) {
-        this.logger.error(`Error batch inserting into ${tableName}:`, { error });
-        throw new Error(`Failed to batch insert into ${tableName}: ${error}`);
+        this.logger.debug(
+          `Processed batch ${Math.floor(i / batchSize) + 1} of ${Math.ceil(records.length / batchSize)}`,
+        );
       }
-    });
+
+      this.logger.debug(`Successfully batch inserted ${records.length} records into ${tableName}`);
+    } catch (error) {
+      this.logger.error(`Error batch inserting into ${tableName}:`, {
+        message: error instanceof Error ? error.message : String(error),
+      });
+      throw new Error(`Failed to batch insert into ${tableName}: ${error}`);
+    }
   }
 
   async getTraces({
@@ -1093,7 +1058,7 @@ export class D1Store extends MastraStorage {
           }))
         : [];
     } catch (error) {
-      this.logger.error('Error getting traces:', { error });
+      this.logger.error('Error getting traces:', { message: error instanceof Error ? error.message : String(error) });
       return [];
     }
   }
@@ -1139,13 +1104,14 @@ export class D1Store extends MastraStorage {
           })
         : [];
     } catch (error) {
-      this.logger.error(`Error getting evals for agent ${agentName}:`, { error });
+      this.logger.error(`Error getting evals for agent ${agentName}:`, {
+        message: error instanceof Error ? error.message : String(error),
+      });
       return [];
     }
   }
 
   getWorkflowRuns(_args?: {
-    namespace?: string;
     workflowName?: string;
     fromDate?: Date;
     toDate?: Date;

@@ -81,50 +81,43 @@ export class SqlBuilder {
     return this;
   }
 
-  // Insert operations
-  insert(table: string, columnsOrData: string[] | Record<string, SqlParam>, values?: SqlParam[]): SqlBuilder {
-    // Handle both patterns: insert(table, {col1: val1, col2: val2}) and insert(table, [col1, col2], [val1, val2])
-    if (Array.isArray(columnsOrData) && values) {
-      // Array-based pattern
-      const columns = columnsOrData;
-      const placeholders = columns.map(() => '?').join(', ');
+  /**
+   * Insert a row, or update specific columns on conflict (upsert).
+   * @param table Table name
+   * @param columns Columns to insert
+   * @param values Values to insert
+   * @param conflictColumns Columns to check for conflict (usually PK or UNIQUE)
+   * @param updateMap Object mapping columns to update to their new value (e.g. { name: 'excluded.name' })
+   */
+  insert(
+    table: string,
+    columns: string[],
+    values: SqlParam[],
+    conflictColumns?: string[],
+    updateMap?: Record<string, string>,
+  ): SqlBuilder {
+    const placeholders = columns.map(() => '?').join(', ');
 
-      this.sql = `INSERT OR REPLACE INTO ${table} (${columns.join(', ')}) VALUES (${placeholders})`;
+    if (conflictColumns && updateMap) {
+      const updateClause = Object.entries(updateMap)
+        .map(([col, expr]) => `${col} = ${expr}`)
+        .join(', ');
+      this.sql = `INSERT INTO ${table} (${columns.join(', ')}) VALUES (${placeholders}) ON CONFLICT(${conflictColumns.join(', ')}) DO UPDATE SET ${updateClause}`;
       this.params.push(...values);
-    } else {
-      // Object-based pattern
-      const data = columnsOrData as Record<string, SqlParam>;
-      const columns = Object.keys(data);
-      const placeholders = columns.map(() => '?').join(', ');
-
-      this.sql = `INSERT OR REPLACE INTO ${table} (${columns.join(', ')}) VALUES (${placeholders})`;
-      this.params.push(...Object.values(data));
+      return this;
     }
+
+    this.sql = `INSERT INTO ${table} (${columns.join(', ')}) VALUES (${placeholders})`;
+    this.params.push(...values);
 
     return this;
   }
 
   // Update operations
-  update(table: string, columnsOrData: string[] | Record<string, SqlParam>, values?: SqlParam[]): SqlBuilder {
-    // Handle both patterns: update(table, {col1: val1, col2: val2}) and update(table, [col1, col2], [val1, val2])
-    if (Array.isArray(columnsOrData) && values) {
-      // Array-based pattern
-      const columns = columnsOrData;
-      const setClause = columns.map(col => `${col} = ?`).join(', ');
-
-      this.sql = `UPDATE ${table} SET ${setClause}`;
-      this.params.push(...values);
-    } else {
-      // Object-based pattern
-      const data = columnsOrData as Record<string, SqlParam>;
-      const setClause = Object.keys(data)
-        .map(key => `${key} = ?`)
-        .join(', ');
-
-      this.sql = `UPDATE ${table} SET ${setClause}`;
-      this.params.push(...Object.values(data));
-    }
-
+  update(table: string, columns: string[], values: SqlParam[]): SqlBuilder {
+    const setClause = columns.map(col => `${col} = ?`).join(', ');
+    this.sql = `UPDATE ${table} SET ${setClause}`;
+    this.params.push(...values);
     return this;
   }
 
@@ -137,21 +130,11 @@ export class SqlBuilder {
   /**
    * Create a table if it doesn't exist
    * @param table The table name
-   * @param columnDefinitions The column definitions as an array of strings or object
+   * @param columnDefinitions The column definitions as an array of strings
    * @returns The builder instance
    */
-  createTable(table: string, columnDefinitions: string[] | Record<string, string>): SqlBuilder {
-    let columns: string;
-
-    if (Array.isArray(columnDefinitions)) {
-      // Handle array of column definitions
-      columns = columnDefinitions.join(', ');
-    } else {
-      // Handle object of column name to definition
-      columns = Object.entries(columnDefinitions)
-        .map(([name, definition]) => `${name} ${definition}`)
-        .join(', ');
-    }
+  createTable(table: string, columnDefinitions: string[]): SqlBuilder {
+    const columns = columnDefinitions.join(', ');
 
     this.sql = `CREATE TABLE IF NOT EXISTS ${table} (${columns})`;
     return this;
@@ -179,33 +162,6 @@ export class SqlBuilder {
    */
   createIndex(indexName: string, tableName: string, columnName: string, indexType: string = ''): SqlBuilder {
     this.sql = `CREATE ${indexType} INDEX IF NOT EXISTS ${indexName} ON ${tableName}(${columnName})`;
-    return this;
-  }
-
-  /**
-   * Begin a transaction
-   * @returns The builder instance
-   */
-  beginTransaction(): SqlBuilder {
-    this.sql = 'BEGIN TRANSACTION';
-    return this;
-  }
-
-  /**
-   * Commit a transaction
-   * @returns The builder instance
-   */
-  commitTransaction(): SqlBuilder {
-    this.sql = 'COMMIT';
-    return this;
-  }
-
-  /**
-   * Rollback a transaction
-   * @returns The builder instance
-   */
-  rollbackTransaction(): SqlBuilder {
-    this.sql = 'ROLLBACK';
     return this;
   }
 

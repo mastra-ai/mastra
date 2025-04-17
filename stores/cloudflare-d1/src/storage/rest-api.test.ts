@@ -1,5 +1,6 @@
 import { randomUUID } from 'crypto';
 import type { MessageType, StorageThreadType } from '@mastra/core/memory';
+import type { TABLE_NAMES } from '@mastra/core/storage';
 import {
   TABLE_MESSAGES,
   TABLE_THREADS,
@@ -72,28 +73,29 @@ describe('D1Store REST API', () => {
   });
 
   describe('Table Operations', () => {
-    const testTableName = TABLE_THREADS;
-    const testTableName2 = TABLE_MESSAGES;
+    const testTableName = 'test_table';
+    const testTableName2 = 'test_table2';
 
     beforeEach(async () => {
       // Try to clean up the test table if it exists
       try {
-        await store.clearTable({ tableName: testTableName as any });
+        await store.clearTable({ tableName: testTableName as TABLE_NAMES });
       } catch {
-        // Table might not exist yet
+        // Table might not exist yet, which is fine
       }
       try {
-        await store.clearTable({ tableName: testTableName2 as any });
+        await store.clearTable({ tableName: testTableName2 as TABLE_NAMES });
       } catch {
-        // Table might not exist yet
+        // Table might not exist yet, which is fine
       }
     });
 
     it('should create a new table with schema', async () => {
       await store.createTable({
-        tableName: testTableName,
+        tableName: testTableName as TABLE_NAMES,
         schema: {
           id: { type: 'text', primaryKey: true },
+          title: { type: 'text' },
           data: { type: 'text', nullable: true },
           created_at: { type: 'timestamp' },
         },
@@ -101,63 +103,57 @@ describe('D1Store REST API', () => {
 
       // Verify table exists by inserting and retrieving data
       await store.insert({
-        tableName: testTableName,
+        tableName: testTableName as TABLE_NAMES,
         record: {
           id: 'test1',
           data: 'test-data',
           title: 'Test Thread',
-          resourceId: 'resource-1',
-          createdAt: new Date(),
-          updatedAt: new Date(),
-        } as StorageThreadType,
+          resource_id: 'resource-1',
+        },
       });
 
-      const result = await store.load<StorageThreadType>({ tableName: testTableName, keys: { id: 'test1' } });
+      const result = (await store.load({ tableName: testTableName as TABLE_NAMES, keys: { id: 'test1' } })) as any;
       expect(result).toBeTruthy();
       if (result) {
         expect(result.title).toBe('Test Thread');
-        expect(result.resourceId).toBe('resource-1');
-        expect(result.createdAt).toBeDefined();
-        expect(result.updatedAt).toBeDefined();
+        expect(result.resource_id).toBe('resource-1');
       }
     });
 
     it('should handle multiple table creation', async () => {
       await store.createTable({
-        tableName: testTableName2,
+        tableName: testTableName2 as TABLE_NAMES,
         schema: {
           id: { type: 'text', primaryKey: true },
-          threadId: { type: 'text', nullable: false }, // Use nullable: false instead of required
+          thread_id: { type: 'text', nullable: false }, // Use nullable: false instead of required
           data: { type: 'text', nullable: true },
         },
       });
 
       // Verify both tables work independently
       await store.insert({
-        tableName: testTableName2,
+        tableName: testTableName2 as TABLE_NAMES,
         record: {
           id: 'test2',
-          threadId: 'thread-1',
-          content: [{ type: 'text', text: 'test-data-2' }],
-          role: 'user',
-        } as MessageType,
+          thread_id: 'thread-1',
+          data: 'test-data-2',
+        },
       });
 
-      const result = await store.load<MessageType>({
-        tableName: testTableName2,
-        keys: { id: 'test2', threadId: 'thread-1' },
-      });
+      const result = (await store.load({
+        tableName: testTableName2 as TABLE_NAMES,
+        keys: { id: 'test2', thread_id: 'thread-1' },
+      })) as any;
       expect(result).toBeTruthy();
       if (result) {
-        expect(result.threadId).toBe('thread-1');
-        expect(result.content).toEqual([{ type: 'text', text: 'test-data-2' }]);
-        expect(result.role).toBe('user');
+        expect(result.thread_id).toBe('thread-1');
+        expect(result.data).toBe('test-data-2');
       }
     });
 
     it('should clear table data', async () => {
       await store.createTable({
-        tableName: testTableName as any,
+        tableName: testTableName as TABLE_NAMES,
         schema: {
           id: { type: 'text', primaryKey: true },
           data: { type: 'text', nullable: true },
@@ -166,16 +162,16 @@ describe('D1Store REST API', () => {
 
       // Insert test data
       await store.insert({
-        tableName: testTableName as any,
-        record: { id: 'test1', data: 'test-data' },
+        tableName: testTableName as TABLE_NAMES,
+        record: { id: 'test1', data: 'test-data' } as unknown as StorageThreadType,
       });
 
       // Clear the table
-      await store.clearTable({ tableName: testTableName as any });
+      await store.clearTable({ tableName: testTableName as TABLE_NAMES });
 
       // Verify data is cleared
       const result = await store.load({
-        tableName: testTableName as any,
+        tableName: testTableName as TABLE_NAMES,
         keys: { id: 'test1' },
       });
 
@@ -183,8 +179,7 @@ describe('D1Store REST API', () => {
     });
   });
 
-  // eslint-disable-next-line vitest/no-focused-tests
-  describe.only('Trace Operations', () => {
+  describe('Trace Operations', () => {
     beforeEach(async () => {
       await store.clearTable({ tableName: TABLE_TRACES });
     });
@@ -264,7 +259,7 @@ describe('D1Store REST API', () => {
     });
 
     it('should handle invalid JSON in fields', async () => {
-      const trace = createSampleTrace('test-trace');
+      const trace = createSampleTrace('test-trace', 'scope');
       trace.status = 'invalid-json{'; // Intentionally invalid JSON
 
       await store.insert({ tableName: TABLE_TRACES, record: trace });
@@ -479,7 +474,6 @@ describe('D1Store REST API', () => {
       const workflow = createSampleWorkflowSnapshot(thread.id);
 
       await store.persistWorkflowSnapshot({
-        namespace: 'test',
         workflowName: 'test-workflow',
         runId: workflow.runId,
         snapshot: workflow,
@@ -489,7 +483,6 @@ describe('D1Store REST API', () => {
       const retrieved = await retryUntil(
         async () =>
           await store.loadWorkflowSnapshot({
-            namespace: 'test',
             workflowName: 'test-workflow',
             runId: workflow.runId,
           }),
@@ -501,7 +494,6 @@ describe('D1Store REST API', () => {
 
     it('should handle non-existent workflow snapshots', async () => {
       const result = await store.loadWorkflowSnapshot({
-        namespace: 'test',
         workflowName: 'test-workflow',
         runId: 'non-existent',
       });
@@ -513,7 +505,6 @@ describe('D1Store REST API', () => {
       const workflow = createSampleWorkflowSnapshot(thread.id);
 
       await store.persistWorkflowSnapshot({
-        namespace: 'test',
         workflowName: 'test-workflow',
         runId: workflow.runId,
         snapshot: workflow,
@@ -526,7 +517,6 @@ describe('D1Store REST API', () => {
       };
 
       await store.persistWorkflowSnapshot({
-        namespace: 'test',
         workflowName: 'test-workflow',
         runId: workflow.runId,
         snapshot: updatedSnapshot,
@@ -535,7 +525,6 @@ describe('D1Store REST API', () => {
       const retrieved = await retryUntil(
         async () =>
           await store.loadWorkflowSnapshot({
-            namespace: 'test',
             workflowName: 'test-workflow',
             runId: workflow.runId,
           }),
@@ -547,7 +536,6 @@ describe('D1Store REST API', () => {
     });
 
     it('should handle complex workflow state', async () => {
-      const namespace = 'test-namespace';
       const runId = `run-${randomUUID()}`;
       const workflowName = 'complex-workflow';
 
@@ -597,14 +585,12 @@ describe('D1Store REST API', () => {
       };
 
       await store.persistWorkflowSnapshot({
-        namespace,
         workflowName,
         runId,
         snapshot: complexSnapshot,
       });
 
       const loadedSnapshot = await store.loadWorkflowSnapshot({
-        namespace,
         workflowName,
         runId,
       });
@@ -758,7 +744,6 @@ describe('D1Store REST API', () => {
       const workflow = createSampleWorkflowSnapshot(thread.id);
 
       await store.persistWorkflowSnapshot({
-        namespace: 'test',
         workflowName: 'test-workflow',
         runId: workflow.runId,
         snapshot: workflow,
@@ -768,7 +753,6 @@ describe('D1Store REST API', () => {
       const retrieved = await retryUntil(
         async () =>
           await store.loadWorkflowSnapshot({
-            namespace: 'test',
             workflowName: 'test-workflow',
             runId: workflow.runId,
           }),
@@ -780,7 +764,6 @@ describe('D1Store REST API', () => {
 
     it('should handle non-existent workflow snapshots', async () => {
       const retrieved = await store.loadWorkflowSnapshot({
-        namespace: 'test',
         workflowName: 'non-existent',
         runId: 'non-existent',
       });
@@ -793,7 +776,6 @@ describe('D1Store REST API', () => {
       const workflow = createSampleWorkflowSnapshot(thread.id);
 
       await store.persistWorkflowSnapshot({
-        namespace: 'test',
         workflowName: 'test-workflow',
         runId: workflow.runId,
         snapshot: workflow,
@@ -806,7 +788,6 @@ describe('D1Store REST API', () => {
       };
 
       await store.persistWorkflowSnapshot({
-        namespace: 'test',
         workflowName: 'test-workflow',
         runId: workflow.runId,
         snapshot: updatedWorkflow,
@@ -815,7 +796,6 @@ describe('D1Store REST API', () => {
       const retrieved = await retryUntil(
         async () =>
           await store.loadWorkflowSnapshot({
-            namespace: 'test',
             workflowName: 'test-workflow',
             runId: workflow.runId,
           }),
@@ -852,7 +832,6 @@ describe('D1Store REST API', () => {
       };
 
       await store.persistWorkflowSnapshot({
-        namespace: 'test',
         workflowName: 'test-workflow',
         runId: workflow.runId,
         snapshot: workflow,
@@ -877,7 +856,6 @@ describe('D1Store REST API', () => {
       };
 
       await store.persistWorkflowSnapshot({
-        namespace: 'test',
         workflowName: 'test-workflow',
         runId: workflow.runId,
         snapshot: updatedWorkflow,
@@ -886,7 +864,6 @@ describe('D1Store REST API', () => {
       await new Promise(resolve => setTimeout(resolve, 5000));
 
       const retrieved = await store.loadWorkflowSnapshot({
-        namespace: 'test',
         workflowName: 'test-workflow',
         runId: workflow.runId,
       });

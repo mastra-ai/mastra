@@ -87,37 +87,34 @@ describe('SQL Builder', () => {
       expect(params).toEqual([1, 'John', 'john@example.com']);
     });
 
-    it('should build an INSERT query with object values', () => {
-      const builder = createSqlBuilder().insert('users', { id: 1, name: 'John', email: 'john@example.com' });
-
-      const { sql, params } = builder.build();
-
-      expect(sql).toBe('INSERT INTO users (id, name, email) VALUES (?, ?, ?)');
-      expect(params).toEqual([1, 'John', 'john@example.com']);
-    });
-
     it('should handle empty values for INSERT', () => {
-      const builder = createSqlBuilder().insert('users', {});
+      const builder = createSqlBuilder().insert('users', ['id', 'name', 'email'], []);
 
       const { sql, params } = builder.build();
 
       expect(sql).toBe('INSERT INTO users DEFAULT VALUES');
       expect(params).toEqual([]);
     });
-  });
 
-  describe('UPDATE Queries', () => {
-    it('should build a basic UPDATE query with object values', () => {
-      const builder = createSqlBuilder()
-        .update('users', { name: 'John', email: 'john@example.com' })
-        .where('id = ?', 1);
+    it('should build an INSERT query with ON CONFLICT', () => {
+      const builder = createSqlBuilder().insert(
+        'users',
+        ['id', 'name', 'email'],
+        [1, 'John', 'john@example.com'],
+        ['id'],
+        { name: 'excluded.name' },
+      );
 
       const { sql, params } = builder.build();
 
-      expect(sql).toBe('UPDATE users SET name = ?, email = ? WHERE id = ?');
-      expect(params).toEqual(['John', 'john@example.com', 1]);
+      expect(sql).toBe(
+        'INSERT INTO users (id, name, email) VALUES (?, ?, ?) ON CONFLICT(id) DO UPDATE SET name = excluded.name',
+      );
+      expect(params).toEqual([1, 'John', 'john@example.com']);
     });
+  });
 
+  describe('UPDATE Queries', () => {
     it('should build an UPDATE query with array columns and values', () => {
       const builder = createSqlBuilder()
         .update('users', ['name', 'email'], ['John', 'john@example.com'])
@@ -130,7 +127,7 @@ describe('SQL Builder', () => {
     });
 
     it('should handle UPDATE without WHERE clause', () => {
-      const builder = createSqlBuilder().update('users', { status: 'inactive' });
+      const builder = createSqlBuilder().update('users', ['status'], ['inactive']);
 
       const { sql, params } = builder.build();
 
@@ -172,22 +169,6 @@ describe('SQL Builder', () => {
   });
 
   describe('CREATE TABLE Queries', () => {
-    it('should build a CREATE TABLE query with object column definitions', () => {
-      const builder = createSqlBuilder().createTable('users', {
-        id: 'INTEGER PRIMARY KEY',
-        name: 'TEXT NOT NULL',
-        email: 'TEXT UNIQUE',
-        created_at: 'TIMESTAMP DEFAULT CURRENT_TIMESTAMP',
-      });
-
-      const { sql, params } = builder.build();
-
-      expect(sql).toBe(
-        'CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY, name TEXT NOT NULL, email TEXT UNIQUE, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)',
-      );
-      expect(params).toEqual([]);
-    });
-
     it('should build a CREATE TABLE query with array column definitions', () => {
       const builder = createSqlBuilder().createTable('users', [
         'id INTEGER PRIMARY KEY',
@@ -234,35 +215,6 @@ describe('SQL Builder', () => {
     });
   });
 
-  describe('Transaction Operations', () => {
-    it('should build a BEGIN TRANSACTION query', () => {
-      const builder = createSqlBuilder().beginTransaction();
-
-      const { sql, params } = builder.build();
-
-      expect(sql).toBe('BEGIN TRANSACTION');
-      expect(params).toEqual([]);
-    });
-
-    it('should build a COMMIT query', () => {
-      const builder = createSqlBuilder().commitTransaction();
-
-      const { sql, params } = builder.build();
-
-      expect(sql).toBe('COMMIT');
-      expect(params).toEqual([]);
-    });
-
-    it('should build a ROLLBACK query', () => {
-      const builder = createSqlBuilder().rollbackTransaction();
-
-      const { sql, params } = builder.build();
-
-      expect(sql).toBe('ROLLBACK');
-      expect(params).toEqual([]);
-    });
-  });
-
   describe('Raw SQL', () => {
     it('should handle raw SQL with parameters', () => {
       const builder = createSqlBuilder().raw('SELECT * FROM users WHERE id = ? AND name = ?', 1, 'John');
@@ -304,7 +256,7 @@ describe('SQL Builder', () => {
       const { sql: sql1 } = builder.build();
       expect(sql1).toBe('SELECT * FROM users');
 
-      builder.reset().insert('products', { id: 1, name: 'Product 1' });
+      builder.reset().insert('products', ['id', 'name'], [1, 'Product 1']);
 
       const { sql: sql2, params: params2 } = builder.build();
       expect(sql2).toBe('INSERT INTO products (id, name) VALUES (?, ?)');

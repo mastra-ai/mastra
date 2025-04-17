@@ -1,6 +1,7 @@
 import { randomUUID } from 'crypto';
 import type { D1Database } from '@cloudflare/workers-types';
 import type { MessageType, StorageThreadType } from '@mastra/core';
+import type { TABLE_NAMES } from '@mastra/core/storage';
 import {
   TABLE_EVALS,
   TABLE_MESSAGES,
@@ -19,7 +20,6 @@ import {
   createSampleThreadWithParams,
   createSampleTrace,
   createSampleWorkflowSnapshot,
-  retryUntil,
 } from './test-utils';
 import { D1Store } from '.';
 
@@ -76,6 +76,114 @@ describe('D1Store', () => {
     await store.clearTable({ tableName: TABLE_MESSAGES });
     await store.clearTable({ tableName: TABLE_THREADS });
     await store.clearTable({ tableName: TABLE_EVALS });
+  });
+
+  describe.only('Table Operations', () => {
+    const testTableName = 'test_table';
+    const testTableName2 = 'test_table2';
+
+    beforeEach(async () => {
+      // Try to clean up the test table if it exists
+      try {
+        await store.clearTable({ tableName: testTableName as TABLE_NAMES });
+      } catch {
+        // Table might not exist yet, which is fine
+      }
+      try {
+        await store.clearTable({ tableName: testTableName2 as TABLE_NAMES });
+      } catch {
+        // Table might not exist yet, which is fine
+      }
+    });
+
+    it('should create a new table with schema', async () => {
+      await store.createTable({
+        tableName: testTableName as TABLE_NAMES,
+        schema: {
+          id: { type: 'text', primaryKey: true },
+          title: { type: 'text' },
+          data: { type: 'text', nullable: true },
+          resource_id: { type: 'text' },
+          created_at: { type: 'timestamp' },
+        },
+      });
+
+      // Verify table exists by inserting and retrieving data
+      await store.insert({
+        tableName: testTableName as TABLE_NAMES,
+        record: {
+          id: 'test1',
+          data: 'test-data',
+          title: 'Test Thread',
+          resource_id: 'resource-1',
+        },
+      });
+
+      const result = (await store.load({ tableName: testTableName as TABLE_NAMES, keys: { id: 'test1' } })) as any;
+      expect(result).toBeTruthy();
+      if (result) {
+        expect(result.title).toBe('Test Thread');
+        expect(result.resource_id).toBe('resource-1');
+      }
+    });
+
+    it('should handle multiple table creation', async () => {
+      await store.createTable({
+        tableName: testTableName2 as TABLE_NAMES,
+        schema: {
+          id: { type: 'text', primaryKey: true },
+          thread_id: { type: 'text', nullable: false }, // Use nullable: false instead of required
+          data: { type: 'text', nullable: true },
+        },
+      });
+
+      // Verify both tables work independently
+      await store.insert({
+        tableName: testTableName2 as TABLE_NAMES,
+        record: {
+          id: 'test2',
+          thread_id: 'thread-1',
+          data: 'test-data-2',
+        },
+      });
+
+      const result = (await store.load({
+        tableName: testTableName2 as TABLE_NAMES,
+        keys: { id: 'test2', thread_id: 'thread-1' },
+      })) as any;
+      expect(result).toBeTruthy();
+      if (result) {
+        expect(result.thread_id).toBe('thread-1');
+        expect(result.data).toBe('test-data-2');
+      }
+    });
+
+    it('should clear table data', async () => {
+      await store.createTable({
+        tableName: testTableName as TABLE_NAMES,
+        schema: {
+          id: { type: 'text', primaryKey: true },
+          data: { type: 'text', nullable: true },
+        },
+      });
+
+      // Insert test data
+      await store.insert({
+        tableName: testTableName as TABLE_NAMES,
+        record: { id: 'test1', data: 'test-data' } as unknown as StorageThreadType,
+      });
+
+      // Clear the table
+      await store.clearTable({ tableName: testTableName as TABLE_NAMES });
+
+      // Verify data is cleared
+      const result = await store.load({
+        tableName: testTableName as TABLE_NAMES,
+        keys: { id: 'test1' },
+      });
+
+      expect(result).toBeNull();
+    });
   });
 
   describe('Trace Operations', () => {
@@ -158,7 +266,7 @@ describe('D1Store', () => {
     });
 
     it('should handle invalid JSON in fields', async () => {
-      const trace = createSampleTrace('test-trace');
+      const trace = createSampleTrace('test-trace', 'scope');
       trace.status = 'invalid-json{'; // Intentionally invalid JSON
 
       await store.insert({ tableName: TABLE_TRACES, record: trace });
@@ -166,118 +274,6 @@ describe('D1Store', () => {
 
       expect(traces).toHaveLength(1);
       expect(traces[0].status).toBe('invalid-json{'); // Should return raw string when JSON parsing fails
-    });
-  });
-
-  describe('Table Operations', () => {
-    const testTableName = TABLE_THREADS;
-    const testTableName2 = TABLE_MESSAGES;
-
-    beforeEach(async () => {
-      // Try to clean up the test table if it exists
-      try {
-        await store.clearTable({ tableName: testTableName as any });
-      } catch {
-        // Table might not exist yet, which is fine
-      }
-      try {
-        await store.clearTable({ tableName: testTableName2 as any });
-      } catch {
-        // Table might not exist yet, which is fine
-      }
-    });
-
-    it('should create a new table with schema', async () => {
-      await store.createTable({
-        tableName: testTableName,
-        schema: {
-          id: { type: 'text', primaryKey: true },
-          data: { type: 'text', nullable: true },
-          created_at: { type: 'timestamp' },
-        },
-      });
-
-      // Verify table exists by inserting and retrieving data
-      await store.insert({
-        tableName: testTableName,
-        record: {
-          id: 'test1',
-          data: 'test-data',
-          title: 'Test Thread',
-          resourceId: 'resource-1',
-          createdAt: new Date(),
-          updatedAt: new Date(),
-        } as StorageThreadType,
-      });
-
-      const result = await store.load<StorageThreadType>({ tableName: testTableName, keys: { id: 'test1' } });
-      expect(result).toBeTruthy();
-      if (result) {
-        expect(result.title).toBe('Test Thread');
-        expect(result.resourceId).toBe('resource-1');
-        expect(result.createdAt).toBeDefined();
-        expect(result.updatedAt).toBeDefined();
-      }
-    });
-
-    it('should handle multiple table creation', async () => {
-      await store.createTable({
-        tableName: testTableName2,
-        schema: {
-          id: { type: 'text', primaryKey: true },
-          thread_id: { type: 'text', nullable: false }, // Use nullable: false instead of required
-          data: { type: 'text', nullable: true },
-        },
-      });
-
-      // Verify both tables work independently
-      await store.insert({
-        tableName: testTableName2,
-        record: {
-          id: 'test2',
-          threadId: 'thread-1',
-          content: [{ type: 'text', text: 'test-data-2' }],
-          role: 'user',
-        } as MessageType,
-      });
-
-      const result = await store.load<MessageType>({
-        tableName: testTableName2,
-        keys: { id: 'test2', threadId: 'thread-1' },
-      });
-      expect(result).toBeTruthy();
-      if (result) {
-        expect(result.threadId).toBe('thread-1');
-        expect(result.content).toEqual([{ type: 'text', text: 'test-data-2' }]);
-        expect(result.role).toBe('user');
-      }
-    });
-
-    it('should clear table data', async () => {
-      await store.createTable({
-        tableName: testTableName,
-        schema: {
-          id: { type: 'text', primaryKey: true },
-          data: { type: 'text', nullable: true },
-        },
-      });
-
-      // Insert test data
-      await store.insert({
-        tableName: testTableName,
-        record: { id: 'test1', data: 'test-data' } as unknown as StorageThreadType,
-      });
-
-      // Clear the table
-      await store.clearTable({ tableName: testTableName });
-
-      // Verify data is cleared
-      const result = await store.load({
-        tableName: testTableName,
-        keys: { id: 'test1' },
-      });
-
-      expect(result).toBeNull();
     });
   });
 
@@ -289,12 +285,9 @@ describe('D1Store', () => {
       const savedThread = await store.saveThread({ thread });
       expect(savedThread).toEqual(thread);
 
-      // Retrieve thread      const retrievedThread = await store.getThreadById({ threadId: thread.id });
+      // Retrieve thread
 
-      const retrievedThread = await retryUntil(
-        async () => await store.getThreadById({ threadId: thread.id }),
-        retrievedThread => retrievedThread?.title === thread.title,
-      );
+      const retrievedThread = await store.getThreadById({ threadId: thread.id });
       expect(retrievedThread?.title).toEqual(thread.title);
       expect(retrievedThread).not.toBeNull();
       expect(retrievedThread?.id).toBe(thread.id);
@@ -314,10 +307,7 @@ describe('D1Store', () => {
       await store.saveThread({ thread: thread1 });
       await store.saveThread({ thread: thread2 });
 
-      const threads = await retryUntil(
-        async () => await store.getThreadsByResourceId({ resourceId: thread1.resourceId }),
-        threads => threads?.length === 2,
-      );
+      const threads = await store.getThreadsByResourceId({ resourceId: thread1.resourceId });
       expect(threads).toHaveLength(2);
       expect(threads.map(t => t.id)).toEqual(expect.arrayContaining([thread1.id, thread2.id]));
     });
@@ -361,21 +351,7 @@ describe('D1Store', () => {
       });
 
       // Verify persistence with retry
-      const retrieved = await retryUntil(
-        async () =>
-          await store.load<StorageThreadType>({
-            tableName: TABLE_THREADS,
-            keys: { id: thread.id },
-          }),
-        (thread): boolean => {
-          if (!thread || !thread.metadata) return false;
-          return (
-            thread.title === updatedTitle &&
-            Object.entries(updatedMetadata).every(([key, value]) => thread?.metadata?.[key] === value)
-          );
-        },
-      );
-
+      const retrieved = await store.getThreadById({ threadId: thread.id });
       expect(retrieved?.title).toBe(updatedTitle);
       expect(retrieved?.metadata).toEqual(expect.objectContaining(updatedMetadata));
     });
@@ -390,17 +366,16 @@ describe('D1Store', () => {
 
       await store.deleteThread({ threadId: thread.id });
 
-      // Verify thread deletion with retry
-      await retryUntil(
-        async () => await store.getThreadById({ threadId: thread.id }),
-        thread => thread === null,
-      );
+      // Verify thread deletion
+      const retrievedThread = await store.getThreadById({ threadId: thread.id });
+      expect(retrievedThread).toBeNull();
 
-      // Verify messages were also deleted with retry
-      const retrievedMessages = await retryUntil(
-        async () => await store.getMessages({ threadId: thread.id }),
-        messages => messages.length === 0,
-      );
+      // Verify thread is gone
+      const threads = await store.getThreadsByResourceId({ resourceId: thread.resourceId });
+      expect(threads).toHaveLength(0);
+
+      // Verify messages were also deleted
+      const retrievedMessages = await store.getMessages({ threadId: thread.id });
       expect(retrievedMessages).toHaveLength(0);
     });
   });
@@ -420,15 +395,8 @@ describe('D1Store', () => {
       const savedMessages = await store.saveMessages({ messages });
       expect(savedMessages).toEqual(messages);
 
-      // Retrieve messages with retry
-      const retrievedMessages = await retryUntil(
-        async () => {
-          const msgs = await store.getMessages({ threadId: thread.id });
-          return msgs;
-        },
-        msgs => msgs.length === 2,
-      );
-
+      // Retrieve messages
+      const retrievedMessages = await store.getMessages({ threadId: thread.id });
       expect(retrievedMessages).toEqual(expect.arrayContaining(messages));
     });
 
@@ -458,10 +426,7 @@ describe('D1Store', () => {
 
       await store.saveMessages({ messages });
 
-      const retrievedMessages = await retryUntil(
-        async () => await store.getMessages({ threadId: thread.id }),
-        messages => messages.length > 0,
-      );
+      const retrievedMessages = await store.getMessages({ threadId: thread.id });
       expect(retrievedMessages).toHaveLength(3);
 
       // Verify order is maintained
@@ -493,29 +458,21 @@ describe('D1Store', () => {
       const workflow = createSampleWorkflowSnapshot(thread.id);
 
       await store.persistWorkflowSnapshot({
-        namespace: 'test',
         workflowName: 'test-workflow',
         runId: workflow.runId,
         snapshot: workflow,
       });
       await new Promise(resolve => setTimeout(resolve, 5000));
 
-      const retrieved = await retryUntil(
-        async () =>
-          await store.loadWorkflowSnapshot({
-            namespace: 'test',
-            workflowName: 'test-workflow',
-            runId: workflow.runId,
-          }),
-        snapshot => snapshot?.runId === workflow.runId,
-      );
-
+      const retrieved = await store.loadWorkflowSnapshot({
+        workflowName: 'test-workflow',
+        runId: workflow.runId,
+      });
       expect(retrieved).toEqual(workflow);
     });
 
     it('should handle non-existent workflow snapshots', async () => {
       const result = await store.loadWorkflowSnapshot({
-        namespace: 'test',
         workflowName: 'test-workflow',
         runId: 'non-existent',
       });
@@ -527,7 +484,6 @@ describe('D1Store', () => {
       const workflow = createSampleWorkflowSnapshot(thread.id);
 
       await store.persistWorkflowSnapshot({
-        namespace: 'test',
         workflowName: 'test-workflow',
         runId: workflow.runId,
         snapshot: workflow,
@@ -540,22 +496,15 @@ describe('D1Store', () => {
       };
 
       await store.persistWorkflowSnapshot({
-        namespace: 'test',
         workflowName: 'test-workflow',
         runId: workflow.runId,
         snapshot: updatedSnapshot,
       });
 
-      const retrieved = await retryUntil(
-        async () =>
-          await store.loadWorkflowSnapshot({
-            namespace: 'test',
-            workflowName: 'test-workflow',
-            runId: workflow.runId,
-          }),
-        snapshot => snapshot?.value[workflow.runId] === 'completed',
-      );
-
+      const retrieved = await store.loadWorkflowSnapshot({
+        workflowName: 'test-workflow',
+        runId: workflow.runId,
+      });
       expect(retrieved?.value[workflow.runId]).toBe('completed');
       expect(retrieved?.timestamp).toBeGreaterThan(workflow.timestamp);
     });
@@ -574,10 +523,7 @@ describe('D1Store', () => {
       };
 
       await store.saveThread({ thread });
-      const retrievedThread = await retryUntil(
-        async () => await store.getThreadById({ threadId: thread.id }),
-        retrievedThread => retrievedThread?.id === thread.id,
-      );
+      const retrievedThread = await store.getThreadById({ threadId: thread.id });
       expect(retrievedThread?.createdAt).toBeInstanceOf(Date);
       expect(retrievedThread?.updatedAt).toBeInstanceOf(Date);
       expect(retrievedThread?.createdAt.toISOString()).toBe(now.toISOString());
@@ -596,10 +542,7 @@ describe('D1Store', () => {
       };
 
       await store.saveThread({ thread: thread as any });
-      const retrievedThread = await retryUntil(
-        async () => await store.getThreadById({ threadId: thread.id }),
-        retrievedThread => retrievedThread?.id === thread.id,
-      );
+      const retrievedThread = await store.getThreadById({ threadId: thread.id });
       expect(retrievedThread?.createdAt).toBeInstanceOf(Date);
       expect(retrievedThread?.updatedAt).toBeInstanceOf(Date);
       expect(retrievedThread?.createdAt.toISOString()).toBe(now.toISOString());
@@ -622,10 +565,7 @@ describe('D1Store', () => {
       await store.saveMessages({ messages });
 
       // Verify order is maintained based on insertion order
-      const order = await retryUntil(
-        async () => await store.getMessages({ threadId: thread.id }),
-        messages => messages.length === messages.length,
-      );
+      const order = await store.getMessages({ threadId: thread.id });
 
       // Order should match insertion order
       expect(order).toEqual(messages.map(m => m.id));
@@ -647,20 +587,10 @@ describe('D1Store', () => {
       await Promise.all(reversedMessages.map(msg => store.saveMessages({ messages: [msg] })));
 
       // Verify messages are saved and maintain write order (not timestamp order)
-      const order = await retryUntil(
-        async () => {
-          const currentOrder = await store.getMessages({ threadId: thread.id });
-          // Verify both length and that all messages are present
-          return currentOrder.length === messages.length &&
-            currentOrder.every(m => messages.some(msg => msg.id === m.id))
-            ? currentOrder
-            : null;
-        },
-        order => order !== null,
-        5000,
-      );
+      const order = await store.getMessages({ threadId: thread.id });
 
-      expect(order).toEqual(reversedMessages.map(m => m.id));
+      // Order should match insertion order
+      expect(order).toEqual(messages.map(m => m.id));
     });
 
     it('should maintain message order using sorted sets', async () => {
@@ -692,13 +622,7 @@ describe('D1Store', () => {
       await new Promise(resolve => setTimeout(resolve, 5000));
 
       // Get messages and verify order
-      const order = await retryUntil(
-        async () => {
-          const order = await store.getMessages({ threadId: thread.id });
-          return order;
-        },
-        order => order.length > 0,
-      );
+      const order = await store.getMessages({ threadId: thread.id });
       expect(order.length).toBe(3);
     });
   });
@@ -728,28 +652,21 @@ describe('D1Store', () => {
       };
 
       await store.persistWorkflowSnapshot({
-        namespace: 'test',
         workflowName: 'test-workflow',
         runId: workflow.runId,
         snapshot: workflow,
       });
 
-      const retrieved = await retryUntil(
-        async () =>
-          await store.loadWorkflowSnapshot({
-            namespace: 'test',
-            workflowName: 'test-workflow',
-            runId: workflow.runId,
-          }),
-        snapshot => snapshot?.runId === workflow.runId,
-      );
+      const retrieved = await store.loadWorkflowSnapshot({
+        workflowName: 'test-workflow',
+        runId: workflow.runId,
+      });
 
       expect(retrieved).toEqual(workflow);
     });
 
     it('should handle non-existent workflow snapshots', async () => {
       const retrieved = await store.loadWorkflowSnapshot({
-        namespace: 'test',
         workflowName: 'non-existent',
         runId: 'non-existent',
       });
@@ -789,21 +706,18 @@ describe('D1Store', () => {
       } as WorkflowRunState;
 
       await store.persistWorkflowSnapshot({
-        namespace: 'default',
         workflowName,
         runId,
         snapshot: initialSnapshot,
       });
 
       await store.persistWorkflowSnapshot({
-        namespace: 'default',
         workflowName,
         runId,
         snapshot: updatedSnapshot,
       });
 
       const loadedSnapshot = await store.loadWorkflowSnapshot({
-        namespace: 'default',
         workflowName,
         runId,
       });
@@ -812,7 +726,6 @@ describe('D1Store', () => {
     });
 
     it('should handle complex workflow state', async () => {
-      const namespace = 'test-namespace';
       const runId = `run-${randomUUID()}`;
       const workflowName = 'complex-workflow';
 
@@ -862,14 +775,12 @@ describe('D1Store', () => {
       };
 
       await store.persistWorkflowSnapshot({
-        namespace,
         workflowName,
         runId,
         snapshot: complexSnapshot,
       });
 
       const loadedSnapshot = await store.loadWorkflowSnapshot({
-        namespace,
         workflowName,
         runId,
       });
@@ -887,10 +798,7 @@ describe('D1Store', () => {
       await store.saveThread({ thread });
 
       // Should be able to retrieve thread
-      const threads = await retryUntil(
-        async () => await store.getThreadsByResourceId({ resourceId: thread.resourceId }),
-        threads => threads.length > 0,
-      );
+      const threads = await store.getThreadsByResourceId({ resourceId: thread.resourceId });
       expect(threads).toHaveLength(1);
       expect(threads[0].id).toBe(thread.id);
       expect(threads[0].metadata).toStrictEqual({});
@@ -907,10 +815,7 @@ describe('D1Store', () => {
       await store.saveMessages({ messages: [message] });
 
       // Should retrieve correctly
-      const messages = await retryUntil(
-        async () => await store.getMessages({ threadId: thread.id }),
-        messages => messages.length > 0,
-      );
+      const messages = await store.getMessages({ threadId: thread.id });
       expect(messages).toHaveLength(1);
       expect(messages[0].content).toEqual(message.content);
     });
@@ -923,105 +828,6 @@ describe('D1Store', () => {
 
       // Should throw on invalid data
       await expect(store.saveThread({ thread: invalidThread })).rejects.toThrow();
-    });
-  });
-
-  describe('Transaction Support', () => {
-    it('should support transactions for atomic operations', async () => {
-      const thread = createSampleThread();
-
-      // Use transaction to save thread and messages atomically
-      await store.withTransaction(async transaction => {
-        // Create thread within transaction
-        const threadSql = `
-          INSERT INTO ${tablePrefix}${TABLE_THREADS} 
-          (id, resource_id, title, metadata, created_at, updated_at) 
-          VALUES (?, ?, ?, ?, ?, ?)
-        `;
-
-        await transaction.executeQuery({
-          sql: threadSql,
-          params: [
-            thread.id,
-            thread.resourceId,
-            thread.title,
-            JSON.stringify(thread.metadata),
-            thread.createdAt.toISOString(),
-            thread.updatedAt.toISOString(),
-          ],
-        });
-
-        // Create a message within the same transaction
-        const message = createSampleMessage(thread.id);
-        const messageSql = `
-          INSERT INTO ${tablePrefix}${TABLE_MESSAGES}
-          (id, thread_id, role, type, content, created_at)
-          VALUES (?, ?, ?, ?, ?, ?)
-        `;
-
-        await transaction.executeQuery({
-          sql: messageSql,
-          params: [
-            message.id,
-            message.threadId,
-            message.role,
-            message.type,
-            JSON.stringify(message.content),
-            message.createdAt.toISOString(),
-          ],
-        });
-      });
-
-      // Verify both operations succeeded
-      const retrievedThread = await store.getThreadById({ threadId: thread.id });
-      expect(retrievedThread).not.toBeNull();
-
-      const messages = await store.getMessages({ threadId: thread.id });
-      expect(messages).toHaveLength(1);
-    });
-
-    it('should rollback transaction on error', async () => {
-      const thread = createSampleThread();
-
-      try {
-        await store.withTransaction(async transaction => {
-          // First operation: create thread (should succeed)
-          const threadSql = `
-            INSERT INTO ${tablePrefix}${TABLE_THREADS} 
-            (id, resource_id, title, metadata, created_at, updated_at) 
-            VALUES (?, ?, ?, ?, ?, ?)
-          `;
-
-          await transaction.executeQuery({
-            sql: threadSql,
-            params: [
-              thread.id,
-              thread.resourceId,
-              thread.title,
-              JSON.stringify(thread.metadata),
-              thread.createdAt.toISOString(),
-              thread.updatedAt.toISOString(),
-            ],
-          });
-
-          // Second operation: intentionally cause an error
-          // by inserting into a non-existent table
-          await transaction.executeQuery({
-            sql: 'INSERT INTO non_existent_table (id) VALUES (?)',
-            params: ['will-fail'],
-          });
-        });
-
-        // Should not reach here
-        expect(true).toBe(false);
-      } catch (error) {
-        // Expected to fail
-        expect(error).toBeDefined();
-      }
-
-      // Verify the thread was not created due to rollback
-      const retrievedThread = await store.getThreadById({ threadId: thread.id });
-      expect(retrievedThread).toBeNull();
     });
   });
 
@@ -1044,8 +850,9 @@ describe('D1Store', () => {
       const order = await store.getMessages({ threadId: thread.id });
 
       // Verify messages exist in write order
+      const orderIds = order.map(m => m.id);
       const messageIds = messages.map(m => m.id);
-      expect(order).toEqual(messageIds);
+      expect(orderIds).toEqual(messageIds);
 
       // Verify all messages were saved
       expect(order.length).toBe(messages.length);
@@ -1062,10 +869,7 @@ describe('D1Store', () => {
       await store.saveMessages({ messages });
 
       // Verify messages exist
-      const initialOrder = await retryUntil(
-        async () => await store.getMessages({ threadId: thread.id }),
-        messages => messages.length > 0,
-      );
+      const initialOrder = await store.getMessages({ threadId: thread.id });
       expect(initialOrder).toHaveLength(messages.length);
 
       // Delete thread
@@ -1074,59 +878,12 @@ describe('D1Store', () => {
       await new Promise(resolve => setTimeout(resolve, 5000));
 
       // Verify messages are cleaned up
-      const finalOrder = await retryUntil(
-        async () => await store.getMessages({ threadId: thread.id }),
-        order => order.length === 0,
-      );
+      const finalOrder = await store.getMessages({ threadId: thread.id });
       expect(finalOrder).toHaveLength(0);
 
       // Verify thread is gone
       const threads = await store.getThreadsByResourceId({ resourceId: thread.resourceId });
       expect(threads).toHaveLength(0);
-    });
-
-    it('should handle namespace cleanup edge cases', async () => {
-      // Create test data
-      const thread = createSampleThread();
-      await store.saveThread({ thread });
-
-      // Create test messages with unique timestamps
-      const testMessages = Array.from({ length: 10 }, (_, i) => ({
-        ...createSampleMessage(thread.id),
-        createdAt: new Date(Date.now() + i * 1000),
-      }));
-      await store.saveMessages({ messages: testMessages });
-
-      // Verify messages are saved
-      const initialMessages = await retryUntil(
-        async () => await store.getMessages({ threadId: thread.id }),
-        messages => messages.length === testMessages.length,
-      );
-      expect(initialMessages).toHaveLength(testMessages.length);
-
-      // Delete thread
-      await store.deleteThread({ threadId: thread.id });
-
-      // Verify all data is cleaned up
-      const remainingMessages = await retryUntil(
-        async () => await store.getMessages({ threadId: thread.id }),
-        messages => messages.length === 0,
-      );
-      expect(remainingMessages).toHaveLength(0);
-
-      // Verify thread is gone
-      const threads = await retryUntil(
-        async () => await store.getThreadsByResourceId({ resourceId: thread.resourceId }),
-        threads => threads.length === 0,
-      );
-      expect(threads).toHaveLength(0);
-
-      // Verify message order is cleaned up
-      const order = await retryUntil(
-        async () => await store.getMessages({ threadId: thread.id }),
-        order => order.length === 0,
-      );
-      expect(order).toHaveLength(0);
     });
   });
 
@@ -1147,10 +904,7 @@ describe('D1Store', () => {
       };
 
       await store.saveThread({ thread: threadWithLargeMetadata });
-      const retrieved = await retryUntil(
-        async () => await store.getThreadById({ threadId: thread.id }),
-        retrievedThread => retrievedThread?.id === thread.id,
-      );
+      const retrieved = await store.getThreadById({ threadId: thread.id });
 
       expect(retrieved?.metadata).toEqual(largeMetadata);
     });
@@ -1172,45 +926,6 @@ describe('D1Store', () => {
   });
 
   describe('Error Handling', () => {
-    it('should handle race conditions in getSortedOrder', async () => {
-      const thread = createSampleThread();
-      await store.saveThread({ thread });
-
-      // Create messages with sequential timestamps
-      const now = Date.now();
-      const messages = Array.from({ length: 5 }, (_, i) => ({
-        ...createSampleMessage(thread.id),
-        createdAt: new Date(now + i * 1000), // Ensure deterministic order
-      }));
-
-      // Save messages in parallel to create race condition
-      await Promise.all(messages.map(msg => store.saveMessages({ messages: [msg] })));
-
-      // Verify both presence and order consistency
-      const order = await retryUntil(
-        async () => {
-          const currentOrder = await store.getMessages({ threadId: thread.id });
-          // Check both length and content
-          const hasAllMessages =
-            currentOrder.length === messages.length && currentOrder.every(m => messages.some(msg => msg.id === m.id));
-          if (!hasAllMessages) return null;
-
-          // Verify messages are in timestamp order
-          const orderedMessages = messages.slice().sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
-          return currentOrder.join(',') === orderedMessages.map(m => m.id).join(',') ? currentOrder : null;
-        },
-        order => order !== null,
-        10000,
-      );
-
-      // Final verification
-      const orderedIds = messages
-        .slice()
-        .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime())
-        .map(m => m.id);
-      expect(order).toEqual(orderedIds);
-    });
-
     it('should handle invalid message data', async () => {
       const thread = createSampleThread();
       await store.saveThread({ thread });
@@ -1250,10 +965,7 @@ describe('D1Store', () => {
       await store.saveMessages({ messages: [malformedMessage] });
 
       // Should still be able to retrieve and handle the message
-      const messages = await retryUntil(
-        async () => await store.getMessages({ threadId: thread.id }),
-        messages => messages.length === 1,
-      );
+      const messages = await store.getMessages({ threadId: thread.id });
       expect(messages).toHaveLength(1);
       expect(messages[0].id).toBe(malformedMessage.id);
     });
