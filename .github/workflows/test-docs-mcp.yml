@@ -31,7 +31,7 @@ jobs:
         run: pnpm install
 
       - name: Build @mastra/mcp
-        run: pnpm turbo --filter="./packages/mcp"
+        run: pnpm turbo --filter="./packages/mcp" build
 
       - name: Run Docs MCP tests
         run: pnpm test:docs-mcp
