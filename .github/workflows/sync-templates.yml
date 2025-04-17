@@ -40,8 +40,6 @@ jobs:
 
       - name: Checkout repository
         uses: actions/checkout@v3
-        with:
-          fetch-depth: 0 # Fetch all history
 
       - name: Set up Node.js
         uses: actions/setup-node@v3
