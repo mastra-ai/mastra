@@ -35,10 +35,11 @@ export class BuildBundler extends Bundler {
     toolsPaths: string[],
     bundleOptions?: Record<string, any>,
   ): Promise<void> {
-    const { swaggerUI } = bundleOptions ?? {};
+    const { swaggerUI, openapi } = bundleOptions ?? {};
     return this._bundle(
       this.getEntry({
         swaggerUI,
+        openapi,
       }),
       entryFile,
       outputDirectory,
@@ -46,12 +47,13 @@ export class BuildBundler extends Bundler {
     );
   }
 
-  protected getEntry({ playground, swaggerUI }: { playground?: boolean; swaggerUI?: boolean }): string {
+  protected getEntry({ swaggerUI, openapi }: { swaggerUI?: boolean; openapi?: boolean }): string {
     const __filename = fileURLToPath(import.meta.url);
     const __dirname = dirname(__filename);
     const template = readFileSync(join(__dirname, 'templates', 'build.entry.js'), 'utf8');
     const options = JSON.stringify({
       swaggerUI: swaggerUI ?? false,
+      openapi: openapi ?? false,
     });
     return template.replace('__SERVER_OPTIONS__', options);
   }

@@ -94,9 +94,9 @@ to = "/.netlify/functions/api/:splat"
     toolsPaths: string[],
     bundleOptions?: Record<string, any>,
   ): Promise<void> {
-    const { swaggerUI } = bundleOptions ?? {};
+    const { swaggerUI, openapi } = bundleOptions ?? {};
     return this._bundle(
-      this.getEntry({ swaggerUI }),
+      this.getEntry({ swaggerUI, openapi }),
       entryFile,
       outputDirectory,
       toolsPaths,
@@ -104,13 +104,13 @@ to = "/.netlify/functions/api/:splat"
     );
   }
 
-  private getEntry({ swaggerUI }: { swaggerUI: boolean }): string {
+  private getEntry({ swaggerUI, openapi }: { swaggerUI: boolean; openapi: boolean }): string {
     return `
 import { handle } from 'hono/netlify'
 import { mastra } from '#mastra';
 import { createHonoServer } from '#server';
 
-const app = await createHonoServer(mastra, { swaggerUI: ${swaggerUI} });
+const app = await createHonoServer(mastra, { swaggerUI: ${swaggerUI}, openapi: ${openapi} });
 
 export default handle(app)
 `;

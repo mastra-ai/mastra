@@ -62,6 +62,7 @@ import {
   getWorkflowRunsHandler,
 } from './handlers/workflows.js';
 import { html } from './welcome.js';
+import type { serverOptions } from './types';
 
 type Bindings = {};
 
@@ -73,10 +74,7 @@ type Variables = {
   playground: boolean;
 };
 
-export async function createHonoServer(
-  mastra: Mastra,
-  options: { playground?: boolean; swaggerUI?: boolean; apiReqLogs?: boolean } = {},
-) {
+export async function createHonoServer(mastra: Mastra, options: serverOptions = {}) {
   // Create typed Hono app
   const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
   const server = mastra.getServer();
@@ -2123,14 +2121,16 @@ export async function createHonoServer(
     deleteIndex,
   );
 
-  app.get(
-    '/openapi.json',
-    openAPISpecs(app, {
-      documentation: {
-        info: { title: 'Mastra API', version: '1.0.0', description: 'Mastra API' },
-      },
-    }),
-  );
+  if (options?.openapi || options?.swaggerUI) {
+    app.get(
+      '/openapi.json',
+      openAPISpecs(app, {
+        documentation: {
+          info: { title: 'Mastra API', version: '1.0.0', description: 'Mastra API' },
+        },
+      }),
+    );
+  }
 
   if (options?.swaggerUI) {
     app.get('/swagger-ui', swaggerUI({ url: '/openapi.json' }));
@@ -2194,10 +2194,7 @@ export async function createHonoServer(
   return app;
 }
 
-export async function createNodeServer(
-  mastra: Mastra,
-  options: { playground?: boolean; swaggerUI?: boolean; apiReqLogs?: boolean } = {},
-) {
+export async function createNodeServer(mastra: Mastra, options: serverOptions = {}) {
   const app = await createHonoServer(mastra, options);
   const serverOptions = mastra.getServer();
 

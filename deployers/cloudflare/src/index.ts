@@ -78,7 +78,7 @@ export class CloudflareDeployer extends Deployer {
     await writeFile(join(outputDirectory, this.outputDir, 'wrangler.json'), JSON.stringify(wranglerConfig));
   }
 
-  private getEntry({ swaggerUI }: { swaggerUI: boolean }): string {
+  private getEntry({ swaggerUI, openapi }: { swaggerUI: boolean; openapi: boolean }): string {
     return `
 import '#polyfills';
 import { mastra } from '#mastra';
@@ -86,7 +86,7 @@ import { createHonoServer } from '#server';
 
 export default {
   fetch: async (request, env, context) => {
-    const app = await createHonoServer(mastra, { swaggerUI: ${swaggerUI} })
+    const app = await createHonoServer(mastra, { swaggerUI: ${swaggerUI}, openapi: ${openapi} })
     return app.fetch(request, env, context);
   }
 }
@@ -126,8 +126,8 @@ process.versions.node = '${process.versions.node}';
     toolsPaths: string[],
     bundleOptions?: Record<string, any>,
   ): Promise<void> {
-    const { swaggerUI } = bundleOptions ?? {};
-    return this._bundle(this.getEntry({ swaggerUI }), entryFile, outputDirectory, toolsPaths);
+    const { swaggerUI, openapi } = bundleOptions ?? {};
+    return this._bundle(this.getEntry({ swaggerUI, openapi }), entryFile, outputDirectory, toolsPaths);
   }
 
   async deploy(outputDirectory: string): Promise<void> {

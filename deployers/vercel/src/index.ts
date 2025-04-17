@@ -134,13 +134,13 @@ export class VercelDeployer extends Deployer {
     await this.writeFiles(outputDirectory);
   }
 
-  private getEntry({ swaggerUI }: { swaggerUI: boolean }): string {
+  private getEntry({ swaggerUI, openapi }: { swaggerUI: boolean; openapi: boolean }): string {
     return `
 import { handle } from 'hono/vercel'
 import { mastra } from '#mastra';
 import { createHonoServer } from '#server';
 
-const app = await createHonoServer(mastra, { swaggerUI: ${swaggerUI} });
+const app = await createHonoServer(mastra, { swaggerUI: ${swaggerUI}, openapi: ${openapi} });
 
 export const GET = handle(app);
 export const POST = handle(app);
@@ -153,8 +153,8 @@ export const POST = handle(app);
     toolsPaths: string[],
     bundleOptions?: Record<string, any>,
   ): Promise<void> {
-    const { swaggerUI } = bundleOptions ?? {};
-    return this._bundle(this.getEntry({ swaggerUI }), entryFile, outputDirectory, toolsPaths);
+    const { swaggerUI, openapi } = bundleOptions ?? {};
+    return this._bundle(this.getEntry({ swaggerUI, openapi }), entryFile, outputDirectory, toolsPaths);
   }
 
   async deploy(outputDirectory: string): Promise<void> {
