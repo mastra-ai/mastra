@@ -1,6 +1,5 @@
 import { existsSync, mkdirSync, writeFileSync } from 'fs';
 import { join } from 'path';
-import type { ServerBundleOptions } from '@mastra/deployer';
 import { Deployer } from '@mastra/deployer';
 import { DepsService } from '@mastra/deployer/services';
 import { execa } from 'execa';
@@ -87,15 +86,9 @@ to = "/.netlify/functions/api/:splat"
     this.writeFiles({ dir: join(outputDirectory, this.outputDir) });
   }
 
-  async bundle(
-    entryFile: string,
-    outputDirectory: string,
-    toolsPaths: string[],
-    bundleOptions?: ServerBundleOptions,
-  ): Promise<void> {
-    const { swaggerUI, openapi, apiReqLogs } = bundleOptions ?? {};
+  async bundle(entryFile: string, outputDirectory: string, toolsPaths: string[]): Promise<void> {
     return this._bundle(
-      this.getEntry({ swaggerUI, openapi, apiReqLogs }),
+      this.getEntry(),
       entryFile,
       outputDirectory,
       toolsPaths,
@@ -103,13 +96,13 @@ to = "/.netlify/functions/api/:splat"
     );
   }
 
-  private getEntry({ swaggerUI, openapi, apiReqLogs }: ServerBundleOptions): string {
+  private getEntry(): string {
     return `
 import { handle } from 'hono/netlify'
 import { mastra } from '#mastra';
 import { createHonoServer } from '#server';
 
-const app = await createHonoServer(mastra, { swaggerUI: ${swaggerUI}, openapi: ${openapi}, apiReqLogs: ${apiReqLogs} });
+const app = await createHonoServer(mastra);
 
 export default handle(app)
 `;

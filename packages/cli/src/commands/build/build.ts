@@ -35,18 +35,14 @@ export async function build({
     if (!platformDeployer) {
       const deployer = new BuildBundler();
       await deployer.prepare(outputDirectory);
-      await deployer.bundle(mastraEntryFile, outputDirectory, discoveredTools, { swaggerUI, openapi, apiReqLogs });
+      await deployer.bundle(mastraEntryFile, outputDirectory, discoveredTools);
       return;
     }
 
     logger.info('Deployer found, preparing deployer build...');
 
     await platformDeployer.prepare(outputDirectory);
-    await platformDeployer.bundle(mastraEntryFile, outputDirectory, discoveredTools, {
-      swaggerUI,
-      openapi,
-      apiReqLogs,
-    });
+    await platformDeployer.bundle(mastraEntryFile, outputDirectory, discoveredTools);
     logger.info('You can now deploy the .mastra/output directory to your target platform.');
   } catch (error) {
     if (error instanceof Error) {
