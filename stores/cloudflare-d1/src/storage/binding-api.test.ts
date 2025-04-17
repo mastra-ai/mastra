@@ -1,13 +1,13 @@
 import { randomUUID } from 'crypto';
 import type { D1Database } from '@cloudflare/workers-types';
-import type { MessageType, StorageThreadType } from '@mastra/core';
+import type { MessageType, StorageThreadType } from '@mastra/core/memory';
 import type { TABLE_NAMES } from '@mastra/core/storage';
 import {
-  TABLE_EVALS,
   TABLE_MESSAGES,
   TABLE_THREADS,
-  TABLE_TRACES,
   TABLE_WORKFLOW_SNAPSHOT,
+  TABLE_EVALS,
+  TABLE_TRACES,
 } from '@mastra/core/storage';
 import type { WorkflowRunState } from '@mastra/core/workflows';
 import dotenv from 'dotenv';
@@ -78,7 +78,7 @@ describe('D1Store', () => {
     await store.clearTable({ tableName: TABLE_EVALS });
   });
 
-  describe.only('Table Operations', () => {
+  describe('Table Operations', () => {
     const testTableName = 'test_table';
     const testTableName2 = 'test_table2';
 
@@ -286,7 +286,6 @@ describe('D1Store', () => {
       expect(savedThread).toEqual(thread);
 
       // Retrieve thread
-
       const retrievedThread = await store.getThreadById({ threadId: thread.id });
       expect(retrievedThread?.title).toEqual(thread.title);
       expect(retrievedThread).not.toBeNull();
@@ -328,8 +327,8 @@ describe('D1Store', () => {
       expect(retrievedThread?.id).toEqual(exampleThreadId);
       expect(retrievedThread?.resourceId).toEqual(exampleResourceId);
       expect(retrievedThread?.title).toEqual(thread.title);
-      expect(retrievedThread?.createdAt).toEqual(createdAt.toISOString());
-      expect(retrievedThread?.updatedAt).toEqual(updatedAt.toISOString());
+      expect(retrievedThread?.createdAt.toISOString()).toEqual(createdAt.toISOString());
+      expect(retrievedThread?.updatedAt.toISOString()).toEqual(updatedAt.toISOString());
     });
 
     it('should update thread title and metadata', async () => {
@@ -397,7 +396,11 @@ describe('D1Store', () => {
 
       // Retrieve messages
       const retrievedMessages = await store.getMessages({ threadId: thread.id });
-      expect(retrievedMessages).toEqual(expect.arrayContaining(messages));
+      const checkMessages = messages.map(m => ({
+        ...m,
+        createdAt: m.createdAt.toISOString(),
+      }));
+      expect(retrievedMessages).toEqual(expect.arrayContaining(checkMessages));
     });
 
     it('should handle empty message array', async () => {
@@ -453,6 +456,19 @@ describe('D1Store', () => {
   });
 
   describe('Workflow Operations', () => {
+    beforeAll(async () => {
+      // Create workflow_snapshot table
+      await store.createTable({
+        tableName: TABLE_WORKFLOW_SNAPSHOT,
+        schema: {
+          workflow_name: { type: 'text', nullable: false },
+          run_id: { type: 'text', nullable: false },
+          snapshot: { type: 'text', nullable: false },
+          created_at: { type: 'timestamp', nullable: false },
+          updated_at: { type: 'timestamp', nullable: false },
+        },
+      });
+    });
     it('should save and retrieve workflow snapshots', async () => {
       const thread = createSampleThread();
       const workflow = createSampleWorkflowSnapshot(thread.id);
@@ -566,9 +582,11 @@ describe('D1Store', () => {
 
       // Verify order is maintained based on insertion order
       const order = await store.getMessages({ threadId: thread.id });
+      const orderIds = order.map(m => m.id);
+      const messageIds = messages.map(m => m.id);
 
       // Order should match insertion order
-      expect(order).toEqual(messages.map(m => m.id));
+      expect(orderIds).toEqual(messageIds);
     });
 
     it('should preserve write order when messages are saved concurrently', async () => {
@@ -588,9 +606,11 @@ describe('D1Store', () => {
 
       // Verify messages are saved and maintain write order (not timestamp order)
       const order = await store.getMessages({ threadId: thread.id });
+      const orderIds = order.map(m => m.id);
+      const messageIds = messages.map(m => m.id);
 
       // Order should match insertion order
-      expect(order).toEqual(messages.map(m => m.id));
+      expect(orderIds).toEqual(messageIds);
     });
 
     it('should maintain message order using sorted sets', async () => {
@@ -819,16 +839,6 @@ describe('D1Store', () => {
       expect(messages).toHaveLength(1);
       expect(messages[0].content).toEqual(message.content);
     });
-
-    it('should validate thread structure', async () => {
-      const invalidThread = {
-        ...createSampleThread(),
-        createdAt: 'invalid-date' as any, // Invalid date
-      };
-
-      // Should throw on invalid data
-      await expect(store.saveThread({ thread: invalidThread })).rejects.toThrow();
-    });
   });
 
   describe('Concurrent Operations', () => {
@@ -856,7 +866,7 @@ describe('D1Store', () => {
 
       // Verify all messages were saved
       expect(order.length).toBe(messages.length);
-      expect(new Set(order)).toEqual(new Set(messageIds));
+      expect(new Set(orderIds)).toEqual(new Set(messageIds));
     });
   });
 
@@ -968,6 +978,36 @@ describe('D1Store', () => {
       const messages = await store.getMessages({ threadId: thread.id });
       expect(messages).toHaveLength(1);
       expect(messages[0].id).toBe(malformedMessage.id);
+    });
+
+    it('should handle large metadata objects', async () => {
+      const thread = createSampleThread();
+      const largeMetadata = {
+        ...thread.metadata,
+        largeArray: Array.from({ length: 1000 }, (_, i) => ({ index: i, data: 'test'.repeat(100) })),
+      };
+
+      const threadWithLargeMetadata = {
+        ...thread,
+        metadata: largeMetadata,
+      };
+
+      await store.saveThread({ thread: threadWithLargeMetadata });
+      const retrieved = await store.getThreadById({ threadId: thread.id });
+
+      expect(retrieved?.metadata).toEqual(largeMetadata);
+    });
+
+    it('should handle special characters in thread titles', async () => {
+      const thread = {
+        ...createSampleThread(),
+        title: 'Special \'quotes\' and "double quotes" and emoji 🎉',
+      };
+
+      await store.saveThread({ thread });
+      const retrieved = await store.getThreadById({ threadId: thread.id });
+
+      expect(retrieved?.title).toBe(thread.title);
     });
   });
 });

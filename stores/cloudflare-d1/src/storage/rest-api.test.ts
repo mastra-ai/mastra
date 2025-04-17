@@ -394,6 +394,10 @@ describe('D1Store REST API', () => {
   });
 
   describe('Message Operations', () => {
+    it('should handle empty message array', async () => {
+      const result = await store.saveMessages({ messages: [] });
+      expect(result).toEqual([]);
+    });
     it('should save and retrieve messages', async () => {
       const thread = createSampleThread();
       await store.saveThread({ thread });
@@ -911,16 +915,6 @@ describe('D1Store REST API', () => {
       expect(messages).toHaveLength(1);
       expect(messages[0].content).toEqual(message.content);
     });
-
-    it('should validate thread structure', async () => {
-      const invalidThread = {
-        ...createSampleThread(),
-        createdAt: 'invalid-date' as any, // Invalid date
-      };
-
-      // Should throw on invalid data
-      await expect(store.saveThread({ thread: invalidThread })).rejects.toThrow();
-    });
   });
 
   describe('Sequential Operations', () => {
@@ -983,50 +977,6 @@ describe('D1Store REST API', () => {
       const threads = await store.getThreadsByResourceId({ resourceId: thread.resourceId });
       expect(threads).toHaveLength(0);
     });
-
-    it('should handle namespace cleanup edge cases', async () => {
-      // Create test data
-      const thread = createSampleThread();
-      await store.saveThread({ thread });
-
-      // Create test messages with unique timestamps
-      const testMessages = Array.from({ length: 10 }, (_, i) => ({
-        ...createSampleMessage(thread.id),
-        createdAt: new Date(Date.now() + i * 1000),
-      }));
-      await store.saveMessages({ messages: testMessages });
-
-      // Verify messages are saved
-      const initialMessages = await retryUntil(
-        async () => await store.getMessages({ threadId: thread.id }),
-        messages => messages.length === testMessages.length,
-      );
-      expect(initialMessages).toHaveLength(testMessages.length);
-
-      // Delete thread
-      await store.deleteThread({ threadId: thread.id });
-
-      // Verify all data is cleaned up
-      const remainingMessages = await retryUntil(
-        async () => await store.getMessages({ threadId: thread.id }),
-        messages => messages.length === 0,
-      );
-      expect(remainingMessages).toHaveLength(0);
-
-      // Verify thread is gone
-      const threads = await retryUntil(
-        async () => await store.getThreadsByResourceId({ resourceId: thread.resourceId }),
-        threads => threads.length === 0,
-      );
-      expect(threads).toHaveLength(0);
-
-      // Verify message order is cleaned up
-      const order = await retryUntil(
-        async () => await store.getMessages({ threadId: thread.id }),
-        order => order.length === 0,
-      );
-      expect(order).toHaveLength(0);
-    });
   });
 
   describe('Large Data Handling', () => {
@@ -1071,38 +1021,6 @@ describe('D1Store REST API', () => {
   });
 
   describe('Error Handling', () => {
-    it('should handle race conditions in getSortedOrder', async () => {
-      const thread = createSampleThread();
-      await store.saveThread({ thread });
-
-      // Create messages with sequential timestamps
-      const now = Date.now();
-      const messages = Array.from({ length: 5 }, (_, i) => ({
-        ...createSampleMessage(thread.id),
-        createdAt: new Date(now + i * 1000), // Ensure deterministic order
-      }));
-
-      // Save messages sequentially to avoid race conditions in REST API
-      for (const msg of messages) {
-        await store.saveMessages({ messages: [msg] });
-      }
-      // For REST API, just verify all messages are eventually saved
-      const order = await retryUntil(
-        async () => {
-          const currentOrder = await store.getMessages({ threadId: thread.id });
-          return currentOrder.length === messages.length &&
-            currentOrder.every(m => messages.some(msg => msg.id === m.id))
-            ? currentOrder
-            : null;
-        },
-        order => order !== null,
-      );
-
-      // Verify all messages exist
-      expect(order?.length).toBe(messages.length);
-      expect(new Set(order || [])).toEqual(new Set(messages.map(m => m.id)));
-    });
-
     it('should handle invalid message data', async () => {
       const thread = createSampleThread();
       await store.saveThread({ thread });

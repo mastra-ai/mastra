@@ -390,7 +390,13 @@ export class D1Store extends MastraStorage {
       return `${colName} ${type} ${nullable} ${primaryKey}`.trim();
     });
 
-    const query = createSqlBuilder().createTable(fullTableName, columnDefinitions);
+    // Add table-level constraints if needed
+    const tableConstraints: string[] = [];
+    if (tableName === TABLE_WORKFLOW_SNAPSHOT) {
+      tableConstraints.push('UNIQUE (workflow_name, run_id)');
+    }
+
+    const query = createSqlBuilder().createTable(fullTableName, columnDefinitions, tableConstraints);
 
     const { sql, params } = query.build();
 
@@ -703,158 +709,73 @@ export class D1Store extends MastraStorage {
   }
 
   async getMessages<T = MessageType>({ threadId, selectBy }: StorageGetMessagesArg): Promise<T[]> {
-    const limit = typeof selectBy?.last === 'number' ? selectBy.last : 40;
     const fullTableName = this.getTableName(TABLE_MESSAGES);
-
-    if (limit === 0 && !selectBy?.include) {
-      return [];
-    }
+    const limit = typeof selectBy?.last === 'number' ? selectBy.last : 40;
+    const include = selectBy?.include || [];
+    const messages: any[] = [];
 
     try {
-      // We'll collect all message IDs we need to fetch
-      const messageIdsToFetch = new Set<string>();
+      if (include.length) {
+        // Build context parameters
+        const prevMax = Math.max(...include.map(i => i.withPreviousMessages || 0));
+        const nextMax = Math.max(...include.map(i => i.withNextMessages || 0));
+        const includeIds = include.map(i => i.id);
 
-      // Handle specifically included messages and their context
-      if (selectBy?.include?.length) {
-        this.logger.debug('Including specific messages with context', { include: selectBy.include });
-
-        for (const item of selectBy.include) {
-          messageIdsToFetch.add(item.id);
-
-          // If we need context (previous/next messages)
-          if (item.withPreviousMessages || item.withNextMessages) {
-            // First, get the current message's position (using createdAt as the ordering)
-            const sqlBuilder = createSqlBuilder();
-
-            // Build position query
-            sqlBuilder
-              .select('createdAt')
-              .from(fullTableName)
-              .where('thread_id = ?', threadId)
-              .andWhere('id = ?', item.id)
-              .limit(1);
-
-            const { sql: positionQuery, params: positionParams } = sqlBuilder.build();
-            const positionResult = await this.executeQuery({
-              sql: positionQuery,
-              params: positionParams,
-              first: true,
-            });
-
-            if (positionResult && 'createdAt' in positionResult) {
-              const messageTimestamp = positionResult.createdAt;
-
-              // Get previous messages if requested
-              if (item.withPreviousMessages && item.withPreviousMessages > 0) {
-                sqlBuilder
-                  .reset()
-                  .select('id')
-                  .from(fullTableName)
-                  .where('thread_id = ?', threadId)
-                  .andWhere('createdAt < ?', messageTimestamp)
-                  .orderBy('createdAt', 'DESC')
-                  .limit(item.withPreviousMessages);
-
-                const { sql: prevQuery, params: prevParams } = sqlBuilder.build();
-                const prevResults = await this.executeQuery({
-                  sql: prevQuery,
-                  params: prevParams,
-                });
-
-                if (isArrayOfRecords(prevResults)) {
-                  for (const row of prevResults) {
-                    messageIdsToFetch.add(row.id);
-                  }
-                }
-
-                // Get next messages if requested
-                if (item.withNextMessages && item.withNextMessages > 0) {
-                  sqlBuilder
-                    .reset()
-                    .select('id')
-                    .from(fullTableName)
-                    .where('thread_id = ?', threadId)
-                    .andWhere('createdAt > ?', messageTimestamp)
-                    .orderBy('createdAt', 'ASC')
-                    .limit(item.withNextMessages);
-
-                  const { sql: nextQuery, params: nextParams } = sqlBuilder.build();
-                  const nextResults = await this.executeQuery({
-                    sql: nextQuery,
-                    params: nextParams,
-                  });
-
-                  if (isArrayOfRecords(nextResults)) {
-                    for (const row of nextResults) {
-                      messageIdsToFetch.add(row.id);
-                    }
-                  }
-                }
-              }
-            }
-          }
-        }
+        // CTE with ROW_NUMBER for context fetching
+        const sql = `
+        WITH ordered_messages AS (
+          SELECT
+            *,
+            ROW_NUMBER() OVER (ORDER BY createdAt DESC) AS row_num
+          FROM ${fullTableName}
+          WHERE thread_id = ?
+        )
+        SELECT
+          m.id,
+          m.content,
+          m.role,
+          m.type,
+          m.createdAt,
+          m.thread_id AS "threadId"
+        FROM ordered_messages m
+        WHERE m.id IN (${includeIds.map(() => '?').join(',')})
+        OR EXISTS (
+          SELECT 1 FROM ordered_messages target
+          WHERE target.id IN (${includeIds.map(() => '?').join(',')})
+          AND (
+            (m.row_num <= target.row_num + ? AND m.row_num > target.row_num)
+            OR
+            (m.row_num >= target.row_num - ? AND m.row_num < target.row_num)
+          )
+        )
+        ORDER BY m.createdAt DESC
+      `;
+        const params = [
+          threadId,
+          ...includeIds, // for m.id IN (...)
+          ...includeIds, // for target.id IN (...)
+          prevMax,
+          nextMax,
+        ];
+        const includeResult = await this.executeQuery({ sql, params });
+        if (Array.isArray(includeResult)) messages.push(...includeResult);
       }
 
-      // If we need the most recent messages
-      if (limit > 0) {
-        let limitQuery = `
-          SELECT id FROM ${fullTableName} 
-          WHERE thread_id = ? 
-          ORDER BY createdAt DESC 
-          LIMIT ?
-        `;
-        const limitParams = [threadId, limit];
-
-        const latestResults = await this.executeQuery({
-          sql: limitQuery,
-          params: limitParams,
-        });
-
-        if (isArrayOfRecords(latestResults)) {
-          for (const row of latestResults) {
-            messageIdsToFetch.add(row.id);
-          }
-        }
-      }
-
-      let query = createSqlBuilder().select('*').from(fullTableName);
-
-      if (messageIdsToFetch.size > 0) {
-        const messageIds = Array.from(messageIdsToFetch);
-        // Create placeholders for the IN clause
-        const placeholders = messageIds.map(() => '?').join(',');
-
-        query
-          .where('thread_id = ?', threadId)
-          .andWhere(`id IN (${placeholders})`, ...messageIds)
-          .orderBy('createdAt', 'ASC');
-      } else {
-        // Fallback to getting the latest messages
-        query
-          .where('thread_id = ?', threadId)
-          .orderBy('createdAt', 'ASC')
-          .limit(limit > 0 ? limit : 40);
-      }
+      // Exclude already fetched ids
+      const excludeIds = messages.map(m => m.id);
+      let query = createSqlBuilder()
+        .select(['id', 'content', 'role', 'type', '"createdAt"', 'thread_id AS "threadId"'])
+        .from(fullTableName)
+        .where('thread_id = ?', threadId)
+        .andWhere(`id NOT IN (${excludeIds.map(() => '?').join(',')})`, ...excludeIds)
+        .orderBy('createdAt', 'DESC')
+        .limit(limit);
 
       const { sql, params } = query.build();
-      const results = await this.executeQuery({
-        sql,
-        params,
-      });
 
-      // Process messages
-      const messages = isArrayOfRecords(results)
-        ? results.map((msg: Record<string, any>) => {
-            const processedMsg: Record<string, any> = {};
+      const result = await this.executeQuery({ sql, params });
 
-            for (const [key, value] of Object.entries(msg)) {
-              processedMsg[key] = this.deserializeValue(value);
-            }
-
-            return processedMsg as T;
-          })
-        : [];
+      if (Array.isArray(result)) messages.push(...result);
 
       // Sort by creation time to ensure proper order
       messages.sort((a, b) => {
@@ -865,10 +786,21 @@ export class D1Store extends MastraStorage {
         return timeA - timeB;
       });
 
+      // Parse message content
+      const processedMessages = messages.map(message => {
+        const processedMsg: Record<string, any> = {};
+
+        for (const [key, value] of Object.entries(message)) {
+          processedMsg[key] = this.deserializeValue(value);
+        }
+
+        return processedMsg as T;
+      });
       this.logger.debug(`Retrieved ${messages.length} messages for thread ${threadId}`);
-      return messages;
+      return processedMessages as T[];
     } catch (error) {
-      this.logger.error(`Error retrieving messages for thread ${threadId}:`, {
+      this.logger.error('Error retrieving messages for thread', {
+        threadId,
         message: error instanceof Error ? error.message : String(error),
       });
       return [];

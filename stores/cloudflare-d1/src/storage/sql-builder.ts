@@ -131,12 +131,13 @@ export class SqlBuilder {
    * Create a table if it doesn't exist
    * @param table The table name
    * @param columnDefinitions The column definitions as an array of strings
+   * @param tableConstraints Optional constraints for the table
    * @returns The builder instance
    */
-  createTable(table: string, columnDefinitions: string[]): SqlBuilder {
+  createTable(table: string, columnDefinitions: string[], tableConstraints?: string[]): SqlBuilder {
     const columns = columnDefinitions.join(', ');
-
-    this.sql = `CREATE TABLE IF NOT EXISTS ${table} (${columns})`;
+    const constraints = tableConstraints && tableConstraints.length > 0 ? ', ' + tableConstraints.join(', ') : '';
+    this.sql = `CREATE TABLE IF NOT EXISTS ${table} (${columns}${constraints})`;
     return this;
   }
 
