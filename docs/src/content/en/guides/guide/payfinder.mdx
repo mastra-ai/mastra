@@ -1,0 +1,330 @@
+---
+title: "Building a PayFinder Agent | Mastra RAG Guides"
+description: Guide on creating an AI pay finder agent that can analyze financial documents and answer about salary using RAG.
+---
+
+import { Steps } from "nextra/components";
+
+# Building a Pay Finder Agent with RAG
+
+In this guide, we'll create an AI pay finder agent that can analyze financial documents and answer specific questions about their content using Retrieval Augmented Generation (RAG).
+
+We'll use the Berkshire Hathaway's [Proxy Statement](https://www.berkshirehathaway.com/meet01/2025proxystatement.pdf) as our example.
+
+## Understanding RAG Components
+
+Let's understand how RAG works and how we'll implement each component:
+
+1. Knowledge Store/Index
+   - Converting text into vector representations
+   - Creating numerical representations of content
+   - Implementation: We'll use OpenAI's text-embedding-3-small to create embeddings and store them in PgVector
+
+2. Retriever
+   - Finding relevant content via similarity search
+   - Matching query embeddings with stored vectors
+   - Implementation: We'll use PgVector to perform similarity searches on our stored embeddings
+
+3. Generator
+   - Processing retrieved content with an LLM
+   - Creating contextually informed responses
+   - Implementation: We'll use GPT-4o-mini to generate answers based on retrieved content
+
+Our implementation will:
+1. Process the proxy statement into embeddings
+2. Store them in PgVector for quick retrieval
+3. Use similarity search to find relevant sections
+4. Generate accurate responses using retrieved context
+
+## Project Structure
+
+```
+payfinder-assistant/
+├── src/
+│   ├── mastra/
+│   │   ├── agents/
+│   │   │   └── payfinderAgent.ts
+│   │   └── index.ts
+│   ├── index.ts
+│   └── store.ts
+├── package.json
+└── .env
+```
+
+<Steps>
+### Initialize Project and Install Dependencies
+
+First, create a new directory for your project and navigate into it:
+
+```bash
+mkdir payfinder-assistant
+cd payfinder-assistant
+```
+
+Initialize a new Node.js project and install the required dependencies:
+
+```bash
+npm init -y
+npm install @mastra/core @mastra/rag @mastra/pg @ai-sdk/openai ai zod pdf.js-extract
+```
+
+Set up PgVector using Docker. If you don't have Docker installed, you can download and install it from the [official Docker website](https://docs.docker.com/engine/install/)
+```bash
+docker run -e POSTGRES_USER=ai \
+           -e POSTGRES_PASSWORD=ai \
+           -e POSTGRES_DB=ai \
+           --name my_postgres \
+           -p 5432:5432 \
+           -d ankane/pgvector
+```
+
+Set up environment variables for API access and database connection:
+
+```bash filename=".env" copy
+OPENAI_API_KEY=your_openai_api_key
+POSTGRES_CONNECTION_STRING=postgresql://ai:ai@localhost:5532/ai
+```
+
+Create the necessary files for our project:
+
+```bash copy
+mkdir -p src/mastra/agents
+touch src/mastra/agents/payfinderAgent.ts
+touch src/mastra/index.ts src/store.ts src/index.ts
+```
+
+### Create the PayFinder Agent
+
+Now we'll create our RAG-enabled pay finder agent. The agent uses:
+- A [Vector Query Tool](/reference/tools/vector-query-tool) for performing semantic search over our vector store to find relevant content in our proxy statement.
+- GPT-4o-mini for understanding queries and generating responses
+- Custom instructions that guide the agent on how to analyze proxy statements, use retrieved content effectively, and acknowledge limitations
+
+```ts copy showLineNumbers filename="src/mastra/agents/payfinderAgent.ts"
+import { Agent } from '@mastra/core/agent';
+import { openai } from '@ai-sdk/openai';
+import { createVectorQueryTool } from '@mastra/rag';
+
+// Create a tool for semantic search over our statement embeddings
+const vectorQueryTool = createVectorQueryTool({
+  vectorStoreName: 'pgVector',
+  indexName: 'statements',
+  model: openai.embedding('text-embedding-3-small'),
+});
+
+export const ragAgent = new Agent({
+  name: 'RAG Agent',
+  instructions: 
+    `You are a helpful rag agent that analyzes annual meeting statements.
+    Use the provided vector query tool to find relevant information from your knowledge base, 
+    and provide accurate, well-supported answers based on the retrieved content.
+    Focus on the specific content available in the tool and acknowledge if you cannot find sufficient information to answer a question.
+    Base your responses only on the content provided, not on general knowledge.`,
+  model: openai('gpt-4o-mini'),
+  tools: {
+    vectorQueryTool,
+  },
+});
+```
+
+### Set Up the Mastra Instance and Vector Store
+
+```ts copy showLineNumbers filename="src/mastra/index.ts"
+import { Mastra } from '@mastra/core';
+import { PgVector } from '@mastra/pg';
+
+import { ragAgent } from './agents/payfinderAgent';
+
+// Initialize Mastra instance
+const pgVector = new PgVector(process.env.POSTGRES_CONNECTION_STRING!);
+export const mastra = new Mastra({
+  agents: { ragAgent },
+  vectors: { pgVector },
+});
+```
+
+### Load and Process the Proxy Statement
+
+This step handles the initial document processing. We:
+1. Fetch the proxy statement from its URL
+2. Convert it into a document object
+3. Split it into smaller, manageable chunks for better processing
+
+```ts copy showLineNumbers filename="src/store.ts"
+import { openai } from "@ai-sdk/openai";
+import { MDocument } from '@mastra/rag';
+import { embedMany } from 'ai';
+import { mastra } from "./mastra";
+import * as PDFExtract from 'pdf.js-extract';
+
+async function loadPdf(url: string): Promise<string> {
+  try {
+    const response = await fetch(url);
+    if (!response.ok) {
+      throw new Error(`Failed to fetch PDF: ${response.statusText}`);
+    }
+    
+    const buffer = await response.arrayBuffer();
+    const pdfExtract = new PDFExtract.PDFExtract();
+    const options = {}; // options
+    
+    const data = await pdfExtract.extractBuffer(Buffer.from(buffer), options);
+    let text = '';
+    
+    for (const page of data.pages) {
+      for (const content of page.content) {
+        if (content.str) {
+          text += content.str + ' ';
+        }
+      }
+      text += '\n';
+    }
+    
+    return text;
+  } catch (error) {
+    console.error('Error loading PDF:', error);
+    throw error;
+  }
+}
+
+// Load the statement
+const statementUrl = "https://www.berkshirehathaway.com/meet01/2025proxystatement.pdf";
+const statementText = await loadPdf(statementUrl);
+
+// Sanitize the text by removing problematic Unicode characters
+const sanitizedText = statementText
+  .replace(/[\u0000-\u001F\u007F-\u009F]/g, '') // Remove control characters
+  .replace(/[\u200B-\u200D\uFEFF]/g, '') // Remove zero-width spaces
+  .normalize('NFKC'); // Normalize Unicode characters
+
+// Create document and chunk it
+const doc = MDocument.fromText(sanitizedText);
+const chunks = await doc.chunk({
+  strategy: 'recursive',
+  size: 1024,
+  overlap: 50,
+  separator: '\n',
+});
+
+console.log("Number of chunks:", chunks.length);
+// Number of chunks: 107
+```
+
+### Create and Store Embeddings
+
+Finally, we'll prepare our content for RAG by:
+1. Generating embeddings for each chunk of text
+2. Creating a vector store index to hold our embeddings
+3. Storing both the embeddings and metadata (original text and source information) in our vector database
+
+> **Note**: This metadata is crucial as it allows us to return the actual content when the vector store finds relevant matches.
+
+This allows our agent to efficiently search and retrieve relevant information.
+
+```ts copy showLineNumbers{23} filename="src/store.ts"
+// Generate embeddings
+const { embeddings } = await embedMany({
+    model: openai.embedding('text-embedding-3-small'),
+    values: chunks.map(chunk => chunk.text),
+  });
+  
+// Get the vector store instance from Mastra
+const vectorStore = mastra.getVector('pgVector');
+
+try {
+  // Create an index for our statement chunks
+  await vectorStore.createIndex({
+    indexName: 'statements',
+    dimension: 1536,
+  });
+  
+  // Store embeddings
+  await vectorStore.upsert({
+    indexName: 'statements',
+    vectors: embeddings,
+    metadata: chunks.map(chunk => ({
+      text: chunk.text,
+      source: 'annual-meeting-statements'
+    })),
+  });
+} catch (error) {
+  console.error('Error storing embeddings:', error);
+  throw error;
+}
+```
+
+This will:
+1. Load the proxy statement from the URL
+2. Split it into manageable chunks
+3. Generate embeddings for each chunk
+4. Store both the embeddings and text in our vector database
+
+To run the script and store the embeddings:
+
+```bash
+npx bun src/store.ts
+```
+
+### Test the Agent
+
+Let's test our pay finder agent with different types of queries:
+
+```ts filename="src/index.ts" showLineNumbers copy
+import { mastra } from "./mastra";
+const agent = mastra.getAgent('ragAgent');
+
+// Basic query about concepts
+const query1 = "What is the salary of Warren E. Buffett?";
+const response1 = await agent.generate(query1);
+console.log("\nQuery:", query1);
+console.log("Response:", response1.text);
+```
+
+Run the script:
+
+```bash copy
+npx bun src/index.ts
+```
+
+You should see output like:
+```
+Query: What is the salary of Warren E. Buffett?
+Response: Warren E. Buffett's annual salary has been $100,000 for over 40 years. 
+He does not receive any bonuses or equity-based compensation. In addition to his salary, 
+he has other compensation related to personal and home security services provided by Berkshire, 
+which amounted to $305,111 in 2024. Therefore, his total compensation for 2024 was $405,111.
+```
+
+### Serve the Application
+
+Start the Mastra server to expose your pay finder agent via API:
+
+```bash
+mastra dev
+```
+
+Your pay finder agent will be available at:
+```
+http://localhost:4111/api/agents/payfinderAgent/generate
+```
+
+Test with curl:
+
+```bash
+curl -X POST http://localhost:4111/api/agents/payfinderAgent/generate \
+  -H "Content-Type: application/json" \
+  -d '{
+    "messages": [
+      { "role": "user", "content": "What were the main findings about model parallelization?" }
+    ]
+  }'
+```
+</Steps>
+
+## Advanced RAG Examples
+
+Explore these examples for more advanced RAG techniques:
+- [Filter RAG](/examples/rag/usage/filter-rag) for filtering results using metadata
+- [Cleanup RAG](/examples/rag/usage/cleanup-rag) for optimizing information density
+- [Chain of Thought RAG](/examples/rag/usage/cot-rag) for complex reasoning queries using workflows
+- [Rerank RAG](/examples/rag/usage/rerank-rag) for improved result relevance

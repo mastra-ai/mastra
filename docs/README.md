@@ -2,7 +2,28 @@ This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-
 
 ## Getting Started
 
-First, run the development server:
+## Setup Documentation Site
+
+The documentation site is included in the project's workspace configuration. If you're setting up the project for the first time, follow these steps:
+
+1. Ensure the docs directory is included in your `pnpm-workspace.yaml`:
+   ```yaml
+   packages:
+     - "docs"
+     # Along with other packages in your workspace
+   ```
+
+Install dependencies:
+
+```bash
+# Install all workspace dependencies including docs
+pnpm install
+
+# Or install docs dependencies specifically
+pnpm --filter docs install
+```
+
+Run the development server:
 
 ```bash
 npm run dev
