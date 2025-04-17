@@ -98,7 +98,6 @@
     "analyze": "size-limit --why",
     "lint": "eslint .",
     "pre-build": "tsup --config tsup.config.ts --format esm,cjs",
-    "prebuild": "turbo run pre-build",
     "build": "node ./tools/commonjs-tsc-fixer.js",
     "build:watch": "pnpm build --watch",
     "size": "size-limit",
