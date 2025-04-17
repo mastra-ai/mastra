@@ -1,6 +1,6 @@
 {
   "name": "@mastra/server",
-  "version": "1.0.4-alpha.2",
+  "version": "2.0.0-alpha.3",
   "description": "",
   "type": "module",
   "files": [

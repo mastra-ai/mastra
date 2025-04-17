@@ -142,7 +142,9 @@ export const agent = new Agent({
 ```typescript
 import { agent } from "./agents/weather";
 
-const container = new Container();
+type MyContainer = {"temperature-scale", "celsius" | "farenheit"}
+
+const container = new Container<MyContainer>();
 container.set("temperature-scale", "celsius");
 
 const result = await agent.generate("What is the weather in San Francisco?", {
@@ -157,6 +159,8 @@ import { Mastra } from "@mastra/core";
 import { Container } from "@mastra/core/di";
 import { agent as weatherAgent } from "./agents/weather";
 
+type MyContainer = {"temperature-scale", "celsius" | "farenheit"}
+
 export const mastra = new Mastra({
   agents: {
     weather: weatherAgent,
@@ -165,7 +169,7 @@ export const mastra = new Mastra({
     middleware: [
       (c, next) => {
         const country = c.req.header("CF-IPCountry");
-        const container = c.get("container");
+        const container: MyContainer = c.get("container");
 
         container.set(
           "temperature-scale",
@@ -342,16 +346,15 @@ export const agent = new Agent({
 });
 
 // The agent can now use voice for interaction
-await agent.voice.speak("Hello, I'm your AI assistant!");
+const audioStream = await agent.voice.speak("Hello, I'm your AI assistant!", {
+  filetype: "m4a",
+});
 
-// Read audio file and transcribe
-const audioFilePath = path.join(process.cwd(), "/audio.m4a");
-const audioStream = createReadStream(audioFilePath);
+playAudio(audioStream!);
 
 try {
-  const transcription = await agent.voice.listen(audioStream, {
-    filetype: "m4a",
-  });
+  const transcription = await agent.voice.listen(audioStream);
+  console.log(transcription)
 } catch (error) {
   console.error("Error transcribing audio:", error);
 }
@@ -387,6 +390,8 @@ The `speak()` and `listen()` methods work with Node.js streams. Here's how to sa
 
 ### Saving Speech Output
 
+The `speak` method returns a stream that you can pipe to a file or speaker.
+
 ```typescript
 import { createWriteStream } from "fs";
 import path from "path";
@@ -404,7 +409,10 @@ await new Promise<void>((resolve, reject) => {
 });
 ```
 
+
 ### Transcribing Audio Input
+
+The `listen` method expects a stream of audio data from a microphone or file.
 
 ```typescript
 import { createReadStream } from "fs";
@@ -425,12 +433,13 @@ try {
 }
 ```
 
-## Real-time Voice Interactions
+## Speech-to-Speech Voice Interactions
 
 For more dynamic and interactive voice experiences, you can use real-time voice providers that support speech-to-speech capabilities:
 
 ```typescript
 import { Agent } from "@mastra/core/agent";
+import { getMicrophoneStream } from "@mastra/node-audio";
 import { OpenAIRealtimeVoice } from "@mastra/voice-openai-realtime";
 import { search, calculate } from "../tools";
 
@@ -490,6 +499,26 @@ agent.voice.on("error", (error) => {
   console.error("Voice error:", error);
 });
 ```
+
+## Supported Voice Providers
+
+Mastra supports multiple voice providers for text-to-speech (TTS) and speech-to-text (STT) capabilities:
+
+| Provider | Package | Features | Reference |
+|----------|---------|----------|-----------|
+| OpenAI | `@mastra/voice-openai` | TTS, STT | [Documentation](/reference/voice/openai) |
+| OpenAI Realtime | `@mastra/voice-openai-realtime` | Realtime speech-to-speech | [Documentation](/reference/voice/openai-realtime) |
+| ElevenLabs | `@mastra/voice-elevenlabs` | High-quality TTS | [Documentation](/reference/voice/elevenlabs) |
+| PlayAI | `@mastra/voice-playai` | TTS | [Documentation](/reference/voice/playai) |
+| Google | `@mastra/voice-google` | TTS, STT | [Documentation](/reference/voice/google) |
+| Deepgram | `@mastra/voice-deepgram` | STT | [Documentation](/reference/voice/deepgram) |
+| Murf | `@mastra/voice-murf` | TTS | [Documentation](/reference/voice/murf) |
+| Speechify | `@mastra/voice-speechify` | TTS | [Documentation](/reference/voice/speechify) |
+| Sarvam | `@mastra/voice-sarvam` | TTS, STT | [Documentation](/reference/voice/sarvam) |
+| Azure | `@mastra/voice-azure` | TTS, STT | [Documentation](/reference/voice/mastra-voice) |
+| Cloudflare | `@mastra/voice-cloudflare` | TTS | [Documentation](/reference/voice/mastra-voice) |
+
+For more details on voice capabilities, see the [Voice API Reference](/reference/voice/mastra-voice).
 
 
 ---
@@ -1312,6 +1341,8 @@ Platform-specific deployers handle configuration and deployment for:
 - **[Vercel](/reference/deployer/vercel)**
 - **[Netlify](/reference/deployer/netlify)**
 
+As of April 2025, Mastra also offers [Mastra Cloud](https://mastra.ai/cloud-beta), a serverless agent environment with atomic deployments. You can sign up for the waitlist [here](https://mastra.ai/cloud-beta).
+
 ### Installing Deployers
 
 ```bash copy
@@ -1398,12 +1429,18 @@ Required variables:
    - `PORT`: HTTP server port (default: 3000)
    - `HOST`: Server host (default: 0.0.0.0)
 
-## Platform Documentation
+## Build Mastra Project
 
-Platform deployment references:
-- [Cloudflare Workers](https://developers.cloudflare.com/workers/)
-- [Vercel](https://vercel.com/docs)
-- [Netlify](https://docs.netlify.com/)
+To build your Mastra project for your target platform run:
+
+```bash
+npx mastra build
+```
+
+When a Deployer is used, the build output is automatically prepared for the target platform.
+You can then deploy the build output `.mastra/output` via your platform's (Vercel, netlify, cloudfare e.t.c) 
+CLI/UI.
+
 
 
 ---
@@ -2603,8 +2640,8 @@ a project, run:
   <Tabs.Tab>
   ```bash copy
    yarn create mastra@latest 
-   ```<
-   /Tabs.Tab>
+   ```
+   </Tabs.Tab>
   <Tabs.Tab>
   ```bash copy
    pnpm create mastra@latest
@@ -2694,22 +2731,28 @@ Then, initialize a TypeScript project including the `@mastra/core` package:
   ```
   </Tabs.Tab>
   <Tabs.Tab>
-    ```bash copy
-    pnpm init pnpm add typescript tsx @types/node mastra --save-dev
-    pnpm add @mastra/core zod pnpm dlx tsc --init 
-    ```
+  ```bash copy
+  pnpm init
+  pnpm add typescript tsx @types/node mastra --save-dev
+  pnpm add @mastra/core zod @ai-sdk/openai
+  pnpm dlx tsc --init 
+  ```
   </Tabs.Tab>
   <Tabs.Tab>
-    ```bash copy
-    yarn init -y yarn add typescript tsx @types/node mastra --dev
-    yarn add @mastra/core zod yarn dlx tsc --init 
-    ```
+  ```bash copy
+  yarn init -y
+  yarn add typescript tsx @types/node mastra --dev
+  yarn add @mastra/core zod @ai-sdk/openai
+  yarn dlx tsc --init 
+  ```
   </Tabs.Tab>
   <Tabs.Tab>
-    ```bash copy
-    bun init -y bun add typescript tsx @types/node mastra --dev
-    bun add @mastra/core zod bunx tsc --init 
-    ```
+  ```bash copy
+  bun init -y
+  bun add typescript tsx @types/node mastra --dev
+  bun add @mastra/core zod @ai-sdk/openai
+  bunx tsc --init 
+  ```
   </Tabs.Tab>
 </Tabs>
 
@@ -3143,6 +3186,62 @@ Track updates for Mastra and `@mastra/*` packages:
    - Update to the latest version of your IDE
 
 
+## Model Capability
+Source: https://mastra.ai/docs/getting-started/model-capability
+
+The AI providers support different language models with various capabilities. Not all models support structured output, image input, object generation, tool usage, or tool streaming.
+
+Here are the capabilities of popular models:
+
+| Provider                                                                 | Model                                       | Image Input         | Object Generation   | Tool Usage          | Tool Streaming      |
+| ------------------------------------------------------------------------ | ------------------------------------------- | ------------------- | ------------------- | ------------------- | ------------------- |
+| [xAI Grok](https://sdk.vercel.ai/providers/ai-sdk-providers/xai)                              | `grok-3`                                    | <Cross size={18} /> | <Check size={18} /> | <Check size={18} /> | <Check size={18} /> |
+| [xAI Grok](https://sdk.vercel.ai/providers/ai-sdk-providers/xai)                              | `grok-3-fast`                               | <Cross size={18} /> | <Check size={18} /> | <Check size={18} /> | <Check size={18} /> |
+| [xAI Grok](https://sdk.vercel.ai/providers/ai-sdk-providers/xai)                              | `grok-3-mini`                               | <Cross size={18} /> | <Check size={18} /> | <Check size={18} /> | <Check size={18} /> |
+| [xAI Grok](https://sdk.vercel.ai/providers/ai-sdk-providers/xai)                              | `grok-3-mini-fast`                          | <Cross size={18} /> | <Check size={18} /> | <Check size={18} /> | <Check size={18} /> |
+| [xAI Grok](https://sdk.vercel.ai/providers/ai-sdk-providers/xai)                              | `grok-2-1212`                               | <Cross size={18} /> | <Check size={18} /> | <Check size={18} /> | <Check size={18} /> |
+| [xAI Grok](https://sdk.vercel.ai/providers/ai-sdk-providers/xai)                              | `grok-2-vision-1212`                        | <Check size={18} /> | <Check size={18} /> | <Check size={18} /> | <Check size={18} /> |
+| [xAI Grok](https://sdk.vercel.ai/providers/ai-sdk-providers/xai)                              | `grok-beta`                                 | <Cross size={18} /> | <Check size={18} /> | <Check size={18} /> | <Check size={18} /> |
+| [xAI Grok](https://sdk.vercel.ai/providers/ai-sdk-providers/xai)                              | `grok-vision-beta`                          | <Check size={18} /> | <Cross size={18} /> | <Cross size={18} /> | <Cross size={18} /> |
+| [OpenAI](https://sdk.vercel.ai/providers/ai-sdk-providers/openai)                             | `gpt-4.1`                                   | <Check size={18} /> | <Check size={18} /> | <Check size={18} /> | <Check size={18} /> |
+| [OpenAI](https://sdk.vercel.ai/providers/ai-sdk-providers/openai)                             | `gpt-4.1-mini`                              | <Check size={18} /> | <Check size={18} /> | <Check size={18} /> | <Check size={18} /> |
+| [OpenAI](https://sdk.vercel.ai/providers/ai-sdk-providers/openai)                             | `gpt-4.1-nano`                              | <Check size={18} /> | <Check size={18} /> | <Check size={18} /> | <Check size={18} /> |
+| [OpenAI](https://sdk.vercel.ai/providers/ai-sdk-providers/openai)                             | `gpt-4o`                                    | <Check size={18} /> | <Check size={18} /> | <Check size={18} /> | <Check size={18} /> |
+| [OpenAI](https://sdk.vercel.ai/providers/ai-sdk-providers/openai)                             | `gpt-4o-mini`                               | <Check size={18} /> | <Check size={18} /> | <Check size={18} /> | <Check size={18} /> |
+| [OpenAI](https://sdk.vercel.ai/providers/ai-sdk-providers/openai)                             | `gpt-4-turbo`                               | <Check size={18} /> | <Check size={18} /> | <Check size={18} /> | <Check size={18} /> |
+| [OpenAI](https://sdk.vercel.ai/providers/ai-sdk-providers/openai)                             | `gpt-4`                                     | <Cross size={18} /> | <Check size={18} /> | <Check size={18} /> | <Check size={18} /> |
+| [OpenAI](https://sdk.vercel.ai/providers/ai-sdk-providers/openai)                             | `o3-mini`                                   | <Cross size={18} /> | <Cross size={18} /> | <Check size={18} /> | <Check size={18} /> |
+| [OpenAI](https://sdk.vercel.ai/providers/ai-sdk-providers/openai)                             | `o1`                                        | <Check size={18} /> | <Cross size={18} /> | <Check size={18} /> | <Check size={18} /> |
+| [OpenAI](https://sdk.vercel.ai/providers/ai-sdk-providers/openai)                             | `o1-mini`                                   | <Check size={18} /> | <Cross size={18} /> | <Check size={18} /> | <Check size={18} /> |
+| [OpenAI](https://sdk.vercel.ai/providers/ai-sdk-providers/openai)                             | `o1-preview`                                | <Cross size={18} /> | <Cross size={18} /> | <Cross size={18} /> | <Cross size={18} /> |
+| [Anthropic](https://sdk.vercel.ai/providers/ai-sdk-providers/anthropic)                       | `claude-3-7-sonnet-20250219`                | <Check size={18} /> | <Check size={18} /> | <Check size={18} /> | <Check size={18} /> |
+| [Anthropic](https://sdk.vercel.ai/providers/ai-sdk-providers/anthropic)                       | `claude-3-5-sonnet-20241022`                | <Check size={18} /> | <Check size={18} /> | <Check size={18} /> | <Check size={18} /> |
+| [Anthropic](https://sdk.vercel.ai/providers/ai-sdk-providers/anthropic)                       | `claude-3-5-sonnet-20240620`                | <Check size={18} /> | <Check size={18} /> | <Check size={18} /> | <Check size={18} /> |
+| [Anthropic](https://sdk.vercel.ai/providers/ai-sdk-providers/anthropic)                       | `claude-3-5-haiku-20241022`                 | <Check size={18} /> | <Check size={18} /> | <Check size={18} /> | <Check size={18} /> |
+| [Mistral](https://sdk.vercel.ai/providers/ai-sdk-providers/mistral)                           | `pixtral-large-latest`                      | <Check size={18} /> | <Check size={18} /> | <Check size={18} /> | <Check size={18} /> |
+| [Mistral](https://sdk.vercel.ai/providers/ai-sdk-providers/mistral)                           | `mistral-large-latest`                      | <Cross size={18} /> | <Check size={18} /> | <Check size={18} /> | <Check size={18} /> |
+| [Mistral](https://sdk.vercel.ai/providers/ai-sdk-providers/mistral)                           | `mistral-small-latest`                      | <Cross size={18} /> | <Check size={18} /> | <Check size={18} /> | <Check size={18} /> |
+| [Mistral](https://sdk.vercel.ai/providers/ai-sdk-providers/mistral)                           | `pixtral-12b-2409`                          | <Check size={18} /> | <Check size={18} /> | <Check size={18} /> | <Check size={18} /> |
+| [Google Generative AI](https://sdk.vercel.ai/providers/ai-sdk-providers/google-generative-ai) | `gemini-2.0-flash-exp`                      | <Check size={18} /> | <Check size={18} /> | <Check size={18} /> | <Check size={18} /> |
+| [Google Generative AI](https://sdk.vercel.ai/providers/ai-sdk-providers/google-generative-ai) | `gemini-1.5-flash`                          | <Check size={18} /> | <Check size={18} /> | <Check size={18} /> | <Check size={18} /> |
+| [Google Generative AI](https://sdk.vercel.ai/providers/ai-sdk-providers/google-generative-ai) | `gemini-1.5-pro`                            | <Check size={18} /> | <Check size={18} /> | <Check size={18} /> | <Check size={18} /> |
+| [Google Vertex](https://sdk.vercel.ai/providers/ai-sdk-providers/google-vertex)               | `gemini-2.0-flash-exp`                      | <Check size={18} /> | <Check size={18} /> | <Check size={18} /> | <Check size={18} /> |
+| [Google Vertex](https://sdk.vercel.ai/providers/ai-sdk-providers/google-vertex)               | `gemini-1.5-flash`                          | <Check size={18} /> | <Check size={18} /> | <Check size={18} /> | <Check size={18} /> |
+| [Google Vertex](https://sdk.vercel.ai/providers/ai-sdk-providers/google-vertex)               | `gemini-1.5-pro`                            | <Check size={18} /> | <Check size={18} /> | <Check size={18} /> | <Check size={18} /> |
+| [DeepSeek](https://sdk.vercel.ai/providers/ai-sdk-providers/deepseek)                         | `deepseek-chat`                             | <Cross size={18} /> | <Check size={18} /> | <Check size={18} /> | <Check size={18} /> |
+| [DeepSeek](https://sdk.vercel.ai/providers/ai-sdk-providers/deepseek)                         | `deepseek-reasoner`                         | <Cross size={18} /> | <Cross size={18} /> | <Cross size={18} /> | <Cross size={18} /> |
+| [Cerebras](https://sdk.vercel.ai/providers/ai-sdk-providers/cerebras)                         | `llama3.1-8b`                               | <Cross size={18} /> | <Check size={18} /> | <Check size={18} /> | <Check size={18} /> |
+| [Cerebras](https://sdk.vercel.ai/providers/ai-sdk-providers/cerebras)                         | `llama3.1-70b`                              | <Cross size={18} /> | <Check size={18} /> | <Check size={18} /> | <Check size={18} /> |
+| [Cerebras](https://sdk.vercel.ai/providers/ai-sdk-providers/cerebras)                         | `llama3.3-70b`                              | <Cross size={18} /> | <Check size={18} /> | <Check size={18} /> | <Check size={18} /> |
+| [Groq](https://sdk.vercel.ai/providers/ai-sdk-providers/groq)                                 | `meta-llama/llama-4-scout-17b-16e-instruct` | <Check size={18} /> | <Check size={18} /> | <Check size={18} /> | <Check size={18} /> |
+| [Groq](https://sdk.vercel.ai/providers/ai-sdk-providers/groq)                                 | `llama-3.3-70b-versatile`                   | <Cross size={18} /> | <Check size={18} /> | <Check size={18} /> | <Check size={18} /> |
+| [Groq](https://sdk.vercel.ai/providers/ai-sdk-providers/groq)                                 | `llama-3.1-8b-instant`                      | <Cross size={18} /> | <Check size={18} /> | <Check size={18} /> | <Check size={18} /> |
+| [Groq](https://sdk.vercel.ai/providers/ai-sdk-providers/groq)                                 | `mixtral-8x7b-32768`                        | <Cross size={18} /> | <Check size={18} /> | <Check size={18} /> | <Check size={18} /> |
+| [Groq](https://sdk.vercel.ai/providers/ai-sdk-providers/groq)                                 | `gemma2-9b-it`                              | <Cross size={18} /> | <Check size={18} /> | <Check size={18} /> | <Check size={18} /> |
+
+Source: [https://sdk.vercel.ai/docs/foundations/providers-and-models#model-capabilities](https://sdk.vercel.ai/docs/foundations/providers-and-models#model-capabilities)
+
+
 ---
 title: "Local Project Structure | Getting Started | Mastra Docs"
 description: Guide on organizing folders and files in Mastra, including best practices and recommended structures.
@@ -3338,7 +3437,7 @@ Once you've defined tools that utilize integrations, you can include these tools
 
 ```typescript filename="src/mastra/agents/index.ts" showLineNumbers copy
 import { openai } from "@ai-sdk/openai";
-import { Agent } from "@mastra/core";
+import { Agent } from "@mastra/core/agent";
 import { getMainBranchRef } from "../tools";
 
 export const codeReviewAgent = new Agent({
@@ -3679,6 +3778,22 @@ The local development server is designed to run without any external dependencie
 
 This architecture allows you to start developing immediately without setting up databases or vector stores, while still maintaining production-like behavior in your local environment.
 
+### Model settings 
+
+The local devleopment server also lets you configure the model settings in Overview > Model Settings. 
+
+You can configure the following settings:
+
+- **Temperature**: Controls randomness in model outputs. Higher values (0-2) produce more creative responses while lower values make outputs more focused and deterministic.
+- **Top P**: Sets cumulative probability threshold for token sampling. Lower values (0-1) make outputs more focused by considering only the most likely tokens.
+- **Top K**: Limits the number of tokens considered for each generation step. Lower values produce more focused outputs by sampling from fewer options.
+- **Frequency Penalty**: Reduces repetition by penalizing tokens based on their frequency in previous text. Higher values (0-2) discourage reuse of common tokens.
+- **Presence Penalty**: Reduces repetition by penalizing tokens that appear in previous text. Higher values (0-2) encourage the model to discuss new topics.
+- **Max Tokens**: Maximum number of tokens allowed in the model's response. Higher values allow for longer outputs but may increase latency.
+- **Max Steps**: Maximum number of steps a workflow or agent can execute before stopping. Prevents infinite loops and runaway processes.
+- **Max Retries**: Number of times to retry failed API calls or model requests before giving up. Helps handle temporary failures gracefully.
+
+
 ## Summary
 
 `mastra dev` makes it easy to develop, debug, and iterate on your AI logic in a self-contained environment before deploying to production.
@@ -3704,7 +3819,7 @@ This processor is used to prevent errors caused by exceeding the LLM's context w
 ```typescript copy showLineNumbers {9-12}
 import { Memory } from "@mastra/memory";
 import { TokenLimiter } from "@mastra/memory/processors";
-import { Agent } from "@mastra/core";
+import { Agent } from "@mastra/core/agent";
 import { openai } from "@ai-sdk/openai";
 
 const agent = new Agent({
@@ -3820,7 +3935,7 @@ When creating custom processors avoid mutating the input `messages` array or its
 
 
 
-## Overview
+# Memory overview
 Source: https://mastra.ai/docs/memory/overview
 
 Memory is how agents manage the context that's available to them, it's a condensation of all chat messages into their context window.
@@ -3942,7 +4057,7 @@ Now that you understand the core concepts, continue to [semantic recall](./seman
 Alternatively you can visit the [configuration reference](../../reference/memory/Memory.mdx) for available options, or browse [usage examples](../../examples/memory/use-chat.mdx).
 
 
-# Recalling Relevant History
+# Semantic Recall
 Source: https://mastra.ai/docs/memory/semantic-recall
 
 If you ask your friend what they did last weekend, they will search in their memory for events associated with "last weekend" and then tell you what they did. That's sort of like how semantic recall works in Mastra.
@@ -3959,6 +4074,10 @@ It uses vector embeddings of messages for similarity search, integrates with var
   alt="Diagram showing Mastra Memory semantic recall"
   width={800}
 />
+
+When it's enabled, new messages are used to query a vector DB for semantically similar messages.
+
+After getting a response from the LLM, all new messages (user, assistant, and tool calls/results) are inserted into the vector DB to be recalled in later interactions.
 
 ## Quick Start
 
@@ -4069,7 +4188,7 @@ You might want to disable semantic recall in scenarios like:
 
 import YouTube from "../../../components/youtube";
 
-# Continuously Relevant Information
+# Working Memory
 Source: https://mastra.ai/docs/memory/working-memory
 
 While [conversation history](/docs/memory/overview#conversation-history) and [semantic recall](./semantic-recall.mdx) help agents remember conversations, working memory allows them to maintain persistent information about users across interactions within a thread.
@@ -5768,49 +5887,760 @@ Mastra supports the following providers:
 
 ---
 title: Voice in Mastra | Mastra Docs
-description: Overview of voice capabilities in Mastra, including text-to-speech, speech-to-text, and real-time voice-to-voice interactions.
+description: Overview of voice capabilities in Mastra, including text-to-speech, speech-to-text, and real-time speech-to-speech interactions.
 ---
+import { Tabs } from "nextra/components";
+import { AudioPlayback } from "@/components/audio-playback";
 
 # Voice in Mastra
 Source: https://mastra.ai/docs/voice/overview
 
-Mastra's Voice system provides a unified interface for voice interactions, enabling text-to-speech (TTS), speech-to-text (STT), and real-time voice-to-voice capabilities in your applications.
-
-## Key Features
-
-- Standardized API across different voice providers
-- Support for multiple voice services
-- Voice-to-voice interactions using events for continuous audio streaming
-- Composable voice providers for mixing TTS and STT services
+Mastra's Voice system provides a unified interface for voice interactions, enabling text-to-speech (TTS), speech-to-text (STT), and real-time speech-to-speech (STS) capabilities in your applications. 
 
 ## Adding Voice to Agents
 
 To learn how to integrate voice capabilities into your agents, check out the [Adding Voice to Agents](../agents/adding-voice.mdx) documentation. This section covers how to use both single and multiple voice providers, as well as real-time interactions.
 
-
-## Example of Using a Single Voice Provider
-
 ```typescript
+import { Agent } from '@mastra/core/agent';
+import { openai } from '@ai-sdk/openai';
 import { OpenAIVoice } from "@mastra/voice-openai";
 
 // Initialize OpenAI voice for TTS
-const voice = new OpenAIVoice({
-  speechModel: {
-    name: "tts-1-hd", // Specify the TTS model
-    apiKey: process.env.OPENAI_API_KEY, // Your OpenAI API key
-  },
+
+const voiceAgent = new Agent({
+  name: "Voice Agent",
+  instructions: "You are a voice assistant that can help users with their tasks.",
+  model: openai("gpt-4o"),
+  voice: new OpenAIVoice(),
+});
+```
+
+You can then use the following voice capabilities:
+
+### Text to Speech (TTS)
+
+Turn your agent's responses into natural-sounding speech using Mastra's TTS capabilities. 
+Choose from multiple providers like OpenAI, ElevenLabs, and more. 
+
+For detailed configuration options and advanced features, check out our [Text-to-Speech guide](./text-to-speech).
+
+<Tabs items={["OpenAI", "Azure", "ElevenLabs", "PlayAI", "Google", "Cloudflare", "Deepgram", "Speechify", "Sarvam", "Murf"]}>
+  <Tabs.Tab>
+```typescript
+import { Agent } from '@mastra/core/agent';
+import { openai } from '@ai-sdk/openai';
+import { OpenAIVoice } from "@mastra/voice-openai";
+import { playAudio } from "@mastra/node-audio";
+
+const voiceAgent = new Agent({
+  name: "Voice Agent",
+  instructions: "You are a voice assistant that can help users with their tasks.",
+  model: openai("gpt-4o"),
+  voice: new OpenAIVoice(),
 });
 
-// Convert text to speech
-const audioStream = await voice.speak("Hello! How can I assist you today?", {
+const { text } = await voiceAgent.generate('What color is the sky?');
+
+// Convert text to speech to an Audio Stream
+const audioStream = await voiceAgent.voice.speak(text, {
   speaker: "default", // Optional: specify a speaker
+  responseFormat: "wav", // Optional: specify a response format
 });
 
-// Play the audio response
 playAudio(audioStream);
 ```
 
-## Example of Using Multiple Voice Providers
+Visit the [OpenAI Voice Reference](/reference/voice/openai) for more information on the OpenAI voice provider.
+  </Tabs.Tab>
+  <Tabs.Tab>
+```typescript
+import { Agent } from '@mastra/core/agent';
+import { openai } from '@ai-sdk/openai';
+import { AzureVoice } from "@mastra/voice-azure";
+import { playAudio } from "@mastra/node-audio";
+
+const voiceAgent = new Agent({
+  name: "Voice Agent",
+  instructions: "You are a voice assistant that can help users with their tasks.",
+  model: openai("gpt-4o"),
+  voice: new AzureVoice(),
+});
+
+const { text } = await voiceAgent.generate('What color is the sky?');
+
+// Convert text to speech to an Audio Stream
+const audioStream = await voiceAgent.voice.speak(text, {
+  speaker: "en-US-JennyNeural", // Optional: specify a speaker
+});
+
+playAudio(audioStream);
+```
+
+Visit the [Azure Voice Reference](/reference/voice/azure) for more information on the Azure voice provider.
+  </Tabs.Tab>
+  <Tabs.Tab>
+```typescript
+import { Agent } from '@mastra/core/agent';
+import { openai } from '@ai-sdk/openai';
+import { ElevenLabsVoice } from "@mastra/voice-elevenlabs";
+import { playAudio } from "@mastra/node-audio";
+
+const voiceAgent = new Agent({
+  name: "Voice Agent",
+  instructions: "You are a voice assistant that can help users with their tasks.",
+  model: openai("gpt-4o"),
+  voice: new ElevenLabsVoice(),
+});
+
+const { text } = await voiceAgent.generate('What color is the sky?');
+
+// Convert text to speech to an Audio Stream
+const audioStream = await voiceAgent.voice.speak(text, {
+  speaker: "default", // Optional: specify a speaker
+});
+
+playAudio(audioStream);
+```
+
+Visit the [ElevenLabs Voice Reference](/reference/voice/elevenlabs) for more information on the ElevenLabs voice provider.
+  </Tabs.Tab>
+  <Tabs.Tab>
+```typescript
+import { Agent } from '@mastra/core/agent';
+import { openai } from '@ai-sdk/openai';
+import { PlayAIVoice } from "@mastra/voice-playai";
+import { playAudio } from "@mastra/node-audio";
+
+const voiceAgent = new Agent({
+  name: "Voice Agent",
+  instructions: "You are a voice assistant that can help users with their tasks.",
+  model: openai("gpt-4o"),
+  voice: new PlayAIVoice(),
+});
+
+const { text } = await voiceAgent.generate('What color is the sky?');
+
+// Convert text to speech to an Audio Stream
+const audioStream = await voiceAgent.voice.speak(text, {
+  speaker: "default", // Optional: specify a speaker
+});
+
+playAudio(audioStream);
+```
+
+Visit the [PlayAI Voice Reference](/reference/voice/playai) for more information on the PlayAI voice provider.
+  </Tabs.Tab>
+  <Tabs.Tab>
+```typescript
+import { Agent } from '@mastra/core/agent';
+import { openai } from '@ai-sdk/openai';
+import { GoogleVoice } from "@mastra/voice-google";
+import { playAudio } from "@mastra/node-audio";
+
+const voiceAgent = new Agent({
+  name: "Voice Agent",
+  instructions: "You are a voice assistant that can help users with their tasks.",
+  model: openai("gpt-4o"),
+  voice: new GoogleVoice(),
+});
+
+const { text } = await voiceAgent.generate('What color is the sky?');
+
+// Convert text to speech to an Audio Stream
+const audioStream = await voiceAgent.voice.speak(text, {
+  speaker: "en-US-Studio-O", // Optional: specify a speaker
+});
+
+playAudio(audioStream);
+```
+
+Visit the [Google Voice Reference](/reference/voice/google) for more information on the Google voice provider.
+  </Tabs.Tab>
+  <Tabs.Tab>
+```typescript
+import { Agent } from '@mastra/core/agent';
+import { openai } from '@ai-sdk/openai';
+import { CloudflareVoice } from "@mastra/voice-cloudflare";
+import { playAudio } from "@mastra/node-audio";
+
+const voiceAgent = new Agent({
+  name: "Voice Agent",
+  instructions: "You are a voice assistant that can help users with their tasks.",
+  model: openai("gpt-4o"),
+  voice: new CloudflareVoice(),
+});
+
+const { text } = await voiceAgent.generate('What color is the sky?');
+
+// Convert text to speech to an Audio Stream
+const audioStream = await voiceAgent.voice.speak(text, {
+  speaker: "default", // Optional: specify a speaker
+});
+
+playAudio(audioStream);
+```
+
+Visit the [Cloudflare Voice Reference](/reference/voice/cloudflare) for more information on the Cloudflare voice provider.
+  </Tabs.Tab>
+  <Tabs.Tab>
+```typescript
+import { Agent } from '@mastra/core/agent';
+import { openai } from '@ai-sdk/openai';
+import { DeepgramVoice } from "@mastra/voice-deepgram";
+import { playAudio } from "@mastra/node-audio";
+
+const voiceAgent = new Agent({
+  name: "Voice Agent",
+  instructions: "You are a voice assistant that can help users with their tasks.",
+  model: openai("gpt-4o"),
+  voice: new DeepgramVoice(),
+});
+
+const { text } = await voiceAgent.generate('What color is the sky?');
+
+// Convert text to speech to an Audio Stream
+const audioStream = await voiceAgent.voice.speak(text, {
+  speaker: "aura-english-us", // Optional: specify a speaker
+});
+
+playAudio(audioStream);
+```
+
+Visit the [Deepgram Voice Reference](/reference/voice/deepgram) for more information on the Deepgram voice provider.
+  </Tabs.Tab>
+  <Tabs.Tab>
+```typescript
+import { Agent } from '@mastra/core/agent';
+import { openai } from '@ai-sdk/openai';
+import { SpeechifyVoice } from "@mastra/voice-speechify";
+import { playAudio } from "@mastra/node-audio";
+
+const voiceAgent = new Agent({
+  name: "Voice Agent",
+  instructions: "You are a voice assistant that can help users with their tasks.",
+  model: openai("gpt-4o"),
+  voice: new SpeechifyVoice(),
+});
+
+const { text } = await voiceAgent.generate('What color is the sky?');
+
+// Convert text to speech to an Audio Stream
+const audioStream = await voiceAgent.voice.speak(text, {
+  speaker: "matthew", // Optional: specify a speaker
+});
+
+playAudio(audioStream);
+```
+
+Visit the [Speechify Voice Reference](/reference/voice/speechify) for more information on the Speechify voice provider.
+  </Tabs.Tab>
+  <Tabs.Tab>
+```typescript
+import { Agent } from '@mastra/core/agent';
+import { openai } from '@ai-sdk/openai';
+import { SarvamVoice } from "@mastra/voice-sarvam";
+import { playAudio } from "@mastra/node-audio";
+
+const voiceAgent = new Agent({
+  name: "Voice Agent",
+  instructions: "You are a voice assistant that can help users with their tasks.",
+  model: openai("gpt-4o"),
+  voice: new SarvamVoice(),
+});
+
+const { text } = await voiceAgent.generate('What color is the sky?');
+
+// Convert text to speech to an Audio Stream
+const audioStream = await voiceAgent.voice.speak(text, {
+  speaker: "default", // Optional: specify a speaker
+});
+
+playAudio(audioStream);
+```
+
+Visit the [Sarvam Voice Reference](/reference/voice/sarvam) for more information on the Sarvam voice provider.
+  </Tabs.Tab>
+  <Tabs.Tab>
+```typescript
+import { Agent } from '@mastra/core/agent';
+import { openai } from '@ai-sdk/openai';
+import { MurfVoice } from "@mastra/voice-murf";
+import { playAudio } from "@mastra/node-audio";
+
+const voiceAgent = new Agent({
+  name: "Voice Agent",
+  instructions: "You are a voice assistant that can help users with their tasks.",
+  model: openai("gpt-4o"),
+  voice: new MurfVoice(),
+});
+
+const { text } = await voiceAgent.generate('What color is the sky?');
+
+// Convert text to speech to an Audio Stream
+const audioStream = await voiceAgent.voice.speak(text, {
+  speaker: "default", // Optional: specify a speaker
+});
+
+playAudio(audioStream);
+```
+
+Visit the [Murf Voice Reference](/reference/voice/murf) for more information on the Murf voice provider.
+  </Tabs.Tab>
+</Tabs>
+
+### Speech to Text (STT)
+
+Transcribe spoken content using various providers like OpenAI, ElevenLabs, and more. For detailed configuration options and more, check out [Speech to Text](./speech-to-text).
+
+You can download a sample audio file from [here](https://github.com/mastra-ai/realtime-voice-demo/raw/refs/heads/main/how_can_i_help_you.mp3).
+<br/>
+<AudioPlayback audio="https://github.com/mastra-ai/realtime-voice-demo/raw/refs/heads/main/how_can_i_help_you.mp3" />
+
+<Tabs items={["OpenAI", "Azure", "ElevenLabs", "Google", "Cloudflare", "Deepgram", "Sarvam"]}>
+  <Tabs.Tab>
+```typescript
+import { Agent } from '@mastra/core/agent';
+import { openai } from '@ai-sdk/openai';
+import { OpenAIVoice } from "@mastra/voice-openai";
+import { createReadStream } from 'fs';
+
+const voiceAgent = new Agent({
+  name: "Voice Agent",
+  instructions: "You are a voice assistant that can help users with their tasks.",
+  model: openai("gpt-4o"),
+  voice: new OpenAIVoice(),
+});
+
+// Use an audio file from a URL
+const audioStream = await createReadStream("./how_can_i_help_you.mp3");
+
+// Convert audio to text
+const transcript = await voiceAgent.voice.listen(audioStream);
+console.log(`User said: ${transcript}`);
+
+// Generate a response based on the transcript
+const { text } = await voiceAgent.generate(transcript);
+```
+
+Visit the [OpenAI Voice Reference](/reference/voice/openai) for more information on the OpenAI voice provider.
+  </Tabs.Tab>
+  <Tabs.Tab>
+```typescript
+import { createReadStream } from 'fs';
+import { Agent } from '@mastra/core/agent';
+import { openai } from '@ai-sdk/openai';
+import { AzureVoice } from "@mastra/voice-azure";
+import { createReadStream } from 'fs';
+
+const voiceAgent = new Agent({
+  name: "Voice Agent",
+  instructions: "You are a voice assistant that can help users with their tasks.",
+  model: openai("gpt-4o"),
+  voice: new AzureVoice(),
+});
+
+// Use an audio file from a URL
+const audioStream = await createReadStream("./how_can_i_help_you.mp3");
+
+// Convert audio to text
+const transcript = await voiceAgent.voice.listen(audioStream);
+console.log(`User said: ${transcript}`);
+
+// Generate a response based on the transcript
+const { text } = await voiceAgent.generate(transcript);
+```
+
+Visit the [Azure Voice Reference](/reference/voice/azure) for more information on the Azure voice provider.
+  </Tabs.Tab>
+  <Tabs.Tab>
+```typescript
+import { Agent } from '@mastra/core/agent';
+import { openai } from '@ai-sdk/openai';
+import { ElevenLabsVoice } from "@mastra/voice-elevenlabs";
+import { createReadStream } from 'fs';
+
+const voiceAgent = new Agent({
+  name: "Voice Agent",
+  instructions: "You are a voice assistant that can help users with their tasks.",
+  model: openai("gpt-4o"),
+  voice: new ElevenLabsVoice(),
+});
+
+// Use an audio file from a URL
+const audioStream = await createReadStream("./how_can_i_help_you.mp3");
+
+// Convert audio to text
+const transcript = await voiceAgent.voice.listen(audioStream);
+console.log(`User said: ${transcript}`);
+
+// Generate a response based on the transcript
+const { text } = await voiceAgent.generate(transcript);
+```
+
+Visit the [ElevenLabs Voice Reference](/reference/voice/elevenlabs) for more information on the ElevenLabs voice provider.
+  </Tabs.Tab>
+  <Tabs.Tab>
+```typescript
+import { Agent } from '@mastra/core/agent';
+import { openai } from '@ai-sdk/openai';
+import { GoogleVoice } from "@mastra/voice-google";
+import { createReadStream } from 'fs';
+
+const voiceAgent = new Agent({
+  name: "Voice Agent",
+  instructions: "You are a voice assistant that can help users with their tasks.",
+  model: openai("gpt-4o"),
+  voice: new GoogleVoice(),
+});
+
+// Use an audio file from a URL
+const audioStream = await createReadStream("./how_can_i_help_you.mp3");
+
+// Convert audio to text
+const transcript = await voiceAgent.voice.listen(audioStream);
+console.log(`User said: ${transcript}`);
+
+// Generate a response based on the transcript
+const { text } = await voiceAgent.generate(transcript);
+```
+
+Visit the [Google Voice Reference](/reference/voice/google) for more information on the Google voice provider.
+  </Tabs.Tab>
+  <Tabs.Tab>
+```typescript
+import { Agent } from '@mastra/core/agent';
+import { openai } from '@ai-sdk/openai';
+import { CloudflareVoice } from "@mastra/voice-cloudflare";
+import { createReadStream } from 'fs';
+
+const voiceAgent = new Agent({
+  name: "Voice Agent",
+  instructions: "You are a voice assistant that can help users with their tasks.",
+  model: openai("gpt-4o"),
+  voice: new CloudflareVoice(),
+});
+
+// Use an audio file from a URL
+const audioStream = await createReadStream("./how_can_i_help_you.mp3");
+
+// Convert audio to text
+const transcript = await voiceAgent.voice.listen(audioStream);
+console.log(`User said: ${transcript}`);
+
+// Generate a response based on the transcript
+const { text } = await voiceAgent.generate(transcript);
+```
+
+Visit the [Cloudflare Voice Reference](/reference/voice/cloudflare) for more information on the Cloudflare voice provider.
+  </Tabs.Tab>
+  <Tabs.Tab>
+```typescript
+import { Agent } from '@mastra/core/agent';
+import { openai } from '@ai-sdk/openai';
+import { DeepgramVoice } from "@mastra/voice-deepgram";
+import { createReadStream } from 'fs';
+
+const voiceAgent = new Agent({
+  name: "Voice Agent",
+  instructions: "You are a voice assistant that can help users with their tasks.",
+  model: openai("gpt-4o"),
+  voice: new DeepgramVoice(),
+});
+
+// Use an audio file from a URL
+const audioStream = await createReadStream("./how_can_i_help_you.mp3");
+
+// Convert audio to text
+const transcript = await voiceAgent.voice.listen(audioStream);
+console.log(`User said: ${transcript}`);
+
+// Generate a response based on the transcript
+const { text } = await voiceAgent.generate(transcript);
+```
+
+Visit the [Deepgram Voice Reference](/reference/voice/deepgram) for more information on the Deepgram voice provider.
+  </Tabs.Tab>
+  <Tabs.Tab>
+```typescript
+import { Agent } from '@mastra/core/agent';
+import { openai } from '@ai-sdk/openai';
+import { SarvamVoice } from "@mastra/voice-sarvam";
+import { createReadStream } from 'fs';
+
+const voiceAgent = new Agent({
+  name: "Voice Agent",
+  instructions: "You are a voice assistant that can help users with their tasks.",
+  model: openai("gpt-4o"),
+  voice: new SarvamVoice(),
+});
+
+// Use an audio file from a URL
+const audioStream = await createReadStream("./how_can_i_help_you.mp3");
+
+// Convert audio to text
+const transcript = await voiceAgent.voice.listen(audioStream);
+console.log(`User said: ${transcript}`);
+
+// Generate a response based on the transcript
+const { text } = await voiceAgent.generate(transcript);
+```
+
+Visit the [Sarvam Voice Reference](/reference/voice/sarvam) for more information on the Sarvam voice provider.
+  </Tabs.Tab>
+</Tabs>
+
+### Speech to Speech (STS)
+
+Create conversational experiences with speech-to-speech capabilities. The unified API enables real-time voice interactions between users and AI agents. 
+For detailed configuration options and advanced features, check out [Speech to Speech](/voice/speech-to-speech).
+
+<Tabs items={["OpenAI"]}>
+  <Tabs.Tab>
+```typescript
+import { Agent } from '@mastra/core/agent';
+import { openai } from '@ai-sdk/openai';
+import { playAudio, getMicrophoneStream } from '@mastra/node-audio';
+import { OpenAIRealtimeVoice } from "@mastra/voice-openai-realtime";
+
+const voiceAgent = new Agent({
+  name: "Voice Agent",
+  instructions: "You are a voice assistant that can help users with their tasks.",
+  model: openai("gpt-4o"),
+  voice: new OpenAIRealtimeVoice(),
+});
+
+// Listen for agent audio responses
+voiceAgent.voice.on('speaker', ({ audio }) => {
+  playAudio(audio);
+});
+
+// Initiate the conversation
+await voiceAgent.voice.speak('How can I help you today?');
+
+// Send continuous audio from the microphone
+const micStream = getMicrophoneStream();
+await voiceAgent.voice.send(micStream);
+```
+
+Visit the [OpenAI Voice Reference](/reference/voice/openai-realtime) for more information on the OpenAI voice provider.
+  </Tabs.Tab>
+</Tabs>
+
+## Voice Configuration
+
+Each voice provider can be configured with different models and options. Below are the detailed configuration options for all supported providers:
+
+<Tabs items={["OpenAI", "Azure", "ElevenLabs", "PlayAI", "Google", "Cloudflare", "Deepgram", "Speechify", "Sarvam", "Murf", "OpenAI Realtime"]}>
+  <Tabs.Tab>
+```typescript
+// OpenAI Voice Configuration
+const voice = new OpenAIVoice({
+  speechModel: {
+    name: "gpt-3.5-turbo", // Example model name
+    apiKey: process.env.OPENAI_API_KEY,
+    language: "en-US", // Language code
+    voiceType: "neural", // Type of voice model
+  },
+  listeningModel: {
+    name: "whisper-1", // Example model name
+    apiKey: process.env.OPENAI_API_KEY,
+    language: "en-US", // Language code
+    format: "wav", // Audio format
+  },
+  speaker: "alloy", // Example speaker name
+});
+```
+
+Visit the [OpenAI Voice Reference](/reference/voice/openai) for more information on the OpenAI voice provider.
+  </Tabs.Tab>
+  <Tabs.Tab>
+```typescript
+// Azure Voice Configuration
+const voice = new AzureVoice({
+  speechModel: {
+    name: "en-US-JennyNeural", // Example model name
+    apiKey: process.env.AZURE_SPEECH_KEY,
+    region: process.env.AZURE_SPEECH_REGION,
+    language: "en-US", // Language code
+    style: "cheerful", // Voice style
+    pitch: "+0Hz", // Pitch adjustment
+    rate: "1.0", // Speech rate
+  },
+  listeningModel: {
+    name: "en-US", // Example model name
+    apiKey: process.env.AZURE_SPEECH_KEY,
+    region: process.env.AZURE_SPEECH_REGION,
+    format: "simple", // Output format
+  },
+});
+```
+
+Visit the [Azure Voice Reference](/reference/voice/azure) for more information on the Azure voice provider.
+  </Tabs.Tab>
+  <Tabs.Tab>
+```typescript
+// ElevenLabs Voice Configuration
+const voice = new ElevenLabsVoice({
+  speechModel: {
+    voiceId: "your-voice-id", // Example voice ID
+    model: "eleven_multilingual_v2", // Example model name
+    apiKey: process.env.ELEVENLABS_API_KEY,
+    language: "en", // Language code
+    emotion: "neutral", // Emotion setting
+  },
+  // ElevenLabs may not have a separate listening model
+});
+```
+
+Visit the [ElevenLabs Voice Reference](/reference/voice/elevenlabs) for more information on the ElevenLabs voice provider.
+  </Tabs.Tab>
+  <Tabs.Tab>
+```typescript
+// PlayAI Voice Configuration
+const voice = new PlayAIVoice({
+  speechModel: {
+    name: "playai-voice", // Example model name
+    speaker: "emma", // Example speaker name
+    apiKey: process.env.PLAYAI_API_KEY,
+    language: "en-US", // Language code
+    speed: 1.0, // Speech speed
+  },
+  // PlayAI may not have a separate listening model
+});
+```
+
+Visit the [PlayAI Voice Reference](/reference/voice/playai) for more information on the PlayAI voice provider.
+  </Tabs.Tab>
+  <Tabs.Tab>
+```typescript
+// Google Voice Configuration
+const voice = new GoogleVoice({
+  speechModel: {
+    name: "en-US-Studio-O", // Example model name
+    apiKey: process.env.GOOGLE_API_KEY,
+    languageCode: "en-US", // Language code
+    gender: "FEMALE", // Voice gender
+    speakingRate: 1.0, // Speaking rate
+  },
+  listeningModel: {
+    name: "en-US", // Example model name
+    sampleRateHertz: 16000, // Sample rate
+  },
+});
+```
+
+Visit the [PlayAI Voice Reference](/reference/voice/playai) for more information on the PlayAI voice provider.
+  </Tabs.Tab>
+  <Tabs.Tab>
+```typescript
+// Cloudflare Voice Configuration
+const voice = new CloudflareVoice({
+  speechModel: {
+    name: "cloudflare-voice", // Example model name
+    accountId: process.env.CLOUDFLARE_ACCOUNT_ID,
+    apiToken: process.env.CLOUDFLARE_API_TOKEN,
+    language: "en-US", // Language code
+    format: "mp3", // Audio format
+  },
+  // Cloudflare may not have a separate listening model
+});
+```
+
+Visit the [Cloudflare Voice Reference](/reference/voice/cloudflare) for more information on the Cloudflare voice provider.
+  </Tabs.Tab>
+  <Tabs.Tab>
+```typescript
+// Deepgram Voice Configuration
+const voice = new DeepgramVoice({
+  speechModel: {
+    name: "nova-2", // Example model name
+    speaker: "aura-english-us", // Example speaker name
+    apiKey: process.env.DEEPGRAM_API_KEY,
+    language: "en-US", // Language code
+    tone: "formal", // Tone setting
+  },
+  listeningModel: {
+    name: "nova-2", // Example model name
+    format: "flac", // Audio format
+  },
+});
+```
+
+Visit the [Deepgram Voice Reference](/reference/voice/deepgram) for more information on the Deepgram voice provider.
+  </Tabs.Tab>
+  <Tabs.Tab>
+```typescript
+// Speechify Voice Configuration
+const voice = new SpeechifyVoice({
+  speechModel: {
+    name: "speechify-voice", // Example model name
+    speaker: "matthew", // Example speaker name
+    apiKey: process.env.SPEECHIFY_API_KEY,
+    language: "en-US", // Language code
+    speed: 1.0, // Speech speed
+  },
+  // Speechify may not have a separate listening model
+});
+```
+
+Visit the [Speechify Voice Reference](/reference/voice/speechify) for more information on the Speechify voice provider.
+  </Tabs.Tab>
+  <Tabs.Tab>
+```typescript
+// Sarvam Voice Configuration
+const voice = new SarvamVoice({
+  speechModel: {
+    name: "sarvam-voice", // Example model name
+    apiKey: process.env.SARVAM_API_KEY,
+    language: "en-IN", // Language code
+    style: "conversational", // Style setting
+  },
+  // Sarvam may not have a separate listening model
+});
+```
+
+Visit the [Sarvam Voice Reference](/reference/voice/sarvam) for more information on the Sarvam voice provider.
+  </Tabs.Tab>
+  <Tabs.Tab>
+```typescript
+// Murf Voice Configuration
+const voice = new MurfVoice({
+  speechModel: {
+    name: "murf-voice", // Example model name
+    apiKey: process.env.MURF_API_KEY,
+    language: "en-US", // Language code
+    emotion: "happy", // Emotion setting
+  },
+  // Murf may not have a separate listening model
+});
+```
+
+Visit the [Murf Voice Reference](/reference/voice/murf) for more information on the Murf voice provider.
+  </Tabs.Tab>
+  <Tabs.Tab>
+```typescript
+// OpenAI Realtime Voice Configuration
+const voice = new OpenAIRealtimeVoice({
+  speechModel: {
+    name: "gpt-3.5-turbo", // Example model name
+    apiKey: process.env.OPENAI_API_KEY,
+    language: "en-US", // Language code
+  },
+  listeningModel: {
+    name: "whisper-1", // Example model name
+    apiKey: process.env.OPENAI_API_KEY,
+    format: "ogg", // Audio format
+  },
+  speaker: "alloy", // Example speaker name
+});
+```
+
+For more information on the OpenAI Realtime voice provider, refer to the [OpenAI Realtime Voice Reference](/reference/voice/openai-realtime).
+  </Tabs.Tab>
+</Tabs>
+
+### Using Multiple Voice Providers
 This example demonstrates how to create and use two different voice providers in Mastra: OpenAI for speech-to-text (STT) and PlayAI for text-to-speech (TTS).
 
 Start by creating instances of the voice providers with any necessary configuration.
@@ -5819,6 +6649,7 @@ Start by creating instances of the voice providers with any necessary configurat
 import { OpenAIVoice } from "@mastra/voice-openai";
 import { PlayAIVoice } from "@mastra/voice-playai";
 import { CompositeVoice } from "@mastra/core/voice";
+import { playAudio, getMicrophoneStream } from "@mastra/node-audio";
 
 // Initialize OpenAI voice for STT
 const input = new OpenAIVoice({
@@ -5851,226 +6682,47 @@ console.log("Transcribed text:", transcript);
 
 // Convert text to speech
 const responseAudio = await voice.speak(`You said: ${transcript}`, {
-  speaker: "default", // Optional: specify a speaker
+  speaker: "default", // Optional: specify a speaker,
+  responseFormat: "wav", // Optional: specify a response format
 });
 
 // Play the audio response
 playAudio(responseAudio);
 ```
 
-## Real-time Capabilities
-
-Many voice providers support real-time speech-to-speech interactions through WebSocket connections, enabling:
-
-- Live voice conversations with AI
-- Streaming transcription
-- Real-time text-to-speech synthesis
-- Tool usage during conversations
-
-
-## Voice Configuration
-
-Voice providers can be configured with different models and options:
-
-```typescript
-const voice = new OpenAIVoice({
-  speechModel: {
-    name: "tts-1-hd",
-    apiKey: process.env.OPENAI_API_KEY
-  },
-  listeningModel: {
-    name: "whisper-1"
-  },
-  speaker: "alloy"
-});
-```
-
-## Available Voice Providers
-
-Mastra supports a variety of voice providers, including:
-
-- OpenAI
-- PlayAI
-- Murf
-- ElevenLabs
-- [More](https://github.com/mastra-ai/mastra/tree/main/voice)
+For more information on the CompositeVoice, refer to the [CompositeVoice Reference](/reference/voice/composite-voice).
 
 ## More Resources
 
 - [CompositeVoice](../../reference/voice/composite-voice.mdx)
 - [MastraVoice](../../reference/voice/mastra-voice.mdx)
 - [OpenAI Voice](../../reference/voice/openai.mdx)
+- [Azure Voice](../../reference/voice/azure.mdx)
+- [Google Voice](../../reference/voice/google.mdx)
+- [Deepgram Voice](../../reference/voice/deepgram.mdx)
 - [PlayAI Voice](../../reference/voice/playai.mdx)
 - [Voice Examples](../../examples/voice/text-to-speech.mdx)
 
-
 ---
-title: Speech-to-Text (STT) in Mastra | Mastra Docs
-description: Overview of Speech-to-Text capabilities in Mastra, including configuration, usage, and integration with voice providers.
----
-
-# Speech-to-Text (STT)
-Source: https://mastra.ai/docs/voice/speech-to-text
-
-Speech-to-Text (STT) in Mastra provides a standardized interface for converting audio input into text across multiple service providers. This section covers STT configuration and usage. Check out the [Adding Voice to Agents](../agents/adding-voice.mdx) documentation to learn how to use STT in an agent.
-
-## Speech Configuration
-
-To use STT in Mastra, you need to provide a `listeningModel` configuration when initializing the voice provider. This configuration includes parameters such as:
-
-- **`name`**: The specific STT model to use.
-- **`apiKey`**: Your API key for authentication.
-- **Provider-specific options**: Additional options that may be required or supported by the specific voice provider.
-
-**Note**: All of these parameters are optional. You can use the default settings provided by the voice provider, which will depend on the specific provider you are using.
-
-### Example Configuration
-
-```typescript
-const voice = new OpenAIVoice({
-  listeningModel: {
-    name: "whisper-1",
-    apiKey: process.env.OPENAI_API_KEY,
-  },
-});
-
-// If using default settings the configuration can be simplified to:
-const voice = new OpenAIVoice();
-```
-
-## Using the Listen Method
-
-The primary method for STT is the `listen()` method, which converts spoken audio into text. Here's how to use it:
-
-```typescript
-const audioStream = getMicrophoneStream(); // Assume this function gets audio input
-const transcript = await voice.listen(audioStream, {
-  filetype: "m4a", // Optional: specify the audio file type
-});
-```
-
-**Note**: If you are using a voice-to-voice provider, such as `OpenAIRealtimeVoice`, the `listen()` method will emit a "writing" event instead of returning a transcript directly.
-
-
----
-title: Text-to-Speech (TTS) in Mastra | Mastra Docs
-description: Overview of Text-to-Speech capabilities in Mastra, including configuration, usage, and integration with voice providers.
+title: Speech-to-Speech Capabilities in Mastra | Mastra Docs
+description: Overview of speech-to-speech capabilities in Mastra, including real-time interactions and event-driven architecture.
 ---
 
-# Text-to-Speech (TTS)
-Source: https://mastra.ai/docs/voice/text-to-speech
-
-Text-to-Speech (TTS) in Mastra offers a unified API for synthesizing spoken audio from text using various provider services. This section explains TTS configuration options and implementation methods. For integrating TTS capabilities with agents, refer to the [Adding Voice to Agents](../agents/adding-voice.mdx) documentation.
-
-## Speech Configuration
-
-To use TTS in Mastra, you need to provide a `speechModel` configuration when initializing the voice provider. This configuration includes parameters such as:
-
-- **`name`**: The specific TTS model to use.
-- **`apiKey`**: Your API key for authentication.
-- **Provider-specific options**: Additional options that may be required or supported by the specific voice provider.
-
-The **`speaker`** option is specified separately and allows you to select different voices for speech synthesis.
-
-**Note**: All of these parameters are optional. You can use the default settings provided by the voice provider, which will depend on the specific provider you are using.
-
-### Example Configuration
-
-```typescript
-const voice = new OpenAIVoice({
-  speechModel: {
-    name: "tts-1-hd",
-    apiKey: process.env.OPENAI_API_KEY
-  },
-  speaker: "alloy",
-});
-
-// If using default settings the configuration can be simplified to:
-const voice = new OpenAIVoice();
-```
-
-## Using the Speak Method
-
-The primary method for TTS is the `speak()` method, which converts text to speech. This method can accept options that allows you to specify the speaker and other provider-specific options. Here's how to use it:
-
-```typescript
-const readableStream = await voice.speak("Hello, world!", {
-  speaker: "default", // Optional: specify a speaker
-  properties: {
-    speed: 1.0, // Optional: adjust speech speed
-    pitch: "default", // Optional: specify pitch if supported
-  },
-});
-```
-
-**Note**: If you are using a voice-to-voice provider, such as `OpenAIRealtimeVoice`, the `speak()` method will emit a "speaking" event instead of returning an Readable Stream.
-
-
-
----
-title: Voice-to-Voice Capabilities in Mastra | Mastra Docs
-description: Overview of voice-to-voice capabilities in Mastra, including real-time interactions and event-driven architecture.
----
-
-# Voice-to-Voice Capabilities in Mastra
-Source: https://mastra.ai/docs/voice/voice-to-voice
+# Speech-to-Speech Capabilities in Mastra
+Source: https://mastra.ai/docs/voice/speech-to-speech
 
 ## Introduction
 
-Voice-to-Voice in Mastra provides a standardized interface for real-time speech-to-speech interactions across multiple service providers. This section covers configuration, event-driven architecture, and implementation methods for creating conversational voice experiences. For integrating Voice-to-Voice capabilities with agents, refer to the [Adding Voice to Agents](../agents/adding-voice.mdx) documentation.
-
-## Real-time Voice Interactions
-
-Mastra's real-time voice system enables continuous bidirectional audio communication through an event-driven architecture. Unlike separate TTS and STT operations, real-time voice maintains an open connection that processes speech continuously in both directions.
-
-### Example Implementation
-
-```typescript
-import { Agent } from "@mastra/core/agent";
-import { OpenAIRealtimeVoice } from "@mastra/voice-openai-realtime";
-
-const agent = new Agent({
-  name: 'Agent',
-  instructions: `You are a helpful assistant with real-time voice capabilities.`,
-  model: openai('gpt-4o'),
-  voice: new OpenAIRealtimeVoice(),
-});
-
-// Connect to the voice service
-await agent.voice.connect();
-
-// Listen for agent audio responses
-agent.voice.on('speaking', ({ audio }) => {
-  playAudio(audio);
-});
-
-// Initiate the conversation
-await agent.voice.speak('How can I help you today?');
-
-// Send continuous audio from the microphone
-const micStream = getMicrophoneStream();
-await agent.voice.send(micStream);
-```
-
-## Event-Driven Architecture
-
-Mastra's voice-to-voice implementation is built on an event-driven architecture. Developers register event listeners to handle incoming audio progressively, allowing for more responsive interactions than waiting for complete audio responses.
-
+Speech-to-Speech (STS) in Mastra provides a standardized interface for real-time interactions across multiple providers.  
+STS enables continuous bidirectional audio communication through listening to events from Realtime models. Unlike separate TTS and STT operations, STS maintains an open connection that processes speech continuously in both directions.
 
 ## Configuration
 
-When initializing a voice-to-voice provider, you can provide configuration options to customize its behavior:
-
-### Constructor Options
-
-- **`chatModel`**: Configuration for the OpenAI realtime model.
+- **`chatModel`**: Configuration for the realtime model.
   - **`apiKey`**: Your OpenAI API key. Falls back to the `OPENAI_API_KEY` environment variable.
   - **`model`**: The model ID to use for real-time voice interactions (e.g., `gpt-4o-mini-realtime`).
   - **`options`**: Additional options for the realtime client, such as session configuration.
-
 - **`speaker`**: The default voice ID for speech synthesis. This allows you to specify which voice to use for the speech output.
-
-### Example Configuration
 
 ```typescript
 const voice = new OpenAIRealtimeVoice({
@@ -6094,231 +6746,214 @@ const voice = new OpenAIRealtimeVoice({
 const voice = new OpenAIRealtimeVoice();
 ```
 
-## Core Methods
+## Using STS
 
-The `OpenAIRealtimeVoice` class provides the following core methods for voice interactions:
-
-### connect()
-
-Establishes a connection to the OpenAI realtime service.
-
-**Usage:**
 ```typescript
-await voice.connect();
-```
+import { Agent } from "@mastra/core/agent";
+import { OpenAIRealtimeVoice } from "@mastra/voice-openai-realtime";
+import { playAudio, getMicrophoneStream } from "@mastra/node-audio";
 
-**Notes:**
-- Must be called before using any other interaction methods
-- Returns a Promise that resolves when the connection is established
-
-### speak(text, options?)
-
-Emits a speaking event using the configured voice model.
-
-**Parameters:**
-- `text`: String content to be spoken
-- `options`: Optional configuration object
-  - `speaker`: Voice ID to use (overrides default)
-  - `properties`: Additional provider-specific properties
-
-**Usage:**
-```typescript
-voice.speak('Hello, how can I help you today?', {
-  speaker: 'alloy'
+const agent = new Agent({
+  name: 'Agent',
+  instructions: `You are a helpful assistant with real-time voice capabilities.`,
+  model: openai('gpt-4o'),
+  voice: new OpenAIRealtimeVoice(),
 });
-```
 
-**Notes:**
-- Emits 'speaker' event rather than returning an audio stream
+// Connect to the voice service
+await agent.voice.connect();
 
-### listen(audioInput, options?)
-
-Processes audio input for speech recognition.
-
-**Parameters:**
-- `audioInput`: Readable stream of audio data
-- `options`: Optional configuration object
-  - `filetype`: Audio format (default: 'mp3')
-  - Additional provider-specific options
-
-**Usage:**
-```typescript
-const audioData = getMicrophoneStream();
-voice.listen(audioData, {
-  filetype: 'wav'
+// Listen for agent audio responses
+agent.voice.on('speaker', ({ audio }) => {
+  playAudio(audio);
 });
-```
 
-**Notes:**
-- Emits 'writing' events with transcribed text
+// Initiate the conversation
+await agent.voice.speak('How can I help you today?');
 
-### send(audioStream)
-
-Streams audio data in real-time for continuous processing.
-
-**Parameters:**
-- `audioStream`: Readable stream of audio data
-
-**Usage:**
-```typescript
+// Send continuous audio from the microphone
 const micStream = getMicrophoneStream();
-await voice.send(micStream);
+await agent.voice.send(micStream);
 ```
 
-**Notes:**
-- Used for continuous audio streaming scenarios like live microphone input
-- Returns a Promise that resolves when the stream is accepted
+For integrating Speech-to-Speech capabilities with agents, refer to the [Adding Voice to Agents](../agents/adding-voice.mdx) documentation.
 
-### answer(params)
+---
+title: Speech-to-Text (STT) in Mastra | Mastra Docs
+description: Overview of Speech-to-Text capabilities in Mastra, including configuration, usage, and integration with voice providers.
+---
 
-Sends a response to the OpenAI Realtime API.
+# Speech-to-Text (STT)
+Source: https://mastra.ai/docs/voice/speech-to-text
 
-**Parameters:**
-- `params`: The parameters object
-  - `options`: Configuration options for the response
-    - `content`: Text content of the response
-    - `voice`: Voice ID to use for the response
+Speech-to-Text (STT) in Mastra provides a standardized interface for converting audio input into text across multiple service providers. 
+STT helps create voice-enabled applications that can respond to human speech, enabling hands-free interaction, accessibility for users with disabilities, and more natural human-computer interfaces.
 
-**Usage:**
+## Configuration
+
+To use STT in Mastra, you need to provide a `listeningModel` when initializing the voice provider. This includes parameters such as:
+
+- **`name`**: The specific STT model to use.
+- **`apiKey`**: Your API key for authentication.
+- **Provider-specific options**: Additional options that may be required or supported by the specific voice provider.
+
+**Note**: All of these parameters are optional. You can use the default settings provided by the voice provider, which will depend on the specific provider you are using.
+
 ```typescript
-await voice.answer({
-  options: {
-    content: "Hello, how can I help you today?",
-    voice: "alloy"
-  }
+const voice = new OpenAIVoice({
+  listeningModel: {
+    name: "whisper-1",
+    apiKey: process.env.OPENAI_API_KEY,
+  },
+});
+
+// If using default settings the configuration can be simplified to:
+const voice = new OpenAIVoice();
+```
+
+## Available Providers
+
+Mastra supports several Speech-to-Text providers, each with their own capabilities and strengths:
+
+- [**OpenAI**](/reference/voice/openai/) - High-accuracy transcription with Whisper models
+- [**Azure**](/reference/voice/azure/) - Microsoft's speech recognition with enterprise-grade reliability
+- [**ElevenLabs**](/reference/voice/elevenlabs/) - Advanced speech recognition with support for multiple languages
+- [**Google**](/reference/voice/google/) - Google's speech recognition with extensive language support
+- [**Cloudflare**](/reference/voice/cloudflare/) - Edge-optimized speech recognition for low-latency applications
+- [**Deepgram**](/reference/voice/deepgram/) - AI-powered speech recognition with high accuracy for various accents
+- [**Sarvam**](/reference/voice/sarvam/) - Specialized in Indic languages and accents
+
+Each provider is implemented as a separate package that you can install as needed:
+
+```bash
+pnpm add @mastra/voice-openai  # Example for OpenAI
+```
+
+## Using the Listen Method
+
+The primary method for STT is the `listen()` method, which converts spoken audio into text. Here's how to use it:
+
+```typescript
+import { Agent } from '@mastra/core/agent';
+import { openai } from '@ai-sdk/openai';
+import { OpenAIVoice } from '@mastra/voice-openai';
+
+const voice = new OpenAIVoice();
+
+const agent = new Agent({
+  name: "Voice Agent",
+  instructions: "You are a voice assistant that provides recommendations based on user input.",
+  model: openai("gpt-4o"),
+  voice,
+});
+
+const audioStream = getMicrophoneStream(); // Assume this function gets audio input
+
+const transcript = await agent.voice.listen(audioStream, {
+  filetype: "m4a", // Optional: specify the audio file type
+});
+
+console.log(`User said: ${transcript}`);
+
+const { text } = await agent.generate(`Based on what the user said, provide them a recommendation: ${transcript}`);
+
+console.log(`Recommendation: ${text}`);
+```
+
+Check out the [Adding Voice to Agents](../agents/adding-voice.mdx) documentation to learn how to use STT in an agent.
+
+
+
+---
+title: Text-to-Speech (TTS) in Mastra | Mastra Docs
+description: Overview of Text-to-Speech capabilities in Mastra, including configuration, usage, and integration with voice providers.
+---
+
+# Text-to-Speech (TTS)
+Source: https://mastra.ai/docs/voice/text-to-speech
+
+Text-to-Speech (TTS) in Mastra offers a unified API for synthesizing spoken audio from text using various providers. 
+By incorporating TTS into your applications, you can enhance user experience with natural voice interactions, improve accessibility for users with visual impairments, and create more engaging multimodal interfaces. 
+
+TTS is a core component of any voice application. Combined with STT (Speech-to-Text), it forms the foundation of voice interaction systems. Newer models support STS ([Speech-to-Speech](./speech-to-speech)) which can be used for real-time interactions but come at high cost ($). 
+
+## Configuration
+
+To use TTS in Mastra, you need to provide a `speechModel` when initializing the voice provider. This includes parameters such as:
+
+- **`name`**: The specific TTS model to use.
+- **`apiKey`**: Your API key for authentication.
+- **Provider-specific options**: Additional options that may be required or supported by the specific voice provider.
+
+The **`speaker`** option allows you to select different voices for speech synthesis. Each provider offers a variety of voice options with distinct characteristics for **Voice diversity**, **Quality**, **Voice personality**, and **Multilingual support**
+
+**Note**: All of these parameters are optional. You can use the default settings provided by the voice provider, which will depend on the specific provider you are using.
+
+
+```typescript
+const voice = new OpenAIVoice({
+  speechModel: {
+    name: "tts-1-hd",
+    apiKey: process.env.OPENAI_API_KEY
+  },
+  speaker: "alloy",
+});
+
+// If using default settings the configuration can be simplified to:
+const voice = new OpenAIVoice();
+```
+
+## Available Providers
+
+Mastra supports a wide range of Text-to-Speech providers, each with their own unique capabilities and voice options. You can choose the provider that best suits your application's needs:
+
+- [**OpenAI**](/reference/voice/openai/) - High-quality voices with natural intonation and expression
+- [**Azure**](/reference/voice/azure/) - Microsoft's speech service with a wide range of voices and languages
+- [**ElevenLabs**](/reference/voice/elevenlabs/) - Ultra-realistic voices with emotion and fine-grained control
+- [**PlayAI**](/reference/voice/playai/) - Specialized in natural-sounding voices with various styles
+- [**Google**](/reference/voice/google/) - Google's speech synthesis with multilingual support
+- [**Cloudflare**](/reference/voice/cloudflare/) - Edge-optimized speech synthesis for low-latency applications
+- [**Deepgram**](/reference/voice/deepgram/) - AI-powered speech technology with high accuracy
+- [**Speechify**](/reference/voice/speechify/) - Text-to-speech optimized for readability and accessibility
+- [**Sarvam**](/reference/voice/sarvam/) - Specialized in Indic languages and accents
+- [**Murf**](/reference/voice/murf/) - Studio-quality voice overs with customizable parameters
+
+Each provider is implemented as a separate package that you can install as needed:
+
+```bash
+pnpm add @mastra/voice-openai  # Example for OpenAI
+```
+
+## Using the Speak Method
+
+The primary method for TTS is the `speak()` method, which converts text to speech. This method can accept options that allows you to specify the speaker and other provider-specific options. Here's how to use it:
+
+```typescript
+import { Agent } from '@mastra/core/agent';
+import { openai } from '@ai-sdk/openai';
+import { OpenAIVoice } from '@mastra/voice-openai';
+
+const voice = new OpenAIVoice();
+
+const agent = new Agent({
+  name: "Voice Agent",
+  instructions: "You are a voice assistant that can help users with their tasks.",
+  model: openai("gpt-4o"),
+  voice,
+});
+
+const { text } = await agent.generate('What color is the sky?');
+
+// Convert text to speech to an Audio Stream
+const readableStream = await voice.speak(text, {
+  speaker: "default", // Optional: specify a speaker
+  properties: {
+    speed: 1.0, // Optional: adjust speech speed
+    pitch: "default", // Optional: specify pitch if supported
+  },
 });
 ```
-
-**Notes:**
-- Triggers a response to the real-time session
-- Returns a Promise that resolves when the response has been sent
-
-## Utility Methods
-
-### updateConfig(config)
-
-Updates the session configuration for the voice instance.
-
-**Parameters:**
-- `config`: New session configuration object
-
-**Usage:**
-```typescript
-voice.updateConfig({
-  turn_detection: {
-    type: 'server_vad',
-    threshold: 0.6,
-    silence_duration_ms: 1200,
-  }
-});
-```
-
-### addTools(tools)
-
-Adds a set of tools to the voice instance.
-
-**Parameters:**
-- `tools`: Array of tool objects that the model can call
-
-**Usage:**
-```typescript
-voice.addTools([
-  createTool({
-    id: "Get Weather Information",
-    inputSchema: z.object({
-        city: z.string(),
-    }),
-    description: `Fetches the current weather information for a given city`,
-    execute: async ({ city }) => {...},
-  })
-]);
-```
-
-### close()
-
-Disconnects from the OpenAI realtime session and cleans up resources.
-
-**Usage:**
-```typescript
-voice.close();
-```
-
-**Notes:**
-- Should be called when you're done with the voice instance to free resources
-
-### on(event, callback)
-
-Registers an event listener for voice events.
-
-**Parameters:**
-- `event`: Event name ('speaker', 'writing', or 'error')
-- `callback`: Function to call when the event occurs
-
-**Usage:**
-```typescript
-voice.on('speaker', (stream) => {
-  stream.pipe(speaker)
-});
-```
-
-### off(event, callback)
-
-Removes a previously registered event listener.
-
-**Parameters:**
-- `event`: Event name
-- `callback`: The callback function to remove
-
-**Usage:**
-```typescript
-voice.off('speaking', callbackFunction);
-```
-
-## Events
-
-The `OpenAIRealtimeVoice` class emits the following events:
-
-### speaker
-
-Emitted when audio data is received from the model.
-
-**Event payload:**
-- `stream`: A stream of audio data as a readable stream
-
-```typescript
-agent.voice.on('speaker', (stream) => {
-  stream.pipe(speaker)
-});
-```
-
-### writing
-
-Emitted when transcribed text is available.
-
-**Event payload:**
-- `text`: The transcribed text
-- `role`: The role of the speaker (user or assistant)
-- `done`: Boolean indicating if this is the final transcription
-
-```typescript
-agent.voice.on('writing', ({ text, role }) => {
-  console.log(`${role}: ${text}`); // Log who said what
-});
-```
-
-### error
-
-Emitted when an error occurs.
-
-**Event payload:**
-- Error object with details about what went wrong
-
-```typescript
-agent.voice.on('error', (error) => {
-  console.error('Voice error:', error);
-});
-```
-
+Check out the [Adding Voice to Agents](../agents/adding-voice.mdx) documentation to learn how to use TTS in an agent.
 
 ---
 title: "Branching, Merging, Conditions | Workflows | Mastra Docs"
@@ -8050,7 +8685,7 @@ import { mastra } from "./index";
 const stepTwo = new Step({
   id: "stepTwo",
   execute: async ({ context, container }) => {
-    const multiplier = container.get("multiplier");
+    const multiplier = (container.get("multiplier");
     const doubledValue = context.getStepResult(stepOne)?.doubledValue;
     if (!doubledValue) {
       return { incrementedValue: 0 };
@@ -8066,7 +8701,9 @@ const stepTwo = new Step({
 const myWorkflow = mastra.getWorkflow("myWorkflow");
 const { runId, start, resume } = myWorkflow.createRun();
 
-const container = new Container();
+type MyContainer = { multiplier; number };
+
+const container = new Container<MyContainer>();
 container.set("multiplier", 5);
 
 // Start the workflow execution
@@ -13255,7 +13892,7 @@ Note: this example is for simplicity of understanding how custom processors work
 Here's how to use memory with processors in an agent:
 
 ```typescript
-import { Agent } from "@mastra/core";
+import { Agent } from "@mastra/core/agent";
 import { Memory, TokenLimiter, ToolCallFilter } from "@mastra/memory";
 import { openai } from "@ai-sdk/openai";
 
@@ -14287,7 +14924,7 @@ const doc = MDocument.fromText("Your text content...");
 
 const chunks = await doc.chunk();
 
-const { embeddings } = await embed({
+const { embeddings } = await embedMany({
   model: openai.embedding('text-embedding-3-small'),
   values: chunks.map(chunk => chunk.text),
 });
@@ -19924,9 +20561,19 @@ description: 'Guides on building with Mastra'
 # Guides
 Source: https://mastra.ai/guides
 
-The Guides section provides guides on building with Mastra.
+While examples show quick implementations and docs explain specific features, these guides are a bit longer and designed to  demonstrate core Mastra concepts:
 
+## [AI Recruiter](/guides/guide/ai-recruiter)
+Create a workflow that processes candidate resumes and conducts interviews, demonstrating branching logic and LLM integration in Mastra workflows.
 
+## [Chef Assistant](/guides/guide/chef-michel)
+Build an AI chef agent that helps users cook meals with available ingredients, showing how to create interactive agents with custom tools.
+
+## [Research Paper Assistant](/guides/guide/research-assistant)
+Develop an AI research assistant that analyzes academic papers using Retrieval Augmented Generation (RAG), demonstrating document processing and question answering.
+
+## [Stock Agent](/guides/guide/stock-agent)
+Implement a simple agent that fetches stock prices, illustrating the basics of creating tools and integrating them with Mastra agents.
 
 
 
@@ -20979,30 +21626,12 @@ This output is suitable for:
 - Running in containerized environments
 - Using with container orchestration systems
 
+## Deployers
+When a Deployer is used, the build output is automatically prepared for the target platform e.g
+- [Vercel Deployer](/reference/deployers/vercel)
+- [Netlify Deployer](/reference/deployers/netlify) 
+- [Cloudflare Deployer](/reference/deployers/cloudflare)
 
----
-title: "`mastra deploy` Reference | Deployment | Mastra CLI"
-description: Documentation for the mastra deploy command, which deploys Mastra projects to platforms like Vercel and Cloudflare.
----
-
-# `mastra deploy` Reference
-Source: https://mastra.ai/reference/cli/deploy
-
-## `mastra deploy vercel`
-
-Deploy your Mastra project to Vercel.
-
-## `mastra deploy cloudflare`
-
-Deploy your Mastra project to Cloudflare.
-
-## `mastra deploy netlify`
-
-Deploy your Mastra project to Netlify.
-
-### Flags
-
-- `-d, --dir <dir>`: Path to your mastra folder
 
 
 ---
@@ -22120,6 +22749,30 @@ const mastra = new Mastra({
   ]}
 />
 
+### Environment Variables
+
+The CloudflareDeployer handles environment variables from multiple sources:
+
+1. **Environment Files**: Variables from `.env.production` and `.env` files.
+2. **Configuration**: Variables passed through the `env` parameter.
+
+
+## Build Mastra Project
+
+To build your Mastra project for cloudflare deployment:
+
+```bash
+npx mastra build
+
+The build process generates the following output structure in the `.mastra/output` directory:
+
+```
+.mastra/output/
+├── index.mjs        # Main worker entry point
+├── wrangler.json    # Cloudflare Worker configuration
+└── assets/          # Static assets and dependencies
+```
+
 ### Wrangler Configuration
 
 The CloudflareDeployer automatically generates a `wrangler.json` configuration file with the following settings:
@@ -22162,13 +22815,25 @@ const routes = [
 ];
 ```
 
-### Environment Variables
 
-The CloudflareDeployer handles environment variables from multiple sources:
+## Deployment Options
 
-1. **Environment Files**: Variables from `.env.production` and `.env` files.
-2. **Configuration**: Variables passed through the `env` parameter.
+After building, you can deploy your Mastra application `.mastra/output`  to Cloudflare Workers using any of these methods:
 
+1. **Wrangler CLI**: Deploy directly using Cloudflare's official CLI tool
+   - Install the CLI: `npm install -g wrangler`
+   - Navigate to the output directory: `cd .mastra/output`
+   - Login to your Cloudflare account: `wrangler login`
+   - Deploy to preview environment: `wrangler deploy`
+   - For production deployment: `wrangler deploy --env production`
+
+2. **Cloudflare Dashboard**: Upload the build output manually through the Cloudflare dashboard
+
+> You can also run `wrangler dev` in your output directory `.mastra/output` to test your Mastra application locally.
+
+## Platform Documentation
+
+- [Cloudflare Workers](https://developers.cloudflare.com/workers/)
 
 
 ---
@@ -22386,9 +23051,38 @@ const mastra = new Mastra({
   ]}
 />
 
+
+### Environment Variables
+
+The NetlifyDeployer handles environment variables from multiple sources:
+
+1. **Environment Files**: Variables from `.env.production` and `.env` files.
+2. **Configuration**: Variables passed through the Mastra configuration.
+3. **Netlify Dashboard**: Variables can also be managed through Netlify's web interface.
+
+
+## Build Mastra Project
+
+To build your Mastra project for Netlify deployment:
+
+```bash
+npx mastra build
+```
+
+The build process generates the following output structure in the `.mastra/output` directory:
+
+```
+.mastra/output/
+├── netlify/
+│   └── functions/
+│       └── api/
+│           └── index.mjs    # Application entry point
+└── netlify.toml             # Netlify configuration
+```
+
 ### Netlify Configuration
 
-The NetlifyDeployer automatically generates a `netlify.toml` configuration file with the following settings:
+The NetlifyDeployer automatically generates a `netlify.toml` configuration file in `.mastra/output` with the following settings:
 
 ```toml
 [functions]
@@ -22402,27 +23096,25 @@ status = 200
 to = "/.netlify/functions/api/:splat"
 ```
 
-### Environment Variables
+## Deployment Options
 
-The NetlifyDeployer handles environment variables from multiple sources:
+After building, you can deploy your Mastra application `.mastra/output` to Netlify using any of these methods:
 
-1. **Environment Files**: Variables from `.env.production` and `.env` files.
-2. **Configuration**: Variables passed through the Mastra configuration.
-3. **Netlify Dashboard**: Variables can also be managed through Netlify's web interface.
+1. **Netlify CLI**: Deploy directly using Netlify's official CLI tool
+   - Install the CLI: `npm install -g netlify-cli`
+   - Navigate to the output directory: `cd .mastra/output`
+   - Deploy with functions directory specified: `netlify deploy --dir . --functions ./netlify/functions`
+   - For production deployment add `--prod` flag: `netlify deploy --prod --dir . --functions ./netlify/functions`
 
-### Project Structure
+2. **Netlify Dashboard**: Connect your Git repository or drag-and-drop the build output through the Netlify dashboard
 
-The deployer creates the following structure in your output directory:
+3. **Netlify Dev**: Run your Mastra application locally with Netlify's development environment
 
-```
-output-directory/
-├── netlify/
-│   └── functions/
-│       └── api/
-│           └── index.mjs    # Application entry point with Hono server integration
-└── netlify.toml             # Deployment configuration
-```
+> You can also run `netlify dev` in your output directory `.mastra/output` to test your Mastra application locally.
 
+## Platform Documentation
+
+- [Netlify](https://docs.netlify.com/)
 
 ---
 title: "Vercel Deployer"
@@ -22477,9 +23169,36 @@ const mastra = new Mastra({
   ]}
 />
 
+
+### Environment Variables
+
+The VercelDeployer handles environment variables from multiple sources:
+
+1. **Environment Files**: Variables from `.env.production` and `.env` files.
+2. **Configuration**: Variables passed through the Mastra configuration.
+3. **Vercel Dashboard**: Variables can also be managed through Vercel's web interface.
+
+The deployer automatically synchronizes environment variables between your local development environment and Vercel's environment variable system, ensuring consistency across all deployment environments (production, preview, and development).
+
+## Build Mastra Project
+
+To build your Mastra project for Vercel deployment:
+
+```bash
+npx mastra build
+```
+
+The build process generates the following output structure in the `.mastra/output` directory:
+
+```
+.mastra/output/
+├── vercel.json     # Vercel configuration
+└── index.mjs       # Application entry point
+```
+
 ### Vercel Configuration
 
-The VercelDeployer automatically generates a `vercel.json` configuration file with the following settings:
+The VercelDeployer automatically generates a `vercel.json` configuration file in `.mastra/output` with the following settings:
 
 ```json
 {
@@ -22503,26 +23222,23 @@ The VercelDeployer automatically generates a `vercel.json` configuration file wi
 }
 ```
 
-### Environment Variables
+## Deployment Options
 
-The VercelDeployer handles environment variables from multiple sources:
+After building, you can deploy your Mastra application `.mastra/output` to Vercel using any of these methods:
 
-1. **Environment Files**: Variables from `.env.production` and `.env` files.
-2. **Configuration**: Variables passed through the Mastra configuration.
-3. **Vercel Dashboard**: Variables can also be managed through Vercel's web interface.
+1. **Vercel CLI**: Deploy directly using Vercel's official CLI tool
+   - Install the CLI: `npm install -g vercel`
+   - Navigate to the output directory: `cd .mastra/output`
+   - Deploy to preview environment: `vercel`
+   - For production deployment: `vercel --prod`
 
-The deployer automatically synchronizes environment variables between your local development environment and Vercel's environment variable system, ensuring consistency across all deployment environments (production, preview, and development).
+2. **Vercel Dashboard**: Connect your Git repository or drag-and-drop the build output through the Vercel dashboard
 
-### Project Structure
+> You can also run `vercel dev` in your output directory `.mastra/output` to test your Mastra application locally.
 
-The deployer creates the following structure in your output directory:
+## Platform Documentation
 
-```
-output-directory/
-├── vercel.json     # Deployment configuration
-└── index.mjs       # Application entry point with Hono server integration
-```
-
+- [Vercel](https://vercel.com/docs)
 
 ---
 title: "Reference: Answer Relevancy | Metrics | Evals | Mastra Docs"
@@ -26199,7 +26915,7 @@ The `AgentNetwork` class provides a way to create a network of specialized agent
 ## Usage
 
 ```typescript
-import { AgentNetwork } from '@mastra/core';
+import { AgentNetwork } from '@mastra/core/network';
 import { openai } from '@mastra/openai';
 
 // Create specialized agents
@@ -29229,6 +29945,13 @@ It provides robust vector similarity search capabilities within your existing Po
       type: "string",
       description: "PostgreSQL connection URL",
     },
+    {
+      name: "schemaName",
+      type: "string",
+      description: 
+        "The name of the schema you want the vector store to use. Will use the default schema if not provided.",
+      isOptional: true,
+    }
   ]}
 />
 
@@ -31344,6 +32067,13 @@ const storage = new PostgresStore({
         "PostgreSQL connection string (e.g., postgresql://user:pass@host:5432/dbname)",
       isOptional: false,
     },
+    {
+      name: "schemaName",
+      type: "string",
+      description: 
+        "The name of the schema you want the storage to use. Will use the default schema if not provided.",
+      isOptional: true,
+    }
   ]}
 />
 
@@ -31470,7 +32200,7 @@ constructor({
     timeout = 60000,
 }: {
     name: string;
-    server: StdioServerParameters | SSEClientParameters;
+    server: MastraMCPServerDefinition;
     capabilities?: ClientCapabilities;
     version?: string;
     timeout?: number;
@@ -31479,6 +32209,7 @@ constructor({
 
 ### Parameters
 
+<br />
 <PropertiesTable
   content={[
     {
@@ -31495,9 +32226,9 @@ constructor({
     },
     {
       name: "server",
-      type: "StdioServerParameters | SSEClientParameters",
+      type: "MastraMCPServerDefinition",
       description:
-        "Configuration parameters for either a stdio server connection or an SSE server connection.",
+        "Configuration parameters for either a stdio server connection or an SSE server connection. Can include log handler and server logs configuration.",
     },
     {
       name: "capabilities",
@@ -31512,6 +32243,111 @@ constructor({
       isOptional: true,
       defaultValue: 60000,
       description: "The timeout duration, in milliseconds, for client tool calls.",
+    },
+  ]}
+/>
+
+### MastraMCPServerDefinition
+
+MCP servers can be configured as either stdio-based or SSE-based servers. The configuration includes both server-specific settings and common options:
+<br />
+<PropertiesTable
+  content={[
+    {
+      name: "command",
+      type: "string",
+      isOptional: true,
+      description: "For stdio servers: The command to execute.",
+    },
+    {
+      name: "args",
+      type: "string[]",
+      isOptional: true,
+      description: "For stdio servers: Arguments to pass to the command.",
+    },
+    {
+      name: "env",
+      type: "Record<string, string>",
+      isOptional: true,
+      description: "For stdio servers: Environment variables to set for the command.",
+    },
+    {
+      name: "url",
+      type: "URL",
+      isOptional: true,
+      description: "For SSE servers: The URL of the server.",
+    },
+    {
+      name: "requestInit",
+      type: "RequestInit",
+      isOptional: true,
+      description: "For SSE servers: Request configuration for the fetch API.",
+    },
+    {
+      name: "eventSourceInit",
+      type: "EventSourceInit",
+      isOptional: true,
+      description: "For SSE servers: Custom fetch configuration for SSE connections. Required when using custom headers.",
+    },
+    {
+      name: "logger",
+      type: "LogHandler",
+      isOptional: true,
+      description: "Optional additional handler for logging.",
+    },
+    {
+      name: "timeout",
+      type: "number",
+      isOptional: true,
+      description: "Server-specific timeout in milliseconds.",
+    },
+    {
+      name: "capabilities",
+      type: "ClientCapabilities",
+      isOptional: true,
+      description: "Server-specific capabilities configuration.",
+    },
+    {
+      name: "enableServerLogs",
+      type: "boolean",
+      isOptional: true,
+      defaultValue: "true",
+      description: "Whether to enable logging for this server.",
+    },
+  ]}
+/>
+
+### LogHandler
+
+The `LogHandler` function takes a `LogMessage` object as its parameter and returns void. The `LogMessage` object has the following properties. The `LoggingLevel` type is a string enum with values: `debug`, `info`, `warn`, and `error`.
+<br />
+<PropertiesTable
+  content={[
+    {
+      name: "level",
+      type: "LoggingLevel",
+      description: "Log level (debug, info, warn, error)",
+    },
+    {
+      name: "message",
+      type: "string",
+      description: "Log message content",
+    },
+    {
+      name: "timestamp",
+      type: "Date",
+      description: "When the log was generated",
+    },
+    {
+      name: "serverName",
+      type: "string",
+      description: "Name of the server that generated the log",
+    },
+    {
+      name: "details",
+      type: "Record<string, any>",
+      isOptional: true,
+      description: "Optional additional log details",
     },
   ]}
 />
@@ -31570,6 +32406,9 @@ const fetchClient = new MastraMCPClient({
   server: {
     command: "docker",
     args: ["run", "-i", "--rm", "mcp/fetch"],
+    logger: (logMessage) => {
+      console.log(`[${logMessage.level}] ${logMessage.message}`);
+    },
   },
 });
 
@@ -31612,7 +32451,7 @@ try {
 }
 ```
 
-#### Example with SSE Server
+### Example with SSE Server
 
 ```typescript
 // Initialize the MCP client using an SSE server
@@ -31637,6 +32476,12 @@ const sseClient = new MastraMCPClient({
         });
       },
     },
+    // Optional additional logging configuration
+    logger: (logMessage) => {
+      console.log(`[${logMessage.level}] ${logMessage.serverName}: ${logMessage.message}`);
+    },
+    // Disable server logs
+    enableServerLogs: false
   },
 });
 
@@ -31646,7 +32491,6 @@ const sseClient = new MastraMCPClient({
 ### Important Note About SSE Authentication
 
 When using SSE connections with authentication or custom headers, you need to configure both `requestInit` and `eventSourceInit`. This is because SSE connections use the browser's EventSource API, which doesn't support custom headers directly. 
-
 
 The `eventSourceInit` configuration allows you to customize the underlying fetch request used for the SSE connection, ensuring your authentication headers are properly included.
 Without `eventSourceInit`, authentication headers specified in `requestInit` won't be included in the connection request, leading to 401 Unauthorized errors.
@@ -31973,30 +32817,21 @@ Creates a new instance of the MCPConfiguration class.
 
 ```typescript
 constructor({
-    id?: string;
-    servers: Record<string, MastraMCPServerDefinition>
-}: {
-    servers: {
-        [serverName: string]: {
-            // For stdio-based servers
-            command?: string;
-            args?: string[];
-            env?: Record<string, string>;
-            // For SSE-based servers
-            url?: URL;
-            requestInit?: RequestInit;
-        }
-    }
-})
+  id?: string;
+  servers: Record<string, MastraMCPServerDefinition>;
+  timeout?: number;
+}: MCPConfigurationOptions)
 ```
 
-### Parameters
+### MCPConfigurationOptions
 
+<br />
 <PropertiesTable
   content={[
     {
       name: "id",
       type: "string",
+      isOptional: true,
       description:
         "Optional unique identifier for the configuration instance. Use this to prevent memory leaks when creating multiple instances with identical configurations.",
     },
@@ -32006,8 +32841,20 @@ constructor({
       description:
         "A map of server configurations, where each key is a unique server identifier and the value is the server configuration.",
     },
+    {
+      name: "timeout",
+      type: "number",
+      isOptional: true,
+      defaultValue: "60000",
+      description: "Global timeout value in milliseconds for all servers unless overridden in individual server configs.",
+    },
   ]}
 />
+
+### MastraMCPServerDefinition
+
+Each server in the `servers` map can be configured as either a stdio-based server or an SSE-based server. 
+For details about the available configuration options, see [MastraMCPServerDefinition](./client#mastramcpserverdefinition) in the MastraMCPClient documentation.
 
 ## Methods
 
@@ -32031,6 +32878,14 @@ const res = await agent.stream(prompt, {
 });
 ```
 
+### disconnect()
+
+Disconnects from all MCP servers and cleans up resources.
+
+```typescript
+async disconnect(): Promise<void>
+```
+
 ## Examples
 
 ### Basic Usage
@@ -32048,11 +32903,15 @@ const mcp = new MCPConfiguration({
       env: {
         API_KEY: "your-api-key",
       },
+      log: (logMessage) => {
+        console.log(`[${logMessage.level}] ${logMessage.message}`);
+      },
     },
     weather: {
-      url: new URL("http://localhost:8080/sse"),
+      url: new URL("http://localhost:8080/sse"),∂
     },
   },
+  timeout: 30000, // Global 30s timeout
 });
 
 // Create an agent with access to all tools
@@ -32087,6 +32946,7 @@ const mcp = new MCPConfiguration({
       env: {
         API_KEY: "user-123-api-key",
       },
+      timeout: 20000, // Server-specific timeout
     },
     weather: {
       url: new URL("http://localhost:8080/sse"),
@@ -33774,6 +34634,7 @@ The OpenAIRealtimeVoice class provides real-time voice interaction capabilities 
 
 ```typescript
 import { OpenAIRealtimeVoice } from "@mastra/voice-openai-realtime";
+import { playAudio, getMicrophoneStream } from "@mastra/node-audio";
 
 // Initialize with default configuration using environment variables
 const voice = new OpenAIRealtimeVoice();
@@ -33800,7 +34661,7 @@ const voiceWithConfig = new OpenAIRealtimeVoice({
 await voice.connect();
 
 // Set up event listeners
-voice.on('speaking', ({ audio }) => {
+voice.on('speaker', ({ audio }) => {
   // Handle audio data (Int16Array) pcm format by default
   playAudio(audio);
 });

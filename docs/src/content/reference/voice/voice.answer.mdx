@@ -11,6 +11,7 @@ The `answer()` method is used in real-time voice providers to trigger the AI to 
 
 ```typescript
 import { OpenAIRealtimeVoice } from "@mastra/voice-openai-realtime";
+import { getMicrophoneStream } from "@mastra/node-audio";
 import Speaker from "@mastra/node-speaker";
 
 const speaker = new Speaker({
@@ -39,18 +40,11 @@ const microphoneStream = getMicrophoneStream();
 await voice.send(microphoneStream);
 // Trigger the AI to respond
 await voice.answer();
-// With custom options (provider-specific)
-await voice.answer({
-  options: {
-    content: "Hello, how can I help you today?",
-    voice: "nova",
-  },
-});
 ```
 
 
 ## Parameters
-
+<br/>
 <PropertiesTable
   content={[
     {
@@ -66,46 +60,6 @@ await voice.answer({
 
 Returns a `Promise<void>` that resolves when the response has been triggered.
 
-## Provider-Specific Options
-
-Each real-time voice provider may support different options for the `answer()` method:
-
-### OpenAI Realtime
-
-<PropertiesTable
-  content={[
-    {
-      name: "options.content",
-      type: "string",
-      description: "Text content to use for the response instead of generating one",
-      isOptional: true,
-    },
-    {
-      name: "options.voice",
-      type: "string",
-      description: "Voice ID to use for this specific response",
-      isOptional: true,
-    }
-  ]}
-/>
-
-## Using with CompositeVoice
-
-When using `CompositeVoice`, the `answer()` method delegates to the configured real-time provider:
-
-```typescript
-import { CompositeVoice } from "@mastra/core/voice";
-import { OpenAIRealtimeVoice } from "@mastra/voice-openai-realtime";
-const realtimeVoice = new OpenAIRealtimeVoice();
-const voice = new CompositeVoice({
-  realtimeProvider: realtimeVoice,
-});
-// Connect to the real-time service
-await voice.connect();
-// This will use the OpenAIRealtimeVoice provider
-await voice.answer();
-```
-
 ## Notes
 
 - This method is only implemented by real-time voice providers that support speech-to-speech capabilities
@@ -113,10 +67,3 @@ await voice.answer();
 - The response audio will typically be emitted through the 'speaking' event rather than returned directly
 - For providers that support it, you can use this method to send a specific response instead of having the AI generate one
 - This method is commonly used in conjunction with `send()` to create a conversational flow
-
-## Related Methods
-
-- [voice.connect()](./voice.connect) - Establishes a connection to the real-time service
-- [voice.send()](./voice.send) - Sends audio data to the voice provider
-- [voice.speak()](./voice.speak) - Converts text to speech
-- [voice.listen()](./voice.listen) - Converts speech to text
