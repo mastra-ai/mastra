@@ -1807,6 +1807,31 @@ describe('MDocument', () => {
       expect(metadata.excerptKeywords).not.toBe('original,keywords'); // Should be new keywords
     });
   });
+  describe('MDocument TitleExtractor document grouping integration', () => {
+    it('groups chunks by docId for title extraction (integration)', async () => {
+      const doc = new MDocument({
+        docs: [
+          { text: 'Alpha chunk 1', metadata: { docId: 'docA' } },
+          { text: 'Alpha chunk 2', metadata: { docId: 'docA' } },
+          { text: 'Beta chunk 1', metadata: { docId: 'docB' } },
+        ],
+        type: 'text',
+      });
+
+      await doc.extractMetadata({ title: true });
+      const chunks = doc.getDocs();
+
+      const titleA1 = chunks[0].metadata.documentTitle;
+      const titleA2 = chunks[1].metadata.documentTitle;
+      const titleB = chunks[2].metadata.documentTitle;
+
+      expect(titleA1).toBeDefined();
+      expect(titleA2).toBeDefined();
+      expect(titleB).toBeDefined();
+      expect(titleA1).toBe(titleA2);
+      expect(titleA1).not.toBe(titleB);
+    });
+  });
 });
 
 // Helper function to find the longest common substring between two strings
