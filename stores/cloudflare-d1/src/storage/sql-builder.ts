@@ -162,7 +162,7 @@ export class SqlBuilder {
    * @returns The builder instance
    */
   createIndex(indexName: string, tableName: string, columnName: string, indexType: string = ''): SqlBuilder {
-    this.sql = `CREATE ${indexType} INDEX IF NOT EXISTS ${indexName} ON ${tableName}(${columnName})`;
+    this.sql = `CREATE ${indexType ? indexType + ' ' : ''}INDEX IF NOT EXISTS ${indexName} ON ${tableName}(${columnName})`;
     return this;
   }
 

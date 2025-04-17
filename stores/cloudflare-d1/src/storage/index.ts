@@ -24,8 +24,6 @@ export interface SqlQueryOptions {
   params?: SqlParam[];
   /** Whether to return only the first result */
   first?: boolean;
-  /** Optional type transformation function to apply to the results */
-  transform?: (row: Record<string, any>) => Record<string, any>;
 }
 
 /**
@@ -146,7 +144,6 @@ export class D1Store extends MastraStorage {
     sql,
     params = [],
     first = false,
-    transform,
   }: SqlQueryOptions): Promise<Record<string, any>[] | Record<string, any> | null> {
     // Ensure binding is defined
     if (!this.binding) {
@@ -164,11 +161,6 @@ export class D1Store extends MastraStorage {
           result = await statement.bind(...formattedParams).first();
           if (!result) return null;
 
-          // Apply transformation if provided
-          if (transform && typeof transform === 'function') {
-            return transform(result);
-          }
-
           return result;
         } else {
           result = await statement.bind(...formattedParams).all();
@@ -179,22 +171,12 @@ export class D1Store extends MastraStorage {
             this.logger.debug('Query metadata', { meta: result.meta });
           }
 
-          // Apply transformation if provided
-          if (transform && typeof transform === 'function') {
-            return results.map(row => transform(row));
-          }
-
           return results;
         }
       } else {
         if (first) {
           result = await statement.first();
           if (!result) return null;
-
-          // Apply transformation if provided
-          if (transform && typeof transform === 'function') {
-            return transform(result);
-          }
 
           return result;
         } else {
@@ -204,11 +186,6 @@ export class D1Store extends MastraStorage {
           // Include metadata for debugging if available
           if (result.meta) {
             this.logger.debug('Query metadata', { meta: result.meta });
-          }
-
-          // Apply transformation if provided
-          if (transform && typeof transform === 'function') {
-            return results.map(row => transform(row));
           }
 
           return results;
@@ -227,7 +204,6 @@ export class D1Store extends MastraStorage {
     sql,
     params = [],
     first = false,
-    transform,
   }: SqlQueryOptions): Promise<Record<string, any>[] | Record<string, any> | null> {
     // Ensure required properties are defined
     if (!this.client || !this.accountId || !this.databaseId) {
@@ -241,24 +217,15 @@ export class D1Store extends MastraStorage {
         params: this.formatSqlParams(params),
       });
 
-      const results = response.result || [];
+      const result = response.result || [];
+      const results = result.flatMap(r => r.results || []);
 
       // If first=true, return only the first result
       if (first) {
         const firstResult = isArrayOfRecords(results) && results.length > 0 ? results[0] : null;
         if (!firstResult) return null;
 
-        // Apply transformation if provided
-        if (transform && typeof transform === 'function') {
-          return transform(firstResult);
-        }
-
         return firstResult;
-      }
-
-      // Apply transformation if provided
-      if (transform && typeof transform === 'function') {
-        return results.map(row => transform(row));
       }
 
       return results;
@@ -277,17 +244,17 @@ export class D1Store extends MastraStorage {
    * @returns Query results as an array or a single object if first=true
    */
   private async executeQuery(options: SqlQueryOptions): Promise<Record<string, any>[] | Record<string, any> | null> {
-    const { sql, params = [], first = false, transform } = options;
+    const { sql, params = [], first = false } = options;
 
     try {
       this.logger.debug('Executing SQL query', { sql, params, first });
 
       if (this.binding) {
         // Use Workers Binding API
-        return this.executeWorkersBindingQuery({ sql, params, first, transform });
+        return this.executeWorkersBindingQuery({ sql, params, first });
       } else if (this.client && this.accountId && this.databaseId) {
         // Use REST API
-        return this.executeRestQuery({ sql, params, first, transform });
+        return this.executeRestQuery({ sql, params, first });
       } else {
         throw new Error('No valid D1 configuration provided');
       }
@@ -958,7 +925,7 @@ export class D1Store extends MastraStorage {
       const query = createSqlBuilder().select('*').from(fullTableName).where('1=1');
 
       if (name) {
-        query.andWhere('name = ?', name);
+        query.andWhere('name LIKE ?', `%${name}%`);
       }
 
       if (scope) {
@@ -987,6 +954,7 @@ export class D1Store extends MastraStorage {
             status: this.deserializeValue(trace.status, 'jsonb'),
             events: this.deserializeValue(trace.events, 'jsonb'),
             links: this.deserializeValue(trace.links, 'jsonb'),
+            other: this.deserializeValue(trace.other, 'jsonb'),
           }))
         : [];
     } catch (error) {

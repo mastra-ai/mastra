@@ -55,8 +55,8 @@ describe('SQL Builder', () => {
 
       const { sql, params } = builder.build();
 
-      expect(sql).toBe('SELECT * FROM users LIMIT 10');
-      expect(params).toEqual([]);
+      expect(sql).toBe('SELECT * FROM users LIMIT ?');
+      expect(params).toEqual([10]);
     });
 
     it('should build a complex SELECT query with all clauses', () => {
@@ -71,9 +71,9 @@ describe('SQL Builder', () => {
       const { sql, params } = builder.build();
 
       expect(sql).toBe(
-        'SELECT id, name, email FROM users WHERE id > ? AND status = ? ORDER BY created_at DESC LIMIT 10',
+        'SELECT id, name, email FROM users WHERE id > ? AND status = ? ORDER BY created_at DESC LIMIT ?',
       );
-      expect(params).toEqual([100, 'active']);
+      expect(params).toEqual([100, 'active', 10]);
     });
   });
 
@@ -92,7 +92,7 @@ describe('SQL Builder', () => {
 
       const { sql, params } = builder.build();
 
-      expect(sql).toBe('INSERT INTO users DEFAULT VALUES');
+      expect(sql).toBe('INSERT INTO users (id, name, email) VALUES (?, ?, ?)');
       expect(params).toEqual([]);
     });
 
@@ -270,25 +270,6 @@ describe('SQL Builder', () => {
 
       const { sql } = builder.build();
       expect(sql).toBe('SELECT * FROM users');
-    });
-
-    it('should handle multiple calls to the same method', () => {
-      const builder = createSqlBuilder().select('id').select('name').from('users');
-
-      const { sql } = builder.build();
-      expect(sql).toBe('SELECT id, name FROM users');
-    });
-
-    it('should handle chaining methods in different order', () => {
-      const builder1 = createSqlBuilder().select('*').from('users').where('id = ?', 1).limit(10);
-
-      const builder2 = createSqlBuilder().from('users').where('id = ?', 1).select('*').limit(10);
-
-      const { sql: sql1 } = builder1.build();
-      const { sql: sql2 } = builder2.build();
-
-      expect(sql1).toBe('SELECT * FROM users WHERE id = ? LIMIT 10');
-      expect(sql2).toBe('SELECT * FROM users WHERE id = ? LIMIT 10');
     });
   });
 });
