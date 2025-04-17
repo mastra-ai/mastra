@@ -6,6 +6,7 @@ import { removeAllOptionsExceptServer } from './babel/remove-all-options-server'
 import commonjs from '@rollup/plugin-commonjs';
 import { recursiveRemoveNonReferencedNodes } from './plugins/remove-unused-references';
 import type { Config, Mastra } from '@mastra/core';
+import { tsConfigPaths } from './plugins/tsconfig-paths';
 
 export function getServerOptionsBundler(
   entryFile: string,
@@ -20,6 +21,7 @@ export function getServerOptionsBundler(
     },
     treeshake: 'smallest',
     plugins: [
+      tsConfigPaths(),
       // transpile typescript to something we understand
       esbuild({
         target: 'node20',
