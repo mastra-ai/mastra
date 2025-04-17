@@ -6,12 +6,13 @@ This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-
 
 The documentation site is included in the project's workspace configuration. If you're setting up the project for the first time, follow these steps:
 
-1. Ensure the docs directory is included in your `pnpm-workspace.yaml`:
-   ```yaml
-   packages:
-     - "docs"
-     # Along with other packages in your workspace
-   ```
+Ensure the docs directory is included in your `pnpm-workspace.yaml`:
+
+```yaml
+packages:
+  - "docs"
+  # Along with other packages in your workspace
+```
 
 Install dependencies:
 
