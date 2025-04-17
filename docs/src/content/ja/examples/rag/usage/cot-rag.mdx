@@ -1,0 +1,174 @@
+---
+title: "例：思考の連鎖プロンプティング | RAG | Mastra ドキュメント"
+description: OpenAIとPGVectorを使用した思考の連鎖推論によるMastraでのRAGシステム実装の例。
+---
+
+import { GithubLink } from "@/components/github-link";
+
+# 思考の連鎖プロンプティング
+
+この例では、Mastra、OpenAIの埋め込み、およびベクトルストレージ用のPGVectorを使用して、検索強化生成（RAG）システムを実装する方法を示し、思考の連鎖推論に重点を置いています。
+
+## 概要
+
+このシステムは、MastraとOpenAIを使用して、思考の連鎖プロンプトを実装しています。以下がその機能です：
+
+1. 応答生成のためにgpt-4o-miniを使用してMastraエージェントを設定
+2. ベクトルストアのインタラクションを管理するためのベクトルクエリツールを作成
+3. テキストドキュメントを小さなセグメントに分割
+4. これらのチャンクの埋め込みを作成
+5. PostgreSQLベクトルデータベースに保存
+6. ベクトルクエリツールを使用してクエリに基づいて関連するチャンクを取得
+7. 思考の連鎖推論を使用してコンテキストに応じた応答を生成
+
+## セットアップ
+
+### 環境セットアップ
+
+環境変数を設定してください：
+
+```bash filename=".env"
+OPENAI_API_KEY=your_openai_api_key_here
+POSTGRES_CONNECTION_STRING=your_connection_string_here
+```
+
+### 依存関係
+
+次に、必要な依存関係をインポートします：
+
+```typescript copy showLineNumbers filename="index.ts"
+import { openai } from "@ai-sdk/openai";
+import { Mastra } from "@mastra/core";
+import { Agent } from "@mastra/core/agent";
+import { PgVector } from "@mastra/pg";
+import { createVectorQueryTool, MDocument } from "@mastra/rag";
+import { embedMany } from "ai";
+```
+
+## ベクトルクエリツールの作成
+
+@mastra/rag からインポートされた createVectorQueryTool を使用して、ベクトルデータベースをクエリできるツールを作成できます。
+
+```typescript copy showLineNumbers{8} filename="index.ts"
+const vectorQueryTool = createVectorQueryTool({
+  vectorStoreName: "pgVector",
+  indexName: "embeddings",
+  model: openai.embedding('text-embedding-3-small'),
+});
+```
+
+## エージェント設定
+
+Mastraエージェントをチェーン・オブ・ソートプロンプトの指示で設定します：
+
+```typescript copy showLineNumbers{14} filename="index.ts"
+export const ragAgent = new Agent({
+  name: "RAG Agent",
+  instructions: `あなたは、提供されたコンテキストに基づいて質問に答える役立つアシスタントです。
+各応答のために次のステップに従ってください：
+
+1. まず、取得したコンテキストチャンクを注意深く分析し、重要な情報を特定します。
+2. 取得した情報がクエリにどのように関連しているかについての思考プロセスを分解します。
+3. 取得したチャンクから異なる部分をどのように結びつけているかを説明します。
+4. 取得したコンテキストの証拠に基づいてのみ結論を導きます。
+5. 取得したチャンクに十分な情報が含まれていない場合は、何が欠けているかを明示的に述べてください。
+
+応答を次のようにフォーマットします：
+思考プロセス：
+- ステップ1：[取得したチャンクの初期分析]
+- ステップ2：[チャンク間の接続]
+- ステップ3：[チャンクに基づく推論]
+
+最終回答：
+[取得したコンテキストに基づく簡潔な回答]
+
+重要：質問に答えるよう求められた場合、ツールで提供されたコンテキストのみに基づいて回答してください。
+コンテキストに質問に完全に答えるための十分な情報が含まれていない場合は、それを明示的に述べてください。
+覚えておいてください：取得した情報をどのように使用して結論に達しているかを説明してください。
+`,
+  model: openai("gpt-4o-mini"),
+  tools: { vectorQueryTool },
+});
+```
+
+## PgVectorとMastraのインスタンス化
+
+すべてのコンポーネントを使用してPgVectorとMastraをインスタンス化します:
+
+```typescript copy showLineNumbers{36} filename="index.ts"
+const pgVector = new PgVector(process.env.POSTGRES_CONNECTION_STRING!);
+
+export const mastra = new Mastra({
+  agents: { ragAgent },
+  vectors: { pgVector },
+});
+const agent = mastra.getAgent("ragAgent");
+```
+
+## ドキュメント処理
+
+ドキュメントを作成し、チャンクに処理します：
+
+```typescript copy showLineNumbers{44} filename="index.ts"
+const doc = MDocument.fromText(
+  `The Impact of Climate Change on Global Agriculture...`,
+);
+
+const chunks = await doc.chunk({
+  strategy: "recursive",
+  size: 512,
+  overlap: 50,
+  separator: "\n",
+});
+```
+
+## 埋め込みの作成と保存
+
+チャンクの埋め込みを生成し、それをベクターデータベースに保存します:
+
+```typescript copy showLineNumbers{55} filename="index.ts"
+const { embeddings } = await embedMany({
+  values: chunks.map(chunk => chunk.text),
+  model: openai.embedding("text-embedding-3-small"),
+});
+
+const vectorStore = mastra.getVector("pgVector");
+await vectorStore.createIndex({
+  indexName: "embeddings",
+  dimension: 1536,
+});
+await vectorStore.upsert({
+  indexName: "embeddings",
+  vectors: embeddings,
+  metadata: chunks?.map((chunk: any) => ({ text: chunk.text })),
+});
+```
+
+## 思考の連鎖クエリ
+
+エージェントがどのように推論を分解するかを確認するために、さまざまなクエリを試してください：
+
+```typescript copy showLineNumbers{83} filename="index.ts"
+const answerOne = await agent.generate('What are the main adaptation strategies for farmers?');
+console.log('\nQuery:', 'What are the main adaptation strategies for farmers?');
+console.log('Response:', answerOne.text);
+
+const answerTwo = await agent.generate('Analyze how temperature affects crop yields.');
+console.log('\nQuery:', 'Analyze how temperature affects crop yields.');
+console.log('Response:', answerTwo.text);
+
+const answerThree = await agent.generate('What connections can you draw between climate change and food security?');
+console.log('\nQuery:', 'What connections can you draw between climate change and food security?');
+console.log('Response:', answerThree.text);
+```
+
+<br />
+<br />
+<hr className="dark:border-[#404040] border-gray-300" />
+<br />
+<br />
+<GithubLink
+  link={
+    "https://github.com/mastra-ai/mastra/blob/main/examples/basics/rag/cot-rag"
+  }
+/>

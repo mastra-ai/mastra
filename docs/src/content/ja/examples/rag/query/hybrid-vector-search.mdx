@@ -1,0 +1,94 @@
+---
+title: "例：ハイブリッドベクトル検索 | RAG | Mastra ドキュメント"
+description: Mastraでベクトル検索結果を強化するためにPGVectorでメタデータフィルターを使用する例。
+---
+
+import { GithubLink } from "@/components/github-link";
+
+# ハイブリッドベクトル検索
+
+ベクトル類似性検索をメタデータフィルターと組み合わせると、より正確で効率的なハイブリッド検索を作成できます。
+このアプローチは次の要素を組み合わせます：
+
+- 最も関連性の高いドキュメントを見つけるためのベクトル類似性検索
+- 追加の基準に基づいて検索結果を絞り込むためのメタデータフィルター
+
+この例では、MastraとPGVectorを使用したハイブリッドベクトル検索の方法を示します。
+
+## 概要
+
+このシステムは、MastraとPGVectorを使用してフィルタリングされたベクトル検索を実装しています。以下のことを行います：
+
+1. メタデータフィルターを使用してPGVectorの既存の埋め込みをクエリします
+2. 異なるメタデータフィールドでフィルタリングする方法を示します
+3. ベクトル類似性とメタデータフィルタリングを組み合わせる方法を示します
+
+> **注**: ドキュメントからメタデータを抽出する方法の例については、[メタデータ抽出](./metadata-extraction)ガイドを参照してください。
+> 
+> 埋め込みを作成して保存する方法については、[埋め込みのアップサート](/examples/rag/upsert/upsert-embeddings)ガイドを参照してください。
+
+## セットアップ
+
+### 環境セットアップ
+
+環境変数を設定してください：
+
+```bash filename=".env"
+OPENAI_API_KEY=your_openai_api_key_here
+POSTGRES_CONNECTION_STRING=your_connection_string_here
+```
+
+### 依存関係
+
+必要な依存関係をインポートします：
+
+```typescript copy showLineNumbers filename="src/index.ts"
+import { embed } from 'ai';
+import { PgVector } from '@mastra/pg';
+import { openai } from '@ai-sdk/openai';
+```
+
+## ベクターストアの初期化
+
+接続文字列を使用してPgVectorを初期化します:
+
+```typescript copy showLineNumbers{4} filename="src/index.ts"
+const pgVector = new PgVector(process.env.POSTGRES_CONNECTION_STRING!);
+```
+
+## 使用例
+
+### メタデータ値でフィルタリング
+
+```typescript copy showLineNumbers{6} filename="src/index.ts"
+// クエリの埋め込みを作成
+const { embedding } = await embed({
+  model: openai.embedding('text-embedding-3-small'),
+  value: '[ここにドキュメントに基づくクエリを挿入]',
+});
+
+// メタデータフィルタを使用したクエリ
+const result = await pgVector.query({
+  indexName: 'embeddings',
+  queryVector: embedding,
+  topK: 3,
+  filter: {
+    'path.to.metadata': {
+      $eq: 'value',
+    },
+  },
+});
+
+console.log('結果:', result);
+```
+
+<br />
+<br />
+<hr className="dark:border-[#404040] border-gray-300" />
+<br />
+<br />
+<GithubLink
+  link={
+    "https://github.com/mastra-ai/mastra/blob/main/examples/basics/rag/hybrid-vector-search"
+  }
+/>

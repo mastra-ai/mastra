@@ -1,0 +1,38 @@
+# エラーハンドリング
+
+Mastra Client SDK には、組み込みのリトライメカニズムとエラーハンドリング機能が含まれています。
+
+## エラーハンドリング
+
+すべてのAPIメソッドは、キャッチして処理できるエラーをスローする可能性があります:
+
+```typescript
+try {
+  const agent = client.getAgent("agent-id");
+  const response = await agent.generate({
+    messages: [{ role: "user", content: "Hello" }],
+  });
+} catch (error) {
+  console.error("An error occurred:", error.message);
+}
+```
+
+## リトライメカニズム
+
+クライアントは指数バックオフを使用して失敗したリクエストを自動的にリトライします:
+
+```typescript
+const client = new MastraClient({
+  baseUrl: "http://localhost:4111",
+  retries: 3, // リトライ試行回数
+  backoffMs: 300, // 初期バックオフ時間
+  maxBackoffMs: 5000, // 最大バックオフ時間
+});
+```
+
+### リトライの仕組み
+
+1. 最初の試行が失敗 → 300ms 待機
+2. 2回目の試行が失敗 → 600ms 待機
+3. 3回目の試行が失敗 → 1200ms 待機
+4. 最終試行が失敗 → エラーをスロー
