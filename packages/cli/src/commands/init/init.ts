@@ -12,6 +12,7 @@ import {
   createMastraDir,
   getAISDKPackage,
   getAPIKey,
+  installCoreDeps,
   writeAPIKey,
   writeCodeSample,
   writeIndexFile,
@@ -66,6 +67,12 @@ export const init = async ({
           writeCodeSample(dirPath, component as Components, llmProvider, components as Components[]),
         ),
       ]);
+
+      const depService = new DepsService();
+      const depCheck = await depService.checkDependencies(['@mastra/libsql']);
+      if (depCheck !== 'ok') {
+        await depService.installPackages(['@mastra/libsql']);
+      }
     }
 
     const key = await getAPIKey(llmProvider || 'openai');
