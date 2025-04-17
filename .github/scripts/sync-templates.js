@@ -1,7 +1,11 @@
-const { Octokit } = require('@octokit/rest');
-const fs = require('fs-extra');
-const path = require('path');
-const { execSync } = require('child_process');
+import { Octokit } from '@octokit/rest';
+import fs from 'fs';
+import * as fsExtra from 'fs-extra/esm';
+import path from 'path';
+import { execSync } from 'child_process';
+import dotenv from 'dotenv';
+
+dotenv.config();
 
 // Configuration
 const TEMPLATES_DIR = path.join(process.cwd(), 'templates');
@@ -24,7 +28,9 @@ async function main() {
 
     // Process each template
     for (const templateName of templateDirs) {
-      await processTemplate(templateName);
+      //pick description text from description.txt
+      const description = fs.readFileSync(path.join(TEMPLATES_DIR, templateName, 'description.txt'), 'utf-8');
+      await processTemplate(templateName, description);
     }
   } catch (error) {
     console.error('Error in main process:', error);
@@ -32,7 +38,7 @@ async function main() {
   }
 }
 
-async function processTemplate(templateName) {
+async function processTemplate(templateName, description) {
   console.log(`Processing template: ${templateName}`);
 
   try {
@@ -44,7 +50,7 @@ async function processTemplate(templateName) {
       await updateExistingRepo(templateName);
     } else {
       console.log(`Repository ${templateName} does not exist, creating...`);
-      await createNewRepo(templateName);
+      await createNewRepo(templateName, description);
     }
   } catch (error) {
     console.error(`Error processing template ${templateName}:`, error);
@@ -66,12 +72,12 @@ async function checkRepoExists(repoName) {
   }
 }
 
-async function createNewRepo(repoName) {
+async function createNewRepo(repoName, description) {
   // Create new repository
   await octokit.repos.createInOrg({
     org: ORGANIZATION,
     name: repoName,
-    description: `Template repository for ${repoName}`,
+    description: description || `Template repository for ${repoName}`,
     is_template: true, // Make it a template repository
     auto_init: false,
   });
@@ -88,17 +94,21 @@ async function updateExistingRepo(repoName) {
 }
 
 async function pushToRepo(repoName) {
+  console.log(`Pushing to new repo: ${repoName}`);
   const templatePath = path.join(TEMPLATES_DIR, repoName);
   const tempDir = path.join(process.cwd(), '.temp', repoName);
 
   try {
     // Create temp directory
-    fs.ensureDirSync(tempDir);
+    console.log(`Creating temp directory: ${tempDir}`);
+    fsExtra.ensureDirSync(tempDir);
 
     // Copy template content to temp directory
-    fs.copySync(templatePath, tempDir);
+    console.log(`Copying template content to temp directory: ${tempDir}`);
+    fsExtra.copySync(templatePath, tempDir);
 
     // Initialize git and push to repo
+    console.log(`Initializing git and pushing to repo: ${repoName}`);
     execSync(
       `
       cd ${tempDir} &&
@@ -114,9 +124,13 @@ async function pushToRepo(repoName) {
     );
 
     console.log(`Successfully pushed template to ${repoName}`);
+  } catch (error) {
+    console.error(`Error pushing template to ${repoName}`, error);
+    throw error;
   } finally {
     // Clean up temp directory
-    fs.removeSync(path.join(process.cwd(), '.temp'));
+    console.log(`Cleaning up temp directory: ${tempDir}`);
+    fsExtra.removeSync(path.join(process.cwd(), '.temp'));
   }
 }
 
