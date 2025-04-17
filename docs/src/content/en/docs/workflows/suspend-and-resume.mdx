@@ -281,16 +281,14 @@ By default, Mastra uses LibSQL as its storage engine:
 
 ```typescript
 import { Mastra } from "@mastra/core/mastra";
-import { DefaultStorage } from "@mastra/core/storage/libsql";
+import { LibSQLStore } from "@mastra/libsql";
 
 const mastra = new Mastra({
-  storage: new DefaultStorage({
-    config: {
-      url: "file:storage.db", // Local file-based database for development
-      // For production, use a persistent URL:
-      // url: process.env.DATABASE_URL,
-      // authToken: process.env.DATABASE_AUTH_TOKEN, // Optional for authenticated connections
-    },
+  storage: new LibSQLStore({
+    url: "file:./storage.db", // Local file-based database for development
+    // For production, use a persistent URL:
+    // url: process.env.DATABASE_URL,
+    // authToken: process.env.DATABASE_AUTH_TOKEN, // Optional for authenticated connections
   }),
 });
 ```
