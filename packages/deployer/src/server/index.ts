@@ -2212,13 +2212,13 @@ export async function createNodeServer(
     },
     () => {
       const logger = mastra.getLogger();
-      logger.info(`🦄 Mastra API running on port ${process.env.PORT || 4111}/api`);
-      logger.info(`📚 Open API documentation available at http://localhost:${process.env.PORT || 4111}/openapi.json`);
+      logger.info(`🦄 Mastra API running on port ${port}/api`);
+      logger.info(`📚 Open API documentation available at http://localhost:${port}/openapi.json`);
       if (options?.swaggerUI) {
-        logger.info(`🧪 Swagger UI available at http://localhost:${process.env.PORT || 4111}/swagger-ui`);
+        logger.info(`🧪 Swagger UI available at http://localhost:${port}/swagger-ui`);
       }
       if (options?.playground) {
-        logger.info(`👨‍💻 Playground available at http://localhost:${process.env.PORT || 4111}/`);
+        logger.info(`👨‍💻 Playground available at http://localhost:${port}/`);
       }
     },
   );

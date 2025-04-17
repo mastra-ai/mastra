@@ -1,5 +1,13 @@
 # @mastra/rag
 
+## 0.1.19-alpha.4
+
+### Patch Changes
+
+- f850f80: use custom extractors rather than llamaindex versions, and remove @llamaindex/core and @llamaindex/env packages
+- Updated dependencies [7e92011]
+  - @mastra/core@0.9.0-alpha.4
+
 ## 0.1.19-alpha.3
 
 ### Patch Changes

@@ -189,6 +189,8 @@ jobs:
       - name: Test
         working-directory: ./e2e-tests/monorepo
         run: pnpm test
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
 
   e2e-create-mastra:
     name: E2E create-mastra
