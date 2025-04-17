@@ -1,0 +1,74 @@
+---
+title: "Example: Agents with a System Prompt | Agents | Mastra Docs"
+description: Example of creating an AI agent in Mastra with a system prompt to define its personality and capabilities.
+---
+
+import { GithubLink } from "@/components/github-link";
+
+# Giving an Agent a System Prompt
+
+When building AI agents, you often need to give them specific instructions and capabilities to handle specialized tasks effectively. System prompts allow you to define an agent's personality, knowledge domain, and behavioral guidelines. This example shows how to create an AI agent with custom instructions and integrate it with a dedicated tool for retrieving verified information.
+
+```ts showLineNumbers copy
+import { openai } from "@ai-sdk/openai";
+import { Agent } from "@mastra/core/agent";
+import { createTool } from "@mastra/core/tools";
+
+import { z } from "zod";
+
+const instructions = `You are a helpful cat expert assistant. When discussing cats, you should always include an interesting cat fact.
+
+  Your main responsibilities:
+  1. Answer questions about cats
+  2. Use the catFact tool to provide verified cat facts
+  3. Incorporate the cat facts naturally into your responses
+
+  Always use the catFact tool at least once in your responses to ensure accuracy.`;
+
+const getCatFact = async () => {
+  const { fact } = (await fetch("https://catfact.ninja/fact").then((res) =>
+    res.json(),
+  )) as {
+    fact: string;
+  };
+
+  return fact;
+};
+
+const catFact = createTool({
+  id: "Get cat facts",
+  inputSchema: z.object({}),
+  description: "Fetches cat facts",
+  execute: async () => {
+    console.log("using tool to fetch cat fact");
+    return {
+      catFact: await getCatFact(),
+    };
+  },
+});
+
+const catOne = new Agent({
+  name: "cat-one",
+  instructions: instructions,
+  model: openai("gpt-4o-mini"),
+  tools: {
+    catFact,
+  },
+});
+
+const result = await catOne.generate("Tell me a cat fact");
+
+console.log(result.text);
+```
+
+<br />
+<br />
+<hr className="dark:border-[#404040] border-gray-300" />
+<br />
+<br />
+
+<GithubLink
+  link={
+    "https://github.com/mastra-ai/mastra/blob/main/examples/basics/agents/system-prompt"
+  }
+/>

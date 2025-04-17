@@ -2,6 +2,7 @@ import { ArrowUpRight } from "lucide-react";
 import React from "react";
 
 import Image from "next/image";
+import { Var, T } from "gt-next/client";
 
 interface ShowcaseCardProps {
   title: string;
@@ -129,20 +130,24 @@ export const ShowcaseGrid = () => {
   ];
 
   return (
-    <div className="mx-auto max-w-7xl  px-4  py-12 sm:px-6 lg:px-8">
-      <div className="text-center mb-12">
-        <h1 className="text-4xl font-bold tracking-tight mb-4 text-zinc-900 dark:text-zinc-100">
-          Showcase
-        </h1>
-        <p className="text-lg text-zinc-600 dark:text-zinc-400">
-          Check out these applications built with Mastra.
-        </p>
+    <T id="components.showcase_grid.0">
+      <div className="mx-auto max-w-7xl  px-4  py-12 sm:px-6 lg:px-8">
+        <div className="text-center mb-12">
+          <h1 className="text-4xl font-bold tracking-tight mb-4 text-zinc-900 dark:text-zinc-100">
+            Showcase
+          </h1>
+          <p className="text-lg text-zinc-600 dark:text-zinc-400">
+            Check out these applications built with Mastra.
+          </p>
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          <Var>
+            {showcaseItems.map((item) => (
+              <ShowcaseCard key={item.title} {...item} />
+            ))}
+          </Var>
+        </div>
       </div>
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {showcaseItems.map((item) => (
-          <ShowcaseCard key={item.title} {...item} />
-        ))}
-      </div>
-    </div>
+    </T>
   );
 };

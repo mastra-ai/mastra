@@ -1,0 +1,163 @@
+---
+title: "Example: Re-ranking Results | Retrieval | RAG | Mastra Docs"
+description: Example of implementing semantic re-ranking in Mastra using OpenAI embeddings and PGVector for vector storage.
+---
+
+import { GithubLink } from "@/components/github-link";
+
+# Re-ranking Results
+
+This example demonstrates how to implement a Retrieval-Augmented Generation (RAG) system with re-ranking using Mastra, OpenAI embeddings, and PGVector for vector storage.
+
+## Overview
+
+The system implements RAG with re-ranking using Mastra and OpenAI. Here's what it does:
+
+1. Chunks text documents into smaller segments and creates embeddings from them
+2. Stores vectors in a PostgreSQL database
+3. Performs initial vector similarity search
+4. Re-ranks results using Mastra's rerank function, combining vector similarity, semantic relevance, and position scores
+5. Compares initial and re-ranked results to show improvements
+
+## Setup
+
+### Environment Setup
+
+Make sure to set up your environment variables:
+
+```bash filename=".env"
+OPENAI_API_KEY=your_openai_api_key_here
+POSTGRES_CONNECTION_STRING=your_connection_string_here
+```
+
+### Dependencies
+
+Then, import the necessary dependencies:
+
+```typescript copy showLineNumbers filename="src/index.ts"
+import { openai } from '@ai-sdk/openai';
+import { PgVector } from '@mastra/pg';
+import { MDocument, rerank } from '@mastra/rag';
+import { embedMany, embed } from 'ai';
+```
+
+## Document Processing
+
+Create a document and process it into chunks:
+
+```typescript copy showLineNumbers{7} filename="src/index.ts"
+const doc1 = MDocument.fromText(`
+market data shows price resistance levels.
+technical charts display moving averages.
+support levels guide trading decisions.
+breakout patterns signal entry points.
+price action determines trade timing.
+`);
+
+const chunks = await doc1.chunk({
+  strategy: 'recursive',
+  size: 150,
+  overlap: 20,
+  separator: '\n',
+});
+```
+
+## Creating and Storing Embeddings
+
+Generate embeddings for the chunks and store them in the vector database:
+
+```typescript copy showLineNumbers{36} filename="src/index.ts"
+const { embeddings } = await embedMany({
+  values: chunks.map(chunk => chunk.text),
+  model: openai.embedding('text-embedding-3-small'),
+});
+
+const pgVector = new PgVector(process.env.POSTGRES_CONNECTION_STRING!);
+await pgVector.createIndex({
+  indexName: 'embeddings',
+  dimension: 1536,
+});
+await pgVector.upsert({
+  indexName: 'embeddings',
+  vectors: embeddings,
+  metadata: chunks?.map((chunk: any) => ({ text: chunk.text })),
+});
+```
+
+## Vector Search and Re-ranking
+
+Perform vector search and re-rank the results:
+
+```typescript copy showLineNumbers{51} filename="src/index.ts"
+const query = 'explain technical trading analysis';
+
+// Get query embedding
+const { embedding: queryEmbedding } = await embed({
+  value: query,
+  model: openai.embedding('text-embedding-3-small'),
+});
+
+// Get initial results
+const initialResults = await pgVector.query({
+  indexName: 'embeddings',
+  queryVector: queryEmbedding,
+  topK: 3,
+});
+
+// Re-rank results
+const rerankedResults = await rerank(initialResults, query, openai('gpt-4o-mini'), {
+  weights: {
+    semantic: 0.5,  // How well the content matches the query semantically
+    vector: 0.3,    // Original vector similarity score
+    position: 0.2   // Preserves original result ordering
+  },
+  topK: 3,
+});
+```
+
+The weights control how different factors influence the final ranking:
+- `semantic`: Higher values prioritize semantic understanding and relevance to the query
+- `vector`: Higher values favor the original vector similarity scores
+- `position`: Higher values help maintain the original ordering of results
+
+## Comparing Results
+
+Print both initial and re-ranked results to see the improvement:
+
+```typescript copy showLineNumbers{72} filename="src/index.ts"
+console.log('Initial Results:');
+initialResults.forEach((result, index) => {
+  console.log(`Result ${index + 1}:`, {
+    text: result.metadata.text,
+    score: result.score,
+  });
+});
+
+console.log('Re-ranked Results:');
+rerankedResults.forEach(({ result, score, details }, index) => {
+  console.log(`Result ${index + 1}:`, {
+    text: result.metadata.text,
+    score: score,
+    semantic: details.semantic,
+    vector: details.vector,
+    position: details.position,
+  });
+});
+```
+
+The re-ranked results show how combining vector similarity with semantic understanding can improve retrieval quality. Each result includes:
+- Overall score combining all factors
+- Semantic relevance score from the language model
+- Vector similarity score from the embedding comparison
+- Position-based score for maintaining original order when appropriate
+
+<br />
+<br />
+<hr className="dark:border-[#404040] border-gray-300" />
+<br />
+<br />
+<GithubLink
+  link={
+    "https://github.com/mastra-ai/mastra/blob/main/examples/basics/rag/rerank"
+  }
+/> 

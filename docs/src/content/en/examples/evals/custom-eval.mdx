@@ -1,0 +1,262 @@
+---
+title: "Example: Custom Eval | Evals | Mastra Docs"
+description: Example of creating custom LLM-based evaluation metrics in Mastra.
+---
+
+import { GithubLink } from "@/components/github-link";
+
+# Custom Eval with LLM as a Judge
+
+This example demonstrates how to create a custom LLM-based evaluation metric in Mastra to check recipes for gluten content using an AI chef agent.
+
+## Overview
+
+The example shows how to:
+
+1. Create a custom LLM-based metric
+2. Use an agent to generate and evaluate recipes
+3. Check recipes for gluten content
+4. Provide detailed feedback about gluten sources
+
+## Setup
+
+### Environment Setup
+
+Make sure to set up your environment variables:
+
+```bash filename=".env"
+OPENAI_API_KEY=your_api_key_here
+```
+
+## Defining Prompts
+
+The evaluation system uses three different prompts, each serving a specific purpose:
+
+#### 1. Instructions Prompt
+
+This prompt sets the role and context for the judge:
+
+```typescript copy showLineNumbers filename="src/mastra/evals/recipe-completeness/prompts.ts"
+export const GLUTEN_INSTRUCTIONS = `You are a Master Chef that identifies if recipes contain gluten.`;
+```
+
+#### 2. Gluten Evaluation Prompt
+
+This prompt creates a structured evaluation of gluten content, checking for specific components:
+
+```typescript copy showLineNumbers{3} filename="src/mastra/evals/recipe-completeness/prompts.ts"
+export const generateGlutenPrompt = ({ output }: { output: string }) => `Check if this recipe is gluten-free.
+
+Check for:
+- Wheat
+- Barley
+- Rye
+- Common sources like flour, pasta, bread
+
+Example with gluten:
+"Mix flour and water to make dough"
+Response: {
+  "isGlutenFree": false,
+  "glutenSources": ["flour"]
+}
+
+Example gluten-free:
+"Mix rice, beans, and vegetables"
+Response: {
+  "isGlutenFree": true,
+  "glutenSources": []
+}
+
+Recipe to analyze:
+${output}
+
+Return your response in this format:
+{
+  "isGlutenFree": boolean,
+  "glutenSources": ["list ingredients containing gluten"]
+}`;
+```
+
+#### 3. Reasoning Prompt
+
+This prompt generates detailed explanations about why a recipe is considered complete or incomplete:
+
+```typescript copy showLineNumbers{34} filename="src/mastra/evals/recipe-completeness/prompts.ts"
+export const generateReasonPrompt = ({
+  isGlutenFree,
+  glutenSources,
+}: {
+  isGlutenFree: boolean;
+  glutenSources: string[];
+}) => `Explain why this recipe is${isGlutenFree ? '' : ' not'} gluten-free.
+
+${glutenSources.length > 0 ? `Sources of gluten: ${glutenSources.join(', ')}` : 'No gluten-containing ingredients found'}
+
+Return your response in this format:
+{
+  "reason": "This recipe is [gluten-free/contains gluten] because [explanation]"
+}`;
+```
+
+## Creating the Judge
+
+We can create a specialized judge that will evaluate recipe gluten content. We can import the prompts defined above and use them in the judge:
+
+```typescript copy showLineNumbers filename="src/mastra/evals/gluten-checker/metricJudge.ts"
+import { type LanguageModel } from '@mastra/core/llm';
+import { MastraAgentJudge } from '@mastra/evals/judge';
+import { z } from 'zod';
+import { GLUTEN_INSTRUCTIONS, generateGlutenPrompt, generateReasonPrompt } from './prompts';
+
+export class RecipeCompletenessJudge extends MastraAgentJudge {
+  constructor(model: LanguageModel) {
+    super('Gluten Checker', GLUTEN_INSTRUCTIONS, model);
+  }
+
+  async evaluate(output: string): Promise<{
+    isGlutenFree: boolean;
+    glutenSources: string[];
+  }> {
+    const glutenPrompt = generateGlutenPrompt({ output });
+    const result = await this.agent.generate(glutenPrompt, {
+      output: z.object({
+        isGlutenFree: z.boolean(),
+        glutenSources: z.array(z.string()),
+      }),
+    });
+
+    return result.object;
+  }
+
+  async getReason(args: { isGlutenFree: boolean; glutenSources: string[] }): Promise<string> {
+    const prompt = generateReasonPrompt(args);
+    const result = await this.agent.generate(prompt, {
+      output: z.object({
+        reason: z.string(),
+      }),
+    });
+
+    return result.object.reason;
+  }
+}
+```
+
+The judge class handles the core evaluation logic through two main methods:
+
+- `evaluate()`: Analyzes recipe gluten content and returns gluten content with verdict
+- `getReason()`: Provides human-readable explanation for the evaluation results
+
+## Creating the Metric
+
+Create the metric class that uses the judge:
+
+```typescript copy showLineNumbers filename="src/mastra/evals/gluten-checker/index.ts"
+export interface MetricResultWithInfo extends MetricResult {
+  info: {
+    reason: string;
+    glutenSources: string[];
+  };
+}
+
+export class GlutenCheckerMetric extends Metric {
+  private judge: GlutenCheckerJudge;
+  constructor(model: LanguageModel) {
+    super();
+
+    this.judge = new GlutenCheckerJudge(model);
+  }
+
+  async measure(output: string): Promise<MetricResultWithInfo> {
+    const { isGlutenFree, glutenSources } = await this.judge.evaluate(output);
+    const score = await this.calculateScore(isGlutenFree);
+    const reason = await this.judge.getReason({
+      isGlutenFree,
+      glutenSources,
+    });
+
+    return {
+      score,
+      info: {
+        glutenSources,
+        reason,
+      },
+    };
+  }
+
+  async calculateScore(isGlutenFree: boolean): Promise<number> {
+    return isGlutenFree ? 1 : 0;
+  }
+}
+```
+
+The metric class serves as the main interface for gluten content evaluation with the following methods:
+
+- `measure()`: Orchestrates the entire evaluation process and returns a comprehensive result
+- `calculateScore()`: Converts the evaluation verdict to a binary score (1 for gluten-free, 0 for contains gluten)
+
+## Setting Up the Agent
+
+Create an agent and attach the metric:
+
+```typescript copy showLineNumbers filename="src/mastra/agents/chefAgent.ts"
+import { openai } from '@ai-sdk/openai';
+import { Agent } from '@mastra/core/agent';
+
+import { GlutenCheckerMetric } from '../evals';
+
+export const chefAgent = new Agent({
+  name: 'chef-agent',
+  instructions:
+    'You are Michel, a practical and experienced home chef' +
+    'You help people cook with whatever ingredients they have available.',
+  model: openai('gpt-4o-mini'),
+  evals: {
+    glutenChecker: new GlutenCheckerMetric(openai('gpt-4o-mini')),
+  },
+});
+```
+
+## Usage Example
+
+Here's how to use the metric with an agent:
+
+```typescript copy showLineNumbers filename="src/index.ts"
+import { mastra } from './mastra';
+
+const chefAgent = mastra.getAgent('chefAgent');
+const metric = chefAgent.evals.glutenChecker;
+
+// Example: Evaluate a recipe
+const input = 'What is a quick way to make rice and beans?';
+const response = await chefAgent.generate(input);
+const result = await metric.measure(input, response.text);
+
+console.log('Metric Result:', {
+  score: result.score,
+  glutenSources: result.info.glutenSources,
+  reason: result.info.reason,
+});
+
+// Example Output:
+// Metric Result: { score: 1, glutenSources: [], reason: 'The recipe is gluten-free as it does not contain any gluten-containing ingredients.' }
+```
+
+## Understanding the Results
+
+The metric provides:
+- A score of 1 for gluten-free recipes and 0 for recipes containing gluten
+- List of gluten sources (if any)
+- Detailed reasoning about the recipe's gluten content
+- Evaluation based on:
+  - Ingredient list
+
+<br />
+<br />
+<hr className="dark:border-[#404040] border-gray-300" />
+<br />
+<br />
+<GithubLink
+  link={
+    "https://github.com/mastra-ai/mastra/blob/main/examples/basics/evals/custom-eval"
+  }
+/>

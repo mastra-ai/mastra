@@ -1,0 +1,175 @@
+---
+title: "Example: Prompt Alignment | Evals | Mastra Docs"
+description: Example of using the Prompt Alignment metric to evaluate instruction adherence in responses.
+---
+
+import { GithubLink } from "@/components/github-link";
+
+# Prompt Alignment
+
+This example demonstrates how to use Mastra's Prompt Alignment metric to evaluate how well responses follow given instructions.
+
+## Overview
+
+The example shows how to:
+
+1. Configure the Prompt Alignment metric
+2. Evaluate instruction adherence
+3. Handle non-applicable instructions
+4. Calculate alignment scores
+
+## Setup
+
+### Environment Setup
+
+Make sure to set up your environment variables:
+
+```bash filename=".env"
+OPENAI_API_KEY=your_api_key_here
+```
+
+### Dependencies
+
+Import the necessary dependencies:
+
+```typescript copy showLineNumbers filename="src/index.ts"
+import { openai } from '@ai-sdk/openai';
+import { PromptAlignmentMetric } from '@mastra/evals/llm';
+```
+
+## Example Usage
+
+### Perfect Alignment Example
+
+Evaluate a response that follows all instructions:
+
+```typescript copy showLineNumbers{5} filename="src/index.ts"
+const instructions1 = [
+  'Use complete sentences',
+  'Include temperature in Celsius',
+  'Mention wind conditions',
+  'State precipitation chance',
+];
+
+const metric1 = new PromptAlignmentMetric(openai('gpt-4o-mini'), {
+  instructions: instructions1,
+});
+
+const query1 = 'What is the weather like?';
+const response1 =
+  'The temperature is 22 degrees Celsius with moderate winds from the northwest. There is a 30% chance of rain.';
+
+console.log('Example 1 - Perfect Alignment:');
+console.log('Instructions:', instructions1);
+console.log('Query:', query1);
+console.log('Response:', response1);
+
+const result1 = await metric1.measure(query1, response1);
+console.log('Metric Result:', {
+  score: result1.score,
+  reason: result1.info.reason,
+  details: result1.info.scoreDetails,
+});
+// Example Output:
+// Metric Result: { score: 1, reason: 'The response follows all instructions.' }
+```
+
+### Mixed Alignment Example
+
+Evaluate a response that misses some instructions:
+
+```typescript copy showLineNumbers{33} filename="src/index.ts"
+const instructions2 = [
+  'Use bullet points',
+  'Include prices in USD',
+  'Show stock status',
+  'Add product descriptions'
+];
+
+const metric2 = new PromptAlignmentMetric(openai('gpt-4o-mini'), {
+  instructions: instructions2,
+});
+
+const query2 = 'List the available products';
+const response2 = '• Coffee - $4.99 (In Stock)\n• Tea - $3.99\n• Water - $1.99 (Out of Stock)';
+
+console.log('Example 2 - Mixed Alignment:');
+console.log('Instructions:', instructions2);
+console.log('Query:', query2);
+console.log('Response:', response2);
+
+const result2 = await metric2.measure(query2, response2);
+console.log('Metric Result:', {
+  score: result2.score,
+  reason: result2.info.reason,
+  details: result2.info.scoreDetails,
+});
+// Example Output:
+// Metric Result: { score: 0.5, reason: 'The response misses some instructions.' }
+```
+
+### Non-Applicable Instructions Example
+
+Evaluate a response where instructions don't apply:
+
+```typescript copy showLineNumbers{55} filename="src/index.ts"
+const instructions3 = [
+  'Show account balance',
+  'List recent transactions',
+  'Display payment history'
+];
+
+const metric3 = new PromptAlignmentMetric(openai('gpt-4o-mini'), {
+  instructions: instructions3,
+});
+
+const query3 = 'What is the weather like?';
+const response3 = 'It is sunny and warm outside.';
+
+console.log('Example 3 - N/A Instructions:');
+console.log('Instructions:', instructions3);
+console.log('Query:', query3);
+console.log('Response:', response3);
+
+const result3 = await metric3.measure(query3, response3);
+console.log('Metric Result:', {
+  score: result3.score,
+  reason: result3.info.reason,
+  details: result3.info.scoreDetails,
+});
+// Example Output:
+// Metric Result: { score: 0, reason: 'No instructions are followed or are applicable to the query.' }
+```
+
+## Understanding the Results
+
+The metric provides:
+
+1. An alignment score between 0 and 1, or -1 for special cases:
+   - 1.0: Perfect alignment - all applicable instructions followed
+   - 0.5-0.8: Mixed alignment - some instructions missed
+   - 0.1-0.4: Poor alignment - most instructions not followed
+   - 0.0:No alignment - no instructions are applicable or followed
+
+2. Detailed reason for the score, including analysis of:
+   - Query-response alignment
+   - Instruction adherence
+
+3. Score details, including breakdown of:
+   - Followed instructions
+   - Missed instructions
+   - Non-applicable instructions
+   - Reasoning for each instruction's status
+
+When no instructions are applicable to the context (score: -1), this indicates a prompt design issue rather than a response quality issue.
+
+<br />
+<br />
+<hr className="dark:border-[#404040] border-gray-300" />
+<br />
+<br />
+<GithubLink
+  link={
+    "https://github.com/mastra-ai/mastra/blob/main/examples/basics/evals/prompt-alignment"
+  }
+/>

@@ -1,0 +1,124 @@
+---
+title: "Inspecting Agents with `mastra dev` | Mastra Local Dev Docs"
+description: Documentation for the Mastra local development environment for Mastra applications.
+---
+import YouTube from "../../../../components/youtube";
+
+# Local Development Environment
+
+Mastra provides a local development environment where you can test your agents, workflows, and tools while developing locally.
+
+<YouTube id="spGlcTEjuXY" />
+
+## Launch Development Server
+
+You can launch the Mastra development environment using the Mastra CLI by running:
+
+```bash
+mastra dev
+```
+
+By default, the server runs at http://localhost:4111, but you can change the port with the `--port` flag.
+
+## Dev Playground
+
+`mastra dev` serves a playground UI for interacting with your agents, workflows, and tools. The playground provides dedicated interfaces for testing each component of your Mastra application during development.
+
+### Agent Playground
+
+The Agent playground provides an interactive chat interface where you can test and debug your agents during development. Key features include:
+
+- **Chat Interface**: Directly interact with your agents to test their responses and behavior.
+- **Prompt CMS**: Experiment with different system instructions for your agent:
+  - A/B test different prompt versions.
+  - Track performance metrics for each variant.
+  - Select and deploy the most effective prompt version.
+- **Agent Traces**: View detailed execution traces to understand how your agent processes requests, including:
+  - Prompt construction.
+  - Tool usage.
+  - Decision-making steps.
+  - Response generation.
+- **Agent Evals**: When you've set up [Agent evaluation metrics](/docs/evals/overview), you can:
+  - Run evaluations directly from the playground.
+  - View evaluation results and metrics.
+  - Compare agent performance across different test cases.
+
+### Workflow Playground
+
+The Workflow playground helps you visualize and test your workflow implementations:
+
+- **Workflow Visualization**: Workflow graph visualization.
+
+- **Run Workflows**:
+  - Trigger test workflow runs with custom input data.
+  - Debug workflow logic and conditions.
+  - Simulate different execution paths.
+  - View detailed execution logs for each step.
+
+- **Workflow Traces**: Examine detailed execution traces that show:
+  - Step-by-step workflow progression.
+  - State transitions and data flow.
+  - Tool invocations and their results.
+  - Decision points and branching logic.
+  - Error handling and recovery paths.
+
+### Tools Playground
+
+The Tools playground allows you to test your custom tools in isolation:
+
+- Test individual tools without running a full agent or workflow.
+- Input test data and view tool responses.
+- Debug tool implementation and error handling.
+- Verify tool input/output schemas.
+- Monitor tool performance and execution time.
+
+## REST API Endpoints
+
+`mastra dev` also spins up REST API routes for your agents and workflows via the local [Mastra Server](/docs/deployment/server). This allows you to test your API endpoints before deployment. See [Mastra Dev reference](/reference/cli/dev#routes) for more details about all endpoints.
+
+You can then leverage the [Mastra Client](/docs/deployment/client) SDK to interact with your served REST API routes seamlessly.
+
+## OpenAPI Specification
+
+`mastra dev` provides an OpenAPI spec at http://localhost:4111/openapi.json
+
+## Local Dev Architecture
+
+The local development server is designed to run without any external dependencies or containerization. This is achieved through:
+
+- **Dev Server**: Uses [Hono](https://hono.dev) as the underlying framework to power the [Mastra Server](/docs/deployment/server).
+
+- **In-Memory Storage**: Uses [LibSQL](https://libsql.org/) memory adapters for:
+  - Agent memory management.
+  - Trace storage.
+  - Evals storage.
+  - Workflow snapshots.
+
+- **Vector Storage**: Uses [FastEmbed](https://github.com/qdrant/fastembed) for:
+  - Default embedding generation.
+  - Vector storage and retrieval.
+  - Semantic search capabilities.
+
+This architecture allows you to start developing immediately without setting up databases or vector stores, while still maintaining production-like behavior in your local environment.
+
+### Model settings 
+
+The local devleopment server also lets you configure the model settings in Overview > Model Settings. 
+
+You can configure the following settings:
+
+- **Temperature**: Controls randomness in model outputs. Higher values (0-2) produce more creative responses while lower values make outputs more focused and deterministic.
+- **Top P**: Sets cumulative probability threshold for token sampling. Lower values (0-1) make outputs more focused by considering only the most likely tokens.
+- **Top K**: Limits the number of tokens considered for each generation step. Lower values produce more focused outputs by sampling from fewer options.
+- **Frequency Penalty**: Reduces repetition by penalizing tokens based on their frequency in previous text. Higher values (0-2) discourage reuse of common tokens.
+- **Presence Penalty**: Reduces repetition by penalizing tokens that appear in previous text. Higher values (0-2) encourage the model to discuss new topics.
+- **Max Tokens**: Maximum number of tokens allowed in the model's response. Higher values allow for longer outputs but may increase latency.
+- **Max Steps**: Maximum number of steps a workflow or agent can execute before stopping. Prevents infinite loops and runaway processes.
+- **Max Retries**: Number of times to retry failed API calls or model requests before giving up. Helps handle temporary failures gracefully.
+
+
+## Summary
+
+`mastra dev` makes it easy to develop, debug, and iterate on your AI logic in a self-contained environment before deploying to production.
+
+- [Mastra Dev reference](../../reference/cli/dev.mdx)../../../../../components/youtube

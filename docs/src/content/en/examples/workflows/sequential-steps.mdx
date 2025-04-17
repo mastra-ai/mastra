@@ -1,0 +1,94 @@
+---
+title: "Example: Sequential Steps | Workflows | Mastra Docs"
+description: Example of using Mastra to chain workflow steps in a specific sequence, passing data between them.
+---
+
+import { GithubLink } from "@/components/github-link";
+
+# Workflow with Sequential Steps
+
+Workflow can be chained to run one after another in a specific sequence.
+
+## Control Flow Diagram
+
+This example shows how to chain workflow steps by using the `then` method demonstrating how to pass data between sequential steps and execute them in order.
+
+Here's the control flow diagram:
+
+<img
+  src="/sequential-chains.png"
+  alt="Diagram showing workflow with sequential steps"
+  width={600}
+/>
+
+## Creating the Steps
+
+Let's start by creating the steps and initializing the workflow.
+
+```ts showLineNumbers copy
+import { Step, Workflow } from "@mastra/core/workflows";
+import { z } from "zod";
+
+const stepOne = new Step({
+  id: "stepOne",
+  execute: async ({ context }) => ({
+    doubledValue: context.triggerData.inputValue * 2,
+  }),
+});
+
+const stepTwo = new Step({
+  id: "stepTwo",
+  execute: async ({ context }) => {
+    if (context.steps.stepOne.status !== "success") {
+      return { incrementedValue: 0 }
+    }
+
+    return { incrementedValue: context.steps.stepOne.output.doubledValue + 1 }
+  },
+});
+
+const stepThree = new Step({
+  id: "stepThree",
+  execute: async ({ context }) => {
+    if (context.steps.stepTwo.status !== "success") {
+      return { tripledValue: 0 }
+    }
+
+    return { tripledValue: context.steps.stepTwo.output.incrementedValue * 3 }
+  },
+});
+
+// Build the workflow
+const myWorkflow = new Workflow({
+  name: "my-workflow",
+  triggerSchema: z.object({
+    inputValue: z.number(),
+  }),
+});
+```
+
+## Chaining the Steps and Executing the Workflow
+
+Now let's chain the steps together.
+
+```ts showLineNumbers copy
+// sequential steps
+myWorkflow.step(stepOne).then(stepTwo).then(stepThree);
+
+myWorkflow.commit();
+
+const { start } = myWorkflow.createRun();
+
+const res = await start({ triggerData: { inputValue: 90 } });
+```
+
+<br />
+<br />
+<hr className="dark:border-[#404040] border-gray-300" />
+<br />
+<br />
+<GithubLink
+  link={
+    "https://github.com/mastra-ai/mastra/blob/main/examples/basics/workflows/workflow-with-sequential-steps"
+  }
+/>
