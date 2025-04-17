@@ -44,6 +44,44 @@ const storage = new PostgresStore({
   ]}
 />
 
+## Constructor Examples
+
+You can instantiate `PostgresStore` in the following ways:
+
+```ts
+import { PostgresStore } from '@mastra/pg';
+
+// Using a connection string only
+const store1 = new PostgresStore({
+  connectionString: 'postgresql://user:password@localhost:5432/mydb',
+});
+
+// Using a connection string with a custom schema name
+const store2 = new PostgresStore({
+  connectionString: 'postgresql://user:password@localhost:5432/mydb',
+  schemaName: 'custom_schema', // optional
+});
+
+// Using individual connection parameters
+const store4 = new PostgresStore({
+  host: 'localhost',
+  port: 5432,
+  database: 'mydb',
+  user: 'user',
+  password: 'password',
+});
+
+// Individual parameters with schemaName
+const store5 = new PostgresStore({
+  host: 'localhost',
+  port: 5432,
+  database: 'mydb',
+  user: 'user',
+  password: 'password',
+  schemaName: 'custom_schema', // optional
+});
+```
+
 ## Additional Notes
 
 ### Schema Management
