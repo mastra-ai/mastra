@@ -102,6 +102,7 @@
     "@rollup/plugin-json": "^6.1.0",
     "@rollup/plugin-node-resolve": "^16.0.0",
     "@rollup/plugin-virtual": "^3.0.2",
+    "@sindresorhus/slugify": "^2.2.1",
     "builtins": "^5.1.0",
     "detect-libc": "^2.0.3",
     "dotenv": "^16.4.7",
