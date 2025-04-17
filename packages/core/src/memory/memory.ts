@@ -13,6 +13,7 @@ import type {
 import { MastraBase } from '../base';
 import type { MastraStorage, StorageGetMessagesArg } from '../storage';
 import { DefaultProxyStorage } from '../storage/default-proxy-storage';
+import { augmentWithInit } from '../storage/storageWithInit';
 import type { CoreTool } from '../tools';
 import { deepMerge } from '../utils';
 import type { MastraVector } from '../vector';
@@ -77,6 +78,8 @@ export abstract class MastraMemory extends MastraBase {
         },
       });
     }
+
+    this.storage = augmentWithInit(this.storage);
 
     const semanticRecallIsEnabled = this.threadConfig.semanticRecall !== false; // default is to have it enabled, so any value except false means it's on
 
