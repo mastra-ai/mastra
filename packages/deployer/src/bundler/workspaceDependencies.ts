@@ -5,37 +5,39 @@ import { findWorkspacesRoot } from 'find-workspaces';
 import { DepsService } from '../services';
 import { ensureDir } from 'fs-extra';
 
+type WorkspacePackageInfo = {
+  location: string;
+  dependencies: Record<string, string> | undefined;
+  version: string | undefined;
+};
+
+type TransitiveDependencyResult = {
+  resolutions: Record<string, string>;
+  usedWorkspacePackages: Set<string>;
+  error?: string;
+};
+
 /**
- * Resolves and packages workspace dependencies
- * Finds all transitive dependencies and creates TGZ packages for them
- * Adds workspace packages to dependenciesToInstall with file: references to the packaged TGZ files
- * Returns resolutions for workspace dependencies
+ * Collects all transitive workspace dependencies and their TGZ paths
  */
-export const resolveAndPackWorkspaceDependencies = async ({
+export const collectTransitiveWorkspaceDependencies = ({
   workspaceMap,
   initialDependencies,
-  dependenciesToInstall,
-  bundleOutputDir,
   logger,
 }: {
-  workspaceMap: Map<
-    string,
-    { location: string; dependencies: Record<string, string> | undefined; version: string | undefined }
-  >;
+  workspaceMap: Map<string, WorkspacePackageInfo>;
   initialDependencies: Set<string>;
-  dependenciesToInstall: Map<string, string>;
-  bundleOutputDir: string;
   logger: Logger;
-}): Promise<Record<string, string> | undefined> => {
-  const seen = new Set<string>();
+}): TransitiveDependencyResult => {
+  const usedWorkspacePackages = new Set<string>();
   const queue: string[] = Array.from(initialDependencies);
   const resolutions: Record<string, string> = {};
-  // find all transitive workspace dependencies
+
   while (queue.length > 0) {
     const len = queue.length;
     for (let i = 0; i < len; i += 1) {
       const pkgName = queue.shift();
-      if (!pkgName || seen.has(pkgName)) {
+      if (!pkgName || usedWorkspacePackages.has(pkgName)) {
         continue;
       }
 
@@ -44,29 +46,45 @@ export const resolveAndPackWorkspaceDependencies = async ({
 
       const root = findWorkspacesRoot();
       if (!root) {
-        logger.error('Could not find workspace root');
-        return;
+        return { resolutions, usedWorkspacePackages, error: 'Could not find workspace root' };
       }
+
       const depsService = new DepsService(root.location);
       depsService.__setLogger(logger);
-      const sanitizedName = pkgName.replace(/^@/, '').replace(/\//, '-');
+      const sanitizedName = slugify(pkgName);
 
       const tgzPath = depsService.getWorkspaceDependencyPath({
         pkgName: sanitizedName,
         version: dep.version!,
       });
-      dependenciesToInstall.set(pkgName, tgzPath);
       resolutions[pkgName] = tgzPath;
-      seen.add(pkgName);
+      usedWorkspacePackages.add(pkgName);
 
       for (const [depName, _depVersion] of Object.entries(dep?.dependencies ?? {})) {
-        if (!seen.has(depName) && workspaceMap.has(depName)) {
+        if (!usedWorkspacePackages.has(depName) && workspaceMap.has(depName)) {
           queue.push(depName);
         }
       }
     }
   }
 
+  return { resolutions, usedWorkspacePackages };
+};
+
+/**
+ * Creates TGZ packages for workspace dependencies in the workspace-module directory
+ */
+export const packWorkspaceDependencies = async ({
+  workspaceMap,
+  usedWorkspacePackages,
+  bundleOutputDir,
+  logger,
+}: {
+  workspaceMap: Map<string, WorkspacePackageInfo>;
+  bundleOutputDir: string;
+  logger: Logger;
+  usedWorkspacePackages: Set<string>;
+}): Promise<void> => {
   const root = findWorkspacesRoot();
   if (!root) {
     logger.error('Could not find workspace root');
@@ -76,15 +94,15 @@ export const resolveAndPackWorkspaceDependencies = async ({
   const depsService = new DepsService(root.location);
   depsService.__setLogger(logger);
 
-  // package all transitive workspace dependencies
-  if (seen.size > 0) {
+  // package all workspace dependencies
+  if (usedWorkspacePackages.size > 0) {
     const workspaceDirPath = join(bundleOutputDir, 'workspace-module');
     await ensureDir(workspaceDirPath);
 
-    logger.info(`Packaging ${seen.size} workspace dependencies...`);
+    logger.info(`Packaging ${usedWorkspacePackages.size} workspace dependencies...`);
 
     const batchSize = 5;
-    const packages = Array.from(seen.values());
+    const packages = Array.from(usedWorkspacePackages.values());
 
     for (let i = 0; i < packages.length; i += batchSize) {
       const batch = packages.slice(i, i + batchSize);
@@ -97,15 +115,6 @@ export const resolveAndPackWorkspaceDependencies = async ({
           if (!dep) return;
 
           try {
-            if (!dependenciesToInstall.has(pkgName)) {
-              const sanitizedName = slugify(pkgName);
-              const tgzPath = depsService.getWorkspaceDependencyPath({
-                pkgName: sanitizedName,
-                version: dep.version!,
-              });
-              dependenciesToInstall.set(pkgName, tgzPath);
-            }
-
             await depsService.pack({ dir: dep.location, destination: workspaceDirPath });
           } catch (error) {
             logger.error(`Failed to package ${pkgName}: ${error}`);
@@ -114,8 +123,6 @@ export const resolveAndPackWorkspaceDependencies = async ({
       );
     }
 
-    logger.info(`Successfully packaged ${seen.size} workspace dependencies`);
+    logger.info(`Successfully packaged ${usedWorkspacePackages.size} workspace dependencies`);
   }
-
-  return resolutions;
 };

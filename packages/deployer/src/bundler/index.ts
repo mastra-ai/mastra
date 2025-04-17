@@ -4,7 +4,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { MastraBundler } from '@mastra/core/bundler';
 import virtual from '@rollup/plugin-virtual';
-import { findWorkspaces, findWorkspacesRoot } from 'find-workspaces';
+import { findWorkspaces } from 'find-workspaces';
 import fsExtra, { copy, ensureDir, readJSON, emptyDir } from 'fs-extra/esm';
 import resolveFrom from 'resolve-from';
 import type { InputOptions, OutputOptions } from 'rollup';
@@ -14,7 +14,7 @@ import { createBundler as createBundlerUtil, getInputOptions } from '../build/bu
 import { writeTelemetryConfig } from '../build/telemetry';
 import { DepsService } from '../services/deps';
 import { FileService } from '../services/fs';
-import { resolveAndPackWorkspaceDependencies } from './resolveWorkspaceDependencies';
+import { collectTransitiveWorkspaceDependencies, packWorkspaceDependencies } from './resolveWorkspaceDependencies';
 
 export abstract class Bundler extends MastraBundler {
   protected analyzeOutputDir = '.build';
@@ -216,14 +216,24 @@ export abstract class Bundler extends MastraBundler {
 
     let resolutions: Record<string, string> = {};
     if (workspaceDependencies.size > 0) {
-      const res = await resolveAndPackWorkspaceDependencies({
+      const result = collectTransitiveWorkspaceDependencies({
         workspaceMap,
         initialDependencies: workspaceDependencies,
-        dependenciesToInstall,
+        logger: this.logger,
+      });
+      resolutions = result.resolutions;
+
+      // Update dependenciesToInstall with the resolved TGZ paths
+      Object.entries(resolutions).forEach(([pkgName, tgzPath]) => {
+        dependenciesToInstall.set(pkgName, tgzPath);
+      });
+
+      await packWorkspaceDependencies({
+        workspaceMap,
+        usedWorkspacePackages: result.usedWorkspacePackages,
         bundleOutputDir: join(outputDirectory, this.outputDir),
         logger: this.logger,
       });
-      resolutions = res ?? {};
     }
 
     // temporary fix for mastra-memory and fastembed
