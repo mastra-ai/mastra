@@ -104,6 +104,50 @@ describe('PostgresStore', () => {
     }
   });
 
+  // --- Validation tests ---
+  describe('Validation', () => {
+    const validConfig = TEST_CONFIG;
+    it('throws if connectionString is empty', () => {
+      expect(() => new PostgresStore({ connectionString: '' })).toThrow(
+        /connectionString must be provided and cannot be empty/,
+      );
+    });
+    it('throws if host is missing or empty', () => {
+      expect(() => new PostgresStore({ ...validConfig, host: '' })).toThrow(
+        /host must be provided and cannot be empty/,
+      );
+      const { host, ...rest } = validConfig;
+      expect(() => new PostgresStore(rest as any)).toThrow(/host must be provided and cannot be empty/);
+    });
+    it('throws if user is missing or empty', () => {
+      expect(() => new PostgresStore({ ...validConfig, user: '' })).toThrow(
+        /user must be provided and cannot be empty/,
+      );
+      const { user, ...rest } = validConfig;
+      expect(() => new PostgresStore(rest as any)).toThrow(/user must be provided and cannot be empty/);
+    });
+    it('throws if database is missing or empty', () => {
+      expect(() => new PostgresStore({ ...validConfig, database: '' })).toThrow(
+        /database must be provided and cannot be empty/,
+      );
+      const { database, ...rest } = validConfig;
+      expect(() => new PostgresStore(rest as any)).toThrow(/database must be provided and cannot be empty/);
+    });
+    it('throws if password is missing or empty', () => {
+      expect(() => new PostgresStore({ ...validConfig, password: '' })).toThrow(
+        /password must be provided and cannot be empty/,
+      );
+      const { password, ...rest } = validConfig;
+      expect(() => new PostgresStore(rest as any)).toThrow(/password must be provided and cannot be empty/);
+    });
+    it('does not throw on valid config (host-based)', () => {
+      expect(() => new PostgresStore(validConfig)).not.toThrow();
+    });
+    it('does not throw on non-empty connection string', () => {
+      expect(() => new PostgresStore({ connectionString })).not.toThrow();
+    });
+  });
+
   describe('Thread Operations', () => {
     it('should create and retrieve a thread', async () => {
       const thread = createSampleThread();
@@ -662,7 +706,7 @@ describe('PostgresStore', () => {
     beforeAll(async () => {
       customSchemaStore = new PostgresStore({
         ...TEST_CONFIG,
-        schema: customSchema,
+        schemaName: customSchema,
       });
 
       await customSchemaStore.init();
@@ -844,7 +888,7 @@ describe('PostgresStore', () => {
           ...TEST_CONFIG,
           user: schemaRestrictedUser,
           password: restrictedPassword,
-          schema: testSchema,
+          schemaName: testSchema,
         });
 
         // Create a fresh connection for verification
@@ -876,7 +920,7 @@ describe('PostgresStore', () => {
           ...TEST_CONFIG,
           user: schemaRestrictedUser,
           password: restrictedPassword,
-          schema: testSchema,
+          schemaName: testSchema,
         });
 
         // Create a fresh connection for verification

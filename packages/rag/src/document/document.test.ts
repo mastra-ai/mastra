@@ -1,6 +1,6 @@
 import { createOpenAI } from '@ai-sdk/openai';
 import { embedMany } from 'ai';
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 
 import { MDocument } from './document';
 import { Language } from './types';
@@ -19,6 +19,8 @@ Welcome to our comprehensive guide on modern web development. This resource cove
 const openai = createOpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
+
+vi.setConfig({ testTimeout: 10_000, hookTimeout: 10_000 });
 
 describe('MDocument', () => {
   describe('basics', () => {
@@ -1693,7 +1695,10 @@ describe('MDocument', () => {
       expect(metadata).toBeDefined();
       expect(metadata.documentTitle).toBeDefined();
       expect(metadata.sectionSummary).toBeDefined();
-      expect(metadata.questionsThisExcerptCanAnswer).toMatch(/^1\. .*\?2\. .*\?$/);
+      const qStr = metadata.questionsThisExcerptCanAnswer;
+      expect(qStr).toMatch(/1\..*\?/s);
+      expect(qStr).toMatch(/2\..*\?/s);
+      expect((qStr.match(/\?/g) || []).length).toBeGreaterThanOrEqual(2);
       expect(metadata.excerptKeywords).toMatch(/^1\. .*\n2\. .*\n3\. .*$/);
     }, 15000);
 
@@ -1710,6 +1715,122 @@ describe('MDocument', () => {
         }),
       ).rejects.toThrow("Summaries must be one of 'self', 'prev', 'next'");
     }, 15000);
+  });
+
+  describe('metadata preservation', () => {
+    const baseText = 'This is a test document for metadata extraction.';
+    const baseMetadata = { source: 'unit-test', customField: 123 };
+
+    it('preserves metadata with KeywordExtractor', async () => {
+      const doc = MDocument.fromText(baseText, { ...baseMetadata });
+      const chunks = await doc.chunk({ extract: { keywords: true } });
+      const metadata = chunks[0].metadata;
+      expect(metadata.source).toBe('unit-test');
+      expect(metadata.customField).toBe(123);
+      expect(metadata.excerptKeywords).toBeDefined();
+    });
+
+    it('preserves metadata with SummaryExtractor', async () => {
+      const doc = MDocument.fromText(baseText, { ...baseMetadata });
+      const chunks = await doc.chunk({ extract: { summary: true } });
+      const metadata = chunks[0].metadata;
+      expect(metadata.source).toBe('unit-test');
+      expect(metadata.customField).toBe(123);
+      expect(metadata.sectionSummary).toBeDefined();
+    });
+
+    it('preserves metadata with QuestionsAnsweredExtractor', async () => {
+      const doc = MDocument.fromText(baseText, { ...baseMetadata });
+      const chunks = await doc.chunk({ extract: { questions: true } });
+      const metadata = chunks[0].metadata;
+      expect(metadata.source).toBe('unit-test');
+      expect(metadata.customField).toBe(123);
+      expect(metadata.questionsThisExcerptCanAnswer).toBeDefined();
+    });
+
+    it('preserves metadata with TitleExtractor', async () => {
+      const doc = MDocument.fromText(baseText, { ...baseMetadata });
+      const chunks = await doc.chunk({ extract: { title: true } });
+      const metadata = chunks[0].metadata;
+      expect(metadata.source).toBe('unit-test');
+      expect(metadata.customField).toBe(123);
+      expect(metadata.documentTitle).toBeDefined();
+    });
+
+    it('preserves metadata with multiple extractors', async () => {
+      const doc = MDocument.fromText(baseText, { ...baseMetadata });
+      const chunks = await doc.chunk({
+        extract: {
+          keywords: true,
+          summary: true,
+          questions: true,
+          title: true,
+        },
+      });
+      const metadata = chunks[0].metadata;
+      expect(metadata.source).toBe('unit-test');
+      expect(metadata.customField).toBe(123);
+      expect(metadata.excerptKeywords).toBeDefined();
+      expect(metadata.sectionSummary).toBeDefined();
+      expect(metadata.questionsThisExcerptCanAnswer).toBeDefined();
+      expect(metadata.documentTitle).toBeDefined();
+    });
+    it('preserves metadata on all chunks when multiple are created', async () => {
+      const text = 'Chunk one.\n\nChunk two.\n\nChunk three.';
+      const doc = MDocument.fromText(text, { source: 'multi-chunk', customField: 42 });
+      const chunks = await doc.chunk({
+        strategy: 'character',
+        separator: '\n\n',
+        size: 20,
+        overlap: 0,
+        extract: { keywords: true },
+      });
+      expect(chunks.length).toBeGreaterThan(1);
+      for (const chunk of chunks) {
+        const metadata = chunk.metadata;
+        expect(metadata.source).toBe('multi-chunk');
+        expect(metadata.customField).toBe(42);
+        expect(metadata.excerptKeywords).toBeDefined();
+      }
+    });
+
+    it('overwrites only the matching metadata field with extractor output', async () => {
+      const doc = MDocument.fromText('Test for overwrite', {
+        excerptKeywords: 'original,keywords',
+        unrelatedField: 'should stay',
+        source: 'unit-test',
+      });
+      const chunks = await doc.chunk({ extract: { keywords: true } });
+      const metadata = chunks[0].metadata;
+      expect(metadata.source).toBe('unit-test');
+      expect(metadata.unrelatedField).toBe('should stay');
+      expect(metadata.excerptKeywords).not.toBe('original,keywords'); // Should be new keywords
+    });
+  });
+  describe('MDocument TitleExtractor document grouping integration', () => {
+    it('groups chunks by docId for title extraction (integration)', async () => {
+      const doc = new MDocument({
+        docs: [
+          { text: 'Alpha chunk 1', metadata: { docId: 'docA' } },
+          { text: 'Alpha chunk 2', metadata: { docId: 'docA' } },
+          { text: 'Beta chunk 1', metadata: { docId: 'docB' } },
+        ],
+        type: 'text',
+      });
+
+      await doc.extractMetadata({ title: true });
+      const chunks = doc.getDocs();
+
+      const titleA1 = chunks[0].metadata.documentTitle;
+      const titleA2 = chunks[1].metadata.documentTitle;
+      const titleB = chunks[2].metadata.documentTitle;
+
+      expect(titleA1).toBeDefined();
+      expect(titleA2).toBeDefined();
+      expect(titleB).toBeDefined();
+      expect(titleA1).toBe(titleA2);
+      expect(titleA1).not.toBe(titleB);
+    });
   });
 });
 

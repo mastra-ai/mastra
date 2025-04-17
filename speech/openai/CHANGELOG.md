@@ -1,5 +1,12 @@
 # @mastra/speech-openai
 
+## 0.1.19-alpha.3
+
+### Patch Changes
+
+- Updated dependencies [fe3ae4d]
+  - @mastra/core@0.9.0-alpha.3
+
 ## 0.1.19-alpha.2
 
 ### Patch Changes

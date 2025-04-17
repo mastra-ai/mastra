@@ -317,6 +317,11 @@ button[title="Collapse sidebar"] {
 
 aside > div:nth-child(2) {
   display: none;
+  --x-color-nextra-bg: var(--primary-bg);
+}
+
+button[title="Change theme"] {
+  display: none;
 }
 
 aside > div:nth-child(1) button {

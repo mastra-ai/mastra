@@ -1,0 +1,26 @@
+{
+  "name": "weather-agent",
+  "version": "1.0.0",
+  "main": "index.js",
+  "private": true,
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "dev": "mastra dev"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "description": "",
+  "type": "module",
+  "dependencies": {
+    "@ai-sdk/openai": "^1.3.12",
+    "@mastra/core": "0.8.4-alpha.2",
+    "zod": "^3.24.2"
+  },
+  "devDependencies": {
+    "@types/node": "^22.14.1",
+    "mastra": "0.4.10-alpha.3",
+    "tsx": "^4.19.3",
+    "typescript": "^5.8.3"
+  }
+}

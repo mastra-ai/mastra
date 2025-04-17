@@ -146,6 +146,7 @@
     "@mastra/voice-speechify": "0.1.13"
   },
   "changesets": [
+    "big-balloons-prove",
     "brave-hornets-refuse",
     "cold-boxes-end",
     "cool-papers-check",
@@ -155,6 +156,7 @@
     "free-news-fly",
     "heavy-donkeys-glow",
     "honest-maps-write",
+    "legal-areas-add",
     "rude-cloths-run",
     "stale-moments-camp",
     "violet-dogs-peel"
