@@ -378,8 +378,7 @@ export class OpenAIRealtimeVoice extends MastraVoice {
     });
 
     this.setupEventListeners();
-    await this.waitForOpen();
-    await this.waitForSessionCreated();
+    await Promise.all([this.waitForOpen(), this.waitForSessionCreated()]);
 
     const openaiTools = transformTools(this.tools);
     this.updateConfig({
@@ -391,6 +390,11 @@ export class OpenAIRealtimeVoice extends MastraVoice {
       voice: this.speaker,
     });
     this.state = 'open';
+  }
+
+  disconnect() {
+    this.state = 'close';
+    this.ws?.close();
   }
 
   /**
@@ -623,19 +627,32 @@ export class OpenAIRealtimeVoice extends MastraVoice {
         console.warn(`Tool "${output.name}" not found`);
         return;
       }
+
+      if (tool?.execute) {
+        this.emit('tool-call-start', {
+          toolCallId: output.call_id,
+          toolName: output.name,
+          toolDescription: tool.description,
+          args: context,
+        });
+      }
+
       const result = await tool?.execute?.(
         { context },
         {
-          toolCallId: 'unknown',
+          toolCallId: output.call_id,
           messages: [],
         },
       );
-      this.emit('tool-result', {
+
+      this.emit('tool-call-result', {
         toolCallId: output.call_id,
         toolName: output.name,
+        toolDescription: tool.description,
         args: context,
         result,
       });
+
       this.sendEvent('conversation.item.create', {
         item: {
           type: 'function_call_output',

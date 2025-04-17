@@ -14,7 +14,7 @@ A sequential agentic workflow that calls two agents to create blog post content.
 
    ```bash
    git clone https://github.com/mastra-ai/mastra
-   cd examples/basics/agents/agents-as-tools
+   cd examples/basics/agents/multi-agent-workflow
    ```
 
 2. Copy the environment variables file and add your Anthropic and OpenAI API keys:
