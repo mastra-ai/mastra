@@ -14,7 +14,7 @@ import { createBundler as createBundlerUtil, getInputOptions } from '../build/bu
 import { writeTelemetryConfig } from '../build/telemetry';
 import { DepsService } from '../services/deps';
 import { FileService } from '../services/fs';
-import { collectTransitiveWorkspaceDependencies, packWorkspaceDependencies } from './resolveWorkspaceDependencies';
+import { collectTransitiveWorkspaceDependencies, packWorkspaceDependencies } from './workspaceDependencies';
 
 export abstract class Bundler extends MastraBundler {
   protected analyzeOutputDir = '.build';
