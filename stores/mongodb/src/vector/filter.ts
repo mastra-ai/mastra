@@ -53,9 +53,7 @@ export class MongoFilterTranslator extends BaseFilterTranslator {
           if (hasOperators) {
             const normalizedValue: Record<string, any> = {};
             for (const [op, opValue] of Object.entries(value)) {
-              normalizedValue[op] = this.isOperator(op)
-                ? this.translateOperator(op, opValue)
-                : opValue;
+              normalizedValue[op] = this.isOperator(op) ? this.translateOperator(op, opValue) : opValue;
             }
             result[newPath] = normalizedValue;
           } else {
@@ -93,23 +91,28 @@ export class MongoFilterTranslator extends BaseFilterTranslator {
     for (const key in filter) {
       if (!Object.prototype.hasOwnProperty.call(filter, key)) continue;
       const value = filter[key];
-      if (this.isLogicalOperator(key)) {
+      // For top-level $not, transform to $nor.
+      if (key === '$not') {
         let arrValue;
-        // Allow $not at top level to be given as an object (wrap it in an array)
         if (!Array.isArray(value)) {
-          if (key === '$not' && typeof value === 'object' && value !== null) {
+          if (typeof value === 'object' && value !== null) {
             arrValue = [value];
           } else {
-            throw new Error(`Value for logical operator ${key} must be an array`);
+            throw new Error(`Value for logical operator $not must be an array or an object`);
           }
         } else {
           arrValue = value;
         }
-        mongoFilter[key] = arrValue.map((subFilter: any) => this.processFilter(subFilter));
+        mongoFilter['$nor'] = arrValue.map((subFilter: any) => this.processFilter(subFilter));
+        continue;
+      }
+      if (this.isLogicalOperator(key)) {
+        if (!Array.isArray(value)) {
+          throw new Error(`Value for logical operator ${key} must be an array`);
+        }
+        mongoFilter[key] = value.map((subFilter: any) => this.processFilter(subFilter));
       } else if (this.isOperator(key)) {
-        throw new Error(
-          `Invalid operator at top level: ${key}. Operators should be within field conditions.`
-        );
+        throw new Error(`Invalid operator at top level: ${key}. Operators should be within field conditions.`);
       } else {
         mongoFilter[key] = this.processFieldCondition(value);
       }
@@ -148,8 +151,8 @@ export class MongoFilterTranslator extends BaseFilterTranslator {
             case '$gte':
             case '$lt':
             case '$lte':
-              if (typeof opValue !== 'number') {
-                throw new Error(`${op} operator requires a numeric value`);
+              if (typeof opValue !== 'number' && typeof opValue !== 'string') {
+                throw new Error(`${op} operator requires a numeric or string value`);
               }
               fieldQuery[op] = opValue;
               break;
@@ -172,7 +175,7 @@ export class MongoFilterTranslator extends BaseFilterTranslator {
               }
               fieldQuery[op] = opValue;
               break;
-            // For now, we ignore $size support.
+            // For now, we are not supporting $size.
             default:
               fieldQuery[op] = opValue;
           }
