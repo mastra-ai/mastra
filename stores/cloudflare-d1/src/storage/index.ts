@@ -432,7 +432,7 @@ export class D1Store extends MastraStorage {
     if (type === 'jsonb' && typeof value === 'string') {
       try {
         return JSON.parse(value) as Record<string, any>;
-      } catch (e) {
+      } catch {
         return value;
       }
     }
@@ -440,7 +440,7 @@ export class D1Store extends MastraStorage {
     if (typeof value === 'string' && (value.startsWith('{') || value.startsWith('['))) {
       try {
         return JSON.parse(value) as Record<string, any>;
-      } catch (e) {
+      } catch {
         return value;
       }
     }
@@ -678,8 +678,6 @@ export class D1Store extends MastraStorage {
 
     try {
       const now = new Date();
-      const fullTableName = this.getTableName(TABLE_MESSAGES);
-
       // Group messages by thread for better organization
       const messagesByThread = new Map<string, MessageType[]>();
 
@@ -698,6 +696,8 @@ export class D1Store extends MastraStorage {
           messagesByThread.set(message.threadId, []);
         }
         messagesByThread.get(message.threadId)!.push(messageToSave);
+
+        console.log('Saving message:', messageToSave);
 
         // Save the message to the database
         await this.insert({

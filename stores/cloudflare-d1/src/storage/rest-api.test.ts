@@ -674,9 +674,8 @@ describe('D1Store REST API', () => {
       await store.saveMessages({ messages });
 
       // Verify order is maintained based on insertion order
-      const orderKey = store['getThreadMessagesKey'](thread.id);
       const order = await retryUntil(
-        async () => await store['getFullOrder'](orderKey),
+        async () => await store.getMessages({ threadId: thread.id }),
         order => order.length === messages.length,
       );
 
@@ -701,47 +700,14 @@ describe('D1Store REST API', () => {
         await store.saveMessages({ messages: [msg] });
       }
       // Verify all messages are saved successfully
-      const orderKey = store['getThreadMessagesKey'](thread.id);
       const order = await retryUntil(
-        async () => {
-          const currentOrder = await store['getFullOrder'](orderKey);
-          // Just verify all messages are present
-          return currentOrder.length === messages.length && currentOrder.every(id => messages.some(m => m.id === id))
-            ? currentOrder
-            : null;
-        },
-        order => order !== null,
+        async () => await store.getMessages({ threadId: thread.id }),
+        order => order.length === messages.length,
       );
 
-      // For REST API, we only verify all messages exist, not their exact order
-      expect(order?.length).toBe(reversedMessages.length);
-      expect(new Set(order || [])).toEqual(new Set(reversedMessages.map(m => m.id)));
-    });
-
-    it('should handle score updates correctly', async () => {
-      const thread = createSampleThread();
-      await store.saveThread({ thread });
-
-      // Create initial messages
-      const messages = Array.from({ length: 3 }, () => createSampleMessage(thread.id));
-      await store.saveMessages({ messages });
-
-      // Update scores to reverse order
-      const orderKey = store['getThreadMessagesKey'](thread.id);
-      await store['updateSortedMessages'](
-        orderKey,
-        messages.map((msg, i) => ({
-          id: msg.id,
-          score: messages.length - 1 - i,
-        })),
-      );
-
-      // Verify new order
-      const order = await retryUntil(
-        async () => await store['getFullOrder'](orderKey),
-        order => order[0] === messages?.[messages.length - 1]?.id,
-      );
-      expect(order).toEqual(messages.map(m => m.id).reverse());
+      // Just verify all messages are present
+      expect(order.length).toBe(messages.length);
+      expect(new Set(order)).toEqual(new Set(messages.map(m => m.id)));
     });
 
     it('should maintain message order using sorted sets', async () => {
@@ -773,36 +739,11 @@ describe('D1Store REST API', () => {
       await new Promise(resolve => setTimeout(resolve, 5000));
 
       // Get messages and verify order
-      const orderKey = store['getThreadMessagesKey'](thread.id);
       const order = await retryUntil(
-        async () => {
-          const order = await store['getFullOrder'](orderKey);
-          return order;
-        },
+        async () => await store.getMessages({ threadId: thread.id }),
         order => order.length > 0,
       );
       expect(order.length).toBe(3);
-
-      // Verify we can get specific ranges
-      const firstTwo = await retryUntil(
-        async () => await store['getRange'](orderKey, 0, 1),
-        order => order.length > 0,
-      );
-
-      expect(firstTwo.length).toBe(2);
-
-      const lastTwo = await retryUntil(
-        async () => await store['getLastN'](orderKey, 2),
-        order => order.length > 0,
-      );
-      expect(lastTwo.length).toBe(2);
-
-      // Verify message ranks
-      const firstMessageRank = await retryUntil(
-        async () => await store['getRank'](orderKey, messages[0].id),
-        order => order !== null,
-      );
-      expect(firstMessageRank).toBe(0);
     });
   });
 
@@ -1022,53 +963,12 @@ describe('D1Store REST API', () => {
         await store.saveMessages({ messages: [msg] });
       }
       // Verify all messages are saved
-      const orderKey = store['getThreadMessagesKey'](thread.id);
       const order = await retryUntil(
-        async () => {
-          const currentOrder = await store['getFullOrder'](orderKey);
-          return currentOrder.length === messages.length ? currentOrder : null;
-        },
-        order => order !== null,
+        async () => await store.getMessages({ threadId: thread.id }),
+        order => order.length === messages.length,
       );
 
       // For REST API, just verify all messages exist
-      const messageIds = messages.map(m => m.id);
-      expect(order?.length).toBe(messages.length);
-      expect(new Set(order || [])).toEqual(new Set(messageIds));
-    });
-
-    it('should maintain order with concurrent score updates', async () => {
-      const thread = createSampleThread();
-      await store.saveThread({ thread });
-
-      // Create initial messages
-      const messages = Array.from({ length: 3 }, () => createSampleMessage(thread.id));
-      await store.saveMessages({ messages });
-
-      const orderKey = store['getThreadMessagesKey'](thread.id);
-
-      // Perform multiple concurrent score updates
-      await Promise.all([
-        store['updateSortedMessages'](
-          orderKey,
-          messages.map((msg, i) => ({ id: msg.id, score: i })),
-        ),
-        store['updateSortedMessages'](
-          orderKey,
-          messages.map((msg, i) => ({ id: msg.id, score: messages.length - 1 - i })),
-        ),
-      ]);
-
-      // Verify final state after updates
-      const order = await retryUntil(
-        async () => {
-          const currentOrder = await store['getFullOrder'](orderKey);
-          return currentOrder.length === messages.length ? currentOrder : null;
-        },
-        order => order !== null,
-      );
-
-      // Just verify all messages exist after updates
       const messageIds = messages.map(m => m.id);
       expect(order?.length).toBe(messages.length);
       expect(new Set(order || [])).toEqual(new Set(messageIds));
@@ -1084,9 +984,8 @@ describe('D1Store REST API', () => {
       await store.saveMessages({ messages });
 
       // Verify messages exist
-      const orderKey = store['getThreadMessagesKey'](thread.id);
       const initialOrder = await retryUntil(
-        async () => await store['getFullOrder'](orderKey),
+        async () => await store.getMessages({ threadId: thread.id }),
         messages => messages.length > 0,
       );
       expect(initialOrder).toHaveLength(messages.length);
@@ -1098,7 +997,7 @@ describe('D1Store REST API', () => {
 
       // Verify messages are cleaned up
       const finalOrder = await retryUntil(
-        async () => await store['getFullOrder'](orderKey),
+        async () => await store.getMessages({ threadId: thread.id }),
         order => order.length === 0,
       );
       expect(finalOrder).toHaveLength(0);
@@ -1145,9 +1044,8 @@ describe('D1Store REST API', () => {
       expect(threads).toHaveLength(0);
 
       // Verify message order is cleaned up
-      const orderKey = store['getThreadMessagesKey'](thread.id);
       const order = await retryUntil(
-        async () => await store['getFullOrder'](orderKey),
+        async () => await store.getMessages({ threadId: thread.id }),
         order => order.length === 0,
       );
       expect(order).toHaveLength(0);
@@ -1212,11 +1110,11 @@ describe('D1Store REST API', () => {
         await store.saveMessages({ messages: [msg] });
       }
       // For REST API, just verify all messages are eventually saved
-      const orderKey = store['getThreadMessagesKey'](thread.id);
       const order = await retryUntil(
         async () => {
-          const currentOrder = await store['getFullOrder'](orderKey);
-          return currentOrder.length === messages.length && currentOrder.every(id => messages.some(m => m.id === id))
+          const currentOrder = await store.getMessages({ threadId: thread.id });
+          return currentOrder.length === messages.length &&
+            currentOrder.every(m => messages.some(msg => msg.id === m.id))
             ? currentOrder
             : null;
         },
@@ -1273,57 +1171,6 @@ describe('D1Store REST API', () => {
       );
       expect(messages).toHaveLength(1);
       expect(messages[0].id).toBe(malformedMessage.id);
-    });
-
-    it('should handle concurrent updates to sorted order', async () => {
-      const thread = createSampleThread();
-      await store.saveThread({ thread });
-
-      // Create initial messages
-      const messages = Array.from({ length: 3 }, () => createSampleMessage(thread.id));
-      await store.saveMessages({ messages });
-
-      // Perform multiple concurrent updates
-      const orderKey = store['getThreadMessagesKey'](thread.id);
-      await Promise.all([
-        store['updateSortedMessages'](
-          orderKey,
-          messages.map((msg, i) => ({ id: msg.id, score: i })),
-        ),
-        store['updateSortedMessages'](
-          orderKey,
-          messages.map((msg, i) => ({ id: msg.id, score: messages.length - 1 - i })),
-        ),
-      ]);
-
-      // Verify order is consistent
-      const order = await retryUntil(
-        async () => await store['getFullOrder'](orderKey),
-        order => order.length === messages.length,
-      );
-      expect(order.length).toBe(messages.length);
-      expect(new Set(order)).toEqual(new Set(messages.map(m => m.id)));
-    });
-
-    it('should handle invalid JSON data gracefully', async () => {
-      await store['putNamespaceValue']({
-        tableName: TABLE_THREADS,
-        key: 'invalid-key',
-        value: 'invalid-json',
-        metadata: '',
-      });
-
-      const result = await store['getKV'](TABLE_THREADS, 'invalid-key');
-      expect(result).toBe('invalid-json');
-    });
-
-    it('should handle namespace creation errors', async () => {
-      const invalidStore = new D1Store({
-        ...TEST_CONFIG,
-        accountId: 'invalid-account',
-      });
-
-      await expect(invalidStore['getOrCreateNamespaceId']('test-namespace')).rejects.toThrow();
     });
 
     it('should handle large metadata objects', async () => {

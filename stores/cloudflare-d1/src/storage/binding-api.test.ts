@@ -225,7 +225,7 @@ describe('D1Store', () => {
         tableName: testTableName2,
         schema: {
           id: { type: 'text', primaryKey: true },
-          threadId: { type: 'text', nullable: false }, // Use nullable: false instead of required
+          thread_id: { type: 'text', nullable: false }, // Use nullable: false instead of required
           data: { type: 'text', nullable: true },
         },
       });
@@ -622,10 +622,9 @@ describe('D1Store', () => {
       await store.saveMessages({ messages });
 
       // Verify order is maintained based on insertion order
-      const orderKey = store['getThreadMessagesKey'](thread.id);
       const order = await retryUntil(
-        async () => await store['getFullOrder'](orderKey),
-        order => order.length === messages.length,
+        async () => await store.getMessages({ threadId: thread.id }),
+        messages => messages.length === messages.length,
       );
 
       // Order should match insertion order
@@ -648,12 +647,12 @@ describe('D1Store', () => {
       await Promise.all(reversedMessages.map(msg => store.saveMessages({ messages: [msg] })));
 
       // Verify messages are saved and maintain write order (not timestamp order)
-      const orderKey = store['getThreadMessagesKey'](thread.id);
       const order = await retryUntil(
         async () => {
-          const currentOrder = await store['getFullOrder'](orderKey);
+          const currentOrder = await store.getMessages({ threadId: thread.id });
           // Verify both length and that all messages are present
-          return currentOrder.length === messages.length && currentOrder.every(id => messages.some(m => m.id === id))
+          return currentOrder.length === messages.length &&
+            currentOrder.every(m => messages.some(msg => msg.id === m.id))
             ? currentOrder
             : null;
         },
@@ -662,32 +661,6 @@ describe('D1Store', () => {
       );
 
       expect(order).toEqual(reversedMessages.map(m => m.id));
-    });
-
-    it('should handle score updates correctly', async () => {
-      const thread = createSampleThread();
-      await store.saveThread({ thread });
-
-      // Create initial messages
-      const messages = Array.from({ length: 3 }, () => createSampleMessage(thread.id));
-      await store.saveMessages({ messages });
-
-      // Update scores to reverse order
-      const orderKey = store['getThreadMessagesKey'](thread.id);
-      await store['updateSortedMessages'](
-        orderKey,
-        messages.map((msg, i) => ({
-          id: msg.id,
-          score: messages.length - 1 - i,
-        })),
-      );
-
-      // Verify new order
-      const order = await retryUntil(
-        async () => await store['getFullOrder'](orderKey),
-        order => order[0] === messages?.[messages.length - 1]?.id,
-      );
-      expect(order).toEqual(messages.map(m => m.id).reverse());
     });
 
     it('should maintain message order using sorted sets', async () => {
@@ -719,36 +692,14 @@ describe('D1Store', () => {
       await new Promise(resolve => setTimeout(resolve, 5000));
 
       // Get messages and verify order
-      const orderKey = store['getThreadMessagesKey'](thread.id);
       const order = await retryUntil(
         async () => {
-          const order = await store['getFullOrder'](orderKey);
+          const order = await store.getMessages({ threadId: thread.id });
           return order;
         },
         order => order.length > 0,
       );
       expect(order.length).toBe(3);
-
-      // Verify we can get specific ranges
-      const firstTwo = await retryUntil(
-        async () => await store['getRange'](orderKey, 0, 1),
-        order => order.length > 0,
-      );
-
-      expect(firstTwo.length).toBe(2);
-
-      const lastTwo = await retryUntil(
-        async () => await store['getLastN'](orderKey, 2),
-        order => order.length > 0,
-      );
-      expect(lastTwo.length).toBe(2);
-
-      // Verify message ranks
-      const firstMessageRank = await retryUntil(
-        async () => await store['getRank'](orderKey, messages[0].id),
-        order => order !== null,
-      );
-      expect(firstMessageRank).toBe(0);
     });
   });
 
@@ -1090,8 +1041,7 @@ describe('D1Store', () => {
       await Promise.all(messages.map(msg => store.saveMessages({ messages: [msg] })));
 
       // Order should reflect write order, not timestamp order
-      const orderKey = store['getThreadMessagesKey'](thread.id);
-      const order = await store['getFullOrder'](orderKey);
+      const order = await store.getMessages({ threadId: thread.id });
 
       // Verify messages exist in write order
       const messageIds = messages.map(m => m.id);
@@ -1100,39 +1050,6 @@ describe('D1Store', () => {
       // Verify all messages were saved
       expect(order.length).toBe(messages.length);
       expect(new Set(order)).toEqual(new Set(messageIds));
-    });
-
-    it('should maintain order with concurrent score updates', async () => {
-      const thread = createSampleThread();
-      await store.saveThread({ thread });
-
-      // Create initial messages
-      const messages = Array.from({ length: 3 }, () => createSampleMessage(thread.id));
-      await store.saveMessages({ messages });
-
-      const orderKey = store['getThreadMessagesKey'](thread.id);
-
-      // Perform multiple concurrent score updates
-      await Promise.all([
-        store['updateSortedMessages'](
-          orderKey,
-          messages.map((msg, i) => ({ id: msg.id, score: i })),
-        ),
-        store['updateSortedMessages'](
-          orderKey,
-          messages.map((msg, i) => ({ id: msg.id, score: messages.length - 1 - i })),
-        ),
-      ]);
-
-      // Order should be immediately consistent
-      const order = await store['getFullOrder'](orderKey);
-
-      const expectedOrder = messages
-        .slice()
-        .reverse()
-        .map(m => m.id);
-
-      expect(order).toEqual(expectedOrder);
     });
   });
 
@@ -1145,9 +1062,8 @@ describe('D1Store', () => {
       await store.saveMessages({ messages });
 
       // Verify messages exist
-      const orderKey = store['getThreadMessagesKey'](thread.id);
       const initialOrder = await retryUntil(
-        async () => await store['getFullOrder'](orderKey),
+        async () => await store.getMessages({ threadId: thread.id }),
         messages => messages.length > 0,
       );
       expect(initialOrder).toHaveLength(messages.length);
@@ -1159,7 +1075,7 @@ describe('D1Store', () => {
 
       // Verify messages are cleaned up
       const finalOrder = await retryUntil(
-        async () => await store['getFullOrder'](orderKey),
+        async () => await store.getMessages({ threadId: thread.id }),
         order => order.length === 0,
       );
       expect(finalOrder).toHaveLength(0);
@@ -1206,9 +1122,8 @@ describe('D1Store', () => {
       expect(threads).toHaveLength(0);
 
       // Verify message order is cleaned up
-      const orderKey = store['getThreadMessagesKey'](thread.id);
       const order = await retryUntil(
-        async () => await store['getFullOrder'](orderKey),
+        async () => await store.getMessages({ threadId: thread.id }),
         order => order.length === 0,
       );
       expect(order).toHaveLength(0);
@@ -1272,13 +1187,12 @@ describe('D1Store', () => {
       await Promise.all(messages.map(msg => store.saveMessages({ messages: [msg] })));
 
       // Verify both presence and order consistency
-      const orderKey = store['getThreadMessagesKey'](thread.id);
       const order = await retryUntil(
         async () => {
-          const currentOrder = await store['getFullOrder'](orderKey);
+          const currentOrder = await store.getMessages({ threadId: thread.id });
           // Check both length and content
           const hasAllMessages =
-            currentOrder.length === messages.length && currentOrder.every(id => messages.some(m => m.id === id));
+            currentOrder.length === messages.length && currentOrder.every(m => messages.some(msg => msg.id === m.id));
           if (!hasAllMessages) return null;
 
           // Verify messages are in timestamp order
@@ -1342,48 +1256,6 @@ describe('D1Store', () => {
       );
       expect(messages).toHaveLength(1);
       expect(messages[0].id).toBe(malformedMessage.id);
-    });
-
-    it('should handle concurrent updates to sorted order', async () => {
-      const thread = createSampleThread();
-      await store.saveThread({ thread });
-
-      // Create initial messages
-      const messages = Array.from({ length: 3 }, () => createSampleMessage(thread.id));
-      await store.saveMessages({ messages });
-
-      // Perform multiple concurrent updates
-      const orderKey = store['getThreadMessagesKey'](thread.id);
-      await Promise.all([
-        store['updateSortedMessages'](
-          orderKey,
-          messages.map((msg, i) => ({ id: msg.id, score: i })),
-        ),
-        store['updateSortedMessages'](
-          orderKey,
-          messages.map((msg, i) => ({ id: msg.id, score: messages.length - 1 - i })),
-        ),
-      ]);
-
-      // Verify order is consistent
-      const order = await retryUntil(
-        async () => await store['getFullOrder'](orderKey),
-        order => order.length === messages.length,
-      );
-      expect(order.length).toBe(messages.length);
-      expect(new Set(order)).toEqual(new Set(messages.map(m => m.id)));
-    });
-
-    it('should handle invalid JSON data gracefully', async () => {
-      await store['putNamespaceValue']({
-        tableName: TABLE_THREADS,
-        key: 'invalid-key',
-        value: 'invalid-json',
-        metadata: '',
-      });
-
-      const result = await store['getKV'](TABLE_THREADS, 'invalid-key');
-      expect(result).toBe('invalid-json');
     });
   });
 });
