@@ -1,0 +1,155 @@
+---
+title: "Example: Word Inclusion | Evals | Mastra Docs"
+description: Example of creating a custom metric to evaluate word inclusion in output text.
+---
+
+import { GithubLink } from "@/components/github-link";
+
+# Word Inclusion Evaluation
+
+This example demonstrates how to create a custom metric in Mastra that evaluates whether specific words appear in the output text.
+This is a simplified version of our own [keyword coverage eval](/reference/evals/keyword-coverage).
+
+## Overview
+
+The example shows how to:
+
+1. Create a custom metric class
+2. Evaluate word presence in responses
+3. Calculate inclusion scores
+4. Handle different inclusion scenarios
+
+## Setup
+
+### Dependencies
+
+Import the necessary dependencies:
+
+```typescript copy showLineNumbers filename="src/index.ts"
+import { Metric, type MetricResult } from '@mastra/core/eval';
+```
+
+## Metric Implementation
+
+Create the Word Inclusion metric:
+
+```typescript copy showLineNumbers{3} filename="src/index.ts"
+interface WordInclusionResult extends MetricResult {
+  score: number;
+  info: {
+    totalWords: number;
+    matchedWords: number;
+  };
+}
+
+export class WordInclusionMetric extends Metric {
+  private referenceWords: Set<string>;
+
+  constructor(words: string[]) {
+    super();
+    this.referenceWords = new Set(words);
+  }
+
+  async measure(input: string, output: string): Promise<WordInclusionResult> {
+    const matchedWords = [...this.referenceWords].filter(k => output.includes(k));
+    const totalWords = this.referenceWords.size;
+    const coverage = totalWords > 0 ? matchedWords.length / totalWords : 0;
+
+    return {
+      score: coverage,
+      info: {
+        totalWords: this.referenceWords.size,
+        matchedWords: matchedWords.length,
+      },
+    };
+  }
+}
+```
+
+## Example Usage
+
+### Full Word Inclusion Example
+
+Test when all words are present in the output:
+
+```typescript copy showLineNumbers{46} filename="src/index.ts"
+const words1 = ['apple', 'banana', 'orange'];
+const metric1 = new WordInclusionMetric(words1);
+
+const input1 = 'List some fruits';
+const output1 = 'Here are some fruits: apple, banana, and orange.';
+
+const result1 = await metric1.measure(input1, output1);
+console.log('Metric Result:', {
+  score: result1.score,
+  info: result1.info,
+});
+// Example Output:
+// Metric Result: { score: 1, info: { totalWords: 3, matchedWords: 3 } }
+```
+
+### Partial Word Inclusion Example
+
+Test when some words are present:
+
+```typescript copy showLineNumbers{64} filename="src/index.ts"
+const words2 = ['python', 'javascript', 'typescript', 'rust'];
+const metric2 = new WordInclusionMetric(words2);
+
+const input2 = 'What programming languages do you know?';
+const output2 = 'I know python and javascript very well.';
+
+const result2 = await metric2.measure(input2, output2);
+console.log('Metric Result:', {
+  score: result2.score,
+  info: result2.info,
+});
+// Example Output:
+// Metric Result: { score: 0.5, info: { totalWords: 4, matchedWords: 2 } }
+```
+
+### No Word Inclusion Example
+
+Test when no words are present:
+
+```typescript copy showLineNumbers{82} filename="src/index.ts"
+const words3 = ['cloud', 'server', 'database'];
+const metric3 = new WordInclusionMetric(words3);
+
+const input3 = 'Tell me about your infrastructure';
+const output3 = 'We use modern technology for our systems.';
+
+const result3 = await metric3.measure(input3, output3);
+console.log('Metric Result:', {
+  score: result3.score,
+  info: result3.info,
+});
+// Example Output:
+// Metric Result: { score: 0, info: { totalWords: 3, matchedWords: 0 } }
+```
+
+## Understanding the Results
+
+The metric provides:
+
+1. A word inclusion score between 0 and 1:
+   - 1.0: Complete inclusion - all words present
+   - 0.5-0.9: Partial inclusion - some words present
+   - 0.0: No inclusion - no words found
+
+2. Detailed statistics including:
+   - Total words to check
+   - Number of matched words
+   - Inclusion ratio calculation
+   - Empty input handling
+
+<br />
+<br />
+<hr className="dark:border-[#404040] border-gray-300" />
+<br />
+<br />
+<GithubLink
+  link={
+    "https://github.com/mastra-ai/mastra/blob/main/examples/basics/evals/word-inclusion"
+  }
+/>

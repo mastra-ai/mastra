@@ -1,7 +1,8 @@
 import { randomUUID } from 'crypto';
 import { readFile } from 'fs/promises';
-import { join } from 'path';
-import { pathToFileURL } from 'url';
+import { dirname } from 'path';
+import { join } from 'path/posix';
+import { fileURLToPath, pathToFileURL } from 'url';
 import { serve } from '@hono/node-server';
 import { serveStatic } from '@hono/node-server/serve-static';
 import { swaggerUI } from '@hono/swagger-ui';
@@ -81,11 +82,15 @@ export async function createHonoServer(
   const server = mastra.getServer();
 
   // Initialize tools
-  const mastraToolsPaths = process.env.MASTRA_TOOLS_PATH;
+  // @ts-ignore
+  const __dirname = dirname(fileURLToPath(import.meta.url));
+
+  const mastraToolsPaths = (await import(pathToFileURL(join(__dirname, 'tools.mjs')).href)).tools;
   const toolImports = mastraToolsPaths
     ? await Promise.all(
-        mastraToolsPaths.split(',').map(async toolPath => {
-          return import(pathToFileURL(toolPath).href);
+        // @ts-ignore
+        mastraToolsPaths.map(async toolPath => {
+          return import(pathToFileURL(join(__dirname, toolPath)).href);
         }),
       )
     : [];

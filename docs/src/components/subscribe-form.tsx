@@ -18,6 +18,7 @@ import {
   FormMessage,
 } from "@/components/ui/forms";
 import { useTheme } from "nextra-theme-docs";
+import { T, Var } from "gt-next/client";
 
 export const formSchema = z.object({
   email: z.string().email(),
@@ -36,7 +37,7 @@ const buttonCopy = ({
   loading: (
     <Spinner
       className="w-4 h-4 !duration-300"
-      color={isDark ? "#fff" : "#000"}
+      color={isDark ? "#000" : "#fff"}
     />
   ),
   success: successIcon ? successIcon : "Subscribed!",
@@ -96,6 +97,7 @@ export const SubscribeForm = ({
                 value: sanitizedEmail,
               },
             ],
+
             context: {
               pageUri: window.location.href,
               pageName: document.title,
@@ -139,9 +141,11 @@ export const SubscribeForm = ({
           render={({ field }) => (
             <FormItem className="flex-1 w-full">
               {showLabel ? (
-                <FormLabel className="text-[13px] mb-[0.69rem] block text-gray-500 dark:text-[#E6E6E6]">
-                  {label || "Mastra Newsletter"}
-                </FormLabel>
+                <T id="components.subscribe_form.0">
+                  <FormLabel className="text-[13px] mb-[0.69rem] block text-gray-500 dark:text-[#E6E6E6]">
+                    <Var>{label || "Mastra Newsletter"}</Var>
+                  </FormLabel>
+                </T>
               ) : null}
 
               <FormControl>
@@ -163,6 +167,7 @@ export const SubscribeForm = ({
             </FormItem>
           )}
         />
+
         <button
           className={cn(
             "dark:bg-[#121212] bg-[#2a2a2a] w-full rounded-md hover:opacity-90 h-[32px] justify-center flex items-center px-4 text-white dark:text-white text-[14px]",

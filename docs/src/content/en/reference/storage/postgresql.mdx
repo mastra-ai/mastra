@@ -1,0 +1,93 @@
+---
+title: "PostgreSQL Storage | Storage System | Mastra Core"
+description: Documentation for the PostgreSQL storage implementation in Mastra.
+---
+
+# PostgreSQL Storage
+
+The PostgreSQL storage implementation provides a production-ready storage solution using PostgreSQL databases.
+
+## Installation
+
+```bash
+npm install @mastra/pg
+```
+
+## Usage
+
+```typescript copy showLineNumbers
+import { PostgresStore } from "@mastra/pg";
+
+const storage = new PostgresStore({
+  connectionString: process.env.DATABASE_URL,
+});
+```
+
+## Parameters
+
+<PropertiesTable
+  content={[
+    {
+      name: "connectionString",
+      type: "string",
+      description:
+        "PostgreSQL connection string (e.g., postgresql://user:pass@host:5432/dbname)",
+      isOptional: false,
+    },
+    {
+      name: "schemaName",
+      type: "string",
+      description: 
+        "The name of the schema you want the storage to use. Will use the default schema if not provided.",
+      isOptional: true,
+    }
+  ]}
+/>
+
+## Constructor Examples
+
+You can instantiate `PostgresStore` in the following ways:
+
+```ts
+import { PostgresStore } from '@mastra/pg';
+
+// Using a connection string only
+const store1 = new PostgresStore({
+  connectionString: 'postgresql://user:password@localhost:5432/mydb',
+});
+
+// Using a connection string with a custom schema name
+const store2 = new PostgresStore({
+  connectionString: 'postgresql://user:password@localhost:5432/mydb',
+  schemaName: 'custom_schema', // optional
+});
+
+// Using individual connection parameters
+const store4 = new PostgresStore({
+  host: 'localhost',
+  port: 5432,
+  database: 'mydb',
+  user: 'user',
+  password: 'password',
+});
+
+// Individual parameters with schemaName
+const store5 = new PostgresStore({
+  host: 'localhost',
+  port: 5432,
+  database: 'mydb',
+  user: 'user',
+  password: 'password',
+  schemaName: 'custom_schema', // optional
+});
+```
+
+## Additional Notes
+
+### Schema Management
+
+The storage implementation handles schema creation and updates automatically. It creates the following tables:
+
+- `threads`: Stores conversation threads
+- `messages`: Stores individual messages
+- `metadata`: Stores additional metadata for threads and messages

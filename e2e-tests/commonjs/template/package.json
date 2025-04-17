@@ -1,0 +1,25 @@
+{
+  "name": "commonjs",
+  "version": "1.0.0",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "dev": "mastra dev",
+    "build": "mastra build"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "MIT",
+  "description": "",
+  "packageManager": "pnpm@10.8.0+sha512.0e82714d1b5b43c74610193cb20734897c1d00de89d0e18420aebc5977fa13d780a9cb05734624e81ebd81cc876cd464794850641c48b9544326b5622ca29971",
+  "dependencies": {
+    "@ai-sdk/openai": "^1.3.11",
+    "@mastra/core": "link:%%MASTRA_DIR%%/packages/core",
+    "zod": "^3.24.2"
+  },
+  "devDependencies": {
+    "@types/node": "^22.14.1",
+    "mastra": "link:%%MASTRA_DIR%%/packages/cli",
+    "typescript": "^5.8.3"
+  }
+}

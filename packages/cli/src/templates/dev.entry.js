@@ -21,18 +21,20 @@ registerHook(AvailableHooks.ON_GENERATION, ({ input, output, metric, runId, agen
   });
 });
 
-if (mastra.storage) {
-  await mastra.storage.init();
+if (mastra.getStorage()) {
+  // start storage init in the background
+  mastra.getStorage().init();
 }
 
 registerHook(AvailableHooks.ON_EVALUATION, async traceObject => {
-  if (mastra.storage) {
+  const storage = mastra.getStorage();
+  if (storage) {
     // Check for required fields
     const logger = mastra?.getLogger();
     const areFieldsValid = checkEvalStorageFields(traceObject, logger);
     if (!areFieldsValid) return;
 
-    await mastra.storage.insert({
+    await storage.insert({
       tableName: TABLE_EVALS,
       record: {
         input: traceObject.input,
