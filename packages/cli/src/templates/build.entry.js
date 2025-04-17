@@ -8,6 +8,7 @@ import { mastra } from '#mastra';
 import { createNodeServer } from '#server';
 
 // @ts-ignore
+// eslint-disable-next-line no-undef
 await createNodeServer(mastra, __SERVER_OPTIONS__);
 
 registerHook(AvailableHooks.ON_GENERATION, ({ input, output, metric, runId, agentName, instructions }) => {
