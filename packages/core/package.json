@@ -97,7 +97,8 @@
     "check": "tsc --noEmit",
     "analyze": "size-limit --why",
     "lint": "eslint .",
-    "build": "tsup --config tsup.config.ts --format esm,cjs",
+    "prebuild": "tsup --config tsup.config.ts --format esm,cjs",
+    "build": "node ./tools/commonjs-tsc-fixer.js",
     "build:watch": "pnpm build --watch",
     "size": "size-limit",
     "test": "vitest run"
