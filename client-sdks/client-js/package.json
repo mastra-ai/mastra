@@ -33,6 +33,9 @@
     "zod": "^3.24.2",
     "zod-to-json-schema": "^3.24.3"
   },
+  "peerDependencies": {
+    "zod": "^3.24.2"
+  },
   "devDependencies": {
     "@babel/preset-env": "^7.26.9",
     "@babel/preset-typescript": "^7.27.0",
