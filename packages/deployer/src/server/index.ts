@@ -61,6 +61,7 @@ import {
   createRunHandler,
   getWorkflowRunsHandler,
 } from './handlers/workflows.js';
+import type { ServerBundleOptions } from './types';
 import { html } from './welcome.js';
 
 type Bindings = {};
@@ -73,10 +74,7 @@ type Variables = {
   playground: boolean;
 };
 
-export async function createHonoServer(
-  mastra: Mastra,
-  options: { playground?: boolean; swaggerUI?: boolean; apiReqLogs?: boolean } = {},
-) {
+export async function createHonoServer(mastra: Mastra, options: ServerBundleOptions = {}) {
   // Create typed Hono app
   const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
   const server = mastra.getServer();
@@ -125,10 +123,6 @@ export async function createHonoServer(
       await next();
     }
   });
-
-  if (options.apiReqLogs) {
-    app.use(logger());
-  }
 
   app.onError(errorHandler);
 
@@ -215,6 +209,10 @@ export async function createHonoServer(
         app.delete(route.path, ...middlewares, route.handler);
       }
     }
+  }
+
+  if (server?.apiReqLogs) {
+    app.use(logger());
   }
 
   // API routes
@@ -2123,18 +2121,18 @@ export async function createHonoServer(
     deleteIndex,
   );
 
-  app.get(
-    '/openapi.json',
-    openAPISpecs(app, {
-      documentation: {
-        info: { title: 'Mastra API', version: '1.0.0', description: 'Mastra API' },
-      },
-    }),
-  );
+  if (server?.openapi || server?.swaggerUI) {
+    app.get(
+      '/openapi.json',
+      openAPISpecs(app, {
+        documentation: {
+          info: { title: 'Mastra API', version: '1.0.0', description: 'Mastra API' },
+        },
+      }),
+    );
+  }
 
-  app.get('/swagger-ui', swaggerUI({ url: '/openapi.json' }));
-
-  if (options?.swaggerUI) {
+  if (server?.swaggerUI) {
     app.get('/swagger-ui', swaggerUI({ url: '/openapi.json' }));
   }
 
@@ -2196,10 +2194,7 @@ export async function createHonoServer(
   return app;
 }
 
-export async function createNodeServer(
-  mastra: Mastra,
-  options: { playground?: boolean; swaggerUI?: boolean; apiReqLogs?: boolean } = {},
-) {
+export async function createNodeServer(mastra: Mastra, options: ServerBundleOptions = {}) {
   const app = await createHonoServer(mastra, options);
   const serverOptions = mastra.getServer();
 
@@ -2212,11 +2207,7 @@ export async function createNodeServer(
     },
     () => {
       const logger = mastra.getLogger();
-      logger.info(`🦄 Mastra API running on port ${process.env.PORT || 4111}/api`);
-      logger.info(`📚 Open API documentation available at http://localhost:${process.env.PORT || 4111}/openapi.json`);
-      if (options?.swaggerUI) {
-        logger.info(`🧪 Swagger UI available at http://localhost:${process.env.PORT || 4111}/swagger-ui`);
-      }
+      logger.info(` Mastra API running on port http://localhost:${process.env.PORT || 4111}/api`);
       if (options?.playground) {
         logger.info(`👨‍💻 Playground available at http://localhost:${process.env.PORT || 4111}/`);
       }

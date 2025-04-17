@@ -169,7 +169,10 @@ program
       command: 'mastra build',
       args,
       execution: async () => {
-        await build({ dir: args.dir, tools: args.tools ? args.tools.split(',') : [] });
+        await build({
+          dir: args.dir,
+          tools: args.tools ? args.tools.split(',') : [],
+        });
       },
       origin,
     });
