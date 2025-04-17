@@ -3,8 +3,7 @@ import { readFileSync, writeFileSync } from 'fs';
 import { join } from 'path';
 import process from 'process';
 
-import { Deployer } from '@mastra/deployer';
-
+import { Deployer, type ServerBundleOptions } from '@mastra/deployer';
 interface EnvVar {
   key: string;
   value: string;
@@ -134,13 +133,13 @@ export class VercelDeployer extends Deployer {
     await this.writeFiles(outputDirectory);
   }
 
-  private getEntry({ swaggerUI, openapi }: { swaggerUI: boolean; openapi: boolean }): string {
+  private getEntry({ swaggerUI, openapi, apiReqLogs }: ServerBundleOptions): string {
     return `
 import { handle } from 'hono/vercel'
 import { mastra } from '#mastra';
 import { createHonoServer } from '#server';
 
-const app = await createHonoServer(mastra, { swaggerUI: ${swaggerUI}, openapi: ${openapi} });
+const app = await createHonoServer(mastra, { swaggerUI: ${swaggerUI}, openapi: ${openapi}, apiReqLogs: ${apiReqLogs} });
 
 export const GET = handle(app);
 export const POST = handle(app);
@@ -151,10 +150,10 @@ export const POST = handle(app);
     entryFile: string,
     outputDirectory: string,
     toolsPaths: string[],
-    bundleOptions?: Record<string, any>,
+    bundleOptions?: ServerBundleOptions,
   ): Promise<void> {
-    const { swaggerUI, openapi } = bundleOptions ?? {};
-    return this._bundle(this.getEntry({ swaggerUI, openapi }), entryFile, outputDirectory, toolsPaths);
+    const { swaggerUI, openapi, apiReqLogs } = bundleOptions ?? {};
+    return this._bundle(this.getEntry({ swaggerUI, openapi, apiReqLogs }), entryFile, outputDirectory, toolsPaths);
   }
 
   async deploy(outputDirectory: string): Promise<void> {

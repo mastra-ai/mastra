@@ -1,7 +1,7 @@
 import { writeFile } from 'fs/promises';
 import { join } from 'path';
 
-import { Deployer, createChildProcessLogger } from '@mastra/deployer';
+import { Deployer, createChildProcessLogger, type ServerBundleOptions } from '@mastra/deployer';
 import type { analyzeBundle } from '@mastra/deployer/analyze';
 import virtual from '@rollup/plugin-virtual';
 import { Cloudflare } from 'cloudflare';
@@ -78,7 +78,7 @@ export class CloudflareDeployer extends Deployer {
     await writeFile(join(outputDirectory, this.outputDir, 'wrangler.json'), JSON.stringify(wranglerConfig));
   }
 
-  private getEntry({ swaggerUI, openapi }: { swaggerUI: boolean; openapi: boolean }): string {
+  private getEntry({ swaggerUI, openapi, apiReqLogs }: ServerBundleOptions): string {
     return `
 import '#polyfills';
 import { mastra } from '#mastra';
@@ -86,7 +86,7 @@ import { createHonoServer } from '#server';
 
 export default {
   fetch: async (request, env, context) => {
-    const app = await createHonoServer(mastra, { swaggerUI: ${swaggerUI}, openapi: ${openapi} })
+    const app = await createHonoServer(mastra, { swaggerUI: ${swaggerUI}, openapi: ${openapi}, apiReqLogs: ${apiReqLogs} })
     return app.fetch(request, env, context);
   }
 }
@@ -124,10 +124,10 @@ process.versions.node = '${process.versions.node}';
     entryFile: string,
     outputDirectory: string,
     toolsPaths: string[],
-    bundleOptions?: Record<string, any>,
+    bundleOptions?: ServerBundleOptions,
   ): Promise<void> {
-    const { swaggerUI, openapi } = bundleOptions ?? {};
-    return this._bundle(this.getEntry({ swaggerUI, openapi }), entryFile, outputDirectory, toolsPaths);
+    const { swaggerUI, openapi, apiReqLogs } = bundleOptions ?? {};
+    return this._bundle(this.getEntry({ swaggerUI, openapi, apiReqLogs }), entryFile, outputDirectory, toolsPaths);
   }
 
   async deploy(outputDirectory: string): Promise<void> {

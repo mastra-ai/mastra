@@ -3,7 +3,7 @@ export interface ApiError extends Error {
   status?: number;
 }
 
-export type serverOptions = {
+export type ServerBundleOptions = {
   playground?: boolean;
   swaggerUI?: boolean;
   apiReqLogs?: boolean;

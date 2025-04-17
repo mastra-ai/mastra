@@ -1,10 +1,9 @@
 import { existsSync, mkdirSync, writeFileSync } from 'fs';
 import { join } from 'path';
 
-import { Deployer } from '@mastra/deployer';
+import { Deployer, type ServerBundleOptions } from '@mastra/deployer';
 import { DepsService } from '@mastra/deployer/services';
 import { execa } from 'execa';
-
 import { getOrCreateSite } from './helpers.js';
 
 export class NetlifyDeployer extends Deployer {
@@ -92,11 +91,11 @@ to = "/.netlify/functions/api/:splat"
     entryFile: string,
     outputDirectory: string,
     toolsPaths: string[],
-    bundleOptions?: Record<string, any>,
+    bundleOptions?: ServerBundleOptions,
   ): Promise<void> {
-    const { swaggerUI, openapi } = bundleOptions ?? {};
+    const { swaggerUI, openapi, apiReqLogs } = bundleOptions ?? {};
     return this._bundle(
-      this.getEntry({ swaggerUI, openapi }),
+      this.getEntry({ swaggerUI, openapi, apiReqLogs }),
       entryFile,
       outputDirectory,
       toolsPaths,
@@ -104,13 +103,13 @@ to = "/.netlify/functions/api/:splat"
     );
   }
 
-  private getEntry({ swaggerUI, openapi }: { swaggerUI: boolean; openapi: boolean }): string {
+  private getEntry({ swaggerUI, openapi, apiReqLogs }: ServerBundleOptions): string {
     return `
 import { handle } from 'hono/netlify'
 import { mastra } from '#mastra';
 import { createHonoServer } from '#server';
 
-const app = await createHonoServer(mastra, { swaggerUI: ${swaggerUI}, openapi: ${openapi} });
+const app = await createHonoServer(mastra, { swaggerUI: ${swaggerUI}, openapi: ${openapi}, apiReqLogs: ${apiReqLogs} });
 
 export default handle(app)
 `;

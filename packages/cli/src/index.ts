@@ -166,6 +166,7 @@ program
   .option('-t, --tools <toolsDirs>', 'Comma-separated list of paths to tool files to include')
   .option('-s, --swaggerui', 'Enable swaggerUI')
   .option('-o, --openapi', 'Enable openapi')
+  .option('-l, --apireqlogs', 'Enable API request logs')
   .action(async args => {
     await analytics.trackCommandExecution({
       command: 'mastra build',
@@ -176,6 +177,7 @@ program
           tools: args.tools ? args.tools.split(',') : [],
           swaggerUI: args?.swaggerui,
           openapi: args?.openapi,
+          apiReqLogs: args?.apireqlogs,
         });
       },
       origin,

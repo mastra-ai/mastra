@@ -62,7 +62,7 @@ import {
   getWorkflowRunsHandler,
 } from './handlers/workflows.js';
 import { html } from './welcome.js';
-import type { serverOptions } from './types';
+import type { ServerBundleOptions } from './types';
 
 type Bindings = {};
 
@@ -74,7 +74,7 @@ type Variables = {
   playground: boolean;
 };
 
-export async function createHonoServer(mastra: Mastra, options: serverOptions = {}) {
+export async function createHonoServer(mastra: Mastra, options: ServerBundleOptions = {}) {
   // Create typed Hono app
   const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
   const server = mastra.getServer();
@@ -2194,7 +2194,7 @@ export async function createHonoServer(mastra: Mastra, options: serverOptions = 
   return app;
 }
 
-export async function createNodeServer(mastra: Mastra, options: serverOptions = {}) {
+export async function createNodeServer(mastra: Mastra, options: ServerBundleOptions = {}) {
   const app = await createHonoServer(mastra, options);
   const serverOptions = mastra.getServer();
 
