@@ -6,20 +6,7 @@ import { BuildBundler } from './BuildBundler';
 import { getDeployer } from '@mastra/deployer';
 import { logger } from '../../utils/logger';
 
-export async function build({
-  dir,
-  tools,
-  swaggerUI,
-  openapi,
-  apiReqLogs,
-}: {
-  dir?: string;
-  tools?: string[];
-  playground?: boolean;
-  swaggerUI?: boolean;
-  openapi?: boolean;
-  apiReqLogs?: boolean;
-}) {
+export async function build({ dir, tools }: { dir?: string; tools?: string[] }) {
   const mastraDir = dir ?? join(process.cwd(), 'src', 'mastra');
   const outputDirectory = join(process.cwd(), '.mastra');
 
