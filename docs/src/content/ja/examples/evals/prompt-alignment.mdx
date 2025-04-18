@@ -1,0 +1,175 @@
+---
+title: "例：プロンプトアライメント | Evals | Mastra Docs"
+description: プロンプトアライメント指標を使用して、回答における指示の遵守を評価する例。
+---
+
+import { GithubLink } from "@/components/github-link";
+
+# プロンプトアラインメント
+
+この例では、Mastraのプロンプトアラインメントメトリックを使用して、応答が与えられた指示にどれだけ従っているかを評価する方法を示します。
+
+## 概要
+
+この例では、以下の方法を示します：
+
+1. Prompt Alignment メトリックを設定する
+2. 指示の遵守を評価する
+3. 該当しない指示を処理する
+4. アライメントスコアを計算する
+
+## セットアップ
+
+### 環境セットアップ
+
+環境変数を設定してください：
+
+```bash filename=".env"
+OPENAI_API_KEY=your_api_key_here
+```
+
+### 依存関係
+
+必要な依存関係をインポートします：
+
+```typescript copy showLineNumbers filename="src/index.ts"
+import { openai } from '@ai-sdk/openai';
+import { PromptAlignmentMetric } from '@mastra/evals/llm';
+```
+
+## 使用例
+
+### 完全な整合性の例
+
+すべての指示に従った応答を評価します：
+
+```typescript copy showLineNumbers{5} filename="src/index.ts"
+const instructions1 = [
+  '完全な文を使用する',
+  '摂氏で温度を含める',
+  '風の状況を言及する',
+  '降水確率を述べる',
+];
+
+const metric1 = new PromptAlignmentMetric(openai('gpt-4o-mini'), {
+  instructions: instructions1,
+});
+
+const query1 = '天気はどうですか？';
+const response1 =
+  '温度は摂氏22度で、北西からの穏やかな風があります。雨の確率は30％です。';
+
+console.log('例 1 - 完全な整合性:');
+console.log('指示:', instructions1);
+console.log('クエリ:', query1);
+console.log('応答:', response1);
+
+const result1 = await metric1.measure(query1, response1);
+console.log('メトリック結果:', {
+  score: result1.score,
+  reason: result1.info.reason,
+  details: result1.info.scoreDetails,
+});
+// 例の出力:
+// メトリック結果: { score: 1, reason: '応答はすべての指示に従っています。' }
+```
+
+### 混合整合性の例
+
+いくつかの指示を逃した応答を評価します：
+
+```typescript copy showLineNumbers{33} filename="src/index.ts"
+const instructions2 = [
+  '箇条書きを使用する',
+  '価格をUSDで含める',
+  '在庫状況を表示する',
+  '製品説明を追加する'
+];
+
+const metric2 = new PromptAlignmentMetric(openai('gpt-4o-mini'), {
+  instructions: instructions2,
+});
+
+const query2 = '利用可能な製品を一覧表示する';
+const response2 = '• コーヒー - $4.99 (在庫あり)\n• 紅茶 - $3.99\n• 水 - $1.99 (在庫切れ)';
+
+console.log('例 2 - 混合整合性:');
+console.log('指示:', instructions2);
+console.log('クエリ:', query2);
+console.log('応答:', response2);
+
+const result2 = await metric2.measure(query2, response2);
+console.log('メトリック結果:', {
+  score: result2.score,
+  reason: result2.info.reason,
+  details: result2.info.scoreDetails,
+});
+// 例の出力:
+// メトリック結果: { score: 0.5, reason: '応答はいくつかの指示を逃しています。' }
+```
+
+### 非適用指示の例
+
+指示が適用されない応答を評価します：
+
+```typescript copy showLineNumbers{55} filename="src/index.ts"
+const instructions3 = [
+  '口座残高を表示する',
+  '最近の取引を一覧表示する',
+  '支払い履歴を表示する'
+];
+
+const metric3 = new PromptAlignmentMetric(openai('gpt-4o-mini'), {
+  instructions: instructions3,
+});
+
+const query3 = '天気はどうですか？';
+const response3 = '外は晴れて暖かいです。';
+
+console.log('例 3 - 非適用指示:');
+console.log('指示:', instructions3);
+console.log('クエリ:', query3);
+console.log('応答:', response3);
+
+const result3 = await metric3.measure(query3, response3);
+console.log('メトリック結果:', {
+  score: result3.score,
+  reason: result3.info.reason,
+  details: result3.info.scoreDetails,
+});
+// 例の出力:
+// メトリック結果: { score: 0, reason: '指示はクエリに対して従われていないか、適用されていません。' }
+```
+
+## 結果の理解
+
+この指標は以下を提供します：
+
+1. 0から1の間の整合スコア、または特別な場合には-1：
+   - 1.0: 完全な整合 - すべての適用可能な指示が従われた
+   - 0.5-0.8: 混合整合 - 一部の指示が見逃された
+   - 0.1-0.4: 不十分な整合 - ほとんどの指示が従われなかった
+   - 0.0: 整合なし - 適用可能な指示がないか、従われていない
+
+2. スコアの詳細な理由、以下を含む分析：
+   - クエリと応答の整合
+   - 指示の遵守
+
+3. スコアの詳細、以下の内訳を含む：
+   - 従われた指示
+   - 見逃された指示
+   - 適用不可の指示
+   - 各指示の状態の理由
+
+コンテキストに適用可能な指示がない場合（スコア: -1）、これは応答の質の問題ではなく、プロンプト設計の問題を示しています。
+
+<br />
+<br />
+<hr className="dark:border-[#404040] border-gray-300" />
+<br />
+<br />
+<GithubLink
+  link={
+    "https://github.com/mastra-ai/mastra/blob/main/examples/basics/evals/prompt-alignment"
+  }
+/>

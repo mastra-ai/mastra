@@ -1,0 +1,122 @@
+---
+title: Setting Up a Project
+description: Configuration steps for Mastra Cloud projects
+---
+
+# Setting Up a Mastra Cloud Project
+
+This page describes the steps to set up a project on Mastra Cloud using GitHub integration.
+
+## Prerequisites
+
+- A Mastra Cloud account
+- A GitHub account
+- A GitHub repository containing a Mastra application
+
+## Project Creation Process
+
+1. **Sign in to Mastra Cloud**
+   - Navigate to the Mastra Cloud dashboard at https://cloud.mastra.ai
+   - Sign in with your account credentials
+
+2. **Add a New Project**
+   - From the "All Projects" view, click the "Add new" button in the top right
+   - This opens the GitHub repository import dialog
+
+   ![Mastra Cloud Projects Dashboard](/docs/cloud-agents.png)
+
+3. **Import Git Repository**
+   - Search for repositories or select from the list of available GitHub repositories
+   - Click the "Import" button next to the repository you want to deploy
+
+4. **Configure Deployment Details**
+   The deployment configuration page includes:
+   - **Repo Name**: The GitHub repository name (read-only)
+   - **Project Name**: Customize the project name (defaults to repo name)
+   - **Branch**: Select the branch to deploy (dropdown, defaults to `main`)
+   - **Project root**: Set the root directory of your project (defaults to `/`)
+   - **Mastra Directory**: Specify where Mastra files are located (defaults to `src/mastra`)
+   - **Build Command**: Optional command to run during build process
+   - **Store Settings**: Configure data storage options
+   - **Environment Variables**: Add key-value pairs for configuration (e.g., API keys)
+
+## Project Structure Requirements
+
+Mastra Cloud scans the GitHub repository for:
+
+- **Agents**: Agent definitions (e.g., Weather Agent) with models and tools
+- **Workflows**: Workflow step definitions (e.g., weather-workflow)
+- **Environment Variables**: Required API keys and configuration variables
+
+The repository should contain a standard Mastra project structure for proper detection and deployment.
+
+## Understanding the Dashboard
+
+After creating a project, the dashboard shows:
+
+### Project Overview
+
+- **Created Date**: When the project was created
+- **Domains**: URLs for accessing your deployed application
+  - Format: `https://[project-name].mastra.cloud`
+  - Format: `https://[random-id].mastra.cloud`
+- **Status**: Current deployment status (success or archived)
+- **Branch**: The branch deployed (typically `main`)
+- **Environment Variables**: Configured API keys and settings
+- **Workflows**: List of detected workflows with step counts
+- **Agents**: List of detected agents with models and tools
+- **Database Usage**: Reads, writes, and storage statistics
+
+### Deployments Section
+
+- List of all deployments with:
+  - Deployment ID (based on commit hash)
+  - Status (success/archived)
+  - Branch
+  - Commit hash
+  - Timestamp
+
+### Logs Section
+
+The Logs view displays:
+
+- Timestamp for each log entry
+- Log level (info, debug)
+- Hostname
+- Detailed log messages, including:
+  - API startup information
+  - Storage initialization
+  - Agent and workflow activity
+
+## Navigation
+
+The sidebar provides access to:
+
+- **Overview**: Project summary and statistics
+- **Deployments**: Deployment history and details
+- **Logs**: Application logs for debugging
+- **Agents**: List and configuration of all agents
+- **Workflows**: List and structure of all workflows
+- **Settings**: Project configuration options
+
+## Environment Variable Configuration
+
+Set environment variables through the dashboard:
+
+1. Navigate to your project in the dashboard
+2. Go to the "Environment Variables" section
+3. Add or edit variables (such as `OPENAI_API_KEY`)
+4. Save the configuration
+
+Environment variables are encrypted and made available to your application during deployment and execution.
+
+## Testing Your Deployment
+
+After deployment, you can test your agents and workflows using:
+
+1. The custom domain assigned to your project: `https://[project-name].mastra.cloud`
+2. The dashboard interface for direct interaction with agents
+
+## Next Steps
+
+After setting up your project, automatic deployments occur whenever you push to the `main` branch of your GitHub repository. See the [deployment documentation](/docs/mastra-cloud/deploying) for more details.

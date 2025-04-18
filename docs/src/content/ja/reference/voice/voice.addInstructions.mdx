@@ -1,0 +1,70 @@
+---
+title: "リファレンス: voice.addInstructions() | 音声プロバイダー | Mastra ドキュメント"
+description: "音声プロバイダーで利用可能なaddInstructions()メソッドのドキュメント。音声モデルの動作を導くための指示を追加します。"
+---
+
+# voice.addInstructions()
+
+`addInstructions()` メソッドは、リアルタイムの対話中にモデルの動作を導くための指示をボイスプロバイダーに装備します。これは特に、会話全体でコンテキストを維持するリアルタイムボイスプロバイダーに役立ちます。
+
+## 使用例
+
+```typescript
+import { OpenAIRealtimeVoice } from "@mastra/voice-openai-realtime";
+import { Agent } from "@mastra/core/agent";
+import { openai } from "@ai-sdk/openai";
+
+// Initialize a real-time voice provider
+const voice = new OpenAIRealtimeVoice({
+  realtimeConfig: {
+    model: "gpt-4o-mini-realtime",
+    apiKey: process.env.OPENAI_API_KEY,
+  },
+});
+
+// Create an agent with the voice provider
+const agent = new Agent({
+  name: "Customer Support Agent",
+  instructions: "You are a helpful customer support agent for a software company.",
+  model: openai("gpt-4o"),
+  voice,
+});
+
+// Add additional instructions to the voice provider
+voice.addInstructions(`
+  When speaking to customers:
+  - Always introduce yourself as the customer support agent
+  - Speak clearly and concisely
+  - Ask clarifying questions when needed
+  - Summarize the conversation at the end
+`);
+
+// Connect to the real-time service
+await voice.connect();
+```
+
+## パラメータ
+<br/>
+<PropertiesTable
+  content={[
+    {
+      name: "instructions",
+      type: "string",
+      description: "音声モデルの動作を導くための指示",
+      isOptional: false,
+    }
+  ]}
+/>
+
+## 戻り値
+
+このメソッドは値を返しません。
+
+## 注意事項
+
+- 指示は、音声インタラクションに関連して明確、具体的、かつ適切である場合に最も効果的です
+- このメソッドは主に会話のコンテキストを維持するリアルタイム音声プロバイダーで使用されます
+- 指示をサポートしていない音声プロバイダーで呼び出された場合、警告をログに記録し、何も実行しません
+- このメソッドで追加された指示は、通常、関連するエージェントによって提供される指示と組み合わされます
+- 最良の結果を得るには、会話を開始する前（`connect()`を呼び出す前）に指示を追加してください
+- `addInstructions()`を複数回呼び出すと、プロバイダーの実装によって、既存の指示が置き換えられるか追加されるかが異なります

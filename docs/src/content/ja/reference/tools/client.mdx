@@ -1,0 +1,321 @@
+---
+title: "リファレンス: MastraMCPClient | ツールディスカバリー | Mastra ドキュメント"
+description: MastraMCPClient の API リファレンス - モデルコンテキストプロトコルのクライアント実装。
+---
+
+# MastraMCPClient
+
+`MastraMCPClient` クラスは、Model Context Protocol (MCP) サーバーと対話するためのクライアント実装を提供します。これは、MCP プロトコルを通じて接続管理、リソース発見、およびツール実行を処理します。
+
+## コンストラクタ
+
+MastraMCPClientの新しいインスタンスを作成します。
+
+```typescript
+constructor({
+    name,
+    version = '1.0.0',
+    server,
+    capabilities = {},
+    timeout = 60000,
+}: {
+    name: string;
+    server: MastraMCPServerDefinition;
+    capabilities?: ClientCapabilities;
+    version?: string;
+    timeout?: number;
+})
+```
+
+### パラメータ
+
+<br />
+<PropertiesTable
+  content={[
+    {
+      name: "name",
+      type: "string",
+      description: "このクライアントインスタンスの名前識別子。",
+    },
+    {
+      name: "version",
+      type: "string",
+      isOptional: true,
+      defaultValue: "1.0.0",
+      description: "クライアントのバージョン。",
+    },
+    {
+      name: "server",
+      type: "MastraMCPServerDefinition",
+      description:
+        "stdioサーバー接続またはSSEサーバー接続のいずれかの構成パラメータ。ログハンドラーとサーバーログの構成を含めることができます。",
+    },
+    {
+      name: "capabilities",
+      type: "ClientCapabilities",
+      isOptional: true,
+      defaultValue: "{}",
+      description: "クライアントのオプション機能構成。",
+    },
+    {
+      name: "timeout",
+      type: "number",
+      isOptional: true,
+      defaultValue: 60000,
+      description: "クライアントツール呼び出しのタイムアウト時間（ミリ秒）。",
+    },
+  ]}
+/>
+
+### MastraMCPServerDefinition
+
+MCPサーバーはstdioベースまたはSSEベースのサーバーとして構成できます。構成にはサーバー固有の設定と共通オプションの両方が含まれます：
+<br />
+<PropertiesTable
+  content={[
+    {
+      name: "command",
+      type: "string",
+      isOptional: true,
+      description: "stdioサーバーの場合：実行するコマンド。",
+    },
+    {
+      name: "args",
+      type: "string[]",
+      isOptional: true,
+      description: "stdioサーバーの場合：コマンドに渡す引数。",
+    },
+    {
+      name: "env",
+      type: "Record<string, string>",
+      isOptional: true,
+      description: "stdioサーバーの場合：コマンドに設定する環境変数。",
+    },
+    {
+      name: "url",
+      type: "URL",
+      isOptional: true,
+      description: "SSEサーバーの場合：サーバーのURL。",
+    },
+    {
+      name: "requestInit",
+      type: "RequestInit",
+      isOptional: true,
+      description: "SSEサーバーの場合：fetch APIのリクエスト構成。",
+    },
+    {
+      name: "eventSourceInit",
+      type: "EventSourceInit",
+      isOptional: true,
+      description: "SSEサーバーの場合：SSE接続のカスタムフェッチ構成。カスタムヘッダーを使用する場合に必要です。",
+    },
+    {
+      name: "logger",
+      type: "LogHandler",
+      isOptional: true,
+      description: "ロギング用のオプションの追加ハンドラー。",
+    },
+    {
+      name: "timeout",
+      type: "number",
+      isOptional: true,
+      description: "サーバー固有のタイムアウト（ミリ秒）。",
+    },
+    {
+      name: "capabilities",
+      type: "ClientCapabilities",
+      isOptional: true,
+      description: "サーバー固有の機能構成。",
+    },
+    {
+      name: "enableServerLogs",
+      type: "boolean",
+      isOptional: true,
+      defaultValue: "true",
+      description: "このサーバーのロギングを有効にするかどうか。",
+    },
+  ]}
+/>
+
+### LogHandler
+
+`LogHandler`関数は`LogMessage`オブジェクトをパラメータとして受け取り、voidを返します。`LogMessage`オブジェクトには以下のプロパティがあります。`LoggingLevel`型は`debug`、`info`、`warn`、`error`の値を持つ文字列列挙型です。
+<br />
+<PropertiesTable
+  content={[
+    {
+      name: "level",
+      type: "LoggingLevel",
+      description: "ログレベル（debug、info、warn、error）",
+    },
+    {
+      name: "message",
+      type: "string",
+      description: "ログメッセージの内容",
+    },
+    {
+      name: "timestamp",
+      type: "Date",
+      description: "ログが生成された時間",
+    },
+    {
+      name: "serverName",
+      type: "string",
+      description: "ログを生成したサーバーの名前",
+    },
+    {
+      name: "details",
+      type: "Record<string, any>",
+      isOptional: true,
+      description: "オプションの追加ログ詳細",
+    },
+  ]}
+/>
+
+## メソッド
+
+### connect()
+
+MCPサーバーとの接続を確立します。
+
+```typescript
+async connect(): Promise<void>
+```
+
+### disconnect()
+
+MCPサーバーとの接続を閉じます。
+
+```typescript
+async disconnect(): Promise<void>
+```
+
+### resources()
+
+サーバーから利用可能なリソースのリストを取得します。
+
+```typescript
+async resources(): Promise<ListResourcesResult>
+```
+
+### tools()
+
+サーバーから利用可能なツールを取得し、Mastra互換のツール形式に変換して初期化します。
+
+```typescript
+async tools(): Promise<Record<string, Tool>>
+```
+
+ツール名を対応するMastraツール実装にマッピングするオブジェクトを返します。
+
+## 例
+
+### Mastra Agentでの使用
+
+#### Stdio Serverの例
+
+```typescript
+import { Agent } from "@mastra/core/agent";
+import { MastraMCPClient } from "@mastra/mcp";
+import { openai } from "@ai-sdk/openai";
+
+// Initialize the MCP client using mcp/fetch as an example https://hub.docker.com/r/mcp/fetch
+// Visit https://github.com/docker/mcp-servers for other reference docker mcp servers
+const fetchClient = new MastraMCPClient({
+  name: "fetch",
+  server: {
+    command: "docker",
+    args: ["run", "-i", "--rm", "mcp/fetch"],
+    logger: (logMessage) => {
+      console.log(`[${logMessage.level}] ${logMessage.message}`);
+    },
+  },
+});
+
+// Create a Mastra Agent
+const agent = new Agent({
+  name: "Fetch agent",
+  instructions:
+    "You are able to fetch data from URLs on demand and discuss the response data with the user.",
+  model: openai("gpt-4o-mini"),
+});
+
+try {
+  // Connect to the MCP server
+  await fetchClient.connect();
+
+  // Gracefully handle process exits so the docker subprocess is cleaned up
+  process.on("exit", () => {
+    fetchClient.disconnect();
+  });
+
+  // Get available tools
+  const tools = await fetchClient.tools();
+
+  // Use the agent with the MCP tools
+  const response = await agent.generate(
+    "Tell me about mastra.ai/docs. Tell me generally what this page is and the content it includes.",
+    {
+      toolsets: {
+        fetch: tools,
+      },
+    },
+  );
+
+  console.log("\n\n" + response.text);
+} catch (error) {
+  console.error("Error:", error);
+} finally {
+  // Always disconnect when done
+  await fetchClient.disconnect();
+}
+```
+
+### SSE Serverの例
+
+```typescript
+// Initialize the MCP client using an SSE server
+const sseClient = new MastraMCPClient({
+  name: "sse-client",
+  server: {
+    url: new URL("https://your-mcp-server.com/sse"),
+    // Optional fetch request configuration - Note: requestInit alone isn't enough for SSE
+    requestInit: {
+      headers: {
+        Authorization: "Bearer your-token",
+      },
+    },
+    // Required for SSE connections with custom headers
+    eventSourceInit: {
+      fetch(input: Request | URL | string, init?: RequestInit) {
+        const headers = new Headers(init?.headers || {});
+        headers.set('Authorization', 'Bearer your-token');
+        return fetch(input, {
+          ...init,
+          headers,
+        });
+      },
+    },
+    // Optional additional logging configuration
+    logger: (logMessage) => {
+      console.log(`[${logMessage.level}] ${logMessage.serverName}: ${logMessage.message}`);
+    },
+    // Disable server logs
+    enableServerLogs: false
+  },
+});
+
+// The rest of the usage is identical to the stdio example
+```
+
+### SSE認証に関する重要な注意
+
+認証やカスタムヘッダーを使用したSSE接続を行う場合、`requestInit`と`eventSourceInit`の両方を設定する必要があります。これは、SSE接続がブラウザのEventSource APIを使用しており、このAPIは直接カスタムヘッダーをサポートしていないためです。
+
+`eventSourceInit`設定により、SSE接続に使用される基盤となるfetchリクエストをカスタマイズでき、認証ヘッダーが適切に含まれるようになります。
+`eventSourceInit`がなければ、`requestInit`で指定された認証ヘッダーは接続リクエストに含まれず、401 Unauthorizedエラーが発生します。
+
+## 関連情報
+
+- アプリケーションで複数のMCPサーバーを管理するには、[MCPConfiguration ドキュメント](./mcp-configuration)を参照してください。
+- モデルコンテキストプロトコルの詳細については、[@modelcontextprotocol/sdk ドキュメント](https://github.com/modelcontextprotocol/typescript-sdk)を参照してください。

@@ -1,0 +1,115 @@
+---
+title: "トレーシング | Mastra オブザーバビリティ ドキュメント"
+description: "Mastra アプリケーションのための OpenTelemetry トレーシングの設定"
+---
+
+import Image from "next/image";
+
+# トレーシング
+
+Mastraは、アプリケーションのトレーシングとモニタリングのためにOpenTelemetry Protocol (OTLP) をサポートしています。テレメトリーが有効化されると、Mastraはエージェント操作、LLMインタラクション、ツール実行、統合呼び出し、ワークフロー実行、データベース操作を含むすべてのコアプリミティブを自動的にトレースします。その後、テレメトリーデータを任意のOTELコレクターにエクスポートできます。
+
+### 基本設定
+
+テレメトリーを有効にする簡単な例を示します：
+
+```ts filename="mastra.config.ts" showLineNumbers copy
+export const mastra = new Mastra({
+  // ... 他の設定
+  telemetry: {
+    serviceName: "my-app",
+    enabled: true,
+    sampling: {
+      type: "always_on",
+    },
+    export: {
+      type: "otlp",
+      endpoint: "http://localhost:4318", // SigNozのローカルエンドポイント
+    },
+  },
+});
+```
+
+### 設定オプション
+
+テレメトリー設定は以下のプロパティを受け入れます：
+
+```ts
+type OtelConfig = {
+  // トレースでサービスを識別するための名前（オプション）
+  serviceName?: string;
+
+  // テレメトリーの有効/無効化（デフォルトはtrue）
+  enabled?: boolean;
+
+  // サンプリングされるトレースの数を制御
+  sampling?: {
+    type: "ratio" | "always_on" | "always_off" | "parent_based";
+    probability?: number; // 比率サンプリング用
+    root?: {
+      probability: number; // 親ベースのサンプリング用
+    };
+  };
+
+  // テレメトリーデータの送信先
+  export?: {
+    type: "otlp" | "console";
+    endpoint?: string;
+    headers?: Record<string, string>;
+  };
+};
+```
+
+詳細は [OtelConfig リファレンスドキュメント](../../reference/observability/otel-config.mdx) を参照してください。
+
+### 環境変数
+
+OTLPエンドポイントとヘッダーは環境変数を通じて設定できます：
+
+```env filename=".env" copy
+OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318
+OTEL_EXPORTER_OTLP_HEADERS=x-api-key=your-api-key
+```
+
+その後、設定で：
+
+```ts filename="mastra.config.ts" showLineNumbers copy
+export const mastra = new Mastra({
+  // ... 他の設定
+  telemetry: {
+    serviceName: "my-app",
+    enabled: true,
+    export: {
+      type: "otlp",
+      // エンドポイントとヘッダーは環境変数から取得されます
+    },
+  },
+});
+```
+
+### 例: SigNoz統合
+
+[SigNoz](https://signoz.io) でのトレースされたエージェントインタラクションの例：
+
+<img
+  src="/docs/signoz-telemetry-demo.png"
+  alt="スパン、LLM呼び出し、ツール実行を示すエージェントインタラクショントレース"
+  style={{ maxWidth: "800px", width: "100%", margin: "8px 0" }}
+  className="nextra-image rounded-md"
+  data-zoom
+  width={800}
+  height={400}
+/>
+
+### その他のサポートされているプロバイダー
+
+サポートされている観測可能性プロバイダーとその設定の詳細については、[Observability Providers リファレンス](../../reference/observability/providers/) を参照してください。
+
+### Next.js特有のトレーシング手順
+
+Next.jsを使用している場合、追加の設定手順が3つあります：
+1. `next.config.ts`でインストゥルメンテーションフックを有効にする
+2. Mastraのテレメトリー設定を構成する
+3. OpenTelemetryエクスポーターを設定する
+
+実装の詳細については、[Next.js Tracing](./nextjs-tracing) ガイドを参照してください。
