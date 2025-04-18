@@ -1,5 +1,6 @@
 import { Octokit } from '@octokit/rest';
 import fs from 'fs';
+import { readFile, writeFile } from 'fs/promises';
 import * as fsExtra from 'fs-extra/esm';
 import path from 'path';
 import { execSync } from 'child_process';
@@ -140,13 +141,13 @@ async function pushToRepo(repoName) {
       execSync(`git checkout -b ${provider}`, { stdio: 'inherit', cwd: tempDir });
 
       for (const file of files) {
-        let content = await fsExtra.readFile(file, 'utf-8');
+        let content = await readFile(file, 'utf-8');
         content.replaceAll(
           `import { openai } from '@ai-sdk/openai';`,
           `import { ${provider} } from '@ai-sdk/${provider}';`,
         );
         content.replaceAll(`openai('gpt-4o')`, `${provider}(process.env.MODEL ?? ${defaultModel})`);
-        await fsExtra.writeFile(file, content);
+        await writeFile(file, content);
       }
       // push branch
       execSync(
