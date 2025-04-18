@@ -28,7 +28,7 @@ jobs:
           node-version: 20.x
 
       - name: Install dependencies
-        run: npm install
+        run: npm install globby
 
       - name: Run examples validator
         run: node .github/scripts/validate-examples.js
