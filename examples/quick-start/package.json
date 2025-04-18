@@ -20,10 +20,17 @@
     "@ai-sdk/anthropic": "^1.1.15",
     "@ai-sdk/groq": "latest",
     "@ai-sdk/openai": "latest",
-    "@mastra/core": "workspace:*",
-    "@mastra/loggers": "workspace:*",
-    "@mastra/memory": "workspace:*",
+    "@mastra/core": "latest",
+    "@mastra/loggers": "latest",
+    "@mastra/memory": "latest",
     "ai": "latest"
+  },
+  "pnpm": {
+    "overrides": {
+      "@mastra/core": "link:../../packages/core",
+      "@mastra/loggers": "link:../../packages/loggers",
+      "@mastra/memory": "link:../../packages/memory"
+    }
   },
   "version": "0.0.1"
 }

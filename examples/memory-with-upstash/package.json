@@ -15,10 +15,18 @@
   "license": "MIT",
   "dependencies": {
     "@ai-sdk/openai": "latest",
-    "@mastra/core": "workspace:*",
-    "@mastra/memory": "workspace:*",
-    "@mastra/pg": "workspace:*",
-    "@mastra/upstash": "workspace:*"
+    "@mastra/core": "latest",
+    "@mastra/memory": "latest",
+    "@mastra/pg": "latest",
+    "@mastra/upstash": "latest"
+  },
+  "pnpm": {
+    "overrides": {
+      "@mastra/core": "link:../../packages/core",
+      "@mastra/memory": "link:../../packages/memory",
+      "@mastra/pg": "link:../../stores/pg",
+      "@mastra/upstash": "link:../../stores/upstash"
+    }
   },
   "devDependencies": {
     "dotenv": "^16.4.7",

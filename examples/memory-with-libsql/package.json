@@ -12,9 +12,15 @@
   "author": "",
   "license": "MIT",
   "dependencies": {
-    "@ai-sdk/openai": "^1.2.1",
-    "@mastra/core": "workspace:*",
-    "@mastra/memory": "workspace:*"
+    "@ai-sdk/openai": "latest",
+    "@mastra/core": "latest",
+    "@mastra/memory": "latest"
   },
-  "version": "0.0.1"
+  "version": "0.0.1",
+  "pnpm": {
+    "overrides": {
+      "@mastra/core": "link:../../packages/core",
+      "@mastra/memory": "link:../../packages/memory"
+    }
+  }
 }

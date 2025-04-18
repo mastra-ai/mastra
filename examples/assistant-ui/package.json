@@ -12,12 +12,17 @@
     "@assistant-ui/react": "0.7.85",
     "@assistant-ui/react-markdown": "^0.7.21",
     "@assistant-ui/react-ui": "^0.1.8",
-    "@mastra/client-js": "workspace:*",
+    "@mastra/client-js": "latest",
     "next": "15.0.3",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "tailwindcss-animate": "^1.0.7",
     "zod": "^3.24.2"
+  },
+  "pnpm": {
+    "overrides": {
+      "@mastra/client-js": "link:../../client-sdks/client-js"
+    }
   },
   "devDependencies": {
     "@types/node": "^20.17.27",

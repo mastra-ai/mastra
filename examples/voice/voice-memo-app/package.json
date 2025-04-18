@@ -9,12 +9,18 @@
   },
   "dependencies": {
     "@ai-sdk/openai": "1.2.5",
-    "@mastra/core": "workspace:*",
-    "@mastra/voice-openai": "workspace:*",
+    "@mastra/core": "latest",
+    "@mastra/voice-openai": "latest",
     "next": "15.1.7",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "zod": "^3.24.2"
+  },
+  "pnpm": {
+    "overrides": {
+      "@mastra/core": "link:../../../packages/core",
+      "@mastra/voice-openai": "link:../../../voice/openai"
+    }
   },
   "devDependencies": {
     "@types/node": "^20.17.24",
