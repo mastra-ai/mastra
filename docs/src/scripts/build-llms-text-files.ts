@@ -112,7 +112,7 @@ async function concatenateMDXDocs(sourceDir: string) {
     // Process both English and Japanese directories
     const enDir = path.join(sourceDir, "src/content/en");
     const jaDir = path.join(sourceDir, "src/content/ja");
-    
+
     await processDirectory(enDir, "en");
     await processDirectory(jaDir, "ja");
 

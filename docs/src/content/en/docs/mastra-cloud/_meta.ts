@@ -1,7 +1,7 @@
 const meta = {
   overview: "Overview",
   "setting-up": "Setting Up a Project",
-  deploying: "Deploying", 
+  deploying: "Deploying",
   observability: "Observability",
 };
 

@@ -14,7 +14,7 @@ const footer = <Footer />;
 export const NextraLayout = ({
   pageMap,
   children,
-  locale
+  locale,
 }: {
   pageMap: PageMapItem[];
   children: React.ReactNode;
