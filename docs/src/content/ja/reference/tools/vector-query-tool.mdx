@@ -1,0 +1,212 @@
+---
+title: "リファレンス: createVectorQueryTool() | RAG | Mastra Tools ドキュメント"
+description: ベクトルストア上でのフィルタリングと再ランキング機能を備えたセマンティック検索を可能にするMastraのベクトルクエリツールのドキュメント。
+---
+
+# createVectorQueryTool()
+
+`createVectorQueryTool()` 関数は、ベクターストアに対するセマンティック検索のためのツールを作成します。フィルタリング、再ランキングをサポートし、さまざまなベクターストアのバックエンドと統合します。
+
+## 基本的な使用法
+
+```typescript
+import { openai } from '@ai-sdk/openai';
+import { createVectorQueryTool } from "@mastra/rag";
+
+const queryTool = createVectorQueryTool({
+  vectorStoreName: "pinecone",
+  indexName: "docs",
+  model: openai.embedding('text-embedding-3-small'),
+});
+```
+
+## パラメータ
+
+<PropertiesTable
+  content={[
+    {
+      name: "vectorStoreName",
+      type: "string",
+      description: "クエリを行うベクトルストアの名前（Mastraで設定されている必要があります）",
+      isOptional: false,
+    },
+    {
+      name: "indexName",
+      type: "string",
+      description: "ベクトルストア内のインデックスの名前",
+      isOptional: false,
+    },
+    {
+      name: "model",
+      type: "EmbeddingModel",
+      description: "ベクトル検索に使用する埋め込みモデル",
+      isOptional: false,
+    },
+    {
+      name: "reranker",
+      type: "RerankConfig",
+      description: "結果を再ランク付けするためのオプション",
+      isOptional: true,
+    },
+    {
+      name: "id",
+      type: "string",
+      description: "ツールのカスタムID（デフォルトは 'VectorQuery {vectorStoreName} {indexName} Tool'）",
+      isOptional: true,
+    },
+    {
+      name: "description",
+      type: "string",
+      description: "ツールのカスタム説明。デフォルトでは: 'ユーザーの質問に答えるために必要な情報を見つけるためにナレッジベースにアクセスします'",
+      isOptional: true,
+    }
+  ]}
+/>
+
+### RerankConfig
+
+<PropertiesTable
+  content={[
+    {
+      name: "model",
+      type: "MastraLanguageModel",
+      description: "再ランク付けに使用する言語モデル",
+      isOptional: false,
+    },
+    {
+      name: "options",
+      type: "RerankerOptions",
+      description: "再ランク付けプロセスのオプション",
+      isOptional: true,
+      properties: [
+        {
+          type: "object",
+          parameters: [
+            {
+              name: "weights",
+              description: "スコアリングコンポーネントの重み（セマンティック: 0.4, ベクトル: 0.4, 位置: 0.2）",
+              isOptional: true,
+              type: "WeightConfig",
+            },
+            {
+              name: "topK",
+              description: "返すトップ結果の数",
+              isOptional: true,
+              type: "number",
+              defaultValue: "3"
+            }
+          ]
+        }
+      ]
+    }
+  ]}
+/>
+
+## 戻り値
+
+このツールは以下のオブジェクトを返します：
+
+<PropertiesTable
+  content={[
+    {
+      name: "relevantContext",
+      type: "string",
+      description: "最も関連性の高いドキュメントチャンクからの結合テキスト",
+    }
+  ]}
+/>
+
+## デフォルトツールの説明
+
+デフォルトの説明は以下に焦点を当てています：
+- 保存された知識から関連情報を見つけること
+- ユーザーの質問に答えること
+- 事実に基づいたコンテンツを取得すること
+
+## 結果の処理
+
+このツールは、ユーザーのクエリに基づいて返す結果の数を決定し、デフォルトでは10件の結果を返します。これはクエリの要件に応じて調整可能です。
+
+## フィルターを使用した例
+
+```typescript
+const queryTool = createVectorQueryTool({
+  vectorStoreName: "pinecone",
+  indexName: "docs",
+  model: openai.embedding('text-embedding-3-small'),
+  enableFilters: true,
+});
+```
+
+フィルタリングが有効になっていると、ツールはクエリを処理してメタデータフィルターを構築し、セマンティック検索と組み合わせます。プロセスは次のように機能します：
+
+1. ユーザーが「'version' フィールドが2.0より大きいコンテンツを見つける」などの特定のフィルター要件でクエリを行います
+2. エージェントがクエリを分析し、適切なフィルターを構築します：
+   ```typescript
+   {
+      "version": { "$gt": 2.0 }
+   }
+   ```
+
+このエージェント駆動のアプローチは次のことを行います：
+- 自然言語のクエリをフィルター仕様に処理します
+- ベクトルストア固有のフィルター構文を実装します
+- クエリ用語をフィルター演算子に変換します
+
+詳細なフィルター構文とストア固有の機能については、[メタデータフィルター](../rag/metadata-filters)のドキュメントを参照してください。
+
+エージェント駆動のフィルタリングがどのように機能するかの例については、[エージェント駆動のメタデータフィルタリング](../../../examples/rag/usage/filter-rag)の例を参照してください。
+
+## リランキングを使用した例
+
+```typescript
+const queryTool = createVectorQueryTool({
+  vectorStoreName: "milvus",
+  indexName: "documentation",
+  model: openai.embedding('text-embedding-3-small'),
+  reranker: {
+    model: openai('gpt-4o-mini'),
+    options: {
+      weights: {
+        semantic: 0.5,  // セマンティック関連性の重み
+        vector: 0.3,    // ベクトル類似性の重み
+        position: 0.2   // 元の位置の重み
+      },
+      topK: 5
+    }
+  }
+});
+```
+
+リランキングは以下を組み合わせることで結果の質を向上させます：
+- セマンティック関連性: テキスト類似性のLLMベースのスコアリングを使用
+- ベクトル類似性: 元のベクトル距離スコア
+- 位置バイアス: 元の結果の順序を考慮
+- クエリ分析: クエリの特性に基づく調整
+
+リランカーは初期のベクトル検索結果を処理し、関連性に最適化された再注文リストを返します。
+
+## カスタム説明付きの例
+
+```typescript
+const queryTool = createVectorQueryTool({
+  vectorStoreName: "pinecone",
+  indexName: "docs",
+  model: openai.embedding('text-embedding-3-small'),
+  description: "会社の方針や手順に関する質問に答えるために関連情報を見つけるために、文書アーカイブを検索します"
+});
+```
+
+この例は、情報検索の基本目的を維持しながら、特定の使用ケースに合わせてツールの説明をカスタマイズする方法を示しています。
+
+## ツールの詳細
+
+このツールは以下で作成されています:
+- **ID**: `VectorQuery {vectorStoreName} {indexName} Tool`
+- **入力スキーマ**: queryText と filter オブジェクトが必要
+- **出力スキーマ**: relevantContext 文字列を返す
+
+## 関連
+
+- [rerank()](../rag/rerank) 
+- [createGraphRAGTool](./graph-rag-tool) 

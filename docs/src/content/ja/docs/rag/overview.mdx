@@ -1,0 +1,85 @@
+---
+title: MastraにおけるRAG（検索強化生成） | Mastra ドキュメント
+description: Mastraにおける検索強化生成（RAG）の概要と、関連するコンテキストでLLMの出力を強化するための機能を詳述します。
+---
+
+# MastraにおけるRAG（Retrieval-Augmented Generation）
+
+MastraのRAGは、独自のデータソースから関連するコンテキストを取り入れることで、LLMの出力を強化し、正確性を向上させ、応答を実際の情報に基づかせるのに役立ちます。
+
+MastraのRAGシステムは以下を提供します：
+
+- 文書を処理し埋め込むための標準化されたAPI
+- 複数のベクトルストアのサポート
+- 最適な検索のためのチャンク化と埋め込み戦略
+- 埋め込みと検索のパフォーマンスを追跡するための可観測性
+
+## 例
+
+RAGを実装するには、ドキュメントをチャンクに分割し、埋め込みを作成し、それらをベクターデータベースに保存し、クエリ時に関連するコンテキストを取得します。
+
+```ts showLineNumbers copy
+import { embedMany } from "ai";
+import { openai } from "@ai-sdk/openai";
+import { PgVector } from "@mastra/pg";
+import { MDocument } from "@mastra/rag";
+import { z } from "zod";
+
+// 1. Initialize document
+const doc = MDocument.fromText(`Your document text here...`);
+
+// 2. Create chunks
+const chunks = await doc.chunk({
+  strategy: "recursive",
+  size: 512,
+  overlap: 50,
+});
+
+// 3. Generate embeddings; we need to pass the text of each chunk
+const { embeddings } = await embedMany({
+  values: chunks.map(chunk => chunk.text),
+  model: openai.embedding("text-embedding-3-small"),
+});
+
+// 4. Store in vector database
+const pgVector = new PgVector(process.env.POSTGRES_CONNECTION_STRING);
+await pgVector.upsert({
+  indexName: "embeddings",
+  vectors: embeddings,
+}); // using an index name of 'embeddings'
+
+// 5. Query similar chunks
+const results = await pgVector.query({
+  indexName: "embeddings",
+  queryVector: queryVector,
+  topK: 3,
+}); // queryVector is the embedding of the query
+
+console.log("Similar chunks:", results);
+```
+
+この例は基本を示しています：ドキュメントを初期化し、チャンクを作成し、埋め込みを生成し、それらを保存し、類似のコンテンツをクエリします。
+
+## ドキュメント処理
+
+RAGの基本的な構成要素はドキュメント処理です。ドキュメントは様々な戦略（再帰的、スライディングウィンドウなど）を使用して分割され、メタデータで強化されることができます。[チャンクと埋め込みのドキュメント](./chunking-and-embedding.mdx)を参照してください。
+
+## ベクターストレージ
+
+Mastraは、埋め込みの永続性と類似性検索のために、pgvector、Pinecone、Qdrantを含む複数のベクターストアをサポートしています。[ベクターデータベースのドキュメント](./vector-databases.mdx)を参照してください。
+
+## 可観測性とデバッグ
+
+MastraのRAGシステムには、取得パイプラインを最適化するための可観測性機能が含まれています：
+
+- 埋め込み生成のパフォーマンスとコストを追跡
+- チャンクの品質と取得の関連性を監視
+- クエリパターンとキャッシュヒット率を分析
+- メトリクスを可観測性プラットフォームにエクスポート
+
+詳細については、[OTel Configuration](../reference/observability/otel-config.mdx)ページをご覧ください。
+
+## 追加のリソース
+
+- [Chain of Thought RAGの例](../../examples/rag/usage/cot-rag.mdx)
+- [すべてのRAGの例](../../examples/)（異なるチャンク戦略、埋め込みモデル、ベクトルストアを含む）

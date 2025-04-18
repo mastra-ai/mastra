@@ -1,0 +1,423 @@
+---
+title: "リファレンス: OpenAI リアルタイム音声 | 音声プロバイダー | Mastra ドキュメント"
+description: "OpenAIRealtimeVoice クラスのドキュメントで、WebSockets を介したリアルタイムのテキスト読み上げと音声認識機能を提供します。"
+---
+
+# OpenAI Realtime Voice
+
+OpenAIRealtimeVoice クラスは、OpenAI の WebSocket ベースの API を使用してリアルタイムの音声対話機能を提供します。リアルタイムの音声から音声への変換、音声活動検出、およびイベントベースのオーディオストリーミングをサポートしています。
+
+## 使用例
+
+```typescript
+import { OpenAIRealtimeVoice } from "@mastra/voice-openai-realtime";
+import { playAudio, getMicrophoneStream } from "@mastra/node-audio";
+
+// Initialize with default configuration using environment variables
+const voice = new OpenAIRealtimeVoice();
+
+// Or initialize with specific configuration
+const voiceWithConfig = new OpenAIRealtimeVoice({
+  chatModel: {
+    apiKey: 'your-openai-api-key',
+    model: 'gpt-4o-mini-realtime-preview-2024-12-17',
+    options: {
+      sessionConfig: {
+        turn_detection: {
+          type: 'server_vad',
+          threshold: 0.6,
+          silence_duration_ms: 1200
+        }
+      }
+    }
+  },
+  speaker: 'alloy'  // Default voice
+});
+
+// Establish connection
+await voice.connect();
+
+// Set up event listeners
+voice.on('speaker', ({ audio }) => {
+  // Handle audio data (Int16Array) pcm format by default
+  playAudio(audio);
+});
+
+voice.on('writing', ({ text, role }) => {
+  // Handle transcribed text
+  console.log(`${role}: ${text}`);
+});
+
+// Convert text to speech
+await voice.speak('Hello, how can I help you today?', {
+  speaker: 'echo'  // Override default voice
+});
+
+// Process audio input
+const microphoneStream = getMicrophoneStream();
+await voice.send(microphoneStream);
+
+// When done, disconnect
+voice.connect();
+```
+
+## 設定
+
+### コンストラクタオプション
+
+<PropertiesTable
+  content={[
+    {
+      name: "chatModel",
+      type: "object",
+      description: "OpenAIリアルタイムモデルの設定。",
+      isOptional: true,
+      defaultValue: "{}",
+    },
+    {
+      name: "speaker",
+      type: "string",
+      description: "音声合成のデフォルト音声ID。",
+      isOptional: true,
+      defaultValue: "'alloy'",
+    },
+  ]}
+/>
+
+### chatModel
+
+<PropertiesTable
+  content={[
+    {
+      name: "model",
+      type: "string",
+      description: "リアルタイム音声インタラクションに使用するモデルID。",
+      isOptional: true,
+      defaultValue: "'gpt-4o-mini-realtime-preview-2024-12-17'",
+    },
+    {
+      name: "apiKey",
+      type: "string",
+      description: "OpenAI APIキー。OPENAI_API_KEY環境変数にフォールバックします。",
+      isOptional: true,
+    },
+    {
+      name: "tools",
+      type: "ToolsInput",
+      description: "モデルの機能を拡張するためのツール設定。OpenAIRealtimeVoiceがエージェントに追加されると、エージェントに設定されたツールは自動的に音声インターフェースで利用可能になります。",
+      isOptional: true,
+    },
+    {
+      name: "options",
+      type: "object",
+      description: "リアルタイムクライアントの追加オプション。",
+      isOptional: true,
+    },
+  ]}
+/>
+
+### options
+
+<PropertiesTable
+  content={[
+    {
+      name: "sessionConfig",
+      type: "Realtime.SessionConfig",
+      description: "リアルタイムセッションの設定。",
+      isOptional: true,
+    },
+    {
+      name: "url",
+      type: "string",
+      description: "カスタムWebSocket URL。",
+      isOptional: true,
+    },
+    {
+      name: "dangerouslyAllowAPIKeyInBrowser",
+      type: "boolean",
+      description: "ブラウザ環境でAPIキーを許可するかどうか。",
+      isOptional: true,
+      defaultValue: "false",
+    },
+    {
+      name: "debug",
+      type: "boolean",
+      description: "デバッグログを有効にします。",
+      isOptional: true,
+      defaultValue: "false",
+    },
+  ]}
+/>
+
+### 音声活動検出 (VAD) 設定
+
+<PropertiesTable
+  content={[
+    {
+      name: "type",
+      type: "string",
+      description: "使用するVADのタイプ。サーバー側のVADはより高い精度を提供します。",
+      isOptional: true,
+      defaultValue: "'server_vad'",
+    },
+    {
+      name: "threshold",
+      type: "number",
+      description: "音声検出の感度 (0.0-1.0)。",
+      isOptional: true,
+      defaultValue: "0.5",
+    },
+    {
+      name: "prefix_padding_ms",
+      type: "number",
+      description: "音声が検出される前に含めるオーディオのミリ秒。",
+      isOptional: true,
+      defaultValue: "1000",
+    },
+    {
+      name: "silence_duration_ms",
+      type: "number",
+      description: "ターンを終了する前の無音のミリ秒。",
+      isOptional: true,
+      defaultValue: "1000",
+    },
+  ]}
+/>
+
+## メソッド
+
+### connect()
+
+OpenAIリアルタイムサービスへの接続を確立します。speak、listen、またはsend関数を使用する前に呼び出す必要があります。
+
+<PropertiesTable
+  content={[
+    {
+      name: "returns",
+      type: "Promise<void>",
+      description: "接続が確立されたときに解決されるPromise。",
+    },
+  ]}
+/>
+
+### speak()
+
+設定された音声モデルを使用してスピーキングイベントを発生させます。入力として文字列またはリーダブルストリームのいずれかを受け入れることができます。
+
+<PropertiesTable
+  content={[
+    {
+      name: "input",
+      type: "string | NodeJS.ReadableStream",
+      description: "音声に変換するテキストまたはテキストストリーム。",
+      isOptional: false,
+    },
+    {
+      name: "options.speaker",
+      type: "string",
+      description: "この特定のスピーチリクエストに使用する音声ID。",
+      isOptional: true,
+      defaultValue: "Constructorのスピーカー値",
+    },
+  ]}
+/>
+
+戻り値: `Promise<void>`
+
+### listen()
+
+音声認識のために音声入力を処理します。音声データのリーダブルストリームを受け取り、書き起こされたテキストと共に「listening」イベントを発生させます。
+
+<PropertiesTable
+  content={[
+    {
+      name: "audioData",
+      type: "NodeJS.ReadableStream",
+      description: "書き起こすための音声ストリーム。",
+      isOptional: false,
+    },
+  ]}
+/>
+
+戻り値: `Promise<void>`
+
+### send()
+
+ライブマイク入力のような連続音声ストリーミングシナリオのために、リアルタイムでOpenAIサービスに音声データをストリームします。
+
+<PropertiesTable
+  content={[
+    {
+      name: "audioData",
+      type: "NodeJS.ReadableStream",
+      description: "サービスに送信する音声ストリーム。",
+      isOptional: false,
+    },
+  ]}
+/>
+
+戻り値: `Promise<void>`
+
+### updateConfig()
+
+音声インスタンスのセッション設定を更新します。これを使用して、音声設定、ターン検出、その他のパラメータを変更できます。
+
+<PropertiesTable
+  content={[
+    {
+      name: "sessionConfig",
+      type: "Realtime.SessionConfig",
+      description: "適用する新しいセッション設定。",
+      isOptional: false,
+    },
+  ]}
+/>
+
+戻り値: `void`
+
+### addTools()
+
+音声インスタンスに一連のツールを追加します。ツールは、会話中にモデルが追加のアクションを実行できるようにします。OpenAIRealtimeVoiceがエージェントに追加されると、そのエージェントに設定されたツールは自動的に音声インターフェースで利用可能になります。
+
+<PropertiesTable
+  content={[
+    {
+      name: "tools",
+      type: "ToolsInput",
+      description: "装備するツールの設定。",
+      isOptional: true,
+    },
+  ]}
+/>
+
+戻り値: `void`
+
+### close()
+
+OpenAIリアルタイムセッションから切断し、リソースをクリーンアップします。音声インスタンスの使用が終了したら呼び出す必要があります。
+
+戻り値: `void`
+
+### getSpeakers()
+
+利用可能な音声スピーカーのリストを返します。
+
+戻り値: `Promise<Array<{ voiceId: string; [key: string]: any }>>`
+
+### on()
+
+音声イベントのためのイベントリスナーを登録します。
+
+<PropertiesTable
+  content={[
+    {
+      name: "event",
+      type: "string",
+      description: "リッスンするイベントの名前。",
+      isOptional: false,
+    },
+    {
+      name: "callback",
+      type: "Function",
+      description: "イベントが発生したときに呼び出される関数。",
+      isOptional: false,
+    },
+  ]}
+/>
+
+戻り値: `void`
+
+### off()
+
+以前に登録されたイベントリスナーを削除します。
+
+<PropertiesTable
+  content={[
+    {
+      name: "event",
+      type: "string",
+      description: "リッスンを停止するイベントの名前。",
+      isOptional: false,
+    },
+    {
+      name: "callback",
+      type: "Function",
+      description: "削除する特定のコールバック関数。",
+      isOptional: false,
+    },
+  ]}
+/>
+
+戻り値: `void`
+
+## イベント
+
+OpenAIRealtimeVoice クラスは次のイベントを発行します:
+
+<PropertiesTable
+  content={[
+    {
+      name: "speaking",
+      type: "event",
+      description: "モデルからオーディオデータが受信されたときに発行されます。コールバックは { audio: Int16Array } を受け取ります。",
+    },
+    {
+      name: "writing",
+      type: "event",
+      description: "文字起こしされたテキストが利用可能になったときに発行されます。コールバックは { text: string, role: string } を受け取ります。",
+    },
+    {
+      name: "error",
+      type: "event",
+      description: "エラーが発生したときに発行されます。コールバックはエラーオブジェクトを受け取ります。",
+    },
+  ]}
+/>
+
+### OpenAI リアルタイムイベント
+
+'openAIRealtime:' をプレフィックスとして付けることで、[OpenAI リアルタイムユーティリティイベント](https://github.com/openai/openai-realtime-api-beta#reference-client-utility-events)をリッスンすることもできます:
+
+<PropertiesTable
+  content={[
+    {
+      name: "openAIRealtime:conversation.created",
+      type: "event",
+      description: "新しい会話が作成されたときに発行されます。",
+    },
+    {
+      name: "openAIRealtime:conversation.interrupted",
+      type: "event",
+      description: "会話が中断されたときに発行されます。",
+    },
+    {
+      name: "openAIRealtime:conversation.updated",
+      type: "event",
+      description: "会話が更新されたときに発行されます。",
+    },
+    {
+      name: "openAIRealtime:conversation.item.appended",
+      type: "event",
+      description: "会話にアイテムが追加されたときに発行されます。",
+    },
+    {
+      name: "openAIRealtime:conversation.item.completed",
+      type: "event",
+      description: "会話内のアイテムが完了したときに発行されます。",
+    },
+  ]}
+/>
+
+## 利用可能な声
+
+以下の声のオプションが利用可能です：
+
+- `alloy`: 中立的でバランスの取れた
+- `ash`: 明瞭で正確な
+- `ballad`: メロディックで滑らかな
+- `coral`: 暖かく親しみやすい
+- `echo`: 共鳴し深みのある
+- `sage`: 落ち着いて思慮深い
+- `shimmer`: 明るくエネルギッシュな
+- `verse`: 多才で表現力豊かな
+

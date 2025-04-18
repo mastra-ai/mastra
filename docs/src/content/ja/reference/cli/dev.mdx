@@ -1,0 +1,134 @@
+---
+title: "`mastra dev` リファレンス | ローカル開発 | Mastra CLI"
+description: エージェント、ツール、ワークフローの開発サーバーを起動するmastra devコマンドのドキュメント。
+---
+
+# `mastra dev` リファレンス
+
+`mastra dev` コマンドは、エージェント、ツール、ワークフローのRESTルートを公開する開発サーバーを起動します。
+
+## パラメータ
+
+<PropertiesTable
+  content={[
+    {
+      name: "--dir",
+      type: "string",
+      description:
+        "Mastraフォルダ（エージェント、ツール、ワークフローを含む）へのパスを指定します。デフォルトでは現在の作業ディレクトリになります。",
+      isOptional: true,
+    },
+    {
+      name: "--tools",
+      type: "string",
+      description:
+        "登録する追加のツールディレクトリへのパスをカンマ区切りで指定します。例：'src/tools/dbTools,src/tools/scraperTools'。",
+      isOptional: true,
+    },
+    {
+      name: "--port",
+      type: "number",
+      description:
+        "開発サーバーのポート番号を指定します。デフォルトは4111です。",
+      isOptional: true,
+    },
+  ]}
+/>
+
+## ルート
+
+`mastra dev`でサーバーを起動すると、デフォルトで以下のRESTルートが公開されます：
+
+### システムルート
+- **GET `/api`**: API状態を取得します。
+
+### エージェントルート
+
+エージェントは`src/mastra/agents`からエクスポートされることが想定されています。
+
+- **GET `/api/agents`**: Mastraフォルダに登録されているエージェントを一覧表示します。
+- **GET `/api/agents/:agentId`**: IDでエージェントを取得します。
+- **GET `/api/agents/:agentId/evals/ci`**: エージェントIDでCI評価を取得します。
+- **GET `/api/agents/:agentId/evals/live`**: エージェントIDでライブ評価を取得します。
+- **POST `/api/agents/:agentId/generate`**: 指定されたエージェントにテキストベースのプロンプトを送信し、エージェントの応答を返します。
+- **POST `/api/agents/:agentId/stream`**: エージェントからの応答をストリームします。
+- **POST `/api/agents/:agentId/instructions`**: エージェントの指示を更新します。
+- **POST `/api/agents/:agentId/instructions/enhance`**: 指示から改善されたシステムプロンプトを生成します。
+- **GET `/api/agents/:agentId/speakers`**: エージェントで利用可能なスピーカーを取得します。
+- **POST `/api/agents/:agentId/speak`**: エージェントの音声プロバイダーを使用してテキストを音声に変換します。
+- **POST `/api/agents/:agentId/listen`**: エージェントの音声プロバイダーを使用して音声をテキストに変換します。
+- **POST `/api/agents/:agentId/tools/:toolId/execute`**: エージェントを通じてツールを実行します。
+
+### ツールルート
+
+ツールは`src/mastra/tools`（または設定されたツールディレクトリ）からエクスポートされることが想定されています。
+
+- **GET `/api/tools`**: すべてのツールを取得します。
+- **GET `/api/tools/:toolId`**: IDでツールを取得します。
+- **POST `/api/tools/:toolId/execute`**: 特定のツールを名前で呼び出し、リクエストボディに入力データを渡します。
+
+### ワークフローのルート
+
+ワークフローは`src/mastra/workflows`（または設定されたワークフローディレクトリ）からエクスポートされることが想定されています。
+
+- **GET `/api/workflows`**: すべてのワークフローを取得します。
+- **GET `/api/workflows/:workflowId`**: IDでワークフローを取得します。
+- **POST `/api/workflows/:workflowName/start`**: 指定されたワークフローを開始します。
+- **POST `/api/workflows/:workflowName/:instanceId/event`**: 既存のワークフローインスタンスにイベントまたはトリガー信号を送信します。
+- **GET `/api/workflows/:workflowName/:instanceId/status`**: 実行中のワークフローインスタンスのステータス情報を返します。
+- **POST `/api/workflows/:workflowId/resume`**: 一時停止されたワークフローステップを再開します。
+- **POST `/api/workflows/:workflowId/resume-async`**: 一時停止されたワークフローステップを非同期で再開します。
+- **POST `/api/workflows/:workflowId/createRun`**: 新しいワークフロー実行を作成します。
+- **POST `/api/workflows/:workflowId/start-async`**: ワークフローを非同期で実行/開始します。
+- **GET `/api/workflows/:workflowId/watch`**: ワークフローの遷移をリアルタイムで監視します。
+
+### メモリルート
+- **GET `/api/memory/status`**: メモリステータスを取得します。
+- **GET `/api/memory/threads`**: すべてのスレッドを取得します。
+- **GET `/api/memory/threads/:threadId`**: IDでスレッドを取得します。
+- **GET `/api/memory/threads/:threadId/messages`**: スレッドのメッセージを取得します。
+- **POST `/api/memory/threads`**: 新しいスレッドを作成します。
+- **PATCH `/api/memory/threads/:threadId`**: スレッドを更新します。
+- **DELETE `/api/memory/threads/:threadId`**: スレッドを削除します。
+- **POST `/api/memory/save-messages`**: メッセージを保存します。
+
+### テレメトリルート
+- **GET `/api/telemetry`**: すべてのトレースを取得します。
+
+### ログルート
+- **GET `/api/logs`**: すべてのログを取得します。
+- **GET `/api/logs/transports`**: すべてのログトランスポートのリスト。
+- **GET `/api/logs/:runId`**: 実行IDでログを取得します。
+
+### ベクトルルート
+- **POST `/api/vector/:vectorName/upsert`**: インデックスにベクトルをアップサートします。
+- **POST `/api/vector/:vectorName/create-index`**: 新しいベクトルインデックスを作成します。
+- **POST `/api/vector/:vectorName/query`**: インデックスからベクトルをクエリします。
+- **GET `/api/vector/:vectorName/indexes`**: ベクトルストアのすべてのインデックスをリストします。
+- **GET `/api/vector/:vectorName/indexes/:indexName`**: 特定のインデックスに関する詳細を取得します。
+- **DELETE `/api/vector/:vectorName/indexes/:indexName`**: 特定のインデックスを削除します。
+
+### OpenAPI仕様
+
+- **GET `/openapi.json`**: プロジェクトのルートに対して自動生成されたOpenAPI仕様を返します。
+- **GET `/swagger-ui`**: API文書化のためのSwagger UIにアクセスします。
+
+## 追加情報
+
+ポートはデフォルトで4111に設定されています。
+
+使用するプロバイダー（例：`OPENAI_API_KEY`、`ANTHROPIC_API_KEY`など）の環境変数が`.env.development`または`.env`ファイルに設定されていることを確認してください。
+
+### リクエスト例
+
+`mastra dev`を実行した後にエージェントをテストするには：
+
+```bash
+curl -X POST http://localhost:4111/api/agents/myAgent/generate \
+  -H "Content-Type: application/json" \
+  -d '{
+    "messages": [
+      { "role": "user", "content": "Hello, how can you assist me today?" }
+    ]
+  }'
+```

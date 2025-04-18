@@ -1,0 +1,43 @@
+---
+title: "`mastra init` リファレンス | プロジェクト作成 | Mastra CLI"
+description: インタラクティブなセットアップオプションで新しいMastraプロジェクトを作成する「mastra init」コマンドのドキュメント。
+---
+
+# `mastra init` リファレンス
+
+## `mastra init`
+
+これは新しいMastraプロジェクトを作成します。3つの異なる方法で実行できます：
+
+1. **インタラクティブモード（推奨）**
+   フラグなしで実行すると、インタラクティブプロンプトが表示され、以下の手順が案内されます：
+
+   - Mastraファイルのディレクトリを選択
+   - インストールするコンポーネント（エージェント、ツール、ワークフロー）を選択
+   - デフォルトのLLMプロバイダー（OpenAI、Anthropic、またはGroq）を選択
+   - サンプルコードを含めるかどうかを決定
+
+2. **デフォルト設定でのクイックスタート**
+
+   ```bash
+   mastra init --default
+   ```
+
+   これにより、以下の設定でプロジェクトがセットアップされます：
+
+   - ソースディレクトリ：`src/`
+   - すべてのコンポーネント：エージェント、ツール、ワークフロー
+   - OpenAIをデフォルトプロバイダーとして設定
+   - サンプルコードなし
+
+3. **カスタムセットアップ**
+   ```bash
+   mastra init --dir src/mastra --components agents,tools --llm openai --example
+   ```
+   オプション：
+   - `-d, --dir`：Mastraファイルのディレクトリ（デフォルトはsrc/mastra）
+   - `-c, --components`：コンマ区切りのコンポーネントリスト（agents, tools, workflows）
+   - `-l, --llm`：デフォルトのモデルプロバイダー（openai, anthropic, または groq）
+   - `-k, --llm-api-key`：選択したLLMプロバイダーのAPIキー（.envファイルに追加されます）
+   - `-e, --example`：サンプルコードを含める
+   - `-ne, --no-example`：サンプルコードをスキップ

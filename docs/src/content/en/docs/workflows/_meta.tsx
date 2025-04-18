@@ -8,6 +8,7 @@ const meta = {
   "dynamic-workflows": <Tag>Dynamic Workflows</Tag>,
   "error-handling": "Error Handling",
   "nested-workflows": <Tag>Nested Workflows</Tag>,
+  "runtime-variables": "Runtime/Dynamic Variables",
 };
 
 export default meta;

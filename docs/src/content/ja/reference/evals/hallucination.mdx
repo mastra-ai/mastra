@@ -1,0 +1,217 @@
+---
+title: "リファレンス: 幻覚 | メトリクス | Evals | Mastra ドキュメント"
+description: 提供されたコンテキストと矛盾する点を特定することで、LLM出力の事実の正確性を評価するMastraの幻覚メトリクスに関するドキュメント。
+---
+
+# HallucinationMetric
+
+`HallucinationMetric`は、LLMが提供されたコンテキストに対して事実に基づいた正確な情報を生成しているかどうかを評価します。このメトリックは、コンテキストと出力の間の直接的な矛盾を特定することによって幻覚を測定します。
+
+## 基本的な使用法
+
+```typescript
+import { openai } from "@ai-sdk/openai";
+import { HallucinationMetric } from "@mastra/evals/llm";
+
+// Configure the model for evaluation
+const model = openai("gpt-4o-mini");
+
+const metric = new HallucinationMetric(model, {
+  context: [
+    "Teslaは2003年にMartin EberhardとMarc Tarpenningによってカリフォルニア州サンカルロスで設立されました。",
+  ],
+});
+
+const result = await metric.measure(
+  "Teslaの設立について教えてください。",
+  "Teslaは2004年にElon Muskによってカリフォルニアで設立されました。",
+);
+
+console.log(result.score); // Score from 0-1
+console.log(result.info.reason); // Explanation of the score
+
+// Example output:
+// {
+//   score: 0.67,
+//   info: {
+//     reason: "スコアが0.67である理由は、コンテキストからの3つの文のうち2つ（設立年と設立者）が出力によって矛盾していたためであり、
+//           場所の文は矛盾していなかったためです。"
+//   }
+// }
+```
+
+## コンストラクタのパラメータ
+
+<PropertiesTable
+  content={[
+    {
+      name: "model",
+      type: "LanguageModel",
+      description: "幻覚を評価するために使用されるモデルの設定",
+      isOptional: false,
+    },
+    {
+      name: "options",
+      type: "HallucinationMetricOptions",
+      description: "メトリックの設定オプション",
+      isOptional: false,
+    },
+  ]}
+/>
+
+### HallucinationMetricOptions
+
+<PropertiesTable
+  content={[
+    {
+      name: "scale",
+      type: "number",
+      description: "最大スコア値",
+      isOptional: true,
+      defaultValue: "1",
+    },
+    {
+      name: "context",
+      type: "string[]",
+      description: "真実のソースとして使用されるコンテキストの配列",
+      isOptional: false,
+    },
+  ]}
+/>
+
+## measure() パラメータ
+
+<PropertiesTable
+  content={[
+    {
+      name: "input",
+      type: "string",
+      description: "元のクエリまたはプロンプト",
+      isOptional: false,
+    },
+    {
+      name: "output",
+      type: "string",
+      description: "評価するLLMの応答",
+      isOptional: false,
+    },
+  ]}
+/>
+
+## 戻り値
+
+<PropertiesTable
+  content={[
+    {
+      name: "score",
+      type: "number",
+      description: "幻覚スコア（0からスケール、デフォルト0-1）",
+    },
+    {
+      name: "info",
+      type: "object",
+      description: "スコアの理由を含むオブジェクト",
+      properties: [
+        {
+          type: "string",
+          parameters: [
+            {
+              name: "reason",
+              type: "string",
+              description:
+                "スコアの詳細な説明と特定された矛盾点",
+            },
+          ],
+        },
+      ],
+    },
+  ]}
+/>
+
+## スコアリングの詳細
+
+このメトリックは、矛盾検出とサポートされていない主張の分析を通じて幻覚を評価します。
+
+### スコアリングプロセス
+
+1. 事実の内容を分析します:
+   - コンテキストからステートメントを抽出
+   - 数値と日付を特定
+   - ステートメントの関係をマッピング
+
+2. 出力を幻覚として分析します:
+   - コンテキストのステートメントと比較
+   - 直接の矛盾を幻覚としてマーク
+   - サポートされていない主張を幻覚として特定
+   - 数値の正確性を評価
+   - 近似のコンテキストを考慮
+
+3. 幻覚スコアを計算します:
+   - 幻覚ステートメント（矛盾とサポートされていない主張）をカウント
+   - 総ステートメント数で割る
+   - 設定された範囲にスケール
+
+最終スコア: `(幻覚ステートメント / 総ステートメント) * スケール`
+
+### 重要な考慮事項
+
+- コンテキストに存在しない主張は幻覚として扱われます
+- 主観的な主張は、明示的にサポートされていない限り幻覚です
+- コンテキスト内の事実についての推測的な言語（「かもしれない」、「おそらく」）は許可されます
+- コンテキスト外の事実についての推測的な言語は幻覚として扱われます
+- 空の出力は幻覚ゼロとなります
+- 数値評価は以下を考慮します:
+  - スケールに適した精度
+  - コンテキストの近似
+  - 明示的な精度の指標
+
+### スコアの解釈
+(0からスケールまで、デフォルトは0-1)
+- 1.0: 完全な幻覚 - すべてのコンテキストステートメントと矛盾
+- 0.75: 高い幻覚 - 75%のコンテキストステートメントと矛盾
+- 0.5: 中程度の幻覚 - 半分のコンテキストステートメントと矛盾
+- 0.25: 低い幻覚 - 25%のコンテキストステートメントと矛盾
+- 0.0: 幻覚なし - 出力がすべてのコンテキストステートメントと一致
+
+**注:** スコアは幻覚の度合いを表します - 低いスコアは提供されたコンテキストとの事実の整合性が良いことを示します
+
+## 分析付きの例
+
+```typescript
+import { openai } from "@ai-sdk/openai";
+import { HallucinationMetric } from "@mastra/evals/llm";
+
+// モデルを評価用に設定
+const model = openai("gpt-4o-mini");
+
+const metric = new HallucinationMetric(model, {
+  context: [
+    "OpenAIは2015年12月にSam Altman、Greg Brockman、その他の人々によって設立されました。",
+    "会社は10億ドルの投資コミットメントで開始されました。",
+    "Elon Muskは初期の支持者でしたが、2018年に取締役会を去りました。",
+  ],
+});
+
+const result = await metric.measure({
+  input: "OpenAIに関する重要な詳細は何ですか？",
+  output:
+    "OpenAIは2015年にElon MuskとSam Altmanによって20億ドルの投資で設立されました。",
+});
+
+// 出力例:
+// {
+//   score: 0.33,
+//   info: {
+//     reason: "スコアが0.33である理由は、コンテキストからの3つのステートメントのうち1つが矛盾していたためです
+//           （投資額が1億ドルではなく2億ドルと述べられていた）。設立日は正しかったが、
+//           創設者の説明は不完全であったが、厳密には矛盾していなかった。"
+//   }
+// }
+```
+
+## 関連
+
+- [Faithfulness Metric](./faithfulness)
+- [Answer Relevancy Metric](./answer-relevancy)
+- [Context Precision Metric](./context-precision)
+- [Context Relevancy Metric](./context-relevancy)

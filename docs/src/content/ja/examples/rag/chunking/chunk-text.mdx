@@ -1,0 +1,29 @@
+---
+title: "例：テキストの意味的チャンキング | RAG | Mastra ドキュメント"
+description: 大きなテキスト文書を処理のために小さなチャンクに分割するためのMastraの使用例。
+---
+
+import { GithubLink } from "@/components/github-link";
+
+# チャンクテキスト
+
+大きなテキストドキュメントを扱う際には、処理のためにそれらを小さく管理しやすい部分に分割する必要があります。チャンクメソッドは、検索、分析、または取得に使用できるセグメントにテキストコンテンツを分割します。この例では、デフォルト設定を使用してプレーンテキストをチャンクに分割する方法を示します。
+
+```tsx copy
+import { MDocument } from "@mastra/rag";
+
+const doc = MDocument.fromText("Your plain text content...");
+
+const chunks = await doc.chunk();
+```
+
+<br />
+<br />
+<hr className="dark:border-[#404040] border-gray-300" />
+<br />
+<br />
+<GithubLink
+  link={
+    "https://github.com/mastra-ai/mastra/blob/main/examples/basics/rag/chunk-text"
+  }
+/>
