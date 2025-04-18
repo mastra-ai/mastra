@@ -11,6 +11,10 @@ overrides:
 importers:
 
   .:
+    dependencies:
+      resolve-from:
+        specifier: ^5.0.0
+        version: 5.0.0
     devDependencies:
       '@changesets/cli':
         specifier: ^2.28.1
