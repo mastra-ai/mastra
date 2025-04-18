@@ -1,5 +1,15 @@
 # @mastra/deployer
 
+## 0.3.0-alpha.7
+
+### Patch Changes
+
+- 63fe16a: Support monorepo workspace packages with native bindings
+- 735ead7: Add support for process.env.development
+- Updated dependencies [157c741]
+  - @mastra/core@0.9.0-alpha.6
+  - @mastra/server@2.0.0-alpha.6
+
 ## 0.3.0-alpha.6
 
 ### Patch Changes
