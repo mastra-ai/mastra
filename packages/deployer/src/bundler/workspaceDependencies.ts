@@ -1,9 +1,9 @@
+import { join } from 'node:path';
 import type { Logger } from '@mastra/core';
 import slugify from '@sindresorhus/slugify';
-import { join } from 'node:path';
 import { findWorkspacesRoot } from 'find-workspaces';
-import { DepsService } from '../services';
 import { ensureDir } from 'fs-extra';
+import { DepsService } from '../services';
 
 type WorkspacePackageInfo = {
   location: string;
@@ -14,7 +14,6 @@ type WorkspacePackageInfo = {
 type TransitiveDependencyResult = {
   resolutions: Record<string, string>;
   usedWorkspacePackages: Set<string>;
-  error?: string;
 };
 
 /**
@@ -46,7 +45,7 @@ export const collectTransitiveWorkspaceDependencies = ({
 
       const root = findWorkspacesRoot();
       if (!root) {
-        return { resolutions, usedWorkspacePackages, error: 'Could not find workspace root' };
+        throw new Error('Could not find workspace root');
       }
 
       const depsService = new DepsService(root.location);
@@ -87,8 +86,7 @@ export const packWorkspaceDependencies = async ({
 }): Promise<void> => {
   const root = findWorkspacesRoot();
   if (!root) {
-    logger.error('Could not find workspace root');
-    return;
+    throw new Error('Could not find workspace root');
   }
 
   const depsService = new DepsService(root.location);

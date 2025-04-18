@@ -216,24 +216,29 @@ export abstract class Bundler extends MastraBundler {
 
     let resolutions: Record<string, string> = {};
     if (workspaceDependencies.size > 0) {
-      const result = collectTransitiveWorkspaceDependencies({
-        workspaceMap,
-        initialDependencies: workspaceDependencies,
-        logger: this.logger,
-      });
-      resolutions = result.resolutions;
+      try {
+        const result = collectTransitiveWorkspaceDependencies({
+          workspaceMap,
+          initialDependencies: workspaceDependencies,
+          logger: this.logger,
+        });
+        resolutions = result.resolutions;
 
-      // Update dependenciesToInstall with the resolved TGZ paths
-      Object.entries(resolutions).forEach(([pkgName, tgzPath]) => {
-        dependenciesToInstall.set(pkgName, tgzPath);
-      });
+        // Update dependenciesToInstall with the resolved TGZ paths
+        Object.entries(resolutions).forEach(([pkgName, tgzPath]) => {
+          dependenciesToInstall.set(pkgName, tgzPath);
+        });
 
-      await packWorkspaceDependencies({
-        workspaceMap,
-        usedWorkspacePackages: result.usedWorkspacePackages,
-        bundleOutputDir: join(outputDirectory, this.outputDir),
-        logger: this.logger,
-      });
+        await packWorkspaceDependencies({
+          workspaceMap,
+          usedWorkspacePackages: result.usedWorkspacePackages,
+          bundleOutputDir: join(outputDirectory, this.outputDir),
+          logger: this.logger,
+        });
+      } catch (error) {
+        this.logger.error(`Failed to collect workspace dependencies: ${error}`);
+        return;
+      }
     }
 
     // temporary fix for mastra-memory and fastembed
