@@ -1,7 +1,7 @@
 import { spawn as nodeSpawn } from 'child_process';
-import { link, readFileSync } from 'fs';
+import { readFileSync } from 'fs';
 import { dirname, resolve } from 'path';
-import { fileURLToPath } from 'url';
+import resolveFrom from 'resolve-from';
 
 /**
  * Promisified version of Node.js spawn function
@@ -76,6 +76,15 @@ function findLinkedDependencies(dir, protocol = 'link:') {
       }
     }
 
+    // Check overrides
+    if (packageJson.pnpm?.overrides) {
+      for (const [name, version] of Object.entries(packageJson.pnpm.overrides)) {
+        if (typeof version === 'string' && version.startsWith(protocol)) {
+          linkedDependencies[name] = version;
+        }
+      }
+    }
+
     return linkedDependencies;
   } catch (error) {
     console.error('Error reading package.json:', error);
@@ -90,21 +99,25 @@ console.log('Found linked dependencies:', linkedDeps);
 
 const depsToInstall = new Set(linkedDeps);
 for (const dep of linkedDeps) {
-  const depDir = dirname(fileURLToPath(import.meta.resolve(`${dep}/package.json`)));
+  const depDir = dirname(resolveFrom(process.cwd(), `${dep}/package.json`));
   const depDeps = findLinkedDependencies(depDir, 'workspace:');
   for (const depDep of Object.keys(depDeps)) {
     depsToInstall.add(depDep);
   }
 }
-await spawn(`pnpm`, ['install', ...[...depsToInstall].map(dep => `--filter ${dep}`)], {
-  cwd: resolve(process.cwd(), '..', '..'),
-  shell: true,
-  stdio: 'inherit',
-});
+if (depsToInstall.size > 0) {
+  await spawn(`pnpm`, ['install', ...[...depsToInstall].map(dep => `--filter ${dep}`)], {
+    cwd: resolve(process.cwd(), '..', '..'),
+    shell: true,
+    stdio: 'inherit',
+  });
+}
 
-await spawn(`pnpm`, ['dlx', 'turbo', 'build', ...linkedDeps.map(dep => `--filter ${dep}`)], {
-  cwd: resolve(process.cwd(), '..', '..'),
-  shell: true,
-  stdio: 'inherit',
-  env: process.env,
-});
+if (linkedDeps.length > 0) {
+  await spawn(`pnpm`, ['dlx', 'turbo', 'build', ...linkedDeps.map(dep => `--filter ${dep}`)], {
+    cwd: resolve(process.cwd(), '..', '..'),
+    shell: true,
+    stdio: 'inherit',
+    env: process.env,
+  });
+}

@@ -1180,7 +1180,7 @@ export class Workflow<
     runId: string;
     stepId: string;
     context?: Record<string, any>;
-    container: Container;
+    container?: Container;
   }) {
     this.logger.warn(`Please use 'resume' on the 'createRun' call instead, resume is deprecated`);
 
