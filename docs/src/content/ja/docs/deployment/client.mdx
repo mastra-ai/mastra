@@ -1,0 +1,119 @@
+---
+title: "MastraClient"
+description: "Mastra Client SDKの設定と使用方法について学ぶ"
+---
+
+# Mastra Client SDK
+
+Mastra Client SDKは、クライアント環境から[Mastraサーバー](/docs/deployment/server)と対話するためのシンプルで型安全なインターフェースを提供します。
+
+## 開発要件
+
+スムーズなローカル開発を確保するために、以下のものを用意してください：
+
+- Node.js 18.x 以降がインストールされていること
+- TypeScript 4.7+ (TypeScriptを使用する場合)
+- Fetch APIをサポートする最新のブラウザ環境
+- ローカルのMastraサーバーが実行中であること（通常はポート4111で）
+
+## インストール
+
+import { Tabs } from "nextra/components";
+
+<Tabs items={["npm", "yarn", "pnpm"]}>
+  <Tabs.Tab>
+```bash copy
+npm install @mastra/client-js
+```
+  </Tabs.Tab>
+  <Tabs.Tab>
+```bash copy
+yarn add @mastra/client-js
+```
+  </Tabs.Tab>
+  <Tabs.Tab>
+```bash copy
+pnpm add @mastra/client-js
+```
+  </Tabs.Tab>
+</Tabs>
+
+## Mastra Clientの初期化
+
+始めるには、必要なパラメータでMastraClientを初期化する必要があります：
+
+```typescript
+import { MastraClient } from "@mastra/client-js";
+
+const client = new MastraClient({
+  baseUrl: "http://localhost:4111", // Mastra開発サーバーのデフォルトポート
+});
+```
+
+### 設定オプション
+
+様々なオプションでクライアントをカスタマイズできます：
+
+```typescript
+const client = new MastraClient({
+  // 必須
+  baseUrl: "http://localhost:4111",
+
+  // 開発用のオプション設定
+  retries: 3,           // リトライ試行回数
+  backoffMs: 300,       // 初期リトライバックオフ時間
+  maxBackoffMs: 5000,   // 最大リトライバックオフ時間
+  headers: {            // 開発用カスタムヘッダー
+    "X-Development": "true"
+  }
+});
+```
+
+## 例
+
+MastraClientが初期化されると、型安全なインターフェースを通じてクライアント呼び出しを開始できます
+
+```typescript
+// Get a reference to your local agent
+const agent = client.getAgent("dev-agent-id");
+
+// Generate responses
+const response = await agent.generate({
+  messages: [
+    {
+      role: "user",
+      content: "Hello, I'm testing the local development setup!"
+    }
+  ]
+});
+```
+
+## 利用可能な機能
+
+Mastraクライアントは、Mastraサーバーが提供するすべてのリソースを公開しています
+
+- [**エージェント**](/reference/client-js/agents): AIエージェントの作成と管理、レスポンスの生成、ストリーミング対話の処理
+- [**メモリ**](/reference/client-js/memory): 会話スレッドとメッセージ履歴の管理
+- [**ツール**](/reference/client-js/tools): エージェントが利用できるツールへのアクセスと実行
+- [**ワークフロー**](/reference/client-js/workflows): 自動化されたワークフローの作成と管理
+- [**ベクトル**](/reference/client-js/vectors): セマンティック検索と類似性マッチングのためのベクトル操作の処理
+
+
+## ベストプラクティス
+1. **エラー処理**: 開発シナリオに適切なエラー処理を実装する
+2. **環境変数**: 設定には環境変数を使用する
+3. **デバッグ**: 必要に応じて詳細なログ記録を有効にする
+
+```typescript
+// エラー処理とログ記録の例
+try {
+  const agent = client.getAgent("dev-agent-id");
+  const response = await agent.generate({
+    messages: [{ role: "user", content: "Test message" }]
+  });
+  console.log("Response:", response);
+} catch (error) {
+  console.error("Development error:", error);
+}
+```
+

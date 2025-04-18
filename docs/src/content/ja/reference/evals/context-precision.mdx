@@ -1,0 +1,188 @@
+---
+title: "リファレンス: コンテキスト精度 | メトリクス | Evals | Mastra ドキュメント"
+description: 期待される出力を生成するために取得されたコンテキストノードの関連性と精度を評価する、Mastra のコンテキスト精度メトリクスに関するドキュメント。
+---
+
+# ContextPrecisionMetric
+
+`ContextPrecisionMetric` クラスは、期待される出力を生成するために取得されたコンテキストノードがどれほど関連性があり正確であるかを評価します。各コンテキスト部分の貢献を分析するために、判定ベースのシステムを使用し、位置に基づいて重み付けされたスコアを提供します。
+
+## 基本的な使用法
+
+```typescript
+import { openai } from "@ai-sdk/openai";
+import { ContextPrecisionMetric } from "@mastra/evals/llm";
+
+// Configure the model for evaluation
+const model = openai("gpt-4o-mini");
+
+const metric = new ContextPrecisionMetric(model, {
+  context: [
+    "光合成は、植物が太陽光からエネルギーを作り出すために使用する生物学的プロセスです。",
+    "植物は成長するために土壌から水と栄養素を必要とします。",
+    "光合成の過程で副産物として酸素が生成されます。",
+  ],
+});
+
+const result = await metric.measure(
+  "光合成とは何ですか？",
+  "光合成は、植物が太陽光をエネルギーに変換するプロセスです。",
+);
+
+console.log(result.score); // 0-1の精度スコア
+console.log(result.info.reason); // スコアの説明
+```
+
+## コンストラクタのパラメータ
+
+<PropertiesTable
+  content={[
+    {
+      name: "model",
+      type: "LanguageModel",
+      description:
+        "コンテキストの関連性を評価するために使用されるモデルの設定",
+      isOptional: false,
+    },
+    {
+      name: "options",
+      type: "ContextPrecisionMetricOptions",
+      description: "メトリックの設定オプション",
+      isOptional: false,
+    },
+  ]}
+/>
+
+### ContextPrecisionMetricOptions
+
+<PropertiesTable
+  content={[
+    {
+      name: "scale",
+      type: "number",
+      description: "最大スコア値",
+      isOptional: true,
+      defaultValue: "1",
+    },
+    {
+      name: "context",
+      type: "string[]",
+      description: "取得順序でのコンテキスト部分の配列",
+      isOptional: false,
+    },
+  ]}
+/>
+
+## measure() パラメータ
+
+<PropertiesTable
+  content={[
+    {
+      name: "input",
+      type: "string",
+      description: "元のクエリまたはプロンプト",
+      isOptional: false,
+    },
+    {
+      name: "output",
+      type: "string",
+      description: "評価する生成された応答",
+      isOptional: false,
+    },
+  ]}
+/>
+
+## 戻り値
+
+<PropertiesTable
+  content={[
+    {
+      name: "score",
+      type: "number",
+      description: "精度スコア（0からスケール、デフォルトは0-1）",
+    },
+    {
+      name: "info",
+      type: "object",
+      description: "スコアの理由を含むオブジェクト",
+      properties: [
+        {
+          type: "string",
+          parameters: [
+            {
+              name: "reason",
+              type: "string",
+              description: "スコアの詳細な説明",
+            },
+          ],
+        },
+      ],
+    },
+  ]}
+/>
+
+## スコアリングの詳細
+
+このメトリックは、バイナリ関連性評価と平均適合率 (MAP) スコアリングを通じてコンテキストの精度を評価します。
+
+### スコアリングプロセス
+
+1. バイナリ関連性スコアを割り当てます:
+   - 関連するコンテキスト: 1
+   - 関連しないコンテキスト: 0
+
+2. 平均適合率を計算します:
+   - 各位置での適合率を計算
+   - 早い位置をより重視
+   - 設定されたスケールに正規化
+
+最終スコア: `Mean Average Precision * scale`
+
+### スコアの解釈
+(0 からスケールまで、デフォルトは 0-1)
+- 1.0: すべての関連するコンテキストが最適な順序で
+- 0.7-0.9: 主に関連するコンテキストが良好な順序で
+- 0.4-0.6: 関連性が混在または順序が最適でない
+- 0.1-0.3: 関連性が限られているか順序が悪い
+- 0.0: 関連するコンテキストがない
+
+## 分析付きの例
+
+```typescript
+import { openai } from "@ai-sdk/openai";
+import { ContextPrecisionMetric } from "@mastra/evals/llm";
+
+// Configure the model for evaluation
+const model = openai("gpt-4o-mini");
+
+const metric = new ContextPrecisionMetric(model, {
+  context: [
+    "運動は心臓を強化し、血液循環を改善します。",
+    "バランスの取れた食事は健康に重要です。",
+    "定期的な身体活動はストレスと不安を軽減します。",
+    "運動器具は高価な場合があります。",
+  ],
+});
+
+const result = await metric.measure(
+  "運動の利点は何ですか？",
+  "定期的な運動は心血管の健康と精神的な健康を改善します。",
+);
+
+// Example output:
+// {
+//   score: 0.75,
+//   info: {
+//     reason: "スコアが0.75である理由は、最初と3番目のコンテキストが出力で言及された利点に非常に関連しているためです。
+//           一方、2番目と4番目のコンテキストは運動の利点に直接関連していません。関連するコンテキストは
+//           シーケンスの最初と中間にうまく配置されています。"
+//   }
+// }
+```
+
+## 関連
+
+- [回答の関連性メトリック](./answer-relevancy)
+- [コンテキスト位置メトリック](./context-position)
+- [完全性メトリック](./completeness)
+- [コンテキスト関連性メトリック](./context-relevancy)

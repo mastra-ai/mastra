@@ -1,0 +1,235 @@
+---
+title: "リファレンス: .chunk() | ドキュメント処理 | RAG | Mastra ドキュメント"
+description: Mastraのchunk関数のドキュメントで、さまざまな戦略を使用してドキュメントを小さなセグメントに分割します。
+---
+
+# リファレンス: .chunk()
+
+`.chunk()` 関数は、さまざまな戦略とオプションを使用してドキュメントを小さなセグメントに分割します。
+
+## 例
+
+```typescript
+import { MDocument } from '@mastra/rag';
+
+const doc = MDocument.fromMarkdown(`
+# Introduction
+This is a sample document that we want to split into chunks.
+
+## Section 1
+Here is the first section with some content.
+
+## Section 2 
+Here is another section with different content.
+`);
+
+// Basic chunking with defaults
+const chunks = await doc.chunk();
+
+// Markdown-specific chunking with header extraction
+const chunksWithMetadata = await doc.chunk({
+  strategy: 'markdown',
+  headers: [['#', 'title'], ['##', 'section']],
+  extract: {
+    summary: true, // Extract summaries with default settings
+    keywords: true  // Extract keywords with default settings
+  }
+});
+```
+
+## パラメータ
+
+<PropertiesTable
+  content={[
+    {
+      name: "strategy",
+      type: "'recursive' | 'character' | 'token' | 'markdown' | 'html' | 'json' | 'latex'",
+      isOptional: true,
+      description:
+        "使用するチャンク戦略。指定されていない場合、ドキュメントタイプに基づいてデフォルトが設定されます。チャンク戦略に応じて、追加のオプションがあります。デフォルト: .md ファイル → 'markdown', .html/.htm → 'html', .json → 'json', .tex → 'latex', その他 → 'recursive'",
+    },
+     {
+      name: "size",
+      type: "number",
+      isOptional: true,
+      defaultValue: "512",
+      description: "各チャンクの最大サイズ",
+    },
+    {
+      name: "overlap",
+      type: "number",
+      isOptional: true,
+      defaultValue: "50",
+      description: "チャンク間で重複する文字/トークンの数。",
+    },
+    {
+      name: "separator",
+      type: "string",
+      isOptional: true,
+      defaultValue: "\\n\\n",
+      description: "分割する文字。テキストコンテンツの場合、デフォルトは二重改行です。",
+    },
+    {
+      name: "isSeparatorRegex",
+      type: "boolean",
+      isOptional: true,
+      defaultValue: "false",
+      description: "セパレータが正規表現パターンかどうか",
+    },
+    {
+      name: "keepSeparator",
+      type: "'start' | 'end'",
+      isOptional: true,
+      description:
+        "チャンクの開始または終了にセパレータを保持するかどうか",
+    },
+    {
+      name: "extract",
+      type: "ExtractParams",
+      isOptional: true,
+      description: "メタデータ抽出の設定。詳細は[ExtractParams リファレンス](./extract-params)を参照してください。",
+    },
+  ]}
+/>
+
+## 戦略固有のオプション
+
+戦略固有のオプションは、戦略パラメータと共にトップレベルのパラメータとして渡されます。例えば：
+
+```typescript showLineNumbers copy
+// HTML戦略の例
+const chunks = await doc.chunk({
+  strategy: 'html',
+  headers: [['h1', 'title'], ['h2', 'subtitle']], // HTML固有のオプション
+  sections: [['div.content', 'main']], // HTML固有のオプション
+  size: 500 // 一般的なオプション
+});
+
+// Markdown戦略の例
+const chunks = await doc.chunk({
+  strategy: 'markdown',
+  headers: [['#', 'title'], ['##', 'section']], // Markdown固有のオプション
+  stripHeaders: true, // Markdown固有のオプション
+  overlap: 50 // 一般的なオプション
+});
+
+// Token戦略の例
+const chunks = await doc.chunk({
+  strategy: 'token',
+  encodingName: 'gpt2', // Token固有のオプション
+  modelName: 'gpt-3.5-turbo', // Token固有のオプション
+  size: 1000 // 一般的なオプション
+});
+```
+
+以下に記載されているオプションは、別のオプションオブジェクト内にネストされるのではなく、設定オブジェクトのトップレベルで直接渡されます。
+
+### HTML
+
+<PropertiesTable
+  content={[
+    {
+      name: "headers",
+      type: "Array<[string, string]>",
+      description:
+        "ヘッダーに基づく分割のための[セレクタ, メタデータキー]ペアの配列",
+    },
+    {
+      name: "sections",
+      type: "Array<[string, string]>",
+      description:
+        "セクションに基づく分割のための[セレクタ, メタデータキー]ペアの配列",
+    },
+    {
+      name: "returnEachLine",
+      type: "boolean",
+      isOptional: true,
+      description: "各行を個別のチャンクとして返すかどうか",
+    },
+  ]}
+/>
+
+### Markdown
+
+<PropertiesTable
+  content={[
+    {
+      name: "headers",
+      type: "Array<[string, string]>",
+      description: "[ヘッダーレベル, メタデータキー]ペアの配列",
+    },
+    {
+      name: "stripHeaders",
+      type: "boolean",
+      isOptional: true,
+      description: "出力からヘッダーを削除するかどうか",
+    },
+    {
+      name: "returnEachLine",
+      type: "boolean",
+      isOptional: true,
+      description: "各行を個別のチャンクとして返すかどうか",
+    },
+  ]}
+/>
+
+### Token
+
+<PropertiesTable
+  content={[
+    {
+      name: "encodingName",
+      type: "string",
+      isOptional: true,
+      description: "使用するトークンエンコーディングの名前",
+    },
+    {
+      name: "modelName",
+      type: "string",
+      isOptional: true,
+      description: "トークン化のためのモデルの名前",
+    },
+  ]}
+/>
+
+### JSON
+
+<PropertiesTable
+  content={[
+    {
+      name: "maxSize",
+      type: "number",
+      description: "各チャンクの最大サイズ",
+    },
+    {
+      name: "minSize",
+      type: "number",
+      isOptional: true,
+      description: "各チャンクの最小サイズ",
+    },
+    {
+      name: "ensureAscii",
+      type: "boolean",
+      isOptional: true,
+      description: "ASCIIエンコーディングを保証するかどうか",
+    },
+    {
+      name: "convertLists",
+      type: "boolean",
+      isOptional: true,
+      description: "JSON内のリストを変換するかどうか",
+    },
+  ]}
+/>
+
+## 戻り値
+
+チャンクされたドキュメントを含む`MDocument`インスタンスを返します。各チャンクには以下が含まれます：
+
+```typescript
+interface DocumentNode {
+  text: string;
+  metadata: Record<string, any>;
+  embedding?: number[];
+}
+```

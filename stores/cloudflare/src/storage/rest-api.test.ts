@@ -1,4 +1,3 @@
-import { randomUUID } from 'crypto';
 import type { MessageType, StorageThreadType } from '@mastra/core/memory';
 import type { TABLE_NAMES } from '@mastra/core/storage';
 import {
@@ -12,7 +11,13 @@ import type { WorkflowRunState } from '@mastra/core/workflows';
 import dotenv from 'dotenv';
 import { describe, it, expect, beforeAll, beforeEach, afterAll, vi } from 'vitest';
 
-import { createSampleTrace } from './test-utils';
+import {
+  createSampleMessage,
+  createSampleThread,
+  createSampleTrace,
+  createSampleWorkflowSnapshot,
+  retryUntil,
+} from './test-utils';
 import type { CloudflareStoreConfig } from './types';
 import { CloudflareStore } from '.';
 
@@ -27,64 +32,7 @@ const TEST_CONFIG: CloudflareStoreConfig = {
   namespacePrefix: 'mastra-test', // Fixed prefix for test isolation
 };
 
-// Sample test data factory functions
-const createSampleThread = () => ({
-  id: `thread-${randomUUID()}`,
-  resourceId: `resource-${randomUUID()}`,
-  title: 'Test Thread',
-  createdAt: new Date(),
-  updatedAt: new Date(),
-  metadata: { key: 'value' },
-});
-
-const createSampleMessage = (threadId: string): MessageType => ({
-  id: `msg-${randomUUID()}`,
-  role: 'user',
-  type: 'text',
-  threadId,
-  content: [{ type: 'text' as const, text: 'Hello' }] as MessageType['content'],
-  createdAt: new Date(),
-  resourceId: `resource-${randomUUID()}`,
-});
-
-const createSampleWorkflowSnapshot = (threadId: string): WorkflowRunState => ({
-  value: { [threadId]: 'running' },
-  context: {
-    steps: {},
-    triggerData: {},
-    attempts: {},
-  },
-  activePaths: [
-    {
-      stepPath: [threadId],
-      stepId: threadId,
-      status: 'running',
-    },
-  ],
-  runId: threadId,
-  timestamp: Date.now(),
-});
-
-// Helper function to retry until condition is met or timeout
-const retryUntil = async <T>(
-  fn: () => Promise<T>,
-  condition: (result: T) => boolean,
-  timeout = 30000, // REST API needs longer timeout due to higher latency
-  interval = 2000, // Longer interval to account for REST API latency
-): Promise<T> => {
-  const start = Date.now();
-  while (Date.now() - start < timeout) {
-    try {
-      const result = await fn();
-      if (condition(result)) return result;
-    } catch (error) {
-      if (Date.now() - start >= timeout) throw error;
-    }
-    await new Promise(resolve => setTimeout(resolve, interval));
-  }
-  throw new Error('Timeout waiting for condition');
-};
-
+// Skip until Cloudflare KV REST API credentials are set up
 describe.skip('CloudflareStore REST API', () => {
   let store: CloudflareStore;
 
@@ -159,6 +107,7 @@ describe.skip('CloudflareStore REST API', () => {
         schema: {
           id: { type: 'text', primaryKey: true },
           data: { type: 'text', nullable: true },
+          created_at: { type: 'timestamp' },
         },
       });
 
@@ -336,6 +285,10 @@ describe.skip('CloudflareStore REST API', () => {
         retrievedThread => retrievedThread?.title === thread.title,
       );
       expect(retrievedThread?.title).toEqual(thread.title);
+      expect(retrievedThread).not.toBeNull();
+      expect(retrievedThread?.id).toBe(thread.id);
+      expect(retrievedThread?.title).toBe(thread.title);
+      expect(retrievedThread?.metadata).toEqual(thread.metadata);
     });
 
     it('should return null for non-existent thread', async () => {
