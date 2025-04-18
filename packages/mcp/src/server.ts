@@ -1,8 +1,9 @@
-import { isVercelTool } from '@mastra/core';
+import { isVercelTool, isZodType, resolveSerializedZodOutput } from '@mastra/core';
 import type { ToolsInput } from '@mastra/core/agent';
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { CallToolRequestSchema, ListToolsRequestSchema } from '@modelcontextprotocol/sdk/types.js';
+import jsonSchemaToZod from 'json-schema-to-zod';
 import { z } from 'zod';
 import { zodToJsonSchema } from 'zod-to-json-schema';
 import { createLogger } from './logger';
@@ -32,6 +33,8 @@ export function createMCPServer({ name, version, tools }: { name: string; versio
     }
   > = {};
   for (const toolName of Object.keys(tools)) {
+    let inputSchema: any;
+    let zodSchema: z.ZodTypeAny;
     const toolInstance = tools[toolName];
     if (!toolInstance) {
       void logger.warning(`Tool instance for '${toolName}' is undefined. Skipping.`);
@@ -41,7 +44,23 @@ export function createMCPServer({ name, version, tools }: { name: string; versio
       void logger.warning(`Tool '${toolName}' does not have a valid execute function. Skipping.`);
       continue;
     }
-    const inputSchema = isVercelTool(toolInstance) ? toolInstance.parameters : toolInstance?.inputSchema;
+    // Vercel tools: .parameters is either Zod or JSON schema
+    if (isVercelTool(toolInstance)) {
+      if (isZodType(toolInstance.parameters)) {
+        zodSchema = toolInstance.parameters;
+        inputSchema = zodToJsonSchema(zodSchema);
+      } else if (typeof toolInstance.parameters === 'object') {
+        zodSchema = resolveSerializedZodOutput(jsonSchemaToZod(toolInstance.parameters));
+        inputSchema = toolInstance.parameters;
+      } else {
+        zodSchema = z.object({});
+        inputSchema = zodToJsonSchema(zodSchema);
+      }
+    } else {
+      // Mastra tools: .inputSchema is always Zod
+      zodSchema = toolInstance?.inputSchema ?? z.object({});
+      inputSchema = zodToJsonSchema(zodSchema);
+    }
 
     // Wrap execute to support both signatures
     const execute = async (args: any, execOptions?: any) => {
@@ -53,8 +72,8 @@ export function createMCPServer({ name, version, tools }: { name: string; versio
     convertedTools[toolName] = {
       name: toolName,
       description: toolInstance?.description,
-      inputSchema: zodToJsonSchema(inputSchema ?? z.object({})),
-      zodSchema: inputSchema ?? z.object({}),
+      inputSchema,
+      zodSchema,
       execute,
     };
   }
