@@ -1,9 +1,9 @@
-import { join } from 'node:path';
-import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { collectTransitiveWorkspaceDependencies, packWorkspaceDependencies } from './workspaceDependencies';
-import { DepsService } from '../services';
-import { findWorkspacesRoot, WorkspacesRoot } from 'find-workspaces';
 import type { Logger } from '@mastra/core';
+import type { WorkspacesRoot } from 'find-workspaces';
+import { findWorkspacesRoot } from 'find-workspaces';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { DepsService } from '../services';
+import { collectTransitiveWorkspaceDependencies, packWorkspaceDependencies } from './workspaceDependencies';
 
 vi.mock('find-workspaces', () => ({
   findWorkspacesRoot: vi.fn().mockReturnValue({ location: '/mock-root' }),
