@@ -14,7 +14,7 @@ import {
 } from '@mastra/core/vector'; 
 import type { VectorFilter } from '@mastra/core/vector/filter';
 
-import { MongoFilterTranslator } from './filter';
+import { MongoDBFilterTranslator } from './filter';
  
 // Define necessary types and interfaces    
 export type MongoDBUpsertArgs = [...UpsertVectorArgs, string[]?];  
@@ -164,9 +164,15 @@ export class MongoDBVector extends MastraVector {
       const meta = metadata?.[idx] || {};    
       const doc = documents?.[idx];    
     
+      // Normalize metadata - convert Date objects to ISO strings
+      const normalizedMeta = Object.keys(meta).reduce((acc, key) => {
+        acc[key] = meta[key] instanceof Date ? meta[key].toISOString() : meta[key];
+        return acc;
+      }, {} as Record<string, any>);
+    
       const updateDoc: Partial<MongoDBDocument> = {    
         [this.embeddingFieldName]: vector,    
-        [this.metadataFieldName]: meta,    
+        [this.metadataFieldName]: normalizedMeta,    
       };    
       if (doc !== undefined) {    
         updateDoc[this.documentFieldName] = doc;    
@@ -192,7 +198,7 @@ export class MongoDBVector extends MastraVector {
     const collection = await this.getCollection(indexName, true);    
     const indexNameInternal = `${indexName}_vector_index`;    
     
-    // Transform the filters using MongoFilterTranslator    
+    // Transform the filters using MongoDBFilterTranslator    
     const mongoFilter = this.transformFilter(filter);    
     const documentMongoFilter = documentFilter ? { [this.documentFieldName]: documentFilter } : {};    
     
@@ -290,12 +296,40 @@ export class MongoDBVector extends MastraVector {
   ): Promise<void> {    
     if (!update.vector && !update.metadata) {    
       throw new Error('No updates provided');    
-    }    
-    //TODO
+    }
+    
+    const collection = await this.getCollection(indexName, true);
+    const updateDoc: Record<string, any> = {};
+    
+    if (update.vector) {
+      updateDoc[this.embeddingFieldName] = update.vector;
+    }
+    
+    if (update.metadata) {
+      // Normalize metadata in updates too
+      const normalizedMeta = Object.keys(update.metadata).reduce((acc, key) => {
+        acc[key] = update.metadata![key] instanceof Date 
+          ? update.metadata![key].toISOString() 
+          : update.metadata![key];
+        return acc;
+      }, {} as Record<string, any>);
+      
+      updateDoc[this.metadataFieldName] = normalizedMeta;
+    }
+    
+    await collection.findOneAndUpdate(
+      { _id: id },
+      { $set: updateDoc }
+    );
   }    
     
   async deleteIndexById(indexName: string, id: string): Promise<void> {    
-    //TODO
+    try {
+      const collection = await this.getCollection(indexName, true);
+      await collection.deleteOne({ _id: id });
+    } catch (error: any) {
+      throw new Error(`Failed to delete index by id: ${id} for index name: ${indexName}: ${error.message}`);
+    }
   }    
   
   // Private methods  
@@ -347,7 +381,7 @@ export class MongoDBVector extends MastraVector {
   }    
   
   private transformFilter(filter?: VectorFilter): any {    
-    const translator = new MongoFilterTranslator();    
+    const translator = new MongoDBFilterTranslator();    
     if (!filter) return {};  
     return translator.translate(filter);    
   }    

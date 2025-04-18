@@ -1,12 +1,12 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 
-import { MongoFilterTranslator } from './filter';
+import { MongoDBFilterTranslator } from './filter';
 
-describe('MongoFilterTranslator', () => {
-  let translator: MongoFilterTranslator;
+describe('MongoDBFilterTranslator', () => {
+  let translator: MongoDBFilterTranslator;
 
   beforeEach(() => {
-    translator = new MongoFilterTranslator();
+    translator = new MongoDBFilterTranslator();
   });
 
   // Basic Filter Operations
@@ -40,9 +40,11 @@ describe('MongoFilterTranslator', () => {
       expect(translator.translate(filter)).toEqual(filter);
     });
 
-    it('throws on unsupported combinations', () => {
+    it('handles boolean values correctly', () => {
       const filter = {
-        field: { $gt: 100, $lt: 200 },
+        active: true,
+        deleted: false,
+        status: { $eq: true }
       };
       expect(translator.translate(filter)).toEqual(filter);
     });
@@ -54,9 +56,12 @@ describe('MongoFilterTranslator', () => {
       const filter = {
         tags: { $all: ['tag1', 'tag2'] },
         categories: { $in: ['A', 'B'] },
+        items: { $nin: ['item1', 'item2'] },
+        scores: { $elemMatch: { $gt: 90 } }
       };
       expect(translator.translate(filter)).toEqual(filter);
     });
+
     it('handles empty array values', () => {
       const filter = {
         tags: { $in: [] },
@@ -71,6 +76,13 @@ describe('MongoFilterTranslator', () => {
       };
       expect(translator.translate(filter)).toEqual(filter);
     });
+
+    it('handles $size operator', () => {
+      const filter = {
+        tags: { $size: 3 }
+      };
+      expect(translator.translate(filter)).toEqual(filter);
+    });
   });
 
   // Logical Operators
@@ -78,6 +90,21 @@ describe('MongoFilterTranslator', () => {
     it('handles logical operators', () => {
       const filter = {
         $or: [{ status: 'active' }, { age: { $gt: 25 } }],
+      };
+      expect(translator.translate(filter)).toEqual(filter);
+    });
+
+    it('handles $not operator', () => {
+      const filter = {
+        field: { $not: { $eq: 'value' } },
+        $not: { field: 'value' }
+      };
+      expect(translator.translate(filter)).toEqual(filter);
+    });
+
+    it('handles $nor operator', () => {
+      const filter = {
+        $nor: [{ status: 'deleted' }, { active: false }]
       };
       expect(translator.translate(filter)).toEqual(filter);
     });
@@ -176,6 +203,28 @@ describe('MongoFilterTranslator', () => {
       ).toThrow();
     });
 
+    it('throws error for logical operators nested in non-logical contexts', () => {
+      expect(() =>
+        translator.translate({
+          field: {
+            $gt: {
+              $or: [{ subfield: 'value1' }, { subfield: 'value2' }],
+            },
+          },
+        }),
+      ).toThrow();
+
+      expect(() =>
+        translator.translate({
+          field: {
+            $not: {
+              $and: [{ subfield: 'value1' }, { subfield: 'value2' }],
+            },
+          },
+        }),
+      ).not.toThrow(); // $not is allowed to contain logical operators
+    });
+
     it('throws error for $not if not an object', () => {
       expect(() => translator.translate({ $not: 'value' })).toThrow();
       expect(() => translator.translate({ $not: [{ field: 'value' }] })).toThrow();
@@ -250,6 +299,13 @@ describe('MongoFilterTranslator', () => {
       expect(translator.translate(undefined as any)).toEqual(undefined);
     });
 
+    it('normalizes dates', () => {
+      const date = new Date('2024-01-01');
+      const filter = { timestamp: { $gt: date } };
+      expect(translator.translate(filter)).toEqual({
+        timestamp: { $gt: date.toISOString() },
+      });
+    });
 
     it('allows $not in field-level conditions', () => {
       expect(() =>
@@ -262,16 +318,98 @@ describe('MongoFilterTranslator', () => {
     });
   });
 
+  // Regex Support
+  describe('regex support', () => {
+    it('handles $regex operator', () => {
+      const filter = {
+        name: { $regex: '^test' }
+      };
+      expect(translator.translate(filter)).toEqual(filter);
+    });
+
+    it('handles RegExp objects', () => {
+      const filter = {
+        name: /^test/i
+      };
+      // RegExp objects should be preserved
+      expect(translator.translate(filter)).toEqual(filter);
+    });
+  });
+
   describe('operator validation', () => {
-    
+    it('ensures all supported operator filters are accepted', () => {
+      const supportedFilters = [
+        // Basic comparison operators
+        { field: { $eq: 'value' } },
+        { field: { $ne: 'value' } },
+        { field: { $gt: 'value' } },
+        { field: { $gte: 'value' } },
+        { field: { $lt: 'value' } },
+        { field: { $lte: 'value' } },
+
+        // Array operators
+        { field: { $in: ['value'] } },
+        { field: { $nin: ['value'] } },
+        { field: { $all: ['value'] } },
+        { field: { $elemMatch: { $gt: 5 } } },
+
+        // Existence
+        { field: { $exists: true } },
+
+        // Logical operators
+        { $and: [{ field1: 'value1' }, { field2: 'value2' }] },
+        { $or: [{ field1: 'value1' }, { field2: 'value2' }] },
+        { $nor: [{ field1: 'value1' }, { field2: 'value2' }] },
+        { $not: { field: 'value' } },
+
+        // Nested logical operators
+        { $or: [{ $and: [{ field1: 'value1' }] }, { $not: { field2: 'value2' } }] },
+
+        // Field-level $not
+        { field: { $not: { $eq: 'value' } } },
+        { field: { $not: { $in: ['value1', 'value2'] } } },
+        { field: { $not: { $gt: 100 } } },
+        { field: { $not: { $lt: 50 } } },
+
+        // Custom operators
+        { field: { $size: 1 } },
+        { field: { $regex: 'pattern' } },
+      ];
+
+      supportedFilters.forEach(filter => {
+        expect(() => translator.translate(filter)).not.toThrow();
+      });
+    });
+
+    it('throws on unsupported operators', () => {
+      expect(() => translator.translate({ field: { $unknown: 'value' } })).toThrow('Unsupported operator: $unknown');
+      expect(() => translator.translate({ $unknown: [{ field: 'value' }] })).toThrow('Unsupported operator: $unknown');
+    });
+
     it('throws error for non-logical operators at top level', () => {
-      const invalidFilters = [{ $gt: 100 }, { $in: ['value1', 'value2'] }, { $exists: true }];
+      const invalidFilters = [
+        { $gt: 100 }, 
+        { $in: ['value1', 'value2'] }, 
+        { $exists: true },
+        { $regex: 'pattern' }
+      ];
 
       invalidFilters.forEach(filter => {
         expect(() => translator.translate(filter)).toThrow(/Invalid top-level operator/);
       });
     });
 
-    
+    it('allows logical operators at top level', () => {
+      const validFilters = [
+        { $and: [{ field: 'value' }] },
+        { $or: [{ field: 'value' }] },
+        { $nor: [{ field: 'value' }] },
+        { $not: { field: 'value' } },
+      ];
+
+      validFilters.forEach(filter => {
+        expect(() => translator.translate(filter)).not.toThrow();
+      });
+    });
   });
 });
