@@ -1,5 +1,6 @@
 import { Octokit } from '@octokit/rest';
 import fs from 'fs';
+import { readFile, writeFile } from 'fs/promises';
 import * as fsExtra from 'fs-extra/esm';
 import path from 'path';
 import { execSync } from 'child_process';
@@ -13,6 +14,13 @@ const ORGANIZATION = process.env.ORGANIZATION;
 const GITHUB_TOKEN = process.env.GITHUB_TOKEN;
 const USERNAME = process.env.USERNAME;
 const EMAIL = process.env.EMAIL;
+
+const PROVIDERS = {
+  openai: 'gpt-4o',
+  anthropic: 'claude-3-5-sonnet-20240620',
+  google: 'gemini-1.5-pro-latest',
+  groq: 'llama-3.3-70b-versatile',
+};
 
 // Initialize Octokit
 const octokit = new Octokit({
@@ -113,18 +121,43 @@ async function pushToRepo(repoName) {
     console.log(`Initializing git and pushing to repo: ${repoName}`);
     execSync(
       `
-      cd ${tempDir} &&
       git init &&
       git config user.name "${USERNAME}" &&
       git config user.email "${EMAIL}" &&
       git add . &&
       git commit -m "Update template from monorepo" &&
       git branch -M main &&
-      git remote add origin https://x-access-token:${GITHUB_TOKEN}@github.com/${ORGANIZATION}/${repoName}.git &&
+      git remote add origin https://x-access-token:${GITHUB_TOKEN}@github.com/${ORGANIZATION}/${repoName}.git  &&
       git push -u origin main --force
     `,
-      { stdio: 'inherit' },
+      { stdio: 'inherit', cwd: tempDir },
     );
+
+    // setup different branches
+    // TODO make more dynamic
+    for (const [provider, defaultModel] of Object.entries(PROVIDERS)) {
+      const files = ['./src/mastra/workflows/index.ts', './src/mastra/agents/index.ts'];
+      // move to new branch
+      execSync(`git switch -c ${provider}`, { stdio: 'inherit', cwd: tempDir });
+
+      for (const file of files) {
+        const filePath = path.join(tempDir, file);
+        let content = await readFile(filePath, 'utf-8');
+        content.replaceAll(
+          `import { openai } from '@ai-sdk/openai';`,
+          `import { ${provider} } from '@ai-sdk/${provider}';`,
+        );
+        content.replaceAll(`openai('gpt-4o')`, `${provider}(process.env.MODEL ?? ${defaultModel})`);
+        await writeFile(filePath, content);
+      }
+      // push branch
+      execSync(
+        `
+        git push -u origin ${provider} --force
+    `,
+        { stdio: 'inherit', cwd: tempDir },
+      );
+    }
 
     console.log(`Successfully pushed template to ${repoName}`);
   } catch (error) {
