@@ -3,7 +3,7 @@
   "version": "0.1.2",
   "private": true,
   "scripts": {
-    "dev": "next dev",
+    "dev": "next dev --turbopack",
     "build": "pnpm build:llms-txt && pnpm build:stars && next build",
     "build:llms-txt": "tsx src/scripts/build-llms-text-files.ts",
     "build:stars": "tsx scripts/fetchStars.ts",
