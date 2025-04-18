@@ -1,0 +1,57 @@
+---
+title: "例：ワークフローの作成 | ワークフロー | Mastra ドキュメント"
+description: Mastraを使用して単一ステップの簡単なワークフローを定義し実行する例。
+---
+
+import { GithubLink } from "@/components/github-link";
+
+# シンプルなワークフローの作成
+
+ワークフローは、構造化されたパスで操作のシーケンスを定義し実行することを可能にします。この例では、単一のステップを持つワークフローを示します。
+
+```ts showLineNumbers copy
+import { Step, Workflow } from "@mastra/core/workflows";
+import { z } from "zod";
+
+const myWorkflow = new Workflow({
+  name: "my-workflow",
+  triggerSchema: z.object({
+    input: z.number(),
+  }),
+});
+
+const stepOne = new Step({
+  id: "stepOne",
+  inputSchema: z.object({
+    value: z.number(),
+  }),
+  outputSchema: z.object({
+    doubledValue: z.number(),
+  }),
+  execute: async ({ context }) => {
+    const doubledValue = context?.triggerData?.input * 2;
+    return { doubledValue };
+  },
+});
+
+myWorkflow.step(stepOne).commit();
+
+const { runId, start } = myWorkflow.createRun();
+
+const res = await start({
+  triggerData: { input: 90 },
+});
+
+console.log(res.results);
+```
+
+<br />
+<br />
+<hr className="dark:border-[#404040] border-gray-300" />
+<br />
+<br />
+<GithubLink
+  link={
+    "https://github.com/mastra-ai/mastra/blob/main/examples/basics/workflows/create-workflow"
+  }
+/>

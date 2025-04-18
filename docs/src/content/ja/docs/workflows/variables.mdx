@@ -1,0 +1,313 @@
+---
+title: "ワークフローバリアブルを使用したデータマッピング | Mastra ドキュメント"
+description: "ワークフローバリアブルを使用して、ステップ間でデータをマッピングし、Mastra ワークフローで動的なデータフローを作成する方法を学びます。"
+---
+
+# ワークフローバリアブルを使用したデータマッピング
+
+Mastraのワークフローバリアブルは、ステップ間でデータをマッピングするための強力なメカニズムを提供し、動的なデータフローを作成し、情報をあるステップから別のステップに渡すことができます。
+
+## ワークフロー変数の理解
+
+Mastraワークフローでは、変数は次の方法で使用されます：
+
+- トリガー入力からステップ入力へのデータのマッピング
+- あるステップの出力を別のステップの入力に渡す
+- ステップ出力内のネストされたプロパティへのアクセス
+- より柔軟で再利用可能なワークフローステップの作成
+
+## データマッピングのための変数の使用
+
+### 基本的な変数マッピング
+
+ワークフローにステップを追加する際に、`variables` プロパティを使用してステップ間でデータをマッピングできます：
+
+```typescript showLineNumbers filename="src/mastra/workflows/index.ts" copy
+const workflow = new Workflow({
+  name: 'data-mapping-workflow',
+  triggerSchema: z.object({
+    inputData: z.string(),
+  }),
+});
+
+workflow
+  .step(step1, {
+    variables: {
+      // トリガーデータをステップ入力にマッピング
+      inputData: { step: 'trigger', path: 'inputData' }
+    }
+  })
+  .then(step2, {
+    variables: {
+      // step1の出力をstep2の入力にマッピング
+      previousValue: { step: step1, path: 'outputField' }
+    }
+  })
+  .commit();
+
+// Mastraにワークフローを登録
+  export const mastra = new Mastra({
+    workflows: { workflow },
+  });
+```
+
+### ネストされたプロパティへのアクセス
+
+`path` フィールドでドット表記を使用してネストされたプロパティにアクセスできます：
+
+```typescript showLineNumbers filename="src/mastra/workflows/index.ts" copy
+workflow
+  .step(step1)
+  .then(step2, {
+    variables: {
+      // step1の出力からネストされたプロパティにアクセス
+      nestedValue: { step: step1, path: 'nested.deeply.value' }
+    }
+  })
+  .commit();
+```
+
+### オブジェクト全体のマッピング
+
+`path` に `.` を使用してオブジェクト全体をマッピングできます：
+
+```typescript showLineNumbers filename="src/mastra/workflows/index.ts" copy
+workflow
+  .step(step1, {
+    variables: {
+      // トリガーデータオブジェクト全体をマッピング
+      triggerData: { step: 'trigger', path: '.' }
+    }
+  })
+  .commit();
+```
+
+### ループ内の変数
+
+変数は `while` や `until` ループにも渡すことができます。これは、イテレーション間や外部ステップからデータを渡すのに便利です：
+
+```typescript showLineNumbers filename="src/mastra/workflows/loop-variables.ts" copy
+// カウンターをインクリメントするステップ
+const incrementStep = new Step({
+  id: 'increment',
+  inputSchema: z.object({
+    // 前回のイテレーションからの値
+    prevValue: z.number().optional(),
+  }),
+  outputSchema: z.object({
+    // 更新されたカウンターの値
+    updatedCounter: z.number(),
+  }),
+  execute: async ({ context }) => {
+    const { prevValue = 0 } = context.inputData;
+    return { updatedCounter: prevValue + 1 };
+  },
+});
+
+const workflow = new Workflow({
+  name: 'counter'
+});
+
+workflow
+  .step(incrementStep)
+  .while(
+    async ({ context }) => {
+      // カウンターが10未満の間続行
+      const result = context.getStepResult(incrementStep);
+      return (result?.updatedCounter ?? 0) < 10;
+    },
+    incrementStep,
+    {
+      // 次のイテレーションに前回の値を渡す
+      prevValue: {
+        step: incrementStep,
+        path: 'updatedCounter'
+      }
+    }
+  );
+```
+
+## 変数の解決
+
+ワークフローが実行されると、Mastraは実行時に変数を次の方法で解決します：
+
+1. `step` プロパティで指定されたソースステップを特定する
+2. そのステップから出力を取得する
+3. `path` を使用して指定されたプロパティに移動する
+4. 解決された値を `inputData` プロパティとしてターゲットステップのコンテキストに注入する
+
+## 例
+
+### トリガーデータからのマッピング
+
+この例は、ワークフロートリガーからステップへのデータのマッピング方法を示しています：
+
+```typescript showLineNumbers filename="src/mastra/workflows/trigger-mapping.ts" copy
+import { Step, Workflow, Mastra } from "@mastra/core";
+import { z } from "zod";
+
+// ユーザー入力が必要なステップを定義
+const processUserInput = new Step({
+  id: "processUserInput",
+  execute: async ({ context }) => {
+    // inputDataは変数マッピングのためにcontextで利用可能になります
+    const { inputData } = context.inputData;
+
+    return {
+      processedData: `Processed: ${inputData}`
+    };
+  },
+});
+
+// ワークフローを作成
+const workflow = new Workflow({
+  name: "trigger-mapping",
+  triggerSchema: z.object({
+    inputData: z.string(),
+  }),
+});
+
+// トリガーデータをステップにマッピング
+workflow
+  .step(processUserInput, {
+    variables: {
+      inputData: { step: 'trigger', path: 'inputData' },
+    }
+  })
+  .commit();
+
+  // Mastraにワークフローを登録
+  export const mastra = new Mastra({
+    workflows: { workflow },
+  });
+```
+
+### ステップ間のマッピング
+
+この例は、あるステップから別のステップへのデータのマッピングを示しています：
+
+```typescript showLineNumbers filename="src/mastra/workflows/step-mapping.ts" copy
+import { Step, Workflow, Mastra } from "@mastra/core";
+import { z } from "zod";
+
+// ステップ1: データを生成
+const generateData = new Step({
+  id: "generateData",
+  outputSchema: z.object({
+    nested: z.object({
+      value: z.string(),
+    }),
+  }),
+  execute: async () => {
+    return {
+      nested: {
+        value: "step1-data"
+      }
+    };
+  },
+});
+
+// ステップ2: ステップ1からのデータを処理
+const processData = new Step({
+  id: "processData",
+  inputSchema: z.object({
+    previousValue: z.string(),
+  }),
+  execute: async ({ context }) => {
+    // previousValueは変数マッピングのために利用可能になります
+    const { previousValue } = context.inputData;
+
+    return {
+      result: `Processed: ${previousValue}`
+    };
+  },
+});
+
+// ワークフローを作成
+const workflow = new Workflow({
+  name: "step-mapping",
+});
+
+// ステップ1からステップ2へのデータをマッピング
+workflow
+  .step(generateData)
+  .then(processData, {
+    variables: {
+      // generateDataの出力からnested.valueプロパティをマッピング
+      previousValue: { step: generateData, path: 'nested.value' },
+    }
+  })
+  .commit();
+
+  // Mastraにワークフローを登録
+  export const mastra = new Mastra({
+    workflows: { workflow },
+  });
+```
+
+## 型の安全性
+
+Mastraは、TypeScriptを使用する際の変数マッピングに型の安全性を提供します:
+
+```typescript showLineNumbers filename="src/mastra/workflows/type-safe.ts" copy
+import { Step, Workflow, Mastra } from "@mastra/core";
+import { z } from "zod";
+
+// Define schemas for better type safety
+const triggerSchema = z.object({
+  inputValue: z.string(),
+});
+
+type TriggerType = z.infer<typeof triggerSchema>;
+
+// Step with typed context
+const step1 = new Step({
+  id: "step1",
+  outputSchema: z.object({
+    nested: z.object({
+      value: z.string(),
+    }),
+  }),
+  execute: async ({ context }) => {
+    // TypeScript knows the shape of triggerData
+    const triggerData = context.getStepResult<TriggerType>('trigger');
+
+    return {
+      nested: {
+        value: `processed-${triggerData?.inputValue}`
+      }
+    };
+  },
+});
+
+// Create the workflow with the schema
+const workflow = new Workflow({
+  name: "type-safe-workflow",
+  triggerSchema,
+});
+
+workflow.step(step1).commit();
+
+  // Register the workflow with Mastra
+  export const mastra = new Mastra({
+    workflows: { workflow },
+  });
+```
+
+## ベストプラクティス
+
+1. **入力と出力を検証する**: データの一貫性を確保するために `inputSchema` と `outputSchema` を使用します。
+
+2. **マッピングをシンプルに保つ**: 可能な限り過度に複雑なネストされたパスを避けます。
+
+3. **デフォルト値を考慮する**: マッピングされたデータが未定義である可能性のあるケースを処理します。
+
+## 直接コンテキストアクセスとの比較
+
+`context.steps`を介して前のステップの結果に直接アクセスすることもできますが、変数マッピングを使用することにはいくつかの利点があります：
+
+| 機能 | 変数マッピング | 直接コンテキストアクセス |
+| ------- | --------------- | --------------------- |
+| 明確さ | 明示的なデータ依存関係 | 暗黙的な依存関係 |
+| 再利用性 | 異なるマッピングでステップを再利用可能 | ステップが密接に結合されている |
+| 型の安全性 | より良いTypeScript統合 | 手動での型アサーションが必要 |

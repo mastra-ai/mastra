@@ -1,5 +1,17 @@
 # @mastra/core
 
+## 0.9.0-alpha.5
+
+### Patch Changes
+
+- 08bb78e: Added an extra safety for Memory message ordering
+
+## 0.9.0-alpha.4
+
+### Patch Changes
+
+- 7e92011: Include tools with deployment builds
+
 ## 0.9.0-alpha.3
 
 ### Minor Changes

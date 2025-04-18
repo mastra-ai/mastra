@@ -1,0 +1,118 @@
+---
+title: "リファレンス: run.watch() | ワークフロー | Mastra ドキュメント"
+description: ワークフロー内の `.watch()` メソッドに関するドキュメントで、ワークフローの実行状況を監視します。
+---
+
+# run.watch()
+
+`.watch()` 関数は、mastra の実行における状態の変化を購読し、実行の進行状況を監視し、状態の更新に反応することを可能にします。
+
+## 使用例
+
+```typescript
+import { Workflow } from "@mastra/core/workflows";
+
+const workflow = new Workflow({
+  name: "document-processor"
+});
+
+const run = workflow.createRun();
+
+// 状態の変化を購読する
+const unsubscribe = run.watch(({results, activePaths}) => {
+  console.log('結果:', results);
+  console.log('アクティブパス:', activePaths);
+});
+
+// ワークフローを実行する
+await run.start({
+  input: { text: "このドキュメントを処理する" }
+});
+
+// 監視を停止する
+unsubscribe();
+```
+
+## パラメーター
+
+<PropertiesTable
+  content={[
+    {
+      name: "callback",
+      type: "(state: WorkflowState) => void",
+      description: "ワークフローの状態が変化するたびに呼び出される関数",
+      isOptional: false
+    }
+  ]}
+/>
+
+### WorkflowState プロパティ
+
+<PropertiesTable
+  content={[
+    {
+      name: "results",
+      type: "Record<string, any>",
+      description: "完了したワークフローステップからの出力",
+      isOptional: false
+    },
+    {
+      name: "activePaths",
+      type: "Map<string, { status: string; suspendPayload?: any; stepPath: string[] }>",
+      description: "各ステップの現在のステータス",
+      isOptional: false
+    },
+    {
+      name: "runId",
+      type: "string",
+      description: "ワークフロー実行のID",
+      isOptional: false
+    },
+    {
+      name: "timestamp",
+      type: "number",
+      description: "ワークフロー実行のタイムスタンプ",
+      isOptional: false
+    }
+  ]}
+/>
+
+## 戻り値
+
+<PropertiesTable
+  content={[
+    {
+      name: "unsubscribe",
+      type: "() => void",
+      description: "ワークフローの状態変化の監視を停止する関数"
+    }
+  ]}
+/>
+
+## 追加の例
+
+特定のステップの完了を監視する:
+
+```typescript
+run.watch(({results, activePaths}) => {
+  if (activePaths.get('processDocument')?.status === 'completed') {
+    console.log('Document processing output:', results['processDocument'].output);
+  }
+});
+```
+
+エラーハンドリング:
+
+```typescript
+run.watch(({results, activePaths}) => {
+  if (activePaths.get('processDocument')?.status === 'failed') {
+    console.error('Document processing failed:', results['processDocument'].error);
+    // Implement error recovery logic
+  }
+});
+```
+
+### 関連
+
+- [ワークフローの作成](/reference/workflows/createRun)
+- [ステップの設定](/reference/workflows/step-class)

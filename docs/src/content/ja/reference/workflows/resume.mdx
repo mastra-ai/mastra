@@ -1,0 +1,155 @@
+---
+title: "リファレンス: run.resume() | ワークフローの実行 | Mastra ドキュメント"
+description: ワークフロー内の `.resume()` メソッドに関するドキュメントで、一時停止されたワークフローステップの実行を再開します。
+---
+
+# run.resume()
+
+`.resume()` メソッドは、一時停止されたワークフローステップの実行を再開し、オプションで新しいコンテキストデータを提供します。このデータは、inputData プロパティでステップによってアクセス可能です。
+
+## 使用法
+
+```typescript copy showLineNumbers
+await run.resume({
+  runId: "abc-123",
+  stepId: "stepTwo",
+  context: {
+    secondValue: 100
+  }
+});
+```
+
+## パラメーター
+
+<PropertiesTable
+  content={[
+    {
+      name: "config",
+      type: "object",
+      description: "ワークフローを再開するための設定",
+      isOptional: false
+    }
+  ]}
+/>
+
+### config
+
+<PropertiesTable
+  content={[
+    {
+      name: "runId",
+      type: "string",
+      description: "再開するワークフロー実行の一意の識別子",
+      isOptional: false
+    },
+    {
+      name: "stepId",
+      type: "string",
+      description: "再開する中断されたステップのID",
+      isOptional: false
+    },
+    {
+      name: "context",
+      type: "Record<string, any>",
+      description: "ステップのinputDataプロパティに注入する新しいコンテキストデータ",
+      isOptional: true
+    }
+  ]}
+/>
+
+## 戻り値
+
+<PropertiesTable
+  content={[
+    {
+      name: "Promise<WorkflowResult>",
+      type: "object",
+      description: "再開されたワークフロー実行の結果"
+    }
+  ]}
+/>
+
+## 非同期/待機フロー
+
+ワークフローが再開されると、実行はステップの実行関数内の `suspend()` 呼び出しの直後から続行されます。これにより、コード内で自然なフローが作成されます。
+
+```typescript
+// 中断ポイントを持つステップ定義
+const reviewStep = new Step({
+  id: "review",
+  execute: async ({ context, suspend }) => {
+    // 実行の最初の部分
+    const initialAnalysis = analyzeData(context.inputData.data);
+
+    if (initialAnalysis.needsReview) {
+      // ここで実行を中断
+      await suspend({ analysis: initialAnalysis });
+
+      // これは resume() が呼び出された後に実行されるコードです
+      // context.inputData は再開中に提供されたデータを含むようになります
+      return {
+        reviewedData: enhanceWithFeedback(initialAnalysis, context.inputData.feedback)
+      };
+    }
+
+    return { reviewedData: initialAnalysis };
+  }
+});
+
+const { runId, resume, start } = workflow.createRun();
+
+await start({
+  inputData: {
+    data: "some data"
+  }
+});
+
+// 後で、ワークフローを再開
+const result = await resume({
+  runId: "workflow-123",
+  stepId: "review",
+  context: {
+    // このデータは `context.inputData` で利用可能になります
+    feedback: "良さそうですが、セクション3を改善してください"
+  }
+});
+```
+
+### 実行フロー
+
+1. ワークフローは `review` ステップの `await suspend()` に達するまで実行されます
+2. ワークフローの状態が保存され、実行が一時停止します
+3. 後で、新しいコンテキストデータで `run.resume()` が呼び出されます
+4. `review` ステップの `suspend()` の後のポイントから実行が続行されます
+5. 新しいコンテキストデータ（`feedback`）は `inputData` プロパティでステップに利用可能です
+6. ステップが完了し、その結果を返します
+7. ワークフローは後続のステップで続行されます
+
+## エラーハンドリング
+
+resume 関数はいくつかのタイプのエラーをスローする可能性があります:
+
+```typescript
+try {
+  await run.resume({
+    runId,
+    stepId: "stepTwo",
+    context: newData
+  });
+} catch (error) {
+  if (error.message === "No snapshot found for workflow run") {
+    // ワークフロー状態が見つからない場合の処理
+  }
+  if (error.message === "Failed to parse workflow snapshot") {
+    // 破損したワークフロー状態の処理
+  }
+}
+```
+
+## 関連
+
+- [一時停止と再開](../../workflows/suspend-and-resume.mdx)
+- [`suspend` リファレンス](./suspend.mdx)
+- [`watch` リファレンス](./watch.mdx)
+- [ワークフロークラス リファレンス](./workflow.mdx)
+```

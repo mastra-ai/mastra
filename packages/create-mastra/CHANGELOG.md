@@ -1,5 +1,11 @@
 # create-mastra
 
+## 0.2.9-alpha.1
+
+### Patch Changes
+
+- 7e92011: Include tools with deployment builds
+
 ## 0.2.9-alpha.0
 
 ### Patch Changes

@@ -1,0 +1,202 @@
+---
+title: "Vercel AI SDKとの併用"
+description: "MastraがVercel AI SDKライブラリをどのように活用しているか、そしてMastraでさらにどのように活用できるかを学ぶ"
+---
+
+# Vercel AI SDKと一緒に使用する
+
+Mastraは、AI SDKのモデルルーティング（OpenAI、Anthropicなどの上に統一されたインターフェース）、構造化された出力、およびツール呼び出しを活用しています。
+
+これについては、[このブログ記事](https://mastra.ai/blog/using-ai-sdk-with-mastra)でより詳しく説明しています
+
+## Mastra + AI SDK
+
+Mastraは、チームが概念実証を迅速かつ容易に製品化するのを支援するために、AI SDKの上に層として機能します。
+
+<img
+  src="/docs/mastra-ai-sdk.png"
+  alt="スパン、LLM呼び出し、ツール実行を示すエージェントインタラクショントレース"
+  style={{ maxWidth: "800px", width: "100%", margin: "8px 0" }}
+  className="nextra-image rounded-md py-8"
+  data-zoom
+  width={800}
+  height={400}
+/>
+
+## モデルルーティング
+
+Mastraでエージェントを作成する際、AI SDKがサポートするどのモデルでも指定できます：
+
+```typescript
+import { openai } from "@ai-sdk/openai";
+import { Agent } from "@mastra/core/agent";
+
+const agent = new Agent({
+  name: "WeatherAgent",
+  instructions: "Instructions for the agent...",
+  model: openai("gpt-4-turbo"), // Model comes directly from AI SDK
+});
+
+const result = await agent.generate("What is the weather like?");
+```
+
+## AI SDK フック
+
+Mastraは、フロントエンドとのシームレスな統合のためにAI SDKのフックと互換性があります：
+
+### useChat
+
+`useChat`フックを使用すると、フロントエンドアプリケーションでリアルタイムチャット対話が可能になります
+
+- エージェントデータストリーム（`.toDataStreamResponse()`）と連携します
+- useChatの`api`はデフォルトで`/api/chat`に設定されています
+- Mastra REST APIのエージェントストリームエンドポイント`{MASTRA_BASE_URL}/agents/:agentId/stream`とデータストリーム用に連携します（構造化された出力が定義されていない場合）
+
+```typescript filename="app/api/chat/route.ts" copy
+import { mastra } from "@/src/mastra";
+
+export async function POST(req: Request) {
+  const { messages } = await req.json();
+  const myAgent = mastra.getAgent("weatherAgent");
+  const stream = await myAgent.stream(messages);
+
+  return stream.toDataStreamResponse();
+}
+```
+
+```typescript copy
+import { useChat } from '@ai-sdk/react';
+
+export function ChatComponent() {
+  const { messages, input, handleInputChange, handleSubmit } = useChat({
+    api: '/path-to-your-agent-stream-api-endpoint'
+  });
+
+  return (
+    <div>
+      {messages.map(m => (
+        <div key={m.id}>
+          {m.role}: {m.content}
+        </div>
+      ))}
+      <form onSubmit={handleSubmit}>
+        <input
+          value={input}
+          onChange={handleInputChange}
+          placeholder="Say something..."
+        />
+      </form>
+    </div>
+  );
+}
+```
+
+> **注意点**: エージェントのメモリ機能と`useChat`を使用する場合は、重要な実装の詳細について[エージェントメモリセクション](/docs/agents/agent-memory#usechat)を確認してください。
+
+### useCompletion
+
+単一ターンの補完には、`useCompletion`フックを使用します：
+
+- エージェントデータストリーム（`.toDataStreamResponse()`）と連携します
+- useCompletionの`api`はデフォルトで`/api/completion`に設定されています
+- Mastra REST APIのエージェントストリームエンドポイント`{MASTRA_BASE_URL}/agents/:agentId/stream`とデータストリーム用に連携します（構造化された出力が定義されていない場合）
+
+```typescript filename="app/api/completion/route.ts" copy
+import { mastra } from "@/src/mastra";
+
+export async function POST(req: Request) {
+  const { messages } = await req.json();
+  const myAgent = mastra.getAgent("weatherAgent");
+  const stream = await myAgent.stream(messages);
+
+  return stream.toDataStreamResponse();
+}
+```
+
+```typescript
+import { useCompletion } from "@ai-sdk/react";
+
+export function CompletionComponent() {
+  const {
+    completion,
+    input,
+    handleInputChange,
+    handleSubmit,
+  } = useCompletion({
+  api: '/path-to-your-agent-stream-api-endpoint'
+  });
+
+  return (
+    <div>
+      <form onSubmit={handleSubmit}>
+        <input
+          value={input}
+          onChange={handleInputChange}
+          placeholder="Enter a prompt..."
+        />
+      </form>
+      <p>Completion result: {completion}</p>
+    </div>
+  );
+}
+```
+
+### useObject
+
+JSONオブジェクトを表すテキストストリームを消費し、スキーマに基づいて完全なオブジェクトに解析するために使用します。
+
+- エージェントテキストストリーム（`.toTextStreamResponse()`）と連携します
+- useObjectの`api`はデフォルトで`/api/completion`に設定されています
+- Mastra REST APIのエージェントストリームエンドポイント`{MASTRA_BASE_URL}/agents/:agentId/stream`とテキストストリーム用に連携します（構造化された出力が定義されている場合）
+
+```typescript filename="app/api/use-object/route.ts" copy
+import { mastra } from "@/src/mastra";
+
+export async function POST(req: Request) {
+  const { messages } = await req.json();
+  const myAgent = mastra.getAgent("weatherAgent");
+  const stream = await myAgent.stream(messages, {
+    output: z.object({
+      weather: z.string(),
+    }),
+  });
+
+  return stream.toTextStreamResponse();
+}
+```
+
+```typescript
+import { experimental_useObject as useObject } from '@ai-sdk/react';
+
+export default function Page() {
+  const { object, submit } = useObject({
+    api: '/api/use-object',
+    schema: z.object({
+      weather: z.string(),
+    }),
+  });
+
+  return (
+    <div>
+      <button onClick={() => submit('example input')}>Generate</button>
+      {object?.content && <p>{object.content}</p>}
+    </div>
+  );
+}
+```
+
+## ツール呼び出し
+
+### AI SDK ツールフォーマット
+
+Mastraは、AI SDKフォーマットで作成されたツールをサポートしているため、Mastraエージェントで直接使用することができます。詳細については、[Vercel AI SDKツールフォーマット](/docs/agents/adding-tools#vercel-ai-sdk-tool-format)に関するツールドキュメントをご覧ください。
+
+### クライアントサイドのツール呼び出し
+
+MastraはAI SDKのツール呼び出しを活用しているため、AI SDKに適用されることはここでも同様に適用されます。
+Mastraの[エージェントツール](/docs/agents/adding-tools)は、AI SDKツールと100%互換性があります。
+
+Mastraツールはオプションの`execute`非同期関数も公開しています。これがオプションである理由は、ツール呼び出しをクライアントやキューに転送する場合があり、同じプロセスで実行したくない場合があるためです。
+
+クライアントサイドのツール呼び出しを活用する一つの方法は、`@ai-sdk/react`の`useChat`フックの`onToolCall`プロパティを使用して、クライアントサイドでツールを実行することです。
+

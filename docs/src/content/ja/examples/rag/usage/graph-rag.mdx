@@ -1,0 +1,179 @@
+---
+title: "例: 完全なグラフRAGシステム | RAG | Mastraドキュメント"
+description: OpenAI埋め込みとベクトルストレージにPGVectorを使用して、MastraでグラフRAGシステムを実装する例。
+---
+
+import { GithubLink } from "@/components/github-link";
+
+# Graph RAG
+
+この例では、Mastra、OpenAI embeddings、およびベクトルストレージ用のPGVectorを使用して、Retrieval-Augmented Generation (RAG) システムを実装する方法を示します。
+
+## 概要
+
+このシステムは、MastraとOpenAIを使用してGraph RAGを実装しています。以下がその機能です：
+
+1. 応答生成のためにgpt-4o-miniを使用してMastraエージェントを設定
+2. ベクトルストアの操作とナレッジグラフの作成/トラバースを管理するためのGraphRAGツールを作成
+3. テキストドキュメントを小さなセグメントに分割
+4. これらのチャンクに対して埋め込みを作成
+5. PostgreSQLベクトルデータベースにそれらを保存
+6. GraphRAGツールを使用してクエリに基づく関連チャンクのナレッジグラフを作成
+   - ツールはベクトルストアから結果を返し、ナレッジグラフを作成
+   - クエリを使用してナレッジグラフをトラバース
+7. Mastraエージェントを使用してコンテキストに応じた応答を生成
+
+## セットアップ
+
+### 環境セットアップ
+
+環境変数を設定してください：
+
+```bash filename=".env"
+OPENAI_API_KEY=your_openai_api_key_here
+POSTGRES_CONNECTION_STRING=your_connection_string_here
+```
+
+### 依存関係
+
+次に、必要な依存関係をインポートします：
+
+```typescript copy showLineNumbers filename="index.ts"
+import { openai } from "@ai-sdk/openai";
+import { Mastra } from "@mastra/core";
+import { Agent } from "@mastra/core/agent";
+import { PgVector } from "@mastra/pg";
+import { MDocument, createGraphRAGTool } from "@mastra/rag";
+import { embedMany } from "ai";
+```
+
+## GraphRAG ツールの作成
+
+@mastra/rag からインポートされた createGraphRAGTool を使用して、ベクターデータベースをクエリし、結果をナレッジグラフに変換するツールを作成できます:
+
+```typescript copy showLineNumbers{8} filename="index.ts"
+const graphRagTool = createGraphRAGTool({
+  vectorStoreName: "pgVector",
+  indexName: "embeddings",
+  model: openai.embedding("text-embedding-3-small"),
+  graphOptions: {
+    dimension: 1536,
+    threshold: 0.7,
+  },
+});
+```
+
+## エージェント設定
+
+応答を処理するMastraエージェントを設定します：
+
+```typescript copy showLineNumbers{19} filename="index.ts"
+const ragAgent = new Agent({
+  name: "GraphRAG Agent",
+  instructions: `あなたは、提供されたコンテキストに基づいて質問に答える役立つアシスタントです。回答を次のようにフォーマットしてください：
+
+1. 直接的な事実: 質問に関連するテキストから直接述べられている事実のみをリストアップします（2-3の箇条書き）
+2. 作られたつながり: テキストの異なる部分間で見つけた関係をリストアップします（2-3の箇条書き）
+3. 結論: すべてをまとめる1文の要約
+
+各セクションを簡潔にし、最も重要なポイントに焦点を当ててください。
+
+重要: 質問に答えるよう求められた場合、ツールで提供されたコンテキストのみに基づいて回答してください。
+コンテキストに質問に完全に答えるための十分な情報が含まれていない場合は、その旨を明示してください。`,
+  model: openai("gpt-4o-mini"),
+  tools: {
+    graphRagTool,
+  },
+});
+```
+
+## PgVectorとMastraのインスタンス化
+
+コンポーネントを使用してPgVectorとMastraをインスタンス化します:
+
+```typescript copy showLineNumbers{36} filename="index.ts"
+const pgVector = new PgVector(process.env.POSTGRES_CONNECTION_STRING!);
+
+export const mastra = new Mastra({
+  agents: { ragAgent },
+  vectors: { pgVector },
+});
+const agent = mastra.getAgent("ragAgent");
+```
+
+## ドキュメント処理
+
+ドキュメントを作成し、チャンクに処理します：
+
+```typescript copy showLineNumbers{45} filename="index.ts"
+const doc = MDocument.fromText(`
+# Riverdale Heights: Community Development Study
+// ... text content ...
+`);
+
+const chunks = await doc.chunk({
+  strategy: "recursive",
+  size: 512,
+  overlap: 50,
+  separator: "\n",
+});
+```
+
+## 埋め込みの作成と保存
+
+チャンクの埋め込みを生成し、それをベクターデータベースに保存します:
+
+```typescript copy showLineNumbers{56} filename="index.ts"
+const { embeddings } = await embedMany({
+  model: openai.embedding("text-embedding-3-small"),
+  values: chunks.map(chunk => chunk.text),
+});
+
+const vectorStore = mastra.getVector("pgVector");
+await vectorStore.createIndex({
+  indexName: "embeddings",
+  dimension: 1536,
+});
+await vectorStore.upsert({
+  indexName: "embeddings",
+  vectors: embeddings,
+  metadata: chunks?.map((chunk: any) => ({ text: chunk.text })),
+});
+```
+
+## グラフベースのクエリ
+
+データ内の関係を探るために、さまざまなクエリを試してください:
+
+```typescript copy showLineNumbers{82} filename="index.ts"
+const queryOne = "What are the direct and indirect effects of early railway decisions on Riverdale Heights' current state?";
+const answerOne = await ragAgent.generate(queryOne);
+console.log('\nQuery:', queryOne);
+console.log('Response:', answerOne.text);
+
+const queryTwo = 'How have changes in transportation infrastructure affected different generations of local businesses and community spaces?';
+const answerTwo = await ragAgent.generate(queryTwo);
+console.log('\nQuery:', queryTwo);
+console.log('Response:', answerTwo.text);
+
+const queryThree = 'Compare how the Rossi family business and Thompson Steel Works responded to major infrastructure changes, and how their responses affected the community.';
+const answerThree = await ragAgent.generate(queryThree);
+console.log('\nQuery:', queryThree);
+console.log('Response:', answerThree.text);
+
+const queryFour = 'Trace how the transformation of the Thompson Steel Works site has influenced surrounding businesses and cultural spaces from 1932 to present.';
+const answerFour = await ragAgent.generate(queryFour);
+console.log('\nQuery:', queryFour);
+console.log('Response:', answerFour.text);
+```
+
+<br />
+<br />
+<hr className="dark:border-[#404040] border-gray-300" />
+<br />
+<br />
+<GithubLink
+  link={
+    "https://github.com/mastra-ai/mastra/blob/main/examples/basics/rag/graph-rag"
+  }
+/>

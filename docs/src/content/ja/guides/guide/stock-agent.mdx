@@ -1,0 +1,30 @@
+---
+title: "AI株式エージェントの構築 | Mastraエージェント | ガイド"
+description: 指定された銘柄の前日終値を取得するシンプルな株式エージェントをMastraで作成するガイド。
+---
+
+import { Steps } from "nextra/components";
+import YouTube from "@/components/youtube";
+
+# 株価エージェント
+
+私たちは、指定されたシンボルの前日の終値を取得するシンプルなエージェントを作成します。この例では、ツールを作成し、それをエージェントに追加して、株価を取得するためにエージェントを使用する方法を示します。
+
+<YouTube id="rIaZ4l7y9wo" />
+
+## プロジェクト構造
+
+```
+stock-price-agent/
+├── src/
+│   ├── agents/
+│   │   └── stockAgent.ts
+│   ├── tools/
+│   │   └── stockPrices.ts
+│   └── index.ts
+├── package.json
+└── .env
+```
+
+---
+

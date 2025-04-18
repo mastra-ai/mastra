@@ -1,0 +1,46 @@
+# getThreadById リファレンス
+
+`getThreadById` 関数は、ストレージからIDによって特定のスレッドを取得します。
+
+## 使用例
+
+```typescript
+import { Memory } from "@mastra/core/memory";
+
+const memory = new Memory(config);
+
+const thread = await memory.getThreadById({ threadId: "thread-123" });
+```
+
+## パラメーター
+
+<PropertiesTable
+  content={[
+    {
+      name: "threadId",
+      type: "string",
+      description: "取得するスレッドのID。",
+      isOptional: false,
+    },
+  ]}
+/>
+
+## 戻り値
+
+<PropertiesTable
+  content={[
+    {
+      name: "StorageThreadType | null",
+      type: "Promise",
+      description:
+        "指定されたIDに関連付けられたスレッド、または見つからない場合はnullに解決されるプロミス。",
+    },
+  ]}
+/>
+
+### 関連
+
+- [Memory クラスリファレンス](/reference/memory/Memory.mdx)
+- [メモリの概要](/docs/memory/overview.mdx) (スレッドの概念をカバー)
+- [createThread](/reference/memory/createThread.mdx)
+- [getThreadsByResourceId](/reference/memory/getThreadsByResourceId.mdx)
