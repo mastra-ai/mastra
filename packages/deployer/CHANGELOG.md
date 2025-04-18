@@ -1,5 +1,14 @@
 # @mastra/deployer
 
+## 0.3.0-alpha.6
+
+### Patch Changes
+
+- 3f9d151: Add support for tsconfig paths in server-configuration
+- Updated dependencies [08bb78e]
+  - @mastra/core@0.9.0-alpha.5
+  - @mastra/server@2.0.0-alpha.5
+
 ## 0.3.0-alpha.5
 
 ### Patch Changes
