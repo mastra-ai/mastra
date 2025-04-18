@@ -28,15 +28,15 @@ export const createSampleThread = () => ({
   metadata: { key: 'value' },
 });
 
-export const createSampleMessage = (threadId: string): MessageType => ({
-  id: `msg-${randomUUID()}`,
-  role: 'user',
-  type: 'text',
-  threadId,
-  content: [{ type: 'text' as const, text: 'Hello' }] as MessageType['content'],
-  createdAt: new Date(),
-  resourceId: `resource-${randomUUID()}`,
-});
+export const createSampleMessage = (threadId: string) =>
+  ({
+    id: `msg-${randomUUID()}`,
+    role: 'user',
+    type: 'text',
+    threadId,
+    content: [{ type: 'text' as const, text: 'Hello' }] as MessageType['content'],
+    createdAt: new Date(),
+  }) as any;
 
 export const createSampleWorkflowSnapshot = (threadId: string): WorkflowRunState => ({
   value: { [threadId]: 'running' },
@@ -75,3 +75,17 @@ export const retryUntil = async <T>(
   }
   throw new Error('Timeout waiting for condition');
 };
+
+export const createSampleThreadWithParams = (
+  threadId: string,
+  resourceId: string,
+  createdAt: Date,
+  updatedAt: Date,
+) => ({
+  id: threadId,
+  resourceId,
+  title: 'Test Thread with given ThreadId and ResourceId',
+  createdAt,
+  updatedAt,
+  metadata: { key: 'value' },
+});
