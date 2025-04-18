@@ -127,7 +127,7 @@ async function pushToRepo(repoName) {
       git add . &&
       git commit -m "Update template from monorepo" &&
       git branch -M main &&
-      git remote add origin https://x-access-token:${GITHUB_TOKEN}@github.com/${ORGANIZATION}/${repoName}.git 
+      git remote add origin https://x-access-token:${GITHUB_TOKEN}@github.com/${ORGANIZATION}/${repoName}.git  &&
       git push -u origin main --force
     `,
       { stdio: 'inherit', cwd: tempDir },
@@ -153,7 +153,6 @@ async function pushToRepo(repoName) {
       // push branch
       execSync(
         `
-        git remote add origin https://x-access-token:${GITHUB_TOKEN}@github.com/${ORGANIZATION}/${repoName}.git &&
         git push -u origin ${provider} --force
     `,
         { stdio: 'inherit', cwd: tempDir },
