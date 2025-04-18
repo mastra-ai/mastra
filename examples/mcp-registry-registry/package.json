@@ -14,9 +14,16 @@
   "license": "MIT",
   "dependencies": {
     "@ai-sdk/openai": "latest",
-    "@mastra/mcp": "workspace:*",
-    "@mastra/mcp-registry-registry": "workspace:*",
-    "@mastra/core": "workspace:*",
+    "@mastra/mcp": "latest",
+    "@mastra/mcp-registry-registry": "latest",
+    "@mastra/core": "latest",
     "zod": "^3.24.2"
+  },
+  "pnpm": {
+    "overrides": {
+      "@mastra/mcp": "link:../../packages/mcp",
+      "@mastra/mcp-registry-registry": "link:../../packages/mcp-registry-registry",
+      "@mastra/core": "link:../../packages/core"
+    }
   }
 }

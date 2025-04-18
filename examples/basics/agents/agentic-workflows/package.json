@@ -8,8 +8,13 @@
   },
   "dependencies": {
     "@ai-sdk/openai": "latest",
-    "@mastra/core": "workspace:*",
+    "@mastra/core": "latest",
     "ai": "latest",
     "zod": "^3.24.2"
+  },
+  "pnpm": {
+    "overrides": {
+      "@mastra/core": "link:../../../../packages/core"
+    }
   }
 }

@@ -12,14 +12,23 @@
   "dependencies": {
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
-    "@mastra/core": "workspace:*",
-    "@mastra/client-js": "workspace:*",
-    "@mastra/voice-openai": "workspace:*",
-    "@mastra/memory": "workspace:*",
-    "mastra": "workspace:*",
+    "@mastra/core": "latest",
+    "@mastra/client-js": "latest",
+    "@mastra/voice-openai": "latest",
+    "@mastra/memory": "latest",
+    "mastra": "latest",
     "@ai-sdk/openai": "1.2.5",
     "zod": "^3.24.2",
     "next": "15.2.3"
+  },
+  "pnpm": {
+    "overrides": {
+      "@mastra/core": "link:../../../packages/core",
+      "@mastra/client-js": "link:../../../client-sdks/client-js",
+      "@mastra/voice-openai": "link:../../../voice/openai",
+      "@mastra/memory": "link:../../../packages/memory",
+      "mastra": "link:../../../packages/cli"
+    }
   },
   "devDependencies": {
     "typescript": "^5",

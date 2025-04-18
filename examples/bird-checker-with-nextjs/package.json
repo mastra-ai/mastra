@@ -11,7 +11,7 @@
   },
   "dependencies": {
     "@ai-sdk/anthropic": "latest",
-    "@mastra/core": "workspace:*",
+    "@mastra/core": "link:../../packages/core",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "lucide-react": "^0.454.0",
@@ -24,6 +24,12 @@
     "tailwind-merge": "^2.6.0",
     "tailwindcss-animate": "^1.0.7",
     "zod": "^3.24.2"
+  },
+  "pnpm": {
+    "overrides": {
+      "@mastra/core": "link:../../packages/core",
+      "@mastra/client-js": "link:../../client-sdks/client-js"
+    }
   },
   "devDependencies": {
     "@types/node": "^20.17.24",

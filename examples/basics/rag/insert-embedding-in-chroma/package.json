@@ -7,9 +7,15 @@
   },
   "dependencies": {
     "@ai-sdk/openai": "latest",
-    "@mastra/rag": "workspace:*",
-    "@mastra/chroma": "workspace:*",
+    "@mastra/rag": "latest",
+    "@mastra/chroma": "latest",
     "ai": "latest"
   },
-  "version": "0.0.2"
+  "version": "0.0.2",
+  "pnpm": {
+    "overrides": {
+      "@mastra/rag": "link:../../../../packages/rag",
+      "@mastra/chroma": "link:../../../../integrations/chroma"
+    }
+  }
 }

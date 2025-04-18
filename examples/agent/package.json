@@ -5,13 +5,6 @@
   "description": "",
   "main": "index.js",
   "version": "0.0.1",
-  "scripts": {
-    "start-deployed": "npx bun src/with-deployed.ts",
-    "start": "npx bun src/index.ts"
-  },
-  "keywords": [],
-  "author": "",
-  "license": "MIT",
   "dependencies": {
     "@ai-sdk/openai": "latest",
     "@mastra/core": "workspace:*",
@@ -19,5 +12,20 @@
     "@mastra/memory": "workspace:*",
     "@mastra/client-js": "workspace:*",
     "zod": "^3.24.2"
-  }
+  },
+  "pnpm": {
+    "overrides": {
+      "@mastra/core": "link:../../packages/core",
+      "@mastra/voice-openai": "link:../../voice/openai",
+      "@mastra/memory": "link:../../packages/memory",
+      "@mastra/client-js": "link:../../client-sdks/client-js"
+    }
+  },
+  "scripts": {
+    "start-deployed": "npx bun src/with-deployed.ts",
+    "start": "npx bun src/index.ts"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "MIT"
 }

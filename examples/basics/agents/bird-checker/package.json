@@ -8,7 +8,12 @@
   },
   "dependencies": {
     "@ai-sdk/anthropic": "latest",
-    "@mastra/core": "workspace:*",
+    "@mastra/core": "latest",
     "zod": "^3.24.2"
+  },
+  "pnpm": {
+    "overrides": {
+      "@mastra/core": "link:../../../../packages/core"
+    }
   }
 }

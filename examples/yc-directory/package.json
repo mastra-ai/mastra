@@ -13,15 +13,22 @@
   "license": "MIT",
   "description": "",
   "dependencies": {
-    "@mastra/core": "workspace:^",
-    "@mastra/evals": "workspace:^",
+    "@mastra/core": "latest",
+    "@mastra/evals": "latest",
     "zod": "^3.24.2"
   },
   "devDependencies": {
     "@ai-sdk/openai": "latest",
     "@types/node": "^20.17.27",
-    "mastra": "workspace:^",
+    "mastra": "latest",
     "tsx": "^4.19.3",
     "typescript": "^5.8.2"
+  },
+  "pnpm": {
+    "overrides": {
+      "@mastra/core": "link:../../packages/core",
+      "@mastra/evals": "link:../../packages/evals",
+      "mastra": "link:../../packages/cli"
+    }
   }
 }
