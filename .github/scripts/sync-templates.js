@@ -138,7 +138,7 @@ async function pushToRepo(repoName) {
     for (const [provider, defaultModel] of Object.entries(PROVIDERS)) {
       const files = ['./src/mastra/workflows/index.ts', './src/mastra/agents/index.ts'];
       // move to new branch
-      execSync(`git checkout -b ${provider}`, { stdio: 'inherit', cwd: tempDir });
+      execSync(`git switch -c ${provider}`, { stdio: 'inherit', cwd: tempDir });
 
       for (const file of files) {
         const filePath = path.join(tempDir, file);
