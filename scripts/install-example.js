@@ -97,6 +97,12 @@ const linkedDeps = Object.keys(findLinkedDependencies('.'));
 
 console.log('Found linked dependencies:', linkedDeps);
 
+await spawn(`pnpm`, ['install', '-w'], {
+  cwd: resolve(process.cwd(), '..', '..'),
+  shell: true,
+  stdio: 'inherit',
+});
+
 const depsToInstall = new Set(linkedDeps);
 for (const dep of linkedDeps) {
   const depDir = dirname(resolveFrom(process.cwd(), `${dep}/package.json`));
