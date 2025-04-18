@@ -1,7 +1,7 @@
-import { createMCPServer } from '../server';
+import { MCPServer } from '../server';
 import { weatherTool } from './tools';
 
-const { startStdio } = createMCPServer({
+const server = new MCPServer({
   name: 'My MCP Server',
   version: '1.0.0',
   tools: {
@@ -9,7 +9,7 @@ const { startStdio } = createMCPServer({
   },
 });
 
-startStdio().catch(error => {
+server.startStdio().catch(error => {
   const errorMessage = 'Fatal error running server';
   console.error(errorMessage, error);
   process.exit(1);
