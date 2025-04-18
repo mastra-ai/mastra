@@ -4,7 +4,7 @@ import type { MessageType } from '@mastra/core';
 import { Agent } from '@mastra/core/agent';
 import { DefaultStorage } from '@mastra/core/storage/libsql';
 import { Memory } from '@mastra/memory';
-import { ToolCallPart } from 'ai';
+import type { ToolCallPart } from 'ai';
 import dotenv from 'dotenv';
 import { describe, expect, it, beforeEach, afterAll } from 'vitest';
 
