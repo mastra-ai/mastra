@@ -321,16 +321,16 @@ export class Memory extends MastraMemory {
     await this.saveWorkingMemory(messages);
 
     // Then strip working memory tags from all messages
-    this.mutateMessagesToHideWorkingMemory(messages);
+    const updatedMessages = this.updateMessagesToHideWorkingMemory(messages);
 
     const config = this.getMergedThreadConfig(memoryConfig);
 
-    const result = this.storage.saveMessages({ messages });
+    const result = this.storage.saveMessages({ messages: updatedMessages });
 
     if (this.vector && config.semanticRecall) {
       let indexName: Promise<string>;
       await Promise.all(
-        messages.map(async message => {
+        updatedMessages.map(async message => {
           if (typeof message.content !== `string` || message.content === '') return;
 
           const { embeddings, chunks, dimension } = await this.embedMessageContent(message.content);
@@ -361,27 +361,42 @@ export class Memory extends MastraMemory {
     return result;
   }
 
-  protected mutateMessagesToHideWorkingMemory(messages: MessageType[]) {
+  protected updateMessagesToHideWorkingMemory(messages: MessageType[]): MessageType[] {
     const workingMemoryRegex = /<working_memory>([^]*?)<\/working_memory>/g;
 
-    for (const [index, message] of messages.entries()) {
-      if (typeof message?.content === `string`) {
-        message.content = message.content.replace(workingMemoryRegex, ``).trim();
-      } else if (Array.isArray(message?.content)) {
-        for (const content of message.content) {
-          if (content.type === `text`) {
-            content.text = content.text.replace(workingMemoryRegex, ``).trim();
-          }
+    const updatedMessages: MessageType[] = [];
 
-          if (
+    for (const message of messages) {
+      if (typeof message?.content === `string`) {
+        updatedMessages.push({
+          ...message,
+          content: message.content.replace(workingMemoryRegex, ``).trim(),
+        });
+      } else if (Array.isArray(message?.content)) {
+        const contentIsWorkingMemory = message.content.some(
+          content =>
             (content.type === `tool-call` || content.type === `tool-result`) &&
-            content.toolName === `updateWorkingMemory`
-          ) {
-            delete messages[index];
-          }
+            content.toolName === `updateWorkingMemory`,
+        );
+        if (contentIsWorkingMemory) {
+          continue;
         }
+        const newContent = message.content.map(content => {
+          if (content.type === 'text') {
+            return {
+              ...content,
+              text: content.text.replace(workingMemoryRegex, '').trim(),
+            };
+          }
+          return { ...content };
+        }) as MessageType['content'];
+        updatedMessages.push({ ...message, content: newContent });
+      } else {
+        updatedMessages.push({ ...message });
       }
     }
+
+    return updatedMessages;
   }
 
   protected parseWorkingMemory(text: string): string | null {

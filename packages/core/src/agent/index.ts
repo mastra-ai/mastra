@@ -297,7 +297,6 @@ export class Agent<
               }
             : null,
           ...processedMessages,
-          ...newMessages,
         ].filter((message): message is NonNullable<typeof message> => Boolean(message)),
       };
     }
