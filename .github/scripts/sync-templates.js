@@ -141,13 +141,14 @@ async function pushToRepo(repoName) {
       execSync(`git checkout -b ${provider}`, { stdio: 'inherit', cwd: tempDir });
 
       for (const file of files) {
-        let content = await readFile(file, 'utf-8');
+        const filePath = path.join(tempDir, file);
+        let content = await readFile(filePath, 'utf-8');
         content.replaceAll(
           `import { openai } from '@ai-sdk/openai';`,
           `import { ${provider} } from '@ai-sdk/${provider}';`,
         );
         content.replaceAll(`openai('gpt-4o')`, `${provider}(process.env.MODEL ?? ${defaultModel})`);
-        await writeFile(file, content);
+        await writeFile(filePath, content);
       }
       // push branch
       execSync(
