@@ -1,4 +1,3 @@
-import { spawn } from 'child_process';
 import http from 'http';
 import path from 'path';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
