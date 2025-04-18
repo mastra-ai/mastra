@@ -1,0 +1,203 @@
+---
+title: "複雑なLLM操作の処理 | ワークフロー | Mastra"
+description: "Mastraのワークフローは、分岐、並列実行、リソースの一時停止などの機能を使用して、複雑な操作のシーケンスを調整するのに役立ちます。"
+---
+
+# ワークフローを使用した複雑なLLM操作の処理
+
+Mastraのワークフローは、分岐、並列実行、リソースの一時停止などの機能を使用して、複雑な操作のシーケンスを調整するのに役立ちます。
+
+## ワークフローを使用するタイミング
+
+ほとんどのAIアプリケーションは、言語モデルへの単一の呼び出し以上のものを必要とします。複数のステップを実行したり、特定のパスを条件付きでスキップしたり、ユーザー入力を受け取るまで実行を一時停止したりすることがあるかもしれません。時には、エージェントツールの呼び出しが十分に正確でないこともあります。
+
+Mastraのワークフローシステムは以下を提供します：
+
+- ステップを定義し、それらを結びつけるための標準化された方法。
+- 単純（線形）および高度（分岐、並列）パスの両方をサポート。
+- 各ワークフローの実行を追跡するためのデバッグおよび可観測性機能。
+
+## 例
+
+ワークフローを作成するには、1つ以上のステップを定義し、それらをリンクしてから、開始する前にワークフローをコミットします。
+
+### ワークフローの分解
+
+ワークフロー作成プロセスの各部分を見てみましょう：
+
+#### 1. ワークフローの作成
+
+Mastraでワークフローを定義する方法は次のとおりです。`name`フィールドはワークフローのAPIエンドポイント（`/workflows/$NAME/`）を決定し、`triggerSchema`はワークフローのトリガーデータの構造を定義します：
+
+```ts filename="src/mastra/workflow/index.ts"
+const myWorkflow = new Workflow({
+  name: "my-workflow",
+  triggerSchema: z.object({
+    inputValue: z.number(),
+  }),
+});
+```
+
+#### 2. ステップの定義
+
+次に、ワークフローのステップを定義します。各ステップは独自の入力および出力スキーマを持つことができます。ここでは、`stepOne`が入力値を2倍にし、`stepTwo`が`stepOne`が成功した場合にその結果をインクリメントします。（簡単にするために、この例ではLLM呼び出しは行っていません）：
+
+```ts filename="src/mastra/workflow/index.ts"
+const stepOne = new Step({
+  id: "stepOne",
+  outputSchema: z.object({
+    doubledValue: z.number(),
+  }),
+  execute: async ({ context }) => {
+    const doubledValue = context.triggerData.inputValue * 2;
+    return { doubledValue };
+  },
+});
+
+const stepTwo = new Step({
+  id: "stepTwo",
+  execute: async ({ context }) => {
+    const doubledValue = context.getStepResult(stepOne)?.doubledValue;
+    if (!doubledValue) {
+      return { incrementedValue: 0 };
+    }
+    return {
+      incrementedValue: doubledValue + 1,
+    };
+  },
+});
+```
+
+#### 3. ステップのリンク
+
+次に、制御フローを作成し、ワークフローを「コミット」（最終化）します。この場合、`stepOne`が最初に実行され、その後に`stepTwo`が続きます。
+
+```ts filename="src/mastra/workflow/index.ts"
+myWorkflow.step(stepOne).then(stepTwo).commit();
+```
+
+### ワークフローの登録
+
+Mastraにワークフローを登録して、ログとテレメトリを有効にします：
+
+```ts showLineNumbers filename="src/mastra/index.ts"
+import { Mastra } from "@mastra/core";
+
+export const mastra = new Mastra({
+  workflows: { myWorkflow },
+});
+```
+
+動的なワークフローを作成する必要がある場合には、mastraインスタンスをコンテキストに注入することもできます：
+
+```ts filename="src/mastra/workflow/index.ts"
+import { Mastra } from "@mastra/core";
+
+const mastra = new Mastra();
+
+const myWorkflow = new Workflow({
+  name: "my-workflow",
+  mastra,
+});
+```
+
+### ワークフローの実行
+
+プログラム的にまたはAPI経由でワークフローを実行します：
+
+```ts showLineNumbers filename="src/mastra/run-workflow.ts" copy
+import { mastra } from "./index";
+
+// ワークフローを取得
+const myWorkflow = mastra.getWorkflow("myWorkflow");
+const { runId, start } = myWorkflow.createRun();
+
+// ワークフローの実行を開始
+await start({ triggerData: { inputValue: 45 } });
+```
+
+またはAPIを使用します（`mastra dev`を実行する必要があります）：
+
+// ワークフロー実行の作成
+
+```bash
+curl --location 'http://localhost:4111/api/workflows/myWorkflow/start-async' \
+     --header 'Content-Type: application/json' \
+     --data '{
+       "inputValue": 45
+     }'
+```
+
+この例は基本を示しています：ワークフローを定義し、ステップを追加し、ワークフローをコミットし、それから実行します。
+
+## ステップの定義
+
+ワークフローの基本的な構成要素[はステップです](./steps.mdx)。ステップは入力と出力のスキーマを使用して定義され、前のステップの結果を取得することができます。
+
+## フロー制御
+
+ワークフローを使用すると、並列ステップ、分岐パスなどでステップを連鎖させる[フロー制御](./control-flow.mdx)を定義できます。
+
+## ワークフロー変数
+
+ステップ間でデータをマッピングしたり、動的なデータフローを作成する必要がある場合、[ワークフロー変数](./variables.mdx)は、情報をあるステップから別のステップに渡し、ステップ出力内のネストされたプロパティにアクセスするための強力なメカニズムを提供します。
+
+## 一時停止と再開
+
+外部データ、ユーザー入力、または非同期イベントのために実行を一時停止する必要がある場合、Mastraは[任意のステップでの一時停止をサポートしています](./suspend-and-resume.mdx)。ワークフローの状態を保持し、後で再開することができます。
+
+## 可観測性とデバッグ
+
+Mastra ワークフローは、ワークフロー実行内の各ステップの入力と出力を自動的に[ログに記録します](../../reference/observability/otel-config.mdx)。これにより、このデータをお好みのログ、テレメトリー、または可観測性ツールに送信することができます。
+
+次のことができます：
+
+- 各ステップのステータスを追跡する（例：`success`、`error`、または `suspended`）。
+- 分析のために実行固有のメタデータを保存する。
+- ログを転送することで、Datadog や New Relic などのサードパーティの可観測性プラットフォームと統合する。
+
+## リクエスト/ユーザー固有の変数の注入
+
+ツールとワークフローの依存性注入をサポートしています。`start` または `resume` 関数呼び出しにコンテナを直接渡すか、[サーバーミドルウェア](/docs/deployment/server#Middleware)を使用して注入することができます。
+
+```ts showLineNumbers filename="src/mastra/run-workflow.ts" copy
+import { mastra } from "./index";
+
+const stepTwo = new Step({
+  id: "stepTwo",
+  execute: async ({ context, container }) => {
+    const multiplier = (container.get("multiplier");
+    const doubledValue = context.getStepResult(stepOne)?.doubledValue;
+    if (!doubledValue) {
+      return { incrementedValue: 0 };
+    }
+
+    return {
+      incrementedValue: doubledValue * multiplier,
+    };
+  },
+});
+
+// Get the workflow
+const myWorkflow = mastra.getWorkflow("myWorkflow");
+const { runId, start, resume } = myWorkflow.createRun();
+
+type MyContainer = { multiplier; number };
+
+const container = new Container<MyContainer>();
+container.set("multiplier", 5);
+
+// Start the workflow execution
+await start({ triggerData: { inputValue: 45 }, container });
+await resume({ stepId: "stepTwo", container });
+```
+
+## 追加リソース
+
+- ガイドセクションの[ワークフローガイド](../guides/ai-recruiter.mdx)は、主要な概念をカバーするチュートリアルです。
+- [順次ステップのワークフロー例](../../examples/workflows/sequential-steps.mdx)
+- [並列ステップのワークフロー例](../../examples/workflows/parallel-steps.mdx)
+- [分岐パスのワークフロー例](../../examples/workflows/branching-paths.mdx)
+- [ワークフロー変数の例](../../examples/workflows/workflow-variables.mdx)
+- [循環依存関係のワークフロー例](../../examples/workflows/cyclical-dependencies.mdx)
+- [一時停止と再開のワークフロー例](../../examples/workflows/suspend-and-resume.mdx)

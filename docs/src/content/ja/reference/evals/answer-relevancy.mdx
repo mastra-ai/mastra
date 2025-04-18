@@ -1,0 +1,186 @@
+---
+title: "リファレンス: 回答の関連性 | メトリクス | 評価 | Mastra ドキュメント"
+description: Mastraにおける回答関連性メトリクスのドキュメント。LLM出力がどれだけ適切に入力クエリに対応しているかを評価します。
+---
+
+# AnswerRelevancyMetric
+
+`AnswerRelevancyMetric`クラスは、LLMの出力が入力クエリにどれだけ適切に回答または対応しているかを評価します。これは判定ベースのシステムを使用して関連性を判断し、詳細なスコアリングと根拠を提供します。
+
+## 基本的な使用方法
+
+```typescript
+import { openai } from "@ai-sdk/openai";
+import { AnswerRelevancyMetric } from "@mastra/evals/llm";
+
+// Configure the model for evaluation
+const model = openai("gpt-4o-mini");
+
+const metric = new AnswerRelevancyMetric(model, {
+  uncertaintyWeight: 0.3,
+  scale: 1,
+});
+
+const result = await metric.measure(
+  "What is the capital of France?",
+  "Paris is the capital of France.",
+);
+
+console.log(result.score); // Score from 0-1
+console.log(result.info.reason); // Explanation of the score
+```
+
+## コンストラクタパラメータ
+
+<PropertiesTable
+  content={[
+    {
+      name: "model",
+      type: "LanguageModel",
+      description: "関連性を評価するために使用されるモデルの設定",
+      isOptional: false,
+    },
+    {
+      name: "options",
+      type: "AnswerRelevancyMetricOptions",
+      description: "メトリックの設定オプション",
+      isOptional: true,
+      defaultValue: "{ uncertaintyWeight: 0.3, scale: 1 }",
+    },
+  ]}
+/>
+
+### AnswerRelevancyMetricOptions
+
+<PropertiesTable
+  content={[
+    {
+      name: "uncertaintyWeight",
+      type: "number",
+      description: "スコアリングにおける「不確か」な判定に与える重み（0-1）",
+      isOptional: true,
+      defaultValue: "0.3",
+    },
+    {
+      name: "scale",
+      type: "number",
+      description: "最大スコア値",
+      isOptional: true,
+      defaultValue: "1",
+    },
+  ]}
+/>
+
+## measure() パラメータ
+
+<PropertiesTable
+  content={[
+    {
+      name: "input",
+      type: "string",
+      description: "元のクエリまたはプロンプト",
+      isOptional: false,
+    },
+    {
+      name: "output",
+      type: "string",
+      description: "評価対象のLLMの応答",
+      isOptional: false,
+    },
+  ]}
+/>
+
+## 戻り値
+
+<PropertiesTable
+  content={[
+    {
+      name: "score",
+      type: "number",
+      description: "関連性スコア（0から指定のスケールまで、デフォルトは0-1）",
+    },
+    {
+      name: "info",
+      type: "object",
+      description: "スコアの理由を含むオブジェクト",
+      properties: [
+        {
+          type: "string",
+          parameters: [
+            {
+              name: "reason",
+              type: "string",
+              description: "スコアの説明",
+            },
+          ],
+        },
+      ],
+    },
+  ]}
+/>
+
+## 採点の詳細
+
+このメトリックは、完全性、正確性、詳細レベルを考慮し、クエリと回答の一致度を通じて関連性を評価します。
+
+### 採点プロセス
+
+1. ステートメント分析：
+   - 文脈を保持しながら出力を意味のあるステートメントに分解します
+   - 各ステートメントをクエリの要件に対して評価します
+
+2. 各ステートメントの関連性を評価：
+   - 「yes」：直接一致に対して完全な重み
+   - 「unsure」：おおよその一致に対して部分的な重み（デフォルト：0.3）
+   - 「no」：無関係なコンテンツに対してゼロの重み
+
+最終スコア：`((direct + uncertainty * partial) / total_statements) * scale`
+
+### スコアの解釈
+（0からスケールまで、デフォルトは0-1）
+- 1.0：完璧な関連性 - 完全かつ正確
+- 0.7-0.9：高い関連性 - 軽微なギャップまたは不正確さ
+- 0.4-0.6：中程度の関連性 - 重大なギャップ
+- 0.1-0.3：低い関連性 - 大きな問題
+- 0.0：関連性なし - 不正確またはトピックから外れている
+
+## カスタム設定の例
+
+```typescript
+import { openai } from "@ai-sdk/openai";
+import { AnswerRelevancyMetric } from "@mastra/evals/llm";
+
+// Configure the model for evaluation
+const model = openai("gpt-4o-mini");
+
+const metric = new AnswerRelevancyMetric(
+  model,
+  {
+    uncertaintyWeight: 0.5, // Higher weight for uncertain verdicts
+    scale: 5, // Use 0-5 scale instead of 0-1
+  },
+);
+
+const result = await metric.measure(
+  "What are the benefits of exercise?",
+  "Regular exercise improves cardiovascular health, builds strength, and boosts mental wellbeing.",
+);
+
+// Example output:
+// {
+//   score: 4.5,
+//   info: {
+//     reason: "The score is 4.5 out of 5 because the response directly addresses the query
+//           with specific, accurate benefits of exercise. It covers multiple aspects
+//           (cardiovascular, muscular, and mental health) in a clear and concise manner.
+//           The answer is highly relevant and provides appropriate detail without
+//           including unnecessary information."
+//   }
+// }
+```
+
+## 関連
+
+- [プロンプト整合性メトリック](./prompt-alignment)
+- [コンテキスト精度メトリック](./context-precision)
+- [忠実性メトリック](./faithfulness)

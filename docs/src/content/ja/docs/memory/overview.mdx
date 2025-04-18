@@ -1,0 +1,119 @@
+# メモリの概要
+
+メモリは、エージェントが利用可能なコンテキストを管理する方法であり、すべてのチャットメッセージをコンテキストウィンドウに凝縮したものです。
+
+## コンテキストウィンドウ
+
+コンテキストウィンドウは、言語モデルが任意の時点で見ることができる情報の総量です。
+
+Mastraでは、コンテキストは3つの部分に分かれています：システム指示とユーザーに関する情報（[ワーキングメモリ](./working-memory.mdx)）、最近のメッセージ（[メッセージ履歴](#conversation-history)）、そしてユーザーのクエリに関連する古いメッセージ（[セマンティック検索](./semantic-recall.mdx)）です。
+
+さらに、コンテキストが長すぎる場合にコンテキストをトリミングしたり情報を削除したりするための[メモリプロセッサ](./memory-processors.mdx)を提供しています。
+
+## クイックスタート
+
+メモリを動作させる最速の方法は、組み込みの開発プレイグラウンドを使用することです。
+
+まだ行っていない場合は、メインの[スタートガイド](/docs/getting-started/installation)に従って新しいMastraプロジェクトを作成してください。
+
+**1. メモリパッケージをインストールします：**
+
+```bash npm2yarn copy
+npm install @mastra/memory
+```
+
+**2. エージェントを作成し、`Memory`インスタンスを接続します：**
+
+```typescript filename="src/mastra/agents/index.ts" {10}
+import { Agent } from "@mastra/core/agent";
+import { Memory } from "@mastra/memory";
+import { openai } from "@ai-sdk/openai";
+
+export const myMemoryAgent = new Agent({
+  name: "MemoryAgent",
+  instructions: "...",
+  model: openai("gpt-4o"),
+
+  memory: new Memory(),
+});
+```
+
+**3. 開発サーバーを起動します：**
+
+```bash npm2yarn copy
+npm run dev
+```
+
+**4. プレイグラウンド（http://localhost:4111）を開き、`MemoryAgent`を選択します：**
+
+いくつかのメッセージを送信して、会話の中で情報を記憶していることを確認してください：
+
+```
+➡️ あなた: 私の好きな色は青です。
+⬅️ エージェント: わかりました！あなたの好きな色が青であることを覚えておきます。
+➡️ あなた: 私の好きな色は何ですか？
+⬅️ エージェント: あなたの好きな色は青です。
+```
+
+## メモリースレッド
+
+Mastraはメモリーをスレッドに整理します。スレッドは特定の会話履歴を識別する記録であり、次の2つの識別子を使用します：
+
+1.  **`threadId`**: 特定の会話ID（例：`support_123`）。
+2.  **`resourceId`**: 各スレッドを所有するユーザーまたはエンティティID（例：`user_123`、`org_456`）。
+
+```typescript {2,3}
+const response = await myMemoryAgent.stream("Hello, my name is Alice.", {
+  resourceId: "user_alice",
+  threadId: "conversation_123",
+});
+```
+
+**重要：** これらのIDがなければ、メモリーが適切に設定されていても、エージェントはメモリーを使用しません。プレイグラウンドではこれが自動的に処理されますが、アプリケーションでメモリーを使用する場合は自分でIDを追加する必要があります。
+
+## 会話履歴
+
+デフォルトでは、`Memory`インスタンスは現在のMemoryスレッドからの[最新40メッセージ](../../reference/memory/Memory.mdx)を各新規リクエストに含めます。これにより、エージェントに即時の会話コンテキストが提供されます。
+
+```ts {3}
+const memory = new Memory({
+  options: {
+    lastMessages: 10,
+  },
+});
+```
+
+**重要:** 各エージェント呼び出しでは、最新のユーザーメッセージのみを送信してください。Mastraは必要な履歴の取得と注入を処理します。履歴全体を自分で送信すると重複が発生します。`useChat`フロントエンドフックを使用する場合の処理方法については、[AI SDK Memoryの例](../../examples/memory/use-chat.mdx)を参照してください。
+
+### ストレージ設定
+
+会話履歴はメッセージを保存するために[ストレージアダプター](/reference/memory/Memory#parameters)に依存しています。
+
+```ts {7-12}
+import { Memory } from "@mastra/memory";
+import { Agent } from "@mastra/core/agent";
+import { LibSQLStore } from "@mastra/core/storage/libsql";
+
+const agent = new Agent({
+  memory: new Memory({
+    // これは省略した場合のデフォルトストレージDBです
+    storage: new LibSQLStore({
+      config: {
+        url: "file:local.db",
+      },
+    }),
+  }),
+});
+```
+
+**ストレージコードの例**:
+
+- [LibSQL](/examples/memory/memory-with-libsql)
+- [Postgres](/examples/memory/memory-with-pg)
+- [Upstash](/examples/memory/memory-with-upstash)
+
+## 次のステップ
+
+コアコンセプトを理解したところで、[セマンティック検索](./semantic-recall.mdx)に進んで、MastraエージェントにRAGメモリを追加する方法を学びましょう。
+
+あるいは、利用可能なオプションについては[設定リファレンス](../../reference/memory/Memory.mdx)を参照するか、[使用例](../../examples/memory/use-chat.mdx)をブラウズすることもできます。

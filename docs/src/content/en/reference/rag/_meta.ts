@@ -1,4 +1,4 @@
-const meta = {
+export default {
   chunk: ".chunk()",
   embeddings: ".embed()",
   "extract-params": "ExtractParams",
@@ -17,4 +17,4 @@ const meta = {
   upstash: "UpstashVector",
 };
 
-export default meta;
+

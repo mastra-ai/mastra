@@ -1,0 +1,70 @@
+---
+title: "リファレンス: suspend() | 制御フロー | Mastra ドキュメント"
+description: "Mastra ワークフローにおける suspend 関数のドキュメントで、再開されるまで実行を一時停止します。"
+---
+
+# suspend()
+
+ワークフローの実行を現在のステップで一時停止し、明示的に再開されるまで待機します。ワークフローの状態は保存され、後で続行することができます。
+
+## 使用例
+
+```typescript
+const approvalStep = new Step({
+  id: "needsApproval",
+  execute: async ({ context, suspend }) => {
+    if (context.steps.amount > 1000) {
+      await suspend();
+    }
+    return { approved: true };
+  }
+});
+```
+
+## パラメーター
+
+<PropertiesTable
+  content={[
+    {
+      name: "metadata",
+      type: "Record<string, any>",
+      description: "中断された状態に保存するオプションのデータ",
+      isOptional: true
+    }
+  ]}
+/>
+
+## 戻り値
+
+<PropertiesTable
+  content={[
+    {
+      name: "Promise<void>",
+      type: "Promise",
+      description: "ワークフローが正常に一時停止されたときに解決されます"
+    }
+  ]}
+/>
+
+## 追加の例
+
+メタデータを使用したサスペンド:
+
+```typescript
+const reviewStep = new Step({
+  id: "review",
+  execute: async ({ context, suspend }) => {
+    await suspend({
+      reason: "Needs manager approval",
+      requestedBy: context.user
+    });
+    return { reviewed: true };
+  }
+});
+```
+
+### 関連
+
+- [ワークフローのサスペンドと再開](../../workflows/suspend-and-resume.mdx)
+- [.resume()](./resume.mdx)
+- [.watch()](./watch.mdx)

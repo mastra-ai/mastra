@@ -1,0 +1,124 @@
+---
+title: ストリーミング作業メモリ
+description: エージェントで作業メモリを使用する例
+---
+
+# ストリーミング作業メモリ
+
+この例では、ユーザーの名前、場所、または好みのような関連する会話の詳細を保持する作業メモリを持つエージェントを作成する方法を示します。
+
+## セットアップ
+
+まず、作業メモリを有効にしてメモリシステムをセットアップします。メモリはデフォルトでLibSQLストレージを使用しますが、必要に応じて他の[ストレージプロバイダー](/docs/agents/agent-memory#storage-options)を使用することもできます。
+
+### テキストストリームモード（デフォルト）
+
+```typescript
+import { Memory } from "@mastra/memory";
+
+const memory = new Memory({
+  options: {
+    workingMemory: {
+      enabled: true,
+      use: "text-stream", // this is the default mode
+    },
+  },
+});
+```
+
+### ツールコールモード
+
+または、作業メモリの更新にツールコールを使用することもできます。このモードは、`toDataStream()`を使用する際に必要です。テキストストリームモードはデータストリーミングと互換性がありません。
+
+```typescript
+const toolCallMemory = new Memory({
+  options: {
+    workingMemory: {
+      enabled: true,
+      use: "tool-call", // Required for toDataStream() compatibility
+    },
+  },
+});
+```
+
+メモリインスタンスをエージェントに追加します。
+
+```typescript
+import { openai } from "@ai-sdk/openai";
+
+const agent = new Agent({
+  name: "Memory agent",
+  instructions: "You are a helpful AI assistant.",
+  model: openai("gpt-4o-mini"),
+  memory, // or toolCallMemory
+});
+```
+
+## 使用例
+
+作業メモリが設定されたので、エージェントと対話し、対話の重要な詳細を記憶することができます。
+
+### テキストストリームモード
+
+テキストストリームモードでは、エージェントは作業メモリの更新を直接応答に含めます：
+
+```typescript
+import { randomUUID } from "crypto";
+import { maskStreamTags } from "@mastra/core/utils";
+
+const threadId = randomUUID();
+const resourceId = "SOME_USER_ID";
+
+const response = await agent.stream("Hello, my name is Jane", {
+  threadId,
+  resourceId,
+});
+
+// 作業メモリタグを隠して応答ストリームを処理
+for await (const chunk of maskStreamTags(
+  response.textStream,
+  "working_memory",
+)) {
+  process.stdout.write(chunk);
+}
+```
+
+### ツールコールモード
+
+ツールコールモードでは、エージェントは専用のツールを使用して作業メモリを更新します：
+
+```typescript
+const toolCallResponse = await toolCallAgent.stream("Hello, my name is Jane", {
+  threadId,
+  resourceId,
+});
+
+// ツールコールを通じて更新が行われるため、作業メモリタグを隠す必要はありません
+for await (const chunk of toolCallResponse.textStream) {
+  process.stdout.write(chunk);
+}
+```
+
+### 応答データの処理
+
+テキストストリームモードでは、応答ストリームに `<working_memory>$data</working_memory>` タグ付きデータが含まれ、`$data` はMarkdown形式のコンテンツです。
+Mastraはこれらのタグを拾い、LLMから返されたデータで作業メモリを自動的に更新します。
+
+このデータをユーザーに表示しないようにするには、上記のように `maskStreamTags` ユーティルを使用できます。
+
+ツールコールモードでは、作業メモリの更新はツールコールを通じて行われるため、タグを隠す必要はありません。
+
+## 概要
+
+この例では以下を示します：
+
+1. テキストストリームモードまたはツールコールモードで作業メモリを有効にしてメモリを設定する
+2. `maskStreamTags` を使用してテキストストリームモードでメモリ更新を隠す
+3. エージェントが両方のモードでインタラクション間に関連するユーザー情報を維持する
+4. 作業メモリの更新を処理するための異なるアプローチ
+
+## 高度なユースケース
+
+作業メモリに関連する情報を制御する方法や、作業メモリが保存されている間の読み込み状態を表示する方法についての例は、[高度な作業メモリの例](/examples/memory/streaming-working-memory-advanced)をご覧ください。
+
+他のメモリタイプやストレージオプションを含むエージェントメモリについて詳しく知るには、[メモリドキュメント](/docs/agents/agent-memory)ページをチェックしてください。

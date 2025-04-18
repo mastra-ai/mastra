@@ -1,0 +1,208 @@
+---
+title: "例：エージェントワークフローの呼び出し | エージェント | Mastra ドキュメント"
+description: Mastraでのエージェントワークフローの作成例。LLM駆動の計画と外部APIの統合を示しています。
+---
+
+import { GithubLink } from "@/components/github-link";
+
+# エージェンティックワークフロー
+
+AIアプリケーションを構築する際、互いの出力に依存する複数のステップを調整する必要がよくあります。この例では、天気データを取得し、それを使用してアクティビティを提案するAIワークフローを作成する方法を示し、外部APIをLLM駆動の計画と統合する方法を示しています。
+
+```ts showLineNumbers copy
+import { Mastra } from "@mastra/core";
+import { Agent } from "@mastra/core/agent";
+import { Step, Workflow } from "@mastra/core/workflows";
+import { z } from "zod";
+import { openai } from "@ai-sdk/openai";
+
+const agent = new Agent({
+  name: 'Weather Agent',
+  instructions: `
+        あなたは天気に基づいた計画に優れた地元のアクティビティと旅行の専門家です。天気データを分析し、実用的なアクティビティの推奨を提供してください。
+        予報の各日に対して、次の形式で回答を構成してください：
+        📅 [曜日, 月 日, 年]
+        ═══════════════════════════
+        🌡️ 天気概要
+        • 状況: [簡単な説明]
+        • 気温: [X°C/Y°F から A°C/B°F]
+        • 降水確率: [X% の確率]
+        🌅 午前のアクティビティ
+        屋外:
+        • [アクティビティ名] - [特定の場所/ルートを含む簡単な説明]
+          最適な時間帯: [特定の時間範囲]
+          注意: [関連する天気の考慮事項]
+        🌞 午後のアクティビティ
+        屋外:
+        • [アクティビティ名] - [特定の場所/ルートを含む簡単な説明]
+          最適な時間帯: [特定の時間範囲]
+          注意: [関連する天気の考慮事項]
+        🏠 屋内の代替案
+        • [アクティビティ名] - [特定の会場を含む簡単な説明]
+          理想的な条件: [この代替案を引き起こす天気条件]
+        ⚠️ 特別な考慮事項
+        • [関連する天気警報、UV指数、風の状況など]
+        ガイドライン:
+        - 1日あたり2〜3つの時間特定の屋外アクティビティを提案
+        - 1〜2つの屋内バックアップオプションを含める
+        - 降水確率が50％を超える場合は、屋内アクティビティを優先
+        - すべてのアクティビティは特定の場所に特化する必要があります
+        - 特定の会場、トレイル、または場所を含める
+        - 気温に基づいてアクティビティの強度を考慮する
+        - 説明は簡潔でありながら情報豊かに保つ
+        一貫性のために、この正確なフォーマットを維持し、示されている絵文字とセクションヘッダーを使用してください。
+      `,
+  model: openai('gpt-4o-mini'),
+});
+
+const fetchWeather = new Step({
+  id: "fetch-weather",
+  description: "指定された都市の天気予報を取得します",
+  inputSchema: z.object({
+    city: z.string().describe("天気を取得する都市"),
+  }),
+  execute: async ({ context }) => {
+    const triggerData = context?.getStepResult<{
+      city: string;
+    }>("trigger");
+
+    if (!triggerData) {
+      throw new Error("トリガーデータが見つかりません");
+    }
+
+    const geocodingUrl = `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(triggerData.city)}&count=1`;
+    const geocodingResponse = await fetch(geocodingUrl);
+    const geocodingData = await geocodingResponse.json();
+
+    if (!geocodingData.results?.[0]) {
+      throw new Error(`場所 '${triggerData.city}' が見つかりません`);
+    }
+
+    const { latitude, longitude, name } = geocodingData.results[0];
+
+    const weatherUrl = `https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&daily=temperature_2m_max,temperature_2m_min,precipitation_probability_mean,weathercode&timezone=auto`;
+    const response = await fetch(weatherUrl);
+    const data = await response.json();
+
+    const forecast = data.daily.time.map((date: string, index: number) => ({
+      date,
+      maxTemp: data.daily.temperature_2m_max[index],
+      minTemp: data.daily.temperature_2m_min[index],
+      precipitationChance: data.daily.precipitation_probability_mean[index],
+      condition: getWeatherCondition(data.daily.weathercode[index]),
+      location: name,
+    }));
+
+    return forecast;
+  },
+});
+
+const forecastSchema = z.array(
+  z.object({
+    date: z.string(),
+    maxTemp: z.number(),
+    minTemp: z.number(),
+    precipitationChance: z.number(),
+    condition: z.string(),
+    location: z.string(),
+  }),
+);
+
+const planActivities = new Step({
+  id: "plan-activities",
+  description: "天気条件に基づいてアクティビティを提案します",
+  inputSchema: forecastSchema,
+  execute: async ({ context, mastra }) => {
+    const forecast =
+      context?.getStepResult<z.infer<typeof forecastSchema>>(
+        "fetch-weather",
+      );
+
+    if (!forecast) {
+      throw new Error("予報データが見つかりません");
+    }
+
+    const prompt = `次の天気予報に基づいて、${forecast[0].location}で適切なアクティビティを提案してください:
+      ${JSON.stringify(forecast, null, 2)}
+      `;
+
+    const response = await agent.stream([
+      {
+        role: "user",
+        content: prompt,
+      },
+    ]);
+
+    let activitiesText = '';
+    
+    for await (const chunk of response.textStream) {
+      process.stdout.write(chunk);
+      activitiesText += chunk;
+    }
+
+    return {
+      activities: activitiesText,
+    };
+  },
+});
+
+function getWeatherCondition(code: number): string {
+  const conditions: Record<number, string> = {
+    0: "晴天",
+    1: "主に晴れ",
+    2: "部分的に曇り",
+    3: "曇り",
+    45: "霧",
+    48: "霧氷の霧",
+    51: "小雨",
+    53: "適度な霧雨",
+    55: "濃い霧雨",
+    61: "小雨",
+    63: "適度な雨",
+    65: "大雨",
+    71: "小雪",
+    73: "適度な降雪",
+    75: "大雪",
+    95: "雷雨",
+  };
+  return conditions[code] || "不明";
+}
+
+const weatherWorkflow = new Workflow({
+  name: "weather-workflow",
+  triggerSchema: z.object({
+    city: z.string().describe("天気を取得する都市"),
+  }),
+})
+  .step(fetchWeather)
+  .then(planActivities);
+
+weatherWorkflow.commit();
+
+const mastra = new Mastra({
+  workflows: {
+    weatherWorkflow,
+  },
+});
+
+async function main() {
+  const { start } = mastra.getWorkflow("weatherWorkflow").createRun();
+
+  const result = await start({
+    triggerData: {
+      city: "London",
+    },
+  });
+
+  console.log("\n \n");
+  console.log(result);
+}
+
+main();
+```
+
+<GithubLink
+  link={
+    "https://github.com/mastra-ai/mastra/blob/main/examples/basics/agents/agentic-workflows"
+  }
+/>

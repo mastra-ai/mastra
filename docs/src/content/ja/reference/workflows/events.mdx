@@ -1,0 +1,305 @@
+---
+title: "イベント駆動型ワークフロー | Mastra ドキュメント"
+description: "MastraでafterEventメソッドとresumeWithEventメソッドを使用してイベント駆動型ワークフローを作成する方法を学びます。"
+---
+
+# イベント駆動ワークフロー
+
+Mastraは、`afterEvent`および`resumeWithEvent`メソッドを通じて、イベント駆動ワークフローの組み込みサポートを提供します。これらのメソッドを使用すると、特定のイベントが発生するのを待っている間に実行を一時停止し、イベントデータが利用可能になったときに再開するワークフローを作成できます。
+
+## 概要
+
+イベント駆動型ワークフローは、次のようなシナリオで役立ちます：
+
+- 外部システムが処理を完了するのを待つ必要がある
+- 特定のポイントでユーザーの承認や入力が必要
+- 非同期操作を調整する必要がある
+- 長時間実行されるプロセスを異なるサービス間で分割して実行する必要がある
+
+## イベントの定義
+
+イベント駆動型の方法を使用する前に、ワークフロー構成でワークフローがリッスンするイベントを定義する必要があります:
+
+```typescript
+import { Workflow } from '@mastra/core/workflows';
+import { z } from 'zod';
+
+const workflow = new Workflow({
+  name: 'approval-workflow',
+  triggerSchema: z.object({ requestId: z.string() }),
+  events: {
+    // Define events with their validation schemas
+    approvalReceived: {
+      schema: z.object({
+        approved: z.boolean(),
+        approverName: z.string(),
+        comment: z.string().optional(),
+      }),
+    },
+    documentUploaded: {
+      schema: z.object({
+        documentId: z.string(),
+        documentType: z.enum(['invoice', 'receipt', 'contract']),
+        metadata: z.record(z.string()).optional(),
+      }),
+    },
+  },
+});
+```
+
+各イベントには、イベントが発生したときに期待されるデータの構造を定義するスキーマと名前が必要です。
+
+## afterEvent()
+
+`afterEvent` メソッドは、特定のイベントを自動的に待機するワークフロー内のサスペンションポイントを作成します。
+
+### 構文
+
+```typescript
+workflow.afterEvent(eventName: string): Workflow
+```
+
+### パラメーター
+
+- `eventName`: 待機するイベントの名前（ワークフローの `events` 設定で定義されている必要があります）
+
+### 戻り値
+
+メソッドチェーンのためのワークフローインスタンスを返します。
+
+### 動作の仕組み
+
+`afterEvent` が呼び出されると、Mastra は次のことを行います：
+
+1. ID `__eventName_event` を持つ特別なステップを作成します
+2. このステップを設定してワークフローの実行を自動的に中断します
+3. イベントが受信された後の継続ポイントを設定します
+
+### 使用例
+
+```typescript
+workflow
+  .step(initialProcessStep)
+  .afterEvent('approvalReceived')  // ワークフローはここで中断します
+  .step(postApprovalStep)          // これはイベント受信後に実行されます
+  .then(finalStep)
+  .commit();
+```
+
+## resumeWithEvent()
+
+`resumeWithEvent` メソッドは、特定のイベントに対するデータを提供することで、一時停止されたワークフローを再開します。
+
+### 構文
+
+```typescript
+run.resumeWithEvent(eventName: string, data: any): Promise<WorkflowRunResult>
+```
+
+### パラメータ
+
+- `eventName`: トリガーされるイベントの名前
+- `data`: イベントデータ（このイベントのために定義されたスキーマに準拠している必要があります）
+
+### 戻り値
+
+再開後のワークフロー実行結果に解決される Promise を返します。
+
+### 動作の仕組み
+
+`resumeWithEvent` が呼び出されると、Mastra は以下を行います：
+
+1. イベントデータをそのイベントのために定義されたスキーマに対して検証します
+2. ワークフローのスナップショットをロードします
+3. イベントデータでコンテキストを更新します
+4. イベントステップから実行を再開します
+5. 後続のステップでワークフローの実行を続行します
+
+### 使用例
+
+```typescript
+// ワークフローの実行を作成
+const run = workflow.createRun();
+
+// ワークフローを開始
+await run.start({ triggerData: { requestId: 'req-123' } });
+
+// 後で、イベントが発生したとき：
+const result = await run.resumeWithEvent('approvalReceived', {
+  approved: true,
+  approverName: 'John Doe',
+  comment: 'Looks good to me!'
+});
+
+console.log(result.results);
+```
+
+## イベントデータへのアクセス
+
+ワークフローがイベントデータで再開されると、そのデータはステップコンテキスト内で `context.inputData.resumedEvent` として利用可能です:
+
+```typescript
+const processApprovalStep = new Step({
+  id: 'processApproval',
+  execute: async ({ context }) => {
+    // イベントデータにアクセス
+    const eventData = context.inputData.resumedEvent;
+
+    return {
+      processingResult: `Processed approval from ${eventData.approverName}`,
+      wasApproved: eventData.approved,
+    };
+  },
+});
+```
+
+## 複数のイベント
+
+さまざまなポイントで複数の異なるイベントを待機するワークフローを作成できます：
+
+```typescript
+workflow
+  .step(createRequest)
+  .afterEvent('approvalReceived')
+  .step(processApproval)
+  .afterEvent('documentUploaded')
+  .step(processDocument)
+  .commit();
+```
+
+複数のイベント停止ポイントを持つワークフローを再開する際には、現在の停止ポイントに対して正しいイベント名とデータを提供する必要があります。
+
+## 実用的な例
+
+この例は、承認とドキュメントのアップロードの両方を必要とする完全なワークフローを示しています：
+
+```typescript
+import { Workflow, Step } from '@mastra/core/workflows';
+import { z } from 'zod';
+
+// Define steps
+const createRequest = new Step({
+  id: 'createRequest',
+  execute: async () => ({ requestId: `req-${Date.now()}` }),
+});
+
+const processApproval = new Step({
+  id: 'processApproval',
+  execute: async ({ context }) => {
+    const approvalData = context.inputData.resumedEvent;
+    return {
+      approved: approvalData.approved,
+      approver: approvalData.approverName,
+    };
+  },
+});
+
+const processDocument = new Step({
+  id: 'processDocument',
+  execute: async ({ context }) => {
+    const documentData = context.inputData.resumedEvent;
+    return {
+      documentId: documentData.documentId,
+      processed: true,
+      type: documentData.documentType,
+    };
+  },
+});
+
+const finalizeRequest = new Step({
+  id: 'finalizeRequest',
+  execute: async ({ context }) => {
+    const requestId = context.steps.createRequest.output.requestId;
+    const approved = context.steps.processApproval.output.approved;
+    const documentId = context.steps.processDocument.output.documentId;
+
+    return {
+      finalized: true,
+      summary: `Request ${requestId} was ${approved ? 'approved' : 'rejected'} with document ${documentId}`
+    };
+  },
+});
+
+// Create workflow
+const requestWorkflow = new Workflow({
+  name: 'document-request-workflow',
+  events: {
+    approvalReceived: {
+      schema: z.object({
+        approved: z.boolean(),
+        approverName: z.string(),
+      }),
+    },
+    documentUploaded: {
+      schema: z.object({
+        documentId: z.string(),
+        documentType: z.enum(['invoice', 'receipt', 'contract']),
+      }),
+    },
+  },
+});
+
+// Build workflow
+requestWorkflow
+  .step(createRequest)
+  .afterEvent('approvalReceived')
+  .step(processApproval)
+  .afterEvent('documentUploaded')
+  .step(processDocument)
+  .then(finalizeRequest)
+  .commit();
+
+// Export workflow
+export { requestWorkflow };
+```
+
+### 例のワークフローを実行する
+
+```typescript
+import { requestWorkflow } from './workflows';
+import { mastra } from './mastra';
+
+async function runWorkflow() {
+  // Get the workflow
+  const workflow = mastra.getWorkflow('document-request-workflow');
+  const run = workflow.createRun();
+
+  // Start the workflow
+  const initialResult = await run.start();
+  console.log('Workflow started:', initialResult.results);
+
+  // Simulate receiving approval
+  const afterApprovalResult = await run.resumeWithEvent('approvalReceived', {
+    approved: true,
+    approverName: 'Jane Smith',
+  });
+  console.log('After approval:', afterApprovalResult.results);
+
+  // Simulate document upload
+  const finalResult = await run.resumeWithEvent('documentUploaded', {
+    documentId: 'doc-456',
+    documentType: 'invoice',
+  });
+  console.log('Final result:', finalResult.results);
+}
+
+runWorkflow().catch(console.error);
+```
+
+## ベストプラクティス
+
+1. **明確なイベントスキーマを定義する**: Zodを使用して、イベントデータの検証のための正確なスキーマを作成する
+2. **説明的なイベント名を使用する**: 目的を明確に伝えるイベント名を選ぶ
+3. **欠落したイベントを処理する**: イベントが発生しない、またはタイムアウトする場合にワークフローが対応できるようにする
+4. **モニタリングを含める**: イベントを待っている一時停止したワークフローを監視するために`watch`メソッドを使用する
+5. **タイムアウトを考慮する**: 発生しない可能性のあるイベントのためにタイムアウトメカニズムを実装する
+6. **イベントを文書化する**: 他の開発者のためにワークフローが依存するイベントを明確に文書化する
+
+## 関連
+
+- [ワークフローでの一時停止と再開](../../workflows/suspend-and-resume.mdx)
+- [ワークフロークラスリファレンス](./workflow.mdx)
+- [再開メソッドリファレンス](./resume.mdx)
+- [ウォッチメソッドリファレンス](./watch.mdx)
+- [アフターイベントリファレンス](./afterEvent.mdx)
+- [イベントで再開リファレンス](./resumeWithEvent.mdx)

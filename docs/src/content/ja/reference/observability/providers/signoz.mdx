@@ -1,0 +1,40 @@
+---
+title: "リファレンス: SigNoz 統合 | Mastra オブザーバビリティ ドキュメント"
+description: SigNozをMastraと統合するためのドキュメント。Mastraは、OpenTelemetryを通じてフルスタック監視を提供するオープンソースのAPMおよびオブザーバビリティプラットフォームです。
+---
+
+# SigNoz
+
+SigNozは、OpenTelemetryを通じてフルスタックの監視機能を提供するオープンソースのAPMおよびオブザーバビリティプラットフォームです。
+
+## 設定
+
+SigNozをMastraと一緒に使用するには、これらの環境変数を設定してください:
+
+```env
+OTEL_EXPORTER_OTLP_ENDPOINT=https://ingest.{region}.signoz.cloud:443
+OTEL_EXPORTER_OTLP_HEADERS=signoz-ingestion-key=your_signoz_token
+```
+
+## 実装
+
+MastraをSigNozで使用するための設定方法は次のとおりです：
+
+```typescript
+import { Mastra } from "@mastra/core";
+
+export const mastra = new Mastra({
+  // ... other config
+  telemetry: {
+    serviceName: "your-service-name",
+    enabled: true,
+    export: {
+      type: "otlp",
+    },
+  },
+});
+```
+
+## ダッシュボード
+
+あなたのSigNozダッシュボードにアクセスするには、[signoz.io](https://signoz.io/)をご覧ください。

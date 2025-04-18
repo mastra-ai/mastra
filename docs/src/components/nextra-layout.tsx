@@ -8,11 +8,13 @@ import { Footer } from "./footer";
 import { Nav } from "./navbar";
 import { SubscribeForm } from "./subscribe-form";
 import { TabSwitcher } from "./tab-switcher";
+import { getSearchPlaceholder } from "./search-placeholder";
 const footer = <Footer />;
 
 export const NextraLayout = ({
   pageMap,
   children,
+  locale
 }: {
   pageMap: PageMapItem[];
   children: React.ReactNode;
@@ -22,8 +24,7 @@ export const NextraLayout = ({
   const isReference = pathname.includes("/reference");
   return (
     <Layout
-      // search={<Search placeholder={getSearchPlaceholder(locale)} />}
-      search={<Search placeholder="Search docs" />}
+      search={<Search placeholder={getSearchPlaceholder(locale)} />}
       navbar={
         <div className="flex  sticky top-0 z-30 bg-[var(--primary-bg)] flex-col">
           <Nav />
@@ -51,10 +52,10 @@ export const NextraLayout = ({
         autoCollapse: true,
         defaultMenuCollapseLevel: isReference ? 1 : 2,
       }}
-      // i18n={[
-      //   { locale: "en", name: "English" },
-      //   { locale: "ja", name: "日本語" },
-      // ]}
+      i18n={[
+        { locale: "en", name: "English" },
+        { locale: "ja", name: "日本語" },
+      ]}
       feedback={{
         content: (
           <T id="_locale_.layout.feedback">Question? Give us feedback</T>

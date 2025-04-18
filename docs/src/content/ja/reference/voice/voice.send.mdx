@@ -1,0 +1,81 @@
+---
+title: "リファレンス: voice.send() | Voice Providers | Mastra Docs"
+description: "リアルタイム音声プロバイダーで利用可能なsend()メソッドのドキュメントで、音声データをストリーミングして継続的に処理します。"
+---
+
+# voice.send()
+
+`send()` メソッドは、音声プロバイダーにリアルタイムで音声データをストリーミングし、継続的に処理します。このメソッドは、リアルタイムの音声対音声の会話に不可欠で、マイク入力を直接AIサービスに送信することができます。
+
+## 使用例
+
+```typescript
+import { OpenAIRealtimeVoice } from "@mastra/voice-openai-realtime";
+import Speaker from "@mastra/node-speaker";
+import { getMicrophoneStream } from "@mastra/node-audio";
+
+const speaker = new Speaker({
+  sampleRate: 24100,  // Audio sample rate in Hz - standard for high-quality audio on MacBook Pro
+  channels: 1,        // Mono audio output (as opposed to stereo which would be 2)
+  bitDepth: 16,       // Bit depth for audio quality - CD quality standard (16-bit resolution)
+});
+
+
+// Initialize a real-time voice provider
+const voice = new OpenAIRealtimeVoice({
+  realtimeConfig: {
+    model: "gpt-4o-mini-realtime",
+    apiKey: process.env.OPENAI_API_KEY,
+  },
+});
+
+// Connect to the real-time service
+await voice.connect();
+
+// Set up event listeners for responses
+voice.on("writing", ({ text, role }) => {
+  console.log(`${role}: ${text}`);
+});
+
+voice.on("speaker", (stream) => {
+  stream.pipe(speaker)
+});
+
+// Get microphone stream (implementation depends on your environment)
+const microphoneStream = getMicrophoneStream();
+
+// Send audio data to the voice provider
+await voice.send(microphoneStream);
+
+// You can also send audio data as Int16Array
+const audioBuffer = getAudioBuffer(); // Assume this returns Int16Array
+await voice.send(audioBuffer);
+```
+
+## パラメータ
+<br/>
+<PropertiesTable
+  content={[
+    {
+      name: "audioData",
+      type: "NodeJS.ReadableStream | Int16Array",
+      description: "音声プロバイダーに送信する音声データ。読み取り可能なストリーム（マイクストリームなど）または音声サンプルのInt16Arrayを指定できます。",
+      isOptional: false,
+    }
+  ]}
+/>
+
+## 戻り値
+
+音声データが音声プロバイダーによって受け入れられたときに解決する`Promise<void>`を返します。
+
+
+## 注意事項
+
+- このメソッドは、音声から音声への機能をサポートするリアルタイム音声プロバイダーでのみ実装されています
+- この機能をサポートしていない音声プロバイダーで呼び出された場合、警告をログに記録して即座に解決します
+- WebSocket接続を確立するには、`send()`を使用する前に`connect()`を呼び出す必要があります
+- 音声フォーマットの要件は、特定の音声プロバイダーによって異なります
+- 継続的な会話では、通常、ユーザーの音声を送信するために`send()`を呼び出し、AIの応答をトリガーするために`answer()`を呼び出します
+- プロバイダーは通常、音声を処理する際に文字起こしされたテキストを含む「writing」イベントを発行します
+- AIが応答すると、プロバイダーは音声応答を含む「speaking」イベントを発行します
