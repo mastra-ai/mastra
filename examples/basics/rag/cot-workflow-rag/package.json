@@ -7,11 +7,18 @@
   },
   "dependencies": {
     "@ai-sdk/openai": "latest",
-    "@mastra/core": "workspace:*",
-    "@mastra/pg": "workspace:*",
-    "@mastra/rag": "workspace:*",
+    "@mastra/core": "latest",
+    "@mastra/pg": "latest",
+    "@mastra/rag": "latest",
     "ai": "latest",
     "zod": "^3.24.2"
   },
-  "version": "0.0.1"
+  "version": "0.0.1",
+  "pnpm": {
+    "overrides": {
+      "@mastra/core": "link:../../../../packages/core",
+      "@mastra/pg": "link:../../../../stores/pg",
+      "@mastra/rag": "link:../../../../packages/rag"
+    }
+  }
 }

@@ -7,7 +7,12 @@
     "start": "pnpx tsx index.ts"
   },
   "dependencies": {
-    "@mastra/evals": "workspace:^"
+    "@mastra/evals": "latest"
+  },
+  "pnpm": {
+    "overrides": {
+      "@mastra/evals": "link:../../../../packages/evals"
+    }
   },
   "devDependencies": {
     "dotenv": "^16.4.7"

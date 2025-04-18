@@ -11,11 +11,16 @@
   "dependencies": {
     "@ai-sdk/anthropic": "^1.1.15",
     "@ai-sdk/react": "^1.1.21",
-    "@mastra/core": "workspace:*",
+    "@mastra/core": "latest",
     "next": "15.1.7",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "zod": "^3.24.2"
+  },
+  "pnpm": {
+    "overrides": {
+      "@mastra/core": "link:../../packages/core"
+    }
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3.3.0",

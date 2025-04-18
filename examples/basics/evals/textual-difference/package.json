@@ -1,13 +1,18 @@
 {
   "name": "examples-textual-difference",
   "private": true,
-  "version": "0.0.0",
+  "version": "0.0.1",
+  "pnpm": {
+    "overrides": {
+      "@mastra/evals": "link:../../../../packages/evals"
+    }
+  },
   "type": "module",
   "scripts": {
     "start": "pnpx tsx index.ts"
   },
   "dependencies": {
-    "@mastra/evals": "workspace:^"
+    "@mastra/evals": "latest"
   },
   "devDependencies": {
     "dotenv": "^16.4.7"

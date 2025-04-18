@@ -7,10 +7,17 @@
   },
   "dependencies": {
     "@ai-sdk/openai": "latest",
-    "@mastra/core": "workspace:*",
-    "@mastra/pg": "workspace:*",
-    "@mastra/rag": "workspace:*",
+    "@mastra/core": "latest",
+    "@mastra/pg": "latest",
+    "@mastra/rag": "latest",
     "ai": "latest"
+  },
+  "pnpm": {
+    "overrides": {
+      "@mastra/core": "link:../../../../packages/core",
+      "@mastra/pg": "link:../../../../stores/pg",
+      "@mastra/rag": "link:../../../../packages/rag"
+    }
   },
   "devDependencies": {
     "dotenv": "^16.4.7"

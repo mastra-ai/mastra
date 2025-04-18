@@ -13,10 +13,10 @@
   "dependencies": {
     "@ai-sdk/openai": "latest",
     "@ai-sdk/react": "^1.2.9",
-    "@mastra/core": "link:../../packages/core",
-    "@mastra/memory": "link:../../packages/memory",
-    "@mastra/pg": "link:../../stores/pg",
- "@next/env": "^15.2.2",
+    "@mastra/core": "latest",
+    "@mastra/memory": "latest",
+    "@mastra/pg": "latest",
+    "@next/env": "^15.2.2",
     "@radix-ui/react-alert-dialog": "^1.1.6",
     "@radix-ui/react-dialog": "^1.1.6",
     "@radix-ui/react-dropdown-menu": "^2.1.11",
@@ -68,6 +68,13 @@
     "tailwindcss-animate": "^1.0.7",
     "usehooks-ts": "^3.1.1",
     "zod": "^3.24.3"
+  },
+  "pnpm": {
+    "overrides": {
+      "@mastra/core": "link:../../packages/core",
+      "@mastra/memory": "link:../../packages/memory",
+      "@mastra/pg": "link:../../stores/pg"
+    }
   },
   "devDependencies": {
     "@tailwindcss/typography": "^0.5.16",

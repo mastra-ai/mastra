@@ -9,11 +9,11 @@
     "lint": "next lint"
   },
   "dependencies": {
-    "@mastra/core": "workspace:*",
-    "@mastra/firecrawl": "workspace:*",
-    "@mastra/github": "workspace:*",
-    "@mastra/loggers": "workspace:*",
-    "@mastra/rag": "workspace:*",
+    "@mastra/core": "latest",
+    "@mastra/firecrawl": "latest",
+    "@mastra/github": "latest",
+    "@mastra/loggers": "latest",
+    "@mastra/rag": "latest",
     "@radix-ui/react-accordion": "^1.2.3",
     "@radix-ui/react-dialog": "^1.1.6",
     "@radix-ui/react-select": "^2.1.6",
@@ -47,5 +47,14 @@
     "react": ">= 0.14.0 || 19",
     "react-dom": ">= 0.14.0 || 19"
   },
-  "version": "0.0.1"
+  "version": "0.0.1",
+  "pnpm": {
+    "overrides": {
+      "@mastra/core": "link:../../packages/core",
+      "@mastra/firecrawl": "link:../../integrations/firecrawl",
+      "@mastra/github": "link:../../integrations/github",
+      "@mastra/loggers": "link:../../packages/loggers",
+      "@mastra/rag": "link:../../packages/rag"
+    }
+  }
 }

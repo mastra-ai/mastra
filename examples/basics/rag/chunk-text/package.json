@@ -6,7 +6,12 @@
     "start": "pnpx tsx index.ts"
   },
   "dependencies": {
-    "@mastra/rag": "workspace:*"
+    "@mastra/rag": "latest"
   },
-  "version": "0.0.1"
+  "version": "0.0.1",
+  "pnpm": {
+    "overrides": {
+      "@mastra/rag": "link:../../../../packages/rag"
+    }
+  }
 }

@@ -1,14 +1,19 @@
 {
   "name": "examples-faithfulness",
   "private": true,
-  "version": "0.0.0",
+  "version": "0.0.1",
   "type": "module",
+  "pnpm": {
+    "overrides": {
+      "@mastra/evals": "link:../../../../packages/evals"
+    }
+  },
   "scripts": {
     "start": "pnpx tsx --env-file .env index.ts"
   },
   "dependencies": {
     "@ai-sdk/openai": "latest",
-    "@mastra/evals": "workspace:^"
+    "@mastra/evals": "latest"
   },
   "devDependencies": {
     "dotenv": "^16.4.7"

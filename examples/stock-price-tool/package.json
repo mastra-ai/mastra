@@ -13,14 +13,20 @@
   "description": "",
   "dependencies": {
     "@ai-sdk/openai": "latest",
-    "@mastra/core": "workspace:*",
+    "@mastra/core": "latest",
     "zod": "^3.24.2"
   },
   "devDependencies": {
     "@jest/globals": "^29.7.0",
     "jest": "^29.7.0",
-    "mastra": "workspace:*",
+    "mastra": "latest",
     "ts-jest": "^29.2.6"
+  },
+  "pnpm": {
+    "overrides": {
+      "@mastra/core": "link:../../packages/core",
+      "mastra": "link:../../packages/cli"
+    }
   },
   "version": "0.0.1"
 }
