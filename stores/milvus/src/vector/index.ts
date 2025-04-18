@@ -123,6 +123,19 @@ export class MilvusVectorStore extends MastraVector {
     throw new Error('Method not implemented.' + args);
   }
 
+  /**
+   * Creates an index on a field in a collection.
+   * If index already exists, it will not throw an error. Also, only one index can be created per field.
+   *
+   * @param args - The arguments for creating the index.
+   * @param args.collectionName - The name of the collection.
+   * @param args.fieldName - The name of the field.
+   * @param args.indexConfig - The configuration for the index.
+   * @param args.metricType - The type of metric to use for the index.
+   * @param args.indexName - The name of the index.
+   * @param args.dimension - The dimension of the index.
+   * @returns A Promise that resolves when the index is created.
+   */
   async createIndex(...args: ParamsToArgs<MilvusCreateIndexParams> | MilvusCreateIndexArgs): Promise<void> {
     try {
       const params = this.normalizeArgs<MilvusCreateIndexParams, MilvusCreateIndexArgs>('createIndex', args, [
@@ -130,6 +143,8 @@ export class MilvusVectorStore extends MastraVector {
         'fieldName',
         'indexConfig',
         'metricType',
+        'indexName',
+        'dimension',
       ]);
 
       const { collectionName, fieldName, dimension, indexName, indexConfig = {}, metricType = MetricType.L2 } = params;
@@ -138,10 +153,15 @@ export class MilvusVectorStore extends MastraVector {
         throw new Error('Missing required parameters: collectionName, fieldName');
       }
 
+      if (indexName) {
+        this.logger.info(
+          `Milvus DB does not support index name. Index name will be ignored. Use '_default_idx' as an index name for quering`,
+        );
+      }
+
       await this.client.createIndex({
         collection_name: collectionName,
         field_name: fieldName,
-        index_name: indexName ?? '',
         index_type: indexConfig.type ?? IndexType.IVF_FLAT,
         metric_type: metricType,
         params: {
@@ -153,8 +173,24 @@ export class MilvusVectorStore extends MastraVector {
     }
   }
 
-  listIndexes(): Promise<string[]> {
-    throw new Error('Method not implemented.');
+  async listIndexes(): Promise<string[]> {
+    try {
+      // Get all collection names
+      const collections = await this.client.showCollections();
+      const collectionNames = collections.data.map(collection => collection.name);
+
+      // Get index names for each collection
+      const indexNames: string[] = [];
+      for (const collectionName of collectionNames) {
+        const response: DescribeIndexResponse = await this.client.describeIndex({
+          collection_name: collectionName,
+        });
+        indexNames.push(...response.index_descriptions.map(index => index.index_name));
+      }
+      return indexNames;
+    } catch (error) {
+      throw new Error('Failed to list indexes: ' + error);
+    }
   }
 
   async describeIndex(collectionName: string): Promise<MilvusIndexStats> {
@@ -173,7 +209,18 @@ export class MilvusVectorStore extends MastraVector {
     }
   }
 
+  async dropIndex(collectionName: string, indexName: string): Promise<void> {
+    try {
+      await this.client.dropIndex({
+        collection_name: collectionName,
+        index_name: indexName,
+      });
+    } catch (error) {
+      throw new Error('Failed to delete index: ' + error);
+    }
+  }
+
   deleteIndex(indexName: string): Promise<void> {
-    throw new Error('Method not implemented.' + indexName);
+    throw new Error(`Method not implemented Use dropIndex instead for ${indexName}`);
   }
 }

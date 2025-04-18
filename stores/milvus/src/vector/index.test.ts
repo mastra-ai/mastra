@@ -1,6 +1,6 @@
 import type { FieldType } from '@zilliz/milvus2-sdk-node';
-import { DataType, IndexType } from '@zilliz/milvus2-sdk-node';
-import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import { DataType, IndexType, MetricType } from '@zilliz/milvus2-sdk-node';
+import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
 import { MilvusVectorStore } from './index';
 
 describe('Milvus Vector tests', () => {
@@ -168,10 +168,11 @@ describe('Milvus Vector tests', () => {
   });
 
   describe('Index operations', () => {
-    const collection_name = `book`;
+    const collectionName = `book`;
+    const indexName = `book_intro_idx`;
 
     beforeAll(async () => {
-      await milvusClient.createCollection(collection_name, [
+      await milvusClient.createCollection(collectionName, [
         {
           name: `book_id`,
           description: `customized primary id`,
@@ -194,21 +195,76 @@ describe('Milvus Vector tests', () => {
     });
 
     afterAll(async () => {
-      await milvusClient.dropCollection(collection_name);
+      await milvusClient.dropCollection(collectionName);
+    });
+
+    beforeEach(async () => {
+      await milvusClient.dropIndex(collectionName, indexName);
     });
 
     it('should create index', async () => {
       await milvusClient.createIndex({
-        collectionName: collection_name,
+        collectionName: collectionName,
         fieldName: 'book_intro',
-        indexName: 'book_intro_idx',
+        indexName: indexName,
+        indexConfig: {
+          type: IndexType.IVF_FLAT,
+        },
+        metricType: MetricType.L2,
+        dimension: 128,
+      });
+
+      const describeResult = await milvusClient.describeIndex(collectionName);
+      console.log('vishesh describeResult', describeResult.indexDescription);
+
+      expect(describeResult).toBeDefined();
+      expect(describeResult.indexDescription).toBeDefined();
+      expect(describeResult.indexDescription.status.error_code).toBe('Success');
+      expect(describeResult.indexDescription.index_descriptions[0].field_name).toBe('book_intro');
+      expect(describeResult.indexDescription.index_descriptions[0].index_name).toBe('_default_idx');
+      expect(describeResult.indexDescription.index_descriptions[0].indexID).toBeDefined();
+      expect(describeResult.indexDescription.index_descriptions[0].params).toBeDefined();
+      expect(describeResult.indexDescription.index_descriptions[0].params).toHaveLength(3);
+    });
+
+    it('should not throw exception while creating two indexes on the same field', async () => {
+      await milvusClient.createIndex({
+        collectionName: collectionName,
+        fieldName: 'book_intro',
+        indexName: indexName,
+        indexConfig: {
+          type: IndexType.IVF_FLAT,
+        },
+        metricType: MetricType.L2,
+        dimension: 128,
+      });
+
+      expect(
+        milvusClient.createIndex({
+          collectionName: collectionName,
+          fieldName: 'book_intro',
+          indexName: indexName,
+          indexConfig: {
+            type: IndexType.IVF_FLAT,
+          },
+          metricType: MetricType.L2,
+          dimension: 128,
+        }),
+      ).resolves.not.toThrowError();
+    });
+
+    it('should create index with HNSW', async () => {
+      await milvusClient.createIndex({
+        collectionName: collectionName,
+        fieldName: 'book_intro',
+        indexName: indexName + '_flat',
         indexConfig: {
           type: IndexType.IVF_FLAT,
         },
         dimension: 128,
       });
 
-      const describeResult = await milvusClient.describeIndex(collection_name);
+      const describeResult = await milvusClient.describeIndex(collectionName);
 
       expect(describeResult).toBeDefined();
       expect(describeResult.indexDescription).toBeDefined();
@@ -220,10 +276,60 @@ describe('Milvus Vector tests', () => {
     });
 
     it('should list indexes', async () => {
-      // const indexes = await milvusClient.listIndexes(collection_name);
-      // expect(indexes).toBeDefined();
-      // expect(indexes.length).toBeGreaterThan(0);
-      // expect(indexes.includes('book_intro')).toBe(true);
+      const indexes = await milvusClient.listIndexes();
+      console.log('vishesh', indexes);
+      expect(indexes).toBeDefined();
+      expect(indexes.length).toBe(3);
+      expect(indexes.includes('_default_idx')).toBe(true);
+    });
+
+    it('should drop index', async () => {
+      const collectionName = `new_book_collection`;
+      const indexName = `book_intro_idx`; // will be ignored by milvus
+
+      // drop existing collection
+      await milvusClient.dropCollection(collectionName);
+
+      // create collection
+      await milvusClient.createCollection(collectionName, [
+        {
+          name: `book_id`,
+          description: `customized primary id`,
+          data_type: DataType.Int64,
+          is_primary_key: true,
+          autoID: false,
+        },
+        {
+          name: `word_count`,
+          description: `word count`,
+          data_type: DataType.Int64,
+        },
+        {
+          name: `book_intro`,
+          description: `word count`,
+          data_type: DataType.FloatVector,
+          dim: 128,
+        },
+      ]);
+
+      await milvusClient.createIndex({
+        collectionName: collectionName,
+        fieldName: 'book_intro',
+        indexName: indexName,
+        indexConfig: {
+          type: IndexType.IVF_FLAT,
+        },
+        dimension: 128,
+      });
+
+      await milvusClient.dropIndex(collectionName, indexName);
+
+      // describe index
+      const describeResult = await milvusClient.describeIndex(collectionName);
+      expect(describeResult).toBeDefined();
+      expect(describeResult.indexDescription).toBeDefined();
+      expect(describeResult.indexDescription.status.error_code).toBe('Success');
+      expect(describeResult.indexDescription.index_descriptions.length).toBe(0);
     });
   });
 });
