@@ -143,7 +143,7 @@ export class Mastra<
     */
     if (this.#telemetry) {
       this.#storage = this.#telemetry.traceClass(storage, {
-        excludeMethods: ['__setTelemetry', '__getTelemetry', '__batchTraceInsert'],
+        excludeMethods: ['__setTelemetry', '__getTelemetry', 'batchTraceInsert'],
       });
       this.#storage.__setTelemetry(this.#telemetry);
     } else {
@@ -423,7 +423,7 @@ This is a warning for now, but will throw an error in the future
 
     if (this.#storage) {
       this.#storage = this.#telemetry.traceClass(this.#storage, {
-        excludeMethods: ['__setTelemetry', '__getTelemetry', '__batchTraceInsert'],
+        excludeMethods: ['__setTelemetry', '__getTelemetry'],
       });
       this.#storage.__setTelemetry(this.#telemetry);
     }
