@@ -46,9 +46,7 @@ export class DevBundler extends Bundler {
     const __dirname = dirname(__filename);
 
     const envFiles = await this.getEnvFiles();
-    const inputOptions = await getWatcherInputOptions(entryFile, 'node', {
-      'process.env.NODE_ENV': JSON.stringify(process.env.NODE_ENV || 'development'),
-    });
+    const inputOptions = await getWatcherInputOptions(entryFile, 'node');
     const toolsInputOptions = await this.getToolsInputOptions(toolsPaths);
 
     await writeTelemetryConfig(entryFile, join(outputDirectory, this.outputDir));
