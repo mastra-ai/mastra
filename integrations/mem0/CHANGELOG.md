@@ -1,5 +1,12 @@
 # @mastra/mem0
 
+## 0.0.6-alpha.6
+
+### Patch Changes
+
+- Updated dependencies [157c741]
+  - @mastra/core@0.9.0-alpha.6
+
 ## 0.0.6-alpha.5
 
 ### Patch Changes

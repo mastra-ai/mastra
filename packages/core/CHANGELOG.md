@@ -1,5 +1,11 @@
 # @mastra/core
 
+## 0.9.0-alpha.6
+
+### Patch Changes
+
+- 157c741: Fix message dupes using processors
+
 ## 0.9.0-alpha.5
 
 ### Patch Changes

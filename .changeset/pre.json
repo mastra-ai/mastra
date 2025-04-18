@@ -145,11 +145,13 @@
     "@mastra/voice-sarvam": "0.1.8",
     "@mastra/voice-speechify": "0.1.13",
     "examples-interactive-story": "0.1.0",
-    "examples-voice-memo-app": "0.1.1"
+    "examples-voice-memo-app": "0.1.1",
+    "@mastra/cloudflare-d1": "0.1.5-alpha.1"
   },
   "changesets": [
     "big-balloons-prove",
     "brave-hornets-refuse",
+    "busy-ways-stick",
     "clever-lions-strive",
     "cold-boxes-end",
     "cool-papers-check",
@@ -159,13 +161,17 @@
     "fancy-frogs-press",
     "flat-pears-invent",
     "free-news-fly",
+    "great-bats-scream",
     "heavy-donkeys-glow",
     "honest-maps-write",
     "legal-areas-add",
     "long-keys-lick",
+    "olive-houses-walk",
     "pink-rules-work",
     "ripe-banks-invent",
+    "rude-buttons-yell",
     "rude-cloths-run",
+    "slick-shrimps-post",
     "stale-moments-camp",
     "violet-dogs-peel"
   ]
