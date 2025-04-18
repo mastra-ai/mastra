@@ -4,6 +4,7 @@ import { MastraMemory } from '@mastra/core/memory';
 import type { MessageType, MemoryConfig, SharedMemoryConfig, StorageThreadType } from '@mastra/core/memory';
 import type { StorageGetMessagesArg } from '@mastra/core/storage';
 import { embedMany } from 'ai';
+import type { FilePart, ImagePart, TextPart } from 'ai';
 
 import xxhash from 'xxhash-wasm';
 import { updateWorkingMemoryTool } from './tools/working-memory';
@@ -321,16 +322,16 @@ export class Memory extends MastraMemory {
     await this.saveWorkingMemory(messages);
 
     // Then strip working memory tags from all messages
-    this.mutateMessagesToHideWorkingMemory(messages);
+    const updatedMessages = this.updateMessagesToHideWorkingMemory(messages);
 
     const config = this.getMergedThreadConfig(memoryConfig);
 
-    const result = this.storage.saveMessages({ messages });
+    const result = this.storage.saveMessages({ messages: updatedMessages });
 
     if (this.vector && config.semanticRecall) {
       let indexName: Promise<string>;
       await Promise.all(
-        messages.map(async message => {
+        updatedMessages.map(async message => {
           if (typeof message.content !== `string` || message.content === '') return;
 
           const { embeddings, chunks, dimension } = await this.embedMessageContent(message.content);
@@ -361,27 +362,44 @@ export class Memory extends MastraMemory {
     return result;
   }
 
-  protected mutateMessagesToHideWorkingMemory(messages: MessageType[]) {
+  protected updateMessagesToHideWorkingMemory(messages: MessageType[]): MessageType[] {
     const workingMemoryRegex = /<working_memory>([^]*?)<\/working_memory>/g;
 
-    for (const [index, message] of messages.entries()) {
-      if (typeof message?.content === `string`) {
-        message.content = message.content.replace(workingMemoryRegex, ``).trim();
-      } else if (Array.isArray(message?.content)) {
-        for (const content of message.content) {
-          if (content.type === `text`) {
-            content.text = content.text.replace(workingMemoryRegex, ``).trim();
-          }
-
-          if (
-            (content.type === `tool-call` || content.type === `tool-result`) &&
-            content.toolName === `updateWorkingMemory`
-          ) {
-            delete messages[index];
-          }
-        }
+    return messages.reduce<MessageType[]>((acc, message) => {
+      if (
+        (message.type === 'tool-call' || message.type === 'tool-result') &&
+        Array.isArray(message.content) &&
+        message.content.some(
+          content =>
+            (content.type === 'tool-call' || content.type === 'tool-result') &&
+            content.toolName === 'updateWorkingMemory',
+        )
+      ) {
+        return acc; // skip this message
       }
-    }
+
+      if (typeof message?.content === 'string') {
+        acc.push({
+          ...message,
+          content: message.content.replace(workingMemoryRegex, '').trim(),
+        });
+      } else if (Array.isArray(message?.content)) {
+        const newContent = message.content.map(content => {
+          if (content.type === 'text') {
+            return {
+              ...content,
+              text: content.text.replace(workingMemoryRegex, '').trim(),
+            };
+          }
+          return { ...content };
+        }) as (TextPart | ImagePart | FilePart)[];
+        acc.push({ ...message, content: newContent });
+      } else {
+        acc.push({ ...message });
+      }
+
+      return acc;
+    }, []);
   }
 
   protected parseWorkingMemory(text: string): string | null {

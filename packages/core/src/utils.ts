@@ -325,7 +325,6 @@ type ToolToConvert = VercelTool | ToolAction<any, any, any>;
 interface LogOptions {
   agentName?: string;
   toolName: string;
-  tool?: ToolToConvert;
   type?: 'tool' | 'toolset' | 'client-tool';
 }
 
@@ -334,7 +333,7 @@ interface LogMessageOptions {
   error: string;
 }
 
-function createLogMessageOptions({ agentName, toolName, tool, type }: LogOptions): LogMessageOptions {
+function createLogMessageOptions({ agentName, toolName, type }: LogOptions): LogMessageOptions {
   // If no agent name, use default format
   if (!agentName) {
     return {
@@ -344,12 +343,11 @@ function createLogMessageOptions({ agentName, toolName, tool, type }: LogOptions
   }
 
   const prefix = `[Agent:${agentName}]`;
-  const vercelPrefix = isVercelTool(tool) ? 'Vercel ' : '';
   const toolType = type === 'toolset' ? 'toolset' : 'tool';
 
   return {
-    start: `${prefix} - Executing ${vercelPrefix}${toolType} ${toolName}`,
-    error: `${prefix} - Failed ${vercelPrefix}${toolType} execution`,
+    start: `${prefix} - Executing ${toolType} ${toolName}`,
+    error: `${prefix} - Failed ${toolType} execution`,
   };
 }
 
@@ -360,7 +358,6 @@ function createExecute(tool: ToolToConvert, options: ToolOptions, logType?: 'too
   const { start, error } = createLogMessageOptions({
     agentName: options.agentName,
     toolName: options.name,
-    tool,
     type: logType,
   });
 
