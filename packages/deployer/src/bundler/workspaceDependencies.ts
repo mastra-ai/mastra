@@ -1,7 +1,7 @@
 import { join } from 'node:path';
 import type { Logger } from '@mastra/core';
 import slugify from '@sindresorhus/slugify';
-import { findWorkspacesRoot } from 'find-workspaces';
+import { findWorkspaces, findWorkspacesRoot } from 'find-workspaces';
 import { ensureDir } from 'fs-extra';
 import { DepsService } from '../services';
 
@@ -14,6 +14,27 @@ type WorkspacePackageInfo = {
 type TransitiveDependencyResult = {
   resolutions: Record<string, string>;
   usedWorkspacePackages: Set<string>;
+};
+
+/**
+ * Creates a map of workspace packages with their metadata for dependency resolution
+ * @returns Map of package names to their location, dependencies and version
+ */
+export const createWorkspacePackageMap = async () => {
+  // TODO move to our own implementation - pkg is 4 years old
+  const workspaces = await findWorkspaces();
+  const workspaceMap = new Map(
+    workspaces?.map(workspace => [
+      workspace.package.name,
+      {
+        location: workspace.location,
+        dependencies: workspace.package.dependencies,
+        version: workspace.package.version,
+      },
+    ]) ?? [],
+  );
+
+  return workspaceMap;
 };
 
 /**

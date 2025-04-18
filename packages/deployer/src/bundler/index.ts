@@ -4,7 +4,6 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { MastraBundler } from '@mastra/core/bundler';
 import virtual from '@rollup/plugin-virtual';
-import { findWorkspaces } from 'find-workspaces';
 import fsExtra, { copy, ensureDir, readJSON, emptyDir } from 'fs-extra/esm';
 import resolveFrom from 'resolve-from';
 import type { InputOptions, OutputOptions } from 'rollup';
@@ -14,7 +13,11 @@ import { createBundler as createBundlerUtil, getInputOptions } from '../build/bu
 import { writeTelemetryConfig } from '../build/telemetry';
 import { DepsService } from '../services/deps';
 import { FileService } from '../services/fs';
-import { collectTransitiveWorkspaceDependencies, packWorkspaceDependencies } from './workspaceDependencies';
+import {
+  collectTransitiveWorkspaceDependencies,
+  createWorkspacePackageMap,
+  packWorkspaceDependencies,
+} from './workspaceDependencies';
 
 export abstract class Bundler extends MastraBundler {
   protected analyzeOutputDir = '.build';
@@ -184,18 +187,7 @@ export abstract class Bundler extends MastraBundler {
 
     await writeTelemetryConfig(mastraEntryFile, join(outputDirectory, this.outputDir));
 
-    const workspaces = await findWorkspaces();
-    const workspaceMap = new Map(
-      workspaces?.map(workspace => [
-        workspace.package.name,
-        {
-          location: workspace.location,
-          dependencies: workspace.package.dependencies,
-          version: workspace.package.version,
-        },
-      ]) ?? [],
-    );
-
+    const workspaceMap = await createWorkspacePackageMap();
     const dependenciesToInstall = new Map<string, string>();
     const workspaceDependencies = new Set<string>();
     for (const dep of analyzedBundleInfo.externalDependencies) {
