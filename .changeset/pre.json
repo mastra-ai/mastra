@@ -143,11 +143,14 @@
     "@mastra/voice-openai-realtime": "0.1.4",
     "@mastra/voice-playai": "0.1.13",
     "@mastra/voice-sarvam": "0.1.8",
-    "@mastra/voice-speechify": "0.1.13"
+    "@mastra/voice-speechify": "0.1.13",
+    "examples-interactive-story": "0.1.0",
+    "examples-voice-memo-app": "0.1.1"
   },
   "changesets": [
     "big-balloons-prove",
     "brave-hornets-refuse",
+    "clever-lions-strive",
     "cold-boxes-end",
     "cool-papers-check",
     "crazy-feet-stay",
@@ -161,6 +164,7 @@
     "legal-areas-add",
     "long-keys-lick",
     "pink-rules-work",
+    "ripe-banks-invent",
     "rude-cloths-run",
     "stale-moments-camp",
     "violet-dogs-peel"
