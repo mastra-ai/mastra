@@ -4,7 +4,6 @@ import { MastraMemory } from '@mastra/core/memory';
 import type { MessageType, MemoryConfig, SharedMemoryConfig, StorageThreadType } from '@mastra/core/memory';
 import type { StorageGetMessagesArg } from '@mastra/core/storage';
 import { embedMany } from 'ai';
-import type { FilePart, ImagePart, TextPart } from 'ai';
 
 import xxhash from 'xxhash-wasm';
 import { updateWorkingMemoryTool } from './tools/working-memory';
@@ -365,25 +364,23 @@ export class Memory extends MastraMemory {
   protected updateMessagesToHideWorkingMemory(messages: MessageType[]): MessageType[] {
     const workingMemoryRegex = /<working_memory>([^]*?)<\/working_memory>/g;
 
-    return messages.reduce<MessageType[]>((acc, message) => {
-      if (
-        (message.type === 'tool-call' || message.type === 'tool-result') &&
-        Array.isArray(message.content) &&
-        message.content.some(
-          content =>
-            (content.type === 'tool-call' || content.type === 'tool-result') &&
-            content.toolName === 'updateWorkingMemory',
-        )
-      ) {
-        return acc; // skip this message
-      }
+    const updatedMessages: MessageType[] = [];
 
-      if (typeof message?.content === 'string') {
-        acc.push({
+    for (const message of messages) {
+      if (typeof message?.content === `string`) {
+        updatedMessages.push({
           ...message,
-          content: message.content.replace(workingMemoryRegex, '').trim(),
+          content: message.content.replace(workingMemoryRegex, ``).trim(),
         });
       } else if (Array.isArray(message?.content)) {
+        const contentIsWorkingMemory = message.content.some(
+          content =>
+            (content.type === `tool-call` || content.type === `tool-result`) &&
+            content.toolName === `updateWorkingMemory`,
+        );
+        if (contentIsWorkingMemory) {
+          continue;
+        }
         const newContent = message.content.map(content => {
           if (content.type === 'text') {
             return {
@@ -392,14 +389,14 @@ export class Memory extends MastraMemory {
             };
           }
           return { ...content };
-        }) as (TextPart | ImagePart | FilePart)[];
-        acc.push({ ...message, content: newContent });
+        }) as MessageType['content'];
+        updatedMessages.push({ ...message, content: newContent });
       } else {
-        acc.push({ ...message });
+        updatedMessages.push({ ...message });
       }
+    }
 
-      return acc;
-    }, []);
+    return updatedMessages;
   }
 
   protected parseWorkingMemory(text: string): string | null {
