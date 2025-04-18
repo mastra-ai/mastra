@@ -1,0 +1,69 @@
+---
+title: "リファレンス: voice.answer() | Voice Providers | Mastra Docs"
+description: "リアルタイム音声プロバイダーで利用可能な answer() メソッドのドキュメントで、音声プロバイダーに応答を生成させるトリガーです。"
+---
+
+# voice.answer()
+
+`answer()` メソッドは、リアルタイムの音声プロバイダーでAIに応答を生成させるために使用されます。このメソッドは、ユーザー入力を受け取った後にAIに応答を明示的に指示する必要がある音声対音声の会話で特に役立ちます。
+
+## 使用例
+
+```typescript
+import { OpenAIRealtimeVoice } from "@mastra/voice-openai-realtime";
+import { getMicrophoneStream } from "@mastra/node-audio";
+import Speaker from "@mastra/node-speaker";
+
+const speaker = new Speaker({
+  sampleRate: 24100,  // Audio sample rate in Hz - standard for high-quality audio on MacBook Pro
+  channels: 1,        // Mono audio output (as opposed to stereo which would be 2)
+  bitDepth: 16,       // Bit depth for audio quality - CD quality standard (16-bit resolution)
+});
+
+// Initialize a real-time voice provider
+const voice = new OpenAIRealtimeVoice({
+  realtimeConfig: {
+    model: "gpt-4o",
+    apiKey: process.env.OPENAI_API_KEY,
+  },
+  speaker: "alloy", // Default voice
+});
+// Connect to the real-time service
+await voice.connect();
+// Register event listener for responses
+voice.on("speaker", (stream) => {
+  // Handle audio response
+  stream.pipe(speaker);
+});
+// Send user audio input
+const microphoneStream = getMicrophoneStream();
+await voice.send(microphoneStream);
+// Trigger the AI to respond
+await voice.answer();
+```
+
+
+## パラメータ
+<br/>
+<PropertiesTable
+  content={[
+    {
+      name: "options",
+      type: "Record<string, unknown>",
+      description: "レスポンスのためのプロバイダー固有のオプション",
+      isOptional: true,
+    }
+  ]}
+/>
+
+## 戻り値
+
+レスポンスがトリガーされたときに解決される`Promise<void>`を返します。
+
+## 注意事項
+
+- このメソッドは、音声対音声機能をサポートするリアルタイム音声プロバイダーでのみ実装されています
+- このメソッドが機能をサポートしていない音声プロバイダーで呼び出された場合、警告をログに記録して即座に解決します
+- 応答音声は通常、直接返されるのではなく、「speaking」イベントを通じて出力されます
+- サポートしているプロバイダーの場合、AIに生成させる代わりに特定の応答を送信するためにこのメソッドを使用できます
+- このメソッドは一般的に、会話のフローを作成するために`send()`と組み合わせて使用されます

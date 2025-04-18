@@ -1,0 +1,88 @@
+---
+title: "リファレンス: .after() | ワークフローの構築 | Mastra ドキュメント"
+description: ワークフローにおける `after()` メソッドのドキュメントで、分岐と統合のパスを可能にします。
+---
+
+# .after()
+
+`.after()` メソッドは、ワークフローのステップ間に明示的な依存関係を定義し、ワークフローの実行における分岐と統合のパスを可能にします。
+
+## 使用法
+
+### 基本的な分岐
+
+```typescript
+workflow
+  .step(stepA)
+    .then(stepB)
+  .after(stepA)  // stepAが完了した後に新しいブランチを作成
+    .step(stepC);
+```
+
+### 複数のブランチのマージ
+
+```typescript
+workflow
+  .step(stepA)
+    .then(stepB)
+  .step(stepC)
+    .then(stepD)
+  .after([stepB, stepD])  // 複数のステップに依存するステップを作成
+    .step(stepE);
+```
+
+## パラメーター
+
+<PropertiesTable
+  content={[
+    {
+      name: "steps",
+      type: "Step | Step[]",
+      description: "続行する前に完了しなければならない単一のステップまたはステップの配列",
+      isOptional: false
+    }
+  ]}
+/>
+
+## 戻り値
+
+<PropertiesTable
+  content={[
+    {
+      name: "workflow",
+      type: "Workflow",
+      description: "メソッドチェーンのためのワークフローインスタンス"
+    }
+  ]}
+/>
+
+## 例
+
+### 単一の依存関係
+
+```typescript
+workflow
+  .step(fetchData)
+  .then(processData)
+  .after(fetchData)  // fetchDataの後に分岐
+  .step(logData);
+```
+
+### 複数の依存関係（ブランチのマージ）
+
+```typescript
+workflow
+  .step(fetchUserData)
+  .then(validateUserData)
+  .step(fetchProductData)
+  .then(validateProductData)
+  .after([validateUserData, validateProductData])  // 両方の検証が完了するのを待つ
+  .step(processOrder);
+```
+
+## 関連
+
+- [Branching Paths の例](../../../examples/workflows/branching-paths.mdx)
+- [Workflow クラスリファレンス](./workflow.mdx)
+- [ステップリファレンス](./step-class.mdx)
+- [制御フローガイド](../../workflows/control-flow.mdx#merging-multiple-branches)

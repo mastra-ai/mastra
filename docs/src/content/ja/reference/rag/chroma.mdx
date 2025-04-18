@@ -1,0 +1,281 @@
+---
+title: "リファレンス: Chroma Vector Store | ベクターデータベース | RAG | Mastra ドキュメント"
+description: MastraのChromaVectorクラスのドキュメントで、ChromaDBを使用したベクター検索を提供します。
+---
+
+# Chroma Vector Store
+
+ChromaVector クラスは、オープンソースの埋め込みデータベースである [ChromaDB](https://www.trychroma.com/) を使用したベクター検索を提供します。
+メタデータフィルタリングとハイブリッド検索機能を備えた効率的なベクター検索を提供します。
+
+## コンストラクタオプション
+
+<PropertiesTable
+  content={[
+    {
+      name: "path",
+      type: "string",
+      description: "ChromaDBインスタンスへのURLパス",
+    },
+    {
+      name: "auth",
+      type: "object",
+      isOptional: true,
+      description: "認証設定",
+    },
+  ]}
+/>
+
+### auth
+
+<PropertiesTable
+  content={[
+    {
+      name: "provider",
+      type: "string",
+      description: "認証プロバイダー",
+    },
+    {
+      name: "credentials",
+      type: "string",
+      description: "認証資格情報",
+    },
+  ]}
+/>
+
+## メソッド
+
+### createIndex()
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "作成するインデックスの名前",
+    },
+    {
+      name: "dimension",
+      type: "number",
+      description: "ベクトルの次元（埋め込みモデルに一致する必要があります）",
+    },
+    {
+      name: "metric",
+      type: "'cosine' | 'euclidean' | 'dotproduct'",
+      isOptional: true,
+      defaultValue: "cosine",
+      description: "類似検索のための距離メトリック",
+    },
+  ]}
+/>
+
+### upsert()
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "アップサートするインデックスの名前",
+    },
+    {
+      name: "vectors",
+      type: "number[][]",
+      description: "埋め込みベクトルの配列",
+    },
+    {
+      name: "metadata",
+      type: "Record<string, any>[]",
+      isOptional: true,
+      description: "各ベクトルのメタデータ",
+    },
+    {
+      name: "ids",
+      type: "string[]",
+      isOptional: true,
+      description: "オプションのベクトルID（提供されない場合は自動生成）",
+    },
+    {
+      name: "documents",
+      type: "string[]",
+      isOptional: true,
+      description:
+        "Chroma固有: ベクトルに関連付けられた元のテキストドキュメント",
+    },
+  ]}
+/>
+
+### query()
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "クエリを実行するインデックスの名前",
+    },
+    {
+      name: "queryVector",
+      type: "number[]",
+      description: "類似ベクトルを見つけるためのクエリベクトル",
+    },
+    {
+      name: "topK",
+      type: "number",
+      isOptional: true,
+      defaultValue: "10",
+      description: "返す結果の数",
+    },
+    {
+      name: "filter",
+      type: "Record<string, any>",
+      isOptional: true,
+      description: "クエリのメタデータフィルター",
+    },
+    {
+      name: "includeVector",
+      type: "boolean",
+      isOptional: true,
+      defaultValue: "false",
+      description: "結果にベクトルを含めるかどうか",
+    },
+    {
+      name: "documentFilter",
+      type: "Record<string, any>",
+      isOptional: true,
+      description: "Chroma固有: ドキュメント内容に適用するフィルター",
+    },
+  ]}
+/>
+
+### listIndexes()
+
+文字列としてインデックス名の配列を返します。
+
+### describeIndex()
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "説明するインデックスの名前",
+    },
+  ]}
+/>
+
+返される内容:
+
+```typescript copy
+interface IndexStats {
+  dimension: number;
+  count: number;
+  metric: "cosine" | "euclidean" | "dotproduct";
+}
+```
+
+### deleteIndex()
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "削除するインデックスの名前",
+    },
+  ]}
+/>
+
+### updateIndexById()
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "更新するベクトルを含むインデックスの名前",
+    },
+    {
+      name: "id",
+      type: "string",
+      description: "更新するベクトルのID",
+    },
+    {
+      name: "update",
+      type: "object",
+      description: "更新パラメータ",
+    },
+  ]}
+/>
+
+`update` オブジェクトには以下を含めることができます:
+
+<PropertiesTable
+  content={[
+    {
+      name: "vector",
+      type: "number[]",
+      isOptional: true,
+      description: "既存のものを置き換える新しいベクトル",
+    },
+    {
+      name: "metadata",
+      type: "Record<string, any>",
+      isOptional: true,
+      description: "既存のメタデータを置き換える新しいメタデータ",
+    },
+  ]}
+/>
+
+### deleteIndexById()
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "削除するベクトルを含むインデックスの名前",
+    },
+    {
+      name: "id",
+      type: "string",
+      description: "削除するベクトルのID",
+    },
+  ]}
+/>
+
+## 応答タイプ
+
+クエリ結果は次の形式で返されます:
+
+```typescript copy
+interface QueryResult {
+  id: string;
+  score: number;
+  metadata: Record<string, any>;
+  document?: string; // Chroma-specific: Original document if it was stored
+  vector?: number[]; // Only included if includeVector is true
+}
+```
+
+## エラーハンドリング
+
+ストアはキャッチ可能な型付きエラーをスローします：
+
+```typescript copy
+try {
+  await store.query({
+    indexName: "index_name",
+    queryVector: queryVector,
+  });
+} catch (error) {
+  if (error instanceof VectorStoreError) {
+    console.log(error.code); // 'connection_failed' | 'invalid_dimension' | etc
+    console.log(error.details); // 追加のエラーコンテキスト
+  }
+}
+```
+
+## 関連
+
+- [メタデータフィルター](./metadata-filters)

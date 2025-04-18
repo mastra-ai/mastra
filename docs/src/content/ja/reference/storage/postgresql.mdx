@@ -1,0 +1,93 @@
+---
+title: "PostgreSQL ストレージ | ストレージシステム | Mastra Core"
+description: MastraにおけるPostgreSQLストレージ実装のドキュメント。
+---
+
+# PostgreSQL ストレージ
+
+PostgreSQL ストレージの実装は、PostgreSQL データベースを使用した本番環境対応のストレージソリューションを提供します。
+
+## インストール
+
+```bash
+npm install @mastra/pg
+```
+
+## 使用法
+
+```typescript copy showLineNumbers
+import { PostgresStore } from "@mastra/pg";
+
+const storage = new PostgresStore({
+  connectionString: process.env.DATABASE_URL,
+});
+```
+
+## パラメータ
+
+<PropertiesTable
+  content={[
+    {
+      name: "connectionString",
+      type: "string",
+      description:
+        "PostgreSQL接続文字列（例：postgresql://user:pass@host:5432/dbname）",
+      isOptional: false,
+    },
+    {
+      name: "schemaName",
+      type: "string",
+      description: 
+        "ストレージが使用するスキーマの名前。提供されない場合はデフォルトのスキーマを使用します。",
+      isOptional: true,
+    }
+  ]}
+/>
+
+## コンストラクタの例
+
+以下の方法で `PostgresStore` をインスタンス化できます：
+
+```ts
+import { PostgresStore } from '@mastra/pg';
+
+// 接続文字列のみを使用
+const store1 = new PostgresStore({
+  connectionString: 'postgresql://user:password@localhost:5432/mydb',
+});
+
+// カスタムスキーマ名を持つ接続文字列を使用
+const store2 = new PostgresStore({
+  connectionString: 'postgresql://user:password@localhost:5432/mydb',
+  schemaName: 'custom_schema', // オプション
+});
+
+// 個別の接続パラメータを使用
+const store4 = new PostgresStore({
+  host: 'localhost',
+  port: 5432,
+  database: 'mydb',
+  user: 'user',
+  password: 'password',
+});
+
+// スキーマ名を含む個別のパラメータ
+const store5 = new PostgresStore({
+  host: 'localhost',
+  port: 5432,
+  database: 'mydb',
+  user: 'user',
+  password: 'password',
+  schemaName: 'custom_schema', // オプション
+});
+```
+
+## 追加の注意事項
+
+### スキーマ管理
+
+ストレージの実装は、スキーマの作成と更新を自動的に処理します。以下のテーブルを作成します：
+
+- `threads`: 会話スレッドを保存
+- `messages`: 個々のメッセージを保存
+- `metadata`: スレッドとメッセージの追加メタデータを保存

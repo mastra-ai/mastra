@@ -1,0 +1,334 @@
+---
+title: "リファレンス: Agent.generate() | Agents | Mastra ドキュメント"
+description: "Mastra エージェントの `.generate()` メソッドに関するドキュメントで、テキストまたは構造化された応答を生成します。"
+---
+
+# Agent.generate()
+
+`generate()` メソッドは、エージェントと対話してテキストまたは構造化された応答を生成するために使用されます。このメソッドは、`messages` とオプションの `options` オブジェクトをパラメータとして受け取ります。
+
+## パラメータ
+
+### `messages`
+
+`messages` パラメータは以下のいずれかです:
+
+- 単一の文字列
+- 文字列の配列
+- `role` と `content` プロパティを持つメッセージオブジェクトの配列
+
+メッセージオブジェクトの構造:
+
+```typescript
+interface Message {
+  role: 'system' | 'user' | 'assistant';
+  content: string;
+}
+```
+
+### `options` (オプション)
+
+出力構造、メモリ管理、ツール使用、テレメトリなどの設定を含めることができるオプションのオブジェクト。
+
+<PropertiesTable
+  content={[
+    {
+      name: "abortSignal",
+      type: "AbortSignal",
+      isOptional: true,
+      description: "エージェントの実行を中止するためのシグナルオブジェクト。シグナルが中止されると、すべての進行中の操作が終了します。",
+    },
+    {
+      name: "context",
+      type: "CoreMessage[]",
+      isOptional: true,
+      description: "エージェントに提供する追加のコンテキストメッセージ。",
+    },
+    {
+      name: "experimental_output",
+      type: "Zod schema | JsonSchema7",
+      isOptional: true,
+      description: "テキスト生成とツール呼び出しに加えて構造化出力生成を有効にします。モデルは提供されたスキーマに準拠した応答を生成します。",
+    },
+    {
+      name: "instructions",
+      type: "string",
+      isOptional: true,
+      description: "この特定の生成のためにエージェントのデフォルトの指示を上書きするカスタム指示。新しいエージェントインスタンスを作成せずにエージェントの動作を動的に変更するのに便利です。",
+    },
+    {
+      name: "output",
+      type: "Zod schema | JsonSchema7",
+      isOptional: true,
+      description: "出力の期待される構造を定義します。JSONスキーマオブジェクトまたはZodスキーマであることができます。",
+    },
+    {
+      name: "maxSteps",
+      type: "number",
+      isOptional: true,
+      defaultValue: "5",
+      description: "許可される最大実行ステップ数。",
+    },
+    {
+      name: "maxRetries",
+      type: "number",
+      isOptional: true,
+      defaultValue: "2",
+      description: "最大リトライ回数。リトライを無効にするには0に設定します。",
+    },
+    {
+      name: "memoryOptions",
+      type: "MemoryConfig",
+      isOptional: true,
+      description: "メモリ管理のための設定オプション。詳細は以下のMemoryConfigセクションを参照してください。",
+    },
+    {
+      name: "onStepFinish",
+      type: "GenerateTextOnStepFinishCallback<any> | never",
+      isOptional: true,
+      description: "各実行ステップ後に呼び出されるコールバック関数。ステップの詳細をJSON文字列として受け取ります。構造化出力には利用できません。",
+    },
+    {
+      name: "resourceId",
+      type: "string",
+      isOptional: true,
+      description: "エージェントと対話するユーザーまたはリソースの識別子。threadIdが提供されている場合は必ず提供する必要があります。",
+    },
+    {
+      name: "telemetry",
+      type: "TelemetrySettings",
+      isOptional: true,
+      description: "生成中のテレメトリ収集のための設定。詳細は以下のTelemetrySettingsセクションを参照してください。",
+    },
+    {
+      name: "temperature",
+      type: "number",
+      isOptional: true,
+      description: "モデルの出力のランダム性を制御します。高い値（例: 0.8）は出力をよりランダムにし、低い値（例: 0.2）はより集中し決定的にします。",
+    },
+    {
+      name: "threadId",
+      type: "string",
+      isOptional: true,
+      description: "会話スレッドの識別子。複数の対話にわたってコンテキストを維持することを可能にします。resourceIdが提供されている場合は必ず提供する必要があります。",
+    },
+    {
+      name: "toolChoice",
+      type: "'auto' | 'none' | 'required' | { type: 'tool'; toolName: string }",
+      isOptional: true,
+      defaultValue: "'auto'",
+      description: "生成中にエージェントがツールを使用する方法を制御します。",
+    },
+    {
+      name: "toolsets",
+      type: "ToolsetsInput",
+      isOptional: true,
+      description: "生成中にエージェントが利用できる追加のツールセット。",
+    },
+  ]}
+/>
+
+#### MemoryConfig
+
+メモリ管理のための設定オプション:
+
+<PropertiesTable
+  content={[
+    {
+      name: "lastMessages",
+      type: "number | false",
+      isOptional: true,
+      description: "コンテキストに含める最新メッセージの数。無効にするにはfalseに設定します。",
+    },
+    {
+      name: "semanticRecall",
+      type: "boolean | object",
+      isOptional: true,
+      description: "セマンティックメモリリコールの設定。booleanまたは詳細な設定が可能です。",
+      properties: [
+        {
+          type: "number",
+          parameters: [
+            {
+              name: "topK",
+              type: "number",
+              isOptional: true,
+              description: "セマンティック的に最も類似したメッセージを取得する数。",
+            }
+          ]
+        },
+        {
+          type: "number | object",
+          parameters: [
+            {
+              name: "messageRange",
+              type: "number | { before: number; after: number }",
+              isOptional: true,
+              description: "セマンティック検索のために考慮するメッセージの範囲。単一の数値またはbefore/afterの設定が可能です。",
+            }
+          ]
+        }
+      ]
+    },
+    {
+      name: "workingMemory",
+      type: "object",
+      isOptional: true,
+      description: "ワーキングメモリの設定。",
+      properties: [
+        {
+          type: "boolean",
+          parameters: [
+            {
+              name: "enabled", 
+              type: "boolean", 
+              isOptional: true, 
+              description: "ワーキングメモリを有効にするかどうか。"
+            }
+          ]
+        },
+        {
+          type: "string",
+          parameters: [
+            {
+              name: "template",
+              type: "string",
+              isOptional: true,
+              description: "ワーキングメモリに使用するテンプレート。",
+            }
+          ]
+        },
+        {
+          type: "'text-stream' | 'tool-call'",
+          parameters: [
+            {
+              name: "type",
+              type: "'text-stream' | 'tool-call'",
+              isOptional: true,
+              description: "ワーキングメモリに使用するコンテンツのタイプ。",
+            }
+          ]
+        }
+      ]
+    },
+    {
+      name: "threads",
+      type: "object",
+      isOptional: true,
+      description: "スレッド固有のメモリ設定。",
+      properties: [
+        {
+          type: "boolean",
+          parameters: [
+            {
+              name: "generateTitle",
+              type: "boolean",
+              isOptional: true,
+              description: "新しいスレッドのタイトルを自動生成するかどうか。",
+            }
+          ]
+        }
+      ]
+    }
+  ]}
+/>
+
+#### TelemetrySettings
+
+生成中のテレメトリ収集の設定：
+
+<PropertiesTable
+  content={[
+    {
+      name: "isEnabled",
+      type: "boolean",
+      isOptional: true,
+      defaultValue: "false",
+      description: "テレメトリを有効または無効にします。実験的なためデフォルトでは無効です。",
+    },
+    {
+      name: "recordInputs",
+      type: "boolean",
+      isOptional: true,
+      defaultValue: "true",
+      description: "入力の記録を有効または無効にします。機密情報の記録を避けたり、データ転送を減らしたり、パフォーマンスを向上させるために無効にすることができます。",
+    },
+    {
+      name: "recordOutputs",
+      type: "boolean",
+      isOptional: true,
+      defaultValue: "true",
+      description: "出力の記録を有効または無効にします。機密情報の記録を避けたり、データ転送を減らしたり、パフォーマンスを向上させるために無効にすることができます。",
+    },
+    {
+      name: "functionId",
+      type: "string",
+      isOptional: true,
+      description: "この関数の識別子。テレメトリデータを関数ごとにグループ化するために使用されます。",
+    },
+    {
+      name: "metadata",
+      type: "Record<string, AttributeValue>",
+      isOptional: true,
+      description: "テレメトリデータに含める追加情報。AttributeValueは文字列、数値、ブール値、これらの型の配列、またはnullであることができます。",
+    },
+    {
+      name: "tracer",
+      type: "Tracer",
+      isOptional: true,
+      description: "テレメトリデータに使用するカスタムOpenTelemetryトレーサーインスタンス。詳細はOpenTelemetryのドキュメントを参照してください。",
+    }
+  ]}
+/>
+
+## 戻り値
+
+`generate()`メソッドの戻り値は、提供されたオプション、特に`output`オプションによって異なります。
+
+### 戻り値のプロパティテーブル
+
+<PropertiesTable
+  content={[
+    {
+      name: "text",
+      type: "string",
+      isOptional: true,
+      description: "生成されたテキスト応答。outputが'text'の場合（スキーマが提供されていない場合）に存在します。",
+    },
+    {
+      name: "object",
+      type: "object",
+      isOptional: true,
+      description: "生成された構造化された応答。`output`または`experimental_output`を通じてスキーマが提供された場合に存在します。",
+    },
+    {
+      name: "toolCalls",
+      type: "Array<ToolCall>",
+      isOptional: true,
+      description: "生成プロセス中に行われたツール呼び出し。テキストモードとオブジェクトモードの両方に存在します。",
+    }
+  ]}
+/>
+
+#### ToolCall構造
+
+<PropertiesTable
+  content={[
+    {
+      name: "toolName",
+      type: "string",
+      required: true,
+      description: "呼び出されたツールの名前。",
+    },
+    {
+      name: "args",
+      type: "any",
+      required: true,
+      description: "ツールに渡された引数。",
+    }
+  ]}
+/>
+
+## 関連メソッド
+
+リアルタイムストリーミング応答については、[`stream()`](./stream.mdx) メソッドのドキュメントを参照してください。

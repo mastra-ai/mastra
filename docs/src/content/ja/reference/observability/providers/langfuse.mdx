@@ -1,0 +1,51 @@
+---
+title: "リファレンス: Langfuse 統合 | Mastra オブザーバビリティ ドキュメント"
+description: LLM アプリケーション向けのオープンソースオブザーバビリティプラットフォームである Mastra と Langfuse を統合するためのドキュメント。
+---
+
+# Langfuse
+
+Langfuseは、LLMアプリケーション向けに特別に設計されたオープンソースのオブザーバビリティプラットフォームです。
+
+> **注**: 現在、AI関連の呼び出しのみが詳細なテレメトリーデータを含みます。他の操作はトレースを作成しますが、情報は限られています。
+
+## 設定
+
+LangfuseをMastraと一緒に使用するには、次の環境変数を設定する必要があります:
+
+```env
+LANGFUSE_PUBLIC_KEY=your_public_key
+LANGFUSE_SECRET_KEY=your_secret_key
+LANGFUSE_BASEURL=https://cloud.langfuse.com  # オプション - デフォルトはcloud.langfuse.com
+```
+
+**重要**: テレメトリーエクスポート設定を構成する際、Langfuseの統合が正しく機能するためには、`traceName`パラメータを`"ai"`に設定する必要があります。
+
+## 実装
+
+こちらは、MastraをLangfuseで使用するための設定方法です：
+
+```typescript
+import { Mastra } from "@mastra/core";
+import { LangfuseExporter } from "langfuse-vercel";
+
+export const mastra = new Mastra({
+  // ... other config
+  telemetry: {
+    serviceName: "ai", // this must be set to "ai" so that the LangfuseExporter thinks it's an AI SDK trace
+    enabled: true,
+    export: {
+      type: "custom",
+      exporter: new LangfuseExporter({
+        publicKey: process.env.LANGFUSE_PUBLIC_KEY,
+        secretKey: process.env.LANGFUSE_SECRET_KEY,
+        baseUrl: process.env.LANGFUSE_BASEURL,
+      }),
+    },
+  },
+});
+```
+
+## ダッシュボード
+
+設定が完了すると、[cloud.langfuse.com](https://cloud.langfuse.com) のLangfuseダッシュボードでトレースと分析を表示できます。

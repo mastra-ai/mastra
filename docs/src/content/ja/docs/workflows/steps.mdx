@@ -1,0 +1,108 @@
+---
+title: "ステップの作成とワークフローへの追加 | Mastra ドキュメント"
+description: "Mastra ワークフローのステップは、入力、出力、および実行ロジックを定義することによって、操作を管理するための構造化された方法を提供します。"
+---
+
+# ワークフローにおけるステップの定義
+
+ワークフローを構築する際には、通常、操作をリンクして再利用できる小さなタスクに分解します。ステップは、入力、出力、および実行ロジックを定義することによって、これらのタスクを管理するための構造化された方法を提供します。
+
+以下のコードは、これらのステップをインラインまたは別々に定義する方法を示しています。
+
+## インラインステップの作成
+
+`.step()` と `.then()` を使用して、ワークフロー内で直接ステップを作成できます。このコードは、2つのステップを順番に定義、リンク、実行する方法を示しています。
+
+```typescript showLineNumbers filename="src/mastra/workflows/index.ts" copy
+import { Step, Workflow, Mastra } from "@mastra/core";
+import { z } from "zod";
+
+export const myWorkflow = new Workflow({
+  name: "my-workflow",
+  triggerSchema: z.object({
+    inputValue: z.number(),
+  }),
+});
+
+myWorkflow
+  .step(
+    new Step({
+      id: "stepOne",
+      outputSchema: z.object({
+        doubledValue: z.number(),
+      }),
+      execute: async ({ context }) => ({
+        doubledValue: context.triggerData.inputValue * 2,
+      }),
+    }),
+  )
+  .then(
+    new Step({
+      id: "stepTwo",
+      outputSchema: z.object({
+        incrementedValue: z.number(),
+      }),
+      execute: async ({ context }) => {
+        if (context.steps.stepOne.status !== "success") {
+          return { incrementedValue: 0 };
+        }
+
+        return { incrementedValue: context.steps.stepOne.output.doubledValue + 1 };
+      },
+    }),
+  ).commit();
+
+  // Register the workflow with Mastra
+  export const mastra = new Mastra({
+    workflows: { myWorkflow },
+  });
+```
+
+## ステップを個別に作成する
+
+ステップのロジックを別々のエンティティで管理したい場合は、ステップを外部で定義してからワークフローに追加することができます。このコードは、ステップを独立して定義し、その後リンクする方法を示しています。
+
+```typescript showLineNumbers filename="src/mastra/workflows/index.ts" copy
+import { Step, Workflow, Mastra } from "@mastra/core";
+import { z } from "zod";
+
+// Define steps separately
+const stepOne = new Step({
+  id: "stepOne",
+  outputSchema: z.object({
+    doubledValue: z.number(),
+  }),
+  execute: async ({ context }) => ({
+    doubledValue: context.triggerData.inputValue * 2,
+  }),
+});
+
+const stepTwo = new Step({
+  id: "stepTwo",
+  outputSchema: z.object({
+    incrementedValue: z.number(),
+  }),
+  execute: async ({ context }) => {
+    if (context.steps.stepOne.status !== "success") {
+      return { incrementedValue: 0 };
+    }
+    return { incrementedValue: context.steps.stepOne.output.doubledValue + 1 };
+  },
+});
+
+// Build the workflow
+const myWorkflow = new Workflow({
+  name: "my-workflow",
+  triggerSchema: z.object({
+    inputValue: z.number(),
+  }),
+});
+
+myWorkflow.step(stepOne).then(stepTwo);
+myWorkflow.commit();
+
+// Register the workflow with Mastra
+export const mastra = new Mastra({
+  workflows: { myWorkflow },
+});
+```

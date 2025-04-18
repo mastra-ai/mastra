@@ -1,0 +1,183 @@
+---
+title: "リファレンス: コンテンツ類似性 | Evals | Mastra Docs"
+description: Mastraのコンテンツ類似性メトリックに関するドキュメント。文字列間のテキスト類似性を測定し、マッチングスコアを提供します。
+---
+
+# ContentSimilarityMetric
+
+`ContentSimilarityMetric` クラスは、2つの文字列間のテキスト類似性を測定し、それらがどれほど一致しているかを示すスコアを提供します。大文字と小文字の区別や空白の処理に関する設定可能なオプションをサポートしています。
+
+## 基本的な使用法
+
+```typescript
+import { ContentSimilarityMetric } from "@mastra/evals/nlp";
+
+const metric = new ContentSimilarityMetric({
+  ignoreCase: true,
+  ignoreWhitespace: true
+});
+
+const result = await metric.measure(
+  "Hello, world!",
+  "hello world"
+);
+
+console.log(result.score); // 0から1までの類似度スコア
+console.log(result.info); // 詳細な類似度メトリクス
+```
+
+## コンストラクタのパラメータ
+
+<PropertiesTable
+  content={[
+    {
+      name: "options",
+      type: "ContentSimilarityOptions",
+      description: "類似性比較のための設定オプション",
+      isOptional: true,
+      defaultValue: "{ ignoreCase: true, ignoreWhitespace: true }",
+    }
+  ]}
+/>
+
+### ContentSimilarityOptions
+
+<PropertiesTable
+  content={[
+    {
+      name: "ignoreCase",
+      type: "boolean",
+      description: "文字列を比較する際に大文字と小文字の違いを無視するかどうか",
+      isOptional: true,
+      defaultValue: "true",
+    },
+    {
+      name: "ignoreWhitespace",
+      type: "boolean",
+      description: "文字列を比較する際に空白を正規化するかどうか",
+      isOptional: true,
+      defaultValue: "true",
+    }
+  ]}
+/>
+
+## measure() パラメーター
+
+<PropertiesTable
+  content={[
+    {
+      name: "input",
+      type: "string",
+      description: "比較対象の参照テキスト",
+      isOptional: false,
+    },
+    {
+      name: "output",
+      type: "string",
+      description: "類似性を評価するテキスト",
+      isOptional: false,
+    }
+  ]}
+/>
+
+## 戻り値
+
+<PropertiesTable
+  content={[
+    {
+      name: "score",
+      type: "number",
+      description: "1が完全な類似性を示す類似スコア (0-1)",
+    },
+    {
+      name: "info",
+      type: "object",
+      description: "詳細な類似性メトリクス",
+      properties: [
+        {
+          type: "number",
+          parameters: [
+            {
+              name: "similarity",
+              type: "number",
+              description: "2つのテキスト間の生の類似スコア",
+            }
+          ]
+        }
+      ]
+    },
+  ]}
+/>
+
+## スコアリングの詳細
+
+このメトリックは、文字レベルのマッチングと設定可能なテキスト正規化を通じてテキストの類似性を評価します。
+
+### スコアリングプロセス
+
+1. テキストを正規化します:
+   - 大文字小文字の正規化（ignoreCase: true の場合）
+   - 空白の正規化（ignoreWhitespace: true の場合）
+
+2. 処理された文字列を文字列類似性アルゴリズムで比較します:
+   - 文字シーケンスを分析
+   - 単語の境界を整列
+   - 相対的な位置を考慮
+   - 長さの違いを考慮
+
+最終スコア: `similarity_value * scale`
+
+### スコアの解釈
+(0 から scale、デフォルト 0-1)
+- 1.0: 完全一致 - 同一のテキスト
+- 0.7-0.9: 高い類似性 - ほとんど一致する内容
+- 0.4-0.6: 中程度の類似性 - 部分的な一致
+- 0.1-0.3: 低い類似性 - 一部の一致パターン
+- 0.0: 類似性なし - 完全に異なるテキスト
+
+## 異なるオプションの例
+
+```typescript
+import { ContentSimilarityMetric } from "@mastra/evals/nlp";
+
+// 大文字と小文字を区別する比較
+const caseSensitiveMetric = new ContentSimilarityMetric({
+  ignoreCase: false,
+  ignoreWhitespace: true
+});
+
+const result1 = await caseSensitiveMetric.measure(
+  "Hello World",
+  "hello world"
+); // 大文字と小文字の違いによりスコアが低くなる
+
+// 出力例:
+// {
+//   score: 0.75,
+//   info: { similarity: 0.75 }
+// }
+
+// 厳密な空白の比較
+const strictWhitespaceMetric = new ContentSimilarityMetric({
+  ignoreCase: true,
+  ignoreWhitespace: false
+});
+
+const result2 = await strictWhitespaceMetric.measure(
+  "Hello   World",
+  "Hello World"
+); // 空白の違いによりスコアが低くなる
+
+// 出力例:
+// {
+//   score: 0.85,
+//   info: { similarity: 0.85 }
+// }
+```
+
+## 関連
+
+- [Completeness Metric](./completeness)
+- [Textual Difference Metric](./textual-difference) 
+- [Answer Relevancy Metric](./answer-relevancy)
+- [Keyword Coverage Metric](./keyword-coverage)

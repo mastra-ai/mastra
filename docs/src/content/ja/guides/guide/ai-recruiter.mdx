@@ -1,0 +1,186 @@
+---
+title: "AI採用担当者の構築 | Mastraワークフロー | ガイド"
+description: LLMを使用して候補者情報を収集・処理するMastraでの採用担当者ワークフローの構築ガイド。
+---
+
+# はじめに
+
+このガイドでは、MastraがLLMを使用したワークフローの構築をどのように支援するかについて学びます。
+
+候補者の履歴書から情報を収集し、候補者のプロフィールに基づいて技術的な質問または行動に関する質問のいずれかに分岐するワークフローの作成について説明します。その過程で、ワークフローのステップの構造化、分岐の処理、LLM呼び出しの統合方法を確認できます。
+
+以下はワークフローの簡潔なバージョンです。必要なモジュールをインポートし、Mastraをセットアップし、候補者データを抽出して分類するステップを定義し、適切なフォローアップ質問をします。各コードブロックの後には、その機能と有用性についての簡単な説明が続きます。
+
+## 1. インポートとセットアップ
+
+ワークフローの定義とデータ検証を処理するために、MastraツールとZodをインポートする必要があります。
+
+```ts filename="src/mastra/index.ts" copy
+import { Mastra } from "@mastra/core";
+import { Step, Workflow } from "@mastra/core/workflows";
+import { z } from "zod";
+```
+
+`.env`ファイルに`OPENAI_API_KEY`を追加してください。
+
+```bash filename=".env" copy
+OPENAI_API_KEY=<your-openai-key>
+```
+
+## 2. ステップ1：候補者情報の収集
+
+履歴書のテキストから候補者の詳細を抽出し、技術系または非技術系として分類したいと思います。このステップではLLMを呼び出して履歴書を解析し、名前、技術的ステータス、専門分野、および元の履歴書テキストを含む構造化されたJSONを返します。コードはトリガーデータからresumeTextを読み取り、LLMにプロンプトを送信し、後続のステップで使用するために整理されたフィールドを返します。
+
+```ts filename="src/mastra/index.ts" copy
+import { Agent } from '@mastra/core/agent';
+import { openai } from "@ai-sdk/openai";
+
+const recruiter = new Agent({
+  name: "Recruiter Agent",
+  instructions: `You are a recruiter.`,
+  model: openai("gpt-4o-mini"),
+})
+
+const gatherCandidateInfo = new Step({
+  id: "gatherCandidateInfo",
+  inputSchema: z.object({
+    resumeText: z.string(),
+  }),
+  outputSchema: z.object({
+    candidateName: z.string(),
+    isTechnical: z.boolean(),
+    specialty: z.string(),
+    resumeText: z.string(),
+  }),
+  execute: async ({ context }) => {
+    const resumeText = context?.getStepResult<{
+      resumeText: string;
+    }>("trigger")?.resumeText;
+
+    const prompt = `
+          Extract details from the resume text:
+          "${resumeText}"
+        `;
+
+    const res = await recruiter.generate(prompt, {
+      output: z.object({
+        candidateName: z.string(),
+        isTechnical: z.boolean(),
+        specialty: z.string(),
+        resumeText: z.string(),
+      }),
+    });
+
+    return res.object;
+  },
+});
+```
+
+## 3. 技術的質問ステップ
+
+このステップでは、技術者として特定された候補者に対して、彼らがどのように専門分野に入ったかについての詳細情報を求めます。LLMが関連性のあるフォローアップ質問を作成できるように、履歴書の全文を使用します。このコードは候補者の専門分野に関する質問を生成します。
+
+```ts filename="src/mastra/index.ts" copy
+interface CandidateInfo {
+  candidateName: string;
+  isTechnical: boolean;
+  specialty: string;
+  resumeText: string;
+}
+
+const askAboutSpecialty = new Step({
+  id: "askAboutSpecialty",
+  outputSchema: z.object({
+    question: z.string(),
+  }),
+  execute: async ({ context }) => {
+    const candidateInfo = context?.getStepResult<CandidateInfo>(
+      "gatherCandidateInfo",
+    );
+
+    const prompt = `
+          You are a recruiter. Given the resume below, craft a short question
+          for ${candidateInfo?.candidateName} about how they got into "${candidateInfo?.specialty}".
+          Resume: ${candidateInfo?.resumeText}
+        `;
+    const res = await recruiter.generate(prompt);
+
+    return { question: res?.text?.trim() || "" };
+  },
+});
+```
+
+## 4. 行動質問ステップ
+
+候補者が非技術系の場合、異なるフォローアップ質問が必要です。このステップでは、彼らの完全な履歴書のテキストを再度参照しながら、役職について最も興味を持っていることを尋ねます。このコードはLLMから役職に焦点を当てたクエリを要求します。
+
+```ts filename="src/mastra/index.ts" copy
+const askAboutRole = new Step({
+  id: "askAboutRole",
+  outputSchema: z.object({
+    question: z.string(),
+  }),
+  execute: async ({ context }) => {
+    const candidateInfo = context?.getStepResult<CandidateInfo>(
+      "gatherCandidateInfo",
+    );
+
+    const prompt = `
+          You are a recruiter. Given the resume below, craft a short question
+          for ${candidateInfo?.candidateName} asking what interests them most about this role.
+          Resume: ${candidateInfo?.resumeText}
+        `;
+    const res = await recruiter.generate(prompt);
+    return { question: res?.text?.trim() || "" };
+  },
+});
+```
+
+## 5. ワークフローの定義
+
+これで、候補者の技術的ステータスに基づいて分岐ロジックを実装するためのステップを組み合わせます。ワークフローはまず候補者データを収集し、次にisTechnicalの値に応じて、専門分野または役割について質問します。このコードはgatherCandidateInfoとaskAboutSpecialtyおよびaskAboutRoleを連鎖させ、ワークフローをコミットします。
+
+```ts filename="src/mastra/index.ts" copy
+const candidateWorkflow = new Workflow({
+  name: "candidate-workflow",
+  triggerSchema: z.object({
+    resumeText: z.string(),
+  }),
+});
+
+candidateWorkflow
+  .step(gatherCandidateInfo)
+  .then(askAboutSpecialty, {
+    when: { "gatherCandidateInfo.isTechnical": true },
+  })
+  .after(gatherCandidateInfo)
+  .step(askAboutRole, {
+    when: { "gatherCandidateInfo.isTechnical": false },
+  });
+
+candidateWorkflow.commit();
+```
+
+## 6. ワークフローを実行する
+
+```ts filename="src/mastra/index.ts" copy
+const mastra = new Mastra({
+  workflows: {
+    candidateWorkflow,
+  },
+});
+
+(async () => {
+  const { runId, start } = mastra.getWorkflow("candidateWorkflow").createRun();
+
+  console.log("Run", runId);
+
+  const runResult = await start({
+    triggerData: { resumeText: "Simulated resume content..." },
+  });
+
+  console.log("Final output:", runResult.results);
+})();
+```
+
+あなたは履歴書を解析し、候補者の技術的能力に基づいてどの質問をするかを決定するワークフローを構築しました。おめでとうございます、そして楽しいハッキングを！

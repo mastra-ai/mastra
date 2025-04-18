@@ -1,0 +1,102 @@
+---
+title: "例：並列実行 | ワークフロー | Mastra ドキュメント"
+description: Mastraを使用してワークフロー内で複数の独立したタスクを並列実行する例。
+---
+
+import { GithubLink } from "@/components/github-link";
+
+# ステップを用いた並列実行
+
+AIアプリケーションを構築する際、効率を向上させるために複数の独立したタスクを同時に処理する必要があることがよくあります。
+
+## 制御フローダイアグラム
+
+この例は、各ブランチが独自のデータフローと依存関係を処理しながら、ステップを並行して実行するワークフローの構造を示しています。
+
+こちらが制御フローダイアグラムです：
+
+<img
+  src="/parallel-chains.png"
+  alt="並行ステップを含むワークフローを示すダイアグラム"
+  width={600}
+/>
+
+## ステップの作成
+
+ステップを作成し、ワークフローを初期化しましょう。
+
+```ts showLineNumbers copy
+import { Step, Workflow } from "@mastra/core/workflows";
+import { z } from "zod";
+
+const stepOne = new Step({
+  id: "stepOne",
+  execute: async ({ context }) => ({
+    doubledValue: context.triggerData.inputValue * 2,
+  }),
+});
+
+const stepTwo = new Step({
+  id: "stepTwo",
+  execute: async ({ context }) => {
+    if (context.steps.stepOne.status !== "success") {
+      return { incrementedValue: 0 }
+    }
+
+    return { incrementedValue: context.steps.stepOne.output.doubledValue + 1 }
+  },
+});
+
+const stepThree = new Step({
+  id: "stepThree",
+  execute: async ({ context }) => ({
+    tripledValue: context.triggerData.inputValue * 3,
+  }),
+});
+
+const stepFour = new Step({
+  id: "stepFour",
+  execute: async ({ context }) => {
+    if (context.steps.stepThree.status !== "success") {
+      return { isEven: false }
+    }
+
+    return { isEven: context.steps.stepThree.output.tripledValue % 2 === 0 }
+  },
+});
+
+const myWorkflow = new Workflow({
+  name: "my-workflow",
+  triggerSchema: z.object({
+    inputValue: z.number(),
+  }),
+});
+```
+
+## ステップの連鎖と並列化
+
+これで、ワークフローにステップを追加できます。`.then()` メソッドはステップを連鎖するために使用されますが、`.step()` メソッドはワークフローにステップを追加するために使用されます。
+
+```ts showLineNumbers copy
+myWorkflow
+  .step(stepOne)
+    .then(stepTwo) // chain one
+  .step(stepThree)
+    .then(stepFour) // chain two
+  .commit();
+
+const { start } = myWorkflow.createRun();
+
+const result = await start({ triggerData: { inputValue: 3 } });
+```
+
+<br />
+<br />
+<hr className="dark:border-[#404040] border-gray-300" />
+<br />
+<br />
+<GithubLink
+  link={
+    "https://github.com/mastra-ai/mastra/blob/main/examples/basics/workflows/workflow-with-parallel-steps"
+  }
+/>

@@ -1,0 +1,136 @@
+---
+title: "例：コンテンツ類似性 | Evals | Mastra Docs"
+description: コンテンツ間のテキスト類似性を評価するためのコンテンツ類似性メトリックの使用例。
+---
+
+import { GithubLink } from "@/components/github-link";
+
+# コンテンツの類似性
+
+この例では、Mastraのコンテンツ類似性メトリックを使用して、2つのコンテンツ間のテキスト類似性を評価する方法を示します。
+
+## 概要
+
+この例では、以下の方法を示します：
+
+1. Content Similarity メトリックを設定する
+2. 異なるテキストのバリエーションを比較する
+3. 類似性スコアを分析する
+4. 異なる類似性のシナリオを処理する
+
+## セットアップ
+
+### 依存関係
+
+必要な依存関係をインポートします:
+
+```typescript copy showLineNumbers filename="src/index.ts"
+import { ContentSimilarityMetric } from '@mastra/evals/nlp';
+```
+
+## メトリック設定
+
+Content Similarityメトリックを設定します：
+
+```typescript copy showLineNumbers{4} filename="src/index.ts"
+const metric = new ContentSimilarityMetric();
+```
+
+## 使用例
+
+### 高い類似性の例
+
+ほぼ同一のテキストを比較します：
+
+```typescript copy showLineNumbers{7} filename="src/index.ts"
+const text1 = 'The quick brown fox jumps over the lazy dog.';
+const reference1 = 'A quick brown fox jumped over a lazy dog.';
+
+console.log('Example 1 - High Similarity:');
+console.log('Text:', text1);
+console.log('Reference:', reference1);
+
+const result1 = await metric.measure(reference1, text1);
+console.log('Metric Result:', {
+  score: result1.score,
+  info: {
+    similarity: result1.info.similarity,
+  },
+});
+// Example Output:
+// Metric Result: { score: 0.7761194029850746, info: { similarity: 0.7761194029850746 } }
+```
+
+### 中程度の類似性の例
+
+意味は似ているが異なる表現のテキストを比較します：
+
+```typescript copy showLineNumbers{23} filename="src/index.ts"
+const text2 = 'A brown fox quickly leaps across a sleeping dog.';
+const reference2 = 'The quick brown fox jumps over the lazy dog.';
+
+console.log('Example 2 - Moderate Similarity:');
+console.log('Text:', text2);
+console.log('Reference:', reference2);
+
+const result2 = await metric.measure(reference2, text2);
+console.log('Metric Result:', {
+  score: result2.score,
+  info: {
+    similarity: result2.info.similarity,
+  },
+});
+// Example Output:
+// Metric Result: {
+//   score: 0.40540540540540543,
+//   info: { similarity: 0.40540540540540543 }
+// }
+```
+
+### 低い類似性の例
+
+明らかに異なるテキストを比較します：
+
+```typescript copy showLineNumbers{39} filename="src/index.ts"
+const text3 = 'The cat sleeps on the windowsill.';
+const reference3 = 'The quick brown fox jumps over the lazy dog.';
+
+console.log('Example 3 - Low Similarity:');
+console.log('Text:', text3);
+console.log('Reference:', reference3);
+
+const result3 = await metric.measure(reference3, text3);
+console.log('Metric Result:', {
+  score: result3.score,
+  info: {
+    similarity: result3.info.similarity,
+  },
+});
+// Example Output:
+// Metric Result: {
+//   score: 0.25806451612903225,
+//   info: { similarity: 0.25806451612903225 }
+// }
+```
+
+## 結果の理解
+
+この指標は以下を提供します：
+
+1. 0から1の間の類似度スコア：
+   - 1.0: 完全一致 - テキストが同一
+   - 0.7-0.9: 高い類似性 - 言葉のわずかな違い
+   - 0.4-0.6: 中程度の類似性 - 同じトピックだが異なる表現
+   - 0.1-0.3: 低い類似性 - いくつかの共通の単語があるが意味が異なる
+   - 0.0: 類似性なし - 完全に異なるテキスト
+
+<br />
+<br />
+<hr className="dark:border-[#404040] border-gray-300" />
+<br />
+<br />
+<GithubLink
+  link={
+    "https://github.com/mastra-ai/mastra/blob/main/examples/basics/evals/content-similarity"
+  }
+/>

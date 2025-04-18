@@ -1,0 +1,218 @@
+---
+title: "例: エージェント駆動のメタデータフィルタリング | 検索 | RAG | Mastra ドキュメント"
+description: RAG システムで Mastra エージェントを使用して、ドキュメント検索のためのメタデータフィルターを構築および適用する例。
+---
+
+import { GithubLink } from "@/components/github-link";
+
+# エージェント駆動のメタデータフィルタリング
+
+この例では、Mastra、OpenAIの埋め込み、およびベクトルストレージ用のPGVectorを使用して、Retrieval-Augmented Generation (RAG) システムを実装する方法を示します。
+このシステムは、ユーザーのクエリからメタデータフィルタを構築するエージェントを使用して、ベクトルストア内の関連するチャンクを検索し、返される結果の量を減らします。
+
+## 概要
+
+このシステムは、MastraとOpenAIを使用してメタデータフィルタリングを実装しています。以下がその機能です：
+
+1. クエリを理解し、フィルター要件を特定するためにgpt-4o-miniを使用してMastraエージェントを設定
+2. メタデータフィルタリングとセマンティック検索を処理するためのベクトルクエリツールを作成
+3. ドキュメントをメタデータと埋め込みを含むチャンクに処理
+4. 効率的な取得のためにベクトルとメタデータの両方をPGVectorに保存
+5. メタデータフィルターとセマンティック検索を組み合わせてクエリを処理
+
+ユーザーが質問をするとき：
+   - エージェントはクエリを分析して意図を理解
+   - 適切なメタデータフィルターを構築（例：トピック、日付、カテゴリによる）
+   - ベクトルクエリツールを使用して最も関連性の高い情報を見つける
+   - フィルタリングされた結果に基づいて文脈に応じた応答を生成
+
+## セットアップ
+
+### 環境セットアップ
+
+環境変数を設定してください：
+
+```bash filename=".env"
+OPENAI_API_KEY=your_openai_api_key_here
+POSTGRES_CONNECTION_STRING=your_connection_string_here
+```
+
+### 依存関係
+
+次に、必要な依存関係をインポートします：
+
+```typescript copy showLineNumbers filename="index.ts"
+import { openai } from '@ai-sdk/openai';
+import { Mastra } from '@mastra/core';
+import { Agent } from '@mastra/core/agent';
+import { PgVector } from '@mastra/pg';
+import { createVectorQueryTool, MDocument, PGVECTOR_PROMPT } from '@mastra/rag';
+import { embedMany } from 'ai';
+```
+
+## ベクトルクエリツールの作成
+
+@mastra/rag からインポートされた createVectorQueryTool を使用して、メタデータフィルタリングを可能にするツールを作成できます：
+
+```typescript copy showLineNumbers{9} filename="index.ts"
+const vectorQueryTool = createVectorQueryTool({
+  id: 'vectorQueryTool',
+  vectorStoreName: "pgVector",
+  indexName: "embeddings",
+  model: openai.embedding('text-embedding-3-small'),
+  enableFilter: true,
+});
+```
+
+## ドキュメント処理
+
+ドキュメントを作成し、メタデータを含むチャンクに処理します:
+
+```typescript copy showLineNumbers{17} filename="index.ts"
+const doc = MDocument.fromText(`The Impact of Climate Change on Global Agriculture...`);
+
+const chunks = await doc.chunk({
+  strategy: 'recursive',
+  size: 512,
+  overlap: 50,
+  separator: '\n',
+  extract: {
+    keywords: true,  // Extracts keywords from each chunk
+  },
+});
+```
+
+### チャンクをメタデータに変換
+
+フィルタリング可能なメタデータにチャンクを変換します:
+
+```typescript copy showLineNumbers{31} filename="index.ts"
+const chunkMetadata = chunks?.map((chunk: any, index: number) => ({
+  text: chunk.text,
+  ...chunk.metadata,
+  nested: {
+    keywords: chunk.metadata.excerptKeywords
+      .replace('KEYWORDS:', '')
+      .split(',')
+      .map(k => k.trim()),
+    id: index,
+  },
+}));
+```
+
+## エージェント設定
+
+エージェントは、ユーザーのクエリを理解し、それを適切なメタデータフィルターに変換するように設定されています。
+
+エージェントには、ベクトルクエリツールと以下を含むシステムプロンプトが必要です：
+- 利用可能なフィルターフィールドのメタデータ構造
+- フィルター操作と構文のためのベクトルストアプロンプト
+
+```typescript copy showLineNumbers{43} filename="index.ts"
+export const ragAgent = new Agent({
+  name: 'RAG Agent',
+  model: openai('gpt-4o-mini'),
+  instructions: `
+  You are a helpful assistant that answers questions based on the provided context. Keep your answers concise and relevant.
+
+  Filter the context by searching the metadata.
+  
+  The metadata is structured as follows:
+
+  {
+    text: string,
+    excerptKeywords: string,
+    nested: {
+      keywords: string[],
+      id: number,
+    },
+  }
+
+  ${PGVECTOR_PROMPT}
+
+  Important: When asked to answer a question, please base your answer only on the context provided in the tool. 
+  If the context doesn't contain enough information to fully answer the question, please state that explicitly.
+  `,
+  tools: { vectorQueryTool },
+});
+```
+
+エージェントの指示は以下を目的としています：
+- ユーザーのクエリを処理してフィルター要件を特定する
+- メタデータ構造を使用して関連情報を見つける
+- vectorQueryToolと提供されたベクトルストアプロンプトを通じて適切なフィルターを適用する
+- フィルターされたコンテキストに基づいて応答を生成する
+
+> 注: 異なるベクトルストアには特定のプロンプトが用意されています。詳細は[ベクトルストアプロンプト](/docs/rag/retrieval#vector-store-prompts)を参照してください。
+
+## PgVectorとMastraのインスタンス化
+
+次のコンポーネントを使用してPgVectorとMastraをインスタンス化します：
+
+```typescript copy showLineNumbers{69} filename="index.ts"
+const pgVector = new PgVector(process.env.POSTGRES_CONNECTION_STRING!);
+
+export const mastra = new Mastra({
+  agents: { ragAgent },
+  vectors: { pgVector },
+});
+const agent = mastra.getAgent('ragAgent');
+```
+
+## 埋め込みの作成と保存
+
+埋め込みを生成し、メタデータと共に保存します:
+
+```typescript copy showLineNumbers{78} filename="index.ts"
+const { embeddings } = await embedMany({
+  model: openai.embedding('text-embedding-3-small'),
+  values: chunks.map(chunk => chunk.text),
+});
+
+const vectorStore = mastra.getVector('pgVector');
+await vectorStore.createIndex({
+  indexName: 'embeddings',
+  dimension: 1536,
+});
+
+// Store both embeddings and metadata together
+await vectorStore.upsert({
+  indexName: 'embeddings',
+  vectors: embeddings,
+  metadata: chunkMetadata,
+});
+```
+
+`upsert` 操作は、ベクトル埋め込みとそれに関連するメタデータの両方を保存し、セマンティック検索とメタデータフィルタリングの機能を組み合わせて提供します。
+
+## メタデータベースのクエリ
+
+メタデータフィルターを使用して、さまざまなクエリを試してください:
+
+```typescript copy showLineNumbers{96} filename="index.ts"
+const queryOne = 'What are the adaptation strategies mentioned?';
+const answerOne = await agent.generate(queryOne);
+console.log('\nQuery:', queryOne);
+console.log('Response:', answerOne.text);
+
+const queryTwo = 'Show me recent sections. Check the "nested.id" field and return values that are greater than 2.';
+const answerTwo = await agent.generate(queryTwo);
+console.log('\nQuery:', queryTwo);
+console.log('Response:', answerTwo.text);
+
+const queryThree = 'Search the "text" field using regex operator to find sections containing "temperature".';
+const answerThree = await agent.generate(queryThree);
+console.log('\nQuery:', queryThree);
+console.log('Response:', answerThree.text);
+```
+
+<br />
+<br />
+<hr className="dark:border-[#404040] border-gray-300" />
+<br />
+<br />
+<GithubLink
+  link={
+    "https://github.com/mastra-ai/mastra/blob/main/examples/basics/rag/filter-rag"
+  }
+/>

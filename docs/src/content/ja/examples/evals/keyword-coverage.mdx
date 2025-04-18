@@ -1,0 +1,139 @@
+---
+title: "例：キーワードカバレッジ | 評価 | Mastra ドキュメント"
+description: 入力テキストから重要なキーワードをレスポンスがどれだけカバーしているかを評価するためのキーワードカバレッジメトリックの使用例。
+---
+
+import { GithubLink } from "@/components/github-link";
+
+# キーワードカバレッジ評価
+
+この例では、Mastraのキーワードカバレッジメトリックを使用して、応答が入力テキストからの重要なキーワードをどの程度含んでいるかを評価する方法を示します。
+
+## 概要
+
+この例では、次の方法を示します：
+
+1. キーワードカバレッジメトリックを設定する
+2. キーワード一致のために応答を評価する
+3. カバレッジスコアを分析する
+4. 異なるカバレッジシナリオを処理する
+
+## セットアップ
+
+### 依存関係
+
+必要な依存関係をインポートします:
+
+```typescript copy showLineNumbers filename="src/index.ts"
+import { KeywordCoverageMetric } from '@mastra/evals/nlp';
+```
+
+## メトリック設定
+
+キーワードカバレッジメトリックを設定します:
+
+```typescript copy showLineNumbers{4} filename="src/index.ts"
+const metric = new KeywordCoverageMetric();
+```
+
+## 使用例
+
+### 完全カバレッジの例
+
+すべてのキーワードを含む応答を評価します：
+
+```typescript copy showLineNumbers{7} filename="src/index.ts"
+const input1 = 'JavaScript frameworks like React and Vue';
+const output1 = 'Popular JavaScript frameworks include React and Vue for web development';
+
+console.log('Example 1 - Full Coverage:');
+console.log('Input:', input1);
+console.log('Output:', output1);
+
+const result1 = await metric.measure(input1, output1);
+console.log('Metric Result:', {
+  score: result1.score,
+  info: {
+    totalKeywords: result1.info.totalKeywords,
+    matchedKeywords: result1.info.matchedKeywords,
+  },
+});
+// Example Output:
+// Metric Result: { score: 1, info: { totalKeywords: 4, matchedKeywords: 4 } }
+```
+
+### 部分カバレッジの例
+
+いくつかのキーワードが含まれる応答を評価します：
+
+```typescript copy showLineNumbers{24} filename="src/index.ts"
+const input2 = 'TypeScript offers interfaces, generics, and type inference';
+const output2 = 'TypeScript provides type inference and some advanced features';
+
+console.log('Example 2 - Partial Coverage:');
+console.log('Input:', input2);
+console.log('Output:', output2);
+
+const result2 = await metric.measure(input2, output2);
+console.log('Metric Result:', {
+  score: result2.score,
+  info: {
+    totalKeywords: result2.info.totalKeywords,
+    matchedKeywords: result2.info.matchedKeywords,
+  },
+});
+// Example Output:
+// Metric Result: { score: 0.5, info: { totalKeywords: 6, matchedKeywords: 3 } }
+```
+
+### 最小カバレッジの例
+
+キーワードの一致が限られた応答を評価します：
+
+```typescript copy showLineNumbers{41} filename="src/index.ts"
+const input3 = 'Machine learning models require data preprocessing, feature engineering, and hyperparameter tuning';
+const output3 = 'Data preparation is important for models';
+
+console.log('Example 3 - Minimal Coverage:');
+console.log('Input:', input3);
+console.log('Output:', output3);
+
+const result3 = await metric.measure(input3, output3);
+console.log('Metric Result:', {
+  score: result3.score,
+  info: {
+    totalKeywords: result3.info.totalKeywords,
+    matchedKeywords: result3.info.matchedKeywords,
+  },
+});
+// Example Output:
+// Metric Result: { score: 0.2, info: { totalKeywords: 10, matchedKeywords: 2 } }
+```
+
+## 結果の理解
+
+この指標は以下を提供します：
+
+1. 0から1の間のカバレッジスコア：
+   - 1.0: 完全なカバレッジ - すべてのキーワードが存在
+   - 0.7-0.9: 高いカバレッジ - ほとんどのキーワードが含まれる
+   - 0.4-0.6: 部分的なカバレッジ - 一部のキーワードが存在
+   - 0.1-0.3: 低いカバレッジ - 少数のキーワードが一致
+   - 0.0: カバレッジなし - キーワードが見つからない
+
+2. 詳細な統計情報を含む：
+   - 入力からのキーワードの総数
+   - 一致したキーワードの数
+   - カバレッジ比率の計算
+   - 専門用語の処理
+
+<br />
+<br />
+<hr className="dark:border-[#404040] border-gray-300" />
+<br />
+<br />
+<GithubLink
+  link={
+    "https://github.com/mastra-ai/mastra/blob/main/examples/basics/evals/keyword-coverage"
+  }
+/> 

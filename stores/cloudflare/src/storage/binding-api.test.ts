@@ -1,4 +1,3 @@
-import { randomUUID } from 'crypto';
 import type { KVNamespace } from '@cloudflare/workers-types';
 import type { MessageType, StorageThreadType } from '@mastra/core/memory';
 import type { TABLE_NAMES } from '@mastra/core/storage';
@@ -13,7 +12,13 @@ import type { WorkflowRunState } from '@mastra/core/workflows';
 import dotenv from 'dotenv';
 import { Miniflare } from 'miniflare';
 import { describe, it, expect, beforeAll, beforeEach, afterAll, vi } from 'vitest';
-import { createSampleTrace } from './test-utils';
+import {
+  createSampleMessage,
+  createSampleThread,
+  createSampleTrace,
+  createSampleWorkflowSnapshot,
+  retryUntil,
+} from './test-utils';
 import type { CloudflareStoreConfig } from './types';
 import { CloudflareStore } from '.';
 
@@ -40,64 +45,6 @@ const mf = new Miniflare({
 const TEST_CONFIG: CloudflareStoreConfig = {
   bindings: {} as Env, // Will be populated in beforeAll
   keyPrefix: 'mastra-test', // Fixed prefix for test isolation
-};
-
-// Sample test data factory functions
-const createSampleThread = () => ({
-  id: `thread-${randomUUID()}`,
-  resourceId: `resource-${randomUUID()}`,
-  title: 'Test Thread',
-  createdAt: new Date(),
-  updatedAt: new Date(),
-  metadata: { key: 'value' },
-});
-
-const createSampleMessage = (threadId: string): MessageType => ({
-  id: `msg-${randomUUID()}`,
-  role: 'user',
-  type: 'text',
-  threadId,
-  content: [{ type: 'text' as const, text: 'Hello' }] as MessageType['content'],
-  createdAt: new Date(),
-  resourceId: `resource-${randomUUID()}`,
-});
-
-const createSampleWorkflowSnapshot = (threadId: string): WorkflowRunState => ({
-  value: { [threadId]: 'running' },
-  context: {
-    steps: {},
-    triggerData: {},
-    attempts: {},
-  },
-  activePaths: [
-    {
-      stepPath: [threadId],
-      stepId: threadId,
-      status: 'running',
-    },
-  ],
-  runId: threadId,
-  timestamp: Date.now(),
-});
-
-// Helper function to retry until condition is met or timeout
-const retryUntil = async <T>(
-  fn: () => Promise<T>,
-  condition: (result: T) => boolean,
-  timeout = 10000, // Increased default timeout for KV eventual consistency
-  interval = 1000, // Increased interval to reduce load
-): Promise<T> => {
-  const start = Date.now();
-  while (Date.now() - start < timeout) {
-    try {
-      const result = await fn();
-      if (condition(result)) return result;
-    } catch (error) {
-      if (Date.now() - start >= timeout) throw error;
-    }
-    await new Promise(resolve => setTimeout(resolve, interval));
-  }
-  throw new Error('Timeout waiting for condition');
 };
 
 describe('CloudflareStore Workers Binding', () => {
@@ -346,6 +293,10 @@ describe('CloudflareStore Workers Binding', () => {
         retrievedThread => retrievedThread?.title === thread.title,
       );
       expect(retrievedThread?.title).toEqual(thread.title);
+      expect(retrievedThread).not.toBeNull();
+      expect(retrievedThread?.id).toBe(thread.id);
+      expect(retrievedThread?.title).toBe(thread.title);
+      expect(retrievedThread?.metadata).toEqual(thread.metadata);
     });
 
     it('should return null for non-existent thread', async () => {
@@ -432,6 +383,10 @@ describe('CloudflareStore Workers Binding', () => {
   });
 
   describe('Message Operations', () => {
+    it('should handle empty message array', async () => {
+      const result = await store.saveMessages({ messages: [] });
+      expect(result).toEqual([]);
+    });
     it('should save and retrieve messages', async () => {
       const thread = createSampleThread();
       await store.saveThread({ thread });

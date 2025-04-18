@@ -1,0 +1,36 @@
+---
+title: "例：チャンク配列の埋め込み | RAG | Mastra ドキュメント"
+description: 類似性検索のためにテキストチャンクの配列の埋め込みを生成するためにMastraを使用する例。
+---
+
+import { GithubLink } from "@/components/github-link";
+
+# Embed Chunk Array
+
+ドキュメントをチャンク化した後、テキストチャンクを類似性検索に使用できる数値ベクトルに変換する必要があります。`embed` メソッドは、選択したプロバイダーとモデルを使用してテキストチャンクを埋め込みに変換します。この例では、テキストチャンクの配列に対して埋め込みを生成する方法を示します。
+
+```tsx copy
+import { openai } from '@ai-sdk/openai';
+import { MDocument } from '@mastra/rag';
+import { embed } from 'ai';
+
+const doc = MDocument.fromText("Your text content...");
+
+const chunks = await doc.chunk();
+
+const { embeddings } = await embedMany({
+  model: openai.embedding('text-embedding-3-small'),
+  values: chunks.map(chunk => chunk.text),
+});
+```
+
+<br />
+<br />
+<hr className="dark:border-[#404040] border-gray-300" />
+<br />
+<br />
+<GithubLink
+  link={
+    "https://github.com/mastra-ai/mastra/blob/main/examples/basics/rag/embed-chunk-array"
+  }
+/>

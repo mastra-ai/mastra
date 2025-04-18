@@ -1,0 +1,74 @@
+---
+title: "LibSQL ストレージ | ストレージシステム | Mastra Core"
+description: MastraにおけるLibSQLストレージ実装のドキュメント。
+---
+
+# LibSQL Storage
+
+LibSQLストレージ実装は、メモリ内および永続データベースとして動作可能なSQLite互換のストレージソリューションを提供します。
+
+## インストール
+
+```bash
+npm install @mastra/storage-libsql
+```
+
+## 使用方法
+
+```typescript copy showLineNumbers
+import { LibSQLStore } from "@mastra/core/storage/libsql";
+
+// File database (development)
+const storage = new LibSQLStore({
+    config: {
+        url: 'file:storage.db',
+    }
+});
+
+// Persistent database (production)
+const storage = new LibSQLStore({
+    config: {
+        url: process.env.DATABASE_URL,
+    }
+});
+```
+
+## パラメーター
+
+<PropertiesTable
+  content={[
+    {
+      name: "url",
+      type: "string",
+      description:
+        "データベースURL。インメモリデータベースには ':memory:' を使用し、ファイルデータベースには 'file:filename.db' を使用します。永続ストレージには、LibSQL互換の接続文字列を使用します。",
+      isOptional: false,
+    },
+    {
+      name: "authToken",
+      type: "string",
+      description: "リモートLibSQLデータベースの認証トークン。",
+      isOptional: true,
+    },
+  ]}
+/>
+
+## 追加の注意事項
+
+### インメモリ vs 永続ストレージ
+
+ファイル構成 (`file:storage.db`) は以下に役立ちます：
+
+- 開発とテスト
+- 一時的なストレージ
+- クイックプロトタイピング
+
+本番環境の使用ケースでは、永続的なデータベースURLを使用してください：`libsql://your-database.turso.io`
+
+### スキーマ管理
+
+ストレージの実装は、スキーマの作成と更新を自動的に処理します。以下のテーブルを作成します：
+
+- `threads`: 会話スレッドを保存
+- `messages`: 個々のメッセージを保存
+- `metadata`: スレッドとメッセージの追加メタデータを保存

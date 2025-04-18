@@ -24,6 +24,9 @@ const meta = {
   deployment: {
     title: "Deployment",
   },
+  "mastra-cloud": {
+    title: "Mastra Cloud",
+  },
   observability: {
     title: "Observability",
   },

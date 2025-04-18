@@ -1,0 +1,164 @@
+---
+title: "リファレンス: Deepgram Voice | 音声プロバイダー | Mastra ドキュメント"
+description: "Deepgramの音声実装に関するドキュメントで、複数の音声モデルと言語を使用したテキスト読み上げと音声認識機能を提供します。"
+---
+
+# Deepgram
+
+MastraにおけるDeepgramの音声実装は、DeepgramのAPIを使用してテキスト読み上げ（TTS）と音声認識（STT）機能を提供します。複数の音声モデルと言語をサポートしており、音声合成と文字起こしの両方に対して設定可能なオプションがあります。
+
+## 使用例
+
+```typescript
+import { DeepgramVoice } from "@mastra/voice-deepgram";
+
+// Initialize with default configuration (uses DEEPGRAM_API_KEY environment variable)
+const voice = new DeepgramVoice();
+
+// Initialize with custom configuration
+const voice = new DeepgramVoice({
+  speechModel: {
+    name: 'aura',
+    apiKey: 'your-api-key',
+  },
+  listeningModel: {
+    name: 'nova-2',
+    apiKey: 'your-api-key',
+  },
+  speaker: 'asteria-en',
+});
+
+// Text-to-Speech
+const audioStream = await voice.speak("Hello, world!");
+
+// Speech-to-Text
+const transcript = await voice.listen(audioStream);
+```
+
+## コンストラクタパラメータ
+
+<PropertiesTable
+  content={[
+    {
+      name: "speechModel",
+      type: "DeepgramVoiceConfig",
+      description: "テキストから音声への機能のための設定。",
+      isOptional: true,
+      defaultValue: "{ name: 'aura' }"
+    },
+    {
+      name: "listeningModel",
+      type: "DeepgramVoiceConfig",
+      description: "音声からテキストへの機能のための設定。",
+      isOptional: true,
+      defaultValue: "{ name: 'nova' }"
+    },
+    {
+      name: "speaker",
+      type: "DeepgramVoiceId",
+      description: "テキストから音声へのデフォルトの声",
+      isOptional: true,
+      defaultValue: "'asteria-en'",
+    },
+  ]}
+/>
+
+### DeepgramVoiceConfig
+
+<PropertiesTable
+  content={[
+    {
+      name: "name",
+      type: "DeepgramModel",
+      description: "使用するDeepgramモデル",
+      isOptional: true,
+    },
+    {
+      name: "apiKey",
+      type: "string",
+      description: "Deepgram APIキー。DEEPGRAM_API_KEY環境変数にフォールバックします",
+      isOptional: true,
+    },
+    {
+      name: "properties",
+      type: "Record<string, any>",
+      description: "Deepgram APIに渡す追加のプロパティ",
+      isOptional: true,
+    },
+    {
+      name: "language",
+      type: "string",
+      description: "モデルの言語コード",
+      isOptional: true,
+    },
+  ]}
+/>
+
+## メソッド
+
+### speak()
+
+設定された音声モデルと声を使用してテキストを音声に変換します。
+
+<PropertiesTable
+  content={[
+    {
+      name: "input",
+      type: "string | NodeJS.ReadableStream",
+      description: "音声に変換するテキスト。ストリームが提供された場合、最初にテキストに変換されます。",
+      isOptional: false,
+    },
+    {
+      name: "options",
+      type: "object",
+      description: "音声合成のための追加オプション",
+      isOptional: true,
+    },
+    {
+      name: "options.speaker",
+      type: "string",
+      description: "このリクエストのデフォルトスピーカーを上書きします",
+      isOptional: true,
+    },
+  ]}
+/>
+
+戻り値: `Promise<NodeJS.ReadableStream>`
+
+### listen()
+
+設定されたリスニングモデルを使用して音声をテキストに変換します。
+
+<PropertiesTable
+  content={[
+    {
+      name: "audioStream",
+      type: "NodeJS.ReadableStream",
+      description: "文字起こしする音声ストリーム",
+      isOptional: false,
+    },
+    {
+      name: "options",
+      type: "object",
+      description: "Deepgram APIに渡す追加オプション",
+      isOptional: true,
+    },
+  ]}
+/>
+
+戻り値: `Promise<string>`
+
+### getSpeakers()
+
+利用可能な音声オプションのリストを返します。
+
+<PropertiesTable
+  content={[
+    {
+      name: "voiceId",
+      type: "string",
+      description: "音声の一意の識別子",
+      isOptional: false,
+    }
+  ]}
+/>

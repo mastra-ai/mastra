@@ -1,0 +1,159 @@
+---
+title: "Mastra デプロイヤー"
+description: Mastraアプリケーションのパッケージングとデプロイを処理する、Deployer抽象クラスのドキュメント。
+---
+
+# Deployer
+
+Deployerは、コードのパッケージング、環境ファイルの管理、Honoフレームワークを使用したアプリケーションの提供によって、Mastraアプリケーションのデプロイメントを処理します。具体的な実装では、特定のデプロイメントターゲットに対するdeployメソッドを定義する必要があります。
+
+## 使用例
+
+```typescript
+import { Deployer } from "@mastra/deployer";
+
+// Create a custom deployer by extending the abstract Deployer class
+class CustomDeployer extends Deployer {
+  constructor() {
+    super({ name: 'custom-deployer' });
+  }
+
+  // Implement the abstract deploy method
+  async deploy(outputDirectory: string): Promise<void> {
+    // Prepare the output directory
+    await this.prepare(outputDirectory);
+    
+    // Bundle the application
+    await this._bundle('server.ts', 'mastra.ts', outputDirectory);
+    
+    // Custom deployment logic
+    // ...
+  }
+}
+```
+
+## パラメータ
+
+### コンストラクタパラメータ
+
+<PropertiesTable
+  content={[
+    {
+      name: "args",
+      type: "object",
+      description: "Deployerの設定オプション。",
+      isOptional: false,
+    },
+    {
+      name: "args.name",
+      type: "string",
+      description: "デプロイヤーインスタンスの一意の名前。",
+      isOptional: false,
+    },
+  ]}
+/>
+
+### deployパラメータ
+
+<PropertiesTable
+  content={[
+    {
+      name: "outputDirectory",
+      type: "string",
+      description: "バンドルされたデプロイ準備完了のアプリケーションが出力されるディレクトリ。",
+      isOptional: false,
+    },
+  ]}
+/>
+
+## メソッド
+
+<PropertiesTable
+  content={[
+    {
+      name: "getEnvFiles",
+      type: "() => Promise<string[]>",
+      description: "デプロイ中に使用される環境ファイルのリストを返します。デフォルトでは、'.env.production' と '.env' ファイルを探します。",
+    },
+    {
+      name: "deploy",
+      type: "(outputDirectory: string) => Promise<void>",
+      description: "サブクラスによって実装されなければならない抽象メソッドです。指定された出力ディレクトリへのデプロイプロセスを処理します。",
+    },
+  ]}
+/>
+
+## Bundlerから継承されたメソッド
+
+Deployerクラスは、Bundlerクラスから以下の主要なメソッドを継承しています：
+
+<PropertiesTable
+  content={[
+    {
+      name: "prepare",
+      type: "(outputDirectory: string) => Promise<void>",
+      description: "出力ディレクトリをクリーンアップし、必要なサブディレクトリを作成して準備します。",
+    },
+    {
+      name: "writeInstrumentationFile",
+      type: "(outputDirectory: string) => Promise<void>",
+      description: "テレメトリ目的のために出力ディレクトリに計測ファイルを書き込みます。",
+    },
+    {
+      name: "writePackageJson",
+      type: "(outputDirectory: string, dependencies: Map<string, string>) => Promise<void>",
+      description: "指定された依存関係を含むpackage.jsonファイルを出力ディレクトリに生成します。",
+    },
+    {
+      name: "_bundle",
+      type: "(serverFile: string, mastraEntryFile: string, outputDirectory: string, bundleLocation?: string) => Promise<void>",
+      description: "指定されたサーバーファイルとMastraエントリーファイルを使用してアプリケーションをバンドルします。",
+    },
+  ]}
+/>
+
+## コアコンセプト
+
+### デプロイメントライフサイクル
+
+Deployerの抽象クラスは構造化されたデプロイメントライフサイクルを実装しています：
+
+1. **初期化**：デプロイヤーは名前で初期化され、依存関係管理のためのDepsインスタンスを作成します。
+2. **環境設定**：`getEnvFiles`メソッドは、デプロイメント中に使用される環境ファイル（.env.production、.env）を識別します。
+3. **準備**：`prepare`メソッド（Bundlerから継承）は出力ディレクトリをクリーンアップし、必要なサブディレクトリを作成します。
+4. **バンドル**：`_bundle`メソッド（Bundlerから継承）はアプリケーションコードとその依存関係をパッケージ化します。
+5. **デプロイメント**：抽象的な`deploy`メソッドはサブクラスによって実装され、実際のデプロイメントプロセスを処理します。
+
+### 環境ファイル管理
+
+Deployerクラスには、`getEnvFiles`メソッドを通じた環境ファイル管理の組み込みサポートが含まれています。このメソッドは：
+
+- 事前定義された順序（.env.production、.env）で環境ファイルを探します
+- FileServiceを使用して最初に存在するファイルを見つけます
+- 見つかった環境ファイルの配列を返します
+- 環境ファイルが見つからない場合は空の配列を返します
+
+```typescript
+getEnvFiles(): Promise<string[]> {
+  const possibleFiles = ['.env.production', '.env.local', '.env'];
+
+  try {
+    const fileService = new FileService();
+    const envFile = fileService.getFirstExistingFile(possibleFiles);
+
+    return Promise.resolve([envFile]);
+  } catch {}
+
+  return Promise.resolve([]);
+}
+```
+
+### バンドルとデプロイメントの関係
+
+DeployerクラスはBundlerクラスを拡張し、バンドルとデプロイメントの間に明確な関係を確立します：
+
+1. **バンドルは前提条件**：バンドルはデプロイメントの前提条件ステップであり、アプリケーションコードがデプロイ可能な形式にパッケージ化されます。
+2. **共有インフラストラクチャ**：バンドルとデプロイメントは、依存関係管理やファイルシステム操作などの共通インフラストラクチャを共有します。
+3. **特殊なデプロイメントロジック**：バンドルがコードパッケージングに焦点を当てる一方、デプロイメントはバンドルされたコードをデプロイするための環境固有のロジックを追加します。
+4. **拡張性**：抽象的な`deploy`メソッドにより、異なるターゲット環境向けの特殊なデプロイヤーを作成することができます。
+

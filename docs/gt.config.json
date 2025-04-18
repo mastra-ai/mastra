@@ -1,0 +1,17 @@
+{
+  "defaultLocale": "en",
+  "files": {
+    "mdx": {
+      "include": ["src/content/[locale]/**/*.mdx"]
+    },
+    "ts": {
+      "include": ["src/content/[locale]/**/_meta.ts"]
+    },
+    "gt": {
+      "output": "public/locales/[locale].json"
+    }
+  },
+  "locales": ["en", "ja"],
+  "projectId": "87a3e295-8ed3-43c1-9ddf-2f8a434b79e7",
+  "_versionId": "0f53cab4e7d835ad8d6b9aba0410d39db61bc6c4744a7faa2ee0509b84e77d62"
+}

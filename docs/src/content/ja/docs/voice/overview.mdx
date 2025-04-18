@@ -1,0 +1,844 @@
+---
+title: Mastraの音声機能 | Mastra ドキュメント
+description: Mastraの音声機能の概要。テキスト読み上げ、音声認識、リアルタイム音声変換などを含みます。
+---
+import { Tabs } from "nextra/components";
+import { AudioPlayback } from "@/components/audio-playback";
+
+# Mastraの音声機能
+
+Mastraの音声システムは、音声インタラクションのための統一されたインターフェースを提供し、アプリケーションでテキスト読み上げ（TTS）、音声認識（STT）、リアルタイム音声変換（STS）機能を実現します。 
+
+## エージェントに音声を追加する
+
+エージェントに音声機能を統合する方法については、[エージェントへの音声追加](../agents/adding-voice.mdx)のドキュメントをご覧ください。このセクションでは、単一および複数の音声プロバイダーの使用方法、およびリアルタイムのインタラクションについて説明しています。
+
+```typescript
+import { Agent } from '@mastra/core/agent';
+import { openai } from '@ai-sdk/openai';
+import { OpenAIVoice } from "@mastra/voice-openai";
+
+// Initialize OpenAI voice for TTS
+
+const voiceAgent = new Agent({
+  name: "Voice Agent",
+  instructions: "You are a voice assistant that can help users with their tasks.",
+  model: openai("gpt-4o"),
+  voice: new OpenAIVoice(),
+});
+```
+
+以下の音声機能を使用できます：
+
+### テキスト読み上げ（TTS）
+
+Mastraのテキスト読み上げ機能を使用して、エージェントの応答を自然な音声に変換できます。
+OpenAI、ElevenLabsなど、複数のプロバイダーから選択できます。
+
+詳細な設定オプションと高度な機能については、[テキスト読み上げガイド](./text-to-speech)をご覧ください。
+
+<Tabs items={["OpenAI", "Azure", "ElevenLabs", "PlayAI", "Google", "Cloudflare", "Deepgram", "Speechify", "Sarvam", "Murf"]}>
+  <Tabs.Tab>
+    ```typescript
+    import { Agent } from '@mastra/core/agent';
+    import { openai } from '@ai-sdk/openai';
+    import { OpenAIVoice } from "@mastra/voice-openai";
+    import { playAudio } from "@mastra/node-audio";
+
+    const voiceAgent = new Agent({
+      name: "Voice Agent",
+      instructions: "You are a voice assistant that can help users with their tasks.",
+      model: openai("gpt-4o"),
+      voice: new OpenAIVoice(),
+    });
+
+    const { text } = await voiceAgent.generate('What color is the sky?');
+
+    // Convert text to speech to an Audio Stream
+    const audioStream = await voiceAgent.voice.speak(text, {
+      speaker: "default", // Optional: specify a speaker
+      responseFormat: "wav", // Optional: specify a response format
+    });
+
+    playAudio(audioStream);
+    ```
+
+    OpenAIの音声プロバイダーについての詳細は[OpenAI音声リファレンス](/reference/voice/openai)をご覧ください。
+  </Tabs.Tab>
+
+  <Tabs.Tab>
+    ```typescript
+    import { Agent } from '@mastra/core/agent';
+    import { openai } from '@ai-sdk/openai';
+    import { AzureVoice } from "@mastra/voice-azure";
+    import { playAudio } from "@mastra/node-audio";
+
+    const voiceAgent = new Agent({
+      name: "Voice Agent",
+      instructions: "You are a voice assistant that can help users with their tasks.",
+      model: openai("gpt-4o"),
+      voice: new AzureVoice(),
+    });
+
+    const { text } = await voiceAgent.generate('What color is the sky?');
+
+    // Convert text to speech to an Audio Stream
+    const audioStream = await voiceAgent.voice.speak(text, {
+      speaker: "en-US-JennyNeural", // Optional: specify a speaker
+    });
+
+    playAudio(audioStream);
+    ```
+
+    Azureの音声プロバイダーについての詳細は[Azure音声リファレンス](/reference/voice/azure)をご覧ください。
+  </Tabs.Tab>
+
+  <Tabs.Tab>
+    ```typescript
+    import { Agent } from '@mastra/core/agent';
+    import { openai } from '@ai-sdk/openai';
+    import { ElevenLabsVoice } from "@mastra/voice-elevenlabs";
+    import { playAudio } from "@mastra/node-audio";
+
+    const voiceAgent = new Agent({
+      name: "Voice Agent",
+      instructions: "You are a voice assistant that can help users with their tasks.",
+      model: openai("gpt-4o"),
+      voice: new ElevenLabsVoice(),
+    });
+
+    const { text } = await voiceAgent.generate('What color is the sky?');
+
+    // Convert text to speech to an Audio Stream
+    const audioStream = await voiceAgent.voice.speak(text, {
+      speaker: "default", // Optional: specify a speaker
+    });
+
+    playAudio(audioStream);
+    ```
+
+    ElevenLabsの音声プロバイダーについての詳細は[ElevenLabs音声リファレンス](/reference/voice/elevenlabs)をご覧ください。
+  </Tabs.Tab>
+
+  <Tabs.Tab>
+    ```typescript
+    import { Agent } from '@mastra/core/agent';
+    import { openai } from '@ai-sdk/openai';
+    import { PlayAIVoice } from "@mastra/voice-playai";
+    import { playAudio } from "@mastra/node-audio";
+
+    const voiceAgent = new Agent({
+      name: "Voice Agent",
+      instructions: "You are a voice assistant that can help users with their tasks.",
+      model: openai("gpt-4o"),
+      voice: new PlayAIVoice(),
+    });
+
+    const { text } = await voiceAgent.generate('What color is the sky?');
+
+    // Convert text to speech to an Audio Stream
+    const audioStream = await voiceAgent.voice.speak(text, {
+      speaker: "default", // Optional: specify a speaker
+    });
+
+    playAudio(audioStream);
+    ```
+
+    PlayAIの音声プロバイダーについての詳細は[PlayAI音声リファレンス](/reference/voice/playai)をご覧ください。
+  </Tabs.Tab>
+
+  <Tabs.Tab>
+    ```typescript
+    import { Agent } from '@mastra/core/agent';
+    import { openai } from '@ai-sdk/openai';
+    import { GoogleVoice } from "@mastra/voice-google";
+    import { playAudio } from "@mastra/node-audio";
+
+    const voiceAgent = new Agent({
+      name: "Voice Agent",
+      instructions: "You are a voice assistant that can help users with their tasks.",
+      model: openai("gpt-4o"),
+      voice: new GoogleVoice(),
+    });
+
+    const { text } = await voiceAgent.generate('What color is the sky?');
+
+    // Convert text to speech to an Audio Stream
+    const audioStream = await voiceAgent.voice.speak(text, {
+      speaker: "en-US-Studio-O", // Optional: specify a speaker
+    });
+
+    playAudio(audioStream);
+    ```
+
+    Google音声プロバイダーの詳細については、[Google音声リファレンス](/reference/voice/google)をご覧ください。
+  </Tabs.Tab>
+
+  <Tabs.Tab>
+    ```typescript
+    import { Agent } from '@mastra/core/agent';
+    import { openai } from '@ai-sdk/openai';
+    import { CloudflareVoice } from "@mastra/voice-cloudflare";
+    import { playAudio } from "@mastra/node-audio";
+
+    const voiceAgent = new Agent({
+      name: "Voice Agent",
+      instructions: "You are a voice assistant that can help users with their tasks.",
+      model: openai("gpt-4o"),
+      voice: new CloudflareVoice(),
+    });
+
+    const { text } = await voiceAgent.generate('What color is the sky?');
+
+    // Convert text to speech to an Audio Stream
+    const audioStream = await voiceAgent.voice.speak(text, {
+      speaker: "default", // Optional: specify a speaker
+    });
+
+    playAudio(audioStream);
+    ```
+
+    Cloudflare音声プロバイダーの詳細については、[Cloudflare音声リファレンス](/reference/voice/cloudflare)をご覧ください。
+  </Tabs.Tab>
+
+  <Tabs.Tab>
+    ```typescript
+    import { Agent } from '@mastra/core/agent';
+    import { openai } from '@ai-sdk/openai';
+    import { DeepgramVoice } from "@mastra/voice-deepgram";
+    import { playAudio } from "@mastra/node-audio";
+
+    const voiceAgent = new Agent({
+      name: "Voice Agent",
+      instructions: "You are a voice assistant that can help users with their tasks.",
+      model: openai("gpt-4o"),
+      voice: new DeepgramVoice(),
+    });
+
+    const { text } = await voiceAgent.generate('What color is the sky?');
+
+    // Convert text to speech to an Audio Stream
+    const audioStream = await voiceAgent.voice.speak(text, {
+      speaker: "aura-english-us", // Optional: specify a speaker
+    });
+
+    playAudio(audioStream);
+    ```
+
+    Deepgram音声プロバイダーの詳細については、[Deepgram音声リファレンス](/reference/voice/deepgram)をご覧ください。
+  </Tabs.Tab>
+
+  <Tabs.Tab>
+    ```typescript
+    import { Agent } from '@mastra/core/agent';
+    import { openai } from '@ai-sdk/openai';
+    import { SpeechifyVoice } from "@mastra/voice-speechify";
+    import { playAudio } from "@mastra/node-audio";
+
+    const voiceAgent = new Agent({
+      name: "Voice Agent",
+      instructions: "You are a voice assistant that can help users with their tasks.",
+      model: openai("gpt-4o"),
+      voice: new SpeechifyVoice(),
+    });
+
+    const { text } = await voiceAgent.generate('What color is the sky?');
+
+    // Convert text to speech to an Audio Stream
+    const audioStream = await voiceAgent.voice.speak(text, {
+      speaker: "matthew", // Optional: specify a speaker
+    });
+
+    playAudio(audioStream);
+    ```
+
+    Speechify音声プロバイダーの詳細については、[Speechify音声リファレンス](/reference/voice/speechify)をご覧ください。
+  </Tabs.Tab>
+
+  <Tabs.Tab>
+    ```typescript
+    import { Agent } from '@mastra/core/agent';
+    import { openai } from '@ai-sdk/openai';
+    import { SarvamVoice } from "@mastra/voice-sarvam";
+    import { playAudio } from "@mastra/node-audio";
+
+    const voiceAgent = new Agent({
+      name: "Voice Agent",
+      instructions: "You are a voice assistant that can help users with their tasks.",
+      model: openai("gpt-4o"),
+      voice: new SarvamVoice(),
+    });
+
+    const { text } = await voiceAgent.generate('What color is the sky?');
+
+    // Convert text to speech to an Audio Stream
+    const audioStream = await voiceAgent.voice.speak(text, {
+      speaker: "default", // Optional: specify a speaker
+    });
+
+    playAudio(audioStream);
+    ```
+
+    Sarvam音声プロバイダーの詳細については、[Sarvam音声リファレンス](/reference/voice/sarvam)をご覧ください。
+  </Tabs.Tab>
+
+  <Tabs.Tab>
+    ```typescript
+    import { Agent } from '@mastra/core/agent';
+    import { openai } from '@ai-sdk/openai';
+    import { MurfVoice } from "@mastra/voice-murf";
+    import { playAudio } from "@mastra/node-audio";
+
+    const voiceAgent = new Agent({
+      name: "Voice Agent",
+      instructions: "You are a voice assistant that can help users with their tasks.",
+      model: openai("gpt-4o"),
+      voice: new MurfVoice(),
+    });
+
+    const { text } = await voiceAgent.generate('What color is the sky?');
+
+    // Convert text to speech to an Audio Stream
+    const audioStream = await voiceAgent.voice.speak(text, {
+      speaker: "default", // Optional: specify a speaker
+    });
+
+    playAudio(audioStream);
+    ```
+
+    Murf音声プロバイダーの詳細については、[Murf音声リファレンス](/reference/voice/murf)をご覧ください。
+  </Tabs.Tab>
+</Tabs>
+
+
+### 音声からテキストへの変換 (STT)
+
+OpenAI、ElevenLabsなど、さまざまなプロバイダーを使用して音声コンテンツを文字起こしします。詳細な設定オプションなどについては、[音声からテキストへ](./speech-to-text)をご確認ください。
+
+サンプル音声ファイルは[こちら](https://github.com/mastra-ai/realtime-voice-demo/raw/refs/heads/main/how_can_i_help_you.mp3)からダウンロードできます。
+<br/>
+<AudioPlayback audio="https://github.com/mastra-ai/realtime-voice-demo/raw/refs/heads/main/how_can_i_help_you.mp3" />
+
+<Tabs items={["OpenAI", "Azure", "ElevenLabs", "Google", "Cloudflare", "Deepgram", "Sarvam"]}>
+  <Tabs.Tab>
+    ```typescript
+    import { Agent } from '@mastra/core/agent';
+    import { openai } from '@ai-sdk/openai';
+    import { OpenAIVoice } from "@mastra/voice-openai";
+    import { createReadStream } from 'fs';
+
+    const voiceAgent = new Agent({
+      name: "Voice Agent",
+      instructions: "You are a voice assistant that can help users with their tasks.",
+      model: openai("gpt-4o"),
+      voice: new OpenAIVoice(),
+    });
+
+    // Use an audio file from a URL
+    const audioStream = await createReadStream("./how_can_i_help_you.mp3");
+
+    // Convert audio to text
+    const transcript = await voiceAgent.voice.listen(audioStream);
+    console.log(`User said: ${transcript}`);
+
+    // Generate a response based on the transcript
+    const { text } = await voiceAgent.generate(transcript);
+    ```
+
+    OpenAIの音声プロバイダーについての詳細は[OpenAI音声リファレンス](/reference/voice/openai)をご覧ください。
+  </Tabs.Tab>
+
+  <Tabs.Tab>
+    ```typescript
+    import { createReadStream } from 'fs';
+    import { Agent } from '@mastra/core/agent';
+    import { openai } from '@ai-sdk/openai';
+    import { AzureVoice } from "@mastra/voice-azure";
+    import { createReadStream } from 'fs';
+
+    const voiceAgent = new Agent({
+      name: "Voice Agent",
+      instructions: "You are a voice assistant that can help users with their tasks.",
+      model: openai("gpt-4o"),
+      voice: new AzureVoice(),
+    });
+
+    // Use an audio file from a URL
+    const audioStream = await createReadStream("./how_can_i_help_you.mp3");
+
+    // Convert audio to text
+    const transcript = await voiceAgent.voice.listen(audioStream);
+    console.log(`User said: ${transcript}`);
+
+    // Generate a response based on the transcript
+    const { text } = await voiceAgent.generate(transcript);
+    ```
+
+    Azureの音声プロバイダーについての詳細は[Azure音声リファレンス](/reference/voice/azure)をご覧ください。
+  </Tabs.Tab>
+
+  <Tabs.Tab>
+    ```typescript
+    import { Agent } from '@mastra/core/agent';
+    import { openai } from '@ai-sdk/openai';
+    import { ElevenLabsVoice } from "@mastra/voice-elevenlabs";
+    import { createReadStream } from 'fs';
+
+    const voiceAgent = new Agent({
+      name: "Voice Agent",
+      instructions: "You are a voice assistant that can help users with their tasks.",
+      model: openai("gpt-4o"),
+      voice: new ElevenLabsVoice(),
+    });
+
+    // Use an audio file from a URL
+    const audioStream = await createReadStream("./how_can_i_help_you.mp3");
+
+    // Convert audio to text
+    const transcript = await voiceAgent.voice.listen(audioStream);
+    console.log(`User said: ${transcript}`);
+
+    // Generate a response based on the transcript
+    const { text } = await voiceAgent.generate(transcript);
+    ```
+
+    ElevenLabsの音声プロバイダーについての詳細は[ElevenLabs音声リファレンス](/reference/voice/elevenlabs)をご覧ください。
+  </Tabs.Tab>
+
+  <Tabs.Tab>
+    ```typescript
+    import { Agent } from '@mastra/core/agent';
+    import { openai } from '@ai-sdk/openai';
+    import { GoogleVoice } from "@mastra/voice-google";
+    import { createReadStream } from 'fs';
+
+    const voiceAgent = new Agent({
+      name: "Voice Agent",
+      instructions: "You are a voice assistant that can help users with their tasks.",
+      model: openai("gpt-4o"),
+      voice: new GoogleVoice(),
+    });
+
+    // Use an audio file from a URL
+    const audioStream = await createReadStream("./how_can_i_help_you.mp3");
+
+    // Convert audio to text
+    const transcript = await voiceAgent.voice.listen(audioStream);
+    console.log(`User said: ${transcript}`);
+
+    // Generate a response based on the transcript
+    const { text } = await voiceAgent.generate(transcript);
+    ```
+
+    Googleの音声プロバイダーについての詳細は[Google音声リファレンス](/reference/voice/google)をご覧ください。
+  </Tabs.Tab>
+
+  <Tabs.Tab>
+    ```typescript
+    import { Agent } from '@mastra/core/agent';
+    import { openai } from '@ai-sdk/openai';
+    import { CloudflareVoice } from "@mastra/voice-cloudflare";
+    import { createReadStream } from 'fs';
+
+    const voiceAgent = new Agent({
+      name: "Voice Agent",
+      instructions: "You are a voice assistant that can help users with their tasks.",
+      model: openai("gpt-4o"),
+      voice: new CloudflareVoice(),
+    });
+
+    // Use an audio file from a URL
+    const audioStream = await createReadStream("./how_can_i_help_you.mp3");
+
+    // Convert audio to text
+    const transcript = await voiceAgent.voice.listen(audioStream);
+    console.log(`User said: ${transcript}`);
+
+    // Generate a response based on the transcript
+    const { text } = await voiceAgent.generate(transcript);
+    ```
+
+    Cloudflare音声プロバイダーの詳細については、[Cloudflare音声リファレンス](/reference/voice/cloudflare)をご覧ください。
+  </Tabs.Tab>
+
+  <Tabs.Tab>
+    ```typescript
+    import { Agent } from '@mastra/core/agent';
+    import { openai } from '@ai-sdk/openai';
+    import { DeepgramVoice } from "@mastra/voice-deepgram";
+    import { createReadStream } from 'fs';
+
+    const voiceAgent = new Agent({
+      name: "Voice Agent",
+      instructions: "You are a voice assistant that can help users with their tasks.",
+      model: openai("gpt-4o"),
+      voice: new DeepgramVoice(),
+    });
+
+    // Use an audio file from a URL
+    const audioStream = await createReadStream("./how_can_i_help_you.mp3");
+
+    // Convert audio to text
+    const transcript = await voiceAgent.voice.listen(audioStream);
+    console.log(`User said: ${transcript}`);
+
+    // Generate a response based on the transcript
+    const { text } = await voiceAgent.generate(transcript);
+    ```
+
+    Deepgram音声プロバイダーの詳細については、[Deepgram音声リファレンス](/reference/voice/deepgram)をご覧ください。
+  </Tabs.Tab>
+
+  <Tabs.Tab>
+    ```typescript
+    import { Agent } from '@mastra/core/agent';
+    import { openai } from '@ai-sdk/openai';
+    import { SarvamVoice } from "@mastra/voice-sarvam";
+    import { createReadStream } from 'fs';
+
+    const voiceAgent = new Agent({
+      name: "Voice Agent",
+      instructions: "You are a voice assistant that can help users with their tasks.",
+      model: openai("gpt-4o"),
+      voice: new SarvamVoice(),
+    });
+
+    // Use an audio file from a URL
+    const audioStream = await createReadStream("./how_can_i_help_you.mp3");
+
+    // Convert audio to text
+    const transcript = await voiceAgent.voice.listen(audioStream);
+    console.log(`User said: ${transcript}`);
+
+    // Generate a response based on the transcript
+    const { text } = await voiceAgent.generate(transcript);
+    ```
+
+    Sarvam音声プロバイダーの詳細については、[Sarvam音声リファレンス](/reference/voice/sarvam)をご覧ください。
+  </Tabs.Tab>
+</Tabs>
+
+
+### 音声から音声へ（STS）
+
+音声から音声への機能で会話体験を作成します。統一されたAPIにより、ユーザーとAIエージェント間のリアルタイム音声インタラクションが可能になります。
+詳細な設定オプションと高度な機能については、[音声から音声へ](./speech-to-speech)をご確認ください。
+
+<Tabs items={["OpenAI"]}>
+  <Tabs.Tab>
+```typescript
+import { Agent } from '@mastra/core/agent';
+import { openai } from '@ai-sdk/openai';
+import { playAudio, getMicrophoneStream } from '@mastra/node-audio';
+import { OpenAIRealtimeVoice } from "@mastra/voice-openai-realtime";
+
+const voiceAgent = new Agent({
+  name: "Voice Agent",
+  instructions: "You are a voice assistant that can help users with their tasks.",
+  model: openai("gpt-4o"),
+  voice: new OpenAIRealtimeVoice(),
+});
+
+// Listen for agent audio responses
+voiceAgent.voice.on('speaker', ({ audio }) => {
+  playAudio(audio);
+});
+
+// Initiate the conversation
+await voiceAgent.voice.speak('How can I help you today?');
+
+// Send continuous audio from the microphone
+const micStream = getMicrophoneStream();
+await voiceAgent.voice.send(micStream);
+```
+
+OpenAI音声プロバイダーの詳細については、[OpenAI音声リファレンス](/reference/voice/openai-realtime)をご覧ください。
+  </Tabs.Tab>
+</Tabs>
+
+## 音声設定
+
+各音声プロバイダーは、異なるモデルやオプションで設定できます。以下は、サポートされているすべてのプロバイダーの詳細な設定オプションです：
+
+<Tabs items={["OpenAI", "Azure", "ElevenLabs", "PlayAI", "Google", "Cloudflare", "Deepgram", "Speechify", "Sarvam", "Murf", "OpenAI Realtime"]}>
+  <Tabs.Tab>
+    ```typescript
+    // OpenAI Voice Configuration
+    const voice = new OpenAIVoice({
+      speechModel: {
+        name: "gpt-3.5-turbo", // Example model name
+        apiKey: process.env.OPENAI_API_KEY,
+        language: "en-US", // Language code
+        voiceType: "neural", // Type of voice model
+      },
+      listeningModel: {
+        name: "whisper-1", // Example model name
+        apiKey: process.env.OPENAI_API_KEY,
+        language: "en-US", // Language code
+        format: "wav", // Audio format
+      },
+      speaker: "alloy", // Example speaker name
+    });
+    ```
+
+    詳細については[OpenAI音声リファレンス](/reference/voice/openai)をご覧ください。
+  </Tabs.Tab>
+
+  <Tabs.Tab>
+    ```typescript
+    // Azure Voice Configuration
+    const voice = new AzureVoice({
+      speechModel: {
+        name: "en-US-JennyNeural", // Example model name
+        apiKey: process.env.AZURE_SPEECH_KEY,
+        region: process.env.AZURE_SPEECH_REGION,
+        language: "en-US", // Language code
+        style: "cheerful", // Voice style
+        pitch: "+0Hz", // Pitch adjustment
+        rate: "1.0", // Speech rate
+      },
+      listeningModel: {
+        name: "en-US", // Example model name
+        apiKey: process.env.AZURE_SPEECH_KEY,
+        region: process.env.AZURE_SPEECH_REGION,
+        format: "simple", // Output format
+      },
+    });
+    ```
+
+    詳細については[Azure音声リファレンス](/reference/voice/azure)をご覧ください。
+  </Tabs.Tab>
+
+  <Tabs.Tab>
+    ```typescript
+    // ElevenLabs Voice Configuration
+    const voice = new ElevenLabsVoice({
+      speechModel: {
+        voiceId: "your-voice-id", // Example voice ID
+        model: "eleven_multilingual_v2", // Example model name
+        apiKey: process.env.ELEVENLABS_API_KEY,
+        language: "en", // Language code
+        emotion: "neutral", // Emotion setting
+      },
+      // ElevenLabs may not have a separate listening model
+    });
+    ```
+
+    詳細については[ElevenLabs音声リファレンス](/reference/voice/elevenlabs)をご覧ください。
+  </Tabs.Tab>
+
+  <Tabs.Tab>
+    ```typescript
+    // PlayAI Voice Configuration
+    const voice = new PlayAIVoice({
+      speechModel: {
+        name: "playai-voice", // Example model name
+        speaker: "emma", // Example speaker name
+        apiKey: process.env.PLAYAI_API_KEY,
+        language: "en-US", // Language code
+        speed: 1.0, // Speech speed
+      },
+      // PlayAI may not have a separate listening model
+    });
+    ```
+
+    詳細については[PlayAI音声リファレンス](/reference/voice/playai)をご覧ください。
+  </Tabs.Tab>
+
+  <Tabs.Tab>
+    ```typescript
+    // Google Voice Configuration
+    const voice = new GoogleVoice({
+      speechModel: {
+        name: "en-US-Studio-O", // Example model name
+        apiKey: process.env.GOOGLE_API_KEY,
+        languageCode: "en-US", // Language code
+        gender: "FEMALE", // Voice gender
+        speakingRate: 1.0, // Speaking rate
+      },
+      listeningModel: {
+        name: "en-US", // Example model name
+        sampleRateHertz: 16000, // Sample rate
+      },
+    });
+    ```
+
+    詳細については[PlayAI音声リファレンス](/reference/voice/playai)をご覧ください。
+  </Tabs.Tab>
+
+  <Tabs.Tab>
+    ```typescript
+    // Cloudflare Voice Configuration
+    const voice = new CloudflareVoice({
+      speechModel: {
+        name: "cloudflare-voice", // Example model name
+        accountId: process.env.CLOUDFLARE_ACCOUNT_ID,
+        apiToken: process.env.CLOUDFLARE_API_TOKEN,
+        language: "en-US", // Language code
+        format: "mp3", // Audio format
+      },
+      // Cloudflare may not have a separate listening model
+    });
+    ```
+
+    詳細については[Cloudflare音声リファレンス](/reference/voice/cloudflare)をご覧ください。
+  </Tabs.Tab>
+
+  <Tabs.Tab>
+    ```typescript
+    // Deepgram Voice Configuration
+    const voice = new DeepgramVoice({
+      speechModel: {
+        name: "nova-2", // Example model name
+        speaker: "aura-english-us", // Example speaker name
+        apiKey: process.env.DEEPGRAM_API_KEY,
+        language: "en-US", // Language code
+        tone: "formal", // Tone setting
+      },
+      listeningModel: {
+        name: "nova-2", // Example model name
+        format: "flac", // Audio format
+      },
+    });
+    ```
+
+    Deepgramの音声プロバイダーの詳細については、[Deepgram音声リファレンス](/reference/voice/deepgram)をご覧ください。
+  </Tabs.Tab>
+
+  <Tabs.Tab>
+    ```typescript
+    // Speechify Voice Configuration
+    const voice = new SpeechifyVoice({
+      speechModel: {
+        name: "speechify-voice", // Example model name
+        speaker: "matthew", // Example speaker name
+        apiKey: process.env.SPEECHIFY_API_KEY,
+        language: "en-US", // Language code
+        speed: 1.0, // Speech speed
+      },
+      // Speechify may not have a separate listening model
+    });
+    ```
+
+    Speechifyの音声プロバイダーの詳細については、[Speechify音声リファレンス](/reference/voice/speechify)をご覧ください。
+  </Tabs.Tab>
+
+  <Tabs.Tab>
+    ```typescript
+    // Sarvam Voice Configuration
+    const voice = new SarvamVoice({
+      speechModel: {
+        name: "sarvam-voice", // Example model name
+        apiKey: process.env.SARVAM_API_KEY,
+        language: "en-IN", // Language code
+        style: "conversational", // Style setting
+      },
+      // Sarvam may not have a separate listening model
+    });
+    ```
+
+    Sarvamの音声プロバイダーの詳細については、[Sarvam音声リファレンス](/reference/voice/sarvam)をご覧ください。
+  </Tabs.Tab>
+
+  <Tabs.Tab>
+    ```typescript
+    // Murf Voice Configuration
+    const voice = new MurfVoice({
+      speechModel: {
+        name: "murf-voice", // Example model name
+        apiKey: process.env.MURF_API_KEY,
+        language: "en-US", // Language code
+        emotion: "happy", // Emotion setting
+      },
+      // Murf may not have a separate listening model
+    });
+    ```
+
+    Murfの音声プロバイダーの詳細については、[Murf音声リファレンス](/reference/voice/murf)をご覧ください。
+  </Tabs.Tab>
+
+  <Tabs.Tab>
+    ```typescript
+    // OpenAI Realtime Voice Configuration
+    const voice = new OpenAIRealtimeVoice({
+      speechModel: {
+        name: "gpt-3.5-turbo", // Example model name
+        apiKey: process.env.OPENAI_API_KEY,
+        language: "en-US", // Language code
+      },
+      listeningModel: {
+        name: "whisper-1", // Example model name
+        apiKey: process.env.OPENAI_API_KEY,
+        format: "ogg", // Audio format
+      },
+      speaker: "alloy", // Example speaker name
+    });
+    ```
+
+    OpenAIリアルタイム音声プロバイダーの詳細については、[OpenAIリアルタイム音声リファレンス](/reference/voice/openai-realtime)を参照してください。
+  </Tabs.Tab>
+</Tabs>
+
+
+### 複数の音声プロバイダーの使用
+この例では、Mastraで2つの異なる音声プロバイダーを作成して使用する方法を示しています：音声からテキスト（STT）にはOpenAI、テキストから音声（TTS）にはPlayAIを使用します。
+
+まず、必要な設定で音声プロバイダーのインスタンスを作成します。
+
+```typescript
+import { OpenAIVoice } from "@mastra/voice-openai";
+import { PlayAIVoice } from "@mastra/voice-playai";
+import { CompositeVoice } from "@mastra/core/voice";
+import { playAudio, getMicrophoneStream } from "@mastra/node-audio";
+
+// STT用のOpenAI音声を初期化
+const input = new OpenAIVoice({
+  listeningModel: {
+    name: "whisper-1",
+    apiKey: process.env.OPENAI_API_KEY,
+  },
+});
+
+// TTS用のPlayAI音声を初期化
+const output = new PlayAIVoice({
+  speechModel: {
+    name: "playai-voice",
+    apiKey: process.env.PLAYAI_API_KEY,
+  },
+});
+
+// CompositeVoiceを使用してプロバイダーを組み合わせる
+const voice = new CompositeVoice({
+  input,
+  output,
+});
+
+// 組み合わせた音声プロバイダーを使用して音声インタラクションを実装
+const audioStream = getMicrophoneStream(); // この関数が音声入力を取得すると仮定
+const transcript = await voice.listen(audioStream);
+
+// 文字起こしされたテキストをログに記録
+console.log("Transcribed text:", transcript);
+
+// テキストを音声に変換
+const responseAudio = await voice.speak(`You said: ${transcript}`, {
+  speaker: "default", // オプション：スピーカーを指定
+  responseFormat: "wav", // オプション：レスポンス形式を指定
+});
+
+// 音声レスポンスを再生
+playAudio(responseAudio);
+```
+
+CompositeVoiceの詳細については、[CompositeVoiceリファレンス](/reference/voice/composite-voice)を参照してください。
+
+## その他のリソース
+
+- [CompositeVoice](../../reference/voice/composite-voice.mdx)
+- [MastraVoice](../../reference/voice/mastra-voice.mdx)
+- [OpenAI Voice](../../reference/voice/openai.mdx)
+- [Azure Voice](../../reference/voice/azure.mdx)
+- [Google Voice](../../reference/voice/google.mdx)
+- [Deepgram Voice](../../reference/voice/deepgram.mdx)
+- [PlayAI Voice](../../reference/voice/playai.mdx)
+- [音声の例](../../examples/voice/text-to-speech.mdx)

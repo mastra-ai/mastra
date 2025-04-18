@@ -1,0 +1,76 @@
+---
+title: ".afterEvent() メソッド | Mastra ドキュメント"
+description: "イベントベースのサスペンションポイントを作成する Mastra ワークフローの afterEvent メソッドのリファレンス。"
+---
+
+# afterEvent()
+
+`afterEvent()` メソッドは、特定のイベントが発生するのを待ってから実行を続行するワークフロー内の中断ポイントを作成します。
+
+## 構文
+
+```typescript
+workflow.afterEvent(eventName: string): Workflow
+```
+
+## パラメータ
+
+| パラメータ | 型 | 説明 |
+|-----------|------|-------------|
+| eventName | string | 待機するイベントの名前。ワークフローの `events` 設定で定義されたイベントと一致する必要があります。 |
+
+## 戻り値
+
+メソッドチェーンのためのワークフローインスタンスを返します。
+
+## 説明
+
+`afterEvent()` メソッドは、特定の名前付きイベントを待機する自動停止ポイントをワークフロー内に作成するために使用されます。これは、ワークフローが一時停止し、外部イベントが発生するのを待つべきポイントを宣言的に定義する方法です。
+
+`afterEvent()` を呼び出すと、Mastra は次のことを行います：
+
+1. ID `__eventName_event` を持つ特別なステップを作成します
+2. このステップはワークフローの実行を自動的に停止します
+3. 指定されたイベントが `resumeWithEvent()` を介してトリガーされるまで、ワークフローは停止したままです
+4. イベントが発生すると、`afterEvent()` 呼び出しの次のステップから実行が続行されます
+
+このメソッドは、Mastra のイベント駆動型ワークフロー機能の一部であり、外部システムやユーザーの操作と連携するワークフローを、手動で停止ロジックを実装することなく作成することを可能にします。
+
+## 使用上の注意
+
+- `afterEvent()`で指定されたイベントは、スキーマを持つワークフローの`events`設定で定義されている必要があります
+- 作成された特別なステップには予測可能なID形式があります: `__eventName_event`（例: `__approvalReceived_event`）
+- `afterEvent()`に続く任意のステップは、`context.inputData.resumedEvent`を介してイベントデータにアクセスできます
+- `resumeWithEvent()`が呼び出されると、イベントデータはそのイベントのために定義されたスキーマに対して検証されます
+
+## 例
+
+### 基本的な使用法
+
+```typescript
+// Define workflow with events
+const workflow = new Workflow({
+  name: 'approval-workflow',
+  events: {
+    approval: {
+      schema: z.object({
+        approved: z.boolean(),
+        approverName: z.string(),
+      }),
+    },
+  },
+});
+
+// Build workflow with event suspension point
+workflow
+  .step(submitRequest)
+  .afterEvent('approval')    // Workflow suspends here
+  .step(processApproval)     // This step runs after the event occurs
+  .commit();
+```
+## 関連
+
+- [イベント駆動型ワークフロー](./events.mdx)
+- [resumeWithEvent()](./resumeWithEvent.mdx)
+- [一時停止と再開](../../workflows/suspend-and-resume.mdx)
+- [Workflow クラス](./workflow.mdx)

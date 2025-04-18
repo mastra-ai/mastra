@@ -1,0 +1,87 @@
+---
+title: "リファレンス: voice.updateConfig() | 音声プロバイダー | Mastra Docs"
+description: "音声プロバイダーで利用可能なupdateConfig()メソッドのドキュメント。実行時に音声プロバイダーの設定を更新します。"
+---
+
+# voice.updateConfig()
+
+`updateConfig()` メソッドを使用すると、実行時に音声プロバイダーの設定を更新できます。これは、新しいインスタンスを作成せずに、音声設定、APIキー、またはその他のプロバイダー固有のオプションを変更する場合に便利です。
+
+## 使用例
+
+```typescript
+import { OpenAIRealtimeVoice } from "@mastra/voice-openai-realtime";
+
+// Initialize a real-time voice provider
+const voice = new OpenAIRealtimeVoice({
+  realtimeConfig: {
+    model: "gpt-4o-mini-realtime",
+    apiKey: process.env.OPENAI_API_KEY,
+  },
+  speaker: "alloy",
+});
+
+// Connect to the real-time service
+await voice.connect();
+
+// Later, update the configuration
+voice.updateConfig({
+  voice: "nova", // Change the default voice
+  turn_detection: {
+    type: "server_vad",
+    threshold: 0.5,
+    silence_duration_ms: 1000
+  }
+});
+
+// The next speak() call will use the new configuration
+await voice.speak("Hello with my new voice!");
+```
+
+## パラメータ
+<br />
+<PropertiesTable
+  content={[
+    {
+      name: "options",
+      type: "Record<string, unknown>",
+      description: "更新する設定オプション。具体的なプロパティは音声プロバイダーによって異なります。",
+      isOptional: false,
+    }
+  ]}
+/>
+
+## 戻り値
+
+このメソッドは値を返しません。
+
+## 設定オプション
+
+異なる音声プロバイダーは異なる設定オプションをサポートしています：
+
+### OpenAI リアルタイム
+<br/>
+<PropertiesTable
+  content={[
+    {
+      name: "voice",
+      type: "string",
+      description: "音声合成に使用する音声ID（例：'alloy'、'echo'、'nova'）",
+      isOptional: true,
+    },
+    {
+      name: "turn_detection",
+      type: "{ type: string, threshold?: number, silence_duration_ms?: number }",
+      description: "ユーザーが話し終わったことを検出するための設定",
+      isOptional: true,
+    }
+  ]}
+/>
+
+## 注意事項
+
+- デフォルトの実装では、プロバイダーがこのメソッドをサポートしていない場合は警告がログに記録されます
+- 設定の更新は通常、進行中の操作ではなく、後続の操作に適用されます
+- コンストラクタで設定できるすべてのプロパティが実行時に更新できるわけではありません
+- 具体的な動作はボイスプロバイダーの実装によって異なります
+- リアルタイムボイスプロバイダーの場合、一部の設定変更ではサービスへの再接続が必要になることがあります

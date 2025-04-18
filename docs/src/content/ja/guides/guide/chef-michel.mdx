@@ -1,0 +1,242 @@
+---
+title: "AIシェフアシスタントの構築 | Mastraエージェントガイド"
+description: 利用可能な食材で料理を作るユーザーを支援するMastraでのシェフアシスタントエージェントの作成ガイド。
+---
+
+import { Steps } from "nextra/components";
+import YouTube from "@/components/youtube";
+
+# エージェントガイド：シェフアシスタントの構築
+
+このガイドでは、ユーザーが手持ちの食材で料理を作るのを手伝う「シェフアシスタント」エージェントの作成方法を説明します。
+
+<YouTube id="_tZhOqHCrF0" />
+
+## 前提条件
+
+- Node.jsがインストールされていること
+- Mastraがインストールされていること: `npm install @mastra/core`
+
+---
+
+## エージェントを作成する
+
+<Steps>
+### エージェントを定義する
+
+新しいファイル `src/mastra/agents/chefAgent.ts` を作成し、エージェントを定義します：
+
+```ts copy filename="src/mastra/agents/chefAgent.ts"
+import { openai } from "@ai-sdk/openai";
+import { Agent } from "@mastra/core/agent";
+
+export const chefAgent = new Agent({
+  name: "chef-agent",
+  instructions:
+    "You are Michel, a practical and experienced home chef" +
+    "You help people cook with whatever ingredients they have available.",
+  model: openai("gpt-4o-mini"),
+});
+```
+
+---
+
+## 環境変数を設定する
+
+プロジェクトのルートに `.env` ファイルを作成し、OpenAI APIキーを追加します：
+
+```bash filename=".env" copy
+OPENAI_API_KEY=your_openai_api_key
+```
+
+---
+
+## エージェントをMastraに登録する
+
+メインファイルで、エージェントを登録します：
+
+```ts copy filename="src/mastra/index.ts"
+import { Mastra } from "@mastra/core";
+
+import { chefAgent } from "./agents/chefAgent";
+
+export const mastra = new Mastra({
+  agents: { chefAgent },
+});
+```
+
+---
+
+</Steps >
+
+## エージェントとの対話
+
+<Steps>
+### テキスト応答の生成
+
+```ts copy filename="src/index.ts"
+async function main() {
+  const query =
+    "In my kitchen I have: pasta, canned tomatoes, garlic, olive oil, and some dried herbs (basil and oregano). What can I make?";
+  console.log(`Query: ${query}`);
+
+  const response = await chefAgent.generate([{ role: "user", content: query }]);
+  console.log("\n👨‍🍳 Chef Michel:", response.text);
+}
+
+main();
+```
+
+スクリプトを実行します：
+
+```bash copy
+npx bun src/index.ts
+```
+
+出力：
+
+```
+Query: In my kitchen I have: pasta, canned tomatoes, garlic, olive oil, and some dried herbs (basil and oregano). What can I make?
+
+👨‍🍳 Chef Michel: You can make a delicious pasta al pomodoro! Here's how...
+```
+
+---
+
+### レスポンスのストリーミング
+
+```ts copy filename="src/index.ts"
+async function main() {
+  const query =
+    "Now I'm over at my friend's house, and they have: chicken thighs, coconut milk, sweet potatoes, and some curry powder.";
+  console.log(`Query: ${query}`);
+
+  const stream = await chefAgent.stream([{ role: "user", content: query }]);
+
+  console.log("\n Chef Michel: ");
+
+  for await (const chunk of stream.textStream) {
+    process.stdout.write(chunk);
+  }
+
+  console.log("\n\n✅ Recipe complete!");
+}
+
+main();
+```
+
+出力：
+
+```
+Query: Now I'm over at my friend's house, and they have: chicken thighs, coconut milk, sweet potatoes, and some curry powder.
+
+👨‍🍳 Chef Michel:
+Great! You can make a comforting chicken curry...
+
+✅ Recipe complete!
+```
+
+---
+
+### 構造化データを含むレシピの生成
+
+```ts copy filename="src/index.ts"
+import { z } from "zod";
+
+async function main() {
+  const query =
+    "I want to make lasagna, can you generate a lasagna recipe for me?";
+  console.log(`Query: ${query}`);
+
+  // Define the Zod schema
+  const schema = z.object({
+    ingredients: z.array(
+      z.object({
+        name: z.string(),
+        amount: z.string(),
+      }),
+    ),
+    steps: z.array(z.string()),
+  });
+
+  const response = await chefAgent.generate(
+    [{ role: "user", content: query }],
+    { output: schema },
+  );
+  console.log("\n👨‍🍳 Chef Michel:", response.object);
+}
+
+main();
+```
+
+出力：
+
+```
+Query: I want to make lasagna, can you generate a lasagna recipe for me?
+
+👨‍🍳 Chef Michel: {
+  ingredients: [
+    { name: "Lasagna noodles", amount: "12 sheets" },
+    { name: "Ground beef", amount: "1 pound" },
+    // ...
+  ],
+  steps: [
+    "Preheat oven to 375°F (190°C).",
+    "Cook the lasagna noodles according to package instructions.",
+    // ...
+  ]
+}
+```
+
+---
+
+</Steps >
+
+## エージェントサーバーの実行
+
+<Steps>
+
+### `mastra dev`の使用
+
+`mastra dev`コマンドを使用してエージェントをサービスとして実行できます：
+
+```bash copy
+mastra dev
+```
+
+これにより、登録されたエージェントと対話するためのエンドポイントを公開するサーバーが起動します。
+
+### シェフアシスタントAPIへのアクセス
+
+デフォルトでは、`mastra dev`は`http://localhost:4111`で実行されます。シェフアシスタントエージェントは以下のURLで利用可能です：
+
+```
+POST http://localhost:4111/api/agents/chefAgent/generate
+```
+
+### `curl`を使用したエージェントとの対話
+
+コマンドラインから`curl`を使用してエージェントと対話できます：
+
+```bash copy
+curl -X POST http://localhost:4111/api/agents/chefAgent/generate \
+  -H "Content-Type: application/json" \
+  -d '{
+    "messages": [
+      {
+        "role": "user",
+        "content": "I have eggs, flour, and milk. What can I make?"
+      }
+    ]
+  }'
+```
+
+**サンプルレスポンス：**
+
+```json
+{
+  "text": "You can make delicious pancakes! Here's a simple recipe..."
+}
+```
+
+</Steps>

@@ -1,0 +1,54 @@
+---
+title: "新しいプロジェクトの作成 | Mastra ローカル開発ドキュメント"
+description: "CLIを使用して新しいMastraプロジェクトを作成するか、既存のNode.jsアプリケーションにMastraを追加します"
+---
+
+# 新しいプロジェクトの作成
+
+`create-mastra` パッケージを使用して新しいプロジェクトを作成できます:
+
+```bash npm2yarn copy
+npm create mastra@latest 
+```
+
+`mastra` CLIを直接使用して新しいプロジェクトを作成することもできます:
+
+```bash npm2yarn copy
+npm install -g mastra@latest 
+mastra create
+```
+
+## インタラクティブセットアップ
+
+引数なしでコマンドを実行すると、CLIプロンプトが開始されます：
+
+1. プロジェクト名
+1. コンポーネントの選択
+2. LLMプロバイダーの設定
+3. APIキーのセットアップ
+4. サンプルコードの含有
+
+## 非対話型セットアップ
+
+非対話型モードでmastraを初期化するには、次のコマンド引数を使用します:
+
+```bash
+Arguments:
+  --components     Specify components: agents, tools, workflows
+  --llm-provider   LLM provider: openai, anthropic, groq, google, or cerebras
+  --add-example    Include example implementation
+  --llm-api-key    Provider API key
+  --project-name   Project name that will be used in package.json and as the project directory name
+```
+
+
+
+生成されたプロジェクト構造:
+```
+my-project/
+├── src/
+│   └── mastra/
+│       └── index.ts    # Mastra entry point
+├── package.json
+└── tsconfig.json
+```

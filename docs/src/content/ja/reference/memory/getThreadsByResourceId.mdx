@@ -1,0 +1,48 @@
+# getThreadsByResourceId リファレンス
+
+`getThreadsByResourceId` 関数は、特定のリソースIDに関連付けられたすべてのスレッドをストレージから取得します。
+
+## 使用例
+
+```typescript
+import { Memory } from "@mastra/core/memory";
+
+const memory = new Memory(config);
+
+const threads = await memory.getThreadsByResourceId({
+  resourceId: "resource-123",
+});
+```
+
+## パラメーター
+
+<PropertiesTable
+  content={[
+    {
+      name: "resourceId",
+      type: "string",
+      description: "スレッドを取得するリソースのID。",
+      isOptional: false,
+    },
+  ]}
+/>
+
+## 戻り値
+
+<PropertiesTable
+  content={[
+    {
+      name: "StorageThreadType[]",
+      type: "Promise",
+      description:
+        "指定されたリソースIDに関連付けられたスレッドの配列に解決されるプロミス。",
+    },
+  ]}
+/>
+
+### 関連
+
+- [Memory クラスリファレンス](/reference/memory/Memory.mdx)
+- [Memory の始め方](/docs/memory/overview.mdx) (スレッド/リソースの概念をカバー)
+- [createThread](/reference/memory/createThread.mdx)
+- [getThreadById](/reference/memory/getThreadById.mdx)

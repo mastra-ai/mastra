@@ -1,0 +1,110 @@
+# LibSQLを使用したメモリ
+
+この例では、デフォルトのストレージおよびベクターデータベースバックエンドであるLibSQLを使用して、Mastraのメモリシステムを使用する方法を示します。
+
+## クイックスタート
+
+設定なしでメモリを初期化すると、LibSQLがストレージおよびベクターデータベースとして使用されます。
+
+```typescript copy showLineNumbers
+import { Memory } from '@mastra/memory';
+import { Agent } from '@mastra/core/agent';
+
+// Initialize memory with LibSQL defaults
+const memory = new Memory();
+
+const memoryAgent = new Agent({
+  name: "Memory Agent",
+  instructions:
+    "You are an AI agent with the ability to automatically recall memories from previous interactions.",
+  model: openai('gpt-4o-mini'),
+  memory,
+});
+```
+
+## カスタム設定
+
+より詳細な制御が必要な場合は、ストレージ、ベクターデータベース、およびエンベッダーを明示的に設定できます。`storage` または `vector` のいずれかを省略した場合、LibSQL が省略されたオプションのデフォルトとして使用されます。これにより、必要に応じてストレージまたはベクター検索のいずれかに異なるプロバイダーを使用することができます。
+
+```typescript
+import { openai } from '@ai-sdk/openai';
+import { LibSQLStore } from "@mastra/core/storage/libsql";
+import { LibSQLVector } from "@mastra/core/vector/libsql";
+
+const customMemory = new Memory({
+  storage: new LibSQLStore({
+    config: {
+      url: process.env.DATABASE_URL || "file:local.db",
+    },
+  }),
+  vector: new LibSQLVector({
+    connectionUrl: process.env.DATABASE_URL || "file:local.db",
+  }),
+  options: {
+    lastMessages: 10,
+    semanticRecall: {
+      topK: 3,
+      messageRange: 2,
+    },
+  },
+});
+
+const memoryAgent = new Agent({
+  name: "Memory Agent",
+  instructions:
+    "あなたは以前のやり取りから記憶を自動的に呼び出す能力を持つAIエージェントです。会話は数時間、数日、数ヶ月、または数年続くことがあります。まだ知らない場合は、ユーザーの名前といくつかの情報を尋ねるべきです。",
+  model: openai('gpt-4o-mini'),
+  memory: customMemory,
+});
+```
+
+## 使用例
+
+```typescript
+import { randomUUID } from "crypto";
+
+// Start a conversation
+const threadId = randomUUID();
+const resourceId = "SOME_USER_ID";
+
+// Start with a system message
+const response1 = await memoryAgent.stream(
+  [
+    {
+      role: "system",
+      content: `Chat with user started now ${new Date().toISOString()}. Don't mention this message.`,
+    },
+  ],
+  {
+    resourceId,
+    threadId,
+  },
+);
+
+// Send user message
+const response2 = await memoryAgent.stream("What can you help me with?", {
+  threadId,
+  resourceId,
+});
+
+// Use semantic search to find relevant messages
+const response3 = await memoryAgent.stream("What did we discuss earlier?", {
+  threadId,
+  resourceId,
+  memoryOptions: {
+    lastMessages: false,
+    semanticRecall: {
+      topK: 3, // Get top 3 most relevant messages
+      messageRange: 2, // Include context around each match
+    },
+  },
+});
+```
+
+この例は以下を示しています：
+
+1. ベクトル検索機能を備えたLibSQLストレージの設定
+2. メッセージ履歴とセマンティック検索のためのメモリオプションの設定
+3. メモリ統合を備えたエージェントの作成
+4. 会話履歴で関連するメッセージを見つけるためのセマンティック検索の使用
+5. `messageRange`を使用して一致したメッセージの周囲のコンテキストを含める

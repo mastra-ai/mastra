@@ -1,0 +1,212 @@
+---
+title: "Cloudflare Deployer"
+description: "CloudflareDeployerクラスのドキュメント。MastraアプリケーションをCloudflare Workersにデプロイします。"
+---
+
+# CloudflareDeployer
+
+CloudflareDeployerは、MastraアプリケーションをCloudflare Workersにデプロイし、設定、環境変数、ルート管理を処理します。抽象Deployerクラスを拡張して、Cloudflare固有のデプロイ機能を提供します。
+
+## 使用例
+
+```typescript
+import { Mastra } from '@mastra/core';
+import { CloudflareDeployer } from '@mastra/deployer-cloudflare';
+
+const mastra = new Mastra({
+  deployer: new CloudflareDeployer({
+    scope: 'your-account-id',
+    projectName: 'your-project-name',
+    routes: [
+      {
+        pattern: 'example.com/*',
+        zone_name: 'example.com',
+        custom_domain: true,
+      },
+    ],
+    workerNamespace: 'your-namespace',
+    auth: {
+      apiToken: 'your-api-token',
+      apiEmail: 'your-email',
+    },
+  }),
+  // ... other Mastra configuration options
+});
+```
+
+## パラメータ
+
+### コンストラクタパラメータ
+
+<PropertiesTable
+  content={[
+    {
+      name: "scope",
+      type: "string",
+      description: "あなたのCloudflareアカウントID。",
+      isOptional: false,
+    },
+    {
+      name: "projectName",
+      type: "string",
+      description: "ワーカープロジェクトの名前。",
+      isOptional: true,
+      defaultValue: "'mastra'",
+    },
+    {
+      name: "routes",
+      type: "CFRoute[]",
+      description: "ワーカーのルート設定の配列。",
+      isOptional: true,
+    },
+    {
+      name: "workerNamespace",
+      type: "string",
+      description: "ワーカーの名前空間。",
+      isOptional: true,
+    },
+    {
+      name: "env",
+      type: "Record<string, any>",
+      description: "ワーカー設定に含める環境変数。",
+      isOptional: true,
+    },
+    {
+      name: "auth",
+      type: "object",
+      description: "Cloudflare認証の詳細。",
+      isOptional: false,
+    },
+  ]}
+/>
+
+### authオブジェクト
+
+<PropertiesTable
+  content={[
+    {
+      name: "apiToken",
+      type: "string",
+      description: "あなたのCloudflare APIトークン。",
+      isOptional: false,
+    },
+    {
+      name: "apiEmail",
+      type: "string",
+      description: "あなたのCloudflareアカウントのメールアドレス。",
+      isOptional: true,
+    },
+  ]}
+/>
+
+### CFRouteオブジェクト
+
+<PropertiesTable
+  content={[
+    {
+      name: "pattern",
+      type: "string",
+      description: "一致するURLパターン（例：'example.com/*'）。",
+      isOptional: false,
+    },
+    {
+      name: "zone_name",
+      type: "string",
+      description: "ドメインゾーン名。",
+      isOptional: false,
+    },
+    {
+      name: "custom_domain",
+      type: "boolean",
+      description: "カスタムドメインを使用するかどうか。",
+      isOptional: true,
+      defaultValue: "false",
+    },
+  ]}
+/>
+
+### 環境変数
+
+CloudflareDeployerは複数のソースから環境変数を処理します：
+
+1. **環境ファイル**：`.env.production`と`.env`ファイルからの変数。
+2. **設定**：`env`パラメータを通じて渡される変数。
+
+
+## Mastraプロジェクトのビルド
+
+Cloudflareデプロイメント用にMastraプロジェクトをビルドするには：
+
+```bash
+npx mastra build
+
+ビルドプロセスは`.mastra/output`ディレクトリに以下の出力構造を生成します：
+
+```
+.mastra/output/
+├── index.mjs        # メインワーカーのエントリーポイント
+├── wrangler.json    # Cloudflare Workerの設定
+└── assets/          # 静的アセットと依存関係
+```
+
+### Wranglerの設定
+
+CloudflareDeployerは以下の設定で`wrangler.json`設定ファイルを自動的に生成します：
+
+```json
+{
+  "name": "your-project-name",
+  "main": "./output/index.mjs",
+  "compatibility_date": "2024-12-02",
+  "compatibility_flags": ["nodejs_compat"],
+  "observability": {
+    "logs": {
+      "enabled": true
+    }
+  },
+  "vars": {
+    // .envファイルと設定からの環境変数
+  },
+  "routes": [
+    // 指定された場合のルート設定
+  ]
+}
+```
+
+### ルート設定
+
+ルートは、URLパターンとドメインに基づいてトラフィックをワーカーに転送するように設定できます：
+
+```typescript
+const routes = [
+  {
+    pattern: 'api.example.com/*',
+    zone_name: 'example.com',
+    custom_domain: true,
+  },
+  {
+    pattern: 'example.com/api/*',
+    zone_name: 'example.com',
+  },
+];
+```
+
+
+## デプロイオプション
+
+ビルド後、Mastraアプリケーションの`.mastra/output`をCloudflare Workersに以下のいずれかの方法でデプロイできます：
+
+1. **Wrangler CLI**: Cloudflareの公式CLIツールを使用して直接デプロイ
+   - CLIをインストール: `npm install -g wrangler`
+   - 出力ディレクトリに移動: `cd .mastra/output`
+   - Cloudflareアカウントにログイン: `wrangler login`
+   - プレビュー環境にデプロイ: `wrangler deploy`
+   - 本番環境へのデプロイ: `wrangler deploy --env production`
+
+2. **Cloudflareダッシュボード**: Cloudflareダッシュボードを通じてビルド出力を手動でアップロード
+
+> 出力ディレクトリ`.mastra/output`で`wrangler dev`を実行して、Mastraアプリケーションをローカルでテストすることもできます。
+
+## プラットフォームドキュメント
+
+- [Cloudflare Workers](https://developers.cloudflare.com/workers/)

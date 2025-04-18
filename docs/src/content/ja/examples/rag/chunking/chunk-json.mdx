@@ -1,0 +1,39 @@
+---
+title: "例：JSONのセマンティックチャンキング | RAG | Mastra ドキュメント"
+description: MastraでセマンティックにドキュメントをチャンクするためのJSONデータのチャンキング。
+---
+
+import { GithubLink } from "@/components/github-link";
+
+# JSONを意味的に分割する
+
+JSONデータを扱う際には、オブジェクトの構造を保持しながら小さな部分に分割する必要があります。chunkメソッドは、キーと値の関係を維持しながら、JSONコンテンツを賢く分解します。この例は、検索や取得の目的でJSONドキュメントをどのように分割するかを示しています。
+
+```tsx copy
+import { MDocument } from "@mastra/rag";
+
+const testJson = {
+  name: "John Doe",
+  age: 30,
+  email: "john.doe@example.com",
+};
+
+const doc = MDocument.fromJSON(JSON.stringify(testJson));
+
+const chunks = await doc.chunk({
+  maxSize: 100,
+});
+
+console.log(chunks);
+```
+
+<br />
+<br />
+<hr className="dark:border-[#404040] border-gray-300" />
+<br />
+<br />
+<GithubLink
+  link={
+    "https://github.com/mastra-ai/mastra/blob/main/examples/basics/rag/chunk-json"
+  }
+/>

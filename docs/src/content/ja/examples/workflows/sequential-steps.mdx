@@ -1,0 +1,94 @@
+---
+title: "例：順次ステップ | ワークフロー | Mastra ドキュメント"
+description: データを受け渡しながら、特定の順序でワークフローステップを連鎖させるMastraの使用例。
+---
+
+import { GithubLink } from "@/components/github-link";
+
+# 順次ステップによるワークフロー
+
+ワークフローは、特定の順序で次々に実行するように連鎖させることができます。
+
+## 制御フローダイアグラム
+
+この例では、`then` メソッドを使用してワークフローステップを連鎖させ、順次ステップ間でデータを渡し、それらを順番に実行する方法を示しています。
+
+こちらが制御フローダイアグラムです：
+
+<img
+  src="/sequential-chains.png"
+  alt="順次ステップを持つワークフローを示すダイアグラム"
+  width={600}
+/>
+
+## ステップの作成
+
+ステップを作成し、ワークフローを初期化しましょう。
+
+```ts showLineNumbers copy
+import { Step, Workflow } from "@mastra/core/workflows";
+import { z } from "zod";
+
+const stepOne = new Step({
+  id: "stepOne",
+  execute: async ({ context }) => ({
+    doubledValue: context.triggerData.inputValue * 2,
+  }),
+});
+
+const stepTwo = new Step({
+  id: "stepTwo",
+  execute: async ({ context }) => {
+    if (context.steps.stepOne.status !== "success") {
+      return { incrementedValue: 0 }
+    }
+
+    return { incrementedValue: context.steps.stepOne.output.doubledValue + 1 }
+  },
+});
+
+const stepThree = new Step({
+  id: "stepThree",
+  execute: async ({ context }) => {
+    if (context.steps.stepTwo.status !== "success") {
+      return { tripledValue: 0 }
+    }
+
+    return { tripledValue: context.steps.stepTwo.output.incrementedValue * 3 }
+  },
+});
+
+// Build the workflow
+const myWorkflow = new Workflow({
+  name: "my-workflow",
+  triggerSchema: z.object({
+    inputValue: z.number(),
+  }),
+});
+```
+
+## ステップを連鎖してワークフローを実行する
+
+では、ステップを連鎖させましょう。
+
+```ts showLineNumbers copy
+// sequential steps
+myWorkflow.step(stepOne).then(stepTwo).then(stepThree);
+
+myWorkflow.commit();
+
+const { start } = myWorkflow.createRun();
+
+const res = await start({ triggerData: { inputValue: 90 } });
+```
+
+<br />
+<br />
+<hr className="dark:border-[#404040] border-gray-300" />
+<br />
+<br />
+<GithubLink
+  link={
+    "https://github.com/mastra-ai/mastra/blob/main/examples/basics/workflows/workflow-with-sequential-steps"
+  }
+/>

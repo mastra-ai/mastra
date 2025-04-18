@@ -1,0 +1,306 @@
+---
+title: "例：ワークフローを使用した構造化推論 | RAG | Mastra ドキュメント"
+description: Mastraのワークフロー機能を使用してRAGシステムに構造化推論を実装する例。
+---
+
+import { GithubLink } from "@/components/github-link";
+
+# ワークフローによる構造化推論
+
+この例では、Mastra、OpenAI 埋め込み、およびベクトルストレージ用の PGVector を使用して、取得強化生成 (RAG) システムを実装する方法を示します。定義されたワークフローを通じた構造化推論に重点を置いています。
+
+## 概要
+
+このシステムは、定義されたワークフローを通じて、MastraとOpenAIを使用してchain-of-thoughtプロンプトを用いたRAGを実装します。以下がその内容です：
+
+1. 応答生成のためにgpt-4o-miniを使用してMastraエージェントを設定
+2. ベクトルストアのインタラクションを管理するためのベクトルクエリツールを作成
+3. chain-of-thought推論のための複数のステップを持つワークフローを定義
+4. テキストドキュメントを処理し、チャンク化
+5. PostgreSQLに埋め込みを作成し、保存
+6. ワークフローステップを通じて応答を生成
+
+## セットアップ
+
+### 環境セットアップ
+
+環境変数を設定してください：
+
+```bash filename=".env"
+OPENAI_API_KEY=your_openai_api_key_here
+POSTGRES_CONNECTION_STRING=your_connection_string_here
+```
+
+### 依存関係
+
+必要な依存関係をインポートします：
+
+```typescript copy showLineNumbers filename="index.ts"
+import { openai } from "@ai-sdk/openai";
+import { Mastra } from "@mastra/core";
+import { Agent } from "@mastra/core/agent";
+import { Step, Workflow } from "@mastra/core/workflows";
+import { PgVector } from "@mastra/pg";
+import { createVectorQueryTool, MDocument } from "@mastra/rag";
+import { embedMany } from "ai";
+import { z } from "zod";
+```
+
+## ワークフローの定義
+
+まず、トリガースキーマを使用してワークフローを定義します:
+
+```typescript copy showLineNumbers{10} filename="index.ts"
+export const ragWorkflow = new Workflow({
+  name: "rag-workflow",
+  triggerSchema: z.object({
+    query: z.string(),
+  }),
+});
+```
+
+## ベクタークエリツールの作成
+
+ベクターデータベースをクエリするためのツールを作成します:
+
+```typescript copy showLineNumbers{17} filename="index.ts"
+const vectorQueryTool = createVectorQueryTool({
+  vectorStoreName: "pgVector",
+  indexName: "embeddings",
+  model: openai.embedding('text-embedding-3-small'),
+});
+```
+
+## エージェント設定
+
+Mastraエージェントを設定します：
+
+```typescript copy showLineNumbers{23} filename="index.ts"
+export const ragAgent = new Agent({
+  name: "RAG Agent",
+  instructions: `You are a helpful assistant that answers questions based on the provided context.`,
+  model: openai("gpt-4o-mini"),
+  tools: {
+    vectorQueryTool,
+  },
+});
+```
+
+## ワークフローステップ
+
+ワークフローは、思考の連鎖を考慮して複数のステップに分けられています：
+
+### 1. コンテキスト分析ステップ
+
+```typescript copy showLineNumbers{32} filename="index.ts"
+const analyzeContext = new Step({
+  id: "analyzeContext",
+  outputSchema: z.object({
+    initialAnalysis: z.string(),
+  }),
+  execute: async ({ context, mastra }) => {
+    console.log("---------------------------");
+    const ragAgent = mastra?.getAgent('ragAgent');
+    const query = context?.getStepResult<{ query: string }>(
+      "trigger",
+    )?.query;
+
+    const analysisPrompt = `${query} 1. まず、取得したコンテキストチャンクを注意深く分析し、重要な情報を特定します。`;
+
+    const analysis = await ragAgent?.generate(analysisPrompt);
+    console.log(analysis?.text);
+    return {
+      initialAnalysis: analysis?.text ?? "",
+    };
+  },
+});
+```
+
+### 2. 思考分解ステップ
+
+```typescript copy showLineNumbers{54} filename="index.ts"
+const breakdownThoughts = new Step({
+  id: "breakdownThoughts",
+  outputSchema: z.object({
+    breakdown: z.string(),
+  }),
+  execute: async ({ context, mastra }) => {
+    console.log("---------------------------");
+    const ragAgent = mastra?.getAgent('ragAgent');
+    const analysis = context?.getStepResult<{
+      initialAnalysis: string;
+    }>("analyzeContext")?.initialAnalysis;
+
+    const connectionPrompt = `
+      初期分析に基づいて: ${analysis}
+
+      2. 取得した情報がクエリにどのように関連しているかについての思考プロセスを分解します。
+    `;
+
+    const connectionAnalysis = await ragAgent?.generate(connectionPrompt);
+    console.log(connectionAnalysis?.text);
+    return {
+      breakdown: connectionAnalysis?.text ?? "",
+    };
+  },
+});
+```
+
+### 3. 接続ステップ
+
+```typescript copy showLineNumbers{80} filename="index.ts"
+const connectPieces = new Step({
+  id: "connectPieces",
+  outputSchema: z.object({
+    connections: z.string(),
+  }),
+  execute: async ({ context, mastra }) => {
+    console.log("---------------------------");
+    const ragAgent = mastra?.getAgent('ragAgent');
+    const process = context?.getStepResult<{
+      breakdown: string;
+    }>("breakdownThoughts")?.breakdown;
+    const connectionPrompt = `
+        分解に基づいて: ${process}
+
+        3. 取得したチャンクから異なる部分をどのように接続しているかを説明します。
+    `;
+
+    const connections = await ragAgent?.generate(connectionPrompt);
+    console.log(connections?.text);
+    return {
+      connections: connections?.text ?? "",
+    };
+  },
+});
+```
+
+### 4. 結論ステップ
+
+```typescript copy showLineNumbers{105} filename="index.ts"
+const drawConclusions = new Step({
+  id: "drawConclusions",
+  outputSchema: z.object({
+    conclusions: z.string(),
+  }),
+  execute: async ({ context, mastra }) => {
+    console.log("---------------------------");
+    const ragAgent = mastra?.getAgent('ragAgent');
+    const evidence = context?.getStepResult<{
+      connections: string;
+    }>("connectPieces")?.connections;
+    const conclusionPrompt = `
+        接続に基づいて: ${evidence}
+
+        4. 取得したコンテキストの証拠に基づいてのみ結論を導き出します。
+    `;
+
+    const conclusions = await ragAgent?.generate(conclusionPrompt);
+    console.log(conclusions?.text);
+    return {
+      conclusions: conclusions?.text ?? "",
+    };
+  },
+});
+```
+
+### 5. 最終回答ステップ
+
+```typescript copy showLineNumbers{130} filename="index.ts"
+const finalAnswer = new Step({
+  id: "finalAnswer",
+  outputSchema: z.object({
+    finalAnswer: z.string(),
+  }),
+  execute: async ({ context, mastra }) => {
+    console.log("---------------------------");
+    const ragAgent = mastra?.getAgent('ragAgent');
+    const conclusions = context?.getStepResult<{
+      conclusions: string;
+    }>("drawConclusions")?.conclusions;
+    const answerPrompt = `
+        結論に基づいて: ${conclusions}
+        回答を次の形式でフォーマットします:
+        思考プロセス:
+        - ステップ 1: [取得したチャンクの初期分析]
+        - ステップ 2: [チャンク間の接続]
+        - ステップ 3: [チャンクに基づく推論]
+
+        最終回答:
+        [取得したコンテキストに基づく簡潔な回答]`;
+
+    const finalAnswer = await ragAgent?.generate(answerPrompt);
+    console.log(finalAnswer?.text);
+    return {
+      finalAnswer: finalAnswer?.text ?? "",
+    };
+  },
+});
+```
+
+## ワークフロー設定
+
+ワークフロー内のすべてのステップを接続します：
+
+```typescript copy showLineNumbers{160} filename="index.ts"
+ragWorkflow
+  .step(analyzeContext)
+  .then(breakdownThoughts)
+  .then(connectPieces)
+  .then(drawConclusions)
+  .then(finalAnswer);
+
+ragWorkflow.commit();
+```
+
+## PgVectorとMastraのインスタンス化
+
+すべてのコンポーネントを使用してPgVectorとMastraをインスタンス化します:
+
+```typescript copy showLineNumbers{169} filename="index.ts"
+const pgVector = new PgVector(process.env.POSTGRES_CONNECTION_STRING!);
+
+export const mastra = new Mastra({
+  agents: { ragAgent },
+  vectors: { pgVector },
+  workflows: { ragWorkflow },
+});
+```
+
+## ドキュメント処理
+
+ドキュメントを処理し、チャンクに分割します：
+
+```typescript copy showLineNumbers{177} filename="index.ts"
+const doc = MDocument.fromText(`The Impact of Climate Change on Global Agriculture...`);
+
+const chunks = await doc.chunk({
+  strategy: "recursive",
+  size: 512,
+  overlap: 50,
+  separator: "\n",
+});
+```
+
+## 埋め込みの作成と保存
+
+埋め込みを生成して保存します:
+
+```typescript copy showLineNumbers{186} filename="index.ts"
+const { embeddings } = await embedMany({
+  model: openai.embedding('text-embedding-3-small'),
+  values: chunks.map(chunk => chunk.text),
+});
+
+const vectorStore = mastra.getVector("pgVector");
+await vectorStore.createIndex({
+  indexName: "embeddings",
+  dimension: 1536,
+});
+await vectorStore.upsert({
+  indexName: "embeddings",
+  vectors: embeddings,
+  metadata: chunks?.map((chunk: any) => ({ text: chunk.text })),
+});
+```
+

@@ -1,0 +1,229 @@
+---
+title: "リファレンス: createTool() | ツール | エージェント | Mastra ドキュメント"
+description: MastraのcreateTool関数に関するドキュメントで、エージェントとワークフローのためのカスタムツールを作成します。
+---
+
+# `createTool()`
+
+`createTool()` 関数は、エージェントやワークフローによって実行される型付きツールを作成します。ツールには、組み込みのスキーマ検証、実行コンテキスト、およびMastraエコシステムとの統合が含まれています。
+
+## 概要
+
+ツールはMastraの基本的な構成要素であり、エージェントが外部システムと対話し、計算を実行し、データにアクセスすることを可能にします。各ツールには以下のものがあります：
+
+- 一意の識別子
+- AIがツールをいつどのように使用するかを理解するのに役立つ説明
+- 検証のためのオプションの入力および出力スキーマ
+- ツールのロジックを実装する実行関数
+
+## 使用例
+
+```ts filename="src/tools/stock-tools.ts" showLineNumbers copy
+import { createTool } from "@mastra/core/tools";
+import { z } from "zod";
+
+// Helper function to fetch stock data
+const getStockPrice = async (symbol: string) => {
+  const response = await fetch(
+    `https://mastra-stock-data.vercel.app/api/stock-data?symbol=${symbol}`
+  );
+  const data = await response.json();
+  return data.prices["4. close"];
+};
+
+// Create a tool to get stock prices
+export const stockPriceTool = createTool({
+  id: "getStockPrice",
+  description: "指定されたティッカーシンボルの現在の株価を取得します",
+  inputSchema: z.object({
+    symbol: z.string().describe("株式ティッカーシンボル（例: AAPL, MSFT）")
+  }),
+  outputSchema: z.object({
+    symbol: z.string(),
+    price: z.number(),
+    currency: z.string(),
+    timestamp: z.string()
+  }),
+  execute: async ({ context }) => {
+    const price = await getStockPrice(context.symbol);
+    
+    return {
+      symbol: context.symbol,
+      price: parseFloat(price),
+      currency: "USD",
+      timestamp: new Date().toISOString()
+    };
+  }
+});
+
+// Create a tool that uses the thread context
+export const threadInfoTool = createTool({
+  id: "getThreadInfo",
+  description: "現在の会話スレッドに関する情報を返します",
+  inputSchema: z.object({
+    includeResource: z.boolean().optional().default(false)
+  }),
+  execute: async ({ context, threadId, resourceId }) => {
+    return {
+      threadId,
+      resourceId: context.includeResource ? resourceId : undefined,
+      timestamp: new Date().toISOString()
+    };
+  }
+});
+```
+
+## APIリファレンス
+
+### パラメータ
+
+`createTool()`は、以下のプロパティを持つ単一のオブジェクトを受け取ります:
+
+<PropertiesTable
+  content={[
+    {
+      name: "id",
+      type: "string",
+      required: true,
+      description: "ツールのユニークな識別子。ツールの機能を説明するものであるべきです。"
+    },
+    {
+      name: "description",
+      type: "string",
+      required: true,
+      description: "ツールが何をするのか、いつ使用すべきか、どのような入力が必要かの詳細な説明。これにより、AIがツールを効果的に使用する方法を理解するのに役立ちます。"
+    },
+    {
+      name: "execute",
+      type: "(context: ToolExecutionContext, options?: any) => Promise<any>",
+      required: false,
+      description: "ツールのロジックを実装する非同期関数。実行コンテキストとオプションの設定を受け取ります。",
+      properties: [
+        {
+          type: "ToolExecutionContext",
+          parameters: [
+            {
+              name: "context",
+              type: "object",
+              description: "inputSchemaに一致する検証済みの入力データ"
+            },
+            {
+              name: "threadId",
+              type: "string",
+              isOptional: true,
+              description: "会話スレッドの識別子（利用可能な場合）"
+            },
+            {
+              name: "resourceId",
+              type: "string",
+              isOptional: true,
+              description: "ツールと対話するユーザーまたはリソースの識別子"
+            },
+            {
+              name: "mastra",
+              type: "Mastra",
+              isOptional: true,
+              description: "Mastraインスタンスへの参照（利用可能な場合）"
+            },
+          ]
+        },
+        {
+          type: "ToolOptions",
+          parameters: [
+            {
+              name: "toolCallId",
+              type: "string",
+              description: "ツール呼び出しのID。例えば、ストリームデータと共にツール呼び出し関連情報を送信する際に使用できます。"
+            },
+            {
+              name: "messages",
+              type: "CoreMessage[]",
+              description: "ツール呼び出しを含む応答を開始するために言語モデルに送信されたメッセージ。メッセージにはシステムプロンプトやツール呼び出しを含むアシスタントの応答は含まれません。"
+            },
+            {
+              name: "abortSignal",
+              type: "AbortSignal",
+              isOptional: true,
+              description: "全体の操作を中止すべきことを示すオプションの中止シグナル。"
+            },
+          ]
+        }
+      ]
+    },
+    {
+      name: "inputSchema",
+      type: "ZodSchema",
+      required: false,
+      description: "ツールの入力パラメータを定義し、検証するZodスキーマ。提供されない場合、ツールは任意の入力を受け入れます。"
+    },
+    {
+      name: "outputSchema",
+      type: "ZodSchema",
+      required: false,
+      description: "ツールの出力を定義し、検証するZodスキーマ。ツールが期待される形式でデータを返すことを保証するのに役立ちます。"
+    },
+  ]}
+/>
+
+### 戻り値
+
+<PropertiesTable
+  content={[
+    {
+      name: "Tool",
+      type: "Tool<TSchemaIn, TSchemaOut>",
+      description: "エージェント、ワークフローで使用したり、直接実行したりできるツールインスタンス。",
+      properties: [
+        {
+          type: "Tool",
+          parameters: [
+            {
+              name: "id",
+              type: "string",
+              description: "ツールのユニークな識別子"
+            },
+            {
+              name: "description",
+              type: "string",
+              description: "ツールの機能の説明"
+            },
+            {
+              name: "inputSchema",
+              type: "ZodSchema | undefined",
+              description: "入力を検証するためのスキーマ"
+            },
+            {
+              name: "outputSchema",
+              type: "ZodSchema | undefined",
+              description: "出力を検証するためのスキーマ"
+            },
+            {
+              name: "execute",
+              type: "Function",
+              description: "ツールの実行関数"
+            }
+          ]
+        }
+      ]
+    }
+  ]}
+/>
+
+## 型の安全性
+
+`createTool()` 関数は、TypeScript のジェネリクスを通じて完全な型の安全性を提供します：
+
+- 入力タイプは `inputSchema` から推論されます
+- 出力タイプは `outputSchema` から推論されます
+- 実行コンテキストは、入力スキーマに基づいて適切に型付けされます
+
+これにより、アプリケーション全体でツールが型安全であることが保証されます。
+
+## ベストプラクティス
+
+1. **説明的なID**: `getWeatherForecast` や `searchDatabase` のような明確でアクション指向のIDを使用する
+2. **詳細な説明**: ツールの使用時期と方法を説明する包括的な説明を提供する
+3. **入力検証**: Zodスキーマを使用して入力を検証し、役立つエラーメッセージを提供する
+4. **エラーハンドリング**: 実行関数で適切なエラーハンドリングを実装する
+5. **冪等性**: 可能であれば、ツールを冪等にする（同じ入力が常に同じ出力を生成する）
+6. **パフォーマンス**: ツールを軽量で迅速に実行できるように保つ

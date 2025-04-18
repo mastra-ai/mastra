@@ -1,0 +1,317 @@
+---
+title: "エージェントツール選択 | エージェントドキュメント | Mastra"
+description: ツールは、エージェントやワークフローによって実行できる型付き関数で、組み込みの統合アクセスとパラメータ検証機能を備えています。各ツールには、入力を定義するスキーマ、ロジックを実装する実行関数、および設定された統合へのアクセスがあります。
+---
+
+# エージェントツールの選択
+
+ツールは、エージェントやワークフローによって実行できる型付き関数であり、組み込みの統合アクセスとパラメータ検証機能を備えています。各ツールには、入力を定義するスキーマ、ロジックを実装する実行関数、および設定された統合へのアクセスがあります。
+
+## ツールの作成
+
+このセクションでは、エージェントが使用できるツールを作成するプロセスを説明します。都市の現在の天気情報を取得するシンプルなツールを作成してみましょう。
+
+```typescript filename="src/mastra/tools/weatherInfo.ts" copy
+import { createTool } from "@mastra/core/tools";
+import { z } from "zod";
+
+const getWeatherInfo = async (city: string) => {
+  // Replace with an actual API call to a weather service
+  const data = await fetch(`https://api.example.com/weather?city=${city}`).then(
+    (r) => r.json(),
+  );
+  return data;
+};
+
+export const weatherInfo = createTool({
+  id: "Get Weather Information",
+  inputSchema: z.object({
+    city: z.string(),
+  }),
+  description: `Fetches the current weather information for a given city`,
+  execute: async ({ context: { city } }) => {
+    console.log("Using tool to fetch weather information for", city);
+    return await getWeatherInfo(city);
+  },
+});
+```
+
+## エージェントにツールを追加する
+
+次に、ツールをエージェントに追加します。天気に関する質問に答えることができるエージェントを作成し、`weatherInfo`ツールを使用するように設定します。
+
+```typescript filename="src/mastra/agents/weatherAgent.ts"
+import { Agent } from "@mastra/core/agent";
+import { openai } from "@ai-sdk/openai";
+import * as tools from "../tools/weatherInfo";
+
+export const weatherAgent = new Agent<typeof tools>({
+  name: "Weather Agent",
+  instructions:
+    "You are a helpful assistant that provides current weather information. When asked about the weather, use the weather information tool to fetch the data.",
+  model: openai("gpt-4o-mini"),
+  tools: {
+    weatherInfo: tools.weatherInfo,
+  },
+});
+```
+
+## エージェントの登録
+
+Mastraにエージェントを初期化する必要があります。
+
+```typescript filename="src/index.ts"
+import { Mastra } from "@mastra/core";
+import { weatherAgent } from "./agents/weatherAgent";
+
+export const mastra = new Mastra({
+  agents: { weatherAgent },
+});
+```
+
+これによりエージェントがMastraに登録され、使用可能になります。
+
+## アボートシグナル
+
+`generate`と`stream`（テキスト生成）からのアボートシグナルはツール実行に転送されます。これらは実行関数の2番目のパラメータでアクセスでき、長時間実行される計算を中止したり、ツール内のフェッチ呼び出しに転送したりすることができます。
+
+```typescript
+import { Agent } from "@mastra/core/agent";
+import { createTool } from "@mastra/core/tools";
+import { z } from "zod";
+
+const agent = new Agent({
+  name: "Weather agent",
+  tools: {
+    weather: createTool({
+      id: "Get Weather Information",
+      description: "Get the weather in a location",
+      inputSchema: z.object({ location: z.string() }),
+      execute: async ({ context: { location } }, { abortSignal }) => {
+        return fetch(
+          `https://api.weatherapi.com/v1/current.json?q=${location}`,
+          { signal: abortSignal }, // forward the abort signal to fetch
+        );
+      },
+    }),
+  },
+});
+
+const result = await agent.generate("What is the weather in San Francisco?", {
+  abortSignal: myAbortSignal, // signal that will be forwarded to tools
+});
+```
+
+## リクエスト/ユーザー固有の変数の注入
+
+ツールとワークフローに対する依存性注入をサポートしています。コンテナを`generate`または`stream`関数呼び出しに直接渡すか、[サーバーミドルウェア](/docs/deployment/server#Middleware)を使用して注入することができます。
+
+以下は、華氏と摂氏の間で温度スケールを変更する例です：
+
+```typescript filename="src/agents/weather-agent.ts"
+import { Agent } from "@mastra/core/agent";
+import { createTool } from "@mastra/core/tools";
+import { z } from "zod";
+
+export const agent = new Agent({
+  name: "Weather agent",
+  tools: {
+    weather: createTool({
+      id: "Get Weather Information",
+      description: "Get the weather in a location",
+      inputSchema: z.object({ location: z.string() }),
+      execute: async ({ context: { location }, container }) => {
+        const scale = container.get("temperature-scale");
+
+        const result = await fetch(
+          `https://api.weatherapi.com/v1/current.json?q=${location}`,
+        );
+
+        const json = await result.json();
+
+        return {
+          temperature: scale === "celsius" ? json.temp_c : json.temp_f,
+        };
+      },
+    }),
+  },
+});
+```
+
+```typescript
+import { agent } from "./agents/weather";
+
+type MyContainer = {"temperature-scale", "celsius" | "farenheit"}
+
+const container = new Container<MyContainer>();
+container.set("temperature-scale", "celsius");
+
+const result = await agent.generate("What is the weather in San Francisco?", {
+  container,
+});
+```
+
+Cloudflare `CF-IPCountry`ヘッダーを使用して、ユーザーの国から温度を導き出してみましょう。上記の例と同じエージェントコードを使用します。
+
+```typescript filename="src/index.ts"
+import { Mastra } from "@mastra/core";
+import { Container } from "@mastra/core/di";
+import { agent as weatherAgent } from "./agents/weather";
+
+type MyContainer = {"temperature-scale", "celsius" | "farenheit"}
+
+export const mastra = new Mastra({
+  agents: {
+    weather: weatherAgent,
+  },
+  server: {
+    middleware: [
+      (c, next) => {
+        const country = c.req.header("CF-IPCountry");
+        const container: MyContainer = c.get("container");
+
+        container.set(
+          "temperature-scale",
+          country === "US" ? "farenheit" : "celsius",
+        );
+      },
+    ],
+  },
+});
+```
+
+## デバッグツール
+
+Vitestやその他のテストフレームワークを使用してツールをテストできます。ツールの単体テストを作成することで、期待通りの動作を確保し、早期にエラーを発見するのに役立ちます。
+
+## ツールを使用したエージェントの呼び出し
+
+これでエージェントを呼び出すことができ、エージェントはツールを使用して天気情報を取得します。
+
+## 例：エージェントとの対話
+
+```typescript filename="src/index.ts"
+import { mastra } from "./index";
+
+async function main() {
+  const agent = mastra.getAgent("weatherAgent");
+  const response = await agent.generate(
+    "What's the weather like in New York City today?",
+  );
+
+  console.log(response.text);
+}
+
+main();
+```
+
+エージェントは`weatherInfo`ツールを使用して、ニューヨーク市の現在の天気を取得し、それに応じて応答します。
+
+## Vercel AI SDK ツール形式
+
+Mastraは、Vercel AI SDK形式で作成されたツールをサポートしています。これらのツールを直接インポートして使用できます：
+
+```typescript filename="src/mastra/tools/vercelTool.ts" copy
+import { tool } from "ai";
+import { z } from "zod";
+
+export const weatherInfo = tool({
+  description: "Fetches the current weather information for a given city",
+  parameters: z.object({
+    city: z.string().describe("The city to get weather for"),
+  }),
+  execute: async ({ city }) => {
+    // Replace with actual API call
+    const data = await fetch(`https://api.example.com/weather?city=${city}`);
+    return data.json();
+  },
+});
+```
+
+Vercelツールを、Mastraツールと一緒にエージェントで使用できます：
+
+```typescript filename="src/mastra/agents/weatherAgent.ts"
+import { Agent } from "@mastra/core/agent";
+import { openai } from "@ai-sdk/openai";
+import { weatherInfo } from "../tools/vercelTool";
+import * as mastraTools from "../tools/mastraTools";
+
+export const weatherAgent = new Agent({
+  name: "Weather Agent",
+  instructions:
+    "You are a helpful assistant that provides weather information.",
+  model: openai("gpt-4"),
+  tools: {
+    weatherInfo, // Vercel tool
+    ...mastraTools, // Mastra tools
+  },
+});
+```
+
+どちらのツール形式も、エージェントのワークフロー内でシームレスに動作します。
+
+## ツール設計のベストプラクティス
+
+エージェント用のツールを作成する際、以下のガイドラインに従うことで、信頼性が高く直感的なツールの使用が確保されます：
+
+### ツールの説明
+
+ツールのメイン説明は、その目的と価値に焦点を当てるべきです：
+
+- 説明はシンプルに保ち、ツールが**何を**するかに焦点を当てる
+- ツールの主な使用例を強調する
+- メインの説明では実装の詳細を避ける
+- エージェントがツールを**いつ**使用するかを理解するのに役立つことに焦点を当てる
+
+```typescript
+createTool({
+  id: "documentSearch",
+  description:
+    "Access the knowledge base to find information needed to answer user questions",
+  // ... rest of tool configuration
+});
+```
+
+### パラメータスキーマ
+
+技術的な詳細はパラメータスキーマに属し、エージェントがツールを正しく使用するのに役立ちます：
+
+- 明確な説明でパラメータを自己文書化する
+- デフォルト値とその影響を含める
+- 役立つ場合は例を提供する
+- 異なるパラメータ選択の影響を説明する
+
+```typescript
+inputSchema: z.object({
+  query: z.string().describe("The search query to find relevant information"),
+  limit: z.number().describe(
+    "Number of results to return. Higher values provide more context, lower values focus on best matches"
+  ),
+  options: z.string().describe(
+    "Optional configuration. Example: '{'filter': 'category=news'}'"
+  ),
+}),
+```
+
+### エージェントとの相互作用パターン
+
+ツールが効果的に使用される可能性が高いのは以下の場合です：
+
+- クエリやタスクが、ツールの支援が明らかに必要なほど複雑である
+- エージェントの指示がツールの使用に関する明確なガイダンスを提供している
+- パラメータの要件がスキーマに十分に文書化されている
+- ツールの目的がクエリのニーズに合致している
+
+### よくある落とし穴
+
+- メインの説明に技術的な詳細を詰め込みすぎる
+- 実装の詳細と使用ガイダンスを混在させる
+- 不明確なパラメータの説明や例の欠如
+
+これらのプラクティスに従うことで、ツールの目的（メインの説明）と実装の詳細（パラメータスキーマ）の間に明確な区分を維持しながら、エージェントによって発見可能で使いやすいツールを確保するのに役立ちます。
+
+## Model Context Protocol (MCP) ツール
+
+Mastraは`@mastra/mcp`パッケージを通じてMCP互換サーバーからのツールもサポートしています。MCPは、AIモデルが外部ツールやリソースを発見し、相互作用するための標準化された方法を提供します。これにより、カスタム統合を作成することなく、サードパーティのツールをエージェントに簡単に統合できます。
+
+設定オプションやベストプラクティスを含むMCPツールの使用に関する詳細情報については、[MCPガイド](/docs/agents/mcp-guide)をご覧ください。

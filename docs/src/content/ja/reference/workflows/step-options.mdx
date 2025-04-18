@@ -1,0 +1,69 @@
+---
+title: "リファレンス: StepOptions | ワークフローの構築 | Mastra ドキュメント"
+description: ワークフロー内のステップオプションに関するドキュメントで、変数マッピング、実行条件、その他のランタイム動作を制御します。
+---
+
+# StepOptions
+
+ワークフローステップの構成オプションで、変数マッピング、実行条件、その他のランタイム動作を制御します。
+
+## 使用法
+
+```typescript
+workflow.step(processOrder, {
+  variables: {
+    orderId: { step: 'trigger', path: 'id' },
+    userId: { step: 'auth', path: 'user.id' }
+  },
+  when: {
+    ref: { step: 'auth', path: 'status' },
+    query: { $eq: 'authenticated' }
+  }
+});
+```
+
+## プロパティ
+
+<PropertiesTable
+  content={[
+    {
+      name: "variables",
+      type: "Record<string, VariableRef>",
+      description: "ステップ入力変数を他のステップからの値にマップします",
+      isOptional: true
+    },
+    {
+      name: "when",
+      type: "StepCondition",
+      description: "ステップ実行のために満たす必要がある条件",
+      isOptional: true
+    }
+  ]}
+/>
+
+### VariableRef
+
+<PropertiesTable
+  content={[
+    {
+      name: "step",
+      type: "string | Step | { id: string }",
+      description: "変数値のソースステップ",
+      isOptional: false
+    },
+    {
+      name: "path",
+      type: "string",
+      description: "ステップの出力内の値へのパス",
+      isOptional: false
+    }
+  ]}
+/>
+
+## 関連
+- [パス比較](../../workflows/control-flow.mdx#path-comparison)
+- [ステップ関数リファレンス](./step-function.mdx)
+- [ステップクラスリファレンス](./step-class.mdx)
+- [ワークフロークラスリファレンス](./workflow.mdx)
+- [制御フローガイド](../../workflows/control-flow.mdx)
+```

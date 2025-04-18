@@ -1,0 +1,43 @@
+---
+title: "例：HTMLのセマンティックチャンキング | RAG | Mastra ドキュメント"
+description: MastraでドキュメントをセマンティックにチャンクするためにHTMLコンテンツをチャンクする。
+---
+
+import { GithubLink } from "@/components/github-link";
+
+# HTMLを意味的に分割する
+
+HTMLコンテンツを扱う際、ドキュメントの構造を維持しながら、より小さく管理しやすい部分に分割する必要がよくあります。`chunk`メソッドは、HTMLタグと要素の整合性を保ちながら、HTMLコンテンツを賢く分割します。この例は、検索や取得の目的でHTMLドキュメントをどのように分割するかを示しています。
+
+```tsx copy
+import { MDocument } from "@mastra/rag";
+
+const html = `
+<div>
+    <h1>h1 content...</h1>
+    <p>p content...</p>
+</div>
+`;
+
+const doc = MDocument.fromHTML(html);
+
+const chunks = await doc.chunk({
+  headers: [
+    ["h1", "Header 1"],
+    ["p", "Paragraph"],
+  ],
+});
+
+console.log(chunks);
+```
+
+<br />
+<br />
+<hr className="dark:border-[#404040] border-gray-300" />
+<br />
+<br />
+<GithubLink
+  link={
+    "https://github.com/mastra-ai/mastra/blob/main/examples/basics/rag/chunk-html"
+  }
+/>

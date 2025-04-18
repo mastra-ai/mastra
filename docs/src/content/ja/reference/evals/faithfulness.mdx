@@ -1,0 +1,192 @@
+---
+title: "リファレンス: Faithfulness | メトリクス | Evals | Mastra ドキュメント"
+description: 提供されたコンテキストと比較して、LLM出力の事実の正確性を評価するMastraのFaithfulnessメトリクスのドキュメント。
+---
+
+# FaithfulnessMetric リファレンス
+
+Mastraの`FaithfulnessMetric`は、提供されたコンテキストと比較してLLMの出力がどれほど事実に基づいているかを評価します。出力から主張を抽出し、それらをコンテキストと照合することで、RAGパイプラインの応答の信頼性を測定するために不可欠です。
+
+## 基本的な使用法
+
+```typescript
+import { openai } from "@ai-sdk/openai";
+import { FaithfulnessMetric } from "@mastra/evals/llm";
+
+// Configure the model for evaluation
+const model = openai("gpt-4o-mini");
+
+const metric = new FaithfulnessMetric(model, {
+  context: [
+    "The company was established in 1995.",
+    "Currently employs around 450-550 people.",
+  ],
+});
+
+const result = await metric.measure(
+  "Tell me about the company.",
+  "The company was founded in 1995 and has 500 employees.",
+);
+
+console.log(result.score); // 1.0
+console.log(result.info.reason); // "All claims are supported by the context."
+```
+
+## コンストラクターパラメータ
+
+<PropertiesTable
+  content={[
+    {
+      name: "model",
+      type: "LanguageModel",
+      description: "忠実性を評価するために使用されるモデルの設定。",
+      isOptional: false,
+    },
+    {
+      name: "options",
+      type: "FaithfulnessMetricOptions",
+      description: "メトリックを設定するための追加オプション。",
+      isOptional: false,
+    },
+  ]}
+/>
+
+### FaithfulnessMetricOptions
+
+<PropertiesTable
+  content={[
+    {
+      name: "scale",
+      type: "number",
+      description:
+        "最大スコア値。最終スコアはこのスケールに正規化されます。",
+      isOptional: false,
+      defaultValue: "1",
+    },
+    {
+      name: "context",
+      type: "string[]",
+      description:
+        "出力の主張が検証されるコンテキストチャンクの配列。",
+      isOptional: false,
+    },
+  ]}
+/>
+
+## measure() パラメータ
+
+<PropertiesTable
+  content={[
+    {
+      name: "input",
+      type: "string",
+      description: "LLMに与えられた元のクエリまたはプロンプト。",
+      isOptional: false,
+    },
+    {
+      name: "output",
+      type: "string",
+      description: "忠実性を評価するためのLLMの応答。",
+      isOptional: false,
+    },
+  ]}
+/>
+
+## 戻り値
+
+<PropertiesTable
+  content={[
+    {
+      name: "score",
+      type: "number",
+      description:
+        "コンテキストによってサポートされている主張の割合を表す、0から設定されたスケールまでのスコア。",
+    },
+    {
+      name: "info",
+      type: "object",
+      description: "スコアの理由を含むオブジェクト",
+      properties: [
+        {
+          type: "string",
+          parameters: [
+            {
+              name: "reason",
+              type: "string",
+              description:
+                "スコアの詳細な説明。どの主張がサポートされ、矛盾し、不確かであるとされたかを含む。",
+            },
+          ],
+        },
+      ],
+    },
+  ]}
+/>
+
+## 採点の詳細
+
+このメトリクスは、提供されたコンテキストに対する主張の検証を通じて忠実性を評価します。
+
+### 採点プロセス
+
+1. 主張とコンテキストを分析します：
+   - すべての主張（事実的および推測的）を抽出
+   - 各主張をコンテキストに対して検証
+   - 以下の3つの判定のいずれかを割り当て：
+     - "yes" - 主張がコンテキストによって裏付けられている
+     - "no" - 主張がコンテキストと矛盾している
+     - "unsure" - 主張が検証不可能
+
+2. 忠実性スコアを計算します：
+   - 裏付けられた主張をカウント
+   - 総主張数で割る
+   - 設定された範囲にスケーリング
+
+最終スコア：`(supported_claims / total_claims) * scale`
+
+### スコアの解釈
+（0から設定値まで、デフォルトは0-1）
+- 1.0：すべての主張がコンテキストによって裏付けられている
+- 0.7-0.9：ほとんどの主張が裏付けられており、検証不可能なものはわずか
+- 0.4-0.6：裏付けと矛盾が混在している
+- 0.1-0.3：裏付けが限られており、多くの矛盾がある
+- 0.0：裏付けられた主張がない
+
+## 高度な例
+
+```typescript
+import { openai } from "@ai-sdk/openai";
+import { FaithfulnessMetric } from "@mastra/evals/llm";
+
+// 評価のためのモデルを設定
+const model = openai("gpt-4o-mini");
+
+const metric = new FaithfulnessMetric(model, {
+  context: [
+    "その会社は2020年に100人の従業員がいました。",
+    "現在の従業員数は約500人です。",
+  ],
+});
+
+// 混合された主張タイプの例
+const result = await metric.measure(
+  "会社の成長はどのようなものですか？",
+  "その会社は2020年に100人の従業員から現在500人に成長し、来年には1000人に拡大するかもしれません。",
+);
+
+// 出力例:
+// {
+//   score: 0.67,
+//   info: {
+//     reason: "スコアが0.67である理由は、2つの主張がコンテキストによってサポートされているためです
+//           （2020年の初期従業員数100人と現在の500人の数）、
+//           将来の拡大の主張はコンテキストに対して検証できないため不確実とされています。"
+//   }
+// }
+```
+
+### 関連
+
+- [回答の関連性メトリック](./answer-relevancy)
+- [幻覚メトリック](./hallucination)
+- [コンテキストの関連性メトリック](./context-relevancy)

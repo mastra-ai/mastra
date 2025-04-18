@@ -1,0 +1,145 @@
+---
+title: "リファレンス: Speechify Voice | Voice Providers | Mastra Docs"
+description: "Speechify音声実装のドキュメントで、テキスト読み上げ機能を提供します。"
+---
+
+# Speechify
+
+MastraにおけるSpeechifyの音声実装は、SpeechifyのAPIを使用してテキスト読み上げ機能を提供します。
+
+## 使用例
+
+```typescript
+import { SpeechifyVoice } from "@mastra/voice-speechify";
+
+// デフォルトの設定で初期化（SPEECHIFY_API_KEY 環境変数を使用）
+const voice = new SpeechifyVoice();
+
+// カスタム設定で初期化
+const voice = new SpeechifyVoice({
+  speechModel: {
+    name: 'simba-english',
+    apiKey: 'your-api-key'
+  },
+  speaker: 'george'  // デフォルトの声
+});
+
+// テキストを音声に変換
+const audioStream = await voice.speak("Hello, world!", {
+  speaker: 'henry',  // デフォルトの声を上書き
+});
+```
+
+## コンストラクターパラメーター
+
+<PropertiesTable
+  content={[
+    {
+      name: "speechModel",
+      type: "SpeechifyConfig",
+      description: "テキスト読み上げ機能の設定",
+      isOptional: true,
+      defaultValue: "{ name: 'simba-english' }",
+    },
+    {
+      name: "speaker",
+      type: "SpeechifyVoiceId",
+      description: "音声合成に使用するデフォルトの音声ID",
+      isOptional: true,
+      defaultValue: "'george'",
+    },
+  ]}
+/>
+
+### SpeechifyConfig
+
+<PropertiesTable
+  content={[
+    {
+      name: "name",
+      type: "VoiceModelName",
+      description: "使用するSpeechifyモデル",
+      isOptional: true,
+      defaultValue: "'simba-english'",
+    },
+    {
+      name: "apiKey",
+      type: "string",
+      description: "Speechify APIキー。SPEECHIFY_API_KEY環境変数にフォールバックします",
+      isOptional: true,
+    },
+  ]}
+/>
+
+## メソッド
+
+### speak()
+
+設定された音声モデルと声を使用してテキストを音声に変換します。
+
+<PropertiesTable
+  content={[
+    {
+      name: "input",
+      type: "string | NodeJS.ReadableStream",
+      description: "音声に変換するテキスト。ストリームが提供された場合、最初にテキストに変換されます。",
+      isOptional: false,
+    },
+    {
+      name: "options.speaker",
+      type: "string",
+      description: "このリクエストのデフォルトのスピーカーを上書きします",
+      isOptional: true,
+      defaultValue: "Constructorのスピーカー値",
+    },
+    {
+      name: "options.model",
+      type: "VoiceModelName",
+      description: "このリクエストのデフォルトのモデルを上書きします",
+      isOptional: true,
+      defaultValue: "Constructorのモデル値",
+    },
+  ]}
+/>
+
+戻り値: `Promise<NodeJS.ReadableStream>`
+
+### getSpeakers()
+
+利用可能な音声オプションの配列を返します。各ノードには以下が含まれます:
+
+<PropertiesTable
+  content={[
+    {
+      name: "voiceId",
+      type: "string",
+      description: "音声の一意の識別子",
+    },
+    {
+      name: "name",
+      type: "string",
+      description: "音声の表示名",
+    },
+    {
+      name: "language",
+      type: "string",
+      description: "音声の言語コード",
+    },
+    {
+      name: "gender",
+      type: "string",
+      description: "音声の性別",
+    },
+  ]}
+/>
+
+### listen()
+
+このメソッドはSpeechifyではサポートされておらず、エラーをスローします。Speechifyは音声認識機能を提供していません。
+
+## メモ
+
+- Speechifyは認証にAPIキーを必要とします
+- デフォルトモデルは「simba-english」です
+- 音声からテキストへの機能はサポートされていません
+- 追加のオーディオストリームオプションは、speak()メソッドのoptionsパラメータを通じて渡すことができます

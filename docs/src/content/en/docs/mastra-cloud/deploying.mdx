@@ -1,0 +1,136 @@
+---
+title: Deploying to Mastra Cloud
+description: GitHub-based deployment process for Mastra applications
+---
+
+# Deploying to Mastra Cloud
+
+This page describes the deployment process for Mastra applications to Mastra Cloud using GitHub integration.
+
+## Prerequisites
+
+- A GitHub account
+- A GitHub repository containing a Mastra application
+- Access to Mastra Cloud
+
+## Deployment Process
+
+Mastra Cloud uses a Git-based deployment workflow similar to platforms like Vercel and Netlify:
+
+1. **Import GitHub Repository**
+   - From the Projects dashboard, click "Add new"
+   - Select the repository containing your Mastra application
+   - Click "Import" next to the desired repository
+
+2. **Configure Deployment Settings**
+   - Set the project name (defaults to repository name)
+   - Select branch to deploy (typically `main`)
+   - Configure the Mastra directory path (defaults to `src/mastra`)
+   - Add necessary environment variables (like API keys)
+
+3. **Deploy from Git**
+   - After initial configuration, deployments are triggered by pushes to the selected branch
+   - Mastra Cloud automatically builds and deploys your application
+   - Each deployment creates an atomic snapshot of your agents and workflows
+
+## Automatic Deployments
+
+Mastra Cloud follows a Git-driven workflow:
+
+1. Make changes to your Mastra application locally
+2. Commit changes to the `main` branch
+3. Push to GitHub
+4. Mastra Cloud automatically detects the push and creates a new deployment
+5. Once the build completes, your application is live
+
+## Deployment Domains
+
+Each project receives two URLs:
+
+1. **Project-specific domain**: `https://[project-name].mastra.cloud`
+   - Example: `https://gray-acoustic-helicopter.mastra.cloud`
+
+2. **Deployment-specific domain**: `https://[deployment-id].mastra.cloud`
+   - Example: `https://young-loud-caravan-6156280f-ad56-4ec8-9701-6bb5271fd73d.mastra.cloud`
+
+These URLs provide direct access to your deployed agents and workflows.
+
+## Viewing Deployments
+
+![Deployments List](/docs/cloud-agents.png)
+
+The deployments section in the dashboard shows:
+
+- **Title**: Deployment identifier (based on commit hash)
+- **Status**: Current state (success or archived)
+- **Branch**: The branch used (typically `main`)
+- **Commit**: The Git commit hash
+- **Updated At**: Timestamp of the deployment
+
+Each deployment represents an atomic snapshot of your Mastra application at a specific point in time.
+
+## Interacting with Agents
+
+![Agent Interface](/docs/cloud-agent.png)
+
+After deployment, interact with your agents:
+
+1. Navigate to your project in the dashboard
+2. Go to the Agents section
+3. Select an agent to view its details and interface
+4. Use the Chat tab to communicate with your agent
+5. View the agent's configuration in the right panel:
+   - Model information (e.g., OpenAI)
+   - Available tools (e.g., getWeather)
+   - Complete system prompt
+6. Use suggested prompts (like "What capabilities do you have?") or enter custom messages
+
+The interface shows the agent's branch (typically "main") and indicates whether conversation memory is enabled.
+
+## Monitoring Logs
+
+The Logs section provides detailed information about your application:
+
+- **Time**: When the log entry was created
+- **Level**: Log level (info, debug)
+- **Hostname**: Server identification
+- **Message**: Detailed log information, including:
+  - API initialization
+  - Storage connections
+  - Agent and workflow activity
+
+These logs help debug and monitor your application's behavior in the production environment.
+
+## Workflows
+
+![Workflows Interface](/docs/cloud-workflows.png)
+
+The Workflows section allows you to view and interact with your deployed workflows:
+
+1. View all workflows in your project
+2. Examine workflow structure and steps
+3. Access execution history and performance data
+
+## Database Usage
+
+Mastra Cloud tracks database utilization metrics:
+
+- Number of reads
+- Number of writes
+- Storage used (MB)
+
+These metrics appear in the project overview, helping you monitor resource consumption.
+
+## Deployment Configuration
+
+Configure your deployment through the dashboard:
+
+1. Navigate to your project settings
+2. Set environment variables (like `OPENAI_API_KEY`)
+3. Configure project-specific settings
+
+Changes to configuration require a new deployment to take effect.
+
+## Next Steps
+
+After deployment, [trace and monitor execution](/docs/mastra-cloud/observability) using the observability tools.

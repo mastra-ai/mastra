@@ -1,0 +1,80 @@
+---
+title: "ローカルプロジェクト構造 | はじめに | Mastra ドキュメント"
+description: Mastraでのフォルダとファイルの整理に関するガイド、ベストプラクティスと推奨される構造を含む。
+---
+
+import { FileTree } from 'nextra/components';
+
+# プロジェクト構造
+
+このページでは、Mastraでのフォルダーとファイルの整理方法についてのガイドを提供します。Mastraはモジュラー型のフレームワークであり、モジュールを個別に、または一緒に使用することができます。
+
+すべてを単一のファイルに書くこともできます（クイックスタートで示したように）、または各エージェント、ツール、ワークフローをそれぞれのファイルに分けることもできます。
+
+特定のフォルダー構造を強制することはありませんが、いくつかのベストプラクティスをお勧めしており、CLIは合理的な構造でプロジェクトをスキャフォールドします。
+
+## CLIの使用
+
+`mastra init`はインタラクティブなCLIで、以下のことができます：
+
+- **Mastraファイルのディレクトリを選択する**：Mastraファイルを配置する場所を指定します（デフォルトは`src/mastra`）。
+- **インストールするコンポーネントを選択する**：プロジェクトに含めたいコンポーネントを選択します：
+  - エージェント
+  - ツール
+  - ワークフロー
+- **デフォルトのLLMプロバイダーを選択する**：OpenAI、Anthropic、Groqなどのサポートされているプロバイダーから選択します。
+- **サンプルコードを含める**：開始するのに役立つサンプルコードを含めるかどうかを決定します。
+
+### プロジェクト構造の例
+
+すべてのコンポーネントを選択し、サンプルコードを含めると、プロジェクト構造は次のようになります：
+
+<FileTree>
+  <FileTree.Folder name="root" defaultOpen>
+    <FileTree.Folder name="src" defaultOpen>
+      <FileTree.Folder name="mastra" defaultOpen>
+        <FileTree.Folder name="agents" defaultOpen>
+          <FileTree.File name="index.ts" />
+        </FileTree.Folder>
+        <FileTree.Folder name="tools" defaultOpen>
+          <FileTree.File name="index.ts" />
+        </FileTree.Folder>
+        <FileTree.Folder name="workflows" defaultOpen>
+          <FileTree.File name="index.ts" />
+        </FileTree.Folder>
+        <FileTree.File name="index.ts" />
+      </FileTree.Folder>
+    </FileTree.Folder>
+    <FileTree.File name=".env" />
+  </FileTree.Folder>
+</FileTree>
+{/* 
+```
+root/
+├── src/
+│   └── mastra/
+│       ├── agents/
+│       │   └── index.ts
+│       ├── tools/
+│       │   └── index.ts
+│       ├── workflows/
+│       │   └── index.ts
+│       ├── index.ts
+├── .env
+``` */}
+
+### トップレベルフォルダ
+
+| フォルダ                | 説明                          |
+| ---------------------- | ------------------------------------ |
+| `src/mastra`           | コアアプリケーションフォルダ              |
+| `src/mastra/agents`    | エージェントの設定と定義 |
+| `src/mastra/tools`     | カスタムツールの定義              |
+| `src/mastra/workflows` | ワークフローの定義                 |
+
+### トップレベルファイル
+
+| ファイル                | 説明                        |
+| --------------------- | ---------------------------------- |
+| `src/mastra/index.ts` | Mastraのメイン設定ファイル |
+| `.env`                | 環境変数              |

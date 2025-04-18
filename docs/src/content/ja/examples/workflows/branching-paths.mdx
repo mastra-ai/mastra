@@ -1,0 +1,220 @@
+---
+title: "例：分岐パス | ワークフロー | Mastra ドキュメント"
+description: 中間結果に基づいて分岐パスを持つワークフローを作成するためのMastraの使用例。
+---
+
+import { GithubLink } from "@/components/github-link";
+
+# 分岐パス
+
+データを処理する際には、中間結果に基づいて異なるアクションを取る必要があることがよくあります。この例では、ワークフローを作成して別々のパスに分岐し、各パスが前のステップの出力に基づいて異なるステップを実行する方法を示します。
+
+## 制御フローダイアグラム
+
+この例では、ワークフローが別々のパスに分岐し、各パスが前のステップの出力に基づいて異なるステップを実行する方法を示します。
+
+こちらが制御フローダイアグラムです：
+
+<img
+  src="/subscribed-chains.png"
+  alt="分岐パスを持つワークフローを示すダイアグラム"
+/>
+
+## ステップの作成
+
+ステップを作成し、ワークフローを初期化しましょう。
+
+{/* prettier-ignore */}
+```ts showLineNumbers copy
+import { Step, Workflow } from "@mastra/core/workflows";
+import { z } from "zod"
+
+const stepOne = new Step({
+  id: "stepOne",
+  execute: async ({ context }) => ({
+    doubledValue: context.triggerData.inputValue * 2
+  })
+});
+
+const stepTwo = new Step({
+  id: "stepTwo",
+  execute: async ({ context }) => {
+    const stepOneResult = context.getStepResult<{ doubledValue: number }>("stepOne");
+    if (!stepOneResult) {
+      return { isDivisibleByFive: false }
+    }
+
+    return { isDivisibleByFive: stepOneResult.doubledValue % 5 === 0 }
+  }
+});
+
+
+const stepThree = new Step({
+  id: "stepThree",
+  execute: async ({ context }) =>{
+    const stepOneResult = context.getStepResult<{ doubledValue: number }>("stepOne");
+    if (!stepOneResult) {
+      return { incrementedValue: 0 }
+    }
+
+    return { incrementedValue: stepOneResult.doubledValue + 1 }
+  }
+});
+
+const stepFour = new Step({
+  id: "stepFour",
+  execute: async ({ context }) => {
+    const stepThreeResult = context.getStepResult<{ incrementedValue: number }>("stepThree");
+    if (!stepThreeResult) {
+      return { isDivisibleByThree: false }
+    }
+
+    return { isDivisibleByThree: stepThreeResult.incrementedValue % 3 === 0 }
+  }
+});
+
+// 両方のブランチに依存する新しいステップ
+const finalStep = new Step({
+  id: "finalStep",
+  execute: async ({ context }) => {
+    // getStepResultを使用して両方のブランチから結果を取得
+    const stepTwoResult = context.getStepResult<{ isDivisibleByFive: boolean }>("stepTwo");
+    const stepFourResult = context.getStepResult<{ isDivisibleByThree: boolean }>("stepFour");
+
+    const isDivisibleByFive = stepTwoResult?.isDivisibleByFive || false;
+    const isDivisibleByThree = stepFourResult?.isDivisibleByThree || false;
+
+    return {
+      summary: `数値 ${context.triggerData.inputValue} は倍にすると5で${isDivisibleByFive ? '割り切れます' : '割り切れません'}、倍にして1を加えると3で${isDivisibleByThree ? '割り切れます' : '割り切れません'}.`,
+      isDivisibleByFive,
+      isDivisibleByThree
+    }
+  }
+});
+
+// ワークフローを構築
+const myWorkflow = new Workflow({
+  name: "my-workflow",
+  triggerSchema: z.object({
+    inputValue: z.number(),
+  }),
+});
+```
+
+## 分岐パスとチェーンステップ
+
+次に、分岐パスを使用してワークフローを構成し、複合 `.after([])` 構文を使用してそれらをマージします。
+
+```ts showLineNumbers copy
+// 2つの並列ブランチを作成
+myWorkflow
+  // 最初のブランチ
+  .step(stepOne)
+  .then(stepTwo)
+
+  // 2番目のブランチ
+  .after(stepOne)
+  .step(stepThree)
+  .then(stepFour)
+
+  // 複合 after 構文を使用して両方のブランチをマージ
+  .after([stepTwo, stepFour])
+  .step(finalStep)
+  .commit();
+
+const { start } = myWorkflow.createRun();
+
+const result = await start({ triggerData: { inputValue: 3 } });
+console.log(result.steps.finalStep.output.summary);
+// 出力: "The number 3 when doubled is not divisible by 5, and when doubled and incremented is divisible by 3."
+```
+
+## 高度なブランチとマージ
+
+複数のブランチとマージポイントを使用して、より複雑なワークフローを作成できます：
+
+```ts showLineNumbers copy
+const complexWorkflow = new Workflow({
+  name: "complex-workflow",
+  triggerSchema: z.object({
+    inputValue: z.number(),
+  }),
+});
+
+// Create multiple branches with different merge points
+complexWorkflow
+  // Main step
+  .step(stepOne)
+
+  // First branch
+  .then(stepTwo)
+
+  // Second branch
+  .after(stepOne)
+  .step(stepThree)
+  .then(stepFour)
+
+  // Third branch (another path from stepOne)
+  .after(stepOne)
+  .step(new Step({
+    id: "alternativePath",
+    execute: async ({ context }) => {
+      const stepOneResult = context.getStepResult<{ doubledValue: number }>("stepOne");
+      return {
+        result: (stepOneResult?.doubledValue || 0) * 3
+      }
+    }
+  }))
+
+  // Merge first and second branches
+  .after([stepTwo, stepFour])
+  .step(new Step({
+    id: "partialMerge",
+    execute: async ({ context }) => {
+      const stepTwoResult = context.getStepResult<{ isDivisibleByFive: boolean }>("stepTwo");
+      const stepFourResult = context.getStepResult<{ isDivisibleByThree: boolean }>("stepFour");
+
+      return {
+        intermediateResult: "Processed first two branches",
+        branchResults: {
+          branch1: stepTwoResult?.isDivisibleByFive,
+          branch2: stepFourResult?.isDivisibleByThree
+        }
+      }
+    }
+  }))
+
+  // Final merge of all branches
+  .after(["partialMerge", "alternativePath"])
+  .step(new Step({
+    id: "finalMerge",
+    execute: async ({ context }) => {
+      const partialMergeResult = context.getStepResult<{
+        intermediateResult: string,
+        branchResults: { branch1: boolean, branch2: boolean }
+      }>("partialMerge");
+
+      const alternativePathResult = context.getStepResult<{ result: number }>("alternativePath");
+
+      return {
+        finalResult: "All branches processed",
+        combinedData: {
+          fromPartialMerge: partialMergeResult?.branchResults,
+          fromAlternativePath: alternativePathResult?.result
+        }
+      }
+    }
+  }))
+  .commit();
+```
+
+<br />
+<br />
+<hr className="dark:border-[#404040] border-gray-300" />
+<br />
+<br />
+<GithubLink
+  link={
+    "https://github.com/mastra-ai/mastra/blob/main/examples/basics/workflows/workflow-with-branching-paths"
+  }
+/>

@@ -1,0 +1,104 @@
+---
+title: "例: 階層的マルチエージェントシステム | エージェント | Mastra"
+description: Mastraを使用して、エージェントがツール機能を通じて相互作用する階層的マルチエージェントシステムを作成する例。
+---
+
+import { GithubLink } from "@/components/github-link";
+
+# 階層的マルチエージェントシステム
+
+この例では、エージェントがツール機能を通じて相互作用し、1つのエージェントが他のエージェントの作業を調整する階層的なマルチエージェントシステムを作成する方法を示します。
+
+システムは3つのエージェントで構成されています：
+
+1. プロセスを調整するパブリッシャーエージェント（監督者）
+2. 初期コンテンツを書くコピーライターエージェント
+3. コンテンツを洗練するエディターエージェント
+
+まず、コピーライターエージェントとそのツールを定義します：
+
+```ts showLineNumbers copy
+import { openai } from "@ai-sdk/openai";
+import { anthropic } from "@ai-sdk/anthropic";
+
+const copywriterAgent = new Agent({
+  name: "Copywriter",
+  instructions: "あなたはブログ投稿のコピーを書くコピーライターエージェントです。",
+  model: anthropic("claude-3-5-sonnet-20241022"),
+});
+
+const copywriterTool = createTool({
+  id: "copywriter-agent",
+  description: "ブログ投稿のコピーを書くためにコピーライターエージェントを呼び出します。",
+  inputSchema: z.object({
+    topic: z.string().describe("ブログ投稿のトピック"),
+  }),
+  outputSchema: z.object({
+    copy: z.string().describe("ブログ投稿のコピー"),
+  }),
+  execute: async ({ context }) => {
+    const result = await copywriterAgent.generate(
+      `Create a blog post about ${context.topic}`,
+    );
+    return { copy: result.text };
+  },
+});
+```
+
+次に、エディターエージェントとそのツールを定義します：
+
+```ts showLineNumbers copy
+const editorAgent = new Agent({
+  name: "Editor",
+  instructions: "あなたはブログ投稿のコピーを編集するエディターエージェントです。",
+  model: openai("gpt-4o-mini"),
+});
+
+const editorTool = createTool({
+  id: "editor-agent",
+  description: "ブログ投稿のコピーを編集するためにエディターエージェントを呼び出します。",
+  inputSchema: z.object({
+    copy: z.string().describe("ブログ投稿のコピー"),
+  }),
+  outputSchema: z.object({
+    copy: z.string().describe("編集されたブログ投稿のコピー"),
+  }),
+  execute: async ({ context }) => {
+    const result = await editorAgent.generate(
+      `Edit the following blog post only returning the edited copy: ${context.copy}`,
+    );
+    return { copy: result.text };
+  },
+});
+```
+
+最後に、他のエージェントを調整するパブリッシャーエージェントを作成します：
+
+```ts showLineNumbers copy
+const publisherAgent = new Agent({
+  name: "publisherAgent",
+  instructions:
+    "あなたは特定のトピックについてブログ投稿のコピーを書くためにまずコピーライターエージェントを呼び出し、その後コピーを編集するためにエディターエージェントを呼び出すパブリッシャーエージェントです。最終的な編集済みのコピーのみを返します。",
+  model: anthropic("claude-3-5-sonnet-20241022"),
+  tools: { copywriterTool, editorTool },
+});
+
+const mastra = new Mastra({
+  agents: { publisherAgent },
+});
+```
+
+システム全体を使用するには：
+
+```ts showLineNumbers copy
+async function main() {
+  const agent = mastra.getAgent("publisherAgent");
+  const result = await agent.generate(
+    "Write a blog post about React JavaScript frameworks. Only return the final edited copy.",
+  );
+  console.log(result.text);
+}
+
+main();
+```
+

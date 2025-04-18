@@ -1,0 +1,154 @@
+---
+title: "リファレンス: createGraphRAGTool() | RAG | Mastra Tools ドキュメント"
+description: MastraのGraph RAG Toolのドキュメントで、ドキュメント間のセマンティック関係のグラフを構築することでRAGを強化します。
+---
+
+# createGraphRAGTool()
+
+`createGraphRAGTool()`は、ドキュメント間のセマンティックな関係のグラフを構築することでRAGを強化するツールを作成します。これは、`GraphRAG`システムを内部で使用して、グラフベースの検索を提供し、直接的な類似性と接続された関係の両方を通じて関連するコンテンツを見つけます。
+
+## 使用例
+
+```typescript
+import { openai } from "@ai-sdk/openai";
+import { createGraphRAGTool } from "@mastra/rag";
+
+const graphTool = createGraphRAGTool({
+  vectorStoreName: "pinecone",
+  indexName: "docs",
+  model: openai.embedding('text-embedding-3-small'),
+  graphOptions: {
+    dimension: 1536,
+    threshold: 0.7,
+    randomWalkSteps: 100,
+    restartProb: 0.15
+  }
+});
+```
+
+## パラメータ
+
+<PropertiesTable
+  content={[
+    {
+      name: "vectorStoreName",
+      type: "string",
+      description: "クエリを行うベクトルストアの名前",
+      isOptional: false,
+    },
+    {
+      name: "indexName",
+      type: "string",
+      description: "ベクトルストア内のインデックスの名前",
+      isOptional: false,
+    },
+    {
+      name: "model",
+      type: "EmbeddingModel",
+      description: "ベクトル検索に使用する埋め込みモデル",
+      isOptional: false,
+    },
+    {
+      name: "graphOptions",
+      type: "GraphOptions",
+      description: "グラフベースの検索のための設定",
+      isOptional: true,
+      defaultValue: "デフォルトのグラフオプション",
+    },
+    {
+      name: "description",
+      type: "string",
+      description: "ツールのカスタム説明。デフォルトでは: '知識ベース内の情報間の関係をアクセスして分析し、接続やパターンに関する複雑な質問に答える'",
+      isOptional: true,
+    }
+  ]}
+/>
+
+### GraphOptions
+
+<PropertiesTable
+  content={[
+    {
+      name: "dimension",
+      type: "number",
+      description: "埋め込みベクトルの次元",
+      isOptional: true,
+      defaultValue: "1536",
+    },
+    {
+      name: "threshold",
+      type: "number",
+      description: "ノード間のエッジを作成するための類似性のしきい値 (0-1)",
+      isOptional: true,
+      defaultValue: "0.7",
+    },
+    {
+      name: "randomWalkSteps",
+      type: "number",
+      description: "グラフトラバーサルのためのランダムウォークのステップ数",
+      isOptional: true,
+      defaultValue: "100",
+    },
+    {
+      name: "restartProb",
+      type: "number",
+      description: "クエリノードからランダムウォークを再開する確率",
+      isOptional: true,
+      defaultValue: "0.15",
+    }
+  ]}
+/>
+
+## 戻り値
+このツールは以下のオブジェクトを返します：
+
+<PropertiesTable
+  content={[
+    {
+      name: "relevantContext",
+      type: "string",
+      description: "グラフベースのランキングを使用して取得された、最も関連性の高いドキュメントチャンクからの結合テキスト",
+    }
+  ]}
+/>
+
+## デフォルトツールの説明
+
+デフォルトの説明は以下に焦点を当てています:
+- ドキュメント間の関係を分析する
+- パターンと接続を見つける
+- 複雑なクエリに答える
+
+## 高度な例
+
+```typescript
+const graphTool = createGraphRAGTool({
+  vectorStoreName: "pinecone",
+  indexName: "docs",
+  model: openai.embedding('text-embedding-3-small'),
+  graphOptions: {
+    dimension: 1536,
+    threshold: 0.8,        // より高い類似性のしきい値
+    randomWalkSteps: 200,  // より多くの探索ステップ
+    restartProb: 0.2      // より高い再開確率
+  }
+});
+```
+
+## カスタム説明付きの例
+
+```typescript
+const graphTool = createGraphRAGTool({
+  vectorStoreName: "pinecone",
+  indexName: "docs",
+  model: openai.embedding('text-embedding-3-small'),
+  description: "Analyze document relationships to find complex patterns and connections in our company's historical data"
+});
+```
+
+この例は、関係分析の基本目的を維持しながら、特定の使用ケースに合わせてツールの説明をカスタマイズする方法を示しています。
+
+## 関連
+
+- [createVectorQueryTool](./vector-query-tool)
+- [GraphRAG](../rag/graph-rag)

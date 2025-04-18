@@ -1,0 +1,87 @@
+import YouTube from "@/components/youtube";
+
+# ワーキングメモリ
+
+[会話履歴](/docs/memory/overview#conversation-history)や[セマンティック検索](./semantic-recall.mdx)がエージェントが会話を記憶するのに役立つ一方、ワーキングメモリはエージェントがスレッド内の対話全体でユーザーに関する永続的な情報を維持することを可能にします。
+
+これはエージェントのアクティブな思考やメモ帳のようなものです - ユーザーやタスクについて利用可能な状態に保つ重要な情報です。これは、人が会話中に自然に相手の名前、好み、または重要な詳細を覚えておくのと似ています。
+
+これは、常に関連性があり、エージェントが常に利用できるべき継続的な状態を維持するのに役立ちます。
+
+## クイックスタート
+
+以下は、ワーキングメモリを使用したエージェントの設定の最小限の例です：
+
+```typescript {12-15}
+import { Agent } from "@mastra/core/agent";
+import { Memory } from "@mastra/memory";
+import { openai } from "@ai-sdk/openai";
+
+// Create agent with working memory enabled
+const agent = new Agent({
+  name: "PersonalAssistant",
+  instructions: "You are a helpful personal assistant.",
+  model: openai("gpt-4o"),
+  memory: new Memory({
+    options: {
+      workingMemory: {
+        enabled: true,
+        use: "tool-call", // Recommended setting
+      },
+    },
+  }),
+});
+```
+
+## 仕組み
+
+ワーキングメモリは、エージェントが継続的に関連する情報を保存するために時間の経過とともに更新できるMarkdownテキストのブロックです：
+
+<YouTube id="ik-ld_XA96s" />
+
+## カスタムテンプレート
+
+テンプレートは、エージェントがワーキングメモリで追跡・更新する情報を指示します。テンプレートが提供されない場合はデフォルトテンプレートが使用されますが、通常はエージェントの特定のユースケースに合わせたカスタムテンプレートを定義して、最も関連性の高い情報を記憶させることが望ましいでしょう。
+
+以下はカスタムテンプレートの例です。この例では、ユーザーが情報を含むメッセージを送信するとすぐに、エージェントはユーザーの名前、場所、タイムゾーンなどを保存します：
+
+```typescript {5-28}
+const memory = new Memory({
+  options: {
+    workingMemory: {
+      enabled: true,
+      template: `
+# User Profile
+ 
+## Personal Info
+ 
+- Name:
+- Location:
+- Timezone:
+ 
+## Preferences
+ 
+- Communication Style: [e.g., Formal, Casual]
+- Project Goal:
+- Key Deadlines:
+  - [Deadline 1]: [Date]
+  - [Deadline 2]: [Date]
+ 
+## Session State
+ 
+- Last Task Discussed:
+- Open Questions:
+  - [Question 1]
+  - [Question 2]
+`,
+    },
+  },
+});
+```
+
+エージェントが期待通りにワーキングメモリを更新していない場合は、エージェントの`instruction`設定にこのテンプレートを_どのように_、_いつ_使用するかについてのシステム指示を追加することができます。
+
+## 例
+
+- [ストリーミングワーキングメモリ](/examples/memory/streaming-working-memory)
+- [ワーキングメモリテンプレートの使用](/examples/memory/streaming-working-memory-advanced)

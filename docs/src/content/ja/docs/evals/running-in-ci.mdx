@@ -1,0 +1,81 @@
+---
+title: "CIでの実行"
+description: "時間の経過とともにエージェントの品質を監視するために、CI/CDパイプラインでMastraの評価を実行する方法を学びましょう。"
+---
+
+# CIでのEvalsの実行
+
+CIパイプラインでevalsを実行することにより、エージェントの品質を時間とともに測定するための定量的な指標を提供し、このギャップを埋めるのに役立ちます。
+
+## CIの統合設定
+
+ESMモジュールをサポートするテストフレームワークであれば、どれでも対応しています。例えば、[Vitest](https://vitest.dev/)、[Jest](https://jestjs.io/)、または[Mocha](https://mochajs.org/)を使用して、CI/CDパイプラインでevalsを実行することができます。
+
+```typescript copy showLineNumbers filename="src/mastra/agents/index.test.ts"
+import { describe, it, expect } from 'vitest';
+import { evaluate } from "@mastra/evals";
+import { ToneConsistencyMetric } from "@mastra/evals/nlp";
+import { myAgent } from './index';
+
+describe('My Agent', () => {
+  it('should validate tone consistency', async () => {
+    const metric = new ToneConsistencyMetric();
+    const result = await evaluate(myAgent, 'Hello, world!', metric)
+
+    expect(result.score).toBe(1);
+  });
+});
+```
+
+テストフレームワーク用のtestSetupとglobalSetupスクリプトを設定して、評価結果をキャプチャする必要があります。これにより、mastraダッシュボードでこれらの結果を表示することができます。
+
+## フレームワーク設定
+
+### Vitestのセットアップ
+
+CI/CDパイプラインでevalsを実行するために、これらのファイルをプロジェクトに追加してください：
+
+```typescript copy showLineNumbers filename="globalSetup.ts"
+import { globalSetup } from '@mastra/evals';
+
+export default function setup() {
+  globalSetup()
+}
+```
+
+```typescript copy showLineNumbers filename="testSetup.ts"
+import { beforeAll } from 'vitest';
+import { attachListeners } from '@mastra/evals';
+
+beforeAll(async () => {
+  await attachListeners();
+});
+```
+
+```typescript copy showLineNumbers filename="vitest.config.ts"
+import { defineConfig } from 'vitest/config'
+
+export default defineConfig({
+  test: {
+    globalSetup: './globalSetup.ts',
+    setupFiles: ['./testSetup.ts'],
+  },
+})
+```
+
+## ストレージ設定
+
+Mastra Storageに評価結果を保存し、Mastraダッシュボードで結果を取得するには：
+
+```typescript copy showLineNumbers filename="testSetup.ts"
+import { beforeAll } from 'vitest';
+import { attachListeners } from '@mastra/evals';
+import { mastra } from './your-mastra-setup';
+
+beforeAll(async () => {
+  // Store evals in Mastra Storage (requires storage to be enabled)
+  await attachListeners(mastra);
+});
+```
+
+ファイルストレージを使用すると、評価は永続化され、後で照会することができます。メモリストレージを使用すると、評価はテストプロセスに限定されます。

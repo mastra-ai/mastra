@@ -109,7 +109,9 @@ export abstract class Bundler extends MastraBundler {
     analyzedBundleInfo: Awaited<ReturnType<typeof analyzeBundle>>,
     toolsPaths: string[],
   ) {
-    const inputOptions: InputOptions = await getInputOptions(mastraEntryFile, analyzedBundleInfo, 'node');
+    const inputOptions: InputOptions = await getInputOptions(mastraEntryFile, analyzedBundleInfo, 'node', {
+      'process.env.NODE_ENV': JSON.stringify('production'),
+    });
     const isVirtual = serverFile.includes('\n') || existsSync(serverFile);
 
     const toolsInputOptions = await this.getToolsInputOptions(toolsPaths);

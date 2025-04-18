@@ -1,0 +1,174 @@
+---
+title: "リファレンス: 完全性 | メトリクス | 評価 | Mastra ドキュメント"
+description: Mastraの完全性メトリクスに関するドキュメント。LLM出力が入力に含まれる重要な要素をどれだけ網羅しているかを評価します。
+---
+
+# CompletenessMetric
+
+`CompletenessMetric`クラスは、LLMの出力が入力に含まれる重要な要素をどれだけ網羅しているかを評価します。名詞、動詞、トピック、用語を分析してカバレッジを判断し、詳細な完全性スコアを提供します。
+
+## 基本的な使用法
+
+```typescript
+import { CompletenessMetric } from "@mastra/evals/nlp";
+
+const metric = new CompletenessMetric();
+
+const result = await metric.measure(
+  "Explain how photosynthesis works in plants using sunlight, water, and carbon dioxide.",
+  "Plants use sunlight to convert water and carbon dioxide into glucose through photosynthesis."
+);
+
+console.log(result.score); // 0-1の範囲のカバレッジスコア
+console.log(result.info); // 要素カバレッジに関する詳細なメトリクスを含むオブジェクト
+```
+
+## measure() パラメーター
+
+<PropertiesTable
+  content={[
+    {
+      name: "input",
+      type: "string",
+      description: "カバーすべき主要な要素を含む元のテキスト",
+      isOptional: false,
+    },
+    {
+      name: "output",
+      type: "string",
+      description: "完全性を評価するためのLLMの応答",
+      isOptional: false,
+    }
+  ]}
+/>
+
+## 戻り値
+
+<PropertiesTable
+  content={[
+    {
+      name: "score",
+      type: "number",
+      description: "完全性スコア（0-1）で、入力要素が出力でカバーされている割合を表します",
+    },
+    {
+      name: "info",
+      type: "object",
+      description: "要素のカバレッジに関する詳細なメトリクスを含むオブジェクト",
+      properties: [
+        {
+          type: "string[]",
+          parameters: [
+            {
+              name: "inputElements",
+              type: "string[]",
+              description: "入力から抽出された主要要素の配列",
+            }
+          ]
+        },
+        {
+          type: "string[]",
+          parameters: [
+            {
+              name: "outputElements",
+              type: "string[]",
+              description: "出力で見つかった主要要素の配列",
+            }
+          ]
+        },
+        {
+          type: "string[]",
+          parameters: [
+            {
+              name: "missingElements",
+              type: "string[]",
+              description: "出力で見つからなかった入力要素の配列",
+            }
+          ]
+        },
+        {
+          type: "object",
+          parameters: [
+            {
+              name: "elementCounts",
+              type: "object",
+              description: "入力と出力の要素数",
+            }
+          ]
+        }
+      ]
+    },
+  ]}
+/>
+
+## 要素抽出の詳細
+
+このメトリックは、いくつかのタイプの要素を抽出して分析します：
+- 名詞：主要なオブジェクト、概念、エンティティ
+- 動詞：アクション及び状態（不定詞形に変換）
+- トピック：主要な主題とテーマ
+- 用語：個々の重要な単語
+
+抽出プロセスには以下が含まれます：
+- テキストの正規化（発音区別符号の削除、小文字への変換）
+- キャメルケース単語の分割
+- 単語境界の処理
+- 短い単語（3文字以下）の特別な処理
+- 要素の重複排除
+
+## スコアリングの詳細
+
+このメトリックは、言語要素のカバレッジ分析を通じて完全性を評価します。
+
+### スコアリングプロセス
+
+1. 主要な要素を抽出します：
+   - 名詞と固有名詞
+   - アクション動詞
+   - トピック固有の用語
+   - 正規化された単語形
+
+2. 入力要素のカバレッジを計算します：
+   - 短い用語（≤3文字）の正確な一致
+   - 長い用語の実質的な重複（>60%）
+
+最終スコア: `(covered_elements / total_input_elements) * scale`
+
+### スコアの解釈
+(0からスケール、デフォルト0-1)
+- 1.0: 完全なカバレッジ - すべての入力要素を含む
+- 0.7-0.9: 高いカバレッジ - ほとんどの主要要素を含む
+- 0.4-0.6: 部分的なカバレッジ - いくつかの主要要素を含む
+- 0.1-0.3: 低いカバレッジ - ほとんどの主要要素が欠けている
+- 0.0: カバレッジなし - 出力にすべての入力要素が欠けている
+
+## 分析付きの例
+
+```typescript
+import { CompletenessMetric } from "@mastra/evals/nlp";
+
+const metric = new CompletenessMetric();
+
+const result = await metric.measure(
+  "The quick brown fox jumps over the lazy dog",
+  "A brown fox jumped over a dog"
+);
+
+// 例の出力:
+// {
+//   score: 0.75,
+//   info: {
+//     inputElements: ["quick", "brown", "fox", "jump", "lazy", "dog"],
+//     outputElements: ["brown", "fox", "jump", "dog"],
+//     missingElements: ["quick", "lazy"],
+//     elementCounts: { input: 6, output: 4 }
+//   }
+// }
+```
+
+## 関連項目
+
+- [回答関連性メトリック](./answer-relevancy)
+- [コンテンツ類似性メトリック](./content-similarity)
+- [テキスト差異メトリック](./textual-difference) 
+- [キーワードカバレッジメトリック](./keyword-coverage)

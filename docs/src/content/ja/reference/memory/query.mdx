@@ -1,0 +1,167 @@
+# query
+
+特定のスレッドからメッセージを取得し、ページネーションとフィルタリングオプションをサポートします。
+
+## 使用例
+
+```typescript
+import { Memory } from "@mastra/memory";
+
+const memory = new Memory({
+  /* config */
+});
+
+// 最後の50件のメッセージを取得
+const { messages, uiMessages } = await memory.query({
+  threadId: "thread-123",
+  selectBy: {
+    last: 50,
+  },
+});
+
+// 特定のメッセージ周辺のコンテキストを含むメッセージを取得
+const { messages: contextMessages } = await memory.query({
+  threadId: "thread-123",
+  selectBy: {
+    include: [
+      {
+        id: "msg-123", // このメッセージのみを取得（コンテキストなし）
+      },
+      {
+        id: "msg-456", // カスタムコンテキスト付きでこのメッセージを取得
+        withPreviousMessages: 3, // 前の3件のメッセージ
+        withNextMessages: 1, // 次の1件のメッセージ
+      },
+    ],
+  },
+});
+
+// メッセージ内のセマンティック検索
+const { messages } = await memory.query({
+  threadId: "thread-123",
+  selectBy: {
+    vectorSearchString: "デプロイメントについて何が議論されましたか？",
+  },
+  threadConfig: {
+    historySearch: true,
+  },
+});
+```
+
+## パラメーター
+
+<PropertiesTable
+  content={[
+    {
+      name: "threadId",
+      type: "string",
+      description:
+        "メッセージを取得するスレッドの一意の識別子",
+      isOptional: false,
+    },
+    {
+      name: "resourceId",
+      type: "string",
+      description:
+        "スレッドを所有するリソースのオプションID。提供された場合、スレッドの所有権を検証します",
+      isOptional: true,
+    },
+    {
+      name: "selectBy",
+      type: "object",
+      description: "メッセージをフィルタリングするためのオプション",
+      isOptional: true,
+    },
+    {
+      name: "threadConfig",
+      type: "MemoryConfig",
+      description: "メッセージ取得のための設定オプション",
+      isOptional: true,
+    },
+  ]}
+/>
+
+### selectBy
+
+<PropertiesTable
+  content={[
+    {
+      name: "vectorSearchString",
+      type: "string",
+      description: "意味的に類似したメッセージを見つけるための検索文字列",
+      isOptional: true,
+    },
+    {
+      name: "last",
+      type: "number | false",
+      description:
+        "取得する最新メッセージの数。制限を無効にするにはfalseに設定します。注意: threadConfig.lastMessages（デフォルト: 40）がこれより小さい場合、これを上書きします。",
+      isOptional: true,
+      defaultValue: "40",
+    },
+    {
+      name: "include",
+      type: "array",
+      description: "コンテキストと共に含めるメッセージIDの配列",
+      isOptional: true,
+    },
+  ]}
+/>
+
+### include
+
+<PropertiesTable
+  content={[
+    {
+      name: "id",
+      type: "string",
+      description: "含めるメッセージのID",
+      isOptional: false,
+    },
+    {
+      name: "withPreviousMessages",
+      type: "number",
+      description:
+        "このメッセージの前に含めるメッセージの数。ベクトル検索を使用する場合はデフォルトで2、それ以外の場合は0です。",
+      isOptional: true,
+    },
+    {
+      name: "withNextMessages",
+      type: "number",
+      description:
+        "このメッセージの後に含めるメッセージの数。ベクトル検索を使用する場合はデフォルトで2、それ以外の場合は0です。",
+      isOptional: true,
+    },
+  ]}
+/>
+
+## 戻り値
+
+<PropertiesTable
+  content={[
+    {
+      name: "messages",
+      type: "CoreMessage[]",
+      description: "コア形式で取得されたメッセージの配列",
+    },
+    {
+      name: "uiMessages",
+      type: "AiMessage[]",
+      description: "UI表示用にフォーマットされたメッセージの配列",
+    },
+  ]}
+/>
+
+## 追加の注意事項
+
+`query` 関数は2つの異なるメッセージ形式を返します：
+
+- `messages`: 内部で使用されるコアメッセージ形式
+- `uiMessages`: ツールの呼び出しと結果の適切なスレッド化を含む、UI表示に適したフォーマット済みメッセージ
+
+### 関連
+
+- [Memory クラスリファレンス](/reference/memory/Memory.mdx)
+- [Memory の始め方](/docs/memory/overview.mdx)
+- [セマンティックリコール](/docs/memory/semantic-recall.mdx)
+- [createThread](/reference/memory/createThread.mdx)

@@ -1,0 +1,140 @@
+---
+title: "リファレンス: CompositeVoice | Voice Providers | Mastra ドキュメント"
+description: "CompositeVoice クラスのドキュメントで、複数の音声プロバイダーを組み合わせて柔軟なテキスト読み上げと音声認識操作を可能にします。"
+---
+
+# CompositeVoice
+
+CompositeVoiceクラスは、テキストから音声への変換や音声からテキストへの変換のために、異なる音声プロバイダーを組み合わせることができます。これは、各操作に最適なプロバイダーを使用したい場合に特に便利です。例えば、音声からテキストへの変換にはOpenAIを使用し、テキストから音声への変換にはPlayAIを使用する場合です。
+
+CompositeVoiceは、Agentクラスによって内部的に使用され、柔軟な音声機能を提供します。
+
+## 使用例
+
+```typescript
+import { CompositeVoice } from "@mastra/core/voice";
+import { OpenAIVoice } from "@mastra/voice-openai";
+import { PlayAIVoice } from "@mastra/voice-playai";
+
+// Create voice providers
+const openai = new OpenAIVoice();
+const playai = new PlayAIVoice();
+
+// Use OpenAI for listening (speech-to-text) and PlayAI for speaking (text-to-speech)
+const voice = new CompositeVoice({
+  input: openai,
+  output: playai
+});
+
+// Convert speech to text using OpenAI
+const text = await voice.listen(audioStream);
+
+// Convert text to speech using PlayAI
+const audio = await voice.speak("Hello, world!");
+```
+
+## コンストラクタのパラメータ
+
+<PropertiesTable
+  content={[
+    {
+      name: "config",
+      type: "object",
+      description: "合成音声サービスのための設定オブジェクト",
+      isOptional: false,
+    },
+    {
+      name: "config.input",
+      type: "MastraVoice",
+      description: "音声認識操作に使用する音声プロバイダー",
+      isOptional: true,
+    },
+    {
+      name: "config.output",
+      type: "MastraVoice",
+      description: "音声合成操作に使用する音声プロバイダー",
+      isOptional: true,
+    },
+  ]}
+/>
+
+## メソッド
+
+### speak()
+
+設定されたスピーキングプロバイダーを使用してテキストを音声に変換します。
+
+<PropertiesTable
+  content={[
+    {
+      name: "input",
+      type: "string | NodeJS.ReadableStream",
+      description: "音声に変換するテキスト",
+      isOptional: false,
+    },
+    {
+      name: "options",
+      type: "object",
+      description: "スピーキングプロバイダーに渡されるプロバイダー固有のオプション",
+      isOptional: true,
+    },
+  ]}
+/>
+
+注意事項:
+- スピーキングプロバイダーが設定されていない場合、このメソッドはエラーをスローします
+- オプションは設定されたスピーキングプロバイダーに渡されます
+- 音声データのストリームを返します
+
+### listen()
+
+設定されたリスニングプロバイダーを使用して音声をテキストに変換します。
+
+<PropertiesTable
+  content={[
+    {
+      name: "audioStream",
+      type: "NodeJS.ReadableStream",
+      description: "テキストに変換する音声ストリーム",
+      isOptional: false,
+    },
+    {
+      name: "options",
+      type: "object",
+      description: "リスニングプロバイダーに渡されるプロバイダー固有のオプション",
+      isOptional: true,
+    },
+  ]}
+/>
+
+注意事項:
+- リスニングプロバイダーが設定されていない場合、このメソッドはエラーをスローします
+- オプションは設定されたリスニングプロバイダーに渡されます
+- プロバイダーに応じて、文字列または転写されたテキストのストリームを返します
+
+### getSpeakers()
+
+スピーキングプロバイダーから利用可能な声のリストを返します。各ノードには以下が含まれます:
+
+<PropertiesTable
+  content={[
+    {
+      name: "voiceId",
+      type: "string",
+      description: "声の一意の識別子",
+      isOptional: false,
+    },
+    {
+      name: "key",
+      type: "value",
+      description: "プロバイダーによって異なる追加の声のプロパティ（例: 名前、言語）",
+      isOptional: true,
+    },
+  ]}
+/>
+
+注意事項:
+- スピーキングプロバイダーからのみ声を返します
+- スピーキングプロバイダーが設定されていない場合、空の配列を返します
+- 各声オブジェクトには少なくともvoiceIdプロパティがあります
+- 追加の声のプロパティはスピーキングプロバイダーに依存します

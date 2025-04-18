@@ -1,0 +1,54 @@
+---
+title: "リファレンス: getAgent() | エージェント設定 | エージェント | Mastra ドキュメント"
+description: getAgent の API リファレンス。
+---
+
+# `getAgent()`
+
+指定された構成に基づいてエージェントを取得する
+
+```ts showLineNumbers copy
+async function getAgent({
+  connectionId,
+  agent,
+  apis,
+  logger,
+}: {
+  connectionId: string;
+  agent: Record<string, any>;
+  apis: Record<string, IntegrationApi>;
+  logger: any;
+}): Promise<(props: { prompt: string }) => Promise<any>> {
+  return async (props: { prompt: string }) => {
+    return { message: "Hello, world!" };
+  };
+}
+```
+
+## API シグネチャ
+
+### パラメーター
+
+<PropertiesTable
+  content={[
+    {
+      name: "connectionId",
+      type: "string",
+      description: "エージェントのAPI呼び出しに使用する接続ID。",
+    },
+    {
+      name: "agent",
+      type: "Record<string, any>",
+      description: "エージェントの設定オブジェクト。",
+    },
+    {
+      name: "apis",
+      type: "Record<string, IntegrationAPI>",
+      description: "API名とそれぞれのAPIオブジェクトのマップ。",
+    },
+  ]}
+/>
+
+### 戻り値
+
+<PropertiesTable content={[]} />

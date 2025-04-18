@@ -1,0 +1,38 @@
+---
+title: "ログ | Mastra オブザーバビリティ ドキュメント"
+description: Mastra における効果的なログ記録に関するドキュメントで、アプリケーションの動作を理解し、AI の精度を向上させるために重要です。
+---
+
+import Image from "next/image";
+
+# ロギング
+
+Mastraでは、ログは特定の関数がいつ実行されるか、どのような入力データを受け取るか、そしてどのように応答するかを詳述することができます。
+
+## 基本設定
+
+こちらは、`INFO` レベルで **コンソールロガー** を設定する最小限の例です。これにより、情報メッセージおよびそれ以上（つまり、`DEBUG`、`INFO`、`WARN`、`ERROR`）がコンソールに出力されます。
+
+```typescript filename="mastra.config.ts" showLineNumbers copy
+import { Mastra } from "@mastra/core";
+import { createLogger } from "@mastra/core/logger";
+
+export const mastra = new Mastra({
+  // Other Mastra configuration...
+  logger: createLogger({
+    name: "Mastra",
+    level: "info",
+  }),
+});
+```
+
+この設定では：
+
+- `name: "Mastra"` はログをグループ化するための名前を指定します。
+- `level: "info"` は記録するログの最小重大度を設定します。
+
+## 設定
+
+- `createLogger()` に渡すことができるオプションの詳細については、[createLogger リファレンスドキュメント](/reference/observability/create-logger.mdx)を参照してください。
+- `Logger` インスタンスを取得したら、そのメソッド（例：`.info()`、`.warn()`、`.error()`）を[Logger インスタンスリファレンスドキュメント](/reference/observability/logger.mdx)で呼び出すことができます。
+- ログを外部サービスに送信して集中管理、分析、または保存を行いたい場合は、Upstash Redis などの他のロガータイプを設定できます。`UPSTASH` ロガータイプを使用する際の `url`、`token`、`key` などのパラメータの詳細については、[createLogger リファレンスドキュメント](/reference/observability/create-logger.mdx)を参照してください。

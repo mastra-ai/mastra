@@ -1,0 +1,163 @@
+---
+title: Observability in Mastra Cloud
+description: Monitoring and debugging tools for Mastra Cloud deployments
+---
+
+# Observability in Mastra Cloud
+
+Mastra Cloud records execution data for monitoring and debugging. It captures traces, logs, and runtime information from agents and workflows.
+
+## Agent Interface
+
+The agent interface offers three main views, accessible via tabs:
+
+1. **Chat**: Interactive messaging interface to test your agent
+2. **Traces**: Detailed execution records
+3. **Evaluation**: Agent performance assessment
+
+![Agent Interface with Chat Tab](/docs/cloud-agent.png)
+
+### Chat Interface
+
+The Chat tab provides:
+
+- Interactive messaging with deployed agents
+- System response to user queries
+- Suggested prompt buttons (e.g., "What capabilities do you have?")
+- Message input area
+- Branch indicator (e.g., "main")
+- Note about agent memory limitations
+
+### Agent Configuration Panel
+
+The right sidebar displays agent details:
+
+- Agent name and deployment identifier
+- Model information (e.g., "OpenAI")
+- Tools available to the agent (e.g., "getWeather")
+- Complete system prompt text
+
+This panel provides visibility into how the agent is configured without needing to check the source code.
+
+## Trace System
+
+Mastra Cloud records traces for agent and workflow interactions.
+
+### Trace Explorer Interface
+
+![Agent Traces View](/docs/cloud-agent-traces.png)
+
+The Trace Explorer interface shows:
+
+- All agent and workflow interactions
+- Specific trace details
+- Input and output data
+- Tool calls with parameters and results
+- Workflow execution paths
+- Filtering options by type, status, timestamp, and agent/workflow
+
+### Trace Data Structure
+
+Each trace contains:
+
+1. **Request Data**: The request that initiated the agent or workflow
+2. **Tool Call Records**: Tool calls during execution with parameters
+3. **Tool Response Data**: The responses from tool calls
+4. **Agent Response Data**: The generated agent response
+5. **Execution Timestamps**: Timing information for each execution step
+6. **Model Metadata**: Information about model usage and tokens
+
+The trace view displays all API calls and results throughout execution. This data helps debug tool usage and agent logic flows.
+
+### Agent Interaction Data
+
+Agent interaction traces include:
+
+- User input text
+- Agent processing steps
+- Tool calls (e.g., weather API calls)
+- Parameters and results for each tool call
+- Final agent response text
+
+## Dashboard Structure
+
+The Mastra Cloud dashboard contains:
+
+- Project deployment history
+- Environment variable configuration
+- Agent configuration details (model, system prompt, tools)
+- Workflow step visualization
+- Deployment URLs
+- Recent activity log
+
+## Agent Testing
+
+Test your agents using the Chat interface:
+
+1. Navigate to the Agents section
+2. Select the agent you want to test
+3. Use the Chat tab to interact with your agent
+4. Send messages and view responses
+5. Use suggested prompts for common queries
+6. Switch to the Traces tab to view execution details
+
+Note that by default, agents do not remember conversation history across sessions. The interface indicates this with the message: "Agent will not remember previous messages. To enable memory for agent see docs."
+
+## Workflow Monitoring
+
+![Workflow Interface](/docs/cloud-workflow.png)
+
+Workflow monitoring shows:
+
+- Diagram of workflow steps and connections
+- Status for each workflow step
+- Execution details for each step
+- Execution trace records
+- Multi-step process execution (e.g., weather lookup followed by activity planning)
+
+### Workflow Execution
+
+![Workflow Run Details](/docs/cloud-workflow-run.png)
+
+When examining a specific workflow execution, you can see the detailed steps and their outputs.
+
+## Logs
+
+![Logs Interface](/docs/cloud-logs.png)
+
+The Logs section provides detailed information about your application:
+
+- **Time**: When the log entry was created
+- **Level**: Log level (info, debug)
+- **Hostname**: Server identification
+- **Message**: Detailed log information, including:
+  - API initialization
+  - Storage connections
+  - Agent and workflow activity
+
+## Technical Features
+
+The observability system includes:
+
+- **API Endpoints**: For programmatic access to trace data
+- **Structured Trace Format**: JSON format for filtering and query operations
+- **Historical Data Storage**: Retention of past execution records
+- **Deployment Version Links**: Correlation between traces and deployment versions
+
+## Debugging Patterns
+
+- Compare trace data when testing agent behavior changes
+- Use the chat interface to test edge case inputs
+- View system prompts to understand agent behavior
+- Examine tool call parameters and results
+- Verify workflow execution step sequencing
+- Identify execution bottlenecks in trace timing data
+- Compare trace differences between agent versions
+
+## Support Resources
+
+For technical assistance with observability:
+
+- Review the [Troubleshooting Documentation]()
+- Contact technical support through the dashboard
+- Join the [Discord developer channel](https://discord.gg/mastra)

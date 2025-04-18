@@ -1,0 +1,152 @@
+---
+title: "リファレンス: Cloudflare Voice | 音声プロバイダー | Mastra ドキュメント"
+description: "CloudflareVoiceクラスのドキュメント。Cloudflare Workers AIを使用したテキスト読み上げ機能を提供します。"
+---
+
+# Cloudflare
+
+MastraのCloudflareVoiceクラスは、Cloudflare Workers AIを使用したテキスト読み上げ機能を提供します。このプロバイダーは、エッジコンピューティング環境に適した効率的で低遅延の音声合成を専門としています。
+
+## 使用例
+
+```typescript
+import { CloudflareVoice } from '@mastra/voice-cloudflare';
+
+// Initialize with configuration
+const voice = new CloudflareVoice({
+  speechModel: {
+    name: '@cf/meta/m2m100-1.2b',
+    apiKey: 'your-cloudflare-api-token',
+    accountId: 'your-cloudflare-account-id'
+  },
+  speaker: 'en-US-1'  // Default voice
+});
+
+// Convert text to speech
+const audioStream = await voice.speak('Hello, how can I help you?', {
+  speaker: 'en-US-2',  // Override default voice
+});
+
+// Get available voices
+const speakers = await voice.getSpeakers();
+console.log(speakers);
+```
+
+## 設定
+
+### コンストラクタオプション
+
+<PropertiesTable
+  content={[
+    {
+      name: "speechModel",
+      type: "CloudflareSpeechConfig",
+      description: "テキスト読み上げ合成の設定。",
+      isOptional: true,
+    },
+    {
+      name: "speaker",
+      type: "string",
+      description: "音声合成のデフォルトの声ID。",
+      isOptional: true,
+      defaultValue: "'en-US-1'",
+    },
+  ]}
+/>
+
+### CloudflareSpeechConfig
+
+<PropertiesTable
+  content={[
+    {
+      name: "name",
+      type: "string",
+      description: "TTSに使用するモデル名。",
+      isOptional: true,
+      defaultValue: "'@cf/meta/m2m100-1.2b'",
+    },
+    {
+      name: "apiKey",
+      type: "string",
+      description: "Workers AIアクセス権を持つCloudflare APIトークン。CLOUDFLARE_API_TOKEN環境変数にフォールバックします。",
+      isOptional: true,
+    },
+    {
+      name: "accountId",
+      type: "string",
+      description: "CloudflareアカウントID。CLOUDFLARE_ACCOUNT_ID環境変数にフォールバックします。",
+      isOptional: true,
+    },
+  ]}
+/>
+
+## メソッド
+
+### speak()
+
+Cloudflareのテキスト読み上げサービスを使用してテキストを音声に変換します。
+
+<PropertiesTable
+  content={[
+    {
+      name: "input",
+      type: "string | NodeJS.ReadableStream",
+      description: "音声に変換するテキストまたはテキストストリーム。",
+      isOptional: false,
+    },
+    {
+      name: "options.speaker",
+      type: "string",
+      description: "音声合成に使用する音声ID。",
+      isOptional: true,
+      defaultValue: "Constructor's speaker value",
+    },
+    {
+      name: "options.format",
+      type: "string",
+      description: "出力オーディオ形式。",
+      isOptional: true,
+      defaultValue: "'mp3'",
+    },
+  ]}
+/>
+
+戻り値: `Promise<NodeJS.ReadableStream>`
+
+### getSpeakers()
+
+利用可能な音声オプションの配列を返します。各ノードには以下が含まれます：
+
+<PropertiesTable
+  content={[
+    {
+      name: "voiceId",
+      type: "string",
+      description: "音声の一意の識別子（例：'en-US-1'）",
+      isOptional: false,
+    },
+    {
+      name: "language",
+      type: "string",
+      description: "音声の言語コード（例：'en-US'）",
+      isOptional: false,
+    },
+  ]}
+/>
+
+## メモ
+
+- APIトークンはコンストラクタオプションまたは環境変数（CLOUDFLARE_API_TOKENとCLOUDFLARE_ACCOUNT_ID）を通じて提供できます
+- Cloudflare Workers AIは低レイテンシーのエッジコンピューティング向けに最適化されています
+- このプロバイダーは音声合成（TTS）機能のみをサポートし、音声認識（STT）はサポートしていません
+- このサービスは他のCloudflare Workers製品とうまく連携します
+- 本番環境での使用には、Cloudflareアカウントに適切なWorkers AIサブスクリプションがあることを確認してください
+- 音声オプションは他のプロバイダーと比較すると限定的ですが、エッジでのパフォーマンスは優れています
+
+## 関連プロバイダー
+
+テキスト読み上げ機能に加えて音声認識機能が必要な場合は、以下のプロバイダーの利用を検討してください：
+
+- [OpenAI](./openai) - TTSとSTTの両方を提供
+- [Google](./google) - TTSとSTTの両方を提供
+- [Azure](./azure) - TTSとSTTの両方を提供

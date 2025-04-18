@@ -1,0 +1,64 @@
+---
+title: "例：トップK結果の取得 | RAG | Mastra ドキュメント"
+description: Mastraを使用してベクトルデータベースをクエリし、意味的に類似したチャンクを取得する例。
+---
+
+import { GithubLink } from "@/components/github-link";
+
+# トップK結果の取得
+
+ベクターデータベースに埋め込みを保存した後、それらをクエリして類似したコンテンツを見つける必要があります。
+
+`query` メソッドは、入力埋め込みに対して意味的に最も類似したチャンクを関連性でランク付けして返します。`topK` パラメータを使用すると、返す結果の数を指定できます。
+
+この例は、Pineconeベクターデータベースから類似したチャンクを取得する方法を示しています。
+
+```tsx copy
+import { openai } from "@ai-sdk/openai";
+import { PineconeVector } from "@mastra/pinecone";
+import { MDocument } from "@mastra/rag";
+import { embedMany } from "ai";
+
+const doc = MDocument.fromText("Your text content...");
+
+const chunks = await doc.chunk();
+
+const { embeddings } = await embedMany({
+  values: chunks.map(chunk => chunk.text),
+  model: openai.embedding("text-embedding-3-small"),
+});
+
+const pinecone = new PineconeVector("your-api-key");
+
+await pinecone.createIndex({
+  indexName: "test_index",
+  dimension: 1536,
+});
+
+await pinecone.upsert({
+  indexName: "test_index",
+  vectors: embeddings,
+  metadata: chunks?.map((chunk: any) => ({ text: chunk.text })),
+});
+
+const topK = 10;
+
+const results = await pinecone.query({
+  indexName: "test_index",
+  queryVector: embeddings[0],
+  topK,
+});
+
+console.log(results);
+```
+
+<br />
+<br />
+<hr className="dark:border-[#404040] border-gray-300" />
+<br />
+<br />
+<GithubLink
+  link={
+    "https://github.com/mastra-ai/mastra/blob/main/examples/basics/rag/retrieve-results"
+  }
+/>

@@ -4,7 +4,7 @@ import { watch } from 'rollup';
 import { getInputOptions as getBundlerInputOptions } from './bundler';
 import { aliasHono } from './plugins/hono-alias';
 
-export async function getInputOptions(entryFile: string, platform: 'node' | 'browser') {
+export async function getInputOptions(entryFile: string, platform: 'node' | 'browser', env?: Record<string, string>) {
   const inputOptions = await getBundlerInputOptions(
     entryFile,
     {
@@ -13,6 +13,7 @@ export async function getInputOptions(entryFile: string, platform: 'node' | 'bro
       invalidChunks: new Set(),
     },
     platform,
+    env,
   );
 
   if (Array.isArray(inputOptions.plugins)) {

@@ -1,0 +1,236 @@
+---
+title: "動的ワークフロー | Mastra ドキュメント"
+description: "ワークフローステップ内で動的ワークフローを作成する方法を学び、実行時の条件に基づいて柔軟なワークフロー作成を可能にします。"
+---
+
+# ダイナミックワークフロー
+
+このガイドでは、ワークフローステップ内でダイナミックワークフローを作成する方法を示します。この高度なパターンにより、実行時の条件に基づいてワークフローをその場で作成および実行することができます。
+
+## 概要
+
+動的ワークフローは、実行時データに基づいてワークフローを作成する必要がある場合に役立ちます。
+
+## 実装
+
+動的ワークフローを作成する鍵は、ステップの`execute`関数内からMastraインスタンスにアクセスし、それを使用して新しいワークフローを作成して実行することです。
+
+### 基本的な例
+
+```typescript
+import { Mastra, Step, Workflow } from '@mastra/core';
+import { z } from 'zod';
+
+const isMastra = (mastra: any): mastra is Mastra => {
+  return mastra && typeof mastra === 'object' && mastra instanceof Mastra;
+};
+
+// 動的ワークフローを作成して実行するステップ
+const createDynamicWorkflow = new Step({
+  id: 'createDynamicWorkflow',
+  outputSchema: z.object({
+    dynamicWorkflowResult: z.any(),
+  }),
+  execute: async ({ context, mastra }) => {
+    if (!mastra) {
+      throw new Error('Mastraインスタンスが利用できません');
+    }
+
+    if (!isMastra(mastra)) {
+      throw new Error('無効なMastraインスタンス');
+    }
+
+    const inputData = context.triggerData.inputData;
+
+    // 新しい動的ワークフローを作成
+    const dynamicWorkflow = new Workflow({
+      name: 'dynamic-workflow',
+      mastra, // 新しいワークフローにmastraインスタンスを渡す
+      triggerSchema: z.object({
+        dynamicInput: z.string(),
+      }),
+    });
+
+    // 動的ワークフローのステップを定義
+    const dynamicStep = new Step({
+      id: 'dynamicStep',
+      execute: async ({ context }) => {
+        const dynamicInput = context.triggerData.dynamicInput;
+        return {
+          processedValue: `Processed: ${dynamicInput}`,
+        };
+      },
+    });
+
+    // 動的ワークフローを構築してコミット
+    dynamicWorkflow.step(dynamicStep).commit();
+
+    // 実行を作成し、動的ワークフローを実行
+    const run = dynamicWorkflow.createRun();
+    const result = await run.start({
+      triggerData: {
+        dynamicInput: inputData,
+      },
+    });
+
+    let dynamicWorkflowResult;
+
+    if (result.results['dynamicStep']?.status === 'success') {
+      dynamicWorkflowResult = result.results['dynamicStep']?.output.processedValue;
+    } else {
+      throw new Error('動的ワークフローが失敗しました');
+    }
+
+    // 動的ワークフローからの結果を返す
+    return {
+      dynamicWorkflowResult,
+    };
+  },
+});
+
+// 動的ワークフロークリエーターを使用するメインワークフロー
+const mainWorkflow = new Workflow({
+  name: 'main-workflow',
+  triggerSchema: z.object({
+    inputData: z.string(),
+  }),
+  mastra: new Mastra(),
+});
+
+mainWorkflow.step(createDynamicWorkflow).commit();
+
+// Mastraにワークフローを登録
+export const mastra = new Mastra({
+  workflows: { mainWorkflow },
+});
+
+const run = mainWorkflow.createRun();
+const result = await run.start({
+  triggerData: {
+    inputData: 'test',
+  },
+});
+```
+
+## 高度な例: ワークフローファクトリー
+
+入力パラメータに基づいて異なるワークフローを生成するワークフローファクトリーを作成できます:
+
+```typescript
+
+const isMastra = (mastra: any): mastra is Mastra => {
+  return mastra && typeof mastra === 'object' && mastra instanceof Mastra;
+};
+
+const workflowFactory = new Step({
+  id: 'workflowFactory',
+  inputSchema: z.object({
+    workflowType: z.enum(['simple', 'complex']),
+    inputData: z.string(),
+  }),
+  outputSchema: z.object({
+    result: z.any(),
+  }),
+  execute: async ({ context, mastra }) => {
+    if (!mastra) {
+      throw new Error('Mastra instance not available');
+    }
+
+    if (!isMastra(mastra)) {
+      throw new Error('Invalid Mastra instance');
+    }
+
+    // タイプに基づいて新しい動的ワークフローを作成
+    const dynamicWorkflow = new Workflow({
+      name: `dynamic-${context.workflowType}-workflow`,
+      mastra,
+      triggerSchema: z.object({
+        input: z.string(),
+      }),
+    });
+
+    if (context.workflowType === 'simple') {
+      // 単一ステップのシンプルなワークフロー
+      const simpleStep = new Step({
+        id: 'simpleStep',
+        execute: async ({ context }) => {
+          return {
+            result: `シンプルな処理: ${context.triggerData.input}`,
+          };
+        },
+      });
+
+      dynamicWorkflow.step(simpleStep).commit();
+    } else {
+      // 複数ステップの複雑なワークフロー
+      const step1 = new Step({
+        id: 'step1',
+        outputSchema: z.object({
+          intermediateResult: z.string(),
+        }),
+        execute: async ({ context }) => {
+          return {
+            intermediateResult: `最初の処理: ${context.triggerData.input}`,
+          };
+        },
+      });
+
+      const step2 = new Step({
+        id: 'step2',
+        execute: async ({ context }) => {
+          const intermediate = context.getStepResult(step1).intermediateResult;
+          return {
+            finalResult: `二番目の処理: ${intermediate}`,
+          };
+        },
+      });
+
+      dynamicWorkflow.step(step1).then(step2).commit();
+    }
+
+    // 動的ワークフローを実行
+    const run = dynamicWorkflow.createRun();
+    const result = await run.start({
+      triggerData: {
+        input: context.inputData,
+      },
+    });
+
+    // ワークフロータイプに基づいて適切な結果を返す
+    if (context.workflowType === 'simple') {
+      return {
+        // @ts-ignore
+        result: result.results['simpleStep']?.output,
+      };
+    } else {
+      return {
+        // @ts-ignore
+        result: result.results['step2']?.output,
+      };
+    }
+  },
+});
+```
+
+## 重要な考慮事項
+
+1. **Mastra インスタンス**: `execute` 関数の `mastra` パラメータは、動的ワークフローを作成するために不可欠な Mastra インスタンスへのアクセスを提供します。
+
+2. **エラーハンドリング**: 動的ワークフローを作成しようとする前に、Mastra インスタンスが利用可能かどうかを常に確認してください。
+
+3. **リソース管理**: 動的ワークフローはリソースを消費するため、1回の実行であまりにも多くのワークフローを作成しないように注意してください。
+
+4. **ワークフローのライフサイクル**: 動的ワークフローは、メインの Mastra インスタンスに自動的に登録されません。明示的に登録しない限り、ステップ実行の期間中のみ存在します。
+
+5. **デバッグ**: 動的ワークフローのデバッグは困難な場合があります。作成と実行を追跡するために詳細なログを追加することを検討してください。
+
+## ユースケース
+
+- **条件付きワークフロー選択**: 入力データに基づいて異なるワークフローパターンを選択する
+- **パラメータ化されたワークフロー**: 動的な構成でワークフローを作成する
+- **ワークフローテンプレート**: テンプレートを使用して専門的なワークフローを生成する
+- **マルチテナントアプリケーション**: 異なるテナントのために分離されたワークフローを作成する
+
+## 結論
+
+ダイナミックワークフローは、柔軟で適応性のあるワークフローシステムを作成するための強力な方法を提供します。ステップ実行内でMastraインスタンスを活用することで、実行時の条件や要件に応じたワークフローを作成できます。

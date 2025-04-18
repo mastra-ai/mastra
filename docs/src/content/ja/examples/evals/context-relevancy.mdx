@@ -1,0 +1,139 @@
+---
+title: "例：コンテキスト関連性 | Evals | Mastra Docs"
+description: クエリに対してコンテキスト情報がどれだけ関連しているかを評価するためのコンテキスト関連性メトリックの使用例。
+---
+
+import { GithubLink } from "@/components/github-link";
+
+# コンテキストの関連性
+
+この例では、Mastraのコンテキスト関連性メトリックを使用して、特定のクエリに対するコンテキスト情報の関連性を評価する方法を示します。
+
+## 概要
+
+この例では、次の方法を示します：
+
+1. Context Relevancy メトリックを設定する
+2. コンテキストの関連性を評価する
+3. 関連性スコアを分析する
+4. 異なる関連性レベルを処理する
+
+## セットアップ
+
+### 環境セットアップ
+
+環境変数を設定してください：
+
+```bash filename=".env"
+OPENAI_API_KEY=your_api_key_here
+```
+
+### 依存関係
+
+必要な依存関係をインポートします：
+
+```typescript copy showLineNumbers filename="src/index.ts"
+import { openai } from '@ai-sdk/openai';
+import { ContextRelevancyMetric } from '@mastra/evals/llm';
+```
+
+## 使用例
+
+### 高い関連性の例
+
+すべてのコンテキストが関連している応答を評価します：
+
+```typescript copy showLineNumbers{5} filename="src/index.ts"
+const context1 = [
+  'アインシュタインは光電効果の発見でノーベル賞を受賞しました。',
+  '彼は1905年に相対性理論を発表しました。',
+  '彼の研究は現代物理学を革命的に変えました。',
+];
+
+const metric1 = new ContextRelevancyMetric(openai('gpt-4o-mini'), {
+  context: context1,
+});
+
+const query1 = 'アインシュタインの業績のいくつかは何ですか？';
+const response1 = 'アインシュタインは光電効果の発見でノーベル賞を受賞し、画期的な相対性理論を発表しました。';
+
+console.log('例 1 - 高い関連性:');
+console.log('コンテキスト:', context1);
+console.log('クエリ:', query1);
+console.log('応答:', response1);
+
+const result1 = await metric1.measure(query1, response1);
+console.log('メトリック結果:', {
+  score: result1.score,
+  reason: result1.info.reason,
+});
+// 例の出力:
+// メトリック結果: { score: 1, reason: 'コンテキストはすべての関連情報を使用し、無関係な情報を含んでいません。' }
+```
+
+### 混合関連性の例
+
+一部のコンテキストが無関係な応答を評価します：
+
+```typescript copy showLineNumbers{31} filename="src/index.ts"
+const context2 = [
+  '日食は月が太陽を遮るときに起こります。',
+  '月は日食の間に地球と太陽の間を移動します。',
+  '月は夜に見えます。',
+  '月には大気がありません。',
+];
+
+const metric2 = new ContextRelevancyMetric(openai('gpt-4o-mini'), {
+  context: context2,
+});
+
+const query2 = '日食の原因は何ですか？';
+const response2 = '日食は月が地球と太陽の間を移動し、日光を遮るときに起こります。';
+
+console.log('例 2 - 混合関連性:');
+console.log('コンテキスト:', context2);
+console.log('クエリ:', query2);
+console.log('応答:', response2);
+
+const result2 = await metric2.measure(query2, response2);
+console.log('メトリック結果:', {
+  score: result2.score,
+  reason: result2.info.reason,
+});
+// 例の出力:
+// メトリック結果: { score: 0.5, reason: 'コンテキストは一部の関連情報を使用し、一部の無関係な情報を含んでいます。' }
+```
+
+### 低い関連性の例
+
+ほとんどのコンテキストが無関係な応答を評価します：
+
+```typescript copy showLineNumbers{57} filename="src/index.ts"
+const context3 = [
+  'グレートバリアリーフはオーストラリアにあります。',
+  'サンゴ礁は生存するために暖かい水を必要とします。',
+  '海洋生物はサンゴ礁に依存しています。',
+  'オーストラリアの首都はキャンベラです。',
+];
+
+const metric3 = new ContextRelevancyMetric(openai('gpt-4o-mini'), {
+  context: context3,
+});
+
+const query3 = 'オーストラリアの首都はどこですか？';
+const response3 = 'オーストラリアの首都はキャンベラです。';
+
+console.log('例 3 - 低い関連性:');
+console.log('コンテキスト:', context3);
+console.log('クエリ:', query3);
+console.log('応答:', response3);
+
+const result3 = await metric3.measure(query3, response3);
+console.log('メトリック結果:', {
+  score: result3.score,
+  reason: result3.info.reason,
+});
+// 例の出力:
+// メトリック結果: { score: 0.12, reason: 'コンテキストには関連する情報が1つしかなく、ほとんどのコンテキストが無関係です。' }
+```
+

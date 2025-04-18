@@ -1,0 +1,55 @@
+---
+title: "リファレンス: Logger インスタンス | Mastra Observability ドキュメント"
+description: 様々な重大度レベルでイベントを記録するためのメソッドを提供する Logger インスタンスのドキュメント。
+---
+
+# ロガーインスタンス
+
+ロガーインスタンスは `createLogger()` によって作成され、さまざまな重大度レベルでイベントを記録するためのメソッドを提供します。ロガーの種類に応じて、メッセージはコンソール、ファイル、または外部サービスに書き込まれることがあります。
+
+## 例
+
+```typescript showLineNumbers copy
+// Using a console logger
+const logger = createLogger({ name: 'Mastra', level: 'info' });
+
+logger.debug('Debug message'); // Won't be logged because level is INFO
+logger.info({ message: 'User action occurred', destinationPath: 'user-actions', type: 'AGENT' }); // Logged
+logger.error('An error occurred'); // Logged as ERROR
+```
+
+## メソッド
+
+<PropertiesTable
+  content={[
+    {
+      name: 'debug',
+      type: '(message: BaseLogMessage | string, ...args: any[]) => void | Promise<void>',
+      description: 'DEBUGレベルのログを書き込みます。レベルがDEBUG以下の場合のみ記録されます。',
+    },
+    {
+      name: 'info',
+      type: '(message: BaseLogMessage | string, ...args: any[]) => void | Promise<void>',
+      description: 'INFOレベルのログを書き込みます。レベルがINFO以下の場合のみ記録されます。',
+    },
+    {
+      name: 'warn',
+      type: '(message: BaseLogMessage | string, ...args: any[]) => void | Promise<void>',
+      description: 'WARNレベルのログを書き込みます。レベルがWARN以下の場合のみ記録されます。',
+    },
+    {
+      name: 'error',
+      type: '(message: BaseLogMessage | string, ...args: any[]) => void | Promise<void>',
+      description: 'ERRORレベルのログを書き込みます。レベルがERROR以下の場合のみ記録されます。',
+    },
+    {
+      name: 'cleanup',
+      type: '() => Promise<void>',
+      isOptional: true,
+      description:
+        'ロガーが保持するリソースをクリーンアップします（例：Upstashのネットワーク接続）。すべてのロガーがこれを実装しているわけではありません。',
+    },
+  ]}
+/>
+
+**注意:** 一部のロガーは`BaseLogMessage`オブジェクト（`message`、`destinationPath`、`type`フィールドを含む）を必要とします。例えば、`File`および`Upstash`ロガーは構造化されたメッセージを必要とします。

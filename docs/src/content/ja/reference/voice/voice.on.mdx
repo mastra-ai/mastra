@@ -1,0 +1,129 @@
+---
+title: "リファレンス: voice.on() | Voice Providers | Mastra Docs"
+description: "音声プロバイダーで利用可能な on() メソッドのドキュメントで、音声イベントのイベントリスナーを登録します。"
+---
+
+# voice.on()
+
+`on()` メソッドは、さまざまな音声イベントのためのイベントリスナーを登録します。これは、音声をリアルタイムで提供するプロバイダーにとって特に重要であり、イベントは文字起こしされたテキスト、音声応答、その他の状態変化を伝えるために使用されます。
+
+## 使用例
+
+```typescript
+import { OpenAIRealtimeVoice } from "@mastra/voice-openai-realtime";
+import Speaker from "@mastra/node-speaker";
+import chalk from "chalk";
+
+// Initialize a real-time voice provider
+const voice = new OpenAIRealtimeVoice({
+  realtimeConfig: {
+    model: "gpt-4o-mini-realtime",
+    apiKey: process.env.OPENAI_API_KEY,
+  },
+});
+
+// Connect to the real-time service
+await voice.connect();
+
+// Register event listener for transcribed text
+voice.on("writing", (event) => {
+  if (event.role === 'user') {
+    process.stdout.write(chalk.green(event.text));
+  } else {
+    process.stdout.write(chalk.blue(event.text));
+  }
+});
+
+// Listen for audio data and play it
+const speaker = new Speaker({
+  sampleRate: 24100,
+  channels: 1,
+  bitDepth: 16,
+});
+
+voice.on("speaker", (stream) => {
+  stream.pipe(speaker);
+});
+
+// Register event listener for errors
+voice.on("error", ({ message, code, details }) => {
+  console.error(`Error ${code}: ${message}`, details);
+});
+```
+
+## パラメータ
+<br/>
+<PropertiesTable
+  content={[
+    {
+      name: "event",
+      type: "string",
+      description: "リッスンするイベントの名前。利用可能なイベントのリストについては、[ボイスイベント](./voice.events)のドキュメントを参照してください。",
+      isOptional: false,
+    },
+    {
+      name: "callback",
+      type: "function",
+      description: "イベントが発生したときに呼び出されるコールバック関数。コールバックのシグネチャは特定のイベントによって異なります。",
+      isOptional: false,
+    }
+  ]}
+/>
+
+## 戻り値
+
+このメソッドは値を返しません。
+
+## イベント
+
+イベントとそのペイロード構造の包括的なリストについては、[Voice Events](./voice.events)のドキュメントを参照してください。
+
+一般的なイベントには以下が含まれます：
+
+- `speaking`: 音声データが利用可能になったときに発行されます
+- `speaker`: 音声出力にパイプできるストリームとともに発行されます
+- `writing`: テキストが文字起こしまたは生成されたときに発行されます
+- `error`: エラーが発生したときに発行されます
+- `tool-call-start`: ツールが実行される直前に発行されます
+- `tool-call-result`: ツールの実行が完了したときに発行されます
+
+異なる音声プロバイダーは、異なるイベントセットと様々なペイロード構造をサポートしている場合があります。
+
+## CompositeVoiceとの使用
+
+`CompositeVoice`を使用する場合、`on()`メソッドは設定されたリアルタイムプロバイダーに委任されます:
+
+```typescript
+import { CompositeVoice } from "@mastra/core/voice";
+import { OpenAIRealtimeVoice } from "@mastra/voice-openai-realtime";
+import Speaker from "@mastra/node-speaker";
+
+const speaker = new Speaker({
+  sampleRate: 24100,  // MacBook Proでの高品質オーディオの標準であるHz単位のオーディオサンプルレート
+  channels: 1,        // モノラルオーディオ出力（ステレオの場合は2）
+  bitDepth: 16,       // オーディオ品質のビット深度 - CD品質の標準（16ビット解像度）
+});
+
+const realtimeVoice = new OpenAIRealtimeVoice();
+const voice = new CompositeVoice({
+  realtimeProvider: realtimeVoice,
+});
+
+// リアルタイムサービスに接続
+await voice.connect();
+
+// これにより、OpenAIRealtimeVoiceプロバイダーにイベントリスナーが登録されます
+voice.on("speaker", (stream) => {
+  stream.pipe(speaker)
+});
+```
+
+## メモ
+
+- このメソッドは主にイベントベースの通信をサポートするリアルタイム音声プロバイダーで使用されます
+- イベントをサポートしていない音声プロバイダーで呼び出された場合、警告をログに記録し何も実行しません
+- イベントリスナーは、イベントを発生させる可能性のあるメソッドを呼び出す前に登録する必要があります
+- イベントリスナーを削除するには、同じイベント名とコールバック関数を指定して[voice.off()](./voice.off)メソッドを使用します
+- 同じイベントに対して複数のリスナーを登録できます
+- コールバック関数はイベントタイプによって異なるデータを受け取ります（[Voice Events](./voice.events)を参照）
+- パフォーマンスを最適化するために、不要になったイベントリスナーは削除することを検討してください

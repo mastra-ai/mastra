@@ -1,0 +1,55 @@
+---
+title: "mastra build"
+description: "Mastraプロジェクトを本番環境にデプロイするためにビルドします"
+---
+
+`mastra build` コマンドは、Mastraプロジェクトを本番環境対応のHonoサーバーにバンドルします。Honoは、型安全なルーティングとミドルウェアサポートを提供する軽量なWebフレームワークであり、MastraエージェントをHTTPエンドポイントとしてデプロイするのに理想的です。
+
+## 使用法
+
+```bash
+mastra build [options]
+```
+
+## オプション
+
+- `--dir <path>`: Mastraプロジェクトを含むディレクトリ（デフォルト：現在のディレクトリ）
+
+## その機能
+
+1. Mastra エントリーファイルを見つけます（`src/mastra/index.ts` または `src/mastra/index.js`）
+2. `.mastra` 出力ディレクトリを作成します
+3. Rollup を使用してコードをバンドルします：
+   - 最適なバンドルサイズのためのツリーシェイキング
+   - Node.js 環境のターゲティング
+   - デバッグ用のソースマップ生成
+
+## 例
+
+```bash
+# 現在のディレクトリからビルド
+mastra build
+
+# 特定のディレクトリからビルド
+mastra build --dir ./my-mastra-project
+```
+
+## 出力
+
+このコマンドは`.mastra`ディレクトリに本番用バンドルを生成します。これには以下が含まれます：
+- あなたのMastraエージェントをエンドポイントとして公開するHonoベースのHTTPサーバー
+- 本番環境向けに最適化されたJavaScriptファイル
+- デバッグ用のソースマップ
+- 必要な依存関係
+
+この出力は以下に適しています：
+- クラウドサーバー（EC2、Digital Ocean）へのデプロイ
+- コンテナ化された環境での実行
+- コンテナオーケストレーションシステムでの使用
+
+## デプロイヤー
+デプロイヤーを使用すると、ビルド出力が対象プラットフォーム向けに自動的に準備されます。例：
+- [Vercel デプロイヤー](/reference/deployers/vercel)
+- [Netlify デプロイヤー](/reference/deployers/netlify) 
+- [Cloudflare デプロイヤー](/reference/deployers/cloudflare)
+

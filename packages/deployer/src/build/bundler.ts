@@ -14,6 +14,7 @@ export async function getInputOptions(
   entryFile: string,
   analyzedBundleInfo: Awaited<ReturnType<typeof analyzeBundle>>,
   platform: 'node' | 'browser',
+  env: Record<string, string> = { 'process.env.NODE_ENV': JSON.stringify('production') },
 ): Promise<InputOptions> {
   let nodeResolvePlugin =
     platform === 'node'
@@ -99,9 +100,7 @@ export async function getInputOptions(
         target: 'node20',
         platform,
         minify: false,
-        define: {
-          'process.env.NODE_ENV': JSON.stringify('production'),
-        },
+        define: env,
       }),
       commonjs({
         extensions: ['.js', '.ts'],

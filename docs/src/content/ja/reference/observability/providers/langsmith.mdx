@@ -1,0 +1,48 @@
+---
+title: "リファレンス: LangSmith 統合 | Mastra オブザーバビリティ ドキュメント"
+description: LLMアプリケーションのデバッグ、テスト、評価、監視のためのプラットフォームであるMastraとLangSmithを統合するためのドキュメント。
+---
+
+# LangSmith
+
+LangSmithは、LLMアプリケーションのデバッグ、テスト、評価、監視のためのLangChainのプラットフォームです。
+
+> **注**: 現在、この統合はアプリケーション内のAI関連の呼び出しのみをトレースします。他の種類の操作はテレメトリーデータにキャプチャされません。
+
+## 設定
+
+LangSmithをMastraで使用するには、次の環境変数を設定する必要があります:
+
+```env
+LANGSMITH_TRACING=true
+LANGSMITH_ENDPOINT=https://api.smith.langchain.com
+LANGSMITH_API_KEY=your-api-key
+LANGSMITH_PROJECT=your-project-name
+```
+
+## 実装
+
+LangSmithを使用するようにMastraを設定する方法は次のとおりです：
+
+```typescript
+import { Mastra } from "@mastra/core";
+import { AISDKExporter } from "langsmith/vercel";
+
+export const mastra = new Mastra({
+  // ... other config
+  telemetry: {
+    serviceName: "your-service-name",
+    enabled: true,
+    export: {
+      type: "custom",
+      exporter: new AISDKExporter(),
+    },
+  },
+});
+```
+
+## ダッシュボード
+
+LangSmith ダッシュボードでトレースと分析にアクセスするには、[smith.langchain.com](https://smith.langchain.com) をご覧ください。
+
+> **注意**: ワークフローを実行しても、新しいプロジェクトにデータが表示されない場合があります。すべてのプロジェクトを表示するには、Name 列で並べ替えを行い、プロジェクトを選択してから、Root Runs の代わりに LLM Calls でフィルタリングする必要があります。

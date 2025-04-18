@@ -1,0 +1,109 @@
+---
+title: "例：音声機能の追加 | エージェント | Mastra"
+description: "Mastraエージェントに音声機能を追加する例で、さまざまな音声プロバイダーを使用して話したり聞いたりする機能を有効にします。"
+---
+
+import { GithubLink } from "@/components/github-link";
+
+# エージェントに声を与える
+
+この例では、Mastraエージェントに音声機能を追加し、異なる音声プロバイダーを使用して話したり聞いたりできるようにする方法を示します。異なる音声設定を持つ2つのエージェントを作成し、音声を使用してどのように相互作用できるかを示します。
+
+この例では以下を紹介します：
+1. CompositeVoiceを使用して、異なるプロバイダーを組み合わせて話すことと聞くことを行う
+2. 単一のプロバイダーを両方の機能に使用する
+3. エージェント間の基本的な音声インタラクション
+
+まず、必要な依存関係をインポートし、エージェントを設定しましょう：
+
+```ts showLineNumbers copy
+// 必要な依存関係をインポート
+import { openai } from '@ai-sdk/openai';
+import { Agent } from '@mastra/core/agent';
+import { CompositeVoice } from '@mastra/core/voice';
+import { OpenAIVoice } from '@mastra/voice-openai';
+import { createReadStream, createWriteStream } from 'fs';
+import { PlayAIVoice } from '@mastra/voice-playai';
+import path from 'path';
+
+// 聞くことと話すことの両方の機能を持つエージェント1を初期化
+const agent1 = new Agent({
+  name: 'Agent1',
+  instructions: `あなたはSTTとTTSの両方の機能を持つエージェントです。`,
+  model: openai('gpt-4o'),
+  voice: new CompositeVoice({
+    input: new OpenAIVoice(), // 音声をテキストに変換
+    output: new PlayAIVoice(), // テキストを音声に変換
+  }),
+});
+
+// 聞くことと話すことの両方の機能にOpenAIのみを使用するエージェント2を初期化
+const agent2 = new Agent({
+  name: 'Agent2',
+  instructions: `あなたはSTTとTTSの両方の機能を持つエージェントです。`,
+  model: openai('gpt-4o'),
+  voice: new OpenAIVoice(),
+});
+```
+
+この設定では：
+- Agent1は、OpenAIを音声からテキストへの変換に、PlayAIをテキストから音声への変換に使用するCompositeVoiceを使用します
+- Agent2は、両方の機能にOpenAIの音声機能を使用します
+
+次に、エージェント間の基本的なインタラクションを示しましょう：
+
+```ts showLineNumbers copy
+// ステップ1：エージェント1が質問を話し、それをファイルに保存
+const audio1 = await agent1.voice.speak('人生の意味を一文で説明してください。');
+await saveAudioToFile(audio1, 'agent1-question.mp3');
+
+// ステップ2：エージェント2がエージェント1の質問を聞く
+const audioFilePath = path.join(process.cwd(), 'agent1-question.mp3');
+const audioStream = createReadStream(audioFilePath);
+const audio2 = await agent2.voice.listen(audioStream);
+const text = await convertToText(audio2);
+
+// ステップ3：エージェント2が応答を生成し、それを話す
+const agent2Response = await agent2.generate(text);
+const agent2ResponseAudio = await agent2.voice.speak(agent2Response.text);
+await saveAudioToFile(agent2ResponseAudio, 'agent2-response.mp3');
+```
+
+インタラクションで何が起こっているか：
+1. Agent1はPlayAIを使用してテキストを音声に変換し、それをファイルに保存します（インタラクションを聞くことができるように音声を保存します）
+2. Agent2はOpenAIの音声からテキストへの変換を使用して音声ファイルを聞きます
+3. Agent2は応答を生成し、それを音声に変換します
+
+この例には、音声ファイルを処理するためのヘルパー関数が含まれています：
+
+```ts showLineNumbers copy
+/**
+ * 音声ストリームをファイルに保存
+ */
+async function saveAudioToFile(audio: NodeJS.ReadableStream, filename: string): Promise<void> {
+  const filePath = path.join(process.cwd(), filename);
+  const writer = createWriteStream(filePath);
+  audio.pipe(writer);
+  return new Promise<void>((resolve, reject) => {
+    writer.on('finish', resolve);
+    writer.on('error', reject);
+  });
+}
+
+/**
+ * 文字列またはリーダブルストリームをテキストに変換
+ */
+async function convertToText(input: string | NodeJS.ReadableStream): Promise<string> {
+  if (typeof input === 'string') {
+    return input;
+  }
+
+  const chunks: Buffer[] = [];
+  return new Promise<string>((resolve, reject) => {
+    input.on('data', chunk => chunks.push(Buffer.from(chunk)));
+    input.on('error', err => reject(err));
+    input.on('end', () => resolve(Buffer.concat(chunks).toString('utf-8')));
+  });
+}
+```
+

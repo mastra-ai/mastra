@@ -1,0 +1,141 @@
+---
+title: "リファレンス: createDocumentChunkerTool() | ツール | Mastra ドキュメント"
+description: Mastraのドキュメントチャンクツールのドキュメントで、効率的な処理と取得のためにドキュメントを小さなチャンクに分割します。
+---
+
+# createDocumentChunkerTool()
+
+`createDocumentChunkerTool()` 関数は、ドキュメントを小さなチャンクに分割して効率的に処理および取得するためのツールを作成します。さまざまなチャンク戦略と設定可能なパラメータをサポートしています。
+
+## 基本的な使用法
+
+```typescript
+import { createDocumentChunkerTool, MDocument } from "@mastra/rag";
+
+const document = new MDocument({
+  text: "Your document content here...",
+  metadata: { source: "user-manual" }
+});
+
+const chunker = createDocumentChunkerTool({
+  doc: document,
+  params: {
+    strategy: "recursive",
+    size: 512,
+    overlap: 50,
+    separator: "\n"
+  }
+});
+
+const { chunks } = await chunker.execute();
+```
+
+## パラメータ
+
+<PropertiesTable
+  content={[
+    {
+      name: "doc",
+      type: "MDocument",
+      description: "チャンク化されるドキュメント",
+      isOptional: false,
+    },
+    {
+      name: "params",
+      type: "ChunkParams",
+      description: "チャンク化のための設定パラメータ",
+      isOptional: true,
+      defaultValue: "デフォルトのチャンク化パラメータ",
+    }
+  ]}
+/>
+
+### ChunkParams
+
+<PropertiesTable
+  content={[
+    {
+      name: "strategy",
+      type: "'recursive'",
+      description: "使用するチャンク化戦略",
+      isOptional: true,
+      defaultValue: "'recursive'",
+    },
+    {
+      name: "size",
+      type: "number",
+      description: "各チャンクの目標サイズ（トークン/文字数）",
+      isOptional: true,
+      defaultValue: "512",
+    },
+    {
+      name: "overlap",
+      type: "number",
+      description: "チャンク間で重複するトークン/文字数",
+      isOptional: true,
+      defaultValue: "50",
+    },
+    {
+      name: "separator",
+      type: "string",
+      description: "チャンクの区切りとして使用する文字",
+      isOptional: true,
+      defaultValue: "'\\n'",
+    }
+  ]}
+/>
+
+## 戻り値
+
+<PropertiesTable
+  content={[
+    {
+      name: "chunks",
+      type: "DocumentChunk[]",
+      description: "コンテンツとメタデータを含むドキュメントチャンクの配列",
+    }
+  ]}
+/>
+
+## カスタムパラメータを使用した例
+
+```typescript
+const technicalDoc = new MDocument({
+  text: longDocumentContent,
+  metadata: {
+    type: "technical",
+    version: "1.0"
+  }
+});
+
+const chunker = createDocumentChunkerTool({
+  doc: technicalDoc,
+  params: {
+    strategy: "recursive",
+    size: 1024,      // Larger chunks
+    overlap: 100,    // More overlap
+    separator: "\n\n" // Split on double newlines
+  }
+});
+
+const { chunks } = await chunker.execute();
+
+// Process the chunks
+chunks.forEach((chunk, index) => {
+  console.log(`Chunk ${index + 1} length: ${chunk.content.length}`);
+});
+```
+
+## ツールの詳細
+
+チャンクは、以下のプロパティを持つMastraツールとして作成されます：
+
+- **ツールID**: `Document Chunker {strategy} {size}`
+- **説明**: `{strategy} 戦略を使用してサイズ {size} と {overlap} オーバーラップでドキュメントをチャンクします`
+- **入力スキーマ**: 空のオブジェクト（追加の入力は不要）
+- **出力スキーマ**: チャンクの配列を含むオブジェクト
+
+## 関連
+
+- [MDocument](../rag/document.mdx)
+- [createVectorQueryTool](./vector-query-tool) 

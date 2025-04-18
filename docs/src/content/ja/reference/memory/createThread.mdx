@@ -1,0 +1,95 @@
+# createThread
+
+メモリシステム内で新しい会話スレッドを作成します。各スレッドは個別の会話またはコンテキストを表し、複数のメッセージを含むことができます。
+
+## 使用例
+
+```typescript
+import { Memory } from "@mastra/memory";
+
+const memory = new Memory({ /* config */ });
+const thread = await memory.createThread({
+  resourceId: "user-123",
+  title: "Support Conversation",
+  metadata: {
+    category: "support",
+    priority: "high"
+  }
+});
+```
+
+## パラメーター
+
+<PropertiesTable
+  content={[
+    {
+      name: "resourceId",
+      type: "string",
+      description: "このスレッドが属するリソースの識別子（例：ユーザーID、プロジェクトID）",
+      isOptional: false,
+    },
+    {
+      name: "threadId",
+      type: "string",
+      description: "スレッドのオプションのカスタムID。指定されない場合は、自動生成されます。",
+      isOptional: true,
+    },
+    {
+      name: "title",
+      type: "string",
+      description: "スレッドのオプションのタイトル",
+      isOptional: true,
+    },
+    {
+      name: "metadata",
+      type: "Record<string, unknown>",
+      description: "スレッドに関連付けるオプションのメタデータ",
+      isOptional: true,
+    },
+  ]}
+/>
+
+## 戻り値
+
+<PropertiesTable
+  content={[
+    {
+      name: "id",
+      type: "string",
+      description: "作成されたスレッドの一意の識別子",
+    },
+    {
+      name: "resourceId",
+      type: "string",
+      description: "スレッドに関連付けられたリソースID",
+    },
+    {
+      name: "title",
+      type: "string",
+      description: "スレッドのタイトル（提供されている場合）",
+    },
+    {
+      name: "createdAt",
+      type: "Date",
+      description: "スレッドが作成された時のタイムスタンプ",
+    },
+    {
+      name: "updatedAt",
+      type: "Date",
+      description: "スレッドが最後に更新された時のタイムスタンプ",
+    },
+    {
+      name: "metadata",
+      type: "Record<string, unknown>",
+      description: "スレッドに関連付けられた追加のメタデータ",
+    },
+  ]}
+/>
+
+### 関連項目
+
+- [Memory クラスリファレンス](/reference/memory/Memory.mdx)
+- [Memory の始め方](/docs/memory/overview.mdx)（スレッドの概念をカバー）
+- [getThreadById](/reference/memory/getThreadById.mdx)
+- [getThreadsByResourceId](/reference/memory/getThreadsByResourceId.mdx)
+- [query](/reference/memory/query.mdx)

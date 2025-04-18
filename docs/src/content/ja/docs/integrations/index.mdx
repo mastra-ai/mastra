@@ -1,0 +1,213 @@
+---
+title: "Mastra 統合の使用 | Mastra ローカル開発ドキュメント"
+description: サードパーティサービスのために自動生成された型安全なAPIクライアントであるMastra統合のドキュメント。
+---
+
+# Mastra統合の使用
+
+Mastraの統合は、サードパーティサービス用の自動生成された型安全なAPIクライアントです。これらはエージェントのツールとして、またはワークフローのステップとして使用できます。
+
+## インテグレーションのインストール
+
+Mastraのデフォルトインテグレーションは、個別にインストール可能なnpmモジュールとしてパッケージ化されています。npmを介してインストールし、Mastraの設定にインポートすることで、プロジェクトにインテグレーションを追加できます。
+
+### 例: GitHubインテグレーションの追加
+
+1. **インテグレーションパッケージのインストール**
+
+GitHubインテグレーションをインストールするには、次を実行します:
+
+```bash
+npm install @mastra/github
+```
+
+2. **プロジェクトにインテグレーションを追加**
+
+インテグレーション用の新しいファイルを作成し（例: `src/mastra/integrations/index.ts`）、インテグレーションをインポートします:
+
+```typescript filename="src/mastra/integrations/index.ts" showLineNumbers copy
+import { GithubIntegration } from "@mastra/github";
+
+export const github = new GithubIntegration({
+  config: {
+    PERSONAL_ACCESS_TOKEN: process.env.GITHUB_PAT!,
+  },
+});
+```
+
+`process.env.GITHUB_PAT!`を実際のGitHubパーソナルアクセストークンに置き換えるか、環境変数が適切に設定されていることを確認してください。
+
+3. **ツールやワークフローでインテグレーションを使用**
+
+エージェントのツールを定義する際やワークフローでインテグレーションを使用できます。
+
+```typescript filename="src/mastra/tools/index.ts" showLineNumbers copy
+import { createTool } from "@mastra/core";
+import { z } from "zod";
+import { github } from "../integrations";
+
+export const getMainBranchRef = createTool({
+  id: "getMainBranchRef",
+  description: "GitHubリポジトリからメインブランチの参照を取得する",
+  inputSchema: z.object({
+    owner: z.string(),
+    repo: z.string(),
+  }),
+  outputSchema: z.object({
+    ref: z.string().optional(),
+  }),
+  execute: async ({ context }) => {
+    const client = await github.getApiClient();
+
+    const mainRef = await client.gitGetRef({
+      path: {
+        owner: context.owner,
+        repo: context.repo,
+        ref: "heads/main",
+      },
+    });
+
+    return { ref: mainRef.data?.ref };
+  },
+});
+```
+
+上記の例では:
+
+- `github`インテグレーションをインポートしています。
+- リポジトリのメインブランチの参照を取得するためにGitHub APIクライアントを使用する`getMainBranchRef`というツールを定義しています。
+- ツールは`owner`と`repo`を入力として受け取り、参照文字列を返します。
+
+## エージェントでの統合の使用
+
+統合を利用するツールを定義したら、これらのツールをエージェントに含めることができます。
+
+```typescript filename="src/mastra/agents/index.ts" showLineNumbers copy
+import { openai } from "@ai-sdk/openai";
+import { Agent } from "@mastra/core/agent";
+import { getMainBranchRef } from "../tools";
+
+export const codeReviewAgent = new Agent({
+  name: "Code Review Agent",
+  instructions:
+    "An agent that reviews code repositories and provides feedback.",
+  model: openai("gpt-4o-mini"),
+  tools: {
+    getMainBranchRef,
+    // other tools...
+  },
+});
+```
+
+このセットアップでは：
+
+- `Code Review Agent` という名前のエージェントを作成します。
+- エージェントの利用可能なツールに `getMainBranchRef` ツールを含めます。
+- エージェントは会話中にこのツールを使用してGitHubリポジトリと対話できるようになります。
+
+## 環境設定
+
+統合に必要なAPIキーやトークンが環境変数に正しく設定されていることを確認してください。例えば、GitHub統合の場合、GitHubの個人アクセストークンを設定する必要があります：
+
+```bash
+GITHUB_PAT=your_personal_access_token
+```
+
+機密情報を管理するために、`.env`ファイルや他の安全な方法を使用することを検討してください。
+
+### 例: Mem0統合の追加
+
+この例では、[Mem0](https://mem0.ai)プラットフォームを使用して、ツール使用を通じてエージェントに長期記憶機能を追加する方法を学びます。
+このメモリ統合は、Mastraの[エージェントメモリ機能](https://mastra.ai/docs/agents/agent-memory)と一緒に動作することができます。
+Mem0は、ユーザーごとにすべてのインタラクションを通じて事実を記憶し、後で思い出すことができるようにし、Mastraのメモリはスレッドごとに動作します。これらを組み合わせて使用することで、Mem0は会話/インタラクションを超えて長期記憶を保存し、Mastraのメモリは個々の会話で線形の会話履歴を維持します。
+
+1. **統合パッケージのインストール**
+
+Mem0統合をインストールするには、次を実行します：
+
+```bash
+npm install @mastra/mem0
+```
+
+2. **プロジェクトに統合を追加**
+
+統合用の新しいファイルを作成し（例：`src/mastra/integrations/index.ts`）、統合をインポートします：
+
+```typescript filename="src/mastra/integrations/index.ts" showLineNumbers copy
+import { Mem0Integration } from "@mastra/mem0";
+
+export const mem0 = new Mem0Integration({
+  config: {
+    apiKey: process.env.MEM0_API_KEY!,
+    userId: "alice",
+  },
+});
+```
+
+3. **ツールやワークフローで統合を使用**
+
+エージェントのツールを定義する際やワークフローで統合を使用できます。
+
+```typescript filename="src/mastra/tools/index.ts" showLineNumbers copy
+import { createTool } from "@mastra/core";
+import { z } from "zod";
+import { mem0 } from "../integrations";
+
+export const mem0RememberTool = createTool({
+  id: "Mem0-remember",
+  description:
+    "Mem0-memorizeツールを使用して以前に保存したエージェントの記憶を思い出します。",
+  inputSchema: z.object({
+    question: z
+      .string()
+      .describe("保存された記憶の中から答えを探すために使用される質問。"),
+  }),
+  outputSchema: z.object({
+    answer: z.string().describe("思い出された答え"),
+  }),
+  execute: async ({ context }) => {
+    console.log(`Searching memory "${context.question}"`);
+    const memory = await mem0.searchMemory(context.question);
+    console.log(`\nFound memory "${memory}"\n`);
+
+    return {
+      answer: memory,
+    };
+  },
+});
+
+export const mem0MemorizeTool = createTool({
+  id: "Mem0-memorize",
+  description:
+    "Mem0に情報を保存し、後でMem0-rememberツールを使用して思い出せるようにします。",
+  inputSchema: z.object({
+    statement: z.string().describe("メモリに保存する文"),
+  }),
+  execute: async ({ context }) => {
+    console.log(`\nCreating memory "${context.statement}"\n`);
+    // レイテンシーを減らすために、メモリはツールの実行をブロックせずに非同期で保存できます
+    void mem0.createMemory(context.statement).then(() => {
+      console.log(`\nMemory "${context.statement}" saved.\n`);
+    });
+    return { success: true };
+  },
+});
+```
+
+上記の例では：
+
+- `@mastra/mem0`統合をインポートします。
+- Mem0 APIクライアントを使用して新しい記憶を作成し、以前に保存された記憶を呼び出す2つのツールを定義します。
+- ツールは`question`を入力として受け取り、記憶を文字列として返します。
+
+## 利用可能な統合
+
+Mastraは、いくつかの組み込み統合を提供しています。主にOAuthを必要としないAPIキーに基づく統合です。利用可能な統合には、Github、Stripe、Resend、Firecrawlなどがあります。
+
+利用可能な統合の完全なリストについては、[Mastraのコードベース](https://github.com/mastra-ai/mastra/tree/main/integrations)または[npmパッケージ](https://www.npmjs.com/search?q=%22%40mastra%22)を確認してください。
+
+## 結論
+
+Mastraのインテグレーションは、AIエージェントとワークフローが外部サービスとシームレスに連携することを可能にします。インテグレーションをインストールして設定することで、APIからのデータ取得、メッセージの送信、サードパーティシステムでのリソース管理などの操作をアプリケーションに追加することができます。
+
+各インテグレーションの具体的な使用方法については、必ずドキュメントを参照し、セキュリティと型の安全性に関するベストプラクティスを遵守してください。
