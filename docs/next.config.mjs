@@ -749,56 +749,6 @@ export default withGT(
         destination: "/docs/voice/speech-to-speech",
         permanent: true,
       },
-      {
-        source: "/:locale/docs/:path*.rsc",
-        destination: "/:locale/docs/:path*",
-        permanent: true,
-      },
-      {
-        source: "/docs/:path*.rsc",
-        destination: "/docs/:path*",
-        permanent: true,
-      },
-      {
-        source: "/examples/:path*.rsc",
-        destination: "/examples/:path*",
-        permanent: true,
-      },
-      {
-        source: "/reference/:path*.rsc",
-        destination: "/reference/:path*",
-        permanent: true,
-      },
-      {
-        source: "/guides/:path*.rsc",
-        destination: "/guides/:path*",
-        permanent: true,
-      },
-      {
-        source: "/showcase/:path*.rsc",
-        destination: "/showcase/:path*",
-        permanent: true,
-      },
-      {
-        source: "/:locale/examples/:path*.rsc",
-        destination: "/:locale/examples/:path*",
-        permanent: true,
-      },
-      {
-        source: "/:locale/reference/:path*.rsc",
-        destination: "/:locale/reference/:path*",
-        permanent: true,
-      },
-      {
-        source: "/:locale/guides/:path*.rsc",
-        destination: "/:locale/guides/:path*",
-        permanent: true,
-      },
-      {
-        source: "/:locale/showcase/:path*.rsc",
-        destination: "/:locale/showcase/:path*",
-        permanent: true,
-      },
     ],
     trailingSlash: false,
   }),

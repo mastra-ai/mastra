@@ -45,7 +45,7 @@ describe('DevBundler', () => {
       const { getWatcherInputOptions } = await import('@mastra/deployer/build');
 
       // Act
-      await devBundler.watch('test-entry.js', 'output-dir');
+      await devBundler.watch('test-entry.js', 'output-dir', []);
 
       // Assert
       expect(getWatcherInputOptions).toHaveBeenCalledWith('test-entry.js', 'node', {
@@ -60,7 +60,7 @@ describe('DevBundler', () => {
       const { getWatcherInputOptions } = await import('@mastra/deployer/build');
 
       // Act
-      await devBundler.watch('test-entry.js', 'output-dir');
+      await devBundler.watch('test-entry.js', 'output-dir', []);
 
       // Assert
       expect(getWatcherInputOptions).toHaveBeenCalledWith('test-entry.js', 'node', {
