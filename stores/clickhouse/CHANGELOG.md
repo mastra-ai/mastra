@@ -1,5 +1,13 @@
 # @mastra/clickhouse
 
+## 0.3.0-alpha.6
+
+### Patch Changes
+
+- dd8d0cb: make Clickhouse storage extendable
+- Updated dependencies [157c741]
+  - @mastra/core@0.9.0-alpha.6
+
 ## 0.3.0-alpha.5
 
 ### Patch Changes
