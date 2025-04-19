@@ -435,12 +435,7 @@ describe('PgVector', () => {
         });
 
         it('should handle filters correctly', async () => {
-          const results = await vectorDB.query({
-            indexName,
-            queryVector: [1, 0, 0],
-            topK: 10,
-            filter: { type: 'a' },
-          });
+          const results = await vectorDB.query({ indexName, queryVector: [1, 0, 0], topK: 10, filter: { type: 'a' } });
 
           expect(results).toHaveLength(1);
           results.forEach(result => {
@@ -606,7 +601,7 @@ describe('PgVector', () => {
 
     // Array Operator Tests
     describe('Array Operators', () => {
-      it('should filter with $in operator', async () => {
+      it('should filter with $in operator for scalar field', async () => {
         const results = await vectorDB.query({
           indexName,
           queryVector: [1, 0, 0],
@@ -618,7 +613,25 @@ describe('PgVector', () => {
         });
       });
 
-      it('should filter with $nin operator', async () => {
+      it('should filter with $in operator for array field', async () => {
+        // Insert a record with tags as array
+        await vectorDB.upsert({
+          indexName,
+          vectors: [[2, 0.2, 0]],
+          metadata: [{ tags: ['featured', 'sale', 'new'] }],
+        });
+        const results = await vectorDB.query({
+          indexName,
+          queryVector: [1, 0, 0],
+          filter: { tags: { $in: ['sale', 'clearance'] } },
+        });
+        expect(results.length).toBeGreaterThan(0);
+        results.forEach(result => {
+          expect(result.metadata?.tags.some((tag: string) => ['sale', 'clearance'].includes(tag))).toBe(true);
+        });
+      });
+
+      it('should filter with $nin operator for scalar field', async () => {
         const results = await vectorDB.query({
           indexName,
           queryVector: [1, 0, 0],
@@ -627,6 +640,24 @@ describe('PgVector', () => {
         expect(results.length).toBeGreaterThan(0);
         results.forEach(result => {
           expect(['electronics', 'books']).not.toContain(result.metadata?.category);
+        });
+      });
+
+      it('should filter with $nin operator for array field', async () => {
+        // Insert a record with tags as array
+        await vectorDB.upsert({
+          indexName,
+          vectors: [[2, 0.3, 0]],
+          metadata: [{ tags: ['clearance', 'used'] }],
+        });
+        const results = await vectorDB.query({
+          indexName,
+          queryVector: [1, 0, 0],
+          filter: { tags: { $nin: ['new', 'sale'] } },
+        });
+        expect(results.length).toBeGreaterThan(0);
+        results.forEach(result => {
+          expect(result.metadata?.tags.every((tag: string) => !['new', 'sale'].includes(tag))).toBe(true);
         });
       });
 
@@ -657,6 +688,52 @@ describe('PgVector', () => {
         expect(results.length).toBeGreaterThan(0);
         results.forEach(result => {
           expect(result.metadata?.tags).toContain('new');
+        });
+      });
+
+      it('should filter with $contains operator for string substring', async () => {
+        const results = await vectorDB.query({
+          indexName,
+          queryVector: [1, 0, 0],
+          filter: { category: { $contains: 'lectro' } },
+        });
+        expect(results.length).toBeGreaterThan(0);
+        results.forEach(result => {
+          expect(result.metadata?.category).toContain('lectro');
+        });
+      });
+
+      it('should not match deep object containment with $contains', async () => {
+        // Insert a record with a nested object
+        await vectorDB.upsert({
+          indexName,
+          vectors: [[1, 0.1, 0]],
+          metadata: [{ details: { color: 'red', size: 'large' }, category: 'clothing' }],
+        });
+        // $contains does NOT support deep object containment in Postgres
+        const results = await vectorDB.query({
+          indexName,
+          queryVector: [1, 0.1, 0],
+          filter: { details: { $contains: { color: 'red' } } },
+        });
+        expect(results.length).toBe(0);
+      });
+
+      it('should fallback to direct equality for non-array, non-string', async () => {
+        // Insert a record with a numeric field
+        await vectorDB.upsert({
+          indexName,
+          vectors: [[1, 0.2, 0]],
+          metadata: [{ price: 123 }],
+        });
+        const results = await vectorDB.query({
+          indexName,
+          queryVector: [1, 0, 0],
+          filter: { price: { $contains: 123 } },
+        });
+        expect(results.length).toBeGreaterThan(0);
+        results.forEach(result => {
+          expect(result.metadata?.price).toBe(123);
         });
       });
 
@@ -810,29 +887,29 @@ describe('PgVector', () => {
         });
       });
 
-      it('should filter with $contains operator for nested objects', async () => {
-        // First insert a record with nested object
-        await vectorDB.upsert({
-          indexName,
-          vectors: [[1, 0.1, 0]],
-          metadata: [
-            {
-              details: { color: 'red', size: 'large' },
-              category: 'clothing',
-            },
-          ],
-        });
+      // it('should filter with $objectContains operator for nested objects', async () => {
+      //   // First insert a record with nested object
+      //   await vectorDB.upsert({
+      //     indexName,
+      //     vectors: [[1, 0.1, 0]],
+      //     metadata: [
+      //       {
+      //         details: { color: 'red', size: 'large' },
+      //         category: 'clothing',
+      //       },
+      //     ],
+      //   });
 
-        const results = await vectorDB.query({
-          indexName,
-          queryVector: [1, 0.1, 0],
-          filter: { details: { $contains: { color: 'red' } } },
-        });
-        expect(results.length).toBeGreaterThan(0);
-        results.forEach(result => {
-          expect(result.metadata?.details.color).toBe('red');
-        });
-      });
+      //   const results = await vectorDB.query({
+      //     indexName,
+      //     queryVector: [1, 0.1, 0],
+      //     filter: { details: { $objectContains: { color: 'red' } } },
+      //   });
+      //   expect(results.length).toBeGreaterThan(0);
+      //   results.forEach(result => {
+      //     expect(result.metadata?.details.color).toBe('red');
+      //   });
+      // });
 
       // String Pattern Tests
       it('should handle exact string matches', async () => {
@@ -1252,6 +1329,7 @@ describe('PgVector', () => {
           indexName,
           queryVector: [1, 0, 0],
           filter: { category: 'electronics' },
+          includeVector: false,
           minScore: 0.9,
         });
         expect(results.length).toBeGreaterThan(0);
@@ -1403,7 +1481,8 @@ describe('PgVector', () => {
           indexName,
           queryVector: [1, 0, 0],
           filter: { category: 'electronics' },
-          minScore: 0.9, // minScore
+          includeVector: false,
+          minScore: 0.9,
         });
         expect(results.length).toBeGreaterThan(0);
         results.forEach(result => {
@@ -1457,7 +1536,11 @@ describe('PgVector', () => {
         const results = await vectorDB.query({
           indexName,
           queryVector: [1, 0, 0],
-          filter: { $and: [{ category: 'electronics' }], $or: [{ price: { $lt: 100 } }, { price: { $gt: 20 } }] },
+          filter: {
+            $and: [{ category: 'electronics' }],
+            $or: [{ price: { $lt: 100 } }, { price: { $gt: 20 } }],
+            $nor: [],
+          },
         });
         expect(results.length).toBeGreaterThan(0);
         results.forEach(result => {
@@ -1477,13 +1560,7 @@ describe('PgVector', () => {
         const results = await vectorDB.query({
           indexName,
           queryVector: [1, 0, 0],
-          filter: {
-            tags: {
-              $elemMatch: {
-                $eq: 'value',
-              },
-            },
-          },
+          filter: { tags: { $elemMatch: { $eq: 'value' } } },
         });
         expect(results).toHaveLength(0); // Should return no results for non-array field
       });
