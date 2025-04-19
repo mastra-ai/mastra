@@ -1,9 +1,9 @@
 import { randomUUID } from 'crypto';
 import { describe, it, expect, beforeAll, beforeEach, afterAll } from 'vitest';
-import type { MetricResult } from '../../eval';
-import type { WorkflowRunState } from '../../workflows';
+import type { MetricResult } from '@mastra/core/eval';
+import type { WorkflowRunState } from '@mastra/core/workflows';
 import type { MastraStorage } from '../base';
-import { TABLE_WORKFLOW_SNAPSHOT, TABLE_EVALS, TABLE_MESSAGES, TABLE_THREADS } from '../constants';
+import { TABLE_WORKFLOW_SNAPSHOT, TABLE_EVALS, TABLE_MESSAGES, TABLE_THREADS } from '@mastra/core/storage';
 
 export function createTestSuite(storage: MastraStorage) {
   describe(storage.constructor.name, () => {

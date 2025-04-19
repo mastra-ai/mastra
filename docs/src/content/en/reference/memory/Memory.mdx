@@ -18,19 +18,18 @@ const agent = new Agent({
 
 ```typescript copy showLineNumbers
 import { Memory } from "@mastra/memory";
-import { LibSQLStore } from "@mastra/core/storage/libsql";
-import { LibSQLVector } from "@mastra/core/vector/libsql";
+import { LibSQLStore, LibSQLVector } from "@mastra/libsql";
 import { Agent } from "@mastra/core/agent";
 
 const memory = new Memory({
   // Optional storage configuration - libsql will be used by default
   storage: new LibSQLStore({
-    url: "file:memory.db",
+    url: "file:./memory.db",
   }),
 
   // Optional vector database for semantic search - libsql will be used by default
   vector: new LibSQLVector({
-    url: "file:vector.db",
+    url: "file:./vector.db",
   }),
 
   // Memory configuration options
@@ -209,4 +208,3 @@ Mastra supports many embedding models through the [Vercel AI SDK](https://sdk.ve
 - [query](/reference/memory/query.mdx)
 - [getThreadById](/reference/memory/getThreadById.mdx)
 - [getThreadsByResourceId](/reference/memory/getThreadsByResourceId.mdx)
-

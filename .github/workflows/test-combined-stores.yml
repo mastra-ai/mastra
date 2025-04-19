@@ -5,8 +5,8 @@ on:
     branches: [main]
     paths:
       - 'stores/**'
-      - 'stores/*/package.json'
       - 'packages/core/**'
+      - 'stores/*/package.json'
       - '.github/workflows/test-combined-stores.yml'
 
 permissions:
