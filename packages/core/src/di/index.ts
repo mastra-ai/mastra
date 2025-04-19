@@ -2,7 +2,7 @@ type RecordToTuple<T> = {
   [K in keyof T]: [K, T[K]];
 }[keyof T][];
 
-export class Container<Values extends Record<string, any> | unknown = unknown> {
+export class Container<Values extends Record<string, any> | unknown = any> {
   private registry = new Map<string, unknown>();
 
   constructor(
@@ -27,11 +27,10 @@ export class Container<Values extends Record<string, any> | unknown = unknown> {
   /**
    * Get a value with its type
    */
-  public get<
-    K extends Values extends Record<string, any> ? keyof Values : string,
-    R = Values extends Record<string, any> ? (K extends keyof Values ? Values[K] : never) : unknown,
-  >(key: string): R {
-    return this.registry.get(key) as R;
+  public get<K extends Values extends Record<string, any> ? keyof Values : string>(
+    key: K,
+  ): Values extends Record<string, any> ? (K extends keyof Values ? Values[K] : unknown) : unknown {
+    return this.registry.get(key as string) as any;
   }
 
   /**
