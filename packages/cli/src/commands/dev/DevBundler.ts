@@ -1,10 +1,11 @@
-import { writeFile } from 'node:fs/promises';
+import { stat, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { FileService } from '@mastra/deployer';
 import { createWatcher, getWatcherInputOptions, writeTelemetryConfig } from '@mastra/deployer/build';
 import { Bundler } from '@mastra/deployer/bundler';
 import * as fsExtra from 'fs-extra';
+import { copy } from 'fs-extra';
 import type { RollupWatcherEvent } from 'rollup';
 
 export class DevBundler extends Bundler {
@@ -56,6 +57,7 @@ export class DevBundler extends Bundler {
 
     const outputDir = join(outputDirectory, this.outputDir);
     const copyPublic = this.copyPublic.bind(this);
+    const copyPublicAssets = this.copyPublicAssets.bind(this);
     const watcher = await createWatcher(
       {
         ...inputOptions,
@@ -77,6 +79,13 @@ export class DevBundler extends Bundler {
               this.addWatchFile(join(dirname(entryFile), 'public'));
             },
             buildEnd() {
+              console.log('Copying public files');
+              console.log(entryFile, outputDirectory);
+
+              copyPublicAssets(dirname(entryFile), outputDirectory).catch(e => {
+                console.error(`Failed to copy public assets: ${e}`);
+              });
+
               return copyPublic(dirname(entryFile), outputDirectory);
             },
           },
@@ -126,5 +135,29 @@ export class DevBundler extends Bundler {
 
   async bundle(): Promise<void> {
     // Do nothing
+  }
+
+  /**
+   * Copies the public directory from one level up from the entry file directory
+   * @param entryFileDir The directory containing the entry file
+   * @param outputDirectory The output directory
+   */
+  protected async copyPublicAssets(entryFileDir: string, outputDirectory: string) {
+    // Go up two levels from the entry file directory
+    // If entry file is in /path/to/project/src/index.js, we want to look in /path/to/project/public
+    const projectRoot = dirname(dirname(entryFileDir));
+    const publicDir = join(projectRoot, 'public');
+
+    try {
+      await stat(publicDir);
+      this.logger.info(`Found public directory at ${publicDir}`);
+    } catch {
+      this.logger.info(`No public directory found at ${publicDir}`);
+      return;
+    }
+
+    const outputPublicDir = join(outputDirectory, this.outputDir, 'public');
+    this.logger.info(`Copying public directory to ${outputPublicDir}`);
+    await copy(publicDir, outputPublicDir);
   }
 }

@@ -2138,6 +2138,9 @@ export async function createHonoServer(
     app.get('/swagger-ui', swaggerUI({ url: '/openapi.json' }));
   }
 
+  // Serve static files from the public directory in the output folder
+  app.use('/public/*', serveStatic({ root: '.' }));
+
   if (options?.playground) {
     // SSE endpoint for refresh notifications
     app.get('/refresh-events', handleClientsRefresh);

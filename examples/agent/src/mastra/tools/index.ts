@@ -15,3 +15,13 @@ export const cookingTool = createTool({
     return 'My tool result';
   },
 });
+
+export const getImage = createTool({
+  id: 'get-image',
+  description: 'Get my image',
+  inputSchema: z.object({}),
+  execute: async () => {
+    console.log('Getting image...');
+    return 'http://localhost:4111/public/aws-resource-graph.png';
+  },
+});
