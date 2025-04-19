@@ -398,7 +398,7 @@ function createExecute(tool: ToolToConvert, options: ToolOptions, logType?: 'too
  * @param value - The value to check
  * @returns True if the value is a Zod type, false otherwise
  */
-function isZodType(value: unknown): value is z.ZodType {
+export function isZodType(value: unknown): value is z.ZodType {
   // Check if it's a Zod schema by looking for common Zod properties and methods
   return (
     typeof value === 'object' &&
