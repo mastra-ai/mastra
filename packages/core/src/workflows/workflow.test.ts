@@ -3047,7 +3047,7 @@ describe('Workflow', async () => {
       });
     });
 
-    it('should handle basic event based resume flow', async () => {
+    it('should handle basic event based resume flow with events registered on workflow', async () => {
       const getUserInputAction = vi.fn().mockResolvedValue({ userInput: 'test input' });
       const promptAgentAction = vi
         .fn()
@@ -3086,12 +3086,76 @@ describe('Workflow', async () => {
       });
 
       const wf = mastra.getWorkflow('test-workflow');
+      const run = wf.createRun();
+
+      const initialResult = await run.start({ triggerData: { input: 'test' } });
+      expect(initialResult.activePaths.size).toBe(1);
+      expect(initialResult.results).toEqual({
+        getUserInput: { status: 'success', output: { userInput: 'test input' } },
+        __testev_event: { status: 'suspended' },
+      });
+      expect(getUserInputAction).toHaveBeenCalledTimes(1);
+
+      const firstResumeResult = await run.resumeWithEvent('testev', {
+        catName: 'test input for resumption',
+      });
+
+      if (!firstResumeResult) {
+        throw new Error('Resume failed to return a result');
+      }
+
+      expect(firstResumeResult.activePaths.size).toBe(1);
+      expect(firstResumeResult.results).toEqual({
+        getUserInput: { status: 'success', output: { userInput: 'test input' } },
+        promptAgent: { status: 'success', output: { test: 'yes' } },
+        __testev_event: {
+          status: 'success',
+          output: {
+            executed: true,
+            resumedEvent: {
+              catName: 'test input for resumption',
+            },
+          },
+        },
+      });
+    });
+
+    it('should handle event based resume flow with events registered on run', async () => {
+      const getUserInputAction = vi.fn().mockResolvedValue({ userInput: 'test input' });
+      const promptAgentAction = vi
+        .fn()
+        .mockImplementationOnce(async () => {
+          return { test: 'yes' };
+        })
+        .mockImplementationOnce(() => ({ modelOutput: 'test output' }));
+      const getUserInput = new Step({
+        id: 'getUserInput',
+        execute: getUserInputAction,
+        outputSchema: z.object({ userInput: z.string() }),
+      });
+      const promptAgent = new Step({
+        id: 'promptAgent',
+        execute: promptAgentAction,
+        outputSchema: z.object({ modelOutput: z.string() }),
+      });
+
+      const promptEvalWorkflow = new Workflow({
+        name: 'test-workflow',
+        triggerSchema: z.object({ input: z.string() }),
+      });
+
+      promptEvalWorkflow.step(getUserInput).afterEvent('testev').step(promptAgent).commit();
+
+      const mastra = new Mastra({
+        logger,
+        workflows: { 'test-workflow': promptEvalWorkflow },
+      });
+
+      const wf = mastra.getWorkflow('test-workflow');
       const run = wf.createRun({
         events: {
           testev: {
-            schema: z.object({
-              catName: z.string(),
-            }),
+            schema: z.object({ catName: z.string() }),
           },
         },
       });
