@@ -86,15 +86,6 @@ export const FILTER_OPERATORS: Record<string, OperatorFn> = {
   $lt: createNumericOperator('<'),
   $lte: createNumericOperator('<='),
 
-  // $in: (key: string, value: any) => ({
-  //   sql: `json_extract(metadata, '$."${handleKey(key)}"') IN (${value.map(() => '?').join(',')})`,
-  //   needsValue: true,
-  // }),
-
-  // $nin: (key: string, value: any) => ({
-  //   sql: `json_extract(metadata, '$."${handleKey(key)}"') NOT IN (${value.map(() => '?').join(',')})`,
-  //   needsValue: true,
-  // }),
   // Array Operators
   $in: (key: string, value: any) => {
     const arr = Array.isArray(value) ? value : [value];
