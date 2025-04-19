@@ -8,7 +8,14 @@ import {
   TABLE_WORKFLOW_SNAPSHOT,
   TABLE_EVALS,
 } from '@mastra/core/storage';
-import type { EvalRow, StorageColumn, StorageGetMessagesArg, TABLE_NAMES } from '@mastra/core/storage';
+import type {
+  EvalRow,
+  StorageColumn,
+  StorageGetMessagesArg,
+  TABLE_NAMES,
+  WorkflowRun,
+  WorkflowRuns,
+} from '@mastra/core/storage';
 import type { WorkflowRunState } from '@mastra/core/workflows';
 import pgPromise from 'pg-promise';
 import type { ISSLConfig } from 'pg-promise/typescript/pg-subset';
@@ -760,16 +767,7 @@ export class PostgresStore extends MastraStorage {
     toDate?: Date;
     limit?: number;
     offset?: number;
-  } = {}): Promise<{
-    runs: Array<{
-      workflowName: string;
-      runId: string;
-      snapshot: WorkflowRunState | string;
-      createdAt: Date;
-      updatedAt: Date;
-    }>;
-    total: number;
-  }> {
+  } = {}): Promise<WorkflowRuns> {
     const conditions: string[] = [];
     const values: any[] = [];
     let paramIndex = 1;
@@ -838,6 +836,14 @@ export class PostgresStore extends MastraStorage {
 
     // Use runs.length as total when not paginating
     return { runs, total: total || runs.length };
+  }
+
+  async getWorkflowRunByResourceId(args: { resourceId: string; workflowName?: string }): Promise<WorkflowRuns> {
+    throw new Error('Method not implemented.');
+  }
+
+  async getWorkflowRunByID(args: { runId: string; workflowName?: string }): Promise<WorkflowRun | null> {
+    throw new Error('Method not implemented.');
   }
 
   async close(): Promise<void> {

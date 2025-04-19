@@ -8,7 +8,14 @@ import {
   TABLE_EVALS,
   TABLE_TRACES,
 } from '@mastra/core/storage';
-import type { TABLE_NAMES, StorageColumn, StorageGetMessagesArg, EvalRow } from '@mastra/core/storage';
+import type {
+  TABLE_NAMES,
+  StorageColumn,
+  StorageGetMessagesArg,
+  EvalRow,
+  WorkflowRuns,
+  WorkflowRun,
+} from '@mastra/core/storage';
 import type { WorkflowRunState } from '@mastra/core/workflows';
 import { Redis } from '@upstash/redis';
 
@@ -547,16 +554,7 @@ export class UpstashStore extends MastraStorage {
       limit?: number;
       offset?: number;
     } = { namespace: 'workflows' },
-  ): Promise<{
-    runs: Array<{
-      workflowName: string;
-      runId: string;
-      snapshot: WorkflowRunState | string;
-      createdAt: Date;
-      updatedAt: Date;
-    }>;
-    total: number;
-  }> {
+  ): Promise<WorkflowRuns> {
     // Get all workflow keys
     const pattern = workflowName
       ? this.getKey(TABLE_WORKFLOW_SNAPSHOT, { namespace, workflow_name: workflowName }) + ':*'
@@ -614,6 +612,14 @@ export class UpstashStore extends MastraStorage {
     }
 
     return { runs, total };
+  }
+
+  async getWorkflowRunByResourceId(args: { resourceId: string; workflowName?: string }): Promise<WorkflowRuns> {
+    throw new Error('Method not implemented.');
+  }
+
+  async getWorkflowRunByID(args: { runId: string; workflowName?: string }): Promise<WorkflowRun | null> {
+    throw new Error('Method not implemented.');
   }
 
   async close(): Promise<void> {

@@ -11,7 +11,14 @@ import {
   TABLE_TRACES,
   TABLE_WORKFLOW_SNAPSHOT,
 } from '@mastra/core/storage';
-import type { EvalRow, StorageColumn, StorageGetMessagesArg, TABLE_NAMES } from '@mastra/core/storage';
+import type {
+  EvalRow,
+  StorageColumn,
+  StorageGetMessagesArg,
+  TABLE_NAMES,
+  WorkflowRun,
+  WorkflowRuns,
+} from '@mastra/core/storage';
 import type { WorkflowRunState } from '@mastra/core/workflows';
 
 function safelyParseJSON(jsonString: string): any {
@@ -868,16 +875,7 @@ export class ClickhouseStore extends MastraStorage {
     toDate?: Date;
     limit?: number;
     offset?: number;
-  } = {}): Promise<{
-    runs: Array<{
-      workflowName: string;
-      runId: string;
-      snapshot: WorkflowRunState | string;
-      createdAt: Date;
-      updatedAt: Date;
-    }>;
-    total: number;
-  }> {
+  } = {}): Promise<WorkflowRuns> {
     try {
       const conditions: string[] = [];
       const values: Record<string, any> = {};
@@ -960,6 +958,14 @@ export class ClickhouseStore extends MastraStorage {
       console.error('Error getting workflow runs:', error);
       throw error;
     }
+  }
+
+  async getWorkflowRunByResourceId(args: { resourceId: string; workflowName?: string }): Promise<WorkflowRuns> {
+    throw new Error('Method not implemented.');
+  }
+
+  async getWorkflowRunByID(args: { runId: string; workflowName?: string }): Promise<WorkflowRun | null> {
+    throw new Error('Method not implemented.');
   }
 
   async close(): Promise<void> {
