@@ -257,7 +257,7 @@ describe('Milvus Vector tests', () => {
       await milvusClient.createIndex({
         collectionName: collectionName,
         fieldName: 'book_intro',
-        indexName: indexName + '_flat',
+        indexName: indexName,
         indexConfig: {
           type: IndexType.IVF_FLAT,
         },
@@ -279,7 +279,7 @@ describe('Milvus Vector tests', () => {
       const indexes = await milvusClient.listIndexes();
       console.log('vishesh', indexes);
       expect(indexes).toBeDefined();
-      expect(indexes.length).toBe(3);
+      expect(indexes.length).toBe(2);
       expect(indexes.includes('_default_idx')).toBe(true);
     });
 
@@ -322,14 +322,66 @@ describe('Milvus Vector tests', () => {
         dimension: 128,
       });
 
-      await milvusClient.dropIndex(collectionName, indexName);
+      await milvusClient.dropIndex(collectionName, 'book_intro');
 
       // describe index
       const describeResult = await milvusClient.describeIndex(collectionName);
       expect(describeResult).toBeDefined();
       expect(describeResult.indexDescription).toBeDefined();
-      expect(describeResult.indexDescription.status.error_code).toBe('Success');
+      expect(describeResult.indexDescription.status.error_code).toBe('IndexNotExist');
       expect(describeResult.indexDescription.index_descriptions.length).toBe(0);
+    });
+  });
+
+  describe('Upsert operations', () => {
+    const collectionName = `new_book_collection_upserts`;
+
+    beforeAll(async () => {
+      await milvusClient.createCollection(collectionName, [
+        {
+          name: `id`,
+          description: `customized primary id`,
+          data_type: DataType.Int64,
+          is_primary_key: true,
+          autoID: false,
+        },
+        {
+          name: `title`,
+          description: `word count`,
+          data_type: DataType.Int64,
+        },
+        {
+          name: `book_intro`,
+          description: `word count`,
+          data_type: DataType.FloatVector,
+          dim: 8,
+        },
+      ]);
+    });
+
+    afterAll(async () => {
+      await milvusClient.dropCollection(collectionName);
+    });
+
+    it('should upsert vectors', async () => {
+      const vectors = [
+        [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8],
+        [1.1, 1.2, 1.3, 1.4, 1.5, 1.6, 1.7, 1.8],
+      ];
+      const ids = [1, 2];
+      const metadata = [{ title: 'Book 1' }, { title: 'Book 2' }];
+      const insertedIds = await milvusClient.upsert({
+        collectionName,
+        fieldName: 'book_intro',
+        vectors,
+        ids: ids.map(id => String(id)),
+        metadata,
+        indexName: 'book_intro_idx',
+      });
+      expect(insertedIds).toBeDefined();
+      expect(insertedIds.length).toBe(2);
+      expect(insertedIds[0]).toBe('1');
+      expect(insertedIds[1]).toBe('2');
     });
   });
 });

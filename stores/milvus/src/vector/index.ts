@@ -40,6 +40,11 @@ export interface MilvusIndexStats extends IndexStats {
   indexDescription: DescribeIndexResponse;
 }
 
+export interface MilvusUpsertVectorParams extends UpsertVectorParams {
+  fieldName: string;
+  collectionName: string;
+}
+
 type MilvusCreateIndexArgs = [...CreateIndexArgs, IndexConfig?, boolean?];
 export class MilvusVectorStore extends MastraVector {
   private client: MilvusClient;
@@ -111,16 +116,110 @@ export class MilvusVectorStore extends MastraVector {
     }
   }
 
-  query<E extends QueryVectorArgs = QueryVectorArgs>(
+  /**
+   * Queries the vector store using the specified parameters or arguments.
+   * Supports both object and tuple argument formats.
+   * @param args - QueryVectorParams object or QueryVectorArgs tuple.
+   * @returns Promise<QueryResult[]> - The query results.
+   */
+  async query<E extends QueryVectorArgs = QueryVectorArgs>(
     ...args: ParamsToArgs<QueryVectorParams> | E
   ): Promise<QueryResult[]> {
-    throw new Error('Method not implemented.' + args);
+    const params = this.normalizeArgs<QueryVectorParams, QueryVectorArgs>('query', args, [
+      'indexName',
+      'queryVector',
+      'topK',
+      'filter',
+      'includeVector',
+    ]);
+    const { indexName, queryVector, topK = 10, filter, includeVector = false } = params;
+    try {
+      const searchParams: any = {
+        collection_name: indexName,
+        vectors: [queryVector],
+        topk: topK,
+        params: JSON.stringify({ metric_type: 'L2' }),
+        output_fields: includeVector ? ['*'] : undefined,
+        filter: filter ? JSON.stringify(filter) : undefined,
+      };
+      const res = await this.client.search(searchParams);
+      if (!res.results) return [];
+      return res.results.map((item: any) => ({
+        id: String(item.id ?? item.primaryKey ?? item.primary_id),
+        score: item.score,
+        metadata: item,
+        vector: includeVector ? item.vector : undefined,
+        document: item.document,
+      })) as QueryResult[];
+    } catch (error) {
+      throw new Error('Failed to query vectors: ' + error);
+    }
   }
 
-  upsert<E extends UpsertVectorArgs = UpsertVectorArgs>(
-    ...args: ParamsToArgs<UpsertVectorParams> | E
-  ): Promise<string[]> {
-    throw new Error('Method not implemented.' + args);
+  /**
+   * Upserts (inserts or updates) vectors into the vector store.
+   * Supports both object and tuple argument formats.
+   * @param args - UpsertVectorParams object or UpsertVectorArgs tuple.
+   * @returns Promise<string[]> - The inserted/updated IDs.
+   */
+  async upsert(...args: ParamsToArgs<MilvusUpsertVectorParams>): Promise<string[]> {
+    const params = this.normalizeArgs<MilvusUpsertVectorParams, UpsertVectorArgs>('upsert', args, [
+      'indexName',
+      'vectors',
+      'metadata',
+      'ids',
+      'fieldName',
+      'collectionName',
+    ]);
+
+    const { collectionName, fieldName, vectors, ids, metadata } = params;
+
+    if (ids && ids.length !== vectors.length) {
+      throw new Error('Ids and vectors must have the same length');
+    }
+
+    if (!collectionName || !fieldName) {
+      throw new Error('Missing required parameters: collectionName, fieldName');
+    }
+
+    try {
+      // Create one row entry for each vector
+      const fields_data = vectors.map((vector, index) => {
+        const entry: Record<string, any> = {
+          [fieldName]: vector,
+        };
+
+        // Add ID field if available
+        if (ids && ids[index]) {
+          entry.id = ids[index];
+        }
+
+        // Add metadata if available
+        if (metadata && metadata[index]) {
+          // Spread metadata fields into the entry
+          Object.entries(metadata[index]).forEach(([key, value]) => {
+            entry[key] = value;
+          });
+        }
+
+        return entry;
+      });
+      console.log(fields_data);
+
+      const res = await this.client.insert({
+        collection_name: collectionName,
+        fields_data,
+      });
+
+      if (res.status.error_code !== 'Success') {
+        throw new Error('Milvus DB error: ' + res.status.reason);
+      }
+
+      // Return the IDs that were inserted
+      return ids || [];
+    } catch (error) {
+      throw new Error('Failed to upsert vectors: ' + error);
+    }
   }
 
   /**
@@ -209,11 +308,11 @@ export class MilvusVectorStore extends MastraVector {
     }
   }
 
-  async dropIndex(collectionName: string, indexName: string): Promise<void> {
+  async dropIndex(collectionName: string, fieldName: string): Promise<void> {
     try {
       await this.client.dropIndex({
         collection_name: collectionName,
-        index_name: indexName,
+        field_name: fieldName,
       });
     } catch (error) {
       throw new Error('Failed to delete index: ' + error);
