@@ -1,5 +1,13 @@
 # mastra
 
+## 0.5.0-alpha.9
+
+### Patch Changes
+
+- Updated dependencies [ed2f549]
+  - @mastra/core@0.9.0-alpha.8
+  - @mastra/deployer@0.3.0-alpha.9
+
 ## 0.5.0-alpha.8
 
 ### Patch Changes

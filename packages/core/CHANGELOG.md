@@ -1,5 +1,11 @@
 # @mastra/core
 
+## 0.9.0-alpha.8
+
+### Patch Changes
+
+- ed2f549: Fix exlude methods for batchTraceInsert
+
 ## 0.9.0-alpha.7
 
 ### Patch Changes
