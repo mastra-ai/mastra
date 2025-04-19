@@ -33,10 +33,10 @@ Mastra is organized as a monorepo with the following key directories:
 
 ### Setting Up Your Development Environment
 
-1. **Clone the repository**:
+1. **Fork and clone the repository**:
 
    ```bash
-   git clone https://github.com/mastra-ai/mastra.git
+   git clone https://github.com/<your_username>/mastra.git
    cd mastra
    ```
 
