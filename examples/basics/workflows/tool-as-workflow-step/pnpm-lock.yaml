@@ -1,0 +1,28 @@
+lockfileVersion: '9.0'
+
+settings:
+  autoInstallPeers: true
+  excludeLinksFromLockfile: false
+
+overrides:
+  '@mastra/core': link:../../../../packages/core
+
+importers:
+
+  .:
+    dependencies:
+      '@mastra/core':
+        specifier: link:../../../../packages/core
+        version: link:../../../../packages/core
+      zod:
+        specifier: ^3.24.2
+        version: 3.24.3
+
+packages:
+
+  zod@3.24.3:
+    resolution: {integrity: sha512-HhY1oqzWCQWuUqvBFnsyrtZRhyPeR7SUGv+C4+MsisMuVfSPx8HpwWqH8tRahSlt6M3PiFAcoeFhZAqIXTxoSg==}
+
+snapshots:
+
+  zod@3.24.3: {}

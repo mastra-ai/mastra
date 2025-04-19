@@ -13,8 +13,14 @@
   "license": "MIT",
   "dependencies": {
     "@ai-sdk/openai": "^1.2.5",
-    "@mastra/client-js": "workspace:*",
-    "@mastra/core": "workspace:*",
+    "@mastra/client-js": "latest",
+    "@mastra/core": "latest",
     "zod": "^3.24.2"
+  },
+  "pnpm": {
+    "overrides": {
+      "@mastra/client-js": "link:../../client-sdks/client-js",
+      "@mastra/core": "link:../../packages/core"
+    }
   }
 }

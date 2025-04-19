@@ -14,9 +14,15 @@
   "type": "module",
   "dependencies": {
     "@ai-sdk/openai": "latest",
-    "@mastra/core": "workspace:*",
-    "@mastra/mem0": "workspace:*",
+    "@mastra/core": "latest",
+    "@mastra/mem0": "latest",
     "zod": "^3.24.2"
+  },
+  "pnpm": {
+    "overrides": {
+      "@mastra/core": "link:../../packages/core",
+      "@mastra/mem0": "link:../../integrations/mem0"
+    }
   },
   "devDependencies": {
     "@types/node": "^22.13.9",

@@ -14,15 +14,22 @@
   "description": "",
   "devDependencies": {
     "@types/node": "^20.17.27",
-    "mastra": "workspace:^",
+    "mastra": "latest",
     "tsx": "^4.19.3",
     "typescript": "^5.8.2",
     "zod": "^3.24.2"
   },
   "dependencies": {
     "@ai-sdk/openai": "latest",
-    "@mastra/core": "workspace:^",
-    "ai": "latest"
+    "@mastra/core": "latest",
+    "ai": "latest",
+    "mastra": "latest"
   },
-  "version": "0.0.1-alpha.2"
+  "version": "0.0.1",
+  "pnpm": {
+    "overrides": {
+      "@mastra/core": "link:../../packages/core",
+      "mastra": "link:../../packages/cli"
+    }
+  }
 }

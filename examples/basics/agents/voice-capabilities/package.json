@@ -14,12 +14,21 @@
   "type": "module",
   "dependencies": {
     "@ai-sdk/openai": "^1.2.1",
-    "@mastra/core": "workspace:*",
-    "@mastra/voice-elevenlabs": "workspace:*",
-    "@mastra/voice-openai": "workspace:*",
-    "@mastra/voice-playai": "workspace:*",
-    "mastra": "workspace:*",
+    "@mastra/core": "latest",
+    "@mastra/voice-elevenlabs": "latest",
+    "@mastra/voice-openai": "latest",
+    "@mastra/voice-playai": "latest",
+    "mastra": "latest",
     "zod": "^3.24.2"
+  },
+  "pnpm": {
+    "overrides": {
+      "@mastra/core": "link:../../../../packages/core",
+      "@mastra/voice-elevenlabs": "link:../../../../voice/elevenlabs",
+      "@mastra/voice-openai": "link:../../../../voice/openai",
+      "@mastra/voice-playai": "link:../../../../voice/playai",
+      "mastra": "link:../../../../packages/cli"
+    }
   },
   "devDependencies": {
     "@types/node": "^20.17.27",
