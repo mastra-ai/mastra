@@ -11,7 +11,7 @@ import {
   TABLE_SCHEMAS,
 } from './constants';
 import type { TABLE_NAMES } from './constants';
-import type { EvalRow, StorageColumn, StorageGetMessagesArg, WorkflowRuns } from './types';
+import type { EvalRow, StorageColumn, StorageGetMessagesArg, WorkflowRun, WorkflowRuns } from './types';
 
 export abstract class MastraStorage extends MastraBase {
   /** @deprecated import from { TABLE_WORKFLOW_SNAPSHOT } '@mastra/core/storage' instead */
@@ -183,4 +183,8 @@ export abstract class MastraStorage extends MastraBase {
     limit?: number;
     offset?: number;
   }): Promise<WorkflowRuns>;
+
+  abstract getWorkflowRunByID(args: { runId: string; workflowName?: string }): Promise<WorkflowRun | null>;
+
+  abstract getWorkflowRunByResourceId(args: { resourceId: string; workflowName?: string }): Promise<WorkflowRuns>;
 }

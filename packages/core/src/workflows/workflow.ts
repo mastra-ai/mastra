@@ -983,12 +983,13 @@ export class Workflow<
   }
 
   async getWorkflowRuns() {
-    if (!this.#mastra?.storage) {
+    const storage = this.#mastra?.getStorage();
+    if (!storage) {
       this.logger.debug('Cannot get workflow runs. Mastra engine is not initialized');
       return { runs: [], total: 0 };
     }
 
-    return this.#mastra.storage.getWorkflowRuns({ workflowName: this.name });
+    return storage.getWorkflowRuns({ workflowName: this.name });
   }
 
   getExecutionSpan(runId: string) {

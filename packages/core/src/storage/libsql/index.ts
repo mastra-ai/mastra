@@ -7,7 +7,7 @@ import type { WorkflowRunState } from '../../workflows';
 import { MastraStorage } from '../base';
 import { TABLE_EVALS, TABLE_MESSAGES, TABLE_THREADS, TABLE_TRACES, TABLE_WORKFLOW_SNAPSHOT } from '../constants';
 import type { TABLE_NAMES } from '../constants';
-import type { StorageColumn, StorageGetMessagesArg, EvalRow } from '../types';
+import type { StorageColumn, StorageGetMessagesArg, EvalRow, WorkflowRuns, WorkflowRun } from '../types';
 
 function safelyParseJSON(jsonString: string): any {
   try {
@@ -654,6 +654,14 @@ export class LibSQLStore extends MastraStorage {
 
     // Use runs.length as total when not paginating
     return { runs, total: total || runs.length };
+  }
+
+  async getWorkflowRunByResourceId(args: { resourceId: string; workflowName?: string }): Promise<WorkflowRuns> {
+    throw new Error('Method not implemented.');
+  }
+
+  async getWorkflowRunByID(args: { runId: string; workflowName?: string }): Promise<WorkflowRun | null> {
+    throw new Error('Method not implemented.');
   }
 }
 
