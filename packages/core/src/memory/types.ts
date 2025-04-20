@@ -41,6 +41,7 @@ export type MemoryConfig = {
     | {
         topK: number;
         messageRange: number | { before: number; after: number };
+        searchScope: 'thread' | 'resource';
       };
   workingMemory?: {
     enabled: boolean;

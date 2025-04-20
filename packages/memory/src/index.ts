@@ -94,9 +94,14 @@ export class Memory extends MastraMemory {
               indexName,
               queryVector: embedding,
               topK: vectorConfig.topK,
-              filter: {
-                thread_id: threadId,
-              },
+              filter:
+                config?.semanticRecall?.searchScope === `resource`
+                  ? {
+                      resource_id: resourceId,
+                    }
+                  : {
+                      thread_id: threadId,
+                    },
             })),
           );
         }),
