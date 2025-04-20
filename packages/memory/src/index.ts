@@ -171,6 +171,7 @@ export class Memory extends MastraMemory {
     }
 
     const messagesResult = await this.query({
+      resourceId,
       threadId,
       selectBy: {
         last: threadConfig.lastMessages,
