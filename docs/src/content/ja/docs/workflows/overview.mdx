@@ -166,7 +166,7 @@ import { mastra } from "./index";
 const stepTwo = new Step({
   id: "stepTwo",
   execute: async ({ context, container }) => {
-    const multiplier = (container.get("multiplier");
+    const multiplier = container.get("multiplier");
     const doubledValue = context.getStepResult(stepOne)?.doubledValue;
     if (!doubledValue) {
       return { incrementedValue: 0 };
