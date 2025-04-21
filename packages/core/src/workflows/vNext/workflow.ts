@@ -697,7 +697,9 @@ export class Run<
       | string[];
     container?: Container;
   }): Promise<{
+    status: 'success' | 'failed' | 'suspended';
     result: TOutput;
+    suspended?: string[];
     steps: {
       [K in keyof StepsRecord<TSteps>]: StepsRecord<TSteps>[K]['outputSchema'] extends undefined
         ? StepResult<unknown>
@@ -716,7 +718,9 @@ export class Run<
     return this.executionEngine.execute<
       z.infer<TInput>,
       {
+        status: 'success' | 'failed' | 'suspended';
         result: TOutput;
+        suspended?: string[];
         steps: {
           [K in keyof StepsRecord<TSteps>]: StepsRecord<TSteps>[K]['outputSchema'] extends undefined
             ? StepResult<unknown>

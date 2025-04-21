@@ -1404,17 +1404,13 @@ describe('Workflow', () => {
     it('should retry a step default 0 times', async () => {
       const step1 = createStep({
         id: 'step1',
-        execute: async () => {
-          return { result: 'success' };
-        },
+        execute: vi.fn<any>().mockResolvedValue({ result: 'success' }),
         inputSchema: z.object({}),
         outputSchema: z.object({}),
       });
       const step2 = createStep({
         id: 'step2',
-        execute: async () => {
-          throw new Error('Step failed');
-        },
+        execute: vi.fn<any>().mockRejectedValue(new Error('Step failed')),
         inputSchema: z.object({}),
         outputSchema: z.object({}),
       });
