@@ -374,7 +374,18 @@ To resume a suspended workflow:
 ```typescript
 // After getting user input
 const result = await workflowRun.resume({
-  step: userInputStep,
+  step: userInputStep, // or 'myStepId' as a string
+  resumeData: {
+    userSelection: "User's choice",
+  },
+});
+```
+
+To resume a suspended nested workflow:
+
+```typescript
+const result = await workflowRun.resume({
+  step: [nestedWorkflow, userInputStep], // or ['nestedWorkflowId', 'myStepId'] as a string array
   resumeData: {
     userSelection: "User's choice",
   },
@@ -400,6 +411,78 @@ const result = await run.start({
 console.log(result.steps); // All step results
 console.log(result.steps['step-id'].output); // Output from a specific step
 console.log(result.result); // The final result of the workflow, result of the last step (or `.map()` output, if used as last step)
+```
+
+## Workflow Execution Result Schema
+
+The result of running a workflow (either from `start()` or `resume()`) follows this TypeScript interface:
+
+```typescript
+interface WorkflowExecutionResult<TOutput, TSteps> {
+  // The overall status of the workflow execution
+  status: 'success' | 'failed' | 'suspended';
+
+  // The final output of the workflow
+  result: TOutput;
+
+  // Array of step IDs that are currently suspended (only present if status is 'suspended')
+  suspended?: string[];
+
+  // Record of all step results, keyed by step ID
+  steps: Record<string, StepResult<any>>;
+
+  // Error message if the workflow failed
+  error?: string;
+}
+```
+
+### Result Properties Explained
+
+1. **status**: Indicates the final state of the workflow execution
+
+   - `'success'`: Workflow completed successfully
+   - `'failed'`: Workflow encountered an error
+   - `'suspended'`: Workflow is paused waiting for user input
+
+2. **result**: Contains the final output of the workflow, typed according to the workflow's `outputSchema`
+
+3. **suspended**: Optional array of step IDs that are currently suspended. Only present when `status` is `'suspended'`
+
+4. **steps**: A record containing the results of all executed steps
+
+   - Keys are step IDs
+   - Values are `StepResult` objects containing the step's output
+   - Type-safe based on each step's `outputSchema`
+
+5. **error**: Optional error message present when `status` is `'failed'`
+
+### Example Usage
+
+```typescript
+const result = await workflow.createRun().start({
+  inputData: {
+    /* ... */
+  },
+});
+
+if (result.status === 'success') {
+  // Workflow completed successfully
+  console.log('Final result:', result.result);
+  console.log('Step outputs:', result.steps);
+} else if (result.status === 'suspended') {
+  // Workflow is waiting for user input
+  console.log('Suspended steps:', result.suspended);
+  // Resume the workflow with user input
+  const resumedResult = await workflowRun.resume({
+    step: result.suspended[0],
+    resumeData: {
+      /* user input */
+    },
+  });
+} else if (result.status === 'failed') {
+  // Workflow encountered an error
+  console.error('Workflow failed:', result.error);
+}
 ```
 
 You can also watch workflow execution:
