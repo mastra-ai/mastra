@@ -3,7 +3,7 @@
   "private": true,
   "version": "0.1.0",
   "scripts": {
-    "test": "pnpm test:pg && pnpm test:upstash && pnpm test:libsql && pnpm test:streaming && pnpm test:working-memory",
+    "test": "pnpm test:pg && pnpm test:upstash && pnpm test:libsql && pnpm test:streaming && pnpm test:working-memory && pnpm test:processors",
     "pretest:pg": "docker compose up -d postgres && (for i in $(seq 1 30); do docker compose exec -T postgres pg_isready -U postgres && break || (sleep 1; [ $i -eq 30 ] && exit 1); done)",
     "test:pg": "vitest run ./src/with-pg-storage.test.ts",
     "posttest:pg": "docker compose down --volumes",
@@ -13,6 +13,7 @@
     "test:libsql": "vitest run ./src/with-libsql-storage.test.ts",
     "test:streaming": "vitest run ./src/streaming-memory.test.ts",
     "test:working-memory": "vitest run ./src/working-memory.test.ts",
+    "test:processors": "vitest run ./src/processors.test.ts",
     "pretest:pg:perf": "docker compose up -d postgres && (for i in $(seq 1 30); do docker compose exec -T postgres pg_isready -U postgres && break || (sleep 1; [ $i -eq 30 ] && exit 1); done)",
     "test:pg:perf": "vitest run ./src/performance-testing/with-pg-storage.test.ts",
     "posttest:pg:perf": "docker compose down --volumes",

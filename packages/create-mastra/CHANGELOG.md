@@ -1,5 +1,32 @@
 # create-mastra
 
+## 0.2.9-alpha.1
+
+### Patch Changes
+
+- 7e92011: Include tools with deployment builds
+
+## 0.2.9-alpha.0
+
+### Patch Changes
+
+- 7184dc5: Add support to pass project path directly to create-mastra and improve tag handling
+
+## 0.2.8
+
+### Patch Changes
+
+- 1ebbfbf: Ability to toggle stream vs generate in playground
+- a2318cd: Revamp mastra deply dx, Make mastra build command output deployment ready build
+- 37bb612: Add Elastic-2.0 licensing for packages
+- c8fe5f0: change the header of all pages with the one from the DS
+
+## 0.2.8-alpha.1
+
+### Patch Changes
+
+- 1ebbfbf: Ability to toggle stream vs generate in playground
+
 ## 0.2.8-alpha.0
 
 ### Patch Changes

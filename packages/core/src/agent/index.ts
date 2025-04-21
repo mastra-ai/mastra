@@ -238,10 +238,11 @@ export class Agent<
 
       const newMessages = ensureAllMessagesAreCoreMessages(userMessages);
 
-      const messages = newMessages.map(u => {
+      const now = Date.now();
+      const messages = newMessages.map((u, index) => {
         return {
           id: this.getMemory()?.generateId()!,
-          createdAt: new Date(),
+          createdAt: new Date(now + index),
           threadId: threadId,
           ...u,
           content: u.content as UserContent | AssistantContent,
@@ -296,7 +297,6 @@ export class Agent<
               }
             : null,
           ...processedMessages,
-          ...newMessages,
         ].filter((message): message is NonNullable<typeof message> => Boolean(message)),
       };
     }
@@ -308,10 +308,12 @@ export class Agent<
     response,
     threadId,
     resourceId,
+    now,
   }: {
     response: any; // why??
     threadId: string;
     resourceId: string;
+    now: number;
   }) {
     if (!response.messages) return [];
     const messagesArray = Array.isArray(response.messages) ? response.messages : [response.messages];
@@ -360,7 +362,7 @@ export class Agent<
         resourceId: resourceId,
         role: message.role as any,
         content: message.content as any,
-        createdAt: new Date(Date.now() + index), // use Date.now() + index to make sure every message is atleast one millisecond apart
+        createdAt: new Date(now + index), // use Date.now() + index to make sure every message is atleast one millisecond apart
         toolCallIds: toolCallIds?.length ? toolCallIds : undefined,
         toolCallArgs: toolCallArgs?.length ? toolCallArgs : undefined,
         toolNames: toolNames?.length ? toolNames : undefined,
@@ -442,12 +444,14 @@ export class Agent<
 
   convertTools({
     toolsets,
+    clientTools,
     threadId,
     resourceId,
     runId,
     container,
   }: {
     toolsets?: ToolsetsInput;
+    clientTools?: ToolsInput;
     threadId?: string;
     resourceId?: string;
     runId?: string;
@@ -517,6 +521,9 @@ export class Agent<
                               runId,
                               threadId,
                               resourceId,
+                              logger: this.logger,
+                              agentName: this.name,
+                              container,
                             },
                             options,
                           ) ?? undefined
@@ -553,17 +560,49 @@ export class Agent<
       toolsFromToolsets.forEach(toolset => {
         Object.entries(toolset).forEach(([toolName, tool]) => {
           const toolObj = tool;
+
           const options = {
             name: toolName,
             runId,
             threadId,
             resourceId,
             logger: this.logger,
+            mastra: mastraProxy as MastraUnion | undefined,
+            memory,
             agentName: this.name,
             container,
           };
-          toolsFromToolsetsConverted[toolName] = makeCoreTool(toolObj, options, 'toolset');
+
+          const convertedToCoreTool = makeCoreTool(toolObj, options, 'toolset');
+
+          toolsFromToolsetsConverted[toolName] = convertedToCoreTool;
         });
+      });
+    }
+
+    const clientToolsForInput = Object.entries(clientTools || {});
+
+    if (clientToolsForInput.length > 0) {
+      this.logger.debug(`[Agent:${this.name}] - Adding client tools ${Object.keys(clientTools || {}).join(', ')}`, {
+        runId,
+      });
+      clientToolsForInput.forEach(([toolName, tool]) => {
+        const { execute, ...rest } = tool;
+        const options = {
+          name: toolName,
+          runId,
+          threadId,
+          resourceId,
+          logger: this.logger,
+          mastra: mastraProxy as MastraUnion | undefined,
+          memory,
+          agentName: this.name,
+          container,
+        };
+
+        const convertedToCoreTool = makeCoreTool(rest, options, 'client-tool');
+
+        toolsFromToolsetsConverted[toolName] = convertedToCoreTool;
       });
     }
 
@@ -614,10 +653,12 @@ export class Agent<
     resourceId,
     runId,
     toolsets,
+    clientTools,
     container,
   }: {
     instructions?: string;
     toolsets?: ToolsetsInput;
+    clientTools?: ToolsInput;
     resourceId?: string;
     threadId?: string;
     memoryConfig?: MemoryConfig;
@@ -687,7 +728,11 @@ export class Agent<
 
         let convertedTools: Record<string, CoreTool> | undefined;
 
-        if ((toolsets && Object.keys(toolsets || {}).length > 0) || (this.getMemory() && resourceId)) {
+        if (
+          (clientTools && Object.keys(clientTools || {}).length > 0) ||
+          (toolsets && Object.keys(toolsets || {}).length > 0) ||
+          (this.getMemory() && resourceId)
+        ) {
           const reasons = [];
           if (toolsets && Object.keys(toolsets || {}).length > 0) {
             reasons.push(`toolsets present (${Object.keys(toolsets || {}).length} tools)`);
@@ -698,11 +743,13 @@ export class Agent<
           this.logger.debug(`[Agent:${this.name}] - Enhancing tools: ${reasons.join(', ')}`, {
             runId,
             toolsets: toolsets ? Object.keys(toolsets) : undefined,
+            clientTools: clientTools ? Object.keys(clientTools) : undefined,
             hasMemory: !!this.getMemory(),
             hasResourceId: !!resourceId,
           });
           convertedTools = this.convertTools({
             toolsets,
+            clientTools,
             threadId: threadIdToUse,
             resourceId,
             runId,
@@ -758,11 +805,12 @@ export class Agent<
           try {
             const userMessage = this.getMostRecentUserMessage(messages);
             const newMessages = userMessage ? [userMessage] : messages;
+            const now = Date.now();
             const threadMessages = this.sanitizeResponseMessages(ensureAllMessagesAreCoreMessages(newMessages)).map(
-              u => {
+              (u, index) => {
                 return {
                   id: this.getMemory()?.generateId()!,
-                  createdAt: new Date(),
+                  createdAt: new Date(now + index),
                   threadId: thread.id,
                   resourceId: resourceId,
                   ...u,
@@ -772,6 +820,7 @@ export class Agent<
                 };
               },
             );
+            const dateResponseMessagesFrom = (threadMessages.at(-1)?.createdAt?.getTime?.() || Date.now()) + 1;
 
             // renaming the thread doesn't need to block finishing the req
             void (async () => {
@@ -795,7 +844,12 @@ export class Agent<
             await memory.saveMessages({
               messages: [
                 ...threadMessages,
-                ...this.getResponseMessages({ threadId, resourceId, response: result.response }),
+                ...this.getResponseMessages({
+                  threadId,
+                  resourceId,
+                  response: result.response,
+                  now: dateResponseMessagesFrom,
+                }),
               ],
               memoryConfig,
             });
@@ -861,6 +915,7 @@ export class Agent<
       runId,
       output,
       toolsets,
+      clientTools,
       temperature,
       toolChoice = 'auto',
       experimental_output,
@@ -903,6 +958,7 @@ export class Agent<
       resourceId,
       runId: runIdToUse,
       toolsets,
+      clientTools,
       container: normalizedContainer,
     });
 
@@ -1028,6 +1084,7 @@ export class Agent<
       onStepFinish,
       runId,
       toolsets,
+      clientTools,
       output,
       temperature,
       toolChoice = 'auto',
@@ -1069,6 +1126,7 @@ export class Agent<
       resourceId,
       runId: runIdToUse,
       toolsets,
+      clientTools,
       container: normalizedContainer,
     });
 

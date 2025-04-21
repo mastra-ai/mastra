@@ -1,0 +1,62 @@
+---
+title: "エージェントメモリーの使用 | エージェント | Mastra ドキュメント"
+description: Mastraのエージェントが会話履歴やコンテキスト情報を保存するためにメモリーをどのように使用するかに関するドキュメント。
+---
+
+# エージェントメモリー
+
+Mastraのエージェントは、会話履歴を保存し、関連情報を思い出し、インタラクション間で永続的なコンテキストを維持するための強力なメモリーシステムを活用できます。これにより、エージェントはより自然でステートフルな会話を行うことができます。
+
+## エージェントのメモリを有効にする
+
+メモリを有効にするには、単に`Memory`クラスをインスタンス化し、エージェントの設定に渡すだけです。また、メモリパッケージをインストールする必要があります：
+
+```bash npm2yarn copy
+npm install @mastra/memory
+```
+
+```typescript
+import { Agent } from "@mastra/core/agent";
+import { Memory } from "@mastra/memory";
+import { openai } from "@ai-sdk/openai";
+
+// 基本的なメモリのセットアップ
+const memory = new Memory();
+
+const agent = new Agent({
+  name: "MyMemoryAgent",
+  instructions: "あなたはメモリを持つ役立つアシスタントです。",
+  model: openai("gpt-4o"),
+  memory: memory, // メモリインスタンスを接続
+});
+```
+
+この基本的なセットアップでは、ストレージにLibSQL、埋め込みにFastEmbedを含むデフォルト設定を使用します。詳細なセットアップ手順については、[メモリ](/docs/memory/overview)を参照してください。
+
+## エージェントコールでのメモリの使用
+
+インタラクション中にメモリを活用するには、エージェントの`stream()`または`generate()`メソッドを呼び出す際に`resourceId`と`threadId`を**必ず**提供する必要があります。
+
+- `resourceId`: 通常、ユーザーまたはエンティティを識別します（例：`user_123`）。
+- `threadId`: 特定の会話スレッドを識別します（例：`support_chat_456`）。
+
+```typescript
+// メモリを使用したエージェント呼び出しの例
+await agent.stream("私の好きな色は青だということを覚えておいて。", {
+  resourceId: "user_alice",
+  threadId: "preferences_thread",
+});
+
+// 同じスレッドの後で...
+const response = await agent.stream("私の好きな色は何？", {
+  resourceId: "user_alice",
+  threadId: "preferences_thread",
+});
+// エージェントはメモリを使用して好きな色を思い出します。
+```
+
+これらのIDは、会話履歴とコンテキストが適切なユーザーと会話のために正しく保存され、取得されることを保証します。
+
+## 次のステップ
+
+Mastraの[メモリ機能](/docs/memory/overview)をさらに探索して、スレッド、会話履歴、セマンティック検索、ワーキングメモリについて学びましょう。

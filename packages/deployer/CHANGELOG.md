@@ -1,5 +1,135 @@
 # @mastra/deployer
 
+## 0.3.0-alpha.8
+
+### Patch Changes
+
+- Updated dependencies [71d9444]
+  - @mastra/core@0.9.0-alpha.7
+  - @mastra/server@2.0.0-alpha.7
+
+## 0.3.0-alpha.7
+
+### Patch Changes
+
+- 63fe16a: Support monorepo workspace packages with native bindings
+- 735ead7: Add support for process.env.development
+- Updated dependencies [157c741]
+  - @mastra/core@0.9.0-alpha.6
+  - @mastra/server@2.0.0-alpha.6
+
+## 0.3.0-alpha.6
+
+### Patch Changes
+
+- 3f9d151: Add support for tsconfig paths in server-configuration
+- Updated dependencies [08bb78e]
+  - @mastra/core@0.9.0-alpha.5
+  - @mastra/server@2.0.0-alpha.5
+
+## 0.3.0-alpha.5
+
+### Patch Changes
+
+- 7e92011: Include tools with deployment builds
+- Updated dependencies [7e92011]
+  - @mastra/core@0.9.0-alpha.4
+  - @mastra/server@2.0.0-alpha.4
+
+## 0.3.0-alpha.4
+
+### Minor Changes
+
+- fe3ae4d: Remove \_\_ functions in storage and move to storage proxy to make sure init is called
+
+### Patch Changes
+
+- Updated dependencies [fe3ae4d]
+  - @mastra/server@2.0.0-alpha.3
+  - @mastra/core@0.9.0-alpha.3
+
+## 0.2.10-alpha.3
+
+### Patch Changes
+
+- Updated dependencies [9ee4293]
+  - @mastra/core@0.8.4-alpha.2
+  - @mastra/server@1.0.4-alpha.2
+
+## 0.2.10-alpha.2
+
+### Patch Changes
+
+- 3527610: Fix multi slash imports during bundling
+
+## 0.2.10-alpha.1
+
+### Patch Changes
+
+- Updated dependencies [8a8a73b]
+- Updated dependencies [6f92295]
+  - @mastra/core@0.8.4-alpha.1
+  - @mastra/server@1.0.4-alpha.1
+
+## 0.2.10-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [03f3cd0]
+  - @mastra/core@0.8.4-alpha.0
+  - @mastra/server@1.0.4-alpha.0
+
+## 0.2.9
+
+### Patch Changes
+
+- 9f6f6dd: Fix container for tools execution api
+- 32e7b71: Add support for dependency injection
+- 37bb612: Add Elastic-2.0 licensing for packages
+- 1ebbfbf: Add 3 minutes timeout to deployer server
+- 67aff42: Fix netlify deployer missing @libsql/linux-x64-gnu bug
+- Updated dependencies [d72318f]
+- Updated dependencies [0bcc862]
+- Updated dependencies [10a8caf]
+- Updated dependencies [359b089]
+- Updated dependencies [9f6f6dd]
+- Updated dependencies [32e7b71]
+- Updated dependencies [37bb612]
+- Updated dependencies [7f1b291]
+  - @mastra/core@0.8.3
+  - @mastra/server@1.0.3
+
+## 0.2.9-alpha.7
+
+### Patch Changes
+
+- Updated dependencies [d72318f]
+  - @mastra/core@0.8.3-alpha.5
+  - @mastra/server@1.0.3-alpha.6
+
+## 0.2.9-alpha.6
+
+### Patch Changes
+
+- 67aff42: Fix netlify deployer missing @libsql/linux-x64-gnu bug
+
+## 0.2.9-alpha.5
+
+### Patch Changes
+
+- 9f6f6dd: Fix container for tools execution api
+- Updated dependencies [9f6f6dd]
+  - @mastra/server@1.0.3-alpha.5
+
+## 0.2.9-alpha.4
+
+### Patch Changes
+
+- 1ebbfbf: Add 3 minutes timeout to deployer server
+- Updated dependencies [7f1b291]
+  - @mastra/core@0.8.3-alpha.4
+  - @mastra/server@1.0.3-alpha.4
+
 ## 0.2.9-alpha.3
 
 ### Patch Changes

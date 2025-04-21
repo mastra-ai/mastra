@@ -1,0 +1,126 @@
+---
+title: "サーバーレスデプロイメント"
+description: "プラットフォーム固有のデプロイヤーや標準HTTPサーバーを使用してMastraアプリケーションを構築・デプロイする"
+---
+
+# サーバーレスデプロイメント
+
+このガイドでは、プラットフォーム固有のデプロイヤーを使用して、MastraをCloudflare Workers、Vercel、およびNetlifyにデプロイする方法を説明します
+
+セルフホスト型Node.jsサーバーのデプロイメントについては、[Mastraサーバーの作成](/docs/deployment/server)ガイドを参照してください。
+
+## 前提条件
+
+始める前に、以下のものを用意してください：
+
+- **Node.js**がインストールされていること（バージョン18以上を推奨）
+- プラットフォーム固有のデプロイヤーを使用する場合：
+  - 選択したプラットフォームのアカウント
+  - 必要なAPIキーまたは認証情報
+
+## サーバーレスプラットフォームデプロイヤー
+
+プラットフォーム固有のデプロイヤーは、以下の設定とデプロイメントを処理します：
+- **[Cloudflare Workers](/reference/deployer/cloudflare)**
+- **[Vercel](/reference/deployer/vercel)**
+- **[Netlify](/reference/deployer/netlify)**
+
+2025年4月現在、Mastraは[Mastra Cloud](https://mastra.ai/cloud-beta)も提供しており、これはアトミックデプロイメントを備えたサーバーレスエージェント環境です。ウェイトリストへの登録は[こちら](https://mastra.ai/cloud-beta)から行えます。
+
+### デプロイヤーのインストール
+
+```bash copy
+# For Cloudflare
+npm install @mastra/deployer-cloudflare
+
+# For Vercel
+npm install @mastra/deployer-vercel
+
+# For Netlify
+npm install @mastra/deployer-netlify
+```
+
+### デプロイヤーの設定
+
+エントリーファイルでデプロイヤーを設定します：
+
+```typescript copy showLineNumbers
+import { Mastra, createLogger } from '@mastra/core';
+import { CloudflareDeployer } from '@mastra/deployer-cloudflare';
+
+export const mastra = new Mastra({
+  agents: { /* your agents here */ },
+  logger: createLogger({ name: 'MyApp', level: 'debug' }),
+  deployer: new CloudflareDeployer({
+    scope: 'your-cloudflare-scope',
+    projectName: 'your-project-name',
+    // See complete configuration options in the reference docs
+  }),
+});
+```
+
+### デプロイヤーの設定
+
+各デプロイヤーには特定の設定オプションがあります。以下は基本的な例ですが、完全な詳細についてはリファレンスドキュメントを参照してください。
+
+#### Cloudflare デプロイヤー
+
+```typescript copy showLineNumbers
+new CloudflareDeployer({
+  scope: 'your-cloudflare-account-id',
+  projectName: 'your-project-name',
+  // For complete configuration options, see the reference documentation
+})
+```
+
+[Cloudflare デプロイヤーリファレンスを見る →](/reference/deployer/cloudflare)
+
+#### Vercel デプロイヤー
+
+```typescript copy showLineNumbers
+new VercelDeployer({
+  teamSlug: 'your-vercel-team-slug',
+  projectName: 'your-project-name',
+  token: 'your-vercel-token'
+  // For complete configuration options, see the reference documentation
+})
+```
+
+[Vercel デプロイヤーリファレンスを見る →](/reference/deployer/vercel)
+
+#### Netlify デプロイヤー
+
+```typescript copy showLineNumbers
+new NetlifyDeployer({
+  scope: 'your-netlify-team-slug',
+  projectName: 'your-project-name',
+  token: 'your-netlify-token'
+})
+```
+
+[Netlify デプロイヤーリファレンスを見る →](/reference/deployer/netlify)
+
+## 環境変数
+
+必要な変数：
+
+1. プラットフォームデプロイヤー変数（プラットフォームデプロイヤーを使用する場合）：
+   - プラットフォームの認証情報
+2. エージェントAPIキー：
+   - `OPENAI_API_KEY`
+   - `ANTHROPIC_API_KEY`
+3. サーバー設定（ユニバーサルデプロイメント用）：
+   - `PORT`: HTTPサーバーポート（デフォルト：3000）
+   - `HOST`: サーバーホスト（デフォルト：0.0.0.0）
+
+## Mastraプロジェクトのビルド
+
+ターゲットプラットフォーム向けにMastraプロジェクトをビルドするには、次のコマンドを実行します：
+
+```bash
+npx mastra build
+```
+
+Deployerを使用すると、ビルド出力は自動的にターゲットプラットフォーム用に準備されます。
+その後、プラットフォーム（Vercel、netlify、cloudfare など）のCLI/UIを通じて、ビルド出力 `.mastra/output` をデプロイできます。
+

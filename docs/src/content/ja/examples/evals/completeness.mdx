@@ -1,0 +1,145 @@
+---
+title: "例：完全性 | Evals | Mastra Docs"
+description: 完全性メトリックを使用して、レスポンスが入力要素をどれだけ徹底的にカバーしているかを評価する例。
+---
+
+import { GithubLink } from "@/components/github-link";
+
+# 完全性評価
+
+この例では、Mastraの完全性メトリックを使用して、応答が入力の主要な要素をどれだけ徹底的にカバーしているかを評価する方法を示します。
+
+## 概要
+
+この例では、次の方法を示します：
+
+1. Completenessメトリックを設定する
+2. 要素カバレッジのために応答を評価する
+3. カバレッジスコアを分析する
+4. 異なるカバレッジシナリオを処理する
+
+## セットアップ
+
+### 依存関係
+
+必要な依存関係をインポートします:
+
+```typescript copy showLineNumbers filename="src/index.ts"
+import { CompletenessMetric } from '@mastra/evals/nlp';
+```
+
+## メトリック設定
+
+Completenessメトリックを設定します：
+
+```typescript copy showLineNumbers{4} filename="src/index.ts"
+const metric = new CompletenessMetric();
+```
+
+## 使用例
+
+### 完全カバレッジの例
+
+すべての要素をカバーする応答を評価します：
+
+```typescript copy showLineNumbers{7} filename="src/index.ts"
+const text1 = 'The primary colors are red, blue, and yellow.';
+const reference1 = 'The primary colors are red, blue, and yellow.';
+
+console.log('Example 1 - Complete Coverage:');
+console.log('Text:', text1);
+console.log('Reference:', reference1);
+
+const result1 = await metric.measure(reference1, text1);
+console.log('Metric Result:', {
+  score: result1.score,
+  info: {
+    missingElements: result1.info.missingElements,
+    elementCounts: result1.info.elementCounts,
+  },
+});
+// Example Output:
+// Metric Result: { score: 1, info: { missingElements: [], elementCounts: { input: 8, output: 8 } } }
+```
+
+### 部分カバレッジの例
+
+いくつかの要素をカバーする応答を評価します：
+
+```typescript copy showLineNumbers{24} filename="src/index.ts"
+const text2 = 'The primary colors are red and blue.';
+const reference2 = 'The primary colors are red, blue, and yellow.';
+
+console.log('Example 2 - Partial Coverage:');
+console.log('Text:', text2);
+console.log('Reference:', reference2);
+
+const result2 = await metric.measure(reference2, text2);
+console.log('Metric Result:', {
+  score: result2.score,
+  info: {
+    missingElements: result2.info.missingElements,
+    elementCounts: result2.info.elementCounts,
+  },
+});
+// Example Output:
+// Metric Result: { score: 0.875, info: { missingElements: ['yellow'], elementCounts: { input: 8, output: 7 } } }
+```
+
+### 最小カバレッジの例
+
+非常に少ない要素をカバーする応答を評価します：
+
+```typescript copy showLineNumbers{41} filename="src/index.ts"
+const text3 = 'The seasons include summer.';
+const reference3 = 'The four seasons are spring, summer, fall, and winter.';
+
+console.log('Example 3 - Minimal Coverage:');
+console.log('Text:', text3);
+console.log('Reference:', reference3);
+
+const result3 = await metric.measure(reference3, text3);
+console.log('Metric Result:', {
+  score: result3.score,
+  info: {
+    missingElements: result3.info.missingElements,
+    elementCounts: result3.info.elementCounts,
+  },
+});
+// Example Output:
+// Metric Result: {
+//   score: 0.3333333333333333,
+//   info: {
+//     missingElements: [ 'four', 'spring', 'winter', 'be', 'fall', 'and' ],
+//     elementCounts: { input: 9, output: 4 }
+//   }
+// }
+```
+
+## 結果の理解
+
+この指標は以下を提供します：
+
+1. 0から1のスコア：
+   - 1.0: 完全なカバレッジ - すべての入力要素を含む
+   - 0.7-0.9: 高いカバレッジ - ほとんどの主要要素を含む
+   - 0.4-0.6: 部分的なカバレッジ - いくつかの主要要素を含む
+   - 0.1-0.3: 低いカバレッジ - ほとんどの主要要素が欠けている
+   - 0.0: カバレッジなし - 出力にすべての入力要素が欠けている
+
+2. 詳細な分析：
+   - 見つかった入力要素のリスト
+   - 一致した出力要素のリスト
+   - 入力から欠けている要素
+   - 要素数の比較
+
+<br />
+<br />
+<hr className="dark:border-[#404040] border-gray-300" />
+<br />
+<br />
+<GithubLink
+  link={
+    "https://github.com/mastra-ai/mastra/blob/main/examples/basics/evals/completeness"
+  }
+/>

@@ -1,0 +1,155 @@
+---
+title: "例：単語の包含 | Evals | Mastra Docs"
+description: 出力テキストにおける単語の包含を評価するためのカスタムメトリクスの作成例。
+---
+
+import { GithubLink } from "@/components/github-link";
+
+# 単語包含評価
+
+この例では、出力テキストに特定の単語が含まれているかどうかを評価するカスタムメトリックをMastraで作成する方法を示します。
+これは、私たち自身の[キーワードカバレッジ評価](/reference/evals/keyword-coverage)の簡略版です。
+
+## 概要
+
+この例では、以下の方法を示します：
+
+1. カスタムメトリッククラスを作成する
+2. 応答における単語の存在を評価する
+3. 包含スコアを計算する
+4. 異なる包含シナリオを処理する
+
+## セットアップ
+
+### 依存関係
+
+必要な依存関係をインポートします:
+
+```typescript copy showLineNumbers filename="src/index.ts"
+import { Metric, type MetricResult } from '@mastra/core/eval';
+```
+
+## メトリックの実装
+
+Word Inclusion メトリックを作成します:
+
+```typescript copy showLineNumbers{3} filename="src/index.ts"
+interface WordInclusionResult extends MetricResult {
+  score: number;
+  info: {
+    totalWords: number;
+    matchedWords: number;
+  };
+}
+
+export class WordInclusionMetric extends Metric {
+  private referenceWords: Set<string>;
+
+  constructor(words: string[]) {
+    super();
+    this.referenceWords = new Set(words);
+  }
+
+  async measure(input: string, output: string): Promise<WordInclusionResult> {
+    const matchedWords = [...this.referenceWords].filter(k => output.includes(k));
+    const totalWords = this.referenceWords.size;
+    const coverage = totalWords > 0 ? matchedWords.length / totalWords : 0;
+
+    return {
+      score: coverage,
+      info: {
+        totalWords: this.referenceWords.size,
+        matchedWords: matchedWords.length,
+      },
+    };
+  }
+}
+```
+
+## 使用例
+
+### 完全な単語の含有例
+
+すべての単語が出力に含まれている場合のテスト：
+
+```typescript copy showLineNumbers{46} filename="src/index.ts"
+const words1 = ['apple', 'banana', 'orange'];
+const metric1 = new WordInclusionMetric(words1);
+
+const input1 = 'List some fruits';
+const output1 = 'Here are some fruits: apple, banana, and orange.';
+
+const result1 = await metric1.measure(input1, output1);
+console.log('Metric Result:', {
+  score: result1.score,
+  info: result1.info,
+});
+// Example Output:
+// Metric Result: { score: 1, info: { totalWords: 3, matchedWords: 3 } }
+```
+
+### 部分的な単語の含有例
+
+いくつかの単語が含まれている場合のテスト：
+
+```typescript copy showLineNumbers{64} filename="src/index.ts"
+const words2 = ['python', 'javascript', 'typescript', 'rust'];
+const metric2 = new WordInclusionMetric(words2);
+
+const input2 = 'What programming languages do you know?';
+const output2 = 'I know python and javascript very well.';
+
+const result2 = await metric2.measure(input2, output2);
+console.log('Metric Result:', {
+  score: result2.score,
+  info: result2.info,
+});
+// Example Output:
+// Metric Result: { score: 0.5, info: { totalWords: 4, matchedWords: 2 } }
+```
+
+### 単語が含まれていない例
+
+単語がまったく含まれていない場合のテスト：
+
+```typescript copy showLineNumbers{82} filename="src/index.ts"
+const words3 = ['cloud', 'server', 'database'];
+const metric3 = new WordInclusionMetric(words3);
+
+const input3 = 'Tell me about your infrastructure';
+const output3 = 'We use modern technology for our systems.';
+
+const result3 = await metric3.measure(input3, output3);
+console.log('Metric Result:', {
+  score: result3.score,
+  info: result3.info,
+});
+// Example Output:
+// Metric Result: { score: 0, info: { totalWords: 3, matchedWords: 0 } }
+```
+
+## 結果の理解
+
+この指標は以下を提供します：
+
+1. 0から1の間の単語包含スコア：
+   - 1.0: 完全な包含 - すべての単語が存在
+   - 0.5-0.9: 部分的な包含 - 一部の単語が存在
+   - 0.0: 包含なし - 単語が見つからない
+
+2. 詳細な統計情報を含む：
+   - チェックする総単語数
+   - 一致した単語の数
+   - 包含率の計算
+   - 空の入力の処理
+
+<br />
+<br />
+<hr className="dark:border-[#404040] border-gray-300" />
+<br />
+<br />
+<GithubLink
+  link={
+    "https://github.com/mastra-ai/mastra/blob/main/examples/basics/evals/word-inclusion"
+  }
+/>

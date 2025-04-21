@@ -4,12 +4,13 @@ import { MastraMemory } from '@mastra/core/memory';
 import type { MessageType, MemoryConfig, SharedMemoryConfig, StorageThreadType } from '@mastra/core/memory';
 import type { StorageGetMessagesArg } from '@mastra/core/storage';
 import { embedMany } from 'ai';
-import { Tiktoken } from 'js-tiktoken/lite';
-import o200k_base from 'js-tiktoken/ranks/o200k_base';
+
 import xxhash from 'xxhash-wasm';
 import { updateWorkingMemoryTool } from './tools/working-memory';
+import { reorderToolCallsAndResults } from './utils';
 
-const encoder = new Tiktoken(o200k_base);
+// Average characters per token based on OpenAI's tokenization
+const CHARS_PER_TOKEN = 4;
 
 /**
  * Concrete implementation of MastraMemory that adds support for thread configuration
@@ -103,7 +104,7 @@ export class Memory extends MastraMemory {
     }
 
     // Get raw messages from storage
-    const rawMessages = await this.storage.__getMessages({
+    const rawMessages = await this.storage.getMessages({
       threadId,
       selectBy: {
         ...selectBy,
@@ -126,9 +127,14 @@ export class Memory extends MastraMemory {
       threadConfig: config,
     });
 
+    // First sort messages by date
+    const orderedByDate = rawMessages.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+    // Then reorder tool calls to be directly before their results
+    const reorderedToolCalls = reorderToolCallsAndResults(orderedByDate);
+
     // Parse and convert messages
-    const messages = this.parseMessages(rawMessages);
-    const uiMessages = this.convertToUIMessages(rawMessages);
+    const messages = this.parseMessages(reorderedToolCalls);
+    const uiMessages = this.convertToUIMessages(reorderedToolCalls);
 
     return { messages, uiMessages };
   }
@@ -177,11 +183,11 @@ export class Memory extends MastraMemory {
   }
 
   async getThreadById({ threadId }: { threadId: string }): Promise<StorageThreadType | null> {
-    return this.storage.__getThreadById({ threadId });
+    return this.storage.getThreadById({ threadId });
   }
 
   async getThreadsByResourceId({ resourceId }: { resourceId: string }): Promise<StorageThreadType[]> {
-    return this.storage.__getThreadsByResourceId({ resourceId });
+    return this.storage.getThreadsByResourceId({ resourceId });
   }
 
   async saveThread({
@@ -195,7 +201,7 @@ export class Memory extends MastraMemory {
 
     if (config.workingMemory?.enabled && !thread?.metadata?.workingMemory) {
       // if working memory is enabled but the thread doesn't have it, we need to set it
-      return this.storage.__saveThread({
+      return this.storage.saveThread({
         thread: deepMerge(thread, {
           metadata: {
             workingMemory: config.workingMemory.template || this.defaultWorkingMemoryTemplate,
@@ -204,7 +210,7 @@ export class Memory extends MastraMemory {
       });
     }
 
-    return this.storage.__saveThread({ thread });
+    return this.storage.saveThread({ thread });
   }
 
   async updateThread({
@@ -216,7 +222,7 @@ export class Memory extends MastraMemory {
     title: string;
     metadata: Record<string, unknown>;
   }): Promise<StorageThreadType> {
-    return this.storage.__updateThread({
+    return this.storage.updateThread({
       id,
       title,
       metadata,
@@ -224,27 +230,34 @@ export class Memory extends MastraMemory {
   }
 
   async deleteThread(threadId: string): Promise<void> {
-    await this.storage.__deleteThread({ threadId });
+    await this.storage.deleteThread({ threadId });
   }
 
-  private chunkText(text: string, size = 4096) {
-    const tokens = encoder.encode(text);
+  private chunkText(text: string, tokenSize = 4096) {
+    // Convert token size to character size with some buffer
+    const charSize = tokenSize * CHARS_PER_TOKEN;
     const chunks: string[] = [];
-    let currentChunk: number[] = [];
+    let currentChunk = '';
 
-    for (const token of tokens) {
-      currentChunk.push(token);
+    // Split text into words to avoid breaking words
+    const words = text.split(/\s+/);
 
-      // If current chunk reaches size limit, add it to chunks and start a new one
-      if (currentChunk.length >= size) {
-        chunks.push(encoder.decode(currentChunk));
-        currentChunk = [];
+    for (const word of words) {
+      // Add space before word unless it's the first word in the chunk
+      const wordWithSpace = currentChunk ? ' ' + word : word;
+
+      // If adding this word would exceed the chunk size, start a new chunk
+      if (currentChunk.length + wordWithSpace.length > charSize) {
+        chunks.push(currentChunk);
+        currentChunk = word;
+      } else {
+        currentChunk += wordWithSpace;
       }
     }
 
-    // Add any remaining tokens as the final chunk
-    if (currentChunk.length > 0) {
-      chunks.push(encoder.decode(currentChunk));
+    // Add the final chunk if not empty
+    if (currentChunk) {
+      chunks.push(currentChunk);
     }
 
     return chunks;
@@ -308,16 +321,16 @@ export class Memory extends MastraMemory {
     await this.saveWorkingMemory(messages);
 
     // Then strip working memory tags from all messages
-    this.mutateMessagesToHideWorkingMemory(messages);
+    const updatedMessages = this.updateMessagesToHideWorkingMemory(messages);
 
     const config = this.getMergedThreadConfig(memoryConfig);
 
-    const result = this.storage.__saveMessages({ messages });
+    const result = this.storage.saveMessages({ messages: updatedMessages });
 
     if (this.vector && config.semanticRecall) {
       let indexName: Promise<string>;
       await Promise.all(
-        messages.map(async message => {
+        updatedMessages.map(async message => {
           if (typeof message.content !== `string` || message.content === '') return;
 
           const { embeddings, chunks, dimension } = await this.embedMessageContent(message.content);
@@ -348,27 +361,42 @@ export class Memory extends MastraMemory {
     return result;
   }
 
-  protected mutateMessagesToHideWorkingMemory(messages: MessageType[]) {
+  protected updateMessagesToHideWorkingMemory(messages: MessageType[]): MessageType[] {
     const workingMemoryRegex = /<working_memory>([^]*?)<\/working_memory>/g;
 
-    for (const [index, message] of messages.entries()) {
-      if (typeof message?.content === `string`) {
-        message.content = message.content.replace(workingMemoryRegex, ``).trim();
-      } else if (Array.isArray(message?.content)) {
-        for (const content of message.content) {
-          if (content.type === `text`) {
-            content.text = content.text.replace(workingMemoryRegex, ``).trim();
-          }
+    const updatedMessages: MessageType[] = [];
 
-          if (
+    for (const message of messages) {
+      if (typeof message?.content === `string`) {
+        updatedMessages.push({
+          ...message,
+          content: message.content.replace(workingMemoryRegex, ``).trim(),
+        });
+      } else if (Array.isArray(message?.content)) {
+        const contentIsWorkingMemory = message.content.some(
+          content =>
             (content.type === `tool-call` || content.type === `tool-result`) &&
-            content.toolName === `updateWorkingMemory`
-          ) {
-            delete messages[index];
-          }
+            content.toolName === `updateWorkingMemory`,
+        );
+        if (contentIsWorkingMemory) {
+          continue;
         }
+        const newContent = message.content.map(content => {
+          if (content.type === 'text') {
+            return {
+              ...content,
+              text: content.text.replace(workingMemoryRegex, '').trim(),
+            };
+          }
+          return { ...content };
+        }) as MessageType['content'];
+        updatedMessages.push({ ...message, content: newContent });
+      } else {
+        updatedMessages.push({ ...message });
       }
     }
+
+    return updatedMessages;
   }
 
   protected parseWorkingMemory(text: string): string | null {
@@ -389,7 +417,7 @@ export class Memory extends MastraMemory {
     if (!this.threadConfig.workingMemory?.enabled) return null;
 
     // Get thread from storage
-    const thread = await this.storage.__getThreadById({ threadId });
+    const thread = await this.storage.getThreadById({ threadId });
     if (!thread) return this.threadConfig?.workingMemory?.template || this.defaultWorkingMemoryTemplate;
 
     // Return working memory from metadata
@@ -427,11 +455,11 @@ export class Memory extends MastraMemory {
       return;
     }
 
-    const thread = await this.storage.__getThreadById({ threadId });
+    const thread = await this.storage.getThreadById({ threadId });
     if (!thread) return;
 
     // Update thread metadata with new working memory
-    await this.storage.__updateThread({
+    await this.storage.updateThread({
       id: thread.id,
       title: thread.title || '',
       metadata: deepMerge(thread.metadata || {}, {

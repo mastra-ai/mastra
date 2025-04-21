@@ -1,0 +1,247 @@
+---
+title: "リファレンス: Upstash Vector Store | ベクターデータベース | RAG | Mastra ドキュメント"
+description: MastraのUpstashVectorクラスのドキュメントで、Upstash Vectorを使用したベクター検索を提供します。
+---
+
+# Upstash Vector Store
+
+UpstashVector クラスは、メタデータフィルタリング機能を備えたベクトル類似検索を提供するサーバーレスベクトルデータベースサービスである [Upstash Vector](https://upstash.com/vector) を使用してベクトル検索を提供します。
+
+## コンストラクタオプション
+
+<PropertiesTable
+  content={[
+    {
+      name: "url",
+      type: "string",
+      description: "Upstash Vector データベースのURL",
+    },
+    {
+      name: "token",
+      type: "string",
+      description: "Upstash Vector APIトークン",
+    },
+  ]}
+/>
+
+## メソッド
+
+### createIndex()
+
+注意: このメソッドはUpstashでは無操作です。インデックスは自動的に作成されます。
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "作成するインデックスの名前",
+    },
+    {
+      name: "dimension",
+      type: "number",
+      description: "ベクトルの次元（埋め込みモデルに一致する必要があります）",
+    },
+    {
+      name: "metric",
+      type: "'cosine' | 'euclidean' | 'dotproduct'",
+      isOptional: true,
+      defaultValue: "cosine",
+      description: "類似性検索のための距離メトリック",
+    },
+  ]}
+/>
+
+### upsert()
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "アップサートするインデックスの名前",
+    },
+    {
+      name: "vectors",
+      type: "number[][]",
+      description: "埋め込みベクトルの配列",
+    },
+    {
+      name: "metadata",
+      type: "Record<string, any>[]",
+      isOptional: true,
+      description: "各ベクトルのメタデータ",
+    },
+    {
+      name: "ids",
+      type: "string[]",
+      isOptional: true,
+      description: "オプションのベクトルID（提供されない場合は自動生成）",
+    },
+  ]}
+/>
+
+### query()
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "クエリを実行するインデックスの名前",
+    },
+    {
+      name: "queryVector",
+      type: "number[]",
+      description: "類似ベクトルを見つけるためのクエリベクトル",
+    },
+    {
+      name: "topK",
+      type: "number",
+      isOptional: true,
+      defaultValue: "10",
+      description: "返す結果の数",
+    },
+    {
+      name: "filter",
+      type: "Record<string, any>",
+      isOptional: true,
+      description: "クエリのメタデータフィルター",
+    },
+    {
+      name: "includeVector",
+      type: "boolean",
+      isOptional: true,
+      defaultValue: "false",
+      description: "結果にベクトルを含めるかどうか",
+    },
+  ]}
+/>
+
+### listIndexes()
+
+インデックス名（名前空間）の配列を文字列として返します。
+
+### describeIndex()
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "説明するインデックスの名前",
+    },
+  ]}
+/>
+
+返される内容:
+
+```typescript copy
+interface IndexStats {
+  dimension: number;
+  count: number;
+  metric: "cosine" | "euclidean" | "dotproduct";
+}
+```
+
+### deleteIndex()
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "削除するインデックス（名前空間）の名前",
+    },
+  ]}
+/>
+
+### updateIndexById()
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "更新するインデックスの名前",
+    },
+    {
+      name: "id",
+      type: "string",
+      description: "更新するアイテムのID",
+    },
+    {
+      name: "update",
+      type: "object",
+      description: "ベクトルおよび/またはメタデータを含む更新オブジェクト",
+    },
+  ]}
+/>
+
+`update` オブジェクトは以下のプロパティを持つことができます:
+
+- `vector` (オプション): 新しいベクトルを表す数値の配列。
+- `metadata` (オプション): メタデータのキーと値のペアのレコード。
+
+`vector` または `metadata` のいずれも提供されない場合、または `metadata` のみが提供された場合はエラーをスローします。
+
+### deleteIndexById()
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "アイテムを削除するインデックスの名前",
+    },
+    {
+      name: "id",
+      type: "string",
+      description: "削除するアイテムのID",
+    },
+  ]}
+/>
+
+指定されたインデックスからIDによってアイテムを削除しようとします。削除が失敗した場合はエラーメッセージを記録します。
+
+## レスポンスタイプ
+
+クエリ結果はこの形式で返されます:
+
+```typescript copy
+interface QueryResult {
+  id: string;
+  score: number;
+  metadata: Record<string, any>;
+  vector?: number[]; // Only included if includeVector is true
+}
+```
+
+## エラーハンドリング
+
+ストアは型付きエラーをスローし、キャッチすることができます：
+
+```typescript copy
+try {
+  await store.query({
+    indexName: "index_name",
+    queryVector: queryVector,
+  });
+} catch (error) {
+  if (error instanceof VectorStoreError) {
+    console.log(error.code); // 'connection_failed' | 'invalid_dimension' | etc
+    console.log(error.details); // 追加のエラーコンテキスト
+  }
+}
+```
+
+## 環境変数
+
+必要な環境変数:
+
+- `UPSTASH_VECTOR_URL`: あなたのUpstash VectorデータベースURL
+- `UPSTASH_VECTOR_TOKEN`: あなたのUpstash Vector APIトークン
+
+## 関連
+
+- [メタデータフィルター](./metadata-filters)

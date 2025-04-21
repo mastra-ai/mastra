@@ -25,6 +25,9 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 
+# star count
+githubStarCount.json
+
 # local env files
 .env*.local
 
@@ -38,4 +41,14 @@ next-env.d.ts
 public/githubStarCount.json
 #pagefind
 _pagefind/
+
+# robots.txt
+robots.txt
+
+# llms.txt
+llms.txt
+llm-full.txt
+
+#Sitemap
+sitemap.xml
 

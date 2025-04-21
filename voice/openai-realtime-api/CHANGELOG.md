@@ -1,5 +1,107 @@
 # @mastra/voice-openai-realtime
 
+## 0.2.0-alpha.9
+
+### Patch Changes
+
+- Updated dependencies [71d9444]
+  - @mastra/core@0.9.0-alpha.7
+
+## 0.2.0-alpha.8
+
+### Patch Changes
+
+- Updated dependencies [157c741]
+  - @mastra/core@0.9.0-alpha.6
+
+## 0.2.0-alpha.7
+
+### Patch Changes
+
+- Updated dependencies [08bb78e]
+  - @mastra/core@0.9.0-alpha.5
+
+## 0.2.0-alpha.6
+
+### Patch Changes
+
+- Updated dependencies [7e92011]
+  - @mastra/core@0.9.0-alpha.4
+
+## 0.2.0-alpha.5
+
+### Patch Changes
+
+- 6cf1417: Voice reference and tool-call-start
+- Updated dependencies [fe3ae4d]
+  - @mastra/core@0.9.0-alpha.3
+
+## 0.2.0-alpha.4
+
+### Minor Changes
+
+- 1ef0f1f: Disconnect
+
+## 0.2.0-alpha.3
+
+### Minor Changes
+
+- 9aaa64b: Don't connect the ws connection until connect is called
+
+### Patch Changes
+
+- Updated dependencies [9ee4293]
+  - @mastra/core@0.8.4-alpha.2
+
+## 0.2.0-alpha.2
+
+### Minor Changes
+
+- 185f8e9: Emit add tools and silence warnings
+
+## 0.1.5-alpha.1
+
+### Patch Changes
+
+- Updated dependencies [8a8a73b]
+- Updated dependencies [6f92295]
+  - @mastra/core@0.8.4-alpha.1
+
+## 0.1.5-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [03f3cd0]
+  - @mastra/core@0.8.4-alpha.0
+
+## 0.1.4
+
+### Patch Changes
+
+- 37bb612: Add Elastic-2.0 licensing for packages
+- Updated dependencies [d72318f]
+- Updated dependencies [0bcc862]
+- Updated dependencies [10a8caf]
+- Updated dependencies [359b089]
+- Updated dependencies [32e7b71]
+- Updated dependencies [37bb612]
+- Updated dependencies [7f1b291]
+  - @mastra/core@0.8.3
+
+## 0.1.4-alpha.5
+
+### Patch Changes
+
+- Updated dependencies [d72318f]
+  - @mastra/core@0.8.3-alpha.5
+
+## 0.1.4-alpha.4
+
+### Patch Changes
+
+- Updated dependencies [7f1b291]
+  - @mastra/core@0.8.3-alpha.4
+
 ## 0.1.4-alpha.3
 
 ### Patch Changes

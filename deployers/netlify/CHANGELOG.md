@@ -1,5 +1,132 @@
 # @mastra/deployer-netlify
 
+## 0.1.19-alpha.8
+
+### Patch Changes
+
+- Updated dependencies [71d9444]
+  - @mastra/core@0.9.0-alpha.7
+  - @mastra/deployer@0.3.0-alpha.8
+
+## 0.1.19-alpha.7
+
+### Patch Changes
+
+- Updated dependencies [157c741]
+- Updated dependencies [63fe16a]
+- Updated dependencies [735ead7]
+  - @mastra/core@0.9.0-alpha.6
+  - @mastra/deployer@0.3.0-alpha.7
+
+## 0.1.19-alpha.6
+
+### Patch Changes
+
+- Updated dependencies [08bb78e]
+- Updated dependencies [3f9d151]
+  - @mastra/core@0.9.0-alpha.5
+  - @mastra/deployer@0.3.0-alpha.6
+
+## 0.1.19-alpha.5
+
+### Patch Changes
+
+- 7e92011: Include tools with deployment builds
+- Updated dependencies [7e92011]
+  - @mastra/deployer@0.3.0-alpha.5
+  - @mastra/core@0.9.0-alpha.4
+
+## 0.1.19-alpha.4
+
+### Patch Changes
+
+- Updated dependencies [fe3ae4d]
+  - @mastra/deployer@0.3.0-alpha.4
+  - @mastra/core@0.9.0-alpha.3
+
+## 0.1.19-alpha.3
+
+### Patch Changes
+
+- Updated dependencies [9ee4293]
+  - @mastra/core@0.8.4-alpha.2
+  - @mastra/deployer@0.2.10-alpha.3
+
+## 0.1.19-alpha.2
+
+### Patch Changes
+
+- Updated dependencies [3527610]
+  - @mastra/deployer@0.2.10-alpha.2
+
+## 0.1.19-alpha.1
+
+### Patch Changes
+
+- Updated dependencies [8a8a73b]
+- Updated dependencies [6f92295]
+  - @mastra/core@0.8.4-alpha.1
+  - @mastra/deployer@0.2.10-alpha.1
+
+## 0.1.19-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [03f3cd0]
+  - @mastra/core@0.8.4-alpha.0
+  - @mastra/deployer@0.2.10-alpha.0
+
+## 0.1.18
+
+### Patch Changes
+
+- 37bb612: Add Elastic-2.0 licensing for packages
+- 67aff42: Fix netlify deployer missing @libsql/linux-x64-gnu bug
+- Updated dependencies [d72318f]
+- Updated dependencies [0bcc862]
+- Updated dependencies [10a8caf]
+- Updated dependencies [359b089]
+- Updated dependencies [9f6f6dd]
+- Updated dependencies [32e7b71]
+- Updated dependencies [37bb612]
+- Updated dependencies [1ebbfbf]
+- Updated dependencies [67aff42]
+- Updated dependencies [7f1b291]
+  - @mastra/core@0.8.3
+  - @mastra/deployer@0.2.9
+
+## 0.1.18-alpha.7
+
+### Patch Changes
+
+- Updated dependencies [d72318f]
+  - @mastra/core@0.8.3-alpha.5
+  - @mastra/deployer@0.2.9-alpha.7
+
+## 0.1.18-alpha.6
+
+### Patch Changes
+
+- 67aff42: Fix netlify deployer missing @libsql/linux-x64-gnu bug
+- Updated dependencies [67aff42]
+  - @mastra/deployer@0.2.9-alpha.6
+
+## 0.1.18-alpha.5
+
+### Patch Changes
+
+- Updated dependencies [9f6f6dd]
+  - @mastra/deployer@0.2.9-alpha.5
+
+## 0.1.18-alpha.4
+
+### Patch Changes
+
+- Updated dependencies [1ebbfbf]
+- Updated dependencies [7f1b291]
+  - @mastra/deployer@0.2.9-alpha.4
+  - @mastra/core@0.8.3-alpha.4
+
 ## 0.1.18-alpha.3
 
 ### Patch Changes

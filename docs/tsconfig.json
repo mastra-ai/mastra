@@ -18,7 +18,8 @@
       }
     ],
     "paths": {
-      "@/*": ["./src/*"]
+      "@/*": ["./src/*"],
+      "@/components/*": ["./src/components/*"]
     },
     "target": "ES2017"
   },
@@ -27,7 +28,7 @@
     "**/*.ts",
     "**/*.tsx",
     ".next/types/**/*.ts",
-    "src/content/_meta.js",
+    "src/content/en/content/_meta.js",
     "theme.config.tsx"
   ],
   "exclude": ["node_modules"]

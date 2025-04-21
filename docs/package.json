@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev --turbopack",
-    "build": "pnpm build:llms-txt && pnpm build:stars && next build",
+    "build": "gtx-cli translate && pnpm build:llms-txt && pnpm build:stars && next build",
     "build:llms-txt": "tsx src/scripts/build-llms-text-files.ts",
     "build:stars": "tsx scripts/fetchStars.ts",
     "start": "next start",
@@ -19,6 +19,8 @@
     "@vercel/analytics": "^1.5.0",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
+    "gt-next": "^5.2.21",
+    "gtx-cli": "^1.1.13",
     "lucide-react": "^0.436.0",
     "motion": "^12.5.0",
     "next": "^15.2.4",

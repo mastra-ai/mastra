@@ -1,5 +1,118 @@
 # @mastra/playground-ui
 
+## 5.0.0-alpha.7
+
+### Patch Changes
+
+- Updated dependencies [71d9444]
+  - @mastra/core@0.9.0-alpha.7
+  - @mastra/client-js@0.1.18-alpha.7
+
+## 5.0.0-alpha.6
+
+### Patch Changes
+
+- Updated dependencies [157c741]
+  - @mastra/core@0.9.0-alpha.6
+  - @mastra/client-js@0.1.18-alpha.6
+
+## 5.0.0-alpha.5
+
+### Patch Changes
+
+- Updated dependencies [08bb78e]
+  - @mastra/core@0.9.0-alpha.5
+  - @mastra/client-js@0.1.18-alpha.5
+
+## 5.0.0-alpha.4
+
+### Patch Changes
+
+- Updated dependencies [7e92011]
+  - @mastra/core@0.9.0-alpha.4
+  - @mastra/client-js@0.1.18-alpha.4
+
+## 5.0.0-alpha.3
+
+### Patch Changes
+
+- Updated dependencies [fe3ae4d]
+  - @mastra/core@0.9.0-alpha.3
+  - @mastra/client-js@0.1.18-alpha.3
+
+## 4.0.5-alpha.2
+
+### Patch Changes
+
+- Updated dependencies [9ee4293]
+  - @mastra/core@0.8.4-alpha.2
+  - @mastra/client-js@0.1.18-alpha.2
+
+## 4.0.5-alpha.1
+
+### Patch Changes
+
+- Updated dependencies [8a8a73b]
+- Updated dependencies [6f92295]
+  - @mastra/core@0.8.4-alpha.1
+  - @mastra/client-js@0.1.18-alpha.1
+
+## 4.0.5-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [03f3cd0]
+  - @mastra/core@0.8.4-alpha.0
+  - @mastra/client-js@0.1.18-alpha.0
+
+## 4.0.4
+
+### Patch Changes
+
+- d72318f: Refactored the evals table to use the DS tables
+- 1ebbfbf: Ability to toggle stream vs generate in playground
+- 9b47dfa: Fix dynamic form for suspended workflow in playground ui
+- f5451a4: bundle tokens as CJS in playground UI for tailwind usage
+- ed52379: enum-type trigger schemas could not be submitted in the Playground UI has been resolved.
+- 37bb612: Add Elastic-2.0 licensing for packages
+- bc4acb3: updated traces to not be wrapped in traces object
+- c8fe5f0: change the header of all pages with the one from the DS
+- Updated dependencies [d72318f]
+- Updated dependencies [0bcc862]
+- Updated dependencies [10a8caf]
+- Updated dependencies [359b089]
+- Updated dependencies [32e7b71]
+- Updated dependencies [37bb612]
+- Updated dependencies [bc4acb3]
+- Updated dependencies [7f1b291]
+  - @mastra/core@0.8.3
+  - @mastra/client-js@0.1.17
+
+## 4.0.4-alpha.6
+
+### Patch Changes
+
+- d72318f: Refactored the evals table to use the DS tables
+- Updated dependencies [d72318f]
+  - @mastra/core@0.8.3-alpha.5
+  - @mastra/client-js@0.1.17-alpha.5
+
+## 4.0.4-alpha.5
+
+### Patch Changes
+
+- ed52379: enum-type trigger schemas could not be submitted in the Playground UI has been resolved.
+
+## 4.0.4-alpha.4
+
+### Patch Changes
+
+- 1ebbfbf: Ability to toggle stream vs generate in playground
+- 9b47dfa: Fix dynamic form for suspended workflow in playground ui
+- Updated dependencies [7f1b291]
+  - @mastra/core@0.8.3-alpha.4
+  - @mastra/client-js@0.1.17-alpha.4
+
 ## 4.0.4-alpha.3
 
 ### Patch Changes

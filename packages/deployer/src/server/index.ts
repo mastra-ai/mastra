@@ -1,7 +1,8 @@
 import { randomUUID } from 'crypto';
 import { readFile } from 'fs/promises';
-import { join } from 'path';
-import { pathToFileURL } from 'url';
+import { dirname } from 'path';
+import { join } from 'path/posix';
+import { fileURLToPath, pathToFileURL } from 'url';
 import { serve } from '@hono/node-server';
 import { serveStatic } from '@hono/node-server/serve-static';
 import { swaggerUI } from '@hono/swagger-ui';
@@ -81,11 +82,15 @@ export async function createHonoServer(
   const server = mastra.getServer();
 
   // Initialize tools
-  const mastraToolsPaths = process.env.MASTRA_TOOLS_PATH;
+  // @ts-ignore
+  const __dirname = dirname(fileURLToPath(import.meta.url));
+
+  const mastraToolsPaths = (await import(pathToFileURL(join(__dirname, 'tools.mjs')).href)).tools;
   const toolImports = mastraToolsPaths
     ? await Promise.all(
-        mastraToolsPaths.split(',').map(async toolPath => {
-          return import(pathToFileURL(toolPath).href);
+        // @ts-ignore
+        mastraToolsPaths.map(async toolPath => {
+          return import(pathToFileURL(join(__dirname, toolPath)).href);
         }),
       )
     : [];
@@ -150,7 +155,7 @@ export async function createHonoServer(
 
   //Global cors config
   if (server?.cors === false) {
-    app.use('*', timeout(server?.timeout ?? 1000 * 30));
+    app.use('*', timeout(server?.timeout ?? 3 * 60 * 1000));
   } else {
     const corsConfig = {
       origin: '*',
@@ -161,7 +166,7 @@ export async function createHonoServer(
       allowHeaders: ['Content-Type', 'Authorization', 'x-mastra-client-type', ...(server?.cors?.allowHeaders ?? [])],
       exposeHeaders: ['Content-Length', 'X-Requested-With', ...(server?.cors?.exposeHeaders ?? [])],
     };
-    app.use('*', timeout(server?.timeout ?? 1000 * 30), cors(corsConfig));
+    app.use('*', timeout(server?.timeout ?? 3 * 60 * 1000), cors(corsConfig));
   }
 
   const bodyLimitOptions = {
@@ -2200,21 +2205,23 @@ export async function createNodeServer(
 
   const port = serverOptions?.port ?? (Number(process.env.PORT) || 4111);
 
-  return serve(
+  const server = serve(
     {
       fetch: app.fetch,
       port,
     },
     () => {
       const logger = mastra.getLogger();
-      logger.info(`🦄 Mastra API running on port ${process.env.PORT || 4111}/api`);
-      logger.info(`📚 Open API documentation available at http://localhost:${process.env.PORT || 4111}/openapi.json`);
+      logger.info(`🦄 Mastra API running on port ${port}/api`);
+      logger.info(`📚 Open API documentation available at http://localhost:${port}/openapi.json`);
       if (options?.swaggerUI) {
-        logger.info(`🧪 Swagger UI available at http://localhost:${process.env.PORT || 4111}/swagger-ui`);
+        logger.info(`🧪 Swagger UI available at http://localhost:${port}/swagger-ui`);
       }
       if (options?.playground) {
-        logger.info(`👨‍💻 Playground available at http://localhost:${process.env.PORT || 4111}/`);
+        logger.info(`👨‍💻 Playground available at http://localhost:${port}/`);
       }
     },
   );
+
+  return server;
 }

@@ -18,6 +18,7 @@ import {
   FormMessage,
 } from "@/components/ui/forms";
 import { useTheme } from "nextra-theme-docs";
+import { T, Var } from "gt-next/client";
 
 export const formSchema = z.object({
   email: z.string().email(),
@@ -36,7 +37,7 @@ const buttonCopy = ({
   loading: (
     <Spinner
       className="w-4 h-4 !duration-300"
-      color={isDark ? "#fff" : "#000"}
+      color={isDark ? "#000" : "#fff"}
     />
   ),
   success: successIcon ? successIcon : "Subscribed!",
@@ -48,12 +49,18 @@ export const SubscribeForm = ({
   placeholder,
   label,
   className,
+  showLabel = true,
+  inputClassName,
+  buttonClassName,
 }: {
   idleIcon?: React.ReactNode;
   successIcon?: React.ReactNode;
   placeholder?: string;
   label?: string;
   className?: string;
+  showLabel?: boolean;
+  inputClassName?: string;
+  buttonClassName?: string;
 }) => {
   const [buttonState, setButtonState] = useState("idle");
   const form = useForm<z.infer<typeof formSchema>>({
@@ -90,6 +97,7 @@ export const SubscribeForm = ({
                 value: sanitizedEmail,
               },
             ],
+
             context: {
               pageUri: window.location.href,
               pageName: document.title,
@@ -132,9 +140,13 @@ export const SubscribeForm = ({
           name="email"
           render={({ field }) => (
             <FormItem className="flex-1 w-full">
-              <FormLabel className="text-[13px] mb-[0.69rem] block text-gray-500 dark:text-[#E6E6E6]">
-                {label || "Mastra Newsletter"}
-              </FormLabel>
+              {showLabel ? (
+                <T id="components.subscribe_form.0">
+                  <FormLabel className="text-[13px] mb-[0.69rem] block text-gray-500 dark:text-[#E6E6E6]">
+                    <Var>{label || "Mastra Newsletter"}</Var>
+                  </FormLabel>
+                </T>
+              ) : null}
 
               <FormControl>
                 <input
@@ -142,6 +154,7 @@ export const SubscribeForm = ({
                   {...field}
                   className={cn(
                     "bg-transparent placeholder:text-text-[#939393] text-sm placeholder:text-sm flex-1 focus:outline-none focus:ring-1 h-[35px] focus:ring-[hsl(var(--tag-green))] w-full py-[0.56rem] px-4 dark:border-[#343434] border rounded-md",
+                    inputClassName,
                   )}
                 />
               </FormControl>
@@ -154,9 +167,11 @@ export const SubscribeForm = ({
             </FormItem>
           )}
         />
+
         <button
           className={cn(
             "dark:bg-[#121212] bg-[#2a2a2a] w-full rounded-md hover:opacity-90 h-[32px] justify-center flex items-center px-4 text-white dark:text-white text-[14px]",
+            buttonClassName,
           )}
           onClick={(e) => {
             e.preventDefault();

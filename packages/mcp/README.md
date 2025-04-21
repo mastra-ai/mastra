@@ -95,6 +95,97 @@ const tools = await mcp.getTools();
 const toolsets = await mcp.getToolsets();
 ```
 
+## Logging
+
+The MCP client provides per-server logging capabilities, allowing you to monitor interactions with each MCP server separately:
+
+```typescript
+import { MCPConfiguration, LogMessage, LoggingLevel } from '@mastra/mcp';
+
+// Define a custom log handler
+const weatherLogger = (logMessage: LogMessage) => {
+  console.log(`[${logMessage.level}] ${logMessage.serverName}: ${logMessage.message}`);
+
+  // Log data contains valuable information
+  console.log('Details:', logMessage.details);
+  console.log('Timestamp:', logMessage.timestamp);
+};
+
+// Initialize MCP configuration with server-specific loggers
+const mcp = new MCPConfiguration({
+  servers: {
+    weatherService: {
+      command: 'npx',
+      args: ['tsx', 'weather-mcp.ts'],
+      // Attach the logger to this specific server
+      log: weatherLogger,
+    },
+
+    stockPriceService: {
+      command: 'npx',
+      args: ['tsx', 'stock-mcp.ts'],
+      // Different logger for this service
+      log: logMessage => {
+        // Just log errors and critical events for this service
+        if (['error', 'critical', 'alert', 'emergency'].includes(logMessage.level)) {
+          console.error(`Stock service ${logMessage.level}: ${logMessage.message}`);
+        }
+      },
+    },
+  },
+});
+```
+
+### Log Message Structure
+
+Each log message contains the following information:
+
+```typescript
+interface LogMessage {
+  level: LoggingLevel; // MCP SDK standard log levels
+  message: string;
+  timestamp: Date;
+  serverName: string;
+  details?: Record<string, any>;
+}
+```
+
+The `LoggingLevel` type is directly imported from the MCP SDK, ensuring compatibility with all standard MCP log levels: `'debug' | 'info' | 'notice' | 'warning' | 'error' | 'critical' | 'alert' | 'emergency'`.
+
+### Creating Reusable Loggers
+
+You can create reusable logger factories for common patterns:
+
+```typescript
+// File logger factory with color coded output for different severity levels
+const createFileLogger = filePath => {
+  return logMessage => {
+    // Format the message based on level
+    const prefix =
+      logMessage.level === 'emergency' ? '!!! EMERGENCY !!! ' : logMessage.level === 'alert' ? '! ALERT ! ' : '';
+
+    // Write to file with timestamp, level, etc.
+    fs.appendFileSync(
+      filePath,
+      `[${logMessage.timestamp.toISOString()}] [${logMessage.level.toUpperCase()}] ${prefix}${logMessage.message}\n`,
+    );
+  };
+};
+
+// Use the factory in configuration
+const mcp = new MCPConfiguration({
+  servers: {
+    weatherService: {
+      command: 'npx',
+      args: ['tsx', 'weather-mcp.ts'],
+      log: createFileLogger('./logs/weather.log'),
+    },
+  },
+});
+```
+
+See the `examples/server-logging.ts` file for comprehensive examples of various logging strategies.
+
 ### Tools vs Toolsets
 
 The MCPConfiguration class provides two ways to access MCP tools:
@@ -242,6 +333,7 @@ This configuration ensures that:
 
 - `version`: Client version (default: '1.0.0')
 - `capabilities`: ClientCapabilities object for specifying supported features
+- `log`: Function that receives and processes log messages
 
 ## Features
 
@@ -251,6 +343,7 @@ This configuration ensures that:
 - Multiple transport layers:
   - Stdio-based for local servers
   - SSE-based for remote servers
+- Per-server logging capability using all standard MCP log levels
 - Automatic error handling and logging
 - Tool execution with context
 

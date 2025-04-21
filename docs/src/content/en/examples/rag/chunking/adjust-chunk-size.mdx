@@ -1,0 +1,31 @@
+---
+title: "Example: Adjusting The Chunk Size | RAG | Mastra Docs"
+description: Adjust chunk size in Mastra to better match your content and memory requirements.
+---
+
+import { GithubLink } from "@/components/github-link";
+
+# Adjust Chunk Size
+
+When processing large documents, you might need to adjust how much text is included in each chunk. By default, chunks are 1024 characters long, but you can customize this size to better match your content and memory requirements. This example shows how to set a custom chunk size when splitting documents.
+
+```tsx copy
+import { MDocument } from "@mastra/rag";
+
+const doc = MDocument.fromText("Your plain text content...");
+
+const chunks = await doc.chunk({
+  size: 512,
+});
+```
+
+<br />
+<br />
+<hr className="dark:border-[#404040] border-gray-300" />
+<br />
+<br />
+<GithubLink
+  link={
+    "https://github.com/mastra-ai/mastra/blob/main/examples/basics/rag/adjust-chunk-size"
+  }
+/>

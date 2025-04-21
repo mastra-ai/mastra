@@ -2,6 +2,7 @@ import { existsSync, mkdirSync, writeFileSync } from 'fs';
 import { join } from 'path';
 
 import { Deployer } from '@mastra/deployer';
+import { DepsService } from '@mastra/deployer/services';
 import { execa } from 'execa';
 
 import { getOrCreateSite } from './helpers.js';
@@ -40,6 +41,20 @@ to = "/.netlify/functions/api/:splat"
     );
   }
 
+  protected async installDependencies(outputDirectory: string, rootDir = process.cwd()) {
+    const deps = new DepsService(rootDir);
+    deps.__setLogger(this.logger);
+
+    await deps.install({
+      dir: join(outputDirectory, this.outputDir),
+      architecture: {
+        os: ['linux'],
+        cpu: ['x64'],
+        libc: ['gnu'],
+      },
+    });
+  }
+
   async deploy(outputDirectory: string): Promise<void> {
     const site = await getOrCreateSite({ token: this.token, name: this.projectName || `mastra`, scope: this.scope });
 
@@ -73,11 +88,12 @@ to = "/.netlify/functions/api/:splat"
     this.writeFiles({ dir: join(outputDirectory, this.outputDir) });
   }
 
-  async bundle(entryFile: string, outputDirectory: string): Promise<void> {
+  async bundle(entryFile: string, outputDirectory: string, toolsPaths: string[]): Promise<void> {
     return this._bundle(
       this.getEntry(),
       entryFile,
       outputDirectory,
+      toolsPaths,
       join(outputDirectory, this.outputDir, 'netlify', 'functions', 'api'),
     );
   }
