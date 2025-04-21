@@ -146,7 +146,6 @@ export function CompletionComponent() {
 JSONオブジェクトを表すテキストストリームを消費し、スキーマに基づいて完全なオブジェクトに解析するために使用します。
 
 - エージェントテキストストリーム（`.toTextStreamResponse()`）と連携します
-- useObjectの`api`はデフォルトで`/api/completion`に設定されています
 - Mastra REST APIのエージェントストリームエンドポイント`{MASTRA_BASE_URL}/agents/:agentId/stream`とテキストストリーム用に連携します（構造化された出力が定義されている場合）
 
 ```typescript filename="app/api/use-object/route.ts" copy
