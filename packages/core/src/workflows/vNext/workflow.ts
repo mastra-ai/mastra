@@ -509,6 +509,7 @@ export class NewWorkflow<
     mastra: Mastra;
   }): Promise<z.infer<TOutput>> {
     this.__registerMastra(mastra);
+
     const run = resume?.steps?.length ? this.createRun({ runId: resume.runId }) : this.createRun();
     const unwatch = run.watch(event => {
       emitter.emit('nested-watch', { event, workflowId: this.id, runId: run.runId, isResume: !!resume?.steps?.length });
@@ -517,18 +518,19 @@ export class NewWorkflow<
       ? await run.resume({ resumeData, step: resume.steps as any })
       : await run.start({ inputData });
     unwatch();
-    const suspendedSteps = Object.entries(res.steps).filter(([stepName, stepResult]) => {
+    const suspendedSteps = Object.entries(res.steps).filter(([_stepName, stepResult]) => {
       const stepRes: StepResult<any> = stepResult as StepResult<any>;
-      if (stepRes?.status === 'suspended') {
-        return stepName;
-      }
-
-      return false;
+      return stepRes?.status === 'suspended';
     });
 
     if (suspendedSteps?.length) {
-      for (const [_stepName, stepResult] of suspendedSteps) {
-        await suspend({ __workflow_meta: { runId: run.runId }, ...(stepResult as any)?.payload });
+      for (const [stepName, stepResult] of suspendedSteps) {
+        // @ts-ignore
+        const suspendPath: string[] = [stepName, ...(stepResult?.payload?.__workflow_meta?.path ?? [])];
+        await suspend({
+          ...(stepResult as any)?.payload,
+          __workflow_meta: { runId: run.runId, path: suspendPath },
+        });
       }
     }
 

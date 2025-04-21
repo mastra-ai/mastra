@@ -2203,7 +2203,6 @@ describe('Workflow', () => {
       const run = promptEvalWorkflow.createRun();
 
       const initialResult = await run.start({ inputData: { input: 'test' } });
-      console.dir({ initialResult }, { depth: null });
       expect(initialResult.steps.promptAgent.status).toBe('suspended');
       expect(promptAgentAction).toHaveBeenCalledTimes(1);
       // expect(initialResult.activePaths.size).toBe(1);
@@ -2223,7 +2222,6 @@ describe('Workflow', () => {
       expect(promptAgentAction).toHaveBeenCalledTimes(1);
 
       const firstResumeResult = await run.resume({ step: 'promptAgent', resumeData: newCtx });
-      console.dir({ firstResumeResult }, { depth: null });
       if (!firstResumeResult) {
         throw new Error('Resume failed to return a result');
       }
@@ -2251,7 +2249,6 @@ describe('Workflow', () => {
           completenessScore: { score: 0.7 },
         },
       });
-      console.dir({ secondResumeResult }, { depth: null });
       if (!secondResumeResult) {
         throw new Error('Resume failed to return a result');
       }
@@ -3279,7 +3276,7 @@ describe('Workflow', () => {
         });
 
         const run = counterWorkflow.createRun();
-        const result = await run.start({ inputData: { startValue: 1 } });
+        const result = await run.start({ inputData: { startValue: 0 } });
 
         expect(begin).toHaveBeenCalledTimes(1);
         expect(start).toHaveBeenCalledTimes(1);
@@ -3293,7 +3290,6 @@ describe('Workflow', () => {
         // @ts-ignore
         expect(result.steps['last-step']).toEqual(undefined);
 
-        vi.clearAllMocks();
         const resumedResults = await run.resume({ step: [wfA, otherStep], resumeData: { newValue: 0 } });
 
         // @ts-ignore
@@ -3302,7 +3298,7 @@ describe('Workflow', () => {
         });
 
         expect(start).toHaveBeenCalledTimes(1);
-        expect(other).toHaveBeenCalledTimes(1);
+        expect(other).toHaveBeenCalledTimes(2);
         expect(final).toHaveBeenCalledTimes(1);
         expect(last).toHaveBeenCalledTimes(1);
       });
@@ -3414,6 +3410,154 @@ describe('Workflow', () => {
           output: { success: true },
         });
       });
+    });
+
+    it('should be able to suspend nested workflow step in a nested workflow step', async () => {
+      const start = vi.fn().mockImplementation(async ({ inputData }) => {
+        // Get the current value (either from trigger or previous increment)
+        const currentValue = inputData.startValue || 0;
+
+        // Increment the value
+        const newValue = currentValue + 1;
+
+        return { newValue };
+      });
+      const startStep = createStep({
+        id: 'start',
+        inputSchema: z.object({ startValue: z.number() }),
+        outputSchema: z.object({
+          newValue: z.number(),
+        }),
+        execute: start,
+      });
+
+      const other = vi.fn().mockImplementation(async ({ suspend, resumeData }) => {
+        if (!resumeData) {
+          await suspend();
+        }
+        return { other: 26 };
+      });
+      const otherStep = createStep({
+        id: 'other',
+        inputSchema: z.object({ newValue: z.number() }),
+        outputSchema: z.object({ other: z.number() }),
+        execute: other,
+      });
+
+      const final = vi.fn().mockImplementation(async ({ getStepResult }) => {
+        const startVal = getStepResult(startStep)?.newValue ?? 0;
+        const otherVal = getStepResult(otherStep)?.other ?? 0;
+        return { finalValue: startVal + otherVal };
+      });
+      const last = vi.fn().mockImplementation(async ({}) => {
+        return { success: true };
+      });
+      const begin = vi.fn().mockImplementation(async ({ inputData }) => {
+        return inputData;
+      });
+      const finalStep = createStep({
+        id: 'final',
+        inputSchema: z.object({ newValue: z.number(), other: z.number() }),
+        outputSchema: z.object({
+          finalValue: z.number(),
+        }),
+        execute: final,
+      });
+
+      const counterWorkflow = createWorkflow({
+        id: 'counter-workflow',
+        inputSchema: z.object({
+          startValue: z.number(),
+        }),
+        outputSchema: z.object({
+          finalValue: z.number(),
+        }),
+      });
+
+      const passthroughStep = createStep({
+        id: 'passthrough',
+        inputSchema: counterWorkflow.inputSchema,
+        outputSchema: counterWorkflow.inputSchema,
+        execute: vi.fn().mockImplementation(async ({ inputData }) => {
+          return inputData;
+        }),
+      });
+
+      const wfA = createWorkflow({
+        id: 'nested-workflow-a',
+        inputSchema: counterWorkflow.inputSchema,
+        outputSchema: finalStep.outputSchema,
+      })
+        .then(startStep)
+        .then(otherStep)
+        .then(finalStep)
+        .commit();
+
+      const wfB = createWorkflow({
+        id: 'nested-workflow-b',
+        inputSchema: counterWorkflow.inputSchema,
+        outputSchema: finalStep.outputSchema,
+      })
+        .then(passthroughStep)
+        .then(wfA)
+        .commit();
+
+      const wfC = createWorkflow({
+        id: 'nested-workflow-c',
+        inputSchema: counterWorkflow.inputSchema,
+        outputSchema: finalStep.outputSchema,
+      })
+        .then(passthroughStep)
+        .then(wfB)
+        .commit();
+
+      counterWorkflow
+        .then(
+          createStep({
+            id: 'begin-step',
+            inputSchema: counterWorkflow.inputSchema,
+            outputSchema: counterWorkflow.inputSchema,
+            execute: begin,
+          }),
+        )
+        .then(wfC)
+        .then(
+          createStep({
+            id: 'last-step',
+            inputSchema: wfA.outputSchema,
+            outputSchema: z.object({ success: z.boolean() }),
+            execute: last,
+          }),
+        )
+        .commit();
+
+      new Mastra({
+        vnext_workflows: { counterWorkflow },
+      });
+
+      const run = counterWorkflow.createRun();
+      const result = await run.start({ inputData: { startValue: 0 } });
+
+      expect(passthroughStep.execute).toHaveBeenCalledTimes(2);
+      expect(result.steps['nested-workflow-c']).toMatchObject({
+        status: 'suspended',
+      });
+
+      // @ts-ignore
+      expect(result.steps['last-step']).toEqual(undefined);
+
+      const resumedResults = await run.resume({ step: [wfC, wfB, wfA, otherStep], resumeData: { newValue: 0 } });
+
+      // @ts-ignore
+      expect(resumedResults.steps['nested-workflow-c'].output).toEqual({
+        finalValue: 26 + 1,
+      });
+
+      expect(start).toHaveBeenCalledTimes(1);
+      expect(other).toHaveBeenCalledTimes(2);
+      expect(final).toHaveBeenCalledTimes(1);
+      expect(last).toHaveBeenCalledTimes(1);
+      expect(passthroughStep.execute).toHaveBeenCalledTimes(2);
     });
   });
 

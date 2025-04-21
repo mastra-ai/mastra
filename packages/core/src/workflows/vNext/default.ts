@@ -592,6 +592,10 @@ export class DefaultExecutionEngine extends ExecutionEngine {
       });
     }
 
+    if (entry.type === 'step' || entry.type === 'loop') {
+      stepResults[entry.step.id] = execResults;
+    }
+
     await this.mastra?.getStorage()?.persistWorkflowSnapshot({
       workflowName: workflowId,
       runId,
@@ -607,7 +611,6 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     });
 
     if (entry.type === 'step' || entry.type === 'loop') {
-      stepResults[entry.step.id] = execResults;
       emitter.emit('watch', {
         type: 'watch',
         payload: {
