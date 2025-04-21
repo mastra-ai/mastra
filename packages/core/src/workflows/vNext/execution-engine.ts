@@ -4,6 +4,7 @@ import { RegisteredLogger } from '../../logger';
 import type { StepResult } from './types';
 import type { NewStep, StepFlowEntry } from '.';
 import type { Mastra } from '../..';
+import type { Container } from '../../di';
 
 /**
  * Represents an execution graph for a workflow
@@ -46,6 +47,7 @@ export abstract class ExecutionEngine extends MastraBase {
       resumePath: number[];
     };
     emitter: EventEmitter;
+    container: Container;
     retryConfig?: {
       attempts?: number;
       delay?: number;

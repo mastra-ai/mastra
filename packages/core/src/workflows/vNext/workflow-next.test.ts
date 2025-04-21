@@ -7,6 +7,7 @@ import { createTool, Mastra, Telemetry } from '../..';
 import { Agent } from '../../agent';
 import { DefaultStorage } from '../../storage/libsql';
 import { createStep, createWorkflow } from './workflow';
+import { Container } from '../../di';
 
 describe('Workflow', () => {
   describe('Basic Workflow Execution', () => {
@@ -3345,6 +3346,90 @@ describe('Workflow', () => {
           output: { success: true },
         });
       });
+    });
+  });
+
+  describe('Dependency Injection', () => {
+    it('should inject container dependencies into steps during run', async () => {
+      const container = new Container();
+      const testValue = 'test-dependency';
+      container.set('testKey', testValue);
+
+      const step = createStep({
+        id: 'step1',
+        execute: async ({ container }) => {
+          const value = container.get('testKey');
+          return { injectedValue: value };
+        },
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+      });
+      const workflow = createWorkflow({ id: 'test-workflow', inputSchema: z.object({}), outputSchema: z.object({}) });
+      workflow.then(step).commit();
+
+      const run = workflow.createRun();
+      const result = await run.start({ container });
+
+      // @ts-ignore
+      expect(result.steps.step1.output.injectedValue).toBe(testValue);
+    });
+
+    it('should inject container dependencies into steps during resume', async () => {
+      const initialStorage = new DefaultStorage({
+        config: {
+          url: 'file::memory:',
+        },
+      });
+      await initialStorage.init();
+
+      const container = new Container();
+      const testValue = 'test-dependency';
+      container.set('testKey', testValue);
+
+      const mastra = new Mastra({
+        logger: false,
+        storage: initialStorage,
+      });
+
+      const execute = vi.fn(async ({ container, suspend, resumeData }) => {
+        if (!resumeData?.human) {
+          await suspend();
+        }
+
+        const value = container.get('testKey');
+        return { injectedValue: value };
+      });
+
+      const step = createStep({
+        id: 'step1',
+        execute,
+        inputSchema: z.object({ human: z.boolean() }),
+        outputSchema: z.object({}),
+      });
+      const workflow = createWorkflow({
+        id: 'test-workflow',
+        mastra,
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+      });
+      workflow.then(step).commit();
+
+      const run = workflow.createRun();
+      await run.start({ container });
+
+      const resumeContainer = new Container();
+      resumeContainer.set('testKey', testValue + '2');
+
+      const result = await run.resume({
+        step: step,
+        resumeData: {
+          human: true,
+        },
+        container: resumeContainer,
+      });
+
+      // @ts-ignore
+      expect(result?.steps.step1.output.injectedValue).toBe(testValue + '2');
     });
   });
 });

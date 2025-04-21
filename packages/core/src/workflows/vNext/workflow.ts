@@ -26,6 +26,7 @@ import type { ToolsInput } from '../../agent/types';
 import type { Metric } from '../../eval';
 import { Tool } from '../../tools';
 import type { ToolExecutionContext } from '../../tools/types';
+import { Container } from '../../di';
 
 export type StepFlowEntry =
   | { type: 'step'; step: Step }
@@ -598,7 +599,7 @@ export class Run<
    * @param input The input data for the workflow
    * @returns A promise that resolves to the workflow output
    */
-  async start({ inputData }: { inputData?: z.infer<TInput> }): Promise<{
+  async start({ inputData, container }: { inputData?: z.infer<TInput>; container?: Container }): Promise<{
     result: TOutput;
     steps: {
       [K in keyof StepsRecord<TSteps>]: StepsRecord<TSteps>[K]['outputSchema'] extends undefined
@@ -624,6 +625,7 @@ export class Run<
       input: inputData,
       emitter: this.emitter,
       retryConfig: this.retryConfig,
+      container: container ?? new Container(),
     });
   }
 
@@ -667,6 +669,7 @@ export class Run<
     step:
       | Step<string, any, any, any, any>
       | [...Step<string, any, any, any, any>[], Step<string, TInput, any, any, any>];
+    container?: Container;
   }): Promise<{
     result: TOutput;
     steps: {
@@ -705,6 +708,7 @@ export class Run<
         resumePath: snapshot?.suspendedPaths?.[steps?.[0]?.id!] as any,
       },
       emitter: this.emitter,
+      container: params.container ?? new Container(),
     });
   }
 
