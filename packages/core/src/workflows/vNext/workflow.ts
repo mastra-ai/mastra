@@ -304,7 +304,15 @@ export class NewWorkflow<
             step: TSteps[number];
             path: PathsToStringProps<ExtractSchemaType<ExtractSchemaFromStep<TSteps[number], 'outputSchema'>>>;
           }
-        | { value: any; schema: z.ZodTypeAny };
+        | { value: any; schema: z.ZodTypeAny }
+        | {
+            initData: TSteps[number];
+            path: PathsToStringProps<ExtractSchemaType<ExtractSchemaFromStep<TSteps[number], 'inputSchema'>>>;
+          }
+        | {
+            containerPath: string;
+            schema: z.ZodTypeAny;
+          };
     },
   >(mappingConfig: TMapping) {
     // Create an implicit step that handles the mapping
@@ -312,7 +320,7 @@ export class NewWorkflow<
       id: `mapping_${randomUUID()}`,
       inputSchema: z.object({}),
       outputSchema: z.object({}),
-      execute: async ({ getStepResult }) => {
+      execute: async ({ getStepResult, initData, container }) => {
         const result: Record<string, any> = {};
         for (const [key, mapping] of Object.entries(mappingConfig)) {
           const m: any = mapping;
@@ -322,7 +330,12 @@ export class NewWorkflow<
             continue;
           }
 
-          const stepResult = getStepResult(m.step);
+          if (m.containerPath) {
+            result[key] = container.get(m.containerPath);
+            continue;
+          }
+
+          const stepResult = m.initData ? initData : getStepResult(m.step);
           const pathParts = m.path.split('.');
           let value: any = stepResult;
           for (const part of pathParts) {
