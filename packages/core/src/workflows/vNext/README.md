@@ -108,11 +108,11 @@ const myStep = createStep({
   suspendSchema: z.object({
     suspendValue: z.string(),
   }),
-  execute: async ({ inputData, mastra, getStepResult, getInitData }) => {
+  execute: async ({ inputData, mastra, getStepResult, getInitData, container }) => {
     const otherStepOutput = getStepResult(step2);
     const initData = getInitData<typeof workflow>(); // typed as the workflow input schema
     return {
-      outputValue: `Processed: ${inputData.inputValue}, ${initData.startValue}`,
+      outputValue: `Processed: ${inputData.inputValue}, ${initData.startValue} (containerValue: ${container.get('containerValue')})`,
     };
   },
 });
@@ -287,6 +287,18 @@ myWorkflow
     transformedValue: {
       step: step1,
       path: 'nestedValue',
+    },
+    containerValue: {
+      containerPath: 'containerValue',
+      schema: z.number(),
+    },
+    constantValue: {
+      value: 42,
+      schema: z.number(),
+    },
+    initDataValue: {
+      initData: myWorkflow,
+      path: 'startValue',
     },
   })
   .then(step2)
