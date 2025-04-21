@@ -1,0 +1,80 @@
+---
+title: "リファレンス：音声イベント | 音声プロバイダー | Mastra ドキュメント"
+description: "音声プロバイダーから発信されるイベントのドキュメント、特にリアルタイム音声インタラクションに関するもの。"
+---
+
+# 音声イベント
+
+音声プロバイダーはリアルタイムの音声インタラクション中に様々なイベントを発生させます。これらのイベントは[voice.on()](./voice.on)メソッドを使用してリッスンすることができ、インタラクティブな音声アプリケーションを構築する上で特に重要です。
+
+## 一般的なイベント
+
+これらのイベントは、リアルタイム音声プロバイダー間で一般的に実装されています：
+
+<PropertiesTable
+  content={[
+    {
+      name: "error",
+      type: "Error",
+      description: "音声処理中にエラーが発生した場合、または音声データ形式がサポートされていない場合に発行されます",
+    },
+    {
+      name: "session.created",
+      type: "object",
+      description: "OpenAIサービスとの新しいセッションが作成されたときに発行されます",
+    },
+    {
+      name: "session.updated",
+      type: "object",
+      description: "セッション設定が更新されたときに発行されます",
+    },
+    {
+      name: "response.created",
+      type: "object",
+      description: "AIアシスタントによって新しい応答が作成されたときに発行されます",
+    },
+    {
+      name: "response.done",
+      type: "object",
+      description: "AIアシスタントが応答を完了したときに発行されます",
+    },
+    {
+      name: "speaker",
+      type: "StreamWithId",
+      description: "音声出力にパイプできる新しい音声ストリームで発行されます",
+    },
+    {
+      name: "writing",
+      type: "object",
+      description: "テキストが文字起こし（ユーザー）または生成（アシスタント）されているときに発行されます",
+    },
+    {
+      name: "speaking",
+      type: "object",
+      description: "音声プロバイダーから音声データが利用可能になったときに発行されます",
+    },
+    {
+      name: "speaking.done",
+      type: "object",
+      description: "音声プロバイダーが発話を終了したときに発行されます",
+    },
+    {
+      name: "tool-call-start",
+      type: "object",
+      description: "AIアシスタントがツールの実行を開始したときに発行されます",
+    },
+    {
+      name: "tool-call-result",
+      type: "object",
+      description: "ツールの実行が結果とともに完了したときに発行されます",
+    }
+  ]}
+/>
+
+## 注意事項
+
+- すべてのイベントがすべての音声プロバイダーでサポートされているわけではありません
+- ペイロード構造はプロバイダーによって異なる場合があります
+- リアルタイムではないプロバイダーの場合、これらのイベントの多くは発生しません
+- イベントは会話の状態に応答するインタラクティブなUIを構築するのに役立ちます
+- イベントリスナーが不要になった場合は、[voice.off()](./voice.off)メソッドを使用してリスナーを削除することを検討してください

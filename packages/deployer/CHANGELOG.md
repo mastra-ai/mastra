@@ -1,5 +1,41 @@
 # @mastra/deployer
 
+## 0.3.0-alpha.8
+
+### Patch Changes
+
+- Updated dependencies [71d9444]
+  - @mastra/core@0.9.0-alpha.7
+  - @mastra/server@2.0.0-alpha.7
+
+## 0.3.0-alpha.7
+
+### Patch Changes
+
+- 63fe16a: Support monorepo workspace packages with native bindings
+- 735ead7: Add support for process.env.development
+- Updated dependencies [157c741]
+  - @mastra/core@0.9.0-alpha.6
+  - @mastra/server@2.0.0-alpha.6
+
+## 0.3.0-alpha.6
+
+### Patch Changes
+
+- 3f9d151: Add support for tsconfig paths in server-configuration
+- Updated dependencies [08bb78e]
+  - @mastra/core@0.9.0-alpha.5
+  - @mastra/server@2.0.0-alpha.5
+
+## 0.3.0-alpha.5
+
+### Patch Changes
+
+- 7e92011: Include tools with deployment builds
+- Updated dependencies [7e92011]
+  - @mastra/core@0.9.0-alpha.4
+  - @mastra/server@2.0.0-alpha.4
+
 ## 0.3.0-alpha.4
 
 ### Minor Changes

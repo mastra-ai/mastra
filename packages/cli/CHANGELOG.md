@@ -1,5 +1,42 @@
 # mastra
 
+## 0.5.0-alpha.8
+
+### Patch Changes
+
+- Updated dependencies [71d9444]
+  - @mastra/core@0.9.0-alpha.7
+  - @mastra/deployer@0.3.0-alpha.8
+
+## 0.5.0-alpha.7
+
+### Patch Changes
+
+- 735ead7: Add support for process.env.development
+- Updated dependencies [157c741]
+- Updated dependencies [63fe16a]
+- Updated dependencies [735ead7]
+  - @mastra/core@0.9.0-alpha.6
+  - @mastra/deployer@0.3.0-alpha.7
+
+## 0.5.0-alpha.6
+
+### Patch Changes
+
+- Updated dependencies [08bb78e]
+- Updated dependencies [3f9d151]
+  - @mastra/core@0.9.0-alpha.5
+  - @mastra/deployer@0.3.0-alpha.6
+
+## 0.5.0-alpha.5
+
+### Patch Changes
+
+- 7e92011: Include tools with deployment builds
+- Updated dependencies [7e92011]
+  - @mastra/deployer@0.3.0-alpha.5
+  - @mastra/core@0.9.0-alpha.4
+
 ## 0.5.0-alpha.4
 
 ### Minor Changes

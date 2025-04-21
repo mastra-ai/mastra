@@ -1,0 +1,153 @@
+---
+title: "Runtime variables - dependency injection | Workflows | Mastra Docs"
+description: Learn how to use Mastra's dependency injection system to provide runtime configuration to workflows and steps.
+---
+
+# Workflow Runtime Variables
+
+Mastra provides a powerful dependency injection system that enables you to configure your workflows and steps with runtime variables. This feature is essential for creating flexible and reusable workflows that can adapt their behavior based on runtime configuration.
+
+## Overview
+
+The dependency injection system allows you to:
+
+1. Pass runtime configuration variables to workflows through a type-safe container
+2. Access these variables within step execution contexts
+3. Modify workflow behavior without changing the underlying code
+4. Share configuration across multiple steps within the same workflow
+
+## Basic Usage
+
+```typescript
+const myWorkflow = mastra.getWorkflow("myWorkflow");
+const { runId, start, resume } = myWorkflow.createRun();
+
+// Define your container's type structure
+type WorkflowContainer = {
+  multiplier: number;
+}
+
+const container = new Container<WorkflowContainer>();
+container.set("multiplier", 5);
+
+// Start the workflow execution with container
+await start({
+  triggerData: { inputValue: 45 },
+  container
+});
+```
+
+## Using with REST API
+
+Here's how to dynamically set a multiplier value from an HTTP header:
+
+```typescript filename="src/index.ts"
+import { Mastra } from "@mastra/core";
+import { Container } from "@mastra/core/di";
+import { workflow as myWorkflow } from "./workflows";
+
+// Define container type with clear, descriptive types
+type WorkflowContainer = {
+  multiplier: number;
+}
+
+export const mastra = new Mastra({
+  workflows: {
+    myWorkflow,
+  },
+  server: {
+    middleware: [
+      async (c, next) => {
+        const multiplier = c.req.header("x-multiplier");
+        const container = c.get<WorkflowContainer>("container");
+
+        // Parse and validate the multiplier value
+        const multiplierValue = parseInt(multiplier || "1", 10);
+        if (isNaN(multiplierValue)) {
+          throw new Error("Invalid multiplier value");
+        }
+
+        container.set("multiplier", multiplierValue);
+
+        await next();  // Don't forget to call next()
+      },
+    ],
+  },
+});
+```
+
+## Creating Steps with Variables
+
+Steps can access container variables and must conform to the workflow's container type:
+
+```typescript
+import { Step } from "@mastra/core/workflow";
+import { z } from "zod";
+
+// Define step input/output types
+interface StepInput {
+  inputValue: number;
+}
+
+interface StepOutput {
+  incrementedValue: number;
+}
+
+const stepOne = new Step({
+  id: "stepOne",
+  description: "Multiply the input value by the configured multiplier",
+  execute: async ({ context, container }) => {
+    try {
+      // Type-safe access to container variables
+      const multiplier = container.get("multiplier");
+      if (multiplier === undefined) {
+        throw new Error("Multiplier not configured in container");
+      }
+
+      // Get and validate input
+      const inputValue = context.getStepResult<StepInput>('trigger')?.inputValue;
+      if (inputValue === undefined) {
+        throw new Error("Input value not provided");
+      }
+
+      const result: StepOutput = {
+        incrementedValue: inputValue * multiplier,
+      };
+
+      return result;
+    } catch (error) {
+      console.error(`Error in stepOne: ${error.message}`);
+      throw error;
+    }
+  },
+});
+```
+
+## Error Handling
+
+When working with runtime variables in workflows, it's important to handle potential errors:
+
+1. **Missing Variables**: Always check if required variables exist in the container
+2. **Type Mismatches**: Use TypeScript's type system to catch type errors at compile time
+3. **Invalid Values**: Validate variable values before using them in your steps
+
+```typescript
+// Example of defensive programming with container variables
+const multiplier = container.get("multiplier");
+if (multiplier === undefined) {
+  throw new Error("Multiplier not configured in container");
+}
+
+// Type and value validation
+if (typeof multiplier !== "number" || multiplier <= 0) {
+  throw new Error(`Invalid multiplier value: ${multiplier}`);
+}
+```
+
+## Best Practices
+
+1. **Type Safety**: Always define proper types for your container and step inputs/outputs
+2. **Validation**: Validate all inputs and container variables before using them
+3. **Error Handling**: Implement proper error handling in your steps
+4. **Documentation**: Document the expected container variables for each workflow
+5. **Default Values**: Provide sensible defaults when possible

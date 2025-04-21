@@ -11,6 +11,7 @@ describe('commonjs', () => {
 
   beforeAll(async () => {
     fixturePath = await mkdtemp(join(tmpdir(), 'mastra-commonjs-test-'));
+    console.log({ fixturePath });
     await setupTestProject(fixturePath);
   }, 60 * 1000);
 

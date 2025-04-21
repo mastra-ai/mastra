@@ -1,5 +1,34 @@
 # @mastra/pg
 
+## 0.3.0-alpha.7
+
+### Patch Changes
+
+- Updated dependencies [71d9444]
+  - @mastra/core@0.9.0-alpha.7
+
+## 0.3.0-alpha.6
+
+### Patch Changes
+
+- Updated dependencies [157c741]
+  - @mastra/core@0.9.0-alpha.6
+
+## 0.3.0-alpha.5
+
+### Patch Changes
+
+- Updated dependencies [08bb78e]
+  - @mastra/core@0.9.0-alpha.5
+
+## 0.3.0-alpha.4
+
+### Patch Changes
+
+- 373458f: updated schema for storage config to align with pgvector and added validation for pg connections
+- Updated dependencies [7e92011]
+  - @mastra/core@0.9.0-alpha.4
+
 ## 0.3.0-alpha.3
 
 ### Minor Changes

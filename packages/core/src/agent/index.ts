@@ -301,7 +301,6 @@ export class Agent<
               }
             : null,
           ...processedMessages,
-          ...newMessages,
         ].filter((message): message is NonNullable<typeof message> => Boolean(message)),
       };
     }
@@ -313,15 +312,16 @@ export class Agent<
     response,
     threadId,
     resourceId,
+    now,
   }: {
     response: any; // why??
     threadId: string;
     resourceId: string;
+    now: number;
   }) {
     if (!response.messages) return [];
     const messagesArray = Array.isArray(response.messages) ? response.messages : [response.messages];
 
-    const now = Date.now();
     return this.sanitizeResponseMessages(messagesArray).map((message: CoreMessage | CoreAssistantMessage, index) => {
       const messageId = randomUUID();
       let toolCallIds: string[] | undefined;
@@ -824,6 +824,7 @@ export class Agent<
                 };
               },
             );
+            const dateResponseMessagesFrom = (threadMessages.at(-1)?.createdAt?.getTime?.() || Date.now()) + 1;
 
             // renaming the thread doesn't need to block finishing the req
             void (async () => {
@@ -847,7 +848,12 @@ export class Agent<
             await memory.saveMessages({
               messages: [
                 ...threadMessages,
-                ...this.getResponseMessages({ threadId, resourceId, response: result.response }),
+                ...this.getResponseMessages({
+                  threadId,
+                  resourceId,
+                  response: result.response,
+                  now: dateResponseMessagesFrom,
+                }),
               ],
               memoryConfig,
             });

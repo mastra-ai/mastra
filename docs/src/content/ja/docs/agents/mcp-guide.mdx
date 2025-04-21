@@ -1,0 +1,215 @@
+---
+title: "MCPをMastraで使用する | エージェント | Mastraドキュメント"
+description: "MastraでMCPを使用して、AIエージェントにサードパーティのツールやリソースを統合します。"
+---
+
+# Mastraでのモデルコンテキストプロトコル（MCP）の使用
+
+[モデルコンテキストプロトコル（MCP）](https://modelcontextprotocol.io/introduction)は、AIモデルが外部ツールやリソースを発見し、相互作用するための標準化された方法です。
+
+## 概要
+
+MastraのMCPは、ツールサーバーに接続するための標準化された方法を提供し、stdioとSSEベースの接続の両方をサポートしています。
+
+## インストール
+
+pnpmを使用する場合：
+
+```bash
+pnpm add @mastra/mcp@latest
+```
+
+npmを使用する場合：
+
+```bash
+npm install @mastra/mcp@latest
+```
+
+## コード内でMCPを使用する
+
+`MCPConfiguration`クラスは、複数のMCPクライアントを管理することなく、Mastraアプリケーションで複数のツールサーバーを管理する方法を提供します。stdioベースとSSEベースの両方のサーバーを設定できます：
+
+```typescript
+import { MCPConfiguration } from "@mastra/mcp";
+import { Agent } from "@mastra/core/agent";
+import { openai } from "@ai-sdk/openai";
+
+const mcp = new MCPConfiguration({
+  servers: {
+    // stdio example
+    sequential: {
+      name: "sequential-thinking",
+      server: {
+        command: "npx",
+        args: ["-y", "@modelcontextprotocol/server-sequential-thinking"],
+      },
+    },
+    // SSE example
+    weather: {
+      url: new URL("http://localhost:8080/sse"),
+      requestInit: {
+        headers: {
+          Authorization: "Bearer your-token",
+        },
+      },
+    },
+  },
+});
+```
+
+### ツールとツールセット
+
+`MCPConfiguration`クラスはMCPツールにアクセスするための2つの方法を提供しており、それぞれ異なるユースケースに適しています：
+
+#### ツールの使用（`getTools()`）
+
+以下の場合にこのアプローチを使用します：
+
+- 単一のMCP接続がある場合
+- ツールが単一のユーザー/コンテキストによって使用される場合
+- ツール設定（APIキー、認証情報）が一定である場合
+- 固定されたツールセットでAgentを初期化したい場合
+
+```typescript
+const agent = new Agent({
+  name: "CLI Assistant",
+  instructions: "You help users with CLI tasks",
+  model: openai("gpt-4o-mini"),
+  tools: await mcp.getTools(), // ツールはエージェント作成時に固定されます
+});
+```
+
+#### ツールセットの使用（`getToolsets()`）
+
+以下の場合にこのアプローチを使用します：
+
+- リクエストごとのツール設定が必要な場合
+- ツールがユーザーごとに異なる認証情報を必要とする場合
+- マルチユーザー環境（Webアプリ、APIなど）で実行する場合
+- ツール設定を動的に変更する必要がある場合
+
+```typescript
+const mcp = new MCPConfiguration({
+  servers: {
+    example: {
+      command: "npx",
+      args: ["-y", "@example/fakemcp"],
+      env: {
+        API_KEY: "your-api-key",
+      },
+    },
+  },
+});
+
+// このユーザー用に設定された現在のツールセットを取得
+const toolsets = await mcp.getToolsets();
+
+// ユーザー固有のツール設定でエージェントを使用
+const response = await agent.stream(
+  "What's new in Mastra and how's the weather?",
+  {
+    toolsets,
+  },
+);
+```
+
+## MCP レジストリ
+
+MCPサーバーは、厳選されたツールコレクションを提供するレジストリを通じてアクセスできます。
+私たちは、最適なMCPサーバーの調達先を見つけるのに役立つ[MCP レジストリ レジストリ](/mcp-registry-registry)を厳選しましたが、以下では私たちのお気に入りのいくつかからツールを使用する方法を紹介します：
+
+### mcp.run レジストリ
+
+[mcp.run](https://www.mcp.run/)を使用すると、事前認証された安全なMCPサーバーを簡単に呼び出すことができます。mcp.runのツールは無料で、完全に管理されているため、エージェントはSSE URLだけを必要とし、ユーザーがインストールしたどのツールでも使用できます。MCPサーバーは[プロファイル](https://docs.mcp.run/user-guide/manage-profiles)にグループ化され、固有のSSE URLでアクセスされます。
+
+各プロファイルについて、固有の署名付きURLをコピー/ペーストして、次のように`MCPConfiguration`に設定できます：
+
+```typescript
+const mcp = new MCPConfiguration({
+  servers: {
+    marketing: {
+      url: new URL(process.env.MCP_RUN_SSE_URL!),
+    },
+  },
+});
+```
+
+> 重要：[mcp.run](https://mcp.run)の各SSE URLには、パスワードのように扱うべき固有の署名が含まれています。SSE URLを環境変数として読み込み、アプリケーションコードの外部で管理することをお勧めします。
+
+```bash filename=".env" copy
+MCP_RUN_SSE_URL=https://www.mcp.run/api/mcp/sse?nonce=...
+```
+
+### Composio.dev レジストリ
+
+[Composio.dev](https://composio.dev)は、Mastraと簡単に統合できる[SSEベースのMCPサーバー](https://mcp.composio.dev)のレジストリを提供しています。Cursor用に生成されるSSE URLはMastraと互換性があり、設定で直接使用できます：
+
+```typescript
+const mcp = new MCPConfiguration({
+  servers: {
+    googleSheets: {
+      url: new URL("https://mcp.composio.dev/googlesheets/[private-url-path]"),
+    },
+    gmail: {
+      url: new URL("https://mcp.composio.dev/gmail/[private-url-path]"),
+    },
+  },
+});
+```
+
+Composio提供のツールを使用する場合、エージェントとの会話を通じて直接サービス（Google SheetsやGmailなど）で認証できます。ツールには認証機能が含まれており、チャット中にプロセスをガイドします。
+
+注意：Composio.dev統合は、SSE URLがあなたのアカウントに紐づけられており、複数のユーザーには使用できないため、個人的な自動化などの単一ユーザーシナリオに最適です。各URLは単一アカウントの認証コンテキストを表します。
+
+### Smithery.ai レジストリ
+
+[Smithery.ai](https://smithery.ai)はMastraで簡単に使用できるMCPサーバーのレジストリを提供しています：
+
+```typescript
+// Unix/Mac
+const mcp = new MCPConfiguration({
+  servers: {
+    sequentialThinking: {
+      command: "npx",
+      args: [
+        "-y",
+        "@smithery/cli@latest",
+        "run",
+        "@smithery-ai/server-sequential-thinking",
+        "--config",
+        "{}",
+      ],
+    },
+  },
+});
+
+// Windows
+const mcp = new MCPConfiguration({
+  servers: {
+    sequentialThinking: {
+      command: "cmd",
+      args: [
+        "/c",
+        "npx",
+        "-y",
+        "@smithery/cli@latest",
+        "run",
+        "@smithery-ai/server-sequential-thinking",
+        "--config",
+        "{}",
+      ],
+    },
+  },
+});
+```
+
+この例は、Smitheryドキュメントのクロード統合例から適応されています。
+
+## Mastraドキュメンテーションサーバーの使用
+
+IDEでMastraのMCPドキュメンテーションサーバーを使用したいですか？[MCPドキュメンテーションサーバーガイド](/docs/getting-started/mcp-docs-server)をチェックして始めましょう。
+
+## 次のステップ
+
+- [MCPConfiguration](/reference/tools/mcp-configuration)についてもっと学ぶ
+- MCPを使用した[サンプルプロジェクト](/examples)をチェックする

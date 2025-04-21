@@ -1,5 +1,34 @@
 # @mastra/memory
 
+## 0.3.0-alpha.8
+
+### Patch Changes
+
+- 71d9444: updated savemessage to not use mutation when hiding working memory
+- Updated dependencies [71d9444]
+  - @mastra/core@0.9.0-alpha.7
+
+## 0.3.0-alpha.7
+
+### Patch Changes
+
+- Updated dependencies [157c741]
+  - @mastra/core@0.9.0-alpha.6
+
+## 0.3.0-alpha.6
+
+### Patch Changes
+
+- Updated dependencies [08bb78e]
+  - @mastra/core@0.9.0-alpha.5
+
+## 0.3.0-alpha.5
+
+### Patch Changes
+
+- Updated dependencies [7e92011]
+  - @mastra/core@0.9.0-alpha.4
+
 ## 0.3.0-alpha.4
 
 ### Minor Changes
