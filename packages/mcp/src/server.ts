@@ -70,13 +70,6 @@ export class MCPServer {
    */
   private convertTools(tools: ToolsInput): Record<string, ConvertedTool> {
     const convertedTools: Record<string, ConvertedTool> = {};
-    const passthroughSchema = z.object({
-      passthrough: z
-        .string()
-        .describe(
-          'This parameter is required only to satisfy interface constraints. It is ignored by the tool logic and can be any string.',
-        ),
-    });
     for (const toolName of Object.keys(tools)) {
       let inputSchema: any;
       let zodSchema: z.ZodTypeAny;
@@ -98,12 +91,12 @@ export class MCPServer {
           zodSchema = resolveSerializedZodOutput(jsonSchemaToZod(toolInstance.parameters));
           inputSchema = toolInstance.parameters;
         } else {
-          zodSchema = passthroughSchema;
+          zodSchema = z.object({});
           inputSchema = zodToJsonSchema(zodSchema);
         }
       } else {
         // Mastra tools: .inputSchema is always Zod
-        zodSchema = toolInstance?.inputSchema ?? passthroughSchema;
+        zodSchema = toolInstance?.inputSchema ?? z.object({});
         inputSchema = zodToJsonSchema(zodSchema);
       }
 
@@ -159,7 +152,7 @@ export class MCPServer {
           };
         }
         await logger.debug(`CallTool: Invoking '${request.params.name}' with arguments:`, request.params.arguments);
-        const args = tool.zodSchema.parse(request.params.arguments);
+        const args = tool.zodSchema.parse(request.params.arguments ?? {});
         const result = await tool.execute(args, request.params);
         const duration = Date.now() - startTime;
         await logger.info(`Tool '${request.params.name}' executed successfully in ${duration}ms.`);
