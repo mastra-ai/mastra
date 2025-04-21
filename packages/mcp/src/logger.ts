@@ -35,7 +35,7 @@ export const writeErrorLog = (message: string, data?: any) => {
     // Append log entry to file
     fs.appendFileSync(logFile, JSON.stringify(logMessage) + '\n', 'utf8');
   } catch (err) {
-    // If file writing fails, at least we still have stdout
+    // If file writing fails, at least we still have stderr
     console.error('Failed to write to log file:', err);
   }
 };
@@ -68,9 +68,13 @@ export function createLogger(server?: Server): Logger {
 
   return {
     info: async (message: string, data?: any) => {
+      // Log to stderr to avoid MCP protocol conflicts on stdout
+      console.error(message, data ? data : '');
       await sendLog('info', message, data);
     },
     warning: async (message: string, data?: any) => {
+      // Log to stderr to avoid MCP protocol conflicts on stdout
+      console.error(message, data ? data : '');
       await sendLog('warning', message, data);
     },
     error: async (message: string, error?: any) => {
@@ -83,10 +87,13 @@ export function createLogger(server?: Server): Logger {
             }
           : error;
       writeErrorLog(message, errorData);
+      console.error(message, errorData ? errorData : '');
       await sendLog('error', message, errorData);
     },
     debug: async (message: string, data?: any) => {
       if (process.env.DEBUG || process.env.NODE_ENV === 'development') {
+        // Log to stderr to avoid MCP protocol conflicts on stdout
+        console.error(message, data ? data : '');
         await sendLog('debug', message, data);
       }
     },

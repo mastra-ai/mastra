@@ -70,6 +70,13 @@ export class MCPServer {
    */
   private convertTools(tools: ToolsInput): Record<string, ConvertedTool> {
     const convertedTools: Record<string, ConvertedTool> = {};
+    const passthroughSchema = z.object({
+      passthrough: z
+        .string()
+        .describe(
+          'This parameter is required only to satisfy interface constraints. It is ignored by the tool logic and can be any string.',
+        ),
+    });
     for (const toolName of Object.keys(tools)) {
       let inputSchema: any;
       let zodSchema: z.ZodTypeAny;
@@ -91,12 +98,12 @@ export class MCPServer {
           zodSchema = resolveSerializedZodOutput(jsonSchemaToZod(toolInstance.parameters));
           inputSchema = toolInstance.parameters;
         } else {
-          zodSchema = z.object({});
+          zodSchema = passthroughSchema;
           inputSchema = zodToJsonSchema(zodSchema);
         }
       } else {
         // Mastra tools: .inputSchema is always Zod
-        zodSchema = toolInstance?.inputSchema ?? z.object({});
+        zodSchema = toolInstance?.inputSchema ?? passthroughSchema;
         inputSchema = zodToJsonSchema(zodSchema);
       }
 
@@ -225,7 +232,7 @@ export class MCPServer {
     res: any;
   }) {
     if (url.pathname === ssePath) {
-      console.log('Received SSE connection');
+      await logger.debug('Received SSE connection');
       this.sseTransport = new SSEServerTransport(messagePath, res);
       await this.server.connect(this.sseTransport);
 
@@ -237,7 +244,7 @@ export class MCPServer {
         this.sseTransport = undefined;
       });
     } else if (url.pathname === messagePath) {
-      console.log('Received message');
+      await logger.debug('Received message');
       if (!this.sseTransport) {
         res.writeHead(503);
         res.end('SSE connection not established');
@@ -245,7 +252,7 @@ export class MCPServer {
       }
       await this.sseTransport.handlePostMessage(req, res);
     } else {
-      console.log('Unknown path:', url.pathname);
+      await logger.debug('Unknown path:', url.pathname);
       res.writeHead(404);
       res.end();
     }
