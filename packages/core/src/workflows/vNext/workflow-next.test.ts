@@ -292,6 +292,64 @@ describe('Workflow', () => {
         expect(result.steps.step2).toEqual({ status: 'success', output: { result: { cool: 'test-input' } } });
       });
 
+      it('should resolve trigger data and DI container values via .map()', async () => {
+        const execute = vi.fn<any>().mockResolvedValue({ result: 'success' });
+        const triggerSchema = z.object({
+          cool: z.string(),
+        });
+
+        const step1 = createStep({
+          id: 'step1',
+          execute,
+          inputSchema: triggerSchema,
+          outputSchema: z.object({ result: z.string() }),
+        });
+
+        const step2 = createStep({
+          id: 'step2',
+          execute: async ({ inputData }) => {
+            return { result: inputData.test, second: inputData.test2 };
+          },
+          inputSchema: z.object({ test: z.string(), test2: z.number() }),
+          outputSchema: z.object({ result: z.string(), second: z.number() }),
+        });
+
+        const workflow = createWorkflow({
+          id: 'test-workflow',
+          inputSchema: triggerSchema,
+          outputSchema: z.object({ result: z.string(), second: z.number() }),
+        });
+
+        workflow
+          .then(step1)
+          .map({
+            test: {
+              initData: workflow,
+              path: 'cool',
+            },
+            test2: {
+              containerPath: 'life',
+              schema: z.number(),
+            },
+          })
+          .then(step2)
+          .commit();
+
+        const container = new Container<{ life: number }>();
+        container.set('life', 42);
+
+        const run = workflow.createRun();
+        const result = await run.start({ inputData: { cool: 'test-input' }, container });
+
+        expect(execute).toHaveBeenCalledWith(
+          expect.objectContaining({
+            inputData: { cool: 'test-input' },
+          }),
+        );
+
+        expect(result.steps.step2).toEqual({ status: 'success', output: { result: 'test-input', second: 42 } });
+      });
+
       it('should resolve variables from previous steps', async () => {
         const step1Action = vi.fn<any>().mockResolvedValue({
           nested: { value: 'step1-data' },

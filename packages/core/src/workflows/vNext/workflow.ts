@@ -320,7 +320,7 @@ export class NewWorkflow<
       id: `mapping_${randomUUID()}`,
       inputSchema: z.object({}),
       outputSchema: z.object({}),
-      execute: async ({ getStepResult, initData, container }) => {
+      execute: async ({ getStepResult, getInitData, container }) => {
         const result: Record<string, any> = {};
         for (const [key, mapping] of Object.entries(mappingConfig)) {
           const m: any = mapping;
@@ -335,7 +335,7 @@ export class NewWorkflow<
             continue;
           }
 
-          const stepResult = m.initData ? initData : getStepResult(m.step);
+          const stepResult = m.initData ? getInitData() : getStepResult(m.step);
           const pathParts = m.path.split('.');
           let value: any = stepResult;
           for (const part of pathParts) {
@@ -359,9 +359,16 @@ export class NewWorkflow<
           path: PathsToStringProps<ExtractSchemaType<ExtractSchemaFromStep<TSteps[number], 'outputSchema'>>>;
         }
           ? ZodPathType<TMapping[K]['step']['outputSchema'], TMapping[K]['path']>
-          : TMapping[K] extends { value: any; schema: z.ZodTypeAny }
-            ? TMapping[K]['schema']
-            : never;
+          : TMapping[K] extends {
+                initData: TSteps[number];
+                path: PathsToStringProps<ExtractSchemaType<ExtractSchemaFromStep<TSteps[number], 'inputSchema'>>>;
+              }
+            ? ZodPathType<TMapping[K]['initData']['inputSchema'], TMapping[K]['path']>
+            : TMapping[K] extends { value: any; schema: z.ZodTypeAny }
+              ? TMapping[K]['schema']
+              : TMapping[K] extends { containerPath: string; schema: z.ZodTypeAny }
+                ? TMapping[K]['schema']
+                : never;
       },
       any,
       z.ZodTypeAny
