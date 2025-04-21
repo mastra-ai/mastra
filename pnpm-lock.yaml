@@ -11,10 +11,6 @@ overrides:
 importers:
 
   .:
-    dependencies:
-      '@mastra/cloud':
-        specifier: link:mastra-cloud
-        version: link:mastra-cloud
     devDependencies:
       '@changesets/cli':
         specifier: ^2.28.1
