@@ -19,7 +19,7 @@ export type ExecuteFunction<TStepInput, TStepOutput, TResumeSchema, TSuspendSche
   // TODO: should this be a schema you can define on the step?
   suspend(suspendPayload: TSuspendSchema): Promise<void>;
   resume?: {
-    steps: NewStep<string, any, any>[];
+    steps: string[];
     resumePayload: any;
   };
   emitter: EventEmitter;

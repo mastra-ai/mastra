@@ -41,7 +41,7 @@ export abstract class ExecutionEngine extends MastraBase {
     graph: ExecutionGraph;
     input?: TInput;
     resume?: {
-      steps: NewStep<string, any, any>[];
+      steps: string[];
       stepResults: Record<string, StepResult<any>>;
       resumePayload: any;
       resumePath: number[];

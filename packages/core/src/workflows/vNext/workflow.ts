@@ -390,7 +390,7 @@ export class NewWorkflow<
         {
           [K in keyof StepsRecord<TParallelSteps>]: StepsRecord<TParallelSteps>[K]['outputSchema']['path'];
         },
-        'strip',
+        any,
         z.ZodTypeAny
       >
     >;
@@ -424,7 +424,7 @@ export class NewWorkflow<
         {
           [K in keyof StepsRecord<ExtractedSteps[]>]: StepsRecord<ExtractedSteps[]>[K]['outputSchema'];
         },
-        'strip',
+        any,
         z.ZodTypeAny
       >
     >;
@@ -501,7 +501,7 @@ export class NewWorkflow<
     ): T['outputSchema'] extends undefined ? unknown : z.infer<NonNullable<T['outputSchema']>>;
     suspend: (suspendPayload: any) => Promise<void>;
     resume?: {
-      steps: NewStep<string, any, any>[];
+      steps: string[];
       resumePayload: any;
       runId?: string;
     };
@@ -620,7 +620,9 @@ export class Run<
    * @returns A promise that resolves to the workflow output
    */
   async start({ inputData, container }: { inputData?: z.infer<TInput>; container?: Container }): Promise<{
+    status: 'success' | 'failed' | 'suspended';
     result: TOutput;
+    suspended?: string[];
     steps: {
       [K in keyof StepsRecord<TSteps>]: StepsRecord<TSteps>[K]['outputSchema'] extends undefined
         ? StepResult<unknown>
@@ -632,6 +634,8 @@ export class Run<
       z.infer<TInput>,
       {
         result: TOutput;
+        status: 'success' | 'failed' | 'suspended';
+        suspended?: string[];
         steps: {
           [K in keyof StepsRecord<TSteps>]: StepsRecord<TSteps>[K]['outputSchema'] extends undefined
             ? StepResult<unknown>
@@ -684,11 +688,13 @@ export class Run<
     };
   }
 
-  async resume<TInput extends z.ZodObject<any>>(params: {
-    resumeData?: z.infer<TInput>;
+  async resume<TResumeSchema extends z.ZodObject<any>>(params: {
+    resumeData?: z.infer<TResumeSchema>;
     step:
-      | Step<string, any, any, any, any>
-      | [...Step<string, any, any, any, any>[], Step<string, TInput, any, any, any>];
+      | Step<string, any, any, TResumeSchema, any>
+      | [...Step<string, any, any, any, any>[], Step<string, TInput, any, TResumeSchema, any>]
+      | string
+      | string[];
     container?: Container;
   }): Promise<{
     result: TOutput;
@@ -699,7 +705,9 @@ export class Run<
     };
     error?: string;
   }> {
-    const steps = Array.isArray(params.step) ? params.step : [params.step];
+    const steps: string[] = (Array.isArray(params.step) ? params.step : [params.step]).map(step =>
+      typeof step === 'string' ? step : step?.id,
+    );
     const snapshot = await this.#mastra?.storage?.loadWorkflowSnapshot({
       workflowName: this.workflowId,
       runId: this.runId,
@@ -725,7 +733,7 @@ export class Run<
         stepResults: snapshot?.context as any,
         resumePayload: params.resumeData,
         // @ts-ignore
-        resumePath: snapshot?.suspendedPaths?.[steps?.[0]?.id!] as any,
+        resumePath: snapshot?.suspendedPaths?.[steps?.[0]] as any,
       },
       emitter: this.emitter,
       container: params.container ?? new Container(),

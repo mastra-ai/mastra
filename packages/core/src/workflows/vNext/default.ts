@@ -15,6 +15,33 @@ type ExecutionContext = {
   };
 };
 
+function fmtReturnValue<TOutput>(
+  stepResults: Record<string, StepResult<any>>,
+  lastOutput: StepResult<any>,
+  error?: Error | string,
+): TOutput {
+  const base: any = {
+    status: lastOutput.status,
+    steps: stepResults,
+  };
+  if (lastOutput.status === 'success') {
+    base.result = lastOutput.output;
+  } else if (lastOutput.status === 'failed') {
+    base.error = error instanceof Error ? error.message : (error ?? lastOutput.error ?? 'Unknown error');
+  } else if (lastOutput.status === 'suspended') {
+    const suspendedStepIds = Object.entries(stepResults).flatMap(([stepId, stepResult]) => {
+      if (stepResult?.status === 'suspended') {
+        return [stepId];
+      }
+
+      return [];
+    });
+    base.suspended = suspendedStepIds;
+  }
+
+  return base as TOutput;
+}
+
 /**
  * Default implementation of the ExecutionEngine using XState
  */
@@ -32,7 +59,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     input?: TInput;
     resume?: {
       // TODO: add execute path
-      steps: NewStep<string, any, any>[];
+      steps: string[];
       stepResults: Record<string, StepResult<any>>;
       resumePayload: any;
       resumePath: number[];
@@ -44,7 +71,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     };
     container: Container;
   }): Promise<TOutput> {
-    const { workflowId, runId, graph, input, resume, retryConfig, container } = params;
+    const { workflowId, runId, graph, input, resume, retryConfig } = params;
     const { attempts = 0, delay = 0 } = retryConfig ?? {};
     const steps = graph.steps;
 
@@ -99,11 +126,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
               eventTimestamp: Date.now(),
             });
           }
-          return {
-            steps: stepResults,
-            result: null,
-            error: lastOutput.error,
-          } as TOutput;
+          return fmtReturnValue(stepResults, lastOutput);
         }
       } catch (e) {
         if (entry.type === 'step') {
@@ -125,17 +148,11 @@ export class DefaultExecutionEngine extends ExecutionEngine {
           });
         }
 
-        return {
-          steps: stepResults,
-          result: null,
-          error: e instanceof Error ? e.message : 'Unknown error',
-        } as TOutput;
+        return fmtReturnValue(stepResults, lastOutput, e as Error);
       }
     }
 
-    const res = { steps: stepResults, result: lastOutput.output };
-
-    return res as TOutput;
+    return fmtReturnValue(stepResults, lastOutput);
   }
 
   getStepOutput(stepResults: Record<string, any>, step?: StepFlowEntry): any {
@@ -176,7 +193,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     stepResults: Record<string, StepResult<any>>;
     executionContext: ExecutionContext;
     resume?: {
-      steps: NewStep<string, any, any>[];
+      steps: string[];
       resumePayload: any;
     };
     prevOutput: any;
@@ -195,7 +212,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
           mastra: this.mastra!,
           container,
           inputData: prevOutput,
-          resumeData: resume?.steps[0]!.id === step.id ? resume?.resumePayload : undefined,
+          resumeData: resume?.steps[0] === step.id ? resume?.resumePayload : undefined,
           getInitData: () => stepResults?.input as any,
           getStepResult: (step: any) => {
             const result = stepResults[step.id];
@@ -250,7 +267,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     prevStep: StepFlowEntry;
     stepResults: Record<string, StepResult<any>>;
     resume?: {
-      steps: NewStep<string, any, any>[];
+      steps: string[];
       stepResults: Record<string, StepResult<any>>;
       resumePayload: any;
       resumePath: number[];
@@ -321,7 +338,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     prevOutput: any;
     stepResults: Record<string, StepResult<any>>;
     resume?: {
-      steps: NewStep<string, any, any>[];
+      steps: string[];
       stepResults: Record<string, StepResult<any>>;
       resumePayload: any;
       resumePath: number[];
@@ -429,7 +446,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     prevOutput: any;
     stepResults: Record<string, StepResult<any>>;
     resume?: {
-      steps: NewStep<string, any, any>[];
+      steps: string[];
       stepResults: Record<string, StepResult<any>>;
       resumePayload: any;
       resumePath: number[];
@@ -495,7 +512,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     prevStep: StepFlowEntry;
     stepResults: Record<string, StepResult<any>>;
     resume?: {
-      steps: NewStep<string, any, any>[];
+      steps: string[];
       stepResults: Record<string, StepResult<any>>;
       resumePayload: any;
       resumePath: number[];

@@ -1404,13 +1404,17 @@ describe('Workflow', () => {
     it('should retry a step default 0 times', async () => {
       const step1 = createStep({
         id: 'step1',
-        execute: vi.fn<any>().mockResolvedValue({ result: 'success' }),
+        execute: async () => {
+          return { result: 'success' };
+        },
         inputSchema: z.object({}),
         outputSchema: z.object({}),
       });
       const step2 = createStep({
         id: 'step2',
-        execute: vi.fn<any>().mockRejectedValue(new Error('Step failed')),
+        execute: async () => {
+          throw new Error('Step failed');
+        },
         inputSchema: z.object({}),
         outputSchema: z.object({}),
       });
@@ -2165,6 +2169,10 @@ describe('Workflow', () => {
       const improveResponse = createStep({
         id: 'improveResponse',
         execute: improveResponseAction,
+        resumeSchema: z.object({
+          toneScore: z.object({ score: z.number() }),
+          completenessScore: z.object({ score: z.number() }),
+        }),
         inputSchema: z.object({ toneScore: z.any(), completenessScore: z.any() }),
         outputSchema: z.object({ improvedOutput: z.string() }),
       });
@@ -2199,6 +2207,7 @@ describe('Workflow', () => {
       const run = promptEvalWorkflow.createRun();
 
       const initialResult = await run.start({ inputData: { input: 'test' } });
+      console.dir({ initialResult }, { depth: null });
       expect(initialResult.steps.promptAgent.status).toBe('suspended');
       expect(promptAgentAction).toHaveBeenCalledTimes(1);
       // expect(initialResult.activePaths.size).toBe(1);
@@ -2217,8 +2226,8 @@ describe('Workflow', () => {
       expect(initialResult.steps.promptAgent.status).toBe('suspended');
       expect(promptAgentAction).toHaveBeenCalledTimes(1);
 
-      const firstResumeResult = await run.resume({ step: promptAgent, resumeData: newCtx });
-
+      const firstResumeResult = await run.resume({ step: 'promptAgent', resumeData: newCtx });
+      console.dir({ firstResumeResult }, { depth: null });
       if (!firstResumeResult) {
         throw new Error('Resume failed to return a result');
       }
@@ -2246,9 +2255,12 @@ describe('Workflow', () => {
           completenessScore: { score: 0.7 },
         },
       });
+      console.dir({ secondResumeResult }, { depth: null });
       if (!secondResumeResult) {
         throw new Error('Resume failed to return a result');
       }
+
+      expect(promptAgentAction).toHaveBeenCalledTimes(2);
 
       expect(secondResumeResult.steps).toEqual({
         input: { input: 'test' },
@@ -2264,6 +2276,8 @@ describe('Workflow', () => {
           output: { toneScore: { score: 0.9 }, completenessScore: { score: 0.8 } },
         },
       });
+
+      expect(promptAgentAction).toHaveBeenCalledTimes(2);
     });
   });
 
