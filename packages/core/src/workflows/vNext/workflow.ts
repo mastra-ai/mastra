@@ -692,7 +692,7 @@ export class Run<
     resumeData?: z.infer<TResumeSchema>;
     step:
       | Step<string, any, any, TResumeSchema, any>
-      | [...Step<string, any, any, any, any>[], Step<string, TInput, any, TResumeSchema, any>]
+      | [...Step<string, any, any, any, any>[], Step<string, any, any, TResumeSchema, any>]
       | string
       | string[];
     container?: Container;
