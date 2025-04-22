@@ -272,6 +272,44 @@ describe('Memory with Processors', () => {
     const userMessagesByContent = responseMessages.filter(m => m.content === userMessage);
     expect(userMessagesByContent).toEqual([expect.objectContaining({ role: 'user', content: userMessage })]); // should only be one
     expect(userMessagesByContent.length).toBe(1); // if there's more than one we have duplicate messages
+
+    const userMessage2 = 'Tell me something else interesting about space';
+
+    const res2 = await agent.generate(
+      [
+        {
+          role: 'user',
+          content: userMessage2,
+        },
+      ],
+      {
+        threadId: thread.id,
+        resourceId,
+      },
+    );
+
+    const responseMessages2 = JSON.parse(res2.request.body || '')?.messages;
+    if (!Array.isArray(responseMessages)) {
+      throw new Error(`responseMessages should be an array`);
+    }
+
+    const userMessagesByContent2 = responseMessages2.filter((m: CoreMessage) => m.content === userMessage2);
+    expect(userMessagesByContent2).toEqual([expect.objectContaining({ role: 'user', content: userMessage2 })]); // should only be one
+    expect(userMessagesByContent2.length).toBe(1); // if there's more than one we have duplicate messages
+
+    // make sure all user messages are there
+    const allUserMessages = responseMessages2.filter((m: CoreMessage) => m.role === 'user');
+    expect(allUserMessages.length).toBe(2);
+
+    const remembered = await memory.query({
+      threadId: thread.id,
+      resourceId,
+      selectBy: {
+        last: 20,
+      },
+    });
+    expect(remembered.messages.filter(m => m.role === 'user').length).toBe(2);
+    expect(remembered.messages.length).toBe(4); // 2 user, 2 assistant
   });
 
   it('should apply processors with a real Mastra agent', async () => {
