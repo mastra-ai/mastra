@@ -22,7 +22,7 @@ export interface CrumbProps {
   isCurrent?: boolean;
   as: React.ElementType;
   className?: string;
-  to: string;
+  href: string;
   prefetch?: boolean | null;
   children: React.ReactNode;
 }
