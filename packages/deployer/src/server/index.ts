@@ -1233,7 +1233,7 @@ export async function createHonoServer(mastra: Mastra, options: ServerBundleOpti
               properties: {
                 title: { type: 'string' },
                 metadata: { type: 'object' },
-                resourceid: { type: 'string' },
+                resourceId: { type: 'string' },
                 threadId: { type: 'string' },
               },
             },
@@ -1246,7 +1246,6 @@ export async function createHonoServer(mastra: Mastra, options: ServerBundleOpti
         },
       },
     }),
-
     createThreadHandler,
   );
 
