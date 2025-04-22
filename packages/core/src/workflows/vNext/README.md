@@ -276,6 +276,58 @@ const workflow = createWorkflow({
   .then(finalStep);
 ```
 
+#### Foreach
+
+Foreach is a step that executes a step for each item in an array type input.
+
+```typescript
+const mapStep = createStep({
+  id: 'map',
+  description: 'Maps (+11) on the current value',
+  inputSchema: z.object({
+    value: z.number(),
+  }),
+  outputSchema: z.object({
+    value: z.number(),
+  }),
+  execute: async ({ inputData }) => {
+    return { value: inputData.value + 11 };
+  },
+});
+
+const finalStep = createStep({
+  id: 'final',
+  description: 'Final step that prints the result',
+  inputSchema: z.array(z.object({ value: z.number() })),
+  outputSchema: z.object({
+    finalValue: z.number(),
+  }),
+  execute: async ({ inputData }) => {
+    return { finalValue: inputData.reduce((acc, curr) => acc + curr.value, 0) };
+  },
+});
+
+const counterWorkflow = createWorkflow({
+  steps: [mapStep, finalStep],
+  id: 'counter-workflow',
+  inputSchema: z.array(z.object({ value: z.number() })),
+  outputSchema: z.object({
+    finalValue: z.number(),
+  }),
+});
+
+counterWorkflow.foreach(mapStep).then(finalStep).commit();
+
+const run = counterWorkflow.createRun();
+const result = await run.start({ inputData: [{ value: 1 }, { value: 22 }, { value: 333 }] });
+```
+
+The loop executes the step for each item in the input array in sequence one at a time. The optional `concurrency` option allows you to execute steps in parallel with a limit on the number of concurrent executions.
+
+```typescript
+counterWorkflow.foreach(mapStep, { concurrency: 2 }).then(finalStep).commit();
+```
+
 #### Variable Mapping
 
 Map specific values between steps using `.map()`:
