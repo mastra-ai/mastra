@@ -5,13 +5,13 @@ import commonjs from '@rollup/plugin-commonjs';
 import { removeAllOptionsExceptTelemetry } from './babel/remove-all-options-telemetry';
 import { recursiveRemoveNonReferencedNodes } from './plugins/remove-unused-references';
 
-export async function getTelemetryBundler(
+export function getTelemetryBundler(
   entryFile: string,
   result: {
     hasCustomConfig: false;
   },
 ) {
-  return await rollup({
+  return rollup({
     logLevel: 'silent',
     input: {
       'telemetry-config': entryFile,
