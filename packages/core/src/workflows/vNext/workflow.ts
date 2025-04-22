@@ -48,6 +48,9 @@ export type StepFlowEntry =
   | {
       type: 'foreach';
       step: Step;
+      opts: {
+        concurrency: number;
+      };
     };
 
 /**
@@ -468,8 +471,11 @@ export class NewWorkflow<
     step: TPrevIsArray extends true
       ? Step<TStepId, TStepInputSchema, TSchemaOut, any, any>
       : 'Previous step must return an array type',
+    opts?: {
+      concurrency: number;
+    },
   ) {
-    this.stepFlow.push({ type: 'foreach', step: step as any });
+    this.stepFlow.push({ type: 'foreach', step: step as any, opts: opts ?? { concurrency: 1 } });
     return this as unknown as NewWorkflow<TSteps, TWorkflowId, TInput, TOutput, z.ZodArray<TSchemaOut>>;
   }
 

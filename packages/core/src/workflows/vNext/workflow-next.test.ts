@@ -1165,7 +1165,9 @@ describe('Workflow', () => {
 
   describe('foreach', () => {
     it('should run a single item concurrency (default) for loop', async () => {
+      const startTime = Date.now();
       const map = vi.fn().mockImplementation(async ({ inputData }) => {
+        await new Promise(resolve => setTimeout(resolve, 1e3));
         return { value: inputData.value + 11 };
       });
       const mapStep = createStep({
@@ -1205,6 +1207,123 @@ describe('Workflow', () => {
 
       const run = counterWorkflow.createRun();
       const result = await run.start({ inputData: [{ value: 1 }, { value: 22 }, { value: 333 }] });
+
+      const endTime = Date.now();
+      const duration = endTime - startTime;
+      expect(duration).toBeGreaterThan(1e3 * 3);
+
+      expect(map).toHaveBeenCalledTimes(3);
+      expect(result.steps).toEqual({
+        input: [{ value: 1 }, { value: 22 }, { value: 333 }],
+        map: { status: 'success', output: [{ value: 12 }, { value: 33 }, { value: 344 }] },
+        final: { status: 'success', output: { finalValue: 1 + 11 + (22 + 11) + (333 + 11) } },
+      });
+    });
+
+    it('should run a all item concurrency for loop', async () => {
+      const startTime = Date.now();
+      const map = vi.fn().mockImplementation(async ({ inputData }) => {
+        await new Promise(resolve => setTimeout(resolve, 1e3));
+        return { value: inputData.value + 11 };
+      });
+      const mapStep = createStep({
+        id: 'map',
+        description: 'Maps (+11) on the current value',
+        inputSchema: z.object({
+          value: z.number(),
+        }),
+        outputSchema: z.object({
+          value: z.number(),
+        }),
+        execute: map,
+      });
+
+      const finalStep = createStep({
+        id: 'final',
+        description: 'Final step that prints the result',
+        inputSchema: z.array(z.object({ value: z.number() })),
+        outputSchema: z.object({
+          finalValue: z.number(),
+        }),
+        execute: async ({ inputData }) => {
+          return { finalValue: inputData.reduce((acc, curr) => acc + curr.value, 0) };
+        },
+      });
+
+      const counterWorkflow = createWorkflow({
+        steps: [mapStep, finalStep],
+        id: 'counter-workflow',
+        inputSchema: z.array(z.object({ value: z.number() })),
+        outputSchema: z.object({
+          finalValue: z.number(),
+        }),
+      });
+
+      counterWorkflow.foreach(mapStep, { concurrency: 3 }).then(finalStep).commit();
+
+      const run = counterWorkflow.createRun();
+      const result = await run.start({ inputData: [{ value: 1 }, { value: 22 }, { value: 333 }] });
+
+      const endTime = Date.now();
+      const duration = endTime - startTime;
+      expect(duration).toBeLessThan(1e3 * 1.2);
+
+      expect(map).toHaveBeenCalledTimes(3);
+      expect(result.steps).toEqual({
+        input: [{ value: 1 }, { value: 22 }, { value: 333 }],
+        map: { status: 'success', output: [{ value: 12 }, { value: 33 }, { value: 344 }] },
+        final: { status: 'success', output: { finalValue: 1 + 11 + (22 + 11) + (333 + 11) } },
+      });
+    });
+
+    it('should run a partial item concurrency for loop', async () => {
+      const startTime = Date.now();
+      const map = vi.fn().mockImplementation(async ({ inputData }) => {
+        await new Promise(resolve => setTimeout(resolve, 1e3));
+        return { value: inputData.value + 11 };
+      });
+      const mapStep = createStep({
+        id: 'map',
+        description: 'Maps (+11) on the current value',
+        inputSchema: z.object({
+          value: z.number(),
+        }),
+        outputSchema: z.object({
+          value: z.number(),
+        }),
+        execute: map,
+      });
+
+      const finalStep = createStep({
+        id: 'final',
+        description: 'Final step that prints the result',
+        inputSchema: z.array(z.object({ value: z.number() })),
+        outputSchema: z.object({
+          finalValue: z.number(),
+        }),
+        execute: async ({ inputData }) => {
+          return { finalValue: inputData.reduce((acc, curr) => acc + curr.value, 0) };
+        },
+      });
+
+      const counterWorkflow = createWorkflow({
+        steps: [mapStep, finalStep],
+        id: 'counter-workflow',
+        inputSchema: z.array(z.object({ value: z.number() })),
+        outputSchema: z.object({
+          finalValue: z.number(),
+        }),
+      });
+
+      counterWorkflow.foreach(mapStep, { concurrency: 2 }).then(finalStep).commit();
+
+      const run = counterWorkflow.createRun();
+      const result = await run.start({ inputData: [{ value: 1 }, { value: 22 }, { value: 333 }] });
+
+      const endTime = Date.now();
+      const duration = endTime - startTime;
+      expect(duration).toBeGreaterThan(1e3 * 1.2);
+      expect(duration).toBeLessThan(1e3 * 2.2);
 
       expect(map).toHaveBeenCalledTimes(3);
       expect(result.steps).toEqual({

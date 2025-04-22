@@ -513,6 +513,9 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     entry: {
       type: 'foreach';
       step: NewStep;
+      opts: {
+        concurrency: number;
+      };
     };
     prevStep: StepFlowEntry;
     prevOutput: any;
@@ -527,24 +530,33 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     emitter: EventEmitter;
     container: Container;
   }): Promise<StepResult<any>> {
-    const { step } = entry;
+    const { step, opts } = entry;
     const results: StepResult<any>[] = [];
-    for (const item of prevOutput) {
-      const result = await this.executeStep({
-        step,
-        stepResults,
-        executionContext,
-        resume,
-        prevOutput: item,
-        emitter,
-        container,
-      });
+    const concurrency = opts.concurrency;
 
-      if (result.status !== 'success') {
-        return result;
+    for (let i = 0; i < prevOutput.length; i += concurrency) {
+      const items = prevOutput.slice(i, i + concurrency);
+      const itemsResults = await Promise.all(
+        items.map((item: any) => {
+          return this.executeStep({
+            step,
+            stepResults,
+            executionContext,
+            resume,
+            prevOutput: item,
+            emitter,
+            container,
+          });
+        }),
+      );
+
+      for (const result of itemsResults) {
+        if (result.status !== 'success') {
+          return result;
+        }
+
+        results.push(result?.output);
       }
-
-      results.push(result?.output);
     }
 
     return { status: 'success', output: results };
