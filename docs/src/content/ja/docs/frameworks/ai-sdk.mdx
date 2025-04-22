@@ -14,7 +14,7 @@ Mastraは、AI SDKのモデルルーティング（OpenAI、Anthropicなどの�
 Mastraは、チームが概念実証を迅速かつ容易に製品化するのを支援するために、AI SDKの上に層として機能します。
 
 <img
-  src="/docs/mastra-ai-sdk.png"
+  src="/image/mastra-ai-sdk.png"
   alt="スパン、LLM呼び出し、ツール実行を示すエージェントインタラクショントレース"
   style={{ maxWidth: "800px", width: "100%", margin: "8px 0" }}
   className="nextra-image rounded-md py-8"
@@ -91,7 +91,7 @@ export function ChatComponent() {
 }
 ```
 
-> **注意点**: エージェントのメモリ機能と`useChat`を使用する場合は、重要な実装の詳細について[エージェントメモリセクション](/docs/agents/agent-memory#usechat)を確認してください。
+> **注意点**: エージェントのメモリ機能と`useChat`を使用する場合は、重要な実装の詳細について[エージェントメモリセクション](/image/agents/agent-memory#usechat)を確認してください。
 
 ### useCompletion
 
@@ -188,12 +188,12 @@ export default function Page() {
 
 ### AI SDK ツールフォーマット
 
-Mastraは、AI SDKフォーマットで作成されたツールをサポートしているため、Mastraエージェントで直接使用することができます。詳細については、[Vercel AI SDKツールフォーマット](/docs/agents/adding-tools#vercel-ai-sdk-tool-format)に関するツールドキュメントをご覧ください。
+Mastraは、AI SDKフォーマットで作成されたツールをサポートしているため、Mastraエージェントで直接使用することができます。詳細については、[Vercel AI SDKツールフォーマット](/image/agents/adding-tools#vercel-ai-sdk-tool-format)に関するツールドキュメントをご覧ください。
 
 ### クライアントサイドのツール呼び出し
 
 MastraはAI SDKのツール呼び出しを活用しているため、AI SDKに適用されることはここでも同様に適用されます。
-Mastraの[エージェントツール](/docs/agents/adding-tools)は、AI SDKツールと100%互換性があります。
+Mastraの[エージェントツール](/image/agents/adding-tools)は、AI SDKツールと100%互換性があります。
 
 Mastraツールはオプションの`execute`非同期関数も公開しています。これがオプションである理由は、ツール呼び出しをクライアントやキューに転送する場合があり、同じプロセスで実行したくない場合があるためです。
 

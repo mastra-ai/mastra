@@ -5,7 +5,7 @@ function formatToK(number: number) {
   if (number >= 1000) {
     return (number / 1000).toFixed(number % 1000 === 0 ? 0 : 1) + "k";
   }
-  return number.toString();
+  return number?.toString();
 }
 
 export const GithubStarCount = ({ stars }: { stars: number }) => {
