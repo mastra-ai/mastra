@@ -2,6 +2,8 @@ import { afterEach } from 'node:test';
 import { tmpdir } from 'os';
 import { join } from 'path';
 import { openai } from '@ai-sdk/openai';
+import type { CoreMessage, MemoryProcessorOpts } from '@mastra/core';
+import { MemoryProcessor } from '@mastra/core';
 import { Agent } from '@mastra/core/agent';
 import { LibSQLStore } from '@mastra/core/storage/libsql';
 import { createTool } from '@mastra/core/tools';
@@ -214,6 +216,62 @@ describe('Memory with Processors', () => {
     // And they should exclude weather tool messages
     expect(filterToolResultsByName(result, `weather`)).toHaveLength(0);
     expect(filterToolCallsByName(result, `weather`)).toHaveLength(0);
+  });
+
+  it('should apply multiple processors without duplicating messages', async () => {
+    class ConversationOnlyFilter extends MemoryProcessor {
+      constructor() {
+        super({ name: 'ConversationOnlyFilter' });
+      }
+
+      process(messages: CoreMessage[], _opts: MemoryProcessorOpts = {}): CoreMessage[] {
+        return messages.filter(msg => msg.role === 'user' || msg.role === 'assistant');
+      }
+    }
+    const memory = new Memory({
+      processors: [new ToolCallFilter(), new ConversationOnlyFilter(), new TokenLimiter(127000)],
+      options: {
+        workingMemory: {
+          enabled: true,
+          use: 'tool-call',
+        },
+      },
+    });
+    const thread = await memory.createThread({
+      title: 'Multiple Processors Test Thread 2',
+      resourceId,
+    });
+    const instructions = 'You are a helpful assistant';
+    const agent = new Agent({
+      name: 'processor-test-agent',
+      instructions,
+      model: openai('gpt-4o'),
+      memory,
+    });
+
+    const userMessage = 'Tell me something interesting about space';
+
+    const res = await agent.generate(
+      [
+        {
+          role: 'user',
+          content: userMessage,
+        },
+      ],
+      {
+        threadId: thread.id,
+        resourceId,
+      },
+    );
+
+    const responseMessages = JSON.parse(res.request.body || '')?.messages;
+    if (!Array.isArray(responseMessages)) {
+      throw new Error(`responseMessages should be an array`);
+    }
+
+    const userMessagesByContent = responseMessages.filter(m => m.content === userMessage);
+    expect(userMessagesByContent).toEqual([expect.objectContaining({ role: 'user', content: userMessage })]); // should only be one
+    expect(userMessagesByContent.length).toBe(1); // if there's more than one we have duplicate messages
   });
 
   it('should apply processors with a real Mastra agent', async () => {
