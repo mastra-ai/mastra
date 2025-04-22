@@ -12,7 +12,8 @@ import { PostHogProvider } from "@/analytics/posthog-provider";
 import { CookieConsent } from "@/components/cookie-consent";
 import { GTProvider } from "gt-next";
 import { NextraLayout } from "@/components/nextra-layout";
-
+import DocsChat from "@/chatbot/components/chat-widget";
+import { isCopilotKitEnabled } from "@/lib/server-utils";
 export const metadata: Metadata = {
   title: "Docs - The Typescript AI framework - Mastra",
   description:
@@ -28,6 +29,9 @@ export default async function RootLayout({
 }>) {
   const { locale } = await params;
   const pageMap = await getPageMap(`/${locale || "en"}`);
+
+  const canUseCopilotKit = await isCopilotKitEnabled();
+
   return (
     <html
       lang={locale || "en"}
@@ -54,6 +58,7 @@ export default async function RootLayout({
           <PostHogProvider>
             <NextraLayout locale={locale} pageMap={pageMap}>
               {children}
+              {canUseCopilotKit && <DocsChat />}
             </NextraLayout>
           </PostHogProvider>
           <Toaster />
