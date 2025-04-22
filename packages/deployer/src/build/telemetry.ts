@@ -5,13 +5,15 @@ import commonjs from '@rollup/plugin-commonjs';
 import { removeAllOptionsExceptTelemetry } from './babel/remove-all-options-telemetry';
 import { recursiveRemoveNonReferencedNodes } from './plugins/remove-unused-references';
 
-export function getTelemetryBundler(
+export async function getTelemetryBundler(
   entryFile: string,
   result: {
     hasCustomConfig: false;
   },
 ) {
-  return rollup({
+  const externalDependencies = new Set<string>();
+
+  const bundle = await rollup({
     logLevel: 'silent',
     input: {
       'telemetry-config': entryFile,
@@ -76,6 +78,16 @@ export function getTelemetryBundler(
           return recursiveRemoveNonReferencedNodes(code);
         },
       },
+      {
+        name: 'get-external-deps',
+        async resolveId(source) {
+          const resolved = await this.resolve(source);
+          if (!resolved && !externalDependencies.has(source)) {
+            externalDependencies.add(source);
+          }
+          return null;
+        },
+      },
       // let esbuild remove all unused imports
       esbuild({
         target: 'node20',
@@ -84,6 +96,8 @@ export function getTelemetryBundler(
       }),
     ],
   });
+
+  return { bundle, externalDependencies };
 }
 
 export async function writeTelemetryConfig(
@@ -91,12 +105,13 @@ export async function writeTelemetryConfig(
   outputDir: string,
 ): Promise<{
   hasCustomConfig: boolean;
+  externalDependencies: Set<string>;
 }> {
   const result = {
     hasCustomConfig: false,
   } as const;
 
-  const bundle = await getTelemetryBundler(entryFile, result);
+  const { bundle, externalDependencies } = await getTelemetryBundler(entryFile, result);
 
   await bundle.write({
     dir: outputDir,
@@ -104,5 +119,5 @@ export async function writeTelemetryConfig(
     entryFileNames: '[name].mjs',
   });
 
-  return result;
+  return { ...result, externalDependencies };
 }
