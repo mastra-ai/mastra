@@ -469,6 +469,51 @@ describe('Workflow', () => {
           step2: { status: 'success', output: { result: 'success', input: [{ str: 'step1-data' }] } },
         });
       });
+
+      it('should resolve inputs from previous steps that are arrays via .map()', async () => {
+        const step1 = createStep({
+          id: 'step1',
+          execute: async () => {
+            return [{ str: 'step1-data' }];
+          },
+          inputSchema: z.object({}),
+          outputSchema: z.array(z.object({ str: z.string() })),
+        });
+        const step2 = createStep({
+          id: 'step2',
+          execute: async ({ inputData }) => {
+            return { result: 'success', input: inputData.ary };
+          },
+          inputSchema: z.object({ ary: z.array(z.object({ str: z.string() })) }),
+          outputSchema: z.object({ result: z.string(), input: z.array(z.object({ str: z.string() })) }),
+        });
+
+        const workflow = createWorkflow({
+          id: 'test-workflow',
+          inputSchema: z.object({}),
+          outputSchema: z.object({ result: z.string() }),
+        });
+
+        workflow
+          .then(step1)
+          .map({
+            ary: {
+              step: step1,
+              path: '.',
+            },
+          })
+          .then(step2)
+          .commit();
+
+        const run = workflow.createRun();
+        const result = await run.start({ inputData: {} });
+
+        expect(result.steps).toMatchObject({
+          input: {},
+          step1: { status: 'success', output: [{ str: 'step1-data' }] },
+          step2: { status: 'success', output: { result: 'success', input: [{ str: 'step1-data' }] } },
+        });
+      });
     });
 
     describe('Simple Conditions', () => {

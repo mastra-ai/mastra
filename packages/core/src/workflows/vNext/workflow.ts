@@ -302,12 +302,12 @@ export class NewWorkflow<
       [K in keyof TMapping]:
         | {
             step: TSteps[number];
-            path: PathsToStringProps<ExtractSchemaType<ExtractSchemaFromStep<TSteps[number], 'outputSchema'>>>;
+            path: PathsToStringProps<ExtractSchemaType<ExtractSchemaFromStep<TSteps[number], 'outputSchema'>>> | '.';
           }
         | { value: any; schema: z.ZodTypeAny }
         | {
             initData: TSteps[number];
-            path: PathsToStringProps<ExtractSchemaType<ExtractSchemaFromStep<TSteps[number], 'inputSchema'>>>;
+            path: PathsToStringProps<ExtractSchemaType<ExtractSchemaFromStep<TSteps[number], 'inputSchema'>>> | '.';
           }
         | {
             containerPath: string;
@@ -336,6 +336,11 @@ export class NewWorkflow<
           }
 
           const stepResult = m.initData ? getInitData() : getStepResult(m.step);
+          if (m.path === '.') {
+            result[key] = stepResult;
+            continue;
+          }
+
           const pathParts = m.path.split('.');
           let value: any = stepResult;
           for (const part of pathParts) {
@@ -358,12 +363,16 @@ export class NewWorkflow<
           step: TSteps[number];
           path: PathsToStringProps<ExtractSchemaType<ExtractSchemaFromStep<TSteps[number], 'outputSchema'>>>;
         }
-          ? ZodPathType<TMapping[K]['step']['outputSchema'], TMapping[K]['path']>
+          ? TMapping[K]['path'] extends '.'
+            ? TMapping[K]['step']['outputSchema']
+            : ZodPathType<TMapping[K]['step']['outputSchema'], TMapping[K]['path']>
           : TMapping[K] extends {
                 initData: TSteps[number];
                 path: PathsToStringProps<ExtractSchemaType<ExtractSchemaFromStep<TSteps[number], 'inputSchema'>>>;
               }
-            ? ZodPathType<TMapping[K]['initData']['inputSchema'], TMapping[K]['path']>
+            ? TMapping[K]['path'] extends '.'
+              ? TMapping[K]['initData']['inputSchema']
+              : ZodPathType<TMapping[K]['initData']['inputSchema'], TMapping[K]['path']>
             : TMapping[K] extends { value: any; schema: z.ZodTypeAny }
               ? TMapping[K]['schema']
               : TMapping[K] extends { containerPath: string; schema: z.ZodTypeAny }
