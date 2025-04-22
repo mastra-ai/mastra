@@ -1,5 +1,4 @@
 import { MastraBase } from '@mastra/core/base';
-import type { ToolAction } from '@mastra/core/tools';
 import { DEFAULT_REQUEST_TIMEOUT_MSEC } from '@modelcontextprotocol/sdk/shared/protocol.js';
 import equal from 'fast-deep-equal';
 import { v5 as uuidv5 } from 'uuid';
@@ -96,7 +95,7 @@ To fix this you have three different options:
 
   public async getTools() {
     this.addToInstanceCache();
-    const connectedTools: Record<string, ToolAction> = {};
+    const connectedTools: Record<string, any> = {}; // <- any because we don't have proper tool schemas
 
     await this.eachClientTools(async ({ serverName, tools }) => {
       for (const [toolName, toolConfig] of Object.entries(tools)) {
@@ -109,7 +108,7 @@ To fix this you have three different options:
 
   public async getToolsets() {
     this.addToInstanceCache();
-    const connectedToolsets: Record<string, Record<string, ToolAction>> = {};
+    const connectedToolsets: Record<string, Record<string, any>> = {}; // <- any because we don't have proper tool schemas
 
     await this.eachClientTools(async ({ serverName, tools }) => {
       if (tools) {
@@ -162,7 +161,7 @@ To fix this you have three different options:
   private async eachClientTools(
     cb: (input: {
       serverName: string;
-      tools: Record<string, ToolAction>;
+      tools: Record<string, any>; // <- any because we don't have proper tool schemas
       client: InstanceType<typeof MastraMCPClient>;
     }) => Promise<void>,
   ) {
