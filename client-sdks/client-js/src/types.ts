@@ -118,7 +118,7 @@ export type SaveMessageToMemoryResponse = MessageType[];
 export interface CreateMemoryThreadParams {
   title: string;
   metadata: Record<string, any>;
-  resourceid: string;
+  resourceId: string;
   threadId: string;
   agentId: string;
 }
@@ -135,7 +135,7 @@ export type GetMemoryThreadResponse = StorageThreadType[];
 export interface UpdateMemoryThreadParams {
   title: string;
   metadata: Record<string, any>;
-  resourceid: string;
+  resourceId: string;
 }
 
 export interface GetMemoryThreadMessagesResponse {
