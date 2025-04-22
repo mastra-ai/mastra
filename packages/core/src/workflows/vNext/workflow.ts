@@ -58,10 +58,10 @@ export type StepFlowEntry =
  */
 export function createStep<
   TStepId extends string,
-  TStepInput extends z.ZodObject<any>,
-  TStepOutput extends z.ZodObject<any>,
-  TResumeSchema extends z.ZodObject<any>,
-  TSuspendSchema extends z.ZodObject<any>,
+  TStepInput extends z.ZodType<any>,
+  TStepOutput extends z.ZodType<any>,
+  TResumeSchema extends z.ZodType<any>,
+  TSuspendSchema extends z.ZodType<any>,
 >(params: {
   id: TStepId;
   description?: string;
@@ -76,13 +76,13 @@ export function createStep<
   TStepId extends string,
   TStepInput extends z.ZodObject<{ prompt: z.ZodString }>,
   TStepOutput extends z.ZodObject<{ text: z.ZodString }>,
-  TResumeSchema extends z.ZodObject<any>,
-  TSuspendSchema extends z.ZodObject<any>,
+  TResumeSchema extends z.ZodType<any>,
+  TSuspendSchema extends z.ZodType<any>,
 >(agent: Agent<TStepId, any, any>): Step<TStepId, TStepInput, TStepOutput, TResumeSchema, TSuspendSchema>;
 
 export function createStep<
-  TSchemaIn extends z.ZodObject<any>,
-  TSchemaOut extends z.ZodObject<any>,
+  TSchemaIn extends z.ZodType<any>,
+  TSchemaOut extends z.ZodType<any>,
   TContext extends ToolExecutionContext<TSchemaIn>,
 >(
   tool: Tool<TSchemaIn, TSchemaOut, TContext> & {
@@ -90,14 +90,14 @@ export function createStep<
     outputSchema: TSchemaOut;
     execute: (context: TContext) => Promise<any>;
   },
-): Step<string, TSchemaIn, TSchemaOut, z.ZodObject<any>, z.ZodObject<any>>;
+): Step<string, TSchemaIn, TSchemaOut, z.ZodType<any>, z.ZodType<any>>;
 
 export function createStep<
   TStepId extends string,
-  TStepInput extends z.ZodObject<any>,
-  TStepOutput extends z.ZodObject<any>,
-  TResumeSchema extends z.ZodObject<any>,
-  TSuspendSchema extends z.ZodObject<any>,
+  TStepInput extends z.ZodType<any>,
+  TStepOutput extends z.ZodType<any>,
+  TResumeSchema extends z.ZodType<any>,
+  TSuspendSchema extends z.ZodType<any>,
 >(
   params:
     | {
@@ -193,8 +193,8 @@ export function cloneStep<TStepId extends string>(
 
 export function createWorkflow<
   TWorkflowId extends string = string,
-  TInput extends z.ZodObject<any> = z.ZodObject<any>,
-  TOutput extends z.ZodObject<any> = z.ZodObject<any>,
+  TInput extends z.ZodType<any> = z.ZodType<any>,
+  TOutput extends z.ZodType<any> = z.ZodType<any>,
   TSteps extends Step<string, any, any>[] = Step<string, any, any>[],
 >(params: NewWorkflowConfig<TWorkflowId, TInput, TOutput, TSteps>) {
   return new NewWorkflow(params);
@@ -202,8 +202,8 @@ export function createWorkflow<
 
 export type NewWorkflowConfig<
   TWorkflowId extends string = string,
-  TInput extends z.ZodObject<any> = z.ZodObject<any>,
-  TOutput extends z.ZodObject<any> = z.ZodObject<any>,
+  TInput extends z.ZodType<any> = z.ZodType<any>,
+  TOutput extends z.ZodType<any> = z.ZodType<any>,
   TSteps extends Step<string, any, any>[] = Step<string, any, any>[],
 > = {
   mastra?: Mastra;
@@ -222,9 +222,9 @@ export type NewWorkflowConfig<
 export class NewWorkflow<
     TSteps extends Step<string, any, any>[] = Step<string, any, any>[],
     TWorkflowId extends string = string,
-    TInput extends z.ZodObject<any> = z.ZodObject<any>,
-    TOutput extends z.ZodObject<any> = z.ZodObject<any>,
-    TPrevSchema extends z.ZodObject<any> = TInput,
+    TInput extends z.ZodType<any> = z.ZodType<any>,
+    TOutput extends z.ZodType<any> = z.ZodType<any>,
+    TPrevSchema extends z.ZodType<any> = TInput,
   >
   extends MastraBase
   implements NewStep<TWorkflowId, TInput, TOutput>
@@ -289,7 +289,7 @@ export class NewWorkflow<
    * @param step The step to add to the workflow
    * @returns The workflow instance for chaining
    */
-  then<TStepInputSchema extends TPrevSchema, TStepId extends string, TSchemaOut extends z.ZodObject<any>>(
+  then<TStepInputSchema extends TPrevSchema, TStepId extends string, TSchemaOut extends z.ZodType<any>>(
     step: Step<TStepId, TStepInputSchema, TSchemaOut, any, any>,
   ) {
     this.stepFlow.push({ type: 'step', step: step as any });
@@ -430,7 +430,7 @@ export class NewWorkflow<
     >;
   }
 
-  dowhile<TStepInputSchema extends TPrevSchema, TStepId extends string, TSchemaOut extends z.ZodObject<any>>(
+  dowhile<TStepInputSchema extends TPrevSchema, TStepId extends string, TSchemaOut extends z.ZodType<any>>(
     step: Step<TStepId, TStepInputSchema, TSchemaOut, any, any>,
     condition: ExecuteFunction<z.infer<TSchemaOut>, any, any, any>,
   ) {
@@ -438,7 +438,7 @@ export class NewWorkflow<
     return this as unknown as NewWorkflow<TSteps, TWorkflowId, TInput, TOutput, TSchemaOut>;
   }
 
-  dountil<TStepInputSchema extends TPrevSchema, TStepId extends string, TSchemaOut extends z.ZodObject<any>>(
+  dountil<TStepInputSchema extends TPrevSchema, TStepId extends string, TSchemaOut extends z.ZodType<any>>(
     step: Step<TStepId, TStepInputSchema, TSchemaOut, any, any>,
     condition: ExecuteFunction<z.infer<TSchemaOut>, any, any, any>,
   ) {
@@ -557,8 +557,8 @@ export class NewWorkflow<
  */
 export class Run<
   TSteps extends Step<string, any, any>[] = Step<string, any, any>[],
-  TInput extends z.ZodObject<any> = z.ZodObject<any>,
-  TOutput extends z.ZodObject<any> = z.ZodObject<any>,
+  TInput extends z.ZodType<any> = z.ZodType<any>,
+  TOutput extends z.ZodType<any> = z.ZodType<any>,
 > {
   protected emitter: EventEmitter;
   /**
@@ -690,7 +690,7 @@ export class Run<
     };
   }
 
-  async resume<TResumeSchema extends z.ZodObject<any>>(params: {
+  async resume<TResumeSchema extends z.ZodType<any>>(params: {
     resumeData?: z.infer<TResumeSchema>;
     step:
       | Step<string, any, any, TResumeSchema, any>

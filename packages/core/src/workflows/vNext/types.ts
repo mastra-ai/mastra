@@ -34,7 +34,7 @@ export type PathsToStringProps<T> = T extends object
     }[keyof T]
   : never;
 
-export type ExtractSchemaType<T extends z.ZodObject<any>> = T extends z.ZodObject<infer V> ? V : never;
+export type ExtractSchemaType<T extends z.ZodType<any>> = T extends z.ZodObject<infer V> ? V : never;
 
 export type ExtractSchemaFromStep<
   TStep extends NewStep<any, any, any>,
@@ -93,21 +93,3 @@ export type ZodPathType<T extends z.ZodTypeAny, P extends string> =
         ? Shape[P]
         : never
     : never;
-
-// Test case
-const testSchema = z.object({
-  name: z.string(),
-  age: z.number(),
-  isActive: z.boolean(),
-  nested: z.object({
-    name: z.string(),
-    age: z.number(),
-    isActive: z.boolean(),
-  }),
-});
-
-// These should all work correctly
-type NameType = ZodPathType<typeof testSchema, 'name'>; // Should be string
-type AgeType = ZodPathType<typeof testSchema, 'age'>; // Should be number
-type IsActiveType = ZodPathType<typeof testSchema, 'isActive'>; // Should be boolean
-type NestedNameType = ZodPathType<typeof testSchema, 'nested.name'>; // Should be string

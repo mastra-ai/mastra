@@ -397,6 +397,42 @@ describe('Workflow', () => {
           }),
         );
       });
+
+      it('should resolve inputs from previous steps that are not objects', async () => {
+        const step1 = createStep({
+          id: 'step1',
+          execute: async () => {
+            return 'step1-data';
+          },
+          inputSchema: z.object({}),
+          outputSchema: z.string(),
+        });
+        const step2 = createStep({
+          id: 'step2',
+          execute: async ({ inputData }) => {
+            return { result: 'success', input: inputData };
+          },
+          inputSchema: z.string(),
+          outputSchema: z.object({ result: z.string(), input: z.string() }),
+        });
+
+        const workflow = createWorkflow({
+          id: 'test-workflow',
+          inputSchema: z.object({}),
+          outputSchema: z.object({ result: z.string() }),
+        });
+
+        workflow.then(step1).then(step2).commit();
+
+        const run = workflow.createRun();
+        const result = await run.start({ inputData: {} });
+
+        expect(result.steps).toEqual({
+          input: {},
+          step1: { status: 'success', output: 'step1-data' },
+          step2: { status: 'success', output: { result: 'success', input: 'step1-data' } },
+        });
+      });
     });
 
     describe('Simple Conditions', () => {
