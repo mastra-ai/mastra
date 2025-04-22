@@ -42,7 +42,6 @@ export const TabSwitcher = ({ className }: { className?: string }) => {
   const pathname = usePathname();
 
   const locale = pathname.split("/")[1];
-  console.log({ pathname, locale: pathname.split("/")[1] });
 
   return (
     <div className={cn("border-b-[0.5px] border-b-[var(--border)]", className)}>
@@ -59,7 +58,7 @@ export const TabSwitcher = ({ className }: { className?: string }) => {
             return (
               <Link
                 key={tab.id}
-                href={`/${locale}/${tab.href}`}
+                href={`/${tab.href}`}
                 className={cn(
                   "flex min-w-fit relative x:focus-visible:nextra-focus gap-1.5 items-center px-0 py-1 text-sm font-medium transition-colors",
                   isActive
