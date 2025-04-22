@@ -23,4 +23,24 @@ export type ServerConfig = {
    * @default { origin: '*', allowMethods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'], allowHeaders: ['Content-Type', 'Authorization', 'x-mastra-client-type'], exposeHeaders: ['Content-Length', 'X-Requested-With'], credentials: false }
    */
   cors?: Parameters<typeof cors>[0] | false;
+  /**
+   * Build configuration for the server
+   */
+  build?: {
+    /**
+     * Enable Swagger UI
+     * @default false
+     */
+    swaggerUI?: boolean;
+    /**
+     * Enable API request logging
+     * @default false
+     */
+    apiReqLogs?: boolean;
+    /**
+     * Enable OpenAPI documentation
+     * @default false
+     */
+    openAPIDocs?: boolean;
+  };
 };

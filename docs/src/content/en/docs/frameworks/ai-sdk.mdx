@@ -3,6 +3,8 @@ title: "Using with Vercel AI SDK"
 description: "Learn how Mastra leverages the Vercel AI SDK library and how you can leverage it further with Mastra"
 ---
 
+import Image from "next/image";
+
 # Using with Vercel AI SDK
 
 Mastra leverages AI SDK's model routing (a unified interface on top of OpenAI, Anthropic, etc), structured output, and tool calling.
@@ -13,8 +15,8 @@ We explain this in greater detail in [this blog post](https://mastra.ai/blog/usi
 
 Mastra acts as a layer on top of AI SDK to help teams productionize their proof-of-concepts quickly and easily.
 
-<img
-  src="/docs/mastra-ai-sdk.png"
+<Image
+  src="/image/mastra-ai-sdk.png"
   alt="Agent interaction trace showing spans, LLM calls, and tool executions"
   style={{ maxWidth: "800px", width: "100%", margin: "8px 0" }}
   className="nextra-image rounded-md py-8"
@@ -228,7 +230,7 @@ The `createDataStream` function allows you to stream additional data to the clie
 
           Your primary function is to help users get weather details for specific locations. When responding:
           - Always ask for a location if none is provided
-          - If the location name isn’t in English, please translate it
+          - If the location name isn't in English, please translate it
           - If giving a location with multiple parts (e.g. "New York, NY"), use the most relevant part (e.g. "New York")
           - Include relevant details like humidity, wind conditions, and precipitation
           - Keep responses concise but informative
