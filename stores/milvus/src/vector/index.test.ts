@@ -9,6 +9,7 @@ describe('Milvus Vector tests', () => {
   beforeAll(async () => {
     // for running the tests, you need to have a local milvus instance running
     // start the milvus db server by running `docker-compose up -d` in the root directory
+    // if the milvus standalone server is crashing continuously, then delete the volumes directory and restart the server
     milvusClient = new MilvusVectorStore({
       address: '127.0.0.1:19530',
       username: 'milvus-username',
@@ -355,6 +356,11 @@ describe('Milvus Vector tests', () => {
           description: `word count`,
           data_type: DataType.FloatVector,
           dim: 8,
+        },
+        {
+          name: `book_metadata`,
+          description: `metadata`,
+          data_type: DataType.JSON,
         },
       ]);
     });
