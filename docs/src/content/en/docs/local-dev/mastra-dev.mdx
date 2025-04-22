@@ -89,8 +89,10 @@ import { Mastra } from "@mastra/core";
 
 export const mastra = new Mastra({
   server: {
-    openAPIDocs: true,  // Enable OpenAPI documentation
-    // ... other server config options
+    build: {
+      openAPIDocs: true,  // Enable OpenAPI documentation
+      // ... other build config options
+    }
   }
 });
 ```
@@ -105,9 +107,11 @@ import { Mastra } from "@mastra/core";
 
 export const mastra = new Mastra({
   server: {
-    openAPIDocs: true,  // Enable OpenAPI documentation
-    swaggerUI: true,  // Enable Swagger UI
-    // ... other server config options
+    build: {
+      openAPIDocs: true,  // Enable OpenAPI documentation
+      swaggerUI: true,  // Enable Swagger UI
+      // ... other build config options
+    }
   }
 });
 ```
