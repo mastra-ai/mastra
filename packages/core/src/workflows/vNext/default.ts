@@ -170,12 +170,16 @@ export class DefaultExecutionEngine extends ExecutionEngine {
             acc = { ...acc, ...parallelResult };
           } else if (entry.type === 'loop') {
             acc[entry.step.id] = stepResults[entry.step.id]?.output;
+          } else if (entry.type === 'foreach') {
+            acc[entry.step.id] = stepResults[entry.step.id]?.output;
           }
           return acc;
         },
         {} as Record<string, any>,
       );
     } else if (step.type === 'loop') {
+      return stepResults[step.step.id]?.output;
+    } else if (step.type === 'foreach') {
       return stepResults[step.step.id]?.output;
     }
   }
@@ -495,6 +499,57 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     return result;
   }
 
+  async executeForeach({
+    entry,
+    prevOutput,
+    stepResults,
+    resume,
+    executionContext,
+    emitter,
+    container,
+  }: {
+    workflowId: string;
+    runId: string;
+    entry: {
+      type: 'foreach';
+      step: NewStep;
+    };
+    prevStep: StepFlowEntry;
+    prevOutput: any;
+    stepResults: Record<string, StepResult<any>>;
+    resume?: {
+      steps: string[];
+      stepResults: Record<string, StepResult<any>>;
+      resumePayload: any;
+      resumePath: number[];
+    };
+    executionContext: ExecutionContext;
+    emitter: EventEmitter;
+    container: Container;
+  }): Promise<StepResult<any>> {
+    const { step } = entry;
+    const results: StepResult<any>[] = [];
+    for (const item of prevOutput) {
+      const result = await this.executeStep({
+        step,
+        stepResults,
+        executionContext,
+        resume,
+        prevOutput: item,
+        emitter,
+        container,
+      });
+
+      if (result.status !== 'success') {
+        return result;
+      }
+
+      results.push(result?.output);
+    }
+
+    return { status: 'success', output: results };
+  }
+
   async executeEntry({
     workflowId,
     runId,
@@ -590,9 +645,22 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         emitter,
         container,
       });
+    } else if (entry.type === 'foreach') {
+      execResults = await this.executeForeach({
+        workflowId,
+        runId,
+        entry,
+        prevStep,
+        prevOutput,
+        stepResults,
+        resume,
+        executionContext,
+        emitter,
+        container,
+      });
     }
 
-    if (entry.type === 'step' || entry.type === 'loop') {
+    if (entry.type === 'step' || entry.type === 'loop' || entry.type === 'foreach') {
       stepResults[entry.step.id] = execResults;
     }
 
@@ -610,7 +678,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
       },
     });
 
-    if (entry.type === 'step' || entry.type === 'loop') {
+    if (entry.type === 'step' || entry.type === 'loop' || entry.type === 'foreach') {
       emitter.emit('watch', {
         type: 'watch',
         payload: {

@@ -44,6 +44,10 @@ export type StepFlowEntry =
       step: Step;
       condition: ExecuteFunction<any, any, any, any>;
       loopType: 'dowhile' | 'dountil';
+    }
+  | {
+      type: 'foreach';
+      step: Step;
     };
 
 /**
@@ -453,6 +457,20 @@ export class NewWorkflow<
   ) {
     this.stepFlow.push({ type: 'loop', step: step as any, condition, loopType: 'dountil' });
     return this as unknown as NewWorkflow<TSteps, TWorkflowId, TInput, TOutput, TSchemaOut>;
+  }
+
+  foreach<
+    TPrevIsArray extends TPrevSchema extends z.ZodArray<any> ? true : false,
+    TStepInputSchema extends TPrevSchema extends z.ZodArray<infer TElement> ? TElement : never,
+    TStepId extends string,
+    TSchemaOut extends z.ZodType<any>,
+  >(
+    step: TPrevIsArray extends true
+      ? Step<TStepId, TStepInputSchema, TSchemaOut, any, any>
+      : 'Previous step must return an array type',
+  ) {
+    this.stepFlow.push({ type: 'foreach', step: step as any });
+    return this as unknown as NewWorkflow<TSteps, TWorkflowId, TInput, TOutput, z.ZodArray<TSchemaOut>>;
   }
 
   /**

@@ -1163,6 +1163,58 @@ describe('Workflow', () => {
     });
   });
 
+  describe('foreach', () => {
+    it('should run a single item concurrency (default) for loop', async () => {
+      const map = vi.fn().mockImplementation(async ({ inputData }) => {
+        return { value: inputData.value + 11 };
+      });
+      const mapStep = createStep({
+        id: 'map',
+        description: 'Maps (+11) on the current value',
+        inputSchema: z.object({
+          value: z.number(),
+        }),
+        outputSchema: z.object({
+          value: z.number(),
+        }),
+        execute: map,
+      });
+
+      const finalStep = createStep({
+        id: 'final',
+        description: 'Final step that prints the result',
+        inputSchema: z.array(z.object({ value: z.number() })),
+        outputSchema: z.object({
+          finalValue: z.number(),
+        }),
+        execute: async ({ inputData }) => {
+          return { finalValue: inputData.reduce((acc, curr) => acc + curr.value, 0) };
+        },
+      });
+
+      const counterWorkflow = createWorkflow({
+        steps: [mapStep, finalStep],
+        id: 'counter-workflow',
+        inputSchema: z.array(z.object({ value: z.number() })),
+        outputSchema: z.object({
+          finalValue: z.number(),
+        }),
+      });
+
+      counterWorkflow.foreach(mapStep).then(finalStep).commit();
+
+      const run = counterWorkflow.createRun();
+      const result = await run.start({ inputData: [{ value: 1 }, { value: 22 }, { value: 333 }] });
+
+      expect(map).toHaveBeenCalledTimes(3);
+      expect(result.steps).toEqual({
+        input: [{ value: 1 }, { value: 22 }, { value: 333 }],
+        map: { status: 'success', output: [{ value: 12 }, { value: 33 }, { value: 344 }] },
+        final: { status: 'success', output: { finalValue: 1 + 11 + (22 + 11) + (333 + 11) } },
+      });
+    });
+  });
+
   describe('if-else branching', () => {
     it('should run the if-then branch', async () => {
       const start = vi.fn().mockImplementation(async ({ inputData }) => {
