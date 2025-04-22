@@ -11,9 +11,7 @@ export async function getTelemetryBundler(
     hasCustomConfig: false;
   },
 ) {
-  const externalDependencies = new Set<string>();
-
-  const bundle = await rollup({
+  return await rollup({
     logLevel: 'silent',
     input: {
       'telemetry-config': entryFile,
@@ -78,16 +76,6 @@ export async function getTelemetryBundler(
           return recursiveRemoveNonReferencedNodes(code);
         },
       },
-      {
-        name: 'get-external-deps',
-        async resolveId(source) {
-          const resolved = await this.resolve(source);
-          if (!resolved && !externalDependencies.has(source)) {
-            externalDependencies.add(source);
-          }
-          return null;
-        },
-      },
       // let esbuild remove all unused imports
       esbuild({
         target: 'node20',
@@ -96,8 +84,6 @@ export async function getTelemetryBundler(
       }),
     ],
   });
-
-  return { bundle, externalDependencies };
 }
 
 export async function writeTelemetryConfig(
@@ -105,19 +91,20 @@ export async function writeTelemetryConfig(
   outputDir: string,
 ): Promise<{
   hasCustomConfig: boolean;
-  externalDependencies: Set<string>;
+  externalDependencies: string[];
 }> {
   const result = {
     hasCustomConfig: false,
   } as const;
 
-  const { bundle, externalDependencies } = await getTelemetryBundler(entryFile, result);
+  const bundle = await getTelemetryBundler(entryFile, result);
 
-  await bundle.write({
+  const { output } = await bundle.write({
     dir: outputDir,
     format: 'es',
     entryFileNames: '[name].mjs',
   });
 
-  return { ...result, externalDependencies };
+  const externals = output[0].imports.filter(x => !x.startsWith('./'));
+  return { ...result, externalDependencies: externals };
 }
