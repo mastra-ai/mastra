@@ -1,10 +1,14 @@
-"use client";
-import { useFetchStars } from "@/hooks/useFetchStars";
+
 import React from "react";
 
-export const GithubStarCount = () => {
-  const stars = useFetchStars();
+function formatToK(number: number) {
+  if (number >= 1000) {
+    return (number / 1000).toFixed(number % 1000 === 0 ? 0 : 1) + "k";
+  }
+  return number.toString();
+}
 
+export const GithubStarCount = ({ stars }: { stars: number }) => {
   return (
     <div className="font-medium w-fit rounded-md opacity-90 transition-colors hover:opacity-100 flex items-center gap-2 justify-start pl-[7px] pr-2.5 py-2 h-[2.125rem] dark:text-white text-sm">
       <svg
@@ -24,7 +28,7 @@ export const GithubStarCount = () => {
       </svg>
 
       <div className="flex gap-1 items-center w-4">
-        <span>{stars}</span>
+        <span>{formatToK(stars)}</span>
       </div>
     </div>
   );
