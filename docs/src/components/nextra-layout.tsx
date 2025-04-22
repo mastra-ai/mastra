@@ -15,10 +15,12 @@ export const NextraLayout = ({
   pageMap,
   children,
   locale,
+  stars,
 }: {
   pageMap: PageMapItem[];
   children: React.ReactNode;
   locale: string;
+  stars: number;
 }) => {
   const pathname = usePathname();
   const isReference = pathname.includes("/reference");
@@ -27,7 +29,7 @@ export const NextraLayout = ({
       search={<Search placeholder={getSearchPlaceholder(locale)} />}
       navbar={
         <div className="flex  sticky top-0 z-30 bg-[var(--primary-bg)] flex-col">
-          <Nav />
+          <Nav stars={stars} />
           <TabSwitcher />
         </div>
       }
