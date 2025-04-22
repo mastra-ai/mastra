@@ -207,6 +207,35 @@ export function createWorkflow<
   return new NewWorkflow(params);
 }
 
+export type WorkflowStatus<TOutput extends z.ZodType<any>, TSteps extends Step<string, any, any>[]> =
+  | {
+      status: 'success';
+      result: z.infer<TOutput>;
+      steps: {
+        [K in keyof StepsRecord<TSteps>]: StepsRecord<TSteps>[K]['outputSchema'] extends undefined
+          ? StepResult<unknown>
+          : StepResult<z.infer<NonNullable<StepsRecord<TSteps>[K]['outputSchema']>>>;
+      };
+    }
+  | {
+      status: 'failed';
+      steps: {
+        [K in keyof StepsRecord<TSteps>]: StepsRecord<TSteps>[K]['outputSchema'] extends undefined
+          ? StepResult<unknown>
+          : StepResult<z.infer<NonNullable<StepsRecord<TSteps>[K]['outputSchema']>>>;
+      };
+      error: string;
+    }
+  | {
+      status: 'suspended';
+      steps: {
+        [K in keyof StepsRecord<TSteps>]: StepsRecord<TSteps>[K]['outputSchema'] extends undefined
+          ? StepResult<unknown>
+          : StepResult<z.infer<NonNullable<StepsRecord<TSteps>[K]['outputSchema']>>>;
+      };
+      suspended: [string[], ...string[][]];
+    };
+
 export type NewWorkflowConfig<
   TWorkflowId extends string = string,
   TInput extends z.ZodType<any> = z.ZodType<any>,
@@ -257,7 +286,7 @@ export class NewWorkflow<
     description,
     executionEngine,
     retryConfig,
-  }: NewWorkflowConfig<TWorkflowId, TInput, TOutput>) {
+  }: NewWorkflowConfig<TWorkflowId, TInput, TOutput, TSteps>) {
     super({ name: id, component: RegisteredLogger.WORKFLOW });
     this.id = id;
     this.description = description;
@@ -567,11 +596,11 @@ export class NewWorkflow<
       }
     }
 
-    if (res.error) {
+    if (res.status === 'failed') {
       throw new Error(res.error);
     }
 
-    return res.result;
+    return res.status === 'success' ? res.result : undefined;
   }
 
   async getWorkflowRuns() {
@@ -654,30 +683,14 @@ export class Run<
    * @param input The input data for the workflow
    * @returns A promise that resolves to the workflow output
    */
-  async start({ inputData, container }: { inputData?: z.infer<TInput>; container?: Container }): Promise<{
-    status: 'success' | 'failed' | 'suspended';
-    result: TOutput;
-    suspended?: string[];
-    steps: {
-      [K in keyof StepsRecord<TSteps>]: StepsRecord<TSteps>[K]['outputSchema'] extends undefined
-        ? StepResult<unknown>
-        : StepResult<z.infer<NonNullable<StepsRecord<TSteps>[K]['outputSchema']>>>;
-    };
-    error?: string;
-  }> {
-    return this.executionEngine.execute<
-      z.infer<TInput>,
-      {
-        result: TOutput;
-        status: 'success' | 'failed' | 'suspended';
-        suspended?: string[];
-        steps: {
-          [K in keyof StepsRecord<TSteps>]: StepsRecord<TSteps>[K]['outputSchema'] extends undefined
-            ? StepResult<unknown>
-            : StepResult<z.infer<NonNullable<StepsRecord<TSteps>[K]['outputSchema']>>>;
-        };
-      }
-    >({
+  async start({
+    inputData,
+    container,
+  }: {
+    inputData?: z.infer<TInput>;
+    container?: Container;
+  }): Promise<WorkflowStatus<TOutput, TSteps>> {
+    return this.executionEngine.execute<z.infer<TInput>, WorkflowStatus<TOutput, TSteps>>({
       workflowId: this.workflowId,
       runId: this.runId,
       graph: this.executionGraph,
@@ -731,17 +744,7 @@ export class Run<
       | string
       | string[];
     container?: Container;
-  }): Promise<{
-    status: 'success' | 'failed' | 'suspended';
-    result: TOutput;
-    suspended?: string[];
-    steps: {
-      [K in keyof StepsRecord<TSteps>]: StepsRecord<TSteps>[K]['outputSchema'] extends undefined
-        ? StepResult<unknown>
-        : StepResult<z.infer<NonNullable<StepsRecord<TSteps>[K]['outputSchema']>>>;
-    };
-    error?: string;
-  }> {
+  }): Promise<WorkflowStatus<TOutput, TSteps>> {
     const steps: string[] = (Array.isArray(params.step) ? params.step : [params.step]).map(step =>
       typeof step === 'string' ? step : step?.id,
     );
@@ -750,19 +753,7 @@ export class Run<
       runId: this.runId,
     });
 
-    return this.executionEngine.execute<
-      z.infer<TInput>,
-      {
-        status: 'success' | 'failed' | 'suspended';
-        result: TOutput;
-        suspended?: string[];
-        steps: {
-          [K in keyof StepsRecord<TSteps>]: StepsRecord<TSteps>[K]['outputSchema'] extends undefined
-            ? StepResult<unknown>
-            : StepResult<z.infer<NonNullable<StepsRecord<TSteps>[K]['outputSchema']>>>;
-        };
-      }
-    >({
+    return this.executionEngine.execute<z.infer<TInput>, WorkflowStatus<TOutput, TSteps>>({
       workflowId: this.workflowId,
       runId: this.runId,
       graph: this.executionGraph,

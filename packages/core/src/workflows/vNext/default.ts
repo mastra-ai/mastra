@@ -31,7 +31,8 @@ function fmtReturnValue<TOutput>(
   } else if (lastOutput.status === 'suspended') {
     const suspendedStepIds = Object.entries(stepResults).flatMap(([stepId, stepResult]) => {
       if (stepResult?.status === 'suspended') {
-        return [stepId];
+        const nestedPath = stepResult?.payload?.__workflow_meta?.path;
+        return nestedPath ? [[stepId, ...nestedPath]] : [[stepId]];
       }
 
       return [];
