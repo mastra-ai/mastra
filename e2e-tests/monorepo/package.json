@@ -3,6 +3,8 @@
   "version": "0.0.1",
   "private": true,
   "devDependencies": {
+    "execa": "^9.5.2",
+    "get-port": "^7.1.0",
     "rollup": "^4.40.0",
     "vitest": "^3.0.7"
   },

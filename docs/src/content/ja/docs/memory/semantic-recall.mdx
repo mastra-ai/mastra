@@ -1,0 +1,126 @@
+# セマンティック リコール
+
+友人に先週末何をしたか尋ねると、彼らは「先週末」に関連する出来事を記憶の中から検索し、それから何をしたかを教えてくれます。それはある意味、Mastraでのセマンティック リコールの仕組みに似ています。
+
+## セマンティックリコールの仕組み
+
+セマンティックリコールはRAGベースの検索であり、メッセージが[最近の会話履歴](./overview.mdx#conversation-history)に含まれなくなった場合でも、エージェントが長期間の対話にわたってコンテキストを維持するのに役立ちます。
+
+メッセージのベクトル埋め込みを使用して類似性検索を行い、さまざまなベクトルストアと統合し、取得されたメッセージの周囲のコンテキストウィンドウを設定可能です。
+
+<br />
+<img
+  src="/docs/semantic-recall.png"
+  alt="Mastra Memoryのセマンティックリコールを示す図"
+  width={800}
+/>
+
+有効にすると、新しいメッセージを使用してベクトルDBに意味的に類似したメッセージを問い合わせます。
+
+LLMからの応答を受け取った後、すべての新しいメッセージ（ユーザー、アシスタント、ツールコール/結果）がベクトルDBに挿入され、後の対話で呼び出されるようになります。
+
+## クイックスタート
+
+セマンティック・リコールはデフォルトで有効になっているため、エージェントにメモリを与えると、それが含まれます：
+
+```typescript {9}
+import { Agent } from "@mastra/core/agent";
+import { Memory } from "@mastra/memory";
+import { openai } from "@ai-sdk/openai";
+
+const agent = new Agent({
+  name: "SupportAgent",
+  instructions: "You are a helpful support agent.",
+  model: openai("gpt-4o"),
+  memory: new Memory(),
+});
+```
+
+## リコール設定
+
+セマンティックリコールの動作を制御する主な2つのパラメータは：
+
+1. **topK**: 意味的に類似したメッセージを取得する数
+2. **messageRange**: 各一致に含める周囲のコンテキストの量
+
+```typescript {5-6}
+const agent = new Agent({
+  memory: new Memory({
+    options: {
+      semanticRecall: {
+        topK: 3, // 最も類似した3つのメッセージを取得
+        messageRange: 2, // 各一致の前後2つのメッセージを含める
+      },
+    },
+  }),
+});
+```
+
+### ストレージ設定
+
+セマンティックリコールは、メッセージとそれらの埋め込みを保存するために[ストレージとベクトルDB](/reference/memory/Memory#parameters)に依存しています。
+
+```ts {8-17}
+import { Memory } from "@mastra/memory";
+import { Agent } from "@mastra/core/agent";
+import { LibSQLStore } from "@mastra/core/storage/libsql";
+import { LibSQLVector } from "@mastra/core/vector/libsql";
+
+const agent = new Agent({
+  memory: new Memory({
+    // これは省略した場合のデフォルトストレージDBです
+    storage: new LibSQLStore({
+      config: {
+        url: "file:local.db",
+      },
+    }),
+    // これは省略した場合のデフォルトベクトルDBです
+    vector: new LibSQLVector({
+      connectionUrl: "file:local.db",
+    }),
+  }),
+});
+```
+
+**ストレージ/ベクトルのコード例**:
+
+- [LibSQL](/examples/memory/memory-with-libsql)
+- [Postgres](/examples/memory/memory-with-pg)
+- [Upstash](/examples/memory/memory-with-upstash)
+
+### エンベッダー設定
+
+セマンティックリコールは、メッセージを埋め込みに変換するための[埋め込みモデル](/reference/memory/Memory#embedder)に依存しています。デフォルトでMastraはFastEmbedを使用しますが、別の[埋め込みモデル](https://sdk.vercel.ai/docs/ai-sdk-core/embeddings)を指定することもできます。
+
+```ts {7}
+import { Memory } from "@mastra/memory";
+import { Agent } from "@mastra/core/agent";
+import { openai } from "@ai-sdk/openai";
+
+const agent = new Agent({
+  memory: new Memory({
+    embedder: openai.embedding("text-embedding-3-small"),
+  }),
+});
+```
+
+### 無効化
+
+セマンティックリコールを使用するとパフォーマンスへの影響があります。新しいメッセージは埋め込みに変換され、新しいメッセージがLLMに送信される前にベクトルデータベースへのクエリに使用されます。
+
+セマンティックリコールはデフォルトで有効になっていますが、必要ない場合は無効にすることができます：
+
+```typescript {4}
+const agent = new Agent({
+  memory: new Memory({
+    options: {
+      semanticRecall: false,
+    },
+  }),
+});
+```
+
+以下のようなシナリオでセマンティックリコールを無効にすることをお勧めします：
+
+- [会話履歴](./getting-started.mdx#conversation-history-last-messages)が現在の会話に十分なコンテキストを提供している場合。
+- リアルタイムの双方向音声のような、埋め込みの作成とベクトルクエリの実行による追加の遅延が目立つパフォーマンスに敏感なアプリケーションの場合。

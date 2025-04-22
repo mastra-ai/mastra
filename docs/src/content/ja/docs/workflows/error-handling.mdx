@@ -1,0 +1,183 @@
+---
+title: "ワークフローにおけるエラー処理 | Mastra ドキュメント"
+description: "ステップの再試行、条件分岐、モニタリングを使用して、Mastra ワークフローでエラーを処理する方法を学びます。"
+---
+
+# ワークフローにおけるエラーハンドリング
+
+堅牢なエラーハンドリングは、プロダクションワークフローにとって不可欠です。Mastraは、エラーを優雅に処理するためのいくつかのメカニズムを提供し、ワークフローが失敗から回復したり、必要に応じて優雅に劣化したりすることを可能にします。
+
+## 概要
+
+Mastra ワークフローでのエラー処理は、以下を使用して実装できます：
+
+1. **ステップの再試行** - 失敗したステップを自動的に再試行
+2. **条件分岐** - ステップの成功または失敗に基づいて代替パスを作成
+3. **エラーモニタリング** - ワークフローのエラーを監視し、プログラムで処理
+4. **結果ステータスの確認** - 後続のステップで前のステップのステータスを確認
+
+## ステップのリトライ
+
+Mastraは、一時的なエラーによって失敗したステップのための組み込みのリトライメカニズムを提供します。これは、外部サービスや一時的に利用できないリソースとやり取りするステップに特に有用です。
+
+### 基本的なリトライ設定
+
+リトライは、ワークフローレベルまたは個々のステップに対して設定できます：
+
+```typescript
+// ワークフローレベルのリトライ設定
+const workflow = new Workflow({
+  name: 'my-workflow',
+  retryConfig: {
+    attempts: 3,    // リトライ試行回数
+    delay: 1000,    // リトライ間の遅延時間（ミリ秒）
+  },
+});
+
+// ステップレベルのリトライ設定（ワークフローレベルを上書き）
+const apiStep = new Step({
+  id: 'callApi',
+  execute: async () => {
+    // 失敗する可能性のあるAPI呼び出し
+  },
+  retryConfig: {
+    attempts: 5,    // このステップは最大5回リトライします
+    delay: 2000,    // リトライ間の遅延時間は2秒
+  },
+});
+```
+
+ステップのリトライに関する詳細は、[ステップのリトライ](../reference/workflows/step-retries.mdx)リファレンスを参照してください。
+
+## 条件分岐
+
+条件ロジックを使用して、前のステップの成功または失敗に基づいて代替のワークフローパスを作成できます：
+
+```typescript
+// Create a workflow with conditional branching
+const workflow = new Workflow({
+  name: 'error-handling-workflow',
+});
+
+workflow
+  .step(fetchDataStep)
+  .then(processDataStep, {
+    // Only execute processDataStep if fetchDataStep was successful
+    when: ({ context }) => {
+      return context.steps.fetchDataStep?.status === 'success';
+    },
+  })
+  .then(fallbackStep, {
+    // Execute fallbackStep if fetchDataStep failed
+    when: ({ context }) => {
+      return context.steps.fetchDataStep?.status === 'failed';
+    },
+  })
+  .commit();
+```
+
+## エラーモニタリング
+
+`watch` メソッドを使用して、ワークフローのエラーを監視できます:
+
+```typescript
+const { start, watch } = workflow.createRun();
+
+watch(async ({ results }) => {
+  // 失敗したステップがあるか確認
+  const failedSteps = Object.entries(results)
+    .filter(([_, step]) => step.status === "failed")
+    .map(([stepId]) => stepId);
+
+  if (failedSteps.length > 0) {
+    console.error(`ワークフローに失敗したステップがあります: ${failedSteps.join(', ')}`);
+    // アラートやログ記録などの是正措置を取る
+  }
+});
+
+await start();
+```
+
+## ステップでのエラー処理
+
+ステップの実行関数内で、プログラム的にエラーを処理することができます：
+
+```typescript
+const robustStep = new Step({
+  id: 'robustStep',
+  execute: async ({ context }) => {
+    try {
+      // 主な操作を試みる
+      const result = await someRiskyOperation();
+      return { success: true, data: result };
+    } catch (error) {
+      // エラーを記録する
+      console.error('操作に失敗しました:', error);
+
+      // 例外を投げる代わりに優雅なフォールバック結果を返す
+      return {
+        success: false,
+        error: error.message,
+        fallbackData: 'デフォルト値'
+      };
+    }
+  },
+});
+```
+
+## 前のステップの結果を確認する
+
+前のステップの結果に基づいて決定を下すことができます:
+
+```typescript
+const finalStep = new Step({
+  id: 'finalStep',
+  execute: async ({ context }) => {
+    // Check results of previous steps
+    const step1Success = context.steps.step1?.status === 'success';
+    const step2Success = context.steps.step2?.status === 'success';
+
+    if (step1Success && step2Success) {
+      // All steps succeeded
+      return { status: 'complete', result: 'All operations succeeded' };
+    } else if (step1Success) {
+      // Only step1 succeeded
+      return { status: 'partial', result: 'Partial completion' };
+    } else {
+      // Critical failure
+      return { status: 'failed', result: 'Critical steps failed' };
+    }
+  },
+});
+```
+
+## エラーハンドリングのベストプラクティス
+
+1. **一時的な失敗に対してリトライを使用する**: 一時的な問題が発生する可能性のあるステップに対してリトライポリシーを設定します。
+
+2. **フォールバックパスを提供する**: 重要なステップが失敗した場合に備えて、代替パスを設計します。
+
+3. **エラーシナリオを具体的にする**: 異なる種類のエラーに対して異なるハンドリング戦略を使用します。
+
+4. **エラーを包括的に記録する**: デバッグを支援するために、エラーを記録する際にはコンテキスト情報を含めます。
+
+5. **失敗時に意味のあるデータを返す**: ステップが失敗した場合、後続のステップが意思決定を行うのに役立つように、失敗に関する構造化データを返します。
+
+6. **冪等性を考慮する**: ステップが重複した副作用を引き起こすことなく安全にリトライできるようにします。
+
+7. **ワークフローの実行を監視する**: `watch` メソッドを使用してワークフローの実行を積極的に監視し、早期にエラーを検出します。
+
+## 高度なエラーハンドリング
+
+より複雑なエラーハンドリングのシナリオを考慮するには、次のことを検討してください：
+
+- **サーキットブレーカーの実装**: ステップが繰り返し失敗する場合、再試行を停止し、フォールバック戦略を使用する
+- **タイムアウト処理の追加**: ステップに時間制限を設定し、ワークフローが無期限に停止するのを防ぐ
+- **専用のエラー回復ワークフローの作成**: 重要なワークフローの場合、メインワークフローが失敗したときにトリガーされる別の回復ワークフローを作成する
+
+## 関連
+
+- [ステップリトライのリファレンス](../../reference/workflows/step-retries.mdx)
+- [ウォッチメソッドのリファレンス](../../reference/workflows/watch.mdx)
+- [ステップ条件](../../reference/workflows/step-condition.mdx)
+- [制御フロー](./control-flow.mdx)

@@ -1,0 +1,131 @@
+# メモリプロセッサ
+
+メモリプロセッサを使用すると、メモリから取得されたメッセージのリストを、エージェントのコンテキストウィンドウに追加されLLMに送信される_前に_変更することができます。これはコンテキストサイズの管理、コンテンツのフィルタリング、パフォーマンスの最適化に役立ちます。
+
+プロセッサは、メモリ設定（例：`lastMessages`、`semanticRecall`）に基づいて取得されたメッセージに対して動作します。新しく入ってくるユーザーメッセージには**影響しません**。
+
+## 組み込みプロセッサー
+
+Mastraには組み込みプロセッサーが提供されています：
+
+### `TokenLimiter`
+
+このプロセッサーは、LLMのコンテキストウィンドウ制限を超えることによって引き起こされるエラーを防ぐために使用されます。取得されたメモリメッセージのトークン数をカウントし、合計数が指定された`limit`を下回るまで最も古いメッセージを削除します。
+
+```typescript copy showLineNumbers {9-12}
+import { Memory } from "@mastra/memory";
+import { TokenLimiter } from "@mastra/memory/processors";
+import { Agent } from "@mastra/core/agent";
+import { openai } from "@ai-sdk/openai";
+
+const agent = new Agent({
+  model: openai("gpt-4o"),
+  memory: new Memory({
+    processors: [
+      // Ensure the total tokens from memory don't exceed ~127k
+      new TokenLimiter(127000),
+    ],
+  }),
+});
+```
+
+`TokenLimiter`はデフォルトで`o200k_base`エンコーディングを使用します（GPT-4oに適しています）。異なるモデルに必要な場合は、他のエンコーディングを指定することができます：
+
+```typescript copy showLineNumbers {6-9}
+// Import the encoding you need (e.g., for older OpenAI models)
+import cl100k_base from "js-tiktoken/ranks/cl100k_base";
+
+const memoryForOlderModel = new Memory({
+  processors: [
+    new TokenLimiter({
+      limit: 16000, // Example limit for a 16k context model
+      encoding: cl100k_base,
+    }),
+  ],
+});
+```
+
+エンコーディングについての詳細は、[OpenAI cookbook](https://cookbook.openai.com/examples/how_to_count_tokens_with_tiktoken#encodings)または[`js-tiktoken` リポジトリ](https://github.com/dqbd/tiktoken)を参照してください。
+
+### `ToolCallFilter`
+
+このプロセッサーは、LLMに送信されるメモリメッセージからツールコールを削除します。コンテキストから潜在的に冗長なツールの対話を除外することでトークンを節約します。これは、将来の対話のために詳細が必要ない場合に役立ちます。また、エージェントが常に特定のツールを再度呼び出し、メモリ内の以前のツール結果に依存しないようにしたい場合にも役立ちます。
+
+```typescript copy showLineNumbers {5-14}
+import { Memory } from "@mastra/memory";
+import { ToolCallFilter, TokenLimiter } from "@mastra/memory/processors";
+
+const memoryFilteringTools = new Memory({
+  processors: [
+    // Example 1: Remove all tool calls/results
+    new ToolCallFilter(),
+
+    // Example 2: Remove only noisy image generation tool calls/results
+    new ToolCallFilter({ exclude: ["generateImageTool"] }),
+
+    // Always place TokenLimiter last
+    new TokenLimiter(127000),
+  ],
+});
+```
+
+## 複数のプロセッサの適用
+
+複数のプロセッサをチェーンすることができます。これらは`processors`配列に表示される順序で実行されます。一つのプロセッサの出力が次のプロセッサの入力となります。
+
+**順序が重要です！** 一般的なベストプラクティスとして、`TokenLimiter`をチェーンの**最後**に配置することをお勧めします。これにより、他のフィルタリングが行われた後の最終的なメッセージセットに対して動作し、最も正確なトークン制限の適用が可能になります。
+
+```typescript copy showLineNumbers {7-14}
+import { Memory } from "@mastra/memory";
+import { ToolCallFilter, TokenLimiter } from "@mastra/memory/processors";
+// Assume a hypothetical 'PIIFilter' custom processor exists
+// import { PIIFilter } from './custom-processors';
+
+const memoryWithMultipleProcessors = new Memory({
+  processors: [
+    // 1. Filter specific tool calls first
+    new ToolCallFilter({ exclude: ["verboseDebugTool"] }),
+    // 2. Apply custom filtering (e.g., remove hypothetical PII - use with caution)
+    // new PIIFilter(),
+    // 3. Apply token limiting as the final step
+    new TokenLimiter(127000),
+  ],
+});
+```
+
+## カスタムプロセッサの作成
+
+基本の `MemoryProcessor` クラスを拡張することで、カスタムロジックを作成できます。
+
+```typescript copy showLineNumbers {4-19,23-26}
+import { Memory, CoreMessage } from "@mastra/memory";
+import { MemoryProcessor, MemoryProcessorOpts } from "@mastra/core/memory";
+
+class ConversationOnlyFilter extends MemoryProcessor {
+  constructor() {
+    // Provide a name for easier debugging if needed
+    super({ name: "ConversationOnlyFilter" });
+  }
+
+  process(
+    messages: CoreMessage[],
+    _opts: MemoryProcessorOpts = {}, // Options passed during memory retrieval, rarely needed here
+  ): CoreMessage[] {
+    // Filter messages based on role
+    return messages.filter(
+      (msg) => msg.role === "user" || msg.role === "assistant",
+    );
+  }
+}
+
+// Use the custom processor
+const memoryWithCustomFilter = new Memory({
+  processors: [
+    new ConversationOnlyFilter(),
+    new TokenLimiter(127000), // Still apply token limiting
+  ],
+});
+```
+
+カスタムプロセッサを作成する際は、入力の `messages` 配列やそのオブジェクトを直接変更しないようにしてください。
+

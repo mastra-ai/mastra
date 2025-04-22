@@ -4,9 +4,10 @@ on:
   pull_request:
     branches: [main]
     paths:
-      - "stores/**"
-      - "stores/*/package.json"
-      - ".github/workflows/test-combined-stores.yml"
+      - 'stores/**'
+      - 'stores/*/package.json'
+      - 'packages/core/**'
+      - '.github/workflows/test-combined-stores.yml'
 
 permissions:
   contents: read
@@ -48,30 +49,28 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install pnpm
-        uses: pnpm/action-setup@v2
+      - uses: pnpm/action-setup@v4
+        name: Install pnpm
         with:
-          version: 9.7.0
+          run_install: false
 
-      - name: Setup Node.js
+      - name: Setup Node.js 20.x
         uses: actions/setup-node@v4
         with:
-          node-version: "20"
-          cache: "pnpm"
+          node-version: 20.x
+          cache: 'pnpm'
 
       - name: Install dependencies
         run: pnpm install
 
-      - name: Build core
-        run: pnpm build:core
-
       - name: Build combined storage packages
-        run: pnpm build:combined-stores
+        run: pnpm turbo --filter "@mastra/${{ matrix.store }}" build
 
       - name: Run ${{ matrix.store }} tests
-        run: pnpm test --filter "@mastra/${{ matrix.store }}"
+        run: pnpm test
+        working-directory: stores/${{ matrix.store }}
         env:
-          NODE_OPTIONS: "--max_old_space_size=8096"
+          NODE_OPTIONS: '--max_old_space_size=8096'
           PINECONE_API_KEY: ${{ secrets.PINECONE_API_KEY }}
           ASTRA_DB_ENDPOINT: ${{ secrets.ASTRA_DB_ENDPOINT }}
           ASTRA_DB_TOKEN: ${{ secrets.ASTRA_DB_TOKEN }}

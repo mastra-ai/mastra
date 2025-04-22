@@ -1,0 +1,249 @@
+---
+title: "リファレンス: ExtractParams | ドキュメント処理 | RAG | Mastra ドキュメント"
+description: Mastraにおけるメタデータ抽出設定のドキュメント。
+---
+
+# ExtractParams
+
+ExtractParamsは、LLM分析を使用してドキュメントチャンクからメタデータを抽出するように設定します。
+
+## 例
+
+```typescript showLineNumbers copy
+import { MDocument } from "@mastra/rag";
+
+const doc = MDocument.fromText(text);
+const chunks = await doc.chunk({
+  extract: {
+    title: true,    // デフォルト設定を使用してタイトルを抽出
+    summary: true,  // デフォルト設定を使用して要約を生成
+    keywords: true  // デフォルト設定を使用してキーワードを抽出
+  }
+});
+
+// 例の出力:
+// chunks[0].metadata = {
+//   documentTitle: "AI Systems Overview",
+//   sectionSummary: "人工知能の概念と応用の概要",
+//   excerptKeywords: "キーワード: AI, 機械学習, アルゴリズム"
+// }
+```
+
+## パラメーター
+
+`extract` パラメーターは以下のフィールドを受け入れます:
+
+<PropertiesTable
+  content={[
+    {
+      name: "title",
+      type: "boolean | TitleExtractorsArgs",
+      isOptional: true,
+      description:
+        "タイトル抽出を有効にします。デフォルト設定には true を設定するか、カスタム設定を提供します。",
+    },
+    {
+      name: "summary",
+      type: "boolean | SummaryExtractArgs",
+      isOptional: true,
+      description:
+        "要約抽出を有効にします。デフォルト設定には true を設定するか、カスタム設定を提供します。",
+    },
+    {
+      name: "questions",
+      type: "boolean | QuestionAnswerExtractArgs",
+      isOptional: true,
+      description:
+        "質問生成を有効にします。デフォルト設定には true を設定するか、カスタム設定を提供します。",
+    },
+    {
+      name: "keywords",
+      type: "boolean | KeywordExtractArgs",
+      isOptional: true,
+      description:
+        "キーワード抽出を有効にします。デフォルト設定には true を設定するか、カスタム設定を提供します。",
+    },
+  ]}
+/>
+
+## 抽出引数
+
+### TitleExtractorsArgs
+
+<PropertiesTable
+  content={[
+    {
+      name: "llm",
+      type: "MastraLanguageModel",
+      isOptional: true,
+      description: "タイトル抽出に使用するAI SDK言語モデル"
+    },
+    {
+      name: "nodes",
+      type: "number",
+      isOptional: true,
+      description: "抽出するタイトルノードの数"
+    },
+    {
+      name: "nodeTemplate",
+      type: "string",
+      isOptional: true,
+      description: "タイトルノード抽出用のカスタムプロンプトテンプレート。{context}プレースホルダーを含む必要があります"
+    },
+    {
+      name: "combineTemplate",
+      type: "string",
+      isOptional: true,
+      description: "タイトルを結合するためのカスタムプロンプトテンプレート。{context}プレースホルダーを含む必要があります"
+    }
+  ]}
+/>
+
+### SummaryExtractArgs
+
+<PropertiesTable
+  content={[
+    {
+      name: "llm",
+      type: "MastraLanguageModel",
+      isOptional: true,
+      description: "要約抽出に使用するAI SDK言語モデル"
+    },
+    {
+      name: "summaries",
+      type: "('self' | 'prev' | 'next')[]",
+      isOptional: true,
+      description: "生成する要約タイプのリスト。'self'（現在のチャンク）、'prev'（前のチャンク）、または'next'（次のチャンク）のみを含めることができます"
+    },
+    {
+      name: "promptTemplate",
+      type: "string",
+      isOptional: true,
+      description: "要約生成用のカスタムプロンプトテンプレート。{context}プレースホルダーを含む必要があります"
+    }
+  ]}
+/>
+
+### QuestionAnswerExtractArgs
+
+<PropertiesTable
+  content={[
+    {
+      name: "llm",
+      type: "MastraLanguageModel",
+      isOptional: true,
+      description: "質問生成に使用するAI SDK言語モデル"
+    },
+    {
+      name: "questions",
+      type: "number",
+      isOptional: true,
+      description: "生成する質問の数"
+    },
+    {
+      name: "promptTemplate",
+      type: "string",
+      isOptional: true,
+      description: "質問生成用のカスタムプロンプトテンプレート。{context}と{numQuestions}の両方のプレースホルダーを含む必要があります"
+    },
+    {
+      name: "embeddingOnly",
+      type: "boolean",
+      isOptional: true,
+      description: "trueの場合、実際の質問なしで埋め込みのみを生成します"
+    }
+  ]}
+/>
+
+### KeywordExtractArgs
+
+<PropertiesTable
+  content={[
+    {
+      name: "llm",
+      type: "MastraLanguageModel",
+      isOptional: true,
+      description: "キーワード抽出に使用するAI SDK言語モデル"
+    },
+    {
+      name: "keywords",
+      type: "number",
+      isOptional: true,
+      description: "抽出するキーワードの数"
+    },
+    {
+      name: "promptTemplate",
+      type: "string",
+      isOptional: true,
+      description: "キーワード抽出用のカスタムプロンプトテンプレート。{context}と{maxKeywords}の両方のプレースホルダーを含む必要があります"
+    }
+  ]}
+/>
+
+## 高度な例
+
+```typescript showLineNumbers copy
+import { MDocument } from "@mastra/rag";
+
+const doc = MDocument.fromText(text);
+const chunks = await doc.chunk({
+  extract: {
+    // Title extraction with custom settings
+    title: {
+      nodes: 2,  // Extract 2 title nodes
+      nodeTemplate: "Generate a title for this: {context}",
+      combineTemplate: "Combine these titles: {context}"
+    },
+
+    // Summary extraction with custom settings
+    summary: {
+      summaries: ["self"],  // Generate summaries for current chunk
+      promptTemplate: "Summarize this: {context}"
+    },
+
+    // Question generation with custom settings
+    questions: {
+      questions: 3,  // Generate 3 questions
+      promptTemplate: "Generate {numQuestions} questions about: {context}",
+      embeddingOnly: false
+    },
+
+    // Keyword extraction with custom settings
+    keywords: {
+      keywords: 5,  // Extract 5 keywords
+      promptTemplate: "Extract {maxKeywords} key terms from: {context}"
+    }
+  }
+});
+
+// Example output:
+// chunks[0].metadata = {
+//   documentTitle: "AI in Modern Computing",
+//   sectionSummary: "Overview of AI concepts and their applications in computing",
+//   questionsThisExcerptCanAnswer: "1. What is machine learning?\n2. How do neural networks work?",
+//   excerptKeywords: "1. Machine learning\n2. Neural networks\n3. Training data"
+// }
+```
+
+## タイトル抽出のためのドキュメントグループ化
+
+`TitleExtractor`を使用する際、各チャンクの`metadata`フィールドに共通の`docId`を指定することで、タイトル抽出のために複数のチャンクをグループ化できます。同じ`docId`を持つすべてのチャンクは、同じ抽出されたタイトルを受け取ります。`docId`が設定されていない場合、各チャンクはタイトル抽出のために独自のドキュメントとして扱われます。
+
+**例：**
+
+```ts
+import { MDocument } from "@mastra/rag";
+
+const doc = new MDocument({
+  docs: [
+    { text: "chunk 1", metadata: { docId: "docA" } },
+    { text: "chunk 2", metadata: { docId: "docA" } },
+    { text: "chunk 3", metadata: { docId: "docB" } },
+  ],
+  type: "text",
+});
+
+await doc.extractMetadata({ title: true });
+// 最初の2つのチャンクは同じタイトルを共有し、3番目のチャンクには別のタイトルが割り当てられます。
+```
+

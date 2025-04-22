@@ -2209,7 +2209,7 @@ export async function createNodeServer(mastra: Mastra, options: ServerBundleOpti
       const logger = mastra.getLogger();
       logger.info(` Mastra API running on port http://localhost:${process.env.PORT || 4111}/api`);
       if (options?.playground) {
-        logger.info(`👨‍💻 Playground available at http://localhost:${process.env.PORT || 4111}/`);
+        logger.info(`👨‍💻 Playground available at http://localhost:${port}/`);
       }
     },
   );

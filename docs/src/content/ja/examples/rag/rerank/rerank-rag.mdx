@@ -1,0 +1,180 @@
+---
+title: "例: ツールを使用した結果の再ランク付け | 検索 | RAG | Mastra ドキュメント"
+description: OpenAI埋め込みとベクトルストレージにPGVectorを使用して、Mastraで再ランク付けを行うRAGシステムを実装する例。
+---
+
+import { GithubLink } from "@/components/github-link";
+
+# ツールを使用した結果の再ランキング
+
+この例では、Mastra のベクトルクエリツールを使用して、OpenAI の埋め込みと PGVector をベクトルストレージとして使用した再ランキングを伴う Retrieval-Augmented Generation (RAG) システムを実装する方法を示します。
+
+## 概要
+
+このシステムは、MastraとOpenAIを使用した再ランキングを伴うRAGを実装しています。以下がその機能です：
+
+1. 応答生成のためにgpt-4o-miniを使用してMastraエージェントを設定
+2. 再ランキング機能を備えたベクトルクエリツールを作成
+3. テキストドキュメントを小さなセグメントに分割し、それらから埋め込みを作成
+4. それらをPostgreSQLベクトルデータベースに保存
+5. クエリに基づいて関連するチャンクを取得し再ランキング
+6. Mastraエージェントを使用してコンテキストに応じた応答を生成
+
+## セットアップ
+
+### 環境セットアップ
+
+環境変数を設定してください：
+
+```bash filename=".env"
+OPENAI_API_KEY=your_openai_api_key_here
+POSTGRES_CONNECTION_STRING=your_connection_string_here
+```
+
+### 依存関係
+
+次に、必要な依存関係をインポートします：
+
+```typescript copy showLineNumbers filename="index.ts"
+import { openai } from "@ai-sdk/openai";
+import { Mastra } from "@mastra/core";
+import { Agent } from "@mastra/core/agent";
+import { PgVector } from "@mastra/pg";
+import { MDocument, createVectorQueryTool } from "@mastra/rag";
+import { embedMany } from "ai";
+```
+
+## 再ランキングを使用したベクトルクエリツールの作成
+
+@mastra/rag からインポートされた createVectorQueryTool を使用して、ベクトルデータベースをクエリし、結果を再ランキングするツールを作成できます:
+
+```typescript copy showLineNumbers{8} filename="index.ts"
+const vectorQueryTool = createVectorQueryTool({
+  vectorStoreName: "pgVector",
+  indexName: "embeddings",
+  model: openai.embedding("text-embedding-3-small"),
+  reranker: {
+    model: openai("gpt-4o-mini"),
+  },
+});
+```
+
+## エージェント設定
+
+応答を処理するMastraエージェントを設定します:
+
+```typescript copy showLineNumbers{17} filename="index.ts"
+export const ragAgent = new Agent({
+  name: "RAG Agent",
+  instructions: `You are a helpful assistant that answers questions based on the provided context. Keep your answers concise and relevant.
+    Important: When asked to answer a question, please base your answer only on the context provided in the tool. 
+    If the context doesn't contain enough information to fully answer the question, please state that explicitly.`,
+  model: openai("gpt-4o-mini"),
+  tools: {
+    vectorQueryTool,
+  },
+});
+```
+
+## PgVectorとMastraのインスタンス化
+
+コンポーネントを使用してPgVectorとMastraをインスタンス化します:
+
+```typescript copy showLineNumbers{29} filename="index.ts"
+const pgVector = new PgVector(process.env.POSTGRES_CONNECTION_STRING!);
+
+export const mastra = new Mastra({
+  agents: { ragAgent },
+  vectors: { pgVector },
+});
+const agent = mastra.getAgent("ragAgent");
+```
+
+## ドキュメント処理
+
+ドキュメントを作成し、チャンクに処理します：
+
+```typescript copy showLineNumbers{38} filename="index.ts"
+const doc1 = MDocument.fromText(`
+market data shows price resistance levels.
+technical charts display moving averages.
+support levels guide trading decisions.
+breakout patterns signal entry points.
+price action determines trade timing.
+
+baseball cards show gradual value increase.
+rookie cards command premium prices.
+card condition affects resale value.
+authentication prevents fake trading.
+grading services verify card quality.
+
+volume analysis confirms price trends.
+sports cards track seasonal demand.
+chart patterns predict movements.
+mint condition doubles card worth.
+resistance breaks trigger orders.
+rare cards appreciate yearly.
+`);
+
+const chunks = await doc1.chunk({
+  strategy: "recursive",
+  size: 150,
+  overlap: 20,
+  separator: "\n",
+});
+```
+
+## 埋め込みの作成と保存
+
+チャンクの埋め込みを生成し、それらをベクターデータベースに保存します:
+
+```typescript copy showLineNumbers{66} filename="index.ts"
+const { embeddings } = await embedMany({
+  model: openai.embedding("text-embedding-3-small"),
+  values: chunks.map(chunk => chunk.text),
+});
+
+const vectorStore = mastra.getVector("pgVector");
+await vectorStore.createIndex({
+  indexName: "embeddings",
+  dimension: 1536,
+});
+
+await vectorStore.upsert({
+  indexName: "embeddings",
+  vectors: embeddings,
+  metadata: chunks?.map((chunk: any) => ({ text: chunk.text })),
+});
+```
+
+## 再ランキングを用いたクエリ
+
+再ランキングが結果にどのように影響するかを確認するために、さまざまなクエリを試してください:
+
+```typescript copy showLineNumbers{82} filename="index.ts"
+const queryOne = 'explain technical trading analysis';
+const answerOne = await agent.generate(queryOne);
+console.log('\nQuery:', queryOne);
+console.log('Response:', answerOne.text);
+
+const queryTwo = 'explain trading card valuation';
+const answerTwo = await agent.generate(queryTwo);
+console.log('\nQuery:', queryTwo);
+console.log('Response:', answerTwo.text);
+
+const queryThree = 'how do you analyze market resistance';
+const answerThree = await agent.generate(queryThree);
+console.log('\nQuery:', queryThree);
+console.log('Response:', answerThree.text);
+```
+
+<br />
+<br />
+<hr className="dark:border-[#404040] border-gray-300" />
+<br />
+<br />
+<GithubLink
+  link={
+    "https://github.com/mastra-ai/mastra/blob/main/examples/basics/rag/rerank-rag"
+  }
+/> 

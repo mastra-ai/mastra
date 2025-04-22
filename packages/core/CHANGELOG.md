@@ -1,5 +1,29 @@
 # @mastra/core
 
+## 0.9.0-alpha.7
+
+### Patch Changes
+
+- 71d9444: updated savemessage to not use mutation when hiding working memory
+
+## 0.9.0-alpha.6
+
+### Patch Changes
+
+- 157c741: Fix message dupes using processors
+
+## 0.9.0-alpha.5
+
+### Patch Changes
+
+- 08bb78e: Added an extra safety for Memory message ordering
+
+## 0.9.0-alpha.4
+
+### Patch Changes
+
+- 7e92011: Include tools with deployment builds
+
 ## 0.9.0-alpha.3
 
 ### Minor Changes
