@@ -34,11 +34,11 @@ export class MCPConfiguration extends MastraBase {
     // If an ID is provided, use it directly
     if (args.id) {
       this.id = args.id;
-      const cached = MCPConfiguration.serverConfigCache.get(this.id);
+      const cached = (this.constructor as typeof MCPConfiguration).serverConfigCache.get(this.id);
 
       // If we have a cache hit but servers don't match, disconnect the old configuration
       if (cached && !equal(cached.servers, args.servers)) {
-        const existingInstance = MCPConfiguration.instances.get(this.id);
+        const existingInstance = (this.constructor as typeof MCPConfiguration).instances.get(this.id);
         if (existingInstance) {
           void existingInstance.disconnect(); // void to explicitly ignore the Promise
         }
@@ -49,13 +49,13 @@ export class MCPConfiguration extends MastraBase {
     }
 
     // Update cache with current configuration
-    MCPConfiguration.serverConfigCache.set(this.id, {
+    (this.constructor as typeof MCPConfiguration).serverConfigCache.set(this.id, {
       servers: args.servers,
       id: this.id,
     });
 
     // Check for existing instance with same ID
-    const existingInstance = MCPConfiguration.instances.get(this.id);
+    const existingInstance = (this.constructor as typeof MCPConfiguration).instances.get(this.id);
     if (existingInstance) {
       if (!args.id) {
         throw new Error(`MCPConfiguration was initialized multiple times with the same configuration options.
@@ -75,8 +75,8 @@ To fix this you have three different options:
   }
 
   private addToInstanceCache() {
-    if (!MCPConfiguration.instances.has(this.id)) {
-      MCPConfiguration.instances.set(this.id, this);
+    if (!(this.constructor as typeof MCPConfiguration).instances.has(this.id)) {
+      (this.constructor as typeof MCPConfiguration).instances.set(this.id, this);
     }
   }
 
@@ -88,7 +88,7 @@ To fix this you have three different options:
   }
 
   public async disconnect() {
-    MCPConfiguration.instances.delete(this.id);
+    (this.constructor as typeof MCPConfiguration).instances.delete(this.id);
 
     await Promise.all(Array.from(this.mcpClientsById.values()).map(client => client.disconnect()));
     this.mcpClientsById.clear();
