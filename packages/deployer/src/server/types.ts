@@ -5,4 +5,5 @@ export interface ApiError extends Error {
 
 export type ServerBundleOptions = {
   playground?: boolean;
+  isDev?: boolean;
 };

@@ -24,18 +24,23 @@ export type ServerConfig = {
    */
   cors?: Parameters<typeof cors>[0] | false;
   /**
-   * Enable Swagger UI
-   * @default false
+   * Build configuration for the server
    */
-  swaggerUI?: boolean;
-  /**
-   * Enable API request logging
-   * @default false
-   */
-  apiReqLogs?: boolean;
-  /**
-   * Enable OpenAPI documentation
-   * @default false
-   */
-  openAPIDocs?: boolean;
+  build?: {
+    /**
+     * Enable Swagger UI
+     * @default false
+     */
+    swaggerUI?: boolean;
+    /**
+     * Enable API request logging
+     * @default false
+     */
+    apiReqLogs?: boolean;
+    /**
+     * Enable OpenAPI documentation
+     * @default false
+     */
+    openAPIDocs?: boolean;
+  };
 };
