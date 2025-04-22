@@ -755,95 +755,169 @@ export class PostgresStore extends MastraStorage {
     }
   }
 
+  private parseWorkflowRun(row: any): WorkflowRun {
+    let parsedSnapshot: WorkflowRunState | string = row.snapshot as string;
+    if (typeof parsedSnapshot === 'string') {
+      try {
+        parsedSnapshot = JSON.parse(row.snapshot as string) as WorkflowRunState;
+      } catch (e) {
+        // If parsing fails, return the raw snapshot string
+        console.warn(`Failed to parse snapshot for workflow ${row.workflow_name}: ${e}`);
+      }
+    }
+
+    return {
+      workflowName: row.workflow_name,
+      runId: row.run_id,
+      snapshot: parsedSnapshot,
+      createdAt: row.createdAt,
+      updatedAt: row.updatedAt,
+      resourceId: row.resourceId,
+    };
+  }
+
   async getWorkflowRuns({
     workflowName,
     fromDate,
     toDate,
     limit,
     offset,
+    resourceId,
   }: {
     workflowName?: string;
     fromDate?: Date;
     toDate?: Date;
     limit?: number;
     offset?: number;
+    resourceId?: string;
   } = {}): Promise<WorkflowRuns> {
-    const conditions: string[] = [];
-    const values: any[] = [];
-    let paramIndex = 1;
+    try {
+      const conditions: string[] = [];
+      const values: any[] = [];
+      let paramIndex = 1;
 
-    if (workflowName) {
-      conditions.push(`workflow_name = $${paramIndex}`);
-      values.push(workflowName);
-      paramIndex++;
-    }
+      if (workflowName) {
+        conditions.push(`workflow_name = $${paramIndex}`);
+        values.push(workflowName);
+        paramIndex++;
+      }
 
-    if (fromDate) {
-      conditions.push(`"createdAt" >= $${paramIndex}`);
-      values.push(fromDate);
-      paramIndex++;
-    }
+      if (resourceId) {
+        conditions.push(`resourceId = $${paramIndex}`);
+        values.push(resourceId);
+        paramIndex++;
+      }
 
-    if (toDate) {
-      conditions.push(`"createdAt" <= $${paramIndex}`);
-      values.push(toDate);
-      paramIndex++;
-    }
+      if (fromDate) {
+        conditions.push(`"createdAt" >= $${paramIndex}`);
+        values.push(fromDate);
+        paramIndex++;
+      }
 
-    const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+      if (toDate) {
+        conditions.push(`"createdAt" <= $${paramIndex}`);
+        values.push(toDate);
+        paramIndex++;
+      }
+      const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
 
-    let total = 0;
-    // Only get total count when using pagination
-    if (limit !== undefined && offset !== undefined) {
-      const countResult = await this.db.one(
-        `SELECT COUNT(*) as count FROM ${this.getTableName(TABLE_WORKFLOW_SNAPSHOT)} ${whereClause}`,
-        values,
-      );
-      total = Number(countResult.count);
-    }
+      let total = 0;
+      // Only get total count when using pagination
+      if (limit !== undefined && offset !== undefined) {
+        const countResult = await this.db.one(
+          `SELECT COUNT(*) as count FROM ${this.getTableName(TABLE_WORKFLOW_SNAPSHOT)} ${whereClause}`,
+          values,
+        );
+        total = Number(countResult.count);
+      }
 
-    // Get results
-    const query = `
+      // Get results
+      const query = `
       SELECT * FROM ${this.getTableName(TABLE_WORKFLOW_SNAPSHOT)} 
       ${whereClause} 
       ORDER BY "createdAt" DESC
       ${limit !== undefined && offset !== undefined ? ` LIMIT $${paramIndex} OFFSET $${paramIndex + 1}` : ''}
     `;
 
-    const queryValues = limit !== undefined && offset !== undefined ? [...values, limit, offset] : values;
+      const queryValues = limit !== undefined && offset !== undefined ? [...values, limit, offset] : values;
 
-    const result = await this.db.manyOrNone(query, queryValues);
+      const result = await this.db.manyOrNone(query, queryValues);
 
-    const runs = (result || []).map(row => {
-      let parsedSnapshot: WorkflowRunState | string = row.snapshot as string;
-      if (typeof parsedSnapshot === 'string') {
-        try {
-          parsedSnapshot = JSON.parse(row.snapshot as string) as WorkflowRunState;
-        } catch (e) {
-          // If parsing fails, return the raw snapshot string
-          console.warn(`Failed to parse snapshot for workflow ${row.workflow_name}: ${e}`);
-        }
+      const runs = (result || []).map(row => {
+        return this.parseWorkflowRun(row);
+      });
+
+      // Use runs.length as total when not paginating
+      return { runs, total: total || runs.length };
+    } catch (error) {
+      console.error('Error getting workflow runs:', error);
+      throw error;
+    }
+  }
+
+  async getWorkflowRunByResourceId({
+    resourceId,
+    workflowName,
+  }: {
+    resourceId: string;
+    workflowName?: string;
+  }): Promise<WorkflowRuns> {
+    try {
+      return this.getWorkflowRuns({
+        resourceId,
+        workflowName,
+      });
+    } catch (error) {
+      console.error('Error getting workflow runs by resource ID:', error);
+      throw error;
+    }
+  }
+
+  async getWorkflowRunByID({
+    runId,
+    workflowName,
+  }: {
+    runId: string;
+    workflowName?: string;
+  }): Promise<WorkflowRun | null> {
+    try {
+      const conditions: string[] = [];
+      const values: any[] = [];
+      let paramIndex = 1;
+
+      if (runId) {
+        conditions.push(`run_id = $${paramIndex}`);
+        values.push(runId);
+        paramIndex++;
       }
 
-      return {
-        workflowName: row.workflow_name,
-        runId: row.run_id,
-        snapshot: parsedSnapshot,
-        createdAt: row.createdAt,
-        updatedAt: row.updatedAt,
-      };
-    });
+      if (workflowName) {
+        conditions.push(`workflow_name = $${paramIndex}`);
+        values.push(workflowName);
+        paramIndex++;
+      }
 
-    // Use runs.length as total when not paginating
-    return { runs, total: total || runs.length };
-  }
+      const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
 
-  async getWorkflowRunByResourceId(args: { resourceId: string; workflowName?: string }): Promise<WorkflowRuns> {
-    throw new Error('Method not implemented.');
-  }
+      // Get results
+      const query = `
+      SELECT * FROM ${this.getTableName(TABLE_WORKFLOW_SNAPSHOT)} 
+      ${whereClause} 
+    `;
 
-  async getWorkflowRunByID(args: { runId: string; workflowName?: string }): Promise<WorkflowRun | null> {
-    throw new Error('Method not implemented.');
+      const queryValues = values;
+
+      const result = await this.db.oneOrNone(query, queryValues);
+
+      if (!result) {
+        return null;
+      }
+
+      return this.parseWorkflowRun(result);
+    } catch (error) {
+      console.error('Error getting workflow run by ID:', error);
+      throw error;
+    }
   }
 
   async close(): Promise<void> {

@@ -863,18 +863,41 @@ export class ClickhouseStore extends MastraStorage {
     }
   }
 
+  private parseWorkflowRun(row: any): WorkflowRun {
+    let parsedSnapshot: WorkflowRunState | string = row.snapshot as string;
+    if (typeof parsedSnapshot === 'string') {
+      try {
+        parsedSnapshot = JSON.parse(row.snapshot as string) as WorkflowRunState;
+      } catch (e) {
+        // If parsing fails, return the raw snapshot string
+        console.warn(`Failed to parse snapshot for workflow ${row.workflow_name}: ${e}`);
+      }
+    }
+
+    return {
+      workflowName: row.workflow_name,
+      runId: row.run_id,
+      snapshot: parsedSnapshot,
+      createdAt: new Date(row.createdAt),
+      updatedAt: new Date(row.updatedAt),
+      resourceId: row.resourceId,
+    };
+  }
+
   async getWorkflowRuns({
     workflowName,
     fromDate,
     toDate,
     limit,
     offset,
+    resourceId,
   }: {
     workflowName?: string;
     fromDate?: Date;
     toDate?: Date;
     limit?: number;
     offset?: number;
+    resourceId?: string;
   } = {}): Promise<WorkflowRuns> {
     try {
       const conditions: string[] = [];
@@ -883,6 +906,11 @@ export class ClickhouseStore extends MastraStorage {
       if (workflowName) {
         conditions.push(`workflow_name = {var_workflow_name:String}`);
         values.var_workflow_name = workflowName;
+      }
+
+      if (resourceId) {
+        conditions.push(`resourceId = {var_resourceId:String}`);
+        values.var_resourceId = resourceId;
       }
 
       if (fromDate) {
@@ -919,7 +947,8 @@ export class ClickhouseStore extends MastraStorage {
             run_id,
             snapshot,
             toDateTime64(createdAt, 3) as createdAt,
-            toDateTime64(updatedAt, 3) as updatedAt
+            toDateTime64(updatedAt, 3) as updatedAt,
+            resourceId
           FROM ${TABLE_WORKFLOW_SNAPSHOT} ${TABLE_ENGINES[TABLE_WORKFLOW_SNAPSHOT].startsWith('ReplacingMergeTree') ? 'FINAL' : ''}
           ${whereClause}
           ORDER BY createdAt DESC
@@ -933,23 +962,7 @@ export class ClickhouseStore extends MastraStorage {
       const resultJson = await result.json();
       const rows = resultJson as any[];
       const runs = rows.map(row => {
-        let parsedSnapshot: WorkflowRunState | string = row.snapshot;
-        if (typeof parsedSnapshot === 'string') {
-          try {
-            parsedSnapshot = JSON.parse(row.snapshot) as WorkflowRunState;
-          } catch (e) {
-            // If parsing fails, return the raw snapshot string
-            console.warn(`Failed to parse snapshot for workflow ${row.workflow_name}: ${e}`);
-          }
-        }
-
-        return {
-          workflowName: row.workflow_name,
-          runId: row.run_id,
-          snapshot: parsedSnapshot,
-          createdAt: new Date(row.createdAt),
-          updatedAt: new Date(row.updatedAt),
-        };
+        return this.parseWorkflowRun(row);
       });
 
       // Use runs.length as total when not paginating
@@ -960,12 +973,73 @@ export class ClickhouseStore extends MastraStorage {
     }
   }
 
-  async getWorkflowRunByResourceId(args: { resourceId: string; workflowName?: string }): Promise<WorkflowRuns> {
-    throw new Error('Method not implemented.');
+  async getWorkflowRunByResourceId({
+    resourceId,
+    workflowName,
+  }: {
+    resourceId: string;
+    workflowName?: string;
+  }): Promise<WorkflowRuns> {
+    try {
+      return this.getWorkflowRuns({
+        resourceId,
+        workflowName,
+      });
+    } catch (error) {
+      console.error('Error getting workflow runs by resource ID:', error);
+      throw error;
+    }
   }
 
-  async getWorkflowRunByID(args: { runId: string; workflowName?: string }): Promise<WorkflowRun | null> {
-    throw new Error('Method not implemented.');
+  async getWorkflowRunByID({
+    runId,
+    workflowName,
+  }: {
+    runId: string;
+    workflowName?: string;
+  }): Promise<WorkflowRun | null> {
+    try {
+      const conditions: string[] = [];
+      const values: Record<string, any> = {};
+
+      if (runId) {
+        conditions.push(`run_id = {runId:String}`);
+        values.runId = runId;
+      }
+
+      if (workflowName) {
+        conditions.push(`workflow_name = {workflowName:String}`);
+        values.workflowName = workflowName;
+      }
+
+      const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+
+      // Get results
+      const result = await this.db.query({
+        query: `
+          SELECT 
+            workflow_name,
+            run_id,
+            snapshot,
+            toDateTime64(createdAt, 3) as createdAt,
+            toDateTime64(updatedAt, 3) as updatedAt,
+            resourceId
+          FROM ${TABLE_WORKFLOW_SNAPSHOT} ${TABLE_ENGINES[TABLE_WORKFLOW_SNAPSHOT].startsWith('ReplacingMergeTree') ? 'FINAL' : ''}
+          ${whereClause}
+        `,
+        query_params: values,
+      });
+
+      const resultJson = await result.json();
+      if (!resultJson) {
+        return null;
+      }
+
+      return this.parseWorkflowRun(resultJson);
+    } catch (error) {
+      console.error('Error getting workflow run by ID:', error);
+      throw error;
+    }
   }
 
   async close(): Promise<void> {

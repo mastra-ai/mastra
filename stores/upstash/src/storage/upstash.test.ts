@@ -732,4 +732,113 @@ describe('UpstashStore', () => {
       expect(snapshot.context?.steps[stepId1]?.status).toBe('completed');
     });
   });
+  describe('getWorkflowRunByID', () => {
+    const testNamespace = 'test-workflows-id';
+    const workflowName = 'workflow-id-test';
+    let runId: string;
+    let stepId: string;
+
+    beforeAll(async () => {
+      // Insert a workflow run for positive test
+      const sample = createSampleWorkflowSnapshot('completed');
+      runId = sample.runId;
+      stepId = sample.stepId;
+      await store.insert({
+        tableName: TABLE_WORKFLOW_SNAPSHOT,
+        record: {
+          namespace: testNamespace,
+          workflow_name: workflowName,
+          run_id: runId,
+          resourceId: 'resource-abc',
+          snapshot: sample.snapshot,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        },
+      });
+    });
+
+    it('should retrieve a workflow run by ID', async () => {
+      const found = await store.getWorkflowRunByID({
+        namespace: testNamespace,
+        runId,
+        workflowName,
+      });
+      expect(found).not.toBeNull();
+      expect(found?.runId).toBe(runId);
+      expect((found?.snapshot as WorkflowRunState)?.context?.steps[stepId]?.status).toBe('completed');
+    });
+
+    it('should return null for non-existent workflow run ID', async () => {
+      const notFound = await store.getWorkflowRunByID({
+        namespace: testNamespace,
+        runId: 'non-existent-id',
+        workflowName,
+      });
+      expect(notFound).toBeNull();
+    });
+  });
+  describe('getWorkflowRunsByResourceID', () => {
+    const testNamespace = 'test-workflows-id';
+    const workflowName = 'workflow-id-test';
+    let resourceId: string;
+    let runIds: string[] = [];
+
+    beforeAll(async () => {
+      // Insert multiple workflow runs for the same resourceId
+      resourceId = 'resource-shared';
+      for (const status of ['completed', 'running']) {
+        const sample = createSampleWorkflowSnapshot(status);
+        runIds.push(sample.runId);
+        await store.insert({
+          tableName: TABLE_WORKFLOW_SNAPSHOT,
+          record: {
+            namespace: testNamespace,
+            workflow_name: workflowName,
+            run_id: sample.runId,
+            resourceId,
+            snapshot: sample.snapshot,
+            createdAt: new Date(),
+            updatedAt: new Date(),
+          },
+        });
+      }
+      // Insert a run with a different resourceId
+      const other = createSampleWorkflowSnapshot('waiting');
+      await store.insert({
+        tableName: TABLE_WORKFLOW_SNAPSHOT,
+        record: {
+          namespace: testNamespace,
+          workflow_name: workflowName,
+          run_id: other.runId,
+          resourceId: 'resource-other',
+          snapshot: other.snapshot,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        },
+      });
+    });
+
+    it('should retrieve all workflow runs by resourceId', async () => {
+      const { runs } = await store.getWorkflowRunByResourceId({
+        namespace: testNamespace,
+        resourceId,
+        workflowName,
+      });
+      expect(Array.isArray(runs)).toBe(true);
+      expect(runs.length).toBeGreaterThanOrEqual(2);
+      for (const run of runs) {
+        expect(run.resourceId).toBe(resourceId);
+      }
+    });
+
+    it('should return an empty array if no workflow runs match resourceId', async () => {
+      const { runs } = await store.getWorkflowRunByResourceId({
+        namespace: testNamespace,
+        resourceId: 'non-existent-resource',
+        workflowName,
+      });
+      expect(Array.isArray(runs)).toBe(true);
+      expect(runs.length).toBe(0);
+    });
+  });
 });

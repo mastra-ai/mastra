@@ -305,6 +305,7 @@ export class UpstashStore extends MastraStorage {
         namespace: record.namespace || 'workflows',
         workflow_name: record.workflow_name,
         run_id: record.run_id,
+        ...(record.resourceId ? { resourceId: record.resourceId } : {}),
       });
     } else if (tableName === TABLE_EVALS) {
       key = this.getKey(tableName, { id: record.run_id });
@@ -538,6 +539,27 @@ export class UpstashStore extends MastraStorage {
     return data.snapshot;
   }
 
+  private parseWorkflowRun(row: any): WorkflowRun {
+    let parsedSnapshot: WorkflowRunState | string = row.snapshot as string;
+    if (typeof parsedSnapshot === 'string') {
+      try {
+        parsedSnapshot = JSON.parse(row.snapshot as string) as WorkflowRunState;
+      } catch (e) {
+        // If parsing fails, return the raw snapshot string
+        console.warn(`Failed to parse snapshot for workflow ${row.workflow_name}: ${e}`);
+      }
+    }
+
+    return {
+      workflowName: row.workflow_name,
+      runId: row.run_id,
+      snapshot: parsedSnapshot,
+      createdAt: this.ensureDate(row.createdAt)!,
+      updatedAt: this.ensureDate(row.updatedAt)!,
+      resourceId: row.resourceId,
+    };
+  }
+
   async getWorkflowRuns(
     {
       namespace,
@@ -546,6 +568,7 @@ export class UpstashStore extends MastraStorage {
       toDate,
       limit,
       offset,
+      resourceId,
     }: {
       namespace: string;
       workflowName?: string;
@@ -553,73 +576,119 @@ export class UpstashStore extends MastraStorage {
       toDate?: Date;
       limit?: number;
       offset?: number;
+      resourceId?: string;
     } = { namespace: 'workflows' },
   ): Promise<WorkflowRuns> {
-    // Get all workflow keys
-    const pattern = workflowName
-      ? this.getKey(TABLE_WORKFLOW_SNAPSHOT, { namespace, workflow_name: workflowName }) + ':*'
-      : this.getKey(TABLE_WORKFLOW_SNAPSHOT, { namespace }) + ':*';
+    try {
+      // Get all workflow keys
+      let pattern = this.getKey(TABLE_WORKFLOW_SNAPSHOT, { namespace }) + ':*';
+      if (workflowName && resourceId) {
+        pattern = this.getKey(TABLE_WORKFLOW_SNAPSHOT, {
+          namespace,
+          workflow_name: workflowName,
+          run_id: '*',
+          resourceId,
+        });
+      } else if (workflowName) {
+        pattern = this.getKey(TABLE_WORKFLOW_SNAPSHOT, { namespace, workflow_name: workflowName }) + ':*';
+      } else if (resourceId) {
+        pattern = this.getKey(TABLE_WORKFLOW_SNAPSHOT, { namespace, workflow_name: '*', run_id: '*', resourceId });
+      }
+      const keys = await this.redis.keys(pattern);
 
-    const keys = await this.redis.keys(pattern);
+      // Get all workflow data
+      const workflows = await Promise.all(
+        keys.map(async key => {
+          const data = await this.redis.get<{
+            workflow_name: string;
+            run_id: string;
+            snapshot: WorkflowRunState | string;
+            createdAt: string | Date;
+            updatedAt: string | Date;
+            resourceId: string;
+          }>(key);
+          return data;
+        }),
+      );
 
-    // Get all workflow data
-    const workflows = await Promise.all(
-      keys.map(async key => {
-        const data = await this.redis.get<{
-          workflow_name: string;
-          run_id: string;
-          snapshot: WorkflowRunState | string;
-          createdAt: string | Date;
-          updatedAt: string | Date;
-        }>(key);
-        return data;
-      }),
-    );
+      // Filter and transform results
+      let runs = workflows
+        .filter(w => w !== null)
+        .map(w => this.parseWorkflowRun(w!))
+        .filter(w => {
+          if (fromDate && w.createdAt < fromDate) return false;
+          if (toDate && w.createdAt > toDate) return false;
+          return true;
+        })
+        .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
 
-    // Filter and transform results
-    let runs = workflows
-      .filter(w => w !== null)
-      .map(w => {
-        let parsedSnapshot: WorkflowRunState | string = w!.snapshot as string;
-        if (typeof parsedSnapshot === 'string') {
-          try {
-            parsedSnapshot = JSON.parse(w!.snapshot as string) as WorkflowRunState;
-          } catch {
-            // If parsing fails, return the raw snapshot string
-            console.warn(`Failed to parse snapshot for workflow ${w!.workflow_name}:`);
-          }
-        }
-        return {
-          workflowName: w!.workflow_name,
-          runId: w!.run_id,
-          snapshot: parsedSnapshot,
-          createdAt: this.ensureDate(w!.createdAt)!,
-          updatedAt: this.ensureDate(w!.updatedAt)!,
-        };
-      })
-      .filter(w => {
-        if (fromDate && w.createdAt < fromDate) return false;
-        if (toDate && w.createdAt > toDate) return false;
-        return true;
-      })
-      .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+      const total = runs.length;
 
-    const total = runs.length;
+      // Apply pagination if requested
+      if (limit !== undefined && offset !== undefined) {
+        runs = runs.slice(offset, offset + limit);
+      }
 
-    // Apply pagination if requested
-    if (limit !== undefined && offset !== undefined) {
-      runs = runs.slice(offset, offset + limit);
+      return { runs, total };
+    } catch (error) {
+      console.error('Error getting workflow runs:', error);
+      throw error;
     }
-
-    return { runs, total };
   }
 
-  async getWorkflowRunByResourceId(args: { resourceId: string; workflowName?: string }): Promise<WorkflowRuns> {
-    throw new Error('Method not implemented.');
+  async getWorkflowRunByResourceId({
+    namespace = 'workflows',
+    resourceId,
+    workflowName,
+  }: {
+    namespace: string;
+    resourceId: string;
+    workflowName?: string;
+  }): Promise<WorkflowRuns> {
+    try {
+      return this.getWorkflowRuns({
+        namespace,
+        resourceId,
+        workflowName,
+      });
+    } catch (error) {
+      console.error('Error getting workflow runs by resource ID:', error);
+      throw error;
+    }
   }
 
-  async getWorkflowRunByID(args: { runId: string; workflowName?: string }): Promise<WorkflowRun | null> {
-    throw new Error('Method not implemented.');
+  async getWorkflowRunByID({
+    namespace = 'workflows',
+    runId,
+    workflowName,
+  }: {
+    namespace: string;
+    runId: string;
+    workflowName?: string;
+  }): Promise<WorkflowRun | null> {
+    try {
+      const key = this.getKey(TABLE_WORKFLOW_SNAPSHOT, { namespace, workflow_name: workflowName, run_id: runId }) + '*';
+      const keys = await this.redis.keys(key);
+      const workflows = await Promise.all(
+        keys.map(async key => {
+          const data = await this.redis.get<{
+            workflow_name: string;
+            run_id: string;
+            snapshot: WorkflowRunState | string;
+            createdAt: string | Date;
+            updatedAt: string | Date;
+            resourceId: string;
+          }>(key);
+          return data;
+        }),
+      );
+      const data = workflows.find(w => w?.run_id === runId && w?.workflow_name === workflowName) as WorkflowRun | null;
+      if (!data) return null;
+      return this.parseWorkflowRun(data);
+    } catch (error) {
+      console.error('Error getting workflow run by ID:', error);
+      throw error;
+    }
   }
 
   async close(): Promise<void> {
