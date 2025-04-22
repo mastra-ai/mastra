@@ -3,7 +3,6 @@ import React from 'react';
 
 import { Icon } from '../../icons/Icon';
 import { SlashIcon } from '../../icons/SlashIcon';
-import { PolymorphicComponentProps } from '../types';
 
 export interface BreadcrumbProps {
   children?: React.ReactNode;
@@ -22,7 +21,7 @@ export interface CrumbProps {
   isCurrent?: boolean;
   as: React.ElementType;
   className?: string;
-  href: string;
+  to: string;
   prefetch?: boolean | null;
   children: React.ReactNode;
 }
