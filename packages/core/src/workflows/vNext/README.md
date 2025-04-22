@@ -173,6 +173,13 @@ const workflow = createWorkflow({
 });
 
 const result = await workflow.createRun().start({ inputData: {} });
+if (result.status === 'success') {
+  console.log(result.result); // only exists if status is success
+} else if (result.status === 'failed') {
+  console.error(result.error); // only exists if status is failed
+} else if (result.status === 'suspended') {
+  console.log(result.suspended); // only exists if status is suspended
+}
 
 // TypeScript knows these properties exist and their types
 console.log(result.steps.step1.output); // Fully typed
@@ -320,6 +327,12 @@ counterWorkflow.foreach(mapStep).then(finalStep).commit();
 
 const run = counterWorkflow.createRun();
 const result = await run.start({ inputData: [{ value: 1 }, { value: 22 }, { value: 333 }] });
+
+if (result.status === 'success') {
+  console.log(result.result); // only exists if status is success
+} else if (result.status === 'failed') {
+  console.error(result.error); // only exists if status is failed
+}
 ```
 
 The loop executes the step for each item in the input array in sequence one at a time. The optional `concurrency` option allows you to execute steps in parallel with a limit on the number of concurrent executions.
@@ -462,7 +475,19 @@ const result = await run.start({
 // Access the results
 console.log(result.steps); // All step results
 console.log(result.steps['step-id'].output); // Output from a specific step
-console.log(result.result); // The final result of the workflow, result of the last step (or `.map()` output, if used as last step)
+
+if (result.status === 'success') {
+  console.log(result.result); // The final result of the workflow, result of the last step (or `.map()` output, if used as last step)
+} else if (result.status === 'suspended') {
+  const resumeResult = await run.resume({
+    step: result.suspended[0], // there is always at least one step id in the suspended array, in this case we resume the first suspended execution path
+    resumeData: {
+      /* user input */
+    },
+  });
+} else if (result.status === 'failed') {
+  console.error(result.error); // only exists if status is failed
+}
 ```
 
 ## Workflow Execution Result Schema
