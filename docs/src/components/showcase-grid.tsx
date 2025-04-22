@@ -1,4 +1,4 @@
-'use client'
+"use client";
 import { ArrowUpRight } from "lucide-react";
 import React from "react";
 import oliveImg from "../../public/showcase/optimized/from-olive.png";
@@ -62,7 +62,7 @@ const ShowcaseCard = ({
 export const ShowcaseGrid = () => {
   const pathname = usePathname();
   const locale = pathname.split("/")[1];
-  console.log(locale)
+  console.log(locale);
   const showcaseItems: ShowcaseCardProps[] = [
     {
       title: "Olive",

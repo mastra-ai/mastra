@@ -13,6 +13,11 @@ import { createBundler as createBundlerUtil, getInputOptions } from '../build/bu
 import { writeTelemetryConfig } from '../build/telemetry';
 import { DepsService } from '../services/deps';
 import { FileService } from '../services/fs';
+import {
+  collectTransitiveWorkspaceDependencies,
+  createWorkspacePackageMap,
+  packWorkspaceDependencies,
+} from './workspaceDependencies';
 
 export abstract class Bundler extends MastraBundler {
   protected analyzeOutputDir = '.build';
@@ -37,7 +42,11 @@ export abstract class Bundler extends MastraBundler {
     await copy(join(__dirname, 'templates', 'instrumentation-template.js'), instrumentationFile);
   }
 
-  async writePackageJson(outputDirectory: string, dependencies: Map<string, string>) {
+  async writePackageJson(
+    outputDirectory: string,
+    dependencies: Map<string, string>,
+    resolutions?: Record<string, string>,
+  ) {
     this.logger.debug(`Writing project's package.json`);
     await ensureDir(outputDirectory);
     const pkgPath = join(outputDirectory, 'package.json');
@@ -69,6 +78,7 @@ export abstract class Bundler extends MastraBundler {
           author: 'Mastra',
           license: 'ISC',
           dependencies: Object.fromEntries(dependenciesMap.entries()),
+          ...(Object.keys(resolutions ?? {}).length > 0 && { resolutions }),
         },
         null,
         2,
@@ -178,14 +188,50 @@ export abstract class Bundler extends MastraBundler {
     );
 
     await writeTelemetryConfig(mastraEntryFile, join(outputDirectory, this.outputDir));
+
+    const workspaceMap = await createWorkspacePackageMap();
     const dependenciesToInstall = new Map<string, string>();
+    const workspaceDependencies = new Set<string>();
     for (const dep of analyzedBundleInfo.externalDependencies) {
       try {
         const pkgPath = resolveFrom(mastraEntryFile, `${dep}/package.json`);
         const pkg = await readJSON(pkgPath);
+
+        if (workspaceMap.has(pkg.name)) {
+          workspaceDependencies.add(pkg.name);
+          continue;
+        }
+
         dependenciesToInstall.set(dep, pkg.version);
       } catch {
         dependenciesToInstall.set(dep, 'latest');
+      }
+    }
+
+    let resolutions: Record<string, string> = {};
+    if (workspaceDependencies.size > 0) {
+      try {
+        const result = collectTransitiveWorkspaceDependencies({
+          workspaceMap,
+          initialDependencies: workspaceDependencies,
+          logger: this.logger,
+        });
+        resolutions = result.resolutions;
+
+        // Update dependenciesToInstall with the resolved TGZ paths
+        Object.entries(resolutions).forEach(([pkgName, tgzPath]) => {
+          dependenciesToInstall.set(pkgName, tgzPath);
+        });
+
+        await packWorkspaceDependencies({
+          workspaceMap,
+          usedWorkspacePackages: result.usedWorkspacePackages,
+          bundleOutputDir: join(outputDirectory, this.outputDir),
+          logger: this.logger,
+        });
+      } catch (error) {
+        this.logger.error(`Failed to collect workspace dependencies: ${error}`);
+        return;
       }
     }
 
@@ -197,7 +243,7 @@ export abstract class Bundler extends MastraBundler {
       dependenciesToInstall.set('fastembed', 'latest');
     }
 
-    await this.writePackageJson(join(outputDirectory, this.outputDir), dependenciesToInstall);
+    await this.writePackageJson(join(outputDirectory, this.outputDir), dependenciesToInstall, resolutions);
     await this.writeInstrumentationFile(join(outputDirectory, this.outputDir));
 
     this.logger.info('Bundling Mastra application');
