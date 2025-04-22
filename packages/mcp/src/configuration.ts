@@ -1,10 +1,10 @@
 import { MastraBase } from '@mastra/core/base';
+import type { ToolAction } from '@mastra/core/tools';
 import { DEFAULT_REQUEST_TIMEOUT_MSEC } from '@modelcontextprotocol/sdk/shared/protocol.js';
+import equal from 'fast-deep-equal';
 import { v5 as uuidv5 } from 'uuid';
-import { MastraMCPClient } from './client';
 import type { MastraMCPServerDefinition } from './client';
-
-const mastraMCPConfigurationInstances = new Map<string, InstanceType<typeof MCPConfiguration>>();
+import { MastraMCPClient } from './client';
 
 export interface MCPConfigurationOptions {
   id?: string;
@@ -13,6 +13,15 @@ export interface MCPConfigurationOptions {
 }
 
 export class MCPConfiguration extends MastraBase {
+  private static readonly instances = new Map<string, InstanceType<typeof MCPConfiguration>>();
+  private static readonly serverConfigCache = new Map<
+    string,
+    {
+      servers: Record<string, MastraMCPServerDefinition>;
+      id: string;
+    }
+  >();
+
   private serverConfigs: Record<string, MastraMCPServerDefinition> = {};
   private id: string;
   private defaultTimeout: number;
@@ -21,10 +30,32 @@ export class MCPConfiguration extends MastraBase {
     super({ name: 'MCPConfiguration' });
     this.defaultTimeout = args.timeout ?? DEFAULT_REQUEST_TIMEOUT_MSEC;
     this.serverConfigs = args.servers;
-    this.id = args.id ?? this.makeId();
 
-    // to prevent memory leaks return the same MCP server instance when configured the same way multiple times
-    const existingInstance = mastraMCPConfigurationInstances.get(this.id);
+    // If an ID is provided, use it directly
+    if (args.id) {
+      this.id = args.id;
+      const cached = MCPConfiguration.serverConfigCache.get(this.id);
+
+      // If we have a cache hit but servers don't match, disconnect the old configuration
+      if (cached && !equal(cached.servers, args.servers)) {
+        const existingInstance = MCPConfiguration.instances.get(this.id);
+        if (existingInstance) {
+          void existingInstance.disconnect(); // void to explicitly ignore the Promise
+        }
+      }
+    } else {
+      // Generate a new ID based on server configs
+      this.id = this.makeId();
+    }
+
+    // Update cache with current configuration
+    MCPConfiguration.serverConfigCache.set(this.id, {
+      servers: args.servers,
+      id: this.id,
+    });
+
+    // Check for existing instance with same ID
+    const existingInstance = MCPConfiguration.instances.get(this.id);
     if (existingInstance) {
       if (!args.id) {
         throw new Error(`MCPConfiguration was initialized multiple times with the same configuration options.
@@ -37,15 +68,15 @@ To fix this you have three different options:
 3. If you only need one instance of MCPConfiguration in your app, refactor your code so it's only created one time (ex. move it out of a loop into a higher scope code block)
 `);
       }
-      return existingInstance;
+      Object.assign(this, existingInstance);
+    } else {
+      this.addToInstanceCache();
     }
-    this.addToInstanceCache();
-    return this;
   }
 
   private addToInstanceCache() {
-    if (!mastraMCPConfigurationInstances.has(this.id)) {
-      mastraMCPConfigurationInstances.set(this.id, this);
+    if (!MCPConfiguration.instances.has(this.id)) {
+      MCPConfiguration.instances.set(this.id, this);
     }
   }
 
@@ -57,7 +88,7 @@ To fix this you have three different options:
   }
 
   public async disconnect() {
-    mastraMCPConfigurationInstances.delete(this.id);
+    MCPConfiguration.instances.delete(this.id);
 
     await Promise.all(Array.from(this.mcpClientsById.values()).map(client => client.disconnect()));
     this.mcpClientsById.clear();
@@ -65,11 +96,11 @@ To fix this you have three different options:
 
   public async getTools() {
     this.addToInstanceCache();
-    const connectedTools: Record<string, any> = {}; // <- any because we don't have proper tool schemas
+    const connectedTools: Record<string, ToolAction> = {};
 
     await this.eachClientTools(async ({ serverName, tools }) => {
       for (const [toolName, toolConfig] of Object.entries(tools)) {
-        connectedTools[`${serverName}_${toolName}`] = toolConfig; // namespace tool to prevent tool name conflicts between servers
+        connectedTools[`${serverName}_${toolName}`] = toolConfig;
       }
     });
 
@@ -78,7 +109,7 @@ To fix this you have three different options:
 
   public async getToolsets() {
     this.addToInstanceCache();
-    const connectedToolsets: Record<string, Record<string, any>> = {}; // <- any because we don't have proper tool schemas
+    const connectedToolsets: Record<string, Record<string, ToolAction>> = {};
 
     await this.eachClientTools(async ({ serverName, tools }) => {
       if (tools) {
@@ -94,7 +125,10 @@ To fix this you have three different options:
     const exists = this.mcpClientsById.has(name);
 
     if (exists) {
-      const mcpClient = this.mcpClientsById.get(name)!;
+      const mcpClient = this.mcpClientsById.get(name);
+      if (!mcpClient) {
+        throw new Error(`Client ${name} exists but is undefined`);
+      }
       await mcpClient.connect();
 
       return mcpClient;
@@ -128,7 +162,7 @@ To fix this you have three different options:
   private async eachClientTools(
     cb: (input: {
       serverName: string;
-      tools: Record<string, any>; // <- any because we don't have proper tool schemas
+      tools: Record<string, ToolAction>;
       client: InstanceType<typeof MastraMCPClient>;
     }) => Promise<void>,
   ) {
