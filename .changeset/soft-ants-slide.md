@@ -8,4 +8,4 @@
 'create-mastra': patch
 ---
 
-Disable swaggerUI, playground for production builds, enable swaggerUI build flag
+Disable swaggerUI, playground for production builds, mastra instance server build config to enable swaggerUI, apiReqLogs, openAPI documentation for prod builds
