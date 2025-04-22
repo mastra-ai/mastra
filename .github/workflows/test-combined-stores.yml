@@ -24,7 +24,7 @@ jobs:
       - uses: actions/checkout@v4
       - id: set-stores
         run: |
-          STORES=$(ls -d stores/*/ | cut -f2 -d'/' | jq -R -s -c 'split("\n")[:-1]')
+          STORES=$(ls -d stores/*/ | grep -v '_test-utils' | cut -f2 -d'/' | jq -R -s -c 'split("\n")[:-1]')
           echo "stores=$STORES" >> $GITHUB_OUTPUT
   test:
     needs: setup
