@@ -398,6 +398,17 @@ This is a warning for now, but will throw an error in the future
   }
 
   public setStorage(storage: MastraStorage) {
+    if (storage instanceof DefaultProxyStorage) {
+      this.#logger.warn(`Importing "DefaultStorage" from '@mastra/core/storage/libsql' is deprecated.
+
+Instead of:
+  import { DefaultStorage } from '@mastra/core/storage/libsql';
+
+Do:
+  import { LibSQLStore } from '@mastra/libsql';
+`);
+    }
+
     this.#storage = augmentWithInit(storage);
   }
 
