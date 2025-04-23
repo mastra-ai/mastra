@@ -130,6 +130,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
           return fmtReturnValue(stepResults, lastOutput);
         }
       } catch (e) {
+        console.error('Error executing step', e);
         if (entry.type === 'step') {
           params.emitter.emit('watch', {
             type: 'watch',
@@ -248,6 +249,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
 
         break;
       } catch (e) {
+        console.error('Error executing step', e);
         execResults = { status: 'failed', error: e instanceof Error ? e : new Error('Unknown error: ' + e) };
       }
     }
@@ -382,6 +384,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
             return result ? index : null;
             // eslint-disable-next-line @typescript-eslint/no-unused-vars
           } catch (e: unknown) {
+            console.error('Error evaluating condition', e);
             return null;
           }
         }),
