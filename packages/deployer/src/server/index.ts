@@ -8,7 +8,7 @@ import { serveStatic } from '@hono/node-server/serve-static';
 import { swaggerUI } from '@hono/swagger-ui';
 import { Telemetry } from '@mastra/core';
 import type { Mastra } from '@mastra/core';
-import { Container } from '@mastra/core/di';
+import { RuntimeContext } from '@mastra/core/di';
 import { Hono } from 'hono';
 import type { Context, MiddlewareHandler } from 'hono';
 import { bodyLimit } from 'hono/body-limit';
@@ -68,7 +68,7 @@ type Bindings = {};
 
 type Variables = {
   mastra: Mastra;
-  container: Container;
+  runtimeContext: RuntimeContext;
   clients: Set<{ controller: ReadableStreamDefaultController }>;
   tools: Record<string, any>;
   playground: boolean;
@@ -129,9 +129,9 @@ export async function createHonoServer(mastra: Mastra, options: ServerBundleOpti
 
   // Add Mastra to context
   app.use('*', function setContext(c, next) {
-    const container = new Container();
+    const runtimeContext = new RuntimeContext();
 
-    c.set('container', container);
+    c.set('runtimeContext', runtimeContext);
     c.set('mastra', mastra);
     c.set('tools', tools);
     c.set('playground', options.playground === true);

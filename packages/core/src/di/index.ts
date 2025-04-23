@@ -2,7 +2,7 @@ type RecordToTuple<T> = {
   [K in keyof T]: [K, T[K]];
 }[keyof T][];
 
-export class Container<Values extends Record<string, any> | unknown = unknown> {
+export class RuntimeContext<Values extends Record<string, any> | unknown = unknown> {
   private registry = new Map<string, unknown>();
 
   constructor(

@@ -104,7 +104,7 @@ const result = await agent.generate("What is the weather in San Francisco?", {
 
 ## Injecting Request/User-Specific Variables
 
-We support dependency injection for tools and workflows. You can pass a container directly to your `generate` or `stream` function calls, or inject it using [server middleware](/docs/deployment/server#Middleware).
+We support dependency injection for tools and workflows. You can pass a runtimeContext directly to your `generate` or `stream` function calls, or inject it using [server middleware](/docs/deployment/server#Middleware).
 
 Here's an example where we change the temperature scale between Fahrenheit and Celsius:
 
@@ -120,8 +120,8 @@ export const agent = new Agent({
       id: "Get Weather Information",
       description: "Get the weather in a location",
       inputSchema: z.object({ location: z.string() }),
-      execute: async ({ context: { location }, container }) => {
-        const scale = container.get("temperature-scale");
+      execute: async ({ context: { location }, runtimeContext }) => {
+        const scale = runtimeContext.get("temperature-scale");
 
         const result = await fetch(
           `https://api.weatherapi.com/v1/current.json?q=${location}`,
@@ -141,13 +141,13 @@ export const agent = new Agent({
 ```typescript
 import { agent } from "./agents/weather";
 
-type MyContainer = {"temperature-scale", "celsius" | "farenheit"}
+type MyRuntimeContext = {"temperature-scale", "celsius" | "farenheit"}
 
-const container = new Container<MyContainer>();
-container.set("temperature-scale", "celsius");
+const runtimeContext = new RuntimeContext<MyRuntimeContext>();
+runtimeContext.set("temperature-scale", "celsius");
 
 const result = await agent.generate("What is the weather in San Francisco?", {
-  container,
+  runtimeContext,
 });
 ```
 
