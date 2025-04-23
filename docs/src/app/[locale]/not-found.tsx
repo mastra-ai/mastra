@@ -3,6 +3,7 @@ import Link from "next/link";
 import "../globals.css"
 import { useParams, usePathname } from "next/navigation";
 import Image from "next/image";
+import Image404 from "../../../public/404-image.png"
 
 export default function NotFound() {
   const pathname = usePathname()
@@ -28,7 +29,7 @@ export default function NotFound() {
       </div>
       <Image
         alt=""
-        src={"/404-image.png"}
+        src={Image404}
         className="absolute bottom-0 rotate-180 w-full"
         width={500}
         height={500}
