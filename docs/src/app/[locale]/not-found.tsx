@@ -1,15 +1,15 @@
-"use client"
+"use client";
 import Link from "next/link";
-import "../globals.css"
+import "../globals.css";
 import { useParams, usePathname } from "next/navigation";
 import Image from "next/image";
-import Image404 from "../../../public/404-image.png"
+import Image404 from "../../../public/404-image.png";
 import { T, Var } from "gt-next";
 
 export default function NotFound() {
-  const pathname = usePathname()
-  const params = useParams()
-  const path = params?.mdxPath?.[0] || pathname.split('/')[1]
+  const pathname = usePathname();
+  const params = useParams();
+  const path = params?.mdxPath?.[0] || pathname.split("/")[1];
 
   return (
     <div className="bg-[var(--primary-bg)] relative min-h-screen w-full grid place-items-center text-white">

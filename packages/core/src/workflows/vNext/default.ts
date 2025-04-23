@@ -27,7 +27,7 @@ function fmtReturnValue<TOutput>(
   if (lastOutput.status === 'success') {
     base.result = lastOutput.output;
   } else if (lastOutput.status === 'failed') {
-    base.error = error instanceof Error ? error.message : (error ?? lastOutput.error ?? 'Unknown error');
+    base.error = error instanceof Error ? error : (lastOutput.error ?? new Error('Unknown error: ' + error));
   } else if (lastOutput.status === 'suspended') {
     const suspendedStepIds = Object.entries(stepResults).flatMap(([stepId, stepResult]) => {
       if (stepResult?.status === 'suspended') {
@@ -130,6 +130,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
           return fmtReturnValue(stepResults, lastOutput);
         }
       } catch (e) {
+        this.logger.error('Error executing step: ' + ((e as Error)?.stack ?? e));
         if (entry.type === 'step') {
           params.emitter.emit('watch', {
             type: 'watch',
@@ -248,7 +249,8 @@ export class DefaultExecutionEngine extends ExecutionEngine {
 
         break;
       } catch (e) {
-        execResults = { status: 'failed', error: e instanceof Error ? e.message : 'Unknown error' };
+        this.logger.error('Error executing step: ' + ((e as Error)?.stack ?? e));
+        execResults = { status: 'failed', error: e instanceof Error ? e : new Error('Unknown error: ' + e) };
       }
     }
 
@@ -380,8 +382,8 @@ export class DefaultExecutionEngine extends ExecutionEngine {
               emitter,
             });
             return result ? index : null;
-            // eslint-disable-next-line @typescript-eslint/no-unused-vars
           } catch (e: unknown) {
+            this.logger.error('Error evaluating condition: ' + ((e as Error)?.stack ?? e));
             return null;
           }
         }),
