@@ -3,7 +3,8 @@
   "extends": ["//"],
   "tasks": {
     "test": {
-      "dependsOn": ["@mastra/core#pre-build", "@mastra/core#build"]
+      "dependsOn": ["^build", "@mastra/core#pre-build", "@mastra/core#build"],
+      "inputs": ["src/**/*.ts", "test/**/*.ts", "package.json"]
     }
   }
 }
