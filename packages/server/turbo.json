@@ -3,7 +3,7 @@
   "extends": ["//"],
   "tasks": {
     "test": {
-      "dependsOn": ["@mastra/core#build"]
+      "dependsOn": ["@mastra/core#pre-build", "@mastra/core#build"]
     }
   }
 }
