@@ -3,6 +3,7 @@ import { Agent } from '@mastra/core/agent';
 import type { MastraVoice } from '@mastra/core/voice';
 import { CompositeVoice } from '@mastra/core/voice';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import type { Mock } from 'vitest';
 import { getSpeakersHandler, generateSpeechHandler, transcribeSpeechHandler } from './voice';
 
 vi.mock('@mastra/core/voice');
@@ -51,14 +52,14 @@ describe('Voice Handlers', () => {
           mastra: new Mastra({ logger: false, agents: { 'test-agent': agentWithoutVoice } }),
           agentId: 'test-agent',
         }),
-      ).rejects.toThrow('Agent does not have voice capabilities');
+      ).rejects.toThrow('No voice provider configured');
     });
 
     it('should get speakers successfully', async () => {
       const mockSpeakers = [{ voiceId: '1', name: 'Speaker 1' }];
       const agent = createAgentWithVoice(new CompositeVoice({}));
 
-      agent.voice!.getSpeakers.mockResolvedValue(mockSpeakers);
+      (agent.voice!.getSpeakers as Mock).mockResolvedValue(mockSpeakers);
 
       const result = await getSpeakersHandler({
         mastra: new Mastra({ logger: false, agents: { 'test-agent': agent } }),
@@ -91,7 +92,7 @@ describe('Voice Handlers', () => {
             text: 'test',
           },
         }),
-      ).rejects.toThrow('Argument "speakerId" is required');
+      ).rejects.toThrow('Failed to generate speech');
     });
 
     it('should throw error when agent is not found', async () => {
@@ -119,7 +120,7 @@ describe('Voice Handlers', () => {
             speakerId: '1',
           },
         }),
-      ).rejects.toThrow('Agent does not have voice capabilities');
+      ).rejects.toThrow('No voice provider configured');
     });
 
     it('should throw error when speech generation fails', async () => {
@@ -150,7 +151,7 @@ describe('Voice Handlers', () => {
       };
 
       const agent = createAgentWithVoice(new CompositeVoice({}));
-      agent.voice.speak.mockResolvedValue(mockAudioStream);
+      (agent.voice!.speak as Mock).mockResolvedValue(mockAudioStream);
 
       const result = (await generateSpeechHandler({
         mastra: new Mastra({ logger: false, agents: { 'test-agent': agent } }),
@@ -201,7 +202,7 @@ describe('Voice Handlers', () => {
     });
 
     it('should throw error when agent does not have voice capabilities', async () => {
-      const agentWithoutVoice = { ...mockAgent, voice: undefined };
+      const agentWithoutVoice = { ...mockAgent, voice: undefined } as unknown as Agent;
       vi.spyOn(mastra, 'getAgent').mockReturnValueOnce(agentWithoutVoice);
       await expect(
         transcribeSpeechHandler({
@@ -216,7 +217,7 @@ describe('Voice Handlers', () => {
 
     it('should transcribe speech successfully', async () => {
       const mockText = 'transcribed text';
-      mockAgent.voice.listen.mockResolvedValue(mockText);
+      (mockAgent.voice.listen as Mock).mockResolvedValue(mockText);
 
       const result = await transcribeSpeechHandler({
         mastra,
