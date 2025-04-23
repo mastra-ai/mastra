@@ -82,7 +82,7 @@ export abstract class MastraMemory extends MastraBase {
     this.storage = augmentWithInit(this.storage);
 
     const semanticRecallIsEnabled = this.threadConfig.semanticRecall !== false; // default is to have it enabled, so any value except false means it's on
-
+    console.log(config);
     if (config.vector && semanticRecallIsEnabled) {
       this.vector = config.vector;
     } else if (
@@ -93,6 +93,7 @@ export abstract class MastraMemory extends MastraBase {
       semanticRecallIsEnabled
       // add the default vector store
     ) {
+      console.log(' are you seeying this papa?');
       // for backwards compat reasons, check if there's a memory-vector.db in cwd or in cwd/.mastra
       // if it's there we need to use it, otherwise use the same file:memory.db
       // We used to need two separate DBs because we would get schema errors
@@ -106,6 +107,20 @@ export abstract class MastraMemory extends MastraBase {
           `Found deprecated Memory vector db file ${oldDb} this db is now merged with the default ${newDb} file. Delete the old one to use the new one. You will need to migrate any data if that's important to you. For now the deprecated path will be used but in a future breaking change we will only use the new db file path.`,
         );
       }
+
+      setTimeout(() => {
+        this.logger?.warn(`
+
+The default vector storage is deprecated in Mastra Memory.
+
+import { LibSQLVector } from '@mastra/libsql';
+
+export const agent = new Agent({
+  new Memory({ vector: new LibSQLVector({ connectionUrl: 'file:../memory.db' }) })
+})
+  
+`);
+      }, 1000);
 
       this.vector = new DefaultVectorDB({
         connectionUrl: hasOldDb ? `file:${oldDb}` : `file:${newDb}`,
@@ -132,6 +147,17 @@ export abstract class MastraMemory extends MastraBase {
   }
 
   public setStorage(storage: MastraStorage) {
+    if (storage instanceof DefaultProxyStorage) {
+      this.logger?.warn(`Importing "DefaultStorage" from '@mastra/core/storage/libsql' is deprecated.
+
+Instead of:
+  import { DefaultStorage } from '@mastra/core/storage/libsql';
+
+Do:
+  import { LibSQLStore } from '@mastra/libsql';
+`);
+    }
+
     this.storage = storage;
   }
 

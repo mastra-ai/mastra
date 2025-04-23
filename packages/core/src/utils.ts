@@ -7,10 +7,10 @@ import type { ZodObject } from 'zod';
 
 import type { MastraPrimitives } from './action';
 import type { ToolsInput } from './agent';
-import { RuntimeContext } from './di';
 import type { Logger } from './logger';
 import type { Mastra } from './mastra';
 import type { AiMessageType, MastraMemory } from './memory';
+import { RuntimeContext } from './runtime-context';
 import { Tool } from './tools';
 import type { CoreTool, ToolAction, VercelTool } from './tools';
 

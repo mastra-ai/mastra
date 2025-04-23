@@ -168,7 +168,7 @@ async function pushToRepo(repoName) {
             `import { openai } from '@ai-sdk/openai';`,
             `import { ${provider} } from '${providerPackage}';`,
           );
-          content = content.replaceAll(`openai('gpt-4o')`, `${provider}(process.env.MODEL ?? ${defaultModel})`);
+          content = content.replaceAll(`openai('gpt-4o')`, `${provider}(process.env.MODEL ?? "${defaultModel}")`);
           await writeFile(filePath, content);
         } else {
           console.log(`${filePath} does not exist`);
