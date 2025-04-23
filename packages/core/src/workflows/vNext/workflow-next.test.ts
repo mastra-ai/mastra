@@ -292,7 +292,7 @@ describe('Workflow', () => {
         expect(result.steps.step2).toEqual({ status: 'success', output: { result: { cool: 'test-input' } } });
       });
 
-      it('should resolve trigger data and DI container values via .map()', async () => {
+      it('should resolve trigger data and DI runtimeContext values via .map()', async () => {
         const execute = vi.fn<any>().mockResolvedValue({ result: 'success' });
         const triggerSchema = z.object({
           cool: z.string(),
@@ -328,18 +328,18 @@ describe('Workflow', () => {
               path: 'cool',
             },
             test2: {
-              containerPath: 'life',
+              runtimeContextPath: 'life',
               schema: z.number(),
             },
           })
           .then(step2)
           .commit();
 
-        const container = new RuntimeContext<{ life: number }>();
-        container.set('life', 42);
+        const runtimeContext = new RuntimeContext<{ life: number }>();
+        runtimeContext.set('life', 42);
 
         const run = workflow.createRun();
-        const result = await run.start({ inputData: { cool: 'test-input' }, container });
+        const result = await run.start({ inputData: { cool: 'test-input' }, runtimeContext });
 
         expect(execute).toHaveBeenCalledWith(
           expect.objectContaining({
@@ -3863,15 +3863,15 @@ describe('Workflow', () => {
   });
 
   describe('Dependency Injection', () => {
-    it('should inject container dependencies into steps during run', async () => {
-      const container = new RuntimeContext();
+    it('should inject runtimeContext dependencies into steps during run', async () => {
+      const runtimeContext = new RuntimeContext();
       const testValue = 'test-dependency';
-      container.set('testKey', testValue);
+      runtimeContext.set('testKey', testValue);
 
       const step = createStep({
         id: 'step1',
-        execute: async ({ container }) => {
-          const value = container.get('testKey');
+        execute: async ({ runtimeContext }) => {
+          const value = runtimeContext.get('testKey');
           return { injectedValue: value };
         },
         inputSchema: z.object({}),
@@ -3881,13 +3881,13 @@ describe('Workflow', () => {
       workflow.then(step).commit();
 
       const run = workflow.createRun();
-      const result = await run.start({ container });
+      const result = await run.start({ runtimeContext });
 
       // @ts-ignore
       expect(result.steps.step1.output.injectedValue).toBe(testValue);
     });
 
-    it('should inject container dependencies into steps during resume', async () => {
+    it('should inject runtimeContext dependencies into steps during resume', async () => {
       const initialStorage = new DefaultStorage({
         config: {
           url: 'file::memory:',
@@ -3895,21 +3895,21 @@ describe('Workflow', () => {
       });
       await initialStorage.init();
 
-      const container = new RuntimeContext();
+      const runtimeContext = new RuntimeContext();
       const testValue = 'test-dependency';
-      container.set('testKey', testValue);
+      runtimeContext.set('testKey', testValue);
 
       const mastra = new Mastra({
         logger: false,
         storage: initialStorage,
       });
 
-      const execute = vi.fn(async ({ container, suspend, resumeData }) => {
+      const execute = vi.fn(async ({ runtimeContext, suspend, resumeData }) => {
         if (!resumeData?.human) {
           await suspend();
         }
 
-        const value = container.get('testKey');
+        const value = runtimeContext.get('testKey');
         return { injectedValue: value };
       });
 
@@ -3928,17 +3928,17 @@ describe('Workflow', () => {
       workflow.then(step).commit();
 
       const run = workflow.createRun();
-      await run.start({ container });
+      await run.start({ runtimeContext });
 
-      const resumeContainer = new RuntimeContext();
-      resumeContainer.set('testKey', testValue + '2');
+      const resumeruntimeContext = new RuntimeContext();
+      resumeruntimeContext.set('testKey', testValue + '2');
 
       const result = await run.resume({
         step: step,
         resumeData: {
           human: true,
         },
-        container: resumeContainer,
+        runtimeContext: resumeruntimeContext,
       });
 
       // @ts-ignore
