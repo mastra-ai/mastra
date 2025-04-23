@@ -1,6 +1,5 @@
 "use client";
 import { cn } from "@/lib/utils";
-import { BookMarked, BookText, BookType, CodeXml, File } from "lucide-react";
 import { motion } from "motion/react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
@@ -10,31 +9,31 @@ const docsTabs = [
     id: "Docs",
     label: "Docs",
     href: "docs",
-    icon: <BookText className="w-4 h-4" />,
+  
   },
   {
     id: "Examples",
     label: "Examples",
     href: "examples",
-    icon: <File className="w-4 h-4" />,
+
   },
   {
     id: "Guides",
     label: "Guides",
     href: "guides",
-    icon: <BookType className="w-4 h-4" />,
+
   },
   {
     id: "API Reference",
     label: "API Reference",
     href: "reference",
-    icon: <CodeXml className="w-4 h-4" />,
+  
   },
   {
     id: "Showcase",
     label: "Showcase",
     href: "showcase",
-    icon: <BookMarked className="w-4 h-4" />,
+ 
   },
 ];
 
@@ -67,7 +66,6 @@ export const TabSwitcher = ({ className }: { className?: string }) => {
                 )}
                 aria-current={isActive ? "page" : undefined}
               >
-                {tab.icon}
                 {tab.label}
 
                 {isActive && (

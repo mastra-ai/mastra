@@ -187,10 +187,15 @@ export abstract class Bundler extends MastraBundler {
       this.logger,
     );
 
-    await writeTelemetryConfig(mastraEntryFile, join(outputDirectory, this.outputDir));
+    const { externalDependencies } = await writeTelemetryConfig(mastraEntryFile, join(outputDirectory, this.outputDir));
+
+    const dependenciesToInstall = new Map<string, string>();
+    // Add extenal dependencies from telemetry file
+    for (const external of externalDependencies) {
+      dependenciesToInstall.set(external, 'latest');
+    }
 
     const workspaceMap = await createWorkspacePackageMap();
-    const dependenciesToInstall = new Map<string, string>();
     const workspaceDependencies = new Set<string>();
     for (const dep of analyzedBundleInfo.externalDependencies) {
       try {

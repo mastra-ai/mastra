@@ -54,11 +54,11 @@ The Mastra class is the core entry point for your application. It manages agents
       defaultValue: "{}",
     },
     {
-      name: "serverMiddleware",
-      type: "Array<{ handler: (c: any, next: () => Promise<void>) => Promise<Response | void>; path?: string; }>",
-      description: "Server middleware functions to be applied to API routes. Each middleware can specify a path pattern (defaults to '/api/*').",
+      name: "server",
+      type: "ServerConfig",
+      description: "Server configuration including port, timeout, API routes, middleware, CORS settings, and build options for Swagger UI, API request logging, and OpenAPI docs.",
       isOptional: true,
-      defaultValue: "[]",
+      defaultValue: "{ port: 4111, cors: { origin: '*', allowMethods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'], allowHeaders: ['Content-Type', 'Authorization', 'x-mastra-client-type'], exposeHeaders: ['Content-Length', 'X-Requested-With'], credentials: false } }",
     },
   ]}
 />
@@ -159,11 +159,11 @@ You can think of the `Mastra` class as a top-level registry. When you register t
       example: 'const memory = mastra.getMemory();',
     },
     {
-      name: "getServerMiddleware()",
-      type: "Array<{ handler: Function; path: string; }>",
+      name: "getServer()",
+      type: "ServerConfig | undefined",
       description:
-        "Returns the configured server middleware functions.",
-      example: 'const middleware = mastra.getServerMiddleware();',
+        "Returns the server configuration including port, timeout, API routes, middleware, CORS settings, and build options.",
+      example: 'const serverConfig = mastra.getServer();',
     },
     {
       name: "setStorage(storage)",
