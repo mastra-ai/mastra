@@ -12,6 +12,7 @@ describe('tsconfig paths', () => {
 
   beforeAll(async () => {
     fixturePath = await mkdtemp(join(tmpdir(), 'mastra-monorepo-test-'));
+    console.log('fixturePath', fixturePath);
     await setupMonorepo(fixturePath);
   }, 60 * 1000);
 
