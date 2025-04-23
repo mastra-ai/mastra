@@ -11,8 +11,10 @@
   --color-primary: #fff;
   --color-el-2: #707070;
   --color-el-3: #939393;
+  --color-el-4: #e6e6e6;
   --font-sans: var(--inter);
   --font-mono: var(--geist-mono);
+  --font-serif: var(--tasa);
   --tag-blue: 211,69%,49%;
   --tag-green: 143,97%,54%;
   --tag-purple: 286,38%,52%;

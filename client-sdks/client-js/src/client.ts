@@ -14,7 +14,6 @@ import type {
   GetTelemetryResponse,
   GetToolResponse,
   GetWorkflowResponse,
-  RequestOptions,
   SaveMessageToMemoryParams,
   SaveMessageToMemoryResponse,
 } from './types';
@@ -165,14 +164,6 @@ export class MastraClient extends BaseResource {
   public getTelemetry(params?: GetTelemetryParams): Promise<GetTelemetryResponse> {
     const { name, scope, page, perPage, attribute } = params || {};
     const _attribute = attribute ? Object.entries(attribute).map(([key, value]) => `${key}:${value}`) : [];
-
-    const queryObj = {
-      ...(name ? { name } : {}),
-      ...(scope ? { scope } : {}),
-      ...(page ? { page: String(page) } : {}),
-      ...(perPage ? { perPage: String(perPage) } : {}),
-      ...(_attribute?.length ? { attribute: _attribute } : {}),
-    } as const;
 
     const searchParams = new URLSearchParams();
     if (name) {

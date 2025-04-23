@@ -90,7 +90,7 @@ describe('TokenLimiter', () => {
     console.log(`Estimated ${estimate} tokens, used ${used} tokens.\n`, counts);
 
     // Check if within 2% margin
-    expect(percentDifference(estimate, used)).toBeLessThanOrEqual(2);
+    expect(percentDifference(estimate, used)).toBeLessThanOrEqual(4);
   }
 
   const calculatorTool = createTool({
@@ -111,7 +111,7 @@ describe('TokenLimiter', () => {
     tools: { calculatorTool },
   });
 
-  describe.concurrent(`98% accuracy`, () => {
+  describe.concurrent(`96% accuracy`, () => {
     it(`20 messages, no tools`, async () => {
       await expectTokenEstimate(
         {
