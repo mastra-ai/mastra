@@ -124,4 +124,15 @@ for (const dep of linkedDeps) {
   }
 }
 
+if (ignored) {
+  try {
+    await spawn('git', ['diff', 'HEAD^', 'HEAD', '--quiet', '--', join(process.cwd(), dir)], {
+      cwd: repoRoot,
+      stdio: 'inherit',
+    });
+  } catch {
+    ignored = false;
+  }
+}
+
 process.exit(ignored ? 0 : 1);
