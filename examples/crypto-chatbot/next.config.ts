@@ -1,8 +1,9 @@
 import type { NextConfig } from 'next';
+import { resolve } from 'path';
 
 const nextConfig: NextConfig = {
   /* config options here */
-  serverExternalPackages: ['@mastra/*', 'libsql', '@libsql/client'],
+  serverExternalPackages: ['@mastra/*'],
   experimental: {
     ppr: true,
   },
