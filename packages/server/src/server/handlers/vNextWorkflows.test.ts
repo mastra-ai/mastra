@@ -89,7 +89,7 @@ function serializeWorkflow(workflow: NewWorkflow) {
     steps: workflow.steps,
     inputSchema: workflow.inputSchema ? stringify(zodToJsonSchema(workflow.inputSchema)) : undefined,
     outputSchema: workflow.outputSchema ? stringify(zodToJsonSchema(workflow.outputSchema)) : undefined,
-    stepFlow: workflow.stepFlow,
+    stepGraph: workflow.stepGraph,
   };
 }
 

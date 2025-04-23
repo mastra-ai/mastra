@@ -5,4 +5,4 @@
 ---
 
 Add vNextWorkflow handlers and APIs
-Add stepFlow and steps to vNextWorkflow
+Add stepGraph and steps to vNextWorkflow
