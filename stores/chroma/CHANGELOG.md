@@ -1,5 +1,12 @@
 # @mastra/chroma
 
+## 0.2.12-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [81fb7f6]
+  - @mastra/core@0.9.1-alpha.0
+
 ## 0.2.11
 
 ### Patch Changes
