@@ -16,10 +16,26 @@ const USERNAME = process.env.USERNAME;
 const EMAIL = process.env.EMAIL;
 
 const PROVIDERS = {
-  openai: 'gpt-4o',
-  anthropic: 'claude-3-5-sonnet-20240620',
-  google: 'gemini-1.5-pro-latest',
-  groq: 'llama-3.3-70b-versatile',
+  openai: {
+    model: 'gpt-4o',
+    package: '@ai-sdk/openai',
+    apiKey: 'OPENAI_API_KEY',
+  },
+  anthropic: {
+    model: 'claude-3-5-sonnet-20240620',
+    package: '@ai-sdk/anthropic',
+    apiKey: 'ANTHROPIC_API_KEY',
+  },
+  google: {
+    model: 'gemini-1.5-pro-latest',
+    package: '@ai-sdk/google',
+    apiKey: 'GOOGLE_GENERATIVE_AI_API_KEY',
+  },
+  groq: {
+    model: 'llama-3.3-70b-versatile',
+    package: '@ai-sdk/groq',
+    apiKey: 'GROQ_API_KEY',
+  },
 };
 
 // Initialize Octokit
@@ -135,24 +151,53 @@ async function pushToRepo(repoName) {
 
     // setup different branches
     // TODO make more dynamic
-    for (const [provider, defaultModel] of Object.entries(PROVIDERS)) {
+    for (const [provider, { model: defaultModel, package: providerPackage, apiKey: providerApiKey }] of Object.entries(
+      PROVIDERS,
+    )) {
       const files = ['./src/mastra/workflows/index.ts', './src/mastra/agents/index.ts'];
       // move to new branch
-      execSync(`git switch -c ${provider}`, { stdio: 'inherit', cwd: tempDir });
+      execSync(`git checkout main && git switch -c ${provider}`, { stdio: 'inherit', cwd: tempDir });
 
+      //update llm provider in workflows and agents
       for (const file of files) {
         const filePath = path.join(tempDir, file);
-        let content = await readFile(filePath, 'utf-8');
-        content.replaceAll(
-          `import { openai } from '@ai-sdk/openai';`,
-          `import { ${provider} } from '@ai-sdk/${provider}';`,
-        );
-        content.replaceAll(`openai('gpt-4o')`, `${provider}(process.env.MODEL ?? ${defaultModel})`);
-        await writeFile(filePath, content);
+        if (fs.existsSync(filePath)) {
+          console.log(`Updating ${filePath}`);
+          let content = await readFile(filePath, 'utf-8');
+          content = content.replaceAll(
+            `import { openai } from '@ai-sdk/openai';`,
+            `import { ${provider} } from '${providerPackage}';`,
+          );
+          content = content.replaceAll(`openai('gpt-4o')`, `${provider}(process.env.MODEL ?? ${defaultModel})`);
+          await writeFile(filePath, content);
+        } else {
+          console.log(`${filePath} does not exist`);
+        }
       }
+
+      //update llm provider in package.json
+      console.log(`Updating package.json for ${provider}`);
+      const latestVersion = await getLatestVersion(providerPackage);
+      const packageJsonPath = path.join(tempDir, 'package.json');
+      let packageJson = await readFile(packageJsonPath, 'utf-8');
+      packageJson = JSON.parse(packageJson);
+      delete packageJson.dependencies['@ai-sdk/openai'];
+      packageJson.dependencies[providerPackage] = `^${latestVersion}`;
+      await writeFile(packageJsonPath, JSON.stringify(packageJson, null, 2));
+
+      //update llm provider in .env.example
+      console.log(`Updating .env.example for ${provider}`);
+      const envExamplePath = path.join(tempDir, '.env.example');
+      let envExample = await readFile(envExamplePath, 'utf-8');
+      envExample = envExample.replace('OPENAI_API_KEY', providerApiKey);
+      envExample = envExample + `\nMODEL=${defaultModel}`;
+      await writeFile(envExamplePath, envExample);
+
       // push branch
       execSync(
         `
+        git add . &&
+        git commit -m "Update llm provider to ${provider}" &&
         git push -u origin ${provider} --force
     `,
         { stdio: 'inherit', cwd: tempDir },
@@ -167,6 +212,15 @@ async function pushToRepo(repoName) {
     // Clean up temp directory
     console.log(`Cleaning up temp directory: ${tempDir}`);
     fsExtra.removeSync(path.join(process.cwd(), '.temp'));
+  }
+}
+
+async function getLatestVersion(packageName) {
+  try {
+    return execSync(`npm view ${packageName} version`, { stdio: 'pipe' }).toString().trim();
+  } catch (error) {
+    console.error(`Error getting latest version of ${packageName}`, error);
+    throw error;
   }
 }
 

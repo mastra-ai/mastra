@@ -2,7 +2,7 @@ import type { ToolExecutionOptions, Tool } from 'ai';
 import type { ZodSchema, z } from 'zod';
 
 import type { IAction, IExecutionContext, MastraUnion } from '../action';
-import type { Container } from '../di';
+import type { RuntimeContext } from '../di';
 import type { Mastra } from '../mastra';
 
 export type VercelTool = Tool;
@@ -28,7 +28,7 @@ export type CoreTool = {
 export interface ToolExecutionContext<TSchemaIn extends z.ZodSchema | undefined = undefined>
   extends IExecutionContext<TSchemaIn> {
   mastra?: MastraUnion;
-  container: Container;
+  runtimeContext: RuntimeContext;
 }
 
 export interface ToolAction<

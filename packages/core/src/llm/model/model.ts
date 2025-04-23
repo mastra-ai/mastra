@@ -15,7 +15,7 @@ import type {
 } from '../';
 import type { MastraPrimitives } from '../../action';
 import type { AiMessageType, ToolsInput } from '../../agent/types';
-import type { Container } from '../../di';
+import type { RuntimeContext } from '../../di';
 import type { Mastra } from '../../mastra';
 import type { MessageType } from '../../memory';
 import type { MastraMemory } from '../../memory/memory';
@@ -73,14 +73,14 @@ export class MastraLLM extends MastraLLMBase {
     threadId,
     resourceId,
     memory,
-    container,
+    runtimeContext,
   }: {
     tools?: ToolsInput;
     runId?: string;
     threadId?: string;
     resourceId?: string;
     memory?: MastraMemory;
-    container: Container;
+    runtimeContext: RuntimeContext;
   }): Record<string, CoreTool> {
     this.logger.debug('Starting tool conversion for LLM');
 
@@ -104,7 +104,7 @@ export class MastraLLM extends MastraLLMBase {
             logger: this.logger,
             memory,
             mastra: mastraProxy,
-            container,
+            runtimeContext,
           };
           memo[k] = makeCoreTool(tool, options);
         }
@@ -132,7 +132,7 @@ export class MastraLLM extends MastraLLMBase {
     threadId,
     resourceId,
     memory,
-    container,
+    runtimeContext,
     ...rest
   }: LLMTextOptions<Z> & { memory?: MastraMemory }) {
     const model = this.#model;
@@ -146,7 +146,8 @@ export class MastraLLM extends MastraLLMBase {
       tools: Object.keys(tools || convertedTools || {}),
     });
 
-    const finalTools = convertedTools || this.convertTools({ tools, runId, threadId, resourceId, memory, container });
+    const finalTools =
+      convertedTools || this.convertTools({ tools, runId, threadId, resourceId, memory, runtimeContext });
 
     const argsForExecute = {
       model,
@@ -224,14 +225,15 @@ export class MastraLLM extends MastraLLMBase {
     threadId,
     resourceId,
     memory,
-    container,
+    runtimeContext,
     ...rest
   }: LLMTextObjectOptions<T> & { memory?: MastraMemory }) {
     const model = this.#model;
 
     this.logger.debug(`[LLM] - Generating a text object`, { runId });
 
-    const finalTools = convertedTools || this.convertTools({ tools, runId, threadId, resourceId, memory, container });
+    const finalTools =
+      convertedTools || this.convertTools({ tools, runId, threadId, resourceId, memory, runtimeContext });
 
     const argsForExecute = {
       model,
@@ -304,7 +306,7 @@ export class MastraLLM extends MastraLLMBase {
     threadId,
     resourceId,
     memory,
-    container,
+    runtimeContext,
     ...rest
   }: LLMInnerStreamOptions<Z> & { memory?: MastraMemory }) {
     const model = this.#model;
@@ -317,7 +319,8 @@ export class MastraLLM extends MastraLLMBase {
       tools: Object.keys(tools || convertedTools || {}),
     });
 
-    const finalTools = convertedTools || this.convertTools({ tools, runId, threadId, resourceId, memory, container });
+    const finalTools =
+      convertedTools || this.convertTools({ tools, runId, threadId, resourceId, memory, runtimeContext });
 
     const argsForExecute = {
       model,
@@ -402,7 +405,7 @@ export class MastraLLM extends MastraLLMBase {
     convertedTools,
     maxSteps = 5,
     toolChoice = 'auto',
-    container,
+    runtimeContext,
     threadId,
     resourceId,
     memory,
@@ -421,7 +424,8 @@ export class MastraLLM extends MastraLLMBase {
       tools: Object.keys(tools || convertedTools || {}),
     });
 
-    const finalTools = convertedTools || this.convertTools({ tools, runId, threadId, resourceId, memory, container });
+    const finalTools =
+      convertedTools || this.convertTools({ tools, runId, threadId, resourceId, memory, runtimeContext });
 
     const argsForExecute = {
       model,

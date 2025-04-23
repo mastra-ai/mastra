@@ -1,13 +1,6 @@
 import type { StorageThreadType } from '@mastra/core';
 
-import type {
-  CreateMemoryThreadParams,
-  GetMemoryThreadMessagesResponse,
-  GetMemoryThreadResponse,
-  ClientOptions,
-  SaveMessageToMemoryParams,
-  UpdateMemoryThreadParams,
-} from '../types';
+import type { GetMemoryThreadMessagesResponse, ClientOptions, UpdateMemoryThreadParams } from '../types';
 
 import { BaseResource } from './base';
 

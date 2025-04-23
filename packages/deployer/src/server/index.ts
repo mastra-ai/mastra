@@ -8,7 +8,7 @@ import { serveStatic } from '@hono/node-server/serve-static';
 import { swaggerUI } from '@hono/swagger-ui';
 import { Telemetry } from '@mastra/core';
 import type { Mastra } from '@mastra/core';
-import { Container } from '@mastra/core/di';
+import { RuntimeContext } from '@mastra/core/di';
 import { Hono } from 'hono';
 import type { Context, MiddlewareHandler } from 'hono';
 import { bodyLimit } from 'hono/body-limit';
@@ -61,22 +61,21 @@ import {
   createRunHandler,
   getWorkflowRunsHandler,
 } from './handlers/workflows.js';
+import type { ServerBundleOptions } from './types';
 import { html } from './welcome.js';
 
 type Bindings = {};
 
 type Variables = {
   mastra: Mastra;
-  container: Container;
+  runtimeContext: RuntimeContext;
   clients: Set<{ controller: ReadableStreamDefaultController }>;
   tools: Record<string, any>;
   playground: boolean;
+  isDev: boolean;
 };
 
-export async function createHonoServer(
-  mastra: Mastra,
-  options: { playground?: boolean; swaggerUI?: boolean; apiReqLogs?: boolean } = {},
-) {
+export async function createHonoServer(mastra: Mastra, options: ServerBundleOptions = {}) {
   // Create typed Hono app
   const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
   const server = mastra.getServer();
@@ -126,21 +125,17 @@ export async function createHonoServer(
     }
   });
 
-  if (options.apiReqLogs) {
-    app.use(logger());
-  }
-
   app.onError(errorHandler);
 
   // Add Mastra to context
   app.use('*', function setContext(c, next) {
-    const container = new Container();
+    const runtimeContext = new RuntimeContext();
 
-    c.set('container', container);
+    c.set('runtimeContext', runtimeContext);
     c.set('mastra', mastra);
     c.set('tools', tools);
     c.set('playground', options.playground === true);
-
+    c.set('isDev', options.isDev === true);
     return next();
   });
 
@@ -215,6 +210,10 @@ export async function createHonoServer(
         app.delete(route.path, ...middlewares, route.handler);
       }
     }
+  }
+
+  if (options?.isDev || server?.build?.apiReqLogs) {
+    app.use(logger());
   }
 
   // API routes
@@ -1234,7 +1233,7 @@ export async function createHonoServer(
               properties: {
                 title: { type: 'string' },
                 metadata: { type: 'object' },
-                resourceid: { type: 'string' },
+                resourceId: { type: 'string' },
                 threadId: { type: 'string' },
               },
             },
@@ -1247,7 +1246,6 @@ export async function createHonoServer(
         },
       },
     }),
-
     createThreadHandler,
   );
 
@@ -2123,18 +2121,18 @@ export async function createHonoServer(
     deleteIndex,
   );
 
-  app.get(
-    '/openapi.json',
-    openAPISpecs(app, {
-      documentation: {
-        info: { title: 'Mastra API', version: '1.0.0', description: 'Mastra API' },
-      },
-    }),
-  );
+  if (options?.isDev || server?.build?.openAPIDocs || server?.build?.swaggerUI) {
+    app.get(
+      '/openapi.json',
+      openAPISpecs(app, {
+        documentation: {
+          info: { title: 'Mastra API', version: '1.0.0', description: 'Mastra API' },
+        },
+      }),
+    );
+  }
 
-  app.get('/swagger-ui', swaggerUI({ url: '/openapi.json' }));
-
-  if (options?.swaggerUI) {
+  if (options?.isDev || server?.build?.swaggerUI) {
     app.get('/swagger-ui', swaggerUI({ url: '/openapi.json' }));
   }
 
@@ -2196,10 +2194,7 @@ export async function createHonoServer(
   return app;
 }
 
-export async function createNodeServer(
-  mastra: Mastra,
-  options: { playground?: boolean; swaggerUI?: boolean; apiReqLogs?: boolean } = {},
-) {
+export async function createNodeServer(mastra: Mastra, options: ServerBundleOptions = {}) {
   const app = await createHonoServer(mastra, options);
   const serverOptions = mastra.getServer();
 
@@ -2212,9 +2207,11 @@ export async function createNodeServer(
     },
     () => {
       const logger = mastra.getLogger();
-      logger.info(`🦄 Mastra API running on port ${port}/api`);
-      logger.info(`📚 Open API documentation available at http://localhost:${port}/openapi.json`);
-      if (options?.swaggerUI) {
+      logger.info(` Mastra API running on port http://localhost:${process.env.PORT || 4111}/api`);
+      if (options?.isDev) {
+        logger.info(`� Open API documentation available at http://localhost:${port}/openapi.json`);
+      }
+      if (options?.isDev) {
         logger.info(`🧪 Swagger UI available at http://localhost:${port}/swagger-ui`);
       }
       if (options?.playground) {
