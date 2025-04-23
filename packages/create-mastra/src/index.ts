@@ -35,6 +35,10 @@ program
   .name('create-mastra')
   .description('Create a new Mastra project')
   .argument('[project-name]', 'Directory name of the project')
+  .option(
+    '-p, --project-name <string>',
+    'Project name that will be used in package.json and as the project directory name.',
+  )
   .option('--default', 'Quick start with defaults(src, OpenAI, no examples)')
   .option('-c, --components <components>', 'Comma-separated list of components (agents, tools, workflows)')
   .option('-l, --llm <model-provider>', 'Default model provider (openai, anthropic, groq, google, or cerebras)')
@@ -43,7 +47,9 @@ program
   .option('-n, --no-example', 'Do not include example code')
   .option('-t, --timeout [timeout]', 'Configurable timeout for package installation, defaults to 60000 ms')
   .option('-d, --dir <directory>', 'Target directory for Mastra source code (default: src/)')
-  .action(async (projectName, args) => {
+  .action(async (projectNameArg, args) => {
+    // Unify: use argument if present, else option
+    const projectName = projectNameArg || args.projectName;
     const timeout = args?.timeout ? (args?.timeout === true ? 60000 : parseInt(args?.timeout, 10)) : undefined;
     if (args.default) {
       await create({
@@ -63,7 +69,7 @@ program
       llmApiKey: args['llm-api-key'],
       createVersionTag,
       timeout,
-      projectName: projectName,
+      projectName,
       directory: args.dir,
     });
   });

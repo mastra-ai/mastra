@@ -42,7 +42,7 @@ program
   });
 
 program
-  .command('create')
+  .command('create [project-name]')
   .description('Create a new Mastra project')
   .option('--default', 'Quick start with defaults(src, OpenAI, no examples)')
   .option('-c, --components <components>', 'Comma-separated list of components (agents, tools, workflows)')
@@ -56,10 +56,12 @@ program
     '-p, --project-name <string>',
     'Project name that will be used in package.json and as the project directory name.',
   )
-  .action(async args => {
+  .action(async (projectNameArg, args) => {
+    // Unify: use argument if present, else option
+    const projectName = projectNameArg || args.projectName;
     await analytics.trackCommandExecution({
       command: 'create',
-      args,
+      args: { ...args, projectName },
       execution: async () => {
         const timeout = args?.timeout ? (args?.timeout === true ? 60000 : parseInt(args?.timeout, 10)) : undefined;
         if (args.default) {
@@ -77,7 +79,7 @@ program
           addExample: args.example,
           llmApiKey: args['llm-api-key'],
           timeout,
-          projectName: args.projectName,
+          projectName,
           directory: args.dir,
         });
       },
