@@ -1,5 +1,4 @@
 import { randomUUID } from 'crypto';
-import type EventEmitter from 'events';
 import type {
   AssistantContent,
   CoreAssistantMessage,
@@ -15,7 +14,7 @@ import type {
   UserContent,
 } from 'ai';
 import type { JSONSchema7 } from 'json-schema';
-import { z, type ZodSchema } from 'zod';
+import type { z, ZodSchema } from 'zod';
 
 import type { MastraPrimitives, MastraUnion } from '../action';
 import { MastraBase } from '../base';
@@ -35,7 +34,6 @@ import { makeCoreTool, createMastraProxy, ensureToolProperties, ensureAllMessage
 import type { CompositeVoice } from '../voice';
 import { DefaultVoice } from '../voice';
 import { agentToStep, Step } from '../workflows';
-import type { NewStep } from '../workflows/vNext';
 import type {
   AgentConfig,
   AgentGenerateOptions,
