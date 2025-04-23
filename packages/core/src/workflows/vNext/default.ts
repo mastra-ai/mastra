@@ -380,6 +380,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
               emitter,
             });
             return result ? index : null;
+            // eslint-disable-next-line @typescript-eslint/no-unused-vars
           } catch (e: unknown) {
             return null;
           }
