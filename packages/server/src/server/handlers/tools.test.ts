@@ -5,7 +5,6 @@ import { createTool } from '@mastra/core/tools';
 import type { ToolAction, VercelTool } from '@mastra/core/tools';
 import type { Mock } from 'vitest';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { z } from 'zod';
 import { HTTPException } from '../http-exception';
 import { getToolsHandler, getToolByIdHandler, executeToolHandler, executeAgentToolHandler } from './tools';
 
@@ -18,7 +17,7 @@ describe('Tools Handlers', () => {
 
   const mockVercelTool: VercelTool = {
     description: 'A Vercel tool',
-    parameters: z.object({}),
+    parameters: {},
     execute: vi.fn(),
   };
 

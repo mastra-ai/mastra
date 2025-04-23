@@ -51,9 +51,7 @@
   "keywords": [],
   "author": "",
   "license": "Elastic-2.0",
-  "dependencies": {
-    "zod": "^3.24.3"
-  },
+  "dependencies": {},
   "peerDependencies": {
     "@mastra/core": "workspace:^"
   },
