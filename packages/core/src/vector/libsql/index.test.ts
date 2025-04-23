@@ -357,7 +357,7 @@ describe('DefaultVectorDB', () => {
         const results = await vectorDB.query({
           indexName,
           queryVector: [1, 0, 0],
-          filter: { numericString: { $gt: '100' } }, // Compare strings numerically
+          filter: { numericString: { $gt: '100' } },
         });
         expect(results.length).toBeGreaterThan(0);
         expect(results[0]?.metadata?.numericString).toBe('123');
@@ -437,7 +437,7 @@ describe('DefaultVectorDB', () => {
 
     // Array Operator Tests
     describe('Array Operators', () => {
-      it('should filter with $in operator', async () => {
+      it('should filter with $in operator for scalar field', async () => {
         const results = await vectorDB.query({
           indexName,
           queryVector: [1, 0, 0],
@@ -449,7 +449,25 @@ describe('DefaultVectorDB', () => {
         });
       });
 
-      it('should filter with $nin operator', async () => {
+      it('should filter with $in operator for array field', async () => {
+        // Insert a record with tags as array
+        await vectorDB.upsert({
+          indexName,
+          vectors: [[2, 0.2, 0]],
+          metadata: [{ tags: ['featured', 'sale', 'new'] }],
+        });
+        const results = await vectorDB.query({
+          indexName,
+          queryVector: [1, 0, 0],
+          filter: { tags: { $in: ['sale', 'clearance'] } },
+        });
+        expect(results.length).toBeGreaterThan(0);
+        results.forEach(result => {
+          expect(result.metadata?.tags.some((tag: string) => ['sale', 'clearance'].includes(tag))).toBe(true);
+        });
+      });
+
+      it('should filter with $nin operator for scalar field', async () => {
         const results = await vectorDB.query({
           indexName,
           queryVector: [1, 0, 0],
@@ -458,6 +476,24 @@ describe('DefaultVectorDB', () => {
         expect(results.length).toBeGreaterThan(0);
         results.forEach(result => {
           expect(['electronics', 'books']).not.toContain(result.metadata?.category);
+        });
+      });
+
+      it('should filter with $nin operator for array field', async () => {
+        // Insert a record with tags as array
+        await vectorDB.upsert({
+          indexName,
+          vectors: [[2, 0.3, 0]],
+          metadata: [{ tags: ['clearance', 'used'] }],
+        });
+        const results = await vectorDB.query({
+          indexName,
+          queryVector: [1, 0, 0],
+          filter: { tags: { $nin: ['new', 'sale'] } },
+        });
+        expect(results.length).toBeGreaterThan(0);
+        results.forEach(result => {
+          expect(result.metadata?.tags.every((tag: string) => !['new', 'sale'].includes(tag))).toBe(true);
         });
       });
 
@@ -491,17 +527,57 @@ describe('DefaultVectorDB', () => {
         });
       });
 
+      it('should filter with $contains operator for string substring', async () => {
+        const results = await vectorDB.query({
+          indexName,
+          queryVector: [1, 0, 0],
+          filter: { category: { $contains: 'lectro' } },
+        });
+        expect(results.length).toBeGreaterThan(0);
+        results.forEach(result => {
+          expect(result.metadata?.category).toContain('lectro');
+        });
+      });
+
+      it('should not match deep object containment with $contains', async () => {
+        // Insert a record with a nested object
+        await vectorDB.upsert({
+          indexName,
+          vectors: [[1, 0.1, 0]],
+          metadata: [{ details: { color: 'red', size: 'large' }, category: 'clothing' }],
+        });
+        // $contains does NOT support deep object containment in Postgres
+        const results = await vectorDB.query({
+          indexName,
+          queryVector: [1, 0.1, 0],
+          filter: { details: { $contains: { color: 'red' } } },
+        });
+        expect(results.length).toBe(0);
+      });
+
+      it('should fallback to direct equality for non-array, non-string', async () => {
+        // Insert a record with a numeric field
+        await vectorDB.upsert({
+          indexName,
+          vectors: [[1, 0.2, 0]],
+          metadata: [{ price: 123 }],
+        });
+        const results = await vectorDB.query({
+          indexName,
+          queryVector: [1, 0, 0],
+          filter: { price: { $contains: 123 } },
+        });
+        expect(results.length).toBeGreaterThan(0);
+        results.forEach(result => {
+          expect(result.metadata?.price).toBe(123);
+        });
+      });
+
       it('should filter with $elemMatch operator', async () => {
         const results = await vectorDB.query({
           indexName,
           queryVector: [1, 0, 0],
-          filter: {
-            tags: {
-              $elemMatch: {
-                $in: ['new', 'premium'],
-              },
-            },
-          },
+          filter: { tags: { $elemMatch: { $in: ['new', 'premium'] } } },
         });
         expect(results.length).toBeGreaterThan(0);
         results.forEach(result => {
@@ -513,13 +589,7 @@ describe('DefaultVectorDB', () => {
         const results = await vectorDB.query({
           indexName,
           queryVector: [1, 0, 0],
-          filter: {
-            tags: {
-              $elemMatch: {
-                $eq: 'sale',
-              },
-            },
-          },
+          filter: { tags: { $elemMatch: { $eq: 'sale' } } },
         });
         expect(results).toHaveLength(1);
         expect(results[0]?.metadata?.tags).toContain('sale');
@@ -529,14 +599,7 @@ describe('DefaultVectorDB', () => {
         const results = await vectorDB.query({
           indexName,
           queryVector: [1, 0, 0],
-          filter: {
-            ratings: {
-              $elemMatch: {
-                $gt: 4,
-                $lt: 4.5,
-              },
-            },
-          },
+          filter: { ratings: { $elemMatch: { $gt: 4, $lt: 4.5 } } },
         });
         expect(results.length).toBeGreaterThan(0);
         results.forEach(result => {
@@ -549,14 +612,7 @@ describe('DefaultVectorDB', () => {
         const results = await vectorDB.query({
           indexName,
           queryVector: [1, 0, 0],
-          filter: {
-            stock: {
-              $elemMatch: {
-                location: 'A',
-                count: { $gt: 20 },
-              },
-            },
-          },
+          filter: { stock: { $elemMatch: { location: 'A', count: { $gt: 20 } } } },
         });
         expect(results.length).toBeGreaterThan(0);
         results.forEach(result => {
@@ -569,13 +625,7 @@ describe('DefaultVectorDB', () => {
         const results = await vectorDB.query({
           indexName,
           queryVector: [1, 0, 0],
-          filter: {
-            reviews: {
-              $elemMatch: {
-                score: { $gt: 4 },
-              },
-            },
-          },
+          filter: { reviews: { $elemMatch: { score: { $gt: 4 } } } },
         });
         expect(results.length).toBeGreaterThan(0);
         results.forEach(result => {
@@ -587,14 +637,7 @@ describe('DefaultVectorDB', () => {
         const results = await vectorDB.query({
           indexName,
           queryVector: [1, 0, 0],
-          filter: {
-            reviews: {
-              $elemMatch: {
-                score: { $gte: 4 },
-                verified: true,
-              },
-            },
-          },
+          filter: { reviews: { $elemMatch: { score: { $gte: 4 }, verified: true } } },
         });
         expect(results.length).toBeGreaterThan(0);
         results.forEach(result => {
@@ -606,13 +649,7 @@ describe('DefaultVectorDB', () => {
         const results = await vectorDB.query({
           indexName,
           queryVector: [1, 0, 0],
-          filter: {
-            reviews: {
-              $elemMatch: {
-                user: 'alice',
-              },
-            },
-          },
+          filter: { reviews: { $elemMatch: { user: 'alice' } } },
         });
         expect(results).toHaveLength(1);
         expect(results[0].metadata?.reviews.some(r => r.user === 'alice')).toBe(true);
@@ -622,13 +659,7 @@ describe('DefaultVectorDB', () => {
         const results = await vectorDB.query({
           indexName,
           queryVector: [1, 0, 0],
-          filter: {
-            reviews: {
-              $elemMatch: {
-                score: 10, // No review has score 10
-              },
-            },
-          },
+          filter: { reviews: { $elemMatch: { score: 10 } } },
         });
         expect(results).toHaveLength(0);
       });
@@ -669,11 +700,7 @@ describe('DefaultVectorDB', () => {
 
       it('should handle non-array field $all', async () => {
         // First insert a record with non-array field
-        await vectorDB.upsert({
-          indexName,
-          vectors: [[1, 0.1, 0]],
-          metadata: [{ tags: 'not-an-array' }],
-        });
+        await vectorDB.upsert({ indexName, vectors: [[1, 0.1, 0]], metadata: [{ tags: 'not-an-array' }] });
 
         const results = await vectorDB.query({
           indexName,
@@ -696,29 +723,29 @@ describe('DefaultVectorDB', () => {
         });
       });
 
-      it('should filter with $contains operator for nested objects', async () => {
-        // First insert a record with nested object
-        await vectorDB.upsert({
-          indexName,
-          vectors: [[1, 0.1, 0]],
-          metadata: [
-            {
-              details: { color: 'red', size: 'large' },
-              category: 'clothing',
-            },
-          ],
-        });
+      // it('should filter with $objectContains operator for nested objects', async () => {
+      //   // First insert a record with nested object
+      //   await vectorDB.upsert({
+      //     indexName,
+      //     vectors: [[1, 0.1, 0]],
+      //     metadata: [
+      //       {
+      //         details: { color: 'red', size: 'large' },
+      //         category: 'clothing',
+      //       },
+      //     ],
+      //   });
 
-        const results = await vectorDB.query({
-          indexName,
-          queryVector: [1, 0.1, 0],
-          filter: { details: { $contains: { color: 'red' } } },
-        });
-        expect(results.length).toBeGreaterThan(0);
-        results.forEach(result => {
-          expect(result.metadata?.details.color).toBe('red');
-        });
-      });
+      //   const results = await vectorDB.query({
+      //     indexName,
+      //     queryVector: [1, 0.1, 0],
+      //     filter: { details: { $objectContains: { color: 'red' } } },
+      //   });
+      //   expect(results.length).toBeGreaterThan(0);
+      //   results.forEach(result => {
+      //     expect(result.metadata?.details.color).toBe('red');
+      //   });
+      // });
 
       // String Pattern Tests
       it('should handle exact string matches', async () => {
@@ -758,11 +785,7 @@ describe('DefaultVectorDB', () => {
       });
 
       it('should handle $size with nested arrays', async () => {
-        await vectorDB.upsert({
-          indexName,
-          vectors: [[1, 0.1, 0]],
-          metadata: [{ nested: { array: [1, 2, 3, 4] } }],
-        });
+        await vectorDB.upsert({ indexName, vectors: [[1, 0.1, 0]], metadata: [{ nested: { array: [1, 2, 3, 4] } }] });
         const results = await vectorDB.query({
           indexName,
           queryVector: [1, 0, 0],
@@ -900,8 +923,12 @@ describe('DefaultVectorDB', () => {
           filter: {
             $not: {
               $or: [
-                { $and: [{ category: 'electronics' }, { price: { $gt: 90 } }] },
-                { $and: [{ category: 'books' }, { price: { $lt: 30 } }] },
+                {
+                  $and: [{ category: 'electronics' }, { price: { $gt: 90 } }],
+                },
+                {
+                  $and: [{ category: 'books' }, { price: { $lt: 30 } }],
+                },
               ],
             },
           },
@@ -1306,8 +1333,14 @@ describe('DefaultVectorDB', () => {
           queryVector: [1, 0, 0],
           filter: {
             $and: [
-              { $or: [{ category: 'electronics' }, { $and: [{ category: 'books' }, { price: { $lt: 30 } }] }] },
-              { $not: { $or: [{ active: false }, { price: { $gt: 100 } }] } },
+              {
+                $or: [{ category: 'electronics' }, { $and: [{ category: 'books' }, { price: { $lt: 30 } }] }],
+              },
+              {
+                $not: {
+                  $or: [{ active: false }, { price: { $gt: 100 } }],
+                },
+              },
             ],
           },
         });

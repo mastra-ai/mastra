@@ -88,7 +88,7 @@ program
   .option('--default', 'Quick start with defaults(src, OpenAI, no examples)')
   .option('-d, --dir <directory>', 'Directory for Mastra files to (defaults to src/)')
   .option('-c, --components <components>', 'Comma-separated list of components (agents, tools, workflows)')
-  .option('-l, --llm <model-provider>', 'Default model provider (openai, anthropic, or groq))')
+  .option('-l, --llm <model-provider>', 'Default model provider (openai, anthropic, groq, google or cerebras))')
   .option('-k, --llm-api-key <api-key>', 'API key for the model provider')
   .option('-e, --example', 'Include example code')
   .action(async args => {
@@ -169,7 +169,10 @@ program
       command: 'mastra build',
       args,
       execution: async () => {
-        await build({ dir: args.dir, tools: args.tools ? args.tools.split(',') : [] });
+        await build({
+          dir: args.dir,
+          tools: args.tools ? args.tools.split(',') : [],
+        });
       },
       origin,
     });
