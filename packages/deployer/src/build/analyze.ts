@@ -120,14 +120,26 @@ async function analyze(
     inlineDynamicImports: true,
   });
 
-  await optimizerBundler.close();
-
   const depsToOptimize = new Map(Object.entries(output[0].importedBindings));
   for (const dep of depsToOptimize.keys()) {
     if (isNodeBuiltin(dep)) {
       depsToOptimize.delete(dep);
     }
   }
+
+  for (const o of output) {
+    if (o.type !== 'chunk' || o.dynamicImports.length === 0) {
+      continue;
+    }
+
+    for (const dynamicImport of o.dynamicImports) {
+      if (!depsToOptimize.has(dynamicImport)) {
+        depsToOptimize.set(dynamicImport, ['*']);
+      }
+    }
+  }
+
+  await optimizerBundler.close();
 
   return depsToOptimize;
 }
