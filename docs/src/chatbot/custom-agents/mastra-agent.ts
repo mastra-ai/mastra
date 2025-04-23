@@ -1,31 +1,42 @@
 import {
-  RunAgent,
-  BaseEvent,
   AbstractAgent,
-  RunAgentInput,
   AgentConfig,
-  RunStartedEvent,
-  RunFinishedEvent,
+  BaseEvent,
   EventType,
-  TextMessageStartEvent,
+  Message,
+  RunAgentInput,
+  RunFinishedEvent,
+  RunStartedEvent,
   TextMessageContentEvent,
   TextMessageEndEvent,
-  Message,
-  ToolCallStartEvent,
+  TextMessageStartEvent,
   ToolCallArgsEvent,
   ToolCallEndEvent,
+  ToolCallStartEvent,
 } from "@agentwire/client";
 
-import { v4 as uuidv4 } from "uuid";
-import { Observable } from "rxjs";
 import { MastraClient } from "@mastra/client-js";
-import { CoreMessage } from "@mastra/core";
+import { CoreMessage, ToolAction } from "@mastra/core";
+import { Observable } from "rxjs";
+import { v4 as uuidv4 } from "uuid";
 
 interface MastraAgentConfig extends AgentConfig {
   mastraClient?: MastraClient;
   agentId: string;
   resourceId?: string;
 }
+
+type MastraMessageContent =
+  | {
+      type: "text";
+      text: string;
+    }
+  | {
+      type: "tool-call";
+      toolCallId: string;
+      toolName: string;
+      args: Record<string, unknown>;
+    };
 
 export class MastraDocsAgent extends AbstractAgent {
   mastraClient: MastraClient;
@@ -70,7 +81,7 @@ export class MastraDocsAgent extends AbstractAgent {
               };
               return acc;
             },
-            {} as Record<string, any>,
+            {} as Record<string, ToolAction>,
           ),
         })
         .then((response) => {
@@ -163,7 +174,7 @@ function convertMessagesToMastraMessages(messages: Message[]): CoreMessage[] {
 
   for (const message of messages) {
     if (message.role === "assistant") {
-      const parts: any[] = message.content
+      const parts: MastraMessageContent[] = message.content
         ? [{ type: "text", text: message.content }]
         : [];
       for (const toolCall of message.toolCalls ?? []) {
