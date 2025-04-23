@@ -241,6 +241,9 @@ importers:
       '@mastra/memory':
         specifier: workspace:*
         version: link:../../packages/memory
+      '@mastra/voice-openai':
+        specifier: workspace:*
+        version: link:../../voice/openai
       zod:
         specifier: ^3.24.2
         version: 3.24.3

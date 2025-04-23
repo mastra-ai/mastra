@@ -55,9 +55,7 @@ export async function generateSpeechHandler({
     }
 
     validateBody({
-      text: undefined,
-      speakerId: undefined,
-      ...body,
+      text: body?.text,
     });
 
     const agent = mastra.getAgent(agentId);

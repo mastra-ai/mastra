@@ -17,6 +17,10 @@ async function main() {
 
   console.log(memoryThread);
   console.log(response.text);
+
+  const audioResponse = await agent.voice.speak(response.text);
+
+  console.log(audioResponse);
 }
 
 main();
