@@ -1,0 +1,97 @@
+# メモリーAPI
+
+メモリーAPIは、Mastraでの会話スレッドとメッセージ履歴を管理するためのメソッドを提供します。
+
+## メモリースレッド操作
+
+### すべてのスレッドを取得する
+
+特定のリソースのすべてのメモリースレッドを取得します：
+
+```typescript
+const threads = await client.getMemoryThreads({
+  resourceId: "resource-1",
+  agentId: "agent-1"
+});
+```
+
+### 新しいスレッドを作成する
+
+新しいメモリースレッドを作成します：
+
+```typescript
+const thread = await client.createMemoryThread({
+  title: "New Conversation",
+  metadata: { category: "support" },
+  resourceid: "resource-1",
+  agentId: "agent-1"
+});
+```
+
+### 特定のスレッドの操作
+
+特定のメモリースレッドのインスタンスを取得します：
+
+```typescript
+const thread = client.getMemoryThread("thread-id", "agent-id");
+```
+
+## スレッドメソッド
+
+### スレッドの詳細を取得する
+
+特定のスレッドに関する詳細を取得します：
+
+```typescript
+const details = await thread.get();
+```
+
+### スレッドを更新する
+
+スレッドのプロパティを更新します：
+
+```typescript
+const updated = await thread.update({
+  title: "Updated Title",
+  metadata: { status: "resolved" },
+  resourceid: "resource-1",
+});
+```
+
+### スレッドを削除する
+
+スレッドとそのメッセージを削除します：
+
+```typescript
+await thread.delete();
+```
+
+## メッセージ操作
+
+### メッセージを保存
+
+メッセージをメモリに保存します:
+
+```typescript
+const savedMessages = await client.saveMessageToMemory({
+  messages: [
+    {
+      role: "user",
+      content: "Hello!",
+      id: "1",
+      threadId: "thread-1",
+      createdAt: new Date(),
+      type: "text",
+    },
+  ],
+  agentId: "agent-1"
+});
+```
+
+### メモリステータスを取得
+
+メモリシステムのステータスを確認します:
+
+```typescript
+const status = await client.getMemoryStatus("agent-id");
+```

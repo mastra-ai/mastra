@@ -1,0 +1,136 @@
+# ワークフローAPI
+
+ワークフローAPIは、Mastraの自動化されたワークフローを操作および実行するためのメソッドを提供します。
+
+## すべてのワークフローの取得
+
+利用可能なすべてのワークフローのリストを取得します：
+
+```typescript
+const workflows = await client.getWorkflows();
+```
+
+## 特定のワークフローを操作する
+
+特定のワークフローのインスタンスを取得します:
+
+```typescript
+const workflow = client.getWorkflow("workflow-id");
+```
+
+## ワークフローメソッド
+
+### ワークフロー詳細の取得
+
+ワークフローに関する詳細情報を取得します：
+
+```typescript
+const details = await workflow.details();
+```
+
+### ワークフロー実行を非同期で開始
+
+トリガーデータでワークフロー実行を開始し、実行結果を待機します：
+
+```typescript
+const {runId} = workflow.createRun()
+
+const result = await workflow.startAsync({
+  runId,
+  triggerData: {
+    param1: "value1",
+    param2: "value2",
+  },
+});
+```
+
+### ワークフロー実行を非同期で再開
+
+一時停止されたワークフローステップを再開し、完全な実行結果を待機します：
+
+```typescript
+const {runId} = createRun({runId: prevRunId})
+
+const result = await workflow.resumeAsync({
+  runId,
+  stepId: "step-id",
+  contextData: { key: "value" },
+});
+```
+
+### ワークフローの監視
+
+ワークフローの遷移を監視します
+
+```typescript
+try{
+  // Get workflow instance
+  const workflow = client.getWorkflow("workflow-id");
+
+  // Create a workflow run
+  const {runId} = workflow.createRun()
+
+  // Watch workflow run 
+     workflow.watch({runId},(record)=>{
+       // Every new record is the latest transition state of the workflow run
+
+        console.log({
+          activePaths: record.activePaths,
+          results: record.results,
+          timestamp: record.timestamp,
+          runId: record.runId
+        });
+     });
+
+  // Start workflow run
+     workflow.start({
+      runId,
+      triggerData: {
+        city: 'New York',
+      },
+    });
+}catch(e){
+  console.error(e);
+}
+```
+### ワークフローの再開
+
+ワークフロー実行を再開し、ワークフローステップの遷移を監視します
+
+```typescript
+try{
+  //To resume a workflow run, when a step is suspended
+  const {run} = createRun({runId: prevRunId})
+
+  //Watch run
+   workflow.watch({runId},(record)=>{
+   // Every new record is the latest transition state of the workflow run
+
+        console.log({
+          activePaths: record.activePaths,
+          results: record.results,
+          timestamp: record.timestamp,
+          runId: record.runId
+        });
+   })
+
+   //resume run
+   workflow.resume({
+      runId,
+      stepId: "step-id",
+      contextData: { key: "value" },
+    });
+}catch(e){
+  console.error(e);
+}
+```
+
+### ワークフロー実行結果
+ワークフロー実行結果は以下を提供します：
+
+| フィールド | 型 | 説明 |
+|-------|------|-------------|
+| `activePaths` | `Record<string, { status: string; suspendPayload?: any; stepPath: string[] }>` | 実行ステータスを含むワークフロー内の現在アクティブなパス |
+| `results` | `CoreWorkflowRunResult<any, any, any>['results']` | ワークフロー実行からの結果 |
+| `timestamp` | `number` | この遷移が発生した時のUnixタイムスタンプ |
+| `runId` | `string` | このワークフロー実行インスタンスの一意の識別子 |

@@ -88,7 +88,7 @@ program
   .option('--default', 'Quick start with defaults(src, OpenAI, no examples)')
   .option('-d, --dir <directory>', 'Directory for Mastra files to (defaults to src/)')
   .option('-c, --components <components>', 'Comma-separated list of components (agents, tools, workflows)')
-  .option('-l, --llm <model-provider>', 'Default model provider (openai, anthropic, or groq))')
+  .option('-l, --llm <model-provider>', 'Default model provider (openai, anthropic, groq, google or cerebras))')
   .option('-k, --llm-api-key <api-key>', 'API key for the model provider')
   .option('-e, --example', 'Include example code')
   .action(async args => {
@@ -97,7 +97,7 @@ program
       args,
       execution: async () => {
         await checkPkgJson();
-        await checkAndInstallCoreDeps();
+        await checkAndInstallCoreDeps(args?.example || args?.default);
 
         if (!Object.keys(args).length) {
           const result = await interactivePrompt();
@@ -163,12 +163,16 @@ program
   .command('build')
   .description('Build your Mastra project')
   .option('-d, --dir <path>', 'Path to directory')
+  .option('-t, --tools <toolsDirs>', 'Comma-separated list of paths to tool files to include')
   .action(async args => {
     await analytics.trackCommandExecution({
       command: 'mastra build',
       args,
       execution: async () => {
-        await build({ dir: args.dir });
+        await build({
+          dir: args.dir,
+          tools: args.tools ? args.tools.split(',') : [],
+        });
       },
       origin,
     });

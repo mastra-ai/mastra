@@ -55,6 +55,25 @@ export class Deps extends MastraBase {
     }
   }
 
+  public getWorkspaceDependencyPath({ pkgName, version }: { pkgName: string; version: string }) {
+    return `file:./workspace-module/${pkgName}-${version}.tgz`;
+  }
+
+  public async pack({ dir, destination }: { dir: string; destination: string }) {
+    const cpLogger = createChildProcessLogger({
+      logger: this.logger,
+      root: dir,
+    });
+
+    return cpLogger({
+      cmd: `${this.packageManager} pack --pack-destination ${destination}`,
+      args: [],
+      env: {
+        PATH: process.env.PATH!,
+      },
+    });
+  }
+
   private async writePnpmConfig(dir: string, options: ArchitectureOptions) {
     const packageJsonPath = path.join(dir, 'package.json');
     const packageJson = await readJSON(packageJsonPath);

@@ -4,6 +4,7 @@ import type { MessageType } from '@mastra/core';
 import { Agent } from '@mastra/core/agent';
 import { DefaultStorage } from '@mastra/core/storage/libsql';
 import { Memory } from '@mastra/memory';
+import type { ToolCallPart } from 'ai';
 import dotenv from 'dotenv';
 import { describe, expect, it, beforeEach, afterAll } from 'vitest';
 
@@ -593,5 +594,50 @@ describe('Working Memory Tests', () => {
       expect(workingMemory).toContain('**First Name**: Jim');
       expect(workingMemory).toContain('**Location**: Vancouver Island');
     }
+  });
+
+  it('should remove tool-call/tool-result messages with toolName "updateWorkingMemory"', async () => {
+    const threadId = thread.id;
+    const messages = [
+      createTestMessage(threadId, 'User says something'),
+      {
+        id: randomUUID(),
+        threadId,
+        role: 'assistant',
+        type: 'tool-call',
+        content: [
+          {
+            type: 'tool-call',
+            toolName: 'updateWorkingMemory',
+            // ...other fields as needed
+          },
+        ],
+        toolNames: ['updateWorkingMemory'],
+      },
+      {
+        id: randomUUID(),
+        threadId,
+        role: 'assistant',
+        type: 'text',
+        content: 'Normal message',
+      },
+    ];
+
+    // Save messages
+    const saved = await memory.saveMessages({ messages: messages as MessageType[] });
+
+    // Should not include the updateWorkingMemory tool-call message
+    expect(
+      saved.some(
+        m =>
+          (m.type === 'tool-call' || m.type === 'tool-result') &&
+          Array.isArray(m.content) &&
+          m.content.some(c => (c as ToolCallPart).toolName === 'updateWorkingMemory'),
+      ),
+    ).toBe(false);
+
+    // Should still include the user and normal text message
+    expect(saved.some(m => m.content === 'Normal message')).toBe(true);
+    expect(saved.some(m => typeof m.content === 'string' && m.content.includes('User says something'))).toBe(true);
   });
 });

@@ -19,7 +19,7 @@ export async function deploy({ dir }: { dir?: string }) {
 
     try {
       await deployer.prepare(outputDirectory);
-      await deployer.bundle(mastraEntryFile, outputDirectory);
+      await deployer.bundle(mastraEntryFile, outputDirectory, []);
       try {
         await deployer.deploy(outputDirectory);
       } catch (error) {

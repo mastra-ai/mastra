@@ -1,0 +1,121 @@
+---
+title: "例：メタデータ抽出 | 検索 | RAG | Mastra ドキュメント"
+description: Mastraでドキュメントからメタデータを抽出して活用する例。ドキュメント処理と検索を強化します。
+---
+
+import { GithubLink } from "@/components/github-link";
+
+# メタデータ抽出
+
+この例では、Mastra のドキュメント処理機能を使用して、ドキュメントからメタデータを抽出し利用する方法を示します。
+抽出されたメタデータは、ドキュメントの整理、フィルタリング、および RAG システムでの強化された検索に使用できます。
+
+## 概要
+
+このシステムは、2つの方法でメタデータ抽出を示します：
+
+1. ドキュメントからの直接メタデータ抽出
+2. メタデータ抽出を伴うチャンク化
+
+## セットアップ
+
+### 依存関係
+
+必要な依存関係をインポートします:
+
+```typescript copy showLineNumbers filename="src/index.ts"
+import { MDocument } from '@mastra/rag';
+```
+
+## ドキュメント作成
+
+テキストコンテンツからドキュメントを作成します：
+
+```typescript copy showLineNumbers{3} filename="src/index.ts"
+const doc = MDocument.fromText(`Title: The Benefits of Regular Exercise
+
+Regular exercise has numerous health benefits. It improves cardiovascular health, 
+strengthens muscles, and boosts mental wellbeing.
+
+Key Benefits:
+• Reduces stress and anxiety
+• Improves sleep quality
+• Helps maintain healthy weight
+• Increases energy levels
+
+For optimal results, experts recommend at least 150 minutes of moderate exercise 
+per week.`);
+```
+
+## 1. 直接メタデータ抽出
+
+ドキュメントから直接メタデータを抽出します：
+
+```typescript copy showLineNumbers{17} filename="src/index.ts"
+// メタデータ抽出オプションを設定
+await doc.extractMetadata({
+  keywords: true,  // 重要なキーワードを抽出
+  summary: true,   // 簡潔な要約を生成
+});
+
+// 抽出されたメタデータを取得
+const meta = doc.getMetadata();
+console.log('抽出されたメタデータ:', meta);
+
+// 出力例:
+// 抽出されたメタデータ: {
+//   keywords: [
+//     '運動',
+//     '健康の利点',
+//     '心血管の健康',
+//     '精神的健康',
+//     'ストレス軽減',
+//     '睡眠の質'
+//   ],
+//   summary: '定期的な運動は、心血管の健康、筋力、精神的健康を含む複数の健康上の利点を提供します。主な利点には、ストレス軽減、睡眠の改善、体重管理、エネルギーの増加が含まれます。推奨される運動時間は週に150分です。'
+// }
+```
+
+## 2. メタデータを用いたチャンク化
+
+ドキュメントのチャンク化とメタデータ抽出を組み合わせる:
+
+```typescript copy showLineNumbers{40} filename="src/index.ts"
+// メタデータ抽出を伴うチャンク化を設定
+await doc.chunk({
+  strategy: 'recursive',  // 再帰的チャンク化戦略を使用
+  size: 200,             // 最大チャンクサイズ
+  extract: {
+    keywords: true,      // チャンクごとにキーワードを抽出
+    summary: true,       // チャンクごとに要約を生成
+  },
+});
+
+// チャンクからメタデータを取得
+const metaTwo = doc.getMetadata();
+console.log('チャンクメタデータ:', metaTwo);
+
+// 出力例:
+// チャンクメタデータ: {
+//   keywords: [
+//     '運動',
+//     '健康の利点',
+//     '心血管の健康',
+//     '精神的健康',
+//     'ストレス軽減',
+//     '睡眠の質'
+//   ],
+//   summary: '定期的な運動は、心血管の健康、筋力、精神的健康を含む複数の健康上の利点を提供します。主な利点には、ストレス軽減、睡眠の改善、体重管理、エネルギーの増加が含まれます。推奨される運動時間は週に150分です。'
+// }
+```
+
+<br />
+<br />
+<hr className="dark:border-[#404040] border-gray-300" />
+<br />
+<br />
+<GithubLink
+  link={
+    "https://github.com/mastra-ai/mastra/blob/main/examples/basics/rag/metadata-extraction"
+  }
+/> 

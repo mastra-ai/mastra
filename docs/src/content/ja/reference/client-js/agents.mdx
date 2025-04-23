@@ -1,0 +1,106 @@
+# Agents API
+
+Agents APIは、Mastra AIエージェントと対話するためのメソッドを提供し、応答の生成、インタラクションのストリーミング、エージェントツールの管理を含みます。
+
+## すべてのエージェントを取得する
+
+利用可能なすべてのエージェントのリストを取得します:
+
+```typescript
+const agents = await client.getAgents();
+```
+
+## 特定のエージェントを操作する
+
+特定のエージェントのインスタンスを取得します:
+
+```typescript
+const agent = client.getAgent("agent-id");
+```
+
+## エージェントメソッド
+
+### エージェントの詳細を取得
+
+エージェントの詳細情報を取得します:
+
+```typescript
+const details = await agent.details();
+```
+
+### 応答を生成
+
+エージェントからの応答を生成します:
+
+```typescript
+const response = await agent.generate({
+  messages: [
+    {
+      role: "user",
+      content: "こんにちは、お元気ですか？",
+    },
+  ],
+  threadId: "thread-1", // オプション: 会話コンテキストのスレッドID
+  resourceid: "resource-1", // オプション: リソースID
+  output: {}, // オプション: 出力設定
+});
+```
+
+### 応答をストリーム
+
+リアルタイムの対話のためにエージェントからの応答をストリームします:
+
+```typescript
+const response = await agent.stream({
+  messages: [
+    {
+      role: "user",
+      content: "物語を話して",
+    },
+  ],
+});
+
+// processDataStreamユーティリティでデータストリームを処理
+ response.processDataStream({
+      onTextPart: (text) => {
+        process.stdout.write(text);
+      },
+      onFilePart: (file) => {
+        console.log(file);
+      },
+      onDataPart: (data) => {
+        console.log(data);
+      },
+      onErrorPart: (error) => {
+        console.error(error);
+      },
+  });
+
+// 応答ボディから直接読み取ることもできます
+const reader = response.body.getReader();
+while (true) {
+  const { done, value } = await reader.read();
+  if (done) break;
+  console.log(new TextDecoder().decode(value));
+}
+```
+
+### エージェントツールを取得
+
+エージェントが利用可能な特定のツールに関する情報を取得します:
+
+```typescript
+const tool = await agent.getTool("tool-id");
+```
+
+### エージェント評価を取得
+
+エージェントの評価結果を取得します:
+
+```typescript
+// CI評価を取得
+const evals = await agent.evals();
+
+// ライブ評価を取得
+const liveEvals = await agent.liveEvals();
+```
