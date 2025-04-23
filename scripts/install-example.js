@@ -114,7 +114,12 @@ for (const dep of linkedDeps) {
   }
 }
 if (depsToInstall.size > 0) {
-  await spawn(`pnpm`, ['install', ...[...depsToInstall].map(dep => `--filter ${dep}`)], {
+  console.log(
+    'Installing dependencies:',
+    [...depsToInstall],
+    ['pnpm', 'install', ...[...depsToInstall].map(dep => `--filter ${dep}`)].join(' '),
+  );
+  await spawn(`pnpm`, ['pnpm', 'install', ...[...depsToInstall].map(dep => `--filter ${dep}`).join(' ')], {
     cwd: resolve(process.cwd(), '..', '..'),
     shell: true,
     stdio: 'inherit',
@@ -122,6 +127,10 @@ if (depsToInstall.size > 0) {
 }
 
 if (linkedDeps.length > 0) {
+  console.log(
+    'Building dependencies:',
+    ['pnpm', 'dlx', 'turbo', 'build', ...linkedDeps.map(dep => `--filter ${dep}`)].join(' '),
+  );
   await spawn(`pnpm`, ['dlx', 'turbo', 'build', ...linkedDeps.map(dep => `--filter ${dep}`)], {
     cwd: resolve(process.cwd(), '..', '..'),
     shell: true,
