@@ -106,10 +106,12 @@ describe('Tools Handlers', () => {
       (mockTool.execute as Mock<() => any>).mockResolvedValue(mockResult);
       const context = { test: 'data' };
 
+      const runtimeContext = new RuntimeContext();
       const result = await executeTool({
         mastra: mockMastra,
         toolId: mockTool.id,
-        runtimeContext: new RuntimeContext(),
+        runId: 'test-run',
+        runtimeContext: runtimeContext,
         data: context,
       });
 
@@ -117,6 +119,8 @@ describe('Tools Handlers', () => {
       expect(mockTool.execute).toHaveBeenCalledWith({
         context,
         mastra: mockMastra,
+        runId: 'test-run',
+        runtimeContext: runtimeContext,
       });
     });
 
@@ -208,12 +212,13 @@ describe('Tools Handlers', () => {
       const context = {
         test: 'data',
       };
+      const runtimeContext = new RuntimeContext();
       const result = await executeAgentToolHandler({
         mastra: mockMastra,
         agentId: 'test-agent',
         toolId: mockTool.id,
         data: context,
-        runtimeContext: new RuntimeContext(),
+        runtimeContext: runtimeContext,
       });
 
       expect(result).toEqual(mockResult);
@@ -221,6 +226,7 @@ describe('Tools Handlers', () => {
         context,
         mastra: mockMastra,
         runId: 'test-agent',
+        runtimeContext: runtimeContext,
       });
     });
 
