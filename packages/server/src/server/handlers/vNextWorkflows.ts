@@ -217,8 +217,9 @@ export async function watchVNextWorkflowHandler({
           }
 
           // a run is finished if we cannot retrieve it anymore
-          asyncRef = setImmediate(() => {
-            if (!workflow.getWorkflowRun(runId)) {
+          asyncRef = setImmediate(async () => {
+            const _run = await workflow.getWorkflowRun(runId);
+            if (!_run) {
               controller.close();
             }
           });
