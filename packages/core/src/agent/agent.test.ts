@@ -4,9 +4,9 @@ import { config } from 'dotenv';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 
-import { RuntimeContext } from '../di';
 import { TestIntegration } from '../integration/openapi-toolset.mock';
 import { Mastra } from '../mastra';
+import { RuntimeContext } from '../runtime-context';
 import { createTool } from '../tools';
 import { CompositeVoice, MastraVoice } from '../voice';
 

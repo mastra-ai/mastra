@@ -1,4 +1,4 @@
-import type { RuntimeContext } from '@mastra/core/di';
+import type { RuntimeContext } from '@mastra/core/runtime-context';
 import { isVercelTool } from '@mastra/core/tools';
 import type { ToolAction, VercelTool } from '@mastra/core/tools';
 import { stringify } from 'superjson';

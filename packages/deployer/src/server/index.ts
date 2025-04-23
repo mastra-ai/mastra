@@ -8,7 +8,7 @@ import { serveStatic } from '@hono/node-server/serve-static';
 import { swaggerUI } from '@hono/swagger-ui';
 import { Telemetry } from '@mastra/core';
 import type { Mastra } from '@mastra/core';
-import { RuntimeContext } from '@mastra/core/di';
+import { RuntimeContext } from '@mastra/core/runtime-context';
 import { Hono } from 'hono';
 import type { Context, MiddlewareHandler } from 'hono';
 import { bodyLimit } from 'hono/body-limit';

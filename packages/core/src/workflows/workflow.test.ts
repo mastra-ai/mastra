@@ -5,9 +5,9 @@ import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 
 import { Agent } from '../agent';
-import { RuntimeContext } from '../di';
 import { createLogger } from '../logger';
 import { Mastra } from '../mastra';
+import { RuntimeContext } from '../runtime-context';
 import { TABLE_WORKFLOW_SNAPSHOT } from '../storage';
 import { DefaultStorage } from '../storage/libsql';
 import { Telemetry } from '../telemetry';

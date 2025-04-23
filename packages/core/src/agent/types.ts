@@ -9,7 +9,6 @@ import type {
 import type { JSONSchema7 } from 'json-schema';
 import type { z, ZodSchema } from 'zod';
 
-import type { RuntimeContext } from '../di';
 import type { Metric } from '../eval';
 import type {
   CoreMessage,
@@ -22,6 +21,7 @@ import type {
 import type { Mastra } from '../mastra';
 import type { MastraMemory } from '../memory/memory';
 import type { MemoryConfig } from '../memory/types';
+import type { RuntimeContext } from '../runtime-context';
 import type { ToolAction, VercelTool } from '../tools';
 import type { CompositeVoice } from '../voice';
 

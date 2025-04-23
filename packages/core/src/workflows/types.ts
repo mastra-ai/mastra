@@ -2,9 +2,9 @@ import type { Query } from 'sift';
 import type { z } from 'zod';
 
 import type { IAction, IExecutionContext, MastraUnion } from '../action';
-import type { RuntimeContext } from '../di';
 import type { BaseLogMessage, RegisteredLogger } from '../logger';
 import type { Mastra } from '../mastra';
+import type { RuntimeContext } from '../runtime-context';
 import type { Step } from './step';
 import type { Workflow } from './workflow';
 
