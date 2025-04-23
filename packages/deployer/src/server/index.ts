@@ -212,7 +212,7 @@ export async function createHonoServer(mastra: Mastra, options: ServerBundleOpti
     }
   }
 
-  if (options?.isDev || server?.build?.apiReqLogs) {
+  if (server?.build?.apiReqLogs) {
     app.use(logger());
   }
 
