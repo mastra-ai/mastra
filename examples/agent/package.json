@@ -7,10 +7,10 @@
   "version": "0.0.1",
   "dependencies": {
     "@ai-sdk/openai": "latest",
-    "@mastra/core": "workspace:*",
-    "@mastra/voice-openai": "workspace:*",
-    "@mastra/memory": "workspace:*",
-    "@mastra/client-js": "workspace:*",
+    "@mastra/core": "latest",
+    "@mastra/voice-openai": "latest",
+    "@mastra/memory": "latest",
+    "@mastra/client-js": "latest",
     "zod": "^3.24.2"
   },
   "pnpm": {
