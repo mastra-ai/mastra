@@ -1,5 +1,17 @@
 # @mastra/core
 
+## 0.9.0-alpha.8
+
+### Patch Changes
+
+- 000a6d4: Fixed an issue where the TokenLimiter message processor was adding new messages into the remembered messages array
+- ed2f549: Fix exlude methods for batchTraceInsert
+- c0f22b4: [MASTRA-3130] Metadata Filter Update for PG and Libsql
+- 0a033fa: Adds MCPServer component
+- 9c26508: Fixed an issue where "mastra dev" wouldn't always print out localhost:4111 logs due to new NODE_ENV fixes
+- 0f4eae3: Rename Container into RuntimeContext
+- 16a8648: Disable swaggerUI, playground for production builds, mastra instance server build config to enable swaggerUI, apiReqLogs, openAPI documentation for prod builds
+
 ## 0.9.0-alpha.7
 
 ### Patch Changes

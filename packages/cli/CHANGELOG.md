@@ -1,5 +1,26 @@
 # mastra
 
+## 0.5.0-alpha.9
+
+### Patch Changes
+
+- c489535: update --llm options for init command to list all providers
+- c821402: Fix table layout issue in the Agent Network section of the Playground.
+- 9c26508: Fixed an issue where "mastra dev" wouldn't always print out localhost:4111 logs due to new NODE_ENV fixes
+- 16a8648: Disable swaggerUI, playground for production builds, mastra instance server build config to enable swaggerUI, apiReqLogs, openAPI documentation for prod builds
+- bdbde72: Sync DS components with Cloud
+- Updated dependencies [b9122b0]
+- Updated dependencies [000a6d4]
+- Updated dependencies [ed2f549]
+- Updated dependencies [c0f22b4]
+- Updated dependencies [0a033fa]
+- Updated dependencies [2538066]
+- Updated dependencies [9c26508]
+- Updated dependencies [0f4eae3]
+- Updated dependencies [16a8648]
+  - @mastra/deployer@0.3.0-alpha.9
+  - @mastra/core@0.9.0-alpha.8
+
 ## 0.5.0-alpha.8
 
 ### Patch Changes

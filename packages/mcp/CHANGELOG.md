@@ -1,5 +1,19 @@
 # @mastra/mcp
 
+## 0.4.0-alpha.9
+
+### Patch Changes
+
+- 0a033fa: Adds MCPServer component
+- Updated dependencies [000a6d4]
+- Updated dependencies [ed2f549]
+- Updated dependencies [c0f22b4]
+- Updated dependencies [0a033fa]
+- Updated dependencies [9c26508]
+- Updated dependencies [0f4eae3]
+- Updated dependencies [16a8648]
+  - @mastra/core@0.9.0-alpha.8
+
 ## 0.4.0-alpha.8
 
 ### Patch Changes

@@ -1,5 +1,12 @@
 # create-mastra
 
+## 0.2.9-alpha.2
+
+### Patch Changes
+
+- 16a8648: Disable swaggerUI, playground for production builds, mastra instance server build config to enable swaggerUI, apiReqLogs, openAPI documentation for prod builds
+- bdbde72: Sync DS components with Cloud
+
 ## 0.2.9-alpha.1
 
 ### Patch Changes

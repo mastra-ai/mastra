@@ -1,5 +1,24 @@
 # @mastra/deployer
 
+## 0.3.0-alpha.9
+
+### Patch Changes
+
+- b9122b0: fix: When using a third party exporter such as Langfuse we were not installing external deps imported from the telemetry config
+- 2538066: Fix memory thread creation from client SDK
+- 0f4eae3: Rename Container into RuntimeContext
+- 16a8648: Disable swaggerUI, playground for production builds, mastra instance server build config to enable swaggerUI, apiReqLogs, openAPI documentation for prod builds
+- Updated dependencies [000a6d4]
+- Updated dependencies [ed2f549]
+- Updated dependencies [c0f22b4]
+- Updated dependencies [0a033fa]
+- Updated dependencies [9c26508]
+- Updated dependencies [0f4eae3]
+- Updated dependencies [1c0d2b7]
+- Updated dependencies [16a8648]
+  - @mastra/core@0.9.0-alpha.8
+  - @mastra/server@2.0.0-alpha.8
+
 ## 0.3.0-alpha.8
 
 ### Patch Changes

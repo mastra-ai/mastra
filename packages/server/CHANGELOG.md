@@ -1,5 +1,20 @@
 # @mastra/deployer
 
+## 2.0.0-alpha.8
+
+### Patch Changes
+
+- 0f4eae3: Rename Container into RuntimeContext
+- 1c0d2b7: Fix speakerId in voice speak method
+- Updated dependencies [000a6d4]
+- Updated dependencies [ed2f549]
+- Updated dependencies [c0f22b4]
+- Updated dependencies [0a033fa]
+- Updated dependencies [9c26508]
+- Updated dependencies [0f4eae3]
+- Updated dependencies [16a8648]
+  - @mastra/core@0.9.0-alpha.8
+
 ## 2.0.0-alpha.7
 
 ### Patch Changes
