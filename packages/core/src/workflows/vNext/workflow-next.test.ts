@@ -586,7 +586,11 @@ describe('Workflow', () => {
       });
 
       it('should handle failing dependencies', async () => {
-        const step1Action = vi.fn<any>().mockRejectedValue(new Error('Failed'));
+        let err: Error | undefined;
+        const step1Action = vi.fn<any>().mockImplementation(() => {
+          err = new Error('Failed');
+          throw err;
+        });
         const step2Action = vi.fn<any>();
 
         const step1 = createStep({
@@ -623,7 +627,7 @@ describe('Workflow', () => {
         expect(step2Action).not.toHaveBeenCalled();
         expect(result?.steps).toEqual({
           input: {},
-          step1: { status: 'failed', error: 'Failed' },
+          step1: { status: 'failed', error: err },
         });
       });
 
@@ -751,7 +755,9 @@ describe('Workflow', () => {
   describe('Error Handling', () => {
     it('should handle step execution errors', async () => {
       const error = new Error('Step execution failed');
-      const failingAction = vi.fn<any>().mockRejectedValue(error);
+      const failingAction = vi.fn<any>().mockImplementation(() => {
+        throw error;
+      });
 
       const step1 = createStep({
         id: 'step1',
@@ -770,10 +776,13 @@ describe('Workflow', () => {
 
       const run = workflow.createRun();
 
-      await expect(run.start({ inputData: {} })).resolves.toMatchObject({
+      await expect(run.start({ inputData: {} })).resolves.toEqual({
+        status: 'failed',
+        error,
         steps: {
+          input: {},
           step1: {
-            error: 'Step execution failed',
+            error,
             status: 'failed',
           },
         },
@@ -872,14 +881,16 @@ describe('Workflow', () => {
         },
         step2: {
           status: 'failed',
-          error: 'Step execution failed',
+          error,
         },
       });
     });
 
     it('should handle step execution errors within nested workflows', async () => {
       const error = new Error('Step execution failed');
-      const failingAction = vi.fn<any>().mockRejectedValue(error);
+      const failingAction = vi.fn<any>().mockImplementation(() => {
+        throw error;
+      });
 
       const successAction = vi.fn<any>().mockResolvedValue({});
 
@@ -929,7 +940,7 @@ describe('Workflow', () => {
       expect(result.steps).toMatchObject({
         'test-workflow': {
           status: 'failed',
-          error: 'Step execution failed',
+          error,
         },
       });
     });
@@ -1690,6 +1701,7 @@ describe('Workflow', () => {
 
   describe('Retry', () => {
     it('should retry a step default 0 times', async () => {
+      let err: Error | undefined;
       const step1 = createStep({
         id: 'step1',
         execute: vi.fn<any>().mockResolvedValue({ result: 'success' }),
@@ -1698,7 +1710,10 @@ describe('Workflow', () => {
       });
       const step2 = createStep({
         id: 'step2',
-        execute: vi.fn<any>().mockRejectedValue(new Error('Step failed')),
+        execute: vi.fn<any>().mockImplementation(() => {
+          err = new Error('Step failed');
+          throw err;
+        }),
         inputSchema: z.object({}),
         outputSchema: z.object({}),
       });
@@ -1721,12 +1736,13 @@ describe('Workflow', () => {
       const result = await run.start({ inputData: {} });
 
       expect(result.steps.step1).toEqual({ status: 'success', output: { result: 'success' } });
-      expect(result.steps.step2).toEqual({ status: 'failed', error: 'Step failed' });
+      expect(result.steps.step2).toEqual({ status: 'failed', error: err });
       expect(step1.execute).toHaveBeenCalledTimes(1);
       expect(step2.execute).toHaveBeenCalledTimes(1); // 0 retries + 1 initial call
     });
 
     it('should retry a step with a custom retry config', async () => {
+      let err: Error | undefined;
       const step1 = createStep({
         id: 'step1',
         execute: vi.fn<any>().mockResolvedValue({ result: 'success' }),
@@ -1735,7 +1751,10 @@ describe('Workflow', () => {
       });
       const step2 = createStep({
         id: 'step2',
-        execute: vi.fn<any>().mockRejectedValue(new Error('Step failed')),
+        execute: vi.fn<any>().mockImplementation(() => {
+          err = new Error('Step failed');
+          throw err;
+        }),
         inputSchema: z.object({}),
         outputSchema: z.object({}),
       });
@@ -1759,7 +1778,7 @@ describe('Workflow', () => {
       const result = await run.start({ inputData: {} });
 
       expect(result.steps.step1).toEqual({ status: 'success', output: { result: 'success' } });
-      expect(result.steps.step2).toEqual({ status: 'failed', error: 'Step failed' });
+      expect(result.steps.step2).toEqual({ status: 'failed', error: err });
       expect(step1.execute).toHaveBeenCalledTimes(1);
       expect(step2.execute).toHaveBeenCalledTimes(6); // 5 retries + 1 initial call
     });

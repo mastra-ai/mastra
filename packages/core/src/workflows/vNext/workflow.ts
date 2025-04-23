@@ -201,7 +201,7 @@ export function createWorkflow<
   return new NewWorkflow(params);
 }
 
-export type WorkflowStatus<TOutput extends z.ZodType<any>, TSteps extends Step<string, any, any>[]> =
+export type WorkflowResult<TOutput extends z.ZodType<any>, TSteps extends Step<string, any, any>[]> =
   | {
       status: 'success';
       result: z.infer<TOutput>;
@@ -218,7 +218,7 @@ export type WorkflowStatus<TOutput extends z.ZodType<any>, TSteps extends Step<s
           ? StepResult<unknown>
           : StepResult<z.infer<NonNullable<StepsRecord<TSteps>[K]['outputSchema']>>>;
       };
-      error: string;
+      error: Error;
     }
   | {
       status: 'suspended';
@@ -591,7 +591,7 @@ export class NewWorkflow<
     }
 
     if (res.status === 'failed') {
-      throw new Error(res.error);
+      throw res.error;
     }
 
     return res.status === 'success' ? res.result : undefined;
@@ -683,8 +683,8 @@ export class Run<
   }: {
     inputData?: z.infer<TInput>;
     container?: RuntimeContext;
-  }): Promise<WorkflowStatus<TOutput, TSteps>> {
-    return this.executionEngine.execute<z.infer<TInput>, WorkflowStatus<TOutput, TSteps>>({
+  }): Promise<WorkflowResult<TOutput, TSteps>> {
+    return this.executionEngine.execute<z.infer<TInput>, WorkflowResult<TOutput, TSteps>>({
       workflowId: this.workflowId,
       runId: this.runId,
       graph: this.executionGraph,
@@ -738,7 +738,7 @@ export class Run<
       | string
       | string[];
     container?: RuntimeContext;
-  }): Promise<WorkflowStatus<TOutput, TSteps>> {
+  }): Promise<WorkflowResult<TOutput, TSteps>> {
     const steps: string[] = (Array.isArray(params.step) ? params.step : [params.step]).map(step =>
       typeof step === 'string' ? step : step?.id,
     );
@@ -747,7 +747,7 @@ export class Run<
       runId: this.runId,
     });
 
-    return this.executionEngine.execute<z.infer<TInput>, WorkflowStatus<TOutput, TSteps>>({
+    return this.executionEngine.execute<z.infer<TInput>, WorkflowResult<TOutput, TSteps>>({
       workflowId: this.workflowId,
       runId: this.runId,
       graph: this.executionGraph,

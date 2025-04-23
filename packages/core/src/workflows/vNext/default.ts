@@ -27,7 +27,7 @@ function fmtReturnValue<TOutput>(
   if (lastOutput.status === 'success') {
     base.result = lastOutput.output;
   } else if (lastOutput.status === 'failed') {
-    base.error = error instanceof Error ? error.message : (error ?? lastOutput.error ?? 'Unknown error');
+    base.error = error instanceof Error ? error : (lastOutput.error ?? new Error('Unknown error: ' + error));
   } else if (lastOutput.status === 'suspended') {
     const suspendedStepIds = Object.entries(stepResults).flatMap(([stepId, stepResult]) => {
       if (stepResult?.status === 'suspended') {
@@ -248,7 +248,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
 
         break;
       } catch (e) {
-        execResults = { status: 'failed', error: e instanceof Error ? e.message : 'Unknown error' };
+        execResults = { status: 'failed', error: e instanceof Error ? e : new Error('Unknown error: ' + e) };
       }
     }
 
