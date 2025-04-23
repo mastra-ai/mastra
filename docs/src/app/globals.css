@@ -34,17 +34,17 @@ body:is(html[class~="dark"] *){
   background: var(--copilot-kit-background-color);
 }
 
-.copilotKitPopup {
-  z-index: 1000!important;
+div .copilotKitPopup {
+  z-index: 1000;
 }
 
 .poweredBy {
   background: var(--copilot-kit-background-color);
 }
 
-.copilotKitInputContainer {
-  border-bottom-left-radius: 0!important;
-  border-bottom-right-radius: 0!important;
+div .copilotKitInputContainer {
+  border-bottom-left-radius: 0;
+  border-bottom-right-radius: 0;
 }
 
 
