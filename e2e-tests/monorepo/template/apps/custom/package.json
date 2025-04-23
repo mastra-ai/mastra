@@ -14,7 +14,8 @@
   "dependencies": {
     "@ai-sdk/openai": "^1.2.1",
     "@mastra/core": "link:%%MASTRA_DIR%%/packages/core",
-    "@inner/inner-tools": "workspace:*"
+    "@inner/inner-tools": "workspace:*",
+    "zod": "^3.24.3"
   },
   "devDependencies": {
     "mastra": "link:%%MASTRA_DIR%%/packages/cli"
