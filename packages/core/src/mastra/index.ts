@@ -385,6 +385,18 @@ This is a warning for now, but will throw an error in the future
     return this.#workflows;
   }
 
+  public vnext_getWorkflows(props: { serialized?: boolean } = {}): Record<string, NewWorkflow> {
+    if (props.serialized) {
+      return Object.entries(this.#vnext_workflows).reduce((acc, [k, v]) => {
+        return {
+          ...acc,
+          [k]: { name: v.name },
+        };
+      }, {});
+    }
+    return this.#vnext_workflows;
+  }
+
   public setStorage(storage: MastraStorage) {
     this.#storage = augmentWithInit(storage);
   }

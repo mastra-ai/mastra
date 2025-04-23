@@ -340,7 +340,7 @@ export class NewWorkflow<
             path: PathsToStringProps<ExtractSchemaType<ExtractSchemaFromStep<TSteps[number], 'inputSchema'>>> | '.';
           }
         | {
-            containerPath: string;
+            runtimeContextPath: string;
             schema: z.ZodTypeAny;
           };
     },
@@ -350,7 +350,7 @@ export class NewWorkflow<
       id: `mapping_${randomUUID()}`,
       inputSchema: z.object({}),
       outputSchema: z.object({}),
-      execute: async ({ getStepResult, getInitData, container }) => {
+      execute: async ({ getStepResult, getInitData, runtimeContext }) => {
         const result: Record<string, any> = {};
         for (const [key, mapping] of Object.entries(mappingConfig)) {
           const m: any = mapping;
@@ -360,8 +360,8 @@ export class NewWorkflow<
             continue;
           }
 
-          if (m.containerPath) {
-            result[key] = container.get(m.containerPath);
+          if (m.runtimeContextPath) {
+            result[key] = runtimeContext.get(m.runtimeContextPath);
             continue;
           }
 
@@ -405,7 +405,7 @@ export class NewWorkflow<
               : ZodPathType<TMapping[K]['initData']['inputSchema'], TMapping[K]['path']>
             : TMapping[K] extends { value: any; schema: z.ZodTypeAny }
               ? TMapping[K]['schema']
-              : TMapping[K] extends { containerPath: string; schema: z.ZodTypeAny }
+              : TMapping[K] extends { runtimeContextPath: string; schema: z.ZodTypeAny }
                 ? TMapping[K]['schema']
                 : never;
       },
@@ -523,6 +523,10 @@ export class NewWorkflow<
     return this as unknown as NewWorkflow<TSteps, TWorkflowId, TInput, TOutput, TOutput>;
   }
 
+  get steps() {
+    return this.stepFlow;
+  }
+
   /**
    * Creates a new workflow run instance
    * @param options Optional configuration for the run
@@ -606,6 +610,11 @@ export class NewWorkflow<
 
     return storage.getWorkflowRuns({ workflowName: this.id });
   }
+
+  async getWorkflowRun(runId: string) {
+    const runs = await this.getWorkflowRuns();
+    return runs.runs.find(r => r.runId === runId);
+  }
 }
 
 /**
@@ -679,10 +688,10 @@ export class Run<
    */
   async start({
     inputData,
-    container,
+    runtimeContext,
   }: {
     inputData?: z.infer<TInput>;
-    container?: RuntimeContext;
+    runtimeContext?: RuntimeContext;
   }): Promise<WorkflowStatus<TOutput, TSteps>> {
     return this.executionEngine.execute<z.infer<TInput>, WorkflowStatus<TOutput, TSteps>>({
       workflowId: this.workflowId,
@@ -691,7 +700,7 @@ export class Run<
       input: inputData,
       emitter: this.emitter,
       retryConfig: this.retryConfig,
-      container: container ?? new RuntimeContext(),
+      runtimeContext: runtimeContext ?? new RuntimeContext(),
     });
   }
 
@@ -737,7 +746,7 @@ export class Run<
       | [...Step<string, any, any, any, any>[], Step<string, any, any, TResumeSchema, any>]
       | string
       | string[];
-    container?: RuntimeContext;
+    runtimeContext?: RuntimeContext;
   }): Promise<WorkflowStatus<TOutput, TSteps>> {
     const steps: string[] = (Array.isArray(params.step) ? params.step : [params.step]).map(step =>
       typeof step === 'string' ? step : step?.id,
@@ -760,7 +769,7 @@ export class Run<
         resumePath: snapshot?.suspendedPaths?.[steps?.[0]] as any,
       },
       emitter: this.emitter,
-      container: params.container ?? new RuntimeContext(),
+      runtimeContext: params.runtimeContext ?? new RuntimeContext(),
     });
   }
 
