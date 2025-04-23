@@ -16,8 +16,8 @@ describe('Tools Handlers', () => {
   });
 
   const mockVercelTool: VercelTool = {
-    name: 'Vercel Tool',
     description: 'A Vercel tool',
+    parameters: {},
     execute: vi.fn(),
   };
 
@@ -61,14 +61,19 @@ describe('Tools Handlers', () => {
     const executeTool = executeToolHandler(mockTools);
 
     it('should throw error when toolId is not provided', async () => {
-      await expect(executeTool({ mastra: new Mastra({ logger: false }), body: { data: {} } })).rejects.toThrow(
-        'Tool ID is required',
-      );
+      await expect(
+        executeTool({ mastra: new Mastra({ logger: false }), data: {}, runtimeContext: new RuntimeContext() }),
+      ).rejects.toThrow('Tool ID is required');
     });
 
     it('should throw 404 when tool is not found', async () => {
       await expect(
-        executeTool({ mastra: new Mastra({ logger: false }), toolId: 'non-existent', body: { data: {} } }),
+        executeTool({
+          mastra: new Mastra({ logger: false }),
+          toolId: 'non-existent',
+          data: {},
+          runtimeContext: new RuntimeContext(),
+        }),
       ).rejects.toThrow('Tool not found');
     });
 
@@ -78,14 +83,19 @@ describe('Tools Handlers', () => {
       const executeTool = executeToolHandler(tools);
 
       await expect(
-        executeTool({ mastra: new Mastra(), toolId: nonExecutableTool.id, body: { data: {} } }),
+        executeTool({
+          mastra: new Mastra(),
+          toolId: nonExecutableTool.id,
+          data: {},
+          runtimeContext: new RuntimeContext(),
+        }),
       ).rejects.toThrow('Tool is not executable');
     });
 
     it('should throw error when data is not provided', async () => {
-      await expect(executeTool({ mastra: new Mastra(), toolId: mockTool.id, body: {} as any })).rejects.toThrow(
-        'Argument "data" is required',
-      );
+      await expect(
+        executeTool({ mastra: new Mastra(), toolId: mockTool.id, data: null, runtimeContext: new RuntimeContext() }),
+      ).rejects.toThrow('Argument "data" is required');
     });
 
     it('should execute regular tool successfully', async () => {
@@ -95,9 +105,12 @@ describe('Tools Handlers', () => {
       (mockTool.execute as Mock<() => any>).mockResolvedValue(mockResult);
       const context = { test: 'data' };
 
+      const runtimeContext = new RuntimeContext();
       const result = await executeTool({
         mastra: mockMastra,
         toolId: mockTool.id,
+        runId: 'test-run',
+        runtimeContext: runtimeContext,
         data: context,
       });
 
@@ -105,16 +118,20 @@ describe('Tools Handlers', () => {
       expect(mockTool.execute).toHaveBeenCalledWith({
         context,
         mastra: mockMastra,
+        runId: 'test-run',
+        runtimeContext: runtimeContext,
       });
     });
 
     it.skip('should execute Vercel tool successfully', async () => {
+      const mockMastra = new Mastra();
       const mockResult = { success: true };
       (mockVercelTool.execute as Mock<() => any>).mockResolvedValue(mockResult);
 
       const result = await executeTool({
         mastra: mockMastra,
-        toolId: mockVercelTool.id,
+        toolId: `tool`,
+        runtimeContext: new RuntimeContext(),
         data: { test: 'data' },
       });
 
@@ -189,17 +206,18 @@ describe('Tools Handlers', () => {
           'test-agent': mockAgent as any,
         },
       });
-      mockTool.execute.mockResolvedValue(mockResult);
+      (mockTool?.execute as Mock<() => any>).mockResolvedValue(mockResult);
 
       const context = {
         test: 'data',
       };
+      const runtimeContext = new RuntimeContext();
       const result = await executeAgentToolHandler({
         mastra: mockMastra,
         agentId: 'test-agent',
         toolId: mockTool.id,
         data: context,
-        runtimeContext: new RuntimeContext(),
+        runtimeContext: runtimeContext,
       });
 
       expect(result).toEqual(mockResult);
@@ -207,6 +225,7 @@ describe('Tools Handlers', () => {
         context,
         mastra: mockMastra,
         runId: 'test-agent',
+        runtimeContext: runtimeContext,
       });
     });
 
@@ -223,7 +242,7 @@ describe('Tools Handlers', () => {
       const result = await executeAgentToolHandler({
         mastra: mockMastra,
         agentId: 'test-agent',
-        toolId: mockVercelTool.id,
+        toolId: `tool`,
         data: {},
         runtimeContext: new RuntimeContext(),
       });
