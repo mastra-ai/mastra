@@ -1,8 +1,13 @@
 import { spawn as nodeSpawn } from 'child_process';
 import { readFileSync } from 'fs';
-import { dirname, join, resolve } from 'path';
-import resolveFrom from 'resolve-from';
+import { dirname, join } from 'path';
 import { fileURLToPath } from 'url';
+
+const dir = process.argv[2];
+if (!dir) {
+  console.error('Usage: node scripts/ignore-example.js <directory>');
+  process.exit(1);
+}
 
 /**
  * Promisified version of Node.js spawn function
@@ -92,13 +97,12 @@ function findLinkedDependencies(dir, protocol = 'link:') {
     return {};
   }
 }
+const repoRoot = dirname(join(fileURLToPath(import.meta.url), '..'));
 
 // Example usage
-const linkedDeps = Object.keys(findLinkedDependencies('.'));
+const linkedDeps = Object.keys(findLinkedDependencies(join(process.cwd(), dir)));
 
 console.log('Found linked dependencies:', linkedDeps);
-
-const repoRoot = dirname(join(fileURLToPath(import.meta.url), '..'));
 
 await spawn(`pnpm`, ['install', '-w'], {
   cwd: repoRoot,
