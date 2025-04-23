@@ -153,17 +153,17 @@ describe('Voice Handlers', () => {
       const agent = createAgentWithVoice(new CompositeVoice({}));
       (agent.voice!.speak as Mock).mockResolvedValue(mockAudioStream);
 
-      const result = (await generateSpeechHandler({
+      const audioStream = await generateSpeechHandler({
         mastra: new Mastra({ logger: false, agents: { 'test-agent': agent } }),
         agentId: 'test-agent',
         body: {
           text: 'test',
           speakerId: '1',
         },
-      })) as { audioData: Buffer };
+      });
 
-      expect(result).toHaveProperty('audioData');
-      expect(Buffer.isBuffer(result.audioData)).toBe(true);
+      expect(audioStream).toBeDefined();
+      expect(audioStream[Symbol.asyncIterator]).toBeDefined();
     });
   });
 
