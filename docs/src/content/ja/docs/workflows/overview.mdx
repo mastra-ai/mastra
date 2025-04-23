@@ -165,8 +165,8 @@ import { mastra } from "./index";
 
 const stepTwo = new Step({
   id: "stepTwo",
-  execute: async ({ context, container }) => {
-    const multiplier = container.get("multiplier");
+  execute: async ({ context, runtimeContext }) => {
+    const multiplier = runtimeContext.get("multiplier");
     const doubledValue = context.getStepResult(stepOne)?.doubledValue;
     if (!doubledValue) {
       return { incrementedValue: 0 };
@@ -182,14 +182,14 @@ const stepTwo = new Step({
 const myWorkflow = mastra.getWorkflow("myWorkflow");
 const { runId, start, resume } = myWorkflow.createRun();
 
-type MyContainer = { multiplier; number };
+type MyRuntimeContext = { multiplier; number };
 
-const container = new Container<MyContainer>();
-container.set("multiplier", 5);
+const runtimeContext = new RuntimeContext<MyRuntimeContext>();
+runtimeContext.set("multiplier", 5);
 
 // Start the workflow execution
-await start({ triggerData: { inputValue: 45 }, container });
-await resume({ stepId: "stepTwo", container });
+await start({ triggerData: { inputValue: 45 }, runtimeContext });
+await resume({ stepId: "stepTwo", runtimeContext });
 ```
 
 ## 追加リソース

@@ -4,7 +4,7 @@ import { Table, Tbody, Th, Row, Cell, DateTimeCell, UnitCell, TxtCell } from '@/
 import { Thead } from '@/ds/components/Table';
 import type { RefinedTrace } from '@/domains/traces/types';
 import { Badge } from '@/ds/components/Badge';
-import { SpanIcon } from '@/ds/icons/SpanIcon';
+import { TraceIcon } from '@/ds/icons/TraceIcon';
 import { useOpenTrace } from './hooks/use-open-trace';
 import { Txt } from '@/ds/components/Txt';
 
@@ -62,7 +62,7 @@ const TraceRow = ({ trace, index }: { trace: RefinedTrace; index: number }) => {
       <UnitCell unit="ms">{trace.duration}</UnitCell>
       <Cell>
         <button onClick={() => openTrace(trace.trace, index)}>
-          <Badge icon={<SpanIcon />}>
+          <Badge icon={<TraceIcon />}>
             {trace.trace.length} span{trace.trace.length > 1 ? 's' : ''}
           </Badge>
         </button>

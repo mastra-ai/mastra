@@ -13,7 +13,7 @@ export async function generateMetadata(props: any) {
   const { locale, mdxPath } = await props.params;
   const { metadata } = await importPage(mdxPath, locale || "en");
 
-  const url = `${baseUrl}/${locale}/${mdxPath.join("/")}`;
+  const url = `${baseUrl}/${locale}/${mdxPath?.join("/")}`;
   const title = metadata.title;
   const description = metadata.description;
 
