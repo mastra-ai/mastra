@@ -1,5 +1,19 @@
 # @mastra/pg
 
+## 0.3.0-alpha.8
+
+### Patch Changes
+
+- c0f22b4: [MASTRA-3130] Metadata Filter Update for PG and Libsql
+- Updated dependencies [000a6d4]
+- Updated dependencies [ed2f549]
+- Updated dependencies [c0f22b4]
+- Updated dependencies [0a033fa]
+- Updated dependencies [9c26508]
+- Updated dependencies [0f4eae3]
+- Updated dependencies [16a8648]
+  - @mastra/core@0.9.0-alpha.8
+
 ## 0.3.0-alpha.7
 
 ### Patch Changes
