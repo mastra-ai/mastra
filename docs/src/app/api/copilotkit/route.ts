@@ -6,7 +6,6 @@ import {
 
 import { MastraDocsAgent } from "@/chatbot/custom-agents/mastra-agent";
 import { NextRequest } from "next/server";
-import { AbstractAgent } from "@agentwire/client";
 
 const docsAgent = new MastraDocsAgent({
   agentId: "docsAgent",
