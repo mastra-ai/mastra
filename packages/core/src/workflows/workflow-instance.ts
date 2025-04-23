@@ -2,7 +2,7 @@ import type { Span } from '@opentelemetry/api';
 import { context as otlpContext, trace } from '@opentelemetry/api';
 import type { Snapshot } from 'xstate';
 import type { z } from 'zod';
-import { Container } from '../di';
+import { RuntimeContext } from '../di';
 import type { Logger } from '../logger';
 import type { Mastra } from '../mastra';
 import { Machine } from './machine';
@@ -31,7 +31,7 @@ export interface WorkflowResultReturn<
 > {
   runId: string;
   start: (
-    props?: { triggerData?: z.infer<T>; container?: Container } | undefined,
+    props?: { triggerData?: z.infer<T>; runtimeContext?: RuntimeContext } | undefined,
   ) => Promise<WorkflowRunResult<T, TSteps, TResult>>;
   watch: (
     onTransition: (state: Pick<WorkflowRunResult<T, TSteps, TResult>, 'results' | 'activePaths' | 'runId'>) => void,
@@ -39,12 +39,12 @@ export interface WorkflowResultReturn<
   resume: (props: {
     stepId: string;
     context?: Record<string, any>;
-    container?: Container;
+    runtimeContext?: RuntimeContext;
   }) => Promise<Omit<WorkflowRunResult<T, TSteps, TResult>, 'runId'> | undefined>;
   resumeWithEvent: (
     eventName: string,
     data: any,
-    container?: Container,
+    runtimeContext?: RuntimeContext,
   ) => Promise<Omit<WorkflowRunResult<T, TSteps, TResult>, 'runId'> | undefined>;
 }
 
@@ -170,8 +170,11 @@ export class WorkflowInstance<
     };
   }
 
-  async start({ triggerData, container }: { triggerData?: z.infer<TTriggerSchema>; container?: Container } = {}) {
-    const results = await this.execute({ triggerData, container: container ?? new Container() });
+  async start({
+    triggerData,
+    runtimeContext,
+  }: { triggerData?: z.infer<TTriggerSchema>; runtimeContext?: RuntimeContext } = {}) {
+    const results = await this.execute({ triggerData, runtimeContext: runtimeContext ?? new RuntimeContext() });
 
     if (this.#onFinish) {
       this.#onFinish();
@@ -198,14 +201,14 @@ export class WorkflowInstance<
       snapshot,
       stepId,
       resumeData,
-      container,
+      runtimeContext,
     }: {
       stepId?: string;
       triggerData?: z.infer<TTriggerSchema>;
       snapshot?: Snapshot<any>;
       resumeData?: any; // TODO: once we have a resume schema plug that in here
-      container: Container;
-    } = { container: new Container() },
+      runtimeContext: RuntimeContext;
+    } = { runtimeContext: new RuntimeContext() },
   ): Promise<Omit<WorkflowRunResult<TTriggerSchema, TSteps, TResult>, 'runId'>> {
     this.#executionSpan = this.#mastra?.getTelemetry()?.tracer.startSpan(`workflow.${this.name}.execute`, {
       attributes: { componentName: this.name, runId: this.runId },
@@ -239,7 +242,7 @@ export class WorkflowInstance<
     const defaultMachine = new Machine<TSteps, TTriggerSchema, TResult>({
       logger: this.logger,
       mastra: this.#mastra,
-      container,
+      runtimeContext,
       workflowInstance: this,
       name: this.name,
       runId: this.runId,
@@ -321,7 +324,7 @@ export class WorkflowInstance<
     return Object.keys(this.#stepSubscriberGraph).some(key => key.split('&&').includes(stepId));
   }
 
-  async runMachine(parentStepId: string, input: any, container: Container = new Container()) {
+  async runMachine(parentStepId: string, input: any, runtimeContext: RuntimeContext = new RuntimeContext()) {
     const stepStatus = input.steps[parentStepId]?.status;
 
     // get all keys from this.#stepSubscriberGraph that include the parentStepId after the &&
@@ -373,7 +376,7 @@ export class WorkflowInstance<
         const machine = new Machine<TSteps, TTriggerSchema, TResult>({
           logger: this.logger,
           mastra: this.#mastra,
-          container: container,
+          runtimeContext: runtimeContext,
           workflowInstance: this,
           name: parentStepId === 'trigger' ? this.name : `${this.name}-${parentStepId}`,
           runId: this.runId,
@@ -526,7 +529,7 @@ export class WorkflowInstance<
     };
   }
 
-  async resumeWithEvent(eventName: string, data: any, container: Container = new Container()) {
+  async resumeWithEvent(eventName: string, data: any, runtimeContext: RuntimeContext = new RuntimeContext()) {
     const event = this.events?.[eventName];
     if (!event) {
       throw new Error(`Event ${eventName} not found`);
@@ -535,7 +538,7 @@ export class WorkflowInstance<
     const results = await this.resume({
       stepId: `__${eventName}_event`,
       context: { resumedEvent: data },
-      container,
+      runtimeContext,
     });
     return results;
   }
@@ -543,16 +546,16 @@ export class WorkflowInstance<
   async resume({
     stepId,
     context: resumeContext,
-    container = new Container(),
+    runtimeContext = new RuntimeContext(),
   }: {
     stepId: string;
     context?: Record<string, any>;
-    container?: Container;
+    runtimeContext?: RuntimeContext;
   }) {
     // NOTE: setTimeout(0) makes sure that if the workflow is still running
     // we'll wait for any state changes to be applied before resuming
     await new Promise(resolve => setTimeout(resolve, 0));
-    return this._resume({ stepId, context: resumeContext, container });
+    return this._resume({ stepId, context: resumeContext, runtimeContext });
   }
 
   async #loadWorkflowSnapshot(runId: string) {
@@ -570,11 +573,11 @@ export class WorkflowInstance<
   async _resume({
     stepId,
     context: resumeContext,
-    container,
+    runtimeContext,
   }: {
     stepId: string;
     context?: Record<string, any>;
-    container: Container;
+    runtimeContext: RuntimeContext;
   }) {
     const snapshot = await this.#loadWorkflowSnapshot(this.runId);
 
@@ -657,7 +660,7 @@ export class WorkflowInstance<
       snapshot: parsedSnapshot,
       stepId: stepPath,
       resumeData: resumeContext,
-      container,
+      runtimeContext,
     });
   }
 

@@ -20,7 +20,7 @@ import type { JSONSchema7 } from 'json-schema';
 import type { z, ZodSchema } from 'zod';
 
 import type { MastraLanguageModel, ToolsInput } from '../agent/types';
-import type { Container } from '../di';
+import type { RuntimeContext } from '../di';
 import type { Run } from '../run/types';
 import type { CoreTool } from '../tools/types';
 
@@ -107,7 +107,7 @@ type MastraCustomLLMOptions<Z extends ZodSchema | JSONSchema7 | undefined = unde
   telemetry?: TelemetrySettings;
   threadId?: string;
   resourceId?: string;
-  container: Container;
+  runtimeContext: RuntimeContext;
 } & Run;
 
 export type LLMTextOptions<Z extends ZodSchema | JSONSchema7 | undefined = undefined> = {

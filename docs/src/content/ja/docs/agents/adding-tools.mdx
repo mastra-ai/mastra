@@ -120,8 +120,8 @@ export const agent = new Agent({
       id: "Get Weather Information",
       description: "Get the weather in a location",
       inputSchema: z.object({ location: z.string() }),
-      execute: async ({ context: { location }, container }) => {
-        const scale = container.get("temperature-scale");
+      execute: async ({ context: { location }, runtimeContext }) => {
+        const scale = runtimeContext.get("temperature-scale");
 
         const result = await fetch(
           `https://api.weatherapi.com/v1/current.json?q=${location}`,
@@ -141,13 +141,13 @@ export const agent = new Agent({
 ```typescript
 import { agent } from "./agents/weather";
 
-type MyContainer = {"temperature-scale", "celsius" | "farenheit"}
+type MyRuntimeContext = {"temperature-scale", "celsius" | "farenheit"}
 
-const container = new Container<MyContainer>();
-container.set("temperature-scale", "celsius");
+const runtimeContext = new RuntimeContext<MyRuntimeContext>();
+runtimeContext.set("temperature-scale", "celsius");
 
 const result = await agent.generate("What is the weather in San Francisco?", {
-  container,
+  runtimeContext,
 });
 ```
 
@@ -155,10 +155,10 @@ Cloudflare `CF-IPCountry`ヘッダーを使用して、ユーザーの国から�
 
 ```typescript filename="src/index.ts"
 import { Mastra } from "@mastra/core";
-import { Container } from "@mastra/core/di";
+import { RuntimeContext } from "@mastra/core/di";
 import { agent as weatherAgent } from "./agents/weather";
 
-type MyContainer = {"temperature-scale", "celsius" | "farenheit"}
+type MyRuntimeContext = {"temperature-scale", "celsius" | "farenheit"}
 
 export const mastra = new Mastra({
   agents: {
@@ -168,9 +168,9 @@ export const mastra = new Mastra({
     middleware: [
       (c, next) => {
         const country = c.req.header("CF-IPCountry");
-        const container: MyContainer = c.get("container");
+        const runtimeContext: MyRuntimeContext = c.get("runtimeContext");
 
-        container.set(
+        runtimeContext.set(
           "temperature-scale",
           country === "US" ? "farenheit" : "celsius",
         );
