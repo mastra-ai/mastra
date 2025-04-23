@@ -79,7 +79,8 @@ export default async function RootLayout({
             <NextraLayout stars={stars} locale={locale} pageMap={pageMap}>
               {shouldInjectToolbar && <VercelToolbar />}
               {children}
-              {canUseCopilotKit && <DocsChat />}
+              {/* {canUseCopilotKit && <DocsChat />} */}
+              {<DocsChat />}
             </NextraLayout>
           </PostHogProvider>
           <Toaster />
