@@ -5,6 +5,7 @@ import { createTool } from '@mastra/core/tools';
 import type { ToolAction, VercelTool } from '@mastra/core/tools';
 import type { Mock } from 'vitest';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { z } from 'zod';
 import { HTTPException } from '../http-exception';
 import { getToolsHandler, getToolByIdHandler, executeToolHandler, executeAgentToolHandler } from './tools';
 
@@ -16,8 +17,8 @@ describe('Tools Handlers', () => {
   });
 
   const mockVercelTool: VercelTool = {
-    name: 'Vercel Tool',
     description: 'A Vercel tool',
+    parameters: z.object({}),
     execute: vi.fn(),
   };
 
@@ -61,14 +62,19 @@ describe('Tools Handlers', () => {
     const executeTool = executeToolHandler(mockTools);
 
     it('should throw error when toolId is not provided', async () => {
-      await expect(executeTool({ mastra: new Mastra({ logger: false }), body: { data: {} } })).rejects.toThrow(
-        'Tool ID is required',
-      );
+      await expect(
+        executeTool({ mastra: new Mastra({ logger: false }), data: {}, runtimeContext: new RuntimeContext() }),
+      ).rejects.toThrow('Tool ID is required');
     });
 
     it('should throw 404 when tool is not found', async () => {
       await expect(
-        executeTool({ mastra: new Mastra({ logger: false }), toolId: 'non-existent', body: { data: {} } }),
+        executeTool({
+          mastra: new Mastra({ logger: false }),
+          toolId: 'non-existent',
+          data: {},
+          runtimeContext: new RuntimeContext(),
+        }),
       ).rejects.toThrow('Tool not found');
     });
 
@@ -78,14 +84,19 @@ describe('Tools Handlers', () => {
       const executeTool = executeToolHandler(tools);
 
       await expect(
-        executeTool({ mastra: new Mastra(), toolId: nonExecutableTool.id, body: { data: {} } }),
+        executeTool({
+          mastra: new Mastra(),
+          toolId: nonExecutableTool.id,
+          data: {},
+          runtimeContext: new RuntimeContext(),
+        }),
       ).rejects.toThrow('Tool is not executable');
     });
 
     it('should throw error when data is not provided', async () => {
-      await expect(executeTool({ mastra: new Mastra(), toolId: mockTool.id, body: {} as any })).rejects.toThrow(
-        'Argument "data" is required',
-      );
+      await expect(
+        executeTool({ mastra: new Mastra(), toolId: mockTool.id, data: null, runtimeContext: new RuntimeContext() }),
+      ).rejects.toThrow('Argument "data" is required');
     });
 
     it('should execute regular tool successfully', async () => {
@@ -98,6 +109,7 @@ describe('Tools Handlers', () => {
       const result = await executeTool({
         mastra: mockMastra,
         toolId: mockTool.id,
+        runtimeContext: new RuntimeContext(),
         data: context,
       });
 
@@ -109,12 +121,14 @@ describe('Tools Handlers', () => {
     });
 
     it.skip('should execute Vercel tool successfully', async () => {
+      const mockMastra = new Mastra();
       const mockResult = { success: true };
       (mockVercelTool.execute as Mock<() => any>).mockResolvedValue(mockResult);
 
       const result = await executeTool({
         mastra: mockMastra,
-        toolId: mockVercelTool.id,
+        toolId: `tool`,
+        runtimeContext: new RuntimeContext(),
         data: { test: 'data' },
       });
 
@@ -189,7 +203,7 @@ describe('Tools Handlers', () => {
           'test-agent': mockAgent as any,
         },
       });
-      mockTool.execute.mockResolvedValue(mockResult);
+      (mockTool?.execute as Mock<() => any>).mockResolvedValue(mockResult);
 
       const context = {
         test: 'data',
@@ -223,7 +237,7 @@ describe('Tools Handlers', () => {
       const result = await executeAgentToolHandler({
         mastra: mockMastra,
         agentId: 'test-agent',
-        toolId: mockVercelTool.id,
+        toolId: `tool`,
         data: {},
         runtimeContext: new RuntimeContext(),
       });

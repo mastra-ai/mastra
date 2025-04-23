@@ -239,7 +239,7 @@ describe('Vector Handlers', () => {
         vectorName: 'test-vector',
       });
 
-      expect(result).toEqual({ indexes: mockIndexes });
+      expect(result).toEqual(mockIndexes);
       expect(mockVector.listIndexes).toHaveBeenCalled();
     });
   });
