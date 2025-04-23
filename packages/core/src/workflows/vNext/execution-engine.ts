@@ -47,7 +47,7 @@ export abstract class ExecutionEngine extends MastraBase {
       resumePath: number[];
     };
     emitter: EventEmitter;
-    container: RuntimeContext;
+    runtimeContext: RuntimeContext;
     retryConfig?: {
       attempts?: number;
       delay?: number;
