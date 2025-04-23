@@ -88,19 +88,17 @@ const memory = new Memory({
 ### Storage Configuration
 
 Conversation history relies on a [storage adapter](/reference/memory/Memory#parameters) to store messages.
+By default it uses the same storage provided to the [main Mastra instance](https://mastra.ai/reference/core/mastra-class#initialization)
 
 ```ts {7-12}
 import { Memory } from "@mastra/memory";
 import { Agent } from "@mastra/core/agent";
-import { LibSQLStore } from "@mastra/core/storage/libsql";
+import { LibSQLStore } from "@mastra/libsql";
 
 const agent = new Agent({
   memory: new Memory({
-    // this is the default storage db if omitted
     storage: new LibSQLStore({
-      config: {
-        url: "file:local.db",
-      },
+      url: "file:./local.db",
     }),
   }),
 });
