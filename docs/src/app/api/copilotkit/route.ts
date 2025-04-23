@@ -13,8 +13,7 @@ const docsAgent = new MastraDocsAgent({
 
 const runtime = new CopilotRuntime({
   agents: {
-    //@ts-expect-error
-    docsAgent: docsAgent,
+    docsAgent,
   },
 });
 
