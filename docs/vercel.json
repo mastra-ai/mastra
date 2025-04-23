@@ -1,9 +1,4 @@
 {
-  "functions": {
-    "api/copilotkit/**/*.ts": {
-      "maxDuration": 60
-    }
-  },
   "crons": [
     {
       "path": "/api/cron/mastra",

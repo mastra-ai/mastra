@@ -4,6 +4,7 @@ import { CopilotPopup } from "@copilotkit/react-ui";
 import "@copilotkit/react-ui/styles.css";
 import React from "react";
 import "@copilotkit/react-ui/styles.css";
+import Spinner from "@/components/ui/spinner";
 
 const DocsChat: React.FC = () => {
   return (
@@ -23,6 +24,9 @@ const Chat = () => {
     <div className="flex items-center justify-center w-full h-full">
       <div className="rounded-lg w-8/10 h-8/10">
         <CopilotPopup
+          icons={{
+            spinnerIcon: <Spinner />,
+          }}
           labels={{
             title: "Mastra Assistant",
             initial: "Need any help?",

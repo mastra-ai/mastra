@@ -24,6 +24,7 @@
 :root {
   --nextra-navbar-height: 60px;
   --nextra-content-width: 1220px;
+  --copilot-kit-primary-color: var(--tag-green);
 }
 
 body:is(html[class~="dark"] *){
