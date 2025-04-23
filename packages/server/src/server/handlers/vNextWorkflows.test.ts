@@ -15,7 +15,7 @@ import {
   resumeAsyncVNextWorkflowHandler,
   resumeVNextWorkflowHandler,
   getVNextWorkflowRunsHandler,
-} from './vNextWorkflow';
+} from './vNextWorkflows';
 
 vi.mock('zod', () => {
   return {
