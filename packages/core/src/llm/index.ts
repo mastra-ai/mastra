@@ -20,8 +20,8 @@ import type { JSONSchema7 } from 'json-schema';
 import type { z, ZodSchema } from 'zod';
 
 import type { MastraLanguageModel, ToolsInput } from '../agent/types';
-import type { RuntimeContext } from '../di';
 import type { Run } from '../run/types';
+import type { RuntimeContext } from '../runtime-context';
 import type { CoreTool } from '../tools/types';
 
 export type LanguageModel = MastraLanguageModel;

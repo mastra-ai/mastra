@@ -2,9 +2,9 @@ import type { Span } from '@opentelemetry/api';
 import { context as otlpContext, trace } from '@opentelemetry/api';
 import type { Snapshot } from 'xstate';
 import type { z } from 'zod';
-import { RuntimeContext } from '../di';
 import type { Logger } from '../logger';
 import type { Mastra } from '../mastra';
+import { RuntimeContext } from '../runtime-context';
 import { Machine } from './machine';
 import type { Step } from './step';
 import type {

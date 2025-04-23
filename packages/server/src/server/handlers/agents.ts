@@ -1,5 +1,5 @@
 import type { Agent } from '@mastra/core/agent';
-import type { RuntimeContext } from '@mastra/core/di';
+import type { RuntimeContext } from '@mastra/core/runtime-context';
 import { stringify } from 'superjson';
 import zodToJsonSchema from 'zod-to-json-schema';
 import { HTTPException } from '../http-exception';
