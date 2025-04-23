@@ -1,6 +1,5 @@
 import { writeFile } from 'fs/promises';
 import { join } from 'path';
-
 import { Deployer, createChildProcessLogger } from '@mastra/deployer';
 import type { analyzeBundle } from '@mastra/deployer/analyze';
 import virtual from '@rollup/plugin-virtual';
@@ -80,16 +79,63 @@ export class CloudflareDeployer extends Deployer {
 
   private getEntry(): string {
     return `
-import '#polyfills';
-import { mastra } from '#mastra';
-import { createHonoServer } from '#server';
+    import '#polyfills';
+    import { mastra } from '#mastra';
+    import { createHonoServer } from '#server';
+    import { evaluate } from '@mastra/core/eval';
+    import { AvailableHooks, registerHook } from '@mastra/core/hooks';
+    import { TABLE_EVALS } from '@mastra/core/storage';
+    import { checkEvalStorageFields } from '@mastra/core/utils';
 
-export default {
-  fetch: async (request, env, context) => {
-    const app = await createHonoServer(mastra)
-    return app.fetch(request, env, context);
-  }
-}
+    registerHook(AvailableHooks.ON_GENERATION, ({ input, output, metric, runId, agentName, instructions }) => {
+      evaluate({
+        agentName,
+        input,
+        metric,
+        output,
+        runId,
+        globalRunId: runId,
+        instructions,
+      });
+    });
+
+    if (mastra.getStorage()) {
+      // start storage init in the background
+      mastra.getStorage().init();
+    }
+
+    registerHook(AvailableHooks.ON_EVALUATION, async traceObject => {
+      const storage = mastra.getStorage();
+      if (storage) {
+        // Check for required fields
+        const logger = mastra?.getLogger();
+        const areFieldsValid = checkEvalStorageFields(traceObject, logger);
+        if (!areFieldsValid) return;
+
+        await storage.insert({
+          tableName: TABLE_EVALS,
+          record: {
+            input: traceObject.input,
+            output: traceObject.output,
+            result: JSON.stringify(traceObject.result || {}),
+            agent_name: traceObject.agentName,
+            metric_name: traceObject.metricName,
+            instructions: traceObject.instructions,
+            test_info: null,
+            global_run_id: traceObject.globalRunId,
+            run_id: traceObject.runId,
+            created_at: new Date().toISOString(),
+          },
+        });
+      }
+    });
+
+    export default {
+      fetch: async (request, env, context) => {
+        const app = await createHonoServer(mastra)
+        return app.fetch(request, env, context);
+      }
+    }
 `;
   }
   async prepare(outputDirectory: string): Promise<void> {

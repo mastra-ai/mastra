@@ -6,7 +6,7 @@ import type { MastraPrimitives } from '../action';
 import type { Agent } from '../agent';
 import { MastraBase } from '../base';
 
-import { Container } from '../di/index';
+import { RuntimeContext } from '../di/index';
 import type { Mastra } from '../mastra';
 import { Step } from './step';
 import type {
@@ -1175,22 +1175,22 @@ export class Workflow<
     runId,
     stepId,
     context: resumeContext,
-    container = new Container(),
+    runtimeContext = new RuntimeContext(),
   }: {
     runId: string;
     stepId: string;
     context?: Record<string, any>;
-    container: Container;
+    runtimeContext: RuntimeContext;
   }) {
     this.logger.warn(`Please use 'resume' on the 'createRun' call instead, resume is deprecated`);
 
     const activeRun = this.#runs.get(runId);
     if (activeRun) {
-      return activeRun.resume({ stepId, context: resumeContext, container });
+      return activeRun.resume({ stepId, context: resumeContext, runtimeContext });
     }
 
     const run = this.createRun({ runId });
-    return run.resume({ stepId, context: resumeContext, container });
+    return run.resume({ stepId, context: resumeContext, runtimeContext });
   }
 
   watch(
@@ -1220,7 +1220,7 @@ export class Workflow<
       runId,
       stepId: `__${eventName}_event`,
       context: { resumedEvent: data },
-      container: new Container(),
+      runtimeContext: new RuntimeContext(),
     });
     return results;
   }

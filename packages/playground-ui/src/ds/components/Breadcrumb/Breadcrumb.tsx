@@ -3,7 +3,6 @@ import React from 'react';
 
 import { Icon } from '../../icons/Icon';
 import { SlashIcon } from '../../icons/SlashIcon';
-import { PolymorphicComponentProps } from '../types';
 
 export interface BreadcrumbProps {
   children?: React.ReactNode;
