@@ -130,7 +130,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
           return fmtReturnValue(stepResults, lastOutput);
         }
       } catch (e) {
-        console.error('Error executing step', e);
+        this.logger.error('Error executing step: ' + ((e as Error)?.stack ?? e));
         if (entry.type === 'step') {
           params.emitter.emit('watch', {
             type: 'watch',
@@ -249,7 +249,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
 
         break;
       } catch (e) {
-        console.error('Error executing step', e);
+        this.logger.error('Error executing step: ' + ((e as Error)?.stack ?? e));
         execResults = { status: 'failed', error: e instanceof Error ? e : new Error('Unknown error: ' + e) };
       }
     }
@@ -383,7 +383,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
             });
             return result ? index : null;
           } catch (e: unknown) {
-            console.error('Error evaluating condition', e);
+            this.logger.error('Error evaluating condition: ' + ((e as Error)?.stack ?? e));
             return null;
           }
         }),
