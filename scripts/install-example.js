@@ -1,7 +1,8 @@
 import { spawn as nodeSpawn } from 'child_process';
 import { readFileSync } from 'fs';
-import { dirname, resolve } from 'path';
+import { dirname, join, resolve } from 'path';
 import resolveFrom from 'resolve-from';
+import { fileURLToPath } from 'url';
 
 /**
  * Promisified version of Node.js spawn function
@@ -97,8 +98,9 @@ const linkedDeps = Object.keys(findLinkedDependencies('.'));
 
 console.log('Found linked dependencies:', linkedDeps);
 
+const repoRoot = dirname(join(fileURLToPath(import.meta.url), '..', '..'));
 await spawn(`pnpm`, ['install', '-w'], {
-  cwd: resolve(process.cwd(), '..', '..'),
+  cwd: repoRoot,
   shell: true,
   stdio: 'inherit',
 });
