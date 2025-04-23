@@ -3,8 +3,7 @@
   "compilerOptions": {
     "baseUrl": ".",
     "paths": {
-      "@/*": ["./src/mastra/*"],
-      "@inner/inner-tools": ["../../packages/inner-tools/src/index.ts"]
+      "@/*": ["./src/mastra/*"]
     }
   }
 }
