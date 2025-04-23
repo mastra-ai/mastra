@@ -1,5 +1,5 @@
 import { ReadableStream } from 'node:stream/web';
-import type { RuntimeContext } from '@mastra/core/di';
+import type { RuntimeContext } from '@mastra/core/runtime-context';
 import type { WorkflowRuns } from '@mastra/core/storage';
 import type { Workflow } from '@mastra/core/workflows';
 import { stringify } from 'superjson';

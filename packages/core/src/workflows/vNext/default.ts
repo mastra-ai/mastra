@@ -70,7 +70,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
       attempts?: number;
       delay?: number;
     };
-    container: RuntimeContext;
+    runtimeContext: RuntimeContext;
   }): Promise<TOutput> {
     const { workflowId, runId, graph, input, resume, retryConfig } = params;
     const { attempts = 0, delay = 0 } = retryConfig ?? {};
@@ -106,7 +106,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
             retryConfig: { attempts, delay },
           },
           emitter: params.emitter,
-          container: params.container,
+          runtimeContext: params.runtimeContext,
         });
         if (lastOutput.status !== 'success') {
           if (entry.type === 'step') {
@@ -192,7 +192,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     resume,
     prevOutput,
     emitter,
-    container,
+    runtimeContext,
   }: {
     step: NewStep<string, any, any>;
     stepResults: Record<string, StepResult<any>>;
@@ -203,7 +203,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     };
     prevOutput: any;
     emitter: EventEmitter;
-    container: RuntimeContext;
+    runtimeContext: RuntimeContext;
   }): Promise<StepResult<any>> {
     let execResults: any;
 
@@ -215,7 +215,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         let suspended: { payload: any } | undefined;
         const result = await step.execute({
           mastra: this.mastra!,
-          container,
+          runtimeContext,
           inputData: prevOutput,
           resumeData: resume?.steps[0] === step.id ? resume?.resumePayload : undefined,
           getInitData: () => stepResults?.input as any,
@@ -264,7 +264,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     resume,
     executionContext,
     emitter,
-    container,
+    runtimeContext,
   }: {
     workflowId: string;
     runId: string;
@@ -279,7 +279,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     };
     executionContext: ExecutionContext;
     emitter: EventEmitter;
-    container: RuntimeContext;
+    runtimeContext: RuntimeContext;
   }): Promise<StepResult<any>> {
     let execResults: any;
     const results: StepResult<any>[] = await Promise.all(
@@ -297,7 +297,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
             retryConfig: executionContext.retryConfig,
           },
           emitter,
-          container,
+          runtimeContext,
         }),
       ),
     );
@@ -334,7 +334,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     resume,
     executionContext,
     emitter,
-    container,
+    runtimeContext,
   }: {
     workflowId: string;
     runId: string;
@@ -350,7 +350,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     };
     executionContext: ExecutionContext;
     emitter: EventEmitter;
-    container: RuntimeContext;
+    runtimeContext: RuntimeContext;
   }): Promise<StepResult<any>> {
     let execResults: any;
     const truthyIndexes = (
@@ -359,7 +359,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
           try {
             const result = await cond({
               mastra: this.mastra!,
-              container,
+              runtimeContext,
               inputData: prevOutput,
               getInitData: () => stepResults?.input as any,
               getStepResult: (step: any) => {
@@ -404,7 +404,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
             retryConfig: executionContext.retryConfig,
           },
           emitter,
-          container,
+          runtimeContext,
         }),
       ),
     );
@@ -438,7 +438,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     resume,
     executionContext,
     emitter,
-    container,
+    runtimeContext,
   }: {
     workflowId: string;
     runId: string;
@@ -459,7 +459,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     };
     executionContext: ExecutionContext;
     emitter: EventEmitter;
-    container: RuntimeContext;
+    runtimeContext: RuntimeContext;
   }): Promise<StepResult<any>> {
     const { step, condition } = entry;
     let isTrue = true;
@@ -473,7 +473,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         resume,
         prevOutput: result.output,
         emitter,
-        container,
+        runtimeContext,
       });
 
       if (result.status !== 'success') {
@@ -482,7 +482,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
 
       isTrue = await condition({
         mastra: this.mastra!,
-        container,
+        runtimeContext,
         inputData: result.output,
         getInitData: () => stepResults?.input as any,
         getStepResult: (step: any) => {
@@ -508,7 +508,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     resume,
     executionContext,
     emitter,
-    container,
+    runtimeContext,
   }: {
     workflowId: string;
     runId: string;
@@ -530,7 +530,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     };
     executionContext: ExecutionContext;
     emitter: EventEmitter;
-    container: RuntimeContext;
+    runtimeContext: RuntimeContext;
   }): Promise<StepResult<any>> {
     const { step, opts } = entry;
     const results: StepResult<any>[] = [];
@@ -547,7 +547,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
             resume,
             prevOutput: item,
             emitter,
-            container,
+            runtimeContext,
           });
         }),
       );
@@ -573,7 +573,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     resume,
     executionContext,
     emitter,
-    container,
+    runtimeContext,
   }: {
     workflowId: string;
     runId: string;
@@ -588,7 +588,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     };
     executionContext: ExecutionContext;
     emitter: EventEmitter;
-    container: RuntimeContext;
+    runtimeContext: RuntimeContext;
   }): Promise<StepResult<any>> {
     const prevOutput = this.getStepOutput(stepResults, prevStep);
     let execResults: any;
@@ -602,7 +602,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         resume,
         prevOutput,
         emitter,
-        container,
+        runtimeContext,
       });
     } else if (resume?.resumePath?.length && (entry.type === 'parallel' || entry.type === 'conditional')) {
       const idx = resume.resumePath.shift();
@@ -619,7 +619,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
           retryConfig: executionContext.retryConfig,
         },
         emitter,
-        container,
+        runtimeContext,
       });
     } else if (entry.type === 'parallel') {
       execResults = await this.executeParallel({
@@ -631,7 +631,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         resume,
         executionContext,
         emitter,
-        container,
+        runtimeContext,
       });
     } else if (entry.type === 'conditional') {
       execResults = await this.executeConditional({
@@ -644,7 +644,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         resume,
         executionContext,
         emitter,
-        container,
+        runtimeContext,
       });
     } else if (entry.type === 'loop') {
       execResults = await this.executeLoop({
@@ -657,7 +657,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         resume,
         executionContext,
         emitter,
-        container,
+        runtimeContext,
       });
     } else if (entry.type === 'foreach') {
       execResults = await this.executeForeach({
@@ -670,7 +670,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         resume,
         executionContext,
         emitter,
-        container,
+        runtimeContext,
       });
     }
 

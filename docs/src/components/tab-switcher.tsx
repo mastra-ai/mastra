@@ -1,6 +1,5 @@
 "use client";
 import { cn } from "@/lib/utils";
-import { BookMarked, BookText, BookType, CodeXml, File } from "lucide-react";
 import { motion } from "motion/react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
