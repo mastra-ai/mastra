@@ -4,6 +4,7 @@ import "../globals.css"
 import { useParams, usePathname } from "next/navigation";
 import Image from "next/image";
 import Image404 from "../../../public/404-image.png"
+import { T, Var } from "gt-next";
 
 export default function NotFound() {
   const pathname = usePathname()
@@ -16,16 +17,22 @@ export default function NotFound() {
         <h2 className="font-serif text-8xl text-[hsl(var(--tag-green))] font-medium">
           404
         </h2>
-        <p className="font-semibold mt-5 text-[var(--color-el-4)]">
-          Sorry, we couldn&apos;t find that page
-        </p>
-        <Link
-          href="/docs"
-          className="font-semibold text-[var(--color-el-4)] mt-2"
-        >
-          Return to{" "}
-          <span className="capitalize underline">{path || "docs"}</span>
-        </Link>
+        <T id="_locale_.notFound.title">
+          <p className="font-semibold mt-5 text-[var(--color-el-4)]">
+            Sorry, we couldn&apos;t find that page
+          </p>
+        </T>
+        <T id="_locale_.notFound.link">
+          <Link
+            href="/docs"
+            className="font-semibold text-[var(--color-el-4)] mt-2"
+          >
+            Return to{" "}
+            <span className="capitalize underline">
+              <Var>{path || "docs"}</Var>
+            </span>
+          </Link>
+        </T>
       </div>
       <Image
         alt=""
