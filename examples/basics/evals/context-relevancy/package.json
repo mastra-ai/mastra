@@ -12,7 +12,7 @@
   },
   "pnpm": {
     "overrides": {
-      "@mastra/evals": "workspace:*"
+      "@mastra/evals": "link:../../../packages/evals"
     }
   },
   "devDependencies": {

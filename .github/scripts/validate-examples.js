@@ -1,3 +1,4 @@
+import { execSync } from 'child_process';
 import fs from 'fs';
 import { globby } from 'globby';
 import { join, dirname } from 'path';
@@ -74,6 +75,12 @@ function validateMastraOverrides(packageJson, packageJsonPath) {
 
 function validateLockFile(lockPath) {
   const exists = fs.existsSync(lockPath);
+
+  execSync(`pnpm install --ignore-workspace`, {
+    cwd: dirname(lockPath),
+    stdio: 'inherit',
+  });
+
   if (!exists) {
     errors.push(`Error: Lock file not found in ${lockPath}`);
   }
