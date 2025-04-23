@@ -77,16 +77,6 @@ export async function startAsyncVNextWorkflowHandler({
       throw new HTTPException(404, { message: 'Workflow not found' });
     }
 
-    if (!runId) {
-      throw new HTTPException(400, { message: 'runId required to start run' });
-    }
-
-    const run = await workflow.getWorkflowRun(runId);
-
-    if (!run) {
-      throw new HTTPException(404, { message: 'Workflow run not found' });
-    }
-
     const _run = workflow.createRun({ runId });
     const result = await _run.start({
       inputData,

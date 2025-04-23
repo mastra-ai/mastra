@@ -151,15 +151,6 @@ describe('vNext Workflow Handlers', () => {
       ).rejects.toThrow(new HTTPException(400, { message: 'Workflow ID is required' }));
     });
 
-    it('should throw error when runId is not provided', async () => {
-      await expect(
-        startAsyncVNextWorkflowHandler({
-          mastra: mockMastra,
-          workflowId: 'test-workflow',
-        }),
-      ).rejects.toThrow(new HTTPException(400, { message: 'runId required to start run' }));
-    });
-
     it('should throw error when vnext workflow is not found', async () => {
       await expect(
         startAsyncVNextWorkflowHandler({
@@ -170,23 +161,17 @@ describe('vNext Workflow Handlers', () => {
       ).rejects.toThrow(new HTTPException(404, { message: 'Workflow with ID non-existent not found' }));
     });
 
-    it('should throw error when workflow run is not found', async () => {
-      await expect(
-        startAsyncVNextWorkflowHandler({
-          mastra: mockMastra,
-          workflowId: 'test-workflow',
-          runId: 'non-existent',
-        }),
-      ).rejects.toThrow(new HTTPException(404, { message: 'Workflow run not found' }));
-    });
-
-    it('should start vnext workflow run successfully', async () => {
-      const run = mockWorkflow.createRun({
-        runId: 'test-run',
+    it('should start vnext workflow run successfully when runId is not passed', async () => {
+      const result = await startAsyncVNextWorkflowHandler({
+        mastra: mockMastra,
+        workflowId: 'test-workflow',
+        inputData: {},
       });
 
-      await run.start({ inputData: {} });
+      expect(result.steps['test-step'].status).toEqual('success');
+    });
 
+    it('should start vnext workflow run successfully when runId is passed', async () => {
       const result = await startAsyncVNextWorkflowHandler({
         mastra: mockMastra,
         workflowId: 'test-workflow',
