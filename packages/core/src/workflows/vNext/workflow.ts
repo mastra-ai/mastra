@@ -263,7 +263,8 @@ export class NewWorkflow<
   public description?: string | undefined;
   public inputSchema: TInput;
   public outputSchema: TOutput;
-  protected stepFlow: StepFlowEntry[];
+  public steps?: TSteps;
+  protected _stepFlow: StepFlowEntry[];
   protected executionEngine: ExecutionEngine;
   protected executionGraph: ExecutionGraph;
   protected retryConfig: {
@@ -280,6 +281,7 @@ export class NewWorkflow<
     description,
     executionEngine,
     retryConfig,
+    steps,
   }: NewWorkflowConfig<TWorkflowId, TInput, TOutput, TSteps>) {
     super({ name: id, component: RegisteredLogger.WORKFLOW });
     this.id = id;
@@ -288,8 +290,9 @@ export class NewWorkflow<
     this.outputSchema = outputSchema;
     this.retryConfig = retryConfig ?? { attempts: 0, delay: 0 };
     this.executionGraph = this.buildExecutionGraph();
-    this.stepFlow = [];
+    this._stepFlow = [];
     this.#mastra = mastra;
+    this.steps = steps;
 
     if (!executionEngine) {
       // TODO: this should be configured using the Mastra class instance that's passed in
@@ -322,7 +325,7 @@ export class NewWorkflow<
   then<TStepInputSchema extends TPrevSchema, TStepId extends string, TSchemaOut extends z.ZodType<any>>(
     step: Step<TStepId, TStepInputSchema, TSchemaOut, any, any>,
   ) {
-    this.stepFlow.push({ type: 'step', step: step as any });
+    this._stepFlow.push({ type: 'step', step: step as any });
     return this as unknown as NewWorkflow<TSteps, TWorkflowId, TInput, TOutput, TSchemaOut>;
   }
 
@@ -413,13 +416,13 @@ export class NewWorkflow<
       z.ZodTypeAny
     >;
 
-    this.stepFlow.push({ type: 'step', step: mappingStep as any });
+    this._stepFlow.push({ type: 'step', step: mappingStep as any });
     return this as unknown as NewWorkflow<TSteps, TWorkflowId, TInput, TOutput, MappedOutputSchema>;
   }
 
   // TODO: make typing better here
   parallel<TParallelSteps extends Step<string, TPrevSchema, any, any, any>[]>(steps: TParallelSteps) {
-    this.stepFlow.push({ type: 'parallel', steps: steps.map(step => ({ type: 'step', step: step as any })) });
+    this._stepFlow.push({ type: 'parallel', steps: steps.map(step => ({ type: 'step', step: step as any })) });
     return this as unknown as NewWorkflow<
       TSteps,
       TWorkflowId,
@@ -441,7 +444,7 @@ export class NewWorkflow<
       [ExecuteFunction<z.infer<TPrevSchema>, any, any, any>, Step<string, TPrevSchema, any, any, any>]
     >,
   >(steps: TBranchSteps) {
-    this.stepFlow.push({
+    this._stepFlow.push({
       type: 'conditional',
       steps: steps.map(([_cond, step]) => ({ type: 'step', step: step as any })),
       conditions: steps.map(([cond]) => cond),
@@ -473,7 +476,7 @@ export class NewWorkflow<
     step: Step<TStepId, TStepInputSchema, TSchemaOut, any, any>,
     condition: ExecuteFunction<z.infer<TSchemaOut>, any, any, any>,
   ) {
-    this.stepFlow.push({ type: 'loop', step: step as any, condition, loopType: 'dowhile' });
+    this._stepFlow.push({ type: 'loop', step: step as any, condition, loopType: 'dowhile' });
     return this as unknown as NewWorkflow<TSteps, TWorkflowId, TInput, TOutput, TSchemaOut>;
   }
 
@@ -481,7 +484,7 @@ export class NewWorkflow<
     step: Step<TStepId, TStepInputSchema, TSchemaOut, any, any>,
     condition: ExecuteFunction<z.infer<TSchemaOut>, any, any, any>,
   ) {
-    this.stepFlow.push({ type: 'loop', step: step as any, condition, loopType: 'dountil' });
+    this._stepFlow.push({ type: 'loop', step: step as any, condition, loopType: 'dountil' });
     return this as unknown as NewWorkflow<TSteps, TWorkflowId, TInput, TOutput, TSchemaOut>;
   }
 
@@ -498,7 +501,7 @@ export class NewWorkflow<
       concurrency: number;
     },
   ) {
-    this.stepFlow.push({ type: 'foreach', step: step as any, opts: opts ?? { concurrency: 1 } });
+    this._stepFlow.push({ type: 'foreach', step: step as any, opts: opts ?? { concurrency: 1 } });
     return this as unknown as NewWorkflow<TSteps, TWorkflowId, TInput, TOutput, z.ZodArray<TSchemaOut>>;
   }
 
@@ -509,7 +512,7 @@ export class NewWorkflow<
   buildExecutionGraph(): ExecutionGraph {
     return {
       id: randomUUID(),
-      steps: this.stepFlow,
+      steps: this._stepFlow,
     };
   }
 
@@ -523,8 +526,8 @@ export class NewWorkflow<
     return this as unknown as NewWorkflow<TSteps, TWorkflowId, TInput, TOutput, TOutput>;
   }
 
-  get steps() {
-    return this.stepFlow;
+  get stepFlow() {
+    return this._stepFlow;
   }
 
   /**
@@ -613,7 +616,7 @@ export class NewWorkflow<
 
   async getWorkflowRun(runId: string) {
     const runs = await this.getWorkflowRuns();
-    return runs.runs.find(r => r.runId === runId);
+    return runs?.runs.find(r => r.runId === runId);
   }
 }
 
