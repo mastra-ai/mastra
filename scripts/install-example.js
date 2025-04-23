@@ -98,7 +98,7 @@ const linkedDeps = Object.keys(findLinkedDependencies('.'));
 
 console.log('Found linked dependencies:', linkedDeps);
 
-const repoRoot = dirname(join(fileURLToPath(import.meta.url), '..', '..'));
+const repoRoot = dirname(join(fileURLToPath(import.meta.url), '..'));
 await spawn(`pnpm`, ['install', '-w'], {
   cwd: repoRoot,
   shell: true,
