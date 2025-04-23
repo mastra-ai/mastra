@@ -120,6 +120,8 @@ async function analyze(
     inlineDynamicImports: true,
   });
 
+  await optimizerBundler.close();
+
   const depsToOptimize = new Map(Object.entries(output[0].importedBindings));
   for (const dep of depsToOptimize.keys()) {
     if (isNodeBuiltin(dep)) {
@@ -138,8 +140,6 @@ async function analyze(
       }
     }
   }
-
-  await optimizerBundler.close();
 
   return depsToOptimize;
 }
