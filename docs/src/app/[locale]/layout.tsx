@@ -13,7 +13,6 @@ import { PostHogProvider } from "@/analytics/posthog-provider";
 import { CookieConsent } from "@/components/cookie-consent";
 import { NextraLayout } from "@/components/nextra-layout";
 import DocsChat from "@/chatbot/components/chat-widget";
-import { isCopilotKitEnabled } from "@/lib/server-utils";
 import { GTProvider } from "gt-next";
 
 const shouldInjectToolbar = process.env.NODE_ENV === "development";
@@ -47,8 +46,6 @@ export default async function RootLayout({
 }>) {
   const { locale } = await params;
   const pageMap = await getPageMap(`/${locale || "en"}`);
-
-  const canUseCopilotKit = await isCopilotKitEnabled();
   const stars = await fetchStars();
 
   return (
@@ -79,7 +76,6 @@ export default async function RootLayout({
             <NextraLayout stars={stars} locale={locale} pageMap={pageMap}>
               {shouldInjectToolbar && <VercelToolbar />}
               {children}
-              {/* {canUseCopilotKit && <DocsChat />} */}
               {<DocsChat />}
             </NextraLayout>
           </PostHogProvider>
