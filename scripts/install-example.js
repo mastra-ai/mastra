@@ -117,22 +117,22 @@ if (depsToInstall.size > 0) {
   console.log(
     'Installing dependencies:',
     [...depsToInstall],
-    ['pnpm', 'install', ...[...depsToInstall].map(dep => `--filter ${dep}`)].join(' '),
+    ['pnpm', 'install', ...[...depsToInstall].map(dep => `--filter=${dep}`)].join(' '),
   );
-  await spawn(`pnpm`, ['pnpm', 'install', ...[...depsToInstall].map(dep => `--filter ${dep}`).join(' ')], {
-    cwd: resolve(process.cwd(), '..', '..'),
-    shell: true,
+
+  await spawn(`pnpm`, ['install', ...[...depsToInstall].map(dep => `--filter=${dep}`)], {
+    cwd: repoRoot,
     stdio: 'inherit',
   });
 }
-
+console.log(linkedDeps);
 if (linkedDeps.length > 0) {
   console.log(
     'Building dependencies:',
-    ['pnpm', 'dlx', 'turbo', 'build', ...linkedDeps.map(dep => `--filter ${dep}`)].join(' '),
+    ['pnpm', 'dlx', 'turbo', 'build', ...linkedDeps.map(dep => `--filter=${dep}`)].join(' '),
   );
-  await spawn(`pnpm`, ['dlx', 'turbo', 'build', ...linkedDeps.map(dep => `--filter ${dep}`)], {
-    cwd: resolve(process.cwd(), '..', '..'),
+  await spawn(`pnpm`, ['dlx', 'turbo', 'build', ...linkedDeps.map(dep => `--filter=${dep}`)], {
+    cwd: repoRoot,
     shell: true,
     stdio: 'inherit',
     env: process.env,
