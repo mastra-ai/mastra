@@ -1,5 +1,5 @@
 import type { Mastra } from '@mastra/core';
-import type { RuntimeContext } from '@mastra/core/di';
+import type { RuntimeContext } from '@mastra/core/runtime-context';
 import {
   getWorkflowsHandler as getOriginalWorkflowsHandler,
   getWorkflowByIdHandler as getOriginalWorkflowByIdHandler,

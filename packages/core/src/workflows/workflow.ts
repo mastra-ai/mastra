@@ -6,8 +6,8 @@ import type { MastraPrimitives } from '../action';
 import type { Agent } from '../agent';
 import { MastraBase } from '../base';
 
-import { RuntimeContext } from '../di/index';
 import type { Mastra } from '../mastra';
+import { RuntimeContext } from '../runtime-context';
 import { Step } from './step';
 import type {
   ActionContext,

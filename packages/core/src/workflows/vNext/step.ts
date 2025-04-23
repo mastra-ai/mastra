@@ -7,7 +7,7 @@ import type { NewWorkflow } from './workflow';
 // Define a type for the execute function
 export type ExecuteFunction<TStepInput, TStepOutput, TResumeSchema, TSuspendSchema> = (params: {
   mastra: Mastra;
-  container: RuntimeContext;
+  runtimeContext: RuntimeContext;
   inputData: TStepInput;
   resumeData?: TResumeSchema;
   getInitData<T extends NewWorkflow<any, any, any, any, any>>(): T extends undefined

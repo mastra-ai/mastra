@@ -97,7 +97,7 @@ program
       args,
       execution: async () => {
         await checkPkgJson();
-        await checkAndInstallCoreDeps();
+        await checkAndInstallCoreDeps(args?.example || args?.default);
 
         if (!Object.keys(args).length) {
           const result = await interactivePrompt();
