@@ -4876,6 +4876,7 @@ describe('Workflow', async () => {
         return { injectedValue: value };
       });
 
+      // @ts-ignore
       const step = new Step({ id: 'step1', execute });
       const workflow = new Workflow({ name: 'test-workflow' });
       workflow.step(step).commit();
@@ -4883,6 +4884,7 @@ describe('Workflow', async () => {
       const run = workflow.createRun();
       const result = await run.start({ runtimeContext });
 
+      // @ts-ignore
       expect(result.results.step1.output.injectedValue).toBe(testValue);
     });
 
@@ -4923,7 +4925,7 @@ describe('Workflow', async () => {
         runtimeContext: resumeRuntimeContext,
       });
 
-      console.log(result);
+      // @ts-ignore
       expect(result?.results.step1.output.injectedValue).toBe(testValue + '2');
     });
   });

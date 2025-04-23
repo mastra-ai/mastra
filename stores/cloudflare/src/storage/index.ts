@@ -1088,6 +1088,7 @@ export class CloudflareStore extends MastraStorage {
         triggerData: data.context?.triggerData || {},
         attempts: data.context?.attempts || {},
       },
+      suspendedPaths: data.suspendedPaths || [],
       activePaths: data.activePaths || [],
       timestamp: data.timestamp || Date.now(),
     };

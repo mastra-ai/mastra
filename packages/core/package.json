@@ -30,6 +30,16 @@
         "default": "./dist/*/index.cjs"
       }
     },
+    "./workflows/vNext": {
+      "import": {
+        "types": "./dist/workflows/vNext/index.d.ts",
+        "default": "./dist/workflows/vNext/index.js"
+      },
+      "require": {
+        "types": "./dist/workflows/vNext/index.d.cts",
+        "default": "./dist/workflows/vNext/index.cjs"
+      }
+    },
     "./storage/libsql": {
       "import": {
         "types": "./dist/storage/libsql/index.d.ts",

@@ -14,7 +14,7 @@ import type {
   UserContent,
 } from 'ai';
 import type { JSONSchema7 } from 'json-schema';
-import type { ZodSchema, z } from 'zod';
+import type { z, ZodSchema } from 'zod';
 
 import type { MastraPrimitives, MastraUnion } from '../action';
 import { MastraBase } from '../base';
@@ -55,6 +55,7 @@ export class Agent<
   TTools extends ToolsInput = ToolsInput,
   TMetrics extends Record<string, Metric> = Record<string, Metric>,
 > extends MastraBase {
+  public id: TAgentId;
   public name: TAgentId;
   readonly llm: MastraLLMBase;
   instructions: string;
@@ -73,6 +74,7 @@ export class Agent<
     super({ component: RegisteredLogger.AGENT });
 
     this.name = config.name;
+    this.id = config.name;
     this.instructions = config.instructions;
 
     if (!config.model) {

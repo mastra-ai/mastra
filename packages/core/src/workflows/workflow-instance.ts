@@ -520,6 +520,7 @@ export class WorkflowInstance<
 
     // TODO: really patch the state together here
     const m = getActivePathsAndStatus(prevSnapshot.value as Record<string, any>);
+    // @ts-ignore
     return {
       runId: this.runId,
       value: snapshot.value as Record<string, string>,

@@ -1159,6 +1159,7 @@ export class Workflow<
 
       const m = this.#getActivePathsAndStatus(parsed.value);
 
+      // @ts-ignore
       return {
         runId,
         value: parsed.value,
