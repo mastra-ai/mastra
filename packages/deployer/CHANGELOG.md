@@ -1,5 +1,42 @@
 # @mastra/deployer
 
+## 0.3.0
+
+### Minor Changes
+
+- fe3ae4d: Remove \_\_ functions in storage and move to storage proxy to make sure init is called
+
+### Patch Changes
+
+- b9122b0: fix: When using a third party exporter such as Langfuse we were not installing external deps imported from the telemetry config
+- 3527610: Fix multi slash imports during bundling
+- 7e92011: Include tools with deployment builds
+- 2538066: Fix memory thread creation from client SDK
+- 63fe16a: Support monorepo workspace packages with native bindings
+- 0f4eae3: Rename Container into RuntimeContext
+- 3f9d151: Add support for tsconfig paths in server-configuration
+- 735ead7: Add support for process.env.development
+- 16a8648: Disable swaggerUI, playground for production builds, mastra instance server build config to enable swaggerUI, apiReqLogs, openAPI documentation for prod builds
+- Updated dependencies [000a6d4]
+- Updated dependencies [08bb78e]
+- Updated dependencies [ed2f549]
+- Updated dependencies [7e92011]
+- Updated dependencies [9ee4293]
+- Updated dependencies [03f3cd0]
+- Updated dependencies [c0f22b4]
+- Updated dependencies [71d9444]
+- Updated dependencies [157c741]
+- Updated dependencies [8a8a73b]
+- Updated dependencies [0a033fa]
+- Updated dependencies [fe3ae4d]
+- Updated dependencies [9c26508]
+- Updated dependencies [0f4eae3]
+- Updated dependencies [1c0d2b7]
+- Updated dependencies [16a8648]
+- Updated dependencies [6f92295]
+  - @mastra/core@0.9.0
+  - @mastra/server@2.0.0
+
 ## 0.3.0-alpha.9
 
 ### Patch Changes

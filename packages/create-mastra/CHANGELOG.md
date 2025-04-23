@@ -1,5 +1,14 @@
 # create-mastra
 
+## 0.2.9
+
+### Patch Changes
+
+- 7e92011: Include tools with deployment builds
+- 7184dc5: Add support to pass project path directly to create-mastra and improve tag handling
+- 16a8648: Disable swaggerUI, playground for production builds, mastra instance server build config to enable swaggerUI, apiReqLogs, openAPI documentation for prod builds
+- bdbde72: Sync DS components with Cloud
+
 ## 0.2.9-alpha.2
 
 ### Patch Changes

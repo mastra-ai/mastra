@@ -1,5 +1,34 @@
 # @mastra/voice-openai-realtime
 
+## 0.2.0
+
+### Minor Changes
+
+- 9aaa64b: Don't connect the ws connection until connect is called
+- 1ef0f1f: Disconnect
+- 185f8e9: Emit add tools and silence warnings
+
+### Patch Changes
+
+- 6cf1417: Voice reference and tool-call-start
+- Updated dependencies [000a6d4]
+- Updated dependencies [08bb78e]
+- Updated dependencies [ed2f549]
+- Updated dependencies [7e92011]
+- Updated dependencies [9ee4293]
+- Updated dependencies [03f3cd0]
+- Updated dependencies [c0f22b4]
+- Updated dependencies [71d9444]
+- Updated dependencies [157c741]
+- Updated dependencies [8a8a73b]
+- Updated dependencies [0a033fa]
+- Updated dependencies [fe3ae4d]
+- Updated dependencies [9c26508]
+- Updated dependencies [0f4eae3]
+- Updated dependencies [16a8648]
+- Updated dependencies [6f92295]
+  - @mastra/core@0.9.0
+
 ## 0.2.0-alpha.10
 
 ### Patch Changes

@@ -1,5 +1,32 @@
 # @mastra/core
 
+## 0.9.0
+
+### Minor Changes
+
+- fe3ae4d: Remove \_\_ functions in storage and move to storage proxy to make sure init is called
+
+### Patch Changes
+
+- 000a6d4: Fixed an issue where the TokenLimiter message processor was adding new messages into the remembered messages array
+- 08bb78e: Added an extra safety for Memory message ordering
+- ed2f549: Fix exlude methods for batchTraceInsert
+- 7e92011: Include tools with deployment builds
+- 9ee4293: Improve commonjs support
+
+  Add types files in the root directory to make sure typescript can resolve it without an exportsmap
+
+- 03f3cd0: Propagate context to passed in tools
+- c0f22b4: [MASTRA-3130] Metadata Filter Update for PG and Libsql
+- 71d9444: updated savemessage to not use mutation when hiding working memory
+- 157c741: Fix message dupes using processors
+- 8a8a73b: fix container to network sub agent
+- 0a033fa: Adds MCPServer component
+- 9c26508: Fixed an issue where "mastra dev" wouldn't always print out localhost:4111 logs due to new NODE_ENV fixes
+- 0f4eae3: Rename Container into RuntimeContext
+- 16a8648: Disable swaggerUI, playground for production builds, mastra instance server build config to enable swaggerUI, apiReqLogs, openAPI documentation for prod builds
+- 6f92295: Fixed an issue where some user messages and llm messages would have the exact same createdAt date, leading to incorrect message ordering. Added a fix for new messages as well as any that were saved before the fix in the wrong order
+
 ## 0.9.0-alpha.8
 
 ### Patch Changes
