@@ -3,5 +3,11 @@
     "api/copilotkit/**/*": {
       "maxDuration": 60
     }
-  }
+  },
+  "crons": [
+    {
+      "path": "/api/cron/mastra",
+      "schedule": "*/10 * * * *"
+    }
+  ]
 }
