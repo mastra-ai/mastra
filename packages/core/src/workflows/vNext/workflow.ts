@@ -2,10 +2,18 @@ import { randomUUID } from 'crypto';
 import EventEmitter from 'events';
 import path from 'path';
 import { z } from 'zod';
+import type { Mastra } from '../..';
+import type { MastraPrimitives } from '../../action';
+import { Agent } from '../../agent';
+import type { ToolsInput } from '../../agent/types';
 import { MastraBase } from '../../base';
+import { RuntimeContext } from '../../di';
+import type { Metric } from '../../eval';
 import { RegisteredLogger } from '../../logger';
 import type { MastraStorage } from '../../storage';
 import { DefaultStorage } from '../../storage/libsql';
+import { Tool } from '../../tools';
+import type { ToolExecutionContext } from '../../tools/types';
 import { DefaultExecutionEngine } from './default';
 import type { ExecutionEngine, ExecutionGraph } from './execution-engine';
 import type { ExecuteFunction, NewStep, NewStep as Step } from './step';
@@ -17,16 +25,8 @@ import type {
   ExtractSchemaFromStep,
   PathsToStringProps,
   ZodPathType,
+  VariableReference,
 } from './types';
-import type { VariableReference } from './types';
-import type { Mastra } from '../..';
-import type { MastraPrimitives } from '../../action';
-import { Agent } from '../../agent';
-import type { ToolsInput } from '../../agent/types';
-import type { Metric } from '../../eval';
-import { Tool } from '../../tools';
-import type { ToolExecutionContext } from '../../tools/types';
-import { RuntimeContext } from '../../di';
 
 export type StepFlowEntry =
   | { type: 'step'; step: Step }

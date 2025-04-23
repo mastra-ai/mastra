@@ -1,10 +1,10 @@
 import type EventEmitter from 'events';
+import type { RuntimeContext } from '../../di';
 import type { ExecutionGraph } from './execution-engine';
 import { ExecutionEngine } from './execution-engine';
 import type { ExecuteFunction, NewStep } from './step';
 import type { StepResult } from './types';
 import type { StepFlowEntry } from './workflow';
-import type { RuntimeContext } from '../../di';
 
 type ExecutionContext = {
   executionPath: number[];

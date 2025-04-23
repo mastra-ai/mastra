@@ -1,4 +1,4 @@
-import { z } from 'zod';
+import type { z } from 'zod';
 import type { NewStep } from './step';
 
 export type StepSuccess<T> = {
