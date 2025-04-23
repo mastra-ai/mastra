@@ -147,7 +147,7 @@ jobs:
         run: pnpm build
 
       - name: Test
-        run: pnpm turbo test --affected
+        run: pnpm turbo test --affected --concurrency 1
 
   e2e-monorepo:
     name: E2E monorepo
