@@ -1,4 +1,4 @@
-import type { Container } from '@mastra/core/di';
+import type { RuntimeContext } from '@mastra/core/di';
 import type { AgentNetwork } from '@mastra/core/network';
 import { HTTPException } from '../http-exception';
 import type { Context } from '../types';
@@ -77,11 +77,11 @@ export async function getNetworkByIdHandler({ mastra, networkId }: Pick<NetworkC
 
 export async function generateHandler({
   mastra,
-  container,
+  runtimeContext,
   networkId,
   body,
 }: NetworkContext & {
-  container: Container;
+  runtimeContext: RuntimeContext;
   body: { messages?: Parameters<AgentNetwork['generate']>[0] } & Parameters<AgentNetwork['generate']>[1];
 }) {
   try {
@@ -94,7 +94,7 @@ export async function generateHandler({
     validateBody({ messages: body.messages });
 
     const { messages, ...rest } = body;
-    const result = await network.generate(messages!, { ...rest, container });
+    const result = await network.generate(messages!, { ...rest, runtimeContext });
 
     return result;
   } catch (error) {
@@ -106,9 +106,9 @@ export async function streamGenerateHandler({
   mastra,
   networkId,
   body,
-  container,
+  runtimeContext,
 }: NetworkContext & {
-  container: Container;
+  runtimeContext: RuntimeContext;
   body: { messages?: Parameters<AgentNetwork['stream']>[0] } & Parameters<AgentNetwork['stream']>[1];
 }) {
   try {
@@ -124,7 +124,7 @@ export async function streamGenerateHandler({
     const streamResult = await network.stream(messages!, {
       output: output as any,
       ...rest,
-      container,
+      runtimeContext,
     });
 
     const streamResponse = output

@@ -73,7 +73,7 @@ export class TokenLimiter extends MemoryProcessor {
 
     const result: CoreMessage[] = [];
 
-    // Process messages in reverse (newest first)
+    // Process messages in reverse (newest first) so that we stop estimating tokens on old messages. Once we get to our limit of tokens there's no reason to keep processing older messages
     for (let i = allMessages.length - 1; i >= 0; i--) {
       const message = allMessages[i];
 
@@ -83,8 +83,11 @@ export class TokenLimiter extends MemoryProcessor {
       const messageTokens = this.countTokens(message);
 
       if (totalTokens + messageTokens <= this.maxTokens) {
-        // Insert at the beginning to maintain chronological order
-        result.unshift(message);
+        // Insert at the beginning to maintain chronological order, but only if it's not a new message
+        if (i < messages.length) {
+          // less than messages.length because we're iterating in reverse. If the index is greater than messages.length it's a new message
+          result.unshift(message);
+        }
         totalTokens += messageTokens;
       } else {
         this.logger.info(

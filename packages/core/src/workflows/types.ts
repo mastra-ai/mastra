@@ -2,7 +2,7 @@ import type { Query } from 'sift';
 import type { z } from 'zod';
 
 import type { IAction, IExecutionContext, MastraUnion } from '../action';
-import type { Container } from '../di';
+import type { RuntimeContext } from '../di';
 import type { BaseLogMessage, RegisteredLogger } from '../logger';
 import type { Mastra } from '../mastra';
 import type { Step } from './step';
@@ -38,7 +38,7 @@ export interface StepExecutionContext<
   runId: string;
   emit: (event: string, data: any) => void;
   mastra?: MastraUnion;
-  container: Container;
+  runtimeContext: RuntimeContext;
 }
 
 export interface StepAction<

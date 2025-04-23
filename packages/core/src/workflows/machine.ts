@@ -6,7 +6,7 @@ import type { MachineContext, Snapshot } from 'xstate';
 import { assign, createActor, fromPromise, setup } from 'xstate';
 import type { z } from 'zod';
 import type { MastraUnion } from '../action';
-import type { Container } from '../di';
+import type { RuntimeContext } from '../di';
 import type { Logger } from '../logger';
 import type { Mastra } from '../mastra';
 import { createMastraProxy } from '../utils';
@@ -49,7 +49,7 @@ export class Machine<
 > extends EventEmitter {
   logger: Logger;
   #mastra?: Mastra;
-  #container: Container;
+  #runtimeContext: RuntimeContext;
   #workflowInstance: WorkflowInstance;
   #executionSpan?: Span | undefined;
 
@@ -66,7 +66,7 @@ export class Machine<
   constructor({
     logger,
     mastra,
-    container,
+    runtimeContext,
     workflowInstance,
     executionSpan,
     name,
@@ -78,7 +78,7 @@ export class Machine<
   }: {
     logger: Logger;
     mastra?: Mastra;
-    container: Container;
+    runtimeContext: RuntimeContext;
     workflowInstance: WorkflowInstance;
     executionSpan?: Span;
     name: string;
@@ -92,7 +92,7 @@ export class Machine<
 
     this.#mastra = mastra;
     this.#workflowInstance = workflowInstance;
-    this.#container = container;
+    this.#runtimeContext = runtimeContext;
     this.#executionSpan = executionSpan;
     this.logger = logger;
 
@@ -415,7 +415,7 @@ export class Machine<
             },
             runId: this.#runId,
             mastra: mastraProxy as MastraUnion | undefined,
-            container: this.#container,
+            runtimeContext: this.#runtimeContext,
           });
         } catch (error) {
           this.logger.debug(`Step ${stepNode.id} failed`, {
@@ -535,7 +535,7 @@ export class Machine<
           };
         }) => {
           const { parentStepId, context } = input;
-          const result = await this.#workflowInstance.runMachine(parentStepId, context, this.#container);
+          const result = await this.#workflowInstance.runMachine(parentStepId, context, this.#runtimeContext);
           return Promise.resolve({
             steps: result.reduce((acc, r) => {
               return { ...acc, ...r?.results };
