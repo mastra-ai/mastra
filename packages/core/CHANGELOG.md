@@ -1,5 +1,11 @@
 # @mastra/core
 
+## 0.9.1-alpha.0
+
+### Patch Changes
+
+- 81fb7f6: Workflows v2
+
 ## 0.9.0
 
 ### Minor Changes
