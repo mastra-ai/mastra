@@ -15,6 +15,9 @@
   "dependencies": {
     "@ai-sdk/openai": "latest",
     "@mastra/core": "workspace:*",
+    "@mastra/voice-openai": "workspace:*",
+    "@mastra/memory": "workspace:*",
+    "@mastra/client-js": "workspace:*",
     "zod": "^3.24.2"
   }
 }
