@@ -11,7 +11,7 @@ function createMockAgent(name: string) {
   return new Agent({
     name,
     instructions: 'You are a helpful assistant',
-    model: createMockModel(),
+    model: createMockModel({ mockText: 'Hello, world!' }),
   });
 }
 
@@ -20,7 +20,7 @@ function createMockNetwork(name: string, agents: Agent[] = []) {
     name,
     instructions: 'You are a helpful assistant',
     agents,
-    model: createMockModel(),
+    model: createMockModel({ mockText: 'Hello, world!' }),
   });
 }
 
@@ -51,10 +51,10 @@ describe('Network Handlers', () => {
           name: 'test-network',
           instructions: expect.any(String),
           agents: [
-            { name: 'agent1', provider: 'test-provider', modelId: 'test-model' },
-            { name: 'agent2', provider: 'test-provider', modelId: 'test-model' },
+            { name: 'agent1', provider: 'mock-provider', modelId: 'mock-model-id' },
+            { name: 'agent2', provider: 'mock-provider', modelId: 'mock-model-id' },
           ],
-          routingModel: { provider: 'test-provider', modelId: 'test-model' },
+          routingModel: { provider: 'mock-provider', modelId: 'mock-model-id' },
         },
       ]);
     });
@@ -82,10 +82,10 @@ describe('Network Handlers', () => {
         name: 'test-network',
         instructions: expect.any(String),
         agents: [
-          { name: 'agent1', provider: 'test-provider', modelId: 'test-model' },
-          { name: 'agent2', provider: 'test-provider', modelId: 'test-model' },
+          { name: 'agent1', provider: 'mock-provider', modelId: 'mock-model-id' },
+          { name: 'agent2', provider: 'mock-provider', modelId: 'mock-model-id' },
         ],
-        routingModel: { provider: 'test-provider', modelId: 'test-model' },
+        routingModel: { provider: 'mock-provider', modelId: 'mock-model-id' },
       });
     });
   });
@@ -128,7 +128,6 @@ describe('Network Handlers', () => {
           mastra: mockMastra,
           networkId: 'test-network',
           body: {
-            messages: ['test message'],
             resourceId: 'test-resource',
             threadId: 'test-thread',
             experimental_output: undefined,
@@ -208,13 +207,16 @@ describe('Network Handlers', () => {
 
     it('should stream generate successfully', async () => {
       const mockMessages = ['test message'];
-      const mockStream = {
+      const mockStreamResult = {
         [Symbol.asyncIterator]: async function* () {
           yield { text: 'streamed response' };
         },
       } as any;
+      const mockStream = {
+        toDataStreamResponse: vi.fn().mockReturnValue(mockStreamResult),
+      };
 
-      vi.spyOn(mockNetwork, 'stream').mockResolvedValue(mockStream);
+      vi.spyOn(mockNetwork, 'stream').mockResolvedValue(mockStream as any);
 
       const result = await streamGenerateHandler({
         mastra: mockMastra,
@@ -228,7 +230,7 @@ describe('Network Handlers', () => {
         runtimeContext: new RuntimeContext(),
       });
 
-      expect(result).toEqual(mockStream);
+      expect(result).toEqual(mockStreamResult);
     });
   });
 });
