@@ -1,10 +1,10 @@
 import type EventEmitter from 'events';
+import type { Mastra } from '../..';
 import { MastraBase } from '../../base';
+import type { RuntimeContext } from '../../di';
 import { RegisteredLogger } from '../../logger';
 import type { StepResult } from './types';
-import type { NewStep, StepFlowEntry } from '.';
-import type { Mastra } from '../..';
-import type { Container } from '../../di';
+import type { StepFlowEntry } from '.';
 
 /**
  * Represents an execution graph for a workflow
@@ -47,7 +47,7 @@ export abstract class ExecutionEngine extends MastraBase {
       resumePath: number[];
     };
     emitter: EventEmitter;
-    container: Container;
+    container: RuntimeContext;
     retryConfig?: {
       attempts?: number;
       delay?: number;

@@ -4,7 +4,7 @@ import { ExecutionEngine } from './execution-engine';
 import type { ExecuteFunction, NewStep } from './step';
 import type { StepResult } from './types';
 import type { StepFlowEntry } from './workflow';
-import type { Container } from '../../di';
+import type { RuntimeContext } from '../../di';
 
 type ExecutionContext = {
   executionPath: number[];
@@ -70,7 +70,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
       attempts?: number;
       delay?: number;
     };
-    container: Container;
+    container: RuntimeContext;
   }): Promise<TOutput> {
     const { workflowId, runId, graph, input, resume, retryConfig } = params;
     const { attempts = 0, delay = 0 } = retryConfig ?? {};
@@ -203,7 +203,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     };
     prevOutput: any;
     emitter: EventEmitter;
-    container: Container;
+    container: RuntimeContext;
   }): Promise<StepResult<any>> {
     let execResults: any;
 
@@ -279,7 +279,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     };
     executionContext: ExecutionContext;
     emitter: EventEmitter;
-    container: Container;
+    container: RuntimeContext;
   }): Promise<StepResult<any>> {
     let execResults: any;
     const results: StepResult<any>[] = await Promise.all(
@@ -350,7 +350,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     };
     executionContext: ExecutionContext;
     emitter: EventEmitter;
-    container: Container;
+    container: RuntimeContext;
   }): Promise<StepResult<any>> {
     let execResults: any;
     const truthyIndexes = (
@@ -458,7 +458,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     };
     executionContext: ExecutionContext;
     emitter: EventEmitter;
-    container: Container;
+    container: RuntimeContext;
   }): Promise<StepResult<any>> {
     const { step, condition } = entry;
     let isTrue = true;
@@ -529,7 +529,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     };
     executionContext: ExecutionContext;
     emitter: EventEmitter;
-    container: Container;
+    container: RuntimeContext;
   }): Promise<StepResult<any>> {
     const { step, opts } = entry;
     const results: StepResult<any>[] = [];
@@ -587,7 +587,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     };
     executionContext: ExecutionContext;
     emitter: EventEmitter;
-    container: Container;
+    container: RuntimeContext;
   }): Promise<StepResult<any>> {
     const prevOutput = this.getStepOutput(stepResults, prevStep);
     let execResults: any;

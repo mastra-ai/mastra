@@ -26,7 +26,7 @@ import type { ToolsInput } from '../../agent/types';
 import type { Metric } from '../../eval';
 import { Tool } from '../../tools';
 import type { ToolExecutionContext } from '../../tools/types';
-import { Container } from '../../di';
+import { RuntimeContext } from '../../di';
 
 export type StepFlowEntry =
   | { type: 'step'; step: Step }
@@ -688,7 +688,7 @@ export class Run<
     container,
   }: {
     inputData?: z.infer<TInput>;
-    container?: Container;
+    container?: RuntimeContext;
   }): Promise<WorkflowStatus<TOutput, TSteps>> {
     return this.executionEngine.execute<z.infer<TInput>, WorkflowStatus<TOutput, TSteps>>({
       workflowId: this.workflowId,
@@ -697,7 +697,7 @@ export class Run<
       input: inputData,
       emitter: this.emitter,
       retryConfig: this.retryConfig,
-      container: container ?? new Container(),
+      container: container ?? new RuntimeContext(),
     });
   }
 
@@ -743,7 +743,7 @@ export class Run<
       | [...Step<string, any, any, any, any>[], Step<string, any, any, TResumeSchema, any>]
       | string
       | string[];
-    container?: Container;
+    container?: RuntimeContext;
   }): Promise<WorkflowStatus<TOutput, TSteps>> {
     const steps: string[] = (Array.isArray(params.step) ? params.step : [params.step]).map(step =>
       typeof step === 'string' ? step : step?.id,
@@ -766,7 +766,7 @@ export class Run<
         resumePath: snapshot?.suspendedPaths?.[steps?.[0]] as any,
       },
       emitter: this.emitter,
-      container: params.container ?? new Container(),
+      container: params.container ?? new RuntimeContext(),
     });
   }
 

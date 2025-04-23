@@ -1,13 +1,13 @@
 import type EventEmitter from 'events';
 import type { z } from 'zod';
 import type { Mastra } from '../..';
+import type { RuntimeContext } from '../../di';
 import type { NewWorkflow } from './workflow';
-import type { Container } from '../../di';
 
 // Define a type for the execute function
 export type ExecuteFunction<TStepInput, TStepOutput, TResumeSchema, TSuspendSchema> = (params: {
   mastra: Mastra;
-  container: Container;
+  container: RuntimeContext;
   inputData: TStepInput;
   resumeData?: TResumeSchema;
   getInitData<T extends NewWorkflow<any, any, any, any, any>>(): T extends undefined

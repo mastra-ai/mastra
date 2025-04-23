@@ -5,9 +5,9 @@ import { afterAll, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import { createTool, Mastra, Telemetry } from '../..';
 import { Agent } from '../../agent';
+import { RuntimeContext } from '../../di';
 import { DefaultStorage } from '../../storage/libsql';
 import { createStep, createWorkflow } from './workflow';
-import { Container } from '../../di';
 
 describe('Workflow', () => {
   describe('Basic Workflow Execution', () => {
@@ -335,7 +335,7 @@ describe('Workflow', () => {
           .then(step2)
           .commit();
 
-        const container = new Container<{ life: number }>();
+        const container = new RuntimeContext<{ life: number }>();
         container.set('life', 42);
 
         const run = workflow.createRun();
@@ -3864,7 +3864,7 @@ describe('Workflow', () => {
 
   describe('Dependency Injection', () => {
     it('should inject container dependencies into steps during run', async () => {
-      const container = new Container();
+      const container = new RuntimeContext();
       const testValue = 'test-dependency';
       container.set('testKey', testValue);
 
@@ -3895,7 +3895,7 @@ describe('Workflow', () => {
       });
       await initialStorage.init();
 
-      const container = new Container();
+      const container = new RuntimeContext();
       const testValue = 'test-dependency';
       container.set('testKey', testValue);
 
@@ -3930,7 +3930,7 @@ describe('Workflow', () => {
       const run = workflow.createRun();
       await run.start({ container });
 
-      const resumeContainer = new Container();
+      const resumeContainer = new RuntimeContext();
       resumeContainer.set('testKey', testValue + '2');
 
       const result = await run.resume({
