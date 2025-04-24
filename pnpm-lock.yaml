@@ -354,7 +354,7 @@ importers:
         version: 7.52.2(@types/node@20.17.30)
       '@rollup/plugin-image':
         specifier: ^3.0.3
-        version: 3.0.3(rollup@4.36.0)
+        version: 3.0.3(rollup@3.29.5)
       '@size-limit/preset-small-lib':
         specifier: ^11.2.0
         version: 11.2.0(size-limit@11.2.0)
@@ -418,7 +418,7 @@ importers:
         version: 7.52.2(@types/node@20.17.30)
       '@rollup/plugin-image':
         specifier: ^3.0.3
-        version: 3.0.3(rollup@3.29.5)
+        version: 3.0.3(rollup@4.36.0)
       '@size-limit/preset-small-lib':
         specifier: ^11.2.0
         version: 11.2.0(size-limit@11.2.0)
@@ -773,7 +773,7 @@ importers:
       '@tanstack/react-virtual':
         specifier: ^3.13.2
         version: 3.13.4(react-dom@19.1.0(react@19.1.0))(react@19.1.0)
-      '@uiw/codemirror-theme-github':
+      '@uiw/codemirror-theme-dracula':
         specifier: ^4.23.10
         version: 4.23.10(@codemirror/language@6.11.0)(@codemirror/state@6.5.2)(@codemirror/view@6.36.4)
       '@uiw/react-codemirror':
@@ -1260,7 +1260,7 @@ importers:
     devDependencies:
       '@ai-sdk/openai':
         specifier: latest
-        version: 1.3.17(zod@3.24.3)
+        version: 1.3.18(zod@3.24.3)
       '@internal/lint':
         specifier: workspace:*
         version: link:../_config
@@ -1723,8 +1723,8 @@ importers:
       '@types/react-syntax-highlighter':
         specifier: ^15.5.13
         version: 15.5.13
-      '@uiw/codemirror-theme-github':
-        specifier: ^4.23.8
+      '@uiw/codemirror-theme-dracula':
+        specifier: ^4.23.10
         version: 4.23.10(@codemirror/language@6.11.0)(@codemirror/state@6.5.2)(@codemirror/view@6.36.4)
       '@uiw/react-codemirror':
         specifier: ^4.23.8
@@ -1892,7 +1892,7 @@ importers:
         version: 1.2.9(zod@3.24.3)
       '@ai-sdk/openai':
         specifier: latest
-        version: 1.3.17(zod@3.24.3)
+        version: 1.3.18(zod@3.24.3)
       '@internal/lint':
         specifier: workspace:*
         version: link:../_config
@@ -3099,8 +3099,8 @@ packages:
     peerDependencies:
       zod: ^3.0.0
 
-  '@ai-sdk/openai@1.3.17':
-    resolution: {integrity: sha512-ge94OcFLfmc1eTBA1b7ubHMRLJ98HZwnD0B3gcE25Y/lZ7ctLbihdn3wgwu9R6ZVD2/jgc73vrjyOL2+lmsoYw==}
+  '@ai-sdk/openai@1.3.18':
+    resolution: {integrity: sha512-gqOHTOu62Tm2r4yDQx/Z5tWAgUrcTK8wXnC4A8zF/VOCzIjJDxxPsqJRTtQTMgIdGXhwmsv2sZ2PzvvuLeZeEg==}
     engines: {node: '>=18'}
     peerDependencies:
       zod: ^3.0.0
@@ -8787,8 +8787,8 @@ packages:
       '@codemirror/state': '>=6.0.0'
       '@codemirror/view': '>=6.0.0'
 
-  '@uiw/codemirror-theme-github@4.23.10':
-    resolution: {integrity: sha512-jTg2sHAcU1d+8x0O+EBDI71rtJ8PWKIW8gzy+SW4wShQTAdsqGHk5y1ynt3KIeoaUkqngLqAK4SkhPaUKlqZqg==}
+  '@uiw/codemirror-theme-dracula@4.23.10':
+    resolution: {integrity: sha512-2xTLHT+QwKrY1NKXcbpB3wPoOdR1JVCeCQIT0f4dupudIcJp+XuIDwUX28fHqc5mwk/9pSbiopW2f+hMwL5Cfw==}
 
   '@uiw/codemirror-themes@4.23.10':
     resolution: {integrity: sha512-dU0UgEEgEXCAYpxuVDQ6fovE82XsqgHZckTJOH6Bs8xCi3Z7dwBKO4pXuiA8qGDwTOXOMjSzfi+pRViDm7OfWw==}
@@ -17997,7 +17997,7 @@ snapshots:
       '@ai-sdk/provider-utils': 2.2.7(zod@3.24.3)
       zod: 3.24.3
 
-  '@ai-sdk/openai@1.3.17(zod@3.24.3)':
+  '@ai-sdk/openai@1.3.18(zod@3.24.3)':
     dependencies:
       '@ai-sdk/provider': 1.1.3
       '@ai-sdk/provider-utils': 2.2.7(zod@3.24.3)
@@ -24732,7 +24732,7 @@ snapshots:
       '@codemirror/state': 6.5.2
       '@codemirror/view': 6.36.4
 
-  '@uiw/codemirror-theme-github@4.23.10(@codemirror/language@6.11.0)(@codemirror/state@6.5.2)(@codemirror/view@6.36.4)':
+  '@uiw/codemirror-theme-dracula@4.23.10(@codemirror/language@6.11.0)(@codemirror/state@6.5.2)(@codemirror/view@6.36.4)':
     dependencies:
       '@uiw/codemirror-themes': 4.23.10(@codemirror/language@6.11.0)(@codemirror/state@6.5.2)(@codemirror/view@6.36.4)
     transitivePeerDependencies:
