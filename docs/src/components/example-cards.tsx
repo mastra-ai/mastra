@@ -10,8 +10,8 @@ export function CardItem({
   links: Array<{ title: string; href: string }>;
 }) {
     return (
-      <Card className="dark:border-[#404040] w-fit px-0 rounded-none border-none shadow-none transition-colors">
-        <CardContent className="space-y-2 px-0 gap-3 grid grid-cols-3">
+      <Card className="dark:border-[#404040] w-full lg:w-fit px-0 rounded-none border-none shadow-none transition-colors">
+        <CardContent className="space-y-2 w-full px-0 gap-3 grid md:grid-cols-2 lg:grid-cols-3">
           {links.map((item) => (
             <Link
               key={`${item.title}-${item.href}`}
