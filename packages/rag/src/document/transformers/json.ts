@@ -1,4 +1,4 @@
-import { Document } from 'llamaindex';
+import { Document } from '@llamaindex/core/schema';
 
 export class RecursiveJsonTransformer {
   private maxSize: number;
