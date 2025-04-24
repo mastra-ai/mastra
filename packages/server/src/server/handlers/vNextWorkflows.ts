@@ -259,16 +259,10 @@ export async function resumeAsyncVNextWorkflowHandler({
       throw new HTTPException(404, { message: 'Workflow run not found' });
     }
 
-    const step = workflow.steps?.find(step => step.id === body.stepId);
-
-    if (!step) {
-      throw new HTTPException(404, { message: 'Step not found' });
-    }
-
     const _run = workflow.createRun({ runId });
 
     const result = await _run.resume({
-      step,
+      step: body.stepId,
       runtimeContext,
     });
 
@@ -301,16 +295,10 @@ export async function resumeVNextWorkflowHandler({
       throw new HTTPException(404, { message: 'Workflow run not found' });
     }
 
-    const step = workflow.steps?.find(step => step.id === body.stepId);
-
-    if (!step) {
-      throw new HTTPException(404, { message: 'Step not found' });
-    }
-
     const _run = workflow.createRun({ runId });
 
     await _run.resume({
-      step,
+      step: body.stepId,
       runtimeContext,
     });
 
