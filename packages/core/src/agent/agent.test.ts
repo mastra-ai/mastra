@@ -388,7 +388,7 @@ describe('agent', () => {
     expect(sanitizedMessages).toHaveLength(2);
   });
 
-  it.only('should allow for runtime functions in instructions', async () => {
+  it('should allow for runtime functions in instructions', async () => {
     const runtimeFunctionAgent = new Agent({
       name: 'Dynamic instructions agent',
       instructions: (runtime) => {
@@ -407,7 +407,7 @@ describe('agent', () => {
       runtimeContext: new RuntimeContext([['name', 'John Doe']]),
     });
 
-    expect(text).toContain('John Doe');
+    expect(text).toEqual('Hello, my name is John Doe.');
   });
 
   describe('voice capabilities', () => {
