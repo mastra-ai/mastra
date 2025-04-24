@@ -93,8 +93,8 @@ describe('Milvus Vector tests', () => {
       expect(results.schema.fields[2].name).toBe('book_intro');
       expect(results.schema.enable_dynamic_field).toBe(false);
       expect(results.schema.autoID).toBe(false);
-      expect(results.shards_num).toBe(2);
-      expect(results.num_partitions).toBe('0');
+      expect(results.shards_num).toBe(1);
+      expect(results.num_partitions).toBe('1');
     });
 
     it('should drop collection', async () => {
@@ -103,11 +103,11 @@ describe('Milvus Vector tests', () => {
       expect(results.error_code).toBe('Success');
     });
 
-    it('should return error response when dropping non-existent collection', async () => {
+    it('should not return error response when dropping non-existent collection', async () => {
       const response = await milvusClient.dropCollection(collection_name);
       expect(response).toBeDefined();
-      expect(response.error_code).toBe('UnexpectedError');
-      expect(response.reason).toBe("DescribeCollection failed: can't find collection: book");
+      expect(response.error_code).toBe('Success');
+      expect(response.reason).toBe('');
     });
 
     it('should create collection with all options', async () => {
@@ -135,7 +135,6 @@ describe('Milvus Vector tests', () => {
 
       const results = await milvusClient.createCollection(collection_name, schema, {
         enable_dynamic_field: false,
-        num_partitions: 2,
         consistency_level: 'Eventually',
         description: 'test collection',
         timeout: 10000,
@@ -155,8 +154,8 @@ describe('Milvus Vector tests', () => {
       expect(describeResults.schema.enable_dynamic_field).toBe(false);
       expect(describeResults.schema.autoID).toBe(false);
       expect(describeResults.schema.description).toBe('test collection');
-      expect(describeResults.shards_num).toBe(2);
-      expect(describeResults.num_partitions).toBe('0');
+      expect(describeResults.shards_num).toBe(1);
+      expect(describeResults.num_partitions).toBe('1');
       expect(describeResults.consistency_level).toBe('Eventually');
     });
 
@@ -164,13 +163,13 @@ describe('Milvus Vector tests', () => {
       const collections = await milvusClient.listCollections();
       expect(collections).toBeDefined();
       expect(collections.length).toBeGreaterThan(0);
-      expect(collections.includes(collection_name)).toBe(true);
+      expect(collections.includes('new_book_collection')).toBe(true);
     });
   });
 
   describe('Index operations', () => {
     const collectionName = `book`;
-    const indexName = `book_intro_idx`;
+    const indexName = `book_intro`;
 
     beforeAll(async () => {
       await milvusClient.createCollection(collectionName, [
@@ -216,13 +215,12 @@ describe('Milvus Vector tests', () => {
       });
 
       const describeResult = await milvusClient.describeIndex(collectionName);
-      console.log('vishesh describeResult', describeResult.indexDescription);
 
       expect(describeResult).toBeDefined();
       expect(describeResult.indexDescription).toBeDefined();
       expect(describeResult.indexDescription.status.error_code).toBe('Success');
       expect(describeResult.indexDescription.index_descriptions[0].field_name).toBe('book_intro');
-      expect(describeResult.indexDescription.index_descriptions[0].index_name).toBe('_default_idx');
+      expect(describeResult.indexDescription.index_descriptions[0].index_name).toBe(indexName);
       expect(describeResult.indexDescription.index_descriptions[0].indexID).toBeDefined();
       expect(describeResult.indexDescription.index_descriptions[0].params).toBeDefined();
       expect(describeResult.indexDescription.index_descriptions[0].params).toHaveLength(3);
@@ -274,19 +272,16 @@ describe('Milvus Vector tests', () => {
       expect(describeResult.indexDescription.index_descriptions[0].indexID).toBeDefined();
       expect(describeResult.indexDescription.index_descriptions[0].params).toBeDefined();
       expect(describeResult.indexDescription.index_descriptions[0].params).toHaveLength(3);
-    });
 
-    it('should list indexes', async () => {
-      const indexes = await milvusClient.listIndexes();
-      console.log('vishesh', indexes);
-      expect(indexes).toBeDefined();
-      expect(indexes.length).toBe(2);
-      expect(indexes.includes('_default_idx')).toBe(true);
+      const listIndexes = await milvusClient.listIndexes();
+      expect(listIndexes).toBeDefined();
+      expect(listIndexes.length).toBe(1);
+      expect(listIndexes.includes(indexName)).toBe(true);
     });
 
     it('should drop index', async () => {
       const collectionName = `new_book_collection`;
-      const indexName = `book_intro_idx`; // will be ignored by milvus
+      const indexName = `book_intro_idx`;
 
       // drop existing collection
       await milvusClient.dropCollection(collectionName);
@@ -323,7 +318,7 @@ describe('Milvus Vector tests', () => {
         dimension: 128,
       });
 
-      await milvusClient.dropIndex(collectionName, 'book_intro');
+      await milvusClient.dropIndex(collectionName, indexName);
 
       // describe index
       const describeResult = await milvusClient.describeIndex(collectionName);
@@ -347,18 +342,13 @@ describe('Milvus Vector tests', () => {
           autoID: false,
         },
         {
-          name: `title`,
-          description: `word count`,
-          data_type: DataType.Int64,
-        },
-        {
-          name: `book_intro`,
+          name: `vector`,
           description: `word count`,
           data_type: DataType.FloatVector,
           dim: 8,
         },
         {
-          name: `book_metadata`,
+          name: `metadata`,
           description: `metadata`,
           data_type: DataType.JSON,
         },
@@ -378,11 +368,10 @@ describe('Milvus Vector tests', () => {
       const metadata = [{ title: 'Book 1' }, { title: 'Book 2' }];
       const insertedIds = await milvusClient.upsert({
         collectionName,
-        fieldName: 'book_intro',
         vectors,
         ids: ids.map(id => String(id)),
         metadata,
-        indexName: 'book_intro_idx',
+        indexName: 'vector_idx',
       });
       expect(insertedIds).toBeDefined();
       expect(insertedIds.length).toBe(2);

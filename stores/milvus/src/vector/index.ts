@@ -41,7 +41,6 @@ export interface MilvusIndexStats extends IndexStats {
 }
 
 export interface MilvusUpsertVectorParams extends UpsertVectorParams {
-  fieldName: string;
   collectionName: string;
 }
 
@@ -168,43 +167,31 @@ export class MilvusVectorStore extends MastraVector {
       'vectors',
       'metadata',
       'ids',
-      'fieldName',
       'collectionName',
     ]);
 
-    const { collectionName, fieldName, vectors, ids, metadata } = params;
+    const { collectionName, vectors, ids = [], metadata = [] } = params;
 
-    if (ids && ids.length !== vectors.length) {
-      throw new Error('Ids and vectors must have the same length');
+    if (!collectionName) {
+      throw new Error('Missing required parameter: collectionName');
     }
 
-    if (!collectionName || !fieldName) {
-      throw new Error('Missing required parameters: collectionName, fieldName');
+    if (!vectors || !Array.isArray(vectors) || vectors.length === 0) {
+      throw new Error('vectors array is required and must not be empty');
     }
+
+    // Generate IDs if not provided
+    const entryIds = ids.length === vectors.length ? ids : vectors.map((_, i) => ids[i] || crypto.randomUUID());
 
     try {
-      // Create one row entry for each vector
+      // Create one row entry for each vector, merging all extra fields
       const fields_data = vectors.map((vector, index) => {
-        const entry: Record<string, any> = {
-          [fieldName]: vector,
+        return {
+          id: entryIds[index],
+          vector: vector,
+          metadata: metadata[index],
         };
-
-        // Add ID field if available
-        if (ids && ids[index]) {
-          entry.id = ids[index];
-        }
-
-        // Add metadata if available
-        if (metadata && metadata[index]) {
-          // Spread metadata fields into the entry
-          Object.entries(metadata[index]).forEach(([key, value]) => {
-            entry[key] = value;
-          });
-        }
-
-        return entry;
       });
-      console.log(fields_data);
 
       const res = await this.client.insert({
         collection_name: collectionName,
@@ -215,8 +202,7 @@ export class MilvusVectorStore extends MastraVector {
         throw new Error('Milvus DB error: ' + res.status.reason);
       }
 
-      // Return the IDs that were inserted
-      return ids || [];
+      return entryIds;
     } catch (error) {
       throw new Error('Failed to upsert vectors: ' + error);
     }
