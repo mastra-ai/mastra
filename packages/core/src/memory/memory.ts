@@ -191,12 +191,15 @@ ${this.deprecationWarnings.map((w, i) => `${this.deprecationWarnings.length > 1 
   private addImplicitDefaultsWarning(config: SharedMemoryConfig) {
     const fromToPairs: {
       key: keyof typeof memoryDefaultOptions;
-      from: string | number;
-      to: string | number | boolean;
+      from: unknown;
+      to: unknown;
     }[] = [];
 
     const indent = (s: string) => s.split(`\n`).join(`\n    `);
-    const printObj = (obj: any) => indent(JSON.stringify(obj, null, 2).replaceAll(`"`, ``));
+    const format = (v: unknown) =>
+      typeof v === `object` && !Array.isArray(v) && v !== null
+        ? indent(JSON.stringify(v, null, 2).replaceAll(`"`, ``))
+        : v;
 
     const options = config.options ?? {};
 
@@ -210,26 +213,26 @@ ${this.deprecationWarnings.map((w, i) => `${this.deprecationWarnings.length > 1 
     if (!(`semanticRecall` in options))
       fromToPairs.push({
         key: 'semanticRecall',
-        from: printObj(memoryDefaultOptions.semanticRecall),
-        to: false,
+        from: memoryDefaultOptions.semanticRecall,
+        to: newMemoryDefaultOptions.semanticRecall,
       });
 
     if (!(`threads` in options))
       fromToPairs.push({
         key: 'threads',
-        from: printObj(memoryDefaultOptions.threads),
-        to: printObj(newMemoryDefaultOptions.threads),
+        from: memoryDefaultOptions.threads,
+        to: newMemoryDefaultOptions.threads,
       });
 
     if (fromToPairs.length > 0) {
       const currentDefaults = `{
   options: {
-    ${fromToPairs.map(({ key, from }) => `${key}: ${from}`).join(`,\n    `)}
+    ${fromToPairs.map(({ key, from }) => `${key}: ${format(from)}`).join(`,\n    `)}
   }
 }`;
       const upcomingDefaults = `{
   options: {
-    ${fromToPairs.map(({ key, to }) => `${key}: ${to}`).join(`,\n    `)}
+    ${fromToPairs.map(({ key, to }) => `${key}: ${format(to)}`).join(`,\n    `)}
   }
 }`;
 
