@@ -3,6 +3,8 @@ title: "Example: Deploying an MCPServer | Agents | Mastra Docs"
 description: Example of setting up, building, and deploying a Mastra MCPServer using the stdio transport and publishing it to NPM.
 ---
 
+import { GithubLink } from "@/components/github-link";
+
 # Example: Deploying an MCPServer
 
 This example guides you through setting up a basic Mastra MCPServer using the stdio transport, building it, and preparing it for deployment, such as publishing to NPM.
@@ -40,17 +42,14 @@ pnpm add @mastra/mcp @mastra/core tsup
 
 3.  Update your `package.json` to include the `bin` entry pointing to your built server file and a script to build the server.
 
-    ```json filename="package.json" copy
-    {
-      // ... other package.json fields
-      "bin": "dist/stdio.js",
-      "scripts": {
-        // ... other scripts
-        "build:mcp": "tsup src/mastra/stdio.ts --format esm --no-splitting --dts && chmod +x dist/stdio.js"
-      }
-      // ... other package.json fields
+  ```json filename="package.json" copy
+  {
+    "bin": "dist/stdio.js",
+    "scripts": {
+      "build:mcp": "tsup src/mastra/stdio.ts --format esm --no-splitting --dts && chmod +x dist/stdio.js"
     }
-    ```
+  }
+  ```
 
 4.  Run the build command:
 
@@ -103,9 +102,3 @@ Note: If you published without an organization scope, the `args` might just be `
 <hr className="dark:border-[#404040] border-gray-300" />
 <br />
 <br />
-
-<GithubLink
-  link={
-    "https://github.com/mastra-ai/mastra/blob/main/examples/agents/deploying-mcp-server"
-  }
-/>
