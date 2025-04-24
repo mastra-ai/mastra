@@ -93,7 +93,7 @@ export const mastra = new Mastra({
 
 Set up Cloudinary for storing the recorded audio files:
 
-```ts filename="speech-to-speech/call-analysis/src/upload.ts"
+```ts filename="speech-to-speech/call-analysis/src/upload.ts" copy
 import { v2 as cloudinary } from 'cloudinary';
 
 cloudinary.config({
@@ -113,7 +113,7 @@ export async function uploadToCloudinary(path: string) {
 
 The main application orchestrates the conversation flow, recording, and analytics integration:
 
-```ts filename="speech-to-speech/call-analysis/src/base.ts"
+```ts filename="speech-to-speech/call-analysis/src/base.ts" copy
 import { Roark } from '@roarkanalytics/sdk';
 import chalk from 'chalk';
 
