@@ -45,6 +45,7 @@
 '@mastra/voice-azure': minor
 '@mastra/voice-murf': minor
 '@mastra/voice-playai': minor
+'@mastra/libsql': minor
 ---
 
 Move @mastra/core to peerDependencies
