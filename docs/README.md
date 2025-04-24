@@ -26,14 +26,6 @@ Copy the Env file:
 cp .env.example .env
 ```
 
-Fill out the environmental variables for the chatbot
-
-```bash
-OPENAI_API_KEY=
-MASTRA_AGENT_URL=
-NEXT_PUBLIC_COPILOT_KIT=
-```
-
 ## Dev Preview
 
 Install the packages
