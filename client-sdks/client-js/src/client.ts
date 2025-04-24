@@ -1,4 +1,4 @@
-import { Agent, MemoryThread, Tool, Workflow, Vector, BaseResource, Network } from './resources';
+import { Agent, MemoryThread, Tool, Workflow, Vector, BaseResource, Network, VNextWorkflow } from './resources';
 import type {
   ClientOptions,
   CreateMemoryThreadParams,
@@ -13,6 +13,7 @@ import type {
   GetTelemetryParams,
   GetTelemetryResponse,
   GetToolResponse,
+  GetVNextWorkflowResponse,
   GetWorkflowResponse,
   SaveMessageToMemoryParams,
   SaveMessageToMemoryResponse,
@@ -119,6 +120,23 @@ export class MastraClient extends BaseResource {
    */
   public getWorkflow(workflowId: string) {
     return new Workflow(this.options, workflowId);
+  }
+
+  /**
+   * Retrieves all available vNext workflows
+   * @returns Promise containing map of vNext workflow IDs to vNext workflow details
+   */
+  public getVNextWorkflows(): Promise<Record<string, GetVNextWorkflowResponse>> {
+    return this.request('/api/workflows/v-next');
+  }
+
+  /**
+   * Gets a vNext workflow instance by ID
+   * @param workflowId - ID of the vNext workflow to retrieve
+   * @returns vNext Workflow instance
+   */
+  public getVNextWorkflow(workflowId: string) {
+    return new VNextWorkflow(this.options, workflowId);
   }
 
   /**
