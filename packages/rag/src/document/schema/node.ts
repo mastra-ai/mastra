@@ -1,6 +1,6 @@
 import { createHash, randomUUID } from 'crypto';
 import { NodeRelationship, ObjectType } from './types';
-import type { Metadata, RelatedNodeInfo, RelatedNodeType, BaseNodeParams } from './types';
+import type { Metadata, RelatedNodeInfo, RelatedNodeType, BaseNodeParams, TextNodeParams } from './types';
 
 /**
  * Generic abstract class for retrievable nodes
@@ -88,14 +88,6 @@ export abstract class BaseNode<T extends Metadata = Metadata> {
 
   abstract generateHash(): string;
 }
-
-export type TextNodeParams<T extends Metadata = Metadata> = BaseNodeParams<T> & {
-  text?: string | undefined;
-  textTemplate?: string | undefined;
-  startCharIdx?: number | undefined;
-  endCharIdx?: number | undefined;
-  metadataSeparator?: string | undefined;
-};
 
 /**
  * TextNode is the default node type for text.

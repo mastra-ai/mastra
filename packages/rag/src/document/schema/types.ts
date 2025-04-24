@@ -32,3 +32,11 @@ export type BaseNodeParams<T extends Metadata = Metadata> = {
   hash?: string | undefined;
   embedding?: number[] | undefined;
 };
+
+export type TextNodeParams<T extends Metadata = Metadata> = BaseNodeParams<T> & {
+  text?: string | undefined;
+  textTemplate?: string | undefined;
+  startCharIdx?: number | undefined;
+  endCharIdx?: number | undefined;
+  metadataSeparator?: string | undefined;
+};
