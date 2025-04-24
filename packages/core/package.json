@@ -144,7 +144,7 @@
     "xstate": "^5.19.2"
   },
   "peerDependencies": {
-    "zod": "^3.24.0"
+    "zod": "^3.23.0"
   },
   "devDependencies": {
     "@ai-sdk/openai": "^1.2.1",

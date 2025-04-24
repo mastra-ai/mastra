@@ -48,11 +48,11 @@
     "execa": "^9.5.2",
     "rollup-plugin-polyfill-node": "^0.13.0",
     "rollup-plugin-shim": "^1.0.0",
-    "wrangler": "^4.4.0",
-    "zod": "^3.24.2"
+    "wrangler": "^4.4.0"
   },
   "peerDependencies": {
-    "@mastra/core": "workspace:^"
+    "@mastra/core": "workspace:^",
+    "zod": "^3.23.0"
   },
   "devDependencies": {
     "@internal/lint": "workspace:*",
@@ -62,6 +62,7 @@
     "eslint": "^9.23.0",
     "tsup": "^8.4.0",
     "typescript": "^5.8.2",
-    "vitest": "^3.0.9"
+    "vitest": "^3.0.9",
+    "zod": "^3.24.2"
   }
 }

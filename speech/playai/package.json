@@ -24,11 +24,10 @@
     "test": "echo deprecated"
   },
   "license": "Elastic-2.0",
-  "dependencies": {
-    "zod": "^3.24.2"
-  },
+  "dependencies": {},
   "peerDependencies": {
-    "@mastra/core": "workspace:^"
+    "@mastra/core": "workspace:^",
+    "zod": "^3.23.0"
   },
   "devDependencies": {
     "@mastra/core": "workspace:^",
@@ -37,6 +36,7 @@
     "@types/node": "^20.17.27",
     "eslint": "^9.23.0",
     "tsup": "^8.4.0",
-    "typescript": "^5.8.2"
+    "typescript": "^5.8.2",
+    "zod": "^3.24.2"
   }
 }

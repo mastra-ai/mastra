@@ -30,11 +30,11 @@
   },
   "license": "Elastic-2.0",
   "dependencies": {
-    "cloudflare": "^4.2.0",
-    "zod": "^3.24.2"
+    "cloudflare": "^4.2.0"
   },
   "peerDependencies": {
-    "@mastra/core": "workspace:^"
+    "@mastra/core": "workspace:^",
+    "zod": "^3.23.0"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^4.20250321.0",
@@ -45,7 +45,8 @@
     "eslint": "^9.23.0",
     "tsup": "^8.4.0",
     "typescript": "^5.8.2",
-    "vitest": "^2.1.9"
+    "vitest": "^2.1.9",
+    "zod": "^3.24.2"
   },
   "keywords": [
     "mastra",

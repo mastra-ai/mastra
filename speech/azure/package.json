@@ -26,11 +26,11 @@
   },
   "license": "Elastic-2.0",
   "dependencies": {
-    "microsoft-cognitiveservices-speech-sdk": "^1.43.0",
-    "zod": "^3.24.2"
+    "microsoft-cognitiveservices-speech-sdk": "^1.43.0"
   },
   "peerDependencies": {
-    "@mastra/core": "workspace:^"
+    "@mastra/core": "workspace:^",
+    "zod": "^3.23.0"
   },
   "devDependencies": {
     "@mastra/core": "workspace:^",
@@ -40,6 +40,7 @@
     "eslint": "^9.23.0",
     "tsup": "^8.4.0",
     "typescript": "^5.8.2",
-    "vitest": "^2.1.9"
+    "vitest": "^2.1.9",
+    "zod": "^3.24.2"
   }
 }

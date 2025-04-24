@@ -33,7 +33,6 @@
     "@mastra/core": "workspace:^",
     "@modelcontextprotocol/sdk": "^1.9.0",
     "uuid": "^11.1.0",
-    "zod": "^3.22.4",
     "zod-to-json-schema": "^3.22.4"
   },
   "devDependencies": {
@@ -48,6 +47,10 @@
     "tsup": "^8.4.0",
     "tsx": "^4.19.3",
     "typescript": "^5.3.3",
-    "vitest": "^3.0.9"
+    "vitest": "^3.0.9",
+    "zod": "^3.22.4"
+  },
+  "peerDependencies": {
+    "zod": "^3.23.0"
   }
 }

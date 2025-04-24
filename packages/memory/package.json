@@ -48,11 +48,11 @@
     "pg-pool": "^3.7.1",
     "postgres": "^3.4.5",
     "redis": "^4.7.0",
-    "xxhash-wasm": "^1.1.0",
-    "zod": "^3.24.2"
+    "xxhash-wasm": "^1.1.0"
   },
   "peerDependencies": {
-    "@mastra/core": "workspace:^"
+    "@mastra/core": "workspace:^",
+    "zod": "^3.23.0"
   },
   "devDependencies": {
     "@mastra/core": "workspace:^",
@@ -65,6 +65,7 @@
     "tsup": "^8.4.0",
     "typescript": "^5.8.2",
     "typescript-eslint": "^8.26.1",
-    "vitest": "^3.0.9"
+    "vitest": "^3.0.9",
+    "zod": "^3.24.2"
   }
 }

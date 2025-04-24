@@ -52,11 +52,11 @@
   ],
   "dependencies": {
     "@hey-api/client-fetch": "^0.3.4",
-    "ts-to-zod": "^3.15.0",
-    "zod": "^3.24.2"
+    "ts-to-zod": "^3.15.0"
   },
   "peerDependencies": {
-    "@mastra/core": "workspace:^"
+    "@mastra/core": "workspace:^",
+    "zod": "^3.23.0"
   },
   "devDependencies": {
     "@jest/globals": "^29.7.0",
@@ -73,7 +73,8 @@
     "size-limit": "^11.2.0",
     "ts-jest": "^29.2.6",
     "tsup": "^8.4.0",
-    "typescript": "^5.8.2"
+    "typescript": "^5.8.2",
+    "zod": "^3.24.2"
   },
   "keywords": [],
   "author": "",

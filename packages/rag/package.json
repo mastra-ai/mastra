@@ -31,12 +31,12 @@
     "js-tiktoken": "^1.0.19",
     "@llamaindex/core": "0.5.5",
     "node-html-better-parser": "^1.4.7",
-    "pathe": "^2.0.3",
-    "zod": "^3.24.2"
+    "pathe": "^2.0.3"
   },
   "peerDependencies": {
     "@mastra/core": "workspace:^",
-    "ai": "^4.0.0"
+    "ai": "^4.0.0",
+    "zod": "^3.23.0"
   },
   "devDependencies": {
     "@mastra/core": "workspace:^",
@@ -50,7 +50,8 @@
     "eslint": "^9.23.0",
     "tsup": "^8.4.0",
     "typescript": "^5.8.2",
-    "vitest": "^3.0.9"
+    "vitest": "^3.0.9",
+    "zod": "^3.24.2"
   },
   "keywords": [
     "rag",
