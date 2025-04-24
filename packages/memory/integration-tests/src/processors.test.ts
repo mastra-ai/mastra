@@ -35,6 +35,7 @@ describe('Memory with Processors', () => {
     memory = new Memory({
       storage,
       options: {
+        lastMessages: 10,
         semanticRecall: false,
         threads: {
           generateTitle: false,
@@ -231,6 +232,9 @@ describe('Memory with Processors', () => {
     const memory = new Memory({
       processors: [new ToolCallFilter(), new ConversationOnlyFilter(), new TokenLimiter(127000)],
       options: {
+        lastMessages: 10,
+        semanticRecall: true,
+        threads: { generateTitle: false },
         workingMemory: {
           enabled: true,
           use: 'tool-call',
@@ -515,7 +519,15 @@ describe('Memory with Processors', () => {
 
 describe('Memory.chunkText', () => {
   it('should split long text into chunks at word boundaries', () => {
-    const memory = new Memory({});
+    const memory = new Memory({
+      options: {
+        semanticRecall: true,
+        lastMessages: 10,
+        threads: {
+          generateTitle: false,
+        },
+      },
+    });
     const words = [];
     for (let i = 0; i < 1000; i++) {
       words.push(`word${i}`);
