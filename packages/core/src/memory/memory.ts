@@ -82,7 +82,6 @@ export abstract class MastraMemory extends MastraBase {
     this.storage = augmentWithInit(this.storage);
 
     const semanticRecallIsEnabled = this.threadConfig.semanticRecall !== false; // default is to have it enabled, so any value except false means it's on
-    console.log(config);
     if (config.vector && semanticRecallIsEnabled) {
       this.vector = config.vector;
     } else if (
@@ -93,7 +92,6 @@ export abstract class MastraMemory extends MastraBase {
       semanticRecallIsEnabled
       // add the default vector store
     ) {
-      console.log(' are you seeying this papa?');
       // for backwards compat reasons, check if there's a memory-vector.db in cwd or in cwd/.mastra
       // if it's there we need to use it, otherwise use the same file:memory.db
       // We used to need two separate DBs because we would get schema errors
