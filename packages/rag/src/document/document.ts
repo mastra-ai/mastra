@@ -1,7 +1,7 @@
-import type { BaseNode } from '@llamaindex/core/schema';
-import { Document as Chunk, NodeRelationship, ObjectType } from '@llamaindex/core/schema';
-
 import { TitleExtractor, SummaryExtractor, QuestionsAnsweredExtractor, KeywordExtractor } from './extractors';
+import type { BaseNode } from './schema';
+import { Document as Chunk, NodeRelationship, ObjectType } from './schema';
+
 import { CharacterTransformer, RecursiveCharacterTransformer } from './transformers/character';
 import { HTMLHeaderTransformer, HTMLSectionTransformer } from './transformers/html';
 import { RecursiveJsonTransformer } from './transformers/json';

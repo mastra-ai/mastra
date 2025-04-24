@@ -1865,9 +1865,6 @@ importers:
 
   packages/rag:
     dependencies:
-      '@llamaindex/core':
-        specifier: 0.5.5
-        version: 0.5.5(@aws-crypto/sha256-js@5.2.0)(@huggingface/transformers@3.4.0)(gpt-tokenizer@2.9.0)(js-tiktoken@1.0.19)(pathe@2.0.3)
       '@mastra/core':
         specifier: workspace:^
         version: link:../core
@@ -5526,13 +5523,6 @@ packages:
     resolution: {integrity: sha512-/KPde26khDUIPkTGU82jdtTW9UAuvUTumCAbFs/7giR0SxsvZC4hru51PBvpijH6BVkHcROcvZM/lpy5h1jRRA==}
     engines: {node: '>=18'}
 
-  '@huggingface/jinja@0.3.3':
-    resolution: {integrity: sha512-vQQr2JyWvVFba3Lj9es4q9vCl1sAc74fdgnEMoX8qHrXtswap9ge9uO3ONDzQB0cQ0PUyaKY2N6HaVbTBvSXvw==}
-    engines: {node: '>=18'}
-
-  '@huggingface/transformers@3.4.0':
-    resolution: {integrity: sha512-jyuglsWc+Ls9/U7eGDDY+xYgDgDtwxQ4ul/5VQoqo2r0LfAnJ+zSRUjKnY6paOyzyhbKaftfEsvXJ049aL1cyw==}
-
   '@humanfs/core@0.19.1':
     resolution: {integrity: sha512-5DyQ4+1JEUzejeK1JGICcideyfUbGixgS9jNgex5nqkW+cY7WZhxBigmieN5Qnw9ZosSNVC9KQKyb+GUaGyKUA==}
     engines: {node: '>=18.18.0'}
@@ -6038,30 +6028,6 @@ packages:
     resolution: {integrity: sha512-8PtI2LrcacvFvzGOkm1CFCGWR5Y5eJDliAlZUEv7BTSAWf07FIVi21mEAyB9VG5y3VpWtY0f+6JYblrwqgqD3A==}
     cpu: [x64]
     os: [win32]
-
-  '@llamaindex/core@0.5.5':
-    resolution: {integrity: sha512-oKDgpoUu2u3kAnoMX2GQhRW+e/YBVcH6LX9dnk4vYud1zoS9B859OQnmXWXtBVgdNJriY5NdYFplNr6mhMKRrw==}
-
-  '@llamaindex/env@0.1.28':
-    resolution: {integrity: sha512-ktAS9I2bJprUilBKpNLLGc2uHGyhFTVWaslSCord0PH4pTTs6OenJdtvG+ZaVkJZg6CLUZDF2e7Hcjwn/NzU+A==}
-    peerDependencies:
-      '@aws-crypto/sha256-js': ^5.2.0
-      '@huggingface/transformers': ^3.0.2
-      gpt-tokenizer: ^2.5.0
-      js-tiktoken: ^1.0.12
-      pathe: ^1.1.2
-      tiktoken: '*'
-    peerDependenciesMeta:
-      '@aws-crypto/sha256-js':
-        optional: true
-      '@huggingface/transformers':
-        optional: true
-      js-tiktoken:
-        optional: true
-      pathe:
-        optional: true
-      tiktoken:
-        optional: true
 
   '@lukeed/csprng@1.1.0':
     resolution: {integrity: sha512-Z7C/xXCiGWsg0KuKsHTKJxbWhpI3Vs5GwLfOean7MGyVFGqdRgBbAjOCh6u4bbjPc/8MJ2pZmK/0DLdCbivLDA==}
@@ -11721,9 +11687,6 @@ packages:
   flatbuffers@1.12.0:
     resolution: {integrity: sha512-c7CZADjRcl6j0PlvFy0ZqXQ67qSEZfrVPynmnL+2zPc+NtMvrF8Y0QceMo7QqnSPc7+uWjUIAbvCQ5WIKlMVdQ==}
 
-  flatbuffers@25.2.10:
-    resolution: {integrity: sha512-7JlN9ZvLDG1McO3kbX0k4v+SUAg48L1rIwEvN6ZQl/eCtgJz9UylTMzE9wrmYrcorgxm3CX/3T/w5VAub99UUw==}
-
   flatted@3.3.3:
     resolution: {integrity: sha512-GX+ysw4PBCz0PzosHDepZGANEuFCMLrnRTiEy9McGjmkCQYwRq4A/X786G/fjM/+OjsWSU1ZrY5qyARZmO/uwg==}
 
@@ -12143,9 +12106,6 @@ packages:
   got@12.6.1:
     resolution: {integrity: sha512-mThBblvlAF1d4O5oqyvN+ZxLAYwIJK7bpMxgYqPD9okW0C3qm5FFn7k811QrcuEBwaogR3ngOFoCfs6mRv7teQ==}
     engines: {node: '>=14.16'}
-
-  gpt-tokenizer@2.9.0:
-    resolution: {integrity: sha512-YSpexBL/k4bfliAzMrRqn3M6+it02LutVyhVpDeMKrC/O9+pCe/5s8U2hYKa2vFLD5/vHhsKc8sOn/qGqII8Kg==}
 
   graceful-fs@4.2.10:
     resolution: {integrity: sha512-9ByhssR2fPVsNZj478qUUbKfmL0+t5BDVyjShtyZZLiK7ZDAArFFfopyOTj0M05wE2tJPisA4iTnnXl2YoPvOA==}
@@ -13584,9 +13544,6 @@ packages:
     resolution: {integrity: sha512-tPJQ1HeyiU2vRruNGhZ+VleWuMQRro8iFtJxYgnS4NQe+EukKF6aGiIT+7flZhISAt2iaXBCfFGvAyif7/f8nQ==}
     engines: {node: ^12.20.0 || ^14.13.1 || >=16.0.0}
 
-  magic-bytes.js@1.10.0:
-    resolution: {integrity: sha512-/k20Lg2q8LE5xiaaSkMXk4sfvI+9EGEykFS4b0CHHGWqDYU0bGUFSwchNOMA56D7TCs9GwVTkqe9als1/ns8UQ==}
-
   magic-string@0.27.0:
     resolution: {integrity: sha512-8UnnX2PeRAPZuN12svgR9j7M1uWMovg/CEnIwIG0LFkXSJJe4PdfUGiTGl8V9bsBHFUtfVINcSyYxd7q+kx9fA==}
     engines: {node: '>=12'}
@@ -14500,21 +14457,11 @@ packages:
   onnxruntime-common@1.14.0:
     resolution: {integrity: sha512-3LJpegM2iMNRX2wUmtYfeX/ytfOzNwAWKSq1HbRrKc9+uqG/FsEA0bbKZl1btQeZaXhC26l44NWpNUeXPII7Ew==}
 
-  onnxruntime-common@1.20.1:
-    resolution: {integrity: sha512-YiU0s0IzYYC+gWvqD1HzLc46Du1sXpSiwzKb63PACIJr6LfL27VsXSXQvt68EzD3V0D5Bc0vyJTjmMxp0ylQiw==}
-
   onnxruntime-common@1.21.0:
     resolution: {integrity: sha512-Q632iLLrtCAVOTO65dh2+mNbQir/QNTVBG3h/QdZBpns7mZ0RYbLRBgGABPbpU9351AgYy7SJf1WaeVwMrBFPQ==}
 
-  onnxruntime-common@1.22.0-dev.20250306-aafa8d170a:
-    resolution: {integrity: sha512-NfIQnW4lIk/8LnhnYqknYPeet0U0+AADgKQRlKex36QrNoVSCY+aNaX6wyy2VzQ4CNWxsYh0E203ajRD/zxn0g==}
-
   onnxruntime-node@1.14.0:
     resolution: {integrity: sha512-5ba7TWomIV/9b6NH/1x/8QEeowsb+jBEvFzU6z0T4mNsFwdPqXeFUM7uxC6QeSRkEbWu3qEB0VMjrvzN/0S9+w==}
-    os: [win32, darwin, linux]
-
-  onnxruntime-node@1.20.1:
-    resolution: {integrity: sha512-di/I4HDXRw+FLgq+TyHmQEDd3cEp9iFFZm0r4uJ1Wd7b/WE1VXtKWo8yemex347c6GNF/3Pv86ZfPhIWxORr0w==}
     os: [win32, darwin, linux]
 
   onnxruntime-node@1.21.0:
@@ -14523,9 +14470,6 @@ packages:
 
   onnxruntime-web@1.14.0:
     resolution: {integrity: sha512-Kcqf43UMfW8mCydVGcX9OMXI2VN17c0p6XvR7IPSZzBf/6lteBzXHvcEVWDPmCKuGombl997HgLqj91F11DzXw==}
-
-  onnxruntime-web@1.22.0-dev.20250306-ccf8fdd9ea:
-    resolution: {integrity: sha512-YwqS9Qqx2eKFXIx+HQloqRUG5/STHPUuNk8wn+qVVmwXBIfNdXX0/Lm7wgo5CnC2k+yqZmjDV5V1dZi4PeSPGQ==}
 
   open@10.1.0:
     resolution: {integrity: sha512-mnkeQ1qP5Ue2wd+aivTD3NHd/lZ96Lu0jgf0pwktLPtx6cTZiH7tyeGRRHs0zX0rbrahXPnXlUnbeXyaBBuIaw==}
@@ -20620,17 +20564,6 @@ snapshots:
 
   '@huggingface/jinja@0.2.2': {}
 
-  '@huggingface/jinja@0.3.3':
-    optional: true
-
-  '@huggingface/transformers@3.4.0':
-    dependencies:
-      '@huggingface/jinja': 0.3.3
-      onnxruntime-node: 1.20.1
-      onnxruntime-web: 1.22.0-dev.20250306-ccf8fdd9ea
-      sharp: 0.33.5
-    optional: true
-
   '@humanfs/core@0.19.1': {}
 
   '@humanfs/node@0.16.6':
@@ -21200,30 +21133,6 @@ snapshots:
 
   '@libsql/win32-x64-msvc@0.5.6':
     optional: true
-
-  '@llamaindex/core@0.5.5(@aws-crypto/sha256-js@5.2.0)(@huggingface/transformers@3.4.0)(gpt-tokenizer@2.9.0)(js-tiktoken@1.0.19)(pathe@2.0.3)':
-    dependencies:
-      '@llamaindex/env': 0.1.28(@aws-crypto/sha256-js@5.2.0)(@huggingface/transformers@3.4.0)(gpt-tokenizer@2.9.0)(js-tiktoken@1.0.19)(pathe@2.0.3)
-      '@types/node': 20.17.30
-      magic-bytes.js: 1.10.0
-      zod: 3.24.3
-      zod-to-json-schema: 3.24.5(zod@3.24.3)
-    transitivePeerDependencies:
-      - '@aws-crypto/sha256-js'
-      - '@huggingface/transformers'
-      - gpt-tokenizer
-      - js-tiktoken
-      - pathe
-      - tiktoken
-
-  '@llamaindex/env@0.1.28(@aws-crypto/sha256-js@5.2.0)(@huggingface/transformers@3.4.0)(gpt-tokenizer@2.9.0)(js-tiktoken@1.0.19)(pathe@2.0.3)':
-    dependencies:
-      gpt-tokenizer: 2.9.0
-    optionalDependencies:
-      '@aws-crypto/sha256-js': 5.2.0
-      '@huggingface/transformers': 3.4.0
-      js-tiktoken: 1.0.19
-      pathe: 2.0.3
 
   '@lukeed/csprng@1.1.0': {}
 
@@ -28553,9 +28462,6 @@ snapshots:
 
   flatbuffers@1.12.0: {}
 
-  flatbuffers@25.2.10:
-    optional: true
-
   flatted@3.3.3: {}
 
   flush-write-stream@2.0.0:
@@ -29070,8 +28976,6 @@ snapshots:
       lowercase-keys: 3.0.0
       p-cancelable: 3.0.0
       responselike: 3.0.0
-
-  gpt-tokenizer@2.9.0: {}
 
   graceful-fs@4.2.10: {}
 
@@ -30844,8 +30748,6 @@ snapshots:
 
   macos-release@3.3.0: {}
 
-  magic-bytes.js@1.10.0: {}
-
   magic-string@0.27.0:
     dependencies:
       '@jridgewell/sourcemap-codec': 1.5.0
@@ -32113,23 +32015,11 @@ snapshots:
 
   onnxruntime-common@1.14.0: {}
 
-  onnxruntime-common@1.20.1:
-    optional: true
-
   onnxruntime-common@1.21.0: {}
-
-  onnxruntime-common@1.22.0-dev.20250306-aafa8d170a:
-    optional: true
 
   onnxruntime-node@1.14.0:
     dependencies:
       onnxruntime-common: 1.14.0
-    optional: true
-
-  onnxruntime-node@1.20.1:
-    dependencies:
-      onnxruntime-common: 1.20.1
-      tar: 7.4.3
     optional: true
 
   onnxruntime-node@1.21.0:
@@ -32146,16 +32036,6 @@ snapshots:
       onnx-proto: 4.0.4
       onnxruntime-common: 1.14.0
       platform: 1.3.6
-
-  onnxruntime-web@1.22.0-dev.20250306-ccf8fdd9ea:
-    dependencies:
-      flatbuffers: 25.2.10
-      guid-typescript: 1.0.9
-      long: 5.3.1
-      onnxruntime-common: 1.22.0-dev.20250306-aafa8d170a
-      platform: 1.3.6
-      protobufjs: 7.4.0
-    optional: true
 
   open@10.1.0:
     dependencies:

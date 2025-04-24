@@ -1,4 +1,4 @@
-import type { Document } from '@llamaindex/core/schema';
+import type { Document } from '../schema';
 
 export interface Transformer {
   transformDocuments(documents: Document[]): Document[];

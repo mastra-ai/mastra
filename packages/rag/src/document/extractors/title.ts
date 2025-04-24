@@ -1,12 +1,8 @@
-import {
-  defaultTitleCombinePromptTemplate,
-  defaultTitleExtractorPromptTemplate,
-  PromptTemplate,
-} from '@llamaindex/core/prompts';
-import type { TitleCombinePrompt, TitleExtractorPrompt } from '@llamaindex/core/prompts';
-import { MetadataMode, TextNode } from '@llamaindex/core/schema';
-import type { BaseNode } from '@llamaindex/core/schema';
 import type { MastraLanguageModel } from '@mastra/core/agent';
+import { defaultTitleCombinePromptTemplate, defaultTitleExtractorPromptTemplate, PromptTemplate } from '../prompts';
+import type { TitleCombinePrompt, TitleExtractorPrompt } from '../prompts';
+import { TextNode } from '../schema';
+import type { BaseNode } from '../schema';
 import { BaseExtractor } from './base';
 import { baseLLM } from './types';
 import type { TitleExtractorsArgs } from './types';
@@ -92,7 +88,7 @@ export class TitleExtractor extends BaseExtractor {
     const nodeIndexes: number[] = [];
 
     nodes.forEach((node, idx) => {
-      const text = node.getContent(this.metadataMode);
+      const text = node.getContent();
       if (!text || text.trim() === '') {
         results[idx] = { documentTitle: '' };
       } else {
@@ -189,7 +185,7 @@ export class TitleExtractor extends BaseExtractor {
               {
                 type: 'text',
                 text: this.nodeTemplate.format({
-                  context: node.getContent(MetadataMode.ALL),
+                  context: node.getContent(),
                 }),
               },
             ],
