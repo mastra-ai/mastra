@@ -42,6 +42,28 @@ export abstract class MemoryProcessor extends MastraBase {
   }
 }
 
+export const memoryDefaultOptions = {
+  lastMessages: 40,
+  semanticRecall: {
+    topK: 2,
+    messageRange: {
+      before: 2,
+      after: 2,
+    },
+  },
+  threads: {
+    generateTitle: true,
+  },
+} satisfies MemoryConfig;
+
+const newMemoryDefaultOptions = {
+  lastMessages: 10,
+  semanticRecall: false,
+  threads: {
+    generateTitle: false,
+  },
+} satisfies MemoryConfig;
+
 /**
  * Abstract Memory class that defines the interface for storing and retrieving
  * conversation threads and messages.
@@ -54,13 +76,9 @@ export abstract class MastraMemory extends MastraBase {
   embedder?: EmbeddingModel<string>;
   private processors: MemoryProcessor[] = [];
 
-  protected threadConfig: MemoryConfig = {
-    lastMessages: 40,
-    semanticRecall: true,
-    threads: {
-      generateTitle: true, // TODO: should we disable this by default to reduce latency?
-    },
-  };
+  private deprecationWarnings: string[] = [];
+
+  protected threadConfig: MemoryConfig = { ...memoryDefaultOptions };
 
   constructor(config: { name: string } & SharedMemoryConfig) {
     super({ component: 'MEMORY', name: config.name });
@@ -101,24 +119,34 @@ export abstract class MastraMemory extends MastraBase {
       const newDb = 'memory.db';
 
       if (hasOldDb) {
-        this.logger.warn(
+        this.deprecationWarnings.push(
           `Found deprecated Memory vector db file ${oldDb} this db is now merged with the default ${newDb} file. Delete the old one to use the new one. You will need to migrate any data if that's important to you. For now the deprecated path will be used but in a future breaking change we will only use the new db file path.`,
         );
       }
 
-      setTimeout(() => {
-        this.logger?.warn(`
+      this.deprecationWarnings.push(`
+Default vector storage is deprecated in Mastra Memory.
+You're using it as an implicit default by not setting a vector store.
 
-The default vector storage is deprecated in Mastra Memory.
+Instead of this:
+export const agent = new Agent({
+  memory: new Memory({
+    options: { semanticRecall: true }
+  })
+})
 
+Do this:
 import { LibSQLVector } from '@mastra/libsql';
 
 export const agent = new Agent({
-  new Memory({ vector: new LibSQLVector({ connectionUrl: 'file:../memory.db' }) })
+  memory: new Memory({
+    options: { semanticRecall: true },
+    vector: new LibSQLVector({
+      connectionUrl: 'file:../memory.db'
+    })
+  })
 })
-  
 `);
-      }, 1000);
 
       this.vector = new DefaultVectorDB({
         connectionUrl: hasOldDb ? `file:${oldDb}` : `file:${newDb}`,
@@ -142,11 +170,94 @@ export const agent = new Agent({
     if (config.processors) {
       this.processors = config.processors;
     }
+
+    this.addImplicitDefaultsWarning(config);
+
+    if (this.deprecationWarnings.length > 0) {
+      setTimeout(() => {
+        this.logger?.warn(`
+
+!MEMORY DEPRECATION WARNING!
+${this.deprecationWarnings.map((w, i) => `${this.deprecationWarnings.length > 1 ? `Warning ${i + 1}:\n` : ``}${w}`).join(`\n\n`)}
+!END MEMORY DEPRECATION WARNING!
+
+`);
+      }, 1000);
+    }
+  }
+
+  // We're changing the implicit defaults from memoryDefaultOptions to newMemoryDefaultOptions so we need to log and let people know
+  private addImplicitDefaultsWarning(config: SharedMemoryConfig) {
+    const fromToPairs: {
+      key: keyof typeof memoryDefaultOptions;
+      from: unknown;
+      to: unknown;
+    }[] = [];
+
+    const indent = (s: string) => s.split(`\n`).join(`\n    `);
+    const format = (v: unknown) =>
+      typeof v === `object` && !Array.isArray(v) && v !== null
+        ? indent(JSON.stringify(v, null, 2).replaceAll(`"`, ``))
+        : v;
+
+    const options = config.options ?? {};
+
+    if (!(`lastMessages` in options))
+      fromToPairs.push({
+        key: 'lastMessages',
+        from: memoryDefaultOptions.lastMessages,
+        to: newMemoryDefaultOptions.lastMessages,
+      });
+
+    if (!(`semanticRecall` in options))
+      fromToPairs.push({
+        key: 'semanticRecall',
+        from: memoryDefaultOptions.semanticRecall,
+        to: newMemoryDefaultOptions.semanticRecall,
+      });
+
+    if (!(`threads` in options))
+      fromToPairs.push({
+        key: 'threads',
+        from: memoryDefaultOptions.threads,
+        to: newMemoryDefaultOptions.threads,
+      });
+
+    if (fromToPairs.length > 0) {
+      const currentDefaults = `{
+  options: {
+    ${fromToPairs.map(({ key, from }) => `${key}: ${format(from)}`).join(`,\n    `)}
+  }
+}`;
+      const upcomingDefaults = `{
+  options: {
+    ${fromToPairs.map(({ key, to }) => `${key}: ${format(to)}`).join(`,\n    `)}
+  }
+}`;
+
+      this.deprecationWarnings.push(`
+Your Mastra memory instance has the
+following implicit default options:
+
+new Memory(${currentDefaults})
+
+In the next release these implicit defaults
+will be changed to the following default settings:
+
+new Memory(${upcomingDefaults})
+
+To keep your defaults as they are, add
+them directly into your Memory configuration,
+otherwise please add the new settings to
+your memory config to prepare for the change.
+--> This breaking change will be released on May 20th <--
+`);
+    }
   }
 
   public setStorage(storage: MastraStorage) {
     if (storage instanceof DefaultProxyStorage) {
-      this.logger?.warn(`Importing "DefaultStorage" from '@mastra/core/storage/libsql' is deprecated.
+      this.deprecationWarnings.push(`Importing "DefaultStorage" from '@mastra/core/storage/libsql' is deprecated.
 
 Instead of:
   import { DefaultStorage } from '@mastra/core/storage/libsql';

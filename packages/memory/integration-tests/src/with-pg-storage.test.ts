@@ -36,6 +36,9 @@ describe('Memory with PostgresStore Integration', () => {
         topK: 3,
         messageRange: 2,
       },
+      threads: {
+        generateTitle: false,
+      },
     },
   });
 

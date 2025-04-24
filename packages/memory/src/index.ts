@@ -1,4 +1,4 @@
-import { deepMerge } from '@mastra/core';
+import { deepMerge, memoryDefaultOptions } from '@mastra/core';
 import type { AiMessageType, CoreMessage, CoreTool } from '@mastra/core';
 import { MastraMemory } from '@mastra/core/memory';
 import type { MessageType, MemoryConfig, SharedMemoryConfig, StorageThreadType } from '@mastra/core/memory';
@@ -66,15 +66,18 @@ export class Memory extends MastraMemory {
 
     const config = this.getMergedThreadConfig(threadConfig || {});
 
+    const defaultRange = memoryDefaultOptions.semanticRecall.messageRange;
+    const defaultTopK = memoryDefaultOptions.semanticRecall.topK;
+
     const vectorConfig =
       typeof config?.semanticRecall === `boolean`
         ? {
-            topK: 2,
-            messageRange: { before: 2, after: 2 },
+            topK: defaultTopK,
+            messageRange: defaultRange,
           }
         : {
-            topK: config?.semanticRecall?.topK ?? 2,
-            messageRange: config?.semanticRecall?.messageRange ?? { before: 2, after: 2 },
+            topK: config?.semanticRecall?.topK ?? defaultTopK,
+            messageRange: config?.semanticRecall?.messageRange ?? defaultRange,
           };
 
     if (config?.semanticRecall && selectBy?.vectorSearchString && this.vector && !!selectBy.vectorSearchString) {
