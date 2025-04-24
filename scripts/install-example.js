@@ -1,6 +1,6 @@
 import { spawn as nodeSpawn } from 'child_process';
-import { link, readFileSync } from 'fs';
-import { dirname, resolve } from 'path';
+import { readFileSync } from 'fs';
+import { dirname, join } from 'path';
 import { fileURLToPath } from 'url';
 
 /**
@@ -76,6 +76,15 @@ function findLinkedDependencies(dir, protocol = 'link:') {
       }
     }
 
+    // Check overrides
+    if (packageJson.pnpm?.overrides) {
+      for (const [name, version] of Object.entries(packageJson.pnpm.overrides)) {
+        if (typeof version === 'string' && version.startsWith(protocol)) {
+          linkedDependencies[name] = version;
+        }
+      }
+    }
+
     return linkedDependencies;
   } catch (error) {
     console.error('Error reading package.json:', error);
@@ -88,23 +97,46 @@ const linkedDeps = Object.keys(findLinkedDependencies('.'));
 
 console.log('Found linked dependencies:', linkedDeps);
 
+const repoRoot = dirname(join(fileURLToPath(import.meta.url), '..'));
+await spawn(`pnpm`, ['install', '-w'], {
+  cwd: repoRoot,
+  shell: true,
+  stdio: 'inherit',
+});
+
+const resolveFrom = (await import('resolve-from')).default;
+
 const depsToInstall = new Set(linkedDeps);
 for (const dep of linkedDeps) {
-  const depDir = dirname(fileURLToPath(import.meta.resolve(`${dep}/package.json`)));
+  const depDir = dirname(resolveFrom(process.cwd(), `${dep}/package.json`));
   const depDeps = findLinkedDependencies(depDir, 'workspace:');
   for (const depDep of Object.keys(depDeps)) {
     depsToInstall.add(depDep);
   }
 }
-await spawn(`pnpm`, ['install', ...[...depsToInstall].map(dep => `--filter ${dep}`)], {
-  cwd: resolve(process.cwd(), '..', '..'),
-  shell: true,
-  stdio: 'inherit',
-});
+if (depsToInstall.size > 0) {
+  console.log(
+    'Installing dependencies:',
+    [...depsToInstall],
+    ['pnpm', 'install', ...[...depsToInstall].map(dep => `--filter ${dep}`)].join(' '),
+  );
 
-await spawn(`pnpm`, ['dlx', 'turbo', 'build', ...linkedDeps.map(dep => `--filter ${dep}`)], {
-  cwd: resolve(process.cwd(), '..', '..'),
-  shell: true,
-  stdio: 'inherit',
-  env: process.env,
-});
+  await spawn(`pnpm`, ['install', ...[...depsToInstall].map(dep => `--filter=${dep}`)], {
+    cwd: repoRoot,
+    stdio: 'inherit',
+  });
+}
+console.log(linkedDeps);
+if (linkedDeps.length > 0) {
+  console.log(
+    'Building dependencies:',
+    ['pnpm', 'dlx', 'turbo', 'build', ...linkedDeps.map(dep => `--filter=${dep}`)].join(' '),
+  );
+
+  await spawn(`pnpm`, ['dlx', 'turbo', 'build', ...linkedDeps.map(dep => `--filter=${dep}`)], {
+    cwd: repoRoot,
+    shell: true,
+    stdio: 'inherit',
+    env: process.env,
+  });
+}

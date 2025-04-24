@@ -114,24 +114,3 @@ async function fetchWeather(
   };
 }
 ```
-
-## Error Handling
-
-When working with runtime variables, it's important to handle potential errors:
-
-1. **Missing Variables**: Always check if required variables exist in the runtimeContext
-2. **Type Mismatches**: Use TypeScript's type system to catch type errors at compile time
-3. **Invalid Values**: Validate variable values before using them in your tools
-
-```typescript
-// Example of defensive programming with runtimeContext variables
-const temperatureUnit = runtimeContext.get("temperature-scale");
-if (!temperatureUnit) {
-  throw new Error("Temperature scale not configured in runtimeContext");
-}
-
-// Type guard for additional runtime safety
-if (temperatureUnit !== "celsius" && temperatureUnit !== "fahrenheit") {
-  throw new Error(`Invalid temperature unit: ${temperatureUnit}`);
-}
-```

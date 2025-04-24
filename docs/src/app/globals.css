@@ -157,11 +157,7 @@ article span.m-tag {
 }
 
 article a {
-  text-decoration: none;
-
-  &:hover {
-    text-decoration: underline;
-  }
+  text-underline-offset: 1px;
 }
 
 article strong > a {

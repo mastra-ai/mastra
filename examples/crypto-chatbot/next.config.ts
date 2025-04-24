@@ -1,8 +1,9 @@
 import type { NextConfig } from 'next';
+import { resolve } from 'path';
 
 const nextConfig: NextConfig = {
   /* config options here */
-  serverExternalPackages: ['@mastra/*', 'libsql', '@libsql/client'],
+  serverExternalPackages: ['@mastra/*'],
   experimental: {
     ppr: true,
   },
@@ -25,6 +26,11 @@ const nextConfig: NextConfig = {
     config.module = {
       ...config.module,
       noParse: [/onnxruntime-node/],
+    };
+
+    config.resolve.alias = {
+      ...config.resolve.alias,
+      '@libsql/client': resolve('./node_modules/@libsql/client'),
     };
 
     return config;

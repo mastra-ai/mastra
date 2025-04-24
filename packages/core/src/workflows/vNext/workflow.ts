@@ -201,7 +201,7 @@ export function createWorkflow<
   return new NewWorkflow(params);
 }
 
-export type WorkflowStatus<TOutput extends z.ZodType<any>, TSteps extends Step<string, any, any>[]> =
+export type WorkflowResult<TOutput extends z.ZodType<any>, TSteps extends Step<string, any, any>[]> =
   | {
       status: 'success';
       result: z.infer<TOutput>;
@@ -218,7 +218,7 @@ export type WorkflowStatus<TOutput extends z.ZodType<any>, TSteps extends Step<s
           ? StepResult<unknown>
           : StepResult<z.infer<NonNullable<StepsRecord<TSteps>[K]['outputSchema']>>>;
       };
-      error: string;
+      error: Error;
     }
   | {
       status: 'suspended';
@@ -263,6 +263,7 @@ export class NewWorkflow<
   public description?: string | undefined;
   public inputSchema: TInput;
   public outputSchema: TOutput;
+  public steps?: TSteps;
   protected stepFlow: StepFlowEntry[];
   protected executionEngine: ExecutionEngine;
   protected executionGraph: ExecutionGraph;
@@ -280,6 +281,7 @@ export class NewWorkflow<
     description,
     executionEngine,
     retryConfig,
+    steps,
   }: NewWorkflowConfig<TWorkflowId, TInput, TOutput, TSteps>) {
     super({ name: id, component: RegisteredLogger.WORKFLOW });
     this.id = id;
@@ -290,6 +292,7 @@ export class NewWorkflow<
     this.executionGraph = this.buildExecutionGraph();
     this.stepFlow = [];
     this.#mastra = mastra;
+    this.steps = steps;
 
     if (!executionEngine) {
       // TODO: this should be configured using the Mastra class instance that's passed in
@@ -523,7 +526,7 @@ export class NewWorkflow<
     return this as unknown as NewWorkflow<TSteps, TWorkflowId, TInput, TOutput, TOutput>;
   }
 
-  get steps() {
+  get stepGraph() {
     return this.stepFlow;
   }
 
@@ -595,7 +598,7 @@ export class NewWorkflow<
     }
 
     if (res.status === 'failed') {
-      throw new Error(res.error);
+      throw res.error;
     }
 
     return res.status === 'success' ? res.result : undefined;
@@ -613,7 +616,7 @@ export class NewWorkflow<
 
   async getWorkflowRun(runId: string) {
     const runs = await this.getWorkflowRuns();
-    return runs.runs.find(r => r.runId === runId);
+    return runs?.runs.find(r => r.runId === runId);
   }
 }
 
@@ -692,8 +695,8 @@ export class Run<
   }: {
     inputData?: z.infer<TInput>;
     runtimeContext?: RuntimeContext;
-  }): Promise<WorkflowStatus<TOutput, TSteps>> {
-    return this.executionEngine.execute<z.infer<TInput>, WorkflowStatus<TOutput, TSteps>>({
+  }): Promise<WorkflowResult<TOutput, TSteps>> {
+    return this.executionEngine.execute<z.infer<TInput>, WorkflowResult<TOutput, TSteps>>({
       workflowId: this.workflowId,
       runId: this.runId,
       graph: this.executionGraph,
@@ -747,7 +750,7 @@ export class Run<
       | string
       | string[];
     runtimeContext?: RuntimeContext;
-  }): Promise<WorkflowStatus<TOutput, TSteps>> {
+  }): Promise<WorkflowResult<TOutput, TSteps>> {
     const steps: string[] = (Array.isArray(params.step) ? params.step : [params.step]).map(step =>
       typeof step === 'string' ? step : step?.id,
     );
@@ -756,7 +759,7 @@ export class Run<
       runId: this.runId,
     });
 
-    return this.executionEngine.execute<z.infer<TInput>, WorkflowStatus<TOutput, TSteps>>({
+    return this.executionEngine.execute<z.infer<TInput>, WorkflowResult<TOutput, TSteps>>({
       workflowId: this.workflowId,
       runId: this.runId,
       graph: this.executionGraph,

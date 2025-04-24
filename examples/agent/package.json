@@ -5,6 +5,22 @@
   "description": "",
   "main": "index.js",
   "version": "0.0.1",
+  "dependencies": {
+    "@ai-sdk/openai": "latest",
+    "@mastra/core": "latest",
+    "@mastra/voice-openai": "latest",
+    "@mastra/memory": "latest",
+    "@mastra/client-js": "latest",
+    "zod": "^3.24.2"
+  },
+  "pnpm": {
+    "overrides": {
+      "@mastra/core": "link:../../packages/core",
+      "@mastra/voice-openai": "link:../../voice/openai",
+      "@mastra/memory": "link:../../packages/memory",
+      "@mastra/client-js": "link:../../client-sdks/client-js"
+    }
+  },
   "scripts": {
     "start-deployed": "npx bun src/with-deployed.ts",
     "start": "npx bun src/index.ts"
@@ -12,12 +28,5 @@
   "keywords": [],
   "author": "",
   "license": "MIT",
-  "dependencies": {
-    "@ai-sdk/openai": "latest",
-    "@mastra/core": "workspace:*",
-    "@mastra/voice-openai": "workspace:*",
-    "@mastra/memory": "workspace:*",
-    "@mastra/client-js": "workspace:*",
-    "zod": "^3.24.2"
-  }
+  "packageManager": "pnpm@10.9.0+sha512.0486e394640d3c1fb3c9d43d49cf92879ff74f8516959c235308f5a8f62e2e19528a65cdc2a3058f587cde71eba3d5b56327c8c33a97e4c4051ca48a10ca2d5f"
 }

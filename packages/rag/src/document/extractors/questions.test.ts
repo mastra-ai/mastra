@@ -1,5 +1,5 @@
 import { createOpenAI } from '@ai-sdk/openai';
-import { TextNode } from 'llamaindex';
+import { TextNode } from '@llamaindex/core/schema';
 import { describe, it, expect, vi } from 'vitest';
 import { QuestionsAnsweredExtractor } from './questions';
 

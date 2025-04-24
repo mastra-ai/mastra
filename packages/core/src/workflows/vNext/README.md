@@ -176,7 +176,8 @@ const result = await workflow.createRun().start({ inputData: {} });
 if (result.status === 'success') {
   console.log(result.result); // only exists if status is success
 } else if (result.status === 'failed') {
-  console.error(result.error); // only exists if status is failed
+  console.error(result.error); // only exists if status is failed, this is an instance of Error
+  throw result.error;
 } else if (result.status === 'suspended') {
   console.log(result.suspended); // only exists if status is suspended
 }
@@ -331,7 +332,7 @@ const result = await run.start({ inputData: [{ value: 1 }, { value: 22 }, { valu
 if (result.status === 'success') {
   console.log(result.result); // only exists if status is success
 } else if (result.status === 'failed') {
-  console.error(result.error); // only exists if status is failed
+  console.error(result.error); // only exists if status is failed, this is an instance of Error
 }
 ```
 
@@ -486,7 +487,7 @@ if (result.status === 'success') {
     },
   });
 } else if (result.status === 'failed') {
-  console.error(result.error); // only exists if status is failed
+  console.error(result.error); // only exists if status is failed, this is an instance of Error
 }
 ```
 
@@ -495,22 +496,34 @@ if (result.status === 'success') {
 The result of running a workflow (either from `start()` or `resume()`) follows this TypeScript interface:
 
 ```typescript
-interface WorkflowExecutionResult<TOutput, TSteps> {
-  // The overall status of the workflow execution
-  status: 'success' | 'failed' | 'suspended';
-
-  // The final output of the workflow
-  result: TOutput;
-
-  // Array of step IDs that are currently suspended (only present if status is 'suspended')
-  suspended?: string[];
-
-  // Record of all step results, keyed by step ID
-  steps: Record<string, StepResult<any>>;
-
-  // Error message if the workflow failed
-  error?: string;
-}
+export type WorkflowResult<...> =
+  | {
+      status: 'success';
+      result: z.infer<TOutput>;
+      steps: {
+        [K in keyof StepsRecord<TSteps>]: StepsRecord<TSteps>[K]['outputSchema'] extends undefined
+          ? StepResult<unknown>
+          : StepResult<z.infer<NonNullable<StepsRecord<TSteps>[K]['outputSchema']>>>;
+      };
+    }
+  | {
+      status: 'failed';
+      steps: {
+        [K in keyof StepsRecord<TSteps>]: StepsRecord<TSteps>[K]['outputSchema'] extends undefined
+          ? StepResult<unknown>
+          : StepResult<z.infer<NonNullable<StepsRecord<TSteps>[K]['outputSchema']>>>;
+      };
+      error: Error;
+    }
+  | {
+      status: 'suspended';
+      steps: {
+        [K in keyof StepsRecord<TSteps>]: StepsRecord<TSteps>[K]['outputSchema'] extends undefined
+          ? StepResult<unknown>
+          : StepResult<z.infer<NonNullable<StepsRecord<TSteps>[K]['outputSchema']>>>;
+      };
+      suspended: [string[], ...string[][]];
+    };
 ```
 
 ### Result Properties Explained
@@ -531,7 +544,7 @@ interface WorkflowExecutionResult<TOutput, TSteps> {
    - Values are `StepResult` objects containing the step's output
    - Type-safe based on each step's `outputSchema`
 
-5. **error**: Optional error message present when `status` is `'failed'`
+5. **error**: Optional error object present when `status` is `'failed'`
 
 ### Example Usage
 
@@ -559,6 +572,7 @@ if (result.status === 'success') {
 } else if (result.status === 'failed') {
   // Workflow encountered an error
   console.error('Workflow failed:', result.error);
+  throw result.error;
 }
 ```
 

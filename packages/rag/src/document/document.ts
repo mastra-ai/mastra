@@ -1,7 +1,7 @@
-import { Document as Chunk, IngestionPipeline, NodeRelationship, ObjectType } from 'llamaindex';
+import type { BaseNode } from '@llamaindex/core/schema';
+import { Document as Chunk, NodeRelationship, ObjectType } from '@llamaindex/core/schema';
 
 import { TitleExtractor, SummaryExtractor, QuestionsAnsweredExtractor, KeywordExtractor } from './extractors';
-
 import { CharacterTransformer, RecursiveCharacterTransformer } from './transformers/character';
 import { HTMLHeaderTransformer, HTMLSectionTransformer } from './transformers/html';
 import { RecursiveJsonTransformer } from './transformers/json';
@@ -54,13 +54,10 @@ export class MDocument {
       );
     }
 
-    const pipeline = new IngestionPipeline({
-      transformations,
-    });
-
-    const nodes = await pipeline.run({
-      documents: this.chunks,
-    });
+    let nodes: BaseNode[] = this.chunks;
+    for (const transform of transformations) {
+      nodes = await transform(nodes);
+    }
 
     this.chunks = this.chunks.map((doc, i) => {
       return new Chunk({
