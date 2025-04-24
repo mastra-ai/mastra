@@ -1,7 +1,6 @@
 import { spawn as nodeSpawn } from 'child_process';
 import { readFileSync } from 'fs';
-import { dirname, join, resolve } from 'path';
-import resolveFrom from 'resolve-from';
+import { dirname, join } from 'path';
 import { fileURLToPath } from 'url';
 
 /**
@@ -104,6 +103,8 @@ await spawn(`pnpm`, ['install', '-w'], {
   shell: true,
   stdio: 'inherit',
 });
+
+const resolveFrom = (await import('resolve-from')).default;
 
 const depsToInstall = new Set(linkedDeps);
 for (const dep of linkedDeps) {
