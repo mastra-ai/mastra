@@ -121,7 +121,7 @@ if (depsToInstall.size > 0) {
     ['pnpm', 'install', ...[...depsToInstall].map(dep => `--filter ${dep}`)].join(' '),
   );
 
-  await spawn(`pnpm`, ['install'], {
+  await spawn(`pnpm`, ['install', ...[...depsToInstall].map(dep => `--filter=${dep}`)], {
     cwd: repoRoot,
     stdio: 'inherit',
   });
