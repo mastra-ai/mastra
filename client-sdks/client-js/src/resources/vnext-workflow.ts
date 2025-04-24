@@ -55,25 +55,23 @@ export class VNextWorkflow extends BaseResource {
 
   /**
    * Resumes a suspended vNext workflow step synchronously without waiting for the vNext workflow to complete
-   * @param stepId - ID of the step to resume
-   * @param runId - ID of the vNext workflow run
-   * @param context - Context to resume the vNext workflow with
+   * @param params - Object containing the runId, step, and resumeData
    * @returns Promise containing the vNext workflow resume results
    */
   resume({
-    stepId,
+    step,
     runId,
-    context,
+    resumeData,
   }: {
-    stepId: string;
+    step: string | string[];
     runId: string;
-    context: Record<string, any>;
+    resumeData?: Record<string, any>;
   }): Promise<{ message: string }> {
     return this.request(`/api/workflows/v-next/${this.workflowId}/resume?runId=${runId}`, {
       method: 'POST',
       body: {
-        stepId,
-        context,
+        step,
+        resumeData,
       },
     });
   }
@@ -98,19 +96,19 @@ export class VNextWorkflow extends BaseResource {
 
   /**
    * Resumes a suspended vNext workflow step asynchronously and returns a promise that resolves when the vNext workflow is complete
-   * @param params - Object containing the runId, stepId, and context
+   * @param params - Object containing the runId, step, and resumeData
    * @returns Promise containing the vNext workflow resume results
    */
   resumeAsync(params: {
     runId: string;
-    stepId: string;
-    context: Record<string, any>;
+    step: string | string[];
+    resumeData?: Record<string, any>;
   }): Promise<VNextWorkflowRunResult> {
     return this.request(`/api/workflows/v-next/${this.workflowId}/resume-async?runId=${params.runId}`, {
       method: 'POST',
       body: {
-        stepId: params.stepId,
-        context: params.context,
+        step: params.step,
+        resumeData: params.resumeData,
       },
     });
   }
