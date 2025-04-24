@@ -33,6 +33,7 @@
     "zod": "^3.24.2"
   },
   "devDependencies": {
+    "@libsql/client": "^0.15.4",
     "@types/js-yaml": "^4.0.9",
     "@types/node": "^20.17.24",
     "@types/react": "^19.0.10",
