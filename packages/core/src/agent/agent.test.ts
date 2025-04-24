@@ -388,6 +388,28 @@ describe('agent', () => {
     expect(sanitizedMessages).toHaveLength(2);
   });
 
+  it.only('should allow for runtime functions in instructions', async () => {
+    const runtimeFunctionAgent = new Agent({
+      name: 'Dynamic instructions agent',
+      instructions: (runtime) => {
+        return `Your name is ${runtime.get('name')}, you are to always respond with "Hello, my name is ${runtime.get('name')}"`;
+      },
+      model: openai('gpt-4o'),
+    });
+
+    const mastra = new Mastra({
+      agents: { runtimeFunctionAgent },
+    });
+
+    const agentOne = mastra.getAgent('runtimeFunctionAgent');
+
+    const { text } = await agentOne.generate('Hi, what is your name?', {
+      runtimeContext: new RuntimeContext([['name', 'John Doe']]),
+    });
+
+    expect(text).toContain('John Doe');
+  });
+
   describe('voice capabilities', () => {
     class MockVoice extends MastraVoice {
       async speak(): Promise<NodeJS.ReadableStream> {

@@ -39,6 +39,7 @@ import type {
   AgentGenerateOptions,
   AgentStreamOptions,
   AiMessageType,
+  InstructionsStringOrRuntimeFunction,
   MastraLanguageModel,
   ToolsetsInput,
   ToolsInput,
@@ -58,7 +59,7 @@ export class Agent<
   public id: TAgentId;
   public name: TAgentId;
   readonly llm: MastraLLMBase;
-  instructions: string;
+  instructions: InstructionsStringOrRuntimeFunction;
   readonly model?: MastraLanguageModel;
   #mastra?: Mastra;
   #memory?: MastraMemory;
@@ -133,7 +134,7 @@ export class Agent<
     return this.#memory ?? this.#mastra?.memory;
   }
 
-  __updateInstructions(newInstructions: string) {
+  __updateInstructions(newInstructions: InstructionsStringOrRuntimeFunction) {
     this.instructions = newInstructions;
     this.logger.debug(`[Agents:${this.name}] Instructions updated.`, { model: this.model, name: this.name });
   }
@@ -353,7 +354,6 @@ export class Agent<
         }>;
 
         toolCallIds = assistantToolCalls?.map(toolCall => toolCall.toolCallId);
-
         toolCallArgs = assistantToolCalls?.map(toolCall => toolCall.toolArgs);
         toolNames = assistantToolCalls?.map(toolCall => toolCall.toolName);
         type = assistantContent?.[0]?.type as 'text' | 'tool-call' | 'tool-result';
@@ -648,7 +648,7 @@ export class Agent<
   }
 
   __primitive({
-    instructions,
+    instructions: instructionsPrimitive,
     messages,
     context,
     threadId,
@@ -659,7 +659,7 @@ export class Agent<
     clientTools,
     runtimeContext,
   }: {
-    instructions?: string;
+    instructions?: InstructionsStringOrRuntimeFunction;
     toolsets?: ToolsetsInput;
     clientTools?: ToolsInput;
     resourceId?: string;
@@ -670,16 +670,18 @@ export class Agent<
     messages: CoreMessage[];
     runtimeContext: RuntimeContext;
   }) {
+    const instructionStringOrFunction = instructionsPrimitive || this.instructions;
+    const instructions = typeof instructionStringOrFunction === 'function' ? instructionStringOrFunction(runtimeContext) : instructionStringOrFunction;
+    const systemMessage: CoreMessage = {
+      role: 'system',
+      content: instructions,
+    };
+
     return {
       before: async () => {
         if (process.env.NODE_ENV !== 'test') {
           this.logger.debug(`[Agents:${this.name}] - Starting generation`, { runId });
         }
-
-        const systemMessage: CoreMessage = {
-          role: 'system',
-          content: instructions || `${this.instructions}.`,
-        };
 
         let coreMessages = messages;
         let threadIdToUse = threadId;
@@ -876,7 +878,7 @@ export class Agent<
               runId: runIdToUse,
               metric,
               agentName: this.name,
-              instructions: instructions || this.instructions,
+              instructions
             });
           }
         }

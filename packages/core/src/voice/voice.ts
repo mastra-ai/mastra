@@ -1,4 +1,4 @@
-import type { ToolsInput } from '../agent';
+import type { Instructions, ToolsInput } from '../agent';
 import { MastraBase } from '../base';
 import { InstrumentClass } from '../telemetry';
 
@@ -144,7 +144,7 @@ export abstract class MastraVoice<
    * Equip the voice provider with instructions
    * @param instructions Instructions to add
    */
-  addInstructions(_instructions?: string): void {
+  addInstructions(_instructions?: Instructions): void {
     // Default implementation - voice providers can override if they support this feature
   }
 

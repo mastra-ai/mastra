@@ -27,6 +27,8 @@ import type { CompositeVoice } from '../voice';
 
 export type { Message as AiMessageType } from 'ai';
 
+export type InstructionsStringOrRuntimeFunction = string | ((runtime: RuntimeContext) => string);
+
 export type ToolsInput = Record<string, ToolAction<any, any, any> | VercelTool>;
 
 export type ToolsetsInput = Record<string, ToolsInput>;
@@ -39,7 +41,7 @@ export interface AgentConfig<
   TMetrics extends Record<string, Metric> = Record<string, Metric>,
 > {
   name: TAgentId;
-  instructions: string;
+  instructions: InstructionsStringOrRuntimeFunction;
   model: MastraLanguageModel;
   defaultGenerateOptions?: AgentGenerateOptions;
   defaultStreamOptions?: AgentStreamOptions;
@@ -58,7 +60,7 @@ export interface AgentConfig<
  */
 export type AgentGenerateOptions<Z extends ZodSchema | JSONSchema7 | undefined = undefined> = {
   /** Optional instructions to override the agent's default instructions */
-  instructions?: string;
+  instructions?: string
   /** Additional tool sets that can be used for this generation */
   toolsets?: ToolsetsInput;
   clientTools?: ToolsInput;
@@ -91,7 +93,7 @@ export type AgentGenerateOptions<Z extends ZodSchema | JSONSchema7 | undefined =
  */
 export type AgentStreamOptions<Z extends ZodSchema | JSONSchema7 | undefined = undefined> = {
   /** Optional instructions to override the agent's default instructions */
-  instructions?: string;
+  instructions?: string
   /** Additional tool sets that can be used for this generation */
   toolsets?: ToolsetsInput;
   clientTools?: ToolsInput;
