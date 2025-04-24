@@ -1,36 +1,129 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# **Contributing to the Docs**
 
-## Getting Started
+Contributions to Mastra are welcome and highly appreciated.
+If you'd like to contribute, see our list of open issues. We also welcome you to open a PR or a new issue with your question.
 
-First, run the development server:
+The first step is to clone the Repo
+
+```bash
+git clone git@github.com:mastra-ai/mastra.git
+cd docs
+```
+
+## Environmental Variables
+
+Some features of the docs won't work unless you have private keys for these projects.
+These include:
+
+* posthog
+* form subscription
+* analytics
+* chatbot
+
+Copy the Env file:
+
+```bash
+cp .env.example .env
+```
+
+Fill out the environmental variables for the chatbot
+
+```bash
+OPENAI_API_KEY=
+MASTRA_AGENT_URL=
+NEXT_PUBLIC_COPILOT_KIT=
+```
+
+## Dev Preview
+
+Install the packages
+
+```bash
+npm i
+```
+
+> The docs have a separate `package.json` file and is not part of the workspace so please do not use
+`pnpm` or `yarn` to launch the docs.
+
+Run the appropriate CLI command in your terminal:
 
 ```bash
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+The docs will be served on `localhost:3000/docs`.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Search
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+Search is implemented with `pageFind` which indexes built `html` files. To get it to work, run:
 
-## Learn More
+```bash
+npm run build
+npm run dev
+```
 
-To learn more about Next.js, take a look at the following resources:
+## Making Changes
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+The Mastra docs use [MDX](https://mdxjs.com/).
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+Adding new conent requires:
 
-## Deploy on Vercel
+* YAML frontmatter
+* A navigation entry in a `meta.ts` file
+* Content for the docs
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+Frontmatter looks like this. title and description are mandatory.
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+```bash
+---
+title: "Introduction | Mastra Docs"
+description: "Mastra is a TypeScript agent framework. It helps you build AI applications and features quickly. It gives you the set of primitives you need: workflows, agents, RAG, integrations, syncs and evals."
+---
+````
+
+Navigation is defined in a relative `meta.ts` file. It modifies the title of the content in the sidebar
+
+```ts
+const meta = {
+  overview: "Overview",
+};
+
+export default meta;
+```
+
+### Components and elements
+
+Mastra is built on [Nextra](https://nextra.site/docs) and therefore we use custom components that `Nextra` provides which includes `callouts`, `Tabs` e.t.c
+
+You can find the full list [here](https://nextra.site/docs/built-ins)
+
+### Guidelines
+
+**Finding Something to Work On:**
+
+1. Check the open issues labeled 'documentation' or 'good first issue'.
+2. Identify areas that are unclear, missing, or incorrect.
+
+**Making Changes:**
+
+1. Create a new branch for your changes (`git checkout -b my-docs-update`).
+2. Make your desired edits to the documentation files (usually found in the `docs/en` directory).
+3. Commit your changes with clear and concise messages.
+
+**Style Guide:**
+
+1. Ensure your writing is clear, concise, and uses consistent formatting.
+
+**Submitting Changes:**
+
+1. Push your branch to your fork (`git push origin my-docs-update`).
+2. Open a Pull Request (PR) against the main repository's `main` branch.
+3. Clearly describe the changes you've made in the PR description.
+
+**Review Process:**
+
+1. Maintainers will review your PR.
+2. Address any feedback or requested changes.
+3. Once approved, your changes will be merged.
+
+We appreciate your contributions to improving our documentation.
