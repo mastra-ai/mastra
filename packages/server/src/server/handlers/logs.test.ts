@@ -15,10 +15,14 @@ type MockedLogger = {
 
 function createLog(args: Partial<BaseLogMessage>): BaseLogMessage {
   return {
-    message: 'test log',
+    msg: 'test log',
     level: 0,
     time: new Date(),
     ...args,
+    pid: 1,
+    hostname: 'test-host',
+    name: 'test-name',
+    runId: 'test-run',
   };
 }
 

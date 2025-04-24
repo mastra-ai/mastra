@@ -20,7 +20,7 @@ export type OperatorType =
 type FilterOperator = {
   sql: string;
   needsValue: boolean;
-  transformValue?: (value: any) => any;
+  transformValue?: () => any;
 };
 
 type OperatorFn = (key: string, paramIndex: number, value?: any) => FilterOperator;
@@ -103,11 +103,29 @@ export const FILTER_OPERATORS: Record<string, OperatorFn> = {
 
   // Array Operators
   $in: (key, paramIndex) => ({
-    sql: `metadata#>>'{${handleKey(key)}}' = ANY($${paramIndex}::text[])`,
+    sql: `(
+      CASE
+        WHEN jsonb_typeof(metadata->'${handleKey(key)}') = 'array' THEN
+          EXISTS (
+            SELECT 1 FROM jsonb_array_elements_text(metadata->'${handleKey(key)}') as elem
+            WHERE elem = ANY($${paramIndex}::text[])
+          )
+        ELSE metadata#>>'{${handleKey(key)}}' = ANY($${paramIndex}::text[])
+      END
+    )`,
     needsValue: true,
   }),
   $nin: (key, paramIndex) => ({
-    sql: `metadata#>>'{${handleKey(key)}}' != ALL($${paramIndex}::text[])`,
+    sql: `(
+      CASE
+        WHEN jsonb_typeof(metadata->'${handleKey(key)}') = 'array' THEN
+          NOT EXISTS (
+            SELECT 1 FROM jsonb_array_elements_text(metadata->'${handleKey(key)}') as elem
+            WHERE elem = ANY($${paramIndex}::text[])
+          )
+        ELSE metadata#>>'{${handleKey(key)}}' != ALL($${paramIndex}::text[])
+      END
+    )`,
     needsValue: true,
   }),
   $all: (key, paramIndex) => ({
@@ -151,14 +169,33 @@ export const FILTER_OPERATORS: Record<string, OperatorFn> = {
     needsValue: true,
   }),
 
-  $contains: (key, paramIndex) => ({
-    sql: `metadata @> $${paramIndex}::jsonb`,
-    needsValue: true,
-    transformValue: value => {
-      const parts = key.split('.');
-      return JSON.stringify(parts.reduceRight((value, key) => ({ [key]: value }), value));
-    },
-  }),
+  $contains: (key, paramIndex, value: any) => {
+    let sql;
+    if (Array.isArray(value)) {
+      sql = `(metadata->'${handleKey(key)}') ?& $${paramIndex}`;
+    } else if (typeof value === 'string') {
+      sql = `metadata->>'${handleKey(key)}' ILIKE '%' || $${paramIndex} || '%'`;
+    } else {
+      sql = `metadata->>'${handleKey(key)}' = $${paramIndex}`;
+    }
+    return {
+      sql,
+      needsValue: true,
+      transformValue: () => (Array.isArray(value) ? value.map(String) : value),
+    };
+  },
+  /**
+   * $objectContains: Postgres-only operator for true JSONB object containment.
+   * Usage: { field: { $objectContains: { ...subobject } } }
+   */
+  // $objectContains: (key, paramIndex) => ({
+  //   sql: `metadata @> $${paramIndex}::jsonb`,
+  //   needsValue: true,
+  //   transformValue: value => {
+  //     const parts = key.split('.');
+  //     return JSON.stringify(parts.reduceRight((value, key) => ({ [key]: value }), value));
+  //   },
+  // }),
   $size: (key: string, paramIndex: number) => ({
     sql: `(
       CASE
@@ -220,9 +257,7 @@ export function buildFilterQuery(filter: VectorFilter, minScore: number): Filter
     const operatorFn = FILTER_OPERATORS[operator as string]!;
     const operatorResult = operatorFn(key, values.length + 1, operatorValue);
     if (operatorResult.needsValue) {
-      const transformedValue = operatorResult.transformValue
-        ? operatorResult.transformValue(operatorValue)
-        : operatorValue;
+      const transformedValue = operatorResult.transformValue ? operatorResult.transformValue() : operatorValue;
       if (Array.isArray(transformedValue) && operator === '$elemMatch') {
         values.push(...transformedValue);
       } else {

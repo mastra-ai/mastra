@@ -147,6 +147,9 @@ export const createMastraProject = async ({
   s.start('Installing @mastra/core');
   await installMastraDependency(pm, '@mastra/core', versionTag, false, timeout);
   s.stop('@mastra/core installed');
+  s.start('Installing @mastra/libsql');
+  await installMastraDependency(pm, '@mastra/libsql', versionTag, false, timeout);
+  s.stop('@mastra/libsql installed');
 
   s.start('Adding .gitignore');
   await exec(`echo output.txt >> .gitignore`);

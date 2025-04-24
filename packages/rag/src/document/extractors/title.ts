@@ -1,13 +1,13 @@
-import type { MastraLanguageModel } from '@mastra/core/agent';
 import {
-  PromptTemplate,
   defaultTitleCombinePromptTemplate,
   defaultTitleExtractorPromptTemplate,
-  MetadataMode,
-  TextNode,
-  BaseExtractor,
-} from 'llamaindex';
-import type { TitleCombinePrompt, TitleExtractorPrompt, BaseNode } from 'llamaindex';
+  PromptTemplate,
+} from '@llamaindex/core/prompts';
+import type { TitleCombinePrompt, TitleExtractorPrompt } from '@llamaindex/core/prompts';
+import { MetadataMode, TextNode } from '@llamaindex/core/schema';
+import type { BaseNode } from '@llamaindex/core/schema';
+import type { MastraLanguageModel } from '@mastra/core/agent';
+import { BaseExtractor } from './base';
 import { baseLLM } from './types';
 import type { TitleExtractorsArgs } from './types';
 

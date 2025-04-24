@@ -27,7 +27,9 @@ export const AgentChat = ({
       modelSettings={modelSettings}
       chatWithGenerate={chatWithGenerate}
     >
-      <Thread memory={memory} />
+      <div className="h-full pb-4">
+        <Thread />
+      </div>
     </MastraRuntimeProvider>
   );
 };

@@ -1,6 +1,6 @@
 {
   "name": "@mastra/rag",
-  "version": "0.1.19-alpha.7",
+  "version": "0.1.20-alpha.0",
   "description": "",
   "type": "module",
   "main": "dist/index.js",
@@ -30,7 +30,7 @@
     "@mastra/core": "workspace:^",
     "@paralleldrive/cuid2": "^2.2.2",
     "js-tiktoken": "^1.0.19",
-    "llamaindex": "^0.9.17",
+    "@llamaindex/core": "0.5.5",
     "node-html-better-parser": "^1.4.7",
     "pathe": "^2.0.3",
     "zod": "^3.24.2"

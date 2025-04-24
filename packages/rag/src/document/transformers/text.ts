@@ -1,4 +1,4 @@
-import { Document } from 'llamaindex';
+import { Document } from '@llamaindex/core/schema';
 
 import type { ChunkOptions } from '../types';
 
