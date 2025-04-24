@@ -116,9 +116,6 @@ importers:
       wrangler:
         specifier: ^4.4.0
         version: 4.4.0(@cloudflare/workers-types@4.20250417.0)(bufferutil@4.0.9)(utf-8-validate@6.0.5)
-      zod:
-        specifier: ^3.24.2
-        version: 3.24.3
     devDependencies:
       '@internal/lint':
         specifier: workspace:*
@@ -144,6 +141,9 @@ importers:
       vitest:
         specifier: ^3.0.9
         version: 3.0.9(@edge-runtime/vm@3.2.0)(@types/debug@4.1.12)(@types/node@20.17.30)(jiti@2.4.2)(jsdom@26.0.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))(lightningcss@1.29.2)(terser@5.39.0)(tsx@4.19.3)(yaml@2.7.0)
+      zod:
+        specifier: ^3.24.2
+        version: 3.24.3
 
   deployers/netlify:
     dependencies:
@@ -162,9 +162,6 @@ importers:
       netlify-cli:
         specifier: ^19.0.3
         version: 19.0.3(@azure/cosmos@4.2.0)(@azure/identity@4.8.0)(@swc/core@1.11.10(@swc/helpers@0.5.15))(@types/express@4.17.21)(@types/node@20.17.30)(@upstash/redis@1.34.5)(bufferutil@4.0.9)(encoding@0.1.13)(picomatch@4.0.2)(rollup@4.36.0)(utf-8-validate@6.0.5)
-      zod:
-        specifier: ^3.24.2
-        version: 3.24.3
     devDependencies:
       '@internal/lint':
         specifier: workspace:*
@@ -190,6 +187,9 @@ importers:
       vitest:
         specifier: ^3.0.9
         version: 3.0.9(@edge-runtime/vm@3.2.0)(@types/debug@4.1.12)(@types/node@20.17.30)(jiti@2.4.2)(jsdom@26.0.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))(lightningcss@1.29.2)(terser@5.39.0)(tsx@4.19.3)(yaml@2.7.0)
+      zod:
+        specifier: ^3.24.2
+        version: 3.24.3
 
   deployers/vercel:
     dependencies:
@@ -336,9 +336,6 @@ importers:
       ts-to-zod:
         specifier: ^3.15.0
         version: 3.15.0
-      zod:
-        specifier: ^3.24.2
-        version: 3.24.3
     devDependencies:
       '@internal/lint':
         specifier: workspace:*
@@ -391,6 +388,9 @@ importers:
       typescript:
         specifier: ^5.7.3
         version: 5.8.2
+      zod:
+        specifier: ^3.24.2
+        version: 3.24.3
 
   integrations/github:
     dependencies:
@@ -400,9 +400,6 @@ importers:
       ts-to-zod:
         specifier: ^3.15.0
         version: 3.15.0
-      zod:
-        specifier: ^3.24.2
-        version: 3.24.3
     devDependencies:
       '@internal/lint':
         specifier: workspace:*
@@ -458,6 +455,9 @@ importers:
       typescript:
         specifier: ^5.7.3
         version: 5.8.2
+      zod:
+        specifier: ^3.24.2
+        version: 3.24.3
 
   integrations/mem0:
     dependencies:
@@ -467,9 +467,6 @@ importers:
       mem0ai:
         specifier: ^2.1.2
         version: 2.1.11(@anthropic-ai/sdk@0.32.1(encoding@0.1.13))(@qdrant/js-client-rest@1.13.0(typescript@5.8.2))(@supabase/supabase-js@2.49.3(bufferutil@4.0.9)(utf-8-validate@6.0.5))(@types/jest@29.5.14)(@types/pg@8.11.11)(@types/sqlite3@3.1.11)(encoding@0.1.13)(groq-sdk@0.8.0(encoding@0.1.13))(ollama@0.5.14)(pg@8.14.0)(redis@4.7.0)(sqlite3@5.1.7)
-      zod:
-        specifier: ^3.24.0
-        version: 3.24.3
     devDependencies:
       '@internal/lint':
         specifier: workspace:*
@@ -498,6 +495,9 @@ importers:
       vitest:
         specifier: ^3.0.9
         version: 3.0.9(@edge-runtime/vm@3.2.0)(@types/debug@4.1.12)(@types/node@20.17.30)(jiti@2.4.2)(jsdom@26.0.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))(lightningcss@1.29.2)(terser@5.39.0)(tsx@4.19.3)(yaml@2.7.0)
+      zod:
+        specifier: ^3.24.0
+        version: 3.24.3
 
   integrations/ragie:
     dependencies:
@@ -507,9 +507,6 @@ importers:
       ts-to-zod:
         specifier: ^3.15.0
         version: 3.15.0
-      zod:
-        specifier: ^3.24.2
-        version: 3.24.3
     devDependencies:
       '@jest/globals':
         specifier: ^29.7.0
@@ -556,6 +553,9 @@ importers:
       typescript:
         specifier: ^5.7.3
         version: 5.8.2
+      zod:
+        specifier: ^3.24.2
+        version: 3.24.3
 
   packages/_config:
     dependencies:
@@ -643,9 +643,6 @@ importers:
       yocto-spinner:
         specifier: ^0.1.2
         version: 0.1.2
-      zod:
-        specifier: ^3.24.2
-        version: 3.24.3
       zod-to-json-schema:
         specifier: ^3.24.3
         version: 3.24.5(zod@3.24.3)
@@ -701,6 +698,9 @@ importers:
       vitest:
         specifier: ^3.0.9
         version: 3.0.9(@edge-runtime/vm@3.2.0)(@types/debug@4.1.12)(@types/node@20.17.30)(jiti@2.4.2)(jsdom@26.0.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))(lightningcss@1.29.2)(terser@5.39.0)(tsx@4.19.3)(yaml@2.7.0)
+      zod:
+        specifier: ^3.24.2
+        version: 3.24.3
 
   packages/cli/src/playground:
     dependencies:
@@ -1169,9 +1169,6 @@ importers:
       typescript-paths:
         specifier: ^1.5.1
         version: 1.5.1(typescript@5.8.2)
-      zod:
-        specifier: ^3.24.2
-        version: 3.24.3
     devDependencies:
       '@hono/node-server':
         specifier: ^1.13.8
@@ -1227,6 +1224,9 @@ importers:
       vitest:
         specifier: ^2.1.9
         version: 2.1.9(@edge-runtime/vm@3.2.0)(@types/node@20.17.30)(jsdom@26.0.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))(lightningcss@1.29.2)(terser@5.39.0)
+      zod:
+        specifier: ^3.24.2
+        version: 3.24.3
       zod-to-json-schema:
         specifier: ^3.24.3
         version: 3.24.5(zod@3.24.3)
@@ -1251,9 +1251,6 @@ importers:
       string-similarity:
         specifier: ^4.0.4
         version: 4.0.4
-      zod:
-        specifier: ^3.24.2
-        version: 3.24.3
     devDependencies:
       '@ai-sdk/openai':
         specifier: latest
@@ -1297,6 +1294,9 @@ importers:
       vitest:
         specifier: ^3.0.9
         version: 3.0.9(@edge-runtime/vm@3.2.0)(@types/debug@4.1.12)(@types/node@20.17.30)(jiti@2.4.2)(jsdom@26.0.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))(lightningcss@1.29.2)(terser@5.39.0)(tsx@4.19.3)(yaml@2.7.0)
+      zod:
+        specifier: ^3.24.2
+        version: 3.24.3
 
   packages/loggers:
     devDependencies:
@@ -1400,9 +1400,6 @@ importers:
       uuid:
         specifier: ^11.1.0
         version: 11.1.0
-      zod:
-        specifier: ^3.22.4
-        version: 3.24.3
       zod-to-json-schema:
         specifier: ^3.22.4
         version: 3.24.5(zod@3.24.3)
@@ -1449,6 +1446,9 @@ importers:
       vitest:
         specifier: ^3.0.9
         version: 3.0.9(@edge-runtime/vm@3.2.0)(@types/debug@4.1.12)(@types/node@20.17.30)(jiti@2.4.2)(jsdom@26.0.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))(lightningcss@1.29.2)(terser@5.39.0)(tsx@4.19.3)(yaml@2.7.0)
+      zod:
+        specifier: ^3.22.4
+        version: 3.24.3
 
   packages/mcp-registry-registry:
     dependencies:
@@ -1461,9 +1461,6 @@ importers:
       uuid:
         specifier: ^11.1.0
         version: 11.1.0
-      zod:
-        specifier: ^3.22.4
-        version: 3.24.3
       zod-to-json-schema:
         specifier: ^3.22.4
         version: 3.24.5(zod@3.24.3)
@@ -1504,6 +1501,9 @@ importers:
       vitest:
         specifier: ^3.0.9
         version: 3.0.9(@edge-runtime/vm@3.2.0)(@types/debug@4.1.12)(@types/node@20.17.30)(jiti@2.4.2)(jsdom@26.0.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))(lightningcss@1.29.2)(terser@5.39.0)(tsx@4.19.3)(yaml@2.7.0)
+      zod:
+        specifier: ^3.22.4
+        version: 3.24.3
 
   packages/memory:
     dependencies:
@@ -1531,9 +1531,6 @@ importers:
       xxhash-wasm:
         specifier: ^1.1.0
         version: 1.1.0
-      zod:
-        specifier: ^3.24.2
-        version: 3.24.3
     devDependencies:
       '@ai-sdk/openai':
         specifier: ^1.3.3
@@ -1568,6 +1565,9 @@ importers:
       vitest:
         specifier: ^3.0.9
         version: 3.0.9(@edge-runtime/vm@3.2.0)(@types/debug@4.1.12)(@types/node@20.17.30)(jiti@2.4.2)(jsdom@26.0.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))(lightningcss@1.29.2)(terser@5.39.0)(tsx@4.19.3)(yaml@2.7.0)
+      zod:
+        specifier: ^3.24.2
+        version: 3.24.3
 
   packages/memory/integration-tests:
     dependencies:
@@ -1595,9 +1595,6 @@ importers:
       dotenv:
         specifier: ^16.4.7
         version: 16.4.7
-      zod:
-        specifier: ^3.24.2
-        version: 3.24.3
     devDependencies:
       '@faker-js/faker':
         specifier: ^9.6.0
@@ -1632,6 +1629,9 @@ importers:
       vitest:
         specifier: ^1.6.1
         version: 1.6.1(@edge-runtime/vm@3.2.0)(@types/node@20.17.30)(jsdom@26.0.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))(lightningcss@1.29.2)(terser@5.39.0)
+      zod:
+        specifier: ^3.24.2
+        version: 3.24.3
 
   packages/playground-ui:
     dependencies:
@@ -1809,9 +1809,6 @@ importers:
       use-debounce:
         specifier: ^10.0.4
         version: 10.0.4(react@19.1.0)
-      zod:
-        specifier: ^3.24.2
-        version: 3.24.3
       zustand:
         specifier: ^5.0.3
         version: 5.0.3(@types/react@19.0.10)(react@19.1.0)(use-sync-external-store@1.4.0(react@19.1.0))
@@ -1861,6 +1858,9 @@ importers:
       vite-plugin-lib-inject-css:
         specifier: ^2.2.1
         version: 2.2.1(vite@5.4.15(@types/node@20.17.30)(lightningcss@1.29.2)(terser@5.39.0))
+      zod:
+        specifier: ^3.24.2
+        version: 3.24.3
 
   packages/rag:
     dependencies:
@@ -1879,9 +1879,6 @@ importers:
       pathe:
         specifier: ^2.0.3
         version: 2.0.3
-      zod:
-        specifier: ^3.24.2
-        version: 3.24.3
     devDependencies:
       '@ai-sdk/cohere':
         specifier: latest
@@ -1919,6 +1916,9 @@ importers:
       vitest:
         specifier: ^3.0.9
         version: 3.0.9(@edge-runtime/vm@3.2.0)(@types/debug@4.1.12)(@types/node@20.17.30)(jiti@2.4.2)(jsdom@26.0.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))(lightningcss@1.29.2)(terser@5.39.0)(tsx@4.19.3)(yaml@2.7.0)
+      zod:
+        specifier: ^3.24.2
+        version: 3.24.3
 
   packages/server:
     devDependencies:
@@ -1961,9 +1961,6 @@ importers:
       microsoft-cognitiveservices-speech-sdk:
         specifier: ^1.43.0
         version: 1.43.0(bufferutil@4.0.9)(utf-8-validate@5.0.10)
-      zod:
-        specifier: ^3.24.2
-        version: 3.24.3
     devDependencies:
       '@internal/lint':
         specifier: workspace:*
@@ -1989,15 +1986,15 @@ importers:
       vitest:
         specifier: ^2.1.9
         version: 2.1.9(@edge-runtime/vm@3.2.0)(@types/node@20.17.30)(jsdom@26.0.0(bufferutil@4.0.9)(utf-8-validate@5.0.10))(lightningcss@1.29.2)(terser@5.39.0)
+      zod:
+        specifier: ^3.24.2
+        version: 3.24.3
 
   speech/deepgram:
     dependencies:
       '@deepgram/sdk':
         specifier: ^3.11.2
         version: 3.11.2(bufferutil@4.0.9)(encoding@0.1.13)(utf-8-validate@6.0.5)
-      zod:
-        specifier: ^3.24.2
-        version: 3.24.3
     devDependencies:
       '@internal/lint':
         specifier: workspace:*
@@ -2020,15 +2017,15 @@ importers:
       typescript:
         specifier: ^5.7.3
         version: 5.8.2
+      zod:
+        specifier: ^3.24.2
+        version: 3.24.3
 
   speech/elevenlabs:
     dependencies:
       elevenlabs:
         specifier: ^1.54.0
         version: 1.54.0(encoding@0.1.13)
-      zod:
-        specifier: ^3.24.2
-        version: 3.24.3
     devDependencies:
       '@internal/lint':
         specifier: workspace:*
@@ -2051,15 +2048,15 @@ importers:
       typescript:
         specifier: ^5.7.3
         version: 5.8.2
+      zod:
+        specifier: ^3.24.2
+        version: 3.24.3
 
   speech/google:
     dependencies:
       '@google-cloud/text-to-speech':
         specifier: ^6.0.1
         version: 6.0.1
-      zod:
-        specifier: ^3.24.2
-        version: 3.24.3
     devDependencies:
       '@internal/lint':
         specifier: workspace:*
@@ -2085,15 +2082,15 @@ importers:
       vitest:
         specifier: ^2.1.9
         version: 2.1.9(@edge-runtime/vm@3.2.0)(@types/node@20.17.30)(jsdom@26.0.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))(lightningcss@1.29.2)(terser@5.39.0)
+      zod:
+        specifier: ^3.24.2
+        version: 3.24.3
 
   speech/ibm:
     dependencies:
       ibm-watson:
         specifier: ^8.0.0
         version: 8.0.0
-      zod:
-        specifier: ^3.24.2
-        version: 3.24.3
     devDependencies:
       '@internal/lint':
         specifier: workspace:*
@@ -2119,15 +2116,15 @@ importers:
       vitest:
         specifier: ^2.1.9
         version: 2.1.9(@edge-runtime/vm@3.2.0)(@types/node@20.17.30)(jsdom@26.0.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))(lightningcss@1.29.2)(terser@5.39.0)
+      zod:
+        specifier: ^3.24.2
+        version: 3.24.3
 
   speech/murf:
     dependencies:
       ky:
         specifier: ^1.7.5
         version: 1.7.5
-      zod:
-        specifier: ^3.24.2
-        version: 3.24.3
     devDependencies:
       '@internal/lint':
         specifier: workspace:*
@@ -2150,15 +2147,15 @@ importers:
       typescript:
         specifier: ^5.7.3
         version: 5.8.2
+      zod:
+        specifier: ^3.24.2
+        version: 3.24.3
 
   speech/openai:
     dependencies:
       openai:
         specifier: ^4.89.0
         version: 4.94.0(encoding@0.1.13)(ws@8.18.1(bufferutil@4.0.9)(utf-8-validate@6.0.5))(zod@3.24.3)
-      zod:
-        specifier: ^3.24.2
-        version: 3.24.3
     devDependencies:
       '@internal/lint':
         specifier: workspace:*
@@ -2181,12 +2178,11 @@ importers:
       typescript:
         specifier: ^5.7.3
         version: 5.8.2
+      zod:
+        specifier: ^3.24.2
+        version: 3.24.3
 
   speech/playai:
-    dependencies:
-      zod:
-        specifier: ^3.24.2
-        version: 3.24.3
     devDependencies:
       '@internal/lint':
         specifier: workspace:*
@@ -2209,15 +2205,15 @@ importers:
       typescript:
         specifier: ^5.7.3
         version: 5.8.2
+      zod:
+        specifier: ^3.24.2
+        version: 3.24.3
 
   speech/replicate:
     dependencies:
       replicate:
         specifier: ^0.34.1
         version: 0.34.1
-      zod:
-        specifier: ^3.24.2
-        version: 3.24.3
     devDependencies:
       '@internal/lint':
         specifier: workspace:*
@@ -2243,15 +2239,15 @@ importers:
       vitest:
         specifier: ^2.1.9
         version: 2.1.9(@edge-runtime/vm@3.2.0)(@types/node@20.17.30)(jsdom@26.0.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))(lightningcss@1.29.2)(terser@5.39.0)
+      zod:
+        specifier: ^3.24.2
+        version: 3.24.3
 
   speech/speechify:
     dependencies:
       '@speechify/api-sdk':
         specifier: ^2.4.1
         version: 2.4.1
-      zod:
-        specifier: ^3.24.2
-        version: 3.24.3
     devDependencies:
       '@internal/lint':
         specifier: workspace:*
@@ -2274,6 +2270,9 @@ importers:
       typescript:
         specifier: ^5.7.3
         version: 5.8.2
+      zod:
+        specifier: ^3.24.2
+        version: 3.24.3
 
   stores/_test-utils:
     dependencies:
@@ -2740,9 +2739,6 @@ importers:
       cloudflare:
         specifier: ^4.2.0
         version: 4.2.0(encoding@0.1.13)
-      zod:
-        specifier: ^3.24.2
-        version: 3.24.3
     devDependencies:
       '@cloudflare/workers-types':
         specifier: ^4.20250321.0
@@ -2771,15 +2767,15 @@ importers:
       vitest:
         specifier: ^2.1.9
         version: 2.1.9(@edge-runtime/vm@3.2.0)(@types/node@20.17.30)(jsdom@26.0.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))(lightningcss@1.29.2)(terser@5.39.0)
+      zod:
+        specifier: ^3.24.2
+        version: 3.24.3
 
   voice/deepgram:
     dependencies:
       '@deepgram/sdk':
         specifier: ^3.11.2
         version: 3.11.2(bufferutil@4.0.9)(encoding@0.1.13)(utf-8-validate@6.0.5)
-      zod:
-        specifier: ^3.24.2
-        version: 3.24.3
     devDependencies:
       '@internal/lint':
         specifier: workspace:*
@@ -2805,15 +2801,15 @@ importers:
       vitest:
         specifier: ^2.1.9
         version: 2.1.9(@edge-runtime/vm@3.2.0)(@types/node@20.17.30)(jsdom@26.0.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))(lightningcss@1.29.2)(terser@5.39.0)
+      zod:
+        specifier: ^3.24.2
+        version: 3.24.3
 
   voice/elevenlabs:
     dependencies:
       elevenlabs:
         specifier: ^1.54.0
         version: 1.54.0(encoding@0.1.13)
-      zod:
-        specifier: ^3.24.2
-        version: 3.24.3
     devDependencies:
       '@internal/lint':
         specifier: workspace:*
@@ -2839,6 +2835,9 @@ importers:
       vitest:
         specifier: ^2.1.9
         version: 2.1.9(@edge-runtime/vm@3.2.0)(@types/node@20.17.30)(jsdom@26.0.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))(lightningcss@1.29.2)(terser@5.39.0)
+      zod:
+        specifier: ^3.24.2
+        version: 3.24.3
 
   voice/google:
     dependencies:
@@ -2848,9 +2847,6 @@ importers:
       '@google-cloud/text-to-speech':
         specifier: ^6.0.1
         version: 6.0.1
-      zod:
-        specifier: ^3.24.2
-        version: 3.24.3
     devDependencies:
       '@internal/lint':
         specifier: workspace:*
@@ -2873,15 +2869,15 @@ importers:
       vitest:
         specifier: ^2.1.9
         version: 2.1.9(@edge-runtime/vm@3.2.0)(@types/node@20.17.30)(jsdom@26.0.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))(lightningcss@1.29.2)(terser@5.39.0)
+      zod:
+        specifier: ^3.24.2
+        version: 3.24.3
 
   voice/murf:
     dependencies:
       ky:
         specifier: ^1.7.5
         version: 1.7.5
-      zod:
-        specifier: ^3.24.2
-        version: 3.24.3
     devDependencies:
       '@internal/lint':
         specifier: workspace:*
@@ -2907,6 +2903,9 @@ importers:
       vitest:
         specifier: ^2.1.9
         version: 2.1.9(@edge-runtime/vm@3.2.0)(@types/node@20.17.30)(jsdom@26.0.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))(lightningcss@1.29.2)(terser@5.39.0)
+      zod:
+        specifier: ^3.24.2
+        version: 3.24.3
 
   voice/openai:
     dependencies:
@@ -2983,10 +2982,6 @@ importers:
         version: 2.1.9(@edge-runtime/vm@3.2.0)(@types/node@20.17.30)(jsdom@26.0.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))(lightningcss@1.29.2)(terser@5.39.0)
 
   voice/playai:
-    dependencies:
-      zod:
-        specifier: ^3.24.2
-        version: 3.24.3
     devDependencies:
       '@internal/lint':
         specifier: workspace:*
@@ -3012,12 +3007,11 @@ importers:
       vitest:
         specifier: ^2.1.9
         version: 2.1.9(@edge-runtime/vm@3.2.0)(@types/node@20.17.30)(jsdom@26.0.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))(lightningcss@1.29.2)(terser@5.39.0)
+      zod:
+        specifier: ^3.24.2
+        version: 3.24.3
 
   voice/sarvam:
-    dependencies:
-      zod:
-        specifier: ^3.24.2
-        version: 3.24.3
     devDependencies:
       '@internal/lint':
         specifier: workspace:*
@@ -3043,15 +3037,15 @@ importers:
       vitest:
         specifier: ^2.1.9
         version: 2.1.9(@edge-runtime/vm@3.2.0)(@types/node@20.17.30)(jsdom@26.0.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))(lightningcss@1.29.2)(terser@5.39.0)
+      zod:
+        specifier: ^3.24.2
+        version: 3.24.3
 
   voice/speechify:
     dependencies:
       '@speechify/api-sdk':
         specifier: ^2.4.1
         version: 2.4.1
-      zod:
-        specifier: ^3.24.2
-        version: 3.24.3
     devDependencies:
       '@internal/lint':
         specifier: workspace:*
@@ -3077,6 +3071,9 @@ importers:
       vitest:
         specifier: ^2.1.9
         version: 2.1.9(@edge-runtime/vm@3.2.0)(@types/node@20.17.30)(jsdom@26.0.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))(lightningcss@1.29.2)(terser@5.39.0)
+      zod:
+        specifier: ^3.24.2
+        version: 3.24.3
 
 packages:
 
@@ -24539,7 +24536,7 @@ snapshots:
       '@types/node': 20.17.30
     optional: true
 
-  '@typescript-eslint/eslint-plugin@5.62.0(@typescript-eslint/parser@5.62.0(eslint@9.23.0(jiti@2.4.2))(typescript@5.8.2))(eslint@9.23.0(jiti@2.4.2))(typescript@5.8.2)':
+  '@typescript-eslint/eslint-plugin@5.62.0(@typescript-eslint/parser@5.62.0(eslint@8.57.1)(typescript@5.8.2))(eslint@8.57.1)(typescript@5.8.2)':
     dependencies:
       '@eslint-community/regexpp': 4.12.1
       '@typescript-eslint/parser': 5.62.0(eslint@8.57.1)(typescript@5.8.2)
@@ -24547,7 +24544,7 @@ snapshots:
       '@typescript-eslint/type-utils': 5.62.0(eslint@8.57.1)(typescript@5.8.2)
       '@typescript-eslint/utils': 5.62.0(eslint@8.57.1)(typescript@5.8.2)
       debug: 4.4.0(supports-color@8.1.1)
-      eslint: 9.23.0(jiti@2.4.2)
+      eslint: 8.57.1
       graphemer: 1.4.0
       ignore: 5.3.2
       natural-compare-lite: 1.4.0
@@ -27095,7 +27092,7 @@ snapshots:
       '@rollup/plugin-replace': 5.0.7(rollup@3.29.5)
       '@rollup/plugin-terser': 0.4.4(rollup@3.29.5)
       '@types/jest': 29.5.14
-      '@typescript-eslint/eslint-plugin': 5.62.0(@typescript-eslint/parser@5.62.0(eslint@9.23.0(jiti@2.4.2))(typescript@5.8.2))(eslint@9.23.0(jiti@2.4.2))(typescript@5.8.2)
+      '@typescript-eslint/eslint-plugin': 5.62.0(@typescript-eslint/parser@5.62.0(eslint@8.57.1)(typescript@5.8.2))(eslint@8.57.1)(typescript@5.8.2)
       '@typescript-eslint/parser': 5.62.0(eslint@8.57.1)(typescript@5.8.2)
       ansi-escapes: 4.3.2
       asyncro: 3.0.0
@@ -27113,7 +27110,7 @@ snapshots:
       eslint-config-prettier: 8.10.0(eslint@8.57.1)
       eslint-plugin-flowtype: 8.0.3(@babel/plugin-syntax-flow@7.26.0(@babel/core@7.26.10))(@babel/plugin-transform-react-jsx@7.25.9(@babel/core@7.26.10))(eslint@8.57.1)
       eslint-plugin-import: 2.31.0(@typescript-eslint/parser@5.62.0(eslint@8.57.1)(typescript@5.8.2))(eslint@8.57.1)
-      eslint-plugin-jest: 27.9.0(@typescript-eslint/eslint-plugin@5.62.0(@typescript-eslint/parser@5.62.0(eslint@9.23.0(jiti@2.4.2))(typescript@5.8.2))(eslint@8.57.1)(typescript@5.8.2))(eslint@8.57.1)(jest@29.7.0(@types/node@20.17.30)(babel-plugin-macros@3.1.0)(ts-node@10.9.2(@swc/core@1.11.10(@swc/helpers@0.5.15))(@types/node@20.17.30)(typescript@5.8.2)))(typescript@5.8.2)
+      eslint-plugin-jest: 27.9.0(@typescript-eslint/eslint-plugin@5.62.0(@typescript-eslint/parser@5.62.0(eslint@8.57.1)(typescript@5.8.2))(eslint@8.57.1)(typescript@5.8.2))(eslint@8.57.1)(jest@29.7.0(@types/node@20.17.30)(babel-plugin-macros@3.1.0)(ts-node@10.9.2(@swc/core@1.11.10(@swc/helpers@0.5.15))(@types/node@20.17.30)(typescript@5.8.2)))(typescript@5.8.2)
       eslint-plugin-jsx-a11y: 6.10.2(eslint@8.57.1)
       eslint-plugin-prettier: 4.2.1(eslint-config-prettier@8.10.0(eslint@8.57.1))(eslint@8.57.1)(prettier@2.8.8)
       eslint-plugin-react: 7.37.4(eslint@8.57.1)
@@ -27773,12 +27770,12 @@ snapshots:
       - eslint-import-resolver-webpack
       - supports-color
 
-  eslint-plugin-jest@27.9.0(@typescript-eslint/eslint-plugin@5.62.0(@typescript-eslint/parser@5.62.0(eslint@9.23.0(jiti@2.4.2))(typescript@5.8.2))(eslint@8.57.1)(typescript@5.8.2))(eslint@8.57.1)(jest@29.7.0(@types/node@20.17.30)(babel-plugin-macros@3.1.0)(ts-node@10.9.2(@swc/core@1.11.10(@swc/helpers@0.5.15))(@types/node@20.17.30)(typescript@5.8.2)))(typescript@5.8.2):
+  eslint-plugin-jest@27.9.0(@typescript-eslint/eslint-plugin@5.62.0(@typescript-eslint/parser@5.62.0(eslint@8.57.1)(typescript@5.8.2))(eslint@8.57.1)(typescript@5.8.2))(eslint@8.57.1)(jest@29.7.0(@types/node@20.17.30)(babel-plugin-macros@3.1.0)(ts-node@10.9.2(@swc/core@1.11.10(@swc/helpers@0.5.15))(@types/node@20.17.30)(typescript@5.8.2)))(typescript@5.8.2):
     dependencies:
       '@typescript-eslint/utils': 5.62.0(eslint@8.57.1)(typescript@5.8.2)
       eslint: 8.57.1
     optionalDependencies:
-      '@typescript-eslint/eslint-plugin': 5.62.0(@typescript-eslint/parser@5.62.0(eslint@9.23.0(jiti@2.4.2))(typescript@5.8.2))(eslint@9.23.0(jiti@2.4.2))(typescript@5.8.2)
+      '@typescript-eslint/eslint-plugin': 5.62.0(@typescript-eslint/parser@5.62.0(eslint@8.57.1)(typescript@5.8.2))(eslint@8.57.1)(typescript@5.8.2)
       jest: 29.7.0(@types/node@20.17.30)(babel-plugin-macros@3.1.0)(ts-node@10.9.2(@swc/core@1.11.10(@swc/helpers@0.5.15))(@types/node@20.17.30)(typescript@5.8.2))
     transitivePeerDependencies:
       - supports-color
