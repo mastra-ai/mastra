@@ -15,45 +15,12 @@ type ExtractTitle = {
  * Extract title from a list of nodes.
  */
 export class TitleExtractor extends BaseExtractor {
-  /**
-   * MastraLanguageModel instance.
-   * @type {MastraLanguageModel}
-   */
   llm: MastraLanguageModel;
-
-  /**
-   * Can work for mixture of text and non-text nodes
-   * @type {boolean}
-   * @default false
-   */
   isTextNodeOnly: boolean = false;
-
-  /**
-   * Number of nodes to extrct titles from.
-   * @type {number}
-   * @default 5
-   */
   nodes: number = 5;
-
-  /**
-   * The prompt template to use for the title extractor.
-   * @type {string}
-   */
   nodeTemplate: TitleExtractorPrompt;
-
-  /**
-   * The prompt template to merge title with..
-   * @type {string}
-   */
   combineTemplate: TitleCombinePrompt;
 
-  /**
-   * Constructor for the TitleExtractor class.
-   * @param {MastraLanguageModel} llm MastraLanguageModel instance.
-   * @param {number} nodes Number of nodes to extract titles from.
-   * @param {TitleExtractorPrompt} nodeTemplate The prompt template to use for the title extractor.
-   * @param {string} combineTemplate The prompt template to merge title with..
-   */
   constructor(options?: TitleExtractorsArgs) {
     super();
 

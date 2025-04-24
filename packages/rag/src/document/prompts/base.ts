@@ -1,13 +1,5 @@
 import { format } from './format';
-import type { ChatMessage } from './types';
-
-export type BasePromptTemplateOptions<TemplatesVar extends readonly string[]> = {
-  templateVars?:
-    | TemplatesVar
-    // loose type for better type inference
-    | readonly string[];
-  options?: Partial<Record<TemplatesVar[number] | (string & {}), string>>;
-};
+import type { BasePromptTemplateOptions, ChatMessage, PromptTemplateOptions } from './types';
 
 export abstract class BasePromptTemplate<const TemplatesVar extends readonly string[] = string[]> {
   templateVars: Set<string> = new Set();
@@ -34,46 +26,18 @@ export abstract class BasePromptTemplate<const TemplatesVar extends readonly str
   abstract get template(): string;
 }
 
-type Permutation<T, K = T> = [T] extends [never] ? [] : K extends K ? [K, ...Permutation<Exclude<T, K>>] : never;
-
-type Join<T extends any[], U extends string> = T extends [infer F, ...infer R]
-  ? R['length'] extends 0
-    ? `${F & string}`
-    : `${F & string}${U}${Join<R, U>}`
-  : never;
-
-type WrapStringWithBracket<T extends string> = `{${T}}`;
-
-export type StringTemplate<Var extends readonly string[]> = Var['length'] extends 0
-  ? string
-  : Var['length'] extends number
-    ? number extends Var['length']
-      ? string
-      : `${string}${Join<Permutation<WrapStringWithBracket<Var[number]>>, `${string}`>}${string}`
-    : never;
-
-export type PromptTemplateOptions<
-  TemplatesVar extends readonly string[],
-  Template extends StringTemplate<TemplatesVar>,
-> = BasePromptTemplateOptions<TemplatesVar> & {
-  template: Template;
-};
-
 export class PromptTemplate<
   const TemplatesVar extends readonly string[] = string[],
-  const Template extends StringTemplate<TemplatesVar> = StringTemplate<TemplatesVar>,
 > extends BasePromptTemplate<TemplatesVar> {
-  #template: Template;
+  #template: string;
 
-  constructor(options: PromptTemplateOptions<TemplatesVar, Template>) {
+  constructor(options: PromptTemplateOptions<TemplatesVar>) {
     const { template, ...rest } = options;
     super(rest);
     this.#template = template;
   }
 
-  partialFormat(
-    options: Partial<Record<TemplatesVar[number] | (string & {}), string>>,
-  ): PromptTemplate<TemplatesVar, Template> {
+  partialFormat(options: Partial<Record<TemplatesVar[number] | (string & {}), string>>): PromptTemplate<TemplatesVar> {
     const prompt = new PromptTemplate({
       template: this.template,
       templateVars: [...this.templateVars],
@@ -107,7 +71,7 @@ export class PromptTemplate<
     ];
   }
 
-  get template(): Template {
+  get template(): string {
     return this.#template;
   }
 }

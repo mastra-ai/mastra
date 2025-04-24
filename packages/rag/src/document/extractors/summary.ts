@@ -21,27 +21,12 @@ type ExtractSummary = {
  * @returns Array of summary results
  */
 export class SummaryExtractor extends BaseExtractor {
-  /**
-   * MastraLanguageModel instance.
-   * @type {MastraLanguageModel}
-   */
   private llm: MastraLanguageModel;
-  /**
-   * List of summaries to extract: 'self', 'prev', 'next'
-   * @type {string[]}
-   */
   summaries: string[];
-
-  /**
-   * The prompt template to use for the summary extractor.
-   * @type {string}
-   */
   promptTemplate: SummaryPrompt;
-
   private selfSummary: boolean;
   private prevSummary: boolean;
   private nextSummary: boolean;
-
   constructor(options?: SummaryExtractArgs) {
     const summaries = options?.summaries ?? ['self'];
 

@@ -6,15 +6,7 @@ import type { Metadata, RelatedNodeInfo, RelatedNodeType, BaseNodeParams, TextNo
  * Generic abstract class for retrievable nodes
  */
 export abstract class BaseNode<T extends Metadata = Metadata> {
-  /**
-   * The unique ID of the Node/Document. The trailing underscore is here
-   * to avoid collisions with the id keyword in Python.
-   *
-   * Set to a UUID by default.
-   */
   id_: string;
-
-  // Metadata fields
   metadata: T;
   relationships: Partial<Record<NodeRelationship, RelatedNodeType<T>>>;
 

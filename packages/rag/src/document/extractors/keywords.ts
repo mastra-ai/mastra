@@ -18,23 +18,8 @@ type ExtractKeyword = {
  * Extract keywords from a list of nodes.
  */
 export class KeywordExtractor extends BaseExtractor {
-  /**
-   * MastraLanguageModel instance.
-   * @type {MastraLanguageModel}
-   */
   llm: MastraLanguageModel;
-
-  /**
-   * Number of keywords to extract.
-   * @type {number}
-   * @default 5
-   */
   keywords: number = 5;
-
-  /**
-   * The prompt template to use for the question extractor.
-   * @type {string}
-   */
   promptTemplate: KeywordExtractPrompt;
 
   /**

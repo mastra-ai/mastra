@@ -18,30 +18,9 @@ type ExtractQuestion = {
  * Extract questions from a list of nodes.
  */
 export class QuestionsAnsweredExtractor extends BaseExtractor {
-  /**
-   * MastraLanguageModel instance.
-   * @type {MastraLanguageModel}
-   */
   llm: MastraLanguageModel;
-
-  /**
-   * Number of questions to generate.
-   * @type {number}
-   * @default 5
-   */
   questions: number = 5;
-
-  /**
-   * The prompt template to use for the question extractor.
-   * @type {string}
-   */
   promptTemplate: QuestionExtractPrompt;
-
-  /**
-   * Wheter to use metadata for embeddings only
-   * @type {boolean}
-   * @default false
-   */
   embeddingOnly: boolean = false;
 
   /**

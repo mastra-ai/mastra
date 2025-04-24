@@ -15,3 +15,15 @@ export type ChatMessage<AdditionalMessageOptions extends object = object> = {
   role: MessageType;
   options?: undefined | AdditionalMessageOptions;
 };
+
+export type BasePromptTemplateOptions<TemplatesVar extends readonly string[]> = {
+  templateVars?:
+    | TemplatesVar
+    // loose type for better type inference
+    | readonly string[];
+  options?: Partial<Record<TemplatesVar[number] | (string & {}), string>>;
+};
+
+export type PromptTemplateOptions<TemplatesVar extends readonly string[]> = BasePromptTemplateOptions<TemplatesVar> & {
+  template: string;
+};
