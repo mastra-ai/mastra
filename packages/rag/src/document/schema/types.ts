@@ -30,12 +30,10 @@ export type BaseNodeParams<T extends Metadata = Metadata> = {
   metadata?: T | undefined;
   relationships?: Partial<Record<NodeRelationship, RelatedNodeType<T>>> | undefined;
   hash?: string | undefined;
-  embedding?: number[] | undefined;
 };
 
 export type TextNodeParams<T extends Metadata = Metadata> = BaseNodeParams<T> & {
   text?: string | undefined;
-  textTemplate?: string | undefined;
   startCharIdx?: number | undefined;
   endCharIdx?: number | undefined;
   metadataSeparator?: string | undefined;

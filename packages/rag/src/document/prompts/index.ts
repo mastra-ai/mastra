@@ -2,7 +2,6 @@ export { BasePromptTemplate, PromptTemplate } from './base';
 export type { BasePromptTemplateOptions, PromptTemplateOptions, StringTemplate } from './base';
 export {
   defaultKeywordExtractPrompt,
-  defaultNodeTextTemplate,
   defaultQuestionExtractPrompt,
   defaultSummaryPrompt,
   defaultTitleCombinePromptTemplate,

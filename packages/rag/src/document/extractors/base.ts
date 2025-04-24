@@ -1,6 +1,4 @@
-import { defaultNodeTextTemplate } from '../prompts';
 import type { BaseNode } from '../schema';
-import { TextNode } from '../schema';
 
 /*
  * Abstract class for all extractors.
@@ -25,15 +23,6 @@ export abstract class BaseExtractor {
         ...newNodes[idx]!.metadata,
         ...curMetadataList[idx],
       };
-    }
-
-    for (const idx in newNodes) {
-      if (newNodes[idx] instanceof TextNode) {
-        newNodes[idx] = new TextNode({
-          ...newNodes[idx],
-          textTemplate: defaultNodeTextTemplate.format(),
-        });
-      }
     }
 
     return newNodes;

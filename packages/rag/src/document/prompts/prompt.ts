@@ -58,17 +58,3 @@ export const defaultTitleCombinePromptTemplate = new PromptTemplate({
 Based on the above candidate titles and contents, what is the comprehensive title for this document? 
 Title: `,
 });
-
-export const defaultNodeTextTemplate = new PromptTemplate({
-  templateVars: ['metadataStr', 'content'],
-  template: `[Excerpt from document]
-{metadataStr}
-Excerpt:
------
-{content}
------
-`,
-}).partialFormat({
-  metadataStr: '',
-  content: '',
-});

@@ -110,13 +110,4 @@ export class PromptTemplate<
   get template(): Template {
     return this.#template;
   }
-
-  /**
-   * Returns all the template variables used in the prompt template.
-   */
-  vars(): string[] {
-    const template = this.template;
-    const matches = template.match(/\{([^}]+)\}/g) || [];
-    return [...new Set(matches.map(match => match.slice(1, -1)))];
-  }
 }

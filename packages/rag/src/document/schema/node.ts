@@ -13,7 +13,6 @@ export abstract class BaseNode<T extends Metadata = Metadata> {
    * Set to a UUID by default.
    */
   id_: string;
-  embedding: number[] | undefined;
 
   // Metadata fields
   metadata: T;
@@ -23,11 +22,10 @@ export abstract class BaseNode<T extends Metadata = Metadata> {
   accessor hash: string = '';
 
   protected constructor(init?: BaseNodeParams<T>) {
-    const { id_, metadata, relationships, embedding } = init || {};
+    const { id_, metadata, relationships } = init || {};
     this.id_ = id_ ?? randomUUID();
     this.metadata = metadata ?? ({} as T);
     this.relationships = relationships ?? {};
-    this.embedding = embedding;
   }
 
   abstract get type(): ObjectType;
@@ -94,19 +92,15 @@ export abstract class BaseNode<T extends Metadata = Metadata> {
  */
 export class TextNode<T extends Metadata = Metadata> extends BaseNode<T> {
   text: string;
-  textTemplate: string;
 
   startCharIdx?: number;
   endCharIdx?: number;
-  // textTemplate: NOTE write your own formatter if needed
-  // metadataTemplate: NOTE write your own formatter if needed
   metadataSeparator: string;
 
   constructor(init: TextNodeParams<T> = {}) {
     super(init);
-    const { text, textTemplate, startCharIdx, endCharIdx, metadataSeparator } = init;
+    const { text, startCharIdx, endCharIdx, metadataSeparator } = init;
     this.text = text ?? '';
-    this.textTemplate = textTemplate ?? '';
     if (startCharIdx) {
       this.startCharIdx = startCharIdx;
     }
