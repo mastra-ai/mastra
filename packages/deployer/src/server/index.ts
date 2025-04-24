@@ -1487,9 +1487,12 @@ export async function createHonoServer(mastra: Mastra, options: ServerBundleOpti
             schema: {
               type: 'object',
               properties: {
-                stepId: { type: 'string' },
-                context: { type: 'object' },
+                step: {
+                  oneOf: [{ type: 'string' }, { type: 'array', items: { type: 'string' } }],
+                },
+                resumeData: { type: 'object' },
               },
+              required: ['step'],
             },
           },
         },
@@ -1525,9 +1528,12 @@ export async function createHonoServer(mastra: Mastra, options: ServerBundleOpti
             schema: {
               type: 'object',
               properties: {
-                stepId: { type: 'string' },
-                context: { type: 'object' },
+                step: {
+                  oneOf: [{ type: 'string' }, { type: 'array', items: { type: 'string' } }],
+                },
+                resumeData: { type: 'object' },
               },
+              required: ['step'],
             },
           },
         },

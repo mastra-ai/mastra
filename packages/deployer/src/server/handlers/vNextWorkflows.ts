@@ -157,7 +157,7 @@ export async function resumeAsyncVNextWorkflowHandler(c: Context) {
     const runtimeContext: RuntimeContext = c.get('runtimeContext');
     const workflowId = c.req.param('workflowId');
     const runId = c.req.query('runId');
-    const { stepId, context } = await c.req.json();
+    const { step, resumeData } = await c.req.json();
 
     if (!runId) {
       throw new HTTPException(400, { message: 'runId required to resume workflow' });
@@ -168,7 +168,7 @@ export async function resumeAsyncVNextWorkflowHandler(c: Context) {
       runtimeContext,
       workflowId,
       runId,
-      body: { stepId, context },
+      body: { step, resumeData },
     });
 
     return c.json(result);
@@ -183,7 +183,7 @@ export async function resumeVNextWorkflowHandler(c: Context) {
     const runtimeContext: RuntimeContext = c.get('runtimeContext');
     const workflowId = c.req.param('workflowId');
     const runId = c.req.query('runId');
-    const { stepId, context } = await c.req.json();
+    const { step, resumeData } = await c.req.json();
 
     if (!runId) {
       throw new HTTPException(400, { message: 'runId required to resume workflow' });
@@ -194,7 +194,7 @@ export async function resumeVNextWorkflowHandler(c: Context) {
       runtimeContext,
       workflowId,
       runId,
-      body: { stepId, context },
+      body: { step, resumeData },
     });
 
     return c.json({ message: 'Workflow run resumed' });

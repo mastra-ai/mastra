@@ -242,7 +242,10 @@ export async function resumeAsyncVNextWorkflowHandler({
   runId,
   body,
   runtimeContext,
-}: VNextWorkflowContext & { body: { stepId: string; context: any }; runtimeContext?: RuntimeContext }) {
+}: VNextWorkflowContext & {
+  body: { step: string | string[]; resumeData?: unknown };
+  runtimeContext?: RuntimeContext;
+}) {
   try {
     if (!workflowId) {
       throw new HTTPException(400, { message: 'Workflow ID is required' });
@@ -250,6 +253,10 @@ export async function resumeAsyncVNextWorkflowHandler({
 
     if (!runId) {
       throw new HTTPException(400, { message: 'runId required to resume workflow' });
+    }
+
+    if (!body.step) {
+      throw new HTTPException(400, { message: 'step required to resume workflow' });
     }
 
     const workflow = mastra.vnext_getWorkflow(workflowId);
@@ -262,7 +269,8 @@ export async function resumeAsyncVNextWorkflowHandler({
     const _run = workflow.createRun({ runId });
 
     const result = await _run.resume({
-      step: body.stepId,
+      step: body.step,
+      resumeData: body.resumeData,
       runtimeContext,
     });
 
@@ -278,7 +286,10 @@ export async function resumeVNextWorkflowHandler({
   runId,
   body,
   runtimeContext,
-}: VNextWorkflowContext & { body: { stepId: string; context: any }; runtimeContext?: RuntimeContext }) {
+}: VNextWorkflowContext & {
+  body: { step: string | string[]; resumeData?: unknown };
+  runtimeContext?: RuntimeContext;
+}) {
   try {
     if (!workflowId) {
       throw new HTTPException(400, { message: 'Workflow ID is required' });
@@ -286,6 +297,10 @@ export async function resumeVNextWorkflowHandler({
 
     if (!runId) {
       throw new HTTPException(400, { message: 'runId required to resume workflow' });
+    }
+
+    if (!body.step) {
+      throw new HTTPException(400, { message: 'step required to resume workflow' });
     }
 
     const workflow = mastra.vnext_getWorkflow(workflowId);
@@ -298,7 +313,8 @@ export async function resumeVNextWorkflowHandler({
     const _run = workflow.createRun({ runId });
 
     await _run.resume({
-      step: body.stepId,
+      step: body.step,
+      resumeData: body.resumeData,
       runtimeContext,
     });
 
