@@ -2,7 +2,7 @@
   "extends": ["//"],
   "tasks": {
     "build": {
-      "dependsOn": ["^build", "@mastra/libsql#build", "@mastra/core#build"]
+      "dependsOn": ["^build", "@mastra/libsql#build", "@mastra/core#build", "@mastra/memory#build"]
     }
   }
 }
