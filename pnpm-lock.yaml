@@ -2151,7 +2151,7 @@ importers:
         version: 7.52.2(@types/node@20.17.30)
       '@rollup/plugin-image':
         specifier: ^3.0.3
-        version: 3.0.3(rollup@3.29.5)
+        version: 3.0.3(rollup@4.36.0)
       '@size-limit/preset-small-lib':
         specifier: ^11.2.0
         version: 11.2.0(size-limit@11.2.0)
@@ -2215,7 +2215,7 @@ importers:
         version: 7.52.2(@types/node@20.17.30)
       '@rollup/plugin-image':
         specifier: ^3.0.3
-        version: 3.0.3(rollup@4.36.0)
+        version: 3.0.3(rollup@3.29.5)
       '@size-limit/preset-small-lib':
         specifier: ^11.2.0
         version: 11.2.0(size-limit@11.2.0)
@@ -3662,6 +3662,9 @@ importers:
 
   packages/rag:
     dependencies:
+      '@llamaindex/core':
+        specifier: 0.5.5
+        version: 0.5.5(@aws-crypto/sha256-js@5.2.0)(@huggingface/transformers@3.4.0)(gpt-tokenizer@2.9.0)(js-tiktoken@1.0.19)(pathe@2.0.3)
       '@mastra/core':
         specifier: workspace:^
         version: link:../core
@@ -3671,9 +3674,6 @@ importers:
       js-tiktoken:
         specifier: ^1.0.19
         version: 1.0.19
-      llamaindex:
-        specifier: 0.9.6
-        version: 0.9.6(@aws-crypto/sha256-js@5.2.0)(@huggingface/transformers@3.4.0)(encoding@0.1.13)(js-tiktoken@1.0.19)(pathe@2.0.3)(tree-sitter@0.22.4)(web-tree-sitter@0.24.7)(ws@8.18.1(bufferutil@4.0.9)(utf-8-validate@6.0.5))(zod@3.24.3)
       node-html-better-parser:
         specifier: ^1.4.7
         version: 1.4.7
@@ -8010,12 +8010,6 @@ packages:
     cpu: [x64]
     os: [win32]
 
-  '@llamaindex/cloud@3.0.6':
-    resolution: {integrity: sha512-T8RPaBMy1AEksi7sIHHangH6JSFILhDW1EhzRNwIHgQNB36UE7nnLb/W9c/buXu9NnOASG/BWIXpvEB57/FcdA==}
-    peerDependencies:
-      '@llamaindex/core': 0.5.5
-      '@llamaindex/env': 0.1.28
-
   '@llamaindex/core@0.5.5':
     resolution: {integrity: sha512-oKDgpoUu2u3kAnoMX2GQhRW+e/YBVcH6LX9dnk4vYud1zoS9B859OQnmXWXtBVgdNJriY5NdYFplNr6mhMKRrw==}
 
@@ -8039,24 +8033,6 @@ packages:
         optional: true
       tiktoken:
         optional: true
-
-  '@llamaindex/node-parser@1.0.5':
-    resolution: {integrity: sha512-2k8jKpxrTcuf2YVqWaBSHgKutlv3uJKQZ8qVuSWAdlqxEy5eDzIwMAiCkWwT9SnkUeTXS5KFoPZcPl4lPthWjQ==}
-    peerDependencies:
-      '@llamaindex/core': 0.5.5
-      '@llamaindex/env': 0.1.28
-      tree-sitter: ^0.22.0
-      web-tree-sitter: ^0.24.3
-
-  '@llamaindex/openai@0.1.57':
-    resolution: {integrity: sha512-3jQjT7XpQgVHWHws977A1dQVeeqeXp/1AE/eyjdomZElHstuGRc4ZDVRPpn1FcH05Lk6Ft4c+sN/2btMzg6msg==}
-
-  '@llamaindex/workflow@0.0.12':
-    resolution: {integrity: sha512-dxLE54MF0dMLkrAIqhozmRKNB1kaHXYiz5qN6FISUgHA2LHXD0AsHTU5cTdD3y1ObUooo4Ta57hgoc/zYmwI/Q==}
-    peerDependencies:
-      '@llamaindex/core': 0.5.5
-      '@llamaindex/env': 0.1.28
-      zod: ^3.23.8
 
   '@lukeed/csprng@1.1.0':
     resolution: {integrity: sha512-Z7C/xXCiGWsg0KuKsHTKJxbWhpI3Vs5GwLfOean7MGyVFGqdRgBbAjOCh6u4bbjPc/8MJ2pZmK/0DLdCbivLDA==}
@@ -10141,9 +10117,6 @@ packages:
 
   '@sec-ant/readable-stream@0.4.1':
     resolution: {integrity: sha512-831qok9r2t8AlxLko40y2ebgSDhenenCatLVeW/uBtnHPyhHOvG0C7TvfgecV+wHzIm5KUICgzmVpWS+IMEAeg==}
-
-  '@selderee/plugin-htmlparser2@0.11.0':
-    resolution: {integrity: sha512-P33hHGdldxGabLFjPPpaTxVolMrzrcegejx+0GxjrIb9Zv48D8yAIA/QTDR2dFl7Uz7urX8aX6+5bCZslr+gWQ==}
 
   '@sevinf/maybe@0.5.0':
     resolution: {integrity: sha512-ARhyoYDnY1LES3vYI0fiG6e9esWfTNcXcO6+MPJJXcnyMV3bim4lnFt45VXouV7y82F4x3YH8nOQ6VztuvUiWg==}
@@ -14831,18 +14804,11 @@ packages:
   html-escaper@2.0.2:
     resolution: {integrity: sha512-H2iMtd0I4Mt5eYiapRdIDjp+XzelXQ0tFE4JS7YFwFevXXMmOp9myNrUvCg0D6ws8iqkRPBfKHgbwig1SmlLfg==}
 
-  html-to-text@9.0.5:
-    resolution: {integrity: sha512-qY60FjREgVZL03vJU6IfMV4GDjGBIoOyvuFdpBDIX9yTlDw0TjxVBQp+P8NvpdIXNJvfWBTNul7fsAQJq2FNpg==}
-    engines: {node: '>=14'}
-
   html-url-attributes@3.0.1:
     resolution: {integrity: sha512-ol6UPyBWqsrO6EJySPz2O7ZSr856WDrEzM5zMqp+FJJLGMW35cLYmmZnl0vztAZxRUoNZJFTCohfjuIJ8I4QBQ==}
 
   html-void-elements@3.0.0:
     resolution: {integrity: sha512-bEqo66MRXsUGxWHV5IP0PUiAWwoEjba4VCzg0LjFJBpchPaTfyfCKTG6bc5F8ucKec3q5y6qOdGyYTSBEvhCrg==}
-
-  htmlparser2@8.0.2:
-    resolution: {integrity: sha512-GYdjWKDkbRLkZ5geuHs5NY1puJ+PXwP7+fHPRz06Eirsb9ugf6d8kkXav6ADhcODhFFPMIXyxkxSuMf3D6NCFA==}
 
   http-cache-semantics@4.1.1:
     resolution: {integrity: sha512-er295DKPVsV82j5kw1Gjt+ADA/XYHsajl82cGNQG2eyoPkvgUhX+nDIyelzhIWbbsXP39EHcI6l5tYs2FYqYXQ==}
@@ -15841,9 +15807,6 @@ packages:
     resolution: {integrity: sha512-b94GiNHQNy6JNTrt5w6zNyffMrNkXZb3KTkCZJb2V1xaEGCk093vkZ2jk3tpaeP33/OiXC+WvK9AxUebnf5nbw==}
     engines: {node: '>= 0.6.3'}
 
-  leac@0.6.0:
-    resolution: {integrity: sha512-y+SqErxb8h7nE/fiEX07jsbuhrpO9lL8eca7/Y1nuWV2moNlXhyd59iDGcRf6moVyDMbmTNzL40SUyrFU/yDpg==}
-
   leven@3.1.0:
     resolution: {integrity: sha512-qsda+H8jTaUaN/x5vzW2rzc+8Rw4TAQ/4KjB46IwK5VH+IlVeeeje/EoZRpiXvIqjFgK84QffqPztGI3VBLG1A==}
     engines: {node: '>=6'}
@@ -15945,10 +15908,6 @@ packages:
 
   listr2@8.2.5:
     resolution: {integrity: sha512-iyAZCeyD+c1gPyE9qpFu8af0Y+MRtmKOncdGoA2S5EY8iFq99dmmvkNnHiWo+pj0s7yH7l3KPIgee77tKpXPWQ==}
-    engines: {node: '>=18.0.0'}
-
-  llamaindex@0.9.6:
-    resolution: {integrity: sha512-zKruI6ooJgTR95JE/u3ID+agoGrhZFqLocIXpo5i3dT0vFspgErzExeiafG+dnOwupLF0DzugNjJTxJIzMYa8A==}
     engines: {node: '>=18.0.0'}
 
   load-tsconfig@0.2.5:
@@ -16857,10 +16816,6 @@ packages:
   node-addon-api@7.1.1:
     resolution: {integrity: sha512-5m3bsyrjFWE1xf7nz7YXdN4udnVtXK6/Yfgn5qnahL6bCkf2yKt4k3nuTKAtT4r3IG8JNR2ncsIMdZuAzJjHQQ==}
 
-  node-addon-api@8.3.1:
-    resolution: {integrity: sha512-lytcDEdxKjGJPTLEfW4mYMigRezMlyJY8W4wxJK8zE533Jlb8L8dRuObJFWg2P+AuOIxoCgKF+2Oq4d4Zd0OUA==}
-    engines: {node: ^18 || ^20 || >= 21}
-
   node-domexception@1.0.0:
     resolution: {integrity: sha512-/jKZoMpw0F8GRwl4/eLROPA3cfcXtLApP0QzLmUT/HuPCZWyB7IY9ZrMeKw2O/nFIqPQB3PVM9aYm0F312AXDQ==}
     engines: {node: '>=10.5.0'}
@@ -17448,9 +17403,6 @@ packages:
   parse5@7.2.1:
     resolution: {integrity: sha512-BuBYQYlv1ckiPdQi/ohiivi9Sagc9JG+Ozs0r7b/0iK3sKmrb0b9FdWdBbOdx6hBCM/F9Ir82ofnBhtZOjCRPQ==}
 
-  parseley@0.12.1:
-    resolution: {integrity: sha512-e6qHKe3a9HWr0oMRVDTRhKce+bRO8VGQR3NyVwcjwrbhMmFCX9KszEV35+rn4AdilFAq9VPxP/Fe1wC9Qjd2lw==}
-
   parseurl@1.3.3:
     resolution: {integrity: sha512-CiyeOxFT/JZyN5m0z9PfXw4SCBJ6Sygz1Dpl0wqjlhDEGGBP1GnsUVEL0p63hoG1fcj3fHynXi9NYO4nWOL+qQ==}
     engines: {node: '>= 0.8'}
@@ -17538,9 +17490,6 @@ packages:
   pdf-parse@1.1.1:
     resolution: {integrity: sha512-v6ZJ/efsBpGrGGknjtq9J/oC8tZWq0KWL5vQrk2GlzLEQPUDB1ex+13Rmidl1neNN358Jn9EHZw5y07FFtaC7A==}
     engines: {node: '>=6.8.1'}
-
-  peberminta@0.9.0:
-    resolution: {integrity: sha512-XIxfHpEuSJbITd1H3EeQwpcZbTLHc+VVr8ANI9t5sit565tsI4/xK3KWTUFE2e6QiangUkh3B0jihzmGnNrRsQ==}
 
   peek-readable@4.1.0:
     resolution: {integrity: sha512-ZI3LnwUv5nOGbQzD9c2iDG6toheuXSZP5esSHBjopsXH4dg19soufvpUGA3uohi5anFtGb2lhAVdHzH6R/Evvg==}
@@ -18640,9 +18589,6 @@ packages:
     resolution: {integrity: sha512-e1QtP3YL5tWww8uKaOCQ18UxIT2laNBXHjV/S2WYCiK4udiv8lkG89KRIoCjUagnAmCBurjF4zEVX2ByBbnCjQ==}
     hasBin: true
 
-  selderee@0.11.0:
-    resolution: {integrity: sha512-5TF+l7p4+OsnP8BCCvSyZiSPc4x4//p5uPwK8TCnVPJYRmU2aYKMpOXvw8zM5a5JvuuCGN1jmsMwuU2W02ukfA==}
-
   semaphore@1.1.0:
     resolution: {integrity: sha512-O4OZEaNtkMd/K0i6js9SL+gqy0ZCBMgUvlSqHKi4IBdjhe7wB8pwztUk1BbZ1fmrvpwFrPbHzqd2w5pTcJH6LA==}
     engines: {node: '>=0.8.0'}
@@ -19519,9 +19465,6 @@ packages:
     resolution: {integrity: sha512-L0Orpi8qGpRG//Nd+H90vFB+3iHnue1zSSGmNOOCh1GLJ7rUKVwV2HvijphGQS2UmhUZewS9VgvxYIdgr+fG1A==}
     hasBin: true
 
-  tree-sitter@0.22.4:
-    resolution: {integrity: sha512-usbHZP9/oxNsUY65MQUsduGRqDHQOou1cagUSwjhoSYAmSahjQDAVsh9s+SlZkn8X8+O1FULRGwHu7AFP3kjzg==}
-
   trim-lines@3.0.1:
     resolution: {integrity: sha512-kRj8B+YHZCc9kQYdWfJB2/oUl9rA99qbowYYBtr4ui4mZyAQ2JpvVBd/6U2YloATfqBhBTSMhTpgBHtU0Mf3Rg==}
 
@@ -20367,9 +20310,6 @@ packages:
   web-streams-polyfill@4.0.0-beta.3:
     resolution: {integrity: sha512-QW95TCTaHmsYfHDybGMwO5IJIM93I/6vTRk+daHTWFPhwh+C8Cg7j7XyKrwrj8Ib6vYXe0ocYNrmzY4xAAN6ug==}
     engines: {node: '>= 14'}
-
-  web-tree-sitter@0.24.7:
-    resolution: {integrity: sha512-CdC/TqVFbXqR+C51v38hv6wOPatKEUGxa39scAeFSm98wIhZxAYonhRQPSMmfZ2w7JDI0zQDdzdmgtNk06/krQ==}
 
   web-vitals@0.2.4:
     resolution: {integrity: sha512-6BjspCO9VriYy12z356nL6JBS0GYeEcA457YyRzD+dD6XYCQ75NKhcOHUMHentOE7OcVCIXXDvOm0jKFfQG2Gg==}
@@ -24219,11 +24159,6 @@ snapshots:
   '@libsql/win32-x64-msvc@0.5.6':
     optional: true
 
-  '@llamaindex/cloud@3.0.6(@llamaindex/core@0.5.5(@aws-crypto/sha256-js@5.2.0)(@huggingface/transformers@3.4.0)(gpt-tokenizer@2.9.0)(js-tiktoken@1.0.19)(pathe@2.0.3))(@llamaindex/env@0.1.28(@aws-crypto/sha256-js@5.2.0)(@huggingface/transformers@3.4.0)(gpt-tokenizer@2.9.0)(js-tiktoken@1.0.19)(pathe@2.0.3))':
-    dependencies:
-      '@llamaindex/core': 0.5.5(@aws-crypto/sha256-js@5.2.0)(@huggingface/transformers@3.4.0)(gpt-tokenizer@2.9.0)(js-tiktoken@1.0.19)(pathe@2.0.3)
-      '@llamaindex/env': 0.1.28(@aws-crypto/sha256-js@5.2.0)(@huggingface/transformers@3.4.0)(gpt-tokenizer@2.9.0)(js-tiktoken@1.0.19)(pathe@2.0.3)
-
   '@llamaindex/core@0.5.5(@aws-crypto/sha256-js@5.2.0)(@huggingface/transformers@3.4.0)(gpt-tokenizer@2.9.0)(js-tiktoken@1.0.19)(pathe@2.0.3)':
     dependencies:
       '@llamaindex/env': 0.1.28(@aws-crypto/sha256-js@5.2.0)(@huggingface/transformers@3.4.0)(gpt-tokenizer@2.9.0)(js-tiktoken@1.0.19)(pathe@2.0.3)
@@ -24247,36 +24182,6 @@ snapshots:
       '@huggingface/transformers': 3.4.0
       js-tiktoken: 1.0.19
       pathe: 2.0.3
-
-  '@llamaindex/node-parser@1.0.5(@llamaindex/core@0.5.5(@aws-crypto/sha256-js@5.2.0)(@huggingface/transformers@3.4.0)(gpt-tokenizer@2.9.0)(js-tiktoken@1.0.19)(pathe@2.0.3))(@llamaindex/env@0.1.28(@aws-crypto/sha256-js@5.2.0)(@huggingface/transformers@3.4.0)(gpt-tokenizer@2.9.0)(js-tiktoken@1.0.19)(pathe@2.0.3))(tree-sitter@0.22.4)(web-tree-sitter@0.24.7)':
-    dependencies:
-      '@llamaindex/core': 0.5.5(@aws-crypto/sha256-js@5.2.0)(@huggingface/transformers@3.4.0)(gpt-tokenizer@2.9.0)(js-tiktoken@1.0.19)(pathe@2.0.3)
-      '@llamaindex/env': 0.1.28(@aws-crypto/sha256-js@5.2.0)(@huggingface/transformers@3.4.0)(gpt-tokenizer@2.9.0)(js-tiktoken@1.0.19)(pathe@2.0.3)
-      html-to-text: 9.0.5
-      tree-sitter: 0.22.4
-      web-tree-sitter: 0.24.7
-
-  '@llamaindex/openai@0.1.57(@aws-crypto/sha256-js@5.2.0)(@huggingface/transformers@3.4.0)(encoding@0.1.13)(gpt-tokenizer@2.9.0)(js-tiktoken@1.0.19)(pathe@2.0.3)(ws@8.18.1(bufferutil@4.0.9)(utf-8-validate@6.0.5))(zod@3.24.3)':
-    dependencies:
-      '@llamaindex/core': 0.5.5(@aws-crypto/sha256-js@5.2.0)(@huggingface/transformers@3.4.0)(gpt-tokenizer@2.9.0)(js-tiktoken@1.0.19)(pathe@2.0.3)
-      '@llamaindex/env': 0.1.28(@aws-crypto/sha256-js@5.2.0)(@huggingface/transformers@3.4.0)(gpt-tokenizer@2.9.0)(js-tiktoken@1.0.19)(pathe@2.0.3)
-      openai: 4.94.0(encoding@0.1.13)(ws@8.18.1(bufferutil@4.0.9)(utf-8-validate@6.0.5))(zod@3.24.3)
-    transitivePeerDependencies:
-      - '@aws-crypto/sha256-js'
-      - '@huggingface/transformers'
-      - encoding
-      - gpt-tokenizer
-      - js-tiktoken
-      - pathe
-      - tiktoken
-      - ws
-      - zod
-
-  '@llamaindex/workflow@0.0.12(@llamaindex/core@0.5.5(@aws-crypto/sha256-js@5.2.0)(@huggingface/transformers@3.4.0)(gpt-tokenizer@2.9.0)(js-tiktoken@1.0.19)(pathe@2.0.3))(@llamaindex/env@0.1.28(@aws-crypto/sha256-js@5.2.0)(@huggingface/transformers@3.4.0)(gpt-tokenizer@2.9.0)(js-tiktoken@1.0.19)(pathe@2.0.3))(zod@3.24.3)':
-    dependencies:
-      '@llamaindex/core': 0.5.5(@aws-crypto/sha256-js@5.2.0)(@huggingface/transformers@3.4.0)(gpt-tokenizer@2.9.0)(js-tiktoken@1.0.19)(pathe@2.0.3)
-      '@llamaindex/env': 0.1.28(@aws-crypto/sha256-js@5.2.0)(@huggingface/transformers@3.4.0)(gpt-tokenizer@2.9.0)(js-tiktoken@1.0.19)(pathe@2.0.3)
-      zod: 3.24.3
 
   '@lukeed/csprng@1.1.0': {}
 
@@ -26792,11 +26697,6 @@ snapshots:
       - '@types/node'
 
   '@sec-ant/readable-stream@0.4.1': {}
-
-  '@selderee/plugin-htmlparser2@0.11.0':
-    dependencies:
-      domhandler: 5.0.3
-      selderee: 0.11.0
 
   '@sevinf/maybe@0.5.0': {}
 
@@ -32944,24 +32844,9 @@ snapshots:
 
   html-escaper@2.0.2: {}
 
-  html-to-text@9.0.5:
-    dependencies:
-      '@selderee/plugin-htmlparser2': 0.11.0
-      deepmerge: 4.3.1
-      dom-serializer: 2.0.0
-      htmlparser2: 8.0.2
-      selderee: 0.11.0
-
   html-url-attributes@3.0.1: {}
 
   html-void-elements@3.0.0: {}
-
-  htmlparser2@8.0.2:
-    dependencies:
-      domelementtype: 2.3.0
-      domhandler: 5.0.3
-      domutils: 3.2.2
-      entities: 4.5.0
 
   http-cache-semantics@4.1.1: {}
 
@@ -34287,8 +34172,6 @@ snapshots:
     dependencies:
       readable-stream: 2.3.8
 
-  leac@0.6.0: {}
-
   leven@3.1.0: {}
 
   levn@0.4.1:
@@ -34421,32 +34304,6 @@ snapshots:
       log-update: 6.1.0
       rfdc: 1.4.1
       wrap-ansi: 9.0.0
-
-  llamaindex@0.9.6(@aws-crypto/sha256-js@5.2.0)(@huggingface/transformers@3.4.0)(encoding@0.1.13)(js-tiktoken@1.0.19)(pathe@2.0.3)(tree-sitter@0.22.4)(web-tree-sitter@0.24.7)(ws@8.18.1(bufferutil@4.0.9)(utf-8-validate@6.0.5))(zod@3.24.3):
-    dependencies:
-      '@llamaindex/cloud': 3.0.6(@llamaindex/core@0.5.5(@aws-crypto/sha256-js@5.2.0)(@huggingface/transformers@3.4.0)(gpt-tokenizer@2.9.0)(js-tiktoken@1.0.19)(pathe@2.0.3))(@llamaindex/env@0.1.28(@aws-crypto/sha256-js@5.2.0)(@huggingface/transformers@3.4.0)(gpt-tokenizer@2.9.0)(js-tiktoken@1.0.19)(pathe@2.0.3))
-      '@llamaindex/core': 0.5.5(@aws-crypto/sha256-js@5.2.0)(@huggingface/transformers@3.4.0)(gpt-tokenizer@2.9.0)(js-tiktoken@1.0.19)(pathe@2.0.3)
-      '@llamaindex/env': 0.1.28(@aws-crypto/sha256-js@5.2.0)(@huggingface/transformers@3.4.0)(gpt-tokenizer@2.9.0)(js-tiktoken@1.0.19)(pathe@2.0.3)
-      '@llamaindex/node-parser': 1.0.5(@llamaindex/core@0.5.5(@aws-crypto/sha256-js@5.2.0)(@huggingface/transformers@3.4.0)(gpt-tokenizer@2.9.0)(js-tiktoken@1.0.19)(pathe@2.0.3))(@llamaindex/env@0.1.28(@aws-crypto/sha256-js@5.2.0)(@huggingface/transformers@3.4.0)(gpt-tokenizer@2.9.0)(js-tiktoken@1.0.19)(pathe@2.0.3))(tree-sitter@0.22.4)(web-tree-sitter@0.24.7)
-      '@llamaindex/openai': 0.1.57(@aws-crypto/sha256-js@5.2.0)(@huggingface/transformers@3.4.0)(encoding@0.1.13)(gpt-tokenizer@2.9.0)(js-tiktoken@1.0.19)(pathe@2.0.3)(ws@8.18.1(bufferutil@4.0.9)(utf-8-validate@6.0.5))(zod@3.24.3)
-      '@llamaindex/workflow': 0.0.12(@llamaindex/core@0.5.5(@aws-crypto/sha256-js@5.2.0)(@huggingface/transformers@3.4.0)(gpt-tokenizer@2.9.0)(js-tiktoken@1.0.19)(pathe@2.0.3))(@llamaindex/env@0.1.28(@aws-crypto/sha256-js@5.2.0)(@huggingface/transformers@3.4.0)(gpt-tokenizer@2.9.0)(js-tiktoken@1.0.19)(pathe@2.0.3))(zod@3.24.3)
-      '@types/lodash': 4.17.16
-      '@types/node': 20.17.30
-      ajv: 8.17.1
-      gpt-tokenizer: 2.9.0
-      lodash: 4.17.21
-      magic-bytes.js: 1.10.0
-    transitivePeerDependencies:
-      - '@aws-crypto/sha256-js'
-      - '@huggingface/transformers'
-      - encoding
-      - js-tiktoken
-      - pathe
-      - tiktoken
-      - tree-sitter
-      - web-tree-sitter
-      - ws
-      - zod
 
   load-tsconfig@0.2.5: {}
 
@@ -35722,8 +35579,6 @@ snapshots:
 
   node-addon-api@7.1.1: {}
 
-  node-addon-api@8.3.1: {}
-
   node-domexception@1.0.0: {}
 
   node-ensure@0.0.0: {}
@@ -36363,11 +36218,6 @@ snapshots:
     dependencies:
       entities: 4.5.0
 
-  parseley@0.12.1:
-    dependencies:
-      leac: 0.6.0
-      peberminta: 0.9.0
-
   parseurl@1.3.3: {}
 
   pascal-case@3.1.2:
@@ -36433,8 +36283,6 @@ snapshots:
       node-ensure: 0.0.0
     transitivePeerDependencies:
       - supports-color
-
-  peberminta@0.9.0: {}
 
   peek-readable@4.1.0: {}
 
@@ -37682,10 +37530,6 @@ snapshots:
     dependencies:
       commander: 2.20.3
 
-  selderee@0.11.0:
-    dependencies:
-      parseley: 0.12.1
-
   semaphore@1.1.0:
     optional: true
 
@@ -38750,11 +38594,6 @@ snapshots:
 
   tree-kill@1.2.2: {}
 
-  tree-sitter@0.22.4:
-    dependencies:
-      node-addon-api: 8.3.1
-      node-gyp-build: 4.8.4
-
   trim-lines@3.0.1: {}
 
   trim-repeated@2.0.0:
@@ -39700,8 +39539,6 @@ snapshots:
   web-streams-polyfill@3.3.3: {}
 
   web-streams-polyfill@4.0.0-beta.3: {}
-
-  web-tree-sitter@0.24.7: {}
 
   web-vitals@0.2.4: {}
 
