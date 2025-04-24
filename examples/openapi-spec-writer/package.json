@@ -9,11 +9,12 @@
     "lint": "next lint"
   },
   "dependencies": {
-    "@mastra/core": "workspace:*",
-    "@mastra/firecrawl": "workspace:*",
-    "@mastra/github": "workspace:*",
-    "@mastra/loggers": "workspace:*",
-    "@mastra/rag": "workspace:*",
+    "@ai-sdk/openai": "^1.3.17",
+    "@mastra/core": "latest",
+    "@mastra/firecrawl": "latest",
+    "@mastra/github": "latest",
+    "@mastra/loggers": "latest",
+    "@mastra/rag": "latest",
     "@radix-ui/react-accordion": "^1.2.3",
     "@radix-ui/react-dialog": "^1.1.6",
     "@radix-ui/react-select": "^2.1.6",
@@ -32,6 +33,7 @@
     "zod": "^3.24.2"
   },
   "devDependencies": {
+    "@libsql/client": "^0.15.4",
     "@types/js-yaml": "^4.0.9",
     "@types/node": "^20.17.24",
     "@types/react": "^19.0.10",
@@ -47,5 +49,15 @@
     "react": ">= 0.14.0 || 19",
     "react-dom": ">= 0.14.0 || 19"
   },
-  "version": "0.0.1"
+  "version": "0.0.1",
+  "pnpm": {
+    "overrides": {
+      "@mastra/core": "link:../../packages/core",
+      "@mastra/firecrawl": "link:../../integrations/firecrawl",
+      "@mastra/github": "link:../../integrations/github",
+      "@mastra/loggers": "link:../../packages/loggers",
+      "@mastra/rag": "link:../../packages/rag"
+    }
+  },
+  "packageManager": "pnpm@10.9.0+sha512.0486e394640d3c1fb3c9d43d49cf92879ff74f8516959c235308f5a8f62e2e19528a65cdc2a3058f587cde71eba3d5b56327c8c33a97e4c4051ca48a10ca2d5f"
 }
