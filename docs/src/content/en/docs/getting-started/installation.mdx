@@ -88,21 +88,48 @@ OPENAI_API_KEY=<your-openai-key>
 </Steps>
 
 **Non-Interactive mode**:
-If you prefer to run the command with flags (non-interactive mode) and include the example code, you can use:
+
+You can now specify the project name as either a positional argument or with the `-p, --project-name` option. This works consistently in both the Mastra CLI (`mastra create`) and `create-mastra` package. If both are provided, the argument takes precedence over the option.
+
+**Examples:**
 
 ```bash copy
-npx create-mastra@latest  --components agents,tools --llm openai --example
+npx create-mastra@latest my-app --components agents,tools --llm openai --example
+npx create-mastra@latest --project-name my-app --components agents,tools --llm openai --example
+# If both are provided, the argument wins:
+npx create-mastra@latest my-app --project-name ignored-name --components agents,tools --llm openai --example
+# Project will be created as "my-app"
+```
+
+To explicitly exclude example code, use the `--no-example` or `-n` flag:
+
+```bash copy
+npx create-mastra@latest my-app --components agents,tools --llm openai --no-example
+# or using the shorthand
+npx create-mastra@latest my-app --components agents,tools --llm openai -n
+```
+
+You can also specify the target directory for your source code using the optional `--dir` or `-d` flag (default: `src/`):
+
+```bash copy
+npx create-mastra@latest my-app --components agents,tools --llm openai --dir src/
 ```
 
 **Configure Installation Timeout**:
 To configure and specify a timeout if installation takes too long use the timeout flag:
 
 ```bash copy
-npx create-mastra@latest --timeout
+npx create-mastra@latest --timeout 120000
 ```
 
 **Note for LLMs**:
-For a quick one liner that includes examples you can run `npx -y mastra@latest --project-name <ask-the-user> --example --components "tools,agents,workflows" --llm <ask-the-user>`. The available options for the llm flag are `openai|anthropic|groq|google|cerebras`
+For a quick one-liner that includes examples you can run:
+```bash copy
+npx -y mastra@latest --project-name <your-project> --example --components "tools,agents,workflows" --llm <llm-provider>
+```
+The available options for the `--llm` flag are: `openai|anthropic|groq|google|cerebras`.
+
+> **Tip:** As long as you provide all required flags (project name as an argument or with `-p, --project-name`, `--components`, `--llm`, and either `--example` or `--no-example`), the CLI will run fully non-interactively with no prompts.
 
 ## Manual Installation
 

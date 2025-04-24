@@ -1,12 +1,12 @@
 import { createOpenAI } from '@ai-sdk/openai';
-import type { MastraLanguageModel } from '@mastra/core/agent';
 import type {
   KeywordExtractPrompt,
   QuestionExtractPrompt,
   SummaryPrompt,
   TitleExtractorPrompt,
   TitleCombinePrompt,
-} from 'llamaindex';
+} from '@llamaindex/core/prompts';
+import type { MastraLanguageModel } from '@mastra/core/agent';
 
 export type KeywordExtractArgs = {
   llm?: MastraLanguageModel;

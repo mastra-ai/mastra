@@ -129,6 +129,18 @@ async function analyze(
     }
   }
 
+  for (const o of output) {
+    if (o.type !== 'chunk' || o.dynamicImports.length === 0) {
+      continue;
+    }
+
+    for (const dynamicImport of o.dynamicImports) {
+      if (!depsToOptimize.has(dynamicImport)) {
+        depsToOptimize.set(dynamicImport, ['*']);
+      }
+    }
+  }
+
   return depsToOptimize;
 }
 
