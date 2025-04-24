@@ -59,7 +59,7 @@ const TraceRow = ({ trace, index }: { trace: RefinedTrace; index: number }) => {
     <Row>
       <DateTimeCell dateTime={new Date(trace.started / 1000)} />
       <TxtCell>{trace.traceId}</TxtCell>
-      <UnitCell unit="ms">{trace.duration}</UnitCell>
+      <UnitCell unit="ms">{trace.duration / 1000}</UnitCell>
       <Cell>
         <button onClick={() => openTrace(trace.trace, index)}>
           <Badge icon={<TraceIcon />}>

@@ -29,12 +29,8 @@ export const Thread = ({ ToolFallback }: ThreadProps) => {
   };
 
   return (
-    <ThreadPrimitive.Root className="max-w-[568px] w-full mx-auto h-[calc(100%-100px)]">
-      <ThreadPrimitive.Viewport
-        className="py-10 overflow-y-auto scroll-smooth h-full px-4"
-        ref={areaRef}
-        autoScroll={false}
-      >
+    <ThreadPrimitive.Root className="max-w-[568px] w-full mx-auto h-[calc(100%-100px)] px-4">
+      <ThreadPrimitive.Viewport className="py-10 overflow-y-auto scroll-smooth h-full" ref={areaRef} autoScroll={false}>
         <div>
           <ThreadWelcome />
           <ThreadPrimitive.Messages
