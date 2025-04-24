@@ -6,7 +6,9 @@ import { ToolFallback } from './tool-fallback';
 export const NetworkChat = ({ agentId, memory }: ChatProps) => {
   return (
     <MastraNetworkRuntimeProvider agentId={agentId} memory={memory}>
-      <Thread memory={memory} ToolFallback={ToolFallback} />
+      <div className="h-full pb-4">
+        <Thread ToolFallback={ToolFallback} />
+      </div>
     </MastraNetworkRuntimeProvider>
   );
 };
