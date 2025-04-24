@@ -1,18 +1,12 @@
 import { defaultNodeTextTemplate } from '../prompts';
 import type { BaseNode } from '../schema';
-import { TransformComponent, TextNode } from '../schema';
+import { TextNode } from '../schema';
 
 /*
  * Abstract class for all extractors.
  */
-export abstract class BaseExtractor extends TransformComponent {
+export abstract class BaseExtractor {
   isTextNodeOnly: boolean = true;
-
-  constructor() {
-    super(async (nodes: BaseNode[]): Promise<BaseNode[]> => {
-      return this.processNodes(nodes);
-    });
-  }
 
   abstract extract(nodes: BaseNode[]): Promise<Record<string, any>[]>;
 

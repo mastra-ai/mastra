@@ -1,11 +1,5 @@
 export type MessageType = 'user' | 'assistant' | 'system' | 'memory' | 'developer';
 
-export type ChatMessage<AdditionalMessageOptions extends object = object> = {
-  content: MessageContent;
-  role: MessageType;
-  options?: undefined | AdditionalMessageOptions;
-};
-
 export type MessageContentTextDetail = {
   type: 'text';
   text: string;
@@ -16,6 +10,8 @@ export type MessageContentTextDetail = {
  */
 export type MessageContent = string | MessageContentTextDetail[];
 
-export type ObjectEntries<T extends Record<string, any>> = {
-  [K in keyof T]: [K, T[K]];
-}[keyof T][];
+export type ChatMessage<AdditionalMessageOptions extends object = object> = {
+  content: MessageContent;
+  role: MessageType;
+  options?: undefined | AdditionalMessageOptions;
+};

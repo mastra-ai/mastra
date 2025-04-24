@@ -1,40 +1,6 @@
-import { randomUUID } from 'crypto';
-import { lazyInitHash, createSHA256 } from '../utils';
-
-export enum NodeRelationship {
-  SOURCE = 'SOURCE',
-  PREVIOUS = 'PREVIOUS',
-  NEXT = 'NEXT',
-  PARENT = 'PARENT',
-  CHILD = 'CHILD',
-}
-
-export enum ObjectType {
-  TEXT = 'TEXT',
-  IMAGE = 'IMAGE',
-  INDEX = 'INDEX',
-  DOCUMENT = 'DOCUMENT',
-  IMAGE_DOCUMENT = 'IMAGE_DOCUMENT',
-}
-
-export type Metadata = Record<string, any>;
-
-export interface RelatedNodeInfo<T extends Metadata = Metadata> {
-  nodeId: string;
-  nodeType?: ObjectType;
-  metadata: T;
-  hash?: string;
-}
-
-export type RelatedNodeType<T extends Metadata = Metadata> = RelatedNodeInfo<T> | RelatedNodeInfo<T>[];
-
-export type BaseNodeParams<T extends Metadata = Metadata> = {
-  id_?: string | undefined;
-  metadata?: T | undefined;
-  relationships?: Partial<Record<NodeRelationship, RelatedNodeType<T>>> | undefined;
-  hash?: string | undefined;
-  embedding?: number[] | undefined;
-};
+import { createHash, randomUUID } from 'crypto';
+import { NodeRelationship, ObjectType } from './types';
+import type { Metadata, RelatedNodeInfo, RelatedNodeType, BaseNodeParams } from './types';
 
 /**
  * Generic abstract class for retrievable nodes
@@ -132,7 +98,7 @@ export type TextNodeParams<T extends Metadata = Metadata> = BaseNodeParams<T> & 
 };
 
 /**
- * TextNode is the default node type for text. Most common node type in LlamaIndex.TS
+ * TextNode is the default node type for text.
  */
 export class TextNode<T extends Metadata = Metadata> extends BaseNode<T> {
   text: string;
@@ -206,4 +172,38 @@ export class Document<T extends Metadata = Metadata> extends TextNode<T> {
   get type() {
     return ObjectType.DOCUMENT;
   }
+}
+
+function lazyInitHash(
+  value: ClassAccessorDecoratorTarget<BaseNode, string>,
+  _context: ClassAccessorDecoratorContext,
+): ClassAccessorDecoratorResult<BaseNode, string> {
+  return {
+    get() {
+      const oldValue = value.get.call(this);
+      if (oldValue === '') {
+        const hash = this.generateHash();
+        value.set.call(this, hash);
+      }
+      return value.get.call(this);
+    },
+    set(newValue: string) {
+      value.set.call(this, newValue);
+    },
+    init(value: string): string {
+      return value;
+    },
+  };
+}
+
+function createSHA256() {
+  const hash = createHash('sha256');
+  return {
+    update(data: string | Uint8Array): void {
+      hash.update(data);
+    },
+    digest() {
+      return hash.digest('base64');
+    },
+  };
 }

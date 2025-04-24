@@ -55,8 +55,8 @@ export class MDocument {
     }
 
     let nodes: BaseNode[] = this.chunks;
-    for (const transform of transformations) {
-      nodes = await transform(nodes);
+    for (const extractor of transformations) {
+      nodes = await extractor.processNodes(nodes);
     }
 
     this.chunks = this.chunks.map((doc, i) => {

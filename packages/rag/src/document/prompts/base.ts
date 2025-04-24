@@ -1,87 +1,31 @@
-import type { Metadata, BaseOutputParser } from '../schema';
-import type { ChatMessage } from '../utils';
-import { objectEntries } from '../utils';
 import { format } from './format';
-import { PromptType } from './prompt-type';
+import type { ChatMessage } from './types';
 
-type MappingFn<TemplatesVar extends string[] = string[]> = (options: Record<TemplatesVar[number], string>) => string;
-
-export type BasePromptTemplateOptions<TemplatesVar extends readonly string[], Vars extends readonly string[]> = {
-  metadata?: Metadata;
+export type BasePromptTemplateOptions<TemplatesVar extends readonly string[]> = {
   templateVars?:
     | TemplatesVar
     // loose type for better type inference
     | readonly string[];
   options?: Partial<Record<TemplatesVar[number] | (string & {}), string>>;
-  outputParser?: BaseOutputParser | undefined;
-  templateVarMappings?: Partial<Record<Vars[number] | (string & {}), TemplatesVar[number] | (string & {})>>;
-  functionMappings?: Partial<Record<TemplatesVar[number] | (string & {}), MappingFn>>;
 };
 
-export abstract class BasePromptTemplate<
-  const TemplatesVar extends readonly string[] = string[],
-  const Vars extends readonly string[] = string[],
-> {
-  metadata: Metadata = {};
-  /**
-   * Set of template variables used in the prompt template. Used for type hints only.
-   * To get the list of template variables used in the prompt at run-time, use the `vars` method.
-   */
+export abstract class BasePromptTemplate<const TemplatesVar extends readonly string[] = string[]> {
   templateVars: Set<string> = new Set();
   options: Partial<Record<TemplatesVar[number] | (string & {}), string>> = {};
-  outputParser: BaseOutputParser | undefined;
-  templateVarMappings: Partial<Record<Vars[number] | (string & {}), TemplatesVar[number] | (string & {})>> = {};
-  functionMappings: Partial<Record<TemplatesVar[number] | (string & {}), MappingFn>> = {};
 
-  protected constructor(options: BasePromptTemplateOptions<TemplatesVar, Vars>) {
-    const { metadata, templateVars, outputParser, templateVarMappings, functionMappings } = options;
-    if (metadata) {
-      this.metadata = metadata;
-    }
+  protected constructor(options: BasePromptTemplateOptions<TemplatesVar>) {
+    const { templateVars } = options;
     if (templateVars) {
       this.templateVars = new Set(templateVars);
     }
     if (options.options) {
       this.options = options.options;
     }
-    this.outputParser = outputParser;
-    if (templateVarMappings) {
-      this.templateVarMappings = templateVarMappings;
-    }
-    if (functionMappings) {
-      this.functionMappings = functionMappings;
-    }
-  }
-
-  protected mapTemplateVars(options: Record<TemplatesVar[number] | (string & {}), string>) {
-    const templateVarMappings = this.templateVarMappings;
-    return Object.fromEntries(objectEntries(options).map(([k, v]) => [templateVarMappings[k] || k, v]));
-  }
-
-  protected mapFunctionVars(options: Record<TemplatesVar[number] | (string & {}), string>) {
-    const functionMappings = this.functionMappings;
-    const newOptions = {} as Record<TemplatesVar[number], string>;
-    for (const [k, v] of objectEntries(functionMappings)) {
-      newOptions[k] = v!(options);
-    }
-
-    for (const [k, v] of objectEntries(options)) {
-      if (!(k in newOptions)) {
-        newOptions[k] = v;
-      }
-    }
-
-    return newOptions;
-  }
-
-  protected mapAllVars(options: Record<TemplatesVar[number] | (string & {}), string>): Record<string, string> {
-    const newOptions = this.mapFunctionVars(options);
-    return this.mapTemplateVars(newOptions);
   }
 
   abstract partialFormat(
     options: Partial<Record<TemplatesVar[number] | (string & {}), string>>,
-  ): BasePromptTemplate<TemplatesVar, Vars>;
+  ): BasePromptTemplate<TemplatesVar>;
 
   abstract format(options?: Partial<Record<TemplatesVar[number] | (string & {}), string>>): string;
 
@@ -110,40 +54,30 @@ export type StringTemplate<Var extends readonly string[]> = Var['length'] extend
 
 export type PromptTemplateOptions<
   TemplatesVar extends readonly string[],
-  Vars extends readonly string[],
   Template extends StringTemplate<TemplatesVar>,
-> = BasePromptTemplateOptions<TemplatesVar, Vars> & {
+> = BasePromptTemplateOptions<TemplatesVar> & {
   template: Template;
-  promptType?: PromptType;
 };
 
 export class PromptTemplate<
   const TemplatesVar extends readonly string[] = string[],
-  const Vars extends readonly string[] = string[],
   const Template extends StringTemplate<TemplatesVar> = StringTemplate<TemplatesVar>,
-> extends BasePromptTemplate<TemplatesVar, Vars> {
+> extends BasePromptTemplate<TemplatesVar> {
   #template: Template;
-  promptType: PromptType;
 
-  constructor(options: PromptTemplateOptions<TemplatesVar, Vars, Template>) {
-    const { template, promptType, ...rest } = options;
+  constructor(options: PromptTemplateOptions<TemplatesVar, Template>) {
+    const { template, ...rest } = options;
     super(rest);
     this.#template = template;
-    this.promptType = promptType ?? PromptType.custom;
   }
 
   partialFormat(
     options: Partial<Record<TemplatesVar[number] | (string & {}), string>>,
-  ): PromptTemplate<TemplatesVar, Vars, Template> {
+  ): PromptTemplate<TemplatesVar, Template> {
     const prompt = new PromptTemplate({
       template: this.template,
       templateVars: [...this.templateVars],
       options: this.options,
-      outputParser: this.outputParser,
-      templateVarMappings: this.templateVarMappings,
-      functionMappings: this.functionMappings,
-      metadata: this.metadata,
-      promptType: this.promptType,
     });
 
     prompt.options = {
@@ -160,14 +94,7 @@ export class PromptTemplate<
       ...options,
     } as Record<TemplatesVar[number], string>;
 
-    const mappedAllOptions = this.mapAllVars(allOptions);
-
-    const prompt = format(this.template, mappedAllOptions);
-
-    if (this.outputParser) {
-      return this.outputParser.format(prompt);
-    }
-    return prompt;
+    return format(this.template, allOptions);
   }
 
   formatMessages(options?: Partial<Record<TemplatesVar[number] | (string & {}), string>>): ChatMessage[] {

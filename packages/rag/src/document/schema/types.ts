@@ -1,33 +1,34 @@
-import { randomUUID } from 'crypto';
-import type { BaseNode } from './node';
-
-interface TransformComponentSignature<Result extends BaseNode[] | Promise<BaseNode[]>> {
-  <Options extends Record<string, unknown>>(nodes: BaseNode[], options?: Options): Result;
+export enum NodeRelationship {
+  SOURCE = 'SOURCE',
+  PREVIOUS = 'PREVIOUS',
+  NEXT = 'NEXT',
+  PARENT = 'PARENT',
+  CHILD = 'CHILD',
 }
 
-export interface TransformComponent<Result extends BaseNode[] | Promise<BaseNode[]> = BaseNode[] | Promise<BaseNode[]>>
-  extends TransformComponentSignature<Result> {
-  id: string;
+export enum ObjectType {
+  TEXT = 'TEXT',
+  IMAGE = 'IMAGE',
+  INDEX = 'INDEX',
+  DOCUMENT = 'DOCUMENT',
+  IMAGE_DOCUMENT = 'IMAGE_DOCUMENT',
 }
 
-export class TransformComponent<Result extends BaseNode[] | Promise<BaseNode[]> = BaseNode[] | Promise<BaseNode[]>> {
-  constructor(transformFn: TransformComponentSignature<Result>) {
-    Object.defineProperties(transformFn, Object.getOwnPropertyDescriptors(this.constructor.prototype));
-    const transform = function transform(...args: Parameters<TransformComponentSignature<Result>>) {
-      return transformFn(...args);
-    };
-    Reflect.setPrototypeOf(transform, new.target.prototype);
-    transform.id = randomUUID();
-    return transform;
-  }
+export type Metadata = Record<string, any>;
+
+export interface RelatedNodeInfo<T extends Metadata = Metadata> {
+  nodeId: string;
+  nodeType?: ObjectType;
+  metadata: T;
+  hash?: string;
 }
 
-/**
- * An OutputParser is used to extract structured data from the raw output of the LLM.
- */
+export type RelatedNodeType<T extends Metadata = Metadata> = RelatedNodeInfo<T> | RelatedNodeInfo<T>[];
 
-export interface BaseOutputParser<T = any> {
-  parse(output: string): T;
-
-  format(output: string): string;
-}
+export type BaseNodeParams<T extends Metadata = Metadata> = {
+  id_?: string | undefined;
+  metadata?: T | undefined;
+  relationships?: Partial<Record<NodeRelationship, RelatedNodeType<T>>> | undefined;
+  hash?: string | undefined;
+  embedding?: number[] | undefined;
+};
