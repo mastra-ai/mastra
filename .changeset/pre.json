@@ -145,5 +145,9 @@
     "@mastra/voice-sarvam": "0.1.9",
     "@mastra/voice-speechify": "0.1.14"
   },
-  "changesets": []
+  "changesets": [
+    "cool-papers-check",
+    "eight-ways-attack",
+    "fast-beans-drive"
+  ]
 }

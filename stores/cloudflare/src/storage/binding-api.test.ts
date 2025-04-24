@@ -734,6 +734,7 @@ describe('CloudflareStore Workers Binding', () => {
           triggerData: { source: 'test' },
           attempts: { 'step-1': 0 },
         },
+        suspendedPaths: {},
         activePaths: [{ stepPath: ['main'], stepId: 'step-1', status: 'waiting' }],
       };
 
@@ -782,6 +783,7 @@ describe('CloudflareStore Workers Binding', () => {
           triggerData: { source: 'test' },
           attempts: { 'step-1': 0 },
         },
+        suspendedPaths: {},
         activePaths: [{ stepPath: ['main'], stepId: 'step-1', status: 'waiting' }],
       };
 
@@ -846,6 +848,7 @@ describe('CloudflareStore Workers Binding', () => {
           triggerData: { source: 'test' },
           attempts: { 'step-1': 0, 'step-2': 0 },
         },
+        suspendedPaths: {},
         activePaths: [
           { stepPath: ['main'], stepId: 'step-1', status: 'waiting' },
           { stepPath: ['main'], stepId: 'step-2', status: 'waiting' },

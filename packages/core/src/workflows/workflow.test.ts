@@ -5,9 +5,9 @@ import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 
 import { Agent } from '../agent';
-import { RuntimeContext } from '../di';
 import { createLogger } from '../logger';
 import { Mastra } from '../mastra';
+import { RuntimeContext } from '../runtime-context';
 import { TABLE_WORKFLOW_SNAPSHOT } from '../storage';
 import { DefaultStorage } from '../storage/libsql';
 import { Telemetry } from '../telemetry';
@@ -4876,6 +4876,7 @@ describe('Workflow', async () => {
         return { injectedValue: value };
       });
 
+      // @ts-ignore
       const step = new Step({ id: 'step1', execute });
       const workflow = new Workflow({ name: 'test-workflow' });
       workflow.step(step).commit();
@@ -4883,6 +4884,7 @@ describe('Workflow', async () => {
       const run = workflow.createRun();
       const result = await run.start({ runtimeContext });
 
+      // @ts-ignore
       expect(result.results.step1.output.injectedValue).toBe(testValue);
     });
 
@@ -4923,7 +4925,7 @@ describe('Workflow', async () => {
         runtimeContext: resumeRuntimeContext,
       });
 
-      console.log(result);
+      // @ts-ignore
       expect(result?.results.step1.output.injectedValue).toBe(testValue + '2');
     });
   });

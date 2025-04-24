@@ -6,9 +6,9 @@ import type { MachineContext, Snapshot } from 'xstate';
 import { assign, createActor, fromPromise, setup } from 'xstate';
 import type { z } from 'zod';
 import type { MastraUnion } from '../action';
-import type { RuntimeContext } from '../di';
 import type { Logger } from '../logger';
 import type { Mastra } from '../mastra';
+import type { RuntimeContext } from '../runtime-context';
 import { createMastraProxy } from '../utils';
 import type { Step } from './step';
 import type {

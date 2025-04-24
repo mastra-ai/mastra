@@ -79,6 +79,9 @@ export abstract class Bundler extends MastraBundler {
           license: 'ISC',
           dependencies: Object.fromEntries(dependenciesMap.entries()),
           ...(Object.keys(resolutions ?? {}).length > 0 && { resolutions }),
+          pnpm: {
+            neverBuiltDependencies: [],
+          },
         },
         null,
         2,

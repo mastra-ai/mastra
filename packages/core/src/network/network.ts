@@ -14,9 +14,9 @@ import { Agent } from '../agent';
 import type { AgentGenerateOptions, AgentStreamOptions } from '../agent';
 import { MastraBase } from '../base';
 
-import type { RuntimeContext } from '../di';
 import { RegisteredLogger } from '../logger';
 import type { Mastra } from '../mastra';
+import type { RuntimeContext } from '../runtime-context';
 import { createTool } from '../tools';
 import type { ToolAction } from '../tools';
 import type { AgentNetworkConfig } from './types';

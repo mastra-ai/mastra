@@ -1,5 +1,14 @@
 # @mastra/cloudflare
 
+## 0.1.1-alpha.0
+
+### Patch Changes
+
+- 835c1c8: suspended paths fix
+- 81fb7f6: Workflows v2
+- Updated dependencies [81fb7f6]
+  - @mastra/core@0.9.1-alpha.0
+
 ## 0.1.0
 
 ### Minor Changes

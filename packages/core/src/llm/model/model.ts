@@ -15,10 +15,10 @@ import type {
 } from '../';
 import type { MastraPrimitives } from '../../action';
 import type { AiMessageType, ToolsInput } from '../../agent/types';
-import type { RuntimeContext } from '../../di';
 import type { Mastra } from '../../mastra';
 import type { MessageType } from '../../memory';
 import type { MastraMemory } from '../../memory/memory';
+import type { RuntimeContext } from '../../runtime-context';
 import type { CoreTool } from '../../tools';
 import { createMastraProxy, delay, makeCoreTool } from '../../utils';
 

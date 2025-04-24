@@ -6,8 +6,8 @@ import type { MastraPrimitives } from '../action';
 import type { Agent } from '../agent';
 import { MastraBase } from '../base';
 
-import { RuntimeContext } from '../di/index';
 import type { Mastra } from '../mastra';
+import { RuntimeContext } from '../runtime-context';
 import { Step } from './step';
 import type {
   ActionContext,
@@ -1159,6 +1159,7 @@ export class Workflow<
 
       const m = this.#getActivePathsAndStatus(parsed.value);
 
+      // @ts-ignore
       return {
         runId,
         value: parsed.value,
