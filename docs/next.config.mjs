@@ -431,7 +431,7 @@ export default withGT(
         permanent: true,
       },
       {
-        source: "/docs/reference/workflows",
+        source: "/docs/reference/workflows/step-retries",
         destination: "/reference/workflows/step-retries",
         permanent: true,
       },
