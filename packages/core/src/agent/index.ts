@@ -121,7 +121,11 @@ export class Agent<
     if (config.voice) {
       this.voice = config.voice;
       this.voice?.addTools(this.tools);
-      this.voice?.addInstructions(config.instructions);
+      if (typeof config.instructions === "string") {
+        this.voice?.addInstructions(config.instructions);
+      } else {
+        throw new Error('Voice agent instructions must be a string');
+      }
     } else {
       this.voice = new DefaultVoice();
     }
