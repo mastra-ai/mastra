@@ -1,7 +1,7 @@
 import { ToolCallContentPartComponent } from '@assistant-ui/react';
-import { CheckIcon, ChevronDownIcon, ChevronUpIcon } from 'lucide-react';
+import { ChevronUpIcon } from 'lucide-react';
 import { useState } from 'react';
-import { Button } from '../ui/button';
+
 import { Badge } from '@/ds/components/Badge';
 import { Icon, ToolsIcon } from '@/ds/icons';
 import { cn } from '@/lib/utils';
@@ -48,22 +48,6 @@ export const ToolFallback: ToolCallContentPartComponent = ({ toolName, argsText,
           </div>
         </div>
       )}
-    </div>
-  );
-
-  return (
-    <div className="mb-2 flex w-full flex-col gap-3 rounded-lg border py-3 text-sm">
-      <div className="flex items-center gap-2 px-4">
-        <CheckIcon className="size-4" />
-        <p className="">
-          Used tool: <b>{toolName}</b>
-        </p>
-        <div className="flex-grow" />
-        <Button onClick={() => setIsCollapsed(!isCollapsed)}>
-          {isCollapsed ? <ChevronUpIcon /> : <ChevronDownIcon />}
-        </Button>
-      </div>
-      {}
     </div>
   );
 };
