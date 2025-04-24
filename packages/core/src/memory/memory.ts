@@ -100,7 +100,6 @@ export abstract class MastraMemory extends MastraBase {
     this.storage = augmentWithInit(this.storage);
 
     const semanticRecallIsEnabled = this.threadConfig.semanticRecall !== false; // default is to have it enabled, so any value except false means it's on
-
     if (config.vector && semanticRecallIsEnabled) {
       this.vector = config.vector;
     } else if (
