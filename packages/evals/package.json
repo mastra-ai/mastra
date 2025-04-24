@@ -62,19 +62,20 @@
   "author": "",
   "license": "Elastic-2.0",
   "dependencies": {
-    "@mastra/core": "workspace:^",
     "compromise": "^14.14.4",
     "difflib": "^0.2.4",
     "fs-extra": "^11.3.0",
     "keyword-extractor": "^0.0.28",
     "sentiment": "^5.0.2",
-    "string-similarity": "^4.0.4",
-    "zod": "^3.24.2"
+    "string-similarity": "^4.0.4"
   },
   "peerDependencies": {
-    "ai": "^4.0.0"
+    "@mastra/core": "workspace:^",
+    "ai": "^4.0.0",
+    "zod": "^3.23.0"
   },
   "devDependencies": {
+    "@mastra/core": "workspace:^",
     "@ai-sdk/openai": "latest",
     "@internal/lint": "workspace:*",
     "@microsoft/api-extractor": "^7.52.1",
@@ -87,6 +88,7 @@
     "eslint": "^9.23.0",
     "tsup": "^8.4.0",
     "typescript": "^5.8.2",
-    "vitest": "^3.0.9"
+    "vitest": "^3.0.9",
+    "zod": "^3.24.2"
   }
 }

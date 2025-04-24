@@ -26,12 +26,15 @@
   },
   "license": "MIT",
   "dependencies": {
-    "@mastra/core": "workspace:^",
     "@libsql/client": "^0.15.4"
+  },
+  "peerDependencies": {
+    "@mastra/core": "workspace:^"
   },
   "devDependencies": {
     "@internal/lint": "workspace:*",
     "@internal/storage-test-utils": "workspace:*",
+    "@mastra/core": "workspace:^",
     "@microsoft/api-extractor": "^7.52.1",
     "@types/node": "^20.17.27",
     "eslint": "^9.23.0",

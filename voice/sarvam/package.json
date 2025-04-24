@@ -29,18 +29,21 @@
     "lint": "eslint ."
   },
   "license": "Elastic-2.0",
-  "dependencies": {
+  "dependencies": {},
+  "peerDependencies": {
     "@mastra/core": "workspace:^",
-    "zod": "^3.24.2"
+    "zod": "^3.23.0"
   },
   "devDependencies": {
+    "@mastra/core": "workspace:^",
     "@internal/lint": "workspace:*",
     "@microsoft/api-extractor": "^7.52.2",
     "@types/node": "^20.17.27",
     "eslint": "^9.23.0",
     "tsup": "^8.4.0",
     "typescript": "^5.8.2",
-    "vitest": "^2.1.9"
+    "vitest": "^2.1.9",
+    "zod": "^3.24.2"
   },
   "keywords": [
     "mastra",

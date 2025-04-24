@@ -31,7 +31,6 @@
   "author": "",
   "license": "Elastic-2.0",
   "dependencies": {
-    "@mastra/core": "workspace:^",
     "@mastra/mcp": "workspace:^",
     "@modelcontextprotocol/sdk": "^1.9.0",
     "date-fns": "^4.1.0",
@@ -39,10 +38,14 @@
     "jsdom": "^26.0.0",
     "turndown": "^7.1.2",
     "uuid": "^11.1.0",
-    "zod": "^3.22.4",
     "zod-to-json-schema": "^3.22.4"
   },
+  "peerDependencies": {
+    "@mastra/core": "workspace:^",
+    "zod": "^3.23.0"
+  },
   "devDependencies": {
+    "@mastra/core": "workspace:^",
     "@hono/node-server": "^1.13.8",
     "@internal/lint": "workspace:*",
     "@types/jsdom": "^21.1.7",
@@ -55,6 +58,7 @@
     "tsup": "^8.4.0",
     "tsx": "^4.19.3",
     "typescript": "^5.3.3",
-    "vitest": "^3.0.9"
+    "vitest": "^3.0.9",
+    "zod": "^3.22.4"
   }
 }

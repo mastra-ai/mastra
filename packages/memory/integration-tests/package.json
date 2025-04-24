@@ -34,8 +34,7 @@
     "@mastra/memory": "workspace:*",
     "@mastra/pg": "workspace:*",
     "@mastra/upstash": "workspace:*",
-    "dotenv": "^16.4.7",
-    "zod": "^3.24.2"
+    "dotenv": "^16.4.7"
   },
   "devDependencies": {
     "@faker-js/faker": "^9.6.0",
@@ -48,6 +47,10 @@
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
     "typescript": "^5.8.2",
-    "vitest": "^1.6.1"
+    "vitest": "^1.6.1",
+    "zod": "^3.24.2"
+  },
+  "peerDependencies": {
+    "zod": "^3.23.0"
   }
 }
