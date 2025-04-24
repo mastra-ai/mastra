@@ -263,6 +263,7 @@ export class NewWorkflow<
   public description?: string | undefined;
   public inputSchema: TInput;
   public outputSchema: TOutput;
+  public steps?: TSteps;
   protected stepFlow: StepFlowEntry[];
   protected executionEngine: ExecutionEngine;
   protected executionGraph: ExecutionGraph;
@@ -280,6 +281,7 @@ export class NewWorkflow<
     description,
     executionEngine,
     retryConfig,
+    steps,
   }: NewWorkflowConfig<TWorkflowId, TInput, TOutput, TSteps>) {
     super({ name: id, component: RegisteredLogger.WORKFLOW });
     this.id = id;
@@ -290,6 +292,7 @@ export class NewWorkflow<
     this.executionGraph = this.buildExecutionGraph();
     this.stepFlow = [];
     this.#mastra = mastra;
+    this.steps = steps;
 
     if (!executionEngine) {
       // TODO: this should be configured using the Mastra class instance that's passed in
@@ -523,7 +526,7 @@ export class NewWorkflow<
     return this as unknown as NewWorkflow<TSteps, TWorkflowId, TInput, TOutput, TOutput>;
   }
 
-  get steps() {
+  get stepGraph() {
     return this.stepFlow;
   }
 
@@ -613,7 +616,7 @@ export class NewWorkflow<
 
   async getWorkflowRun(runId: string) {
     const runs = await this.getWorkflowRuns();
-    return runs.runs.find(r => r.runId === runId);
+    return runs?.runs.find(r => r.runId === runId);
   }
 }
 
