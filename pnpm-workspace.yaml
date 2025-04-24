@@ -11,3 +11,4 @@ packages:
   - "examples/dane"
   - "packages/cli/src/playground"
   - "packages/*/integration-tests"
+  - "packages/cloud"
