@@ -251,6 +251,7 @@ To keep your defaults as they are, add
 them directly into your Memory configuration,
 otherwise please add the new settings to
 your memory config to prepare for the change.
+--> This breaking change will be released on May 20th <--
 `);
     }
   }
