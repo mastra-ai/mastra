@@ -83,6 +83,11 @@ describe.for(allPackages.map(pkg => [relative(join(__dirname.replaceAll('\\', '/
           }
         },
       );
+
+      const dependencies = [...Object.keys(pkgJson.dependencies ?? {}), ...Object.keys(pkgJson.devDependencies ?? {})];
+      it.skipIf(!dependencies.includes('@mastra/core'))('should have @mastra/core as a peer dependency', () => {
+        expect(pkgJson.peerDependencies?.['@mastra/core']).toBeDefined();
+      });
     });
   },
 );
