@@ -117,7 +117,7 @@ if (depsToInstall.size > 0) {
   console.log(
     'Installing dependencies:',
     [...depsToInstall],
-    ['pnpm', 'install', ...[...depsToInstall].map(dep => `--filter=${dep}`)].join(' '),
+    ['pnpm', 'install', ...[...depsToInstall].map(dep => `--filter ${dep}`)].join(' '),
   );
 
   await spawn(`pnpm`, ['install'], {
@@ -131,6 +131,7 @@ if (linkedDeps.length > 0) {
     'Building dependencies:',
     ['pnpm', 'dlx', 'turbo', 'build', ...linkedDeps.map(dep => `--filter=${dep}`)].join(' '),
   );
+
   await spawn(`pnpm`, ['dlx', 'turbo', 'build', ...linkedDeps.map(dep => `--filter=${dep}`)], {
     cwd: repoRoot,
     shell: true,
