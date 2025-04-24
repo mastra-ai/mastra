@@ -74,13 +74,7 @@ export async function generateSpeechHandler({
       throw new HTTPException(500, { message: 'Failed to generate speech' });
     }
 
-    const chunks: Buffer[] = [];
-    for await (const chunk of audioStream) {
-      chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
-    }
-    const audioData = Buffer.concat(chunks);
-
-    return { audioData };
+    return audioStream;
   } catch (error) {
     return handleError(error, 'Error generating speech');
   }
