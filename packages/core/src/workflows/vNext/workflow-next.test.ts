@@ -1861,7 +1861,7 @@ describe('Workflow', () => {
 
       const executionResult = await run.start({ inputData: {} });
 
-      expect(onTransition).toHaveBeenCalledTimes(2);
+      expect(onTransition).toHaveBeenCalledTimes(3);
       expect(onTransition).toHaveBeenCalledWith(
         expect.objectContaining({
           type: 'watch',
@@ -1915,7 +1915,9 @@ describe('Workflow', () => {
       });
       workflow.then(step1).then(step2).commit();
 
-      const onTransition = vi.fn();
+      const onTransition = vi.fn().mockImplementation(data => {
+        // console.dir({ onTransition: data }, { depth: null });
+      });
 
       const run = workflow.createRun();
       const run2 = workflow.createRun({ runId: run.runId });
@@ -1925,7 +1927,7 @@ describe('Workflow', () => {
 
       const executionResult = await run.start({ inputData: {} });
 
-      expect(onTransition).toHaveBeenCalledTimes(2);
+      expect(onTransition).toHaveBeenCalledTimes(3);
       expect(onTransition).toHaveBeenCalledWith(
         expect.objectContaining({
           type: 'watch',
@@ -1936,7 +1938,14 @@ describe('Workflow', () => {
               output: expect.any(Object),
             }),
             workflowState: expect.objectContaining({
-              status: expect.any(String),
+              status: 'success',
+              steps: {
+                input: {},
+                step1: { status: 'success', output: { result: 'success1' } },
+                step2: { status: 'success', output: { result: 'success2' } },
+              },
+              result: { result: 'success2' },
+              error: null,
             }),
           },
           eventTimestamp: expect.any(Number),
@@ -1989,8 +1998,8 @@ describe('Workflow', () => {
 
       await run.start({ inputData: {} });
 
-      expect(onTransition).toHaveBeenCalledTimes(2);
-      expect(onTransition2).toHaveBeenCalledTimes(2);
+      expect(onTransition).toHaveBeenCalledTimes(3);
+      expect(onTransition2).toHaveBeenCalledTimes(3);
 
       const run2 = workflow.createRun();
 
@@ -1998,8 +2007,8 @@ describe('Workflow', () => {
 
       await run2.start({ inputData: {} });
 
-      expect(onTransition).toHaveBeenCalledTimes(2);
-      expect(onTransition2).toHaveBeenCalledTimes(4);
+      expect(onTransition).toHaveBeenCalledTimes(3);
+      expect(onTransition2).toHaveBeenCalledTimes(6);
 
       const run3 = workflow.createRun();
 
@@ -2007,8 +2016,8 @@ describe('Workflow', () => {
 
       await run3.start({ inputData: {} });
 
-      expect(onTransition).toHaveBeenCalledTimes(4);
-      expect(onTransition2).toHaveBeenCalledTimes(4);
+      expect(onTransition).toHaveBeenCalledTimes(6);
+      expect(onTransition2).toHaveBeenCalledTimes(6);
     });
   });
 
