@@ -1,6 +1,6 @@
 import { randomUUID } from 'crypto';
 import type { D1Database } from '@cloudflare/workers-types';
-import type { MessageType, StorageThreadType } from '@mastra/core/memory';
+import type { MessageType } from '@mastra/core/memory';
 import type { TABLE_NAMES } from '@mastra/core/storage';
 import {
   TABLE_MESSAGES,
@@ -9,7 +9,6 @@ import {
   TABLE_EVALS,
   TABLE_TRACES,
 } from '@mastra/core/storage';
-import type { WorkflowRunState } from '@mastra/core/workflows';
 import dotenv from 'dotenv';
 import { Miniflare } from 'miniflare';
 import { describe, it, expect, beforeAll, beforeEach, afterAll, vi } from 'vitest';
@@ -170,7 +169,7 @@ describe('D1Store', () => {
       // Insert test data
       await store.insert({
         tableName: testTableName as TABLE_NAMES,
-        record: { id: 'test1', data: 'test-data' } as unknown as StorageThreadType,
+        record: { id: 'test1', data: 'test-data' },
       });
 
       // Clear the table
@@ -654,7 +653,7 @@ describe('D1Store', () => {
     });
 
     it('should persist and load workflow snapshots', async () => {
-      const workflow: WorkflowRunState = {
+      const workflow = {
         runId: 'test-run',
         value: { 'test-run': 'running' },
         timestamp: Date.now(),
@@ -669,6 +668,7 @@ describe('D1Store', () => {
           attempts: { 'step-1': 0 },
         },
         activePaths: [{ stepPath: ['main'], stepId: 'step-1', status: 'waiting' }],
+        suspendedPaths: {},
       };
 
       await store.persistWorkflowSnapshot({
@@ -708,7 +708,8 @@ describe('D1Store', () => {
           attempts: {},
           triggerData: { type: 'manual' },
         },
-      } as WorkflowRunState;
+        suspendedPaths: {},
+      };
 
       const updatedSnapshot = {
         runId,
@@ -723,7 +724,8 @@ describe('D1Store', () => {
           attempts: { 'step-1': 1 },
           triggerData: { type: 'manual' },
         },
-      } as WorkflowRunState;
+        suspendedPaths: {},
+      };
 
       await store.persistWorkflowSnapshot({
         workflowName,
@@ -792,6 +794,7 @@ describe('D1Store', () => {
             status: 'waiting',
           },
         ],
+        suspendedPaths: {},
       };
 
       await store.persistWorkflowSnapshot({

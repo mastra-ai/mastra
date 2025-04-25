@@ -634,7 +634,7 @@ export class ClickhouseStore extends MastraStorage {
     }
   }
 
-  async getMessages<T = unknown>({ threadId, selectBy }: StorageGetMessagesArg): Promise<T> {
+  async getMessages<T = unknown>({ threadId, selectBy }: StorageGetMessagesArg): Promise<T[]> {
     try {
       const messages: any[] = [];
       const limit = typeof selectBy?.last === `number` ? selectBy.last : 40;
@@ -741,7 +741,7 @@ export class ClickhouseStore extends MastraStorage {
         }
       });
 
-      return messages as T;
+      return messages as T[];
     } catch (error) {
       console.error('Error getting messages:', error);
       throw error;
