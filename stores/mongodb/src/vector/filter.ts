@@ -21,10 +21,10 @@ export class MongoDBFilterTranslator extends BaseFilterTranslator {
     if (this.isEmpty(filter)) return filter;
     this.validateFilter(filter);
 
-    return this.translateNode(filter, true);
+    return this.translateNode(filter);
   }
 
-  private translateNode(node: VectorFilter | FieldCondition, isTopLevel: boolean = false): any {
+  private translateNode(node: VectorFilter | FieldCondition): any {
     // Handle primitive values and arrays
     if (this.isRegex(node)) {
       return node; // Return regex values as-is
@@ -34,13 +34,6 @@ export class MongoDBFilterTranslator extends BaseFilterTranslator {
 
     const entries = Object.entries(node as Record<string, any>);
     const translatedEntries = entries.map(([key, value]) => {
-      // Validate top-level operators
-      if (isTopLevel && key.startsWith('$')) {
-        if (!['$and', '$or', '$nor', '$not'].includes(key)) {
-          throw new Error(`Invalid top-level operator: ${key}`);
-        }
-      }
-
       // Handle operators
       if (this.isOperator(key)) {
         return [key, this.translateOperatorValue(key, value)];
@@ -126,7 +119,6 @@ export class MongoDBFilterTranslator extends BaseFilterTranslator {
   }
 
   isEmpty(filter: any): boolean {
-    return filter === undefined || filter === null || 
-           (typeof filter === 'object' && Object.keys(filter).length === 0);
+    return filter === undefined || filter === null || (typeof filter === 'object' && Object.keys(filter).length === 0);
   }
 }
