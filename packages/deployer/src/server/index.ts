@@ -1491,6 +1491,7 @@ export async function createHonoServer(mastra: Mastra, options: ServerBundleOpti
                   oneOf: [{ type: 'string' }, { type: 'array', items: { type: 'string' } }],
                 },
                 resumeData: { type: 'object' },
+                runtimeContext: { type: 'object' },
               },
               required: ['step'],
             },
@@ -1532,6 +1533,7 @@ export async function createHonoServer(mastra: Mastra, options: ServerBundleOpti
                   oneOf: [{ type: 'string' }, { type: 'array', items: { type: 'string' } }],
                 },
                 resumeData: { type: 'object' },
+                runtimeContext: { type: 'object' },
               },
               required: ['step'],
             },
@@ -1544,6 +1546,7 @@ export async function createHonoServer(mastra: Mastra, options: ServerBundleOpti
 
   app.post(
     '/api/workflows/v-next/:workflowId/create-run',
+    bodyLimit(bodyLimitOptions),
     describeRoute({
       description: 'Create a new vNext workflow run',
       tags: ['vNextWorkflows'],
@@ -1597,7 +1600,8 @@ export async function createHonoServer(mastra: Mastra, options: ServerBundleOpti
             schema: {
               type: 'object',
               properties: {
-                input: { type: 'object' },
+                inputData: { type: 'object' },
+                runtimeContext: { type: 'object' },
               },
             },
           },
@@ -1641,7 +1645,8 @@ export async function createHonoServer(mastra: Mastra, options: ServerBundleOpti
             schema: {
               type: 'object',
               properties: {
-                input: { type: 'object' },
+                inputData: { type: 'object' },
+                runtimeContext: { type: 'object' },
               },
             },
           },

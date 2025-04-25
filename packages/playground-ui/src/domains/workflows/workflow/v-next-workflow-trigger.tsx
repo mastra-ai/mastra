@@ -13,7 +13,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Text } from '@/components/ui/text';
 
-import { useExecuteWorkflow, useWatchWorkflow, useResumeWorkflow, useWorkflow } from '@/hooks/use-workflows';
+import { useExecuteWorkflow, useWatchWorkflow, useResumeWorkflow, useVNextWorkflow } from '@/hooks/use-workflows';
 import { WorkflowRunContext } from '../context/workflow-run-context';
 import { toast } from 'sonner';
 
@@ -23,11 +23,7 @@ interface SuspendedStep {
   suspendPayload: any;
 }
 
-interface WorkflowPath {
-  stepId: string;
-}
-
-export function WorkflowTrigger({
+export function VNextWorkflowTrigger({
   workflowId,
   baseUrl,
   setRunId,
@@ -36,78 +32,78 @@ export function WorkflowTrigger({
   baseUrl: string;
   setRunId?: (runId: string) => void;
 }) {
-  const { result, setResult, payload, setPayload } = useContext(WorkflowRunContext);
-  const { isLoading, workflow } = useWorkflow(workflowId, baseUrl);
-  const { createWorkflowRun, startWorkflowRun } = useExecuteWorkflow(baseUrl);
-  const { watchWorkflow, watchResult, isWatchingWorkflow } = useWatchWorkflow(baseUrl);
-  const { resumeWorkflow, isResumingWorkflow } = useResumeWorkflow(baseUrl);
+  const { vNextResult, setVNextResult, payload, setPayload } = useContext(WorkflowRunContext);
+  const { isLoading, vNextWorkflow } = useVNextWorkflow(workflowId, baseUrl);
+  const { createVNextWorkflowRun, startVNextWorkflowRun } = useExecuteWorkflow(baseUrl);
+  const { watchVNextWorkflow, watchVNextResult, isWatchingVNextWorkflow } = useWatchWorkflow(baseUrl);
+  const { resumeVNextWorkflow, isResumingVNextWorkflow } = useResumeWorkflow(baseUrl);
   const [suspendedSteps, setSuspendedSteps] = useState<SuspendedStep[]>([]);
   const [isRunning, setIsRunning] = useState(false);
-  const triggerSchema = workflow?.triggerSchema;
+  const triggerSchema = vNextWorkflow?.inputSchema;
 
   const handleExecuteWorkflow = async (data: any) => {
     try {
-      if (!workflow) return;
+      if (!vNextWorkflow) return;
       setIsRunning(true);
 
-      setResult(null);
+      setVNextResult(null);
 
-      const { runId } = await createWorkflowRun({ workflowId });
+      const { runId } = await createVNextWorkflowRun({ workflowId });
 
       setRunId?.(runId);
 
-      watchWorkflow({ workflowId, runId });
+      watchVNextWorkflow({ workflowId, runId });
 
-      startWorkflowRun({ workflowId, runId, input: data });
+      startVNextWorkflowRun({ workflowId, runId, input: data });
     } catch (err) {
       setIsRunning(false);
       toast.error('Error executing workflow');
     }
   };
 
-  const handleResumeWorkflow = async (step: SuspendedStep & { context: any }) => {
-    if (!workflow) return;
+  const handleResumeWorkflow = async (step: SuspendedStep & { resumeData: any }) => {
+    if (!vNextWorkflow) return;
 
-    const { stepId, runId: prevRunId, context } = step;
+    const { stepId, runId: prevRunId, resumeData } = step;
 
-    const { runId } = await createWorkflowRun({ workflowId, prevRunId });
+    const { runId } = await createVNextWorkflowRun({ workflowId, prevRunId });
 
-    watchWorkflow({ workflowId, runId });
+    watchVNextWorkflow({ workflowId, runId });
 
-    await resumeWorkflow({
-      stepId,
+    await resumeVNextWorkflow({
+      step: stepId,
       runId,
-      context,
+      resumeData,
       workflowId,
     });
   };
 
-  const watchResultToUse = result ?? watchResult;
+  const watchResultToUse = vNextResult ?? watchVNextResult;
 
-  const workflowActivePaths = watchResultToUse?.activePaths ?? [];
-
-  useEffect(() => {
-    setIsRunning(isWatchingWorkflow);
-  }, [isWatchingWorkflow]);
+  const workflowActivePaths = watchResultToUse?.payload?.workflowState?.steps ?? {};
 
   useEffect(() => {
-    if (!watchResultToUse?.activePaths || !result?.runId) return;
+    setIsRunning(isWatchingVNextWorkflow);
+  }, [isWatchingVNextWorkflow]);
 
-    const suspended = Object.entries(watchResultToUse.activePaths)
+  useEffect(() => {
+    if (!watchResultToUse?.payload?.workflowState?.steps || !vNextResult?.runId) return;
+
+    const suspended = Object.entries(watchResultToUse.payload.workflowState.steps)
       .filter(([_, { status }]) => status === 'suspended')
-      .map(([stepId, { suspendPayload }]) => ({
+      .map(([stepId, { payload }]) => ({
         stepId,
-        runId: result.runId,
-        suspendPayload,
+        runId: vNextResult.runId,
+        suspendPayload: payload,
       }));
     setSuspendedSteps(suspended);
-  }, [watchResultToUse, result]);
+  }, [watchResultToUse, vNextResult]);
 
   useEffect(() => {
-    if (watchResult) {
-      setResult(watchResult);
+    if (watchVNextResult) {
+      setVNextResult(watchVNextResult);
     }
-  }, [watchResult]);
+  }, [watchVNextResult]);
 
   if (isLoading) {
     return (
@@ -120,13 +116,13 @@ export function WorkflowTrigger({
     );
   }
 
-  if (!workflow) return null;
+  if (!vNextWorkflow) return null;
 
   const isSuspendedSteps = suspendedSteps.length > 0;
 
   const zodInputSchema = triggerSchema ? resolveSerializedZodOutput(jsonSchemaToZod(parse(triggerSchema))) : null;
 
-  const { sanitizedOutput, ...restResult } = result ?? {};
+  const { sanitizedOutput, ...restResult } = vNextResult ?? {};
 
   return (
     <ScrollArea className="h-[calc(100vh-126px)] pt-2 px-4 pb-4 text-xs w-full">
@@ -139,7 +135,7 @@ export function WorkflowTrigger({
                   <Text variant="secondary" className="px-4 text-mastra-el-3" size="xs">
                     Input
                   </Text>
-                  {isResumingWorkflow ? (
+                  {isResumingVNextWorkflow ? (
                     <span className="flex items-center gap-1">
                       <Loader2 className="w-3 h-3 animate-spin text-mastra-el-accent" /> Resuming workflow
                     </span>
@@ -150,7 +146,7 @@ export function WorkflowTrigger({
                 <DynamicForm
                   schema={zodInputSchema}
                   defaultValues={payload}
-                  isSubmitLoading={isWatchingWorkflow}
+                  isSubmitLoading={isWatchingVNextWorkflow}
                   onSubmit={data => {
                     setPayload(data);
                     handleExecuteWorkflow(data);
@@ -159,7 +155,7 @@ export function WorkflowTrigger({
               </div>
             ) : (
               <div className="px-4 space-y-4">
-                {isResumingWorkflow ? (
+                {isResumingVNextWorkflow ? (
                   <span className="flex items-center gap-1">
                     <Loader2 className="w-3 h-3 animate-spin text-mastra-el-accent" /> Resuming workflow
                   </span>
@@ -180,52 +176,42 @@ export function WorkflowTrigger({
               Status
             </Text>
             <div className="px-4 flex flex-col gap-4">
-              {Object.entries(workflowActivePaths)?.map(([stepId, { status: pathStatus, stepPath }]) => {
-                return (
-                  <div className="flex flex-col gap-1">
-                    {stepPath?.map((path, idx) => {
-                      const status =
-                        pathStatus === 'completed'
-                          ? 'Completed'
-                          : stepId === path
-                            ? pathStatus.charAt(0).toUpperCase() + pathStatus.slice(1)
-                            : 'Completed';
-
-                      const statusIcon =
-                        status === 'Completed' ? (
-                          <div className="w-2 h-2 bg-green-500 rounded-full" />
-                        ) : status === 'Failed' ? (
-                          <div className="w-2 h-2 bg-red-500 rounded-full" />
-                        ) : (
-                          <div className="w-2 h-2 bg-yellow-500 rounded-full animate-pulse" />
-                        );
-
-                      return (
-                        <div key={idx} className="flex flex-col overflow-hidden rounded-md border">
-                          <div className={`flex items-center justify-between p-3`}>
+              {Object.entries(workflowActivePaths)
+                ?.filter(([key, _]) => key !== 'input' && !key.endsWith('.input'))
+                ?.map(([stepId, { status }]) => {
+                  const statusIcon =
+                    status === 'success' ? (
+                      <div className="w-2 h-2 bg-green-500 rounded-full" />
+                    ) : status === 'failed' ? (
+                      <div className="w-2 h-2 bg-red-500 rounded-full" />
+                    ) : (
+                      <div className="w-2 h-2 bg-yellow-500 rounded-full animate-pulse" />
+                    );
+                  return (
+                    <div className="flex flex-col gap-1">
+                      <div key={stepId} className="flex flex-col overflow-hidden rounded-md border">
+                        <div className={`flex items-center justify-between p-3`}>
+                          <Text variant="secondary" className="text-mastra-el-3" size="xs">
+                            {stepId.charAt(0).toUpperCase() + stepId.slice(1)}
+                          </Text>
+                          <span className="flex items-center gap-2 capitalize">
                             <Text variant="secondary" className="text-mastra-el-3" size="xs">
-                              {path.charAt(0).toUpperCase() + path.slice(1)}
+                              {statusIcon}
                             </Text>
-                            <span className="flex items-center gap-2">
-                              <Text variant="secondary" className="text-mastra-el-3" size="xs">
-                                {statusIcon}
-                              </Text>
-                              {status}
-                            </span>
-                          </div>
+                            {status}
+                          </span>
                         </div>
-                      );
-                    })}
-                  </div>
-                );
-              })}
+                      </div>
+                    </div>
+                  );
+                })}
             </div>
           </div>
         )}
 
         {isSuspendedSteps &&
           suspendedSteps?.map(step => {
-            const stepDefinition = workflow.steps[step.stepId];
+            const stepDefinition = vNextWorkflow.steps[step.stepId];
             const stepSchema = stepDefinition?.inputSchema
               ? resolveSerializedZodOutput(jsonSchemaToZod(parse(stepDefinition.inputSchema)))
               : z.record(z.string(), z.any());
@@ -245,14 +231,14 @@ export function WorkflowTrigger({
                 )}
                 <DynamicForm
                   schema={stepSchema}
-                  isSubmitLoading={isResumingWorkflow}
+                  isSubmitLoading={isResumingVNextWorkflow}
                   submitButtonLabel="Resume"
                   onSubmit={data => {
                     handleResumeWorkflow({
                       stepId: step.stepId,
                       runId: step.runId,
                       suspendPayload: step.suspendPayload,
-                      context: data,
+                      resumeData: data,
                     });
                   }}
                 />
@@ -260,7 +246,7 @@ export function WorkflowTrigger({
             );
           })}
 
-        {result && (
+        {vNextResult && (
           <div className="flex flex-col group relative">
             <Text variant="secondary" className="px-4 text-mastra-el-3" size="xs">
               Output
