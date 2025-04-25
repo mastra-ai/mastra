@@ -4,7 +4,7 @@ import { Loader2 } from 'lucide-react';
 import { Button } from '../ui/button';
 import { ScrollArea } from '../ui/scroll-area';
 import { AutoForm, CustomZodProvider } from '@/components/ui/autoform';
-import type { ExtendableAutoFormProps, AutoFormFieldComponents } from '@autoform/react';
+import type { ExtendableAutoFormProps } from '@autoform/react';
 import z from 'zod';
 import { Label } from '../ui/label';
 
@@ -28,19 +28,12 @@ export function DynamicForm<T extends z.ZodSchema>({
     return null;
   }
 
-  const normalizedSchema = (schema: z.ZodSchema) => {
-    // using a non-printable character to avoid conflicts with the form data
-    return z.object({
-      '\u200B': schema,
-    });
-  };
-
-  const schemaProvider = new CustomZodProvider(normalizedSchema(schema));
+  const schemaProvider = new CustomZodProvider(schema as any);
 
   const formProps: ExtendableAutoFormProps<z.infer<T>> = {
     schema: schemaProvider,
     onSubmit: async values => {
-      await onSubmit(values['\u200B']);
+      await onSubmit(values);
     },
     defaultValues,
     formProps: {
