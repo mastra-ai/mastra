@@ -1,5 +1,5 @@
 import * as child_process from 'child_process';
-import { readFileSync, writeFileSync } from 'fs';
+import { readFileSync, writeFileSync, readdirSync } from 'fs';
 import { join } from 'path';
 import process from 'process';
 import { Deployer } from '@mastra/deployer';
@@ -27,33 +27,6 @@ export class VercelDeployer extends Deployer {
     this.teamSlug = teamSlug;
     this.projectName = projectName;
     this.token = token;
-  }
-
-  writeFiles(outputDirectory: string): void {
-    writeFileSync(
-      join(outputDirectory, this.outputDir, 'vercel.json'),
-      JSON.stringify(
-        {
-          version: 2,
-          installCommand: 'npm install --omit=dev',
-          builds: [
-            {
-              src: 'index.mjs',
-              use: '@vercel/node',
-              config: { includeFiles: ['**'] },
-            },
-          ],
-          routes: [
-            {
-              src: '/(.*)',
-              dest: 'index.mjs',
-            },
-          ],
-        },
-        null,
-        2,
-      ),
-    );
   }
 
   private getProjectId({ dir }: { dir: string }): string {
@@ -130,7 +103,6 @@ export class VercelDeployer extends Deployer {
 
   async prepare(outputDirectory: string): Promise<void> {
     await super.prepare(outputDirectory);
-    await this.writeFiles(outputDirectory);
   }
 
   private getEntry(): string {
@@ -193,8 +165,41 @@ export const POST = handle(app);
 `;
   }
 
+  private writeVercelJSON(outputDirectory: string, files: string[] = ['./*']) {
+    writeFileSync(
+      join(outputDirectory, this.outputDir, 'vercel.json'),
+      JSON.stringify(
+        {
+          version: 2,
+          installCommand: 'npm install --omit=dev',
+          builds: [
+            {
+              src: 'index.mjs',
+              use: '@vercel/node',
+              config: { includeFiles: files },
+            },
+          ],
+          routes: [
+            {
+              src: '/(.*)',
+              dest: 'index.mjs',
+            },
+          ],
+        },
+        null,
+        2,
+      ),
+    );
+  }
+
   async bundle(entryFile: string, outputDirectory: string, toolsPaths: string[]): Promise<void> {
-    return this._bundle(this.getEntry(), entryFile, outputDirectory, toolsPaths);
+    const result = await this._bundle(this.getEntry(), entryFile, outputDirectory, toolsPaths);
+
+    // read dist files one level deep in the output directory
+    const files = readdirSync(join(outputDirectory, this.outputDir));
+    this.writeVercelJSON(outputDirectory, files);
+
+    return result;
   }
 
   async deploy(outputDirectory: string): Promise<void> {
