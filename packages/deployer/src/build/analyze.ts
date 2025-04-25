@@ -89,6 +89,9 @@ async function analyze(
           if (id === '#mastra') {
             return normalizedMastraEntry;
           }
+          if (id.startsWith('@mastra/server')) {
+            return fileURLToPath(import.meta.resolve(id));
+          }
         },
       } satisfies Plugin,
       json(),
@@ -123,6 +126,18 @@ async function analyze(
   for (const dep of depsToOptimize.keys()) {
     if (isNodeBuiltin(dep)) {
       depsToOptimize.delete(dep);
+    }
+  }
+
+  for (const o of output) {
+    if (o.type !== 'chunk' || o.dynamicImports.length === 0) {
+      continue;
+    }
+
+    for (const dynamicImport of o.dynamicImports) {
+      if (!depsToOptimize.has(dynamicImport)) {
+        depsToOptimize.set(dynamicImport, ['*']);
+      }
     }
   }
 
@@ -303,7 +318,10 @@ async function validateOutput(
     } catch (err) {
       result.invalidChunks.add(file.fileName);
       if (file.isEntry && reverseVirtualReferenceMap.has(file.name)) {
-        result.externalDependencies.add(reverseVirtualReferenceMap.get(file.name)!);
+        const reference = reverseVirtualReferenceMap.get(file.name)!;
+        const dep = reference.startsWith('@') ? reference.split('/').slice(0, 2).join('/') : reference.split('/')[0];
+
+        result.externalDependencies.add(dep!);
       }
 
       // we might need this on other projects but not sure so let's keep it commented out for now

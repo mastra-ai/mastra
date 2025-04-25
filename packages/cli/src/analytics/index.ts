@@ -76,6 +76,7 @@ export class PosthogAnalytics {
       host,
       flushAt: 1,
       flushInterval: 0,
+      disableGeoip: false,
     });
 
     this.captureSessionStart();
@@ -110,7 +111,6 @@ export class PosthogAnalytics {
       session_id: this.sessionId,
       cli_version: this.version || 'unknown',
       machine_id: os.hostname(),
-      disableGeoip: false,
     };
   }
 

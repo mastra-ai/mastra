@@ -36,7 +36,7 @@ export async function setupMonorepo(pathToStoreFiles) {
   await nestedReplace(newPath, pkgJsonMastraPath);
 
   console.log('Installing dependencies...');
-  spawnSync('pnpm', ['install', '--shamefully-hoist'], {
+  spawnSync('pnpm', ['install'], {
     cwd: newPath,
     stdio: 'inherit',
     shell: true,

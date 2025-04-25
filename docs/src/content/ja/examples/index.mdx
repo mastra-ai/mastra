@@ -1,0 +1,224 @@
+---
+title: "例一覧：ワークフロー、エージェント、RAG | Mastra Docs"
+description: "Mastraを使ったAI開発の実用的な例を探索してください。テキスト生成、RAG実装、構造化された出力、マルチモーダルインタラクションなどが含まれます。OpenAI、Anthropic、Google Geminiを使用してAIアプリケーションを構築する方法を学びましょう。"
+---
+
+import { CardItems, CardItem, CardTitle } from "@/components/example-cards";
+import { Tabs } from "nextra/components";
+
+# 例
+
+例のセクションは、Mastraを使用した基本的なAIエンジニアリングを示す短いプロジェクト例のリストで、テキスト生成、構造化された出力、ストリーミングレスポンス、検索拡張生成（RAG）、音声などが含まれています。
+
+<CardItems titles={["Agent", "Workflow", "Memory", "RAG", "Evals", "Voice"]} items={
+  {Agent: [
+      {
+        title: "システムプロンプトを使用したエージェント",
+        href: "/examples/agents/system-prompt",
+      },
+      {
+        title: "エージェント型ワークフロー",
+        href: "/examples/agents/agentic-workflows",
+      },
+      {
+        title: "ツールの使用",
+        href: "/examples/agents/using-a-tool",
+      },
+      {
+        title: "階層型マルチエージェントシステム",
+        href: "/examples/agents/hierarchical-multi-agent",
+      },
+      {
+        title: "マルチエージェントワークフロー",
+        href: "/examples/agents/multi-agent-workflow",
+      },
+      {
+        title: "鳥チェッカー",
+        href: "/examples/agents/bird-checker",
+      },
+    ],
+    Workflow: [
+      {
+        title: "ワークフローの作成",
+        href: "/examples/workflows/creating-a-workflow",
+      },
+      {
+        title: "ステップとしてツールを使用する",
+        href: "/examples/workflows/using-a-tool-as-a-step",
+      },
+      { title: "並列ステップ", href: "/examples/workflows/parallel-steps" },
+      {
+        title: "連続ステップ",
+        href: "/examples/workflows/sequential-steps",
+      },
+      { title: "分岐パス", href: "/examples/workflows/branching-paths" },
+      {
+        title: "循環依存関係",
+        href: "/examples/workflows/cyclical-dependencies",
+      },
+      {
+        title: "一時停止と再開",
+        href: "/examples/workflows/suspend-and-resume",
+      },
+      { title: "エージェントの呼び出し", href: "/examples/workflows/calling-agent" },
+    ],
+    Memory:[
+      {
+        title: "LibSQLを使用した長期メモリ",
+        href: "/examples/memory/memory-with-libsql",
+      },
+      {
+        title: "Postgresを使用した長期メモリ",
+        href: "/examples/memory/memory-with-pg",
+      },
+      {
+        title: "Upstashを使用した長期メモリ",
+        href: "/examples/memory/memory-with-upstash",
+      },
+      {
+        title: "ストリーミングワーキングメモリ（クイックスタート）",
+        href: "/examples/memory/streaming-working-memory",
+      },
+      {
+        title: "ストリーミングワーキングメモリ（高度）",
+        href: "/examples/memory/streaming-working-memory-advanced",
+      },
+    ],
+  RAG: [
+      { title: "テキストのチャンク化", href: "/examples/rag/chunking/chunk-text" },
+      { title: "マークダウンのチャンク化", href: "/examples/rag/chunking/chunk-markdown" },
+      { title: "HTMLのチャンク化", href: "/examples/rag/chunking/chunk-html" },
+      { title: "JSONのチャンク化", href: "/examples/rag/chunking/chunk-json" },
+      { title: "テキストチャンクの埋め込み", href: "/examples/rag/embedding/embed-text-chunk" },
+      { title: "チャンク配列の埋め込み", href: "/examples/rag/embedding/embed-chunk-array" },
+      { title: "チャンクサイズの調整", href: "/examples/rag/chunking/adjust-chunk-size" },
+      {
+        title: "チャンク区切りの調整",
+        href: "/examples/rag/chunking/adjust-chunk-delimiters",
+      },
+      {
+        title: "メタデータ抽出",
+        href: "/examples/rag/embedding/metadata-extraction",
+      },
+      {
+        title: "ハイブリッドベクトル検索",
+        href: "/examples/rag/query/hybrid-vector-search",
+      },
+      {
+        title: "Cohereを使用したテキスト埋め込み",
+        href: "/examples/rag/embedding/embed-text-with-cohere",
+      },
+      {
+        title: "埋め込みのアップサート",
+        href: "/examples/rag/upsert/upsert-embeddings",
+      },
+      { title: "結果の取得", href: "/examples/rag/query/retrieve-results" },
+      { title: "ベクトルクエリツールの使用", href: "/examples/rag/usage/basic-rag" },
+      {
+        title: "情報密度の最適化",
+        href: "/examples/rag/usage/cleanup-rag",
+      },
+      { title: "メタデータフィルタリング", href: "/examples/rag/usage/filter-rag" },
+      {
+        title: "結果の再ランキング",
+        href: "/examples/rag/rerank/rerank",
+      },
+      {
+        title: "ツールを使用した結果の再ランキング",
+        href: "/examples/rag/rerank/rerank-rag",
+      },
+      { title: "思考連鎖プロンプティング", href: "/examples/rag/usage/cot-rag" },
+      {
+        title: "ワークフローを使用した構造化推論",
+        href: "/examples/rag/usage/cot-workflow-rag",
+      },
+      { title: "グラフRAG", href: "/examples/rag/usage/graph-rag" },
+    ],
+  Evals: [
+    {
+      title: "回答の関連性",
+      href: "/examples/evals/answer-relevancy",
+    },
+    {
+      title: "バイアス",
+      href: "/examples/evals/bias",
+    },
+    {
+      title: "完全性",
+      href: "/examples/evals/completeness",
+    },
+    {
+      title: "コンテンツの類似性",
+      href: "/examples/evals/content-similarity",
+    },
+    {
+      title: "コンテキスト位置",
+      href: "/examples/evals/context-position",
+    },
+    {
+      title: "コンテキスト精度",
+      href: "/examples/evals/context-precision",
+    },
+    {
+      title: "コンテキスト関連性",
+      href: "/examples/evals/context-relevancy",
+    },
+    {
+      title: "コンテキスト再現率",
+      href: "/examples/evals/contextual-recall",
+    },
+    {
+      title: "LLMを審査員とするカスタム評価",
+      href: "/examples/evals/custom-eval",
+    },
+    {
+      title: "忠実性",
+      href: "/examples/evals/faithfulness",
+    },
+    {
+      title: "幻覚",
+      href: "/examples/evals/hallucination",
+    },
+    {
+      title: "キーワードカバレッジ",
+      href: "/examples/evals/keyword-coverage",
+    },
+    {
+      title: "プロンプト整合性",
+      href: "/examples/evals/prompt-alignment",
+    },
+    {
+      title: "要約",
+      href: "/examples/evals/summarization",
+    },
+    {
+      title: "テキストの差異",
+      href: "/examples/evals/textual-difference",
+    },
+    {
+      title: "トーンの一貫性", 
+      href: "/examples/evals/tone-consistency",
+    },
+    {
+      title: "有害性",
+      href: "/examples/evals/toxicity",
+    },
+    {
+      title: "単語の包含",
+      href: "/examples/evals/word-inclusion",
+    },
+  ],
+  Voice: [
+    {
+      title: "テキスト読み上げ",
+      href: "/examples/voice/text-to-speech",
+    },
+    {
+      title: "音声認識",
+      href: "/examples/voice/speech-to-text",
+    }
+  ],
+}}>
+
+</CardItems>
+

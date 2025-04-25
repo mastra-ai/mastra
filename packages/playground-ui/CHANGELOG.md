@@ -1,5 +1,328 @@
 # @mastra/playground-ui
 
+## 5.0.1-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [81fb7f6]
+  - @mastra/core@0.9.1-alpha.0
+  - @mastra/client-js@0.1.19-alpha.0
+
+## 5.0.0
+
+### Patch Changes
+
+- bdbde72: Sync DS components with Cloud
+- Updated dependencies [000a6d4]
+- Updated dependencies [08bb78e]
+- Updated dependencies [ed2f549]
+- Updated dependencies [7e92011]
+- Updated dependencies [9ee4293]
+- Updated dependencies [03f3cd0]
+- Updated dependencies [c0f22b4]
+- Updated dependencies [71d9444]
+- Updated dependencies [157c741]
+- Updated dependencies [8a8a73b]
+- Updated dependencies [0a033fa]
+- Updated dependencies [fe3ae4d]
+- Updated dependencies [2538066]
+- Updated dependencies [9c26508]
+- Updated dependencies [0f4eae3]
+- Updated dependencies [16a8648]
+- Updated dependencies [6f92295]
+  - @mastra/core@0.9.0
+  - @mastra/client-js@0.1.18
+
+## 5.0.0-alpha.8
+
+### Patch Changes
+
+- bdbde72: Sync DS components with Cloud
+- Updated dependencies [000a6d4]
+- Updated dependencies [ed2f549]
+- Updated dependencies [c0f22b4]
+- Updated dependencies [0a033fa]
+- Updated dependencies [2538066]
+- Updated dependencies [9c26508]
+- Updated dependencies [0f4eae3]
+- Updated dependencies [16a8648]
+  - @mastra/core@0.9.0-alpha.8
+  - @mastra/client-js@0.1.18-alpha.8
+
+## 5.0.0-alpha.7
+
+### Patch Changes
+
+- Updated dependencies [71d9444]
+  - @mastra/core@0.9.0-alpha.7
+  - @mastra/client-js@0.1.18-alpha.7
+
+## 5.0.0-alpha.6
+
+### Patch Changes
+
+- Updated dependencies [157c741]
+  - @mastra/core@0.9.0-alpha.6
+  - @mastra/client-js@0.1.18-alpha.6
+
+## 5.0.0-alpha.5
+
+### Patch Changes
+
+- Updated dependencies [08bb78e]
+  - @mastra/core@0.9.0-alpha.5
+  - @mastra/client-js@0.1.18-alpha.5
+
+## 5.0.0-alpha.4
+
+### Patch Changes
+
+- Updated dependencies [7e92011]
+  - @mastra/core@0.9.0-alpha.4
+  - @mastra/client-js@0.1.18-alpha.4
+
+## 5.0.0-alpha.3
+
+### Patch Changes
+
+- Updated dependencies [fe3ae4d]
+  - @mastra/core@0.9.0-alpha.3
+  - @mastra/client-js@0.1.18-alpha.3
+
+## 4.0.5-alpha.2
+
+### Patch Changes
+
+- Updated dependencies [9ee4293]
+  - @mastra/core@0.8.4-alpha.2
+  - @mastra/client-js@0.1.18-alpha.2
+
+## 4.0.5-alpha.1
+
+### Patch Changes
+
+- Updated dependencies [8a8a73b]
+- Updated dependencies [6f92295]
+  - @mastra/core@0.8.4-alpha.1
+  - @mastra/client-js@0.1.18-alpha.1
+
+## 4.0.5-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [03f3cd0]
+  - @mastra/core@0.8.4-alpha.0
+  - @mastra/client-js@0.1.18-alpha.0
+
+## 4.0.4
+
+### Patch Changes
+
+- d72318f: Refactored the evals table to use the DS tables
+- 1ebbfbf: Ability to toggle stream vs generate in playground
+- 9b47dfa: Fix dynamic form for suspended workflow in playground ui
+- f5451a4: bundle tokens as CJS in playground UI for tailwind usage
+- ed52379: enum-type trigger schemas could not be submitted in the Playground UI has been resolved.
+- 37bb612: Add Elastic-2.0 licensing for packages
+- bc4acb3: updated traces to not be wrapped in traces object
+- c8fe5f0: change the header of all pages with the one from the DS
+- Updated dependencies [d72318f]
+- Updated dependencies [0bcc862]
+- Updated dependencies [10a8caf]
+- Updated dependencies [359b089]
+- Updated dependencies [32e7b71]
+- Updated dependencies [37bb612]
+- Updated dependencies [bc4acb3]
+- Updated dependencies [7f1b291]
+  - @mastra/core@0.8.3
+  - @mastra/client-js@0.1.17
+
+## 4.0.4-alpha.6
+
+### Patch Changes
+
+- d72318f: Refactored the evals table to use the DS tables
+- Updated dependencies [d72318f]
+  - @mastra/core@0.8.3-alpha.5
+  - @mastra/client-js@0.1.17-alpha.5
+
+## 4.0.4-alpha.5
+
+### Patch Changes
+
+- ed52379: enum-type trigger schemas could not be submitted in the Playground UI has been resolved.
+
+## 4.0.4-alpha.4
+
+### Patch Changes
+
+- 1ebbfbf: Ability to toggle stream vs generate in playground
+- 9b47dfa: Fix dynamic form for suspended workflow in playground ui
+- Updated dependencies [7f1b291]
+  - @mastra/core@0.8.3-alpha.4
+  - @mastra/client-js@0.1.17-alpha.4
+
+## 4.0.4-alpha.3
+
+### Patch Changes
+
+- Updated dependencies [10a8caf]
+  - @mastra/core@0.8.3-alpha.3
+  - @mastra/client-js@0.1.17-alpha.3
+
+## 4.0.4-alpha.2
+
+### Patch Changes
+
+- Updated dependencies [0bcc862]
+  - @mastra/core@0.8.3-alpha.2
+  - @mastra/client-js@0.1.17-alpha.2
+
+## 4.0.4-alpha.1
+
+### Patch Changes
+
+- f5451a4: bundle tokens as CJS in playground UI for tailwind usage
+- 37bb612: Add Elastic-2.0 licensing for packages
+- bc4acb3: updated traces to not be wrapped in traces object
+- c8fe5f0: change the header of all pages with the one from the DS
+- Updated dependencies [32e7b71]
+- Updated dependencies [37bb612]
+- Updated dependencies [bc4acb3]
+  - @mastra/core@0.8.3-alpha.1
+  - @mastra/client-js@0.1.17-alpha.1
+
+## 4.0.4-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [359b089]
+  - @mastra/core@0.8.3-alpha.0
+  - @mastra/client-js@0.1.17-alpha.0
+
+## 4.0.3
+
+### Patch Changes
+
+- d3c372c: Show status UI of steps on playground workflow when workflow has no triggerSchema
+  Show number of steps on workflows table
+- Updated dependencies [a06aadc]
+  - @mastra/core@0.8.2
+  - @mastra/client-js@0.1.16
+
+## 4.0.3-alpha.0
+
+### Patch Changes
+
+- d3c372c: Show status UI of steps on playground workflow when workflow has no triggerSchema
+  Show number of steps on workflows table
+- Updated dependencies [a06aadc]
+  - @mastra/core@0.8.2-alpha.0
+  - @mastra/client-js@0.1.16-alpha.0
+
+## 4.0.2
+
+### Patch Changes
+
+- 99e2998: Set default max steps to 5
+- Updated dependencies [99e2998]
+- Updated dependencies [8fdb414]
+  - @mastra/core@0.8.1
+  - @mastra/client-js@0.1.15
+
+## 4.0.2-alpha.0
+
+### Patch Changes
+
+- 99e2998: Set default max steps to 5
+- Updated dependencies [99e2998]
+- Updated dependencies [8fdb414]
+  - @mastra/core@0.8.1-alpha.0
+  - @mastra/client-js@0.1.15-alpha.0
+
+## 4.0.1
+
+### Patch Changes
+
+- 87b96d7: set playground agent maxSteps default to 3
+
+## 4.0.1-alpha.0
+
+### Patch Changes
+
+- 87b96d7: set playground agent maxSteps default to 3
+
+## 4.0.0
+
+### Patch Changes
+
+- 5ae0180: Removed prefixed doc references
+- a4a1151: Fix playground freezing when buffer is passed between steps
+- 7bdbb64: Show no input when attributs are empty
+- 9d13790: update playground-ui dynamic form, cleanups
+- 055c4ea: Fix traces page showing e.reduce error
+- 124ce08: Ability to set maxTokens, temperature, and other common features in playground
+- 40dca45: Fix expanding workflow sidebar not expanding the output section
+- 8393832: Handle nested workflow view on workflow graph
+- 23999d4: Add Design System tokens and components into playground ui
+- 8076ecf: Unify workflow watch/start response
+- d16ed18: Make playground-ui dynamic forms better
+- Updated dependencies [56c31b7]
+- Updated dependencies [619c39d]
+- Updated dependencies [5ae0180]
+- Updated dependencies [fe56be0]
+- Updated dependencies [93875ed]
+- Updated dependencies [107bcfe]
+- Updated dependencies [9bfa12b]
+- Updated dependencies [515ebfb]
+- Updated dependencies [5b4e19f]
+- Updated dependencies [dbbbf80]
+- Updated dependencies [a0967a0]
+- Updated dependencies [055c4ea]
+- Updated dependencies [fca3b21]
+- Updated dependencies [88fa727]
+- Updated dependencies [f37f535]
+- Updated dependencies [789bef3]
+- Updated dependencies [a3f0e90]
+- Updated dependencies [4d67826]
+- Updated dependencies [6330967]
+- Updated dependencies [8393832]
+- Updated dependencies [6330967]
+- Updated dependencies [84fe241]
+- Updated dependencies [5646a01]
+- Updated dependencies [99d43b9]
+- Updated dependencies [d7e08e8]
+- Updated dependencies [febc8a6]
+- Updated dependencies [7599d77]
+- Updated dependencies [0118361]
+- Updated dependencies [bffd64f]
+- Updated dependencies [619c39d]
+- Updated dependencies [cafae83]
+- Updated dependencies [8076ecf]
+- Updated dependencies [8df4a77]
+- Updated dependencies [304397c]
+  - @mastra/core@0.8.0
+  - @mastra/client-js@0.1.14
+
+## 4.0.0-alpha.9
+
+### Patch Changes
+
+- a4a1151: Fix playground freezing when buffer is passed between steps
+- 124ce08: Ability to set maxTokens, temperature, and other common features in playground
+- 23999d4: Add Design System tokens and components into playground ui
+
+## 4.0.0-alpha.8
+
+### Patch Changes
+
+- 055c4ea: Fix traces page showing e.reduce error
+- Updated dependencies [055c4ea]
+- Updated dependencies [bffd64f]
+- Updated dependencies [8df4a77]
+  - @mastra/client-js@0.1.14-alpha.8
+  - @mastra/core@0.8.0-alpha.8
+
 ## 4.0.0-alpha.7
 
 ### Patch Changes

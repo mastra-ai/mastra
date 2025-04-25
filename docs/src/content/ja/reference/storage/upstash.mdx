@@ -1,0 +1,86 @@
+---
+title: "Upstash Storage | ストレージシステム | Mastra Core"
+description: MastraにおけるUpstashストレージ実装のドキュメント。
+---
+
+# Upstash Storage
+
+Upstashのストレージ実装は、UpstashのRedis互換のキー・バリュー・ストアを使用したサーバーレスに適したストレージソリューションを提供します。
+
+## インストール
+
+```bash
+npm install @mastra/upstash
+```
+
+## 使用法
+
+```typescript copy showLineNumbers
+import { UpstashStore } from "@mastra/upstash";
+
+const storage = new UpstashStore({
+  url: process.env.UPSTASH_URL,
+  token: process.env.UPSTASH_TOKEN,
+});
+```
+
+## パラメーター
+
+<PropertiesTable
+  content={[
+    {
+      name: "url",
+      type: "string",
+      description: "Upstash Redis URL",
+      isOptional: false,
+    },
+    {
+      name: "token",
+      type: "string",
+      description: "Upstash Redis 認証トークン",
+      isOptional: false,
+    },
+    {
+      name: "prefix",
+      type: "string",
+      description: "すべての保存されたアイテムのキー接頭辞",
+      isOptional: true,
+      defaultValue: "mastra:",
+    },
+  ]}
+/>
+
+## 追加の注意事項
+
+### キー構造
+
+Upstash ストレージの実装はキーと値の構造を使用します：
+
+- スレッドキー: `{prefix}thread:{threadId}`
+- メッセージキー: `{prefix}message:{messageId}`
+- メタデータキー: `{prefix}metadata:{entityId}`
+
+### サーバーレスの利点
+
+Upstash ストレージは特にサーバーレス展開に適しています：
+
+- 接続管理が不要
+- リクエストごとの料金
+- グローバルなレプリケーションオプション
+- エッジ互換
+
+### データの永続性
+
+Upstash は以下を提供します：
+
+- 自動データ永続性
+- 時点復旧
+- クロスリージョンレプリケーションオプション
+
+### パフォーマンスの考慮事項
+
+最適なパフォーマンスのために：
+
+- データを整理するために適切なキーのプレフィックスを使用する
+- Redis のメモリ使用量を監視する
+- 必要に応じてデータの有効期限ポリシーを検討する

@@ -1,0 +1,106 @@
+---
+title: "リファレンス: createLogger() | Mastra Observability ドキュメント"
+description: 指定された設定に基づいてロガーをインスタンス化する createLogger 関数のドキュメント。
+---
+
+# createLogger()
+
+`createLogger()` 関数は、指定された設定に基づいてロガーをインスタンス化するために使用されます。タイプとそのタイプに関連する追加のパラメータを指定することで、コンソールベース、ファイルベース、または Upstash Redis ベースのロガーを作成できます。
+
+### 使用法
+
+#### コンソールロガー（開発）
+
+```typescript showLineNumbers copy
+const consoleLogger = createLogger({ name: "Mastra", level: "debug" });
+consoleLogger.info("App started");
+```
+
+#### ファイルトランスポート（構造化ログ）
+
+```typescript showLineNumbers copy
+import { FileTransport } from "@mastra/loggers/file";
+
+const fileLogger = createLogger({
+  name: "Mastra",
+  transports: { file: new FileTransport({ path: "test-dir/test.log" }) },
+  level: "warn",
+});
+fileLogger.warn("Low disk space", {
+  destinationPath: "system",
+  type: "WORKFLOW",
+});
+```
+
+#### Upstash ロガー（リモートログドレイン）
+
+```typescript showLineNumbers copy
+import { UpstashTransport } from "@mastra/loggers/upstash";
+
+const logger = createLogger({
+  name: "Mastra",
+  transports: {
+    upstash: new UpstashTransport({
+      listName: "production-logs",
+      upstashUrl: process.env.UPSTASH_URL!,
+      upstashToken: process.env.UPSTASH_TOKEN!,
+    }),
+  },
+  level: "info",
+});
+
+logger.info({
+  message: "User signed in",
+  destinationPath: "auth",
+  type: "AGENT",
+  runId: "run_123",
+});
+```
+
+### パラメータ
+
+<PropertiesTable
+  content={[
+    {
+      name: "type",
+      type: "CONSOLE" | "FILE" | "UPSTASH",
+      description: "作成するロガーの実装を指定します。",
+    },
+    {
+      name: "level",
+      type: "LogLevel",
+      isOptional: true,
+      default: "INFO",
+      description:
+        "記録するログの最小重大度レベル。DEBUG、INFO、WARN、または ERROR のいずれか。",
+    },
+    {
+      name: "dirPath",
+      type: "string",
+      isOptional: true,
+      description:
+        'FILE タイプのみ。ログファイルが保存されるディレクトリパス（デフォルト: "logs"）。',
+    },
+    {
+      name: "url",
+      type: "string",
+      isOptional: true,
+      description:
+        "UPSTASH タイプのみ。ログを保存するために使用される Upstash Redis エンドポイント URL。",
+    },
+    {
+      name: "token",
+      type: "string",
+      isOptional: true,
+      description: "UPSTASH タイプのみ。Upstash Redis アクセストークン。",
+    },
+    {
+      name: "key",
+      type: "string",
+      isOptional: true,
+      default: "logs",
+      description:
+        "UPSTASH タイプのみ。ログが保存される Redis リストキー。",
+    },
+  ]}
+/>

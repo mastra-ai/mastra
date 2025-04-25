@@ -1,0 +1,190 @@
+---
+title: メモリプロセッサ
+description: 呼び出されたメッセージをフィルタリングおよび変換するためのメモリプロセッサの使用例
+---
+
+# メモリープロセッサー
+
+この例では、メモリープロセッサーを使用してトークン使用量を制限し、ツール呼び出しをフィルタリングし、シンプルなカスタムプロセッサーを作成する方法を示します。
+
+## セットアップ
+
+まず、memoryパッケージをインストールします:
+
+```bash
+npm install @mastra/memory
+# または
+pnpm add @mastra/memory
+# または
+yarn add @mastra/memory
+```
+
+## プロセッサを使用した基本的なメモリ設定
+
+```typescript
+import { Memory } from "@mastra/memory";
+import { TokenLimiter, ToolCallFilter } from "@mastra/memory/processors";
+
+// Create memory with processors
+const memory = new Memory({
+  processors: [new TokenLimiter(127000), new ToolCallFilter()],
+});
+```
+
+## トークン制限の使用
+
+`TokenLimiter` は、モデルのコンテキストウィンドウ内に収まるように支援します:
+
+```typescript
+import { Memory } from "@mastra/memory";
+import { TokenLimiter } from "@mastra/memory/processors";
+
+// トークン制限を設定してメモリをセットアップ
+const memory = new Memory({
+  processors: [
+    // 約12700トークンに制限 (GPT-4o用)
+    new TokenLimiter(127000),
+  ],
+});
+```
+
+必要に応じて異なるエンコーディングを指定することもできます:
+
+```typescript
+import { Memory } from "@mastra/memory";
+import { TokenLimiter } from "@mastra/memory/processors";
+import cl100k_base from "js-tiktoken/ranks/cl100k_base";
+
+const memory = new Memory({
+  processors: [
+    new TokenLimiter({
+      limit: 16000,
+      encoding: cl100k_base, // 特定のモデル用の特定のエンコーディング 例: GPT-3.5
+    }),
+  ],
+});
+```
+
+## ツール呼び出しのフィルタリング
+
+`ToolCallFilter` プロセッサは、メモリからツール呼び出しとその結果を削除します:
+
+```typescript
+import { Memory } from "@mastra/memory";
+import { ToolCallFilter } from "@mastra/memory/processors";
+
+// すべてのツール呼び出しをフィルタリング
+const memoryNoTools = new Memory({
+  processors: [new ToolCallFilter()],
+});
+
+// 特定のツール呼び出しをフィルタリング
+const memorySelectiveFilter = new Memory({
+  processors: [
+    new ToolCallFilter({
+      exclude: ["imageGenTool", "clipboardTool"],
+    }),
+  ],
+});
+```
+
+## 複数のプロセッサの組み合わせ
+
+プロセッサは定義された順に実行されます：
+
+```typescript
+import { Memory } from "@mastra/memory";
+import { TokenLimiter, ToolCallFilter } from "@mastra/memory/processors";
+
+const memory = new Memory({
+  processors: [
+    // 最初にツール呼び出しをフィルタリング
+    new ToolCallFilter({ exclude: ["imageGenTool"] }),
+    // 次にトークンを制限（他のフィルタ/変換後の正確な測定のためにトークンリミッターは常に最後に配置）
+    new TokenLimiter(16000),
+  ],
+});
+```
+
+## シンプルなカスタムプロセッサの作成
+
+`MemoryProcessor` クラスを拡張することで、独自のプロセッサを作成できます：
+
+```typescript
+import type { CoreMessage } from "@mastra/core";
+import { MemoryProcessor } from "@mastra/core/memory";
+import { Memory } from "@mastra/memory";
+
+// 最新のメッセージのみを保持するシンプルなプロセッサ
+class RecentMessagesProcessor extends MemoryProcessor {
+  private limit: number;
+
+  constructor(limit: number = 10) {
+    super();
+    this.limit = limit;
+  }
+
+  process(messages: CoreMessage[]): CoreMessage[] {
+    // 最新のメッセージのみを保持
+    return messages.slice(-this.limit);
+  }
+}
+
+// カスタムプロセッサを使用
+const memory = new Memory({
+  processors: [
+    new RecentMessagesProcessor(5), // 最新の5件のメッセージのみを保持
+    new TokenLimiter(16000),
+  ],
+});
+```
+
+注意: この例はカスタムプロセッサの動作を理解しやすくするためのもので、`new Memory({ options: { lastMessages: 5 } })` を使用してメッセージをより効率的に制限できます。メモリプロセッサは、メモリがストレージから取得された後に適用されますが、`options.lastMessages` はメッセージがストレージから取得される前に適用されます。
+
+## エージェントとの統合
+
+エージェントでプロセッサを使用してメモリを使用する方法は次のとおりです:
+
+```typescript
+import { Agent } from "@mastra/core/agent";
+import { Memory, TokenLimiter, ToolCallFilter } from "@mastra/memory";
+import { openai } from "@ai-sdk/openai";
+
+// Set up memory with processors
+const memory = new Memory({
+  processors: [
+    new ToolCallFilter({ exclude: ["debugTool"] }),
+    new TokenLimiter(16000),
+  ],
+});
+
+// Create an agent with the memory
+const agent = new Agent({
+  name: "ProcessorAgent",
+  instructions: "You are a helpful assistant with processed memory.",
+  model: openai("gpt-4o-mini"),
+  memory,
+});
+
+// Use the agent
+const response = await agent.stream("Hi, can you remember our conversation?", {
+  threadId: "unique-thread-id",
+  resourceId: "user-123",
+});
+
+for await (const chunk of response.textStream) {
+  process.stdout.write(chunk);
+}
+```
+
+## 概要
+
+この例では以下を示します：
+
+1. コンテキストウィンドウのオーバーフローを防ぐためのトークン制限を使用したメモリの設定
+2. ノイズとトークン使用量を減らすためのツール呼び出しのフィルタリング
+3. 最近のメッセージのみを保持するためのシンプルなカスタムプロセッサの作成
+4. 複数のプロセッサを正しい順序で組み合わせる
+5. 処理されたメモリをエージェントと統合する
+
+メモリプロセッサの詳細については、[メモリプロセッサのドキュメント](/reference/memory/memory-processors)を参照してください。

@@ -1,13 +1,14 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import type { Tool, Context } from 'tylerbarnes-fastmcp-fix';
 import { z } from 'zod';
+import { logger } from '../logger';
 import { fromPackageRoot } from '../utils';
 
 const examplesDir = fromPackageRoot('.docs/organized/code-examples');
 
 // Helper function to list code examples
 async function listCodeExamples(): Promise<Array<{ name: string; path: string }>> {
+  void logger.debug('Listing code examples');
   try {
     const files = await fs.readdir(examplesDir);
     return files
@@ -25,6 +26,7 @@ async function listCodeExamples(): Promise<Array<{ name: string; path: string }>
 // Helper function to read a code example
 async function readCodeExample(filename: string): Promise<string> {
   const filePath = path.join(examplesDir, filename);
+  void logger.debug(`Reading example: ${filename}`);
 
   try {
     return await fs.readFile(filePath, 'utf-8');
@@ -42,7 +44,7 @@ const examplesListing =
     ? '\n\nAvailable examples: ' + initialExamples.map(ex => ex.name).join(', ')
     : '\n\nNo examples available yet. Run the documentation preparation script first.';
 
-const examplesSchema = z.object({
+export const examplesInputSchema = z.object({
   example: z
     .string()
     .optional()
@@ -51,21 +53,50 @@ const examplesSchema = z.object({
     ),
 });
 
-type ExamplesParams = z.infer<typeof examplesSchema>;
+export type ExamplesInput = z.infer<typeof examplesInputSchema>;
 
-export const examplesTool: Tool<any, typeof examplesSchema> = {
+export const examplesTool = {
   name: 'mastraExamples',
   description:
     'Get code examples from the Mastra.ai examples directory. Without a specific example name, lists all available examples. With an example name, returns the full source code of that example.',
-  parameters: examplesSchema,
-  execute: async (args: ExamplesParams, _context: Context<any>) => {
-    if (!args.example) {
-      const examples = await listCodeExamples();
-      return ['Available code examples:', '', ...examples.map(ex => `- ${ex.name}`)].join('\n');
-    }
+  execute: async (args: ExamplesInput) => {
+    void logger.debug('Executing mastraExamples tool', { example: args.example });
+    try {
+      if (!args.example) {
+        const examples = await listCodeExamples();
+        return {
+          content: [
+            {
+              type: 'text',
+              text: ['Available code examples:', '', ...examples.map(ex => `- ${ex.name}`)].join('\n'),
+            },
+          ],
+          isError: false,
+        };
+      }
 
-    const filename = args.example.endsWith('.md') ? args.example : `${args.example}.md`;
-    const content = await readCodeExample(filename);
-    return content;
+      const filename = args.example.endsWith('.md') ? args.example : `${args.example}.md`;
+      const content = await readCodeExample(filename);
+      return {
+        content: [
+          {
+            type: 'text',
+            text: content,
+          },
+        ],
+        isError: false,
+      };
+    } catch (error) {
+      void logger.error('Failed to execute mastraExamples tool', error);
+      return {
+        content: [
+          {
+            type: 'text',
+            text: `Error: ${error instanceof Error ? error.message : String(error)}`,
+          },
+        ],
+        isError: true,
+      };
+    }
   },
 };

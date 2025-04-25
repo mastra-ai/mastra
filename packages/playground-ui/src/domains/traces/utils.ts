@@ -75,7 +75,7 @@ export const refineTraces = (traces: Span[], isWorkflow: boolean = false): Refin
     return name;
   };
 
-  const groupedTraces = traces.reduce<Record<string, Span[]>>((acc, curr) => {
+  const groupedTraces = traces?.reduce<Record<string, Span[]>>((acc, curr) => {
     const newCurr = { ...curr, name: newName(curr.name), duration: curr.endTime - curr.startTime };
 
     listOfSpanIds.add(curr.id);
@@ -93,6 +93,7 @@ export const refineTraces = (traces: Span[], isWorkflow: boolean = false): Refin
     }));
 
     const failedStatus = value.find(span => span.status.code !== 0)?.status;
+
     return {
       traceId: key,
       serviceName: parentSpan?.name || key,

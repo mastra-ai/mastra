@@ -6,6 +6,7 @@ import { z } from 'zod';
 
 import { TestIntegration } from '../integration/openapi-toolset.mock';
 import { Mastra } from '../mastra';
+import { RuntimeContext } from '../runtime-context';
 import { createTool } from '../tools';
 import { CompositeVoice, MastraVoice } from '../voice';
 
@@ -18,6 +19,7 @@ const mockFindUser = vi.fn().mockImplementation(async data => {
     { name: 'Dero Israel', email: 'dero@mail.com' },
     { name: 'Ife Dayo', email: 'dayo@mail.com' },
     { name: 'Tao Feeq', email: 'feeq@mail.com' },
+    { name: 'Joe', email: 'joe@mail.com' },
   ];
 
   const userInfo = list?.find(({ name }) => name === (data as { name: string }).name);
@@ -211,6 +213,97 @@ describe('agent', () => {
     expect(mockFindUser).toHaveBeenCalled();
     expect(name).toBe('Dero Israel');
   }, 500000);
+
+  it('generate - should pass and call client side tools', async () => {
+    const userAgent = new Agent({
+      name: 'User agent',
+      instructions: 'You are an agent that can get list of users using client side tools.',
+      model: openai('gpt-4o'),
+    });
+
+    const result = await userAgent.generate('Make it green', {
+      clientTools: {
+        changeColor: {
+          id: 'changeColor',
+          description: 'This is a test tool that returns the name and email',
+          inputSchema: z.object({
+            color: z.string(),
+          }),
+          execute: async () => {
+            console.log('SUHHH');
+          },
+        },
+      },
+    });
+
+    expect(result.toolCalls.length).toBeGreaterThan(0);
+  });
+
+  it('stream - should pass and call client side tools', async () => {
+    const userAgent = new Agent({
+      name: 'User agent',
+      instructions: 'You are an agent that can get list of users using client side tools.',
+      model: openai('gpt-4o'),
+    });
+
+    const result = await userAgent.stream('Make it green', {
+      clientTools: {
+        changeColor: {
+          id: 'changeColor',
+          description: 'This is a test tool that returns the name and email',
+          inputSchema: z.object({
+            color: z.string(),
+          }),
+          execute: async () => {
+            console.log('SUHHH');
+          },
+        },
+      },
+      onFinish: props => {
+        expect(props.toolCalls.length).toBeGreaterThan(0);
+      },
+    });
+
+    for await (const _ of result.fullStream) {
+    }
+  });
+
+  it('should generate with default max steps', async () => {
+    const findUserTool = createTool({
+      id: 'Find user tool',
+      description: 'This is a test tool that returns the name and email',
+      inputSchema: z.object({
+        name: z.string(),
+      }),
+      execute: async ({ context }) => {
+        return mockFindUser(context) as Promise<Record<string, any>>;
+      },
+    });
+
+    const userAgent = new Agent({
+      name: 'User agent',
+      instructions: 'You are an agent that can get list of users using findUserTool.',
+      model: openai('gpt-4o'),
+      tools: { findUserTool },
+    });
+
+    const mastra = new Mastra({
+      agents: { userAgent },
+    });
+
+    const agentOne = mastra.getAgent('userAgent');
+
+    const res = await agentOne.generate(
+      'Use the "findUserTool" to Find the user with name - Joe and return the name and email',
+    );
+
+    const toolCall: any = res.steps[0].toolResults.find((result: any) => result.toolName === 'findUserTool');
+
+    expect(res.steps.length > 1);
+    expect(res.text.includes('joe@mail.com'));
+    expect(toolCall?.result?.email).toBe('joe@mail.com');
+    expect(mockFindUser).toHaveBeenCalled();
+  });
 
   it('should call testTool from TestIntegration', async () => {
     const testAgent = new Agent({
@@ -452,5 +545,101 @@ describe('agent', () => {
       expect(mastraExecute).toHaveBeenCalled();
       expect(vercelExecute).toHaveBeenCalled();
     });
+
+    it('should make runtimeContext available to tools when injected in generate', async () => {
+      const testRuntimeContext = new RuntimeContext([['test-value', 'runtimeContext-value']]);
+      let capturedValue: string | null = null;
+
+      const testTool = createTool({
+        id: 'runtimeContext-test-tool',
+        description: 'A tool that verifies runtimeContext is available',
+        inputSchema: z.object({
+          query: z.string(),
+        }),
+        execute: ({ runtimeContext }) => {
+          capturedValue = runtimeContext.get('test-value')!;
+
+          return Promise.resolve({
+            success: true,
+            runtimeContextAvailable: !!runtimeContext,
+            runtimeContextValue: capturedValue,
+          });
+        },
+      });
+
+      const agent = new Agent({
+        name: 'runtimeContext-test-agent',
+        instructions: 'You are an agent that tests runtimeContext availability.',
+        model: openai('gpt-4o'),
+        tools: { testTool },
+      });
+
+      const mastra = new Mastra({
+        agents: { agent },
+      });
+
+      const testAgent = mastra.getAgent('agent');
+
+      const response = await testAgent.generate('Use the runtimeContext-test-tool with query "test"', {
+        toolChoice: 'required',
+        runtimeContext: testRuntimeContext,
+      });
+
+      const toolCall = response.toolResults.find(result => result.toolName === 'testTool');
+
+      expect(toolCall?.result?.runtimeContextAvailable).toBe(true);
+      expect(toolCall?.result?.runtimeContextValue).toBe('runtimeContext-value');
+      expect(capturedValue).toBe('runtimeContext-value');
+    }, 500000);
+
+    it('should make runtimeContext available to tools when injected in stream', async () => {
+      const testRuntimeContext = new RuntimeContext([['test-value', 'runtimeContext-value']]);
+      let capturedValue: string | null = null;
+
+      const testTool = createTool({
+        id: 'runtimeContext-test-tool',
+        description: 'A tool that verifies runtimeContext is available',
+        inputSchema: z.object({
+          query: z.string(),
+        }),
+        execute: ({ runtimeContext }) => {
+          capturedValue = runtimeContext.get('test-value')!;
+
+          return Promise.resolve({
+            success: true,
+            runtimeContextAvailable: !!runtimeContext,
+            runtimeContextValue: capturedValue,
+          });
+        },
+      });
+
+      const agent = new Agent({
+        name: 'runtimeContext-test-agent',
+        instructions: 'You are an agent that tests runtimeContext availability.',
+        model: openai('gpt-4o'),
+        tools: { testTool },
+      });
+
+      const mastra = new Mastra({
+        agents: { agent },
+      });
+
+      const testAgent = mastra.getAgent('agent');
+
+      const stream = await testAgent.stream('Use the runtimeContext-test-tool with query "test"', {
+        toolChoice: 'required',
+        runtimeContext: testRuntimeContext,
+      });
+
+      for await (const _chunk of stream.textStream) {
+        // empty line
+      }
+
+      const toolCall = (await stream.toolResults).find(result => result.toolName === 'testTool');
+
+      expect(toolCall?.result?.runtimeContextAvailable).toBe(true);
+      expect(toolCall?.result?.runtimeContextValue).toBe('runtimeContext-value');
+      expect(capturedValue).toBe('runtimeContext-value');
+    }, 500000);
   });
 });

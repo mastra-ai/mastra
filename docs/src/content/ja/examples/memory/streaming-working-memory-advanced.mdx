@@ -1,0 +1,139 @@
+---
+title: ストリーミング作業記憶（上級）
+description: 会話を通じてToDoリストを維持するための作業記憶の使用例
+---
+
+# ストリーミング作業メモリ（上級）
+
+この例では、最小限のコンテキストでも作業メモリを使用してToDoリストを維持するエージェントを作成する方法を示します。作業メモリのより簡単な紹介については、[基本的な作業メモリの例](/examples/memory/short-term-working-memory)を参照してください。
+
+## セットアップ
+
+作業メモリ機能を持つエージェントの作成方法を分解してみましょう。最小限のコンテキストでもタスクを記憶するToDoリストマネージャーを構築します。
+
+### 1. メモリの設定
+
+まず、作業メモリを使用して状態を維持するため、短いコンテキストウィンドウでメモリシステムを設定します。メモリはデフォルトでLibSQLストレージを使用しますが、必要に応じて他の[ストレージプロバイダー](/docs/agents/agent-memory#storage-options)を使用することもできます：
+
+```typescript
+import { Memory } from "@mastra/memory";
+
+const memory = new Memory({
+  options: {
+    lastMessages: 1, // 作業メモリは短いコンテキストウィンドウでも会話の一貫性を維持できることを意味します
+    workingMemory: {
+      enabled: true,
+    },
+  },
+});
+```
+
+### 2. 作業メモリテンプレートの定義
+
+次に、エージェントにToDoリストデータをどのように構造化するかを示すテンプレートを定義します。テンプレートはデータ構造を表現するためにMarkdownを使用します。これにより、エージェントは各ToDoアイテムに対して追跡すべき情報を理解するのに役立ちます。
+
+```typescript
+const memory = new Memory({
+  options: {
+    lastMessages: 1,
+    workingMemory: {
+      enabled: true,
+      template: `
+# Todo List
+## アイテムのステータス
+- アクティブなアイテム:
+  - 例 (期限: 3028年2月7日, 開始: 2025年2月7日)
+    - 説明: これは例のタスクです
+## 完了
+- まだありません
+`,
+    },
+  },
+});
+```
+
+### 3. ToDoリストエージェントの作成
+
+最後に、このメモリシステムを使用するエージェントを作成します。エージェントの指示は、ユーザーとどのようにやり取りし、ToDoリストを管理するかを定義します。
+
+```typescript
+import { openai } from "@ai-sdk/openai";
+
+const todoAgent = new Agent({
+  name: "TODO Agent",
+  instructions:
+    "あなたは役に立つToDoリストAIエージェントです。ユーザーがToDoリストを管理するのを手伝ってください。まだリストがない場合は、何を追加するか尋ねてください！リストがある場合は、チャットが始まるときに常にそれを表示してください。各アイテムには絵文字、日付、タイトル（1から始まるインデックス番号付き）、説明、ステータスを追加してください。各情報の左に絵文字を追加してください。また、ボックス内に箇条書きでサブタスクリストをサポートしてください。各タスクの時間をどのくらいかかるかを尋ねて、ユーザーが時間を区切るのを手伝ってください。",
+  model: openai("gpt-4o-mini"),
+  memory,
+});
+```
+
+**注:** テンプレートと指示はオプションです - `workingMemory.enabled`が`true`に設定されている場合、デフォルトのシステムメッセージが自動的に挿入され、エージェントが作業メモリをどのように使用するかを理解するのを助けます。
+
+## 使用例
+
+エージェントの応答には、Mastraが作業メモリを自動的に更新するために使用するXMLのような`<working_memory>$data</working_memory>`タグが含まれます。これを処理する2つの方法を見ていきます。
+
+### 基本的な使用法
+
+単純なケースでは、`maskStreamTags`を使用してユーザーから作業メモリの更新を隠すことができます。
+
+```typescript
+import { randomUUID } from "crypto";
+import { maskStreamTags } from "@mastra/core/utils";
+
+// 会話を開始する
+const threadId = randomUUID();
+const resourceId = "SOME_USER_ID";
+
+// 新しいToDoアイテムを追加する
+const response = await todoAgent.stream(
+  "タスクを追加: アプリの新機能を構築する。約2時間かかり、次の金曜日までに完了する必要があります。",
+  {
+    threadId,
+    resourceId,
+  },
+);
+
+// ストリームを処理し、作業メモリの更新を隠す
+for await (const chunk of maskStreamTags(
+  response.textStream,
+  "working_memory",
+)) {
+  process.stdout.write(chunk);
+}
+```
+
+### UIフィードバックを伴う高度な使用法
+
+より良いユーザー体験のために、作業メモリが更新されている間にロード状態を表示することができます。
+
+```typescript
+// 上記と同じインポートとセットアップ...
+
+// ライフサイクルフックを追加してUIフィードバックを提供する
+const maskedStream = maskStreamTags(response.textStream, "working_memory", {
+  // working_memoryタグが開始されたときに呼び出される
+  onStart: () => showLoadingSpinner("ToDoリストを更新中..."),
+  // working_memoryタグが終了したときに呼び出される
+  onEnd: () => hideLoadingSpinner(),
+  // マスクされたコンテンツと共に呼び出される
+  onMask: (chunk) => console.debug("更新されたToDoリスト:", chunk),
+});
+
+// マスクされたストリームを処理する
+for await (const chunk of maskedStream) {
+  process.stdout.write(chunk);
+}
+```
+
+この例は以下を示しています：
+
+1. 作業メモリが有効なメモリシステムのセットアップ
+2. 構造化されたXMLでToDoリストテンプレートを作成
+3. `maskStreamTags`を使用してユーザーからメモリ更新を隠す
+4. ライフサイクルフックを使用してメモリ更新中にUIのロード状態を提供
+
+コンテキストに1つのメッセージしかない場合でも（`lastMessages: 1`）、エージェントは作業メモリに完全なToDoリストを保持します。エージェントが応答するたびに、ToDoリストの現在の状態で作業メモリを更新し、インタラクション間の永続性を確保します。
+
+エージェントメモリの詳細、他のメモリタイプやストレージオプションについては、[メモリドキュメント](/docs/agents/agent-memory)ページをご覧ください。

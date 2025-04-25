@@ -29,7 +29,9 @@ const startServer = async (dotMastraPath: string, port: number, env: Map<string,
     currentServerProcess = execa('node', commands, {
       cwd: dotMastraPath,
       env: {
+        NODE_ENV: 'production',
         ...Object.fromEntries(env),
+        MASTRA_DEV: 'true',
         PORT: port.toString() || process.env.PORT || '4111',
         MASTRA_DEFAULT_STORAGE_URL: `file:${join(dotMastraPath, '..', 'mastra.db')}`,
       },

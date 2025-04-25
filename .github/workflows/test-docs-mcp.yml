@@ -4,9 +4,9 @@ on:
   pull_request:
     branches: [main]
     paths:
-      - "packages/mcp/**"
-      - "packages/mcp-docs-server/**"
-      - ".github/workflows/test-docs-mcp.yml"
+      - 'packages/mcp/**'
+      - 'packages/mcp-docs-server/**'
+      - '.github/workflows/test-docs-mcp.yml'
 
 jobs:
   test:
@@ -16,27 +16,22 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install pnpm
-        uses: pnpm/action-setup@v2
+      - uses: pnpm/action-setup@v4
+        name: Install pnpm
         with:
-          version: 9.7.0
+          run_install: false
 
-      - name: Setup Node.js
+      - name: Setup Node.js 20.x
         uses: actions/setup-node@v4
         with:
-          node-version: "20"
-          cache: "pnpm"
+          node-version: 20.x
+          cache: 'pnpm'
 
       - name: Install dependencies
         run: pnpm install
 
-      - name: Build core
-        run: pnpm build:core
-
       - name: Build @mastra/mcp
-        working-directory: packages/mcp
-        run: pnpm build
+        run: pnpm turbo --filter="./packages/mcp" build
 
       - name: Run Docs MCP tests
         run: pnpm test:docs-mcp
-

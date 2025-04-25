@@ -1,8 +1,13 @@
 import { randomUUID } from 'crypto';
-import type { MetricResult, TestInfo } from '@mastra/core/eval';
 import type { MessageType } from '@mastra/core/memory';
 import type { TABLE_NAMES } from '@mastra/core/storage';
-import { TABLE_MESSAGES, TABLE_THREADS, TABLE_WORKFLOW_SNAPSHOT, TABLE_EVALS } from '@mastra/core/storage';
+import {
+  TABLE_MESSAGES,
+  TABLE_THREADS,
+  TABLE_WORKFLOW_SNAPSHOT,
+  TABLE_EVALS,
+  TABLE_TRACES,
+} from '@mastra/core/storage';
 import type { WorkflowRunState } from '@mastra/core/workflows';
 import { describe, it, expect, beforeAll, beforeEach, afterAll, vi } from 'vitest';
 
@@ -55,6 +60,23 @@ const createSampleWorkflowSnapshot = (status: string, createdAt?: Date) => {
   return { snapshot, runId, stepId };
 };
 
+const createSampleTrace = (name: string, scope?: string, attributes?: Record<string, string>) => ({
+  id: `trace-${randomUUID()}`,
+  parentSpanId: `span-${randomUUID()}`,
+  traceId: `trace-${randomUUID()}`,
+  name,
+  scope,
+  kind: 'internal',
+  status: JSON.stringify({ code: 'success' }),
+  events: JSON.stringify([{ name: 'start', timestamp: Date.now() }]),
+  links: JSON.stringify([]),
+  attributes: attributes ? JSON.stringify(attributes) : undefined,
+  startTime: new Date().toISOString(),
+  endTime: new Date().toISOString(),
+  other: JSON.stringify({ custom: 'data' }),
+  createdAt: new Date().toISOString(),
+});
+
 const createSampleEval = (agentName: string, isTest = false) => {
   const testInfo = isTest ? { testPath: 'test/path.ts', testName: 'Test Name' } : undefined;
 
@@ -98,6 +120,7 @@ describe('UpstashStore', () => {
     await store.clearTable({ tableName: TABLE_MESSAGES });
     await store.clearTable({ tableName: TABLE_WORKFLOW_SNAPSHOT });
     await store.clearTable({ tableName: TABLE_EVALS });
+    await store.clearTable({ tableName: TABLE_TRACES });
   });
 
   describe('Table Operations', () => {
@@ -149,10 +172,10 @@ describe('UpstashStore', () => {
       const now = new Date();
       const thread = createSampleThread(now);
 
-      const savedThread = await store.__saveThread({ thread });
+      const savedThread = await store.saveThread({ thread });
       expect(savedThread).toEqual(thread);
 
-      const retrievedThread = await store.__getThreadById({ threadId: thread.id });
+      const retrievedThread = await store.getThreadById({ threadId: thread.id });
       expect(retrievedThread).toEqual({
         ...thread,
         createdAt: new Date(now.toISOString()),
@@ -185,7 +208,7 @@ describe('UpstashStore', () => {
 
       await store.saveThread({ thread });
 
-      const updatedThread = await store.__updateThread({
+      const updatedThread = await store.updateThread({
         id: thread.id,
         title: 'Updated Title',
         metadata: { updated: 'value' },
@@ -267,7 +290,7 @@ describe('UpstashStore', () => {
       await store.clearTable({ tableName: TABLE_THREADS });
 
       // Create a test thread
-      await store.__saveThread({
+      await store.saveThread({
         thread: {
           id: threadId,
           resourceId: 'resource-1',
@@ -286,15 +309,15 @@ describe('UpstashStore', () => {
         createSampleMessage(threadId, 'Third'),
       ];
 
-      await store.__saveMessages({ messages: messages as MessageType[] });
+      await store.saveMessages({ messages: messages as MessageType[] });
 
-      const retrievedMessages = await store.__getMessages({ threadId });
+      const retrievedMessages = await store.getMessages({ threadId });
       expect(retrievedMessages).toHaveLength(3);
       expect(retrievedMessages.map(m => m.content[0].text)).toEqual(['First', 'Second', 'Third']);
     });
 
     it('should handle empty message array', async () => {
-      const result = await store.__saveMessages({ messages: [] });
+      const result = await store.saveMessages({ messages: [] });
       expect(result).toEqual([]);
     });
 
@@ -314,10 +337,101 @@ describe('UpstashStore', () => {
         },
       ];
 
-      await store.__saveMessages({ messages: messages as MessageType[] });
+      await store.saveMessages({ messages: messages as MessageType[] });
 
-      const retrievedMessages = await store.__getMessages({ threadId });
+      const retrievedMessages = await store.getMessages({ threadId });
       expect(retrievedMessages[0].content).toEqual(messages[0].content);
+    });
+  });
+
+  describe('Trace Operations', () => {
+    beforeEach(async () => {
+      await store.clearTable({ tableName: TABLE_TRACES });
+    });
+
+    it('should retrieve traces with filtering and pagination', async () => {
+      // Insert sample traces
+      const trace1 = createSampleTrace('test-trace-1', 'scope1', { env: 'prod' });
+      const trace2 = createSampleTrace('test-trace-2', 'scope1', { env: 'dev' });
+      const trace3 = createSampleTrace('other-trace', 'scope2', { env: 'prod' });
+
+      await store.insert({ tableName: TABLE_TRACES, record: trace1 });
+      await store.insert({ tableName: TABLE_TRACES, record: trace2 });
+      await store.insert({ tableName: TABLE_TRACES, record: trace3 });
+
+      // Test name filter
+      const testTraces = await store.getTraces({ name: 'test-trace', page: 0, perPage: 10 });
+      expect(testTraces).toHaveLength(2);
+      expect(testTraces.map(t => t.name)).toContain('test-trace-1');
+      expect(testTraces.map(t => t.name)).toContain('test-trace-2');
+
+      // Test scope filter
+      const scope1Traces = await store.getTraces({ scope: 'scope1', page: 0, perPage: 10 });
+      expect(scope1Traces).toHaveLength(2);
+      expect(scope1Traces.every(t => t.scope === 'scope1')).toBe(true);
+
+      // Test attributes filter
+      const prodTraces = await store.getTraces({
+        attributes: { env: 'prod' },
+        page: 0,
+        perPage: 10,
+      });
+      expect(prodTraces).toHaveLength(2);
+      expect(prodTraces.every(t => t.attributes.env === 'prod')).toBe(true);
+
+      // Test pagination
+      const pagedTraces = await store.getTraces({ page: 0, perPage: 2 });
+      expect(pagedTraces).toHaveLength(2);
+
+      // Test combined filters
+      const combinedTraces = await store.getTraces({
+        scope: 'scope1',
+        attributes: { env: 'prod' },
+        page: 0,
+        perPage: 10,
+      });
+      expect(combinedTraces).toHaveLength(1);
+      expect(combinedTraces[0].name).toBe('test-trace-1');
+
+      // Verify trace object structure
+      const trace = combinedTraces[0];
+      expect(trace).toHaveProperty('id');
+      expect(trace).toHaveProperty('parentSpanId');
+      expect(trace).toHaveProperty('traceId');
+      expect(trace).toHaveProperty('name');
+      expect(trace).toHaveProperty('scope');
+      expect(trace).toHaveProperty('kind');
+      expect(trace).toHaveProperty('status');
+      expect(trace).toHaveProperty('events');
+      expect(trace).toHaveProperty('links');
+      expect(trace).toHaveProperty('attributes');
+      expect(trace).toHaveProperty('startTime');
+      expect(trace).toHaveProperty('endTime');
+      expect(trace).toHaveProperty('other');
+      expect(trace).toHaveProperty('createdAt');
+
+      // Verify JSON fields are parsed
+      expect(typeof trace.status).toBe('object');
+      expect(typeof trace.events).toBe('object');
+      expect(typeof trace.links).toBe('object');
+      expect(typeof trace.attributes).toBe('object');
+      expect(typeof trace.other).toBe('object');
+    });
+
+    it('should handle empty results', async () => {
+      const traces = await store.getTraces({ page: 0, perPage: 10 });
+      expect(traces).toHaveLength(0);
+    });
+
+    it('should handle invalid JSON in fields', async () => {
+      const trace = createSampleTrace('test-trace');
+      trace.status = 'invalid-json{'; // Intentionally invalid JSON
+
+      await store.insert({ tableName: TABLE_TRACES, record: trace });
+      const traces = await store.getTraces({ page: 0, perPage: 10 });
+
+      expect(traces).toHaveLength(1);
+      expect(traces[0].status).toBe('invalid-json{'); // Should return raw string when JSON parsing fails
     });
   });
 
@@ -433,7 +547,7 @@ describe('UpstashStore', () => {
       await store.clearTable({ tableName: TABLE_WORKFLOW_SNAPSHOT });
     });
     it('returns empty array when no workflows exist', async () => {
-      const { runs, total } = await store.__getWorkflowRuns();
+      const { runs, total } = await store.getWorkflowRuns();
       expect(runs).toEqual([]);
       expect(total).toBe(0);
     });
@@ -459,7 +573,7 @@ describe('UpstashStore', () => {
         snapshot: workflow2,
       });
 
-      const { runs, total } = await store.__getWorkflowRuns({ namespace: testNamespace });
+      const { runs, total } = await store.getWorkflowRuns({ namespace: testNamespace });
       expect(runs).toHaveLength(2);
       expect(total).toBe(2);
       expect(runs[0]!.workflowName).toBe(workflowName2); // Most recent first
@@ -491,7 +605,7 @@ describe('UpstashStore', () => {
         snapshot: workflow2,
       });
 
-      const { runs, total } = await store.__getWorkflowRuns({ namespace: testNamespace, workflowName: workflowName1 });
+      const { runs, total } = await store.getWorkflowRuns({ namespace: testNamespace, workflowName: workflowName1 });
       expect(runs).toHaveLength(1);
       expect(total).toBe(1);
       expect(runs[0]!.workflowName).toBe(workflowName1);
@@ -545,7 +659,7 @@ describe('UpstashStore', () => {
         },
       });
 
-      const { runs } = await store.__getWorkflowRuns({
+      const { runs } = await store.getWorkflowRuns({
         namespace: testNamespace,
         fromDate: yesterday,
         toDate: now,
@@ -591,7 +705,7 @@ describe('UpstashStore', () => {
       });
 
       // Get first page
-      const page1 = await store.__getWorkflowRuns({
+      const page1 = await store.getWorkflowRuns({
         namespace: testNamespace,
         limit: 2,
         offset: 0,
@@ -606,7 +720,7 @@ describe('UpstashStore', () => {
       expect(secondSnapshot.context?.steps[stepId2]?.status).toBe('running');
 
       // Get second page
-      const page2 = await store.__getWorkflowRuns({
+      const page2 = await store.getWorkflowRuns({
         namespace: testNamespace,
         limit: 2,
         offset: 2,

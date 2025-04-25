@@ -8,14 +8,14 @@
       "dependsOn": ["build:cli"]
     },
     "build": {
-      "dependsOn": ["build:cli", "prepare-docs", "^build"]
+      "dependsOn": ["build:cli", "prepare-docs"]
     },
     "build:cli": {
       "outputs": ["dist/**"],
       "dependsOn": ["^build"]
     },
     "test": {
-      "dependsOn": ["build", "build:cli", "prepare-docs"],
+      "dependsOn": ["build"],
       "outputs": []
     }
   }

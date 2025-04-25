@@ -1,5 +1,7 @@
 # mastra-ai-sdk-use-chat-example
 
+## 0.1.1
+
 ## 0.1.1-alpha.0
 
 ### Patch Changes

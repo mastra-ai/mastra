@@ -11,6 +11,7 @@ import type {
 } from '@mastra/core';
 
 import type { AgentGenerateOptions, AgentStreamOptions } from '@mastra/core/agent';
+import type { NewWorkflow, WatchEvent, WorkflowResult as VNextWorkflowResult } from '@mastra/core/workflows/vNext';
 import type { JSONSchema7 } from 'json-schema';
 import type { ZodSchema } from 'zod';
 
@@ -78,6 +79,18 @@ export type WorkflowRunResult = {
   timestamp: number;
   runId: string;
 };
+
+export interface GetVNextWorkflowResponse {
+  name: string;
+  steps: NewWorkflow['steps'];
+  stepGraph: NewWorkflow['stepGraph'];
+  inputSchema: string;
+  outputSchema: string;
+}
+
+export type VNextWorkflowWatchResult = WatchEvent & { runId: string };
+
+export type VNextWorkflowRunResult = VNextWorkflowResult<any, any>;
 export interface UpsertVectorParams {
   indexName: string;
   vectors: number[][];
@@ -118,7 +131,7 @@ export type SaveMessageToMemoryResponse = MessageType[];
 export interface CreateMemoryThreadParams {
   title: string;
   metadata: Record<string, any>;
-  resourceid: string;
+  resourceId: string;
   threadId: string;
   agentId: string;
 }
@@ -135,7 +148,7 @@ export type GetMemoryThreadResponse = StorageThreadType[];
 export interface UpdateMemoryThreadParams {
   title: string;
   metadata: Record<string, any>;
-  resourceid: string;
+  resourceId: string;
 }
 
 export interface GetMemoryThreadMessagesResponse {
@@ -156,8 +169,48 @@ export type GetLogsResponse = BaseLogMessage[];
 
 export type RequestFunction = (path: string, options?: RequestOptions) => Promise<any>;
 
+type SpanStatus = {
+  code: number;
+};
+
+type SpanOther = {
+  droppedAttributesCount: number;
+  droppedEventsCount: number;
+  droppedLinksCount: number;
+};
+
+type SpanEventAttributes = {
+  key: string;
+  value: { [key: string]: string | number | boolean | null };
+};
+
+type SpanEvent = {
+  attributes: SpanEventAttributes[];
+  name: string;
+  timeUnixNano: string;
+  droppedAttributesCount: number;
+};
+
+type Span = {
+  id: string;
+  parentSpanId: string | null;
+  traceId: string;
+  name: string;
+  scope: string;
+  kind: number;
+  status: SpanStatus;
+  events: SpanEvent[];
+  links: any[];
+  attributes: Record<string, string | number | boolean | null>;
+  startTime: number;
+  endTime: number;
+  duration: number;
+  other: SpanOther;
+  createdAt: string;
+};
+
 export interface GetTelemetryResponse {
-  traces: any[];
+  traces: Span[];
 }
 
 export interface GetTelemetryParams {

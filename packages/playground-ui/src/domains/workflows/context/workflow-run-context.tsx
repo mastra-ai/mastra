@@ -1,9 +1,11 @@
-import { WorkflowRunResult } from '@mastra/client-js';
+import { ExtendedVNextWorkflowWatchResult, ExtendedWorkflowRunResult } from '@/hooks/use-workflows';
 import { createContext, useState } from 'react';
 
 type WorkflowRunContextType = {
-  result: WorkflowRunResult | null;
+  result: ExtendedWorkflowRunResult | null;
   setResult: React.Dispatch<React.SetStateAction<any>>;
+  vNextResult: ExtendedVNextWorkflowWatchResult | null;
+  setVNextResult: React.Dispatch<React.SetStateAction<any>>;
   payload: any;
   setPayload: React.Dispatch<React.SetStateAction<any>>;
   clearData: () => void;
@@ -12,11 +14,13 @@ type WorkflowRunContextType = {
 export const WorkflowRunContext = createContext<WorkflowRunContextType>({} as WorkflowRunContextType);
 
 export function WorkflowRunProvider({ children }: { children: React.ReactNode }) {
-  const [result, setResult] = useState<WorkflowRunResult | null>(null);
+  const [result, setResult] = useState<ExtendedWorkflowRunResult | null>(null);
+  const [vNextResult, setVNextResult] = useState<ExtendedVNextWorkflowWatchResult | null>(null);
   const [payload, setPayload] = useState<any>(null);
 
   const clearData = () => {
     setResult(null);
+    setVNextResult(null);
     setPayload(null);
   };
 
@@ -25,6 +29,8 @@ export function WorkflowRunProvider({ children }: { children: React.ReactNode })
       value={{
         result,
         setResult,
+        vNextResult,
+        setVNextResult,
         payload,
         setPayload,
         clearData,

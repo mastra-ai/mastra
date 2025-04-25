@@ -1,0 +1,117 @@
+---
+title: "例：マルチエージェントワークフロー | エージェント | Mastra ドキュメント"
+description: Mastraでエージェントワークフローを作成する例で、作業成果物が複数のエージェント間で受け渡しされます。
+---
+
+import { GithubLink } from "@/components/github-link";
+
+# マルチエージェントワークフロー
+
+この例では、ワーカーエージェントとスーパーバイザーエージェントを使用して、複数のエージェント間で作業成果物を渡すエージェントワークフローを作成する方法を示します。
+
+この例では、2つのエージェントを順番に呼び出すシーケンシャルワークフローを作成します：
+
+1. 初期のブログ投稿を書くコピーライターエージェント
+2. コンテンツを洗練するエディターエージェント
+
+まず、必要な依存関係をインポートします：
+
+```typescript
+import { openai } from "@ai-sdk/openai";
+import { anthropic } from "@ai-sdk/anthropic";
+import { Agent } from "@mastra/core/agent";
+import { Step, Workflow } from "@mastra/core/workflows";
+import { z } from "zod";
+```
+
+初期のブログ投稿を生成するコピーライターエージェントを作成します：
+
+```typescript
+const copywriterAgent = new Agent({
+  name: "Copywriter",
+  instructions: "あなたはブログ投稿のコピーを書くコピーライターエージェントです。",
+  model: anthropic("claude-3-5-sonnet-20241022"),
+});
+```
+
+エージェントを実行し、応答を処理するコピーライターステップを定義します：
+
+```typescript
+const copywriterStep = new Step({
+  id: "copywriterStep",
+  execute: async ({ context }) => {
+    if (!context?.triggerData?.topic) {
+      throw new Error("トリガーデータにトピックが見つかりません");
+    }
+    const result = await copywriterAgent.generate(
+      `Create a blog post about ${context.triggerData.topic}`,
+    );
+    console.log("copywriter result", result.text);
+    return {
+      copy: result.text,
+    };
+  },
+});
+```
+
+コピーライターのコンテンツを洗練するためにエディターエージェントを設定します：
+
+```typescript
+const editorAgent = new Agent({
+  name: "Editor",
+  instructions: "あなたはブログ投稿のコピーを編集するエディターエージェントです。",
+  model: openai("gpt-4o-mini"),
+});
+```
+
+コピーライターの出力を処理するエディターステップを作成します：
+
+```typescript
+const editorStep = new Step({
+  id: "editorStep",
+  execute: async ({ context }) => {
+    const copy = context?.getStepResult<{ copy: number }>("copywriterStep")?.copy;
+
+    const result = await editorAgent.generate(
+      `Edit the following blog post only returning the edited copy: ${copy}`,
+    );
+    console.log("editor result", result.text);
+    return {
+      copy: result.text,
+    };
+  },
+});
+```
+
+ワークフローを設定し、ステップを実行します：
+
+```typescript
+const myWorkflow = new Workflow({
+  name: "my-workflow",
+  triggerSchema: z.object({
+    topic: z.string(),
+  }),
+});
+
+// ステップを順番に実行します。
+myWorkflow.step(copywriterStep).then(editorStep).commit();
+
+const { runId, start } = myWorkflow.createRun();
+
+const res = await start({
+  triggerData: { topic: "React JavaScript frameworks" },
+});
+console.log("Results: ", res.results);
+```
+
+<br />
+<br />
+<hr className="dark:border-[#404040] border-gray-300" />
+<br />
+<br />
+
+<GithubLink
+  link={
+    "https://github.com/mastra-ai/mastra/blob/main/examples/basics/agents/multi-agent-workflow"
+  }
+/>

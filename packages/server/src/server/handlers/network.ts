@@ -1,4 +1,5 @@
 import type { AgentNetwork } from '@mastra/core/network';
+import type { RuntimeContext } from '@mastra/core/runtime-context';
 import { HTTPException } from '../http-exception';
 import type { Context } from '../types';
 import { handleError } from './error';
@@ -76,9 +77,11 @@ export async function getNetworkByIdHandler({ mastra, networkId }: Pick<NetworkC
 
 export async function generateHandler({
   mastra,
+  runtimeContext,
   networkId,
   body,
 }: NetworkContext & {
+  runtimeContext: RuntimeContext;
   body: { messages?: Parameters<AgentNetwork['generate']>[0] } & Parameters<AgentNetwork['generate']>[1];
 }) {
   try {
@@ -91,7 +94,7 @@ export async function generateHandler({
     validateBody({ messages: body.messages });
 
     const { messages, ...rest } = body;
-    const result = await network.generate(messages!, rest);
+    const result = await network.generate(messages!, { ...rest, runtimeContext });
 
     return result;
   } catch (error) {
@@ -103,7 +106,9 @@ export async function streamGenerateHandler({
   mastra,
   networkId,
   body,
+  runtimeContext,
 }: NetworkContext & {
+  runtimeContext: RuntimeContext;
   body: { messages?: Parameters<AgentNetwork['stream']>[0] } & Parameters<AgentNetwork['stream']>[1];
 }) {
   try {
@@ -119,6 +124,7 @@ export async function streamGenerateHandler({
     const streamResult = await network.stream(messages!, {
       output: output as any,
       ...rest,
+      runtimeContext,
     });
 
     const streamResponse = output

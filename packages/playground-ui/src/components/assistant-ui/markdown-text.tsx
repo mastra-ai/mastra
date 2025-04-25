@@ -156,16 +156,7 @@ const defaultComponents = memoizeMarkdownComponents({
       }}
     />
   ),
-  p: ({ className, ...props }) => (
-    <p
-      className={cn('leading-7 first:mt-0 last:mb-0', className)}
-      {...props}
-      style={{
-        marginBottom: '1.25rem',
-        marginTop: '1.25rem',
-      }}
-    />
-  ),
+  p: ({ className, ...props }) => <p className={cn('leading-7 first:mt-0 last:mb-0', className)} {...props} />,
   a: ({ className, ...props }) => (
     <a className={cn('text-primary font-medium underline underline-offset-4', className)} {...props} />
   ),

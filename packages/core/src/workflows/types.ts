@@ -4,6 +4,7 @@ import type { z } from 'zod';
 import type { IAction, IExecutionContext, MastraUnion } from '../action';
 import type { BaseLogMessage, RegisteredLogger } from '../logger';
 import type { Mastra } from '../mastra';
+import type { RuntimeContext } from '../runtime-context';
 import type { Step } from './step';
 import type { Workflow } from './workflow';
 
@@ -37,6 +38,7 @@ export interface StepExecutionContext<
   runId: string;
   emit: (event: string, data: any) => void;
   mastra?: MastraUnion;
+  runtimeContext: RuntimeContext;
 }
 
 export interface StepAction<
@@ -450,6 +452,8 @@ export interface WorkflowRunState {
     stepId: string;
     status: string;
   }>;
+
+  suspendedPaths: Record<string, number[]>;
 
   // Metadata
   runId: string;

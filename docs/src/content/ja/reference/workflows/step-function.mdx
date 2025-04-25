@@ -1,0 +1,92 @@
+---
+title: "リファレンス: Workflow.step() | ワークフロー | Mastra ドキュメント"
+description: ワークフロー内の `.step()` メソッドに関するドキュメントで、ワークフローに新しいステップを追加します。
+---
+
+# Workflow.step()
+
+`.step()` メソッドは、ワークフローに新しいステップを追加し、オプションでその変数と実行条件を設定します。
+
+## 使用法
+
+```typescript
+workflow.step({
+  id: "stepTwo",
+  outputSchema: z.object({
+    result: z.number()
+  }),
+  execute: async ({ context }) => {
+    return { result: 42 };
+  }
+});
+```
+
+## パラメーター
+
+<PropertiesTable
+  content={[
+    {
+      name: "stepConfig",
+      type: "Step | StepDefinition | string",
+      description: "ワークフローに追加するステップインスタンス、設定オブジェクト、またはステップID",
+      isOptional: false
+    },
+    {
+      name: "options",
+      type: "StepOptions",
+      description: "ステップ実行のためのオプション設定",
+      isOptional: true
+    }
+  ]}
+/>
+
+### StepDefinition
+
+<PropertiesTable
+  content={[
+    {
+      name: "id",
+      type: "string",
+      description: "ステップの一意の識別子",
+      isOptional: false
+    },
+    {
+      name: "outputSchema",
+      type: "z.ZodSchema",
+      description: "ステップ出力を検証するためのスキーマ",
+      isOptional: true
+    },
+    {
+      name: "execute",
+      type: "(params: ExecuteParams) => Promise<any>",
+      description: "ステップロジックを含む関数",
+      isOptional: false
+    }
+  ]}
+/>
+
+### StepOptions
+
+<PropertiesTable
+  content={[
+    {
+      name: "variables",
+      type: "Record<string, VariableRef>",
+      description: "変数名とそのソース参照のマップ",
+      isOptional: true
+    },
+    {
+      name: "when",
+      type: "StepCondition",
+      description: "ステップを実行するために満たすべき条件",
+      isOptional: true
+    }
+  ]}
+/>
+
+## 関連
+- [ステップインスタンスの基本的な使用法](../../workflows/steps.mdx)
+- [ステップクラスリファレンス](./step-class.mdx)
+- [ワークフロークラスリファレンス](./workflow.mdx)
+- [制御フローガイド](../../workflows/control-flow.mdx)
+```

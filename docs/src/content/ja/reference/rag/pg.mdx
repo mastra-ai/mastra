@@ -1,0 +1,501 @@
+---
+title: "リファレンス: PG Vector Store | ベクターデータベース | RAG | Mastra ドキュメント"
+description: PostgreSQLのpgvector拡張機能を使用してベクター検索を提供するMastraのPgVectorクラスのドキュメント。
+---
+
+# PG Vector Store
+
+PgVectorクラスは、[PostgreSQL](https://www.postgresql.org/)と[pgvector](https://github.com/pgvector/pgvector)拡張機能を使用してベクトル検索を提供します。
+既存のPostgreSQLデータベース内で強力なベクトル類似性検索機能を提供します。
+
+## コンストラクタオプション
+
+<PropertiesTable
+  content={[
+    {
+      name: "connectionString",
+      type: "string",
+      description: "PostgreSQL接続URL",
+    },
+    {
+      name: "schemaName",
+      type: "string",
+      description: 
+        "ベクトルストアが使用するスキーマの名前。提供されない場合はデフォルトのスキーマを使用します。",
+      isOptional: true,
+    }
+  ]}
+/>
+
+## コンストラクタの例
+
+`PgVector`を2つの方法でインスタンス化できます：
+
+```ts
+import { PgVector } from '@mastra/pg';
+
+// 接続文字列を使用する方法（文字列形式）
+const vectorStore1 = new PgVector('postgresql://user:password@localhost:5432/mydb');
+
+// 設定オブジェクトを使用する方法（オプションのschemaNameを含む）
+const vectorStore2 = new PgVector({
+  connectionString: 'postgresql://user:password@localhost:5432/mydb',
+  schemaName: 'custom_schema', // オプション
+});
+```
+
+## メソッド
+
+### createIndex()
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "作成するインデックスの名前",
+    },
+    {
+      name: "dimension",
+      type: "number",
+      description: "ベクトルの次元（埋め込みモデルに一致する必要があります）",
+    },
+    {
+      name: "metric",
+      type: "'cosine' | 'euclidean' | 'dotproduct'",
+      isOptional: true,
+      defaultValue: "cosine",
+      description: "類似性検索のための距離メトリック",
+    },
+    {
+      name: "indexConfig",
+      type: "IndexConfig",
+      isOptional: true,
+      defaultValue: "{ type: 'ivfflat' }",
+      description: "インデックス設定",
+    },
+    {
+      name: "buildIndex",
+      type: "boolean",
+      isOptional: true,
+      defaultValue: "true",
+      description: "インデックスを構築するかどうか",
+    },
+  ]}
+/>
+
+#### IndexConfig
+
+<PropertiesTable
+  content={[
+    {
+      name: "type",
+      type: "'flat' | 'hnsw' | 'ivfflat'",
+      description: "インデックスタイプ",
+      defaultValue: "ivfflat",
+      properties: [
+        {
+          type: "string",
+          parameters: [
+            {
+              name: "flat",
+              type: "flat",
+              description:
+                "全探索を行うシーケンシャルスキャン（インデックスなし）。",
+            },
+            {
+              name: "ivfflat",
+              type: "ivfflat",
+              description:
+                "近似検索のためにベクトルをリストにクラスタリングします。",
+            },
+            {
+              name: "hnsw",
+              type: "hnsw",
+              description:
+                "高速な検索時間と高い再現率を提供するグラフベースのインデックス。",
+            },
+          ],
+        },
+      ],
+    },
+    {
+      name: "ivf",
+      type: "IVFConfig",
+      isOptional: true,
+      description: "IVF設定",
+      properties: [
+        {
+          type: "object",
+          parameters: [
+            {
+              name: "lists",
+              type: "number",
+              description:
+                "リストの数。指定しない場合、データセットサイズに基づいて自動計算されます。（最小100、最大4000）",
+              isOptional: true,
+            },
+          ],
+        },
+      ],
+    },
+    {
+      name: "hnsw",
+      type: "HNSWConfig",
+      isOptional: true,
+      description: "HNSW設定",
+      properties: [
+        {
+          type: "object",
+          parameters: [
+            {
+              name: "m",
+              type: "number",
+              description:
+                "ノードごとの最大接続数（デフォルト: 8）",
+              isOptional: true,
+            },
+            {
+              name: "efConstruction",
+              type: "number",
+              description: "構築時の複雑さ（デフォルト: 32）",
+              isOptional: true,
+            },
+          ],
+        },
+      ],
+    },
+  ]}
+/>
+
+#### メモリ要件
+
+HNSWインデックスは構築時にかなりの共有メモリを必要とします。100Kベクトルの場合：
+
+- 小さな次元 (64d): デフォルト設定で約60MB
+- 中程度の次元 (256d): デフォルト設定で約180MB
+- 大きな次元 (384d+): デフォルト設定で約250MB以上
+
+M値やefConstruction値が高いと、メモリ要件が大幅に増加します。必要に応じてシステムの共有メモリ制限を調整してください。
+
+### upsert()
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "ベクトルをアップサートするインデックスの名前",
+    },
+    {
+      name: "vectors",
+      type: "number[][]",
+      description: "埋め込みベクトルの配列",
+    },
+    {
+      name: "metadata",
+      type: "Record<string, any>[]",
+      isOptional: true,
+      description: "各ベクトルのメタデータ",
+    },
+    {
+      name: "ids",
+      type: "string[]",
+      isOptional: true,
+      description: "オプションのベクトルID（指定しない場合は自動生成）",
+    },
+  ]}
+/>
+
+### query()
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "クエリするインデックスの名前",
+    },
+    {
+      name: "vector",
+      type: "number[]",
+      description: "クエリベクトル",
+    },
+    {
+      name: "topK",
+      type: "number",
+      isOptional: true,
+      defaultValue: "10",
+      description: "返す結果の数",
+    },
+    {
+      name: "filter",
+      type: "Record<string, any>",
+      isOptional: true,
+      description: "メタデータフィルター",
+    },
+    {
+      name: "includeVector",
+      type: "boolean",
+      isOptional: true,
+      defaultValue: "false",
+      description: "結果にベクトルを含めるかどうか",
+    },
+    {
+      name: "minScore",
+      type: "number",
+      isOptional: true,
+      defaultValue: "0",
+      description: "最小類似度スコアの閾値",
+    },
+    {
+      name: "options",
+      type: "{ ef?: number; probes?: number }",
+      isOptional: true,
+      description: "HNSWおよびIVFインデックスの追加オプション",
+      properties: [
+        {
+          type: "object",
+          parameters: [
+            {
+              name: "ef",
+              type: "number",
+              description: "HNSW検索パラメータ",
+              isOptional: true,
+            },
+            {
+              name: "probes",
+              type: "number",
+              description: "IVF検索パラメータ",
+              isOptional: true,
+            },
+          ],
+        },
+      ],
+    },
+  ]}
+/>
+
+### listIndexes()
+
+インデックス名を文字列として配列で返します。
+
+### describeIndex()
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "説明するインデックスの名前",
+    },
+  ]}
+/>
+
+返される内容:
+
+```typescript copy
+interface PGIndexStats {
+  dimension: number;
+  count: number;
+  metric: "cosine" | "euclidean" | "dotproduct";
+  type: "flat" | "hnsw" | "ivfflat";
+  config: {
+    m?: number;
+    efConstruction?: number;
+    lists?: number;
+    probes?: number;
+  };
+}
+```
+
+### deleteIndex()
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "削除するインデックスの名前",
+    },
+  ]}
+/>
+
+### updateIndexById()
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "ベクトルを含むインデックスの名前",
+    },
+    {
+      name: "id",
+      type: "string",
+      description: "更新するベクトルのID",
+    },
+    {
+      name: "update",
+      type: "object",
+      description: "更新パラメータ",
+      properties: [
+        {
+          type: "object",
+          parameters: [
+            {
+              name: "vector",
+              type: "number[]",
+              description: "新しいベクトル値",
+              isOptional: true,
+            },
+            {
+              name: "metadata",
+              type: "Record<string, any>",
+              description: "新しいメタデータ値",
+              isOptional: true,
+            },
+          ],
+        },
+      ],
+    },
+  ]}
+/>
+
+IDで既存のベクトルを更新します。ベクトルまたはメタデータのいずれかを提供する必要があります。
+
+```typescript copy
+// ベクトルのみを更新
+await pgVector.updateIndexById("my_vectors", "vector123", {
+  vector: [0.1, 0.2, 0.3],
+});
+
+// メタデータのみを更新
+await pgVector.updateIndexById("my_vectors", "vector123", {
+  metadata: { label: "updated" },
+});
+
+// ベクトルとメタデータの両方を更新
+await pgVector.updateIndexById("my_vectors", "vector123", {
+  vector: [0.1, 0.2, 0.3],
+  metadata: { label: "updated" },
+});
+```
+
+### deleteIndexById()
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "ベクトルを含むインデックスの名前",
+    },
+    {
+      name: "id",
+      type: "string",
+      description: "削除するベクトルのID",
+    },
+  ]}
+/>
+
+指定されたインデックスからIDで単一のベクトルを削除します。
+
+```typescript copy
+await pgVector.deleteIndexById("my_vectors", "vector123");
+```
+
+### disconnect()
+
+データベース接続プールを閉じます。ストアの使用が終了したら呼び出す必要があります。
+
+### buildIndex()
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "定義するインデックスの名前",
+    },
+    {
+      name: "metric",
+      type: "'cosine' | 'euclidean' | 'dotproduct'",
+      isOptional: true,
+      defaultValue: "cosine",
+      description: "類似性検索のための距離メトリック",
+    },
+    {
+      name: "indexConfig",
+      type: "IndexConfig",
+      description: "インデックスタイプとパラメータの設定",
+    },
+  ]}
+/>
+
+指定されたメトリックと設定でインデックスを構築または再構築します。新しいインデックスを作成する前に、既存のインデックスを削除します。
+
+```typescript copy
+// Define HNSW index
+await pgVector.buildIndex("my_vectors", "cosine", {
+  type: "hnsw",
+  hnsw: {
+    m: 8,
+    efConstruction: 32,
+  },
+});
+
+// Define IVF index
+await pgVector.buildIndex("my_vectors", "cosine", {
+  type: "ivfflat",
+  ivf: {
+    lists: 100,
+  },
+});
+
+// Define flat index
+await pgVector.buildIndex("my_vectors", "cosine", {
+  type: "flat",
+});
+```
+
+## レスポンスタイプ
+
+クエリ結果はこの形式で返されます:
+
+```typescript copy
+interface QueryResult {
+  id: string;
+  score: number;
+  metadata: Record<string, any>;
+  vector?: number[]; // Only included if includeVector is true
+}
+```
+
+## エラーハンドリング
+
+ストアは型付きエラーをスローし、キャッチすることができます：
+
+```typescript copy
+try {
+  await store.query({
+    indexName: "index_name",
+    queryVector: queryVector,
+  });
+} catch (error) {
+  if (error instanceof VectorStoreError) {
+    console.log(error.code); // 'connection_failed' | 'invalid_dimension' | etc
+    console.log(error.details); // 追加のエラーコンテキスト
+  }
+}
+```
+
+## ベストプラクティス
+
+- 最適なパフォーマンスを確保するために、インデックス設定を定期的に評価してください。
+- データセットのサイズやクエリの要件に基づいて、`lists` や `m` などのパラメータを調整してください。
+- 特に大幅なデータ変更後には、効率を維持するために定期的にインデックスを再構築してください。
+
+## 関連
+
+- [メタデータフィルター](./metadata-filters)

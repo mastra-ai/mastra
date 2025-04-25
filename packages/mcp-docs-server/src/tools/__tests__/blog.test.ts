@@ -26,7 +26,7 @@ describe('blog tool', () => {
 
   test('handles fetch errors gracefully', async () => {
     const result = await callTool(tools.mastra_mastraBlog, { url: '/blog/non-existent-post' });
-    expect(result).toBe('Error: Error: Failed to fetch blog posts');
+    expect(result).toBe('Error: Failed to fetch blog post');
   });
 
   test('returns specific blog post content when URL is provided', async () => {
@@ -38,5 +38,20 @@ describe('blog tool', () => {
   test('removes Next.js initialization code from blog post content', async () => {
     const result = await callTool(tools.mastra_mastraBlog, { url: '/blog/principles-of-ai-engineering' });
     expect(result).not.toContain('self.__next_f');
+  });
+
+  test('blog posts are formatted as markdown links', async () => {
+    const result = await callTool(tools.mastra_mastraBlog, { url: '/blog' });
+    expect(result).toMatch(/\[.*\]\(\/blog\/.*\)/);
+  });
+
+  test('handles rate limiting response', async () => {
+    const result = await callTool(tools.mastra_mastraBlog, { url: '/blog/rate-limited' });
+    expect(result).toBe('Error: Rate limit exceeded');
+  });
+
+  test('handles empty blog post content', async () => {
+    const result = await callTool(tools.mastra_mastraBlog, { url: '/blog/empty-post' });
+    expect(result).toBe('Error: No content found in blog post');
   });
 });
