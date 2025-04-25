@@ -64,7 +64,7 @@ export class MongoDBVector extends MastraVector {
     await this.client.connect();
   }
 
-  async close(): Promise<void> {
+  async disconnect(): Promise<void> {
     await this.client.close();
   }
 

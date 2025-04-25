@@ -1,20 +1,48 @@
+import type { VectorFilter } from '@mastra/core/vector/filter';
 import { vi, describe, it, expect, beforeAll, afterAll, test } from 'vitest';
 import { MongoDBVector } from './';
-import type { VectorFilter } from '@mastra/core/vector/filter';
 
 // Give tests enough time to complete database operations
 vi.setConfig({ testTimeout: 300000, hookTimeout: 300000 });
 
 // Concrete MongoDB configuration values – adjust these for your environment
-const uri = 'mongodb://localhost:27017/?directConnection=true&serverSelectionTimeoutMS=2000';
+const uri =
+  'mongodb://mongodb:mongodb@localhost:27018/?authSource=admin&directConnection=true&serverSelectionTimeoutMS=2000';
 const dbName = 'vector_db';
-const defaultDimension = 128;
 
+async function waitForAtlasSearchReady(
+  vectorDB: MongoDBVector,
+  indexName: string = 'dummy_vector_index',
+  dimension: number = 1,
+  metric: 'cosine' | 'euclidean' | 'dotproduct' = 'cosine',
+  timeout: number = 300000,
+  interval: number = 5000,
+) {
+  const start = Date.now();
+  let lastError: any = null;
+  let attempt = 0;
+  while (Date.now() - start < timeout) {
+    attempt++;
+    try {
+      await vectorDB.createIndex({ indexName, dimension, metric });
+      // If it succeeds, we're ready
+      console.log(`[waitForAtlasSearchReady] Atlas Search is ready! (attempt ${attempt})`);
+      return;
+    } catch (e: any) {
+      lastError = e;
+      console.log(`[waitForAtlasSearchReady] Not ready yet (attempt ${attempt}): ${e.message}`);
+      await new Promise(res => setTimeout(res, interval));
+    }
+  }
+  throw new Error(
+    'Atlas Search did not become ready in time. Last error: ' + (lastError ? lastError.message : 'unknown'),
+  );
+}
 // Helper function to wait for a condition with timeout (similar to mdb_toolkit)
 async function waitForCondition(
   condition: () => Promise<boolean>,
   timeout: number = 10000,
-  interval: number = 1000
+  interval: number = 1000,
 ): Promise<boolean> {
   const startTime = Date.now();
   while (Date.now() - startTime < timeout) {
@@ -29,7 +57,7 @@ async function createIndexAndWait(
   vectorDB: MongoDBVector,
   indexName: string,
   dimension: number,
-  metric: 'cosine' | 'euclidean' | 'dotproduct'
+  metric: 'cosine' | 'euclidean' | 'dotproduct',
 ) {
   await vectorDB.createIndex({ indexName, dimension, metric });
   await vectorDB.waitForIndexReady(indexName);
@@ -39,7 +67,7 @@ async function createIndexAndWait(
       return cols.includes(indexName);
     },
     30000,
-    2000
+    2000,
   );
   if (!created) throw new Error('Timed out waiting for collection to be created');
 }
@@ -54,7 +82,7 @@ async function deleteIndexAndWait(vectorDB: MongoDBVector, indexName: string) {
         return !cols.includes(indexName);
       },
       30000,
-      2000
+      2000,
     );
     if (!deleted) throw new Error('Timed out waiting for collection to be deleted');
   } catch (error) {
@@ -71,15 +99,14 @@ describe('MongoDBVector Integration Tests', () => {
     vectorDB = new MongoDBVector({ uri, dbName });
     await vectorDB.connect();
 
+    // Wait for Atlas Search to be ready
+    await waitForAtlasSearchReady(vectorDB);
+
     // Cleanup any existing collections
     try {
       const cols = await vectorDB.listIndexes();
       await Promise.all(cols.map(c => vectorDB.deleteIndex(c)));
-      const deleted = await waitForCondition(
-        async () => (await vectorDB.listIndexes()).length === 0,
-        30000,
-        2000
-      );
+      const deleted = await waitForCondition(async () => (await vectorDB.listIndexes()).length === 0, 30000, 2000);
       if (!deleted) throw new Error('Timed out waiting for collections to be deleted');
     } catch (error) {
       console.error('Failed to delete test collections:', error);
@@ -101,7 +128,7 @@ describe('MongoDBVector Integration Tests', () => {
     } catch (error) {
       console.error('Failed to delete test collection:', error);
     }
-    await vectorDB.close();
+    await vectorDB.disconnect();
   });
 
   test('full vector database workflow', async () => {
@@ -120,12 +147,7 @@ describe('MongoDBVector Integration Tests', () => {
       [0, 0, 1, 0],
       [0, 0, 0, 1],
     ];
-    const metadata = [
-      { label: 'vector1' },
-      { label: 'vector2' },
-      { label: 'vector3' },
-      { label: 'vector4' },
-    ];
+    const metadata = [{ label: 'vector1' }, { label: 'vector2' }, { label: 'vector3' }, { label: 'vector4' }];
     const ids = await vectorDB.upsert({ indexName: testIndexName, vectors, metadata });
     expect(ids).toHaveLength(4);
 
@@ -178,14 +200,20 @@ describe('MongoDBVector Integration Tests', () => {
     try {
       await createIndexAndWait(vectorDB, highDimIndexName, 1536, 'cosine');
       const vectors = [
-        Array(1536).fill(0).map((_, i) => i % 2),
-        Array(1536).fill(0).map((_, i) => (i + 1) % 2),
+        Array(1536)
+          .fill(0)
+          .map((_, i) => i % 2),
+        Array(1536)
+          .fill(0)
+          .map((_, i) => (i + 1) % 2),
       ];
       const metadata = [{ label: 'even' }, { label: 'odd' }];
       const ids = await vectorDB.upsert({ indexName: highDimIndexName, vectors, metadata });
       expect(ids).toHaveLength(2);
       await new Promise(resolve => setTimeout(resolve, 5000));
-      const queryVector = Array(1536).fill(0).map((_, i) => i % 2);
+      const queryVector = Array(1536)
+        .fill(0)
+        .map((_, i) => i % 2);
       const results = await vectorDB.query({ indexName: highDimIndexName, queryVector, topK: 2 });
       expect(results).toHaveLength(2);
       expect(results[0]?.metadata).toEqual({ label: 'even' });
@@ -221,7 +249,7 @@ describe('MongoDBVector Integration Tests', () => {
     async function retryQuery(params: any, maxRetries = 2) {
       let results = await vectorDB.query(params);
       let retryCount = 0;
-      
+
       // If no results, retry a few times with delay
       while (results.length === 0 && retryCount < maxRetries) {
         console.log(`No results found, retrying (${retryCount + 1}/${maxRetries})...`);
@@ -229,7 +257,7 @@ describe('MongoDBVector Integration Tests', () => {
         results = await vectorDB.query(params);
         retryCount++;
       }
-      
+
       return results;
     }
 
@@ -237,32 +265,32 @@ describe('MongoDBVector Integration Tests', () => {
       // Ensure testIndexName2 has at least one document
       const testVector = [1, 0, 0, 0];
       const testMetadata = { label: 'test_filter_validation' };
-      
+
       // First check if there are already documents
       const existingResults = await vectorDB.query({
         indexName: testIndexName2,
         queryVector: testVector,
-        topK: 1
+        topK: 1,
       });
-      
+
       // If no documents exist, insert one
       if (existingResults.length === 0) {
         await vectorDB.upsert({
           indexName: testIndexName2,
           vectors: [testVector],
-          metadata: [testMetadata]
+          metadata: [testMetadata],
         });
-        
+
         // Wait for the document to be indexed
         await new Promise(resolve => setTimeout(resolve, 5000));
-        
+
         // Verify the document is indexed
         const verifyResults = await retryQuery({
           indexName: testIndexName2,
           queryVector: testVector,
-          topK: 1
+          topK: 1,
         });
-        
+
         if (verifyResults.length === 0) {
           console.warn('Warning: Could not verify document was indexed in testIndexName2');
         }
@@ -327,8 +355,7 @@ describe('MongoDBVector Integration Tests', () => {
         filter: { 'metadata.timestamp': { $gt: new Date('2023-01-01T00:00:00Z') } },
       });
       expect(results.length).toBeGreaterThan(0);
-      expect(new Date(results[0]?.metadata.timestamp).toISOString())
-        .toEqual(timestampDate.toISOString());
+      expect(new Date(results[0]?.metadata.timestamp).toISOString()).toEqual(timestampDate.toISOString());
     });
   });
 
@@ -407,8 +434,7 @@ describe('MongoDBVector Integration Tests', () => {
       expect(updatedResult?.vector).toEqual(newVector);
     });
     it('should throw exception when no updates are given', async () => {
-      await expect(vectorDB.updateIndexById(indexName, 'nonexistent-id', {}))
-        .rejects.toThrow('No updates provided');
+      await expect(vectorDB.updateIndexById(indexName, 'nonexistent-id', {})).rejects.toThrow('No updates provided');
     });
     it('should delete the vector by id', async () => {
       const ids = await vectorDB.upsert({ indexName, vectors: testVectors });
