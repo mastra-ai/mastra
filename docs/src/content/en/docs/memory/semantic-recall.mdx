@@ -10,7 +10,7 @@ It uses vector embeddings of messages for similarity search, integrates with var
 
 <br />
 <img
-  src="/docs/semantic-recall.png"
+  src="/image/semantic-recall.png"
   alt="Diagram showing Mastra Memory semantic recall"
   width={800}
 />
@@ -63,20 +63,17 @@ Semantic recall relies on a [storage and vector db](/reference/memory/Memory#par
 ```ts {8-17}
 import { Memory } from "@mastra/memory";
 import { Agent } from "@mastra/core/agent";
-import { LibSQLStore } from "@mastra/core/storage/libsql";
-import { LibSQLVector } from "@mastra/core/vector/libsql";
+import { LibSQLStore, LibSQLVector } from "@mastra/libsql";
 
 const agent = new Agent({
   memory: new Memory({
     // this is the default storage db if omitted
     storage: new LibSQLStore({
-      config: {
-        url: "file:local.db",
-      },
+      url: "file:./local.db",
     }),
     // this is the default vector db if omitted
     vector: new LibSQLVector({
-      connectionUrl: "file:local.db",
+      connectionUrl: "file:./local.db",
     }),
   }),
 });
@@ -90,7 +87,7 @@ const agent = new Agent({
 
 ### Embedder configuration
 
-Semantic recall relies an [embedding model](/reference/memory/Memory#embedder) to convert messages into embeddings. By default Mastra uses FastEmbed but you can specify another [embedding model](https://sdk.vercel.ai/docs/ai-sdk-core/embeddings).
+Semantic recall relies an [embedding model](/reference/memory/Memory#embedder) to convert messages into embeddings. By default Mastra uses FastEmbed but you can specify another [embedding model](https://sdk.vercel.ai/image/ai-sdk-core/embeddings).
 
 ```ts {7}
 import { Memory } from "@mastra/memory";
@@ -122,5 +119,5 @@ const agent = new Agent({
 
 You might want to disable semantic recall in scenarios like:
 
-- When [conversation history](./getting-started.mdx#conversation-history-last-messages) provide sufficient context for the current conversation.
+- When conversation history provide sufficient context for the current conversation.
 - In performance-sensitive applications, like realtime two-way audio, where the added latency of creating embeddings and running vector queries is noticeable.

@@ -1,7 +1,8 @@
 import { join, resolve, isAbsolute } from 'node:path';
 import { createClient } from '@libsql/client';
-import type { Client, InValue } from '@libsql/client';
+import type { Client, InValue, Config as LibSQLConfig } from '@libsql/client';
 import type { MetricResult, TestInfo } from '../../eval';
+import type { Logger } from '../../logger';
 import type { MessageType, StorageThreadType } from '../../memory/types';
 import type { WorkflowRunState } from '../../workflows';
 import { MastraStorage } from '../base';
@@ -17,9 +18,23 @@ function safelyParseJSON(jsonString: string): any {
   }
 }
 
-export interface LibSQLConfig {
-  url: string;
-  authToken?: string;
+let hasWarned = false;
+function warnDeprecation(logger: Logger) {
+  if (hasWarned) return;
+  hasWarned = true;
+
+  logger?.warn(`The default storage is deprecated, please add any storage to Mastra itself.
+
+In \`src/mastra/index.ts\` add:
+Import { LibSQLStore } from \`@mastra/libsql\`.
+
+export const mastra = new Mastra({
+  // other config
+  storage: new LibSQLStore({
+    url: 'file:../mastra.db',
+  }),
+}
+`);
 }
 
 export class LibSQLStore extends MastraStorage {
@@ -152,6 +167,8 @@ export class LibSQLStore extends MastraStorage {
   }
 
   async insert({ tableName, record }: { tableName: TABLE_NAMES; record: Record<string, any> }): Promise<void> {
+    warnDeprecation(this.logger);
+
     try {
       await this.client.execute(
         this.prepareStatement({
@@ -167,6 +184,8 @@ export class LibSQLStore extends MastraStorage {
 
   async batchInsert({ tableName, records }: { tableName: TABLE_NAMES; records: Record<string, any>[] }): Promise<void> {
     if (records.length === 0) return;
+
+    warnDeprecation(this.logger);
 
     try {
       const batchStatements = records.map(r => this.prepareStatement({ tableName, record: r }));

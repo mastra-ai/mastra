@@ -82,6 +82,40 @@ You can then leverage the [Mastra Client](/docs/deployment/client) SDK to intera
 
 `mastra dev` provides an OpenAPI spec at http://localhost:4111/openapi.json
 
+To enable OpenAPI documentation in your Mastra instance, add the following configuration:
+
+```typescript
+import { Mastra } from "@mastra/core";
+
+export const mastra = new Mastra({
+  server: {
+    build: {
+      openAPIDocs: true,  // Enable OpenAPI documentation
+      // ... other build config options
+    }
+  }
+});
+```
+
+## Swagger UI
+
+Swagger UI provides an interactive interface for testing your API endpoints at `mastra dev` provides an OpenAPI spec at http://localhost:4111/swagger-ui. 
+To enable Swagger UI in your Mastra instance, add the following configuration:
+
+```typescript
+import { Mastra } from "@mastra/core";
+
+export const mastra = new Mastra({
+  server: {
+    build: {
+      openAPIDocs: true,  // Enable OpenAPI documentation
+      swaggerUI: true,  // Enable Swagger UI
+      // ... other build config options
+    }
+  }
+});
+```
+
 ## Local Dev Architecture
 
 The local development server is designed to run without any external dependencies or containerization. This is achieved through:

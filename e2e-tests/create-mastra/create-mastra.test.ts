@@ -47,10 +47,13 @@ describe('create mastra', () => {
       proc = execa('pnpm', ['dev', '--port', port.toString()], {
         cwd: join(fixturePath, 'project'),
       });
-
+      proc!.stderr?.on('data', data => {
+        console.error(data?.toString());
+      });
       await new Promise<void>(resolve => {
         console.log('waiting for server to start');
         proc!.stdout?.on('data', data => {
+          console.log(data?.toString());
           if (data?.toString()?.includes(`http://localhost:${port}`)) {
             resolve();
           }

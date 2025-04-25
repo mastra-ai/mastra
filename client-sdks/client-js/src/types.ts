@@ -11,6 +11,7 @@ import type {
 } from '@mastra/core';
 
 import type { AgentGenerateOptions, AgentStreamOptions } from '@mastra/core/agent';
+import type { NewWorkflow, WatchEvent, WorkflowResult as VNextWorkflowResult } from '@mastra/core/workflows/vNext';
 import type { JSONSchema7 } from 'json-schema';
 import type { ZodSchema } from 'zod';
 
@@ -78,6 +79,18 @@ export type WorkflowRunResult = {
   timestamp: number;
   runId: string;
 };
+
+export interface GetVNextWorkflowResponse {
+  name: string;
+  steps: NewWorkflow['steps'];
+  stepGraph: NewWorkflow['stepGraph'];
+  inputSchema: string;
+  outputSchema: string;
+}
+
+export type VNextWorkflowWatchResult = WatchEvent & { runId: string };
+
+export type VNextWorkflowRunResult = VNextWorkflowResult<any, any>;
 export interface UpsertVectorParams {
   indexName: string;
   vectors: number[][];
@@ -118,7 +131,7 @@ export type SaveMessageToMemoryResponse = MessageType[];
 export interface CreateMemoryThreadParams {
   title: string;
   metadata: Record<string, any>;
-  resourceid: string;
+  resourceId: string;
   threadId: string;
   agentId: string;
 }
@@ -135,7 +148,7 @@ export type GetMemoryThreadResponse = StorageThreadType[];
 export interface UpdateMemoryThreadParams {
   title: string;
   metadata: Record<string, any>;
-  resourceid: string;
+  resourceId: string;
 }
 
 export interface GetMemoryThreadMessagesResponse {

@@ -1,6 +1,8 @@
 import { Mastra } from '@mastra/core';
+import { RuntimeContext } from '@mastra/core/runtime-context';
 import { Step, Workflow } from '@mastra/core/workflows';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import type { Mock } from 'vitest';
 import { HTTPException } from '../http-exception';
 import {
   getWorkflowsHandler,
@@ -122,17 +124,27 @@ describe('Workflow Handlers', () => {
         startAsyncWorkflowHandler({
           mastra: mockMastra,
           runId: 'test-run',
+          runtimeContext: new RuntimeContext(),
         }),
       ).rejects.toThrow(new HTTPException(400, { message: 'Workflow ID is required' }));
     });
 
-    it('should throw error when runId is not provided', async () => {
-      await expect(
-        startAsyncWorkflowHandler({
-          mastra: mockMastra,
-          workflowId: 'test-workflow',
-        }),
-      ).rejects.toThrow(new HTTPException(400, { message: 'runId required to start run' }));
+    it('should create runId if not provided', async () => {
+      vi.spyOn(mockWorkflow, 'createRun').mockReturnValueOnce({
+        runId: 'test-run',
+        watch: vi.fn(),
+        resume: vi.fn(),
+        resumeWithEvent: vi.fn(),
+        start: vi.fn().mockResolvedValue({ runId: 'test-run' }),
+      });
+
+      const result = await startAsyncWorkflowHandler({
+        mastra: mockMastra,
+        workflowId: 'test-workflow',
+        runtimeContext: new RuntimeContext(),
+      });
+
+      expect(result.runId).toEqual('test-run');
     });
 
     it('should throw error when workflow is not found', async () => {
@@ -141,6 +153,7 @@ describe('Workflow Handlers', () => {
           mastra: mockMastra,
           workflowId: 'non-existent',
           runId: 'test-run',
+          // @ts-expect-error
           body: {},
         }),
       ).rejects.toThrow(new HTTPException(404, { message: 'Workflow with ID non-existent not found' }));
@@ -152,6 +165,7 @@ describe('Workflow Handlers', () => {
           mastra: mockMastra,
           workflowId: 'test-workflow',
           runId: 'non-existent',
+          // @ts-expect-error
           body: {},
         }),
       ).rejects.toThrow(new HTTPException(404, { message: 'Workflow run not found' }));
@@ -160,7 +174,7 @@ describe('Workflow Handlers', () => {
     it('should start workflow run successfully', async () => {
       const mockResult = { success: true };
 
-      mockWorkflow.steps['test-step'].execute.mockResolvedValue(mockResult);
+      (mockWorkflow.steps['test-step'].execute as Mock).mockResolvedValue(mockResult);
       mockWorkflow.createRun({
         runId: 'test-run',
       });
@@ -169,10 +183,15 @@ describe('Workflow Handlers', () => {
         mastra: mockMastra,
         workflowId: 'test-workflow',
         runId: 'test-run',
+        // @ts-expect-error
         body: { test: 'data' },
       });
 
-      expect(result.results['test-step'].output).toEqual(mockResult);
+      const stepResult = result.results['test-step'];
+      expect(stepResult.status).toEqual('success');
+      if (stepResult.status === 'success') {
+        expect(stepResult.output).toEqual(mockResult);
+      }
     });
   });
 
@@ -217,7 +236,7 @@ describe('Workflow Handlers', () => {
 
     it('should get workflow run successfully', async () => {
       const mockResult = { success: true };
-      mockWorkflow.steps['test-step'].execute.mockResolvedValue(mockResult);
+      (mockWorkflow.steps['test-step'].execute as Mock).mockResolvedValue(mockResult);
       mockWorkflow.createRun({
         runId: 'test-run',
       });
@@ -269,7 +288,7 @@ describe('Workflow Handlers', () => {
         startWorkflowRunHandler({
           mastra: mockMastra,
           runId: 'test-run',
-          body: {},
+          runtimeContext: new RuntimeContext(),
         }),
       ).rejects.toThrow(new HTTPException(400, { message: 'Workflow ID is required' }));
     });
@@ -279,7 +298,7 @@ describe('Workflow Handlers', () => {
         startWorkflowRunHandler({
           mastra: mockMastra,
           workflowId: 'test-workflow',
-          body: {},
+          runtimeContext: new RuntimeContext(),
         }),
       ).rejects.toThrow(new HTTPException(400, { message: 'runId required to start run' }));
     });
@@ -290,14 +309,14 @@ describe('Workflow Handlers', () => {
           mastra: mockMastra,
           workflowId: 'test-workflow',
           runId: 'non-existent',
-          body: {},
+          runtimeContext: new RuntimeContext(),
         }),
       ).rejects.toThrow(new HTTPException(404, { message: 'Workflow run not found' }));
     });
 
     it('should start workflow run successfully', async () => {
       const mockResult = { success: true };
-      mockWorkflow.steps['test-step'].execute.mockResolvedValue(mockResult);
+      (mockWorkflow.steps['test-step'].execute as Mock).mockResolvedValue(mockResult);
       mockWorkflow.createRun({
         runId: 'test-run',
       });
@@ -306,7 +325,7 @@ describe('Workflow Handlers', () => {
         mastra: mockMastra,
         workflowId: 'test-workflow',
         runId: 'test-run',
-        body: { test: 'data' },
+        runtimeContext: new RuntimeContext(),
       });
 
       expect(result).toEqual({ message: 'Workflow run started' });
@@ -320,6 +339,7 @@ describe('Workflow Handlers', () => {
           mastra: mockMastra,
           runId: 'test-run',
           body: { stepId: 'test-step', context: {} },
+          runtimeContext: new RuntimeContext(),
         }),
       ).rejects.toThrow(new HTTPException(400, { message: 'Workflow ID is required' }));
     });
@@ -330,6 +350,7 @@ describe('Workflow Handlers', () => {
           mastra: mockMastra,
           workflowId: 'test-workflow',
           body: { stepId: 'test-step', context: {} },
+          runtimeContext: new RuntimeContext(),
         }),
       ).rejects.toThrow(new HTTPException(400, { message: 'runId required to resume workflow' }));
     });
@@ -341,6 +362,7 @@ describe('Workflow Handlers', () => {
           workflowId: 'test-workflow',
           runId: 'non-existent',
           body: { stepId: 'test-step', context: {} },
+          runtimeContext: new RuntimeContext(),
         }),
       ).rejects.toThrow(new HTTPException(404, { message: 'Workflow run not found' }));
     });
@@ -348,7 +370,7 @@ describe('Workflow Handlers', () => {
     // todo fix
     it.skip('should resume workflow run successfully', async () => {
       const mockResult = { success: true };
-      reusableWorkflow.steps['test-step2'].execute.mockResolvedValue(mockResult);
+      (reusableWorkflow.steps['test-step2'].execute as Mock).mockResolvedValue(mockResult);
       const run = reusableWorkflow.createRun({
         runId: 'test2-run',
       });
@@ -357,15 +379,13 @@ describe('Workflow Handlers', () => {
         triggerData: { test: 'data' },
       });
 
-      console.log('wait??');
-
-      // const result = await resumeAsyncWorkflowHandler({
-      //   mastra: mockMastra,
-      //   workflowId: reusableWorkflow.name,
-      //   runId: 'test2-run',
-      //   body: { stepId: 'test-step', context: { test: 'data' } },
-      // });
-
+      const result = await resumeAsyncWorkflowHandler({
+        mastra: mockMastra,
+        workflowId: reusableWorkflow.name,
+        runId: 'test2-run',
+        body: { stepId: 'test-step', context: { test: 'data' } },
+        runtimeContext: new RuntimeContext(),
+      });
       expect(result).toEqual(mockResult);
     });
   });
@@ -377,6 +397,7 @@ describe('Workflow Handlers', () => {
           mastra: mockMastra,
           runId: 'test-run',
           body: { stepId: 'test-step', context: {} },
+          runtimeContext: new RuntimeContext(),
         }),
       ).rejects.toThrow(new HTTPException(400, { message: 'Workflow ID is required' }));
     });
@@ -387,6 +408,7 @@ describe('Workflow Handlers', () => {
           mastra: mockMastra,
           workflowId: 'test-workflow',
           body: { stepId: 'test-step', context: {} },
+          runtimeContext: new RuntimeContext(),
         }),
       ).rejects.toThrow(new HTTPException(400, { message: 'runId required to resume workflow' }));
     });
@@ -398,13 +420,14 @@ describe('Workflow Handlers', () => {
           workflowId: 'test-workflow',
           runId: 'non-existent',
           body: { stepId: 'test-step', context: {} },
+          runtimeContext: new RuntimeContext(),
         }),
       ).rejects.toThrow(new HTTPException(404, { message: 'Workflow run not found' }));
     });
 
     it('should resume workflow run successfully', async () => {
       const mockResult = { success: true };
-      reusableWorkflow.steps['test-step2'].execute.mockResolvedValue(mockResult);
+      (reusableWorkflow.steps['test-step2'].execute as Mock).mockResolvedValue(mockResult);
       const run = reusableWorkflow.createRun({
         runId: 'test-run',
       });
@@ -415,6 +438,7 @@ describe('Workflow Handlers', () => {
         workflowId: reusableWorkflow.name,
         runId: 'test-run',
         body: { stepId: 'test-step', context: { test: 'data' } },
+        runtimeContext: new RuntimeContext(),
       });
 
       expect(result).toEqual({ message: 'Workflow run resumed' });
@@ -430,7 +454,7 @@ describe('Workflow Handlers', () => {
 
     it('should get workflow runs successfully (empty)', async () => {
       // Mock the workflow's getWorkflowRuns to return empty result
-      mockWorkflow.getWorkflowRuns.mockResolvedValue({
+      (mockWorkflow.getWorkflowRuns as Mock).mockResolvedValue({
         runs: [],
         total: 0,
       });
@@ -457,7 +481,7 @@ describe('Workflow Handlers', () => {
         ],
         total: 1,
       };
-      mockWorkflow.getWorkflowRuns.mockResolvedValue(mockRuns);
+      (mockWorkflow.getWorkflowRuns as Mock).mockResolvedValue(mockRuns);
 
       const result = await getWorkflowRunsHandler({
         mastra: mockMastra,
@@ -469,7 +493,7 @@ describe('Workflow Handlers', () => {
     });
 
     it('should handle errors from workflow', async () => {
-      mockWorkflow.getWorkflowRuns.mockRejectedValue(new Error('Workflow error'));
+      (mockWorkflow.getWorkflowRuns as Mock).mockRejectedValue(new Error('Workflow error'));
 
       await expect(
         getWorkflowRunsHandler({

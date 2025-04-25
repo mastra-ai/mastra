@@ -23,7 +23,8 @@
     "pretest:libsql:perf": "docker compose up -d postgres && (for i in $(seq 1 30); do docker compose exec -T postgres pg_isready -U postgres && break || (sleep 1; [ $i -eq 30 ] && exit 1); done)",
     "test:libsql:perf": "vitest run ./src/performance-testing/with-libsql-storage.test.ts",
     "posttest:libsql:perf": "docker compose down --volumes",
-    "test:perf": "pnpm test:pg:perf && pnpm test:upstash:perf && pnpm test:libsql:perf"
+    "test:perf": "pnpm test:pg:perf && pnpm test:upstash:perf && pnpm test:libsql:perf",
+    "dev": "mastra dev"
   },
   "dependencies": {
     "@ai-sdk/openai": "^1.3.0",

@@ -1,8 +1,7 @@
 import * as child_process from 'child_process';
-import { readFileSync, writeFileSync } from 'fs';
+import { readFileSync, writeFileSync, readdirSync } from 'fs';
 import { join } from 'path';
 import process from 'process';
-
 import { Deployer } from '@mastra/deployer';
 
 interface EnvVar {
@@ -28,33 +27,6 @@ export class VercelDeployer extends Deployer {
     this.teamSlug = teamSlug;
     this.projectName = projectName;
     this.token = token;
-  }
-
-  writeFiles(outputDirectory: string): void {
-    writeFileSync(
-      join(outputDirectory, this.outputDir, 'vercel.json'),
-      JSON.stringify(
-        {
-          version: 2,
-          installCommand: 'npm install --omit=dev',
-          builds: [
-            {
-              src: 'index.mjs',
-              use: '@vercel/node',
-              config: { includeFiles: ['**'] },
-            },
-          ],
-          routes: [
-            {
-              src: '/(.*)',
-              dest: 'index.mjs',
-            },
-          ],
-        },
-        null,
-        2,
-      ),
-    );
   }
 
   private getProjectId({ dir }: { dir: string }): string {
@@ -131,7 +103,6 @@ export class VercelDeployer extends Deployer {
 
   async prepare(outputDirectory: string): Promise<void> {
     await super.prepare(outputDirectory);
-    await this.writeFiles(outputDirectory);
   }
 
   private getEntry(): string {
@@ -139,6 +110,53 @@ export class VercelDeployer extends Deployer {
 import { handle } from 'hono/vercel'
 import { mastra } from '#mastra';
 import { createHonoServer } from '#server';
+import { evaluate } from '@mastra/core/eval';
+import { AvailableHooks, registerHook } from '@mastra/core/hooks';
+import { TABLE_EVALS } from '@mastra/core/storage';
+import { checkEvalStorageFields } from '@mastra/core/utils';
+
+registerHook(AvailableHooks.ON_GENERATION, ({ input, output, metric, runId, agentName, instructions }) => {
+  evaluate({
+    agentName,
+    input,
+    metric,
+    output,
+    runId,
+    globalRunId: runId,
+    instructions,
+  });
+});
+
+if (mastra.getStorage()) {
+  // start storage init in the background
+  mastra.getStorage().init();
+}
+
+registerHook(AvailableHooks.ON_EVALUATION, async traceObject => {
+  const storage = mastra.getStorage();
+  if (storage) {
+    // Check for required fields
+    const logger = mastra?.getLogger();
+    const areFieldsValid = checkEvalStorageFields(traceObject, logger);
+    if (!areFieldsValid) return;
+
+    await storage.insert({
+      tableName: TABLE_EVALS,
+      record: {
+        input: traceObject.input,
+        output: traceObject.output,
+        result: JSON.stringify(traceObject.result || {}),
+        agent_name: traceObject.agentName,
+        metric_name: traceObject.metricName,
+        instructions: traceObject.instructions,
+        test_info: null,
+        global_run_id: traceObject.globalRunId,
+        run_id: traceObject.runId,
+        created_at: new Date().toISOString(),
+      },
+    });
+  }
+});
 
 const app = await createHonoServer(mastra);
 
@@ -147,8 +165,41 @@ export const POST = handle(app);
 `;
   }
 
+  private writeVercelJSON(outputDirectory: string, files: string[] = ['./*']) {
+    writeFileSync(
+      join(outputDirectory, this.outputDir, 'vercel.json'),
+      JSON.stringify(
+        {
+          version: 2,
+          installCommand: 'npm install --omit=dev',
+          builds: [
+            {
+              src: 'index.mjs',
+              use: '@vercel/node',
+              config: { includeFiles: files },
+            },
+          ],
+          routes: [
+            {
+              src: '/(.*)',
+              dest: 'index.mjs',
+            },
+          ],
+        },
+        null,
+        2,
+      ),
+    );
+  }
+
   async bundle(entryFile: string, outputDirectory: string, toolsPaths: string[]): Promise<void> {
-    return this._bundle(this.getEntry(), entryFile, outputDirectory, toolsPaths);
+    const result = await this._bundle(this.getEntry(), entryFile, outputDirectory, toolsPaths);
+
+    // read dist files one level deep in the output directory
+    const files = readdirSync(join(outputDirectory, this.outputDir));
+    this.writeVercelJSON(outputDirectory, files);
+
+    return result;
   }
 
   async deploy(outputDirectory: string): Promise<void> {

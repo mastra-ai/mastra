@@ -10,5 +10,10 @@
   },
   "scripts": {
     "test": "vitest"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "esbuild"
+    ]
   }
 }

@@ -1,4 +1,4 @@
-import { Agent, MemoryThread, Tool, Workflow, Vector, BaseResource, Network } from './resources';
+import { Agent, MemoryThread, Tool, Workflow, Vector, BaseResource, Network, VNextWorkflow } from './resources';
 import type {
   ClientOptions,
   CreateMemoryThreadParams,
@@ -13,8 +13,8 @@ import type {
   GetTelemetryParams,
   GetTelemetryResponse,
   GetToolResponse,
+  GetVNextWorkflowResponse,
   GetWorkflowResponse,
-  RequestOptions,
   SaveMessageToMemoryParams,
   SaveMessageToMemoryResponse,
 } from './types';
@@ -123,6 +123,23 @@ export class MastraClient extends BaseResource {
   }
 
   /**
+   * Retrieves all available vNext workflows
+   * @returns Promise containing map of vNext workflow IDs to vNext workflow details
+   */
+  public getVNextWorkflows(): Promise<Record<string, GetVNextWorkflowResponse>> {
+    return this.request('/api/workflows/v-next');
+  }
+
+  /**
+   * Gets a vNext workflow instance by ID
+   * @param workflowId - ID of the vNext workflow to retrieve
+   * @returns vNext Workflow instance
+   */
+  public getVNextWorkflow(workflowId: string) {
+    return new VNextWorkflow(this.options, workflowId);
+  }
+
+  /**
    * Gets a vector instance by name
    * @param vectorName - Name of the vector to retrieve
    * @returns Vector instance
@@ -165,14 +182,6 @@ export class MastraClient extends BaseResource {
   public getTelemetry(params?: GetTelemetryParams): Promise<GetTelemetryResponse> {
     const { name, scope, page, perPage, attribute } = params || {};
     const _attribute = attribute ? Object.entries(attribute).map(([key, value]) => `${key}:${value}`) : [];
-
-    const queryObj = {
-      ...(name ? { name } : {}),
-      ...(scope ? { scope } : {}),
-      ...(page ? { page: String(page) } : {}),
-      ...(perPage ? { perPage: String(perPage) } : {}),
-      ...(_attribute?.length ? { attribute: _attribute } : {}),
-    } as const;
 
     const searchParams = new URLSearchParams();
     if (name) {

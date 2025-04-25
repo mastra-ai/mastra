@@ -76,6 +76,7 @@ export async function writeAgentSample(llmProvider: LLMProvider, destPath: strin
   const content = `
 ${providerImport}
 import { Agent } from '@mastra/core/agent';
+import { Memory } from '@mastra/memory';
 ${addExampleTool ? `import { weatherTool } from '../tools';` : ''}
 
 export const weatherAgent = new Agent({
@@ -83,6 +84,15 @@ export const weatherAgent = new Agent({
   instructions: \`${instructions}\`,
   model: ${modelItem},
   ${addExampleTool ? 'tools: { weatherTool },' : ''}
+  memory: new Memory({
+    options: {
+      lastMessages: 10,
+      semanticRecall: false,
+      threads: {
+        generateTitle: false
+      } 
+    }
+  })
 });
     `;
   const formattedContent = await prettier.format(content, {
@@ -358,11 +368,16 @@ export const mastra = new Mastra()
       `
 import { Mastra } from '@mastra/core/mastra';
 import { createLogger } from '@mastra/core/logger';
+import { LibSQLStore } from '@mastra/libsql';
 ${addWorkflow ? `import { weatherWorkflow } from './workflows';` : ''}
 ${addAgent ? `import { weatherAgent } from './agents';` : ''}
 
 export const mastra = new Mastra({
   ${filteredExports.join('\n  ')}
+  storage: new LibSQLStore({
+    // stores telemetry, evals, ... into memory storage, if it needs to persist, change to file:../mastra.db
+    url: ":memory:",
+  }),
   logger: createLogger({
     name: 'Mastra',
     level: 'info',
@@ -384,20 +399,28 @@ export const checkInitialization = async (dirPath: string) => {
   }
 };
 
-export const checkAndInstallCoreDeps = async () => {
+export const checkAndInstallCoreDeps = async (addExample: boolean) => {
   const depsService = new DepsService();
-  const depCheck = await depsService.checkDependencies(['@mastra/core']);
+  let depCheck = await depsService.checkDependencies(['@mastra/core']);
 
   if (depCheck !== 'ok') {
-    await installCoreDeps();
+    await installCoreDeps('@mastra/core');
+  }
+
+  if (addExample) {
+    depCheck = await depsService.checkDependencies(['@mastra/libsql']);
+
+    if (depCheck !== 'ok') {
+      await installCoreDeps('@mastra/libsql');
+    }
   }
 };
 
 const spinner = yoctoSpinner({ text: 'Installing Mastra core dependencies\n' });
-export async function installCoreDeps() {
+export async function installCoreDeps(pkg: string) {
   try {
     const confirm = await p.confirm({
-      message: 'You do not have the @mastra/core package installed. Would you like to install it?',
+      message: `You do not have the ${pkg} package installed. Would you like to install it?`,
       initialValue: false,
     });
 
@@ -415,7 +438,7 @@ export async function installCoreDeps() {
 
     const depsService = new DepsService();
 
-    await depsService.installPackages(['@mastra/core@latest']);
+    await depsService.installPackages([`${pkg}@latest`]);
     spinner.success('@mastra/core installed successfully');
   } catch (err) {
     console.error(err);

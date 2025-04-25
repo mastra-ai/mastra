@@ -1,6 +1,10 @@
 import { openai } from '@ai-sdk/openai';
+import { OpenAIVoice } from '@mastra/voice-openai';
+import { Memory } from '@mastra/memory';
 import { Agent } from '@mastra/core/agent';
 import { cookingTool } from '../tools/index.js';
+
+const memory = new Memory();
 
 export const chefAgent = new Agent({
   name: 'Chef Agent',
@@ -14,6 +18,8 @@ export const chefAgent = new Agent({
   tools: {
     cookingTool,
   },
+  memory,
+  voice: new OpenAIVoice(),
 });
 
 export const chefAgentResponses = new Agent({

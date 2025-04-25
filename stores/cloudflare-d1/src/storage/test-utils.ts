@@ -52,6 +52,7 @@ export const createSampleWorkflowSnapshot = (threadId: string): WorkflowRunState
       status: 'running',
     },
   ],
+  suspendedPaths: {},
   runId: threadId,
   timestamp: Date.now(),
 });

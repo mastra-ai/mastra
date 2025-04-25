@@ -1,14 +1,12 @@
 import { randomUUID } from 'crypto';
 import { readFile } from 'fs/promises';
-import { dirname } from 'path';
 import { join } from 'path/posix';
-import { fileURLToPath, pathToFileURL } from 'url';
 import { serve } from '@hono/node-server';
 import { serveStatic } from '@hono/node-server/serve-static';
 import { swaggerUI } from '@hono/swagger-ui';
 import { Telemetry } from '@mastra/core';
 import type { Mastra } from '@mastra/core';
-import { Container } from '@mastra/core/di';
+import { RuntimeContext } from '@mastra/core/runtime-context';
 import { Hono } from 'hono';
 import type { Context, MiddlewareHandler } from 'hono';
 import { bodyLimit } from 'hono/body-limit';
@@ -49,6 +47,17 @@ import { rootHandler } from './handlers/root';
 import { getTelemetryHandler, storeTelemetryHandler } from './handlers/telemetry';
 import { executeAgentToolHandler, executeToolHandler, getToolByIdHandler, getToolsHandler } from './handlers/tools';
 import { upsertVectors, createIndex, queryVectors, listIndexes, describeIndex, deleteIndex } from './handlers/vector';
+import {
+  startVNextWorkflowRunHandler,
+  resumeAsyncVNextWorkflowHandler,
+  startAsyncVNextWorkflowHandler,
+  getVNextWorkflowByIdHandler,
+  getVNextWorkflowsHandler,
+  resumeVNextWorkflowHandler,
+  watchVNextWorkflowHandler,
+  createVNextWorkflowRunHandler,
+  getVNextWorkflowRunsHandler,
+} from './handlers/vNextWorkflows.js';
 import { getSpeakersHandler, speakHandler, listenHandler } from './handlers/voice';
 import {
   startWorkflowRunHandler,
@@ -61,36 +70,32 @@ import {
   createRunHandler,
   getWorkflowRunsHandler,
 } from './handlers/workflows.js';
+import type { ServerBundleOptions } from './types';
 import { html } from './welcome.js';
 
 type Bindings = {};
 
 type Variables = {
   mastra: Mastra;
-  container: Container;
+  runtimeContext: RuntimeContext;
   clients: Set<{ controller: ReadableStreamDefaultController }>;
   tools: Record<string, any>;
   playground: boolean;
+  isDev: boolean;
 };
 
-export async function createHonoServer(
-  mastra: Mastra,
-  options: { playground?: boolean; swaggerUI?: boolean; apiReqLogs?: boolean } = {},
-) {
+export async function createHonoServer(mastra: Mastra, options: ServerBundleOptions = {}) {
   // Create typed Hono app
   const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
   const server = mastra.getServer();
 
-  // Initialize tools
-  // @ts-ignore
-  const __dirname = dirname(fileURLToPath(import.meta.url));
-
-  const mastraToolsPaths = (await import(pathToFileURL(join(__dirname, 'tools.mjs')).href)).tools;
+  const toolsPath = './tools.mjs';
+  const mastraToolsPaths = (await import(toolsPath)).tools;
   const toolImports = mastraToolsPaths
     ? await Promise.all(
         // @ts-ignore
         mastraToolsPaths.map(async toolPath => {
-          return import(pathToFileURL(join(__dirname, toolPath)).href);
+          return import(toolPath);
         }),
       )
     : [];
@@ -126,21 +131,17 @@ export async function createHonoServer(
     }
   });
 
-  if (options.apiReqLogs) {
-    app.use(logger());
-  }
-
   app.onError(errorHandler);
 
   // Add Mastra to context
   app.use('*', function setContext(c, next) {
-    const container = new Container();
+    const runtimeContext = new RuntimeContext();
 
-    c.set('container', container);
+    c.set('runtimeContext', runtimeContext);
     c.set('mastra', mastra);
     c.set('tools', tools);
     c.set('playground', options.playground === true);
-
+    c.set('isDev', options.isDev === true);
     return next();
   });
 
@@ -215,6 +216,10 @@ export async function createHonoServer(
         app.delete(route.path, ...middlewares, route.handler);
       }
     }
+  }
+
+  if (server?.build?.apiReqLogs) {
+    app.use(logger());
   }
 
   // API routes
@@ -1234,7 +1239,7 @@ export async function createHonoServer(
               properties: {
                 title: { type: 'string' },
                 metadata: { type: 'object' },
-                resourceid: { type: 'string' },
+                resourceId: { type: 'string' },
                 threadId: { type: 'string' },
               },
             },
@@ -1247,7 +1252,6 @@ export async function createHonoServer(
         },
       },
     }),
-
     createThreadHandler,
   );
 
@@ -1388,6 +1392,299 @@ export async function createHonoServer(
       },
     }),
     storeTelemetryHandler,
+  );
+
+  // vNextWorkflow routes
+  app.get(
+    '/api/workflows/v-next',
+    describeRoute({
+      description: 'Get all vNext workflows',
+      tags: ['vNextWorkflows'],
+      responses: {
+        200: {
+          description: 'List of all vNext workflows',
+        },
+      },
+    }),
+    getVNextWorkflowsHandler,
+  );
+
+  app.get(
+    '/api/workflows/v-next/:workflowId',
+    describeRoute({
+      description: 'Get vNext workflow by ID',
+      tags: ['vNextWorkflows'],
+      parameters: [
+        {
+          name: 'workflowId',
+          in: 'path',
+          required: true,
+          schema: { type: 'string' },
+        },
+      ],
+      responses: {
+        200: {
+          description: 'vNext workflow details',
+        },
+        404: {
+          description: 'vNext workflow not found',
+        },
+      },
+    }),
+    getVNextWorkflowByIdHandler,
+  );
+
+  app.get(
+    '/api/workflows/v-next/:workflowId/runs',
+    describeRoute({
+      description: 'Get all runs for a vNext workflow',
+      tags: ['vNextWorkflows'],
+      parameters: [
+        {
+          name: 'workflowId',
+          in: 'path',
+          required: true,
+          schema: { type: 'string' },
+        },
+      ],
+      responses: {
+        200: {
+          description: 'List of vNext workflow runs from storage',
+        },
+      },
+    }),
+    getVNextWorkflowRunsHandler,
+  );
+
+  app.post(
+    '/api/workflows/v-next/:workflowId/resume',
+    describeRoute({
+      description: 'Resume a suspended vNext workflow step',
+      tags: ['vNextWorkflows'],
+      parameters: [
+        {
+          name: 'workflowId',
+          in: 'path',
+          required: true,
+          schema: { type: 'string' },
+        },
+        {
+          name: 'runId',
+          in: 'query',
+          required: true,
+          schema: { type: 'string' },
+        },
+      ],
+      requestBody: {
+        required: true,
+        content: {
+          'application/json': {
+            schema: {
+              type: 'object',
+              properties: {
+                step: {
+                  oneOf: [{ type: 'string' }, { type: 'array', items: { type: 'string' } }],
+                },
+                resumeData: { type: 'object' },
+                runtimeContext: { type: 'object' },
+              },
+              required: ['step'],
+            },
+          },
+        },
+      },
+    }),
+    resumeVNextWorkflowHandler,
+  );
+
+  app.post(
+    '/api/workflows/v-next/:workflowId/resume-async',
+    bodyLimit(bodyLimitOptions),
+    describeRoute({
+      description: 'Resume a suspended vNext workflow step',
+      tags: ['vNextWorkflows'],
+      parameters: [
+        {
+          name: 'workflowId',
+          in: 'path',
+          required: true,
+          schema: { type: 'string' },
+        },
+        {
+          name: 'runId',
+          in: 'query',
+          required: true,
+          schema: { type: 'string' },
+        },
+      ],
+      requestBody: {
+        required: true,
+        content: {
+          'application/json': {
+            schema: {
+              type: 'object',
+              properties: {
+                step: {
+                  oneOf: [{ type: 'string' }, { type: 'array', items: { type: 'string' } }],
+                },
+                resumeData: { type: 'object' },
+                runtimeContext: { type: 'object' },
+              },
+              required: ['step'],
+            },
+          },
+        },
+      },
+    }),
+    resumeAsyncVNextWorkflowHandler,
+  );
+
+  app.post(
+    '/api/workflows/v-next/:workflowId/create-run',
+    bodyLimit(bodyLimitOptions),
+    describeRoute({
+      description: 'Create a new vNext workflow run',
+      tags: ['vNextWorkflows'],
+      parameters: [
+        {
+          name: 'workflowId',
+          in: 'path',
+          required: true,
+          schema: { type: 'string' },
+        },
+        {
+          name: 'runId',
+          in: 'query',
+          required: false,
+          schema: { type: 'string' },
+        },
+      ],
+      responses: {
+        200: {
+          description: 'New vNext workflow run created',
+        },
+      },
+    }),
+    createVNextWorkflowRunHandler,
+  );
+
+  app.post(
+    '/api/workflows/v-next/:workflowId/start-async',
+    bodyLimit(bodyLimitOptions),
+    describeRoute({
+      description: 'Execute/Start a vNext workflow',
+      tags: ['vNextWorkflows'],
+      parameters: [
+        {
+          name: 'workflowId',
+          in: 'path',
+          required: true,
+          schema: { type: 'string' },
+        },
+        {
+          name: 'runId',
+          in: 'query',
+          required: false,
+          schema: { type: 'string' },
+        },
+      ],
+      requestBody: {
+        required: true,
+        content: {
+          'application/json': {
+            schema: {
+              type: 'object',
+              properties: {
+                inputData: { type: 'object' },
+                runtimeContext: { type: 'object' },
+              },
+            },
+          },
+        },
+      },
+      responses: {
+        200: {
+          description: 'vNext workflow execution result',
+        },
+        404: {
+          description: 'vNext workflow not found',
+        },
+      },
+    }),
+    startAsyncVNextWorkflowHandler,
+  );
+
+  app.post(
+    '/api/workflows/v-next/:workflowId/start',
+    describeRoute({
+      description: 'Create and start a new vNext workflow run',
+      tags: ['vNextWorkflows'],
+      parameters: [
+        {
+          name: 'workflowId',
+          in: 'path',
+          required: true,
+          schema: { type: 'string' },
+        },
+        {
+          name: 'runId',
+          in: 'query',
+          required: true,
+          schema: { type: 'string' },
+        },
+      ],
+      requestBody: {
+        required: true,
+        content: {
+          'application/json': {
+            schema: {
+              type: 'object',
+              properties: {
+                inputData: { type: 'object' },
+                runtimeContext: { type: 'object' },
+              },
+            },
+          },
+        },
+      },
+      responses: {
+        200: {
+          description: 'vNext workflow run started',
+        },
+        404: {
+          description: 'vNext workflow not found',
+        },
+      },
+    }),
+    startVNextWorkflowRunHandler,
+  );
+
+  app.get(
+    '/api/workflows/v-next/:workflowId/watch',
+    describeRoute({
+      description: 'Watch vNext workflow transitions in real-time',
+      parameters: [
+        {
+          name: 'workflowId',
+          in: 'path',
+          required: true,
+          schema: { type: 'string' },
+        },
+        {
+          name: 'runId',
+          in: 'query',
+          required: false,
+          schema: { type: 'string' },
+        },
+      ],
+      tags: ['vNextWorkflows'],
+      responses: {
+        200: {
+          description: 'vNext workflow transitions in real-time',
+        },
+      },
+    }),
+    watchVNextWorkflowHandler,
   );
 
   // Workflow routes
@@ -1596,11 +1893,14 @@ export async function createHonoServer(
     createRunHandler,
   );
 
+  /**
+   * @deprecated Use /api/workflows/:workflowId/start-async instead
+   */
   app.post(
     '/api/workflows/:workflowId/startAsync',
     bodyLimit(bodyLimitOptions),
     describeRoute({
-      description: 'Execute/Start a workflow',
+      description: '@deprecated Use /api/workflows/:workflowId/start-async instead',
       tags: ['workflows'],
       parameters: [
         {
@@ -1641,14 +1941,11 @@ export async function createHonoServer(
     startAsyncWorkflowHandler,
   );
 
-  /**
-   * @deprecated Use /api/workflows/:workflowId/start-async instead
-   */
   app.post(
     '/api/workflows/:workflowId/start-async',
     bodyLimit(bodyLimitOptions),
     describeRoute({
-      description: '@deprecated Use /api/workflows/:workflowId/start-async instead',
+      description: 'Execute/Start a workflow',
       tags: ['workflows'],
       parameters: [
         {
@@ -2123,18 +2420,18 @@ export async function createHonoServer(
     deleteIndex,
   );
 
-  app.get(
-    '/openapi.json',
-    openAPISpecs(app, {
-      documentation: {
-        info: { title: 'Mastra API', version: '1.0.0', description: 'Mastra API' },
-      },
-    }),
-  );
+  if (options?.isDev || server?.build?.openAPIDocs || server?.build?.swaggerUI) {
+    app.get(
+      '/openapi.json',
+      openAPISpecs(app, {
+        documentation: {
+          info: { title: 'Mastra API', version: '1.0.0', description: 'Mastra API' },
+        },
+      }),
+    );
+  }
 
-  app.get('/swagger-ui', swaggerUI({ url: '/openapi.json' }));
-
-  if (options?.swaggerUI) {
+  if (options?.isDev || server?.build?.swaggerUI) {
     app.get('/swagger-ui', swaggerUI({ url: '/openapi.json' }));
   }
 
@@ -2196,10 +2493,7 @@ export async function createHonoServer(
   return app;
 }
 
-export async function createNodeServer(
-  mastra: Mastra,
-  options: { playground?: boolean; swaggerUI?: boolean; apiReqLogs?: boolean } = {},
-) {
+export async function createNodeServer(mastra: Mastra, options: ServerBundleOptions = {}) {
   const app = await createHonoServer(mastra, options);
   const serverOptions = mastra.getServer();
 
@@ -2212,9 +2506,11 @@ export async function createNodeServer(
     },
     () => {
       const logger = mastra.getLogger();
-      logger.info(`🦄 Mastra API running on port ${port}/api`);
-      logger.info(`📚 Open API documentation available at http://localhost:${port}/openapi.json`);
-      if (options?.swaggerUI) {
+      logger.info(` Mastra API running on port http://localhost:${process.env.PORT || 4111}/api`);
+      if (options?.isDev) {
+        logger.info(`� Open API documentation available at http://localhost:${port}/openapi.json`);
+      }
+      if (options?.isDev) {
         logger.info(`🧪 Swagger UI available at http://localhost:${port}/swagger-ui`);
       }
       if (options?.playground) {
