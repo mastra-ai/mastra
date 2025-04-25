@@ -69,7 +69,7 @@ export const Footer = () => {
       >
         <div className="flex max-w-(--nextra-content-width) pl-[max(env(safe-area-inset-left),1.5rem)] pr-[max(env(safe-area-inset-right),1.5rem)] flex-col lg:flex-row gap-16 lg:gap-0 w-full justify-between">
           <div>
-            <Logo/>
+            <Logo />
             <div className="md:hidden pt-10">
               <label
                 htmlFor="email"

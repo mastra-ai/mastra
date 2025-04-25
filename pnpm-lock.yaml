@@ -889,6 +889,43 @@ importers:
         specifier: ^6.2.3
         version: 6.2.3(@types/node@20.17.30)(jiti@2.4.2)(lightningcss@1.29.2)(terser@5.39.0)(tsx@4.19.3)(yaml@2.7.0)
 
+  packages/cloud:
+    dependencies:
+      '@mastra/core':
+        specifier: workspace:^
+        version: link:../core
+      '@opentelemetry/core':
+        specifier: ^1.30.1
+        version: 1.30.1(@opentelemetry/api@1.9.0)
+      '@opentelemetry/otlp-exporter-base':
+        specifier: ^0.57.2
+        version: 0.57.2(@opentelemetry/api@1.9.0)
+      '@opentelemetry/otlp-transformer':
+        specifier: ^0.57.2
+        version: 0.57.2(@opentelemetry/api@1.9.0)
+      '@opentelemetry/sdk-trace-base':
+        specifier: ^1.30.1
+        version: 1.30.1(@opentelemetry/api@1.9.0)
+    devDependencies:
+      '@internal/lint':
+        specifier: workspace:*
+        version: link:../_config
+      '@microsoft/api-extractor':
+        specifier: ^7.52.1
+        version: 7.52.2(@types/node@20.17.30)
+      '@types/node':
+        specifier: ^20.17.27
+        version: 20.17.30
+      eslint:
+        specifier: ^9.23.0
+        version: 9.23.0(jiti@2.4.2)
+      tsup:
+        specifier: ^8.4.0
+        version: 8.4.0(@microsoft/api-extractor@7.52.2(@types/node@20.17.30))(@swc/core@1.11.10(@swc/helpers@0.5.15))(jiti@2.4.2)(postcss@8.5.3)(tsx@4.19.3)(typescript@5.8.2)(yaml@2.7.0)
+      typescript:
+        specifier: ^5.7.3
+        version: 5.8.2
+
   packages/core:
     dependencies:
       '@libsql/client':

@@ -56,9 +56,7 @@ export const Logo = () => {
 export const Nav = ({ stars }: { stars: number }) => {
   return (
     <Navbar
-      logo={
-       <Logo/>
-      }
+      logo={<Logo />}
       logoLink={process.env.NEXT_PUBLIC_APP_URL}
       projectIcon={<GithubStarCount stars={stars} />}
       projectLink="https://github.com/mastra-ai/mastra"
