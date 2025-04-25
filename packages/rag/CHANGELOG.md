@@ -1,5 +1,21 @@
 # @mastra/rag
 
+## 0.1.20-alpha.1
+
+### Patch Changes
+
+- 6278b62: [MASTRA-3185] Remove Llamaindex
+- 8fb46d6: [MASTRA-3171] pin llamaindex version to 0.9.6
+- db1d220: switch to llamaindex core pinned version
+- Updated dependencies [20275d4]
+- Updated dependencies [7d1892c]
+- Updated dependencies [a90a082]
+- Updated dependencies [35955b0]
+- Updated dependencies [c1409ef]
+- Updated dependencies [11d4485]
+- Updated dependencies [2d4001d]
+  - @mastra/core@0.9.1-alpha.1
+
 ## 0.1.20-alpha.0
 
 ### Patch Changes
