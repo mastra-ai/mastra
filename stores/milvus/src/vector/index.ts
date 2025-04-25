@@ -18,6 +18,7 @@ import type {
   FieldType,
   GetVersionResponse,
   ResStatus,
+  SearchResults,
 } from '@zilliz/milvus2-sdk-node';
 import type { IndexConfig } from './types';
 
@@ -45,6 +46,15 @@ export interface MilvusUpsertVectorParams extends UpsertVectorParams {
 }
 
 type MilvusCreateIndexArgs = [...CreateIndexArgs, IndexConfig?, boolean?];
+
+export interface MilvusQueryVectorParams extends QueryVectorParams {
+  collectionName: string;
+}
+
+export interface MilvusQueryVectorArgs extends QueryVectorArgs {
+  collectionName: string;
+}
+
 export class MilvusVectorStore extends MastraVector {
   private client: MilvusClient;
   constructor({
@@ -121,34 +131,44 @@ export class MilvusVectorStore extends MastraVector {
    * @param args - QueryVectorParams object or QueryVectorArgs tuple.
    * @returns Promise<QueryResult[]> - The query results.
    */
-  async query<E extends QueryVectorArgs = QueryVectorArgs>(
-    ...args: ParamsToArgs<QueryVectorParams> | E
-  ): Promise<QueryResult[]> {
-    const params = this.normalizeArgs<QueryVectorParams, QueryVectorArgs>('query', args, [
+  async query(...args: ParamsToArgs<MilvusQueryVectorParams> | MilvusQueryVectorArgs): Promise<QueryResult[]> {
+    const params = this.normalizeArgs<MilvusQueryVectorParams, MilvusQueryVectorArgs>('query', args, [
       'indexName',
       'queryVector',
       'topK',
       'filter',
+      'collectionName',
       'includeVector',
     ]);
-    const { indexName, queryVector, topK = 10, filter, includeVector = false } = params;
+    const { queryVector, topK = 10, filter = '', collectionName, includeVector = false } = params;
     try {
       const searchParams: any = {
-        collection_name: indexName,
-        vectors: [queryVector],
+        collection_name: collectionName,
+        data: [queryVector],
         topk: topK,
-        params: JSON.stringify({ metric_type: 'L2' }),
-        output_fields: includeVector ? ['*'] : undefined,
-        filter: filter ? JSON.stringify(filter) : undefined,
+        filter,
+        // output_fields: ['id', 'metadata', 'vector'],
       };
-      const res = await this.client.search(searchParams);
+
+      // load collection
+      const loadCollectionResponse = await this.client.loadCollection({
+        collection_name: collectionName,
+      });
+
+      if (loadCollectionResponse.error_code !== 'Success') {
+        throw new Error('Failed to load collection: ' + loadCollectionResponse.reason);
+      }
+
+      const res: SearchResults = await this.client.search(searchParams);
+      console.log(res);
+
       if (!res.results) return [];
+
       return res.results.map((item: any) => ({
-        id: String(item.id ?? item.primaryKey ?? item.primary_id),
+        id: item.id,
         score: item.score,
-        metadata: item,
+        metadata: item.metadata,
         vector: includeVector ? item.vector : undefined,
-        document: item.document,
       })) as QueryResult[];
     } catch (error) {
       throw new Error('Failed to query vectors: ' + error);

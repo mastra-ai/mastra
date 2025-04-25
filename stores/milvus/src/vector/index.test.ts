@@ -545,4 +545,102 @@ describe('Milvus Vector tests', () => {
       ).rejects.toThrow('Missing required parameter: collectionName');
     });
   });
+
+  describe('Simple Query operations', () => {
+    const collectionName = `new_book_collection_query`;
+    const indexName = 'vector_idx';
+
+    beforeAll(async () => {
+      await milvusClient.createCollection(collectionName, [
+        {
+          name: `id`,
+          description: `customized primary id`,
+          data_type: DataType.VarChar,
+          max_length: 256,
+          is_primary_key: true,
+          autoID: false,
+        },
+        {
+          name: `vector`,
+          description: `word count`,
+          data_type: DataType.FloatVector,
+          dim: 8,
+        },
+        {
+          name: `metadata`,
+          description: `metadata`,
+          data_type: DataType.JSON,
+        },
+      ]);
+
+      // create index
+      await milvusClient.createIndex({
+        collectionName: collectionName,
+        fieldName: 'vector',
+        indexName: indexName,
+        indexConfig: {
+          type: IndexType.IVF_FLAT,
+        },
+        metricType: MetricType.L2,
+        dimension: 8,
+      });
+    });
+
+    afterAll(async () => {
+      await milvusClient.dropCollection(collectionName);
+    });
+
+    it('should query vectors', async () => {
+      const vectors = [
+        [0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 1.1],
+        [1.4, 1.5, 1.6, 1.7, 1.8, 1.9, 2.0, 2.1],
+        [2.4, 2.5, 2.6, 2.7, 2.8, 2.9, 3.0, 3.1],
+      ];
+
+      const insertedIds = await milvusClient.upsert({
+        collectionName,
+        vectors,
+        ids: ['1', '2', '3'],
+        metadata: [{ title: 'Book 1' }, { title: 'Book 2' }, { title: 'Book 3' }],
+        indexName,
+      });
+
+      const queryResult = await milvusClient.query({
+        collectionName,
+        indexName,
+        queryVector: vectors[0],
+        topK: 3,
+      });
+
+      expect(queryResult).toBeDefined();
+      expect(queryResult.length).toBe(3);
+      expect(queryResult[0].id).toBe(insertedIds[0]);
+      expect(queryResult[1].id).toBe(insertedIds[1]);
+      expect(queryResult[2].id).toBe(insertedIds[2]);
+      expect(queryResult[0].score).toBeDefined();
+      expect(queryResult[1].score).toBeDefined();
+      expect(queryResult[2].score).toBeDefined();
+      expect(queryResult[0].metadata).toBeDefined();
+      expect(queryResult[1].metadata).toBeDefined();
+      expect(queryResult[2].metadata).toBeDefined();
+      expect(queryResult[0].vector).toBeDefined();
+      expect(queryResult[1].vector).toBeDefined();
+      expect(queryResult[2].vector).toBeDefined();
+
+      // Check that the scores are within a reasonable range
+      expect(queryResult[0].score).toBeLessThanOrEqual(1);
+      expect(queryResult[1].score).toBeLessThanOrEqual(1);
+      expect(queryResult[2].score).toBeLessThanOrEqual(1);
+
+      // Check that the metadata is correct
+      expect(queryResult[0].metadata).toEqual({ title: 'Book 1' });
+      expect(queryResult[1].metadata).toEqual({ title: 'Book 2' });
+      expect(queryResult[2].metadata).toEqual({ title: 'Book 3' });
+
+      // Check that the vectors are correct
+      expect(queryResult[0].vector).toEqual(vectors[0]);
+      expect(queryResult[1].vector).toEqual(vectors[1]);
+      expect(queryResult[2].vector).toEqual(vectors[2]);
+    });
+  });
 });
