@@ -9,7 +9,7 @@ description: "Use MCP in Mastra to integrate third party tools and resources in 
 
 ## Overview
 
-MCP in Mastra provides a standardized way to connect to tool servers and supports both stdio and SSE-based connections.
+MCP in Mastra provides a standardized way to connect to tool servers. It supports Stdio and HTTP (uses Streamable HTTP, falls back to SSE).
 
 ## Installation
 
@@ -27,7 +27,12 @@ npm install @mastra/mcp@latest
 
 ## Using MCP in Your Code
 
-The `MCPConfiguration` class provides a way to manage multiple tool servers in your Mastra applications without managing multiple MCP clients. You can configure both stdio-based and SSE-based servers:
+The `MCPConfiguration` class provides a way to manage multiple tool servers in your Mastra applications without managing multiple MCP clients. The `MastraMCPClient` used internally by `MCPConfiguration` now automatically detects the transport type based on your server configuration:
+
+-   If you provide a `command`, it uses the Stdio transport.
+-   If you provide a `url`, it first attempts to use the Streamable HTTP transport and falls back to the legacy SSE transport if the initial connection fails.
+
+Here's an example configuration:
 
 ```typescript
 import { MCPConfiguration } from "@mastra/mcp";
@@ -36,17 +41,14 @@ import { openai } from "@ai-sdk/openai";
 
 const mcp = new MCPConfiguration({
   servers: {
-    // stdio example
+    // Stdio example
     sequential: {
-      name: "sequential-thinking",
-      server: {
-        command: "npx",
-        args: ["-y", "@modelcontextprotocol/server-sequential-thinking"],
-      },
+      command: "npx",
+      args: ["-y", "@modelcontextprotocol/server-sequential-thinking"],
     },
-    // SSE example
+    // HTTP example (will try Streamable HTTP first, then fallback to SSE)
     weather: {
-      url: new URL("http://localhost:8080/sse"),
+      url: new URL("http://localhost:8080/mcp"), // Use the base URL for Streamable HTTP
       requestInit: {
         headers: {
           Authorization: "Bearer your-token",

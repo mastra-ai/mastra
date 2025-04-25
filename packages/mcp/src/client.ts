@@ -5,7 +5,8 @@ import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { SSEClientTransport } from '@modelcontextprotocol/sdk/client/sse.js';
 import type { SSEClientTransportOptions } from '@modelcontextprotocol/sdk/client/sse.js';
 import { getDefaultEnvironment, StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
-import type { StdioServerParameters } from '@modelcontextprotocol/sdk/client/stdio.js';
+import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
+import type { StreamableHTTPClientTransportOptions } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
 import { DEFAULT_REQUEST_TIMEOUT_MSEC } from '@modelcontextprotocol/sdk/shared/protocol.js';
 import type { Protocol } from '@modelcontextprotocol/sdk/shared/protocol.js';
 import type { Transport } from '@modelcontextprotocol/sdk/shared/transport.js';
@@ -28,17 +29,42 @@ export interface LogMessage {
 
 export type LogHandler = (logMessage: LogMessage) => void;
 
-// Omit the fields we want to control from the SDK options
-type SSEClientParameters = {
-  url: URL;
-} & SSEClientTransportOptions;
-
-export type MastraMCPServerDefinition = (StdioServerParameters | SSEClientParameters) & {
+// Base options common to all server definitions
+type BaseServerOptions = {
   logger?: LogHandler;
   timeout?: number;
   capabilities?: ClientCapabilities;
   enableServerLogs?: boolean;
 };
+
+type StdioServerDefinition = BaseServerOptions & {
+  command: string; // 'command' is required for Stdio
+  args?: string[];
+  env?: Record<string, string>;
+
+  url?: never; // Exclude 'url' for Stdio
+  requestInit?: never; // Exclude HTTP options for Stdio
+  eventSourceInit?: never; // Exclude HTTP options for Stdio
+  reconnectionOptions?: never; // Exclude Streamable HTTP specific options
+  sessionId?: never; // Exclude Streamable HTTP specific options
+};
+
+// HTTP Server Definition (Streamable HTTP or SSE fallback)
+type HttpServerDefinition = BaseServerOptions & {
+  url: URL; // 'url' is required for HTTP
+
+  command?: never; // Exclude 'command' for HTTP
+  args?: never; // Exclude Stdio options for HTTP
+  env?: never; // Exclude Stdio options for HTTP
+
+  // Include relevant options from SDK HTTP transport types
+  requestInit?: StreamableHTTPClientTransportOptions['requestInit'];
+  eventSourceInit?: SSEClientTransportOptions['eventSourceInit'];
+  reconnectionOptions?: StreamableHTTPClientTransportOptions['reconnectionOptions'];
+  sessionId?: StreamableHTTPClientTransportOptions['sessionId'];
+};
+
+export type MastraMCPServerDefinition = StdioServerDefinition | HttpServerDefinition;
 
 /**
  * Convert an MCP LoggingLevel to a logger method name that exists in our logger
@@ -65,11 +91,12 @@ function convertLogLevelToLoggerMethod(level: LoggingLevel): 'debug' | 'info' | 
 
 export class MastraMCPClient extends MastraBase {
   name: string;
-  private transport: Transport;
   private client: Client;
   private readonly timeout: number;
   private logHandler?: LogHandler;
   private enableServerLogs?: boolean;
+  private serverConfig: MastraMCPServerDefinition;
+  private transport?: Transport;
 
   constructor({
     name,
@@ -89,22 +116,7 @@ export class MastraMCPClient extends MastraBase {
     this.timeout = timeout;
     this.logHandler = server.logger;
     this.enableServerLogs = server.enableServerLogs ?? true;
-
-    // Extract log handler from server config to avoid passing it to transport
-    const { logger, enableServerLogs, ...serverConfig } = server;
-
-    if (`url` in serverConfig) {
-      this.transport = new SSEClientTransport(serverConfig.url, {
-        requestInit: serverConfig.requestInit,
-        eventSourceInit: serverConfig.eventSourceInit,
-      });
-    } else {
-      this.transport = new StdioClientTransport({
-        ...serverConfig,
-        // without ...getDefaultEnvironment() commands like npx will fail because there will be no PATH env var
-        env: { ...getDefaultEnvironment(), ...(serverConfig.env || {}) },
-      });
-    }
+    this.serverConfig = server;
 
     this.client = new Client(
       {
@@ -130,14 +142,16 @@ export class MastraMCPClient extends MastraBase {
     // Convert MCP logging level to our logger method
     const loggerMethod = convertLogLevelToLoggerMethod(level);
 
+    const msg = `[${this.name}] ${message}`;
+
     // Log to internal logger
-    this.logger[loggerMethod](message, details);
+    this.logger[loggerMethod](msg, details);
 
     // Send to registered handler if available
     if (this.logHandler) {
       this.logHandler({
         level,
-        message,
+        message: msg,
         timestamp: new Date(),
         serverName: this.name,
         details,
@@ -164,46 +178,135 @@ export class MastraMCPClient extends MastraBase {
     }
   }
 
-  private isConnected = false;
-
-  async connect() {
-    if (this.isConnected) return;
+  private async connectStdio(command: string) {
+    this.log('debug', `Using Stdio transport for command: ${command}`);
     try {
-      this.log('debug', `Connecting to MCP server`);
-      await this.client.connect(this.transport, {
-        timeout: this.timeout,
+      this.transport = new StdioClientTransport({
+        command,
+        args: this.serverConfig.args,
+        env: { ...getDefaultEnvironment(), ...(this.serverConfig.env || {}) },
       });
-      this.isConnected = true;
-      const originalOnClose = this.client.onclose;
-      this.client.onclose = () => {
-        this.log('debug', `MCP server connection closed`);
-        this.isConnected = false;
-        if (typeof originalOnClose === `function`) {
-          originalOnClose();
-        }
-      };
-      asyncExitHook(
-        async () => {
-          this.log('debug', `Disconnecting MCP server during exit`);
-          await this.disconnect();
-        },
-        { wait: 5000 },
-      );
-
-      process.on('SIGTERM', () => gracefulExit());
-      this.log('info', `Successfully connected to MCP server`);
+      await this.client.connect(this.transport, { timeout: this.serverConfig.timeout ?? this.timeout });
+      this.log('debug', `Successfully connected to MCP server via Stdio`);
     } catch (e) {
-      this.log('error', `Failed connecting to MCP server`, {
-        error: e instanceof Error ? e.stack : JSON.stringify(e, null, 2),
-      });
-      this.isConnected = false;
+      this.log('error', e instanceof Error ? e.stack || e.message : JSON.stringify(e));
       throw e;
     }
   }
 
+  private async connectHttp(url: URL) {
+    const { requestInit, eventSourceInit } = this.serverConfig;
+
+    this.log('debug', `Attempting to connect to URL: ${url}`);
+
+    // Assume /sse means sse.
+    let shouldTrySSE = url.pathname.endsWith(`/sse`);
+
+    if (!shouldTrySSE) {
+      try {
+        // Try Streamable HTTP transport first
+        this.log('debug', 'Trying Streamable HTTP transport...');
+        const streamableTransport = new StreamableHTTPClientTransport(url, {
+          requestInit,
+          reconnectionOptions: this.serverConfig.reconnectionOptions,
+          sessionId: this.serverConfig.sessionId,
+        });
+        await this.client.connect(streamableTransport, {
+          timeout:
+            // this is hardcoded to 3s because the long default timeout would be extremely slow for sse backwards compat (60s)
+            3000,
+        });
+        this.transport = streamableTransport;
+        this.log('debug', 'Successfully connected using Streamable HTTP transport.');
+      } catch (error) {
+        this.log('debug', `Streamable HTTP transport failed: ${error}`);
+        shouldTrySSE = true;
+      }
+    }
+
+    if (shouldTrySSE) {
+      this.log('debug', 'Falling back to deprecated HTTP+SSE transport...');
+      try {
+        // Fallback to SSE transport
+        const sseTransport = new SSEClientTransport(url, { requestInit, eventSourceInit });
+        await this.client.connect(sseTransport, { timeout: this.serverConfig.timeout ?? this.timeout });
+        this.transport = sseTransport;
+        this.log('debug', 'Successfully connected using deprecated HTTP+SSE transport.');
+      } catch (sseError) {
+        this.log(
+          'error',
+          `Failed to connect with SSE transport after failing to connect to Streamable HTTP transport first. SSE error: ${sseError}`,
+        );
+        throw new Error('Could not connect to server with any available HTTP transport');
+      }
+    }
+  }
+
+  private isConnected = false;
+
+  async connect() {
+    if (this.isConnected) return;
+
+    const { command, url } = this.serverConfig;
+
+    if (command) {
+      await this.connectStdio(command);
+    } else if (url) {
+      await this.connectHttp(url);
+    } else {
+      throw new Error('Server configuration must include either a command or a url.');
+    }
+
+    this.isConnected = true;
+    const originalOnClose = this.client.onclose;
+    this.client.onclose = () => {
+      this.log('debug', `MCP server connection closed`);
+      this.isConnected = false;
+      if (typeof originalOnClose === `function`) {
+        originalOnClose();
+      }
+    };
+    asyncExitHook(
+      async () => {
+        this.log('debug', `Disconnecting MCP server during exit`);
+        await this.disconnect();
+      },
+      { wait: 5000 },
+    );
+
+    process.on('SIGTERM', () => gracefulExit());
+    this.log('debug', `Successfully connected to MCP server`);
+  }
+
+  /**
+   * Get the current session ID if using the Streamable HTTP transport.
+   * Returns undefined if not connected or not using Streamable HTTP.
+   */
+  get sessionId(): string | undefined {
+    if (this.transport instanceof StreamableHTTPClientTransport) {
+      return this.transport.sessionId;
+    }
+    return undefined;
+  }
+
   async disconnect() {
+    if (!this.transport) {
+      this.log('debug', 'Disconnect called but no transport was connected.');
+      return;
+    }
     this.log('debug', `Disconnecting from MCP server`);
-    return await this.client.close();
+    try {
+      await this.transport.close();
+      this.log('debug', 'Successfully disconnected from MCP server');
+    } catch (e) {
+      this.log('error', 'Error during MCP server disconnect', {
+        error: e instanceof Error ? e.stack : JSON.stringify(e, null, 2),
+      });
+      throw e;
+    } finally {
+      this.transport = undefined;
+      this.isConnected = false;
+    }
   }
 
   // TODO: do the type magic to return the right method type. Right now we get infinitely deep infered type errors from Zod without using "any"
