@@ -1915,7 +1915,7 @@ describe('Workflow', () => {
       });
       workflow.then(step1).then(step2).commit();
 
-      const onTransition = vi.fn().mockImplementation(data => {
+      const onTransition = vi.fn().mockImplementation(_data => {
         // console.dir({ onTransition: data }, { depth: null });
       });
 
