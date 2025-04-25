@@ -343,7 +343,7 @@ describe('MongoDBVector Integration Tests', () => {
       const vector = [1, 0, 0, 0];
       const timestampDate = new Date('2024-01-01T00:00:00Z');
       // Upsert a document with a timestamp in metadata
-      const [docId] = await vectorDB.upsert({
+      await vectorDB.upsert({
         indexName: testIndexName2,
         vectors: [vector],
         metadata: [{ timestamp: timestampDate }],
@@ -355,7 +355,7 @@ describe('MongoDBVector Integration Tests', () => {
         filter: { 'metadata.timestamp': { $gt: new Date('2023-01-01T00:00:00Z') } },
       });
       expect(results.length).toBeGreaterThan(0);
-      expect(new Date(results[0]?.metadata.timestamp).toISOString()).toEqual(timestampDate.toISOString());
+      expect(new Date(results[0]?.metadata?.timestamp).toISOString()).toEqual(timestampDate.toISOString());
     });
   });
 
