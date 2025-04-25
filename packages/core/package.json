@@ -1,6 +1,6 @@
 {
   "name": "@mastra/core",
-  "version": "0.9.1-alpha.0",
+  "version": "0.9.1-alpha.1",
   "license": "Elastic-2.0",
   "type": "module",
   "main": "dist/index.js",
