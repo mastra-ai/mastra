@@ -39,7 +39,7 @@ export function WorkflowInformation({ workflowId, isVNext }: { workflowId: strin
         ) : null}
       </TabsContent>
       <TabsContent value="endpoints">
-        <WorkflowEndpoints workflowId={workflowId} />
+        <WorkflowEndpoints workflowId={workflowId} isVNext={isVNext} />
       </TabsContent>
       <TabsContent value="logs">
         <WorkflowLogs runId={runId} />

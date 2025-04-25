@@ -29,16 +29,12 @@ export const useWorkflows = () => {
   return { workflows, vNextWorkflows, isLoading };
 };
 
-export const useWorkflow = (workflowId: string, enabled: boolean = true) => {
+export const useWorkflow = (workflowId: string) => {
   const [workflow, setWorkflow] = useState<GetWorkflowResponse | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
     const fetchWorkflow = async () => {
-      if (!enabled) {
-        setIsLoading(false);
-        return;
-      }
       setIsLoading(true);
       try {
         if (!workflowId) {
@@ -58,21 +54,17 @@ export const useWorkflow = (workflowId: string, enabled: boolean = true) => {
     };
 
     fetchWorkflow();
-  }, [workflowId, enabled]);
+  }, [workflowId]);
 
   return { workflow, isLoading };
 };
 
-export const useVNextWorkflow = (workflowId: string, enabled: boolean = true) => {
+export const useVNextWorkflow = (workflowId: string) => {
   const [vNextWorkflow, setVNextWorkflow] = useState<GetVNextWorkflowResponse | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
     const fetchWorkflow = async () => {
-      if (!enabled) {
-        setIsLoading(false);
-        return;
-      }
       setIsLoading(true);
       try {
         if (!workflowId) {
@@ -92,7 +84,7 @@ export const useVNextWorkflow = (workflowId: string, enabled: boolean = true) =>
     };
 
     fetchWorkflow();
-  }, [workflowId, enabled]);
+  }, [workflowId]);
 
   return { vNextWorkflow, isLoading };
 };

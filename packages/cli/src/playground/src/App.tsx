@@ -14,9 +14,12 @@ import AgentTool from './pages/tools/agent-tool';
 import Tool from './pages/tools/tool';
 import Workflows from './pages/workflows';
 import Workflow from './pages/workflows/workflow';
+import VNextWorkflow from './pages/workflows/workflow/v-next';
 import WorkflowTracesPage from './pages/workflows/workflow/traces';
+import VNextWorkflowTracesPage from './pages/workflows/workflow/v-next/traces';
 import Networks from './pages/networks';
 import { NetworkLayout } from './domains/networks/network-layout';
+import { VNextWorkflowLayout } from './domains/workflows/v-next-workflow-layout';
 import Network from './pages/networks/network';
 import { PostHogProvider } from './lib/analytics';
 
@@ -83,6 +86,18 @@ function App() {
             >
               <Route path="graph" element={<Workflow />} />
               <Route path="traces" element={<WorkflowTracesPage />} />
+            </Route>
+            <Route path="/workflows/v-next" element={<Navigate to="/workflows/v-next/:workflowId/graph" />} />
+            <Route
+              path="/workflows/v-next/:workflowId"
+              element={
+                <VNextWorkflowLayout>
+                  <Outlet />
+                </VNextWorkflowLayout>
+              }
+            >
+              <Route path="graph" element={<VNextWorkflow />} />
+              <Route path="traces" element={<VNextWorkflowTracesPage />} />
             </Route>
             <Route path="/" element={<Navigate to="/agents" />} />
           </Route>

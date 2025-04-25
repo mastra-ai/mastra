@@ -4,12 +4,10 @@ import {
   getVNextWorkflowByIdHandler as getOriginalVNextWorkflowByIdHandler,
   startAsyncVNextWorkflowHandler as getOriginalStartAsyncVNextWorkflowHandler,
   createVNextWorkflowRunHandler as getOriginalCreateVNextWorkflowRunHandler,
-  createAndWatchVNextWorkflowRunHandler as getOriginalCreateAndWatchVNextWorkflowRunHandler,
   startVNextWorkflowRunHandler as getOriginalStartVNextWorkflowRunHandler,
   watchVNextWorkflowHandler as getOriginalWatchVNextWorkflowHandler,
   resumeAsyncVNextWorkflowHandler as getOriginalResumeAsyncVNextWorkflowHandler,
   resumeVNextWorkflowHandler as getOriginalResumeVNextWorkflowHandler,
-  resumeAndWatchVNextWorkflowHandler as getOriginalResumeAndWatchVNextWorkflowHandler,
   getVNextWorkflowRunsHandler as getOriginalGetVNextWorkflowRunsHandler,
 } from '@mastra/server/handlers/vNextWorkflows';
 import type { Context } from 'hono';
@@ -61,47 +59,6 @@ export async function createVNextWorkflowRunHandler(c: Context) {
     });
 
     return c.json(result);
-  } catch (e) {
-    return handleError(e, 'Error creating run');
-  }
-}
-
-export async function createAndWatchVNextWorkflowRunHandler(c: Context) {
-  try {
-    const mastra: Mastra = c.get('mastra');
-    const logger = mastra.getLogger();
-    const workflowId = c.req.param('workflowId');
-    const prevRunId = c.req.query('runId');
-    const { inputData, runtimeContext } = await c.req.json();
-
-    return stream(
-      c,
-      async stream => {
-        try {
-          const result = await getOriginalCreateAndWatchVNextWorkflowRunHandler({
-            mastra,
-            workflowId,
-            runId: prevRunId,
-            inputData,
-            runtimeContext,
-          });
-          stream.onAbort(() => {
-            if (!result.locked) {
-              return result.cancel();
-            }
-          });
-
-          for await (const chunk of result) {
-            await stream.write(chunk.toString() + '\x1E');
-          }
-        } catch (err) {
-          console.log(err);
-        }
-      },
-      async err => {
-        logger.error('Error in watch stream: ' + err?.message);
-      },
-    );
   } catch (e) {
     return handleError(e, 'Error creating run');
   }
@@ -236,51 +193,6 @@ export async function resumeVNextWorkflowHandler(c: Context) {
     });
 
     return c.json({ message: 'Workflow run resumed' });
-  } catch (error) {
-    return handleError(error, 'Error resuming workflow');
-  }
-}
-
-export async function resumeAndWatchVNextWorkflowHandler(c: Context) {
-  try {
-    const mastra: Mastra = c.get('mastra');
-    const logger = mastra.getLogger();
-    const workflowId = c.req.param('workflowId');
-    const runId = c.req.query('runId');
-    const { step, resumeData, runtimeContext } = await c.req.json();
-
-    if (!runId) {
-      throw new HTTPException(400, { message: 'runId required to resume workflow' });
-    }
-
-    return stream(
-      c,
-      async stream => {
-        try {
-          const result = await getOriginalResumeAndWatchVNextWorkflowHandler({
-            mastra,
-            runtimeContext,
-            workflowId,
-            runId,
-            body: { step, resumeData },
-          });
-          stream.onAbort(() => {
-            if (!result.locked) {
-              return result.cancel();
-            }
-          });
-
-          for await (const chunk of result) {
-            await stream.write(chunk.toString() + '\x1E');
-          }
-        } catch (err) {
-          console.log(err);
-        }
-      },
-      async err => {
-        logger.error('Error in watch stream: ' + err?.message);
-      },
-    );
   } catch (error) {
     return handleError(error, 'Error resuming workflow');
   }

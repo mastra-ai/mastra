@@ -1,14 +1,16 @@
 import { useParams } from 'react-router';
+
 import { WorkflowTraces } from '@mastra/playground-ui';
 
 import { Skeleton } from '@/components/ui/skeleton';
 
 import { WorkflowInformation } from '@/domains/workflows/workflow-information';
-import { useWorkflow } from '@/hooks/use-workflows';
+import { useVNextWorkflow } from '@/hooks/use-workflows';
 
 function WorkflowTracesPage() {
   const { workflowId } = useParams();
-  const { workflow, isLoading: isWorkflowLoading } = useWorkflow(workflowId!);
+
+  const { vNextWorkflow, isLoading: isWorkflowLoading } = useVNextWorkflow(workflowId!);
 
   if (isWorkflowLoading) {
     return (
@@ -17,7 +19,7 @@ function WorkflowTracesPage() {
           <Skeleton className="h-[600px]" />
         </div>
         <div className="flex flex-col">
-          <WorkflowInformation workflowId={workflowId!} />
+          <WorkflowInformation workflowId={workflowId!} isVNext />
         </div>
       </main>
     );
@@ -25,9 +27,9 @@ function WorkflowTracesPage() {
 
   return (
     <WorkflowTraces
-      workflowName={workflow?.name || ''}
+      workflowName={vNextWorkflow?.name || ''}
       baseUrl=""
-      sidebarChild={<WorkflowInformation workflowId={workflowId!} />}
+      sidebarChild={<WorkflowInformation workflowId={workflowId!} isVNext />}
     />
   );
 }

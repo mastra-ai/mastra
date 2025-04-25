@@ -126,63 +126,6 @@ export async function createVNextWorkflowRunHandler({
   }
 }
 
-export async function createAndWatchVNextWorkflowRunHandler({
-  mastra,
-  workflowId,
-  runId: prevRunId,
-  inputData,
-  runtimeContext,
-}: Pick<VNextWorkflowContext, 'mastra' | 'workflowId' | 'runId'> & {
-  inputData?: unknown;
-  runtimeContext?: RuntimeContext;
-}) {
-  try {
-    if (!workflowId) {
-      throw new HTTPException(400, { message: 'Workflow ID is required' });
-    }
-
-    const workflow = mastra.vnext_getWorkflow(workflowId);
-
-    if (!workflow) {
-      throw new HTTPException(404, { message: 'Workflow not found' });
-    }
-
-    const run = workflow.createRun({ runId: prevRunId });
-
-    let unwatch: () => void;
-    let asyncRef: NodeJS.Immediate | null = null;
-    const stream = new ReadableStream<string>({
-      start(controller) {
-        unwatch = run.watch(({ type, payload, eventTimestamp }) => {
-          controller.enqueue(JSON.stringify({ type, payload, eventTimestamp, runId: run.runId }));
-
-          if (asyncRef) {
-            clearImmediate(asyncRef);
-            asyncRef = null;
-          }
-
-          // a run is finished if we cannot retrieve it anymore
-          asyncRef = setImmediate(async () => {
-            const confirmRun = await workflow.getWorkflowRun(run.runId);
-            if (!confirmRun) {
-              controller.close();
-            }
-          });
-        });
-      },
-      cancel() {
-        unwatch?.();
-      },
-    });
-
-    await run.start({ inputData, runtimeContext });
-
-    return stream;
-  } catch (error) {
-    throw new HTTPException(500, { message: (error as Error)?.message || 'Error creating workflow run' });
-  }
-}
-
 export async function startAsyncVNextWorkflowHandler({
   mastra,
   runtimeContext,
@@ -289,8 +232,8 @@ export async function watchVNextWorkflowHandler({
 
           // a run is finished if we cannot retrieve it anymore
           asyncRef = setImmediate(async () => {
-            const confirmRun = await workflow.getWorkflowRun(runId);
-            if (!confirmRun) {
+            const runDone = payload.workflowState.status !== 'running';
+            if (runDone) {
               controller.close();
             }
           });
@@ -390,76 +333,6 @@ export async function resumeVNextWorkflowHandler({
     });
 
     return { message: 'Workflow run resumed' };
-  } catch (error) {
-    return handleError(error, 'Error resuming workflow');
-  }
-}
-
-export async function resumeAndWatchVNextWorkflowHandler({
-  mastra,
-  workflowId,
-  runId,
-  body,
-  runtimeContext,
-}: VNextWorkflowContext & {
-  body: { step: string | string[]; resumeData?: unknown };
-  runtimeContext?: RuntimeContext;
-}) {
-  try {
-    if (!workflowId) {
-      throw new HTTPException(400, { message: 'Workflow ID is required' });
-    }
-
-    if (!runId) {
-      throw new HTTPException(400, { message: 'runId required to resume workflow' });
-    }
-
-    if (!body.step) {
-      throw new HTTPException(400, { message: 'step required to resume workflow' });
-    }
-
-    const workflow = mastra.vnext_getWorkflow(workflowId);
-    const run = await workflow.getWorkflowRun(runId);
-
-    if (!run) {
-      throw new HTTPException(404, { message: 'Workflow run not found' });
-    }
-
-    const _run = workflow.createRun({ runId });
-
-    let unwatch: () => void;
-    let asyncRef: NodeJS.Immediate | null = null;
-    const stream = new ReadableStream<string>({
-      start(controller) {
-        unwatch = _run.watch(({ type, payload, eventTimestamp }) => {
-          controller.enqueue(JSON.stringify({ type, payload, eventTimestamp, runId: _run.runId }));
-
-          if (asyncRef) {
-            clearImmediate(asyncRef);
-            asyncRef = null;
-          }
-
-          // a run is finished if we cannot retrieve it anymore
-          asyncRef = setImmediate(async () => {
-            const confirmRun = await workflow.getWorkflowRun(_run.runId);
-            if (!confirmRun) {
-              controller.close();
-            }
-          });
-        });
-      },
-      cancel() {
-        unwatch?.();
-      },
-    });
-
-    await _run.resume({
-      step: body.step,
-      resumeData: body.resumeData,
-      runtimeContext,
-    });
-
-    return stream;
   } catch (error) {
     return handleError(error, 'Error resuming workflow');
   }

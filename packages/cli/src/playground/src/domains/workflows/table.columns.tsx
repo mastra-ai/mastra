@@ -27,16 +27,18 @@ export const workflowsTableColumns: ColumnDef<{ id: string; name: string; stepsC
     cell: ({ row }) => (
       <Cell>
         <div className="flex justify-end items-center gap-2">
-          <Badge icon={<Footprints />}>
+          <Badge icon={<Footprints />} className="!h-button-md">
             {row.original.stepsCount} step{row.original.stepsCount > 1 ? 's' : ''}
           </Badge>
 
-          <Button as="a" href={`/workflows/${row.original.id}/graph${row.original.isVNext ? '?version=v-next' : ''}`}>
+          <Button as="a" href={`/workflows${row.original.isVNext ? '/v-next' : ''}/${row.original.id}/graph`}>
             <Icon>
               <WorkflowIcon />
             </Icon>
             View Workflow
           </Button>
+
+          {row.original.isVNext ? <Badge className="!text-accent1 !h-button-md">vNext</Badge> : null}
         </div>
       </Cell>
     ),

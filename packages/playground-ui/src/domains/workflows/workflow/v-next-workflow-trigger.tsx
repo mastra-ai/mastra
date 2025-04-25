@@ -13,13 +13,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Text } from '@/components/ui/text';
 
-import {
-  useExecuteWorkflow,
-  useWatchWorkflow,
-  useResumeWorkflow,
-  useWorkflow,
-  useVNextWorkflow,
-} from '@/hooks/use-workflows';
+import { useExecuteWorkflow, useWatchWorkflow, useResumeWorkflow, useVNextWorkflow } from '@/hooks/use-workflows';
 import { WorkflowRunContext } from '../context/workflow-run-context';
 import { toast } from 'sonner';
 
@@ -86,7 +80,7 @@ export function VNextWorkflowTrigger({
 
   const watchResultToUse = vNextResult ?? watchVNextResult;
 
-  const workflowActivePaths = Object.values(watchResultToUse?.payload?.workflowState?.steps ?? {});
+  const workflowActivePaths = watchResultToUse?.payload?.workflowState?.steps ?? {};
 
   useEffect(() => {
     setIsRunning(isWatchingVNextWorkflow);
@@ -127,6 +121,8 @@ export function VNextWorkflowTrigger({
   const isSuspendedSteps = suspendedSteps.length > 0;
 
   const zodInputSchema = triggerSchema ? resolveSerializedZodOutput(jsonSchemaToZod(parse(triggerSchema))) : null;
+
+  const { sanitizedOutput, ...restResult } = vNextResult ?? {};
 
   return (
     <ScrollArea className="h-[calc(100vh-126px)] pt-2 px-4 pb-4 text-xs w-full">
@@ -180,33 +176,35 @@ export function VNextWorkflowTrigger({
               Status
             </Text>
             <div className="px-4 flex flex-col gap-4">
-              {Object.entries(workflowActivePaths)?.map(([stepId, { status }]) => {
-                const statusIcon =
-                  status === 'completed' ? (
-                    <div className="w-2 h-2 bg-green-500 rounded-full" />
-                  ) : status === 'failed' ? (
-                    <div className="w-2 h-2 bg-red-500 rounded-full" />
-                  ) : (
-                    <div className="w-2 h-2 bg-yellow-500 rounded-full animate-pulse" />
-                  );
-                return (
-                  <div className="flex flex-col gap-1">
-                    <div key={stepId} className="flex flex-col overflow-hidden border">
-                      <div className={`flex items-center justify-between p-3`}>
-                        <Text variant="secondary" className="text-mastra-el-3" size="xs">
-                          {stepId.charAt(0).toUpperCase() + stepId.slice(1)}
-                        </Text>
-                        <span className="flex items-center gap-2 capitalize">
+              {Object.entries(workflowActivePaths)
+                ?.filter(([key, _]) => key !== 'input' && !key.endsWith('.input'))
+                ?.map(([stepId, { status }]) => {
+                  const statusIcon =
+                    status === 'success' ? (
+                      <div className="w-2 h-2 bg-green-500 rounded-full" />
+                    ) : status === 'failed' ? (
+                      <div className="w-2 h-2 bg-red-500 rounded-full" />
+                    ) : (
+                      <div className="w-2 h-2 bg-yellow-500 rounded-full animate-pulse" />
+                    );
+                  return (
+                    <div className="flex flex-col gap-1">
+                      <div key={stepId} className="flex flex-col overflow-hidden rounded-md border">
+                        <div className={`flex items-center justify-between p-3`}>
                           <Text variant="secondary" className="text-mastra-el-3" size="xs">
-                            {statusIcon}
+                            {stepId.charAt(0).toUpperCase() + stepId.slice(1)}
                           </Text>
-                          {status}
-                        </span>
+                          <span className="flex items-center gap-2 capitalize">
+                            <Text variant="secondary" className="text-mastra-el-3" size="xs">
+                              {statusIcon}
+                            </Text>
+                            {status}
+                          </span>
+                        </div>
                       </div>
                     </div>
-                  </div>
-                );
-              })}
+                  );
+                })}
             </div>
           </div>
         )}
@@ -256,12 +254,12 @@ export function VNextWorkflowTrigger({
             <div className="flex flex-col gap-2">
               <CopyButton
                 classname="absolute z-40 w-8 h-8 p-0 transition-opacity duration-150 ease-in-out opacity-0 top-4 right-4 group-hover:opacity-100"
-                content={JSON.stringify(vNextResult, null, 2)}
+                content={JSON.stringify(restResult, null, 2)}
               />
             </div>
             <CodeBlockDemo
               className="w-full overflow-x-auto"
-              code={vNextResult.sanitizedOutput || JSON.stringify(vNextResult, null, 2)}
+              code={sanitizedOutput || JSON.stringify(restResult, null, 2)}
               language="json"
             />
           </div>

@@ -652,7 +652,7 @@ export class NewWorkflow<
 
   async getWorkflowRun(runId: string) {
     const runs = await this.getWorkflowRuns();
-    return runs?.runs.find(r => r.runId === runId);
+    return runs?.runs.find(r => r.runId === runId) || this.#runs.get(runId);
   }
 }
 

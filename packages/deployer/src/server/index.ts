@@ -59,8 +59,6 @@ import {
   watchVNextWorkflowHandler,
   createVNextWorkflowRunHandler,
   getVNextWorkflowRunsHandler,
-  resumeAndWatchVNextWorkflowHandler,
-  createAndWatchVNextWorkflowRunHandler,
 } from './handlers/vNextWorkflows.js';
 import { getSpeakersHandler, speakHandler, listenHandler } from './handlers/voice';
 import {
@@ -1505,52 +1503,6 @@ export async function createHonoServer(mastra: Mastra, options: ServerBundleOpti
   );
 
   app.post(
-    '/api/workflows/v-next/:workflowId/resume-and-watch',
-    describeRoute({
-      description: 'Resume a suspended vNext workflow step and watch vNext workflow transitions in real-time',
-      tags: ['vNextWorkflows'],
-      parameters: [
-        {
-          name: 'workflowId',
-          in: 'path',
-          required: true,
-          schema: { type: 'string' },
-        },
-        {
-          name: 'runId',
-          in: 'query',
-          required: true,
-          schema: { type: 'string' },
-        },
-      ],
-      requestBody: {
-        required: true,
-        content: {
-          'application/json': {
-            schema: {
-              type: 'object',
-              properties: {
-                step: {
-                  oneOf: [{ type: 'string' }, { type: 'array', items: { type: 'string' } }],
-                },
-                resumeData: { type: 'object' },
-                runtimeContext: { type: 'object' },
-              },
-              required: ['step'],
-            },
-          },
-        },
-      },
-      responses: {
-        200: {
-          description: 'vNext workflow transitions in real-time',
-        },
-      },
-    }),
-    resumeAndWatchVNextWorkflowHandler,
-  );
-
-  app.post(
     '/api/workflows/v-next/:workflowId/resume-async',
     bodyLimit(bodyLimitOptions),
     describeRoute({
@@ -1619,49 +1571,6 @@ export async function createHonoServer(mastra: Mastra, options: ServerBundleOpti
       },
     }),
     createVNextWorkflowRunHandler,
-  );
-
-  app.post(
-    '/api/workflows/v-next/:workflowId/create-and-watch-run',
-    bodyLimit(bodyLimitOptions),
-    describeRoute({
-      description: 'Create a new vNext workflow run and watch vNext workflow transitions in real-time',
-      tags: ['vNextWorkflows'],
-      parameters: [
-        {
-          name: 'workflowId',
-          in: 'path',
-          required: true,
-          schema: { type: 'string' },
-        },
-        {
-          name: 'runId',
-          in: 'query',
-          required: false,
-          schema: { type: 'string' },
-        },
-      ],
-      requestBody: {
-        required: true,
-        content: {
-          'application/json': {
-            schema: {
-              type: 'object',
-              properties: {
-                inputData: { type: 'object' },
-                runtimeContext: { type: 'object' },
-              },
-            },
-          },
-        },
-      },
-      responses: {
-        200: {
-          description: 'vNext workflow transitions in real-time',
-        },
-      },
-    }),
-    createAndWatchVNextWorkflowRunHandler,
   );
 
   app.post(

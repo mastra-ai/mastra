@@ -115,49 +115,6 @@ export class VNextWorkflow extends BaseResource {
   }
 
   /**
-   * Creates and watches a new vNext workflow run
-   * @param onRecord - Callback that takes the watch result
-   * @param params - Optional object containing the optional runId, inputData and runtimeContext
-   * @returns AsyncGenerator that yields parsed records from the vNext workflow watch stream after creating and starting a run
-   */
-  async createAndWatchRun(
-    onRecord: (record: VNextWorkflowWatchResult) => void,
-    params?: { runId?: string; inputData?: Record<string, any>; runtimeContext?: RuntimeContext },
-  ) {
-    const searchParams = new URLSearchParams();
-
-    if (!!params?.runId) {
-      searchParams.set('runId', params.runId);
-    }
-
-    const response: Response = await this.request(
-      `/api/workflows/v-next/${this.workflowId}/create-and-watch-run?${searchParams.toString()}`,
-      {
-        method: 'POST',
-        stream: true,
-        body: params
-          ? {
-              inputData: params?.inputData,
-              runtimeContext: params?.runtimeContext,
-            }
-          : undefined,
-      },
-    );
-
-    if (!response.ok) {
-      throw new Error(`Failed to watch vNext workflow: ${response.statusText}`);
-    }
-
-    if (!response.body) {
-      throw new Error('Response body is null');
-    }
-
-    for await (const record of this.streamProcessor(response.body)) {
-      onRecord(record);
-    }
-  }
-
-  /**
    * Starts a vNext workflow run synchronously without waiting for the workflow to complete
    * @param params - Object containing the runId, inputData and runtimeContext
    * @returns Promise containing success message
@@ -198,52 +155,6 @@ export class VNextWorkflow extends BaseResource {
         runtimeContext,
       },
     });
-  }
-
-  /**
-   * Resumes and watches a suspended vNext workflow step synchronously without waiting for the vNext workflow to complete
-   * @param params - Object containing the runId, step, resumeData and runtimeContext
-   * @param onRecord - Callback that takes the watch result
-   * @returns AsyncGenerator that yields parsed records from the vNext workflow watch stream after resuming the run
-   */
-  async resumeAndWatch(
-    {
-      step,
-      runId,
-      resumeData,
-      runtimeContext,
-    }: {
-      step: string | string[];
-      runId: string;
-      resumeData?: Record<string, any>;
-      runtimeContext?: RuntimeContext;
-    },
-    onRecord: (record: VNextWorkflowWatchResult) => void,
-  ) {
-    const response: Response = await this.request(
-      `/api/workflows/v-next/${this.workflowId}/resume-and-watch?runId=${runId}`,
-      {
-        method: 'POST',
-        stream: true,
-        body: {
-          step,
-          resumeData,
-          runtimeContext,
-        },
-      },
-    );
-
-    if (!response.ok) {
-      throw new Error(`Failed to watch vNext workflow: ${response.statusText}`);
-    }
-
-    if (!response.body) {
-      throw new Error('Response body is null');
-    }
-
-    for await (const record of this.streamProcessor(response.body)) {
-      onRecord(record);
-    }
   }
 
   /**
