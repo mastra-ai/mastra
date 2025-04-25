@@ -4,4 +4,4 @@
 'create-mastra': patch
 ---
 
-Fix triggerSchema default not showing in playground ui
+Fix triggerSchema default not showing in workflow ui
