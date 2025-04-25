@@ -1,8 +1,6 @@
 import { randomUUID } from 'crypto';
 import { readFile } from 'fs/promises';
-import { dirname } from 'path';
 import { join } from 'path/posix';
-import { fileURLToPath, pathToFileURL } from 'url';
 import { serve } from '@hono/node-server';
 import { serveStatic } from '@hono/node-server/serve-static';
 import { swaggerUI } from '@hono/swagger-ui';
