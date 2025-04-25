@@ -1003,13 +1003,13 @@ export class ClickhouseStore extends MastraStorage {
       const values: Record<string, any> = {};
 
       if (runId) {
-        conditions.push(`run_id = {runId:String}`);
-        values.runId = runId;
+        conditions.push(`run_id = {var_runId:String}`);
+        values.var_runId = runId;
       }
 
       if (workflowName) {
-        conditions.push(`workflow_name = {workflowName:String}`);
-        values.workflowName = workflowName;
+        conditions.push(`workflow_name = {var_workflow_name:String}`);
+        values.var_workflow_name = workflowName;
       }
 
       const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
@@ -1028,14 +1028,14 @@ export class ClickhouseStore extends MastraStorage {
           ${whereClause}
         `,
         query_params: values,
+        format: 'JSONEachRow',
       });
 
       const resultJson = await result.json();
-      if (!resultJson) {
+      if (!Array.isArray(resultJson) || resultJson.length === 0) {
         return null;
       }
-
-      return this.parseWorkflowRun(resultJson);
+      return this.parseWorkflowRun(resultJson[0]);
     } catch (error) {
       console.error('Error getting workflow run by ID:', error);
       throw error;

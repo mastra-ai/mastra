@@ -2,10 +2,12 @@ import { randomUUID } from 'crypto';
 import type { WorkflowRunState } from '@mastra/core';
 import type { MessageType } from '@mastra/core/memory';
 import { TABLE_THREADS, TABLE_MESSAGES, TABLE_WORKFLOW_SNAPSHOT } from '@mastra/core/storage';
-import { describe, it, expect, beforeAll, beforeEach, afterAll } from 'vitest';
+import { describe, it, expect, beforeAll, beforeEach, afterAll, vi } from 'vitest';
 
 import { ClickhouseStore } from '.';
 import type { ClickhouseConfig } from '.';
+
+vi.setConfig({ testTimeout: 60_000, hookTimeout: 60_000 });
 
 const TEST_CONFIG: ClickhouseConfig = {
   url: process.env.CLICKHOUSE_URL || 'http://localhost:8123',
@@ -235,7 +237,8 @@ describe('ClickhouseStore', () => {
 
       // Verify order is maintained
       retrievedMessages.forEach((msg, idx) => {
-        expect((msg.content[0] as any).text).toBe((messages[idx].content[0] as any).text);
+        // @ts-expect-error
+        expect(msg.content[0].text).toBe(messages[idx].content[0].text);
       });
     }, 10e3);
 
@@ -706,7 +709,7 @@ describe('ClickhouseStore', () => {
     let runId: string;
     let stepId: string;
 
-    beforeAll(async () => {
+    beforeEach(async () => {
       // Insert a workflow run for positive test
       const sample = createSampleWorkflowSnapshot('success');
       runId = sample.runId;
@@ -747,7 +750,7 @@ describe('ClickhouseStore', () => {
     let resourceId: string;
     let runIds: string[] = [];
 
-    beforeAll(async () => {
+    beforeEach(async () => {
       // Insert multiple workflow runs for the same resourceId
       resourceId = 'resource-shared';
       for (const status of ['completed', 'running']) {

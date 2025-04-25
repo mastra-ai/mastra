@@ -10,7 +10,14 @@ import {
   TABLE_WORKFLOW_SNAPSHOT,
   TABLE_EVALS,
 } from '@mastra/core/storage';
-import type { EvalRow, StorageColumn, StorageGetMessagesArg, TABLE_NAMES } from '@mastra/core/storage';
+import type {
+  EvalRow,
+  StorageColumn,
+  StorageGetMessagesArg,
+  TABLE_NAMES,
+  WorkflowRun,
+  WorkflowRuns,
+} from '@mastra/core/storage';
 import type { WorkflowRunState } from '@mastra/core/workflows';
 
 function safelyParseJSON(jsonString: string): any {
@@ -544,80 +551,145 @@ export class LibSQLStore extends MastraStorage {
     toDate,
     limit,
     offset,
+    resourceId,
   }: {
     workflowName?: string;
     fromDate?: Date;
     toDate?: Date;
     limit?: number;
     offset?: number;
-  } = {}): Promise<{
-    runs: Array<{
-      workflowName: string;
-      runId: string;
-      snapshot: WorkflowRunState | string;
-      createdAt: Date;
-      updatedAt: Date;
-    }>;
-    total: number;
-  }> {
+    resourceId?: string;
+  } = {}): Promise<WorkflowRuns> {
+    try {
+      const conditions: string[] = [];
+      const args: InValue[] = [];
+
+      if (workflowName) {
+        conditions.push('workflow_name = ?');
+        args.push(workflowName);
+      }
+
+      if (fromDate) {
+        conditions.push('createdAt >= ?');
+        args.push(fromDate.toISOString());
+      }
+
+      if (toDate) {
+        conditions.push('createdAt <= ?');
+        args.push(toDate.toISOString());
+      }
+
+      if (resourceId) {
+        conditions.push('resourceId = ?');
+        args.push(resourceId);
+      }
+
+      const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+
+      let total = 0;
+      // Only get total count when using pagination
+      if (limit !== undefined && offset !== undefined) {
+        const countResult = await this.client.execute({
+          sql: `SELECT COUNT(*) as count FROM ${TABLE_WORKFLOW_SNAPSHOT} ${whereClause}`,
+          args,
+        });
+        total = Number(countResult.rows?.[0]?.count ?? 0);
+      }
+
+      // Get results
+      const result = await this.client.execute({
+        sql: `SELECT * FROM ${TABLE_WORKFLOW_SNAPSHOT} ${whereClause} ORDER BY createdAt DESC${limit !== undefined && offset !== undefined ? ` LIMIT ? OFFSET ?` : ''}`,
+        args: limit !== undefined && offset !== undefined ? [...args, limit, offset] : args,
+      });
+
+      const runs = (result.rows || []).map(row => {
+        let parsedSnapshot: WorkflowRunState | string = row.snapshot as string;
+        if (typeof parsedSnapshot === 'string') {
+          try {
+            parsedSnapshot = JSON.parse(row.snapshot as string) as WorkflowRunState;
+          } catch (e) {
+            // If parsing fails, return the raw snapshot string
+            console.warn(`Failed to parse snapshot for workflow ${row.workflow_name}: ${e}`);
+          }
+        }
+
+        return {
+          workflowName: row.workflow_name as string,
+          runId: row.run_id as string,
+          snapshot: parsedSnapshot,
+          createdAt: new Date(row.createdAt as string),
+          updatedAt: new Date(row.updatedAt as string),
+        };
+      });
+
+      // Use runs.length as total when not paginating
+      return { runs, total: total || runs.length };
+    } catch (error) {
+      console.error('Error getting workflow runs:', error);
+      throw error;
+    }
+  }
+
+  async getWorkflowRunByID({
+    runId,
+    workflowName,
+  }: {
+    runId: string;
+    workflowName?: string;
+  }): Promise<WorkflowRun | null> {
     const conditions: string[] = [];
-    const args: InValue[] = [];
+    const args: (string | number)[] = [];
+
+    if (runId) {
+      conditions.push('run_id = ?');
+      args.push(runId);
+    }
 
     if (workflowName) {
       conditions.push('workflow_name = ?');
       args.push(workflowName);
     }
 
-    if (fromDate) {
-      conditions.push('createdAt >= ?');
-      args.push(fromDate.toISOString());
-    }
-
-    if (toDate) {
-      conditions.push('createdAt <= ?');
-      args.push(toDate.toISOString());
-    }
-
     const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
 
-    let total = 0;
-    // Only get total count when using pagination
-    if (limit !== undefined && offset !== undefined) {
-      const countResult = await this.client.execute({
-        sql: `SELECT COUNT(*) as count FROM ${TABLE_WORKFLOW_SNAPSHOT} ${whereClause}`,
-        args,
-      });
-      total = Number(countResult.rows?.[0]?.count ?? 0);
+    const result = await this.client.execute({
+      sql: `SELECT * FROM ${TABLE_WORKFLOW_SNAPSHOT} ${whereClause}`,
+      args,
+    });
+
+    if (!result.rows?.[0]) {
+      return null;
     }
 
-    // Get results
-    const result = await this.client.execute({
-      sql: `SELECT * FROM ${TABLE_WORKFLOW_SNAPSHOT} ${whereClause} ORDER BY createdAt DESC${limit !== undefined && offset !== undefined ? ` LIMIT ? OFFSET ?` : ''}`,
-      args: limit !== undefined && offset !== undefined ? [...args, limit, offset] : args,
-    });
+    return this.parseWorkflowRun(result.rows[0]);
+  }
 
-    const runs = (result.rows || []).map(row => {
-      let parsedSnapshot: WorkflowRunState | string = row.snapshot as string;
-      if (typeof parsedSnapshot === 'string') {
-        try {
-          parsedSnapshot = JSON.parse(row.snapshot as string) as WorkflowRunState;
-        } catch (e) {
-          // If parsing fails, return the raw snapshot string
-          console.warn(`Failed to parse snapshot for workflow ${row.workflow_name}: ${e}`);
-        }
-      }
+  async getWorkflowRunByResourceId({
+    resourceId,
+    workflowName,
+  }: {
+    resourceId: string;
+    workflowName?: string;
+  }): Promise<WorkflowRuns> {
+    try {
+      return this.getWorkflowRuns({
+        resourceId,
+        workflowName,
+      });
+    } catch (error) {
+      console.error('Error getting workflow runs by resource ID:', error);
+      throw error;
+    }
+  }
 
-      return {
-        workflowName: row.workflow_name as string,
-        runId: row.run_id as string,
-        snapshot: parsedSnapshot,
-        createdAt: new Date(row.createdAt as string),
-        updatedAt: new Date(row.updatedAt as string),
-      };
-    });
-
-    // Use runs.length as total when not paginating
-    return { runs, total: total || runs.length };
+  private parseWorkflowRun(row: Record<string, any>): WorkflowRun {
+    return {
+      workflowName: row.workflow_name as string,
+      runId: row.run_id as string,
+      snapshot: row.snapshot as string,
+      createdAt: new Date(row.created_at as string),
+      updatedAt: new Date(row.updated_at as string),
+    };
   }
 }
 

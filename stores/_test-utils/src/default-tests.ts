@@ -2,7 +2,7 @@ import { randomUUID } from 'crypto';
 import { describe, it, expect, beforeAll, beforeEach, afterAll } from 'vitest';
 import type { MetricResult } from '@mastra/core/eval';
 import type { WorkflowRunState } from '@mastra/core/workflows';
-import type { MastraStorage } from '../base';
+import type { MastraStorage } from '@mastra/core/storage';
 import { TABLE_WORKFLOW_SNAPSHOT, TABLE_EVALS, TABLE_MESSAGES, TABLE_THREADS } from '@mastra/core/storage';
 
 export function createTestSuite(storage: MastraStorage) {
@@ -55,10 +55,18 @@ export function createTestSuite(storage: MastraStorage) {
           attempts: {},
         },
         activePaths: [],
+        suspendedPaths: {},
         runId,
         timestamp: timestamp.getTime(),
       } as WorkflowRunState;
       return { snapshot, runId, stepId };
+    };
+
+    const checkWorkflowSnapshot = (snapshot: WorkflowRunState | string, stepId: string, status: string) => {
+      if (typeof snapshot === 'string') {
+        throw new Error('Expected WorkflowRunState, got string');
+      }
+      expect(snapshot.context?.steps[stepId]?.status).toBe(status);
     };
 
     beforeAll(async () => {
@@ -576,6 +584,106 @@ export function createTestSuite(storage: MastraStorage) {
         expect(page2.runs[0]!.workflowName).toBe(workflowName1);
         const snapshot = page2.runs[0]!.snapshot as WorkflowRunState;
         expect(snapshot.context?.steps[stepId1]?.status).toBe('completed');
+      });
+    });
+    describe('getWorkflowRunByID', () => {
+      const workflowName = 'workflow-id-test';
+      let runId: string;
+      let stepId: string;
+
+      beforeAll(async () => {
+        // Insert a workflow run for positive test
+        const sample = createSampleWorkflowSnapshot('success');
+        runId = sample.runId;
+        stepId = sample.stepId;
+        await storage.insert({
+          tableName: TABLE_WORKFLOW_SNAPSHOT,
+          record: {
+            workflow_name: workflowName,
+            run_id: runId,
+            resourceId: 'resource-abc',
+            snapshot: sample.snapshot,
+            createdAt: new Date(),
+            updatedAt: new Date(),
+          },
+        });
+      });
+
+      it('should retrieve a workflow run by ID', async () => {
+        const found = await storage.getWorkflowRunByID({
+          runId,
+          workflowName,
+        });
+        expect(found).not.toBeNull();
+        expect(found?.runId).toBe(runId);
+        checkWorkflowSnapshot(found?.snapshot!, stepId, 'success');
+      });
+
+      it('should return null for non-existent workflow run ID', async () => {
+        const notFound = await storage.getWorkflowRunByID({
+          runId: 'non-existent-id',
+          workflowName,
+        });
+        expect(notFound).toBeNull();
+      });
+    });
+    describe('getWorkflowRunsByResourceID', () => {
+      const workflowName = 'workflow-id-test';
+      let resourceId: string;
+      let runIds: string[] = [];
+
+      beforeAll(async () => {
+        // Insert multiple workflow runs for the same resourceId
+        resourceId = 'resource-shared';
+        for (const status of ['success', 'failed']) {
+          const sample = createSampleWorkflowSnapshot(status as WorkflowRunState['context']['steps'][string]['status']);
+          runIds.push(sample.runId);
+          await storage.insert({
+            tableName: TABLE_WORKFLOW_SNAPSHOT,
+            record: {
+              workflow_name: workflowName,
+              run_id: sample.runId,
+              resourceId,
+              snapshot: sample.snapshot,
+              createdAt: new Date(),
+              updatedAt: new Date(),
+            },
+          });
+        }
+        // Insert a run with a different resourceId
+        const other = createSampleWorkflowSnapshot('waiting');
+        await storage.insert({
+          tableName: TABLE_WORKFLOW_SNAPSHOT,
+          record: {
+            workflow_name: workflowName,
+            run_id: other.runId,
+            resourceId: 'resource-other',
+            snapshot: other.snapshot,
+            createdAt: new Date(),
+            updatedAt: new Date(),
+          },
+        });
+      });
+
+      it('should retrieve all workflow runs by resourceId', async () => {
+        const { runs } = await storage.getWorkflowRunByResourceId({
+          resourceId,
+          workflowName,
+        });
+        expect(Array.isArray(runs)).toBe(true);
+        expect(runs.length).toBeGreaterThanOrEqual(2);
+        for (const run of runs) {
+          expect(run.resourceId).toBe(resourceId);
+        }
+      });
+
+      it('should return an empty array if no workflow runs match resourceId', async () => {
+        const { runs } = await storage.getWorkflowRunByResourceId({
+          resourceId: 'non-existent-resource',
+          workflowName,
+        });
+        expect(Array.isArray(runs)).toBe(true);
+        expect(runs.length).toBe(0);
       });
     });
   });

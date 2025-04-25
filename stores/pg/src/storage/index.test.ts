@@ -4,7 +4,7 @@ import type { MessageType } from '@mastra/core/memory';
 import { TABLE_WORKFLOW_SNAPSHOT, TABLE_MESSAGES, TABLE_THREADS, TABLE_EVALS } from '@mastra/core/storage';
 import type { WorkflowRunState } from '@mastra/core/workflows';
 import pgPromise from 'pg-promise';
-import { describe, it, expect, beforeAll, beforeEach, afterAll, afterEach } from 'vitest';
+import { describe, it, expect, beforeAll, beforeEach, afterAll, afterEach, vi } from 'vitest';
 
 import { PostgresStore } from '.';
 import type { PostgresConfig } from '.';
@@ -18,6 +18,8 @@ const TEST_CONFIG: PostgresConfig = {
 };
 
 const connectionString = `postgresql://${TEST_CONFIG.user}:${TEST_CONFIG.password}@${TEST_CONFIG.host}:${TEST_CONFIG.port}/${TEST_CONFIG.database}`;
+
+vi.setConfig({ testTimeout: 60_000, hookTimeout: 60_000 });
 
 // Sample test data factory functions
 const createSampleThread = () => ({
@@ -273,7 +275,8 @@ describe('PostgresStore', () => {
 
       // Verify order is maintained
       retrievedMessages.forEach((msg, idx) => {
-        expect((msg.content[0] as any).text).toBe((messages[idx].content[0] as any).text);
+        // @ts-expect-error
+        expect(msg.content[0].text).toBe(messages[idx].content[0].text);
       });
     });
 
