@@ -1,6 +1,5 @@
 import { randomUUID } from 'crypto';
 import EventEmitter from 'events';
-import { uniqueId } from 'lodash-es';
 import { z } from 'zod';
 import type { Mastra } from '../..';
 import type { MastraPrimitives } from '../../action';
@@ -458,7 +457,7 @@ export class NewWorkflow<
       type: 'conditional',
       steps: steps.map(([_cond, step]) => ({ type: 'step', step: step as any })),
       conditions: steps.map(([cond]) => cond),
-      serializedConditions: steps.map(([cond]) => ({ id: uniqueId('condition'), fn: cond.toString() })),
+      serializedConditions: steps.map(([cond, _step]) => ({ id: `${_step.id}-condition`, fn: cond.toString() })),
     });
     steps.forEach(([_, step]) => {
       this.steps[step.id] = step;
@@ -495,7 +494,7 @@ export class NewWorkflow<
       step: step as any,
       condition,
       loopType: 'dowhile',
-      serializedCondition: { id: uniqueId('condition'), fn: condition.toString() },
+      serializedCondition: { id: `${step.id}-condition`, fn: condition.toString() },
     });
     this.steps[step.id] = step;
     return this as unknown as NewWorkflow<TSteps, TWorkflowId, TInput, TOutput, TSchemaOut>;
@@ -510,7 +509,7 @@ export class NewWorkflow<
       step: step as any,
       condition,
       loopType: 'dountil',
-      serializedCondition: { id: uniqueId('condition'), fn: condition.toString() },
+      serializedCondition: { id: `${step.id}-condition`, fn: condition.toString() },
     });
     this.steps[step.id] = step;
     return this as unknown as NewWorkflow<TSteps, TWorkflowId, TInput, TOutput, TSchemaOut>;
