@@ -1861,7 +1861,7 @@ describe('Workflow', () => {
 
       const executionResult = await run.start({ inputData: {} });
 
-      expect(onTransition).toHaveBeenCalledTimes(3);
+      expect(onTransition).toHaveBeenCalledTimes(5);
       expect(onTransition).toHaveBeenCalledWith(
         expect.objectContaining({
           type: 'watch',
@@ -1927,7 +1927,7 @@ describe('Workflow', () => {
 
       const executionResult = await run.start({ inputData: {} });
 
-      expect(onTransition).toHaveBeenCalledTimes(3);
+      expect(onTransition).toHaveBeenCalledTimes(5);
       expect(onTransition).toHaveBeenCalledWith(
         expect.objectContaining({
           type: 'watch',
@@ -1998,8 +1998,8 @@ describe('Workflow', () => {
 
       await run.start({ inputData: {} });
 
-      expect(onTransition).toHaveBeenCalledTimes(3);
-      expect(onTransition2).toHaveBeenCalledTimes(3);
+      expect(onTransition).toHaveBeenCalledTimes(5);
+      expect(onTransition2).toHaveBeenCalledTimes(5);
 
       const run2 = workflow.createRun();
 
@@ -2007,8 +2007,8 @@ describe('Workflow', () => {
 
       await run2.start({ inputData: {} });
 
-      expect(onTransition).toHaveBeenCalledTimes(3);
-      expect(onTransition2).toHaveBeenCalledTimes(6);
+      expect(onTransition).toHaveBeenCalledTimes(5);
+      expect(onTransition2).toHaveBeenCalledTimes(10);
 
       const run3 = workflow.createRun();
 
@@ -2016,8 +2016,8 @@ describe('Workflow', () => {
 
       await run3.start({ inputData: {} });
 
-      expect(onTransition).toHaveBeenCalledTimes(6);
-      expect(onTransition2).toHaveBeenCalledTimes(6);
+      expect(onTransition).toHaveBeenCalledTimes(10);
+      expect(onTransition2).toHaveBeenCalledTimes(10);
     });
   });
 

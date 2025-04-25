@@ -622,7 +622,6 @@ export class DefaultExecutionEngine extends ExecutionEngine {
             steps: {
               ...stepResults,
               [entry.step.id]: {
-                id: entry.step.id,
                 status: 'running',
               },
             },
