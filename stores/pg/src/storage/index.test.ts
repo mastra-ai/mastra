@@ -659,7 +659,7 @@ describe('PostgresStore', () => {
     let runId: string;
     let stepId: string;
 
-    beforeAll(async () => {
+    beforeEach(async () => {
       // Insert a workflow run for positive test
       const sample = createSampleWorkflowSnapshot('success');
       runId = sample.runId;
@@ -695,12 +695,12 @@ describe('PostgresStore', () => {
       expect(notFound).toBeNull();
     });
   });
-  describe('getWorkflowRunsByResourceID', () => {
+  describe.only('getWorkflowRunsByResourceID', () => {
     const workflowName = 'workflow-id-test';
     let resourceId: string;
     let runIds: string[] = [];
 
-    beforeAll(async () => {
+    beforeEach(async () => {
       // Insert multiple workflow runs for the same resourceId
       resourceId = 'resource-shared';
       for (const status of ['success', 'failed']) {

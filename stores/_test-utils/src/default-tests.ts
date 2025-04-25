@@ -591,7 +591,7 @@ export function createTestSuite(storage: MastraStorage) {
       let runId: string;
       let stepId: string;
 
-      beforeAll(async () => {
+      beforeEach(async () => {
         // Insert a workflow run for positive test
         const sample = createSampleWorkflowSnapshot('success');
         runId = sample.runId;
@@ -632,7 +632,7 @@ export function createTestSuite(storage: MastraStorage) {
       let resourceId: string;
       let runIds: string[] = [];
 
-      beforeAll(async () => {
+      beforeEach(async () => {
         // Insert multiple workflow runs for the same resourceId
         resourceId = 'resource-shared';
         for (const status of ['success', 'failed']) {

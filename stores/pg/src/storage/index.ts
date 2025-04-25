@@ -803,7 +803,7 @@ export class PostgresStore extends MastraStorage {
       }
 
       if (resourceId) {
-        conditions.push(`resourceId = $${paramIndex}`);
+        conditions.push(`"resourceId" = $${paramIndex}`);
         values.push(resourceId);
         paramIndex++;
       }
