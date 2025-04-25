@@ -143,11 +143,38 @@
     "@mastra/voice-openai-realtime": "0.2.0",
     "@mastra/voice-playai": "0.1.14",
     "@mastra/voice-sarvam": "0.1.9",
-    "@mastra/voice-speechify": "0.1.14"
+    "@mastra/voice-speechify": "0.1.14",
+    "@mastra/cloud": "0.0.0-alpha.0",
+    "@internal/storage-test-utils": "0.0.0",
+    "@mastra/libsql": "0.0.1-alpha.0",
+    "@mastra/mongodb": "0.0.1"
   },
   "changesets": [
-    "cool-papers-check",
+    "better-trams-press",
+    "clever-baboons-dress",
+    "cool-berries-report",
+    "cuddly-trains-heal",
+    "curly-insects-follow",
     "eight-ways-attack",
-    "fast-beans-drive"
+    "fast-beans-drive",
+    "fast-ducks-kneel",
+    "five-gifts-laugh",
+    "forty-ears-look",
+    "grumpy-toes-juggle",
+    "happy-chicken-wave",
+    "happy-peas-act",
+    "icy-buckets-sniff",
+    "itchy-hounds-wave",
+    "lucky-windows-shop",
+    "many-frogs-march",
+    "nice-keys-fly",
+    "odd-monkeys-shout",
+    "petite-hats-roll",
+    "ready-spies-find",
+    "sour-baboons-lie",
+    "ten-hats-clean",
+    "tiny-jeans-burn",
+    "two-pianos-study",
+    "wet-candles-reply"
   ]
 }

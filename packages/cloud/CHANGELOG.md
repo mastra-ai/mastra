@@ -1,10 +1,10 @@
-# @mastra/libsql
+# @mastra/cloud
 
-## 0.0.1-alpha.1
+## 0.0.0-alpha.1
 
 ### Patch Changes
 
-- 2d4001d: Add new @msstra/libsql package and use it in create-mastra
+- 0d0a947: feat: add mastra cloud telemtry exporter
 - Updated dependencies [20275d4]
 - Updated dependencies [7d1892c]
 - Updated dependencies [a90a082]
