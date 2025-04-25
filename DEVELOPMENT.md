@@ -106,12 +106,13 @@ Mastra uses Vitest for testing. To run tests:
      ```
    - Specific package tests:
      ```bash
-     pnpm test:core        # Core package tests
-     pnpm test:cli         # CLI tests
-     pnpm test:rag         # RAG tests
-     pnpm test:memory      # Memory tests
-     pnpm test:evals       # Evals tests
-     pnpm test:clients     # Client SDK tests
+     pnpm test:core             # Core package tests
+     pnpm test:cli              # CLI tests
+     pnpm test:rag              # RAG tests
+     pnpm test:memory           # Memory tests
+     pnpm test:evals            # Evals tests
+     pnpm test:clients          # Client SDK tests
+     pnpm test:combined-stores  # Combined stores tests
      ```
    - Watch mode (for development):
      ```bash
