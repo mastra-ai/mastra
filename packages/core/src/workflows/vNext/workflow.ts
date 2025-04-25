@@ -273,6 +273,8 @@ export class NewWorkflow<
   };
   #mastra?: Mastra;
 
+  #runs: Map<string, Run<TSteps, TInput, TOutput>> = new Map();
+
   constructor({
     mastra,
     id,
@@ -300,6 +302,8 @@ export class NewWorkflow<
     } else {
       this.executionEngine = executionEngine;
     }
+
+    this.#runs = new Map();
   }
 
   __registerMastra(mastra: Mastra) {
@@ -539,14 +543,21 @@ export class NewWorkflow<
     const runIdToUse = options?.runId || randomUUID();
 
     // Return a new Run instance with object parameters
-    return new Run({
-      workflowId: this.id,
-      runId: runIdToUse,
-      executionEngine: this.executionEngine,
-      executionGraph: this.executionGraph,
-      mastra: this.#mastra,
-      retryConfig: this.retryConfig,
-    });
+    const run =
+      this.#runs.get(runIdToUse) ??
+      new Run({
+        workflowId: this.id,
+        runId: runIdToUse,
+        executionEngine: this.executionEngine,
+        executionGraph: this.executionGraph,
+        mastra: this.#mastra,
+        retryConfig: this.retryConfig,
+        cleanup: () => this.#runs.delete(runIdToUse),
+      });
+
+    this.#runs.set(runIdToUse, run);
+
+    return run;
   }
 
   async execute({
@@ -659,6 +670,8 @@ export class Run<
    */
   #mastra?: Mastra;
 
+  protected cleanup?: () => void;
+
   protected retryConfig?: {
     attempts?: number;
     delay?: number;
@@ -674,6 +687,7 @@ export class Run<
       attempts?: number;
       delay?: number;
     };
+    cleanup?: () => void;
   }) {
     this.workflowId = params.workflowId;
     this.runId = params.runId;
@@ -682,6 +696,7 @@ export class Run<
     this.#mastra = params.mastra;
     this.emitter = new EventEmitter();
     this.retryConfig = params.retryConfig;
+    this.cleanup = params.cleanup;
   }
 
   /**
@@ -696,7 +711,7 @@ export class Run<
     inputData?: z.infer<TInput>;
     runtimeContext?: RuntimeContext;
   }): Promise<WorkflowResult<TOutput, TSteps>> {
-    return this.executionEngine.execute<z.infer<TInput>, WorkflowResult<TOutput, TSteps>>({
+    const result = await this.executionEngine.execute<z.infer<TInput>, WorkflowResult<TOutput, TSteps>>({
       workflowId: this.workflowId,
       runId: this.runId,
       graph: this.executionGraph,
@@ -705,6 +720,10 @@ export class Run<
       retryConfig: this.retryConfig,
       runtimeContext: runtimeContext ?? new RuntimeContext(),
     });
+
+    this.cleanup?.();
+
+    return result;
   }
 
   watch(cb: (event: WatchEvent) => void): () => void {
