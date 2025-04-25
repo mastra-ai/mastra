@@ -1,6 +1,6 @@
 import { createOpenAI } from '@ai-sdk/openai';
-import { TextNode } from '@llamaindex/core/schema';
 import { describe, it, expect, vi } from 'vitest';
+import { TextNode } from '../schema';
 import { SummaryExtractor } from './summary';
 
 const openai = createOpenAI({

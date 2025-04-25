@@ -1,13 +1,6 @@
-import {
-  ActionBarPrimitive,
-  BranchPickerPrimitive,
-  MessagePrimitive,
-  ToolCallContentPartComponent,
-} from '@assistant-ui/react';
-import { CheckIcon, ChevronLeftIcon, ChevronRightIcon, CopyIcon } from 'lucide-react';
+import { ActionBarPrimitive, MessagePrimitive, ToolCallContentPartComponent, useMessage } from '@assistant-ui/react';
+import { CheckIcon, CopyIcon } from 'lucide-react';
 import { FC } from 'react';
-
-import { cn } from '@/lib/utils';
 
 import { MarkdownText } from './markdown-text';
 import { TooltipIconButton } from './tooltip-icon-button';
@@ -16,41 +9,19 @@ import { ToolFallback } from '@/components/assistant-ui/tool-fallback';
 export const AssistantMessage: FC<{ ToolFallback?: ToolCallContentPartComponent }> = ({
   ToolFallback: ToolFallbackCustom,
 }) => {
+  const data = useMessage();
+  const isSolelyToolCall = data.content.length === 1 && data.content[0].type === 'tool-call';
+
   return (
-    <MessagePrimitive.Root className="grid group grid-cols-[auto_auto_1fr] grid-rows-[auto_1fr] max-w-[var(--thread-max-width)] relative w-full">
-      <div className="text-foreground max-w-[calc(var(--thread-max-width)*0.8)] sm:max-w-[70%] break-words leading-7 col-span-2 py-2 col-start-2 row-start-1">
+    <MessagePrimitive.Root className="max-w-full">
+      <div className="text-icon6 text-ui-lg leading-ui-lg">
         <MessagePrimitive.Content
           components={{ Text: MarkdownText, tools: { Fallback: ToolFallbackCustom || ToolFallback } }}
         />
       </div>
 
-      <AssistantActionBar />
-      <BranchPicker className="col-start-2 row-start-2 -ml-2 mr-2" />
+      <div className="h-6 pt-1">{!isSolelyToolCall && <AssistantActionBar />}</div>
     </MessagePrimitive.Root>
-  );
-};
-
-const BranchPicker: FC<BranchPickerPrimitive.Root.Props> = ({ className, ...rest }) => {
-  return (
-    <BranchPickerPrimitive.Root
-      hideWhenSingleBranch
-      className={cn('text-muted-foreground inline-flex items-center text-xs', className)}
-      {...rest}
-    >
-      <BranchPickerPrimitive.Previous asChild>
-        <TooltipIconButton tooltip="Previous">
-          <ChevronLeftIcon />
-        </TooltipIconButton>
-      </BranchPickerPrimitive.Previous>
-      <span className="font-medium">
-        <BranchPickerPrimitive.Number /> / <BranchPickerPrimitive.Count />
-      </span>
-      <BranchPickerPrimitive.Next asChild>
-        <TooltipIconButton tooltip="Next">
-          <ChevronRightIcon />
-        </TooltipIconButton>
-      </BranchPickerPrimitive.Next>
-    </BranchPickerPrimitive.Root>
   );
 };
 
@@ -58,9 +29,9 @@ const AssistantActionBar: FC = () => {
   return (
     <ActionBarPrimitive.Root
       hideWhenRunning
-      autohide="not-last"
+      autohide="always"
       autohideFloat="single-branch"
-      className="text-muted-foreground flex gap-1 col-start-3 row-start-2 -ml-1"
+      className="flex gap-1 items-center transition-all"
     >
       {/* <MessagePrimitive.If speaking={false}>
         <ActionBarPrimitive.Speak asChild>
@@ -77,7 +48,7 @@ const AssistantActionBar: FC = () => {
         </ActionBarPrimitive.StopSpeaking>
       </MessagePrimitive.If> */}
       <ActionBarPrimitive.Copy asChild>
-        <TooltipIconButton tooltip="Copy">
+        <TooltipIconButton tooltip="Copy" className="bg-transparent text-icon3 hover:text-icon6">
           <MessagePrimitive.If copied>
             <CheckIcon />
           </MessagePrimitive.If>

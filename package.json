@@ -35,6 +35,7 @@
     "test:watch": "vitest watch",
     "test:cli": "pnpm --filter ./packages/cli test",
     "test:core": "pnpm --filter ./packages/core test",
+    "test:mcp": "pnpm --filter ./packages/mcp test",
     "test:rag": "pnpm --filter ./packages/rag test",
     "test:clients": "pnpm --filter \"./client-sdks/*\" test",
     "test:combined-stores": "pnpm --filter \"./stores/*\" test",

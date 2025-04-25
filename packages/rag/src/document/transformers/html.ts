@@ -1,5 +1,5 @@
-import { Document } from '@llamaindex/core/schema';
 import { parse } from 'node-html-better-parser';
+import { Document } from '../schema';
 
 import { RecursiveCharacterTransformer } from './character';
 

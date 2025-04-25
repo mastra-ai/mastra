@@ -116,6 +116,10 @@ export function getResuableTests(memory: Memory) {
               topK: 1,
               messageRange: 1,
             },
+            lastMessages: 10,
+            threads: {
+              generateTitle: false,
+            },
           },
         });
 

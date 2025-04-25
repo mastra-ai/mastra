@@ -1,8 +1,8 @@
-import { PromptTemplate, defaultSummaryPrompt } from '@llamaindex/core/prompts';
-import type { SummaryPrompt } from '@llamaindex/core/prompts';
-import type { BaseNode } from '@llamaindex/core/schema';
-import { TextNode } from '@llamaindex/core/schema';
 import type { MastraLanguageModel } from '@mastra/core/agent';
+import { PromptTemplate, defaultSummaryPrompt } from '../prompts';
+import type { SummaryPrompt } from '../prompts';
+import type { BaseNode } from '../schema';
+import { TextNode } from '../schema';
 import { BaseExtractor } from './base';
 import { baseLLM, STRIP_REGEX } from './types';
 import type { SummaryExtractArgs } from './types';
@@ -21,27 +21,12 @@ type ExtractSummary = {
  * @returns Array of summary results
  */
 export class SummaryExtractor extends BaseExtractor {
-  /**
-   * MastraLanguageModel instance.
-   * @type {MastraLanguageModel}
-   */
   private llm: MastraLanguageModel;
-  /**
-   * List of summaries to extract: 'self', 'prev', 'next'
-   * @type {string[]}
-   */
   summaries: string[];
-
-  /**
-   * The prompt template to use for the summary extractor.
-   * @type {string}
-   */
   promptTemplate: SummaryPrompt;
-
   private selfSummary: boolean;
   private prevSummary: boolean;
   private nextSummary: boolean;
-
   constructor(options?: SummaryExtractArgs) {
     const summaries = options?.summaries ?? ['self'];
 
@@ -70,14 +55,14 @@ export class SummaryExtractor extends BaseExtractor {
    * @returns {Promise<string>} Summary extracted from the node.
    */
   async generateNodeSummary(node: BaseNode): Promise<string> {
-    const text = node.getContent(this.metadataMode);
+    const text = node.getContent();
     if (!text || text.trim() === '') {
       return '';
     }
     if (this.isTextNodeOnly && !(node instanceof TextNode)) {
       return '';
     }
-    const context = node.getContent(this.metadataMode);
+    const context = node.getContent();
 
     const prompt = this.promptTemplate.format({
       context,

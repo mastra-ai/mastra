@@ -1,8 +1,8 @@
-import { PromptTemplate, defaultQuestionExtractPrompt } from '@llamaindex/core/prompts';
-import type { QuestionExtractPrompt } from '@llamaindex/core/prompts';
-import type { BaseNode } from '@llamaindex/core/schema';
-import { TextNode } from '@llamaindex/core/schema';
 import type { MastraLanguageModel } from '@mastra/core/agent';
+import { PromptTemplate, defaultQuestionExtractPrompt } from '../prompts';
+import type { QuestionExtractPrompt } from '../prompts';
+import type { BaseNode } from '../schema';
+import { TextNode } from '../schema';
 import { BaseExtractor } from './base';
 import { baseLLM, STRIP_REGEX } from './types';
 import type { QuestionAnswerExtractArgs } from './types';
@@ -18,30 +18,9 @@ type ExtractQuestion = {
  * Extract questions from a list of nodes.
  */
 export class QuestionsAnsweredExtractor extends BaseExtractor {
-  /**
-   * MastraLanguageModel instance.
-   * @type {MastraLanguageModel}
-   */
   llm: MastraLanguageModel;
-
-  /**
-   * Number of questions to generate.
-   * @type {number}
-   * @default 5
-   */
   questions: number = 5;
-
-  /**
-   * The prompt template to use for the question extractor.
-   * @type {string}
-   */
   promptTemplate: QuestionExtractPrompt;
-
-  /**
-   * Wheter to use metadata for embeddings only
-   * @type {boolean}
-   * @default false
-   */
   embeddingOnly: boolean = false;
 
   /**
@@ -75,7 +54,7 @@ export class QuestionsAnsweredExtractor extends BaseExtractor {
    * @returns {Promise<Array<ExtractQuestion> | Array<{}>>} Questions extracted from the node.
    */
   async extractQuestionsFromNode(node: BaseNode): Promise<ExtractQuestion> {
-    const text = node.getContent(this.metadataMode);
+    const text = node.getContent();
     if (!text || text.trim() === '') {
       return { questionsThisExcerptCanAnswer: '' };
     }
@@ -83,7 +62,7 @@ export class QuestionsAnsweredExtractor extends BaseExtractor {
       return { questionsThisExcerptCanAnswer: '' };
     }
 
-    const contextStr = node.getContent(this.metadataMode);
+    const contextStr = node.getContent();
 
     const prompt = this.promptTemplate.format({
       context: contextStr,

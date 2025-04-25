@@ -1,12 +1,8 @@
-import {
-  defaultTitleCombinePromptTemplate,
-  defaultTitleExtractorPromptTemplate,
-  PromptTemplate,
-} from '@llamaindex/core/prompts';
-import type { TitleCombinePrompt, TitleExtractorPrompt } from '@llamaindex/core/prompts';
-import { MetadataMode, TextNode } from '@llamaindex/core/schema';
-import type { BaseNode } from '@llamaindex/core/schema';
 import type { MastraLanguageModel } from '@mastra/core/agent';
+import { defaultTitleCombinePromptTemplate, defaultTitleExtractorPromptTemplate, PromptTemplate } from '../prompts';
+import type { TitleCombinePrompt, TitleExtractorPrompt } from '../prompts';
+import { TextNode } from '../schema';
+import type { BaseNode } from '../schema';
 import { BaseExtractor } from './base';
 import { baseLLM } from './types';
 import type { TitleExtractorsArgs } from './types';
@@ -19,45 +15,12 @@ type ExtractTitle = {
  * Extract title from a list of nodes.
  */
 export class TitleExtractor extends BaseExtractor {
-  /**
-   * MastraLanguageModel instance.
-   * @type {MastraLanguageModel}
-   */
   llm: MastraLanguageModel;
-
-  /**
-   * Can work for mixture of text and non-text nodes
-   * @type {boolean}
-   * @default false
-   */
   isTextNodeOnly: boolean = false;
-
-  /**
-   * Number of nodes to extrct titles from.
-   * @type {number}
-   * @default 5
-   */
   nodes: number = 5;
-
-  /**
-   * The prompt template to use for the title extractor.
-   * @type {string}
-   */
   nodeTemplate: TitleExtractorPrompt;
-
-  /**
-   * The prompt template to merge title with..
-   * @type {string}
-   */
   combineTemplate: TitleCombinePrompt;
 
-  /**
-   * Constructor for the TitleExtractor class.
-   * @param {MastraLanguageModel} llm MastraLanguageModel instance.
-   * @param {number} nodes Number of nodes to extract titles from.
-   * @param {TitleExtractorPrompt} nodeTemplate The prompt template to use for the title extractor.
-   * @param {string} combineTemplate The prompt template to merge title with..
-   */
   constructor(options?: TitleExtractorsArgs) {
     super();
 
@@ -92,7 +55,7 @@ export class TitleExtractor extends BaseExtractor {
     const nodeIndexes: number[] = [];
 
     nodes.forEach((node, idx) => {
-      const text = node.getContent(this.metadataMode);
+      const text = node.getContent();
       if (!text || text.trim() === '') {
         results[idx] = { documentTitle: '' };
       } else {
@@ -189,7 +152,7 @@ export class TitleExtractor extends BaseExtractor {
               {
                 type: 'text',
                 text: this.nodeTemplate.format({
-                  context: node.getContent(MetadataMode.ALL),
+                  context: node.getContent(),
                 }),
               },
             ],

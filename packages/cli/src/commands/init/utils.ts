@@ -76,6 +76,7 @@ export async function writeAgentSample(llmProvider: LLMProvider, destPath: strin
   const content = `
 ${providerImport}
 import { Agent } from '@mastra/core/agent';
+import { Memory } from '@mastra/memory';
 ${addExampleTool ? `import { weatherTool } from '../tools';` : ''}
 
 export const weatherAgent = new Agent({
@@ -83,6 +84,15 @@ export const weatherAgent = new Agent({
   instructions: \`${instructions}\`,
   model: ${modelItem},
   ${addExampleTool ? 'tools: { weatherTool },' : ''}
+  memory: new Memory({
+    options: {
+      lastMessages: 10,
+      semanticRecall: false,
+      threads: {
+        generateTitle: false
+      } 
+    }
+  })
 });
     `;
   const formattedContent = await prettier.format(content, {
