@@ -19,7 +19,7 @@
 		"client"
 	],
 	"author": "",
-	"license": "ISC",
+	"license": "Elastic-2.0",
 	"workspaces": [
 		"packages/*",
 		"examples/*"

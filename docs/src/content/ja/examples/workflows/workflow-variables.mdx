@@ -1,0 +1,207 @@
+---
+title: "ワークフロー変数を使用したデータマッピング | Mastraの例"
+description: "Mastraワークフローでステップ間のデータをマッピングするためにワークフロー変数を使用する方法を学びます。"
+---
+
+# ワークフロー変数を使用したデータマッピング
+
+この例では、Mastra ワークフロー内のステップ間でデータをマッピングするためにワークフロー変数を使用する方法を示します。
+
+## ユースケース: ユーザー登録プロセス
+
+この例では、シンプルなユーザー登録ワークフローを構築します。これには以下が含まれます：
+
+1. ユーザー入力の検証
+1. ユーザーデータのフォーマット
+1. ユーザープロファイルの作成
+
+## 実装
+
+```typescript showLineNumbers filename="src/mastra/workflows/user-registration.ts" copy
+import { Step, Workflow } from "@mastra/core/workflows";
+import { z } from "zod";
+
+// Define our schemas for better type safety
+const userInputSchema = z.object({
+  email: z.string().email(),
+  name: z.string(),
+  age: z.number().min(18),
+});
+
+const validatedDataSchema = z.object({
+  isValid: z.boolean(),
+  validatedData: z.object({
+    email: z.string(),
+    name: z.string(),
+    age: z.number(),
+  }),
+});
+
+const formattedDataSchema = z.object({
+  userId: z.string(),
+  formattedData: z.object({
+    email: z.string(),
+    displayName: z.string(),
+    ageGroup: z.string(),
+  }),
+});
+
+const profileSchema = z.object({
+  profile: z.object({
+    id: z.string(),
+    email: z.string(),
+    displayName: z.string(),
+    ageGroup: z.string(),
+    createdAt: z.string(),
+  }),
+});
+
+// Define the workflow
+const registrationWorkflow = new Workflow({
+  name: "user-registration",
+  triggerSchema: userInputSchema,
+});
+
+// Step 1: Validate user input
+const validateInput = new Step({
+  id: "validateInput",
+  inputSchema: userInputSchema,
+  outputSchema: validatedDataSchema,
+  execute: async ({ context }) => {
+    const { email, name, age } = context;
+
+    // Simple validation logic
+    const isValid = email.includes('@') && name.length > 0 && age >= 18;
+
+    return {
+      isValid,
+      validatedData: {
+        email: email.toLowerCase().trim(),
+        name,
+        age,
+      },
+    };
+  },
+});
+
+// Step 2: Format user data
+const formatUserData = new Step({
+  id: "formatUserData",
+  inputSchema: z.object({
+    validatedData: z.object({
+      email: z.string(),
+      name: z.string(),
+      age: z.number(),
+    }),
+  }),
+  outputSchema: formattedDataSchema,
+  execute: async ({ context }) => {
+    const { validatedData } = context;
+
+    // Generate a simple user ID
+    const userId = `user_${Math.floor(Math.random() * 10000)}`;
+
+    // Format the data
+    const ageGroup = validatedData.age < 30 ? "young-adult" : "adult";
+
+    return {
+      userId,
+      formattedData: {
+        email: validatedData.email,
+        displayName: validatedData.name,
+        ageGroup,
+      },
+    };
+  },
+});
+
+// Step 3: Create user profile
+const createUserProfile = new Step({
+  id: "createUserProfile",
+  inputSchema: z.object({
+    userId: z.string(),
+    formattedData: z.object({
+      email: z.string(),
+      displayName: z.string(),
+      ageGroup: z.string(),
+    }),
+  }),
+  outputSchema: profileSchema,
+  execute: async ({ context }) => {
+    const { userId, formattedData } = context;
+
+    // In a real app, you would save to a database here
+
+    return {
+      profile: {
+        id: userId,
+        ...formattedData,
+        createdAt: new Date().toISOString(),
+      },
+    };
+  },
+});
+
+// Build the workflow with variable mappings
+registrationWorkflow
+  // First step gets data from the trigger
+  .step(validateInput, {
+    variables: {
+      email: { step: 'trigger', path: 'email' },
+      name: { step: 'trigger', path: 'name' },
+      age: { step: 'trigger', path: 'age' },
+    }
+  })
+  // Format user data with validated data from previous step
+  .then(formatUserData, {
+    variables: {
+      validatedData: { step: validateInput, path: 'validatedData' },
+    },
+    when: {
+      ref: { step: validateInput, path: 'isValid' },
+      query: { $eq: true },
+    },
+  })
+  // Create profile with data from the format step
+  .then(createUserProfile, {
+    variables: {
+      userId: { step: formatUserData, path: 'userId' },
+      formattedData: { step: formatUserData, path: 'formattedData' },
+    },
+  })
+  .commit();
+
+export default registrationWorkflow;
+```
+
+## この例の使用方法
+
+1. 上記のようにファイルを作成します
+2. Mastra インスタンスにワークフローを登録します
+3. ワークフローを実行します:
+
+```bash
+curl --location 'http://localhost:4111/api/workflows/user-registration/start-async' \
+     --header 'Content-Type: application/json' \
+     --data '{
+       "email": "user@example.com",
+       "name": "John Doe",
+       "age": 25
+     }'
+```
+
+## 重要なポイント
+
+この例は、ワークフロー変数に関するいくつかの重要な概念を示しています：
+
+1. **データマッピング**: 変数はデータをあるステップから別のステップへマッピングし、明確なデータフローを作成します。
+
+2. **パスアクセス**: `path` プロパティは、ステップの出力のどの部分を使用するかを指定します。
+
+3. **条件付き実行**: `when` プロパティは、前のステップの出力に基づいてステップを条件付きで実行できるようにします。
+
+4. **型の安全性**: 各ステップは、型の安全性を確保するために入力および出力スキーマを定義し、ステップ間で渡されるデータが適切に型付けされていることを保証します。
+
+5. **明示的なデータ依存性**: 入力スキーマを定義し、変数マッピングを使用することで、ステップ間のデータ依存性が明示的かつ明確になります。
+
+ワークフロー変数に関する詳細は、[ワークフロー変数のドキュメント](../../docs/workflows/variables.mdx)を参照してください。

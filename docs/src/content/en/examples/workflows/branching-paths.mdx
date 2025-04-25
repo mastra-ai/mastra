@@ -1,0 +1,220 @@
+---
+title: "Example: Branching Paths | Workflows | Mastra Docs"
+description: Example of using Mastra to create workflows with branching paths based on intermediate results.
+---
+
+import { GithubLink } from "@/components/github-link";
+
+# Branching Paths
+
+When processing data, you often need to take different actions based on intermediate results. This example shows how to create a workflow that splits into separate paths, where each path executes different steps based on the output of a previous step.
+
+## Control Flow Diagram
+
+This example shows how to create a workflow that splits into separate paths, where each path executes different steps based on the output of a previous step.
+
+Here's the control flow diagram:
+
+<img
+  src="/subscribed-chains.png"
+  alt="Diagram showing workflow with branching paths"
+/>
+
+## Creating the Steps
+
+Let's start by creating the steps and initializing the workflow.
+
+{/* prettier-ignore */}
+```ts showLineNumbers copy
+import { Step, Workflow } from "@mastra/core/workflows";
+import { z } from "zod"
+
+const stepOne = new Step({
+  id: "stepOne",
+  execute: async ({ context }) => ({
+    doubledValue: context.triggerData.inputValue * 2
+  })
+});
+
+const stepTwo = new Step({
+  id: "stepTwo",
+  execute: async ({ context }) => {
+    const stepOneResult = context.getStepResult<{ doubledValue: number }>("stepOne");
+    if (!stepOneResult) {
+      return { isDivisibleByFive: false }
+    }
+
+    return { isDivisibleByFive: stepOneResult.doubledValue % 5 === 0 }
+  }
+});
+
+
+const stepThree = new Step({
+  id: "stepThree",
+  execute: async ({ context }) =>{
+    const stepOneResult = context.getStepResult<{ doubledValue: number }>("stepOne");
+    if (!stepOneResult) {
+      return { incrementedValue: 0 }
+    }
+
+    return { incrementedValue: stepOneResult.doubledValue + 1 }
+  }
+});
+
+const stepFour = new Step({
+  id: "stepFour",
+  execute: async ({ context }) => {
+    const stepThreeResult = context.getStepResult<{ incrementedValue: number }>("stepThree");
+    if (!stepThreeResult) {
+      return { isDivisibleByThree: false }
+    }
+
+    return { isDivisibleByThree: stepThreeResult.incrementedValue % 3 === 0 }
+  }
+});
+
+// New step that depends on both branches
+const finalStep = new Step({
+  id: "finalStep",
+  execute: async ({ context }) => {
+    // Get results from both branches using getStepResult
+    const stepTwoResult = context.getStepResult<{ isDivisibleByFive: boolean }>("stepTwo");
+    const stepFourResult = context.getStepResult<{ isDivisibleByThree: boolean }>("stepFour");
+
+    const isDivisibleByFive = stepTwoResult?.isDivisibleByFive || false;
+    const isDivisibleByThree = stepFourResult?.isDivisibleByThree || false;
+
+    return {
+      summary: `The number ${context.triggerData.inputValue} when doubled ${isDivisibleByFive ? 'is' : 'is not'} divisible by 5, and when doubled and incremented ${isDivisibleByThree ? 'is' : 'is not'} divisible by 3.`,
+      isDivisibleByFive,
+      isDivisibleByThree
+    }
+  }
+});
+
+// Build the workflow
+const myWorkflow = new Workflow({
+  name: "my-workflow",
+  triggerSchema: z.object({
+    inputValue: z.number(),
+  }),
+});
+```
+
+## Branching Paths and Chaining Steps
+
+Now let's configure the workflow with branching paths and merge them using the compound `.after([])` syntax.
+
+```ts showLineNumbers copy
+// Create two parallel branches
+myWorkflow
+  // First branch
+  .step(stepOne)
+  .then(stepTwo)
+
+  // Second branch
+  .after(stepOne)
+  .step(stepThree)
+  .then(stepFour)
+
+  // Merge both branches using compound after syntax
+  .after([stepTwo, stepFour])
+  .step(finalStep)
+  .commit();
+
+const { start } = myWorkflow.createRun();
+
+const result = await start({ triggerData: { inputValue: 3 } });
+console.log(result.steps.finalStep.output.summary);
+// Output: "The number 3 when doubled is not divisible by 5, and when doubled and incremented is divisible by 3."
+```
+
+## Advanced Branching and Merging
+
+You can create more complex workflows with multiple branches and merge points:
+
+```ts showLineNumbers copy
+const complexWorkflow = new Workflow({
+  name: "complex-workflow",
+  triggerSchema: z.object({
+    inputValue: z.number(),
+  }),
+});
+
+// Create multiple branches with different merge points
+complexWorkflow
+  // Main step
+  .step(stepOne)
+
+  // First branch
+  .then(stepTwo)
+
+  // Second branch
+  .after(stepOne)
+  .step(stepThree)
+  .then(stepFour)
+
+  // Third branch (another path from stepOne)
+  .after(stepOne)
+  .step(new Step({
+    id: "alternativePath",
+    execute: async ({ context }) => {
+      const stepOneResult = context.getStepResult<{ doubledValue: number }>("stepOne");
+      return {
+        result: (stepOneResult?.doubledValue || 0) * 3
+      }
+    }
+  }))
+
+  // Merge first and second branches
+  .after([stepTwo, stepFour])
+  .step(new Step({
+    id: "partialMerge",
+    execute: async ({ context }) => {
+      const stepTwoResult = context.getStepResult<{ isDivisibleByFive: boolean }>("stepTwo");
+      const stepFourResult = context.getStepResult<{ isDivisibleByThree: boolean }>("stepFour");
+
+      return {
+        intermediateResult: "Processed first two branches",
+        branchResults: {
+          branch1: stepTwoResult?.isDivisibleByFive,
+          branch2: stepFourResult?.isDivisibleByThree
+        }
+      }
+    }
+  }))
+
+  // Final merge of all branches
+  .after(["partialMerge", "alternativePath"])
+  .step(new Step({
+    id: "finalMerge",
+    execute: async ({ context }) => {
+      const partialMergeResult = context.getStepResult<{
+        intermediateResult: string,
+        branchResults: { branch1: boolean, branch2: boolean }
+      }>("partialMerge");
+
+      const alternativePathResult = context.getStepResult<{ result: number }>("alternativePath");
+
+      return {
+        finalResult: "All branches processed",
+        combinedData: {
+          fromPartialMerge: partialMergeResult?.branchResults,
+          fromAlternativePath: alternativePathResult?.result
+        }
+      }
+    }
+  }))
+  .commit();
+```
+
+<br />
+<br />
+<hr className="dark:border-[#404040] border-gray-300" />
+<br />
+<br />
+<GithubLink
+  link={
+    "https://github.com/mastra-ai/mastra/blob/main/examples/basics/workflows/workflow-with-branching-paths"
+  }
+/>

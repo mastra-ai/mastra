@@ -1,0 +1,44 @@
+# ツールAPI
+
+ツールAPIは、Mastraプラットフォームで利用可能なツールを操作および実行するためのメソッドを提供します。
+
+## すべてのツールを取得する
+
+利用可能なすべてのツールのリストを取得します:
+
+```typescript
+const tools = await client.getTools();
+```
+
+## 特定のツールの操作
+
+特定のツールのインスタンスを取得する：
+
+```typescript
+const tool = client.getTool("tool-id");
+```
+
+## ツールメソッド
+
+### ツールの詳細を取得
+
+ツールに関する詳細情報を取得します:
+
+```typescript
+const details = await tool.details();
+```
+
+### ツールを実行
+
+特定の引数でツールを実行します:
+
+```typescript
+const result = await tool.execute({
+  args: {
+    param1: "value1",
+    param2: "value2",
+  },
+  threadId: "thread-1", // オプション: スレッドコンテキスト
+  resourceid: "resource-1", // オプション: リソース識別子
+});
+```

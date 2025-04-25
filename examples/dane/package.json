@@ -1,6 +1,6 @@
 {
   "name": "@mastra/dane",
-  "version": "0.0.12-alpha.7",
+  "version": "0.0.17-alpha.0",
   "main": "dist/index.js",
   "type": "module",
   "files": [
@@ -19,7 +19,7 @@
   },
   "keywords": [],
   "author": "",
-  "license": "ISC",
+  "license": "MIT",
   "description": "",
   "devDependencies": {
     "@types/node": "^20.17.27",
@@ -33,6 +33,7 @@
     "@libsql/client": "^0.14.0",
     "@mastra/core": "workspace:*",
     "@mastra/github": "workspace:*",
+    "@mastra/libsql": "workspace:*",
     "@mastra/mcp": "workspace:*",
     "@mastra/memory": "workspace:*",
     "@mastra/rag": "workspace:*",

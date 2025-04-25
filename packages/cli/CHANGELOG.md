@@ -1,5 +1,406 @@
 # mastra
 
+## 0.5.1-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [81fb7f6]
+  - @mastra/core@0.9.1-alpha.0
+  - @mastra/deployer@0.3.1-alpha.0
+
+## 0.5.0
+
+### Minor Changes
+
+- fe3ae4d: Remove \_\_ functions in storage and move to storage proxy to make sure init is called
+
+### Patch Changes
+
+- c489535: update --llm options for init command to list all providers
+- 7e92011: Include tools with deployment builds
+- 7184dc5: Add support to pass project path directly to create-mastra and improve tag handling
+- c821402: Fix table layout issue in the Agent Network section of the Playground.
+- 9c26508: Fixed an issue where "mastra dev" wouldn't always print out localhost:4111 logs due to new NODE_ENV fixes
+- 735ead7: Add support for process.env.development
+- 16a8648: Disable swaggerUI, playground for production builds, mastra instance server build config to enable swaggerUI, apiReqLogs, openAPI documentation for prod builds
+- bdbde72: Sync DS components with Cloud
+- Updated dependencies [b9122b0]
+- Updated dependencies [000a6d4]
+- Updated dependencies [08bb78e]
+- Updated dependencies [3527610]
+- Updated dependencies [ed2f549]
+- Updated dependencies [7e92011]
+- Updated dependencies [9ee4293]
+- Updated dependencies [03f3cd0]
+- Updated dependencies [c0f22b4]
+- Updated dependencies [71d9444]
+- Updated dependencies [157c741]
+- Updated dependencies [8a8a73b]
+- Updated dependencies [0a033fa]
+- Updated dependencies [fe3ae4d]
+- Updated dependencies [2538066]
+- Updated dependencies [9c26508]
+- Updated dependencies [63fe16a]
+- Updated dependencies [0f4eae3]
+- Updated dependencies [3f9d151]
+- Updated dependencies [735ead7]
+- Updated dependencies [16a8648]
+- Updated dependencies [6f92295]
+  - @mastra/deployer@0.3.0
+  - @mastra/core@0.9.0
+
+## 0.5.0-alpha.9
+
+### Patch Changes
+
+- c489535: update --llm options for init command to list all providers
+- c821402: Fix table layout issue in the Agent Network section of the Playground.
+- 9c26508: Fixed an issue where "mastra dev" wouldn't always print out localhost:4111 logs due to new NODE_ENV fixes
+- 16a8648: Disable swaggerUI, playground for production builds, mastra instance server build config to enable swaggerUI, apiReqLogs, openAPI documentation for prod builds
+- bdbde72: Sync DS components with Cloud
+- Updated dependencies [b9122b0]
+- Updated dependencies [000a6d4]
+- Updated dependencies [ed2f549]
+- Updated dependencies [c0f22b4]
+- Updated dependencies [0a033fa]
+- Updated dependencies [2538066]
+- Updated dependencies [9c26508]
+- Updated dependencies [0f4eae3]
+- Updated dependencies [16a8648]
+  - @mastra/deployer@0.3.0-alpha.9
+  - @mastra/core@0.9.0-alpha.8
+
+## 0.5.0-alpha.8
+
+### Patch Changes
+
+- Updated dependencies [71d9444]
+  - @mastra/core@0.9.0-alpha.7
+  - @mastra/deployer@0.3.0-alpha.8
+
+## 0.5.0-alpha.7
+
+### Patch Changes
+
+- 735ead7: Add support for process.env.development
+- Updated dependencies [157c741]
+- Updated dependencies [63fe16a]
+- Updated dependencies [735ead7]
+  - @mastra/core@0.9.0-alpha.6
+  - @mastra/deployer@0.3.0-alpha.7
+
+## 0.5.0-alpha.6
+
+### Patch Changes
+
+- Updated dependencies [08bb78e]
+- Updated dependencies [3f9d151]
+  - @mastra/core@0.9.0-alpha.5
+  - @mastra/deployer@0.3.0-alpha.6
+
+## 0.5.0-alpha.5
+
+### Patch Changes
+
+- 7e92011: Include tools with deployment builds
+- Updated dependencies [7e92011]
+  - @mastra/deployer@0.3.0-alpha.5
+  - @mastra/core@0.9.0-alpha.4
+
+## 0.5.0-alpha.4
+
+### Minor Changes
+
+- fe3ae4d: Remove \_\_ functions in storage and move to storage proxy to make sure init is called
+
+### Patch Changes
+
+- Updated dependencies [fe3ae4d]
+  - @mastra/deployer@0.3.0-alpha.4
+  - @mastra/core@0.9.0-alpha.3
+
+## 0.4.10-alpha.3
+
+### Patch Changes
+
+- Updated dependencies [9ee4293]
+  - @mastra/core@0.8.4-alpha.2
+  - @mastra/deployer@0.2.10-alpha.3
+
+## 0.4.10-alpha.2
+
+### Patch Changes
+
+- 7184dc5: Add support to pass project path directly to create-mastra and improve tag handling
+- Updated dependencies [3527610]
+  - @mastra/deployer@0.2.10-alpha.2
+
+## 0.4.10-alpha.1
+
+### Patch Changes
+
+- Updated dependencies [8a8a73b]
+- Updated dependencies [6f92295]
+  - @mastra/core@0.8.4-alpha.1
+  - @mastra/deployer@0.2.10-alpha.1
+
+## 0.4.10-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [03f3cd0]
+  - @mastra/core@0.8.4-alpha.0
+  - @mastra/deployer@0.2.10-alpha.0
+
+## 0.4.9
+
+### Patch Changes
+
+- d72318f: Refactored the evals table to use the DS tables
+- 1ebbfbf: Ability to toggle stream vs generate in playground
+- a2318cd: Revamp mastra deply dx, Make mastra build command output deployment ready build
+- ea0725e: make sure to put the geoip argument in the right spot (client init) and not at the properties level
+- 37bb612: Add Elastic-2.0 licensing for packages
+- c8fe5f0: change the header of all pages with the one from the DS
+- Updated dependencies [d72318f]
+- Updated dependencies [0bcc862]
+- Updated dependencies [10a8caf]
+- Updated dependencies [359b089]
+- Updated dependencies [9f6f6dd]
+- Updated dependencies [32e7b71]
+- Updated dependencies [37bb612]
+- Updated dependencies [1ebbfbf]
+- Updated dependencies [67aff42]
+- Updated dependencies [7f1b291]
+  - @mastra/core@0.8.3
+  - @mastra/deployer@0.2.9
+
+## 0.4.9-alpha.7
+
+### Patch Changes
+
+- d72318f: Refactored the evals table to use the DS tables
+- Updated dependencies [d72318f]
+  - @mastra/core@0.8.3-alpha.5
+  - @mastra/deployer@0.2.9-alpha.7
+
+## 0.4.9-alpha.6
+
+### Patch Changes
+
+- Updated dependencies [67aff42]
+  - @mastra/deployer@0.2.9-alpha.6
+
+## 0.4.9-alpha.5
+
+### Patch Changes
+
+- Updated dependencies [9f6f6dd]
+  - @mastra/deployer@0.2.9-alpha.5
+
+## 0.4.9-alpha.4
+
+### Patch Changes
+
+- 1ebbfbf: Ability to toggle stream vs generate in playground
+- ea0725e: make sure to put the geoip argument in the right spot (client init) and not at the properties level
+- Updated dependencies [1ebbfbf]
+- Updated dependencies [7f1b291]
+  - @mastra/deployer@0.2.9-alpha.4
+  - @mastra/core@0.8.3-alpha.4
+
+## 0.4.9-alpha.3
+
+### Patch Changes
+
+- Updated dependencies [10a8caf]
+  - @mastra/core@0.8.3-alpha.3
+  - @mastra/deployer@0.2.9-alpha.3
+
+## 0.4.9-alpha.2
+
+### Patch Changes
+
+- Updated dependencies [0bcc862]
+  - @mastra/core@0.8.3-alpha.2
+  - @mastra/deployer@0.2.9-alpha.2
+
+## 0.4.9-alpha.1
+
+### Patch Changes
+
+- a2318cd: Revamp mastra deply dx, Make mastra build command output deployment ready build
+- 37bb612: Add Elastic-2.0 licensing for packages
+- c8fe5f0: change the header of all pages with the one from the DS
+- Updated dependencies [32e7b71]
+- Updated dependencies [37bb612]
+  - @mastra/deployer@0.2.9-alpha.1
+  - @mastra/core@0.8.3-alpha.1
+
+## 0.4.9-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [359b089]
+  - @mastra/core@0.8.3-alpha.0
+  - @mastra/deployer@0.2.9-alpha.0
+
+## 0.4.8
+
+### Patch Changes
+
+- d3c372c: Show status UI of steps on playground workflow when workflow has no triggerSchema
+  Show number of steps on workflows table
+- df5989d: Correct playground model setting maxSteps reset value
+- Updated dependencies [a06aadc]
+- Updated dependencies [ae6c5ce]
+- Updated dependencies [94cd5c1]
+  - @mastra/core@0.8.2
+  - @mastra/deployer@0.2.8
+
+## 0.4.8-alpha.1
+
+### Patch Changes
+
+- df5989d: Correct playground model setting maxSteps reset value
+- Updated dependencies [94cd5c1]
+  - @mastra/deployer@0.2.8-alpha.1
+
+## 0.4.8-alpha.0
+
+### Patch Changes
+
+- d3c372c: Show status UI of steps on playground workflow when workflow has no triggerSchema
+  Show number of steps on workflows table
+- Updated dependencies [a06aadc]
+- Updated dependencies [ae6c5ce]
+  - @mastra/core@0.8.2-alpha.0
+  - @mastra/deployer@0.2.8-alpha.0
+
+## 0.4.7
+
+### Patch Changes
+
+- 99e2998: Set default max steps to 5
+- 8fdb414: Custom mastra server cors config
+- Updated dependencies [99e2998]
+- Updated dependencies [8fdb414]
+  - @mastra/core@0.8.1
+  - @mastra/deployer@0.2.7
+
+## 0.4.7-alpha.0
+
+### Patch Changes
+
+- 99e2998: Set default max steps to 5
+- 8fdb414: Custom mastra server cors config
+- Updated dependencies [99e2998]
+- Updated dependencies [8fdb414]
+  - @mastra/core@0.8.1-alpha.0
+  - @mastra/deployer@0.2.7-alpha.0
+
+## 0.4.6
+
+### Patch Changes
+
+- 87b96d7: set playground agent maxSteps default to 3
+
+## 0.4.6-alpha.0
+
+### Patch Changes
+
+- 87b96d7: set playground agent maxSteps default to 3
+
+## 0.4.5
+
+### Patch Changes
+
+- a4a1151: Fix playground freezing when buffer is passed between steps
+- 9f529a4: enable geoip in system properties for analytics
+- 9d13790: update playground-ui dynamic form, cleanups
+- 13ade6a: update favicon shape
+- b08fc42: Fix workflow in getting started
+- 055c4ea: Fix traces page showing e.reduce error
+- 124ce08: Ability to set maxTokens, temperature, and other common features in playground
+- c0f6c98: fix flag for disabling geoip
+- 789bef3: Make runId optional for workflow startAsync api
+- a3f0e90: Update storage initialization to ensure tables are present
+- 40dca45: Fix expanding workflow sidebar not expanding the output section
+- 6330967: Enable route timeout using server options
+- b311bb7: fix cli build command to use correct Mastra directory
+- 8393832: Handle nested workflow view on workflow graph
+- 6330967: Add support for configuration of server port using Mastra instance
+- 40720d3: Add support for webcontainers like stackblitz
+- 23999d4: Add Design System tokens and components into playground ui
+- 706e6aa: Remove unused dependencies
+- 8076ecf: Unify workflow watch/start response
+- 9e7d46a: Fix scroll issue on playground tools page
+- d16ed18: Make playground-ui dynamic forms better
+- Updated dependencies [56c31b7]
+- Updated dependencies [619c39d]
+- Updated dependencies [2135c81]
+- Updated dependencies [5ae0180]
+- Updated dependencies [05d58cc]
+- Updated dependencies [fe56be0]
+- Updated dependencies [93875ed]
+- Updated dependencies [107bcfe]
+- Updated dependencies [9bfa12b]
+- Updated dependencies [515ebfb]
+- Updated dependencies [5b4e19f]
+- Updated dependencies [4c98129]
+- Updated dependencies [4c65a57]
+- Updated dependencies [dbbbf80]
+- Updated dependencies [a0967a0]
+- Updated dependencies [84fe241]
+- Updated dependencies [fca3b21]
+- Updated dependencies [88fa727]
+- Updated dependencies [dfb0601]
+- Updated dependencies [f37f535]
+- Updated dependencies [789bef3]
+- Updated dependencies [a3f0e90]
+- Updated dependencies [4d67826]
+- Updated dependencies [6330967]
+- Updated dependencies [8393832]
+- Updated dependencies [6330967]
+- Updated dependencies [84fe241]
+- Updated dependencies [99d43b9]
+- Updated dependencies [32ba03c]
+- Updated dependencies [d7e08e8]
+- Updated dependencies [3c6ae54]
+- Updated dependencies [febc8a6]
+- Updated dependencies [0deb356]
+- Updated dependencies [7599d77]
+- Updated dependencies [0118361]
+- Updated dependencies [619c39d]
+- Updated dependencies [cafae83]
+- Updated dependencies [8076ecf]
+- Updated dependencies [8df4a77]
+- Updated dependencies [304397c]
+  - @mastra/core@0.8.0
+  - @mastra/deployer@0.2.6
+
+## 0.4.5-alpha.11
+
+### Patch Changes
+
+- a4a1151: Fix playground freezing when buffer is passed between steps
+- 13ade6a: update favicon shape
+- 124ce08: Ability to set maxTokens, temperature, and other common features in playground
+- c0f6c98: fix flag for disabling geoip
+- 23999d4: Add Design System tokens and components into playground ui
+- 9e7d46a: Fix scroll issue on playground tools page
+
+## 0.4.5-alpha.10
+
+### Patch Changes
+
+- b08fc42: Fix workflow in getting started
+- 055c4ea: Fix traces page showing e.reduce error
+- Updated dependencies [2135c81]
+- Updated dependencies [8df4a77]
+  - @mastra/deployer@0.2.6-alpha.10
+  - @mastra/core@0.8.0-alpha.8
+
 ## 0.4.5-alpha.9
 
 ### Patch Changes

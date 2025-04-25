@@ -310,8 +310,5 @@ it('should log correctly for Vercel tool execution', async () => {
 
   await coreTool.execute?.({ name: 'test' }, { toolCallId: 'test-id', messages: [] });
 
-  expect(mockLogger.debug).toHaveBeenCalledWith(
-    '[Agent:testAgent] - Executing Vercel tool testTool',
-    expect.any(Object),
-  );
+  expect(mockLogger.debug).toHaveBeenCalledWith('[Agent:testAgent] - Executing tool testTool', expect.any(Object));
 });

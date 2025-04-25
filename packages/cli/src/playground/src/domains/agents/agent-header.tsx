@@ -1,52 +1,31 @@
-import { useMatch, useNavigate } from 'react-router';
+import { Link } from 'react-router';
 
-import Breadcrumb from '@/components/ui/breadcrumbs';
-import { Button } from '@/components/ui/button';
-import { Header } from '@/components/ui/header';
+import { Header, Breadcrumb, Crumb, HeaderGroup, Button } from '@mastra/playground-ui';
 
 export function AgentHeader({ agentName, agentId }: { agentName: string; agentId: string }) {
-  const isEvalsPage = useMatch(`/agents/${agentId}/evals`);
-  const isTracesPage = useMatch(`/agents/${agentId}/traces`);
-  const isChatPage = useMatch(`/agents/${agentId}/chat`) || (!isEvalsPage && !isTracesPage);
-  const navigate = useNavigate();
-
-  const breadcrumbItems = [
-    {
-      label: 'Agents',
-      href: '/agents',
-    },
-    {
-      label: agentName,
-      href: `/agents/${agentId}`,
-      isCurrent: true,
-    },
-  ];
   return (
-    <Header title={<Breadcrumb items={breadcrumbItems} />}>
-      <Button
-        variant={isChatPage ? 'secondary' : 'outline'}
-        size="slim"
-        onClick={() => navigate(`/agents/${agentId}/chat`)}
-        className="rounded-[0.125rem] px-2"
-      >
-        Chat
-      </Button>
-      <Button
-        variant={isTracesPage ? 'secondary' : 'outline'}
-        size="slim"
-        onClick={() => navigate(`/agents/${agentId}/traces`)}
-        className="rounded-[0.125rem] px-2"
-      >
-        Traces
-      </Button>
-      <Button
-        variant={isEvalsPage ? 'secondary' : 'outline'}
-        size="slim"
-        onClick={() => navigate(`/agents/${agentId}/evals`)}
-        className="rounded-[0.125rem] px-2"
-      >
-        Evals
-      </Button>
+    <Header>
+      <Breadcrumb>
+        <Crumb as={Link} to={`/agents`}>
+          Agents
+        </Crumb>
+        <Crumb as={Link} to={`/agents/${agentId}`} isCurrent>
+          {agentName}
+        </Crumb>
+      </Breadcrumb>
+
+      <HeaderGroup>
+        <Button as={Link} to={`/agents/${agentId}/chat`}>
+          Chat
+        </Button>
+
+        <Button as={Link} to={`/agents/${agentId}/traces`}>
+          Traces
+        </Button>
+        <Button as={Link} to={`/agents/${agentId}/evals`}>
+          Evals
+        </Button>
+      </HeaderGroup>
     </Header>
   );
 }

@@ -2,6 +2,8 @@ import { Thread } from '@/components/assistant-ui/thread';
 
 import { MastraRuntimeProvider } from '@/services/mastra-runtime-provider';
 import { ChatProps } from '@/types';
+import { useContext } from 'react';
+import { AgentContext } from './context/agent-context';
 
 export const AgentChat = ({
   agentId,
@@ -12,6 +14,7 @@ export const AgentChat = ({
   baseUrl,
   refreshThreadList,
 }: ChatProps) => {
+  const { modelSettings, chatWithGenerate } = useContext(AgentContext);
   return (
     <MastraRuntimeProvider
       agentId={agentId}
@@ -21,8 +24,12 @@ export const AgentChat = ({
       memory={memory}
       baseUrl={baseUrl}
       refreshThreadList={refreshThreadList}
+      modelSettings={modelSettings}
+      chatWithGenerate={chatWithGenerate}
     >
-      <Thread memory={memory} />
+      <div className="h-full pb-4">
+        <Thread />
+      </div>
     </MastraRuntimeProvider>
   );
 };

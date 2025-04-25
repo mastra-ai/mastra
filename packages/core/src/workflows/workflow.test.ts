@@ -7,6 +7,7 @@ import { z } from 'zod';
 import { Agent } from '../agent';
 import { createLogger } from '../logger';
 import { Mastra } from '../mastra';
+import { RuntimeContext } from '../runtime-context';
 import { TABLE_WORKFLOW_SNAPSHOT } from '../storage';
 import { DefaultStorage } from '../storage/libsql';
 import { Telemetry } from '../telemetry';
@@ -1578,6 +1579,104 @@ describe('Workflow', async () => {
       expect(results.final.output).toEqual({ finalValue: 26 + 2 });
     });
 
+    it('should run if-else in order', async () => {
+      const order: string[] = [];
+
+      const step1Action = vi.fn().mockImplementation(async () => {
+        order.push('step1');
+      });
+      const step2Action = vi.fn().mockImplementation(async () => {
+        order.push('step2');
+      });
+      const step3Action = vi.fn().mockImplementation(async () => {
+        order.push('step3');
+      });
+      const step4Action = vi.fn().mockImplementation(async () => {
+        order.push('step4');
+      });
+      const step5Action = vi.fn().mockImplementation(async () => {
+        order.push('step5');
+      });
+
+      const step1 = new Step({ id: 'step1', execute: step1Action });
+      const step2 = new Step({ id: 'step2', execute: step2Action });
+      const step3 = new Step({ id: 'step3', execute: step3Action });
+      const step4 = new Step({ id: 'step4', execute: step4Action });
+      const step5 = new Step({ id: 'step5', execute: step5Action });
+
+      const workflow = new Workflow({ name: 'test-workflow' });
+      workflow
+        .step(step1)
+        .if(async () => true)
+        .then(step2)
+        .if(async () => false)
+        .then(step3)
+        .else()
+        .then(step4)
+        .else()
+        .then(step5)
+        .commit();
+
+      const run = workflow.createRun();
+      await run.start();
+
+      expect(step1Action).toHaveBeenCalledTimes(1);
+      expect(step2Action).toHaveBeenCalledTimes(1);
+      expect(step3Action).not.toHaveBeenCalled();
+      expect(step4Action).toHaveBeenCalledTimes(1);
+      expect(step5Action).not.toHaveBeenCalled();
+      expect(order).toEqual(['step1', 'step2', 'step4']);
+    });
+
+    it('should run stacked if-else in order', async () => {
+      const order: string[] = [];
+
+      const step1Action = vi.fn().mockImplementation(async () => {
+        order.push('step1');
+      });
+      const step2Action = vi.fn().mockImplementation(async () => {
+        order.push('step2');
+      });
+      const step3Action = vi.fn().mockImplementation(async () => {
+        order.push('step3');
+      });
+      const step4Action = vi.fn().mockImplementation(async () => {
+        order.push('step4');
+      });
+      const step5Action = vi.fn().mockImplementation(async () => {
+        order.push('step5');
+      });
+
+      const step1 = new Step({ id: 'step1', execute: step1Action });
+      const step2 = new Step({ id: 'step2', execute: step2Action });
+      const step3 = new Step({ id: 'step3', execute: step3Action });
+      const step4 = new Step({ id: 'step4', execute: step4Action });
+      const step5 = new Step({ id: 'step5', execute: step5Action });
+
+      const workflow = new Workflow({ name: 'test-workflow' });
+      workflow
+        .step(step1)
+        .if(async () => true)
+        .then(step2)
+        .else()
+        .then(step4)
+        .if(async () => false)
+        .then(step3)
+        .else()
+        .then(step5)
+        .commit();
+
+      const run = workflow.createRun();
+      await run.start();
+
+      expect(step1Action).toHaveBeenCalledTimes(1);
+      expect(step2Action).toHaveBeenCalledTimes(1);
+      expect(step3Action).not.toHaveBeenCalled();
+      expect(step4Action).not.toHaveBeenCalled();
+      expect(step5Action).toHaveBeenCalledTimes(1);
+      expect(order).toEqual(['step1', 'step2', 'step5']);
+    });
+
     it('should run an until loop inside an if-then branch', async () => {
       const increment = vi.fn().mockImplementation(async ({ context }) => {
         // Get the current value (either from trigger or previous increment)
@@ -1993,7 +2092,7 @@ describe('Workflow', async () => {
       expect(result.results.step2).toEqual({ status: 'success', output: { result: 'success2' } });
     });
 
-    it('should run compount subscribers with when conditions', async () => {
+    it('should run compound subscribers with when conditions', async () => {
       const step1Action = vi.fn<any>().mockResolvedValue({ result: 'success1' });
       const step2Action = vi.fn<any>().mockResolvedValue({ result: 'success2' });
       const step3Action = vi.fn<any>().mockResolvedValue({ result: 'success3' });
@@ -3463,13 +3562,13 @@ describe('Workflow', async () => {
       expect(results['nested-workflow-b'].output.results).toEqual({
         start: { output: { newValue: 1 }, status: 'success' },
         final: { output: { finalValue: 1 }, status: 'success' },
-        __start_else: {
+        __start_else_1: {
           output: {
             executed: true,
           },
           status: 'success',
         },
-        __start_if: {
+        __start_if_1: {
           status: 'skipped',
         },
       });
@@ -4763,6 +4862,71 @@ describe('Workflow', async () => {
           runId: results.runId,
         }),
       );
+    });
+  });
+
+  describe('Dependency Injection', () => {
+    it('should inject runtimeContext dependencies into steps during run', async () => {
+      const runtimeContext = new RuntimeContext();
+      const testValue = 'test-dependency';
+      runtimeContext.set('testKey', testValue);
+
+      const execute = vi.fn(({ runtimeContext }) => {
+        const value = runtimeContext.get('testKey');
+        return { injectedValue: value };
+      });
+
+      // @ts-ignore
+      const step = new Step({ id: 'step1', execute });
+      const workflow = new Workflow({ name: 'test-workflow' });
+      workflow.step(step).commit();
+
+      const run = workflow.createRun();
+      const result = await run.start({ runtimeContext });
+
+      // @ts-ignore
+      expect(result.results.step1.output.injectedValue).toBe(testValue);
+    });
+
+    it('should inject runtimeContext dependencies into steps during resume', async () => {
+      const runtimeContext = new RuntimeContext();
+      const testValue = 'test-dependency';
+      runtimeContext.set('testKey', testValue);
+
+      const mastra = new Mastra({
+        logger: false,
+        storage,
+      });
+
+      const execute = vi.fn(async ({ runtimeContext, suspend, context }) => {
+        if (!context.inputData.human) {
+          await suspend();
+        }
+
+        const value = runtimeContext.get('testKey');
+        return { injectedValue: value };
+      });
+
+      const step = new Step({ id: 'step1', execute });
+      const workflow = new Workflow({ name: 'test-workflow', mastra });
+      workflow.step(step).commit();
+
+      const run = workflow.createRun();
+      await run.start({ runtimeContext });
+
+      const resumeRuntimeContext = new RuntimeContext();
+      resumeRuntimeContext.set('testKey', testValue + '2');
+
+      const result = await run.resume({
+        stepId: 'step1',
+        context: {
+          human: true,
+        },
+        runtimeContext: resumeRuntimeContext,
+      });
+
+      // @ts-ignore
+      expect(result?.results.step1.output.injectedValue).toBe(testValue + '2');
     });
   });
 });

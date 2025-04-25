@@ -1,7 +1,16 @@
 import type { Config } from 'tailwindcss';
-
 import defaultFont from 'tailwindcss/defaultTheme';
-
+import {
+  FontSizes,
+  LineHeights,
+  IconColors,
+  BorderColors,
+  Colors,
+  BorderRadius,
+  BorderWidth,
+  Spacings,
+  Sizes,
+} from '@mastra/playground-ui/tokens';
 export default {
   darkMode: ['class'],
   content: [
@@ -19,7 +28,38 @@ export default {
       },
     },
     extend: {
+      fontSize: {
+        ...FontSizes,
+      },
+      lineHeight: {
+        ...LineHeights,
+      },
+
+      borderRadius: {
+        ...BorderRadius,
+      },
+      borderWidth: {
+        ...BorderWidth,
+      },
+      padding: {
+        ...Spacings,
+      },
+      margin: {
+        ...Spacings,
+      },
+      gap: {
+        ...Spacings,
+      },
+      height: {
+        ...Sizes,
+      },
+      width: {
+        ...Sizes,
+      },
       colors: {
+        ...Colors,
+        ...IconColors,
+        ...BorderColors,
         background: 'hsl(var(--background))',
         foreground: 'hsl(var(--foreground))',
         card: {
@@ -108,14 +148,9 @@ export default {
           'el-connected': '#6cd063',
         },
       },
-      borderRadius: {
-        lg: 'var(--radius)',
-        md: 'calc(var(--radius) - 2px)',
-        sm: 'calc(var(--radius) - 4px)',
-      },
       fontFamily: {
         serif: ['var(--tasa-explorer)', ...defaultFont.fontFamily.serif],
-        mono: ['var(--commit-mono)', ...defaultFont.fontFamily.mono],
+        mono: ['var(--geist-mono)', ...defaultFont.fontFamily.mono],
         sans: ['var(--font-inter)', ...defaultFont.fontFamily.sans],
       },
       animation: {

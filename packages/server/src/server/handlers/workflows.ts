@@ -1,14 +1,14 @@
 import { ReadableStream } from 'node:stream/web';
-import type { Mastra } from '@mastra/core';
+import type { RuntimeContext } from '@mastra/core/runtime-context';
+import type { WorkflowRuns } from '@mastra/core/storage';
 import type { Workflow } from '@mastra/core/workflows';
 import { stringify } from 'superjson';
 import zodToJsonSchema from 'zod-to-json-schema';
 import { HTTPException } from '../http-exception';
-
+import type { Context } from '../types';
 import { handleError } from './error';
 
-interface WorkflowContext {
-  mastra: Mastra;
+interface WorkflowContext extends Context {
   workflowId?: string;
   runId?: string;
 }
@@ -79,10 +79,14 @@ export async function getWorkflowByIdHandler({ mastra, workflowId }: WorkflowCon
 
 export async function startAsyncWorkflowHandler({
   mastra,
+  runtimeContext,
   workflowId,
   runId,
   triggerData,
-}: Pick<WorkflowContext, 'mastra' | 'workflowId' | 'runId'> & { triggerData?: unknown }) {
+}: Pick<WorkflowContext, 'mastra' | 'workflowId' | 'runId'> & {
+  triggerData?: unknown;
+  runtimeContext: RuntimeContext;
+}) {
   try {
     if (!workflowId) {
       throw new HTTPException(400, { message: 'Workflow ID is required' });
@@ -98,6 +102,7 @@ export async function startAsyncWorkflowHandler({
       const { start } = workflow.createRun();
       const result = await start({
         triggerData,
+        runtimeContext,
       });
       return result;
     }
@@ -110,6 +115,7 @@ export async function startAsyncWorkflowHandler({
 
     const result = await run.start({
       triggerData,
+      runtimeContext,
     });
     return result;
   } catch (error) {
@@ -175,10 +181,14 @@ export async function createRunHandler({
 
 export async function startWorkflowRunHandler({
   mastra,
+  runtimeContext,
   workflowId,
   runId,
   triggerData,
-}: Pick<WorkflowContext, 'mastra' | 'workflowId' | 'runId'> & { triggerData?: unknown }) {
+}: Pick<WorkflowContext, 'mastra' | 'workflowId' | 'runId'> & {
+  triggerData?: unknown;
+  runtimeContext: RuntimeContext;
+}) {
   try {
     if (!workflowId) {
       throw new HTTPException(400, { message: 'Workflow ID is required' });
@@ -197,6 +207,7 @@ export async function startWorkflowRunHandler({
 
     await run.start({
       triggerData,
+      runtimeContext,
     });
 
     return { message: 'Workflow run started' };
@@ -263,7 +274,8 @@ export async function resumeAsyncWorkflowHandler({
   workflowId,
   runId,
   body,
-}: WorkflowContext & { body: { stepId: string; context: any } }) {
+  runtimeContext,
+}: WorkflowContext & { body: { stepId: string; context: any }; runtimeContext: RuntimeContext }) {
   try {
     if (!workflowId) {
       throw new HTTPException(400, { message: 'Workflow ID is required' });
@@ -283,6 +295,7 @@ export async function resumeAsyncWorkflowHandler({
     const result = await run.resume({
       stepId: body.stepId,
       context: body.context,
+      runtimeContext,
     });
 
     return result;
@@ -296,7 +309,8 @@ export async function resumeWorkflowHandler({
   workflowId,
   runId,
   body,
-}: WorkflowContext & { body: { stepId: string; context: any } }) {
+  runtimeContext,
+}: WorkflowContext & { body: { stepId: string; context: any }; runtimeContext: RuntimeContext }) {
   try {
     if (!workflowId) {
       throw new HTTPException(400, { message: 'Workflow ID is required' });
@@ -316,6 +330,7 @@ export async function resumeWorkflowHandler({
     await run.resume({
       stepId: body.stepId,
       context: body.context,
+      runtimeContext,
     });
 
     return { message: 'Workflow run resumed' };
@@ -324,7 +339,7 @@ export async function resumeWorkflowHandler({
   }
 }
 
-export async function getWorkflowRunsHandler({ mastra, workflowId }: WorkflowContext) {
+export async function getWorkflowRunsHandler({ mastra, workflowId }: WorkflowContext): Promise<WorkflowRuns> {
   try {
     if (!workflowId) {
       throw new HTTPException(400, { message: 'Workflow ID is required' });

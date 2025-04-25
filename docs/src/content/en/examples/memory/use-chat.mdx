@@ -1,0 +1,158 @@
+---
+title: AI SDK useChat Hook
+description: Example showing how to integrate Mastra memory with the Vercel AI SDK useChat hook.
+---
+
+# Example: AI SDK `useChat` Hook
+
+Integrating Mastra's memory with frontend frameworks like React using the Vercel AI SDK's `useChat` hook requires careful handling of message history to avoid duplication. This example shows the recommended pattern.
+
+## Preventing Message Duplication with `useChat`
+
+The default behavior of `useChat` sends the entire chat history with each request. Since Mastra's memory automatically retrieves history based on `threadId`, sending the full history from the client leads to duplicate messages in the context window and storage.
+
+**Solution:** Configure `useChat` to send **only the latest message** along with your `threadId` and `resourceId`.
+
+```typescript
+// components/Chat.tsx (React Example)
+import { useChat } from "ai/react";
+
+export function Chat({ threadId, resourceId }) {
+  const { messages, input, handleInputChange, handleSubmit } = useChat({
+    api: "/api/chat", // Your backend endpoint
+    // Pass only the latest message and custom IDs
+    experimental_prepareRequestBody: (request) => {
+      // Ensure messages array is not empty and get the last message
+      const lastMessage = request.messages.length > 0 ? request.messages[request.messages.length - 1] : null;
+
+      // Return the structured body for your API route
+      return {
+        message: lastMessage, // Send only the most recent message content/role
+        threadId,
+        resourceId,
+      };
+    },
+    // Optional: Initial messages if loading history from backend
+    // initialMessages: loadedMessages,
+  });
+
+  // ... rest of your chat UI component
+  return (
+    <div>
+      {/* Render messages */}
+      <form onSubmit={handleSubmit}>
+        <input value={input} onChange={handleInputChange} placeholder="Send a message..." />
+        <button type="submit">Send</button>
+      </form>
+    </div>
+  );
+}
+
+// app/api/chat/route.ts (Next.js Example)
+import { Agent } from "@mastra/core/agent";
+import { Memory } from "@mastra/memory";
+import { openai } from "@ai-sdk/openai";
+import { CoreMessage } from "@mastra/core"; // Import CoreMessage
+
+const agent = new Agent({
+  name: "ChatAgent",
+  instructions: "You are a helpful assistant.",
+  model: openai("gpt-4o"),
+  memory: new Memory(), // Assumes default memory setup
+});
+
+export async function POST(request: Request) {
+  // Get data structured by experimental_prepareRequestBody
+  const { message, threadId, resourceId }: { message: CoreMessage | null; threadId: string; resourceId: string } = await request.json();
+
+  // Handle cases where message might be null (e.g., initial load or error)
+  if (!message || !message.content) {
+    // Return an appropriate response or error
+    return new Response("Missing message content", { status: 400 });
+  }
+
+  // Process with memory using the single message content
+  const stream = await agent.stream(message.content, {
+    threadId,
+    resourceId,
+    // Pass other message properties if needed, e.g., role
+    // messageOptions: { role: message.role }
+  });
+
+  // Return the streaming response
+  return stream.toDataStreamResponse();
+}
+```
+
+See the [AI SDK documentation on message persistence](https://sdk.vercel.ai/docs/ai-sdk-ui/chatbot-message-persistence) for more background.
+
+## Basic Thread Management UI
+
+While this page focuses on `useChat`, you can also build UIs for managing threads (listing, creating, selecting). This typically involves backend API endpoints that interact with Mastra's memory functions like `memory.getThreadsByResourceId()` and `memory.createThread()`.
+
+```typescript
+// Conceptual React component for a thread list
+import React, { useState, useEffect } from 'react';
+
+// Assume API functions exist: fetchThreads, createNewThread
+async function fetchThreads(userId: string): Promise<{ id: string; title: string }[]> { /* ... */ }
+async function createNewThread(userId: string): Promise<{ id: string; title: string }> { /* ... */ }
+
+function ThreadList({ userId, currentThreadId, onSelectThread }) {
+  const [threads, setThreads] = useState([]);
+  // ... loading and error states ...
+
+  useEffect(() => {
+    // Fetch threads for userId
+  }, [userId]);
+
+  const handleCreateThread = async () => {
+    // Call createNewThread API, update state, select new thread
+  };
+
+  // ... render UI with list of threads and New Conversation button ...
+  return (
+     <div>
+       <h2>Conversations</h2>
+       <button onClick={handleCreateThread}>New Conversation</button>
+       <ul>
+         {threads.map(thread => (
+           <li key={thread.id}>
+             <button onClick={() => onSelectThread(thread.id)} disabled={thread.id === currentThreadId}>
+               {thread.title || `Chat ${thread.id.substring(0, 8)}...`}
+             </button>
+           </li>
+         ))}
+       </ul>
+     </div>
+  );
+}
+
+// Example Usage in a Parent Chat Component
+function ChatApp() {
+  const userId = "user_123";
+  const [currentThreadId, setCurrentThreadId] = useState<string | null>(null);
+
+  return (
+    <div style={{ display: 'flex' }}>
+      <ThreadList
+        userId={userId}
+        currentThreadId={currentThreadId}
+        onSelectThread={setCurrentThreadId}
+      />
+      <div style={{ flexGrow: 1 }}>
+        {currentThreadId ? (
+          <Chat threadId={currentThreadId} resourceId={userId} /> // Your useChat component
+        ) : (
+          <div>Select or start a conversation.</div>
+        )}
+      </div>
+    </div>
+  );
+}
+```
+
+## Related
+
+-   **[Getting Started](../../docs/memory/overview.mdx)**: Covers the core concepts of `resourceId` and `threadId`.
+-   **[Memory Reference](../../reference/memory/Memory.mdx)**: API details for `Memory` class methods.

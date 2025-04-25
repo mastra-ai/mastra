@@ -3,4 +3,8 @@
 node_modules/
 dist/
 .env
-memory:
+*.d.ts
+./memory
+./vector/
+./telemetry/
+./storage/

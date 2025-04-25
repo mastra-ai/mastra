@@ -9,9 +9,9 @@
     "tokens": "tsx src/processor-example.ts"
   },
   "dependencies": {
-    "@ai-sdk/openai": "^1.0.0",
-    "@mastra/core": "workspace:*",
-    "@mastra/memory": "workspace:*",
+    "@ai-sdk/openai": "latest",
+    "@mastra/core": "latest",
+    "@mastra/memory": "latest",
     "ai": "^4.2.6",
     "chalk": "^5.4.1",
     "dotenv": "^16.3.1",
@@ -19,5 +19,12 @@
     "tiktoken": "^1.0.13",
     "tsx": "^4.6.2",
     "zod": "^3.22.4"
-  }
+  },
+  "pnpm": {
+    "overrides": {
+      "@mastra/core": "link:../../packages/core",
+      "@mastra/memory": "link:../../packages/memory"
+    }
+  },
+  "packageManager": "pnpm@10.9.0+sha512.0486e394640d3c1fb3c9d43d49cf92879ff74f8516959c235308f5a8f62e2e19528a65cdc2a3058f587cde71eba3d5b56327c8c33a97e4c4051ca48a10ca2d5f"
 }

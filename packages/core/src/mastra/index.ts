@@ -7,15 +7,18 @@ import type { AgentNetwork } from '../network';
 import type { ServerConfig } from '../server/types';
 import type { MastraStorage } from '../storage';
 import { DefaultProxyStorage } from '../storage/default-proxy-storage';
+import { augmentWithInit } from '../storage/storageWithInit';
 import { InstrumentClass, Telemetry } from '../telemetry';
 import type { OtelConfig } from '../telemetry';
 import type { MastraTTS } from '../tts';
 import type { MastraVector } from '../vector';
 import type { Workflow } from '../workflows';
+import type { NewWorkflow } from '../workflows/vNext';
 
 export interface Config<
   TAgents extends Record<string, Agent<any>> = Record<string, Agent<any>>,
   TWorkflows extends Record<string, Workflow> = Record<string, Workflow>,
+  TNewWorkflows extends Record<string, NewWorkflow> = Record<string, NewWorkflow>,
   TVectors extends Record<string, MastraVector> = Record<string, MastraVector>,
   TTTS extends Record<string, MastraTTS> = Record<string, MastraTTS>,
   TLogger extends Logger = Logger,
@@ -27,6 +30,7 @@ export interface Config<
   vectors?: TVectors;
   logger?: TLogger | false;
   workflows?: TWorkflows;
+  vnext_workflows?: TNewWorkflows;
   tts?: TTTS;
   telemetry?: OtelConfig;
   deployer?: MastraDeployer;
@@ -53,6 +57,7 @@ export interface Config<
 export class Mastra<
   TAgents extends Record<string, Agent<any>> = Record<string, Agent<any>>,
   TWorkflows extends Record<string, Workflow> = Record<string, Workflow>,
+  TNewWorkflows extends Record<string, NewWorkflow> = Record<string, NewWorkflow>,
   TVectors extends Record<string, MastraVector> = Record<string, MastraVector>,
   TTTS extends Record<string, MastraTTS> = Record<string, MastraTTS>,
   TLogger extends Logger = Logger,
@@ -62,6 +67,7 @@ export class Mastra<
   #agents: TAgents;
   #logger: TLogger;
   #workflows: TWorkflows;
+  #vnext_workflows: TNewWorkflows;
   #tts?: TTTS;
   #deployer?: MastraDeployer;
   #serverMiddleware: Array<{
@@ -95,7 +101,7 @@ export class Mastra<
     return this.#memory;
   }
 
-  constructor(config?: Config<TAgents, TWorkflows, TVectors, TTTS, TLogger>) {
+  constructor(config?: Config<TAgents, TWorkflows, TNewWorkflows, TVectors, TTTS, TLogger>) {
     // Store server middleware with default path
     if (config?.serverMiddleware) {
       this.#serverMiddleware = config.serverMiddleware.map(m => ({
@@ -115,7 +121,8 @@ export class Mastra<
       if (config?.logger) {
         logger = config.logger;
       } else {
-        const levleOnEnv = process.env.NODE_ENV === 'production' ? LogLevel.WARN : LogLevel.INFO;
+        const levleOnEnv =
+          process.env.NODE_ENV === 'production' && process.env.MASTRA_DEV !== 'true' ? LogLevel.WARN : LogLevel.INFO;
         logger = createLogger({ name: 'Mastra', level: levleOnEnv }) as unknown as TLogger;
       }
     }
@@ -130,6 +137,8 @@ export class Mastra<
       });
     }
 
+    storage = augmentWithInit(storage);
+
     /*
     Telemetry
     */
@@ -140,7 +149,7 @@ export class Mastra<
     */
     if (this.#telemetry) {
       this.#storage = this.#telemetry.traceClass(storage, {
-        excludeMethods: ['__setTelemetry', '__getTelemetry', '__batchTraceInsert'],
+        excludeMethods: ['__setTelemetry', '__getTelemetry', 'batchTraceInsert'],
       });
       this.#storage.__setTelemetry(this.#telemetry);
     } else {
@@ -279,6 +288,24 @@ This is a warning for now, but will throw an error in the future
       });
     }
 
+    this.#vnext_workflows = {} as TNewWorkflows;
+    if (config?.vnext_workflows) {
+      Object.entries(config.vnext_workflows).forEach(([key, workflow]) => {
+        workflow.__registerMastra(this);
+        workflow.__registerPrimitives({
+          logger: this.getLogger(),
+          telemetry: this.#telemetry,
+          storage: this.storage,
+          memory: this.memory,
+          agents: agents,
+          tts: this.#tts,
+          vectors: this.#vectors,
+        });
+        // @ts-ignore
+        this.#vnext_workflows[key] = workflow;
+      });
+    }
+
     if (config?.server) {
       this.#server = config.server;
     }
@@ -330,6 +357,22 @@ This is a warning for now, but will throw an error in the future
     return workflow;
   }
 
+  public vnext_getWorkflow<TWorkflowId extends keyof TNewWorkflows>(
+    id: TWorkflowId,
+    { serialized }: { serialized?: boolean } = {},
+  ): TNewWorkflows[TWorkflowId] {
+    const workflow = this.#vnext_workflows?.[id];
+    if (!workflow) {
+      throw new Error(`Workflow with ID ${String(id)} not found`);
+    }
+
+    if (serialized) {
+      return { name: workflow.name } as TNewWorkflows[TWorkflowId];
+    }
+
+    return workflow;
+  }
+
   public getWorkflows(props: { serialized?: boolean } = {}): Record<string, Workflow> {
     if (props.serialized) {
       return Object.entries(this.#workflows).reduce((acc, [k, v]) => {
@@ -342,8 +385,31 @@ This is a warning for now, but will throw an error in the future
     return this.#workflows;
   }
 
+  public vnext_getWorkflows(props: { serialized?: boolean } = {}): Record<string, NewWorkflow> {
+    if (props.serialized) {
+      return Object.entries(this.#vnext_workflows).reduce((acc, [k, v]) => {
+        return {
+          ...acc,
+          [k]: { name: v.name },
+        };
+      }, {});
+    }
+    return this.#vnext_workflows;
+  }
+
   public setStorage(storage: MastraStorage) {
-    this.#storage = storage;
+    if (storage instanceof DefaultProxyStorage) {
+      this.#logger.warn(`Importing "DefaultStorage" from '@mastra/core/storage/libsql' is deprecated.
+
+Instead of:
+  import { DefaultStorage } from '@mastra/core/storage/libsql';
+
+Do:
+  import { LibSQLStore } from '@mastra/libsql';
+`);
+    }
+
+    this.#storage = augmentWithInit(storage);
   }
 
   public setLogger({ logger }: { logger: TLogger }) {
@@ -420,7 +486,7 @@ This is a warning for now, but will throw an error in the future
 
     if (this.#storage) {
       this.#storage = this.#telemetry.traceClass(this.#storage, {
-        excludeMethods: ['__setTelemetry', '__getTelemetry', '__batchTraceInsert'],
+        excludeMethods: ['__setTelemetry', '__getTelemetry'],
       });
       this.#storage.__setTelemetry(this.#telemetry);
     }

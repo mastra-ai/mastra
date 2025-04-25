@@ -21,6 +21,7 @@ import type {
 import type { Mastra } from '../mastra';
 import type { MastraMemory } from '../memory/memory';
 import type { MemoryConfig } from '../memory/types';
+import type { RuntimeContext } from '../runtime-context';
 import type { ToolAction, VercelTool } from '../tools';
 import type { CompositeVoice } from '../voice';
 
@@ -60,6 +61,7 @@ export type AgentGenerateOptions<Z extends ZodSchema | JSONSchema7 | undefined =
   instructions?: string;
   /** Additional tool sets that can be used for this generation */
   toolsets?: ToolsetsInput;
+  clientTools?: ToolsInput;
   /** Additional context messages to include */
   context?: CoreMessage[];
   /** Memory configuration options */
@@ -78,6 +80,8 @@ export type AgentGenerateOptions<Z extends ZodSchema | JSONSchema7 | undefined =
   toolChoice?: 'auto' | 'none' | 'required' | { type: 'tool'; toolName: string };
   /** Telemetry settings */
   telemetry?: TelemetrySettings;
+  /** RuntimeContext for dependency injection */
+  runtimeContext?: RuntimeContext;
 } & ({ resourceId?: undefined; threadId?: undefined } | { resourceId: string; threadId: string }) &
   (Z extends undefined ? DefaultLLMTextOptions : DefaultLLMTextObjectOptions);
 
@@ -90,6 +94,7 @@ export type AgentStreamOptions<Z extends ZodSchema | JSONSchema7 | undefined = u
   instructions?: string;
   /** Additional tool sets that can be used for this generation */
   toolsets?: ToolsetsInput;
+  clientTools?: ToolsInput;
   /** Additional context messages to include */
   context?: CoreMessage[];
   /** Memory configuration options */
@@ -116,5 +121,7 @@ export type AgentStreamOptions<Z extends ZodSchema | JSONSchema7 | undefined = u
   experimental_output?: Z;
   /** Telemetry settings */
   telemetry?: TelemetrySettings;
+  /** RuntimeContext for dependency injection */
+  runtimeContext?: RuntimeContext;
 } & ({ resourceId?: undefined; threadId?: undefined } | { resourceId: string; threadId: string }) &
   (Z extends undefined ? DefaultLLMStreamOptions : DefaultLLMStreamObjectOptions);

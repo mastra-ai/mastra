@@ -16,7 +16,7 @@ function AgentTracesPage() {
         <div className="p-4">
           <Skeleton className="h-[600px]" />
         </div>
-        <div className="flex flex-col">
+        <div>
           <AgentInformation agentId={agentId!} />
         </div>
       </main>

@@ -64,16 +64,31 @@ export const createGraphRAGTool = ({
     }),
     description: toolDescription,
     execute: async ({ context: { queryText, topK, filter }, mastra }) => {
-      const topKValue =
-        typeof topK === 'number' && !isNaN(topK)
-          ? topK
-          : typeof topK === 'string' && !isNaN(Number(topK))
-            ? Number(topK)
-            : 10;
-      const vectorStore = mastra?.getVector(vectorStoreName);
       const logger = mastra?.getLogger();
+      if (!logger) {
+        console.warn(
+          '[GraphRAGTool] Logger not initialized: no debug or error logs will be recorded for this tool execution.',
+        );
+      }
+      if (logger) {
+        logger.debug('[GraphRAGTool] execute called with:', { queryText, topK, filter });
+      }
+      try {
+        const topKValue =
+          typeof topK === 'number' && !isNaN(topK)
+            ? topK
+            : typeof topK === 'string' && !isNaN(Number(topK))
+              ? Number(topK)
+              : 10;
+        const vectorStore = mastra?.getVector(vectorStoreName);
 
-      if (vectorStore) {
+        if (!vectorStore) {
+          if (logger) {
+            logger.error('Vector store not found', { vectorStoreName });
+          }
+          return { relevantContext: [] };
+        }
+
         let queryFilter = {};
         if (enableFilter) {
           queryFilter = (() => {
@@ -89,7 +104,7 @@ export const createGraphRAGTool = ({
           })();
         }
         if (logger) {
-          logger.debug('Using this filter and topK:', { queryFilter, topK: topKValue });
+          logger.debug('Prepared vector query parameters:', { queryFilter, topK: topKValue });
         }
         const { results, queryEmbedding } = await vectorQuerySearch({
           indexName,
@@ -100,6 +115,9 @@ export const createGraphRAGTool = ({
           topK: topKValue,
           includeVectors: true,
         });
+        if (logger) {
+          logger.debug('vectorQuerySearch returned results', { count: results.length });
+        }
 
         // Initialize graph if not done yet
         if (!isInitialized) {
@@ -112,8 +130,13 @@ export const createGraphRAGTool = ({
             vector: result.vector || [],
           }));
 
+          if (logger) {
+            logger.debug('Initializing graph', { chunkCount: chunks.length, embeddingCount: embeddings.length });
+          }
           graphRag.createGraph(chunks, embeddings);
           isInitialized = true;
+        } else if (logger) {
+          logger.debug('Graph already initialized, skipping graph construction');
         }
 
         // Get reranked results using GraphRAG
@@ -123,16 +146,27 @@ export const createGraphRAGTool = ({
           randomWalkSteps: graphOptions.randomWalkSteps,
           restartProb: graphOptions.restartProb,
         });
-
+        if (logger) {
+          logger.debug('GraphRAG query returned results', { count: rerankedResults.length });
+        }
         // Extract and combine relevant chunks
         const relevantChunks = rerankedResults.map(result => result.content);
+        if (logger) {
+          logger.debug('Returning relevant context chunks', { count: relevantChunks.length });
+        }
         return {
           relevantContext: relevantChunks,
         };
+      } catch (err) {
+        if (logger) {
+          logger.error('Unexpected error in VectorQueryTool execute', {
+            error: err,
+            errorMessage: err instanceof Error ? err.message : String(err),
+            errorStack: err instanceof Error ? err.stack : undefined,
+          });
+        }
+        return { relevantContext: [] };
       }
-      return {
-        relevantContext: [],
-      };
     },
   });
 };

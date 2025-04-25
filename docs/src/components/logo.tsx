@@ -50,3 +50,7 @@ export const logo = (
     />
   </svg>
 );
+
+export const LogoWithSuffix = () => (
+  <div className="flex items-center gap-2">{logo}</div>
+);

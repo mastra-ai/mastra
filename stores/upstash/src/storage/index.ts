@@ -6,6 +6,7 @@ import {
   TABLE_THREADS,
   TABLE_WORKFLOW_SNAPSHOT,
   TABLE_EVALS,
+  TABLE_TRACES,
 } from '@mastra/core/storage';
 import type { TABLE_NAMES, StorageColumn, StorageGetMessagesArg, EvalRow } from '@mastra/core/storage';
 import type { WorkflowRunState } from '@mastra/core/workflows';
@@ -57,7 +58,7 @@ export class UpstashStore extends MastraStorage {
 
             // Handle test_info as an object
             return typeof record.test_info === 'object' && 'testPath' in record.test_info;
-          } catch (_e) {
+          } catch {
             return false;
           }
         });
@@ -74,7 +75,7 @@ export class UpstashStore extends MastraStorage {
 
             // Handle test_info as an object
             return !(typeof record.test_info === 'object' && 'testPath' in record.test_info);
-          } catch (_e) {
+          } catch {
             return true;
           }
         });
@@ -94,7 +95,7 @@ export class UpstashStore extends MastraStorage {
     if (typeof result === 'string') {
       try {
         result = JSON.parse(result);
-      } catch (_e) {
+      } catch {
         console.warn('Failed to parse result JSON:');
       }
     }
@@ -103,7 +104,7 @@ export class UpstashStore extends MastraStorage {
     if (typeof testInfo === 'string') {
       try {
         testInfo = JSON.parse(testInfo);
-      } catch (_e) {
+      } catch {
         console.warn('Failed to parse test_info JSON:');
       }
     }
@@ -127,15 +128,115 @@ export class UpstashStore extends MastraStorage {
     };
   }
 
-  getTraces(_input: {
-    name?: string;
-    scope?: string;
-    page: number;
-    perPage: number;
-    attributes?: Record<string, string>;
-    filters?: Record<string, any>;
-  }): Promise<any[]> {
-    throw new Error('Method not implemented.');
+  async getTraces(
+    {
+      name,
+      scope,
+      page = 0,
+      perPage = 100,
+      attributes,
+      filters,
+    }: {
+      name?: string;
+      scope?: string;
+      page: number;
+      perPage: number;
+      attributes?: Record<string, string>;
+      filters?: Record<string, any>;
+    } = {
+      page: 0,
+      perPage: 100,
+    },
+  ): Promise<any[]> {
+    try {
+      // Get all keys that match the traces table pattern
+      const pattern = `${TABLE_TRACES}:*`;
+      const keys = await this.redis.keys(pattern);
+
+      // Fetch all trace records
+      const traceRecords = await Promise.all(
+        keys.map(async key => {
+          const data = await this.redis.get<Record<string, any>>(key);
+          return data;
+        }),
+      );
+
+      // Filter out nulls and apply filters
+      let filteredTraces = traceRecords.filter(
+        (record): record is Record<string, any> => record !== null && typeof record === 'object',
+      );
+
+      // Apply name filter if provided
+      if (name) {
+        filteredTraces = filteredTraces.filter(record => record.name?.toLowerCase().startsWith(name.toLowerCase()));
+      }
+
+      // Apply scope filter if provided
+      if (scope) {
+        filteredTraces = filteredTraces.filter(record => record.scope === scope);
+      }
+
+      // Apply attributes filter if provided
+      if (attributes) {
+        filteredTraces = filteredTraces.filter(record => {
+          const recordAttributes = record.attributes;
+          if (!recordAttributes) return false;
+
+          // Parse attributes if stored as string
+          const parsedAttributes =
+            typeof recordAttributes === 'string' ? JSON.parse(recordAttributes) : recordAttributes;
+
+          return Object.entries(attributes).every(([key, value]) => parsedAttributes[key] === value);
+        });
+      }
+
+      // Apply custom filters if provided
+      if (filters) {
+        filteredTraces = filteredTraces.filter(record =>
+          Object.entries(filters).every(([key, value]) => record[key] === value),
+        );
+      }
+
+      // Sort traces by creation date (newest first)
+      filteredTraces.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+
+      // Apply pagination
+      const start = page * perPage;
+      const end = start + perPage;
+      const paginatedTraces = filteredTraces.slice(start, end);
+
+      // Transform and return the traces
+      return paginatedTraces.map(record => ({
+        id: record.id,
+        parentSpanId: record.parentSpanId,
+        traceId: record.traceId,
+        name: record.name,
+        scope: record.scope,
+        kind: record.kind,
+        status: this.parseJSON(record.status),
+        events: this.parseJSON(record.events),
+        links: this.parseJSON(record.links),
+        attributes: this.parseJSON(record.attributes),
+        startTime: record.startTime,
+        endTime: record.endTime,
+        other: this.parseJSON(record.other),
+        createdAt: this.ensureDate(record.createdAt),
+      }));
+    } catch (error) {
+      console.error('Failed to get traces:', error);
+      return [];
+    }
+  }
+
+  private parseJSON(value: any): any {
+    if (typeof value === 'string') {
+      try {
+        return JSON.parse(value);
+      } catch {
+        return value;
+      }
+    }
+    return value;
   }
 
   private redis: Redis;
@@ -287,7 +388,7 @@ export class UpstashStore extends MastraStorage {
       },
     };
 
-    await this.__saveThread({ thread: updatedThread });
+    await this.saveThread({ thread: updatedThread });
     return updatedThread;
   }
 
@@ -485,7 +586,7 @@ export class UpstashStore extends MastraStorage {
         if (typeof parsedSnapshot === 'string') {
           try {
             parsedSnapshot = JSON.parse(w!.snapshot as string) as WorkflowRunState;
-          } catch (_e) {
+          } catch {
             // If parsing fails, return the raw snapshot string
             console.warn(`Failed to parse snapshot for workflow ${w!.workflow_name}:`);
           }

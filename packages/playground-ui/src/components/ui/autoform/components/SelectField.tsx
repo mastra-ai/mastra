@@ -12,7 +12,7 @@ export const SelectField: React.FC<AutoFormFieldProps> = ({ field, inputProps, e
         const syntheticEvent = {
           target: {
             value,
-            name: field.key,
+            name: inputProps.name,
           },
         } as React.ChangeEvent<HTMLInputElement>;
         props.onChange(syntheticEvent);

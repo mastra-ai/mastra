@@ -2,6 +2,8 @@ import { afterEach } from 'node:test';
 import { tmpdir } from 'os';
 import { join } from 'path';
 import { openai } from '@ai-sdk/openai';
+import type { CoreMessage, MemoryProcessorOpts } from '@mastra/core';
+import { MemoryProcessor } from '@mastra/core';
 import { Agent } from '@mastra/core/agent';
 import { LibSQLStore } from '@mastra/core/storage/libsql';
 import { createTool } from '@mastra/core/tools';
@@ -33,6 +35,7 @@ describe('Memory with Processors', () => {
     memory = new Memory({
       storage,
       options: {
+        lastMessages: 10,
         semanticRecall: false,
         threads: {
           generateTitle: false,
@@ -216,6 +219,103 @@ describe('Memory with Processors', () => {
     expect(filterToolCallsByName(result, `weather`)).toHaveLength(0);
   });
 
+  it('should apply multiple processors without duplicating messages', async () => {
+    class ConversationOnlyFilter extends MemoryProcessor {
+      constructor() {
+        super({ name: 'ConversationOnlyFilter' });
+      }
+
+      process(messages: CoreMessage[], _opts: MemoryProcessorOpts = {}): CoreMessage[] {
+        return messages.filter(msg => msg.role === 'user' || msg.role === 'assistant');
+      }
+    }
+    const memory = new Memory({
+      processors: [new ToolCallFilter(), new ConversationOnlyFilter(), new TokenLimiter(127000)],
+      options: {
+        lastMessages: 10,
+        semanticRecall: true,
+        threads: { generateTitle: false },
+        workingMemory: {
+          enabled: true,
+          use: 'tool-call',
+        },
+      },
+    });
+    const thread = await memory.createThread({
+      title: 'Multiple Processors Test Thread 2',
+      resourceId,
+    });
+    const instructions = 'You are a helpful assistant';
+    const agent = new Agent({
+      name: 'processor-test-agent',
+      instructions,
+      model: openai('gpt-4o'),
+      memory,
+    });
+
+    const userMessage = 'Tell me something interesting about space';
+
+    const res = await agent.generate(
+      [
+        {
+          role: 'user',
+          content: userMessage,
+        },
+      ],
+      {
+        threadId: thread.id,
+        resourceId,
+      },
+    );
+
+    const responseMessages = JSON.parse(res.request.body || '')?.messages;
+    if (!Array.isArray(responseMessages)) {
+      throw new Error(`responseMessages should be an array`);
+    }
+
+    const userMessagesByContent = responseMessages.filter(m => m.content === userMessage);
+    expect(userMessagesByContent).toEqual([expect.objectContaining({ role: 'user', content: userMessage })]); // should only be one
+    expect(userMessagesByContent.length).toBe(1); // if there's more than one we have duplicate messages
+
+    const userMessage2 = 'Tell me something else interesting about space';
+
+    const res2 = await agent.generate(
+      [
+        {
+          role: 'user',
+          content: userMessage2,
+        },
+      ],
+      {
+        threadId: thread.id,
+        resourceId,
+      },
+    );
+
+    const responseMessages2 = JSON.parse(res2.request.body || '')?.messages;
+    if (!Array.isArray(responseMessages)) {
+      throw new Error(`responseMessages should be an array`);
+    }
+
+    const userMessagesByContent2 = responseMessages2.filter((m: CoreMessage) => m.content === userMessage2);
+    expect(userMessagesByContent2).toEqual([expect.objectContaining({ role: 'user', content: userMessage2 })]); // should only be one
+    expect(userMessagesByContent2.length).toBe(1); // if there's more than one we have duplicate messages
+
+    // make sure all user messages are there
+    const allUserMessages = responseMessages2.filter((m: CoreMessage) => m.role === 'user');
+    expect(allUserMessages.length).toBe(2);
+
+    const remembered = await memory.query({
+      threadId: thread.id,
+      resourceId,
+      selectBy: {
+        last: 20,
+      },
+    });
+    expect(remembered.messages.filter(m => m.role === 'user').length).toBe(2);
+    expect(remembered.messages.length).toBe(4); // 2 user, 2 assistant. These wont be filtered because they come from memory.query() directly
+  });
+
   it('should apply processors with a real Mastra agent', async () => {
     // Create a thread
     const thread = await memory.createThread({
@@ -348,5 +448,110 @@ describe('Memory with Processors', () => {
 
     // The result should still contain some messages
     expect(combinedResult.length).toBeGreaterThan(0);
+  });
+
+  it('should chunk long text by character count', async () => {
+    // Create a thread
+    const thread = await memory.createThread({
+      title: 'Text Chunking Test Thread',
+      resourceId,
+    });
+
+    // Create a long text with known word boundaries
+    const words = [];
+    for (let i = 0; i < 1000; i++) {
+      words.push(`word${i}`);
+    }
+    const longText = words.join(' ');
+
+    // Save a message with the long text
+    await memory.saveMessages({
+      messages: [
+        {
+          id: 'chunking-test',
+          threadId: thread.id,
+          role: 'user',
+          content: longText,
+          createdAt: new Date(),
+          resourceId,
+          type: 'text',
+        },
+      ],
+    });
+
+    // Query the message back
+    const queryResult = await memory.query({
+      threadId: thread.id,
+      selectBy: { last: 1 },
+    });
+
+    // Retrieve the message (no TokenLimiter, just get the message back)
+    const result = memory.processMessages({
+      messages: queryResult.messages,
+    });
+
+    // Should have retrieved the message
+    expect(result.length).toBe(1);
+
+    // Each chunk should respect word boundaries
+    for (const msg of result) {
+      // No words should be cut off
+      const content = typeof msg.content === 'string' ? msg.content : (msg.content[0] as { text: string }).text;
+      const words = content.split(/\s+/);
+      for (const word of words) {
+        expect(word).toMatch(/^word\d+$/); // Each word should be complete
+      }
+    }
+
+    // Chunks should maintain original order
+    let prevNum = -1;
+    for (const msg of result) {
+      const content = typeof msg.content === 'string' ? msg.content : (msg.content[0] as { text: string }).text;
+      const firstWord = content.split(/\s+/)[0];
+      const num = parseInt(firstWord.replace('word', ''));
+      expect(num).toBeGreaterThan(prevNum);
+      prevNum = num;
+    }
+  });
+});
+
+// Direct unit test for chunkText
+
+describe('Memory.chunkText', () => {
+  it('should split long text into chunks at word boundaries', () => {
+    const memory = new Memory({
+      options: {
+        semanticRecall: true,
+        lastMessages: 10,
+        threads: {
+          generateTitle: false,
+        },
+      },
+    });
+    const words = [];
+    for (let i = 0; i < 1000; i++) {
+      words.push(`word${i}`);
+    }
+    const longText = words.join(' ');
+    // Use a small token size to force chunking
+    const chunks = (memory as any).chunkText(longText, 50);
+    expect(chunks.length).toBeGreaterThan(1);
+    // Each chunk should respect word boundaries
+    for (const chunk of chunks) {
+      const chunkWords = chunk.split(/\s+/);
+      for (const word of chunkWords) {
+        if (word.length === 0) continue;
+        expect(word).toMatch(/^word\d+$/);
+      }
+    }
+    // Chunks should maintain original order
+    let prevNum = -1;
+    for (const chunk of chunks) {
+      const firstWord = chunk.split(/\s+/)[0];
+      if (!firstWord) continue; // skip empty
+      const num = parseInt(firstWord.replace('word', ''));
+      expect(num).toBeGreaterThan(prevNum);
+      prevNum = num;
+    }
   });
 });

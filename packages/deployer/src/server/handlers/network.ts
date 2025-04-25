@@ -1,4 +1,5 @@
 import type { Mastra } from '@mastra/core';
+import type { RuntimeContext } from '@mastra/core/runtime-context';
 import {
   getNetworksHandler as getOriginalNetworksHandler,
   getNetworkByIdHandler as getOriginalNetworkByIdHandler,
@@ -42,11 +43,13 @@ export async function getNetworkByIdHandler(c: Context) {
 export async function generateHandler(c: Context) {
   try {
     const mastra: Mastra = c.get('mastra');
+    const runtimeContext: RuntimeContext = c.get('runtimeContext');
     const networkId = c.req.param('networkId');
     const body = await c.req.json();
 
     const result = await getOriginalGenerateHandler({
       mastra,
+      runtimeContext,
       networkId,
       body,
     });
@@ -60,11 +63,13 @@ export async function generateHandler(c: Context) {
 export async function streamGenerateHandler(c: Context): Promise<Response | undefined> {
   try {
     const mastra: Mastra = c.get('mastra');
+    const runtimeContext: RuntimeContext = c.get('runtimeContext');
     const networkId = c.req.param('networkId');
     const body = await c.req.json();
 
     const streamResponse = await getOriginalStreamGenerateHandler({
       mastra,
+      runtimeContext,
       networkId,
       body,
     });

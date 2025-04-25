@@ -61,9 +61,10 @@ async function concatenateMDXDocs(sourceDir: string) {
     content: string;
     title: string;
     description?: string;
+    language: string;
   }> = [];
 
-  async function processDirectory(dirPath: string) {
+  async function processDirectory(dirPath: string, language: string) {
     try {
       const entries = await fs.readdir(dirPath, { withFileTypes: true });
       for (const entry of entries) {
@@ -71,7 +72,7 @@ async function concatenateMDXDocs(sourceDir: string) {
 
         if (entry.isDirectory()) {
           if (!entry.name.startsWith(".") && entry.name !== "node_modules") {
-            await processDirectory(fullPath);
+            await processDirectory(fullPath, language);
           }
           continue;
         }
@@ -90,6 +91,7 @@ async function concatenateMDXDocs(sourceDir: string) {
             content,
             title: frontMatter.title || path.basename(relativePath, ".mdx"),
             description: frontMatter.description,
+            language,
           });
         } catch (error) {
           console.error(
@@ -107,10 +109,15 @@ async function concatenateMDXDocs(sourceDir: string) {
   }
 
   try {
-    await processDirectory(sourceDir);
+    // Process both English and Japanese directories
+    const enDir = path.join(sourceDir, "src/content/en");
+    const jaDir = path.join(sourceDir, "src/content/ja");
+
+    await processDirectory(enDir, "en");
+    await processDirectory(jaDir, "ja");
 
     if (mdxFiles.length === 0) {
-      console.warn("No MDX files found in the specified directory");
+      console.warn("No MDX files found in the specified directories");
       return;
     }
 
@@ -119,6 +126,7 @@ async function concatenateMDXDocs(sourceDir: string) {
       .map((file) => {
         const sourceUrl = pathToUrl(file.path);
         const content = file.content;
+        const languagePrefix = `[${file.language.toUpperCase()}] `;
 
         // Find the position after the title (h1 or h2)
         const titleMatch = content.match(/^(#|##)\s+.*$/m);
@@ -129,7 +137,7 @@ async function concatenateMDXDocs(sourceDir: string) {
             titleIndex + titleMatch[0].length,
           );
           const afterTitle = content.slice(titleIndex + titleMatch[0].length);
-          return `${beforeTitle}\nSource: ${sourceUrl}${afterTitle}`;
+          return `${beforeTitle}\n${languagePrefix}Source: ${sourceUrl}${afterTitle}`;
         }
 
         // If no title found, add source URL after frontmatter if it exists
@@ -143,11 +151,11 @@ async function concatenateMDXDocs(sourceDir: string) {
           const afterFrontMatter = content.slice(
             frontMatterIndex + frontMatterMatch[0].length,
           );
-          return `${beforeFrontMatter}\nSource: ${sourceUrl}${afterFrontMatter}`;
+          return `${beforeFrontMatter}\n${languagePrefix}Source: ${sourceUrl}${afterFrontMatter}`;
         }
 
         // If neither title nor frontmatter found, prepend source URL
-        return `Source: ${sourceUrl}\n\n${content}`;
+        return `${languagePrefix}Source: ${sourceUrl}\n\n${content}`;
       })
       .join("\n\n");
 
@@ -158,7 +166,7 @@ async function concatenateMDXDocs(sourceDir: string) {
     );
     console.log(`Generated llms-full.txt`);
 
-    // Group files by parent directory
+    // Group files by language and parent directory
     const groupedFiles = mdxFiles.reduce(
       (groups, file) => {
         const pagesIndex = file.path.indexOf("src/content/");
@@ -169,16 +177,17 @@ async function concatenateMDXDocs(sourceDir: string) {
           return groups;
         }
 
-        // Get the first directory after 'src/pages/'
-        const pathAfterPages = file.path.slice(
+        // Get the first directory after 'src/content/'
+        const pathAfterContent = file.path.slice(
           pagesIndex + "src/content/".length,
         );
-        const firstDir = pathAfterPages.split("/")[0];
+        const [language, firstDir] = pathAfterContent.split("/");
 
-        if (!groups[firstDir]) {
-          groups[firstDir] = [];
+        const groupKey = `${language}/${firstDir}`;
+        if (!groups[groupKey]) {
+          groups[groupKey] = [];
         }
-        groups[firstDir].push(file);
+        groups[groupKey].push(file);
         return groups;
       },
       {} as Record<string, typeof mdxFiles>,
@@ -198,7 +207,8 @@ async function concatenateMDXDocs(sourceDir: string) {
     ];
 
     for (const [group, files] of Object.entries(groupedFiles)) {
-      indexContent.push(`\n## ${group}`);
+      const [language, section] = group.split("/");
+      indexContent.push(`\n## ${language.toUpperCase()} - ${section}`);
       for (const file of files) {
         const url = pathToUrl(file.path);
         indexContent.push(

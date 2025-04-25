@@ -1,9 +1,8 @@
 import { existsSync, mkdirSync, writeFileSync } from 'fs';
 import { join } from 'path';
-
 import { Deployer } from '@mastra/deployer';
+import { DepsService } from '@mastra/deployer/services';
 import { execa } from 'execa';
-
 import { getOrCreateSite } from './helpers.js';
 
 export class NetlifyDeployer extends Deployer {
@@ -40,6 +39,20 @@ to = "/.netlify/functions/api/:splat"
     );
   }
 
+  protected async installDependencies(outputDirectory: string, rootDir = process.cwd()) {
+    const deps = new DepsService(rootDir);
+    deps.__setLogger(this.logger);
+
+    await deps.install({
+      dir: join(outputDirectory, this.outputDir),
+      architecture: {
+        os: ['linux'],
+        cpu: ['x64'],
+        libc: ['gnu'],
+      },
+    });
+  }
+
   async deploy(outputDirectory: string): Promise<void> {
     const site = await getOrCreateSite({ token: this.token, name: this.projectName || `mastra`, scope: this.scope });
 
@@ -73,24 +86,72 @@ to = "/.netlify/functions/api/:splat"
     this.writeFiles({ dir: join(outputDirectory, this.outputDir) });
   }
 
-  async bundle(entryFile: string, outputDirectory: string): Promise<void> {
+  async bundle(entryFile: string, outputDirectory: string, toolsPaths: string[]): Promise<void> {
     return this._bundle(
       this.getEntry(),
       entryFile,
       outputDirectory,
+      toolsPaths,
       join(outputDirectory, this.outputDir, 'netlify', 'functions', 'api'),
     );
   }
 
   private getEntry(): string {
     return `
-import { handle } from 'hono/netlify'
-import { mastra } from '#mastra';
-import { createHonoServer } from '#server';
+    import { handle } from 'hono/netlify'
+    import { mastra } from '#mastra';
+    import { createHonoServer } from '#server';
+    import { evaluate } from '@mastra/core/eval';
+    import { AvailableHooks, registerHook } from '@mastra/core/hooks';
+    import { TABLE_EVALS } from '@mastra/core/storage';
+    import { checkEvalStorageFields } from '@mastra/core/utils';
 
-const app = await createHonoServer(mastra);
+    registerHook(AvailableHooks.ON_GENERATION, ({ input, output, metric, runId, agentName, instructions }) => {
+      evaluate({
+        agentName,
+        input,
+        metric,
+        output,
+        runId,
+        globalRunId: runId,
+        instructions,
+      });
+    });
 
-export default handle(app)
+    if (mastra.getStorage()) {
+      // start storage init in the background
+      mastra.getStorage().init();
+    }
+
+    registerHook(AvailableHooks.ON_EVALUATION, async traceObject => {
+      const storage = mastra.getStorage();
+      if (storage) {
+        // Check for required fields
+        const logger = mastra?.getLogger();
+        const areFieldsValid = checkEvalStorageFields(traceObject, logger);
+        if (!areFieldsValid) return;
+
+        await storage.insert({
+          tableName: TABLE_EVALS,
+          record: {
+            input: traceObject.input,
+            output: traceObject.output,
+            result: JSON.stringify(traceObject.result || {}),
+            agent_name: traceObject.agentName,
+            metric_name: traceObject.metricName,
+            instructions: traceObject.instructions,
+            test_info: null,
+            global_run_id: traceObject.globalRunId,
+            run_id: traceObject.runId,
+            created_at: new Date().toISOString(),
+          },
+        });
+      }
+    });
+
+    const app = await createHonoServer(mastra);
+
+    export default handle(app)
 `;
   }
 }

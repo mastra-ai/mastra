@@ -1,6 +1,6 @@
 {
   "name": "@mastra/deployer-netlify",
-  "version": "0.1.15-alpha.9",
+  "version": "0.1.20-alpha.0",
   "description": "",
   "type": "module",
   "files": [
@@ -29,7 +29,7 @@
   },
   "keywords": [],
   "author": "",
-  "license": "ISC",
+  "license": "Elastic-2.0",
   "dependencies": {
     "@mastra/core": "workspace:^",
     "@mastra/deployer": "workspace:^",

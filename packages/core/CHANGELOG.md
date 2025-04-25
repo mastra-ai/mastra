@@ -1,5 +1,219 @@
 # @mastra/core
 
+## 0.9.1-alpha.0
+
+### Patch Changes
+
+- 81fb7f6: Workflows v2
+
+## 0.9.0
+
+### Minor Changes
+
+- fe3ae4d: Remove \_\_ functions in storage and move to storage proxy to make sure init is called
+
+### Patch Changes
+
+- 000a6d4: Fixed an issue where the TokenLimiter message processor was adding new messages into the remembered messages array
+- 08bb78e: Added an extra safety for Memory message ordering
+- ed2f549: Fix exlude methods for batchTraceInsert
+- 7e92011: Include tools with deployment builds
+- 9ee4293: Improve commonjs support
+
+  Add types files in the root directory to make sure typescript can resolve it without an exportsmap
+
+- 03f3cd0: Propagate context to passed in tools
+- c0f22b4: [MASTRA-3130] Metadata Filter Update for PG and Libsql
+- 71d9444: updated savemessage to not use mutation when hiding working memory
+- 157c741: Fix message dupes using processors
+- 8a8a73b: fix container to network sub agent
+- 0a033fa: Adds MCPServer component
+- 9c26508: Fixed an issue where "mastra dev" wouldn't always print out localhost:4111 logs due to new NODE_ENV fixes
+- 0f4eae3: Rename Container into RuntimeContext
+- 16a8648: Disable swaggerUI, playground for production builds, mastra instance server build config to enable swaggerUI, apiReqLogs, openAPI documentation for prod builds
+- 6f92295: Fixed an issue where some user messages and llm messages would have the exact same createdAt date, leading to incorrect message ordering. Added a fix for new messages as well as any that were saved before the fix in the wrong order
+
+## 0.9.0-alpha.8
+
+### Patch Changes
+
+- 000a6d4: Fixed an issue where the TokenLimiter message processor was adding new messages into the remembered messages array
+- ed2f549: Fix exlude methods for batchTraceInsert
+- c0f22b4: [MASTRA-3130] Metadata Filter Update for PG and Libsql
+- 0a033fa: Adds MCPServer component
+- 9c26508: Fixed an issue where "mastra dev" wouldn't always print out localhost:4111 logs due to new NODE_ENV fixes
+- 0f4eae3: Rename Container into RuntimeContext
+- 16a8648: Disable swaggerUI, playground for production builds, mastra instance server build config to enable swaggerUI, apiReqLogs, openAPI documentation for prod builds
+
+## 0.9.0-alpha.7
+
+### Patch Changes
+
+- 71d9444: updated savemessage to not use mutation when hiding working memory
+
+## 0.9.0-alpha.6
+
+### Patch Changes
+
+- 157c741: Fix message dupes using processors
+
+## 0.9.0-alpha.5
+
+### Patch Changes
+
+- 08bb78e: Added an extra safety for Memory message ordering
+
+## 0.9.0-alpha.4
+
+### Patch Changes
+
+- 7e92011: Include tools with deployment builds
+
+## 0.9.0-alpha.3
+
+### Minor Changes
+
+- fe3ae4d: Remove \_\_ functions in storage and move to storage proxy to make sure init is called
+
+## 0.8.4-alpha.2
+
+### Patch Changes
+
+- 9ee4293: Improve commonjs support
+
+  Add types files in the root directory to make sure typescript can resolve it without an exportsmap
+
+## 0.8.4-alpha.1
+
+### Patch Changes
+
+- 8a8a73b: fix container to network sub agent
+- 6f92295: Fixed an issue where some user messages and llm messages would have the exact same createdAt date, leading to incorrect message ordering. Added a fix for new messages as well as any that were saved before the fix in the wrong order
+
+## 0.8.4-alpha.0
+
+### Patch Changes
+
+- 03f3cd0: Propagate context to passed in tools
+
+## 0.8.3
+
+### Patch Changes
+
+- d72318f: Refactored the evals table to use the DS tables
+- 0bcc862: Fixed an issue where we were sanitizing response message content and filter on a value that may not always be an array
+- 10a8caf: Removed an extra console log that made it into core
+- 359b089: Allowed explicitly disabling vector/embedder in Memory by passing vector: false or options.semanticRecall: false
+- 32e7b71: Add support for dependency injection
+- 37bb612: Add Elastic-2.0 licensing for packages
+- 7f1b291: Client Side tool call passing
+
+## 0.8.3-alpha.5
+
+### Patch Changes
+
+- d72318f: Refactored the evals table to use the DS tables
+
+## 0.8.3-alpha.4
+
+### Patch Changes
+
+- 7f1b291: Client Side tool call passing
+
+## 0.8.3-alpha.3
+
+### Patch Changes
+
+- 10a8caf: Removed an extra console log that made it into core
+
+## 0.8.3-alpha.2
+
+### Patch Changes
+
+- 0bcc862: Fixed an issue where we were sanitizing response message content and filter on a value that may not always be an array
+
+## 0.8.3-alpha.1
+
+### Patch Changes
+
+- 32e7b71: Add support for dependency injection
+- 37bb612: Add Elastic-2.0 licensing for packages
+
+## 0.8.3-alpha.0
+
+### Patch Changes
+
+- 359b089: Allowed explicitly disabling vector/embedder in Memory by passing vector: false or options.semanticRecall: false
+
+## 0.8.2
+
+### Patch Changes
+
+- a06aadc: Upgrade fastembed to fix bug where fastembe cannot be imported
+
+## 0.8.2-alpha.0
+
+### Patch Changes
+
+- a06aadc: Upgrade fastembed to fix bug where fastembe cannot be imported
+
+## 0.8.1
+
+### Patch Changes
+
+- 99e2998: Set default max steps to 5
+- 8fdb414: Custom mastra server cors config
+
+## 0.8.1-alpha.0
+
+### Patch Changes
+
+- 99e2998: Set default max steps to 5
+- 8fdb414: Custom mastra server cors config
+
+## 0.8.0
+
+### Minor Changes
+
+- 619c39d: Added support for agents as steps
+
+### Patch Changes
+
+- 56c31b7: Batch insert messages for libsql adapter
+- 5ae0180: Removed prefixed doc references
+- fe56be0: exclude \_\_primitive, getMemory, hasOwnMemory from traces since they create noisy traces
+- 93875ed: Improved the performance of Memory semantic recall by 2 to 3 times when using pg by making tweaks to @mastra/memory @mastra/core and @mastra/pg
+- 107bcfe: Fixed JSON parsing in memory component to prevent crashes when encountering strings that start with '[' or '{' but are not valid JSON
+- 9bfa12b: Accept ID on step config
+- 515ebfb: Fix compound subscriber bug
+- 5b4e19f: fix hanging and excessive workflow execution
+- dbbbf80: Added clickhouse storage
+- a0967a0: Added new "Memory Processor" feature to @mastra/core and @mastra/memory, allowing devs to modify Mastra Memory before it's sent to the LLM
+- fca3b21: fix server in mastra not to be mandatory
+- 88fa727: Added getWorkflowRuns for libsql, pg, clickhouse and upstash as well as added route getWorkflowRunsHandler
+- f37f535: Added variables to while and until loops
+- a3f0e90: Update storage initialization to ensure tables are present
+- 4d67826: Fix eval writes, remove id column
+- 6330967: Enable route timeout using server options
+- 8393832: Handle nested workflow view on workflow graph
+- 6330967: Add support for configuration of server port using Mastra instance
+- 99d43b9: Updated evaluate to include agent output
+- d7e08e8: createdAt needs to be nullable
+- febc8a6: Added dual tracing and fixed local tracing recursion
+- 7599d77: fix(deps): update ai sdk to ^4.2.2
+- 0118361: Add resourceId to memory metadata
+- 619c39d: AgentStep -> Agent as a workflow step (WIP)
+- cafae83: Changed error messages for vector mismatch with index
+- 8076ecf: Unify workflow watch/start response
+- 8df4a77: Fix if-else execution order
+- 304397c: Add support for custom api routes in mastra
+
+## 0.8.0-alpha.8
+
+### Patch Changes
+
+- 8df4a77: Fix if-else execution order
+
 ## 0.8.0-alpha.7
 
 ### Patch Changes

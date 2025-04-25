@@ -1,0 +1,167 @@
+# query
+
+Retrieves messages from a specific thread, with support for pagination and filtering options.
+
+## Usage Example
+
+```typescript
+import { Memory } from "@mastra/memory";
+
+const memory = new Memory({
+  /* config */
+});
+
+// Get last 50 messages
+const { messages, uiMessages } = await memory.query({
+  threadId: "thread-123",
+  selectBy: {
+    last: 50,
+  },
+});
+
+// Get messages with context around specific messages
+const { messages: contextMessages } = await memory.query({
+  threadId: "thread-123",
+  selectBy: {
+    include: [
+      {
+        id: "msg-123", // Get just this message (no context)
+      },
+      {
+        id: "msg-456", // Get this message with custom context
+        withPreviousMessages: 3, // 3 messages before
+        withNextMessages: 1, // 1 message after
+      },
+    ],
+  },
+});
+
+// Semantic search in messages
+const { messages } = await memory.query({
+  threadId: "thread-123",
+  selectBy: {
+    vectorSearchString: "What was discussed about deployment?",
+  },
+  threadConfig: {
+    historySearch: true,
+  },
+});
+```
+
+## Parameters
+
+<PropertiesTable
+  content={[
+    {
+      name: "threadId",
+      type: "string",
+      description:
+        "The unique identifier of the thread to retrieve messages from",
+      isOptional: false,
+    },
+    {
+      name: "resourceId",
+      type: "string",
+      description:
+        "Optional ID of the resource that owns the thread. If provided, validates thread ownership",
+      isOptional: true,
+    },
+    {
+      name: "selectBy",
+      type: "object",
+      description: "Options for filtering messages",
+      isOptional: true,
+    },
+    {
+      name: "threadConfig",
+      type: "MemoryConfig",
+      description: "Configuration options for message retrieval",
+      isOptional: true,
+    },
+  ]}
+/>
+
+### selectBy
+
+<PropertiesTable
+  content={[
+    {
+      name: "vectorSearchString",
+      type: "string",
+      description: "Search string for finding semantically similar messages",
+      isOptional: true,
+    },
+    {
+      name: "last",
+      type: "number | false",
+      description:
+        "Number of most recent messages to retrieve. Set to false to disable limit. Note: threadConfig.lastMessages (default: 40) will override this if smaller.",
+      isOptional: true,
+      defaultValue: "40",
+    },
+    {
+      name: "include",
+      type: "array",
+      description: "Array of message IDs to include with context",
+      isOptional: true,
+    },
+  ]}
+/>
+
+### include
+
+<PropertiesTable
+  content={[
+    {
+      name: "id",
+      type: "string",
+      description: "ID of the message to include",
+      isOptional: false,
+    },
+    {
+      name: "withPreviousMessages",
+      type: "number",
+      description:
+        "Number of messages to include before this message. Defaults to 2 when using vector search, 0 otherwise.",
+      isOptional: true,
+    },
+    {
+      name: "withNextMessages",
+      type: "number",
+      description:
+        "Number of messages to include after this message. Defaults to 2 when using vector search, 0 otherwise.",
+      isOptional: true,
+    },
+  ]}
+/>
+
+## Returns
+
+<PropertiesTable
+  content={[
+    {
+      name: "messages",
+      type: "CoreMessage[]",
+      description: "Array of retrieved messages in their core format",
+    },
+    {
+      name: "uiMessages",
+      type: "AiMessage[]",
+      description: "Array of messages formatted for UI display",
+    },
+  ]}
+/>
+
+## Additional Notes
+
+The `query` function returns two different message formats:
+
+- `messages`: Core message format used internally
+- `uiMessages`: Formatted messages suitable for UI display, including proper threading of tool calls and results
+
+### Related
+
+- [Memory Class Reference](/reference/memory/Memory.mdx)
+- [Getting Started with Memory](/docs/memory/overview.mdx)
+- [Semantic Recall](/docs/memory/semantic-recall.mdx)
+- [createThread](/reference/memory/createThread.mdx)

@@ -1,4 +1,5 @@
 import type { Mastra } from '@mastra/core';
+import type { RuntimeContext } from '@mastra/core/runtime-context';
 import {
   getWorkflowsHandler as getOriginalWorkflowsHandler,
   getWorkflowByIdHandler as getOriginalWorkflowByIdHandler,
@@ -49,12 +50,14 @@ export async function getWorkflowByIdHandler(c: Context) {
 export async function startAsyncWorkflowHandler(c: Context) {
   try {
     const mastra: Mastra = c.get('mastra');
+    const runtimeContext: RuntimeContext = c.get('runtimeContext');
     const workflowId = c.req.param('workflowId');
     const triggerData = await c.req.json();
     const runId = c.req.query('runId');
 
     const result = await getOriginalStartAsyncWorkflowHandler({
       mastra,
+      runtimeContext,
       workflowId,
       runId,
       triggerData,
@@ -87,12 +90,14 @@ export async function createRunHandler(c: Context) {
 export async function startWorkflowRunHandler(c: Context) {
   try {
     const mastra: Mastra = c.get('mastra');
+    const runtimeContext: RuntimeContext = c.get('runtimeContext');
     const workflowId = c.req.param('workflowId');
     const triggerData = await c.req.json();
     const runId = c.req.query('runId');
 
     await getOriginalStartWorkflowRunHandler({
       mastra,
+      runtimeContext,
       workflowId,
       runId,
       triggerData,
@@ -149,6 +154,7 @@ export function watchWorkflowHandler(c: Context) {
 export async function resumeAsyncWorkflowHandler(c: Context) {
   try {
     const mastra: Mastra = c.get('mastra');
+    const runtimeContext: RuntimeContext = c.get('runtimeContext');
     const workflowId = c.req.param('workflowId');
     const runId = c.req.query('runId');
     const { stepId, context } = await c.req.json();
@@ -159,6 +165,7 @@ export async function resumeAsyncWorkflowHandler(c: Context) {
 
     const result = await getOriginalResumeAsyncWorkflowHandler({
       mastra,
+      runtimeContext,
       workflowId,
       runId,
       body: { stepId, context },
@@ -173,6 +180,7 @@ export async function resumeAsyncWorkflowHandler(c: Context) {
 export async function resumeWorkflowHandler(c: Context) {
   try {
     const mastra: Mastra = c.get('mastra');
+    const runtimeContext: RuntimeContext = c.get('runtimeContext');
     const workflowId = c.req.param('workflowId');
     const runId = c.req.query('runId');
     const { stepId, context } = await c.req.json();
@@ -183,6 +191,7 @@ export async function resumeWorkflowHandler(c: Context) {
 
     await getOriginalResumeWorkflowHandler({
       mastra,
+      runtimeContext,
       workflowId,
       runId,
       body: { stepId, context },

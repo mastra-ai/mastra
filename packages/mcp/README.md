@@ -37,6 +37,16 @@ const sseClient = new MastraMCPClient({
     requestInit: {
       headers: { Authorization: 'Bearer your-token' },
     },
+    eventSourceInit: {
+      fetch(input: Request | URL | string, init?: RequestInit) {
+        const headers = new Headers(init?.headers || {});
+        headers.set('Authorization', 'Bearer your-token');
+        return fetch(input, {
+          ...init,
+          headers,
+        });
+      },
+    },
   },
   timeout: 60000, // optional timeout for tool calls in milliseconds
 });
@@ -84,6 +94,97 @@ const tools = await mcp.getTools();
 // Get tools grouped into a toolset object per-server
 const toolsets = await mcp.getToolsets();
 ```
+
+## Logging
+
+The MCP client provides per-server logging capabilities, allowing you to monitor interactions with each MCP server separately:
+
+```typescript
+import { MCPConfiguration, LogMessage, LoggingLevel } from '@mastra/mcp';
+
+// Define a custom log handler
+const weatherLogger = (logMessage: LogMessage) => {
+  console.log(`[${logMessage.level}] ${logMessage.serverName}: ${logMessage.message}`);
+
+  // Log data contains valuable information
+  console.log('Details:', logMessage.details);
+  console.log('Timestamp:', logMessage.timestamp);
+};
+
+// Initialize MCP configuration with server-specific loggers
+const mcp = new MCPConfiguration({
+  servers: {
+    weatherService: {
+      command: 'npx',
+      args: ['tsx', 'weather-mcp.ts'],
+      // Attach the logger to this specific server
+      log: weatherLogger,
+    },
+
+    stockPriceService: {
+      command: 'npx',
+      args: ['tsx', 'stock-mcp.ts'],
+      // Different logger for this service
+      log: logMessage => {
+        // Just log errors and critical events for this service
+        if (['error', 'critical', 'alert', 'emergency'].includes(logMessage.level)) {
+          console.error(`Stock service ${logMessage.level}: ${logMessage.message}`);
+        }
+      },
+    },
+  },
+});
+```
+
+### Log Message Structure
+
+Each log message contains the following information:
+
+```typescript
+interface LogMessage {
+  level: LoggingLevel; // MCP SDK standard log levels
+  message: string;
+  timestamp: Date;
+  serverName: string;
+  details?: Record<string, any>;
+}
+```
+
+The `LoggingLevel` type is directly imported from the MCP SDK, ensuring compatibility with all standard MCP log levels: `'debug' | 'info' | 'notice' | 'warning' | 'error' | 'critical' | 'alert' | 'emergency'`.
+
+### Creating Reusable Loggers
+
+You can create reusable logger factories for common patterns:
+
+```typescript
+// File logger factory with color coded output for different severity levels
+const createFileLogger = filePath => {
+  return logMessage => {
+    // Format the message based on level
+    const prefix =
+      logMessage.level === 'emergency' ? '!!! EMERGENCY !!! ' : logMessage.level === 'alert' ? '! ALERT ! ' : '';
+
+    // Write to file with timestamp, level, etc.
+    fs.appendFileSync(
+      filePath,
+      `[${logMessage.timestamp.toISOString()}] [${logMessage.level.toUpperCase()}] ${prefix}${logMessage.message}\n`,
+    );
+  };
+};
+
+// Use the factory in configuration
+const mcp = new MCPConfiguration({
+  servers: {
+    weatherService: {
+      command: 'npx',
+      args: ['tsx', 'weather-mcp.ts'],
+      log: createFileLogger('./logs/weather.log'),
+    },
+  },
+});
+```
+
+See the `examples/server-logging.ts` file for comprehensive examples of various logging strategies.
 
 ### Tools vs Toolsets
 
@@ -140,6 +241,16 @@ const mcp = new MCPConfiguration({
           Authorization: 'Bearer user-1-token',
         },
       },
+      eventSourceInit: {
+        fetch(input: Request | URL | string, init?: RequestInit) {
+          const headers = new Headers(init?.headers || {});
+          headers.set('Authorization', 'Bearer user-1-token');
+          return fetch(input, {
+            ...init,
+            headers,
+          });
+        },
+      },
     },
   },
 });
@@ -161,6 +272,44 @@ The `MCPConfiguration` class automatically:
 - Namespaces tools to prevent naming conflicts
 - Handles connection lifecycle and cleanup
 - Provides both flat and grouped access to tools
+
+## SSE Authentication and Headers
+
+When using SSE (Server-Sent Events) connections with authentication or custom headers, you need to configure headers in a specific way. The standard `requestInit` headers won't work alone because SSE connections use the browser's `EventSource` API, which doesn't support custom headers directly.
+
+The `eventSourceInit` configuration allows you to customize the underlying fetch request used for the SSE connection, ensuring your authentication headers are properly included.
+
+To properly include authentication headers or other custom headers in SSE connections, you need to use both `requestInit` and `eventSourceInit`:
+
+```typescript
+const sseClient = new MastraMCPClient({
+  name: 'authenticated-sse-client',
+  server: {
+    url: new URL('https://your-mcp-server.com/sse'),
+    // requestInit alone isn't enough for SSE connections
+    requestInit: {
+      headers: { Authorization: 'Bearer your-token' },
+    },
+    // eventSourceInit is required to include headers in the SSE connection
+    eventSourceInit: {
+      fetch(input: Request | URL | string, init?: RequestInit) {
+        const headers = new Headers(init?.headers || {});
+        headers.set('Authorization', 'Bearer your-token');
+        return fetch(input, {
+          ...init,
+          headers,
+        });
+      },
+    },
+  },
+});
+```
+
+This configuration ensures that:
+
+1. The authentication headers are properly included in the SSE connection request
+2. The connection can be established with the required credentials
+3. Subsequent messages can be received through the authenticated connection
 
 ## Configuration
 
@@ -184,6 +333,7 @@ The `MCPConfiguration` class automatically:
 
 - `version`: Client version (default: '1.0.0')
 - `capabilities`: ClientCapabilities object for specifying supported features
+- `log`: Function that receives and processes log messages
 
 ## Features
 
@@ -193,6 +343,7 @@ The `MCPConfiguration` class automatically:
 - Multiple transport layers:
   - Stdio-based for local servers
   - SSE-based for remote servers
+- Per-server logging capability using all standard MCP log levels
 - Automatic error handling and logging
 - Tool execution with context
 

@@ -1,4 +1,5 @@
 import type { Mastra } from '@mastra/core';
+import type { RuntimeContext } from '@mastra/core/runtime-context';
 import {
   getAgentsHandler as getOriginalAgentsHandler,
   getAgentByIdHandler as getOriginalAgentByIdHandler,
@@ -58,11 +59,13 @@ export async function generateHandler(c: Context) {
   try {
     const mastra: Mastra = c.get('mastra');
     const agentId = c.req.param('agentId');
+    const runtimeContext: RuntimeContext = c.get('runtimeContext');
     const body = await c.req.json();
 
     const result = await getOriginalGenerateHandler({
       mastra,
       agentId,
+      runtimeContext,
       body,
     });
 
@@ -76,11 +79,13 @@ export async function streamGenerateHandler(c: Context): Promise<Response | unde
   try {
     const mastra = c.get('mastra');
     const agentId = c.req.param('agentId');
+    const runtimeContext: RuntimeContext = c.get('runtimeContext');
     const body = await c.req.json();
 
     const streamResponse = await getOriginalStreamGenerateHandler({
       mastra,
       agentId,
+      runtimeContext,
       body,
     });
 

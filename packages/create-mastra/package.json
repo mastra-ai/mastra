@@ -1,7 +1,8 @@
 {
   "name": "create-mastra",
-  "version": "0.2.4-alpha.2",
+  "version": "0.2.9",
   "description": "Create Mastra apps with one command",
+  "license": "Elastic-2.0",
   "type": "module",
   "main": "dist/index.js",
   "bin": {

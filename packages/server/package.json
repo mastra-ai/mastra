@@ -1,6 +1,6 @@
 {
   "name": "@mastra/server",
-  "version": "0.0.1-alpha.5",
+  "version": "2.0.1-alpha.0",
   "description": "",
   "type": "module",
   "files": [
@@ -50,15 +50,15 @@
   },
   "keywords": [],
   "author": "",
-  "license": "ISC",
+  "license": "Elastic-2.0",
   "dependencies": {},
   "peerDependencies": {
     "@mastra/core": "workspace:^"
   },
   "devDependencies": {
-    "@mastra/core": "workspace:*",
     "@ai-sdk/openai": "^1.3.2",
     "@internal/lint": "workspace:*",
+    "@mastra/core": "workspace:*",
     "@microsoft/api-extractor": "^7.52.1",
     "@types/node": "^20.17.27",
     "eslint": "^9.23.0",
