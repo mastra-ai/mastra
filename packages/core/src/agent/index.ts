@@ -675,7 +675,7 @@ export class Agent<
     runtimeContext: RuntimeContext;
   }) {
     const instructionStringOrFunction = instructionsPrimitive || this.instructions;
-    const instructions = typeof instructionStringOrFunction === 'function' ? instructionStringOrFunction(runtimeContext) : instructionStringOrFunction;
+    const instructions = typeof instructionStringOrFunction === 'function' ? instructionStringOrFunction({ runtimeContext: runtimeContext ?? new Container() }) : instructionStringOrFunction;
     const systemMessage: CoreMessage = {
       role: 'system',
       content: instructions,
