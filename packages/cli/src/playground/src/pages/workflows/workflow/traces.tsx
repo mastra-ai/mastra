@@ -1,35 +1,18 @@
-import { WorkflowTraces } from '@mastra/playground-ui';
-import { useParams } from 'react-router';
+import { useParams, useSearchParams } from 'react-router';
 
-import { Skeleton } from '@/components/ui/skeleton';
-
-import { WorkflowInformation } from '@/domains/workflows/workflow-information';
-import { useWorkflow } from '@/hooks/use-workflows';
+import { VNextWorkflowTraces } from '@/domains/workflows/v-next-workflow.traces';
+import { WorkflowTraces } from '@/domains/workflows/workflow-traces';
 
 function WorkflowTracesPage() {
   const { workflowId } = useParams();
-  const { workflow, isLoading: isWorkflowLoading } = useWorkflow(workflowId!);
+  const [searchParams] = useSearchParams();
+  const isVNext = searchParams.get('version') === 'v-next';
 
-  if (isWorkflowLoading) {
-    return (
-      <main className="flex-1 relative grid grid-cols-[1fr_325px] divide-x">
-        <div className="p-4">
-          <Skeleton className="h-[600px]" />
-        </div>
-        <div className="flex flex-col">
-          <WorkflowInformation workflowId={workflowId!} />
-        </div>
-      </main>
-    );
+  if (isVNext) {
+    return <VNextWorkflowTraces workflowId={workflowId!} />;
   }
 
-  return (
-    <WorkflowTraces
-      workflowName={workflow?.name!}
-      baseUrl=""
-      sidebarChild={<WorkflowInformation workflowId={workflowId!} />}
-    />
-  );
+  return <WorkflowTraces workflowId={workflowId!} />;
 }
 
 export default WorkflowTracesPage;

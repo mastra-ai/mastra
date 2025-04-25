@@ -1,3 +1,4 @@
+import type { RuntimeContext } from '@mastra/core/runtime-context';
 import type {
   ClientOptions,
   GetVNextWorkflowResponse,
@@ -15,102 +16,6 @@ export class VNextWorkflow extends BaseResource {
     private workflowId: string,
   ) {
     super(options);
-  }
-
-  /**
-   * Retrieves details about the vNext workflow
-   * @returns Promise containing vNext workflow details including steps and graphs
-   */
-  details(): Promise<GetVNextWorkflowResponse> {
-    return this.request(`/api/workflows/v-next/${this.workflowId}`);
-  }
-
-  /**
-   * Creates a new vNext workflow run
-   * @returns Promise containing the generated run ID
-   */
-  createRun(params?: { runId?: string }): Promise<{ runId: string }> {
-    const searchParams = new URLSearchParams();
-
-    if (!!params?.runId) {
-      searchParams.set('runId', params.runId);
-    }
-
-    return this.request(`/api/workflows/v-next/${this.workflowId}/create-run?${searchParams.toString()}`, {
-      method: 'POST',
-    });
-  }
-
-  /**
-   * Starts a vNext workflow run synchronously without waiting for the workflow to complete
-   * @param params - Object containing the runId and inputData
-   * @returns Promise containing success message
-   */
-  start(params: { runId: string; inputData: Record<string, any> }): Promise<{ message: string }> {
-    return this.request(`/api/workflows/v-next/${this.workflowId}/start?runId=${params.runId}`, {
-      method: 'POST',
-      body: params?.inputData,
-    });
-  }
-
-  /**
-   * Resumes a suspended vNext workflow step synchronously without waiting for the vNext workflow to complete
-   * @param params - Object containing the runId, step, and resumeData
-   * @returns Promise containing the vNext workflow resume results
-   */
-  resume({
-    step,
-    runId,
-    resumeData,
-  }: {
-    step: string | string[];
-    runId: string;
-    resumeData?: Record<string, any>;
-  }): Promise<{ message: string }> {
-    return this.request(`/api/workflows/v-next/${this.workflowId}/resume?runId=${runId}`, {
-      method: 'POST',
-      body: {
-        step,
-        resumeData,
-      },
-    });
-  }
-
-  /**
-   * Starts a vNext workflow run asynchronously and returns a promise that resolves when the vNext workflow is complete
-   * @param params - Object containing the optional runId and inputData
-   * @returns Promise containing the vNext workflow execution results
-   */
-  startAsync(params: { runId?: string; inputData: Record<string, any> }): Promise<VNextWorkflowRunResult> {
-    const searchParams = new URLSearchParams();
-
-    if (!!params?.runId) {
-      searchParams.set('runId', params.runId);
-    }
-
-    return this.request(`/api/workflows/v-next/${this.workflowId}/start-async?${searchParams.toString()}`, {
-      method: 'POST',
-      body: params?.inputData,
-    });
-  }
-
-  /**
-   * Resumes a suspended vNext workflow step asynchronously and returns a promise that resolves when the vNext workflow is complete
-   * @param params - Object containing the runId, step, and resumeData
-   * @returns Promise containing the vNext workflow resume results
-   */
-  resumeAsync(params: {
-    runId: string;
-    step: string | string[];
-    resumeData?: Record<string, any>;
-  }): Promise<VNextWorkflowRunResult> {
-    return this.request(`/api/workflows/v-next/${this.workflowId}/resume-async?runId=${params.runId}`, {
-      method: 'POST',
-      body: {
-        step: params.step,
-        resumeData: params.resumeData,
-      },
-    });
   }
 
   /**
@@ -182,6 +87,206 @@ export class VNextWorkflow extends BaseResource {
         // Ignore cancel errors
       });
     }
+  }
+
+  /**
+   * Retrieves details about the vNext workflow
+   * @returns Promise containing vNext workflow details including steps and graphs
+   */
+  details(): Promise<GetVNextWorkflowResponse> {
+    return this.request(`/api/workflows/v-next/${this.workflowId}`);
+  }
+
+  /**
+   * Creates a new vNext workflow run
+   * @param params - Optional object containing the optional runId
+   * @returns Promise containing the runId of the created run
+   */
+  createRun(params?: { runId?: string }): Promise<{ runId: string }> {
+    const searchParams = new URLSearchParams();
+
+    if (!!params?.runId) {
+      searchParams.set('runId', params.runId);
+    }
+
+    return this.request(`/api/workflows/v-next/${this.workflowId}/create-run?${searchParams.toString()}`, {
+      method: 'POST',
+    });
+  }
+
+  /**
+   * Creates and watches a new vNext workflow run
+   * @param onRecord - Callback that takes the watch result
+   * @param params - Optional object containing the optional runId, inputData and runtimeContext
+   * @returns AsyncGenerator that yields parsed records from the vNext workflow watch stream after creating and starting a run
+   */
+  async createAndWatchRun(
+    onRecord: (record: VNextWorkflowWatchResult) => void,
+    params?: { runId?: string; inputData?: Record<string, any>; runtimeContext?: RuntimeContext },
+  ) {
+    const searchParams = new URLSearchParams();
+
+    if (!!params?.runId) {
+      searchParams.set('runId', params.runId);
+    }
+
+    const response: Response = await this.request(
+      `/api/workflows/v-next/${this.workflowId}/create-and-watch-run?${searchParams.toString()}`,
+      {
+        method: 'POST',
+        stream: true,
+        body: params
+          ? {
+              inputData: params?.inputData,
+              runtimeContext: params?.runtimeContext,
+            }
+          : undefined,
+      },
+    );
+
+    if (!response.ok) {
+      throw new Error(`Failed to watch vNext workflow: ${response.statusText}`);
+    }
+
+    if (!response.body) {
+      throw new Error('Response body is null');
+    }
+
+    for await (const record of this.streamProcessor(response.body)) {
+      onRecord(record);
+    }
+  }
+
+  /**
+   * Starts a vNext workflow run synchronously without waiting for the workflow to complete
+   * @param params - Object containing the runId, inputData and runtimeContext
+   * @returns Promise containing success message
+   */
+  start(params: {
+    runId: string;
+    inputData: Record<string, any>;
+    runtimeContext?: RuntimeContext;
+  }): Promise<{ message: string }> {
+    return this.request(`/api/workflows/v-next/${this.workflowId}/start?runId=${params.runId}`, {
+      method: 'POST',
+      body: { inputData: params?.inputData, runtimeContext: params.runtimeContext },
+    });
+  }
+
+  /**
+   * Resumes a suspended vNext workflow step synchronously without waiting for the vNext workflow to complete
+   * @param params - Object containing the runId, step, resumeData and runtimeContext
+   * @returns Promise containing success message
+   */
+  resume({
+    step,
+    runId,
+    resumeData,
+    runtimeContext,
+  }: {
+    step: string | string[];
+    runId: string;
+    resumeData?: Record<string, any>;
+    runtimeContext?: RuntimeContext;
+  }): Promise<{ message: string }> {
+    return this.request(`/api/workflows/v-next/${this.workflowId}/resume?runId=${runId}`, {
+      method: 'POST',
+      stream: true,
+      body: {
+        step,
+        resumeData,
+        runtimeContext,
+      },
+    });
+  }
+
+  /**
+   * Resumes and watches a suspended vNext workflow step synchronously without waiting for the vNext workflow to complete
+   * @param params - Object containing the runId, step, resumeData and runtimeContext
+   * @param onRecord - Callback that takes the watch result
+   * @returns AsyncGenerator that yields parsed records from the vNext workflow watch stream after resuming the run
+   */
+  async resumeAndWatch(
+    {
+      step,
+      runId,
+      resumeData,
+      runtimeContext,
+    }: {
+      step: string | string[];
+      runId: string;
+      resumeData?: Record<string, any>;
+      runtimeContext?: RuntimeContext;
+    },
+    onRecord: (record: VNextWorkflowWatchResult) => void,
+  ) {
+    const response: Response = await this.request(
+      `/api/workflows/v-next/${this.workflowId}/resume-and-watch?runId=${runId}`,
+      {
+        method: 'POST',
+        stream: true,
+        body: {
+          step,
+          resumeData,
+          runtimeContext,
+        },
+      },
+    );
+
+    if (!response.ok) {
+      throw new Error(`Failed to watch vNext workflow: ${response.statusText}`);
+    }
+
+    if (!response.body) {
+      throw new Error('Response body is null');
+    }
+
+    for await (const record of this.streamProcessor(response.body)) {
+      onRecord(record);
+    }
+  }
+
+  /**
+   * Starts a vNext workflow run asynchronously and returns a promise that resolves when the vNext workflow is complete
+   * @param params - Object containing the optional runId, inputData and runtimeContext
+   * @returns Promise containing the vNext workflow execution results
+   */
+  startAsync(params: {
+    runId?: string;
+    inputData: Record<string, any>;
+    runtimeContext?: RuntimeContext;
+  }): Promise<VNextWorkflowRunResult> {
+    const searchParams = new URLSearchParams();
+
+    if (!!params?.runId) {
+      searchParams.set('runId', params.runId);
+    }
+
+    return this.request(`/api/workflows/v-next/${this.workflowId}/start-async?${searchParams.toString()}`, {
+      method: 'POST',
+      body: { inputData: params.inputData, runtimeContext: params.runtimeContext },
+    });
+  }
+
+  /**
+   * Resumes a suspended vNext workflow step asynchronously and returns a promise that resolves when the vNext workflow is complete
+   * @param params - Object containing the runId, step, resumeData and runtimeContext
+   * @returns Promise containing the vNext workflow resume results
+   */
+  resumeAsync(params: {
+    runId: string;
+    step: string | string[];
+    resumeData?: Record<string, any>;
+    runtimeContext?: RuntimeContext;
+  }): Promise<VNextWorkflowRunResult> {
+    return this.request(`/api/workflows/v-next/${this.workflowId}/resume-async?runId=${params.runId}`, {
+      method: 'POST',
+      body: {
+        step: params.step,
+        resumeData: params.resumeData,
+        runtimeContext: params.runtimeContext,
+      },
+    });
   }
 
   /**

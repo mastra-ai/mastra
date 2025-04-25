@@ -1,16 +1,21 @@
 import { Badge, Button, Cell, EntryCell, Icon, WorkflowIcon } from '@mastra/playground-ui';
 import { Footprints } from 'lucide-react';
-import { Link } from 'react-router';
 
-const NameCell = ({ row }: { row: any }) => {
-  return <EntryCell icon={<WorkflowIcon />} name={row.original.name} />;
+type ColumnDef<T> = {
+  id: string;
+  header: string;
+  cell: (props: { row: { original: T } }) => React.ReactNode;
+  meta?: {
+    width?: string;
+  };
+  size?: number;
 };
 
-export const workflowsTableColumns = [
+export const workflowsTableColumns: ColumnDef<{ id: string; name: string; stepsCount: number; isVNext?: boolean }>[] = [
   {
     id: 'name',
     header: 'Name',
-    cell: NameCell,
+    cell: ({ row }) => <EntryCell icon={<WorkflowIcon />} name={row.original.name} />,
     meta: {
       width: 'auto',
     },
@@ -26,7 +31,7 @@ export const workflowsTableColumns = [
             {row.original.stepsCount} step{row.original.stepsCount > 1 ? 's' : ''}
           </Badge>
 
-          <Button as={Link} to={`/workflows/${row.original.id}/graph`}>
+          <Button as="a" href={`/workflows/${row.original.id}/graph${row.original.isVNext ? '?version=v-next' : ''}`}>
             <Icon>
               <WorkflowIcon />
             </Icon>

@@ -93,3 +93,35 @@ function getWeatherCondition(code: number): string {
   };
   return conditions[code] || 'Unknown';
 }
+
+export const activityPlannerTool = createTool({
+  id: 'get-weather-specific-activities',
+  description: 'Get weather-specific activities for a city',
+  inputSchema: z.object({
+    city: z.string(),
+  }),
+  outputSchema: z.object({
+    activities: z.array(z.string()),
+  }),
+  execute: async ({ context, mastra }) => {
+    const plannerWorkflow = mastra?.getWorkflow('step1Workflow');
+    if (!plannerWorkflow) {
+      throw new Error('Planner workflow not found');
+    }
+
+    const run = plannerWorkflow.createRun();
+    const results = await run.start({
+      triggerData: {
+        city: context.city,
+      },
+    });
+    const planActivitiesStep = results.results['plan-activities'];
+    if (planActivitiesStep.status === 'success') {
+      return planActivitiesStep.output;
+    }
+
+    return {
+      activities: 'No activities found',
+    };
+  },
+});

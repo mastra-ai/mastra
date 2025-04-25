@@ -1,8 +1,14 @@
 import type { Workflow } from '@mastra/core/workflows';
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState } from 'react';
 import { useDebouncedCallback } from 'use-debounce';
 import { toast } from 'sonner';
-import { WorkflowRunResult as BaseWorkflowRunResult, MastraClient } from '@mastra/client-js';
+import {
+  WorkflowRunResult as BaseWorkflowRunResult,
+  VNextWorkflowWatchResult,
+  GetVNextWorkflowResponse,
+  MastraClient,
+} from '@mastra/client-js';
+import { RuntimeContext } from '@mastra/core/runtime-context';
 
 export type ExtendedWorkflowRunResult = BaseWorkflowRunResult & {
   sanitizedOutput?: string | null;
@@ -10,6 +16,53 @@ export type ExtendedWorkflowRunResult = BaseWorkflowRunResult & {
     message: string;
     stack?: string;
   } | null;
+};
+
+export type ExtendedVNextWorkflowWatchResult = VNextWorkflowWatchResult & {
+  sanitizedOutput?: string | null;
+  sanitizedError?: {
+    message: string;
+    stack?: string;
+  } | null;
+};
+
+const sanitizeVNexWorkflowWatchResult = (record: VNextWorkflowWatchResult) => {
+  const formattedResults = Object.entries(record.payload.workflowState.steps || {}).reduce(
+    (acc, [key, value]) => {
+      let output = value.status === 'completed' ? value.output : undefined;
+      if (output) {
+        output = Object.entries(output).reduce(
+          (_acc, [_key, _value]) => {
+            const val = _value as { type: string; data: unknown };
+            _acc[_key] = val.type?.toLowerCase() === 'buffer' ? { type: 'Buffer', data: `[...buffered data]` } : val;
+            return _acc;
+          },
+          {} as Record<string, any>,
+        );
+      }
+      acc[key] = { ...value, output };
+      return acc;
+    },
+    {} as Record<string, any>,
+  );
+  const sanitizedRecord: ExtendedVNextWorkflowWatchResult = {
+    ...record,
+    sanitizedOutput: record
+      ? JSON.stringify(
+          {
+            ...record,
+            payload: {
+              ...record.payload,
+              workflowState: { ...record.payload.workflowState, steps: formattedResults },
+            },
+          },
+          null,
+          2,
+        ).slice(0, 50000) // Limit to 50KB
+      : null,
+  };
+
+  return sanitizedRecord;
 };
 
 export const useWorkflow = (workflowId: string, baseUrl: string) => {
@@ -67,8 +120,43 @@ export const useWorkflow = (workflowId: string, baseUrl: string) => {
   return { workflow, isLoading };
 };
 
+export const useVNextWorkflow = (workflowId: string, baseUrl: string) => {
+  const [vNextWorkflow, setVNextWorkflow] = useState<GetVNextWorkflowResponse | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+
+  const client = new MastraClient({
+    baseUrl: baseUrl || '',
+  });
+
+  useEffect(() => {
+    const fetchWorkflow = async () => {
+      setIsLoading(true);
+      try {
+        if (!workflowId) {
+          setVNextWorkflow(null);
+          setIsLoading(false);
+          return;
+        }
+        const res = await client.getVNextWorkflow(workflowId).details();
+        setVNextWorkflow(res);
+      } catch (error) {
+        setVNextWorkflow(null);
+        console.error('Error fetching workflow', error);
+        toast.error('Error fetching workflow');
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchWorkflow();
+  }, [workflowId]);
+
+  return { vNextWorkflow, isLoading };
+};
+
 export const useExecuteWorkflow = (baseUrl: string) => {
-  const [isExecutingWorkflow, setIsExecutingWorkflow] = useState(false);
+  const [isWatchingVNextWorkflow, setIsWatchingVNextWorkflow] = useState(false);
+  const [watchVNextResult, setWatchVNextResult] = useState<ExtendedVNextWorkflowWatchResult | null>(null);
 
   const client = new MastraClient({
     baseUrl: baseUrl || '',
@@ -85,6 +173,60 @@ export const useExecuteWorkflow = (baseUrl: string) => {
     }
   };
 
+  const createVNextWorkflowRun = async ({ workflowId, prevRunId }: { workflowId: string; prevRunId?: string }) => {
+    try {
+      const workflow = client.getVNextWorkflow(workflowId);
+      const { runId: newRunId } = await workflow.createRun({ runId: prevRunId });
+      return { runId: newRunId };
+    } catch (error) {
+      console.error('Error creating workflow run:', error);
+      throw error;
+    }
+  };
+
+  // Debounce the state update to prevent too frequent renders
+  const debouncedSetVNextWatchResult = useDebouncedCallback((record: ExtendedVNextWorkflowWatchResult) => {
+    const sanitizedRecord = sanitizeVNexWorkflowWatchResult(record);
+    setWatchVNextResult(sanitizedRecord);
+  }, 100);
+
+  const createAndWatchVNextWorkflowRun = async ({
+    workflowId,
+    prevRunId,
+    inputData,
+    runtimeContext,
+  }: {
+    workflowId: string;
+    prevRunId?: string;
+    inputData: Record<string, unknown>;
+    runtimeContext?: RuntimeContext;
+  }) => {
+    try {
+      setIsWatchingVNextWorkflow(true);
+      const workflow = client.getVNextWorkflow(workflowId);
+      await workflow.createAndWatchRun(
+        record => {
+          console.log('record in use-workflows===', record);
+          try {
+            debouncedSetVNextWatchResult(record);
+          } catch (err) {
+            console.error('Error processing workflow record:', err);
+            // Set a minimal error state if processing fails
+            setWatchVNextResult({
+              ...record,
+            });
+          }
+        },
+        { runId: prevRunId, inputData, runtimeContext },
+      );
+    } catch (error) {
+      console.error('Error creating workflow run:', error);
+      throw error;
+    } finally {
+      setIsWatchingVNextWorkflow(false);
+    }
+  };
+
   const startWorkflowRun = async ({ workflowId, runId, input }: { workflowId: string; runId: string; input: any }) => {
     try {
       const workflow = client.getWorkflow(workflowId);
@@ -95,12 +237,60 @@ export const useExecuteWorkflow = (baseUrl: string) => {
     }
   };
 
-  return { startWorkflowRun, createWorkflowRun, isExecutingWorkflow };
+  const startVNextWorkflowRun = async ({
+    workflowId,
+    runId,
+    input,
+  }: {
+    workflowId: string;
+    runId: string;
+    input: any;
+  }) => {
+    try {
+      const workflow = client.getVNextWorkflow(workflowId);
+      await workflow.start({ runId, inputData: input || {} });
+    } catch (error) {
+      console.error('Error starting workflow run:', error);
+      throw error;
+    }
+  };
+
+  const startAsyncVNextWorkflowRun = async ({
+    workflowId,
+    runId,
+    input,
+  }: {
+    workflowId: string;
+    runId?: string;
+    input: any;
+  }) => {
+    try {
+      const workflow = client.getVNextWorkflow(workflowId);
+      const result = await workflow.startAsync({ runId, inputData: input || {} });
+      return result;
+    } catch (error) {
+      console.error('Error starting workflow run:', error);
+      throw error;
+    }
+  };
+
+  return {
+    startWorkflowRun,
+    createWorkflowRun,
+    createAndWatchVNextWorkflowRun,
+    startVNextWorkflowRun,
+    watchVNextResult,
+    isWatchingVNextWorkflow,
+    createVNextWorkflowRun,
+    startAsyncVNextWorkflowRun,
+  };
 };
 
 export const useWatchWorkflow = (baseUrl: string) => {
   const [isWatchingWorkflow, setIsWatchingWorkflow] = useState(false);
+  const [isWatchingVNextWorkflow, setIsWatchingVNextWorkflow] = useState(false);
   const [watchResult, setWatchResult] = useState<ExtendedWorkflowRunResult | null>(null);
+  const [watchVNextResult, setWatchVNextResult] = useState<ExtendedVNextWorkflowWatchResult | null>(null);
 
   // Debounce the state update to prevent too frequent renders
   const debouncedSetWatchResult = useDebouncedCallback((record: ExtendedWorkflowRunResult) => {
@@ -142,6 +332,7 @@ export const useWatchWorkflow = (baseUrl: string) => {
       const workflow = client.getWorkflow(workflowId);
 
       await workflow.watch({ runId }, record => {
+        console.log('record in use-workflows==', record);
         try {
           debouncedSetWatchResult(record);
         } catch (err) {
@@ -161,11 +352,57 @@ export const useWatchWorkflow = (baseUrl: string) => {
     }
   };
 
-  return { watchWorkflow, isWatchingWorkflow, watchResult };
+  // Debounce the state update to prevent too frequent renders
+  const debouncedSetVNextWatchResult = useDebouncedCallback((record: ExtendedVNextWorkflowWatchResult) => {
+    const sanitizedRecord = sanitizeVNexWorkflowWatchResult(record);
+    setWatchVNextResult(sanitizedRecord);
+  }, 100);
+
+  const watchVNextWorkflow = async ({ workflowId, runId }: { workflowId: string; runId: string }) => {
+    try {
+      setIsWatchingVNextWorkflow(true);
+      const client = new MastraClient({
+        baseUrl,
+      });
+
+      const workflow = client.getVNextWorkflow(workflowId);
+
+      await workflow.watch({ runId }, record => {
+        console.log('record in use-workflows===', record);
+        try {
+          debouncedSetVNextWatchResult(record);
+        } catch (err) {
+          console.error('Error processing workflow record:', err);
+          // Set a minimal error state if processing fails
+          setWatchVNextResult({
+            ...record,
+          });
+        }
+      });
+    } catch (error) {
+      console.error('Error watching workflow:', error);
+
+      throw error;
+    } finally {
+      setIsWatchingVNextWorkflow(false);
+    }
+  };
+
+  return {
+    watchWorkflow,
+    isWatchingWorkflow,
+    watchResult,
+    watchVNextWorkflow,
+    isWatchingVNextWorkflow,
+    watchVNextResult,
+  };
 };
 
 export const useResumeWorkflow = (baseUrl: string) => {
   const [isResumingWorkflow, setIsResumingWorkflow] = useState(false);
+  const [isResumingVNextWorkflow, setIsResumingVNextWorkflow] = useState(false);
+  const [isResumeWatchingVNextWorkflow, setIsResumeWatchingVNextWorkflow] = useState(false);
+  const [resumeWatchVNextResult, setResumeWatchVNextResult] = useState<ExtendedVNextWorkflowWatchResult | null>(null);
 
   const resumeWorkflow = async ({
     workflowId,
@@ -195,5 +432,92 @@ export const useResumeWorkflow = (baseUrl: string) => {
     }
   };
 
-  return { resumeWorkflow, isResumingWorkflow };
+  // Debounce the state update to prevent too frequent renders
+  const debouncedSetVNextWatchResult = useDebouncedCallback((record: ExtendedVNextWorkflowWatchResult) => {
+    const sanitizedRecord = sanitizeVNexWorkflowWatchResult(record);
+    setResumeWatchVNextResult(sanitizedRecord);
+  }, 100);
+
+  const resumeAndWatchVNextWorkflow = async ({
+    workflowId,
+    step,
+    runId,
+    resumeData,
+    runtimeContext,
+  }: {
+    workflowId: string;
+    step: string | string[];
+    runId: string;
+    resumeData: any;
+    runtimeContext?: RuntimeContext;
+  }) => {
+    try {
+      setIsResumeWatchingVNextWorkflow(true);
+      const client = new MastraClient({
+        baseUrl: baseUrl || '',
+      });
+
+      const response = await client
+        .getVNextWorkflow(workflowId)
+        .resumeAndWatch({ step, runId, resumeData, runtimeContext }, record => {
+          console.log('record in use-workflows===', record);
+          try {
+            debouncedSetVNextWatchResult(record);
+          } catch (err) {
+            console.error('Error processing workflow record:', err);
+            // Set a minimal error state if processing fails
+            setResumeWatchVNextResult({
+              ...record,
+            });
+          }
+        });
+
+      return response;
+    } catch (error) {
+      console.error('Error resuming workflow:', error);
+      throw error;
+    } finally {
+      setIsResumeWatchingVNextWorkflow(false);
+    }
+  };
+
+  const resumeVNextWorkflow = async ({
+    workflowId,
+    step,
+    runId,
+    resumeData,
+    runtimeContext,
+  }: {
+    workflowId: string;
+    step: string | string[];
+    runId: string;
+    resumeData: any;
+    runtimeContext?: RuntimeContext;
+  }) => {
+    try {
+      setIsResumingVNextWorkflow(true);
+      const client = new MastraClient({
+        baseUrl: baseUrl || '',
+      });
+
+      const response = await client.getVNextWorkflow(workflowId).resume({ step, runId, resumeData, runtimeContext });
+
+      return response;
+    } catch (error) {
+      console.error('Error resuming workflow:', error);
+      throw error;
+    } finally {
+      setIsResumingVNextWorkflow(false);
+    }
+  };
+
+  return {
+    resumeWorkflow,
+    isResumingWorkflow,
+    isResumeWatchingVNextWorkflow,
+    resumeAndWatchVNextWorkflow,
+    resumeVNextWorkflow,
+    isResumingVNextWorkflow,
+    resumeWatchVNextResult,
+  };
 };

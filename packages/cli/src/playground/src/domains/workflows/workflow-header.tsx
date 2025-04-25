@@ -9,16 +9,16 @@ export function WorkflowHeader({ workflowName, workflowId }: { workflowName: str
         <Crumb as={Link} to={`/workflows`}>
           Workflows
         </Crumb>
-        <Crumb as={Link} to={`/workflows/${workflowId}`} isCurrent>
+        <Crumb as="span" to={`/workflows/${workflowId}`} isCurrent>
           {workflowName}
         </Crumb>
       </Breadcrumb>
 
       <HeaderGroup>
-        <Button as={Link} to={`/workflows/${workflowId}/graph`}>
+        <Button as="a" href={`/workflows/${workflowId}/graph`}>
           Graph
         </Button>
-        <Button as={Link} to={`/workflows/${workflowId}/traces`}>
+        <Button as="a" href={`/workflows/${workflowId}/traces`}>
           Traces
         </Button>
       </HeaderGroup>

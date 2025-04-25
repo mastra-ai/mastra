@@ -1,57 +1,39 @@
 import { Dialog, DialogContent, DialogPortal, DialogTitle } from '@/components/ui/dialog';
 import { createContext, useState } from 'react';
-import { WorkflowNestedGraph } from '../workflow/workflow-nested-graph';
 import { ReactFlowProvider } from '@xyflow/react';
 import { Workflow } from 'lucide-react';
 import { Text } from '@/components/ui/text';
+import { StepFlowEntry } from '@mastra/core/workflows/vNext';
+import { VNextWorkflowNestedGraph } from '../workflow/v-next-workflow-nested-graph';
 
-type WorkflowNestedGraphContextType = {
-  showNestedGraph: ({
-    label,
-    stepGraph,
-    stepSubscriberGraph,
-  }: {
-    label: string;
-    stepGraph: any;
-    stepSubscriberGraph: any;
-  }) => void;
+type VNextWorkflowNestedGraphContextType = {
+  showNestedGraph: ({ label, stepGraph }: { label: string; stepGraph: StepFlowEntry[] }) => void;
   closeNestedGraph: () => void;
 };
 
-export const WorkflowNestedGraphContext = createContext<WorkflowNestedGraphContextType>(
-  {} as WorkflowNestedGraphContextType,
+export const VNextWorkflowNestedGraphContext = createContext<VNextWorkflowNestedGraphContextType>(
+  {} as VNextWorkflowNestedGraphContextType,
 );
 
-export function WorkflowNestedGraphProvider({ children }: { children: React.ReactNode }) {
-  const [stepGraph, setStepGraph] = useState<any>(null);
-  const [stepSubscriberGraph, setStepSubscriberGraph] = useState<any>(null);
+export function VNextWorkflowNestedGraphProvider({ children }: { children: React.ReactNode }) {
+  const [stepGraph, setStepGraph] = useState<StepFlowEntry[] | null>(null);
   const [openDialog, setOpenDialog] = useState<boolean>(false);
   const [label, setLabel] = useState<string>('');
 
   const closeNestedGraph = () => {
     setOpenDialog(false);
     setStepGraph(null);
-    setStepSubscriberGraph(null);
     setLabel('');
   };
 
-  const showNestedGraph = ({
-    label,
-    stepGraph,
-    stepSubscriberGraph,
-  }: {
-    label: string;
-    stepGraph: any;
-    stepSubscriberGraph: any;
-  }) => {
+  const showNestedGraph = ({ label, stepGraph }: { label: string; stepGraph: StepFlowEntry[] }) => {
     setLabel(label);
     setStepGraph(stepGraph);
-    setStepSubscriberGraph(stepSubscriberGraph);
     setOpenDialog(true);
   };
 
   return (
-    <WorkflowNestedGraphContext.Provider
+    <VNextWorkflowNestedGraphContext.Provider
       value={{
         showNestedGraph,
         closeNestedGraph,
@@ -69,11 +51,11 @@ export function WorkflowNestedGraphProvider({ children }: { children: React.Reac
               </Text>
             </DialogTitle>
             <ReactFlowProvider>
-              <WorkflowNestedGraph stepGraph={stepGraph} open={openDialog} stepSubscriberGraph={stepSubscriberGraph} />
+              <VNextWorkflowNestedGraph stepGraph={stepGraph!} open={openDialog} />
             </ReactFlowProvider>
           </DialogContent>
         </DialogPortal>
       </Dialog>
-    </WorkflowNestedGraphContext.Provider>
+    </VNextWorkflowNestedGraphContext.Provider>
   );
 }

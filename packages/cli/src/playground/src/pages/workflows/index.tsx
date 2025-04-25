@@ -5,12 +5,19 @@ import { DataTable, Header, HeaderTitle } from '@mastra/playground-ui';
 import { workflowsTableColumns } from '@/domains/workflows/table.columns';
 
 function Workflows() {
-  const { workflows, isLoading } = useWorkflows();
+  const { workflows, vNextWorkflows, isLoading } = useWorkflows();
 
   const workflowList = Object.entries(workflows).map(([key, workflow]) => ({
     id: key,
     name: workflow.name,
     stepsCount: Object.keys(workflow.steps)?.length,
+  }));
+
+  const vNextWorkflowList = Object.entries(vNextWorkflows).map(([key, workflow]) => ({
+    id: key,
+    name: workflow.name,
+    stepsCount: Object.keys(workflow.steps ?? {})?.length,
+    isVNext: true,
   }));
 
   return (
@@ -20,7 +27,12 @@ function Workflows() {
       </Header>
       <section className="flex-1 relative overflow-hidden">
         <ScrollArea className="h-full">
-          <DataTable emptyText="Workflows" isLoading={isLoading} columns={workflowsTableColumns} data={workflowList} />
+          <DataTable
+            emptyText="Workflows"
+            isLoading={isLoading}
+            columns={workflowsTableColumns}
+            data={[...workflowList, ...vNextWorkflowList]}
+          />
         </ScrollArea>
       </section>
     </div>
