@@ -41,14 +41,12 @@
   "author": "",
   "license": "Elastic-2.0",
   "dependencies": {
+    "@babel/core": "^7.26.10",
     "@mastra/core": "workspace:^",
     "@mastra/deployer": "workspace:^",
     "@rollup/plugin-virtual": "^3.0.2",
     "cloudflare": "^4.1.0",
-    "date-fns": "^4.1.0",
-    "execa": "^9.5.2",
-    "rollup-plugin-polyfill-node": "^0.13.0",
-    "rollup-plugin-shim": "^1.0.0",
+    "rollup": "^4.35.0",
     "wrangler": "^4.4.0",
     "zod": "^3.24.2"
   },

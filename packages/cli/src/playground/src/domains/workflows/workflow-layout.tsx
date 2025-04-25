@@ -11,6 +11,7 @@ import { WorkflowHeader } from './workflow-header';
 export const WorkflowLayout = ({ children }: { children: React.ReactNode }) => {
   const { workflowId } = useParams();
   const { workflow, isLoading: isWorkflowLoading } = useWorkflow(workflowId!);
+
   return (
     <WorkflowRunProvider>
       <div className="h-full overflow-hidden">
@@ -21,7 +22,7 @@ export const WorkflowLayout = ({ children }: { children: React.ReactNode }) => {
             </HeaderTitle>
           </Header>
         ) : (
-          <WorkflowHeader workflowName={workflow?.name!} workflowId={workflowId!} />
+          <WorkflowHeader workflowName={workflow?.name || ''} workflowId={workflowId!} />
         )}
         {children}
       </div>

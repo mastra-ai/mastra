@@ -1,8 +1,6 @@
 import { randomUUID } from 'crypto';
 import { readFile } from 'fs/promises';
-import { dirname } from 'path';
 import { join } from 'path/posix';
-import { fileURLToPath, pathToFileURL } from 'url';
 import { serve } from '@hono/node-server';
 import { serveStatic } from '@hono/node-server/serve-static';
 import { swaggerUI } from '@hono/swagger-ui';
@@ -91,16 +89,13 @@ export async function createHonoServer(mastra: Mastra, options: ServerBundleOpti
   const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
   const server = mastra.getServer();
 
-  // Initialize tools
-  // @ts-ignore
-  const __dirname = dirname(fileURLToPath(import.meta.url));
-
-  const mastraToolsPaths = (await import(pathToFileURL(join(__dirname, 'tools.mjs')).href)).tools;
+  const toolsPath = './tools.mjs';
+  const mastraToolsPaths = (await import(toolsPath)).tools;
   const toolImports = mastraToolsPaths
     ? await Promise.all(
         // @ts-ignore
         mastraToolsPaths.map(async toolPath => {
-          return import(pathToFileURL(join(__dirname, toolPath)).href);
+          return import(toolPath);
         }),
       )
     : [];
@@ -1491,6 +1486,7 @@ export async function createHonoServer(mastra: Mastra, options: ServerBundleOpti
                   oneOf: [{ type: 'string' }, { type: 'array', items: { type: 'string' } }],
                 },
                 resumeData: { type: 'object' },
+                runtimeContext: { type: 'object' },
               },
               required: ['step'],
             },
@@ -1532,6 +1528,7 @@ export async function createHonoServer(mastra: Mastra, options: ServerBundleOpti
                   oneOf: [{ type: 'string' }, { type: 'array', items: { type: 'string' } }],
                 },
                 resumeData: { type: 'object' },
+                runtimeContext: { type: 'object' },
               },
               required: ['step'],
             },
@@ -1544,6 +1541,7 @@ export async function createHonoServer(mastra: Mastra, options: ServerBundleOpti
 
   app.post(
     '/api/workflows/v-next/:workflowId/create-run',
+    bodyLimit(bodyLimitOptions),
     describeRoute({
       description: 'Create a new vNext workflow run',
       tags: ['vNextWorkflows'],
@@ -1597,7 +1595,8 @@ export async function createHonoServer(mastra: Mastra, options: ServerBundleOpti
             schema: {
               type: 'object',
               properties: {
-                input: { type: 'object' },
+                inputData: { type: 'object' },
+                runtimeContext: { type: 'object' },
               },
             },
           },
@@ -1641,7 +1640,8 @@ export async function createHonoServer(mastra: Mastra, options: ServerBundleOpti
             schema: {
               type: 'object',
               properties: {
-                input: { type: 'object' },
+                inputData: { type: 'object' },
+                runtimeContext: { type: 'object' },
               },
             },
           },

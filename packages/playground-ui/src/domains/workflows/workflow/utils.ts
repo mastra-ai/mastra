@@ -1,9 +1,11 @@
 import Dagre from '@dagrejs/dagre';
 import type { StepCondition } from '@mastra/core/workflows';
+import { NewStep, NewWorkflow, StepFlowEntry } from '@mastra/core/workflows/vNext';
+import { v4 as uuid } from '@lukeed/uuid';
 import type { Node, Edge } from '@xyflow/react';
 import { MarkerType } from '@xyflow/react';
 
-export type ConditionConditionType = 'if' | 'else' | 'when' | 'until' | 'while';
+export type ConditionConditionType = 'if' | 'else' | 'when' | 'until' | 'while' | 'dountil' | 'dowhile';
 
 export type Condition =
   | {
@@ -465,6 +467,250 @@ export const contructNodesAndEdges = ({
       }
     }
   }
+  const { nodes: layoutedNodes, edges: layoutedEdges } = getLayoutedElements(nodes, edges);
+
+  return { nodes: layoutedNodes, edges: layoutedEdges };
+};
+
+type NewStepType = NewStep<string, any, any, any, any> &
+  (
+    | {
+        component: 'WORKFLOW';
+        stepFlow: StepFlowEntry[];
+      }
+    | {
+        component?: never;
+        stepFlow?: never;
+      }
+  );
+
+const getStepNodeAndEdge = ({
+  stepFlow,
+  xIndex,
+  yIndex,
+  prevNodeIds,
+  nextStepFlow,
+  condition,
+}: {
+  stepFlow: StepFlowEntry;
+  xIndex: number;
+  yIndex: number;
+  prevNodeIds: string[];
+  nextStepFlow?: StepFlowEntry;
+  condition?: { id: string; fn: string };
+}): { nodes: Node[]; edges: Edge[]; nextPrevNodeIds: string[] } => {
+  let nextNodeIds: string[] = [];
+  if (nextStepFlow?.type === 'step' || nextStepFlow?.type === 'foreach' || nextStepFlow?.type === 'loop') {
+    nextNodeIds = [nextStepFlow?.step.id];
+  }
+  if (nextStepFlow?.type === 'parallel') {
+    nextNodeIds = nextStepFlow?.steps.map(step => (step as { type: 'step'; step: { id: string } }).step.id) || [];
+  }
+  if (nextStepFlow?.type === 'conditional') {
+    nextNodeIds = nextStepFlow?.serializedConditions.map(cond => cond.id) || [];
+  }
+
+  if (stepFlow.type === 'step' || stepFlow.type === 'foreach') {
+    const hasGraph = (stepFlow.step as NewStepType).component === 'WORKFLOW';
+    const nodes = [
+      ...(condition
+        ? [
+            {
+              id: condition.id,
+              position: { x: xIndex * 300, y: yIndex * 100 },
+              type: 'condition-node',
+              data: {
+                label: condition.id,
+                withoutTopHandle: false,
+                withoutBottomHandle: !nextNodeIds.length,
+                isLarge: true,
+                conditions: [{ type: 'when', fnString: condition.fn }],
+              },
+            },
+          ]
+        : []),
+      {
+        id: stepFlow.step.id,
+        position: { x: xIndex * 300, y: (yIndex + (condition ? 1 : 0)) * 100 },
+        type: hasGraph ? 'nested-node' : 'default-node',
+        data: {
+          label: stepFlow.step.id,
+          description: stepFlow.step.description,
+          withoutTopHandle: condition ? false : !prevNodeIds.length,
+          withoutBottomHandle: !nextNodeIds.length,
+          stepGraph: hasGraph ? (stepFlow.step as NewStepType).stepFlow : undefined,
+        },
+      },
+    ];
+    const edges = [
+      ...(!prevNodeIds.length
+        ? []
+        : condition
+          ? [
+              ...prevNodeIds.map(prevNodeId => ({
+                id: `e${prevNodeId}-${condition.id}`,
+                source: prevNodeId,
+                target: condition.id,
+                ...defaultEdgeOptions,
+              })),
+              {
+                id: `e${condition.id}-${stepFlow.step.id}`,
+                source: condition.id,
+                target: stepFlow.step.id,
+                ...defaultEdgeOptions,
+              },
+            ]
+          : prevNodeIds.map(prevNodeId => ({
+              id: `e${prevNodeId}-${stepFlow.step.id}`,
+              source: prevNodeId,
+              target: stepFlow.step.id,
+              ...defaultEdgeOptions,
+            }))),
+      ...(!nextNodeIds.length
+        ? []
+        : nextNodeIds.map(nextNodeId => ({
+            id: `e${stepFlow.step.id}-${nextNodeId}`,
+            source: stepFlow.step.id,
+            target: nextNodeId,
+            ...defaultEdgeOptions,
+          }))),
+    ];
+    return { nodes, edges, nextPrevNodeIds: [stepFlow.step.id] };
+  }
+
+  if (stepFlow.type === 'loop') {
+    const { step: _step, serializedCondition, loopType } = stepFlow;
+    const hasGraph = (_step as NewStepType).component === 'WORKFLOW';
+    const nodes = [
+      {
+        id: _step.id,
+        position: { x: xIndex * 300, y: yIndex * 100 },
+        type: hasGraph ? 'nested-node' : 'default-node',
+        data: {
+          label: _step.id,
+          description: _step.description,
+          withoutTopHandle: !prevNodeIds.length,
+          withoutBottomHandle: false,
+          stepGraph: hasGraph ? (_step as NewStepType).stepFlow : undefined,
+        },
+      },
+      {
+        id: serializedCondition.id,
+        position: { x: xIndex * 300, y: (yIndex + 1) * 100 },
+        type: 'condition-node',
+        data: {
+          label: serializedCondition.id,
+          withoutTopHandle: false,
+          withoutBottomHandle: !nextNodeIds.length,
+          isLarge: true,
+          conditions: [{ type: loopType, fnString: serializedCondition.fn }],
+        },
+      },
+    ];
+
+    const edges = [
+      ...(!prevNodeIds.length
+        ? []
+        : prevNodeIds.map(prevNodeId => ({
+            id: `e${prevNodeId}-${_step.id}`,
+            source: prevNodeId,
+            target: _step.id,
+            ...defaultEdgeOptions,
+          }))),
+      {
+        id: `e${_step.id}-${serializedCondition.id}`,
+        source: _step.id,
+        target: serializedCondition.id,
+        ...defaultEdgeOptions,
+      },
+      ...(!nextNodeIds.length
+        ? []
+        : nextNodeIds.map(nextNodeId => ({
+            id: `e${serializedCondition.id}-${nextNodeId}`,
+            source: serializedCondition.id,
+            target: nextNodeId,
+            ...defaultEdgeOptions,
+          }))),
+    ];
+
+    return { nodes, edges, nextPrevNodeIds: [serializedCondition.id] };
+  }
+
+  if (stepFlow.type === 'parallel') {
+    let nodes: Node[] = [];
+    let edges: Edge[] = [];
+    stepFlow.steps.forEach((_stepFlow, index) => {
+      const { nodes: _nodes, edges: _edges } = getStepNodeAndEdge({
+        stepFlow: _stepFlow,
+        xIndex: index,
+        yIndex,
+        prevNodeIds,
+        nextStepFlow,
+      });
+      nodes.push(..._nodes);
+      edges.push(..._edges);
+    });
+
+    return { nodes, edges, nextPrevNodeIds: nodes.map(node => node.id) };
+  }
+
+  if (stepFlow.type === 'conditional') {
+    let nodes: Node[] = [];
+    let edges: Edge[] = [];
+    stepFlow.steps.forEach((_stepFlow, index) => {
+      const { nodes: _nodes, edges: _edges } = getStepNodeAndEdge({
+        stepFlow: _stepFlow,
+        xIndex: index,
+        yIndex,
+        prevNodeIds,
+        nextStepFlow,
+        condition: stepFlow.serializedConditions[index],
+      });
+      nodes.push(..._nodes);
+      edges.push(..._edges);
+    });
+
+    return { nodes, edges, nextPrevNodeIds: nodes.map(node => node.id) };
+  }
+
+  return { nodes: [], edges: [], nextPrevNodeIds: [] };
+};
+
+export const constructVNextNodesAndEdges = ({
+  stepGraph,
+}: {
+  stepGraph: NewWorkflow['stepGraph'];
+}): { nodes: Node[]; edges: Edge[] } => {
+  if (!stepGraph) {
+    return { nodes: [], edges: [] };
+  }
+
+  if (stepGraph.length === 0) {
+    return { nodes: [], edges: [] };
+  }
+
+  let nodes: Node[] = [];
+  let edges: Edge[] = [];
+
+  let prevNodeIds: string[] = [];
+
+  for (let index = 0; index < stepGraph.length; index++) {
+    const {
+      nodes: _nodes,
+      edges: _edges,
+      nextPrevNodeIds,
+    } = getStepNodeAndEdge({
+      stepFlow: stepGraph[index],
+      xIndex: index,
+      yIndex: index,
+      prevNodeIds,
+      nextStepFlow: index === stepGraph.length - 1 ? undefined : stepGraph[index + 1],
+    });
+    nodes.push(..._nodes);
+    edges.push(..._edges);
+    prevNodeIds = nextPrevNodeIds;
+  }
+
   const { nodes: layoutedNodes, edges: layoutedEdges } = getLayoutedElements(nodes, edges);
 
   return { nodes: layoutedNodes, edges: layoutedEdges };

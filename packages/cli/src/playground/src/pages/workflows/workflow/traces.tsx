@@ -1,5 +1,5 @@
-import { WorkflowTraces } from '@mastra/playground-ui';
 import { useParams } from 'react-router';
+import { WorkflowTraces } from '@mastra/playground-ui';
 
 import { Skeleton } from '@/components/ui/skeleton';
 
@@ -25,7 +25,7 @@ function WorkflowTracesPage() {
 
   return (
     <WorkflowTraces
-      workflowName={workflow?.name!}
+      workflowName={workflow?.name || ''}
       baseUrl=""
       sidebarChild={<WorkflowInformation workflowId={workflowId!} />}
     />
