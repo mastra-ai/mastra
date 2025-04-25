@@ -1861,7 +1861,7 @@ describe('Workflow', () => {
 
       const executionResult = await run.start({ inputData: {} });
 
-      expect(onTransition).toHaveBeenCalledTimes(2);
+      expect(onTransition).toHaveBeenCalledTimes(3);
       expect(onTransition).toHaveBeenCalledWith(
         expect.objectContaining({
           type: 'watch',
@@ -1873,6 +1873,79 @@ describe('Workflow', () => {
             }),
             workflowState: expect.objectContaining({
               status: expect.any(String),
+            }),
+          },
+          eventTimestamp: expect.any(Number),
+        }),
+      );
+
+      // Verify execution completed successfully
+      expect(executionResult.steps.step1).toEqual({
+        status: 'success',
+        output: { result: 'success1' },
+      });
+      expect(executionResult.steps.step2).toEqual({
+        status: 'success',
+        output: { result: 'success2' },
+      });
+    });
+
+    it('should watch workflow state changes and call onTransition when attaching from separate run', async () => {
+      const step1Action = vi.fn<any>().mockResolvedValue({ result: 'success1' });
+      const step2Action = vi.fn<any>().mockResolvedValue({ result: 'success2' });
+
+      const step1 = createStep({
+        id: 'step1',
+        execute: step1Action,
+        inputSchema: z.object({}),
+        outputSchema: z.object({ value: z.string() }),
+      });
+      const step2 = createStep({
+        id: 'step2',
+        execute: step2Action,
+        inputSchema: z.object({ value: z.string() }),
+        outputSchema: z.object({}),
+      });
+
+      const workflow = createWorkflow({
+        id: 'test-workflow',
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+        steps: [step1, step2],
+      });
+      workflow.then(step1).then(step2).commit();
+
+      const onTransition = vi.fn().mockImplementation(_data => {
+        // console.dir({ onTransition: data }, { depth: null });
+      });
+
+      const run = workflow.createRun();
+      const run2 = workflow.createRun({ runId: run.runId });
+
+      // Start watching the workflow
+      run2.watch(onTransition);
+
+      const executionResult = await run.start({ inputData: {} });
+
+      expect(onTransition).toHaveBeenCalledTimes(3);
+      expect(onTransition).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: 'watch',
+          payload: {
+            currentStep: expect.objectContaining({
+              id: expect.any(String),
+              status: expect.any(String),
+              output: expect.any(Object),
+            }),
+            workflowState: expect.objectContaining({
+              status: 'success',
+              steps: {
+                input: {},
+                step1: { status: 'success', output: { result: 'success1' } },
+                step2: { status: 'success', output: { result: 'success2' } },
+              },
+              result: { result: 'success2' },
+              error: null,
             }),
           },
           eventTimestamp: expect.any(Number),
@@ -1925,8 +1998,8 @@ describe('Workflow', () => {
 
       await run.start({ inputData: {} });
 
-      expect(onTransition).toHaveBeenCalledTimes(2);
-      expect(onTransition2).toHaveBeenCalledTimes(2);
+      expect(onTransition).toHaveBeenCalledTimes(3);
+      expect(onTransition2).toHaveBeenCalledTimes(3);
 
       const run2 = workflow.createRun();
 
@@ -1934,8 +2007,8 @@ describe('Workflow', () => {
 
       await run2.start({ inputData: {} });
 
-      expect(onTransition).toHaveBeenCalledTimes(2);
-      expect(onTransition2).toHaveBeenCalledTimes(4);
+      expect(onTransition).toHaveBeenCalledTimes(3);
+      expect(onTransition2).toHaveBeenCalledTimes(6);
 
       const run3 = workflow.createRun();
 
@@ -1943,8 +2016,8 @@ describe('Workflow', () => {
 
       await run3.start({ inputData: {} });
 
-      expect(onTransition).toHaveBeenCalledTimes(4);
-      expect(onTransition2).toHaveBeenCalledTimes(4);
+      expect(onTransition).toHaveBeenCalledTimes(6);
+      expect(onTransition2).toHaveBeenCalledTimes(6);
     });
   });
 
