@@ -6,29 +6,35 @@ import type { ReadableSpan, SpanExporter } from '@opentelemetry/sdk-trace-base';
 
 import { fetchWithRetry } from '../utils/fetchWithRetry';
 
-export interface MastraCloudExporterOptions {
-  accessToken: string;
-}
+export type MastraCloudExporterOptions = {
+  accessToken?: string;
+  endpoint?: string;
+  logger?: Logger;
+};
 
 class MastraCloudExporter implements SpanExporter {
   private queue: { data: any[]; resultCallback: (result: ExportResult) => void }[] = [];
   private serializer: typeof JsonTraceSerializer;
   private activeFlush: Promise<void> | undefined = undefined;
   private accessToken: string;
+  private endpoint: string;
   private logger?: Logger;
-  private endpoint?: string;
 
-  constructor({ accessToken, endpoint, logger }: { accessToken?: string; endpoint?: string; logger?: Logger }) {
-    if (!accessToken || !accessToken.trim()) {
+  constructor({ accessToken, endpoint, logger }: MastraCloudExporterOptions = {}) {
+    if (!accessToken && !process.env.MASTRA_CLOUD_ACCESS_TOKEN) {
       throw new Error('Mastra Cloud Access Token is required');
     }
-    this.accessToken = accessToken;
+
+    if (!endpoint && !process.env.MASTRA_CLOUD_ENDPOINT) {
+      throw new Error('Mastra Cloud Endpoint is required');
+    }
+
+    this.accessToken = accessToken ?? process.env.MASTRA_CLOUD_ACCESS_TOKEN!;
+    this.endpoint = endpoint ?? process.env.MASTRA_CLOUD_ENDPOINT!;
     this.serializer = JsonTraceSerializer;
+
     if (logger) {
       this.logger = logger;
-    }
-    if (endpoint) {
-      this.endpoint = endpoint;
     }
   }
 
