@@ -695,7 +695,7 @@ describe('PostgresStore', () => {
       expect(notFound).toBeNull();
     });
   });
-  describe.only('getWorkflowRunsByResourceID', () => {
+  describe('getWorkflowRunsByResourceID', () => {
     const workflowName = 'workflow-id-test';
     let resourceId: string;
     let runIds: string[] = [];

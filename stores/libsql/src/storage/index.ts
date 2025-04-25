@@ -683,10 +683,19 @@ export class LibSQLStore extends MastraStorage {
   }
 
   private parseWorkflowRun(row: Record<string, any>): WorkflowRun {
+    let parsedSnapshot: WorkflowRunState | string = row.snapshot as string;
+    if (typeof parsedSnapshot === 'string') {
+      try {
+        parsedSnapshot = JSON.parse(row.snapshot as string) as WorkflowRunState;
+      } catch (e) {
+        // If parsing fails, return the raw snapshot string
+        console.warn(`Failed to parse snapshot for workflow ${row.workflow_name}: ${e}`);
+      }
+    }
     return {
       workflowName: row.workflow_name as string,
       runId: row.run_id as string,
-      snapshot: row.snapshot as string,
+      snapshot: parsedSnapshot,
       createdAt: new Date(row.created_at as string),
       updatedAt: new Date(row.updated_at as string),
     };
