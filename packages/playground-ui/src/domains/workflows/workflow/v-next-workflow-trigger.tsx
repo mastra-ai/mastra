@@ -212,9 +212,7 @@ export function VNextWorkflowTrigger({
         {isSuspendedSteps &&
           suspendedSteps?.map(step => {
             const stepDefinition = vNextWorkflow.steps[step.stepId];
-            const stepSchema = stepDefinition?.inputSchema
-              ? resolveSerializedZodOutput(jsonSchemaToZod(parse(stepDefinition.inputSchema)))
-              : z.record(z.string(), z.any());
+            const stepSchema = stepDefinition?.resumeSchema ?? z.record(z.string(), z.any());
             return (
               <div className="flex flex-col px-4">
                 <Text variant="secondary" className="text-mastra-el-3" size="xs">
