@@ -232,21 +232,16 @@ export class MilvusVectorStore extends MastraVector {
         'dimension',
       ]);
 
-      const { collectionName, fieldName, dimension, indexName, indexConfig = {}, metricType = MetricType.L2 } = params;
+      const { collectionName, fieldName, indexName, dimension, indexConfig = {}, metricType = MetricType.L2 } = params;
 
       if (!collectionName || !fieldName) {
         throw new Error('Missing required parameters: collectionName, fieldName');
       }
 
-      if (indexName) {
-        this.logger.info(
-          `Milvus DB does not support index name. Index name will be ignored. Use '_default_idx' as an index name for quering`,
-        );
-      }
-
       await this.client.createIndex({
         collection_name: collectionName,
         field_name: fieldName,
+        index_name: indexName,
         index_type: indexConfig.type ?? IndexType.IVF_FLAT,
         metric_type: metricType,
         params: {
