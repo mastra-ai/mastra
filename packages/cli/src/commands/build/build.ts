@@ -7,7 +7,7 @@ import { getDeployer } from '@mastra/deployer';
 import { logger } from '../../utils/logger';
 
 export async function build({ dir, tools }: { dir?: string; tools?: string[] }) {
-  const mastraDir = dir ?? join(process.cwd(), 'src', 'mastra');
+  const mastraDir = dir ? (dir.startsWith('/') ? dir : join(process.cwd(), dir)) : join(process.cwd(), 'src', 'mastra');
   const outputDirectory = join(process.cwd(), '.mastra');
 
   const defaultToolsPath = join(mastraDir, 'tools');
