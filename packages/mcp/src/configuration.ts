@@ -11,16 +11,9 @@ export interface MCPConfigurationOptions {
   timeout?: number; // Optional global timeout
 }
 
-export class MCPConfiguration extends MastraBase {
-  private static readonly instances = new Map<string, InstanceType<typeof MCPConfiguration>>();
-  private static readonly serverConfigCache = new Map<
-    string,
-    {
-      servers: Record<string, MastraMCPServerDefinition>;
-      id: string;
-    }
-  >();
+const mastraMCPConfigurationInstances = new Map<string, InstanceType<typeof MCPConfiguration>>();
 
+export class MCPConfiguration extends MastraBase {
   private serverConfigs: Record<string, MastraMCPServerDefinition> = {};
   private id: string;
   private defaultTimeout: number;
@@ -29,15 +22,16 @@ export class MCPConfiguration extends MastraBase {
     super({ name: 'MCPConfiguration' });
     this.defaultTimeout = args.timeout ?? DEFAULT_REQUEST_TIMEOUT_MSEC;
     this.serverConfigs = args.servers;
+    this.id = args.id ?? this.makeId();
 
     // If an ID is provided, use it directly
     if (args.id) {
       this.id = args.id;
-      const cached = (this.constructor as typeof MCPConfiguration).serverConfigCache.get(this.id);
+      const cached = mastraMCPConfigurationInstances.get(this.id);
 
       // If we have a cache hit but servers don't match, disconnect the old configuration
-      if (cached && !equal(cached.servers, args.servers)) {
-        const existingInstance = (this.constructor as typeof MCPConfiguration).instances.get(this.id);
+      if (cached && !equal(cached.serverConfigs, args.servers)) {
+        const existingInstance = mastraMCPConfigurationInstances.get(this.id);
         if (existingInstance) {
           void existingInstance.disconnect(); // void to explicitly ignore the Promise
         }
@@ -48,13 +42,10 @@ export class MCPConfiguration extends MastraBase {
     }
 
     // Update cache with current configuration
-    (this.constructor as typeof MCPConfiguration).serverConfigCache.set(this.id, {
-      servers: args.servers,
-      id: this.id,
-    });
+    mastraMCPConfigurationInstances.set(this.id, this);
 
     // Check for existing instance with same ID
-    const existingInstance = (this.constructor as typeof MCPConfiguration).instances.get(this.id);
+    const existingInstance = mastraMCPConfigurationInstances.get(this.id);
     if (existingInstance) {
       if (!args.id) {
         throw new Error(`MCPConfiguration was initialized multiple times with the same configuration options.
@@ -67,15 +58,15 @@ To fix this you have three different options:
 3. If you only need one instance of MCPConfiguration in your app, refactor your code so it's only created one time (ex. move it out of a loop into a higher scope code block)
 `);
       }
-      Object.assign(this, existingInstance);
-    } else {
-      this.addToInstanceCache();
+      return existingInstance;
     }
+    this.addToInstanceCache();
+    return this;
   }
 
   private addToInstanceCache() {
-    if (!(this.constructor as typeof MCPConfiguration).instances.has(this.id)) {
-      (this.constructor as typeof MCPConfiguration).instances.set(this.id, this);
+    if (!mastraMCPConfigurationInstances.has(this.id)) {
+      mastraMCPConfigurationInstances.set(this.id, this);
     }
   }
 
@@ -87,7 +78,7 @@ To fix this you have three different options:
   }
 
   public async disconnect() {
-    (this.constructor as typeof MCPConfiguration).instances.delete(this.id);
+    mastraMCPConfigurationInstances.delete(this.id);
 
     await Promise.all(Array.from(this.mcpClientsById.values()).map(client => client.disconnect()));
     this.mcpClientsById.clear();
@@ -99,7 +90,7 @@ To fix this you have three different options:
 
     await this.eachClientTools(async ({ serverName, tools }) => {
       for (const [toolName, toolConfig] of Object.entries(tools)) {
-        connectedTools[`${serverName}_${toolName}`] = toolConfig;
+        connectedTools[`${serverName}_${toolName}`] = toolConfig; // namespace tool to prevent tool name conflicts between servers
       }
     });
 
@@ -124,13 +115,13 @@ To fix this you have three different options:
     const exists = this.mcpClientsById.has(name);
 
     if (exists) {
-      const mcpClient = this.mcpClientsById.get(name);
-      if (!mcpClient) {
+      const existingClient = this.mcpClientsById.get(name);
+      if (!existingClient) {
         throw new Error(`Client ${name} exists but is undefined`);
       }
-      await mcpClient.connect();
+      await existingClient.connect();
 
-      return mcpClient;
+      return existingClient;
     }
 
     this.logger.debug(`Connecting to ${name} MCP server`);
