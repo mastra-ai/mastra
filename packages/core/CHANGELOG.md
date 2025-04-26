@@ -1,5 +1,22 @@
 # @mastra/core
 
+## 0.9.1-alpha.1
+
+### Patch Changes
+
+- 20275d4: Adding warnings for current implicit Memory default options as they will be changing soon in a breaking change. Also added memory to create-mastra w/ new defaults so new projects don't see these warnings
+- 7d1892c: Return error object directly in vNext workflows
+- a90a082: Rename container to runtimeContext in vNext workflow
+  Add steps accessor for stepFlow in vnext workflow
+  Add getWorkflowRun to vnext workflow
+  Add vnext_getWorkflows() to mastra core
+- 35955b0: Rename import to runtime-contxt
+- c1409ef: Add vNextWorkflow handlers and APIs
+  Add stepGraph and steps to vNextWorkflow
+- 11d4485: Show VNext workflows on the playground
+  Show running status for step in vNext workflowState
+- 2d4001d: Add new @msstra/libsql package and use it in create-mastra
+
 ## 0.9.1-alpha.0
 
 ### Patch Changes

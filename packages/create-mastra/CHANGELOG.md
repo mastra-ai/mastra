@@ -1,5 +1,20 @@
 # create-mastra
 
+## 0.3.0-alpha.0
+
+### Minor Changes
+
+- e126a44: improve non-interactive mode of the mastra cli and create-mastra by adding --no-example and --dir flags
+
+### Patch Changes
+
+- 05806e3: revamp the UI of the chat in playground
+- b50b9b7: Add vNext workflow to client-js
+- 11d4485: Show VNext workflows on the playground
+  Show running status for step in vNext workflowState
+- 8863033: Fix tools api in local dev api
+- 2d4001d: Add new @msstra/libsql package and use it in create-mastra
+
 ## 0.2.9
 
 ### Patch Changes

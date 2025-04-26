@@ -1,5 +1,26 @@
 # @mastra/deployer-vercel
 
+## 0.1.20-alpha.1
+
+### Patch Changes
+
+- ce8f129: Improve includeFiles pattern in vercel to reduce function limit
+- Updated dependencies [e7c2881]
+- Updated dependencies [0ccb8b4]
+- Updated dependencies [92c598d]
+- Updated dependencies [20275d4]
+- Updated dependencies [7d1892c]
+- Updated dependencies [ebdb781]
+- Updated dependencies [a90a082]
+- Updated dependencies [35955b0]
+- Updated dependencies [c1409ef]
+- Updated dependencies [11d4485]
+- Updated dependencies [530ced1]
+- Updated dependencies [611aa4a]
+- Updated dependencies [2d4001d]
+  - @mastra/deployer@0.3.1-alpha.1
+  - @mastra/core@0.9.1-alpha.1
+
 ## 0.1.20-alpha.0
 
 ### Patch Changes
