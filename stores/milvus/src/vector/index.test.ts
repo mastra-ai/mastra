@@ -354,7 +354,6 @@ describe('Milvus Vector tests', () => {
 
       // Verify it's using IVF_SQ8
       const params = describeResult.indexDescription.index_descriptions[0].params;
-      console.log(params);
       const indexTypeParam = params.find(param => param.key === 'index_type');
       expect(indexTypeParam?.value).toBe('IVF_SQ8');
 
@@ -797,8 +796,8 @@ describe('Milvus Vector tests', () => {
     });
   });
 
-  describe('Upsert operations', () => {
-    const collectionName = `new_book_collection_upserts`;
+  describe('Insert operations', () => {
+    const collectionName = `new_book_collection_inserts`;
 
     beforeAll(async () => {
       await milvusClient.createCollection(collectionName, [
@@ -909,21 +908,6 @@ describe('Milvus Vector tests', () => {
       expect(updatedIds).toBeDefined();
       expect(updatedIds.length).toBe(1);
       expect(updatedIds[0]).toBe(id);
-
-      // TODO: Verify the update by querying
-      // const queryResult = await milvusClient.query({
-      //   collectionName,
-      //   queryVector: updatedVectors[0],
-      //   indexName: 'vector_idx',
-      //   topK: 5,
-      //   includeVector: true,
-      // });
-
-      // expect(queryResult).toBeDefined();
-      // expect(queryResult.length).toBe(1);
-      // expect(queryResult[0].id).toBe(id);
-      // expect(queryResult[0].metadata).toEqual(updatedMetadata[0]);
-      // expect(queryResult[0].vector).toEqual(updatedVectors[0]);
     });
 
     it('should upsert vectors with partial IDs provided', async () => {
@@ -1035,6 +1019,108 @@ describe('Milvus Vector tests', () => {
           indexName: 'vector_idx',
         }),
       ).rejects.toThrow('Missing required parameter: collectionName');
+    });
+  });
+
+  describe('Update operations', () => {
+    const collectionName = `new_book_collection_update`;
+
+    beforeAll(async () => {
+      await milvusClient.createCollection(collectionName, [
+        {
+          name: `id`,
+          description: `customized primary id`,
+          data_type: DataType.VarChar,
+          max_length: 256,
+          is_primary_key: true,
+          autoID: false,
+        },
+        {
+          name: `vector`,
+          description: `word count`,
+          data_type: DataType.FloatVector,
+          dim: 8,
+        },
+        {
+          name: `metadata`,
+          description: `metadata`,
+          data_type: DataType.JSON,
+        },
+      ]);
+
+      // create index
+      await milvusClient.createIndex({
+        collectionName: collectionName,
+        fieldName: 'vector',
+        indexName: 'vector_idx',
+        indexConfig: {
+          type: IndexType.IVF_FLAT,
+        },
+        metricType: MetricType.L2,
+        dimension: 8,
+      });
+    });
+
+    afterAll(async () => {
+      await milvusClient.dropCollection(collectionName);
+    });
+
+    it('should update existing vectors', async () => {
+      const vectors = [
+        [0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9],
+        [1.2, 1.3, 1.4, 1.5, 1.6, 1.7, 1.8, 1.9],
+      ];
+      const ids = ['1', '2'];
+      const metadata = [{ title: 'Book 1' }, { title: 'Book 2' }];
+
+      const insertedIds = await milvusClient.upsert({
+        collectionName,
+        vectors,
+        ids,
+        metadata,
+        indexName: 'vector_idx',
+      });
+
+      expect(insertedIds).toBeDefined();
+      expect(insertedIds.length).toBe(2);
+      expect(insertedIds[0]).toBe('1');
+      expect(insertedIds[1]).toBe('2');
+
+      const updatedVectors = [
+        [0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 1.1],
+        [1.4, 1.5, 1.6, 1.7, 1.8, 1.9, 2.0, 2.1],
+      ];
+      const updatedMetadata = [{ title: 'Updated Book 1' }, { title: 'Updated Book 2' }];
+
+      const updatedIds = await milvusClient.upsert({
+        collectionName,
+        vectors: updatedVectors,
+        ids,
+        metadata: updatedMetadata,
+        indexName: 'vector_idx',
+      });
+
+      expect(updatedIds).toBeDefined();
+      expect(updatedIds.length).toBe(2);
+      expect(updatedIds[0]).toBe('1');
+      expect(updatedIds[1]).toBe('2');
+
+      const queryResult = await milvusClient.query({
+        collectionName,
+        indexName: 'vector_idx',
+        queryVector: vectors[0],
+        topK: 4,
+        includeVector: true,
+      });
+
+      expect(queryResult).toBeDefined();
+      expect(queryResult.length).toBe(2);
+      expect(queryResult[0].id).toBe('1');
+      expect(queryResult[1].id).toBe('2');
+
+      // verify updated metadata
+      expect(queryResult[0].metadata).toEqual(updatedMetadata[0]);
+      expect(queryResult[1].metadata).toEqual(updatedMetadata[1]);
     });
   });
 
