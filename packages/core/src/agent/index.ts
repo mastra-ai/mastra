@@ -426,8 +426,6 @@ export class Agent<
 
     return messagesBySanitizedContent.filter(message => {
       if (typeof message.content === `string`) {
-        // Always preserve assistant messages even with empty content
-        // This prevents the "Unexpected role 'user' after role 'tool'" error
         if (message.role === 'assistant') {
           return true;
         }
