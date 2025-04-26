@@ -5,18 +5,20 @@ import { v5 as uuidv5 } from 'uuid';
 import type { MastraMCPServerDefinition } from './client';
 import { MastraMCPClient } from './client';
 
+const mastraMCPConfigurationInstances = new Map<string, InstanceType<typeof MCPConfiguration>>();
+
 export interface MCPConfigurationOptions {
   id?: string;
   servers: Record<string, MastraMCPServerDefinition>;
   timeout?: number; // Optional global timeout
 }
 
-const mastraMCPConfigurationInstances = new Map<string, InstanceType<typeof MCPConfiguration>>();
-
 export class MCPConfiguration extends MastraBase {
   private serverConfigs: Record<string, MastraMCPServerDefinition> = {};
   private id: string;
   private defaultTimeout: number;
+  private mcpClientsById = new Map<string, MastraMCPClient>();
+  private disconnectPromise: Promise<void> | null = null;
 
   constructor(args: MCPConfigurationOptions) {
     super({ name: 'MCPConfiguration' });
@@ -24,27 +26,21 @@ export class MCPConfiguration extends MastraBase {
     this.serverConfigs = args.servers;
     this.id = args.id ?? this.makeId();
 
-    // If an ID is provided, use it directly
     if (args.id) {
       this.id = args.id;
       const cached = mastraMCPConfigurationInstances.get(this.id);
 
-      // If we have a cache hit but servers don't match, disconnect the old configuration
       if (cached && !equal(cached.serverConfigs, args.servers)) {
         const existingInstance = mastraMCPConfigurationInstances.get(this.id);
         if (existingInstance) {
-          void existingInstance.disconnect(); // void to explicitly ignore the Promise
+          void existingInstance.disconnectSafe();
         }
       }
     } else {
-      // Generate a new ID based on server configs
       this.id = this.makeId();
     }
 
-    // Update cache with current configuration
-    mastraMCPConfigurationInstances.set(this.id, this);
-
-    // Check for existing instance with same ID
+    // to prevent memory leaks return the same MCP server instance when configured the same way multiple times
     const existingInstance = mastraMCPConfigurationInstances.get(this.id);
     if (existingInstance) {
       if (!args.id) {
@@ -60,6 +56,8 @@ To fix this you have three different options:
       }
       return existingInstance;
     }
+
+    mastraMCPConfigurationInstances.set(this.id, this);
     this.addToInstanceCache();
     return this;
   }
@@ -73,15 +71,33 @@ To fix this you have three different options:
   private makeId() {
     const text = JSON.stringify(this.serverConfigs).normalize('NFKC');
     const idNamespace = uuidv5(`MCPConfiguration`, uuidv5.DNS);
-
     return uuidv5(text, idNamespace);
   }
 
   public async disconnect() {
-    mastraMCPConfigurationInstances.delete(this.id);
+    // Helps to prevent race condition
+    // If there is already a disconnect ongoing, return the existing promise.
+    if (this.disconnectPromise) {
+      return this.disconnectPromise;
+    }
 
-    await Promise.all(Array.from(this.mcpClientsById.values()).map(client => client.disconnect()));
-    this.mcpClientsById.clear();
+    this.disconnectPromise = (async () => {
+      try {
+        mastraMCPConfigurationInstances.delete(this.id);
+
+        // Disconnect all clients in the cache
+        await Promise.all(Array.from(this.mcpClientsById.values()).map(client => client.disconnect()));
+        this.mcpClientsById.clear();
+      } finally {
+        this.disconnectPromise = null;
+      }
+    })();
+
+    return this.disconnectPromise;
+  }
+
+  private async disconnectSafe() {
+    await this.disconnect();
   }
 
   public async getTools() {
@@ -110,17 +126,23 @@ To fix this you have three different options:
     return connectedToolsets;
   }
 
-  private mcpClientsById = new Map<string, MastraMCPClient>();
   private async getConnectedClient(name: string, config: MastraMCPServerDefinition) {
+    // Helps to prevent race condition.
+    // If we want to call connect() we need to wait for the disconnect to complete first if any is ongoing.
+    if (this.disconnectPromise) {
+      await this.disconnectPromise;
+    }
+
     const exists = this.mcpClientsById.has(name);
+    const existingClient = this.mcpClientsById.get(name);
 
     if (exists) {
-      const existingClient = this.mcpClientsById.get(name);
+      // This is just to satisfy Typescript since technically you could have this.mcpClientsById.set('someKey', undefined);
+      // Should never reach this point basically we always create a new MastraMCPClient instance when we add to the Map.
       if (!existingClient) {
         throw new Error(`Client ${name} exists but is undefined`);
       }
       await existingClient.connect();
-
       return existingClient;
     }
 
@@ -134,6 +156,7 @@ To fix this you have three different options:
     });
 
     this.mcpClientsById.set(name, mcpClient);
+
     try {
       await mcpClient.connect();
     } catch (e) {
