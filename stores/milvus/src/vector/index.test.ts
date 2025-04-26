@@ -351,10 +351,19 @@ describe('Milvus Vector tests', () => {
       expect(describeResult.indexDescription.index_descriptions[0].field_name).toBe('book_intro');
       expect(describeResult.indexDescription.index_descriptions[0].index_name).toBe(indexName);
       expect(describeResult.indexDescription.index_descriptions[0].indexID).toBeDefined();
+
       // Verify it's using IVF_SQ8
       const params = describeResult.indexDescription.index_descriptions[0].params;
+      console.log(params);
       const indexTypeParam = params.find(param => param.key === 'index_type');
       expect(indexTypeParam?.value).toBe('IVF_SQ8');
+
+      const metricParam = params.find(param => param.key === 'metric_type');
+      expect(metricParam?.value).toBe('L2');
+
+      const nlistParam = params.find(param => param.key === 'params');
+      expect(nlistParam).toBeDefined();
+      expect(nlistParam?.value).toBe('{"nlist":64}');
     });
 
     it('should create index with IVF_PQ index type for high-dimensional vectors', async () => {
@@ -382,6 +391,12 @@ describe('Milvus Vector tests', () => {
       const params = describeResult.indexDescription.index_descriptions[0].params;
       const indexTypeParam = params.find(param => param.key === 'index_type');
       expect(indexTypeParam?.value).toBe('IVF_PQ');
+
+      const metricParam = params.find(param => param.key === 'metric_type');
+      expect(metricParam?.value).toBe('L2');
+
+      const nlistParam = params.find(param => param.key === 'params');
+      expect(nlistParam?.value).toBe('{"nlist":32,"m":4,"nbits":8}');
     });
 
     it('should create index with HNSW index type and custom parameters', async () => {
@@ -410,6 +425,12 @@ describe('Milvus Vector tests', () => {
       const params = describeResult.indexDescription.index_descriptions[0].params;
       const indexTypeParam = params.find(param => param.key === 'index_type');
       expect(indexTypeParam?.value).toBe('HNSW');
+
+      const metricParam = params.find(param => param.key === 'metric_type');
+      expect(metricParam?.value).toBe('L2');
+
+      const nlistParam = params.find(param => param.key === 'params');
+      expect(nlistParam?.value).toBe('{"M":16,"efConstruction":200}');
     });
 
     it('should create index with inner product metric type for similarity search', async () => {
@@ -435,6 +456,9 @@ describe('Milvus Vector tests', () => {
       const params = describeResult.indexDescription.index_descriptions[0].params;
       const metricTypeParam = params.find(param => param.key === 'metric_type');
       expect(metricTypeParam?.value).toBe('IP');
+
+      const nlistParam = params.find(param => param.key === 'params');
+      expect(nlistParam?.value).toBe('{"nlist":128}');
     });
 
     it('should create index with COSINE metric type for text embeddings', async () => {
@@ -460,6 +484,9 @@ describe('Milvus Vector tests', () => {
       const params = describeResult.indexDescription.index_descriptions[0].params;
       const metricTypeParam = params.find(param => param.key === 'metric_type');
       expect(metricTypeParam?.value).toBe('COSINE');
+
+      const nlistParam = params.find(param => param.key === 'params');
+      expect(nlistParam?.value).toBe('{"nlist":128}');
     });
 
     it('should create FLAT index for exact search', async () => {
@@ -484,6 +511,12 @@ describe('Milvus Vector tests', () => {
       const params = describeResult.indexDescription.index_descriptions[0].params;
       const indexTypeParam = params.find(param => param.key === 'index_type');
       expect(indexTypeParam?.value).toBe('FLAT');
+
+      const metricParam = params.find(param => param.key === 'metric_type');
+      expect(metricParam?.value).toBe('L2');
+
+      const nlistParam = params.find(param => param.key === 'params');
+      expect(nlistParam?.value).toBe('{"nlist":128}');
     });
 
     it('should create index with IVF_FLAT with custom lists parameter', async () => {
