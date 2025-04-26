@@ -258,15 +258,48 @@ export class MilvusVectorStore extends MastraVector {
         throw new Error('Missing required parameters: collectionName, fieldName');
       }
 
+      // Build index parameters based on index type
+      const indexType = indexConfig.type ?? IndexType.IVF_FLAT;
+      const indexParams: Record<string, any> = {};
+
+      // Configure index parameters based on index type
+      if (indexType.startsWith('IVF')) {
+        // Handle IVF-based indexes (IVF_FLAT, IVF_SQ8, IVF_PQ, etc.)
+        const nlist = indexConfig.ivf?.lists || dimension;
+        indexParams.nlist = nlist;
+
+        // Add PQ-specific parameters if needed
+        if (indexType === IndexType.IVF_PQ) {
+          // Set m (number of subquantizers) to 4 by default or something appropriate
+          indexParams.m = 4;
+          // nbits is typically 8
+          indexParams.nbits = 8;
+        }
+      } else if (indexType === IndexType.HNSW) {
+        // Handle HNSW specific parameters
+        indexParams.M = indexConfig.hnsw?.m || 16; // Default edges per node
+        indexParams.efConstruction = indexConfig.hnsw?.efConstruction || 200; // Default size of candidate list
+      } else if (indexType === IndexType.DISKANN) {
+        // DiskANN specific parameters if needed
+        indexParams.search_list = 100;
+      } else if (indexType.startsWith('BIN_')) {
+        // Handle binary vector indexes (BIN_FLAT, BIN_IVF_FLAT)
+        if (indexType === IndexType.BIN_IVF_FLAT) {
+          indexParams.nlist = indexConfig.ivf?.lists || 128;
+        }
+      } else {
+        // FLAT and other index types
+        // FLAT doesn't need specific parameters, but we'll set one to conform to API
+        indexParams.nlist = dimension;
+      }
+
       await this.client.createIndex({
         collection_name: collectionName,
         field_name: fieldName,
         index_name: indexName,
-        index_type: indexConfig.type ?? IndexType.IVF_FLAT,
+        index_type: indexType,
         metric_type: metricType,
-        params: {
-          nlist: dimension,
-        },
+        params: indexParams,
       });
     } catch (error) {
       throw new Error('Failed to create index: ' + error);
