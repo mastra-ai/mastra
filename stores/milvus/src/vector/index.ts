@@ -147,7 +147,7 @@ export class MilvusVectorStore extends MastraVector {
         data: [queryVector],
         topk: topK,
         filter,
-        // output_fields: ['id', 'metadata', 'vector'],
+        output_fields: ['id', 'metadata', 'vector'],
       };
 
       // load collection
