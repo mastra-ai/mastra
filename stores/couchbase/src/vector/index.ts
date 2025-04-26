@@ -9,10 +9,8 @@ import type {
 } from '@mastra/core/vector';
 import { Bucket, Cluster, Collection, connect, SearchRequest, VectorQuery, VectorSearch, Scope } from 'couchbase';
 
-const metricsInMastra = ['cosine', 'euclidean', 'dotproduct'] as const;
-type MastraMetric = typeof metricsInMastra[number];
-const metricsInCouchbase = ['cosine', 'l2_norm', 'dot_product'] as const;
-type CouchbaseMetric = typeof metricsInCouchbase[number];
+type MastraMetric = 'cosine' | 'euclidean' | 'dotproduct';
+type CouchbaseMetric = 'cosine' | 'l2_norm' | 'dot_product';
 export const DISTANCE_MAPPING: Record<MastraMetric, CouchbaseMetric> = {
     cosine: 'cosine',
     euclidean: 'l2_norm',
