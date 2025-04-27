@@ -234,7 +234,7 @@ export async function watchVNextWorkflowHandler({
 
           // a run is finished if we cannot retrieve it anymore
           asyncRef = setImmediate(async () => {
-            const runDone = payload.workflowState.status !== 'running';
+            const runDone = payload.workflowState.status !== 'running' && payload.workflowState.status !== 'suspended';
             if (runDone) {
               controller.close();
             }
