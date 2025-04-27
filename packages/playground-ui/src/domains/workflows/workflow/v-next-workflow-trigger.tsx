@@ -212,7 +212,6 @@ export function VNextWorkflowTrigger({
         {isSuspendedSteps &&
           suspendedSteps?.map(step => {
             const stepDefinition = vNextWorkflow.steps[step.stepId];
-            console.log('stepDefinition-resume', stepDefinition.resumeSchema);
             const stepSchema = stepDefinition.resumeSchema
               ? resolveSerializedZodOutput(jsonSchemaToZod(parse(stepDefinition.resumeSchema as unknown as string)))
               : z.record(z.string(), z.any());
