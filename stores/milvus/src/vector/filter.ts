@@ -16,7 +16,7 @@ export class MilvusFilterTranslator extends BaseFilterTranslator {
   };
 
   // Supported logical operators
-  private readonly supportedLogicalOperators = ['$and', '$or'];
+  private readonly supportedLogicalOperators = ['$and', '$or', '$not'];
 
   // List of supported operators
   private readonly supportedOperators = [
@@ -30,6 +30,9 @@ export class MilvusFilterTranslator extends BaseFilterTranslator {
     '$like',
     '$notLike',
     '$regex',
+    '$jsonContains',
+    '$jsonContainsAll',
+    '$jsonContainsAny',
   ];
 
   // Fields that should not be treated as metadata
@@ -51,6 +54,10 @@ export class MilvusFilterTranslator extends BaseFilterTranslator {
 
     if (filter && '$or' in filter) {
       return this.processLogicalOperator(filter.$or as VectorFilter[], 'OR');
+    }
+
+    if (filter && '$not' in filter) {
+      return this.processNotOperator(filter.$not as VectorFilter);
     }
 
     // Process regular field conditions
@@ -79,6 +86,17 @@ export class MilvusFilterTranslator extends BaseFilterTranslator {
     }
 
     return conditions.join(' AND ');
+  }
+
+  private processNotOperator(filter: VectorFilter): string {
+    const condition = this.processFilter(filter);
+    if (!condition) {
+      return '';
+    }
+
+    // If condition already has parentheses, we don't need to add more
+    const needsParentheses = !condition.startsWith('(') || !condition.endsWith(')');
+    return `NOT ${needsParentheses ? `(${condition})` : condition}`;
   }
 
   private processKey(key: string): string {
@@ -163,9 +181,24 @@ export class MilvusFilterTranslator extends BaseFilterTranslator {
         continue;
       }
 
-      // Special case for $regex operator
+      // Special case for $regex operator - convert to LIKE
       if (op === '$regex') {
-        conditions.push(`regexp_match(${this.escapeFieldName(key)}, '${value}')`);
+        // Convert regex pattern to LIKE pattern if possible
+        let likePattern = value;
+
+        // Handle common regex patterns and convert to LIKE equivalents
+        if (value.startsWith('^')) {
+          // Starts with - remove ^ and add % at the end
+          likePattern = value.slice(1) + '%';
+        } else if (value.endsWith('$')) {
+          // Ends with - remove $ and add % at the beginning
+          likePattern = '%' + value.slice(0, -1);
+        } else {
+          // Contains - add % at both ends
+          likePattern = '%' + value + '%';
+        }
+
+        conditions.push(`${this.escapeFieldName(key)} LIKE '${likePattern}'`);
         continue;
       }
 
@@ -181,12 +214,60 @@ export class MilvusFilterTranslator extends BaseFilterTranslator {
         continue;
       }
 
+      // Handle JSON operators
+      if (op === '$jsonContains') {
+        conditions.push(this.formatJsonContains(key, value));
+        continue;
+      }
+
+      if (op === '$jsonContainsAll') {
+        conditions.push(this.formatJsonContainsAll(key, value));
+        continue;
+      }
+
+      if (op === '$jsonContainsAny') {
+        conditions.push(this.formatJsonContainsAny(key, value));
+        continue;
+      }
+
       // Regular operators
       const milvusOperator = this.operatorMap[op];
       conditions.push(`${this.escapeFieldName(key)} ${milvusOperator} ${this.formatValue(value)}`);
     }
 
     return conditions.join(' AND ');
+  }
+
+  private formatJsonContains(key: string, value: any): string {
+    const formattedValue = this.formatJsonValue(value);
+    return `json_contains(${this.escapeFieldName(key)}, ${formattedValue})`;
+  }
+
+  private formatJsonContainsAll(key: string, values: any[]): string {
+    const formattedValues = this.formatJsonValue(values);
+    return `json_contains_all(${this.escapeFieldName(key)}, ${formattedValues})`;
+  }
+
+  private formatJsonContainsAny(key: string, values: any[]): string {
+    const formattedValues = this.formatJsonValue(values);
+    return `json_contains_any(${this.escapeFieldName(key)}, ${formattedValues})`;
+  }
+
+  private formatJsonValue(value: any): string {
+    if (typeof value === 'string') {
+      return `"${value.replace(/"/g, '\\"')}"`;
+    } else if (Array.isArray(value)) {
+      const arrayValues = value.map(v => this.formatJsonValue(v)).join(', ');
+      return `[${arrayValues}]`;
+    } else if (value === null) {
+      return 'null';
+    } else if (typeof value === 'object') {
+      const entries = Object.entries(value).map(([k, v]) => `"${k}": ${this.formatJsonValue(v)}`);
+      return `{${entries.join(', ')}}`;
+    }
+
+    // For numbers, booleans, etc.
+    return value.toString();
   }
 
   private formatSimpleCondition(key: string, value: any): string {

@@ -122,6 +122,31 @@ describe('MilvusFilterTranslator', () => {
       expect(translator.translate(filter)).toEqual('(metadata["status"] == \'active\' OR metadata["age"] > 25)');
     });
 
+    it('handles $not operator', () => {
+      const filter = {
+        $not: { color: 'green' },
+      };
+      expect(translator.translate(filter)).toEqual('NOT (metadata["color"] == \'green\')');
+    });
+
+    it('handles $not operator with comparison', () => {
+      const filter = {
+        $not: { price: { $gt: 100 } },
+      };
+      expect(translator.translate(filter)).toEqual('NOT (metadata["price"] > 100)');
+    });
+
+    it('handles $not operator with complex conditions', () => {
+      const filter = {
+        $not: {
+          $or: [{ category: 'news' }, { importance: { $gt: 8 } }],
+        },
+      };
+      expect(translator.translate(filter)).toEqual(
+        'NOT (metadata["category"] == \'news\' OR metadata["importance"] > 8)',
+      );
+    });
+
     it('handles nested logical operators', () => {
       const filter = {
         $and: [
@@ -218,9 +243,76 @@ describe('MilvusFilterTranslator', () => {
       expect(translator.translate(filter)).toEqual('metadata["name"] NOT LIKE \'%John%\'');
     });
 
-    it('handles regexp_match function', () => {
+    it('converts regex starts-with pattern to LIKE', () => {
       const filter = { name: { $regex: '^John' } };
-      expect(translator.translate(filter)).toEqual('regexp_match(metadata["name"], \'^John\')');
+      expect(translator.translate(filter)).toEqual('metadata["name"] LIKE \'John%\'');
+    });
+
+    it('converts regex ends-with pattern to LIKE', () => {
+      const filter = { name: { $regex: 'Smith$' } };
+      expect(translator.translate(filter)).toEqual('metadata["name"] LIKE \'%Smith\'');
+    });
+
+    it('converts regex contains pattern to LIKE', () => {
+      const filter = { name: { $regex: 'middle' } };
+      expect(translator.translate(filter)).toEqual('metadata["name"] LIKE \'%middle%\'');
+    });
+  });
+
+  // JSON Operators
+  describe('json operators', () => {
+    it('handles json_contains with string value', () => {
+      const filter = { tags: { $jsonContains: 'sale' } };
+      expect(translator.translate(filter)).toEqual('json_contains(metadata["tags"], "sale")');
+    });
+
+    it('handles json_contains with object value', () => {
+      const filter = { product: { $jsonContains: { price: 100 } } };
+      expect(translator.translate(filter)).toEqual('json_contains(metadata["product"], {"price": 100})');
+    });
+
+    it('handles json_contains_all with array value', () => {
+      const filter = { tags: { $jsonContainsAll: ['electronics', 'sale', 'new'] } };
+      expect(translator.translate(filter)).toEqual(
+        'json_contains_all(metadata["tags"], ["electronics", "sale", "new"])',
+      );
+    });
+
+    it('handles json_contains_any with array value', () => {
+      const filter = { tags: { $jsonContainsAny: ['electronics', 'new', 'clearance'] } };
+      expect(translator.translate(filter)).toEqual(
+        'json_contains_any(metadata["tags"], ["electronics", "new", "clearance"])',
+      );
+    });
+
+    it('handles json operators with complex nested values', () => {
+      const filter = {
+        products: {
+          $jsonContains: {
+            items: [
+              { name: 'Laptop', price: 999 },
+              { name: 'Mouse', price: 25 },
+            ],
+          },
+        },
+      };
+      expect(translator.translate(filter)).toEqual(
+        'json_contains(metadata["products"], {"items": [{"name": "Laptop", "price": 999}, {"name": "Mouse", "price": 25}]})',
+      );
+    });
+
+    it('handles json operators with non-metadata fields', () => {
+      const filter = { id: { $jsonContains: 'prefix-' } };
+      expect(translator.translate(filter)).toEqual('json_contains(id, "prefix-")');
+    });
+
+    it('handles json operators in combination with other operators', () => {
+      const filter = {
+        $and: [{ tags: { $jsonContainsAny: ['electronics', 'new'] } }, { price: { $lt: 1000 } }],
+      };
+      expect(translator.translate(filter)).toEqual(
+        'json_contains_any(metadata["tags"], ["electronics", "new"]) AND metadata["price"] < 1000',
+      );
     });
   });
 
