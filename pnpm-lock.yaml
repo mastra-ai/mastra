@@ -2532,7 +2532,7 @@ importers:
         specifier: ^4.0.7
         version: 4.0.7(@aws-sdk/credential-providers@3.768.0)(socks@2.8.4)
       cloudflare:
-        specifier: ^4.1.0
+        specifier: ^4.2.0
         version: 4.2.0(encoding@0.1.13)
       mongodb:
         specifier: ^6.15.0
