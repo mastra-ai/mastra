@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi, afterEach } from "vitest"
-import { McpConfiguration } from "../src/index.js"
+import { MCPClient } from "../src/index.js"
 import { RegistryClient, ServerDefinition } from "@mcp/registry"
 import { existsSync } from "fs"
 import { readFile, writeFile } from "fs/promises"
@@ -14,16 +14,16 @@ vi.mock("fs/promises", () => ({
 	writeFile: vi.fn(),
 }))
 
-describe("McpConfiguration", () => {
+describe("MCPClient", () => {
 	const registry = new RegistryClient({
 		url: "https://opentools.com/.well-known/mcp.json",
 	})
 
-	let config: McpConfiguration
+	let config: MCPClient
 
 	beforeEach(() => {
 		vi.clearAllMocks()
-		config = new McpConfiguration({
+		config = new MCPClient({
 			id: "test-config",
 			registry,
 		})
@@ -41,7 +41,7 @@ describe("McpConfiguration", () => {
 
 		it("should accept optional headers", () => {
 			const headers = { "X-Custom": "value" }
-			const configWithHeaders = new McpConfiguration({
+			const configWithHeaders = new MCPClient({
 				id: "test",
 				registry,
 				headers,

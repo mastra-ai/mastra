@@ -1,12 +1,12 @@
 import { spawn } from 'child_process';
 import path from 'path';
 import { describe, it, expect, beforeEach, afterEach, afterAll, beforeAll, vi } from 'vitest';
-import { MCPConfiguration } from './configuration';
+import { MCPClient } from './configuration';
 
 vi.setConfig({ testTimeout: 80000, hookTimeout: 80000 });
 
-describe('MCPConfiguration', () => {
-  let mcp: MCPConfiguration;
+describe('MCPClient', () => {
+  let mcp: MCPClient;
   let weatherProcess: ReturnType<typeof spawn>;
 
   beforeAll(async () => {
@@ -36,7 +36,7 @@ describe('MCPConfiguration', () => {
   });
 
   beforeEach(async () => {
-    mcp = new MCPConfiguration({
+    mcp = new MCPClient({
       servers: {
         stockPrice: {
           command: 'npx',
@@ -95,7 +95,7 @@ describe('MCPConfiguration', () => {
   });
 
   it('should handle connection errors gracefully', async () => {
-    const badConfig = new MCPConfiguration({
+    const badConfig = new MCPClient({
       servers: {
         badServer: {
           command: 'nonexistent-command',
@@ -110,7 +110,7 @@ describe('MCPConfiguration', () => {
 
   describe('Instance Management', () => {
     it('should allow multiple instances with different IDs', async () => {
-      const config2 = new MCPConfiguration({
+      const config2 = new MCPClient({
         id: 'custom-id',
         servers: {
           stockPrice: {
@@ -130,7 +130,7 @@ describe('MCPConfiguration', () => {
     it('should allow reuse of configuration after closing', async () => {
       await mcp.disconnect();
 
-      const config2 = new MCPConfiguration({
+      const config2 = new MCPClient({
         servers: {
           stockPrice: {
             command: 'npx',
@@ -150,7 +150,7 @@ describe('MCPConfiguration', () => {
     });
 
     it('should throw error when creating duplicate instance without ID', async () => {
-      const existingConfig = new MCPConfiguration({
+      const existingConfig = new MCPClient({
         servers: {
           stockPrice: {
             command: 'npx',
@@ -164,7 +164,7 @@ describe('MCPConfiguration', () => {
 
       expect(
         () =>
-          new MCPConfiguration({
+          new MCPClient({
             servers: {
               stockPrice: {
                 command: 'npx',
@@ -175,14 +175,14 @@ describe('MCPConfiguration', () => {
               },
             },
           }),
-      ).toThrow(/MCPConfiguration was initialized multiple times/);
+      ).toThrow(/MCPClient was initialized multiple times/);
 
       await existingConfig.disconnect();
     });
   });
-  describe('MCPConfiguration Operation Timeouts', () => {
+  describe('MCPClient Operation Timeouts', () => {
     it('should respect custom timeout in configuration', async () => {
-      const config = new MCPConfiguration({
+      const config = new MCPClient({
         id: 'test-timeout-config',
         timeout: 3000, // 3 second timeout
         servers: {
@@ -208,7 +208,7 @@ describe('MCPConfiguration', () => {
     });
 
     it('should respect per-server timeout override', async () => {
-      const config = new MCPConfiguration({
+      const config = new MCPClient({
         id: 'test-server-timeout-config',
         timeout: 500, // Global timeout of 500ms
         servers: {
@@ -236,9 +236,9 @@ describe('MCPConfiguration', () => {
     });
   });
 
-  describe('MCPConfiguration Connection Timeout', () => {
+  describe('MCPClient Connection Timeout', () => {
     it('should throw timeout error for slow starting server', async () => {
-      const slowConfig = new MCPConfiguration({
+      const slowConfig = new MCPClient({
         id: 'test-slow-server',
         servers: {
           slowServer: {
@@ -254,7 +254,7 @@ describe('MCPConfiguration', () => {
     });
 
     it('timeout should be longer than configured timeout', async () => {
-      const slowConfig = new MCPConfiguration({
+      const slowConfig = new MCPClient({
         id: 'test-slow-server',
         timeout: 2000,
         servers: {
@@ -272,7 +272,7 @@ describe('MCPConfiguration', () => {
     });
 
     it('should respect per-server timeout configuration', async () => {
-      const mixedConfig = new MCPConfiguration({
+      const mixedConfig = new MCPClient({
         id: 'test-mixed-timeout',
         timeout: 1000, // Short global timeout
         servers: {

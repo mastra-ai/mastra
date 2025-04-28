@@ -27,7 +27,7 @@ npm install @mastra/mcp@latest
 
 ## Using MCP in Your Code
 
-The `MCPConfiguration` class provides a way to manage multiple tool servers in your Mastra applications without managing multiple MCP clients. The `MastraMCPClient` used internally by `MCPConfiguration` now automatically detects the transport type based on your server configuration:
+The `MCPClient` class provides a way to manage multiple tool servers in your Mastra applications without managing multiple MCP clients. The `MastraMCPClient` used internally by `MCPConfiguration` now automatically detects the transport type based on your server configuration:
 
 -   If you provide a `command`, it uses the Stdio transport.
 -   If you provide a `url`, it first attempts to use the Streamable HTTP transport and falls back to the legacy SSE transport if the initial connection fails.
@@ -35,11 +35,11 @@ The `MCPConfiguration` class provides a way to manage multiple tool servers in y
 Here's an example configuration:
 
 ```typescript
-import { MCPConfiguration } from "@mastra/mcp";
+import { MCPClient } from "@mastra/mcp";
 import { Agent } from "@mastra/core/agent";
 import { openai } from "@ai-sdk/openai";
 
-const mcp = new MCPConfiguration({
+const mcp = new MCPClient({
   servers: {
     // Stdio example
     sequential: {
@@ -61,7 +61,7 @@ const mcp = new MCPConfiguration({
 
 ### Tools vs Toolsets
 
-The `MCPConfiguration` class provides two ways to access MCP tools, each suited for different use cases:
+The `MCPClient` class provides two ways to access MCP tools, each suited for different use cases:
 
 #### Using Tools (`getTools()`)
 
@@ -91,7 +91,7 @@ Use this approach when:
 - Tool configuration needs to change dynamically
 
 ```typescript
-const mcp = new MCPConfiguration({
+const mcp = new MCPClient({
   servers: {
     example: {
       command: "npx",
@@ -124,10 +124,10 @@ We've curated an [MCP Registry Registry](https://mastra.ai/mcp-registry-registry
 
 [mcp.run](https://www.mcp.run/) makes it easy for you to call pre-authenticated, secure MCP Servers. The tools from mcp.run are free, and entirely managed, so your agent only needs a SSE URL and can use any tools a user has installed. MCP Servers are grouped into [Profiles](https://docs.mcp.run/user-guide/manage-profiles), and accessed with a unique SSE URL.
 
-For each Profile, you can copy/paste unique, signed URLs into your `MCPConfiguration` like this:
+For each Profile, you can copy/paste unique, signed URLs into your `MCPClient` like this:
 
 ```typescript
-const mcp = new MCPConfiguration({
+const mcp = new MCPClient({
   servers: {
     marketing: {
       url: new URL(process.env.MCP_RUN_SSE_URL!),
@@ -147,7 +147,7 @@ MCP_RUN_SSE_URL=https://www.mcp.run/api/mcp/sse?nonce=...
 [Composio.dev](https://composio.dev) provides a registry of [SSE-based MCP servers](https://mcp.composio.dev) that can be easily integrated with Mastra. The SSE URL that's generated for Cursor is compatible with Mastra - you can use it directly in your configuration:
 
 ```typescript
-const mcp = new MCPConfiguration({
+const mcp = new MCPClient({
   servers: {
     googleSheets: {
       url: new URL("https://mcp.composio.dev/googlesheets/[private-url-path]"),
@@ -169,7 +169,7 @@ Note: The Composio.dev integration is best suited for single-user scenarios like
 
 ```typescript
 // Unix/Mac
-const mcp = new MCPConfiguration({
+const mcp = new MCPClient({
   servers: {
     sequentialThinking: {
       command: "npx",
@@ -186,7 +186,7 @@ const mcp = new MCPConfiguration({
 });
 
 // Windows
-const mcp = new MCPConfiguration({
+const mcp = new MCPClient({
   servers: {
     sequentialThinking: {
       command: "cmd",
@@ -216,11 +216,11 @@ The tools from your MCP server are returned as a plain JavaScript object when yo
 Suppose your MCP server exposes three tools: `weather`, `stockPrice`, and `news`, but you want to exclude the `news` tool from your agent. You can do this by filtering the tools object:
 
 ```typescript
-import { MCPConfiguration } from "@mastra/mcp";
+import { MCPClient } from "@mastra/mcp";
 import { Agent } from "@mastra/core/agent";
 import { openai } from "@ai-sdk/openai";
 
-const mcp = new MCPConfiguration({
+const mcp = new MCPClient({
   servers: {
     myServer: {
       command: "npx",
@@ -282,5 +282,5 @@ Looking to use Mastra's MCP documentation server in your IDE? Check out our [MCP
 
 ## Next Steps
 
-- Learn more about [MCPConfiguration](/reference/tools/mcp-configuration)
+- Learn more about [MCPClient](/reference/tools/mcp-client)
 - Check out our [example projects](/examples) that use MCP
