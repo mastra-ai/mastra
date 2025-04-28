@@ -56,6 +56,7 @@ jobs:
         run: pnpm install -w
 
       - name: Create/Update Changesets
-        uses: 'wardpeet/changesets-dependencies-action@f5ba59c1277159600410de096d7f9ea8019ce11d'
+        uses: 'wardpeet/changesets-dependencies-action@2e05bd09862b1928b7f53bdbdf546a0b2c1af921'
         env:
           GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}
+          SKIP_CREDENTIALS: '1'
