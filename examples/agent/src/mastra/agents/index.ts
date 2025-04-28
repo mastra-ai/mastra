@@ -36,6 +36,17 @@ export const dynamicAgent = new Agent({
     }
     return openai('gpt-4o-mini');
   },
+  tools: ({ runtimeContext }) => {
+    const tools = {
+      cookingTool,
+    };
+
+    if (runtimeContext.get('foo')) {
+      tools['web_search_preview'] = openai.tools.webSearchPreview();
+    }
+
+    return tools;
+  },
 });
 
 export const chefAgentResponses = new Agent({
