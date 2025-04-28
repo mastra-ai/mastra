@@ -1,8 +1,8 @@
 import { openai } from '@ai-sdk/openai';
 import { Agent } from '@mastra/core/agent';
-import { MCPConfiguration } from '@mastra/mcp';
+import { MCPClient } from '@mastra/mcp';
 
-const mcp = new MCPConfiguration({
+const mcp = new MCPClient({
   servers: {
     registry: {
       command: 'node',
