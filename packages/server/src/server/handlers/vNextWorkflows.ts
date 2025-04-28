@@ -237,6 +237,7 @@ export async function watchVNextWorkflowHandler({
             const runDone = payload.workflowState.status !== 'running';
             if (runDone) {
               controller.close();
+              unwatch?.();
             }
           });
         });
