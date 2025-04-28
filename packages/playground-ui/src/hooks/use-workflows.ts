@@ -6,9 +6,9 @@ import {
   WorkflowRunResult as BaseWorkflowRunResult,
   VNextWorkflowWatchResult,
   GetVNextWorkflowResponse,
-  MastraClient,
 } from '@mastra/client-js';
 import { RuntimeContext } from '@mastra/core/runtime-context';
+import { createMastraClient } from '@/lib/mastra-client';
 
 export type ExtendedWorkflowRunResult = BaseWorkflowRunResult & {
   sanitizedOutput?: string | null;
@@ -69,9 +69,7 @@ export const useWorkflow = (workflowId: string, baseUrl: string) => {
   const [workflow, setWorkflow] = useState<Workflow | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
-  const client = new MastraClient({
-    baseUrl: baseUrl || '',
-  });
+  const client = createMastraClient(baseUrl);
 
   useEffect(() => {
     const fetchWorkflow = async () => {
@@ -124,9 +122,7 @@ export const useVNextWorkflow = (workflowId: string, baseUrl: string) => {
   const [vNextWorkflow, setVNextWorkflow] = useState<GetVNextWorkflowResponse | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
-  const client = new MastraClient({
-    baseUrl: baseUrl || '',
-  });
+  const client = createMastraClient(baseUrl);
 
   useEffect(() => {
     const fetchWorkflow = async () => {
@@ -155,9 +151,7 @@ export const useVNextWorkflow = (workflowId: string, baseUrl: string) => {
 };
 
 export const useExecuteWorkflow = (baseUrl: string) => {
-  const client = new MastraClient({
-    baseUrl: baseUrl || '',
-  });
+  const client = createMastraClient(baseUrl);
 
   const createWorkflowRun = async ({ workflowId, prevRunId }: { workflowId: string; prevRunId?: string }) => {
     try {
@@ -276,9 +270,7 @@ export const useWatchWorkflow = (baseUrl: string) => {
   const watchWorkflow = async ({ workflowId, runId }: { workflowId: string; runId: string }) => {
     try {
       setIsWatchingWorkflow(true);
-      const client = new MastraClient({
-        baseUrl,
-      });
+      const client = createMastraClient(baseUrl);
 
       const workflow = client.getWorkflow(workflowId);
 
@@ -312,9 +304,7 @@ export const useWatchWorkflow = (baseUrl: string) => {
   const watchVNextWorkflow = async ({ workflowId, runId }: { workflowId: string; runId: string }) => {
     try {
       setIsWatchingVNextWorkflow(true);
-      const client = new MastraClient({
-        baseUrl,
-      });
+      const client = createMastraClient(baseUrl);
 
       const workflow = client.getVNextWorkflow(workflowId);
 
@@ -366,9 +356,7 @@ export const useResumeWorkflow = (baseUrl: string) => {
   }) => {
     try {
       setIsResumingWorkflow(true);
-      const client = new MastraClient({
-        baseUrl: baseUrl || '',
-      });
+      const client = createMastraClient(baseUrl);
 
       const response = await client.getWorkflow(workflowId).resume({ stepId, runId, context });
 
@@ -396,9 +384,7 @@ export const useResumeWorkflow = (baseUrl: string) => {
   }) => {
     try {
       setIsResumingVNextWorkflow(true);
-      const client = new MastraClient({
-        baseUrl: baseUrl || '',
-      });
+      const client = createMastraClient(baseUrl);
 
       const response = await client.getVNextWorkflow(workflowId).resume({ step, runId, resumeData, runtimeContext });
 
