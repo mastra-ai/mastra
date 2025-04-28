@@ -19,7 +19,7 @@
     "mastra": "latest",
     "@ai-sdk/openai": "1.2.5",
     "zod": "^3.24.2",
-    "next": "15.2.3"
+    "next": "15.2.4"
   },
   "pnpm": {
     "overrides": {
