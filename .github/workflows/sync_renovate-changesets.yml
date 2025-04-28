@@ -1,6 +1,6 @@
 name: Sync Renovate changeset
 on:
-  pull_request_target:
+  pull_request:
     paths:
       - '.github/workflows/sync_renovate-changesets.yml'
       - '**/pnpm-lock.yaml'
@@ -8,7 +8,7 @@ on:
 jobs:
   changeset:
     runs-on: ubuntu-latest
-    # if: github.actor == 'renovate[bot]' && github.repository == 'mastra-ai/mastra'
+    if: github.actor == 'renovate[bot]' && github.repository == 'mastra-ai/mastra'
     steps:
       - uses: actions/create-github-app-token@v1
         id: app-token
@@ -22,9 +22,12 @@ jobs:
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
 
-      - run: echo ${{ secrets.GH_TOKEN }}
-        env:
-          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ steps.app-token.outputs.token }}
+          persist-credentials: false
 
       - run: |
           cat <<- EOF > $HOME/.netrc
@@ -37,13 +40,6 @@ jobs:
           EOF
           git config --global user.name '${{ steps.app-token.outputs.app-slug }}[bot]'
           git config --global user.email '${{ steps.get-user-id.outputs.user-id }}+${{ steps.app-token.outputs.app-slug }}[bot]@users.noreply.github.com'
-
-      - name: Checkout
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-          token: ${{ steps.app-token.outputs.token }}
-          persist-credentials: false
 
       - uses: pnpm/action-setup@v4
         name: Install pnpm
