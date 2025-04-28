@@ -7,7 +7,8 @@ import { createTool, Mastra, Telemetry } from '../..';
 import { Agent } from '../../agent';
 import { RuntimeContext } from '../../di';
 import { DefaultStorage } from '../../storage/libsql';
-import { createStep, createWorkflow } from './workflow';
+import type { WatchEvent } from './types';
+import { cloneStep, cloneWorkflow, createStep, createWorkflow } from './workflow';
 
 describe('Workflow', () => {
   describe('Basic Workflow Execution', () => {
@@ -17,6 +18,38 @@ describe('Workflow', () => {
         id: 'step1',
         execute,
         inputSchema: z.object({}),
+        outputSchema: z.object({ result: z.string() }),
+      });
+
+      const workflow = createWorkflow({
+        id: 'test-workflow',
+        inputSchema: z.object({}),
+        outputSchema: z.object({
+          result: z.string(),
+        }),
+        steps: [step1],
+      });
+
+      workflow.then(step1).commit();
+
+      const run = workflow.createRun();
+      const result = await run.start({ inputData: {} });
+
+      expect(execute).toHaveBeenCalled();
+      expect(result.steps['step1']).toEqual({
+        status: 'success',
+        output: { result: 'success' },
+      });
+    });
+
+    it('should have access to typed workflow results', async () => {
+      const execute = vi.fn<any>().mockResolvedValue({ result: 'success' });
+      const step1 = createStep({
+        id: 'step1',
+        execute,
+        inputSchema: z.object({}),
+        suspendSchema: z.object({ hello: z.string() }).strict(),
+        resumeSchema: z.object({ resumeInfo: z.object({ hello: z.string() }).strict() }),
         outputSchema: z.object({ result: z.string() }),
       });
 
@@ -1852,7 +1885,16 @@ describe('Workflow', () => {
       });
       workflow.then(step1).then(step2).commit();
 
-      const onTransition = vi.fn();
+      let watchData: WatchEvent[] = [];
+      const onTransition = data => {
+        watchData.push({
+          ...data,
+          payload: {
+            currentStep: data.payload.currentStep ? { ...data.payload.currentStep } : undefined,
+            workflowState: { ...data.payload.workflowState },
+          },
+        });
+      };
 
       const run = workflow.createRun();
 
@@ -1861,23 +1903,45 @@ describe('Workflow', () => {
 
       const executionResult = await run.start({ inputData: {} });
 
-      expect(onTransition).toHaveBeenCalledTimes(5);
-      expect(onTransition).toHaveBeenCalledWith(
-        expect.objectContaining({
-          type: 'watch',
-          payload: {
-            currentStep: expect.objectContaining({
-              id: expect.any(String),
-              status: expect.any(String),
-              output: expect.any(Object),
-            }),
-            workflowState: expect.objectContaining({
-              status: expect.any(String),
-            }),
+      expect(watchData.length).toBe(5);
+      expect(watchData[1]).toEqual({
+        type: 'watch',
+        payload: {
+          currentStep: {
+            id: 'step1',
+            status: 'success',
+            output: { result: 'success1' },
           },
-          eventTimestamp: expect.any(Number),
-        }),
-      );
+          workflowState: {
+            status: 'running',
+            steps: {
+              input: {},
+              step1: { status: 'success', output: { result: 'success1' } },
+            },
+            result: null,
+            error: null,
+          },
+        },
+        eventTimestamp: expect.any(Number),
+      });
+
+      expect(watchData[watchData.length - 1]).toEqual({
+        type: 'watch',
+        payload: {
+          currentStep: undefined,
+          workflowState: {
+            status: 'success',
+            steps: {
+              input: {},
+              step1: { status: 'success', output: { result: 'success1' } },
+              step2: { status: 'success', output: { result: 'success2' } },
+            },
+            result: { result: 'success2' },
+            error: null,
+          },
+        },
+        eventTimestamp: expect.any(Number),
+      });
 
       // Verify execution completed successfully
       expect(executionResult.steps.step1).toEqual({
@@ -1915,9 +1979,16 @@ describe('Workflow', () => {
       });
       workflow.then(step1).then(step2).commit();
 
-      const onTransition = vi.fn().mockImplementation(_data => {
-        // console.dir({ onTransition: data }, { depth: null });
-      });
+      let watchData: WatchEvent[] = [];
+      const onTransition = data => {
+        watchData.push({
+          ...data,
+          payload: {
+            currentStep: data.payload.currentStep ? { ...data.payload.currentStep } : undefined,
+            workflowState: { ...data.payload.workflowState },
+          },
+        });
+      };
 
       const run = workflow.createRun();
       const run2 = workflow.createRun({ runId: run.runId });
@@ -1927,30 +1998,44 @@ describe('Workflow', () => {
 
       const executionResult = await run.start({ inputData: {} });
 
-      expect(onTransition).toHaveBeenCalledTimes(5);
-      expect(onTransition).toHaveBeenCalledWith(
-        expect.objectContaining({
-          type: 'watch',
-          payload: {
-            currentStep: expect.objectContaining({
-              id: expect.any(String),
-              status: expect.any(String),
-              output: expect.any(Object),
-            }),
-            workflowState: expect.objectContaining({
-              status: 'success',
-              steps: {
-                input: {},
-                step1: { status: 'success', output: { result: 'success1' } },
-                step2: { status: 'success', output: { result: 'success2' } },
-              },
-              result: { result: 'success2' },
-              error: null,
-            }),
+      expect(watchData.length).toBe(5);
+      expect(watchData[1]).toEqual({
+        type: 'watch',
+        payload: {
+          currentStep: {
+            id: 'step1',
+            status: 'success',
+            output: { result: 'success1' },
           },
-          eventTimestamp: expect.any(Number),
-        }),
-      );
+          workflowState: {
+            status: 'running',
+            steps: {
+              input: {},
+              step1: { status: 'success', output: { result: 'success1' } },
+            },
+            result: null,
+            error: null,
+          },
+        },
+        eventTimestamp: expect.any(Number),
+      });
+      expect(watchData[watchData.length - 1]).toEqual({
+        type: 'watch',
+        payload: {
+          currentStep: undefined,
+          workflowState: {
+            status: 'success',
+            steps: {
+              input: {},
+              step1: { status: 'success', output: { result: 'success1' } },
+              step2: { status: 'success', output: { result: 'success2' } },
+            },
+            result: { result: 'success2' },
+            error: null,
+          },
+        },
+        eventTimestamp: expect.any(Number),
+      });
 
       // Verify execution completed successfully
       expect(executionResult.steps.step1).toEqual({
@@ -3020,6 +3105,117 @@ describe('Workflow', () => {
       expect(last).toHaveBeenCalledTimes(1);
       // @ts-ignore
       expect(result.steps['nested-workflow-a'].output).toEqual({
+        finalValue: 26 + 1,
+      });
+
+      // @ts-ignore
+      expect(result.steps['nested-workflow-b'].output).toEqual({
+        finalValue: 1,
+      });
+
+      expect(result.steps['last-step']).toEqual({
+        output: { success: true },
+        status: 'success',
+      });
+    });
+
+    it('should be able clone workflows as steps', async () => {
+      const start = vi.fn().mockImplementation(async ({ inputData }) => {
+        // Get the current value (either from trigger or previous increment)
+        const currentValue = inputData.startValue || 0;
+
+        // Increment the value
+        const newValue = currentValue + 1;
+
+        return { newValue };
+      });
+      const startStep = createStep({
+        id: 'start',
+        inputSchema: z.object({ startValue: z.number() }),
+        outputSchema: z.object({
+          newValue: z.number(),
+        }),
+        execute: start,
+      });
+
+      const other = vi.fn().mockImplementation(async () => {
+        return { other: 26 };
+      });
+      const otherStep = createStep({
+        id: 'other',
+        inputSchema: z.object({ newValue: z.number() }),
+        outputSchema: z.object({ other: z.number() }),
+        execute: other,
+      });
+
+      const final = vi.fn().mockImplementation(async ({ getStepResult }) => {
+        const startVal = getStepResult(startStep)?.newValue ?? 0;
+        const otherVal = getStepResult(cloneStep(otherStep, { id: 'other-clone' }))?.other ?? 0;
+        return { finalValue: startVal + otherVal };
+      });
+      const last = vi.fn().mockImplementation(async ({ inputData }) => {
+        console.log('inputData', inputData);
+        return { success: true };
+      });
+      const finalStep = createStep({
+        id: 'final',
+        inputSchema: z.object({ newValue: z.number(), other: z.number() }),
+        outputSchema: z.object({ success: z.boolean() }),
+        execute: final,
+      });
+
+      const counterWorkflow = createWorkflow({
+        id: 'counter-workflow',
+        inputSchema: z.object({
+          startValue: z.number(),
+        }),
+        outputSchema: z.object({ success: z.boolean() }),
+      });
+
+      const wfA = createWorkflow({
+        id: 'nested-workflow-a',
+        inputSchema: counterWorkflow.inputSchema,
+        outputSchema: z.object({ success: z.boolean() }),
+      })
+        .then(startStep)
+        .then(cloneStep(otherStep, { id: 'other-clone' }))
+        .then(finalStep)
+        .commit();
+      const wfB = createWorkflow({
+        id: 'nested-workflow-b',
+        inputSchema: counterWorkflow.inputSchema,
+        outputSchema: z.object({ success: z.boolean() }),
+      })
+        .then(startStep)
+        .then(cloneStep(finalStep, { id: 'final-clone' }))
+        .commit();
+
+      const wfAClone = cloneWorkflow(wfA, { id: 'nested-workflow-a-clone' });
+
+      counterWorkflow
+        .parallel([wfAClone, wfB])
+        .then(
+          createStep({
+            id: 'last-step',
+            inputSchema: z.object({
+              'nested-workflow-b': z.object({ success: z.boolean() }),
+              'nested-workflow-a-clone': z.object({ success: z.boolean() }),
+            }),
+            outputSchema: z.object({ success: z.boolean() }),
+            execute: last,
+          }),
+        )
+        .commit();
+
+      const run = counterWorkflow.createRun();
+      const result = await run.start({ inputData: { startValue: 0 } });
+
+      expect(start).toHaveBeenCalledTimes(2);
+      expect(other).toHaveBeenCalledTimes(1);
+      expect(final).toHaveBeenCalledTimes(2);
+      expect(last).toHaveBeenCalledTimes(1);
+      // @ts-ignore
+      expect(result.steps['nested-workflow-a-clone'].output).toEqual({
         finalValue: 26 + 1,
       });
 
