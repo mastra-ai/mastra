@@ -675,10 +675,6 @@ export class LibSQLStore extends MastraStorage {
     return { runs, total: total || runs.length };
   }
 
-  async getWorkflowRunsByResourceID(_args: { resourceId: string; workflowName?: string }): Promise<WorkflowRuns> {
-    throw new Error('Method not implemented.');
-  }
-
   async getWorkflowRunByID(_args: { runId: string; workflowName?: string }): Promise<WorkflowRun | null> {
     throw new Error('Method not implemented.');
   }

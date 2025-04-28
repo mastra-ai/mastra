@@ -636,27 +636,6 @@ export class UpstashStore extends MastraStorage {
     }
   }
 
-  async getWorkflowRunsByResourceID({
-    namespace = 'workflows',
-    resourceId,
-    workflowName,
-  }: {
-    namespace: string;
-    resourceId: string;
-    workflowName?: string;
-  }): Promise<WorkflowRuns> {
-    try {
-      return this.getWorkflowRuns({
-        namespace,
-        resourceId,
-        workflowName,
-      });
-    } catch (error) {
-      console.error('Error getting workflow runs by resource ID:', error);
-      throw error;
-    }
-  }
-
   async getWorkflowRunByID({
     namespace = 'workflows',
     runId,

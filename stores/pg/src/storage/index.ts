@@ -870,24 +870,6 @@ export class PostgresStore extends MastraStorage {
     }
   }
 
-  async getWorkflowRunsByResourceID({
-    resourceId,
-    workflowName,
-  }: {
-    resourceId: string;
-    workflowName?: string;
-  }): Promise<WorkflowRuns> {
-    try {
-      return this.getWorkflowRuns({
-        resourceId,
-        workflowName,
-      });
-    } catch (error) {
-      console.error('Error getting workflow runs by resource ID:', error);
-      throw error;
-    }
-  }
-
   async getWorkflowRunByID({
     runId,
     workflowName,

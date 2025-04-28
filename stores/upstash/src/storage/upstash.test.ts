@@ -790,7 +790,7 @@ describe('UpstashStore', () => {
       expect(notFound).toBeNull();
     });
   });
-  describe('getWorkflowRunsByResourceID', () => {
+  describe('getWorkflowRuns with resourceId', () => {
     const testNamespace = 'test-workflows-id';
     const workflowName = 'workflow-id-test';
     let resourceId: string;
@@ -832,7 +832,7 @@ describe('UpstashStore', () => {
     });
 
     it('should retrieve all workflow runs by resourceId', async () => {
-      const { runs } = await store.getWorkflowRunsByResourceID({
+      const { runs } = await store.getWorkflowRuns({
         namespace: testNamespace,
         resourceId,
         workflowName,
@@ -845,7 +845,7 @@ describe('UpstashStore', () => {
     });
 
     it('should return an empty array if no workflow runs match resourceId', async () => {
-      const { runs } = await store.getWorkflowRunsByResourceID({
+      const { runs } = await store.getWorkflowRuns({
         namespace: testNamespace,
         resourceId: 'non-existent-resource',
         workflowName,

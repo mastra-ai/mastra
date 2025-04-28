@@ -185,6 +185,4 @@ export abstract class MastraStorage extends MastraBase {
   }): Promise<WorkflowRuns>;
 
   abstract getWorkflowRunByID(args: { runId: string; workflowName?: string }): Promise<WorkflowRun | null>;
-
-  abstract getWorkflowRunsByResourceID(args: { resourceId: string; workflowName?: string }): Promise<WorkflowRuns>;
 }
