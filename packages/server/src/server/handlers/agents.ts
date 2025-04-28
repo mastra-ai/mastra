@@ -19,33 +19,35 @@ export async function getAgentsHandler({ mastra, runtimeContext }: Context & { r
   try {
     const agents = mastra.getAgents();
 
-    const serializedAgentsMap = Object.entries(agents).map(async ([id, agent]) => {
-      const instructions = await agent.getInstructions({ runtimeContext });
-      const tools = await agent.getTools({ runtimeContext });
-      const llm = await agent.getLLM({ runtimeContext });
+    const serializedAgentsMap = await Promise.all(
+      Object.entries(agents).map(async ([id, agent]) => {
+        const instructions = await agent.getInstructions({ runtimeContext });
+        const tools = await agent.getTools({ runtimeContext });
+        const llm = await agent.getLLM({ runtimeContext });
 
-      const serializedAgentTools = Object.entries(tools || {}).reduce<any>((acc, [key, tool]) => {
-        const _tool = tool as any;
-        acc[key] = {
-          ..._tool,
-          inputSchema: _tool.inputSchema ? stringify(zodToJsonSchema(_tool.inputSchema)) : undefined,
-          outputSchema: _tool.outputSchema ? stringify(zodToJsonSchema(_tool.outputSchema)) : undefined,
+        const serializedAgentTools = Object.entries(tools || {}).reduce<any>((acc, [key, tool]) => {
+          const _tool = tool as any;
+          acc[key] = {
+            ..._tool,
+            inputSchema: _tool.inputSchema ? stringify(zodToJsonSchema(_tool.inputSchema)) : undefined,
+            outputSchema: _tool.outputSchema ? stringify(zodToJsonSchema(_tool.outputSchema)) : undefined,
+          };
+          return acc;
+        }, {});
+
+        return {
+          id,
+          name: agent.name,
+          instructions,
+          tools: serializedAgentTools,
+          provider: llm?.getProvider(),
+          modelId: llm?.getModelId(),
         };
-        return acc;
-      }, {});
+      }),
+    );
 
-      return {
-        id,
-        name: agent.name,
-        instructions,
-        tools: serializedAgentTools,
-        provider: llm?.getProvider(),
-        modelId: llm?.getModelId(),
-      };
-    });
-
-    const serializedAgents = (await Promise.all(serializedAgentsMap)).reduce<any>((acc, memo) => {
-      acc[memo.id] = memo;
+    const serializedAgents = serializedAgentsMap.reduce<any>((acc, { id, ...rest }) => {
+      acc[id] = rest;
       return acc;
     }, {});
 

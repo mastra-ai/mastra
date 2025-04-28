@@ -26,7 +26,7 @@ export async function getNetworksHandler({
           id: network.formatAgentId(routingAgent.name),
           name: routingAgent.name,
           instructions: routingAgent.instructions,
-          agents: Promise.all(
+          agents: await Promise.all(
             agents.map(async agent => {
               const llm = await agent.getLLM({ runtimeContext });
               return {
@@ -75,7 +75,7 @@ export async function getNetworkByIdHandler({
       id: network.formatAgentId(routingAgent.name),
       name: routingAgent.name,
       instructions: routingAgent.instructions,
-      agents: Promise.all(
+      agents: await Promise.all(
         agents.map(async agent => {
           const llm = await agent.getLLM({ runtimeContext });
           return {
