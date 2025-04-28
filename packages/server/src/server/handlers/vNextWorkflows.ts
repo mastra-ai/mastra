@@ -24,6 +24,7 @@ export async function getVNextWorkflowsHandler({ mastra }: VNextWorkflowContext)
             ...step,
             inputSchema: step.inputSchema ? stringify(zodToJsonSchema(step.inputSchema)) : undefined,
             outputSchema: step.outputSchema ? stringify(zodToJsonSchema(step.outputSchema)) : undefined,
+            resumeSchema: step.resumeSchema ? stringify(zodToJsonSchema(step.resumeSchema)) : undefined,
           };
           return acc;
         }, {}),
@@ -57,6 +58,7 @@ export async function getVNextWorkflowByIdHandler({ mastra, workflowId }: VNextW
           ...step,
           inputSchema: step.inputSchema ? stringify(zodToJsonSchema(step.inputSchema)) : undefined,
           outputSchema: step.outputSchema ? stringify(zodToJsonSchema(step.outputSchema)) : undefined,
+          resumeSchema: step.resumeSchema ? stringify(zodToJsonSchema(step.resumeSchema)) : undefined,
         };
         return acc;
       }, {}),
