@@ -580,8 +580,13 @@ export class LibSQLStore extends MastraStorage {
       }
 
       if (resourceId) {
-        conditions.push('resourceId = ?');
-        args.push(resourceId);
+        const hasResourceId = await this.hasColumn(TABLE_WORKFLOW_SNAPSHOT, 'resourceId');
+        if (hasResourceId) {
+          conditions.push('resourceId = ?');
+          args.push(resourceId);
+        } else {
+          console.warn(`[${TABLE_WORKFLOW_SNAPSHOT}] resourceId column not found. Skipping resourceId filter.`);
+        }
       }
 
       const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';

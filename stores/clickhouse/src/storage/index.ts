@@ -909,8 +909,13 @@ export class ClickhouseStore extends MastraStorage {
       }
 
       if (resourceId) {
-        conditions.push(`resourceId = {var_resourceId:String}`);
-        values.var_resourceId = resourceId;
+        const hasResourceId = await this.hasColumn(TABLE_WORKFLOW_SNAPSHOT, 'resourceId');
+        if (hasResourceId) {
+          conditions.push(`resourceId = {var_resourceId:String}`);
+          values.var_resourceId = resourceId;
+        } else {
+          console.warn(`[${TABLE_WORKFLOW_SNAPSHOT}] resourceId column not found. Skipping resourceId filter.`);
+        }
       }
 
       if (fromDate) {

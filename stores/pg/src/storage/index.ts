@@ -756,9 +756,11 @@ export class PostgresStore extends MastraStorage {
   }
 
   private async hasColumn(table: string, column: string): Promise<boolean> {
+    // Use this.schema to scope the check
+    const schema = this.schema || 'public';
     const result = await this.db.oneOrNone(
-      `SELECT 1 FROM information_schema.columns WHERE table_name = $1 AND column_name = $2`,
-      [table, column],
+      `SELECT 1 FROM information_schema.columns WHERE table_schema = $1 AND table_name = $2 AND (column_name = $3 OR column_name = $4)`,
+      [schema, table, column, column.toLowerCase()],
     );
     return !!result;
   }
@@ -811,9 +813,14 @@ export class PostgresStore extends MastraStorage {
       }
 
       if (resourceId) {
-        conditions.push(`"resourceId" = $${paramIndex}`);
-        values.push(resourceId);
-        paramIndex++;
+        const hasResourceId = await this.hasColumn(TABLE_WORKFLOW_SNAPSHOT, 'resourceId');
+        if (hasResourceId) {
+          conditions.push(`"resourceId" = $${paramIndex}`);
+          values.push(resourceId);
+          paramIndex++;
+        } else {
+          console.warn(`[${TABLE_WORKFLOW_SNAPSHOT}] resourceId column not found. Skipping resourceId filter.`);
+        }
       }
 
       if (fromDate) {

@@ -1,5 +1,5 @@
 import { randomUUID } from 'crypto';
-import { describe, it, expect, beforeAll, beforeEach, afterAll } from 'vitest';
+import { describe, it, expect, beforeAll, beforeEach, afterAll, afterEach } from 'vitest';
 import type { MetricResult } from '@mastra/core/eval';
 import type { WorkflowRunState } from '@mastra/core/workflows';
 import type { MastraStorage } from '@mastra/core/storage';
@@ -685,6 +685,38 @@ export function createTestSuite(storage: MastraStorage) {
         expect(Array.isArray(runs)).toBe(true);
         expect(runs.length).toBe(0);
       });
+    });
+  });
+
+  describe('hasColumn', () => {
+    const tempTable = 'temp_test_table';
+
+    beforeEach(async () => {
+      // Always try to drop the table before each test, ignore errors if it doesn't exist
+      try {
+        await storage['client'].execute({ sql: `DROP TABLE IF EXISTS ${tempTable}` });
+      } catch {
+        /* ignore */
+      }
+    });
+
+    it('returns true if the column exists', async () => {
+      await storage['client'].execute({ sql: `CREATE TABLE ${tempTable} (id INTEGER PRIMARY KEY, resourceId TEXT)` });
+      expect(await storage['hasColumn'](tempTable, 'resourceId')).toBe(true);
+    });
+
+    it('returns false if the column does not exist', async () => {
+      await storage['client'].execute({ sql: `CREATE TABLE ${tempTable} (id INTEGER PRIMARY KEY)` });
+      expect(await storage['hasColumn'](tempTable, 'resourceId')).toBe(false);
+    });
+
+    afterEach(async () => {
+      // Always try to drop the table after each test, ignore errors if it doesn't exist
+      try {
+        await storage['client'].execute({ sql: `DROP TABLE IF EXISTS ${tempTable}` });
+      } catch {
+        /* ignore */
+      }
     });
   });
 

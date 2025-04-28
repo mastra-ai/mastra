@@ -2,7 +2,7 @@ import { randomUUID } from 'crypto';
 import type { WorkflowRunState } from '@mastra/core';
 import type { MessageType } from '@mastra/core/memory';
 import { TABLE_THREADS, TABLE_MESSAGES, TABLE_WORKFLOW_SNAPSHOT } from '@mastra/core/storage';
-import { describe, it, expect, beforeAll, beforeEach, afterAll, vi } from 'vitest';
+import { describe, it, expect, beforeAll, beforeEach, afterAll, vi, afterEach } from 'vitest';
 
 import { ClickhouseStore } from '.';
 import type { ClickhouseConfig } from '.';
@@ -802,6 +802,38 @@ describe('ClickhouseStore', () => {
       });
       expect(Array.isArray(runs)).toBe(true);
       expect(runs.length).toBe(0);
+    });
+  });
+
+  describe('hasColumn', () => {
+    const tempTable = 'temp_test_table';
+
+    beforeEach(async () => {
+      // Always try to drop the table before each test, ignore errors if it doesn't exist
+      try {
+        await store['db'].query({ query: `DROP TABLE IF EXISTS ${tempTable}` });
+      } catch {
+        /* ignore */
+      }
+    });
+
+    it('returns true if the column exists', async () => {
+      await store['db'].query({ query: `CREATE TABLE ${tempTable} (id SERIAL PRIMARY KEY, resourceId TEXT)` });
+      expect(await store['hasColumn'](tempTable, 'resourceId')).toBe(true);
+    });
+
+    it('returns false if the column does not exist', async () => {
+      await store['db'].query({ query: `CREATE TABLE ${tempTable} (id SERIAL PRIMARY KEY)` });
+      expect(await store['hasColumn'](tempTable, 'resourceId')).toBe(false);
+    });
+
+    afterEach(async () => {
+      // Clean up after each test
+      try {
+        await store['db'].query({ query: `DROP TABLE IF EXISTS ${tempTable}` });
+      } catch {
+        /* ignore */
+      }
     });
   });
 

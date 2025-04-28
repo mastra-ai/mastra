@@ -838,6 +838,38 @@ describe('PostgresStore', () => {
     });
   });
 
+  describe('hasColumn', () => {
+    const tempTable = 'temp_test_table';
+
+    beforeEach(async () => {
+      // Always try to drop the table before each test, ignore errors if it doesn't exist
+      try {
+        await store['db'].query(`DROP TABLE IF EXISTS ${tempTable}`);
+      } catch {
+        /* ignore */
+      }
+    });
+
+    it('returns true if the column exists', async () => {
+      await store['db'].query(`CREATE TABLE ${tempTable} (id SERIAL PRIMARY KEY, resourceId TEXT)`);
+      expect(await store['hasColumn'](tempTable, 'resourceId')).toBe(true);
+    });
+
+    it('returns false if the column does not exist', async () => {
+      await store['db'].query(`CREATE TABLE ${tempTable} (id SERIAL PRIMARY KEY)`);
+      expect(await store['hasColumn'](tempTable, 'resourceId')).toBe(false);
+    });
+
+    afterEach(async () => {
+      // Always try to drop the table after each test, ignore errors if it doesn't exist
+      try {
+        await store['db'].query(`DROP TABLE IF EXISTS ${tempTable}`);
+      } catch {
+        /* ignore */
+      }
+    });
+  });
+
   describe('Schema Support', () => {
     const customSchema = 'mastra_test';
     let customSchemaStore: PostgresStore;
