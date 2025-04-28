@@ -636,7 +636,7 @@ export class UpstashStore extends MastraStorage {
     }
   }
 
-  async getWorkflowRunByResourceId({
+  async getWorkflowRunsByResourceID({
     namespace = 'workflows',
     resourceId,
     workflowName,

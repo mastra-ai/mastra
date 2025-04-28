@@ -832,7 +832,7 @@ describe('UpstashStore', () => {
     });
 
     it('should retrieve all workflow runs by resourceId', async () => {
-      const { runs } = await store.getWorkflowRunByResourceId({
+      const { runs } = await store.getWorkflowRunsByResourceID({
         namespace: testNamespace,
         resourceId,
         workflowName,
@@ -845,7 +845,7 @@ describe('UpstashStore', () => {
     });
 
     it('should return an empty array if no workflow runs match resourceId', async () => {
-      const { runs } = await store.getWorkflowRunByResourceId({
+      const { runs } = await store.getWorkflowRunsByResourceID({
         namespace: testNamespace,
         resourceId: 'non-existent-resource',
         workflowName,

@@ -646,7 +646,7 @@ export class LibSQLStore extends MastraStorage {
     return this.parseWorkflowRun(result.rows[0]);
   }
 
-  async getWorkflowRunByResourceId({
+  async getWorkflowRunsByResourceID({
     resourceId,
     workflowName,
   }: {
@@ -662,6 +662,13 @@ export class LibSQLStore extends MastraStorage {
       console.error('Error getting workflow runs by resource ID:', error);
       throw error;
     }
+  }
+
+  private async hasColumn(table: string, column: string): Promise<boolean> {
+    const result = await this.client.execute({
+      sql: `PRAGMA table_info(${table})`,
+    });
+    return (await result.rows)?.some((row: any) => row.name === column);
   }
 
   private parseWorkflowRun(row: Record<string, any>): WorkflowRun {

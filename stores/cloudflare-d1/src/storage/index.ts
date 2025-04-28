@@ -1028,7 +1028,7 @@ export class D1Store extends MastraStorage {
     throw new Error('Method not implemented.');
   }
 
-  async getWorkflowRunByResourceId(_args: { resourceId: string; workflowName?: string }): Promise<WorkflowRuns> {
+  async getWorkflowRunsByResourceID(_args: { resourceId: string; workflowName?: string }): Promise<WorkflowRuns> {
     throw new Error('Method not implemented.');
   }
 

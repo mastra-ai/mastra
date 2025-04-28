@@ -784,7 +784,7 @@ describe('ClickhouseStore', () => {
     });
 
     it('should retrieve all workflow runs by resourceId', async () => {
-      const { runs } = await store.getWorkflowRunByResourceId({
+      const { runs } = await store.getWorkflowRunsByResourceID({
         resourceId,
         workflowName,
       });
@@ -796,7 +796,7 @@ describe('ClickhouseStore', () => {
     });
 
     it('should return an empty array if no workflow runs match resourceId', async () => {
-      const { runs } = await store.getWorkflowRunByResourceId({
+      const { runs } = await store.getWorkflowRunsByResourceID({
         resourceId: 'non-existent-resource',
         workflowName,
       });

@@ -666,7 +666,7 @@ export function createTestSuite(storage: MastraStorage) {
       });
 
       it('should retrieve all workflow runs by resourceId', async () => {
-        const { runs } = await storage.getWorkflowRunByResourceId({
+        const { runs } = await storage.getWorkflowRunsByResourceID({
           resourceId,
           workflowName,
         });
@@ -678,7 +678,7 @@ export function createTestSuite(storage: MastraStorage) {
       });
 
       it('should return an empty array if no workflow runs match resourceId', async () => {
-        const { runs } = await storage.getWorkflowRunByResourceId({
+        const { runs } = await storage.getWorkflowRunsByResourceID({
           resourceId: 'non-existent-resource',
           workflowName,
         });

@@ -755,6 +755,14 @@ export class PostgresStore extends MastraStorage {
     }
   }
 
+  private async hasColumn(table: string, column: string): Promise<boolean> {
+    const result = await this.db.oneOrNone(
+      `SELECT 1 FROM information_schema.columns WHERE table_name = $1 AND column_name = $2`,
+      [table, column],
+    );
+    return !!result;
+  }
+
   private parseWorkflowRun(row: any): WorkflowRun {
     let parsedSnapshot: WorkflowRunState | string = row.snapshot as string;
     if (typeof parsedSnapshot === 'string') {
@@ -855,7 +863,7 @@ export class PostgresStore extends MastraStorage {
     }
   }
 
-  async getWorkflowRunByResourceId({
+  async getWorkflowRunsByResourceID({
     resourceId,
     workflowName,
   }: {

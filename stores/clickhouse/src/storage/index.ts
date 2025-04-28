@@ -973,7 +973,7 @@ export class ClickhouseStore extends MastraStorage {
     }
   }
 
-  async getWorkflowRunByResourceId({
+  async getWorkflowRunsByResourceID({
     resourceId,
     workflowName,
   }: {
@@ -1040,6 +1040,15 @@ export class ClickhouseStore extends MastraStorage {
       console.error('Error getting workflow run by ID:', error);
       throw error;
     }
+  }
+
+  private async hasColumn(table: string, column: string): Promise<boolean> {
+    const result = await this.db.query({
+      query: `DESCRIBE TABLE ${table}`,
+      format: 'JSONEachRow',
+    });
+    const columns = (await result.json()) as { name: string }[];
+    return columns.some(c => c.name === column);
   }
 
   async close(): Promise<void> {
