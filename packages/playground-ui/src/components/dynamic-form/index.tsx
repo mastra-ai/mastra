@@ -28,14 +28,21 @@ export function DynamicForm<T extends z.ZodSchema>({
     return null;
   }
 
-  const schemaProvider = new CustomZodProvider(schema as any);
+  const normalizedSchema = (schema: z.ZodSchema) => {
+    // using a non-printable character to avoid conflicts with the form data
+    return z.object({
+      '\u200B': schema,
+    });
+  };
+
+  const schemaProvider = new CustomZodProvider(normalizedSchema(schema));
 
   const formProps: ExtendableAutoFormProps<z.infer<T>> = {
     schema: schemaProvider,
     onSubmit: async values => {
-      await onSubmit(values);
+      await onSubmit(values['\u200B']);
     },
-    defaultValues,
+    defaultValues: defaultValues ? { '\u200B': defaultValues } : undefined,
     formProps: {
       className: 'space-y-4 p-4',
     },
