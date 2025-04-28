@@ -15,9 +15,11 @@ describe('Milvus Vector tests', () => {
       username: 'milvus-username',
       password: 'milvus-password',
       ssl: false,
+      logLevel: 'info',
     });
 
     expect(milvusClient).toBeDefined();
+    expect((await milvusClient.checkHealth()).isHealthy).toBe(true);
   });
 
   describe('Schema operations', () => {

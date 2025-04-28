@@ -225,9 +225,9 @@ describe('MilvusFilterTranslator', () => {
     });
 
     it('allows vectors fields with dot notation', () => {
-      const filter = { 'vectors.dimension': 128 };
+      const filter = { 'vector.dimension': 128 };
       // This should not throw as vectors is in the nonMetadataFields list
-      expect(translator.translate(filter)).toEqual('vectors.dimension == 128');
+      expect(translator.translate(filter)).toEqual('vector.dimension == 128');
     });
   });
 
@@ -441,9 +441,9 @@ describe('MilvusFilterTranslator', () => {
     it('does not transform id and vectors fields', () => {
       const filter = {
         id: 'doc1',
-        vectors: [1, 2, 3],
+        vector: [1, 2, 3],
       };
-      expect(translator.translate(filter)).toEqual("id == 'doc1' AND vectors IN [1, 2, 3]");
+      expect(translator.translate(filter)).toEqual("id == 'doc1' AND vector IN [1, 2, 3]");
     });
   });
 });

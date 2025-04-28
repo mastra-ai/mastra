@@ -63,14 +63,18 @@ export class MilvusVectorStore extends MastraVector {
     username,
     password,
     ssl,
+    trace,
+    logLevel,
   }: {
     address: string;
     username?: string;
     password?: string;
     ssl?: boolean;
+    trace?: boolean;
+    logLevel?: 'debug' | 'info' | 'warn' | 'error';
   }) {
     super();
-    this.client = new MilvusClient({ address, ssl, username, password });
+    this.client = new MilvusClient({ address, ssl, username, password, trace, logLevel });
   }
 
   async checkHealth(): Promise<CheckHealthResponse> {

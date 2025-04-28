@@ -36,7 +36,7 @@ export class MilvusFilterTranslator extends BaseFilterTranslator {
   ];
 
   // Fields that should not be treated as metadata
-  private readonly nonMetadataFields = ['id', 'vectors'];
+  private readonly nonMetadataFields = ['id', 'vector'];
 
   translate(filter: VectorFilter): string {
     if (!filter || Object.keys(filter).length === 0) {
