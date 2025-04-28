@@ -1,5 +1,13 @@
 # @mastra/mongodb
 
+## 0.0.2-alpha.2
+
+### Patch Changes
+
+- c4c6f04: added and updated docs for mongodb
+- Updated dependencies [6262bd5]
+  - @mastra/core@0.9.1-alpha.3
+
 ## 0.0.2-alpha.1
 
 ### Patch Changes
