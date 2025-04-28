@@ -596,14 +596,14 @@ The `event` object has the following schema:
 type WatchEvent = {
   type: 'watch';
   payload: {
-    currentStep: {
+    currentStep?: {
       id: string;
       status: 'running' | 'completed' | 'failed' | 'suspended';
       output?: Record<string, any>;
       payload?: Record<string, any>;
     };
     workflowState: {
-      status: 'running' | 'completed' | 'failed' | 'suspended';
+      status: 'running' | 'success' | 'failed' | 'suspended';
       steps: Record<
         string,
         {
@@ -612,13 +612,16 @@ type WatchEvent = {
           payload?: Record<string, any>;
         }
       >;
-      output?: Record<string, any>;
+      result?: Record<string, any>;
+      error?: Record<string, any>;
       payload?: Record<string, any>;
     };
   };
   eventTimestamp: Date;
 };
 ```
+
+The `currentStep` property is only present when the workflow is running. When the workflow is finished the status on `workflowState` is changed, as well as the `result` and `error` properties. At the same time the `currentStep` property is removed.
 
 ## Nested Workflows
 
