@@ -1,5 +1,19 @@
 # @mastra/playground-ui
 
+## 5.0.1-alpha.2
+
+### Patch Changes
+
+- 70124e1: revamp the ui for traces
+- 926821d: Fix triggerSchema default not showing in workflow ui
+- 57b25ed: Use resumeSchema to show inputs on the playground for suspended workflows
+- f1d4b7a: Add x-mastra-dev-playground header to all playground requests
+- Updated dependencies [405b63d]
+- Updated dependencies [61e92f5]
+- Updated dependencies [c71013a]
+  - @mastra/core@0.9.1-alpha.2
+  - @mastra/client-js@0.1.19-alpha.2
+
 ## 5.0.1-alpha.1
 
 ### Patch Changes

@@ -11,10 +11,10 @@ interface KeyValuePair {
   value: string;
 }
 
-export const RecordField: React.FC<AutoFormFieldProps> = ({ inputProps, error, id }) => {
-  const { key, value = {}, onChange, ...props } = inputProps;
+export const RecordField: React.FC<AutoFormFieldProps> = ({ inputProps, field, error, id }) => {
+  const { key, onChange, ...props } = inputProps;
   const [pairs, setPairs] = React.useState<KeyValuePair[]>(() =>
-    Object.entries(value).map(([key, val]) => ({
+    Object.entries(field.default || {}).map(([key, val]) => ({
       id: key || uuid(),
       key,
       value: val as string,

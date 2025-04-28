@@ -4,7 +4,7 @@ import { Loader2 } from 'lucide-react';
 import { Button } from '../ui/button';
 import { ScrollArea } from '../ui/scroll-area';
 import { AutoForm, CustomZodProvider } from '@/components/ui/autoform';
-import type { ExtendableAutoFormProps, AutoFormFieldComponents } from '@autoform/react';
+import type { ExtendableAutoFormProps } from '@autoform/react';
 import z from 'zod';
 import { Label } from '../ui/label';
 
@@ -42,7 +42,7 @@ export function DynamicForm<T extends z.ZodSchema>({
     onSubmit: async values => {
       await onSubmit(values['\u200B']);
     },
-    defaultValues,
+    defaultValues: defaultValues ? { '\u200B': defaultValues } : undefined,
     formProps: {
       className: 'space-y-4 p-4',
     },
