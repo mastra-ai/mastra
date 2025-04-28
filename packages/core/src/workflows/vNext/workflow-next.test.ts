@@ -7,6 +7,7 @@ import { createTool, Mastra, Telemetry } from '../..';
 import { Agent } from '../../agent';
 import { RuntimeContext } from '../../di';
 import { DefaultStorage } from '../../storage/libsql';
+import type { WatchEvent } from './types';
 import { createStep, createWorkflow } from './workflow';
 
 describe('Workflow', () => {
@@ -17,6 +18,38 @@ describe('Workflow', () => {
         id: 'step1',
         execute,
         inputSchema: z.object({}),
+        outputSchema: z.object({ result: z.string() }),
+      });
+
+      const workflow = createWorkflow({
+        id: 'test-workflow',
+        inputSchema: z.object({}),
+        outputSchema: z.object({
+          result: z.string(),
+        }),
+        steps: [step1],
+      });
+
+      workflow.then(step1).commit();
+
+      const run = workflow.createRun();
+      const result = await run.start({ inputData: {} });
+
+      expect(execute).toHaveBeenCalled();
+      expect(result.steps['step1']).toEqual({
+        status: 'success',
+        output: { result: 'success' },
+      });
+    });
+
+    it('should have access to typed workflow results', async () => {
+      const execute = vi.fn<any>().mockResolvedValue({ result: 'success' });
+      const step1 = createStep({
+        id: 'step1',
+        execute,
+        inputSchema: z.object({}),
+        suspendSchema: z.object({ hello: z.string() }).strict(),
+        resumeSchema: z.object({ resumeInfo: z.object({ hello: z.string() }).strict() }),
         outputSchema: z.object({ result: z.string() }),
       });
 
@@ -1852,7 +1885,16 @@ describe('Workflow', () => {
       });
       workflow.then(step1).then(step2).commit();
 
-      const onTransition = vi.fn();
+      let watchData: WatchEvent[] = [];
+      const onTransition = data => {
+        watchData.push({
+          ...data,
+          payload: {
+            currentStep: data.payload.currentStep ? { ...data.payload.currentStep } : undefined,
+            workflowState: { ...data.payload.workflowState },
+          },
+        });
+      };
 
       const run = workflow.createRun();
 
@@ -1861,23 +1903,45 @@ describe('Workflow', () => {
 
       const executionResult = await run.start({ inputData: {} });
 
-      expect(onTransition).toHaveBeenCalledTimes(5);
-      expect(onTransition).toHaveBeenCalledWith(
-        expect.objectContaining({
-          type: 'watch',
-          payload: {
-            currentStep: expect.objectContaining({
-              id: expect.any(String),
-              status: expect.any(String),
-              output: expect.any(Object),
-            }),
-            workflowState: expect.objectContaining({
-              status: expect.any(String),
-            }),
+      expect(watchData.length).toBe(5);
+      expect(watchData[1]).toEqual({
+        type: 'watch',
+        payload: {
+          currentStep: {
+            id: 'step1',
+            status: 'success',
+            output: { result: 'success1' },
           },
-          eventTimestamp: expect.any(Number),
-        }),
-      );
+          workflowState: {
+            status: 'running',
+            steps: {
+              input: {},
+              step1: { status: 'success', output: { result: 'success1' } },
+            },
+            result: null,
+            error: null,
+          },
+        },
+        eventTimestamp: expect.any(Number),
+      });
+
+      expect(watchData[watchData.length - 1]).toEqual({
+        type: 'watch',
+        payload: {
+          currentStep: undefined,
+          workflowState: {
+            status: 'success',
+            steps: {
+              input: {},
+              step1: { status: 'success', output: { result: 'success1' } },
+              step2: { status: 'success', output: { result: 'success2' } },
+            },
+            result: { result: 'success2' },
+            error: null,
+          },
+        },
+        eventTimestamp: expect.any(Number),
+      });
 
       // Verify execution completed successfully
       expect(executionResult.steps.step1).toEqual({
@@ -1915,9 +1979,16 @@ describe('Workflow', () => {
       });
       workflow.then(step1).then(step2).commit();
 
-      const onTransition = vi.fn().mockImplementation(_data => {
-        // console.dir({ onTransition: data }, { depth: null });
-      });
+      let watchData: WatchEvent[] = [];
+      const onTransition = data => {
+        watchData.push({
+          ...data,
+          payload: {
+            currentStep: data.payload.currentStep ? { ...data.payload.currentStep } : undefined,
+            workflowState: { ...data.payload.workflowState },
+          },
+        });
+      };
 
       const run = workflow.createRun();
       const run2 = workflow.createRun({ runId: run.runId });
@@ -1927,30 +1998,44 @@ describe('Workflow', () => {
 
       const executionResult = await run.start({ inputData: {} });
 
-      expect(onTransition).toHaveBeenCalledTimes(5);
-      expect(onTransition).toHaveBeenCalledWith(
-        expect.objectContaining({
-          type: 'watch',
-          payload: {
-            currentStep: expect.objectContaining({
-              id: expect.any(String),
-              status: expect.any(String),
-              output: expect.any(Object),
-            }),
-            workflowState: expect.objectContaining({
-              status: 'success',
-              steps: {
-                input: {},
-                step1: { status: 'success', output: { result: 'success1' } },
-                step2: { status: 'success', output: { result: 'success2' } },
-              },
-              result: { result: 'success2' },
-              error: null,
-            }),
+      expect(watchData.length).toBe(5);
+      expect(watchData[1]).toEqual({
+        type: 'watch',
+        payload: {
+          currentStep: {
+            id: 'step1',
+            status: 'success',
+            output: { result: 'success1' },
           },
-          eventTimestamp: expect.any(Number),
-        }),
-      );
+          workflowState: {
+            status: 'running',
+            steps: {
+              input: {},
+              step1: { status: 'success', output: { result: 'success1' } },
+            },
+            result: null,
+            error: null,
+          },
+        },
+        eventTimestamp: expect.any(Number),
+      });
+      expect(watchData[watchData.length - 1]).toEqual({
+        type: 'watch',
+        payload: {
+          currentStep: undefined,
+          workflowState: {
+            status: 'success',
+            steps: {
+              input: {},
+              step1: { status: 'success', output: { result: 'success1' } },
+              step2: { status: 'success', output: { result: 'success2' } },
+            },
+            result: { result: 'success2' },
+            error: null,
+          },
+        },
+        eventTimestamp: expect.any(Number),
+      });
 
       // Verify execution completed successfully
       expect(executionResult.steps.step1).toEqual({
