@@ -5,6 +5,22 @@ import { MilvusVectorStore } from './index';
 
 describe('Milvus Vector tests', () => {
   let milvusClient: MilvusVectorStore;
+  // Define collection names at the top level to manage them centrally
+  const testCollections = {
+    basic: 'book',
+    index: 'new_book_collection',
+    insert: 'new_book_collection_inserts',
+    update: 'new_book_collection_update',
+    query: 'new_book_collection_query',
+    queryVariations: 'query_variations_collection',
+    advancedQuery: 'advanced_query_collection',
+  };
+
+  // Use smaller dimensions to speed up tests
+  const testDimensions = {
+    basic: 64, // reduced from 128
+    small: 8,
+  };
 
   beforeAll(async () => {
     // for running the tests, you need to have a local milvus instance running
@@ -22,14 +38,23 @@ describe('Milvus Vector tests', () => {
     expect((await milvusClient.checkHealth()).isHealthy).toBe(true);
   });
 
+  // Clean up all test collections after all tests complete
+  afterAll(async () => {
+    // Drop all test collections at the end
+    for (const collName of Object.values(testCollections)) {
+      try {
+        await milvusClient.dropCollection(collName);
+      } catch {
+        // Ignore errors if collections don't exist
+      }
+    }
+  });
+
   describe('Schema operations', () => {
-    const collection_name = `book`;
-    afterAll(async () => {
-      await milvusClient.dropCollection(collection_name);
-    });
+    const collection_name = testCollections.basic;
 
     it('should create collection', async () => {
-      const dim = 128;
+      const dim = testDimensions.basic;
       const schema: FieldType[] = [
         {
           name: `book_id`,
@@ -57,7 +82,7 @@ describe('Milvus Vector tests', () => {
     });
 
     it('should throw error when creating collection with dynamic field', async () => {
-      const dim = 128;
+      const dim = testDimensions.basic;
       const schema: FieldType[] = [
         {
           name: `book_id`,
@@ -113,7 +138,7 @@ describe('Milvus Vector tests', () => {
     });
 
     it('should create collection with all options', async () => {
-      const dim = 128;
+      const dim = testDimensions.basic;
       const schema: FieldType[] = [
         {
           name: `book_id`,
@@ -165,39 +190,40 @@ describe('Milvus Vector tests', () => {
       const collections = await milvusClient.listCollections();
       expect(collections).toBeDefined();
       expect(collections.length).toBeGreaterThan(0);
-      expect(collections.includes('new_book_collection')).toBe(true);
+      expect(collections.includes(testCollections.basic)).toBe(true);
     });
   });
 
   describe('Index operations', () => {
-    const collectionName = `book`;
+    const collectionName = testCollections.index;
     const indexName = `book_intro`;
 
     beforeAll(async () => {
-      await milvusClient.createCollection(collectionName, [
-        {
-          name: `book_id`,
-          description: `customized primary id`,
-          data_type: DataType.Int64,
-          is_primary_key: true,
-          autoID: false,
-        },
-        {
-          name: `word_count`,
-          description: `word count`,
-          data_type: DataType.Int64,
-        },
-        {
-          name: `book_intro`,
-          description: `word count`,
-          data_type: DataType.FloatVector,
-          dim: 128,
-        },
-      ]);
-    });
-
-    afterAll(async () => {
-      await milvusClient.dropCollection(collectionName);
+      // Try to create the collection, but don't worry if it already exists
+      try {
+        await milvusClient.createCollection(collectionName, [
+          {
+            name: `book_id`,
+            description: `customized primary id`,
+            data_type: DataType.Int64,
+            is_primary_key: true,
+            autoID: false,
+          },
+          {
+            name: `word_count`,
+            description: `word count`,
+            data_type: DataType.Int64,
+          },
+          {
+            name: `book_intro`,
+            description: `word count`,
+            data_type: DataType.FloatVector,
+            dim: testDimensions.basic,
+          },
+        ]);
+      } catch {
+        // Collection might already exist, that's fine
+      }
     });
 
     beforeEach(async () => {
@@ -213,7 +239,7 @@ describe('Milvus Vector tests', () => {
           type: IndexType.IVF_FLAT,
         },
         metricType: MetricType.L2,
-        dimension: 128,
+        dimension: testDimensions.basic,
       });
 
       const describeResult = await milvusClient.describeIndex(collectionName);
@@ -237,7 +263,7 @@ describe('Milvus Vector tests', () => {
           type: IndexType.IVF_FLAT,
         },
         metricType: MetricType.L2,
-        dimension: 128,
+        dimension: testDimensions.basic,
       });
 
       expect(
@@ -249,7 +275,7 @@ describe('Milvus Vector tests', () => {
             type: IndexType.IVF_FLAT,
           },
           metricType: MetricType.L2,
-          dimension: 128,
+          dimension: testDimensions.basic,
         }),
       ).resolves.not.toThrowError();
     });
@@ -262,7 +288,7 @@ describe('Milvus Vector tests', () => {
         indexConfig: {
           type: IndexType.IVF_FLAT,
         },
-        dimension: 128,
+        dimension: testDimensions.basic,
       });
 
       const describeResult = await milvusClient.describeIndex(collectionName);
@@ -343,7 +369,7 @@ describe('Milvus Vector tests', () => {
           },
         },
         metricType: MetricType.L2,
-        dimension: 128,
+        dimension: testDimensions.basic,
       });
 
       const describeResult = await milvusClient.describeIndex(collectionName);
@@ -354,6 +380,8 @@ describe('Milvus Vector tests', () => {
       expect(describeResult.indexDescription.index_descriptions[0].field_name).toBe('book_intro');
       expect(describeResult.indexDescription.index_descriptions[0].index_name).toBe(indexName);
       expect(describeResult.indexDescription.index_descriptions[0].indexID).toBeDefined();
+      expect(describeResult.indexDescription.index_descriptions[0].params).toBeDefined();
+      expect(describeResult.indexDescription.index_descriptions[0].params).toHaveLength(3);
 
       // Verify it's using IVF_SQ8
       const params = describeResult.indexDescription.index_descriptions[0].params;
@@ -380,7 +408,7 @@ describe('Milvus Vector tests', () => {
           },
         },
         metricType: MetricType.L2,
-        dimension: 128,
+        dimension: testDimensions.basic,
       });
 
       const describeResult = await milvusClient.describeIndex(collectionName);
@@ -414,7 +442,7 @@ describe('Milvus Vector tests', () => {
           },
         },
         metricType: MetricType.L2,
-        dimension: 128,
+        dimension: testDimensions.basic,
       });
 
       const describeResult = await milvusClient.describeIndex(collectionName);
@@ -445,7 +473,7 @@ describe('Milvus Vector tests', () => {
           type: IndexType.IVF_FLAT,
         },
         metricType: MetricType.IP, // Inner product for similarity
-        dimension: 128,
+        dimension: testDimensions.basic,
       });
 
       const describeResult = await milvusClient.describeIndex(collectionName);
@@ -461,7 +489,7 @@ describe('Milvus Vector tests', () => {
       expect(metricTypeParam?.value).toBe('IP');
 
       const nlistParam = params.find(param => param.key === 'params');
-      expect(nlistParam?.value).toBe('{"nlist":128}');
+      expect(nlistParam?.value).toBe('{"nlist":64}');
     });
 
     it('should create index with COSINE metric type for text embeddings', async () => {
@@ -473,7 +501,7 @@ describe('Milvus Vector tests', () => {
           type: IndexType.IVF_FLAT,
         },
         metricType: MetricType.COSINE, // Cosine similarity for text embeddings
-        dimension: 128,
+        dimension: testDimensions.basic,
       });
 
       const describeResult = await milvusClient.describeIndex(collectionName);
@@ -489,7 +517,7 @@ describe('Milvus Vector tests', () => {
       expect(metricTypeParam?.value).toBe('COSINE');
 
       const nlistParam = params.find(param => param.key === 'params');
-      expect(nlistParam?.value).toBe('{"nlist":128}');
+      expect(nlistParam?.value).toBe('{"nlist":64}');
     });
 
     it('should create FLAT index for exact search', async () => {
@@ -501,7 +529,7 @@ describe('Milvus Vector tests', () => {
           type: IndexType.FLAT, // Exact search, no approximation
         },
         metricType: MetricType.L2,
-        dimension: 128,
+        dimension: testDimensions.basic,
       });
 
       const describeResult = await milvusClient.describeIndex(collectionName);
@@ -519,7 +547,7 @@ describe('Milvus Vector tests', () => {
       expect(metricParam?.value).toBe('L2');
 
       const nlistParam = params.find(param => param.key === 'params');
-      expect(nlistParam?.value).toBe('{"nlist":128}');
+      expect(nlistParam?.value).toBe('{"nlist":64}');
     });
 
     it('should create index with IVF_FLAT with custom lists parameter', async () => {
@@ -534,7 +562,7 @@ describe('Milvus Vector tests', () => {
           },
         },
         metricType: MetricType.L2,
-        dimension: 128,
+        dimension: testDimensions.basic,
       });
 
       const describeResult = await milvusClient.describeIndex(collectionName);
@@ -586,13 +614,13 @@ describe('Milvus Vector tests', () => {
           name: `title_vector`,
           description: `title embeddings`,
           data_type: DataType.FloatVector,
-          dim: 64,
+          dim: testDimensions.small,
         },
         {
           name: `content_vector`,
           description: `content embeddings`,
           data_type: DataType.FloatVector,
-          dim: 128,
+          dim: testDimensions.basic,
         },
       ]);
 
@@ -605,7 +633,7 @@ describe('Milvus Vector tests', () => {
           type: IndexType.IVF_FLAT,
         },
         metricType: MetricType.COSINE,
-        dimension: 64,
+        dimension: testDimensions.small,
       });
 
       // Create index on content_vector
@@ -617,7 +645,7 @@ describe('Milvus Vector tests', () => {
           type: IndexType.HNSW,
         },
         metricType: MetricType.L2,
-        dimension: 128,
+        dimension: testDimensions.basic,
       });
 
       // Verify both indexes exist
@@ -650,7 +678,7 @@ describe('Milvus Vector tests', () => {
           type: IndexType.DISKANN, // Disk-based approximate nearest neighbor search
         },
         metricType: MetricType.L2,
-        dimension: 128,
+        dimension: testDimensions.basic,
       });
 
       const describeResult = await milvusClient.describeIndex(collectionName);
@@ -683,7 +711,7 @@ describe('Milvus Vector tests', () => {
           name: 'binary_vector',
           description: 'binary vector field',
           data_type: DataType.BinaryVector,
-          dim: 128, // Dimension in bits for binary vectors
+          dim: testDimensions.basic, // Dimension in bits for binary vectors
         },
       ]);
 
@@ -696,7 +724,7 @@ describe('Milvus Vector tests', () => {
           type: IndexType.BIN_FLAT, // Index for binary vectors
         },
         metricType: MetricType.HAMMING, // Hamming distance for binary vectors
-        dimension: 128,
+        dimension: testDimensions.basic,
       });
 
       const describeResult = await milvusClient.describeIndex(binaryCollectionName);
@@ -735,7 +763,7 @@ describe('Milvus Vector tests', () => {
           name: 'binary_vector',
           description: 'binary vector field',
           data_type: DataType.BinaryVector,
-          dim: 256, // Dimension in bits for binary vectors
+          dim: testDimensions.basic, // Dimension in bits for binary vectors
         },
       ]);
 
@@ -751,7 +779,7 @@ describe('Milvus Vector tests', () => {
           },
         },
         metricType: MetricType.JACCARD, // Jaccard distance for binary vectors
-        dimension: 256,
+        dimension: testDimensions.basic,
       });
 
       const describeResult = await milvusClient.describeIndex(binaryCollectionName);
@@ -784,7 +812,7 @@ describe('Milvus Vector tests', () => {
           type: IndexType.IVF_FLAT,
         },
         metricType: MetricType.L2,
-        dimension: 128,
+        dimension: testDimensions.basic,
       });
 
       const describeResult = await milvusClient.describeIndex(collectionName);
@@ -801,7 +829,7 @@ describe('Milvus Vector tests', () => {
   });
 
   describe('Insert operations', () => {
-    const collectionName = `new_book_collection_inserts`;
+    const collectionName = testCollections.insert;
 
     beforeAll(async () => {
       await milvusClient.createCollection(collectionName, [
@@ -817,7 +845,7 @@ describe('Milvus Vector tests', () => {
           name: `vector`,
           description: `word count`,
           data_type: DataType.FloatVector,
-          dim: 8,
+          dim: testDimensions.small,
         },
         {
           name: `metadata`,
@@ -834,13 +862,11 @@ describe('Milvus Vector tests', () => {
           type: IndexType.IVF_FLAT,
         },
         metricType: MetricType.L2,
-        dimension: 8,
+        dimension: testDimensions.small,
       });
     });
 
-    afterAll(async () => {
-      await milvusClient.dropCollection(collectionName);
-    });
+    // No need for afterAll cleanup as it's handled by the top-level afterAll
 
     it('should upsert vectors', async () => {
       const vectors = [
@@ -979,7 +1005,7 @@ describe('Milvus Vector tests', () => {
     it('should upsert a large batch of vectors', async () => {
       // Create a larger batch of 10 vectors
       const vectors = Array.from({ length: 10 }, (_, i) =>
-        Array.from({ length: 8 }, (_, j) => (i + 1) * 0.1 + j * 0.01),
+        Array.from({ length: testDimensions.small }, (_, j) => (i + 1) * 0.1 + j * 0.01),
       );
 
       const ids = Array.from({ length: 10 }, (_, i) => String(300 + i));
@@ -1028,7 +1054,7 @@ describe('Milvus Vector tests', () => {
   });
 
   describe('Update operations', () => {
-    const collectionName = `new_book_collection_update`;
+    const collectionName = testCollections.update;
 
     beforeAll(async () => {
       await milvusClient.createCollection(collectionName, [
@@ -1044,7 +1070,7 @@ describe('Milvus Vector tests', () => {
           name: `vector`,
           description: `word count`,
           data_type: DataType.FloatVector,
-          dim: 8,
+          dim: testDimensions.small,
         },
         {
           name: `metadata`,
@@ -1062,13 +1088,11 @@ describe('Milvus Vector tests', () => {
           type: IndexType.IVF_FLAT,
         },
         metricType: MetricType.L2,
-        dimension: 8,
+        dimension: testDimensions.small,
       });
     });
 
-    afterAll(async () => {
-      await milvusClient.dropCollection(collectionName);
-    });
+    // No need for afterAll cleanup as it's handled by the top-level afterAll
 
     it('should update existing vectors', async () => {
       const vectors = [
@@ -1130,7 +1154,7 @@ describe('Milvus Vector tests', () => {
   });
 
   describe('Simple Query operations', () => {
-    const collectionName = `new_book_collection_query`;
+    const collectionName = testCollections.query;
     const indexName = 'vector_idx';
 
     beforeAll(async () => {
@@ -1147,7 +1171,7 @@ describe('Milvus Vector tests', () => {
           name: `vector`,
           description: `word count`,
           data_type: DataType.FloatVector,
-          dim: 8,
+          dim: testDimensions.small,
         },
         {
           name: `metadata`,
@@ -1165,13 +1189,11 @@ describe('Milvus Vector tests', () => {
           type: IndexType.IVF_FLAT,
         },
         metricType: MetricType.L2,
-        dimension: 8,
+        dimension: testDimensions.small,
       });
     });
 
-    afterAll(async () => {
-      await milvusClient.dropCollection(collectionName);
-    });
+    // No need for afterAll cleanup as it's handled by the top-level afterAll
 
     it('should query vectors', async () => {
       const vectors = [
@@ -1228,7 +1250,7 @@ describe('Milvus Vector tests', () => {
 
       // Expect the first result's vector to be the correct length and format
       if (queryResult[0].vector) {
-        expect(queryResult[0].vector.length).toBe(8);
+        expect(queryResult[0].vector.length).toBe(testDimensions.small);
         expect(Array.isArray(queryResult[0].vector)).toBe(true);
       }
 
@@ -1237,7 +1259,7 @@ describe('Milvus Vector tests', () => {
         expect(result.vector).toBeDefined();
 
         if (result.vector) {
-          expect(result.vector.length).toBe(8);
+          expect(result.vector.length).toBe(testDimensions.small);
           expect(Array.isArray(result.vector)).toBe(true);
 
           // All elements should be numbers
@@ -1250,7 +1272,7 @@ describe('Milvus Vector tests', () => {
   });
 
   describe('Query operation variations', () => {
-    const collectionName = `query_variations_collection`;
+    const collectionName = testCollections.queryVariations;
     const indexName = 'vector_idx';
 
     beforeAll(async () => {
@@ -1267,7 +1289,7 @@ describe('Milvus Vector tests', () => {
           name: `vector`,
           description: `vector field`,
           data_type: DataType.FloatVector,
-          dim: 8,
+          dim: testDimensions.small,
         },
         {
           name: `metadata`,
@@ -1285,7 +1307,7 @@ describe('Milvus Vector tests', () => {
           type: IndexType.IVF_FLAT,
         },
         metricType: MetricType.L2,
-        dimension: 8,
+        dimension: testDimensions.small,
       });
 
       // Insert test data
@@ -1312,9 +1334,7 @@ describe('Milvus Vector tests', () => {
       });
     });
 
-    afterAll(async () => {
-      await milvusClient.dropCollection(collectionName);
-    });
+    // No need for afterAll cleanup as it's handled by the top-level afterAll
 
     it('should query with a smaller topK value', async () => {
       const queryVector = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8];
@@ -1387,7 +1407,7 @@ describe('Milvus Vector tests', () => {
       queryResult.forEach(result => {
         expect(result.vector).toBeDefined();
         if (result.vector) {
-          expect(result.vector.length).toBe(8);
+          expect(result.vector.length).toBe(testDimensions.small);
           expect(Array.isArray(result.vector)).toBe(true);
         }
       });
@@ -1418,7 +1438,7 @@ describe('Milvus Vector tests', () => {
   });
 
   describe('Advanced Query with filter', () => {
-    const collectionName = `advanced_query_collection`;
+    const collectionName = testCollections.advancedQuery;
     const indexName = 'vector_idx';
 
     beforeAll(async () => {
@@ -1435,7 +1455,7 @@ describe('Milvus Vector tests', () => {
           name: `vector`,
           description: `vector field`,
           data_type: DataType.FloatVector,
-          dim: 8,
+          dim: testDimensions.small,
         },
         {
           name: `metadata`,
@@ -1453,7 +1473,21 @@ describe('Milvus Vector tests', () => {
           type: IndexType.IVF_FLAT,
         },
         metricType: MetricType.L2,
-        dimension: 8,
+        dimension: testDimensions.small,
+      });
+
+      // create index on metadata
+      await milvusClient.createIndex({
+        collectionName: collectionName,
+        fieldName: 'metadata',
+        indexName: 'metadata_idx',
+        indexConfig: {
+          type: IndexType.INVERTED,
+        },
+        metricType: MetricType.L2,
+        dimension: testDimensions.small,
+        jsonPath: 'metadata["author"]',
+        jsonCastType: 'varchar',
       });
 
       // Insert test data
@@ -1480,9 +1514,7 @@ describe('Milvus Vector tests', () => {
       });
     });
 
-    afterAll(async () => {
-      await milvusClient.dropCollection(collectionName);
-    });
+    // No need for afterAll cleanup as it's handled by the top-level afterAll
 
     it('should query with filter', async () => {
       const queryVector = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8];

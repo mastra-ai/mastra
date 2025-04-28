@@ -36,6 +36,8 @@ export interface MilvusCreateIndexParams extends CreateIndexParams {
   fieldName?: string;
   indexConfig?: IndexConfig;
   metricType?: MetricType;
+  jsonPath?: string;
+  jsonCastType?: string;
 }
 
 export interface MilvusIndexStats extends IndexStats {
@@ -148,7 +150,7 @@ export class MilvusVectorStore extends MastraVector {
     const { queryVector, topK = 10, filter = {}, collectionName, includeVector = false } = params;
     try {
       const milvusFilter = new MilvusFilterTranslator().translate(filter);
-      const searchParams: any = {
+      const searchParams = {
         collection_name: collectionName,
         data: [queryVector],
         topk: topK,
@@ -255,9 +257,20 @@ export class MilvusVectorStore extends MastraVector {
         'metricType',
         'indexName',
         'dimension',
+        'jsonPath',
+        'jsonCastType',
       ]);
 
-      const { collectionName, fieldName, indexName, dimension, indexConfig = {}, metricType = MetricType.L2 } = params;
+      const {
+        collectionName,
+        fieldName,
+        indexName,
+        dimension,
+        indexConfig = {},
+        metricType = MetricType.L2,
+        jsonPath,
+        jsonCastType,
+      } = params;
 
       if (!collectionName || !fieldName) {
         throw new Error('Missing required parameters: collectionName, fieldName');
@@ -292,6 +305,10 @@ export class MilvusVectorStore extends MastraVector {
         if (indexType === IndexType.BIN_IVF_FLAT) {
           indexParams.nlist = indexConfig.ivf?.lists || 128;
         }
+      } else if (indexType === IndexType.INVERTED) {
+        // Handle inverted index
+        indexParams.json_path = jsonPath;
+        indexParams.json_cast_type = jsonCastType;
       } else {
         // FLAT and other index types
         // FLAT doesn't need specific parameters, but we'll set one to conform to API
@@ -359,6 +376,6 @@ export class MilvusVectorStore extends MastraVector {
   }
 
   deleteIndex(indexName: string): Promise<void> {
-    throw new Error(`Method not implemented Use dropIndex instead for ${indexName}`);
+    throw new Error(`Method not implemented. Use dropIndex instead for ${indexName}`);
   }
 }
