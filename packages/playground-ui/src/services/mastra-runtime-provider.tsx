@@ -6,10 +6,10 @@ import {
   AppendMessage,
   AssistantRuntimeProvider,
 } from '@assistant-ui/react';
-import { MastraClient } from '@mastra/client-js';
 import { useState, ReactNode, useEffect } from 'react';
 
 import { ChatProps } from '@/types';
+import { createMastraClient } from '@/lib/mastra-client';
 
 const convertMessage = (message: ThreadMessageLike): ThreadMessageLike => {
   return message;
@@ -68,9 +68,7 @@ export function MastraRuntimeProvider({
     }
   }, [initialMessages, threadId, memory]);
 
-  const mastra = new MastraClient({
-    baseUrl: baseUrl || '',
-  });
+  const mastra = createMastraClient(baseUrl);
   const agent = mastra.getAgent(agentId);
 
   const onNew = async (message: AppendMessage) => {

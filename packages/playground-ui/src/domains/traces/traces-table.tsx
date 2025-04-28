@@ -7,6 +7,8 @@ import { Badge } from '@/ds/components/Badge';
 import { TraceIcon } from '@/ds/icons/TraceIcon';
 import { useOpenTrace } from './hooks/use-open-trace';
 import { Txt } from '@/ds/components/Txt';
+import { useContext } from 'react';
+import { TraceContext } from './context/trace-context';
 
 const TracesTableSkeleton = ({ colsCount }: { colsCount: number }) => {
   return (
@@ -52,14 +54,14 @@ export interface TracesTableProps {
   error?: { message: string } | null;
 }
 
-const TraceRow = ({ trace, index }: { trace: RefinedTrace; index: number }) => {
+const TraceRow = ({ trace, index, isActive }: { trace: RefinedTrace; index: number; isActive: boolean }) => {
   const { openTrace } = useOpenTrace();
 
   return (
-    <Row>
+    <Row className={isActive ? 'bg-surface4' : ''}>
       <DateTimeCell dateTime={new Date(trace.started / 1000)} />
       <TxtCell>{trace.traceId}</TxtCell>
-      <UnitCell unit="ms">{trace.duration}</UnitCell>
+      <UnitCell unit="ms">{trace.duration / 1000}</UnitCell>
       <Cell>
         <button onClick={() => openTrace(trace.trace, index)}>
           <Badge icon={<TraceIcon />}>
@@ -73,6 +75,7 @@ const TraceRow = ({ trace, index }: { trace: RefinedTrace; index: number }) => {
 
 export const TracesTable = ({ traces, isLoading, error }: TracesTableProps) => {
   const hasNoTraces = !traces || traces.length === 0;
+  const { currentTraceIndex } = useContext(TraceContext);
   const colsCount = 4;
 
   return (
@@ -92,7 +95,7 @@ export const TracesTable = ({ traces, isLoading, error }: TracesTableProps) => {
       ) : (
         <Tbody>
           {traces.map((trace, index) => (
-            <TraceRow key={trace.traceId} trace={trace} index={index} />
+            <TraceRow key={trace.traceId} trace={trace} index={index} isActive={index === currentTraceIndex} />
           ))}
         </Tbody>
       )}
