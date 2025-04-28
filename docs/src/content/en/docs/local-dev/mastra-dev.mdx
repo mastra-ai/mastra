@@ -18,7 +18,19 @@ You can launch the Mastra development environment using the Mastra CLI by runnin
 mastra dev
 ```
 
-By default, the server runs at http://localhost:4111, but you can change the port with the `--port` flag.
+By default, the server runs on localhost at http://localhost:4111. Custom port and host can be configured via the
+mastra server config. 
+
+```typescript
+import { Mastra } from "@mastra/core";
+
+export const mastra = new Mastra({
+  server: {
+   port: '4111',
+   host: '0.0.0.0'
+  }
+});
+```
 
 ## Dev Playground
 
