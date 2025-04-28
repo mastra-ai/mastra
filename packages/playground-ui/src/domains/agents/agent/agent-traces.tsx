@@ -10,28 +10,29 @@ import clsx from 'clsx';
 export interface AgentTracesProps {
   agentName: string;
   baseUrl: string;
+  className?: string;
 }
 
-export function AgentTraces({ agentName, baseUrl }: AgentTracesProps) {
+export function AgentTraces({ agentName, baseUrl, className }: AgentTracesProps) {
   return (
     <TraceProvider>
-      <AgentTracesInner agentName={agentName} baseUrl={baseUrl} />
+      <AgentTracesInner agentName={agentName} baseUrl={baseUrl} className={className} />
     </TraceProvider>
   );
 }
 
-function AgentTracesInner({ agentName, baseUrl }: AgentTracesProps) {
+function AgentTracesInner({ agentName, baseUrl, className }: AgentTracesProps) {
   const [sidebarWidth, setSidebarWidth] = useState(100);
   const { traces, firstCallLoading, error } = useTraces(agentName, baseUrl);
   const { isOpen: open } = useContext(TraceContext);
 
   return (
-    <main className="h-full relative overflow-hidden flex">
-      <div className={clsx('h-full', open ? 'w-auto' : 'w-full')}>
+    <div className={clsx('h-full relative overflow-hidden flex', className)}>
+      <div className={clsx('h-full overflow-y-scroll', open ? 'w-auto' : 'w-full')}>
         <TracesTable traces={traces} isLoading={firstCallLoading} error={error} />
       </div>
 
       {open && <TracesSidebar width={sidebarWidth} onResize={setSidebarWidth} />}
-    </main>
+    </div>
   );
 }
