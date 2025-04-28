@@ -770,7 +770,6 @@ export class Run<
             id: `${workflowId}.${payload?.currentStep?.id}`,
           },
           workflowState: {
-            ...payload?.workflowState,
             steps: prefixedSteps,
           },
         };
@@ -830,7 +829,10 @@ export class Run<
   updateState(state: Record<string, any>) {
     if (state.currentStep) {
       this.state.currentStep = state.currentStep;
+    } else if (state.workflowState?.status !== 'running') {
+      delete this.state.currentStep;
     }
+
     if (state.workflowState) {
       this.state.workflowState = deepMerge(this.state.workflowState ?? {}, state.workflowState ?? {});
     }
