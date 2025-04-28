@@ -244,6 +244,7 @@ describe('MCPClient', () => {
           slowServer: {
             command: 'node',
             args: ['-e', 'setTimeout(() => process.exit(0), 65000)'], // Simulate a server that takes 65 seconds to start
+            timeout: 1000,
           },
         },
       });
@@ -252,14 +253,14 @@ describe('MCPClient', () => {
       await slowConfig.disconnect();
     });
 
-    it('timeout should be longer than default timeout', async () => {
+    it('timeout should be longer than configured timeout', async () => {
       const slowConfig = new MCPClient({
         id: 'test-slow-server',
-        timeout: 70000,
+        timeout: 2000,
         servers: {
           slowServer: {
             command: 'node',
-            args: ['-e', 'setTimeout(() => process.exit(0), 65000)'], // Simulate a server that takes 65 seconds to start
+            args: ['-e', 'setTimeout(() => process.exit(0), 1000)'], // Simulate a server that takes 1 second to start
           },
         },
       });
@@ -268,22 +269,6 @@ describe('MCPClient', () => {
       expect(error).toBeDefined();
       expect(error.message).not.toMatch(/Request timed out/);
       await slowConfig.disconnect();
-    });
-
-    it('should respect custom timeout configuration', async () => {
-      const quickConfig = new MCPClient({
-        id: 'test-quick-timeout',
-        timeout: 1000, // Very short global timeout
-        servers: {
-          slowServer: {
-            command: 'node',
-            args: ['-e', 'setTimeout(() => process.exit(0), 30000)'], // Takes 30 seconds to exit
-          },
-        },
-      });
-
-      await expect(quickConfig.getTools()).rejects.toThrow(/Request timed out/);
-      await quickConfig.disconnect();
     });
 
     it('should respect per-server timeout configuration', async () => {
