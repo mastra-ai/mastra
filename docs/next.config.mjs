@@ -765,6 +765,11 @@ export default withGT(
         destination: "/docs/voice/speech-to-speech",
         permanent: true,
       },
+      {
+        source: "/reference/tools/mcp-configuration",
+        destination: "/reference/tools/mcp-client",
+        permanent: true,
+      },
     ],
     trailingSlash: false,
   }),

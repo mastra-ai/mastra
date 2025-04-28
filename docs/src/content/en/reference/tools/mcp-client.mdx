@@ -1,25 +1,25 @@
 ---
-title: "Reference: MCPConfiguration | Tool Management | Mastra Docs"
-description: API Reference for MCPConfiguration - A class for managing multiple Model Context Protocol servers and their tools.
+title: "Reference: MCPClient | Tool Management | Mastra Docs"
+description: API Reference for MCPClient - A class for managing multiple Model Context Protocol servers and their tools.
 ---
 
-# MCPConfiguration
+# MCPClient
 
-The `MCPConfiguration` class provides a way to manage multiple MCP server connections and their tools in a Mastra application. It handles connection lifecycle, tool namespacing, and provides convenient access to tools across all configured servers.
+The `MCPClient` class provides a way to manage multiple MCP server connections and their tools in a Mastra application. It handles connection lifecycle, tool namespacing, and provides convenient access to tools across all configured servers.
 
 ## Constructor
 
-Creates a new instance of the MCPConfiguration class.
+Creates a new instance of the MCPClient class.
 
 ```typescript
 constructor({
   id?: string;
   servers: Record<string, MastraMCPServerDefinition>;
   timeout?: number;
-}: MCPConfigurationOptions)
+}: MCPClientOptions)
 ```
 
-### MCPConfigurationOptions
+### MCPClientOptions
 
 <br />
 <PropertiesTable
@@ -54,7 +54,72 @@ Each server in the `servers` map is configured using the `MastraMCPServerDefinit
 -   If `command` is provided, it uses the Stdio transport.
 -   If `url` is provided, it first attempts to use the Streamable HTTP transport and falls back to the legacy SSE transport if the initial connection fails.
 
-For details about the available configuration options (`command`, `args`, `env`, `url`, `requestInit`, `eventSourceInit`), see [MastraMCPServerDefinition](./client#mastramcpserverdefinition) in the MastraMCPClient documentation.
+<br />
+<PropertiesTable
+  content={[
+    {
+      name: "command",
+      type: "string",
+      isOptional: true,
+      description: "For Stdio servers: The command to execute.",
+    },
+    {
+      name: "args",
+      type: "string[]",
+      isOptional: true,
+      description: "For Stdio servers: Arguments to pass to the command.",
+    },
+    {
+      name: "env",
+      type: "Record<string, string>",
+      isOptional: true,
+      description: "For Stdio servers: Environment variables to set for the command.",
+    },
+    {
+      name: "url",
+      type: "URL",
+      isOptional: true,
+      description: "For HTTP servers (Streamable HTTP or SSE): The URL of the server.",
+    },
+    {
+      name: "requestInit",
+      type: "RequestInit",
+      isOptional: true,
+      description: "For HTTP servers: Request configuration for the fetch API.",
+    },
+    {
+      name: "eventSourceInit",
+      type: "EventSourceInit",
+      isOptional: true,
+      description: "For SSE fallback: Custom fetch configuration for SSE connections. Required when using custom headers with SSE.",
+    },
+    {
+      name: "logger",
+      type: "LogHandler",
+      isOptional: true,
+      description: "Optional additional handler for logging.",
+    },
+    {
+      name: "timeout",
+      type: "number",
+      isOptional: true,
+      description: "Server-specific timeout in milliseconds.",
+    },
+    {
+      name: "capabilities",
+      type: "ClientCapabilities",
+      isOptional: true,
+      description: "Server-specific capabilities configuration.",
+    },
+    {
+      name: "enableServerLogs",
+      type: "boolean",
+      isOptional: true,
+      defaultValue: "true",
+      description: "Whether to enable logging for this server.",
+    },
+  ]}
+/>
 
 ## Methods
 
@@ -91,11 +156,11 @@ async disconnect(): Promise<void>
 ### Basic Usage
 
 ```typescript
-import { MCPConfiguration } from "@mastra/mcp";
+import { MCPClient } from "@mastra/mcp";
 import { Agent } from "@mastra/core/agent";
 import { openai } from "@ai-sdk/openai";
 
-const mcp = new MCPConfiguration({
+const mcp = new MCPClient({
   servers: {
     stockPrice: {
       command: "npx",
@@ -127,7 +192,7 @@ const agent = new Agent({
 
 ```typescript
 import { Agent } from "@mastra/core/agent";
-import { MCPConfiguration } from "@mastra/mcp";
+import { MCPClient } from "@mastra/mcp";
 import { openai } from "@ai-sdk/openai";
 
 // Create the agent first, without any tools
@@ -138,7 +203,7 @@ const agent = new Agent({
 });
 
 // Later, configure MCP with user-specific settings
-const mcp = new MCPConfiguration({
+const mcp = new MCPClient({
   servers: {
     stockPrice: {
       command: "npx",
@@ -170,7 +235,7 @@ const response = await agent.stream(
 
 ## Resource Management
 
-The `MCPConfiguration` class includes built-in memory leak prevention for managing multiple instances:
+The `MCPClient` class includes built-in memory leak prevention for managing multiple instances:
 
 1. Creating multiple instances with identical configurations without an `id` will throw an error to prevent memory leaks
 2. If you need multiple instances with identical configurations, provide a unique `id` for each instance
@@ -181,14 +246,14 @@ For example, if you try to create multiple instances with the same configuration
 
 ```typescript
 // First instance - OK
-const mcp1 = new MCPConfiguration({
+const mcp1 = new MCPClient({
   servers: {
     /* ... */
   },
 });
 
 // Second instance with same config - Will throw an error
-const mcp2 = new MCPConfiguration({
+const mcp2 = new MCPClient({
   servers: {
     /* ... */
   },
@@ -196,7 +261,7 @@ const mcp2 = new MCPConfiguration({
 
 // To fix, either:
 // 1. Add unique IDs
-const mcp3 = new MCPConfiguration({
+const mcp3 = new MCPClient({
   id: "instance-1",
   servers: {
     /* ... */
@@ -205,7 +270,7 @@ const mcp3 = new MCPConfiguration({
 
 // 2. Or disconnect before recreating
 await mcp1.disconnect();
-const mcp4 = new MCPConfiguration({
+const mcp4 = new MCPClient({
   servers: {
     /* ... */
   },
@@ -214,7 +279,7 @@ const mcp4 = new MCPConfiguration({
 
 ## Server Lifecycle
 
-MCPConfiguration handles server connections gracefully:
+MCPClient handles server connections gracefully:
 
 1. Automatic connection management for multiple servers
 2. Graceful server shutdown to prevent error messages during development
@@ -222,5 +287,4 @@ MCPConfiguration handles server connections gracefully:
 
 ## Related Information
 
-- For details about individual MCP client configuration, see the [MastraMCPClient documentation](./client)
 - For more about the Model Context Protocol, see the [@modelcontextprotocol/sdk documentation](https://github.com/modelcontextprotocol/typescript-sdk)
