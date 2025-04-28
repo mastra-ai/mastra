@@ -11,7 +11,8 @@ import { linkCheckerWorkflow } from './workflows/link-checker.js';
 import { packagePublisher } from './workflows/publish-packages.js';
 import { telephoneGameWorkflow } from './workflows/telephone-game.js';
 
-export const mastra = new Mastra({
+// @ts-ignore
+export const mastra: Mastra = new Mastra({
   agents: {
     dane,
     danePackagePublisher,
