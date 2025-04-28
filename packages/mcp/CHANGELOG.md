@@ -1,5 +1,13 @@
 # @mastra/mcp
 
+## 0.4.1-alpha.3
+
+### Patch Changes
+
+- ba1f4f3: Added Streamable HTTP MCP support to MCPConfiguration and MastraMCPClient
+- Updated dependencies [6262bd5]
+  - @mastra/core@0.9.1-alpha.3
+
 ## 0.4.1-alpha.2
 
 ### Patch Changes
