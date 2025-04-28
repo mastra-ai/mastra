@@ -8,7 +8,7 @@ on:
 jobs:
   changeset:
     runs-on: ubuntu-latest
-    if: github.actor == 'renovate[bot]' && github.repository == 'mastra-ai/mastra'
+    # if: github.actor == 'renovate[bot]' && github.repository == 'mastra-ai/mastra'
     steps:
       - uses: actions/create-github-app-token@v1
         id: app-token
@@ -19,6 +19,10 @@ jobs:
       - name: Get GitHub App User ID
         id: get-user-id
         run: echo "user-id=$(gh api "/users/${{ steps.app-token.outputs.app-slug }}[bot]" --jq .id)" >> "$GITHUB_OUTPUT"
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+
+      - run: echo ${{ secrets.GH_TOKEN }}
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
 
@@ -35,7 +39,7 @@ jobs:
           git config --global user.email '${{ steps.get-user-id.outputs.user-id }}+${{ steps.app-token.outputs.app-slug }}[bot]@users.noreply.github.com'
 
       - name: Checkout
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           fetch-depth: 0
           token: ${{ steps.app-token.outputs.token }}
@@ -56,7 +60,7 @@ jobs:
         run: pnpm install -w
 
       - name: Create/Update Changesets
-        uses: 'wardpeet/changesets-dependencies-action@2e05bd09862b1928b7f53bdbdf546a0b2c1af921'
+        uses: 'wardpeet/changesets-dependencies-action@c3c417ae5b8d2fbdc65d010bb9a0c83906f3a57d'
         env:
           GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}
           SKIP_CREDENTIALS: '1'
