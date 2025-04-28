@@ -412,12 +412,14 @@ export class MongoDBStore extends MastraStorage {
       query['workflow_name'] = workflowName;
     }
 
-    if (fromDate) {
-      query['createdAt'] = { $gte: fromDate };
-    }
-
-    if (toDate) {
-      query['createdAt'] = { $lte: toDate };
+    if (fromDate || toDate) {
+      query['createdAt'] = {};
+      if (fromDate) {
+        query['createdAt']['$gte'] = fromDate;
+      }
+      if (toDate) {
+        query['createdAt']['$lte'] = toDate;
+      }
     }
 
     let total = 0;
@@ -501,6 +503,36 @@ export class MongoDBStore extends MastraStorage {
     }
   }
 
+  async persistWorkflowSnapshot({
+    workflowName,
+    runId,
+    snapshot,
+  }: {
+    workflowName: string;
+    runId: string;
+    snapshot: WorkflowRunState;
+  }): Promise<void> {
+    try {
+      const now = new Date().toISOString();
+      await this.db.collection(TABLE_WORKFLOW_SNAPSHOT).updateOne(
+        { workflow_name: workflowName, run_id: runId },
+        {
+          $set: {
+            snapshot: JSON.stringify(snapshot),
+            updatedAt: now,
+          },
+          $setOnInsert: {
+            createdAt: now,
+          },
+        },
+        { upsert: true },
+      );
+    } catch (error) {
+      this.logger.error(`Error persisting workflow snapshot: ${error}`);
+      throw error;
+    }
+  }
+
   async loadWorkflowSnapshot({
     workflowName,
     runId,
@@ -509,7 +541,7 @@ export class MongoDBStore extends MastraStorage {
     runId: string;
   }): Promise<WorkflowRunState | null> {
     try {
-      const result = await this.load({
+      const result = await this.load<any[]>({
         tableName: TABLE_WORKFLOW_SNAPSHOT,
         keys: {
           workflow_name: workflowName,
@@ -517,11 +549,11 @@ export class MongoDBStore extends MastraStorage {
         },
       });
 
-      if (!result) {
+      if (!result?.length) {
         return null;
       }
 
-      return (result as any).snapshot;
+      return JSON.parse(result[0].snapshot);
     } catch (error) {
       console.error('Error loading workflow snapshot:', error);
       throw error;

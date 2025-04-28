@@ -336,7 +336,7 @@ describe('MongoDBStore', () => {
   });
 
   describe('Workflow Snapshots', () => {
-    it.only('should persist and load workflow snapshots', async () => {
+    it('should persist and load workflow snapshots', async () => {
       const test = new Test(store).build();
       await test.clearTables();
       const workflowName = 'test-workflow';
@@ -495,8 +495,16 @@ describe('MongoDBStore', () => {
       const workflowName1 = 'default_test_1';
       const workflowName2 = 'default_test_2';
 
-      const { snapshot: workflow1, runId: runId1, stepId: stepId1 } = test.generateSampleWorkflowSnapshot('completed');
-      const { snapshot: workflow2, runId: runId2, stepId: stepId2 } = test.generateSampleWorkflowSnapshot('running');
+      const {
+        snapshot: workflow1,
+        runId: runId1,
+        stepId: stepId1,
+      } = test.generateSampleWorkflowSnapshot({ status: 'completed' });
+      const {
+        snapshot: workflow2,
+        runId: runId2,
+        stepId: stepId2,
+      } = test.generateSampleWorkflowSnapshot({ status: 'running' });
 
       await store.persistWorkflowSnapshot({ workflowName: workflowName1, runId: runId1, snapshot: workflow1 });
       await new Promise(resolve => setTimeout(resolve, 10)); // Small delay to ensure different timestamps
@@ -519,8 +527,12 @@ describe('MongoDBStore', () => {
       const workflowName1 = 'filter_test_1';
       const workflowName2 = 'filter_test_2';
 
-      const { snapshot: workflow1, runId: runId1, stepId: stepId1 } = test.generateSampleWorkflowSnapshot('completed');
-      const { snapshot: workflow2, runId: runId2 } = test.generateSampleWorkflowSnapshot('failed');
+      const {
+        snapshot: workflow1,
+        runId: runId1,
+        stepId: stepId1,
+      } = test.generateSampleWorkflowSnapshot({ status: 'completed' });
+      const { snapshot: workflow2, runId: runId2 } = test.generateSampleWorkflowSnapshot({ status: 'failed' });
 
       await store.persistWorkflowSnapshot({ workflowName: workflowName1, runId: runId1, snapshot: workflow1 });
       await new Promise(resolve => setTimeout(resolve, 10)); // Small delay to ensure different timestamps
@@ -544,9 +556,17 @@ describe('MongoDBStore', () => {
       const workflowName2 = 'date_test_2';
       const workflowName3 = 'date_test_3';
 
-      const { snapshot: workflow1, runId: runId1 } = test.generateSampleWorkflowSnapshot('completed');
-      const { snapshot: workflow2, runId: runId2, stepId: stepId2 } = test.generateSampleWorkflowSnapshot('running');
-      const { snapshot: workflow3, runId: runId3, stepId: stepId3 } = test.generateSampleWorkflowSnapshot('waiting');
+      const { snapshot: workflow1, runId: runId1 } = test.generateSampleWorkflowSnapshot({ status: 'completed' });
+      const {
+        snapshot: workflow2,
+        runId: runId2,
+        stepId: stepId2,
+      } = test.generateSampleWorkflowSnapshot({ status: 'running' });
+      const {
+        snapshot: workflow3,
+        runId: runId3,
+        stepId: stepId3,
+      } = test.generateSampleWorkflowSnapshot({ status: 'waiting' });
 
       await store.insert({
         tableName: TABLE_WORKFLOW_SNAPSHOT,
@@ -600,9 +620,21 @@ describe('MongoDBStore', () => {
       const workflowName2 = 'page_test_2';
       const workflowName3 = 'page_test_3';
 
-      const { snapshot: workflow1, runId: runId1, stepId: stepId1 } = test.generateSampleWorkflowSnapshot('completed');
-      const { snapshot: workflow2, runId: runId2, stepId: stepId2 } = test.generateSampleWorkflowSnapshot('running');
-      const { snapshot: workflow3, runId: runId3, stepId: stepId3 } = test.generateSampleWorkflowSnapshot('waiting');
+      const {
+        snapshot: workflow1,
+        runId: runId1,
+        stepId: stepId1,
+      } = test.generateSampleWorkflowSnapshot({ status: 'completed' });
+      const {
+        snapshot: workflow2,
+        runId: runId2,
+        stepId: stepId2,
+      } = test.generateSampleWorkflowSnapshot({ status: 'running' });
+      const {
+        snapshot: workflow3,
+        runId: runId3,
+        stepId: stepId3,
+      } = test.generateSampleWorkflowSnapshot({ status: 'waiting' });
 
       await store.persistWorkflowSnapshot({ workflowName: workflowName1, runId: runId1, snapshot: workflow1 });
       await new Promise(resolve => setTimeout(resolve, 10)); // Small delay to ensure different timestamps
