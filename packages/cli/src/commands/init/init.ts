@@ -87,8 +87,6 @@ export const init = async ({
     const installCommand = getPackageManagerInstallCommand(pm);
     await exec(`${pm} ${installCommand} ${aiSdkPackage}`);
 
-    console.log(`configureEditorWithDocsMCP: ${configureEditorWithDocsMCP}`);
-
     if (configureEditorWithDocsMCP) {
       await installMastraDocsMCPServer({
         editor: configureEditorWithDocsMCP,

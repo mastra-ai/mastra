@@ -41,25 +41,6 @@ async function writeMergedConfig(configPath: string) {
 export const windsurfGlobalMCPConfigPath = path.join(os.homedir(), '.codeium', 'windsurf', 'mcp_config.json');
 export const cursorGlobalMCPConfigPath = path.join(os.homedir(), '.cursor', 'mcp.json');
 
-export async function globalCursorMCPIsAlreadyInstalled(directory?: string) {
-  // If directory is provided, check project .cursor/mcp.json, else check global ~/.cursor/mcp.json
-  const configPath = directory ? path.join(directory, '.cursor', 'mcp.json') : cursorGlobalMCPConfigPath;
-  if (!existsSync(configPath)) {
-    return false;
-  }
-  try {
-    const configContents = await readJSON(configPath);
-    if (!configContents?.mcpServers) return false;
-    const hasMastraMCP = Object.values(configContents.mcpServers).some((server?: any) =>
-      server?.args?.find((arg?: string) => arg?.includes(`@mastra/mcp-docs-server`)),
-    );
-    return hasMastraMCP;
-  } catch (e) {
-    console.error(e);
-    return false;
-  }
-}
-
 export async function installMastraDocsMCPServer({
   editor,
   directory,
@@ -71,7 +52,7 @@ export async function installMastraDocsMCPServer({
     await writeMergedConfig(path.join(directory, '.cursor', 'mcp.json'));
   }
   if (editor === `cursor-global`) {
-    const alreadyInstalled = await globalMCPIsAlreadyInstalled(`cursor`);
+    const alreadyInstalled = await globalMCPIsAlreadyInstalled(editor);
     if (alreadyInstalled) {
       return;
     }
@@ -79,7 +60,7 @@ export async function installMastraDocsMCPServer({
   }
 
   if (editor === `windsurf`) {
-    const alreadyInstalled = await globalMCPIsAlreadyInstalled(`windsurf`);
+    const alreadyInstalled = await globalMCPIsAlreadyInstalled(editor);
     if (alreadyInstalled) {
       return;
     }
@@ -87,16 +68,16 @@ export async function installMastraDocsMCPServer({
   }
 }
 
-export async function globalMCPIsAlreadyInstalled(editor: 'windsurf' | 'cursor') {
+export async function globalMCPIsAlreadyInstalled(editor: undefined | 'cursor' | 'cursor-global' | 'windsurf') {
   let configPath: string = ``;
 
   if (editor === 'windsurf') {
     configPath = windsurfGlobalMCPConfigPath;
-  } else if (editor === 'cursor') {
+  } else if (editor === 'cursor-global') {
     configPath = cursorGlobalMCPConfigPath;
   }
 
-  if (!existsSync(configPath)) {
+  if (!configPath || !existsSync(configPath)) {
     return false;
   }
 
