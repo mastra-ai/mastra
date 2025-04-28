@@ -63,13 +63,14 @@ function convertLogLevelToLoggerMethod(level: LoggingLevel): 'debug' | 'info' | 
   }
 }
 
-export class MastraMCPClient extends MastraBase {
+export class InternalMastraMCPClient extends MastraBase {
   name: string;
   private transport: Transport;
   private client: Client;
   private readonly timeout: number;
   private logHandler?: LogHandler;
   private enableServerLogs?: boolean;
+  private static hasWarned = false;
 
   constructor({
     name,
@@ -85,6 +86,13 @@ export class MastraMCPClient extends MastraBase {
     timeout?: number;
   }) {
     super({ name: 'MastraMCPClient' });
+    if (!InternalMastraMCPClient.hasWarned) {
+      // eslint-disable-next-line no-console
+      console.warn(
+        '[DEPRECATION] MastraMCPClient is deprecated and will be removed in a future release. Please use MCPClient instead.',
+      );
+      InternalMastraMCPClient.hasWarned = true;
+    }
     this.name = name;
     this.timeout = timeout;
     this.logHandler = server.logger;
@@ -259,3 +267,8 @@ export class MastraMCPClient extends MastraBase {
     return toolsRes;
   }
 }
+
+/**
+ * @deprecated MastraMCPClient is deprecated and will be removed in a future release. Please use MCPClient instead.
+ */
+export const MastraMCPClient = InternalMastraMCPClient;

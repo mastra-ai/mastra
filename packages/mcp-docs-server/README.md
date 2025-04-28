@@ -74,12 +74,12 @@ If a tool call fails you will need to go into Windsurf MCP settings and re-start
 ### In a Mastra Agent
 
 ```typescript
-import { MCPConfiguration } from '@mastra/mcp';
+import { MCPClient } from '@mastra/mcp';
 import { Agent } from '@mastra/core/agent';
 import { openai } from '@ai-sdk/openai';
 
 // Configure MCP with the docs server
-const mcp = new MCPConfiguration({
+const mcp = new MCPClient({
   servers: {
     mastra: {
       command: 'npx',

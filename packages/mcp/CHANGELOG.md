@@ -137,7 +137,7 @@
 
 ### Patch Changes
 
-- 492e370: Updated MCPConfiguration to connect/disconnect to all clients simultaneously instead of one at a time
+- 492e370: Updated MCPClient to connect/disconnect to all clients simultaneously instead of one at a time
 - 37bb612: Add Elastic-2.0 licensing for packages
 - 3e8e000: Added configurable test timeouts to mcp configuration, and updated mcp version
 - 476ce7c: [MASTRA-2997] added documentation on authorization headers in sse connections
@@ -175,7 +175,7 @@
 
 ### Patch Changes
 
-- 492e370: Updated MCPConfiguration to connect/disconnect to all clients simultaneously instead of one at a time
+- 492e370: Updated MCPClient to connect/disconnect to all clients simultaneously instead of one at a time
 
 ## 0.3.10-alpha.2
 
@@ -544,7 +544,7 @@
 
 ### Minor Changes
 
-- dd7a09a: Added new MCPConfiguration class for managing multiple MCP server tools/toolsets. Fixed a bug where MCPClient env would overwrite PATH env var. Fixed a bug where MCP servers would be killed non-gracefully leading to printing huge errors on every code save when running mastra dev
+- dd7a09a: Added new MCPClient class for managing multiple MCP server tools/toolsets. Fixed a bug where MCPClient env would overwrite PATH env var. Fixed a bug where MCP servers would be killed non-gracefully leading to printing huge errors on every code save when running mastra dev
 
 ### Patch Changes
 
@@ -619,7 +619,7 @@
 
 ### Minor Changes
 
-- dd7a09a: Added new MCPConfiguration class for managing multiple MCP server tools/toolsets. Fixed a bug where MCPClient env would overwrite PATH env var. Fixed a bug where MCP servers would be killed non-gracefully leading to printing huge errors on every code save when running mastra dev
+- dd7a09a: Added new MCPClient class for managing multiple MCP server tools/toolsets. Fixed a bug where MCPClient env would overwrite PATH env var. Fixed a bug where MCP servers would be killed non-gracefully leading to printing huge errors on every code save when running mastra dev
 
 ### Patch Changes
 

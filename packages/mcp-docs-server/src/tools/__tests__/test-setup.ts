@@ -1,7 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import { serve } from '@hono/node-server';
-import { MCPConfiguration } from '@mastra/mcp';
+import { MCPClient } from '@mastra/mcp';
 import { Hono } from 'hono';
 import type { Context } from 'hono';
 
@@ -44,7 +44,7 @@ export const server = serve({
 // Get the actual port the server is running on
 const port = (server.address() as { port: number }).port;
 
-export const mcp = new MCPConfiguration({
+export const mcp = new MCPClient({
   id: 'test-mcp',
   servers: {
     mastra: {

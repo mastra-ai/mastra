@@ -1,40 +1,40 @@
 import { MastraBase } from '@mastra/core/base';
 import { DEFAULT_REQUEST_TIMEOUT_MSEC } from '@modelcontextprotocol/sdk/shared/protocol.js';
 import { v5 as uuidv5 } from 'uuid';
-import { MastraMCPClient } from './client';
+import { InternalMastraMCPClient } from './client';
 import type { MastraMCPServerDefinition } from './client';
 
-const mastraMCPConfigurationInstances = new Map<string, InstanceType<typeof MCPConfiguration>>();
+const mcpClientInstances = new Map<string, InstanceType<typeof MCPClient>>();
 
-export interface MCPConfigurationOptions {
+export interface MCPClientOptions {
   id?: string;
   servers: Record<string, MastraMCPServerDefinition>;
   timeout?: number; // Optional global timeout
 }
 
-export class MCPConfiguration extends MastraBase {
+export class MCPClient extends MastraBase {
   private serverConfigs: Record<string, MastraMCPServerDefinition> = {};
   private id: string;
   private defaultTimeout: number;
 
-  constructor(args: MCPConfigurationOptions) {
-    super({ name: 'MCPConfiguration' });
+  constructor(args: MCPClientOptions) {
+    super({ name: 'MCPClient' });
     this.defaultTimeout = args.timeout ?? DEFAULT_REQUEST_TIMEOUT_MSEC;
     this.serverConfigs = args.servers;
     this.id = args.id ?? this.makeId();
 
     // to prevent memory leaks return the same MCP server instance when configured the same way multiple times
-    const existingInstance = mastraMCPConfigurationInstances.get(this.id);
+    const existingInstance = mcpClientInstances.get(this.id);
     if (existingInstance) {
       if (!args.id) {
-        throw new Error(`MCPConfiguration was initialized multiple times with the same configuration options.
+        throw new Error(`MCPClient was initialized multiple times with the same configuration options.
 
 This error is intended to prevent memory leaks.
 
 To fix this you have three different options:
-1. If you need multiple MCPConfiguration class instances with identical server configurations, set an id when configuring: new MCPConfiguration({ id: "my-unique-id" })
-2. Call "await configuration.disconnect()" after you're done using the configuration and before you recreate another instance with the same options. If the identical MCPConfiguration instance is already closed at the time of re-creating it, you will not see this error.
-3. If you only need one instance of MCPConfiguration in your app, refactor your code so it's only created one time (ex. move it out of a loop into a higher scope code block)
+1. If you need multiple MCPClient class instances with identical server configurations, set an id when configuring: new MCPClient({ id: "my-unique-id" })
+2. Call "await client.disconnect()" after you're done using the client and before you recreate another instance with the same options. If the identical MCPClient instance is already closed at the time of re-creating it, you will not see this error.
+3. If you only need one instance of MCPClient in your app, refactor your code so it's only created one time (ex. move it out of a loop into a higher scope code block)
 `);
       }
       return existingInstance;
@@ -44,20 +44,20 @@ To fix this you have three different options:
   }
 
   private addToInstanceCache() {
-    if (!mastraMCPConfigurationInstances.has(this.id)) {
-      mastraMCPConfigurationInstances.set(this.id, this);
+    if (!mcpClientInstances.has(this.id)) {
+      mcpClientInstances.set(this.id, this);
     }
   }
 
   private makeId() {
     const text = JSON.stringify(this.serverConfigs).normalize('NFKC');
-    const idNamespace = uuidv5(`MCPConfiguration`, uuidv5.DNS);
+    const idNamespace = uuidv5(`MCPClient`, uuidv5.DNS);
 
     return uuidv5(text, idNamespace);
   }
 
   public async disconnect() {
-    mastraMCPConfigurationInstances.delete(this.id);
+    mcpClientInstances.delete(this.id);
 
     await Promise.all(Array.from(this.mcpClientsById.values()).map(client => client.disconnect()));
     this.mcpClientsById.clear();
@@ -89,7 +89,7 @@ To fix this you have three different options:
     return connectedToolsets;
   }
 
-  private mcpClientsById = new Map<string, MastraMCPClient>();
+  private mcpClientsById = new Map<string, InternalMastraMCPClient>();
   private async getConnectedClient(name: string, config: MastraMCPServerDefinition) {
     const exists = this.mcpClientsById.has(name);
 
@@ -103,7 +103,7 @@ To fix this you have three different options:
     this.logger.debug(`Connecting to ${name} MCP server`);
 
     // Create client with server configuration including log handler
-    const mcpClient = new MastraMCPClient({
+    const mcpClient = new InternalMastraMCPClient({
       name,
       server: config,
       timeout: config.timeout ?? this.defaultTimeout,
@@ -114,7 +114,7 @@ To fix this you have three different options:
       await mcpClient.connect();
     } catch (e) {
       this.mcpClientsById.delete(name);
-      this.logger.error(`MCPConfiguration errored connecting to MCP server ${name}`, {
+      this.logger.error(`MCPClient errored connecting to MCP server ${name}`, {
         error: e instanceof Error ? e.message : String(e),
       });
       throw new Error(`Failed to connect to MCP server ${name}: ${e instanceof Error ? e.message : String(e)}`);
@@ -129,7 +129,7 @@ To fix this you have three different options:
     cb: (input: {
       serverName: string;
       tools: Record<string, any>; // <- any because we don't have proper tool schemas
-      client: InstanceType<typeof MastraMCPClient>;
+      client: InstanceType<typeof InternalMastraMCPClient>;
     }) => Promise<void>,
   ) {
     await Promise.all(
@@ -141,3 +141,17 @@ To fix this you have three different options:
     );
   }
 }
+
+/**
+ * @deprecated MCPConfigurationOptions is deprecated and will be removed in a future release. Use MCPClientOptions instead.
+ */
+export interface MCPConfigurationOptions {
+  id?: string;
+  servers: Record<string, MastraMCPServerDefinition>;
+  timeout?: number; // Optional global timeout
+}
+
+/**
+ * @deprecated MCPConfiguration is deprecated and will be removed in a future release. Use MCPClient instead.
+ */
+export class MCPConfiguration extends MCPClient {}
