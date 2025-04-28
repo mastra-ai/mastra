@@ -9,7 +9,6 @@ export const useOpenTrace = () => {
     setIsOpen: setOpen,
     trace: currentTrace,
     setSpan,
-    setOpenDetail,
     setCurrentTraceIndex,
   } = useContext(TraceContext);
 
@@ -20,7 +19,6 @@ export const useOpenTrace = () => {
     setCurrentTraceIndex(traceIndex);
     if (open && currentTrace?.[0]?.id !== trace[0].id) return;
     setOpen(prev => !prev);
-    setOpenDetail(prev => !prev);
   };
 
   return { openTrace };

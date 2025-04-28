@@ -37,7 +37,10 @@ export interface ThProps extends React.TdHTMLAttributes<HTMLTableCellElement> {
 export const Th = ({ className, children, ...props }: ThProps) => {
   return (
     <th
-      className={clsx('text-icon3 text-ui-sm h-full text-left font-normal uppercase first:pl-5 last:pr-5', className)}
+      className={clsx(
+        'text-icon3 text-ui-sm h-full text-left font-normal uppercase first:pl-5 last:pr-5 whitespace-nowrap',
+        className,
+      )}
       {...props}
     >
       {children}

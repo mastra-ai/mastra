@@ -1,6 +1,6 @@
 import React from 'react';
 
-import { Span } from './Span';
+import { Span, SpanProps } from './Span';
 import { Spans } from './Spans';
 import { TraceDurationProvider } from './Trace.context';
 
@@ -10,12 +10,21 @@ export interface TraceProps {
   durationMs: number;
   tokenCount?: number;
   onClick?: () => void;
+  variant: SpanProps['variant'];
+  isActive?: boolean;
 }
 
-export const Trace = ({ name, spans, durationMs, tokenCount, onClick }: TraceProps) => {
+export const Trace = ({ name, spans, durationMs, tokenCount, onClick, variant, isActive }: TraceProps) => {
   return (
     <TraceDurationProvider durationMs={durationMs}>
-      <Span isRoot durationMs={durationMs} variant={'other'} spans={<Spans>{spans}</Spans>} onClick={onClick}>
+      <Span
+        isRoot
+        durationMs={durationMs}
+        variant={variant}
+        spans={<Spans>{spans}</Spans>}
+        onClick={onClick}
+        isActive={isActive}
+      >
         {name}
       </Span>
     </TraceDurationProvider>
