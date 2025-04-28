@@ -205,6 +205,75 @@ const mcp = new MCPConfiguration({
 
 This example is adapted from the Claude integration example in the Smithery documentation.
 
+## Excluding Tools in Your MCP Server
+
+The tools from your MCP server are returned as a plain JavaScript object when you call `await mcp.getTools()` or `await mcp.getToolsets()`. This means you can easily filter or exclude tools before passing them to your agent.
+
+### Excluding Tools Examples
+
+Suppose your MCP server exposes three tools: `weather`, `stockPrice`, and `news`, but you want to exclude the `news` tool from your agent. You can do this by filtering the tools object:
+
+```typescript
+import { MCPConfiguration } from "@mastra/mcp";
+import { Agent } from "@mastra/core/agent";
+import { openai } from "@ai-sdk/openai";
+
+const mcp = new MCPConfiguration({
+  servers: {
+    myServer: {
+      command: "npx",
+      args: ["tsx", "my-mcp-server.ts"],
+    },
+  },
+});
+
+// Get all tools from the MCP server
+const allTools = await mcp.getTools();
+
+// Exclude the 'news' tool (tool names are namespaced as 'serverName_toolName')
+const filteredTools = Object.fromEntries(
+  Object.entries(allTools).filter(([toolName]) => toolName !== "myServer_news")
+);
+
+// Pass only the filtered tools to your agent
+const agent = new Agent({
+  name: "Selective Agent",
+  instructions: "You can access only selected tools.",
+  model: openai("gpt-4"),
+  tools: filteredTools,
+});
+```
+
+You can use any logic in the `.filter()` function to exclude tools by name, type, or any other property. This approach works the same way for `getToolsets()` if you want to filter toolsets dynamically per request.
+
+Another approach is to destructure the tools you want to use, or exclude the tools you do not want.
+
+```typescript
+// Remove the undesired tool from the destructed object
+const { myServer_news, ...filteredTools } = await mcp.getTools();
+
+// Pass only the filtered tools to your agent
+const agent = new Agent({
+  name: "Selective Agent",
+  instructions: "You can access only selected tools.",
+  model: openai("gpt-4"),
+  tools: filteredTools,
+});
+```
+
+```typescript
+// Select the desired tools from the destructed object
+const { myServer_weather, myServer_stockPrice } = await mcp.getTools();
+
+// Pass only the filtered tools to your agent
+const agent = new Agent({
+  name: "Selective Agent",
+  instructions: "You can access only selected tools.",
+  model: openai("gpt-4"),
+  tools: { myServer_weather, myServer_stockPrice },
+});
+```
+
 ## Using the Mastra Documentation Server
 
 Looking to use Mastra's MCP documentation server in your IDE? Check out our [MCP Documentation Server guide](/docs/getting-started/mcp-docs-server) to get started.
