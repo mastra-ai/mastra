@@ -2,25 +2,24 @@
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
   "rangeStrategy": "bump",
   "extends": [
-    "config:recommended",
     ":dependencyDashboard",
     ":disableRateLimiting",
     ":maintainLockFilesWeekly",
     ":semanticCommits",
     ":automergeDisabled",
-    ":disablePeerDependencies"
+    ":disablePeerDependencies",
+    ":ignoreModulesAndTests",
+    "replacements:all",
+    "workarounds:typesNodeVersioning",
+    "group:recommended"
   ],
   "postUpdateOptions": ["pnpmDedupe"],
   "rebaseWhen": "conflicted",
   "major": {
     "dependencyDashboardApproval": true
   },
-  "ignorePaths": ["docs/**"],
+  "ignorePaths": ["docs/**", "packages/memory/integration-tests/**", "explorations/**"],
   "packageRules": [
-    {
-      "enabled": false,
-      "matchPackageNames": ["*"]
-    },
     {
       "matchDepTypes": ["engines"],
       "enabled": false
@@ -70,7 +69,8 @@
       "groupName": "formatting & linting",
       "commitMessageTopic": "Formatting & linting",
       "matchFileNames": ["+(package.json)", "**/package.json"],
-      "matchPackageNames": ["eslint", "prettier", "/^eslint-/", "!@typescript-eslint/"],
+      "matchPackageNames": ["eslint", "prettier", "/^eslint-/"],
+      "excludePackageNames": ["@typescript-eslint/"],
       "matchUpdateTypes": ["major", "minor", "patch"],
       "matchDepTypes": ["dependencies", "devDependencies"],
       "dependencyDashboardApproval": false,
@@ -86,15 +86,31 @@
       "enabled": true
     },
     {
-      "groupName": "mastra",
-      "commitMessageTopic": "mastra",
-      "matchFileNames": ["packages/cli/*/package.json"],
+      "groupName": "@internal/lint",
+      "commitMessageTopic": "@internal/lint",
+      "matchFileNames": ["packages/_config/package.json"],
       "matchUpdateTypes": ["minor", "patch"],
       "matchDepTypes": ["dependencies", "devDependencies"],
       "enabled": true
     },
     {
-      "groupName": "major-mastra",
+      "groupName": "@internal/lint",
+      "commitMessageTopic": "@internal/lint",
+      "matchFileNames": ["packages/_config/package.json"],
+      "matchUpdateTypes": ["major"],
+      "matchDepTypes": ["dependencies", "devDependencies"],
+      "enabled": true
+    },
+    {
+      "groupName": "mastra",
+      "commitMessageTopic": "mastra",
+      "matchFileNames": ["packages/cli/package.json"],
+      "matchUpdateTypes": ["minor", "patch"],
+      "matchDepTypes": ["dependencies", "devDependencies"],
+      "enabled": true
+    },
+    {
+      "groupName": "mastra",
       "commitMessageTopic": "mastra",
       "matchFileNames": ["packages/cli/package.json"],
       "matchUpdateTypes": ["major"],
@@ -102,15 +118,31 @@
       "enabled": true
     },
     {
-      "groupName": "Mastra core",
-      "commitMessageTopic": "Mastra core",
-      "matchFileNames": ["packages/core/*/package.json"],
+      "groupName": "Mastra cloud",
+      "commitMessageTopic": "Mastra cloud",
+      "matchFileNames": ["packages/cloud/package.json"],
       "matchUpdateTypes": ["minor", "patch"],
       "matchDepTypes": ["dependencies", "devDependencies"],
       "enabled": true
     },
     {
-      "groupName": "major-Mastra core",
+      "groupName": "Mastra cloud",
+      "commitMessageTopic": "Mastra cloud",
+      "matchFileNames": ["packages/cloud/package.json"],
+      "matchUpdateTypes": ["major"],
+      "matchDepTypes": ["dependencies", "devDependencies"],
+      "enabled": true
+    },
+    {
+      "groupName": "Mastra core",
+      "commitMessageTopic": "Mastra core",
+      "matchFileNames": ["packages/core/package.json"],
+      "matchUpdateTypes": ["minor", "patch"],
+      "matchDepTypes": ["dependencies", "devDependencies"],
+      "enabled": true
+    },
+    {
+      "groupName": "Mastra core",
       "commitMessageTopic": "Mastra core",
       "matchFileNames": ["packages/core/package.json"],
       "matchUpdateTypes": ["major"],
@@ -120,13 +152,13 @@
     {
       "groupName": "create-mastra",
       "commitMessageTopic": "create-mastra",
-      "matchFileNames": ["packages/create-mastra/*/package.json"],
+      "matchFileNames": ["packages/create-mastra/package.json"],
       "matchUpdateTypes": ["minor", "patch"],
       "matchDepTypes": ["dependencies", "devDependencies"],
       "enabled": true
     },
     {
-      "groupName": "major-create-mastra",
+      "groupName": "create-mastra",
       "commitMessageTopic": "create-mastra",
       "matchFileNames": ["packages/create-mastra/package.json"],
       "matchUpdateTypes": ["major"],
@@ -136,13 +168,13 @@
     {
       "groupName": "Mastra deployer",
       "commitMessageTopic": "Mastra deployer",
-      "matchFileNames": ["packages/deployer/*/package.json"],
+      "matchFileNames": ["packages/deployer/package.json"],
       "matchUpdateTypes": ["minor", "patch"],
       "matchDepTypes": ["dependencies", "devDependencies"],
       "enabled": true
     },
     {
-      "groupName": "major-Mastra deployer",
+      "groupName": "Mastra deployer",
       "commitMessageTopic": "Mastra deployer",
       "matchFileNames": ["packages/deployer/package.json"],
       "matchUpdateTypes": ["major"],
@@ -152,13 +184,13 @@
     {
       "groupName": "Mastra evals",
       "commitMessageTopic": "Mastra evals",
-      "matchFileNames": ["packages/evals/*/package.json"],
+      "matchFileNames": ["packages/evals/package.json"],
       "matchUpdateTypes": ["minor", "patch"],
       "matchDepTypes": ["dependencies", "devDependencies"],
       "enabled": true
     },
     {
-      "groupName": "major-Mastra evals",
+      "groupName": "Mastra evals",
       "commitMessageTopic": "Mastra evals",
       "matchFileNames": ["packages/evals/package.json"],
       "matchUpdateTypes": ["major"],
@@ -168,13 +200,13 @@
     {
       "groupName": "Mastra loggers",
       "commitMessageTopic": "Mastra loggers",
-      "matchFileNames": ["packages/loggers/*/package.json"],
+      "matchFileNames": ["packages/loggers/package.json"],
       "matchUpdateTypes": ["minor", "patch"],
       "matchDepTypes": ["dependencies", "devDependencies"],
       "enabled": true
     },
     {
-      "groupName": "major-Mastra loggers",
+      "groupName": "Mastra loggers",
       "commitMessageTopic": "Mastra loggers",
       "matchFileNames": ["packages/loggers/package.json"],
       "matchUpdateTypes": ["major"],
@@ -184,13 +216,13 @@
     {
       "groupName": "Mastra mcp",
       "commitMessageTopic": "Mastra mcp",
-      "matchFileNames": ["packages/mcp/*/package.json"],
+      "matchFileNames": ["packages/mcp/package.json"],
       "matchUpdateTypes": ["minor", "patch"],
       "matchDepTypes": ["dependencies", "devDependencies"],
       "enabled": true
     },
     {
-      "groupName": "major-Mastra mcp",
+      "groupName": "Mastra mcp",
       "commitMessageTopic": "Mastra mcp",
       "matchFileNames": ["packages/mcp/package.json"],
       "matchUpdateTypes": ["major"],
@@ -200,13 +232,13 @@
     {
       "groupName": "Mastra mcp-docs-server",
       "commitMessageTopic": "Mastra mcp-docs-server",
-      "matchFileNames": ["packages/mcp-docs-server/*/package.json"],
+      "matchFileNames": ["packages/mcp-docs-server/package.json"],
       "matchUpdateTypes": ["minor", "patch"],
       "matchDepTypes": ["dependencies", "devDependencies"],
       "enabled": true
     },
     {
-      "groupName": "major-Mastra mcp-docs-server",
+      "groupName": "Mastra mcp-docs-server",
       "commitMessageTopic": "Mastra mcp-docs-server",
       "matchFileNames": ["packages/mcp-docs-server/package.json"],
       "matchUpdateTypes": ["major"],
@@ -214,15 +246,31 @@
       "enabled": true
     },
     {
-      "groupName": "Mastra memory",
-      "commitMessageTopic": "Mastra memory",
-      "matchFileNames": ["packages/memory/*/package.json"],
+      "groupName": "Mastra mcp-registry-registry",
+      "commitMessageTopic": "Mastra mcp-registry-registry",
+      "matchFileNames": ["packages/mcp-registry-registry/package.json"],
       "matchUpdateTypes": ["minor", "patch"],
       "matchDepTypes": ["dependencies", "devDependencies"],
       "enabled": true
     },
     {
-      "groupName": "major-Mastra memory",
+      "groupName": "Mastra mcp-registry-registry",
+      "commitMessageTopic": "Mastra mcp-registry-registry",
+      "matchFileNames": ["packages/mcp-registry-registry/package.json"],
+      "matchUpdateTypes": ["major"],
+      "matchDepTypes": ["dependencies", "devDependencies"],
+      "enabled": true
+    },
+    {
+      "groupName": "Mastra memory",
+      "commitMessageTopic": "Mastra memory",
+      "matchFileNames": ["packages/memory/package.json"],
+      "matchUpdateTypes": ["minor", "patch"],
+      "matchDepTypes": ["dependencies", "devDependencies"],
+      "enabled": true
+    },
+    {
+      "groupName": "Mastra memory",
       "commitMessageTopic": "Mastra memory",
       "matchFileNames": ["packages/memory/package.json"],
       "matchUpdateTypes": ["major"],
@@ -232,13 +280,13 @@
     {
       "groupName": "Mastra playground-ui",
       "commitMessageTopic": "Mastra playground-ui",
-      "matchFileNames": ["packages/playground-ui/*/package.json"],
+      "matchFileNames": ["packages/playground-ui/package.json"],
       "matchUpdateTypes": ["minor", "patch"],
       "matchDepTypes": ["dependencies", "devDependencies"],
       "enabled": true
     },
     {
-      "groupName": "major-Mastra playground-ui",
+      "groupName": "Mastra playground-ui",
       "commitMessageTopic": "Mastra playground-ui",
       "matchFileNames": ["packages/playground-ui/package.json"],
       "matchUpdateTypes": ["major"],
@@ -248,13 +296,13 @@
     {
       "groupName": "Mastra rag",
       "commitMessageTopic": "Mastra rag",
-      "matchFileNames": ["packages/rag/*/package.json"],
+      "matchFileNames": ["packages/rag/package.json"],
       "matchUpdateTypes": ["minor", "patch"],
       "matchDepTypes": ["dependencies", "devDependencies"],
       "enabled": true
     },
     {
-      "groupName": "major-Mastra rag",
+      "groupName": "Mastra rag",
       "commitMessageTopic": "Mastra rag",
       "matchFileNames": ["packages/rag/package.json"],
       "matchUpdateTypes": ["major"],
@@ -264,13 +312,13 @@
     {
       "groupName": "Mastra server",
       "commitMessageTopic": "Mastra server",
-      "matchFileNames": ["packages/server/*/package.json"],
+      "matchFileNames": ["packages/server/package.json"],
       "matchUpdateTypes": ["minor", "patch"],
       "matchDepTypes": ["dependencies", "devDependencies"],
       "enabled": true
     },
     {
-      "groupName": "major-Mastra server",
+      "groupName": "Mastra server",
       "commitMessageTopic": "Mastra server",
       "matchFileNames": ["packages/server/package.json"],
       "matchUpdateTypes": ["major"],
@@ -278,31 +326,15 @@
       "enabled": true
     },
     {
-      "groupName": "@internal/lint",
-      "commitMessageTopic": "@internal/lint",
-      "matchFileNames": ["packages/_config/*/package.json"],
+      "groupName": "Mastra deployer-cloudflare",
+      "commitMessageTopic": "Mastra deployer-cloudflare",
+      "matchFileNames": ["deployers/cloudflare/package.json"],
       "matchUpdateTypes": ["minor", "patch"],
-      "matchDepTypes": ["dependencies", "devDependencies"],
-      "enabled": true
-    },
-    {
-      "groupName": "major-@internal/lint",
-      "commitMessageTopic": "@internal/lint",
-      "matchFileNames": ["packages/_config/package.json"],
-      "matchUpdateTypes": ["major"],
       "matchDepTypes": ["dependencies", "devDependencies"],
       "enabled": true
     },
     {
       "groupName": "Mastra deployer-cloudflare",
-      "commitMessageTopic": "Mastra deployer-cloudflare",
-      "matchFileNames": ["deployers/cloudflare/*/package.json"],
-      "matchUpdateTypes": ["minor", "patch"],
-      "matchDepTypes": ["dependencies", "devDependencies"],
-      "enabled": true
-    },
-    {
-      "groupName": "major-Mastra deployer-cloudflare",
       "commitMessageTopic": "Mastra deployer-cloudflare",
       "matchFileNames": ["deployers/cloudflare/package.json"],
       "matchUpdateTypes": ["major"],
@@ -312,13 +344,13 @@
     {
       "groupName": "Mastra deployer-netlify",
       "commitMessageTopic": "Mastra deployer-netlify",
-      "matchFileNames": ["deployers/netlify/*/package.json"],
+      "matchFileNames": ["deployers/netlify/package.json"],
       "matchUpdateTypes": ["minor", "patch"],
       "matchDepTypes": ["dependencies", "devDependencies"],
       "enabled": true
     },
     {
-      "groupName": "major-Mastra deployer-netlify",
+      "groupName": "Mastra deployer-netlify",
       "commitMessageTopic": "Mastra deployer-netlify",
       "matchFileNames": ["deployers/netlify/package.json"],
       "matchUpdateTypes": ["major"],
@@ -328,13 +360,13 @@
     {
       "groupName": "Mastra deployer-vercel",
       "commitMessageTopic": "Mastra deployer-vercel",
-      "matchFileNames": ["deployers/vercel/*/package.json"],
+      "matchFileNames": ["deployers/vercel/package.json"],
       "matchUpdateTypes": ["minor", "patch"],
       "matchDepTypes": ["dependencies", "devDependencies"],
       "enabled": true
     },
     {
-      "groupName": "major-Mastra deployer-vercel",
+      "groupName": "Mastra deployer-vercel",
       "commitMessageTopic": "Mastra deployer-vercel",
       "matchFileNames": ["deployers/vercel/package.json"],
       "matchUpdateTypes": ["major"],
@@ -342,15 +374,31 @@
       "enabled": true
     },
     {
-      "groupName": "Mastra astra",
-      "commitMessageTopic": "Mastra astra",
-      "matchFileNames": ["stores/astra/*/package.json"],
+      "groupName": "@internal/storage-test-utils",
+      "commitMessageTopic": "@internal/storage-test-utils",
+      "matchFileNames": ["stores/_test-utils/package.json"],
       "matchUpdateTypes": ["minor", "patch"],
       "matchDepTypes": ["dependencies", "devDependencies"],
       "enabled": true
     },
     {
-      "groupName": "major-Mastra astra",
+      "groupName": "@internal/storage-test-utils",
+      "commitMessageTopic": "@internal/storage-test-utils",
+      "matchFileNames": ["stores/_test-utils/package.json"],
+      "matchUpdateTypes": ["major"],
+      "matchDepTypes": ["dependencies", "devDependencies"],
+      "enabled": true
+    },
+    {
+      "groupName": "Mastra astra",
+      "commitMessageTopic": "Mastra astra",
+      "matchFileNames": ["stores/astra/package.json"],
+      "matchUpdateTypes": ["minor", "patch"],
+      "matchDepTypes": ["dependencies", "devDependencies"],
+      "enabled": true
+    },
+    {
+      "groupName": "Mastra astra",
       "commitMessageTopic": "Mastra astra",
       "matchFileNames": ["stores/astra/package.json"],
       "matchUpdateTypes": ["major"],
@@ -360,13 +408,13 @@
     {
       "groupName": "Mastra chroma",
       "commitMessageTopic": "Mastra chroma",
-      "matchFileNames": ["stores/chroma/*/package.json"],
+      "matchFileNames": ["stores/chroma/package.json"],
       "matchUpdateTypes": ["minor", "patch"],
       "matchDepTypes": ["dependencies", "devDependencies"],
       "enabled": true
     },
     {
-      "groupName": "major-Mastra chroma",
+      "groupName": "Mastra chroma",
       "commitMessageTopic": "Mastra chroma",
       "matchFileNames": ["stores/chroma/package.json"],
       "matchUpdateTypes": ["major"],
@@ -376,13 +424,13 @@
     {
       "groupName": "Mastra clickhouse",
       "commitMessageTopic": "Mastra clickhouse",
-      "matchFileNames": ["stores/clickhouse/*/package.json"],
+      "matchFileNames": ["stores/clickhouse/package.json"],
       "matchUpdateTypes": ["minor", "patch"],
       "matchDepTypes": ["dependencies", "devDependencies"],
       "enabled": true
     },
     {
-      "groupName": "major-Mastra clickhouse",
+      "groupName": "Mastra clickhouse",
       "commitMessageTopic": "Mastra clickhouse",
       "matchFileNames": ["stores/clickhouse/package.json"],
       "matchUpdateTypes": ["major"],
@@ -390,15 +438,63 @@
       "enabled": true
     },
     {
-      "groupName": "Mastra pg",
-      "commitMessageTopic": "Mastra pg",
-      "matchFileNames": ["stores/pg/*/package.json"],
+      "groupName": "Mastra cloudflare",
+      "commitMessageTopic": "Mastra cloudflare",
+      "matchFileNames": ["stores/cloudflare/package.json"],
       "matchUpdateTypes": ["minor", "patch"],
       "matchDepTypes": ["dependencies", "devDependencies"],
       "enabled": true
     },
     {
-      "groupName": "major-Mastra pg",
+      "groupName": "Mastra cloudflare",
+      "commitMessageTopic": "Mastra cloudflare",
+      "matchFileNames": ["stores/cloudflare/package.json"],
+      "matchUpdateTypes": ["major"],
+      "matchDepTypes": ["dependencies", "devDependencies"],
+      "enabled": true
+    },
+    {
+      "groupName": "Mastra cloudflare-d1",
+      "commitMessageTopic": "Mastra cloudflare-d1",
+      "matchFileNames": ["stores/cloudflare-d1/package.json"],
+      "matchUpdateTypes": ["minor", "patch"],
+      "matchDepTypes": ["dependencies", "devDependencies"],
+      "enabled": true
+    },
+    {
+      "groupName": "Mastra cloudflare-d1",
+      "commitMessageTopic": "Mastra cloudflare-d1",
+      "matchFileNames": ["stores/cloudflare-d1/package.json"],
+      "matchUpdateTypes": ["major"],
+      "matchDepTypes": ["dependencies", "devDependencies"],
+      "enabled": true
+    },
+    {
+      "groupName": "Mastra libsql",
+      "commitMessageTopic": "Mastra libsql",
+      "matchFileNames": ["stores/libsql/package.json"],
+      "matchUpdateTypes": ["minor", "patch"],
+      "matchDepTypes": ["dependencies", "devDependencies"],
+      "enabled": true
+    },
+    {
+      "groupName": "Mastra libsql",
+      "commitMessageTopic": "Mastra libsql",
+      "matchFileNames": ["stores/libsql/package.json"],
+      "matchUpdateTypes": ["major"],
+      "matchDepTypes": ["dependencies", "devDependencies"],
+      "enabled": true
+    },
+    {
+      "groupName": "Mastra pg",
+      "commitMessageTopic": "Mastra pg",
+      "matchFileNames": ["stores/pg/package.json"],
+      "matchUpdateTypes": ["minor", "patch"],
+      "matchDepTypes": ["dependencies", "devDependencies"],
+      "enabled": true
+    },
+    {
+      "groupName": "Mastra pg",
       "commitMessageTopic": "Mastra pg",
       "matchFileNames": ["stores/pg/package.json"],
       "matchUpdateTypes": ["major"],
@@ -408,13 +504,13 @@
     {
       "groupName": "Mastra pinecone",
       "commitMessageTopic": "Mastra pinecone",
-      "matchFileNames": ["stores/pinecone/*/package.json"],
+      "matchFileNames": ["stores/pinecone/package.json"],
       "matchUpdateTypes": ["minor", "patch"],
       "matchDepTypes": ["dependencies", "devDependencies"],
       "enabled": true
     },
     {
-      "groupName": "major-Mastra pinecone",
+      "groupName": "Mastra pinecone",
       "commitMessageTopic": "Mastra pinecone",
       "matchFileNames": ["stores/pinecone/package.json"],
       "matchUpdateTypes": ["major"],
@@ -424,13 +520,13 @@
     {
       "groupName": "Mastra qdrant",
       "commitMessageTopic": "Mastra qdrant",
-      "matchFileNames": ["stores/qdrant/*/package.json"],
+      "matchFileNames": ["stores/qdrant/package.json"],
       "matchUpdateTypes": ["minor", "patch"],
       "matchDepTypes": ["dependencies", "devDependencies"],
       "enabled": true
     },
     {
-      "groupName": "major-Mastra qdrant",
+      "groupName": "Mastra qdrant",
       "commitMessageTopic": "Mastra qdrant",
       "matchFileNames": ["stores/qdrant/package.json"],
       "matchUpdateTypes": ["major"],
@@ -440,13 +536,13 @@
     {
       "groupName": "Mastra turbopuffer",
       "commitMessageTopic": "Mastra turbopuffer",
-      "matchFileNames": ["stores/turbopuffer/*/package.json"],
+      "matchFileNames": ["stores/turbopuffer/package.json"],
       "matchUpdateTypes": ["minor", "patch"],
       "matchDepTypes": ["dependencies", "devDependencies"],
       "enabled": true
     },
     {
-      "groupName": "major-Mastra turbopuffer",
+      "groupName": "Mastra turbopuffer",
       "commitMessageTopic": "Mastra turbopuffer",
       "matchFileNames": ["stores/turbopuffer/package.json"],
       "matchUpdateTypes": ["major"],
@@ -456,13 +552,13 @@
     {
       "groupName": "Mastra upstash",
       "commitMessageTopic": "Mastra upstash",
-      "matchFileNames": ["stores/upstash/*/package.json"],
+      "matchFileNames": ["stores/upstash/package.json"],
       "matchUpdateTypes": ["minor", "patch"],
       "matchDepTypes": ["dependencies", "devDependencies"],
       "enabled": true
     },
     {
-      "groupName": "major-Mastra upstash",
+      "groupName": "Mastra upstash",
       "commitMessageTopic": "Mastra upstash",
       "matchFileNames": ["stores/upstash/package.json"],
       "matchUpdateTypes": ["major"],
@@ -472,13 +568,13 @@
     {
       "groupName": "Mastra vectorize",
       "commitMessageTopic": "Mastra vectorize",
-      "matchFileNames": ["stores/vectorize/*/package.json"],
+      "matchFileNames": ["stores/vectorize/package.json"],
       "matchUpdateTypes": ["minor", "patch"],
       "matchDepTypes": ["dependencies", "devDependencies"],
       "enabled": true
     },
     {
-      "groupName": "major-Mastra vectorize",
+      "groupName": "Mastra vectorize",
       "commitMessageTopic": "Mastra vectorize",
       "matchFileNames": ["stores/vectorize/package.json"],
       "matchUpdateTypes": ["major"],
@@ -488,13 +584,13 @@
     {
       "groupName": "Mastra speech-azure",
       "commitMessageTopic": "Mastra speech-azure",
-      "matchFileNames": ["speech/azure/*/package.json"],
+      "matchFileNames": ["speech/azure/package.json"],
       "matchUpdateTypes": ["minor", "patch"],
       "matchDepTypes": ["dependencies", "devDependencies"],
       "enabled": true
     },
     {
-      "groupName": "major-Mastra speech-azure",
+      "groupName": "Mastra speech-azure",
       "commitMessageTopic": "Mastra speech-azure",
       "matchFileNames": ["speech/azure/package.json"],
       "matchUpdateTypes": ["major"],
@@ -504,13 +600,13 @@
     {
       "groupName": "Mastra speech-deepgram",
       "commitMessageTopic": "Mastra speech-deepgram",
-      "matchFileNames": ["speech/deepgram/*/package.json"],
+      "matchFileNames": ["speech/deepgram/package.json"],
       "matchUpdateTypes": ["minor", "patch"],
       "matchDepTypes": ["dependencies", "devDependencies"],
       "enabled": true
     },
     {
-      "groupName": "major-Mastra speech-deepgram",
+      "groupName": "Mastra speech-deepgram",
       "commitMessageTopic": "Mastra speech-deepgram",
       "matchFileNames": ["speech/deepgram/package.json"],
       "matchUpdateTypes": ["major"],
@@ -520,13 +616,13 @@
     {
       "groupName": "Mastra speech-elevenlabs",
       "commitMessageTopic": "Mastra speech-elevenlabs",
-      "matchFileNames": ["speech/elevenlabs/*/package.json"],
+      "matchFileNames": ["speech/elevenlabs/package.json"],
       "matchUpdateTypes": ["minor", "patch"],
       "matchDepTypes": ["dependencies", "devDependencies"],
       "enabled": true
     },
     {
-      "groupName": "major-Mastra speech-elevenlabs",
+      "groupName": "Mastra speech-elevenlabs",
       "commitMessageTopic": "Mastra speech-elevenlabs",
       "matchFileNames": ["speech/elevenlabs/package.json"],
       "matchUpdateTypes": ["major"],
@@ -536,13 +632,13 @@
     {
       "groupName": "Mastra speech-google",
       "commitMessageTopic": "Mastra speech-google",
-      "matchFileNames": ["speech/google/*/package.json"],
+      "matchFileNames": ["speech/google/package.json"],
       "matchUpdateTypes": ["minor", "patch"],
       "matchDepTypes": ["dependencies", "devDependencies"],
       "enabled": true
     },
     {
-      "groupName": "major-Mastra speech-google",
+      "groupName": "Mastra speech-google",
       "commitMessageTopic": "Mastra speech-google",
       "matchFileNames": ["speech/google/package.json"],
       "matchUpdateTypes": ["major"],
@@ -552,13 +648,13 @@
     {
       "groupName": "Mastra speech-ibm",
       "commitMessageTopic": "Mastra speech-ibm",
-      "matchFileNames": ["speech/ibm/*/package.json"],
+      "matchFileNames": ["speech/ibm/package.json"],
       "matchUpdateTypes": ["minor", "patch"],
       "matchDepTypes": ["dependencies", "devDependencies"],
       "enabled": true
     },
     {
-      "groupName": "major-Mastra speech-ibm",
+      "groupName": "Mastra speech-ibm",
       "commitMessageTopic": "Mastra speech-ibm",
       "matchFileNames": ["speech/ibm/package.json"],
       "matchUpdateTypes": ["major"],
@@ -568,13 +664,13 @@
     {
       "groupName": "Mastra speech-murf",
       "commitMessageTopic": "Mastra speech-murf",
-      "matchFileNames": ["speech/murf/*/package.json"],
+      "matchFileNames": ["speech/murf/package.json"],
       "matchUpdateTypes": ["minor", "patch"],
       "matchDepTypes": ["dependencies", "devDependencies"],
       "enabled": true
     },
     {
-      "groupName": "major-Mastra speech-murf",
+      "groupName": "Mastra speech-murf",
       "commitMessageTopic": "Mastra speech-murf",
       "matchFileNames": ["speech/murf/package.json"],
       "matchUpdateTypes": ["major"],
@@ -584,13 +680,13 @@
     {
       "groupName": "Mastra speech-openai",
       "commitMessageTopic": "Mastra speech-openai",
-      "matchFileNames": ["speech/openai/*/package.json"],
+      "matchFileNames": ["speech/openai/package.json"],
       "matchUpdateTypes": ["minor", "patch"],
       "matchDepTypes": ["dependencies", "devDependencies"],
       "enabled": true
     },
     {
-      "groupName": "major-Mastra speech-openai",
+      "groupName": "Mastra speech-openai",
       "commitMessageTopic": "Mastra speech-openai",
       "matchFileNames": ["speech/openai/package.json"],
       "matchUpdateTypes": ["major"],
@@ -600,13 +696,13 @@
     {
       "groupName": "Mastra speech-playai",
       "commitMessageTopic": "Mastra speech-playai",
-      "matchFileNames": ["speech/playai/*/package.json"],
+      "matchFileNames": ["speech/playai/package.json"],
       "matchUpdateTypes": ["minor", "patch"],
       "matchDepTypes": ["dependencies", "devDependencies"],
       "enabled": true
     },
     {
-      "groupName": "major-Mastra speech-playai",
+      "groupName": "Mastra speech-playai",
       "commitMessageTopic": "Mastra speech-playai",
       "matchFileNames": ["speech/playai/package.json"],
       "matchUpdateTypes": ["major"],
@@ -616,13 +712,13 @@
     {
       "groupName": "Mastra speech-replicate",
       "commitMessageTopic": "Mastra speech-replicate",
-      "matchFileNames": ["speech/replicate/*/package.json"],
+      "matchFileNames": ["speech/replicate/package.json"],
       "matchUpdateTypes": ["minor", "patch"],
       "matchDepTypes": ["dependencies", "devDependencies"],
       "enabled": true
     },
     {
-      "groupName": "major-Mastra speech-replicate",
+      "groupName": "Mastra speech-replicate",
       "commitMessageTopic": "Mastra speech-replicate",
       "matchFileNames": ["speech/replicate/package.json"],
       "matchUpdateTypes": ["major"],
@@ -632,13 +728,13 @@
     {
       "groupName": "Mastra speech-speechify",
       "commitMessageTopic": "Mastra speech-speechify",
-      "matchFileNames": ["speech/speechify/*/package.json"],
+      "matchFileNames": ["speech/speechify/package.json"],
       "matchUpdateTypes": ["minor", "patch"],
       "matchDepTypes": ["dependencies", "devDependencies"],
       "enabled": true
     },
     {
-      "groupName": "major-Mastra speech-speechify",
+      "groupName": "Mastra speech-speechify",
       "commitMessageTopic": "Mastra speech-speechify",
       "matchFileNames": ["speech/speechify/package.json"],
       "matchUpdateTypes": ["major"],
@@ -648,13 +744,13 @@
     {
       "groupName": "Mastra voice-azure",
       "commitMessageTopic": "Mastra voice-azure",
-      "matchFileNames": ["voice/azure/*/package.json"],
+      "matchFileNames": ["voice/azure/package.json"],
       "matchUpdateTypes": ["minor", "patch"],
       "matchDepTypes": ["dependencies", "devDependencies"],
       "enabled": true
     },
     {
-      "groupName": "major-Mastra voice-azure",
+      "groupName": "Mastra voice-azure",
       "commitMessageTopic": "Mastra voice-azure",
       "matchFileNames": ["voice/azure/package.json"],
       "matchUpdateTypes": ["major"],
@@ -664,13 +760,13 @@
     {
       "groupName": "Mastra voice-cloudflare",
       "commitMessageTopic": "Mastra voice-cloudflare",
-      "matchFileNames": ["voice/cloudflare/*/package.json"],
+      "matchFileNames": ["voice/cloudflare/package.json"],
       "matchUpdateTypes": ["minor", "patch"],
       "matchDepTypes": ["dependencies", "devDependencies"],
       "enabled": true
     },
     {
-      "groupName": "major-Mastra voice-cloudflare",
+      "groupName": "Mastra voice-cloudflare",
       "commitMessageTopic": "Mastra voice-cloudflare",
       "matchFileNames": ["voice/cloudflare/package.json"],
       "matchUpdateTypes": ["major"],
@@ -680,13 +776,13 @@
     {
       "groupName": "Mastra voice-deepgram",
       "commitMessageTopic": "Mastra voice-deepgram",
-      "matchFileNames": ["voice/deepgram/*/package.json"],
+      "matchFileNames": ["voice/deepgram/package.json"],
       "matchUpdateTypes": ["minor", "patch"],
       "matchDepTypes": ["dependencies", "devDependencies"],
       "enabled": true
     },
     {
-      "groupName": "major-Mastra voice-deepgram",
+      "groupName": "Mastra voice-deepgram",
       "commitMessageTopic": "Mastra voice-deepgram",
       "matchFileNames": ["voice/deepgram/package.json"],
       "matchUpdateTypes": ["major"],
@@ -696,13 +792,13 @@
     {
       "groupName": "Mastra voice-elevenlabs",
       "commitMessageTopic": "Mastra voice-elevenlabs",
-      "matchFileNames": ["voice/elevenlabs/*/package.json"],
+      "matchFileNames": ["voice/elevenlabs/package.json"],
       "matchUpdateTypes": ["minor", "patch"],
       "matchDepTypes": ["dependencies", "devDependencies"],
       "enabled": true
     },
     {
-      "groupName": "major-Mastra voice-elevenlabs",
+      "groupName": "Mastra voice-elevenlabs",
       "commitMessageTopic": "Mastra voice-elevenlabs",
       "matchFileNames": ["voice/elevenlabs/package.json"],
       "matchUpdateTypes": ["major"],
@@ -712,13 +808,13 @@
     {
       "groupName": "Mastra voice-google",
       "commitMessageTopic": "Mastra voice-google",
-      "matchFileNames": ["voice/google/*/package.json"],
+      "matchFileNames": ["voice/google/package.json"],
       "matchUpdateTypes": ["minor", "patch"],
       "matchDepTypes": ["dependencies", "devDependencies"],
       "enabled": true
     },
     {
-      "groupName": "major-Mastra voice-google",
+      "groupName": "Mastra voice-google",
       "commitMessageTopic": "Mastra voice-google",
       "matchFileNames": ["voice/google/package.json"],
       "matchUpdateTypes": ["major"],
@@ -728,13 +824,13 @@
     {
       "groupName": "Mastra voice-murf",
       "commitMessageTopic": "Mastra voice-murf",
-      "matchFileNames": ["voice/murf/*/package.json"],
+      "matchFileNames": ["voice/murf/package.json"],
       "matchUpdateTypes": ["minor", "patch"],
       "matchDepTypes": ["dependencies", "devDependencies"],
       "enabled": true
     },
     {
-      "groupName": "major-Mastra voice-murf",
+      "groupName": "Mastra voice-murf",
       "commitMessageTopic": "Mastra voice-murf",
       "matchFileNames": ["voice/murf/package.json"],
       "matchUpdateTypes": ["major"],
@@ -744,13 +840,13 @@
     {
       "groupName": "Mastra voice-openai",
       "commitMessageTopic": "Mastra voice-openai",
-      "matchFileNames": ["voice/openai/*/package.json"],
+      "matchFileNames": ["voice/openai/package.json"],
       "matchUpdateTypes": ["minor", "patch"],
       "matchDepTypes": ["dependencies", "devDependencies"],
       "enabled": true
     },
     {
-      "groupName": "major-Mastra voice-openai",
+      "groupName": "Mastra voice-openai",
       "commitMessageTopic": "Mastra voice-openai",
       "matchFileNames": ["voice/openai/package.json"],
       "matchUpdateTypes": ["major"],
@@ -760,13 +856,13 @@
     {
       "groupName": "Mastra voice-openai-realtime",
       "commitMessageTopic": "Mastra voice-openai-realtime",
-      "matchFileNames": ["voice/openai-realtime-api/*/package.json"],
+      "matchFileNames": ["voice/openai-realtime-api/package.json"],
       "matchUpdateTypes": ["minor", "patch"],
       "matchDepTypes": ["dependencies", "devDependencies"],
       "enabled": true
     },
     {
-      "groupName": "major-Mastra voice-openai-realtime",
+      "groupName": "Mastra voice-openai-realtime",
       "commitMessageTopic": "Mastra voice-openai-realtime",
       "matchFileNames": ["voice/openai-realtime-api/package.json"],
       "matchUpdateTypes": ["major"],
@@ -776,13 +872,13 @@
     {
       "groupName": "Mastra voice-playai",
       "commitMessageTopic": "Mastra voice-playai",
-      "matchFileNames": ["voice/playai/*/package.json"],
+      "matchFileNames": ["voice/playai/package.json"],
       "matchUpdateTypes": ["minor", "patch"],
       "matchDepTypes": ["dependencies", "devDependencies"],
       "enabled": true
     },
     {
-      "groupName": "major-Mastra voice-playai",
+      "groupName": "Mastra voice-playai",
       "commitMessageTopic": "Mastra voice-playai",
       "matchFileNames": ["voice/playai/package.json"],
       "matchUpdateTypes": ["major"],
@@ -792,13 +888,13 @@
     {
       "groupName": "Mastra voice-sarvam",
       "commitMessageTopic": "Mastra voice-sarvam",
-      "matchFileNames": ["voice/sarvam/*/package.json"],
+      "matchFileNames": ["voice/sarvam/package.json"],
       "matchUpdateTypes": ["minor", "patch"],
       "matchDepTypes": ["dependencies", "devDependencies"],
       "enabled": true
     },
     {
-      "groupName": "major-Mastra voice-sarvam",
+      "groupName": "Mastra voice-sarvam",
       "commitMessageTopic": "Mastra voice-sarvam",
       "matchFileNames": ["voice/sarvam/package.json"],
       "matchUpdateTypes": ["major"],
@@ -808,13 +904,13 @@
     {
       "groupName": "Mastra voice-speechify",
       "commitMessageTopic": "Mastra voice-speechify",
-      "matchFileNames": ["voice/speechify/*/package.json"],
+      "matchFileNames": ["voice/speechify/package.json"],
       "matchUpdateTypes": ["minor", "patch"],
       "matchDepTypes": ["dependencies", "devDependencies"],
       "enabled": true
     },
     {
-      "groupName": "major-Mastra voice-speechify",
+      "groupName": "Mastra voice-speechify",
       "commitMessageTopic": "Mastra voice-speechify",
       "matchFileNames": ["voice/speechify/package.json"],
       "matchUpdateTypes": ["major"],
@@ -824,13 +920,13 @@
     {
       "groupName": "Mastra client-js",
       "commitMessageTopic": "Mastra client-js",
-      "matchFileNames": ["client-sdks/client-js/*/package.json"],
+      "matchFileNames": ["client-sdks/client-js/package.json"],
       "matchUpdateTypes": ["minor", "patch"],
       "matchDepTypes": ["dependencies", "devDependencies"],
       "enabled": true
     },
     {
-      "groupName": "major-Mastra client-js",
+      "groupName": "Mastra client-js",
       "commitMessageTopic": "Mastra client-js",
       "matchFileNames": ["client-sdks/client-js/package.json"],
       "matchUpdateTypes": ["major"],
@@ -840,13 +936,13 @@
     {
       "groupName": "Mastra firecrawl",
       "commitMessageTopic": "Mastra firecrawl",
-      "matchFileNames": ["integrations/firecrawl/*/package.json"],
+      "matchFileNames": ["integrations/firecrawl/package.json"],
       "matchUpdateTypes": ["minor", "patch"],
       "matchDepTypes": ["dependencies", "devDependencies"],
       "enabled": true
     },
     {
-      "groupName": "major-Mastra firecrawl",
+      "groupName": "Mastra firecrawl",
       "commitMessageTopic": "Mastra firecrawl",
       "matchFileNames": ["integrations/firecrawl/package.json"],
       "matchUpdateTypes": ["major"],
@@ -856,13 +952,13 @@
     {
       "groupName": "Mastra github",
       "commitMessageTopic": "Mastra github",
-      "matchFileNames": ["integrations/github/*/package.json"],
+      "matchFileNames": ["integrations/github/package.json"],
       "matchUpdateTypes": ["minor", "patch"],
       "matchDepTypes": ["dependencies", "devDependencies"],
       "enabled": true
     },
     {
-      "groupName": "major-Mastra github",
+      "groupName": "Mastra github",
       "commitMessageTopic": "Mastra github",
       "matchFileNames": ["integrations/github/package.json"],
       "matchUpdateTypes": ["major"],
@@ -872,13 +968,13 @@
     {
       "groupName": "Mastra mem0",
       "commitMessageTopic": "Mastra mem0",
-      "matchFileNames": ["integrations/mem0/*/package.json"],
+      "matchFileNames": ["integrations/mem0/package.json"],
       "matchUpdateTypes": ["minor", "patch"],
       "matchDepTypes": ["dependencies", "devDependencies"],
       "enabled": true
     },
     {
-      "groupName": "major-Mastra mem0",
+      "groupName": "Mastra mem0",
       "commitMessageTopic": "Mastra mem0",
       "matchFileNames": ["integrations/mem0/package.json"],
       "matchUpdateTypes": ["major"],
@@ -888,13 +984,13 @@
     {
       "groupName": "Mastra ragie",
       "commitMessageTopic": "Mastra ragie",
-      "matchFileNames": ["integrations/ragie/*/package.json"],
+      "matchFileNames": ["integrations/ragie/package.json"],
       "matchUpdateTypes": ["minor", "patch"],
       "matchDepTypes": ["dependencies", "devDependencies"],
       "enabled": true
     },
     {
-      "groupName": "major-Mastra ragie",
+      "groupName": "Mastra ragie",
       "commitMessageTopic": "Mastra ragie",
       "matchFileNames": ["integrations/ragie/package.json"],
       "matchUpdateTypes": ["major"],
@@ -904,13 +1000,13 @@
     {
       "groupName": "Mastra playground",
       "commitMessageTopic": "Mastra playground",
-      "matchFileNames": ["packages/cli/src/playground/*/package.json"],
+      "matchFileNames": ["packages/cli/src/playground/package.json"],
       "matchUpdateTypes": ["minor", "patch"],
       "matchDepTypes": ["dependencies", "devDependencies"],
       "enabled": true
     },
     {
-      "groupName": "major-Mastra playground",
+      "groupName": "Mastra playground",
       "commitMessageTopic": "Mastra playground",
       "matchFileNames": ["packages/cli/src/playground/package.json"],
       "matchUpdateTypes": ["major"],
@@ -918,15 +1014,31 @@
       "enabled": true
     },
     {
-      "groupName": "mastra",
-      "commitMessageTopic": "mastra",
-      "matchFileNames": ["packages/cli/*/package.json"],
+      "groupName": "@internal/lint",
+      "commitMessageTopic": "@internal/lint",
+      "matchFileNames": ["packages/_config/package.json"],
       "matchUpdateTypes": ["minor", "patch"],
       "matchDepTypes": ["dependencies", "devDependencies"],
       "enabled": true
     },
     {
-      "groupName": "major-mastra",
+      "groupName": "@internal/lint",
+      "commitMessageTopic": "@internal/lint",
+      "matchFileNames": ["packages/_config/package.json"],
+      "matchUpdateTypes": ["major"],
+      "matchDepTypes": ["dependencies", "devDependencies"],
+      "enabled": true
+    },
+    {
+      "groupName": "mastra",
+      "commitMessageTopic": "mastra",
+      "matchFileNames": ["packages/cli/package.json"],
+      "matchUpdateTypes": ["minor", "patch"],
+      "matchDepTypes": ["dependencies", "devDependencies"],
+      "enabled": true
+    },
+    {
+      "groupName": "mastra",
       "commitMessageTopic": "mastra",
       "matchFileNames": ["packages/cli/package.json"],
       "matchUpdateTypes": ["major"],
@@ -934,15 +1046,31 @@
       "enabled": true
     },
     {
-      "groupName": "Mastra core",
-      "commitMessageTopic": "Mastra core",
-      "matchFileNames": ["packages/core/*/package.json"],
+      "groupName": "Mastra cloud",
+      "commitMessageTopic": "Mastra cloud",
+      "matchFileNames": ["packages/cloud/package.json"],
       "matchUpdateTypes": ["minor", "patch"],
       "matchDepTypes": ["dependencies", "devDependencies"],
       "enabled": true
     },
     {
-      "groupName": "major-Mastra core",
+      "groupName": "Mastra cloud",
+      "commitMessageTopic": "Mastra cloud",
+      "matchFileNames": ["packages/cloud/package.json"],
+      "matchUpdateTypes": ["major"],
+      "matchDepTypes": ["dependencies", "devDependencies"],
+      "enabled": true
+    },
+    {
+      "groupName": "Mastra core",
+      "commitMessageTopic": "Mastra core",
+      "matchFileNames": ["packages/core/package.json"],
+      "matchUpdateTypes": ["minor", "patch"],
+      "matchDepTypes": ["dependencies", "devDependencies"],
+      "enabled": true
+    },
+    {
+      "groupName": "Mastra core",
       "commitMessageTopic": "Mastra core",
       "matchFileNames": ["packages/core/package.json"],
       "matchUpdateTypes": ["major"],
@@ -952,13 +1080,13 @@
     {
       "groupName": "create-mastra",
       "commitMessageTopic": "create-mastra",
-      "matchFileNames": ["packages/create-mastra/*/package.json"],
+      "matchFileNames": ["packages/create-mastra/package.json"],
       "matchUpdateTypes": ["minor", "patch"],
       "matchDepTypes": ["dependencies", "devDependencies"],
       "enabled": true
     },
     {
-      "groupName": "major-create-mastra",
+      "groupName": "create-mastra",
       "commitMessageTopic": "create-mastra",
       "matchFileNames": ["packages/create-mastra/package.json"],
       "matchUpdateTypes": ["major"],
@@ -968,13 +1096,13 @@
     {
       "groupName": "Mastra deployer",
       "commitMessageTopic": "Mastra deployer",
-      "matchFileNames": ["packages/deployer/*/package.json"],
+      "matchFileNames": ["packages/deployer/package.json"],
       "matchUpdateTypes": ["minor", "patch"],
       "matchDepTypes": ["dependencies", "devDependencies"],
       "enabled": true
     },
     {
-      "groupName": "major-Mastra deployer",
+      "groupName": "Mastra deployer",
       "commitMessageTopic": "Mastra deployer",
       "matchFileNames": ["packages/deployer/package.json"],
       "matchUpdateTypes": ["major"],
@@ -984,13 +1112,13 @@
     {
       "groupName": "Mastra evals",
       "commitMessageTopic": "Mastra evals",
-      "matchFileNames": ["packages/evals/*/package.json"],
+      "matchFileNames": ["packages/evals/package.json"],
       "matchUpdateTypes": ["minor", "patch"],
       "matchDepTypes": ["dependencies", "devDependencies"],
       "enabled": true
     },
     {
-      "groupName": "major-Mastra evals",
+      "groupName": "Mastra evals",
       "commitMessageTopic": "Mastra evals",
       "matchFileNames": ["packages/evals/package.json"],
       "matchUpdateTypes": ["major"],
@@ -1000,13 +1128,13 @@
     {
       "groupName": "Mastra loggers",
       "commitMessageTopic": "Mastra loggers",
-      "matchFileNames": ["packages/loggers/*/package.json"],
+      "matchFileNames": ["packages/loggers/package.json"],
       "matchUpdateTypes": ["minor", "patch"],
       "matchDepTypes": ["dependencies", "devDependencies"],
       "enabled": true
     },
     {
-      "groupName": "major-Mastra loggers",
+      "groupName": "Mastra loggers",
       "commitMessageTopic": "Mastra loggers",
       "matchFileNames": ["packages/loggers/package.json"],
       "matchUpdateTypes": ["major"],
@@ -1016,13 +1144,13 @@
     {
       "groupName": "Mastra mcp",
       "commitMessageTopic": "Mastra mcp",
-      "matchFileNames": ["packages/mcp/*/package.json"],
+      "matchFileNames": ["packages/mcp/package.json"],
       "matchUpdateTypes": ["minor", "patch"],
       "matchDepTypes": ["dependencies", "devDependencies"],
       "enabled": true
     },
     {
-      "groupName": "major-Mastra mcp",
+      "groupName": "Mastra mcp",
       "commitMessageTopic": "Mastra mcp",
       "matchFileNames": ["packages/mcp/package.json"],
       "matchUpdateTypes": ["major"],
@@ -1032,13 +1160,13 @@
     {
       "groupName": "Mastra mcp-docs-server",
       "commitMessageTopic": "Mastra mcp-docs-server",
-      "matchFileNames": ["packages/mcp-docs-server/*/package.json"],
+      "matchFileNames": ["packages/mcp-docs-server/package.json"],
       "matchUpdateTypes": ["minor", "patch"],
       "matchDepTypes": ["dependencies", "devDependencies"],
       "enabled": true
     },
     {
-      "groupName": "major-Mastra mcp-docs-server",
+      "groupName": "Mastra mcp-docs-server",
       "commitMessageTopic": "Mastra mcp-docs-server",
       "matchFileNames": ["packages/mcp-docs-server/package.json"],
       "matchUpdateTypes": ["major"],
@@ -1046,15 +1174,31 @@
       "enabled": true
     },
     {
-      "groupName": "Mastra memory",
-      "commitMessageTopic": "Mastra memory",
-      "matchFileNames": ["packages/memory/*/package.json"],
+      "groupName": "Mastra mcp-registry-registry",
+      "commitMessageTopic": "Mastra mcp-registry-registry",
+      "matchFileNames": ["packages/mcp-registry-registry/package.json"],
       "matchUpdateTypes": ["minor", "patch"],
       "matchDepTypes": ["dependencies", "devDependencies"],
       "enabled": true
     },
     {
-      "groupName": "major-Mastra memory",
+      "groupName": "Mastra mcp-registry-registry",
+      "commitMessageTopic": "Mastra mcp-registry-registry",
+      "matchFileNames": ["packages/mcp-registry-registry/package.json"],
+      "matchUpdateTypes": ["major"],
+      "matchDepTypes": ["dependencies", "devDependencies"],
+      "enabled": true
+    },
+    {
+      "groupName": "Mastra memory",
+      "commitMessageTopic": "Mastra memory",
+      "matchFileNames": ["packages/memory/package.json"],
+      "matchUpdateTypes": ["minor", "patch"],
+      "matchDepTypes": ["dependencies", "devDependencies"],
+      "enabled": true
+    },
+    {
+      "groupName": "Mastra memory",
       "commitMessageTopic": "Mastra memory",
       "matchFileNames": ["packages/memory/package.json"],
       "matchUpdateTypes": ["major"],
@@ -1064,13 +1208,13 @@
     {
       "groupName": "Mastra playground-ui",
       "commitMessageTopic": "Mastra playground-ui",
-      "matchFileNames": ["packages/playground-ui/*/package.json"],
+      "matchFileNames": ["packages/playground-ui/package.json"],
       "matchUpdateTypes": ["minor", "patch"],
       "matchDepTypes": ["dependencies", "devDependencies"],
       "enabled": true
     },
     {
-      "groupName": "major-Mastra playground-ui",
+      "groupName": "Mastra playground-ui",
       "commitMessageTopic": "Mastra playground-ui",
       "matchFileNames": ["packages/playground-ui/package.json"],
       "matchUpdateTypes": ["major"],
@@ -1080,13 +1224,13 @@
     {
       "groupName": "Mastra rag",
       "commitMessageTopic": "Mastra rag",
-      "matchFileNames": ["packages/rag/*/package.json"],
+      "matchFileNames": ["packages/rag/package.json"],
       "matchUpdateTypes": ["minor", "patch"],
       "matchDepTypes": ["dependencies", "devDependencies"],
       "enabled": true
     },
     {
-      "groupName": "major-Mastra rag",
+      "groupName": "Mastra rag",
       "commitMessageTopic": "Mastra rag",
       "matchFileNames": ["packages/rag/package.json"],
       "matchUpdateTypes": ["major"],
@@ -1096,13 +1240,13 @@
     {
       "groupName": "Mastra server",
       "commitMessageTopic": "Mastra server",
-      "matchFileNames": ["packages/server/*/package.json"],
+      "matchFileNames": ["packages/server/package.json"],
       "matchUpdateTypes": ["minor", "patch"],
       "matchDepTypes": ["dependencies", "devDependencies"],
       "enabled": true
     },
     {
-      "groupName": "major-Mastra server",
+      "groupName": "Mastra server",
       "commitMessageTopic": "Mastra server",
       "matchFileNames": ["packages/server/package.json"],
       "matchUpdateTypes": ["major"],
@@ -1110,17 +1254,33 @@
       "enabled": true
     },
     {
-      "groupName": "@internal/lint",
-      "commitMessageTopic": "@internal/lint",
-      "matchFileNames": ["packages/_config/*/package.json"],
+      "groupName": "Mastra cloud",
+      "commitMessageTopic": "Mastra cloud",
+      "matchFileNames": ["packages/cloud/package.json"],
       "matchUpdateTypes": ["minor", "patch"],
       "matchDepTypes": ["dependencies", "devDependencies"],
       "enabled": true
     },
     {
-      "groupName": "major-@internal/lint",
-      "commitMessageTopic": "@internal/lint",
-      "matchFileNames": ["packages/_config/package.json"],
+      "groupName": "Mastra cloud",
+      "commitMessageTopic": "Mastra cloud",
+      "matchFileNames": ["packages/cloud/package.json"],
+      "matchUpdateTypes": ["major"],
+      "matchDepTypes": ["dependencies", "devDependencies"],
+      "enabled": true
+    },
+    {
+      "groupName": "weather-agent",
+      "commitMessageTopic": "weather-agent",
+      "matchFileNames": ["templates/weather-agent/package.json"],
+      "matchUpdateTypes": ["minor", "patch"],
+      "matchDepTypes": ["dependencies", "devDependencies"],
+      "enabled": true
+    },
+    {
+      "groupName": "weather-agent",
+      "commitMessageTopic": "weather-agent",
+      "matchFileNames": ["templates/weather-agent/package.json"],
       "matchUpdateTypes": ["major"],
       "matchDepTypes": ["dependencies", "devDependencies"],
       "enabled": true
