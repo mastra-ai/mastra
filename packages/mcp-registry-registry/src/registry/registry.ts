@@ -1,5 +1,6 @@
 import { processApifyServers } from './processors/apify';
 import { processApiTrackerServers } from './processors/apitracker';
+import { processDockerServers } from './processors/docker';
 import { processFleurServers } from './processors/fleur';
 import { processMcpRunServers } from './processors/mcprun';
 import { processPulseMcpServers } from './processors/pulse';
@@ -16,6 +17,16 @@ export const registryData: RegistryFile = {
       servers_url: 'https://apitracker.io/api/mcp-servers',
       tags: ['verified'],
       postProcessServers: processApiTrackerServers,
+    },
+    {
+      id: 'docker-mcp-catalog',
+      name: 'Docker MCP Catalog',
+      description: 'A collection of secure, high quality MCP servers as docker images',
+      url: 'https://hub.docker.com/catalogs/mcp',
+      servers_url: 'https://hub.docker.com/v2/repositories/mcp/',
+      tags: ['verified'],
+      count: 102,
+      postProcessServers: processDockerServers,
     },
     {
       id: 'apify',

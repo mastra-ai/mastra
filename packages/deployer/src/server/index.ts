@@ -108,7 +108,6 @@ export async function createHonoServer(mastra: Mastra, options: ServerBundleOpti
   }, {});
 
   // Middleware
-
   app.use('*', async function setTelemetryInfo(c, next) {
     const requestId = c.req.header('x-request-id') ?? randomUUID();
     const span = Telemetry.getActiveSpan();
@@ -2503,18 +2502,20 @@ export async function createNodeServer(mastra: Mastra, options: ServerBundleOpti
     {
       fetch: app.fetch,
       port,
+      hostname: serverOptions?.host ?? 'localhost',
     },
     () => {
       const logger = mastra.getLogger();
-      logger.info(` Mastra API running on port http://localhost:${process.env.PORT || 4111}/api`);
+      const host = serverOptions?.host ?? 'localhost';
+      logger.info(` Mastra API running on port http://${host}:${port}/api`);
       if (options?.isDev) {
-        logger.info(`� Open API documentation available at http://localhost:${port}/openapi.json`);
+        logger.info(`� Open API documentation available at http://${host}:${port}/openapi.json`);
       }
       if (options?.isDev) {
-        logger.info(`🧪 Swagger UI available at http://localhost:${port}/swagger-ui`);
+        logger.info(`🧪 Swagger UI available at http://${host}:${port}/swagger-ui`);
       }
       if (options?.playground) {
-        logger.info(`👨‍💻 Playground available at http://localhost:${port}/`);
+        logger.info(`👨‍💻 Playground available at http://${host}:${port}/`);
       }
     },
   );
