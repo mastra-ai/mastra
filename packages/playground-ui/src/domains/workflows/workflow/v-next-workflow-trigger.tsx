@@ -209,7 +209,8 @@ export function VNextWorkflowTrigger({
           </div>
         )}
 
-        {isSuspendedSteps &&
+        {!isWatchingVNextWorkflow &&
+          isSuspendedSteps &&
           suspendedSteps?.map(step => {
             const stepDefinition = vNextWorkflow.steps[step.stepId];
             const stepSchema = stepDefinition?.resumeSchema
