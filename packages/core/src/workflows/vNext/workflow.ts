@@ -756,12 +756,13 @@ export class Run<
       cb({ type: event.type, payload: this.getState() as any, eventTimestamp: event.eventTimestamp });
     };
     this.emitter.on('watch', watchCb);
-    this.emitter.on('nested-watch', ({ event, workflowId }) => {
+
+    const nestedWatchCb = ({ event, workflowId }: { event: WatchEvent; workflowId: string }) => {
       try {
         const { type, payload, eventTimestamp } = event;
         const prefixedSteps = Object.fromEntries(
           Object.entries(payload?.workflowState?.steps ?? {}).map(([stepId, step]) => [
-            `${workflowId}.${stepId}`,
+            `${this.workflowId}.${stepId}`,
             step,
           ]),
         );
@@ -779,10 +780,12 @@ export class Run<
       } catch (e) {
         console.error(e);
       }
-    });
+    };
+    this.emitter.on('nested-watch', nestedWatchCb);
 
     return () => {
       this.emitter.off('watch', watchCb);
+      this.emitter.off('nested-watch', nestedWatchCb);
     };
   }
 
