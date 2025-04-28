@@ -32,11 +32,13 @@ export type StepFlowEntry =
       type: 'conditional';
       steps: StepFlowEntry[];
       conditions: ExecuteFunction<any, any, any, any>[];
+      serializedConditions: { id: string; fn: string }[];
     }
   | {
       type: 'loop';
       step: Step;
       condition: ExecuteFunction<any, any, any, any>;
+      serializedCondition: { id: string; fn: string };
       loopType: 'dowhile' | 'dountil';
     }
   | {
@@ -180,9 +182,9 @@ export function createStep<
 }
 
 export function cloneStep<TStepId extends string>(
-  step: Step<TStepId, any, any>,
+  step: Step<string, any, any>,
   opts: { id: TStepId },
-): Step<string, any, any> {
+): Step<TStepId, any, any> {
   return {
     id: opts.id,
     description: step.description,
@@ -196,9 +198,31 @@ export function createWorkflow<
   TWorkflowId extends string = string,
   TInput extends z.ZodType<any> = z.ZodType<any>,
   TOutput extends z.ZodType<any> = z.ZodType<any>,
-  TSteps extends Step<string, any, any>[] = Step<string, any, any>[],
+  TSteps extends Step<string, any, any, any, any>[] = Step<string, any, any, any, any>[],
 >(params: NewWorkflowConfig<TWorkflowId, TInput, TOutput, TSteps>) {
   return new NewWorkflow(params);
+}
+
+export function cloneWorkflow<
+  TWorkflowId extends string = string,
+  TInput extends z.ZodType<any> = z.ZodType<any>,
+  TOutput extends z.ZodType<any> = z.ZodType<any>,
+  TSteps extends Step<string, any, any, any, any>[] = Step<string, any, any, any, any>[],
+>(
+  workflow: NewWorkflow<TSteps, string, TInput, TOutput>,
+  opts: { id: TWorkflowId },
+): NewWorkflow<TSteps, TWorkflowId, TInput, TOutput> {
+  const wf = new NewWorkflow({
+    id: opts.id,
+    inputSchema: workflow.inputSchema,
+    outputSchema: workflow.outputSchema,
+    steps: workflow.stepDefs,
+    mastra: workflow.mastra,
+  });
+
+  wf.setStepFlow(workflow.stepGraph);
+  wf.commit();
+  return wf;
 }
 
 export type WorkflowResult<TOutput extends z.ZodType<any>, TSteps extends Step<string, any, any>[]> =
@@ -234,7 +258,7 @@ export type NewWorkflowConfig<
   TWorkflowId extends string = string,
   TInput extends z.ZodType<any> = z.ZodType<any>,
   TOutput extends z.ZodType<any> = z.ZodType<any>,
-  TSteps extends Step<string, any, any>[] = Step<string, any, any>[],
+  TSteps extends Step<string, any, any, any, any>[] = Step<string, any, any, any, any>[],
 > = {
   mastra?: Mastra;
   id: TWorkflowId;
@@ -250,7 +274,7 @@ export type NewWorkflowConfig<
 };
 
 export class NewWorkflow<
-    TSteps extends Step<string, any, any>[] = Step<string, any, any>[],
+    TSteps extends Step<string, any, any, any, any>[] = Step<string, any, any, any, any>[],
     TWorkflowId extends string = string,
     TInput extends z.ZodType<any> = z.ZodType<any>,
     TOutput extends z.ZodType<any> = z.ZodType<any>,
@@ -263,7 +287,8 @@ export class NewWorkflow<
   public description?: string | undefined;
   public inputSchema: TInput;
   public outputSchema: TOutput;
-  public steps?: TSteps;
+  public steps: Record<string, Step<string, any, any, any, any>>;
+  public stepDefs?: TSteps;
   protected stepFlow: StepFlowEntry[];
   protected executionEngine: ExecutionEngine;
   protected executionGraph: ExecutionGraph;
@@ -272,6 +297,8 @@ export class NewWorkflow<
     delay?: number;
   };
   #mastra?: Mastra;
+
+  #runs: Map<string, Run<TSteps, TInput, TOutput>> = new Map();
 
   constructor({
     mastra,
@@ -292,7 +319,8 @@ export class NewWorkflow<
     this.executionGraph = this.buildExecutionGraph();
     this.stepFlow = [];
     this.#mastra = mastra;
-    this.steps = steps;
+    this.steps = {};
+    this.stepDefs = steps;
 
     if (!executionEngine) {
       // TODO: this should be configured using the Mastra class instance that's passed in
@@ -300,6 +328,12 @@ export class NewWorkflow<
     } else {
       this.executionEngine = executionEngine;
     }
+
+    this.#runs = new Map();
+  }
+
+  get mastra() {
+    return this.#mastra;
   }
 
   __registerMastra(mastra: Mastra) {
@@ -317,6 +351,10 @@ export class NewWorkflow<
     }
   }
 
+  setStepFlow(stepFlow: StepFlowEntry[]) {
+    this.stepFlow = stepFlow;
+  }
+
   /**
    * Adds a step to the workflow
    * @param step The step to add to the workflow
@@ -326,6 +364,7 @@ export class NewWorkflow<
     step: Step<TStepId, TStepInputSchema, TSchemaOut, any, any>,
   ) {
     this.stepFlow.push({ type: 'step', step: step as any });
+    this.steps[step.id] = step;
     return this as unknown as NewWorkflow<TSteps, TWorkflowId, TInput, TOutput, TSchemaOut>;
   }
 
@@ -423,6 +462,9 @@ export class NewWorkflow<
   // TODO: make typing better here
   parallel<TParallelSteps extends Step<string, TPrevSchema, any, any, any>[]>(steps: TParallelSteps) {
     this.stepFlow.push({ type: 'parallel', steps: steps.map(step => ({ type: 'step', step: step as any })) });
+    steps.forEach(step => {
+      this.steps[step.id] = step;
+    });
     return this as unknown as NewWorkflow<
       TSteps,
       TWorkflowId,
@@ -448,6 +490,10 @@ export class NewWorkflow<
       type: 'conditional',
       steps: steps.map(([_cond, step]) => ({ type: 'step', step: step as any })),
       conditions: steps.map(([cond]) => cond),
+      serializedConditions: steps.map(([cond, _step]) => ({ id: `${_step.id}-condition`, fn: cond.toString() })),
+    });
+    steps.forEach(([_, step]) => {
+      this.steps[step.id] = step;
     });
 
     // Extract just the Step elements from the tuples array
@@ -476,7 +522,14 @@ export class NewWorkflow<
     step: Step<TStepId, TStepInputSchema, TSchemaOut, any, any>,
     condition: ExecuteFunction<z.infer<TSchemaOut>, any, any, any>,
   ) {
-    this.stepFlow.push({ type: 'loop', step: step as any, condition, loopType: 'dowhile' });
+    this.stepFlow.push({
+      type: 'loop',
+      step: step as any,
+      condition,
+      loopType: 'dowhile',
+      serializedCondition: { id: `${step.id}-condition`, fn: condition.toString() },
+    });
+    this.steps[step.id] = step;
     return this as unknown as NewWorkflow<TSteps, TWorkflowId, TInput, TOutput, TSchemaOut>;
   }
 
@@ -484,7 +537,14 @@ export class NewWorkflow<
     step: Step<TStepId, TStepInputSchema, TSchemaOut, any, any>,
     condition: ExecuteFunction<z.infer<TSchemaOut>, any, any, any>,
   ) {
-    this.stepFlow.push({ type: 'loop', step: step as any, condition, loopType: 'dountil' });
+    this.stepFlow.push({
+      type: 'loop',
+      step: step as any,
+      condition,
+      loopType: 'dountil',
+      serializedCondition: { id: `${step.id}-condition`, fn: condition.toString() },
+    });
+    this.steps[step.id] = step;
     return this as unknown as NewWorkflow<TSteps, TWorkflowId, TInput, TOutput, TSchemaOut>;
   }
 
@@ -502,6 +562,7 @@ export class NewWorkflow<
     },
   ) {
     this.stepFlow.push({ type: 'foreach', step: step as any, opts: opts ?? { concurrency: 1 } });
+    this.steps[(step as any).id] = step as any;
     return this as unknown as NewWorkflow<TSteps, TWorkflowId, TInput, TOutput, z.ZodArray<TSchemaOut>>;
   }
 
@@ -539,14 +600,21 @@ export class NewWorkflow<
     const runIdToUse = options?.runId || randomUUID();
 
     // Return a new Run instance with object parameters
-    return new Run({
-      workflowId: this.id,
-      runId: runIdToUse,
-      executionEngine: this.executionEngine,
-      executionGraph: this.executionGraph,
-      mastra: this.#mastra,
-      retryConfig: this.retryConfig,
-    });
+    const run =
+      this.#runs.get(runIdToUse) ??
+      new Run({
+        workflowId: this.id,
+        runId: runIdToUse,
+        executionEngine: this.executionEngine,
+        executionGraph: this.executionGraph,
+        mastra: this.#mastra,
+        retryConfig: this.retryConfig,
+        cleanup: () => this.#runs.delete(runIdToUse),
+      });
+
+    this.#runs.set(runIdToUse, run);
+
+    return run;
   }
 
   async execute({
@@ -616,7 +684,7 @@ export class NewWorkflow<
 
   async getWorkflowRun(runId: string) {
     const runs = await this.getWorkflowRuns();
-    return runs?.runs.find(r => r.runId === runId);
+    return runs?.runs.find(r => r.runId === runId) || this.#runs.get(runId);
   }
 }
 
@@ -659,6 +727,8 @@ export class Run<
    */
   #mastra?: Mastra;
 
+  protected cleanup?: () => void;
+
   protected retryConfig?: {
     attempts?: number;
     delay?: number;
@@ -674,6 +744,7 @@ export class Run<
       attempts?: number;
       delay?: number;
     };
+    cleanup?: () => void;
   }) {
     this.workflowId = params.workflowId;
     this.runId = params.runId;
@@ -682,6 +753,7 @@ export class Run<
     this.#mastra = params.mastra;
     this.emitter = new EventEmitter();
     this.retryConfig = params.retryConfig;
+    this.cleanup = params.cleanup;
   }
 
   /**
@@ -696,7 +768,7 @@ export class Run<
     inputData?: z.infer<TInput>;
     runtimeContext?: RuntimeContext;
   }): Promise<WorkflowResult<TOutput, TSteps>> {
-    return this.executionEngine.execute<z.infer<TInput>, WorkflowResult<TOutput, TSteps>>({
+    const result = await this.executionEngine.execute<z.infer<TInput>, WorkflowResult<TOutput, TSteps>>({
       workflowId: this.workflowId,
       runId: this.runId,
       graph: this.executionGraph,
@@ -705,19 +777,25 @@ export class Run<
       retryConfig: this.retryConfig,
       runtimeContext: runtimeContext ?? new RuntimeContext(),
     });
+
+    this.cleanup?.();
+
+    return result;
   }
 
   watch(cb: (event: WatchEvent) => void): () => void {
-    this.emitter.on('watch', ({ type, payload, eventTimestamp }) => {
-      this.updateState(payload);
-      cb({ type, payload: this.getState() as any, eventTimestamp: eventTimestamp });
-    });
-    this.emitter.on('nested-watch', ({ event, workflowId }) => {
+    const watchCb = (event: WatchEvent) => {
+      this.updateState(event.payload);
+      cb({ type: event.type, payload: this.getState() as any, eventTimestamp: event.eventTimestamp });
+    };
+    this.emitter.on('watch', watchCb);
+
+    const nestedWatchCb = ({ event, workflowId }: { event: WatchEvent; workflowId: string }) => {
       try {
         const { type, payload, eventTimestamp } = event;
         const prefixedSteps = Object.fromEntries(
           Object.entries(payload?.workflowState?.steps ?? {}).map(([stepId, step]) => [
-            `${workflowId}.${stepId}`,
+            `${this.workflowId}.${stepId}`,
             step,
           ]),
         );
@@ -727,7 +805,6 @@ export class Run<
             id: `${workflowId}.${payload?.currentStep?.id}`,
           },
           workflowState: {
-            ...payload?.workflowState,
             steps: prefixedSteps,
           },
         };
@@ -736,9 +813,12 @@ export class Run<
       } catch (e) {
         console.error(e);
       }
-    });
+    };
+    this.emitter.on('nested-watch', nestedWatchCb);
+
     return () => {
-      this.emitter.off('watch', cb);
+      this.emitter.off('watch', watchCb);
+      this.emitter.off('nested-watch', nestedWatchCb);
     };
   }
 
@@ -787,7 +867,10 @@ export class Run<
   updateState(state: Record<string, any>) {
     if (state.currentStep) {
       this.state.currentStep = state.currentStep;
+    } else if (state.workflowState?.status !== 'running') {
+      delete this.state.currentStep;
     }
+
     if (state.workflowState) {
       this.state.workflowState = deepMerge(this.state.workflowState ?? {}, state.workflowState ?? {});
     }

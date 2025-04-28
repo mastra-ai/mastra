@@ -1,7 +1,7 @@
-import type { BaseNode } from '@llamaindex/core/schema';
-import { Document as Chunk, NodeRelationship, ObjectType } from '@llamaindex/core/schema';
-
 import { TitleExtractor, SummaryExtractor, QuestionsAnsweredExtractor, KeywordExtractor } from './extractors';
+import type { BaseNode } from './schema';
+import { Document as Chunk, NodeRelationship, ObjectType } from './schema';
+
 import { CharacterTransformer, RecursiveCharacterTransformer } from './transformers/character';
 import { HTMLHeaderTransformer, HTMLSectionTransformer } from './transformers/html';
 import { RecursiveJsonTransformer } from './transformers/json';
@@ -55,8 +55,8 @@ export class MDocument {
     }
 
     let nodes: BaseNode[] = this.chunks;
-    for (const transform of transformations) {
-      nodes = await transform(nodes);
+    for (const extractor of transformations) {
+      nodes = await extractor.processNodes(nodes);
     }
 
     this.chunks = this.chunks.map((doc, i) => {

@@ -57,18 +57,18 @@ export type VariableReference<
 export type WatchEvent = {
   type: 'watch';
   payload: {
-    currentStep: {
+    currentStep?: {
       id: string;
-      status: 'running' | 'completed' | 'failed' | 'suspended';
+      status: 'running' | 'success' | 'failed' | 'suspended';
       output?: Record<string, any>;
       payload?: Record<string, any>;
     };
     workflowState: {
-      status: 'running' | 'completed' | 'failed' | 'suspended';
+      status: 'running' | 'success' | 'failed' | 'suspended';
       steps: Record<
         string,
         {
-          status: 'running' | 'completed' | 'failed' | 'suspended';
+          status: 'running' | 'success' | 'failed' | 'suspended';
           output?: Record<string, any>;
           payload?: Record<string, any>;
         }

@@ -14,9 +14,27 @@ export type ApiRoute = {
 type Middleware = MiddlewareHandler | { path: string; handler: MiddlewareHandler };
 
 export type ServerConfig = {
+  /**
+   * Port for the server
+   * @default 4111
+   */
   port?: number;
+  /**
+   * Host for the server
+   * @default 'localhost'
+   */
+  host?: string;
+  /**
+   * Timeout for the server
+   */
   timeout?: number;
+  /**
+   * Custom API routes for the server
+   */
   apiRoutes?: ApiRoute[];
+  /**
+   * Middleware for the server
+   */
   middleware?: Middleware | Middleware[];
   /**
    * CORS configuration for the server

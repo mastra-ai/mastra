@@ -48,6 +48,11 @@ describe('Memory Streaming Tests', () => {
           enabled: true,
           use: 'tool-call',
         },
+        lastMessages: 10,
+        threads: {
+          generateTitle: false,
+        },
+        semanticRecall: true,
       },
     });
 

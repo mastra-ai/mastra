@@ -1,5 +1,34 @@
 # @mastra/deployer
 
+## 2.0.1-alpha.2
+
+### Patch Changes
+
+- 57b25ed: Use resumeSchema to show inputs on the playground for suspended workflows
+- Updated dependencies [405b63d]
+- Updated dependencies [61e92f5]
+- Updated dependencies [c71013a]
+  - @mastra/core@0.9.1-alpha.2
+
+## 2.0.1-alpha.1
+
+### Patch Changes
+
+- 35955b0: Rename import to runtime-contxt
+- c1409ef: Add vNextWorkflow handlers and APIs
+  Add stepGraph and steps to vNextWorkflow
+- f200fed: Server handler audioStream fix
+- 11d4485: Show VNext workflows on the playground
+  Show running status for step in vNext workflowState
+- Updated dependencies [20275d4]
+- Updated dependencies [7d1892c]
+- Updated dependencies [a90a082]
+- Updated dependencies [35955b0]
+- Updated dependencies [c1409ef]
+- Updated dependencies [11d4485]
+- Updated dependencies [2d4001d]
+  - @mastra/core@0.9.1-alpha.1
+
 ## 2.0.1-alpha.0
 
 ### Patch Changes
