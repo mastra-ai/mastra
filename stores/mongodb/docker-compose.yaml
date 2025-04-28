@@ -1,0 +1,10 @@
+services:
+  db:
+    image: mongo:6.0.16
+    container_name: 'mongodb-test-db'
+    ports:
+      - '27017:27017'
+    volumes:
+      - mongodbdata:/data/db
+volumes:
+  mongodbdata:
