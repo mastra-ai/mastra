@@ -35,7 +35,7 @@ export const init = async ({
   llmProvider: LLMProvider;
   addExample: boolean;
   llmApiKey?: string;
-  configureEditorWithDocsMCP?: undefined | 'windsurf' | 'cursor';
+  configureEditorWithDocsMCP?: undefined | 'windsurf' | 'cursor' | 'cursor-global';
 }) => {
   s.start('Initializing Mastra');
 
@@ -86,6 +86,8 @@ export const init = async ({
     const pm = depsService.packageManager;
     const installCommand = getPackageManagerInstallCommand(pm);
     await exec(`${pm} ${installCommand} ${aiSdkPackage}`);
+
+    console.log(`configureEditorWithDocsMCP: ${configureEditorWithDocsMCP}`);
 
     if (configureEditorWithDocsMCP) {
       await installMastraDocsMCPServer({
