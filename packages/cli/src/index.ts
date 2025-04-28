@@ -145,6 +145,7 @@ program
   .option('-r, --root <root>', 'Path to your root folder')
   .option('-t, --tools <toolsDirs>', 'Comma-separated list of paths to tool files to include')
   .option('-p, --port <port>', 'deprecated: Port number for the development server (defaults to 4111)')
+  .option('-h, --host <host>', 'Host for the development server (defaults to localhost)')
   .action(args => {
     analytics.trackCommand({
       command: 'dev',
