@@ -69,7 +69,11 @@ constructor({
 
 ### MastraMCPServerDefinition
 
-MCP servers can be configured as either stdio-based or SSE-based servers. The configuration includes both server-specific settings and common options:
+MCP servers can be configured using this definition. The client automatically detects the transport type based on the provided parameters:
+
+-   If `command` is provided, it uses the Stdio transport.
+-   If `url` is provided, it first attempts to use the Streamable HTTP transport and falls back to the legacy SSE transport if the initial connection fails.
+
 <br />
 <PropertiesTable
   content={[
@@ -77,37 +81,37 @@ MCP servers can be configured as either stdio-based or SSE-based servers. The co
       name: "command",
       type: "string",
       isOptional: true,
-      description: "For stdio servers: The command to execute.",
+      description: "For Stdio servers: The command to execute.",
     },
     {
       name: "args",
       type: "string[]",
       isOptional: true,
-      description: "For stdio servers: Arguments to pass to the command.",
+      description: "For Stdio servers: Arguments to pass to the command.",
     },
     {
       name: "env",
       type: "Record<string, string>",
       isOptional: true,
-      description: "For stdio servers: Environment variables to set for the command.",
+      description: "For Stdio servers: Environment variables to set for the command.",
     },
     {
       name: "url",
       type: "URL",
       isOptional: true,
-      description: "For SSE servers: The URL of the server.",
+      description: "For HTTP servers (Streamable HTTP or SSE): The URL of the server.",
     },
     {
       name: "requestInit",
       type: "RequestInit",
       isOptional: true,
-      description: "For SSE servers: Request configuration for the fetch API.",
+      description: "For HTTP servers: Request configuration for the fetch API.",
     },
     {
       name: "eventSourceInit",
       type: "EventSourceInit",
       isOptional: true,
-      description: "For SSE servers: Custom fetch configuration for SSE connections. Required when using custom headers.",
+      description: "For SSE fallback: Custom fetch configuration for SSE connections. Required when using custom headers with SSE.",
     },
     {
       name: "logger",

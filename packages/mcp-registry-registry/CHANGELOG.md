@@ -1,5 +1,15 @@
 # @mastra/mcp-registry-registry
 
+## 0.0.3-alpha.2
+
+### Patch Changes
+
+- fc9b3e4: add docker registry
+- Updated dependencies [405b63d]
+- Updated dependencies [61e92f5]
+- Updated dependencies [c71013a]
+  - @mastra/core@0.9.1-alpha.2
+
 ## 0.0.3-alpha.1
 
 ### Patch Changes

@@ -10,7 +10,7 @@ import { GithubLink } from "@/components/github-link";
 
 After generating embeddings, you need to store them in a database that supports vector similarity search. This example shows how to store embeddings in various vector databases for later retrieval.
 
-<Tabs items={['PgVector', 'Pinecone', 'Qdrant', 'Chroma', 'Astra DB', 'LibSQL', 'Upstash', 'Cloudflare']}>
+<Tabs items={['PgVector', 'Pinecone', 'Qdrant', 'Chroma', 'Astra DB', 'LibSQL', 'Upstash', 'Cloudflare', 'MongoDB']}>
   <Tabs.Tab>
   The `PgVector` class provides methods to create indexes and insert embeddings into PostgreSQL with the pgvector extension.
     ```tsx copy
@@ -310,6 +310,40 @@ After generating embeddings, you need to store them in a database that supports 
       indexName: 'test_collection',
       vectors: embeddings,
       metadata: chunks?.map(chunk => ({ text: chunk.text })),
+    });
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+  The `MongoDBVector` class provides methods to create indexes and insert embeddings into MongoDB with Atlas Search.
+    ```tsx copy
+    import { openai } from "@ai-sdk/openai";
+    import { MongoDBVector } from "@mastra/mongodb";
+    import { MDocument } from "@mastra/rag";
+    import { embedMany } from "ai";
+
+    const doc = MDocument.fromText("Your text content...");
+
+    const chunks = await doc.chunk();
+
+    const { embeddings } = await embedMany({
+      values: chunks.map(chunk => chunk.text),
+      model: openai.embedding("text-embedding-3-small"),
+    });
+
+    const vectorDB = new MongoDBVector({
+      uri: process.env.MONGODB_URI!,
+      dbName: process.env.MONGODB_DB_NAME!,
+    });
+
+    await vectorDB.createIndex({
+      indexName: "test_index",
+      dimension: 1536,
+    });
+
+    await vectorDB.upsert({
+      indexName: "test_index",
+      vectors: embeddings,
+      metadata: chunks?.map((chunk: any) => ({ text: chunk.text })),
     });
     ```
   </Tabs.Tab>

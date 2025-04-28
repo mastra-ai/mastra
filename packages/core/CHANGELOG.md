@@ -1,5 +1,13 @@
 # @mastra/core
 
+## 0.9.1-alpha.2
+
+### Patch Changes
+
+- 405b63d: add ability to clone workflows with different id
+- 61e92f5: vNext fix workflow watch cleanup
+- c71013a: vNeuxt: unset currentStep for workflow status change event
+
 ## 0.9.1-alpha.1
 
 ### Patch Changes

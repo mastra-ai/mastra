@@ -194,6 +194,38 @@ Workflow definition requires:
 - `outputSchema`: Zod schema defining workflow output
 - `steps`: Array of steps used in the workflow (optional, but recommended for type safety)
 
+### Re-using steps and nested workflows
+
+You can re-use steps and nested workflows by cloning them:
+
+```typescript
+const clonedStep = cloneStep(myStep, { id: 'cloned-step' });
+const clonedWorkflow = cloneWorkflow(myWorkflow, { id: 'cloned-workflow' });
+```
+
+This way you can use the same step or nested workflow in the same workflow multiple times.
+
+```typescript
+import { createWorkflow, createStep, cloneStep, cloneWorkflow } from '@mastra/core/workflows/vNext';
+
+const myWorkflow = createWorkflow({
+  id: 'my-workflow',
+  steps: [step1, step2, step3],
+});
+myWorkflow.then(step1).then(step2).then(step3).commit();
+
+const parentWorkflow = createWorkflow({
+  id: 'parent-workflow',
+  steps: [myWorkflow, step4],
+});
+parentWorkflow
+  .then(myWorkflow)
+  .then(step4)
+  .then(cloneWorkflow(myWorkflow, { id: 'cloned-workflow' }))
+  .then(cloneStep(step4, { id: 'cloned-step-4' }))
+  .commit();
+```
+
 ### Flow Control
 
 vNext workflows provide flexible flow control mechanisms.
@@ -596,14 +628,14 @@ The `event` object has the following schema:
 type WatchEvent = {
   type: 'watch';
   payload: {
-    currentStep: {
+    currentStep?: {
       id: string;
       status: 'running' | 'completed' | 'failed' | 'suspended';
       output?: Record<string, any>;
       payload?: Record<string, any>;
     };
     workflowState: {
-      status: 'running' | 'completed' | 'failed' | 'suspended';
+      status: 'running' | 'success' | 'failed' | 'suspended';
       steps: Record<
         string,
         {
@@ -612,13 +644,16 @@ type WatchEvent = {
           payload?: Record<string, any>;
         }
       >;
-      output?: Record<string, any>;
+      result?: Record<string, any>;
+      error?: Record<string, any>;
       payload?: Record<string, any>;
     };
   };
   eventTimestamp: Date;
 };
 ```
+
+The `currentStep` property is only present when the workflow is running. When the workflow is finished the status on `workflowState` is changed, as well as the `result` and `error` properties. At the same time the `currentStep` property is removed.
 
 ## Nested Workflows
 

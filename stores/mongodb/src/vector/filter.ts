@@ -10,10 +10,8 @@ export class MongoDBFilterTranslator extends BaseFilterTranslator {
   protected override getSupportedOperators(): OperatorSupport {
     return {
       ...BaseFilterTranslator.DEFAULT_OPERATORS,
-      array: ['$all', '$in', '$nin'],
-      logical: ['$and', '$or', '$not', '$nor'],
       regex: ['$regex'],
-      custom: ['$size', '$elemMatch'],
+      custom: ['$size'],
     };
   }
 
