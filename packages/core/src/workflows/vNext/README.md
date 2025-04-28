@@ -194,6 +194,38 @@ Workflow definition requires:
 - `outputSchema`: Zod schema defining workflow output
 - `steps`: Array of steps used in the workflow (optional, but recommended for type safety)
 
+### Re-using steps and nested workflows
+
+You can re-use steps and nested workflows by cloning them:
+
+```typescript
+const clonedStep = cloneStep(myStep, { id: 'cloned-step' });
+const clonedWorkflow = cloneWorkflow(myWorkflow, { id: 'cloned-workflow' });
+```
+
+This way you can use the same step or nested workflow in the same workflow multiple times.
+
+```typescript
+import { createWorkflow, createStep, cloneStep, cloneWorkflow } from '@mastra/core/workflows/vNext';
+
+const myWorkflow = createWorkflow({
+  id: 'my-workflow',
+  steps: [step1, step2, step3],
+});
+myWorkflow.then(step1).then(step2).then(step3).commit();
+
+const parentWorkflow = createWorkflow({
+  id: 'parent-workflow',
+  steps: [myWorkflow, step4],
+});
+parentWorkflow
+  .then(myWorkflow)
+  .then(step4)
+  .then(cloneWorkflow(myWorkflow, { id: 'cloned-workflow' }))
+  .then(cloneStep(step4, { id: 'cloned-step-4' }))
+  .commit();
+```
+
 ### Flow Control
 
 vNext workflows provide flexible flow control mechanisms.

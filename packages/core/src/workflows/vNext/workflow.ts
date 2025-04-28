@@ -182,9 +182,9 @@ export function createStep<
 }
 
 export function cloneStep<TStepId extends string>(
-  step: Step<TStepId, any, any>,
+  step: Step<string, any, any>,
   opts: { id: TStepId },
-): Step<string, any, any> {
+): Step<TStepId, any, any> {
   return {
     id: opts.id,
     description: step.description,
@@ -201,6 +201,28 @@ export function createWorkflow<
   TSteps extends Step<string, any, any, any, any>[] = Step<string, any, any, any, any>[],
 >(params: NewWorkflowConfig<TWorkflowId, TInput, TOutput, TSteps>) {
   return new NewWorkflow(params);
+}
+
+export function cloneWorkflow<
+  TWorkflowId extends string = string,
+  TInput extends z.ZodType<any> = z.ZodType<any>,
+  TOutput extends z.ZodType<any> = z.ZodType<any>,
+  TSteps extends Step<string, any, any, any, any>[] = Step<string, any, any, any, any>[],
+>(
+  workflow: NewWorkflow<TSteps, string, TInput, TOutput>,
+  opts: { id: TWorkflowId },
+): NewWorkflow<TSteps, TWorkflowId, TInput, TOutput> {
+  const wf = new NewWorkflow({
+    id: opts.id,
+    inputSchema: workflow.inputSchema,
+    outputSchema: workflow.outputSchema,
+    steps: workflow.stepDefs,
+    mastra: workflow.mastra,
+  });
+
+  wf.setStepFlow(workflow.stepGraph);
+  wf.commit();
+  return wf;
 }
 
 export type WorkflowResult<TOutput extends z.ZodType<any>, TSteps extends Step<string, any, any>[]> =
@@ -266,6 +288,7 @@ export class NewWorkflow<
   public inputSchema: TInput;
   public outputSchema: TOutput;
   public steps: Record<string, Step<string, any, any, any, any>>;
+  public stepDefs?: TSteps;
   protected stepFlow: StepFlowEntry[];
   protected executionEngine: ExecutionEngine;
   protected executionGraph: ExecutionGraph;
@@ -285,6 +308,7 @@ export class NewWorkflow<
     description,
     executionEngine,
     retryConfig,
+    steps,
   }: NewWorkflowConfig<TWorkflowId, TInput, TOutput, TSteps>) {
     super({ name: id, component: RegisteredLogger.WORKFLOW });
     this.id = id;
@@ -296,6 +320,7 @@ export class NewWorkflow<
     this.stepFlow = [];
     this.#mastra = mastra;
     this.steps = {};
+    this.stepDefs = steps;
 
     if (!executionEngine) {
       // TODO: this should be configured using the Mastra class instance that's passed in
@@ -305,6 +330,10 @@ export class NewWorkflow<
     }
 
     this.#runs = new Map();
+  }
+
+  get mastra() {
+    return this.#mastra;
   }
 
   __registerMastra(mastra: Mastra) {
@@ -320,6 +349,10 @@ export class NewWorkflow<
     if (p.logger) {
       this.__setLogger(p.logger);
     }
+  }
+
+  setStepFlow(stepFlow: StepFlowEntry[]) {
+    this.stepFlow = stepFlow;
   }
 
   /**
