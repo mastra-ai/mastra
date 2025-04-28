@@ -20,10 +20,10 @@ describe('create mastra', () => {
       cleanup = await setupRegistry(fixturePath, port);
 
       process.env.npm_config_registry = `http://localhost:${port}/`;
-      await runCreateMastra(fixturePath, 'pnpm', port);
+      await runCreateMastra(fixturePath, 'pnpm');
       chdir(join(fixturePath, 'project'));
     },
-    15 * 60 * 1000,
+    10 * 60 * 1000,
   );
 
   afterAll(async () => {
