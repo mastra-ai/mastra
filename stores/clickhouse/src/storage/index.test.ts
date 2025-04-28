@@ -818,12 +818,25 @@ describe('ClickhouseStore', () => {
     });
 
     it('returns true if the column exists', async () => {
-      await store['db'].query({ query: `CREATE TABLE ${tempTable} (id SERIAL PRIMARY KEY, resourceId TEXT)` });
+      await store['db'].query({
+        query: `CREATE TABLE temp_test_table (
+          id UInt64,
+          resourceId String
+        ) ENGINE = MergeTree()
+        ORDER BY id
+        `,
+      });
       expect(await store['hasColumn'](tempTable, 'resourceId')).toBe(true);
     });
 
     it('returns false if the column does not exist', async () => {
-      await store['db'].query({ query: `CREATE TABLE ${tempTable} (id SERIAL PRIMARY KEY)` });
+      await store['db'].query({
+        query: `CREATE TABLE temp_test_table (
+          id UInt64,
+        ) ENGINE = MergeTree()
+        ORDER BY id
+        `,
+      });
       expect(await store['hasColumn'](tempTable, 'resourceId')).toBe(false);
     });
 
