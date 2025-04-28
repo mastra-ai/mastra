@@ -48,7 +48,7 @@ jobs:
 
       - name: Setup Node.js 20.x
         uses: actions/setup-node@v4
-        with:=
+        with:
           node-version: 20.x
           cache: 'pnpm'
 
