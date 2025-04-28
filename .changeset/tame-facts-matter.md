@@ -1,5 +1,5 @@
 ---
-'@mastra/mcp': major
+'@mastra/mcp': patch 
 ---
 
 improved mcp config cache
