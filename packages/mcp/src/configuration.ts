@@ -89,6 +89,20 @@ To fix this you have three different options:
     return connectedToolsets;
   }
 
+  /**
+   * Get the current session IDs for all connected MCP clients using the Streamable HTTP transport.
+   * Returns an object mapping server names to their session IDs.
+   */
+  get sessionIds(): Record<string, string> {
+    const sessionIds: Record<string, string> = {};
+    for (const [serverName, client] of this.mcpClientsById.entries()) {
+      if (client.sessionId) {
+        sessionIds[serverName] = client.sessionId;
+      }
+    }
+    return sessionIds;
+  }
+
   private mcpClientsById = new Map<string, MastraMCPClient>();
   private async getConnectedClient(name: string, config: MastraMCPServerDefinition) {
     const exists = this.mcpClientsById.has(name);
@@ -117,7 +131,9 @@ To fix this you have three different options:
       this.logger.error(`MCPConfiguration errored connecting to MCP server ${name}`, {
         error: e instanceof Error ? e.message : String(e),
       });
-      throw new Error(`Failed to connect to MCP server ${name}: ${e instanceof Error ? e.message : String(e)}`);
+      throw new Error(
+        `Failed to connect to MCP server ${name}: ${e instanceof Error ? e.stack || e.message : String(e)}`,
+      );
     }
 
     this.logger.debug(`Connected to ${name} MCP server`);
