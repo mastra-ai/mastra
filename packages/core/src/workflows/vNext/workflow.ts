@@ -182,9 +182,9 @@ export function createStep<
 }
 
 export function cloneStep<TStepId extends string>(
-  step: Step<TStepId, any, any>,
+  step: Step<string, any, any>,
   opts: { id: TStepId },
-): Step<string, any, any> {
+): Step<TStepId, any, any> {
   return {
     id: opts.id,
     description: step.description,

@@ -8,7 +8,7 @@ import { Agent } from '../../agent';
 import { RuntimeContext } from '../../di';
 import { DefaultStorage } from '../../storage/libsql';
 import type { WatchEvent } from './types';
-import { cloneWorkflow, createStep, createWorkflow } from './workflow';
+import { cloneStep, cloneWorkflow, createStep, createWorkflow } from './workflow';
 
 describe('Workflow', () => {
   describe('Basic Workflow Execution', () => {
@@ -3150,7 +3150,7 @@ describe('Workflow', () => {
 
       const final = vi.fn().mockImplementation(async ({ getStepResult }) => {
         const startVal = getStepResult(startStep)?.newValue ?? 0;
-        const otherVal = getStepResult(otherStep)?.other ?? 0;
+        const otherVal = getStepResult(cloneStep(otherStep, { id: 'other-clone' }))?.other ?? 0;
         return { finalValue: startVal + otherVal };
       });
       const last = vi.fn().mockImplementation(async ({ inputData }) => {
@@ -3178,7 +3178,7 @@ describe('Workflow', () => {
         outputSchema: z.object({ success: z.boolean() }),
       })
         .then(startStep)
-        .then(otherStep)
+        .then(cloneStep(otherStep, { id: 'other-clone' }))
         .then(finalStep)
         .commit();
       const wfB = createWorkflow({
@@ -3187,7 +3187,7 @@ describe('Workflow', () => {
         outputSchema: z.object({ success: z.boolean() }),
       })
         .then(startStep)
-        .then(finalStep)
+        .then(cloneStep(finalStep, { id: 'final-clone' }))
         .commit();
 
       const wfAClone = cloneWorkflow(wfA, { id: 'nested-workflow-a-clone' });
