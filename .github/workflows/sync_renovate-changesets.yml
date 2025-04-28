@@ -1,6 +1,6 @@
 name: Sync Renovate changeset
 on:
-  pull_request_target:
+  pull_request:
     paths:
       - '.github/workflows/sync_renovate-changesets.yml'
       - '**/pnpm-lock.yaml'
@@ -22,6 +22,13 @@ jobs:
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
 
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ steps.app-token.outputs.token }}
+          persist-credentials: false
+
       - run: |
           cat <<- EOF > $HOME/.netrc
             machine github.com
@@ -34,13 +41,6 @@ jobs:
           git config --global user.name '${{ steps.app-token.outputs.app-slug }}[bot]'
           git config --global user.email '${{ steps.get-user-id.outputs.user-id }}+${{ steps.app-token.outputs.app-slug }}[bot]@users.noreply.github.com'
 
-      - name: Checkout
-        uses: actions/checkout@v3
-        with:
-          fetch-depth: 0
-          token: ${{ steps.app-token.outputs.token }}
-          persist-credentials: false
-
       - uses: pnpm/action-setup@v4
         name: Install pnpm
         with:
@@ -51,9 +51,6 @@ jobs:
         with:
           node-version: 20.x
           cache: 'pnpm'
-
-      - name: Install dependencies
-        run: pnpm install -w
 
       - name: Create/Update Changesets
         uses: 'wardpeet/changesets-dependencies-action@2e05bd09862b1928b7f53bdbdf546a0b2c1af921'
