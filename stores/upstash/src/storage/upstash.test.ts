@@ -744,7 +744,7 @@ describe('UpstashStore', () => {
       checkWorkflowSnapshot(snapshot, stepId1, 'success');
     });
   });
-  describe('getWorkflowRunByID', () => {
+  describe('getWorkflowRunById', () => {
     const testNamespace = 'test-workflows-id';
     const workflowName = 'workflow-id-test';
     let runId: string;
@@ -770,7 +770,7 @@ describe('UpstashStore', () => {
     });
 
     it('should retrieve a workflow run by ID', async () => {
-      const found = await store.getWorkflowRunByID({
+      const found = await store.getWorkflowRunById({
         namespace: testNamespace,
         runId,
         workflowName,
@@ -782,7 +782,7 @@ describe('UpstashStore', () => {
     });
 
     it('should return null for non-existent workflow run ID', async () => {
-      const notFound = await store.getWorkflowRunByID({
+      const notFound = await store.getWorkflowRunById({
         namespace: testNamespace,
         runId: 'non-existent-id',
         workflowName,

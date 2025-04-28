@@ -1293,7 +1293,7 @@ export class CloudflareStore extends MastraStorage {
     throw new Error('Method not implemented.');
   }
 
-  async getWorkflowRunByID(_args: { runId: string; workflowName?: string }): Promise<WorkflowRun | null> {
+  async getWorkflowRunById(_args: { runId: string; workflowName?: string }): Promise<WorkflowRun | null> {
     throw new Error('Method not implemented.');
   }
 

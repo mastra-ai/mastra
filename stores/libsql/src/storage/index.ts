@@ -617,7 +617,7 @@ export class LibSQLStore extends MastraStorage {
     }
   }
 
-  async getWorkflowRunByID({
+  async getWorkflowRunById({
     runId,
     workflowName,
   }: {

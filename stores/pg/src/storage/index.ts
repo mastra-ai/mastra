@@ -870,7 +870,7 @@ export class PostgresStore extends MastraStorage {
     }
   }
 
-  async getWorkflowRunByID({
+  async getWorkflowRunById({
     runId,
     workflowName,
   }: {

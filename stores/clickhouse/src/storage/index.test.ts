@@ -704,7 +704,7 @@ describe('ClickhouseStore', () => {
       checkWorkflowSnapshot(snapshot, stepId1, 'success');
     }, 10e3);
   });
-  describe('getWorkflowRunByID', () => {
+  describe('getWorkflowRunById', () => {
     const workflowName = 'workflow-id-test';
     let runId: string;
     let stepId: string;
@@ -728,7 +728,7 @@ describe('ClickhouseStore', () => {
     });
 
     it('should retrieve a workflow run by ID', async () => {
-      const found = await store.getWorkflowRunByID({
+      const found = await store.getWorkflowRunById({
         runId,
         workflowName,
       });
@@ -738,7 +738,7 @@ describe('ClickhouseStore', () => {
     });
 
     it('should return null for non-existent workflow run ID', async () => {
-      const notFound = await store.getWorkflowRunByID({
+      const notFound = await store.getWorkflowRunById({
         runId: 'non-existent-id',
         workflowName,
       });

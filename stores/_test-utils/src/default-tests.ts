@@ -586,7 +586,7 @@ export function createTestSuite(storage: MastraStorage) {
         expect(snapshot.context?.steps[stepId1]?.status).toBe('completed');
       });
     });
-    describe('getWorkflowRunByID', () => {
+    describe('getWorkflowRunById', () => {
       const workflowName = 'workflow-id-test';
       let runId: string;
       let stepId: string;
@@ -610,7 +610,7 @@ export function createTestSuite(storage: MastraStorage) {
       });
 
       it('should retrieve a workflow run by ID', async () => {
-        const found = await storage.getWorkflowRunByID({
+        const found = await storage.getWorkflowRunById({
           runId,
           workflowName,
         });
@@ -620,7 +620,7 @@ export function createTestSuite(storage: MastraStorage) {
       });
 
       it('should return null for non-existent workflow run ID', async () => {
-        const notFound = await storage.getWorkflowRunByID({
+        const notFound = await storage.getWorkflowRunById({
           runId: 'non-existent-id',
           workflowName,
         });

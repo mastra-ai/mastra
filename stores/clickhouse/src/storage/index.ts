@@ -996,7 +996,7 @@ export class ClickhouseStore extends MastraStorage {
     }
   }
 
-  async getWorkflowRunByID({
+  async getWorkflowRunById({
     runId,
     workflowName,
   }: {
