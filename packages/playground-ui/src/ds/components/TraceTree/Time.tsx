@@ -19,7 +19,7 @@ export const Time = ({ durationMs, tokenCount, variant, progressPercent }: TimeP
 
   return (
     <div>
-      <div className="bg-surface4 relative h-[6px] w-full rounded-full p-px">
+      <div className="bg-surface4 relative h-[6px] w-full rounded-full p-px overflow-hidden">
         <div className={clsx('absolute h-1 rounded-full', variantClass)} style={{ width: `${progressPercent}%` }} />
       </div>
       <div className="flex items-center gap-4 pt-0.5">

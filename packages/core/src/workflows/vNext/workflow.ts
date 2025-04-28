@@ -182,9 +182,9 @@ export function createStep<
 }
 
 export function cloneStep<TStepId extends string>(
-  step: Step<TStepId, any, any>,
+  step: Step<string, any, any>,
   opts: { id: TStepId },
-): Step<string, any, any> {
+): Step<TStepId, any, any> {
   return {
     id: opts.id,
     description: step.description,
@@ -198,9 +198,31 @@ export function createWorkflow<
   TWorkflowId extends string = string,
   TInput extends z.ZodType<any> = z.ZodType<any>,
   TOutput extends z.ZodType<any> = z.ZodType<any>,
-  TSteps extends Step<string, any, any>[] = Step<string, any, any>[],
+  TSteps extends Step<string, any, any, any, any>[] = Step<string, any, any, any, any>[],
 >(params: NewWorkflowConfig<TWorkflowId, TInput, TOutput, TSteps>) {
   return new NewWorkflow(params);
+}
+
+export function cloneWorkflow<
+  TWorkflowId extends string = string,
+  TInput extends z.ZodType<any> = z.ZodType<any>,
+  TOutput extends z.ZodType<any> = z.ZodType<any>,
+  TSteps extends Step<string, any, any, any, any>[] = Step<string, any, any, any, any>[],
+>(
+  workflow: NewWorkflow<TSteps, string, TInput, TOutput>,
+  opts: { id: TWorkflowId },
+): NewWorkflow<TSteps, TWorkflowId, TInput, TOutput> {
+  const wf = new NewWorkflow({
+    id: opts.id,
+    inputSchema: workflow.inputSchema,
+    outputSchema: workflow.outputSchema,
+    steps: workflow.stepDefs,
+    mastra: workflow.mastra,
+  });
+
+  wf.setStepFlow(workflow.stepGraph);
+  wf.commit();
+  return wf;
 }
 
 export type WorkflowResult<TOutput extends z.ZodType<any>, TSteps extends Step<string, any, any>[]> =
@@ -236,7 +258,7 @@ export type NewWorkflowConfig<
   TWorkflowId extends string = string,
   TInput extends z.ZodType<any> = z.ZodType<any>,
   TOutput extends z.ZodType<any> = z.ZodType<any>,
-  TSteps extends Step<string, any, any>[] = Step<string, any, any>[],
+  TSteps extends Step<string, any, any, any, any>[] = Step<string, any, any, any, any>[],
 > = {
   mastra?: Mastra;
   id: TWorkflowId;
@@ -252,7 +274,7 @@ export type NewWorkflowConfig<
 };
 
 export class NewWorkflow<
-    TSteps extends Step<string, any, any>[] = Step<string, any, any>[],
+    TSteps extends Step<string, any, any, any, any>[] = Step<string, any, any, any, any>[],
     TWorkflowId extends string = string,
     TInput extends z.ZodType<any> = z.ZodType<any>,
     TOutput extends z.ZodType<any> = z.ZodType<any>,
@@ -265,7 +287,8 @@ export class NewWorkflow<
   public description?: string | undefined;
   public inputSchema: TInput;
   public outputSchema: TOutput;
-  public steps: Record<string, Step<string, any, any>>;
+  public steps: Record<string, Step<string, any, any, any, any>>;
+  public stepDefs?: TSteps;
   protected stepFlow: StepFlowEntry[];
   protected executionEngine: ExecutionEngine;
   protected executionGraph: ExecutionGraph;
@@ -285,6 +308,7 @@ export class NewWorkflow<
     description,
     executionEngine,
     retryConfig,
+    steps,
   }: NewWorkflowConfig<TWorkflowId, TInput, TOutput, TSteps>) {
     super({ name: id, component: RegisteredLogger.WORKFLOW });
     this.id = id;
@@ -296,6 +320,7 @@ export class NewWorkflow<
     this.stepFlow = [];
     this.#mastra = mastra;
     this.steps = {};
+    this.stepDefs = steps;
 
     if (!executionEngine) {
       // TODO: this should be configured using the Mastra class instance that's passed in
@@ -305,6 +330,10 @@ export class NewWorkflow<
     }
 
     this.#runs = new Map();
+  }
+
+  get mastra() {
+    return this.#mastra;
   }
 
   __registerMastra(mastra: Mastra) {
@@ -320,6 +349,10 @@ export class NewWorkflow<
     if (p.logger) {
       this.__setLogger(p.logger);
     }
+  }
+
+  setStepFlow(stepFlow: StepFlowEntry[]) {
+    this.stepFlow = stepFlow;
   }
 
   /**
@@ -751,16 +784,18 @@ export class Run<
   }
 
   watch(cb: (event: WatchEvent) => void): () => void {
-    this.emitter.on('watch', ({ type, payload, eventTimestamp }) => {
-      this.updateState(payload);
-      cb({ type, payload: this.getState() as any, eventTimestamp: eventTimestamp });
-    });
-    this.emitter.on('nested-watch', ({ event, workflowId }) => {
+    const watchCb = (event: WatchEvent) => {
+      this.updateState(event.payload);
+      cb({ type: event.type, payload: this.getState() as any, eventTimestamp: event.eventTimestamp });
+    };
+    this.emitter.on('watch', watchCb);
+
+    const nestedWatchCb = ({ event, workflowId }: { event: WatchEvent; workflowId: string }) => {
       try {
         const { type, payload, eventTimestamp } = event;
         const prefixedSteps = Object.fromEntries(
           Object.entries(payload?.workflowState?.steps ?? {}).map(([stepId, step]) => [
-            `${workflowId}.${stepId}`,
+            `${this.workflowId}.${stepId}`,
             step,
           ]),
         );
@@ -770,7 +805,6 @@ export class Run<
             id: `${workflowId}.${payload?.currentStep?.id}`,
           },
           workflowState: {
-            ...payload?.workflowState,
             steps: prefixedSteps,
           },
         };
@@ -779,9 +813,12 @@ export class Run<
       } catch (e) {
         console.error(e);
       }
-    });
+    };
+    this.emitter.on('nested-watch', nestedWatchCb);
+
     return () => {
-      this.emitter.off('watch', cb);
+      this.emitter.off('watch', watchCb);
+      this.emitter.off('nested-watch', nestedWatchCb);
     };
   }
 
@@ -830,7 +867,10 @@ export class Run<
   updateState(state: Record<string, any>) {
     if (state.currentStep) {
       this.state.currentStep = state.currentStep;
+    } else if (state.workflowState?.status !== 'running') {
+      delete this.state.currentStep;
     }
+
     if (state.workflowState) {
       this.state.workflowState = deepMerge(this.state.workflowState ?? {}, state.workflowState ?? {});
     }

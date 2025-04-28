@@ -2,25 +2,18 @@ import { useCallback, useContext, useMemo, useState } from 'react';
 import { toast } from 'sonner';
 
 import usePolling from '@/lib/polls';
-import { MastraClient } from '@mastra/client-js';
 
 import type { RefinedTrace } from '@/domains/traces/types';
 import { refineTraces } from '@/domains/traces/utils';
 import { TraceContext } from '@/domains/traces/context/trace-context';
-
+import { createMastraClient } from '@/lib/mastra-client';
 export const useTraces = (componentName: string, baseUrl: string, isWorkflow: boolean = false) => {
   const [traces, setTraces] = useState<RefinedTrace[]>([]);
 
   const { setTraces: setTraceContextTraces } = useContext(TraceContext);
 
   // Memoize the client instance
-  const client = useMemo(
-    () =>
-      new MastraClient({
-        baseUrl: baseUrl || '',
-      }),
-    [baseUrl],
-  );
+  const client = useMemo(() => createMastraClient(baseUrl), [baseUrl]);
 
   const fetchFn = useCallback(async () => {
     try {
