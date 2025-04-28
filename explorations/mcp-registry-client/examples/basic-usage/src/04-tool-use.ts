@@ -6,7 +6,7 @@
 import { Agent } from "@mastra/core/agent"
 import { openai } from "@ai-sdk/openai"
 import { RegistryClient } from "@mcp/registry"
-import { McpConfiguration } from "@mastra/mcp-configuration"
+import { MCPClient } from "@mastra/mcp-configuration"
 import chalk from "chalk"
 import * as readline from "node:readline/promises"
 import { stdin as input, stdout as output } from "node:process"
@@ -15,7 +15,7 @@ const registry = new RegistryClient({
 	url: `https://opentools.com/.well-known/mcp.json`,
 })
 
-const mcpConfiguration = new McpConfiguration({
+const MCPClient = new MCPClient({
 	id: "tools-configuration-1",
 	registry,
 })
@@ -26,7 +26,7 @@ const agent = new Agent({
 	instructions: `You are a helpful agent`,
 })
 
-const toolsets = await mcpConfiguration.getConnectedTools()
+const toolsets = await MCPClient.getConnectedTools()
 
 let prompt = `Which tools do you have access to?`
 

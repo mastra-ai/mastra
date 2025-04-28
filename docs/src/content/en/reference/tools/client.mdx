@@ -3,9 +3,13 @@ title: "Reference: MastraMCPClient | Tool Discovery | Mastra Docs"
 description: API Reference for MastraMCPClient - A client implementation for the Model Context Protocol.
 ---
 
-# MastraMCPClient
+# MastraMCPClient (Deprecated)
 
 The `MastraMCPClient` class provides a client implementation for interacting with Model Context Protocol (MCP) servers. It handles connection management, resource discovery, and tool execution through the MCP protocol.
+
+## Deprecation notice
+
+`MastraMCPClient` is being deprecated in favour of [`MCPClient`](./mcp-client). Rather than having two different interfaces for managing a single MCP server vs multiple MCP servers, we opted to recommend using the interface to manage multiple even when using a single MCP server.
 
 ## Constructor
 
@@ -321,5 +325,5 @@ Without `eventSourceInit`, authentication headers specified in `requestInit` won
 
 ## Related Information
 
-- For managing multiple MCP servers in your application, see the [MCPConfiguration documentation](./mcp-configuration)
+- For managing multiple MCP servers in your application, see the [MCPClient documentation](./mcp-client)
 - For more details about the Model Context Protocol, see the [@modelcontextprotocol/sdk documentation](https://github.com/modelcontextprotocol/typescript-sdk).

@@ -20,37 +20,59 @@ The client automatically detects the transport type based on your server configu
 ## Usage
 
 ```typescript
-import { MastraMCPClient } from '@mastra/mcp';
+import { MCPClient } from '@mastra/mcp';
 
 // Create a client with a Stdio server
-const stdioClient = new MastraMCPClient({
-  name: 'my-stdio-client',
-  version: '1.0.0', // optional
-  server: {
-    command: 'your-mcp-server-command',
-    args: ['--your', 'args'],
-    env: { API_KEY: 'your-api-key' }, // optional environment variables
+const stdioClient = new MCPClient({
+  servers: {
+    myStdioClient: {
+      command: 'your-mcp-server-command',
+      args: ['--your', 'args'],
+      env: { API_KEY: 'your-api-key' }, // optional environment variables
+      capabilities: {}, // optional ClientCapabilities
+      timeout: 60000, // optional timeout for tool calls in milliseconds
+    },
   },
-  capabilities: {}, // optional ClientCapabilities
-  timeout: 60000, // optional timeout for tool calls in milliseconds
 });
 
 // Create a client with an HTTP server (tries Streamable HTTP, falls back to SSE)
-const httpClient = new MastraMCPClient({
-  name: 'my-http-client',
-  version: '1.0.0',
-  server: {
-    url: new URL('https://your-mcp-server.com/mcp'), // Use the base URL for Streamable HTTP
-    requestInit: {
-      // Optional fetch request configuration
-      headers: { Authorization: 'Bearer your-token' },
-    },
-    // eventSourceInit is only needed for custom headers with the legacy SSE fallback
-    eventSourceInit: {
-      /* ... */
+const httpClient = new MCPClient({
+  servers: {
+    myHttpClient: {
+      url: new URL('https://your-mcp-server.com/mcp'), // Use the base URL for Streamable HTTP
+      requestInit: {
+        // Optional fetch request configuration
+        headers: { Authorization: 'Bearer your-token' },
+      },
+      // eventSourceInit is only needed for custom headers with the legacy SSE fallback
+      eventSourceInit: {
+        /* ... */
+      },
     },
   },
-  timeout: 60000, // optional timeout for tool calls in milliseconds
+});
+
+// Or create a client with SSE server
+const sseClient = new MCPClient({
+  servers: {
+    mySseClient: {
+      url: new URL('https://your-mcp-server.com/sse'),
+      requestInit: {
+        headers: { Authorization: 'Bearer your-token' },
+      },
+      eventSourceInit: {
+        fetch(input: Request | URL | string, init?: RequestInit) {
+          const headers = new Headers(init?.headers || {});
+          headers.set('Authorization', 'Bearer your-token');
+          return fetch(input, {
+            ...init,
+            headers,
+          });
+        },
+      },
+      timeout: 60000, // optional timeout for tool calls in milliseconds
+    },
+  },
 });
 
 // Connect to the MCP server (using one of the clients above)
@@ -68,12 +90,12 @@ await httpClient.disconnect();
 
 ## Managing Multiple MCP Servers
 
-For applications that need to interact with multiple MCP servers, the `MCPConfiguration` class provides a convenient way to manage multiple server connections and their tools. It also uses the automatic transport detection based on the `server` configuration:
+For applications that need to interact with multiple MCP servers, the `MCPClient` class provides a convenient way to manage multiple server connections and their tools. It also uses the automatic transport detection based on the `server` configuration:
 
 ```typescript
-import { MCPConfiguration } from '@mastra/mcp';
+import { MCPClient } from '@mastra/mcp';
 
-const mcp = new MCPConfiguration({
+const mcp = new MCPClient({
   servers: {
     // Stdio-based server
     stockPrice: {
@@ -106,7 +128,7 @@ const toolsets = await mcp.getToolsets();
 The MCP client provides per-server logging capabilities, allowing you to monitor interactions with each MCP server separately:
 
 ```typescript
-import { MCPConfiguration, LogMessage, LoggingLevel } from '@mastra/mcp';
+import { MCPClient, LogMessage, LoggingLevel } from '@mastra/mcp';
 
 // Define a custom log handler
 const weatherLogger = (logMessage: LogMessage) => {
@@ -118,7 +140,7 @@ const weatherLogger = (logMessage: LogMessage) => {
 };
 
 // Initialize MCP configuration with server-specific loggers
-const mcp = new MCPConfiguration({
+const mcp = new MCPClient({
   servers: {
     weatherService: {
       command: 'npx',
@@ -182,7 +204,7 @@ const createFileLogger = (filePath: string) => {
 };
 
 // Use the factory in configuration
-const mcp = new MCPConfiguration({
+const mcp = new MCPClient({
   servers: {
     weatherService: {
       command: 'npx',
@@ -197,7 +219,7 @@ See the `examples/server-logging.ts` file for comprehensive examples of various 
 
 ### Tools vs Toolsets
 
-The MCPConfiguration class provides two ways to access MCP tools:
+The MCPClient class provides two ways to access MCP tools:
 
 #### Tools (`getTools()`)
 
@@ -230,12 +252,12 @@ Use this when:
 - Tool configuration needs to change dynamically
 
 ```typescript
-import { MCPConfiguration } from '@mastra/mcp';
+import { MCPClient } from '@mastra/mcp';
 import { Agent } from '@mastra/core/agent';
 import { openai } from '@ai-sdk/openai';
 
 // Configure MCP servers with user-specific settings before getting toolsets
-const mcp = new MCPConfiguration({
+const mcp = new MCPClient({
   servers: {
     stockPrice: {
       command: 'npx',
@@ -272,7 +294,7 @@ const response = await agent.generate('What is the weather in London?', {
 console.log(response.text);
 ```
 
-The `MCPConfiguration` class automatically:
+The `MCPClient` class automatically:
 
 - Manages connections to multiple MCP servers
 - Namespaces tools to prevent naming conflicts
@@ -288,23 +310,24 @@ The `eventSourceInit` configuration allows you to customize the underlying fetch
 To properly include authentication headers or other custom headers in SSE connections when using the legacy fallback, you need to use both `requestInit` and `eventSourceInit`:
 
 ```typescript
-const sseClient = new MastraMCPClient({
-  name: 'authenticated-sse-client',
-  server: {
-    url: new URL('https://your-mcp-server.com/sse'), // Note the typical /sse path for legacy servers
-    // requestInit alone isn't enough for SSE connections
-    requestInit: {
-      headers: { Authorization: 'Bearer your-token' },
-    },
-    // eventSourceInit is required to include headers in the SSE connection
-    eventSourceInit: {
-      fetch(input: Request | URL | string, init?: RequestInit) {
-        const headers = new Headers(init?.headers || {});
-        headers.set('Authorization', 'Bearer your-token');
-        return fetch(input, {
-          ...init,
-          headers,
-        });
+const sseClient = new MCPClient({
+  servers: {
+    authenticatedSseClient: {
+      url: new URL('https://your-mcp-server.com/sse'), // Note the typical /sse path for legacy servers
+      // requestInit alone isn't enough for SSE connections
+      requestInit: {
+        headers: { Authorization: 'Bearer your-token' },
+      },
+      // eventSourceInit is required to include headers in the SSE connection
+      eventSourceInit: {
+        fetch(input: Request | URL | string, init?: RequestInit) {
+          const headers = new Headers(init?.headers || {});
+          headers.set('Authorization', 'Bearer your-token');
+          return fetch(input, {
+            ...init,
+            headers,
+          });
+        },
       },
     },
   },

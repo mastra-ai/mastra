@@ -75,12 +75,12 @@ To make your MCP server available for others (or yourself) to use via `npx` or a
 
 ## Use the Deployed MCP Server
 
-Once published, your MCP server can be used by an `MastraMCPClient` or `MCPConfiguration` by specifying the command to run your package. You can also use any other MCP client like Claude desktop, Cursor, or Windsurf.
+Once published, your MCP server can be used by an `MCPClient` by specifying the command to run your package. You can also use any other MCP client like Claude desktop, Cursor, or Windsurf.
 
 ```typescript
-import { MCPConfiguration } from "@mastra/mcp";
+import { MCPClient } from "@mastra/mcp";
 
-const mcp = new MCPConfiguration({
+const mcp = new MCPClient({
   servers: {
     // Give this MCP server instance a name
     yourServerName: {
