@@ -232,7 +232,7 @@ export function VNextWorkflowTrigger({
                 )}
                 <DynamicForm
                   schema={stepSchema}
-                  isSubmitLoading={isResumingVNextWorkflow || isWatchingVNextWorkflow}
+                  isSubmitLoading={isResumingVNextWorkflow}
                   submitButtonLabel="Resume"
                   onSubmit={data => {
                     handleResumeWorkflow({
