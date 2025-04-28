@@ -39,46 +39,6 @@ export function SpanDetail() {
   const SpanIcon = spanIconMap[getSpanVariant(span)];
   const variantClass = spanVariantClasses[getSpanVariant(span)];
 
-  const spanMock: Span = {
-    id: 'mock-span-123',
-    parentSpanId: null,
-    traceId: 'mock-trace-456',
-    name: 'Mock Span',
-    scope: 'mock-scope',
-    kind: 1,
-    status: {
-      code: 0,
-    },
-    events: [
-      {
-        name: 'mock-event',
-        timeUnixNano: '123456789000000000',
-        attributes: [
-          {
-            key: 'event-attr',
-            value: { message: 'mock event message' },
-          },
-        ],
-        droppedAttributesCount: 0,
-      },
-    ],
-    links: [],
-    attributes: {
-      'mock.attribute': 'mock value',
-      'http.method': 'GET',
-      'http.url': 'https://example.com',
-    },
-    startTime: Date.now() - 1000,
-    endTime: Date.now(),
-    duration: 1000,
-    other: {
-      droppedAttributesCount: 0,
-      droppedEventsCount: 0,
-      droppedLinksCount: 0,
-    },
-    createdAt: new Date().toISOString(),
-  };
-
   return (
     <aside>
       <Header>
