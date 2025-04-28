@@ -58,4 +58,4 @@ jobs:
       - name: Create/Update Changesets
         uses: 'the-guild-org/changesets-dependencies-action@v1.1.0'
         env:
-          token: ${{ steps.app-token.outputs.token }}
+          GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}
