@@ -1,5 +1,12 @@
 # @mastra/mcp
 
+## 0.4.1-alpha.4
+
+### Patch Changes
+
+- 2526527: We are deprecating the MastraMCPClient class in favour of using MCPClient (formerly MCPConfiguration). MCPClient can handle 1+ MCP servers, whereas MastraMCPClient can only handle a single MCP server. Rather than having two different interfaces to use when using a single MCP vs multiple, we opted to nudge people towards using the interface that is more flexible.
+- a2ccb71: improved mcp config cache
+
 ## 0.4.1-alpha.3
 
 ### Patch Changes
