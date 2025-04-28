@@ -262,7 +262,7 @@ const agent = new Agent({
 ```
 
 ```typescript
-// Remove the undesired tool from the destructed object
+// Select the desired tools from the destructed object
 const { myServer_weather, myServer_stockPrice } = await mcp.getTools();
 
 // Pass only the filtered tools to your agent
