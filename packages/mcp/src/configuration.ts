@@ -170,4 +170,11 @@ export interface MCPConfigurationOptions {
 /**
  * @deprecated MCPConfiguration is deprecated and will be removed in a future release. Use MCPClient instead.
  */
-export class MCPConfiguration extends MCPClient {}
+export class MCPConfiguration extends MCPClient {
+  constructor(args: MCPClientOptions) {
+    super(args);
+    this.logger.warn(
+      `MCPConfiguration has been renamed to MCPClient and MCPConfiguration is deprecated. The API is identical but the MCPConfiguration export will be removed in the future. Update your imports now to prevent future errors.`,
+    );
+  }
+}

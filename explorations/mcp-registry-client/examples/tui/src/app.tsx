@@ -2,14 +2,17 @@ import React, { useEffect, useState } from "react"
 import { Box, Newline, Text, useInput } from "ink"
 import { RegistryClient, ServerDefinition } from "@mcp/registry"
 import SelectInput from "ink-select-input"
-import { MCPClient, type ConfiguredServer } from "@mastra/mcp-configuration"
+import {
+	McpConfiguration,
+	type ConfiguredServer,
+} from "@mastra/mcp-configuration"
 import { Form } from "ink-form"
 
 const registry = new RegistryClient({
 	url: `https://opentools.com/.well-known/mcp.json`,
 })
 
-const configuration = new MCPClient({
+const configuration = new McpConfiguration({
 	id: "tui-config",
 	registry,
 })
