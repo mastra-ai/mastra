@@ -269,6 +269,7 @@ describe('Milvus Vector tests', () => {
       expect(describeResult.indexDescription).toBeDefined();
       expect(describeResult.indexDescription.status.error_code).toBe('Success');
       expect(describeResult.indexDescription.index_descriptions[0].field_name).toBe('book_intro');
+      expect(describeResult.indexDescription.index_descriptions[0].index_name).toBe(indexName);
       expect(describeResult.indexDescription.index_descriptions[0].indexID).toBeDefined();
       expect(describeResult.indexDescription.index_descriptions[0].params).toBeDefined();
       expect(describeResult.indexDescription.index_descriptions[0].params).toHaveLength(3);
@@ -429,6 +430,7 @@ describe('Milvus Vector tests', () => {
       expect(metricParam?.value).toBe('L2');
 
       const nlistParam = params.find(param => param.key === 'params');
+      expect(nlistParam).toBeDefined();
       expect(nlistParam?.value).toBe('{"M":16,"efConstruction":200}');
     });
 
@@ -823,7 +825,7 @@ describe('Milvus Vector tests', () => {
       ]);
 
       await milvusClient.createIndex({
-        collectionName,
+        collectionName: collectionName,
         fieldName: 'vector',
         indexName: 'vector_idx',
         indexConfig: {
@@ -845,6 +847,7 @@ describe('Milvus Vector tests', () => {
       ];
       const ids = [1, 2];
       const metadata = [{ title: 'Book 1' }, { title: 'Book 2' }];
+
       const insertedIds = await milvusClient.upsert({
         collectionName,
         vectors,
@@ -1408,6 +1411,285 @@ describe('Milvus Vector tests', () => {
         expect(result.score).toBeDefined();
         expect(result.metadata).toBeDefined();
         expect(result.vector).toBeDefined();
+      });
+    });
+  });
+
+  describe('Advanced Query with filter', () => {
+    const collectionName = `advanced_query_collection`;
+    const indexName = 'vector_idx';
+
+    beforeAll(async () => {
+      await milvusClient.createCollection(collectionName, [
+        {
+          name: `id`,
+          description: `customized primary id`,
+          data_type: DataType.VarChar,
+          max_length: 256,
+          is_primary_key: true,
+          autoID: false,
+        },
+        {
+          name: `vector`,
+          description: `vector field`,
+          data_type: DataType.FloatVector,
+          dim: 8,
+        },
+        {
+          name: `metadata`,
+          description: `metadata`,
+          data_type: DataType.JSON,
+        },
+      ]);
+
+      // create index
+      await milvusClient.createIndex({
+        collectionName: collectionName,
+        fieldName: 'vector',
+        indexName: indexName,
+        indexConfig: {
+          type: IndexType.IVF_FLAT,
+        },
+        metricType: MetricType.L2,
+        dimension: 8,
+      });
+
+      // Insert test data
+      const vectors = [
+        [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8],
+        [1.1, 1.2, 1.3, 1.4, 1.5, 1.6, 1.7, 1.8],
+        [2.1, 2.2, 2.3, 2.4, 2.5, 2.6, 2.7, 2.8],
+        [3.1, 3.2, 3.3, 3.4, 3.5, 3.6, 3.7, 3.8],
+        [4.1, 4.2, 4.3, 4.4, 4.5, 4.6, 4.7, 4.8],
+      ];
+
+      await milvusClient.upsert({
+        collectionName,
+        vectors,
+        ids: ['test1', 'test2', 'test3', 'test4', 'test5'],
+        metadata: [
+          { title: 'Book A', author: 'Author 1', year: 2021 },
+          { title: 'Book B', author: 'Author 2', year: 2022 },
+          { title: 'Book C', author: 'Author 3', year: 2023 },
+          { title: 'Book D', author: 'Author 1', year: 2020 },
+          { title: 'Book E', author: 'Author 2', year: 2019 },
+        ],
+        indexName,
+      });
+    });
+
+    afterAll(async () => {
+      await milvusClient.dropCollection(collectionName);
+    });
+
+    it('should query with filter', async () => {
+      const queryVector = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8];
+
+      const queryResult = await milvusClient.query({
+        collectionName,
+        indexName,
+        queryVector,
+        topK: 3,
+        filter: { author: 'Author 1' },
+        includeVector: true,
+      });
+
+      expect(queryResult).toBeDefined();
+      expect(queryResult.length).toBe(2);
+
+      // Check that the results match the filter
+      queryResult.forEach(result => {
+        expect(result.metadata).toBeDefined();
+        if (result.metadata) {
+          expect(result.metadata.author).toBe('Author 1');
+          expect(result.metadata.year).toBeDefined();
+          expect([2020, 2021]).toContain(result.metadata.year);
+          expect(result.metadata.title).toBeDefined();
+          expect(['Book D', 'Book A']).toContain(result.metadata.title);
+
+          expect(result.vector).toBeDefined();
+          expect(result.id).toBeDefined();
+          expect(result.score).toBeDefined();
+        }
+      });
+    });
+
+    it('should query with $in filter', async () => {
+      const queryVector = [1.1, 1.2, 1.3, 1.4, 1.5, 1.6, 1.7, 1.8];
+
+      const queryResult = await milvusClient.query({
+        collectionName,
+        indexName,
+        queryVector,
+        topK: 5,
+        filter: { author: { $in: ['Author 1', 'Author 2'] } },
+        includeVector: true,
+      });
+
+      expect(queryResult).toBeDefined();
+      expect(queryResult.length).toBe(4);
+
+      // Check that the results match the filter
+      queryResult.forEach(result => {
+        expect(result.metadata).toBeDefined();
+        if (result.metadata) {
+          expect(['Author 1', 'Author 2']).toContain(result.metadata.author);
+          expect(result.vector).toBeDefined();
+          expect(result.id).toBeDefined();
+          expect(result.score).toBeDefined();
+        }
+      });
+    });
+
+    it('should query with numeric comparison filter', async () => {
+      const queryVector = [2.1, 2.2, 2.3, 2.4, 2.5, 2.6, 2.7, 2.8];
+
+      const queryResult = await milvusClient.query({
+        collectionName,
+        indexName,
+        queryVector,
+        topK: 5,
+        filter: { year: { $gte: 2020, $lte: 2022 } },
+        includeVector: true,
+      });
+
+      expect(queryResult).toBeDefined();
+      expect(queryResult.length).toBe(3);
+
+      // Check that the results match the filter
+      queryResult.forEach(result => {
+        expect(result.metadata).toBeDefined();
+        if (result.metadata) {
+          expect(result.metadata.year).toBeGreaterThanOrEqual(2020);
+          expect(result.metadata.year).toBeLessThanOrEqual(2022);
+          expect(result.vector).toBeDefined();
+          expect(result.id).toBeDefined();
+          expect(result.score).toBeDefined();
+        }
+      });
+    });
+
+    it('should query with $or logical operator', async () => {
+      const queryVector = [3.1, 3.2, 3.3, 3.4, 3.5, 3.6, 3.7, 3.8];
+
+      const queryResult = await milvusClient.query({
+        collectionName,
+        indexName,
+        queryVector,
+        topK: 5,
+        filter: {
+          $or: [{ author: 'Author 1' }, { year: 2022 }],
+        },
+        includeVector: true,
+      });
+
+      expect(queryResult).toBeDefined();
+      expect(queryResult.length).toBe(3);
+
+      // Check that the results match the filter
+      queryResult.forEach(result => {
+        expect(result.metadata).toBeDefined();
+        if (result.metadata) {
+          expect(result.metadata.author === 'Author 1' || result.metadata.year === 2022).toBe(true);
+          expect(result.vector).toBeDefined();
+          expect(result.id).toBeDefined();
+          expect(result.score).toBeDefined();
+        }
+      });
+    });
+
+    it('should query with $not operator', async () => {
+      const queryVector = [4.1, 4.2, 4.3, 4.4, 4.5, 4.6, 4.7, 4.8];
+
+      const queryResult = await milvusClient.query({
+        collectionName,
+        indexName,
+        queryVector,
+        topK: 5,
+        filter: {
+          $not: {
+            author: 'Author 3',
+          },
+        },
+        includeVector: true,
+      });
+
+      expect(queryResult).toBeDefined();
+      expect(queryResult.length).toBe(4);
+
+      // Check that the results match the filter
+      queryResult.forEach(result => {
+        expect(result.metadata).toBeDefined();
+        if (result.metadata) {
+          expect(result.metadata.author).not.toBe('Author 3');
+          expect(result.vector).toBeDefined();
+          expect(result.id).toBeDefined();
+          expect(result.score).toBeDefined();
+        }
+      });
+    });
+
+    it('should query with $like operator', async () => {
+      const queryVector = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8];
+
+      const queryResult = await milvusClient.query({
+        collectionName,
+        indexName,
+        queryVector,
+        topK: 5,
+        filter: {
+          title: { $like: '%Book%' },
+        },
+        includeVector: true,
+      });
+
+      expect(queryResult).toBeDefined();
+      expect(queryResult.length).toBe(5);
+
+      // Check that the results match the filter
+      queryResult.forEach(result => {
+        expect(result.metadata).toBeDefined();
+        if (result.metadata) {
+          expect(result.metadata.title).toMatch(/Book/);
+          expect(result.vector).toBeDefined();
+          expect(result.id).toBeDefined();
+          expect(result.score).toBeDefined();
+        }
+      });
+    });
+
+    it('should query with complex nested conditions', async () => {
+      const queryVector = [2.1, 2.2, 2.3, 2.4, 2.5, 2.6, 2.7, 2.8];
+
+      const queryResult = await milvusClient.query({
+        collectionName,
+        indexName,
+        queryVector,
+        topK: 5,
+        filter: {
+          $and: [
+            {
+              $or: [{ author: 'Author 1' }, { author: 'Author 2' }],
+            },
+            { year: { $gte: 2020 } },
+          ],
+        },
+        includeVector: true,
+      });
+
+      expect(queryResult).toBeDefined();
+      expect(queryResult.length).toBe(3);
+
+      // Check that the results match the filter
+      queryResult.forEach(result => {
+        expect(result.metadata).toBeDefined();
+        if (result.metadata) {
+          expect(['Author 1', 'Author 2']).toContain(result.metadata.author);
+          expect(result.metadata.year).toBeGreaterThanOrEqual(2020);
+          expect(result.vector).toBeDefined();
+          expect(result.id).toBeDefined();
+          expect(result.score).toBeDefined();
+        }
       });
     });
   });

@@ -20,6 +20,7 @@ import type {
   ResStatus,
   SearchResults,
 } from '@zilliz/milvus2-sdk-node';
+import { MilvusFilterTranslator } from './filter';
 import type { IndexConfig } from './types';
 
 export type CollectionOptions = {
@@ -140,13 +141,14 @@ export class MilvusVectorStore extends MastraVector {
       'collectionName',
       'includeVector',
     ]);
-    const { queryVector, topK = 10, filter = '', collectionName, includeVector = false } = params;
+    const { queryVector, topK = 10, filter = {}, collectionName, includeVector = false } = params;
     try {
+      const milvusFilter = new MilvusFilterTranslator().translate(filter);
       const searchParams: any = {
         collection_name: collectionName,
         data: [queryVector],
         topk: topK,
-        filter,
+        filter: milvusFilter,
         output_fields: ['id', 'metadata', 'vector'],
       };
 
@@ -160,7 +162,6 @@ export class MilvusVectorStore extends MastraVector {
       }
 
       const res: SearchResults = await this.client.search(searchParams);
-      console.log(res);
 
       if (!res.results) return [];
 
