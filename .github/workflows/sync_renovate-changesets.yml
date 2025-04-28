@@ -52,9 +52,6 @@ jobs:
           node-version: 20.x
           cache: 'pnpm'
 
-      - name: Install dependencies
-        run: pnpm install -w
-
       - name: Create/Update Changesets
         uses: 'wardpeet/changesets-dependencies-action@c3c417ae5b8d2fbdc65d010bb9a0c83906f3a57d'
         env:
