@@ -605,16 +605,7 @@ export class LibSQLStore extends MastraStorage {
     toDate?: Date;
     limit?: number;
     offset?: number;
-  } = {}): Promise<{
-    runs: Array<{
-      workflowName: string;
-      runId: string;
-      snapshot: WorkflowRunState | string;
-      createdAt: Date;
-      updatedAt: Date;
-    }>;
-    total: number;
-  }> {
+  } = {}): Promise<WorkflowRuns> {
     const conditions: string[] = [];
     const args: InValue[] = [];
 
