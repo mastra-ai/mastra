@@ -17,7 +17,7 @@ function AgentTracesPage() {
     );
   }
 
-  return <AgentTraces agentName={agent?.name!} baseUrl="" />;
+  return <AgentTraces agentName={agent?.name!} baseUrl="" className="h-[calc(100vh-40px)]" />;
 }
 
 export default AgentTracesPage;
