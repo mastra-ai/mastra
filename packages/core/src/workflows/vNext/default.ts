@@ -113,10 +113,6 @@ export class DefaultExecutionEngine extends ExecutionEngine {
             params.emitter.emit('watch', {
               type: 'watch',
               payload: {
-                currentStep: {
-                  id: entry.step.id,
-                  ...lastOutput,
-                },
                 workflowState: {
                   status: lastOutput.status,
                   steps: stepResults,
@@ -135,15 +131,11 @@ export class DefaultExecutionEngine extends ExecutionEngine {
           params.emitter.emit('watch', {
             type: 'watch',
             payload: {
-              currentStep: {
-                id: entry.step.id,
-                ...lastOutput,
-              },
               workflowState: {
-                status: 'running',
+                status: 'failed',
                 steps: stepResults,
                 result: null,
-                error: null,
+                error: e as Error,
               },
             },
             eventTimestamp: Date.now(),
@@ -157,7 +149,6 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     params.emitter.emit('watch', {
       type: 'watch',
       payload: {
-        currentStep: null,
         workflowState: {
           status: lastOutput.status,
           steps: stepResults,
