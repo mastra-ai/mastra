@@ -88,7 +88,7 @@ export interface GetVNextWorkflowResponse {
   outputSchema: string;
 }
 
-export type VNextWorkflowWatchResult = WatchEvent;
+export type VNextWorkflowWatchResult = WatchEvent & { runId: string };
 
 export type VNextWorkflowRunResult = VNextWorkflowResult<any, any>;
 export interface UpsertVectorParams {

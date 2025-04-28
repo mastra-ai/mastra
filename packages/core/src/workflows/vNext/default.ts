@@ -609,6 +609,30 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     const prevOutput = this.getStepOutput(stepResults, prevStep);
     let execResults: any;
 
+    if (entry.type === 'step' || entry.type === 'loop' || entry.type === 'foreach') {
+      emitter.emit('watch', {
+        type: 'watch',
+        payload: {
+          currentStep: {
+            id: entry.step.id,
+            status: 'running',
+          },
+          workflowState: {
+            status: 'running',
+            steps: {
+              ...stepResults,
+              [entry.step.id]: {
+                status: 'running',
+              },
+            },
+            result: null,
+            error: null,
+          },
+        },
+        eventTimestamp: Date.now(),
+      });
+    }
+
     if (entry.type === 'step') {
       const { step } = entry;
       execResults = await this.executeStep({

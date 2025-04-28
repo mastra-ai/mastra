@@ -1,5 +1,4 @@
 import { Dialog, DialogContent, DialogPortal, DialogTitle } from '@/components/ui/dialog';
-import { ScrollArea } from '@/components/ui/scroll-area';
 import { createContext, useState } from 'react';
 import { WorkflowNestedGraph } from '../workflow/workflow-nested-graph';
 import { ReactFlowProvider } from '@xyflow/react';
