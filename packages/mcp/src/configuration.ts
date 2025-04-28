@@ -33,7 +33,7 @@ export class MCPConfiguration extends MastraBase {
       if (cached && !equal(cached.serverConfigs, args.servers)) {
         const existingInstance = mastraMCPConfigurationInstances.get(this.id);
         if (existingInstance) {
-          void existingInstance.disconnectSafe();
+          void existingInstance.disconnect();
         }
       }
     } else {
@@ -94,10 +94,6 @@ To fix this you have three different options:
     })();
 
     return this.disconnectPromise;
-  }
-
-  private async disconnectSafe() {
-    await this.disconnect();
   }
 
   public async getTools() {
