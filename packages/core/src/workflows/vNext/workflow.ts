@@ -751,10 +751,11 @@ export class Run<
   }
 
   watch(cb: (event: WatchEvent) => void): () => void {
-    this.emitter.on('watch', ({ type, payload, eventTimestamp }) => {
-      this.updateState(payload);
-      cb({ type, payload: this.getState() as any, eventTimestamp: eventTimestamp });
-    });
+    const watchCb = (event: WatchEvent) => {
+      this.updateState(event.payload);
+      cb({ type: event.type, payload: this.getState() as any, eventTimestamp: event.eventTimestamp });
+    };
+    this.emitter.on('watch', watchCb);
     this.emitter.on('nested-watch', ({ event, workflowId }) => {
       try {
         const { type, payload, eventTimestamp } = event;
@@ -779,8 +780,9 @@ export class Run<
         console.error(e);
       }
     });
+
     return () => {
-      this.emitter.off('watch', cb);
+      this.emitter.off('watch', watchCb);
     };
   }
 
