@@ -30,16 +30,16 @@
   "license": "MIT",
   "dependencies": {
     "@mastra/core": "workspace:^",
-    "@turbopuffer/turbopuffer": "^0.6.4"
+    "@turbopuffer/turbopuffer": "^0.7.0"
   },
   "devDependencies": {
     "@internal/lint": "workspace:*",
-    "@microsoft/api-extractor": "^7.52.1",
-    "@types/node": "^20.17.27",
-    "dotenv": "^16.4.7",
-    "eslint": "^9.23.0",
+    "@microsoft/api-extractor": "^7.52.5",
+    "@types/node": "^20.17.32",
+    "dotenv": "^16.5.0",
+    "eslint": "^9.25.1",
     "tsup": "^8.4.0",
-    "typescript": "^5.8.2",
-    "vitest": "^3.0.9"
+    "typescript": "^5.8.3",
+    "vitest": "^3.1.2"
   }
 }
