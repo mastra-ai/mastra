@@ -1,8 +1,9 @@
 import { MastraBase } from '@mastra/core/base';
 import { DEFAULT_REQUEST_TIMEOUT_MSEC } from '@modelcontextprotocol/sdk/shared/protocol.js';
+import equal from 'fast-deep-equal';
 import { v5 as uuidv5 } from 'uuid';
-import { MastraMCPClient } from './client';
 import type { MastraMCPServerDefinition } from './client';
+import { MastraMCPClient } from './client';
 
 const mastraMCPConfigurationInstances = new Map<string, InstanceType<typeof MCPConfiguration>>();
 
@@ -16,12 +17,28 @@ export class MCPConfiguration extends MastraBase {
   private serverConfigs: Record<string, MastraMCPServerDefinition> = {};
   private id: string;
   private defaultTimeout: number;
+  private mcpClientsById = new Map<string, MastraMCPClient>();
+  private disconnectPromise: Promise<void> | null = null;
 
   constructor(args: MCPConfigurationOptions) {
     super({ name: 'MCPConfiguration' });
     this.defaultTimeout = args.timeout ?? DEFAULT_REQUEST_TIMEOUT_MSEC;
     this.serverConfigs = args.servers;
     this.id = args.id ?? this.makeId();
+
+    if (args.id) {
+      this.id = args.id;
+      const cached = mastraMCPConfigurationInstances.get(this.id);
+
+      if (cached && !equal(cached.serverConfigs, args.servers)) {
+        const existingInstance = mastraMCPConfigurationInstances.get(this.id);
+        if (existingInstance) {
+          void existingInstance.disconnect();
+        }
+      }
+    } else {
+      this.id = this.makeId();
+    }
 
     // to prevent memory leaks return the same MCP server instance when configured the same way multiple times
     const existingInstance = mastraMCPConfigurationInstances.get(this.id);
@@ -39,6 +56,8 @@ To fix this you have three different options:
       }
       return existingInstance;
     }
+
+    mastraMCPConfigurationInstances.set(this.id, this);
     this.addToInstanceCache();
     return this;
   }
@@ -52,15 +71,29 @@ To fix this you have three different options:
   private makeId() {
     const text = JSON.stringify(this.serverConfigs).normalize('NFKC');
     const idNamespace = uuidv5(`MCPConfiguration`, uuidv5.DNS);
-
     return uuidv5(text, idNamespace);
   }
 
   public async disconnect() {
-    mastraMCPConfigurationInstances.delete(this.id);
+    // Helps to prevent race condition
+    // If there is already a disconnect ongoing, return the existing promise.
+    if (this.disconnectPromise) {
+      return this.disconnectPromise;
+    }
 
-    await Promise.all(Array.from(this.mcpClientsById.values()).map(client => client.disconnect()));
-    this.mcpClientsById.clear();
+    this.disconnectPromise = (async () => {
+      try {
+        mastraMCPConfigurationInstances.delete(this.id);
+
+        // Disconnect all clients in the cache
+        await Promise.all(Array.from(this.mcpClientsById.values()).map(client => client.disconnect()));
+        this.mcpClientsById.clear();
+      } finally {
+        this.disconnectPromise = null;
+      }
+    })();
+
+    return this.disconnectPromise;
   }
 
   public async getTools() {
@@ -103,15 +136,24 @@ To fix this you have three different options:
     return sessionIds;
   }
 
-  private mcpClientsById = new Map<string, MastraMCPClient>();
   private async getConnectedClient(name: string, config: MastraMCPServerDefinition) {
+    // Helps to prevent race condition.
+    // If we want to call connect() we need to wait for the disconnect to complete first if any is ongoing.
+    if (this.disconnectPromise) {
+      await this.disconnectPromise;
+    }
+
     const exists = this.mcpClientsById.has(name);
+    const existingClient = this.mcpClientsById.get(name);
 
     if (exists) {
-      const mcpClient = this.mcpClientsById.get(name)!;
-      await mcpClient.connect();
-
-      return mcpClient;
+      // This is just to satisfy Typescript since technically you could have this.mcpClientsById.set('someKey', undefined);
+      // Should never reach this point basically we always create a new MastraMCPClient instance when we add to the Map.
+      if (!existingClient) {
+        throw new Error(`Client ${name} exists but is undefined`);
+      }
+      await existingClient.connect();
+      return existingClient;
     }
 
     this.logger.debug(`Connecting to ${name} MCP server`);
@@ -124,6 +166,7 @@ To fix this you have three different options:
     });
 
     this.mcpClientsById.set(name, mcpClient);
+
     try {
       await mcpClient.connect();
     } catch (e) {
