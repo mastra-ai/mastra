@@ -1,6 +1,4 @@
-import { MouseEvent as ReactMouseEvent, useContext, useEffect, useRef, useState } from 'react';
-
-import { TraceContext } from '@/domains/traces/context/trace-context';
+import { MouseEvent as ReactMouseEvent, useEffect, useRef, useState } from 'react';
 
 export const useResizeColumn = ({
   defaultWidth,
@@ -15,7 +13,7 @@ export const useResizeColumn = ({
 }) => {
   const [isDragging, setIsDragging] = useState(false);
   const [sidebarWidth, setSidebarWidth] = useState<number>(defaultWidth);
-  // const { isOpen } = useContext(TraceContext);
+
   const containerRef = useRef<HTMLDivElement>(null);
   const dragStartXRef = useRef(0);
   const initialWidthRef = useRef(0);
