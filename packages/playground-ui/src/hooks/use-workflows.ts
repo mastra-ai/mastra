@@ -275,7 +275,6 @@ export const useWatchWorkflow = (baseUrl: string) => {
       const workflow = client.getWorkflow(workflowId);
 
       await workflow.watch({ runId }, record => {
-        console.log('record in use-workflows==', record);
         try {
           debouncedSetWatchResult(record);
         } catch (err) {
@@ -309,7 +308,6 @@ export const useWatchWorkflow = (baseUrl: string) => {
       const workflow = client.getVNextWorkflow(workflowId);
 
       await workflow.watch({ runId }, record => {
-        console.log('record in use-workflows===', record);
         try {
           debouncedSetVNextWatchResult(record);
         } catch (err) {
