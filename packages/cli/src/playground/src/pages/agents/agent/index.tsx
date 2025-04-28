@@ -1,4 +1,4 @@
-import { AgentProvider, AgentChat as Chat, MastraResizablePanel, type ModelSettings } from '@mastra/playground-ui';
+import { AgentProvider, AgentChat as Chat, MastraResizablePanel } from '@mastra/playground-ui';
 import { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router';
 import { v4 as uuid } from '@lukeed/uuid';
@@ -21,7 +21,7 @@ function Agent() {
     threadId: threadId!,
     memory: !!memory?.result,
   });
-  const [sidebar, _] = useState(true);
+  const [sidebar] = useState(true);
   const {
     threads,
     isLoading: isThreadsLoading,
