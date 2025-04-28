@@ -3119,7 +3119,7 @@ describe('Workflow', () => {
       });
     });
 
-    it('should be able to nest workflows and return all nested step results', async () => {
+    it('should be able clone workflows as steps', async () => {
       const start = vi.fn().mockImplementation(async ({ inputData }) => {
         // Get the current value (either from trigger or previous increment)
         const currentValue = inputData.startValue || 0;
