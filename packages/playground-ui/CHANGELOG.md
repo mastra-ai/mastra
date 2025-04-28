@@ -1,5 +1,16 @@
 # @mastra/playground-ui
 
+## 5.0.1-alpha.3
+
+### Patch Changes
+
+- 34a76ca: Call workflow cleanup function when closing watch stream controller
+- 0c3c4f4: Playground routing model settings for AgentNetworks
+- 1700eca: fixing overflow on agent traces
+- Updated dependencies [6262bd5]
+  - @mastra/core@0.9.1-alpha.3
+  - @mastra/client-js@0.1.19-alpha.3
+
 ## 5.0.1-alpha.2
 
 ### Patch Changes

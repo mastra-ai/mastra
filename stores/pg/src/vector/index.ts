@@ -71,23 +71,49 @@ export class PgVector extends MastraVector {
   private schemaSetupComplete: boolean | undefined = undefined;
 
   constructor(connectionString: string);
-  constructor(config: { connectionString: string; schemaName?: string });
-  constructor(config: string | { connectionString: string; schemaName?: string }) {
-    const connectionString = typeof config === 'string' ? config : config.connectionString;
-    if (!connectionString || typeof connectionString !== 'string' || connectionString.trim() === '') {
+  constructor(config: {
+    connectionString: string;
+    schemaName?: string;
+    pgPoolOptions?: Omit<pg.PoolConfig, 'connectionString'>;
+  });
+  constructor(
+    config:
+      | string
+      | {
+          connectionString: string;
+          schemaName?: string;
+          pgPoolOptions?: Omit<pg.PoolConfig, 'connectionString'>;
+        },
+  ) {
+    let connectionString: string;
+    let pgPoolOptions: Omit<pg.PoolConfig, 'connectionString'> | undefined;
+    let schemaName: string | undefined;
+
+    if (typeof config === 'string') {
+      connectionString = config;
+      schemaName = undefined;
+      pgPoolOptions = undefined;
+    } else {
+      connectionString = config.connectionString;
+      schemaName = config.schemaName;
+      pgPoolOptions = config.pgPoolOptions;
+    }
+
+    if (!connectionString || connectionString.trim() === '') {
       throw new Error(
         'PgVector: connectionString must be provided and cannot be empty. Passing an empty string may cause fallback to local Postgres defaults.',
       );
     }
     super();
 
-    this.schema = typeof config === 'string' ? undefined : config.schemaName;
+    this.schema = schemaName;
 
     const basePool = new pg.Pool({
       connectionString,
       max: 20, // Maximum number of clients in the pool
       idleTimeoutMillis: 30000, // Close idle connections after 30 seconds
       connectionTimeoutMillis: 2000, // Fail fast if can't connect
+      ...pgPoolOptions,
     });
 
     const telemetry = this.__getTelemetry();

@@ -62,8 +62,8 @@ export const Span = ({ children, durationMs, variant, tokenCount, spans, isRoot,
   return (
     <TraceDurationProvider durationMs={durationMs}>
       <li>
-        <div className={clsx('grid grid-cols-2 items-center gap-2 rounded-md pl-2', isActive && 'bg-surface4')}>
-          <div className="flex h-8 items-center gap-1">
+        <div className={clsx('flex justify-between items-center gap-2 rounded-md pl-2', isActive && 'bg-surface4')}>
+          <div className="flex h-8 items-center gap-1 min-w-0">
             {spans ? (
               <button
                 type="button"

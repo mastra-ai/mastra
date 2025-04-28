@@ -18,7 +18,7 @@ export const Time = ({ durationMs, tokenCount, variant, progressPercent }: TimeP
   const variantClass = variant ? variantClasses[variant] : 'bg-accent3';
 
   return (
-    <div>
+    <div className="w-[166px] shrink-0">
       <div className="bg-surface4 relative h-[6px] w-full rounded-full p-px overflow-hidden">
         <div className={clsx('absolute h-1 rounded-full', variantClass)} style={{ width: `${progressPercent}%` }} />
       </div>
