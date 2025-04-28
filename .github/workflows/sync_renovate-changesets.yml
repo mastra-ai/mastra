@@ -48,7 +48,7 @@ jobs:
 
       - name: Setup Node.js 20.x
         uses: actions/setup-node@v4
-        with:
+        with:=
           node-version: 20.x
           cache: 'pnpm'
 
@@ -56,6 +56,6 @@ jobs:
         run: pnpm install -w
 
       - name: Create/Update Changesets
-        uses: 'the-guild-org/changesets-dependencies-action@v1.1.0'
+        uses: 'wardpeet/changesets-dependencies-action#allow-skip-creds'
         env:
           GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}
