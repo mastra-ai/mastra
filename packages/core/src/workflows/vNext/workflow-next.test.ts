@@ -1890,7 +1890,7 @@ describe('Workflow', () => {
         watchData.push({
           ...data,
           payload: {
-            currentStep: { ...data.payload.currentStep },
+            currentStep: data.payload.currentStep ? { ...data.payload.currentStep } : undefined,
             workflowState: { ...data.payload.workflowState },
           },
         });
@@ -1919,6 +1919,24 @@ describe('Workflow', () => {
               step1: { status: 'success', output: { result: 'success1' } },
             },
             result: null,
+            error: null,
+          },
+        },
+        eventTimestamp: expect.any(Number),
+      });
+
+      expect(watchData[watchData.length - 1]).toEqual({
+        type: 'watch',
+        payload: {
+          currentStep: undefined,
+          workflowState: {
+            status: 'success',
+            steps: {
+              input: {},
+              step1: { status: 'success', output: { result: 'success1' } },
+              step2: { status: 'success', output: { result: 'success2' } },
+            },
+            result: { result: 'success2' },
             error: null,
           },
         },
@@ -1966,7 +1984,7 @@ describe('Workflow', () => {
         watchData.push({
           ...data,
           payload: {
-            currentStep: { ...data.payload.currentStep },
+            currentStep: data.payload.currentStep ? { ...data.payload.currentStep } : undefined,
             workflowState: { ...data.payload.workflowState },
           },
         });
@@ -2004,7 +2022,7 @@ describe('Workflow', () => {
       expect(watchData[watchData.length - 1]).toEqual({
         type: 'watch',
         payload: {
-          currentStep: {},
+          currentStep: undefined,
           workflowState: {
             status: 'success',
             steps: {

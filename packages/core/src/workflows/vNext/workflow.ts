@@ -829,8 +829,8 @@ export class Run<
   updateState(state: Record<string, any>) {
     if (state.currentStep) {
       this.state.currentStep = state.currentStep;
-    } else if (state.workflowState?.status === 'success') {
-      this.state.currentStep = {};
+    } else if (state.workflowState?.status !== 'running') {
+      delete this.state.currentStep;
     }
 
     if (state.workflowState) {

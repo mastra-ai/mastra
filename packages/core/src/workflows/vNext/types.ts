@@ -57,7 +57,7 @@ export type VariableReference<
 export type WatchEvent = {
   type: 'watch';
   payload: {
-    currentStep: {
+    currentStep?: {
       id: string;
       status: 'running' | 'success' | 'failed' | 'suspended';
       output?: Record<string, any>;
