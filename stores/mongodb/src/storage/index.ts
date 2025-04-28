@@ -600,4 +600,8 @@ export class MongoDBStore extends MastraStorage {
       createdAt: row.created_at as string,
     };
   }
+
+  async close(): Promise<void> {
+    await this.client.close();
+  }
 }

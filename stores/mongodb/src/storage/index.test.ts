@@ -1,7 +1,7 @@
 import { randomUUID } from 'crypto';
 import type { MessageType, MetricResult, WorkflowRunState } from '@mastra/core';
 import { TABLE_EVALS, TABLE_MESSAGES, TABLE_THREADS, TABLE_WORKFLOW_SNAPSHOT } from '@mastra/core/storage';
-import { beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { MongoDBConfig } from './index';
 import { MongoDBStore } from './index';
 
@@ -18,7 +18,6 @@ class Test {
 
   async clearTables() {
     try {
-      // Clear tables before each test
       await this.store.clearTable({ tableName: TABLE_WORKFLOW_SNAPSHOT });
       await this.store.clearTable({ tableName: TABLE_MESSAGES });
       await this.store.clearTable({ tableName: TABLE_THREADS });
@@ -212,7 +211,6 @@ describe('MongoDBStore', () => {
 
       // Verify messages were also deleted
       const retrievedMessages = await store.getMessages({ threadId: thread.id });
-      console.log('index.test.ts [170]', retrievedMessages);
       expect(retrievedMessages).toHaveLength(0);
     });
   });
@@ -748,13 +746,11 @@ describe('MongoDBStore', () => {
     });
   });
 
-  /**
-   afterAll(async () => {
-   try {
-   await store.close();
-   } catch (error) {
-   console.warn('Error closing store:', error);
-   }
-   });
-   */
+  afterAll(async () => {
+    try {
+      await store.close();
+    } catch (error) {
+      console.warn('Error closing store:', error);
+    }
+  });
 });
