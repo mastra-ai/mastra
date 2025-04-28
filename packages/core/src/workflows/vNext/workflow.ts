@@ -198,7 +198,7 @@ export function createWorkflow<
   TWorkflowId extends string = string,
   TInput extends z.ZodType<any> = z.ZodType<any>,
   TOutput extends z.ZodType<any> = z.ZodType<any>,
-  TSteps extends Step<string, any, any>[] = Step<string, any, any>[],
+  TSteps extends Step<string, any, any, any, any>[] = Step<string, any, any, any, any>[],
 >(params: NewWorkflowConfig<TWorkflowId, TInput, TOutput, TSteps>) {
   return new NewWorkflow(params);
 }
@@ -236,7 +236,7 @@ export type NewWorkflowConfig<
   TWorkflowId extends string = string,
   TInput extends z.ZodType<any> = z.ZodType<any>,
   TOutput extends z.ZodType<any> = z.ZodType<any>,
-  TSteps extends Step<string, any, any>[] = Step<string, any, any>[],
+  TSteps extends Step<string, any, any, any, any>[] = Step<string, any, any, any, any>[],
 > = {
   mastra?: Mastra;
   id: TWorkflowId;
@@ -252,7 +252,7 @@ export type NewWorkflowConfig<
 };
 
 export class NewWorkflow<
-    TSteps extends Step<string, any, any>[] = Step<string, any, any>[],
+    TSteps extends Step<string, any, any, any, any>[] = Step<string, any, any, any, any>[],
     TWorkflowId extends string = string,
     TInput extends z.ZodType<any> = z.ZodType<any>,
     TOutput extends z.ZodType<any> = z.ZodType<any>,
@@ -265,7 +265,7 @@ export class NewWorkflow<
   public description?: string | undefined;
   public inputSchema: TInput;
   public outputSchema: TOutput;
-  public steps: Record<string, Step<string, any, any>>;
+  public steps: Record<string, Step<string, any, any, any, any>>;
   protected stepFlow: StepFlowEntry[];
   protected executionEngine: ExecutionEngine;
   protected executionGraph: ExecutionGraph;
