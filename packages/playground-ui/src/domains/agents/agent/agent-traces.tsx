@@ -1,45 +1,37 @@
-import { ReactNode, useContext, useState } from 'react';
-
-import { cn } from '@/lib/utils';
+import { useContext, useState } from 'react';
 
 import { TraceContext, TraceProvider } from '@/domains/traces/context/trace-context';
 
 import { useTraces } from '@/hooks/use-traces';
 import { TracesTable } from '../../traces/traces-table';
 import { TracesSidebar } from '@/domains/traces/traces-sidebar';
+import clsx from 'clsx';
 
 export interface AgentTracesProps {
   agentName: string;
   baseUrl: string;
-  sidebarChild: ReactNode;
 }
 
-export function AgentTraces({ agentName, baseUrl, sidebarChild }: AgentTracesProps) {
+export function AgentTraces({ agentName, baseUrl }: AgentTracesProps) {
   return (
     <TraceProvider>
-      <AgentTracesInner agentName={agentName} baseUrl={baseUrl} sidebarChild={sidebarChild} />
+      <AgentTracesInner agentName={agentName} baseUrl={baseUrl} />
     </TraceProvider>
   );
 }
 
-function AgentTracesInner({ agentName, baseUrl, sidebarChild }: AgentTracesProps) {
-  const [sidebarWidth, setSidebarWidth] = useState(30);
+function AgentTracesInner({ agentName, baseUrl }: AgentTracesProps) {
+  const [sidebarWidth, setSidebarWidth] = useState(100);
   const { traces, firstCallLoading, error } = useTraces(agentName, baseUrl);
   const { isOpen: open } = useContext(TraceContext);
 
   return (
-    <main className="h-full relative overflow-hidden flex flex-row">
-      <div className="flex-1 block mr-[30%]">
+    <main className="h-full relative overflow-hidden flex">
+      <div className={clsx('h-full', open ? 'w-auto' : 'w-full')}>
         <TracesTable traces={traces} isLoading={firstCallLoading} error={error} />
       </div>
 
-      <TracesSidebar
-        className={cn(open ? 'grid grid-cols-2 w-[60%]' : 'min-w-[325px]')}
-        width={100 - sidebarWidth}
-        onResize={setSidebarWidth}
-      >
-        {sidebarChild}
-      </TracesSidebar>
+      {open && <TracesSidebar width={sidebarWidth} onResize={setSidebarWidth} />}
     </main>
   );
 }

@@ -212,8 +212,8 @@ export function VNextWorkflowTrigger({
         {isSuspendedSteps &&
           suspendedSteps?.map(step => {
             const stepDefinition = vNextWorkflow.steps[step.stepId];
-            const stepSchema = stepDefinition?.inputSchema
-              ? resolveSerializedZodOutput(jsonSchemaToZod(parse(stepDefinition.inputSchema)))
+            const stepSchema = stepDefinition?.resumeSchema
+              ? resolveSerializedZodOutput(jsonSchemaToZod(parse(stepDefinition.resumeSchema)))
               : z.record(z.string(), z.any());
             return (
               <div className="flex flex-col px-4">
