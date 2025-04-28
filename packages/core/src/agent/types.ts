@@ -39,17 +39,19 @@ export interface AgentConfig<
   TMetrics extends Record<string, Metric> = Record<string, Metric>,
 > {
   name: TAgentId;
-  instructions: string;
-  model: MastraLanguageModel;
+  instructions: string | (({ runtimeContext }: { runtimeContext: RuntimeContext }) => Promise<string> | string);
+  model:
+    | MastraLanguageModel
+    | (({ runtimeContext }: { runtimeContext: RuntimeContext }) => Promise<MastraLanguageModel> | MastraLanguageModel);
+  tools?: TTools | (({ runtimeContext }: { runtimeContext: RuntimeContext }) => Promise<TTools> | TTools);
   defaultGenerateOptions?: AgentGenerateOptions;
   defaultStreamOptions?: AgentStreamOptions;
-  tools?: TTools;
   mastra?: Mastra;
-  /** @deprecated This property is deprecated. Use evals instead to add evaluation metrics. */
-  metrics?: TMetrics;
   evals?: TMetrics;
   memory?: MastraMemory;
   voice?: CompositeVoice;
+  /** @deprecated This property is deprecated. Use evals instead to add evaluation metrics. */
+  metrics?: TMetrics;
 }
 
 /**

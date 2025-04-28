@@ -22,6 +22,22 @@ export const chefAgent = new Agent({
   voice: new OpenAIVoice(),
 });
 
+export const dynamicAgent = new Agent({
+  name: 'Dynamic Agent',
+  instructions: ({ runtimeContext }) => {
+    if (runtimeContext.get('foo')) {
+      return 'You are a dynamic agent';
+    }
+    return 'You are a static agent';
+  },
+  model: ({ runtimeContext }) => {
+    if (runtimeContext.get('foo')) {
+      return openai('gpt-4o');
+    }
+    return openai('gpt-4o-mini');
+  },
+});
+
 export const chefAgentResponses = new Agent({
   name: 'Chef Agent',
   instructions: `
