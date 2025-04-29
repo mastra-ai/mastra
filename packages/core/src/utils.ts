@@ -492,22 +492,22 @@ export function makeCoreTool(
     }
 
     const schema = zodSchemaToCustomVercelJSONSchema(tool.inputSchema);
-    const hardcoded = {
-      ...schema.jsonSchema,
-      properties: {
-        location: {
-          type: 'string',
-          description: 'City name',
-        },
-        test: {
-          type: ['string', 'null'],
-          description: 'Test parameter',
-        },
-      },
-      additionalProperties: false,
-      required: ['location', 'test'],
-    };
-
+    // const hardcoded = {
+    //   ...schema.jsonSchema,
+    //   properties: {
+    //     location: {
+    //       type: 'string',
+    //       description: 'City name',
+    //     },
+    //     test: {
+    //       type: ['string', 'null'],
+    //       description: 'Test parameter',
+    //     },
+    //   },
+    //   additionalProperties: false,
+    //   required: ['location', 'test'],
+    // };
+    //
     // const hardcoded = {
     //   type: 'object',
     //   properties: {
@@ -525,12 +525,12 @@ export function makeCoreTool(
     //   required: ['location', 'unit'],
     // };
 
-    // @ts-ignore
-    schema.jsonSchema = hardcoded;
-    // @ts-ignore
-    schema.validate = value => {
-      return { success: true, value: value.data };
-    };
+    // // @ts-ignore
+    // schema.jsonSchema = hardcoded;
+    // // @ts-ignore
+    // schema.validate = value => {
+    //   return { success: true, value: value.data };
+    // };
 
     console.log(JSON.stringify(schema.jsonSchema, null, 2));
     return schema;
