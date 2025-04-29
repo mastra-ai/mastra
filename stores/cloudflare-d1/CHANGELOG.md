@@ -1,5 +1,14 @@
 # @mastra/cloudflare-d1
 
+## 0.1.6-alpha.4
+
+### Patch Changes
+
+- 479f490: [MASTRA-3131] Add getWorkflowRunByID and add resourceId as filter for getWorkflowRuns
+- Updated dependencies [e4943b8]
+- Updated dependencies [479f490]
+  - @mastra/core@0.9.1-alpha.4
+
 ## 0.1.6-alpha.3
 
 ### Patch Changes

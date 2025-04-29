@@ -1,0 +1,177 @@
+---
+title: "リファレンス: MCPServer | MCP経由でMastraツールを公開する | Mastraドキュメント"
+description: MCPServerのAPIリファレンス - Mastraツールと機能をModel Context Protocolサーバーとして公開するためのクラス。
+---
+
+# MCPServer
+
+`MCPServer`クラスは、既存のMastraツールをModel Context Protocol（MCP）サーバーとして公開する機能を提供します。これにより、任意のMCPクライアント（CursorやWindsurf、Claude Desktopなど）がツールに接続し、エージェントが利用できるようになります。
+Mastraエージェントでツールを使用するだけであれば、MCPサーバーを作成する必要はないことに注意してください。このAPIを使用すると、Mastraツールを外部MCPクライアントに公開できます。Mastraでは、MCPなしで直接ツールを使用できます。
+
+[stdio（サブプロセス）とSSE（HTTP）の両方のMCPトランスポート](https://modelcontextprotocol.io/docs/concepts/transports)をサポートしています。
+
+## プロパティ
+
+新しいMCPServerを作成するには、サーバーとそれが提供するツールに関する基本情報を提供する必要があります。
+
+<PropertiesTable
+  content={[
+    {
+      name: "name",
+      type: "string",
+      description: "サーバーの名前（「My Weather Server」など）。",
+    },
+    {
+      name: "version",
+      type: "string",
+      description: "サーバーのバージョン（「1.0.0」など）。",
+    },
+    {
+      name: "tools",
+      type: "ToolsInput",
+      description:
+        "利用可能にしたいツールを含むオブジェクト。これにはMastraやVercel AI SDKで作成されたツールを含めることができます。",
+    },
+  ]}
+/>
+
+例えば、以下のように新しい`MCPServer`インスタンスを作成できます：
+
+```typescript
+import { MCPServer } from "@mastra/mcp";
+import { weatherTool } from "./tools"; // Assuming you have a weather tool defined in this file
+
+const server = new MCPServer({
+  name: "My Weather Server",
+  version: "1.0.0",
+  tools: { weatherTool },
+});
+```
+
+## メソッド
+
+これらは`MCPServer`インスタンスで呼び出すことができる関数で、その動作を制御し情報を取得するためのものです。
+
+### startStdio()
+
+このメソッドを使用して、標準入出力（stdio）を使用して通信するようにサーバーを起動します。これは、サーバーをコマンドラインプログラムとして実行する場合の典型的な方法です。
+
+```typescript
+async startStdio(): Promise<void>
+```
+
+以下は、stdioを使用してサーバーを起動する方法です：
+
+```typescript
+const server = new MCPServer({
+  // example configuration above
+});
+await server.startStdio();
+```
+
+### startSSE()
+
+このメソッドは、MCPサーバーを既存のWebサーバーと統合して、Server-Sent Events（SSE）を通信に使用するのに役立ちます。WebサーバーのコードからSSEまたはメッセージパスへのリクエストを受信したときに、これを呼び出します。
+
+```typescript
+async startSSE({
+  url,
+  ssePath,
+  messagePath,
+  req,
+  res,
+}: {
+  url: URL;
+  ssePath: string;
+  messagePath: string;
+  req: any;
+  res: any;
+}): Promise<void>
+```
+
+以下は、HTTPサーバーのリクエストハンドラー内で`startSSE`を使用する例です。この例では、MCPクライアントは`http://localhost:1234/sse`であなたのMCPサーバーに接続できます：
+
+```typescript
+import http from "http";
+
+const httpServer = http.createServer(async (req, res) => {
+  await server.startSSE({
+    url: new URL(req.url || "", `http://localhost:1234`),
+    ssePath: "/sse",
+    messagePath: "/message",
+    req,
+    res,
+  });
+});
+
+httpServer.listen(PORT, () => {
+  console.log(`HTTP server listening on port ${PORT}`);
+});
+```
+
+以下は、`startSSE`メソッドに必要な値の詳細です：
+
+<PropertiesTable
+  content={[
+    {
+      name: "url",
+      type: "URL",
+      description: "ユーザーがリクエストしているWebアドレス。",
+    },
+    {
+      name: "ssePath",
+      type: "string",
+      description: "クライアントがSSE接続するためのURLの特定の部分（例：'/sse'）。",
+    },
+    {
+      name: "messagePath",
+      type: "string",
+      description: "クライアントがメッセージを送信するためのURLの特定の部分（例：'/message'）。",
+    },
+    {
+      name: "req",
+      type: "any",
+      description: "Webサーバーからの着信リクエストオブジェクト。",
+    },
+    {
+      name: "res",
+      type: "any",
+      description: "Webサーバーからのレスポンスオブジェクト。データを送り返すために使用されます。",
+    },
+  ]}
+/>
+
+### getStdioTransport()
+
+`startStdio()`でサーバーを起動した場合、これを使用してstdio通信を管理するオブジェクトを取得できます。これは主に内部的なチェックやテスト用です。
+
+```typescript
+getStdioTransport(): StdioServerTransport | undefined
+```
+
+### getSseTransport()
+
+`startSSE()`でサーバーを起動した場合、これを使用してSSE通信を管理するオブジェクトを取得できます。`getStdioTransport`と同様に、これは主に内部チェックやテスト用です。
+
+```typescript
+getSseTransport(): SSEServerTransport | undefined
+```
+
+### tools()
+
+このメソッドは、サーバーを作成したときに設定されたツールを確認できます。これは読み取り専用のリストで、デバッグ目的に役立ちます。
+
+```typescript
+tools(): Readonly<Record<string, ConvertedTool>>
+```
+
+このメソッドは、サーバーを作成したときに設定されたツールを確認できます。これは読み取り専用のリストで、デバッグ目的に役立ちます。
+
+```typescript
+tools(): Readonly<Record<string, ConvertedTool>>
+```
+
+## 関連情報
+
+- Mastraで MCPサーバーに接続する方法については、[MCPClientのドキュメント](./mcp-client)を参照してください。
+- Model Context Protocolの詳細については、[@modelcontextprotocol/sdkのドキュメント](https://github.com/modelcontextprotocol/typescript-sdk)を参照してください。

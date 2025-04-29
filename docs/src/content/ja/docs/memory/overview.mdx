@@ -12,14 +12,14 @@ Mastraでは、コンテキストは3つの部分に分かれています：シ�
 
 ## クイックスタート
 
-メモリを動作させる最速の方法は、組み込みの開発プレイグラウンドを使用することです。
+メモリを動作させる最も速い方法は、組み込みの開発プレイグラウンドを使用することです。
 
 まだ行っていない場合は、メインの[スタートガイド](/docs/getting-started/installation)に従って新しいMastraプロジェクトを作成してください。
 
 **1. メモリパッケージをインストールします：**
 
 ```bash npm2yarn copy
-npm install @mastra/memory
+npm install @mastra/memory@latest
 ```
 
 **2. エージェントを作成し、`Memory`インスタンスを接続します：**
@@ -46,7 +46,7 @@ npm run dev
 
 **4. プレイグラウンド（http://localhost:4111）を開き、`MemoryAgent`を選択します：**
 
-いくつかのメッセージを送信して、会話の中で情報を記憶していることを確認してください：
+いくつかのメッセージを送信して、ターンをまたいで情報を記憶していることに注目してください：
 
 ```
 ➡️ あなた: 私の好きな色は青です。
@@ -73,7 +73,7 @@ const response = await myMemoryAgent.stream("Hello, my name is Alice.", {
 
 ## 会話履歴
 
-デフォルトでは、`Memory`インスタンスは現在のMemoryスレッドからの[最新40メッセージ](../../reference/memory/Memory.mdx)を各新規リクエストに含めます。これにより、エージェントに即時の会話コンテキストが提供されます。
+デフォルトでは、`Memory`インスタンスは現在のMemoryスレッドから[最新の40メッセージ](../../reference/memory/Memory.mdx)を各新規リクエストに含めます。これにより、エージェントに即時の会話コンテキストが提供されます。
 
 ```ts {3}
 const memory = new Memory({
@@ -88,19 +88,17 @@ const memory = new Memory({
 ### ストレージ設定
 
 会話履歴はメッセージを保存するために[ストレージアダプター](/reference/memory/Memory#parameters)に依存しています。
+デフォルトでは、[Mastraメインインスタンス](https://mastra.ai/reference/core/mastra-class#initialization)に提供されたのと同じストレージを使用します。
 
 ```ts {7-12}
 import { Memory } from "@mastra/memory";
 import { Agent } from "@mastra/core/agent";
-import { LibSQLStore } from "@mastra/core/storage/libsql";
+import { LibSQLStore } from "@mastra/libsql";
 
 const agent = new Agent({
   memory: new Memory({
-    // これは省略した場合のデフォルトストレージDBです
     storage: new LibSQLStore({
-      config: {
-        url: "file:local.db",
-      },
+      url: "file:./local.db",
     }),
   }),
 });

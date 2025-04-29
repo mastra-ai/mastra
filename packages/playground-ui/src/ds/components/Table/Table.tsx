@@ -61,11 +61,20 @@ export interface RowProps {
   className?: string;
   children: React.ReactNode;
   selected?: boolean;
+  onClick?: () => void;
 }
 
-export const Row = ({ className, children, selected = false }: RowProps) => {
+export const Row = ({ className, children, selected = false, onClick }: RowProps) => {
   return (
-    <tr className={clsx('border-b-sm border-border1 hover:bg-surface3', selected && 'bg-surface4', className)}>
+    <tr
+      className={clsx(
+        'border-b-sm border-border1 hover:bg-surface3',
+        selected && 'bg-surface4',
+        onClick && 'cursor-pointer',
+        className,
+      )}
+      onClick={onClick}
+    >
       {children}
     </tr>
   );

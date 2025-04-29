@@ -79,7 +79,7 @@ jobs:
             dir=$(dirname "$package_json")
             echo "Installing dependencies in $dir"
             cd "$dir"
-            pnpm install --ignore-workspace
+            pnpm install --ignore-workspace --no-frozen-lockfile
             cd - > /dev/null
           done
 
