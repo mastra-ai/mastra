@@ -23,6 +23,7 @@ export function MastraNetworkRuntimeProvider({
   threadId,
   baseUrl,
   refreshThreadList,
+  modelSettings = {},
 }: Readonly<{
   children: ReactNode;
 }> &
@@ -30,6 +31,9 @@ export function MastraNetworkRuntimeProvider({
   const [isRunning, setIsRunning] = useState(false);
   const [messages, setMessages] = useState<ThreadMessageLike[]>(initialMessages || []);
   const [currentThreadId, setCurrentThreadId] = useState<string | undefined>(threadId);
+
+  const { frequencyPenalty, presencePenalty, maxRetries, maxSteps, maxTokens, temperature, topK, topP, instructions } =
+    modelSettings;
 
   useEffect(() => {
     if (messages.length === 0 || currentThreadId !== threadId) {
@@ -41,10 +45,6 @@ export function MastraNetworkRuntimeProvider({
   }, [initialMessages, threadId, memory, messages]);
 
   const mastra = createMastraClient(baseUrl);
-
-  console.log('MastraClient initialized');
-
-  console.log(messages, '###');
 
   const network = mastra.getNetwork(agentId);
 
@@ -64,6 +64,15 @@ export function MastraNetworkRuntimeProvider({
           },
         ],
         runId: agentId,
+        frequencyPenalty,
+        presencePenalty,
+        maxRetries,
+        maxSteps,
+        maxTokens,
+        temperature,
+        topK,
+        topP,
+        instructions,
         ...(memory ? { threadId, resourceId: agentId } : {}),
       });
 

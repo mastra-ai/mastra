@@ -1,5 +1,29 @@
 # @mastra/mcp
 
+## 0.4.1-alpha.4
+
+### Patch Changes
+
+- 2526527: We are deprecating the MastraMCPClient class in favour of using MCPClient (formerly MCPConfiguration). MCPClient can handle 1+ MCP servers, whereas MastraMCPClient can only handle a single MCP server. Rather than having two different interfaces to use when using a single MCP vs multiple, we opted to nudge people towards using the interface that is more flexible.
+- a2ccb71: improved mcp config cache
+
+## 0.4.1-alpha.3
+
+### Patch Changes
+
+- ba1f4f3: Added Streamable HTTP MCP support to MCPConfiguration and MastraMCPClient
+- Updated dependencies [6262bd5]
+  - @mastra/core@0.9.1-alpha.3
+
+## 0.4.1-alpha.2
+
+### Patch Changes
+
+- Updated dependencies [405b63d]
+- Updated dependencies [61e92f5]
+- Updated dependencies [c71013a]
+  - @mastra/core@0.9.1-alpha.2
+
 ## 0.4.1-alpha.1
 
 ### Patch Changes

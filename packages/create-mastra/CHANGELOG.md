@@ -1,5 +1,22 @@
 # create-mastra
 
+## 0.3.0-alpha.2
+
+### Patch Changes
+
+- 34a76ca: Call workflow cleanup function when closing watch stream controller
+- 0c3c4f4: Playground routing model settings for AgentNetworks
+- 1700eca: fixing overflow on agent traces
+
+## 0.3.0-alpha.1
+
+### Patch Changes
+
+- 70124e1: revamp the ui for traces
+- 926821d: Fix triggerSchema default not showing in workflow ui
+- 57b25ed: Use resumeSchema to show inputs on the playground for suspended workflows
+- f1d4b7a: Add x-mastra-dev-playground header to all playground requests
+
 ## 0.3.0-alpha.0
 
 ### Minor Changes

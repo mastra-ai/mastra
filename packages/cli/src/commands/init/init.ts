@@ -35,7 +35,7 @@ export const init = async ({
   llmProvider: LLMProvider;
   addExample: boolean;
   llmApiKey?: string;
-  configureEditorWithDocsMCP?: undefined | 'windsurf' | 'cursor';
+  configureEditorWithDocsMCP?: undefined | 'windsurf' | 'cursor' | 'cursor-global';
 }) => {
   s.start('Initializing Mastra');
 
