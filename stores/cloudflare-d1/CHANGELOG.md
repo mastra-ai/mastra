@@ -1,5 +1,18 @@
 # @mastra/cloudflare-d1
 
+## 0.1.6-alpha.6
+
+### Patch Changes
+
+- Updated dependencies [3e7b69d]
+  - @mastra/core@0.9.1-alpha.5
+
+## 0.1.6-alpha.5
+
+### Patch Changes
+
+- c8641ce: [MASTRA-3276] Cloudflare KV and D1 Workflow Runs
+
 ## 0.1.6-alpha.4
 
 ### Patch Changes

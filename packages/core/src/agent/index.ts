@@ -15,7 +15,6 @@ import type {
 } from 'ai';
 import type { JSONSchema7 } from 'json-schema';
 import type { z, ZodSchema } from 'zod';
-
 import type { MastraPrimitives, MastraUnion } from '../action';
 import { MastraBase } from '../base';
 import type { Metric } from '../eval';
@@ -36,15 +35,24 @@ import { DefaultVoice } from '../voice';
 import { agentToStep, Step } from '../workflows';
 import type {
   AgentConfig,
+  MastraLanguageModel,
   AgentGenerateOptions,
   AgentStreamOptions,
   AiMessageType,
-  MastraLanguageModel,
   ToolsetsInput,
   ToolsInput,
+  DynamicArgument,
 } from './types';
 
 export * from './types';
+
+function resoolveMaybePromise<T, R = void>(value: T | Promise<T>, cb: (value: T) => R) {
+  if (value instanceof Promise) {
+    return value.then(cb);
+  }
+
+  return cb(value);
+}
 
 @InstrumentClass({
   prefix: 'agent',
@@ -57,43 +65,39 @@ export class Agent<
 > extends MastraBase {
   public id: TAgentId;
   public name: TAgentId;
-  readonly llm: MastraLLMBase;
-  instructions: string;
-  readonly model?: MastraLanguageModel;
+  #instructions: DynamicArgument<string>;
+  readonly model?: DynamicArgument<MastraLanguageModel>;
   #mastra?: Mastra;
   #memory?: MastraMemory;
   #defaultGenerateOptions: AgentGenerateOptions;
   #defaultStreamOptions: AgentStreamOptions;
-  tools: TTools;
+  #tools: DynamicArgument<TTools>;
   /** @deprecated This property is deprecated. Use evals instead. */
   metrics: TMetrics;
   evals: TMetrics;
-  voice: CompositeVoice;
+  #voice: CompositeVoice;
 
   constructor(config: AgentConfig<TAgentId, TTools, TMetrics>) {
     super({ component: RegisteredLogger.AGENT });
 
     this.name = config.name;
     this.id = config.name;
-    this.instructions = config.instructions;
+
+    this.#instructions = config.instructions;
 
     if (!config.model) {
       throw new Error(`LanguageModel is required to create an Agent. Please provide the 'model'.`);
     }
 
-    this.llm = new MastraLLM({ model: config.model, mastra: config.mastra });
+    this.model = config.model;
 
     this.#defaultGenerateOptions = config.defaultGenerateOptions || {};
     this.#defaultStreamOptions = config.defaultStreamOptions || {};
 
-    this.tools = {} as TTools;
+    this.#tools = config.tools || ({} as TTools);
 
     this.metrics = {} as TMetrics;
     this.evals = {} as TMetrics;
-
-    if (config.tools) {
-      this.tools = ensureToolProperties(config.tools) as TTools;
-    }
 
     if (config.mastra) {
       this.__registerMastra(config.mastra);
@@ -118,25 +122,178 @@ export class Agent<
     }
 
     if (config.voice) {
-      this.voice = config.voice;
-      this.voice?.addTools(this.tools);
-      this.voice?.addInstructions(config.instructions);
+      this.#voice = config.voice;
+      if (typeof config.tools !== 'function') {
+        this.#voice?.addTools(this.tools);
+      }
+      if (typeof config.instructions === 'string') {
+        this.#voice?.addInstructions(config.instructions);
+      }
     } else {
-      this.voice = new DefaultVoice();
+      this.#voice = new DefaultVoice();
     }
   }
 
   public hasOwnMemory(): boolean {
     return Boolean(this.#memory);
   }
+
   public getMemory(): MastraMemory | undefined {
     return this.#memory ?? this.#mastra?.memory;
   }
 
+  get voice() {
+    if (typeof this.#instructions === 'function') {
+      throw new Error('Voice is not compatible when instructions are a function. Please use getVoice() instead.');
+    }
+
+    return this.#voice;
+  }
+
+  public async getVoice({ runtimeContext }: { runtimeContext?: RuntimeContext } = {}) {
+    if (this.#voice) {
+      const voice = this.#voice;
+      voice?.addTools(await this.getTools({ runtimeContext }));
+      voice?.addInstructions(await this.getInstructions({ runtimeContext }));
+      return voice;
+    } else {
+      return new DefaultVoice();
+    }
+  }
+
+  get instructions() {
+    this.logger.warn('The instructions property is deprecated. Please use getInstructions() instead.');
+
+    if (typeof this.#instructions === 'function') {
+      throw new Error(
+        'Instructions are not compatible when instructions are a function. Please use getInstructions() instead.',
+      );
+    }
+
+    return this.#instructions;
+  }
+
+  public getInstructions({ runtimeContext = new RuntimeContext() }: { runtimeContext?: RuntimeContext } = {}):
+    | string
+    | Promise<string> {
+    if (typeof this.#instructions === 'string') {
+      return this.#instructions;
+    }
+
+    const result = this.#instructions({ runtimeContext });
+    return resoolveMaybePromise(result, instructions => {
+      if (!instructions) {
+        this.logger.error(`[Agent:${this.name}] - Function-based instructions returned empty value`);
+        throw new Error(
+          'Instructions are required to use an Agent. The function-based instructions returned an empty value.',
+        );
+      }
+
+      return instructions;
+    });
+  }
+
+  get tools() {
+    this.logger.warn('The tools property is deprecated. Please use getTools() instead.');
+
+    if (typeof this.#tools === 'function') {
+      throw new Error('Tools are not compatible when tools are a function. Please use getTools() instead.');
+    }
+
+    return ensureToolProperties(this.#tools) as TTools;
+  }
+
+  public getTools({ runtimeContext = new RuntimeContext() }: { runtimeContext?: RuntimeContext } = {}):
+    | TTools
+    | Promise<TTools> {
+    if (typeof this.#tools !== 'function') {
+      return ensureToolProperties(this.#tools) as TTools;
+    }
+
+    const result = this.#tools({ runtimeContext });
+
+    return resoolveMaybePromise(result, tools => {
+      if (!tools) {
+        this.logger.error(`[Agent:${this.name}] - Function-based tools returned empty value`);
+        throw new Error(
+          'Tools are required when using a function to provide them. The function returned an empty value.',
+        );
+      }
+
+      return ensureToolProperties(tools) as TTools;
+    });
+  }
+
+  get llm() {
+    this.logger.warn('The llm property is deprecated. Please use getLLM() instead.');
+
+    if (typeof this.model === 'function') {
+      throw new Error('LLM is not compatible when model is a function. Please use getLLM() instead.');
+    }
+
+    return this.getLLM();
+  }
+
+  /**
+   * Gets or creates an LLM instance based on the current model
+   * @param options Options for getting the LLM
+   * @returns A promise that resolves to the LLM instance
+   */
+  public getLLM({ runtimeContext = new RuntimeContext() }: { runtimeContext?: RuntimeContext } = {}):
+    | MastraLLMBase
+    | Promise<MastraLLMBase> {
+    const model = this.getModel({ runtimeContext });
+
+    return resoolveMaybePromise(model, model => {
+      const llm = new MastraLLM({ model, mastra: this.#mastra });
+
+      // Apply stored primitives if available
+      if (this.#primitives) {
+        llm.__registerPrimitives(this.#primitives);
+      }
+
+      if (this.#mastra) {
+        llm.__registerMastra(this.#mastra);
+      }
+
+      return llm;
+    });
+  }
+
+  /**
+   * Gets the model, resolving it if it's a function
+   * @param options Options for getting the model
+   * @returns A promise that resolves to the model
+   */
+  public getModel({ runtimeContext = new RuntimeContext() }: { runtimeContext?: RuntimeContext } = {}):
+    | MastraLanguageModel
+    | Promise<MastraLanguageModel> {
+    if (typeof this.model !== 'function') {
+      if (!this.model) {
+        this.logger.error(`[Agent:${this.name}] - No model provided`);
+        throw new Error('Model is required to use an Agent.');
+      }
+
+      return this.model;
+    }
+
+    const result = this.model({ runtimeContext });
+    return resoolveMaybePromise(result, model => {
+      if (!model) {
+        this.logger.error(`[Agent:${this.name}] - Function-based model returned empty value`);
+        throw new Error('Model is required to use an Agent. The function-based model returned an empty value.');
+      }
+
+      return model;
+    });
+  }
+
   __updateInstructions(newInstructions: string) {
-    this.instructions = newInstructions;
+    this.#instructions = newInstructions;
     this.logger.debug(`[Agents:${this.name}] Instructions updated.`, { model: this.model, name: this.name });
   }
+
+  #primitives?: MastraPrimitives;
 
   __registerPrimitives(p: MastraPrimitives) {
     if (p.telemetry) {
@@ -147,14 +304,15 @@ export class Agent<
       this.__setLogger(p.logger);
     }
 
-    this.llm.__registerPrimitives(p);
+    // Store primitives for later use when creating LLM instances
+    this.#primitives = p;
 
     this.logger.debug(`[Agents:${this.name}] initialized.`, { model: this.model, name: this.name });
   }
 
   __registerMastra(mastra: Mastra) {
     this.#mastra = mastra;
-    this.llm.__registerMastra(mastra);
+    // Mastra will be passed to the LLM when it's created in getLLM()
   }
 
   /**
@@ -162,23 +320,31 @@ export class Agent<
    * @param tools
    */
   __setTools(tools: TTools) {
-    this.tools = tools;
+    this.#tools = tools;
     this.logger.debug(`[Agents:${this.name}] Tools set for agent ${this.name}`, { model: this.model, name: this.name });
   }
 
-  async generateTitleFromUserMessage({ message }: { message: CoreUserMessage }) {
+  async generateTitleFromUserMessage({
+    message,
+    runtimeContext = new RuntimeContext(),
+  }: {
+    message: CoreUserMessage;
+    runtimeContext?: RuntimeContext;
+  }) {
     // need to use text, not object output or it will error for models that don't support structured output (eg Deepseek R1)
-    const { text } = await this.llm.__text<{ title: string }>({
-      runtimeContext: new RuntimeContext(),
+    const llm = await this.getLLM({ runtimeContext });
+
+    const { text } = await llm.__text<{ title: string }>({
+      runtimeContext,
       messages: [
         {
           role: 'system',
           content: `\n
-      - you will generate a short title based on the first message a user begins a conversation with
-      - ensure it is not more than 80 characters long
-      - the title should be a summary of the user's message
-      - do not use quotes or colons
-      - the entire text you return will be used as the title`,
+    - you will generate a short title based on the first message a user begins a conversation with
+    - ensure it is not more than 80 characters long
+    - the title should be a summary of the user's message
+    - do not use quotes or colons
+    - the entire text you return will be used as the title`,
         },
         {
           role: 'user',
@@ -445,7 +611,7 @@ export class Agent<
     }) as Array<CoreMessage>;
   }
 
-  convertTools({
+  private async convertTools({
     toolsets,
     clientTools,
     threadId,
@@ -459,7 +625,7 @@ export class Agent<
     resourceId?: string;
     runId?: string;
     runtimeContext: RuntimeContext;
-  }): Record<string, CoreTool> {
+  }): Promise<Record<string, CoreTool>> {
     this.logger.debug(`[Agents:${this.name}] - Assigning tools`, { runId, threadId, resourceId });
 
     // Get memory tools if available
@@ -472,10 +638,12 @@ export class Agent<
       mastraProxy = createMastraProxy({ mastra: this.#mastra, logger });
     }
 
-    const converted = Object.entries(this.tools || {}).reduce(
+    const tools = await this.getTools({ runtimeContext });
+
+    const converted = Object.entries(tools || {}).reduce(
       (memo, value) => {
         const k = value[0];
-        const tool = this.tools[k];
+        const tool = tools[k];
 
         if (tool) {
           const options = {
@@ -731,34 +899,29 @@ export class Agent<
 
         let convertedTools: Record<string, CoreTool> | undefined;
 
-        if (
-          (clientTools && Object.keys(clientTools || {}).length > 0) ||
-          (toolsets && Object.keys(toolsets || {}).length > 0) ||
-          (this.getMemory() && resourceId)
-        ) {
-          const reasons = [];
-          if (toolsets && Object.keys(toolsets || {}).length > 0) {
-            reasons.push(`toolsets present (${Object.keys(toolsets || {}).length} tools)`);
-          }
-          if (this.getMemory() && resourceId) {
-            reasons.push('memory and resourceId available');
-          }
-          this.logger.debug(`[Agent:${this.name}] - Enhancing tools: ${reasons.join(', ')}`, {
-            runId,
-            toolsets: toolsets ? Object.keys(toolsets) : undefined,
-            clientTools: clientTools ? Object.keys(clientTools) : undefined,
-            hasMemory: !!this.getMemory(),
-            hasResourceId: !!resourceId,
-          });
-          convertedTools = this.convertTools({
-            toolsets,
-            clientTools,
-            threadId: threadIdToUse,
-            resourceId,
-            runId,
-            runtimeContext,
-          });
+        const reasons = [];
+        if (toolsets && Object.keys(toolsets || {}).length > 0) {
+          reasons.push(`toolsets present (${Object.keys(toolsets || {}).length} tools)`);
         }
+        if (this.getMemory() && resourceId) {
+          reasons.push('memory and resourceId available');
+        }
+        this.logger.debug(`[Agent:${this.name}] - Enhancing tools: ${reasons.join(', ')}`, {
+          runId,
+          toolsets: toolsets ? Object.keys(toolsets) : undefined,
+          clientTools: clientTools ? Object.keys(clientTools) : undefined,
+          hasMemory: !!this.getMemory(),
+          hasResourceId: !!resourceId,
+        });
+
+        convertedTools = await this.convertTools({
+          toolsets,
+          clientTools,
+          threadId: threadIdToUse,
+          resourceId,
+          runId,
+          runtimeContext,
+        });
 
         const messageObjects = [systemMessage, ...(context || []), ...coreMessages];
 
@@ -923,9 +1086,10 @@ export class Agent<
       toolChoice = 'auto',
       experimental_output,
       telemetry,
-      runtimeContext,
+      runtimeContext = new RuntimeContext(),
       ...rest
     }: AgentGenerateOptions<Z> = Object.assign({}, this.#defaultGenerateOptions, generateOptions);
+
     let messagesToUse: CoreMessage[] = [];
 
     if (typeof messages === `string`) {
@@ -950,10 +1114,11 @@ export class Agent<
     }
 
     const runIdToUse = runId || randomUUID();
+    const instructionsToUse = instructions || (await this.getInstructions({ runtimeContext }));
+    const llm = await this.getLLM({ runtimeContext });
 
-    const normalizedRuntimeContext = runtimeContext ?? new RuntimeContext();
     const { before, after } = this.__primitive({
-      instructions,
+      instructions: instructionsToUse,
       messages: messagesToUse,
       context,
       threadId: threadIdInFn,
@@ -962,16 +1127,15 @@ export class Agent<
       runId: runIdToUse,
       toolsets,
       clientTools,
-      runtimeContext: normalizedRuntimeContext,
+      runtimeContext,
     });
 
     const { threadId, thread, messageObjects, convertedTools } = await before();
 
     if (!output && experimental_output) {
-      const result = await this.llm.__text({
+      const result = await llm.__text({
         messages: messageObjects,
-        tools: this.tools,
-        convertedTools,
+        tools: convertedTools,
         onStepFinish: (result: any) => {
           void onStepFinish?.(result);
         },
@@ -983,7 +1147,7 @@ export class Agent<
         threadId,
         resourceId,
         memory: this.getMemory(),
-        runtimeContext: normalizedRuntimeContext,
+        runtimeContext,
         ...rest,
       });
 
@@ -999,10 +1163,9 @@ export class Agent<
     }
 
     if (!output) {
-      const result = await this.llm.__text({
+      const result = await llm.__text({
         messages: messageObjects,
-        tools: this.tools,
-        convertedTools,
+        tools: convertedTools,
         onStepFinish: (result: any) => {
           void onStepFinish?.(result);
         },
@@ -1014,7 +1177,7 @@ export class Agent<
         threadId,
         resourceId,
         memory: this.getMemory(),
-        runtimeContext: normalizedRuntimeContext,
+        runtimeContext,
         ...rest,
       });
 
@@ -1025,11 +1188,10 @@ export class Agent<
       return result as unknown as GenerateReturn<Z>;
     }
 
-    const result = await this.llm.__textObject({
+    const result = await llm.__textObject({
       messages: messageObjects,
-      tools: this.tools,
+      tools: convertedTools,
       structuredOutput: output,
-      convertedTools,
       onStepFinish: (result: any) => {
         void onStepFinish?.(result);
       },
@@ -1039,7 +1201,7 @@ export class Agent<
       toolChoice,
       telemetry,
       memory: this.getMemory(),
-      runtimeContext: normalizedRuntimeContext,
+      runtimeContext,
       ...rest,
     });
 
@@ -1093,11 +1255,12 @@ export class Agent<
       toolChoice = 'auto',
       experimental_output,
       telemetry,
-      runtimeContext,
+      runtimeContext = new RuntimeContext(),
       ...rest
     }: AgentStreamOptions<Z> = Object.assign({}, this.#defaultStreamOptions, streamOptions);
-    const normalizedRuntimeContext = runtimeContext ?? new RuntimeContext();
     const runIdToUse = runId || randomUUID();
+    const instructionsToUse = instructions || (await this.getInstructions({ runtimeContext }));
+    const llm = await this.getLLM({ runtimeContext });
 
     let messagesToUse: CoreMessage[] = [];
 
@@ -1121,7 +1284,7 @@ export class Agent<
     }
 
     const { before, after } = this.__primitive({
-      instructions,
+      instructions: instructionsToUse,
       messages: messagesToUse,
       context,
       threadId: threadIdInFn,
@@ -1130,7 +1293,7 @@ export class Agent<
       runId: runIdToUse,
       toolsets,
       clientTools,
-      runtimeContext: normalizedRuntimeContext,
+      runtimeContext,
     });
 
     const { threadId, thread, messageObjects, convertedTools } = await before();
@@ -1140,11 +1303,10 @@ export class Agent<
         runId,
       });
 
-      const streamResult = await this.llm.__stream({
+      const streamResult = await llm.__stream({
         messages: messageObjects,
         temperature,
-        tools: this.tools,
-        convertedTools,
+        tools: convertedTools,
         onStepFinish: (result: any) => {
           void onStepFinish?.(result);
         },
@@ -1165,7 +1327,7 @@ export class Agent<
         toolChoice,
         experimental_output,
         memory: this.getMemory(),
-        runtimeContext: normalizedRuntimeContext,
+        runtimeContext,
         ...rest,
       });
 
@@ -1176,11 +1338,10 @@ export class Agent<
       this.logger.debug(`Starting agent ${this.name} llm stream call`, {
         runId,
       });
-      return this.llm.__stream({
+      return llm.__stream({
         messages: messageObjects,
         temperature,
-        tools: this.tools,
-        convertedTools,
+        tools: convertedTools,
         onStepFinish: (result: any) => {
           void onStepFinish?.(result);
         },
@@ -1201,7 +1362,7 @@ export class Agent<
         toolChoice,
         telemetry,
         memory: this.getMemory(),
-        runtimeContext: normalizedRuntimeContext,
+        runtimeContext,
         ...rest,
       }) as unknown as StreamReturn<Z>;
     }
@@ -1210,12 +1371,11 @@ export class Agent<
       runId,
     });
 
-    return this.llm.__streamObject({
+    return llm.__streamObject({
       messages: messageObjects,
-      tools: this.tools,
+      tools: convertedTools,
       temperature,
       structuredOutput: output,
-      convertedTools,
       onStepFinish: (result: any) => {
         void onStepFinish?.(result);
       },
@@ -1235,7 +1395,7 @@ export class Agent<
       toolChoice,
       telemetry,
       memory: this.getMemory(),
-      runtimeContext: normalizedRuntimeContext,
+      runtimeContext,
       ...rest,
     }) as unknown as StreamReturn<Z>;
   }

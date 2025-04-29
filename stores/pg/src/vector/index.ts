@@ -519,6 +519,7 @@ export class PgVector extends MastraVector {
     // Wait for the installation process to complete
     await this.installVectorExtensionPromise;
   }
+
   async listIndexes(): Promise<string[]> {
     const client = await this.pool.connect();
     try {

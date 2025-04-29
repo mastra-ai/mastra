@@ -1,5 +1,11 @@
 # @mastra/core
 
+## 0.9.1-alpha.5
+
+### Patch Changes
+
+- 3e7b69d: Dynamic agent props
+
 ## 0.9.1-alpha.4
 
 ### Patch Changes
