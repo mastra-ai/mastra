@@ -2283,7 +2283,7 @@ importers:
         version: link:../../packages/core
       '@speechify/api-sdk':
         specifier: ^2.4.1
-        version: 2.4.1
+        version: 2.5.2
       zod:
         specifier: ^3.24.2
         version: 3.24.3
@@ -3122,23 +3122,23 @@ importers:
         specifier: workspace:^
         version: link:../../packages/core
       '@speechify/api-sdk':
-        specifier: ^2.4.1
-        version: 2.4.1
+        specifier: ^2.5.2
+        version: 2.5.2
       zod:
-        specifier: ^3.24.2
+        specifier: ^3.24.3
         version: 3.24.3
     devDependencies:
       '@internal/lint':
         specifier: workspace:*
         version: link:../../packages/_config
       '@microsoft/api-extractor':
-        specifier: ^7.52.2
+        specifier: ^7.52.5
         version: 7.52.5(@types/node@20.17.32)
       '@types/node':
         specifier: ^20.17.27
         version: 20.17.32
       eslint:
-        specifier: ^9.23.0
+        specifier: ^9.25.1
         version: 9.25.1(jiti@2.4.2)
       tsup:
         specifier: ^8.4.0
@@ -8172,8 +8172,8 @@ packages:
     resolution: {integrity: sha512-piUTHyp2Axx3p/kc2CIJkYSv0BAaheBQmbACZgQSSfWUumWNW+R1lL+H9PDBxKJkvOeEX+hKYEFiwO8xagL8AQ==}
     engines: {node: '>=18.0.0'}
 
-  '@speechify/api-sdk@2.4.1':
-    resolution: {integrity: sha512-feWF7l9z3w/pHqhSMR8wR7Te+/f4BETx85lyeWeD+xB12g0L/Q0ltoGRGYcoAb2jag9Yu/C3GC3bYk0fiw+mNQ==}
+  '@speechify/api-sdk@2.5.2':
+    resolution: {integrity: sha512-PDAGauAeMLHyz9JTp3ole0ZbXXDXsbBlK/X8YToFJEUhIxuW02KC90CYImVz0xyNoNQEyDgPPBsA9Y71AOTzqA==}
     deprecated: 'This package is no longer supported. Please use the new official SDK: @speechify/api'
 
   '@supabase/auth-js@2.69.1':
@@ -24025,7 +24025,7 @@ snapshots:
       '@smithy/types': 4.1.0
       tslib: 2.8.1
 
-  '@speechify/api-sdk@2.4.1': {}
+  '@speechify/api-sdk@2.5.2': {}
 
   '@supabase/auth-js@2.69.1':
     dependencies:
