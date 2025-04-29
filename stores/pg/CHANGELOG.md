@@ -1,5 +1,13 @@
 # @mastra/pg
 
+## 0.3.1-alpha.3
+
+### Patch Changes
+
+- 6a76949: add PgVector pgPoolOptions constructor parameter
+- Updated dependencies [6262bd5]
+  - @mastra/core@0.9.1-alpha.3
+
 ## 0.3.1-alpha.2
 
 ### Patch Changes

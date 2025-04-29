@@ -134,6 +134,8 @@ const renovateConfig = {
   ],
 };
 
+const ignorePackages = ['@microsoft/api-extractor', 'tsup', 'rollup', 'eslint', 'prettier', 'typescript'];
+
 for (const pkg of listOfPackages) {
   const packageJsonPath = `${pkg}/package.json`;
   try {
@@ -149,6 +151,7 @@ for (const pkg of listOfPackages) {
       matchFileNames: [`${pkg}/package.json`],
       matchUpdateTypes: ['minor', 'patch'],
       matchDepTypes: ['dependencies', 'devDependencies'],
+      matchPackageNames: ['*', ...ignorePackages.map(pkg => `!${pkg}`)], // Match all except ignored packages
       enabled: true,
     });
 
@@ -159,6 +162,7 @@ for (const pkg of listOfPackages) {
       matchUpdateTypes: ['major'],
       matchDepTypes: ['dependencies', 'devDependencies'],
       enabled: true,
+      dependencyDashboardApproval: true,
     });
   } catch (error) {
     console.warn(`Could not read package.json for ${pkg}, using directory name instead`);
@@ -168,6 +172,7 @@ for (const pkg of listOfPackages) {
       matchFileNames: [`${pkg}/package.json`],
       matchUpdateTypes: ['minor', 'patch'],
       matchDepTypes: ['dependencies', 'devDependencies'],
+      matchPackageNames: ['*', ...ignorePackages.map(pkg => `!${pkg}`)], // Match all except ignored packages
       enabled: true,
     });
 
@@ -178,6 +183,7 @@ for (const pkg of listOfPackages) {
       matchUpdateTypes: ['major'],
       matchDepTypes: ['dependencies', 'devDependencies'],
       enabled: true,
+      dependencyDashboardApproval: true,
     });
   }
 }

@@ -1,5 +1,11 @@
 # @mastra/core
 
+## 0.9.1-alpha.3
+
+### Patch Changes
+
+- 6262bd5: Mastra server custom host config
+
 ## 0.9.1-alpha.2
 
 ### Patch Changes

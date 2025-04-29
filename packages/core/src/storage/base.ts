@@ -11,7 +11,7 @@ import {
   TABLE_SCHEMAS,
 } from './constants';
 import type { TABLE_NAMES } from './constants';
-import type { EvalRow, StorageColumn, StorageGetMessagesArg, WorkflowRuns } from './types';
+import type { EvalRow, StorageColumn, StorageGetMessagesArg, WorkflowRun, WorkflowRuns } from './types';
 
 export abstract class MastraStorage extends MastraBase {
   /** @deprecated import from { TABLE_WORKFLOW_SNAPSHOT } '@mastra/core/storage' instead */
@@ -176,11 +176,13 @@ export abstract class MastraStorage extends MastraBase {
   abstract getEvalsByAgentName(agentName: string, type?: 'test' | 'live'): Promise<EvalRow[]>;
 
   abstract getWorkflowRuns(args?: {
-    namespace?: string;
     workflowName?: string;
     fromDate?: Date;
     toDate?: Date;
     limit?: number;
     offset?: number;
+    resourceId?: string;
   }): Promise<WorkflowRuns>;
+
+  abstract getWorkflowRunById(args: { runId: string; workflowName?: string }): Promise<WorkflowRun | null>;
 }

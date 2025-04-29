@@ -174,9 +174,9 @@ For detailed configuration options and advanced usage, see the [Vector Query Too
 Vector store prompts define query patterns and filtering capabilities for each vector database implementation. 
 When implementing filtering, these prompts are required in the agent's instructions to specify valid operators and syntax for each vector store implementation.
 
-<Tabs items={['Pg Vector', 'Pinecone', 'Qdrant', 'Chroma', 'Astra', 'LibSQL', 'Upstash', 'Cloudflare']}>
+<Tabs items={['Pg Vector', 'Pinecone', 'Qdrant', 'Chroma', 'Astra', 'LibSQL', 'Upstash', 'Cloudflare', 'MongoDB']}>
   <Tabs.Tab>
-  ```ts showLineNumbers copy
+```ts showLineNumbers copy
 import { openai } from '@ai-sdk/openai';
 import { PGVECTOR_PROMPT } from "@mastra/rag";
 
@@ -190,10 +190,10 @@ export const ragAgent = new Agent({
   tools: { vectorQueryTool },
 });
 ```
-
 </Tabs.Tab>
+
 <Tabs.Tab>
-  ```ts filename="vector-store.ts" showLineNumbers copy
+```ts filename="vector-store.ts" showLineNumbers copy
 import { openai } from '@ai-sdk/openai';
 import { PINECONE_PROMPT } from "@mastra/rag";
 
@@ -208,8 +208,9 @@ export const ragAgent = new Agent({
 });
 ```
 </Tabs.Tab>
+
 <Tabs.Tab>
-  ```ts filename="vector-store.ts" showLineNumbers copy
+```ts filename="vector-store.ts" showLineNumbers copy
 import { openai } from '@ai-sdk/openai';
 import { QDRANT_PROMPT } from "@mastra/rag";
 
@@ -224,8 +225,9 @@ export const ragAgent = new Agent({
 });
 ```
 </Tabs.Tab>
+
 <Tabs.Tab>
-  ```ts filename="vector-store.ts" showLineNumbers copy
+```ts filename="vector-store.ts" showLineNumbers copy
 import { openai } from '@ai-sdk/openai';
 import { CHROMA_PROMPT } from "@mastra/rag";
 
@@ -240,8 +242,9 @@ export const ragAgent = new Agent({
 });
 ```
 </Tabs.Tab>
+
 <Tabs.Tab>
-  ```ts filename="vector-store.ts" showLineNumbers copy
+```ts filename="vector-store.ts" showLineNumbers copy
 import { openai } from '@ai-sdk/openai';
 import { ASTRA_PROMPT } from "@mastra/rag";
 
@@ -256,8 +259,9 @@ export const ragAgent = new Agent({
 });
 ```
 </Tabs.Tab>
+
 <Tabs.Tab>
-  ```ts filename="vector-store.ts" showLineNumbers copy
+```ts filename="vector-store.ts" showLineNumbers copy
 import { openai } from '@ai-sdk/openai';
 import { LIBSQL_PROMPT } from "@mastra/rag";
 
@@ -272,8 +276,9 @@ export const ragAgent = new Agent({
 });
 ```
 </Tabs.Tab>
+
 <Tabs.Tab>
-  ```ts filename="vector-store.ts" showLineNumbers copy
+```ts filename="vector-store.ts" showLineNumbers copy
 import { openai } from '@ai-sdk/openai';
 import { UPSTASH_PROMPT } from "@mastra/rag";
 
@@ -288,8 +293,9 @@ export const ragAgent = new Agent({
 });
 ```
 </Tabs.Tab>
+
 <Tabs.Tab>
-  ```ts filename="vector-store.ts" showLineNumbers copy
+```ts filename="vector-store.ts" showLineNumbers copy
 import { openai } from '@ai-sdk/openai';
 import { VECTORIZE_PROMPT } from "@mastra/rag";
 
@@ -304,6 +310,24 @@ export const ragAgent = new Agent({
 });
 ```
 </Tabs.Tab>
+
+<Tabs.Tab>
+```ts filename="vector-store.ts" showLineNumbers copy
+import { openai } from '@ai-sdk/openai';
+import { MONGODB_PROMPT } from "@mastra/rag";
+
+export const ragAgent = new Agent({
+  name: 'RAG Agent',
+  model: openai('gpt-4o-mini'),
+  instructions: `
+  Process queries using the provided context. Structure responses to be concise and relevant.
+  ${MONGODB_PROMPT}
+  `,
+  tools: { vectorQueryTool },
+});
+```
+</Tabs.Tab>
+
 </Tabs>
 
 ### Re-ranking

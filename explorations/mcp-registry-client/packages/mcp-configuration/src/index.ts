@@ -11,7 +11,7 @@ const baseConfigSchema = z.object({
 	command: z.string().min(1, "Command is required"),
 	env: z.record(z.string()).optional(),
 	args: z.array(z.string()).optional(),
-	runtimeArgs: z.array(z.string()).optional()
+	runtimeArgs: z.array(z.string()).optional(),
 })
 
 export interface ServerConfiguration {
@@ -34,7 +34,7 @@ interface ConfigStore {
 	configurations: Record<string, ServerConfiguration>
 }
 
-export class McpConfiguration {
+export class MCPClient {
 	public registry: RegistryClient
 	private id: string
 	private headers?: Record<string, string>
@@ -55,7 +55,7 @@ export class McpConfiguration {
 
 	private parseConfig(
 		config: unknown,
-		server: ServerDefinition
+		server: ServerDefinition,
 	): Record<string, unknown> {
 		if (!config || typeof config !== "object") {
 			throw new Error("Configuration must be an object")
@@ -89,7 +89,13 @@ export class McpConfiguration {
 		}
 	}
 
-	public async add({ server, config }: { server: ServerDefinition; config: ConfiguredServer["config"] }) {
+	public async add({
+		server,
+		config,
+	}: {
+		server: ServerDefinition
+		config: ConfiguredServer["config"]
+	}) {
 		await this.loadStore()
 
 		// Check for duplicate configuration
@@ -102,7 +108,9 @@ export class McpConfiguration {
 		this.parseConfig(config, server)
 
 		// Add default arguments from server configuration
-		const runtimeConfig = server.schemas?.find((c) => c.command === config.command)
+		const runtimeConfig = server.schemas?.find(
+			(c) => c.command === config.command,
+		)
 		const configWithDefaults = {
 			...config,
 			args: runtimeConfig?.args ? [...runtimeConfig.args] : undefined,
@@ -128,9 +136,11 @@ export class McpConfiguration {
 		config: ConfiguredServer["config"]
 	}) {
 		await this.loadStore()
-		
+
 		// Get the full server definition for validation
-		const serverDef = await this.registry.getServerDefinition({ id: input.server.id })
+		const serverDef = await this.registry.getServerDefinition({
+			id: input.server.id,
+		})
 		this.parseConfig(input.config, serverDef)
 
 		const existing = this.store.configurations[input.server.id]
@@ -143,7 +153,13 @@ export class McpConfiguration {
 			config: {
 				...input.config,
 				args: serverDef.schemas?.find((c) => c.command === input.config.command)
-					?.args ? [...serverDef.schemas.find((c) => c.command === input.config.command)!.args!] : undefined,
+					?.args
+					? [
+							...serverDef.schemas.find(
+								(c) => c.command === input.config.command,
+							)!.args!,
+						]
+					: undefined,
 			},
 			updatedAt: new Date().toISOString(),
 		}

@@ -1,5 +1,13 @@
 # @mastra/deployer
 
+## 2.0.1-alpha.3
+
+### Patch Changes
+
+- 34a76ca: Call workflow cleanup function when closing watch stream controller
+- Updated dependencies [6262bd5]
+  - @mastra/core@0.9.1-alpha.3
+
 ## 2.0.1-alpha.2
 
 ### Patch Changes
