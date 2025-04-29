@@ -157,6 +157,29 @@ For detailed filter syntax and store-specific capabilities, see the [Metadata Fi
 
 For an example of how agent-driven filtering works, see the [Agent-Driven Metadata Filtering](../../../examples/rag/usage/filter-rag) example.
 
+## Filter Prompts
+
+Each vector store package exports a prompt constant that defines the supported filter operators and their usage. These prompts help agents construct valid filters for each specific vector store:
+
+```typescript
+import { PINECONE_PROMPT } from '@mastra/pinecone';
+
+// Use these prompts to guide filter construction for each store
+const queryTool = createVectorQueryTool({
+  vectorStoreName: "pinecone",
+  indexName: "docs",
+  model: openai.embedding('text-embedding-3-small'),
+  enableFilters: true,
+  filterPrompt: PINECONE_PROMPT // Store-specific filter prompt
+});
+```
+
+The prompts include:
+- Supported operators (comparison, array, logical, element)
+- Example usage for each operator
+- Store-specific restrictions and rules
+- Complex query examples
+
 ## Example with Reranking
 
 ```typescript
