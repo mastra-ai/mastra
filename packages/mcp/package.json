@@ -38,7 +38,7 @@
   "devDependencies": {
     "@ai-sdk/anthropic": "^1.1.15",
     "@internal/lint": "workspace:*",
-    "@microsoft/api-extractor": "^7.52.1",
+    "@microsoft/api-extractor": "^7.52.5",
     "@types/node": "^20.17.27",
     "eslint": "^9.23.0",
     "json-schema-to-zod": "^2.6.0",
