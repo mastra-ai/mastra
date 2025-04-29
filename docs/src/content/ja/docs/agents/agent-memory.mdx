@@ -12,7 +12,7 @@ Mastraのエージェントは、会話履歴を保存し、関連情報を思�
 メモリを有効にするには、単に`Memory`クラスをインスタンス化し、エージェントの設定に渡すだけです。また、メモリパッケージをインストールする必要があります：
 
 ```bash npm2yarn copy
-npm install @mastra/memory
+npm install @mastra/memory@latest
 ```
 
 ```typescript
@@ -31,7 +31,7 @@ const agent = new Agent({
 });
 ```
 
-この基本的なセットアップでは、ストレージにLibSQL、埋め込みにFastEmbedを含むデフォルト設定を使用します。詳細なセットアップ手順については、[メモリ](/docs/memory/overview)を参照してください。
+この基本的なセットアップでは、ストレージにLibSQL、埋め込みにFastEmbedを含むデフォルト設定を使用しています。詳細なセットアップ手順については、[メモリ](/docs/memory/overview)を参照してください。
 
 ## エージェントコールでのメモリの使用
 

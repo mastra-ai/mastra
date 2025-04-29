@@ -23,6 +23,10 @@ export async function build({ dir, tools }: { dir?: string; tools?: string[] }) 
       const deployer = new BuildBundler();
       await deployer.prepare(outputDirectory);
       await deployer.bundle(mastraEntryFile, outputDirectory, discoveredTools);
+      logger.info(`Build successful, you can now deploy the .mastra/output directory to your target platform.`);
+      logger.info(
+        `To start the server, run: node --import=./.mastra/output/instrumentation.mjs .mastra/output/index.mjs`,
+      );
       return;
     }
 

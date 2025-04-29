@@ -27,22 +27,17 @@ mastra init
 3. APIキーのセットアップ
 4. サンプルコードの含有
 
-## 非対話型セットアップ
+## 非対話式セットアップ
 
-非対話型モードでmastraを初期化するには、次のコマンド引数を使用します:
+非対話モードでmastraを初期化するには、以下のコマンド引数を使用します：
 
 ```bash
 Arguments:
-  --components     指定するコンポーネント: agents, tools, workflows
-  --llm-provider   LLMプロバイダー: openai, anthropic, または groq
-  --add-example    例の実装を含める
-  --llm-api-key    プロバイダーのAPIキー
-  --dir            Mastraファイルのディレクトリ (デフォルトはsrc/)
+  --components     Specify components: agents, tools, workflows
+  --llm            LLM provider: openai, anthropic, groq, google or cerebras
+  --llm-api-key    Provider API key
+  --example        Include example implementation
+  --dir            Directory for Mastra files (defaults to src/)
 ```
-詳細については、[mastra init CLI ドキュメント](../../reference/cli/init)を参照してください。
 
-
-
-
-
-
+詳細については、[mastra init CLIドキュメント](../../reference/cli/init)を参照してください。

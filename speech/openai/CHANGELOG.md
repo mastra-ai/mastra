@@ -1,5 +1,16 @@
 # @mastra/speech-openai
 
+## 0.1.20-alpha.4
+
+### Patch Changes
+
+- a136907: dependencies updates:
+  - Updated dependency [`openai@^4.96.0` ↗︎](https://www.npmjs.com/package/openai/v/4.96.0) (from `^4.89.0`, in `dependencies`)
+  - Updated dependency [`zod@^3.24.3` ↗︎](https://www.npmjs.com/package/zod/v/3.24.3) (from `^3.24.2`, in `dependencies`)
+- Updated dependencies [e4943b8]
+- Updated dependencies [479f490]
+  - @mastra/core@0.9.1-alpha.4
+
 ## 0.1.20-alpha.3
 
 ### Patch Changes
