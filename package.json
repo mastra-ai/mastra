@@ -34,7 +34,6 @@
     "test": "vitest run",
     "test:watch": "vitest watch",
     "test:watch:combined-stores": "pnpm --filter \"./stores/*\" test:watch",
-    "test:watch:combined-stores:mongodb": "pnpm --filter \"./stores/mongodb\" test:watch",
     "test:cli": "pnpm --filter ./packages/cli test",
     "test:core": "pnpm --filter ./packages/core test",
     "test:mcp": "pnpm --filter ./packages/mcp test",
