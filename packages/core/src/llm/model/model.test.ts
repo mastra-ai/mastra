@@ -2,12 +2,11 @@ import type { CoreMessage } from 'ai';
 import type { JSONSchema7 } from 'json-schema';
 import { describe, it, expect, vi } from 'vitest';
 import { z } from 'zod';
-
+import { RuntimeContext } from '../../runtime-context';
 import { createTool } from '../../tools';
+import { makeCoreTool } from '../../utils';
 
 import { MockProvider } from './mock';
-import { RuntimeContext } from '../../runtime-context';
-import { makeCoreTool } from '../../utils';
 
 describe('MastraLLM', () => {
   const mockMastra = {
