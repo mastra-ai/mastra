@@ -31,7 +31,7 @@ jobs:
           cache: 'pnpm'
 
       - name: Install dependencies
-        run: pnpm install --filter @mastra/dane
+        run: pnpm install
 
       - name: Build Dane
         run: pnpm turbo run build --filter @mastra/dane
