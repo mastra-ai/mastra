@@ -4,7 +4,7 @@
   "private": true,
   "devDependencies": {
     "execa": "^9.5.2",
-    "rollup": "^4.40.0",
+    "rollup": "^4.40.1",
     "vitest": "^3.0.7"
   },
   "scripts": {

@@ -80,61 +80,11 @@ class MastraCloudExporter implements SpanExporter {
   }
 
   flush(): Promise<void> {
-    const now = new Date();
     const items = this.queue.shift();
     if (!items) return Promise.resolve();
 
-    const allSpans: any[] = items.data.reduce((acc, scopedSpans) => {
-      const { scope, spans } = scopedSpans;
-      for (const span of spans) {
-        const {
-          spanId,
-          parentSpanId,
-          traceId,
-          name,
-          kind,
-          attributes,
-          status,
-          events,
-          links,
-          startTimeUnixNano,
-          endTimeUnixNano,
-          ...rest
-        } = span;
-
-        const startTime = Number(BigInt(startTimeUnixNano) / 1000n);
-        const endTime = Number(BigInt(endTimeUnixNano) / 1000n);
-
-        acc.push({
-          id: spanId,
-          parentSpanId,
-          traceId,
-          name,
-          scope: scope.name,
-          kind,
-          status: JSON.stringify(status),
-          events: JSON.stringify(events),
-          links: JSON.stringify(links),
-          attributes: JSON.stringify(
-            attributes.reduce((acc: Record<string, any>, attr: any) => {
-              const valueKey = Object.keys(attr.value)[0];
-              if (valueKey) {
-                acc[attr.key] = attr.value[valueKey];
-              }
-              return acc;
-            }, {}),
-          ),
-          startTime,
-          endTime,
-          other: JSON.stringify(rest),
-          createdAt: now,
-        });
-      }
-      return acc;
-    }, []);
-
     return this.batchInsert({
-      records: allSpans,
+      records: items.data,
     })
       .then(() => {
         items.resultCallback({

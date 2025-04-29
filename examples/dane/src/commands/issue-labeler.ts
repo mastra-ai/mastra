@@ -8,28 +8,29 @@ export async function issueLabelerCommand() {
 
   const { start } = mastra.getWorkflow('githubIssueLabeler').createRun();
 
+  const issueNumber = parseInt(process.env.ISSUE_NUMBER!, 10);
   const result = await start({
     triggerData: {
-      issue_number: parseInt(process.env.ISSUE_NUMBER!, 10),
+      issue_number: issueNumber,
       owner: process.env.OWNER!,
       repo: normalizeRepo(process.env.REPO!),
     },
   });
 
   if (result.results?.labelIssue?.status === 'failed') {
-    console.error(chalk.red(`Error applying labels for issue: ${result.triggerData?.issue_number}`));
+    console.error(chalk.red(`Error applying labels for issue: ${issueNumber}`));
     console.error({ error: result.results?.labelIssue?.error });
     return;
   }
 
   if (result.results?.labelIssue?.status !== 'success') {
-    console.error(chalk.red(`Failed to apply labels for issue: ${result.triggerData?.issue_number}`));
+    console.error(chalk.red(`Failed to apply labels for issue: ${issueNumber}`));
     return;
   }
 
   console.log(
     chalk.green(
-      `Issue: ${result.triggerData?.issue_number} has been labeled with: ${result.results?.labelIssue?.output?.labels.join(', ')}`,
+      `Issue: ${issueNumber} has been labeled with: ${result.results?.labelIssue?.output?.labels.join(', ')}`,
     ),
   );
 }

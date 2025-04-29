@@ -9,6 +9,7 @@ import { useOpenTrace } from './hooks/use-open-trace';
 import { Txt } from '@/ds/components/Txt';
 import { useContext } from 'react';
 import { TraceContext } from './context/trace-context';
+import { Check, X } from 'lucide-react';
 
 const TracesTableSkeleton = ({ colsCount }: { colsCount: number }) => {
   return (
@@ -56,7 +57,7 @@ export interface TracesTableProps {
 
 const TraceRow = ({ trace, index, isActive }: { trace: RefinedTrace; index: number; isActive: boolean }) => {
   const { openTrace } = useOpenTrace();
-
+  const hasFailure = trace.trace.some(span => span.status.code !== 0);
   return (
     <Row className={isActive ? 'bg-surface4' : ''}>
       <DateTimeCell dateTime={new Date(trace.started / 1000)} />
@@ -68,6 +69,17 @@ const TraceRow = ({ trace, index, isActive }: { trace: RefinedTrace; index: numb
             {trace.trace.length} span{trace.trace.length > 1 ? 's' : ''}
           </Badge>
         </button>
+      </Cell>
+      <Cell>
+        {hasFailure ? (
+          <Badge variant="error" icon={<X />}>
+            Failed
+          </Badge>
+        ) : (
+          <Badge icon={<Check />} variant="success">
+            Success
+          </Badge>
+        )}
       </Cell>
     </Row>
   );
@@ -85,6 +97,7 @@ export const TracesTable = ({ traces, isLoading, error }: TracesTableProps) => {
         <Th width="auto">Trace Id</Th>
         <Th width={160}>Duration</Th>
         <Th width={160}>Spans</Th>
+        <Th width={160}>Status</Th>
       </Thead>
       {isLoading ? (
         <TracesTableSkeleton colsCount={colsCount} />

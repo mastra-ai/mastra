@@ -176,7 +176,7 @@ When implementing filtering, these prompts are required in the agent's instructi
 
 <Tabs items={['Pg Vector', 'Pinecone', 'Qdrant', 'Chroma', 'Astra', 'LibSQL', 'Upstash', 'Cloudflare', 'MongoDB']}>
   <Tabs.Tab>
-  ```ts showLineNumbers copy
+```ts showLineNumbers copy
 import { openai } from '@ai-sdk/openai';
 import { PGVECTOR_PROMPT } from "@mastra/rag";
 
@@ -190,10 +190,10 @@ export const ragAgent = new Agent({
   tools: { vectorQueryTool },
 });
 ```
-
 </Tabs.Tab>
+
 <Tabs.Tab>
-  ```ts filename="vector-store.ts" showLineNumbers copy
+```ts filename="vector-store.ts" showLineNumbers copy
 import { openai } from '@ai-sdk/openai';
 import { PINECONE_PROMPT } from "@mastra/rag";
 
@@ -208,8 +208,9 @@ export const ragAgent = new Agent({
 });
 ```
 </Tabs.Tab>
+
 <Tabs.Tab>
-  ```ts filename="vector-store.ts" showLineNumbers copy
+```ts filename="vector-store.ts" showLineNumbers copy
 import { openai } from '@ai-sdk/openai';
 import { QDRANT_PROMPT } from "@mastra/rag";
 
@@ -224,8 +225,9 @@ export const ragAgent = new Agent({
 });
 ```
 </Tabs.Tab>
+
 <Tabs.Tab>
-  ```ts filename="vector-store.ts" showLineNumbers copy
+```ts filename="vector-store.ts" showLineNumbers copy
 import { openai } from '@ai-sdk/openai';
 import { CHROMA_PROMPT } from "@mastra/rag";
 
@@ -240,8 +242,9 @@ export const ragAgent = new Agent({
 });
 ```
 </Tabs.Tab>
+
 <Tabs.Tab>
-  ```ts filename="vector-store.ts" showLineNumbers copy
+```ts filename="vector-store.ts" showLineNumbers copy
 import { openai } from '@ai-sdk/openai';
 import { ASTRA_PROMPT } from "@mastra/rag";
 
@@ -256,8 +259,9 @@ export const ragAgent = new Agent({
 });
 ```
 </Tabs.Tab>
+
 <Tabs.Tab>
-  ```ts filename="vector-store.ts" showLineNumbers copy
+```ts filename="vector-store.ts" showLineNumbers copy
 import { openai } from '@ai-sdk/openai';
 import { LIBSQL_PROMPT } from "@mastra/rag";
 
@@ -272,8 +276,9 @@ export const ragAgent = new Agent({
 });
 ```
 </Tabs.Tab>
+
 <Tabs.Tab>
-  ```ts filename="vector-store.ts" showLineNumbers copy
+```ts filename="vector-store.ts" showLineNumbers copy
 import { openai } from '@ai-sdk/openai';
 import { UPSTASH_PROMPT } from "@mastra/rag";
 
@@ -288,8 +293,9 @@ export const ragAgent = new Agent({
 });
 ```
 </Tabs.Tab>
+
 <Tabs.Tab>
-  ```ts filename="vector-store.ts" showLineNumbers copy
+```ts filename="vector-store.ts" showLineNumbers copy
 import { openai } from '@ai-sdk/openai';
 import { VECTORIZE_PROMPT } from "@mastra/rag";
 
@@ -304,8 +310,9 @@ export const ragAgent = new Agent({
 });
 ```
 </Tabs.Tab>
+
 <Tabs.Tab>
-  ```ts filename="vector-store.ts" showLineNumbers copy
+```ts filename="vector-store.ts" showLineNumbers copy
 import { openai } from '@ai-sdk/openai';
 import { MONGODB_PROMPT } from "@mastra/rag";
 
@@ -320,6 +327,7 @@ export const ragAgent = new Agent({
 });
 ```
 </Tabs.Tab>
+
 </Tabs>
 
 ### Re-ranking
