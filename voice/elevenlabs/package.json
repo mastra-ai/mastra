@@ -30,16 +30,16 @@
   "license": "Elastic-2.0",
   "dependencies": {
     "@mastra/core": "workspace:^",
-    "elevenlabs": "^1.54.0",
-    "zod": "^3.24.2"
+    "elevenlabs": "^1.57.0",
+    "zod": "^3.24.3"
   },
   "devDependencies": {
     "@internal/lint": "workspace:*",
-    "@microsoft/api-extractor": "^7.52.2",
-    "@types/node": "^20.17.27",
-    "eslint": "^9.23.0",
+    "@microsoft/api-extractor": "^7.52.5",
+    "@types/node": "^20.17.32",
+    "eslint": "^9.25.1",
     "tsup": "^8.4.0",
-    "typescript": "^5.8.2",
+    "typescript": "^5.8.3",
     "vitest": "^2.1.9"
   }
 }
