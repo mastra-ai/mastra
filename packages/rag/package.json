@@ -29,10 +29,10 @@
   "dependencies": {
     "@mastra/core": "workspace:^",
     "@paralleldrive/cuid2": "^2.2.2",
-    "js-tiktoken": "^1.0.19",
-    "node-html-better-parser": "^1.4.7",
+    "js-tiktoken": "^1.0.20",
+    "node-html-better-parser": "^1.4.11",
     "pathe": "^2.0.3",
-    "zod": "^3.24.2"
+    "zod": "^3.24.3"
   },
   "peerDependencies": {
     "ai": "^4.0.0"
@@ -41,14 +41,14 @@
     "@ai-sdk/cohere": "latest",
     "@ai-sdk/openai": "latest",
     "@internal/lint": "workspace:*",
-    "@microsoft/api-extractor": "^7.52.1",
-    "@types/node": "^20.17.27",
-    "ai": "^4.2.2",
-    "dotenv": "^16.4.7",
-    "eslint": "^9.23.0",
+    "@microsoft/api-extractor": "^7.52.5",
+    "@types/node": "^20.17.32",
+    "ai": "^4.3.10",
+    "dotenv": "^16.5.0",
+    "eslint": "^9.25.1",
     "tsup": "^8.4.0",
-    "typescript": "^5.8.2",
-    "vitest": "^3.0.9"
+    "typescript": "^5.8.3",
+    "vitest": "^3.1.2"
   },
   "keywords": [
     "rag",
