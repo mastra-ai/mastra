@@ -2,8 +2,9 @@ import type { CoreMessage } from 'ai';
 import type { JSONSchema7 } from 'json-schema';
 import { describe, it, expect, vi } from 'vitest';
 import { z } from 'zod';
-
+import { RuntimeContext } from '../../runtime-context';
 import { createTool } from '../../tools';
+import { makeCoreTool } from '../../utils';
 
 import { MockProvider } from './mock';
 
@@ -16,17 +17,25 @@ describe('MastraLLM', () => {
     } as any,
   };
 
-  const mockToolExecute = vi.fn().mockResolvedValue('tool result');
+  const runtimeContext = new RuntimeContext();
 
   const mockTools = {
-    testTool: createTool({
-      id: 'testTool',
-      inputSchema: z.object({ test: z.string() }),
-      description: 'Test tool description',
-      execute: async ({ context, threadId, resourceId }, options) => {
-        return mockToolExecute({ ...context, threadId, resourceId }, options);
+    testTool: makeCoreTool(
+      createTool({
+        id: 'test',
+        inputSchema: z.object({ test: z.string() }),
+        description: 'Test tool description',
+        execute: async () => {
+          return 'Test';
+        },
+      }),
+      {
+        name: 'test',
+        logger: mockMastra.logger,
+        mastra: mockMastra as any,
+        runtimeContext,
       },
-    }),
+    ),
   };
 
   const generateSpy = vi.fn();
@@ -68,76 +77,6 @@ describe('MastraLLM', () => {
     });
   });
 
-  describe('convertTools', () => {
-    it('should convert tools correctly', () => {
-      const converted = aisdkText.convertTools({ tools: mockTools });
-
-      expect(converted).toHaveProperty('testTool');
-
-      expect(converted.testTool).toMatchObject({
-        description: 'Test tool description',
-        parameters: mockTools.testTool.inputSchema,
-      });
-
-      expect(typeof converted.testTool.execute).toBe('function');
-    });
-
-    it('should handle empty tools input', () => {
-      const converted = aisdkText.convertTools({ tools: {} });
-      expect(converted).toEqual({});
-    });
-
-    it('should log debug messages during tool conversion', () => {
-      aisdkText.convertTools({ tools: mockTools });
-      expect(mockMastra.logger.debug).toHaveBeenCalledWith('Starting tool conversion for LLM');
-      expect(mockMastra.logger.debug).toHaveBeenCalledWith('Converted tools for LLM');
-    });
-
-    it('should execute tool with correct context', async () => {
-      const converted = aisdkText.convertTools({ tools: mockTools });
-      expect(converted).toBeDefined();
-      expect(converted.testTool).toBeDefined();
-      if (converted.testTool.execute) {
-        await converted.testTool.execute({ test: 'value' }, { toolCallId: '1', messages: [] });
-      }
-
-      expect(mockToolExecute).toHaveBeenCalledWith({ test: 'value' }, { toolCallId: '1', messages: [] });
-    });
-
-    it('should pass threadId and resourceId to tool execution context', async () => {
-      const threadId = 'test-thread-123';
-      const resourceId = 'test-resource-456';
-      const converted = aisdkText.convertTools({ tools: mockTools, threadId, resourceId });
-
-      expect(converted).toBeDefined();
-      expect(converted.testTool).toBeDefined();
-      if (converted.testTool.execute) {
-        await converted.testTool.execute({ test: 'value' }, { toolCallId: '1', messages: [] });
-      }
-
-      expect(mockToolExecute).toHaveBeenCalledWith(
-        {
-          test: 'value',
-          threadId,
-          resourceId,
-        },
-        { toolCallId: '1', messages: [] },
-      );
-    });
-
-    it('should handle undefined threadId and resourceId', async () => {
-      const converted = aisdkText.convertTools({ tools: mockTools });
-
-      expect(converted).toBeDefined();
-      expect(converted.testTool).toBeDefined();
-      if (converted.testTool.execute) {
-        await converted.testTool.execute({ test: 'value' }, { toolCallId: '1', messages: [] });
-      }
-
-      expect(mockToolExecute).toHaveBeenCalledWith({ test: 'value' }, { toolCallId: '1', messages: [] });
-    });
-  });
-
   describe('generate', () => {
     it('should generate text output by default', async () => {
       const messages: CoreMessage[] = [{ role: 'user', content: 'test message' }];
@@ -146,6 +85,7 @@ describe('MastraLLM', () => {
         tools: mockTools,
         temperature: 0.7,
         maxSteps: 5,
+        runtimeContext,
       });
 
       expect(generateSpy).toHaveBeenCalled();
@@ -164,6 +104,7 @@ describe('MastraLLM', () => {
         temperature: 0.7,
         maxSteps: 5,
         output: schema,
+        runtimeContext,
       });
 
       expect(generateSpy).toHaveBeenCalled();
@@ -175,6 +116,7 @@ describe('MastraLLM', () => {
         tools: mockTools,
         temperature: 0.7,
         maxSteps: 5,
+        runtimeContext,
       });
 
       expect(generateSpy).toHaveBeenCalled();
@@ -186,6 +128,7 @@ describe('MastraLLM', () => {
         tools: mockTools,
         temperature: 0.7,
         maxSteps: 5,
+        runtimeContext,
       });
 
       expect(generateSpy).toHaveBeenCalled();
@@ -199,6 +142,7 @@ describe('MastraLLM', () => {
         tools: mockTools,
         temperature: 0.7,
         maxSteps: 5,
+        runtimeContext,
       });
 
       expect(generateSpy).toHaveBeenCalled();
@@ -213,6 +157,7 @@ describe('MastraLLM', () => {
         onStepFinish,
         temperature: 0.7,
         maxSteps: 5,
+        runtimeContext,
       });
 
       expect(generateSpy).toHaveBeenCalled();
@@ -227,6 +172,7 @@ describe('MastraLLM', () => {
         tools: mockTools,
         temperature: 0.7,
         maxSteps: 5,
+        runtimeContext,
       });
 
       expect(streamSpy).toHaveBeenCalled();
@@ -237,6 +183,7 @@ describe('MastraLLM', () => {
         tools: mockTools,
         temperature: 0.7,
         maxSteps: 5,
+        runtimeContext,
       });
 
       expect(streamSpy).toHaveBeenCalled();
@@ -247,6 +194,7 @@ describe('MastraLLM', () => {
         tools: mockTools,
         temperature: 0.7,
         maxSteps: 5,
+        runtimeContext,
       });
 
       expect(streamSpy).toHaveBeenCalled();
@@ -263,6 +211,7 @@ describe('MastraLLM', () => {
         output: schema,
         temperature: 0.7,
         maxSteps: 5,
+        runtimeContext,
       });
 
       expect(streamSpy).toHaveBeenCalled();
@@ -283,6 +232,7 @@ describe('MastraLLM', () => {
         output: jsonSchema,
         temperature: 0.7,
         maxSteps: 5,
+        runtimeContext,
       });
 
       expect(streamSpy).toHaveBeenCalled();
@@ -299,6 +249,7 @@ describe('MastraLLM', () => {
         onFinish,
         temperature: 0.7,
         maxSteps: 5,
+        runtimeContext,
       });
 
       expect(streamSpy).toHaveBeenCalled();
@@ -319,6 +270,7 @@ describe('MastraLLM', () => {
         onFinish,
         temperature: 0.7,
         maxSteps: 5,
+        runtimeContext,
       });
 
       expect(streamSpy).toHaveBeenCalled();
@@ -334,6 +286,7 @@ describe('MastraLLM', () => {
         tools: mockTools,
         temperature: 0.7,
         maxSteps: 5,
+        runtimeContext,
       });
 
       expect(generateSpy).toHaveBeenCalled();
@@ -349,6 +302,7 @@ describe('MastraLLM', () => {
         tools: mockTools,
         temperature: 0.7,
         maxSteps: 5,
+        runtimeContext,
       });
 
       expect(generateSpy).toHaveBeenCalled();
@@ -356,13 +310,13 @@ describe('MastraLLM', () => {
 
     it('should handle pre-converted tools', async () => {
       const messages: CoreMessage[] = [{ role: 'user', content: 'test message' }];
-      const convertedTools = aisdkText.convertTools({ tools: mockTools });
 
       await aisdkText.__text({
         messages,
-        convertedTools,
+        tools: mockTools,
         temperature: 0.7,
         maxSteps: 5,
+        runtimeContext,
       });
 
       expect(generateSpy).toHaveBeenCalled();
@@ -377,6 +331,7 @@ describe('MastraLLM', () => {
         onStepFinish,
         temperature: 0.7,
         maxSteps: 5,
+        runtimeContext,
       });
 
       expect(generateSpy).toHaveBeenCalled();
@@ -398,6 +353,7 @@ describe('MastraLLM', () => {
         onStepFinish,
         temperature: 0.7,
         maxSteps: 5,
+        runtimeContext,
       });
 
       expect(generateSpy).toHaveBeenCalled();
@@ -412,6 +368,7 @@ describe('MastraLLM', () => {
         runId,
         temperature: 0.7,
         maxSteps: 5,
+        runtimeContext,
       });
 
       expect(generateSpy).toHaveBeenCalled();
@@ -433,6 +390,7 @@ describe('MastraLLM', () => {
         runId,
         temperature: 0.7,
         maxSteps: 5,
+        runtimeContext,
       });
 
       expect(generateSpy).toHaveBeenCalled();
@@ -448,6 +406,7 @@ describe('MastraLLM', () => {
         tools: mockTools,
         temperature: 0.7,
         maxSteps: 5,
+        runtimeContext,
       });
 
       expect(streamSpy).toHaveBeenCalled();
@@ -461,6 +420,7 @@ describe('MastraLLM', () => {
         tools: mockTools,
         temperature: 0.7,
         maxSteps: 5,
+        runtimeContext,
       });
 
       expect(streamSpy).toHaveBeenCalled();
@@ -468,13 +428,13 @@ describe('MastraLLM', () => {
 
     it('should handle pre-converted tools', async () => {
       const messages: CoreMessage[] = [{ role: 'user', content: 'test message' }];
-      const convertedTools = aisdkText.convertTools({ tools: mockTools });
 
       await aisdkText.__stream({
         messages,
-        convertedTools,
+        tools: mockTools,
         temperature: 0.7,
         maxSteps: 5,
+        runtimeContext,
       });
 
       expect(streamSpy).toHaveBeenCalled();
@@ -491,6 +451,7 @@ describe('MastraLLM', () => {
         onFinish,
         temperature: 0.7,
         maxSteps: 5,
+        runtimeContext,
       });
 
       expect(streamSpy).toHaveBeenCalled();
@@ -505,6 +466,7 @@ describe('MastraLLM', () => {
         runId,
         temperature: 0.7,
         maxSteps: 5,
+        runtimeContext,
       });
 
       expect(streamSpy).toHaveBeenCalled();
@@ -535,6 +497,7 @@ describe('MastraLLM', () => {
         runId,
         temperature: 0.7,
         maxSteps: 5,
+        runtimeContext,
       });
 
       expect(streamSpy).toHaveBeenCalled();
@@ -547,28 +510,30 @@ describe('MastraLLM', () => {
 
       const schema = z.object({
         content: z.string(),
-      });
+      }) as z.ZodType<any>;
 
       const result = await aisdkObject.__textObject({
         messages,
+        runtimeContext,
         structuredOutput: schema,
         temperature: 0.7,
         maxSteps: 5,
       });
 
-      expect(result.object.content).toEqual('Custom object response');
+      expect(result?.object?.content).toEqual('Custom object response');
     });
 
     it('should handle array type schemas', async () => {
       const messages: CoreMessage[] = [{ role: 'user', content: 'test message' }];
 
-      const arraySchema = z.object({ content: z.array(z.string()) });
+      const arraySchema = z.object({ content: z.array(z.string()) }) as z.ZodType<any>;
 
       await aisdkArray.__textObject({
         messages,
         structuredOutput: arraySchema,
         temperature: 0.7,
         maxSteps: 5,
+        runtimeContext,
       });
 
       expect(generateSpy).toHaveBeenCalled();
@@ -590,6 +555,7 @@ describe('MastraLLM', () => {
         structuredOutput: jsonSchema,
         temperature: 0.7,
         maxSteps: 5,
+        runtimeContext,
       });
 
       expect(generateSpy).toHaveBeenCalled();
@@ -600,7 +566,7 @@ describe('MastraLLM', () => {
 
       const schema = z.object({
         content: z.string(),
-      });
+      }) as z.ZodType<any>;
 
       await aisdkObject.__textObject({
         messages,
@@ -608,6 +574,7 @@ describe('MastraLLM', () => {
         structuredOutput: schema,
         temperature: 0.7,
         maxSteps: 5,
+        runtimeContext,
       });
     });
   });
@@ -617,7 +584,7 @@ describe('MastraLLM', () => {
       const messages: CoreMessage[] = [{ role: 'user', content: 'test message' }];
       const schema = z.object({
         content: z.string(),
-      });
+      }) as z.ZodType<any>;
 
       await aisdkObject.__streamObject({
         messages,
@@ -625,6 +592,7 @@ describe('MastraLLM', () => {
         structuredOutput: schema,
         temperature: 0.7,
         maxSteps: 5,
+        runtimeContext,
       });
 
       expect(streamSpy).toHaveBeenCalled();
@@ -632,13 +600,14 @@ describe('MastraLLM', () => {
 
     it('should handle array type schemas', async () => {
       const messages: CoreMessage[] = [{ role: 'user', content: 'test message' }];
-      const arraySchema = z.object({ content: z.array(z.string()) });
+      const arraySchema = z.object({ content: z.array(z.string()) }) as z.ZodType<any>;
 
       await aisdkObject.__streamObject({
         messages,
         structuredOutput: arraySchema,
         temperature: 0.7,
         maxSteps: 5,
+        runtimeContext,
       });
 
       expect(streamSpy).toHaveBeenCalled();
@@ -659,6 +628,7 @@ describe('MastraLLM', () => {
         structuredOutput: jsonSchema,
         temperature: 0.7,
         maxSteps: 5,
+        runtimeContext,
       });
 
       expect(streamSpy).toHaveBeenCalled();
@@ -668,7 +638,7 @@ describe('MastraLLM', () => {
       const messages: CoreMessage[] = [{ role: 'user', content: 'test message' }];
       const schema = z.object({
         content: z.string(),
-      });
+      }) as z.ZodType<any>;
       const onStepFinish = vi.fn();
       const onFinish = vi.fn();
 
@@ -679,6 +649,7 @@ describe('MastraLLM', () => {
         onFinish,
         temperature: 0.7,
         maxSteps: 5,
+        runtimeContext,
       });
 
       expect(streamSpy).toHaveBeenCalled();
@@ -688,7 +659,7 @@ describe('MastraLLM', () => {
       const messages: CoreMessage[] = [{ role: 'user', content: 'test message' }];
       const schema = z.object({
         content: z.string(),
-      });
+      }) as z.ZodType<any>;
       const runId = 'test-run';
 
       await aisdkObject.__streamObject({
@@ -697,6 +668,7 @@ describe('MastraLLM', () => {
         runId,
         temperature: 0.7,
         maxSteps: 5,
+        runtimeContext,
       });
 
       expect(streamSpy).toHaveBeenCalled();
@@ -706,15 +678,15 @@ describe('MastraLLM', () => {
       const messages: CoreMessage[] = [{ role: 'user', content: 'test message' }];
       const schema = z.object({
         content: z.string(),
-      });
-      const convertedTools = aisdkObject.convertTools({ tools: mockTools });
+      }) as z.ZodType<any>;
 
       await aisdkObject.__streamObject({
         messages,
         structuredOutput: schema,
-        convertedTools,
+        tools: mockTools,
         temperature: 0.7,
         maxSteps: 5,
+        runtimeContext,
       });
 
       expect(streamSpy).toHaveBeenCalled();
@@ -724,7 +696,8 @@ describe('MastraLLM', () => {
       const messages: CoreMessage[] = [{ role: 'user', content: 'test message' }];
       const schema = z.object({
         content: z.string(),
-      });
+      }) as z.ZodType<any>;
+
       const runId = 'test-run';
 
       await aisdkObject.__streamObject({
@@ -733,6 +706,7 @@ describe('MastraLLM', () => {
         runId,
         temperature: 0.7,
         maxSteps: 5,
+        runtimeContext,
       });
 
       expect(streamSpy).toHaveBeenCalled();
