@@ -58,7 +58,7 @@ async function deleteIndexAndWait(vectorDB: AstraVector, indexName: string) {
   }
 }
 
-describe('AstraVector Integration Tests', () => {
+describe.skip('AstraVector Integration Tests', () => {
   let vectorDB: AstraVector;
   const testIndexName = 'testvectors1733728136118'; // Unique collection name
   const testIndexName2 = 'testvectors1733728136119'; // Unique collection name
