@@ -63,7 +63,7 @@
     "pnpm": ">=9.7.0"
   },
   "resolutions": {
-    "typescript": "^5.7.3",
+    "typescript": "^5.8.3",
     "@types/node": "^20.17.27"
   },
   "license": "Elastic-2.0",
