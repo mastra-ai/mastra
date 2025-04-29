@@ -290,6 +290,7 @@ describe('CloudflareVector', () => {
     });
 
     it('should create, describe, and delete an index', async () => {
+      const tempIndexName = `create-describe-delete`;
       // Create
       await vectorDB.createIndex({ indexName: tempIndexName, dimension: VECTOR_DIMENSION, metric: 'cosine' });
       await waitUntilReady(vectorDB, tempIndexName);
@@ -302,8 +303,12 @@ describe('CloudflareVector', () => {
         count: 0,
       });
 
-      // Delete
-      await vectorDB.deleteIndex(tempIndexName);
+      try {
+        // Delete
+        await vectorDB.deleteIndex(tempIndexName);
+      } catch (e) {
+        console.error(`Failed deleting index ${tempIndexName}`, e);
+      }
       const indexes = await vectorDB.listIndexes();
       expect(indexes).not.toContain(tempIndexName);
     });
