@@ -288,7 +288,7 @@ describe('CloudflareVector', () => {
         // clean up this unique index that only has one test.
         // the test cleans it up but if it fails in the middle it might cause future tests to fail
         await vectorDB.deleteIndex(tempIndexNameCreateDescribeDelete);
-      } catch (e) {}
+      } catch {}
     });
 
     it('should create and list indexes', async () => {
