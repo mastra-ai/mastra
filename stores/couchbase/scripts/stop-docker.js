@@ -1,3 +1,7 @@
 #!/usr/bin/env node
 import { execSync } from 'child_process';
-execSync('docker compose -f "./docker-compose.yaml" down --volumes', { stdio: 'inherit' });
+try {
+  execSync('docker compose -f "./docker-compose.yaml" down --volumes', { stdio: 'inherit' });
+} catch (error) {
+  console.error('Failed to stop container', error);
+}
