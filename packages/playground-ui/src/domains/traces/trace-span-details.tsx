@@ -6,7 +6,7 @@ import { TraceContext } from './context/trace-context';
 
 import { formatDuration, formatOtelTimestamp, formatOtelTimestamp2, transformKey } from './utils';
 import { Header } from '@/ds/components/Header';
-import { ChevronDown, ChevronUp } from 'lucide-react';
+import { ChevronDown, ChevronUp, X } from 'lucide-react';
 import { Icon, LatencyIcon } from '@/ds/icons';
 import { Button } from '@/ds/components/Button';
 import { Txt } from '@/ds/components/Txt';
@@ -71,7 +71,15 @@ export function SpanDetail() {
         </Txt>
 
         <div className="flex flex-row gap-2 items-center">
-          <Badge icon={<LatencyIcon />}>{formatDuration(span.duration)}ms</Badge>
+          {span.status.code === 0 ? (
+            <Badge icon={<LatencyIcon />} variant="success">
+              {formatDuration(span.duration)}ms
+            </Badge>
+          ) : (
+            <Badge variant="error" icon={<X />}>
+              Failed in {formatDuration(span.duration)}ms
+            </Badge>
+          )}
         </div>
 
         <hr className="border-border1 border-sm my-5" />
