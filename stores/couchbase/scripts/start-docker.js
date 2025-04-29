@@ -1,3 +1,10 @@
 #!/usr/bin/env node
 import { execSync } from 'child_process';
+try {
+  execSync('docker compose -f "./docker-compose.yaml" ps --quiet');
+  console.log('Container already running, bringing it down first...');
+  execSync('docker compose -f "./docker-compose.yaml" down --volumes', { stdio: 'inherit' });
+} catch (error) {
+  // pass
+}
 execSync('docker compose -f "./docker-compose.yaml" up --wait', { stdio: 'inherit' });

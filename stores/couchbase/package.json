@@ -23,7 +23,9 @@
     "build:watch": "pnpm build --watch",
     "lint": "eslint .",
     "coverage": "vitest run --coverage",
-    "test": "node scripts/start-docker.js; vitest run; node scripts/stop-docker.js"
+    "pretest": "node scripts/start-docker.js",
+    "test": "vitest run",
+    "posttest": "node scripts/stop-docker.js"
   },
   "dependencies": {
     "@mastra/core": "workspace:^",
