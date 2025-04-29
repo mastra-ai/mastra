@@ -33,17 +33,17 @@ export type ToolsetsInput = Record<string, ToolsInput>;
 
 export type MastraLanguageModel = LanguageModelV1;
 
+export type DynamicArgument<T> = T | (({ runtimeContext }: { runtimeContext: RuntimeContext }) => Promise<T> | T);
+
 export interface AgentConfig<
   TAgentId extends string = string,
   TTools extends ToolsInput = ToolsInput,
   TMetrics extends Record<string, Metric> = Record<string, Metric>,
 > {
   name: TAgentId;
-  instructions: string | (({ runtimeContext }: { runtimeContext: RuntimeContext }) => Promise<string> | string);
-  model:
-    | MastraLanguageModel
-    | (({ runtimeContext }: { runtimeContext: RuntimeContext }) => Promise<MastraLanguageModel> | MastraLanguageModel);
-  tools?: TTools | (({ runtimeContext }: { runtimeContext: RuntimeContext }) => Promise<TTools> | TTools);
+  instructions: DynamicArgument<string>;
+  model: DynamicArgument<MastraLanguageModel>;
+  tools?: DynamicArgument<TTools>;
   defaultGenerateOptions?: AgentGenerateOptions;
   defaultStreamOptions?: AgentStreamOptions;
   mastra?: Mastra;

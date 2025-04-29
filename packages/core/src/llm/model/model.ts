@@ -69,7 +69,7 @@ export class MastraLLM extends MastraLLMBase {
     runId,
     messages,
     maxSteps = 5,
-    tools,
+    tools = {},
     temperature,
     toolChoice = 'auto',
     onStepFinish,
@@ -89,16 +89,14 @@ export class MastraLLM extends MastraLLMBase {
       maxSteps,
       threadId,
       resourceId,
-      tools: Object.keys(tools || {}),
+      tools: Object.keys(tools),
     });
-
-    const finalTools = tools;
 
     const argsForExecute = {
       model,
       temperature,
       tools: {
-        ...finalTools,
+        ...tools,
       },
       toolChoice,
       maxSteps,
@@ -160,7 +158,7 @@ export class MastraLLM extends MastraLLMBase {
     messages,
     onStepFinish,
     maxSteps = 5,
-    tools,
+    tools = {},
     structuredOutput,
     runId,
     temperature,
@@ -176,13 +174,11 @@ export class MastraLLM extends MastraLLMBase {
 
     this.logger.debug(`[LLM] - Generating a text object`, { runId });
 
-    const finalTools = tools;
-
     const argsForExecute = {
       model,
       temperature,
       tools: {
-        ...finalTools,
+        ...tools,
       },
       maxSteps,
       toolChoice,
@@ -239,7 +235,7 @@ export class MastraLLM extends MastraLLMBase {
     onStepFinish,
     onFinish,
     maxSteps = 5,
-    tools,
+    tools = {},
     runId,
     temperature,
     toolChoice = 'auto',
@@ -261,13 +257,11 @@ export class MastraLLM extends MastraLLMBase {
       tools: Object.keys(tools || {}),
     });
 
-    const finalTools = tools;
-
     const argsForExecute = {
       model,
       temperature,
       tools: {
-        ...finalTools,
+        ...tools,
       },
       maxSteps,
       toolChoice,
@@ -342,7 +336,7 @@ export class MastraLLM extends MastraLLMBase {
   async __streamObject<T extends ZodSchema | JSONSchema7 | undefined>({
     messages,
     runId,
-    tools,
+    tools = {},
     maxSteps = 5,
     toolChoice = 'auto',
     runtimeContext,
