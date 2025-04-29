@@ -1,0 +1,89 @@
+---
+title: "Cloudflare D1 ストレージ | ストレージシステム | Mastra Core"
+description: Mastraにおける Cloudflare D1 SQL ストレージ実装のドキュメント。
+---
+
+# Cloudflare D1 ストレージ
+
+Cloudflare D1ストレージの実装は、Cloudflare D1を使用したサーバーレスSQLデータベースソリューションを提供し、リレーショナル操作とトランザクションの一貫性をサポートします。
+
+## インストール
+
+```bash
+npm install @mastra/cloudflare-d1@latest
+```
+
+## 使用方法
+
+```typescript copy showLineNumbers
+import { D1Store } from "@mastra/cloudflare-d1";
+
+// --- Example 1: Using Workers Binding ---
+const storageWorkers = new D1Store({
+  binding: D1Database, // D1Database binding provided by the Workers runtime
+  tablePrefix: 'dev_', // Optional: isolate tables per environment
+});
+
+// --- Example 2: Using REST API ---
+const storageRest = new D1Store({
+  accountId: process.env.CLOUDFLARE_ACCOUNT_ID!, // Cloudflare Account ID
+  databaseId: process.env.CLOUDFLARE_D1_DATABASE_ID!, // D1 Database ID
+  apiToken: process.env.CLOUDFLARE_API_TOKEN!, // Cloudflare API Token
+  tablePrefix: 'dev_', // Optional: isolate tables per environment
+});
+```
+
+## パラメータ
+
+<PropertiesTable
+  content={[
+    {
+      name: "binding",
+      type: "D1Database",
+      description: "Cloudflare D1 Workersバインディング（Workersランタイム用）",
+      isOptional: true,
+    },
+    {
+      name: "accountId",
+      type: "string",
+      description: "CloudflareアカウントID（REST API用）",
+      isOptional: true,
+    },
+    {
+      name: "databaseId",
+      type: "string",
+      description: "Cloudflare D1データベースID（REST API用）",
+      isOptional: true,
+    },
+    {
+      name: "apiToken",
+      type: "string",
+      description: "Cloudflare APIトークン（REST API用）",
+      isOptional: true,
+    },
+    {
+      name: "tablePrefix",
+      type: "string",
+      description: "すべてのテーブル名のオプションのプレフィックス（環境分離に役立ちます）",
+      isOptional: true,
+    },
+  ]}
+/>
+
+## 追加情報
+
+### スキーマ管理
+
+ストレージの実装はスキーマの作成と更新を自動的に処理します。以下のテーブルが作成されます：
+
+- `threads`: 会話スレッドを保存します
+- `messages`: 個々のメッセージを保存します
+- `metadata`: スレッドとメッセージの追加メタデータを保存します
+
+### トランザクションと一貫性
+
+Cloudflare D1は単一行操作のトランザクション保証を提供します。これにより、複数の操作を単一の全か無かの作業単位として実行できます。
+
+### テーブル作成とマイグレーション
+
+テーブルはストレージが初期化されるときに自動的に作成されます（`tablePrefix`オプションを使用して環境ごとに分離できます）が、列の追加、データ型の変更、インデックスの修正などの高度なスキーマ変更には、データ損失を避けるために手動のマイグレーションと慎重な計画が必要です。

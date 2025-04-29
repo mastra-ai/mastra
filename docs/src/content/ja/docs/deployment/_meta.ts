@@ -1,7 +1,7 @@
 const meta = {
-  server: "サーバー付き",
+  overview: "概要",
+  server: "サーバーを使用",
   deployment: "サーバーレスプラットフォーム",
-  client: "Mastra クライアント",
+  client: "Mastraクライアント",
 };
-
 export default meta;
