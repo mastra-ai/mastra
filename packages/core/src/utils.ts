@@ -13,6 +13,7 @@ import type { AiMessageType, MastraMemory } from './memory';
 import { RuntimeContext } from './runtime-context';
 import { Tool } from './tools';
 import type { CoreTool, ToolAction, VercelTool } from './tools';
+import { zodSchemaToCustomVercelJSONSchema } from './x-temp-json-schema';
 
 export const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
@@ -77,6 +78,7 @@ export function jsonSchemaPropertiesToTSTypes(value: any): z.ZodTypeAny {
   return zodType;
 }
 
+// Only used for MCP - we convert MCP JSON schema to zod to make it compatible with Mastra tools
 export function jsonSchemaToModel(jsonSchema: Record<string, any>): ZodObject<any> {
   const properties = jsonSchema.properties;
   const requiredFields = jsonSchema.required || [];
@@ -466,10 +468,10 @@ function convertVercelToolParameters(tool: VercelTool): z.ZodType {
   return isZodType(schema) ? schema : resolveSerializedZodOutput(jsonSchemaToZod(schema));
 }
 
-function convertInputSchema(tool: ToolAction<any, any, any>): z.ZodType {
-  const schema = tool.inputSchema ?? z.object({});
-  return isZodType(schema) ? schema : resolveSerializedZodOutput(jsonSchemaToZod(schema));
-}
+// function convertInputSchema(tool: ToolAction<any, any, any>): z.ZodType {
+//   const schema = tool.inputSchema ?? z.object({});
+//   return isZodType(schema) ? schema : resolveSerializedZodOutput(jsonSchemaToZod(schema));
+// }
 
 /**
  * Converts a Vercel Tool or Mastra Tool into a CoreTool format
@@ -489,7 +491,51 @@ export function makeCoreTool(
       return convertVercelToolParameters(tool);
     }
 
-    return convertInputSchema(tool);
+    const schema = zodSchemaToCustomVercelJSONSchema(tool.inputSchema);
+    const hardcoded = {
+      ...schema.jsonSchema,
+      properties: {
+        location: {
+          type: 'string',
+          description: 'City name',
+        },
+        test: {
+          type: ['string', 'null'],
+          description: 'Test parameter',
+        },
+      },
+      additionalProperties: false,
+      required: ['location', 'test'],
+    };
+
+    // const hardcoded = {
+    //   type: 'object',
+    //   properties: {
+    //     location: {
+    //       type: 'string',
+    //       description: 'The location to get the weather for',
+    //     },
+    //     unit: {
+    //       type: ['string', 'null'],
+    //       description: 'The unit to return the temperature in',
+    //       // enum: ['F', 'C'],
+    //     },
+    //   },
+    //   additionalProperties: false,
+    //   required: ['location', 'unit'],
+    // };
+
+    // @ts-ignore
+    schema.jsonSchema = hardcoded;
+    // @ts-ignore
+    schema.validate = value => {
+      return { success: true, value: value.data };
+    };
+
+    console.log(JSON.stringify(schema.jsonSchema, null, 2));
+    return schema;
+    // return jsonSchema(tool.inputSchema).jsonSchema;
+    // return convertInputSchema(tool);
   };
 
   // Check if this is a provider-defined tool
@@ -507,6 +553,7 @@ export function makeCoreTool(
       id: tool.id as `${string}.${string}`,
       args: ('args' in tool ? tool.args : {}) as Record<string, unknown>,
       description: tool.description!,
+      // @ts-ignore
       parameters: getParameters(),
       execute: tool.execute ? createExecute(tool, { ...options, description: tool.description }, logType) : undefined,
     };
@@ -516,6 +563,7 @@ export function makeCoreTool(
   return {
     type: 'function' as const,
     description: tool.description!,
+    // @ts-ignore
     parameters: getParameters(),
     execute: tool.execute ? createExecute(tool, { ...options, description: tool.description }, logType) : undefined,
   };
