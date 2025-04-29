@@ -27,11 +27,11 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@ai-sdk/ui-utils": "^1.1.19",
+    "@ai-sdk/ui-utils": "^1.2.8",
     "@mastra/core": "workspace:^",
     "json-schema": "^0.4.0",
-    "zod": "^3.24.2",
-    "zod-to-json-schema": "^3.24.3"
+    "zod": "^3.24.3",
+    "zod-to-json-schema": "^3.24.5"
   },
   "peerDependencies": {
     "zod": "^3.24.2"
@@ -42,9 +42,9 @@
     "@internal/lint": "workspace:*",
     "@tsconfig/recommended": "^1.0.8",
     "@types/json-schema": "^7.0.15",
-    "@types/node": "^20.17.27",
+    "@types/node": "^20.17.32",
     "tsup": "^8.4.0",
-    "typescript": "^5.8.2",
-    "vitest": "^3.0.9"
+    "typescript": "^5.8.3",
+    "vitest": "^3.1.2"
   }
 }
