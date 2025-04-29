@@ -31,23 +31,23 @@
   "license": "Elastic-2.0",
   "dependencies": {
     "@mastra/core": "workspace:^",
-    "@modelcontextprotocol/sdk": "^1.9.0",
+    "@modelcontextprotocol/sdk": "^1.10.2",
     "uuid": "^11.1.0",
-    "zod": "^3.22.4",
-    "zod-to-json-schema": "^3.22.4"
+    "zod": "^3.24.3",
+    "zod-to-json-schema": "^3.24.5"
   },
   "devDependencies": {
-    "@hono/node-server": "^1.13.8",
+    "@hono/node-server": "^1.14.1",
     "@internal/lint": "workspace:*",
     "@mastra/mcp": "workspace:^",
-    "@types/node": "^20.11.24",
-    "@wong2/mcp-cli": "^1.6.0",
+    "@types/node": "^20.17.32",
+    "@wong2/mcp-cli": "^1.8.0",
     "cross-env": "^7.0.3",
-    "eslint": "^9.23.0",
-    "hono": "^4.7.4",
+    "eslint": "^9.25.1",
+    "hono": "^4.7.8",
     "tsup": "^8.4.0",
-    "tsx": "^4.19.3",
-    "typescript": "^5.3.3",
-    "vitest": "^3.0.9"
+    "tsx": "^4.19.4",
+    "typescript": "^5.8.3",
+    "vitest": "^3.1.2"
   }
 }
