@@ -2220,20 +2220,20 @@ importers:
         specifier: workspace:^
         version: link:../../packages/core
       zod:
-        specifier: ^3.24.2
+        specifier: ^3.24.3
         version: 3.24.3
     devDependencies:
       '@internal/lint':
         specifier: workspace:*
         version: link:../../packages/_config
       '@microsoft/api-extractor':
-        specifier: ^7.52.2
+        specifier: ^7.52.5
         version: 7.52.5(@types/node@20.17.32)
       '@types/node':
         specifier: ^20.17.27
         version: 20.17.32
       eslint:
-        specifier: ^9.23.0
+        specifier: ^9.25.1
         version: 9.25.1(jiti@2.4.2)
       tsup:
         specifier: ^8.4.0
