@@ -1,6 +1,6 @@
 import { Tag } from "@/components/tag";
 const meta = {
-  overview: "Overview",
+  overview: <Tag text="new">Overview</Tag>,
   "flow-control": "Flow Control",
   "suspend-and-resume": "Suspend & Resume",
   "input-data-mapping": "Input Data Mapping",
