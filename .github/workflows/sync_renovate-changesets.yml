@@ -53,7 +53,39 @@ jobs:
           cache: 'pnpm'
 
       - name: Create/Update Changesets
-        uses: 'wardpeet/changesets-dependencies-action@2e05bd09862b1928b7f53bdbdf546a0b2c1af921'
+        uses: 'wardpeet/changesets-dependencies-action@1ac684b9885a8e9bb1d24f09fd2c253b36b3700d'
         env:
           GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}
           SKIP_CREDENTIALS: '1'
+          INCLUDE_DEV_DEPS: '1'
+
+      - name: Check for package.json changes in examples and e2e-tests
+        id: check-examples
+        run: |
+          if git diff --name-only HEAD^ HEAD | grep -q -E "(examples|e2e-tests)/.*package.json"; then
+            echo "examples_changed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "examples_changed=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Install dependencies
+        if: steps.check-examples.outputs.examples_changed == 'true'
+        run: |
+          # Get list of changed package.json files in examples and e2e-tests directories
+          changed_files=$(git diff --name-only HEAD^ HEAD | grep -E "(examples|e2e-tests)/.*package.json")
+
+          # For each changed package.json, run pnpm install in its directory
+          for package_json in $changed_files; do
+            dir=$(dirname "$package_json")
+            echo "Installing dependencies in $dir"
+            cd "$dir"
+            pnpm install --ignore-workspace
+            cd - > /dev/null
+          done
+
+          # Commit the changes if any were made
+          if [ -n "$(git status --porcelain)" ]; then
+            git add .
+            git commit -m "chore: update pnpm-lock.yaml files"
+            git push
+          fi
