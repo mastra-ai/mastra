@@ -13,6 +13,7 @@ import { MastraVector } from '@mastra/core/vector';
 import { IndexType, MetricType, MilvusClient } from '@zilliz/milvus2-sdk-node';
 import type {
   CheckHealthResponse,
+  ClientConfig,
   DescribeCollectionResponse,
   DescribeIndexResponse,
   FieldType,
@@ -60,23 +61,9 @@ export interface MilvusQueryVectorArgs extends QueryVectorArgs {
 
 export class MilvusVectorStore extends MastraVector {
   private client: MilvusClient;
-  constructor({
-    address,
-    username,
-    password,
-    ssl,
-    trace,
-    logLevel,
-  }: {
-    address: string;
-    username?: string;
-    password?: string;
-    ssl?: boolean;
-    trace?: boolean;
-    logLevel?: 'debug' | 'info' | 'warn' | 'error';
-  }) {
+  constructor(addressOrConfig: ClientConfig | string, ssl?: boolean, username?: string, password?: string) {
     super();
-    this.client = new MilvusClient({ address, ssl, username, password, trace, logLevel });
+    this.client = new MilvusClient(addressOrConfig, ssl, username, password);
   }
 
   async checkHealth(): Promise<CheckHealthResponse> {
@@ -132,12 +119,6 @@ export class MilvusVectorStore extends MastraVector {
     }
   }
 
-  /**
-   * Queries the vector store using the specified parameters or arguments.
-   * Supports both object and tuple argument formats.
-   * @param args - QueryVectorParams object or QueryVectorArgs tuple.
-   * @returns Promise<QueryResult[]> - The query results.
-   */
   async query(...args: ParamsToArgs<MilvusQueryVectorParams> | MilvusQueryVectorArgs): Promise<QueryResult[]> {
     const params = this.normalizeArgs<MilvusQueryVectorParams, MilvusQueryVectorArgs>('query', args, [
       'indexName',
@@ -182,12 +163,6 @@ export class MilvusVectorStore extends MastraVector {
     }
   }
 
-  /**
-   * Upserts (inserts or updates) vectors into the vector store.
-   * Supports both object and tuple argument formats.
-   * @param args - UpsertVectorParams object or UpsertVectorArgs tuple.
-   * @returns Promise<string[]> - The inserted/updated IDs.
-   */
   async upsert(...args: ParamsToArgs<MilvusUpsertVectorParams>): Promise<string[]> {
     const params = this.normalizeArgs<MilvusUpsertVectorParams, UpsertVectorArgs>('upsert', args, [
       'indexName',
@@ -237,7 +212,6 @@ export class MilvusVectorStore extends MastraVector {
 
   /**
    * Creates an index on a field in a collection.
-   * If index already exists, it will not throw an error. Also, only one index can be created per field.
    *
    * @param args - The arguments for creating the index.
    * @param args.collectionName - The name of the collection.
