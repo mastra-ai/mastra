@@ -2189,23 +2189,23 @@ importers:
         specifier: workspace:^
         version: link:../../packages/core
       openai:
-        specifier: ^4.89.0
-        version: 4.94.0(encoding@0.1.13)(ws@8.18.1(bufferutil@4.0.9)(utf-8-validate@6.0.5))(zod@3.24.3)
+        specifier: ^4.96.0
+        version: 4.96.0(encoding@0.1.13)(ws@8.18.1(bufferutil@4.0.9)(utf-8-validate@6.0.5))(zod@3.24.3)
       zod:
-        specifier: ^3.24.2
+        specifier: ^3.24.3
         version: 3.24.3
     devDependencies:
       '@internal/lint':
         specifier: workspace:*
         version: link:../../packages/_config
       '@microsoft/api-extractor':
-        specifier: ^7.52.2
+        specifier: ^7.52.5
         version: 7.52.5(@types/node@20.17.32)
       '@types/node':
         specifier: ^20.17.27
         version: 20.17.32
       eslint:
-        specifier: ^9.23.0
+        specifier: ^9.25.1
         version: 9.25.1(jiti@2.4.2)
       tsup:
         specifier: ^8.4.0
@@ -2987,7 +2987,7 @@ importers:
         version: link:../../packages/core
       openai:
         specifier: ^4.89.0
-        version: 4.94.0(encoding@0.1.13)(ws@8.18.1(bufferutil@4.0.9)(utf-8-validate@6.0.5))(zod@3.24.3)
+        version: 4.96.0(encoding@0.1.13)(ws@8.18.1(bufferutil@4.0.9)(utf-8-validate@6.0.5))(zod@3.24.3)
       zod:
         specifier: ^3.24.2
         version: 3.24.3
@@ -14638,8 +14638,8 @@ packages:
     resolution: {integrity: sha512-JM8fhcpmpGN0vrUwGquYIzdcEQHtFuom6sRCbbCM6CfzZXNuRk33G7KfeRAIfnaCxSpzrP5iHtwJzIm6biUZ2Q==}
     hasBin: true
 
-  openai@4.94.0:
-    resolution: {integrity: sha512-WVmr9HWcwfouLJ7R3UHd2A93ClezTPuJljQxkCYQAL15Sjyt+FBNoqEz5MHSdH/ebQrVyvRhFyn/bvdqtSPyIA==}
+  openai@4.96.0:
+    resolution: {integrity: sha512-dKoW56i02Prv2XQolJ9Rl9Svqubqkzg3QpwEOBuSVZLk05Shelu7s+ErRTwFc1Bs3JZ2qBqBfVpXQiJhwOGG8A==}
     hasBin: true
     peerDependencies:
       ws: ^8.18.0
@@ -26258,7 +26258,7 @@ snapshots:
       cohere-ai: 7.16.0(encoding@0.1.13)
       isomorphic-fetch: 3.0.0(encoding@0.1.13)
       ollama: 0.5.14
-      openai: 4.94.0(encoding@0.1.13)(ws@8.18.1(bufferutil@4.0.9)(utf-8-validate@6.0.5))(zod@3.24.3)
+      openai: 4.96.0(encoding@0.1.13)(ws@8.18.1(bufferutil@4.0.9)(utf-8-validate@6.0.5))(zod@3.24.3)
       voyageai: 0.0.3(encoding@0.1.13)
     transitivePeerDependencies:
       - aws-crt
@@ -32260,7 +32260,7 @@ snapshots:
     transitivePeerDependencies:
       - encoding
 
-  openai@4.94.0(encoding@0.1.13)(ws@8.18.1(bufferutil@4.0.9)(utf-8-validate@6.0.5))(zod@3.24.3):
+  openai@4.96.0(encoding@0.1.13)(ws@8.18.1(bufferutil@4.0.9)(utf-8-validate@6.0.5))(zod@3.24.3):
     dependencies:
       '@types/node': 20.17.32
       '@types/node-fetch': 2.6.12
