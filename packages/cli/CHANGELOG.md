@@ -1,5 +1,11 @@
 # mastra
 
+## 0.6.0-alpha.6
+
+### Patch Changes
+
+- 25d3c39: build logs for how to load instrumentation for build output
+
 ## 0.6.0-alpha.5
 
 ### Patch Changes
