@@ -62,11 +62,11 @@ export const Nav = ({ stars }: { stars: number }) => {
       projectLink="https://github.com/mastra-ai/mastra"
       chatIcon={null}
       chatLink={""}
-      className="relative"
+      className="relative px-6"
     >
       <Link
         href="/docs"
-        className="px-1.5 absolute left-[115px] md:left-[125px] text-[var(--x-color-primary-600)] font-medium tracking-wider py-0.5 text-xs rounded border border-[var(--border)] uppercase"
+        className="px-1.5 absolute left-[118px]  md:left-[125px] text-[var(--x-color-primary-600)] font-medium tracking-wider py-0.5 text-xs rounded border border-[var(--border)] uppercase"
       >
         Docs
       </Link>
