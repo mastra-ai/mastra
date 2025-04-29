@@ -19,7 +19,7 @@ import type {
 import type { WorkflowRunState } from '@mastra/core/workflows';
 import Cloudflare from 'cloudflare';
 import { isWorkersConfig } from './types';
-import type { CloudflareStoreConfig, RecordTypes } from './types';
+import type { CloudflareStoreConfig, ListOptions, RecordTypes } from './types';
 
 export class CloudflareStore extends MastraStorage {
   private client?: Cloudflare;
@@ -80,7 +80,8 @@ export class CloudflareStore extends MastraStorage {
         this.logger.info('Using Cloudflare KV REST API');
       }
     } catch (error) {
-      this.logger.error('Failed to initialize CloudflareStore:', { error });
+      const message = error instanceof Error ? error.message : String(error);
+      this.logger.error('Failed to initialize CloudflareStore:', { message });
       throw error;
     }
   }
@@ -127,7 +128,8 @@ export class CloudflareStore extends MastraStorage {
       if (error.message && error.message.includes('key not found')) {
         return null;
       }
-      this.logger.error(`Failed to get value for ${tableName} ${key}:`, { error });
+      const message = error instanceof Error ? error.message : String(error);
+      this.logger.error(`Failed to get value for ${tableName} ${key}:`, { message });
       throw error;
     }
   }
@@ -160,7 +162,8 @@ export class CloudflareStore extends MastraStorage {
         });
       }
     } catch (error) {
-      this.logger.error(`Failed to put value for ${tableName} ${key}:`, { error });
+      const message = error instanceof Error ? error.message : String(error);
+      this.logger.error(`Failed to put value for ${tableName} ${key}:`, { message });
       throw error;
     }
   }
@@ -177,7 +180,7 @@ export class CloudflareStore extends MastraStorage {
     }
   }
 
-  async listNamespaceKeys(tableName: TABLE_NAMES, options?: { limit?: number; prefix?: string }) {
+  async listNamespaceKeys(tableName: TABLE_NAMES, options?: ListOptions) {
     try {
       if (this.bindings) {
         const binding = this.getBinding(tableName);
@@ -301,7 +304,8 @@ export class CloudflareStore extends MastraStorage {
       }
       return data;
     } catch (error) {
-      this.logger.error('Failed to parse text:', { error, text });
+      const message = error instanceof Error ? error.message : String(error);
+      this.logger.error('Failed to parse text:', { message, text });
       return null;
     }
   }
@@ -344,9 +348,9 @@ export class CloudflareStore extends MastraStorage {
     }
   }
 
-  private async listKV(tableName: TABLE_NAMES): Promise<Array<{ name: string }>> {
+  private async listKV(tableName: TABLE_NAMES, options?: ListOptions): Promise<Array<{ name: string }>> {
     try {
-      return await this.listNamespaceKeys(tableName);
+      return await this.listNamespaceKeys(tableName, options);
     } catch (error: any) {
       this.logger.error(`Failed to list KV for ${tableName}:`, error);
       throw new Error(`Failed to list KV: ${error.message}`);
@@ -440,7 +444,8 @@ export class CloudflareStore extends MastraStorage {
           if (!data) return null;
           return typeof data === 'string' ? JSON.parse(data) : data;
         } catch (error) {
-          this.logger.error(`Error retrieving message ${id}:`, { error });
+          const message = error instanceof Error ? error.message : String(error);
+          this.logger.error(`Error retrieving message ${id}:`, { message });
           return null;
         }
       }),
@@ -489,7 +494,8 @@ export class CloudflareStore extends MastraStorage {
           value: JSON.stringify(updatedOrder),
         });
       } catch (error) {
-        this.logger.error(`Error updating sorted order for key ${orderKey}:`, { error });
+        const message = error instanceof Error ? error.message : String(error);
+        this.logger.error(`Error updating sorted order for key ${orderKey}:`, { message });
         throw error; // Let caller handle the error
       } finally {
         // Clean up the queue if this was the last operation
@@ -544,7 +550,11 @@ export class CloudflareStore extends MastraStorage {
         if (!record.namespace || !record.workflow_name || !record.run_id) {
           throw new Error('Namespace, workflow name, and run ID are required');
         }
-        return `${prefix}${tableName}:${record.namespace}:${record.workflow_name}:${record.run_id}`;
+        let key = `${prefix}${tableName}:${record.namespace}:${record.workflow_name}:${record.run_id}`;
+        if (record.resourceId) {
+          key = `${key}:${record.resourceId}`;
+        }
+        return key;
       case TABLE_TRACES:
         if (!record.id) throw new Error('Trace ID is required');
         return `${prefix}${tableName}:${record.id}`;
@@ -564,7 +574,8 @@ export class CloudflareStore extends MastraStorage {
       const schemaKey = this.getSchemaKey(tableName);
       return await this.getKV(tableName, schemaKey);
     } catch (error) {
-      this.logger.error(`Failed to get schema for ${tableName}:`, { error });
+      const message = error instanceof Error ? error.message : String(error);
+      this.logger.error(`Failed to get schema for ${tableName}:`, { message });
       return null;
     }
   }
@@ -618,7 +629,8 @@ export class CloudflareStore extends MastraStorage {
         }
       }
     } catch (error) {
-      this.logger.error(`Error validating record against schema:`, { error, record, schema });
+      const message = error instanceof Error ? error.message : String(error);
+      this.logger.error(`Error validating record against schema:`, { message, record, schema });
       throw error;
     }
   }
@@ -656,7 +668,7 @@ export class CloudflareStore extends MastraStorage {
           }
           break;
         case TABLE_WORKFLOW_SNAPSHOT:
-          if (!('namespace' in recordTyped) || !('workflowName' in recordTyped) || !('runId' in recordTyped)) {
+          if (!('namespace' in recordTyped) || !('workflow_name' in recordTyped) || !('run_id' in recordTyped)) {
             throw new Error('Workflow record missing required fields');
           }
           break;
@@ -669,7 +681,8 @@ export class CloudflareStore extends MastraStorage {
           throw new Error(`Unknown table type: ${tableName}`);
       }
     } catch (error) {
-      this.logger.error(`Failed to validate record for ${tableName}:`, { error, record });
+      const message = error instanceof Error ? error.message : String(error);
+      this.logger.error(`Failed to validate record for ${tableName}:`, { message, record });
       throw error;
     }
   }
@@ -718,7 +731,13 @@ export class CloudflareStore extends MastraStorage {
     }
   }
 
-  async insert<T extends TABLE_NAMES>({ tableName, record }: { tableName: T; record: RecordTypes[T] }): Promise<void> {
+  async insert<T extends TABLE_NAMES>({
+    tableName,
+    record,
+  }: {
+    tableName: T;
+    record: Record<string, any>;
+  }): Promise<void> {
     try {
       const key = this.getKey(tableName, record);
 
@@ -734,7 +753,8 @@ export class CloudflareStore extends MastraStorage {
       await this.validateRecord(processedRecord, tableName);
       await this.putKV({ tableName, key, value: processedRecord });
     } catch (error) {
-      this.logger.error(`Failed to insert record for ${tableName}:`, { error });
+      const message = error instanceof Error ? error.message : String(error);
+      this.logger.error(`Failed to insert record for ${tableName}:`, { message });
       throw error;
     }
   }
@@ -758,7 +778,9 @@ export class CloudflareStore extends MastraStorage {
 
       return processed as R;
     } catch (error) {
-      this.logger.error(`Failed to load data for ${tableName}:`, { error });
+      this.logger.error(`Failed to load data for ${tableName}:`, {
+        error: error instanceof Error ? error.message : String(error),
+      });
       return null;
     }
   }
@@ -775,7 +797,9 @@ export class CloudflareStore extends MastraStorage {
         metadata: this.ensureMetadata(thread.metadata),
       };
     } catch (error) {
-      this.logger.error(`Error processing thread ${threadId}:`, { error });
+      this.logger.error(`Error processing thread ${threadId}:`, {
+        error: error instanceof Error ? error.message : String(error),
+      });
       return null;
     }
   }
@@ -799,14 +823,16 @@ export class CloudflareStore extends MastraStorage {
               metadata: this.ensureMetadata(thread.metadata),
             };
           } catch (error) {
-            this.logger.error(`Error processing thread from key ${keyObj.name}:`, { error });
+            const message = error instanceof Error ? error.message : String(error);
+            this.logger.error(`Error processing thread from key ${keyObj.name}:`, { message });
             return null;
           }
         }),
       );
       return threads.filter((thread): thread is StorageThreadType => thread !== null);
     } catch (error) {
-      this.logger.error(`Error getting threads for resourceId ${resourceId}:`, { error });
+      const message = error instanceof Error ? error.message : String(error);
+      this.logger.error(`Error getting threads for resourceId ${resourceId}:`, { message });
       return [];
     }
   }
@@ -816,7 +842,8 @@ export class CloudflareStore extends MastraStorage {
       await this.insert({ tableName: TABLE_THREADS, record: thread });
       return thread;
     } catch (error) {
-      this.logger.error('Error saving thread:', { error });
+      const message = error instanceof Error ? error.message : String(error);
+      this.logger.error('Error saving thread:', { message });
       throw error;
     }
   }
@@ -849,7 +876,8 @@ export class CloudflareStore extends MastraStorage {
       await this.insert({ tableName: TABLE_THREADS, record: updatedThread });
       return updatedThread;
     } catch (error) {
-      this.logger.error(`Error updating thread ${id}:`, { error });
+      const message = error instanceof Error ? error.message : String(error);
+      this.logger.error(`Error updating thread ${id}:`, { message });
       throw error;
     }
   }
@@ -876,7 +904,8 @@ export class CloudflareStore extends MastraStorage {
         this.deleteKV(TABLE_THREADS, this.getKey(TABLE_THREADS, { id: threadId })),
       ]);
     } catch (error) {
-      this.logger.error(`Error deleting thread ${threadId}:`, { error });
+      const message = error instanceof Error ? error.message : String(error);
+      this.logger.error(`Error deleting thread ${threadId}:`, { message });
       throw error;
     }
   }
@@ -885,7 +914,8 @@ export class CloudflareStore extends MastraStorage {
     try {
       return this.getKey(TABLE_MESSAGES, { threadId, id: messageId });
     } catch (error) {
-      this.logger.error(`Error getting message key for thread ${threadId} and message ${messageId}:`, { error });
+      const message = error instanceof Error ? error.message : String(error);
+      this.logger.error(`Error getting message key for thread ${threadId} and message ${messageId}:`, { message });
       throw error;
     }
   }
@@ -893,7 +923,8 @@ export class CloudflareStore extends MastraStorage {
     try {
       return this.getKey(TABLE_MESSAGES, { threadId, id: 'messages' });
     } catch (error) {
-      this.logger.error(`Error getting thread messages key for thread ${threadId}:`, { error });
+      const message = error instanceof Error ? error.message : String(error);
+      this.logger.error(`Error getting thread messages key for thread ${threadId}:`, { message });
       throw error;
     }
   }
@@ -1114,10 +1145,20 @@ export class CloudflareStore extends MastraStorage {
       const normalizedState = this.normalizeWorkflowState(snapshot);
       this.validateWorkflowState(normalizedState);
 
-      const key = this.getKey(TABLE_WORKFLOW_SNAPSHOT, { namespace, workflow_name: workflowName, run_id: runId });
-      await this.putKV({ tableName: TABLE_WORKFLOW_SNAPSHOT, key, value: normalizedState });
+      await this.insert({
+        tableName: TABLE_WORKFLOW_SNAPSHOT,
+        record: {
+          namespace,
+          workflow_name: workflowName,
+          run_id: runId,
+          snapshot: normalizedState,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        },
+      });
     } catch (error) {
-      this.logger.error('Error persisting workflow snapshot:', { error });
+      const message = error instanceof Error ? error.message : String(error);
+      this.logger.error('Error persisting workflow snapshot:', { message });
       throw error;
     }
   }
@@ -1135,11 +1176,13 @@ export class CloudflareStore extends MastraStorage {
       const data = await this.getKV(TABLE_WORKFLOW_SNAPSHOT, key);
       if (!data) return null;
 
-      const state = this.normalizeWorkflowState(data);
+      const state = this.normalizeWorkflowState(data.snapshot || data);
       this.validateWorkflowState(state);
       return state;
     } catch (error) {
-      this.logger.error('Error loading workflow snapshot:', { error });
+      this.logger.error('Error loading workflow snapshot:', {
+        error: error instanceof Error ? error.message : String(error),
+      });
       return null;
     }
   }
@@ -1165,7 +1208,8 @@ export class CloudflareStore extends MastraStorage {
         }),
       );
     } catch (error) {
-      this.logger.error('Error in batch insert:', { error });
+      const message = error instanceof Error ? error.message : String(error);
+      this.logger.error('Error in batch insert:', { message });
       throw error;
     }
   }
@@ -1262,7 +1306,8 @@ export class CloudflareStore extends MastraStorage {
         createdAt: record.createdAt,
       }));
     } catch (error) {
-      this.logger.error('Failed to get traces:', { message: error instanceof Error ? error.message : String(error) });
+      const message = error instanceof Error ? error.message : String(error);
+      this.logger.error('Failed to get traces:', { message });
       return [];
     }
   }
@@ -1282,19 +1327,150 @@ export class CloudflareStore extends MastraStorage {
     throw new Error('Method not implemented.');
   }
 
-  getWorkflowRuns(_args?: {
-    namespace?: string;
-    workflowName?: string;
-    fromDate?: Date;
-    toDate?: Date;
-    limit?: number;
-    offset?: number;
-  }): Promise<WorkflowRuns> {
-    throw new Error('Method not implemented.');
+  private parseWorkflowRun(row: any): WorkflowRun {
+    let parsedSnapshot: WorkflowRunState | string = row.snapshot as string;
+    if (typeof parsedSnapshot === 'string') {
+      try {
+        parsedSnapshot = JSON.parse(row.snapshot as string) as WorkflowRunState;
+      } catch (e) {
+        // If parsing fails, return the raw snapshot string
+        console.warn(`Failed to parse snapshot for workflow ${row.workflow_name}: ${e}`);
+      }
+    }
+
+    return {
+      workflowName: row.workflow_name,
+      runId: row.run_id,
+      snapshot: parsedSnapshot,
+      createdAt: this.ensureDate(row.createdAt)!,
+      updatedAt: this.ensureDate(row.updatedAt)!,
+      resourceId: row.resourceId,
+    };
   }
 
-  async getWorkflowRunById(_args: { runId: string; workflowName?: string }): Promise<WorkflowRun | null> {
-    throw new Error('Method not implemented.');
+  private buildWorkflowSnapshotPrefix({
+    namespace,
+    workflowName,
+    runId,
+    resourceId,
+  }: {
+    namespace?: string;
+    workflowName?: string;
+    runId?: string;
+    resourceId?: string;
+  }): string {
+    // Add namespace prefix if configured
+    const prefix = this.namespacePrefix ? `${this.namespacePrefix}:` : '';
+    let key = `${prefix}${TABLE_WORKFLOW_SNAPSHOT}`;
+    if (namespace) key += `:${namespace}`;
+    if (workflowName) key += `:${workflowName}`;
+    if (runId) key += `:${runId}`;
+    if (resourceId) key += `:${resourceId}`;
+    // If partial, ensure trailing colon for correct prefix match
+    if (!resourceId && (runId || workflowName || namespace)) key += ':';
+    return key;
+  }
+
+  async getWorkflowRuns({
+    namespace,
+    workflowName,
+    limit = 20,
+    offset = 0,
+    resourceId,
+    fromDate,
+    toDate,
+  }: {
+    namespace?: string;
+    workflowName?: string;
+    limit?: number;
+    offset?: number;
+    resourceId?: string;
+    fromDate?: Date;
+    toDate?: Date;
+  } = {}): Promise<WorkflowRuns> {
+    try {
+      // List all keys in the workflow snapshot table
+      const prefix = this.buildWorkflowSnapshotPrefix({ namespace, workflowName });
+      const keyObjs = await this.listKV(TABLE_WORKFLOW_SNAPSHOT, { prefix });
+      const runs: WorkflowRun[] = [];
+      for (const { name: key } of keyObjs) {
+        // Extract namespace, workflow_name, run_id, resourceId from key
+        const parts = key.split(':');
+        const idx = parts.indexOf(TABLE_WORKFLOW_SNAPSHOT);
+        if (idx === -1 || parts.length < idx + 4) continue;
+        const ns = parts[idx + 1];
+        const wfName = parts[idx + 2];
+        // If resourceId is present in the key, it's at idx+4
+        const keyResourceId = parts.length > idx + 4 ? parts[idx + 4] : undefined;
+        // Filter by namespace, workflowName, resourceId if provided
+        if ((namespace && ns !== namespace) || (workflowName && wfName !== workflowName)) continue;
+        if (resourceId && keyResourceId && keyResourceId !== resourceId) continue;
+        // Load the snapshot
+        const data = await this.getKV(TABLE_WORKFLOW_SNAPSHOT, key);
+        if (!data) continue;
+        try {
+          // Filter by resourceId in value if not in key
+          if (resourceId && data.resourceId && data.resourceId !== resourceId) continue;
+          // Filter by fromDate/toDate
+          const createdAt = this.ensureDate(data.createdAt);
+          if (fromDate && createdAt && createdAt < fromDate) continue;
+          if (toDate && createdAt && createdAt > toDate) continue;
+          const state = this.normalizeWorkflowState(data.snapshot || data);
+          this.validateWorkflowState(state);
+          const run = this.parseWorkflowRun({ ...data, snapshot: state });
+          runs.push(run);
+        } catch (err) {
+          this.logger.error('Failed to parse workflow snapshot:', { key, error: err });
+        }
+      }
+      // Sort by createdAt descending
+      runs.sort((a, b) => {
+        const aDate = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+        const bDate = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+        return bDate - aDate;
+      });
+      // Apply pagination
+      const pagedRuns = runs.slice(offset, offset + limit);
+      return {
+        runs: pagedRuns,
+        total: runs.length,
+      };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      this.logger.error('Error in getWorkflowRuns:', { message });
+      return { runs: [], total: 0 };
+    }
+  }
+
+  async getWorkflowRunById({
+    namespace,
+    runId,
+    workflowName,
+  }: {
+    namespace: string;
+    runId: string;
+    workflowName: string;
+  }): Promise<WorkflowRun | null> {
+    try {
+      if (!runId || !workflowName || !namespace) {
+        throw new Error('runId, workflowName, and namespace are required');
+      }
+      // Use prefix to list all possible keys for this run (with/without resourceId)
+      const prefix = this.buildWorkflowSnapshotPrefix({ namespace, workflowName, runId });
+      const keyObjs = await this.listKV(TABLE_WORKFLOW_SNAPSHOT, { prefix });
+      if (!keyObjs.length) return null;
+      const key = keyObjs[0]?.name;
+      const data = await this.getKV(TABLE_WORKFLOW_SNAPSHOT, key as string);
+      if (!data) return null;
+      // Normalize to WorkflowRun type
+      const state = this.normalizeWorkflowState(data.snapshot || data);
+      this.validateWorkflowState(state);
+      return this.parseWorkflowRun({ ...data, snapshot: state });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      this.logger.error('Error in getWorkflowRunById:', { message });
+      return null;
+    }
   }
 
   async close(): Promise<void> {

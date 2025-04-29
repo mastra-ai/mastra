@@ -428,7 +428,8 @@ export class D1Store extends MastraStorage {
     try {
       await this.executeQuery({ sql, params });
     } catch (error) {
-      this.logger.error(`Error inserting into ${fullTableName}:`, { error });
+      const message = error instanceof Error ? error.message : String(error);
+      this.logger.error(`Error inserting into ${fullTableName}:`, { message });
       throw new Error(`Failed to insert into ${fullTableName}: ${error}`);
     }
   }
@@ -562,7 +563,8 @@ export class D1Store extends MastraStorage {
       await this.executeQuery({ sql, params });
       return thread;
     } catch (error) {
-      this.logger.error(`Error saving thread to ${fullTableName}:`, { error });
+      const message = error instanceof Error ? error.message : String(error);
+      this.logger.error(`Error saving thread to ${fullTableName}:`, { message });
       throw error;
     }
   }
@@ -607,7 +609,8 @@ export class D1Store extends MastraStorage {
         updatedAt: new Date(),
       };
     } catch (error) {
-      this.logger.error('Error updating thread:', { error });
+      const message = error instanceof Error ? error.message : String(error);
+      this.logger.error('Error updating thread:', { message });
       throw error;
     }
   }
