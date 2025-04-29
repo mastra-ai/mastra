@@ -63,9 +63,9 @@ research-assistant/
 
   新しいNode.jsプロジェクトを初期化し、必要な依存関係をインストールします：
 
-  ```bash
+  ```bash copy
   npm init -y
-  npm install @mastra/core @mastra/rag @mastra/pg @ai-sdk/openai ai zod
+  npm install @mastra/core@latest @mastra/rag@latest @mastra/pg@latest @ai-sdk/openai@latest ai@latest zod@latest
   ```
 
   APIアクセスとデータベース接続のための環境変数を設定します：
@@ -138,7 +138,7 @@ research-assistant/
 
   このステップでは、初期ドキュメント処理を行います。以下の手順で進めます：
 
-  1. 論文をURLから取得する
+  1. URLから研究論文を取得する
   2. ドキュメントオブジェクトに変換する
   3. より良い処理のために、小さく管理しやすいチャンクに分割する
 
@@ -174,7 +174,7 @@ research-assistant/
   2. 埋め込みを保持するベクトルストアインデックスを作成する
   3. 埋め込みとメタデータ（元のテキストとソース情報）をベクトルデータベースに保存する
 
-  > **注意**：このメタデータは、ベクトルストアが関連する一致を見つけたときに実際のコンテンツを返すために重要です。
+  > **注意**：このメタデータは、ベクトルストアが関連する一致を見つけたときに実際のコンテンツを返すことができるため、非常に重要です。
 
   これにより、エージェントは効率的に情報を検索して取得できるようになります。
 
@@ -295,6 +295,7 @@ research-assistant/
     }'
   ```
 </Steps>
+
 
 
 

@@ -49,9 +49,9 @@ export const mastra = new Mastra({
 });
 ```
 
-## 音声の処理と文字起こし
+## 音声の文字起こし処理
 
-以下のコードは、ウェブリクエストから音声を受け取り、エージェントのSTT機能を使用して文字起こしを行う方法を示しています：
+以下のコードは、Webリクエストから音声を受け取り、エージェントのSTT機能を使用して文字起こしする方法を示しています：
 
 ```typescript filename="app/api/audio/route.ts"
 import { mastra } from '@/src/mastra'; // Import the Mastra instance
@@ -77,7 +77,7 @@ export async function POST(req: Request) {
 }
 ```
 
-Smart Voice Memo Appの完全な実装は、私たちのGitHubリポジトリで見ることができます。
+スマートボイスメモアプリの完全な実装は、GitHubリポジトリで確認できます。
 
 <br />
 <br />
@@ -86,6 +86,6 @@ Smart Voice Memo Appの完全な実装は、私たちのGitHubリポジトリで
 <br />
 <GithubLink
   link={
-    "https://github.com/mastra-ai/mastra/blob/main/examples/voice/voice-memo-app"
+    "https://github.com/mastra-ai/voice-examples/tree/main/speech-to-text/voice-memo-app"
   }
 />
