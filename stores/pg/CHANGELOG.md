@@ -1,5 +1,14 @@
 # @mastra/pg
 
+## 0.3.1-alpha.5
+
+### Patch Changes
+
+- 3e7b69d: Dynamic agent props
+- 5f826d9: Moved vector store specific prompts from @mastra/rag to be exported from the store that the prompt belongs to, ie @mastra/pg
+- Updated dependencies [3e7b69d]
+  - @mastra/core@0.9.1-alpha.5
+
 ## 0.3.1-alpha.4
 
 ### Patch Changes
