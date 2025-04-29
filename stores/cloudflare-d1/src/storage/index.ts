@@ -428,7 +428,8 @@ export class D1Store extends MastraStorage {
     try {
       await this.executeQuery({ sql, params });
     } catch (error) {
-      this.logger.error(`Error inserting into ${fullTableName}:`, { error });
+      const message = error instanceof Error ? error.message : String(error);
+      this.logger.error(`Error inserting into ${fullTableName}:`, { message });
       throw new Error(`Failed to insert into ${fullTableName}: ${error}`);
     }
   }
@@ -562,7 +563,8 @@ export class D1Store extends MastraStorage {
       await this.executeQuery({ sql, params });
       return thread;
     } catch (error) {
-      this.logger.error(`Error saving thread to ${fullTableName}:`, { error });
+      const message = error instanceof Error ? error.message : String(error);
+      this.logger.error(`Error saving thread to ${fullTableName}:`, { message });
       throw error;
     }
   }
@@ -607,7 +609,8 @@ export class D1Store extends MastraStorage {
         updatedAt: new Date(),
       };
     } catch (error) {
-      this.logger.error('Error updating thread:', { error });
+      const message = error instanceof Error ? error.message : String(error);
+      this.logger.error('Error updating thread:', { message });
       throw error;
     }
   }
@@ -1018,18 +1021,129 @@ export class D1Store extends MastraStorage {
     }
   }
 
-  getWorkflowRuns(_args?: {
+  private parseWorkflowRun(row: any): WorkflowRun {
+    let parsedSnapshot: WorkflowRunState | string = row.snapshot as string;
+    if (typeof parsedSnapshot === 'string') {
+      try {
+        parsedSnapshot = JSON.parse(row.snapshot as string) as WorkflowRunState;
+      } catch (e) {
+        // If parsing fails, return the raw snapshot string
+        console.warn(`Failed to parse snapshot for workflow ${row.workflow_name}: ${e}`);
+      }
+    }
+
+    return {
+      workflowName: row.workflow_name,
+      runId: row.run_id,
+      snapshot: parsedSnapshot,
+      createdAt: this.ensureDate(row.createdAt)!,
+      updatedAt: this.ensureDate(row.updatedAt)!,
+      resourceId: row.resourceId,
+    };
+  }
+
+  private async hasColumn(table: string, column: string): Promise<boolean> {
+    // For D1/SQLite, use PRAGMA table_info to get column info
+    const sql = `PRAGMA table_info(${table});`;
+    const result = await this.executeQuery({ sql, params: [] });
+    if (!result || !Array.isArray(result)) return false;
+    return result.some((col: any) => col.name === column || col.name === column.toLowerCase());
+  }
+
+  async getWorkflowRuns({
+    workflowName,
+    fromDate,
+    toDate,
+    limit,
+    offset,
+    resourceId,
+  }: {
     workflowName?: string;
     fromDate?: Date;
     toDate?: Date;
     limit?: number;
     offset?: number;
-  }): Promise<WorkflowRuns> {
-    throw new Error('Method not implemented.');
+    resourceId?: string;
+  } = {}): Promise<WorkflowRuns> {
+    const fullTableName = this.getTableName(TABLE_WORKFLOW_SNAPSHOT);
+    try {
+      const builder = createSqlBuilder().select().from(fullTableName);
+      const countBuilder = createSqlBuilder().count().from(fullTableName);
+
+      if (workflowName) builder.whereAnd('workflow_name = ?', workflowName);
+      if (resourceId) {
+        const hasResourceId = await this.hasColumn(fullTableName, 'resourceId');
+        if (hasResourceId) {
+          builder.whereAnd('resourceId = ?', resourceId);
+          countBuilder.whereAnd('resourceId = ?', resourceId);
+        } else {
+          console.warn(`[${fullTableName}] resourceId column not found. Skipping resourceId filter.`);
+        }
+      }
+      if (fromDate) {
+        builder.whereAnd('createdAt >= ?', fromDate instanceof Date ? fromDate.toISOString() : fromDate);
+        countBuilder.whereAnd('createdAt >= ?', fromDate instanceof Date ? fromDate.toISOString() : fromDate);
+      }
+      if (toDate) {
+        builder.whereAnd('createdAt <= ?', toDate instanceof Date ? toDate.toISOString() : toDate);
+        countBuilder.whereAnd('createdAt <= ?', toDate instanceof Date ? toDate.toISOString() : toDate);
+      }
+
+      builder.orderBy('createdAt', 'DESC');
+      if (typeof limit === 'number') builder.limit(limit);
+      if (typeof offset === 'number') builder.offset(offset);
+
+      const { sql, params } = builder.build();
+
+      let total = 0;
+
+      if (limit !== undefined && offset !== undefined) {
+        const { sql: countSql, params: countParams } = countBuilder.build();
+        const countResult = await this.executeQuery({ sql: countSql, params: countParams, first: true });
+        total = Number((countResult as Record<string, any>)?.count ?? 0);
+      }
+
+      const results = await this.executeQuery({ sql, params });
+      const runs = (isArrayOfRecords(results) ? results : []).map((row: any) => this.parseWorkflowRun(row));
+      return { runs, total: total || runs.length };
+    } catch (error) {
+      this.logger.error('Error getting workflow runs:', {
+        message: error instanceof Error ? error.message : String(error),
+      });
+      throw error;
+    }
   }
 
-  async getWorkflowRunById(_args: { runId: string; workflowName?: string }): Promise<WorkflowRun | null> {
-    throw new Error('Method not implemented.');
+  async getWorkflowRunById({
+    runId,
+    workflowName,
+  }: {
+    runId: string;
+    workflowName?: string;
+  }): Promise<WorkflowRun | null> {
+    const fullTableName = this.getTableName(TABLE_WORKFLOW_SNAPSHOT);
+    try {
+      const conditions: string[] = [];
+      const params: SqlParam[] = [];
+      if (runId) {
+        conditions.push('run_id = ?');
+        params.push(runId);
+      }
+      if (workflowName) {
+        conditions.push('workflow_name = ?');
+        params.push(workflowName);
+      }
+      const whereClause = conditions.length > 0 ? 'WHERE ' + conditions.join(' AND ') : '';
+      const sql = `SELECT * FROM ${fullTableName} ${whereClause} ORDER BY createdAt DESC LIMIT 1`;
+      const result = await this.executeQuery({ sql, params, first: true });
+      if (!result) return null;
+      return this.parseWorkflowRun(result);
+    } catch (error) {
+      this.logger.error('Error getting workflow run by ID:', {
+        message: error instanceof Error ? error.message : String(error),
+      });
+      throw error;
+    }
   }
 
   /**
