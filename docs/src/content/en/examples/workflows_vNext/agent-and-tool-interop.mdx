@@ -87,7 +87,7 @@ Here, we'll get the weather workflow from the mastra instance, then create a run
 ```ts showLineNumbers copy filename="exec.ts"
 import { mastra } from "./"
 
-const workflow = mastra.getNewWorkflow('weatherWorkflow')
+const workflow = mastra.vnext_getWorkflow('weatherWorkflow')
 const run = workflow.createRun()
 
 const result = await run.start({ inputData: { location: "Lagos" } })

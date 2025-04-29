@@ -186,7 +186,7 @@ import { mastra } from "./"
 import { createInterface } from 'readline'
 import { humanInputStep } from './workflows'
 
-const workflow = mastra.getNewWorkflow('weather-workflow')
+const workflow = mastra.vnext_getWorkflow('weather-workflow')
 const run = workflow.createRun({})
 const result = await run.start({
   inputData: { vacationDescription: 'I want to go to the beach' },
