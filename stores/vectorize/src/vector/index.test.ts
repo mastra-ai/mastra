@@ -261,6 +261,7 @@ describe('CloudflareVector', () => {
 
   describe('Index Operations', () => {
     const tempIndexName = 'test_temp_index';
+    const tempIndexNameCreateDescribeDelete = `create-describe-delete`;
 
     beforeEach(async () => {
       // Cleanup any existing index before each test
@@ -282,6 +283,14 @@ describe('CloudflareVector', () => {
       }
     });
 
+    afterAll(async () => {
+      try {
+        // clean up this unique index that only has one test.
+        // the test cleans it up but if it fails in the middle it might cause future tests to fail
+        await vectorDB.deleteIndex(tempIndexNameCreateDescribeDelete);
+      } catch (e) {}
+    });
+
     it('should create and list indexes', async () => {
       await vectorDB.createIndex({ indexName: tempIndexName, dimension: VECTOR_DIMENSION, metric: 'cosine' });
       await waitUntilReady(vectorDB, tempIndexName);
@@ -290,13 +299,16 @@ describe('CloudflareVector', () => {
     });
 
     it('should create, describe, and delete an index', async () => {
-      const tempIndexName = `create-describe-delete`;
       // Create
-      await vectorDB.createIndex({ indexName: tempIndexName, dimension: VECTOR_DIMENSION, metric: 'cosine' });
-      await waitUntilReady(vectorDB, tempIndexName);
+      await vectorDB.createIndex({
+        indexName: tempIndexNameCreateDescribeDelete,
+        dimension: VECTOR_DIMENSION,
+        metric: 'cosine',
+      });
+      await waitUntilReady(vectorDB, tempIndexNameCreateDescribeDelete);
 
       // Describe
-      const stats = await vectorDB.describeIndex(tempIndexName);
+      const stats = await vectorDB.describeIndex(tempIndexNameCreateDescribeDelete);
       expect(stats).toEqual({
         dimension: VECTOR_DIMENSION,
         metric: 'cosine',
@@ -305,12 +317,12 @@ describe('CloudflareVector', () => {
 
       try {
         // Delete
-        await vectorDB.deleteIndex(tempIndexName);
+        await vectorDB.deleteIndex(tempIndexNameCreateDescribeDelete);
       } catch (e) {
-        console.error(`Failed deleting index ${tempIndexName}`, e);
+        console.error(`Failed deleting index ${tempIndexNameCreateDescribeDelete}`, e);
       }
       const indexes = await vectorDB.listIndexes();
-      expect(indexes).not.toContain(tempIndexName);
+      expect(indexes).not.toContain(tempIndexNameCreateDescribeDelete);
     });
   });
 
