@@ -58,7 +58,7 @@ const TraceRow = ({ trace, index, isActive }: { trace: RefinedTrace; index: numb
   const { openTrace } = useOpenTrace();
 
   return (
-    <Row className={isActive ? 'bg-surface4' : ''}>
+    <Row className={isActive ? 'bg-surface4' : ''} onClick={() => openTrace(trace.trace, index)}>
       <DateTimeCell dateTime={new Date(trace.started / 1000)} />
       <TxtCell>{trace.traceId}</TxtCell>
       <UnitCell unit="ms">{trace.duration / 1000}</UnitCell>
