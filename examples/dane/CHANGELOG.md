@@ -1,5 +1,28 @@
 # @mastra/dane
 
+## 0.0.17-alpha.5
+
+### Patch Changes
+
+- Updated dependencies [e4943b8]
+- Updated dependencies [479f490]
+  - @mastra/core@0.9.1-alpha.4
+  - @mastra/libsql@0.0.1-alpha.4
+  - @mastra/upstash@0.3.1-alpha.4
+  - @mastra/github@1.1.20-alpha.4
+  - @mastra/mcp@0.4.1-alpha.5
+  - @mastra/memory@0.3.1-alpha.4
+  - @mastra/rag@0.1.20-alpha.4
+
+## 0.0.17-alpha.4
+
+### Patch Changes
+
+- 2526527: We are deprecating the MastraMCPClient class in favour of using MCPClient (formerly MCPConfiguration). MCPClient can handle 1+ MCP servers, whereas MastraMCPClient can only handle a single MCP server. Rather than having two different interfaces to use when using a single MCP vs multiple, we opted to nudge people towards using the interface that is more flexible.
+- Updated dependencies [2526527]
+- Updated dependencies [a2ccb71]
+  - @mastra/mcp@0.4.1-alpha.4
+
 ## 0.0.17-alpha.3
 
 ### Patch Changes

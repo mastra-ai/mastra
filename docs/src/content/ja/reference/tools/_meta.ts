@@ -4,6 +4,6 @@ const meta = {
   "vector-query-tool": "createVectorQueryTool()",
   client: "MastraMCPClient",
   "mcp-client": "MCPClient",
+  "mcp-server": "MCPServer",
 };
-
 export default meta;

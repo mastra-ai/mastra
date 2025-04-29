@@ -1,5 +1,14 @@
 # @mastra/cloud
 
+## 0.0.0-alpha.4
+
+### Patch Changes
+
+- ce5731e: fix: do not transform spans for mastra cloud
+- Updated dependencies [e4943b8]
+- Updated dependencies [479f490]
+  - @mastra/core@0.9.1-alpha.4
+
 ## 0.0.0-alpha.3
 
 ### Patch Changes

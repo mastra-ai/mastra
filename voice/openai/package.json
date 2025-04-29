@@ -1,6 +1,6 @@
 {
   "name": "@mastra/voice-openai",
-  "version": "0.1.16-alpha.3",
+  "version": "0.1.16-alpha.4",
   "description": "Mastra OpenAI speech integration",
   "type": "module",
   "files": [
@@ -35,7 +35,7 @@
   },
   "devDependencies": {
     "@internal/lint": "workspace:*",
-    "@microsoft/api-extractor": "^7.52.2",
+    "@microsoft/api-extractor": "^7.52.5",
     "@types/node": "^20.17.27",
     "eslint": "^9.23.0",
     "tsup": "^8.4.0",

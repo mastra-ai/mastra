@@ -1,6 +1,6 @@
 name: Sync Renovate changeset
 on:
-  pull_request_target:
+  pull_request:
     paths:
       - '.github/workflows/sync_renovate-changesets.yml'
       - '**/pnpm-lock.yaml'
@@ -22,6 +22,13 @@ jobs:
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
 
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ steps.app-token.outputs.token }}
+          persist-credentials: false
+
       - run: |
           cat <<- EOF > $HOME/.netrc
             machine github.com
@@ -34,13 +41,6 @@ jobs:
           git config --global user.name '${{ steps.app-token.outputs.app-slug }}[bot]'
           git config --global user.email '${{ steps.get-user-id.outputs.user-id }}+${{ steps.app-token.outputs.app-slug }}[bot]@users.noreply.github.com'
 
-      - name: Checkout
-        uses: actions/checkout@v3
-        with:
-          fetch-depth: 0
-          token: ${{ steps.app-token.outputs.token }}
-          persist-credentials: false
-
       - uses: pnpm/action-setup@v4
         name: Install pnpm
         with:
@@ -52,11 +52,40 @@ jobs:
           node-version: 20.x
           cache: 'pnpm'
 
-      - name: Install dependencies
-        run: pnpm install -w
-
       - name: Create/Update Changesets
-        uses: 'wardpeet/changesets-dependencies-action@2e05bd09862b1928b7f53bdbdf546a0b2c1af921'
+        uses: 'wardpeet/changesets-dependencies-action@1ac684b9885a8e9bb1d24f09fd2c253b36b3700d'
         env:
           GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}
           SKIP_CREDENTIALS: '1'
+          INCLUDE_DEV_DEPS: '1'
+
+      - name: Check for package.json changes in examples and e2e-tests
+        id: check-examples
+        run: |
+          if git diff --name-only HEAD^ HEAD | grep -q -E "(examples|e2e-tests)/.*package.json"; then
+            echo "examples_changed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "examples_changed=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Install dependencies
+        if: steps.check-examples.outputs.examples_changed == 'true'
+        run: |
+          # Get list of changed package.json files in examples and e2e-tests directories
+          changed_files=$(git diff --name-only HEAD^ HEAD | grep -E "(examples|e2e-tests)/.*package.json")
+
+          # For each changed package.json, run pnpm install in its directory
+          for package_json in $changed_files; do
+            dir=$(dirname "$package_json")
+            echo "Installing dependencies in $dir"
+            cd "$dir"
+            pnpm install --ignore-workspace --no-frozen-lockfile
+            cd - > /dev/null
+          done
+
+          # Commit the changes if any were made
+          if [ -n "$(git status --porcelain)" ]; then
+            git add .
+            git commit -m "chore: update pnpm-lock.yaml files"
+            git push
+          fi

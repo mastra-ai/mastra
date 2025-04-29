@@ -17,7 +17,7 @@ import type { CoreTool, ToolAction, VercelTool } from './tools';
 export const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
 export function jsonSchemaPropertiesToTSTypes(value: any): z.ZodTypeAny {
-  if (!value.type) {
+  if (!value?.type) {
     return z.object({});
   }
 
@@ -55,6 +55,9 @@ export function jsonSchemaPropertiesToTSTypes(value: any): z.ZodTypeAny {
         .describe((value.description || '') + (value.examples ? `\nExamples: ${value.examples.join(', ')}` : ''));
       break;
     case 'array':
+      if (!value.items || !value.items?.type) {
+        value.items = value.items ? { ...value.items, type: 'string' } : { type: 'string' };
+      }
       zodType = z
         .array(jsonSchemaPropertiesToTSTypes(value.items))
         .describe((value.description || '') + (value.examples ? `\nExamples: ${value.examples.join(', ')}` : ''));

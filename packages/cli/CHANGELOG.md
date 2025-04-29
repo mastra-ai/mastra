@@ -1,5 +1,28 @@
 # mastra
 
+## 0.6.0-alpha.6
+
+### Patch Changes
+
+- 25d3c39: build logs for how to load instrumentation for build output
+
+## 0.6.0-alpha.5
+
+### Patch Changes
+
+- 3b74a74: add badge for failure / successful traces
+- 5a66ced: add click on trace row
+- Updated dependencies [e4943b8]
+- Updated dependencies [479f490]
+  - @mastra/core@0.9.1-alpha.4
+  - @mastra/deployer@0.3.1-alpha.4
+
+## 0.6.0-alpha.4
+
+### Patch Changes
+
+- 5ebe2aa: Adds ability to add a global configuration for cursor for the Mastra docs MCP server during creation of a Mastra project. Allowing all cursor projects to have access to the MCP server.
+
 ## 0.6.0-alpha.3
 
 ### Patch Changes
