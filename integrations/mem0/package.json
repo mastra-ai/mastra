@@ -34,18 +34,18 @@
   },
   "devDependencies": {
     "@internal/lint": "workspace:*",
-    "@microsoft/api-extractor": "^7.52.1",
-    "@types/node": "^20.17.27",
-    "@types/pg": "^8.11.11",
-    "eslint": "^9.23.0",
+    "@microsoft/api-extractor": "^7.52.5",
+    "@types/node": "^20.17.32",
+    "@types/pg": "^8.11.14",
+    "eslint": "^9.25.1",
     "tsup": "^8.4.0",
-    "typescript": "^5.8.2",
-    "typescript-eslint": "^8.26.1",
-    "vitest": "^3.0.9"
+    "typescript": "^5.8.3",
+    "typescript-eslint": "^8.31.1",
+    "vitest": "^3.1.2"
   },
   "dependencies": {
     "@mastra/core": "workspace:^",
-    "mem0ai": "^2.1.2",
-    "zod": "^3.24.0"
+    "mem0ai": "^2.1.20",
+    "zod": "^3.24.3"
   }
 }
