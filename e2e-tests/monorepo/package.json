@@ -6,7 +6,7 @@
     "execa": "^9.5.2",
     "get-port": "^7.1.0",
     "rollup": "^4.40.1",
-    "vitest": "^3.0.7"
+    "vitest": "^3.1.2"
   },
   "scripts": {
     "test": "vitest"
