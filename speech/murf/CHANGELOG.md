@@ -1,5 +1,16 @@
 # @mastra/speech-murf
 
+## 0.1.20-alpha.4
+
+### Patch Changes
+
+- 21abcaa: dependencies updates:
+  - Updated dependency [`ky@^1.8.1` ↗︎](https://www.npmjs.com/package/ky/v/1.8.1) (from `^1.7.5`, in `dependencies`)
+  - Updated dependency [`zod@^3.24.3` ↗︎](https://www.npmjs.com/package/zod/v/3.24.3) (from `^3.24.2`, in `dependencies`)
+- Updated dependencies [e4943b8]
+- Updated dependencies [479f490]
+  - @mastra/core@0.9.1-alpha.4
+
 ## 0.1.20-alpha.3
 
 ### Patch Changes

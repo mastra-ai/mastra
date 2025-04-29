@@ -9,27 +9,23 @@ LibSQLストレージ実装は、メモリ内および永続データベース�
 
 ## インストール
 
-```bash
-npm install @mastra/storage-libsql
+```bash copy
+npm install @mastra/storage-libsql@latest
 ```
 
 ## 使用方法
 
 ```typescript copy showLineNumbers
-import { LibSQLStore } from "@mastra/core/storage/libsql";
+import { LibSQLStore } from "@mastra/libsql";
 
-// File database (development)
+// ファイルデータベース（開発環境）
 const storage = new LibSQLStore({
-    config: {
-        url: 'file:storage.db',
-    }
+  url: "file:./storage.db",
 });
 
-// Persistent database (production)
+// 永続的データベース（本番環境）
 const storage = new LibSQLStore({
-    config: {
-        url: process.env.DATABASE_URL,
-    }
+  url: process.env.DATABASE_URL,
 });
 ```
 

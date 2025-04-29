@@ -1,4 +1,4 @@
-import { ChevronDown, ChevronUp, XIcon } from 'lucide-react';
+import { ChevronDown, ChevronUp, X } from 'lucide-react';
 import { useContext } from 'react';
 
 import { Button } from '@/ds/components/Button';
@@ -9,6 +9,7 @@ import { Txt } from '@/ds/components/Txt';
 
 import { Icon } from '@/ds/icons';
 import { Header } from '@/ds/components/Header';
+import { Badge } from '@/ds/components/Badge';
 
 export function TraceDetails() {
   const { trace, currentTraceIndex, prevTrace, nextTrace, traces, clearData } = useContext(TraceContext);
@@ -16,6 +17,8 @@ export function TraceDetails() {
   const actualTrace = traces[currentTraceIndex];
 
   if (!actualTrace || !trace) return null;
+
+  const hasFailure = trace.some(span => span.status.code !== 0);
 
   return (
     <aside>
@@ -36,10 +39,16 @@ export function TraceDetails() {
             </Icon>
           </Button>
         </div>
-        <div>
-          <Txt variant="ui-lg" className="font-medium text-icon5">
+        <div className="flex items-center gap-1 justify-between w-full">
+          <Txt variant="ui-lg" className="font-medium text-icon5 shrink-0">
             Trace <span className="ml-2 text-icon3">{actualTrace.traceId.substring(0, 5)}</span>
           </Txt>
+
+          {hasFailure && (
+            <Badge variant="error" icon={<X />}>
+              Failed
+            </Badge>
+          )}
         </div>
       </Header>
 

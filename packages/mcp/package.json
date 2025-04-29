@@ -1,6 +1,6 @@
 {
   "name": "@mastra/mcp",
-  "version": "0.4.1-alpha.4",
+  "version": "0.4.1-alpha.5",
   "description": "",
   "type": "module",
   "main": "dist/index.js",
@@ -38,14 +38,14 @@
   "devDependencies": {
     "@ai-sdk/anthropic": "^1.1.15",
     "@internal/lint": "workspace:*",
-    "@microsoft/api-extractor": "^7.52.1",
+    "@microsoft/api-extractor": "^7.52.5",
     "@types/node": "^20.17.27",
     "eslint": "^9.23.0",
     "json-schema-to-zod": "^2.6.0",
     "tsup": "^8.4.0",
     "tsx": "^4.19.3",
     "typescript": "^5.8.2",
-    "vitest": "^3.0.9",
+    "vitest": "^3.1.2",
     "zod": "^3.24.2",
     "zod-to-json-schema": "^3.22.4"
   }
