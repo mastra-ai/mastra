@@ -1,5 +1,11 @@
 # create-mastra
 
+## 0.3.0-alpha.4
+
+### Patch Changes
+
+- 25d3c39: build logs for how to load instrumentation for build output
+
 ## 0.3.0-alpha.3
 
 ### Patch Changes
