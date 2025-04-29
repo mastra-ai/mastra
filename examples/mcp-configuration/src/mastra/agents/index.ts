@@ -1,11 +1,11 @@
 import { openai } from '@ai-sdk/openai';
 import { Agent } from '@mastra/core/agent';
-import { MCPConfiguration } from '@mastra/mcp';
+import { MCPClient } from '@mastra/mcp';
 
 // start sse server - in real life this would already be running but want to show using sse and stdio in this example
 import '../tools/sse';
 
-const mcp = new MCPConfiguration({
+const mcp = new MCPClient({
   servers: {
     stockPrice: {
       command: 'npx',

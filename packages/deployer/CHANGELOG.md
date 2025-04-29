@@ -1,5 +1,15 @@
 # @mastra/deployer
 
+## 0.3.1-alpha.3
+
+### Patch Changes
+
+- 6262bd5: Mastra server custom host config
+- Updated dependencies [34a76ca]
+- Updated dependencies [6262bd5]
+  - @mastra/server@2.0.1-alpha.3
+  - @mastra/core@0.9.1-alpha.3
+
 ## 0.3.1-alpha.2
 
 ### Patch Changes

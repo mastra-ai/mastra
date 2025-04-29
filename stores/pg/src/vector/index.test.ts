@@ -2436,4 +2436,45 @@ describe('PgVector', () => {
       });
     });
   });
+
+  describe('PoolConfig Custom Options', () => {
+    it('should apply custom values to properties with default values', async () => {
+      const db = new PgVector({
+        connectionString,
+        pgPoolOptions: {
+          max: 5,
+          idleTimeoutMillis: 10000,
+          connectionTimeoutMillis: 1000,
+        },
+      });
+
+      expect(db['pool'].options.max).toBe(5);
+      expect(db['pool'].options.idleTimeoutMillis).toBe(10000);
+      expect(db['pool'].options.connectionTimeoutMillis).toBe(1000);
+    });
+
+    it('should pass properties with no default values', async () => {
+      const db = new PgVector({
+        connectionString,
+        pgPoolOptions: {
+          ssl: false,
+        },
+      });
+
+      expect(db['pool'].options.ssl).toBe(false);
+    });
+    it('should keep default values when custom values are added', async () => {
+      const db = new PgVector({
+        connectionString,
+        pgPoolOptions: {
+          ssl: false,
+        },
+      });
+
+      expect(db['pool'].options.max).toBe(20);
+      expect(db['pool'].options.idleTimeoutMillis).toBe(30000);
+      expect(db['pool'].options.connectionTimeoutMillis).toBe(2000);
+      expect(db['pool'].options.ssl).toBe(false);
+    });
+  });
 });

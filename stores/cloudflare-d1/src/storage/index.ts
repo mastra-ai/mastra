@@ -8,7 +8,14 @@ import {
   TABLE_EVALS,
   TABLE_TRACES,
 } from '@mastra/core/storage';
-import type { TABLE_NAMES, StorageColumn, StorageGetMessagesArg, EvalRow, WorkflowRuns } from '@mastra/core/storage';
+import type {
+  TABLE_NAMES,
+  StorageColumn,
+  StorageGetMessagesArg,
+  EvalRow,
+  WorkflowRuns,
+  WorkflowRun,
+} from '@mastra/core/storage';
 import type { WorkflowRunState } from '@mastra/core/workflows';
 import Cloudflare from 'cloudflare';
 import { createSqlBuilder } from './sql-builder';
@@ -1018,6 +1025,10 @@ export class D1Store extends MastraStorage {
     limit?: number;
     offset?: number;
   }): Promise<WorkflowRuns> {
+    throw new Error('Method not implemented.');
+  }
+
+  async getWorkflowRunById(_args: { runId: string; workflowName?: string }): Promise<WorkflowRun | null> {
     throw new Error('Method not implemented.');
   }
 

@@ -80,8 +80,8 @@ export const ReferenceCards = () => {
             href: "/reference/tools/client",
           },
           {
-            title: "MCPConfiguration",
-            href: "/reference/tools/mcp-configuration",
+            title: "MCPClient",
+            href: "/reference/tools/mcp-client",
           },
         ],
         Workflows: [

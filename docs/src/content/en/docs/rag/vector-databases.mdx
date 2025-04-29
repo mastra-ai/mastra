@@ -11,7 +11,7 @@ After generating embeddings, you need to store them in a database that supports 
 
 ## Supported Databases
 
-<Tabs items={['Pg Vector', 'Pinecone', 'Qdrant', 'Chroma', 'Astra', 'LibSQL', 'Upstash', 'Cloudflare']}>
+<Tabs items={['Pg Vector', 'Pinecone', 'Qdrant', 'Chroma', 'Astra', 'LibSQL', 'Upstash', 'Cloudflare', 'MongoDB']}>
   <Tabs.Tab>
   ```ts filename="vector-store.ts" showLineNumbers copy
   import { PgVector } from '@mastra/pg';
@@ -162,6 +162,25 @@ import { LibSQLVector } from "@mastra/core/vector/libsql";
   });
   ```
 </Tabs.Tab>
+<Tabs.Tab>
+  ```ts filename="vector-store.ts" showLineNumbers copy
+  import { MongoDBVector } from '@mastra/mongodb'
+
+  const store = new MongoDBVector({
+    url: process.env.MONGODB_URL,
+    database: process.env.MONGODB_DATABASE
+  })
+  await store.createIndex({
+    indexName: "myCollection",
+    dimension: 1536,
+  });
+  await store.upsert({
+    indexName: "myCollection",
+    vectors: embeddings,
+    metadata: chunks.map(chunk => ({ text: chunk.text })),
+  });
+  ```
+</Tabs.Tab>
 </Tabs>
 
 ## Using Vector Storage
@@ -191,7 +210,7 @@ The dimension size must match the output dimension of your chosen embedding mode
 
 Each vector database enforces specific naming conventions for indexes and collections to ensure compatibility and prevent conflicts.
 
-<Tabs items={['Pg Vector', 'Pinecone', 'Qdrant', 'Chroma', 'Astra', 'LibSQL', 'Upstash', 'Cloudflare']}>
+<Tabs items={['Pg Vector', 'Pinecone', 'Qdrant', 'Chroma', 'Astra', 'LibSQL', 'Upstash', 'Cloudflare', 'MongoDB']}>
   <Tabs.Tab>
     Index names must:
     - Start with a letter or underscore
@@ -262,6 +281,16 @@ Each vector database enforces specific naming conventions for indexes and collec
     - Use dashes instead of spaces
     - Example: `my-index-123` is valid
     - Example: `My_Index` is not valid (uppercase and underscore)
+  </Tabs.Tab>
+  <Tabs.Tab>
+    Collection (index) names must:
+    - Start with a letter or underscore
+    - Be up to 120 bytes long
+    - Contain only letters, numbers, underscores, or dots
+    - Cannot contain `$` or the null character
+    - Example: `my_collection.123` is valid
+    - Example: `my-index` is not valid (contains hyphen)
+    - Example: `My$Collection` is not valid (contains `$`)
   </Tabs.Tab>
 </Tabs>
 
