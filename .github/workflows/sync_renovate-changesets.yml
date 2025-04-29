@@ -57,3 +57,27 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}
           SKIP_CREDENTIALS: '1'
+
+      - name: Check for package.json changes in examples
+        id: check-examples
+        run: |
+          if git diff --name-only HEAD^ HEAD | grep -q "examples/.*package.json"; then
+            echo "examples_changed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "examples_changed=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Install dependencies
+        if: steps.check-examples.outputs.examples_changed == 'true'
+        run: |
+          # Get list of changed package.json files in examples directory
+          changed_files=$(git diff --name-only HEAD^ HEAD | grep "examples/.*package.json")
+
+          # For each changed package.json, run pnpm install in its directory
+          for package_json in $changed_files; do
+            dir=$(dirname "$package_json")
+            echo "Installing dependencies in $dir"
+            cd "$dir"
+            pnpm install --ignore-workspace
+            cd - > /dev/null
+          done
