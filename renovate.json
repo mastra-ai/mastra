@@ -82,7 +82,16 @@
       "matchFileNames": ["+(package.json)", "**/package.json"],
       "matchUpdateTypes": ["major", "minor", "patch"],
       "matchDepTypes": ["devDependencies"],
-      "matchPackageNames": ["@microsoft/api-extractor", "tsup", "rollup"],
+      "matchPackageNames": ["@microsoft/api-extractor", "tsup", "rollup", "@types/node", "dotenv"],
+      "enabled": true
+    },
+    {
+      "groupName": "Test tools",
+      "commitMessageTopic": "Test tools",
+      "matchFileNames": ["+(package.json)", "**/package.json"],
+      "matchUpdateTypes": ["major", "minor", "patch"],
+      "matchDepTypes": ["devDependencies"],
+      "matchPackageNames": ["vitest"],
       "enabled": true
     },
     {
@@ -98,7 +107,10 @@
         "!rollup",
         "!eslint",
         "!prettier",
-        "!typescript"
+        "!typescript",
+        "!vitest",
+        "!@types/node",
+        "!dotenv"
       ],
       "enabled": true
     },
@@ -124,7 +136,10 @@
         "!rollup",
         "!eslint",
         "!prettier",
-        "!typescript"
+        "!typescript",
+        "!vitest",
+        "!@types/node",
+        "!dotenv"
       ],
       "enabled": true
     },
@@ -150,7 +165,10 @@
         "!rollup",
         "!eslint",
         "!prettier",
-        "!typescript"
+        "!typescript",
+        "!vitest",
+        "!@types/node",
+        "!dotenv"
       ],
       "enabled": true
     },
@@ -176,7 +194,10 @@
         "!rollup",
         "!eslint",
         "!prettier",
-        "!typescript"
+        "!typescript",
+        "!vitest",
+        "!@types/node",
+        "!dotenv"
       ],
       "enabled": true
     },
@@ -202,7 +223,10 @@
         "!rollup",
         "!eslint",
         "!prettier",
-        "!typescript"
+        "!typescript",
+        "!vitest",
+        "!@types/node",
+        "!dotenv"
       ],
       "enabled": true
     },
@@ -228,7 +252,10 @@
         "!rollup",
         "!eslint",
         "!prettier",
-        "!typescript"
+        "!typescript",
+        "!vitest",
+        "!@types/node",
+        "!dotenv"
       ],
       "enabled": true
     },
@@ -254,7 +281,10 @@
         "!rollup",
         "!eslint",
         "!prettier",
-        "!typescript"
+        "!typescript",
+        "!vitest",
+        "!@types/node",
+        "!dotenv"
       ],
       "enabled": true
     },
@@ -280,7 +310,10 @@
         "!rollup",
         "!eslint",
         "!prettier",
-        "!typescript"
+        "!typescript",
+        "!vitest",
+        "!@types/node",
+        "!dotenv"
       ],
       "enabled": true
     },
@@ -306,7 +339,10 @@
         "!rollup",
         "!eslint",
         "!prettier",
-        "!typescript"
+        "!typescript",
+        "!vitest",
+        "!@types/node",
+        "!dotenv"
       ],
       "enabled": true
     },
@@ -332,7 +368,10 @@
         "!rollup",
         "!eslint",
         "!prettier",
-        "!typescript"
+        "!typescript",
+        "!vitest",
+        "!@types/node",
+        "!dotenv"
       ],
       "enabled": true
     },
@@ -358,7 +397,10 @@
         "!rollup",
         "!eslint",
         "!prettier",
-        "!typescript"
+        "!typescript",
+        "!vitest",
+        "!@types/node",
+        "!dotenv"
       ],
       "enabled": true
     },
@@ -384,7 +426,10 @@
         "!rollup",
         "!eslint",
         "!prettier",
-        "!typescript"
+        "!typescript",
+        "!vitest",
+        "!@types/node",
+        "!dotenv"
       ],
       "enabled": true
     },
@@ -410,7 +455,10 @@
         "!rollup",
         "!eslint",
         "!prettier",
-        "!typescript"
+        "!typescript",
+        "!vitest",
+        "!@types/node",
+        "!dotenv"
       ],
       "enabled": true
     },
@@ -436,7 +484,10 @@
         "!rollup",
         "!eslint",
         "!prettier",
-        "!typescript"
+        "!typescript",
+        "!vitest",
+        "!@types/node",
+        "!dotenv"
       ],
       "enabled": true
     },
@@ -462,7 +513,10 @@
         "!rollup",
         "!eslint",
         "!prettier",
-        "!typescript"
+        "!typescript",
+        "!vitest",
+        "!@types/node",
+        "!dotenv"
       ],
       "enabled": true
     },
@@ -488,7 +542,10 @@
         "!rollup",
         "!eslint",
         "!prettier",
-        "!typescript"
+        "!typescript",
+        "!vitest",
+        "!@types/node",
+        "!dotenv"
       ],
       "enabled": true
     },
@@ -514,7 +571,10 @@
         "!rollup",
         "!eslint",
         "!prettier",
-        "!typescript"
+        "!typescript",
+        "!vitest",
+        "!@types/node",
+        "!dotenv"
       ],
       "enabled": true
     },
@@ -540,7 +600,10 @@
         "!rollup",
         "!eslint",
         "!prettier",
-        "!typescript"
+        "!typescript",
+        "!vitest",
+        "!@types/node",
+        "!dotenv"
       ],
       "enabled": true
     },
@@ -566,7 +629,10 @@
         "!rollup",
         "!eslint",
         "!prettier",
-        "!typescript"
+        "!typescript",
+        "!vitest",
+        "!@types/node",
+        "!dotenv"
       ],
       "enabled": true
     },
@@ -592,7 +658,10 @@
         "!rollup",
         "!eslint",
         "!prettier",
-        "!typescript"
+        "!typescript",
+        "!vitest",
+        "!@types/node",
+        "!dotenv"
       ],
       "enabled": true
     },
@@ -618,7 +687,10 @@
         "!rollup",
         "!eslint",
         "!prettier",
-        "!typescript"
+        "!typescript",
+        "!vitest",
+        "!@types/node",
+        "!dotenv"
       ],
       "enabled": true
     },
@@ -644,7 +716,10 @@
         "!rollup",
         "!eslint",
         "!prettier",
-        "!typescript"
+        "!typescript",
+        "!vitest",
+        "!@types/node",
+        "!dotenv"
       ],
       "enabled": true
     },
@@ -670,7 +745,10 @@
         "!rollup",
         "!eslint",
         "!prettier",
-        "!typescript"
+        "!typescript",
+        "!vitest",
+        "!@types/node",
+        "!dotenv"
       ],
       "enabled": true
     },
@@ -696,7 +774,10 @@
         "!rollup",
         "!eslint",
         "!prettier",
-        "!typescript"
+        "!typescript",
+        "!vitest",
+        "!@types/node",
+        "!dotenv"
       ],
       "enabled": true
     },
@@ -722,7 +803,10 @@
         "!rollup",
         "!eslint",
         "!prettier",
-        "!typescript"
+        "!typescript",
+        "!vitest",
+        "!@types/node",
+        "!dotenv"
       ],
       "enabled": true
     },
@@ -748,7 +832,10 @@
         "!rollup",
         "!eslint",
         "!prettier",
-        "!typescript"
+        "!typescript",
+        "!vitest",
+        "!@types/node",
+        "!dotenv"
       ],
       "enabled": true
     },
@@ -774,7 +861,10 @@
         "!rollup",
         "!eslint",
         "!prettier",
-        "!typescript"
+        "!typescript",
+        "!vitest",
+        "!@types/node",
+        "!dotenv"
       ],
       "enabled": true
     },
@@ -800,7 +890,10 @@
         "!rollup",
         "!eslint",
         "!prettier",
-        "!typescript"
+        "!typescript",
+        "!vitest",
+        "!@types/node",
+        "!dotenv"
       ],
       "enabled": true
     },
@@ -826,7 +919,10 @@
         "!rollup",
         "!eslint",
         "!prettier",
-        "!typescript"
+        "!typescript",
+        "!vitest",
+        "!@types/node",
+        "!dotenv"
       ],
       "enabled": true
     },
@@ -852,7 +948,10 @@
         "!rollup",
         "!eslint",
         "!prettier",
-        "!typescript"
+        "!typescript",
+        "!vitest",
+        "!@types/node",
+        "!dotenv"
       ],
       "enabled": true
     },
@@ -878,7 +977,10 @@
         "!rollup",
         "!eslint",
         "!prettier",
-        "!typescript"
+        "!typescript",
+        "!vitest",
+        "!@types/node",
+        "!dotenv"
       ],
       "enabled": true
     },
@@ -904,7 +1006,10 @@
         "!rollup",
         "!eslint",
         "!prettier",
-        "!typescript"
+        "!typescript",
+        "!vitest",
+        "!@types/node",
+        "!dotenv"
       ],
       "enabled": true
     },
@@ -930,7 +1035,10 @@
         "!rollup",
         "!eslint",
         "!prettier",
-        "!typescript"
+        "!typescript",
+        "!vitest",
+        "!@types/node",
+        "!dotenv"
       ],
       "enabled": true
     },
@@ -956,7 +1064,10 @@
         "!rollup",
         "!eslint",
         "!prettier",
-        "!typescript"
+        "!typescript",
+        "!vitest",
+        "!@types/node",
+        "!dotenv"
       ],
       "enabled": true
     },
@@ -982,7 +1093,10 @@
         "!rollup",
         "!eslint",
         "!prettier",
-        "!typescript"
+        "!typescript",
+        "!vitest",
+        "!@types/node",
+        "!dotenv"
       ],
       "enabled": true
     },
@@ -1008,7 +1122,10 @@
         "!rollup",
         "!eslint",
         "!prettier",
-        "!typescript"
+        "!typescript",
+        "!vitest",
+        "!@types/node",
+        "!dotenv"
       ],
       "enabled": true
     },
@@ -1034,7 +1151,10 @@
         "!rollup",
         "!eslint",
         "!prettier",
-        "!typescript"
+        "!typescript",
+        "!vitest",
+        "!@types/node",
+        "!dotenv"
       ],
       "enabled": true
     },
@@ -1060,7 +1180,10 @@
         "!rollup",
         "!eslint",
         "!prettier",
-        "!typescript"
+        "!typescript",
+        "!vitest",
+        "!@types/node",
+        "!dotenv"
       ],
       "enabled": true
     },
@@ -1086,7 +1209,10 @@
         "!rollup",
         "!eslint",
         "!prettier",
-        "!typescript"
+        "!typescript",
+        "!vitest",
+        "!@types/node",
+        "!dotenv"
       ],
       "enabled": true
     },
@@ -1112,7 +1238,10 @@
         "!rollup",
         "!eslint",
         "!prettier",
-        "!typescript"
+        "!typescript",
+        "!vitest",
+        "!@types/node",
+        "!dotenv"
       ],
       "enabled": true
     },
@@ -1138,7 +1267,10 @@
         "!rollup",
         "!eslint",
         "!prettier",
-        "!typescript"
+        "!typescript",
+        "!vitest",
+        "!@types/node",
+        "!dotenv"
       ],
       "enabled": true
     },
@@ -1164,7 +1296,10 @@
         "!rollup",
         "!eslint",
         "!prettier",
-        "!typescript"
+        "!typescript",
+        "!vitest",
+        "!@types/node",
+        "!dotenv"
       ],
       "enabled": true
     },
@@ -1190,7 +1325,10 @@
         "!rollup",
         "!eslint",
         "!prettier",
-        "!typescript"
+        "!typescript",
+        "!vitest",
+        "!@types/node",
+        "!dotenv"
       ],
       "enabled": true
     },
@@ -1216,7 +1354,10 @@
         "!rollup",
         "!eslint",
         "!prettier",
-        "!typescript"
+        "!typescript",
+        "!vitest",
+        "!@types/node",
+        "!dotenv"
       ],
       "enabled": true
     },
@@ -1242,7 +1383,10 @@
         "!rollup",
         "!eslint",
         "!prettier",
-        "!typescript"
+        "!typescript",
+        "!vitest",
+        "!@types/node",
+        "!dotenv"
       ],
       "enabled": true
     },
@@ -1268,7 +1412,10 @@
         "!rollup",
         "!eslint",
         "!prettier",
-        "!typescript"
+        "!typescript",
+        "!vitest",
+        "!@types/node",
+        "!dotenv"
       ],
       "enabled": true
     },
@@ -1294,7 +1441,10 @@
         "!rollup",
         "!eslint",
         "!prettier",
-        "!typescript"
+        "!typescript",
+        "!vitest",
+        "!@types/node",
+        "!dotenv"
       ],
       "enabled": true
     },
@@ -1320,7 +1470,10 @@
         "!rollup",
         "!eslint",
         "!prettier",
-        "!typescript"
+        "!typescript",
+        "!vitest",
+        "!@types/node",
+        "!dotenv"
       ],
       "enabled": true
     },
@@ -1346,7 +1499,10 @@
         "!rollup",
         "!eslint",
         "!prettier",
-        "!typescript"
+        "!typescript",
+        "!vitest",
+        "!@types/node",
+        "!dotenv"
       ],
       "enabled": true
     },
@@ -1372,7 +1528,10 @@
         "!rollup",
         "!eslint",
         "!prettier",
-        "!typescript"
+        "!typescript",
+        "!vitest",
+        "!@types/node",
+        "!dotenv"
       ],
       "enabled": true
     },
@@ -1398,7 +1557,10 @@
         "!rollup",
         "!eslint",
         "!prettier",
-        "!typescript"
+        "!typescript",
+        "!vitest",
+        "!@types/node",
+        "!dotenv"
       ],
       "enabled": true
     },
@@ -1424,7 +1586,10 @@
         "!rollup",
         "!eslint",
         "!prettier",
-        "!typescript"
+        "!typescript",
+        "!vitest",
+        "!@types/node",
+        "!dotenv"
       ],
       "enabled": true
     },
@@ -1450,7 +1615,10 @@
         "!rollup",
         "!eslint",
         "!prettier",
-        "!typescript"
+        "!typescript",
+        "!vitest",
+        "!@types/node",
+        "!dotenv"
       ],
       "enabled": true
     },
@@ -1476,7 +1644,10 @@
         "!rollup",
         "!eslint",
         "!prettier",
-        "!typescript"
+        "!typescript",
+        "!vitest",
+        "!@types/node",
+        "!dotenv"
       ],
       "enabled": true
     },
@@ -1502,7 +1673,10 @@
         "!rollup",
         "!eslint",
         "!prettier",
-        "!typescript"
+        "!typescript",
+        "!vitest",
+        "!@types/node",
+        "!dotenv"
       ],
       "enabled": true
     },
@@ -1528,7 +1702,10 @@
         "!rollup",
         "!eslint",
         "!prettier",
-        "!typescript"
+        "!typescript",
+        "!vitest",
+        "!@types/node",
+        "!dotenv"
       ],
       "enabled": true
     },
@@ -1554,7 +1731,10 @@
         "!rollup",
         "!eslint",
         "!prettier",
-        "!typescript"
+        "!typescript",
+        "!vitest",
+        "!@types/node",
+        "!dotenv"
       ],
       "enabled": true
     },
@@ -1580,7 +1760,10 @@
         "!rollup",
         "!eslint",
         "!prettier",
-        "!typescript"
+        "!typescript",
+        "!vitest",
+        "!@types/node",
+        "!dotenv"
       ],
       "enabled": true
     },
@@ -1606,7 +1789,10 @@
         "!rollup",
         "!eslint",
         "!prettier",
-        "!typescript"
+        "!typescript",
+        "!vitest",
+        "!@types/node",
+        "!dotenv"
       ],
       "enabled": true
     },
@@ -1632,7 +1818,10 @@
         "!rollup",
         "!eslint",
         "!prettier",
-        "!typescript"
+        "!typescript",
+        "!vitest",
+        "!@types/node",
+        "!dotenv"
       ],
       "enabled": true
     },
@@ -1658,7 +1847,10 @@
         "!rollup",
         "!eslint",
         "!prettier",
-        "!typescript"
+        "!typescript",
+        "!vitest",
+        "!@types/node",
+        "!dotenv"
       ],
       "enabled": true
     },
@@ -1684,7 +1876,10 @@
         "!rollup",
         "!eslint",
         "!prettier",
-        "!typescript"
+        "!typescript",
+        "!vitest",
+        "!@types/node",
+        "!dotenv"
       ],
       "enabled": true
     },
@@ -1710,7 +1905,10 @@
         "!rollup",
         "!eslint",
         "!prettier",
-        "!typescript"
+        "!typescript",
+        "!vitest",
+        "!@types/node",
+        "!dotenv"
       ],
       "enabled": true
     },
@@ -1736,7 +1934,10 @@
         "!rollup",
         "!eslint",
         "!prettier",
-        "!typescript"
+        "!typescript",
+        "!vitest",
+        "!@types/node",
+        "!dotenv"
       ],
       "enabled": true
     },
@@ -1762,7 +1963,10 @@
         "!rollup",
         "!eslint",
         "!prettier",
-        "!typescript"
+        "!typescript",
+        "!vitest",
+        "!@types/node",
+        "!dotenv"
       ],
       "enabled": true
     },
@@ -1788,7 +1992,10 @@
         "!rollup",
         "!eslint",
         "!prettier",
-        "!typescript"
+        "!typescript",
+        "!vitest",
+        "!@types/node",
+        "!dotenv"
       ],
       "enabled": true
     },
@@ -1814,7 +2021,10 @@
         "!rollup",
         "!eslint",
         "!prettier",
-        "!typescript"
+        "!typescript",
+        "!vitest",
+        "!@types/node",
+        "!dotenv"
       ],
       "enabled": true
     },
@@ -1840,7 +2050,10 @@
         "!rollup",
         "!eslint",
         "!prettier",
-        "!typescript"
+        "!typescript",
+        "!vitest",
+        "!@types/node",
+        "!dotenv"
       ],
       "enabled": true
     },
@@ -1866,7 +2079,10 @@
         "!rollup",
         "!eslint",
         "!prettier",
-        "!typescript"
+        "!typescript",
+        "!vitest",
+        "!@types/node",
+        "!dotenv"
       ],
       "enabled": true
     },
@@ -1892,7 +2108,10 @@
         "!rollup",
         "!eslint",
         "!prettier",
-        "!typescript"
+        "!typescript",
+        "!vitest",
+        "!@types/node",
+        "!dotenv"
       ],
       "enabled": true
     },
@@ -1918,7 +2137,10 @@
         "!rollup",
         "!eslint",
         "!prettier",
-        "!typescript"
+        "!typescript",
+        "!vitest",
+        "!@types/node",
+        "!dotenv"
       ],
       "enabled": true
     },
@@ -1944,7 +2166,10 @@
         "!rollup",
         "!eslint",
         "!prettier",
-        "!typescript"
+        "!typescript",
+        "!vitest",
+        "!@types/node",
+        "!dotenv"
       ],
       "enabled": true
     },
@@ -1970,7 +2195,10 @@
         "!rollup",
         "!eslint",
         "!prettier",
-        "!typescript"
+        "!typescript",
+        "!vitest",
+        "!@types/node",
+        "!dotenv"
       ],
       "enabled": true
     },
@@ -1996,7 +2224,10 @@
         "!rollup",
         "!eslint",
         "!prettier",
-        "!typescript"
+        "!typescript",
+        "!vitest",
+        "!@types/node",
+        "!dotenv"
       ],
       "enabled": true
     },
@@ -2022,7 +2253,10 @@
         "!rollup",
         "!eslint",
         "!prettier",
-        "!typescript"
+        "!typescript",
+        "!vitest",
+        "!@types/node",
+        "!dotenv"
       ],
       "enabled": true
     },
@@ -2048,7 +2282,10 @@
         "!rollup",
         "!eslint",
         "!prettier",
-        "!typescript"
+        "!typescript",
+        "!vitest",
+        "!@types/node",
+        "!dotenv"
       ],
       "enabled": true
     },

@@ -128,13 +128,32 @@ const renovateConfig = {
       matchFileNames: ['+(package.json)', '**/package.json'],
       matchUpdateTypes: ['major', 'minor', 'patch'],
       matchDepTypes: ['devDependencies'],
-      matchPackageNames: ['@microsoft/api-extractor', 'tsup', 'rollup'],
+      matchPackageNames: ['@microsoft/api-extractor', 'tsup', 'rollup', '@types/node', 'dotenv'],
+      enabled: true,
+    },
+    {
+      groupName: 'Test tools',
+      commitMessageTopic: 'Test tools',
+      matchFileNames: ['+(package.json)', '**/package.json'],
+      matchUpdateTypes: ['major', 'minor', 'patch'],
+      matchDepTypes: ['devDependencies'],
+      matchPackageNames: ['vitest'],
       enabled: true,
     },
   ],
 };
 
-const ignorePackages = ['@microsoft/api-extractor', 'tsup', 'rollup', 'eslint', 'prettier', 'typescript'];
+const ignorePackages = [
+  '@microsoft/api-extractor',
+  'tsup',
+  'rollup',
+  'eslint',
+  'prettier',
+  'typescript',
+  'vitest',
+  '@types/node',
+  'dotenv',
+];
 
 for (const pkg of listOfPackages) {
   const packageJsonPath = `${pkg}/package.json`;
