@@ -1,5 +1,11 @@
 # @mastra/cloudflare
 
+## 0.1.1-alpha.5
+
+### Patch Changes
+
+- c8641ce: [MASTRA-3276] Cloudflare KV and D1 Workflow Runs
+
 ## 0.1.1-alpha.4
 
 ### Patch Changes
