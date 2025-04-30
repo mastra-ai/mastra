@@ -397,7 +397,7 @@ export class NewWorkflow<
         for (const [key, mapping] of Object.entries(mappingConfig)) {
           const m: any = mapping;
 
-          if (m.value) {
+          if (m.value !== undefined) {
             result[key] = m.value;
             continue;
           }
