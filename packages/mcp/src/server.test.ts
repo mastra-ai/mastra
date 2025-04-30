@@ -3,7 +3,7 @@ import path from 'path';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { describe, it, expect, beforeAll, afterAll, afterEach, vi } from 'vitest';
 import { weatherTool } from './__fixtures__/tools';
-import { MCPConfiguration } from './configuration';
+import { MCPClient } from './configuration';
 import { MCPServer } from './server';
 
 const PORT = 9100 + Math.floor(Math.random() * 1000);
@@ -94,7 +94,7 @@ describe('MCPServer', () => {
       expect(server.getStdioTransport()).toBeInstanceOf(StdioServerTransport);
     });
     it('should use stdio transport to get tools', async () => {
-      const existingConfig = new MCPConfiguration({
+      const existingConfig = new MCPClient({
         servers: {
           weather: {
             command: 'npx',

@@ -1,4 +1,13 @@
 {
+  "11bef4d9654cd19d23012b7e772ebd1dabce34f828f0e6085421faf15ed2e2ae": {
+    "type": "p",
+    "props": {
+      "children": "申し訳ありません、そのページが見つかりませんでした",
+      "data-_gt": {
+        "id": 1
+      }
+    }
+  },
   "321d8387bf8694b4d93f563aee179fd59803c4500def0014f21bbfc63a68b8f5": {
     "type": "a",
     "props": {
@@ -219,6 +228,30 @@
   "92c32fae15ccbe96dc437cd84aa273561f2e1e5d2f56a1df2b52e0215fcaaf64": [
     "ドキュメントを検索..."
   ],
+  "978f83723de942dc40edd3e3fdd07730e6a9ffcd12c8ad75aa96571659b714a0": {
+    "type": "Link",
+    "props": {
+      "children": [
+        {
+          "type": "span",
+          "props": {
+            "children": {
+              "id": 3,
+              "key": "_gt_value_3",
+              "variable": "variable"
+            },
+            "data-_gt": {
+              "id": 2
+            }
+          }
+        },
+        "に戻る"
+      ],
+      "data-_gt": {
+        "id": 1
+      }
+    }
+  },
   "989ac06e1d91a95495ec48b983d596998be58c97b5fad20cd3a9f5a07b623a4d": "?:",
   "9af001fe095f6e6170466d501fb883c885870ca7ebb34cfc07ee2f0156dabbc2": "質問がありますか？ フィードバックをお寄せください",
   "9eff57cce7ee1e8224f9203a447caeed06eb72a03155f32450708860814e61e9": "このページの内容",

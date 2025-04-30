@@ -4,9 +4,9 @@ import { SyntaxHighlighter } from '@/components/syntax-highlighter';
 
 import { TraceContext } from './context/trace-context';
 
-import { formatDuration, formatOtelTimestamp, formatOtelTimestamp2, transformKey } from './utils';
+import { formatOtelTimestamp, formatOtelTimestamp2, transformKey } from './utils';
 import { Header } from '@/ds/components/Header';
-import { ChevronDown, ChevronUp } from 'lucide-react';
+import { ChevronDown, ChevronUp, X } from 'lucide-react';
 import { Icon, LatencyIcon } from '@/ds/icons';
 import { Button } from '@/ds/components/Button';
 import { Txt } from '@/ds/components/Txt';
@@ -17,7 +17,7 @@ import type { Span } from './types';
 import React from 'react';
 
 export function SpanDetail() {
-  const { span, setSpan, trace } = useContext(TraceContext);
+  const { span, setSpan, trace, setIsOpen } = useContext(TraceContext);
   if (!span || !trace) return null;
 
   // Span order is reversed
@@ -56,8 +56,15 @@ export function SpanDetail() {
         </div>
         <div>
           <Txt variant="ui-lg" className="font-medium text-icon5" as="h2">
-            Span <span className="ml-2 text-icon3">{span.id.substring(0, 5)}</span>
+            Span <span className="ml-2 text-icon3">{span.id.substring(0, 7)}</span>
           </Txt>
+        </div>
+        <div className="ml-auto flex items-center gap-2">
+          <Button className="bg-transparent border-none" onClick={() => setIsOpen(false)}>
+            <Icon>
+              <X />
+            </Icon>
+          </Button>
         </div>
       </Header>
 
@@ -71,7 +78,15 @@ export function SpanDetail() {
         </Txt>
 
         <div className="flex flex-row gap-2 items-center">
-          <Badge icon={<LatencyIcon />}>{formatDuration(span.duration)}ms</Badge>
+          {span.status.code === 0 ? (
+            <Badge icon={<LatencyIcon />} variant="success">
+              {Math.round(span.duration / 1000)}ms
+            </Badge>
+          ) : (
+            <Badge variant="error" icon={<X />}>
+              Failed in {Math.round(span.duration / 1000)}ms
+            </Badge>
+          )}
         </div>
 
         <hr className="border-border1 border-sm my-5" />

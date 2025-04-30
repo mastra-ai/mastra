@@ -2,7 +2,7 @@ import { spawn } from 'child_process';
 import path from 'path';
 import { describe, it, expect, vi, beforeEach, afterEach, beforeAll, afterAll } from 'vitest';
 import type { LogMessage } from './client';
-import { MCPConfiguration } from './configuration';
+import { MCPClient } from './configuration';
 
 // Increase test timeout for server operations
 vi.setConfig({ testTimeout: 80000, hookTimeout: 80000 });
@@ -58,7 +58,7 @@ describe('MCP Server Logging', () => {
     const weatherLogHandler = vi.fn();
     const stockLogHandler = vi.fn();
 
-    const config = new MCPConfiguration({
+    const config = new MCPClient({
       id: 'server-log-test',
       servers: {
         weather: {
@@ -116,7 +116,7 @@ describe('MCP Server Logging', () => {
     });
 
     // Intentionally use a non-existent command to generate errors
-    const config = new MCPConfiguration({
+    const config = new MCPClient({
       id: 'error-log-test',
       servers: {
         badServer: {
@@ -153,7 +153,7 @@ describe('MCP Server Logging', () => {
       console.log(formatted);
     };
 
-    const config = new MCPConfiguration({
+    const config = new MCPClient({
       id: 'console-log-test',
       servers: {
         echoServer: {
