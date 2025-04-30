@@ -20,7 +20,13 @@ async function nestedReplace(path, mastraPath) {
   }
 }
 
-export async function setupMonorepo(pathToStoreFiles) {
+/**
+ *
+ * @param {string} pathToStoreFiles
+ * @param {string} tag
+ * @param {'pnpm' | 'npm' | 'yarn'} pkgManager
+ */
+export async function setupMonorepo(pathToStoreFiles, tag, pkgManager) {
   const __dirname = dirname(fileURLToPath(import.meta.url));
 
   const monorepoPath = join(__dirname, 'template');
@@ -32,18 +38,15 @@ export async function setupMonorepo(pathToStoreFiles) {
   await cp(monorepoPath, newPath, { recursive: true });
   await cp(join(__dirname, '..', '..', 'tsconfig.node.json'), join(newPath, 'tsconfig.json'));
 
-  // replace %%MASTRA_DIR%% with the new path
-  await nestedReplace(newPath, pkgJsonMastraPath);
-
   console.log('Installing dependencies...');
-  spawnSync('pnpm', ['install'], {
+  spawnSync(pkgManager, ['install'], {
     cwd: newPath,
     stdio: 'inherit',
     shell: true,
   });
 
   console.log('building mastra...');
-  spawnSync('pnpm', ['build'], {
+  spawnSync(pkgManager, ['build'], {
     cwd: join(newPath, 'apps', 'custom'),
     stdio: 'inherit',
     shell: true,
