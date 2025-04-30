@@ -1,5 +1,11 @@
 # mastra
 
+## 0.6.0-alpha.11
+
+### Patch Changes
+
+- ca665d3: fix the ui for smaller screen regarding traces
+
 ## 0.6.0-alpha.10
 
 ### Patch Changes

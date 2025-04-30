@@ -61,13 +61,11 @@ const TraceRow = ({ trace, index, isActive }: { trace: RefinedTrace; index: numb
   return (
     <Row className={isActive ? 'bg-surface4' : ''} onClick={() => openTrace(trace.trace, index)}>
       <DateTimeCell dateTime={new Date(trace.started / 1000)} />
-      <TxtCell>{trace.traceId}</TxtCell>
-      <UnitCell unit="ms">{trace.duration / 1000}</UnitCell>
+      <TxtCell title={trace.traceId}>{trace.traceId.substring(0, 7)}...</TxtCell>
+      <UnitCell unit="ms">{Math.round(trace.duration / 1000)}</UnitCell>
       <Cell>
         <button onClick={() => openTrace(trace.trace, index)}>
-          <Badge icon={<TraceIcon />}>
-            {trace.trace.length} span{trace.trace.length > 1 ? 's' : ''}
-          </Badge>
+          <Badge icon={<TraceIcon />}>{trace.trace.length}</Badge>
         </button>
       </Cell>
       <Cell>
@@ -93,11 +91,11 @@ export const TracesTable = ({ traces, isLoading, error }: TracesTableProps) => {
   return (
     <Table size="small">
       <Thead>
-        <Th width={160}>Time</Th>
+        <Th width={120}>Time</Th>
         <Th width="auto">Trace Id</Th>
-        <Th width={160}>Duration</Th>
-        <Th width={160}>Spans</Th>
-        <Th width={160}>Status</Th>
+        <Th width={120}>Duration</Th>
+        <Th width={120}>Spans</Th>
+        <Th width={120}>Status</Th>
       </Thead>
       {isLoading ? (
         <TracesTableSkeleton colsCount={colsCount} />
