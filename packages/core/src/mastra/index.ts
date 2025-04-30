@@ -282,7 +282,18 @@ This is a warning for now, but will throw an error in the future
         if (workflowSteps.length > 0) {
           workflowSteps.forEach(step => {
             // @ts-ignore
-            this.#workflows[step.workflowId] = step.workflow;
+            const [existingWorkflowId, existingWorkflow] = Object.entries(config.workflows || {})?.find(
+              ([_, value]) => value?.name === step.workflow?.name,
+            ) ?? [null, null];
+            if (existingWorkflowId) {
+              // @ts-ignore
+              workflow.setStepWorkflowId(step.id, existingWorkflowId);
+              // @ts-ignore
+              existingWorkflow.setNestedAndAddedToMastra(true);
+            } else {
+              // @ts-ignore
+              this.#workflows[step.workflowId] = step.workflow;
+            }
           });
         }
       });

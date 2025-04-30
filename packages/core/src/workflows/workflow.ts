@@ -47,6 +47,7 @@ export class Workflow<
   #mastra?: Mastra;
   #runs: Map<string, WorkflowInstance<TSteps, TTriggerSchema>> = new Map();
   isNested: boolean = false;
+  isNestedAndAddedToMastra: boolean = false;
   #onStepTransition: Set<
     (
       state: Pick<
@@ -1269,6 +1270,22 @@ export class Workflow<
 
   setNested(isNested: boolean) {
     this.isNested = isNested;
+  }
+
+  setNestedAndAddedToMastra(isNestedAndAddedToMastra: boolean) {
+    this.isNestedAndAddedToMastra = isNestedAndAddedToMastra;
+  }
+
+  setStepWorkflowId(stepId: string, workflowId: string) {
+    if (this.#steps[stepId]) {
+      this.#steps[stepId] = {
+        ...this.#steps[stepId],
+        step: {
+          ...this.#steps[stepId].step,
+          workflowId,
+        },
+      };
+    }
   }
 
   toStep(): Step<TStepId, TTriggerSchema, z.ZodType<WorkflowRunResult<TTriggerSchema, TSteps, TResultSchema>>, any> {

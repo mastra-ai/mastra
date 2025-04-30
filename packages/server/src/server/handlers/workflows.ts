@@ -17,7 +17,7 @@ export async function getWorkflowsHandler({ mastra }: WorkflowContext) {
   try {
     const workflows = mastra.getWorkflows({ serialized: false });
     const _workflows = Object.entries(workflows).reduce<any>((acc, [key, workflow]) => {
-      if (workflow.isNested) return acc;
+      if (workflow.isNested && !workflow.isNestedAndAddedToMastra) return acc;
       acc[key] = {
         stepGraph: workflow.stepGraph,
         stepSubscriberGraph: workflow.stepSubscriberGraph,
@@ -28,7 +28,9 @@ export async function getWorkflowsHandler({ mastra }: WorkflowContext) {
         steps: Object.entries(workflow.steps).reduce<any>((acc, [key, step]) => {
           const _step = step as any;
           acc[key] = {
-            ..._step,
+            id: _step.id,
+            description: _step.description,
+            workflowId: _step.workflowId,
             inputSchema: _step.inputSchema ? stringify(zodToJsonSchema(_step.inputSchema)) : undefined,
             outputSchema: _step.outputSchema ? stringify(zodToJsonSchema(_step.outputSchema)) : undefined,
           };
@@ -65,7 +67,9 @@ export async function getWorkflowByIdHandler({ mastra, workflowId }: WorkflowCon
       steps: Object.entries(workflow.steps).reduce<any>((acc, [key, step]) => {
         const _step = step as any;
         acc[key] = {
-          ..._step,
+          id: _step.id,
+          description: _step.description,
+          workflowId: _step.workflowId,
           inputSchema: _step.inputSchema ? stringify(zodToJsonSchema(_step.inputSchema)) : undefined,
           outputSchema: _step.outputSchema ? stringify(zodToJsonSchema(_step.outputSchema)) : undefined,
         };

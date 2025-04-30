@@ -49,6 +49,39 @@ export type StepFlowEntry =
       };
     };
 
+export type SerializedStep = Pick<Step, 'id' | 'description'> & {
+  component?: string;
+  stepFlow?: SerializedStepFlowEntry[];
+};
+
+export type SerializedStepFlowEntry =
+  | {
+      type: 'step';
+      step: SerializedStep;
+    }
+  | {
+      type: 'parallel';
+      steps: SerializedStepFlowEntry[];
+    }
+  | {
+      type: 'conditional';
+      steps: SerializedStepFlowEntry[];
+      serializedConditions: { id: string; fn: string }[];
+    }
+  | {
+      type: 'loop';
+      step: SerializedStep;
+      serializedCondition: { id: string; fn: string };
+      loopType: 'dowhile' | 'dountil';
+    }
+  | {
+      type: 'foreach';
+      step: SerializedStep;
+      opts: {
+        concurrency: number;
+      };
+    };
+
 /**
  * Creates a new workflow step
  * @param params Configuration parameters for the step
@@ -290,6 +323,7 @@ export class NewWorkflow<
   public steps: Record<string, Step<string, any, any, any, any>>;
   public stepDefs?: TSteps;
   protected stepFlow: StepFlowEntry[];
+  protected serializedStepFlow: SerializedStepFlowEntry[];
   protected executionEngine: ExecutionEngine;
   protected executionGraph: ExecutionGraph;
   protected retryConfig: {
@@ -318,6 +352,7 @@ export class NewWorkflow<
     this.retryConfig = retryConfig ?? { attempts: 0, delay: 0 };
     this.executionGraph = this.buildExecutionGraph();
     this.stepFlow = [];
+    this.serializedStepFlow = [];
     this.#mastra = mastra;
     this.steps = {};
     this.stepDefs = steps;
@@ -364,6 +399,15 @@ export class NewWorkflow<
     step: Step<TStepId, TStepInputSchema, TSchemaOut, any, any>,
   ) {
     this.stepFlow.push({ type: 'step', step: step as any });
+    this.serializedStepFlow.push({
+      type: 'step',
+      step: {
+        id: step.id,
+        description: step.description,
+        component: (step as SerializedStep).component,
+        stepFlow: (step as SerializedStep).stepFlow,
+      },
+    });
     this.steps[step.id] = step;
     return this as unknown as NewWorkflow<TSteps, TWorkflowId, TInput, TOutput, TSchemaOut>;
   }
@@ -456,12 +500,33 @@ export class NewWorkflow<
     >;
 
     this.stepFlow.push({ type: 'step', step: mappingStep as any });
+    this.serializedStepFlow.push({
+      type: 'step',
+      step: {
+        id: mappingStep.id,
+        description: mappingStep.description,
+        component: (mappingStep as SerializedStep).component,
+        stepFlow: (mappingStep as SerializedStep).stepFlow,
+      },
+    });
     return this as unknown as NewWorkflow<TSteps, TWorkflowId, TInput, TOutput, MappedOutputSchema>;
   }
 
   // TODO: make typing better here
   parallel<TParallelSteps extends Step<string, TPrevSchema, any, any, any>[]>(steps: TParallelSteps) {
     this.stepFlow.push({ type: 'parallel', steps: steps.map(step => ({ type: 'step', step: step as any })) });
+    this.serializedStepFlow.push({
+      type: 'parallel',
+      steps: steps.map(step => ({
+        type: 'step',
+        step: {
+          id: step.id,
+          description: step.description,
+          component: (step as SerializedStep).component,
+          stepFlow: (step as SerializedStep).stepFlow,
+        },
+      })),
+    });
     steps.forEach(step => {
       this.steps[step.id] = step;
     });
@@ -490,6 +555,19 @@ export class NewWorkflow<
       type: 'conditional',
       steps: steps.map(([_cond, step]) => ({ type: 'step', step: step as any })),
       conditions: steps.map(([cond]) => cond),
+      serializedConditions: steps.map(([cond, _step]) => ({ id: `${_step.id}-condition`, fn: cond.toString() })),
+    });
+    this.serializedStepFlow.push({
+      type: 'conditional',
+      steps: steps.map(([_cond, step]) => ({
+        type: 'step',
+        step: {
+          id: step.id,
+          description: step.description,
+          component: (step as SerializedStep).component,
+          stepFlow: (step as SerializedStep).stepFlow,
+        },
+      })),
       serializedConditions: steps.map(([cond, _step]) => ({ id: `${_step.id}-condition`, fn: cond.toString() })),
     });
     steps.forEach(([_, step]) => {
@@ -529,6 +607,17 @@ export class NewWorkflow<
       loopType: 'dowhile',
       serializedCondition: { id: `${step.id}-condition`, fn: condition.toString() },
     });
+    this.serializedStepFlow.push({
+      type: 'loop',
+      step: {
+        id: step.id,
+        description: step.description,
+        component: (step as SerializedStep).component,
+        stepFlow: (step as SerializedStep).stepFlow,
+      },
+      serializedCondition: { id: `${step.id}-condition`, fn: condition.toString() },
+      loopType: 'dowhile',
+    });
     this.steps[step.id] = step;
     return this as unknown as NewWorkflow<TSteps, TWorkflowId, TInput, TOutput, TSchemaOut>;
   }
@@ -543,6 +632,17 @@ export class NewWorkflow<
       condition,
       loopType: 'dountil',
       serializedCondition: { id: `${step.id}-condition`, fn: condition.toString() },
+    });
+    this.serializedStepFlow.push({
+      type: 'loop',
+      step: {
+        id: step.id,
+        description: step.description,
+        component: (step as SerializedStep).component,
+        stepFlow: (step as SerializedStep).stepFlow,
+      },
+      serializedCondition: { id: `${step.id}-condition`, fn: condition.toString() },
+      loopType: 'dountil',
     });
     this.steps[step.id] = step;
     return this as unknown as NewWorkflow<TSteps, TWorkflowId, TInput, TOutput, TSchemaOut>;
@@ -562,6 +662,16 @@ export class NewWorkflow<
     },
   ) {
     this.stepFlow.push({ type: 'foreach', step: step as any, opts: opts ?? { concurrency: 1 } });
+    this.serializedStepFlow.push({
+      type: 'foreach',
+      step: {
+        id: (step as SerializedStep).id,
+        description: (step as SerializedStep).description,
+        component: (step as SerializedStep).component,
+        stepFlow: (step as SerializedStep).stepFlow,
+      },
+      opts: opts ?? { concurrency: 1 },
+    });
     this.steps[(step as any).id] = step as any;
     return this as unknown as NewWorkflow<TSteps, TWorkflowId, TInput, TOutput, z.ZodArray<TSchemaOut>>;
   }
@@ -589,6 +699,10 @@ export class NewWorkflow<
 
   get stepGraph() {
     return this.stepFlow;
+  }
+
+  get serializedStepGraph() {
+    return this.serializedStepFlow;
   }
 
   /**
