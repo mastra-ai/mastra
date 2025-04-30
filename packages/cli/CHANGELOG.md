@@ -1,5 +1,38 @@
 # mastra
 
+## 0.6.0-alpha.8
+
+### Patch Changes
+
+- Updated dependencies [c23a81c]
+  - @mastra/core@0.9.1-alpha.6
+  - @mastra/deployer@0.3.1-alpha.6
+
+## 0.6.0-alpha.7
+
+### Patch Changes
+
+- Updated dependencies [3e7b69d]
+  - @mastra/core@0.9.1-alpha.5
+  - @mastra/deployer@0.3.1-alpha.5
+
+## 0.6.0-alpha.6
+
+### Patch Changes
+
+- 25d3c39: build logs for how to load instrumentation for build output
+
+## 0.6.0-alpha.5
+
+### Patch Changes
+
+- 3b74a74: add badge for failure / successful traces
+- 5a66ced: add click on trace row
+- Updated dependencies [e4943b8]
+- Updated dependencies [479f490]
+  - @mastra/core@0.9.1-alpha.4
+  - @mastra/deployer@0.3.1-alpha.4
+
 ## 0.6.0-alpha.4
 
 ### Patch Changes

@@ -1,5 +1,46 @@
 # @mastra/dane
 
+## 0.0.17-alpha.7
+
+### Patch Changes
+
+- Updated dependencies [c23a81c]
+  - @mastra/core@0.9.1-alpha.6
+  - @mastra/github@1.1.20-alpha.6
+  - @mastra/mcp@0.4.1-alpha.7
+  - @mastra/memory@0.3.1-alpha.6
+  - @mastra/rag@0.1.20-alpha.6
+  - @mastra/libsql@0.0.1-alpha.6
+  - @mastra/upstash@0.3.1-alpha.6
+
+## 0.0.17-alpha.6
+
+### Patch Changes
+
+- Updated dependencies [3e7b69d]
+- Updated dependencies [5f826d9]
+  - @mastra/core@0.9.1-alpha.5
+  - @mastra/upstash@0.3.1-alpha.5
+  - @mastra/libsql@0.0.1-alpha.5
+  - @mastra/rag@0.1.20-alpha.5
+  - @mastra/github@1.1.20-alpha.5
+  - @mastra/mcp@0.4.1-alpha.6
+  - @mastra/memory@0.3.1-alpha.5
+
+## 0.0.17-alpha.5
+
+### Patch Changes
+
+- Updated dependencies [e4943b8]
+- Updated dependencies [479f490]
+  - @mastra/core@0.9.1-alpha.4
+  - @mastra/libsql@0.0.1-alpha.4
+  - @mastra/upstash@0.3.1-alpha.4
+  - @mastra/github@1.1.20-alpha.4
+  - @mastra/mcp@0.4.1-alpha.5
+  - @mastra/memory@0.3.1-alpha.4
+  - @mastra/rag@0.1.20-alpha.4
+
 ## 0.0.17-alpha.4
 
 ### Patch Changes

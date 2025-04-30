@@ -1,0 +1,256 @@
+---
+title: "Reference: Agent | Agents | Mastra Docs"
+description: "Documentation for the Agent class in Mastra, which provides the foundation for creating AI agents with various capabilities."
+---
+
+# Agent
+
+The `Agent` class is the foundation for creating AI agents in Mastra. It provides methods for generating responses, streaming interactions, and handling voice capabilities.
+
+## Importing
+
+```typescript
+import { Agent } from "@mastra/core/agent";
+```
+
+## Constructor
+
+Creates a new Agent instance with the specified configuration.
+
+```typescript
+constructor(config: AgentConfig<TAgentId, TTools, TMetrics>)
+```
+
+### Parameters
+<br />
+
+<PropertiesTable
+  content={[
+    {
+      name: "name",
+      type: "string",
+      isOptional: false,
+      description: "Unique identifier for the agent.",
+    },
+    {
+      name: "instructions",
+      type: "string | Function",
+      isOptional: false,
+      description: "Instructions that guide the agent's behavior. Can be a static string or a function that returns a string.",
+    },
+    {
+      name: "model",
+      type: "LanguageModelV1 | Function",
+      isOptional: false,
+      description: "The language model to use for generating responses. Can be a model instance or a function that returns a model.",
+    },
+    {
+      name: "tools",
+      type: "ToolsInput | Function",
+      isOptional: true,
+      description: "Tools that the agent can use. Can be a static object or a function that returns tools.",
+    },
+    {
+      name: "defaultGenerateOptions",
+      type: "AgentGenerateOptions",
+      isOptional: true,
+      description: "Default options to use when calling generate().",
+    },
+    {
+      name: "defaultStreamOptions",
+      type: "AgentStreamOptions",
+      isOptional: true,
+      description: "Default options to use when calling stream().",
+    },
+    {
+      name: "mastra",
+      type: "Mastra",
+      isOptional: true,
+      description: "Mastra instance for integration with the broader Mastra ecosystem.",
+    },
+    {
+      name: "evals",
+      type: "Record<string, Metric>",
+      isOptional: true,
+      description: "Evaluation metrics for assessing agent performance.",
+    },
+    {
+      name: "memory",
+      type: "MastraMemory",
+      isOptional: true,
+      description: "Memory system for the agent to store and retrieve information.",
+    },
+    {
+      name: "voice",
+      type: "CompositeVoice",
+      isOptional: true,
+      description: "Voice capabilities for speech-to-text and text-to-speech functionality.",
+    },
+  ]}
+/>
+
+
+
+### getTools()
+
+Gets the tools, resolving them if they're a function.
+
+[See detailed documentation for getTools()](/reference/agents/getTools)
+
+### llm
+
+Accessor for the agent's language model.
+
+```typescript
+llm(): MastraLanguageModel | (({ runtimeContext }: { runtimeContext: RuntimeContext }) => Promise<MastraLanguageModel> | MastraLanguageModel)
+```
+
+Returns the language model used by the agent.
+
+### getLLM()
+
+Gets or creates an LLM instance based on the current model.
+
+```typescript
+getLLM({ runtimeContext = new RuntimeContext() }: { runtimeContext?: RuntimeContext } = {}): MastraLLMBase | Promise<MastraLLMBase>
+```
+
+### getModel()
+
+Gets the model, resolving it if it's a function.
+
+```typescript
+getModel({ runtimeContext = new RuntimeContext() }: { runtimeContext?: RuntimeContext } = {}): MastraLanguageModel | Promise<MastraLanguageModel>
+```
+
+### hasOwnMemory()
+
+Checks if the agent has its own memory system.
+
+```typescript
+hasOwnMemory(): boolean
+```
+
+Returns `true` if the agent has a memory system, `false` otherwise.
+
+### getMemory()
+
+Gets the agent's memory system.
+
+```typescript
+getMemory(): MastraMemory | undefined
+```
+
+Returns the memory system if it exists, `undefined` otherwise.
+
+### toStep()
+
+Converts the agent to a workflow step.
+
+```typescript
+toStep(): Step<TAgentId, z.ZodObject<{ prompt: z.ZodString }>, z.ZodObject<{ text: z.ZodString }>, any>
+```
+
+Returns a Step instance that can be used in a workflow.
+
+## Examples
+
+### Creating a Basic Agent
+
+```typescript
+import { Agent, OpenAI } from "@mastra/core";
+
+const agent = new Agent({
+  name: "assistant",
+  instructions: "You are a helpful assistant.",
+  model: new OpenAI("gpt-4"),
+});
+
+const result = await agent.generate("Hello, how can you help me?");
+console.log(result.text);
+```
+
+### Creating an Agent with Tools
+
+```typescript
+import { Agent, OpenAI } from "@mastra/core";
+
+const agent = new Agent({
+  name: "weather-assistant",
+  instructions: "You are a helpful assistant that can check the weather.",
+  model: new OpenAI("gpt-4"),
+  tools: {
+    getWeather: {
+      description: "Get the current weather for a location",
+      parameters: {
+        type: "object",
+        properties: {
+          location: {
+            type: "string",
+            description: "The city and state, e.g. San Francisco, CA",
+          },
+        },
+        required: ["location"],
+      },
+      execute: async ({ location }) => {
+        // Implementation to fetch weather data
+        return { temperature: 72, conditions: "sunny" };
+      },
+    },
+  },
+});
+
+const result = await agent.generate("What's the weather in San Francisco?");
+console.log(result.text);
+```
+
+### Creating an Agent with Memory
+
+```typescript
+import { Agent, OpenAI, MemoryManager } from "@mastra/core";
+
+const memory = new MemoryManager();
+const agent = new Agent({
+  name: "memory-assistant",
+  instructions: "You are a helpful assistant that remembers previous conversations.",
+  model: new OpenAI("gpt-4"),
+  memory,
+});
+
+// First interaction
+const result1 = await agent.generate("My name is Alice.", {
+  resourceId: "user-123",
+  threadId: "conversation-1",
+});
+
+// Later interaction - the agent will remember the user's name
+const result2 = await agent.generate("What's my name?", {
+  resourceId: "user-123",
+  threadId: "conversation-1",
+});
+
+console.log(result2.text); // Should mention "Alice"
+```
+
+### Creating an Agent with Voice Capabilities
+
+```typescript
+import { Agent, OpenAI, ElevenLabsVoice } from "@mastra/core";
+
+const voice = new ElevenLabsVoice({
+  apiKey: process.env.ELEVENLABS_API_KEY,
+});
+
+const agent = new Agent({
+  name: "voice-assistant",
+  instructions: "You are a helpful voice assistant.",
+  model: new OpenAI("gpt-4"),
+  voice,
+});
+
+// Text-to-speech
+const audioStream = await agent.voice.speak("Hello, how can I help you today?");
+
+// Speech-to-text (with an audio stream from a microphone or file)
+const transcription = await agent.voice.listen(audioStream);
+```

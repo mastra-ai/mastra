@@ -82,7 +82,16 @@
       "matchFileNames": ["+(package.json)", "**/package.json"],
       "matchUpdateTypes": ["major", "minor", "patch"],
       "matchDepTypes": ["devDependencies"],
-      "matchPackageNames": ["@microsoft/api-extractor", "tsup", "rollup"],
+      "matchPackageNames": ["@microsoft/api-extractor", "tsup", "rollup", "@types/node", "dotenv"],
+      "enabled": true
+    },
+    {
+      "groupName": "Test tools",
+      "commitMessageTopic": "Test tools",
+      "matchFileNames": ["+(package.json)", "**/package.json"],
+      "matchUpdateTypes": ["major", "minor", "patch"],
+      "matchDepTypes": ["devDependencies"],
+      "matchPackageNames": ["vitest"],
       "enabled": true
     },
     {
@@ -91,6 +100,18 @@
       "matchFileNames": ["packages/_config/package.json"],
       "matchUpdateTypes": ["minor", "patch"],
       "matchDepTypes": ["dependencies", "devDependencies"],
+      "matchPackageNames": [
+        "*",
+        "!@microsoft/api-extractor",
+        "!tsup",
+        "!rollup",
+        "!eslint",
+        "!prettier",
+        "!typescript",
+        "!vitest",
+        "!@types/node",
+        "!dotenv"
+      ],
       "enabled": true
     },
     {
@@ -99,7 +120,8 @@
       "matchFileNames": ["packages/_config/package.json"],
       "matchUpdateTypes": ["major"],
       "matchDepTypes": ["dependencies", "devDependencies"],
-      "enabled": true
+      "enabled": true,
+      "dependencyDashboardApproval": true
     },
     {
       "groupName": "mastra",
@@ -107,6 +129,18 @@
       "matchFileNames": ["packages/cli/package.json"],
       "matchUpdateTypes": ["minor", "patch"],
       "matchDepTypes": ["dependencies", "devDependencies"],
+      "matchPackageNames": [
+        "*",
+        "!@microsoft/api-extractor",
+        "!tsup",
+        "!rollup",
+        "!eslint",
+        "!prettier",
+        "!typescript",
+        "!vitest",
+        "!@types/node",
+        "!dotenv"
+      ],
       "enabled": true
     },
     {
@@ -115,7 +149,8 @@
       "matchFileNames": ["packages/cli/package.json"],
       "matchUpdateTypes": ["major"],
       "matchDepTypes": ["dependencies", "devDependencies"],
-      "enabled": true
+      "enabled": true,
+      "dependencyDashboardApproval": true
     },
     {
       "groupName": "Mastra cloud",
@@ -123,6 +158,18 @@
       "matchFileNames": ["packages/cloud/package.json"],
       "matchUpdateTypes": ["minor", "patch"],
       "matchDepTypes": ["dependencies", "devDependencies"],
+      "matchPackageNames": [
+        "*",
+        "!@microsoft/api-extractor",
+        "!tsup",
+        "!rollup",
+        "!eslint",
+        "!prettier",
+        "!typescript",
+        "!vitest",
+        "!@types/node",
+        "!dotenv"
+      ],
       "enabled": true
     },
     {
@@ -131,7 +178,8 @@
       "matchFileNames": ["packages/cloud/package.json"],
       "matchUpdateTypes": ["major"],
       "matchDepTypes": ["dependencies", "devDependencies"],
-      "enabled": true
+      "enabled": true,
+      "dependencyDashboardApproval": true
     },
     {
       "groupName": "Mastra core",
@@ -139,6 +187,18 @@
       "matchFileNames": ["packages/core/package.json"],
       "matchUpdateTypes": ["minor", "patch"],
       "matchDepTypes": ["dependencies", "devDependencies"],
+      "matchPackageNames": [
+        "*",
+        "!@microsoft/api-extractor",
+        "!tsup",
+        "!rollup",
+        "!eslint",
+        "!prettier",
+        "!typescript",
+        "!vitest",
+        "!@types/node",
+        "!dotenv"
+      ],
       "enabled": true
     },
     {
@@ -147,7 +207,8 @@
       "matchFileNames": ["packages/core/package.json"],
       "matchUpdateTypes": ["major"],
       "matchDepTypes": ["dependencies", "devDependencies"],
-      "enabled": true
+      "enabled": true,
+      "dependencyDashboardApproval": true
     },
     {
       "groupName": "create-mastra",
@@ -155,6 +216,18 @@
       "matchFileNames": ["packages/create-mastra/package.json"],
       "matchUpdateTypes": ["minor", "patch"],
       "matchDepTypes": ["dependencies", "devDependencies"],
+      "matchPackageNames": [
+        "*",
+        "!@microsoft/api-extractor",
+        "!tsup",
+        "!rollup",
+        "!eslint",
+        "!prettier",
+        "!typescript",
+        "!vitest",
+        "!@types/node",
+        "!dotenv"
+      ],
       "enabled": true
     },
     {
@@ -163,7 +236,8 @@
       "matchFileNames": ["packages/create-mastra/package.json"],
       "matchUpdateTypes": ["major"],
       "matchDepTypes": ["dependencies", "devDependencies"],
-      "enabled": true
+      "enabled": true,
+      "dependencyDashboardApproval": true
     },
     {
       "groupName": "Mastra deployer",
@@ -171,6 +245,18 @@
       "matchFileNames": ["packages/deployer/package.json"],
       "matchUpdateTypes": ["minor", "patch"],
       "matchDepTypes": ["dependencies", "devDependencies"],
+      "matchPackageNames": [
+        "*",
+        "!@microsoft/api-extractor",
+        "!tsup",
+        "!rollup",
+        "!eslint",
+        "!prettier",
+        "!typescript",
+        "!vitest",
+        "!@types/node",
+        "!dotenv"
+      ],
       "enabled": true
     },
     {
@@ -179,7 +265,8 @@
       "matchFileNames": ["packages/deployer/package.json"],
       "matchUpdateTypes": ["major"],
       "matchDepTypes": ["dependencies", "devDependencies"],
-      "enabled": true
+      "enabled": true,
+      "dependencyDashboardApproval": true
     },
     {
       "groupName": "Mastra evals",
@@ -187,6 +274,18 @@
       "matchFileNames": ["packages/evals/package.json"],
       "matchUpdateTypes": ["minor", "patch"],
       "matchDepTypes": ["dependencies", "devDependencies"],
+      "matchPackageNames": [
+        "*",
+        "!@microsoft/api-extractor",
+        "!tsup",
+        "!rollup",
+        "!eslint",
+        "!prettier",
+        "!typescript",
+        "!vitest",
+        "!@types/node",
+        "!dotenv"
+      ],
       "enabled": true
     },
     {
@@ -195,7 +294,8 @@
       "matchFileNames": ["packages/evals/package.json"],
       "matchUpdateTypes": ["major"],
       "matchDepTypes": ["dependencies", "devDependencies"],
-      "enabled": true
+      "enabled": true,
+      "dependencyDashboardApproval": true
     },
     {
       "groupName": "Mastra loggers",
@@ -203,6 +303,18 @@
       "matchFileNames": ["packages/loggers/package.json"],
       "matchUpdateTypes": ["minor", "patch"],
       "matchDepTypes": ["dependencies", "devDependencies"],
+      "matchPackageNames": [
+        "*",
+        "!@microsoft/api-extractor",
+        "!tsup",
+        "!rollup",
+        "!eslint",
+        "!prettier",
+        "!typescript",
+        "!vitest",
+        "!@types/node",
+        "!dotenv"
+      ],
       "enabled": true
     },
     {
@@ -211,7 +323,8 @@
       "matchFileNames": ["packages/loggers/package.json"],
       "matchUpdateTypes": ["major"],
       "matchDepTypes": ["dependencies", "devDependencies"],
-      "enabled": true
+      "enabled": true,
+      "dependencyDashboardApproval": true
     },
     {
       "groupName": "Mastra mcp",
@@ -219,6 +332,18 @@
       "matchFileNames": ["packages/mcp/package.json"],
       "matchUpdateTypes": ["minor", "patch"],
       "matchDepTypes": ["dependencies", "devDependencies"],
+      "matchPackageNames": [
+        "*",
+        "!@microsoft/api-extractor",
+        "!tsup",
+        "!rollup",
+        "!eslint",
+        "!prettier",
+        "!typescript",
+        "!vitest",
+        "!@types/node",
+        "!dotenv"
+      ],
       "enabled": true
     },
     {
@@ -227,7 +352,8 @@
       "matchFileNames": ["packages/mcp/package.json"],
       "matchUpdateTypes": ["major"],
       "matchDepTypes": ["dependencies", "devDependencies"],
-      "enabled": true
+      "enabled": true,
+      "dependencyDashboardApproval": true
     },
     {
       "groupName": "Mastra mcp-docs-server",
@@ -235,6 +361,18 @@
       "matchFileNames": ["packages/mcp-docs-server/package.json"],
       "matchUpdateTypes": ["minor", "patch"],
       "matchDepTypes": ["dependencies", "devDependencies"],
+      "matchPackageNames": [
+        "*",
+        "!@microsoft/api-extractor",
+        "!tsup",
+        "!rollup",
+        "!eslint",
+        "!prettier",
+        "!typescript",
+        "!vitest",
+        "!@types/node",
+        "!dotenv"
+      ],
       "enabled": true
     },
     {
@@ -243,7 +381,8 @@
       "matchFileNames": ["packages/mcp-docs-server/package.json"],
       "matchUpdateTypes": ["major"],
       "matchDepTypes": ["dependencies", "devDependencies"],
-      "enabled": true
+      "enabled": true,
+      "dependencyDashboardApproval": true
     },
     {
       "groupName": "Mastra mcp-registry-registry",
@@ -251,6 +390,18 @@
       "matchFileNames": ["packages/mcp-registry-registry/package.json"],
       "matchUpdateTypes": ["minor", "patch"],
       "matchDepTypes": ["dependencies", "devDependencies"],
+      "matchPackageNames": [
+        "*",
+        "!@microsoft/api-extractor",
+        "!tsup",
+        "!rollup",
+        "!eslint",
+        "!prettier",
+        "!typescript",
+        "!vitest",
+        "!@types/node",
+        "!dotenv"
+      ],
       "enabled": true
     },
     {
@@ -259,7 +410,8 @@
       "matchFileNames": ["packages/mcp-registry-registry/package.json"],
       "matchUpdateTypes": ["major"],
       "matchDepTypes": ["dependencies", "devDependencies"],
-      "enabled": true
+      "enabled": true,
+      "dependencyDashboardApproval": true
     },
     {
       "groupName": "Mastra memory",
@@ -267,6 +419,18 @@
       "matchFileNames": ["packages/memory/package.json"],
       "matchUpdateTypes": ["minor", "patch"],
       "matchDepTypes": ["dependencies", "devDependencies"],
+      "matchPackageNames": [
+        "*",
+        "!@microsoft/api-extractor",
+        "!tsup",
+        "!rollup",
+        "!eslint",
+        "!prettier",
+        "!typescript",
+        "!vitest",
+        "!@types/node",
+        "!dotenv"
+      ],
       "enabled": true
     },
     {
@@ -275,7 +439,8 @@
       "matchFileNames": ["packages/memory/package.json"],
       "matchUpdateTypes": ["major"],
       "matchDepTypes": ["dependencies", "devDependencies"],
-      "enabled": true
+      "enabled": true,
+      "dependencyDashboardApproval": true
     },
     {
       "groupName": "Mastra playground-ui",
@@ -283,6 +448,18 @@
       "matchFileNames": ["packages/playground-ui/package.json"],
       "matchUpdateTypes": ["minor", "patch"],
       "matchDepTypes": ["dependencies", "devDependencies"],
+      "matchPackageNames": [
+        "*",
+        "!@microsoft/api-extractor",
+        "!tsup",
+        "!rollup",
+        "!eslint",
+        "!prettier",
+        "!typescript",
+        "!vitest",
+        "!@types/node",
+        "!dotenv"
+      ],
       "enabled": true
     },
     {
@@ -291,7 +468,8 @@
       "matchFileNames": ["packages/playground-ui/package.json"],
       "matchUpdateTypes": ["major"],
       "matchDepTypes": ["dependencies", "devDependencies"],
-      "enabled": true
+      "enabled": true,
+      "dependencyDashboardApproval": true
     },
     {
       "groupName": "Mastra rag",
@@ -299,6 +477,18 @@
       "matchFileNames": ["packages/rag/package.json"],
       "matchUpdateTypes": ["minor", "patch"],
       "matchDepTypes": ["dependencies", "devDependencies"],
+      "matchPackageNames": [
+        "*",
+        "!@microsoft/api-extractor",
+        "!tsup",
+        "!rollup",
+        "!eslint",
+        "!prettier",
+        "!typescript",
+        "!vitest",
+        "!@types/node",
+        "!dotenv"
+      ],
       "enabled": true
     },
     {
@@ -307,7 +497,8 @@
       "matchFileNames": ["packages/rag/package.json"],
       "matchUpdateTypes": ["major"],
       "matchDepTypes": ["dependencies", "devDependencies"],
-      "enabled": true
+      "enabled": true,
+      "dependencyDashboardApproval": true
     },
     {
       "groupName": "Mastra server",
@@ -315,6 +506,18 @@
       "matchFileNames": ["packages/server/package.json"],
       "matchUpdateTypes": ["minor", "patch"],
       "matchDepTypes": ["dependencies", "devDependencies"],
+      "matchPackageNames": [
+        "*",
+        "!@microsoft/api-extractor",
+        "!tsup",
+        "!rollup",
+        "!eslint",
+        "!prettier",
+        "!typescript",
+        "!vitest",
+        "!@types/node",
+        "!dotenv"
+      ],
       "enabled": true
     },
     {
@@ -323,7 +526,8 @@
       "matchFileNames": ["packages/server/package.json"],
       "matchUpdateTypes": ["major"],
       "matchDepTypes": ["dependencies", "devDependencies"],
-      "enabled": true
+      "enabled": true,
+      "dependencyDashboardApproval": true
     },
     {
       "groupName": "Mastra deployer-cloudflare",
@@ -331,6 +535,18 @@
       "matchFileNames": ["deployers/cloudflare/package.json"],
       "matchUpdateTypes": ["minor", "patch"],
       "matchDepTypes": ["dependencies", "devDependencies"],
+      "matchPackageNames": [
+        "*",
+        "!@microsoft/api-extractor",
+        "!tsup",
+        "!rollup",
+        "!eslint",
+        "!prettier",
+        "!typescript",
+        "!vitest",
+        "!@types/node",
+        "!dotenv"
+      ],
       "enabled": true
     },
     {
@@ -339,7 +555,8 @@
       "matchFileNames": ["deployers/cloudflare/package.json"],
       "matchUpdateTypes": ["major"],
       "matchDepTypes": ["dependencies", "devDependencies"],
-      "enabled": true
+      "enabled": true,
+      "dependencyDashboardApproval": true
     },
     {
       "groupName": "Mastra deployer-netlify",
@@ -347,6 +564,18 @@
       "matchFileNames": ["deployers/netlify/package.json"],
       "matchUpdateTypes": ["minor", "patch"],
       "matchDepTypes": ["dependencies", "devDependencies"],
+      "matchPackageNames": [
+        "*",
+        "!@microsoft/api-extractor",
+        "!tsup",
+        "!rollup",
+        "!eslint",
+        "!prettier",
+        "!typescript",
+        "!vitest",
+        "!@types/node",
+        "!dotenv"
+      ],
       "enabled": true
     },
     {
@@ -355,7 +584,8 @@
       "matchFileNames": ["deployers/netlify/package.json"],
       "matchUpdateTypes": ["major"],
       "matchDepTypes": ["dependencies", "devDependencies"],
-      "enabled": true
+      "enabled": true,
+      "dependencyDashboardApproval": true
     },
     {
       "groupName": "Mastra deployer-vercel",
@@ -363,6 +593,18 @@
       "matchFileNames": ["deployers/vercel/package.json"],
       "matchUpdateTypes": ["minor", "patch"],
       "matchDepTypes": ["dependencies", "devDependencies"],
+      "matchPackageNames": [
+        "*",
+        "!@microsoft/api-extractor",
+        "!tsup",
+        "!rollup",
+        "!eslint",
+        "!prettier",
+        "!typescript",
+        "!vitest",
+        "!@types/node",
+        "!dotenv"
+      ],
       "enabled": true
     },
     {
@@ -371,7 +613,8 @@
       "matchFileNames": ["deployers/vercel/package.json"],
       "matchUpdateTypes": ["major"],
       "matchDepTypes": ["dependencies", "devDependencies"],
-      "enabled": true
+      "enabled": true,
+      "dependencyDashboardApproval": true
     },
     {
       "groupName": "@internal/storage-test-utils",
@@ -379,6 +622,18 @@
       "matchFileNames": ["stores/_test-utils/package.json"],
       "matchUpdateTypes": ["minor", "patch"],
       "matchDepTypes": ["dependencies", "devDependencies"],
+      "matchPackageNames": [
+        "*",
+        "!@microsoft/api-extractor",
+        "!tsup",
+        "!rollup",
+        "!eslint",
+        "!prettier",
+        "!typescript",
+        "!vitest",
+        "!@types/node",
+        "!dotenv"
+      ],
       "enabled": true
     },
     {
@@ -387,7 +642,8 @@
       "matchFileNames": ["stores/_test-utils/package.json"],
       "matchUpdateTypes": ["major"],
       "matchDepTypes": ["dependencies", "devDependencies"],
-      "enabled": true
+      "enabled": true,
+      "dependencyDashboardApproval": true
     },
     {
       "groupName": "Mastra astra",
@@ -395,6 +651,18 @@
       "matchFileNames": ["stores/astra/package.json"],
       "matchUpdateTypes": ["minor", "patch"],
       "matchDepTypes": ["dependencies", "devDependencies"],
+      "matchPackageNames": [
+        "*",
+        "!@microsoft/api-extractor",
+        "!tsup",
+        "!rollup",
+        "!eslint",
+        "!prettier",
+        "!typescript",
+        "!vitest",
+        "!@types/node",
+        "!dotenv"
+      ],
       "enabled": true
     },
     {
@@ -403,7 +671,8 @@
       "matchFileNames": ["stores/astra/package.json"],
       "matchUpdateTypes": ["major"],
       "matchDepTypes": ["dependencies", "devDependencies"],
-      "enabled": true
+      "enabled": true,
+      "dependencyDashboardApproval": true
     },
     {
       "groupName": "Mastra chroma",
@@ -411,6 +680,18 @@
       "matchFileNames": ["stores/chroma/package.json"],
       "matchUpdateTypes": ["minor", "patch"],
       "matchDepTypes": ["dependencies", "devDependencies"],
+      "matchPackageNames": [
+        "*",
+        "!@microsoft/api-extractor",
+        "!tsup",
+        "!rollup",
+        "!eslint",
+        "!prettier",
+        "!typescript",
+        "!vitest",
+        "!@types/node",
+        "!dotenv"
+      ],
       "enabled": true
     },
     {
@@ -419,7 +700,8 @@
       "matchFileNames": ["stores/chroma/package.json"],
       "matchUpdateTypes": ["major"],
       "matchDepTypes": ["dependencies", "devDependencies"],
-      "enabled": true
+      "enabled": true,
+      "dependencyDashboardApproval": true
     },
     {
       "groupName": "Mastra clickhouse",
@@ -427,6 +709,18 @@
       "matchFileNames": ["stores/clickhouse/package.json"],
       "matchUpdateTypes": ["minor", "patch"],
       "matchDepTypes": ["dependencies", "devDependencies"],
+      "matchPackageNames": [
+        "*",
+        "!@microsoft/api-extractor",
+        "!tsup",
+        "!rollup",
+        "!eslint",
+        "!prettier",
+        "!typescript",
+        "!vitest",
+        "!@types/node",
+        "!dotenv"
+      ],
       "enabled": true
     },
     {
@@ -435,7 +729,8 @@
       "matchFileNames": ["stores/clickhouse/package.json"],
       "matchUpdateTypes": ["major"],
       "matchDepTypes": ["dependencies", "devDependencies"],
-      "enabled": true
+      "enabled": true,
+      "dependencyDashboardApproval": true
     },
     {
       "groupName": "Mastra cloudflare",
@@ -443,6 +738,18 @@
       "matchFileNames": ["stores/cloudflare/package.json"],
       "matchUpdateTypes": ["minor", "patch"],
       "matchDepTypes": ["dependencies", "devDependencies"],
+      "matchPackageNames": [
+        "*",
+        "!@microsoft/api-extractor",
+        "!tsup",
+        "!rollup",
+        "!eslint",
+        "!prettier",
+        "!typescript",
+        "!vitest",
+        "!@types/node",
+        "!dotenv"
+      ],
       "enabled": true
     },
     {
@@ -451,7 +758,8 @@
       "matchFileNames": ["stores/cloudflare/package.json"],
       "matchUpdateTypes": ["major"],
       "matchDepTypes": ["dependencies", "devDependencies"],
-      "enabled": true
+      "enabled": true,
+      "dependencyDashboardApproval": true
     },
     {
       "groupName": "Mastra cloudflare-d1",
@@ -459,6 +767,18 @@
       "matchFileNames": ["stores/cloudflare-d1/package.json"],
       "matchUpdateTypes": ["minor", "patch"],
       "matchDepTypes": ["dependencies", "devDependencies"],
+      "matchPackageNames": [
+        "*",
+        "!@microsoft/api-extractor",
+        "!tsup",
+        "!rollup",
+        "!eslint",
+        "!prettier",
+        "!typescript",
+        "!vitest",
+        "!@types/node",
+        "!dotenv"
+      ],
       "enabled": true
     },
     {
@@ -467,7 +787,8 @@
       "matchFileNames": ["stores/cloudflare-d1/package.json"],
       "matchUpdateTypes": ["major"],
       "matchDepTypes": ["dependencies", "devDependencies"],
-      "enabled": true
+      "enabled": true,
+      "dependencyDashboardApproval": true
     },
     {
       "groupName": "Mastra libsql",
@@ -475,6 +796,18 @@
       "matchFileNames": ["stores/libsql/package.json"],
       "matchUpdateTypes": ["minor", "patch"],
       "matchDepTypes": ["dependencies", "devDependencies"],
+      "matchPackageNames": [
+        "*",
+        "!@microsoft/api-extractor",
+        "!tsup",
+        "!rollup",
+        "!eslint",
+        "!prettier",
+        "!typescript",
+        "!vitest",
+        "!@types/node",
+        "!dotenv"
+      ],
       "enabled": true
     },
     {
@@ -483,7 +816,37 @@
       "matchFileNames": ["stores/libsql/package.json"],
       "matchUpdateTypes": ["major"],
       "matchDepTypes": ["dependencies", "devDependencies"],
+      "enabled": true,
+      "dependencyDashboardApproval": true
+    },
+    {
+      "groupName": "Mastra mongodb",
+      "commitMessageTopic": "Mastra mongodb",
+      "matchFileNames": ["stores/mongodb/package.json"],
+      "matchUpdateTypes": ["minor", "patch"],
+      "matchDepTypes": ["dependencies", "devDependencies"],
+      "matchPackageNames": [
+        "*",
+        "!@microsoft/api-extractor",
+        "!tsup",
+        "!rollup",
+        "!eslint",
+        "!prettier",
+        "!typescript",
+        "!vitest",
+        "!@types/node",
+        "!dotenv"
+      ],
       "enabled": true
+    },
+    {
+      "groupName": "Mastra mongodb",
+      "commitMessageTopic": "Mastra mongodb",
+      "matchFileNames": ["stores/mongodb/package.json"],
+      "matchUpdateTypes": ["major"],
+      "matchDepTypes": ["dependencies", "devDependencies"],
+      "enabled": true,
+      "dependencyDashboardApproval": true
     },
     {
       "groupName": "Mastra pg",
@@ -491,6 +854,18 @@
       "matchFileNames": ["stores/pg/package.json"],
       "matchUpdateTypes": ["minor", "patch"],
       "matchDepTypes": ["dependencies", "devDependencies"],
+      "matchPackageNames": [
+        "*",
+        "!@microsoft/api-extractor",
+        "!tsup",
+        "!rollup",
+        "!eslint",
+        "!prettier",
+        "!typescript",
+        "!vitest",
+        "!@types/node",
+        "!dotenv"
+      ],
       "enabled": true
     },
     {
@@ -499,7 +874,8 @@
       "matchFileNames": ["stores/pg/package.json"],
       "matchUpdateTypes": ["major"],
       "matchDepTypes": ["dependencies", "devDependencies"],
-      "enabled": true
+      "enabled": true,
+      "dependencyDashboardApproval": true
     },
     {
       "groupName": "Mastra pinecone",
@@ -507,6 +883,18 @@
       "matchFileNames": ["stores/pinecone/package.json"],
       "matchUpdateTypes": ["minor", "patch"],
       "matchDepTypes": ["dependencies", "devDependencies"],
+      "matchPackageNames": [
+        "*",
+        "!@microsoft/api-extractor",
+        "!tsup",
+        "!rollup",
+        "!eslint",
+        "!prettier",
+        "!typescript",
+        "!vitest",
+        "!@types/node",
+        "!dotenv"
+      ],
       "enabled": true
     },
     {
@@ -515,7 +903,8 @@
       "matchFileNames": ["stores/pinecone/package.json"],
       "matchUpdateTypes": ["major"],
       "matchDepTypes": ["dependencies", "devDependencies"],
-      "enabled": true
+      "enabled": true,
+      "dependencyDashboardApproval": true
     },
     {
       "groupName": "Mastra qdrant",
@@ -523,6 +912,18 @@
       "matchFileNames": ["stores/qdrant/package.json"],
       "matchUpdateTypes": ["minor", "patch"],
       "matchDepTypes": ["dependencies", "devDependencies"],
+      "matchPackageNames": [
+        "*",
+        "!@microsoft/api-extractor",
+        "!tsup",
+        "!rollup",
+        "!eslint",
+        "!prettier",
+        "!typescript",
+        "!vitest",
+        "!@types/node",
+        "!dotenv"
+      ],
       "enabled": true
     },
     {
@@ -531,7 +932,8 @@
       "matchFileNames": ["stores/qdrant/package.json"],
       "matchUpdateTypes": ["major"],
       "matchDepTypes": ["dependencies", "devDependencies"],
-      "enabled": true
+      "enabled": true,
+      "dependencyDashboardApproval": true
     },
     {
       "groupName": "Mastra turbopuffer",
@@ -539,6 +941,18 @@
       "matchFileNames": ["stores/turbopuffer/package.json"],
       "matchUpdateTypes": ["minor", "patch"],
       "matchDepTypes": ["dependencies", "devDependencies"],
+      "matchPackageNames": [
+        "*",
+        "!@microsoft/api-extractor",
+        "!tsup",
+        "!rollup",
+        "!eslint",
+        "!prettier",
+        "!typescript",
+        "!vitest",
+        "!@types/node",
+        "!dotenv"
+      ],
       "enabled": true
     },
     {
@@ -547,7 +961,8 @@
       "matchFileNames": ["stores/turbopuffer/package.json"],
       "matchUpdateTypes": ["major"],
       "matchDepTypes": ["dependencies", "devDependencies"],
-      "enabled": true
+      "enabled": true,
+      "dependencyDashboardApproval": true
     },
     {
       "groupName": "Mastra upstash",
@@ -555,6 +970,18 @@
       "matchFileNames": ["stores/upstash/package.json"],
       "matchUpdateTypes": ["minor", "patch"],
       "matchDepTypes": ["dependencies", "devDependencies"],
+      "matchPackageNames": [
+        "*",
+        "!@microsoft/api-extractor",
+        "!tsup",
+        "!rollup",
+        "!eslint",
+        "!prettier",
+        "!typescript",
+        "!vitest",
+        "!@types/node",
+        "!dotenv"
+      ],
       "enabled": true
     },
     {
@@ -563,7 +990,8 @@
       "matchFileNames": ["stores/upstash/package.json"],
       "matchUpdateTypes": ["major"],
       "matchDepTypes": ["dependencies", "devDependencies"],
-      "enabled": true
+      "enabled": true,
+      "dependencyDashboardApproval": true
     },
     {
       "groupName": "Mastra vectorize",
@@ -571,6 +999,18 @@
       "matchFileNames": ["stores/vectorize/package.json"],
       "matchUpdateTypes": ["minor", "patch"],
       "matchDepTypes": ["dependencies", "devDependencies"],
+      "matchPackageNames": [
+        "*",
+        "!@microsoft/api-extractor",
+        "!tsup",
+        "!rollup",
+        "!eslint",
+        "!prettier",
+        "!typescript",
+        "!vitest",
+        "!@types/node",
+        "!dotenv"
+      ],
       "enabled": true
     },
     {
@@ -579,7 +1019,8 @@
       "matchFileNames": ["stores/vectorize/package.json"],
       "matchUpdateTypes": ["major"],
       "matchDepTypes": ["dependencies", "devDependencies"],
-      "enabled": true
+      "enabled": true,
+      "dependencyDashboardApproval": true
     },
     {
       "groupName": "Mastra speech-azure",
@@ -587,6 +1028,18 @@
       "matchFileNames": ["speech/azure/package.json"],
       "matchUpdateTypes": ["minor", "patch"],
       "matchDepTypes": ["dependencies", "devDependencies"],
+      "matchPackageNames": [
+        "*",
+        "!@microsoft/api-extractor",
+        "!tsup",
+        "!rollup",
+        "!eslint",
+        "!prettier",
+        "!typescript",
+        "!vitest",
+        "!@types/node",
+        "!dotenv"
+      ],
       "enabled": true
     },
     {
@@ -595,7 +1048,8 @@
       "matchFileNames": ["speech/azure/package.json"],
       "matchUpdateTypes": ["major"],
       "matchDepTypes": ["dependencies", "devDependencies"],
-      "enabled": true
+      "enabled": true,
+      "dependencyDashboardApproval": true
     },
     {
       "groupName": "Mastra speech-deepgram",
@@ -603,6 +1057,18 @@
       "matchFileNames": ["speech/deepgram/package.json"],
       "matchUpdateTypes": ["minor", "patch"],
       "matchDepTypes": ["dependencies", "devDependencies"],
+      "matchPackageNames": [
+        "*",
+        "!@microsoft/api-extractor",
+        "!tsup",
+        "!rollup",
+        "!eslint",
+        "!prettier",
+        "!typescript",
+        "!vitest",
+        "!@types/node",
+        "!dotenv"
+      ],
       "enabled": true
     },
     {
@@ -611,7 +1077,8 @@
       "matchFileNames": ["speech/deepgram/package.json"],
       "matchUpdateTypes": ["major"],
       "matchDepTypes": ["dependencies", "devDependencies"],
-      "enabled": true
+      "enabled": true,
+      "dependencyDashboardApproval": true
     },
     {
       "groupName": "Mastra speech-elevenlabs",
@@ -619,6 +1086,18 @@
       "matchFileNames": ["speech/elevenlabs/package.json"],
       "matchUpdateTypes": ["minor", "patch"],
       "matchDepTypes": ["dependencies", "devDependencies"],
+      "matchPackageNames": [
+        "*",
+        "!@microsoft/api-extractor",
+        "!tsup",
+        "!rollup",
+        "!eslint",
+        "!prettier",
+        "!typescript",
+        "!vitest",
+        "!@types/node",
+        "!dotenv"
+      ],
       "enabled": true
     },
     {
@@ -627,7 +1106,8 @@
       "matchFileNames": ["speech/elevenlabs/package.json"],
       "matchUpdateTypes": ["major"],
       "matchDepTypes": ["dependencies", "devDependencies"],
-      "enabled": true
+      "enabled": true,
+      "dependencyDashboardApproval": true
     },
     {
       "groupName": "Mastra speech-google",
@@ -635,6 +1115,18 @@
       "matchFileNames": ["speech/google/package.json"],
       "matchUpdateTypes": ["minor", "patch"],
       "matchDepTypes": ["dependencies", "devDependencies"],
+      "matchPackageNames": [
+        "*",
+        "!@microsoft/api-extractor",
+        "!tsup",
+        "!rollup",
+        "!eslint",
+        "!prettier",
+        "!typescript",
+        "!vitest",
+        "!@types/node",
+        "!dotenv"
+      ],
       "enabled": true
     },
     {
@@ -643,7 +1135,8 @@
       "matchFileNames": ["speech/google/package.json"],
       "matchUpdateTypes": ["major"],
       "matchDepTypes": ["dependencies", "devDependencies"],
-      "enabled": true
+      "enabled": true,
+      "dependencyDashboardApproval": true
     },
     {
       "groupName": "Mastra speech-ibm",
@@ -651,6 +1144,18 @@
       "matchFileNames": ["speech/ibm/package.json"],
       "matchUpdateTypes": ["minor", "patch"],
       "matchDepTypes": ["dependencies", "devDependencies"],
+      "matchPackageNames": [
+        "*",
+        "!@microsoft/api-extractor",
+        "!tsup",
+        "!rollup",
+        "!eslint",
+        "!prettier",
+        "!typescript",
+        "!vitest",
+        "!@types/node",
+        "!dotenv"
+      ],
       "enabled": true
     },
     {
@@ -659,7 +1164,8 @@
       "matchFileNames": ["speech/ibm/package.json"],
       "matchUpdateTypes": ["major"],
       "matchDepTypes": ["dependencies", "devDependencies"],
-      "enabled": true
+      "enabled": true,
+      "dependencyDashboardApproval": true
     },
     {
       "groupName": "Mastra speech-murf",
@@ -667,6 +1173,18 @@
       "matchFileNames": ["speech/murf/package.json"],
       "matchUpdateTypes": ["minor", "patch"],
       "matchDepTypes": ["dependencies", "devDependencies"],
+      "matchPackageNames": [
+        "*",
+        "!@microsoft/api-extractor",
+        "!tsup",
+        "!rollup",
+        "!eslint",
+        "!prettier",
+        "!typescript",
+        "!vitest",
+        "!@types/node",
+        "!dotenv"
+      ],
       "enabled": true
     },
     {
@@ -675,7 +1193,8 @@
       "matchFileNames": ["speech/murf/package.json"],
       "matchUpdateTypes": ["major"],
       "matchDepTypes": ["dependencies", "devDependencies"],
-      "enabled": true
+      "enabled": true,
+      "dependencyDashboardApproval": true
     },
     {
       "groupName": "Mastra speech-openai",
@@ -683,6 +1202,18 @@
       "matchFileNames": ["speech/openai/package.json"],
       "matchUpdateTypes": ["minor", "patch"],
       "matchDepTypes": ["dependencies", "devDependencies"],
+      "matchPackageNames": [
+        "*",
+        "!@microsoft/api-extractor",
+        "!tsup",
+        "!rollup",
+        "!eslint",
+        "!prettier",
+        "!typescript",
+        "!vitest",
+        "!@types/node",
+        "!dotenv"
+      ],
       "enabled": true
     },
     {
@@ -691,7 +1222,8 @@
       "matchFileNames": ["speech/openai/package.json"],
       "matchUpdateTypes": ["major"],
       "matchDepTypes": ["dependencies", "devDependencies"],
-      "enabled": true
+      "enabled": true,
+      "dependencyDashboardApproval": true
     },
     {
       "groupName": "Mastra speech-playai",
@@ -699,6 +1231,18 @@
       "matchFileNames": ["speech/playai/package.json"],
       "matchUpdateTypes": ["minor", "patch"],
       "matchDepTypes": ["dependencies", "devDependencies"],
+      "matchPackageNames": [
+        "*",
+        "!@microsoft/api-extractor",
+        "!tsup",
+        "!rollup",
+        "!eslint",
+        "!prettier",
+        "!typescript",
+        "!vitest",
+        "!@types/node",
+        "!dotenv"
+      ],
       "enabled": true
     },
     {
@@ -707,7 +1251,8 @@
       "matchFileNames": ["speech/playai/package.json"],
       "matchUpdateTypes": ["major"],
       "matchDepTypes": ["dependencies", "devDependencies"],
-      "enabled": true
+      "enabled": true,
+      "dependencyDashboardApproval": true
     },
     {
       "groupName": "Mastra speech-replicate",
@@ -715,6 +1260,18 @@
       "matchFileNames": ["speech/replicate/package.json"],
       "matchUpdateTypes": ["minor", "patch"],
       "matchDepTypes": ["dependencies", "devDependencies"],
+      "matchPackageNames": [
+        "*",
+        "!@microsoft/api-extractor",
+        "!tsup",
+        "!rollup",
+        "!eslint",
+        "!prettier",
+        "!typescript",
+        "!vitest",
+        "!@types/node",
+        "!dotenv"
+      ],
       "enabled": true
     },
     {
@@ -723,7 +1280,8 @@
       "matchFileNames": ["speech/replicate/package.json"],
       "matchUpdateTypes": ["major"],
       "matchDepTypes": ["dependencies", "devDependencies"],
-      "enabled": true
+      "enabled": true,
+      "dependencyDashboardApproval": true
     },
     {
       "groupName": "Mastra speech-speechify",
@@ -731,6 +1289,18 @@
       "matchFileNames": ["speech/speechify/package.json"],
       "matchUpdateTypes": ["minor", "patch"],
       "matchDepTypes": ["dependencies", "devDependencies"],
+      "matchPackageNames": [
+        "*",
+        "!@microsoft/api-extractor",
+        "!tsup",
+        "!rollup",
+        "!eslint",
+        "!prettier",
+        "!typescript",
+        "!vitest",
+        "!@types/node",
+        "!dotenv"
+      ],
       "enabled": true
     },
     {
@@ -739,7 +1309,8 @@
       "matchFileNames": ["speech/speechify/package.json"],
       "matchUpdateTypes": ["major"],
       "matchDepTypes": ["dependencies", "devDependencies"],
-      "enabled": true
+      "enabled": true,
+      "dependencyDashboardApproval": true
     },
     {
       "groupName": "Mastra voice-azure",
@@ -747,6 +1318,18 @@
       "matchFileNames": ["voice/azure/package.json"],
       "matchUpdateTypes": ["minor", "patch"],
       "matchDepTypes": ["dependencies", "devDependencies"],
+      "matchPackageNames": [
+        "*",
+        "!@microsoft/api-extractor",
+        "!tsup",
+        "!rollup",
+        "!eslint",
+        "!prettier",
+        "!typescript",
+        "!vitest",
+        "!@types/node",
+        "!dotenv"
+      ],
       "enabled": true
     },
     {
@@ -755,7 +1338,8 @@
       "matchFileNames": ["voice/azure/package.json"],
       "matchUpdateTypes": ["major"],
       "matchDepTypes": ["dependencies", "devDependencies"],
-      "enabled": true
+      "enabled": true,
+      "dependencyDashboardApproval": true
     },
     {
       "groupName": "Mastra voice-cloudflare",
@@ -763,6 +1347,18 @@
       "matchFileNames": ["voice/cloudflare/package.json"],
       "matchUpdateTypes": ["minor", "patch"],
       "matchDepTypes": ["dependencies", "devDependencies"],
+      "matchPackageNames": [
+        "*",
+        "!@microsoft/api-extractor",
+        "!tsup",
+        "!rollup",
+        "!eslint",
+        "!prettier",
+        "!typescript",
+        "!vitest",
+        "!@types/node",
+        "!dotenv"
+      ],
       "enabled": true
     },
     {
@@ -771,7 +1367,8 @@
       "matchFileNames": ["voice/cloudflare/package.json"],
       "matchUpdateTypes": ["major"],
       "matchDepTypes": ["dependencies", "devDependencies"],
-      "enabled": true
+      "enabled": true,
+      "dependencyDashboardApproval": true
     },
     {
       "groupName": "Mastra voice-deepgram",
@@ -779,6 +1376,18 @@
       "matchFileNames": ["voice/deepgram/package.json"],
       "matchUpdateTypes": ["minor", "patch"],
       "matchDepTypes": ["dependencies", "devDependencies"],
+      "matchPackageNames": [
+        "*",
+        "!@microsoft/api-extractor",
+        "!tsup",
+        "!rollup",
+        "!eslint",
+        "!prettier",
+        "!typescript",
+        "!vitest",
+        "!@types/node",
+        "!dotenv"
+      ],
       "enabled": true
     },
     {
@@ -787,7 +1396,8 @@
       "matchFileNames": ["voice/deepgram/package.json"],
       "matchUpdateTypes": ["major"],
       "matchDepTypes": ["dependencies", "devDependencies"],
-      "enabled": true
+      "enabled": true,
+      "dependencyDashboardApproval": true
     },
     {
       "groupName": "Mastra voice-elevenlabs",
@@ -795,6 +1405,18 @@
       "matchFileNames": ["voice/elevenlabs/package.json"],
       "matchUpdateTypes": ["minor", "patch"],
       "matchDepTypes": ["dependencies", "devDependencies"],
+      "matchPackageNames": [
+        "*",
+        "!@microsoft/api-extractor",
+        "!tsup",
+        "!rollup",
+        "!eslint",
+        "!prettier",
+        "!typescript",
+        "!vitest",
+        "!@types/node",
+        "!dotenv"
+      ],
       "enabled": true
     },
     {
@@ -803,7 +1425,8 @@
       "matchFileNames": ["voice/elevenlabs/package.json"],
       "matchUpdateTypes": ["major"],
       "matchDepTypes": ["dependencies", "devDependencies"],
-      "enabled": true
+      "enabled": true,
+      "dependencyDashboardApproval": true
     },
     {
       "groupName": "Mastra voice-google",
@@ -811,6 +1434,18 @@
       "matchFileNames": ["voice/google/package.json"],
       "matchUpdateTypes": ["minor", "patch"],
       "matchDepTypes": ["dependencies", "devDependencies"],
+      "matchPackageNames": [
+        "*",
+        "!@microsoft/api-extractor",
+        "!tsup",
+        "!rollup",
+        "!eslint",
+        "!prettier",
+        "!typescript",
+        "!vitest",
+        "!@types/node",
+        "!dotenv"
+      ],
       "enabled": true
     },
     {
@@ -819,7 +1454,8 @@
       "matchFileNames": ["voice/google/package.json"],
       "matchUpdateTypes": ["major"],
       "matchDepTypes": ["dependencies", "devDependencies"],
-      "enabled": true
+      "enabled": true,
+      "dependencyDashboardApproval": true
     },
     {
       "groupName": "Mastra voice-murf",
@@ -827,6 +1463,18 @@
       "matchFileNames": ["voice/murf/package.json"],
       "matchUpdateTypes": ["minor", "patch"],
       "matchDepTypes": ["dependencies", "devDependencies"],
+      "matchPackageNames": [
+        "*",
+        "!@microsoft/api-extractor",
+        "!tsup",
+        "!rollup",
+        "!eslint",
+        "!prettier",
+        "!typescript",
+        "!vitest",
+        "!@types/node",
+        "!dotenv"
+      ],
       "enabled": true
     },
     {
@@ -835,7 +1483,8 @@
       "matchFileNames": ["voice/murf/package.json"],
       "matchUpdateTypes": ["major"],
       "matchDepTypes": ["dependencies", "devDependencies"],
-      "enabled": true
+      "enabled": true,
+      "dependencyDashboardApproval": true
     },
     {
       "groupName": "Mastra voice-openai",
@@ -843,6 +1492,18 @@
       "matchFileNames": ["voice/openai/package.json"],
       "matchUpdateTypes": ["minor", "patch"],
       "matchDepTypes": ["dependencies", "devDependencies"],
+      "matchPackageNames": [
+        "*",
+        "!@microsoft/api-extractor",
+        "!tsup",
+        "!rollup",
+        "!eslint",
+        "!prettier",
+        "!typescript",
+        "!vitest",
+        "!@types/node",
+        "!dotenv"
+      ],
       "enabled": true
     },
     {
@@ -851,7 +1512,8 @@
       "matchFileNames": ["voice/openai/package.json"],
       "matchUpdateTypes": ["major"],
       "matchDepTypes": ["dependencies", "devDependencies"],
-      "enabled": true
+      "enabled": true,
+      "dependencyDashboardApproval": true
     },
     {
       "groupName": "Mastra voice-openai-realtime",
@@ -859,6 +1521,18 @@
       "matchFileNames": ["voice/openai-realtime-api/package.json"],
       "matchUpdateTypes": ["minor", "patch"],
       "matchDepTypes": ["dependencies", "devDependencies"],
+      "matchPackageNames": [
+        "*",
+        "!@microsoft/api-extractor",
+        "!tsup",
+        "!rollup",
+        "!eslint",
+        "!prettier",
+        "!typescript",
+        "!vitest",
+        "!@types/node",
+        "!dotenv"
+      ],
       "enabled": true
     },
     {
@@ -867,7 +1541,8 @@
       "matchFileNames": ["voice/openai-realtime-api/package.json"],
       "matchUpdateTypes": ["major"],
       "matchDepTypes": ["dependencies", "devDependencies"],
-      "enabled": true
+      "enabled": true,
+      "dependencyDashboardApproval": true
     },
     {
       "groupName": "Mastra voice-playai",
@@ -875,6 +1550,18 @@
       "matchFileNames": ["voice/playai/package.json"],
       "matchUpdateTypes": ["minor", "patch"],
       "matchDepTypes": ["dependencies", "devDependencies"],
+      "matchPackageNames": [
+        "*",
+        "!@microsoft/api-extractor",
+        "!tsup",
+        "!rollup",
+        "!eslint",
+        "!prettier",
+        "!typescript",
+        "!vitest",
+        "!@types/node",
+        "!dotenv"
+      ],
       "enabled": true
     },
     {
@@ -883,7 +1570,8 @@
       "matchFileNames": ["voice/playai/package.json"],
       "matchUpdateTypes": ["major"],
       "matchDepTypes": ["dependencies", "devDependencies"],
-      "enabled": true
+      "enabled": true,
+      "dependencyDashboardApproval": true
     },
     {
       "groupName": "Mastra voice-sarvam",
@@ -891,6 +1579,18 @@
       "matchFileNames": ["voice/sarvam/package.json"],
       "matchUpdateTypes": ["minor", "patch"],
       "matchDepTypes": ["dependencies", "devDependencies"],
+      "matchPackageNames": [
+        "*",
+        "!@microsoft/api-extractor",
+        "!tsup",
+        "!rollup",
+        "!eslint",
+        "!prettier",
+        "!typescript",
+        "!vitest",
+        "!@types/node",
+        "!dotenv"
+      ],
       "enabled": true
     },
     {
@@ -899,7 +1599,8 @@
       "matchFileNames": ["voice/sarvam/package.json"],
       "matchUpdateTypes": ["major"],
       "matchDepTypes": ["dependencies", "devDependencies"],
-      "enabled": true
+      "enabled": true,
+      "dependencyDashboardApproval": true
     },
     {
       "groupName": "Mastra voice-speechify",
@@ -907,6 +1608,18 @@
       "matchFileNames": ["voice/speechify/package.json"],
       "matchUpdateTypes": ["minor", "patch"],
       "matchDepTypes": ["dependencies", "devDependencies"],
+      "matchPackageNames": [
+        "*",
+        "!@microsoft/api-extractor",
+        "!tsup",
+        "!rollup",
+        "!eslint",
+        "!prettier",
+        "!typescript",
+        "!vitest",
+        "!@types/node",
+        "!dotenv"
+      ],
       "enabled": true
     },
     {
@@ -915,7 +1628,8 @@
       "matchFileNames": ["voice/speechify/package.json"],
       "matchUpdateTypes": ["major"],
       "matchDepTypes": ["dependencies", "devDependencies"],
-      "enabled": true
+      "enabled": true,
+      "dependencyDashboardApproval": true
     },
     {
       "groupName": "Mastra client-js",
@@ -923,6 +1637,18 @@
       "matchFileNames": ["client-sdks/client-js/package.json"],
       "matchUpdateTypes": ["minor", "patch"],
       "matchDepTypes": ["dependencies", "devDependencies"],
+      "matchPackageNames": [
+        "*",
+        "!@microsoft/api-extractor",
+        "!tsup",
+        "!rollup",
+        "!eslint",
+        "!prettier",
+        "!typescript",
+        "!vitest",
+        "!@types/node",
+        "!dotenv"
+      ],
       "enabled": true
     },
     {
@@ -931,7 +1657,8 @@
       "matchFileNames": ["client-sdks/client-js/package.json"],
       "matchUpdateTypes": ["major"],
       "matchDepTypes": ["dependencies", "devDependencies"],
-      "enabled": true
+      "enabled": true,
+      "dependencyDashboardApproval": true
     },
     {
       "groupName": "Mastra firecrawl",
@@ -939,6 +1666,18 @@
       "matchFileNames": ["integrations/firecrawl/package.json"],
       "matchUpdateTypes": ["minor", "patch"],
       "matchDepTypes": ["dependencies", "devDependencies"],
+      "matchPackageNames": [
+        "*",
+        "!@microsoft/api-extractor",
+        "!tsup",
+        "!rollup",
+        "!eslint",
+        "!prettier",
+        "!typescript",
+        "!vitest",
+        "!@types/node",
+        "!dotenv"
+      ],
       "enabled": true
     },
     {
@@ -947,7 +1686,8 @@
       "matchFileNames": ["integrations/firecrawl/package.json"],
       "matchUpdateTypes": ["major"],
       "matchDepTypes": ["dependencies", "devDependencies"],
-      "enabled": true
+      "enabled": true,
+      "dependencyDashboardApproval": true
     },
     {
       "groupName": "Mastra github",
@@ -955,6 +1695,18 @@
       "matchFileNames": ["integrations/github/package.json"],
       "matchUpdateTypes": ["minor", "patch"],
       "matchDepTypes": ["dependencies", "devDependencies"],
+      "matchPackageNames": [
+        "*",
+        "!@microsoft/api-extractor",
+        "!tsup",
+        "!rollup",
+        "!eslint",
+        "!prettier",
+        "!typescript",
+        "!vitest",
+        "!@types/node",
+        "!dotenv"
+      ],
       "enabled": true
     },
     {
@@ -963,7 +1715,8 @@
       "matchFileNames": ["integrations/github/package.json"],
       "matchUpdateTypes": ["major"],
       "matchDepTypes": ["dependencies", "devDependencies"],
-      "enabled": true
+      "enabled": true,
+      "dependencyDashboardApproval": true
     },
     {
       "groupName": "Mastra mem0",
@@ -971,6 +1724,18 @@
       "matchFileNames": ["integrations/mem0/package.json"],
       "matchUpdateTypes": ["minor", "patch"],
       "matchDepTypes": ["dependencies", "devDependencies"],
+      "matchPackageNames": [
+        "*",
+        "!@microsoft/api-extractor",
+        "!tsup",
+        "!rollup",
+        "!eslint",
+        "!prettier",
+        "!typescript",
+        "!vitest",
+        "!@types/node",
+        "!dotenv"
+      ],
       "enabled": true
     },
     {
@@ -979,7 +1744,8 @@
       "matchFileNames": ["integrations/mem0/package.json"],
       "matchUpdateTypes": ["major"],
       "matchDepTypes": ["dependencies", "devDependencies"],
-      "enabled": true
+      "enabled": true,
+      "dependencyDashboardApproval": true
     },
     {
       "groupName": "Mastra ragie",
@@ -987,6 +1753,18 @@
       "matchFileNames": ["integrations/ragie/package.json"],
       "matchUpdateTypes": ["minor", "patch"],
       "matchDepTypes": ["dependencies", "devDependencies"],
+      "matchPackageNames": [
+        "*",
+        "!@microsoft/api-extractor",
+        "!tsup",
+        "!rollup",
+        "!eslint",
+        "!prettier",
+        "!typescript",
+        "!vitest",
+        "!@types/node",
+        "!dotenv"
+      ],
       "enabled": true
     },
     {
@@ -995,7 +1773,8 @@
       "matchFileNames": ["integrations/ragie/package.json"],
       "matchUpdateTypes": ["major"],
       "matchDepTypes": ["dependencies", "devDependencies"],
-      "enabled": true
+      "enabled": true,
+      "dependencyDashboardApproval": true
     },
     {
       "groupName": "Mastra playground",
@@ -1003,6 +1782,18 @@
       "matchFileNames": ["packages/cli/src/playground/package.json"],
       "matchUpdateTypes": ["minor", "patch"],
       "matchDepTypes": ["dependencies", "devDependencies"],
+      "matchPackageNames": [
+        "*",
+        "!@microsoft/api-extractor",
+        "!tsup",
+        "!rollup",
+        "!eslint",
+        "!prettier",
+        "!typescript",
+        "!vitest",
+        "!@types/node",
+        "!dotenv"
+      ],
       "enabled": true
     },
     {
@@ -1011,7 +1802,8 @@
       "matchFileNames": ["packages/cli/src/playground/package.json"],
       "matchUpdateTypes": ["major"],
       "matchDepTypes": ["dependencies", "devDependencies"],
-      "enabled": true
+      "enabled": true,
+      "dependencyDashboardApproval": true
     },
     {
       "groupName": "@internal/lint",
@@ -1019,6 +1811,18 @@
       "matchFileNames": ["packages/_config/package.json"],
       "matchUpdateTypes": ["minor", "patch"],
       "matchDepTypes": ["dependencies", "devDependencies"],
+      "matchPackageNames": [
+        "*",
+        "!@microsoft/api-extractor",
+        "!tsup",
+        "!rollup",
+        "!eslint",
+        "!prettier",
+        "!typescript",
+        "!vitest",
+        "!@types/node",
+        "!dotenv"
+      ],
       "enabled": true
     },
     {
@@ -1027,7 +1831,8 @@
       "matchFileNames": ["packages/_config/package.json"],
       "matchUpdateTypes": ["major"],
       "matchDepTypes": ["dependencies", "devDependencies"],
-      "enabled": true
+      "enabled": true,
+      "dependencyDashboardApproval": true
     },
     {
       "groupName": "mastra",
@@ -1035,6 +1840,18 @@
       "matchFileNames": ["packages/cli/package.json"],
       "matchUpdateTypes": ["minor", "patch"],
       "matchDepTypes": ["dependencies", "devDependencies"],
+      "matchPackageNames": [
+        "*",
+        "!@microsoft/api-extractor",
+        "!tsup",
+        "!rollup",
+        "!eslint",
+        "!prettier",
+        "!typescript",
+        "!vitest",
+        "!@types/node",
+        "!dotenv"
+      ],
       "enabled": true
     },
     {
@@ -1043,7 +1860,8 @@
       "matchFileNames": ["packages/cli/package.json"],
       "matchUpdateTypes": ["major"],
       "matchDepTypes": ["dependencies", "devDependencies"],
-      "enabled": true
+      "enabled": true,
+      "dependencyDashboardApproval": true
     },
     {
       "groupName": "Mastra cloud",
@@ -1051,6 +1869,18 @@
       "matchFileNames": ["packages/cloud/package.json"],
       "matchUpdateTypes": ["minor", "patch"],
       "matchDepTypes": ["dependencies", "devDependencies"],
+      "matchPackageNames": [
+        "*",
+        "!@microsoft/api-extractor",
+        "!tsup",
+        "!rollup",
+        "!eslint",
+        "!prettier",
+        "!typescript",
+        "!vitest",
+        "!@types/node",
+        "!dotenv"
+      ],
       "enabled": true
     },
     {
@@ -1059,7 +1889,8 @@
       "matchFileNames": ["packages/cloud/package.json"],
       "matchUpdateTypes": ["major"],
       "matchDepTypes": ["dependencies", "devDependencies"],
-      "enabled": true
+      "enabled": true,
+      "dependencyDashboardApproval": true
     },
     {
       "groupName": "Mastra core",
@@ -1067,6 +1898,18 @@
       "matchFileNames": ["packages/core/package.json"],
       "matchUpdateTypes": ["minor", "patch"],
       "matchDepTypes": ["dependencies", "devDependencies"],
+      "matchPackageNames": [
+        "*",
+        "!@microsoft/api-extractor",
+        "!tsup",
+        "!rollup",
+        "!eslint",
+        "!prettier",
+        "!typescript",
+        "!vitest",
+        "!@types/node",
+        "!dotenv"
+      ],
       "enabled": true
     },
     {
@@ -1075,7 +1918,8 @@
       "matchFileNames": ["packages/core/package.json"],
       "matchUpdateTypes": ["major"],
       "matchDepTypes": ["dependencies", "devDependencies"],
-      "enabled": true
+      "enabled": true,
+      "dependencyDashboardApproval": true
     },
     {
       "groupName": "create-mastra",
@@ -1083,6 +1927,18 @@
       "matchFileNames": ["packages/create-mastra/package.json"],
       "matchUpdateTypes": ["minor", "patch"],
       "matchDepTypes": ["dependencies", "devDependencies"],
+      "matchPackageNames": [
+        "*",
+        "!@microsoft/api-extractor",
+        "!tsup",
+        "!rollup",
+        "!eslint",
+        "!prettier",
+        "!typescript",
+        "!vitest",
+        "!@types/node",
+        "!dotenv"
+      ],
       "enabled": true
     },
     {
@@ -1091,7 +1947,8 @@
       "matchFileNames": ["packages/create-mastra/package.json"],
       "matchUpdateTypes": ["major"],
       "matchDepTypes": ["dependencies", "devDependencies"],
-      "enabled": true
+      "enabled": true,
+      "dependencyDashboardApproval": true
     },
     {
       "groupName": "Mastra deployer",
@@ -1099,6 +1956,18 @@
       "matchFileNames": ["packages/deployer/package.json"],
       "matchUpdateTypes": ["minor", "patch"],
       "matchDepTypes": ["dependencies", "devDependencies"],
+      "matchPackageNames": [
+        "*",
+        "!@microsoft/api-extractor",
+        "!tsup",
+        "!rollup",
+        "!eslint",
+        "!prettier",
+        "!typescript",
+        "!vitest",
+        "!@types/node",
+        "!dotenv"
+      ],
       "enabled": true
     },
     {
@@ -1107,7 +1976,8 @@
       "matchFileNames": ["packages/deployer/package.json"],
       "matchUpdateTypes": ["major"],
       "matchDepTypes": ["dependencies", "devDependencies"],
-      "enabled": true
+      "enabled": true,
+      "dependencyDashboardApproval": true
     },
     {
       "groupName": "Mastra evals",
@@ -1115,6 +1985,18 @@
       "matchFileNames": ["packages/evals/package.json"],
       "matchUpdateTypes": ["minor", "patch"],
       "matchDepTypes": ["dependencies", "devDependencies"],
+      "matchPackageNames": [
+        "*",
+        "!@microsoft/api-extractor",
+        "!tsup",
+        "!rollup",
+        "!eslint",
+        "!prettier",
+        "!typescript",
+        "!vitest",
+        "!@types/node",
+        "!dotenv"
+      ],
       "enabled": true
     },
     {
@@ -1123,7 +2005,8 @@
       "matchFileNames": ["packages/evals/package.json"],
       "matchUpdateTypes": ["major"],
       "matchDepTypes": ["dependencies", "devDependencies"],
-      "enabled": true
+      "enabled": true,
+      "dependencyDashboardApproval": true
     },
     {
       "groupName": "Mastra loggers",
@@ -1131,6 +2014,18 @@
       "matchFileNames": ["packages/loggers/package.json"],
       "matchUpdateTypes": ["minor", "patch"],
       "matchDepTypes": ["dependencies", "devDependencies"],
+      "matchPackageNames": [
+        "*",
+        "!@microsoft/api-extractor",
+        "!tsup",
+        "!rollup",
+        "!eslint",
+        "!prettier",
+        "!typescript",
+        "!vitest",
+        "!@types/node",
+        "!dotenv"
+      ],
       "enabled": true
     },
     {
@@ -1139,7 +2034,8 @@
       "matchFileNames": ["packages/loggers/package.json"],
       "matchUpdateTypes": ["major"],
       "matchDepTypes": ["dependencies", "devDependencies"],
-      "enabled": true
+      "enabled": true,
+      "dependencyDashboardApproval": true
     },
     {
       "groupName": "Mastra mcp",
@@ -1147,6 +2043,18 @@
       "matchFileNames": ["packages/mcp/package.json"],
       "matchUpdateTypes": ["minor", "patch"],
       "matchDepTypes": ["dependencies", "devDependencies"],
+      "matchPackageNames": [
+        "*",
+        "!@microsoft/api-extractor",
+        "!tsup",
+        "!rollup",
+        "!eslint",
+        "!prettier",
+        "!typescript",
+        "!vitest",
+        "!@types/node",
+        "!dotenv"
+      ],
       "enabled": true
     },
     {
@@ -1155,7 +2063,8 @@
       "matchFileNames": ["packages/mcp/package.json"],
       "matchUpdateTypes": ["major"],
       "matchDepTypes": ["dependencies", "devDependencies"],
-      "enabled": true
+      "enabled": true,
+      "dependencyDashboardApproval": true
     },
     {
       "groupName": "Mastra mcp-docs-server",
@@ -1163,6 +2072,18 @@
       "matchFileNames": ["packages/mcp-docs-server/package.json"],
       "matchUpdateTypes": ["minor", "patch"],
       "matchDepTypes": ["dependencies", "devDependencies"],
+      "matchPackageNames": [
+        "*",
+        "!@microsoft/api-extractor",
+        "!tsup",
+        "!rollup",
+        "!eslint",
+        "!prettier",
+        "!typescript",
+        "!vitest",
+        "!@types/node",
+        "!dotenv"
+      ],
       "enabled": true
     },
     {
@@ -1171,7 +2092,8 @@
       "matchFileNames": ["packages/mcp-docs-server/package.json"],
       "matchUpdateTypes": ["major"],
       "matchDepTypes": ["dependencies", "devDependencies"],
-      "enabled": true
+      "enabled": true,
+      "dependencyDashboardApproval": true
     },
     {
       "groupName": "Mastra mcp-registry-registry",
@@ -1179,6 +2101,18 @@
       "matchFileNames": ["packages/mcp-registry-registry/package.json"],
       "matchUpdateTypes": ["minor", "patch"],
       "matchDepTypes": ["dependencies", "devDependencies"],
+      "matchPackageNames": [
+        "*",
+        "!@microsoft/api-extractor",
+        "!tsup",
+        "!rollup",
+        "!eslint",
+        "!prettier",
+        "!typescript",
+        "!vitest",
+        "!@types/node",
+        "!dotenv"
+      ],
       "enabled": true
     },
     {
@@ -1187,7 +2121,8 @@
       "matchFileNames": ["packages/mcp-registry-registry/package.json"],
       "matchUpdateTypes": ["major"],
       "matchDepTypes": ["dependencies", "devDependencies"],
-      "enabled": true
+      "enabled": true,
+      "dependencyDashboardApproval": true
     },
     {
       "groupName": "Mastra memory",
@@ -1195,6 +2130,18 @@
       "matchFileNames": ["packages/memory/package.json"],
       "matchUpdateTypes": ["minor", "patch"],
       "matchDepTypes": ["dependencies", "devDependencies"],
+      "matchPackageNames": [
+        "*",
+        "!@microsoft/api-extractor",
+        "!tsup",
+        "!rollup",
+        "!eslint",
+        "!prettier",
+        "!typescript",
+        "!vitest",
+        "!@types/node",
+        "!dotenv"
+      ],
       "enabled": true
     },
     {
@@ -1203,7 +2150,8 @@
       "matchFileNames": ["packages/memory/package.json"],
       "matchUpdateTypes": ["major"],
       "matchDepTypes": ["dependencies", "devDependencies"],
-      "enabled": true
+      "enabled": true,
+      "dependencyDashboardApproval": true
     },
     {
       "groupName": "Mastra playground-ui",
@@ -1211,6 +2159,18 @@
       "matchFileNames": ["packages/playground-ui/package.json"],
       "matchUpdateTypes": ["minor", "patch"],
       "matchDepTypes": ["dependencies", "devDependencies"],
+      "matchPackageNames": [
+        "*",
+        "!@microsoft/api-extractor",
+        "!tsup",
+        "!rollup",
+        "!eslint",
+        "!prettier",
+        "!typescript",
+        "!vitest",
+        "!@types/node",
+        "!dotenv"
+      ],
       "enabled": true
     },
     {
@@ -1219,7 +2179,8 @@
       "matchFileNames": ["packages/playground-ui/package.json"],
       "matchUpdateTypes": ["major"],
       "matchDepTypes": ["dependencies", "devDependencies"],
-      "enabled": true
+      "enabled": true,
+      "dependencyDashboardApproval": true
     },
     {
       "groupName": "Mastra rag",
@@ -1227,6 +2188,18 @@
       "matchFileNames": ["packages/rag/package.json"],
       "matchUpdateTypes": ["minor", "patch"],
       "matchDepTypes": ["dependencies", "devDependencies"],
+      "matchPackageNames": [
+        "*",
+        "!@microsoft/api-extractor",
+        "!tsup",
+        "!rollup",
+        "!eslint",
+        "!prettier",
+        "!typescript",
+        "!vitest",
+        "!@types/node",
+        "!dotenv"
+      ],
       "enabled": true
     },
     {
@@ -1235,7 +2208,8 @@
       "matchFileNames": ["packages/rag/package.json"],
       "matchUpdateTypes": ["major"],
       "matchDepTypes": ["dependencies", "devDependencies"],
-      "enabled": true
+      "enabled": true,
+      "dependencyDashboardApproval": true
     },
     {
       "groupName": "Mastra server",
@@ -1243,6 +2217,18 @@
       "matchFileNames": ["packages/server/package.json"],
       "matchUpdateTypes": ["minor", "patch"],
       "matchDepTypes": ["dependencies", "devDependencies"],
+      "matchPackageNames": [
+        "*",
+        "!@microsoft/api-extractor",
+        "!tsup",
+        "!rollup",
+        "!eslint",
+        "!prettier",
+        "!typescript",
+        "!vitest",
+        "!@types/node",
+        "!dotenv"
+      ],
       "enabled": true
     },
     {
@@ -1251,7 +2237,8 @@
       "matchFileNames": ["packages/server/package.json"],
       "matchUpdateTypes": ["major"],
       "matchDepTypes": ["dependencies", "devDependencies"],
-      "enabled": true
+      "enabled": true,
+      "dependencyDashboardApproval": true
     },
     {
       "groupName": "Mastra cloud",
@@ -1259,6 +2246,18 @@
       "matchFileNames": ["packages/cloud/package.json"],
       "matchUpdateTypes": ["minor", "patch"],
       "matchDepTypes": ["dependencies", "devDependencies"],
+      "matchPackageNames": [
+        "*",
+        "!@microsoft/api-extractor",
+        "!tsup",
+        "!rollup",
+        "!eslint",
+        "!prettier",
+        "!typescript",
+        "!vitest",
+        "!@types/node",
+        "!dotenv"
+      ],
       "enabled": true
     },
     {
@@ -1267,7 +2266,8 @@
       "matchFileNames": ["packages/cloud/package.json"],
       "matchUpdateTypes": ["major"],
       "matchDepTypes": ["dependencies", "devDependencies"],
-      "enabled": true
+      "enabled": true,
+      "dependencyDashboardApproval": true
     },
     {
       "groupName": "weather-agent",
@@ -1275,6 +2275,18 @@
       "matchFileNames": ["templates/weather-agent/package.json"],
       "matchUpdateTypes": ["minor", "patch"],
       "matchDepTypes": ["dependencies", "devDependencies"],
+      "matchPackageNames": [
+        "*",
+        "!@microsoft/api-extractor",
+        "!tsup",
+        "!rollup",
+        "!eslint",
+        "!prettier",
+        "!typescript",
+        "!vitest",
+        "!@types/node",
+        "!dotenv"
+      ],
       "enabled": true
     },
     {
@@ -1283,7 +2295,8 @@
       "matchFileNames": ["templates/weather-agent/package.json"],
       "matchUpdateTypes": ["major"],
       "matchDepTypes": ["dependencies", "devDependencies"],
-      "enabled": true
+      "enabled": true,
+      "dependencyDashboardApproval": true
     }
   ]
 }

@@ -1,5 +1,18 @@
 # create-mastra
 
+## 0.3.0-alpha.4
+
+### Patch Changes
+
+- 25d3c39: build logs for how to load instrumentation for build output
+
+## 0.3.0-alpha.3
+
+### Patch Changes
+
+- 3b74a74: add badge for failure / successful traces
+- 5a66ced: add click on trace row
+
 ## 0.3.0-alpha.2
 
 ### Patch Changes

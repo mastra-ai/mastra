@@ -28,17 +28,15 @@ Mastraは異なるストレージプロバイダーを提供しますが、そ�
 
 ## 設定
 
-Mastraはデフォルトのストレージオプションで設定できます:
+Mastraはデフォルトのストレージオプションで設定できます：
 
 ```typescript copy
 import { Mastra } from "@mastra/core/mastra";
-import { DefaultStorage } from "@mastra/core/storage/libsql";
+import { LibSQLStore } from "@mastra/libsql";
 
 const mastra = new Mastra({
-  storage: new DefaultStorage({
-    config: {
-      url: "file:.mastra/mastra.db",
-    },
+  storage: new LibSQLStore({
+    url: "file:./mastra.db",
   }),
 });
 ```

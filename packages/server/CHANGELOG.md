@@ -1,5 +1,28 @@
 # @mastra/deployer
 
+## 2.0.1-alpha.6
+
+### Patch Changes
+
+- Updated dependencies [c23a81c]
+  - @mastra/core@0.9.1-alpha.6
+
+## 2.0.1-alpha.5
+
+### Patch Changes
+
+- 3e7b69d: Dynamic agent props
+- Updated dependencies [3e7b69d]
+  - @mastra/core@0.9.1-alpha.5
+
+## 2.0.1-alpha.4
+
+### Patch Changes
+
+- Updated dependencies [e4943b8]
+- Updated dependencies [479f490]
+  - @mastra/core@0.9.1-alpha.4
+
 ## 2.0.1-alpha.3
 
 ### Patch Changes

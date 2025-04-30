@@ -1,5 +1,29 @@
 # @mastra/voice-sarvam
 
+## 0.1.10-alpha.6
+
+### Patch Changes
+
+- Updated dependencies [c23a81c]
+  - @mastra/core@0.9.1-alpha.6
+
+## 0.1.10-alpha.5
+
+### Patch Changes
+
+- Updated dependencies [3e7b69d]
+  - @mastra/core@0.9.1-alpha.5
+
+## 0.1.10-alpha.4
+
+### Patch Changes
+
+- 7ee5fc7: dependencies updates:
+  - Updated dependency [`zod@^3.24.3` ↗︎](https://www.npmjs.com/package/zod/v/3.24.3) (from `^3.24.2`, in `dependencies`)
+- Updated dependencies [e4943b8]
+- Updated dependencies [479f490]
+  - @mastra/core@0.9.1-alpha.4
+
 ## 0.1.10-alpha.3
 
 ### Patch Changes

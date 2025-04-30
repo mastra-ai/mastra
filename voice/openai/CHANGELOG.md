@@ -1,5 +1,27 @@
 # @mastra/voice-openai
 
+## 0.1.16-alpha.6
+
+### Patch Changes
+
+- Updated dependencies [c23a81c]
+  - @mastra/core@0.9.1-alpha.6
+
+## 0.1.16-alpha.5
+
+### Patch Changes
+
+- Updated dependencies [3e7b69d]
+  - @mastra/core@0.9.1-alpha.5
+
+## 0.1.16-alpha.4
+
+### Patch Changes
+
+- Updated dependencies [e4943b8]
+- Updated dependencies [479f490]
+  - @mastra/core@0.9.1-alpha.4
+
 ## 0.1.16-alpha.3
 
 ### Patch Changes
