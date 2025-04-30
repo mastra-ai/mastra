@@ -28,7 +28,7 @@ export const AgentChat = ({
       chatWithGenerate={chatWithGenerate}
     >
       <div className="h-full pb-4">
-        <Thread />
+        <Thread agentName={agentName ?? ''} />
       </div>
     </MastraRuntimeProvider>
   );
