@@ -2,21 +2,63 @@
 import { z } from 'zod';
 import { zodToJsonSchema } from 'zod-to-json-schema';
 import { createOpenAI } from '@ai-sdk/openai';
-import { Agent } from '@mastra/core';
+import { Agent, MastraLanguageModel } from '@mastra/core/agent';
 import { createTool } from '@mastra/core/tools';
 import { allParsersSchema, baseAllParsersSchema } from './allParsersSchema.js';
 import * as fs from 'fs/promises';
 import { config } from 'dotenv'; // Assuming dotenv is used for API keys
+import chalk from 'chalk';
 
 // Load environment variables
 config();
 
+type Result = {
+  testId: string;
+  modelName: string;
+  testName: string;
+  modelProvider: string;
+  status: string;
+  error: any;
+  receivedContext: any;
+};
+
+/**
+ * Generate a summary of the test results
+ */
+function generateSummary(results: Result[]) {
+  console.log(chalk.blue('\n=== RAG Agent Test Summary ==='));
+  console.log('Total Models:', modelsToTest.length);
+
+  // Log instruction sets
+  console.log(chalk.yellow('\nInstruction Sets:'));
+
+  // Test statistics
+  console.log(chalk.yellow('\nTest Statistics:'));
+  console.log(chalk.yellow('Total tests run:'), results.length);
+  console.log(chalk.green('Successful tests (tool was used):'), results.filter(r => r.status === 'success').length);
+  console.log(
+    chalk.red('Failed tests (tool was not used or errored out):'),
+    results.filter(r => r.status !== 'success').length,
+  );
+
+  console.log(chalk.blue('\n=== Detailed Results ==='));
+  console.log('| Company | Model | TestName | Status | ErrorMessage |');
+  console.log('| ------- | ----- | ------ | ----- | ------ |');
+
+  for (const result of results) {
+    const status = result.status === 'success' ? chalk.green(result.status) : chalk.red(result.status);
+    console.log(
+      `| ${result.modelProvider} | ${result.modelName} | ${result.testName} | ${status} | ${result.error ? chalk.red(result.error) : ''} |`,
+    );
+  }
+}
+
 // Configure models to test
 const openai = createOpenAI({ apiKey: process.env.OPENAI_API_KEY });
-const modelsToTest = [
-  { name: 'openai/gpt-4o', instance: openai('gpt-4o') },
+const modelsToTest: { name: string; instance: MastraLanguageModel }[] = [
+  // { name: 'openai/gpt-4o', instance: openai('gpt-4o') as unknown as MastraLanguageModel },
   // Add other models here, e.g.:
-  // { name: 'openai/gpt-3.5-turbo-0125', instance: openai('gpt-3.5-turbo-0125') },
+  { name: 'openai/o3-mini', instance: openai('o3-mini') as unknown as MastraLanguageModel },
   // { name: 'anthropic/claude-3-haiku-20240307', instance: anthropic('claude-3-haiku-20240307') }, // Assuming anthropic is configured
 ];
 
@@ -45,83 +87,100 @@ const testTools = Object.keys(originalShape).map(key => {
   });
 });
 
-async function runTests() {
-  const results = [];
+async function runSingleTest(
+  modelInfo: { name: string; instance: MastraLanguageModel },
+  testTool: ReturnType<typeof createTool>,
+  testId: string,
+): Promise<Result> {
+  const toolName = testTool.id;
+  console.log(`Testing ${modelInfo.name} with tool: ${toolName}`);
 
-  for (const modelInfo of modelsToTest) {
-    console.log(`\nTesting model: ${modelInfo.name} ✨`);
+  try {
+    const agent = new Agent({
+      name: `test-agent-${modelInfo.name.replace(/[^a-zA-Z0-9]/g, '-')}`,
+      instructions: `You are a test agent. Your task is to call the tool named '${toolName}' with any valid arguments.`,
+      model: modelInfo.instance,
+      tools: { [toolName]: testTool },
+    });
 
-    for (const testTool of testTools) {
-      const toolName = testTool.id;
-      const inputSchema = testTool.inputSchema;
-      // Convert Zod to JSON schema using the available function
-      const schemaJson = zodToJsonSchema(inputSchema, { target: 'openApi3' });
+    const response = await agent.generate(`Please call the tool named '${toolName}'.`, {
+      toolChoice: 'required',
+      maxSteps: 1,
+      temperature: 1,
+    });
 
-      console.log(`  Testing tool: ${toolName}`);
+    const toolCall = response.toolCalls.find(tc => tc.toolName === toolName);
+    const toolResult = response.toolResults.find(tr => tr.toolCallId === toolCall?.toolCallId);
 
-      try {
-        const agent = new Agent({
-          name: `test-agent-${modelInfo.name.replace(/[^a-zA-Z0-9]/g, '-')}`, // Sanitize name for agent ID
-          instructions: `You are a test agent. Your task is to call the tool named '${toolName}' with any valid arguments.`,
-          model: modelInfo.instance,
-          tools: { [toolName]: testTool },
-        });
-
-        // Prompt the agent to call the tool
-        const response = await agent.generate(`Please call the tool named '${toolName}'.`, {
-          toolChoice: 'required', // Force tool call
-          maxSteps: 1, // Only need one step to call the tool
-        });
-
-        console.log('Agent Response:', JSON.stringify(response, null, 2)); // Log the full response
-
-        // Analyze the response
-        // Find the tool call and its result
-        const toolCall = response.toolCalls.find(tc => tc.toolName === toolName);
-        const toolResult = response.toolResults.find(tr => tr.toolCallId === toolCall?.id);
-
-        if (toolResult && toolResult.result?.success) {
-          console.log(`    ✅ Success`);
-          results.push({
-            modelName: modelInfo.name,
-            testName: toolName,
-            schemaJson: schemaJson,
-            result: 'success',
-            error: null,
-            receivedContext: toolResult.result.receivedContext, // Capture received args
-          });
-        } else {
-          console.log(`    ❌ Failed`);
-          // Capture error details
-          const error = toolResult?.result?.error || response.text || 'Tool call failed or result missing';
-          results.push({
-            modelName: modelInfo.name,
-            testName: toolName,
-            schemaJson: schemaJson,
-            result: 'failure',
-            error: error,
-            receivedContext: toolResult?.result?.receivedContext || null,
-          });
-        }
-      } catch (e: any) {
-        console.log(`    ❌ Error during generation: ${e.message}`);
-        results.push({
-          modelName: modelInfo.name,
-          testName: toolName,
-          schemaJson: schemaJson,
-          result: 'error',
-          error: e.message,
-          receivedContext: null,
-        });
-      }
+    if (toolResult && toolResult.result?.success) {
+      return {
+        modelName: modelInfo.name,
+        modelProvider: modelInfo.instance.provider,
+        testName: toolName,
+        status: 'success',
+        error: null,
+        receivedContext: toolResult.result.receivedContext,
+        testId,
+      };
+    } else {
+      const error = toolResult?.result?.error || response.text || 'Tool call failed or result missing';
+      return {
+        modelName: modelInfo.name,
+        testName: toolName,
+        modelProvider: modelInfo.instance.provider,
+        status: 'failure',
+        error: error,
+        receivedContext: toolResult?.result?.receivedContext || null,
+        testId,
+      };
     }
+  } catch (e: any) {
+    return {
+      modelName: modelInfo.name,
+      testName: toolName,
+      modelProvider: modelInfo.instance.provider,
+      status: 'error',
+      error: e.message,
+      receivedContext: null,
+      testId,
+    };
+  }
+}
+
+async function runTests() {
+  const testId = new Date().toISOString();
+
+  // Create all test combinations
+  const testCombinations = modelsToTest.flatMap(modelInfo =>
+    testTools.map(testTool => ({
+      modelInfo,
+      testTool,
+      testId: crypto.randomUUID(),
+    })),
+  );
+
+  // Run all tests in parallel with concurrency limit
+  const CONCURRENCY_LIMIT = 100; // Adjust based on your needs
+  const results: Result[] = [];
+
+  for (let i = 0; i < testCombinations.length; i += CONCURRENCY_LIMIT) {
+    const batch = testCombinations.slice(i, i + CONCURRENCY_LIMIT);
+    console.log(
+      `Running batch ${i / CONCURRENCY_LIMIT + 1} of ${Math.ceil(testCombinations.length / CONCURRENCY_LIMIT)}`,
+    );
+
+    const batchResults = await Promise.all(
+      batch.map(({ modelInfo, testTool, testId }) => runSingleTest(modelInfo, testTool, testId)),
+    );
+
+    results.push(...batchResults);
   }
 
   // Write results to JSON file
   const outputPath = 'tool-schema-test-output.json';
+  generateSummary(results);
   await fs.writeFile(outputPath, JSON.stringify(results, null, 2));
-  console.log(`\nTest results written to ${outputPath} 📝`);
+  console.log(`\nTest ${testId} results written to ${outputPath} 📝`);
 }
 
-runTests();
-
+runTests().catch(console.error);

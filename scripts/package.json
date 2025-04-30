@@ -8,10 +8,11 @@
   },
   "dependencies": {
     "@ai-sdk/openai": "^0.0.24",
+    "@mastra/core": "workspace:^",
+    "chalk": "^5.4.1",
     "dotenv": "^16.4.5",
     "zod": "^3.23.8",
-    "zod-to-json-schema": "^3.23.0",
-    "@mastra/core": "workspace:^"
+    "zod-to-json-schema": "^3.23.0"
   },
   "devDependencies": {
     "tsx": "^4.16.2"

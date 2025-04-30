@@ -196,6 +196,8 @@ export class MastraLLM extends MastraLLMBase {
       }
     }
 
+    console.log({ temperature });
+
     return await generateText({
       messages,
       ...argsForExecute,
