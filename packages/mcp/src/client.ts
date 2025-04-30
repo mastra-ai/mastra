@@ -103,7 +103,6 @@ export class InternalMastraMCPClient extends MastraBase {
   private readonly timeout: number;
   private logHandler?: LogHandler;
   private enableServerLogs?: boolean;
-  private static hasWarned = false;
   private serverConfig: MastraMCPServerDefinition;
   private transport?: Transport;
 
