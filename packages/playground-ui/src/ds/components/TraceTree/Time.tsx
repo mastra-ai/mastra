@@ -24,7 +24,7 @@ export const Time = ({ durationMs, tokenCount, variant, progressPercent }: TimeP
       </div>
       <div className="flex items-center gap-4 pt-0.5">
         <Txt variant="ui-sm" className="text-icon2 font-medium">
-          {durationMs}ms
+          {Math.round(durationMs)}ms
         </Txt>
         {tokenCount && (
           <Txt variant="ui-sm" className="text-icon2 font-medium">
