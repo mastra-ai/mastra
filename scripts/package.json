@@ -7,7 +7,7 @@
     "test-tool-schemas": "tsx test-tool-schemas.ts"
   },
   "dependencies": {
-    "@ai-sdk/openai": "^0.0.24",
+    "@ai-sdk/openai": "^1.3.21",
     "@mastra/core": "workspace:^",
     "chalk": "^5.4.1",
     "dotenv": "^16.4.5",
