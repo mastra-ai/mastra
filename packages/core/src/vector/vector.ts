@@ -32,8 +32,9 @@ export abstract class MastraVector extends MastraBase {
     }
 
     this.logger.warn(
-      `Deprecation Warning: Passing individual arguments to ${method}() is deprecated. ` +
-        'Please use an object parameter instead.',
+      `Deprecation Warning: Passing individual arguments to ${method}() is deprecated.
+      Please use an object parameter instead.
+      Individual arguments will be removed on May 20th.`,
     );
 
     const baseKeys = this.baseKeys[method as keyof typeof this.baseKeys] || [];
