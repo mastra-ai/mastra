@@ -168,7 +168,8 @@ export class Workflow extends BaseResource {
               }
             }
           }
-        } catch (error) {
+          //ts-ignore
+        } catch {
           // Silently ignore parsing errors to maintain stream processing
           // This allows the stream to continue even if one record is malformed
         }
