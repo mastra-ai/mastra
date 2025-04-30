@@ -5,10 +5,9 @@ import { Skeleton } from '@/components/ui/skeleton';
 
 import { useAgent } from '@/hooks/use-agents';
 
-function AgentTracesInner() {
+function AgentTracesContent() {
   const { agentId } = useParams();
   const { agent, isLoading: isAgentLoading } = useAgent(agentId!);
-
   const { traces, firstCallLoading, error } = useTraces(agent?.name || '', '');
 
   if (isAgentLoading) {
@@ -25,10 +24,9 @@ function AgentTracesInner() {
 }
 
 function AgentTracesPage() {
-  // Wrap the inner component with TraceProvider to provide context for useTraces
   return (
     <TraceProvider>
-      <AgentTracesInner />
+      <AgentTracesContent />
     </TraceProvider>
   );
 }
