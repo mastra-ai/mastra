@@ -55,6 +55,9 @@ export type StreamParams<T extends JSONSchema7 | ZodSchema | undefined = undefin
 
 export interface GetEvalsByAgentIdResponse extends GetAgentResponse {
   evals: any[];
+  instructions: string;
+  name: string;
+  id: string;
 }
 
 export interface GetToolResponse {
