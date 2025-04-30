@@ -84,7 +84,7 @@ export function SpanDetail() {
             </Badge>
           ) : (
             <Badge variant="error" icon={<X />}>
-              Failed in {Math.round(span.duration / 1000)}s
+              Failed in {Math.round(span.duration / 1000)}ms
             </Badge>
           )}
         </div>
