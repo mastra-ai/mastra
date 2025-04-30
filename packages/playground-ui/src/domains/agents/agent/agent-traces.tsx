@@ -28,7 +28,7 @@ function AgentTracesInner({ agentName, baseUrl, className }: AgentTracesProps) {
 
   return (
     <div className={clsx('h-full relative overflow-hidden flex', className)}>
-      <div className={clsx('h-full overflow-y-scroll', open ? 'w-auto' : 'w-full')}>
+      <div className="h-full overflow-y-scroll w-full">
         <TracesTable traces={traces} isLoading={firstCallLoading} error={error} />
       </div>
 
