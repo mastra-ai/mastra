@@ -20,10 +20,10 @@ describe('create mastra', () => {
       cleanup = await setupRegistry(fixturePath, port);
 
       process.env.npm_config_registry = `http://localhost:${port}/`;
-      await runCreateMastra(fixturePath, 'pnpm', port);
+      await runCreateMastra(fixturePath, 'pnpm');
       chdir(join(fixturePath, 'project'));
     },
-    15 * 60 * 1000,
+    10 * 60 * 1000,
   );
 
   afterAll(async () => {
@@ -47,10 +47,13 @@ describe('create mastra', () => {
       proc = execa('pnpm', ['dev', '--port', port.toString()], {
         cwd: join(fixturePath, 'project'),
       });
-
+      proc!.stderr?.on('data', data => {
+        console.error(data?.toString());
+      });
       await new Promise<void>(resolve => {
         console.log('waiting for server to start');
         proc!.stdout?.on('data', data => {
+          console.log(data?.toString());
           if (data?.toString()?.includes(`http://localhost:${port}`)) {
             resolve();
           }

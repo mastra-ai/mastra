@@ -13,5 +13,5 @@ const tasa = localFont({
 export const fonts = {
   geistMono,
   inter,
-  tasa
+  tasa,
 };

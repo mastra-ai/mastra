@@ -60,6 +60,9 @@ describe('Working Memory Tests', () => {
           topK: 3,
           messageRange: 2,
         },
+        threads: {
+          generateTitle: false,
+        },
       },
     });
 
@@ -319,6 +322,9 @@ describe('Working Memory Tests', () => {
           topK: 3,
           messageRange: 2,
         },
+        threads: {
+          generateTitle: false,
+        },
       },
     });
 
@@ -369,6 +375,10 @@ describe('Working Memory Tests', () => {
           use: 'tool-call',
         },
         lastMessages: 10,
+        threads: {
+          generateTitle: false,
+        },
+        semanticRecall: true,
       },
     });
 
@@ -417,6 +427,10 @@ describe('Working Memory Tests', () => {
           use: 'text-stream',
         },
         lastMessages: 10,
+        threads: {
+          generateTitle: false,
+        },
+        semanticRecall: true,
       },
     });
 
@@ -462,6 +476,10 @@ describe('Working Memory Tests', () => {
           use: 'tool-call',
         },
         lastMessages: 5,
+        threads: {
+          generateTitle: false,
+        },
+        semanticRecall: true,
       },
     });
 
@@ -506,6 +524,10 @@ describe('Working Memory Tests', () => {
 `,
         },
         lastMessages: 5,
+        threads: {
+          generateTitle: false,
+        },
+        semanticRecall: true,
       },
     });
 

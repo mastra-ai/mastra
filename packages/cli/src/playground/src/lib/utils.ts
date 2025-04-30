@@ -13,7 +13,11 @@ interface ApplicationError extends Error {
 }
 
 export const fetcher = async (url: string, hideError?: boolean) => {
-  const res = await fetch(url);
+  const res = await fetch(url, {
+    headers: {
+      'x-mastra-dev-playground': 'true',
+    },
+  });
 
   if (!res.ok) {
     const error = new Error('An error occurred while fetching the data.') as ApplicationError;

@@ -79,6 +79,9 @@ export abstract class Bundler extends MastraBundler {
           license: 'ISC',
           dependencies: Object.fromEntries(dependenciesMap.entries()),
           ...(Object.keys(resolutions ?? {}).length > 0 && { resolutions }),
+          pnpm: {
+            neverBuiltDependencies: [],
+          },
         },
         null,
         2,
@@ -270,10 +273,7 @@ export abstract class Bundler extends MastraBundler {
       .filter(key => key.startsWith('tools/'))
       .map(key => `./${key}.mjs`);
 
-    await writeFile(
-      join(outputDirectory, this.outputDir, 'tools.mjs'),
-      `export const tools = ${JSON.stringify(toolsInputOptions)};`,
-    );
+    await writeFile(join(bundleLocation, 'tools.mjs'), `export const tools = ${JSON.stringify(toolsInputOptions)};`);
     this.logger.info('Bundling Mastra done');
 
     this.logger.info('Copying public files');

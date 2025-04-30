@@ -33,7 +33,7 @@ OPENAI_API_KEY=your_openai_api_key
 また、`@mastra/core`パッケージがインストールされていることを確認してください：
 
 ```bash npm2yarn copy
-npm install @mastra/core
+npm install @mastra/core@latest
 ```
 
 ### エージェントの登録
@@ -270,34 +270,8 @@ const stream = await myAgent.stream(
 );
 ```
 
-## 5. エージェントの実行
-
-Mastraは、エージェントをAPIの背後で実行するための`mastra dev`というCLIコマンドを提供しています。デフォルトでは、`src/mastra/agents`ディレクトリ内のファイルでエクスポートされたエージェントを探します。
-
-### サーバーの起動
-
-```bash
-mastra dev
-```
-
-これによりサーバーが起動し、エージェントは`http://localhost:4111/api/agents/myAgent/generate`で利用可能になります。
-
-### エージェントとの対話
-
-コマンドラインから`curl`を使用してエージェントと対話できます：
-
-```bash
-curl -X POST http://localhost:4111/api/agents/myAgent/generate \
-  -H "Content-Type: application/json" \
-  -d '{
-    "messages": [
-      { "role": "user", "content": "Hello, how can you assist me today?" }
-    ]
-  }'
-```
-
 ## 次のステップ
 
 - [エージェントメモリ](./agent-memory.mdx)ガイドでエージェントメモリについて学びましょう。
 - [エージェントツール](./adding-tools.mdx)ガイドでエージェントツールについて学びましょう。
-- [シェフ・ミシェル](../guides/chef-michel.mdx)の例でエージェントの例を確認しましょう。
+- [シェフ・ミシェル](../../guides/guide/chef-michel.mdx)の例でエージェントの例を確認しましょう。

@@ -21,6 +21,9 @@ describe('Memory with LibSQL Integration', () => {
           topK: 3,
           messageRange: 2,
         },
+        threads: {
+          generateTitle: false,
+        },
       },
     });
 
@@ -34,6 +37,9 @@ describe('Memory with LibSQL Integration', () => {
         semanticRecall: {
           topK: 3,
           messageRange: 2,
+        },
+        threads: {
+          generateTitle: false,
         },
       },
     });

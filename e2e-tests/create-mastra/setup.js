@@ -84,7 +84,7 @@ export async function setupRegistry(storageDirectory, port) {
     });
 
     execSync(
-      `pnpm --filter="create-mastra^..." --filter="create-mastra" --filter="@mastra/libsql" publish --registry=http://localhost:${port}/ --no-git-checks --tag=create-mastra-e2e-test`,
+      `pnpm --filter="create-mastra^..." --filter="create-mastra" --filter="@mastra/libsql" --filter="@mastra/memory" publish --registry=http://localhost:${port}/ --no-git-checks --tag=create-mastra-e2e-test`,
       {
         cwd: rootDir,
         stdio: ['ignore', 'ignore', 'ignore'],

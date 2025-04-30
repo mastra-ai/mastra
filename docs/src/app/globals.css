@@ -119,7 +119,10 @@ header > * {
 .nextra-navbar nav {
   position: relative;
   --nextra-content-width: 1220px;
-  padding-inline: 0;
+
+  @media screen and (min-width: 768px) {
+    padding-inline: 0;
+  }
 }
 
 /* Hack for menu */
@@ -175,11 +178,7 @@ article span.m-tag {
 }
 
 article a {
-  text-decoration: none;
-
-  &:hover {
-    text-decoration: underline;
-  }
+  text-underline-offset: 1px;
 }
 
 article strong > a {

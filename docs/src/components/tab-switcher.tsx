@@ -9,31 +9,26 @@ const docsTabs = [
     id: "Docs",
     label: "Docs",
     href: "docs",
-  
   },
   {
     id: "Examples",
     label: "Examples",
     href: "examples",
-
   },
   {
     id: "Guides",
     label: "Guides",
     href: "guides",
-
   },
   {
     id: "API Reference",
     label: "API Reference",
     href: "reference",
-  
   },
   {
     id: "Showcase",
     label: "Showcase",
     href: "showcase",
- 
   },
 ];
 

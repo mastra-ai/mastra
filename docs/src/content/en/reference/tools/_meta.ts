@@ -3,7 +3,8 @@ const meta = {
   "graph-rag-tool": "createGraphRAGTool()",
   "vector-query-tool": "createVectorQueryTool()",
   client: "MastraMCPClient",
-  "mcp-configuration": "MCPConfiguration",
+  "mcp-client": "MCPClient",
+  "mcp-server": "MCPServer",
 };
 
 export default meta;

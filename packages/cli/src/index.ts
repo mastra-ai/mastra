@@ -42,22 +42,26 @@ program
   });
 
 program
-  .command('create')
+  .command('create [project-name]')
   .description('Create a new Mastra project')
   .option('--default', 'Quick start with defaults(src, OpenAI, no examples)')
   .option('-c, --components <components>', 'Comma-separated list of components (agents, tools, workflows)')
   .option('-l, --llm <model-provider>', 'Default model provider (openai, anthropic, groq, google, or cerebras))')
   .option('-k, --llm-api-key <api-key>', 'API key for the model provider')
   .option('-e, --example', 'Include example code')
+  .option('-n, --no-example', 'Do not include example code')
   .option('-t, --timeout [timeout]', 'Configurable timeout for package installation, defaults to 60000 ms')
+  .option('-d, --dir <directory>', 'Target directory for Mastra source code (default: src/)')
   .option(
     '-p, --project-name <string>',
     'Project name that will be used in package.json and as the project directory name.',
   )
-  .action(async args => {
+  .action(async (projectNameArg, args) => {
+    // Unify: use argument if present, else option
+    const projectName = projectNameArg || args.projectName;
     await analytics.trackCommandExecution({
       command: 'create',
-      args,
+      args: { ...args, projectName },
       execution: async () => {
         const timeout = args?.timeout ? (args?.timeout === true ? 60000 : parseInt(args?.timeout, 10)) : undefined;
         if (args.default) {
@@ -75,7 +79,8 @@ program
           addExample: args.example,
           llmApiKey: args['llm-api-key'],
           timeout,
-          projectName: args.projectName,
+          projectName,
+          directory: args.dir,
         });
       },
       origin,
@@ -91,6 +96,7 @@ program
   .option('-l, --llm <model-provider>', 'Default model provider (openai, anthropic, groq, google or cerebras))')
   .option('-k, --llm-api-key <api-key>', 'API key for the model provider')
   .option('-e, --example', 'Include example code')
+  .option('-n, --no-example', 'Do not include example code')
   .action(async args => {
     await analytics.trackCommandExecution({
       command: 'init',

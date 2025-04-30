@@ -105,6 +105,7 @@ export const useDeleteThread = () => {
       method: 'DELETE',
       headers: {
         'Content-Type': 'application/json',
+        'x-mastra-dev-playground': 'true',
       },
     });
 

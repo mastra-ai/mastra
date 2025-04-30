@@ -1,5 +1,97 @@
 # @mastra/playground-ui
 
+## 5.0.1-alpha.9
+
+### Patch Changes
+
+- ca665d3: fix the ui for smaller screen regarding traces
+
+## 5.0.1-alpha.8
+
+### Patch Changes
+
+- Updated dependencies [2d17c73]
+  - @mastra/core@0.9.1-alpha.8
+  - @mastra/client-js@0.1.19-alpha.8
+
+## 5.0.1-alpha.7
+
+### Patch Changes
+
+- Updated dependencies [1d3b1cd]
+  - @mastra/core@0.9.1-alpha.7
+  - @mastra/client-js@0.1.19-alpha.7
+
+## 5.0.1-alpha.6
+
+### Patch Changes
+
+- Updated dependencies [c23a81c]
+  - @mastra/core@0.9.1-alpha.6
+  - @mastra/client-js@0.1.19-alpha.6
+
+## 5.0.1-alpha.5
+
+### Patch Changes
+
+- Updated dependencies [3e7b69d]
+  - @mastra/core@0.9.1-alpha.5
+  - @mastra/client-js@0.1.19-alpha.5
+
+## 5.0.1-alpha.4
+
+### Patch Changes
+
+- 3b74a74: add badge for failure / successful traces
+- 5a66ced: add click on trace row
+- Updated dependencies [e4943b8]
+- Updated dependencies [479f490]
+  - @mastra/core@0.9.1-alpha.4
+  - @mastra/client-js@0.1.19-alpha.4
+
+## 5.0.1-alpha.3
+
+### Patch Changes
+
+- 34a76ca: Call workflow cleanup function when closing watch stream controller
+- 0c3c4f4: Playground routing model settings for AgentNetworks
+- 1700eca: fixing overflow on agent traces
+- Updated dependencies [6262bd5]
+  - @mastra/core@0.9.1-alpha.3
+  - @mastra/client-js@0.1.19-alpha.3
+
+## 5.0.1-alpha.2
+
+### Patch Changes
+
+- 70124e1: revamp the ui for traces
+- 926821d: Fix triggerSchema default not showing in workflow ui
+- 57b25ed: Use resumeSchema to show inputs on the playground for suspended workflows
+- f1d4b7a: Add x-mastra-dev-playground header to all playground requests
+- Updated dependencies [405b63d]
+- Updated dependencies [61e92f5]
+- Updated dependencies [c71013a]
+  - @mastra/core@0.9.1-alpha.2
+  - @mastra/client-js@0.1.19-alpha.2
+
+## 5.0.1-alpha.1
+
+### Patch Changes
+
+- 05806e3: revamp the UI of the chat in playground
+- 11d4485: Show VNext workflows on the playground
+  Show running status for step in vNext workflowState
+- Updated dependencies [20275d4]
+- Updated dependencies [7d1892c]
+- Updated dependencies [a90a082]
+- Updated dependencies [35955b0]
+- Updated dependencies [c1409ef]
+- Updated dependencies [b50b9b7]
+- Updated dependencies [11d4485]
+- Updated dependencies [2d4001d]
+  - @mastra/core@0.9.1-alpha.1
+  - @mastra/client-js@0.1.19-alpha.1
+
 ## 5.0.1-alpha.0
 
 ### Patch Changes

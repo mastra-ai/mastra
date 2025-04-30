@@ -176,7 +176,8 @@ const result = await workflow.createRun().start({ inputData: {} });
 if (result.status === 'success') {
   console.log(result.result); // only exists if status is success
 } else if (result.status === 'failed') {
-  console.error(result.error); // only exists if status is failed
+  console.error(result.error); // only exists if status is failed, this is an instance of Error
+  throw result.error;
 } else if (result.status === 'suspended') {
   console.log(result.suspended); // only exists if status is suspended
 }
@@ -192,6 +193,38 @@ Workflow definition requires:
 - `inputSchema`: Zod schema defining workflow input
 - `outputSchema`: Zod schema defining workflow output
 - `steps`: Array of steps used in the workflow (optional, but recommended for type safety)
+
+### Re-using steps and nested workflows
+
+You can re-use steps and nested workflows by cloning them:
+
+```typescript
+const clonedStep = cloneStep(myStep, { id: 'cloned-step' });
+const clonedWorkflow = cloneWorkflow(myWorkflow, { id: 'cloned-workflow' });
+```
+
+This way you can use the same step or nested workflow in the same workflow multiple times.
+
+```typescript
+import { createWorkflow, createStep, cloneStep, cloneWorkflow } from '@mastra/core/workflows/vNext';
+
+const myWorkflow = createWorkflow({
+  id: 'my-workflow',
+  steps: [step1, step2, step3],
+});
+myWorkflow.then(step1).then(step2).then(step3).commit();
+
+const parentWorkflow = createWorkflow({
+  id: 'parent-workflow',
+  steps: [myWorkflow, step4],
+});
+parentWorkflow
+  .then(myWorkflow)
+  .then(step4)
+  .then(cloneWorkflow(myWorkflow, { id: 'cloned-workflow' }))
+  .then(cloneStep(step4, { id: 'cloned-step-4' }))
+  .commit();
+```
 
 ### Flow Control
 
@@ -331,7 +364,7 @@ const result = await run.start({ inputData: [{ value: 1 }, { value: 22 }, { valu
 if (result.status === 'success') {
   console.log(result.result); // only exists if status is success
 } else if (result.status === 'failed') {
-  console.error(result.error); // only exists if status is failed
+  console.error(result.error); // only exists if status is failed, this is an instance of Error
 }
 ```
 
@@ -486,7 +519,7 @@ if (result.status === 'success') {
     },
   });
 } else if (result.status === 'failed') {
-  console.error(result.error); // only exists if status is failed
+  console.error(result.error); // only exists if status is failed, this is an instance of Error
 }
 ```
 
@@ -495,22 +528,34 @@ if (result.status === 'success') {
 The result of running a workflow (either from `start()` or `resume()`) follows this TypeScript interface:
 
 ```typescript
-interface WorkflowExecutionResult<TOutput, TSteps> {
-  // The overall status of the workflow execution
-  status: 'success' | 'failed' | 'suspended';
-
-  // The final output of the workflow
-  result: TOutput;
-
-  // Array of step IDs that are currently suspended (only present if status is 'suspended')
-  suspended?: string[];
-
-  // Record of all step results, keyed by step ID
-  steps: Record<string, StepResult<any>>;
-
-  // Error message if the workflow failed
-  error?: string;
-}
+export type WorkflowResult<...> =
+  | {
+      status: 'success';
+      result: z.infer<TOutput>;
+      steps: {
+        [K in keyof StepsRecord<TSteps>]: StepsRecord<TSteps>[K]['outputSchema'] extends undefined
+          ? StepResult<unknown>
+          : StepResult<z.infer<NonNullable<StepsRecord<TSteps>[K]['outputSchema']>>>;
+      };
+    }
+  | {
+      status: 'failed';
+      steps: {
+        [K in keyof StepsRecord<TSteps>]: StepsRecord<TSteps>[K]['outputSchema'] extends undefined
+          ? StepResult<unknown>
+          : StepResult<z.infer<NonNullable<StepsRecord<TSteps>[K]['outputSchema']>>>;
+      };
+      error: Error;
+    }
+  | {
+      status: 'suspended';
+      steps: {
+        [K in keyof StepsRecord<TSteps>]: StepsRecord<TSteps>[K]['outputSchema'] extends undefined
+          ? StepResult<unknown>
+          : StepResult<z.infer<NonNullable<StepsRecord<TSteps>[K]['outputSchema']>>>;
+      };
+      suspended: [string[], ...string[][]];
+    };
 ```
 
 ### Result Properties Explained
@@ -531,7 +576,7 @@ interface WorkflowExecutionResult<TOutput, TSteps> {
    - Values are `StepResult` objects containing the step's output
    - Type-safe based on each step's `outputSchema`
 
-5. **error**: Optional error message present when `status` is `'failed'`
+5. **error**: Optional error object present when `status` is `'failed'`
 
 ### Example Usage
 
@@ -559,6 +604,7 @@ if (result.status === 'success') {
 } else if (result.status === 'failed') {
   // Workflow encountered an error
   console.error('Workflow failed:', result.error);
+  throw result.error;
 }
 ```
 
@@ -582,14 +628,14 @@ The `event` object has the following schema:
 type WatchEvent = {
   type: 'watch';
   payload: {
-    currentStep: {
+    currentStep?: {
       id: string;
       status: 'running' | 'completed' | 'failed' | 'suspended';
       output?: Record<string, any>;
       payload?: Record<string, any>;
     };
     workflowState: {
-      status: 'running' | 'completed' | 'failed' | 'suspended';
+      status: 'running' | 'success' | 'failed' | 'suspended';
       steps: Record<
         string,
         {
@@ -598,13 +644,16 @@ type WatchEvent = {
           payload?: Record<string, any>;
         }
       >;
-      output?: Record<string, any>;
+      result?: Record<string, any>;
+      error?: Record<string, any>;
       payload?: Record<string, any>;
     };
   };
   eventTimestamp: Date;
 };
 ```
+
+The `currentStep` property is only present when the workflow is running. When the workflow is finished the status on `workflowState` is changed, as well as the `result` and `error` properties. At the same time the `currentStep` property is removed.
 
 ## Nested Workflows
 

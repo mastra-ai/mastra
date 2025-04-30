@@ -1,5 +1,56 @@
 # create-mastra
 
+## 0.3.0-alpha.5
+
+### Patch Changes
+
+- ca665d3: fix the ui for smaller screen regarding traces
+
+## 0.3.0-alpha.4
+
+### Patch Changes
+
+- 25d3c39: build logs for how to load instrumentation for build output
+
+## 0.3.0-alpha.3
+
+### Patch Changes
+
+- 3b74a74: add badge for failure / successful traces
+- 5a66ced: add click on trace row
+
+## 0.3.0-alpha.2
+
+### Patch Changes
+
+- 34a76ca: Call workflow cleanup function when closing watch stream controller
+- 0c3c4f4: Playground routing model settings for AgentNetworks
+- 1700eca: fixing overflow on agent traces
+
+## 0.3.0-alpha.1
+
+### Patch Changes
+
+- 70124e1: revamp the ui for traces
+- 926821d: Fix triggerSchema default not showing in workflow ui
+- 57b25ed: Use resumeSchema to show inputs on the playground for suspended workflows
+- f1d4b7a: Add x-mastra-dev-playground header to all playground requests
+
+## 0.3.0-alpha.0
+
+### Minor Changes
+
+- e126a44: improve non-interactive mode of the mastra cli and create-mastra by adding --no-example and --dir flags
+
+### Patch Changes
+
+- 05806e3: revamp the UI of the chat in playground
+- b50b9b7: Add vNext workflow to client-js
+- 11d4485: Show VNext workflows on the playground
+  Show running status for step in vNext workflowState
+- 8863033: Fix tools api in local dev api
+- 2d4001d: Add new @msstra/libsql package and use it in create-mastra
+
 ## 0.2.9
 
 ### Patch Changes

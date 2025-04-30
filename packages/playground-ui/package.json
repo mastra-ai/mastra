@@ -1,7 +1,7 @@
 {
   "name": "@mastra/playground-ui",
   "type": "module",
-  "version": "5.0.1-alpha.0",
+  "version": "5.0.1-alpha.9",
   "description": "Mastra Playground components",
   "main": "dist/index.umd.js",
   "module": "dist/index.es.js",
@@ -71,7 +71,7 @@
     "@radix-ui/react-tooltip": "^1.1.8",
     "@tanstack/react-table": "^8.21.2",
     "@types/react-syntax-highlighter": "^15.5.13",
-    "@uiw/codemirror-theme-github": "^4.23.8",
+    "@uiw/codemirror-theme-dracula": "^4.23.10",
     "@uiw/react-codemirror": "^4.23.8",
     "@xyflow/react": "^12.3.6",
     "cmdk": "^1.0.0",
@@ -120,7 +120,7 @@
     "tailwind-merge": "^3.0.2",
     "tailwindcss": "^3.4.17",
     "typescript": "^5.8.2",
-    "vite": "^5.4.15",
+    "vite": "^6.0.0",
     "vite-plugin-dts": "^3.9.1",
     "vite-plugin-lib-inject-css": "^2.2.1"
   }

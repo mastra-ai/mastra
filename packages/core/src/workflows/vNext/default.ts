@@ -27,7 +27,7 @@ function fmtReturnValue<TOutput>(
   if (lastOutput.status === 'success') {
     base.result = lastOutput.output;
   } else if (lastOutput.status === 'failed') {
-    base.error = error instanceof Error ? error.message : (error ?? lastOutput.error ?? 'Unknown error');
+    base.error = error instanceof Error ? error : (lastOutput.error ?? new Error('Unknown error: ' + error));
   } else if (lastOutput.status === 'suspended') {
     const suspendedStepIds = Object.entries(stepResults).flatMap(([stepId, stepResult]) => {
       if (stepResult?.status === 'suspended') {
@@ -113,10 +113,6 @@ export class DefaultExecutionEngine extends ExecutionEngine {
             params.emitter.emit('watch', {
               type: 'watch',
               payload: {
-                currentStep: {
-                  id: entry.step.id,
-                  ...lastOutput,
-                },
                 workflowState: {
                   status: lastOutput.status,
                   steps: stepResults,
@@ -130,19 +126,16 @@ export class DefaultExecutionEngine extends ExecutionEngine {
           return fmtReturnValue(stepResults, lastOutput);
         }
       } catch (e) {
+        this.logger.error('Error executing step: ' + ((e as Error)?.stack ?? e));
         if (entry.type === 'step') {
           params.emitter.emit('watch', {
             type: 'watch',
             payload: {
-              currentStep: {
-                id: entry.step.id,
-                ...lastOutput,
-              },
               workflowState: {
-                status: lastOutput.status,
+                status: 'failed',
                 steps: stepResults,
                 result: null,
-                error: lastOutput.error,
+                error: e as Error,
               },
             },
             eventTimestamp: Date.now(),
@@ -152,6 +145,19 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         return fmtReturnValue(stepResults, lastOutput, e as Error);
       }
     }
+
+    params.emitter.emit('watch', {
+      type: 'watch',
+      payload: {
+        workflowState: {
+          status: lastOutput.status,
+          steps: stepResults,
+          result: lastOutput.output,
+          error: lastOutput.error,
+        },
+      },
+      eventTimestamp: Date.now(),
+    });
 
     return fmtReturnValue(stepResults, lastOutput);
   }
@@ -248,7 +254,8 @@ export class DefaultExecutionEngine extends ExecutionEngine {
 
         break;
       } catch (e) {
-        execResults = { status: 'failed', error: e instanceof Error ? e.message : 'Unknown error' };
+        this.logger.error('Error executing step: ' + ((e as Error)?.stack ?? e));
+        execResults = { status: 'failed', error: e instanceof Error ? e : new Error('Unknown error: ' + e) };
       }
     }
 
@@ -380,8 +387,8 @@ export class DefaultExecutionEngine extends ExecutionEngine {
               emitter,
             });
             return result ? index : null;
-            // eslint-disable-next-line @typescript-eslint/no-unused-vars
           } catch (e: unknown) {
+            this.logger.error('Error evaluating condition: ' + ((e as Error)?.stack ?? e));
             return null;
           }
         }),
@@ -593,6 +600,30 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     const prevOutput = this.getStepOutput(stepResults, prevStep);
     let execResults: any;
 
+    if (entry.type === 'step' || entry.type === 'loop' || entry.type === 'foreach') {
+      emitter.emit('watch', {
+        type: 'watch',
+        payload: {
+          currentStep: {
+            id: entry.step.id,
+            status: 'running',
+          },
+          workflowState: {
+            status: 'running',
+            steps: {
+              ...stepResults,
+              [entry.step.id]: {
+                status: 'running',
+              },
+            },
+            result: null,
+            error: null,
+          },
+        },
+        eventTimestamp: Date.now(),
+      });
+    }
+
     if (entry.type === 'step') {
       const { step } = entry;
       execResults = await this.executeStep({
@@ -703,6 +734,9 @@ export class DefaultExecutionEngine extends ExecutionEngine {
           },
           workflowState: {
             status: 'running',
+            steps: stepResults,
+            result: null,
+            error: null,
           },
         },
         eventTimestamp: Date.now(),
