@@ -22,7 +22,7 @@ export default function Home() {
     <div className="flex flex-col min-h-screen bg-gray-50 justify-between">
       <div className="p-6 flex-1 flex flex-col items-center justify-start">
         <div className="w-full max-w-xl bg-white rounded-lg shadow p-6 mb-8 min-h-[100px] flex items-center justify-center text-lg text-gray-800">
-          {answer ? answer : <span className="text-gray-400">Your answer will appear here</span>}
+          {answer ? answer : <span className="text-gray-500">Your answer will appear here</span>}
         </div>
       </div>
       <form
@@ -35,7 +35,7 @@ export default function Home() {
           value={query}
           onChange={e => setQuery(e.target.value)}
           placeholder="Ask a question..."
-          className="flex-1 rounded-lg border border-gray-300 px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-400"
+          className="text-black flex-1 rounded-lg border border-gray-300 px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-400"
         />
         <button
           type="submit"
