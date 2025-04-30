@@ -593,7 +593,6 @@ describe('Workflow', () => {
 
         const run = workflow.createRun();
         const result = await run.start({ inputData: { cool: 'test-input' } });
-        console.log('result', result);
 
         expect(execute).toHaveBeenCalledWith(
           expect.objectContaining({
