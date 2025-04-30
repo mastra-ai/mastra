@@ -1,4 +1,4 @@
-import { Agent, MemoryThread, Tool, Workflow, Vector, BaseResource, Network, VNextWorkflow } from './resources';
+import { Agent, MemoryThread, Tool, Workflow, Vector, BaseResource, Network, VNextWorkflow, A2A } from './resources';
 import type {
   ClientOptions,
   CreateMemoryThreadParams,
@@ -228,5 +228,14 @@ export class MastraClient extends BaseResource {
    */
   public getNetwork(networkId: string) {
     return new Network(this.options, networkId);
+  }
+
+  /**
+   * Gets an A2A client for interacting with an agent via the A2A protocol
+   * @param agentId - ID of the agent to interact with
+   * @returns A2A client instance
+   */
+  public getA2A(agentId: string) {
+    return new A2A(this.options, agentId);
   }
 }
