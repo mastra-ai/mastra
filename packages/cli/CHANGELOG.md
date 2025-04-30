@@ -1,5 +1,15 @@
 # mastra
 
+## 0.6.1-alpha.1
+
+### Patch Changes
+
+- 2429c74: Add get workflow runs api to client-js
+- Updated dependencies [254f5c3]
+- Updated dependencies [b804723]
+  - @mastra/deployer@0.3.2-alpha.1
+  - @mastra/core@0.9.2-alpha.1
+
 ## 0.6.1-alpha.0
 
 ### Patch Changes

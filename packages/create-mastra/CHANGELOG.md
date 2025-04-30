@@ -1,5 +1,11 @@
 # create-mastra
 
+## 0.3.1-alpha.1
+
+### Patch Changes
+
+- 2429c74: Add get workflow runs api to client-js
+
 ## 0.3.1-alpha.0
 
 ### Patch Changes

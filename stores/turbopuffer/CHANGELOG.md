@@ -1,5 +1,12 @@
 # @mastra/turbopuffer
 
+## 0.0.13-alpha.1
+
+### Patch Changes
+
+- Updated dependencies [b804723]
+  - @mastra/core@0.9.2-alpha.1
+
 ## 0.0.13-alpha.0
 
 ### Patch Changes
