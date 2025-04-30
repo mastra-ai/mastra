@@ -1,4 +1,3 @@
-import { URLSearchParams } from 'url';
 import type { GetToolResponse, ClientOptions } from '../types';
 
 import { BaseResource } from './base';
