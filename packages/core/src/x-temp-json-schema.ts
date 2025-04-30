@@ -24,7 +24,6 @@ import zodToJsonSchema, {
 // }
 
 function makeOptionalPropsNullable<Schema extends z.AnyZodObject>(schema: Schema) {
-  return schema;
   const entries = Object.entries(schema.shape) as [keyof Schema['shape'], z.ZodTypeAny][];
   const newProps = entries.reduce(
     (acc, [key, value]) => {
@@ -72,13 +71,12 @@ export function zodSchemaToCustomVercelJSONSchema<OBJECT>(
 
   // @ts-ignore
   const newSchema = makeOptionalPropsNullable(zodSchema);
-  console.log(`is this code getting hit?`);
   console.log(JSON.stringify(newSchema._def.shape(), null, 2), newSchema._def.shape());
   // @ts-ignore
   return jsonSchema(
     zodToJsonSchema(newSchema, {
       $refStrategy: useReferences ? 'root' : 'none',
-      target: 'jsonSchema7', // note: openai mode breaks various gemini conversions.
+      target: 'openApi3', // note: openai mode breaks various gemini conversions.
       // override: (def, refs) => {
       //   const path = refs.currentPath.join('/');
       //   console.log(path, def);
