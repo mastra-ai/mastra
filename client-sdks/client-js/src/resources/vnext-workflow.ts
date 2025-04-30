@@ -2,6 +2,7 @@ import type { RuntimeContext } from '@mastra/core/runtime-context';
 import type {
   ClientOptions,
   GetVNextWorkflowResponse,
+  GetWorkflowRunsResponse,
   VNextWorkflowRunResult,
   VNextWorkflowWatchResult,
 } from '../types';
@@ -95,6 +96,14 @@ export class VNextWorkflow extends BaseResource {
    */
   details(): Promise<GetVNextWorkflowResponse> {
     return this.request(`/api/workflows/v-next/${this.workflowId}`);
+  }
+
+  /**
+   * Retrieves all runs for a vNext workflow
+   * @returns Promise containing vNext workflow runs array
+   */
+  runs(): Promise<GetWorkflowRunsResponse> {
+    return this.request(`/api/workflows/v-next/${this.workflowId}/runs`);
   }
 
   /**

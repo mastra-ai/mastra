@@ -1,4 +1,4 @@
-import type { GetWorkflowResponse, ClientOptions, WorkflowRunResult } from '../types';
+import type { GetWorkflowResponse, ClientOptions, WorkflowRunResult, GetWorkflowRunsResponse } from '../types';
 
 import { BaseResource } from './base';
 
@@ -18,6 +18,14 @@ export class Workflow extends BaseResource {
    */
   details(): Promise<GetWorkflowResponse> {
     return this.request(`/api/workflows/${this.workflowId}`);
+  }
+
+  /**
+   * Retrieves all runs for a workflow
+   * @returns Promise containing workflow runs array
+   */
+  runs(): Promise<GetWorkflowRunsResponse> {
+    return this.request(`/api/workflows/${this.workflowId}/runs`);
   }
 
   /**
