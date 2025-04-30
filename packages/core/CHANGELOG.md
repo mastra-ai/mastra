@@ -1,5 +1,11 @@
 # @mastra/core
 
+## 0.9.1-alpha.8
+
+### Patch Changes
+
+- 2d17c73: Fix checking for presence of constant value mappings
+
 ## 0.9.1-alpha.7
 
 ### Patch Changes
