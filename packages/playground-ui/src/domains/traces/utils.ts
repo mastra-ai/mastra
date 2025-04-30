@@ -47,7 +47,10 @@ export function transformKey(key: string) {
   if (key.includes('.result')) {
     return 'Output';
   }
-  return key.split('.').join(' ').split('_');
+
+  const newKey = key.split('.').join(' ').split('_').join(' ').replaceAll('ai', 'AI');
+
+  return newKey.substring(0, 1).toUpperCase() + newKey.substring(1);
 }
 
 export function cleanString(string: string) {

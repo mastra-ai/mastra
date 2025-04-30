@@ -81,6 +81,11 @@ export class SqlBuilder {
     return this;
   }
 
+  count(): SqlBuilder {
+    this.sql += 'SELECT COUNT(*) AS count';
+    return this;
+  }
+
   /**
    * Insert a row, or update specific columns on conflict (upsert).
    * @param table Table name

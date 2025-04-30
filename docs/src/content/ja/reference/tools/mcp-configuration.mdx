@@ -1,25 +1,25 @@
 ---
-title: "リファレンス: MCPConfiguration | ツール管理 | Mastra ドキュメント"
-description: MCPConfiguration の API リファレンス - 複数のモデルコンテキストプロトコルサーバーとそのツールを管理するためのクラス。
+title: "リファレンス: MCPClient | ツール管理 | Mastra ドキュメント"
+description: MCPClient の API リファレンス - 複数のモデルコンテキストプロトコルサーバーとそのツールを管理するためのクラス。
 ---
 
-# MCPConfiguration
+# MCPClient
 
-`MCPConfiguration` クラスは、Mastra アプリケーション内で複数の MCP サーバー接続とそのツールを管理する方法を提供します。接続のライフサイクルを管理し、ツールの名前空間を処理し、すべての設定されたサーバーにわたってツールへの便利なアクセスを提供します。
+`MCPClient` クラスは、Mastra アプリケーション内で複数の MCP サーバー接続とそのツールを管理する方法を提供します。接続のライフサイクルを管理し、ツールの名前空間を処理し、すべての設定されたサーバーにわたってツールへの便利なアクセスを提供します。
 
 ## コンストラクタ
 
-MCPConfigurationクラスの新しいインスタンスを作成します。
+MCPClientクラスの新しいインスタンスを作成します。
 
 ```typescript
 constructor({
   id?: string;
   servers: Record<string, MastraMCPServerDefinition>;
   timeout?: number;
-}: MCPConfigurationOptions)
+}: MCPClientOptions)
 ```
 
-### MCPConfigurationOptions
+### MCPClientOptions
 
 <br />
 <PropertiesTable
@@ -87,11 +87,11 @@ async disconnect(): Promise<void>
 ### 基本的な使用法
 
 ```typescript
-import { MCPConfiguration } from "@mastra/mcp";
+import { MCPClient } from "@mastra/mcp";
 import { Agent } from "@mastra/core/agent";
 import { openai } from "@ai-sdk/openai";
 
-const mcp = new MCPConfiguration({
+const mcp = new MCPClient({
   servers: {
     stockPrice: {
       command: "npx",
@@ -123,7 +123,7 @@ const agent = new Agent({
 
 ```typescript
 import { Agent } from "@mastra/core/agent";
-import { MCPConfiguration } from "@mastra/mcp";
+import { MCPClient } from "@mastra/mcp";
 import { openai } from "@ai-sdk/openai";
 
 // まず、ツールなしでエージェントを作成
@@ -134,7 +134,7 @@ const agent = new Agent({
 });
 
 // 後で、ユーザー固有の設定でMCPを構成
-const mcp = new MCPConfiguration({
+const mcp = new MCPClient({
   servers: {
     stockPrice: {
       command: "npx",
@@ -166,7 +166,7 @@ const response = await agent.stream(
 
 ## リソース管理
 
-`MCPConfiguration` クラスには、複数のインスタンスを管理するためのメモリリーク防止機能が組み込まれています:
+`MCPClient` クラスには、複数のインスタンスを管理するためのメモリリーク防止機能が組み込まれています:
 
 1. `id` なしで同一の設定を持つ複数のインスタンスを作成すると、メモリリークを防ぐためにエラーが発生します
 2. 同一の設定を持つ複数のインスタンスが必要な場合は、各インスタンスに一意の `id` を指定してください
@@ -177,14 +177,14 @@ const response = await agent.stream(
 
 ```typescript
 // 最初のインスタンス - OK
-const mcp1 = new MCPConfiguration({
+const mcp1 = new MCPClient({
   servers: {
     /* ... */
   },
 });
 
 // 同じ設定での2番目のインスタンス - エラーが発生します
-const mcp2 = new MCPConfiguration({
+const mcp2 = new MCPClient({
   servers: {
     /* ... */
   },
@@ -192,7 +192,7 @@ const mcp2 = new MCPConfiguration({
 
 // 修正方法:
 // 1. 一意のIDを追加
-const mcp3 = new MCPConfiguration({
+const mcp3 = new MCPClient({
   id: "instance-1",
   servers: {
     /* ... */
@@ -201,7 +201,7 @@ const mcp3 = new MCPConfiguration({
 
 // 2. または再作成前に切断
 await mcp1.disconnect();
-const mcp4 = new MCPConfiguration({
+const mcp4 = new MCPClient({
   servers: {
     /* ... */
   },
@@ -210,7 +210,7 @@ const mcp4 = new MCPConfiguration({
 
 ## サーバーライフサイクル
 
-MCPConfigurationはサーバー接続を優雅に処理します：
+MCPClientはサーバー接続を優雅に処理します：
 
 1. 複数のサーバーに対する自動接続管理
 2. 開発中のエラーメッセージを防ぐための優雅なサーバーシャットダウン

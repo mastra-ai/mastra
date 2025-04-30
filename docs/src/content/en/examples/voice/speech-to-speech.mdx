@@ -25,7 +25,7 @@ The system creates a voice conversation with a Mastra agent, records the entire 
 
 Create a `.env` file based on the sample provided:
 
-```text:speech-to-speech/call-analysis/sample.env
+```bash filename="speech-to-speech/call-analysis/sample.env" copy
 OPENAI_API_KEY=
 CLOUDINARY_CLOUD_NAME=
 CLOUDINARY_API_KEY=
@@ -37,7 +37,7 @@ ROARK_API_KEY=
 
 Install the required dependencies:
 
-```bash
+```bash copy
 npm install
 ```
 
@@ -47,7 +47,7 @@ npm install
 
 First, we define our agent with voice capabilities:
 
-```typescript:speech-to-speech/call-analysis/src/mastra/agents/index.ts
+```ts filename="speech-to-speech/call-analysis/src/mastra/agents/index.ts" copy
 import { openai } from '@ai-sdk/openai';
 import { Agent } from '@mastra/core/agent';
 import { createTool } from '@mastra/core/tools';
@@ -78,7 +78,7 @@ export const speechToSpeechServer = new Agent({
 
 Register the agent with Mastra:
 
-```typescript:speech-to-speech/call-analysis/src/mastra/index.ts
+```ts filename="speech-to-speech/call-analysis/src/mastra/index.ts" copy
 import { Mastra } from '@mastra/core';
 import { speechToSpeechServer } from './agents';
 
@@ -93,7 +93,7 @@ export const mastra = new Mastra({
 
 Set up Cloudinary for storing the recorded audio files:
 
-```typescript:speech-to-speech/call-analysis/src/upload.ts
+```ts filename="speech-to-speech/call-analysis/src/upload.ts" copy
 import { v2 as cloudinary } from 'cloudinary';
 
 cloudinary.config({
@@ -113,7 +113,7 @@ export async function uploadToCloudinary(path: string) {
 
 The main application orchestrates the conversation flow, recording, and analytics integration:
 
-```typescript:speech-to-speech/call-analysis/src/base.ts
+```ts filename="speech-to-speech/call-analysis/src/base.ts" copy
 import { Roark } from '@roarkanalytics/sdk';
 import chalk from 'chalk';
 
@@ -184,7 +184,7 @@ The `utils.ts` file contains helper functions for managing the conversation, inc
 
 Start the conversation with:
 
-```bash
+```bash copy
 npm run dev
 ```
 

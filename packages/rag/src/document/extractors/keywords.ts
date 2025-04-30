@@ -1,8 +1,8 @@
-import { defaultKeywordExtractPrompt, PromptTemplate } from '@llamaindex/core/prompts';
-import type { KeywordExtractPrompt } from '@llamaindex/core/prompts';
-import type { BaseNode } from '@llamaindex/core/schema';
-import { MetadataMode, TextNode } from '@llamaindex/core/schema';
 import type { MastraLanguageModel } from '@mastra/core/agent';
+import { defaultKeywordExtractPrompt, PromptTemplate } from '../prompts';
+import type { KeywordExtractPrompt } from '../prompts';
+import type { BaseNode } from '../schema';
+import { TextNode } from '../schema';
 import { BaseExtractor } from './base';
 import { baseLLM } from './types';
 import type { KeywordExtractArgs } from './types';
@@ -18,23 +18,8 @@ type ExtractKeyword = {
  * Extract keywords from a list of nodes.
  */
 export class KeywordExtractor extends BaseExtractor {
-  /**
-   * MastraLanguageModel instance.
-   * @type {MastraLanguageModel}
-   */
   llm: MastraLanguageModel;
-
-  /**
-   * Number of keywords to extract.
-   * @type {number}
-   * @default 5
-   */
   keywords: number = 5;
-
-  /**
-   * The prompt template to use for the question extractor.
-   * @type {string}
-   */
   promptTemplate: KeywordExtractPrompt;
 
   /**
@@ -69,7 +54,7 @@ export class KeywordExtractor extends BaseExtractor {
    * Adds error handling for malformed/empty LLM output.
    */
   async extractKeywordsFromNodes(node: BaseNode): Promise<ExtractKeyword> {
-    const text = node.getContent(this.metadataMode);
+    const text = node.getContent();
     if (!text || text.trim() === '') {
       return { excerptKeywords: '' };
     }
@@ -89,7 +74,7 @@ export class KeywordExtractor extends BaseExtractor {
               {
                 type: 'text',
                 text: this.promptTemplate.format({
-                  context: node.getContent(MetadataMode.ALL),
+                  context: node.getContent(),
                   maxKeywords: this.keywords.toString(),
                 }),
               },

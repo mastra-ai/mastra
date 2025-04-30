@@ -24,6 +24,9 @@ describe('Memory with UpstashStore Integration', () => {
         topK: 3,
         messageRange: 2,
       },
+      threads: {
+        generateTitle: false,
+      },
     },
   });
 

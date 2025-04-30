@@ -15,8 +15,6 @@ type TraceContextType = {
   prevTrace: () => void;
   span: Span | null;
   setSpan: React.Dispatch<React.SetStateAction<Span | null>>;
-  openDetail: boolean;
-  setOpenDetail: React.Dispatch<React.SetStateAction<boolean>>;
   clearData: () => void;
 };
 
@@ -28,7 +26,6 @@ export function TraceProvider({ children }: { children: React.ReactNode }) {
   const [traces, setTraces] = useState<RefinedTrace[]>([]);
   const [currentTraceIndex, setCurrentTraceIndex] = useState(0);
   const [span, setSpan] = useState<Span | null>(null);
-  const [openDetail, setOpenDetail] = useState(false);
 
   const nextTrace = () => {
     if (currentTraceIndex < traces.length - 1) {
@@ -56,7 +53,6 @@ export function TraceProvider({ children }: { children: React.ReactNode }) {
     setOpen(false);
     setTrace(null);
     setSpan(null);
-    setOpenDetail(false);
   };
 
   return (
@@ -74,8 +70,6 @@ export function TraceProvider({ children }: { children: React.ReactNode }) {
         prevTrace,
         span,
         setSpan,
-        openDetail,
-        setOpenDetail,
         clearData,
       }}
     >

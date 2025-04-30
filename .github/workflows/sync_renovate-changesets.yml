@@ -1,0 +1,91 @@
+name: Sync Renovate changeset
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/sync_renovate-changesets.yml'
+      - '**/pnpm-lock.yaml'
+
+jobs:
+  changeset:
+    runs-on: ubuntu-latest
+    if: github.actor == 'renovate[bot]' && github.repository == 'mastra-ai/mastra'
+    steps:
+      - uses: actions/create-github-app-token@v1
+        id: app-token
+        with:
+          app-id: ${{ vars.DANE_APP_ID }}
+          private-key: ${{ secrets.DANE_APP_PRIVATE_KEY }}
+
+      - name: Get GitHub App User ID
+        id: get-user-id
+        run: echo "user-id=$(gh api "/users/${{ steps.app-token.outputs.app-slug }}[bot]" --jq .id)" >> "$GITHUB_OUTPUT"
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ steps.app-token.outputs.token }}
+          persist-credentials: false
+
+      - run: |
+          cat <<- EOF > $HOME/.netrc
+            machine github.com
+            login ${{ steps.app-token.outputs.app-slug }}
+            password ${{ steps.app-token.outputs.token }}
+            machine api.github.com
+            login ${{ steps.app-token.outputs.app-slug }}
+            password ${{ steps.app-token.outputs.token }}
+          EOF
+          git config --global user.name '${{ steps.app-token.outputs.app-slug }}[bot]'
+          git config --global user.email '${{ steps.get-user-id.outputs.user-id }}+${{ steps.app-token.outputs.app-slug }}[bot]@users.noreply.github.com'
+
+      - uses: pnpm/action-setup@v4
+        name: Install pnpm
+        with:
+          run_install: false
+
+      - name: Setup Node.js 20.x
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20.x
+          cache: 'pnpm'
+
+      - name: Create/Update Changesets
+        uses: 'wardpeet/changesets-dependencies-action@1ac684b9885a8e9bb1d24f09fd2c253b36b3700d'
+        env:
+          GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}
+          SKIP_CREDENTIALS: '1'
+          INCLUDE_DEV_DEPS: '1'
+
+      - name: Check for package.json changes in examples and e2e-tests
+        id: check-examples
+        run: |
+          if git diff --name-only HEAD^ HEAD | grep -q -E "(examples|e2e-tests)/.*package.json"; then
+            echo "examples_changed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "examples_changed=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Install dependencies
+        if: steps.check-examples.outputs.examples_changed == 'true'
+        run: |
+          # Get list of changed package.json files in examples and e2e-tests directories
+          changed_files=$(git diff --name-only HEAD^ HEAD | grep -E "(examples|e2e-tests)/.*package.json")
+
+          # For each changed package.json, run pnpm install in its directory
+          for package_json in $changed_files; do
+            dir=$(dirname "$package_json")
+            echo "Installing dependencies in $dir"
+            cd "$dir"
+            pnpm install --ignore-workspace --no-frozen-lockfile
+            cd - > /dev/null
+          done
+
+          # Commit the changes if any were made
+          if [ -n "$(git status --porcelain)" ]; then
+            git add .
+            git commit -m "chore: update pnpm-lock.yaml files"
+            git push
+          fi

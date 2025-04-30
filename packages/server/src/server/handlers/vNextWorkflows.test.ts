@@ -86,10 +86,20 @@ function createReusableMockWorkflow(name: string) {
 function serializeWorkflow(workflow: NewWorkflow) {
   return {
     name: workflow.id,
-    steps: workflow.steps,
+    steps: Object.entries(workflow.steps).reduce<any>((acc, [key, step]) => {
+      acc[key] = {
+        id: step.id,
+        description: step.description,
+        inputSchema: step.inputSchema ? stringify(zodToJsonSchema(step.inputSchema)) : undefined,
+        outputSchema: step.outputSchema ? stringify(zodToJsonSchema(step.outputSchema)) : undefined,
+        resumeSchema: step.resumeSchema ? stringify(zodToJsonSchema(step.resumeSchema)) : undefined,
+        suspendSchema: step.suspendSchema ? stringify(zodToJsonSchema(step.suspendSchema)) : undefined,
+      };
+      return acc;
+    }, {}),
     inputSchema: workflow.inputSchema ? stringify(zodToJsonSchema(workflow.inputSchema)) : undefined,
     outputSchema: workflow.outputSchema ? stringify(zodToJsonSchema(workflow.outputSchema)) : undefined,
-    stepGraph: workflow.stepGraph,
+    stepGraph: workflow.serializedStepGraph,
   };
 }
 

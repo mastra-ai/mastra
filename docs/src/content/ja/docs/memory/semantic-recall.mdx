@@ -15,7 +15,7 @@
   width={800}
 />
 
-有効にすると、新しいメッセージを使用してベクトルDBに意味的に類似したメッセージを問い合わせます。
+有効になっている場合、新しいメッセージを使用してベクトルDBに意味的に類似したメッセージを問い合わせます。
 
 LLMからの応答を受け取った後、すべての新しいメッセージ（ユーザー、アシスタント、ツールコール/結果）がベクトルDBに挿入され、後の対話で呼び出されるようになります。
 
@@ -49,7 +49,7 @@ const agent = new Agent({
     options: {
       semanticRecall: {
         topK: 3, // 最も類似した3つのメッセージを取得
-        messageRange: 2, // 各一致の前後2つのメッセージを含める
+        messageRange: 2, // 各一致の前後に2つのメッセージを含める
       },
     },
   }),
@@ -58,25 +58,22 @@ const agent = new Agent({
 
 ### ストレージ設定
 
-セマンティックリコールは、メッセージとそれらの埋め込みを保存するために[ストレージとベクトルDB](/reference/memory/Memory#parameters)に依存しています。
+セマンティックリコールは、メッセージとそのエンベディングを保存するために[ストレージとベクトルDB](/reference/memory/Memory#parameters)に依存しています。
 
 ```ts {8-17}
 import { Memory } from "@mastra/memory";
 import { Agent } from "@mastra/core/agent";
-import { LibSQLStore } from "@mastra/core/storage/libsql";
-import { LibSQLVector } from "@mastra/core/vector/libsql";
+import { LibSQLStore, LibSQLVector } from "@mastra/libsql";
 
 const agent = new Agent({
   memory: new Memory({
     // これは省略した場合のデフォルトストレージDBです
     storage: new LibSQLStore({
-      config: {
-        url: "file:local.db",
-      },
+      url: "file:./local.db",
     }),
     // これは省略した場合のデフォルトベクトルDBです
     vector: new LibSQLVector({
-      connectionUrl: "file:local.db",
+      connectionUrl: "file:./local.db",
     }),
   }),
 });
@@ -90,7 +87,7 @@ const agent = new Agent({
 
 ### エンベッダー設定
 
-セマンティックリコールは、メッセージを埋め込みに変換するための[埋め込みモデル](/reference/memory/Memory#embedder)に依存しています。デフォルトでMastraはFastEmbedを使用しますが、別の[埋め込みモデル](https://sdk.vercel.ai/image/ai-sdk-core/embeddings)を指定することもできます。
+セマンティックリコールは、メッセージをエンベディングに変換するために[埋め込みモデル](/reference/memory/Memory#embedder)に依存しています。デフォルトではMastraはFastEmbedを使用しますが、別の[埋め込みモデル](https://sdk.vercel.ai/image/ai-sdk-core/embeddings)を指定することもできます。
 
 ```ts {7}
 import { Memory } from "@mastra/memory";
@@ -106,7 +103,7 @@ const agent = new Agent({
 
 ### 無効化
 
-セマンティックリコールを使用するとパフォーマンスへの影響があります。新しいメッセージは埋め込みに変換され、新しいメッセージがLLMに送信される前にベクトルデータベースへのクエリに使用されます。
+セマンティックリコールを使用するとパフォーマンスへの影響があります。新しいメッセージはエンベディングに変換され、新しいメッセージがLLMに送信される前にベクトルデータベースへのクエリに使用されます。
 
 セマンティックリコールはデフォルトで有効になっていますが、必要ない場合は無効にすることができます：
 
@@ -120,7 +117,7 @@ const agent = new Agent({
 });
 ```
 
-以下のようなシナリオでセマンティックリコールを無効にすることをお勧めします：
+以下のようなシナリオではセマンティックリコールを無効にすることをお勧めします：
 
-- [会話履歴](./getting-started.mdx#conversation-history-last-messages)が現在の会話に十分なコンテキストを提供している場合。
-- リアルタイムの双方向音声のような、埋め込みの作成とベクトルクエリの実行による追加の遅延が目立つパフォーマンスに敏感なアプリケーションの場合。
+- 会話履歴が現在の会話に十分なコンテキストを提供している場合。
+- リアルタイムの双方向音声など、パフォーマンスに敏感なアプリケーションで、エンベディングの作成とベクトルクエリの実行による追加の遅延が目立つ場合。

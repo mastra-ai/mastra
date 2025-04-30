@@ -273,10 +273,7 @@ export abstract class Bundler extends MastraBundler {
       .filter(key => key.startsWith('tools/'))
       .map(key => `./${key}.mjs`);
 
-    await writeFile(
-      join(outputDirectory, this.outputDir, 'tools.mjs'),
-      `export const tools = ${JSON.stringify(toolsInputOptions)};`,
-    );
+    await writeFile(join(bundleLocation, 'tools.mjs'), `export const tools = ${JSON.stringify(toolsInputOptions)};`);
     this.logger.info('Bundling Mastra done');
 
     this.logger.info('Copying public files');

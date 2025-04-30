@@ -19,8 +19,18 @@ export async function getVNextWorkflowsHandler({ mastra }: VNextWorkflowContext)
     const _workflows = Object.entries(workflows).reduce<any>((acc, [key, workflow]) => {
       acc[key] = {
         name: workflow.name,
-        steps: workflow.steps,
-        stepGraph: workflow.stepGraph,
+        steps: Object.entries(workflow.steps).reduce<any>((acc, [key, step]) => {
+          acc[key] = {
+            id: step.id,
+            description: step.description,
+            inputSchema: step.inputSchema ? stringify(zodToJsonSchema(step.inputSchema)) : undefined,
+            outputSchema: step.outputSchema ? stringify(zodToJsonSchema(step.outputSchema)) : undefined,
+            resumeSchema: step.resumeSchema ? stringify(zodToJsonSchema(step.resumeSchema)) : undefined,
+            suspendSchema: step.suspendSchema ? stringify(zodToJsonSchema(step.suspendSchema)) : undefined,
+          };
+          return acc;
+        }, {}),
+        stepGraph: workflow.serializedStepGraph,
         inputSchema: workflow.inputSchema ? stringify(zodToJsonSchema(workflow.inputSchema)) : undefined,
         outputSchema: workflow.outputSchema ? stringify(zodToJsonSchema(workflow.outputSchema)) : undefined,
       };
@@ -45,46 +55,24 @@ export async function getVNextWorkflowByIdHandler({ mastra, workflowId }: VNextW
     }
 
     return {
-      steps: workflow.steps,
+      steps: Object.entries(workflow.steps).reduce<any>((acc, [key, step]) => {
+        acc[key] = {
+          id: step.id,
+          description: step.description,
+          inputSchema: step.inputSchema ? stringify(zodToJsonSchema(step.inputSchema)) : undefined,
+          outputSchema: step.outputSchema ? stringify(zodToJsonSchema(step.outputSchema)) : undefined,
+          resumeSchema: step.resumeSchema ? stringify(zodToJsonSchema(step.resumeSchema)) : undefined,
+          suspendSchema: step.suspendSchema ? stringify(zodToJsonSchema(step.suspendSchema)) : undefined,
+        };
+        return acc;
+      }, {}),
       name: workflow.name,
-      stepGraph: workflow.stepGraph,
+      stepGraph: workflow.serializedStepGraph,
       inputSchema: workflow.inputSchema ? stringify(zodToJsonSchema(workflow.inputSchema)) : undefined,
       outputSchema: workflow.outputSchema ? stringify(zodToJsonSchema(workflow.outputSchema)) : undefined,
     };
   } catch (error) {
     throw new HTTPException(500, { message: (error as Error)?.message || 'Error getting workflow' });
-  }
-}
-
-export async function startAsyncVNextWorkflowHandler({
-  mastra,
-  runtimeContext,
-  workflowId,
-  runId,
-  inputData,
-}: Pick<VNextWorkflowContext, 'mastra' | 'workflowId' | 'runId'> & {
-  inputData?: unknown;
-  runtimeContext?: RuntimeContext;
-}) {
-  try {
-    if (!workflowId) {
-      throw new HTTPException(400, { message: 'Workflow ID is required' });
-    }
-
-    const workflow = mastra.vnext_getWorkflow(workflowId);
-
-    if (!workflow) {
-      throw new HTTPException(404, { message: 'Workflow not found' });
-    }
-
-    const _run = workflow.createRun({ runId });
-    const result = await _run.start({
-      inputData,
-      runtimeContext,
-    });
-    return result;
-  } catch (error) {
-    throw new HTTPException(500, { message: (error as Error)?.message || 'Error executing workflow' });
   }
 }
 
@@ -141,6 +129,38 @@ export async function createVNextWorkflowRunHandler({
     return { runId: run.runId };
   } catch (error) {
     throw new HTTPException(500, { message: (error as Error)?.message || 'Error creating workflow run' });
+  }
+}
+
+export async function startAsyncVNextWorkflowHandler({
+  mastra,
+  runtimeContext,
+  workflowId,
+  runId,
+  inputData,
+}: Pick<VNextWorkflowContext, 'mastra' | 'workflowId' | 'runId'> & {
+  inputData?: unknown;
+  runtimeContext?: RuntimeContext;
+}) {
+  try {
+    if (!workflowId) {
+      throw new HTTPException(400, { message: 'Workflow ID is required' });
+    }
+
+    const workflow = mastra.vnext_getWorkflow(workflowId);
+
+    if (!workflow) {
+      throw new HTTPException(404, { message: 'Workflow not found' });
+    }
+
+    const _run = workflow.createRun({ runId });
+    const result = await _run.start({
+      inputData,
+      runtimeContext,
+    });
+    return result;
+  } catch (error) {
+    throw new HTTPException(500, { message: (error as Error)?.message || 'Error executing workflow' });
   }
 }
 
@@ -203,12 +223,12 @@ export async function watchVNextWorkflowHandler({
       throw new HTTPException(404, { message: 'Workflow run not found' });
     }
 
-    const { watch } = workflow.createRun({ runId });
+    const _run = workflow.createRun({ runId });
     let unwatch: () => void;
     let asyncRef: NodeJS.Immediate | null = null;
     const stream = new ReadableStream<string>({
       start(controller) {
-        unwatch = watch(({ type, payload, eventTimestamp }) => {
+        unwatch = _run.watch(({ type, payload, eventTimestamp }) => {
           controller.enqueue(JSON.stringify({ type, payload, eventTimestamp, runId }));
 
           if (asyncRef) {
@@ -218,9 +238,10 @@ export async function watchVNextWorkflowHandler({
 
           // a run is finished if we cannot retrieve it anymore
           asyncRef = setImmediate(async () => {
-            const _run = await workflow.getWorkflowRun(runId);
-            if (!_run) {
+            const runDone = payload.workflowState.status !== 'running';
+            if (runDone) {
               controller.close();
+              unwatch?.();
             }
           });
         });

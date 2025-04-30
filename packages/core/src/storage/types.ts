@@ -12,23 +12,18 @@ export interface StorageColumn {
   };
 }
 
-export interface WorkflowRow {
-  workflow_name: string;
-  run_id: string;
-  snapshot: WorkflowRunState;
-  created_at: Date;
-  updated_at: Date;
+export interface WorkflowRuns {
+  runs: WorkflowRun[];
+  total: number;
 }
 
-export interface WorkflowRuns {
-  runs: Array<{
-    workflowName: string;
-    runId: string;
-    snapshot: WorkflowRunState | string;
-    createdAt: Date;
-    updatedAt: Date;
-  }>;
-  total: number;
+export interface WorkflowRun {
+  workflowName: string;
+  runId: string;
+  snapshot: WorkflowRunState | string;
+  createdAt: Date;
+  updatedAt: Date;
+  resourceId?: string;
 }
 
 export type StorageGetMessagesArg = {

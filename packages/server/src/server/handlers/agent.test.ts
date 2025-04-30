@@ -57,6 +57,8 @@ describe('Agent Handlers', () => {
   let mockMastra: Mastra;
   let mockAgent: Agent;
 
+  const runtimeContext = new RuntimeContext();
+
   beforeEach(() => {
     mockAgent = new MockAgent({
       name: 'test-agent',
@@ -85,7 +87,9 @@ describe('Agent Handlers', () => {
 
   describe('getAgentsHandler', () => {
     it('should return serialized agents', async () => {
-      const result = await getAgentsHandler({ mastra: mockMastra });
+      const result = await getAgentsHandler({ mastra: mockMastra, runtimeContext });
+
+      console.log(result);
 
       expect(result).toEqual({
         'test-agent': {
@@ -101,7 +105,7 @@ describe('Agent Handlers', () => {
 
   describe('getAgentByIdHandler', () => {
     it('should return serialized agent', async () => {
-      const result = await getAgentByIdHandler({ mastra: mockMastra, agentId: 'test-agent' });
+      const result = await getAgentByIdHandler({ mastra: mockMastra, agentId: 'test-agent', runtimeContext });
 
       expect(result).toEqual({
         name: 'test-agent',
@@ -113,7 +117,9 @@ describe('Agent Handlers', () => {
     });
 
     it('should throw 404 when agent not found', async () => {
-      await expect(getAgentByIdHandler({ mastra: mockMastra, agentId: 'non-existing' })).rejects.toThrow(
+      await expect(
+        getAgentByIdHandler({ mastra: mockMastra, runtimeContext, agentId: 'non-existing' }),
+      ).rejects.toThrow(
         new HTTPException(404, {
           message: 'Agent with name non-existing not found',
         }),
@@ -126,7 +132,7 @@ describe('Agent Handlers', () => {
       const storage = mockMastra.getStorage();
       vi.spyOn(storage!, 'getEvalsByAgentName').mockResolvedValue(mockEvals);
 
-      const result = await getEvalsByAgentIdHandler({ mastra: mockMastra, agentId: 'test-agent' });
+      const result = await getEvalsByAgentIdHandler({ mastra: mockMastra, agentId: 'test-agent', runtimeContext });
 
       expect(result).toEqual({
         id: 'test-agent',
@@ -141,7 +147,7 @@ describe('Agent Handlers', () => {
     it('should return live agent evals', async () => {
       vi.spyOn(mockMastra.getStorage()!, 'getEvalsByAgentName').mockResolvedValue(mockEvals);
 
-      const result = await getLiveEvalsByAgentIdHandler({ mastra: mockMastra, agentId: 'test-agent' });
+      const result = await getLiveEvalsByAgentIdHandler({ mastra: mockMastra, agentId: 'test-agent', runtimeContext });
 
       expect(result).toEqual({
         id: 'test-agent',

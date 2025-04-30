@@ -55,6 +55,9 @@ export type StreamParams<T extends JSONSchema7 | ZodSchema | undefined = undefin
 
 export interface GetEvalsByAgentIdResponse extends GetAgentResponse {
   evals: any[];
+  instructions: string;
+  name: string;
+  id: string;
 }
 
 export interface GetToolResponse {
@@ -82,13 +85,22 @@ export type WorkflowRunResult = {
 
 export interface GetVNextWorkflowResponse {
   name: string;
-  steps: NewWorkflow['steps'];
-  stepGraph: NewWorkflow['stepGraph'];
+  steps: {
+    [key: string]: {
+      id: string;
+      description: string;
+      inputSchema: string;
+      outputSchema: string;
+      resumeSchema: string;
+      suspendSchema: string;
+    };
+  };
+  stepGraph: NewWorkflow['serializedStepGraph'];
   inputSchema: string;
   outputSchema: string;
 }
 
-export type VNextWorkflowWatchResult = WatchEvent;
+export type VNextWorkflowWatchResult = WatchEvent & { runId: string };
 
 export type VNextWorkflowRunResult = VNextWorkflowResult<any, any>;
 export interface UpsertVectorParams {

@@ -11,7 +11,11 @@ import yoctoSpinner from 'yocto-spinner';
 import { DepsService } from '../../services/service.deps';
 import { FileService } from '../../services/service.file';
 import { logger } from '../../utils/logger';
-import { globalWindsurfMCPIsAlreadyInstalled, windsurfGlobalMCPConfigPath } from './mcp-docs-server-install';
+import {
+  cursorGlobalMCPConfigPath,
+  globalMCPIsAlreadyInstalled,
+  windsurfGlobalMCPConfigPath,
+} from './mcp-docs-server-install';
 
 const exec = util.promisify(child_process.exec);
 
@@ -76,6 +80,7 @@ export async function writeAgentSample(llmProvider: LLMProvider, destPath: strin
   const content = `
 ${providerImport}
 import { Agent } from '@mastra/core/agent';
+import { Memory } from '@mastra/memory';
 ${addExampleTool ? `import { weatherTool } from '../tools';` : ''}
 
 export const weatherAgent = new Agent({
@@ -83,6 +88,15 @@ export const weatherAgent = new Agent({
   instructions: \`${instructions}\`,
   model: ${modelItem},
   ${addExampleTool ? 'tools: { weatherTool },' : ''}
+  memory: new Memory({
+    options: {
+      lastMessages: 10,
+      semanticRecall: false,
+      threads: {
+        generateTitle: false
+      } 
+    }
+  })
 });
     `;
   const formattedContent = await prettier.format(content, {
@@ -558,13 +572,23 @@ export const interactivePrompt = async () => {
           initialValue: false,
         }),
       configureEditorWithDocsMCP: async () => {
-        const windsurfIsAlreadyInstalled = await globalWindsurfMCPIsAlreadyInstalled();
+        const windsurfIsAlreadyInstalled = await globalMCPIsAlreadyInstalled(`windsurf`);
+        const cursorIsAlreadyInstalled = await globalMCPIsAlreadyInstalled(`cursor`);
 
         const editor = await p.select({
           message: `Make your AI IDE into a Mastra expert? (installs Mastra docs MCP server)`,
           options: [
             { value: 'skip', label: 'Skip for now', hint: 'default' },
-            { value: 'cursor', label: 'Cursor' },
+            {
+              value: 'cursor',
+              label: 'Cursor (project only)',
+              hint: cursorIsAlreadyInstalled ? `Already installed globally` : undefined,
+            },
+            {
+              value: 'cursor-global',
+              label: 'Cursor (global, all projects)',
+              hint: cursorIsAlreadyInstalled ? `Already installed` : undefined,
+            },
             {
               value: 'windsurf',
               label: 'Windsurf',
@@ -583,6 +607,19 @@ export const interactivePrompt = async () => {
           p.log.message(
             `\nNote: you will need to go into Cursor Settings -> MCP Settings and manually enable the installed Mastra MCP server.\n`,
           );
+        }
+
+        if (editor === `cursor-global`) {
+          const confirm = await p.select({
+            message: `Global install will add/update ${cursorGlobalMCPConfigPath} and make the Mastra docs MCP server available in all your Cursor projects. Continue?`,
+            options: [
+              { value: 'yes', label: 'Yes, I understand' },
+              { value: 'skip', label: 'No, skip for now' },
+            ],
+          });
+          if (confirm !== `yes`) {
+            return undefined;
+          }
         }
 
         if (editor === `windsurf`) {

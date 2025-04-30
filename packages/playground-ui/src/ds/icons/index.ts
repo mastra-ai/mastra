@@ -37,3 +37,4 @@ export * from './TsIcon';
 export * from './VariablesIcon';
 export * from './WorkflowIcon';
 export * from './WorkflowCoinIcon';
+export * from './LatencyIcon';

@@ -144,12 +144,11 @@ export const createMastraProject = async ({
   await installMastraDependency(pm, 'mastra', versionTag, true, timeout);
   s.stop('mastra installed');
 
-  s.start('Installing @mastra/core');
+  s.start('Installing dependencies');
   await installMastraDependency(pm, '@mastra/core', versionTag, false, timeout);
-  s.stop('@mastra/core installed');
-  s.start('Installing @mastra/libsql');
   await installMastraDependency(pm, '@mastra/libsql', versionTag, false, timeout);
-  s.stop('@mastra/libsql installed');
+  await installMastraDependency(pm, '@mastra/memory', versionTag, false, timeout);
+  s.stop('Dependencies installed');
 
   s.start('Adding .gitignore');
   await exec(`echo output.txt >> .gitignore`);

@@ -1,0 +1,129 @@
+---
+title: "Using Workflows with Agents and Tools | Workflows (vNext) | Mastra Docs"
+description: "Steps in Mastra workflows (vNext) provide a structured way to manage operations by defining inputs, outputs, and execution logic."
+---
+
+## Agent as a step
+
+vNext workflows can use Mastra agents directly as steps using `createStep(agent)`:
+
+```typescript
+// Agent defined elsewhere
+const myAgent = new Agent({
+  name: "myAgent",
+  instructions: "...",
+  model: openai("gpt-4"),
+});
+
+// Create Mastra instance with agent
+const mastra = new Mastra({
+  agents: {
+    myAgent,
+  },
+  vnext_workflows: {
+    myWorkflow,
+  },
+});
+
+// Use agent in workflow
+myWorkflow
+  .then(preparationStep)
+  .map({
+    prompt: {
+      step: preparationStep,
+      path: "formattedPrompt",
+    },
+  })
+  .then(createStep(myAgent)) // Use agent directly as a step
+  .then(processResultStep)
+  .commit();
+```
+
+## Tools as a step
+
+vNext workflows can use Mastra tools directly as steps using `createStep(tool)`:
+
+```typescript
+const myTool = createTool({
+  id: "my-tool",
+  description: "My tool",
+  inputSchema: z.object({}),
+  outputSchema: z.object({}),
+  execute: async ({ inputData }) => {
+    return { result: "success" };
+  },
+});
+
+myWorkflow.then(createStep(myTool)).then(finalStep).commit();
+```
+
+## Workflow as a tool in an agent
+
+```typescript
+import { Agent } from "@mastra/core/agent";
+import { createTool } from "@mastra/core/tools";
+import { createWorkflow, createStep } from "@mastra/core/workflows/vNext";
+
+const weatherWorkflow = createWorkflow({
+  steps: [fetchWeather, planActivities],
+  id: "weather-workflow-step1-single-day",
+  inputSchema: z.object({
+    city: z.string().describe("The city to get the weather for"),
+  }),
+  outputSchema: z.object({
+    activities: z.string(),
+  }),
+})
+  .then(fetchWeather)
+  .then(planActivities);
+
+const activityPlannerTool = createTool({
+  id: "get-weather-specific-activities",
+  description: "Get weather-specific activities for a city",
+  inputSchema: z.object({
+    city: z.string(),
+  }),
+  outputSchema: z.object({
+    activities: z.array(z.string()),
+  }),
+  execute: async ({ context, mastra }) => {
+    const plannerWorkflow = mastra?.getWorkflow("my-workflow");
+    if (!plannerWorkflow) {
+      throw new Error("Planner workflow not found");
+    }
+
+    const run = plannerWorkflow.createRun();
+    const results = await run.start({
+      triggerData: {
+        city: context.city,
+      },
+    });
+    const planActivitiesStep = results.results["plan-activities"];
+    if (planActivitiesStep.status === "success") {
+      return planActivitiesStep.output;
+    }
+
+    return {
+      activities: "No activities found",
+    };
+  },
+});
+
+const activityPlannerAgent = new Agent({
+  name: "activityPlannerAgent",
+  model: openai("gpt-4o"),
+  instructions: `
+  You are an activity planner. You have access to a tool that will help you get weather-specific activities for any city. The tool uses agents to plan the activities, you just need to provide the city. Whatever information you get back, return it as is and add your own thoughts on top of it.
+  `,
+  tools: { activityPlannerTool },
+});
+
+export const mastra = new Mastra({
+  vnext_workflows: {
+    "my-workflow": myWorkflow,
+  },
+  agents: {
+    activityPlannerAgent,
+  },
+});
+```

@@ -1,5 +1,4 @@
 import type { Mastra } from '@mastra/core';
-import type { RuntimeContext } from '@mastra/core/di';
 import {
   getVNextWorkflowsHandler as getOriginalVNextWorkflowsHandler,
   getVNextWorkflowByIdHandler as getOriginalVNextWorkflowByIdHandler,
@@ -47,28 +46,6 @@ export async function getVNextWorkflowByIdHandler(c: Context) {
   }
 }
 
-export async function startAsyncVNextWorkflowHandler(c: Context) {
-  try {
-    const mastra: Mastra = c.get('mastra');
-    const runtimeContext: RuntimeContext = c.get('runtimeContext');
-    const workflowId = c.req.param('workflowId');
-    const inputData = await c.req.json();
-    const runId = c.req.query('runId');
-
-    const result = await getOriginalStartAsyncVNextWorkflowHandler({
-      mastra,
-      runtimeContext,
-      workflowId,
-      runId,
-      inputData,
-    });
-
-    return c.json(result);
-  } catch (error) {
-    return handleError(error, 'Error executing workflow');
-  }
-}
-
 export async function createVNextWorkflowRunHandler(c: Context) {
   try {
     const mastra: Mastra = c.get('mastra');
@@ -87,12 +64,32 @@ export async function createVNextWorkflowRunHandler(c: Context) {
   }
 }
 
+export async function startAsyncVNextWorkflowHandler(c: Context) {
+  try {
+    const mastra: Mastra = c.get('mastra');
+    const workflowId = c.req.param('workflowId');
+    const { inputData, runtimeContext } = await c.req.json();
+    const runId = c.req.query('runId');
+
+    const result = await getOriginalStartAsyncVNextWorkflowHandler({
+      mastra,
+      runtimeContext,
+      workflowId,
+      runId,
+      inputData,
+    });
+
+    return c.json(result);
+  } catch (error) {
+    return handleError(error, 'Error executing workflow');
+  }
+}
+
 export async function startVNextWorkflowRunHandler(c: Context) {
   try {
     const mastra: Mastra = c.get('mastra');
-    const runtimeContext: RuntimeContext = c.get('runtimeContext');
     const workflowId = c.req.param('workflowId');
-    const inputData = await c.req.json();
+    const { inputData, runtimeContext } = await c.req.json();
     const runId = c.req.query('runId');
 
     await getOriginalStartVNextWorkflowRunHandler({
@@ -154,10 +151,9 @@ export function watchVNextWorkflowHandler(c: Context) {
 export async function resumeAsyncVNextWorkflowHandler(c: Context) {
   try {
     const mastra: Mastra = c.get('mastra');
-    const runtimeContext: RuntimeContext = c.get('runtimeContext');
     const workflowId = c.req.param('workflowId');
     const runId = c.req.query('runId');
-    const { step, resumeData } = await c.req.json();
+    const { step, resumeData, runtimeContext } = await c.req.json();
 
     if (!runId) {
       throw new HTTPException(400, { message: 'runId required to resume workflow' });
@@ -180,10 +176,9 @@ export async function resumeAsyncVNextWorkflowHandler(c: Context) {
 export async function resumeVNextWorkflowHandler(c: Context) {
   try {
     const mastra: Mastra = c.get('mastra');
-    const runtimeContext: RuntimeContext = c.get('runtimeContext');
     const workflowId = c.req.param('workflowId');
     const runId = c.req.query('runId');
-    const { step, resumeData } = await c.req.json();
+    const { step, resumeData, runtimeContext } = await c.req.json();
 
     if (!runId) {
       throw new HTTPException(400, { message: 'runId required to resume workflow' });
