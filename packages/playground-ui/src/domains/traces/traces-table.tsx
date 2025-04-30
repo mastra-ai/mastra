@@ -71,11 +71,11 @@ const TraceRow = ({ trace, index, isActive }: { trace: RefinedTrace; index: numb
       <Cell>
         {hasFailure ? (
           <Badge variant="error" icon={<X />}>
-            <span className="hidden xl:block">Failed</span>
+            Failed
           </Badge>
         ) : (
           <Badge icon={<Check />} variant="success">
-            <span className="hidden xl:block">Success</span>
+            Success
           </Badge>
         )}
       </Cell>
