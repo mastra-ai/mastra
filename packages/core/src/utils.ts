@@ -1,9 +1,10 @@
 import { createHash } from 'crypto';
 import { convertToCoreMessages } from 'ai';
-import type { CoreMessage, ToolExecutionOptions } from 'ai';
+import type { CoreMessage, Schema, ToolExecutionOptions } from 'ai';
+import type { JSONSchema7Type } from 'json-schema';
 import jsonSchemaToZod from 'json-schema-to-zod';
-import { z } from 'zod';
 import type { ZodObject } from 'zod';
+import { z } from 'zod';
 
 import type { MastraPrimitives } from './action';
 import type { ToolsInput } from './agent';
@@ -16,6 +17,15 @@ import type { CoreTool, ToolAction, VercelTool } from './tools';
 import { zodSchemaToCustomVercelJSONSchema } from './x-temp-json-schema';
 
 export const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+
+type SchemaConstraints = {
+  [path: string]: {
+    minLength?: number;
+    maxLength?: number;
+    exactLength?: number;
+    defaultValue?: unknown;
+  };
+};
 
 export function jsonSchemaPropertiesToTSTypes(value: any): z.ZodTypeAny {
   if (!value?.type) {
@@ -486,59 +496,22 @@ export function makeCoreTool(
   logType?: 'tool' | 'toolset' | 'client-tool',
 ): CoreTool {
   // Helper to get parameters based on tool type
-  const getParameters = () => {
+  const getParameters = (): Schema<any> & { constraints: SchemaConstraints } => {
     if (isVercelTool(tool)) {
-      return convertVercelToolParameters(tool);
+      const schema = convertVercelToolParameters(tool);
+      // First convert to unknown
+      const converted = Object.assign(schema, { constraints: {} }) as unknown;
+      // Then to the target type
+      return converted as Schema<any> & { constraints: SchemaConstraints };
     }
 
     const schema = zodSchemaToCustomVercelJSONSchema(tool.inputSchema);
-    // const hardcoded = {
-    //   ...schema.jsonSchema,
-    //   properties: {
-    //     location: {
-    //       type: 'string',
-    //       description: 'City name',
-    //     },
-    //     test: {
-    //       type: ['string', 'null'],
-    //       description: 'Test parameter',
-    //     },
-    //   },
-    //   additionalProperties: false,
-    //   required: ['location', 'test'],
-    // };
-    //
-    // const hardcoded = {
-    //   type: 'object',
-    //   properties: {
-    //     location: {
-    //       type: 'string',
-    //       description: 'The location to get the weather for',
-    //     },
-    //     unit: {
-    //       type: ['string', 'null'],
-    //       description: 'The unit to return the temperature in',
-    //       // enum: ['F', 'C'],
-    //     },
-    //   },
-    //   additionalProperties: false,
-    //   required: ['location', 'unit'],
-    // };
-
-    // // @ts-ignore
-    // schema.jsonSchema = hardcoded;
-    // // @ts-ignore
-    // schema.validate = value => {
-    //   return { success: true, value: value.data };
-    // };
-
     console.log(JSON.stringify(schema.jsonSchema, null, 2));
     return schema;
     // return jsonSchema(tool.inputSchema).jsonSchema;
     // return convertInputSchema(tool);
   };
 
-  // Check if this is a provider-defined tool
   const isProviderDefined =
     'type' in tool &&
     tool.type === 'provider-defined' &&
@@ -546,15 +519,20 @@ export function makeCoreTool(
     typeof tool.id === 'string' &&
     tool.id.includes('.');
 
+  const { constraints, ...parametersRaw } = getParameters();
+  const parameters = parametersRaw as unknown as z.ZodType | JSONSchema7Type;
+
+  const toolDescription =
+    tool.description! + (Object.keys(constraints).length > 0 ? ' ' + JSON.stringify(constraints) : '');
+
   // For provider-defined tools, we need to include all required properties
   if (isProviderDefined) {
     return {
       type: 'provider-defined' as const,
       id: tool.id as `${string}.${string}`,
       args: ('args' in tool ? tool.args : {}) as Record<string, unknown>,
-      description: tool.description!,
-      // @ts-ignore
-      parameters: getParameters(),
+      description: toolDescription,
+      parameters,
       execute: tool.execute ? createExecute(tool, { ...options, description: tool.description }, logType) : undefined,
     };
   }
@@ -562,9 +540,8 @@ export function makeCoreTool(
   // For function tools
   return {
     type: 'function' as const,
-    description: tool.description!,
-    // @ts-ignore
-    parameters: getParameters(),
+    description: toolDescription,
+    parameters,
     execute: tool.execute ? createExecute(tool, { ...options, description: tool.description }, logType) : undefined,
   };
 }
