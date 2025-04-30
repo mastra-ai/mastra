@@ -49,7 +49,7 @@ async function setupCluster() {
   }
 
   // Wait for cluster to be fully available after potential operations
-  await new Promise(resolve => setTimeout(resolve, 10000)); // TODO: Can this hardcoded value be removed?
+  await new Promise(resolve => setTimeout(resolve, 10000));
 }
 
 async function checkBucketHealth(

@@ -77,13 +77,7 @@ export class CouchbaseVector extends MastraVector {
     return this.collection;
   }
 
-  /*
-    ALTERNATE:
-    async createIndex2(params: CreateIndexParams): Promise<void> {...}
-    */
-  // TODO: Do we need this at all? It says in `mastra/packages/core/dist/chunk-ZABXT2MN.js` that the individual arguments are deprecated. And so object needs to be passed directly.
-  async createIndex(...args: ParamsToArgs<CreateIndexParams>): Promise<void> {
-    const params = this.normalizeArgs<CreateIndexParams>('createIndex', args);
+  async createIndex(params: CreateIndexParams): Promise<void> {
     const { indexName, dimension, metric = 'dotproduct' as MastraMetric } = params;
     await this.getCollection();
 
@@ -168,8 +162,7 @@ export class CouchbaseVector extends MastraVector {
     this.vector_dimension = dimension;
   }
 
-  async upsert(...args: ParamsToArgs<UpsertVectorParams>): Promise<string[]> {
-    const params = this.normalizeArgs<UpsertVectorParams>('upsert', args);
+  async upsert(params: UpsertVectorParams): Promise<string[]> {
     const { vectors, metadata, ids } = params;
     await this.getCollection();
 
@@ -207,8 +200,7 @@ export class CouchbaseVector extends MastraVector {
     return pointIds;
   }
 
-  async query(...args: ParamsToArgs<QueryVectorParams>): Promise<QueryResult[]> {
-    const params = this.normalizeArgs<QueryVectorParams>('query', args);
+  async query(params: QueryVectorParams): Promise<QueryResult[]> {
     const { indexName, queryVector, topK = 10, includeVector = false } = params;
 
     await this.getCollection();
