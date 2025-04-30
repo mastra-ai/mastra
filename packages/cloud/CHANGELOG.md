@@ -1,5 +1,12 @@
 # @mastra/cloud
 
+## 0.0.0-alpha.7
+
+### Patch Changes
+
+- Updated dependencies [1d3b1cd]
+  - @mastra/core@0.9.1-alpha.7
+
 ## 0.0.0-alpha.6
 
 ### Patch Changes

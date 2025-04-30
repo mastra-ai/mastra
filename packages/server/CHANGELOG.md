@@ -1,5 +1,13 @@
 # @mastra/deployer
 
+## 2.0.1-alpha.7
+
+### Patch Changes
+
+- 1d3b1cd: Rebump
+- Updated dependencies [1d3b1cd]
+  - @mastra/core@0.9.1-alpha.7
+
 ## 2.0.1-alpha.6
 
 ### Patch Changes
