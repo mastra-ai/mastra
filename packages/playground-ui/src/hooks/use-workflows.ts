@@ -94,7 +94,7 @@ export const useWorkflow = (workflowId: string, baseUrl: string) => {
 
             const wFlow = await client.getWorkflow(step.workflowId).details();
 
-            if (!res) return step;
+            if (!wFlow) return step;
 
             return { ...step, stepGraph: wFlow.stepGraph, stepSubscriberGraph: wFlow.stepSubscriberGraph };
           }),

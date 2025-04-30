@@ -592,6 +592,9 @@ export class Agent<
 
     return messagesBySanitizedContent.filter(message => {
       if (typeof message.content === `string`) {
+        if (message.role === 'assistant') {
+          return true;
+        }
         return message.content !== '';
       }
 

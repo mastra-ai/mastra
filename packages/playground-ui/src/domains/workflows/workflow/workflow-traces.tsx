@@ -28,7 +28,7 @@ function WorkflowTracesInner({ workflowName, baseUrl }: WorkflowTracesProps) {
 
   return (
     <main className="h-full relative overflow-hidden flex">
-      <div className={clsx('h-full', open ? 'w-auto' : 'w-full')}>
+      <div className="h-full overflow-y-scroll w-full">
         <TracesTable traces={traces} isLoading={firstCallLoading} error={error} />
       </div>
 

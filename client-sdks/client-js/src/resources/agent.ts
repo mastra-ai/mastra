@@ -1,8 +1,8 @@
+import { processDataStream } from '@ai-sdk/ui-utils';
 import type { GenerateReturn } from '@mastra/core';
 import type { JSONSchema7 } from 'json-schema';
 import { ZodSchema } from 'zod';
 import { zodToJsonSchema } from 'zod-to-json-schema';
-import { processDataStream } from '@ai-sdk/ui-utils';
 
 import type {
   GenerateParams,
@@ -29,7 +29,6 @@ export class AgentTool extends BaseResource {
    * @param params - Parameters required for tool execution
    * @returns Promise containing tool execution results
    */
-  /** @deprecated use CreateRun/startRun */
   execute(params: { data: any }): Promise<any> {
     return this.request(`/api/agents/${this.agentId}/tools/${this.toolId}/execute`, {
       method: 'POST',

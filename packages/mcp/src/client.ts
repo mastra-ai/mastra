@@ -89,13 +89,20 @@ function convertLogLevelToLoggerMethod(level: LoggingLevel): 'debug' | 'info' | 
   }
 }
 
+export type InternalMastraMCPClientOptions = {
+  name: string;
+  server: MastraMCPServerDefinition;
+  capabilities?: ClientCapabilities;
+  version?: string;
+  timeout?: number;
+};
+
 export class InternalMastraMCPClient extends MastraBase {
   name: string;
   private client: Client;
   private readonly timeout: number;
   private logHandler?: LogHandler;
   private enableServerLogs?: boolean;
-  private static hasWarned = false;
   private serverConfig: MastraMCPServerDefinition;
   private transport?: Transport;
 
@@ -105,21 +112,8 @@ export class InternalMastraMCPClient extends MastraBase {
     server,
     capabilities = {},
     timeout = DEFAULT_REQUEST_TIMEOUT_MSEC,
-  }: {
-    name: string;
-    server: MastraMCPServerDefinition;
-    capabilities?: ClientCapabilities;
-    version?: string;
-    timeout?: number;
-  }) {
+  }: InternalMastraMCPClientOptions) {
     super({ name: 'MastraMCPClient' });
-    if (!InternalMastraMCPClient.hasWarned) {
-      // eslint-disable-next-line no-console
-      console.warn(
-        '[DEPRECATION] MastraMCPClient is deprecated and will be removed in a future release. Please use MCPClient instead.',
-      );
-      InternalMastraMCPClient.hasWarned = true;
-    }
     this.name = name;
     this.timeout = timeout;
     this.logHandler = server.logger;
@@ -374,4 +368,12 @@ export class InternalMastraMCPClient extends MastraBase {
 /**
  * @deprecated MastraMCPClient is deprecated and will be removed in a future release. Please use MCPClient instead.
  */
-export const MastraMCPClient = InternalMastraMCPClient;
+
+export class MastraMCPClient extends InternalMastraMCPClient {
+  constructor(args: InternalMastraMCPClientOptions) {
+    super(args);
+    this.logger.warn(
+      '[DEPRECATION] MastraMCPClient is deprecated and will be removed in a future release. Please use MCPClient instead.',
+    );
+  }
+}
