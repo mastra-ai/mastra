@@ -1,6 +1,6 @@
 import { MastraBase } from '@mastra/core/base';
 import { createTool } from '@mastra/core/tools';
-import { jsonSchemaToModel } from '@mastra/core/utils';
+import { isZodType, resolveSerializedZodOutput } from '@mastra/core/utils';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { SSEClientTransport } from '@modelcontextprotocol/sdk/client/sse.js';
 import type { SSEClientTransportOptions } from '@modelcontextprotocol/sdk/client/sse.js';
@@ -14,6 +14,8 @@ import type { ClientCapabilities, LoggingLevel } from '@modelcontextprotocol/sdk
 import { CallToolResultSchema, ListResourcesResultSchema } from '@modelcontextprotocol/sdk/types.js';
 
 import { asyncExitHook, gracefulExit } from 'exit-hook';
+import jsonSchemaToZod from 'json-schema-to-zod';
+import type { JsonSchema } from 'json-schema-to-zod';
 import { z } from 'zod';
 
 // Re-export MCP SDK LoggingLevel for convenience
@@ -320,17 +322,25 @@ export class InternalMastraMCPClient extends MastraBase {
     });
   }
 
+  private convertInputSchema(
+    inputSchema: Awaited<ReturnType<Client['listTools']>>['tools'][0]['inputSchema'] | JsonSchema,
+  ): z.ZodType {
+    return isZodType(inputSchema)
+      ? inputSchema
+      : resolveSerializedZodOutput(jsonSchemaToZod(inputSchema as JsonSchema));
+  }
+
   async tools() {
     this.log('debug', `Requesting tools from MCP server`);
     const { tools } = await this.client.listTools({ timeout: this.timeout });
     const toolsRes: Record<string, any> = {};
     tools.forEach(tool => {
       this.log('debug', `Processing tool: ${tool.name}`);
-      const s = jsonSchemaToModel(tool.inputSchema);
+
       const mastraTool = createTool({
         id: `${this.name}_${tool.name}`,
         description: tool.description || '',
-        inputSchema: s,
+        inputSchema: this.convertInputSchema(tool.inputSchema),
         execute: async ({ context }) => {
           try {
             this.log('debug', `Executing tool: ${tool.name}`, { toolArgs: context });
