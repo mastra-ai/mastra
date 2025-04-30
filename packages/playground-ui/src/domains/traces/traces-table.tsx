@@ -62,7 +62,7 @@ const TraceRow = ({ trace, index, isActive }: { trace: RefinedTrace; index: numb
     <Row className={isActive ? 'bg-surface4' : ''} onClick={() => openTrace(trace.trace, index)}>
       <DateTimeCell dateTime={new Date(trace.started / 1000)} />
       <TxtCell title={trace.traceId}>{trace.traceId.substring(0, 7)}...</TxtCell>
-      <UnitCell unit="ms">{trace.duration / 1000}</UnitCell>
+      <UnitCell unit="ms">{Math.round(trace.duration / 1000)}</UnitCell>
       <Cell>
         <button onClick={() => openTrace(trace.trace, index)}>
           <Badge icon={<TraceIcon />}>{trace.trace.length}</Badge>

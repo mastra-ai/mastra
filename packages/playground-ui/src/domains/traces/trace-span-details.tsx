@@ -4,7 +4,7 @@ import { SyntaxHighlighter } from '@/components/syntax-highlighter';
 
 import { TraceContext } from './context/trace-context';
 
-import { formatDuration, formatOtelTimestamp, formatOtelTimestamp2, transformKey } from './utils';
+import { formatOtelTimestamp, formatOtelTimestamp2, transformKey } from './utils';
 import { Header } from '@/ds/components/Header';
 import { ChevronDown, ChevronUp, X } from 'lucide-react';
 import { Icon, LatencyIcon } from '@/ds/icons';
@@ -80,11 +80,11 @@ export function SpanDetail() {
         <div className="flex flex-row gap-2 items-center">
           {span.status.code === 0 ? (
             <Badge icon={<LatencyIcon />} variant="success">
-              {formatDuration(span.duration)}ms
+              {Math.round(span.duration / 1000)}ms
             </Badge>
           ) : (
             <Badge variant="error" icon={<X />}>
-              Failed in {formatDuration(span.duration)}ms
+              Failed in {Math.round(span.duration / 1000)}s
             </Badge>
           )}
         </div>
