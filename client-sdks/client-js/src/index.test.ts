@@ -1,4 +1,3 @@
-import type { MessageType } from '@mastra/core';
 import { describe, expect, beforeEach, it, vi } from 'vitest';
 
 import { MastraClient } from './client';
@@ -489,7 +488,7 @@ describe('MastraClient Resources', () => {
       const result = await memoryThread.update({
         title: 'Updated Thread',
         metadata: { updated: true },
-        resourceid: 'test-resource',
+        resourceId: 'test-resource',
       });
       expect(result).toEqual(mockResponse);
       expect(global.fetch).toHaveBeenCalledWith(
@@ -536,6 +535,7 @@ describe('MastraClient Resources', () => {
           content: 'test',
           role: 'user' as const,
           threadId: 'test-thread',
+          resourceId: 'test-resource',
           createdAt: new Date('2025-03-26T10:40:55.116Z'),
         },
       ];
@@ -584,10 +584,10 @@ describe('MastraClient Resources', () => {
     it('should execute tool', async () => {
       const mockResponse = { data: 'test' };
       mockFetchResponse(mockResponse);
-      const result = await tool.execute({ data: '' });
+      const result = await tool.execute({ data: '', runId: 'test-run-id' });
       expect(result).toEqual(mockResponse);
       expect(global.fetch).toHaveBeenCalledWith(
-        `${clientOptions.baseUrl}/api/tools/test-tool/execute`,
+        `${clientOptions.baseUrl}/api/tools/test-tool/execute?runId=test-run-id`,
         expect.objectContaining({
           method: 'POST',
           headers: expect.objectContaining({
