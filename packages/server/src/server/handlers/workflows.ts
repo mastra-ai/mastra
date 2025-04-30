@@ -28,7 +28,9 @@ export async function getWorkflowsHandler({ mastra }: WorkflowContext) {
         steps: Object.entries(workflow.steps).reduce<any>((acc, [key, step]) => {
           const _step = step as any;
           acc[key] = {
-            ..._step,
+            id: _step.id,
+            description: _step.description,
+            workflowId: _step.workflowId,
             inputSchema: _step.inputSchema ? stringify(zodToJsonSchema(_step.inputSchema)) : undefined,
             outputSchema: _step.outputSchema ? stringify(zodToJsonSchema(_step.outputSchema)) : undefined,
           };
@@ -65,7 +67,9 @@ export async function getWorkflowByIdHandler({ mastra, workflowId }: WorkflowCon
       steps: Object.entries(workflow.steps).reduce<any>((acc, [key, step]) => {
         const _step = step as any;
         acc[key] = {
-          ..._step,
+          id: _step.id,
+          description: _step.description,
+          workflowId: _step.workflowId,
           inputSchema: _step.inputSchema ? stringify(zodToJsonSchema(_step.inputSchema)) : undefined,
           outputSchema: _step.outputSchema ? stringify(zodToJsonSchema(_step.outputSchema)) : undefined,
         };
