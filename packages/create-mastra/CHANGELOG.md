@@ -1,5 +1,11 @@
 # create-mastra
 
+## 0.3.0-alpha.5
+
+### Patch Changes
+
+- ca665d3: fix the ui for smaller screen regarding traces
+
 ## 0.3.0-alpha.4
 
 ### Patch Changes
