@@ -1,0 +1,19 @@
+{
+  "name": "@mastra/scripts",
+  "version": "1.0.0",
+  "description": "Internal scripts for Mastra project",
+  "private": true,
+  "scripts": {
+    "test-tool-schemas": "tsx test-tool-schemas.ts"
+  },
+  "dependencies": {
+    "@ai-sdk/openai": "^0.0.24",
+    "dotenv": "^16.4.5",
+    "zod": "^3.23.8",
+    "zod-to-json-schema": "^3.23.0",
+    "@mastra/core": "workspace:^"
+  },
+  "devDependencies": {
+    "tsx": "^4.16.2"
+  }
+}

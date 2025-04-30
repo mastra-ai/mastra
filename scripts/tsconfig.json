@@ -1,0 +1,14 @@
+{
+  "compilerOptions": {
+    "outDir": "./dist",
+    "rootDir": ".",
+    "module": "commonjs",
+    "esModuleInterop": true,
+    "strict": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true
+  },
+  "include": [
+    "./**/*.ts"
+  ]
+}
