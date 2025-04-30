@@ -1,5 +1,60 @@
 # mastra
 
+## 0.6.0
+
+### Minor Changes
+
+- e126a44: improve non-interactive mode of the mastra cli and create-mastra by adding --no-example and --dir flags
+
+### Patch Changes
+
+- 34a76ca: Call workflow cleanup function when closing watch stream controller
+- 0ccb8b4: Fix deployer bundling when custom mastra dir is set
+- 25d3c39: build logs for how to load instrumentation for build output
+- 70124e1: revamp the ui for traces
+- 20275d4: Adding warnings for current implicit Memory default options as they will be changing soon in a breaking change. Also added memory to create-mastra w/ new defaults so new projects don't see these warnings
+- 3b74a74: add badge for failure / successful traces
+- 05806e3: revamp the UI of the chat in playground
+- 926821d: Fix triggerSchema default not showing in workflow ui
+- 0c3c4f4: Playground routing model settings for AgentNetworks
+- 1700eca: fixing overflow on agent traces
+- b50b9b7: Add vNext workflow to client-js
+- 11d4485: Show VNext workflows on the playground
+  Show running status for step in vNext workflowState
+- ca665d3: fix the ui for smaller screen regarding traces
+- 57b25ed: Use resumeSchema to show inputs on the playground for suspended workflows
+- f1d4b7a: Add x-mastra-dev-playground header to all playground requests
+- 5a66ced: add click on trace row
+- 8863033: Fix tools api in local dev api
+- 2d4001d: Add new @msstra/libsql package and use it in create-mastra
+- 5ebe2aa: Adds ability to add a global configuration for cursor for the Mastra docs MCP server during creation of a Mastra project. Allowing all cursor projects to have access to the MCP server.
+- Updated dependencies [e7c2881]
+- Updated dependencies [0ccb8b4]
+- Updated dependencies [92c598d]
+- Updated dependencies [405b63d]
+- Updated dependencies [81fb7f6]
+- Updated dependencies [20275d4]
+- Updated dependencies [7d1892c]
+- Updated dependencies [ebdb781]
+- Updated dependencies [a90a082]
+- Updated dependencies [2d17c73]
+- Updated dependencies [61e92f5]
+- Updated dependencies [35955b0]
+- Updated dependencies [6262bd5]
+- Updated dependencies [c1409ef]
+- Updated dependencies [3e7b69d]
+- Updated dependencies [e4943b8]
+- Updated dependencies [11d4485]
+- Updated dependencies [479f490]
+- Updated dependencies [530ced1]
+- Updated dependencies [c23a81c]
+- Updated dependencies [611aa4a]
+- Updated dependencies [2d4001d]
+- Updated dependencies [c71013a]
+- Updated dependencies [1d3b1cd]
+  - @mastra/deployer@0.3.1
+  - @mastra/core@0.9.1
+
 ## 0.6.0-alpha.11
 
 ### Patch Changes

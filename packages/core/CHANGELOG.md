@@ -1,5 +1,33 @@
 # @mastra/core
 
+## 0.9.1
+
+### Patch Changes
+
+- 405b63d: add ability to clone workflows with different id
+- 81fb7f6: Workflows v2
+- 20275d4: Adding warnings for current implicit Memory default options as they will be changing soon in a breaking change. Also added memory to create-mastra w/ new defaults so new projects don't see these warnings
+- 7d1892c: Return error object directly in vNext workflows
+- a90a082: Rename container to runtimeContext in vNext workflow
+  Add steps accessor for stepFlow in vnext workflow
+  Add getWorkflowRun to vnext workflow
+  Add vnext_getWorkflows() to mastra core
+- 2d17c73: Fix checking for presence of constant value mappings
+- 61e92f5: vNext fix workflow watch cleanup
+- 35955b0: Rename import to runtime-contxt
+- 6262bd5: Mastra server custom host config
+- c1409ef: Add vNextWorkflow handlers and APIs
+  Add stepGraph and steps to vNextWorkflow
+- 3e7b69d: Dynamic agent props
+- e4943b8: Default arrays to string type when transformation JSON schema to zod as per the JSON schema spec.
+- 11d4485: Show VNext workflows on the playground
+  Show running status for step in vNext workflowState
+- 479f490: [MASTRA-3131] Add getWorkflowRunByID and add resourceId as filter for getWorkflowRuns
+- c23a81c: added deprecation warnings for pg and individual args
+- 2d4001d: Add new @msstra/libsql package and use it in create-mastra
+- c71013a: vNeuxt: unset currentStep for workflow status change event
+- 1d3b1cd: Rebump
+
 ## 0.9.1-alpha.8
 
 ### Patch Changes

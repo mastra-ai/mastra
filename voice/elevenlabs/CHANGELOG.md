@@ -1,5 +1,32 @@
 # @mastra/voice-elevenlabs
 
+## 0.1.15
+
+### Patch Changes
+
+- ac69a13: dependencies updates:
+  - Updated dependency [`elevenlabs@^1.57.0` ↗︎](https://www.npmjs.com/package/elevenlabs/v/1.57.0) (from `^1.54.0`, in `dependencies`)
+  - Updated dependency [`zod@^3.24.3` ↗︎](https://www.npmjs.com/package/zod/v/3.24.3) (from `^3.24.2`, in `dependencies`)
+- Updated dependencies [405b63d]
+- Updated dependencies [81fb7f6]
+- Updated dependencies [20275d4]
+- Updated dependencies [7d1892c]
+- Updated dependencies [a90a082]
+- Updated dependencies [2d17c73]
+- Updated dependencies [61e92f5]
+- Updated dependencies [35955b0]
+- Updated dependencies [6262bd5]
+- Updated dependencies [c1409ef]
+- Updated dependencies [3e7b69d]
+- Updated dependencies [e4943b8]
+- Updated dependencies [11d4485]
+- Updated dependencies [479f490]
+- Updated dependencies [c23a81c]
+- Updated dependencies [2d4001d]
+- Updated dependencies [c71013a]
+- Updated dependencies [1d3b1cd]
+  - @mastra/core@0.9.1
+
 ## 0.1.15-alpha.8
 
 ### Patch Changes
