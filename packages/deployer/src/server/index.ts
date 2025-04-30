@@ -72,6 +72,7 @@ import {
 } from './handlers/workflows.js';
 import type { ServerBundleOptions } from './types';
 import { html } from './welcome.js';
+import { getAgentCardByIdHandler, getAgentExecutionHandler } from './handlers/a2a';
 
 type Bindings = {};
 
@@ -220,6 +221,144 @@ export async function createHonoServer(mastra: Mastra, options: ServerBundleOpti
   if (server?.build?.apiReqLogs) {
     app.use(logger());
   }
+
+  /**
+   * A2A
+   */
+
+  app.get(
+    '/.well-known/:agentId/agent.json',
+    describeRoute({
+      description: 'Get agent configuration',
+      tags: ['agents'],
+      parameters: [
+        {
+          name: 'agentId',
+          in: 'path',
+          required: true,
+          schema: { type: 'string' },
+        },
+      ],
+      responses: {
+        200: {
+          description: 'Agent configuration',
+        },
+      },
+    }),
+    getAgentCardByIdHandler,
+  );
+
+  app.post(
+    '/a2a/:agentId',
+    describeRoute({
+      description: 'Execute agent via A2A protocol',
+      tags: ['agents'],
+      parameters: [
+        {
+          name: 'agentId',
+          in: 'path',
+          required: true,
+          schema: { type: 'string' },
+        },
+      ],
+      requestBody: {
+        required: true,
+        content: {
+          'application/json': {
+            schema: {
+              type: 'object',
+              properties: {
+                method: {
+                  type: 'string',
+                  enum: ['tasks/send', 'tasks/sendSubscribe', 'tasks/get', 'tasks/cancel'],
+                  description: 'The A2A protocol method to execute',
+                },
+                params: {
+                  type: 'object',
+                  oneOf: [
+                    {
+                      // TaskSendParams
+                      type: 'object',
+                      properties: {
+                        id: {
+                          type: 'string',
+                          description: 'Unique identifier for the task being initiated or continued',
+                        },
+                        sessionId: {
+                          type: 'string',
+                          description: 'Optional identifier for the session this task belongs to',
+                        },
+                        message: {
+                          type: 'object',
+                          description: 'The message content to send to the agent for processing',
+                        },
+                        pushNotification: {
+                          type: 'object',
+                          nullable: true,
+                          description:
+                            'Optional pushNotification information for receiving notifications about this task',
+                        },
+                        historyLength: {
+                          type: 'integer',
+                          nullable: true,
+                          description:
+                            'Optional parameter to specify how much message history to include in the response',
+                        },
+                        metadata: {
+                          type: 'object',
+                          nullable: true,
+                          description: 'Optional metadata associated with sending this message',
+                        },
+                      },
+                      required: ['id', 'message'],
+                    },
+                    {
+                      // TaskQueryParams
+                      type: 'object',
+                      properties: {
+                        id: { type: 'string', description: 'The unique identifier of the task' },
+                        historyLength: {
+                          type: 'integer',
+                          nullable: true,
+                          description: 'Optional history length to retrieve for the task',
+                        },
+                        metadata: {
+                          type: 'object',
+                          nullable: true,
+                          description: 'Optional metadata to include with the operation',
+                        },
+                      },
+                      required: ['id'],
+                    },
+                    {
+                      // TaskIdParams
+                      type: 'object',
+                      properties: {
+                        id: { type: 'string', description: 'The unique identifier of the task' },
+                        metadata: {
+                          type: 'object',
+                          nullable: true,
+                          description: 'Optional metadata to include with the operation',
+                        },
+                      },
+                      required: ['id'],
+                    },
+                  ],
+                },
+              },
+              required: ['method', 'params'],
+            },
+          },
+        },
+      },
+      responses: {
+        200: {
+          description: 'Agent response',
+        },
+      },
+    }),
+    getAgentExecutionHandler,
+  );
 
   // API routes
   app.get(
