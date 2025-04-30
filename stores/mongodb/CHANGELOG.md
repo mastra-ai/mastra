@@ -1,5 +1,12 @@
 # @mastra/mongodb
 
+## 0.0.2-alpha.5
+
+### Patch Changes
+
+- Updated dependencies [c23a81c]
+  - @mastra/core@0.9.1-alpha.6
+
 ## 0.0.2-alpha.4
 
 ### Patch Changes
