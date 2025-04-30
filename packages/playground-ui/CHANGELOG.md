@@ -1,5 +1,11 @@
 # @mastra/playground-ui
 
+## 5.0.1-alpha.9
+
+### Patch Changes
+
+- ca665d3: fix the ui for smaller screen regarding traces
+
 ## 5.0.1-alpha.8
 
 ### Patch Changes
