@@ -106,7 +106,7 @@ async function runSingleTest(
     const response = await agent.generate(`Please call the tool named '${toolName}'.`, {
       toolChoice: 'required',
       maxSteps: 1,
-      temperature: 1,
+      temperature: 1, // todo only set this for o3-mini, other models should use whatever the default is - also seems wrong that we have to do this at all
     });
 
     const toolCall = response.toolCalls.find(tc => tc.toolName === toolName);
