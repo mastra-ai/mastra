@@ -64,5 +64,7 @@
     "@mastra/voice-sarvam": "0.1.10",
     "@mastra/voice-speechify": "0.1.15"
   },
-  "changesets": []
+  "changesets": [
+    "metal-owls-appear"
+  ]
 }
