@@ -65,6 +65,7 @@
     "@mastra/voice-speechify": "0.1.15"
   },
   "changesets": [
+    "dark-phones-sin",
     "every-pears-swim",
     "hot-bags-float",
     "huge-trains-film",

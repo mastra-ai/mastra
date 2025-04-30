@@ -1,5 +1,11 @@
 # @mastra/core
 
+## 0.9.2-alpha.2
+
+### Patch Changes
+
+- 26738f4: Switched from a custom MCP tools schema deserializer to json-schema-to-zod - fixes an issue where MCP tool schemas didn't deserialize properly in Mastra playground. Also added support for testing tools with no input arguments in playground
+
 ## 0.9.2-alpha.1
 
 ### Patch Changes
