@@ -1,5 +1,11 @@
 # @mastra/core
 
+## 0.9.2-alpha.1
+
+### Patch Changes
+
+- b804723: Fix #3831: keep conversations in tact by keeping empty assistant messages
+
 ## 0.9.2-alpha.0
 
 ### Patch Changes

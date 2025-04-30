@@ -1,5 +1,13 @@
 # @mastra/mcp
 
+## 0.4.2-alpha.1
+
+### Patch Changes
+
+- 8bb9b4d: Deprecation warning was on the subclass, rather than the deprecated class. So the deprecation warning would show even if you used the new class.
+- Updated dependencies [b804723]
+  - @mastra/core@0.9.2-alpha.1
+
 ## 0.4.2-alpha.0
 
 ### Patch Changes
