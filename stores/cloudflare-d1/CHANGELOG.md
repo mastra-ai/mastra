@@ -1,5 +1,12 @@
 # @mastra/cloudflare-d1
 
+## 0.1.6-alpha.7
+
+### Patch Changes
+
+- Updated dependencies [c23a81c]
+  - @mastra/core@0.9.1-alpha.6
+
 ## 0.1.6-alpha.6
 
 ### Patch Changes
