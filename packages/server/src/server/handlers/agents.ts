@@ -15,28 +15,39 @@ type GetBody<
 } & Parameters<Agent[T]>[1];
 
 // Agent handlers
-export async function getAgentsHandler({ mastra }: Context) {
+export async function getAgentsHandler({ mastra, runtimeContext }: Context & { runtimeContext: RuntimeContext }) {
   try {
     const agents = mastra.getAgents();
 
-    const serializedAgents = Object.entries(agents).reduce<any>((acc, [_id, _agent]) => {
-      const agent = _agent as any;
-      const serializedAgentTools = Object.entries(agent?.tools || {}).reduce<any>((acc, [key, tool]) => {
-        const _tool = tool as any;
-        acc[key] = {
-          ..._tool,
-          inputSchema: _tool.inputSchema ? stringify(zodToJsonSchema(_tool.inputSchema)) : undefined,
-          outputSchema: _tool.outputSchema ? stringify(zodToJsonSchema(_tool.outputSchema)) : undefined,
+    const serializedAgentsMap = await Promise.all(
+      Object.entries(agents).map(async ([id, agent]) => {
+        const instructions = await agent.getInstructions({ runtimeContext });
+        const tools = await agent.getTools({ runtimeContext });
+        const llm = await agent.getLLM({ runtimeContext });
+
+        const serializedAgentTools = Object.entries(tools || {}).reduce<any>((acc, [key, tool]) => {
+          const _tool = tool as any;
+          acc[key] = {
+            ..._tool,
+            inputSchema: _tool.inputSchema ? stringify(zodToJsonSchema(_tool.inputSchema)) : undefined,
+            outputSchema: _tool.outputSchema ? stringify(zodToJsonSchema(_tool.outputSchema)) : undefined,
+          };
+          return acc;
+        }, {});
+
+        return {
+          id,
+          name: agent.name,
+          instructions,
+          tools: serializedAgentTools,
+          provider: llm?.getProvider(),
+          modelId: llm?.getModelId(),
         };
-        return acc;
-      }, {});
-      acc[_id] = {
-        name: agent.name,
-        instructions: agent.instructions,
-        tools: serializedAgentTools,
-        provider: agent.llm?.getProvider(),
-        modelId: agent.llm?.getModelId(),
-      };
+      }),
+    );
+
+    const serializedAgents = serializedAgentsMap.reduce<any>((acc, { id, ...rest }) => {
+      acc[id] = rest;
       return acc;
     }, {});
 
@@ -46,7 +57,11 @@ export async function getAgentsHandler({ mastra }: Context) {
   }
 }
 
-export async function getAgentByIdHandler({ mastra, agentId }: Context & { agentId: string }) {
+export async function getAgentByIdHandler({
+  mastra,
+  runtimeContext,
+  agentId,
+}: Context & { runtimeContext: RuntimeContext; agentId: string }) {
   try {
     const agent = mastra.getAgent(agentId);
 
@@ -54,7 +69,9 @@ export async function getAgentByIdHandler({ mastra, agentId }: Context & { agent
       throw new HTTPException(404, { message: 'Agent not found' });
     }
 
-    const serializedAgentTools = Object.entries(agent?.tools || {}).reduce<any>((acc, [key, tool]) => {
+    const tools = await agent.getTools({ runtimeContext });
+
+    const serializedAgentTools = Object.entries(tools || {}).reduce<any>((acc, [key, tool]) => {
       const _tool = tool as any;
       acc[key] = {
         ..._tool,
@@ -64,26 +81,34 @@ export async function getAgentByIdHandler({ mastra, agentId }: Context & { agent
       return acc;
     }, {});
 
+    const instructions = await agent.getInstructions({ runtimeContext });
+    const llm = await agent.getLLM({ runtimeContext });
+
     return {
       name: agent.name,
-      instructions: agent.instructions,
+      instructions,
       tools: serializedAgentTools,
-      provider: agent.llm?.getProvider(),
-      modelId: agent.llm?.getModelId(),
+      provider: llm?.getProvider(),
+      modelId: llm?.getModelId(),
     };
   } catch (error) {
     return handleError(error, 'Error getting agent');
   }
 }
 
-export async function getEvalsByAgentIdHandler({ mastra, agentId }: Context & { agentId: string }) {
+export async function getEvalsByAgentIdHandler({
+  mastra,
+  runtimeContext,
+  agentId,
+}: Context & { runtimeContext: RuntimeContext; agentId: string }) {
   try {
     const agent = mastra.getAgent(agentId);
     const evals = (await mastra.getStorage()?.getEvalsByAgentName?.(agent.name, 'test')) || [];
+    const instructions = await agent.getInstructions({ runtimeContext });
     return {
       id: agentId,
       name: agent.name,
-      instructions: agent.instructions,
+      instructions,
       evals,
     };
   } catch (error) {
@@ -91,15 +116,20 @@ export async function getEvalsByAgentIdHandler({ mastra, agentId }: Context & { 
   }
 }
 
-export async function getLiveEvalsByAgentIdHandler({ mastra, agentId }: Context & { agentId: string }) {
+export async function getLiveEvalsByAgentIdHandler({
+  mastra,
+  runtimeContext,
+  agentId,
+}: Context & { runtimeContext: RuntimeContext; agentId: string }) {
   try {
     const agent = mastra.getAgent(agentId);
     const evals = (await mastra.getStorage()?.getEvalsByAgentName?.(agent.name, 'live')) || [];
+    const instructions = await agent.getInstructions({ runtimeContext });
 
     return {
       id: agentId,
       name: agent.name,
-      instructions: agent.instructions,
+      instructions,
       evals,
     };
   } catch (error) {

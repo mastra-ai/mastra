@@ -1,5 +1,48 @@
 # @mastra/cloudflare-d1
 
+## 0.1.6-alpha.9
+
+### Patch Changes
+
+- Updated dependencies [2d17c73]
+  - @mastra/core@0.9.1-alpha.8
+
+## 0.1.6-alpha.8
+
+### Patch Changes
+
+- Updated dependencies [1d3b1cd]
+  - @mastra/core@0.9.1-alpha.7
+
+## 0.1.6-alpha.7
+
+### Patch Changes
+
+- Updated dependencies [c23a81c]
+  - @mastra/core@0.9.1-alpha.6
+
+## 0.1.6-alpha.6
+
+### Patch Changes
+
+- Updated dependencies [3e7b69d]
+  - @mastra/core@0.9.1-alpha.5
+
+## 0.1.6-alpha.5
+
+### Patch Changes
+
+- c8641ce: [MASTRA-3276] Cloudflare KV and D1 Workflow Runs
+
+## 0.1.6-alpha.4
+
+### Patch Changes
+
+- 479f490: [MASTRA-3131] Add getWorkflowRunByID and add resourceId as filter for getWorkflowRuns
+- Updated dependencies [e4943b8]
+- Updated dependencies [479f490]
+  - @mastra/core@0.9.1-alpha.4
+
 ## 0.1.6-alpha.3
 
 ### Patch Changes

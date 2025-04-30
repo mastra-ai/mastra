@@ -1,5 +1,36 @@
 # @mastra/core
 
+## 0.9.1-alpha.8
+
+### Patch Changes
+
+- 2d17c73: Fix checking for presence of constant value mappings
+
+## 0.9.1-alpha.7
+
+### Patch Changes
+
+- 1d3b1cd: Rebump
+
+## 0.9.1-alpha.6
+
+### Patch Changes
+
+- c23a81c: added deprecation warnings for pg and individual args
+
+## 0.9.1-alpha.5
+
+### Patch Changes
+
+- 3e7b69d: Dynamic agent props
+
+## 0.9.1-alpha.4
+
+### Patch Changes
+
+- e4943b8: Default arrays to string type when transformation JSON schema to zod as per the JSON schema spec.
+- 479f490: [MASTRA-3131] Add getWorkflowRunByID and add resourceId as filter for getWorkflowRuns
+
 ## 0.9.1-alpha.3
 
 ### Patch Changes

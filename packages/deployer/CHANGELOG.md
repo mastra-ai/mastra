@@ -1,5 +1,48 @@
 # @mastra/deployer
 
+## 0.3.1-alpha.8
+
+### Patch Changes
+
+- Updated dependencies [2d17c73]
+  - @mastra/core@0.9.1-alpha.8
+  - @mastra/server@2.0.1-alpha.8
+
+## 0.3.1-alpha.7
+
+### Patch Changes
+
+- 1d3b1cd: Rebump
+- Updated dependencies [1d3b1cd]
+  - @mastra/core@0.9.1-alpha.7
+  - @mastra/server@2.0.1-alpha.7
+
+## 0.3.1-alpha.6
+
+### Patch Changes
+
+- Updated dependencies [c23a81c]
+  - @mastra/core@0.9.1-alpha.6
+  - @mastra/server@2.0.1-alpha.6
+
+## 0.3.1-alpha.5
+
+### Patch Changes
+
+- 3e7b69d: Dynamic agent props
+- Updated dependencies [3e7b69d]
+  - @mastra/core@0.9.1-alpha.5
+  - @mastra/server@2.0.1-alpha.5
+
+## 0.3.1-alpha.4
+
+### Patch Changes
+
+- Updated dependencies [e4943b8]
+- Updated dependencies [479f490]
+  - @mastra/core@0.9.1-alpha.4
+  - @mastra/server@2.0.1-alpha.4
+
 ## 0.3.1-alpha.3
 
 ### Patch Changes

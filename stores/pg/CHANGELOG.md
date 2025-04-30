@@ -1,5 +1,45 @@
 # @mastra/pg
 
+## 0.3.1-alpha.8
+
+### Patch Changes
+
+- Updated dependencies [2d17c73]
+  - @mastra/core@0.9.1-alpha.8
+
+## 0.3.1-alpha.7
+
+### Patch Changes
+
+- Updated dependencies [1d3b1cd]
+  - @mastra/core@0.9.1-alpha.7
+
+## 0.3.1-alpha.6
+
+### Patch Changes
+
+- c23a81c: added deprecation warnings for pg and individual args
+- Updated dependencies [c23a81c]
+  - @mastra/core@0.9.1-alpha.6
+
+## 0.3.1-alpha.5
+
+### Patch Changes
+
+- 3e7b69d: Dynamic agent props
+- 5f826d9: Moved vector store specific prompts from @mastra/rag to be exported from the store that the prompt belongs to, ie @mastra/pg
+- Updated dependencies [3e7b69d]
+  - @mastra/core@0.9.1-alpha.5
+
+## 0.3.1-alpha.4
+
+### Patch Changes
+
+- 479f490: [MASTRA-3131] Add getWorkflowRunByID and add resourceId as filter for getWorkflowRuns
+- Updated dependencies [e4943b8]
+- Updated dependencies [479f490]
+  - @mastra/core@0.9.1-alpha.4
+
 ## 0.3.1-alpha.3
 
 ### Patch Changes

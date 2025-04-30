@@ -1,6 +1,6 @@
 {
   "name": "@mastra/deployer-cloudflare",
-  "version": "0.1.20-alpha.3",
+  "version": "0.1.20-alpha.8",
   "description": "",
   "type": "module",
   "files": [
@@ -57,6 +57,6 @@
     "eslint": "^9.23.0",
     "tsup": "^8.4.0",
     "typescript": "^5.8.2",
-    "vitest": "^3.0.9"
+    "vitest": "^3.1.2"
   }
 }
