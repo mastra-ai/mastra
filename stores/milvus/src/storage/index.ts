@@ -8,8 +8,8 @@ import type {
   WorkflowRuns,
 } from '@mastra/core';
 import type { TABLE_NAMES } from '@mastra/core/storage';
-import { MilvusClient } from '@zilliz/milvus2-sdk-node';
-import type { CheckHealthResponse, ClientConfig } from '@zilliz/milvus2-sdk-node';
+import type { CheckHealthResponse, ClientConfig, CollectionSchema, FieldType } from '@zilliz/milvus2-sdk-node';
+import { MilvusClient, DataType } from '@zilliz/milvus2-sdk-node';
 
 export class MilvusStorage extends MastraStorage {
   private client: MilvusClient;
@@ -34,8 +34,86 @@ export class MilvusStorage extends MastraStorage {
     return this.client.checkHealth();
   }
 
-  createTable({ tableName, schema }: { tableName: TABLE_NAMES; schema: Record<string, StorageColumn> }): Promise<void> {
-    throw new Error(`Method not implemented. ${tableName}, ${JSON.stringify(schema)}`);
+  translateSchema(schema: Record<string, StorageColumn>): FieldType[] {
+    return Object.entries(schema).map(([name, column]) => {
+      let dataType: DataType;
+      let maxLength: number | undefined;
+
+      switch (column.type) {
+        case 'uuid':
+          dataType = DataType.VarChar;
+          maxLength = 36; // Standard UUID length
+          break;
+        case 'integer':
+          dataType = DataType.Int32;
+          break;
+        case 'bigint':
+          dataType = DataType.Int64;
+          break;
+        case 'text':
+          dataType = DataType.VarChar;
+          maxLength = 65535; // Default max length for text
+          break;
+        case 'timestamp':
+          dataType = DataType.Int64;
+          break;
+        case 'jsonb':
+          dataType = DataType.JSON;
+          break;
+        default:
+          dataType = DataType.VarChar; // Default to VarChar if type is unknown
+          maxLength = 255;
+      }
+
+      const fieldType: FieldType = {
+        name,
+        data_type: dataType,
+        is_primary_key: column.primaryKey ?? false,
+        nullable: column.nullable ?? true,
+      };
+
+      if (maxLength && dataType === DataType.VarChar) {
+        fieldType.max_length = maxLength;
+      }
+
+      return fieldType;
+    });
+  }
+
+  async getTableSchema(tableName: TABLE_NAMES): Promise<CollectionSchema> {
+    try {
+      const collection = await this.client.describeCollection({ collection_name: tableName });
+      return collection.schema;
+    } catch (error) {
+      throw new Error('Failed to get collection: ' + error);
+    }
+  }
+
+  async createTable({
+    tableName,
+    schema,
+  }: {
+    tableName: TABLE_NAMES;
+    schema: Record<string, StorageColumn>;
+  }): Promise<void> {
+    try {
+      const fields = this.translateSchema(schema);
+      console.log(fields);
+      await this.client.createCollection({
+        collection_name: tableName,
+        schema: fields,
+      });
+    } catch (error) {
+      throw new Error('Failed to create collection: ' + error);
+    }
+  }
+
+  async dropTable({ tableName }: { tableName: TABLE_NAMES }): Promise<void> {
+    try {
+      await this.client.dropCollection({ collection_name: tableName });
+    } catch (error) {
+      throw new Error('Failed to drop collection: ' + error);
+    }
   }
 
   clearTable({ tableName }: { tableName: TABLE_NAMES }): Promise<void> {
