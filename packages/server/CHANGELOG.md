@@ -1,5 +1,15 @@
 # @mastra/deployer
 
+## 2.0.2-alpha.0
+
+### Patch Changes
+
+- 0097d50: Add serializedStepGraph to vNext workflow
+  Return serializedStepGraph from vNext workflow
+  Use serializedStepGraph in vNext workflow graph
+- Updated dependencies [0097d50]
+  - @mastra/core@0.9.2-alpha.0
+
 ## 2.0.1
 
 ### Patch Changes

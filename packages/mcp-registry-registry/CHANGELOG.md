@@ -1,5 +1,12 @@
 # @mastra/mcp-registry-registry
 
+## 0.0.4-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [0097d50]
+  - @mastra/core@0.9.2-alpha.0
+
 ## 0.0.3
 
 ### Patch Changes
