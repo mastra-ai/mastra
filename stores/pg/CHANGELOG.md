@@ -1,5 +1,13 @@
 # @mastra/pg
 
+## 0.3.1-alpha.6
+
+### Patch Changes
+
+- c23a81c: added deprecation warnings for pg and individual args
+- Updated dependencies [c23a81c]
+  - @mastra/core@0.9.1-alpha.6
+
 ## 0.3.1-alpha.5
 
 ### Patch Changes

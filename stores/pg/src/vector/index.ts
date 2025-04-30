@@ -70,6 +70,10 @@ export class PgVector extends MastraVector {
   private vectorExtensionInstalled: boolean | undefined = undefined;
   private schemaSetupComplete: boolean | undefined = undefined;
 
+  /**
+   * @deprecated Passing connectionString as a string is deprecated.
+   * Use the object parameter instead. This signature will be removed on May 20th.
+   */
   constructor(connectionString: string);
   constructor(config: {
     connectionString: string;
@@ -90,6 +94,15 @@ export class PgVector extends MastraVector {
     let schemaName: string | undefined;
 
     if (typeof config === 'string') {
+      // DEPRECATION WARNING
+      console.warn(
+        `DEPRECATION WARNING: Passing connectionString as a string to PgVector constructor is deprecated.
+
+        Please use an object parameter instead:
+        new PgVector({ connectionString })
+
+        The string signature will be removed on May 20th.`,
+      );
       connectionString = config;
       schemaName = undefined;
       pgPoolOptions = undefined;

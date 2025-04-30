@@ -1,5 +1,13 @@
 # @mastra/deployer
 
+## 0.3.1-alpha.6
+
+### Patch Changes
+
+- Updated dependencies [c23a81c]
+  - @mastra/core@0.9.1-alpha.6
+  - @mastra/server@2.0.1-alpha.6
+
 ## 0.3.1-alpha.5
 
 ### Patch Changes
