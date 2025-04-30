@@ -5,7 +5,6 @@ import { askQuestion } from "./action-ask";
 import { useState } from "react";
 
 export default function Home() {
-  "use client";
   const [query, setQuery] = useState("");
   const [answer, setAnswer] = useState("");
   const [loading, setLoading] = useState(false);
