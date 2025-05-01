@@ -21,14 +21,16 @@ export async function getVNextWorkflowsHandler({ mastra }: VNextWorkflowContext)
         name: workflow.name,
         steps: Object.entries(workflow.steps).reduce<any>((acc, [key, step]) => {
           acc[key] = {
-            ...step,
+            id: step.id,
+            description: step.description,
             inputSchema: step.inputSchema ? stringify(zodToJsonSchema(step.inputSchema)) : undefined,
             outputSchema: step.outputSchema ? stringify(zodToJsonSchema(step.outputSchema)) : undefined,
             resumeSchema: step.resumeSchema ? stringify(zodToJsonSchema(step.resumeSchema)) : undefined,
+            suspendSchema: step.suspendSchema ? stringify(zodToJsonSchema(step.suspendSchema)) : undefined,
           };
           return acc;
         }, {}),
-        stepGraph: workflow.stepGraph,
+        stepGraph: workflow.serializedStepGraph,
         inputSchema: workflow.inputSchema ? stringify(zodToJsonSchema(workflow.inputSchema)) : undefined,
         outputSchema: workflow.outputSchema ? stringify(zodToJsonSchema(workflow.outputSchema)) : undefined,
       };
@@ -55,15 +57,17 @@ export async function getVNextWorkflowByIdHandler({ mastra, workflowId }: VNextW
     return {
       steps: Object.entries(workflow.steps).reduce<any>((acc, [key, step]) => {
         acc[key] = {
-          ...step,
+          id: step.id,
+          description: step.description,
           inputSchema: step.inputSchema ? stringify(zodToJsonSchema(step.inputSchema)) : undefined,
           outputSchema: step.outputSchema ? stringify(zodToJsonSchema(step.outputSchema)) : undefined,
           resumeSchema: step.resumeSchema ? stringify(zodToJsonSchema(step.resumeSchema)) : undefined,
+          suspendSchema: step.suspendSchema ? stringify(zodToJsonSchema(step.suspendSchema)) : undefined,
         };
         return acc;
       }, {}),
       name: workflow.name,
-      stepGraph: workflow.stepGraph,
+      stepGraph: workflow.serializedStepGraph,
       inputSchema: workflow.inputSchema ? stringify(zodToJsonSchema(workflow.inputSchema)) : undefined,
       outputSchema: workflow.outputSchema ? stringify(zodToJsonSchema(workflow.outputSchema)) : undefined,
     };

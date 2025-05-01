@@ -1,7 +1,6 @@
 import Dagre from '@dagrejs/dagre';
 import type { StepCondition } from '@mastra/core/workflows';
-import { NewStep, NewWorkflow, StepFlowEntry } from '@mastra/core/workflows/vNext';
-import { v4 as uuid } from '@lukeed/uuid';
+import { NewStep, NewWorkflow, SerializedStepFlowEntry, StepFlowEntry } from '@mastra/core/workflows/vNext';
 import type { Node, Edge } from '@xyflow/react';
 import { MarkerType } from '@xyflow/react';
 
@@ -492,11 +491,11 @@ const getStepNodeAndEdge = ({
   nextStepFlow,
   condition,
 }: {
-  stepFlow: StepFlowEntry;
+  stepFlow: SerializedStepFlowEntry;
   xIndex: number;
   yIndex: number;
   prevNodeIds: string[];
-  nextStepFlow?: StepFlowEntry;
+  nextStepFlow?: SerializedStepFlowEntry;
   condition?: { id: string; fn: string };
 }): { nodes: Node[]; edges: Edge[]; nextPrevNodeIds: string[] } => {
   let nextNodeIds: string[] = [];
@@ -679,7 +678,7 @@ const getStepNodeAndEdge = ({
 export const constructVNextNodesAndEdges = ({
   stepGraph,
 }: {
-  stepGraph: NewWorkflow['stepGraph'];
+  stepGraph: NewWorkflow['serializedStepGraph'];
 }): { nodes: Node[]; edges: Edge[] } => {
   if (!stepGraph) {
     return { nodes: [], edges: [] };

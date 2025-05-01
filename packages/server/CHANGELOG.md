@@ -1,5 +1,85 @@
 # @mastra/deployer
 
+## 2.0.2-alpha.2
+
+### Patch Changes
+
+- Updated dependencies [26738f4]
+  - @mastra/core@0.9.2-alpha.2
+
+## 2.0.2-alpha.1
+
+### Patch Changes
+
+- Updated dependencies [b804723]
+  - @mastra/core@0.9.2-alpha.1
+
+## 2.0.2-alpha.0
+
+### Patch Changes
+
+- 0097d50: Add serializedStepGraph to vNext workflow
+  Return serializedStepGraph from vNext workflow
+  Use serializedStepGraph in vNext workflow graph
+- Updated dependencies [0097d50]
+  - @mastra/core@0.9.2-alpha.0
+
+## 2.0.1
+
+### Patch Changes
+
+- 34a76ca: Call workflow cleanup function when closing watch stream controller
+- 35955b0: Rename import to runtime-contxt
+- c1409ef: Add vNextWorkflow handlers and APIs
+  Add stepGraph and steps to vNextWorkflow
+- 3e7b69d: Dynamic agent props
+- f200fed: Server handler audioStream fix
+- 11d4485: Show VNext workflows on the playground
+  Show running status for step in vNext workflowState
+- 57b25ed: Use resumeSchema to show inputs on the playground for suspended workflows
+- 1d3b1cd: Rebump
+- Updated dependencies [405b63d]
+- Updated dependencies [81fb7f6]
+- Updated dependencies [20275d4]
+- Updated dependencies [7d1892c]
+- Updated dependencies [a90a082]
+- Updated dependencies [2d17c73]
+- Updated dependencies [61e92f5]
+- Updated dependencies [35955b0]
+- Updated dependencies [6262bd5]
+- Updated dependencies [c1409ef]
+- Updated dependencies [3e7b69d]
+- Updated dependencies [e4943b8]
+- Updated dependencies [11d4485]
+- Updated dependencies [479f490]
+- Updated dependencies [c23a81c]
+- Updated dependencies [2d4001d]
+- Updated dependencies [c71013a]
+- Updated dependencies [1d3b1cd]
+  - @mastra/core@0.9.1
+
+## 2.0.1-alpha.8
+
+### Patch Changes
+
+- Updated dependencies [2d17c73]
+  - @mastra/core@0.9.1-alpha.8
+
+## 2.0.1-alpha.7
+
+### Patch Changes
+
+- 1d3b1cd: Rebump
+- Updated dependencies [1d3b1cd]
+  - @mastra/core@0.9.1-alpha.7
+
+## 2.0.1-alpha.6
+
+### Patch Changes
+
+- Updated dependencies [c23a81c]
+  - @mastra/core@0.9.1-alpha.6
+
 ## 2.0.1-alpha.5
 
 ### Patch Changes
