@@ -91,6 +91,8 @@ export abstract class MastraStorage extends MastraBase {
     perPage: number;
     attributes?: Record<string, string>;
     filters?: Record<string, any>;
+    fromDate?: Date;
+    toDate?: Date;
   }): Promise<any[]>;
 
   async init(): Promise<void> {

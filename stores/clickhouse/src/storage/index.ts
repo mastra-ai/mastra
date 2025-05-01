@@ -210,6 +210,8 @@ export class ClickhouseStore extends MastraStorage {
     perPage,
     attributes,
     filters,
+    fromDate,
+    toDate,
   }: {
     name?: string;
     scope?: string;
@@ -217,6 +219,8 @@ export class ClickhouseStore extends MastraStorage {
     perPage: number;
     attributes?: Record<string, string>;
     filters?: Record<string, any>;
+    fromDate?: Date;
+    toDate?: Date;
   }): Promise<any[]> {
     const limit = perPage;
     const offset = page * perPage;
@@ -246,6 +250,16 @@ export class ClickhouseStore extends MastraStorage {
         );
         args[`var_col_${key}`] = value;
       });
+    }
+
+    if (fromDate) {
+      conditions.push(`createdAt >= {var_from_date:DateTime64(3)}`);
+      args.var_from_date = fromDate.getTime() / 1000; // Convert to Unix timestamp
+    }
+
+    if (toDate) {
+      conditions.push(`createdAt <= {var_to_date:DateTime64(3)}`);
+      args.var_to_date = toDate.getTime() / 1000; // Convert to Unix timestamp
     }
 
     const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
