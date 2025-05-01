@@ -21,7 +21,11 @@ type Result = {
 const openai = createOpenAI({ apiKey: process.env.OPENAI_API_KEY });
 const modelsToTest: LanguageModel[] = [
   openai('o3-mini'),
-  // openai('gpt-4o'),
+  openai('o4-mini'),
+  openai(`o3`),
+  openai('gpt-4o'),
+  openai(`gpt-4.1-mini`),
+  openai(`gpt-4.1`),
 ];
 
 const testTools = Object.keys(allParsers.shape).map(key => {
