@@ -6,7 +6,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { WorkflowInformation } from '@/domains/workflows/workflow-information';
 import { useWorkflow } from '@/hooks/use-workflows';
 
-function WorkflowTracesInner() {
+function WorkflowTracesContent() {
   const { workflowId } = useParams();
   const { workflow, isLoading: isWorkflowLoading } = useWorkflow(workflowId!);
 
@@ -40,7 +40,7 @@ function WorkflowTracesPage() {
   // Wrap with TraceProvider to ensure proper context for useTraces
   return (
     <TraceProvider>
-      <WorkflowTracesInner />
+      <WorkflowTracesContent />
     </TraceProvider>
   );
 }

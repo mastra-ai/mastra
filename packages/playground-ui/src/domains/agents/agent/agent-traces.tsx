@@ -25,7 +25,7 @@ function AgentTracesInner({ className, traces, isLoading, error }: AgentTracesPr
   return (
     <div className={clsx('h-full relative overflow-hidden flex', className)}>
       <div className="h-full overflow-y-scroll w-full">
-        <TracesTable traces={traces} isLoading={firstCallLoading} error={error} />
+        <TracesTable traces={traces} isLoading={isLoading} error={error} />
       </div>
 
       {open && <TracesSidebar width={sidebarWidth} onResize={setSidebarWidth} />}
