@@ -12,4 +12,3 @@ packages:
   - "packages/cli/src/playground"
   - "packages/*/integration-tests"
   - "packages/cloud"
-  - "dynamodb/*"
