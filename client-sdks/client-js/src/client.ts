@@ -33,15 +33,17 @@ export class MastraClient extends BaseResource {
     return this.request('/api/agents');
   }
 
-  public async getAGUI(): Promise<Record<string, AGUIAdapter>> {
-    const agents = (await this.request('/api/agents/gui')) as Record<string, GetAgentResponse>;
+  public async getAGUI({ resourceId }: { resourceId: string }): Promise<Record<string, AGUIAdapter>> {
+    const agents = await this.getAgents();
 
     return Object.entries(agents).reduce(
       (acc, [agentId]) => {
         const agent = this.getAgent(agentId);
+
         acc[agentId] = new AGUIAdapter({
           agentId,
           agent,
+          resourceId,
         });
 
         return acc;
