@@ -1,0 +1,115 @@
+---
+title: "Using Tools with Agents | Agents | Mastra Docs"
+description: Learn how to create tools, add them to Mastra agents, and integrate tools from MCP servers.
+---
+
+# Using Tools with Agents
+
+Agents can use tools to extend their capabilities beyond text generation. Tools allow agents to perform calculations, access external systems, and process data. You can create your own tools or leverage tools provided by third-party MCP (Model Context Protocol) servers.
+
+## Overview
+
+Tools are typed functions that can be executed by agents or workflows. Each tool has a schema defining its inputs, an executor function implementing its logic, and optional access to configured integrations.
+
+Here's a basic example of creating a tool:
+
+```typescript filename="src/mastra/tools/weatherInfo.ts" copy
+import { createTool } from "@mastra/core/tools";
+import { z } from "zod";
+
+export const weatherInfo = createTool({
+  id: "Get Weather Information",
+  inputSchema: z.object({
+    city: z.string(),
+  }),
+  description: `Fetches the current weather information for a given city`,
+  execute: async ({ context: { city } }) => {
+    // Tool logic here (e.e.g., API call)
+    console.log("Using tool to fetch weather information for", city);
+    return { temperature: 20, conditions: "Sunny" }; // Example return
+  },
+});
+```
+
+For a comprehensive guide on creating and designing tools, see the [Tools Overview](/docs/tools-mcp/overview).
+
+## Add Tools to an Agent
+
+To make a tool available to an agent, add it to the `tools` property in the agent's configuration.
+
+```typescript filename="src/mastra/agents/weatherAgent.ts"
+import { Agent } from "@mastra/core/agent";
+import { openai } from "@ai-sdk/openai";
+import { weatherInfo } from "../tools/weatherInfo"; // Your tool
+
+export const weatherAgent = new Agent({
+  name: "Weather Agent",
+  instructions:
+    "You are a helpful assistant that provides current weather information. When asked about the weather, use the weather information tool to fetch the data.",
+  model: openai("gpt-4o-mini"),
+  tools: {
+    weatherInfo, // Add the tool here
+  },
+});
+```
+
+When you call the agent, it can now decide to use the configured tool based on its instructions and the user's prompt.
+
+```typescript filename="src/index.ts"
+import { mastra } from "./mastra"; // Assuming mastra instance is exported from here
+
+async function main() {
+  const agent = mastra.getAgent("weatherAgent");
+  const response = await agent.generate(
+    "What's the weather like in New York City today?",
+  );
+
+  console.log(response.text);
+}
+
+main();
+```
+
+## Add MCP Tools to an Agent
+
+[Model Context Protocol (MCP)](https://modelcontextprotocol.io/introduction) provides a standardized way for AI models to discover and interact with external tools and resources. You can connect your Mastra agent to MCP servers to use tools provided by third parties.
+
+For a deeper dive into MCP concepts and how to set up MCP clients and servers, see the [MCP Overview](/docs/tools-mcp/mcp-overview).
+
+### Installation
+
+First, install the Mastra MCP package:
+
+```bash npm2yarn copy
+npm install @mastra/mcp@latest
+```
+
+### Using MCP Tools with an Agent
+
+You use an `MCPClient` to connect to MCP servers and retrieve tools. You can then add these tools to your agent's configuration.
+
+```typescript
+import { MCPClient } from "@mastra/mcp";
+import { Agent } from "@mastra/core/agent";
+import { openai } from "@ai-sdk/openai";
+
+// Configure MCPClient to connect to your server(s)
+const mcp = new MCPClient({
+  servers: { /* ... server configurations ... */ },
+});
+
+// Create an agent and add tools from the MCP client
+const agent = new Agent({
+  name: "Agent with MCP Tools",
+  instructions: "You can use tools from connected MCP servers.",
+  model: openai("gpt-4o-mini"),
+  tools: await mcp.getTools(), // Add tools fetched from MCP servers
+});
+
+// For dynamic tool configurations per request, use getToolsets()
+// const agent = new Agent({ /* ... config without tools ... */ });
+// const toolsets = await mcp.getToolsets();
+// await agent.generate(prompt, { toolsets });
+```
+
+For more details on configuring `MCPClient` and the difference between `getTools()` and `getToolsets()`, see the [MCP Overview](/docs/tools-mcp/mcp-overview).
