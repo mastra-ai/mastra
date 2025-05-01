@@ -5,10 +5,6 @@ description: Learn how to create tools, add them to Mastra agents, and integrate
 
 # Using Tools with Agents
 
-Agents can use tools to extend their capabilities beyond text generation. Tools allow agents to perform calculations, access external systems, and process data. You can create your own tools or leverage tools provided by third-party MCP (Model Context Protocol) servers.
-
-## Overview
-
 Tools are typed functions that can be executed by agents or workflows. Each tool has a schema defining its inputs, an executor function implementing its logic, and optional access to configured integrations.
 
 Here's a basic example of creating a tool:
@@ -54,21 +50,6 @@ export const weatherAgent = new Agent({
 ```
 
 When you call the agent, it can now decide to use the configured tool based on its instructions and the user's prompt.
-
-```typescript filename="src/index.ts"
-import { mastra } from "./mastra"; // Assuming mastra instance is exported from here
-
-async function main() {
-  const agent = mastra.getAgent("weatherAgent");
-  const response = await agent.generate(
-    "What's the weather like in New York City today?",
-  );
-
-  console.log(response.text);
-}
-
-main();
-```
 
 ## Add MCP Tools to an Agent
 
