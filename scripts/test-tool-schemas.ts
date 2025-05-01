@@ -106,6 +106,9 @@ function generateSummary(resultsByModel: Map<LanguageModel, { results: Result[] 
     for (const result of results) {
       const status = result.status === 'success' ? chalk.green(result.status) : chalk.red(result.status);
       console.log(`  ${status}${result.status === 'error' ? '  ' : ''} ${result.testName}`);
+      if (result.error) {
+        console.error(`    ${result.error}`);
+      }
     }
   }
 }

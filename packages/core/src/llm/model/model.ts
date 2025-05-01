@@ -105,6 +105,7 @@ export class MastraLLM extends MastraLLMBase {
             memory,
             mastra: mastraProxy,
             runtimeContext,
+            model: this.#model,
           };
           memo[k] = makeCoreTool(tool, options);
         }
@@ -195,8 +196,6 @@ export class MastraLLM extends MastraLLMBase {
         schema = jsonSchema(experimental_output as JSONSchema7) as Schema<Z>;
       }
     }
-
-    console.log({ temperature });
 
     return await generateText({
       messages,

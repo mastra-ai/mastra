@@ -488,6 +488,7 @@ export class Agent<
             memory,
             agentName: this.name,
             runtimeContext,
+            model: this.model,
           };
           memo[k] = makeCoreTool(tool, options);
         }

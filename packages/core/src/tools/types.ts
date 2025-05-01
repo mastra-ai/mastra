@@ -1,4 +1,4 @@
-import type { ToolExecutionOptions, Tool } from 'ai';
+import type { ToolExecutionOptions, Tool, Schema } from 'ai';
 import type { JSONSchema7Type } from 'json-schema';
 import type { ZodSchema, z } from 'zod';
 
@@ -12,7 +12,7 @@ export type VercelTool = Tool;
 export type CoreTool = {
   id?: string;
   description?: string;
-  parameters: ZodSchema | JSONSchema7Type;
+  parameters: ZodSchema | JSONSchema7Type | Schema;
   execute?: (params: any, options: ToolExecutionOptions) => Promise<any>;
 } & (
   | {
