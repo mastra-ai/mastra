@@ -16,6 +16,7 @@ export async function getAgentCardByIdHandler({
   }
 
   const instructions = await agent.getInstructions({ runtimeContext });
+  const tools = await agent.getTools({ runtimeContext });
 
   // Extract agent information to create the AgentCard
   const agentCard: AgentCard = {
@@ -35,8 +36,14 @@ export async function getAgentCardByIdHandler({
     },
     defaultInputModes: ['text'],
     defaultOutputModes: ['text'],
-    // TODO: SKILLS
-    skills: [],
+    // Convert agent tools to skills format for A2A protocol
+    skills: Object.entries(tools).map(([toolId, tool]) => ({
+      id: toolId,
+      name: toolId,
+      description: tool.description || `Tool: ${toolId}`,
+      // Optional fields
+      tags: ['tool'],
+    })),
   };
 
   return agentCard;
