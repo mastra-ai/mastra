@@ -547,6 +547,61 @@ describe('Workflow', () => {
           step2: { status: 'success', output: { result: 'success', input: [{ str: 'step1-data' }] } },
         });
       });
+
+      it('should resolve constant values via .map()', async () => {
+        const execute = vi.fn<any>().mockResolvedValue({ result: 'success' });
+        const triggerSchema = z.object({
+          cool: z.string(),
+        });
+
+        const step1 = createStep({
+          id: 'step1',
+          execute,
+          inputSchema: triggerSchema,
+          outputSchema: z.object({ result: z.string() }),
+        });
+
+        const step2 = createStep({
+          id: 'step2',
+          execute: async ({ inputData }) => {
+            return { result: inputData.candidates.map(c => c.name).join('') || 'none', second: inputData.iteration };
+          },
+          inputSchema: z.object({ candidates: z.array(z.object({ name: z.string() })), iteration: z.number() }),
+          outputSchema: z.object({ result: z.string(), second: z.number() }),
+        });
+
+        const workflow = createWorkflow({
+          id: 'test-workflow',
+          inputSchema: triggerSchema,
+          outputSchema: z.object({ result: z.string(), second: z.number() }),
+        });
+
+        workflow
+          .then(step1)
+          .map({
+            candidates: {
+              value: [],
+              schema: z.array(z.object({ name: z.string() })),
+            },
+            iteration: {
+              value: 0,
+              schema: z.number(),
+            },
+          })
+          .then(step2)
+          .commit();
+
+        const run = workflow.createRun();
+        const result = await run.start({ inputData: { cool: 'test-input' } });
+
+        expect(execute).toHaveBeenCalledWith(
+          expect.objectContaining({
+            inputData: { cool: 'test-input' },
+          }),
+        );
+
+        expect(result.steps.step2).toEqual({ status: 'success', output: { result: 'none', second: 0 } });
+      });
     });
 
     describe('Simple Conditions', () => {
@@ -3007,6 +3062,199 @@ describe('Workflow', () => {
       expect(result.steps['nested-workflow-2']).toEqual({
         status: 'success',
         output: { text: 'London' },
+      });
+    });
+
+    it('should be able to use an agent as a step via mastra instance', async () => {
+      const workflow = createWorkflow({
+        id: 'test-workflow',
+        inputSchema: z.object({
+          prompt1: z.string(),
+          prompt2: z.string(),
+        }),
+        outputSchema: z.object({}),
+      });
+
+      const agent = new Agent({
+        name: 'test-agent-1',
+        instructions: 'test agent instructions',
+        model: openai('gpt-4'),
+      });
+
+      const agent2 = new Agent({
+        name: 'test-agent-2',
+        instructions: 'test agent instructions',
+        model: openai('gpt-4'),
+      });
+
+      const startStep = createStep({
+        id: 'start',
+        inputSchema: z.object({
+          prompt1: z.string(),
+          prompt2: z.string(),
+        }),
+        outputSchema: z.object({ prompt1: z.string(), prompt2: z.string() }),
+        execute: async ({ inputData }) => {
+          return {
+            prompt1: inputData.prompt1,
+            prompt2: inputData.prompt2,
+          };
+        },
+      });
+
+      new Mastra({
+        vnext_workflows: { 'test-workflow': workflow },
+        agents: { 'test-agent-1': agent, 'test-agent-2': agent2 },
+      });
+
+      workflow
+        .then(startStep)
+        .map({
+          prompt: {
+            step: startStep,
+            path: 'prompt1',
+          },
+        })
+        .then(
+          createStep({
+            id: 'agent-step-1',
+            inputSchema: z.object({ prompt: z.string() }),
+            outputSchema: z.object({ text: z.string() }),
+            execute: async ({ inputData, mastra }) => {
+              const agent = mastra.getAgent('test-agent-1');
+              const result = await agent.generate([{ role: 'user', content: inputData.prompt }]);
+              return { text: result.text };
+            },
+          }),
+        )
+        .map({
+          prompt: {
+            step: startStep,
+            path: 'prompt2',
+          },
+        })
+        .then(
+          createStep({
+            id: 'agent-step-2',
+            inputSchema: z.object({ prompt: z.string() }),
+            outputSchema: z.object({ text: z.string() }),
+            execute: async ({ inputData, mastra }) => {
+              const agent = mastra.getAgent('test-agent-2');
+              const result = await agent.generate([{ role: 'user', content: inputData.prompt }]);
+              return { text: result.text };
+            },
+          }),
+        )
+
+        .commit();
+
+      const run = workflow.createRun();
+      const result = await run.start({
+        inputData: { prompt1: 'Capital of France, just the name', prompt2: 'Capital of UK, just the name' },
+      });
+
+      expect(result.steps['agent-step-1']).toEqual({
+        status: 'success',
+        output: { text: 'Paris' },
+      });
+
+      expect(result.steps['agent-step-2']).toEqual({
+        status: 'success',
+        output: { text: 'London' },
+      });
+    });
+
+    it('should be able to use an agent as a step in nested workflow via mastra instance', async () => {
+      const workflow = createWorkflow({
+        id: 'test-workflow',
+        inputSchema: z.object({
+          prompt1: z.string(),
+          prompt2: z.string(),
+        }),
+        outputSchema: z.object({}),
+      });
+
+      const agent = new Agent({
+        name: 'test-agent-1',
+        instructions: 'test agent instructions',
+        model: openai('gpt-4'),
+      });
+
+      const agent2 = new Agent({
+        name: 'test-agent-2',
+        instructions: 'test agent instructions',
+        model: openai('gpt-4'),
+      });
+
+      new Mastra({
+        vnext_workflows: { 'test-workflow': workflow },
+        agents: { 'test-agent-1': agent, 'test-agent-2': agent2 },
+      });
+
+      const agentStep = createStep({
+        id: 'agent-step',
+        inputSchema: z.object({ agentName: z.string(), prompt: z.string() }),
+        outputSchema: z.object({ text: z.string() }),
+        execute: async ({ inputData, mastra }) => {
+          const agent = mastra.getAgent(inputData.agentName);
+          const result = await agent.generate([{ role: 'user', content: inputData.prompt }]);
+          return { text: result.text };
+        },
+      });
+
+      const agentStep2 = cloneStep(agentStep, { id: 'agent-step-2' });
+
+      workflow
+        .then(
+          createWorkflow({
+            id: 'nested-workflow',
+            inputSchema: z.object({ prompt1: z.string(), prompt2: z.string() }),
+            outputSchema: z.object({ text: z.string() }),
+          })
+            .map({
+              agentName: {
+                value: 'test-agent-1',
+                schema: z.string(),
+              },
+              prompt: {
+                initData: workflow,
+                path: 'prompt1',
+              },
+            })
+            .then(agentStep)
+            .map({
+              agentName: {
+                value: 'test-agent-2',
+                schema: z.string(),
+              },
+              prompt: {
+                initData: workflow,
+                path: 'prompt2',
+              },
+            })
+            .then(agentStep2)
+            .then(
+              createStep({
+                id: 'final-step',
+                inputSchema: z.object({ text: z.string() }),
+                outputSchema: z.object({ text: z.string() }),
+                execute: async ({ getStepResult }) => {
+                  return { text: `${getStepResult(agentStep)?.text} ${getStepResult(agentStep2)?.text}` };
+                },
+              }),
+            )
+            .commit(),
+        )
+        .commit();
+
+      const run = workflow.createRun();
+      const result = await run.start({
+        inputData: { prompt1: 'Capital of France, just the name', prompt2: 'Capital of UK, just the name' },
+      });
+
+      expect(result.steps['nested-workflow']).toEqual({
+        status: 'success',
+        output: { text: 'Paris London' },
       });
     });
   });

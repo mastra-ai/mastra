@@ -1,0 +1,234 @@
+---
+title: "Input Data Mapping with Workflow (vNext) | Mastra Docs"
+description: "Learn how to use workflow input mapping to create more dynamic data flows in your Mastra workflows (vNext)."
+---
+
+# Input Data Mapping
+
+Input data mapping allows explicit mapping of values for the inputs of the next step. These values can come from a number of sources:
+
+- The outputs of a previous step
+- The runtime context
+- A constant value
+- The initial input of the workflow
+
+```typescript
+myWorkflow
+  .then(step1)
+  .map({
+    transformedValue: {
+      step: step1,
+      path: "nestedValue",
+    },
+    runtimeContextValue: {
+      runtimeContextPath: "runtimeContextValue",
+      schema: z.number(),
+    },
+    constantValue: {
+      value: 42,
+      schema: z.number(),
+    },
+    initDataValue: {
+      initData: myWorkflow,
+      path: "startValue",
+    },
+  })
+  .then(step2)
+  .commit();
+```
+
+There are many cases where `.map()` can be useful in matching inputs to outputs, whether it's renaming outputs to match inputs or mapping complex data structures or other previous step outputs.
+
+## Renaming outputs
+
+One use case for input mappings is renaming outputs to match inputs:
+
+```typescript
+const step1 = createStep({
+  id: "step1",
+  inputSchema: z.object({
+    inputValue: z.string(),
+  }),
+  outputSchema: z.object({
+    outputValue: z.string(),
+  }),
+  execute: async ({ inputData }) => {
+    return { outputValue: inputData.inputValue };
+  },
+});
+
+const step2 = createStep({
+  id: "step2",
+  inputSchema: z.object({
+    unexepectedName: z.string(),
+  }),
+  outputSchema: z.object({
+    result: z.string(),
+  }),
+  execute: async ({ inputData }) => {
+    return { result: inputData.outputValue };
+  },
+});
+const workflow = createWorkflow({
+  id: "my-workflow",
+  steps: [step1, step2],
+  inputSchema: z.object({
+    inputValue: z.string(),
+  }),
+  outputSchema: z.object({
+    result: z.string(),
+  }),
+});
+
+workflow
+  .then(step1)
+  .map({
+    unexepectedName: {
+      step: step1,
+      path: "outputValue",
+    },
+  })
+  .then(step2)
+  .commit();
+```
+
+## Using workflow inputs as later step inputs
+
+```typescript
+const step1 = createStep({
+  id: "step1",
+  inputSchema: z.object({
+    inputValue: z.string(),
+  }),
+  outputSchema: z.object({
+    outputValue: z.string(),
+  }),
+  execute: async ({ inputData }) => {
+    return { outputValue: inputData.inputValue };
+  },
+});
+
+const step2 = createStep({
+  id: "step2",
+  inputSchema: z.object({
+    outputValue: z.string(),
+    initialValue: z.string(),
+  }),
+  outputSchema: z.object({
+    result: z.string(),
+  }),
+  execute: async ({ inputData }) => {
+    return { result: inputData.outputValue };
+  },
+});
+
+const workflow = createWorkflow({
+  id: "my-workflow",
+  steps: [step1, step2],
+  inputSchema: z.object({
+    inputValue: z.string(),
+  }),
+  outputSchema: z.object({
+    result: z.string(),
+  }),
+});
+
+workflow
+  .then(step1)
+  .map({
+    outputValue: {
+      step: step1,
+      path: "outputValue",
+    },
+    initialValue: {
+      initData: workflow,
+      path: "inputValue",
+    },
+  })
+  .then(step2)
+  .commit();
+```
+
+## Using multiple outputs of previous steps
+
+```typescript
+const step1 = createStep({
+  id: "step1",
+  inputSchema: z.object({
+    inputValue: z.string(),
+  }),
+  outputSchema: z.object({
+    outputValue: z.string(),
+  }),
+  execute: async ({ inputData }) => {
+    return { outputValue: inputData.inputValue };
+  },
+});
+
+const step2 = createStep({
+  id: "step2",
+  inputSchema: z.object({
+    outputValue: z.string(),
+    initialValue: z.string(),
+  }),
+  outputSchema: z.object({
+    result: z.string(),
+  }),
+  execute: async ({ inputData }) => {
+    return { result: inputData.outputValue };
+  },
+});
+
+const step3 = createStep({
+  id: "step3",
+  inputSchema: z.object({
+    currentResult: z.string(),
+    intermediateValue: z.string(),
+    initialValue: z.string(),
+  }),
+  outputSchema: z.object({
+    result: z.string(),
+  }),
+  execute: async ({ inputData }) => {
+    return {
+      result:
+        inputData.result +
+        " " +
+        inputData.intermediateValue +
+        " " +
+        inputData.initialValue,
+    };
+  },
+});
+
+const workflow = createWorkflow({
+  id: "my-workflow",
+  steps: [step1, step2],
+  inputSchema: z.object({
+    inputValue: z.string(),
+  }),
+  outputSchema: z.object({
+    result: z.string(),
+  }),
+});
+
+workflow
+  .then(step1)
+  .then(step2)
+  .map({
+    initialValue: {
+      initData: workflow,
+      path: "inputValue",
+    },
+    currentResult: {
+      step: step2,
+      path: "result",
+    },
+    intermediateValue: {
+      step: step1,
+      path: "outputValue",
+    },
+  })
+  .then(step3)
+  .commit();
+```

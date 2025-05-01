@@ -15,6 +15,9 @@ const meta = {
   workflows: {
     title: "Workflows",
   },
+  "workflows-vnext": {
+    title: "Workflows (vNext)",
+  },
   rag: {
     title: "RAG",
   },

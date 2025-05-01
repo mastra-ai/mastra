@@ -8,6 +8,7 @@ import type {
   StorageThreadType,
   BaseLogMessage,
   WorkflowRunResult as CoreWorkflowRunResult,
+  WorkflowRuns,
 } from '@mastra/core';
 
 import type { AgentGenerateOptions, AgentStreamOptions } from '@mastra/core/agent';
@@ -55,6 +56,9 @@ export type StreamParams<T extends JSONSchema7 | ZodSchema | undefined = undefin
 
 export interface GetEvalsByAgentIdResponse extends GetAgentResponse {
   evals: any[];
+  instructions: string;
+  name: string;
+  id: string;
 }
 
 export interface GetToolResponse {
@@ -73,6 +77,8 @@ export interface GetWorkflowResponse {
   workflowId?: string;
 }
 
+export type GetWorkflowRunsResponse = WorkflowRuns;
+
 export type WorkflowRunResult = {
   activePaths: Record<string, { status: string; suspendPayload?: any; stepPath: string[] }>;
   results: CoreWorkflowRunResult<any, any, any>['results'];
@@ -82,8 +88,17 @@ export type WorkflowRunResult = {
 
 export interface GetVNextWorkflowResponse {
   name: string;
-  steps: NewWorkflow['steps'];
-  stepGraph: NewWorkflow['stepGraph'];
+  steps: {
+    [key: string]: {
+      id: string;
+      description: string;
+      inputSchema: string;
+      outputSchema: string;
+      resumeSchema: string;
+      suspendSchema: string;
+    };
+  };
+  stepGraph: NewWorkflow['serializedStepGraph'];
   inputSchema: string;
   outputSchema: string;
 }

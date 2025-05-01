@@ -45,14 +45,14 @@ Then, import the necessary dependencies:
 import { openai } from '@ai-sdk/openai';
 import { Mastra } from '@mastra/core';
 import { Agent } from '@mastra/core/agent';
-import { PgVector } from '@mastra/pg';
-import { createVectorQueryTool, MDocument, PGVECTOR_PROMPT } from '@mastra/rag';
+import { PgVector, PGVECTOR_PROMPT } from '@mastra/pg';
+import { createVectorQueryTool, MDocument } from '@mastra/rag';
 import { embedMany } from 'ai';
 ```
 
 ## Vector Query Tool Creation
 
-Using createVectorQueryTool imported from @mastra/rag, you can create a tool that enables metadata filtering:
+Using createVectorQueryTool imported from @mastra/rag, you can create a tool that enables metadata filtering. Each vector store has its own prompt that defines the supported filter operators and syntax:
 
 ```typescript copy showLineNumbers{9} filename="index.ts"
 const vectorQueryTool = createVectorQueryTool({
@@ -61,8 +61,15 @@ const vectorQueryTool = createVectorQueryTool({
   indexName: "embeddings",
   model: openai.embedding('text-embedding-3-small'),
   enableFilter: true,
+  filterPrompt: PGVECTOR_PROMPT // Use the prompt for your vector store
 });
 ```
+
+Each prompt includes:
+- Supported operators (comparison, array, logical, element)
+- Example usage for each operator
+- Store-specific restrictions and rules
+- Complex query examples
 
 ## Document Processing
 

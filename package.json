@@ -25,6 +25,8 @@
     "build:deployer": "pnpm turbo build --filter ./packages/deployer",
     "build:server": "pnpm turbo build --filter ./packages/server",
     "build:core": "pnpm turbo build --filter ./packages/core",
+    "build:mcp": "pnpm turbo build --filter ./packages/mcp",
+    "build:playground-ui": "pnpm turbo build --filter ./packages/playground-ui/",
     "build:rag": "pnpm turbo build --filter ./packages/rag",
     "build:memory": "pnpm turbo build --filter ./packages/memory",
     "build:docs-mcp": "pnpm turbo build --filter ./packages/mcp-docs-server",
