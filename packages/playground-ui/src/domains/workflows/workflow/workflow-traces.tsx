@@ -1,10 +1,9 @@
 import { ReactNode, useContext, useState } from 'react';
 
-import { TraceContext, TraceProvider } from '@/domains/traces/context/trace-context';
+import { TraceContext } from '@/domains/traces/context/trace-context';
 
 import { TracesTable } from '@/domains/traces/traces-table';
 import { TracesSidebar } from '@/domains/traces/traces-sidebar';
-import clsx from 'clsx';
 import { RefinedTrace } from '@/domains/traces/types';
 
 export interface WorkflowTracesProps {

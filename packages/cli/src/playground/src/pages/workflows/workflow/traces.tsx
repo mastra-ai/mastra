@@ -37,7 +37,6 @@ function WorkflowTracesContent() {
 }
 
 function WorkflowTracesPage() {
-  // Wrap with TraceProvider to ensure proper context for useTraces
   return (
     <TraceProvider>
       <WorkflowTracesContent />
