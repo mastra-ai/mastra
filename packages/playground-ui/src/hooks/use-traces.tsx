@@ -10,11 +10,8 @@ import { createMastraClient } from '@/lib/mastra-client';
 export const useTraces = (componentName: string, baseUrl: string, isWorkflow: boolean = false) => {
   const [traces, setTraces] = useState<RefinedTrace[]>([]);
 
-  // Get TraceContext safely, it might not be available if used outside of a TraceProvider
-  const traceContext = useContext(TraceContext);
-  const setTraceContextTraces = traceContext?.setTraces;
+  const { setTraces: setTraceContextTraces } = useContext(TraceContext);
 
-  // Memoize the client instance
   const client = useMemo(() => createMastraClient(baseUrl), [baseUrl]);
 
   const fetchFn = useCallback(async () => {
@@ -30,7 +27,6 @@ export const useTraces = (componentName: string, baseUrl: string, isWorkflow: bo
       const refinedTraces = refineTraces(res?.traces || [], isWorkflow);
       return refinedTraces;
     } catch (error) {
-      console.log(`error, fetchFn`, error);
       throw error;
     }
   }, [client, componentName, isWorkflow]);
@@ -39,11 +35,7 @@ export const useTraces = (componentName: string, baseUrl: string, isWorkflow: bo
     (newTraces: RefinedTrace[]) => {
       if (newTraces.length > 0) {
         setTraces(() => newTraces);
-        // Only call setTraceContextTraces if it's a function
-        console.log(`setTraceContextTraces`, setTraceContextTraces);
-        if (typeof setTraceContextTraces === 'function') {
-          setTraceContextTraces(() => newTraces);
-        }
+        setTraceContextTraces(() => newTraces);
       }
     },
     [setTraceContextTraces],
