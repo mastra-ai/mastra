@@ -12,7 +12,7 @@ const client = new MastraClient({
 async function main() {
   try {
     // Get the agent ID - this would be the ID of an agent you've created
-    const agentId = process.env.AGENT_ID || 'researchAgent';
+    const agentId = 'myAgent';
 
     console.log(`🤖 Connecting to agent: ${agentId} via A2A protocol\n`);
 
@@ -25,8 +25,8 @@ async function main() {
 
     console.log(`\nAgent Name: ${agentCard.name}`);
     console.log(`Description: ${agentCard.description}`);
-    console.log(`Capabilities: ${agentCard.capabilities.join(', ')}`);
-    console.log(`API Version: ${agentCard.apiVersion}`);
+    console.log(`Capabilities: ${JSON.stringify(agentCard.capabilities)}`);
+    console.log(`API Version: ${agentCard.version}`);
     console.log('\n-------------------\n');
 
     // Step 2: Send a message to the agent
@@ -40,13 +40,17 @@ async function main() {
       id: taskId,
       message: {
         role: 'user',
-        content: query,
+        parts: [{ type: 'text', text: query }],
       },
     });
 
     console.log(`\nTask Status: ${response.task.status}`);
     console.log('\n🤖 Agent Response:');
-    console.log(response.task.result?.message.content || 'No response content');
+    console.log(
+      response.task.status.message?.parts[0]?.type === 'text'
+        ? response.task.status.message.parts[0].text
+        : 'No response content',
+    );
 
     console.log('\n-------------------\n');
 
@@ -78,11 +82,14 @@ async function main() {
       id: researchTaskId,
       message: {
         role: 'user',
-        content: researchQuery,
+        parts: [{ type: 'text', text: researchQuery }],
       },
     });
 
-    const researchResult = researchResponse.task.result?.message.content || '';
+    const researchResult =
+      researchResponse.task.status.message?.parts[0]?.type === 'text'
+        ? researchResponse.task.status.message.parts[0].text
+        : '';
     console.log('\nResearch Results:');
     console.log(researchResult.substring(0, 150) + '...');
 
@@ -95,12 +102,16 @@ async function main() {
       id: contentTaskId,
       message: {
         role: 'user',
-        content: contentPrompt,
+        parts: [{ type: 'text', text: contentPrompt }],
       },
     });
 
     console.log('\nFinal Content:');
-    console.log(contentResponse.task.result?.message.content || 'No content generated');
+    console.log(
+      contentResponse.task.status.message?.parts[0]?.type === 'text'
+        ? contentResponse.task.status.message.parts[0].text
+        : 'No content generated',
+    );
 
     console.log('\n-------------------\n');
     console.log('✅ A2A example completed successfully!');

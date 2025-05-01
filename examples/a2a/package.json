@@ -7,6 +7,7 @@
   "main": "dist/index.js",
   "scripts": {
     "start": "tsx src/index.ts",
+    "mastra:dev": "mastra dev",
     "build": "tsc",
     "dev": "tsx watch src/index.ts"
   },
@@ -19,12 +20,14 @@
   "author": "Mastra Team",
   "license": "MIT",
   "dependencies": {
+    "@ai-sdk/openai": "^1.3.21",
     "@mastra/client-js": "link:../../client-sdks/client-js",
     "@mastra/core": "link:../../packages/core",
     "dotenv": "^16.3.1",
     "zod": "^3.22.2"
   },
   "devDependencies": {
+    "mastra": "link:../../packages/cli",
     "tsx": "^4.7.0",
     "typescript": "^5.3.3"
   },
