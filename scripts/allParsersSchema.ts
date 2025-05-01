@@ -13,7 +13,7 @@ const allParsers = z.object({
   arrayMax: z.array(z.string()).max(1),
   arrayMinMax: z.array(z.string()).min(1).max(1),
   boolean: z.boolean(),
-  date: z.date(),
+  // date: z.date(), // TODO: probably don't need this. the model passes a date string which errors but it can't pass an actual date object..
   default: z.number().default(42),
   enum: z.enum(['hej', 'svejs']),
   // intersection: z.intersection(z.string().min(1), z.string().max(4)),
@@ -21,7 +21,7 @@ const allParsers = z.object({
   // literal: z.literal("hej"), // TODO: Support this probably
   // never: z.never() as any, // TODO: Support this probably
   nativeEnum: z.nativeEnum(nativeEnum),
-  null: z.null(),
+  null: z.null().describe(`make sure you pass null not "null" (no quotes)`),
   nullablePrimitive: z.string().nullable(),
   nullableObject: z.object({ hello: z.string() }).nullable(),
   number: z.number(),
