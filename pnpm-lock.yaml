@@ -2002,6 +2002,9 @@ importers:
       '@mastra/core':
         specifier: workspace:^
         version: link:../packages/core
+      ai:
+        specifier: ^4.3.9
+        version: 4.3.9(react@19.1.0)(zod@3.24.3)
       chalk:
         specifier: ^5.4.1
         version: 5.4.1

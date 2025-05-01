@@ -6,7 +6,7 @@ enum nativeEnum {
   'c',
 }
 
-const baseAllParsersSchema = z.object({
+const allParsers = z.object({
   // any: z.any(),
   array: z.array(z.string()),
   arrayMin: z.array(z.string()).min(1),
@@ -65,9 +65,7 @@ const baseAllParsersSchema = z.object({
   // unknown: z.unknown(),
 });
 
-export const allParsersSchema = baseAllParsersSchema.partial().default({ string: 'hello' }).describe('watup');
-
-export { baseAllParsersSchema };
+export { allParsers };
 
 /*
 We do not support:

@@ -1,16 +1,12 @@
-// scripts/test-tool-schemas.ts
 import { z } from 'zod';
-import { zodToJsonSchema } from 'zod-to-json-schema';
+import type { LanguageModel } from '@mastra/core';
 import { createOpenAI } from '@ai-sdk/openai';
-import { Agent, MastraLanguageModel } from '@mastra/core/agent';
-import { createTool } from '@mastra/core/tools';
-import { allParsersSchema, baseAllParsersSchema } from './allParsersSchema.js';
+import { createTool } from '@mastra/core';
+import { allParsers } from './allParsersSchema.js';
 import * as fs from 'fs/promises';
-import { config } from 'dotenv'; // Assuming dotenv is used for API keys
 import chalk from 'chalk';
-
-// Load environment variables
-config();
+import { Agent } from '@mastra/core/agent';
+import 'dotenv/config';
 
 type Result = {
   testId: string;
@@ -22,84 +18,35 @@ type Result = {
   receivedContext: any;
 };
 
-/**
- * Generate a summary of the test results
- */
-function generateSummary(results: Result[]) {
-  console.log(chalk.blue('\n=== RAG Agent Test Summary ==='));
-  console.log('Total Models:', modelsToTest.length);
-
-  // Log instruction sets
-  console.log(chalk.yellow('\nInstruction Sets:'));
-
-  // Test statistics
-  console.log(chalk.yellow('\nTest Statistics:'));
-  console.log(chalk.yellow('Total tests run:'), results.length);
-  console.log(chalk.green('Successful tests (tool was used):'), results.filter(r => r.status === 'success').length);
-  console.log(
-    chalk.red('Failed tests (tool was not used or errored out):'),
-    results.filter(r => r.status !== 'success').length,
-  );
-
-  console.log(chalk.blue('\n=== Detailed Results ==='));
-  console.log('| Company | Model | TestName | Status | ErrorMessage |');
-  console.log('| ------- | ----- | ------ | ----- | ------ |');
-
-  for (const result of results) {
-    const status = result.status === 'success' ? chalk.green(result.status) : chalk.red(result.status);
-    console.log(
-      `| ${result.modelProvider} | ${result.modelName} | ${result.testName} | ${status} | ${result.error ? chalk.red(result.error) : ''} |`,
-    );
-  }
-}
-
-// Configure models to test
 const openai = createOpenAI({ apiKey: process.env.OPENAI_API_KEY });
-const modelsToTest: { name: string; instance: MastraLanguageModel }[] = [
-  // { name: 'openai/gpt-4o', instance: openai('gpt-4o') as unknown as MastraLanguageModel },
-  // Add other models here, e.g.:
-  { name: 'openai/o3-mini', instance: openai('o3-mini') as unknown as MastraLanguageModel },
-  // { name: 'anthropic/claude-3-haiku-20240307', instance: anthropic('claude-3-haiku-20240307') }, // Assuming anthropic is configured
+const modelsToTest: LanguageModel[] = [
+  openai('o3-mini'),
+  // openai('gpt-4o'),
 ];
 
-// Dynamically create tools from allParsersSchema properties
-// Dynamically create tools from allParsersSchema properties
-// Access the original object shape from the base schema
-const originalShape = baseAllParsersSchema.shape;
-
-console.log('Original Shape:', originalShape);
-console.log('Keys of Original Shape:', Object.keys(originalShape));
-
-const testTools = Object.keys(originalShape).map(key => {
-  const schemaProperty = originalShape[key];
-  // Create an object schema with only this one property
-  const inputSchema = z.object({ [key]: schemaProperty });
-
+const testTools = Object.keys(allParsers.shape).map(key => {
   return createTool({
     id: `testTool_${key}`,
     description: `Test tool for schema type: ${key}. Call this tool to test the schema.`,
-    inputSchema: inputSchema,
+    inputSchema: z.object({ [key]: allParsers.shape[key as keyof typeof allParsers.shape] }),
     execute: async ({ context }) => {
-      // Tool execution logic - just return success and the received context
-      console.log(`Executing testTool_${key} with context:`, context);
+      // console.log(`Executing testTool_${key} with context:`, context);
       return { success: true, receivedContext: context };
     },
   });
 });
 
 async function runSingleTest(
-  modelInfo: { name: string; instance: MastraLanguageModel },
+  model: LanguageModel,
   testTool: ReturnType<typeof createTool>,
   testId: string,
 ): Promise<Result> {
   const toolName = testTool.id;
-  console.log(`Testing ${modelInfo.name} with tool: ${toolName}`);
-
   try {
     const agent = new Agent({
-      name: `test-agent-${modelInfo.name.replace(/[^a-zA-Z0-9]/g, '-')}`,
+      name: `test-agent-${model.modelId}`,
       instructions: `You are a test agent. Your task is to call the tool named '${toolName}' with any valid arguments.`,
-      model: modelInfo.instance,
+      model: model,
       tools: { [toolName]: testTool },
     });
 
@@ -114,8 +61,8 @@ async function runSingleTest(
 
     if (toolResult && toolResult.result?.success) {
       return {
-        modelName: modelInfo.name,
-        modelProvider: modelInfo.instance.provider,
+        modelName: model.modelId,
+        modelProvider: model.provider,
         testName: toolName,
         status: 'success',
         error: null,
@@ -125,9 +72,9 @@ async function runSingleTest(
     } else {
       const error = toolResult?.result?.error || response.text || 'Tool call failed or result missing';
       return {
-        modelName: modelInfo.name,
+        modelName: model.modelId,
         testName: toolName,
-        modelProvider: modelInfo.instance.provider,
+        modelProvider: model.provider,
         status: 'failure',
         error: error,
         receivedContext: toolResult?.result?.receivedContext || null,
@@ -136,14 +83,30 @@ async function runSingleTest(
     }
   } catch (e: any) {
     return {
-      modelName: modelInfo.name,
+      modelName: model.modelId,
       testName: toolName,
-      modelProvider: modelInfo.instance.provider,
+      modelProvider: model.provider,
       status: 'error',
       error: e.message,
       receivedContext: null,
       testId,
     };
+  }
+}
+
+/**
+ * Generate a summary of the test results
+ */
+function generateSummary(resultsByModel: Map<LanguageModel, { results: Result[] }>) {
+  console.log(chalk.blue('\n=== Tool Compatibility Summary ==='));
+  console.log('Total Models:', modelsToTest.length);
+
+  for (const [model, { results }] of Array.from(resultsByModel)) {
+    console.log(chalk.blue(`\n${model.provider}/${model.modelId}`));
+    for (const result of results) {
+      const status = result.status === 'success' ? chalk.green(result.status) : chalk.red(result.status);
+      console.log(`  ${status}${result.status === 'error' ? '  ' : ''} ${result.testName}`);
+    }
   }
 }
 
@@ -161,7 +124,7 @@ async function runTests() {
 
   // Run all tests in parallel with concurrency limit
   const CONCURRENCY_LIMIT = 100; // Adjust based on your needs
-  const results: Result[] = [];
+  const resultsByModel = new Map<LanguageModel, { results: Result[] }>();
 
   for (let i = 0; i < testCombinations.length; i += CONCURRENCY_LIMIT) {
     const batch = testCombinations.slice(i, i + CONCURRENCY_LIMIT);
@@ -169,16 +132,20 @@ async function runTests() {
       `Running batch ${i / CONCURRENCY_LIMIT + 1} of ${Math.ceil(testCombinations.length / CONCURRENCY_LIMIT)}`,
     );
 
-    const batchResults = await Promise.all(
-      batch.map(({ modelInfo, testTool, testId }) => runSingleTest(modelInfo, testTool, testId)),
+    await Promise.all(
+      batch.map(async ({ modelInfo, testTool, testId }) => {
+        const result = await runSingleTest(modelInfo, testTool, testId);
+        const existingResult = resultsByModel.get(modelInfo) || { results: [] };
+        existingResult.results.push(result);
+        resultsByModel.set(modelInfo, existingResult);
+      }),
     );
-
-    results.push(...batchResults);
   }
 
   // Write results to JSON file
   const outputPath = 'tool-schema-test-output.json';
-  generateSummary(results);
+  generateSummary(resultsByModel);
+  const results = Array.from(resultsByModel.values()).flatMap(v => v.results);
   await fs.writeFile(outputPath, JSON.stringify(results, null, 2));
   console.log(`\nTest ${testId} results written to ${outputPath} 📝`);
 }
