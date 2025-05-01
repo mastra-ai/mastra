@@ -56,7 +56,21 @@ function resoolveMaybePromise<T, R = void>(value: T | Promise<T>, cb: (value: T)
 
 @InstrumentClass({
   prefix: 'agent',
-  excludeMethods: ['hasOwnMemory', 'getMemory', '__primitive', '__setTools', '__setLogger', '__setTelemetry', 'log'],
+  excludeMethods: [
+    'hasOwnMemory',
+    'getMemory',
+    '__primitive',
+    '__registerMastra',
+    '__registerPrimitives',
+    '__setTools',
+    '__setLogger',
+    '__setTelemetry',
+    'log',
+    'getModel',
+    'getInstructions',
+    'getTools',
+    'getLLM',
+  ],
 })
 export class Agent<
   TAgentId extends string = string,
