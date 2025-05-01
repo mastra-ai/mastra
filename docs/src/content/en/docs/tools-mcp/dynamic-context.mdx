@@ -9,43 +9,28 @@ import { Callout } from "nextra/components";
 
 Mastra provides `RuntimeContext`, a system based on dependency injection, that allows you to pass dynamic, request-specific configuration to your tools during execution. This is useful when a tool's behavior needs to change based on user identity, request headers, or other runtime factors, without altering the tool's core code.
 
-## Overview
-
-Using `RuntimeContext` allows you to:
-
-1.  Define a type-safe structure for your dynamic configuration.
-2.  Pass runtime variables to agents and tools via the `runtimeContext` option in `generate()` or `stream()` calls.
-3.  Access these variables within the `execute` function of your tools.
-4.  Modify tool behavior based on runtime data (e.g., user preferences, location).
-5.  Share configuration across multiple tools used within the same agent call.
-
 <Callout>
   **Note:** `RuntimeContext` is primarily used for passing data *into* tool executions. It's distinct from agent memory, which handles conversation history and state persistence across multiple calls.
 </Callout>
 
 ## Basic Usage
 
-1.  **Define the Context Type:** Create a type definition for the data you want to pass.
-2.  **Instantiate `RuntimeContext`:** Create an instance typed with your definition.
-3.  **Set Values:** Populate the context with data.
-4.  **Pass to Agent:** Include the `runtimeContext` instance in the options object when calling `agent.generate()` or `agent.stream()`.
+To use `RuntimeContext`, first define a type structure for your dynamic configuration. Then, create an instance of `RuntimeContext` typed with your definition and set the desired values. Finally, include the `runtimeContext` instance in the options object when calling `agent.generate()` or `agent.stream()`.
 
 ```typescript
 import { RuntimeContext } from "@mastra/core/di";
 // Assume 'agent' is an already defined Mastra Agent instance
 
-// 1. Define the context type
+// Define the context type
 type WeatherRuntimeContext = {
   "temperature-scale": "celsius" | "fahrenheit";
 };
 
-// 2. Instantiate RuntimeContext
+// Instantiate RuntimeContext and set values
 const runtimeContext = new RuntimeContext<WeatherRuntimeContext>();
-
-// 3. Set values
 runtimeContext.set("temperature-scale", "celsius");
 
-// 4. Pass to agent call
+// Pass to agent call
 const response = await agent.generate("What's the weather like today?", {
   runtimeContext, // Pass the context here
 });
