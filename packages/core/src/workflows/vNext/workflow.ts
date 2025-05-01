@@ -799,7 +799,7 @@ export class NewWorkflow<
       return { runs: [], total: 0 };
     }
 
-    return storage.getWorkflowRuns({ workflowName: this.name, ...(args ?? {}) });
+    return storage.getWorkflowRuns({ workflowName: this.id, ...(args ?? {}) });
   }
 
   async getWorkflowRun(runId: string) {

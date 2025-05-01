@@ -548,11 +548,11 @@ export class LibSQLStore extends MastraStorage {
     }
 
     if (fromDate) {
-      conditions.push('"createdAt" >= ?');
+      conditions.push('createdAt >= ?');
     }
 
     if (toDate) {
-      conditions.push('"createdAt" <= ?');
+      conditions.push('createdAt <= ?');
     }
 
     const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';

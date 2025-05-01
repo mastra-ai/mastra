@@ -210,12 +210,16 @@ export class UpstashStore extends MastraStorage {
 
       // Apply fromDate filter if provided
       if (fromDate) {
-        filteredTraces = filteredTraces.filter(record => new Date(record.createdAt) >= fromDate);
+        filteredTraces = filteredTraces.filter(
+          record => new Date(record.createdAt).getTime() >= new Date(fromDate).getTime(),
+        );
       }
 
       // Apply toDate filter if provided
       if (toDate) {
-        filteredTraces = filteredTraces.filter(record => new Date(record.createdAt) <= toDate);
+        filteredTraces = filteredTraces.filter(
+          record => new Date(record.createdAt).getTime() <= new Date(toDate).getTime(),
+        );
       }
 
       // Sort traces by creation date (newest first)
