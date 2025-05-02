@@ -15,6 +15,7 @@ import { getSpanVariant } from './utils/getSpanVariant';
 import { spanIconMap, spanVariantClasses } from '@/ds/components/TraceTree/Span';
 import type { Span } from './types';
 import React from 'react';
+import { toSigFigs } from '@/lib/number';
 
 export function SpanDetail() {
   const { span, setSpan, trace, setIsOpen } = useContext(TraceContext);
@@ -80,11 +81,11 @@ export function SpanDetail() {
         <div className="flex flex-row gap-2 items-center">
           {span.status.code === 0 ? (
             <Badge icon={<LatencyIcon />} variant="success">
-              {Math.round(span.duration / 1000)}ms
+              {toSigFigs(span.duration / 1000, 3)}ms
             </Badge>
           ) : (
             <Badge variant="error" icon={<X />}>
-              Failed in {Math.round(span.duration / 1000)}ms
+              Failed in {toSigFigs(span.duration / 1000, 3)}ms
             </Badge>
           )}
         </div>
