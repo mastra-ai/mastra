@@ -135,29 +135,42 @@ export class MilvusStorage extends MastraStorage {
         is_primary_key: false,
       });
 
-      await this.client.createCollection({
+      const response = await this.client.createCollection({
         collection_name: tableName,
         schema: fields,
       });
+
+      if (response.error_code !== 'Success') {
+        throw new Error('Error status code: ' + response.reason);
+      }
     } catch (error) {
       throw new Error('Failed to create collection: ' + error);
     }
   }
 
-  async dropTable({ tableName }: { tableName: TABLE_NAMES }): Promise<void> {
+  async clearTable({ tableName }: { tableName: TABLE_NAMES }): Promise<void> {
     try {
       await this.client.dropCollection({ collection_name: tableName });
     } catch (error) {
-      throw new Error('Failed to drop collection: ' + error);
+      throw new Error('Failed to clear collection: ' + error);
     }
   }
 
-  clearTable({ tableName }: { tableName: TABLE_NAMES }): Promise<void> {
-    throw new Error(`Method not implemented. ${tableName}`);
+  async insert({ tableName, record }: { tableName: TABLE_NAMES; record: Record<string, any> }): Promise<void> {
+    try {
+      const response = await this.client.upsert({
+        collection_name: tableName,
+        data: [record],
+      });
+
+      if (response.status.error_code !== 'Success') {
+        throw new Error('Error status code: ' + response.status.reason);
+      }
+    } catch (error) {
+      throw new Error('Failed to insert record: ' + error);
+    }
   }
-  insert({ tableName, record }: { tableName: TABLE_NAMES; record: Record<string, any> }): Promise<void> {
-    throw new Error(`Method not implemented. ${tableName}, ${JSON.stringify(record)}`);
-  }
+
   batchInsert({ tableName, records }: { tableName: TABLE_NAMES; records: Record<string, any>[] }): Promise<void> {
     throw new Error(`Method not implemented. ${tableName}, ${JSON.stringify(records)}`);
   }
