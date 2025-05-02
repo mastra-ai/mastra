@@ -7,6 +7,7 @@ import type { RefinedTrace } from '@/domains/traces/types';
 import { refineTraces } from '@/domains/traces/utils';
 import { TraceContext } from '@/domains/traces/context/trace-context';
 import { createMastraClient } from '@/lib/mastra-client';
+
 export const useTraces = (componentName: string, baseUrl: string, isWorkflow: boolean = false) => {
   const [traces, setTraces] = useState<RefinedTrace[]>([]);
 
