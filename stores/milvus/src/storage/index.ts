@@ -80,15 +80,43 @@ export class MilvusStorage extends MastraStorage {
     });
   }
 
-  async getTableSchema(tableName: TABLE_NAMES): Promise<CollectionSchema> {
+  transformCollectionDescription(schema: CollectionSchema): Record<string, StorageColumn>[] {
+    const types: Record<string, string> = {
+      int64: 'bigint',
+      uuid: 'uuid',
+      int32: 'integer',
+      varchar: 'text',
+      float64: 'float',
+      floatvector: 'vector',
+      json: 'jsonb',
+    };
+
+    return schema.fields.map(field => ({
+      [field.name]: {
+        type: types[field.data_type.toString().toLowerCase()] as StorageColumn['type'],
+        nullable: field.nullable,
+        primaryKey: field.is_primary_key,
+      },
+    }));
+  }
+
+  async getTableSchema(tableName: TABLE_NAMES): Promise<Record<string, StorageColumn>[]> {
     try {
       const collection = await this.client.describeCollection({ collection_name: tableName });
-      return collection.schema;
+      return this.transformCollectionDescription(collection.schema);
     } catch (error) {
       throw new Error('Failed to get collection: ' + error);
     }
   }
 
+  /**
+   * Creates a table in Milvus with the given schema. An extra placeholder vector field is added to the schema. Milvus requires at least one vector field to be present in the collection schema.
+   *
+   * check this discussion thread for reference: https://github.com/milvus-io/milvus/discussions/34927
+   *
+   * @param tableName - The table name.
+   * @param schema - The schema of the table.
+   */
   async createTable({
     tableName,
     schema,
@@ -98,7 +126,15 @@ export class MilvusStorage extends MastraStorage {
   }): Promise<void> {
     try {
       const fields = this.translateSchema(schema);
-      console.log(fields);
+
+      // Add a placeholder vector field - required by Milvus
+      fields.push({
+        name: 'vector_placeholder',
+        data_type: DataType.FloatVector,
+        dim: 2, // Smallest possible dimension
+        is_primary_key: false,
+      });
+
       await this.client.createCollection({
         collection_name: tableName,
         schema: fields,

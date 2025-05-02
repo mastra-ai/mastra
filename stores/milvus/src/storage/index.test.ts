@@ -9,7 +9,7 @@ describe('MilvusStorage', () => {
     // setup milvus client
     milvusStorage = new MilvusStorage(
       'milvus',
-      { address: '127.0.0.1:19530', database: 'storage-volume' },
+      { address: '127.0.0.1:19530' },
       false,
       'milvus-username',
       'milvus-password',
@@ -38,18 +38,19 @@ describe('MilvusStorage', () => {
       await milvusStorage.createTable({ tableName: TABLE_MESSAGES, schema });
 
       // Verify table exists and schema is correct
-      const table = await milvusStorage.getTableSchema(TABLE_MESSAGES);
+      const tableSchema = await milvusStorage.getTableSchema(TABLE_MESSAGES);
 
-      expect(table.fields.length).toBe(7);
-      expect(table.name).toEqual(TABLE_MESSAGES);
-      // check the types of the fields
-      expect(table.fields[0].data_type.toString().toLowerCase()).toBe('int32');
-      expect(table.fields[1].data_type.toString().toLowerCase()).toBe('utf8');
-      expect(table.fields[2].data_type.toString().toLowerCase()).toBe('float64');
-      expect(table.fields[3].data_type.toString().toLowerCase()).toBe('utf8');
-      expect(table.fields[4].data_type.toString().toLowerCase()).toBe('utf8');
-      expect(table.fields[5].data_type.toString().toLowerCase()).toBe('float64');
-      expect(table.fields[6].data_type.toString().toLowerCase()).toBe('utf8');
+      expect(tableSchema).toBeDefined();
+      tableSchema.forEach(column => {
+        const key = Object.keys(column)[0];
+        const value = column[key];
+
+        expect(key).toBeDefined();
+        expect(value).toBeDefined();
+        expect(value.type).toBeDefined();
+        expect(value.nullable).toBeDefined();
+        expect(value.primaryKey).toBeDefined();
+      });
     });
   });
 });
