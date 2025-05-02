@@ -179,7 +179,8 @@ program
 program
   .command('build')
   .description('Build your Mastra project')
-  .option('-d, --dir <path>', 'Path to directory')
+  .option('-d, --dir <path>', 'Path to your Mastra Folder')
+  .option('-r, --root <path>', 'Path to your root folder')
   .option('-t, --tools <toolsDirs>', 'Comma-separated list of paths to tool files to include')
   .action(async args => {
     await analytics.trackCommandExecution({
@@ -187,8 +188,9 @@ program
       args,
       execution: async () => {
         await build({
-          dir: args.dir,
-          tools: args.tools ? args.tools.split(',') : [],
+          dir: args?.dir,
+          root: args?.root,
+          tools: args?.tools ? args.tools.split(',') : [],
         });
       },
       origin,

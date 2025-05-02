@@ -20,6 +20,14 @@ interface NextConfig {
   serverExternalPackages?: string[];
 }
 
+interface TsConfig {
+  compilerOptions?: {
+    module?: string;
+    moduleResolution?: string;
+    [key: string]: unknown;
+  };
+}
+
 function readPackageJson(dir: string): PackageJson {
   const packageJsonPath = join(dir, 'package.json');
   try {
@@ -31,6 +39,46 @@ function readPackageJson(dir: string): PackageJson {
     }
     throw error;
   }
+}
+
+function readTsConfig(dir: string): TsConfig | null {
+  const tsConfigPath = join(dir, 'tsconfig.json');
+  try {
+    const tsConfigContent = readFileSync(tsConfigPath, 'utf-8');
+    return JSON.parse(tsConfigContent);
+  } catch {
+    return null;
+  }
+}
+
+function checkTsConfig(dir: string): boolean {
+  const tsConfig = readTsConfig(dir);
+  if (!tsConfig) {
+    logger.warn('No tsconfig.json found. This might cause issues with Mastra packages.');
+    return true; // Not a critical error, just a warning
+  }
+
+  const { module, moduleResolution } = tsConfig.compilerOptions || {};
+
+  // Check if either moduleResolution is 'bundler' or module is 'CommonJS'
+  const isValidConfig = moduleResolution === 'bundler' || module === 'CommonJS';
+  if (!isValidConfig) {
+    logger.error('tsconfig.json has invalid configuration');
+    logger.error('Please set either:');
+    logger.error('  "compilerOptions": {');
+    logger.error('    "moduleResolution": "bundler"');
+    logger.error('  }');
+    logger.error('or');
+    logger.error('  "compilerOptions": {');
+    logger.error('    "module": "CommonJS"');
+    logger.error('  }');
+    logger.error('For the recommended TypeScript configuration, see:');
+    logger.error('https://mastra.ai/en/docs/getting-started/installation#initialize-typescript');
+    return false;
+  }
+
+  logger.info('TypeScript config is properly configured for Mastra packages');
+  return true;
 }
 
 function isNextJsProject(dir: string): boolean {
@@ -156,6 +204,7 @@ export async function lint({ dir, root, tools }: { dir?: string; root?: string; 
 
     const hasMastraCore = checkMastraCore(mastraPackages);
     const isMastraDepsCompatible = checkMastraDepsCompatibility(mastraPackages);
+    const isTsConfigValid = checkTsConfig(rootDir);
 
     const fs = new FileService();
     const mastraEntryFile = fs.getFirstExistingFile([join(mastraDir, 'index.ts'), join(mastraDir, 'index.js')]);
@@ -169,7 +218,7 @@ export async function lint({ dir, root, tools }: { dir?: string; root?: string; 
       await platformDeployer.lint(mastraEntryFile, outputDirectory, discoveredTools);
     }
 
-    return hasMastraCore && isMastraDepsCompatible;
+    return hasMastraCore && isMastraDepsCompatible && isTsConfigValid;
   } catch (error) {
     if (error instanceof Error) {
       logger.error(`Lint check failed: ${error.message}`);
