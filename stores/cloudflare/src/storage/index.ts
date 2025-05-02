@@ -1220,12 +1220,16 @@ export class CloudflareStore extends MastraStorage {
     page = 0,
     perPage = 100,
     attributes,
+    fromDate,
+    toDate,
   }: {
     name?: string;
     scope?: string;
     page: number;
     perPage: number;
     attributes?: Record<string, string>;
+    fromDate?: Date;
+    toDate?: Date;
   }): Promise<any[]> {
     try {
       // Get all keys for traces table
@@ -1274,6 +1278,16 @@ export class CloudflareStore extends MastraStorage {
           if (!recordAttrs) return false;
           return Object.entries(attributes).every(([key, value]) => recordAttrs[key] === value);
         });
+      }
+
+      // Apply fromDate filter if provided
+      if (fromDate) {
+        filteredTraces = filteredTraces.filter(record => new Date(record.createdAt).getTime() >= fromDate.getTime());
+      }
+
+      // Apply toDate filter if provided
+      if (toDate) {
+        filteredTraces = filteredTraces.filter(record => new Date(record.createdAt).getTime() <= toDate.getTime());
       }
 
       // Sort by createdAt desc

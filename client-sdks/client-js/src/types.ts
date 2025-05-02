@@ -8,6 +8,7 @@ import type {
   StorageThreadType,
   BaseLogMessage,
   WorkflowRunResult as CoreWorkflowRunResult,
+  WorkflowRuns,
 } from '@mastra/core';
 
 import type { AgentGenerateOptions, AgentStreamOptions } from '@mastra/core/agent';
@@ -75,6 +76,16 @@ export interface GetWorkflowResponse {
   stepSubscriberGraph: Record<string, StepGraph>;
   workflowId?: string;
 }
+
+export interface GetWorkflowRunsParams {
+  fromDate?: Date;
+  toDate?: Date;
+  limit?: number;
+  offset?: number;
+  resourceId?: string;
+}
+
+export type GetWorkflowRunsResponse = WorkflowRuns;
 
 export type WorkflowRunResult = {
   activePaths: Record<string, { status: string; suspendPayload?: any; stepPath: string[] }>;
@@ -231,6 +242,8 @@ export interface GetTelemetryParams {
   page?: number;
   perPage?: number;
   attribute?: Record<string, string>;
+  fromDate?: Date;
+  toDate?: Date;
 }
 
 export interface GetNetworkResponse {

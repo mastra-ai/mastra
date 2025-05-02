@@ -180,7 +180,7 @@ export class MastraClient extends BaseResource {
    * @returns Promise containing telemetry data
    */
   public getTelemetry(params?: GetTelemetryParams): Promise<GetTelemetryResponse> {
-    const { name, scope, page, perPage, attribute } = params || {};
+    const { name, scope, page, perPage, attribute, fromDate, toDate } = params || {};
     const _attribute = attribute ? Object.entries(attribute).map(([key, value]) => `${key}:${value}`) : [];
 
     const searchParams = new URLSearchParams();
@@ -204,6 +204,12 @@ export class MastraClient extends BaseResource {
       } else {
         searchParams.set('attribute', _attribute);
       }
+    }
+    if (fromDate) {
+      searchParams.set('fromDate', fromDate.toISOString());
+    }
+    if (toDate) {
+      searchParams.set('toDate', toDate.toISOString());
     }
 
     if (searchParams.size) {

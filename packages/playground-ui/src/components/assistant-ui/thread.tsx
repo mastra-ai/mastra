@@ -18,9 +18,10 @@ import { useAutoscroll } from '@/hooks/use-autoscroll';
 
 export interface ThreadProps {
   ToolFallback?: ToolCallContentPartComponent;
+  agentName?: string;
 }
 
-export const Thread = ({ ToolFallback }: ThreadProps) => {
+export const Thread = ({ ToolFallback, agentName }: ThreadProps) => {
   const areaRef = useRef<HTMLDivElement>(null);
   useAutoscroll(areaRef, { enabled: true });
 
@@ -32,7 +33,7 @@ export const Thread = ({ ToolFallback }: ThreadProps) => {
     <ThreadPrimitive.Root className="max-w-[568px] w-full mx-auto h-[calc(100%-100px)] px-4">
       <ThreadPrimitive.Viewport className="py-10 overflow-y-auto scroll-smooth h-full" ref={areaRef} autoScroll={false}>
         <div>
-          <ThreadWelcome />
+          <ThreadWelcome agentName={agentName} />
           <ThreadPrimitive.Messages
             components={{
               UserMessage: UserMessage,
@@ -52,12 +53,29 @@ export const Thread = ({ ToolFallback }: ThreadProps) => {
   );
 };
 
-const ThreadWelcome = () => {
+export interface ThreadWelcomeProps {
+  agentName?: string;
+}
+
+const ThreadWelcome = ({ agentName }: ThreadWelcomeProps) => {
+  const safeAgentName = agentName ?? '';
+  const words = safeAgentName.split(' ') ?? [];
+
+  let initials = 'A';
+
+  if (words.length === 2) {
+    initials = `${words[0][0]}${words[1][0]}`;
+  } else if (safeAgentName.length > 0) {
+    initials = `${safeAgentName[0]}`;
+  } else {
+    initials = 'A';
+  }
+
   return (
     <ThreadPrimitive.Empty>
       <div className="flex w-full flex-grow flex-col items-center justify-center">
         <Avatar>
-          <AvatarFallback>C</AvatarFallback>
+          <AvatarFallback>{initials}</AvatarFallback>
         </Avatar>
         <p className="mt-4 font-medium">How can I help you today?</p>
       </div>

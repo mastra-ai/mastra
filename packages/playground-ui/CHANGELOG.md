@@ -1,5 +1,46 @@
 # @mastra/playground-ui
 
+## 5.0.2-alpha.4
+
+### Patch Changes
+
+- 5b43dd0: revamp ui for threads
+- Updated dependencies [ccef9f9]
+- Updated dependencies [51e6923]
+  - @mastra/core@0.9.2-alpha.4
+  - @mastra/client-js@0.1.20-alpha.4
+
+## 5.0.2-alpha.3
+
+### Patch Changes
+
+- 33b84fd: fix showing sig digits in trace / span duration
+- b63e712: refactor: Separate fetching traces from within playground-ui components
+- Updated dependencies [967b41c]
+- Updated dependencies [4155f47]
+- Updated dependencies [17826a9]
+  - @mastra/core@0.9.2-alpha.3
+  - @mastra/client-js@0.1.20-alpha.3
+
+## 5.0.2-alpha.2
+
+### Patch Changes
+
+- 26738f4: Switched from a custom MCP tools schema deserializer to json-schema-to-zod - fixes an issue where MCP tool schemas didn't deserialize properly in Mastra playground. Also added support for testing tools with no input arguments in playground
+- Updated dependencies [26738f4]
+  - @mastra/core@0.9.2-alpha.2
+  - @mastra/client-js@0.1.20-alpha.2
+
+## 5.0.2-alpha.1
+
+### Patch Changes
+
+- Updated dependencies [254f5c3]
+- Updated dependencies [b804723]
+- Updated dependencies [2429c74]
+  - @mastra/client-js@0.1.20-alpha.1
+  - @mastra/core@0.9.2-alpha.1
+
 ## 5.0.2-alpha.0
 
 ### Patch Changes

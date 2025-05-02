@@ -10,6 +10,7 @@ import { Txt } from '@/ds/components/Txt';
 import { useContext } from 'react';
 import { TraceContext } from './context/trace-context';
 import { Check, X } from 'lucide-react';
+import { toSigFigs } from '@/lib/number';
 
 const TracesTableSkeleton = ({ colsCount }: { colsCount: number }) => {
   return (
@@ -58,11 +59,12 @@ export interface TracesTableProps {
 const TraceRow = ({ trace, index, isActive }: { trace: RefinedTrace; index: number; isActive: boolean }) => {
   const { openTrace } = useOpenTrace();
   const hasFailure = trace.trace.some(span => span.status.code !== 0);
+
   return (
     <Row className={isActive ? 'bg-surface4' : ''} onClick={() => openTrace(trace.trace, index)}>
       <DateTimeCell dateTime={new Date(trace.started / 1000)} />
       <TxtCell title={trace.traceId}>{trace.traceId.substring(0, 7)}...</TxtCell>
-      <UnitCell unit="ms">{Math.round(trace.duration / 1000)}</UnitCell>
+      <UnitCell unit="ms">{toSigFigs(trace.duration / 1000, 3)}</UnitCell>
       <Cell>
         <button onClick={() => openTrace(trace.trace, index)}>
           <Badge icon={<TraceIcon />}>{trace.trace.length}</Badge>
