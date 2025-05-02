@@ -1,5 +1,17 @@
 # @mastra/deployer
 
+## 0.3.2-alpha.3
+
+### Patch Changes
+
+- 4155f47: Add parameters to filter workflow runs
+  Add fromDate and toDate to telemetry parameters
+- Updated dependencies [967b41c]
+- Updated dependencies [4155f47]
+- Updated dependencies [17826a9]
+  - @mastra/core@0.9.2-alpha.3
+  - @mastra/server@2.0.2-alpha.3
+
 ## 0.3.2-alpha.2
 
 ### Patch Changes
