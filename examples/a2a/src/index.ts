@@ -44,6 +44,8 @@ async function main() {
       },
     });
 
+    console.log(response);
+
     console.log(`\nTask Status: ${response.task.status}`);
     console.log('\n🤖 Agent Response:');
     console.log(

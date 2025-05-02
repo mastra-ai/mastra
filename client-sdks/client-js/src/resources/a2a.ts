@@ -1,4 +1,4 @@
-import type { TaskSendParams, TaskQueryParams, TaskIdParams, Task, AgentCard } from '@mastra/core/a2a';
+import type { TaskSendParams, TaskQueryParams, TaskIdParams, Task, AgentCard, JSONRPCResponse } from '@mastra/core/a2a';
 import type { ClientOptions } from '../types';
 import { BaseResource } from './base';
 
@@ -27,13 +27,15 @@ export class A2A extends BaseResource {
    * @returns Promise containing the task response
    */
   async sendMessage(params: TaskSendParams): Promise<{ task: Task }> {
-    return this.request(`/a2a/${this.agentId}`, {
+    const response = await this.request<JSONRPCResponse<Task>>(`/a2a/${this.agentId}`, {
       method: 'POST',
       body: {
         method: 'tasks/send',
         params,
       },
     });
+
+    return { task: response.result! };
   }
 
   /**

@@ -1,3 +1,4 @@
+import { randomUUID } from 'crypto';
 import type { Mastra } from '@mastra/core';
 import type { TaskSendParams, TaskQueryParams, TaskIdParams } from '@mastra/core/a2a';
 import type { RuntimeContext } from '@mastra/core/runtime-context';
@@ -38,6 +39,7 @@ export async function getAgentExecutionHandler(c: Context) {
     mastra,
     agentId,
     runtimeContext,
+    requestId: randomUUID(),
     method: body.method as 'tasks/send' | 'tasks/sendSubscribe' | 'tasks/get' | 'tasks/cancel',
     params: body.params as TaskSendParams | TaskQueryParams | TaskIdParams,
   });
