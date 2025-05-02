@@ -1,5 +1,15 @@
 # @mastra/playground-ui
 
+## 5.0.2-alpha.4
+
+### Patch Changes
+
+- 5b43dd0: revamp ui for threads
+- Updated dependencies [ccef9f9]
+- Updated dependencies [51e6923]
+  - @mastra/core@0.9.2-alpha.4
+  - @mastra/client-js@0.1.20-alpha.4
+
 ## 5.0.2-alpha.3
 
 ### Patch Changes

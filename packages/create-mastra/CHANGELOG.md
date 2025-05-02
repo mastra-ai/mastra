@@ -1,5 +1,11 @@
 # create-mastra
 
+## 0.3.1-alpha.3
+
+### Patch Changes
+
+- 5b43dd0: revamp ui for threads
+
 ## 0.3.1-alpha.2
 
 ### Patch Changes
