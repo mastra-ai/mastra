@@ -60,7 +60,7 @@ const step1 = createStep({
 const step2 = createStep({
   id: "step2",
   inputSchema: z.object({
-    unexepectedName: z.string(),
+    unexpectedName: z.string(),
   }),
   outputSchema: z.object({
     result: z.string(),
@@ -83,7 +83,7 @@ const workflow = createWorkflow({
 workflow
   .then(step1)
   .map({
-    unexepectedName: {
+    unexpectedName: {
       step: step1,
       path: "outputValue",
     },
