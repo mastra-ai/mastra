@@ -85,4 +85,8 @@ export class BuildBundler extends Bundler {
     });
     `;
   }
+
+  async lint(entryFile: string, outputDirectory: string, toolsPaths: string[]): Promise<void> {
+    super.lint(entryFile, outputDirectory, toolsPaths);
+  }
 }

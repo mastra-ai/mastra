@@ -1,6 +1,9 @@
 import { readFileSync } from 'fs';
 import { join } from 'path';
+import { getDeployer } from '@mastra/deployer';
+import { FileService } from '../../services/service.file.js';
 import { logger } from '../../utils/logger.js';
+import { BuildBundler } from '../build/BuildBundler.js';
 
 interface PackageJson {
   dependencies?: Record<string, string>;
@@ -128,19 +131,18 @@ function checkMastraDepsCompatibility(mastraPackages: MastraPackage[]): boolean 
   return true;
 }
 
-export async function lint({
-  dir: _dir,
-  root,
-  tools: _tools,
-}: {
-  dir?: string;
-  root?: string;
-  tools?: string[];
-}): Promise<boolean> {
+export async function lint({ dir, root, tools }: { dir?: string; root?: string; tools?: string[] }): Promise<boolean> {
   try {
     const rootDir = root || process.cwd();
-    // const mastraDir = dir ? (dir.startsWith('/') ? dir : join(process.cwd(), dir)) : join(process.cwd(), 'src', 'mastra');
-    // const dotMastraPath = join(rootDir, '.mastra');
+    const mastraDir = dir
+      ? dir.startsWith('/')
+        ? dir
+        : join(process.cwd(), dir)
+      : join(process.cwd(), 'src', 'mastra');
+    const outputDirectory = join(rootDir, '.mastra');
+
+    const defaultToolsPath = join(mastraDir, 'tools');
+    const discoveredTools = [defaultToolsPath, ...(tools ?? [])];
 
     if (isNextJsProject(rootDir)) {
       const nextConfigValid = checkNextConfig(rootDir);
@@ -155,8 +157,17 @@ export async function lint({
     const hasMastraCore = checkMastraCore(mastraPackages);
     const isMastraDepsCompatible = checkMastraDepsCompatibility(mastraPackages);
 
-    //TODO: Mastra folder lint
-    // deployers peer deps support e.g cloudflare, sqlite adapter  cannot be used, use d1 instead.
+    const fs = new FileService();
+    const mastraEntryFile = fs.getFirstExistingFile([join(mastraDir, 'index.ts'), join(mastraDir, 'index.js')]);
+
+    const platformDeployer = await getDeployer(mastraEntryFile, outputDirectory);
+
+    if (!platformDeployer) {
+      const deployer = new BuildBundler();
+      await deployer.lint(mastraEntryFile, outputDirectory, discoveredTools);
+    } else {
+      await platformDeployer.lint(mastraEntryFile, outputDirectory, discoveredTools);
+    }
 
     return hasMastraCore && isMastraDepsCompatible;
   } catch (error) {

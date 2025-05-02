@@ -212,4 +212,10 @@ process.versions.node = '${process.versions.node}';
       body: tags,
     });
   }
+
+  async lint(entryFile: string, outputDirectory: string, toolsPaths: string[]): Promise<void> {
+    super.lint(entryFile, outputDirectory, toolsPaths);
+
+    // Lint for cloudflare support
+  }
 }
