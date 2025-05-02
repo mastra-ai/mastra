@@ -1,6 +1,6 @@
 import { useParams } from 'react-router';
 
-import { WorkflowTraces } from '@mastra/playground-ui';
+import { useTraces, WorkflowTraces } from '@mastra/playground-ui';
 
 import { Skeleton } from '@/components/ui/skeleton';
 
@@ -11,8 +11,9 @@ function WorkflowTracesPage() {
   const { workflowId } = useParams();
 
   const { vNextWorkflow, isLoading: isWorkflowLoading } = useVNextWorkflow(workflowId!);
+  const { traces, error, firstCallLoading } = useTraces(vNextWorkflow?.name || '', '', true);
 
-  if (isWorkflowLoading) {
+  if (isWorkflowLoading || firstCallLoading) {
     return (
       <main className="flex-1 relative grid grid-cols-[1fr_325px] divide-x">
         <div className="p-4">
@@ -25,13 +26,7 @@ function WorkflowTracesPage() {
     );
   }
 
-  return (
-    <WorkflowTraces
-      workflowName={vNextWorkflow?.name || ''}
-      baseUrl=""
-      sidebarChild={<WorkflowInformation workflowId={workflowId!} isVNext />}
-    />
-  );
+  return <WorkflowTraces traces={traces} isLoading={firstCallLoading} error={error} />;
 }
 
 export default WorkflowTracesPage;
