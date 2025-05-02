@@ -75,52 +75,50 @@ export function AgentSidebar({
 
   return (
     <>
-      <div className="overflow-y-auto h-[calc(100%-40px)]">
-        <Threads>
-          <ThreadList>
-            <ThreadItem>
-              <ThreadLink as={Link} to={`/agents/${agentId}/chat/${uuid()}`}>
-                <span className="text-accent1 flex items-center gap-4">
-                  <Icon className="bg-surface4 rounded-lg" size="lg">
-                    <Plus />
-                  </Icon>
-                  New Chat
-                </span>
-              </ThreadLink>
-            </ThreadItem>
+      <Threads>
+        <ThreadList>
+          <ThreadItem>
+            <ThreadLink as={Link} to={`/agents/${agentId}/chat/${uuid()}`}>
+              <span className="text-accent1 flex items-center gap-4">
+                <Icon className="bg-surface4 rounded-lg" size="lg">
+                  <Plus />
+                </Icon>
+                New Chat
+              </span>
+            </ThreadLink>
+          </ThreadItem>
 
-            {reverseThreads.map(thread => {
-              const isActive = thread.id === threadId;
+          {reverseThreads.map(thread => {
+            const isActive = thread.id === threadId;
 
-              return (
-                <ThreadItem isActive={isActive} key={thread.id}>
-                  <ThreadLink as={Link} to={`/agents/${agentId}/chat/${thread.id}`}>
-                    <span className="truncate">{thread.title}</span>
-                    <p className="text-ui-xs text-icon3">{formatDay(thread.createdAt)}</p>
-                  </ThreadLink>
+            return (
+              <ThreadItem isActive={isActive} key={thread.id}>
+                <ThreadLink as={Link} to={`/agents/${agentId}/chat/${thread.id}`}>
+                  <span className="truncate">{thread.title}</span>
+                  <p className="text-ui-xs text-icon3">{formatDay(thread.createdAt)}</p>
+                </ThreadLink>
 
-                  <ThreadDeleteButton onClick={() => setDeleteId(thread.id)} />
-                </ThreadItem>
-              );
-            })}
-          </ThreadList>
-        </Threads>
+                <ThreadDeleteButton onClick={() => setDeleteId(thread.id)} />
+              </ThreadItem>
+            );
+          })}
+        </ThreadList>
+      </Threads>
 
-        <AlertDialog open={!!deleteId} onOpenChange={() => setDeleteId(null)}>
-          <AlertDialog.Content>
-            <AlertDialog.Header>
-              <AlertDialog.Title>Are you absolutely sure?</AlertDialog.Title>
-              <AlertDialog.Description>
-                This action cannot be undone. This will permanently delete your chat and remove it from our servers.
-              </AlertDialog.Description>
-            </AlertDialog.Header>
-            <AlertDialog.Footer>
-              <AlertDialog.Cancel>Cancel</AlertDialog.Cancel>
-              <AlertDialog.Action onClick={handleDelete}>Continue</AlertDialog.Action>
-            </AlertDialog.Footer>
-          </AlertDialog.Content>
-        </AlertDialog>
-      </div>
+      <AlertDialog open={!!deleteId} onOpenChange={() => setDeleteId(null)}>
+        <AlertDialog.Content>
+          <AlertDialog.Header>
+            <AlertDialog.Title>Are you absolutely sure?</AlertDialog.Title>
+            <AlertDialog.Description>
+              This action cannot be undone. This will permanently delete your chat and remove it from our servers.
+            </AlertDialog.Description>
+          </AlertDialog.Header>
+          <AlertDialog.Footer>
+            <AlertDialog.Cancel>Cancel</AlertDialog.Cancel>
+            <AlertDialog.Action onClick={handleDelete}>Continue</AlertDialog.Action>
+          </AlertDialog.Footer>
+        </AlertDialog.Content>
+      </AlertDialog>
     </>
   );
 }
