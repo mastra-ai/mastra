@@ -16,7 +16,7 @@ const variantClasses = {
 
 export const Time = ({ durationMs, tokenCount, variant, progressPercent }: TimeProps) => {
   const variantClass = variant ? variantClasses[variant] : 'bg-accent3';
-  const percent = Math.max(100, progressPercent);
+  const percent = Math.min(100, progressPercent);
 
   return (
     <div className="w-[80px] xl:w-[166px] shrink-0">
