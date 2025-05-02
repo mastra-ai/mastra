@@ -12,7 +12,6 @@ export const useTraces = (componentName: string, baseUrl: string, isWorkflow: bo
 
   const { setTraces: setTraceContextTraces } = useContext(TraceContext);
 
-  // Memoize the client instance
   const client = useMemo(() => createMastraClient(baseUrl), [baseUrl]);
 
   const fetchFn = useCallback(async () => {
@@ -43,6 +42,7 @@ export const useTraces = (componentName: string, baseUrl: string, isWorkflow: bo
   );
 
   const onError = useCallback((error: { message: string }) => {
+    console.log(`error, onError`, error);
     toast.error(error.message);
   }, []);
 

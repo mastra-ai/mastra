@@ -2,6 +2,8 @@ import type { RuntimeContext } from '@mastra/core/runtime-context';
 import type {
   ClientOptions,
   GetVNextWorkflowResponse,
+  GetWorkflowRunsParams,
+  GetWorkflowRunsResponse,
   VNextWorkflowRunResult,
   VNextWorkflowWatchResult,
 } from '../types';
@@ -67,7 +69,7 @@ export class VNextWorkflow extends BaseResource {
               }
             }
           }
-        } catch (error) {
+        } catch {
           // Silently ignore parsing errors to maintain stream processing
           // This allows the stream to continue even if one record is malformed
         }
@@ -95,6 +97,36 @@ export class VNextWorkflow extends BaseResource {
    */
   details(): Promise<GetVNextWorkflowResponse> {
     return this.request(`/api/workflows/v-next/${this.workflowId}`);
+  }
+
+  /**
+   * Retrieves all runs for a vNext workflow
+   * @param params - Parameters for filtering runs
+   * @returns Promise containing vNext workflow runs array
+   */
+  runs(params?: GetWorkflowRunsParams): Promise<GetWorkflowRunsResponse> {
+    const searchParams = new URLSearchParams();
+    if (params?.fromDate) {
+      searchParams.set('fromDate', params.fromDate.toISOString());
+    }
+    if (params?.toDate) {
+      searchParams.set('toDate', params.toDate.toISOString());
+    }
+    if (params?.limit) {
+      searchParams.set('limit', String(params.limit));
+    }
+    if (params?.offset) {
+      searchParams.set('offset', String(params.offset));
+    }
+    if (params?.resourceId) {
+      searchParams.set('resourceId', params.resourceId);
+    }
+
+    if (searchParams.size) {
+      return this.request(`/api/workflows/v-next/${this.workflowId}/runs?${searchParams}`);
+    } else {
+      return this.request(`/api/workflows/v-next/${this.workflowId}/runs`);
+    }
   }
 
   /**

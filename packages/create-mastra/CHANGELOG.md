@@ -1,5 +1,19 @@
 # create-mastra
 
+## 0.3.1-alpha.1
+
+### Patch Changes
+
+- 2429c74: Add get workflow runs api to client-js
+
+## 0.3.1-alpha.0
+
+### Patch Changes
+
+- 0097d50: Add serializedStepGraph to vNext workflow
+  Return serializedStepGraph from vNext workflow
+  Use serializedStepGraph in vNext workflow graph
+
 ## 0.3.0
 
 ### Minor Changes

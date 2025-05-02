@@ -1,5 +1,28 @@
 # @mastra/mcp
 
+## 0.4.2-alpha.2
+
+### Patch Changes
+
+- 26738f4: Switched from a custom MCP tools schema deserializer to json-schema-to-zod - fixes an issue where MCP tool schemas didn't deserialize properly in Mastra playground. Also added support for testing tools with no input arguments in playground
+- Updated dependencies [26738f4]
+  - @mastra/core@0.9.2-alpha.2
+
+## 0.4.2-alpha.1
+
+### Patch Changes
+
+- 8bb9b4d: Deprecation warning was on the subclass, rather than the deprecated class. So the deprecation warning would show even if you used the new class.
+- Updated dependencies [b804723]
+  - @mastra/core@0.9.2-alpha.1
+
+## 0.4.2-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [0097d50]
+  - @mastra/core@0.9.2-alpha.0
+
 ## 0.4.1
 
 ### Patch Changes

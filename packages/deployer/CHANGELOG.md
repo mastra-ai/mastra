@@ -1,5 +1,30 @@
 # @mastra/deployer
 
+## 0.3.2-alpha.2
+
+### Patch Changes
+
+- Updated dependencies [26738f4]
+  - @mastra/core@0.9.2-alpha.2
+  - @mastra/server@2.0.2-alpha.2
+
+## 0.3.2-alpha.1
+
+### Patch Changes
+
+- 254f5c3: Audit, cleanup MastraClient
+- Updated dependencies [b804723]
+  - @mastra/core@0.9.2-alpha.1
+  - @mastra/server@2.0.2-alpha.1
+
+## 0.3.2-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [0097d50]
+  - @mastra/server@2.0.2-alpha.0
+  - @mastra/core@0.9.2-alpha.0
+
 ## 0.3.1
 
 ### Patch Changes

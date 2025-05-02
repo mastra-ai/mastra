@@ -1,5 +1,25 @@
 # @mastra/core
 
+## 0.9.2-alpha.2
+
+### Patch Changes
+
+- 26738f4: Switched from a custom MCP tools schema deserializer to json-schema-to-zod - fixes an issue where MCP tool schemas didn't deserialize properly in Mastra playground. Also added support for testing tools with no input arguments in playground
+
+## 0.9.2-alpha.1
+
+### Patch Changes
+
+- b804723: Fix #3831: keep conversations in tact by keeping empty assistant messages
+
+## 0.9.2-alpha.0
+
+### Patch Changes
+
+- 0097d50: Add serializedStepGraph to vNext workflow
+  Return serializedStepGraph from vNext workflow
+  Use serializedStepGraph in vNext workflow graph
+
 ## 0.9.1
 
 ### Patch Changes

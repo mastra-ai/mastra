@@ -64,5 +64,12 @@
     "@mastra/voice-sarvam": "0.1.10",
     "@mastra/voice-speechify": "0.1.15"
   },
-  "changesets": []
+  "changesets": [
+    "dark-phones-sin",
+    "every-pears-swim",
+    "hot-bags-float",
+    "huge-trains-film",
+    "metal-owls-appear",
+    "ripe-chairs-dream"
+  ]
 }

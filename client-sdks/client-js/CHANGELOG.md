@@ -1,5 +1,31 @@
 # @mastra/client-js
 
+## 0.1.20-alpha.2
+
+### Patch Changes
+
+- Updated dependencies [26738f4]
+  - @mastra/core@0.9.2-alpha.2
+
+## 0.1.20-alpha.1
+
+### Patch Changes
+
+- 254f5c3: Audit, cleanup MastraClient
+- 2429c74: Add get workflow runs api to client-js
+- Updated dependencies [b804723]
+  - @mastra/core@0.9.2-alpha.1
+
+## 0.1.20-alpha.0
+
+### Patch Changes
+
+- 0097d50: Add serializedStepGraph to vNext workflow
+  Return serializedStepGraph from vNext workflow
+  Use serializedStepGraph in vNext workflow graph
+- Updated dependencies [0097d50]
+  - @mastra/core@0.9.2-alpha.0
+
 ## 0.1.19
 
 ### Patch Changes
