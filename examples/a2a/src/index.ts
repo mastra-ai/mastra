@@ -63,7 +63,7 @@ async function main() {
       id: taskId,
     });
 
-    console.log(`Task Status: ${taskStatus.task.status}`);
+    console.log(`Task Status: ${taskStatus.status}`);
     console.log('\n-------------------\n');
 
     // Step 4: Demonstrate agent-to-agent communication

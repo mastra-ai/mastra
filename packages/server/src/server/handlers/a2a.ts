@@ -1,3 +1,4 @@
+import type { CoreMessage } from '@mastra/core';
 import { A2AError } from '@mastra/core/a2a';
 import type {
   TaskSendParams,
@@ -7,20 +8,18 @@ import type {
   JSONRPCError,
   JSONRPCResponse,
   TaskStatus,
+  TaskState,
 } from '@mastra/core/a2a';
 import type { Agent } from '@mastra/core/agent';
 import type { RuntimeContext } from '@mastra/core/runtime-context';
-import { inMemoryTaskStore } from '../a2a/store';
+import { activeCancellations, inMemoryTaskStore } from '../a2a/store';
 import type { InMemoryTaskStore } from '../a2a/store';
 import { applyUpdateToTaskAndHistory, createTaskContext, loadOrCreateTaskAndHistory } from '../a2a/tasks';
 import type { Context } from '../types';
-import type { CoreMessage } from '@mastra/core';
 
 export async function getAgentCardByIdHandler({
   mastra,
   agentId,
-  // We need to keep runtimeContext in the parameters even if unused
-  // to match the expected function signature
   runtimeContext,
 }: Context & { runtimeContext: RuntimeContext; agentId: string }): Promise<AgentCard> {
   const agent = mastra.getAgent(agentId);
@@ -162,14 +161,9 @@ async function handleTaskSend({
     history: currentData.history,
   });
 
-  // Transform into generate call or transform into a stream call
-
-  console.log(context, currentData, params, agent);
-
-  // Process generator yields
   try {
-    const { text } = await agent.generate(message as any);
-    console.log(text);
+    const { text } = await agent.generate(message as unknown as CoreMessage[]);
+
     currentData = applyUpdateToTaskAndHistory(currentData, {
       state: 'completed',
 
@@ -213,6 +207,75 @@ async function handleTaskSend({
   return sendJsonResponse(requestId, currentData.task);
 }
 
+async function handleTaskGet({
+  requestId,
+  taskStore,
+  agentId,
+  taskId,
+}: {
+  requestId: string;
+  taskStore: InMemoryTaskStore;
+  agentId: string;
+  taskId: string;
+}) {
+  const task = await taskStore.load({ agentId, taskId });
+
+  return sendJsonResponse(requestId, task);
+}
+
+async function handleTaskCancel({
+  requestId,
+  taskStore,
+  agentId,
+  taskId,
+}: {
+  requestId: string;
+  taskStore: InMemoryTaskStore;
+  agentId: string;
+  taskId: string;
+}) {
+  // Load task and history
+  let data = await taskStore.load({
+    agentId,
+    taskId,
+  });
+
+  if (!data) {
+    throw A2AError.taskNotFound(taskId);
+  }
+
+  // Check if cancelable (not already in a final state)
+  const finalStates: TaskState[] = ['completed', 'failed', 'canceled'];
+
+  if (finalStates.includes(data.task.status.state)) {
+    console.log(`Task ${taskId} already in final state ${data.task.status.state}, cannot cancel.`);
+    return sendJsonResponse(requestId, data.task);
+  }
+
+  // Signal cancellation
+  activeCancellations.add(taskId);
+
+  // Apply 'canceled' state update
+  const cancelUpdate: Omit<TaskStatus, 'timestamp'> = {
+    state: 'canceled',
+    message: {
+      role: 'agent',
+      parts: [{ type: 'text', text: 'Task cancelled by request.' }],
+    },
+  };
+
+  data = applyUpdateToTaskAndHistory(data, cancelUpdate);
+
+  // Save the updated state
+  await taskStore.save({ agentId, data });
+
+  // Remove from active cancellations *after* saving
+  activeCancellations.delete(taskId);
+
+  // Return the updated task object
+  return sendJsonResponse(requestId, data.task);
+}
+
 export async function getAgentExecutionHandler({
   requestId,
   mastra,
@@ -239,7 +302,7 @@ export async function getAgentExecutionHandler({
 
     // 2. Route based on method
     switch (method) {
-      case 'tasks/send':
+      case 'tasks/send': {
         const result = await handleTaskSend({
           requestId,
           params: params as TaskSendParams,
@@ -248,30 +311,40 @@ export async function getAgentExecutionHandler({
           agent,
         });
         return result;
+      }
       // case "tasks/sendSubscribe":
       //     await this.handleTaskSendSubscribe(
       //         requestBody as schema.SendTaskStreamingRequest,
       //         res
       //     );
       //     break;
-      // case "tasks/get":
-      //     await this.handleTaskGet(requestBody as schema.GetTaskRequest, res);
-      //     break;
-      // case "tasks/cancel":
-      //     await this.handleTaskCancel(
-      //         requestBody as schema.CancelTaskRequest,
-      //         res
-      //     );
-      //     break;
-      // Add other methods like tasks/pushNotification/*, tasks/resubscribe later if needed
+      case 'tasks/get': {
+        const result = await handleTaskGet({
+          requestId,
+          taskStore: inMemoryTaskStore,
+          agentId,
+          taskId,
+        });
+
+        return result;
+      }
+      case 'tasks/cancel': {
+        const result = await handleTaskCancel({
+          requestId,
+          taskStore: inMemoryTaskStore,
+          agentId,
+          taskId,
+        });
+
+        return result;
+      }
       default:
         throw A2AError.methodNotFound(method);
     }
   } catch (error) {
-    // Forward errors to the Express error handler
     if (error instanceof A2AError && taskId && !error.taskId) {
       error.taskId = taskId; // Add task ID context if missing
     }
-    return normalizeError(error, params.id ?? null);
+    return normalizeError(error, requestId, taskId);
   }
 }

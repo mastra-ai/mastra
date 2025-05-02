@@ -43,14 +43,16 @@ export class A2A extends BaseResource {
    * @param params - Parameters for querying the task
    * @returns Promise containing the task response
    */
-  async getTask(params: TaskQueryParams): Promise<{ task: Task }> {
-    return this.request(`/a2a/${this.agentId}`, {
+  async getTask(params: TaskQueryParams): Promise<Task> {
+    const response = await this.request<JSONRPCResponse<Task>>(`/a2a/${this.agentId}`, {
       method: 'POST',
       body: {
         method: 'tasks/get',
         params,
       },
     });
+
+    return response.result!;
   }
 
   /**
