@@ -117,6 +117,9 @@ export class DefaultProxyStorage extends MastraStorage {
     page: number;
     perPage: number;
     attributes?: Record<string, string>;
+    filters?: Record<string, any>;
+    fromDate?: Date;
+    toDate?: Date;
   }): Promise<any[]> {
     await this.setupStorage();
     return this.storage!.getTraces(options);
