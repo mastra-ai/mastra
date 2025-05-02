@@ -1,6 +1,6 @@
 import { AgentProvider, AgentChat as Chat, MastraResizablePanel } from '@mastra/playground-ui';
 import { useEffect, useState } from 'react';
-import { useNavigate, useParams } from 'react-router';
+import { useNavigate, useParams, useLocation } from 'react-router';
 import { v4 as uuid } from '@lukeed/uuid';
 
 import { cn } from '@/lib/utils';
@@ -12,6 +12,7 @@ import { useMemory, useMessages, useThreads } from '@/hooks/use-memory';
 import type { Message } from '@/types';
 
 function Agent() {
+  const location = useLocation();
   const { agentId, threadId } = useParams();
   const { agent, isLoading: isAgentLoading } = useAgent(agentId!);
   const { memory } = useMemory(agentId!);
@@ -40,11 +41,15 @@ function Agent() {
     return null;
   }
 
+  const handleRefreshThreadList = () => {
+    refreshThreads();
+  };
+
   return (
     <AgentProvider>
       <section className={cn('relative h-[calc(100%-40px)] divide-x flex w-full')}>
         {sidebar && memory?.result ? (
-          <div className="h-full w-[256px]">
+          <div className="h-full w-[300px]">
             <AgentSidebar agentId={agentId!} threadId={threadId!} threads={threads} isLoading={isThreadsLoading} />
           </div>
         ) : null}
@@ -56,9 +61,7 @@ function Agent() {
             threadId={threadId!}
             initialMessages={isMessagesLoading ? undefined : (messages as Message[])}
             memory={memory?.result}
-            refreshThreadList={() => {
-              refreshThreads();
-            }}
+            refreshThreadList={handleRefreshThreadList}
           />
         </div>
 
