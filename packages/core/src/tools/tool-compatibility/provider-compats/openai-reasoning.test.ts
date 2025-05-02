@@ -76,7 +76,6 @@ describe('OpenAIReasoningToolCompat', () => {
 
         const result = compat.processZodType(schema, 'test', constraints);
         expect(result._def.typeName).toBe('ZodObject');
-        console.log(constraints);
         expect(constraints).toHaveProperty('test.user.name', { stringMin: 2 });
         expect(constraints).toHaveProperty('test.user.age', { gte: 18 });
       });
@@ -143,7 +142,6 @@ describe('OpenAIReasoningToolCompat', () => {
 
         expect(result._def.typeName).toBe('ZodString');
 
-        console.log(constraints);
         expect(constraints).toHaveProperty('test', {
           stringMin: 3,
           stringMax: 10,
