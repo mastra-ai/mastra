@@ -7,6 +7,7 @@ import * as fs from 'fs/promises';
 import chalk from 'chalk';
 import { Agent } from '@mastra/core/agent';
 import 'dotenv/config';
+import { createOpenRouter } from '@openrouter/ai-sdk-provider';
 
 type Result = {
   testId: string;
@@ -18,17 +19,22 @@ type Result = {
   receivedContext: any;
 };
 
+const openrouter = createOpenRouter({
+  apiKey: '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',
+});
+
 const openai = createOpenAI({ apiKey: process.env.OPENAI_API_KEY });
 const modelsToTest: LanguageModel[] = [
-  openai('o3-mini'),
-  openai('o4-mini'),
-  openai(`o3`),
-  openai('gpt-4o'),
-  openai(`gpt-4.1-mini`),
-  openai(`gpt-4.1`),
+  openrouter('openai/gpt-4o-2024-11-20'),
+  // openai('o4-mini'),
+  // openai(`o3`),
+  // openai('gpt-4o'),
+  // openai(`gpt-4.1-mini`),
+  // openai(`gpt-4.1`),
 ];
 
 const testTools = Object.keys(allParsers.shape).map(key => {
+  console.log(`hereee`, { key, schema: allParsers.shape[key as keyof typeof allParsers.shape] });
   return createTool({
     id: `testTool_${key}`,
     description: `Test tool for schema type: ${key}. Call this tool to test the schema.`,

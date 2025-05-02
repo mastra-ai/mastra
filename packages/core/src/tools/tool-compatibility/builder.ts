@@ -7,7 +7,10 @@ import { RuntimeContext } from '../../runtime-context';
 import { isVercelTool, isZodType, resolveSerializedZodOutput } from '../../utils';
 import type { ToolOptions } from '../../utils';
 import type { CoreTool, ToolAction, VercelTool } from '../types';
-import { OpenAIReasoningToolCompat } from './openai-reasoning';
+import { AnthropicToolCompat } from './provider-compats/anthropic';
+import { GoogleToolCompat } from './provider-compats/google';
+import { OpenAIToolCompat } from './provider-compats/openai';
+import { OpenAIReasoningToolCompat } from './provider-compats/openai-reasoning';
 
 export type ToolToConvert = VercelTool | ToolAction<any, any, any>;
 export type LogType = 'tool' | 'toolset' | 'client-tool';
@@ -166,8 +169,13 @@ export class CoreToolBuilder extends MastraBase {
     const model = this.options.model;
 
     if (model) {
-      for (const compat of [new OpenAIReasoningToolCompat()]) {
-        if (compat.shouldApply({ model })) {
+      for (const compat of [
+        new OpenAIReasoningToolCompat(model),
+        new OpenAIToolCompat(model),
+        new GoogleToolCompat(model),
+        new AnthropicToolCompat(model),
+      ]) {
+        if (compat.shouldApply()) {
           return { ...definition, ...compat.process(this.originalTool) };
         }
       }
