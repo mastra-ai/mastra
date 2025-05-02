@@ -1,7 +1,6 @@
 /** @type {import('next').NextConfig} */
 import nextra from "nextra";
 import { initGT } from "gt-next/config";
-import withVercelToolbar from "@vercel/toolbar/plugins/next";
 
 const withNextra = nextra({
   search: {

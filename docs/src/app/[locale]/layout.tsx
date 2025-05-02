@@ -7,15 +7,12 @@ import { Head } from "nextra/components";
 import { getPageMap } from "nextra/page-map";
 import { fonts } from "../font/setup";
 import "../globals.css";
-import { VercelToolbar } from "@vercel/toolbar/next";
 
 import { PostHogProvider } from "@/analytics/posthog-provider";
 import { CookieConsent } from "@/components/cookie-consent";
 import { NextraLayout } from "@/components/nextra-layout";
 import DocsChat from "@/chatbot/components/chat-widget";
 import { GTProvider } from "gt-next";
-
-const shouldInjectToolbar = process.env.NODE_ENV === "development";
 
 const fetchStars = async () => {
   try {
@@ -74,7 +71,6 @@ export default async function RootLayout({
         <GTProvider locale={locale}>
           <PostHogProvider>
             <NextraLayout stars={stars} locale={locale} pageMap={pageMap}>
-              {shouldInjectToolbar && <VercelToolbar />}
               {children}
               {<DocsChat />}
             </NextraLayout>
