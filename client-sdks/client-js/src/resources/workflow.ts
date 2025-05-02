@@ -1,4 +1,10 @@
-import type { GetWorkflowResponse, ClientOptions, WorkflowRunResult, GetWorkflowRunsResponse } from '../types';
+import type {
+  GetWorkflowResponse,
+  ClientOptions,
+  WorkflowRunResult,
+  GetWorkflowRunsResponse,
+  GetWorkflowRunsParams,
+} from '../types';
 
 import { BaseResource } from './base';
 
@@ -22,10 +28,32 @@ export class Workflow extends BaseResource {
 
   /**
    * Retrieves all runs for a workflow
+   * @param params - Parameters for filtering runs
    * @returns Promise containing workflow runs array
    */
-  runs(): Promise<GetWorkflowRunsResponse> {
-    return this.request(`/api/workflows/${this.workflowId}/runs`);
+  runs(params?: GetWorkflowRunsParams): Promise<GetWorkflowRunsResponse> {
+    const searchParams = new URLSearchParams();
+    if (params?.fromDate) {
+      searchParams.set('fromDate', params.fromDate.toISOString());
+    }
+    if (params?.toDate) {
+      searchParams.set('toDate', params.toDate.toISOString());
+    }
+    if (params?.limit) {
+      searchParams.set('limit', String(params.limit));
+    }
+    if (params?.offset) {
+      searchParams.set('offset', String(params.offset));
+    }
+    if (params?.resourceId) {
+      searchParams.set('resourceId', params.resourceId);
+    }
+
+    if (searchParams.size) {
+      return this.request(`/api/workflows/${this.workflowId}/runs?${searchParams}`);
+    } else {
+      return this.request(`/api/workflows/${this.workflowId}/runs`);
+    }
   }
 
   /**

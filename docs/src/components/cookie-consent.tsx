@@ -13,6 +13,9 @@ declare global {
   }
 }
 
+const REO_SCRIPT_ID = "reo-script";
+const REO_CLIENT_ID = "fdd9258c52d6769";
+
 export const CookieConsent = () => {
   const [cookieConsent, setCookieConsent] = useState<boolean | null>(null);
   const GA_ID = process.env.NEXT_PUBLIC_GA_ID;
@@ -58,6 +61,14 @@ export const CookieConsent = () => {
             `}
           </Script>
         </>
+      )}
+
+      {cookieConsent && (
+        <Script id={REO_SCRIPT_ID} strategy="afterInteractive">
+          {`!function(){var e,t,n;e="${REO_CLIENT_ID}",t=function(){Reo.init({clientID:"${REO_CLIENT_ID}"})},
+          (n=document.createElement("script")).src="https://static.reo.dev/"+e+"/reo.js",n.defer=!0,
+          n.onload=t,document.head.appendChild(n)}();`}
+        </Script>
       )}
 
       <HubspotTracker cookieConsent={cookieConsent ?? false} />

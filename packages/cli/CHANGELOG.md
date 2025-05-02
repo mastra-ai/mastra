@@ -1,5 +1,19 @@
 # mastra
 
+## 0.6.1-alpha.3
+
+### Patch Changes
+
+- 33b84fd: fix showing sig digits in trace / span duration
+- 4155f47: Add parameters to filter workflow runs
+  Add fromDate and toDate to telemetry parameters
+- b63e712: refactor: Separate fetching traces from within playground-ui components
+- Updated dependencies [967b41c]
+- Updated dependencies [4155f47]
+- Updated dependencies [17826a9]
+  - @mastra/core@0.9.2-alpha.3
+  - @mastra/deployer@0.3.2-alpha.3
+
 ## 0.6.1-alpha.2
 
 ### Patch Changes
