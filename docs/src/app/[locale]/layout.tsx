@@ -15,6 +15,7 @@ import { GTProvider } from "gt-next";
 import Script from "next/script";
 
 const REO_SCRIPT_ID = "reo-script";
+const REO_CLIENT_ID = "fdd9258c52d6769";
 
 const fetchStars = async () => {
   try {
@@ -80,7 +81,7 @@ export default async function RootLayout({
           <CookieConsent />
         </GTProvider>
         <Script id={REO_SCRIPT_ID} strategy="afterInteractive">
-          {`!function(){var e,t,n;e="fdd9258c52d6769",t=function(){Reo.init({clientID:"fdd9258c52d6769"})},
+          {`!function(){var e,t,n;e="${REO_CLIENT_ID}",t=function(){Reo.init({clientID:"${REO_CLIENT_ID}"})},
           (n=document.createElement("script")).src="https://static.reo.dev/"+e+"/reo.js",n.defer=!0,
           n.onload=t,document.head.appendChild(n)}();`}
         </Script>
