@@ -158,6 +158,8 @@ export class MilvusStorage extends MastraStorage {
 
   async insert({ tableName, record }: { tableName: TABLE_NAMES; record: Record<string, any> }): Promise<void> {
     try {
+      // Add placeholder vector field - required by Milvus
+      record.vector_placeholder = [0, 0];
       const response = await this.client.upsert({
         collection_name: tableName,
         data: [record],

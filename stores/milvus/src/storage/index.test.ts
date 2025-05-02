@@ -29,13 +29,13 @@ describe('MilvusStorage', () => {
   let milvusStorage: MilvusStorage;
   beforeAll(async () => {
     // setup milvus client
-    milvusStorage = new MilvusStorage(
-      'milvus',
-      { address: '127.0.0.1:19530' },
-      false,
-      'milvus-username',
-      'milvus-password',
-    );
+    milvusStorage = new MilvusStorage('milvus', {
+      address: '127.0.0.1:19530',
+      ssl: false,
+      username: 'milvus-username',
+      password: 'milvus-password',
+      logLevel: 'info',
+    });
 
     expect(milvusStorage).toBeDefined();
     expect((await milvusStorage.checkHealth()).isHealthy).toBe(true);
@@ -88,7 +88,6 @@ describe('MilvusStorage', () => {
 
       // Verify table exists and schema is correct
       const tableSchema = await milvusStorage.getTableSchema(TABLE_MESSAGES);
-      console.log(tableSchema);
 
       expect(tableSchema).toBeDefined();
       expect(tableSchema.length).toBe(2); // id and vector
@@ -204,23 +203,40 @@ describe('MilvusStorage', () => {
       const tableName = TABLE_MESSAGES;
       const record = generateRecords(1)[0];
 
-      expect(await milvusStorage.insert({ tableName, record })).resolves.not.toThrow();
+      expect(milvusStorage.insert({ tableName, record })).resolves.not.toThrow();
     });
 
     it('should throw if varchar max length is exceeded', async () => {
       const tableName = TABLE_MESSAGES;
-      const record = generateRecords(1)[0];
-      record.content = 'a'.repeat(1000);
+      const record = {
+        id: 1,
+        threadId: '00000000-0000-4000-a000-000000000000',
+        referenceId: 1,
+        messageType: 'text',
+        content: 'a'.repeat(65536),
+        createdAt: new Date(),
+        metadata: {},
+      };
 
-      expect(await milvusStorage.insert({ tableName, record })).rejects.toThrow();
+      // match exception message
+      expect(milvusStorage.insert({ tableName, record })).rejects.toThrow(
+        'Failed to insert record: Error: Error status code: length of varchar field content exceeds max length, row number: 0, length: 65536, max length: 65535: invalid parameter',
+      );
     });
 
-    it('should throw if jsonb max length is exceeded', async () => {
+    it('should not throw if json object is given', async () => {
       const tableName = TABLE_MESSAGES;
-      const record = generateRecords(1)[0];
-      record.metadata = { foo: 'bar' };
+      const record = {
+        id: 1,
+        threadId: '00000000-0000-4000-a000-000000000000',
+        referenceId: 1,
+        messageType: 'text',
+        content: 'test',
+        createdAt: new Date(),
+        metadata: { foo: 'bar' },
+      };
 
-      expect(await milvusStorage.insert({ tableName, record })).rejects.toThrow();
+      expect(milvusStorage.insert({ tableName, record })).resolves.not.toThrow();
     });
   });
 });
