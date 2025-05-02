@@ -1,5 +1,17 @@
 # @mastra/playground-ui
 
+## 5.0.2-alpha.3
+
+### Patch Changes
+
+- 33b84fd: fix showing sig digits in trace / span duration
+- b63e712: refactor: Separate fetching traces from within playground-ui components
+- Updated dependencies [967b41c]
+- Updated dependencies [4155f47]
+- Updated dependencies [17826a9]
+  - @mastra/core@0.9.2-alpha.3
+  - @mastra/client-js@0.1.20-alpha.3
+
 ## 5.0.2-alpha.2
 
 ### Patch Changes
