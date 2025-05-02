@@ -1,5 +1,15 @@
 # @mastra/memory
 
+## 0.3.2-alpha.3
+
+### Patch Changes
+
+- 17826a9: Added a breaking change warning about deprecated working memory "use: 'text-stream'" which is being fully replaced by "use: 'tool-call'"
+- Updated dependencies [967b41c]
+- Updated dependencies [4155f47]
+- Updated dependencies [17826a9]
+  - @mastra/core@0.9.2-alpha.3
+
 ## 0.3.2-alpha.2
 
 ### Patch Changes
