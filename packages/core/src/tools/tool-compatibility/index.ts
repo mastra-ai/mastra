@@ -10,7 +10,7 @@ import { MastraBase } from '../../base';
 import { convertVercelToolParameters } from './builder';
 import type { ToolToConvert } from './builder';
 
-const OPENAI_TOOL_DESCRIPTION_MAX_LENGTH = 1024;
+export const OPENAI_TOOL_DESCRIPTION_MAX_LENGTH = 1024;
 
 export type SchemaConstraints = {
   [path: string]: {
@@ -368,7 +368,6 @@ export abstract class ToolCompatibility extends MastraBase {
       };
     }
 
-    // TODO: we should think of other ways to build up the tool description here cause this is a bit janky. We also need to make sure the description text isn't too long because some models throw errors when it's too long
     const { schema, constraints } = this.zodToAISDKSchema(tool.inputSchema);
 
     const isOpenAI = model.provider.includes(`openai`) || model.modelId.includes(`openai`);
@@ -378,15 +377,16 @@ export abstract class ToolCompatibility extends MastraBase {
 
     // openai only allows tools descriptions of up to 1024 characters
     // If their tool description is too long we want it to return the openai error as is
-    if (
-      isOpenAI &&
-      description.length > OPENAI_TOOL_DESCRIPTION_MAX_LENGTH &&
-      tool.description.length < OPENAI_TOOL_DESCRIPTION_MAX_LENGTH
-    ) {
-      this.logger.warn(
-        `Tool description is too long for OpenAI. Truncating to 1024 characters. Tool call might not respect the schema constraints.`,
-      );
-      description = description.slice(0, 1020);
+    if (isOpenAI && description.length > OPENAI_TOOL_DESCRIPTION_MAX_LENGTH) {
+      if (tool.description.length < OPENAI_TOOL_DESCRIPTION_MAX_LENGTH) {
+        this.logger.warn(
+          `Tool description is too long for OpenAI. Truncating to 1024 characters. Tool call might not respect the schema constraints.`,
+        );
+        description = description.slice(0, OPENAI_TOOL_DESCRIPTION_MAX_LENGTH);
+      } else {
+        // Preserve the original description if it's already over the limit
+        description = tool.description;
+      }
     }
 
     return {
