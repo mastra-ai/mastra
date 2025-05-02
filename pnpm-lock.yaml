@@ -611,8 +611,8 @@ importers:
         specifier: ^1.1.1
         version: 1.1.1
       posthog-node:
-        specifier: ^4.10.1
-        version: 4.10.1
+        specifier: 4.16.0
+        version: 4.16.0
       prettier:
         specifier: ^3.5.3
         version: 3.5.3
@@ -13393,12 +13393,10 @@ packages:
 
   libsql@0.4.7:
     resolution: {integrity: sha512-T9eIRCs6b0J1SHKYIvD8+KCJMcWZ900iZyxdnSCdqxN12Z1ijzT+jY5nrk72Jw4B0HGzms2NgpryArlJqvc3Lw==}
-    cpu: [x64, arm64, wasm32]
     os: [darwin, linux, win32]
 
   libsql@0.5.6:
     resolution: {integrity: sha512-k0qHpyU47iWBplT4IJKEcMgUbms8jl9cNGE6aqsdOYmSJjtZIaYkn8f4ku5DzxRHpk1+o4FK7ZwGVCExYboZqQ==}
-    cpu: [x64, arm64, wasm32]
     os: [darwin, linux, win32]
 
   light-my-request@5.14.0:
@@ -15222,6 +15220,10 @@ packages:
 
   posthog-node@4.10.1:
     resolution: {integrity: sha512-rEzVszfaOkUFTjEabDcRLJNRqMwTOeU1WpqKgQEDV3x82O4ODifkvkoCERaPxl/ossi1NtqKXBOZ+XnhQ19pNQ==}
+    engines: {node: '>=15.0.0'}
+
+  posthog-node@4.16.0:
+    resolution: {integrity: sha512-j7t3h8gC2A2GUE8inqshaUuSrP7zLLtwHpP6sv9vePNRhjEqqd7lPzyjEeDWdcW1COmHtQXH19TYbyjGlutNXA==}
     engines: {node: '>=15.0.0'}
 
   preact@10.26.4:
@@ -24605,7 +24607,7 @@ snapshots:
       '@types/node': 20.17.32
     optional: true
 
-  '@typescript-eslint/eslint-plugin@5.62.0(@typescript-eslint/parser@5.62.0(eslint@9.25.1(jiti@2.4.2))(typescript@5.8.3))(eslint@9.25.1(jiti@2.4.2))(typescript@5.8.3)':
+  '@typescript-eslint/eslint-plugin@5.62.0(@typescript-eslint/parser@5.62.0(eslint@8.57.1)(typescript@5.8.3))(eslint@8.57.1)(typescript@5.8.3)':
     dependencies:
       '@eslint-community/regexpp': 4.12.1
       '@typescript-eslint/parser': 5.62.0(eslint@8.57.1)(typescript@5.8.3)
@@ -24613,7 +24615,7 @@ snapshots:
       '@typescript-eslint/type-utils': 5.62.0(eslint@8.57.1)(typescript@5.8.3)
       '@typescript-eslint/utils': 5.62.0(eslint@8.57.1)(typescript@5.8.3)
       debug: 4.4.0(supports-color@8.1.1)
-      eslint: 9.25.1(jiti@2.4.2)
+      eslint: 8.57.1
       graphemer: 1.4.0
       ignore: 5.3.2
       natural-compare-lite: 1.4.0
@@ -27172,7 +27174,7 @@ snapshots:
       '@rollup/plugin-replace': 5.0.7(rollup@3.29.5)
       '@rollup/plugin-terser': 0.4.4(rollup@3.29.5)
       '@types/jest': 29.5.14
-      '@typescript-eslint/eslint-plugin': 5.62.0(@typescript-eslint/parser@5.62.0(eslint@9.25.1(jiti@2.4.2))(typescript@5.8.3))(eslint@9.25.1(jiti@2.4.2))(typescript@5.8.3)
+      '@typescript-eslint/eslint-plugin': 5.62.0(@typescript-eslint/parser@5.62.0(eslint@8.57.1)(typescript@5.8.3))(eslint@8.57.1)(typescript@5.8.3)
       '@typescript-eslint/parser': 5.62.0(eslint@8.57.1)(typescript@5.8.3)
       ansi-escapes: 4.3.2
       asyncro: 3.0.0
@@ -27855,7 +27857,7 @@ snapshots:
       '@typescript-eslint/utils': 5.62.0(eslint@8.57.1)(typescript@5.8.3)
       eslint: 8.57.1
     optionalDependencies:
-      '@typescript-eslint/eslint-plugin': 5.62.0(@typescript-eslint/parser@5.62.0(eslint@9.25.1(jiti@2.4.2))(typescript@5.8.3))(eslint@9.25.1(jiti@2.4.2))(typescript@5.8.3)
+      '@typescript-eslint/eslint-plugin': 5.62.0(@typescript-eslint/parser@5.62.0(eslint@8.57.1)(typescript@5.8.3))(eslint@8.57.1)(typescript@5.8.3)
       jest: 29.7.0(@types/node@20.17.32)(babel-plugin-macros@3.1.0)(ts-node@10.9.2(@swc/core@1.11.10(@swc/helpers@0.5.15))(@types/node@20.17.32)(typescript@5.8.3))
     transitivePeerDependencies:
       - supports-color
@@ -29467,7 +29469,7 @@ snapshots:
       isstream: 0.1.2
       jsonwebtoken: 9.0.2
       mime-types: 2.1.35
-      retry-axios: 2.6.0(axios@1.8.4)
+      retry-axios: 2.6.0(axios@1.8.4(debug@4.4.0))
       tough-cookie: 4.1.4
     transitivePeerDependencies:
       - supports-color
@@ -32808,6 +32810,12 @@ snapshots:
     transitivePeerDependencies:
       - debug
 
+  posthog-node@4.16.0:
+    dependencies:
+      axios: 1.8.4(debug@4.4.0)
+    transitivePeerDependencies:
+      - debug
+
   preact@10.26.4: {}
 
   prebuild-install@7.1.3:
@@ -33552,7 +33560,7 @@ snapshots:
 
   ret@0.4.3: {}
 
-  retry-axios@2.6.0(axios@1.8.4):
+  retry-axios@2.6.0(axios@1.8.4(debug@4.4.0)):
     dependencies:
       axios: 1.8.4(debug@4.4.0)
 
