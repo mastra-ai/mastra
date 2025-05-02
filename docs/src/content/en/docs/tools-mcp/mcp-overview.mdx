@@ -174,8 +174,9 @@ MCP servers can be discovered through registries. Here’s how to connect to som
 
     const mcp = new MCPClient({
       servers: {
-        command: "cmd",
-        args: [
+        sequentialThinking: {
+          command: "cmd",
+          args: [
             "/c",
             "npx",
             "-y",
