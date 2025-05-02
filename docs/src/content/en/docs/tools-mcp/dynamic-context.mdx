@@ -103,7 +103,7 @@ export const mastra = new Mastra({
   server: {
     middleware: [
       async (c, next) => {
-        // Get the RuntimeContext instance (Mastra provides one by default)
+        // Get the RuntimeContext instance
         const runtimeContext = c.get<RuntimeContext<WeatherRuntimeContext>>("runtimeContext");
 
         // Get country code from request header
