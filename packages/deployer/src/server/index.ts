@@ -1445,6 +1445,11 @@ export async function createHonoServer(mastra: Mastra, options: ServerBundleOpti
           required: true,
           schema: { type: 'string' },
         },
+        { name: 'fromDate', in: 'query', required: false, schema: { type: 'string', format: 'date-time' } },
+        { name: 'toDate', in: 'query', required: false, schema: { type: 'string', format: 'date-time' } },
+        { name: 'limit', in: 'query', required: false, schema: { type: 'number' } },
+        { name: 'offset', in: 'query', required: false, schema: { type: 'number' } },
+        { name: 'resourceId', in: 'query', required: false, schema: { type: 'string' } },
       ],
       responses: {
         200: {
@@ -1738,6 +1743,11 @@ export async function createHonoServer(mastra: Mastra, options: ServerBundleOpti
           required: true,
           schema: { type: 'string' },
         },
+        { name: 'fromDate', in: 'query', required: false, schema: { type: 'string', format: 'date-time' } },
+        { name: 'toDate', in: 'query', required: false, schema: { type: 'string', format: 'date-time' } },
+        { name: 'limit', in: 'query', required: false, schema: { type: 'number' } },
+        { name: 'offset', in: 'query', required: false, schema: { type: 'number' } },
+        { name: 'resourceId', in: 'query', required: false, schema: { type: 'string' } },
       ],
       responses: {
         200: {

@@ -1,5 +1,14 @@
 # @mastra/core
 
+## 0.9.2-alpha.3
+
+### Patch Changes
+
+- 967b41c: fix: removes new agent getter methods from telemetry
+- 4155f47: Add parameters to filter workflow runs
+  Add fromDate and toDate to telemetry parameters
+- 17826a9: Added a breaking change warning about deprecated working memory "use: 'text-stream'" which is being fully replaced by "use: 'tool-call'"
+
 ## 0.9.2-alpha.2
 
 ### Patch Changes
