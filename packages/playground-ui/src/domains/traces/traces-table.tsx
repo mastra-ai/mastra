@@ -10,6 +10,7 @@ import { useContext } from 'react';
 import { TraceContext } from './context/trace-context';
 import { Check, X } from 'lucide-react';
 import { Button } from '@/ds/components/Button';
+import Spinner from '@/components/ui/spinner';
 
 const TracesTableSkeleton = ({ colsCount }: { colsCount: number }) => {
   return (
@@ -56,6 +57,8 @@ export interface TracesTableProps {
   onLoadNew?: () => void;
   onLoadMore?: () => void;
   hasMore?: boolean;
+  onReachEnd?: () => void;
+  onPullDown?: () => void;
 }
 
 const TraceRow = ({ trace, index, isActive }: { trace: RefinedTrace; index: number; isActive: boolean }) => {
@@ -86,13 +89,33 @@ const TraceRow = ({ trace, index, isActive }: { trace: RefinedTrace; index: numb
   );
 };
 
-export const TracesTable = ({ traces, isLoading, error, onLoadNew, onLoadMore, hasMore }: TracesTableProps) => {
+export const TracesTable = ({
+  traces,
+  isLoading,
+  error,
+  onLoadNew,
+  onLoadMore,
+  hasMore,
+  onReachEnd,
+  onPullDown,
+}: TracesTableProps) => {
   const hasNoTraces = !traces || traces.length === 0;
   const { currentTraceIndex } = useContext(TraceContext);
   const colsCount = 4;
 
+  const firstTrace = traces?.[0];
+  const lastTrace = traces?.[traces?.length - 1];
+  const scannedSince = firstTrace ? new Date(firstTrace.started / 1000) : null;
+  const scannedUntil = lastTrace ? new Date(lastTrace.started / 1000) : null;
+
   return (
     <div className="space-y-4">
+      {onPullDown && isLoading && (
+        <div className="flex justify-center mt-4 items-center gap-2">
+          <Spinner /> <Txt>Loading... Scanned up to {scannedSince?.toLocaleString()}</Txt>
+        </div>
+      )}
+
       {onLoadNew && (
         <div className="flex justify-center mt-4">
           <Button onClick={onLoadNew} disabled={isLoading}>
@@ -124,6 +147,13 @@ export const TracesTable = ({ traces, isLoading, error, onLoadNew, onLoadMore, h
           </>
         )}
       </Table>
+
+      {onReachEnd && isLoading && (
+        <div className="flex justify-center mt-4 items-center gap-2">
+          <Spinner /> <Txt>Loading... Scanned up to {scannedUntil?.toLocaleString()}</Txt>
+        </div>
+      )}
+
       {onLoadMore && (
         <div className="flex justify-center mt-4">
           <Button onClick={onLoadMore} disabled={isLoading || !hasMore}>
