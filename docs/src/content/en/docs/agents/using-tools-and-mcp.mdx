@@ -7,6 +7,8 @@ description: Learn how to create tools, add them to Mastra agents, and integrate
 
 Tools are typed functions that can be executed by agents or workflows. Each tool has a schema defining its inputs, an executor function implementing its logic, and optional access to configured integrations.
 
+## Creating Tools
+
 Here's a basic example of creating a tool:
 
 ```typescript filename="src/mastra/tools/weatherInfo.ts" copy
@@ -29,14 +31,14 @@ export const weatherInfo = createTool({
 
 For a comprehensive guide on creating and designing tools, see the [Tools Overview](/docs/tools-mcp/overview).
 
-## Add Tools to an Agent
+## Adding Tools to an Agent
 
 To make a tool available to an agent, add it to the `tools` property in the agent's configuration.
 
-```typescript filename="src/mastra/agents/weatherAgent.ts"
+```typescript filename="src/mastra/agents/weatherAgent.ts" {3,11}
 import { Agent } from "@mastra/core/agent";
 import { openai } from "@ai-sdk/openai";
-import { weatherInfo } from "../tools/weatherInfo"; // Your tool
+import { weatherInfo } from "../tools/weatherInfo";
 
 export const weatherAgent = new Agent({
   name: "Weather Agent",
@@ -44,14 +46,14 @@ export const weatherAgent = new Agent({
     "You are a helpful assistant that provides current weather information. When asked about the weather, use the weather information tool to fetch the data.",
   model: openai("gpt-4o-mini"),
   tools: {
-    weatherInfo, // Add the tool here
+    weatherInfo,
   },
 });
 ```
 
 When you call the agent, it can now decide to use the configured tool based on its instructions and the user's prompt.
 
-## Add MCP Tools to an Agent
+## Adding MCP Tools to an Agent
 
 [Model Context Protocol (MCP)](https://modelcontextprotocol.io/introduction) provides a standardized way for AI models to discover and interact with external tools and resources. You can connect your Mastra agent to MCP servers to use tools provided by third parties.
 
@@ -65,32 +67,43 @@ First, install the Mastra MCP package:
 npm install @mastra/mcp@latest
 ```
 
-### Using MCP Tools with an Agent
+### Using MCP Tools
 
-You use an `MCPClient` to connect to MCP servers and retrieve tools. You can then add these tools to your agent's configuration.
+Because there are so many MCP server registries to choose from, we've created an [MCP Registry Registry](https://mastra.ai/mcp-registry-registry) to help you find MCP servers!
 
-```typescript
+Once you have a server you want to use with your agent, import the Mastra `MCPClient` and add the server configuration.
+
+```typescript filename="src/mastra/mcp.ts" {1,7-16}
 import { MCPClient } from "@mastra/mcp";
 import { Agent } from "@mastra/core/agent";
 import { openai } from "@ai-sdk/openai";
 
 // Configure MCPClient to connect to your server(s)
-const mcp = new MCPClient({
-  servers: { /* ... server configurations ... */ },
+export const mcp = new MCPClient({
+  servers: {
+    filesystem: {
+      command: "npx",
+      args: [
+        "-y",
+        "@modelcontextprotocol/server-filesystem",
+        "/Users/username/Downloads",
+      ],
+    },
+  },
 });
+```
 
+Then connect your agent to the server tools:
+
+```typescript filename="src/mastra/agents/mcpAgent.ts" {7}
+import { mcp } from "../mcp";
 // Create an agent and add tools from the MCP client
 const agent = new Agent({
   name: "Agent with MCP Tools",
   instructions: "You can use tools from connected MCP servers.",
   model: openai("gpt-4o-mini"),
-  tools: await mcp.getTools(), // Add tools fetched from MCP servers
+  tools: await mcp.getTools(),
 });
-
-// For dynamic tool configurations per request, use getToolsets()
-// const agent = new Agent({ /* ... config without tools ... */ });
-// const toolsets = await mcp.getToolsets();
-// await agent.generate(prompt, { toolsets });
 ```
 
-For more details on configuring `MCPClient` and the difference between `getTools()` and `getToolsets()`, see the [MCP Overview](/docs/tools-mcp/mcp-overview).
+For more details on configuring `MCPClient` and the difference between static and dynamic MCP server configurations, see the [MCP Overview](/docs/tools-mcp/mcp-overview).
