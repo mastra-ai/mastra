@@ -41,7 +41,7 @@
     "fs-extra": "^11.3.0",
     "pino": "^9.6.0",
     "pino-pretty": "^13.0.0",
-    "posthog-node": "^4.10.1",
+    "posthog-node": "^4.14.0",
     "prettier": "^3.5.3"
   },
   "devDependencies": {
@@ -49,10 +49,10 @@
     "@microsoft/api-extractor": "^7.52.5",
     "@rollup/plugin-commonjs": "^28.0.3",
     "@rollup/plugin-json": "^6.1.0",
-    "@rollup/plugin-node-resolve": "^16.0.0",
+    "@rollup/plugin-node-resolve": "^16.0.1",
     "@types/fs-extra": "^11.0.4",
-    "@types/node": "^20.17.27",
-    "esbuild": "^0.25.0",
+    "@types/node": "^20.17.32",
+    "esbuild": "^0.25.3",
     "eslint": "^9.23.0",
     "mastra": "workspace:^",
     "rollup": "^4.40.1",
