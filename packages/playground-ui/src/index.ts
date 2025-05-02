@@ -6,6 +6,7 @@ export * from './domains/workflows/index';
 export * from './domains/resizable-panel';
 export * from './components/dynamic-form/index';
 export * from './components/ui/data-table';
+export * from './components/threads';
 export * from './types';
 export * from './ds/components/Badge/index';
 export * from './ds/components/Button/index';
@@ -14,6 +15,7 @@ export * from './ds/components/Header/index';
 export * from './ds/components/Logo/index';
 export * from './ds/components/Table/index';
 export * from './ds/components/Txt/index';
+
 export * from './ds/icons/index';
 export { useTraces } from './hooks/index';
 
