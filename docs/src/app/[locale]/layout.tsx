@@ -12,7 +12,7 @@ import { PostHogProvider } from "@/analytics/posthog-provider";
 import { CookieConsent } from "@/components/cookie-consent";
 import { NextraLayout } from "@/components/nextra-layout";
 import { GTProvider } from "gt-next";
-
+import Script from "next/script";
 const fetchStars = async () => {
   try {
     const res = await fetch("https://api.github.com/repos/mastra-ai/mastra", {
@@ -76,8 +76,13 @@ export default async function RootLayout({
           <Toaster />
           <CookieConsent />
         </GTProvider>
+        <Script id="reo-script" strategy="afterInteractive">
+          {`!function(){var e,t,n;e="fdd9258c52d6769",t=function(){Reo.init({clientID:"fdd9258c52d6769"})},
+          (n=document.createElement("script")).src="https://static.reo.dev/"+e+"/reo.js",n.defer=!0,
+          n.onload=t,document.head.appendChild(n)}();`}
+        </Script>
+        <Analytics />
       </body>
-      <Analytics />
     </html>
   );
 }
