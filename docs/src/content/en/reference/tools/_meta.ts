@@ -1,4 +1,5 @@
 const meta = {
+  "create-tool": "createTool()",
   "document-chunker-tool": "createDocumentChunkerTool()",
   "graph-rag-tool": "createGraphRAGTool()",
   "vector-query-tool": "createVectorQueryTool()",
