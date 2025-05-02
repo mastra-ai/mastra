@@ -13,9 +13,13 @@ export class OpenAIReasoningToolCompat extends ToolCompatibility {
     return `openApi3`;
   }
 
+  isReasoningModel(): boolean {
+    return this.getModel().modelId.includes(`o3`) || this.getModel().modelId.includes(`o4`);
+  }
+
   shouldApply(): boolean {
     if (
-      this.getModel().supportsStructuredOutputs &&
+      (this.getModel().supportsStructuredOutputs || this.isReasoningModel()) &&
       (this.getModel().provider.includes(`openai`) || this.getModel().modelId.includes(`openai`))
     ) {
       return true;
@@ -56,10 +60,10 @@ export class OpenAIReasoningToolCompat extends ToolCompatibility {
         return this.processZodType<T>(innerType, path, constraints);
       }
       case 'ZodNumber': {
-        return this.defaultZodNumberHandler(value, path, constraints, ['min', 'max', 'multipleOf']);
+        return this.defaultZodNumberHandler(value, path, constraints);
       }
       case 'ZodString': {
-        return this.defaultZodStringHandler(value, path, constraints, ['emoji']);
+        return this.defaultZodStringHandler(value, path, constraints);
       }
       case 'ZodDate': {
         const zodDate = value as z.ZodDate;

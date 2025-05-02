@@ -10,6 +10,8 @@ import { MastraBase } from '../../base';
 import { convertVercelToolParameters } from './builder';
 import type { ToolToConvert } from './builder';
 
+const OPENAI_TOOL_DESCRIPTION_MAX_LENGTH = 1024;
+
 export type SchemaConstraints = {
   [path: string]: {
     defaultValue?: unknown;
@@ -47,9 +49,7 @@ export const ALL_STRING_CHECKS = ['regex', 'emoji', 'email', 'url', 'uuid', 'cui
 export const ALL_NUMBER_CHECKS = [
   'min', // gte internally
   'max', // lte internally
-  'int',
   'multipleOf',
-  'finite',
 ] as const;
 
 export const ALL_ARRAY_CHECKS = ['min', 'max', 'length'] as const;
@@ -61,8 +61,6 @@ export type ArrayCheckType = (typeof ALL_ARRAY_CHECKS)[number];
 export type ZodShape<T extends z.AnyZodObject> = T['shape'];
 export type ShapeKey<T extends z.AnyZodObject> = keyof ZodShape<T>;
 export type ShapeValue<T extends z.AnyZodObject> = ZodShape<T>[ShapeKey<T>];
-
-export type ToolCompatibilityInput = { model: MastraLanguageModel };
 
 export abstract class ToolCompatibility extends MastraBase {
   private model: MastraLanguageModel;
@@ -76,7 +74,7 @@ export abstract class ToolCompatibility extends MastraBase {
   }
 
   // return true to apply this compatibility fix
-  abstract shouldApply(input: ToolCompatibilityInput): boolean;
+  abstract shouldApply(): boolean;
   // return undefined to use the default of jsonSchema7
   abstract getSchemaTarget(): Targets | undefined;
 
@@ -116,8 +114,6 @@ export abstract class ToolCompatibility extends MastraBase {
         },
       },
     );
-
-    console.log({ schema: JSON.stringify(schema, null, 2) });
 
     return { schema, constraints };
   }
@@ -189,14 +185,14 @@ export abstract class ToolCompatibility extends MastraBase {
     // Create new array with processed element type and preserved constraints
     let result = z.array(processedType);
 
-    // Only apply constraints that we're handling
-    if (zodArray.minLength?.value !== undefined && handleChecks.includes('min')) {
+    // Reapply the constraints that we're not handling
+    if (zodArray.minLength?.value !== undefined && !handleChecks.includes('min')) {
       result = result.min(zodArray.minLength.value);
     }
-    if (zodArray.maxLength?.value !== undefined && handleChecks.includes('max')) {
+    if (zodArray.maxLength?.value !== undefined && !handleChecks.includes('max')) {
       result = result.max(zodArray.maxLength.value);
     }
-    if (zodArray.exactLength?.value !== undefined && handleChecks.includes('length')) {
+    if (zodArray.exactLength?.value !== undefined && !handleChecks.includes('length')) {
       result = result.length(zodArray.exactLength.value);
     }
 
@@ -307,25 +303,22 @@ export abstract class ToolCompatibility extends MastraBase {
       if ('kind' in check) {
         if (handleChecks.includes(check.kind as NumberCheckType)) {
           switch (check.kind) {
-            case 'min': {
-              currentConstraints.gte = check.value;
+            case 'min':
+              if (check.inclusive) {
+                currentConstraints.gte = check.value;
+              } else {
+                currentConstraints.gt = check.value;
+              }
               break;
-            }
-            case 'max': {
-              currentConstraints.lte = check.value;
+            case 'max':
+              if (check.inclusive) {
+                currentConstraints.lte = check.value;
+              } else {
+                currentConstraints.lt = check.value;
+              }
               break;
-            }
-            case 'int': {
-              // For integers, we'll store it as multipleOf: 1
-              currentConstraints.multipleOf = 1;
-              break;
-            }
             case 'multipleOf': {
               currentConstraints.multipleOf = check.value;
-              break;
-            }
-            case 'finite': {
-              // Store finite check but don't add any constraints
               break;
             }
           }
@@ -360,7 +353,10 @@ export abstract class ToolCompatibility extends MastraBase {
     return result as ShapeValue<T>;
   }
 
-  public process(tool: ToolToConvert): {
+  public process(
+    tool: ToolToConvert,
+    model: MastraLanguageModel,
+  ): {
     description?: string;
     parameters: Schema;
   } {
@@ -375,9 +371,26 @@ export abstract class ToolCompatibility extends MastraBase {
     // TODO: we should think of other ways to build up the tool description here cause this is a bit janky. We also need to make sure the description text isn't too long because some models throw errors when it's too long
     const { schema, constraints } = this.zodToAISDKSchema(tool.inputSchema);
 
+    const isOpenAI = model.provider.includes(`openai`) || model.modelId.includes(`openai`);
+
+    let description =
+      (tool.description || '') + (Object.keys(constraints).length > 0 ? ' ' + `\n` + JSON.stringify(constraints) : '');
+
+    // openai only allows tools descriptions of up to 1024 characters
+    // If their tool description is too long we want it to return the openai error as is
+    if (
+      isOpenAI &&
+      description.length > OPENAI_TOOL_DESCRIPTION_MAX_LENGTH &&
+      tool.description.length < OPENAI_TOOL_DESCRIPTION_MAX_LENGTH
+    ) {
+      this.logger.warn(
+        `Tool description is too long for OpenAI. Truncating to 1024 characters. Tool call might not respect the schema constraints.`,
+      );
+      description = description.slice(0, 1020);
+    }
+
     return {
-      description:
-        (tool.description || '') + (Object.keys(constraints).length > 0 ? ' ' + JSON.stringify(constraints) : ''),
+      description,
       parameters: schema,
     };
   }

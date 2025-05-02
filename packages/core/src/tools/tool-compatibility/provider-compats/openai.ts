@@ -42,6 +42,7 @@ export class OpenAIToolCompat extends ToolCompatibility {
       case 'ZodString': {
         const model = this.getModel();
         const checks: StringCheckType[] = ['emoji'];
+
         if (model.modelId.includes('gpt-4o-mini')) {
           checks.push('regex');
         }

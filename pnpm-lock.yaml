@@ -1011,7 +1011,7 @@ importers:
         version: 3.24.5(zod@3.24.3)
     devDependencies:
       '@ai-sdk/openai':
-        specifier: ^1.2.1
+        specifier: ^1.3.20
         version: 1.3.20(zod@3.24.3)
       '@babel/core':
         specifier: ^7.26.10
@@ -1999,6 +1999,12 @@ importers:
 
   scripts:
     dependencies:
+      '@ai-sdk/anthropic':
+        specifier: ^1.1.15
+        version: 1.2.10(zod@3.24.3)
+      '@ai-sdk/google':
+        specifier: ^1.2.14
+        version: 1.2.14(zod@3.24.3)
       '@ai-sdk/openai':
         specifier: ^1.3.21
         version: 1.3.21(zod@3.24.3)
@@ -3200,6 +3206,12 @@ packages:
 
   '@ai-sdk/cohere@1.2.9':
     resolution: {integrity: sha512-ENbQT2bDt1FN+DOLkoFT9n+cojLv7zdN5GCaDtkaqJUuRa+6lHqNO4tRvB79Jg8DY03mhDermty9EhJW2zHoTA==}
+    engines: {node: '>=18'}
+    peerDependencies:
+      zod: ^3.0.0
+
+  '@ai-sdk/google@1.2.14':
+    resolution: {integrity: sha512-r3FSyyWl0KVjUlKn5o+vMl+Nk8Z/mV6xrqW+49g7fMoRVr/wkRxJZtHorrdDGRreCJubZyAk8ziSQSLpgv2H6w==}
     engines: {node: '>=18'}
     peerDependencies:
       zod: ^3.0.0
@@ -18144,6 +18156,12 @@ snapshots:
       zod: 3.24.3
 
   '@ai-sdk/cohere@1.2.9(zod@3.24.3)':
+    dependencies:
+      '@ai-sdk/provider': 1.1.3
+      '@ai-sdk/provider-utils': 2.2.7(zod@3.24.3)
+      zod: 3.24.3
+
+  '@ai-sdk/google@1.2.14(zod@3.24.3)':
     dependencies:
       '@ai-sdk/provider': 1.1.3
       '@ai-sdk/provider-utils': 2.2.7(zod@3.24.3)

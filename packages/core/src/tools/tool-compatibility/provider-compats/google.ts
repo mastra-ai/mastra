@@ -40,7 +40,7 @@ export class GoogleToolCompat extends ToolCompatibility {
       case 'ZodNumber': {
         // Google models support these properties but the model doesn't respect them, but it respects them when they're
         // added to the tool description
-        return this.defaultZodNumberHandler(value, path, constraints, ['min', 'max', 'multipleOf']);
+        return this.defaultZodNumberHandler(value, path, constraints);
       }
       default:
         return value as ShapeValue<T>;

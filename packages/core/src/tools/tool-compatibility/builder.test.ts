@@ -1,3 +1,4 @@
+import { openai } from '@ai-sdk/openai';
 import { Agent } from '@mastra/core/agent';
 import { createTool } from '@mastra/core/tools';
 import { createOpenRouter } from '@openrouter/ai-sdk-provider';
@@ -16,7 +17,6 @@ type Result = {
   testId: string;
 };
 
-// Test schemas
 enum TestEnum {
   A = 'A',
   B = 'B',
@@ -113,8 +113,6 @@ async function runSingleTest(
       temperature: 1,
     });
 
-    console.log(JSON.stringify(response, null, 2));
-
     const toolCall = response.toolCalls.find(tc => tc.toolName === toolName);
     const toolResult = response.toolResults.find(tr => tr.toolCallId === toolCall?.toolCallId);
 
@@ -141,8 +139,6 @@ async function runSingleTest(
       };
     }
   } catch (e: any) {
-    console.log(JSON.stringify(e, null, 2));
-
     return {
       modelName: model.modelId,
       testName: toolName,
@@ -186,6 +182,9 @@ describe('Tool Schema Compatibility', () => {
     openrouter('openai/o4-mini-high'),
     openrouter('openai/o3-mini'),
     openrouter('openai/gpt-4o-2024-11-20'),
+    // openrouter disables structured outputs by default for o3-mini, so added in a reasoning model not through openrouter to test
+    openai('o3-mini'),
+    openai('o4-mini-high'),
 
     // // Meta Models
     // Meta seems to not handle tools correctly in general, so commenting out for now
