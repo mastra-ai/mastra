@@ -4,4 +4,4 @@
 'create-mastra': patch
 ---
 
-add click on trace row
+fix showing sig digits in trace / span duration

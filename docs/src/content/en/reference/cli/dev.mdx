@@ -112,6 +112,8 @@ The port defaults to 4111. Both the port and hostname can be configured via the 
 
 Make sure you have your environment variables set up in your `.env.development` or `.env` file for any providers you use (e.g., `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, etc.).
 
+Make sure the `index.ts` file in your Mastra folder exports the Mastra instance for the dev server to read.
+
 ### Example request
 
 To test an agent after running `mastra dev`:
