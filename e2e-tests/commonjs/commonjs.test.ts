@@ -41,6 +41,7 @@ describe('commonjs', () => {
     });
 
     const parsedOutput = JSON.parse(stdout);
+    console.log({ parsedOutput });
     expect(parsedOutput.weatherAgent).toBeDefined();
     expect(parsedOutput.weatherAgent.name).toBe('Weather Agent');
     expect(parsedOutput.weatherAgent.instructions).toMatchInlineSnapshot(`

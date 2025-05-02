@@ -117,7 +117,7 @@ Here, we'll get the increment workflow from the mastra instance, then create a r
 ```ts showLineNumbers copy filename="exec.ts"
 import { mastra } from "./"
 
-const workflow = mastra.getNewWorkflow('incrementWorkflow')
+const workflow = mastra.vnext_getWorkflow('incrementWorkflow')
 const run = workflow.createRun()
 
 const result = await run.start({ inputData: { value: 0 } })

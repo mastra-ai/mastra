@@ -12,7 +12,7 @@ import { Header } from '@/ds/components/Header';
 import { Badge } from '@/ds/components/Badge';
 
 export function TraceDetails() {
-  const { trace, currentTraceIndex, prevTrace, nextTrace, traces, clearData } = useContext(TraceContext);
+  const { trace, currentTraceIndex, prevTrace, nextTrace, traces } = useContext(TraceContext);
 
   const actualTrace = traces[currentTraceIndex];
 
@@ -41,7 +41,7 @@ export function TraceDetails() {
         </div>
         <div className="flex items-center gap-1 justify-between w-full">
           <Txt variant="ui-lg" className="font-medium text-icon5 shrink-0">
-            Trace <span className="ml-2 text-icon3">{actualTrace.traceId.substring(0, 5)}</span>
+            Trace <span className="ml-2 text-icon3">{actualTrace.traceId.substring(0, 7)}</span>
           </Txt>
 
           {hasFailure && (

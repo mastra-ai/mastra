@@ -1,8 +1,10 @@
 import { Mastra } from '@mastra/core';
 import { RuntimeContext } from '@mastra/core/runtime-context';
 import { Step, Workflow } from '@mastra/core/workflows';
+import { stringify } from 'superjson';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { Mock } from 'vitest';
+import zodToJsonSchema from 'zod-to-json-schema';
 import { HTTPException } from '../http-exception';
 import {
   getWorkflowsHandler,
@@ -64,7 +66,15 @@ function serializeWorkflow(workflow: Workflow) {
     serializedStepGraph: workflow.serializedStepGraph,
     serializedStepSubscriberGraph: workflow.serializedStepSubscriberGraph,
     triggerSchema: workflow.triggerSchema,
-    steps: workflow.steps,
+    steps: Object.entries(workflow.steps).reduce<any>((acc, [key, step]) => {
+      acc[key] = {
+        id: step.id,
+        description: step.description,
+        inputSchema: step.inputSchema ? stringify(zodToJsonSchema(step.inputSchema)) : undefined,
+        outputSchema: step.outputSchema ? stringify(zodToJsonSchema(step.outputSchema)) : undefined,
+      };
+      return acc;
+    }, {}),
   };
 }
 

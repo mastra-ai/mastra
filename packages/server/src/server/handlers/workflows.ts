@@ -28,7 +28,9 @@ export async function getWorkflowsHandler({ mastra }: WorkflowContext) {
         steps: Object.entries(workflow.steps).reduce<any>((acc, [key, step]) => {
           const _step = step as any;
           acc[key] = {
-            ..._step,
+            id: _step.id,
+            description: _step.description,
+            workflowId: _step.workflowId,
             inputSchema: _step.inputSchema ? stringify(zodToJsonSchema(_step.inputSchema)) : undefined,
             outputSchema: _step.outputSchema ? stringify(zodToJsonSchema(_step.outputSchema)) : undefined,
           };
@@ -65,7 +67,9 @@ export async function getWorkflowByIdHandler({ mastra, workflowId }: WorkflowCon
       steps: Object.entries(workflow.steps).reduce<any>((acc, [key, step]) => {
         const _step = step as any;
         acc[key] = {
-          ..._step,
+          id: _step.id,
+          description: _step.description,
+          workflowId: _step.workflowId,
           inputSchema: _step.inputSchema ? stringify(zodToJsonSchema(_step.inputSchema)) : undefined,
           outputSchema: _step.outputSchema ? stringify(zodToJsonSchema(_step.outputSchema)) : undefined,
         };
@@ -339,14 +343,28 @@ export async function resumeWorkflowHandler({
   }
 }
 
-export async function getWorkflowRunsHandler({ mastra, workflowId }: WorkflowContext): Promise<WorkflowRuns> {
+export async function getWorkflowRunsHandler({
+  mastra,
+  workflowId,
+  fromDate,
+  toDate,
+  limit,
+  offset,
+  resourceId,
+}: WorkflowContext & {
+  fromDate?: Date;
+  toDate?: Date;
+  limit?: number;
+  offset?: number;
+  resourceId?: string;
+}): Promise<WorkflowRuns> {
   try {
     if (!workflowId) {
       throw new HTTPException(400, { message: 'Workflow ID is required' });
     }
 
     const workflow = mastra.getWorkflow(workflowId);
-    const workflowRuns = (await workflow.getWorkflowRuns()) || {
+    const workflowRuns = (await workflow.getWorkflowRuns({ fromDate, toDate, limit, offset, resourceId })) || {
       runs: [],
       total: 0,
     };

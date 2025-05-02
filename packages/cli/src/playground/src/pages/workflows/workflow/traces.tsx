@@ -1,14 +1,17 @@
 import { useParams } from 'react-router';
-import { WorkflowTraces } from '@mastra/playground-ui';
+import { TraceProvider, useTraces, WorkflowTraces } from '@mastra/playground-ui';
 
 import { Skeleton } from '@/components/ui/skeleton';
 
 import { WorkflowInformation } from '@/domains/workflows/workflow-information';
 import { useWorkflow } from '@/hooks/use-workflows';
 
-function WorkflowTracesPage() {
+function WorkflowTracesContent() {
   const { workflowId } = useParams();
   const { workflow, isLoading: isWorkflowLoading } = useWorkflow(workflowId!);
+
+  // This hook will now be called within a TraceProvider context
+  const { traces, error, firstCallLoading } = useTraces(workflow?.name || '', '', true);
 
   if (isWorkflowLoading) {
     return (
@@ -25,10 +28,19 @@ function WorkflowTracesPage() {
 
   return (
     <WorkflowTraces
-      workflowName={workflow?.name || ''}
-      baseUrl=""
+      traces={traces}
+      isLoading={firstCallLoading}
+      error={error}
       sidebarChild={<WorkflowInformation workflowId={workflowId!} />}
     />
+  );
+}
+
+function WorkflowTracesPage() {
+  return (
+    <TraceProvider>
+      <WorkflowTracesContent />
+    </TraceProvider>
   );
 }
 

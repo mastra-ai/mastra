@@ -54,6 +54,22 @@ export const memoryDefaultOptions = {
   threads: {
     generateTitle: true,
   },
+  workingMemory: {
+    use: 'text-stream', // will be deprecated, use 'tool-call' instead
+    enabled: false,
+    template: `
+# User Information
+- **First Name**: 
+- **Last Name**: 
+- **Location**: 
+- **Occupation**: 
+- **Interests**: 
+- **Goals**: 
+- **Events**: 
+- **Facts**: 
+- **Projects**: 
+`,
+  },
 } satisfies MemoryConfig;
 
 const newMemoryDefaultOptions = {
@@ -61,6 +77,24 @@ const newMemoryDefaultOptions = {
   semanticRecall: false,
   threads: {
     generateTitle: false,
+  },
+  workingMemory: {
+    // new
+    use: 'tool-call',
+    // stays the same
+    enabled: false,
+    template: `
+# User Information
+- **First Name**: 
+- **Last Name**: 
+- **Location**: 
+- **Occupation**: 
+- **Interests**: 
+- **Goals**: 
+- **Events**: 
+- **Facts**: 
+- **Projects**: 
+`,
   },
 } satisfies MemoryConfig;
 
@@ -189,9 +223,10 @@ ${this.deprecationWarnings.map((w, i) => `${this.deprecationWarnings.length > 1 
   // We're changing the implicit defaults from memoryDefaultOptions to newMemoryDefaultOptions so we need to log and let people know
   private addImplicitDefaultsWarning(config: SharedMemoryConfig) {
     const fromToPairs: {
-      key: keyof typeof memoryDefaultOptions;
+      key: keyof MemoryConfig;
       from: unknown;
       to: unknown;
+      message?: string;
     }[] = [];
 
     const indent = (s: string) => s.split(`\n`).join(`\n    `);
@@ -223,6 +258,24 @@ ${this.deprecationWarnings.map((w, i) => `${this.deprecationWarnings.length > 1 
         to: newMemoryDefaultOptions.threads,
       });
 
+    if (
+      `workingMemory` in options &&
+      // special handling for working memory since it's disabled by default and users should only care about the change if they're using
+      options.workingMemory?.enabled === true &&
+      options.workingMemory?.use !== `tool-call`
+    ) {
+      fromToPairs.push({
+        key: 'workingMemory',
+        from: {
+          use: memoryDefaultOptions.workingMemory.use,
+        },
+        to: {
+          use: newMemoryDefaultOptions.workingMemory.use,
+        },
+        message: `\nAlso, the text-stream output mode (which is the current default) will be fully removed in an upcoming breaking change. Please update your code to use the newer "use: 'tool-call'" setting instead.\n`,
+      });
+    }
+
     if (fromToPairs.length > 0) {
       const currentDefaults = `{
   options: {
@@ -234,6 +287,8 @@ ${this.deprecationWarnings.map((w, i) => `${this.deprecationWarnings.length > 1 
     ${fromToPairs.map(({ key, to }) => `${key}: ${format(to)}`).join(`,\n    `)}
   }
 }`;
+
+      const messages = fromToPairs.filter(ft => ft.message);
 
       this.deprecationWarnings.push(`
 Your Mastra memory instance has the
@@ -250,6 +305,7 @@ To keep your defaults as they are, add
 them directly into your Memory configuration,
 otherwise please add the new settings to
 your memory config to prepare for the change.
+${messages.length ? messages.map(ft => ft.message).join(`\n`) : ``}
 --> This breaking change will be released on May 20th <--
 `);
     }

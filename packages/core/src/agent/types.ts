@@ -33,23 +33,25 @@ export type ToolsetsInput = Record<string, ToolsInput>;
 
 export type MastraLanguageModel = LanguageModelV1;
 
+export type DynamicArgument<T> = T | (({ runtimeContext }: { runtimeContext: RuntimeContext }) => Promise<T> | T);
+
 export interface AgentConfig<
   TAgentId extends string = string,
   TTools extends ToolsInput = ToolsInput,
   TMetrics extends Record<string, Metric> = Record<string, Metric>,
 > {
   name: TAgentId;
-  instructions: string;
-  model: MastraLanguageModel;
+  instructions: DynamicArgument<string>;
+  model: DynamicArgument<MastraLanguageModel>;
+  tools?: DynamicArgument<TTools>;
   defaultGenerateOptions?: AgentGenerateOptions;
   defaultStreamOptions?: AgentStreamOptions;
-  tools?: TTools;
   mastra?: Mastra;
-  /** @deprecated This property is deprecated. Use evals instead to add evaluation metrics. */
-  metrics?: TMetrics;
   evals?: TMetrics;
   memory?: MastraMemory;
   voice?: CompositeVoice;
+  /** @deprecated This property is deprecated. Use evals instead to add evaluation metrics. */
+  metrics?: TMetrics;
 }
 
 /**

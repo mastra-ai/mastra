@@ -22,6 +22,9 @@ export class Memory extends MastraMemory {
 
     const mergedConfig = this.getMergedThreadConfig({
       workingMemory: config.options?.workingMemory || {
+        // these defaults are now set inside @mastra/core/memory in getMergedThreadConfig.
+        // In a future release we can remove it from this block - for now if we remove it
+        // and someone bumps @mastra/memory without bumping @mastra/core the defaults wouldn't exist yet
         enabled: false,
         template: this.defaultWorkingMemoryTemplate,
       },
