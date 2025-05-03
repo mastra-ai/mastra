@@ -204,6 +204,18 @@ describe('MilvusStorage', () => {
       const record = generateRecords(1)[0];
 
       expect(milvusStorage.insert({ tableName, record })).resolves.not.toThrow();
+
+      const loadedRecord = await milvusStorage.load<MessageRecord[]>({ tableName, keys: { id: record.id } });
+
+      expect(loadedRecord).toBeDefined();
+      expect(loadedRecord).toHaveLength(1);
+      expect(loadedRecord?.[0].id).toBe(record.id.toString());
+      expect(loadedRecord?.[0].threadId).toBe(record.threadId);
+      expect(loadedRecord?.[0].referenceId).toBe(record.referenceId.toString());
+      expect(loadedRecord?.[0].messageType).toBe(record.messageType);
+      expect(loadedRecord?.[0].content).toBe(record.content);
+      // expect(loadedRecord?.[0].createdAt).toBe(record.createdAt);
+      expect(loadedRecord?.[0].metadata).toEqual(record.metadata);
     });
 
     it('should throw if varchar max length is exceeded', async () => {
@@ -237,6 +249,23 @@ describe('MilvusStorage', () => {
       };
 
       expect(milvusStorage.insert({ tableName, record })).resolves.not.toThrow();
+    });
+
+    it('should batch insert records', async () => {
+      const tableName = TABLE_MESSAGES;
+      const records = generateRecords(10);
+
+      expect(milvusStorage.batchInsert({ tableName, records })).resolves.not.toThrow();
+    });
+
+    it('should throw if varchar max length is exceeded in batch insert', async () => {
+      const tableName = TABLE_MESSAGES;
+      const records = generateRecords(10);
+      records[0].content = 'a'.repeat(65536);
+
+      expect(milvusStorage.batchInsert({ tableName, records })).rejects.toThrow(
+        'Failed to insert record: Error: Error status code: length of varchar field content exceeds max length, row number: 0, length: 65536, max length: 65535: invalid parameter',
+      );
     });
   });
 });

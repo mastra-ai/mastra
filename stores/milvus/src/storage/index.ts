@@ -1,15 +1,8 @@
-import { MastraStorage } from '@mastra/core';
-import type {
-  StorageColumn,
-  EvalRow,
-  MessageType,
-  StorageGetMessagesArg,
-  StorageThreadType,
-  WorkflowRuns,
-} from '@mastra/core';
-import type { TABLE_NAMES } from '@mastra/core/storage';
+import type { MessageType, StorageThreadType, WorkflowRuns } from '@mastra/core';
+import { MastraStorage } from '@mastra/core/storage';
+import type { StorageColumn, EvalRow, StorageGetMessagesArg, TABLE_NAMES } from '@mastra/core/storage';
 import type { CheckHealthResponse, ClientConfig, CollectionSchema, FieldType } from '@zilliz/milvus2-sdk-node';
-import { MilvusClient, DataType } from '@zilliz/milvus2-sdk-node';
+import { MilvusClient, DataType, IndexType, MetricType } from '@zilliz/milvus2-sdk-node';
 
 export class MilvusStorage extends MastraStorage {
   private client: MilvusClient;
@@ -143,6 +136,15 @@ export class MilvusStorage extends MastraStorage {
       if (response.error_code !== 'Success') {
         throw new Error('Error status code: ' + response.reason);
       }
+
+      // Creating index on placeholder vector field because milvus requires mandatory index on vector field
+      await this.client.createIndex({
+        collection_name: tableName,
+        field_name: 'vector_placeholder',
+        index_name: 'vector_idx',
+        index_type: IndexType.IVF_FLAT,
+        metric_type: MetricType.L2,
+      });
     } catch (error) {
       throw new Error('Failed to create collection: ' + error);
     }
@@ -173,13 +175,62 @@ export class MilvusStorage extends MastraStorage {
     }
   }
 
-  batchInsert({ tableName, records }: { tableName: TABLE_NAMES; records: Record<string, any>[] }): Promise<void> {
-    throw new Error(`Method not implemented. ${tableName}, ${JSON.stringify(records)}`);
+  async batchInsert({ tableName, records }: { tableName: TABLE_NAMES; records: Record<string, any>[] }): Promise<void> {
+    try {
+      // Add placeholder vector field - required by Milvus
+      records.forEach(record => {
+        record.vector_placeholder = [0, 0];
+      });
+      const response = await this.client.upsert({
+        collection_name: tableName,
+        data: records,
+      });
+
+      if (response.status.error_code !== 'Success') {
+        throw new Error('Error status code: ' + response.status.reason);
+      }
+    } catch (error) {
+      throw new Error('Failed to insert record: ' + error);
+    }
   }
 
-  load<R>({ tableName, keys }: { tableName: TABLE_NAMES; keys: Record<string, string> }): Promise<R | null> {
-    throw new Error(`Method not implemented. ${tableName}, ${JSON.stringify(keys)}`);
+  async load<R>({ tableName, keys }: { tableName: TABLE_NAMES; keys: Record<string, any> }): Promise<R | null> {
+    try {
+      const loadResponse = await this.client.loadCollection({ collection_name: tableName });
+
+      if (loadResponse.error_code !== 'Success') {
+        throw new Error('Error status code: ' + loadResponse.reason);
+      }
+
+      const filter = Object.entries(keys)
+        .map(([key, value]) => {
+          if (typeof value === 'string') {
+            return `${key} == "${value}"`;
+          } else if (typeof value === 'number') {
+            return `${key} == ${value}`;
+          } else if (typeof value === 'boolean') {
+            return `${key} == ${value}`;
+          } else {
+            return `${key} == "${value}"`;
+          }
+        })
+        .join(' AND ');
+
+      const response = await this.client.query({
+        collection_name: tableName,
+        filter,
+      });
+
+      if (response.status.error_code !== 'Success') {
+        throw new Error('Error status code: ' + response.status.reason);
+      }
+
+      return response.data as R;
+    } catch (error) {
+      throw new Error('Failed to load record: ' + error);
+    }
   }
+
   getThreadById({ threadId }: { threadId: string }): Promise<StorageThreadType | null> {
     throw new Error(`Method not implemented. ${threadId}`);
   }
