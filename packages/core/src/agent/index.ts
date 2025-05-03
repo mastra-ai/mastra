@@ -340,9 +340,11 @@ export class Agent<
 
   async generateTitleFromUserMessage({
     message,
+    instructions,
     runtimeContext = new RuntimeContext(),
   }: {
     message: CoreUserMessage;
+    instructions?: string;
     runtimeContext?: RuntimeContext;
   }) {
     // need to use text, not object output or it will error for models that don't support structured output (eg Deepseek R1)
@@ -353,7 +355,9 @@ export class Agent<
       messages: [
         {
           role: 'system',
-          content: `\n
+          content:
+            instructions ??
+            `\n
     - you will generate a short title based on the first message a user begins a conversation with
     - ensure it is not more than 80 characters long
     - the title should be a summary of the user's message
@@ -377,18 +381,34 @@ export class Agent<
     return userMessages.at(-1);
   }
 
-  async genTitle(userMessage: CoreUserMessage | undefined) {
+  async genTitle(userMessage: CoreUserMessage | undefined, instructions: string | undefined) {
     let title = `New Thread ${new Date().toISOString()}`;
     try {
       if (userMessage) {
         title = await this.generateTitleFromUserMessage({
           message: userMessage,
+          instructions,
         });
       }
     } catch (e) {
       console.error('Error generating title:', e);
     }
     return title;
+  }
+
+  async getTitleInstructions(
+    userMessage: CoreUserMessage | undefined,
+    threadsConfig: MemoryConfig['threads'],
+    { runtimeContext }: { runtimeContext: RuntimeContext },
+  ) {
+    try {
+      const getter = threadsConfig?.generateTitleInstructions;
+      const instructions = typeof getter === 'function' ? await getter(userMessage, { runtimeContext }) : getter;
+      return instructions;
+    } catch (e) {
+      console.error('Error getting title instructions:', e);
+      return undefined;
+    }
   }
 
   async fetchMemory({
@@ -1016,7 +1036,14 @@ export class Agent<
               }
 
               const config = memory.getMergedThreadConfig(memoryConfig);
-              const title = config?.threads?.generateTitle ? await this.genTitle(userMessage) : undefined;
+              if (!config?.threads?.generateTitle) {
+                return;
+              }
+
+              const titleInstructions = await this.getTitleInstructions(userMessage, config.threads, {
+                runtimeContext,
+              });
+              const title = await this.genTitle(userMessage, titleInstructions);
               if (!title) {
                 return;
               }

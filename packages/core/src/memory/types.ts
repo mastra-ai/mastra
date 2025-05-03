@@ -1,5 +1,6 @@
-import type { AssistantContent, CoreMessage, EmbeddingModel, ToolContent, UserContent } from 'ai';
+import type { AssistantContent, CoreMessage, CoreUserMessage, EmbeddingModel, ToolContent, UserContent } from 'ai';
 
+import type { RuntimeContext } from '../runtime-context';
 import type { MastraStorage } from '../storage';
 import type { MastraVector } from '../vector';
 import type { MemoryProcessor } from '.';
@@ -56,6 +57,12 @@ export type MemoryConfig = {
       };
   threads?: {
     generateTitle?: boolean;
+    generateTitleInstructions?:
+      | string
+      | ((
+          userMessage: CoreUserMessage | undefined,
+          { runtimeContext }: { runtimeContext: RuntimeContext },
+        ) => Promise<string>);
   };
 };
 
