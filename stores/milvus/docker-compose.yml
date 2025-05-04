@@ -35,6 +35,7 @@ services:
       ETCD_ENDPOINTS: etcd:2379
       MINIO_ADDRESS: minio:9000
     volumes:
+      - ./milvus.yaml:/milvus/configs/milvus.yaml
       - ${DOCKER_VOLUME_DIRECTORY:-.}/volumes/milvus:/var/lib/milvus
     ports:
       - '19530:19530'

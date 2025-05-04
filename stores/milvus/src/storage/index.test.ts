@@ -268,4 +268,130 @@ describe('MilvusStorage', () => {
       );
     });
   });
+
+  describe('Collection cache tests', () => {
+    beforeAll(async () => {
+      const tableName = TABLE_MESSAGES;
+      const schema: Record<string, StorageColumn> = {
+        id: { type: 'bigint', nullable: false, primaryKey: true },
+        threadId: { type: 'uuid', nullable: false },
+        referenceId: { type: 'bigint', nullable: true },
+        messageType: { type: 'text', nullable: true },
+        content: { type: 'text', nullable: true },
+        createdAt: { type: 'timestamp', nullable: true },
+        metadata: { type: 'jsonb', nullable: true },
+      };
+
+      await milvusStorage.createTable({ tableName, schema });
+    });
+
+    it('should have improved query performance after first load', async () => {
+      const tableName = TABLE_MESSAGES;
+      const schema: Record<string, StorageColumn> = {
+        id: { type: 'bigint', nullable: false, primaryKey: true },
+        threadId: { type: 'uuid', nullable: false },
+        referenceId: { type: 'bigint', nullable: true },
+        messageType: { type: 'text', nullable: true },
+        content: { type: 'text', nullable: true },
+        createdAt: { type: 'timestamp', nullable: true },
+        metadata: { type: 'jsonb', nullable: true },
+      };
+
+      // Create table and insert test data
+      await milvusStorage.createTable({ tableName, schema });
+
+      const testRecords = generateRecords(10);
+      await milvusStorage.batchInsert({ tableName, records: testRecords });
+
+      // First query - collection needs to be loaded
+      const startTimeFirstQuery = performance.now();
+      await milvusStorage.load({
+        tableName,
+        keys: { id: testRecords[0].id },
+      });
+      const endTimeFirstQuery = performance.now();
+      const firstQueryTime = endTimeFirstQuery - startTimeFirstQuery;
+
+      // Second query - collection should already be loaded
+      const startTimeSecondQuery = performance.now();
+      await milvusStorage.load({
+        tableName,
+        keys: { id: testRecords[1].id },
+      });
+      const endTimeSecondQuery = performance.now();
+      const secondQueryTime = endTimeSecondQuery - startTimeSecondQuery;
+
+      // Verify second query is faster
+      expect(secondQueryTime).toBeLessThan(firstQueryTime);
+
+      // Log the performance improvement for verification
+      const performanceImprovement = ((firstQueryTime - secondQueryTime) / firstQueryTime) * 100;
+      console.log(`Query performance improved by ${performanceImprovement.toFixed(2)}% after collection was loaded`);
+    });
+
+    it('should consistently maintain fast query times after collection load', async () => {
+      const tableName = TABLE_MESSAGES;
+      const schema: Record<string, StorageColumn> = {
+        id: { type: 'bigint', nullable: false, primaryKey: true },
+        threadId: { type: 'uuid', nullable: false },
+        referenceId: { type: 'bigint', nullable: true },
+        messageType: { type: 'text', nullable: true },
+        content: { type: 'text', nullable: true },
+        createdAt: { type: 'timestamp', nullable: true },
+        metadata: { type: 'jsonb', nullable: true },
+      };
+
+      // Clear previously loaded collections to ensure fresh test
+      (milvusStorage as any).loadedCollections = new Set();
+
+      // Create table and insert test data
+      await milvusStorage.createTable({ tableName, schema });
+
+      const testRecords = generateRecords(20);
+      await milvusStorage.batchInsert({ tableName, records: testRecords });
+
+      // Initial query to load collection
+      const initialQueryResult = await milvusStorage.load({
+        tableName,
+        keys: { id: testRecords[0].id },
+      });
+
+      // Verify initial query returned correct data
+      expect(initialQueryResult).not.toBeNull();
+
+      // Perform multiple queries and measure times
+      const queryTimes: number[] = [];
+
+      for (let i = 1; i < 5; i++) {
+        const startTime = performance.now();
+        await milvusStorage.load({
+          tableName,
+          keys: { id: testRecords[i].id },
+        });
+        const endTime = performance.now();
+        queryTimes.push(endTime - startTime);
+      }
+
+      // Calculate average and standard deviation to verify consistency
+      const averageTime = queryTimes.reduce((sum, time) => sum + time, 0) / queryTimes.length;
+      const variance = queryTimes.reduce((sum, time) => sum + Math.pow(time - averageTime, 2), 0) / queryTimes.length;
+      const stdDeviation = Math.sqrt(variance);
+
+      // Log results for debugging
+      console.log(`Subsequent query times (ms): ${queryTimes.join(', ')}`);
+      console.log(`Average query time: ${averageTime.toFixed(2)} ms`);
+      console.log(`Standard deviation: ${stdDeviation.toFixed(2)} ms`);
+
+      // Verify queries have relatively consistent performance (low standard deviation relative to mean)
+      expect(stdDeviation).toBeLessThan(averageTime * 0.5); // StdDev should be less than 50% of average
+
+      // Verify all subsequent queries are significantly faster than typical cold-start times
+      // This threshold might need adjustment based on actual system performance
+      // TODO: the performance is very poor, need to fix
+      const reasonableColdStartTime = 500; // ms
+      queryTimes.forEach(time => {
+        expect(time).toBeLessThan(reasonableColdStartTime);
+      });
+    });
+  });
 });

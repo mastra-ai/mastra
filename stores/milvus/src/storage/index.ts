@@ -6,6 +6,7 @@ import { MilvusClient, DataType, IndexType, MetricType } from '@zilliz/milvus2-s
 
 export class MilvusStorage extends MastraStorage {
   private client: MilvusClient;
+  private loadedCollections: Set<string>;
 
   constructor(
     name: string,
@@ -17,6 +18,7 @@ export class MilvusStorage extends MastraStorage {
     try {
       super({ name });
       this.client = new MilvusClient(addressOrConfig, ssl, username, password);
+      this.loadedCollections = new Set<string>();
       return this;
     } catch (error) {
       throw new Error('Failed to initialize Milvus client: ' + error);
@@ -153,6 +155,8 @@ export class MilvusStorage extends MastraStorage {
   async clearTable({ tableName }: { tableName: TABLE_NAMES }): Promise<void> {
     try {
       await this.client.dropCollection({ collection_name: tableName });
+      // Remove from loaded collections after dropping
+      this.loadedCollections.delete(tableName);
     } catch (error) {
       throw new Error('Failed to clear collection: ' + error);
     }
@@ -194,13 +198,26 @@ export class MilvusStorage extends MastraStorage {
     }
   }
 
-  async load<R>({ tableName, keys }: { tableName: TABLE_NAMES; keys: Record<string, any> }): Promise<R | null> {
-    try {
+  /**
+   * Ensures a collection is loaded into memory before querying
+   * @param tableName - The name of the collection to load
+   */
+  private async ensureCollectionLoaded(tableName: TABLE_NAMES): Promise<void> {
+    if (!this.loadedCollections.has(tableName)) {
       const loadResponse = await this.client.loadCollection({ collection_name: tableName });
 
       if (loadResponse.error_code !== 'Success') {
-        throw new Error('Error status code: ' + loadResponse.reason);
+        throw new Error('Error loading collection: ' + loadResponse.reason);
       }
+
+      this.loadedCollections.add(tableName);
+    }
+  }
+
+  async load<R>({ tableName, keys }: { tableName: TABLE_NAMES; keys: Record<string, any> }): Promise<R | null> {
+    try {
+      // Only load collection if not already loaded
+      await this.ensureCollectionLoaded(tableName);
 
       const filter = Object.entries(keys)
         .map(([key, value]) => {
