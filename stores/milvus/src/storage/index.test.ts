@@ -1,5 +1,6 @@
-import type { StorageColumn } from '@mastra/core/storage';
-import { TABLE_MESSAGES } from '@mastra/core/storage';
+import type { MessageType, StorageThreadType, TraceType } from '@mastra/core';
+import type { EvalRow, StorageColumn, WorkflowRuns } from '@mastra/core/storage';
+import { TABLE_MESSAGES, TABLE_SCHEMAS, TABLE_THREADS } from '@mastra/core/storage';
 import { afterAll, beforeAll, afterEach, describe, expect, it, beforeEach } from 'vitest';
 import { MilvusStorage } from './index';
 
@@ -25,6 +26,80 @@ function generateRecords(count: number): MessageRecord[] {
   }));
 }
 
+function generateThreads(count: number): StorageThreadType[] {
+  return Array.from({ length: count }, (_, index) => ({
+    id: (index + 1).toString(),
+    title: `Test thread ${index + 1}`,
+    metadata: { testIndex: index, foo: 'bar' },
+    createdAt: new Date(),
+    updatedAt: new Date(),
+    resourceId: `00000000-0000-4000-a000-${(1000000000000 + index).toString(16).padStart(12, '0')}`,
+    vector_placeholder: [0, 0],
+  }));
+}
+
+function generateMessageRecords(count: number, threadId?: string): MessageType[] {
+  return Array.from({ length: count }, (_, index) => ({
+    id: (index + 1).toString(),
+    content: `Test message ${index + 1}`,
+    role: 'user',
+    createdAt: new Date(),
+    threadId: threadId ?? `12333d567-e89b-12d3-a456-${(426614174000 + index).toString()}`,
+    resourceId: `12333d567-e89b-12d3-a456-${(426614174000 + index).toString()}`,
+    toolCallIds: [],
+    toolCallArgs: [],
+    toolNames: [],
+    type: 'text',
+  }));
+}
+
+function generateTraceRecords(count: number): TraceType[] {
+  return Array.from({ length: count }, (_, index) => ({
+    id: (index + 1).toString(),
+    name: `Test trace ${index + 1}`,
+    scope: 'test',
+    kind: 0,
+    parentSpanId: `12333d567-e89b-12d3-a456-${(426614174000 + index).toString()}`,
+    traceId: `12333d567-e89b-12d3-a456-${(426614174000 + index).toString()}`,
+    attributes: { attribute1: 'value1' },
+    status: { code: 0, description: 'OK' },
+    events: { event1: 'value1' },
+    links: { link1: 'value1' },
+    other: { other1: 'value1' },
+    startTime: new Date().getTime(),
+    endTime: new Date().getTime(),
+    createdAt: new Date(),
+  }));
+}
+
+function generateEvalRecords(count: number): EvalRow[] {
+  return Array.from({ length: count }, (_, index) => ({
+    input: `Test input ${index + 1}`,
+    output: `Test output ${index + 1}`,
+    result: { score: index + 1, info: { testIndex: index + 1 } },
+    agentName: `Test agent ${index + 1}`,
+    metricName: `Test metric ${index + 1}`,
+    instructions: 'Test instructions',
+    testInfo: { testName: `Test ${index + 1}`, testPath: `TestPath ${index + 1}` },
+    runId: `12333d567-e89b-12d3-a456-${(426614174000 + index).toString()}`,
+    globalRunId: `12333d567-e89b-12d3-a456-${(426614174000 + index).toString()}`,
+    createdAt: new Date().toString(),
+  }));
+}
+
+function generateWorkflowRuns(count: number): WorkflowRuns {
+  return {
+    runs: Array.from({ length: count }, (_, index) => ({
+      workflowName: `Test workflow ${index + 1}`,
+      runId: `12333d567-e89b-12d3-a456-${(426614174000 + index).toString()}`,
+      snapshot: `Test snapshot ${index + 1}`,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    })),
+    total: count,
+  };
+}
+
 describe('MilvusStorage', () => {
   let milvusStorage: MilvusStorage;
   beforeAll(async () => {
@@ -43,6 +118,7 @@ describe('MilvusStorage', () => {
 
   afterAll(async () => {
     await milvusStorage.clearTable({ tableName: TABLE_MESSAGES });
+    await milvusStorage.clearTable({ tableName: TABLE_THREADS });
   });
 
   describe('Create table', () => {
@@ -362,7 +438,7 @@ describe('MilvusStorage', () => {
       // Perform multiple queries and measure times
       const queryTimes: number[] = [];
 
-      for (let i = 1; i < 5; i++) {
+      for (let i = 1; i < 10; i++) {
         const startTime = performance.now();
         await milvusStorage.load({
           tableName,
@@ -392,6 +468,72 @@ describe('MilvusStorage', () => {
       queryTimes.forEach(time => {
         expect(time).toBeLessThan(reasonableColdStartTime);
       });
+    });
+  });
+
+  describe('Thread operations', () => {
+    beforeAll(async () => {
+      await milvusStorage.createTable({
+        tableName: TABLE_THREADS,
+        schema: TABLE_SCHEMAS[TABLE_THREADS],
+      });
+    });
+
+    it('should save a thread', async () => {
+      const thread = generateThreads(1)[0];
+
+      const savedThread = await milvusStorage.saveThread({
+        thread,
+      });
+
+      expect(savedThread).toBeDefined();
+      expect(savedThread.title).toBe(thread.title);
+      expect(savedThread.metadata).toEqual(thread.metadata);
+      expect(savedThread.createdAt).toBeDefined();
+      expect(savedThread.updatedAt).toBeDefined();
+
+      const threadFromDB = await milvusStorage.getThreadById({ threadId: savedThread.id });
+      console.log(threadFromDB);
+
+      expect(threadFromDB).toBeDefined();
+      expect(threadFromDB?.title).toBe(thread.title);
+      expect(threadFromDB?.metadata).toEqual(thread.metadata);
+      expect(threadFromDB?.createdAt).toBeDefined();
+      expect(threadFromDB?.updatedAt).toBeDefined();
+    });
+
+    it('should update a thread', async () => {
+      const thread = generateThreads(1)[0];
+
+      const savedThread = await milvusStorage.saveThread({
+        thread,
+      });
+
+      expect(savedThread).toBeDefined();
+      expect(savedThread.title).toBe(thread.title);
+      expect(savedThread.metadata).toEqual(thread.metadata);
+      expect(savedThread.createdAt).toBeDefined();
+      expect(savedThread.updatedAt).toBeDefined();
+
+      const updatedThread = await milvusStorage.updateThread({
+        id: savedThread.id,
+        title: 'updated title',
+        metadata: { foo: 'bar' },
+      });
+
+      expect(updatedThread).toBeDefined();
+      expect(updatedThread.title).toBe('updated title');
+      expect(updatedThread.metadata).toEqual({ foo: 'bar' });
+      expect(updatedThread.createdAt).toBeDefined();
+      expect(updatedThread.updatedAt).toBeDefined();
+
+      // Verify that the thread was updated in the database
+      const threadFromDB = await milvusStorage.getThreadById({ threadId: savedThread.id });
+      expect(threadFromDB).toBeDefined();
+      expect(threadFromDB?.title).toBe('updated title');
+      expect(threadFromDB?.metadata).toEqual({ foo: 'bar' });
+      expect(threadFromDB?.createdAt).toBeDefined();
+      expect(threadFromDB?.updatedAt).toBeDefined();
     });
   });
 });

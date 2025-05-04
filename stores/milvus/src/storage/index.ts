@@ -1,5 +1,5 @@
 import type { MessageType, StorageThreadType, WorkflowRuns } from '@mastra/core';
-import { MastraStorage } from '@mastra/core/storage';
+import { MastraStorage, TABLE_THREADS } from '@mastra/core/storage';
 import type { StorageColumn, EvalRow, StorageGetMessagesArg, TABLE_NAMES } from '@mastra/core/storage';
 import type { CheckHealthResponse, ClientConfig, CollectionSchema, FieldType } from '@zilliz/milvus2-sdk-node';
 import { MilvusClient, DataType, IndexType, MetricType } from '@zilliz/milvus2-sdk-node';
@@ -248,16 +248,70 @@ export class MilvusStorage extends MastraStorage {
     }
   }
 
-  getThreadById({ threadId }: { threadId: string }): Promise<StorageThreadType | null> {
-    throw new Error(`Method not implemented. ${threadId}`);
+  async getThreadById({ threadId }: { threadId: string }): Promise<StorageThreadType | null> {
+    try {
+      await this.ensureCollectionLoaded(TABLE_THREADS);
+
+      const response = await this.client.query({
+        collection_name: TABLE_THREADS,
+        filter: `id == "${threadId}"`,
+      });
+
+      if (response.status.error_code !== 'Success') {
+        throw new Error('Error status code: ' + response.status.reason);
+      }
+      console.log(response.data);
+
+      return {
+        id: response.data[0]?.id ?? '',
+        resourceId: response.data[0]?.resourceId ?? '',
+        title: response.data[0]?.title ?? '',
+        metadata: response.data[0]?.metadata ?? {},
+        createdAt: response.data[0]?.createdAt ?? new Date(),
+        updatedAt: response.data[0]?.updatedAt ?? new Date(),
+      };
+    } catch (error) {
+      throw new Error('Failed to get thread: ' + error);
+    }
   }
-  getThreadsByResourceId({ resourceId }: { resourceId: string }): Promise<StorageThreadType[]> {
-    throw new Error(`Method not implemented. ${resourceId}`);
+
+  async getThreadsByResourceId({ resourceId }: { resourceId: string }): Promise<StorageThreadType[]> {
+    try {
+      await this.ensureCollectionLoaded(TABLE_THREADS);
+
+      const response = await this.client.query({
+        collection_name: TABLE_THREADS,
+        filter: `resourceId == ${resourceId}`,
+      });
+
+      if (response.status.error_code !== 'Success') {
+        throw new Error('Error status code: ' + response.status.reason);
+      }
+
+      return response.data as StorageThreadType[];
+    } catch (error) {
+      throw new Error('Failed to get threads: ' + error);
+    }
   }
-  saveThread({ thread }: { thread: StorageThreadType }): Promise<StorageThreadType> {
-    throw new Error(`Method not implemented. ${JSON.stringify(thread)}`);
+
+  async saveThread({ thread }: { thread: StorageThreadType }): Promise<StorageThreadType> {
+    try {
+      const response = await this.client.upsert({
+        collection_name: TABLE_THREADS,
+        data: [thread],
+      });
+
+      if (response.status.error_code !== 'Success') {
+        throw new Error('Error status code: ' + response.status.reason);
+      }
+
+      return thread;
+    } catch (error) {
+      throw new Error('Failed to save thread: ' + error);
+    }
   }
-  updateThread({
+
+  async updateThread({
     id,
     title,
     metadata,
@@ -266,11 +320,48 @@ export class MilvusStorage extends MastraStorage {
     title: string;
     metadata: Record<string, unknown>;
   }): Promise<StorageThreadType> {
-    throw new Error(`Method not implemented. ${id}, ${title}, ${JSON.stringify(metadata)}`);
+    try {
+      const response = await this.client.upsert({
+        collection_name: TABLE_THREADS,
+        data: [
+          {
+            id,
+            title,
+            metadata,
+          },
+        ],
+      });
+
+      if (response.status.error_code !== 'Success') {
+        throw new Error('Error status code: ' + response.status.reason);
+      }
+
+      const thread = await this.getThreadById({ threadId: id });
+
+      return {
+        id,
+        title,
+        metadata,
+        resourceId: thread?.resourceId ?? '',
+        createdAt: thread?.createdAt ?? new Date(),
+        updatedAt: thread?.updatedAt ?? new Date(),
+      };
+    } catch (error) {
+      throw new Error('Failed to update thread: ' + error);
+    }
   }
-  deleteThread({ threadId }: { threadId: string }): Promise<void> {
-    throw new Error(`Method not implemented. ${threadId}`);
+
+  async deleteThread({ threadId }: { threadId: string }): Promise<void> {
+    try {
+      await this.client.delete({
+        collection_name: TABLE_THREADS,
+        filter: `id == ${threadId}`,
+      });
+    } catch (error) {
+      throw new Error('Failed to delete thread: ' + error);
+    }
   }
+
   getMessages({ threadId, selectBy, threadConfig }: StorageGetMessagesArg): Promise<MessageType[]> {
     throw new Error(`Method not implemented. ${threadId}, ${selectBy}, ${JSON.stringify(threadConfig)}`);
   }
