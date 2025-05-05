@@ -39,8 +39,8 @@
     "jsdom": "^26.0.0",
     "turndown": "^7.1.2",
     "uuid": "^11.1.0",
-    "zod": "^3.22.4",
-    "zod-to-json-schema": "^3.22.4"
+    "zod": "^3.24.3",
+    "zod-to-json-schema": "^3.24.5"
   },
   "devDependencies": {
     "@hono/node-server": "^1.13.8",

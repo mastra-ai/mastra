@@ -32,8 +32,8 @@
     "@mastra/core": "workspace:^",
     "json-schema": "^0.4.0",
     "rxjs": "7.8.1",
-    "zod": "^3.24.2",
-    "zod-to-json-schema": "^3.24.3"
+    "zod": "^3.24.3",
+    "zod-to-json-schema": "^3.24.5"
   },
   "peerDependencies": {
     "zod": "^3.24.2"
