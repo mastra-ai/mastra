@@ -1,5 +1,33 @@
 # @mastra/core
 
+## 0.9.2-alpha.4
+
+### Patch Changes
+
+- ccef9f9: Fixed a type error when converting tools
+- 51e6923: fix ts errors on default proxy storage
+
+## 0.9.2-alpha.3
+
+### Patch Changes
+
+- 967b41c: fix: removes new agent getter methods from telemetry
+- 4155f47: Add parameters to filter workflow runs
+  Add fromDate and toDate to telemetry parameters
+- 17826a9: Added a breaking change warning about deprecated working memory "use: 'text-stream'" which is being fully replaced by "use: 'tool-call'"
+
+## 0.9.2-alpha.2
+
+### Patch Changes
+
+- 26738f4: Switched from a custom MCP tools schema deserializer to json-schema-to-zod - fixes an issue where MCP tool schemas didn't deserialize properly in Mastra playground. Also added support for testing tools with no input arguments in playground
+
+## 0.9.2-alpha.1
+
+### Patch Changes
+
+- b804723: Fix #3831: keep conversations in tact by keeping empty assistant messages
+
 ## 0.9.2-alpha.0
 
 ### Patch Changes
