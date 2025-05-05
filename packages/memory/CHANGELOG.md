@@ -1,5 +1,11 @@
 # @mastra/memory
 
+## 0.3.2-alpha.6
+
+### Patch Changes
+
+- 544767d: Improved token estimation in TokenLimiter from 96% accuracy back to 99%
+
 ## 0.3.2-alpha.5
 
 ### Patch Changes
