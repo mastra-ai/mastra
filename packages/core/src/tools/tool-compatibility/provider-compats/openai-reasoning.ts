@@ -1,7 +1,7 @@
-import { z } from 'zod';
+import type { z } from 'zod';
 import type { Targets } from 'zod-to-json-schema';
 import { ToolCompatibility } from '..';
-import type { SchemaConstraints, ShapeValue } from '..';
+import type { ShapeValue } from '..';
 import type { MastraLanguageModel } from '../../../agent';
 
 export class OpenAIReasoningToolCompat extends ToolCompatibility {
@@ -29,78 +29,44 @@ export class OpenAIReasoningToolCompat extends ToolCompatibility {
   }
 
   processZodType<T extends z.AnyZodObject>(
-    value: z.ZodTypeAny,
-    path: string,
-    constraints: SchemaConstraints,
+    value: z.ZodTypeAny
   ): ShapeValue<T> {
     switch (value._def.typeName) {
       case 'ZodOptional':
         return (value as z.ZodOptional<z.ZodTypeAny>).unwrap().nullable() as ShapeValue<T>;
       case 'ZodObject': {
-        return this.defaultZodObjectHandler(value, path, constraints);
+        return this.defaultZodObjectHandler(value);
       }
       case 'ZodArray': {
-        return this.defaultZodArrayHandler(value, path, constraints);
+        return this.defaultZodArrayHandler(value);
       }
       case 'ZodUnion': {
-        return this.defaultZodUnionHandler(value, path, constraints);
+        return this.defaultZodUnionHandler(value);
       }
       case 'ZodDefault': {
         const defaultDef = (value as z.ZodDefault<any>)._def;
         const innerType = defaultDef.innerType;
         const defaultValue = defaultDef.defaultValue();
+        const constraints: { defaultValue?: unknown } = {};
+        if (defaultValue !== undefined) {
+          constraints.defaultValue = defaultValue;
+        }
 
-        // Store default value in constraints
-        constraints[path] = {
-          ...constraints[path],
-          defaultValue,
-        };
-
-        // Process the inner type
-        return this.processZodType<T>(innerType, path, constraints);
+        const description = this.mergeParameterDescription(value.description, constraints);
+        let result = this.processZodType<T>(innerType);
+        if (description) {
+          result = result.describe(description);
+        }
+        return result;
       }
       case 'ZodNumber': {
-        return this.defaultZodNumberHandler(value, path, constraints);
+        return this.defaultZodNumberHandler(value);
       }
       case 'ZodString': {
-        return this.defaultZodStringHandler(value, path, constraints);
+        return this.defaultZodStringHandler(value);
       }
       case 'ZodDate': {
-        const zodDate = value as z.ZodDate;
-        const currentConstraints: SchemaConstraints[string] = {};
-
-        // Check for date constraints in the checks array
-        const checks = zodDate._def.checks || [];
-        type ZodDateCheck = (typeof checks)[number];
-        const newChecks: ZodDateCheck[] = [];
-
-        for (const check of checks) {
-          if ('kind' in check) {
-            switch (check.kind) {
-              case 'min':
-                currentConstraints.minDate = new Date(check.value).toISOString();
-                break;
-              case 'max':
-                currentConstraints.maxDate = new Date(check.value).toISOString();
-                break;
-              default:
-                newChecks.push(check);
-            }
-          }
-        }
-
-        // Add date-time format constraint
-        currentConstraints.dateFormat = 'date-time';
-
-        if (Object.keys(currentConstraints).length > 0) {
-          constraints[path] = {
-            ...constraints[path],
-            ...currentConstraints,
-          };
-        }
-
-        // Return a string type with date-time format instead of date
-        return z.string().describe('date-time') as ShapeValue<T>;
+        return this.defaultZodDateHandler(value);
       }
       default:
         return value as ShapeValue<T>;

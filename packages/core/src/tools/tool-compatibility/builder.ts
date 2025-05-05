@@ -107,7 +107,7 @@ export class CoreToolBuilder extends MastraBase {
 
   private createExecute(tool: ToolToConvert, options: ToolOptions, logType?: 'tool' | 'toolset' | 'client-tool') {
     // dont't add memory or mastra to logging
-    // don't add memory or mastra to logging
+    const { logger, mastra: _mastra, memory: _memory, runtimeContext, ...rest } = options;
 
     const { start, error } = this.createLogMessageOptions({
       agentName: options.agentName,
@@ -129,7 +129,7 @@ export class CoreToolBuilder extends MastraBase {
             mastra: options.mastra,
             memory: options.memory,
             runId: options.runId,
-            runtimeContext: runtimeContext ?? new RuntimeContext(),
+            runtimeContext: options.runtimeContext ?? new RuntimeContext(),
           },
           execOptions,
         ) ?? undefined
@@ -138,10 +138,10 @@ export class CoreToolBuilder extends MastraBase {
 
     return async (args: any, execOptions?: any) => {
       try {
-        logger.debug(start, { ...rest, args });
+        this.logger.debug(start, { ...rest, args });
         return await execFunction(args, execOptions);
       } catch (err) {
-        logger.error(error, { ...rest, error: err, args });
+        this.logger.error(error, { ...rest, error: err, args });
         throw err;
       }
     };

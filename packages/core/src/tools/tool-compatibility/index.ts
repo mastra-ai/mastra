@@ -10,40 +10,6 @@ import { isVercelTool } from '../../utils';
 import { convertVercelToolParameters } from './builder';
 import type { ToolToConvert } from './builder';
 
-export const OPENAI_TOOL_DESCRIPTION_MAX_LENGTH = 1024;
-
-export type SchemaConstraints = {
-  [path: string]: {
-    defaultValue?: unknown;
-    // Array constraints
-    minLength?: number;
-    maxLength?: number;
-    exactLength?: number;
-    // Number constraints
-    gt?: number;
-    gte?: number;
-    lt?: number;
-    lte?: number;
-    multipleOf?: number;
-    // String constraints
-    stringMin?: number;
-    stringMax?: number;
-    email?: boolean;
-    url?: boolean;
-    uuid?: boolean;
-    cuid?: boolean;
-    emoji?: boolean;
-    regex?: {
-      pattern: string;
-      flags?: string;
-    };
-    // Date constraints
-    minDate?: string;
-    maxDate?: string;
-    dateFormat?: string;
-  };
-};
-
 export const ALL_STRING_CHECKS = ['regex', 'emoji', 'email', 'url', 'uuid', 'cuid', 'min', 'max'] as const;
 
 export const ALL_NUMBER_CHECKS = [
@@ -62,6 +28,39 @@ export type ZodShape<T extends z.AnyZodObject> = T['shape'];
 export type ShapeKey<T extends z.AnyZodObject> = keyof ZodShape<T>;
 export type ShapeValue<T extends z.AnyZodObject> = ZodShape<T>[ShapeKey<T>];
 
+// Add constraint types at the top
+
+type StringConstraints = {
+  minLength?: number;
+  maxLength?: number;
+  email?: boolean;
+  url?: boolean;
+  uuid?: boolean;
+  cuid?: boolean;
+  emoji?: boolean;
+  regex?: { pattern: string; flags?: string };
+};
+
+type NumberConstraints = {
+  gt?: number;
+  gte?: number;
+  lt?: number;
+  lte?: number;
+  multipleOf?: number;
+};
+
+type ArrayConstraints = {
+  minLength?: number;
+  maxLength?: number;
+  exactLength?: number;
+};
+
+type DateConstraints = {
+  minDate?: string;
+  maxDate?: string;
+  dateFormat?: string;
+};
+
 export abstract class ToolCompatibility extends MastraBase {
   private model: MastraLanguageModel;
   constructor(model: MastraLanguageModel) {
@@ -79,22 +78,18 @@ export abstract class ToolCompatibility extends MastraBase {
   abstract getSchemaTarget(): Targets | undefined;
 
   abstract processZodType<T extends z.AnyZodObject>(
-    value: z.ZodTypeAny,
-    path: string,
-    constraints: SchemaConstraints,
+    value: z.ZodTypeAny
   ): ShapeValue<T>;
 
   private zodToAISDKSchema<OBJECT>(zodSchema: z.AnyZodObject): {
     schema: Schema<OBJECT>;
-    constraints: SchemaConstraints;
   } {
-    const constraints: SchemaConstraints = {};
 
     const newSchema = z.object(
       Object.entries<z.ZodTypeAny>(zodSchema.shape).reduce(
         (acc, [key, value]) => ({
           ...acc,
-          [key]: this.processZodType<any>(value, String(key), constraints),
+          [key]: this.processZodType<any>(value),
         }),
         {},
       ),
@@ -115,228 +110,188 @@ export abstract class ToolCompatibility extends MastraBase {
       },
     );
 
-    return { schema, constraints };
+    return { schema };
   }
 
   public defaultZodObjectHandler<T extends z.AnyZodObject>(
-    value: z.ZodTypeAny,
-    path: string,
-    constraints: SchemaConstraints,
+    value: z.ZodTypeAny
   ): ShapeValue<T> {
     const zodObject = value as z.ZodObject<any, any, any>;
-    // Process each property of the object recursively
     const processedShape = Object.entries(zodObject.shape || {}).reduce<Record<string, z.ZodTypeAny>>(
       (acc, [key, propValue]) => {
         const typedPropValue = propValue as z.ZodTypeAny;
-        const processedValue = this.processZodType<T>(
-          typedPropValue,
-          path ? `${path}.${String(key)}` : String(key),
-          constraints,
-        );
-
-        return {
-          ...acc,
-          [key]: processedValue,
-        };
+        const processedValue = this.processZodType<T>(typedPropValue);
+        acc[key] = processedValue;
+        return acc;
       },
       {},
     );
-    return z.object(processedShape) as ShapeValue<T>;
+    let result = z.object(processedShape);
+    if (value.description) {
+      result = result.describe(value.description);
+    }
+    return result as ShapeValue<T>;
+  }
+
+  public mergeParameterDescription(description: string | undefined, constraints: NumberConstraints | StringConstraints | ArrayConstraints | DateConstraints | { defaultValue?: unknown }): string | undefined{
+    if (Object.keys(constraints).length > 0) {
+      return (description ? description + "\n" : "") + JSON.stringify(constraints)
+    } else {
+      return description;
+    }
   }
 
   public defaultZodArrayHandler<T extends z.AnyZodObject>(
     value: z.ZodTypeAny,
-    path: string,
-    constraints: SchemaConstraints,
     handleChecks: readonly ArrayCheckType[] = ALL_ARRAY_CHECKS,
   ): ShapeValue<T> {
     const zodArray = (value as z.ZodArray<any>)._def;
     const arrayType = zodArray.type;
-    const currentConstraints: SchemaConstraints[string] = {};
-
-    // Handle min length
+    const constraints: ArrayConstraints = {};
     if (zodArray.minLength?.value !== undefined && handleChecks.includes('min')) {
-      currentConstraints.minLength = zodArray.minLength.value;
+      constraints.minLength = zodArray.minLength.value;
     }
-
-    // Handle max length
     if (zodArray.maxLength?.value !== undefined && handleChecks.includes('max')) {
-      currentConstraints.maxLength = zodArray.maxLength.value;
+      constraints.exactLength = zodArray.maxLength.value;
     }
-
-    // Handle exact length
-    if (zodArray.exactLength?.value !== undefined && handleChecks.includes('length')) {
-      currentConstraints.exactLength = zodArray.exactLength.value;
-    }
-
-    if (Object.keys(currentConstraints).length > 0) {
-      constraints[path] = {
-        ...constraints[path],
-        ...currentConstraints,
-      };
-    }
-
-    // Process the array element type recursively
     const processedType =
       arrayType._def.typeName === 'ZodObject'
-        ? this.processZodType<T>(arrayType as z.ZodTypeAny, `${path}.*`, constraints)
+        ? this.processZodType<T>(arrayType as z.ZodTypeAny)
         : arrayType;
-
-    // Create new array with processed element type and preserved constraints
     let result = z.array(processedType);
-
-    // Reapply the constraints that we're not handling
-    if (zodArray.minLength?.value !== undefined && !handleChecks.includes('min')) {
+    if (zodArray.minLength?.value !== undefined && handleChecks.includes('min')) {
       result = result.min(zodArray.minLength.value);
     }
-    if (zodArray.maxLength?.value !== undefined && !handleChecks.includes('max')) {
+    if (zodArray.maxLength?.value !== undefined && handleChecks.includes('max')) {
       result = result.max(zodArray.maxLength.value);
     }
-    if (zodArray.exactLength?.value !== undefined && !handleChecks.includes('length')) {
+    if (zodArray.exactLength?.value !== undefined && handleChecks.includes('length')) {
       result = result.length(zodArray.exactLength.value);
     }
 
+    const description = this.mergeParameterDescription(value.description, constraints);
+    if (description) {
+      result = result.describe(description);
+    }
     return result as ShapeValue<T>;
   }
 
   public defaultZodUnionHandler<T extends z.AnyZodObject>(
-    value: z.ZodTypeAny,
-    path: string,
-    constraints: SchemaConstraints,
+    value: z.ZodTypeAny
   ): ShapeValue<T> {
     const zodUnion = value as z.ZodUnion<[z.ZodTypeAny, ...z.ZodTypeAny[]]>;
-    // Process each option in the union
     const processedOptions = zodUnion._def.options.map((option: z.ZodTypeAny) =>
-      this.processZodType<T>(option, path, constraints),
+      this.processZodType<T>(option)
     ) as [z.ZodTypeAny, z.ZodTypeAny, ...z.ZodTypeAny[]];
-
-    return z.union(processedOptions) as ShapeValue<T>;
+    let result = z.union(processedOptions);
+    if (value.description) {
+      result = result.describe(value.description);
+    }
+    return result as ShapeValue<T>;
   }
 
   public defaultZodStringHandler<T extends z.AnyZodObject>(
     value: z.ZodTypeAny,
-    path: string,
-    constraints: SchemaConstraints,
-    handleChecks: readonly StringCheckType[] = ALL_STRING_CHECKS, // Default to handling all checks
+    handleChecks: readonly StringCheckType[] = ALL_STRING_CHECKS
   ): ShapeValue<T> {
     const zodString = value as z.ZodString;
-    const currentConstraints: SchemaConstraints[string] = {};
+    const constraints: StringConstraints = {};
     const checks = zodString._def.checks || [];
     type ZodStringCheck = (typeof checks)[number];
     const newChecks: ZodStringCheck[] = [];
-
     for (const check of checks) {
       if ('kind' in check) {
         if (handleChecks.includes(check.kind as StringCheckType)) {
           switch (check.kind) {
             case 'regex': {
-              currentConstraints.regex = {
+              constraints.regex = {
                 pattern: check.regex.source,
                 flags: check.regex.flags,
               };
               break;
             }
             case 'emoji': {
-              currentConstraints.emoji = true;
+              constraints.emoji = true;
               break;
             }
             case 'email': {
-              currentConstraints.email = true;
+              constraints.email = true;
               break;
             }
             case 'url': {
-              currentConstraints.url = true;
+              constraints.url = true;
               break;
             }
             case 'uuid': {
-              currentConstraints.uuid = true;
+              constraints.uuid = true;
               break;
             }
             case 'cuid': {
-              currentConstraints.cuid = true;
+              constraints.cuid = true;
               break;
             }
             case 'min': {
-              currentConstraints.minLength = check.value;
+              constraints.minLength = check.value;
               break;
             }
             case 'max': {
-              currentConstraints.maxLength = check.value;
+              constraints.maxLength = check.value;
               break;
             }
           }
         } else {
-          // If we're not handling this check specially, preserve it
           newChecks.push(check);
         }
       }
     }
-
-    if (Object.keys(currentConstraints).length > 0) {
-      constraints[path] = {
-        ...constraints[path],
-        ...currentConstraints,
-      };
-    }
-
-    // Return a string type with any remaining checks
     let result = z.string();
     for (const check of newChecks) {
       result = result._addCheck(check);
+    }
+    const description = this.mergeParameterDescription(value.description, constraints);
+    if (description) {
+      result = result.describe(description);
     }
     return result as ShapeValue<T>;
   }
 
   public defaultZodNumberHandler<T extends z.AnyZodObject>(
     value: z.ZodTypeAny,
-    path: string,
-    constraints: SchemaConstraints,
-    handleChecks: readonly NumberCheckType[] = ALL_NUMBER_CHECKS, // Default to handling all checks
+    handleChecks: readonly NumberCheckType[] = ALL_NUMBER_CHECKS
   ): ShapeValue<T> {
     const zodNumber = value as z.ZodNumber;
-    const currentConstraints: SchemaConstraints[string] = {};
+    const constraints: NumberConstraints = {};
     const checks = zodNumber._def.checks || [];
     type ZodNumberCheck = (typeof checks)[number];
     const newChecks: ZodNumberCheck[] = [];
-
     for (const check of checks) {
       if ('kind' in check) {
         if (handleChecks.includes(check.kind as NumberCheckType)) {
           switch (check.kind) {
             case 'min':
               if (check.inclusive) {
-                currentConstraints.gte = check.value;
+                constraints.gte = check.value;
               } else {
-                currentConstraints.gt = check.value;
+                constraints.gt = check.value;
               }
               break;
             case 'max':
               if (check.inclusive) {
-                currentConstraints.lte = check.value;
+                constraints.lte = check.value;
               } else {
-                currentConstraints.lt = check.value;
+                constraints.lt = check.value;
               }
               break;
             case 'multipleOf': {
-              currentConstraints.multipleOf = check.value;
+              constraints.multipleOf = check.value;
               break;
             }
           }
         } else {
-          // If we're not handling this check specially, preserve it
           newChecks.push(check);
         }
       }
     }
-
-    if (Object.keys(currentConstraints).length > 0) {
-      constraints[path] = {
-        ...constraints[path],
-        ...currentConstraints,
-      };
-    }
-
-    // Return a number type with any remaining checks
     let result = z.number();
     for (const check of newChecks) {
       switch (check.kind) {
@@ -349,6 +304,41 @@ export abstract class ToolCompatibility extends MastraBase {
         default:
           result = result._addCheck(check);
       }
+    }
+    const description = this.mergeParameterDescription(value.description, constraints);
+    if (description) {
+      result = result.describe(description);
+    }
+    return result as ShapeValue<T>;
+  }
+
+  public defaultZodDateHandler<T extends z.AnyZodObject>(
+    value: z.ZodTypeAny
+  ): ShapeValue<T> {
+    const zodDate = value as z.ZodDate;
+    const constraints: DateConstraints = {};
+    const checks = zodDate._def.checks || [];
+    type ZodDateCheck = (typeof checks)[number];
+    const newChecks: ZodDateCheck[] = [];
+    for (const check of checks) {
+      if ('kind' in check) {
+        switch (check.kind) {
+          case 'min':
+            constraints.minDate = new Date(check.value).toISOString();
+            break;
+          case 'max':
+            constraints.maxDate = new Date(check.value).toISOString();
+            break;
+          default:
+            newChecks.push(check);
+        }
+      }
+    }
+    constraints.dateFormat = 'date-time';
+    let result = z.string().describe('date-time');
+    const description = this.mergeParameterDescription(value.description, constraints);
+    if (description) {
+      result = result.describe(description);
     }
     return result as ShapeValue<T>;
   }
@@ -365,29 +355,11 @@ export abstract class ToolCompatibility extends MastraBase {
       };
     }
 
-    const { schema, constraints } = this.zodToAISDKSchema(tool.inputSchema);
-
-    const isOpenAI = this.getModel().provider.includes(`openai`) || this.getModel().modelId.includes(`openai`);
-
-    let description =
-      (tool.description || '') + (Object.keys(constraints).length > 0 ? ' ' + `\n` + JSON.stringify(constraints) : '');
-
-    // openai only allows tools descriptions of up to 1024 characters
-    // If their tool description is too long we want it to return the openai error as is
-    if (isOpenAI && description.length > OPENAI_TOOL_DESCRIPTION_MAX_LENGTH) {
-      if (tool?.description?.length || 0 < OPENAI_TOOL_DESCRIPTION_MAX_LENGTH) {
-        this.logger.warn(
-          `Tool description is too long for OpenAI. Truncating to 1024 characters. Tool call might not respect the schema constraints.`,
-        );
-        description = description.slice(0, OPENAI_TOOL_DESCRIPTION_MAX_LENGTH);
-      } else {
-        // Preserve the original description if it's already over the limit
-        description = tool?.description || '';
-      }
-    }
+    // Constraints are now embedded in the Zod schema descriptions, so just use the schema as-is
+    const { schema } = this.zodToAISDKSchema(tool.inputSchema);
 
     return {
-      description,
+      description: tool.description,
       parameters: schema,
     };
   }

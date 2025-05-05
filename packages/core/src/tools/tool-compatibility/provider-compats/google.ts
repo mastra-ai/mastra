@@ -1,7 +1,7 @@
 import type { z } from 'zod';
 import type { Targets } from 'zod-to-json-schema';
 import { ToolCompatibility } from '..';
-import type { SchemaConstraints, ShapeValue } from '..';
+import type { ShapeValue } from '..';
 import type { MastraLanguageModel } from '../../../agent';
 
 export class GoogleToolCompat extends ToolCompatibility {
@@ -18,29 +18,27 @@ export class GoogleToolCompat extends ToolCompatibility {
   }
 
   processZodType<T extends z.AnyZodObject>(
-    value: z.ZodTypeAny,
-    path: string,
-    constraints: SchemaConstraints,
+    value: z.ZodTypeAny
   ): ShapeValue<T> {
     switch (value._def.typeName) {
       case 'ZodObject': {
-        return this.defaultZodObjectHandler(value, path, constraints);
+        return this.defaultZodObjectHandler(value);
       }
       case 'ZodArray': {
-        return this.defaultZodArrayHandler(value, path, constraints, []);
+        return this.defaultZodArrayHandler(value, []);
       }
       case 'ZodUnion': {
-        return this.defaultZodUnionHandler(value, path, constraints);
+        return this.defaultZodUnionHandler(value);
       }
       // Google models support these properties but the model doesn't respect them, but it respects them when they're
       // added to the tool description
       case 'ZodString': {
-        return this.defaultZodStringHandler(value, path, constraints);
+        return this.defaultZodStringHandler(value);
       }
       case 'ZodNumber': {
         // Google models support these properties but the model doesn't respect them, but it respects them when they're
         // added to the tool description
-        return this.defaultZodNumberHandler(value, path, constraints);
+        return this.defaultZodNumberHandler(value);
       }
       default:
         return value as ShapeValue<T>;

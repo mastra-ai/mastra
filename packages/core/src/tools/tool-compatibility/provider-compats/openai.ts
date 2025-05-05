@@ -1,7 +1,7 @@
 import type { z } from 'zod';
 import type { Targets } from 'zod-to-json-schema';
 import { ToolCompatibility } from '..';
-import type { SchemaConstraints, ShapeValue, StringCheckType } from '..';
+import type { ShapeValue, StringCheckType } from '..';
 import type { MastraLanguageModel } from '../../../agent';
 
 export class OpenAIToolCompat extends ToolCompatibility {
@@ -25,19 +25,17 @@ export class OpenAIToolCompat extends ToolCompatibility {
   }
 
   processZodType<T extends z.AnyZodObject>(
-    value: z.ZodTypeAny,
-    path: string,
-    constraints: SchemaConstraints,
+    value: z.ZodTypeAny
   ): ShapeValue<T> {
     switch (value._def.typeName) {
       case 'ZodObject': {
-        return this.defaultZodObjectHandler(value, path, constraints);
+        return this.defaultZodObjectHandler(value);
       }
       case 'ZodUnion': {
-        return this.defaultZodUnionHandler(value, path, constraints);
+        return this.defaultZodUnionHandler(value);
       }
       case 'ZodArray': {
-        return this.defaultZodArrayHandler(value, path, constraints, []);
+        return this.defaultZodArrayHandler(value);
       }
       case 'ZodString': {
         const model = this.getModel();
@@ -46,7 +44,7 @@ export class OpenAIToolCompat extends ToolCompatibility {
         if (model.modelId.includes('gpt-4o-mini')) {
           checks.push('regex');
         }
-        return this.defaultZodStringHandler(value, path, constraints, checks);
+        return this.defaultZodStringHandler(value, checks);
       }
       default:
         return value as ShapeValue<T>;
