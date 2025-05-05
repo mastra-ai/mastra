@@ -70,6 +70,7 @@ jobs:
 
       - name: Install dependencies
         if: steps.check-examples.outputs.examples_changed == 'true'
+        shell: bash
         run: |
           # Get list of changed package.json files in examples and e2e-tests directories
           changed_files=$(git diff --name-only HEAD^ HEAD | grep -E "(examples|e2e-tests)/.*package.json")
