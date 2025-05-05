@@ -41,6 +41,7 @@ export class GoogleToolCompat extends ToolCompatibility {
         return this.defaultZodNumberHandler(value);
       }
       default:
+        this.defaultUnsupportedZodTypeHandler(value)
         return value as ShapeValue<T>;
     }
   }

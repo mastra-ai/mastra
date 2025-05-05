@@ -19,10 +19,12 @@ export const ALL_NUMBER_CHECKS = [
 ] as const;
 
 export const ALL_ARRAY_CHECKS = ['min', 'max', 'length'] as const;
+export const UNSUPPORTED_ZOD_TYPES = ['ZodIntersection', 'ZodNever', 'ZodNull', 'ZodTuple', 'ZodUndefined'] as const;
 
 export type StringCheckType = (typeof ALL_STRING_CHECKS)[number];
 export type NumberCheckType = (typeof ALL_NUMBER_CHECKS)[number];
 export type ArrayCheckType = (typeof ALL_ARRAY_CHECKS)[number];
+export type UnsupportedZodType = (typeof UNSUPPORTED_ZOD_TYPES)[number];
 
 export type ZodShape<T extends z.AnyZodObject> = T['shape'];
 export type ShapeKey<T extends z.AnyZodObject> = keyof ZodShape<T>;
@@ -133,12 +135,22 @@ export abstract class ToolCompatibility extends MastraBase {
     return result as ShapeValue<T>;
   }
 
-  public mergeParameterDescription(description: string | undefined, constraints: NumberConstraints | StringConstraints | ArrayConstraints | DateConstraints | { defaultValue?: unknown }): string | undefined{
+  public mergeParameterDescription(description: string | undefined, constraints: NumberConstraints | StringConstraints | ArrayConstraints | DateConstraints | { defaultValue?: unknown }): string | undefined {
     if (Object.keys(constraints).length > 0) {
       return (description ? description + "\n" : "") + JSON.stringify(constraints)
     } else {
       return description;
     }
+  }
+
+  public defaultUnsupportedZodTypeHandler<T extends z.AnyZodObject>(
+    value: z.ZodTypeAny,
+    throwOnTypes: readonly UnsupportedZodType[] = UNSUPPORTED_ZOD_TYPES
+  ): ShapeValue<T> {
+    if (throwOnTypes.includes(value._def.typeName as UnsupportedZodType)) {
+      throw new Error(`${this.model.modelId} does not support zod type: ${value._def.typeName}`);
+    }
+    return value as ShapeValue<T>;
   }
 
   public defaultZodArrayHandler<T extends z.AnyZodObject>(
@@ -152,20 +164,23 @@ export abstract class ToolCompatibility extends MastraBase {
       constraints.minLength = zodArray.minLength.value;
     }
     if (zodArray.maxLength?.value !== undefined && handleChecks.includes('max')) {
-      constraints.exactLength = zodArray.maxLength.value;
+      constraints.maxLength = zodArray.maxLength.value;
+    }
+    if (zodArray.exactLength?.value !== undefined && handleChecks.includes('length')) {
+      constraints.exactLength = zodArray.exactLength.value;
     }
     const processedType =
       arrayType._def.typeName === 'ZodObject'
         ? this.processZodType<T>(arrayType as z.ZodTypeAny)
         : arrayType;
     let result = z.array(processedType);
-    if (zodArray.minLength?.value !== undefined && handleChecks.includes('min')) {
+    if (zodArray.minLength?.value !== undefined && !handleChecks.includes('min')) {
       result = result.min(zodArray.minLength.value);
     }
-    if (zodArray.maxLength?.value !== undefined && handleChecks.includes('max')) {
+    if (zodArray.maxLength?.value !== undefined && !handleChecks.includes('max')) {
       result = result.max(zodArray.maxLength.value);
     }
-    if (zodArray.exactLength?.value !== undefined && handleChecks.includes('length')) {
+    if (zodArray.exactLength?.value !== undefined && !handleChecks.includes('length')) {
       result = result.length(zodArray.exactLength.value);
     }
 

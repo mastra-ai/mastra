@@ -47,6 +47,7 @@ export class OpenAIToolCompat extends ToolCompatibility {
         return this.defaultZodStringHandler(value, checks);
       }
       default:
+          this.defaultUnsupportedZodTypeHandler(value, ['ZodNever', 'ZodUndefined', 'ZodTuple'])
         return value as ShapeValue<T>;
     }
   }

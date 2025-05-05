@@ -14,7 +14,7 @@ export class AnthropicToolCompat extends ToolCompatibility {
   }
 
   shouldApply(): boolean {
-    return this.getModel().modelId.includes('claude-3.5-haiku');
+    return this.getModel().modelId.includes('claude');
   }
 
   processZodType<T extends z.AnyZodObject>(
@@ -33,9 +33,18 @@ export class AnthropicToolCompat extends ToolCompatibility {
       // the claude-3.5-haiku model support these properties but the model doesn't respect them, but it respects them when they're
       // added to the tool description
       case 'ZodString': {
-        return this.defaultZodStringHandler(value, ['max', 'min']);
+        if (this.getModel().modelId.includes('claude-3.5-haiku')) {
+          return this.defaultZodStringHandler(value, ['max', 'min']);
+        } else {
+          return value as ShapeValue<T>;
+        }
       }
       default:
+        if (this.getModel().modelId.includes('claude-3.7')) {
+          this.defaultUnsupportedZodTypeHandler(value, ['ZodNever', 'ZodTuple', 'ZodUndefined'])
+        } else {
+          this.defaultUnsupportedZodTypeHandler(value, ['ZodNever', 'ZodUndefined'])
+        }
         return value as ShapeValue<T>;
     }
   }

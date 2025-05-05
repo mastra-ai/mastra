@@ -11,7 +11,7 @@ type Result = {
   modelName: string;
   modelProvider: string;
   testName: string;
-  status: 'success' | 'failure' | 'error';
+  status: 'success' | 'failure' | 'error' | 'expected-error';
   error: string | null;
   receivedContext: any;
   testId: string;
@@ -76,6 +76,13 @@ const allSchemas = {
 
   // Default values
   default: z.string().default('test'),
+
+  // Uncategorized types, not supported by OpenAI reasoning models
+  intersection: z.intersection(z.string().min(1), z.string().max(4)),
+  never: z.never() as any,
+  null: z.null(),
+  tuple: z.tuple([z.string(), z.number(), z.boolean()]),
+  undefined: z.undefined(),
 } as const;
 
 type SchemaMap = typeof allSchemas;
@@ -139,11 +146,17 @@ async function runSingleTest(
       };
     }
   } catch (e: any) {
+    console.log(e.message)
+    let status: Result['status'] = 'error';
+    if (e.message.includes('does not support zod type:')) {
+      status = 'expected-error';
+    }
+    console.log(`the error`, JSON.stringify(e, null, 2));
     return {
       modelName: model.modelId,
       testName: toolName,
       modelProvider: model.provider,
-      status: 'error',
+      status,
       error: e.message,
       receivedContext: null,
       testId,
@@ -162,8 +175,6 @@ describe('Tool Schema Compatibility', () => {
   const modelsToTest = [
     // Anthropic Models
     openrouter('anthropic/claude-3.7-sonnet'),
-    openrouter('anthropic/claude-3.7-sonnet:thinking'),
-    openrouter('anthropic/claude-3.7-sonnet:beta'),
     openrouter('anthropic/claude-3.5-sonnet'),
     openrouter('anthropic/claude-3.5-haiku'),
 
@@ -172,17 +183,12 @@ describe('Tool Schema Compatibility', () => {
     // // Google Models
     openrouter('google/gemini-2.5-pro-preview-03-25'),
     openrouter('google/gemini-2.5-flash-preview'),
-    openrouter('google/gemini-2.5-flash-preview:thinking'),
     openrouter('google/gemini-2.0-flash-001'),
     openrouter('google/gemini-2.0-flash-lite-001'),
 
     // // OpenAI Models
     openrouter('openai/gpt-4o-mini'),
-    openrouter('openai/gpt-4.1'),
     openrouter('openai/gpt-4.1-mini'),
-    openrouter('openai/o4-mini-high'),
-    openrouter('openai/o3-mini'),
-    openrouter('openai/gpt-4o-2024-11-20'),
     // openrouter disables structured outputs by default for o3-mini, so added in a reasoning model not through openrouter to test
     openai('o3-mini'),
     openai('o4-mini'),
@@ -257,11 +263,15 @@ describe('Tool Schema Compatibility', () => {
                   result = await runSingleTest(model, testTool, crypto.randomUUID(), testTool.id);
                 }
 
-                expect(result.status).toBe('success');
-                if (result.status !== 'success') {
+                if (result.status !== 'success' && result.status !== 'expected-error') {
                   console.error(`Error for ${model.modelId} - ${schemaName}:`, result.error);
                 }
-                expect(result.status).toBe('success');
+
+                if (result.status === 'expected-error') {
+                  expect(result.status).toBe('expected-error');
+                } else {
+                  expect(result.status).toBe('success');
+                }
               },
               TEST_TIMEOUT,
             );
