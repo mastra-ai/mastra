@@ -255,7 +255,7 @@ describe('Tool Schema Compatibility', () => {
                   console.error(`Error for ${model.modelId} - ${schemaName}:`, result.error);
                 }
               },
-              { timeout: TEST_TIMEOUT },
+              TEST_TIMEOUT,
             );
           });
         });
