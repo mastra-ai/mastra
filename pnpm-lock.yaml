@@ -2353,8 +2353,8 @@ importers:
         specifier: workspace:^
         version: link:../../packages/core
       chromadb:
-        specifier: ^2.2.0
-        version: 2.2.0(encoding@0.1.13)(ws@8.18.1(bufferutil@4.0.9)(utf-8-validate@6.0.5))(zod@3.24.3)
+        specifier: ^2.3.0
+        version: 2.3.0(encoding@0.1.13)(ws@8.18.1(bufferutil@4.0.9)(utf-8-validate@6.0.5))(zod@3.24.3)
     devDependencies:
       '@internal/lint':
         specifier: workspace:*
@@ -9971,9 +9971,10 @@ packages:
   chromadb-default-embed@2.14.0:
     resolution: {integrity: sha512-odCiCzZ5jqNI0sS6RcRxObx8gM7aCPULQkdWw/OgqIGdIUOKUj9b8jDElLbZ6feMKNB0MSQhtXi0P8QEeVO75w==}
 
-  chromadb@2.2.0:
-    resolution: {integrity: sha512-bNu/wG7PMcrcvzL4K4K0N06E/1jE+uD0JlO0sY5O+IK8NH9OXnlyBuGLr+mJ6X4dDHL31dsDK/W4Zyi7t7Bxvg==}
+  chromadb@2.3.0:
+    resolution: {integrity: sha512-QgvZH/DCj8Xs9tYki5CmgWQw4cP/ifybnwKaAG7drcYGxPnnBrCyJSxHoNtAhGhuG9ktZT4SbttHxnxjBKHXfg==}
     engines: {node: '>=14.17.0'}
+    hasBin: true
 
   ci-info@3.9.0:
     resolution: {integrity: sha512-NIxF55hv4nSqQswkAeiOi1r83xy8JldOFDTWiug55KBu9Jnblncd2U6ViHmYgHf01TPZS77NJBhBMKdWj9HQMQ==}
@@ -26256,7 +26257,7 @@ snapshots:
     transitivePeerDependencies:
       - bare-buffer
 
-  chromadb@2.2.0(encoding@0.1.13)(ws@8.18.1(bufferutil@4.0.9)(utf-8-validate@6.0.5))(zod@3.24.3):
+  chromadb@2.3.0(encoding@0.1.13)(ws@8.18.1(bufferutil@4.0.9)(utf-8-validate@6.0.5))(zod@3.24.3):
     dependencies:
       '@google/generative-ai': 0.1.3
       '@xenova/transformers': 2.17.2
@@ -26266,6 +26267,7 @@ snapshots:
       isomorphic-fetch: 3.0.0(encoding@0.1.13)
       ollama: 0.5.14
       openai: 4.96.0(encoding@0.1.13)(ws@8.18.1(bufferutil@4.0.9)(utf-8-validate@6.0.5))(zod@3.24.3)
+      semver: 7.7.1
       voyageai: 0.0.3(encoding@0.1.13)
     transitivePeerDependencies:
       - aws-crt
