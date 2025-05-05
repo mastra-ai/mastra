@@ -156,6 +156,7 @@ describe('Tool Schema Compatibility', () => {
   const SUITE_TIMEOUT = 120000; // 2 minutes
   const TEST_TIMEOUT = 60000; // 1 minute
 
+  if (!process.env.OPENROUTER_API_KEY) throw new Error('OPENROUTER_API_KEY environment variable is required');
   const openrouter = createOpenRouter({ apiKey: process.env.OPENROUTER_API_KEY });
 
   const modelsToTest = [
