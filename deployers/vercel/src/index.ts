@@ -236,4 +236,10 @@ export const POST = handle(app);
       this.logger.info('\nAdd your ENV vars to .env or your vercel dashboard.\n');
     }
   }
+
+  async lint(entryFile: string, outputDirectory: string, toolsPaths: string[]): Promise<void> {
+    await super.lint(entryFile, outputDirectory, toolsPaths);
+
+    // Lint for vercel support
+  }
 }
