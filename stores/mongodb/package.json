@@ -32,14 +32,14 @@
   "dependencies": {
     "@mastra/core": "workspace:^",
     "@types/mongodb": "^4.0.7",
-    "cloudflare": "^4.1.0",
-    "mongodb": "^6.15.0",
+    "cloudflare": "^4.2.0",
+    "mongodb": "^6.16.0",
     "uuid": "^11.1.0"
   },
   "devDependencies": {
     "@internal/lint": "workspace:*",
     "@microsoft/api-extractor": "^7.52.5",
-    "@types/node": "^20.17.27",
+    "@types/node": "^20.17.32",
     "eslint": "^9.23.0",
     "tsup": "^8.4.0",
     "typescript": "^5.8.2",
