@@ -1,5 +1,20 @@
 # mastra
 
+## 0.6.1-alpha.5
+
+### Patch Changes
+
+- 8607972: Introduce Mastra lint cli command
+- 7eeb2bc: Added explicit storage to memory in create-mastra so new projects don't see breaking change warnings
+- fba031f: Show traces for vNext workflow
+- Updated dependencies [3d2fb5c]
+- Updated dependencies [7eeb2bc]
+- Updated dependencies [8607972]
+- Updated dependencies [7eeb2bc]
+- Updated dependencies [fba031f]
+  - @mastra/core@0.9.2-alpha.5
+  - @mastra/deployer@0.3.2-alpha.5
+
 ## 0.6.1-alpha.4
 
 ### Patch Changes
