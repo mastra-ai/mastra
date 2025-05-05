@@ -54,13 +54,48 @@ export const memoryDefaultOptions = {
   threads: {
     generateTitle: true,
   },
+  workingMemory: {
+    use: 'text-stream', // will be deprecated, use 'tool-call' instead
+    enabled: false,
+    template: `
+# User Information
+- **First Name**: 
+- **Last Name**: 
+- **Location**: 
+- **Occupation**: 
+- **Interests**: 
+- **Goals**: 
+- **Events**: 
+- **Facts**: 
+- **Projects**: 
+`,
+  },
 } satisfies MemoryConfig;
 
+// TODO: May 20th breaking change, make these the default options. Also in packages/cli/src/commands/init/utils.ts remove the hardcoded options to use the new defaults instead
 const newMemoryDefaultOptions = {
   lastMessages: 10,
   semanticRecall: false,
   threads: {
     generateTitle: false,
+  },
+  workingMemory: {
+    // new
+    use: 'tool-call',
+    // stays the same
+    enabled: false,
+    template: `
+# User Information
+- **First Name**: 
+- **Last Name**: 
+- **Location**: 
+- **Occupation**: 
+- **Interests**: 
+- **Goals**: 
+- **Events**: 
+- **Facts**: 
+- **Projects**: 
+`,
   },
 } satisfies MemoryConfig;
 
@@ -87,6 +122,25 @@ export abstract class MastraMemory extends MastraBase {
       this.threadConfig = this.getMergedThreadConfig(config.options);
     }
 
+    // user is running mastra outside mastra dev in their own code, and is using default memory storage
+    const hasRootMemoryDbFile = existsSync(join(process.cwd(), `memory.db`));
+    // user is running mastra server and has default memory storage
+    const hasParentMemoryDbFile = existsSync(join(process.cwd(), `..`, `..`, `memory.db`));
+    // May 20th we wont worry about this anymore
+    const suggestDbPath =
+      hasRootMemoryDbFile || hasParentMemoryDbFile
+        ? `file:${hasParentMemoryDbFile ? `../../` : ``}memory.db`
+        : `file:../mastra.db`;
+
+    // TODO: MAY 20th BREAKING CHANGE: Memory will inherit storage from Mastra instance by default
+    // if (config.storage) {
+    //   this.storage = config.storage;
+    // } else if (this.mastra?.storage) { // Assuming Mastra instance is available as this.mastra
+    //   this.storage = this.mastra.storage;
+    // } else {
+    //   throw new Error(`Memory requires a storage provider to function. Add a storage configuration to Memory or add one to your Mastra instance`)
+    // }
+    // TODO: remove in may 20th breaking change, replace with above code.
     if (config.storage) {
       this.storage = config.storage;
     } else {
@@ -95,6 +149,56 @@ export abstract class MastraMemory extends MastraBase {
           url: 'file:memory.db',
         },
       });
+
+      // TODO: remove in may 20th breaking change
+      this.deprecationWarnings.push(`
+Default storage is deprecated in Mastra Memory.
+You're using it as an implicit default by not setting a storage adapter.
+
+In the May 20th breaking change the default store will be removed.
+
+Instead of this:
+export const agent = new Agent({
+  memory: new Memory({
+    // your config
+  })
+})
+
+Do this:
+import { LibSQLStore } from '@mastra/libsql';
+
+export const agent = new Agent({
+  memory: new Memory({
+    // your config
+    storage: new LibSQLStore({
+      url: '${suggestDbPath}' // relative path from bundled .mastra/output dir
+    })
+  })
+})
+
+Additionally, in the breaking release, Memory will inherit storage from the Mastra instance.
+If you plan on using that feature you can prepare by setting the same storage instance on Mastra and Memory.
+
+Ex:
+// mastra/storage.ts
+export const storage = new LibSQLStore({
+  url: '${suggestDbPath}'
+})
+
+// mastra/index.ts
+import { storage } from "./storage"
+export const mastra = new Mastra({
+  // your config
+  storage
+})
+
+// mastra/agents/index.ts
+import { storage } from "../storage"
+export const yourAgent = new Agent({
+  // your config
+  storage
+})
+`);
     }
 
     this.storage = augmentWithInit(this.storage);
@@ -110,6 +214,7 @@ export abstract class MastraMemory extends MastraBase {
       semanticRecallIsEnabled
       // add the default vector store
     ) {
+      // TODO: remove in may 20th breaking change
       // for backwards compat reasons, check if there's a memory-vector.db in cwd or in cwd/.mastra
       // if it's there we need to use it, otherwise use the same file:memory.db
       // We used to need two separate DBs because we would get schema errors
@@ -119,14 +224,18 @@ export abstract class MastraMemory extends MastraBase {
       const newDb = 'memory.db';
 
       if (hasOldDb) {
+        // TODO: remove in may 20th breaking change
         this.deprecationWarnings.push(
-          `Found deprecated Memory vector db file ${oldDb} this db is now merged with the default ${newDb} file. Delete the old one to use the new one. You will need to migrate any data if that's important to you. For now the deprecated path will be used but in a future breaking change we will only use the new db file path.`,
+          `Found deprecated Memory vector db file ${oldDb}. In the May 20th breaking change, this will no longer be used by default. This db is now merged with the default storage file (${newDb}). You will need to manually migrate any data from ${oldDb} to ${newDb} if it's important to you. For now the deprecated path will be used, but in the May 20th breaking change we will only use the new db file path.`,
         );
       }
 
+      // TODO: remove in may 20th breaking change
       this.deprecationWarnings.push(`
 Default vector storage is deprecated in Mastra Memory.
 You're using it as an implicit default by not setting a vector store.
+
+In the May 20th breaking change the default vector store will be removed.
 
 Instead of this:
 export const agent = new Agent({
@@ -142,13 +251,14 @@ export const agent = new Agent({
   memory: new Memory({
     options: { semanticRecall: true },
     vector: new LibSQLVector({
-      connectionUrl: 'file:../memory.db'
+      connectionUrl: '${suggestDbPath}' // relative path from bundled .mastra/output dir
     })
   })
 })
 `);
 
       this.vector = new DefaultVectorDB({
+        // TODO: MAY 20th BREAKING CHANGE: remove this default and throw an error if semantic recall is enabled but there's no vector db
         connectionUrl: hasOldDb ? `file:${oldDb}` : `file:${newDb}`,
       });
     }
@@ -189,9 +299,10 @@ ${this.deprecationWarnings.map((w, i) => `${this.deprecationWarnings.length > 1 
   // We're changing the implicit defaults from memoryDefaultOptions to newMemoryDefaultOptions so we need to log and let people know
   private addImplicitDefaultsWarning(config: SharedMemoryConfig) {
     const fromToPairs: {
-      key: keyof typeof memoryDefaultOptions;
+      key: keyof MemoryConfig;
       from: unknown;
       to: unknown;
+      message?: string;
     }[] = [];
 
     const indent = (s: string) => s.split(`\n`).join(`\n    `);
@@ -223,6 +334,24 @@ ${this.deprecationWarnings.map((w, i) => `${this.deprecationWarnings.length > 1 
         to: newMemoryDefaultOptions.threads,
       });
 
+    if (
+      `workingMemory` in options &&
+      // special handling for working memory since it's disabled by default and users should only care about the change if they're using
+      options.workingMemory?.enabled === true &&
+      options.workingMemory?.use !== `tool-call`
+    ) {
+      fromToPairs.push({
+        key: 'workingMemory',
+        from: {
+          use: memoryDefaultOptions.workingMemory.use,
+        },
+        to: {
+          use: newMemoryDefaultOptions.workingMemory.use,
+        },
+        message: `\nAlso, the text-stream output mode (which is the current default) will be fully removed in an upcoming breaking change. Please update your code to use the newer "use: 'tool-call'" setting instead.\n`,
+      });
+    }
+
     if (fromToPairs.length > 0) {
       const currentDefaults = `{
   options: {
@@ -234,6 +363,8 @@ ${this.deprecationWarnings.map((w, i) => `${this.deprecationWarnings.length > 1 
     ${fromToPairs.map(({ key, to }) => `${key}: ${format(to)}`).join(`,\n    `)}
   }
 }`;
+
+      const messages = fromToPairs.filter(ft => ft.message);
 
       this.deprecationWarnings.push(`
 Your Mastra memory instance has the
@@ -250,6 +381,7 @@ To keep your defaults as they are, add
 them directly into your Memory configuration,
 otherwise please add the new settings to
 your memory config to prepare for the change.
+${messages.length ? messages.map(ft => ft.message).join(`\n`) : ``}
 --> This breaking change will be released on May 20th <--
 `);
     }

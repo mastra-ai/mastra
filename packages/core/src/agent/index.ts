@@ -657,11 +657,9 @@ export class Agent<
 
     const tools = await this.getTools({ runtimeContext });
 
-    const converted = Object.entries(tools || {}).reduce(
-      (memo, value) => {
-        const k = value[0];
-        const tool = tools[k];
-
+    // Convert tools
+    const convertedEntries = await Promise.all(
+      Object.entries(tools || {}).map(async ([k, tool]) => {
         if (tool) {
           const options = {
             name: k,
@@ -673,24 +671,30 @@ export class Agent<
             memory,
             agentName: this.name,
             runtimeContext,
+            model: typeof this.model === 'function' ? await this.getModel({ runtimeContext }) : this.model,
           };
-          memo[k] = makeCoreTool(tool, options);
+          return [k, makeCoreTool(tool, options)];
         }
-        return memo;
-      },
-      {} as Record<string, CoreTool>,
+        return undefined;
+      }),
+    );
+    const converted = Object.fromEntries(
+      convertedEntries.filter((entry): entry is [string, CoreTool] => Boolean(entry)),
     );
 
     // Convert memory tools with proper context
-    const convertedMemoryTools = memoryTools
-      ? Object.entries(memoryTools).reduce(
-          (memo, [k, tool]) => {
-            memo[k] = {
+    let convertedMemoryTools: Record<string, CoreTool> = {};
+    if (memoryTools) {
+      const memoryToolEntries = await Promise.all(
+        Object.entries(memoryTools).map(async ([k, tool]) => {
+          return [
+            k,
+            {
               description: tool.description,
               parameters: tool.parameters,
               execute:
                 typeof tool?.execute === 'function'
-                  ? async (args, options) => {
+                  ? async (args: any, options: any) => {
                       try {
                         this.logger.debug(`[Agent:${this.name}] - Executing memory tool ${k}`, {
                           name: k,
@@ -727,13 +731,16 @@ export class Agent<
                       }
                     }
                   : undefined,
-            };
-            return memo;
-          },
-          {} as Record<string, CoreTool>,
-        )
-      : {};
+            },
+          ] as [string, CoreTool];
+        }),
+      );
+      convertedMemoryTools = Object.fromEntries(
+        memoryToolEntries.filter((entry): entry is [string, CoreTool] => Boolean(entry)),
+      );
+    }
 
+    // Convert tools from toolsets
     const toolsFromToolsetsConverted: Record<string, CoreTool> = {
       ...converted,
       ...convertedMemoryTools,
@@ -745,10 +752,9 @@ export class Agent<
       this.logger.debug(`[Agent:${this.name}] - Adding tools from toolsets ${Object.keys(toolsets || {}).join(', ')}`, {
         runId,
       });
-      toolsFromToolsets.forEach(toolset => {
-        Object.entries(toolset).forEach(([toolName, tool]) => {
+      for (const toolset of toolsFromToolsets) {
+        for (const [toolName, tool] of Object.entries(toolset)) {
           const toolObj = tool;
-
           const options = {
             name: toolName,
             runId,
@@ -759,22 +765,21 @@ export class Agent<
             memory,
             agentName: this.name,
             runtimeContext,
+            model: typeof this.model === 'function' ? await this.getModel({ runtimeContext }) : this.model,
           };
-
           const convertedToCoreTool = makeCoreTool(toolObj, options, 'toolset');
-
           toolsFromToolsetsConverted[toolName] = convertedToCoreTool;
-        });
-      });
+        }
+      }
     }
 
+    // Convert client tools
     const clientToolsForInput = Object.entries(clientTools || {});
-
     if (clientToolsForInput.length > 0) {
       this.logger.debug(`[Agent:${this.name}] - Adding client tools ${Object.keys(clientTools || {}).join(', ')}`, {
         runId,
       });
-      clientToolsForInput.forEach(([toolName, tool]) => {
+      for (const [toolName, tool] of clientToolsForInput) {
         const { execute, ...rest } = tool;
         const options = {
           name: toolName,
@@ -786,12 +791,11 @@ export class Agent<
           memory,
           agentName: this.name,
           runtimeContext,
+          model: typeof this.model === 'function' ? await this.getModel({ runtimeContext }) : this.model,
         };
-
         const convertedToCoreTool = makeCoreTool(rest, options, 'client-tool');
-
         toolsFromToolsetsConverted[toolName] = convertedToCoreTool;
-      });
+      }
     }
 
     return toolsFromToolsetsConverted;

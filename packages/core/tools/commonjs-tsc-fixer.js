@@ -1,5 +1,5 @@
 import { readFile, writeFile, rm, mkdir } from 'fs/promises';
-import { dirname, join } from 'path';
+import { dirname, join, relative } from 'path';
 import { globby } from 'globby';
 
 async function cleanupDtsFiles() {
@@ -33,18 +33,20 @@ async function writeDtsFiles() {
           const dir = dirname(file);
           const filename = key.replace('*', dir.replace(join(rootPath, 'dist/'), ''));
 
-          const filepath = join(rootPath, filename) + '.d.ts';
-          await mkdir(dirname(filepath), { recursive: true });
+          const targetPath = join(rootPath, filename) + '.d.ts';
+          await mkdir(dirname(targetPath), { recursive: true });
+
           await writeFile(
-            join(rootPath, filename) + '.d.ts',
-            `export * from './${file.replace(rootPath, '').replace('/index.d.cts', '').replaceAll('\\', '/')}';`,
+            targetPath,
+            `export * from './${relative(dirname(targetPath), file).replace('/index.d.cts', '').replaceAll('\\', '/')}';`,
           );
         } else {
-          const filepath = join(rootPath, key) + '.d.ts';
-          await mkdir(dirname(filepath), { recursive: true });
+          const targetPath = join(rootPath, key) + '.d.ts';
+          await mkdir(dirname(targetPath), { recursive: true });
+
           await writeFile(
-            filepath,
-            `export * from './${file.replace(rootPath, '').replace('/index.d.cts', '').replaceAll('\\', '/')}';`,
+            targetPath,
+            `export * from './${relative(dirname(targetPath), file).replace('/index.d.cts', '').replaceAll('\\', '/')}';`,
           );
         }
       }

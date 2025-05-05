@@ -77,6 +77,14 @@ export interface GetWorkflowResponse {
   workflowId?: string;
 }
 
+export interface GetWorkflowRunsParams {
+  fromDate?: Date;
+  toDate?: Date;
+  limit?: number;
+  offset?: number;
+  resourceId?: string;
+}
+
 export type GetWorkflowRunsResponse = WorkflowRuns;
 
 export type WorkflowRunResult = {
@@ -234,6 +242,8 @@ export interface GetTelemetryParams {
   page?: number;
   perPage?: number;
   attribute?: Record<string, string>;
+  fromDate?: Date;
+  toDate?: Date;
 }
 
 export interface GetNetworkResponse {

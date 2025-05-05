@@ -1,5 +1,31 @@
 # @mastra/core
 
+## 0.9.2-alpha.5
+
+### Patch Changes
+
+- 3d2fb5c: Fix commonjs import for vnext workflows
+- 7eeb2bc: Add Memory default storage breaking change warning
+- 8607972: Introduce Mastra lint cli command
+- 7eeb2bc: Added explicit storage to memory in create-mastra so new projects don't see breaking change warnings
+- fba031f: Show traces for vNext workflow
+
+## 0.9.2-alpha.4
+
+### Patch Changes
+
+- ccef9f9: Fixed a type error when converting tools
+- 51e6923: fix ts errors on default proxy storage
+
+## 0.9.2-alpha.3
+
+### Patch Changes
+
+- 967b41c: fix: removes new agent getter methods from telemetry
+- 4155f47: Add parameters to filter workflow runs
+  Add fromDate and toDate to telemetry parameters
+- 17826a9: Added a breaking change warning about deprecated working memory "use: 'text-stream'" which is being fully replaced by "use: 'tool-call'"
+
 ## 0.9.2-alpha.2
 
 ### Patch Changes
