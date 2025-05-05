@@ -37,7 +37,7 @@ async function writeDtsFiles() {
           await mkdir(dirname(targetPath), { recursive: true });
 
           await writeFile(
-            join(rootPath, filename) + '.d.ts',
+            targetPath,
             `export * from './${relative(dirname(targetPath), file).replace('/index.d.cts', '').replaceAll('\\', '/')}';`,
           );
         } else {
