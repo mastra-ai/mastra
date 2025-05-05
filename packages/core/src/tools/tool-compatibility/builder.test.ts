@@ -117,7 +117,6 @@ async function runSingleTest(
     const response = await agent.generate(`Please call the tool named '${toolName}'.`, {
       toolChoice: 'required',
       maxSteps: 1,
-      temperature: 1,
     });
 
     const toolCall = response.toolCalls.find(tc => tc.toolName === toolName);
@@ -146,12 +145,10 @@ async function runSingleTest(
       };
     }
   } catch (e: any) {
-    console.log(e.message)
     let status: Result['status'] = 'error';
     if (e.message.includes('does not support zod type:')) {
       status = 'expected-error';
     }
-    console.log(`the error`, JSON.stringify(e, null, 2));
     return {
       modelName: model.modelId,
       testName: toolName,
@@ -180,25 +177,28 @@ describe('Tool Schema Compatibility', () => {
 
     // NOTE: Google models accept number constraints like numberLt, but the models don't respect it and returns a wrong response often
     // Unions of objects are not supported
-    // // Google Models
+    // Google Models
     openrouter('google/gemini-2.5-pro-preview-03-25'),
     openrouter('google/gemini-2.5-flash-preview'),
     openrouter('google/gemini-2.0-flash-001'),
     openrouter('google/gemini-2.0-flash-lite-001'),
 
-    // // OpenAI Models
+    // OpenAI Models
     openrouter('openai/gpt-4o-mini'),
     openrouter('openai/gpt-4.1-mini'),
     // openrouter disables structured outputs by default for o3-mini, so added in a reasoning model not through openrouter to test
     openai('o3-mini'),
     openai('o4-mini'),
 
-    // // Meta Models
-    // Meta seems to not handle tools correctly in general, so commenting out for now
+    // Meta Models
+    // Meta often calls the tool with the wrong name, ie 'tesTool_number'/'TestTool_number' instead of 'testTool_number'
+    // There is a compatibility layer added for it, which does seem to help a bit, but it still errors enough to not want it to be in the test suite
+    // so commenting out for now
     // openrouter('meta-llama/llama-4-maverick'),
 
-    // // Other Models
+    // Other Models
     // deepseek randomly doesn't call the tool so the check fails. It seems to handle the tool call correctly though when it does call it
+    // There is a compatibility layer added for it, but it still errors enough to not want it to be in the test suite
     // openrouter('deepseek/deepseek-chat-v3-0324'),
   ];
 
@@ -260,6 +260,7 @@ describe('Tool Schema Compatibility', () => {
 
                 // Sometimes models are flaky, if it's not an API error, run it again
                 if (result.status === 'failure') {
+                  console.log(`Possibly flake from model ${model.modelId}, running ${schemaName} again`);
                   result = await runSingleTest(model, testTool, crypto.randomUUID(), testTool.id);
                 }
 

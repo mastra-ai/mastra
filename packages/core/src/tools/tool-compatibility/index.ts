@@ -197,8 +197,9 @@ export abstract class ToolCompatibility extends MastraBase {
     const zodUnion = value as z.ZodUnion<[z.ZodTypeAny, ...z.ZodTypeAny[]]>;
     const processedOptions = zodUnion._def.options.map((option: z.ZodTypeAny) =>
       this.processZodType<T>(option)
-    ) as [z.ZodTypeAny, z.ZodTypeAny, ...z.ZodTypeAny[]];
-    let result = z.union(processedOptions);
+    );
+    if (processedOptions.length < 2) throw new Error('Union must have at least 2 options');
+    let result = z.union(processedOptions as [z.ZodTypeAny, z.ZodTypeAny, ...z.ZodTypeAny[]]);
     if (value.description) {
       result = result.describe(value.description);
     }
@@ -339,10 +340,16 @@ export abstract class ToolCompatibility extends MastraBase {
       if ('kind' in check) {
         switch (check.kind) {
           case 'min':
-            constraints.minDate = new Date(check.value).toISOString();
+            const minDate = new Date(check.value);
+            if (!isNaN(minDate.getTime())) {
+              constraints.minDate = minDate.toISOString();
+            }
             break;
           case 'max':
-            constraints.maxDate = new Date(check.value).toISOString();
+            const maxDate = new Date(check.value);
+            if (!isNaN(maxDate.getTime())) {
+              constraints.maxDate = maxDate.toISOString();
+            }
             break;
           default:
             newChecks.push(check);
