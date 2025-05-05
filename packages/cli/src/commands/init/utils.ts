@@ -11,6 +11,11 @@ import yoctoSpinner from 'yocto-spinner';
 import { DepsService } from '../../services/service.deps';
 import { FileService } from '../../services/service.file';
 import { logger } from '../../utils/logger';
+import {
+  cursorGlobalMCPConfigPath,
+  globalMCPIsAlreadyInstalled,
+  windsurfGlobalMCPConfigPath,
+} from './mcp-docs-server-install';
 
 const exec = util.promisify(child_process.exec);
 
@@ -65,6 +70,7 @@ export async function writeAgentSample(llmProvider: LLMProvider, destPath: strin
 
       Your primary function is to help users get weather details for specific locations. When responding:
       - Always ask for a location if none is provided
+      - If the location name isn’t in English, please translate it
       - If giving a location with multiple parts (e.g. "New York, NY"), use the most relevant part (e.g. "New York")
       - Include relevant details like humidity, wind conditions, and precipitation
       - Keep responses concise but informative
@@ -74,6 +80,8 @@ export async function writeAgentSample(llmProvider: LLMProvider, destPath: strin
   const content = `
 ${providerImport}
 import { Agent } from '@mastra/core/agent';
+import { Memory } from '@mastra/memory';
+import { LibSQLStore } from '@mastra/libsql';
 ${addExampleTool ? `import { weatherTool } from '../tools';` : ''}
 
 export const weatherAgent = new Agent({
@@ -81,6 +89,18 @@ export const weatherAgent = new Agent({
   instructions: \`${instructions}\`,
   model: ${modelItem},
   ${addExampleTool ? 'tools: { weatherTool },' : ''}
+  memory: new Memory({
+    storage: new LibSQLStore({
+      url: "file:../mastra.db", // path is relative to the .mastra/output directory
+    }),
+    options: {
+      lastMessages: 10,
+      semanticRecall: false,
+      threads: {
+        generateTitle: false
+      } 
+    }
+  })
 });
     `;
   const formattedContent = await prettier.format(content, {
@@ -150,12 +170,24 @@ const agent = new Agent({
       \`,
 });
 
+const forecastSchema = z.array(
+  z.object({
+    date: z.string(),
+    maxTemp: z.number(),
+    minTemp: z.number(),
+    precipitationChance: z.number(),
+    condition: z.string(),
+    location: z.string(),
+  }),
+);
+
 const fetchWeather = new Step({
   id: 'fetch-weather',
   description: 'Fetches weather forecast for a given city',
   inputSchema: z.object({
     city: z.string().describe('The city to get the weather for'),
   }),
+  outputSchema: forecastSchema,
   execute: async ({ context }) => {
     const triggerData = context?.getStepResult<{ city: string }>('trigger');
 
@@ -200,23 +232,12 @@ const fetchWeather = new Step({
   },
 });
 
-const forecastSchema = z.array(
-  z.object({
-    date: z.string(),
-    maxTemp: z.number(),
-    minTemp: z.number(),
-    precipitationChance: z.number(),
-    condition: z.string(),
-    location: z.string(),
-  }),
-);
 
 const planActivities = new Step({
   id: 'plan-activities',
   description: 'Suggests activities based on weather conditions',
-  inputSchema: forecastSchema,
   execute: async ({ context, mastra }) => {
-    const forecast = context?.getStepResult<z.infer<typeof forecastSchema>>('fetch-weather');
+    const forecast = context?.getStepResult(fetchWeather);
 
     if (!forecast || forecast.length === 0) {
       throw new Error('Forecast data not found');
@@ -355,11 +376,16 @@ export const mastra = new Mastra()
       `
 import { Mastra } from '@mastra/core/mastra';
 import { createLogger } from '@mastra/core/logger';
+import { LibSQLStore } from '@mastra/libsql';
 ${addWorkflow ? `import { weatherWorkflow } from './workflows';` : ''}
 ${addAgent ? `import { weatherAgent } from './agents';` : ''}
 
 export const mastra = new Mastra({
   ${filteredExports.join('\n  ')}
+  storage: new LibSQLStore({
+    // stores telemetry, evals, ... into memory storage, if it needs to persist, change to file:../mastra.db
+    url: ":memory:",
+  }),
   logger: createLogger({
     name: 'Mastra',
     level: 'info',
@@ -381,20 +407,28 @@ export const checkInitialization = async (dirPath: string) => {
   }
 };
 
-export const checkAndInstallCoreDeps = async () => {
+export const checkAndInstallCoreDeps = async (addExample: boolean) => {
   const depsService = new DepsService();
-  const depCheck = await depsService.checkDependencies(['@mastra/core']);
+  let depCheck = await depsService.checkDependencies(['@mastra/core']);
 
   if (depCheck !== 'ok') {
-    await installCoreDeps();
+    await installCoreDeps('@mastra/core');
+  }
+
+  if (addExample) {
+    depCheck = await depsService.checkDependencies(['@mastra/libsql']);
+
+    if (depCheck !== 'ok') {
+      await installCoreDeps('@mastra/libsql');
+    }
   }
 };
 
 const spinner = yoctoSpinner({ text: 'Installing Mastra core dependencies\n' });
-export async function installCoreDeps() {
+export async function installCoreDeps(pkg: string) {
   try {
     const confirm = await p.confirm({
-      message: 'You do not have the @mastra/core package installed. Would you like to install it?',
+      message: `You do not have the ${pkg} package installed. Would you like to install it?`,
       initialValue: false,
     });
 
@@ -412,7 +446,7 @@ export async function installCoreDeps() {
 
     const depsService = new DepsService();
 
-    await depsService.installPackages(['@mastra/core@latest']);
+    await depsService.installPackages([`${pkg}@latest`]);
     spinner.success('@mastra/core installed successfully');
   } catch (err) {
     console.error(err);
@@ -541,6 +575,72 @@ export const interactivePrompt = async () => {
           message: 'Add example',
           initialValue: false,
         }),
+      configureEditorWithDocsMCP: async () => {
+        const windsurfIsAlreadyInstalled = await globalMCPIsAlreadyInstalled(`windsurf`);
+        const cursorIsAlreadyInstalled = await globalMCPIsAlreadyInstalled(`cursor`);
+
+        const editor = await p.select({
+          message: `Make your AI IDE into a Mastra expert? (installs Mastra docs MCP server)`,
+          options: [
+            { value: 'skip', label: 'Skip for now', hint: 'default' },
+            {
+              value: 'cursor',
+              label: 'Cursor (project only)',
+              hint: cursorIsAlreadyInstalled ? `Already installed globally` : undefined,
+            },
+            {
+              value: 'cursor-global',
+              label: 'Cursor (global, all projects)',
+              hint: cursorIsAlreadyInstalled ? `Already installed` : undefined,
+            },
+            {
+              value: 'windsurf',
+              label: 'Windsurf',
+              hint: windsurfIsAlreadyInstalled ? `Already installed` : undefined,
+            },
+          ],
+        });
+
+        if (editor === `skip`) return undefined;
+        if (editor === `windsurf` && windsurfIsAlreadyInstalled) {
+          p.log.message(`\nWindsurf is already installed, skipping.`);
+          return undefined;
+        }
+
+        if (editor === `cursor`) {
+          p.log.message(
+            `\nNote: you will need to go into Cursor Settings -> MCP Settings and manually enable the installed Mastra MCP server.\n`,
+          );
+        }
+
+        if (editor === `cursor-global`) {
+          const confirm = await p.select({
+            message: `Global install will add/update ${cursorGlobalMCPConfigPath} and make the Mastra docs MCP server available in all your Cursor projects. Continue?`,
+            options: [
+              { value: 'yes', label: 'Yes, I understand' },
+              { value: 'skip', label: 'No, skip for now' },
+            ],
+          });
+          if (confirm !== `yes`) {
+            return undefined;
+          }
+        }
+
+        if (editor === `windsurf`) {
+          const confirm = await p.select({
+            message: `Windsurf only supports a global MCP config (at ${windsurfGlobalMCPConfigPath}) is it ok to add/update that global config?\nThis means the Mastra docs MCP server will be available in all your Windsurf projects.`,
+            options: [
+              { value: 'yes', label: 'Yes, I understand' },
+              { value: 'skip', label: 'No, skip for now' },
+            ],
+          });
+          if (confirm !== `yes`) {
+            return undefined;
+          }
+        }
+
+        return editor;
+      },
     },
     {
       onCancel: () => {

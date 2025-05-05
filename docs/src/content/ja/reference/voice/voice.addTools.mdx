@@ -1,0 +1,77 @@
+---
+title: "リファレンス: voice.addTools() | 音声プロバイダー | Mastra ドキュメント"
+description: "音声プロバイダーで利用可能なaddTools()メソッドのドキュメント。音声モデルに関数呼び出し機能を提供します。"
+---
+
+# voice.addTools()
+
+`addTools()`メソッドは、リアルタイムの対話中にモデルが呼び出せるツール（関数）を音声プロバイダーに装備します。これにより、音声アシスタントは情報の検索、計算の実行、外部システムとの対話などのアクションを実行できるようになります。
+
+## 使用例
+
+```typescript
+import { OpenAIRealtimeVoice } from "@mastra/voice-openai-realtime";
+import { createTool } from "@mastra/core/tools";
+import { z } from "zod";
+
+// Define tools
+const weatherTool = createTool({
+  id: "getWeather",
+  description: "Get the current weather for a location",
+  inputSchema: z.object({
+    location: z.string().describe("The city and state, e.g. San Francisco, CA"),
+  }),
+  outputSchema: z.object({
+    message: z.string(),
+  }),
+  execute: async ({ context }) => {
+    // Fetch weather data from an API
+    const response = await fetch(`https://api.weather.com?location=${encodeURIComponent(context.location)}`);
+    const data = await response.json();
+    return { message: `The current temperature in ${context.location} is ${data.temperature}°F with ${data.conditions}.` };
+  },
+});
+
+// Initialize a real-time voice provider
+const voice = new OpenAIRealtimeVoice({
+  realtimeConfig: {
+    model: "gpt-4o-mini-realtime",
+    apiKey: process.env.OPENAI_API_KEY,
+  },
+});
+
+// Add tools to the voice provider
+voice.addTools({
+  getWeather: weatherTool,
+});
+
+// Connect to the real-time service
+await voice.connect();
+```
+
+## パラメータ
+<br/>
+<PropertiesTable
+  content={[
+    {
+      name: "tools",
+      type: "ToolsInput",
+      description: "音声モデルによって呼び出すことができるツール定義を含むオブジェクト",
+      isOptional: false,
+    }
+  ]}
+/>
+
+## 戻り値
+
+このメソッドは値を返しません。
+
+## 注意事項
+
+- ツールはMastraツールフォーマットに従い、名前、説明、入力スキーマ、実行関数を含む必要があります
+- このメソッドは主に関数呼び出しをサポートするリアルタイム音声プロバイダーで使用されます
+- ツールをサポートしていない音声プロバイダーで呼び出された場合、警告をログに記録し何も実行しません
+- このメソッドで追加されたツールは、通常、関連するエージェントによって提供されるツールと組み合わせて使用されます
+- 最良の結果を得るには、会話を開始する前（`connect()`を呼び出す前）にツールを追加してください
+- 音声プロバイダーは、モデルがツールを使用することを決定した際に、ツールハンドラーの呼び出しを自動的に処理します
+- `addTools()`を複数回呼び出すと、プロバイダーの実装によって、既存のツールが置き換えられるか、マージされる場合があります

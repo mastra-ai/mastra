@@ -1,0 +1,170 @@
+---
+title: "例：テキスト差分 | 評価 | Mastra ドキュメント"
+description: テキスト差分メトリックを使用して、シーケンスの違いや変更を分析することにより、テキスト文字列間の類似性を評価する例。
+---
+
+import { GithubLink } from "@/components/github-link";
+
+# テキスト差分評価
+
+この例では、Mastraのテキスト差分メトリックを使用して、シーケンスの違いと変化を分析することにより、テキスト文字列間の類似性を評価する方法を示します。
+
+## 概要
+
+この例では、以下の方法を示します：
+
+1. テキスト差分メトリックを設定する
+2. テキストシーケンスを比較して差異を見つける
+3. 類似度スコアと変更を分析する
+4. 異なる比較シナリオを処理する
+
+## セットアップ
+
+### 依存関係
+
+必要な依存関係をインポートします:
+
+```typescript copy showLineNumbers filename="src/index.ts"
+import { TextualDifferenceMetric } from '@mastra/evals/nlp';
+```
+
+## メトリック設定
+
+テキスト差分メトリックを設定します:
+
+```typescript copy showLineNumbers{4} filename="src/index.ts"
+const metric = new TextualDifferenceMetric();
+```
+
+## 使用例
+
+### 同一テキストの例
+
+まったく同じテキストを評価します：
+
+```typescript copy showLineNumbers{7} filename="src/index.ts"
+const input1 = 'The quick brown fox jumps over the lazy dog';
+const output1 = 'The quick brown fox jumps over the lazy dog';
+
+console.log('Example 1 - Identical Texts:');
+console.log('Input:', input1);
+console.log('Output:', output1);
+
+const result1 = await metric.measure(input1, output1);
+console.log('Metric Result:', {
+  score: result1.score,
+  info: {
+    confidence: result1.info.confidence,
+    ratio: result1.info.ratio,
+    changes: result1.info.changes,
+    lengthDiff: result1.info.lengthDiff,
+  },
+});
+// Example Output:
+// Metric Result: {
+//   score: 1,
+//   info: { confidence: 1, ratio: 1, changes: 0, lengthDiff: 0 }
+// }
+```
+
+### 小さな違いの例
+
+小さなバリエーションのあるテキストを評価します：
+
+```typescript copy showLineNumbers{26} filename="src/index.ts"
+const input2 = 'Hello world! How are you?';
+const output2 = 'Hello there! How is it going?';
+
+console.log('Example 2 - Minor Differences:');
+console.log('Input:', input2);
+console.log('Output:', output2);
+
+const result2 = await metric.measure(input2, output2);
+console.log('Metric Result:', {
+  score: result2.score,
+  info: {
+    confidence: result2.info.confidence,
+    ratio: result2.info.ratio,
+    changes: result2.info.changes,
+    lengthDiff: result2.info.lengthDiff,
+  },
+});
+// Example Output:
+// Metric Result: {
+//   score: 0.5925925925925926,
+//   info: {
+//     confidence: 0.8620689655172413,
+//     ratio: 0.5925925925925926,
+//     changes: 5,
+//     lengthDiff: 0.13793103448275862
+//   }
+// }
+```
+
+### 大きな違いの例
+
+大きな違いのあるテキストを評価します：
+
+```typescript copy showLineNumbers{45} filename="src/index.ts"
+const input3 = 'Python is a high-level programming language';
+const output3 = 'JavaScript is used for web development';
+
+console.log('Example 3 - Major Differences:');
+console.log('Input:', input3);
+console.log('Output:', output3);
+
+const result3 = await metric.measure(input3, output3);
+console.log('Metric Result:', {
+  score: result3.score,
+  info: {
+    confidence: result3.info.confidence,
+    ratio: result3.info.ratio,
+    changes: result3.info.changes,
+    lengthDiff: result3.info.lengthDiff,
+  },
+});
+// Example Output:
+// Metric Result: {
+//   score: 0.32098765432098764,
+//   info: {
+//     confidence: 0.8837209302325582,
+//     ratio: 0.32098765432098764,
+//     changes: 8,
+//     lengthDiff: 0.11627906976744186
+//   }
+// }
+```
+
+## 結果の理解
+
+このメトリックは以下を提供します：
+
+1. 0から1の間の類似度スコア：
+   - 1.0: 同一のテキスト - 違いなし
+   - 0.7-0.9: 小さな違い - 少しの変更が必要
+   - 0.4-0.6: 中程度の違い - かなりの変更が必要
+   - 0.1-0.3: 大きな違い - 大幅な変更が必要
+   - 0.0: 完全に異なるテキスト
+
+2. 詳細なメトリックには以下が含まれます：
+   - 信頼度: テキストの長さに基づく比較の信頼性
+   - 比率: シーケンスマッチングからの生の類似度スコア
+   - 変更: 必要な編集操作の数
+   - 長さの違い: テキストの長さの正規化された違い
+
+3. 以下の分析：
+   - 文字レベルの違い
+   - シーケンスマッチングパターン
+   - 編集距離の計算
+   - 長さの正規化の影響
+
+<br />
+<br />
+<hr className="dark:border-[#404040] border-gray-300" />
+<br />
+<br />
+<GithubLink
+  link={
+    "https://github.com/mastra-ai/mastra/blob/main/examples/basics/evals/textual-difference"
+  }
+/> 

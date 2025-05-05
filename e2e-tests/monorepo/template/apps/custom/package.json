@@ -1,0 +1,23 @@
+{
+  "name": "@inner/app",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "type": "module",
+  "scripts": {
+    "dev": "mastra dev",
+    "build": "mastra build"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "@ai-sdk/openai": "^1.2.1",
+    "@mastra/core": "monorepo-test",
+    "@inner/inner-tools": "workspace:*",
+    "zod": "^3.24.3"
+  },
+  "devDependencies": {
+    "mastra": "monorepo-test"
+  }
+}

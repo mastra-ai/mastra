@@ -1,14 +1,23 @@
 import type { Config } from 'tailwindcss';
-
 import defaultFont from 'tailwindcss/defaultTheme';
-
+import {
+  FontSizes,
+  LineHeights,
+  IconColors,
+  BorderColors,
+  Colors,
+  BorderRadius,
+  BorderWidth,
+  Spacings,
+  Sizes,
+} from '@mastra/playground-ui/tokens';
 export default {
   darkMode: ['class'],
   content: [
     './src/pages/**/*.{js,ts,jsx,tsx,mdx}',
     './src/components/**/*.{js,ts,jsx,tsx,mdx}',
     './src/**/*.{js,ts,jsx,tsx,html}',
-    './node_modules/@mastra/playground-ui/**/*.{js,ts,jsx,tsx}',
+    './node_modules/@mastra/playground-ui/src/**/*.{js,ts,jsx,tsx}',
   ],
   theme: {
     container: {
@@ -19,7 +28,38 @@ export default {
       },
     },
     extend: {
+      fontSize: {
+        ...FontSizes,
+      },
+      lineHeight: {
+        ...LineHeights,
+      },
+
+      borderRadius: {
+        ...BorderRadius,
+      },
+      borderWidth: {
+        ...BorderWidth,
+      },
+      padding: {
+        ...Spacings,
+      },
+      margin: {
+        ...Spacings,
+      },
+      gap: {
+        ...Spacings,
+      },
+      height: {
+        ...Sizes,
+      },
+      width: {
+        ...Sizes,
+      },
       colors: {
+        ...Colors,
+        ...IconColors,
+        ...BorderColors,
         background: 'hsl(var(--background))',
         foreground: 'hsl(var(--foreground))',
         card: {
@@ -108,20 +148,16 @@ export default {
           'el-connected': '#6cd063',
         },
       },
-      borderRadius: {
-        lg: 'var(--radius)',
-        md: 'calc(var(--radius) - 2px)',
-        sm: 'calc(var(--radius) - 4px)',
-      },
       fontFamily: {
         serif: ['var(--tasa-explorer)', ...defaultFont.fontFamily.serif],
-        mono: ['var(--commit-mono)', ...defaultFont.fontFamily.mono],
+        mono: ['var(--geist-mono)', ...defaultFont.fontFamily.mono],
         sans: ['var(--font-inter)', ...defaultFont.fontFamily.sans],
       },
       animation: {
         ripple: 'ripple var(--duration,2s) ease calc(var(--i, 0)*.2s) infinite',
         'icon-right': 'animate-icon-right ease-out 250ms',
         'typing-dot-bounce': 'typing-dot-bounce 1.4s infinite ease-in-out',
+        'fade-in': 'fade-in 1s ease-out',
       },
       keyframes: {
         ripple: {
@@ -146,6 +182,16 @@ export default {
           },
           '50%': {
             transform: 'translateY(-4px)',
+          },
+        },
+        'fade-in': {
+          '0%': {
+            opacity: '0.8',
+            backgroundColor: 'hsl(var(--muted))',
+          },
+          '100%': {
+            opacity: '1',
+            backgroundColor: 'transparent',
           },
         },
       },

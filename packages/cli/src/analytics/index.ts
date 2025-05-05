@@ -16,6 +16,8 @@ interface CommandData {
   error?: string;
 }
 
+export type CLI_ORIGIN = 'mastra-cloud' | 'oss';
+
 export class PosthogAnalytics {
   private sessionId: string;
   private client?: PostHog;
@@ -74,6 +76,7 @@ export class PosthogAnalytics {
       host,
       flushAt: 1,
       flushInterval: 0,
+      disableGeoip: false,
     });
 
     this.captureSessionStart();
@@ -85,7 +88,7 @@ export class PosthogAnalytics {
 
   private isTelemetryEnabled(): boolean {
     // Check environment variable first
-    if (process.env.NO_MASTRA_TELEMETRY) {
+    if (process.env.MASTRA_TELEMETRY_DISABLED) {
       return false;
     }
     // Default to enabled
@@ -131,6 +134,7 @@ export class PosthogAnalytics {
     durationMs?: number;
     status?: 'success' | 'error';
     error?: string;
+    origin?: CLI_ORIGIN;
   }): void {
     try {
       if (!this.client) {
@@ -160,6 +164,7 @@ export class PosthogAnalytics {
         properties: {
           ...this.getSystemProperties(),
           ...commandData,
+          origin: options?.origin || 'oss',
         },
       });
     } catch {
@@ -172,10 +177,12 @@ export class PosthogAnalytics {
     command,
     args,
     execution,
+    origin,
   }: {
     command: string;
     args: Record<string, unknown>;
     execution: () => Promise<T>;
+    origin?: CLI_ORIGIN;
   }): Promise<T> {
     const startTime = process.hrtime();
 
@@ -189,6 +196,7 @@ export class PosthogAnalytics {
         args,
         durationMs,
         status: 'success',
+        origin,
       });
 
       return result;
@@ -202,6 +210,7 @@ export class PosthogAnalytics {
         durationMs,
         status: 'error',
         error: error instanceof Error ? error.message : String(error),
+        origin,
       });
 
       throw error;

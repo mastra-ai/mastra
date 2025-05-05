@@ -1,7 +1,8 @@
-import { writeFileSync } from 'fs';
+import { writeFile } from 'fs/promises';
 import { join } from 'path';
-
 import { Deployer, createChildProcessLogger } from '@mastra/deployer';
+import type { analyzeBundle } from '@mastra/deployer/analyze';
+import virtual from '@rollup/plugin-virtual';
 import { Cloudflare } from 'cloudflare';
 
 interface CFRoute {
@@ -52,16 +53,15 @@ export class CloudflareDeployer extends Deployer {
 
   async writeFiles(outputDirectory: string): Promise<void> {
     const env = await this.loadEnvVars();
-
     const envsAsObject = Object.assign({}, Object.fromEntries(env.entries()), this.env);
 
     const cfWorkerName = this.projectName;
 
     const wranglerConfig: Record<string, any> = {
       name: cfWorkerName,
-      main: './output/index.mjs',
-      compatibility_date: '2024-12-02',
-      compatibility_flags: ['nodejs_compat'],
+      main: './index.mjs',
+      compatibility_date: '2025-04-01',
+      compatibility_flags: ['nodejs_compat', 'nodejs_compat_populate_process_env'],
       observability: {
         logs: {
           enabled: true,
@@ -74,23 +74,68 @@ export class CloudflareDeployer extends Deployer {
       wranglerConfig.routes = this.routes;
     }
 
-    writeFileSync(join(outputDirectory, 'wrangler.json'), JSON.stringify(wranglerConfig));
+    await writeFile(join(outputDirectory, this.outputDir, 'wrangler.json'), JSON.stringify(wranglerConfig));
   }
 
   private getEntry(): string {
     return `
-export default {
-  fetch: async (request, env, context) => {
-    Object.keys(env).forEach(key => {
-      process.env[key] = env[key]
-    })
+    import '#polyfills';
+    import { mastra } from '#mastra';
+    import { createHonoServer } from '#server';
+    import { evaluate } from '@mastra/core/eval';
+    import { AvailableHooks, registerHook } from '@mastra/core/hooks';
+    import { TABLE_EVALS } from '@mastra/core/storage';
+    import { checkEvalStorageFields } from '@mastra/core/utils';
 
-    const { mastra } = await import('#mastra')
-    const { createHonoServer } = await import('#server')
-    const app = await createHonoServer(mastra)
-    return app.fetch(request, env, context);
-  }
-}
+    registerHook(AvailableHooks.ON_GENERATION, ({ input, output, metric, runId, agentName, instructions }) => {
+      evaluate({
+        agentName,
+        input,
+        metric,
+        output,
+        runId,
+        globalRunId: runId,
+        instructions,
+      });
+    });
+
+    if (mastra.getStorage()) {
+      // start storage init in the background
+      mastra.getStorage().init();
+    }
+
+    registerHook(AvailableHooks.ON_EVALUATION, async traceObject => {
+      const storage = mastra.getStorage();
+      if (storage) {
+        // Check for required fields
+        const logger = mastra?.getLogger();
+        const areFieldsValid = checkEvalStorageFields(traceObject, logger);
+        if (!areFieldsValid) return;
+
+        await storage.insert({
+          tableName: TABLE_EVALS,
+          record: {
+            input: traceObject.input,
+            output: traceObject.output,
+            result: JSON.stringify(traceObject.result || {}),
+            agent_name: traceObject.agentName,
+            metric_name: traceObject.metricName,
+            instructions: traceObject.instructions,
+            test_info: null,
+            global_run_id: traceObject.globalRunId,
+            run_id: traceObject.runId,
+            created_at: new Date().toISOString(),
+          },
+        });
+      }
+    });
+
+    export default {
+      fetch: async (request, env, context) => {
+        const app = await createHonoServer(mastra)
+        return app.fetch(request, env, context);
+      }
+    }
 `;
   }
   async prepare(outputDirectory: string): Promise<void> {
@@ -98,18 +143,41 @@ export default {
     await this.writeFiles(outputDirectory);
   }
 
-  async bundle(entryFile: string, outputDirectory: string): Promise<void> {
-    return this._bundle(this.getEntry(), entryFile, outputDirectory);
+  async getBundlerOptions(
+    serverFile: string,
+    mastraEntryFile: string,
+    analyzedBundleInfo: Awaited<ReturnType<typeof analyzeBundle>>,
+    toolsPaths: string[],
+  ) {
+    const inputOptions = await super.getBundlerOptions(serverFile, mastraEntryFile, analyzedBundleInfo, toolsPaths);
+
+    if (Array.isArray(inputOptions.plugins)) {
+      inputOptions.plugins = [
+        virtual({
+          '#polyfills': `
+process.versions = process.versions || {};
+process.versions.node = '${process.versions.node}';
+      `,
+        }),
+        ...inputOptions.plugins,
+      ];
+    }
+
+    return inputOptions;
+  }
+
+  async bundle(entryFile: string, outputDirectory: string, toolsPaths: string[]): Promise<void> {
+    return this._bundle(this.getEntry(), entryFile, outputDirectory, toolsPaths);
   }
 
   async deploy(outputDirectory: string): Promise<void> {
     const cmd = this.workerNamespace
-      ? `npm exec -- wrangler deploy --dispatch-namespace ${this.workerNamespace}`
-      : 'npm exec -- wrangler deploy';
+      ? `npm exec -- wrangler@latest deploy --dispatch-namespace ${this.workerNamespace}`
+      : 'npm exec -- wrangler@latest deploy';
 
     const cpLogger = createChildProcessLogger({
       logger: this.logger,
-      root: outputDirectory,
+      root: join(outputDirectory, this.outputDir),
     });
 
     await cpLogger({
@@ -143,5 +211,18 @@ export default {
       account_id: scope,
       body: tags,
     });
+  }
+
+  async lint(entryFile: string, outputDirectory: string, toolsPaths: string[]): Promise<void> {
+    await super.lint(entryFile, outputDirectory, toolsPaths);
+
+    const hasLibsql = (await this.deps.checkDependencies(['@mastra/libsql'])) === `ok`;
+
+    if (hasLibsql) {
+      this.logger.error(
+        'Cloudflare Deployer does not support @libsql/client(which may have been installed by @mastra/libsql) as a dependency. Please use Cloudflare D1 instead @mastra/cloudflare-d1',
+      );
+      process.exit(1);
+    }
   }
 }

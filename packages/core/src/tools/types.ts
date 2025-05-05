@@ -3,6 +3,7 @@ import type { ZodSchema, z } from 'zod';
 
 import type { IAction, IExecutionContext, MastraUnion } from '../action';
 import type { Mastra } from '../mastra';
+import type { RuntimeContext } from '../runtime-context';
 
 export type VercelTool = Tool;
 
@@ -27,18 +28,18 @@ export type CoreTool = {
 export interface ToolExecutionContext<TSchemaIn extends z.ZodSchema | undefined = undefined>
   extends IExecutionContext<TSchemaIn> {
   mastra?: MastraUnion;
+  runtimeContext: RuntimeContext;
 }
 
 export interface ToolAction<
   TSchemaIn extends z.ZodSchema | undefined = undefined,
   TSchemaOut extends z.ZodSchema | undefined = undefined,
   TContext extends ToolExecutionContext<TSchemaIn> = ToolExecutionContext<TSchemaIn>,
-  TOptions extends unknown = unknown,
-> extends IAction<string, TSchemaIn, TSchemaOut, TContext, TOptions> {
+> extends IAction<string, TSchemaIn, TSchemaOut, TContext, ToolExecutionOptions> {
   description: string;
   execute?: (
     context: TContext,
-    options?: TOptions,
+    options?: ToolExecutionOptions,
   ) => Promise<TSchemaOut extends z.ZodSchema ? z.infer<TSchemaOut> : unknown>;
   mastra?: Mastra;
 }

@@ -39,20 +39,49 @@ const execWithTimeout = async (command: string, timeoutMs?: number) => {
   }
 };
 
+async function installMastraDependency(
+  pm: string,
+  dependency: string,
+  versionTag: string,
+  isDev: boolean,
+  timeout?: number,
+) {
+  let installCommand = getPackageManagerInstallCommand(pm);
+
+  if (isDev) {
+    installCommand = `${installCommand} --save-dev`;
+  }
+
+  try {
+    await execWithTimeout(`${pm} ${installCommand} ${dependency}${versionTag}`, timeout);
+  } catch (err) {
+    console.log('err', err);
+    if (versionTag === '@latest') {
+      throw err;
+    }
+
+    await execWithTimeout(`${pm} ${installCommand} ${dependency}@latest`, timeout);
+  }
+}
+
 export const createMastraProject = async ({
+  projectName: name,
   createVersionTag,
   timeout,
 }: {
+  projectName?: string;
   createVersionTag?: string;
   timeout?: number;
 }) => {
   p.intro(color.inverse('Mastra Create'));
 
-  const projectName = await p.text({
-    message: 'What do you want to name your project?',
-    placeholder: 'my-mastra-app',
-    defaultValue: 'my-mastra-app',
-  });
+  const projectName =
+    name ??
+    (await p.text({
+      message: 'What do you want to name your project?',
+      placeholder: 'my-mastra-app',
+      defaultValue: 'my-mastra-app',
+    }));
 
   if (p.isCancel(projectName)) {
     p.cancel('Operation cancelled');
@@ -84,13 +113,14 @@ export const createMastraProject = async ({
   const depsService = new DepsService();
   await depsService.addScriptsToPackageJson({
     dev: 'mastra dev',
+    build: 'mastra build',
   });
 
   s.stop('Project created');
 
   s.start(`Installing ${pm} dependencies`);
   await exec(`${pm} ${installCommand} zod`);
-  await exec(`${pm} ${installCommand} typescript tsx @types/node --save-dev`);
+  await exec(`${pm} ${installCommand} typescript @types/node --save-dev`);
   await exec(`echo '{
   "compilerOptions": {
     "target": "ES2022",
@@ -100,27 +130,25 @@ export const createMastraProject = async ({
     "forceConsistentCasingInFileNames": true,
     "strict": true,
     "skipLibCheck": true,
+    "noEmit": true,
     "outDir": "dist"
   },
   "include": [
     "src/**/*"
-  ],
-  "exclude": [
-    "node_modules",
-    "dist",
-    ".mastra"
   ]
 }' > tsconfig.json`);
 
   s.stop(`${pm} dependencies installed`);
   s.start('Installing mastra');
   const versionTag = createVersionTag ? `@${createVersionTag}` : '@latest';
-  await execWithTimeout(`${pm} ${installCommand} mastra${versionTag}`, timeout);
+  await installMastraDependency(pm, 'mastra', versionTag, true, timeout);
   s.stop('mastra installed');
 
-  s.start('Installing @mastra/core');
-  await execWithTimeout(`${pm} ${installCommand} @mastra/core${versionTag}`, timeout);
-  s.stop('@mastra/core installed');
+  s.start('Installing dependencies');
+  await installMastraDependency(pm, '@mastra/core', versionTag, false, timeout);
+  await installMastraDependency(pm, '@mastra/libsql', versionTag, false, timeout);
+  await installMastraDependency(pm, '@mastra/memory', versionTag, false, timeout);
+  s.stop('Dependencies installed');
 
   s.start('Adding .gitignore');
   await exec(`echo output.txt >> .gitignore`);
@@ -130,6 +158,7 @@ export const createMastraProject = async ({
   await exec(`echo .env.development >> .gitignore`);
   await exec(`echo .env >> .gitignore`);
   await exec(`echo *.db >> .gitignore`);
+  await exec(`echo *.db-* >> .gitignore`);
   s.stop('.gitignore added');
 
   p.outro('Project created successfully');

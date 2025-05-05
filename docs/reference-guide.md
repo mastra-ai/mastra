@@ -4,7 +4,7 @@ This is a guide for community members (and LLMs!) for creating new reference doc
 
 Mastra organizes its reference documentation in folders with the same structure as its core concepts: `CLI`,`LLMs and Models`, `Agents`, `Engines`, `RAG`, `Observability`. Each function gets its own page, such as `src/pages/reference/agents/createTool.mdx`.
 
-We try to stay away from creating classes because it's not very Typescript-y, but they get their own pages too.
+We try to stay away from creating classes because it's not very TypeScript-y, but they get their own pages too.
 
 Below is a guide for reference documentation on a function. They illustrate `Parameters` and `Returns`, using a <PropertiesTable> component to list options, types, and defaults.
 

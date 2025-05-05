@@ -1,5 +1,372 @@
 # create-mastra
 
+## 0.3.1-alpha.4
+
+### Patch Changes
+
+- 8607972: Introduce Mastra lint cli command
+- fba031f: Show traces for vNext workflow
+
+## 0.3.1-alpha.3
+
+### Patch Changes
+
+- 5b43dd0: revamp ui for threads
+
+## 0.3.1-alpha.2
+
+### Patch Changes
+
+- 33b84fd: fix showing sig digits in trace / span duration
+- 4155f47: Add parameters to filter workflow runs
+  Add fromDate and toDate to telemetry parameters
+
+## 0.3.1-alpha.1
+
+### Patch Changes
+
+- 2429c74: Add get workflow runs api to client-js
+
+## 0.3.1-alpha.0
+
+### Patch Changes
+
+- 0097d50: Add serializedStepGraph to vNext workflow
+  Return serializedStepGraph from vNext workflow
+  Use serializedStepGraph in vNext workflow graph
+
+## 0.3.0
+
+### Minor Changes
+
+- e126a44: improve non-interactive mode of the mastra cli and create-mastra by adding --no-example and --dir flags
+
+### Patch Changes
+
+- 34a76ca: Call workflow cleanup function when closing watch stream controller
+- 25d3c39: build logs for how to load instrumentation for build output
+- 70124e1: revamp the ui for traces
+- 3b74a74: add badge for failure / successful traces
+- 05806e3: revamp the UI of the chat in playground
+- 926821d: Fix triggerSchema default not showing in workflow ui
+- 0c3c4f4: Playground routing model settings for AgentNetworks
+- 1700eca: fixing overflow on agent traces
+- b50b9b7: Add vNext workflow to client-js
+- 11d4485: Show VNext workflows on the playground
+  Show running status for step in vNext workflowState
+- ca665d3: fix the ui for smaller screen regarding traces
+- 57b25ed: Use resumeSchema to show inputs on the playground for suspended workflows
+- f1d4b7a: Add x-mastra-dev-playground header to all playground requests
+- 5a66ced: add click on trace row
+- 8863033: Fix tools api in local dev api
+- 2d4001d: Add new @msstra/libsql package and use it in create-mastra
+
+## 0.3.0-alpha.5
+
+### Patch Changes
+
+- ca665d3: fix the ui for smaller screen regarding traces
+
+## 0.3.0-alpha.4
+
+### Patch Changes
+
+- 25d3c39: build logs for how to load instrumentation for build output
+
+## 0.3.0-alpha.3
+
+### Patch Changes
+
+- 3b74a74: add badge for failure / successful traces
+- 5a66ced: add click on trace row
+
+## 0.3.0-alpha.2
+
+### Patch Changes
+
+- 34a76ca: Call workflow cleanup function when closing watch stream controller
+- 0c3c4f4: Playground routing model settings for AgentNetworks
+- 1700eca: fixing overflow on agent traces
+
+## 0.3.0-alpha.1
+
+### Patch Changes
+
+- 70124e1: revamp the ui for traces
+- 926821d: Fix triggerSchema default not showing in workflow ui
+- 57b25ed: Use resumeSchema to show inputs on the playground for suspended workflows
+- f1d4b7a: Add x-mastra-dev-playground header to all playground requests
+
+## 0.3.0-alpha.0
+
+### Minor Changes
+
+- e126a44: improve non-interactive mode of the mastra cli and create-mastra by adding --no-example and --dir flags
+
+### Patch Changes
+
+- 05806e3: revamp the UI of the chat in playground
+- b50b9b7: Add vNext workflow to client-js
+- 11d4485: Show VNext workflows on the playground
+  Show running status for step in vNext workflowState
+- 8863033: Fix tools api in local dev api
+- 2d4001d: Add new @msstra/libsql package and use it in create-mastra
+
+## 0.2.9
+
+### Patch Changes
+
+- 7e92011: Include tools with deployment builds
+- 7184dc5: Add support to pass project path directly to create-mastra and improve tag handling
+- 16a8648: Disable swaggerUI, playground for production builds, mastra instance server build config to enable swaggerUI, apiReqLogs, openAPI documentation for prod builds
+- bdbde72: Sync DS components with Cloud
+
+## 0.2.9-alpha.2
+
+### Patch Changes
+
+- 16a8648: Disable swaggerUI, playground for production builds, mastra instance server build config to enable swaggerUI, apiReqLogs, openAPI documentation for prod builds
+- bdbde72: Sync DS components with Cloud
+
+## 0.2.9-alpha.1
+
+### Patch Changes
+
+- 7e92011: Include tools with deployment builds
+
+## 0.2.9-alpha.0
+
+### Patch Changes
+
+- 7184dc5: Add support to pass project path directly to create-mastra and improve tag handling
+
+## 0.2.8
+
+### Patch Changes
+
+- 1ebbfbf: Ability to toggle stream vs generate in playground
+- a2318cd: Revamp mastra deply dx, Make mastra build command output deployment ready build
+- 37bb612: Add Elastic-2.0 licensing for packages
+- c8fe5f0: change the header of all pages with the one from the DS
+
+## 0.2.8-alpha.1
+
+### Patch Changes
+
+- 1ebbfbf: Ability to toggle stream vs generate in playground
+
+## 0.2.8-alpha.0
+
+### Patch Changes
+
+- a2318cd: Revamp mastra deply dx, Make mastra build command output deployment ready build
+- 37bb612: Add Elastic-2.0 licensing for packages
+- c8fe5f0: change the header of all pages with the one from the DS
+
+## 0.2.7
+
+### Patch Changes
+
+- d3c372c: Show status UI of steps on playground workflow when workflow has no triggerSchema
+  Show number of steps on workflows table
+- df5989d: Correct playground model setting maxSteps reset value
+
+## 0.2.7-alpha.1
+
+### Patch Changes
+
+- df5989d: Correct playground model setting maxSteps reset value
+
+## 0.2.7-alpha.0
+
+### Patch Changes
+
+- d3c372c: Show status UI of steps on playground workflow when workflow has no triggerSchema
+  Show number of steps on workflows table
+
+## 0.2.6
+
+### Patch Changes
+
+- 99e2998: Set default max steps to 5
+- 8fdb414: Custom mastra server cors config
+
+## 0.2.6-alpha.0
+
+### Patch Changes
+
+- 99e2998: Set default max steps to 5
+- 8fdb414: Custom mastra server cors config
+
+## 0.2.5
+
+### Patch Changes
+
+- 87b96d7: set playground agent maxSteps default to 3
+
+## 0.2.5-alpha.0
+
+### Patch Changes
+
+- 87b96d7: set playground agent maxSteps default to 3
+
+## 0.2.4
+
+### Patch Changes
+
+- a4a1151: Fix playground freezing when buffer is passed between steps
+- 9d13790: update playground-ui dynamic form, cleanups
+- 13ade6a: update favicon shape
+- 055c4ea: Fix traces page showing e.reduce error
+- 124ce08: Ability to set maxTokens, temperature, and other common features in playground
+- 789bef3: Make runId optional for workflow startAsync api
+- 40dca45: Fix expanding workflow sidebar not expanding the output section
+- 8393832: Handle nested workflow view on workflow graph
+- 23999d4: Add Design System tokens and components into playground ui
+- 8076ecf: Unify workflow watch/start response
+- 9e7d46a: Fix scroll issue on playground tools page
+- d16ed18: Make playground-ui dynamic forms better
+
+## 0.2.4-alpha.4
+
+### Patch Changes
+
+- a4a1151: Fix playground freezing when buffer is passed between steps
+- 13ade6a: update favicon shape
+- 124ce08: Ability to set maxTokens, temperature, and other common features in playground
+- 23999d4: Add Design System tokens and components into playground ui
+- 9e7d46a: Fix scroll issue on playground tools page
+
+## 0.2.4-alpha.3
+
+### Patch Changes
+
+- 055c4ea: Fix traces page showing e.reduce error
+
+## 0.2.4-alpha.2
+
+### Patch Changes
+
+- 9d13790: update playground-ui dynamic form, cleanups
+- 40dca45: Fix expanding workflow sidebar not expanding the output section
+- d16ed18: Make playground-ui dynamic forms better
+
+## 0.2.4-alpha.1
+
+### Patch Changes
+
+- 789bef3: Make runId optional for workflow startAsync api
+- 8393832: Handle nested workflow view on workflow graph
+
+## 0.2.4-alpha.0
+
+### Patch Changes
+
+- 8076ecf: Unify workflow watch/start response
+
+## 0.2.3
+
+### Patch Changes
+
+- 6d5d9c6: Show tool calls in playground chat
+- 2447900: Show No input for steps without input on traces UI
+- c30787b: Stop automatically scrolling to bottom in agent chat if user has scrolled up
+- 214e7ce: Only mark required fields as required on the playground
+- 0b496ff: Load env vars on mastra deploy
+- 2134786: Fix traces navigation not working in playground
+
+## 0.2.3-alpha.2
+
+### Patch Changes
+
+- 6d5d9c6: Show tool calls in playground chat
+
+## 0.2.3-alpha.1
+
+### Patch Changes
+
+- 2134786: Fix traces navigation not working in playground
+
+## 0.2.3-alpha.0
+
+### Patch Changes
+
+- 2447900: Show No input for steps without input on traces UI
+- c30787b: Stop automatically scrolling to bottom in agent chat if user has scrolled up
+- 214e7ce: Only mark required fields as required on the playground
+- 0b496ff: Load env vars on mastra deploy
+
+## 0.2.2
+
+### Patch Changes
+
+- 933ea4d: Fix messages in thread not showing latest when switching between threads
+- 9cba774: Fix new thread title not reflecting until refresh or new message is sent
+- 77e4c35: Pop a dialog showing the functional condition when a functional condition is clicked on workflow graph
+- 248cb07: Allow ai-sdk Message type for messages in agent generate and stream
+  Fix sidebar horizontal overflow in playground
+
+## 0.2.2-alpha.1
+
+### Patch Changes
+
+- 77e4c35: Pop a dialog showing the functional condition when a functional condition is clicked on workflow graph
+
+## 0.2.2-alpha.0
+
+### Patch Changes
+
+- 933ea4d: Fix messages in thread not showing latest when switching between threads
+- 9cba774: Fix new thread title not reflecting until refresh or new message is sent
+- 248cb07: Allow ai-sdk Message type for messages in agent generate and stream
+  Fix sidebar horizontal overflow in playground
+
+## 0.2.1
+
+### Patch Changes
+
+- 404640e: AgentNetwork changeset
+
+## 0.2.1-alpha.0
+
+### Patch Changes
+
+- 404640e: AgentNetwork changeset
+
+## 0.2.0
+
+### Minor Changes
+
+- f9b6ab5: add Cerebras as a llm provider to create-mastra@latest
+
+### Patch Changes
+
+- 0f24546: Add google as a new LLM provider option in project creation
+- 1291e89: Add resizable-panel to playground-ui and use in agent and workflow sidebars
+- 9ba1e97: update playground ui for mastra and create-mastra
+- 5baf1ec: animate new traces
+- 9116d70: Handle the different workflow methods in workflow graph
+- 0709d99: add prop for dynamic empty text
+
+## 0.2.0-alpha.2
+
+### Patch Changes
+
+- 5baf1ec: animate new traces
+- 9116d70: Handle the different workflow methods in workflow graph
+- 0709d99: add prop for dynamic empty text
+
+## 0.2.0-alpha.1
+
+### Minor Changes
+
+- f9b6ab5: add Cerebras as a llm provider to create-mastra@latest
+
+### Patch Changes
+
+- 1291e89: Add resizable-panel to playground-ui and use in agent and workflow sidebars
+- 9ba1e97: update playground ui for mastra and create-mastra
+
 ## 0.1.10-alpha.0
 
 ### Patch Changes

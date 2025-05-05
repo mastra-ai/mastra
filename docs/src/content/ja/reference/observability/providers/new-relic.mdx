@@ -1,0 +1,40 @@
+---
+title: "リファレンス: New Relic 統合 | Mastra オブザーバビリティ ドキュメント"
+description: New Relic と Mastra の統合に関するドキュメント。Mastra は、OpenTelemetry をサポートするフルスタック監視のための包括的なオブザーバビリティ プラットフォームです。
+---
+
+# New Relic
+
+New Relicは、フルスタックモニタリングのためにOpenTelemetry (OTLP) をサポートする包括的なオブザーバビリティプラットフォームです。
+
+## 設定
+
+OTLPを介してMastraでNew Relicを使用するには、これらの環境変数を設定してください:
+
+```env
+OTEL_EXPORTER_OTLP_ENDPOINT=https://otlp.nr-data.net:4317
+OTEL_EXPORTER_OTLP_HEADERS="api-key=your_license_key"
+```
+
+## 実装
+
+MastraをNew Relicで使用するための設定方法は次のとおりです：
+
+```typescript
+import { Mastra } from "@mastra/core";
+
+export const mastra = new Mastra({
+  // ... other config
+  telemetry: {
+    serviceName: "your-service-name",
+    enabled: true,
+    export: {
+      type: "otlp",
+    },
+  },
+});
+```
+
+## ダッシュボード
+
+[one.newrelic.com](https://one.newrelic.com) で New Relic One ダッシュボードにテレメトリーデータを表示します

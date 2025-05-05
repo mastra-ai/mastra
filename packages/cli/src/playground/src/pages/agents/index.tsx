@@ -1,13 +1,11 @@
-import { Header } from '@/components/ui/header';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { AgentsTable } from '@mastra/playground-ui';
-import { useNavigate } from 'react-router';
+import { DataTable, Header, HeaderTitle } from '@mastra/playground-ui';
 
 import { useAgents } from '@/hooks/use-agents';
+import { agentsTableColumns } from '@/domains/agents/table.columns';
 
 function Agents() {
-  const { agents } = useAgents();
-  const navigate = useNavigate();
+  const { agents, isLoading } = useAgents();
 
   const agentListData = Object.entries(agents).map(([key, agent]) => ({
     id: key,
@@ -18,59 +16,15 @@ function Agents() {
   }));
 
   return (
-    <div className="flex flex-col relative overflow-hidden">
-      <section className="flex-1 relative overflow-hidden">
-        <ScrollArea className="h-full">
-          <section>
-            <AgentsTable
-              isLoading={false}
-              title={<Header title="Agents" className="border-0 h-[var(--top-bar-height)] mx-0" />}
-              agentsList={agentListData}
-              columns={[
-                {
-                  id: 'name',
-                  header: 'Name',
-                  cell: ({ row }) => (
-                    <button
-                      className="w-full h-full flex justify-start py-4"
-                      onClick={() => {
-                        navigate(`/agents/${row.original.id}/chat`);
-                      }}
-                    >
-                      <span
-                        onClick={() => {
-                          navigate(`/agents/${row.original.id}/chat`);
-                        }}
-                        className="text-mastra-el-5 text-sm  truncate"
-                      >
-                        {row.original.name}
-                      </span>
-                    </button>
-                  ),
-                },
+    <section className="overflow-hidden">
+      <Header>
+        <HeaderTitle>Agents</HeaderTitle>
+      </Header>
 
-                {
-                  id: 'model',
-                  header: 'Model',
-                  cell: ({ row }) => (
-                    <button
-                      className="w-full h-full flex justify-end p-4"
-                      onClick={() => {
-                        navigate(`/agents/${row.original.id}/chat`);
-                      }}
-                    >
-                      <span className="text-mastra-el-5 text-sm flex items-center gap-2">
-                        <span>{row.original.modelId}</span> 
-                      </span>
-                    </button>
-                  ),
-                },
-              ]}
-            />
-          </section>
-        </ScrollArea>
-      </section>
-    </div>
+      <ScrollArea className="h-full">
+        <DataTable isLoading={isLoading} columns={agentsTableColumns} data={agentListData} />
+      </ScrollArea>
+    </section>
   );
 }
 

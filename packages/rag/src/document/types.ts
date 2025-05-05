@@ -1,12 +1,10 @@
 import type { TiktokenEncoding, TiktokenModel } from 'js-tiktoken';
 import type {
-  LLM,
-  TitleCombinePrompt,
-  TitleExtractorPrompt,
-  SummaryPrompt,
-  QuestionExtractPrompt,
-  KeywordExtractPrompt,
-} from 'llamaindex';
+  TitleExtractorsArgs,
+  SummaryExtractArgs,
+  QuestionAnswerExtractArgs,
+  KeywordExtractArgs,
+} from './extractors';
 
 export enum Language {
   CPP = 'cpp',
@@ -41,7 +39,7 @@ export type ExtractParams = {
   title?: TitleExtractorsArgs | boolean;
   summary?: SummaryExtractArgs | boolean;
   questions?: QuestionAnswerExtractArgs | boolean;
-  keywords?: boolean | Record<string, any>;
+  keywords?: KeywordExtractArgs | boolean;
 };
 
 export type ChunkOptions = {
@@ -67,32 +65,6 @@ export type ChunkOptions = {
   allowedSpecial?: Set<string> | 'all';
   disallowedSpecial?: Set<string> | 'all';
   stripHeaders?: boolean;
-};
-
-export type TitleExtractorsArgs = {
-  llm?: LLM;
-  nodes?: number;
-  nodeTemplate?: TitleExtractorPrompt['template'];
-  combineTemplate?: TitleCombinePrompt['template'];
-};
-
-export type SummaryExtractArgs = {
-  llm?: LLM;
-  summaries?: string[];
-  promptTemplate?: SummaryPrompt['template'];
-};
-
-export type QuestionAnswerExtractArgs = {
-  llm?: LLM;
-  questions?: number;
-  promptTemplate?: QuestionExtractPrompt['template'];
-  embeddingOnly?: boolean;
-};
-
-export type KeywordExtractArgs = {
-  llm?: LLM;
-  keywords?: number;
-  promptTemplate?: KeywordExtractPrompt['template'];
 };
 
 export type ChunkStrategy = 'recursive' | 'character' | 'token' | 'markdown' | 'html' | 'json' | 'latex';

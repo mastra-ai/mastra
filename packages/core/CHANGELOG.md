@@ -1,5 +1,571 @@
 # @mastra/core
 
+## 0.9.2-alpha.5
+
+### Patch Changes
+
+- 3d2fb5c: Fix commonjs import for vnext workflows
+- 7eeb2bc: Add Memory default storage breaking change warning
+- 8607972: Introduce Mastra lint cli command
+- 7eeb2bc: Added explicit storage to memory in create-mastra so new projects don't see breaking change warnings
+- fba031f: Show traces for vNext workflow
+
+## 0.9.2-alpha.4
+
+### Patch Changes
+
+- ccef9f9: Fixed a type error when converting tools
+- 51e6923: fix ts errors on default proxy storage
+
+## 0.9.2-alpha.3
+
+### Patch Changes
+
+- 967b41c: fix: removes new agent getter methods from telemetry
+- 4155f47: Add parameters to filter workflow runs
+  Add fromDate and toDate to telemetry parameters
+- 17826a9: Added a breaking change warning about deprecated working memory "use: 'text-stream'" which is being fully replaced by "use: 'tool-call'"
+
+## 0.9.2-alpha.2
+
+### Patch Changes
+
+- 26738f4: Switched from a custom MCP tools schema deserializer to json-schema-to-zod - fixes an issue where MCP tool schemas didn't deserialize properly in Mastra playground. Also added support for testing tools with no input arguments in playground
+
+## 0.9.2-alpha.1
+
+### Patch Changes
+
+- b804723: Fix #3831: keep conversations in tact by keeping empty assistant messages
+
+## 0.9.2-alpha.0
+
+### Patch Changes
+
+- 0097d50: Add serializedStepGraph to vNext workflow
+  Return serializedStepGraph from vNext workflow
+  Use serializedStepGraph in vNext workflow graph
+
+## 0.9.1
+
+### Patch Changes
+
+- 405b63d: add ability to clone workflows with different id
+- 81fb7f6: Workflows v2
+- 20275d4: Adding warnings for current implicit Memory default options as they will be changing soon in a breaking change. Also added memory to create-mastra w/ new defaults so new projects don't see these warnings
+- 7d1892c: Return error object directly in vNext workflows
+- a90a082: Rename container to runtimeContext in vNext workflow
+  Add steps accessor for stepFlow in vnext workflow
+  Add getWorkflowRun to vnext workflow
+  Add vnext_getWorkflows() to mastra core
+- 2d17c73: Fix checking for presence of constant value mappings
+- 61e92f5: vNext fix workflow watch cleanup
+- 35955b0: Rename import to runtime-contxt
+- 6262bd5: Mastra server custom host config
+- c1409ef: Add vNextWorkflow handlers and APIs
+  Add stepGraph and steps to vNextWorkflow
+- 3e7b69d: Dynamic agent props
+- e4943b8: Default arrays to string type when transformation JSON schema to zod as per the JSON schema spec.
+- 11d4485: Show VNext workflows on the playground
+  Show running status for step in vNext workflowState
+- 479f490: [MASTRA-3131] Add getWorkflowRunByID and add resourceId as filter for getWorkflowRuns
+- c23a81c: added deprecation warnings for pg and individual args
+- 2d4001d: Add new @msstra/libsql package and use it in create-mastra
+- c71013a: vNeuxt: unset currentStep for workflow status change event
+- 1d3b1cd: Rebump
+
+## 0.9.1-alpha.8
+
+### Patch Changes
+
+- 2d17c73: Fix checking for presence of constant value mappings
+
+## 0.9.1-alpha.7
+
+### Patch Changes
+
+- 1d3b1cd: Rebump
+
+## 0.9.1-alpha.6
+
+### Patch Changes
+
+- c23a81c: added deprecation warnings for pg and individual args
+
+## 0.9.1-alpha.5
+
+### Patch Changes
+
+- 3e7b69d: Dynamic agent props
+
+## 0.9.1-alpha.4
+
+### Patch Changes
+
+- e4943b8: Default arrays to string type when transformation JSON schema to zod as per the JSON schema spec.
+- 479f490: [MASTRA-3131] Add getWorkflowRunByID and add resourceId as filter for getWorkflowRuns
+
+## 0.9.1-alpha.3
+
+### Patch Changes
+
+- 6262bd5: Mastra server custom host config
+
+## 0.9.1-alpha.2
+
+### Patch Changes
+
+- 405b63d: add ability to clone workflows with different id
+- 61e92f5: vNext fix workflow watch cleanup
+- c71013a: vNeuxt: unset currentStep for workflow status change event
+
+## 0.9.1-alpha.1
+
+### Patch Changes
+
+- 20275d4: Adding warnings for current implicit Memory default options as they will be changing soon in a breaking change. Also added memory to create-mastra w/ new defaults so new projects don't see these warnings
+- 7d1892c: Return error object directly in vNext workflows
+- a90a082: Rename container to runtimeContext in vNext workflow
+  Add steps accessor for stepFlow in vnext workflow
+  Add getWorkflowRun to vnext workflow
+  Add vnext_getWorkflows() to mastra core
+- 35955b0: Rename import to runtime-contxt
+- c1409ef: Add vNextWorkflow handlers and APIs
+  Add stepGraph and steps to vNextWorkflow
+- 11d4485: Show VNext workflows on the playground
+  Show running status for step in vNext workflowState
+- 2d4001d: Add new @msstra/libsql package and use it in create-mastra
+
+## 0.9.1-alpha.0
+
+### Patch Changes
+
+- 81fb7f6: Workflows v2
+
+## 0.9.0
+
+### Minor Changes
+
+- fe3ae4d: Remove \_\_ functions in storage and move to storage proxy to make sure init is called
+
+### Patch Changes
+
+- 000a6d4: Fixed an issue where the TokenLimiter message processor was adding new messages into the remembered messages array
+- 08bb78e: Added an extra safety for Memory message ordering
+- ed2f549: Fix exlude methods for batchTraceInsert
+- 7e92011: Include tools with deployment builds
+- 9ee4293: Improve commonjs support
+
+  Add types files in the root directory to make sure typescript can resolve it without an exportsmap
+
+- 03f3cd0: Propagate context to passed in tools
+- c0f22b4: [MASTRA-3130] Metadata Filter Update for PG and Libsql
+- 71d9444: updated savemessage to not use mutation when hiding working memory
+- 157c741: Fix message dupes using processors
+- 8a8a73b: fix container to network sub agent
+- 0a033fa: Adds MCPServer component
+- 9c26508: Fixed an issue where "mastra dev" wouldn't always print out localhost:4111 logs due to new NODE_ENV fixes
+- 0f4eae3: Rename Container into RuntimeContext
+- 16a8648: Disable swaggerUI, playground for production builds, mastra instance server build config to enable swaggerUI, apiReqLogs, openAPI documentation for prod builds
+- 6f92295: Fixed an issue where some user messages and llm messages would have the exact same createdAt date, leading to incorrect message ordering. Added a fix for new messages as well as any that were saved before the fix in the wrong order
+
+## 0.9.0-alpha.8
+
+### Patch Changes
+
+- 000a6d4: Fixed an issue where the TokenLimiter message processor was adding new messages into the remembered messages array
+- ed2f549: Fix exlude methods for batchTraceInsert
+- c0f22b4: [MASTRA-3130] Metadata Filter Update for PG and Libsql
+- 0a033fa: Adds MCPServer component
+- 9c26508: Fixed an issue where "mastra dev" wouldn't always print out localhost:4111 logs due to new NODE_ENV fixes
+- 0f4eae3: Rename Container into RuntimeContext
+- 16a8648: Disable swaggerUI, playground for production builds, mastra instance server build config to enable swaggerUI, apiReqLogs, openAPI documentation for prod builds
+
+## 0.9.0-alpha.7
+
+### Patch Changes
+
+- 71d9444: updated savemessage to not use mutation when hiding working memory
+
+## 0.9.0-alpha.6
+
+### Patch Changes
+
+- 157c741: Fix message dupes using processors
+
+## 0.9.0-alpha.5
+
+### Patch Changes
+
+- 08bb78e: Added an extra safety for Memory message ordering
+
+## 0.9.0-alpha.4
+
+### Patch Changes
+
+- 7e92011: Include tools with deployment builds
+
+## 0.9.0-alpha.3
+
+### Minor Changes
+
+- fe3ae4d: Remove \_\_ functions in storage and move to storage proxy to make sure init is called
+
+## 0.8.4-alpha.2
+
+### Patch Changes
+
+- 9ee4293: Improve commonjs support
+
+  Add types files in the root directory to make sure typescript can resolve it without an exportsmap
+
+## 0.8.4-alpha.1
+
+### Patch Changes
+
+- 8a8a73b: fix container to network sub agent
+- 6f92295: Fixed an issue where some user messages and llm messages would have the exact same createdAt date, leading to incorrect message ordering. Added a fix for new messages as well as any that were saved before the fix in the wrong order
+
+## 0.8.4-alpha.0
+
+### Patch Changes
+
+- 03f3cd0: Propagate context to passed in tools
+
+## 0.8.3
+
+### Patch Changes
+
+- d72318f: Refactored the evals table to use the DS tables
+- 0bcc862: Fixed an issue where we were sanitizing response message content and filter on a value that may not always be an array
+- 10a8caf: Removed an extra console log that made it into core
+- 359b089: Allowed explicitly disabling vector/embedder in Memory by passing vector: false or options.semanticRecall: false
+- 32e7b71: Add support for dependency injection
+- 37bb612: Add Elastic-2.0 licensing for packages
+- 7f1b291: Client Side tool call passing
+
+## 0.8.3-alpha.5
+
+### Patch Changes
+
+- d72318f: Refactored the evals table to use the DS tables
+
+## 0.8.3-alpha.4
+
+### Patch Changes
+
+- 7f1b291: Client Side tool call passing
+
+## 0.8.3-alpha.3
+
+### Patch Changes
+
+- 10a8caf: Removed an extra console log that made it into core
+
+## 0.8.3-alpha.2
+
+### Patch Changes
+
+- 0bcc862: Fixed an issue where we were sanitizing response message content and filter on a value that may not always be an array
+
+## 0.8.3-alpha.1
+
+### Patch Changes
+
+- 32e7b71: Add support for dependency injection
+- 37bb612: Add Elastic-2.0 licensing for packages
+
+## 0.8.3-alpha.0
+
+### Patch Changes
+
+- 359b089: Allowed explicitly disabling vector/embedder in Memory by passing vector: false or options.semanticRecall: false
+
+## 0.8.2
+
+### Patch Changes
+
+- a06aadc: Upgrade fastembed to fix bug where fastembe cannot be imported
+
+## 0.8.2-alpha.0
+
+### Patch Changes
+
+- a06aadc: Upgrade fastembed to fix bug where fastembe cannot be imported
+
+## 0.8.1
+
+### Patch Changes
+
+- 99e2998: Set default max steps to 5
+- 8fdb414: Custom mastra server cors config
+
+## 0.8.1-alpha.0
+
+### Patch Changes
+
+- 99e2998: Set default max steps to 5
+- 8fdb414: Custom mastra server cors config
+
+## 0.8.0
+
+### Minor Changes
+
+- 619c39d: Added support for agents as steps
+
+### Patch Changes
+
+- 56c31b7: Batch insert messages for libsql adapter
+- 5ae0180: Removed prefixed doc references
+- fe56be0: exclude \_\_primitive, getMemory, hasOwnMemory from traces since they create noisy traces
+- 93875ed: Improved the performance of Memory semantic recall by 2 to 3 times when using pg by making tweaks to @mastra/memory @mastra/core and @mastra/pg
+- 107bcfe: Fixed JSON parsing in memory component to prevent crashes when encountering strings that start with '[' or '{' but are not valid JSON
+- 9bfa12b: Accept ID on step config
+- 515ebfb: Fix compound subscriber bug
+- 5b4e19f: fix hanging and excessive workflow execution
+- dbbbf80: Added clickhouse storage
+- a0967a0: Added new "Memory Processor" feature to @mastra/core and @mastra/memory, allowing devs to modify Mastra Memory before it's sent to the LLM
+- fca3b21: fix server in mastra not to be mandatory
+- 88fa727: Added getWorkflowRuns for libsql, pg, clickhouse and upstash as well as added route getWorkflowRunsHandler
+- f37f535: Added variables to while and until loops
+- a3f0e90: Update storage initialization to ensure tables are present
+- 4d67826: Fix eval writes, remove id column
+- 6330967: Enable route timeout using server options
+- 8393832: Handle nested workflow view on workflow graph
+- 6330967: Add support for configuration of server port using Mastra instance
+- 99d43b9: Updated evaluate to include agent output
+- d7e08e8: createdAt needs to be nullable
+- febc8a6: Added dual tracing and fixed local tracing recursion
+- 7599d77: fix(deps): update ai sdk to ^4.2.2
+- 0118361: Add resourceId to memory metadata
+- 619c39d: AgentStep -> Agent as a workflow step (WIP)
+- cafae83: Changed error messages for vector mismatch with index
+- 8076ecf: Unify workflow watch/start response
+- 8df4a77: Fix if-else execution order
+- 304397c: Add support for custom api routes in mastra
+
+## 0.8.0-alpha.8
+
+### Patch Changes
+
+- 8df4a77: Fix if-else execution order
+
+## 0.8.0-alpha.7
+
+### Patch Changes
+
+- febc8a6: Added dual tracing and fixed local tracing recursion
+
+## 0.8.0-alpha.6
+
+### Patch Changes
+
+- a3f0e90: Update storage initialization to ensure tables are present
+
+## 0.8.0-alpha.5
+
+### Patch Changes
+
+- 93875ed: Improved the performance of Memory semantic recall by 2 to 3 times when using pg by making tweaks to @mastra/memory @mastra/core and @mastra/pg
+
+## 0.8.0-alpha.4
+
+### Patch Changes
+
+- d7e08e8: createdAt needs to be nullable
+
+## 0.8.0-alpha.3
+
+### Patch Changes
+
+- 5ae0180: Removed prefixed doc references
+- 9bfa12b: Accept ID on step config
+- 515ebfb: Fix compound subscriber bug
+- 88fa727: Added getWorkflowRuns for libsql, pg, clickhouse and upstash as well as added route getWorkflowRunsHandler
+- f37f535: Added variables to while and until loops
+- 4d67826: Fix eval writes, remove id column
+- 6330967: Enable route timeout using server options
+- 8393832: Handle nested workflow view on workflow graph
+- 6330967: Add support for configuration of server port using Mastra instance
+
+## 0.8.0-alpha.2
+
+### Patch Changes
+
+- 56c31b7: Batch insert messages for libsql adapter
+- dbbbf80: Added clickhouse storage
+- 99d43b9: Updated evaluate to include agent output
+
+## 0.8.0-alpha.1
+
+### Minor Changes
+
+- 619c39d: Added support for agents as steps
+
+### Patch Changes
+
+- fe56be0: exclude \_\_primitive, getMemory, hasOwnMemory from traces since they create noisy traces
+- a0967a0: Added new "Memory Processor" feature to @mastra/core and @mastra/memory, allowing devs to modify Mastra Memory before it's sent to the LLM
+- fca3b21: fix server in mastra not to be mandatory
+- 0118361: Add resourceId to memory metadata
+- 619c39d: AgentStep -> Agent as a workflow step (WIP)
+
+## 0.7.1-alpha.0
+
+### Patch Changes
+
+- 107bcfe: Fixed JSON parsing in memory component to prevent crashes when encountering strings that start with '[' or '{' but are not valid JSON
+- 5b4e19f: fix hanging and excessive workflow execution
+- 7599d77: fix(deps): update ai sdk to ^4.2.2
+- cafae83: Changed error messages for vector mismatch with index
+- 8076ecf: Unify workflow watch/start response
+- 304397c: Add support for custom api routes in mastra
+
+## 0.7.0
+
+### Minor Changes
+
+- 1af25d5: Added nested workflows API
+
+### Patch Changes
+
+- b4fbc59: Fixed an issue where sending CoreMessages to AI SDK would result in "Unsupported role: tool" errors
+- a838fde: Update memory.ts
+- a8bd4cf: Fixed JSON Schema generation for null types to prevent duplicate null entries in type arrays
+- 7a3eeb0: Fixed a memory issue when using useChat where new messages were formatted as ui messages, were mixed with stored core messages in memory, and a mixed list was sent to AI SDK, causing it to error
+- 0b54522: AgentNetwork logs
+- b3b34f5: Fix agent generate,stream returnType with experimental_output
+- a4686e8: Realtime event queue
+- 6530ad1: Correct agent onFinish interface
+- 27439ad: Updated the jsonSchemaPropertiesToTSTypes function to properly handle JSON Schema definitions where type can be an array of strings. Previously, the function only handled single string types, but according to the JSON Schema specification, type can be an array of possible types.
+
+## 0.7.0-alpha.3
+
+### Patch Changes
+
+- b3b34f5: Fix agent generate,stream returnType with experimental_output
+- a4686e8: Realtime event queue
+
+## 0.7.0-alpha.2
+
+### Patch Changes
+
+- a838fde: Update memory.ts
+- a8bd4cf: Fixed JSON Schema generation for null types to prevent duplicate null entries in type arrays
+- 7a3eeb0: Fixed a memory issue when using useChat where new messages were formatted as ui messages, were mixed with stored core messages in memory, and a mixed list was sent to AI SDK, causing it to error
+- 6530ad1: Correct agent onFinish interface
+
+## 0.7.0-alpha.1
+
+### Minor Changes
+
+- 1af25d5: Added nested workflows API
+
+### Patch Changes
+
+- 0b54522: AgentNetwork logs
+- 27439ad: Updated the jsonSchemaPropertiesToTSTypes function to properly handle JSON Schema definitions where type can be an array of strings. Previously, the function only handled single string types, but according to the JSON Schema specification, type can be an array of possible types.
+
+## 0.6.5-alpha.0
+
+### Patch Changes
+
+- b4fbc59: Fixed an issue where sending CoreMessages to AI SDK would result in "Unsupported role: tool" errors
+
+## 0.6.4
+
+### Patch Changes
+
+- 6794797: Check for eval values before inserting into storage
+- fb68a80: Inject mastra instance into llm class
+- b56a681: Update README and some tests for vector stores
+- 248cb07: Allow ai-sdk Message type for messages in agent generate and stream
+  Fix sidebar horizontal overflow in playground
+
+## 0.6.4-alpha.1
+
+### Patch Changes
+
+- 6794797: Check for eval values before inserting into storage
+
+## 0.6.4-alpha.0
+
+### Patch Changes
+
+- fb68a80: Inject mastra instance into llm class
+- b56a681: Update README and some tests for vector stores
+- 248cb07: Allow ai-sdk Message type for messages in agent generate and stream
+  Fix sidebar horizontal overflow in playground
+
+## 0.6.3
+
+### Patch Changes
+
+- 404640e: AgentNetwork changeset
+- 3bce733: fix: agent.generate only get thread if there is threadID
+
+## 0.6.3-alpha.1
+
+### Patch Changes
+
+- 3bce733: fix: agent.generate only get thread if there is threadID
+
+## 0.6.3-alpha.0
+
+### Patch Changes
+
+- 404640e: AgentNetwork changeset
+
+## 0.6.2
+
+### Patch Changes
+
+- beaf1c2: createTool type fixes
+- 3084e13: More parallel memory operations
+
+## 0.6.2-alpha.0
+
+### Patch Changes
+
+- beaf1c2: createTool type fixes
+- 3084e13: More parallel memory operations
+
+## 0.6.1
+
+### Patch Changes
+
+- fc2f89c: Insert static payload into inputData
+- dfbb131: Fix after method on multiple passes
+- f4854ee: Fix else branch execution when if-branch has loops
+- afaf73f: Add fix for vercel tools and optional instructions
+- 0850b4c: Watch and resume per run
+- 7bcfaee: Remove node_modules-path dir which calls \_\_dirname at the top level and breaks some esm runtimes
+- 44631b1: Fix after usage with skipped conditions on the awaited steps
+- 9116d70: Handle the different workflow methods in workflow graph
+- 6e559a0: Update Voice for realtime providers
+- 5f43505: feat: OpenAI realtime voice provider for speech to speech communication
+  Update voice speaking event type
+
+## 0.6.1-alpha.2
+
+### Patch Changes
+
+- fc2f89c: Insert static payload into inputData
+- dfbb131: Fix after method on multiple passes
+- 0850b4c: Watch and resume per run
+- 9116d70: Handle the different workflow methods in workflow graph
+
+## 0.6.1-alpha.1
+
+### Patch Changes
+
+- f4854ee: Fix else branch execution when if-branch has loops
+- afaf73f: Add fix for vercel tools and optional instructions
+- 44631b1: Fix after usage with skipped conditions on the awaited steps
+- 6e559a0: Update Voice for realtime providers
+- 5f43505: feat: OpenAI realtime voice provider for speech to speech communication
+  Update voice speaking event type
+
 ## 0.6.1-alpha.0
 
 ### Patch Changes

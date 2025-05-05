@@ -10,7 +10,9 @@ import type {
   CreateIndexArgs,
 } from '@mastra/core/vector';
 import type { VectorFilter } from '@mastra/core/vector/filter';
+import { Mutex } from 'async-mutex';
 import pg from 'pg';
+import xxhash from 'xxhash-wasm';
 
 import { PGFilterTranslator } from './filter';
 import { buildFilterQuery } from './sql-builder';
@@ -59,16 +61,72 @@ type PgDefineIndexArgs = [string, 'cosine' | 'euclidean' | 'dotproduct', IndexCo
 
 export class PgVector extends MastraVector {
   private pool: pg.Pool;
-  private indexCache: Map<string, PGIndexStats> = new Map();
+  private describeIndexCache: Map<string, PGIndexStats> = new Map();
+  private createdIndexes = new Map<string, number>();
+  private mutexesByName = new Map<string, Mutex>();
+  private schema?: string;
+  private setupSchemaPromise: Promise<void> | null = null;
+  private installVectorExtensionPromise: Promise<void> | null = null;
+  private vectorExtensionInstalled: boolean | undefined = undefined;
+  private schemaSetupComplete: boolean | undefined = undefined;
 
-  constructor(connectionString: string) {
+  /**
+   * @deprecated Passing connectionString as a string is deprecated.
+   * Use the object parameter instead. This signature will be removed on May 20th.
+   */
+  constructor(connectionString: string);
+  constructor(config: {
+    connectionString: string;
+    schemaName?: string;
+    pgPoolOptions?: Omit<pg.PoolConfig, 'connectionString'>;
+  });
+  constructor(
+    config:
+      | string
+      | {
+          connectionString: string;
+          schemaName?: string;
+          pgPoolOptions?: Omit<pg.PoolConfig, 'connectionString'>;
+        },
+  ) {
+    let connectionString: string;
+    let pgPoolOptions: Omit<pg.PoolConfig, 'connectionString'> | undefined;
+    let schemaName: string | undefined;
+
+    if (typeof config === 'string') {
+      // DEPRECATION WARNING
+      console.warn(
+        `DEPRECATION WARNING: Passing connectionString as a string to PgVector constructor is deprecated.
+
+        Please use an object parameter instead:
+        new PgVector({ connectionString })
+
+        The string signature will be removed on May 20th.`,
+      );
+      connectionString = config;
+      schemaName = undefined;
+      pgPoolOptions = undefined;
+    } else {
+      connectionString = config.connectionString;
+      schemaName = config.schemaName;
+      pgPoolOptions = config.pgPoolOptions;
+    }
+
+    if (!connectionString || connectionString.trim() === '') {
+      throw new Error(
+        'PgVector: connectionString must be provided and cannot be empty. Passing an empty string may cause fallback to local Postgres defaults.',
+      );
+    }
     super();
+
+    this.schema = schemaName;
 
     const basePool = new pg.Pool({
       connectionString,
       max: 20, // Maximum number of clients in the pool
       idleTimeoutMillis: 30000, // Close idle connections after 30 seconds
       connectionTimeoutMillis: 2000, // Fail fast if can't connect
+      ...pgPoolOptions,
     });
 
     const telemetry = this.__getTelemetry();
@@ -80,6 +138,30 @@ export class PgVector extends MastraVector {
           'vector.type': 'postgres',
         },
       }) ?? basePool;
+
+    void (async () => {
+      // warm the created indexes cache so we don't need to check if indexes exist every time
+      const existingIndexes = await this.listIndexes();
+      void existingIndexes.map(async indexName => {
+        const info = await this.getIndexInfo(indexName);
+        const key = await this.getIndexCacheKey({
+          indexName,
+          metric: info.metric,
+          dimension: info.dimension,
+          type: info.type,
+        });
+        this.createdIndexes.set(indexName, key);
+      });
+    })();
+  }
+
+  private getMutexByName(indexName: string) {
+    if (!this.mutexesByName.has(indexName)) this.mutexesByName.set(indexName, new Mutex());
+    return this.mutexesByName.get(indexName)!;
+  }
+
+  private getTableName(indexName: string) {
+    return this.schema ? `${this.schema}.${indexName}` : indexName;
   }
 
   transformFilter(filter?: VectorFilter) {
@@ -88,10 +170,10 @@ export class PgVector extends MastraVector {
   }
 
   async getIndexInfo(indexName: string): Promise<PGIndexStats> {
-    if (!this.indexCache.has(indexName)) {
-      this.indexCache.set(indexName, await this.describeIndex(indexName));
+    if (!this.describeIndexCache.has(indexName)) {
+      this.describeIndexCache.set(indexName, await this.describeIndex(indexName));
     }
-    return this.indexCache.get(indexName)!;
+    return this.describeIndexCache.get(indexName)!;
   }
 
   async query(...args: ParamsToArgs<PgQueryVectorParams> | PgQueryVectorArgs): Promise<QueryResult[]> {
@@ -123,6 +205,8 @@ export class PgVector extends MastraVector {
         await client.query(`SET LOCAL ivfflat.probes = ${probes}`);
       }
 
+      const tableName = this.getTableName(indexName);
+
       const query = `
         WITH vector_scores AS (
           SELECT
@@ -130,7 +214,7 @@ export class PgVector extends MastraVector {
             1 - (embedding <=> '${vectorStr}'::vector) as score,
             metadata
             ${includeVector ? ', embedding' : ''}
-          FROM ${indexName}
+          FROM ${tableName}
           ${filterQuery}
         )
         SELECT *
@@ -155,6 +239,7 @@ export class PgVector extends MastraVector {
     const params = this.normalizeArgs<UpsertVectorParams>('upsert', args);
 
     const { indexName, vectors, metadata, ids } = params;
+    const tableName = this.getTableName(indexName);
 
     // Start a transaction
     const client = await this.pool.connect();
@@ -164,7 +249,7 @@ export class PgVector extends MastraVector {
 
       for (let i = 0; i < vectors.length; i++) {
         const query = `
-          INSERT INTO ${indexName} (vector_id, embedding, metadata)
+          INSERT INTO ${tableName} (vector_id, embedding, metadata)
           VALUES ($1, $2::vector, $3::jsonb)
           ON CONFLICT (vector_id)
           DO UPDATE SET
@@ -180,10 +265,80 @@ export class PgVector extends MastraVector {
       return vectorIds;
     } catch (error) {
       await client.query('ROLLBACK');
+      if (error instanceof Error && error.message?.includes('expected') && error.message?.includes('dimensions')) {
+        const match = error.message.match(/expected (\d+) dimensions, not (\d+)/);
+        if (match) {
+          const [, expected, actual] = match;
+          throw new Error(
+            `Vector dimension mismatch: Index "${params.indexName}" expects ${expected} dimensions but got ${actual} dimensions. ` +
+              `Either use a matching embedding model or delete and recreate the index with the new dimension.`,
+          );
+        }
+      }
       throw error;
     } finally {
       client.release();
     }
+  }
+
+  private hasher = xxhash();
+  private async getIndexCacheKey(params: CreateIndexParams & { type: IndexType | undefined }) {
+    const input = params.indexName + params.dimension + params.metric + (params.type || 'ivfflat'); // ivfflat is default
+    return (await this.hasher).h32(input);
+  }
+  private cachedIndexExists(indexName: string, newKey: number) {
+    const existingIndexCacheKey = this.createdIndexes.get(indexName);
+    return existingIndexCacheKey && existingIndexCacheKey === newKey;
+  }
+  private async setupSchema(client: pg.PoolClient) {
+    if (!this.schema || this.schemaSetupComplete) {
+      return;
+    }
+
+    if (!this.setupSchemaPromise) {
+      this.setupSchemaPromise = (async () => {
+        try {
+          // First check if schema exists and we have usage permission
+          const schemaCheck = await client.query(
+            `
+            SELECT EXISTS (
+              SELECT 1 FROM information_schema.schemata 
+              WHERE schema_name = $1
+            )
+          `,
+            [this.schema],
+          );
+
+          const schemaExists = schemaCheck.rows[0].exists;
+
+          if (!schemaExists) {
+            try {
+              await client.query(`CREATE SCHEMA IF NOT EXISTS ${this.schema}`);
+              this.logger.info(`Schema "${this.schema}" created successfully`);
+            } catch (error) {
+              this.logger.error(`Failed to create schema "${this.schema}"`, { error });
+              throw new Error(
+                `Unable to create schema "${this.schema}". This requires CREATE privilege on the database. ` +
+                  `Either create the schema manually or grant CREATE privilege to the user.`,
+              );
+            }
+          }
+
+          // If we got here, schema exists and we can use it
+          this.schemaSetupComplete = true;
+          this.logger.debug(`Schema "${this.schema}" is ready for use`);
+        } catch (error) {
+          // Reset flags so we can retry
+          this.schemaSetupComplete = undefined;
+          this.setupSchemaPromise = null;
+          throw error;
+        } finally {
+          this.setupSchemaPromise = null;
+        }
+      })();
+    }
+
+    await this.setupSchemaPromise;
   }
 
   async createIndex(...args: ParamsToArgs<PgCreateIndexParams> | PgCreateIndexArgs): Promise<void> {
@@ -193,50 +348,58 @@ export class PgVector extends MastraVector {
     ]);
 
     const { indexName, dimension, metric = 'cosine', indexConfig = {}, buildIndex = true } = params;
+    const tableName = this.getTableName(indexName);
 
-    const client = await this.pool.connect();
-    try {
-      // Validate inputs
-      if (!indexName.match(/^[a-zA-Z_][a-zA-Z0-9_]*$/)) {
-        throw new Error('Invalid index name format');
-      }
-      if (!Number.isInteger(dimension) || dimension <= 0) {
-        throw new Error('Dimension must be a positive integer');
-      }
-
-      // First check if vector extension is available
-      const extensionCheck = await client.query(`
-        SELECT EXISTS (
-          SELECT 1 FROM pg_available_extensions WHERE name = 'vector'
-        );
-      `);
-
-      if (!extensionCheck.rows[0].exists) {
-        throw new Error('PostgreSQL vector extension is not available. Please install it first.');
-      }
-
-      // Try to create extension
-      await client.query('CREATE EXTENSION IF NOT EXISTS vector');
-
-      // Create the table with explicit schema
-      await client.query(`
-        CREATE TABLE IF NOT EXISTS ${indexName} (
-          id SERIAL PRIMARY KEY,
-          vector_id TEXT UNIQUE NOT NULL,
-          embedding vector(${dimension}),
-          metadata JSONB DEFAULT '{}'::jsonb
-        );
-      `);
-
-      if (buildIndex) {
-        await this.buildIndex({ indexName, metric, indexConfig });
-      }
-    } catch (error: any) {
-      console.error('Failed to create vector table:', error);
-      throw error;
-    } finally {
-      client.release();
+    // Validate inputs
+    if (!indexName.match(/^[a-zA-Z_][a-zA-Z0-9_]*$/)) {
+      throw new Error('Invalid index name format');
     }
+    if (!Number.isInteger(dimension) || dimension <= 0) {
+      throw new Error('Dimension must be a positive integer');
+    }
+
+    const indexCacheKey = await this.getIndexCacheKey({ indexName, dimension, type: indexConfig.type, metric });
+    if (this.cachedIndexExists(indexName, indexCacheKey)) {
+      // we already saw this index get created since the process started, no need to recreate it
+      return;
+    }
+
+    const mutex = this.getMutexByName(`create-${indexName}`);
+    // Use async-mutex instead of advisory lock for perf (over 2x as fast)
+    await mutex.runExclusive(async () => {
+      if (this.cachedIndexExists(indexName, indexCacheKey)) {
+        // this may have been created while we were waiting to acquire a lock
+        return;
+      }
+
+      const client = await this.pool.connect();
+
+      try {
+        // Setup schema if needed
+        await this.setupSchema(client);
+
+        // Install vector extension first (needs to be in public schema)
+        await this.installVectorExtension(client);
+        await client.query(`
+          CREATE TABLE IF NOT EXISTS ${tableName} (
+            id SERIAL PRIMARY KEY,
+            vector_id TEXT UNIQUE NOT NULL,
+            embedding vector(${dimension}),
+            metadata JSONB DEFAULT '{}'::jsonb
+          );
+        `);
+        this.createdIndexes.set(indexName, indexCacheKey);
+
+        if (buildIndex) {
+          await this.setupIndex({ indexName, metric, indexConfig }, client);
+        }
+      } catch (error: any) {
+        this.createdIndexes.delete(indexName);
+        throw error;
+      } finally {
+        client.release();
+      }
+    });
   }
 
   /**
@@ -260,9 +423,26 @@ export class PgVector extends MastraVector {
 
     const client = await this.pool.connect();
     try {
-      await client.query(`DROP INDEX IF EXISTS ${indexName}_vector_idx`);
+      await this.setupIndex({ indexName, metric, indexConfig }, client);
+    } finally {
+      client.release();
+    }
+  }
 
-      if (indexConfig.type === 'flat') return;
+  private async setupIndex({ indexName, metric, indexConfig }: PgDefineIndexParams, client: pg.PoolClient) {
+    const mutex = this.getMutexByName(`build-${indexName}`);
+    // Use async-mutex instead of advisory lock for perf (over 2x as fast)
+    await mutex.runExclusive(async () => {
+      const tableName = this.getTableName(indexName);
+
+      if (this.createdIndexes.has(indexName)) {
+        await client.query(`DROP INDEX IF EXISTS ${tableName}_vector_idx`);
+      }
+
+      if (indexConfig.type === 'flat') {
+        this.describeIndexCache.delete(indexName);
+        return;
+      }
 
       const metricOp =
         metric === 'cosine' ? 'vector_cosine_ops' : metric === 'euclidean' ? 'vector_l2_ops' : 'vector_ip_ops';
@@ -273,8 +453,8 @@ export class PgVector extends MastraVector {
         const efConstruction = indexConfig.hnsw?.efConstruction ?? 32;
 
         indexSQL = `
-          CREATE INDEX ${indexName}_vector_idx 
-          ON ${indexName} 
+          CREATE INDEX IF NOT EXISTS ${indexName}_vector_idx 
+          ON ${tableName} 
           USING hnsw (embedding ${metricOp})
           WITH (
             m = ${m},
@@ -286,22 +466,71 @@ export class PgVector extends MastraVector {
         if (indexConfig.ivf?.lists) {
           lists = indexConfig.ivf.lists;
         } else {
-          const size = (await client.query(`SELECT COUNT(*) FROM ${indexName}`)).rows[0].count;
+          const size = (await client.query(`SELECT COUNT(*) FROM ${tableName}`)).rows[0].count;
           lists = Math.max(100, Math.min(4000, Math.floor(Math.sqrt(size) * 2)));
         }
         indexSQL = `
-          CREATE INDEX ${indexName}_vector_idx
-          ON ${indexName}
+          CREATE INDEX IF NOT EXISTS ${indexName}_vector_idx
+          ON ${tableName}
           USING ivfflat (embedding ${metricOp})
           WITH (lists = ${lists});
         `;
       }
 
       await client.query(indexSQL);
-      this.indexCache.delete(indexName);
-    } finally {
-      client.release();
+    });
+  }
+
+  private async installVectorExtension(client: pg.PoolClient) {
+    // If we've already successfully installed, no need to do anything
+    if (this.vectorExtensionInstalled) {
+      return;
     }
+
+    // If there's no existing installation attempt or the previous one failed
+    if (!this.installVectorExtensionPromise) {
+      this.installVectorExtensionPromise = (async () => {
+        try {
+          // First check if extension is already installed
+          const extensionCheck = await client.query(`
+            SELECT EXISTS (
+              SELECT 1 FROM pg_extension WHERE extname = 'vector'
+            );
+          `);
+
+          this.vectorExtensionInstalled = extensionCheck.rows[0].exists;
+
+          if (!this.vectorExtensionInstalled) {
+            try {
+              await client.query('CREATE EXTENSION IF NOT EXISTS vector');
+              this.vectorExtensionInstalled = true;
+              this.logger.info('Vector extension installed successfully');
+            } catch {
+              this.logger.warn(
+                'Could not install vector extension. This requires superuser privileges. ' +
+                  'If the extension is already installed globally, you can ignore this warning.',
+              );
+              // Don't set vectorExtensionInstalled to false here since we're not sure if it failed
+              // due to permissions or if it's already installed globally
+            }
+          } else {
+            this.logger.debug('Vector extension already installed, skipping installation');
+          }
+        } catch (error) {
+          this.logger.error('Error checking vector extension status', { error });
+          // Reset both the promise and the flag so we can retry
+          this.vectorExtensionInstalled = undefined;
+          this.installVectorExtensionPromise = null;
+          throw error; // Re-throw so caller knows it failed
+        } finally {
+          // Clear the promise after completion (success or failure)
+          this.installVectorExtensionPromise = null;
+        }
+      })();
+    }
+
+    // Wait for the installation process to complete
+    await this.installVectorExtensionPromise;
   }
 
   async listIndexes(): Promise<string[]> {
@@ -311,10 +540,10 @@ export class PgVector extends MastraVector {
       const vectorTablesQuery = `
             SELECT DISTINCT table_name
             FROM information_schema.columns
-            WHERE table_schema = 'public'
+            WHERE table_schema = $1
             AND udt_name = 'vector';
         `;
-      const vectorTables = await client.query(vectorTablesQuery);
+      const vectorTables = await client.query(vectorTablesQuery, [this.schema || 'public']);
       return vectorTables.rows.map(row => row.table_name);
     } finally {
       client.release();
@@ -324,6 +553,8 @@ export class PgVector extends MastraVector {
   async describeIndex(indexName: string): Promise<PGIndexStats> {
     const client = await this.pool.connect();
     try {
+      const tableName = this.getTableName(indexName);
+
       // Get vector dimension
       const dimensionQuery = `
                 SELECT atttypmod as dimension
@@ -335,7 +566,7 @@ export class PgVector extends MastraVector {
       // Get row count
       const countQuery = `
                 SELECT COUNT(*) as count
-                FROM ${indexName};
+                FROM ${tableName};
             `;
 
       // Get index metric type
@@ -348,11 +579,11 @@ export class PgVector extends MastraVector {
             JOIN pg_class c ON i.indexrelid = c.oid
             JOIN pg_am am ON c.relam = am.oid
             JOIN pg_opclass opclass ON i.indclass[0] = opclass.oid
-            WHERE c.relname = '${indexName}_vector_idx';
+            WHERE c.relname = '${tableName}_vector_idx';
             `;
 
       const [dimResult, countResult, indexResult] = await Promise.all([
-        client.query(dimensionQuery, [indexName]),
+        client.query(dimensionQuery, [tableName]),
         client.query(countQuery),
         client.query(indexQuery),
       ]);
@@ -401,8 +632,10 @@ export class PgVector extends MastraVector {
   async deleteIndex(indexName: string): Promise<void> {
     const client = await this.pool.connect();
     try {
+      const tableName = this.getTableName(indexName);
       // Drop the table
-      await client.query(`DROP TABLE IF EXISTS ${indexName} CASCADE`);
+      await client.query(`DROP TABLE IF EXISTS ${tableName} CASCADE`);
+      this.createdIndexes.delete(indexName);
     } catch (error: any) {
       await client.query('ROLLBACK');
       throw new Error(`Failed to delete vector table: ${error.message}`);
@@ -414,7 +647,8 @@ export class PgVector extends MastraVector {
   async truncateIndex(indexName: string) {
     const client = await this.pool.connect();
     try {
-      await client.query(`TRUNCATE ${indexName}`);
+      const tableName = this.getTableName(indexName);
+      await client.query(`TRUNCATE ${tableName}`);
     } catch (e: any) {
       await client.query('ROLLBACK');
       throw new Error(`Failed to truncate vector table: ${e.message}`);
@@ -460,10 +694,12 @@ export class PgVector extends MastraVector {
         return;
       }
 
+      const tableName = this.getTableName(indexName);
+
       // query looks like this:
       // UPDATE table SET embedding = $2::vector, metadata = $3::jsonb WHERE id = $1
       const query = `
-        UPDATE ${indexName}
+        UPDATE ${tableName}
         SET ${updateParts.join(', ')}
         WHERE vector_id = $1
       `;
@@ -477,8 +713,9 @@ export class PgVector extends MastraVector {
   async deleteIndexById(indexName: string, id: string): Promise<void> {
     const client = await this.pool.connect();
     try {
+      const tableName = this.getTableName(indexName);
       const query = `
-        DELETE FROM ${indexName}
+        DELETE FROM ${tableName}
         WHERE vector_id = $1
       `;
       await client.query(query, [id]);

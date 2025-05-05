@@ -7,14 +7,14 @@ import { rollup, type InputOptions, type OutputOptions } from 'rollup';
 import esbuild from 'rollup-plugin-esbuild';
 
 import type { analyzeBundle } from './analyze';
-import { libSqlFix } from './plugins/fix-libsql';
 import { removeDeployer } from './plugins/remove-deployer';
-import { telemetryFix } from './plugins/telemetry-fix';
+import { tsConfigPaths } from './plugins/tsconfig-paths';
 
 export async function getInputOptions(
   entryFile: string,
   analyzedBundleInfo: Awaited<ReturnType<typeof analyzeBundle>>,
   platform: 'node' | 'browser',
+  env: Record<string, string> = { 'process.env.NODE_ENV': JSON.stringify('production') },
 ): Promise<InputOptions> {
   let nodeResolvePlugin =
     platform === 'node'
@@ -30,15 +30,30 @@ export async function getInputOptions(
           browser: true,
         });
 
-  const externals = Array.from(analyzedBundleInfo.externalDependencies).concat(['@mastra/core/hooks']);
+  const externalsCopy = new Set<string>();
+
+  // make all nested imports external from the same package
+  for (const external of analyzedBundleInfo.externalDependencies) {
+    if (external.startsWith('@')) {
+      const [scope, name] = external.split('/', 3);
+      externalsCopy.add(`${scope}/${name}`);
+      externalsCopy.add(`${scope}/${name}/*`);
+    } else {
+      externalsCopy.add(external);
+      externalsCopy.add(`${external}/*`);
+    }
+  }
+
+  const externals = Array.from(externalsCopy);
+
+  const normalizedEntryFile = entryFile.replaceAll('\\', '/');
   return {
     logLevel: process.env.MASTRA_BUNDLER_DEBUG === 'true' ? 'debug' : 'silent',
-    treeshake: true,
+    treeshake: 'smallest',
     preserveSymlinks: true,
     external: externals,
     plugins: [
-      telemetryFix(),
-      libSqlFix(),
+      tsConfigPaths(),
       {
         name: 'alias-optimized-deps',
         // @ts-ignore
@@ -67,16 +82,25 @@ export async function getInputOptions(
             find: /^\#server$/,
             replacement: fileURLToPath(import.meta.resolve('@mastra/deployer/server')).replaceAll('\\', '/'),
           },
-          { find: /^\#mastra$/, replacement: entryFile.replaceAll('\\', '/') },
+          {
+            find: /^\@mastra\/server\/(.*)/,
+            replacement: `@mastra/server/$1`,
+            customResolver: id => {
+              if (id.startsWith('@mastra/server')) {
+                return {
+                  id: fileURLToPath(import.meta.resolve(id)),
+                };
+              }
+            },
+          },
+          { find: /^\#mastra$/, replacement: normalizedEntryFile },
         ],
       }),
       esbuild({
         target: 'node20',
         platform,
         minify: false,
-        define: {
-          'process.env.NODE_ENV': JSON.stringify('production'),
-        },
+        define: env,
       }),
       commonjs({
         extensions: ['.js', '.ts'],

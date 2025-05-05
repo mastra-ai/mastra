@@ -1,0 +1,158 @@
+---
+title: AI SDK useChat フック
+description: Mastra メモリを Vercel AI SDK useChat フックと統合する方法を示す例。
+---
+
+# 例: AI SDK `useChat` フック
+
+Vercel AI SDKの`useChat`フックを使用して、ReactのようなフロントエンドフレームワークとMastraのメモリを統合するには、メッセージ履歴を重複しないように注意深く扱う必要があります。この例では、推奨されるパターンを示しています。
+
+## `useChat`を使用したメッセージ重複の防止
+
+`useChat`のデフォルトの動作は、各リクエストでチャット履歴全体を送信します。Mastraのメモリは`threadId`に基づいて履歴を自動的に取得するため、クライアントから完全な履歴を送信すると、コンテキストウィンドウとストレージに重複したメッセージが発生します。
+
+**解決策:** `useChat`を設定して、`threadId`と`resourceId`と共に**最新のメッセージのみ**を送信します。
+
+```typescript
+// components/Chat.tsx (React Example)
+import { useChat } from "ai/react";
+
+export function Chat({ threadId, resourceId }) {
+  const { messages, input, handleInputChange, handleSubmit } = useChat({
+    api: "/api/chat", // Your backend endpoint
+    // Pass only the latest message and custom IDs
+    experimental_prepareRequestBody: (request) => {
+      // Ensure messages array is not empty and get the last message
+      const lastMessage = request.messages.length > 0 ? request.messages[request.messages.length - 1] : null;
+
+      // Return the structured body for your API route
+      return {
+        message: lastMessage, // Send only the most recent message content/role
+        threadId,
+        resourceId,
+      };
+    },
+    // Optional: Initial messages if loading history from backend
+    // initialMessages: loadedMessages,
+  });
+
+  // ... rest of your chat UI component
+  return (
+    <div>
+      {/* Render messages */}
+      <form onSubmit={handleSubmit}>
+        <input value={input} onChange={handleInputChange} placeholder="Send a message..." />
+        <button type="submit">Send</button>
+      </form>
+    </div>
+  );
+}
+
+// app/api/chat/route.ts (Next.js Example)
+import { Agent } from "@mastra/core/agent";
+import { Memory } from "@mastra/memory";
+import { openai } from "@ai-sdk/openai";
+import { CoreMessage } from "@mastra/core"; // Import CoreMessage
+
+const agent = new Agent({
+  name: "ChatAgent",
+  instructions: "You are a helpful assistant.",
+  model: openai("gpt-4o"),
+  memory: new Memory(), // Assumes default memory setup
+});
+
+export async function POST(request: Request) {
+  // Get data structured by experimental_prepareRequestBody
+  const { message, threadId, resourceId }: { message: CoreMessage | null; threadId: string; resourceId: string } = await request.json();
+
+  // Handle cases where message might be null (e.g., initial load or error)
+  if (!message || !message.content) {
+    // Return an appropriate response or error
+    return new Response("Missing message content", { status: 400 });
+  }
+
+  // Process with memory using the single message content
+  const stream = await agent.stream(message.content, {
+    threadId,
+    resourceId,
+    // Pass other message properties if needed, e.g., role
+    // messageOptions: { role: message.role }
+  });
+
+  // Return the streaming response
+  return stream.toDataStreamResponse();
+}
+```
+
+メッセージの永続性に関する詳細は、[AI SDKのドキュメント](https://sdk.vercel.ai/docs/ai-sdk-ui/chatbot-message-persistence)を参照してください。
+
+## 基本スレッド管理UI
+
+このページは `useChat` に焦点を当てていますが、スレッドを管理するためのUI（リスト、作成、選択）を構築することもできます。これは通常、`memory.getThreadsByResourceId()` や `memory.createThread()` のようなMastraのメモリ機能とやり取りするバックエンドAPIエンドポイントを含みます。
+
+```typescript
+// スレッドリストの概念的なReactコンポーネント
+import React, { useState, useEffect } from 'react';
+
+// API関数が存在すると仮定: fetchThreads, createNewThread
+async function fetchThreads(userId: string): Promise<{ id: string; title: string }[]> { /* ... */ }
+async function createNewThread(userId: string): Promise<{ id: string; title: string }> { /* ... */ }
+
+function ThreadList({ userId, currentThreadId, onSelectThread }) {
+  const [threads, setThreads] = useState([]);
+  // ... ローディングとエラーステート ...
+
+  useEffect(() => {
+    // userIdのスレッドを取得
+  }, [userId]);
+
+  const handleCreateThread = async () => {
+    // createNewThread APIを呼び出し、状態を更新し、新しいスレッドを選択
+  };
+
+  // ... スレッドのリストと新しい会話ボタンでUIをレンダリング ...
+  return (
+     <div>
+       <h2>会話</h2>
+       <button onClick={handleCreateThread}>新しい会話</button>
+       <ul>
+         {threads.map(thread => (
+           <li key={thread.id}>
+             <button onClick={() => onSelectThread(thread.id)} disabled={thread.id === currentThreadId}>
+               {thread.title || `チャット ${thread.id.substring(0, 8)}...`}
+             </button>
+           </li>
+         ))}
+       </ul>
+     </div>
+  );
+}
+
+// 親チャットコンポーネントでの使用例
+function ChatApp() {
+  const userId = "user_123";
+  const [currentThreadId, setCurrentThreadId] = useState<string | null>(null);
+
+  return (
+    <div style={{ display: 'flex' }}>
+      <ThreadList
+        userId={userId}
+        currentThreadId={currentThreadId}
+        onSelectThread={setCurrentThreadId}
+      />
+      <div style={{ flexGrow: 1 }}>
+        {currentThreadId ? (
+          <Chat threadId={currentThreadId} resourceId={userId} /> // あなたのuseChatコンポーネント
+        ) : (
+          <div>会話を選択または開始してください。</div>
+        )}
+      </div>
+    </div>
+  );
+}
+```
+
+## 関連
+
+-   **[はじめに](../../docs/memory/overview.mdx)**: `resourceId` と `threadId` の基本概念を説明します。
+-   **[メモリリファレンス](../../reference/memory/Memory.mdx)**: `Memory` クラスメソッドのAPI詳細。

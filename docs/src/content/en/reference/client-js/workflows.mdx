@@ -1,0 +1,136 @@
+# Workflows API
+
+The Workflows API provides methods to interact with and execute automated workflows in Mastra.
+
+## Getting All Workflows
+
+Retrieve a list of all available workflows:
+
+```typescript
+const workflows = await client.getWorkflows();
+```
+
+## Working with a Specific Workflow
+
+Get an instance of a specific workflow:
+
+```typescript
+const workflow = client.getWorkflow("workflow-id");
+```
+
+## Workflow Methods
+
+### Get Workflow Details
+
+Retrieve detailed information about a workflow:
+
+```typescript
+const details = await workflow.details();
+```
+
+### Start workflow run asynchronously
+
+Start a workflow run with triggerData and await full run results:
+
+```typescript
+const {runId} = workflow.createRun()
+
+const result = await workflow.startAsync({
+  runId,
+  triggerData: {
+    param1: "value1",
+    param2: "value2",
+  },
+});
+```
+
+### Resume Workflow run asynchronously
+
+Resume a suspended workflow step and await full run result:
+
+```typescript
+const {runId} = createRun({runId: prevRunId})
+
+const result = await workflow.resumeAsync({
+  runId,
+  stepId: "step-id",
+  contextData: { key: "value" },
+});
+```
+
+### Watch Workflow
+
+Watch workflow transitions
+
+```typescript
+try{
+  // Get workflow instance
+  const workflow = client.getWorkflow("workflow-id");
+
+  // Create a workflow run
+  const {runId} = workflow.createRun()
+
+  // Watch workflow run 
+     workflow.watch({runId},(record)=>{
+       // Every new record is the latest transition state of the workflow run
+
+        console.log({
+          activePaths: record.activePaths,
+          results: record.results,
+          timestamp: record.timestamp,
+          runId: record.runId
+        });
+     });
+
+  // Start workflow run
+     workflow.start({
+      runId,
+      triggerData: {
+        city: 'New York',
+      },
+    });
+}catch(e){
+  console.error(e);
+}
+```
+### Resume Workflow
+
+Resume workflow run and watch workflow step transitions
+
+```typescript
+try{
+  //To resume a workflow run, when a step is suspended
+  const {run} = createRun({runId: prevRunId})
+
+  //Watch run
+   workflow.watch({runId},(record)=>{
+   // Every new record is the latest transition state of the workflow run
+
+        console.log({
+          activePaths: record.activePaths,
+          results: record.results,
+          timestamp: record.timestamp,
+          runId: record.runId
+        });
+   })
+
+   //resume run
+   workflow.resume({
+      runId,
+      stepId: "step-id",
+      contextData: { key: "value" },
+    });
+}catch(e){
+  console.error(e);
+}
+```
+
+### Workflow run result
+A workflow run result yields the following:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `activePaths` | `Record<string, { status: string; suspendPayload?: any; stepPath: string[] }>` | Currently active paths in the workflow with their execution status |
+| `results` | `CoreWorkflowRunResult<any, any, any>['results']` | Results from the workflow execution |
+| `timestamp` | `number` | Unix timestamp of when this transition occurred |
+| `runId` | `string` | Unique identifier for this workflow run instance |

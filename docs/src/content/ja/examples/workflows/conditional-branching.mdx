@@ -1,0 +1,151 @@
+---
+title: "例：条件分岐（実験的） | ワークフロー | Mastra ドキュメント"
+description: if/else文を使用してワークフローに条件分岐を作成するためのMastraの使用例。
+---
+
+import { GithubLink } from '@/components/github-link';
+
+# 条件分岐を伴うワークフロー（実験的）
+
+ワークフローは、条件に基づいて異なるパスをたどる必要があることがよくあります。この例では、ワークフロー内で条件分岐を作成するために `if` と `else` を使用する方法を示します。
+
+## 基本的な If/Else の例
+
+この例は、数値に基づいて異なるパスを取るシンプルなワークフローを示しています:
+
+```ts showLineNumbers copy
+import { Mastra } from '@mastra/core';
+import { Step, Workflow } from '@mastra/core/workflows';
+import { z } from 'zod';
+
+
+// 初期値を提供するステップ
+const startStep = new Step({
+  id: 'start',
+  outputSchema: z.object({
+    value: z.number(),
+  }),
+  execute: async ({ context }) => {
+    // トリガーデータから値を取得
+    const value = context.triggerData.inputValue;
+    return { value };
+  },
+});
+
+// 高い値を処理するステップ
+const highValueStep = new Step({
+  id: 'highValue',
+  outputSchema: z.object({
+    result: z.string(),
+  }),
+  execute: async ({ context }) => {
+    const value = context.getStepResult<{ value: number }>('start')?.value;
+    return { result: `High value processed: ${value}` };
+  },
+});
+
+// 低い値を処理するステップ
+const lowValueStep = new Step({
+  id: 'lowValue',
+  outputSchema: z.object({
+    result: z.string(),
+  }),
+  execute: async ({ context }) => {
+    const value = context.getStepResult<{ value: number }>('start')?.value;
+    return { result: `Low value processed: ${value}` };
+  },
+});
+
+// 結果をまとめる最終ステップ
+const finalStep = new Step({
+  id: 'final',
+  outputSchema: z.object({
+    summary: z.string(),
+  }),
+  execute: async ({ context }) => {
+    // 実行されたどちらかのブランチから結果を取得
+    const highResult = context.getStepResult<{ result: string }>('highValue')?.result;
+    const lowResult = context.getStepResult<{ result: string }>('lowValue')?.result;
+
+    const result = highResult || lowResult;
+    return { summary: `Processing complete: ${result}` };
+  },
+});
+
+// 条件分岐を持つワークフローを構築
+const conditionalWorkflow = new Workflow({
+  name: 'conditional-workflow',
+  triggerSchema: z.object({
+    inputValue: z.number(),
+  }),
+});
+
+conditionalWorkflow
+  .step(startStep)
+  .if(async ({ context }) => {
+    const value = context.getStepResult<{ value: number }>('start')?.value ?? 0;
+    return value >= 10; // 条件: 値が10以上
+  })
+  .then(highValueStep)
+  .then(finalStep)
+  .else()
+  .then(lowValueStep)
+  .then(finalStep) // 両方のブランチが最終ステップで合流
+  .commit();
+
+// ワークフローを登録
+const mastra = new Mastra({
+  workflows: { conditionalWorkflow },
+});
+
+// 使用例
+async function runWorkflow(inputValue: number) {
+  const workflow = mastra.getWorkflow('conditionalWorkflow');
+  const { start } = workflow.createRun();
+
+  const result = await start({
+    triggerData: { inputValue },
+  });
+
+  console.log('Workflow result:', result.results);
+  return result;
+}
+
+// 高い値で実行 ("if" ブランチをたどる)
+const result1 = await runWorkflow(15);
+// 低い値で実行 ("else" ブランチをたどる)
+const result2 = await runWorkflow(5);
+
+console.log('Result 1:', result1);
+console.log('Result 2:', result2);
+
+```
+
+## 参照ベースの条件の使用
+
+比較演算子を使用して参照ベースの条件を使用することもできます：
+
+```ts showLineNumbers copy
+// 関数の代わりに参照ベースの条件を使用
+conditionalWorkflow
+  .step(startStep)
+  .if({
+    ref: { step: startStep, path: 'value' },
+    query: { $gte: 10 }, // 条件: 値が10以上
+  })
+  .then(highValueStep)
+  .then(finalStep)
+  .else()
+  .then(lowValueStep)
+  .then(finalStep)
+  .commit();
+```
+
+<br />
+<br />
+<hr className="dark:border-[#404040] border-gray-300" />
+<br />
+<br />
+<GithubLink
+  link={'https://github.com/mastra-ai/mastra/blob/main/examples/basics/workflows/conditional-branching'}
+/>

@@ -1,5 +1,5 @@
 import { Mastra } from '@mastra/core';
-import { LibSQLStore } from '@mastra/core/storage/libsql';
+import { LibSQLStore } from '@mastra/libsql';
 
 import { dane, daneChangeLog, daneCommitMessage, daneIssueLabeler, daneLinkChecker } from './agents/index.js';
 import { daneNewContributor } from './agents/new-contributor.js';
@@ -11,7 +11,8 @@ import { linkCheckerWorkflow } from './workflows/link-checker.js';
 import { packagePublisher } from './workflows/publish-packages.js';
 import { telephoneGameWorkflow } from './workflows/telephone-game.js';
 
-export const mastra = new Mastra({
+// @ts-ignore
+export const mastra: Mastra = new Mastra({
   agents: {
     dane,
     danePackagePublisher,
@@ -22,9 +23,7 @@ export const mastra = new Mastra({
     daneNewContributor,
   },
   storage: new LibSQLStore({
-    config: {
-      url: ':memory:',
-    },
+    url: ':memory:',
   }),
   workflows: {
     message: messageWorkflow,

@@ -1,0 +1,60 @@
+{
+  "name": "@mastra/mcp-docs-server",
+  "version": "0.0.12-alpha.5",
+  "description": "MCP server for accessing Mastra.ai documentation, changelogs, and news.",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "bin": "dist/stdio.js",
+  "files": [
+    "dist",
+    ".docs",
+    "README.md"
+  ],
+  "exports": {
+    ".": {
+      "import": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      }
+    },
+    "./package.json": "./package.json"
+  },
+  "scripts": {
+    "prepare-docs": "cross-env PREPARE=true node dist/prepare-docs/prepare.js",
+    "build:cli": "tsup src/stdio.ts src/prepare-docs/prepare.ts --format esm --experimental-dts --treeshake=smallest --splitting",
+    "pretest": "pnpm turbo build --filter @mastra/mcp-docs-server",
+    "test": "vitest run",
+    "lint": "eslint ."
+  },
+  "keywords": [],
+  "author": "",
+  "license": "Elastic-2.0",
+  "dependencies": {
+    "@mastra/core": "workspace:^",
+    "@mastra/mcp": "workspace:^",
+    "@modelcontextprotocol/sdk": "^1.9.0",
+    "date-fns": "^4.1.0",
+    "exit-hook": "^4.0.0",
+    "jsdom": "^26.0.0",
+    "turndown": "^7.1.2",
+    "uuid": "^11.1.0",
+    "zod": "^3.22.4",
+    "zod-to-json-schema": "^3.22.4"
+  },
+  "devDependencies": {
+    "@hono/node-server": "^1.13.8",
+    "@internal/lint": "workspace:*",
+    "@types/jsdom": "^21.1.7",
+    "@types/node": "^20.11.24",
+    "@types/turndown": "^5.0.5",
+    "@wong2/mcp-cli": "^1.6.0",
+    "cross-env": "^7.0.3",
+    "eslint": "^9.23.0",
+    "hono": "^4.7.4",
+    "tsup": "^8.4.0",
+    "tsx": "^4.19.3",
+    "typescript": "^5.3.3",
+    "vitest": "^3.1.2"
+  }
+}

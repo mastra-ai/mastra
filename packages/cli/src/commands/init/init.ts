@@ -6,6 +6,7 @@ import color from 'picocolors';
 import { DepsService } from '../../services/service.deps';
 import { getPackageManagerInstallCommand } from '../utils';
 
+import { installMastraDocsMCPServer } from './mcp-docs-server-install';
 import {
   createComponentsDir,
   createMastraDir,
@@ -27,12 +28,14 @@ export const init = async ({
   components,
   llmProvider = 'openai',
   llmApiKey,
+  configureEditorWithDocsMCP,
 }: {
   directory: string;
   components: string[];
   llmProvider: LLMProvider;
   addExample: boolean;
   llmApiKey?: string;
+  configureEditorWithDocsMCP?: undefined | 'windsurf' | 'cursor' | 'cursor-global';
 }) => {
   s.start('Initializing Mastra');
 
@@ -63,6 +66,17 @@ export const init = async ({
           writeCodeSample(dirPath, component as Components, llmProvider, components as Components[]),
         ),
       ]);
+
+      const depService = new DepsService();
+      const needsLibsql = (await depService.checkDependencies(['@mastra/libsql'])) !== `ok`;
+      if (needsLibsql) {
+        await depService.installPackages(['@mastra/libsql']);
+      }
+      const needsMemory =
+        components.includes(`agents`) && (await depService.checkDependencies(['@mastra/memory'])) !== `ok`;
+      if (needsMemory) {
+        await depService.installPackages(['@mastra/memory']);
+      }
     }
 
     const key = await getAPIKey(llmProvider || 'openai');
@@ -72,6 +86,13 @@ export const init = async ({
     const pm = depsService.packageManager;
     const installCommand = getPackageManagerInstallCommand(pm);
     await exec(`${pm} ${installCommand} ${aiSdkPackage}`);
+
+    if (configureEditorWithDocsMCP) {
+      await installMastraDocsMCPServer({
+        editor: configureEditorWithDocsMCP,
+        directory: process.cwd(),
+      });
+    }
 
     s.stop();
     if (!llmApiKey) {

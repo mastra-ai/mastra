@@ -22,6 +22,7 @@ import type {
 import type { MastraPrimitives } from '../../action';
 import { MastraBase } from '../../base';
 import { RegisteredLogger } from '../../logger';
+import type { Mastra } from '../../mastra';
 
 export class MastraLLMBase extends MastraBase {
   // @ts-ignore
@@ -78,7 +79,9 @@ export class MastraLLMBase extends MastraBase {
     if (p.logger) {
       this.__setLogger(p.logger);
     }
+  }
 
+  __registerMastra(p: Mastra) {
     this.#mastra = p;
   }
 
@@ -98,7 +101,7 @@ export class MastraLLMBase extends MastraBase {
 
   async generate<Z extends ZodSchema | JSONSchema7 | undefined = undefined>(
     messages: string | string[] | CoreMessage[],
-    options: LLMStreamOptions<Z> = {},
+    options: LLMStreamOptions<Z>,
   ): Promise<GenerateReturn<Z>> {
     this.logger.debug(`[LLMs:${this.name}] Generating text.`, { messages, options });
     throw new Error('Method not implemented.');
@@ -120,7 +123,7 @@ export class MastraLLMBase extends MastraBase {
 
   async stream<Z extends ZodSchema | JSONSchema7 | undefined = undefined>(
     messages: string | string[] | CoreMessage[],
-    options: LLMStreamOptions<Z> = {},
+    options: LLMStreamOptions<Z>,
   ): Promise<StreamReturn<Z>> {
     this.logger.debug(`[LLMs:${this.name}] Streaming text.`, { messages, options });
     throw new Error('Method not implemented.');

@@ -1,4 +1,6 @@
+"use client";
 import React from "react";
+import { T } from "gt-next/client";
 
 interface Parameter {
   name: string;
@@ -39,22 +41,28 @@ export const PropertiesTable: React.FC<PropertiesTableProps> = ({
           {properties.map((prop, idx) => (
             <div
               key={idx}
-              className="m-2 rounded-lg flex flex-col relative my-4 border border-zinc-200 dark:border-zinc-800"
+              className="m-2 rounded-lg flex flex-col relative my-4 border border-neutral-300 dark:border-neutral-900"
             >
               <div className="flex flex-col">
-                <div className="cursor-pointer font-mono text-xs absolute -top-3 right-2 bg-zinc-200 dark:bg-zinc-800 dark:text-zinc-400 px-2 py-1 rounded-md text-zinc-600 z-20">
+                <div className="cursor-pointer font-mono text-xs absolute -top-3 right-2 bg-zinc-200 dark:bg-neutral-700 dark:text-zinc-400 px-2 py-1 rounded-md text-zinc-600 z-20">
                   {prop.type}
                 </div>
                 {prop.parameters &&
                   prop.parameters.map((param, paramIdx) => (
                     <div
                       key={paramIdx}
-                      className="flex flex-col border-b p-3 gap-1 last:border-none border-zinc-200 dark:border-zinc-800"
+                      className="flex flex-col border-b p-3 gap-1 last:border-none dark:border-neutral-700"
                     >
                       <div className="relative flex flex-row items-start gap-2 group">
                         <h3 className="font-mono text-sm font-medium cursor-pointer">
                           {param.name}
-                          <span>{param.isOptional ? "?:" : ":"}</span>
+                          <span>
+                            {param.isOptional ? (
+                              <T id="components.properties_table.0">{"?:"}</T>
+                            ) : (
+                              <T id="components.properties_table.1">{":"}</T>
+                            )}
+                          </span>
                         </h3>
                         <div className="font-mono text-zinc-500 text-sm w-full">
                           {param.type}
@@ -80,12 +88,18 @@ export const PropertiesTable: React.FC<PropertiesTableProps> = ({
           <div
             key={index}
             id={item.name}
-            className="flex flex-col gap-1 py-3 border-b first:pt-0 first:pb-3 border-zinc-200 dark:border-zinc-800"
+            className="flex flex-col gap-1 py-3 border-b first:pt-0 first:pb-3 border-neutral-300 dark:border-neutral-900"
           >
             <div className="flex flex-row gap-2 group items-start">
               <h3 className="font-mono text-sm font-medium cursor-pointer">
                 {item.name}
-                <span>{item.isOptional ? "?:" : ":"}</span>
+                <span>
+                  {item.isOptional ? (
+                    <T id="components.properties_table.2">{"?:"}</T>
+                  ) : (
+                    <T id="components.properties_table.3">{":"}</T>
+                  )}
+                </span>
               </h3>
               <div className="text-sm leading-5 text-zinc-500">{item.type}</div>
               {item.defaultValue && (

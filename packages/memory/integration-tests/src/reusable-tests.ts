@@ -1,7 +1,9 @@
 import { randomUUID } from 'node:crypto';
-import type { Memory } from '@mastra/memory';
+import { openai } from '@ai-sdk/openai';
+import { Memory } from '@mastra/memory';
 import type { TextPart, ImagePart, FilePart, ToolCallPart } from 'ai';
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
+import { reorderToolCallsAndResults } from '../../src/utils';
 
 const resourceId = 'resource';
 // Test helpers
@@ -29,6 +31,7 @@ const createTestMessage = (
     role,
     type,
     createdAt: new Date(Date.now() + messageCounter * 1000), // Add 1 second per message to prevent messages having the same timestamp
+    resourceId,
   };
 };
 
@@ -105,6 +108,61 @@ export function getResuableTests(memory: Memory) {
     });
 
     describe('Semantic Search', () => {
+      it('should chunk long messages before embedding', async () => {
+        const memory = new Memory({
+          embedder: openai.embedding(`text-embedding-3-small`),
+          options: {
+            semanticRecall: {
+              topK: 1,
+              messageRange: 1,
+            },
+            lastMessages: 10,
+            threads: {
+              generateTitle: false,
+            },
+          },
+        });
+
+        const thread = await memory.createThread({
+          resourceId,
+          title: 'Long chunking test',
+        });
+        const threadId = thread.id;
+
+        const content = Array(1000).fill(`This is a long message to test chunking with`).join(`\n`);
+        await expect(
+          memory.saveMessages({
+            messages: [
+              {
+                type: 'text',
+                role: 'user',
+                content,
+                threadId,
+                id: `long-chunking-message-${Date.now()}`,
+                createdAt: new Date(),
+                resourceId,
+              },
+            ],
+          }),
+        ).resolves.not.toThrow();
+
+        const { messages } = await memory.query({
+          threadId,
+          resourceId,
+          selectBy: {
+            vectorSearchString: content,
+          },
+          threadConfig: {
+            semanticRecall: {
+              topK: 2,
+              messageRange: 2,
+            },
+          },
+        });
+
+        expect(messages.length).toBe(1);
+      });
+
       it('should find semantically similar messages', async () => {
         const messages = [
           createTestMessage(thread.id, 'The weather is nice today', 'user'),
@@ -262,10 +320,239 @@ export function getResuableTests(memory: Memory) {
         ]);
       });
 
+      it('should reorder tool calls to be directly before their matching tool results', async () => {
+        // Create a unique tool call ID for matching tool calls with results
+        const toolCallId = `test-call-${randomUUID()}`;
+
+        let count = 0;
+        const start = Date.now();
+        const getCreatedAt = () => new Date(start + ++count);
+
+        // Create an assistant message with a tool call
+        const toolCallMessage = {
+          id: randomUUID(),
+          threadId: thread.id as string,
+          resourceId,
+          role: 'assistant' as const,
+          type: 'text' as const,
+          createdAt: getCreatedAt(),
+          content: [
+            { type: 'text' as const, text: 'I will call a tool' },
+            {
+              type: 'tool-call' as const,
+              toolCallId,
+              toolName: 'test-tool',
+              args: { test: true },
+            },
+          ],
+        };
+
+        // First create a standard text message from the user
+        const userMessage = {
+          ...createTestMessage(thread.id, 'A user message to start the conversation', 'user'),
+          createdAt: getCreatedAt(),
+        };
+
+        // Create a tool result message
+        const toolResultMessage = {
+          id: randomUUID(),
+          threadId: thread.id,
+          resourceId,
+          role: 'assistant' as const,
+          type: 'text' as const,
+          createdAt: getCreatedAt(),
+          content: [
+            {
+              type: 'tool-result' as const,
+              toolCallId,
+              toolName: 'test-tool',
+              result: 'test result',
+            },
+          ],
+        };
+
+        // PART 1: Test the utility function directly
+        // Create a mock of what these messages would look like when retrieved directly from storage
+        // In storage, they would be in the wrong order: tool call, user, tool result
+        const rawMessages = [toolCallMessage, userMessage, toolResultMessage];
+
+        // Verify the reordering function works correctly directly
+        const reorderedMessages = reorderToolCallsAndResults(rawMessages);
+
+        // Now verify the reordering:
+        // 1. All messages should still be present
+        expect(reorderedMessages.length).toBe(3);
+
+        // 2. User message should remain in place (middle)
+        expect(reorderedMessages[0]).toBe(userMessage);
+
+        // 3. Tool call should come directly before tool result
+        expect(reorderedMessages[1]).toBe(toolCallMessage);
+        expect(reorderedMessages[2]).toBe(toolResultMessage);
+
+        // PART 2: INTEGRATION TEST - Save the messages and verify through Memory APIs
+
+        // Create a new thread for this part of the test to avoid interference
+        const integrationThread = await memory.createThread({
+          resourceId,
+          title: 'Tool Order Integration Test',
+        });
+
+        // Create copies of our test messages with the correct new threadId
+        const integrationToolCallMessage = {
+          ...toolCallMessage,
+          id: randomUUID(), // New ID to avoid conflicts
+          threadId: integrationThread.id,
+        };
+
+        const integrationUserMessage = {
+          ...userMessage,
+          id: randomUUID(), // New ID to avoid conflicts
+          threadId: integrationThread.id,
+        };
+
+        const integrationToolResultMessage = {
+          ...toolResultMessage,
+          id: randomUUID(), // New ID to avoid conflicts
+          threadId: integrationThread.id,
+        };
+
+        // Save messages in the wrong order intentionally
+        await memory.saveMessages({ messages: [integrationToolCallMessage] });
+        await memory.saveMessages({ messages: [integrationUserMessage] });
+        await memory.saveMessages({ messages: [integrationToolResultMessage] });
+
+        // Retrieve messages through rememberMessages
+        const result = await memory.rememberMessages({
+          threadId: integrationThread.id,
+          config: { lastMessages: 10 },
+        });
+
+        // Check that all messages are present
+        expect(result.messages.length).toBe(3);
+
+        // Verify message order directly by index
+        // We expect: [userMessage, toolCallMessage, toolResultMessage]
+        expect(result.messages[0].id).toBe(integrationUserMessage.id);
+        expect(result.messages[1].id).toBe(integrationToolCallMessage.id);
+        expect(result.messages[2].id).toBe(integrationToolResultMessage.id);
+      });
+
+      it('should reorder tool calls that appear after their results', async () => {
+        // Create a unique tool call ID for matching tool calls with results
+        const toolCallId = `test-call-${randomUUID()}`;
+
+        let count = 0;
+        const start = Date.now();
+        const getCreatedAt = () => new Date(start + ++count * 1000);
+
+        // Create a tool result message that appears first
+        const toolResultMessage = {
+          id: randomUUID(),
+          threadId: thread.id,
+          resourceId,
+          role: 'assistant' as const,
+          type: 'text' as const,
+          createdAt: getCreatedAt(),
+          content: [
+            {
+              type: 'tool-result' as const,
+              toolCallId,
+              toolName: 'test-tool',
+              result: 'test result',
+            },
+          ],
+        };
+
+        // Create a user message that appears second
+        const userMessage = {
+          ...createTestMessage(thread.id, 'A user message in between', 'user'),
+          createdAt: getCreatedAt(),
+        };
+
+        // Create an assistant message with a tool call that appears last
+        const toolCallMessage = {
+          id: randomUUID(),
+          threadId: thread.id as string,
+          resourceId,
+          role: 'assistant' as const,
+          type: 'text' as const,
+          createdAt: getCreatedAt(),
+          content: [
+            { type: 'text' as const, text: 'I will call a tool' },
+            {
+              type: 'tool-call' as const,
+              toolCallId,
+              toolName: 'test-tool',
+              args: { test: true },
+            },
+          ],
+        };
+
+        // Create messages in the wrong order: tool result, user, tool call
+        const rawMessages = [toolResultMessage, userMessage, toolCallMessage];
+
+        // Verify the reordering function works correctly
+        const reorderedMessages = reorderToolCallsAndResults(rawMessages);
+
+        // Now verify the reordering:
+        // 1. All messages should still be present
+        expect(reorderedMessages.length).toBe(3);
+
+        // 2. Tool call should come first, followed by tool result, then user message
+        expect(reorderedMessages[0]).toBe(toolCallMessage);
+        expect(reorderedMessages[1]).toBe(toolResultMessage);
+        expect(reorderedMessages[2]).toBe(userMessage);
+
+        // PART 2: INTEGRATION TEST
+        const integrationThread = await memory.createThread({
+          resourceId,
+          title: 'Reversed Tool Order Test',
+        });
+
+        // Create copies of our test messages with the correct new threadId
+        const integrationToolResultMessage = {
+          ...toolResultMessage,
+          id: randomUUID(),
+          threadId: integrationThread.id,
+        };
+
+        const integrationUserMessage = {
+          ...userMessage,
+          id: randomUUID(),
+          threadId: integrationThread.id,
+        };
+
+        const integrationToolCallMessage = {
+          ...toolCallMessage,
+          id: randomUUID(),
+          threadId: integrationThread.id,
+        };
+
+        // Save messages in the wrong order intentionally
+        await memory.saveMessages({ messages: [integrationToolResultMessage] });
+        await memory.saveMessages({ messages: [integrationUserMessage] });
+        await memory.saveMessages({ messages: [integrationToolCallMessage] });
+
+        // Retrieve messages through rememberMessages
+        const result = await memory.rememberMessages({
+          threadId: integrationThread.id,
+          config: { lastMessages: 10 },
+        });
+
+        // Check that all messages are present
+        expect(result.messages.length).toBe(3);
+
+        // Verify message order directly by index
+        expect(result.messages[0].id).toBe(integrationToolCallMessage.id);
+        expect(result.messages[1].id).toBe(integrationToolResultMessage.id);
+        expect(result.messages[2].id).toBe(integrationUserMessage.id);
+      });
+
       it('should handle complex message content', async () => {
         const complexMessage = [
-          { type: 'text', text: 'This is a complex message with multiple parts' },
-          { type: 'image', url: 'https://example.com/image.jpg' },
+          { type: 'text' as const, text: 'This is a complex message with multiple parts' },
+          { type: 'text' as const, text: 'https://example.com/image.jpg' },
         ];
 
         await memory.saveMessages({
@@ -280,6 +567,132 @@ export function getResuableTests(memory: Memory) {
           },
         });
         expect(result.messages[0].content).toEqual(complexMessage);
+      });
+
+      it('should reorder tool calls with multiple messages in between', async () => {
+        // Create a unique tool call ID for matching tool calls with results
+        const toolCallId = `test-call-${randomUUID()}`;
+
+        let count = 0;
+        const start = Date.now();
+        const getCreatedAt = () => new Date(start + ++count * 1000);
+
+        // Create an assistant message with a tool call
+        const toolCallMessage = {
+          id: randomUUID(),
+          threadId: thread.id as string,
+          resourceId,
+          role: 'assistant' as const,
+          type: 'text' as const,
+          createdAt: getCreatedAt(),
+          content: [
+            { type: 'text' as const, text: 'I will call a tool' },
+            {
+              type: 'tool-call' as const,
+              toolCallId,
+              toolName: 'test-tool',
+              args: { test: true },
+            },
+          ],
+        };
+
+        // Create two user messages
+        const userMessage1 = {
+          ...createTestMessage(thread.id, 'First user message in between', 'user'),
+          createdAt: getCreatedAt(),
+        };
+        const userMessage2 = {
+          ...createTestMessage(thread.id, 'Second user message in between', 'user'),
+          createdAt: getCreatedAt(),
+        };
+
+        // Create a tool result message
+        const toolResultMessage = {
+          id: randomUUID(),
+          threadId: thread.id,
+          resourceId,
+          role: 'assistant' as const,
+          type: 'text' as const,
+          createdAt: getCreatedAt(),
+          content: [
+            {
+              type: 'tool-result' as const,
+              toolCallId,
+              toolName: 'test-tool',
+              result: 'test result',
+            },
+          ],
+        };
+
+        // Create messages in the wrong order: tool call, user1, user2, tool result
+        const rawMessages = [toolCallMessage, userMessage1, userMessage2, toolResultMessage];
+
+        // Verify the reordering function works correctly
+        const reorderedMessages = reorderToolCallsAndResults(rawMessages);
+
+        // Now verify the reordering:
+        // 1. All messages should still be present
+        expect(reorderedMessages.length).toBe(4);
+
+        // 2. User messages should remain in their relative order
+        expect(reorderedMessages[0]).toBe(userMessage1);
+        expect(reorderedMessages[1]).toBe(userMessage2);
+
+        // 3. Tool call should come directly before tool result
+        expect(reorderedMessages[2]).toBe(toolCallMessage);
+        expect(reorderedMessages[3]).toBe(toolResultMessage);
+
+        // PART 2: INTEGRATION TEST
+        const integrationThread = await memory.createThread({
+          resourceId,
+          title: 'Multiple Messages Tool Order Test',
+        });
+
+        // Create copies of our test messages with the correct new threadId
+        const integrationToolCallMessage = {
+          ...toolCallMessage,
+          id: randomUUID(),
+          threadId: integrationThread.id,
+        };
+
+        const integrationUserMessage1 = {
+          ...userMessage1,
+          id: randomUUID(),
+          threadId: integrationThread.id,
+        };
+
+        const integrationUserMessage2 = {
+          ...userMessage2,
+          id: randomUUID(),
+          threadId: integrationThread.id,
+        };
+
+        const integrationToolResultMessage = {
+          ...toolResultMessage,
+          id: randomUUID(),
+          threadId: integrationThread.id,
+        };
+
+        // Save messages in the wrong order intentionally
+        await memory.saveMessages({ messages: [integrationToolCallMessage] });
+        await memory.saveMessages({ messages: [integrationUserMessage1] });
+        await memory.saveMessages({ messages: [integrationUserMessage2] });
+        await memory.saveMessages({ messages: [integrationToolResultMessage] });
+
+        // Retrieve messages through rememberMessages
+        const result = await memory.rememberMessages({
+          threadId: integrationThread.id,
+          config: { lastMessages: 10 },
+        });
+
+        // Check that all messages are present
+        expect(result.messages.length).toBe(4);
+
+        // Verify message order directly by index
+        expect(result.messages[0].id).toBe(integrationUserMessage1.id);
+        expect(result.messages[1].id).toBe(integrationUserMessage2.id);
+        expect(result.messages[2].id).toBe(integrationToolCallMessage.id);
+        expect(result.messages[3].id).toBe(integrationToolResultMessage.id);
       });
     });
 
@@ -324,6 +737,35 @@ export function getResuableTests(memory: Memory) {
 
         expect(result.messages).toHaveLength(1);
         expect(result.messages[0].content).toBe('Test message');
+      });
+    });
+    describe('Concurrent Operations', () => {
+      it('should handle concurrent message saves with embeddings', async () => {
+        const thread = await memory.saveThread({
+          thread: createTestThread('Concurrent Test Thread'),
+        });
+
+        // Create multiple batches of messages with embeddings
+        const messagesBatches = Array(5)
+          .fill(null)
+          .map(() => [
+            createTestMessage(thread.id, 'Test message with embedding'),
+            createTestMessage(thread.id, 'Another test message with embedding'),
+          ]);
+
+        // Try to save all batches concurrently
+        const promises = messagesBatches.map(messages => memory.saveMessages({ messages }));
+
+        // Should handle concurrent index creation gracefully
+        await expect(Promise.all(promises)).resolves.not.toThrow();
+
+        // Verify all messages were saved
+        const result = await memory.rememberMessages({
+          threadId: thread.id,
+          resourceId,
+          config: { lastMessages: 20 },
+        });
+        expect(result.messages).toHaveLength(messagesBatches.flat().length);
       });
     });
   });

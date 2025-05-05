@@ -1,10 +1,16 @@
-import { deepMerge } from '@mastra/core';
+import { deepMerge, memoryDefaultOptions } from '@mastra/core';
 import type { AiMessageType, CoreMessage, CoreTool } from '@mastra/core';
 import { MastraMemory } from '@mastra/core/memory';
 import type { MessageType, MemoryConfig, SharedMemoryConfig, StorageThreadType } from '@mastra/core/memory';
 import type { StorageGetMessagesArg } from '@mastra/core/storage';
-import { embed } from 'ai';
+import { embedMany } from 'ai';
+
+import xxhash from 'xxhash-wasm';
 import { updateWorkingMemoryTool } from './tools/working-memory';
+import { reorderToolCallsAndResults } from './utils';
+
+// Average characters per token based on OpenAI's tokenization
+const CHARS_PER_TOKEN = 4;
 
 /**
  * Concrete implementation of MastraMemory that adds support for thread configuration
@@ -16,6 +22,9 @@ export class Memory extends MastraMemory {
 
     const mergedConfig = this.getMergedThreadConfig({
       workingMemory: config.options?.workingMemory || {
+        // these defaults are now set inside @mastra/core/memory in getMergedThreadConfig.
+        // In a future release we can remove it from this block - for now if we remove it
+        // and someone bumps @mastra/memory without bumping @mastra/core the defaults wouldn't exist yet
         enabled: false,
         template: this.defaultWorkingMemoryTemplate,
       },
@@ -40,17 +49,17 @@ export class Memory extends MastraMemory {
     resourceId,
     selectBy,
     threadConfig,
-  }: StorageGetMessagesArg): Promise<{ messages: CoreMessage[]; uiMessages: AiMessageType[] }> {
+  }: StorageGetMessagesArg & {
+    threadConfig?: MemoryConfig;
+  }): Promise<{ messages: CoreMessage[]; uiMessages: AiMessageType[] }> {
     if (resourceId) await this.validateThreadIsOwnedByResource(threadId, resourceId);
 
-    let vectorResults:
-      | null
-      | {
-          id: string;
-          score: number;
-          metadata?: Record<string, any>;
-          vector?: number[];
-        }[] = null;
+    const vectorResults: {
+      id: string;
+      score: number;
+      metadata?: Record<string, any>;
+      vector?: number[];
+    }[] = [];
 
     this.logger.debug(`Memory query() with:`, {
       threadId,
@@ -60,37 +69,48 @@ export class Memory extends MastraMemory {
 
     const config = this.getMergedThreadConfig(threadConfig || {});
 
+    const defaultRange = memoryDefaultOptions.semanticRecall.messageRange;
+    const defaultTopK = memoryDefaultOptions.semanticRecall.topK;
+
     const vectorConfig =
       typeof config?.semanticRecall === `boolean`
         ? {
-            topK: 2,
-            messageRange: { before: 2, after: 2 },
+            topK: defaultTopK,
+            messageRange: defaultRange,
           }
         : {
-            topK: config?.semanticRecall?.topK ?? 2,
-            messageRange: config?.semanticRecall?.messageRange ?? { before: 2, after: 2 },
+            topK: config?.semanticRecall?.topK ?? defaultTopK,
+            messageRange: config?.semanticRecall?.messageRange ?? defaultRange,
           };
 
     if (config?.semanticRecall && selectBy?.vectorSearchString && this.vector && !!selectBy.vectorSearchString) {
-      const { embedding } = await embed({
-        value: selectBy.vectorSearchString,
-        model: this.embedder,
-      });
+      const { embeddings, dimension } = await this.embedMessageContent(selectBy.vectorSearchString!);
+      const { indexName } = await this.createEmbeddingIndex(dimension);
 
-      const { indexName } = await this.createEmbeddingIndex();
+      await Promise.all(
+        embeddings.map(async embedding => {
+          if (typeof this.vector === `undefined`) {
+            throw new Error(
+              `Tried to query vector index ${indexName} but this Memory instance doesn't have an attached vector db.`,
+            );
+          }
 
-      vectorResults = await this.vector.query({
-        indexName,
-        queryVector: embedding,
-        topK: vectorConfig.topK,
-        filter: {
-          thread_id: threadId,
-        },
-      });
+          vectorResults.push(
+            ...(await this.vector.query({
+              indexName,
+              queryVector: embedding,
+              topK: vectorConfig.topK,
+              filter: {
+                thread_id: threadId,
+              },
+            })),
+          );
+        }),
+      );
     }
 
     // Get raw messages from storage
-    const rawMessages = await this.storage.__getMessages({
+    const rawMessages = await this.storage.getMessages({
       threadId,
       selectBy: {
         ...selectBy,
@@ -113,9 +133,14 @@ export class Memory extends MastraMemory {
       threadConfig: config,
     });
 
+    // First sort messages by date
+    const orderedByDate = rawMessages.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+    // Then reorder tool calls to be directly before their results
+    const reorderedToolCalls = reorderToolCallsAndResults(orderedByDate);
+
     // Parse and convert messages
-    const messages = this.parseMessages(rawMessages);
-    const uiMessages = this.convertToUIMessages(rawMessages);
+    const messages = this.parseMessages(reorderedToolCalls);
+    const uiMessages = this.convertToUIMessages(reorderedToolCalls);
 
     return { messages, uiMessages };
   }
@@ -136,7 +161,6 @@ export class Memory extends MastraMemory {
     uiMessages: AiMessageType[];
   }> {
     if (resourceId) await this.validateThreadIsOwnedByResource(threadId, resourceId);
-
     const threadConfig = this.getMergedThreadConfig(config || {});
 
     if (!threadConfig.lastMessages && !threadConfig.semanticRecall) {
@@ -147,7 +171,7 @@ export class Memory extends MastraMemory {
       };
     }
 
-    const messages = await this.query({
+    const messagesResult = await this.query({
       threadId,
       selectBy: {
         last: threadConfig.lastMessages,
@@ -156,20 +180,20 @@ export class Memory extends MastraMemory {
       threadConfig: config,
     });
 
-    this.logger.debug(`Remembered message history includes ${messages.messages.length} messages.`);
+    this.logger.debug(`Remembered message history includes ${messagesResult.messages.length} messages.`);
     return {
       threadId,
-      messages: messages.messages,
-      uiMessages: messages.uiMessages,
+      messages: messagesResult.messages,
+      uiMessages: messagesResult.uiMessages,
     };
   }
 
   async getThreadById({ threadId }: { threadId: string }): Promise<StorageThreadType | null> {
-    return this.storage.__getThreadById({ threadId });
+    return this.storage.getThreadById({ threadId });
   }
 
   async getThreadsByResourceId({ resourceId }: { resourceId: string }): Promise<StorageThreadType[]> {
-    return this.storage.__getThreadsByResourceId({ resourceId });
+    return this.storage.getThreadsByResourceId({ resourceId });
   }
 
   async saveThread({
@@ -183,7 +207,7 @@ export class Memory extends MastraMemory {
 
     if (config.workingMemory?.enabled && !thread?.metadata?.workingMemory) {
       // if working memory is enabled but the thread doesn't have it, we need to set it
-      return this.storage.__saveThread({
+      return this.storage.saveThread({
         thread: deepMerge(thread, {
           metadata: {
             workingMemory: config.workingMemory.template || this.defaultWorkingMemoryTemplate,
@@ -192,7 +216,7 @@ export class Memory extends MastraMemory {
       });
     }
 
-    return this.storage.__saveThread({ thread });
+    return this.storage.saveThread({ thread });
   }
 
   async updateThread({
@@ -204,7 +228,7 @@ export class Memory extends MastraMemory {
     title: string;
     metadata: Record<string, unknown>;
   }): Promise<StorageThreadType> {
-    return this.storage.__updateThread({
+    return this.storage.updateThread({
       id,
       title,
       metadata,
@@ -212,12 +236,84 @@ export class Memory extends MastraMemory {
   }
 
   async deleteThread(threadId: string): Promise<void> {
-    await this.storage.__deleteThread({ threadId });
+    await this.storage.deleteThread({ threadId });
+  }
 
-    // TODO: Also clean up vector storage if it exists
-    // if (this.vector) {
-    //   await this.vector.deleteThread(threadId); ?? filter by thread attributes and delete all returned messages?
-    // }
+  private chunkText(text: string, tokenSize = 4096) {
+    // Convert token size to character size with some buffer
+    const charSize = tokenSize * CHARS_PER_TOKEN;
+    const chunks: string[] = [];
+    let currentChunk = '';
+
+    // Split text into words to avoid breaking words
+    const words = text.split(/\s+/);
+
+    for (const word of words) {
+      // Add space before word unless it's the first word in the chunk
+      const wordWithSpace = currentChunk ? ' ' + word : word;
+
+      // If adding this word would exceed the chunk size, start a new chunk
+      if (currentChunk.length + wordWithSpace.length > charSize) {
+        chunks.push(currentChunk);
+        currentChunk = word;
+      } else {
+        currentChunk += wordWithSpace;
+      }
+    }
+
+    // Add the final chunk if not empty
+    if (currentChunk) {
+      chunks.push(currentChunk);
+    }
+
+    return chunks;
+  }
+
+  private hasher = xxhash();
+
+  // embedding is computationally expensive so cache content -> embeddings/chunks
+  private embeddingCache = new Map<
+    number,
+    {
+      chunks: string[];
+      embeddings: Awaited<ReturnType<typeof embedMany>>['embeddings'];
+      dimension: number | undefined;
+    }
+  >();
+  private firstEmbed: Promise<any> | undefined;
+  private async embedMessageContent(content: string) {
+    // use fast xxhash for lower memory usage. if we cache by content string we will store all messages in memory for the life of the process
+    const key = (await this.hasher).h32(content);
+    const cached = this.embeddingCache.get(key);
+    if (cached) return cached;
+    const chunks = this.chunkText(content);
+
+    if (typeof this.embedder === `undefined`) {
+      throw new Error(`Tried to embed message content but this Memory instance doesn't have an attached embedder.`);
+    }
+    // for fastembed multiple initial calls to embed will fail if the model hasn't been downloaded yet.
+    const isFastEmbed = this.embedder.provider === `fastembed`;
+    if (isFastEmbed && this.firstEmbed instanceof Promise) {
+      // so wait for the first one
+      await this.firstEmbed;
+    }
+
+    const promise = embedMany({
+      values: chunks,
+      model: this.embedder,
+      maxRetries: 3,
+    });
+
+    if (isFastEmbed && !this.firstEmbed) this.firstEmbed = promise;
+    const { embeddings } = await promise;
+
+    const result = {
+      embeddings,
+      chunks,
+      dimension: embeddings[0]?.length,
+    };
+    this.embeddingCache.set(key, result);
+    return result;
   }
 
   async saveMessages({
@@ -231,46 +327,82 @@ export class Memory extends MastraMemory {
     await this.saveWorkingMemory(messages);
 
     // Then strip working memory tags from all messages
-    this.mutateMessagesToHideWorkingMemory(messages);
+    const updatedMessages = this.updateMessagesToHideWorkingMemory(messages);
 
     const config = this.getMergedThreadConfig(memoryConfig);
 
-    if (this.vector && config.semanticRecall) {
-      const { indexName } = await this.createEmbeddingIndex();
+    const result = this.storage.saveMessages({ messages: updatedMessages });
 
-      for (const message of messages) {
-        if (typeof message.content !== `string` || message.content === '') continue;
-        const { embedding } = await embed({ value: message.content, model: this.embedder, maxRetries: 3 });
-        await this.vector.upsert({
-          indexName,
-          vectors: [embedding],
-          metadata: [
-            {
-              text: message.content,
+    if (this.vector && config.semanticRecall) {
+      let indexName: Promise<string>;
+      await Promise.all(
+        updatedMessages.map(async message => {
+          if (typeof message.content !== `string` || message.content === '') return;
+
+          const { embeddings, chunks, dimension } = await this.embedMessageContent(message.content);
+
+          if (typeof indexName === `undefined`) {
+            indexName = this.createEmbeddingIndex(dimension).then(result => result.indexName);
+          }
+
+          if (typeof this.vector === `undefined`) {
+            throw new Error(
+              `Tried to upsert embeddings to index ${indexName} but this Memory instance doesn't have an attached vector db.`,
+            );
+          }
+
+          await this.vector.upsert({
+            indexName: await indexName,
+            vectors: embeddings,
+            metadata: chunks.map(() => ({
               message_id: message.id,
               thread_id: message.threadId,
-            },
-          ],
-        });
-      }
+              resource_id: message.resourceId,
+            })),
+          });
+        }),
+      );
     }
 
-    return this.storage.__saveMessages({ messages });
+    return result;
   }
 
-  protected mutateMessagesToHideWorkingMemory(messages: MessageType[]) {
+  protected updateMessagesToHideWorkingMemory(messages: MessageType[]): MessageType[] {
     const workingMemoryRegex = /<working_memory>([^]*?)<\/working_memory>/g;
+
+    const updatedMessages: MessageType[] = [];
+
     for (const message of messages) {
       if (typeof message?.content === `string`) {
-        message.content = message.content.replace(workingMemoryRegex, ``).trim();
+        updatedMessages.push({
+          ...message,
+          content: message.content.replace(workingMemoryRegex, ``).trim(),
+        });
       } else if (Array.isArray(message?.content)) {
-        for (const content of message.content) {
-          if (content.type === `text`) {
-            content.text = content.text.replace(workingMemoryRegex, ``).trim();
-          }
+        const contentIsWorkingMemory = message.content.some(
+          content =>
+            (content.type === `tool-call` || content.type === `tool-result`) &&
+            content.toolName === `updateWorkingMemory`,
+        );
+        if (contentIsWorkingMemory) {
+          continue;
         }
+        const newContent = message.content.map(content => {
+          if (content.type === 'text') {
+            return {
+              ...content,
+              text: content.text.replace(workingMemoryRegex, '').trim(),
+            };
+          }
+          return { ...content };
+        }) as MessageType['content'];
+        updatedMessages.push({ ...message, content: newContent });
+      } else {
+        updatedMessages.push({ ...message });
       }
     }
+
+    return updatedMessages;
   }
 
   protected parseWorkingMemory(text: string): string | null {
@@ -287,11 +419,11 @@ export class Memory extends MastraMemory {
     return null;
   }
 
-  protected async getWorkingMemory({ threadId }: { threadId: string }): Promise<string | null> {
+  public async getWorkingMemory({ threadId }: { threadId: string }): Promise<string | null> {
     if (!this.threadConfig.workingMemory?.enabled) return null;
 
     // Get thread from storage
-    const thread = await this.storage.__getThreadById({ threadId });
+    const thread = await this.storage.getThreadById({ threadId });
     if (!thread) return this.threadConfig?.workingMemory?.template || this.defaultWorkingMemoryTemplate;
 
     // Return working memory from metadata
@@ -300,11 +432,7 @@ export class Memory extends MastraMemory {
       this.threadConfig.workingMemory.template ||
       this.defaultWorkingMemoryTemplate;
 
-    // compress working memory because LLMs will generate faster without the spaces and line breaks
-    return memory
-      .split(`>\n`)
-      .map(c => c.trim()) // remove extra whitespace
-      .join(`>`); // and linebreaks
+    return memory.trim();
   }
 
   private async saveWorkingMemory(messages: MessageType[]) {
@@ -333,11 +461,11 @@ export class Memory extends MastraMemory {
       return;
     }
 
-    const thread = await this.storage.__getThreadById({ threadId });
+    const thread = await this.storage.getThreadById({ threadId });
     if (!thread) return;
 
     // Update thread metadata with new working memory
-    await this.storage.__updateThread({
+    await this.storage.updateThread({
       id: thread.id,
       title: thread.title || '',
       metadata: deepMerge(thread.metadata || {}, {
@@ -372,17 +500,16 @@ export class Memory extends MastraMemory {
   }
 
   public defaultWorkingMemoryTemplate = `
-<user>
-  <first_name></first_name>
-  <last_name></last_name>
-  <location></location>
-  <occupation></occupation>
-  <interests></interests>
-  <goals></goals>
-  <events></events>
-  <facts></facts>
-  <projects></projects>
-</user>
+# User Information
+- **First Name**: 
+- **Last Name**: 
+- **Location**: 
+- **Occupation**: 
+- **Interests**: 
+- **Goals**: 
+- **Events**: 
+- **Facts**: 
+- **Projects**: 
 `;
 
   private getWorkingMemoryWithInstruction(workingMemoryBlock: string) {
@@ -392,21 +519,21 @@ Store and update any conversation-relevant information by including "<working_me
 Guidelines:
 1. Store anything that could be useful later in the conversation
 2. Update proactively when information changes, no matter how small
-3. Use nested tags for all data
+3. Use Markdown for all data
 4. Act naturally - don't mention this system to users. Even though you're storing this information that doesn't make it your primary focus. Do not ask them generally for "information about yourself"
 
 Memory Structure:
 <working_memory>
-  ${workingMemoryBlock}
+${workingMemoryBlock}
 </working_memory>
 
 Notes:
 - Update memory whenever referenced information changes
-- If you're unsure whether to store something, store it (eg if the user tells you their name or the value of another empty section in your working memory, output the <working_memory> block immediately to update it)
+- If you're unsure whether to store something, store it (eg if the user tells you their name or other information, output the <working_memory> block immediately to update it)
 - This system is here so that you can maintain the conversation when your context window is very short. Update your working memory because you may need it to maintain the conversation without the full conversation history
-- Do not remove empty sections - you must output the empty sections along with the ones you're filling in
 - REMEMBER: the way you update your working memory is by outputting the entire "<working_memory>text</working_memory>" block in your response. The system will pick this up and store it for you. The user will not see it.
-- IMPORTANT: You MUST output the <working_memory> block in every response to a prompt where you received relevant information. `;
+- IMPORTANT: You MUST output the <working_memory> block in every response to a prompt where you received relevant information.
+- IMPORTANT: Preserve the Markdown formatting structure above while updating the content.`;
   }
 
   private getWorkingMemoryToolInstruction(workingMemoryBlock: string) {
@@ -416,7 +543,7 @@ Store and update any conversation-relevant information by calling the updateWork
 Guidelines:
 1. Store anything that could be useful later in the conversation
 2. Update proactively when information changes, no matter how small
-3. Use nested XML tags for all data
+3. Use Markdown format for all data
 4. Act naturally - don't mention this system to users. Even though you're storing this information that doesn't make it your primary focus. Do not ask them generally for "information about yourself"
 
 Memory Structure:
@@ -424,11 +551,12 @@ ${workingMemoryBlock}
 
 Notes:
 - Update memory whenever referenced information changes
-- If you're unsure whether to store something, store it (eg if the user tells you their name or the value of another empty section in your working memory, call updateWorkingMemory immediately to update it)
+- If you're unsure whether to store something, store it (eg if the user tells you information about themselves, call updateWorkingMemory immediately to update it)
 - This system is here so that you can maintain the conversation when your context window is very short. Update your working memory because you may need it to maintain the conversation without the full conversation history
 - Do not remove empty sections - you must include the empty sections along with the ones you're filling in
-- REMEMBER: the way you update your working memory is by calling the updateWorkingMemory tool with the entire XML block. The system will store it for you. The user will not see it.
-- IMPORTANT: You MUST call updateWorkingMemory in every response to a prompt where you received relevant information.`;
+- REMEMBER: the way you update your working memory is by calling the updateWorkingMemory tool with the entire Markdown content. The system will store it for you. The user will not see it.
+- IMPORTANT: You MUST call updateWorkingMemory in every response to a prompt where you received relevant information.
+- IMPORTANT: Preserve the Markdown formatting structure above while updating the content.`;
   }
 
   public getTools(config?: MemoryConfig): Record<string, CoreTool> {

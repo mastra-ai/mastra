@@ -1,5 +1,836 @@
 # @mastra/deployer
 
+## 0.3.2-alpha.5
+
+### Patch Changes
+
+- 8607972: Introduce Mastra lint cli command
+- Updated dependencies [3d2fb5c]
+- Updated dependencies [7eeb2bc]
+- Updated dependencies [8607972]
+- Updated dependencies [7eeb2bc]
+- Updated dependencies [fba031f]
+  - @mastra/core@0.9.2-alpha.5
+  - @mastra/server@2.0.2-alpha.5
+
+## 0.3.2-alpha.4
+
+### Patch Changes
+
+- Updated dependencies [ccef9f9]
+- Updated dependencies [51e6923]
+  - @mastra/core@0.9.2-alpha.4
+  - @mastra/server@2.0.2-alpha.4
+
+## 0.3.2-alpha.3
+
+### Patch Changes
+
+- 4155f47: Add parameters to filter workflow runs
+  Add fromDate and toDate to telemetry parameters
+- Updated dependencies [967b41c]
+- Updated dependencies [4155f47]
+- Updated dependencies [17826a9]
+  - @mastra/core@0.9.2-alpha.3
+  - @mastra/server@2.0.2-alpha.3
+
+## 0.3.2-alpha.2
+
+### Patch Changes
+
+- Updated dependencies [26738f4]
+  - @mastra/core@0.9.2-alpha.2
+  - @mastra/server@2.0.2-alpha.2
+
+## 0.3.2-alpha.1
+
+### Patch Changes
+
+- 254f5c3: Audit, cleanup MastraClient
+- Updated dependencies [b804723]
+  - @mastra/core@0.9.2-alpha.1
+  - @mastra/server@2.0.2-alpha.1
+
+## 0.3.2-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [0097d50]
+  - @mastra/server@2.0.2-alpha.0
+  - @mastra/core@0.9.2-alpha.0
+
+## 0.3.1
+
+### Patch Changes
+
+- e7c2881: fix: support dynamic imports when bundling
+- 0ccb8b4: Fix deployer bundling when custom mastra dir is set
+- 92c598d: Remove API request logs from local dev server
+- ebdb781: Fix writing tools in correct folder
+- 35955b0: Rename import to runtime-contxt
+- 6262bd5: Mastra server custom host config
+- c1409ef: Add vNextWorkflow handlers and APIs
+  Add stepGraph and steps to vNextWorkflow
+- 3e7b69d: Dynamic agent props
+- 11d4485: Show VNext workflows on the playground
+  Show running status for step in vNext workflowState
+- 530ced1: Fix cloudflare deployer by removing import.meta.url reference
+- 611aa4a: add all builds to run postinstall
+- 1d3b1cd: Rebump
+- Updated dependencies [34a76ca]
+- Updated dependencies [405b63d]
+- Updated dependencies [81fb7f6]
+- Updated dependencies [20275d4]
+- Updated dependencies [7d1892c]
+- Updated dependencies [a90a082]
+- Updated dependencies [2d17c73]
+- Updated dependencies [61e92f5]
+- Updated dependencies [35955b0]
+- Updated dependencies [6262bd5]
+- Updated dependencies [c1409ef]
+- Updated dependencies [3e7b69d]
+- Updated dependencies [e4943b8]
+- Updated dependencies [f200fed]
+- Updated dependencies [11d4485]
+- Updated dependencies [479f490]
+- Updated dependencies [57b25ed]
+- Updated dependencies [c23a81c]
+- Updated dependencies [2d4001d]
+- Updated dependencies [c71013a]
+- Updated dependencies [1d3b1cd]
+  - @mastra/server@2.0.1
+  - @mastra/core@0.9.1
+
+## 0.3.1-alpha.8
+
+### Patch Changes
+
+- Updated dependencies [2d17c73]
+  - @mastra/core@0.9.1-alpha.8
+  - @mastra/server@2.0.1-alpha.8
+
+## 0.3.1-alpha.7
+
+### Patch Changes
+
+- 1d3b1cd: Rebump
+- Updated dependencies [1d3b1cd]
+  - @mastra/core@0.9.1-alpha.7
+  - @mastra/server@2.0.1-alpha.7
+
+## 0.3.1-alpha.6
+
+### Patch Changes
+
+- Updated dependencies [c23a81c]
+  - @mastra/core@0.9.1-alpha.6
+  - @mastra/server@2.0.1-alpha.6
+
+## 0.3.1-alpha.5
+
+### Patch Changes
+
+- 3e7b69d: Dynamic agent props
+- Updated dependencies [3e7b69d]
+  - @mastra/core@0.9.1-alpha.5
+  - @mastra/server@2.0.1-alpha.5
+
+## 0.3.1-alpha.4
+
+### Patch Changes
+
+- Updated dependencies [e4943b8]
+- Updated dependencies [479f490]
+  - @mastra/core@0.9.1-alpha.4
+  - @mastra/server@2.0.1-alpha.4
+
+## 0.3.1-alpha.3
+
+### Patch Changes
+
+- 6262bd5: Mastra server custom host config
+- Updated dependencies [34a76ca]
+- Updated dependencies [6262bd5]
+  - @mastra/server@2.0.1-alpha.3
+  - @mastra/core@0.9.1-alpha.3
+
+## 0.3.1-alpha.2
+
+### Patch Changes
+
+- Updated dependencies [405b63d]
+- Updated dependencies [61e92f5]
+- Updated dependencies [57b25ed]
+- Updated dependencies [c71013a]
+  - @mastra/core@0.9.1-alpha.2
+  - @mastra/server@2.0.1-alpha.2
+
+## 0.3.1-alpha.1
+
+### Patch Changes
+
+- e7c2881: fix: support dynamic imports when bundling
+- 0ccb8b4: Fix deployer bundling when custom mastra dir is set
+- 92c598d: Remove API request logs from local dev server
+- ebdb781: Fix writing tools in correct folder
+- 35955b0: Rename import to runtime-contxt
+- c1409ef: Add vNextWorkflow handlers and APIs
+  Add stepGraph and steps to vNextWorkflow
+- 11d4485: Show VNext workflows on the playground
+  Show running status for step in vNext workflowState
+- 530ced1: Fix cloudflare deployer by removing import.meta.url reference
+- 611aa4a: add all builds to run postinstall
+- Updated dependencies [20275d4]
+- Updated dependencies [7d1892c]
+- Updated dependencies [a90a082]
+- Updated dependencies [35955b0]
+- Updated dependencies [c1409ef]
+- Updated dependencies [f200fed]
+- Updated dependencies [11d4485]
+- Updated dependencies [2d4001d]
+  - @mastra/core@0.9.1-alpha.1
+  - @mastra/server@2.0.1-alpha.1
+
+## 0.3.1-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [81fb7f6]
+  - @mastra/core@0.9.1-alpha.0
+  - @mastra/server@2.0.1-alpha.0
+
+## 0.3.0
+
+### Minor Changes
+
+- fe3ae4d: Remove \_\_ functions in storage and move to storage proxy to make sure init is called
+
+### Patch Changes
+
+- b9122b0: fix: When using a third party exporter such as Langfuse we were not installing external deps imported from the telemetry config
+- 3527610: Fix multi slash imports during bundling
+- 7e92011: Include tools with deployment builds
+- 2538066: Fix memory thread creation from client SDK
+- 63fe16a: Support monorepo workspace packages with native bindings
+- 0f4eae3: Rename Container into RuntimeContext
+- 3f9d151: Add support for tsconfig paths in server-configuration
+- 735ead7: Add support for process.env.development
+- 16a8648: Disable swaggerUI, playground for production builds, mastra instance server build config to enable swaggerUI, apiReqLogs, openAPI documentation for prod builds
+- Updated dependencies [000a6d4]
+- Updated dependencies [08bb78e]
+- Updated dependencies [ed2f549]
+- Updated dependencies [7e92011]
+- Updated dependencies [9ee4293]
+- Updated dependencies [03f3cd0]
+- Updated dependencies [c0f22b4]
+- Updated dependencies [71d9444]
+- Updated dependencies [157c741]
+- Updated dependencies [8a8a73b]
+- Updated dependencies [0a033fa]
+- Updated dependencies [fe3ae4d]
+- Updated dependencies [9c26508]
+- Updated dependencies [0f4eae3]
+- Updated dependencies [1c0d2b7]
+- Updated dependencies [16a8648]
+- Updated dependencies [6f92295]
+  - @mastra/core@0.9.0
+  - @mastra/server@2.0.0
+
+## 0.3.0-alpha.9
+
+### Patch Changes
+
+- b9122b0: fix: When using a third party exporter such as Langfuse we were not installing external deps imported from the telemetry config
+- 2538066: Fix memory thread creation from client SDK
+- 0f4eae3: Rename Container into RuntimeContext
+- 16a8648: Disable swaggerUI, playground for production builds, mastra instance server build config to enable swaggerUI, apiReqLogs, openAPI documentation for prod builds
+- Updated dependencies [000a6d4]
+- Updated dependencies [ed2f549]
+- Updated dependencies [c0f22b4]
+- Updated dependencies [0a033fa]
+- Updated dependencies [9c26508]
+- Updated dependencies [0f4eae3]
+- Updated dependencies [1c0d2b7]
+- Updated dependencies [16a8648]
+  - @mastra/core@0.9.0-alpha.8
+  - @mastra/server@2.0.0-alpha.8
+
+## 0.3.0-alpha.8
+
+### Patch Changes
+
+- Updated dependencies [71d9444]
+  - @mastra/core@0.9.0-alpha.7
+  - @mastra/server@2.0.0-alpha.7
+
+## 0.3.0-alpha.7
+
+### Patch Changes
+
+- 63fe16a: Support monorepo workspace packages with native bindings
+- 735ead7: Add support for process.env.development
+- Updated dependencies [157c741]
+  - @mastra/core@0.9.0-alpha.6
+  - @mastra/server@2.0.0-alpha.6
+
+## 0.3.0-alpha.6
+
+### Patch Changes
+
+- 3f9d151: Add support for tsconfig paths in server-configuration
+- Updated dependencies [08bb78e]
+  - @mastra/core@0.9.0-alpha.5
+  - @mastra/server@2.0.0-alpha.5
+
+## 0.3.0-alpha.5
+
+### Patch Changes
+
+- 7e92011: Include tools with deployment builds
+- Updated dependencies [7e92011]
+  - @mastra/core@0.9.0-alpha.4
+  - @mastra/server@2.0.0-alpha.4
+
+## 0.3.0-alpha.4
+
+### Minor Changes
+
+- fe3ae4d: Remove \_\_ functions in storage and move to storage proxy to make sure init is called
+
+### Patch Changes
+
+- Updated dependencies [fe3ae4d]
+  - @mastra/server@2.0.0-alpha.3
+  - @mastra/core@0.9.0-alpha.3
+
+## 0.2.10-alpha.3
+
+### Patch Changes
+
+- Updated dependencies [9ee4293]
+  - @mastra/core@0.8.4-alpha.2
+  - @mastra/server@1.0.4-alpha.2
+
+## 0.2.10-alpha.2
+
+### Patch Changes
+
+- 3527610: Fix multi slash imports during bundling
+
+## 0.2.10-alpha.1
+
+### Patch Changes
+
+- Updated dependencies [8a8a73b]
+- Updated dependencies [6f92295]
+  - @mastra/core@0.8.4-alpha.1
+  - @mastra/server@1.0.4-alpha.1
+
+## 0.2.10-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [03f3cd0]
+  - @mastra/core@0.8.4-alpha.0
+  - @mastra/server@1.0.4-alpha.0
+
+## 0.2.9
+
+### Patch Changes
+
+- 9f6f6dd: Fix container for tools execution api
+- 32e7b71: Add support for dependency injection
+- 37bb612: Add Elastic-2.0 licensing for packages
+- 1ebbfbf: Add 3 minutes timeout to deployer server
+- 67aff42: Fix netlify deployer missing @libsql/linux-x64-gnu bug
+- Updated dependencies [d72318f]
+- Updated dependencies [0bcc862]
+- Updated dependencies [10a8caf]
+- Updated dependencies [359b089]
+- Updated dependencies [9f6f6dd]
+- Updated dependencies [32e7b71]
+- Updated dependencies [37bb612]
+- Updated dependencies [7f1b291]
+  - @mastra/core@0.8.3
+  - @mastra/server@1.0.3
+
+## 0.2.9-alpha.7
+
+### Patch Changes
+
+- Updated dependencies [d72318f]
+  - @mastra/core@0.8.3-alpha.5
+  - @mastra/server@1.0.3-alpha.6
+
+## 0.2.9-alpha.6
+
+### Patch Changes
+
+- 67aff42: Fix netlify deployer missing @libsql/linux-x64-gnu bug
+
+## 0.2.9-alpha.5
+
+### Patch Changes
+
+- 9f6f6dd: Fix container for tools execution api
+- Updated dependencies [9f6f6dd]
+  - @mastra/server@1.0.3-alpha.5
+
+## 0.2.9-alpha.4
+
+### Patch Changes
+
+- 1ebbfbf: Add 3 minutes timeout to deployer server
+- Updated dependencies [7f1b291]
+  - @mastra/core@0.8.3-alpha.4
+  - @mastra/server@1.0.3-alpha.4
+
+## 0.2.9-alpha.3
+
+### Patch Changes
+
+- Updated dependencies [10a8caf]
+  - @mastra/core@0.8.3-alpha.3
+  - @mastra/server@1.0.3-alpha.3
+
+## 0.2.9-alpha.2
+
+### Patch Changes
+
+- Updated dependencies [0bcc862]
+  - @mastra/core@0.8.3-alpha.2
+  - @mastra/server@1.0.3-alpha.2
+
+## 0.2.9-alpha.1
+
+### Patch Changes
+
+- 32e7b71: Add support for dependency injection
+- 37bb612: Add Elastic-2.0 licensing for packages
+- Updated dependencies [32e7b71]
+- Updated dependencies [37bb612]
+  - @mastra/server@1.0.3-alpha.1
+  - @mastra/core@0.8.3-alpha.1
+
+## 0.2.9-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [359b089]
+  - @mastra/core@0.8.3-alpha.0
+  - @mastra/server@1.0.3-alpha.0
+
+## 0.2.8
+
+### Patch Changes
+
+- ae6c5ce: Fix await loop inside mastra entrypoint
+- 94cd5c1: Fix yarn workspace isolation
+- Updated dependencies [a06aadc]
+  - @mastra/core@0.8.2
+  - @mastra/server@1.0.2
+
+## 0.2.8-alpha.1
+
+### Patch Changes
+
+- 94cd5c1: Fix yarn workspace isolation
+
+## 0.2.8-alpha.0
+
+### Patch Changes
+
+- ae6c5ce: Fix await loop inside mastra entrypoint
+- Updated dependencies [a06aadc]
+  - @mastra/core@0.8.2-alpha.0
+  - @mastra/server@1.0.2-alpha.0
+
+## 0.2.7
+
+### Patch Changes
+
+- 8fdb414: Custom mastra server cors config
+- Updated dependencies [99e2998]
+- Updated dependencies [8fdb414]
+  - @mastra/core@0.8.1
+  - @mastra/server@1.0.1
+
+## 0.2.7-alpha.0
+
+### Patch Changes
+
+- 8fdb414: Custom mastra server cors config
+- Updated dependencies [99e2998]
+- Updated dependencies [8fdb414]
+  - @mastra/core@0.8.1-alpha.0
+  - @mastra/server@1.0.1-alpha.0
+
+## 0.2.6
+
+### Patch Changes
+
+- 2135c81: Alias @mastra/server in bundler
+- 05d58cc: fix: add 'x-mastra-client-type' to allowed headers in CORS configuration
+- 4c98129: Upgrade babel-core
+- 4c65a57: Add fastebmed as external
+- 84fe241: Decoupled handlers from hono
+- 88fa727: Added getWorkflowRuns for libsql, pg, clickhouse and upstash as well as added route getWorkflowRunsHandler
+- dfb0601: Add missing triggerData to the openapi.json for the POST /api/workflow/{workflowId}/start endpoint
+- 789bef3: Make runId optional for workflow startAsync api
+- a3f0e90: Update storage initialization to ensure tables are present
+- 6330967: Enable route timeout using server options
+- 8393832: Handle nested workflow view on workflow graph
+- 6330967: Add support for configuration of server port using Mastra instance
+- 84fe241: Improve streaming of workflows
+- 32ba03c: Make timeout 30s
+- 3c6ae54: Fix fastembed part of dependencies
+- febc8a6: Added dual tracing and fixed local tracing recursion
+- 0deb356: Fixed a bug where the hono body wasn't properly passed into stream+generate API handlers resulting in "cannot destructure property messages of body"
+- 8076ecf: Unify workflow watch/start response
+- 304397c: Add support for custom api routes in mastra
+- Updated dependencies [56c31b7]
+- Updated dependencies [619c39d]
+- Updated dependencies [5ae0180]
+- Updated dependencies [fe56be0]
+- Updated dependencies [93875ed]
+- Updated dependencies [107bcfe]
+- Updated dependencies [9bfa12b]
+- Updated dependencies [515ebfb]
+- Updated dependencies [5b4e19f]
+- Updated dependencies [dbbbf80]
+- Updated dependencies [a0967a0]
+- Updated dependencies [84fe241]
+- Updated dependencies [fca3b21]
+- Updated dependencies [88fa727]
+- Updated dependencies [f37f535]
+- Updated dependencies [789bef3]
+- Updated dependencies [a3f0e90]
+- Updated dependencies [4d67826]
+- Updated dependencies [6330967]
+- Updated dependencies [8393832]
+- Updated dependencies [6330967]
+- Updated dependencies [84fe241]
+- Updated dependencies [99d43b9]
+- Updated dependencies [d7e08e8]
+- Updated dependencies [febc8a6]
+- Updated dependencies [7599d77]
+- Updated dependencies [0118361]
+- Updated dependencies [619c39d]
+- Updated dependencies [cafae83]
+- Updated dependencies [8076ecf]
+- Updated dependencies [8df4a77]
+- Updated dependencies [304397c]
+  - @mastra/core@0.8.0
+  - @mastra/server@1.0.0
+
+## 0.2.6-alpha.10
+
+### Patch Changes
+
+- 2135c81: Alias @mastra/server in bundler
+- Updated dependencies [8df4a77]
+  - @mastra/core@0.8.0-alpha.8
+  - @mastra/server@0.0.1-alpha.6
+
+## 0.2.6-alpha.9
+
+### Patch Changes
+
+- 3c6ae54: Fix fastembed part of dependencies
+- febc8a6: Added dual tracing and fixed local tracing recursion
+- Updated dependencies [febc8a6]
+  - @mastra/server@0.0.1-alpha.5
+  - @mastra/core@0.8.0-alpha.7
+
+## 0.2.6-alpha.8
+
+### Patch Changes
+
+- 4c65a57: Add fastebmed as external
+- a3f0e90: Update storage initialization to ensure tables are present
+- Updated dependencies [a3f0e90]
+  - @mastra/server@0.0.1-alpha.4
+  - @mastra/core@0.8.0-alpha.6
+
+## 0.2.6-alpha.7
+
+### Patch Changes
+
+- Updated dependencies [93875ed]
+  - @mastra/core@0.8.0-alpha.5
+  - @mastra/server@0.0.1-alpha.3
+
+## 0.2.6-alpha.6
+
+### Patch Changes
+
+- Updated dependencies [d7e08e8]
+  - @mastra/core@0.8.0-alpha.4
+  - @mastra/server@0.0.1-alpha.2
+
+## 0.2.6-alpha.5
+
+### Patch Changes
+
+- 32ba03c: Make timeout 30s
+
+## 0.2.6-alpha.4
+
+### Patch Changes
+
+- 88fa727: Added getWorkflowRuns for libsql, pg, clickhouse and upstash as well as added route getWorkflowRunsHandler
+- dfb0601: Add missing triggerData to the openapi.json for the POST /api/workflow/{workflowId}/start endpoint
+- 789bef3: Make runId optional for workflow startAsync api
+- 6330967: Enable route timeout using server options
+- 8393832: Handle nested workflow view on workflow graph
+- 6330967: Add support for configuration of server port using Mastra instance
+- Updated dependencies [5ae0180]
+- Updated dependencies [9bfa12b]
+- Updated dependencies [515ebfb]
+- Updated dependencies [88fa727]
+- Updated dependencies [f37f535]
+- Updated dependencies [789bef3]
+- Updated dependencies [4d67826]
+- Updated dependencies [6330967]
+- Updated dependencies [8393832]
+- Updated dependencies [6330967]
+  - @mastra/core@0.8.0-alpha.3
+  - @mastra/server@0.0.1-alpha.1
+
+## 0.2.6-alpha.3
+
+### Patch Changes
+
+- 0deb356: Fixed a bug where the hono body wasn't properly passed into stream+generate API handlers resulting in "cannot destructure property messages of body"
+
+## 0.2.6-alpha.2
+
+### Patch Changes
+
+- 4c98129: Upgrade babel-core
+- 84fe241: Decoupled handlers from hono
+- 84fe241: Improve streaming of workflows
+- Updated dependencies [56c31b7]
+- Updated dependencies [dbbbf80]
+- Updated dependencies [84fe241]
+- Updated dependencies [84fe241]
+- Updated dependencies [99d43b9]
+  - @mastra/core@0.8.0-alpha.2
+  - @mastra/server@0.0.1-alpha.0
+
+## 0.2.6-alpha.1
+
+### Patch Changes
+
+- Updated dependencies [619c39d]
+- Updated dependencies [fe56be0]
+- Updated dependencies [a0967a0]
+- Updated dependencies [fca3b21]
+- Updated dependencies [0118361]
+- Updated dependencies [619c39d]
+  - @mastra/core@0.8.0-alpha.1
+
+## 0.2.6-alpha.0
+
+### Patch Changes
+
+- 05d58cc: fix: add 'x-mastra-client-type' to allowed headers in CORS configuration
+- 8076ecf: Unify workflow watch/start response
+- 304397c: Add support for custom api routes in mastra
+- Updated dependencies [107bcfe]
+- Updated dependencies [5b4e19f]
+- Updated dependencies [7599d77]
+- Updated dependencies [cafae83]
+- Updated dependencies [8076ecf]
+- Updated dependencies [304397c]
+  - @mastra/core@0.7.1-alpha.0
+
+## 0.2.5
+
+### Patch Changes
+
+- cdc0498: Fix process.versions.node.split in cloudflare deployer
+- 0b496ff: Load env vars on mastra deploy
+- Updated dependencies [b4fbc59]
+- Updated dependencies [a838fde]
+- Updated dependencies [a8bd4cf]
+- Updated dependencies [7a3eeb0]
+- Updated dependencies [0b54522]
+- Updated dependencies [b3b34f5]
+- Updated dependencies [1af25d5]
+- Updated dependencies [a4686e8]
+- Updated dependencies [6530ad1]
+- Updated dependencies [27439ad]
+  - @mastra/core@0.7.0
+
+## 0.2.5-alpha.3
+
+### Patch Changes
+
+- Updated dependencies [b3b34f5]
+- Updated dependencies [a4686e8]
+  - @mastra/core@0.7.0-alpha.3
+
+## 0.2.5-alpha.2
+
+### Patch Changes
+
+- Updated dependencies [a838fde]
+- Updated dependencies [a8bd4cf]
+- Updated dependencies [7a3eeb0]
+- Updated dependencies [6530ad1]
+  - @mastra/core@0.7.0-alpha.2
+
+## 0.2.5-alpha.1
+
+### Patch Changes
+
+- cdc0498: Fix process.versions.node.split in cloudflare deployer
+- 0b496ff: Load env vars on mastra deploy
+- Updated dependencies [0b54522]
+- Updated dependencies [1af25d5]
+- Updated dependencies [27439ad]
+  - @mastra/core@0.7.0-alpha.1
+
+## 0.2.5-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [b4fbc59]
+  - @mastra/core@0.6.5-alpha.0
+
+## 0.2.4
+
+### Patch Changes
+
+- e764fd1: Fix telemetry when side-effects are added to the mastra file
+- 709aa2c: fix building externals
+- e764fd1: Fix deployer when side-effects are added to the mastra file
+- 05ef3e0: Support voice for mastra client
+- 95c5745: Fix symlink resolving and externals
+- 85a2461: Fix cloudflare deployer
+- Updated dependencies [6794797]
+- Updated dependencies [fb68a80]
+- Updated dependencies [b56a681]
+- Updated dependencies [248cb07]
+  - @mastra/core@0.6.4
+
+## 0.2.4-alpha.1
+
+### Patch Changes
+
+- 709aa2c: fix building externals
+- 85a2461: Fix cloudflare deployer
+- Updated dependencies [6794797]
+  - @mastra/core@0.6.4-alpha.1
+
+## 0.2.4-alpha.0
+
+### Patch Changes
+
+- e764fd1: Fix telemetry when side-effects are added to the mastra file
+- e764fd1: Fix deployer when side-effects are added to the mastra file
+- 05ef3e0: Support voice for mastra client
+- 95c5745: Fix symlink resolving and externals
+- Updated dependencies [fb68a80]
+- Updated dependencies [b56a681]
+- Updated dependencies [248cb07]
+  - @mastra/core@0.6.4-alpha.0
+
+## 0.2.3
+
+### Patch Changes
+
+- 404640e: AgentNetwork changeset
+- Updated dependencies [404640e]
+- Updated dependencies [3bce733]
+  - @mastra/core@0.6.3
+
+## 0.2.3-alpha.1
+
+### Patch Changes
+
+- Updated dependencies [3bce733]
+  - @mastra/core@0.6.3-alpha.1
+
+## 0.2.3-alpha.0
+
+### Patch Changes
+
+- 404640e: AgentNetwork changeset
+- Updated dependencies [404640e]
+  - @mastra/core@0.6.3-alpha.0
+
+## 0.2.2
+
+### Patch Changes
+
+- 4e6732b: Add support for tsconfig paths aliases
+- Updated dependencies [beaf1c2]
+- Updated dependencies [3084e13]
+  - @mastra/core@0.6.2
+
+## 0.2.2-alpha.1
+
+### Patch Changes
+
+- Updated dependencies [beaf1c2]
+- Updated dependencies [3084e13]
+  - @mastra/core@0.6.2-alpha.0
+
+## 0.2.2-alpha.0
+
+### Patch Changes
+
+- 4e6732b: Add support for tsconfig paths aliases
+
+## 0.2.1
+
+### Patch Changes
+
+- cc7f392: Fix babel transformation in deployer
+- 0850b4c: Watch and resume per run
+- da8d9bb: Enable public dir copying if it exists
+- 9116d70: Handle the different workflow methods in workflow graph
+- 61ad5a4: Move esbuild plugin higher than commonjs for telemetry extraction
+- Updated dependencies [fc2f89c]
+- Updated dependencies [dfbb131]
+- Updated dependencies [f4854ee]
+- Updated dependencies [afaf73f]
+- Updated dependencies [0850b4c]
+- Updated dependencies [7bcfaee]
+- Updated dependencies [44631b1]
+- Updated dependencies [9116d70]
+- Updated dependencies [6e559a0]
+- Updated dependencies [5f43505]
+  - @mastra/core@0.6.1
+
+## 0.2.1-alpha.2
+
+### Patch Changes
+
+- cc7f392: Fix babel transformation in deployer
+- 0850b4c: Watch and resume per run
+- da8d9bb: Enable public dir copying if it exists
+- 9116d70: Handle the different workflow methods in workflow graph
+- Updated dependencies [fc2f89c]
+- Updated dependencies [dfbb131]
+- Updated dependencies [0850b4c]
+- Updated dependencies [9116d70]
+  - @mastra/core@0.6.1-alpha.2
+
+## 0.2.1-alpha.1
+
+### Patch Changes
+
+- 61ad5a4: Move esbuild plugin higher than commonjs for telemetry extraction
+- Updated dependencies [f4854ee]
+- Updated dependencies [afaf73f]
+- Updated dependencies [44631b1]
+- Updated dependencies [6e559a0]
+- Updated dependencies [5f43505]
+  - @mastra/core@0.6.1-alpha.1
+
 ## 0.2.1-alpha.0
 
 ### Patch Changes

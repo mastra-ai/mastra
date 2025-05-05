@@ -2,9 +2,16 @@ import { MastraBase } from '../base';
 import type { MessageType, StorageThreadType } from '../memory/types';
 import type { WorkflowRunState } from '../workflows';
 
-import { TABLE_WORKFLOW_SNAPSHOT, TABLE_EVALS, TABLE_MESSAGES, TABLE_THREADS, TABLE_TRACES } from './constants';
+import {
+  TABLE_WORKFLOW_SNAPSHOT,
+  TABLE_EVALS,
+  TABLE_MESSAGES,
+  TABLE_THREADS,
+  TABLE_TRACES,
+  TABLE_SCHEMAS,
+} from './constants';
 import type { TABLE_NAMES } from './constants';
-import type { EvalRow, StorageColumn, StorageGetMessagesArg } from './types';
+import type { EvalRow, StorageColumn, StorageGetMessagesArg, WorkflowRun, WorkflowRuns } from './types';
 
 export abstract class MastraStorage extends MastraBase {
   /** @deprecated import from { TABLE_WORKFLOW_SNAPSHOT } '@mastra/core/storage' instead */
@@ -42,39 +49,17 @@ export abstract class MastraStorage extends MastraBase {
     records: Record<string, any>[];
   }): Promise<void>;
 
-  async __batchInsert({
-    tableName,
-    records,
-  }: {
-    tableName: TABLE_NAMES;
-    records: Record<string, any>[];
-  }): Promise<void> {
-    await this.init();
-    return this.batchInsert({ tableName, records });
+  batchTraceInsert({ records }: { records: Record<string, any>[] }): Promise<void> {
+    return this.batchInsert({ tableName: TABLE_TRACES, records });
   }
 
   abstract load<R>({ tableName, keys }: { tableName: TABLE_NAMES; keys: Record<string, string> }): Promise<R | null>;
 
   abstract getThreadById({ threadId }: { threadId: string }): Promise<StorageThreadType | null>;
 
-  async __getThreadById({ threadId }: { threadId: string }): Promise<StorageThreadType | null> {
-    await this.init();
-    return this.getThreadById({ threadId });
-  }
-
   abstract getThreadsByResourceId({ resourceId }: { resourceId: string }): Promise<StorageThreadType[]>;
 
-  async __getThreadsByResourceId({ resourceId }: { resourceId: string }): Promise<StorageThreadType[]> {
-    await this.init();
-    return this.getThreadsByResourceId({ resourceId });
-  }
-
   abstract saveThread({ thread }: { thread: StorageThreadType }): Promise<StorageThreadType>;
-
-  async __saveThread({ thread }: { thread: StorageThreadType }): Promise<StorageThreadType> {
-    await this.init();
-    return this.saveThread({ thread });
-  }
 
   abstract updateThread({
     id,
@@ -86,39 +71,11 @@ export abstract class MastraStorage extends MastraBase {
     metadata: Record<string, unknown>;
   }): Promise<StorageThreadType>;
 
-  async __updateThread({
-    id,
-    title,
-    metadata,
-  }: {
-    id: string;
-    title: string;
-    metadata: Record<string, unknown>;
-  }): Promise<StorageThreadType> {
-    await this.init();
-    return this.updateThread({ id, title, metadata });
-  }
-
   abstract deleteThread({ threadId }: { threadId: string }): Promise<void>;
-
-  async __deleteThread({ threadId }: { threadId: string }): Promise<void> {
-    await this.init();
-    return this.deleteThread({ threadId });
-  }
 
   abstract getMessages({ threadId, selectBy, threadConfig }: StorageGetMessagesArg): Promise<MessageType[]>;
 
-  async __getMessages({ threadId, selectBy, threadConfig }: StorageGetMessagesArg): Promise<MessageType[]> {
-    await this.init();
-    return this.getMessages({ threadId, selectBy, threadConfig });
-  }
-
   abstract saveMessages({ messages }: { messages: MessageType[] }): Promise<MessageType[]>;
-
-  async __saveMessages({ messages }: { messages: MessageType[] }): Promise<MessageType[]> {
-    await this.init();
-    return this.saveMessages({ messages });
-  }
 
   abstract getTraces({
     name,
@@ -126,28 +83,17 @@ export abstract class MastraStorage extends MastraBase {
     page,
     perPage,
     attributes,
+    filters,
   }: {
     name?: string;
     scope?: string;
     page: number;
     perPage: number;
     attributes?: Record<string, string>;
+    filters?: Record<string, any>;
+    fromDate?: Date;
+    toDate?: Date;
   }): Promise<any[]>;
-
-  async __getTraces({
-    scope,
-    page,
-    perPage,
-    attributes,
-  }: {
-    scope?: string;
-    page: number;
-    perPage: number;
-    attributes?: Record<string, string>;
-  }): Promise<any[]> {
-    await this.init();
-    return this.getTraces({ scope, page, perPage, attributes });
-  }
 
   async init(): Promise<void> {
     // to prevent race conditions, await any current init
@@ -158,104 +104,27 @@ export abstract class MastraStorage extends MastraBase {
     this.hasInitialized = Promise.all([
       this.createTable({
         tableName: TABLE_WORKFLOW_SNAPSHOT,
-        schema: {
-          workflow_name: {
-            type: 'text',
-          },
-          run_id: {
-            type: 'text',
-          },
-          snapshot: {
-            type: 'text',
-          },
-          createdAt: {
-            type: 'timestamp',
-          },
-          updatedAt: {
-            type: 'timestamp',
-          },
-        },
+        schema: TABLE_SCHEMAS[TABLE_WORKFLOW_SNAPSHOT],
       }),
 
       this.createTable({
         tableName: TABLE_EVALS,
-        schema: {
-          input: {
-            type: 'text',
-          },
-          output: {
-            type: 'text',
-          },
-          result: {
-            type: 'jsonb',
-          },
-          agent_name: {
-            type: 'text',
-          },
-          metric_name: {
-            type: 'text',
-          },
-          instructions: {
-            type: 'text',
-          },
-          test_info: {
-            type: 'jsonb',
-            nullable: true,
-          },
-          global_run_id: {
-            type: 'text',
-          },
-          run_id: {
-            type: 'text',
-          },
-          created_at: {
-            type: 'timestamp',
-          },
-        },
+        schema: TABLE_SCHEMAS[TABLE_EVALS],
       }),
 
       this.createTable({
         tableName: TABLE_THREADS,
-        schema: {
-          id: { type: 'text', nullable: false, primaryKey: true },
-          resourceId: { type: 'text', nullable: false },
-          title: { type: 'text', nullable: false },
-          metadata: { type: 'text', nullable: true },
-          createdAt: { type: 'timestamp', nullable: false },
-          updatedAt: { type: 'timestamp', nullable: false },
-        },
+        schema: TABLE_SCHEMAS[TABLE_THREADS],
       }),
 
       this.createTable({
         tableName: TABLE_MESSAGES,
-        schema: {
-          id: { type: 'text', nullable: false, primaryKey: true },
-          thread_id: { type: 'text', nullable: false },
-          content: { type: 'text', nullable: false },
-          role: { type: 'text', nullable: false },
-          type: { type: 'text', nullable: false },
-          createdAt: { type: 'timestamp', nullable: false },
-        },
+        schema: TABLE_SCHEMAS[TABLE_MESSAGES],
       }),
 
       this.createTable({
         tableName: TABLE_TRACES,
-        schema: {
-          id: { type: 'text', nullable: false, primaryKey: true },
-          parentSpanId: { type: 'text', nullable: true },
-          name: { type: 'text', nullable: false },
-          traceId: { type: 'text', nullable: false },
-          scope: { type: 'text', nullable: false },
-          kind: { type: 'integer', nullable: false },
-          attributes: { type: 'jsonb', nullable: true },
-          status: { type: 'jsonb', nullable: true },
-          events: { type: 'jsonb', nullable: true },
-          links: { type: 'jsonb', nullable: true },
-          other: { type: 'text', nullable: true },
-          startTime: { type: 'bigint', nullable: false },
-          endTime: { type: 'bigint', nullable: false },
-          createdAt: { type: 'timestamp', nullable: false },
-        },
+        schema: TABLE_SCHEMAS[TABLE_TRACES],
       }),
     ]).then(() => true);
 
@@ -308,8 +177,14 @@ export abstract class MastraStorage extends MastraBase {
 
   abstract getEvalsByAgentName(agentName: string, type?: 'test' | 'live'): Promise<EvalRow[]>;
 
-  async __getEvalsByAgentName(agentName: string, type?: 'test' | 'live'): Promise<EvalRow[]> {
-    await this.init();
-    return this.getEvalsByAgentName(agentName, type);
-  }
+  abstract getWorkflowRuns(args?: {
+    workflowName?: string;
+    fromDate?: Date;
+    toDate?: Date;
+    limit?: number;
+    offset?: number;
+    resourceId?: string;
+  }): Promise<WorkflowRuns>;
+
+  abstract getWorkflowRunById(args: { runId: string; workflowName?: string }): Promise<WorkflowRun | null>;
 }

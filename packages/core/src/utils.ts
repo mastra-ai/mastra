@@ -1,109 +1,19 @@
 import { createHash } from 'crypto';
+import { convertToCoreMessages } from 'ai';
+import type { CoreMessage, ToolExecutionOptions } from 'ai';
 import jsonSchemaToZod from 'json-schema-to-zod';
 import { z } from 'zod';
-import type { ZodObject } from 'zod';
+
 import type { MastraPrimitives } from './action';
 import type { ToolsInput } from './agent';
 import type { Logger } from './logger';
 import type { Mastra } from './mastra';
-import type { MastraMemory } from './memory';
+import type { AiMessageType, MastraMemory } from './memory';
+import { RuntimeContext } from './runtime-context';
 import { Tool } from './tools';
 import type { CoreTool, ToolAction, VercelTool } from './tools';
 
 export const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
-
-export function jsonSchemaPropertiesToTSTypes(value: any): z.ZodTypeAny {
-  if (!value.type) {
-    return z.object({});
-  }
-
-  let zodType;
-  switch (value.type) {
-    case 'string':
-      zodType = z
-        .string()
-        .describe((value.description || '') + (value.examples ? `\nExamples: ${value.examples.join(', ')}` : ''));
-      break;
-    case 'number':
-      zodType = z
-        .number()
-        .describe((value.description || '') + (value.examples ? `\nExamples: ${value.examples.join(', ')}` : ''));
-      break;
-    case 'integer':
-      zodType = z
-        .number()
-        .int()
-        .describe((value.description || '') + (value.examples ? `\nExamples: ${value.examples.join(', ')}` : ''));
-      break;
-    case 'boolean':
-      zodType = z
-        .boolean()
-        .describe((value.description || '') + (value.examples ? `\nExamples: ${value.examples.join(', ')}` : ''));
-      break;
-    case 'array':
-      zodType = z
-        .array(jsonSchemaPropertiesToTSTypes(value.items))
-        .describe((value.description || '') + (value.examples ? `\nExamples: ${value.examples.join(', ')}` : ''));
-      break;
-    case 'object':
-      zodType = jsonSchemaToModel(value).describe(
-        (value.description || '') + (value.examples ? `\nExamples: ${value.examples.join(', ')}` : ''),
-      );
-      break;
-    case 'null':
-      zodType = z.null().describe(value.description || '');
-      break;
-    default:
-      throw new Error(`Unsupported JSON schema type: ${value.type}`);
-  }
-
-  return zodType;
-}
-
-export function jsonSchemaToModel(jsonSchema: Record<string, any>): ZodObject<any> {
-  const properties = jsonSchema.properties;
-  const requiredFields = jsonSchema.required || [];
-  if (!properties) {
-    return z.object({});
-  }
-
-  const zodSchema: Record<string, any> = {};
-  for (const [key, _] of Object.entries(properties)) {
-    const value = _ as any;
-    let zodType;
-    if (value.anyOf) {
-      const anyOfTypes = value.anyOf.map((schema: any) => jsonSchemaPropertiesToTSTypes(schema));
-      zodType = z
-        .union(anyOfTypes)
-        .describe((value.description || '') + (value.examples ? `\nExamples: ${value.examples.join(', ')}` : ''));
-    } else if (value.allOf) {
-      const allOfTypes = value.allOf.map((schema: any) => jsonSchemaPropertiesToTSTypes(schema));
-      zodType = z
-        .intersection(
-          allOfTypes[0],
-          allOfTypes.slice(1).reduce((acc: z.ZodTypeAny, schema: z.ZodTypeAny) => acc.and(schema), allOfTypes[0]),
-        )
-        .describe((value.description || '') + (value.examples ? `\nExamples: ${value.examples.join(', ')}` : ''));
-    } else {
-      if (!value.type) {
-        value.type = 'string';
-      }
-      zodType = jsonSchemaPropertiesToTSTypes(value);
-    }
-
-    if (value.description) {
-      zodType = zodType.describe(value.description);
-    }
-
-    if (requiredFields.includes(key)) {
-      zodSchema[key] = zodType;
-    } else {
-      zodSchema[key] = zodType.nullable().optional();
-    }
-  }
-
-  return z.object(zodSchema);
-}
 
 /**
  * Deep merges two objects, recursively merging nested objects and arrays
@@ -287,7 +197,7 @@ export function resolveSerializedZodOutput(schema: string): z.ZodType {
  */
 export function isVercelTool(tool?: ToolToConvert): tool is VercelTool {
   // Checks if this tool is not an instance of Tool
-  return !(tool instanceof Tool);
+  return !!(tool && !(tool instanceof Tool) && 'parameters' in tool);
 }
 
 interface ToolOptions {
@@ -298,17 +208,17 @@ interface ToolOptions {
   logger: Logger;
   description?: string;
   mastra?: (Mastra & MastraPrimitives) | MastraPrimitives;
+  runtimeContext: RuntimeContext;
   memory?: MastraMemory;
   agentName?: string;
 }
 
-type ToolToConvert = VercelTool | ToolAction<any, any, any, any>;
+type ToolToConvert = VercelTool | ToolAction<any, any, any>;
 
 interface LogOptions {
   agentName?: string;
   toolName: string;
-  tool?: ToolToConvert;
-  type?: 'tool' | 'toolset';
+  type?: 'tool' | 'toolset' | 'client-tool';
 }
 
 interface LogMessageOptions {
@@ -316,7 +226,7 @@ interface LogMessageOptions {
   error: string;
 }
 
-function createLogMessageOptions({ agentName, toolName, tool, type }: LogOptions): LogMessageOptions {
+function createLogMessageOptions({ agentName, toolName, type }: LogOptions): LogMessageOptions {
   // If no agent name, use default format
   if (!agentName) {
     return {
@@ -326,30 +236,29 @@ function createLogMessageOptions({ agentName, toolName, tool, type }: LogOptions
   }
 
   const prefix = `[Agent:${agentName}]`;
-  const vercelPrefix = isVercelTool(tool) ? 'Vercel ' : '';
   const toolType = type === 'toolset' ? 'toolset' : 'tool';
 
   return {
-    start: `${prefix} - Executing ${vercelPrefix}${toolType} ${toolName}`,
-    error: `${prefix} - Failed ${vercelPrefix}${toolType} execution`,
+    start: `${prefix} - Executing ${toolType} ${toolName}`,
+    error: `${prefix} - Failed ${toolType} execution`,
   };
 }
 
-function createExecute(tool: ToolToConvert, options: ToolOptions, logType?: 'tool' | 'toolset') {
+function createExecute(tool: ToolToConvert, options: ToolOptions, logType?: 'tool' | 'toolset' | 'client-tool') {
   // dont't add memory or mastra to logging
-  const { logger, mastra: _mastra, memory: _memory, ...rest } = options;
+  const { logger, mastra: _mastra, memory: _memory, runtimeContext, ...rest } = options;
 
   const { start, error } = createLogMessageOptions({
     agentName: options.agentName,
     toolName: options.name,
-    tool,
     type: logType,
   });
 
-  const execFunction = async (args: any, execOptions: any) => {
+  const execFunction = async (args: any, execOptions: ToolExecutionOptions) => {
     if (isVercelTool(tool)) {
       return tool?.execute?.(args, execOptions) ?? undefined;
     }
+
     return (
       tool?.execute?.(
         {
@@ -359,6 +268,7 @@ function createExecute(tool: ToolToConvert, options: ToolOptions, logType?: 'too
           mastra: options.mastra,
           memory: options.memory,
           runId: options.runId,
+          runtimeContext: runtimeContext ?? new RuntimeContext(),
         },
         execOptions,
       ) ?? undefined
@@ -381,7 +291,7 @@ function createExecute(tool: ToolToConvert, options: ToolOptions, logType?: 'too
  * @param value - The value to check
  * @returns True if the value is a Zod type, false otherwise
  */
-function isZodType(value: unknown): value is z.ZodType {
+export function isZodType(value: unknown): value is z.ZodType {
   // Check if it's a Zod schema by looking for common Zod properties and methods
   return (
     typeof value === 'object' &&
@@ -446,6 +356,11 @@ function convertVercelToolParameters(tool: VercelTool): z.ZodType {
   return isZodType(schema) ? schema : resolveSerializedZodOutput(jsonSchemaToZod(schema));
 }
 
+function convertInputSchema(tool: ToolAction<any, any, any>): z.ZodType {
+  const schema = tool.inputSchema ?? z.object({});
+  return isZodType(schema) ? schema : resolveSerializedZodOutput(jsonSchemaToZod(schema));
+}
+
 /**
  * Converts a Vercel Tool or Mastra Tool into a CoreTool format
  * @param tool - The tool to convert (either VercelTool or ToolAction)
@@ -453,13 +368,18 @@ function convertVercelToolParameters(tool: VercelTool): z.ZodType {
  * @param logType - Type of tool to log (tool or toolset)
  * @returns A CoreTool that can be used by the system
  */
-export function makeCoreTool(tool: ToolToConvert, options: ToolOptions, logType?: 'tool' | 'toolset'): CoreTool {
+export function makeCoreTool(
+  tool: ToolToConvert,
+  options: ToolOptions,
+  logType?: 'tool' | 'toolset' | 'client-tool',
+): CoreTool {
   // Helper to get parameters based on tool type
   const getParameters = () => {
     if (isVercelTool(tool)) {
       return convertVercelToolParameters(tool);
     }
-    return tool.inputSchema ?? z.object({});
+
+    return convertInputSchema(tool);
   };
 
   // Check if this is a provider-defined tool
@@ -549,4 +469,95 @@ export function createMastraProxy({ mastra, logger }: { mastra: Mastra; logger: 
       return Reflect.get(target, prop);
     },
   });
+}
+
+export function checkEvalStorageFields(traceObject: any, logger?: Logger) {
+  const missingFields = [];
+  if (!traceObject.input) missingFields.push('input');
+  if (!traceObject.output) missingFields.push('output');
+  if (!traceObject.agentName) missingFields.push('agent_name');
+  if (!traceObject.metricName) missingFields.push('metric_name');
+  if (!traceObject.instructions) missingFields.push('instructions');
+  if (!traceObject.globalRunId) missingFields.push('global_run_id');
+  if (!traceObject.runId) missingFields.push('run_id');
+
+  if (missingFields.length > 0) {
+    if (logger) {
+      logger.warn('Skipping evaluation storage due to missing required fields', {
+        missingFields,
+        runId: traceObject.runId,
+        agentName: traceObject.agentName,
+      });
+    } else {
+      console.warn('Skipping evaluation storage due to missing required fields', {
+        missingFields,
+        runId: traceObject.runId,
+        agentName: traceObject.agentName,
+      });
+    }
+    return false;
+  }
+
+  return true;
+}
+
+// lifted from https://github.com/vercel/ai/blob/main/packages/ai/core/prompt/detect-prompt-type.ts#L27
+function detectSingleMessageCharacteristics(
+  message: any,
+): 'has-ui-specific-parts' | 'has-core-specific-parts' | 'message' | 'other' {
+  if (
+    typeof message === 'object' &&
+    message !== null &&
+    (message.role === 'function' || // UI-only role
+      message.role === 'data' || // UI-only role
+      'toolInvocations' in message || // UI-specific field
+      'parts' in message || // UI-specific field
+      'experimental_attachments' in message)
+  ) {
+    return 'has-ui-specific-parts';
+  } else if (
+    typeof message === 'object' &&
+    message !== null &&
+    'content' in message &&
+    (Array.isArray(message.content) || // Core messages can have array content
+      'experimental_providerMetadata' in message ||
+      'providerOptions' in message)
+  ) {
+    return 'has-core-specific-parts';
+  } else if (
+    typeof message === 'object' &&
+    message !== null &&
+    'role' in message &&
+    'content' in message &&
+    typeof message.content === 'string' &&
+    ['system', 'user', 'assistant', 'tool'].includes(message.role)
+  ) {
+    return 'message';
+  } else {
+    return 'other';
+  }
+}
+
+function isUiMessage(message: CoreMessage | AiMessageType): message is AiMessageType {
+  return detectSingleMessageCharacteristics(message) === `has-ui-specific-parts`;
+}
+function isCoreMessage(message: CoreMessage | AiMessageType): message is CoreMessage {
+  return [`has-core-specific-parts`, `message`].includes(detectSingleMessageCharacteristics(message));
+}
+
+export function ensureAllMessagesAreCoreMessages(messages: (CoreMessage | AiMessageType)[]) {
+  return messages
+    .map(message => {
+      if (isUiMessage(message)) {
+        return convertToCoreMessages([message]);
+      }
+      if (isCoreMessage(message)) {
+        return message;
+      }
+      const characteristics = detectSingleMessageCharacteristics(message);
+      throw new Error(
+        `Message does not appear to be a core message or a UI message but must be one of the two, found "${characteristics}" type for message:\n\n${JSON.stringify(message, null, 2)}\n`,
+      );
+    })
+    .flat();
 }

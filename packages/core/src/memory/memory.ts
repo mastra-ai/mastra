@@ -13,6 +13,7 @@ import type {
 import { MastraBase } from '../base';
 import type { MastraStorage, StorageGetMessagesArg } from '../storage';
 import { DefaultProxyStorage } from '../storage/default-proxy-storage';
+import { augmentWithInit } from '../storage/storageWithInit';
 import type { CoreTool } from '../tools';
 import { deepMerge } from '../utils';
 import type { MastraVector } from '../vector';
@@ -20,6 +21,83 @@ import { defaultEmbedder } from '../vector/fastembed';
 import { DefaultVectorDB } from '../vector/libsql';
 
 import type { MessageType, SharedMemoryConfig, StorageThreadType, MemoryConfig, AiMessageType } from './types';
+
+export type MemoryProcessorOpts = {
+  systemMessage?: string;
+  memorySystemMessage?: string;
+  newMessages?: CoreMessage[];
+};
+/**
+ * Interface for message processors that can filter or transform messages
+ * before they're sent to the LLM.
+ */
+export abstract class MemoryProcessor extends MastraBase {
+  /**
+   * Process a list of messages and return a filtered or transformed list.
+   * @param messages The messages to process
+   * @returns The processed messages
+   */
+  process(messages: CoreMessage[], _opts: MemoryProcessorOpts): CoreMessage[] {
+    return messages;
+  }
+}
+
+export const memoryDefaultOptions = {
+  lastMessages: 40,
+  semanticRecall: {
+    topK: 2,
+    messageRange: {
+      before: 2,
+      after: 2,
+    },
+  },
+  threads: {
+    generateTitle: true,
+  },
+  workingMemory: {
+    use: 'text-stream', // will be deprecated, use 'tool-call' instead
+    enabled: false,
+    template: `
+# User Information
+- **First Name**: 
+- **Last Name**: 
+- **Location**: 
+- **Occupation**: 
+- **Interests**: 
+- **Goals**: 
+- **Events**: 
+- **Facts**: 
+- **Projects**: 
+`,
+  },
+} satisfies MemoryConfig;
+
+// TODO: May 20th breaking change, make these the default options. Also in packages/cli/src/commands/init/utils.ts remove the hardcoded options to use the new defaults instead
+const newMemoryDefaultOptions = {
+  lastMessages: 10,
+  semanticRecall: false,
+  threads: {
+    generateTitle: false,
+  },
+  workingMemory: {
+    // new
+    use: 'tool-call',
+    // stays the same
+    enabled: false,
+    template: `
+# User Information
+- **First Name**: 
+- **Last Name**: 
+- **Location**: 
+- **Occupation**: 
+- **Interests**: 
+- **Goals**: 
+- **Events**: 
+- **Facts**: 
+- **Projects**: 
+`,
+  },
+} satisfies MemoryConfig;
 
 /**
  * Abstract Memory class that defines the interface for storing and retrieving
@@ -29,31 +107,114 @@ export abstract class MastraMemory extends MastraBase {
   MAX_CONTEXT_TOKENS?: number;
 
   storage: MastraStorage;
-  vector: MastraVector;
-  embedder: EmbeddingModel<string>;
+  vector?: MastraVector;
+  embedder?: EmbeddingModel<string>;
+  private processors: MemoryProcessor[] = [];
 
-  protected threadConfig: MemoryConfig = {
-    lastMessages: 40,
-    semanticRecall: true,
-    threads: {
-      generateTitle: true, // TODO: should we disable this by default to reduce latency?
-    },
-  };
+  private deprecationWarnings: string[] = [];
+
+  protected threadConfig: MemoryConfig = { ...memoryDefaultOptions };
 
   constructor(config: { name: string } & SharedMemoryConfig) {
     super({ component: 'MEMORY', name: config.name });
 
-    this.storage =
-      config.storage ||
-      new DefaultProxyStorage({
+    if (config.options) {
+      this.threadConfig = this.getMergedThreadConfig(config.options);
+    }
+
+    // user is running mastra outside mastra dev in their own code, and is using default memory storage
+    const hasRootMemoryDbFile = existsSync(join(process.cwd(), `memory.db`));
+    // user is running mastra server and has default memory storage
+    const hasParentMemoryDbFile = existsSync(join(process.cwd(), `..`, `..`, `memory.db`));
+    // May 20th we wont worry about this anymore
+    const suggestDbPath =
+      hasRootMemoryDbFile || hasParentMemoryDbFile
+        ? `file:${hasParentMemoryDbFile ? `../../` : ``}memory.db`
+        : `file:../mastra.db`;
+
+    // TODO: MAY 20th BREAKING CHANGE: Memory will inherit storage from Mastra instance by default
+    // if (config.storage) {
+    //   this.storage = config.storage;
+    // } else if (this.mastra?.storage) { // Assuming Mastra instance is available as this.mastra
+    //   this.storage = this.mastra.storage;
+    // } else {
+    //   throw new Error(`Memory requires a storage provider to function. Add a storage configuration to Memory or add one to your Mastra instance`)
+    // }
+    // TODO: remove in may 20th breaking change, replace with above code.
+    if (config.storage) {
+      this.storage = config.storage;
+    } else {
+      this.storage = new DefaultProxyStorage({
         config: {
           url: 'file:memory.db',
         },
       });
 
-    if (config.vector) {
+      // TODO: remove in may 20th breaking change
+      this.deprecationWarnings.push(`
+Default storage is deprecated in Mastra Memory.
+You're using it as an implicit default by not setting a storage adapter.
+
+In the May 20th breaking change the default store will be removed.
+
+Instead of this:
+export const agent = new Agent({
+  memory: new Memory({
+    // your config
+  })
+})
+
+Do this:
+import { LibSQLStore } from '@mastra/libsql';
+
+export const agent = new Agent({
+  memory: new Memory({
+    // your config
+    storage: new LibSQLStore({
+      url: '${suggestDbPath}' // relative path from bundled .mastra/output dir
+    })
+  })
+})
+
+Additionally, in the breaking release, Memory will inherit storage from the Mastra instance.
+If you plan on using that feature you can prepare by setting the same storage instance on Mastra and Memory.
+
+Ex:
+// mastra/storage.ts
+export const storage = new LibSQLStore({
+  url: '${suggestDbPath}'
+})
+
+// mastra/index.ts
+import { storage } from "./storage"
+export const mastra = new Mastra({
+  // your config
+  storage
+})
+
+// mastra/agents/index.ts
+import { storage } from "../storage"
+export const yourAgent = new Agent({
+  // your config
+  storage
+})
+`);
+    }
+
+    this.storage = augmentWithInit(this.storage);
+
+    const semanticRecallIsEnabled = this.threadConfig.semanticRecall !== false; // default is to have it enabled, so any value except false means it's on
+    if (config.vector && semanticRecallIsEnabled) {
       this.vector = config.vector;
-    } else {
+    } else if (
+      // if there's no configured vector store
+      // and the vector store hasn't been explicitly disabled with vector: false
+      config.vector !== false &&
+      // and semanticRecall is enabled
+      semanticRecallIsEnabled
+      // add the default vector store
+    ) {
+      // TODO: remove in may 20th breaking change
       // for backwards compat reasons, check if there's a memory-vector.db in cwd or in cwd/.mastra
       // if it's there we need to use it, otherwise use the same file:memory.db
       // We used to need two separate DBs because we would get schema errors
@@ -63,28 +224,181 @@ export abstract class MastraMemory extends MastraBase {
       const newDb = 'memory.db';
 
       if (hasOldDb) {
-        this.logger.warn(
-          `Found deprecated Memory vector db file ${oldDb} this db is now merged with the default ${newDb} file. Delete the old one to use the new one. You will need to migrate any data if that's important to you. For now the deprecated path will be used but in a future breaking change we will only use the new db file path.`,
+        // TODO: remove in may 20th breaking change
+        this.deprecationWarnings.push(
+          `Found deprecated Memory vector db file ${oldDb}. In the May 20th breaking change, this will no longer be used by default. This db is now merged with the default storage file (${newDb}). You will need to manually migrate any data from ${oldDb} to ${newDb} if it's important to you. For now the deprecated path will be used, but in the May 20th breaking change we will only use the new db file path.`,
         );
       }
 
+      // TODO: remove in may 20th breaking change
+      this.deprecationWarnings.push(`
+Default vector storage is deprecated in Mastra Memory.
+You're using it as an implicit default by not setting a vector store.
+
+In the May 20th breaking change the default vector store will be removed.
+
+Instead of this:
+export const agent = new Agent({
+  memory: new Memory({
+    options: { semanticRecall: true }
+  })
+})
+
+Do this:
+import { LibSQLVector } from '@mastra/libsql';
+
+export const agent = new Agent({
+  memory: new Memory({
+    options: { semanticRecall: true },
+    vector: new LibSQLVector({
+      connectionUrl: '${suggestDbPath}' // relative path from bundled .mastra/output dir
+    })
+  })
+})
+`);
+
       this.vector = new DefaultVectorDB({
+        // TODO: MAY 20th BREAKING CHANGE: remove this default and throw an error if semantic recall is enabled but there's no vector db
         connectionUrl: hasOldDb ? `file:${oldDb}` : `file:${newDb}`,
       });
     }
 
     if (config.embedder) {
       this.embedder = config.embedder;
-    } else {
+    } else if (
+      // if there's no configured embedder
+      // and there's a vector store
+      typeof this.vector !== `undefined` &&
+      // and semanticRecall is enabled
+      semanticRecallIsEnabled
+    ) {
+      // add the default embedder
       this.embedder = defaultEmbedder('bge-small-en-v1.5'); // https://huggingface.co/BAAI/bge-small-en-v1.5#model-list we're using small 1.5 because it's much faster than base 1.5 and only scores slightly worse despite being roughly 100MB smaller - small is ~130MB while base is ~220MB
     }
 
-    if (config.options) {
-      this.threadConfig = this.getMergedThreadConfig(config.options);
+    // Initialize processors if provided
+    if (config.processors) {
+      this.processors = config.processors;
+    }
+
+    this.addImplicitDefaultsWarning(config);
+
+    if (this.deprecationWarnings.length > 0) {
+      setTimeout(() => {
+        this.logger?.warn(`
+
+!MEMORY DEPRECATION WARNING!
+${this.deprecationWarnings.map((w, i) => `${this.deprecationWarnings.length > 1 ? `Warning ${i + 1}:\n` : ``}${w}`).join(`\n\n`)}
+!END MEMORY DEPRECATION WARNING!
+
+`);
+      }, 1000);
+    }
+  }
+
+  // We're changing the implicit defaults from memoryDefaultOptions to newMemoryDefaultOptions so we need to log and let people know
+  private addImplicitDefaultsWarning(config: SharedMemoryConfig) {
+    const fromToPairs: {
+      key: keyof MemoryConfig;
+      from: unknown;
+      to: unknown;
+      message?: string;
+    }[] = [];
+
+    const indent = (s: string) => s.split(`\n`).join(`\n    `);
+    const format = (v: unknown) =>
+      typeof v === `object` && !Array.isArray(v) && v !== null
+        ? indent(JSON.stringify(v, null, 2).replaceAll(`"`, ``))
+        : v;
+
+    const options = config.options ?? {};
+
+    if (!(`lastMessages` in options))
+      fromToPairs.push({
+        key: 'lastMessages',
+        from: memoryDefaultOptions.lastMessages,
+        to: newMemoryDefaultOptions.lastMessages,
+      });
+
+    if (!(`semanticRecall` in options))
+      fromToPairs.push({
+        key: 'semanticRecall',
+        from: memoryDefaultOptions.semanticRecall,
+        to: newMemoryDefaultOptions.semanticRecall,
+      });
+
+    if (!(`threads` in options))
+      fromToPairs.push({
+        key: 'threads',
+        from: memoryDefaultOptions.threads,
+        to: newMemoryDefaultOptions.threads,
+      });
+
+    if (
+      `workingMemory` in options &&
+      // special handling for working memory since it's disabled by default and users should only care about the change if they're using
+      options.workingMemory?.enabled === true &&
+      options.workingMemory?.use !== `tool-call`
+    ) {
+      fromToPairs.push({
+        key: 'workingMemory',
+        from: {
+          use: memoryDefaultOptions.workingMemory.use,
+        },
+        to: {
+          use: newMemoryDefaultOptions.workingMemory.use,
+        },
+        message: `\nAlso, the text-stream output mode (which is the current default) will be fully removed in an upcoming breaking change. Please update your code to use the newer "use: 'tool-call'" setting instead.\n`,
+      });
+    }
+
+    if (fromToPairs.length > 0) {
+      const currentDefaults = `{
+  options: {
+    ${fromToPairs.map(({ key, from }) => `${key}: ${format(from)}`).join(`,\n    `)}
+  }
+}`;
+      const upcomingDefaults = `{
+  options: {
+    ${fromToPairs.map(({ key, to }) => `${key}: ${format(to)}`).join(`,\n    `)}
+  }
+}`;
+
+      const messages = fromToPairs.filter(ft => ft.message);
+
+      this.deprecationWarnings.push(`
+Your Mastra memory instance has the
+following implicit default options:
+
+new Memory(${currentDefaults})
+
+In the next release these implicit defaults
+will be changed to the following default settings:
+
+new Memory(${upcomingDefaults})
+
+To keep your defaults as they are, add
+them directly into your Memory configuration,
+otherwise please add the new settings to
+your memory config to prepare for the change.
+${messages.length ? messages.map(ft => ft.message).join(`\n`) : ``}
+--> This breaking change will be released on May 20th <--
+`);
     }
   }
 
   public setStorage(storage: MastraStorage) {
+    if (storage instanceof DefaultProxyStorage) {
+      this.deprecationWarnings.push(`Importing "DefaultStorage" from '@mastra/core/storage/libsql' is deprecated.
+
+Instead of:
+  import { DefaultStorage } from '@mastra/core/storage/libsql';
+
+Do:
+  import { LibSQLStore } from '@mastra/libsql';
+`);
+    }
+
     this.storage = storage;
   }
 
@@ -114,20 +428,19 @@ export abstract class MastraMemory extends MastraBase {
     return {};
   }
 
-  protected async createEmbeddingIndex(): Promise<{ indexName: string }> {
+  protected async createEmbeddingIndex(dimensions?: number): Promise<{ indexName: string }> {
     const defaultDimensions = 1536;
-
-    // AI SDK doesn't expose a way to check how many dimensions a model uses.
-    const dimensionsByModelId: Record<string, number> = {
-      'bge-small-en-v1.5': 384,
-      'bge-base-en-v1.5': 768,
-    };
-
-    const dimensions = dimensionsByModelId[this.embedder.modelId] || defaultDimensions;
     const isDefault = dimensions === defaultDimensions;
-    const indexName = isDefault ? 'memory_messages' : `memory_messages_${dimensions}`;
+    const usedDimensions = dimensions ?? defaultDimensions;
+    const indexName = isDefault ? 'memory_messages' : `memory_messages_${usedDimensions}`;
 
-    await this.vector.createIndex({ indexName, dimension: dimensions });
+    if (typeof this.vector === `undefined`) {
+      throw new Error(`Tried to create embedding index but no vector db is attached to this Memory instance.`);
+    }
+    await this.vector.createIndex({
+      indexName,
+      dimension: usedDimensions,
+    });
     return { indexName };
   }
 
@@ -135,15 +448,57 @@ export abstract class MastraMemory extends MastraBase {
     return deepMerge(this.threadConfig, config || {});
   }
 
+  /**
+   * Apply all configured message processors to a list of messages.
+   * @param messages The messages to process
+   * @returns The processed messages
+   */
+  private applyProcessors(
+    messages: CoreMessage[],
+    opts: {
+      processors?: MemoryProcessor[];
+    } & MemoryProcessorOpts,
+  ): CoreMessage[] {
+    const processors = opts.processors || this.processors;
+    if (!processors || processors.length === 0) {
+      return messages;
+    }
+
+    let processedMessages = [...messages];
+
+    for (const processor of processors) {
+      processedMessages = processor.process(processedMessages, {
+        systemMessage: opts.systemMessage,
+        newMessages: opts.newMessages,
+        memorySystemMessage: opts.memorySystemMessage,
+      });
+    }
+
+    return processedMessages;
+  }
+
+  processMessages({
+    messages,
+    processors,
+    ...opts
+  }: {
+    messages: CoreMessage[];
+    processors?: MemoryProcessor[];
+  } & MemoryProcessorOpts) {
+    return this.applyProcessors(messages, { processors: processors || this.processors, ...opts });
+  }
+
   abstract rememberMessages({
     threadId,
     resourceId,
     vectorMessageSearch,
+    systemMessage,
     config,
   }: {
     threadId: string;
     resourceId?: string;
     vectorMessageSearch?: string;
+    systemMessage?: CoreMessage;
     config?: MemoryConfig;
   }): Promise<{
     threadId: string;
@@ -156,15 +511,22 @@ export abstract class MastraMemory extends MastraBase {
   }
 
   protected parseMessages(messages: MessageType[]): CoreMessage[] {
-    return messages.map(msg => ({
-      ...msg,
-      content:
-        typeof msg.content === 'string' && (msg.content.startsWith('[') || msg.content.startsWith('{'))
-          ? JSON.parse((msg as MessageType).content as string)
-          : typeof msg.content === 'number'
-            ? String(msg.content)
-            : msg.content,
-    }));
+    return messages.map(msg => {
+      let content = msg.content;
+      if (typeof content === 'string' && (content.startsWith('[') || content.startsWith('{'))) {
+        try {
+          content = JSON.parse(content);
+        } catch {
+          // Keep the original string if it's not valid JSON
+        }
+      } else if (typeof content === 'number') {
+        content = String(content);
+      }
+      return {
+        ...msg,
+        content,
+      };
+    }) as CoreMessage[];
   }
 
   protected convertToUIMessages(messages: MessageType[]): AiMessageType[] {
@@ -244,6 +606,7 @@ export abstract class MastraMemory extends MastraBase {
           role: message.role as AiMessageType['role'],
           content: textContent,
           toolInvocations,
+          createdAt: message.createdAt,
         });
 
         return obj;
@@ -353,6 +716,7 @@ export abstract class MastraMemory extends MastraBase {
    */
   async addMessage({
     threadId,
+    resourceId,
     config,
     content,
     role,
@@ -362,6 +726,7 @@ export abstract class MastraMemory extends MastraBase {
     toolCallIds,
   }: {
     threadId: string;
+    resourceId: string;
     config?: MemoryConfig;
     content: UserContent | AssistantContent;
     role: 'user' | 'assistant';
@@ -376,6 +741,7 @@ export abstract class MastraMemory extends MastraBase {
       role,
       createdAt: new Date(),
       threadId,
+      resourceId,
       type,
       toolNames,
       toolCallArgs,

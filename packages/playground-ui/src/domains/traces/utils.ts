@@ -47,7 +47,10 @@ export function transformKey(key: string) {
   if (key.includes('.result')) {
     return 'Output';
   }
-  return key.split('.').join(' ').split('_');
+
+  const newKey = key.split('.').join(' ').split('_').join(' ').replaceAll('ai', 'AI');
+
+  return newKey.substring(0, 1).toUpperCase() + newKey.substring(1);
 }
 
 export function cleanString(string: string) {
@@ -75,7 +78,7 @@ export const refineTraces = (traces: Span[], isWorkflow: boolean = false): Refin
     return name;
   };
 
-  const groupedTraces = traces.reduce<Record<string, Span[]>>((acc, curr) => {
+  const groupedTraces = traces?.reduce<Record<string, Span[]>>((acc, curr) => {
     const newCurr = { ...curr, name: newName(curr.name), duration: curr.endTime - curr.startTime };
 
     listOfSpanIds.add(curr.id);
@@ -93,6 +96,7 @@ export const refineTraces = (traces: Span[], isWorkflow: boolean = false): Refin
     }));
 
     const failedStatus = value.find(span => span.status.code !== 0)?.status;
+
     return {
       traceId: key,
       serviceName: parentSpan?.name || key,

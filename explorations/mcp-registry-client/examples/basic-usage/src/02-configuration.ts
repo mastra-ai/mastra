@@ -9,7 +9,7 @@
  */
 
 import { RegistryClient } from "@mcp/registry"
-import { McpConfiguration } from "@mastra/mcp-configuration"
+import { MCPClient } from "@mastra/mcp-configuration"
 
 // Create registry client
 const registry = new RegistryClient({
@@ -17,7 +17,7 @@ const registry = new RegistryClient({
 })
 
 // Create configuration manager
-const config = new McpConfiguration({
+const config = new MCPClient({
 	id: "example-config",
 	registry,
 })

@@ -1,4 +1,4 @@
-import { Agent, MemoryThread, Tool, Workflow, Vector, BaseResource } from './resources';
+import { Agent, MemoryThread, Tool, Workflow, Vector, BaseResource, Network, VNextWorkflow } from './resources';
 import type {
   ClientOptions,
   CreateMemoryThreadParams,
@@ -9,11 +9,12 @@ import type {
   GetLogsResponse,
   GetMemoryThreadParams,
   GetMemoryThreadResponse,
+  GetNetworkResponse,
   GetTelemetryParams,
   GetTelemetryResponse,
   GetToolResponse,
+  GetVNextWorkflowResponse,
   GetWorkflowResponse,
-  RequestOptions,
   SaveMessageToMemoryParams,
   SaveMessageToMemoryResponse,
 } from './types';
@@ -122,6 +123,23 @@ export class MastraClient extends BaseResource {
   }
 
   /**
+   * Retrieves all available vNext workflows
+   * @returns Promise containing map of vNext workflow IDs to vNext workflow details
+   */
+  public getVNextWorkflows(): Promise<Record<string, GetVNextWorkflowResponse>> {
+    return this.request('/api/workflows/v-next');
+  }
+
+  /**
+   * Gets a vNext workflow instance by ID
+   * @param workflowId - ID of the vNext workflow to retrieve
+   * @returns vNext Workflow instance
+   */
+  public getVNextWorkflow(workflowId: string) {
+    return new VNextWorkflow(this.options, workflowId);
+  }
+
+  /**
    * Gets a vector instance by name
    * @param vectorName - Name of the vector to retrieve
    * @returns Vector instance
@@ -162,16 +180,8 @@ export class MastraClient extends BaseResource {
    * @returns Promise containing telemetry data
    */
   public getTelemetry(params?: GetTelemetryParams): Promise<GetTelemetryResponse> {
-    const { name, scope, page, perPage, attribute } = params || {};
+    const { name, scope, page, perPage, attribute, fromDate, toDate } = params || {};
     const _attribute = attribute ? Object.entries(attribute).map(([key, value]) => `${key}:${value}`) : [];
-
-    const queryObj = {
-      ...(name ? { name } : {}),
-      ...(scope ? { scope } : {}),
-      ...(page ? { page: String(page) } : {}),
-      ...(perPage ? { perPage: String(perPage) } : {}),
-      ...(_attribute?.length ? { attribute: _attribute } : {}),
-    } as const;
 
     const searchParams = new URLSearchParams();
     if (name) {
@@ -195,11 +205,34 @@ export class MastraClient extends BaseResource {
         searchParams.set('attribute', _attribute);
       }
     }
+    if (fromDate) {
+      searchParams.set('fromDate', fromDate.toISOString());
+    }
+    if (toDate) {
+      searchParams.set('toDate', toDate.toISOString());
+    }
 
     if (searchParams.size) {
       return this.request(`/api/telemetry?${searchParams}`);
     } else {
       return this.request(`/api/telemetry`);
     }
+  }
+
+  /**
+   * Retrieves all available networks
+   * @returns Promise containing map of network IDs to network details
+   */
+  public getNetworks(): Promise<Record<string, GetNetworkResponse>> {
+    return this.request('/api/networks');
+  }
+
+  /**
+   * Gets a network instance by ID
+   * @param networkId - ID of the network to retrieve
+   * @returns Network instance
+   */
+  public getNetwork(networkId: string) {
+    return new Network(this.options, networkId);
   }
 }

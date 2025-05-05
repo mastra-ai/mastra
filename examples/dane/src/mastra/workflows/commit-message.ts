@@ -5,6 +5,7 @@ import { execSync } from 'child_process';
 import { z } from 'zod';
 
 import { fsTool } from '../tools/fs.js';
+import { RuntimeContext } from '@mastra/core/di';
 
 export const commitMessageGenerator = new Workflow({
   name: 'commit-message',
@@ -36,14 +37,14 @@ const readConventionalCommitSpec = new Step({
   outputSchema: z.object({
     fileData: z.any(),
   }),
-  execute: async ({ suspend }) => {
+  execute: async () => {
     if (!fsTool?.execute) {
       return { fileData: null };
     }
 
     const fileData = await fsTool.execute({
       context: { action: 'read', file: 'data/crawl/conventional-commit.json', data: '' } as any,
-      suspend,
+      runtimeContext: new RuntimeContext(),
     });
 
     return { fileData };

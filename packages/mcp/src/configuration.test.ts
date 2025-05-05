@@ -1,10 +1,12 @@
 import { spawn } from 'child_process';
 import path from 'path';
-import { describe, it, expect, beforeEach, afterEach, afterAll, beforeAll } from 'vitest';
-import { MCPConfiguration } from './configuration';
+import { describe, it, expect, beforeEach, afterEach, afterAll, beforeAll, vi } from 'vitest';
+import { MCPClient } from './configuration';
 
-describe('MCPConfiguration', () => {
-  let mcp: MCPConfiguration;
+vi.setConfig({ testTimeout: 80000, hookTimeout: 80000 });
+
+describe('MCPClient', () => {
+  let mcp: MCPClient;
   let weatherProcess: ReturnType<typeof spawn>;
 
   beforeAll(async () => {
@@ -34,7 +36,7 @@ describe('MCPConfiguration', () => {
   });
 
   beforeEach(async () => {
-    mcp = new MCPConfiguration({
+    mcp = new MCPClient({
       servers: {
         stockPrice: {
           command: 'npx',
@@ -93,7 +95,7 @@ describe('MCPConfiguration', () => {
   });
 
   it('should handle connection errors gracefully', async () => {
-    const badConfig = new MCPConfiguration({
+    const badConfig = new MCPClient({
       servers: {
         badServer: {
           command: 'nonexistent-command',
@@ -108,7 +110,7 @@ describe('MCPConfiguration', () => {
 
   describe('Instance Management', () => {
     it('should allow multiple instances with different IDs', async () => {
-      const config2 = new MCPConfiguration({
+      const config2 = new MCPClient({
         id: 'custom-id',
         servers: {
           stockPrice: {
@@ -128,7 +130,7 @@ describe('MCPConfiguration', () => {
     it('should allow reuse of configuration after closing', async () => {
       await mcp.disconnect();
 
-      const config2 = new MCPConfiguration({
+      const config2 = new MCPClient({
         servers: {
           stockPrice: {
             command: 'npx',
@@ -148,7 +150,7 @@ describe('MCPConfiguration', () => {
     });
 
     it('should throw error when creating duplicate instance without ID', async () => {
-      const existingConfig = new MCPConfiguration({
+      const existingConfig = new MCPClient({
         servers: {
           stockPrice: {
             command: 'npx',
@@ -162,7 +164,7 @@ describe('MCPConfiguration', () => {
 
       expect(
         () =>
-          new MCPConfiguration({
+          new MCPClient({
             servers: {
               stockPrice: {
                 command: 'npx',
@@ -173,9 +175,122 @@ describe('MCPConfiguration', () => {
               },
             },
           }),
-      ).toThrow(/MCPConfiguration was initialized multiple times/);
+      ).toThrow(/MCPClient was initialized multiple times/);
 
       await existingConfig.disconnect();
+    });
+  });
+  describe('MCPClient Operation Timeouts', () => {
+    it('should respect custom timeout in configuration', async () => {
+      const config = new MCPClient({
+        id: 'test-timeout-config',
+        timeout: 3000, // 3 second timeout
+        servers: {
+          test: {
+            command: 'node',
+            args: [
+              '-e',
+              `
+            const { Server } = require('@modelcontextprotocol/sdk/server/index.js');
+            const server = new Server({ name: 'test', version: '1.0.0' });
+            setTimeout(() => process.exit(0), 2000); // 2 second delay
+          `,
+            ],
+          },
+        },
+      });
+
+      const error = await config.getTools().catch(e => e);
+      expect(error).toBeDefined(); // Will throw since server exits before responding
+      expect(error.message).not.toMatch(/Request timed out/);
+
+      await config.disconnect();
+    });
+
+    it('should respect per-server timeout override', async () => {
+      const config = new MCPClient({
+        id: 'test-server-timeout-config',
+        timeout: 500, // Global timeout of 500ms
+        servers: {
+          test: {
+            command: 'node',
+            args: [
+              '-e',
+              `
+            const { Server } = require('@modelcontextprotocol/sdk/server/index.js');
+            const server = new Server({ name: 'test', version: '1.0.0' });
+            setTimeout(() => process.exit(0), 2000); // 2 second delay
+          `,
+            ],
+            timeout: 3000, // Server-specific timeout of 3s
+          },
+        },
+      });
+
+      // This should succeed since server timeout (3s) is longer than delay (2s)
+      const error = await config.getTools().catch(e => e);
+      expect(error).toBeDefined(); // Will throw since server exits before responding
+      expect(error.message).not.toMatch(/Request timed out/);
+
+      await config.disconnect();
+    });
+  });
+
+  describe('MCPClient Connection Timeout', () => {
+    it('should throw timeout error for slow starting server', async () => {
+      const slowConfig = new MCPClient({
+        id: 'test-slow-server',
+        servers: {
+          slowServer: {
+            command: 'node',
+            args: ['-e', 'setTimeout(() => process.exit(0), 65000)'], // Simulate a server that takes 65 seconds to start
+            timeout: 1000,
+          },
+        },
+      });
+
+      await expect(slowConfig.getTools()).rejects.toThrow(/Request timed out/);
+      await slowConfig.disconnect();
+    });
+
+    it('timeout should be longer than configured timeout', async () => {
+      const slowConfig = new MCPClient({
+        id: 'test-slow-server',
+        timeout: 2000,
+        servers: {
+          slowServer: {
+            command: 'node',
+            args: ['-e', 'setTimeout(() => process.exit(0), 1000)'], // Simulate a server that takes 1 second to start
+          },
+        },
+      });
+
+      const error = await slowConfig.getTools().catch(e => e);
+      expect(error).toBeDefined();
+      expect(error.message).not.toMatch(/Request timed out/);
+      await slowConfig.disconnect();
+    });
+
+    it('should respect per-server timeout configuration', async () => {
+      const mixedConfig = new MCPClient({
+        id: 'test-mixed-timeout',
+        timeout: 1000, // Short global timeout
+        servers: {
+          quickServer: {
+            command: 'node',
+            args: ['-e', 'setTimeout(() => process.exit(0), 2000)'], // Takes 2 seconds to exit
+          },
+          slowServer: {
+            command: 'node',
+            args: ['-e', 'setTimeout(() => process.exit(0), 2000)'], // Takes 2 seconds to exit
+            timeout: 3000, // But has a longer timeout
+          },
+        },
+      });
+
+      // Quick server should timeout
+      await expect(mixedConfig.getTools()).rejects.toThrow(/Request timed out/);
+      await mixedConfig.disconnect();
     });
   });
 });

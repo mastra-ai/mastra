@@ -62,11 +62,58 @@ export class CloudflareVector extends MastraVector {
     return translator.translate(filter);
   }
 
+  private async verifyIndexExists(indexName: string, dimension: number): Promise<boolean> {
+    try {
+      const info = await this.client.vectorize.indexes.info(indexName, {
+        account_id: this.accountId,
+      });
+
+      if (!info) {
+        return false; // Index doesn't exist
+      }
+      if (info.dimensions !== dimension) {
+        throw new Error(
+          `Index "${indexName}" already exists with ${info.dimensions} dimensions, but ${dimension} dimensions were requested`,
+        );
+      }
+
+      // Index exists with matching dimensions
+      return true;
+    } catch (error: any) {
+      // Check if this is an expected "index doesn't exist" error
+      // This covers all variants of not found/deleted errors by checking:
+      // 1. HTTP status (404/410 both mean the index isn't there)
+      // 2. Error message content (contains common patterns)
+      const message = error?.errors?.[0]?.message || error?.message;
+      if (
+        error.status === 404 ||
+        error.status === 410 ||
+        message?.toLowerCase().includes('not found') ||
+        message?.toLowerCase().includes('deleted')
+      ) {
+        return false;
+      }
+
+      // For any other errors, propagate them up
+      throw error;
+    }
+  }
+
   async createIndex(...args: ParamsToArgs<CreateIndexParams>): Promise<void> {
     const params = this.normalizeArgs<CreateIndexParams>('createIndex', args);
 
     const { indexName, dimension, metric = 'cosine' } = params;
 
+    // Check if index exists with correct dimensions
+    const exists = await this.verifyIndexExists(indexName, dimension);
+    if (exists) {
+      this.logger.info(
+        `Index "${indexName}" already exists with ${dimension} dimensions and metric ${metric}, skipping creation.`,
+      );
+      return;
+    }
+
+    // Index doesn't exist, create it
     await this.client.vectorize.indexes.create({
       account_id: this.accountId,
       config: {
@@ -157,5 +204,39 @@ export class CloudflareVector extends MastraVector {
     });
 
     return res?.metadataIndexes ?? [];
+  }
+
+  async updateIndexById(
+    indexName: string,
+    id: string,
+    update: {
+      vector?: number[];
+      metadata?: Record<string, any>;
+    },
+  ): Promise<void> {
+    if (!update.vector && !update.metadata) {
+      throw new Error('No update data provided');
+    }
+
+    const updatePayload: any = {
+      ids: [id],
+      account_id: this.accountId,
+    };
+
+    if (update.vector) {
+      updatePayload.vectors = [update.vector];
+    }
+    if (update.metadata) {
+      updatePayload.metadata = [update.metadata];
+    }
+
+    await this.upsert({ indexName: indexName, vectors: updatePayload.vectors, metadata: updatePayload.metadata });
+  }
+
+  async deleteIndexById(indexName: string, id: string): Promise<void> {
+    await this.client.vectorize.indexes.deleteByIds(indexName, {
+      ids: [id],
+      account_id: this.accountId,
+    });
   }
 }

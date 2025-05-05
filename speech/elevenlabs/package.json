@@ -1,6 +1,6 @@
 {
   "name": "@mastra/speech-elevenlabs",
-  "version": "0.1.9-alpha.0",
+  "version": "0.1.20-alpha.5",
   "description": "Mastra ElevenLabs speech integration (DEPRECATED - use @mastra/voice-elevenlabs instead)",
   "type": "module",
   "main": "dist/index.js",
@@ -23,17 +23,18 @@
     "build": "tsup src/index.ts --format esm,cjs --experimental-dts --clean --treeshake=smallest --splitting",
     "test": "echo deprecated"
   },
+  "license": "Elastic-2.0",
   "dependencies": {
     "@mastra/core": "workspace:^",
-    "elevenlabs": "^1.54.0",
-    "zod": "^3.24.2"
+    "elevenlabs": "^1.57.0",
+    "zod": "^3.24.3"
   },
   "devDependencies": {
     "@internal/lint": "workspace:*",
-    "@microsoft/api-extractor": "^7.52.1",
-    "@types/node": "^22.13.10",
-    "eslint": "^9.22.0",
+    "@microsoft/api-extractor": "^7.52.5",
+    "@types/node": "^20.17.32",
+    "eslint": "^9.25.1",
     "tsup": "^8.4.0",
-    "typescript": "^5.8.2"
+    "typescript": "^5.8.3"
   }
 }

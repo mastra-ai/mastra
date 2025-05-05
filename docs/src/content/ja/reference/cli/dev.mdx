@@ -1,0 +1,49 @@
+---
+title: "`mastra dev` リファレンス | ローカル開発 | Mastra CLI"
+description: エージェント、ツール、ワークフローの開発サーバーを起動するmastra devコマンドのドキュメント。
+---
+
+# `mastra dev` リファレンス
+
+`mastra dev` コマンドは、エージェント、ツール、ワークフローのRESTルートを公開する開発サーバーを起動します。
+
+## パラメータ
+
+<PropertiesTable
+  content={[
+    {
+      name: "--dir",
+      type: "string",
+      description:
+        "Mastraフォルダ（エージェント、ツール、ワークフローを含む）へのパスを指定します。デフォルトでは現在の作業ディレクトリになります。",
+      isOptional: true,
+    },
+    {
+      name: "--tools",
+      type: "string",
+      description:
+        "登録する追加のツールディレクトリへのパスをカンマ区切りで指定します。例：'src/tools/dbTools,src/tools/scraperTools'。",
+      isOptional: true,
+    },
+  ]}
+/>
+
+## ルート## 追加情報
+
+ポートのデフォルトは4111です。ポートとホスト名の両方はmastraサーバー設定で構成できます。設定の詳細については[開発サーバーの起動](/docs/local-dev/mastra-dev#launch-development-server)を参照してください。
+
+使用するプロバイダー（例：`OPENAI_API_KEY`、`ANTHROPIC_API_KEY`など）の環境変数が`.env.development`または`.env`ファイルに設定されていることを確認してください。
+
+### リクエスト例
+
+`mastra dev`を実行した後にエージェントをテストするには：
+
+```bash
+curl -X POST http://localhost:4111/api/agents/myAgent/generate \
+  -H "Content-Type: application/json" \
+  -d '{
+    "messages": [
+      { "role": "user", "content": "Hello, how can you assist me today?" }
+    ]
+  }'
+```

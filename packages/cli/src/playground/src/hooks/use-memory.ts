@@ -42,6 +42,29 @@ export const useThreads = ({
     }
   }, [resourceid, agentId, isMemoryEnabled]);
 
+  useEffect(() => {
+    const refetchThreads = async (count = 0) => {
+      const newThreads = await mutate();
+      if (newThreads?.length) {
+        const lastThread = newThreads[newThreads.length - 1];
+        count = count + 1;
+        if (lastThread?.title?.toLowerCase()?.includes('new thread') && count < 3) {
+          setTimeout(() => {
+            refetchThreads(count);
+          }, 500);
+        }
+      }
+    };
+    if (threads?.length) {
+      const lastThread = threads[threads.length - 1];
+      if (lastThread?.title?.toLowerCase()?.includes('new thread')) {
+        setTimeout(() => {
+          refetchThreads();
+        }, 500);
+      }
+    }
+  }, [threads]);
+
   return { threads, isLoading, mutate };
 };
 
@@ -82,6 +105,7 @@ export const useDeleteThread = () => {
       method: 'DELETE',
       headers: {
         'Content-Type': 'application/json',
+        'x-mastra-dev-playground': 'true',
       },
     });
 

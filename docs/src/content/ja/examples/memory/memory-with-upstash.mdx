@@ -1,0 +1,102 @@
+# Upstashを使用したメモリ
+
+この例では、ストレージバックエンドとしてUpstashを使用してMastraのメモリシステムを使用する方法を示します。
+
+## セットアップ
+
+まず、Upstashのストレージとベクター機能を使用してメモリシステムをセットアップします:
+
+```typescript
+import { Memory } from "@mastra/memory";
+import { UpstashStore, UpstashVector } from "@mastra/upstash";
+import { Agent } from "@mastra/core/agent";
+import { openai } from "@ai-sdk/openai";
+
+// Upstashのストレージとベクター検索を使用してメモリを初期化
+const memory = new Memory({
+  storage: new UpstashStore({
+    url: process.env.UPSTASH_REDIS_REST_URL,
+    token: process.env.UPSTASH_REDIS_REST_TOKEN,
+  }),
+  vector: new UpstashVector({
+    url: process.env.UPSTASH_REDIS_REST_URL,
+    token: process.env.UPSTASH_REDIS_REST_TOKEN,
+  }),
+  options: {
+    lastMessages: 10,
+    semanticRecall: {
+      topK: 3,
+      messageRange: 2,
+    },
+  },
+});
+
+// メモリ機能を持つエージェントを作成
+const chefAgent = new Agent({
+  name: "chefAgent",
+  instructions:
+    "あなたはMichelです。実用的で経験豊富な家庭料理のシェフで、利用可能な食材で素晴らしい料理を作る手助けをします。",
+  model: openai("gpt-4o-mini"),
+  memory,
+});
+```
+
+## 環境設定
+
+環境変数にUpstashの資格情報を設定してください：
+
+```bash
+UPSTASH_REDIS_REST_URL=your-redis-url
+UPSTASH_REDIS_REST_TOKEN=your-redis-token
+```
+
+## 使用例
+
+```typescript
+import { randomUUID } from "crypto";
+
+// Start a conversation
+const threadId = randomUUID();
+const resourceId = "SOME_USER_ID";
+
+// Ask about ingredients
+const response1 = await chefAgent.stream(
+  "私のキッチンには、パスタ、缶詰のトマト、ニンニク、オリーブオイル、そしていくつかの乾燥ハーブ（バジルとオレガノ）があります。何が作れますか？",
+  {
+    threadId,
+    resourceId,
+  },
+);
+
+// Ask about different ingredients
+const response2 = await chefAgent.stream(
+  "今、私は友達の家にいて、彼らは鶏もも肉、ココナッツミルク、サツマイモ、カレーパウダーを持っています。",
+  {
+    threadId,
+    resourceId,
+  },
+);
+
+// Use memory to recall previous conversation
+const response3 = await chefAgent.stream(
+  "友達の家に行く前に何を料理しましたか？",
+  {
+    threadId,
+    resourceId,
+    memoryOptions: {
+      lastMessages: 3, // Get last 3 messages for context
+      semanticRecall: {
+        topK: 2, // Also get 2 most relevant messages
+        messageRange: 2, // Include context around matches
+      },
+    },
+  },
+);
+```
+
+この例は以下を示しています：
+
+1. ベクター検索機能を備えたUpstashストレージの設定
+2. Upstash接続のための環境変数の設定
+3. メモリ統合を備えたエージェントの作成
+4. 同じクエリで最近の履歴とセマンティック検索の両方を使用

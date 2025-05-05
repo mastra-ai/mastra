@@ -105,7 +105,6 @@ const reader = new LocalCalendarReader();
 
 export const listEvents = createTool({
   id: 'listEvents',
-  name: 'List Events',
   description: 'List calendar events',
   inputSchema: z.object({
     startDate: z.string(),

@@ -1,4 +1,4 @@
 export type RagieConfig = {
-    API_KEY: string;
-    [key: string]: any;
+  API_KEY: string;
+  [key: string]: any;
 };

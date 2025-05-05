@@ -1,15 +1,12 @@
 'use client';
 
-import { zodResolver } from '@hookform/resolvers/zod';
 import { Loader2 } from 'lucide-react';
-import { useForm } from 'react-hook-form';
-import { z } from 'zod';
-
 import { Button } from '../ui/button';
 import { ScrollArea } from '../ui/scroll-area';
-
-import { customZodUnionResolver } from './resolvers';
-import { resolveSchema } from './schema-resolver';
+import { AutoForm, CustomZodProvider } from '@/components/ui/autoform';
+import type { ExtendableAutoFormProps } from '@autoform/react';
+import z, { ZodObject } from 'zod';
+import { Label } from '../ui/label';
 
 interface DynamicFormProps<T extends z.ZodSchema> {
   schema: T;
@@ -19,6 +16,13 @@ interface DynamicFormProps<T extends z.ZodSchema> {
   submitButtonLabel?: string;
 }
 
+function isEmptyZodObject(schema: unknown): boolean {
+  if (schema instanceof ZodObject) {
+    return Object.keys(schema.shape).length === 0;
+  }
+  return false;
+}
+
 export function DynamicForm<T extends z.ZodSchema>({
   schema,
   onSubmit,
@@ -26,65 +30,48 @@ export function DynamicForm<T extends z.ZodSchema>({
   isSubmitLoading,
   submitButtonLabel = 'Submit',
 }: DynamicFormProps<T>) {
-  const schemaTypeName = (schema as any)?._def?.typeName;
-  const discriminatedUnionSchemaOptions = (schema as any)?._def?.options;
-  const discriminatedUnionSchemaDiscriminator = (schema as any)?._def?.discriminator;
-
-  // Wrap non-object schemas in a container object
-  const wrappedSchema = schemaTypeName !== 'ZodObject' ? z.object({ items: schema }) : schema;
-
-  const form = useForm<z.infer<typeof wrappedSchema>>({
-    resolver:
-      schemaTypeName === 'ZodDiscriminatedUnion'
-        ? customZodUnionResolver(wrappedSchema as any, discriminatedUnionSchemaDiscriminator)
-        : zodResolver(wrappedSchema as any),
-    defaultValues,
-  });
-
-  const { control, handleSubmit, watch } = form;
-  const formValues = form.watch();
-
-  const discriminatorValue = discriminatedUnionSchemaDiscriminator
-    ? (watch(discriminatedUnionSchemaDiscriminator) as any)
-    : undefined;
-
-  const resolvedSchema =
-    schemaTypeName === 'ZodDiscriminatedUnion'
-      ? discriminatedUnionSchemaOptions?.find(
-          (option: any) => option?.shape?.[discriminatedUnionSchemaDiscriminator]?._def?.value === discriminatorValue,
-        ) || z.object({ [discriminatedUnionSchemaDiscriminator]: z.string() })
-      : wrappedSchema;
-
-  function handleFieldChange({ key, value }: { key: keyof z.infer<T>; value: any }) {
-    if (key === discriminatedUnionSchemaDiscriminator) {
-      form.setValue(key as any, value);
-    } else {
-      form.setValue(key as any, value);
-    }
+  if (!schema) {
+    console.error('no form schema found');
+    return null;
   }
 
-  const wrappedOnSubmit = (values: z.infer<typeof wrappedSchema>) => {
-    if (schemaTypeName !== 'ZodObject') {
-      return onSubmit(values.items);
+  const normalizedSchema = (schema: z.ZodSchema) => {
+    if (isEmptyZodObject(schema)) {
+      return z.object({});
     }
-    return onSubmit(values as any);
+    // using a non-printable character to avoid conflicts with the form data
+    return z.object({
+      '\u200B': schema,
+    });
+  };
+
+  const schemaProvider = new CustomZodProvider(normalizedSchema(schema));
+
+  const formProps: ExtendableAutoFormProps<z.infer<T>> = {
+    schema: schemaProvider,
+    onSubmit: async values => {
+      await onSubmit(values?.['\u200B'] || {});
+    },
+    defaultValues: defaultValues ? { '\u200B': defaultValues } : undefined,
+    formProps: {
+      className: 'space-y-4 p-4',
+    },
+    uiComponents: {
+      SubmitButton: ({ children }) => (
+        <Button className="w-full" type="submit" disabled={isSubmitLoading}>
+          {isSubmitLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : children || submitButtonLabel}
+        </Button>
+      ),
+    },
+    formComponents: {
+      Label: ({ value }) => <Label className="text-sm font-normal">{value}</Label>,
+    },
+    withSubmit: true,
   };
 
   return (
     <ScrollArea className="h-full w-full">
-      <form onSubmit={handleSubmit(wrappedOnSubmit)} className="flex flex-col gap-4 p-4 w-full">
-        {resolveSchema({
-          schema: resolvedSchema,
-          parentField: '',
-          control,
-          formValues,
-          errors: form.formState.errors,
-          handleFieldChange,
-        })}
-        <Button disabled={isSubmitLoading} type="submit">
-          {isSubmitLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : submitButtonLabel}
-        </Button>
-      </form>
+      <AutoForm {...formProps} />
     </ScrollArea>
   );
 }

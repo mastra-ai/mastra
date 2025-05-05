@@ -3,7 +3,13 @@ import type { EmbeddingModel } from 'ai';
 import { z } from 'zod';
 
 import { GraphRAG } from '../graph-rag';
-import { vectorQuerySearch, defaultGraphRagDescription, filterDescription, topKDescription } from '../utils';
+import {
+  vectorQuerySearch,
+  defaultGraphRagDescription,
+  filterDescription,
+  topKDescription,
+  queryTextDescription,
+} from '../utils';
 
 export const createGraphRAGTool = ({
   vectorStoreName,
@@ -38,35 +44,67 @@ export const createGraphRAGTool = ({
   const graphRag = new GraphRAG(graphOptions.dimension, graphOptions.threshold);
   let isInitialized = false;
 
+  const baseSchema = {
+    queryText: z.string().describe(queryTextDescription),
+    topK: z.coerce.number().describe(topKDescription),
+  };
+  const inputSchema = enableFilter
+    ? z
+        .object({
+          ...baseSchema,
+          filter: z.coerce.string().describe(filterDescription),
+        })
+        .passthrough()
+    : z.object(baseSchema).passthrough();
   return createTool({
     id: toolId,
-    inputSchema: z.object({
-      queryText: z.string().describe('The text query to search for in the vector database'),
-      topK: z.number().describe(topKDescription),
-      filter: z.string().describe(filterDescription),
-    }),
+    inputSchema,
     outputSchema: z.object({
       relevantContext: z.any(),
     }),
     description: toolDescription,
     execute: async ({ context: { queryText, topK, filter }, mastra }) => {
-      const vectorStore = mastra?.vectors?.[vectorStoreName];
+      const logger = mastra?.getLogger();
+      if (!logger) {
+        console.warn(
+          '[GraphRAGTool] Logger not initialized: no debug or error logs will be recorded for this tool execution.',
+        );
+      }
+      if (logger) {
+        logger.debug('[GraphRAGTool] execute called with:', { queryText, topK, filter });
+      }
+      try {
+        const topKValue =
+          typeof topK === 'number' && !isNaN(topK)
+            ? topK
+            : typeof topK === 'string' && !isNaN(Number(topK))
+              ? Number(topK)
+              : 10;
+        const vectorStore = mastra?.getVector(vectorStoreName);
 
-      if (vectorStore) {
+        if (!vectorStore) {
+          if (logger) {
+            logger.error('Vector store not found', { vectorStoreName });
+          }
+          return { relevantContext: [] };
+        }
+
         let queryFilter = {};
         if (enableFilter) {
-          queryFilter = filter
-            ? (() => {
-                try {
-                  return JSON.parse(filter);
-                } catch {
-                  return filter;
-                }
-              })()
-            : filter;
+          queryFilter = (() => {
+            try {
+              return typeof filter === 'string' ? JSON.parse(filter) : filter;
+            } catch (error) {
+              // Log the error and use empty object
+              if (logger) {
+                logger.warn('Failed to parse filter as JSON, using empty filter', { filter, error });
+              }
+              return {};
+            }
+          })();
         }
-        if (mastra.logger) {
-          mastra.logger.debug('Using this filter and topK:', { queryFilter, topK });
+        if (logger) {
+          logger.debug('Prepared vector query parameters:', { queryFilter, topK: topKValue });
         }
         const { results, queryEmbedding } = await vectorQuerySearch({
           indexName,
@@ -74,9 +112,12 @@ export const createGraphRAGTool = ({
           queryText,
           model,
           queryFilter: Object.keys(queryFilter || {}).length > 0 ? queryFilter : undefined,
-          topK,
+          topK: topKValue,
           includeVectors: true,
         });
+        if (logger) {
+          logger.debug('vectorQuerySearch returned results', { count: results.length });
+        }
 
         // Initialize graph if not done yet
         if (!isInitialized) {
@@ -89,28 +130,43 @@ export const createGraphRAGTool = ({
             vector: result.vector || [],
           }));
 
+          if (logger) {
+            logger.debug('Initializing graph', { chunkCount: chunks.length, embeddingCount: embeddings.length });
+          }
           graphRag.createGraph(chunks, embeddings);
           isInitialized = true;
+        } else if (logger) {
+          logger.debug('Graph already initialized, skipping graph construction');
         }
 
         // Get reranked results using GraphRAG
         const rerankedResults = graphRag.query({
           query: queryEmbedding,
-          topK,
+          topK: topKValue,
           randomWalkSteps: graphOptions.randomWalkSteps,
           restartProb: graphOptions.restartProb,
         });
-
+        if (logger) {
+          logger.debug('GraphRAG query returned results', { count: rerankedResults.length });
+        }
         // Extract and combine relevant chunks
         const relevantChunks = rerankedResults.map(result => result.content);
+        if (logger) {
+          logger.debug('Returning relevant context chunks', { count: relevantChunks.length });
+        }
         return {
           relevantContext: relevantChunks,
         };
+      } catch (err) {
+        if (logger) {
+          logger.error('Unexpected error in VectorQueryTool execute', {
+            error: err,
+            errorMessage: err instanceof Error ? err.message : String(err),
+            errorStack: err instanceof Error ? err.stack : undefined,
+          });
+        }
+        return { relevantContext: [] };
       }
-
-      return {
-        relevantContext: [],
-      };
     },
   });
 };

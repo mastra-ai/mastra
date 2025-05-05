@@ -1,0 +1,20 @@
+{
+  "name": "e2e-create-mastra",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "E2E tests for @mastra/create-mastra",
+  "scripts": {
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "execa": "^9.5.2",
+    "get-port": "^7.1.0",
+    "globby": "^14.1.0",
+    "npm-cli-login": "^1.0.0",
+    "verdaccio": "^6.1.2",
+    "verdaccio-auth-memory": "^10.2.2",
+    "vitest": "^3.1.2"
+  },
+  "dependencies": {}
+}

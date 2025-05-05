@@ -1,6 +1,6 @@
 {
   "name": "@mastra/dane",
-  "version": "0.0.7-alpha.0",
+  "version": "0.0.18-alpha.5",
   "main": "dist/index.js",
   "type": "module",
   "files": [
@@ -19,10 +19,10 @@
   },
   "keywords": [],
   "author": "",
-  "license": "ISC",
+  "license": "MIT",
   "description": "",
   "devDependencies": {
-    "@types/node": "^22.13.10",
+    "@types/node": "^20.17.27",
     "@types/pdf-parse": "^1.1.4",
     "mastra": "workspace:*",
     "tsx": "^4.19.3"
@@ -30,13 +30,12 @@
   "dependencies": {
     "@ai-sdk/anthropic": "^1.1.15",
     "@inquirer/prompts": "^7.3.3",
-    "@libsql/client": "^0.14.0",
     "@mastra/core": "workspace:*",
     "@mastra/github": "workspace:*",
+    "@mastra/libsql": "workspace:*",
     "@mastra/mcp": "workspace:*",
     "@mastra/memory": "workspace:*",
     "@mastra/rag": "workspace:*",
-    "@mastra/stabilityai": "workspace:*",
     "@mastra/upstash": "workspace:*",
     "boxen": "^8.0.1",
     "chalk": "^5.4.1",

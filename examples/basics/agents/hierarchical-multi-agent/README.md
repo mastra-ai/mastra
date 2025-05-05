@@ -14,7 +14,7 @@ A simple supervisor planning agent that orchestrates calls to other agents using
 
    ```bash
    git clone https://github.com/mastra-ai/mastra
-   cd examples/basics/agents/agents-as-tools
+   cd examples/basics/agents/hierarchical-multi-agent
    ```
 
 2. Copy the environment variables file and add your Anthropic and OpenAI API keys:

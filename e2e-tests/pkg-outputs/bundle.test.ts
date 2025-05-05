@@ -15,6 +15,9 @@ let allPackages = await globby(
     '!**/integration-tests/**',
     '!./packages/_config/**',
     '!./e2e-tests/**',
+    '!**/mcp-docs-server/**',
+    '!**/mcp-registry-registry/**',
+    '!**/stores/_test-utils/**',
   ],
   {
     cwd: resolve(__dirname, '..', '..'),

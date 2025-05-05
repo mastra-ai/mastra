@@ -1,0 +1,116 @@
+---
+title: "Netlify デプロイヤー"
+description: "NetlifyDeployer クラスのドキュメントで、Mastra アプリケーションを Netlify Functions にデプロイします。"
+---
+
+# NetlifyDeployer
+
+NetlifyDeployerは、Mastraアプリケーションをネットリファイ・ファンクションにデプロイし、サイトの作成、設定、およびデプロイプロセスを処理します。抽象Deployerクラスを拡張して、Netlify固有のデプロイ機能を提供します。
+
+## 使用例
+
+```typescript
+import { Mastra } from '@mastra/core';
+import { NetlifyDeployer } from '@mastra/deployer-netlify';
+
+const mastra = new Mastra({
+  deployer: new NetlifyDeployer({
+    scope: 'your-team-slug',
+    projectName: 'your-project-name',
+    token: 'your-netlify-token'
+  }),
+  // ... other Mastra configuration options
+});
+```
+
+## パラメーター
+
+### コンストラクターパラメーター
+
+<PropertiesTable
+  content={[
+    {
+      name: "scope",
+      type: "string",
+      description: "あなたのNetlifyチームのスラッグまたはID。",
+      isOptional: false,
+    },
+    {
+      name: "projectName",
+      type: "string",
+      description: "あなたのNetlifyサイトの名前（存在しない場合は作成されます）。",
+      isOptional: false,
+    },
+    {
+      name: "token",
+      type: "string",
+      description: "あなたのNetlify認証トークン。",
+      isOptional: false,
+    },
+  ]}
+/>
+
+
+### 環境変数
+
+NetlifyDeployerは複数のソースから環境変数を処理します：
+
+1. **環境ファイル**: `.env.production`および`.env`ファイルからの変数。
+2. **設定**: Mastra設定を通じて渡される変数。
+3. **Netlifyダッシュボード**: Netlifyのウェブインターフェースを通じて管理することもできます。
+
+
+## Mastraプロジェクトのビルド
+
+Netlifyデプロイメント用にMastraプロジェクトをビルドするには：
+
+```bash
+npx mastra build
+```
+
+ビルドプロセスは、`.mastra/output`ディレクトリに以下の出力構造を生成します：
+
+```
+.mastra/output/
+├── netlify/
+│   └── functions/
+│       └── api/
+│           └── index.mjs    # アプリケーションのエントリーポイント
+└── netlify.toml             # Netlify設定
+```
+
+### Netlify設定
+
+NetlifyDeployerは、`.mastra/output`に以下の設定で`netlify.toml`設定ファイルを自動生成します：
+
+```toml
+[functions]
+node_bundler = "esbuild"            
+directory = "netlify/functions"
+
+[[redirects]]
+force = true
+from = "/*"
+status = 200
+to = "/.netlify/functions/api/:splat"
+```
+
+## デプロイオプション
+
+ビルド後、Mastraアプリケーションの`.mastra/output`を以下のいずれかの方法でNetlifyにデプロイできます：
+
+1. **Netlify CLI**: Netlifyの公式CLIツールを使用して直接デプロイ
+   - CLIをインストール: `npm install -g netlify-cli`
+   - 出力ディレクトリに移動: `cd .mastra/output`
+   - 関数ディレクトリを指定してデプロイ: `netlify deploy --dir . --functions ./netlify/functions`
+   - 本番環境へのデプロイには`--prod`フラグを追加: `netlify deploy --prod --dir . --functions ./netlify/functions`
+
+2. **Netlifyダッシュボード**: Gitリポジトリを接続するか、Netlifyダッシュボードにビルド出力をドラッグ＆ドロップ
+
+3. **Netlify Dev**: Netlifyの開発環境でMastraアプリケーションをローカルで実行
+
+> 出力ディレクトリ`.mastra/output`で`netlify dev`を実行して、Mastraアプリケーションをローカルでテストすることもできます。
+
+## プラットフォームドキュメント
+
+- [Netlify](https://docs.netlify.com/)

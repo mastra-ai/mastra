@@ -1,5 +1,796 @@
 # @mastra/deployer-vercel
 
+## 0.1.21-alpha.5
+
+### Patch Changes
+
+- 8607972: Introduce Mastra lint cli command
+- Updated dependencies [3d2fb5c]
+- Updated dependencies [7eeb2bc]
+- Updated dependencies [8607972]
+- Updated dependencies [7eeb2bc]
+- Updated dependencies [fba031f]
+  - @mastra/core@0.9.2-alpha.5
+  - @mastra/deployer@0.3.2-alpha.5
+
+## 0.1.21-alpha.4
+
+### Patch Changes
+
+- Updated dependencies [ccef9f9]
+- Updated dependencies [51e6923]
+  - @mastra/core@0.9.2-alpha.4
+  - @mastra/deployer@0.3.2-alpha.4
+
+## 0.1.21-alpha.3
+
+### Patch Changes
+
+- Updated dependencies [967b41c]
+- Updated dependencies [4155f47]
+- Updated dependencies [17826a9]
+  - @mastra/core@0.9.2-alpha.3
+  - @mastra/deployer@0.3.2-alpha.3
+
+## 0.1.21-alpha.2
+
+### Patch Changes
+
+- Updated dependencies [26738f4]
+  - @mastra/core@0.9.2-alpha.2
+  - @mastra/deployer@0.3.2-alpha.2
+
+## 0.1.21-alpha.1
+
+### Patch Changes
+
+- Updated dependencies [254f5c3]
+- Updated dependencies [b804723]
+  - @mastra/deployer@0.3.2-alpha.1
+  - @mastra/core@0.9.2-alpha.1
+
+## 0.1.21-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [0097d50]
+  - @mastra/core@0.9.2-alpha.0
+  - @mastra/deployer@0.3.2-alpha.0
+
+## 0.1.20
+
+### Patch Changes
+
+- ce8f129: Improve includeFiles pattern in vercel to reduce function limit
+- Updated dependencies [e7c2881]
+- Updated dependencies [0ccb8b4]
+- Updated dependencies [92c598d]
+- Updated dependencies [405b63d]
+- Updated dependencies [81fb7f6]
+- Updated dependencies [20275d4]
+- Updated dependencies [7d1892c]
+- Updated dependencies [ebdb781]
+- Updated dependencies [a90a082]
+- Updated dependencies [2d17c73]
+- Updated dependencies [61e92f5]
+- Updated dependencies [35955b0]
+- Updated dependencies [6262bd5]
+- Updated dependencies [c1409ef]
+- Updated dependencies [3e7b69d]
+- Updated dependencies [e4943b8]
+- Updated dependencies [11d4485]
+- Updated dependencies [479f490]
+- Updated dependencies [530ced1]
+- Updated dependencies [c23a81c]
+- Updated dependencies [611aa4a]
+- Updated dependencies [2d4001d]
+- Updated dependencies [c71013a]
+- Updated dependencies [1d3b1cd]
+  - @mastra/deployer@0.3.1
+  - @mastra/core@0.9.1
+
+## 0.1.20-alpha.8
+
+### Patch Changes
+
+- Updated dependencies [2d17c73]
+  - @mastra/core@0.9.1-alpha.8
+  - @mastra/deployer@0.3.1-alpha.8
+
+## 0.1.20-alpha.7
+
+### Patch Changes
+
+- Updated dependencies [1d3b1cd]
+  - @mastra/core@0.9.1-alpha.7
+  - @mastra/deployer@0.3.1-alpha.7
+
+## 0.1.20-alpha.6
+
+### Patch Changes
+
+- Updated dependencies [c23a81c]
+  - @mastra/core@0.9.1-alpha.6
+  - @mastra/deployer@0.3.1-alpha.6
+
+## 0.1.20-alpha.5
+
+### Patch Changes
+
+- Updated dependencies [3e7b69d]
+  - @mastra/core@0.9.1-alpha.5
+  - @mastra/deployer@0.3.1-alpha.5
+
+## 0.1.20-alpha.4
+
+### Patch Changes
+
+- Updated dependencies [e4943b8]
+- Updated dependencies [479f490]
+  - @mastra/core@0.9.1-alpha.4
+  - @mastra/deployer@0.3.1-alpha.4
+
+## 0.1.20-alpha.3
+
+### Patch Changes
+
+- Updated dependencies [6262bd5]
+  - @mastra/deployer@0.3.1-alpha.3
+  - @mastra/core@0.9.1-alpha.3
+
+## 0.1.20-alpha.2
+
+### Patch Changes
+
+- Updated dependencies [405b63d]
+- Updated dependencies [61e92f5]
+- Updated dependencies [c71013a]
+  - @mastra/core@0.9.1-alpha.2
+  - @mastra/deployer@0.3.1-alpha.2
+
+## 0.1.20-alpha.1
+
+### Patch Changes
+
+- ce8f129: Improve includeFiles pattern in vercel to reduce function limit
+- Updated dependencies [e7c2881]
+- Updated dependencies [0ccb8b4]
+- Updated dependencies [92c598d]
+- Updated dependencies [20275d4]
+- Updated dependencies [7d1892c]
+- Updated dependencies [ebdb781]
+- Updated dependencies [a90a082]
+- Updated dependencies [35955b0]
+- Updated dependencies [c1409ef]
+- Updated dependencies [11d4485]
+- Updated dependencies [530ced1]
+- Updated dependencies [611aa4a]
+- Updated dependencies [2d4001d]
+  - @mastra/deployer@0.3.1-alpha.1
+  - @mastra/core@0.9.1-alpha.1
+
+## 0.1.20-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [81fb7f6]
+  - @mastra/core@0.9.1-alpha.0
+  - @mastra/deployer@0.3.1-alpha.0
+
+## 0.1.19
+
+### Patch Changes
+
+- 7e92011: Include tools with deployment builds
+- 16a8648: Disable swaggerUI, playground for production builds, mastra instance server build config to enable swaggerUI, apiReqLogs, openAPI documentation for prod builds
+- Updated dependencies [b9122b0]
+- Updated dependencies [000a6d4]
+- Updated dependencies [08bb78e]
+- Updated dependencies [3527610]
+- Updated dependencies [ed2f549]
+- Updated dependencies [7e92011]
+- Updated dependencies [9ee4293]
+- Updated dependencies [03f3cd0]
+- Updated dependencies [c0f22b4]
+- Updated dependencies [71d9444]
+- Updated dependencies [157c741]
+- Updated dependencies [8a8a73b]
+- Updated dependencies [0a033fa]
+- Updated dependencies [fe3ae4d]
+- Updated dependencies [2538066]
+- Updated dependencies [9c26508]
+- Updated dependencies [63fe16a]
+- Updated dependencies [0f4eae3]
+- Updated dependencies [3f9d151]
+- Updated dependencies [735ead7]
+- Updated dependencies [16a8648]
+- Updated dependencies [6f92295]
+  - @mastra/deployer@0.3.0
+  - @mastra/core@0.9.0
+
+## 0.1.19-alpha.9
+
+### Patch Changes
+
+- 16a8648: Disable swaggerUI, playground for production builds, mastra instance server build config to enable swaggerUI, apiReqLogs, openAPI documentation for prod builds
+- Updated dependencies [b9122b0]
+- Updated dependencies [000a6d4]
+- Updated dependencies [ed2f549]
+- Updated dependencies [c0f22b4]
+- Updated dependencies [0a033fa]
+- Updated dependencies [2538066]
+- Updated dependencies [9c26508]
+- Updated dependencies [0f4eae3]
+- Updated dependencies [16a8648]
+  - @mastra/deployer@0.3.0-alpha.9
+  - @mastra/core@0.9.0-alpha.8
+
+## 0.1.19-alpha.8
+
+### Patch Changes
+
+- Updated dependencies [71d9444]
+  - @mastra/core@0.9.0-alpha.7
+  - @mastra/deployer@0.3.0-alpha.8
+
+## 0.1.19-alpha.7
+
+### Patch Changes
+
+- Updated dependencies [157c741]
+- Updated dependencies [63fe16a]
+- Updated dependencies [735ead7]
+  - @mastra/core@0.9.0-alpha.6
+  - @mastra/deployer@0.3.0-alpha.7
+
+## 0.1.19-alpha.6
+
+### Patch Changes
+
+- Updated dependencies [08bb78e]
+- Updated dependencies [3f9d151]
+  - @mastra/core@0.9.0-alpha.5
+  - @mastra/deployer@0.3.0-alpha.6
+
+## 0.1.19-alpha.5
+
+### Patch Changes
+
+- 7e92011: Include tools with deployment builds
+- Updated dependencies [7e92011]
+  - @mastra/deployer@0.3.0-alpha.5
+  - @mastra/core@0.9.0-alpha.4
+
+## 0.1.19-alpha.4
+
+### Patch Changes
+
+- Updated dependencies [fe3ae4d]
+  - @mastra/deployer@0.3.0-alpha.4
+  - @mastra/core@0.9.0-alpha.3
+
+## 0.1.19-alpha.3
+
+### Patch Changes
+
+- Updated dependencies [9ee4293]
+  - @mastra/core@0.8.4-alpha.2
+  - @mastra/deployer@0.2.10-alpha.3
+
+## 0.1.19-alpha.2
+
+### Patch Changes
+
+- Updated dependencies [3527610]
+  - @mastra/deployer@0.2.10-alpha.2
+
+## 0.1.19-alpha.1
+
+### Patch Changes
+
+- Updated dependencies [8a8a73b]
+- Updated dependencies [6f92295]
+  - @mastra/core@0.8.4-alpha.1
+  - @mastra/deployer@0.2.10-alpha.1
+
+## 0.1.19-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [03f3cd0]
+  - @mastra/core@0.8.4-alpha.0
+  - @mastra/deployer@0.2.10-alpha.0
+
+## 0.1.18
+
+### Patch Changes
+
+- 37bb612: Add Elastic-2.0 licensing for packages
+- Updated dependencies [d72318f]
+- Updated dependencies [0bcc862]
+- Updated dependencies [10a8caf]
+- Updated dependencies [359b089]
+- Updated dependencies [9f6f6dd]
+- Updated dependencies [32e7b71]
+- Updated dependencies [37bb612]
+- Updated dependencies [1ebbfbf]
+- Updated dependencies [67aff42]
+- Updated dependencies [7f1b291]
+  - @mastra/core@0.8.3
+  - @mastra/deployer@0.2.9
+
+## 0.1.18-alpha.7
+
+### Patch Changes
+
+- Updated dependencies [d72318f]
+  - @mastra/core@0.8.3-alpha.5
+  - @mastra/deployer@0.2.9-alpha.7
+
+## 0.1.18-alpha.6
+
+### Patch Changes
+
+- Updated dependencies [67aff42]
+  - @mastra/deployer@0.2.9-alpha.6
+
+## 0.1.18-alpha.5
+
+### Patch Changes
+
+- Updated dependencies [9f6f6dd]
+  - @mastra/deployer@0.2.9-alpha.5
+
+## 0.1.18-alpha.4
+
+### Patch Changes
+
+- Updated dependencies [1ebbfbf]
+- Updated dependencies [7f1b291]
+  - @mastra/deployer@0.2.9-alpha.4
+  - @mastra/core@0.8.3-alpha.4
+
+## 0.1.18-alpha.3
+
+### Patch Changes
+
+- Updated dependencies [10a8caf]
+  - @mastra/core@0.8.3-alpha.3
+  - @mastra/deployer@0.2.9-alpha.3
+
+## 0.1.18-alpha.2
+
+### Patch Changes
+
+- Updated dependencies [0bcc862]
+  - @mastra/core@0.8.3-alpha.2
+  - @mastra/deployer@0.2.9-alpha.2
+
+## 0.1.18-alpha.1
+
+### Patch Changes
+
+- 37bb612: Add Elastic-2.0 licensing for packages
+- Updated dependencies [32e7b71]
+- Updated dependencies [37bb612]
+  - @mastra/deployer@0.2.9-alpha.1
+  - @mastra/core@0.8.3-alpha.1
+
+## 0.1.18-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [359b089]
+  - @mastra/core@0.8.3-alpha.0
+  - @mastra/deployer@0.2.9-alpha.0
+
+## 0.1.17
+
+### Patch Changes
+
+- Updated dependencies [a06aadc]
+- Updated dependencies [ae6c5ce]
+- Updated dependencies [94cd5c1]
+  - @mastra/core@0.8.2
+  - @mastra/deployer@0.2.8
+
+## 0.1.17-alpha.1
+
+### Patch Changes
+
+- Updated dependencies [94cd5c1]
+  - @mastra/deployer@0.2.8-alpha.1
+
+## 0.1.17-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [a06aadc]
+- Updated dependencies [ae6c5ce]
+  - @mastra/core@0.8.2-alpha.0
+  - @mastra/deployer@0.2.8-alpha.0
+
+## 0.1.16
+
+### Patch Changes
+
+- Updated dependencies [99e2998]
+- Updated dependencies [8fdb414]
+  - @mastra/core@0.8.1
+  - @mastra/deployer@0.2.7
+
+## 0.1.16-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [99e2998]
+- Updated dependencies [8fdb414]
+  - @mastra/core@0.8.1-alpha.0
+  - @mastra/deployer@0.2.7-alpha.0
+
+## 0.1.15
+
+### Patch Changes
+
+- Updated dependencies [56c31b7]
+- Updated dependencies [619c39d]
+- Updated dependencies [2135c81]
+- Updated dependencies [5ae0180]
+- Updated dependencies [05d58cc]
+- Updated dependencies [fe56be0]
+- Updated dependencies [93875ed]
+- Updated dependencies [107bcfe]
+- Updated dependencies [9bfa12b]
+- Updated dependencies [515ebfb]
+- Updated dependencies [5b4e19f]
+- Updated dependencies [4c98129]
+- Updated dependencies [4c65a57]
+- Updated dependencies [dbbbf80]
+- Updated dependencies [a0967a0]
+- Updated dependencies [84fe241]
+- Updated dependencies [fca3b21]
+- Updated dependencies [88fa727]
+- Updated dependencies [dfb0601]
+- Updated dependencies [f37f535]
+- Updated dependencies [789bef3]
+- Updated dependencies [a3f0e90]
+- Updated dependencies [4d67826]
+- Updated dependencies [6330967]
+- Updated dependencies [8393832]
+- Updated dependencies [6330967]
+- Updated dependencies [84fe241]
+- Updated dependencies [99d43b9]
+- Updated dependencies [32ba03c]
+- Updated dependencies [d7e08e8]
+- Updated dependencies [3c6ae54]
+- Updated dependencies [febc8a6]
+- Updated dependencies [0deb356]
+- Updated dependencies [7599d77]
+- Updated dependencies [0118361]
+- Updated dependencies [619c39d]
+- Updated dependencies [cafae83]
+- Updated dependencies [8076ecf]
+- Updated dependencies [8df4a77]
+- Updated dependencies [304397c]
+  - @mastra/core@0.8.0
+  - @mastra/deployer@0.2.6
+
+## 0.1.15-alpha.10
+
+### Patch Changes
+
+- Updated dependencies [2135c81]
+- Updated dependencies [8df4a77]
+  - @mastra/deployer@0.2.6-alpha.10
+  - @mastra/core@0.8.0-alpha.8
+
+## 0.1.15-alpha.9
+
+### Patch Changes
+
+- Updated dependencies [3c6ae54]
+- Updated dependencies [febc8a6]
+  - @mastra/deployer@0.2.6-alpha.9
+  - @mastra/core@0.8.0-alpha.7
+
+## 0.1.15-alpha.8
+
+### Patch Changes
+
+- Updated dependencies [4c65a57]
+- Updated dependencies [a3f0e90]
+  - @mastra/deployer@0.2.6-alpha.8
+  - @mastra/core@0.8.0-alpha.6
+
+## 0.1.15-alpha.7
+
+### Patch Changes
+
+- Updated dependencies [93875ed]
+  - @mastra/core@0.8.0-alpha.5
+  - @mastra/deployer@0.2.6-alpha.7
+
+## 0.1.15-alpha.6
+
+### Patch Changes
+
+- Updated dependencies [d7e08e8]
+  - @mastra/core@0.8.0-alpha.4
+  - @mastra/deployer@0.2.6-alpha.6
+
+## 0.1.15-alpha.5
+
+### Patch Changes
+
+- Updated dependencies [32ba03c]
+  - @mastra/deployer@0.2.6-alpha.5
+
+## 0.1.15-alpha.4
+
+### Patch Changes
+
+- Updated dependencies [5ae0180]
+- Updated dependencies [9bfa12b]
+- Updated dependencies [515ebfb]
+- Updated dependencies [88fa727]
+- Updated dependencies [dfb0601]
+- Updated dependencies [f37f535]
+- Updated dependencies [789bef3]
+- Updated dependencies [4d67826]
+- Updated dependencies [6330967]
+- Updated dependencies [8393832]
+- Updated dependencies [6330967]
+  - @mastra/core@0.8.0-alpha.3
+  - @mastra/deployer@0.2.6-alpha.4
+
+## 0.1.15-alpha.3
+
+### Patch Changes
+
+- Updated dependencies [0deb356]
+  - @mastra/deployer@0.2.6-alpha.3
+
+## 0.1.15-alpha.2
+
+### Patch Changes
+
+- Updated dependencies [56c31b7]
+- Updated dependencies [4c98129]
+- Updated dependencies [dbbbf80]
+- Updated dependencies [84fe241]
+- Updated dependencies [84fe241]
+- Updated dependencies [99d43b9]
+  - @mastra/core@0.8.0-alpha.2
+  - @mastra/deployer@0.2.6-alpha.2
+
+## 0.1.15-alpha.1
+
+### Patch Changes
+
+- Updated dependencies [619c39d]
+- Updated dependencies [fe56be0]
+- Updated dependencies [a0967a0]
+- Updated dependencies [fca3b21]
+- Updated dependencies [0118361]
+- Updated dependencies [619c39d]
+  - @mastra/core@0.8.0-alpha.1
+  - @mastra/deployer@0.2.6-alpha.1
+
+## 0.1.15-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [05d58cc]
+- Updated dependencies [107bcfe]
+- Updated dependencies [5b4e19f]
+- Updated dependencies [7599d77]
+- Updated dependencies [cafae83]
+- Updated dependencies [8076ecf]
+- Updated dependencies [304397c]
+  - @mastra/deployer@0.2.6-alpha.0
+  - @mastra/core@0.7.1-alpha.0
+
+## 0.1.14
+
+### Patch Changes
+
+- 0b496ff: Load env vars on mastra deploy
+- Updated dependencies [cdc0498]
+- Updated dependencies [b4fbc59]
+- Updated dependencies [a838fde]
+- Updated dependencies [a8bd4cf]
+- Updated dependencies [7a3eeb0]
+- Updated dependencies [0b54522]
+- Updated dependencies [b3b34f5]
+- Updated dependencies [1af25d5]
+- Updated dependencies [a4686e8]
+- Updated dependencies [6530ad1]
+- Updated dependencies [0b496ff]
+- Updated dependencies [27439ad]
+  - @mastra/deployer@0.2.5
+  - @mastra/core@0.7.0
+
+## 0.1.14-alpha.3
+
+### Patch Changes
+
+- Updated dependencies [b3b34f5]
+- Updated dependencies [a4686e8]
+  - @mastra/core@0.7.0-alpha.3
+  - @mastra/deployer@0.2.5-alpha.3
+
+## 0.1.14-alpha.2
+
+### Patch Changes
+
+- Updated dependencies [a838fde]
+- Updated dependencies [a8bd4cf]
+- Updated dependencies [7a3eeb0]
+- Updated dependencies [6530ad1]
+  - @mastra/core@0.7.0-alpha.2
+  - @mastra/deployer@0.2.5-alpha.2
+
+## 0.1.14-alpha.1
+
+### Patch Changes
+
+- 0b496ff: Load env vars on mastra deploy
+- Updated dependencies [cdc0498]
+- Updated dependencies [0b54522]
+- Updated dependencies [1af25d5]
+- Updated dependencies [0b496ff]
+- Updated dependencies [27439ad]
+  - @mastra/deployer@0.2.5-alpha.1
+  - @mastra/core@0.7.0-alpha.1
+
+## 0.1.14-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [b4fbc59]
+  - @mastra/core@0.6.5-alpha.0
+  - @mastra/deployer@0.2.5-alpha.0
+
+## 0.1.13
+
+### Patch Changes
+
+- Updated dependencies [e764fd1]
+- Updated dependencies [6794797]
+- Updated dependencies [709aa2c]
+- Updated dependencies [fb68a80]
+- Updated dependencies [e764fd1]
+- Updated dependencies [05ef3e0]
+- Updated dependencies [95c5745]
+- Updated dependencies [b56a681]
+- Updated dependencies [85a2461]
+- Updated dependencies [248cb07]
+  - @mastra/deployer@0.2.4
+  - @mastra/core@0.6.4
+
+## 0.1.13-alpha.1
+
+### Patch Changes
+
+- Updated dependencies [6794797]
+- Updated dependencies [709aa2c]
+- Updated dependencies [85a2461]
+  - @mastra/core@0.6.4-alpha.1
+  - @mastra/deployer@0.2.4-alpha.1
+
+## 0.1.13-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [e764fd1]
+- Updated dependencies [fb68a80]
+- Updated dependencies [e764fd1]
+- Updated dependencies [05ef3e0]
+- Updated dependencies [95c5745]
+- Updated dependencies [b56a681]
+- Updated dependencies [248cb07]
+  - @mastra/deployer@0.2.4-alpha.0
+  - @mastra/core@0.6.4-alpha.0
+
+## 0.1.12
+
+### Patch Changes
+
+- 404640e: AgentNetwork changeset
+- Updated dependencies [404640e]
+- Updated dependencies [3bce733]
+  - @mastra/deployer@0.2.3
+  - @mastra/core@0.6.3
+
+## 0.1.12-alpha.1
+
+### Patch Changes
+
+- Updated dependencies [3bce733]
+  - @mastra/core@0.6.3-alpha.1
+  - @mastra/deployer@0.2.3-alpha.1
+
+## 0.1.12-alpha.0
+
+### Patch Changes
+
+- 404640e: AgentNetwork changeset
+- Updated dependencies [404640e]
+  - @mastra/deployer@0.2.3-alpha.0
+  - @mastra/core@0.6.3-alpha.0
+
+## 0.1.11
+
+### Patch Changes
+
+- Updated dependencies [4e6732b]
+- Updated dependencies [beaf1c2]
+- Updated dependencies [3084e13]
+  - @mastra/deployer@0.2.2
+  - @mastra/core@0.6.2
+
+## 0.1.11-alpha.1
+
+### Patch Changes
+
+- Updated dependencies [beaf1c2]
+- Updated dependencies [3084e13]
+  - @mastra/core@0.6.2-alpha.0
+  - @mastra/deployer@0.2.2-alpha.1
+
+## 0.1.11-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [4e6732b]
+  - @mastra/deployer@0.2.2-alpha.0
+
+## 0.1.10
+
+### Patch Changes
+
+- Updated dependencies [cc7f392]
+- Updated dependencies [fc2f89c]
+- Updated dependencies [dfbb131]
+- Updated dependencies [f4854ee]
+- Updated dependencies [afaf73f]
+- Updated dependencies [0850b4c]
+- Updated dependencies [7bcfaee]
+- Updated dependencies [da8d9bb]
+- Updated dependencies [44631b1]
+- Updated dependencies [9116d70]
+- Updated dependencies [6e559a0]
+- Updated dependencies [5f43505]
+- Updated dependencies [61ad5a4]
+  - @mastra/deployer@0.2.1
+  - @mastra/core@0.6.1
+
+## 0.1.10-alpha.2
+
+### Patch Changes
+
+- Updated dependencies [cc7f392]
+- Updated dependencies [fc2f89c]
+- Updated dependencies [dfbb131]
+- Updated dependencies [0850b4c]
+- Updated dependencies [da8d9bb]
+- Updated dependencies [9116d70]
+  - @mastra/deployer@0.2.1-alpha.2
+  - @mastra/core@0.6.1-alpha.2
+
+## 0.1.10-alpha.1
+
+### Patch Changes
+
+- Updated dependencies [f4854ee]
+- Updated dependencies [afaf73f]
+- Updated dependencies [44631b1]
+- Updated dependencies [6e559a0]
+- Updated dependencies [5f43505]
+- Updated dependencies [61ad5a4]
+  - @mastra/core@0.6.1-alpha.1
+  - @mastra/deployer@0.2.1-alpha.1
+
 ## 0.1.10-alpha.0
 
 ### Patch Changes
