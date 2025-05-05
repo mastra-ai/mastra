@@ -100,9 +100,14 @@ export class Memory extends MastraMemory {
               indexName,
               queryVector: embedding,
               topK: vectorConfig.topK,
-              filter: {
-                thread_id: threadId,
-              },
+              filter:
+                typeof config?.semanticRecall === 'object' && config?.semanticRecall?.searchScope === `resource`
+                  ? {
+                      resource_id: resourceId,
+                    }
+                  : {
+                      thread_id: threadId,
+                    },
             })),
           );
         }),
@@ -172,6 +177,7 @@ export class Memory extends MastraMemory {
     }
 
     const messagesResult = await this.query({
+      resourceId,
       threadId,
       selectBy: {
         last: threadConfig.lastMessages,
