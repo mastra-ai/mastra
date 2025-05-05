@@ -1,0 +1,27 @@
+{
+  "name": "@mastra/fastembed",
+  "version": "0.0.0",
+  "license": "Elastic-2.0",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsup src/index.ts --format esm,cjs --dts",
+    "build:watch": "pnpm build --watch",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "ai": "^3.0.0",
+    "fastembed": "^1.14.4"
+  },
+  "devDependencies": {
+    "@internal/lint": "workspace:*",
+    "@types/node": "^20.17.27",
+    "tsup": "^8.0.0",
+    "typescript": "^5.0.0",
+    "vitest": "^1.0.0"
+  }
+}

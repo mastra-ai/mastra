@@ -57,7 +57,7 @@ jobs:
         run: pnpm install
 
       - name: Build vector+store packages
-        run: pnpm turbo build --filter "./stores/*" --filter "mastra" --filter "@mastra/memory"
+        run: pnpm turbo build --filter "./stores/*" --filter "mastra" --filter "@mastra/memory" --filter "@mastra/fastembed"
 
       - name: Run Memory tests
         run: pnpm test:memory

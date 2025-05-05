@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { openai } from '@ai-sdk/openai';
+import { fastembed } from '@mastra/fastembed';
 import { Memory } from '@mastra/memory';
 import type { TextPart, ImagePart, FilePart, ToolCallPart } from 'ai';
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
@@ -110,7 +110,7 @@ export function getResuableTests(memory: Memory) {
     describe('Semantic Search', () => {
       it('should chunk long messages before embedding', async () => {
         const memory = new Memory({
-          embedder: openai.embedding(`text-embedding-3-small`),
+          embedder: fastembed,
           options: {
             semanticRecall: {
               topK: 1,

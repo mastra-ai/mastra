@@ -35,7 +35,8 @@
     "@mastra/pg": "workspace:*",
     "@mastra/upstash": "workspace:*",
     "dotenv": "^16.4.7",
-    "zod": "^3.24.2"
+    "zod": "^3.24.2",
+    "@mastra/fastembed": "workspace:*"
   },
   "devDependencies": {
     "@faker-js/faker": "^9.6.0",
