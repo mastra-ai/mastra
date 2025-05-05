@@ -107,7 +107,7 @@ export class CoreToolBuilder extends MastraBase {
 
   private createExecute(tool: ToolToConvert, options: ToolOptions, logType?: 'tool' | 'toolset' | 'client-tool') {
     // dont't add memory or mastra to logging
-    const { logger, mastra: _mastra, memory: _memory, runtimeContext, ...rest } = options;
+    // don't add memory or mastra to logging
 
     const { start, error } = this.createLogMessageOptions({
       agentName: options.agentName,
