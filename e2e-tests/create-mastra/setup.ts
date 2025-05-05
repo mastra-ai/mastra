@@ -41,8 +41,16 @@ export default async function setup(project: TestProject) {
   );
 
   return () => {
-    teardown();
-    registry.kill();
+    try {
+      teardown();
+    } catch {
+      // ignore
+    }
+    try {
+      registry.kill();
+    } catch {
+      // ignore
+    }
   };
 }
 

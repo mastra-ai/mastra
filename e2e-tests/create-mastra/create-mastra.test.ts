@@ -9,7 +9,7 @@ import { execSync } from 'child_process';
 
 describe('create mastra', () => {
   let fixturePath: string;
-  let projectPath;
+  let projectPath: string;
 
   beforeAll(
     async () => {
@@ -24,7 +24,7 @@ describe('create mastra', () => {
       process.env.npm_config_registry = registry;
       execSync(`pnpm dlx create-mastra@${tag} -c agents,tools,workflows -l openai -e project`, {
         cwd: fixturePath,
-        stdio: ['inherit', 'inherit', 'pipe'],
+        stdio: ['inherit', 'inherit', 'inherit'],
       });
     },
     10 * 60 * 1000,
