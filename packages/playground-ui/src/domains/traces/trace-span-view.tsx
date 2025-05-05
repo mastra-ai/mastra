@@ -5,7 +5,7 @@ import { Trace } from '@/ds/components/TraceTree/Trace';
 import { Spans } from '@/ds/components/TraceTree/Spans';
 import { Span as SpanComponent } from '@/ds/components/TraceTree/Span';
 import { TraceContext } from './context/trace-context';
-import { useContext } from 'react';
+import { useContext, useMemo } from 'react';
 import { getSpanVariant } from './utils/getSpanVariant';
 
 function buildTree(items: Span[], parentSpanId: string | null = null): SpanNode[] {
@@ -47,22 +47,31 @@ const NestedSpans = ({ spans }: { spans: SpanNode[] }) => {
 };
 
 export default function SpanView({ trace }: SpanViewProps) {
+  const longest = useMemo(() => Math.max(...trace.map(node => node.duration)), [trace]);
+
   // SQL query sorts by startTime in descending order, so we need to reverse and copy the array for spans to show in correct order
   const shallowCopy = [...trace];
   const tree = buildTree(shallowCopy.reverse());
-  const { span: activeSpan, setSpan } = useContext(TraceContext);
+  const { span: activeSpan, setSpan, clearData } = useContext(TraceContext);
+
   return (
     <TraceTree>
-      {tree.map(node => (
-        <Trace
-          name={node.name}
-          durationMs={node.duration / 1000}
-          spans={<NestedSpans spans={node.children} />}
-          variant={getSpanVariant(node)}
-          isActive={node.id === activeSpan?.id}
-          onClick={() => setSpan(node)}
-        />
-      ))}
+      {tree.map(node => {
+        return (
+          <Trace
+            name={node.name}
+            durationMs={node.duration / 1000}
+            longestMs={longest / 1000}
+            spans={<NestedSpans spans={node.children} />}
+            variant={getSpanVariant(node)}
+            isActive={node.id === activeSpan?.id}
+            onClick={() => {
+              clearData();
+              setSpan(node);
+            }}
+          />
+        );
+      })}
     </TraceTree>
   );
 }

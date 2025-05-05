@@ -12,11 +12,12 @@ export interface TraceProps {
   onClick?: () => void;
   variant: SpanProps['variant'];
   isActive?: boolean;
+  longestMs: number;
 }
 
-export const Trace = ({ name, spans, durationMs, tokenCount, onClick, variant, isActive }: TraceProps) => {
+export const Trace = ({ name, spans, durationMs, tokenCount, onClick, variant, isActive, longestMs }: TraceProps) => {
   return (
-    <TraceDurationProvider durationMs={durationMs}>
+    <TraceDurationProvider durationMs={longestMs}>
       <Span
         isRoot
         durationMs={durationMs}

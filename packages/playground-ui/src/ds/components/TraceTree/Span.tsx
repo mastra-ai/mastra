@@ -60,50 +60,48 @@ export const Span = ({ children, durationMs, variant, tokenCount, spans, isRoot,
   const TextEl = onClick ? 'button' : 'div';
 
   return (
-    <TraceDurationProvider durationMs={durationMs}>
-      <li>
-        <div className={clsx('flex justify-between items-center gap-2 rounded-md pl-2', isActive && 'bg-surface4')}>
-          <div className="flex h-8 items-center gap-1 min-w-0">
-            {spans ? (
-              <button
-                type="button"
-                aria-label={isExpanded ? 'Collapse span' : 'Expand span'}
-                aria-expanded={isExpanded}
-                className="text-icon3 flex h-4 w-4"
-                onClick={() => setIsExpanded(!isExpanded)}
-              >
-                <Icon>
-                  <ChevronIcon className={clsx('transition-transform -rotate-90', { 'rotate-0': isExpanded })} />
-                </Icon>
-              </button>
-            ) : (
-              <div aria-hidden className="h-full w-4">
-                {!isRoot && <div className="ml-[7px] h-full w-px rounded-full" />}
-              </div>
-            )}
+    <li>
+      <div className={clsx('flex justify-between items-center gap-2 rounded-md pl-2', isActive && 'bg-surface4')}>
+        <div className="flex h-8 items-center gap-1 min-w-0">
+          {spans ? (
+            <button
+              type="button"
+              aria-label={isExpanded ? 'Collapse span' : 'Expand span'}
+              aria-expanded={isExpanded}
+              className="text-icon3 flex h-4 w-4"
+              onClick={() => setIsExpanded(!isExpanded)}
+            >
+              <Icon>
+                <ChevronIcon className={clsx('transition-transform -rotate-90', { 'rotate-0': isExpanded })} />
+              </Icon>
+            </button>
+          ) : (
+            <div aria-hidden className="h-full w-4">
+              {!isRoot && <div className="ml-[7px] h-full w-px rounded-full" />}
+            </div>
+          )}
 
-            <TextEl className="flex items-center gap-2 min-w-0" onClick={onClick}>
-              <div className={clsx('bg-surface4 flex items-center justify-center rounded-md p-[3px]', variantClass)}>
-                <Icon>
-                  <VariantIcon />
-                </Icon>
-              </div>
-              <Txt variant="ui-md" className="text-icon6 truncate">
-                {children}
-              </Txt>
-            </TextEl>
-          </div>
-
-          <Time
-            durationMs={durationMs}
-            tokenCount={tokenCount}
-            variant={variant === 'agent' ? 'agent' : undefined}
-            progressPercent={progressPercent}
-          />
+          <TextEl className="flex items-center gap-2 min-w-0" onClick={onClick}>
+            <div className={clsx('bg-surface4 flex items-center justify-center rounded-md p-[3px]', variantClass)}>
+              <Icon>
+                <VariantIcon />
+              </Icon>
+            </div>
+            <Txt variant="ui-md" className="text-icon6 truncate">
+              {children}
+            </Txt>
+          </TextEl>
         </div>
 
-        {isExpanded && spans && <div className="ml-4">{spans}</div>}
-      </li>
-    </TraceDurationProvider>
+        <Time
+          durationMs={durationMs}
+          tokenCount={tokenCount}
+          variant={variant === 'agent' ? 'agent' : undefined}
+          progressPercent={progressPercent}
+        />
+      </div>
+
+      {isExpanded && spans && <div className="ml-4">{spans}</div>}
+    </li>
   );
 };
