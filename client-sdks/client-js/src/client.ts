@@ -1,3 +1,4 @@
+import type { AbstractAgent } from '@ag-ui/client';
 import { AGUIAdapter } from './adapters/agui';
 import { Agent, MemoryThread, Tool, Workflow, Vector, BaseResource, Network, VNextWorkflow } from './resources';
 import type {
@@ -33,7 +34,7 @@ export class MastraClient extends BaseResource {
     return this.request('/api/agents');
   }
 
-  public async getAGUI({ resourceId }: { resourceId: string }): Promise<Record<string, AGUIAdapter>> {
+  public async getAGUI({ resourceId }: { resourceId: string }): Promise<Record<string, AbstractAgent>> {
     const agents = await this.getAgents();
 
     return Object.entries(agents).reduce(
@@ -48,7 +49,7 @@ export class MastraClient extends BaseResource {
 
         return acc;
       },
-      {} as Record<string, AGUIAdapter>,
+      {} as Record<string, AbstractAgent>,
     );
   }
 
