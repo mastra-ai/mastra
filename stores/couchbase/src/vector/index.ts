@@ -5,7 +5,6 @@ import type {
   CreateIndexParams,
   UpsertVectorParams,
   QueryVectorParams,
-  ParamsToArgs,
 } from '@mastra/core/vector';
 import type { Bucket, Cluster, Collection, Scope } from 'couchbase';
 import { connect, SearchRequest, VectorQuery, VectorSearch } from 'couchbase';
