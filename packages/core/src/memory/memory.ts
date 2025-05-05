@@ -72,6 +72,7 @@ export const memoryDefaultOptions = {
   },
 } satisfies MemoryConfig;
 
+// TODO: May 20th breaking change, make these the default options. Also in packages/cli/src/commands/init/utils.ts remove the hardcoded options to use the new defaults instead
 const newMemoryDefaultOptions = {
   lastMessages: 10,
   semanticRecall: false,
