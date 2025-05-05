@@ -52,13 +52,6 @@ jobs:
           node-version: 20.x
           cache: 'pnpm'
 
-      - name: Create/Update Changesets
-        uses: 'wardpeet/changesets-dependencies-action@1ac684b9885a8e9bb1d24f09fd2c253b36b3700d'
-        env:
-          GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}
-          SKIP_CREDENTIALS: '1'
-          INCLUDE_DEV_DEPS: '1'
-
       - name: Check for package.json changes in examples and e2e-tests
         id: check-examples
         run: |
@@ -67,6 +60,13 @@ jobs:
           else
             echo "examples_changed=false" >> "$GITHUB_OUTPUT"
           fi
+
+      - name: Create/Update Changesets
+        uses: 'wardpeet/changesets-dependencies-action@1ac684b9885a8e9bb1d24f09fd2c253b36b3700d'
+        env:
+          GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}
+          SKIP_CREDENTIALS: '1'
+          INCLUDE_DEV_DEPS: '1'
 
       - name: Install dependencies
         if: steps.check-examples.outputs.examples_changed == 'true'
