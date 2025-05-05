@@ -337,9 +337,23 @@ export class Memory extends MastraMemory {
       let indexName: Promise<string>;
       await Promise.all(
         updatedMessages.map(async message => {
-          if (typeof message.content !== `string` || message.content === '') return;
+          let textForEmbedding: string | null = null;
 
-          const { embeddings, chunks, dimension } = await this.embedMessageContent(message.content);
+          if (typeof message.content === 'string' && message.content.trim() !== '') {
+            textForEmbedding = message.content;
+          } else if (Array.isArray(message.content)) {
+            // Extract text from all text parts, concatenate
+            const joined = message.content
+              .filter((part: any) => part && part.type === 'text' && typeof part.text === 'string')
+              .map((part: any) => part.text)
+              .join(' ')
+              .trim();
+            if (joined) textForEmbedding = joined;
+          }
+
+          if (!textForEmbedding) return;
+
+          const { embeddings, chunks, dimension } = await this.embedMessageContent(textForEmbedding);
 
           if (typeof indexName === `undefined`) {
             indexName = this.createEmbeddingIndex(dimension).then(result => result.indexName);
