@@ -1,5 +1,18 @@
 # @mastra/playground-ui
 
+## 5.0.2-alpha.5
+
+### Patch Changes
+
+- fba031f: Show traces for vNext workflow
+- Updated dependencies [3d2fb5c]
+- Updated dependencies [7eeb2bc]
+- Updated dependencies [8607972]
+- Updated dependencies [7eeb2bc]
+- Updated dependencies [fba031f]
+  - @mastra/core@0.9.2-alpha.5
+  - @mastra/client-js@0.1.20-alpha.5
+
 ## 5.0.2-alpha.4
 
 ### Patch Changes
