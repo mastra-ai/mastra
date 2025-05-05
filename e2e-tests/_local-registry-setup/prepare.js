@@ -1,31 +1,21 @@
 import { execSync } from 'node:child_process';
 import { readFileSync, writeFileSync } from 'node:fs';
-import { globby } from 'globby';
-import { runRegistry, login } from './registry.js';
-import { resolve, join } from 'node:path';
-import { mkdir } from 'node:fs/promises';
 
-const rootDir = resolve(join(process.cwd(), '..', '..'));
-
-function cleanup(registry, resetChanges = false) {
+function cleanup(monorepoDir, resetChanges = false) {
   execSync('git checkout .', {
-    cwd: rootDir,
+    cwd: monorepoDir,
     stdio: ['inherit', 'inherit', 'pipe'],
   });
   execSync('git clean -fd', {
-    cwd: rootDir,
+    cwd: monorepoDir,
     stdio: ['inherit', 'inherit', 'pipe'],
   });
 
   if (resetChanges) {
     execSync('git reset --soft HEAD~1', {
-      cwd: rootDir,
+      cwd: monorepoDir,
       stdio: ['inherit', 'inherit', 'pipe'],
     });
-  }
-
-  if (registry) {
-    registry.kill();
   }
 }
 
@@ -35,26 +25,22 @@ function cleanup(registry, resetChanges = false) {
  * @param {number} port
  * @returns
  */
-export async function setupRegistry(storageDirectory, port) {
-  const registry = await runRegistry(['-c', './verdaccio.yaml', '-l', `${port}`], {
-    cwd: storageDirectory,
-  });
-  login('mastra', 'mastra-ai', port);
+export async function prepareMonorepo(monorepoDir, glob) {
   let shelvedChanges = false;
 
   try {
     const gitStatus = execSync('git status --porcelain', {
-      cwd: rootDir,
+      cwd: monorepoDir,
       encoding: 'utf8',
     });
 
     if (gitStatus.length > 0) {
       execSync('git add -A', {
-        cwd: rootDir,
+        cwd: monorepoDir,
         stdio: ['inherit', 'inherit', 'pipe'],
       });
       execSync('git commit -m "SAVEPOINT"', {
-        cwd: rootDir,
+        cwd: monorepoDir,
         stdio: ['inherit', 'inherit', 'pipe'],
       });
       shelvedChanges = true;
@@ -62,7 +48,7 @@ export async function setupRegistry(storageDirectory, port) {
 
     await (async function updateWorkspaceDependencies() {
       // Update workspace dependencies to use ^ instead of *
-      const packageFiles = await globby('**/package.json', {
+      const packageFiles = await glob('**/package.json', {
         ignore: ['**/node_modules/**'],
       });
 
@@ -74,33 +60,18 @@ export async function setupRegistry(storageDirectory, port) {
     })();
 
     execSync('pnpm changeset pre exit', {
-      cwd: rootDir,
+      cwd: monorepoDir,
       stdio: ['inherit', 'inherit', 'pipe'],
     });
 
     execSync('pnpm changeset version --snapshot create-mastra-e2e-test', {
-      cwd: rootDir,
+      cwd: monorepoDir,
       stdio: ['inherit', 'inherit', 'pipe'],
     });
-
-    execSync(
-      `pnpm --filter="create-mastra^..." --filter="create-mastra" --filter="@mastra/libsql" --filter="@mastra/memory" publish --registry=http://localhost:${port}/ --no-git-checks --tag=create-mastra-e2e-test`,
-      {
-        cwd: rootDir,
-        stdio: ['ignore', 'ignore', 'ignore'],
-      },
-    );
   } catch (error) {
-    cleanup(registry);
+    cleanup(monorepoDir, false);
     throw error;
   }
 
-  return () => cleanup(registry, shelvedChanges);
-}
-
-export async function runCreateMastra(rootDir, pkgManager) {
-  execSync(`${pkgManager} dlx create-mastra@create-mastra-e2e-test -c agents,tools,workflows -l openai -e project`, {
-    cwd: rootDir,
-    stdio: ['inherit', 'inherit', 'pipe'],
-  });
+  return () => cleanup(monorepoDir, shelvedChanges);
 }
