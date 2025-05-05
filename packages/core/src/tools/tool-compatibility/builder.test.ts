@@ -251,10 +251,10 @@ describe('Tool Schema Compatibility', () => {
               `should handle ${schemaName} schema`,
               async () => {
                 const result = await runSingleTest(model, testTool, crypto.randomUUID(), testTool.id);
-                expect(result.status).toBe('success');
                 if (result.status !== 'success') {
                   console.error(`Error for ${model.modelId} - ${schemaName}:`, result.error);
                 }
+                expect(result.status).toBe('success');
               },
               TEST_TIMEOUT,
             );
