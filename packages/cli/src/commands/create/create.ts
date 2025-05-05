@@ -16,6 +16,7 @@ export const create = async (args: {
   createVersionTag?: string;
   timeout?: number;
   directory?: string;
+  mcpServer?: 'windsurf' | 'cursor' | 'cursor-global';
 }) => {
   const { projectName } = await createMastraProject({
     projectName: args?.projectName,
@@ -46,6 +47,7 @@ export const create = async (args: {
     llmProvider,
     addExample,
     llmApiKey,
+    configureEditorWithDocsMCP: args.mcpServer,
   });
 
   postCreate({ projectName });
