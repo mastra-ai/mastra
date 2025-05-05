@@ -95,6 +95,16 @@
       "enabled": true
     },
     {
+      "groupName": "Schema",
+      "commitMessageTopic": "Schema",
+      "matchFileNames": ["+(package.json)", "**/package.json"],
+      "matchPackageNames": ["zod", "json-schema", "zod-to-json-schema"],
+      "matchUpdateTypes": ["major", "minor", "patch"],
+      "matchDepTypes": ["dependencies", "devDependencies"],
+      "dependencyDashboardApproval": false,
+      "enabled": true
+    },
+    {
       "groupName": "@internal/lint",
       "commitMessageTopic": "@internal/lint",
       "matchFileNames": ["packages/_config/package.json"],
@@ -110,7 +120,10 @@
         "!typescript",
         "!vitest",
         "!@types/node",
-        "!dotenv"
+        "!dotenv",
+        "!zod",
+        "!json-schema",
+        "!zod-to-json-schema"
       ],
       "enabled": true
     },
@@ -139,7 +152,10 @@
         "!typescript",
         "!vitest",
         "!@types/node",
-        "!dotenv"
+        "!dotenv",
+        "!zod",
+        "!json-schema",
+        "!zod-to-json-schema"
       ],
       "enabled": true
     },
@@ -168,7 +184,10 @@
         "!typescript",
         "!vitest",
         "!@types/node",
-        "!dotenv"
+        "!dotenv",
+        "!zod",
+        "!json-schema",
+        "!zod-to-json-schema"
       ],
       "enabled": true
     },
@@ -197,7 +216,10 @@
         "!typescript",
         "!vitest",
         "!@types/node",
-        "!dotenv"
+        "!dotenv",
+        "!zod",
+        "!json-schema",
+        "!zod-to-json-schema"
       ],
       "enabled": true
     },
@@ -226,7 +248,10 @@
         "!typescript",
         "!vitest",
         "!@types/node",
-        "!dotenv"
+        "!dotenv",
+        "!zod",
+        "!json-schema",
+        "!zod-to-json-schema"
       ],
       "enabled": true
     },
@@ -255,7 +280,10 @@
         "!typescript",
         "!vitest",
         "!@types/node",
-        "!dotenv"
+        "!dotenv",
+        "!zod",
+        "!json-schema",
+        "!zod-to-json-schema"
       ],
       "enabled": true
     },
@@ -284,7 +312,10 @@
         "!typescript",
         "!vitest",
         "!@types/node",
-        "!dotenv"
+        "!dotenv",
+        "!zod",
+        "!json-schema",
+        "!zod-to-json-schema"
       ],
       "enabled": true
     },
@@ -313,7 +344,10 @@
         "!typescript",
         "!vitest",
         "!@types/node",
-        "!dotenv"
+        "!dotenv",
+        "!zod",
+        "!json-schema",
+        "!zod-to-json-schema"
       ],
       "enabled": true
     },
@@ -342,7 +376,10 @@
         "!typescript",
         "!vitest",
         "!@types/node",
-        "!dotenv"
+        "!dotenv",
+        "!zod",
+        "!json-schema",
+        "!zod-to-json-schema"
       ],
       "enabled": true
     },
@@ -371,7 +408,10 @@
         "!typescript",
         "!vitest",
         "!@types/node",
-        "!dotenv"
+        "!dotenv",
+        "!zod",
+        "!json-schema",
+        "!zod-to-json-schema"
       ],
       "enabled": true
     },
@@ -400,7 +440,10 @@
         "!typescript",
         "!vitest",
         "!@types/node",
-        "!dotenv"
+        "!dotenv",
+        "!zod",
+        "!json-schema",
+        "!zod-to-json-schema"
       ],
       "enabled": true
     },
@@ -429,7 +472,10 @@
         "!typescript",
         "!vitest",
         "!@types/node",
-        "!dotenv"
+        "!dotenv",
+        "!zod",
+        "!json-schema",
+        "!zod-to-json-schema"
       ],
       "enabled": true
     },
@@ -458,7 +504,10 @@
         "!typescript",
         "!vitest",
         "!@types/node",
-        "!dotenv"
+        "!dotenv",
+        "!zod",
+        "!json-schema",
+        "!zod-to-json-schema"
       ],
       "enabled": true
     },
@@ -487,7 +536,10 @@
         "!typescript",
         "!vitest",
         "!@types/node",
-        "!dotenv"
+        "!dotenv",
+        "!zod",
+        "!json-schema",
+        "!zod-to-json-schema"
       ],
       "enabled": true
     },
@@ -516,7 +568,10 @@
         "!typescript",
         "!vitest",
         "!@types/node",
-        "!dotenv"
+        "!dotenv",
+        "!zod",
+        "!json-schema",
+        "!zod-to-json-schema"
       ],
       "enabled": true
     },
@@ -545,7 +600,10 @@
         "!typescript",
         "!vitest",
         "!@types/node",
-        "!dotenv"
+        "!dotenv",
+        "!zod",
+        "!json-schema",
+        "!zod-to-json-schema"
       ],
       "enabled": true
     },
@@ -574,7 +632,10 @@
         "!typescript",
         "!vitest",
         "!@types/node",
-        "!dotenv"
+        "!dotenv",
+        "!zod",
+        "!json-schema",
+        "!zod-to-json-schema"
       ],
       "enabled": true
     },
@@ -603,7 +664,10 @@
         "!typescript",
         "!vitest",
         "!@types/node",
-        "!dotenv"
+        "!dotenv",
+        "!zod",
+        "!json-schema",
+        "!zod-to-json-schema"
       ],
       "enabled": true
     },
@@ -632,7 +696,10 @@
         "!typescript",
         "!vitest",
         "!@types/node",
-        "!dotenv"
+        "!dotenv",
+        "!zod",
+        "!json-schema",
+        "!zod-to-json-schema"
       ],
       "enabled": true
     },
@@ -661,7 +728,10 @@
         "!typescript",
         "!vitest",
         "!@types/node",
-        "!dotenv"
+        "!dotenv",
+        "!zod",
+        "!json-schema",
+        "!zod-to-json-schema"
       ],
       "enabled": true
     },
@@ -690,7 +760,10 @@
         "!typescript",
         "!vitest",
         "!@types/node",
-        "!dotenv"
+        "!dotenv",
+        "!zod",
+        "!json-schema",
+        "!zod-to-json-schema"
       ],
       "enabled": true
     },
@@ -719,7 +792,10 @@
         "!typescript",
         "!vitest",
         "!@types/node",
-        "!dotenv"
+        "!dotenv",
+        "!zod",
+        "!json-schema",
+        "!zod-to-json-schema"
       ],
       "enabled": true
     },
@@ -748,7 +824,10 @@
         "!typescript",
         "!vitest",
         "!@types/node",
-        "!dotenv"
+        "!dotenv",
+        "!zod",
+        "!json-schema",
+        "!zod-to-json-schema"
       ],
       "enabled": true
     },
@@ -777,7 +856,10 @@
         "!typescript",
         "!vitest",
         "!@types/node",
-        "!dotenv"
+        "!dotenv",
+        "!zod",
+        "!json-schema",
+        "!zod-to-json-schema"
       ],
       "enabled": true
     },
@@ -806,7 +888,10 @@
         "!typescript",
         "!vitest",
         "!@types/node",
-        "!dotenv"
+        "!dotenv",
+        "!zod",
+        "!json-schema",
+        "!zod-to-json-schema"
       ],
       "enabled": true
     },
@@ -835,7 +920,10 @@
         "!typescript",
         "!vitest",
         "!@types/node",
-        "!dotenv"
+        "!dotenv",
+        "!zod",
+        "!json-schema",
+        "!zod-to-json-schema"
       ],
       "enabled": true
     },
@@ -864,7 +952,10 @@
         "!typescript",
         "!vitest",
         "!@types/node",
-        "!dotenv"
+        "!dotenv",
+        "!zod",
+        "!json-schema",
+        "!zod-to-json-schema"
       ],
       "enabled": true
     },
@@ -893,7 +984,10 @@
         "!typescript",
         "!vitest",
         "!@types/node",
-        "!dotenv"
+        "!dotenv",
+        "!zod",
+        "!json-schema",
+        "!zod-to-json-schema"
       ],
       "enabled": true
     },
@@ -922,7 +1016,10 @@
         "!typescript",
         "!vitest",
         "!@types/node",
-        "!dotenv"
+        "!dotenv",
+        "!zod",
+        "!json-schema",
+        "!zod-to-json-schema"
       ],
       "enabled": true
     },
@@ -951,7 +1048,10 @@
         "!typescript",
         "!vitest",
         "!@types/node",
-        "!dotenv"
+        "!dotenv",
+        "!zod",
+        "!json-schema",
+        "!zod-to-json-schema"
       ],
       "enabled": true
     },
@@ -980,7 +1080,10 @@
         "!typescript",
         "!vitest",
         "!@types/node",
-        "!dotenv"
+        "!dotenv",
+        "!zod",
+        "!json-schema",
+        "!zod-to-json-schema"
       ],
       "enabled": true
     },
@@ -1009,7 +1112,10 @@
         "!typescript",
         "!vitest",
         "!@types/node",
-        "!dotenv"
+        "!dotenv",
+        "!zod",
+        "!json-schema",
+        "!zod-to-json-schema"
       ],
       "enabled": true
     },
@@ -1038,7 +1144,10 @@
         "!typescript",
         "!vitest",
         "!@types/node",
-        "!dotenv"
+        "!dotenv",
+        "!zod",
+        "!json-schema",
+        "!zod-to-json-schema"
       ],
       "enabled": true
     },
@@ -1067,7 +1176,10 @@
         "!typescript",
         "!vitest",
         "!@types/node",
-        "!dotenv"
+        "!dotenv",
+        "!zod",
+        "!json-schema",
+        "!zod-to-json-schema"
       ],
       "enabled": true
     },
@@ -1096,7 +1208,10 @@
         "!typescript",
         "!vitest",
         "!@types/node",
-        "!dotenv"
+        "!dotenv",
+        "!zod",
+        "!json-schema",
+        "!zod-to-json-schema"
       ],
       "enabled": true
     },
@@ -1125,7 +1240,10 @@
         "!typescript",
         "!vitest",
         "!@types/node",
-        "!dotenv"
+        "!dotenv",
+        "!zod",
+        "!json-schema",
+        "!zod-to-json-schema"
       ],
       "enabled": true
     },
@@ -1154,7 +1272,10 @@
         "!typescript",
         "!vitest",
         "!@types/node",
-        "!dotenv"
+        "!dotenv",
+        "!zod",
+        "!json-schema",
+        "!zod-to-json-schema"
       ],
       "enabled": true
     },
@@ -1183,7 +1304,10 @@
         "!typescript",
         "!vitest",
         "!@types/node",
-        "!dotenv"
+        "!dotenv",
+        "!zod",
+        "!json-schema",
+        "!zod-to-json-schema"
       ],
       "enabled": true
     },
@@ -1212,7 +1336,10 @@
         "!typescript",
         "!vitest",
         "!@types/node",
-        "!dotenv"
+        "!dotenv",
+        "!zod",
+        "!json-schema",
+        "!zod-to-json-schema"
       ],
       "enabled": true
     },
@@ -1241,7 +1368,10 @@
         "!typescript",
         "!vitest",
         "!@types/node",
-        "!dotenv"
+        "!dotenv",
+        "!zod",
+        "!json-schema",
+        "!zod-to-json-schema"
       ],
       "enabled": true
     },
@@ -1270,7 +1400,10 @@
         "!typescript",
         "!vitest",
         "!@types/node",
-        "!dotenv"
+        "!dotenv",
+        "!zod",
+        "!json-schema",
+        "!zod-to-json-schema"
       ],
       "enabled": true
     },
@@ -1299,7 +1432,10 @@
         "!typescript",
         "!vitest",
         "!@types/node",
-        "!dotenv"
+        "!dotenv",
+        "!zod",
+        "!json-schema",
+        "!zod-to-json-schema"
       ],
       "enabled": true
     },
@@ -1328,7 +1464,10 @@
         "!typescript",
         "!vitest",
         "!@types/node",
-        "!dotenv"
+        "!dotenv",
+        "!zod",
+        "!json-schema",
+        "!zod-to-json-schema"
       ],
       "enabled": true
     },
@@ -1357,7 +1496,10 @@
         "!typescript",
         "!vitest",
         "!@types/node",
-        "!dotenv"
+        "!dotenv",
+        "!zod",
+        "!json-schema",
+        "!zod-to-json-schema"
       ],
       "enabled": true
     },
@@ -1386,7 +1528,10 @@
         "!typescript",
         "!vitest",
         "!@types/node",
-        "!dotenv"
+        "!dotenv",
+        "!zod",
+        "!json-schema",
+        "!zod-to-json-schema"
       ],
       "enabled": true
     },
@@ -1415,7 +1560,10 @@
         "!typescript",
         "!vitest",
         "!@types/node",
-        "!dotenv"
+        "!dotenv",
+        "!zod",
+        "!json-schema",
+        "!zod-to-json-schema"
       ],
       "enabled": true
     },
@@ -1444,7 +1592,10 @@
         "!typescript",
         "!vitest",
         "!@types/node",
-        "!dotenv"
+        "!dotenv",
+        "!zod",
+        "!json-schema",
+        "!zod-to-json-schema"
       ],
       "enabled": true
     },
@@ -1473,7 +1624,10 @@
         "!typescript",
         "!vitest",
         "!@types/node",
-        "!dotenv"
+        "!dotenv",
+        "!zod",
+        "!json-schema",
+        "!zod-to-json-schema"
       ],
       "enabled": true
     },
@@ -1502,7 +1656,10 @@
         "!typescript",
         "!vitest",
         "!@types/node",
-        "!dotenv"
+        "!dotenv",
+        "!zod",
+        "!json-schema",
+        "!zod-to-json-schema"
       ],
       "enabled": true
     },
@@ -1531,7 +1688,10 @@
         "!typescript",
         "!vitest",
         "!@types/node",
-        "!dotenv"
+        "!dotenv",
+        "!zod",
+        "!json-schema",
+        "!zod-to-json-schema"
       ],
       "enabled": true
     },
@@ -1560,7 +1720,10 @@
         "!typescript",
         "!vitest",
         "!@types/node",
-        "!dotenv"
+        "!dotenv",
+        "!zod",
+        "!json-schema",
+        "!zod-to-json-schema"
       ],
       "enabled": true
     },
@@ -1589,7 +1752,10 @@
         "!typescript",
         "!vitest",
         "!@types/node",
-        "!dotenv"
+        "!dotenv",
+        "!zod",
+        "!json-schema",
+        "!zod-to-json-schema"
       ],
       "enabled": true
     },
@@ -1618,7 +1784,10 @@
         "!typescript",
         "!vitest",
         "!@types/node",
-        "!dotenv"
+        "!dotenv",
+        "!zod",
+        "!json-schema",
+        "!zod-to-json-schema"
       ],
       "enabled": true
     },
@@ -1647,7 +1816,10 @@
         "!typescript",
         "!vitest",
         "!@types/node",
-        "!dotenv"
+        "!dotenv",
+        "!zod",
+        "!json-schema",
+        "!zod-to-json-schema"
       ],
       "enabled": true
     },
@@ -1676,7 +1848,10 @@
         "!typescript",
         "!vitest",
         "!@types/node",
-        "!dotenv"
+        "!dotenv",
+        "!zod",
+        "!json-schema",
+        "!zod-to-json-schema"
       ],
       "enabled": true
     },
@@ -1705,7 +1880,10 @@
         "!typescript",
         "!vitest",
         "!@types/node",
-        "!dotenv"
+        "!dotenv",
+        "!zod",
+        "!json-schema",
+        "!zod-to-json-schema"
       ],
       "enabled": true
     },
@@ -1734,7 +1912,10 @@
         "!typescript",
         "!vitest",
         "!@types/node",
-        "!dotenv"
+        "!dotenv",
+        "!zod",
+        "!json-schema",
+        "!zod-to-json-schema"
       ],
       "enabled": true
     },
@@ -1763,7 +1944,10 @@
         "!typescript",
         "!vitest",
         "!@types/node",
-        "!dotenv"
+        "!dotenv",
+        "!zod",
+        "!json-schema",
+        "!zod-to-json-schema"
       ],
       "enabled": true
     },
@@ -1792,7 +1976,10 @@
         "!typescript",
         "!vitest",
         "!@types/node",
-        "!dotenv"
+        "!dotenv",
+        "!zod",
+        "!json-schema",
+        "!zod-to-json-schema"
       ],
       "enabled": true
     },
@@ -1821,7 +2008,10 @@
         "!typescript",
         "!vitest",
         "!@types/node",
-        "!dotenv"
+        "!dotenv",
+        "!zod",
+        "!json-schema",
+        "!zod-to-json-schema"
       ],
       "enabled": true
     },
@@ -1850,7 +2040,10 @@
         "!typescript",
         "!vitest",
         "!@types/node",
-        "!dotenv"
+        "!dotenv",
+        "!zod",
+        "!json-schema",
+        "!zod-to-json-schema"
       ],
       "enabled": true
     },
@@ -1879,7 +2072,10 @@
         "!typescript",
         "!vitest",
         "!@types/node",
-        "!dotenv"
+        "!dotenv",
+        "!zod",
+        "!json-schema",
+        "!zod-to-json-schema"
       ],
       "enabled": true
     },
@@ -1908,7 +2104,10 @@
         "!typescript",
         "!vitest",
         "!@types/node",
-        "!dotenv"
+        "!dotenv",
+        "!zod",
+        "!json-schema",
+        "!zod-to-json-schema"
       ],
       "enabled": true
     },
@@ -1937,7 +2136,10 @@
         "!typescript",
         "!vitest",
         "!@types/node",
-        "!dotenv"
+        "!dotenv",
+        "!zod",
+        "!json-schema",
+        "!zod-to-json-schema"
       ],
       "enabled": true
     },
@@ -1966,7 +2168,10 @@
         "!typescript",
         "!vitest",
         "!@types/node",
-        "!dotenv"
+        "!dotenv",
+        "!zod",
+        "!json-schema",
+        "!zod-to-json-schema"
       ],
       "enabled": true
     },
@@ -1995,7 +2200,10 @@
         "!typescript",
         "!vitest",
         "!@types/node",
-        "!dotenv"
+        "!dotenv",
+        "!zod",
+        "!json-schema",
+        "!zod-to-json-schema"
       ],
       "enabled": true
     },
@@ -2024,7 +2232,10 @@
         "!typescript",
         "!vitest",
         "!@types/node",
-        "!dotenv"
+        "!dotenv",
+        "!zod",
+        "!json-schema",
+        "!zod-to-json-schema"
       ],
       "enabled": true
     },
@@ -2053,7 +2264,10 @@
         "!typescript",
         "!vitest",
         "!@types/node",
-        "!dotenv"
+        "!dotenv",
+        "!zod",
+        "!json-schema",
+        "!zod-to-json-schema"
       ],
       "enabled": true
     },
@@ -2082,7 +2296,10 @@
         "!typescript",
         "!vitest",
         "!@types/node",
-        "!dotenv"
+        "!dotenv",
+        "!zod",
+        "!json-schema",
+        "!zod-to-json-schema"
       ],
       "enabled": true
     },
@@ -2111,7 +2328,10 @@
         "!typescript",
         "!vitest",
         "!@types/node",
-        "!dotenv"
+        "!dotenv",
+        "!zod",
+        "!json-schema",
+        "!zod-to-json-schema"
       ],
       "enabled": true
     },
@@ -2140,7 +2360,10 @@
         "!typescript",
         "!vitest",
         "!@types/node",
-        "!dotenv"
+        "!dotenv",
+        "!zod",
+        "!json-schema",
+        "!zod-to-json-schema"
       ],
       "enabled": true
     },
@@ -2169,7 +2392,10 @@
         "!typescript",
         "!vitest",
         "!@types/node",
-        "!dotenv"
+        "!dotenv",
+        "!zod",
+        "!json-schema",
+        "!zod-to-json-schema"
       ],
       "enabled": true
     },
@@ -2198,7 +2424,10 @@
         "!typescript",
         "!vitest",
         "!@types/node",
-        "!dotenv"
+        "!dotenv",
+        "!zod",
+        "!json-schema",
+        "!zod-to-json-schema"
       ],
       "enabled": true
     },
@@ -2227,7 +2456,10 @@
         "!typescript",
         "!vitest",
         "!@types/node",
-        "!dotenv"
+        "!dotenv",
+        "!zod",
+        "!json-schema",
+        "!zod-to-json-schema"
       ],
       "enabled": true
     },
@@ -2256,7 +2488,10 @@
         "!typescript",
         "!vitest",
         "!@types/node",
-        "!dotenv"
+        "!dotenv",
+        "!zod",
+        "!json-schema",
+        "!zod-to-json-schema"
       ],
       "enabled": true
     },
@@ -2285,7 +2520,10 @@
         "!typescript",
         "!vitest",
         "!@types/node",
-        "!dotenv"
+        "!dotenv",
+        "!zod",
+        "!json-schema",
+        "!zod-to-json-schema"
       ],
       "enabled": true
     },
