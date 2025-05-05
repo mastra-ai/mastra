@@ -27,7 +27,7 @@ function isNextJsProject(dir: string): boolean {
     return false;
   }
 }
-
+// TODO: Move to babel
 export const nextConfigRule: LintRule = {
   name: 'next-config',
   description: 'Checks if Next.js config is properly configured for Mastra packages',
