@@ -9,7 +9,6 @@ import demeterImg from "../../public/showcase/optimized/demeter.png";
 import notebookImg from "../../public/showcase/optimized/notebook-lm.png";
 import repoImg from "../../public/showcase/optimized/repo-base.png";
 import aiBeatsImg from "../../public/showcase/optimized/ai-beats-lab.png";
-import travelAiImg from "../../public/showcase/optimized/travel-ai.png";
 import excalidrawImg from "../../public/showcase/optimized/excalidraw-app.png";
 import ecommerceRagImg from "../../public/showcase/optimized/ecommerce-rag.jpg";
 import textToSqlImg from "../../public/showcase/optimized/text-to-sql.png";
@@ -116,12 +115,6 @@ export const ShowcaseGrid = () => {
       description: "Generate musical beats and melodies using AI agents",
       image: aiBeatsImg,
       link: "https://ai-beat-lab.lovable.app/",
-    },
-    {
-      title: "TravelAI",
-      description: "Travel assistant that helps you plan your next trip",
-      image: travelAiImg,
-      link: "https://mastra-eight.vercel.app/",
     },
     {
       title: "Excalidraw app",
