@@ -230,7 +230,6 @@ export class DefaultExecutionEngine extends ExecutionEngine {
       return async (data: any) => {
         const telemetry = this.mastra?.getTelemetry();
         const span = executionContext.executionSpan;
-        console.log('span!!!', span);
         if (!telemetry || !span) {
           return step.execute(data);
         }
