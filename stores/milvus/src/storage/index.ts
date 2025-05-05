@@ -272,7 +272,7 @@ export class MilvusStorage extends MastraStorage {
       }
 
       if (response.data.length === 0) {
-        throw new Error('No data found');
+        return null;
       }
 
       return {
@@ -295,14 +295,21 @@ export class MilvusStorage extends MastraStorage {
 
       const response = await this.client.query({
         collection_name: TABLE_THREADS,
-        filter: `resourceId == ${resourceId}`,
+        filter: `resourceId == "${resourceId}"`,
       });
 
       if (response.status.error_code !== 'Success') {
         throw new Error('Error status code: ' + response.status.reason);
       }
 
-      return response.data as StorageThreadType[];
+      return response.data.map(thread => ({
+        id: thread.id,
+        resourceId: thread.resourceId,
+        title: thread.title,
+        metadata: JSON.parse(thread.metadata),
+        createdAt: new Date(Number(thread.createdAt)),
+        updatedAt: new Date(Number(thread.updatedAt)),
+      }));
     } catch (error) {
       throw new Error('Failed to get threads: ' + error);
     }
@@ -383,7 +390,7 @@ export class MilvusStorage extends MastraStorage {
     try {
       await this.client.delete({
         collection_name: TABLE_THREADS,
-        filter: `id == ${threadId}`,
+        filter: `id == "${threadId}"`,
       });
     } catch (error) {
       throw new Error('Failed to delete thread: ' + error);

@@ -26,14 +26,14 @@ function generateRecords(count: number): MessageRecord[] {
   }));
 }
 
-function generateThreads(count: number): StorageThreadType[] {
+function generateThreads(count: number, resourceId?: string): StorageThreadType[] {
   return Array.from({ length: count }, (_, index) => ({
     id: (index + 1).toString(),
     title: `Test thread ${index + 1}`,
     metadata: { testIndex: index, foo: 'bar' },
     createdAt: new Date(),
     updatedAt: new Date(),
-    resourceId: `00000000-0000-4000-a000-${(1000000000000 + index).toString(16).padStart(12, '0')}`,
+    resourceId: resourceId ?? `00000000-0000-4000-a000-${(1000000000000 + index).toString(16).padStart(12, '0')}`,
     vector_placeholder: [0, 0],
   }));
 }
@@ -535,6 +535,49 @@ describe('MilvusStorage', () => {
       expect(threadFromDB?.metadata).toEqual({ foo: 'bar' });
       expect(threadFromDB?.createdAt).toEqual(savedThread.createdAt);
       expect(threadFromDB?.updatedAt.getTime()).toBeGreaterThan(savedThread.updatedAt.getTime());
+    });
+
+    it('should get threads by resource id', async () => {
+      const resourceId = '00000000-0000-4000-a000-000000000023';
+      const threads = generateThreads(5, resourceId);
+
+      for (const thread of threads) {
+        await milvusStorage.saveThread({ thread });
+      }
+
+      const threadsFromDB = await milvusStorage.getThreadsByResourceId({ resourceId });
+
+      expect(threadsFromDB).toBeDefined();
+      expect(threadsFromDB.length).toBe(5);
+
+      for (let i = 0; i < threadsFromDB.length; i++) {
+        expect(threadsFromDB[i].id).toBe(threads[i].id);
+        expect(threadsFromDB[i].title).toBe(threads[i].title);
+        expect(threadsFromDB[i].metadata).toEqual(threads[i].metadata);
+        expect(threadsFromDB[i].createdAt).toEqual(threads[i].createdAt);
+        expect(threadsFromDB[i].updatedAt).toEqual(threads[i].updatedAt);
+      }
+    });
+
+    it('should delete a thread', async () => {
+      const thread = {
+        id: '1000',
+        resourceId: '00000000-0000-4000-a000-000000000023',
+        title: 'Test thread',
+        metadata: { foo: 'bar' },
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        vector_placeholder: [0, 0],
+      };
+
+      const savedThread = await milvusStorage.saveThread({ thread });
+
+      expect(savedThread).toBeDefined();
+
+      await milvusStorage.deleteThread({ threadId: savedThread.id });
+
+      const threadFromDB = await milvusStorage.getThreadById({ threadId: savedThread.id });
+      expect(threadFromDB).toBeNull();
     });
   });
 });
