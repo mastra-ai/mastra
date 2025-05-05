@@ -212,4 +212,17 @@ process.versions.node = '${process.versions.node}';
       body: tags,
     });
   }
+
+  async lint(entryFile: string, outputDirectory: string, toolsPaths: string[]): Promise<void> {
+    await super.lint(entryFile, outputDirectory, toolsPaths);
+
+    const hasLibsql = (await this.deps.checkDependencies(['@mastra/libsql'])) === `ok`;
+
+    if (hasLibsql) {
+      this.logger.error(
+        'Cloudflare Deployer does not support @libsql/client(which may have been installed by @mastra/libsql) as a dependency. Please use Cloudflare D1 instead @mastra/cloudflare-d1',
+      );
+      process.exit(1);
+    }
+  }
 }
