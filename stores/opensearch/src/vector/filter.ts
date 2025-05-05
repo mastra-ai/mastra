@@ -18,8 +18,8 @@ export class OpenSearchFilterTranslator extends BaseFilterTranslator {
     };
   }
 
-  translate(filter?: VectorFilter): any {
-    if (this.isEmpty(filter)) return filter;
+  translate(filter?: VectorFilter): VectorFilter {
+    if (this.isEmpty(filter)) return undefined;
     this.validateFilter(filter);
     return this.translateNode(filter);
   }
@@ -43,24 +43,22 @@ export class OpenSearchFilterTranslator extends BaseFilterTranslator {
 
     // Handle field conditions
     const conditions = entries.map(([key, value]) => {
-      if (this.isOperator(key)) {
-        return this.translateOperator(key, value);
-      }
-
       // Handle nested objects
       if (typeof value === 'object' && value !== null && !Array.isArray(value)) {
-        const subEntries = Object.entries(value);
-        if (subEntries.length === 1 && subEntries[0] && this.isOperator(subEntries[0][0])) {
-          const [operator, operatorValue] = subEntries[0] as [QueryOperator, any];
-          return this.translateFieldOperator(`metadata.${key}`, operator, operatorValue);
-        }
-        // Handle nested object without operators
-        return this.translateNestedObject(`metadata.${key}`, value);
+        // Check if the object contains operators
+        const hasOperators = Object.keys(value).some(k => this.isOperator(k));
+
+        // Use a more direct approach based on whether operators are present
+        const nestedField = `metadata.${key}`;
+        return hasOperators
+          ? this.translateFieldConditions(nestedField, value)
+          : this.translateNestedObject(nestedField, value);
       }
 
-      // Handle multiple conditions on the same field
-      if (typeof value === 'object' && value !== null && Object.keys(value).some(k => this.isOperator(k))) {
-        return this.translateFieldConditions(`metadata.${key}`, value);
+      // Handle arrays
+      if (Array.isArray(value)) {
+        const fieldWithKeyword = this.addKeywordIfNeeded(`metadata.${key}`, value);
+        return { terms: { [fieldWithKeyword]: value } };
       }
 
       // Handle simple field equality
@@ -99,15 +97,26 @@ export class OpenSearchFilterTranslator extends BaseFilterTranslator {
 
   private translateLogicalOperator(operator: QueryOperator, value: any): any {
     const conditions = Array.isArray(value) ? value.map(item => this.translateNode(item)) : [this.translateNode(value)];
-
     switch (operator) {
       case '$and':
+        // For empty $and, return a query that matches everything
+        if (Array.isArray(value) && value.length === 0) {
+          return { match_all: {} };
+        }
         return {
           bool: {
             must: conditions,
           },
         };
       case '$or':
+        // For empty $or, return a query that matches nothing
+        if (Array.isArray(value) && value.length === 0) {
+          return {
+            bool: {
+              must_not: [{ match_all: {} }],
+            },
+          };
+        }
         return {
           bool: {
             should: conditions,
@@ -125,8 +134,8 @@ export class OpenSearchFilterTranslator extends BaseFilterTranslator {
   }
 
   private translateFieldOperator(field: string, operator: QueryOperator, value: any): any {
-    // Handle comparison operators
-    if (this.isBasicOperator(operator) || this.isNumericOperator(operator)) {
+    // Handle basic comparison operators
+    if (this.isBasicOperator(operator)) {
       const normalizedValue = this.normalizeComparisonValue(value);
       const fieldWithKeyword = this.addKeywordIfNeeded(field, value);
       switch (operator) {
@@ -138,16 +147,16 @@ export class OpenSearchFilterTranslator extends BaseFilterTranslator {
               must_not: [{ term: { [fieldWithKeyword]: normalizedValue } }],
             },
           };
-        case '$gt':
-        case '$gte':
-        case '$lt':
-        case '$lte': {
-          const rangeOp = operator.replace('$', '');
-          return { range: { [field]: { [rangeOp]: normalizedValue } } };
-        }
         default:
           return { term: { [fieldWithKeyword]: normalizedValue } };
       }
+    }
+
+    // Handle numeric operators
+    if (this.isNumericOperator(operator)) {
+      const normalizedValue = this.normalizeComparisonValue(value);
+      const rangeOp = operator.replace('$', '');
+      return { range: { [field]: { [rangeOp]: normalizedValue } } };
     }
 
     // Handle array operators
@@ -161,12 +170,24 @@ export class OpenSearchFilterTranslator extends BaseFilterTranslator {
         case '$in':
           return { terms: { [fieldWithKeyword]: normalizedValues } };
         case '$nin':
+          // For empty arrays, return a query that matches everything
+          if (normalizedValues.length === 0) {
+            return { match_all: {} };
+          }
           return {
             bool: {
               must_not: [{ terms: { [fieldWithKeyword]: normalizedValues } }],
             },
           };
         case '$all':
+          // For empty arrays, return a query that will match nothing
+          if (normalizedValues.length === 0) {
+            return {
+              bool: {
+                must_not: [{ match_all: {} }],
+              },
+            };
+          }
           return {
             bool: {
               must: normalizedValues.map(v => ({ term: { [fieldWithKeyword]: v } })),
@@ -189,7 +210,38 @@ export class OpenSearchFilterTranslator extends BaseFilterTranslator {
 
     // Handle regex operators
     if (this.isRegexOperator(operator)) {
-      return { regexp: { [field]: value } };
+      // Convert value to string if it's not already
+      const regexValue = typeof value === 'string' ? value : value.toString();
+
+      // Process regex pattern to handle anchors properly
+      let processedRegex = regexValue;
+      const hasStartAnchor = regexValue.startsWith('^');
+      const hasEndAnchor = regexValue.endsWith('$');
+
+      // If we have anchors, use wildcard query for better handling
+      if (hasStartAnchor || hasEndAnchor) {
+        // Remove anchors
+        if (hasStartAnchor) {
+          processedRegex = processedRegex.substring(1);
+        }
+        if (hasEndAnchor) {
+          processedRegex = processedRegex.substring(0, processedRegex.length - 1);
+        }
+
+        // Create wildcard pattern
+        let wildcardPattern = processedRegex;
+        if (!hasStartAnchor) {
+          wildcardPattern = '*' + wildcardPattern;
+        }
+        if (!hasEndAnchor) {
+          wildcardPattern = wildcardPattern + '*';
+        }
+
+        return { wildcard: { [field]: wildcardPattern } };
+      }
+
+      // Use regexp for other regex patterns
+      return { regexp: { [field]: regexValue } };
     }
 
     const fieldWithKeyword = this.addKeywordIfNeeded(field, value);
@@ -208,45 +260,73 @@ export class OpenSearchFilterTranslator extends BaseFilterTranslator {
     return field;
   }
 
-  private translateOperator(operator: QueryOperator, value: any): any {
+  private translateOperator(operator: QueryOperator, value: any, field?: string): any {
+    // Check if this is a valid operator
+    if (!this.isOperator(operator)) {
+      throw new Error(`Unsupported operator: ${operator}`);
+    }
+
+    // Handle logical operators
     if (this.isLogicalOperator(operator)) {
+      // For $not operator with field context and nested operators, handle specially
+      if (operator === '$not' && field && typeof value === 'object' && value !== null && !Array.isArray(value)) {
+        const entries = Object.entries(value);
+        if (entries.length === 1 && entries[0] && this.isOperator(entries[0][0])) {
+          const [nestedOp, nestedVal] = entries[0] as [QueryOperator, any];
+          const translatedNested = this.translateFieldOperator(field, nestedOp, nestedVal);
+          return {
+            bool: {
+              must_not: [translatedNested],
+            },
+          };
+        }
+      }
       return this.translateLogicalOperator(operator, value);
     }
+
+    // If a field is provided, use translateFieldOperator for more specific translation
+    if (field) {
+      return this.translateFieldOperator(field, operator, value);
+    }
+
+    // For non-logical operators without a field context, just return the value
+    // The actual translation happens in translateFieldConditions where we have the field context
     return value;
   }
 
   private translateFieldConditions(field: string, conditions: Record<string, any>): any {
-    const rangeConditions: any[] = [];
-    const otherConditions: any[] = [];
+    // Special case: Optimize multiple numeric operators into a single range query
+    if (Object.keys(conditions).every(op => this.isNumericOperator(op)) && Object.keys(conditions).length > 0) {
+      // Create a range query directly from the conditions
+      const rangeParams = Object.fromEntries(
+        Object.entries(conditions).map(([op, val]) => [op.replace('$', ''), this.normalizeComparisonValue(val)]),
+      );
+
+      return { range: { [field]: rangeParams } };
+    }
+
+    // Handle all other operators consistently
+    const queryConditions: any[] = [];
 
     Object.entries(conditions).forEach(([operator, value]) => {
-      if (this.isNumericOperator(operator)) {
-        const rangeOp = operator.replace('$', '');
-        rangeConditions.push({ range: { [field]: { [rangeOp]: this.normalizeComparisonValue(value) } } });
-      } else if (this.isBasicOperator(operator)) {
-        const fieldWithKeyword = this.addKeywordIfNeeded(field, value);
-        if (operator === '$eq') {
-          otherConditions.push({ term: { [fieldWithKeyword]: this.normalizeComparisonValue(value) } });
-        } else if (operator === '$ne') {
-          otherConditions.push({
-            bool: {
-              must_not: [{ term: { [fieldWithKeyword]: this.normalizeComparisonValue(value) } }],
-            },
-          });
-        }
+      if (this.isOperator(operator)) {
+        queryConditions.push(this.translateOperator(operator as QueryOperator, value, field));
       } else {
-        otherConditions.push(this.translateFieldOperator(field, operator as QueryOperator, value));
+        // Handle non-operator keys (should not happen in normal usage)
+        const fieldWithKeyword = this.addKeywordIfNeeded(`${field}.${operator}`, value);
+        queryConditions.push({ term: { [fieldWithKeyword]: value } });
       }
     });
 
-    const allConditions = [...rangeConditions, ...otherConditions];
-    if (allConditions.length === 1) {
-      return allConditions[0];
+    // Return single condition without wrapping
+    if (queryConditions.length === 1) {
+      return queryConditions[0];
     }
 
+    // Combine multiple conditions with AND logic
     return {
       bool: {
-        must: allConditions,
+        must: queryConditions,
       },
     };
   }

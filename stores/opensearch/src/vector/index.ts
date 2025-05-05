@@ -182,6 +182,7 @@ export class OpenSearchVector extends MastraVector {
 
     try {
       const translatedFilter = this.transformFilter(filter);
+      console.log('translatedFilter', JSON.stringify(translatedFilter));
 
       const response = await this.client.search({
         index: indexName,
@@ -209,6 +210,14 @@ export class OpenSearchVector extends MastraVector {
       return results;
     } catch (error) {
       console.error('Failed to query vectors:', error);
+
+      // Check if this is a filter translation error
+      if (
+        error instanceof Error &&
+        (error.message.includes('Unsupported operator') || error.message.includes('$not operator cannot be empty'))
+      ) {
+        throw error; // Re-throw filter validation errors
+      }
       return [];
     }
   }
@@ -235,5 +244,103 @@ export class OpenSearchVector extends MastraVector {
   private transformFilter(filter?: VectorFilter) {
     const translator = new OpenSearchFilterTranslator();
     return translator.translate(filter);
+  }
+
+  /**
+   * Updates a specific document in the index by ID.
+   *
+   * @param {string} indexName - The name of the index containing the document.
+   * @param {string} id - The ID of the document to update.
+   * @param {Object} update - The update to apply to the document.
+   * @param {number[]} [update.vector] - Optional new vector to update.
+   * @param {Record<string, any>} [update.metadata] - Optional new metadata to update.
+   * @returns {Promise<void>} A promise that resolves when the document is updated.
+   */
+  async updateIndexById(
+    indexName: string,
+    id: string,
+    update: {
+      vector?: number[];
+      metadata?: Record<string, any>;
+    },
+  ): Promise<void> {
+    if (!update.vector && !update.metadata) {
+      throw new Error('No updates provided');
+    }
+
+    try {
+      // First get the current document to merge with updates
+      const { body: existingDoc } = await this.client
+        .get({
+          index: indexName,
+          id: id,
+        })
+        .catch(() => {
+          throw new Error(`Document with ID ${id} not found in index ${indexName}`);
+        });
+
+      if (!existingDoc || !existingDoc._source) {
+        throw new Error(`Document with ID ${id} has no source data in index ${indexName}`);
+      }
+
+      const source = existingDoc._source;
+      const updatedDoc: Record<string, any> = {
+        id: source.id || id,
+      };
+
+      // Update vector if provided
+      if (update.vector) {
+        // Get index stats to check dimension
+        const indexInfo = await this.describeIndex(indexName);
+
+        // Validate vector dimensions
+        this.validateVectorDimensions([update.vector], indexInfo.dimension);
+
+        updatedDoc.embedding = update.vector;
+      } else if (source.embedding) {
+        updatedDoc.embedding = source.embedding;
+      }
+
+      // Update metadata if provided
+      if (update.metadata) {
+        updatedDoc.metadata = update.metadata;
+      } else {
+        updatedDoc.metadata = source.metadata || {};
+      }
+
+      // Update the document
+      await this.client.index({
+        index: indexName,
+        id: id,
+        body: updatedDoc,
+        refresh: true,
+      });
+    } catch (error) {
+      console.error(`Failed to update document with ID ${id} in index ${indexName}:`, error);
+      throw error;
+    }
+  }
+
+  /**
+   * Deletes a specific document from the index by ID.
+   *
+   * @param {string} indexName - The name of the index containing the document.
+   * @param {string} id - The ID of the document to delete.
+   * @returns {Promise<void>} A promise that resolves when the document is deleted.
+   */
+  async deleteIndexById(indexName: string, id: string): Promise<void> {
+    try {
+      await this.client.delete({
+        index: indexName,
+        id: id,
+        refresh: true,
+      });
+    } catch (error: unknown) {
+      console.error(`Failed to delete document with ID ${id} from index ${indexName}:`, error);
+      // Don't throw error if document doesn't exist, just log it
+      if (error && typeof error === 'object' && 'statusCode' in error && error.statusCode !== 404) {
+        throw error;
+      }
+    }
   }
 }

@@ -21,8 +21,12 @@
   "scripts": {
     "build": "tsup src/index.ts --format esm,cjs --experimental-dts --clean --treeshake=smallest --splitting",
     "build:watch": "pnpm build --watch",
+    "pretest": "docker compose up -d && (for i in $(seq 1 30); do curl -s http://localhost:9200/_cluster/health | grep -q '\"status\"' && break || (sleep 1; [ $i -eq 30 ] && exit 1); done)",
     "test": "vitest run",
-    "test:watch": "vitest",
+    "posttest": "docker compose down -v",
+    "pretest:watch": "docker compose up -d",
+    "test:watch": "vitest watch",
+    "posttest:watch": "docker compose down -v",
     "lint": "eslint ."
   },
   "dependencies": {
