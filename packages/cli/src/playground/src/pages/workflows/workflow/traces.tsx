@@ -31,7 +31,7 @@ function WorkflowTracesContent() {
       traces={traces}
       isLoading={firstCallLoading}
       error={error}
-      sidebarChild={<WorkflowInformation workflowId={workflowId!} />}
+      // sidebarChild={<WorkflowInformation workflowId={workflowId!} />}
     />
   );
 }
