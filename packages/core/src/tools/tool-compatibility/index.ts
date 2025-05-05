@@ -4,9 +4,9 @@ import type { JSONSchema7 } from 'json-schema';
 import { z } from 'zod';
 import zodToJsonSchema from 'zod-to-json-schema';
 import type { Targets } from 'zod-to-json-schema';
-import { isVercelTool } from '../..';
 import type { MastraLanguageModel } from '../../agent/types';
 import { MastraBase } from '../../base';
+import { isVercelTool } from '../../utils';
 import { convertVercelToolParameters } from './builder';
 import type { ToolToConvert } from './builder';
 
@@ -378,14 +378,14 @@ export abstract class ToolCompatibility extends MastraBase {
     // openai only allows tools descriptions of up to 1024 characters
     // If their tool description is too long we want it to return the openai error as is
     if (isOpenAI && description.length > OPENAI_TOOL_DESCRIPTION_MAX_LENGTH) {
-      if (tool.description.length < OPENAI_TOOL_DESCRIPTION_MAX_LENGTH) {
+      if (tool?.description?.length || 0 < OPENAI_TOOL_DESCRIPTION_MAX_LENGTH) {
         this.logger.warn(
           `Tool description is too long for OpenAI. Truncating to 1024 characters. Tool call might not respect the schema constraints.`,
         );
         description = description.slice(0, OPENAI_TOOL_DESCRIPTION_MAX_LENGTH);
       } else {
         // Preserve the original description if it's already over the limit
-        description = tool.description;
+        description = tool?.description || '';
       }
     }
 
