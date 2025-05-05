@@ -4,6 +4,7 @@ import { MastraMemory } from '@mastra/core/memory';
 import type { MessageType, MemoryConfig, SharedMemoryConfig, StorageThreadType } from '@mastra/core/memory';
 import type { StorageGetMessagesArg } from '@mastra/core/storage';
 import { embedMany } from 'ai';
+import type { TextPart } from 'ai';
 
 import xxhash from 'xxhash-wasm';
 import { updateWorkingMemoryTool } from './tools/working-memory';
@@ -344,8 +345,8 @@ export class Memory extends MastraMemory {
           } else if (Array.isArray(message.content)) {
             // Extract text from all text parts, concatenate
             const joined = message.content
-              .filter((part: any) => part && part.type === 'text' && typeof part.text === 'string')
-              .map((part: any) => part.text)
+              .filter(part => part && part.type === 'text' && typeof part.text === 'string')
+              .map(part => (part as TextPart).text)
               .join(' ')
               .trim();
             if (joined) textForEmbedding = joined;
