@@ -1,6 +1,6 @@
 {
   "name": "@mastra/fastembed",
-  "version": "0.0.0",
+  "version": "0.0.1",
   "license": "Elastic-2.0",
   "type": "module",
   "main": "dist/index.js",
@@ -21,7 +21,7 @@
     "@internal/lint": "workspace:*",
     "@types/node": "^20.17.27",
     "tsup": "^8.0.0",
-    "typescript": "^5.0.0",
+    "typescript": "^5.8.3",
     "vitest": "^1.0.0"
   }
 }
