@@ -1,7 +1,7 @@
 import { it, describe, expect, beforeAll, afterAll, inject } from 'vitest';
 import { rollup } from 'rollup';
 import { join } from 'path';
-import { setupMonorepo } from './setup';
+import { setupMonorepo } from './prepare';
 import { mkdtemp, rm } from 'fs/promises';
 import { tmpdir } from 'os';
 import getPort from 'get-port';

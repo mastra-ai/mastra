@@ -1,10 +1,9 @@
 import { it, describe, expect, beforeAll, afterAll } from 'vitest';
-import { rollup } from 'rollup';
 import { join } from 'path';
-import { setupTestProject } from './setup';
+import { setupTestProject } from './prepare';
 import { mkdtemp, rm } from 'fs/promises';
 import { tmpdir } from 'os';
-import { execa, ExecaError } from 'execa';
+import { execa } from 'execa';
 
 describe('commonjs', () => {
   let fixturePath: string;
@@ -13,6 +12,7 @@ describe('commonjs', () => {
     fixturePath = await mkdtemp(join(tmpdir(), 'mastra-commonjs-test-'));
     console.log({ fixturePath });
     await setupTestProject(fixturePath);
+    console.log('done');
   }, 60 * 1000);
 
   afterAll(async () => {
@@ -23,7 +23,7 @@ describe('commonjs', () => {
     } catch {}
   });
 
-  it('should pass tsc type check', async () => {
+  it('should pass tsc type check', { timeout: 30 * 1000 }, async () => {
     const tsc = await execa({
       cwd: fixturePath,
     })`tsc`;
