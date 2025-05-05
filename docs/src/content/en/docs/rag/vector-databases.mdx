@@ -226,7 +226,7 @@ The dimension size must match the output dimension of your chosen embedding mode
 
 Each vector database enforces specific naming conventions for indexes and collections to ensure compatibility and prevent conflicts.
 
-<Tabs items={['Pg Vector', 'Pinecone', 'Qdrant', 'Chroma', 'Astra', 'LibSQL', 'Upstash', 'Cloudflare', 'MongoDB']}>
+<Tabs items={['Pg Vector', 'Pinecone', 'Qdrant', 'Chroma', 'Astra', 'LibSQL', 'Upstash', 'Cloudflare', 'MongoDB', 'OpenSearch']}>
   <Tabs.Tab>
     Index names must:
     - Start with a letter or underscore
@@ -307,6 +307,13 @@ Each vector database enforces specific naming conventions for indexes and collec
     - Example: `my_collection.123` is valid
     - Example: `my-index` is not valid (contains hyphen)
     - Example: `My$Collection` is not valid (contains `$`)
+  </Tabs.Tab>
+  <Tabs.Tab>
+    Index names must:
+    - Start with a letter or underscore
+    - Contain only letters, numbers, and underscores
+    - Example: `my_index_123` is valid
+    - Example: `my-index` is not valid (contains hyphen)
   </Tabs.Tab>
 </Tabs>
 

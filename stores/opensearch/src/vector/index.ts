@@ -1,11 +1,4 @@
-import type {
-  CreateIndexParams,
-  IndexStats,
-  ParamsToArgs,
-  QueryResult,
-  QueryVectorParams,
-  UpsertVectorParams,
-} from '@mastra/core';
+import type { CreateIndexParams, IndexStats, QueryResult, QueryVectorParams, UpsertVectorParams } from '@mastra/core';
 import { MastraVector } from '@mastra/core/vector';
 import type { VectorFilter } from '@mastra/core/vector/filter';
 import { Client as OpenSearchClient } from '@opensearch-project/opensearch';
@@ -39,8 +32,7 @@ export class OpenSearchVector extends MastraVector {
    * @param {'cosine' | 'euclidean' | 'dotproduct'} [metric=cosine] - The metric to use to sort vectors in the collection.
    * @returns {Promise<void>} A promise that resolves when the collection is created.
    */
-  async createIndex(...args: ParamsToArgs<CreateIndexParams>): Promise<void> {
-    const params = this.normalizeArgs<CreateIndexParams>('createIndex', args);
+  async createIndex(params: CreateIndexParams): Promise<void> {
     const { indexName, dimension, metric = 'cosine' } = params;
 
     if (!Number.isInteger(dimension) || dimension <= 0) {
@@ -85,8 +77,8 @@ export class OpenSearchVector extends MastraVector {
     try {
       const response = await this.client.cat.indices({ format: 'json' });
       const indexes = response.body
-        .map((index: { index: string }) => index.index)
-        .filter((index: string) => index !== undefined);
+        .map((record: { index?: string }) => record.index)
+        .filter((index: string | undefined) => index !== undefined);
 
       return indexes;
     } catch (error) {
@@ -133,8 +125,7 @@ export class OpenSearchVector extends MastraVector {
    * @param {string[]} [ids] - An optional array of IDs corresponding to each vector. If not provided, new IDs will be generated.
    * @returns {Promise<string[]>} A promise that resolves to an array of IDs of the upserted vectors.
    */
-  async upsert(...args: ParamsToArgs<UpsertVectorParams>): Promise<string[]> {
-    const params = this.normalizeArgs<UpsertVectorParams>('upsert', args);
+  async upsert(params: UpsertVectorParams): Promise<string[]> {
     const { indexName, vectors, metadata = [], ids } = params;
 
     const vectorIds = ids || vectors.map(() => crypto.randomUUID());
@@ -186,8 +177,7 @@ export class OpenSearchVector extends MastraVector {
    * @param {boolean} [includeVectors=false] - Whether to include the vectors in the response.
    * @returns {Promise<QueryResult[]>} A promise that resolves to an array of query results.
    */
-  async query(...args: ParamsToArgs<QueryVectorParams>): Promise<QueryResult[]> {
-    const params = this.normalizeArgs<QueryVectorParams>('query', args);
+  async query(params: QueryVectorParams): Promise<QueryResult[]> {
     const { indexName, queryVector, filter, topK = 10, includeVector = false } = params;
 
     try {
