@@ -333,7 +333,6 @@ export function getResuableTests(memory: Memory) {
           },
           vectorMessageSearch: 'JavaScript',
         });
-        console.log('resultProgramming', resultProgramming);
         const programmingContents = resultProgramming.messages.map(m =>
           Array.isArray(m.content) && m.content[0]?.type === 'text' ? m.content[0].text : m.content,
         );
@@ -350,7 +349,6 @@ export function getResuableTests(memory: Memory) {
           },
           vectorMessageSearch: 'rainy',
         });
-        console.log('resultWeather', resultWeather);
         const weatherContents = resultWeather.messages.map(m =>
           Array.isArray(m.content) && m.content[0]?.type === 'text' ? m.content[0].text : m.content,
         );
@@ -378,7 +376,7 @@ export function getResuableTests(memory: Memory) {
           vectorMessageSearch: 'world',
         });
         const contents = result.messages.map(m =>
-          Array.isArray(m.content) ? m.content.map((p: any) => p.text).join(' ') : m.content,
+          Array.isArray(m.content) ? m.content.map(p => (p as TextPart).text).join(' ') : m.content,
         );
         expect(contents[0]).toContain('world');
         expect(contents[0]).toContain('Hello');
@@ -404,7 +402,7 @@ export function getResuableTests(memory: Memory) {
           vectorMessageSearch: 'assistant',
         });
         const contents = result.messages.map(m =>
-          Array.isArray(m.content) ? m.content.map((p: any) => p.text).join(' ') : m.content,
+          Array.isArray(m.content) ? m.content.map(p => (p as TextPart).text).join(' ') : m.content,
         );
         expect(contents[0]).toContain('Assistant says hello.');
         expect(contents[0]).toContain('This is a test.');
