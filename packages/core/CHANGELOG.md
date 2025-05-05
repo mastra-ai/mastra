@@ -1,5 +1,12 @@
 # @mastra/core
 
+## 0.9.2-alpha.4
+
+### Patch Changes
+
+- ccef9f9: Fixed a type error when converting tools
+- 51e6923: fix ts errors on default proxy storage
+
 ## 0.9.2-alpha.3
 
 ### Patch Changes
