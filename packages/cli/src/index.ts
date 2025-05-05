@@ -146,7 +146,14 @@ program
   .option('-r, --root <path>', 'Path to your root folder')
   .option('-t, --tools <toolsDirs>', 'Comma-separated list of paths to tool files to include')
   .action(async args => {
-    await lint({ dir: args.dir, root: args.root, tools: args.tools ? args.tools.split(',') : [] });
+    await analytics.trackCommandExecution({
+      command: 'lint',
+      args,
+      execution: async () => {
+        await lint({ dir: args.dir, root: args.root, tools: args.tools ? args.tools.split(',') : [] });
+      },
+      origin,
+    });
   });
 
 program
