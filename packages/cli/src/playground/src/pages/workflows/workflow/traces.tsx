@@ -26,14 +26,7 @@ function WorkflowTracesContent() {
     );
   }
 
-  return (
-    <WorkflowTraces
-      traces={traces}
-      isLoading={firstCallLoading}
-      error={error}
-      sidebarChild={<WorkflowInformation workflowId={workflowId!} />}
-    />
-  );
+  return <WorkflowTraces traces={traces} isLoading={firstCallLoading} error={error} />;
 }
 
 function WorkflowTracesPage() {
