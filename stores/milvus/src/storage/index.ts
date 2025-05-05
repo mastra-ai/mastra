@@ -1,7 +1,13 @@
 import type { MessageType, StorageThreadType, WorkflowRuns } from '@mastra/core';
 import { MastraStorage, TABLE_THREADS } from '@mastra/core/storage';
 import type { StorageColumn, EvalRow, StorageGetMessagesArg, TABLE_NAMES } from '@mastra/core/storage';
-import type { CheckHealthResponse, ClientConfig, CollectionSchema, FieldType } from '@zilliz/milvus2-sdk-node';
+import type {
+  CheckHealthResponse,
+  ClientConfig,
+  CollectionSchema,
+  DescribeCollectionResponse,
+  FieldType,
+} from '@zilliz/milvus2-sdk-node';
 import { MilvusClient, DataType, IndexType, MetricType } from '@zilliz/milvus2-sdk-node';
 
 export class MilvusStorage extends MastraStorage {
@@ -27,6 +33,10 @@ export class MilvusStorage extends MastraStorage {
 
   checkHealth(): Promise<CheckHealthResponse> {
     return this.client.checkHealth();
+  }
+
+  async describeTable({ tableName }: { tableName: string }): Promise<DescribeCollectionResponse> {
+    return this.client.describeCollection({ collection_name: tableName });
   }
 
   translateSchema(schema: Record<string, StorageColumn>): FieldType[] {
@@ -260,15 +270,19 @@ export class MilvusStorage extends MastraStorage {
       if (response.status.error_code !== 'Success') {
         throw new Error('Error status code: ' + response.status.reason);
       }
-      console.log(response.data);
+
+      if (response.data.length === 0) {
+        throw new Error('No data found');
+      }
 
       return {
         id: response.data[0]?.id ?? '',
         resourceId: response.data[0]?.resourceId ?? '',
         title: response.data[0]?.title ?? '',
-        metadata: response.data[0]?.metadata ?? {},
-        createdAt: response.data[0]?.createdAt ?? new Date(),
-        updatedAt: response.data[0]?.updatedAt ?? new Date(),
+        metadata: JSON.parse(response.data[0]?.metadata ?? '{}'),
+        // convert timestamps to dates
+        createdAt: new Date(Number(response.data[0]?.createdAt)),
+        updatedAt: new Date(Number(response.data[0]?.updatedAt)),
       };
     } catch (error) {
       throw new Error('Failed to get thread: ' + error);
@@ -296,9 +310,17 @@ export class MilvusStorage extends MastraStorage {
 
   async saveThread({ thread }: { thread: StorageThreadType }): Promise<StorageThreadType> {
     try {
+      const threadToSave = {
+        ...thread,
+        metadata: JSON.stringify(thread.metadata),
+        // convert dates to timestamps
+        createdAt: thread.createdAt.getTime(),
+        updatedAt: thread.updatedAt.getTime(),
+      };
+
       const response = await this.client.upsert({
         collection_name: TABLE_THREADS,
-        data: [thread],
+        data: [threadToSave],
       });
 
       if (response.status.error_code !== 'Success') {
@@ -321,31 +343,37 @@ export class MilvusStorage extends MastraStorage {
     metadata: Record<string, unknown>;
   }): Promise<StorageThreadType> {
     try {
-      const response = await this.client.upsert({
+      const existingThread = await this.getThreadById({ threadId: id });
+      const updatedAt = new Date().getTime();
+
+      const threadToSave = {
+        id,
+        title,
+        resourceId: existingThread?.resourceId ?? '',
+        metadata: JSON.stringify(metadata),
+        vector_placeholder: [0, 0], // for milvus compatibility
+        // convert dates to timestamps
+        createdAt: existingThread?.createdAt.getTime() ?? new Date().getTime(),
+        updatedAt,
+      };
+
+      const response = await this.client.insert({
         collection_name: TABLE_THREADS,
-        data: [
-          {
-            id,
-            title,
-            metadata,
-          },
-        ],
+        data: [threadToSave],
       });
 
       if (response.status.error_code !== 'Success') {
         throw new Error('Error status code: ' + response.status.reason);
       }
 
-      const thread = await this.getThreadById({ threadId: id });
-
       return {
         id,
         title,
         metadata,
-        resourceId: thread?.resourceId ?? '',
-        createdAt: thread?.createdAt ?? new Date(),
-        updatedAt: thread?.updatedAt ?? new Date(),
-      };
+        resourceId: existingThread?.resourceId ?? '',
+        createdAt: existingThread?.createdAt ?? new Date(),
+        updatedAt: new Date(updatedAt),
+      } as StorageThreadType;
     } catch (error) {
       throw new Error('Failed to update thread: ' + error);
     }

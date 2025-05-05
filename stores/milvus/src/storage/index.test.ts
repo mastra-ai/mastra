@@ -489,17 +489,18 @@ describe('MilvusStorage', () => {
       expect(savedThread).toBeDefined();
       expect(savedThread.title).toBe(thread.title);
       expect(savedThread.metadata).toEqual(thread.metadata);
-      expect(savedThread.createdAt).toBeDefined();
-      expect(savedThread.updatedAt).toBeDefined();
+      expect(savedThread.createdAt).toEqual(thread.createdAt);
+      expect(savedThread.updatedAt).toEqual(thread.updatedAt);
 
       const threadFromDB = await milvusStorage.getThreadById({ threadId: savedThread.id });
-      console.log(threadFromDB);
 
       expect(threadFromDB).toBeDefined();
       expect(threadFromDB?.title).toBe(thread.title);
       expect(threadFromDB?.metadata).toEqual(thread.metadata);
-      expect(threadFromDB?.createdAt).toBeDefined();
-      expect(threadFromDB?.updatedAt).toBeDefined();
+      expect(threadFromDB?.createdAt).toEqual(thread.createdAt);
+      expect(threadFromDB?.updatedAt).toEqual(thread.updatedAt);
+      expect(threadFromDB?.resourceId).toEqual(savedThread.resourceId);
+      expect(threadFromDB?.id).toEqual(savedThread.id);
     });
 
     it('should update a thread', async () => {
@@ -512,8 +513,8 @@ describe('MilvusStorage', () => {
       expect(savedThread).toBeDefined();
       expect(savedThread.title).toBe(thread.title);
       expect(savedThread.metadata).toEqual(thread.metadata);
-      expect(savedThread.createdAt).toBeDefined();
-      expect(savedThread.updatedAt).toBeDefined();
+      expect(savedThread.createdAt).toEqual(thread.createdAt);
+      expect(savedThread.updatedAt).toEqual(thread.updatedAt);
 
       const updatedThread = await milvusStorage.updateThread({
         id: savedThread.id,
@@ -524,16 +525,16 @@ describe('MilvusStorage', () => {
       expect(updatedThread).toBeDefined();
       expect(updatedThread.title).toBe('updated title');
       expect(updatedThread.metadata).toEqual({ foo: 'bar' });
-      expect(updatedThread.createdAt).toBeDefined();
-      expect(updatedThread.updatedAt).toBeDefined();
+      expect(updatedThread.createdAt).toEqual(savedThread.createdAt);
+      expect(updatedThread.updatedAt.getTime()).toBeGreaterThan(savedThread.updatedAt.getTime());
 
       // Verify that the thread was updated in the database
       const threadFromDB = await milvusStorage.getThreadById({ threadId: savedThread.id });
       expect(threadFromDB).toBeDefined();
       expect(threadFromDB?.title).toBe('updated title');
       expect(threadFromDB?.metadata).toEqual({ foo: 'bar' });
-      expect(threadFromDB?.createdAt).toBeDefined();
-      expect(threadFromDB?.updatedAt).toBeDefined();
+      expect(threadFromDB?.createdAt).toEqual(savedThread.createdAt);
+      expect(threadFromDB?.updatedAt.getTime()).toBeGreaterThan(savedThread.updatedAt.getTime());
     });
   });
 });
