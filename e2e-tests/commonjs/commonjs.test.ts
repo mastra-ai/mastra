@@ -1,4 +1,4 @@
-import { it, describe, expect, beforeAll, afterAll } from 'vitest';
+import { it, describe, expect, beforeAll, afterAll, inject } from 'vitest';
 import { join } from 'path';
 import { setupTestProject } from './prepare';
 import { mkdtemp, rm } from 'fs/promises';
@@ -9,8 +9,14 @@ describe('commonjs', () => {
   let fixturePath: string;
 
   beforeAll(async () => {
+    const tag = inject('tag');
+    const registry = inject('registry');
+
+    console.log('registry', registry);
+    console.log('tag', tag);
     fixturePath = await mkdtemp(join(tmpdir(), 'mastra-commonjs-test-'));
-    console.log({ fixturePath });
+
+    process.env.npm_config_registry = registry;
     await setupTestProject(fixturePath);
     console.log('done');
   }, 60 * 1000);
