@@ -44,7 +44,7 @@ myWorkflow
   .then(initialStep)
   .branch([
     [async ({ inputData }) => inputData.value > 50, highValueStep],
-    [async ({ inputData }) => inputData.value <= 50, lowValueStep],
+    [async ({ inputData }) => inputData.value > 10 && inputData.value <= 50, lowValueStep],
     [async ({ inputData }) => inputData.value <= 10, extremelyLowValueStep],
   ])
   .then(finalStep)
