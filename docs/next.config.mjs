@@ -165,8 +165,18 @@ export default withGT(
         permanent: true,
       },
       {
+        source: "/docs/agents/adding-tools",
+        destination: "/docs/agents/using-tools-and-mcp",
+        permanent: true,
+      },
+      {
         source: "/docs/agents/02a-mcp-guide",
         destination: "/docs/agents/mcp-guide",
+        permanent: true,
+      },
+      {
+        source: "/docs/agents/mcp-guide",
+        destination: "/docs/agents/using-tools-and-mcp",
         permanent: true,
       },
       {
@@ -358,6 +368,11 @@ export default withGT(
       {
         source: "/docs/local-dev/integrations",
         destination: "/docs/integrations",
+        permanent: true,
+      },
+      {
+        source: "/docs/integrations",
+        destination: "/docs/tools-mcp/mcp-overview",
         permanent: true,
       },
       {

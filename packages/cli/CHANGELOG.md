@@ -1,5 +1,16 @@
 # mastra
 
+## 0.6.1-alpha.4
+
+### Patch Changes
+
+- 5b43dd0: revamp ui for threads
+- 8ea9d17: Pinned Posthog-node which is broken in the most recent version of that package https://github.com/PostHog/posthog-js-lite/issues/491
+- Updated dependencies [ccef9f9]
+- Updated dependencies [51e6923]
+  - @mastra/core@0.9.2-alpha.4
+  - @mastra/deployer@0.3.2-alpha.4
+
 ## 0.6.1-alpha.3
 
 ### Patch Changes
