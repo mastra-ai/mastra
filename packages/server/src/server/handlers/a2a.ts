@@ -223,6 +223,130 @@ async function handleTaskGet({
   return sendJsonResponse(requestId, task);
 }
 
+async function handleTaskSendSubscribe({
+  requestId,
+  params,
+  agentId,
+  taskStore,
+  agent,
+}: {
+  requestId: string;
+  params: TaskSendParams;
+  agentId: string;
+  taskStore: InMemoryTaskStore;
+  agent: Agent;
+}) {
+  validateTaskSendParams(params);
+
+  const { id: taskId, message, sessionId, metadata } = params;
+
+  // Load or create task AND history
+  let currentData = await loadOrCreateTaskAndHistory({
+    taskId,
+    taskStore,
+    agentId,
+    message,
+    sessionId,
+    metadata,
+  });
+
+  // Use the new TaskContext definition, passing history
+  const context = createTaskContext({
+    task: currentData.task,
+    userMessage: message,
+    history: currentData.history,
+  });
+
+  try {
+    const result = await agent.stream(message as unknown as CoreMessage[]);
+
+    const stream = new TransformStream({
+      async transform(chunk, controller) {
+        console.log(chunk);
+
+        currentData = applyUpdateToTaskAndHistory(currentData, {
+          state: 'working',
+          message: {
+            role: 'agent',
+            parts: [
+              {
+                type: 'text',
+                text: chunk,
+              },
+            ],
+          },
+        });
+
+        await taskStore.save({ agentId, data: currentData });
+        context.task = currentData.task;
+
+        controller.enqueue(createSuccessResponse(requestId, currentData.task));
+      },
+      async flush(controller) {
+        currentData = applyUpdateToTaskAndHistory(currentData, {
+          state: 'completed',
+          message: {
+            role: 'agent',
+            parts: [
+              {
+                type: 'text',
+                text: '',
+              },
+            ],
+          },
+        });
+
+        await taskStore.save({ agentId, data: currentData });
+        context.task = currentData.task;
+        controller.enqueue(createSuccessResponse(requestId, currentData.task));
+      },
+    });
+
+    return new Response(
+      result
+        .toDataStream({
+          sendUsage: true,
+          sendReasoning: true,
+          getErrorMessage: (error: any) => {
+            return `An error occurred while processing your request. ${error instanceof Error ? error.message : JSON.stringify(error)}`;
+          },
+        })
+        .pipeThrough(stream),
+      {
+        headers: {
+          'Content-Type': 'text/plain; charset=utf-8',
+          'X-Vercel-AI-Data-Stream': 'v1',
+        },
+      },
+    );
+  } catch (handlerError) {
+    // If handler throws, apply 'failed' status, save, and rethrow
+    const failureStatusUpdate: Omit<TaskStatus, 'timestamp'> = {
+      state: 'failed',
+      message: {
+        role: 'agent',
+        parts: [
+          {
+            type: 'text',
+            text: `Handler failed: ${handlerError instanceof Error ? handlerError.message : String(handlerError)}`,
+          },
+        ],
+      },
+    };
+    currentData = applyUpdateToTaskAndHistory(currentData, failureStatusUpdate);
+    try {
+      await taskStore.save({ agentId, data: currentData });
+    } catch (saveError) {
+      console.error(`Failed to save task ${taskId} after handler error:`, saveError);
+      // Still throw the original handler error
+    }
+    throw normalizeError(handlerError, requestId, taskId); // Rethrow original error
+  }
+
+  // The loop finished, send the final task state
+  return sendJsonResponse(requestId, currentData.task);
+}
+
 async function handleTaskCancel({
   requestId,
   taskStore,
@@ -312,12 +436,10 @@ export async function getAgentExecutionHandler({
         });
         return result;
       }
-      // case "tasks/sendSubscribe":
-      //     await this.handleTaskSendSubscribe(
-      //         requestBody as schema.SendTaskStreamingRequest,
-      //         res
-      //     );
-      //     break;
+      case 'tasks/sendSubscribe':
+        const result = await handleTaskSendSubscribe({ requestId, taskStore: inMemoryTaskStore, agentId, taskId });
+        return result;
+
       case 'tasks/get': {
         const result = await handleTaskGet({
           requestId,
