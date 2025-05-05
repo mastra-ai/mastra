@@ -72,7 +72,7 @@ describe('TokenLimiter', () => {
       estimatedTokens += testLimiter.countTokens(message as CoreMessage);
     }
 
-    return estimatedTokens;
+    return Number(estimatedTokens.toFixed(2));
   }
 
   function percentDifference(a: number, b: number) {
@@ -90,7 +90,7 @@ describe('TokenLimiter', () => {
     console.log(`Estimated ${estimate} tokens, used ${used} tokens.\n`, counts);
 
     // Check if within 2% margin
-    expect(percentDifference(estimate, used)).toBeLessThanOrEqual(4);
+    expect(percentDifference(estimate, used)).toBeLessThanOrEqual(2);
   }
 
   const calculatorTool = createTool({
