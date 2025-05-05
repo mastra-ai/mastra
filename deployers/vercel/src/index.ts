@@ -238,7 +238,7 @@ export const POST = handle(app);
   }
 
   async lint(entryFile: string, outputDirectory: string, toolsPaths: string[]): Promise<void> {
-    super.lint(entryFile, outputDirectory, toolsPaths);
+    await super.lint(entryFile, outputDirectory, toolsPaths);
 
     // Lint for vercel support
   }

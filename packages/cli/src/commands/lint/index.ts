@@ -79,11 +79,12 @@ export async function lint({ dir, root, tools }: { dir?: string; root?: string; 
 
     // Run deployer lint if all rules passed
     if (allRulesPassed) {
-      const fs = new FileService();
-      const mastraEntryFile = fs.getFirstExistingFile([join(mastraDir, 'index.ts'), join(mastraDir, 'index.js')]);
-
+      const fileService = new FileService();
+      const mastraEntryFile = fileService.getFirstExistingFile([
+        join(mastraDir, 'index.ts'),
+        join(mastraDir, 'index.js'),
+      ]);
       const platformDeployer = await getDeployer(mastraEntryFile, outputDirectory);
-
       if (!platformDeployer) {
         const deployer = new BuildBundler();
         await deployer.lint(mastraEntryFile, outputDirectory, discoveredTools);

@@ -4,6 +4,8 @@ import { Deployer, createChildProcessLogger } from '@mastra/deployer';
 import type { analyzeBundle } from '@mastra/deployer/analyze';
 import virtual from '@rollup/plugin-virtual';
 import { Cloudflare } from 'cloudflare';
+import { readJSON } from 'fs-extra/esm';
+import resolveFrom from 'resolve-from';
 
 interface CFRoute {
   pattern: string;
@@ -214,8 +216,21 @@ process.versions.node = '${process.versions.node}';
   }
 
   async lint(entryFile: string, outputDirectory: string, toolsPaths: string[]): Promise<void> {
-    super.lint(entryFile, outputDirectory, toolsPaths);
+    console.log({
+      pkgPath: resolveFrom(entryFile, 'package.json'),
+      entryFile,
+      outputDirectory,
+      toolsPaths,
+    });
+    await super.lint(entryFile, outputDirectory, toolsPaths);
+    const pkgPath = resolveFrom(entryFile, 'package.json');
+    const pkg = await readJSON(pkgPath);
 
-    // Lint for cloudflare support
+    if (pkg.dependencies['@mastra/libsql']) {
+      this.logger.error(
+        'Cloudflare Deployer does not support @mastra/libsql as a dependency. Please use Cloudflare D1 instead @mastra/cloudflare-d1',
+      );
+      process.exit(1);
+    }
   }
 }
