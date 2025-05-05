@@ -62,22 +62,30 @@
     "@mastra/voice-openai-realtime": "0.2.1",
     "@mastra/voice-playai": "0.1.15",
     "@mastra/voice-sarvam": "0.1.10",
-    "@mastra/voice-speechify": "0.1.15"
+    "@mastra/voice-speechify": "0.1.15",
+    "@mastra/couchbase": "0.0.1"
   },
   "changesets": [
     "brave-ghosts-shake",
+    "chatty-radios-type",
     "curvy-pens-clean",
     "dark-phones-sin",
     "eager-pots-punch",
     "every-pears-swim",
+    "few-mails-begin",
+    "fifty-fireants-vanish",
     "hot-bags-float",
     "huge-trains-film",
+    "icy-cups-yawn",
     "legal-zoos-float",
     "metal-owls-appear",
     "nine-schools-love",
+    "ninety-webs-win",
     "pretty-crabs-camp",
+    "real-cycles-move",
     "real-wings-carry",
     "ripe-chairs-dream",
+    "short-hounds-study",
     "tiny-jeans-travel",
     "violet-eyes-film"
   ]

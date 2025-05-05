@@ -1,5 +1,18 @@
 # @mastra/deployer-vercel
 
+## 0.1.21-alpha.5
+
+### Patch Changes
+
+- 8607972: Introduce Mastra lint cli command
+- Updated dependencies [3d2fb5c]
+- Updated dependencies [7eeb2bc]
+- Updated dependencies [8607972]
+- Updated dependencies [7eeb2bc]
+- Updated dependencies [fba031f]
+  - @mastra/core@0.9.2-alpha.5
+  - @mastra/deployer@0.3.2-alpha.5
+
 ## 0.1.21-alpha.4
 
 ### Patch Changes

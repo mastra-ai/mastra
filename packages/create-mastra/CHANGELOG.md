@@ -1,5 +1,12 @@
 # create-mastra
 
+## 0.3.1-alpha.4
+
+### Patch Changes
+
+- 8607972: Introduce Mastra lint cli command
+- fba031f: Show traces for vNext workflow
+
 ## 0.3.1-alpha.3
 
 ### Patch Changes
