@@ -176,7 +176,7 @@ export class CoreToolBuilder extends MastraBase {
         new AnthropicToolCompat(model),
       ]) {
         if (compat.shouldApply()) {
-          return { ...definition, ...compat.process(this.originalTool, model) };
+          return { ...definition, ...compat.process(this.originalTool) };
         }
       }
     }

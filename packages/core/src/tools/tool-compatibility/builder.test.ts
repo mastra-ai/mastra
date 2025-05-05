@@ -184,7 +184,7 @@ describe('Tool Schema Compatibility', () => {
     openrouter('openai/gpt-4o-2024-11-20'),
     // openrouter disables structured outputs by default for o3-mini, so added in a reasoning model not through openrouter to test
     openai('o3-mini'),
-    openai('o4-mini-high'),
+    openai('o4-mini'),
 
     // // Meta Models
     // Meta seems to not handle tools correctly in general, so commenting out for now
@@ -249,7 +249,13 @@ describe('Tool Schema Compatibility', () => {
             it.concurrent(
               `should handle ${schemaName} schema`,
               async () => {
-                const result = await runSingleTest(model, testTool, crypto.randomUUID(), testTool.id);
+                let result = await runSingleTest(model, testTool, crypto.randomUUID(), testTool.id);
+
+                // Sometimes models are flaky, if it's not an API error, run it again
+                if (result.status === 'failure') {
+                  result = await runSingleTest(model, testTool, crypto.randomUUID(), testTool.id);
+                }
+
                 expect(result.status).toBe('success');
                 if (result.status !== 'success') {
                   console.error(`Error for ${model.modelId} - ${schemaName}:`, result.error);

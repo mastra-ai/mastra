@@ -46,7 +46,7 @@ describe('ToolCompatibility.process tool description truncation', () => {
     // Patch zodToAISDKSchema to return empty constraints
     // @ts-ignore
     compat.zodToAISDKSchema = () => ({ schema: z.object({ foo: z.string() }), constraints: { foo: { minLength: 1 } } });
-    const result = compat.process(tool, openaiModel);
+    const result = compat.process(tool);
     expect(result.description!.length).toBeGreaterThan(tool.description.length);
   });
 
@@ -57,7 +57,7 @@ describe('ToolCompatibility.process tool description truncation', () => {
     const bigConstraints = { foo: { minLength: 1, maxLength: 1000, extra: 'x'.repeat(1000) } };
     // @ts-ignore
     compat.zodToAISDKSchema = () => ({ schema: z.object({ foo: z.string() }), constraints: bigConstraints });
-    const result = compat.process(tool, openaiModel);
+    const result = compat.process(tool);
     // Should be truncated to 1020 chars
     expect(result.description!.length).toBeLessThanOrEqual(OPENAI_TOOL_DESCRIPTION_MAX_LENGTH);
   });
@@ -68,7 +68,7 @@ describe('ToolCompatibility.process tool description truncation', () => {
     // Patch zodToAISDKSchema to return empty constraints
     // @ts-ignore
     compat.zodToAISDKSchema = () => ({ schema: z.object({ foo: z.string() }), constraints: { foo: { minLength: 1 } } });
-    const result = compat.process(tool, openaiModel);
+    const result = compat.process(tool);
     expect(result.description!).toBe(tool.description);
   });
 
@@ -78,7 +78,7 @@ describe('ToolCompatibility.process tool description truncation', () => {
     // Patch zodToAISDKSchema to return empty constraints
     // @ts-ignore
     compat.zodToAISDKSchema = () => ({ schema: z.object({ foo: z.string() }), constraints: {} });
-    const result = compat.process(tool, anthropicModel);
+    const result = compat.process(tool);
     expect(result.description!).toBe(tool.description);
   });
 });

@@ -353,10 +353,7 @@ export abstract class ToolCompatibility extends MastraBase {
     return result as ShapeValue<T>;
   }
 
-  public process(
-    tool: ToolToConvert,
-    model: MastraLanguageModel,
-  ): {
+  public process(tool: ToolToConvert): {
     description?: string;
     parameters: Schema;
   } {
@@ -370,7 +367,7 @@ export abstract class ToolCompatibility extends MastraBase {
 
     const { schema, constraints } = this.zodToAISDKSchema(tool.inputSchema);
 
-    const isOpenAI = model.provider.includes(`openai`) || model.modelId.includes(`openai`);
+    const isOpenAI = this.getModel().provider.includes(`openai`) || this.getModel().modelId.includes(`openai`);
 
     let description =
       (tool.description || '') + (Object.keys(constraints).length > 0 ? ' ' + `\n` + JSON.stringify(constraints) : '');
