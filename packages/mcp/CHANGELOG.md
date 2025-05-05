@@ -1,5 +1,86 @@
 # @mastra/mcp
 
+## 0.4.2-alpha.4
+
+### Patch Changes
+
+- Updated dependencies [ccef9f9]
+- Updated dependencies [51e6923]
+  - @mastra/core@0.9.2-alpha.4
+
+## 0.4.2-alpha.3
+
+### Patch Changes
+
+- Updated dependencies [967b41c]
+- Updated dependencies [4155f47]
+- Updated dependencies [17826a9]
+  - @mastra/core@0.9.2-alpha.3
+
+## 0.4.2-alpha.2
+
+### Patch Changes
+
+- 26738f4: Switched from a custom MCP tools schema deserializer to json-schema-to-zod - fixes an issue where MCP tool schemas didn't deserialize properly in Mastra playground. Also added support for testing tools with no input arguments in playground
+- Updated dependencies [26738f4]
+  - @mastra/core@0.9.2-alpha.2
+
+## 0.4.2-alpha.1
+
+### Patch Changes
+
+- 8bb9b4d: Deprecation warning was on the subclass, rather than the deprecated class. So the deprecation warning would show even if you used the new class.
+- Updated dependencies [b804723]
+  - @mastra/core@0.9.2-alpha.1
+
+## 0.4.2-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [0097d50]
+  - @mastra/core@0.9.2-alpha.0
+
+## 0.4.1
+
+### Patch Changes
+
+- 2526527: We are deprecating the MastraMCPClient class in favour of using MCPClient (formerly MCPConfiguration). MCPClient can handle 1+ MCP servers, whereas MastraMCPClient can only handle a single MCP server. Rather than having two different interfaces to use when using a single MCP vs multiple, we opted to nudge people towards using the interface that is more flexible.
+- ba1f4f3: Added Streamable HTTP MCP support to MCPConfiguration and MastraMCPClient
+- a2ccb71: improved mcp config cache
+- Updated dependencies [405b63d]
+- Updated dependencies [81fb7f6]
+- Updated dependencies [20275d4]
+- Updated dependencies [7d1892c]
+- Updated dependencies [a90a082]
+- Updated dependencies [2d17c73]
+- Updated dependencies [61e92f5]
+- Updated dependencies [35955b0]
+- Updated dependencies [6262bd5]
+- Updated dependencies [c1409ef]
+- Updated dependencies [3e7b69d]
+- Updated dependencies [e4943b8]
+- Updated dependencies [11d4485]
+- Updated dependencies [479f490]
+- Updated dependencies [c23a81c]
+- Updated dependencies [2d4001d]
+- Updated dependencies [c71013a]
+- Updated dependencies [1d3b1cd]
+  - @mastra/core@0.9.1
+
+## 0.4.1-alpha.9
+
+### Patch Changes
+
+- Updated dependencies [2d17c73]
+  - @mastra/core@0.9.1-alpha.8
+
+## 0.4.1-alpha.8
+
+### Patch Changes
+
+- Updated dependencies [1d3b1cd]
+  - @mastra/core@0.9.1-alpha.7
+
 ## 0.4.1-alpha.7
 
 ### Patch Changes

@@ -27,7 +27,7 @@ The inputs and outputs of steps that are connected together should match: the in
 
 Steps are run using an `execute` function that receives a context object with inputs from the previous step and/or resume data if the step is being resumed from a suspended state. The `execute` function should return a value that matches its outputSchema.
 
-Primitives such as `.then()`, `.parallel()` and `.branch()` describe the execution flow of workflows, and how tthe steps within them are connected. Running worksflows (whether standalone or as a step), their execution is dictated by their execution flow instead of an `execute` function. The final result of a workflow will always be the result of its last step, which should match the workflow's outputSchema.
+Primitives such as `.then()`, `.parallel()` and `.branch()` describe the execution flow of workflows, and how the steps within them are connected. Running workflows (whether standalone or as a step), their execution is dictated by their execution flow instead of an `execute` function. The final result of a workflow will always be the result of its last step, which should match the workflow's outputSchema.
 
 ## Creating Workflows
 
