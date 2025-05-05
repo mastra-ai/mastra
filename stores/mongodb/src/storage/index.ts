@@ -1,6 +1,6 @@
 import type { MetricResult, TestInfo } from '@mastra/core/eval';
 import type { MessageType, StorageThreadType } from '@mastra/core/memory';
-import type { EvalRow, StorageGetMessagesArg, TABLE_NAMES } from '@mastra/core/storage';
+import type { EvalRow, StorageGetMessagesArg, TABLE_NAMES, WorkflowRun } from '@mastra/core/storage';
 import {
   MastraStorage,
   TABLE_EVALS,
@@ -558,6 +558,56 @@ export class MongoDBStore extends MastraStorage {
       console.error('Error loading workflow snapshot:', error);
       throw error;
     }
+  }
+
+  async getWorkflowRunById({
+    runId,
+    workflowName,
+  }: {
+    runId: string;
+    workflowName?: string;
+  }): Promise<WorkflowRun | null> {
+    try {
+      const query: any = {};
+      if (runId) {
+        query['run_id'] = runId;
+      }
+
+      if (workflowName) {
+        query['workflow_name'] = workflowName;
+      }
+
+      const result = await this.db.collection(TABLE_WORKFLOW_SNAPSHOT).findOne(query);
+      if (!result) {
+        return null;
+      }
+
+      return this.parseWorkflowRun(result);
+    } catch (error) {
+      console.error('Error getting workflow run by ID:', error);
+      throw error;
+    }
+  }
+
+  private parseWorkflowRun(row: any): WorkflowRun {
+    let parsedSnapshot: WorkflowRunState | string = row.snapshot as string;
+    if (typeof parsedSnapshot === 'string') {
+      try {
+        parsedSnapshot = JSON.parse(row.snapshot as string) as WorkflowRunState;
+      } catch (e) {
+        // If parsing fails, return the raw snapshot string
+        console.warn(`Failed to parse snapshot for workflow ${row.workflow_name}: ${e}`);
+      }
+    }
+
+    return {
+      workflowName: row.workflow_name,
+      runId: row.run_id,
+      snapshot: parsedSnapshot,
+      createdAt: row.createdAt,
+      updatedAt: row.updatedAt,
+      resourceId: row.resourceId,
+    };
   }
 
   private parseRow(row: any): MessageType {
