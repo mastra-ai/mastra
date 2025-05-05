@@ -23,13 +23,13 @@
   "description": "",
   "devDependencies": {
     "@types/node": "^20.17.27",
-    "@types/pdf-parse": "^1.1.4",
+    "@types/pdf-parse": "^1.1.5",
     "mastra": "workspace:*",
-    "tsx": "^4.19.3"
+    "tsx": "^4.19.4"
   },
   "dependencies": {
     "@ai-sdk/anthropic": "^1.1.15",
-    "@inquirer/prompts": "^7.3.3",
+    "@inquirer/prompts": "^7.5.0",
     "@mastra/core": "workspace:*",
     "@mastra/github": "workspace:*",
     "@mastra/libsql": "workspace:*",
@@ -41,17 +41,17 @@
     "chalk": "^5.4.1",
     "cli-table3": "^0.6.5",
     "commander": "^12.1.0",
-    "dotenv": "^16.4.7",
-    "drizzle-kit": "^0.30.5",
+    "dotenv": "^16.5.0",
+    "drizzle-kit": "^0.31.1",
     "execa": "^9.5.2",
-    "luxon": "^3.5.0",
+    "luxon": "^3.6.1",
     "node-ical": "^0.20.1",
     "node-screenshots": "^0.2.1",
     "pdf-parse": "^1.1.1",
-    "playwright": "^1.51.0",
-    "playwright-core": "^1.51.0",
+    "playwright": "^1.52.0",
+    "playwright-core": "^1.52.0",
     "sqlite3": "^5.1.7",
     "typescript": "^5.8.2",
-    "zod": "^3.24.2"
+    "zod": "^3.24.4"
   }
 }
