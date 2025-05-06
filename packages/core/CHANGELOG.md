@@ -1,5 +1,15 @@
 # @mastra/core
 
+## 0.9.2-alpha.5
+
+### Patch Changes
+
+- 3d2fb5c: Fix commonjs import for vnext workflows
+- 7eeb2bc: Add Memory default storage breaking change warning
+- 8607972: Introduce Mastra lint cli command
+- 7eeb2bc: Added explicit storage to memory in create-mastra so new projects don't see breaking change warnings
+- fba031f: Show traces for vNext workflow
+
 ## 0.9.2-alpha.4
 
 ### Patch Changes

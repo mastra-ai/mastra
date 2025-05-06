@@ -75,6 +75,10 @@ const renovateConfig = {
       enabled: false,
     },
     {
+      matchDatasources: ['npm'],
+      minimumReleaseAge: '3 days',
+    },
+    {
       groupName: 'examples',
       commitMessageTopic: 'examples',
       groupSlug: 'examples-minor',
@@ -140,6 +144,16 @@ const renovateConfig = {
       matchPackageNames: ['vitest'],
       enabled: true,
     },
+    {
+      groupName: 'Schema',
+      commitMessageTopic: 'Schema',
+      matchFileNames: ['+(package.json)', '**/package.json'],
+      matchPackageNames: ['zod', 'json-schema', 'zod-to-json-schema'],
+      matchUpdateTypes: ['major', 'minor', 'patch'],
+      matchDepTypes: ['dependencies', 'devDependencies'],
+      dependencyDashboardApproval: false,
+      enabled: true,
+    },
   ],
 };
 
@@ -153,6 +167,9 @@ const ignorePackages = [
   'vitest',
   '@types/node',
   'dotenv',
+  'zod',
+  'json-schema',
+  'zod-to-json-schema',
 ];
 
 for (const pkg of listOfPackages) {

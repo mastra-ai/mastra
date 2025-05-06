@@ -1,4 +1,6 @@
 import type EventEmitter from 'events';
+import { context as otlpContext, trace } from '@opentelemetry/api';
+import type { Span } from '@opentelemetry/api';
 import type { RuntimeContext } from '../../di';
 import type { ExecutionGraph } from './execution-engine';
 import { ExecutionEngine } from './execution-engine';
@@ -13,6 +15,7 @@ type ExecutionContext = {
     attempts: number;
     delay: number;
   };
+  executionSpan: Span;
 };
 
 function fmtReturnValue<TOutput>(
@@ -80,6 +83,10 @@ export class DefaultExecutionEngine extends ExecutionEngine {
       throw new Error('Workflow must have at least one step');
     }
 
+    const executionSpan = this.mastra?.getTelemetry()?.tracer.startSpan(`workflow.${workflowId}.execute`, {
+      attributes: { componentName: workflowId, runId },
+    });
+
     await this.mastra?.getStorage()?.init();
 
     let startIdx = 0;
@@ -104,6 +111,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
             executionPath: [i],
             suspendedPaths: {},
             retryConfig: { attempts, delay },
+            executionSpan: executionSpan as Span,
           },
           emitter: params.emitter,
           runtimeContext: params.runtimeContext,
@@ -123,6 +131,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
               eventTimestamp: Date.now(),
             });
           }
+          executionSpan?.end();
           return fmtReturnValue(stepResults, lastOutput);
         }
       } catch (e) {
@@ -142,6 +151,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
           });
         }
 
+        executionSpan?.end();
         return fmtReturnValue(stepResults, lastOutput, e as Error);
       }
     }
@@ -159,6 +169,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
       eventTimestamp: Date.now(),
     });
 
+    executionSpan?.end();
     return fmtReturnValue(stepResults, lastOutput);
   }
 
@@ -192,6 +203,8 @@ export class DefaultExecutionEngine extends ExecutionEngine {
   }
 
   async executeStep({
+    workflowId,
+    runId,
     step,
     stepResults,
     executionContext,
@@ -200,6 +213,8 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     emitter,
     runtimeContext,
   }: {
+    workflowId: string;
+    runId: string;
     step: NewStep<string, any, any>;
     stepResults: Record<string, StepResult<any>>;
     executionContext: ExecutionContext;
@@ -211,6 +226,28 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     emitter: EventEmitter;
     runtimeContext: RuntimeContext;
   }): Promise<StepResult<any>> {
+    const _runStep = (step: NewStep<any, any, any, any>, spanName: string, attributes?: Record<string, string>) => {
+      return async (data: any) => {
+        const telemetry = this.mastra?.getTelemetry();
+        const span = executionContext.executionSpan;
+        if (!telemetry || !span) {
+          return step.execute(data);
+        }
+
+        return otlpContext.with(trace.setSpan(otlpContext.active(), span), async () => {
+          return telemetry.traceMethod(step.execute.bind(step), {
+            spanName,
+            attributes,
+          })(data);
+        });
+      };
+    };
+
+    const runStep = _runStep(step, `workflow.${workflowId}.step.${step.id}`, {
+      componentName: workflowId,
+      runId,
+    });
+
     let execResults: any;
 
     const retries = step.retries ?? executionContext.retryConfig.attempts ?? 0;
@@ -219,7 +256,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     for (let i = 0; i < retries + 1; i++) {
       try {
         let suspended: { payload: any } | undefined;
-        const result = await step.execute({
+        const result = await runStep({
           mastra: this.mastra!,
           runtimeContext,
           inputData: prevOutput,
@@ -302,6 +339,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
             executionPath: [...executionContext.executionPath, i],
             suspendedPaths: executionContext.suspendedPaths,
             retryConfig: executionContext.retryConfig,
+            executionSpan: executionContext.executionSpan,
           },
           emitter,
           runtimeContext,
@@ -409,6 +447,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
             executionPath: [...executionContext.executionPath, index],
             suspendedPaths: executionContext.suspendedPaths,
             retryConfig: executionContext.retryConfig,
+            executionSpan: executionContext.executionSpan,
           },
           emitter,
           runtimeContext,
@@ -439,6 +478,8 @@ export class DefaultExecutionEngine extends ExecutionEngine {
   }
 
   async executeLoop({
+    workflowId,
+    runId,
     entry,
     prevOutput,
     stepResults,
@@ -474,6 +515,8 @@ export class DefaultExecutionEngine extends ExecutionEngine {
 
     do {
       result = await this.executeStep({
+        workflowId,
+        runId,
         step,
         stepResults,
         executionContext,
@@ -509,6 +552,8 @@ export class DefaultExecutionEngine extends ExecutionEngine {
   }
 
   async executeForeach({
+    workflowId,
+    runId,
     entry,
     prevOutput,
     stepResults,
@@ -548,6 +593,8 @@ export class DefaultExecutionEngine extends ExecutionEngine {
       const itemsResults = await Promise.all(
         items.map((item: any) => {
           return this.executeStep({
+            workflowId,
+            runId,
             step,
             stepResults,
             executionContext,
@@ -627,6 +674,8 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     if (entry.type === 'step') {
       const { step } = entry;
       execResults = await this.executeStep({
+        workflowId,
+        runId,
         step,
         stepResults,
         executionContext,
@@ -648,6 +697,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
           executionPath: [...executionContext.executionPath, idx!],
           suspendedPaths: executionContext.suspendedPaths,
           retryConfig: executionContext.retryConfig,
+          executionSpan: executionContext.executionSpan,
         },
         emitter,
         runtimeContext,

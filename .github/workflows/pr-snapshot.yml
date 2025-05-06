@@ -39,7 +39,7 @@ jobs:
       - name: Setup Node.js 20.x
         uses: actions/setup-node@v4
         with:
-          node-version: 20.x
+          node-version: 20.19.1
           cache: 'pnpm'
 
       - name: Install dependencies
@@ -93,4 +93,4 @@ jobs:
         run: pnpm changeset version --snapshot ${{ env.FINAL_TAG }}
 
       - name: Publish to npm
-        run: pnpm publish -r --no-git-checks --tag ${{ env.FINAL_TAG }}
+        run: pnpm publish -r --no-git-checks --tag ${{ env.FINAL_TAG }} --access public

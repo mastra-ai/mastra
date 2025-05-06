@@ -2842,6 +2842,53 @@ describe('Workflow', () => {
       expect(runs[0]?.snapshot).toBeDefined();
       expect(runs[1]?.snapshot).toBeDefined();
     });
+
+    it('should get workflow run by id from storage', async () => {
+      const step1Action = vi.fn<any>().mockResolvedValue({ result: 'success1' });
+      const step2Action = vi.fn<any>().mockResolvedValue({ result: 'success2' });
+
+      const step1 = createStep({
+        id: 'step1',
+        execute: step1Action,
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+      });
+      const step2 = createStep({
+        id: 'step2',
+        execute: step2Action,
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+      });
+
+      const workflow = createWorkflow({ id: 'test-workflow', inputSchema: z.object({}), outputSchema: z.object({}) });
+      workflow.then(step1).then(step2).commit();
+
+      new Mastra({
+        vnext_workflows: {
+          'test-workflow': workflow,
+        },
+      });
+
+      // Create a few runs
+      const run1 = workflow.createRun();
+      await run1.start({ inputData: {} });
+
+      const run2 = workflow.createRun();
+      await run2.start({ inputData: {} });
+
+      const { runs, total } = await workflow.getWorkflowRuns();
+      expect(total).toBe(2);
+      expect(runs).toHaveLength(2);
+      expect(runs.map(r => r.runId)).toEqual(expect.arrayContaining([run1.runId, run2.runId]));
+      expect(runs[0]?.workflowName).toBe('test-workflow');
+      expect(runs[0]?.snapshot).toBeDefined();
+      expect(runs[1]?.snapshot).toBeDefined();
+
+      const run3 = await workflow.getWorkflowRunById(run1.runId);
+      expect(run3?.runId).toBe(run1.runId);
+      expect(run3?.workflowName).toBe('test-workflow');
+      expect(run3?.snapshot).toEqual(runs[0].snapshot);
+    });
   });
 
   describe('Accessing Mastra', () => {
