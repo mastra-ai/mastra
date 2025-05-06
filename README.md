@@ -1,4 +1,4 @@
-# Mastra
+# Mastra Repository
 
 [![npm version](https://badge.fury.io/js/@mastra%2Fcore.svg)](https://www.npmjs.com/package/@mastra/core)
 ![GitHub Repo stars](https://img.shields.io/github/stars/mastra-ai/mastra)
