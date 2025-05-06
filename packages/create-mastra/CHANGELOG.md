@@ -1,5 +1,21 @@
 # create-mastra
 
+## 0.3.1
+
+### Patch Changes
+
+- 144fa1b: lift up the traces fetching and allow to pass them down in the TracesTable. It allows passing down mastra client traces OR clickhouse traces
+- 33b84fd: fix showing sig digits in trace / span duration
+- 4155f47: Add parameters to filter workflow runs
+  Add fromDate and toDate to telemetry parameters
+- 8607972: Introduce Mastra lint cli command
+- 0097d50: Add serializedStepGraph to vNext workflow
+  Return serializedStepGraph from vNext workflow
+  Use serializedStepGraph in vNext workflow graph
+- 5b43dd0: revamp ui for threads
+- 2429c74: Add get workflow runs api to client-js
+- fba031f: Show traces for vNext workflow
+
 ## 0.3.1-alpha.5
 
 ### Patch Changes
