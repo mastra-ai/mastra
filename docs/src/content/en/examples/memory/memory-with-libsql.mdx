@@ -36,8 +36,7 @@ Then configure it in your memory setup:
 
 ```typescript {4,13}
 import { openai } from "@ai-sdk/openai";
-import { LibSQLStore } from "@mastra/libsql";
-import { LibSQLVector } from "@mastra/libsql";
+import { LibSQLStore, LibSQLVector } from "@mastra/libsql";
 import { fastembed } from "@mastra/fastembed";
 
 const customMemory = new Memory({
