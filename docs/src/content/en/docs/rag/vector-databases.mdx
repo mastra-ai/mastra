@@ -310,10 +310,13 @@ Each vector database enforces specific naming conventions for indexes and collec
   </Tabs.Tab>
   <Tabs.Tab>
     Index names must:
-    - Start with a letter or underscore
-    - Contain only letters, numbers, and underscores
-    - Example: `my_index_123` is valid
-    - Example: `my-index` is not valid (contains hyphen)
+    - Use only lowercase letters
+    - Not begin with underscores or hyphens
+    - Not contain spaces, commas
+    - Not contain special characters (e.g. `:`, `"`, `*`, `+`, `/`, `\`, `|`, `?`, `#`, `>`, `<`)
+    - Example: `my-index-123` is valid
+    - Example: `My_Index` is not valid (contains uppercase letters)
+    - Example: `_myindex` is not valid (begins with underscore)
   </Tabs.Tab>
 </Tabs>
 
