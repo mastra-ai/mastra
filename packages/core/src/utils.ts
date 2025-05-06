@@ -206,7 +206,7 @@ export interface ToolOptions {
   runId?: string;
   threadId?: string;
   resourceId?: string;
-  logger: Logger;
+  logger?: Logger;
   description?: string;
   mastra?: (Mastra & MastraPrimitives) | MastraPrimitives;
   runtimeContext: RuntimeContext;

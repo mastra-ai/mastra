@@ -52,12 +52,12 @@ export class CoreToolBuilder extends MastraBase {
   }
 
   // Helper to get parameters based on tool type
-  private getParameters = (): Schema => {
+  private getParameters = () => {
     if (isVercelTool(this.originalTool)) {
-      return zodSchema(convertVercelToolParameters(this.originalTool));
+      return convertVercelToolParameters(this.originalTool);
     }
 
-    return zodSchema(convertInputSchema(this.originalTool));
+    return convertInputSchema(this.originalTool);
   };
 
   // For provider-defined tools, we need to include all required properties
@@ -139,10 +139,10 @@ export class CoreToolBuilder extends MastraBase {
 
     return async (args: any, execOptions?: any) => {
       try {
-        this.logger.debug(start, { ...rest, args });
+        (options.logger || this.logger).debug(start, { ...rest, args });
         return await execFunction(args, execOptions);
       } catch (err) {
-        this.logger.error(error, { ...rest, error: err, args });
+        (options.logger || this.logger).error(error, { ...rest, error: err, args });
         throw err;
       }
     };
