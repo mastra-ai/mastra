@@ -17,9 +17,7 @@ export class GoogleToolCompat extends ToolCompatibility {
     return this.getModel().provider.includes('google') || this.getModel().modelId.includes('google');
   }
 
-  processZodType<T extends z.AnyZodObject>(
-    value: z.ZodTypeAny
-  ): ShapeValue<T> {
+  processZodType<T extends z.AnyZodObject>(value: z.ZodTypeAny): ShapeValue<T> {
     switch (value._def.typeName) {
       case 'ZodObject': {
         return this.defaultZodObjectHandler(value);
@@ -41,8 +39,7 @@ export class GoogleToolCompat extends ToolCompatibility {
         return this.defaultZodNumberHandler(value);
       }
       default:
-        this.defaultUnsupportedZodTypeHandler(value)
-        return value as ShapeValue<T>;
+        return this.defaultUnsupportedZodTypeHandler(value);
     }
   }
 }

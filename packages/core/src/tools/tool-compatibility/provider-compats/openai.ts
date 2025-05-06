@@ -24,9 +24,7 @@ export class OpenAIToolCompat extends ToolCompatibility {
     return false;
   }
 
-  processZodType<T extends z.AnyZodObject>(
-    value: z.ZodTypeAny
-  ): ShapeValue<T> {
+  processZodType<T extends z.AnyZodObject>(value: z.ZodTypeAny): ShapeValue<T> {
     switch (value._def.typeName) {
       case 'ZodObject': {
         return this.defaultZodObjectHandler(value);
@@ -47,8 +45,7 @@ export class OpenAIToolCompat extends ToolCompatibility {
         return this.defaultZodStringHandler(value, checks);
       }
       default:
-          this.defaultUnsupportedZodTypeHandler(value, ['ZodNever', 'ZodUndefined', 'ZodTuple'])
-        return value as ShapeValue<T>;
+        return this.defaultUnsupportedZodTypeHandler(value, ['ZodNever', 'ZodUndefined', 'ZodTuple']);
     }
   }
 }

@@ -69,8 +69,7 @@ export class OpenAIReasoningToolCompat extends ToolCompatibility {
         return this.defaultZodDateHandler(value);
       }
       default:
-        this.defaultUnsupportedZodTypeHandler(value);
-        return value as ShapeValue<T>;
+        return this.defaultUnsupportedZodTypeHandler(value);
     }
   }
 }

@@ -41,11 +41,10 @@ export class AnthropicToolCompat extends ToolCompatibility {
       }
       default:
         if (this.getModel().modelId.includes('claude-3.7')) {
-          this.defaultUnsupportedZodTypeHandler(value, ['ZodNever', 'ZodTuple', 'ZodUndefined'])
+          return this.defaultUnsupportedZodTypeHandler(value, ['ZodNever', 'ZodTuple', 'ZodUndefined']);
         } else {
-          this.defaultUnsupportedZodTypeHandler(value, ['ZodNever', 'ZodUndefined'])
+          return this.defaultUnsupportedZodTypeHandler(value, ['ZodNever', 'ZodUndefined']);
         }
-        return value as ShapeValue<T>;
     }
   }
 }
