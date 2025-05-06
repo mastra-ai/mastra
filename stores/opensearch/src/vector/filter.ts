@@ -109,6 +109,9 @@ export class OpenSearchFilterTranslator extends BaseFilterTranslator {
     return { match_all: {} };
   }
 
+  /**
+   * Handles translation of nested objects with dot notation fields
+   */
   private translateNestedObject(field: string, value: Record<string, any>): any {
     const conditions = Object.entries(value).map(([subField, subValue]) => {
       const fullField = `${field}.${subField}`;
@@ -252,51 +255,58 @@ export class OpenSearchFilterTranslator extends BaseFilterTranslator {
 
     // Handle regex operators
     if (this.isRegexOperator(operator)) {
-      // Convert value to string if it's not already
-      const regexValue = typeof value === 'string' ? value : value.toString();
-
-      // Check for problematic patterns (like newlines, etc.)
-      if (regexValue.includes('\n') || regexValue.includes('\r')) {
-        // For patterns with newlines, use a simpler approach
-        // OpenSearch doesn't support dotall flag like JavaScript
-        return { match: { [field]: value } };
-      }
-
-      // Process regex pattern to handle anchors properly
-      let processedRegex = regexValue;
-      const hasStartAnchor = regexValue.startsWith('^');
-      const hasEndAnchor = regexValue.endsWith('$');
-
-      // If we have anchors, use wildcard query for better handling
-      if (hasStartAnchor || hasEndAnchor) {
-        // Remove anchors
-        if (hasStartAnchor) {
-          processedRegex = processedRegex.substring(1);
-        }
-        if (hasEndAnchor) {
-          processedRegex = processedRegex.substring(0, processedRegex.length - 1);
-        }
-
-        // Create wildcard pattern
-        let wildcardPattern = processedRegex;
-        if (!hasStartAnchor) {
-          wildcardPattern = '*' + wildcardPattern;
-        }
-        if (!hasEndAnchor) {
-          wildcardPattern = wildcardPattern + '*';
-        }
-
-        return { wildcard: { [field]: wildcardPattern } };
-      }
-
-      // Use regexp for other regex patterns
-      // Escape any backslashes to prevent OpenSearch from misinterpreting them
-      const escapedRegex = regexValue.replace(/\\/g, '\\\\');
-      return { regexp: { [field]: escapedRegex } };
+      return this.translateRegexOperator(field, value);
     }
 
     const fieldWithKeyword = this.addKeywordIfNeeded(field, value);
     return { term: { [fieldWithKeyword]: value } };
+  }
+
+  /**
+   * Translates regex patterns to OpenSearch query syntax
+   */
+  private translateRegexOperator(field: string, value: any): any {
+    // Convert value to string if it's not already
+    const regexValue = typeof value === 'string' ? value : value.toString();
+
+    // Check for problematic patterns (like newlines, etc.)
+    if (regexValue.includes('\n') || regexValue.includes('\r')) {
+      // For patterns with newlines, use a simpler approach
+      // OpenSearch doesn't support dotall flag like JavaScript
+      return { match: { [field]: value } };
+    }
+
+    // Process regex pattern to handle anchors properly
+    let processedRegex = regexValue;
+    const hasStartAnchor = regexValue.startsWith('^');
+    const hasEndAnchor = regexValue.endsWith('$');
+
+    // If we have anchors, use wildcard query for better handling
+    if (hasStartAnchor || hasEndAnchor) {
+      // Remove anchors
+      if (hasStartAnchor) {
+        processedRegex = processedRegex.substring(1);
+      }
+      if (hasEndAnchor) {
+        processedRegex = processedRegex.substring(0, processedRegex.length - 1);
+      }
+
+      // Create wildcard pattern
+      let wildcardPattern = processedRegex;
+      if (!hasStartAnchor) {
+        wildcardPattern = '*' + wildcardPattern;
+      }
+      if (!hasEndAnchor) {
+        wildcardPattern = wildcardPattern + '*';
+      }
+
+      return { wildcard: { [field]: wildcardPattern } };
+    }
+
+    // Use regexp for other regex patterns
+    // Escape any backslashes to prevent OpenSearch from misinterpreting them
+    const escapedRegex = regexValue.replace(/\\/g, '\\\\');
+    return { regexp: { [field]: escapedRegex } };
   }
 
   private addKeywordIfNeeded(field: string, value: any): string {
@@ -311,6 +321,34 @@ export class OpenSearchFilterTranslator extends BaseFilterTranslator {
     return field;
   }
 
+  /**
+   * Helper method to handle special cases for the $not operator
+   */
+  private handleNotOperatorSpecialCases(value: any, field: string): any | null {
+    // For "not null", we need to use exists query
+    if (value === null) {
+      return { exists: { field } };
+    }
+
+    if (typeof value === 'object' && value !== null) {
+      // For "not {$eq: null}", we need to use exists query
+      if ('$eq' in value && value.$eq === null) {
+        return { exists: { field } };
+      }
+
+      // For "not {$ne: null}", we need to use must_not exists query
+      if ('$ne' in value && value.$ne === null) {
+        return {
+          bool: {
+            must_not: [{ exists: { field } }],
+          },
+        };
+      }
+    }
+
+    return null; // No special case applies
+  }
+
   private translateOperator(operator: QueryOperator, value: any, field?: string): any {
     // Check if this is a valid operator
     if (!this.isOperator(operator)) {
@@ -319,25 +357,9 @@ export class OpenSearchFilterTranslator extends BaseFilterTranslator {
 
     // Special case for $not with null or $eq: null
     if (operator === '$not' && field) {
-      if (value === null) {
-        // For "not null", we need to use exists query
-        return { exists: { field } };
-      }
-
-      if (typeof value === 'object' && value !== null) {
-        // For "not {$eq: null}", we need to use exists query
-        if ('$eq' in value && value.$eq === null) {
-          return { exists: { field } };
-        }
-
-        // For "not {$ne: null}", we need to use must_not exists query
-        if ('$ne' in value && value.$ne === null) {
-          return {
-            bool: {
-              must_not: [{ exists: { field } }],
-            },
-          };
-        }
+      const specialCaseResult = this.handleNotOperatorSpecialCases(value, field);
+      if (specialCaseResult) {
+        return specialCaseResult;
       }
     }
 
@@ -384,20 +406,18 @@ export class OpenSearchFilterTranslator extends BaseFilterTranslator {
     return value;
   }
 
+  /**
+   * Translates field conditions to OpenSearch query syntax
+   * Handles special cases like range queries and multiple operators
+   */
   private translateFieldConditions(field: string, conditions: Record<string, any>): any {
     // Special case: Optimize multiple numeric operators into a single range query
-    if (Object.keys(conditions).every(op => this.isNumericOperator(op)) && Object.keys(conditions).length > 0) {
-      // Create a range query directly from the conditions
-      const rangeParams = Object.fromEntries(
-        Object.entries(conditions).map(([op, val]) => [op.replace('$', ''), this.normalizeComparisonValue(val)]),
-      );
-
-      return { range: { [field]: rangeParams } };
+    if (this.canOptimizeToRangeQuery(conditions)) {
+      return this.createRangeQuery(field, conditions);
     }
 
     // Handle all other operators consistently
     const queryConditions: any[] = [];
-
     Object.entries(conditions).forEach(([operator, value]) => {
       if (this.isOperator(operator)) {
         queryConditions.push(this.translateOperator(operator as QueryOperator, value, field));
@@ -419,5 +439,23 @@ export class OpenSearchFilterTranslator extends BaseFilterTranslator {
         must: queryConditions,
       },
     };
+  }
+
+  /**
+   * Checks if conditions can be optimized to a range query
+   */
+  private canOptimizeToRangeQuery(conditions: Record<string, any>): boolean {
+    return Object.keys(conditions).every(op => this.isNumericOperator(op)) && Object.keys(conditions).length > 0;
+  }
+
+  /**
+   * Creates a range query from numeric operators
+   */
+  private createRangeQuery(field: string, conditions: Record<string, any>): any {
+    const rangeParams = Object.fromEntries(
+      Object.entries(conditions).map(([op, val]) => [op.replace('$', ''), this.normalizeComparisonValue(val)]),
+    );
+
+    return { range: { [field]: rangeParams } };
   }
 }
