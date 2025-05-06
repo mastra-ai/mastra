@@ -7,8 +7,8 @@ This example demonstrates how to use Mastra's memory system with LibSQL, which i
 Initializing memory with no settings will use LibSQL as the storage and vector database.
 
 ```typescript copy showLineNumbers
-import { Memory } from '@mastra/memory';
-import { Agent } from '@mastra/core/agent';
+import { Memory } from "@mastra/memory";
+import { Agent } from "@mastra/core/agent";
 
 // Initialize memory with LibSQL defaults
 const memory = new Memory();
@@ -17,7 +17,7 @@ const memoryAgent = new Agent({
   name: "Memory Agent",
   instructions:
     "You are an AI agent with the ability to automatically recall memories from previous interactions.",
-  model: openai('gpt-4o-mini'),
+  model: openai("gpt-4o-mini"),
   memory,
 });
 ```
@@ -26,20 +26,27 @@ const memoryAgent = new Agent({
 
 If you need more control, you can explicitly configure the storage, vector database, and embedder. If you omit either `storage` or `vector`, LibSQL will be used as the default for the omitted option. This lets you use a different provider for just storage or just vector search if needed.
 
-```typescript
-import { openai } from '@ai-sdk/openai';
-import { LibSQLStore } from "@mastra/core/storage/libsql";
-import { LibSQLVector } from "@mastra/core/vector/libsql";
+To use FastEmbed (a local embedding model) as the embedder, first install the package:
+
+```bash npm2yarn copy
+npm install @mastra/fastembed
+```
+
+Then configure it in your memory setup:
+
+```typescript {4,13}
+import { openai } from "@ai-sdk/openai";
+import { LibSQLStore, LibSQLVector } from "@mastra/libsql";
+import { fastembed } from "@mastra/fastembed";
 
 const customMemory = new Memory({
   storage: new LibSQLStore({
-    config: {
-      url: process.env.DATABASE_URL || "file:local.db",
-    },
+    url: process.env.DATABASE_URL || "file:local.db",
   }),
   vector: new LibSQLVector({
     connectionUrl: process.env.DATABASE_URL || "file:local.db",
   }),
+  embedder: fastembed,
   options: {
     lastMessages: 10,
     semanticRecall: {
@@ -53,7 +60,7 @@ const memoryAgent = new Agent({
   name: "Memory Agent",
   instructions:
     "You are an AI agent with the ability to automatically recall memories from previous interactions. You may have conversations that last hours, days, months, or years. If you don't know it already you should ask for the users name and some info about them.",
-  model: openai('gpt-4o-mini'),
+  model: openai("gpt-4o-mini"),
   memory: customMemory,
 });
 ```

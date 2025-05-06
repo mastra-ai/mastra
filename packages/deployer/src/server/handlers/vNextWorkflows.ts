@@ -202,9 +202,15 @@ export async function getVNextWorkflowRunsHandler(c: Context) {
   try {
     const mastra: Mastra = c.get('mastra');
     const workflowId = c.req.param('workflowId');
+    const { fromDate, toDate, limit, offset, resourceId } = c.req.query();
     const workflowRuns = await getOriginalGetVNextWorkflowRunsHandler({
       mastra,
       workflowId,
+      fromDate: fromDate ? new Date(fromDate) : undefined,
+      toDate: toDate ? new Date(toDate) : undefined,
+      limit: limit ? Number(limit) : undefined,
+      offset: offset ? Number(offset) : undefined,
+      resourceId,
     });
 
     return c.json(workflowRuns);

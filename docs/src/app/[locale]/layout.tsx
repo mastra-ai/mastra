@@ -78,8 +78,8 @@ export default async function RootLayout({
           <Toaster />
           <CookieConsent />
         </GTProvider>
+        <Analytics />
       </body>
-      <Analytics />
     </html>
   );
 }

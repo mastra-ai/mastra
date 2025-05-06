@@ -1,14 +1,14 @@
 # LibSQLを使用したメモリ
 
-この例では、デフォルトのストレージおよびベクターデータベースバックエンドであるLibSQLを使用して、Mastraのメモリシステムを使用する方法を示します。
+この例では、MastraのメモリシステムをLibSQLと共に使用する方法を示します。LibSQLはデフォルトのストレージおよびベクトルデータベースバックエンドです。
 
 ## クイックスタート
 
-設定なしでメモリを初期化すると、LibSQLがストレージおよびベクターデータベースとして使用されます。
+設定なしでメモリを初期化すると、LibSQLがストレージとベクトルデータベースとして使用されます。
 
 ```typescript copy showLineNumbers
-import { Memory } from '@mastra/memory';
-import { Agent } from '@mastra/core/agent';
+import { Memory } from "@mastra/memory";
+import { Agent } from "@mastra/core/agent";
 
 // Initialize memory with LibSQL defaults
 const memory = new Memory();
@@ -17,29 +17,36 @@ const memoryAgent = new Agent({
   name: "Memory Agent",
   instructions:
     "You are an AI agent with the ability to automatically recall memories from previous interactions.",
-  model: openai('gpt-4o-mini'),
+  model: openai("gpt-4o-mini"),
   memory,
 });
 ```
 
 ## カスタム設定
 
-より詳細な制御が必要な場合は、ストレージ、ベクターデータベース、およびエンベッダーを明示的に設定できます。`storage` または `vector` のいずれかを省略した場合、LibSQL が省略されたオプションのデフォルトとして使用されます。これにより、必要に応じてストレージまたはベクター検索のいずれかに異なるプロバイダーを使用することができます。
+より詳細な制御が必要な場合は、ストレージ、ベクトルデータベース、エンベッダーを明示的に設定できます。`storage`または`vector`のいずれかを省略した場合、省略されたオプションにはデフォルトでLibSQLが使用されます。これにより、必要に応じてストレージまたはベクトル検索のみに異なるプロバイダーを使用することができます。
 
-```typescript
-import { openai } from '@ai-sdk/openai';
-import { LibSQLStore } from "@mastra/core/storage/libsql";
-import { LibSQLVector } from "@mastra/core/vector/libsql";
+FastEmbed（ローカルの埋め込みモデル）をエンベッダーとして使用するには、まずパッケージをインストールします：
+
+```bash npm2yarn copy
+npm install @mastra/fastembed
+```
+
+次に、メモリ設定で構成します：
+
+```typescript {4,13}
+import { openai } from "@ai-sdk/openai";
+import { LibSQLStore, LibSQLVector } from "@mastra/libsql";
+import { fastembed } from "@mastra/fastembed";
 
 const customMemory = new Memory({
   storage: new LibSQLStore({
-    config: {
-      url: process.env.DATABASE_URL || "file:local.db",
-    },
+    url: process.env.DATABASE_URL || "file:local.db",
   }),
   vector: new LibSQLVector({
     connectionUrl: process.env.DATABASE_URL || "file:local.db",
   }),
+  embedder: fastembed,
   options: {
     lastMessages: 10,
     semanticRecall: {
@@ -52,8 +59,8 @@ const customMemory = new Memory({
 const memoryAgent = new Agent({
   name: "Memory Agent",
   instructions:
-    "あなたは以前のやり取りから記憶を自動的に呼び出す能力を持つAIエージェントです。会話は数時間、数日、数ヶ月、または数年続くことがあります。まだ知らない場合は、ユーザーの名前といくつかの情報を尋ねるべきです。",
-  model: openai('gpt-4o-mini'),
+    "You are an AI agent with the ability to automatically recall memories from previous interactions. You may have conversations that last hours, days, months, or years. If you don't know it already you should ask for the users name and some info about them.",
+  model: openai("gpt-4o-mini"),
   memory: customMemory,
 });
 ```
@@ -103,8 +110,8 @@ const response3 = await memoryAgent.stream("What did we discuss earlier?", {
 
 この例は以下を示しています：
 
-1. ベクトル検索機能を備えたLibSQLストレージの設定
+1. ベクトル検索機能を備えたLibSQLストレージのセットアップ
 2. メッセージ履歴とセマンティック検索のためのメモリオプションの設定
-3. メモリ統合を備えたエージェントの作成
-4. 会話履歴で関連するメッセージを見つけるためのセマンティック検索の使用
+3. メモリ統合機能を持つエージェントの作成
+4. 会話履歴から関連するメッセージを見つけるためのセマンティック検索の使用
 5. `messageRange`を使用して一致したメッセージの周囲のコンテキストを含める

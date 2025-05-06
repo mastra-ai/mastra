@@ -1,18 +1,26 @@
 # Agents API
 
-Agents APIは、Mastra AIエージェントと対話するためのメソッドを提供し、応答の生成、インタラクションのストリーミング、エージェントツールの管理を含みます。
+Agents APIは、Mastra AIエージェントと対話するためのメソッドを提供し、レスポンスの生成、ストリーミング対話、エージェントツールの管理などが含まれます。
 
-## すべてのエージェントを取得する
+## Mastraクライアントの初期化
 
-利用可能なすべてのエージェントのリストを取得します:
+```typescript
+import { MastraClient } from "@mastra/client-js";
+
+const client = new MastraClient();
+```
+
+## すべてのエージェントの取得
+
+利用可能なすべてのエージェントのリストを取得します：
 
 ```typescript
 const agents = await client.getAgents();
 ```
 
-## 特定のエージェントを操作する
+## 特定のエージェントの操作
 
-特定のエージェントのインスタンスを取得します:
+特定のエージェントのインスタンスを取得する：
 
 ```typescript
 const agent = client.getAgent("agent-id");
@@ -20,47 +28,48 @@ const agent = client.getAgent("agent-id");
 
 ## エージェントメソッド
 
-### エージェントの詳細を取得
+### エージェント詳細の取得
 
-エージェントの詳細情報を取得します:
+エージェントに関する詳細情報を取得します：
 
 ```typescript
 const details = await agent.details();
 ```
 
-### 応答を生成
+### レスポンスの生成
 
-エージェントからの応答を生成します:
+エージェントからレスポンスを生成します：
 
 ```typescript
 const response = await agent.generate({
   messages: [
     {
       role: "user",
-      content: "こんにちは、お元気ですか？",
+      content: "Hello, how are you?",
     },
   ],
-  threadId: "thread-1", // オプション: 会話コンテキストのスレッドID
-  resourceid: "resource-1", // オプション: リソースID
-  output: {}, // オプション: 出力設定
+  threadId: "thread-1", // Optional: Thread ID for conversation context
+  resourceid: "resource-1", // Optional: Resource ID
+  output: {}, // Optional: Output configuration
 });
 ```
 
-### 応答をストリーム
+### レスポンスのストリーミング
 
-リアルタイムの対話のためにエージェントからの応答をストリームします:
+リアルタイムのやり取りのためにエージェントからのレスポンスをストリーミングします：
+
 
 ```typescript
 const response = await agent.stream({
   messages: [
     {
       role: "user",
-      content: "物語を話して",
+      content: "Tell me a story",
     },
   ],
 });
 
-// processDataStreamユーティリティでデータストリームを処理
+// Process data stream with the processDataStream util
  response.processDataStream({
       onTextPart: (text) => {
         process.stdout.write(text);
@@ -76,7 +85,7 @@ const response = await agent.stream({
       },
   });
 
-// 応答ボディから直接読み取ることもできます
+// You can also read from response body directly
 const reader = response.body.getReader();
 while (true) {
   const { done, value } = await reader.read();
@@ -85,22 +94,22 @@ while (true) {
 }
 ```
 
-### エージェントツールを取得
+### エージェントツールの取得
 
-エージェントが利用可能な特定のツールに関する情報を取得します:
+エージェントが利用できる特定のツールに関する情報を取得します：
 
 ```typescript
 const tool = await agent.getTool("tool-id");
 ```
 
-### エージェント評価を取得
+### エージェント評価の取得
 
-エージェントの評価結果を取得します:
+エージェントの評価結果を取得します：
 
 ```typescript
-// CI評価を取得
+// Get CI evaluations
 const evals = await agent.evals();
 
-// ライブ評価を取得
+// Get live evaluations
 const liveEvals = await agent.liveEvals();
 ```

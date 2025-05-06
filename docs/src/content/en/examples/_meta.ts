@@ -23,6 +23,9 @@ const meta = {
   voice: {
     title: "Voice",
   },
+  deployment: {
+    title: "Deployment",
+  },
 };
 
 export default meta;

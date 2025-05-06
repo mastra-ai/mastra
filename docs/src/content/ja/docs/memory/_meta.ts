@@ -4,5 +4,4 @@ const meta = {
   "working-memory": "作業記憶",
   "memory-processors": "メモリプロセッサ",
 };
-
 export default meta;

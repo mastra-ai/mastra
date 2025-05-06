@@ -4,5 +4,4 @@ const meta = {
   "otel-config": "OTelConfig",
   "create-logger": ".createLogger()",
 };
-
 export default meta;

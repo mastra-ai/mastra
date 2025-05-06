@@ -269,16 +269,15 @@ myWorkflow
   .branch([
     [async ({ inputData }) => inputData.value > 50, highValueStep],
     [async ({ inputData }) => inputData.value <= 50, lowValueStep],
+    [async ({ inputData }) => inputData.value <= 10, extremelyLowValueStep],
   ])
   .then(finalStep)
   .commit();
 ```
 
-Branch conditions are evaluated in order, and the first matching condition's step is executed.
+Branch conditions are evaluated sequentially, and all steps with matching conditions are executed in parallel. If `inputData.value` is `5` then both `lowValueStep` and `extremelyLowValueStep` will be run.
 
-Conditional steps receive previous step results as input. Their outputs are passed into the next step input as an object where the key is the step id and the value is the step output, for example the above example outputs an object with two keys `highValueStep` and `lowValueStep` with the outputs of the respective workflows as values.
-
-When multiple conditions are true, all matching steps are executed in parallel.
+Each conditional step (like `highValueStep` or `lowValueStep`) receives as input the output of the previous step (`initialStep` in this case). The output of each matching conditional step is collected. The next step after the branch (`finalStep`) receives an object containing the outputs of all the steps that were run in the branch. The keys of this object are the step IDs, and the values are the outputs of those steps (`{ lowValueStep: <output of lowValueStep>, extremelyLowValueStep: <output of extremelyLowValueStep> }`).
 
 #### Loops
 
