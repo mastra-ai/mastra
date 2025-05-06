@@ -31,12 +31,12 @@
     "@ai-sdk/react": "^1.2.1",
     "@mastra/client-js": "workspace:*",
     "@mastra/core": "workspace:*",
+    "@mastra/fastembed": "workspace:*",
     "@mastra/memory": "workspace:*",
     "@mastra/pg": "workspace:*",
     "@mastra/upstash": "workspace:*",
     "dotenv": "^16.4.7",
-    "zod": "^3.24.2",
-    "@mastra/fastembed": "workspace:*"
+    "zod": "^3.24.2"
   },
   "devDependencies": {
     "@faker-js/faker": "^9.6.0",
