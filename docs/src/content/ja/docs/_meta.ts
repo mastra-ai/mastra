@@ -1,45 +1,20 @@
 const meta = {
   index: "はじめに",
-  "getting-started": {
-    title: "使い方",
-  },
-  frameworks: {
-    title: "フレームワーク",
-  },
-  agents: {
-    title: "エージェント",
-  },
-  memory: {
-    title: "メモリ",
-  },
-  workflows: {
-    title: "ワークフロー",
-  },
-  rag: {
-    title: "RAG",
-  },
-  "local-dev": {
-    title: "ローカル開発",
-  },
-  deployment: {
-    title: "デプロイメント",
-  },
-  "mastra-cloud": {
-    title: "Mastra Cloud",
-  },
-  observability: {
-    title: "可観測性",
-  },
-  evals: {
-    title: "評価",
-  },
-  storage: {
-    title: "ストレージ",
-  },
-  voice: {
-    title: "音声",
-  },
-  integrations: "インテグレーション",
+  "getting-started": { title: "使い方" },
+  agents: { title: "エージェント" },
+  "tools-mcp": { title: "ツールとMCP", theme: { collapsed: true } },
+  memory: { title: "メモリ", theme: { collapsed: true } },
+  workflows: { title: "ワークフロー", theme: { collapsed: true } },
+  "workflows-vnext": { title: "ワークフロー (vNext)" },
+  rag: { title: "RAG" },
+  "local-dev": { title: "ローカル開発" },
+  deployment: { title: "デプロイメント" },
+  "mastra-cloud": { title: "Mastra Cloud" },
+  observability: { title: "可観測性" },
+  evals: { title: "評価" },
+  frameworks: { title: "フレームワーク" },
+  storage: { title: "ストレージ" },
+  voice: { title: "音声" },
   community: "コミュニティ",
 };
 export default meta;

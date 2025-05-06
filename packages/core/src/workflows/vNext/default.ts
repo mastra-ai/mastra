@@ -263,6 +263,10 @@ export class DefaultExecutionEngine extends ExecutionEngine {
           resumeData: resume?.steps[0] === step.id ? resume?.resumePayload : undefined,
           getInitData: () => stepResults?.input as any,
           getStepResult: (step: any) => {
+            if (!step?.id) {
+              return null;
+            }
+
             const result = stepResults[step.id];
             if (result?.status === 'success') {
               return result.output;

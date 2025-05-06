@@ -1,0 +1,104 @@
+---
+title: "リファレンス: createTool() | ツール | Mastra ドキュメント"
+description: MastraのcreateTool関数のドキュメント。エージェント用のカスタムツールを定義するために使用されます。
+---
+
+# createTool()
+
+`createTool()`関数は、Mastraエージェントが実行できるカスタムツールを定義するために使用されます。ツールはエージェントの機能を拡張し、外部システムとの対話、計算の実行、または特定のデータへのアクセスを可能にします。
+
+## 基本的な使用方法
+
+天気情報を取得するツールを作成する基本的な例を以下に示します：
+
+```typescript filename="src/mastra/tools/weatherInfo.ts" copy
+import { createTool } from "@mastra/core/tools";
+import { z } from "zod";
+
+export const weatherInfo = createTool({
+  id: "Get Weather Information",
+  inputSchema: z.object({
+    city: z.string(),
+  }),
+  description: `Fetches the current weather information for a given city`,
+  execute: async ({ context: { city } }) => {
+    // Tool logic here (e.g., API call)
+    console.log("Using tool to fetch weather information for", city);
+    return { temperature: 20, conditions: "Sunny" }; // Example return
+  },
+});
+```
+
+## パラメータ
+
+`createTool()`関数は以下のパラメータを持つオブジェクトを受け取ります：
+
+<PropertiesTable
+  content={[
+    {
+      name: "id",
+      type: "string",
+      description: "ツールの一意の識別子。",
+      isOptional: false,
+    },
+    {
+      name: "description",
+      type: "string",
+      description:
+        "ツールの機能に関する説明。エージェントがいつこのツールを使用するかを判断するために使用されます。",
+      isOptional: false,
+    },
+    {
+      name: "inputSchema",
+      type: "Zod schema",
+      description:
+        "ツールの`execute`関数に対する予想される入力パラメータを定義するZodスキーマ。",
+      isOptional: true,
+    },
+    {
+      name: "outputSchema",
+      type: "Zod schema",
+      description:
+        "ツールの`execute`関数の予想される出力構造を定義するZodスキーマ。",
+      isOptional: true,
+    },
+    {
+      name: "execute",
+      type: "function",
+      description:
+        "ツールのロジックを含む関数。`context`（`inputSchema`に基づいて解析された入力）、`runtimeContext`、および`abortSignal`を含むオブジェクトを受け取ります。",
+      isOptional: false,
+    },
+  ]}
+/>
+
+## 戻り値
+
+`createTool()`関数は`Tool`オブジェクトを返します。
+
+<PropertiesTable
+  content={[
+    {
+      name: "Tool",
+      type: "object",
+      description:
+        "定義されたツールを表すオブジェクトで、エージェントに追加する準備ができています。",
+    },
+  ]}
+/>
+
+## ツールの詳細
+
+`createTool()`によって返される`Tool`オブジェクトには、以下の主要なプロパティがあります：
+
+- **ID**：`id`パラメータで提供される一意の識別子。
+- **説明**：`description`パラメータで提供される説明。
+- **パラメータ**：`inputSchema`から派生し、ツールが期待する入力の構造を定義します。
+- **実行関数**：`execute`パラメータで定義されたロジックで、エージェントがツールを使用することを決定したときに呼び出されます。
+
+## 関連項目
+
+- [ツールの概要](/docs/tools-mcp/overview)
+- [エージェントでのツールの使用](/docs/agents/using-tools-and-mcp)
+- [動的ツールコンテキスト](/docs/tools-mcp/dynamic-context)
+- [高度なツールの使用方法](/docs/tools-mcp/advanced-usage)

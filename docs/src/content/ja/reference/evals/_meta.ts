@@ -16,5 +16,4 @@ const meta = {
   "tone-consistency": "ToneConsistency",
   toxicity: "Toxicity",
 };
-
 export default meta;
