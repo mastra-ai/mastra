@@ -400,27 +400,147 @@ export class MilvusStorage extends MastraStorage {
   async getMessages({ threadId, selectBy, threadConfig }: StorageGetMessagesArg): Promise<MessageType[]> {
     try {
       await this.ensureCollectionLoaded(TABLE_MESSAGES);
+      let filter = `thread_id == "${threadId}"`;
 
+      // Apply selectBy filters if provided
+      if (selectBy) {
+        // Handle 'include' to fetch specific messages
+        if (selectBy.include && selectBy.include.length > 0) {
+          const includeIds = selectBy.include.map(item => item.id);
+          // Add additional query to include specific message IDs
+          // This will be combined with the threadId filter
+          filter = filter + ' OR ' + `id IN [${includeIds.map(id => `'${id}'`).join(',')}]`;
+
+          // Note: The surrounding messages (withPreviousMessages/withNextMessages) will be
+          // handled after we retrieve the results
+        }
+      }
+
+      // Fetch all records matching the query
       const response = await this.client.query({
         collection_name: TABLE_MESSAGES,
-        filter: `thread_id == "${threadId}"`,
+        filter,
       });
 
       if (response.status.error_code !== 'Success') {
         throw new Error('Error status code: ' + response.status.reason);
       }
 
-      return response.data.map(message => ({
+      const messages = response.data.map(message => ({
         id: message.id,
         threadId: message.thread_id,
         content: message.content,
         role: message.role,
         createdAt: new Date(Number(message.createdAt)),
         type: message.type,
+        resourceId: message.resourceId,
+      }));
+
+      // Sort the records chronologically
+      let records = messages.sort((a: MessageType, b: MessageType) => {
+        const dateA = new Date(a.createdAt).getTime();
+        const dateB = new Date(b.createdAt).getTime();
+        return dateA - dateB; // Ascending order
+      });
+
+      // Process the include.withPreviousMessages and include.withNextMessages if specified
+      if (selectBy?.include && selectBy.include.length > 0) {
+        records = this.processMessagesWithContext(records, selectBy.include);
+      }
+
+      // If we're fetching the last N messages, take only the last N after sorting
+      if (selectBy?.last !== undefined && selectBy.last !== false) {
+        records = records.slice(-selectBy.last);
+      }
+
+      return records.map(message => ({
+        id: message.id,
+        threadId: message.threadId,
+        content: message.content,
+        role: message.role,
+        createdAt: new Date(Number(message.createdAt)),
+        type: message.type,
+        resourceId: message.resourceId,
       })) as MessageType[];
     } catch (error) {
       throw new Error('Failed to get messages: ' + error);
     }
+  }
+
+  /**
+   * Processes messages to include context messages based on withPreviousMessages and withNextMessages
+   * @param records - The sorted array of records to process
+   * @param include - The array of include specifications with context parameters
+   * @returns The processed array with context messages included
+   */
+  private processMessagesWithContext(
+    records: any[],
+    include: { id: string; withPreviousMessages?: number; withNextMessages?: number }[],
+  ): any[] {
+    const messagesWithContext = include.filter(item => item.withPreviousMessages || item.withNextMessages);
+
+    if (messagesWithContext.length === 0) {
+      return records;
+    }
+
+    // Create a map of message id to index in the sorted array for quick lookup
+    const messageIndexMap = new Map<string, number>();
+    records.forEach((message, index) => {
+      messageIndexMap.set(message.id, index);
+    });
+
+    // Keep track of additional indices to include
+    const additionalIndices = new Set<number>();
+
+    for (const item of messagesWithContext) {
+      const messageIndex = messageIndexMap.get(item.id);
+      if (messageIndex !== undefined) {
+        // Add previous messages if requested
+        if (item.withPreviousMessages) {
+          const startIdx = Math.max(0, messageIndex - item.withPreviousMessages);
+          for (let i = startIdx; i < messageIndex; i++) {
+            additionalIndices.add(i);
+          }
+        }
+
+        // Add next messages if requested
+        if (item.withNextMessages) {
+          const endIdx = Math.min(records.length - 1, messageIndex + item.withNextMessages);
+          for (let i = messageIndex + 1; i <= endIdx; i++) {
+            additionalIndices.add(i);
+          }
+        }
+      }
+    }
+
+    // If we need to include additional messages, create a new set of records
+    if (additionalIndices.size === 0) {
+      return records;
+    }
+
+    // Get IDs of the records that matched the original query
+    const originalMatchIds = new Set(include.map(item => item.id));
+
+    // Create a set of all indices we need to include
+    const allIndices = new Set<number>();
+
+    // Add indices of originally matched messages
+    records.forEach((record, index) => {
+      if (originalMatchIds.has(record.id)) {
+        allIndices.add(index);
+      }
+    });
+
+    // Add the additional context message indices
+    additionalIndices.forEach(index => {
+      allIndices.add(index);
+    });
+
+    // Create a new filtered array with only the required messages
+    // while maintaining chronological order
+    return Array.from(allIndices)
+      .sort((a, b) => a - b)
+      .map(index => records[index]);
   }
 
   async saveMessages({ messages }: { messages: MessageType[] }): Promise<MessageType[]> {

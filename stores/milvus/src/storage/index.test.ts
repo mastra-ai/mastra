@@ -613,5 +613,67 @@ describe('MilvusStorage', () => {
       expect(messagesFromDB[0].type).toBe(messages[0].type);
       expect(messagesFromDB[0].createdAt).toEqual(messages[0].createdAt);
     });
+
+    it('should get the last N messages when selectBy.last is specified', async () => {
+      const threadId = '12333d567-e89b-12d3-a456-426614174000';
+      const messages: MessageType[] = generateMessageRecords(10, threadId);
+      await milvusStorage.saveMessages({ messages });
+
+      // Get the last 3 messages
+      const loadedMessages = await milvusStorage.getMessages({
+        threadId,
+        selectBy: { last: 3 },
+      });
+
+      expect(loadedMessages).not.toBeNull();
+      expect(loadedMessages.length).toEqual(3);
+
+      // Verify that we got the last 3 messages in chronological order
+      for (let i = 0; i < 3; i++) {
+        expect(loadedMessages[i].id.toString()).toEqual(messages[messages.length - 3 + i].id);
+        expect(loadedMessages[i].content).toEqual(messages[messages.length - 3 + i].content);
+      }
+    });
+
+    it('should get specific messages when selectBy.include is specified', async () => {
+      const threadId = '12333d567-e89b-12d3-a456-426614174000';
+      const messages: MessageType[] = generateMessageRecords(10, threadId);
+      await milvusStorage.saveMessages({ messages });
+
+      // Select specific messages by ID
+      const messageIds = [messages[2].id, messages[5].id, messages[8].id];
+      const loadedMessages = await milvusStorage.getMessages({
+        threadId,
+        selectBy: {
+          include: messageIds.map(id => ({ id })),
+        },
+      });
+
+      expect(loadedMessages).not.toBeNull();
+      // We should get either the specified messages or all thread messages
+      expect(loadedMessages.length).toBeGreaterThanOrEqual(3);
+
+      // Verify that the selected messages are included in the results
+      const loadedIds = loadedMessages.map(m => m.id.toString());
+      messageIds.forEach(id => {
+        expect(loadedIds).toContain(id);
+      });
+    });
+
+    it('should handle empty results when using selectBy filters', async () => {
+      const threadId = '12333d567-e89b-12d3-a456-426614174000';
+      // Create messages for a different thread ID
+      const messages: MessageType[] = generateMessageRecords(5, 'different-thread-id');
+      await milvusStorage.saveMessages({ messages });
+
+      // Try to get messages for our test threadId, which should return empty
+      const loadedMessages = await milvusStorage.getMessages({
+        threadId,
+        selectBy: { last: 3 },
+      });
+
+      expect(loadedMessages).not.toBeNull();
+      expect(loadedMessages.length).toEqual(0);
+    });
   });
 });
