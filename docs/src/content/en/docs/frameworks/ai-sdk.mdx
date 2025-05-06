@@ -157,9 +157,9 @@ For consuming text streams that represent JSON objects and parsing them into a c
 import { mastra } from "@/src/mastra";
 
 export async function POST(req: Request) {
-  const { messages } = await req.json();
+  const body = await req.json();
   const myAgent = mastra.getAgent("weatherAgent");
-  const stream = await myAgent.stream(messages, {
+  const stream = await myAgent.stream(body, {
     output: z.object({
       weather: z.string(),
     }),
@@ -183,7 +183,7 @@ export default function Page() {
   return (
     <div>
       <button onClick={() => submit('example input')}>Generate</button>
-      {object?.content && <p>{object.content}</p>}
+      {object?.weather && <p>{object.weather}</p>}
     </div>
   );
 }
