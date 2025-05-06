@@ -109,7 +109,7 @@ export async function createHonoServer(mastra: Mastra, options: ServerBundleOpti
       return acc;
     }, {});
   } catch (err) {
-    console.error('Failed to import tools');
+    console.error('Failed to import tools', err);
   }
 
   // Middleware
