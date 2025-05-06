@@ -9,7 +9,7 @@ import {
   getVNextWorkflowsHandler,
   getVNextWorkflowByIdHandler,
   startAsyncVNextWorkflowHandler,
-  getVNextWorkflowRunHandler,
+  getVNextWorkflowRunByIdHandler,
   createVNextWorkflowRunHandler,
   startVNextWorkflowRunHandler,
   resumeAsyncVNextWorkflowHandler,
@@ -193,10 +193,10 @@ describe('vNext Workflow Handlers', () => {
     });
   });
 
-  describe('getVNextWorkflowRunHandler', () => {
+  describe('getVNextWorkflowRunByIdHandler', () => {
     it('should throw error when workflowId is not provided', async () => {
       await expect(
-        getVNextWorkflowRunHandler({
+        getVNextWorkflowRunByIdHandler({
           mastra: mockMastra,
           runId: 'test-run',
         }),
@@ -205,7 +205,7 @@ describe('vNext Workflow Handlers', () => {
 
     it('should throw error when runId is not provided', async () => {
       await expect(
-        getVNextWorkflowRunHandler({
+        getVNextWorkflowRunByIdHandler({
           mastra: mockMastra,
           workflowId: 'test-workflow',
         }),
@@ -214,7 +214,7 @@ describe('vNext Workflow Handlers', () => {
 
     it('should throw error when vnext workflow is not found', async () => {
       await expect(
-        getVNextWorkflowRunHandler({
+        getVNextWorkflowRunByIdHandler({
           mastra: mockMastra,
           workflowId: 'non-existent',
           runId: 'test-run',
@@ -224,7 +224,7 @@ describe('vNext Workflow Handlers', () => {
 
     it('should throw error when vnext workflow run is not found', async () => {
       await expect(
-        getVNextWorkflowRunHandler({
+        getVNextWorkflowRunByIdHandler({
           mastra: mockMastra,
           workflowId: 'test-workflow',
           runId: 'non-existent',
@@ -239,7 +239,7 @@ describe('vNext Workflow Handlers', () => {
 
       await run.start({ inputData: {} });
 
-      const result = await getVNextWorkflowRunHandler({
+      const result = await getVNextWorkflowRunByIdHandler({
         mastra: mockMastra,
         workflowId: 'test-workflow',
         runId: 'test-run',
