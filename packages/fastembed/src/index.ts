@@ -25,7 +25,6 @@ async function generateEmbeddings(values: string[], modelType: 'BGESmallENV15' |
     for await (const result of embeddings) {
       // result is an array of embeddings, one for each text in the batch
       // We convert each Float32Array embedding to a regular number array
-      // @ts-ignore unbundleableImport fn breaks types
       allResults.push(...result.map(embedding => Array.from(embedding)));
     }
 
