@@ -1,5 +1,15 @@
 # @mastra/core
 
+## 0.9.2-alpha.6
+
+### Patch Changes
+
+- 6052aa6: Add getWorkflowRunById to vNext workflow core and server handler
+- 7d8b7c7: In vnext getworkflowRunById, pick run from this.#runs if it does not exist in storage
+- 3a5f1e1: Created a new @mastra/fastembed package based on the default embedder in @mastra/core as the default embedder will be removed in a breaking change (May 20th)
+  Added a warning to use the new @mastra/fastembed package instead of the default embedder
+- 8398d89: vNext: dynamic input mappings
+
 ## 0.9.2-alpha.5
 
 ### Patch Changes

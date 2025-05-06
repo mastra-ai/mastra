@@ -1,5 +1,11 @@
 # create-mastra
 
+## 0.3.1-alpha.5
+
+### Patch Changes
+
+- 144fa1b: lift up the traces fetching and allow to pass them down in the TracesTable. It allows passing down mastra client traces OR clickhouse traces
+
 ## 0.3.1-alpha.4
 
 ### Patch Changes

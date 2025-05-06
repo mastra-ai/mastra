@@ -1,5 +1,18 @@
 # @mastra/deployer-vercel
 
+## 0.1.21-alpha.6
+
+### Patch Changes
+
+- 0af36c5: Fix bug where we were not traversing dirs when creating vercel.json to add al files to the includedFiles array
+- Updated dependencies [6052aa6]
+- Updated dependencies [a798090]
+- Updated dependencies [7d8b7c7]
+- Updated dependencies [3a5f1e1]
+- Updated dependencies [8398d89]
+  - @mastra/core@0.9.2-alpha.6
+  - @mastra/deployer@0.3.2-alpha.6
+
 ## 0.1.21-alpha.5
 
 ### Patch Changes

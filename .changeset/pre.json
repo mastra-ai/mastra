@@ -63,11 +63,15 @@
     "@mastra/voice-speechify": "0.1.15",
     "@mastra/couchbase": "0.0.1",
     "@internal/storage-test-utils": "0.0.1",
-    "@internal/lint": "0.0.2"
+    "@internal/lint": "0.0.2",
+    "@mastra/fastembed": "0.0.1"
   },
   "changesets": [
+    "angry-regions-know",
     "brave-ghosts-shake",
+    "calm-candles-listen",
     "chatty-radios-type",
+    "cool-colts-shop",
     "curvy-pens-clean",
     "curvy-worms-study",
     "dark-phones-sin",
@@ -78,6 +82,8 @@
     "hot-bags-float",
     "huge-trains-film",
     "icy-cups-yawn",
+    "kind-boxes-take",
+    "kind-days-stand",
     "legal-zoos-float",
     "metal-owls-appear",
     "nine-schools-love",
@@ -85,9 +91,13 @@
     "pretty-crabs-camp",
     "real-cycles-move",
     "real-wings-carry",
+    "rich-clubs-push",
     "ripe-chairs-dream",
     "short-hounds-study",
+    "smooth-rings-dream",
+    "tasty-readers-wear",
     "tiny-jeans-travel",
+    "unlucky-coats-approve",
     "violet-eyes-film"
   ]
 }
