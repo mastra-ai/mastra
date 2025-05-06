@@ -184,8 +184,8 @@ describe('QdrantVector', () => {
       // expect(results[0]?.vector).toEqual(newVector);
     });
 
-    it('should throw exception when no updates are given', () => {
-      expect(qdrant.updateIndexById(testCollectionName, 'id', {})).rejects.toThrow('No updates provided');
+    it('should throw exception when no updates are given', async () => {
+      await expect(qdrant.updateIndexById(testCollectionName, 'id', {})).rejects.toThrow('No updates provided');
     });
 
     it('should throw error for non-existent index', async () => {

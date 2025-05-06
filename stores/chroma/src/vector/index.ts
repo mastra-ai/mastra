@@ -130,34 +130,30 @@ export class ChromaVector extends MastraVector {
       });
     } catch (error: any) {
       // Check for 'already exists' error
-      await this.checkIndexExists(error, indexName, dimension, metric);
-    }
-  }
-
-  private async checkIndexExists(error: any, indexName: string, dimension: number, metric: string) {
-    const message = error?.message || error?.toString();
-    if (message && message.toLowerCase().includes('already exists')) {
-      // Fetch collection info and check dimension
-      try {
-        const info = await this.getCollection(indexName);
-        const existingDim = info?.metadata?.dimension;
-        if (existingDim === dimension) {
-          this.logger?.info?.(
-            `Collection "${indexName}" already exists with ${dimension} dimensions and metric ${metric}, skipping creation.`,
-          );
-          return;
-        } else {
+      const message = error?.message || error?.toString();
+      if (message && message.toLowerCase().includes('already exists')) {
+        // Fetch collection info and check dimension
+        try {
+          const info = await this.getCollection(indexName);
+          const existingDim = info?.metadata?.dimension;
+          if (existingDim === dimension) {
+            this.logger?.info?.(
+              `Collection "${indexName}" already exists with ${dimension} dimensions and metric ${metric}, skipping creation.`,
+            );
+            return;
+          } else {
+            throw new Error(
+              `Index "${indexName}" already exists with ${existingDim} dimensions, but ${dimension} dimensions were requested`,
+            );
+          }
+        } catch (infoError) {
           throw new Error(
-            `Index "${indexName}" already exists with ${existingDim} dimensions, but ${dimension} dimensions were requested`,
+            `Index "${indexName}" already exists, but failed to fetch collection info for dimension check: ${infoError}`,
           );
         }
-      } catch (infoError) {
-        throw new Error(
-          `Index "${indexName}" already exists, but failed to fetch collection info for dimension check: ${infoError}`,
-        );
       }
+      throw error;
     }
-    throw error;
   }
 
   transformFilter(filter?: VectorFilter) {

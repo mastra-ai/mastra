@@ -81,42 +81,40 @@ export class CloudflareVector extends MastraVector {
       });
     } catch (error: any) {
       // Check for 'already exists' error
-      await this.checkIndexExists(error, indexName, dimension, metric);
-    }
-  }
-
-  private async checkIndexExists(error: any, indexName: string, dimension: number, metric: string) {
-    const message = error?.errors?.[0]?.message || error?.message;
-    if (
-      error.status === 409 ||
-      (typeof message === 'string' &&
-        (message.toLowerCase().includes('already exists') || message.toLowerCase().includes('duplicate')))
-    ) {
-      // Fetch index info and check dimensions
-      try {
-        const info = await this.client.vectorize.indexes.info(indexName, {
-          account_id: this.accountId,
-        });
-        if (info && info.dimensions === dimension) {
-          this.logger.info(
-            `Index "${indexName}" already exists with ${dimension} dimensions and metric ${metric}, skipping creation.`,
-          );
-          return;
-        } else if (info) {
+      const message = error?.errors?.[0]?.message || error?.message;
+      if (
+        error.status === 409 ||
+        (typeof message === 'string' &&
+          (message.toLowerCase().includes('already exists') || message.toLowerCase().includes('duplicate')))
+      ) {
+        // Fetch index info and check dimensions
+        try {
+          const info = await this.client.vectorize.indexes.info(indexName, {
+            account_id: this.accountId,
+          });
+          if (info && info.dimensions === dimension) {
+            this.logger.info(
+              `Index "${indexName}" already exists with ${dimension} dimensions and metric ${metric}, skipping creation.`,
+            );
+            return;
+          } else if (info) {
+            throw new Error(
+              `Index "${indexName}" already exists with ${info.dimensions} dimensions, but ${dimension} dimensions were requested`,
+            );
+          } else {
+            throw new Error(
+              `Index "${indexName}" already exists, but could not retrieve its dimensions for validation.`,
+            );
+          }
+        } catch (infoError) {
           throw new Error(
-            `Index "${indexName}" already exists with ${info.dimensions} dimensions, but ${dimension} dimensions were requested`,
+            `Index "${indexName}" already exists, but failed to fetch index info for dimension check: ${infoError}`,
           );
-        } else {
-          throw new Error(`Index "${indexName}" already exists, but could not retrieve its dimensions for validation.`);
         }
-      } catch (infoError) {
-        throw new Error(
-          `Index "${indexName}" already exists, but failed to fetch index info for dimension check: ${infoError}`,
-        );
       }
+      // For any other errors, propagate
+      throw error;
     }
-    // For any other errors, propagate
-    throw error;
   }
 
   async query(...args: ParamsToArgs<QueryVectorParams>): Promise<QueryResult[]> {

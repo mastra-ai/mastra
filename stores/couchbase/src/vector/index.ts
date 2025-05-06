@@ -162,36 +162,32 @@ export class CouchbaseVector extends MastraVector {
       this.vector_dimension = dimension;
     } catch (error: any) {
       // Check for 'already exists' error (Couchbase may throw a 400 or 409, or have a message)
-      await this.checkIndexExists(error, indexName, dimension, metric);
-    }
-  }
-
-  private async checkIndexExists(error: any, indexName: string, dimension: number, metric: string) {
-    const message = error?.message || error?.toString();
-    if (message && message.toLowerCase().includes('index exists')) {
-      // Fetch index info and check dimension
-      try {
-        const info = await this.scope.searchIndexes().getIndex(indexName);
-        const existingDim =
-          info?.params?.mapping?.types?.[`${this.scopeName}.${this.collectionName}`]?.properties?.embedding?.fields?.[0]
-            ?.dims;
-        if (existingDim === dimension) {
-          this.logger?.info?.(
-            `Index "${indexName}" already exists with ${dimension} dimensions and metric ${metric}, skipping creation.`,
-          );
-          return;
-        } else {
+      const message = error?.message || error?.toString();
+      if (message && message.toLowerCase().includes('index exists')) {
+        // Fetch index info and check dimension
+        try {
+          const info = await this.scope.searchIndexes().getIndex(indexName);
+          const existingDim =
+            info?.params?.mapping?.types?.[`${this.scopeName}.${this.collectionName}`]?.properties?.embedding
+              ?.fields?.[0]?.dims;
+          if (existingDim === dimension) {
+            this.logger?.info?.(
+              `Index "${indexName}" already exists with ${dimension} dimensions and metric ${metric}, skipping creation.`,
+            );
+            return;
+          } else {
+            throw new Error(
+              `Index "${indexName}" already exists with ${existingDim} dimensions, but ${dimension} dimensions were requested`,
+            );
+          }
+        } catch (infoError) {
           throw new Error(
-            `Index "${indexName}" already exists with ${existingDim} dimensions, but ${dimension} dimensions were requested`,
+            `Index "${indexName}" already exists, but failed to fetch index info for dimension check: ${infoError}`,
           );
         }
-      } catch (infoError) {
-        throw new Error(
-          `Index "${indexName}" already exists, but failed to fetch index info for dimension check: ${infoError}`,
-        );
       }
+      throw error;
     }
-    throw error;
   }
 
   async upsert(params: UpsertVectorParams): Promise<string[]> {
