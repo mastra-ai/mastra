@@ -383,6 +383,87 @@ describe('Workflow', () => {
         expect(result.steps.step2).toEqual({ status: 'success', output: { result: 'test-input', second: 42 } });
       });
 
+      it('should resolve dynamic mappings via .map()', async () => {
+        const execute = vi.fn<any>().mockResolvedValue({ result: 'success' });
+        const triggerSchema = z.object({
+          cool: z.string(),
+        });
+
+        const step1 = createStep({
+          id: 'step1',
+          execute,
+          inputSchema: triggerSchema,
+          outputSchema: z.object({ result: z.string() }),
+        });
+
+        const step2 = createStep({
+          id: 'step2',
+          execute: async ({ inputData }) => {
+            return { result: inputData.test, second: inputData.test2 };
+          },
+          inputSchema: z.object({ test: z.string(), test2: z.string() }),
+          outputSchema: z.object({ result: z.string(), second: z.string() }),
+        });
+
+        const workflow = createWorkflow({
+          id: 'test-workflow',
+          inputSchema: triggerSchema,
+          outputSchema: z.object({ result: z.string(), second: z.string() }),
+        });
+
+        workflow
+          .then(step1)
+          .map({
+            test: {
+              initData: workflow,
+              path: 'cool',
+            },
+            test2: {
+              schema: z.string(),
+              fn: async ({ inputData }) => {
+                return 'Hello ' + inputData.result;
+              },
+            },
+          })
+          .then(step2)
+          .map({
+            result: {
+              step: step2,
+              path: 'result',
+            },
+            second: {
+              schema: z.string(),
+              fn: async ({ getStepResult }) => {
+                return getStepResult(step1).result;
+              },
+            },
+          })
+          .commit();
+
+        const run = workflow.createRun();
+        const result = await run.start({ inputData: { cool: 'test-input' } });
+
+        if (result.status !== 'success') {
+          expect.fail('Workflow should have succeeded');
+        }
+
+        expect(execute).toHaveBeenCalledWith(
+          expect.objectContaining({
+            inputData: { cool: 'test-input' },
+          }),
+        );
+
+        expect(result.steps.step2).toEqual({
+          status: 'success',
+          output: { result: 'test-input', second: 'Hello success' },
+        });
+
+        expect(result.result).toEqual({
+          result: 'test-input',
+          second: 'success',
+        });
+      });
+
       it('should resolve variables from previous steps', async () => {
         const step1Action = vi.fn<any>().mockResolvedValue({
           nested: { value: 'step1-data' },
@@ -602,6 +683,57 @@ describe('Workflow', () => {
 
         expect(result.steps.step2).toEqual({ status: 'success', output: { result: 'none', second: 0 } });
       });
+
+      it('should resolve fully dynamic input via .map()', async () => {
+        const execute = vi.fn<any>().mockResolvedValue({ result: 'success' });
+        const triggerSchema = z.object({
+          cool: z.string(),
+        });
+
+        const step1 = createStep({
+          id: 'step1',
+          execute,
+          inputSchema: triggerSchema,
+          outputSchema: z.object({ result: z.string() }),
+        });
+
+        const step2 = createStep({
+          id: 'step2',
+          execute: async ({ inputData }) => {
+            return { result: inputData.candidates.map(c => c.name).join(', ') || 'none', second: inputData.iteration };
+          },
+          inputSchema: z.object({ candidates: z.array(z.object({ name: z.string() })), iteration: z.number() }),
+          outputSchema: z.object({ result: z.string(), second: z.number() }),
+        });
+
+        const workflow = createWorkflow({
+          id: 'test-workflow',
+          inputSchema: triggerSchema,
+          outputSchema: z.object({ result: z.string(), second: z.number() }),
+        });
+
+        workflow
+          .then(step1)
+          .map(async ({ inputData }) => {
+            return {
+              candidates: [{ name: inputData.result }, { name: 'hello' }],
+              iteration: 0,
+            };
+          })
+          .then(step2)
+          .commit();
+
+        const run = workflow.createRun();
+        const result = await run.start({ inputData: { cool: 'test-input' } });
+
+        expect(execute).toHaveBeenCalledWith(
+          expect.objectContaining({
+            inputData: { cool: 'test-input' },
+          }),
+        );
+
+        expect(result.steps.step2).toEqual({ status: 'success', output: { result: 'success, hello', second: 0 } });
+      });
     });
 
     describe('Simple Conditions', () => {
@@ -634,6 +766,14 @@ describe('Workflow', () => {
           inputSchema: z.object({ status: z.string() }),
           outputSchema: z.object({ result: z.string() }),
         });
+        const step4 = createStep({
+          id: 'step4',
+          execute: async ({ inputData }) => {
+            return { result: inputData.result };
+          },
+          inputSchema: z.object({ result: z.string() }),
+          outputSchema: z.object({ result: z.string() }),
+        });
 
         const workflow = createWorkflow({
           id: 'test-workflow',
@@ -658,6 +798,13 @@ describe('Workflow', () => {
               step3,
             ],
           ])
+          .map({
+            result: {
+              step: [step3, step2],
+              path: 'result',
+            },
+          })
+          .then(step4)
           .commit();
 
         const run = workflow.createRun();
@@ -666,10 +813,11 @@ describe('Workflow', () => {
         expect(step1Action).toHaveBeenCalled();
         expect(step2Action).toHaveBeenCalled();
         expect(step3Action).not.toHaveBeenCalled();
-        expect(result.steps).toEqual({
+        expect(result.steps).toMatchObject({
           input: { status: 'success' },
           step1: { status: 'success', output: { status: 'success' } },
           step2: { status: 'success', output: { result: 'step2' } },
+          step4: { status: 'success', output: { result: 'step2' } },
         });
       });
 
