@@ -9,6 +9,9 @@ import { Nav } from "./navbar";
 import { SubscribeForm } from "./subscribe-form";
 import { TabSwitcher } from "./tab-switcher";
 import { getSearchPlaceholder } from "./search-placeholder";
+import { SearchWrapper } from "./search-wrapper";
+import { CustomSearch } from "./custom-search";
+
 const footer = <Footer />;
 
 export const NextraLayout = ({
@@ -26,7 +29,8 @@ export const NextraLayout = ({
   const isReference = pathname.includes("/reference");
   return (
     <Layout
-      search={<Search placeholder={getSearchPlaceholder(locale)} />}
+      search={<SearchWrapper locale={locale} />}
+      // search={<SearchWrapper locale={locale} />}
       navbar={
         <div className="flex  sticky top-0 z-30 bg-[var(--primary-bg)] flex-col">
           <Nav stars={stars} />

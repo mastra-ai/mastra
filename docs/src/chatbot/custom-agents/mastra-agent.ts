@@ -13,6 +13,7 @@ import {
   ToolCallArgsEvent,
   ToolCallEndEvent,
   ToolCallStartEvent,
+  ToolMessage,
 } from "@agentwire/client";
 
 import { MastraClient } from "@mastra/client-js";
@@ -45,7 +46,8 @@ export class MastraDocsAgent extends AbstractAgent {
     super(config);
     this.resourceId = config.resourceId;
 
-    const baseUrl = process.env.MASTRA_AGENT_URL || "";
+    // const baseUrl = process.env.MASTRA_AGENT_URL || "";
+    const baseUrl = "http://localhost:4111";
 
     this.mastraClient =
       config?.mastraClient ??
@@ -55,6 +57,7 @@ export class MastraDocsAgent extends AbstractAgent {
   }
 
   protected run(input: RunAgentInput): Observable<BaseEvent> {
+    console.log("run", input);
     const agent = this.mastraClient.getAgent(this.agentId!);
 
     return new Observable<BaseEvent>((subscriber) => {
@@ -127,6 +130,20 @@ export class MastraDocsAgent extends AbstractAgent {
               subscriber.complete();
             },
             onToolCallPart(streamPart) {
+              console.log(
+                "onToolCallPart",
+                JSON.stringify(streamPart, null, 2),
+              );
+              // End any in-progress text message before starting a tool call
+              if (currentMessageId !== undefined) {
+                const endMessage: TextMessageEndEvent = {
+                  type: EventType.TEXT_MESSAGE_END,
+                  messageId: currentMessageId,
+                };
+                subscriber.next(endMessage);
+                currentMessageId = undefined;
+              }
+
               subscriber.next({
                 type: EventType.TOOL_CALL_START,
                 toolCallId: streamPart.toolCallId,
@@ -151,7 +168,42 @@ export class MastraDocsAgent extends AbstractAgent {
               console.log("onToolCallStreamingStartPart", streamPart);
             },
             onToolResultPart(streamPart) {
-              console.log("onToolResultPart", streamPart);
+              console.log(
+                "onToolResultPart",
+                JSON.stringify(streamPart, null, 2),
+              );
+
+              // End any in-progress text message before adding tool result
+              if (currentMessageId !== undefined) {
+                const endMessage: TextMessageEndEvent = {
+                  type: EventType.TEXT_MESSAGE_END,
+                  messageId: currentMessageId,
+                };
+                subscriber.next(endMessage);
+                currentMessageId = undefined;
+              }
+
+              // Create a tool result message
+              // Tool results need to be sent as a complete message with role "tool"
+              const toolResult =
+                typeof streamPart.result === "string"
+                  ? streamPart.result
+                  : JSON.stringify(streamPart.result);
+
+              // Create a new message with tool result
+              const toolMessageId = uuidv4();
+
+              const message: ToolMessage = {
+                id: toolMessageId,
+                role: "tool",
+                content: toolResult,
+                toolCallId: streamPart.toolCallId,
+              };
+
+              // Send tool result as a complete message
+              // TODO: This is a hack (i guess?) to prevent `An assistant message with 'tool_calls' must be followed by tool messages responding to each 'tool_call_id'` errors.
+              //@ts-ignore
+              subscriber.next(message);
             },
           });
         })
@@ -189,6 +241,17 @@ function convertMessagesToMastraMessages(messages: Message[]): CoreMessage[] {
         role: "assistant",
         content: parts,
       });
+      if (message.toolCalls?.length) {
+        result.push({
+          role: "tool",
+          content: message.toolCalls.map((toolCall) => ({
+            type: "tool-result",
+            toolCallId: toolCall.id,
+            toolName: toolCall.function.name,
+            result: JSON.parse(toolCall.function.arguments),
+          })),
+        });
+      }
     } else if (message.role === "user") {
       result.push({
         role: "user",

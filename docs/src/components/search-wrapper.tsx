@@ -1,0 +1,136 @@
+import { cn } from "@/lib/utils";
+import {
+  Dialog,
+  DialogBackdrop,
+  DialogPanel,
+  DialogTitle,
+} from "@headlessui/react";
+import { useEffect, useState } from "react";
+import { CustomSearch } from "./custom-search";
+import { getSearchPlaceholder } from "./search-placeholder";
+import { Button } from "./ui/button";
+import DocsChat from "@/chatbot/components/chat-widget";
+import { JarvisIcon } from "./svgs/Icons";
+
+const INPUTS = new Set(["INPUT", "SELECT", "BUTTON", "TEXTAREA"]);
+
+export const SearchWrapper = ({ locale }: { locale: string }) => {
+  const [isOpen, setIsOpen] = useState(false);
+  const [isAgentMode, setIsAgentMode] = useState(false);
+
+  useEffect(() => {
+    function handleKeyDown(event: KeyboardEvent) {
+      const el = document.activeElement;
+      if (
+        !el ||
+        INPUTS.has(el.tagName) ||
+        (el as HTMLElement).isContentEditable
+      ) {
+        return;
+      }
+      if (
+        event.key === "/" ||
+        (event.key === "k" &&
+          !event.shiftKey &&
+          (navigator.userAgent.includes("Mac") ? event.metaKey : event.ctrlKey))
+      ) {
+        event.preventDefault();
+        // prevent to scroll to top
+        setIsOpen(true);
+      }
+    }
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, []);
+
+  function open() {
+    setIsOpen(true);
+  }
+
+  function close() {
+    setIsOpen(false);
+  }
+
+  return (
+    <>
+      <div className="flex items-center gap-2">
+        <Button onClick={open} variant="ghost" className="">
+          Search
+        </Button>
+        <Shortcut />
+      </div>
+      <Dialog
+        open={isOpen}
+        as="div"
+        className="relative z-10 w-[660px] focus:outline-none"
+        onClose={close}
+      >
+        <DialogBackdrop className="fixed inset-0 delay-[0ms] duration-300 ease-out bg-black/50" />
+        <div className="fixed inset-0 z-10 w-screen overflow-y-auto">
+          <div className="flex items-start pt-[200px] justify-center min-h-full p-4">
+            <DialogPanel
+              transition
+              className="w-full h-fit max-w-[660px] mx-auto rounded-xl bg-surface-4 duration-300 ease-out data-closed:transform-[scale(95%)] data-closed:opacity-0"
+            >
+              <DialogTitle as="h3" className="sr-only">
+                Search
+              </DialogTitle>
+              <div className="w-full">
+                {isAgentMode ? (
+                  <DocsChat setIsAgentMode={setIsAgentMode} />
+                ) : (
+                  <div className="p-[10px]">
+                    <CustomSearch
+                      placeholder={getSearchPlaceholder(locale)}
+                      isAgentMode={isAgentMode}
+                    />
+                    <hr className="w-full my-2 text-borders-1" />
+                    <Button
+                      className="w-full flex items-center font-medium justify-between gap-2 cursor-pointer text-[18px] h-14 pl-4 pr-3 bg-surface-5 text-accent-green bg-[url('/bloom-2.png')] bg-cover bg-right"
+                      variant="ghost"
+                      onClick={() => setIsAgentMode(true)}
+                    >
+                      <div className="flex items-center gap-2">
+                        <span>{JarvisIcon}</span>
+                        <span>Ask Docs Agent</span>
+                      </div>
+                      <span className="flex items-center h-8 px-3 text-base font-medium rounded-sm bg-tag-green-2 text-accent-green justify-self-end">
+                        experimental
+                      </span>
+                    </Button>
+                  </div>
+                )}
+              </div>
+            </DialogPanel>
+          </div>
+        </div>
+      </Dialog>
+    </>
+  );
+};
+
+function Shortcut() {
+  return (
+    <kbd
+      className={cn(
+        "x:absolute x:my-1.5 x:select-none x:pointer-events-none x:end-1.5 x:transition-all",
+        "x:h-5 x:rounded x:bg-nextra-bg x:px-1.5 x:font-mono x:text-[11px] x:font-medium x:text-gray-600 x:dark:text-gray-400",
+        "x:border nextra-border",
+        "x:contrast-more:text-current",
+        "x:items-center x:gap-1 x:flex",
+        "x:max-sm:hidden not-prose",
+      )}
+    >
+      {navigator.userAgent.includes("Mac") ? (
+        <>
+          <span className="x:text-xs">⌘</span>K
+        </>
+      ) : (
+        "CTRL K"
+      )}
+    </kbd>
+  );
+}
