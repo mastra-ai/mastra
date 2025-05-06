@@ -1,3 +1,4 @@
+import type { ToolExecutionOptions } from 'ai';
 import jsonSchemaToZod from 'json-schema-to-zod';
 import { z } from 'zod';
 import { MastraBase } from '../../base';
