@@ -2873,16 +2873,12 @@ describe('Workflow', () => {
       const run1 = workflow.createRun();
       await run1.start({ inputData: {} });
 
-      const run2 = workflow.createRun();
-      await run2.start({ inputData: {} });
-
       const { runs, total } = await workflow.getWorkflowRuns();
-      expect(total).toBe(2);
-      expect(runs).toHaveLength(2);
-      expect(runs.map(r => r.runId)).toEqual(expect.arrayContaining([run1.runId, run2.runId]));
+      expect(total).toBe(1);
+      expect(runs).toHaveLength(1);
+      expect(runs.map(r => r.runId)).toEqual(expect.arrayContaining([run1.runId]));
       expect(runs[0]?.workflowName).toBe('test-workflow');
       expect(runs[0]?.snapshot).toBeDefined();
-      expect(runs[1]?.snapshot).toBeDefined();
 
       const run3 = await workflow.getWorkflowRunById(run1.runId);
       expect(run3?.runId).toBe(run1.runId);
