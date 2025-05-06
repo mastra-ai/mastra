@@ -925,9 +925,6 @@ importers:
 
   packages/core:
     dependencies:
-      '@ai-sdk/ui-utils':
-        specifier: ^1.1.19
-        version: 1.2.8(zod@3.24.3)
       '@libsql/client':
         specifier: ^0.14.0
         version: 0.14.0(bufferutil@4.0.9)(utf-8-validate@6.0.5)
