@@ -39,28 +39,50 @@ async function writeMergedConfig(configPath: string) {
 }
 
 export const windsurfGlobalMCPConfigPath = path.join(os.homedir(), '.codeium', 'windsurf', 'mcp_config.json');
+export const cursorGlobalMCPConfigPath = path.join(os.homedir(), '.cursor', 'mcp.json');
 
 export async function installMastraDocsMCPServer({
   editor,
   directory,
 }: {
-  editor: undefined | 'cursor' | 'windsurf';
+  editor: undefined | 'cursor' | 'cursor-global' | 'windsurf';
   directory: string;
 }) {
-  if (editor === `cursor`) await writeMergedConfig(path.join(directory, '.cursor', 'mcp.json'));
+  if (editor === `cursor`) {
+    await writeMergedConfig(path.join(directory, '.cursor', 'mcp.json'));
+  }
+  if (editor === `cursor-global`) {
+    const alreadyInstalled = await globalMCPIsAlreadyInstalled(editor);
+    if (alreadyInstalled) {
+      return;
+    }
+    await writeMergedConfig(cursorGlobalMCPConfigPath);
+  }
 
-  const windsurfIsInstalled = await globalWindsurfMCPIsAlreadyInstalled();
-  if (editor === `windsurf` && !windsurfIsInstalled) await writeMergedConfig(windsurfGlobalMCPConfigPath);
+  if (editor === `windsurf`) {
+    const alreadyInstalled = await globalMCPIsAlreadyInstalled(editor);
+    if (alreadyInstalled) {
+      return;
+    }
+    await writeMergedConfig(windsurfGlobalMCPConfigPath);
+  }
 }
 
-export async function globalWindsurfMCPIsAlreadyInstalled() {
-  if (!existsSync(windsurfGlobalMCPConfigPath)) {
+export async function globalMCPIsAlreadyInstalled(editor: undefined | 'cursor' | 'cursor-global' | 'windsurf') {
+  let configPath: string = ``;
+
+  if (editor === 'windsurf') {
+    configPath = windsurfGlobalMCPConfigPath;
+  } else if (editor === 'cursor-global') {
+    configPath = cursorGlobalMCPConfigPath;
+  }
+
+  if (!configPath || !existsSync(configPath)) {
     return false;
   }
 
   try {
-    const configContents = await readJSON(windsurfGlobalMCPConfigPath);
-
+    const configContents = await readJSON(configPath);
     if (!configContents?.mcpServers) return false;
 
     const hasMastraMCP = Object.values(configContents.mcpServers).some((server?: any) =>

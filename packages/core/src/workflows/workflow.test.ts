@@ -5,9 +5,9 @@ import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 
 import { Agent } from '../agent';
-import { Container } from '../di';
 import { createLogger } from '../logger';
 import { Mastra } from '../mastra';
+import { RuntimeContext } from '../runtime-context';
 import { TABLE_WORKFLOW_SNAPSHOT } from '../storage';
 import { DefaultStorage } from '../storage/libsql';
 import { Telemetry } from '../telemetry';
@@ -4866,42 +4866,44 @@ describe('Workflow', async () => {
   });
 
   describe('Dependency Injection', () => {
-    it('should inject container dependencies into steps during run', async () => {
-      const container = new Container();
+    it('should inject runtimeContext dependencies into steps during run', async () => {
+      const runtimeContext = new RuntimeContext();
       const testValue = 'test-dependency';
-      container.set('testKey', testValue);
+      runtimeContext.set('testKey', testValue);
 
-      const execute = vi.fn(({ container }) => {
-        const value = container.get('testKey');
+      const execute = vi.fn(({ runtimeContext }) => {
+        const value = runtimeContext.get('testKey');
         return { injectedValue: value };
       });
 
+      // @ts-ignore
       const step = new Step({ id: 'step1', execute });
       const workflow = new Workflow({ name: 'test-workflow' });
       workflow.step(step).commit();
 
       const run = workflow.createRun();
-      const result = await run.start({ container });
+      const result = await run.start({ runtimeContext });
 
+      // @ts-ignore
       expect(result.results.step1.output.injectedValue).toBe(testValue);
     });
 
-    it('should inject container dependencies into steps during resume', async () => {
-      const container = new Container();
+    it('should inject runtimeContext dependencies into steps during resume', async () => {
+      const runtimeContext = new RuntimeContext();
       const testValue = 'test-dependency';
-      container.set('testKey', testValue);
+      runtimeContext.set('testKey', testValue);
 
       const mastra = new Mastra({
         logger: false,
         storage,
       });
 
-      const execute = vi.fn(async ({ container, suspend, context }) => {
+      const execute = vi.fn(async ({ runtimeContext, suspend, context }) => {
         if (!context.inputData.human) {
           await suspend();
         }
 
-        const value = container.get('testKey');
+        const value = runtimeContext.get('testKey');
         return { injectedValue: value };
       });
 
@@ -4910,20 +4912,20 @@ describe('Workflow', async () => {
       workflow.step(step).commit();
 
       const run = workflow.createRun();
-      await run.start({ container });
+      await run.start({ runtimeContext });
 
-      const resumeContainer = new Container();
-      resumeContainer.set('testKey', testValue + '2');
+      const resumeRuntimeContext = new RuntimeContext();
+      resumeRuntimeContext.set('testKey', testValue + '2');
 
       const result = await run.resume({
         stepId: 'step1',
         context: {
           human: true,
         },
-        container: resumeContainer,
+        runtimeContext: resumeRuntimeContext,
       });
 
-      console.log(result);
+      // @ts-ignore
       expect(result?.results.step1.output.injectedValue).toBe(testValue + '2');
     });
   });

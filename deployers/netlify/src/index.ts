@@ -154,4 +154,10 @@ to = "/.netlify/functions/api/:splat"
     export default handle(app)
 `;
   }
+
+  async lint(entryFile: string, outputDirectory: string, toolsPaths: string[]): Promise<void> {
+    await super.lint(entryFile, outputDirectory, toolsPaths);
+
+    // Lint for netlify support
+  }
 }

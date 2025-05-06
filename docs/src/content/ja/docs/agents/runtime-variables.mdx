@@ -1,0 +1,116 @@
+---
+title: "ランタイムコンテキスト | エージェント | Mastra ドキュメント"
+description: Mastraの依存性注入システムを使用して、エージェントとツールにランタイム設定を提供する方法を学びます。
+---
+
+# エージェントランタイムコンテキスト
+
+Mastraはランタイムコンテキストを提供します。これは依存性注入に基づくシステムで、エージェントとツールをランタイム変数で設定することを可能にします。非常に似たことを行う複数の異なるエージェントを作成している場合、ランタイムコンテキストを使用すると、それらを1つのエージェントに統合することができます。
+
+## 概要
+
+依存性注入システムにより、以下のことが可能になります：
+
+1. 型安全なruntimeContextを通じて、実行時の設定変数をエージェントに渡す
+2. ツール実行コンテキスト内でこれらの変数にアクセスする
+3. 基盤となるコードを変更せずにエージェントの動作を修正する
+4. 同じエージェント内の複数のツール間で設定を共有する
+
+## 基本的な使い方
+
+```typescript
+const agent = mastra.getAgent("weatherAgent");
+
+// Define your runtimeContext's type structure
+type WeatherRuntimeContext = {
+  "temperature-scale": "celsius" | "fahrenheit"; // Fixed typo in "fahrenheit"
+};
+
+const runtimeContext = new RuntimeContext<WeatherRuntimeContext>();
+runtimeContext.set("temperature-scale", "celsius");
+
+const response = await agent.generate("What's the weather like today?", {
+  runtimeContext,
+});
+
+console.log(response.text);
+```
+
+## REST APIでの使用
+
+ユーザーの位置情報に基づいて温度単位を動的に設定する方法を、Cloudflareの`CF-IPCountry`ヘッダーを使用して示します：
+
+```typescript filename="src/index.ts"
+import { Mastra } from "@mastra/core";
+import { RuntimeContext } from "@mastra/core/di";
+import { agent as weatherAgent } from "./agents/weather";
+
+// Define RuntimeContext type with clear, descriptive types
+type WeatherRuntimeContext = {
+  "temperature-scale": "celsius" | "fahrenheit";
+};
+
+export const mastra = new Mastra({
+  agents: {
+    weather: weatherAgent,
+  },
+  server: {
+    middleware: [
+      async (c, next) => {
+        const country = c.req.header("CF-IPCountry");
+        const runtimeContext = c.get<WeatherRuntimeContext>("runtimeContext");
+
+        // Set temperature scale based on country
+        runtimeContext.set(
+          "temperature-scale",
+          country === "US" ? "fahrenheit" : "celsius",
+        );
+
+        await next(); // Don't forget to call next()
+      },
+    ],
+  },
+});
+```
+
+## 変数を使用したツールの作成
+
+ツールはruntimeContext変数にアクセスでき、エージェントのruntimeContextタイプに準拠する必要があります：
+
+```typescript
+import { createTool } from "@mastra/core/tools";
+import { z } from "zod";
+
+export const weatherTool = createTool({
+  id: "getWeather",
+  description: "Get the current weather for a location",
+  inputSchema: z.object({
+    location: z.string().describe("The location to get weather for"),
+  }),
+  execute: async ({ context, runtimeContext }) => {
+    // Type-safe access to runtimeContext variables
+    const temperatureUnit = runtimeContext.get("temperature-scale");
+
+    const weather = await fetchWeather(context.location, {
+      temperatureUnit,
+    });
+
+    return { result: weather };
+  },
+});
+
+async function fetchWeather(
+  location: string,
+  { temperatureUnit }: { temperatureUnit: "celsius" | "fahrenheit" },
+): Promise<WeatherResponse> {
+  // Implementation of weather API call
+  const response = await weatherApi.fetch(location, temperatureUnit);
+
+  return {
+    location,
+    temperature: "72°F",
+    conditions: "Sunny",
+    unit: temperatureUnit,
+  };
+}
+```

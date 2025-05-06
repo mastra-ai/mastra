@@ -1,5 +1,5 @@
-import type { Container } from '@mastra/core/di';
 import type { AgentNetwork } from '@mastra/core/network';
+import type { RuntimeContext } from '@mastra/core/runtime-context';
 import { HTTPException } from '../http-exception';
 import type { Context } from '../types';
 import { handleError } from './error';
@@ -7,30 +7,42 @@ import { validateBody } from './utils';
 
 interface NetworkContext extends Context {
   networkId?: string;
+  runtimeContext: RuntimeContext;
 }
 
-export async function getNetworksHandler({ mastra }: Pick<NetworkContext, 'mastra'>) {
+export async function getNetworksHandler({
+  mastra,
+  runtimeContext,
+}: Pick<NetworkContext, 'mastra' | 'runtimeContext'>) {
   try {
     const networks = mastra.getNetworks();
 
-    const serializedNetworks = networks.map(network => {
-      const routingAgent = network.getRoutingAgent();
-      const agents = network.getAgents();
-      return {
-        id: network.formatAgentId(routingAgent.name),
-        name: routingAgent.name,
-        instructions: routingAgent.instructions,
-        agents: agents.map(agent => ({
-          name: agent.name,
-          provider: agent.llm?.getProvider(),
-          modelId: agent.llm?.getModelId(),
-        })),
-        routingModel: {
-          provider: routingAgent.llm?.getProvider(),
-          modelId: routingAgent.llm?.getModelId(),
-        },
-      };
-    });
+    const serializedNetworks = await Promise.all(
+      networks.map(async network => {
+        const routingAgent = network.getRoutingAgent();
+        const routingLLM = await routingAgent.getLLM({ runtimeContext });
+        const agents = network.getAgents();
+        return {
+          id: network.formatAgentId(routingAgent.name),
+          name: routingAgent.name,
+          instructions: routingAgent.instructions,
+          agents: await Promise.all(
+            agents.map(async agent => {
+              const llm = await agent.getLLM({ runtimeContext });
+              return {
+                name: agent.name,
+                provider: llm?.getProvider(),
+                modelId: llm?.getModelId(),
+              };
+            }),
+          ),
+          routingModel: {
+            provider: routingLLM?.getProvider(),
+            modelId: routingLLM?.getModelId(),
+          },
+        };
+      }),
+    );
 
     return serializedNetworks;
   } catch (error) {
@@ -38,7 +50,11 @@ export async function getNetworksHandler({ mastra }: Pick<NetworkContext, 'mastr
   }
 }
 
-export async function getNetworkByIdHandler({ mastra, networkId }: Pick<NetworkContext, 'mastra' | 'networkId'>) {
+export async function getNetworkByIdHandler({
+  mastra,
+  networkId,
+  runtimeContext,
+}: Pick<NetworkContext, 'mastra' | 'networkId' | 'runtimeContext'>) {
   try {
     const networks = mastra.getNetworks();
 
@@ -52,20 +68,26 @@ export async function getNetworkByIdHandler({ mastra, networkId }: Pick<NetworkC
     }
 
     const routingAgent = network.getRoutingAgent();
+    const routingLLM = await routingAgent.getLLM({ runtimeContext });
     const agents = network.getAgents();
 
     const serializedNetwork = {
       id: network.formatAgentId(routingAgent.name),
       name: routingAgent.name,
       instructions: routingAgent.instructions,
-      agents: agents.map(agent => ({
-        name: agent.name,
-        provider: agent.llm?.getProvider(),
-        modelId: agent.llm?.getModelId(),
-      })),
+      agents: await Promise.all(
+        agents.map(async agent => {
+          const llm = await agent.getLLM({ runtimeContext });
+          return {
+            name: agent.name,
+            provider: llm?.getProvider(),
+            modelId: llm?.getModelId(),
+          };
+        }),
+      ),
       routingModel: {
-        provider: routingAgent.llm?.getProvider(),
-        modelId: routingAgent.llm?.getModelId(),
+        provider: routingLLM?.getProvider(),
+        modelId: routingLLM?.getModelId(),
       },
     };
 
@@ -77,11 +99,11 @@ export async function getNetworkByIdHandler({ mastra, networkId }: Pick<NetworkC
 
 export async function generateHandler({
   mastra,
-  container,
+  runtimeContext,
   networkId,
   body,
 }: NetworkContext & {
-  container: Container;
+  runtimeContext: RuntimeContext;
   body: { messages?: Parameters<AgentNetwork['generate']>[0] } & Parameters<AgentNetwork['generate']>[1];
 }) {
   try {
@@ -94,7 +116,7 @@ export async function generateHandler({
     validateBody({ messages: body.messages });
 
     const { messages, ...rest } = body;
-    const result = await network.generate(messages!, { ...rest, container });
+    const result = await network.generate(messages!, { ...rest, runtimeContext });
 
     return result;
   } catch (error) {
@@ -106,9 +128,9 @@ export async function streamGenerateHandler({
   mastra,
   networkId,
   body,
-  container,
+  runtimeContext,
 }: NetworkContext & {
-  container: Container;
+  runtimeContext: RuntimeContext;
   body: { messages?: Parameters<AgentNetwork['stream']>[0] } & Parameters<AgentNetwork['stream']>[1];
 }) {
   try {
@@ -124,7 +146,7 @@ export async function streamGenerateHandler({
     const streamResult = await network.stream(messages!, {
       output: output as any,
       ...rest,
-      container,
+      runtimeContext,
     });
 
     const streamResponse = output

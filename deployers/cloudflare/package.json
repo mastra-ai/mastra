@@ -1,6 +1,6 @@
 {
   "name": "@mastra/deployer-cloudflare",
-  "version": "0.1.19-alpha.8",
+  "version": "0.1.21-alpha.5",
   "description": "",
   "type": "module",
   "files": [
@@ -41,24 +41,22 @@
   "author": "",
   "license": "Elastic-2.0",
   "dependencies": {
+    "@babel/core": "^7.26.10",
     "@mastra/core": "workspace:^",
     "@mastra/deployer": "workspace:^",
     "@rollup/plugin-virtual": "^3.0.2",
     "cloudflare": "^4.1.0",
-    "date-fns": "^4.1.0",
-    "execa": "^9.5.2",
-    "rollup-plugin-polyfill-node": "^0.13.0",
-    "rollup-plugin-shim": "^1.0.0",
+    "rollup": "^4.35.0",
     "wrangler": "^4.4.0",
     "zod": "^3.24.2"
   },
   "devDependencies": {
     "@internal/lint": "workspace:*",
-    "@microsoft/api-extractor": "^7.52.1",
+    "@microsoft/api-extractor": "^7.52.5",
     "@types/node": "^20.17.27",
     "eslint": "^9.23.0",
     "tsup": "^8.4.0",
     "typescript": "^5.8.2",
-    "vitest": "^3.0.9"
+    "vitest": "^3.1.2"
   }
 }

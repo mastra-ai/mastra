@@ -1,7 +1,7 @@
 const meta = {
-  index: "イントロダクション",
+  index: "はじめに",
   "getting-started": {
-    title: "はじめに",
+    title: "使い方",
   },
   frameworks: {
     title: "フレームワーク",
@@ -24,6 +24,9 @@ const meta = {
   deployment: {
     title: "デプロイメント",
   },
+  "mastra-cloud": {
+    title: "Mastra Cloud",
+  },
   observability: {
     title: "可観測性",
   },
@@ -36,8 +39,7 @@ const meta = {
   voice: {
     title: "音声",
   },
-  integrations: "統合",
+  integrations: "インテグレーション",
   community: "コミュニティ",
 };
-
 export default meta;

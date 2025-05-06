@@ -1,3 +1,4 @@
+import { processDataStream } from '@ai-sdk/ui-utils';
 import type { GenerateReturn } from '@mastra/core';
 import type { JSONSchema7 } from 'json-schema';
 import { ZodSchema } from 'zod';
@@ -6,7 +7,6 @@ import { zodToJsonSchema } from 'zod-to-json-schema';
 import type { GenerateParams, ClientOptions, StreamParams, GetNetworkResponse } from '../types';
 
 import { BaseResource } from './base';
-import { processDataStream } from '@ai-sdk/ui-utils';
 
 export class Network extends BaseResource {
   constructor(

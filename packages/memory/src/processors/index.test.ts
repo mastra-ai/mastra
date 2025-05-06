@@ -72,7 +72,7 @@ describe('TokenLimiter', () => {
       estimatedTokens += testLimiter.countTokens(message as CoreMessage);
     }
 
-    return estimatedTokens;
+    return Number(estimatedTokens.toFixed(2));
   }
 
   function percentDifference(a: number, b: number) {
@@ -134,10 +134,10 @@ describe('TokenLimiter', () => {
       );
     });
 
-    it(`4 messages, 0 tools`, async () => {
+    it(`20 messages, 0 tools`, async () => {
       await expectTokenEstimate(
         {
-          messageCount: 2,
+          messageCount: 10,
           toolFrequency: 0,
           threadId: '3',
         },

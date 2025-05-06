@@ -89,13 +89,13 @@ const results = await store.query({
       name: "$all",
       description: "Matches arrays containing all elements",
       example: '{ tags: { $all: ["urgent", "high"] } }',
-      supportedBy: ["Astra", "Pinecone", "Upstash"]
+      supportedBy: ["Astra", "Pinecone", "Upstash", "MongoDB"]
     },
     {
       name: "$elemMatch",
       description: "Matches array elements meeting criteria",
       example: '{ scores: { $elemMatch: { $gt: 80 } } }',
-      supportedBy: ["LibSQL", "PgVector"]
+      supportedBy: ["LibSQL", "PgVector", "MongoDB"]
     }
   ]}
 />
@@ -119,13 +119,13 @@ const results = await store.query({
       name: "$not",
       description: "Logical NOT",
       example: '{ price: { $not: { $lt: 100 } } }',
-      supportedBy: ["Astra", "Qdrant", "Upstash", "PgVector", "LibSQL"]
+      supportedBy: ["Astra", "Qdrant", "Upstash", "PgVector", "LibSQL", "MongoDB"]
     },
     {
       name: "$nor",
       description: "Logical NOR",
       example: '{ $nor: [{ status: "deleted" }, { archived: true }] }',
-      supportedBy: ["Qdrant", "Upstash", "PgVector", "LibSQL"]
+      supportedBy: ["Qdrant", "Upstash", "PgVector", "LibSQL", "MongoDB"]
     }
   ]}
 />
@@ -155,13 +155,13 @@ const results = await store.query({
       name: "$regex",
       description: "Regular expression match",
       example: '{ name: { $regex: "^test" } }',
-      supportedBy: ["Qdrant", "PgVector", "Upstash"]
+      supportedBy: ["Qdrant", "PgVector", "Upstash", "MongoDB"]
     },
     {
       name: "$size",
       description: "Array length check",
       example: '{ tags: { $size: { $gt: 2 } } }',
-      supportedBy: ["Astra", "LibSQL", "PgVector"]
+      supportedBy: ["Astra", "LibSQL", "PgVector", "MongoDB"]
     },
     {
       name: "$geo",
@@ -287,11 +287,21 @@ const results = await store.query({
 - Case-sensitive string comparisons
 - Metadata updates are atomic
 
+### MongoDB
+- Full support for MongoDB/Sift query syntax for metadata filters
+- Supports all standard comparison, array, logical, and element operators
+- Supports nested fields and arrays in metadata
+- Filtering can be applied to both `metadata` and the original document content using the `filter` and `documentFilter` options, respectively
+- `filter` applies to the metadata object; `documentFilter` applies to the original document fields
+- No artificial limits on filter size or complexity (subject to MongoDB query limits)
+- Indexing metadata fields is recommended for optimal performance
+
 ## Related
 - [Astra](./astra)
 - [Chroma](./chroma)
 - [Cloudflare Vectorize](./vectorize)
 - [LibSQL](./libsql)
+- [MongoDB](./mongodb)
 - [PgStore](./pg)
 - [Pinecone](./pinecone)
 - [Qdrant](./qdrant)

@@ -52,6 +52,7 @@ export default async function RootLayout({
         "antialiased",
         fonts.geistMono.variable,
         fonts.inter.variable,
+        fonts.tasa.variable,
       )}
       suppressHydrationWarning
     >
@@ -75,8 +76,8 @@ export default async function RootLayout({
           <Toaster />
           <CookieConsent />
         </GTProvider>
+        <Analytics />
       </body>
-      <Analytics />
     </html>
   );
 }

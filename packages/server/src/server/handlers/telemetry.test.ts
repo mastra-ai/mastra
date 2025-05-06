@@ -78,7 +78,7 @@ describe('Telemetry Handler', () => {
       },
     });
 
-    expect(result).toEqual({ traces: mockTraces });
+    expect(result).toEqual(mockTraces);
     expect(mockStorage.getTraces).toHaveBeenCalledWith({
       name: 'test',
       scope: 'test',
@@ -104,7 +104,7 @@ describe('Telemetry Handler', () => {
       },
     });
 
-    expect(result).toEqual({ traces: mockTraces });
+    expect(result).toEqual(mockTraces);
     expect(mockStorage.getTraces).toHaveBeenCalledWith({
       name: 'test',
       scope: 'test',
@@ -129,7 +129,7 @@ describe('Telemetry Handler', () => {
       },
     });
 
-    expect(result).toEqual({ traces: mockTraces });
+    expect(result).toEqual(mockTraces);
     expect(mockStorage.getTraces).toHaveBeenCalledWith({
       name: 'test',
       scope: 'test',
@@ -156,7 +156,7 @@ describe('Telemetry Handler', () => {
       },
     });
 
-    expect(result).toEqual({ traces: mockTraces });
+    expect(result).toEqual(mockTraces);
     expect(mockStorage.getTraces).toHaveBeenCalledWith({
       name: 'test',
       scope: 'test',

@@ -165,8 +165,18 @@ export default withGT(
         permanent: true,
       },
       {
+        source: "/docs/agents/adding-tools",
+        destination: "/docs/agents/using-tools-and-mcp",
+        permanent: true,
+      },
+      {
         source: "/docs/agents/02a-mcp-guide",
         destination: "/docs/agents/mcp-guide",
+        permanent: true,
+      },
+      {
+        source: "/docs/agents/mcp-guide",
+        destination: "/docs/agents/using-tools-and-mcp",
         permanent: true,
       },
       {
@@ -205,26 +215,6 @@ export default withGT(
         permanent: true,
       },
       {
-        source: "/docs/guides/01-chef-michel",
-        destination: "/docs/guides/chef-michel",
-        permanent: true,
-      },
-      {
-        source: "/docs/guides/02-stock-agent",
-        destination: "/docs/guides/stock-agent",
-        permanent: true,
-      },
-      {
-        source: "/docs/guides/03-recruiter",
-        destination: "/docs/guides/ai-recruiter",
-        permanent: true,
-      },
-      {
-        source: "/docs/guides/04-research-assistant",
-        destination: "/docs/guides/research-assistant",
-        permanent: true,
-      },
-      {
         source: "/docs/workflows/00-overview",
         destination: "/docs/workflows/overview",
         permanent: true,
@@ -240,7 +230,18 @@ export default withGT(
         permanent: false, // we should have a memory-processors reference
       },
       {
+        source: "/reference/memory/memory-processors",
+        destination: "/docs/memory/memory-processors",
+        permanent: true,
+      },
+      {
         source: "/docs/memory/getting-started",
+        destination: "/docs/memory/overview",
+        permanent: true,
+      },
+      {
+        source:
+          "/docs/memory/getting-started#conversation-history-last-messages",
         destination: "/docs/memory/overview",
         permanent: true,
       },
@@ -310,6 +311,16 @@ export default withGT(
         permanent: true,
       },
       {
+        source: "/workflows",
+        destination: "/docs/workflows/steps",
+        permanent: true,
+      },
+      {
+        source: "/workflows/:path*",
+        destination: "/docs/workflows/:path*",
+        permanent: true,
+      },
+      {
         source: "/docs/workflows/data-flow",
         destination: "/docs/workflows/variables",
         permanent: true,
@@ -350,11 +361,6 @@ export default withGT(
         permanent: true,
       },
       {
-        source: "/examples/rag/query/metadata-extraction",
-        destination: "/examples/rag/query/retrieve-results",
-        permanent: true,
-      },
-      {
         source: "/docs/showcase",
         destination: "/showcase",
         permanent: true,
@@ -362,6 +368,11 @@ export default withGT(
       {
         source: "/docs/local-dev/integrations",
         destination: "/docs/integrations",
+        permanent: true,
+      },
+      {
+        source: "/docs/integrations",
+        destination: "/docs/tools-mcp/mcp-overview",
         permanent: true,
       },
       {
@@ -405,6 +416,11 @@ export default withGT(
         permanent: true,
       },
       {
+        source: "/docs/guides/chef-michel",
+        destination: "/guides/guide/chef-michel",
+        permanent: true,
+      },
+      {
         source: "/docs/guide/guides/03-stock-agent",
         destination: "/guides/guide/stock-agent",
         permanent: true,
@@ -430,6 +446,16 @@ export default withGT(
         permanent: true,
       },
       {
+        source: "/docs/reference/workflows/step-retries",
+        destination: "/reference/workflows/step-retries",
+        permanent: true,
+      },
+      {
+        source: "/docs/reference/observability/otel-config",
+        destination: "/reference/observability/otel-config",
+        permanent: true,
+      },
+      {
         source: "/docs/reference/client-js",
         destination: "/reference/client-js/agents",
         permanent: true,
@@ -447,6 +473,11 @@ export default withGT(
       {
         source: "/docs/reference/observability/combine-loggers",
         destination: "/reference/observability/logger",
+        permanent: true,
+      },
+      {
+        source: "/reference/rag/retrieval",
+        destination: "/examples/rag/query/retrieve-results",
         permanent: true,
       },
       {
@@ -747,6 +778,11 @@ export default withGT(
       {
         source: "/docs/voice/voice-to-voice",
         destination: "/docs/voice/speech-to-speech",
+        permanent: true,
+      },
+      {
+        source: "/reference/tools/mcp-configuration",
+        destination: "/reference/tools/mcp-client",
         permanent: true,
       },
     ],
