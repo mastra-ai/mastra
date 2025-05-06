@@ -293,6 +293,120 @@ export function getResuableTests(memory: Memory) {
         // Messages should be in the order they were created
         expect(result.messages.every((m, i) => i === 0 || m.createdAt >= result.messages[i - 1].createdAt)).toBe(true);
       });
+      it('should embed and recall both string and TextPart messages', async () => {
+        // Plain string messages (semantically unrelated)
+        const stringWeather = createTestMessage(thread.id, 'The weather is rainy and cold.', 'user', 'text');
+        const stringTravel = createTestMessage(thread.id, 'I am planning a trip to Japan.', 'user', 'text');
+        const stringSports = createTestMessage(thread.id, 'The football match was exciting.', 'user', 'text');
+
+        // TextPart messages (semantically unrelated to above)
+        const textPartProgramming = createTestMessage(
+          thread.id,
+          [{ type: 'text', text: 'JavaScript is a versatile language.' }],
+          'user',
+          'text',
+        );
+        const textPartFood = createTestMessage(
+          thread.id,
+          [{ type: 'text', text: 'Sushi is my favorite food.' }],
+          'user',
+          'text',
+        );
+        const textPartMusic = createTestMessage(
+          thread.id,
+          [{ type: 'text', text: 'Classical music is relaxing.' }],
+          'user',
+          'text',
+        );
+
+        await memory.saveMessages({
+          messages: [stringWeather, stringTravel, stringSports, textPartProgramming, textPartFood, textPartMusic],
+        });
+
+        // Semantic search for a TextPart topic
+        const resultProgramming = await memory.rememberMessages({
+          threadId: thread.id,
+          resourceId,
+          config: {
+            lastMessages: 0,
+            semanticRecall: { messageRange: 0, topK: 1 },
+          },
+          vectorMessageSearch: 'JavaScript',
+        });
+        const programmingContents = resultProgramming.messages.map(m =>
+          Array.isArray(m.content) && m.content[0]?.type === 'text' ? m.content[0].text : m.content,
+        );
+        expect(programmingContents).toContain('JavaScript is a versatile language.');
+        expect(programmingContents).not.toContain('The weather is rainy and cold.');
+
+        // Semantic search for a string topic
+        const resultWeather = await memory.rememberMessages({
+          threadId: thread.id,
+          resourceId,
+          config: {
+            lastMessages: 0,
+            semanticRecall: { messageRange: 0, topK: 1 },
+          },
+          vectorMessageSearch: 'rainy',
+        });
+        const weatherContents = resultWeather.messages.map(m =>
+          Array.isArray(m.content) && m.content[0]?.type === 'text' ? m.content[0].text : m.content,
+        );
+        expect(weatherContents).toContain('The weather is rainy and cold.');
+        expect(weatherContents).not.toContain('JavaScript is a versatile language.');
+      });
+
+      it('should embed and recall message with multiple TextParts concatenated', async () => {
+        const multiTextParts = createTestMessage(
+          thread.id,
+          [
+            { type: 'text', text: 'Hello' },
+            { type: 'text', text: 'world' },
+            { type: 'text', text: 'again' },
+          ],
+          'user',
+          'text',
+        );
+        await memory.saveMessages({ messages: [multiTextParts] });
+
+        const result = await memory.rememberMessages({
+          threadId: thread.id,
+          resourceId,
+          config: { lastMessages: 0, semanticRecall: { messageRange: 0, topK: 1 } },
+          vectorMessageSearch: 'world',
+        });
+        const contents = result.messages.map(m =>
+          Array.isArray(m.content) ? m.content.map(p => (p as TextPart).text).join(' ') : m.content,
+        );
+        expect(contents[0]).toContain('world');
+        expect(contents[0]).toContain('Hello');
+        expect(contents[0]).toContain('again');
+      });
+
+      it('should embed and recall assistant message with TextPart array', async () => {
+        const assistantTextParts = createTestMessage(
+          thread.id,
+          [
+            { type: 'text', text: 'Assistant says hello.' },
+            { type: 'text', text: 'This is a test.' },
+          ],
+          'assistant',
+          'text',
+        );
+        await memory.saveMessages({ messages: [assistantTextParts] });
+
+        const result = await memory.rememberMessages({
+          threadId: thread.id,
+          resourceId,
+          config: { lastMessages: 0, semanticRecall: { messageRange: 0, topK: 1 } },
+          vectorMessageSearch: 'assistant',
+        });
+        const contents = result.messages.map(m =>
+          Array.isArray(m.content) ? m.content.map(p => (p as TextPart).text).join(' ') : m.content,
+        );
+        expect(contents[0]).toContain('Assistant says hello.');
+        expect(contents[0]).toContain('This is a test.');
+      });
     });
 
     describe('Message Types and Roles', () => {
@@ -318,6 +432,43 @@ export function getResuableTests(memory: Memory) {
           expect.objectContaining({ type: 'tool-call' }),
           expect.objectContaining({ type: 'tool-result' }),
         ]);
+      });
+
+      it('should handle user message with TextPart content', async () => {
+        const userPart = { type: 'text', text: 'Hello' } as TextPart;
+        const assistantPart = { type: 'text', text: 'Goodbye' } as TextPart;
+        const messages = [
+          createTestMessage(thread.id, [userPart], 'user', 'text'),
+          createTestMessage(thread.id, [assistantPart], 'assistant', 'text'),
+        ];
+        await memory.saveMessages({ messages });
+        const result = await memory.rememberMessages({
+          threadId: thread.id,
+          resourceId,
+          config: { lastMessages: 10 },
+        });
+        expect(result.messages).toHaveLength(2);
+        expect(result.messages[0]).toMatchObject({
+          role: 'user',
+          type: 'text',
+        });
+        // Accept both string and object as content, but if object, check shape
+        const content = result.messages[0].content[0];
+        if (typeof content === 'object' && content !== null && 'type' in content && content.type === 'text') {
+          expect(content).toEqual(userPart);
+        } else {
+          expect(content).toEqual('Hello');
+        }
+        expect(result.messages[1]).toMatchObject({
+          role: 'assistant',
+          type: 'text',
+        });
+        const content2 = result.messages[1].content[0];
+        if (typeof content2 === 'object' && content2 !== null && 'type' in content2 && content2.type === 'text') {
+          expect(content2).toEqual(assistantPart);
+        } else {
+          expect(content2).toEqual('Goodbye');
+        }
       });
 
       it('should reorder tool calls to be directly before their matching tool results', async () => {

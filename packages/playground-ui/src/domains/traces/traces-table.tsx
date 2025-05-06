@@ -1,6 +1,5 @@
 import { Skeleton } from '@/components/ui/skeleton';
 import { Table, Tbody, Th, Row, Cell, DateTimeCell, UnitCell, TxtCell } from '@/ds/components/Table';
-
 import { Thead } from '@/ds/components/Table';
 import type { RefinedTrace } from '@/domains/traces/types';
 import { Badge } from '@/ds/components/Badge';
@@ -53,7 +52,7 @@ const TracesTableError = ({ error, colsCount }: { error: { message: string }; co
 export interface TracesTableProps {
   traces: RefinedTrace[];
   isLoading: boolean;
-  error?: { message: string } | null;
+  error: { message: string } | null;
 }
 
 const TraceRow = ({ trace, index, isActive }: { trace: RefinedTrace; index: number; isActive: boolean }) => {
@@ -106,11 +105,13 @@ export const TracesTable = ({ traces, isLoading, error }: TracesTableProps) => {
       ) : hasNoTraces ? (
         <TracesTableEmpty colsCount={colsCount} />
       ) : (
-        <Tbody>
-          {traces.map((trace, index) => (
-            <TraceRow key={trace.traceId} trace={trace} index={index} isActive={index === currentTraceIndex} />
-          ))}
-        </Tbody>
+        <>
+          <Tbody>
+            {traces.map((trace, index) => (
+              <TraceRow key={trace.traceId} trace={trace} index={index} isActive={index === currentTraceIndex} />
+            ))}
+          </Tbody>
+        </>
       )}
     </Table>
   );

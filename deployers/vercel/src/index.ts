@@ -196,8 +196,15 @@ export const POST = handle(app);
     const result = await this._bundle(this.getEntry(), entryFile, outputDirectory, toolsPaths);
 
     // read dist files one level deep in the output directory
-    const files = readdirSync(join(outputDirectory, this.outputDir));
-    this.writeVercelJSON(outputDirectory, files);
+    const files = readdirSync(join(outputDirectory, this.outputDir), {
+      recursive: true,
+    });
+
+    const filesWithoutNodeModules = files.filter(
+      file => typeof file === 'string' && !file.startsWith('node_modules'),
+    ) as string[];
+
+    this.writeVercelJSON(outputDirectory, filesWithoutNodeModules);
 
     return result;
   }
