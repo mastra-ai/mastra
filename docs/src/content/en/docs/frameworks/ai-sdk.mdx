@@ -109,9 +109,9 @@ For single-turn completions, use the `useCompletion` hook:
 import { mastra } from "@/src/mastra";
 
 export async function POST(req: Request) {
-  const { messages } = await req.json();
+  const { prompt } = await req.json();
   const myAgent = mastra.getAgent("weatherAgent");
-  const stream = await myAgent.stream(messages);
+  const stream = await myAgent.stream([{ role: "user", content: prompt }]);
 
   return stream.toDataStreamResponse();
 }
