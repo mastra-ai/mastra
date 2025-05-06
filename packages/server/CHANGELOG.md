@@ -1,5 +1,218 @@
 # @mastra/deployer
 
+## 2.0.2-alpha.5
+
+### Patch Changes
+
+- Updated dependencies [3d2fb5c]
+- Updated dependencies [7eeb2bc]
+- Updated dependencies [8607972]
+- Updated dependencies [7eeb2bc]
+- Updated dependencies [fba031f]
+  - @mastra/core@0.9.2-alpha.5
+
+## 2.0.2-alpha.4
+
+### Patch Changes
+
+- Updated dependencies [ccef9f9]
+- Updated dependencies [51e6923]
+  - @mastra/core@0.9.2-alpha.4
+
+## 2.0.2-alpha.3
+
+### Patch Changes
+
+- 4155f47: Add parameters to filter workflow runs
+  Add fromDate and toDate to telemetry parameters
+- Updated dependencies [967b41c]
+- Updated dependencies [4155f47]
+- Updated dependencies [17826a9]
+  - @mastra/core@0.9.2-alpha.3
+
+## 2.0.2-alpha.2
+
+### Patch Changes
+
+- Updated dependencies [26738f4]
+  - @mastra/core@0.9.2-alpha.2
+
+## 2.0.2-alpha.1
+
+### Patch Changes
+
+- Updated dependencies [b804723]
+  - @mastra/core@0.9.2-alpha.1
+
+## 2.0.2-alpha.0
+
+### Patch Changes
+
+- 0097d50: Add serializedStepGraph to vNext workflow
+  Return serializedStepGraph from vNext workflow
+  Use serializedStepGraph in vNext workflow graph
+- Updated dependencies [0097d50]
+  - @mastra/core@0.9.2-alpha.0
+
+## 2.0.1
+
+### Patch Changes
+
+- 34a76ca: Call workflow cleanup function when closing watch stream controller
+- 35955b0: Rename import to runtime-contxt
+- c1409ef: Add vNextWorkflow handlers and APIs
+  Add stepGraph and steps to vNextWorkflow
+- 3e7b69d: Dynamic agent props
+- f200fed: Server handler audioStream fix
+- 11d4485: Show VNext workflows on the playground
+  Show running status for step in vNext workflowState
+- 57b25ed: Use resumeSchema to show inputs on the playground for suspended workflows
+- 1d3b1cd: Rebump
+- Updated dependencies [405b63d]
+- Updated dependencies [81fb7f6]
+- Updated dependencies [20275d4]
+- Updated dependencies [7d1892c]
+- Updated dependencies [a90a082]
+- Updated dependencies [2d17c73]
+- Updated dependencies [61e92f5]
+- Updated dependencies [35955b0]
+- Updated dependencies [6262bd5]
+- Updated dependencies [c1409ef]
+- Updated dependencies [3e7b69d]
+- Updated dependencies [e4943b8]
+- Updated dependencies [11d4485]
+- Updated dependencies [479f490]
+- Updated dependencies [c23a81c]
+- Updated dependencies [2d4001d]
+- Updated dependencies [c71013a]
+- Updated dependencies [1d3b1cd]
+  - @mastra/core@0.9.1
+
+## 2.0.1-alpha.8
+
+### Patch Changes
+
+- Updated dependencies [2d17c73]
+  - @mastra/core@0.9.1-alpha.8
+
+## 2.0.1-alpha.7
+
+### Patch Changes
+
+- 1d3b1cd: Rebump
+- Updated dependencies [1d3b1cd]
+  - @mastra/core@0.9.1-alpha.7
+
+## 2.0.1-alpha.6
+
+### Patch Changes
+
+- Updated dependencies [c23a81c]
+  - @mastra/core@0.9.1-alpha.6
+
+## 2.0.1-alpha.5
+
+### Patch Changes
+
+- 3e7b69d: Dynamic agent props
+- Updated dependencies [3e7b69d]
+  - @mastra/core@0.9.1-alpha.5
+
+## 2.0.1-alpha.4
+
+### Patch Changes
+
+- Updated dependencies [e4943b8]
+- Updated dependencies [479f490]
+  - @mastra/core@0.9.1-alpha.4
+
+## 2.0.1-alpha.3
+
+### Patch Changes
+
+- 34a76ca: Call workflow cleanup function when closing watch stream controller
+- Updated dependencies [6262bd5]
+  - @mastra/core@0.9.1-alpha.3
+
+## 2.0.1-alpha.2
+
+### Patch Changes
+
+- 57b25ed: Use resumeSchema to show inputs on the playground for suspended workflows
+- Updated dependencies [405b63d]
+- Updated dependencies [61e92f5]
+- Updated dependencies [c71013a]
+  - @mastra/core@0.9.1-alpha.2
+
+## 2.0.1-alpha.1
+
+### Patch Changes
+
+- 35955b0: Rename import to runtime-contxt
+- c1409ef: Add vNextWorkflow handlers and APIs
+  Add stepGraph and steps to vNextWorkflow
+- f200fed: Server handler audioStream fix
+- 11d4485: Show VNext workflows on the playground
+  Show running status for step in vNext workflowState
+- Updated dependencies [20275d4]
+- Updated dependencies [7d1892c]
+- Updated dependencies [a90a082]
+- Updated dependencies [35955b0]
+- Updated dependencies [c1409ef]
+- Updated dependencies [11d4485]
+- Updated dependencies [2d4001d]
+  - @mastra/core@0.9.1-alpha.1
+
+## 2.0.1-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [81fb7f6]
+  - @mastra/core@0.9.1-alpha.0
+
+## 2.0.0
+
+### Minor Changes
+
+- fe3ae4d: Remove \_\_ functions in storage and move to storage proxy to make sure init is called
+
+### Patch Changes
+
+- 0f4eae3: Rename Container into RuntimeContext
+- 1c0d2b7: Fix speakerId in voice speak method
+- Updated dependencies [000a6d4]
+- Updated dependencies [08bb78e]
+- Updated dependencies [ed2f549]
+- Updated dependencies [7e92011]
+- Updated dependencies [9ee4293]
+- Updated dependencies [03f3cd0]
+- Updated dependencies [c0f22b4]
+- Updated dependencies [71d9444]
+- Updated dependencies [157c741]
+- Updated dependencies [8a8a73b]
+- Updated dependencies [0a033fa]
+- Updated dependencies [fe3ae4d]
+- Updated dependencies [9c26508]
+- Updated dependencies [0f4eae3]
+- Updated dependencies [16a8648]
+- Updated dependencies [6f92295]
+  - @mastra/core@0.9.0
+
+## 2.0.0-alpha.8
+
+### Patch Changes
+
+- 0f4eae3: Rename Container into RuntimeContext
+- 1c0d2b7: Fix speakerId in voice speak method
+- Updated dependencies [000a6d4]
+- Updated dependencies [ed2f549]
+- Updated dependencies [c0f22b4]
+- Updated dependencies [0a033fa]
+- Updated dependencies [9c26508]
+- Updated dependencies [0f4eae3]
+- Updated dependencies [16a8648]
+  - @mastra/core@0.9.0-alpha.8
+
 ## 2.0.0-alpha.7
 
 ### Patch Changes

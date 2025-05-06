@@ -66,17 +66,17 @@ These two primitives could be used to build registry UIs, configuration UIs, CLI
 
 Now that we have an official registry client and server definition, abstractions can be built to extend them in framework or userland specific ways.
 
-For example an `MCPConfiguration` class which takes a registry and can use it to validate and persist configurations in a storage adapter.
+For example an `MCPClient` class which takes a registry and can use it to validate and persist configurations in a storage adapter.
 
 ```ts
 import { RegistryClient } from "@mcp/registry"
-import { McpConfiguration } from "@mastra/mcp"
+import { MCPClient } from "@mastra/mcp"
 
 const registry = new RegistryClient({
 	url: "https://example-tools.com/.well-known/mcp.json",
 })
 
-const configuration = new McpConfiguration({
+const configuration = new MCPClient({
 	id: "validation-example", // user or app id for persisting configs
 	registry,
 })
@@ -85,7 +85,7 @@ const configuration = new McpConfiguration({
 This class could then take static configurations:
 
 ```ts
-const configuration = new McpConfiguration({
+const configuration = new MCPClient({
 	id: "validation-example",
 	registry,
 	servers: {
@@ -102,7 +102,7 @@ const configuration = new McpConfiguration({
 Or dynamically receive and validate configs:
 
 ```ts
-const configuration = new McpConfiguration({
+const configuration = new MCPClient({
 	id: "validation-example",
 	registry,
 	storage: new StorageAdapter(),
@@ -137,7 +137,7 @@ const res = await agent.generate(prompt, {
 For this example I broke out the registry, server definitions, and configuration, but when we actually ship this API at Mastra (or an equivalent API), it will be more concise and just involve configuration and a registry endpoint. The registry and server definition classes would be internal for us.
 
 ```ts
-const mcp = new MCPConfiguration({
+const mcp = new MCPClient({
 	registry: "https://mcp.run/.well-known/mcp.json",
 	servers: {
 		...serverConfigs,

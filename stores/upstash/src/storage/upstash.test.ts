@@ -25,27 +25,26 @@ const createSampleThread = (date?: Date) => ({
   metadata: { key: 'value' },
 });
 
-const createSampleMessage = (threadId: string, content: string = 'Hello') =>
-  ({
-    id: `msg-${randomUUID()}`,
-    role: 'user',
-    type: 'text',
-    threadId,
-    content: [{ type: 'text', text: content }],
-    createdAt: new Date(),
-  }) as any;
+const createSampleMessage = (threadId: string, content: string = 'Hello'): MessageType => ({
+  id: `msg-${randomUUID()}`,
+  role: 'user',
+  type: 'text',
+  threadId,
+  content: [{ type: 'text', text: content }],
+  createdAt: new Date(),
+  resourceId: `resource-${randomUUID()}`,
+});
 
 const createSampleWorkflowSnapshot = (status: string, createdAt?: Date) => {
   const runId = `run-${randomUUID()}`;
   const stepId = `step-${randomUUID()}`;
   const timestamp = createdAt || new Date();
-  const snapshot = {
-    result: { success: true },
+  const snapshot: WorkflowRunState = {
     value: {},
     context: {
       steps: {
         [stepId]: {
-          status,
+          status: status as WorkflowRunState['context']['steps'][string]['status'],
           payload: {},
           error: undefined,
         },
@@ -54,9 +53,10 @@ const createSampleWorkflowSnapshot = (status: string, createdAt?: Date) => {
       attempts: {},
     },
     activePaths: [],
+    suspendedPaths: {},
     runId,
     timestamp: timestamp.getTime(),
-  } as WorkflowRunState;
+  };
   return { snapshot, runId, stepId };
 };
 
@@ -92,6 +92,13 @@ const createSampleEval = (agentName: string, isTest = false) => {
     run_id: `run-${randomUUID()}`,
     created_at: new Date().toISOString(),
   };
+};
+
+const checkWorkflowSnapshot = (snapshot: WorkflowRunState | string, stepId: string, status: string) => {
+  if (typeof snapshot === 'string') {
+    throw new Error('Expected WorkflowRunState, got string');
+  }
+  expect(snapshot.context?.steps[stepId]?.status).toBe(status);
 };
 
 describe('UpstashStore', () => {
@@ -303,17 +310,17 @@ describe('UpstashStore', () => {
     });
 
     it('should save and retrieve messages in order', async () => {
-      const messages = [
+      const messages: MessageType[] = [
         createSampleMessage(threadId, 'First'),
         createSampleMessage(threadId, 'Second'),
         createSampleMessage(threadId, 'Third'),
       ];
 
-      await store.saveMessages({ messages: messages as MessageType[] });
+      await store.saveMessages({ messages: messages });
 
-      const retrievedMessages = await store.getMessages({ threadId });
+      const retrievedMessages = await store.getMessages<MessageType[]>({ threadId });
       expect(retrievedMessages).toHaveLength(3);
-      expect(retrievedMessages.map(m => m.content[0].text)).toEqual(['First', 'Second', 'Third']);
+      expect(retrievedMessages.map((m: any) => m.content[0].text)).toEqual(['First', 'Second', 'Third']);
     });
 
     it('should handle empty message array', async () => {
@@ -335,11 +342,11 @@ describe('UpstashStore', () => {
           ],
           createdAt: new Date(),
         },
-      ];
+      ] as MessageType[];
 
-      await store.saveMessages({ messages: messages as MessageType[] });
+      await store.saveMessages({ messages });
 
-      const retrievedMessages = await store.getMessages({ threadId });
+      const retrievedMessages = await store.getMessages<MessageType>({ threadId });
       expect(retrievedMessages[0].content).toEqual(messages[0].content);
     });
   });
@@ -451,13 +458,15 @@ describe('UpstashStore', () => {
           stepResults: {
             step1: { status: 'success', payload: { result: 'done' } },
           },
+          steps: {},
           attempts: {},
           triggerData: {},
         },
         runId: testRunId,
         activePaths: [],
+        suspendedPaths: {},
         timestamp: Date.now(),
-      } as unknown as WorkflowRunState;
+      };
 
       await store.persistWorkflowSnapshot({
         namespace: testNamespace,
@@ -556,8 +565,8 @@ describe('UpstashStore', () => {
       const workflowName1 = 'default_test_1';
       const workflowName2 = 'default_test_2';
 
-      const { snapshot: workflow1, runId: runId1, stepId: stepId1 } = createSampleWorkflowSnapshot('completed');
-      const { snapshot: workflow2, runId: runId2, stepId: stepId2 } = createSampleWorkflowSnapshot('running');
+      const { snapshot: workflow1, runId: runId1, stepId: stepId1 } = createSampleWorkflowSnapshot('success');
+      const { snapshot: workflow2, runId: runId2, stepId: stepId2 } = createSampleWorkflowSnapshot('waiting');
 
       await store.persistWorkflowSnapshot({
         namespace: testNamespace,
@@ -578,17 +587,17 @@ describe('UpstashStore', () => {
       expect(total).toBe(2);
       expect(runs[0]!.workflowName).toBe(workflowName2); // Most recent first
       expect(runs[1]!.workflowName).toBe(workflowName1);
-      const firstSnapshot = runs[0]!.snapshot as WorkflowRunState;
-      const secondSnapshot = runs[1]!.snapshot as WorkflowRunState;
-      expect(firstSnapshot.context?.steps[stepId2]?.status).toBe('running');
-      expect(secondSnapshot.context?.steps[stepId1]?.status).toBe('completed');
+      const firstSnapshot = runs[0]!.snapshot;
+      const secondSnapshot = runs[1]!.snapshot;
+      checkWorkflowSnapshot(firstSnapshot, stepId2, 'waiting');
+      checkWorkflowSnapshot(secondSnapshot, stepId1, 'success');
     });
 
     it('filters by workflow name', async () => {
       const workflowName1 = 'filter_test_1';
       const workflowName2 = 'filter_test_2';
 
-      const { snapshot: workflow1, runId: runId1, stepId: stepId1 } = createSampleWorkflowSnapshot('completed');
+      const { snapshot: workflow1, runId: runId1, stepId: stepId1 } = createSampleWorkflowSnapshot('success');
       const { snapshot: workflow2, runId: runId2 } = createSampleWorkflowSnapshot('failed');
 
       await store.persistWorkflowSnapshot({
@@ -609,8 +618,11 @@ describe('UpstashStore', () => {
       expect(runs).toHaveLength(1);
       expect(total).toBe(1);
       expect(runs[0]!.workflowName).toBe(workflowName1);
-      const snapshot = runs[0]!.snapshot as WorkflowRunState;
-      expect(snapshot.context?.steps[stepId1]?.status).toBe('completed');
+      const snapshot = runs[0]!.snapshot;
+      if (typeof snapshot === 'string') {
+        throw new Error('Expected WorkflowRunState, got string');
+      }
+      expect(snapshot.context?.steps[stepId1]?.status).toBe('success');
     });
 
     it('filters by date range', async () => {
@@ -621,9 +633,9 @@ describe('UpstashStore', () => {
       const workflowName2 = 'date_test_2';
       const workflowName3 = 'date_test_3';
 
-      const { snapshot: workflow1, runId: runId1 } = createSampleWorkflowSnapshot('completed');
-      const { snapshot: workflow2, runId: runId2, stepId: stepId2 } = createSampleWorkflowSnapshot('running');
-      const { snapshot: workflow3, runId: runId3, stepId: stepId3 } = createSampleWorkflowSnapshot('waiting');
+      const { snapshot: workflow1, runId: runId1 } = createSampleWorkflowSnapshot('success');
+      const { snapshot: workflow2, runId: runId2, stepId: stepId2 } = createSampleWorkflowSnapshot('waiting');
+      const { snapshot: workflow3, runId: runId3, stepId: stepId3 } = createSampleWorkflowSnapshot('skipped');
 
       await store.insert({
         tableName: TABLE_WORKFLOW_SNAPSHOT,
@@ -668,10 +680,10 @@ describe('UpstashStore', () => {
       expect(runs).toHaveLength(2);
       expect(runs[0]!.workflowName).toBe(workflowName3);
       expect(runs[1]!.workflowName).toBe(workflowName2);
-      const firstSnapshot = runs[0]!.snapshot as WorkflowRunState;
-      const secondSnapshot = runs[1]!.snapshot as WorkflowRunState;
-      expect(firstSnapshot.context?.steps[stepId3]?.status).toBe('waiting');
-      expect(secondSnapshot.context?.steps[stepId2]?.status).toBe('running');
+      const firstSnapshot = runs[0]!.snapshot;
+      const secondSnapshot = runs[1]!.snapshot;
+      checkWorkflowSnapshot(firstSnapshot, stepId3, 'skipped');
+      checkWorkflowSnapshot(secondSnapshot, stepId2, 'waiting');
     });
 
     it('handles pagination', async () => {
@@ -679,9 +691,9 @@ describe('UpstashStore', () => {
       const workflowName2 = 'page_test_2';
       const workflowName3 = 'page_test_3';
 
-      const { snapshot: workflow1, runId: runId1, stepId: stepId1 } = createSampleWorkflowSnapshot('completed');
-      const { snapshot: workflow2, runId: runId2, stepId: stepId2 } = createSampleWorkflowSnapshot('running');
-      const { snapshot: workflow3, runId: runId3, stepId: stepId3 } = createSampleWorkflowSnapshot('waiting');
+      const { snapshot: workflow1, runId: runId1, stepId: stepId1 } = createSampleWorkflowSnapshot('success');
+      const { snapshot: workflow2, runId: runId2, stepId: stepId2 } = createSampleWorkflowSnapshot('waiting');
+      const { snapshot: workflow3, runId: runId3, stepId: stepId3 } = createSampleWorkflowSnapshot('skipped');
 
       await store.persistWorkflowSnapshot({
         namespace: testNamespace,
@@ -714,10 +726,10 @@ describe('UpstashStore', () => {
       expect(page1.total).toBe(3); // Total count of all records
       expect(page1.runs[0]!.workflowName).toBe(workflowName3);
       expect(page1.runs[1]!.workflowName).toBe(workflowName2);
-      const firstSnapshot = page1.runs[0]!.snapshot as WorkflowRunState;
-      const secondSnapshot = page1.runs[1]!.snapshot as WorkflowRunState;
-      expect(firstSnapshot.context?.steps[stepId3]?.status).toBe('waiting');
-      expect(secondSnapshot.context?.steps[stepId2]?.status).toBe('running');
+      const firstSnapshot = page1.runs[0]!.snapshot;
+      const secondSnapshot = page1.runs[1]!.snapshot;
+      checkWorkflowSnapshot(firstSnapshot, stepId3, 'skipped');
+      checkWorkflowSnapshot(secondSnapshot, stepId2, 'waiting');
 
       // Get second page
       const page2 = await store.getWorkflowRuns({
@@ -728,8 +740,118 @@ describe('UpstashStore', () => {
       expect(page2.runs).toHaveLength(1);
       expect(page2.total).toBe(3);
       expect(page2.runs[0]!.workflowName).toBe(workflowName1);
-      const snapshot = page2.runs[0]!.snapshot as WorkflowRunState;
-      expect(snapshot.context?.steps[stepId1]?.status).toBe('completed');
+      const snapshot = page2.runs[0]!.snapshot;
+      checkWorkflowSnapshot(snapshot, stepId1, 'success');
+    });
+  });
+  describe('getWorkflowRunById', () => {
+    const testNamespace = 'test-workflows-id';
+    const workflowName = 'workflow-id-test';
+    let runId: string;
+    let stepId: string;
+
+    beforeAll(async () => {
+      // Insert a workflow run for positive test
+      const sample = createSampleWorkflowSnapshot('success');
+      runId = sample.runId;
+      stepId = sample.stepId;
+      await store.insert({
+        tableName: TABLE_WORKFLOW_SNAPSHOT,
+        record: {
+          namespace: testNamespace,
+          workflow_name: workflowName,
+          run_id: runId,
+          resourceId: 'resource-abc',
+          snapshot: sample.snapshot,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        },
+      });
+    });
+
+    it('should retrieve a workflow run by ID', async () => {
+      const found = await store.getWorkflowRunById({
+        namespace: testNamespace,
+        runId,
+        workflowName,
+      });
+      expect(found).not.toBeNull();
+      expect(found?.runId).toBe(runId);
+      const snapshot = found?.snapshot;
+      checkWorkflowSnapshot(snapshot!, stepId, 'success');
+    });
+
+    it('should return null for non-existent workflow run ID', async () => {
+      const notFound = await store.getWorkflowRunById({
+        namespace: testNamespace,
+        runId: 'non-existent-id',
+        workflowName,
+      });
+      expect(notFound).toBeNull();
+    });
+  });
+  describe('getWorkflowRuns with resourceId', () => {
+    const testNamespace = 'test-workflows-id';
+    const workflowName = 'workflow-id-test';
+    let resourceId: string;
+    let runIds: string[] = [];
+
+    beforeAll(async () => {
+      // Insert multiple workflow runs for the same resourceId
+      resourceId = 'resource-shared';
+      for (const status of ['success', 'waiting']) {
+        const sample = createSampleWorkflowSnapshot(status);
+        runIds.push(sample.runId);
+        await store.insert({
+          tableName: TABLE_WORKFLOW_SNAPSHOT,
+          record: {
+            namespace: testNamespace,
+            workflow_name: workflowName,
+            run_id: sample.runId,
+            resourceId,
+            snapshot: sample.snapshot,
+            createdAt: new Date(),
+            updatedAt: new Date(),
+          },
+        });
+      }
+      // Insert a run with a different resourceId
+      const other = createSampleWorkflowSnapshot('waiting');
+      await store.insert({
+        tableName: TABLE_WORKFLOW_SNAPSHOT,
+        record: {
+          namespace: testNamespace,
+          workflow_name: workflowName,
+          run_id: other.runId,
+          resourceId: 'resource-other',
+          snapshot: other.snapshot,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        },
+      });
+    });
+
+    it('should retrieve all workflow runs by resourceId', async () => {
+      const { runs } = await store.getWorkflowRuns({
+        namespace: testNamespace,
+        resourceId,
+        workflowName,
+      });
+      expect(Array.isArray(runs)).toBe(true);
+      expect(runs.length).toBeGreaterThanOrEqual(2);
+      for (const run of runs) {
+        expect(run.resourceId).toBe(resourceId);
+      }
+    });
+
+    it('should return an empty array if no workflow runs match resourceId', async () => {
+      const { runs } = await store.getWorkflowRuns({
+        namespace: testNamespace,
+        resourceId: 'non-existent-resource',
+        workflowName,
+      });
+      expect(Array.isArray(runs)).toBe(true);
+      expect(runs.length).toBe(0);
     });
   });
 });

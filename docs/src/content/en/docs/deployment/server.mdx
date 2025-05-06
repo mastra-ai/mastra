@@ -275,6 +275,14 @@ Start the HTTP server:
 node .mastra/output/index.mjs
 ```
 
+### Enable Telemetry for build output
+
+Load instrumentation for the build output like so:
+
+```bash copy
+node --import=./.mastra/output/instrumentation.mjs  .mastra/output/index.mjs
+```
+
 ## Serverless Deployment
 
 Mastra also supports serverless deployment on Cloudflare Workers, Vercel, and Netlify.

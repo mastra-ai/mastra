@@ -90,17 +90,25 @@ const mastra = new Mastra({
 });
 ```
 
-### Deploy
+### Lint
 
-`mastra deploy`
+`mastra lint`
 
-This command deploys the mastra project to a serverless platform like Vercel or Cloudflare Workers.
+Validates your Mastra project structure and code.
 
-The deploy command does the following:
+Options:
 
-- Initializes the mastra project
-- Builds the project
-- Deploys the built project to the platform
+```bash
+--root    Path to your root folder
+--tools   Comma-separated list of paths to tool files to include
+```
+
+Example usage:
+
+```bash
+# Lint default directory
+mastra lint
+```
 
 # Telemetry
 

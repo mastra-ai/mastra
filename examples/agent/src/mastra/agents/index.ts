@@ -1,6 +1,10 @@
 import { openai } from '@ai-sdk/openai';
+import { OpenAIVoice } from '@mastra/voice-openai';
+import { Memory } from '@mastra/memory';
 import { Agent } from '@mastra/core/agent';
 import { cookingTool } from '../tools/index.js';
+
+const memory = new Memory();
 
 export const chefAgent = new Agent({
   name: 'Chef Agent',
@@ -13,6 +17,35 @@ export const chefAgent = new Agent({
   model: openai('gpt-4o-mini'),
   tools: {
     cookingTool,
+  },
+  memory,
+  voice: new OpenAIVoice(),
+});
+
+export const dynamicAgent = new Agent({
+  name: 'Dynamic Agent',
+  instructions: ({ runtimeContext }) => {
+    if (runtimeContext.get('foo')) {
+      return 'You are a dynamic agent';
+    }
+    return 'You are a static agent';
+  },
+  model: ({ runtimeContext }) => {
+    if (runtimeContext.get('foo')) {
+      return openai('gpt-4o');
+    }
+    return openai('gpt-4o-mini');
+  },
+  tools: ({ runtimeContext }) => {
+    const tools = {
+      cookingTool,
+    };
+
+    if (runtimeContext.get('foo')) {
+      tools['web_search_preview'] = openai.tools.webSearchPreview();
+    }
+
+    return tools;
   },
 });
 

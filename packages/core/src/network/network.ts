@@ -14,9 +14,9 @@ import { Agent } from '../agent';
 import type { AgentGenerateOptions, AgentStreamOptions } from '../agent';
 import { MastraBase } from '../base';
 
-import type { Container } from '../di';
 import { RegisteredLogger } from '../logger';
 import type { Mastra } from '../mastra';
+import type { RuntimeContext } from '../runtime-context';
 import { createTool } from '../tools';
 import type { ToolAction } from '../tools';
 import type { AgentNetworkConfig } from './types';
@@ -71,7 +71,7 @@ export class AgentNetwork extends MastraBase {
             }),
           ),
         }),
-        execute: async ({ context, container }) => {
+        execute: async ({ context, runtimeContext }) => {
           try {
             // Extract the actions from the context
             const actions = context.actions;
@@ -85,7 +85,7 @@ export class AgentNetwork extends MastraBase {
                   action.agent,
                   [{ role: 'user', content: action.input }],
                   action.includeHistory,
-                  container,
+                  runtimeContext,
                 ),
               ),
             );
@@ -206,7 +206,7 @@ export class AgentNetwork extends MastraBase {
     );
   }
 
-  async executeAgent(agentId: string, input: CoreMessage[], includeHistory = false, container?: Container) {
+  async executeAgent(agentId: string, input: CoreMessage[], includeHistory = false, runtimeContext?: RuntimeContext) {
     try {
       // Find the agent by its formatted ID
       const agent = this.#agents.find(agent => this.formatAgentId(agent.name) === agentId);
@@ -246,7 +246,7 @@ export class AgentNetwork extends MastraBase {
       }
 
       // Generate a response from the agent
-      const result = await agent.generate(messagesWithContext, { container });
+      const result = await agent.generate(messagesWithContext, { runtimeContext });
 
       return result.text;
     } catch (err) {

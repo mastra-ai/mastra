@@ -1,12 +1,12 @@
 import { useState } from 'react';
 
-import { WorkflowTrigger } from '@mastra/playground-ui';
+import { VNextWorkflowTrigger, WorkflowTrigger } from '@mastra/playground-ui';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
 import { WorkflowEndpoints } from './workflow-endpoints';
 import { WorkflowLogs } from './workflow-logs';
 
-export function WorkflowInformation({ workflowId }: { workflowId: string }) {
+export function WorkflowInformation({ workflowId, isVNext }: { workflowId: string; isVNext?: boolean }) {
   const [runId, setRunId] = useState<string>('');
   return (
     <Tabs defaultValue="run" className="border-l-[1px]">
@@ -28,10 +28,18 @@ export function WorkflowInformation({ workflowId }: { workflowId: string }) {
         </TabsTrigger>
       </TabsList>
       <TabsContent value="run">
-        {workflowId ? <WorkflowTrigger workflowId={workflowId} setRunId={setRunId} baseUrl="" /> : null}
+        {workflowId ? (
+          <>
+            {isVNext ? (
+              <VNextWorkflowTrigger workflowId={workflowId} setRunId={setRunId} baseUrl="" />
+            ) : (
+              <WorkflowTrigger workflowId={workflowId} setRunId={setRunId} baseUrl="" />
+            )}
+          </>
+        ) : null}
       </TabsContent>
       <TabsContent value="endpoints">
-        <WorkflowEndpoints workflowId={workflowId} />
+        <WorkflowEndpoints workflowId={workflowId} isVNext={isVNext} />
       </TabsContent>
       <TabsContent value="logs">
         <WorkflowLogs runId={runId} />

@@ -29,12 +29,15 @@ describe('Memory with PostgresStore Integration', () => {
   const config = parseConnectionString(connectionString);
   const memory = new Memory({
     storage: new PostgresStore(config),
-    vector: new PgVector(connectionString),
+    vector: new PgVector({ connectionString }),
     options: {
       lastMessages: 10,
       semanticRecall: {
         topK: 3,
         messageRange: 2,
+      },
+      threads: {
+        generateTitle: false,
       },
     },
   });

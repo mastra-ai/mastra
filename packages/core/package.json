@@ -1,6 +1,6 @@
 {
   "name": "@mastra/core",
-  "version": "0.9.0-alpha.7",
+  "version": "0.9.2-alpha.5",
   "license": "Elastic-2.0",
   "type": "module",
   "main": "dist/index.js",
@@ -28,6 +28,16 @@
       "require": {
         "types": "./dist/*/index.d.cts",
         "default": "./dist/*/index.cjs"
+      }
+    },
+    "./workflows/vNext": {
+      "import": {
+        "types": "./dist/workflows/vNext/index.d.ts",
+        "default": "./dist/workflows/vNext/index.js"
+      },
+      "require": {
+        "types": "./dist/workflows/vNext/index.d.cts",
+        "default": "./dist/workflows/vNext/index.cjs"
       }
     },
     "./storage/libsql": {
@@ -140,7 +150,7 @@
     "@ai-sdk/openai": "^1.2.1",
     "@babel/core": "^7.26.10",
     "@internal/lint": "workspace:*",
-    "@microsoft/api-extractor": "^7.52.1",
+    "@microsoft/api-extractor": "^7.52.5",
     "@size-limit/preset-small-lib": "^11.2.0",
     "@types/babel__core": "^7.20.5",
     "@types/json-schema": "^7.0.15",
@@ -150,11 +160,11 @@
     "@types/qs": "^6.9.18",
     "eslint": "^9.23.0",
     "globby": "^14.1.0",
-    "rollup": "^4.35.0",
+    "rollup": "^4.40.1",
     "size-limit": "^11.2.0",
     "tsup": "^8.4.0",
     "typescript": "^5.8.2",
-    "vitest": "^3.0.9",
+    "vitest": "^3.1.2",
     "zod": "^3.24.2"
   },
   "engines": {

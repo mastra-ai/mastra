@@ -2,7 +2,7 @@ import { Input } from '@/components/ui/input';
 import { AutoFormFieldProps } from '@autoform/react';
 import React from 'react';
 
-export const NumberField: React.FC<AutoFormFieldProps> = ({ inputProps, error, id }) => {
+export const NumberField: React.FC<AutoFormFieldProps> = ({ inputProps, error, field, id }) => {
   const { key, ...props } = inputProps;
 
   return (
@@ -11,6 +11,7 @@ export const NumberField: React.FC<AutoFormFieldProps> = ({ inputProps, error, i
       type="number"
       className={error ? 'border-destructive' : ''}
       {...props}
+      defaultValue={field.default}
       onChange={e => {
         const value = e.target.value;
         if (value !== '' && !isNaN(Number(value))) {

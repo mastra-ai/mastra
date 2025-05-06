@@ -35,7 +35,7 @@ export const init = async ({
   llmProvider: LLMProvider;
   addExample: boolean;
   llmApiKey?: string;
-  configureEditorWithDocsMCP?: undefined | 'windsurf' | 'cursor';
+  configureEditorWithDocsMCP?: undefined | 'windsurf' | 'cursor' | 'cursor-global';
 }) => {
   s.start('Initializing Mastra');
 
@@ -66,6 +66,17 @@ export const init = async ({
           writeCodeSample(dirPath, component as Components, llmProvider, components as Components[]),
         ),
       ]);
+
+      const depService = new DepsService();
+      const needsLibsql = (await depService.checkDependencies(['@mastra/libsql'])) !== `ok`;
+      if (needsLibsql) {
+        await depService.installPackages(['@mastra/libsql']);
+      }
+      const needsMemory =
+        components.includes(`agents`) && (await depService.checkDependencies(['@mastra/memory'])) !== `ok`;
+      if (needsMemory) {
+        await depService.installPackages(['@mastra/memory']);
+      }
     }
 
     const key = await getAPIKey(llmProvider || 'openai');

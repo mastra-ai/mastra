@@ -13,8 +13,8 @@ const sizes = {
 
 export const Icon = ({ children, className, size = 'default', ...props }: IconProps) => {
   return (
-    <div className={clsx(sizes[size], className)} {...props}>
+    <span className={clsx('block', sizes[size], className)} {...props}>
       {children}
-    </div>
+    </span>
   );
 };
