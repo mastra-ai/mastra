@@ -11,7 +11,6 @@
     "@mastra/github": "1.1.20",
     "@mastra/mem0": "0.0.7",
     "@mastra/ragie": "1.1.20",
-    "@internal/lint": "0.0.2",
     "mastra": "0.6.0",
     "@mastra/playground": "0.0.1",
     "@mastra/cloud": "0.0.0",
@@ -38,7 +37,6 @@
     "@mastra/speech-playai": "0.1.19",
     "@mastra/speech-replicate": "0.1.20",
     "@mastra/speech-speechify": "0.1.20",
-    "@internal/storage-test-utils": "0.0.1",
     "@mastra/astra": "0.2.12",
     "@mastra/chroma": "0.2.12",
     "@mastra/clickhouse": "0.3.1",
@@ -63,7 +61,9 @@
     "@mastra/voice-playai": "0.1.15",
     "@mastra/voice-sarvam": "0.1.10",
     "@mastra/voice-speechify": "0.1.15",
-    "@mastra/couchbase": "0.0.1"
+    "@mastra/couchbase": "0.0.1",
+    "@internal/storage-test-utils": "0.0.1",
+    "@internal/lint": "0.0.2"
   },
   "changesets": [
     "brave-ghosts-shake",
