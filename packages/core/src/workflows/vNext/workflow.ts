@@ -20,6 +20,7 @@ import type {
   ExtractSchemaFromStep,
   PathsToStringProps,
   ZodPathType,
+  DynamicMapping,
 } from './types';
 
 export type StepFlowEntry =
@@ -428,7 +429,8 @@ export class NewWorkflow<
         | {
             runtimeContextPath: string;
             schema: z.ZodTypeAny;
-          };
+          }
+        | DynamicMapping<TPrevSchema, z.ZodTypeAny>;
     },
   >(mappingConfig: TMapping) {
     // Create an implicit step that handles the mapping
@@ -436,13 +438,20 @@ export class NewWorkflow<
       id: `mapping_${randomUUID()}`,
       inputSchema: z.object({}),
       outputSchema: z.object({}),
-      execute: async ({ getStepResult, getInitData, runtimeContext }) => {
+      execute: async ctx => {
+        const { getStepResult, getInitData, runtimeContext } = ctx;
+
         const result: Record<string, any> = {};
         for (const [key, mapping] of Object.entries(mappingConfig)) {
           const m: any = mapping;
 
           if (m.value !== undefined) {
             result[key] = m.value;
+            continue;
+          }
+
+          if (m.fn !== undefined) {
+            result[key] = await m.fn(ctx);
             continue;
           }
 
@@ -489,7 +498,7 @@ export class NewWorkflow<
             ? TMapping[K]['path'] extends '.'
               ? TMapping[K]['initData']['inputSchema']
               : ZodPathType<TMapping[K]['initData']['inputSchema'], TMapping[K]['path']>
-            : TMapping[K] extends { value: any; schema: z.ZodTypeAny }
+            : TMapping[K] extends { schema: z.ZodTypeAny }
               ? TMapping[K]['schema']
               : TMapping[K] extends { runtimeContextPath: string; schema: z.ZodTypeAny }
                 ? TMapping[K]['schema']
