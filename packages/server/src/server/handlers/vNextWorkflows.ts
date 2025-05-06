@@ -76,11 +76,13 @@ export async function getVNextWorkflowByIdHandler({ mastra, workflowId }: VNextW
   }
 }
 
-export async function getVNextWorkflowRunHandler({
+export async function getVNextWorkflowRunByIdHandler({
   mastra,
   workflowId,
   runId,
-}: Pick<VNextWorkflowContext, 'mastra' | 'workflowId' | 'runId'>): Promise<ReturnType<NewWorkflow['getWorkflowRun']>> {
+}: Pick<VNextWorkflowContext, 'mastra' | 'workflowId' | 'runId'>): Promise<
+  ReturnType<NewWorkflow['getWorkflowRunById']>
+> {
   try {
     if (!workflowId) {
       throw new HTTPException(400, { message: 'Workflow ID is required' });
@@ -96,7 +98,7 @@ export async function getVNextWorkflowRunHandler({
       throw new HTTPException(404, { message: 'Workflow not found' });
     }
 
-    const run = await workflow.getWorkflowRun(runId);
+    const run = await workflow.getWorkflowRunById(runId);
 
     if (!run) {
       throw new HTTPException(404, { message: 'Workflow run not found' });
@@ -184,7 +186,7 @@ export async function startVNextWorkflowRunHandler({
     }
 
     const workflow = mastra.vnext_getWorkflow(workflowId);
-    const run = await workflow.getWorkflowRun(runId);
+    const run = await workflow.getWorkflowRunById(runId);
 
     if (!run) {
       throw new HTTPException(404, { message: 'Workflow run not found' });
@@ -217,7 +219,7 @@ export async function watchVNextWorkflowHandler({
     }
 
     const workflow = mastra.vnext_getWorkflow(workflowId);
-    const run = await workflow.getWorkflowRun(runId);
+    const run = await workflow.getWorkflowRunById(runId);
 
     if (!run) {
       throw new HTTPException(404, { message: 'Workflow run not found' });
@@ -281,7 +283,7 @@ export async function resumeAsyncVNextWorkflowHandler({
     }
 
     const workflow = mastra.vnext_getWorkflow(workflowId);
-    const run = await workflow.getWorkflowRun(runId);
+    const run = await workflow.getWorkflowRunById(runId);
 
     if (!run) {
       throw new HTTPException(404, { message: 'Workflow run not found' });
@@ -325,7 +327,7 @@ export async function resumeVNextWorkflowHandler({
     }
 
     const workflow = mastra.vnext_getWorkflow(workflowId);
-    const run = await workflow.getWorkflowRun(runId);
+    const run = await workflow.getWorkflowRunById(runId);
 
     if (!run) {
       throw new HTTPException(404, { message: 'Workflow run not found' });

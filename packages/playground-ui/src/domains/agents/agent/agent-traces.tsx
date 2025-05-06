@@ -1,6 +1,6 @@
 import { useContext, useState } from 'react';
 
-import { TraceContext, TraceProvider } from '@/domains/traces/context/trace-context';
+import { TraceContext } from '@/domains/traces/context/trace-context';
 
 import { TracesTable } from '../../traces/traces-table';
 import { TracesSidebar } from '@/domains/traces/traces-sidebar';
