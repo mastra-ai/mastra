@@ -1,5 +1,5 @@
 import type { MessageType, StorageThreadType, WorkflowRuns } from '@mastra/core';
-import { MastraStorage, TABLE_THREADS } from '@mastra/core/storage';
+import { MastraStorage, TABLE_MESSAGES, TABLE_THREADS } from '@mastra/core/storage';
 import type { StorageColumn, EvalRow, StorageGetMessagesArg, TABLE_NAMES } from '@mastra/core/storage';
 import type {
   CheckHealthResponse,
@@ -397,12 +397,59 @@ export class MilvusStorage extends MastraStorage {
     }
   }
 
-  getMessages({ threadId, selectBy, threadConfig }: StorageGetMessagesArg): Promise<MessageType[]> {
-    throw new Error(`Method not implemented. ${threadId}, ${selectBy}, ${JSON.stringify(threadConfig)}`);
+  async getMessages({ threadId, selectBy, threadConfig }: StorageGetMessagesArg): Promise<MessageType[]> {
+    try {
+      await this.ensureCollectionLoaded(TABLE_MESSAGES);
+
+      const response = await this.client.query({
+        collection_name: TABLE_MESSAGES,
+        filter: `thread_id == "${threadId}"`,
+      });
+
+      if (response.status.error_code !== 'Success') {
+        throw new Error('Error status code: ' + response.status.reason);
+      }
+
+      return response.data.map(message => ({
+        id: message.id,
+        threadId: message.thread_id,
+        content: message.content,
+        role: message.role,
+        createdAt: new Date(Number(message.createdAt)),
+        type: message.type,
+      })) as MessageType[];
+    } catch (error) {
+      throw new Error('Failed to get messages: ' + error);
+    }
   }
-  saveMessages({ messages }: { messages: MessageType[] }): Promise<MessageType[]> {
-    throw new Error(`Method not implemented. ${JSON.stringify(messages)}`);
+
+  async saveMessages({ messages }: { messages: MessageType[] }): Promise<MessageType[]> {
+    try {
+      const messagesToSave = messages.map(message => ({
+        id: message.id,
+        thread_id: message.threadId,
+        content: message.content,
+        role: message.role,
+        type: message.type,
+        createdAt: message.createdAt.getTime(),
+        vector_placeholder: [0, 0], // required for milvus compatibility
+      }));
+
+      const response = await this.client.upsert({
+        collection_name: TABLE_MESSAGES,
+        data: messagesToSave,
+      });
+
+      if (response.status.error_code !== 'Success') {
+        throw new Error('Error status code: ' + response.status.reason);
+      }
+
+      return messages;
+    } catch (error) {
+      throw new Error('Failed to save messages: ' + error);
+    }
   }
+
   getTraces({
     name,
     scope,

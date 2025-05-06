@@ -50,6 +50,7 @@ function generateMessageRecords(count: number, threadId?: string): MessageType[]
     toolCallArgs: [],
     toolNames: [],
     type: 'text',
+    vector_placeholder: [0, 0],
   }));
 }
 
@@ -578,6 +579,39 @@ describe('MilvusStorage', () => {
 
       const threadFromDB = await milvusStorage.getThreadById({ threadId: savedThread.id });
       expect(threadFromDB).toBeNull();
+    });
+  });
+
+  describe('Message operations', () => {
+    beforeAll(async () => {
+      await milvusStorage.createTable({
+        tableName: TABLE_MESSAGES,
+        schema: TABLE_SCHEMAS[TABLE_MESSAGES],
+      });
+    });
+
+    it('should save a message', async () => {
+      const messages = generateMessageRecords(1);
+
+      const savedMessage = await milvusStorage.saveMessages({ messages });
+
+      expect(savedMessage).toBeDefined();
+      expect(savedMessage[0].id).toBe(messages[0].id);
+      expect(savedMessage[0].threadId).toBe(messages[0].threadId);
+      expect(savedMessage[0].content).toBe(messages[0].content);
+      expect(savedMessage[0].role).toBe(messages[0].role);
+      expect(savedMessage[0].type).toBe(messages[0].type);
+      expect(savedMessage[0].createdAt).toEqual(messages[0].createdAt);
+
+      const messagesFromDB = await milvusStorage.getMessages({ threadId: messages[0].threadId });
+
+      expect(messagesFromDB).toBeDefined();
+      expect(messagesFromDB[0].id).toBe(messages[0].id);
+      expect(messagesFromDB[0].threadId).toBe(messages[0].threadId);
+      expect(messagesFromDB[0].content).toBe(messages[0].content);
+      expect(messagesFromDB[0].role).toBe(messages[0].role);
+      expect(messagesFromDB[0].type).toBe(messages[0].type);
+      expect(messagesFromDB[0].createdAt).toEqual(messages[0].createdAt);
     });
   });
 });
