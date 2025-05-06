@@ -1,5 +1,12 @@
 # @mastra/mem0
 
+## 0.0.8-alpha.7
+
+### Patch Changes
+
+- 2cf3b8f: dependencies updates:
+  - Updated dependency [`zod@^3.24.3` ↗︎](https://www.npmjs.com/package/zod/v/3.24.3) (from `^3.24.0`, in `dependencies`)
+
 ## 0.0.8-alpha.6
 
 ### Patch Changes

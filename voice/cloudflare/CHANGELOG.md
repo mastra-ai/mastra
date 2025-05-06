@@ -1,5 +1,12 @@
 # @mastra/voice-cloudflare
 
+## 0.1.9-alpha.7
+
+### Patch Changes
+
+- 2cf3b8f: dependencies updates:
+  - Updated dependency [`zod@^3.24.3` ↗︎](https://www.npmjs.com/package/zod/v/3.24.3) (from `^3.24.2`, in `dependencies`)
+
 ## 0.1.9-alpha.6
 
 ### Patch Changes

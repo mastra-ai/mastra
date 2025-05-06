@@ -1,5 +1,15 @@
 # mastra
 
+## 0.6.1-alpha.7
+
+### Patch Changes
+
+- 2cf3b8f: dependencies updates:
+  - Updated dependency [`zod@^3.24.3` ↗︎](https://www.npmjs.com/package/zod/v/3.24.3) (from `^3.24.2`, in `dependencies`)
+  - Updated dependency [`zod-to-json-schema@^3.24.5` ↗︎](https://www.npmjs.com/package/zod-to-json-schema/v/3.24.5) (from `^3.24.3`, in `dependencies`)
+- Updated dependencies [2cf3b8f]
+  - @mastra/deployer@0.3.2-alpha.7
+
 ## 0.6.1-alpha.6
 
 ### Patch Changes
