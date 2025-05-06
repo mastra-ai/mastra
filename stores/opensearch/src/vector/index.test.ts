@@ -47,10 +47,8 @@ describe('OpenSearchVector', () => {
 
     describe('metrics', () => {
       const testIndex = 'test_metric';
-      beforeEach(async () => {
-        try {
-          await vectorDB.deleteIndex(testIndex);
-        } catch {}
+      afterEach(async () => {
+        await vectorDB.deleteIndex(testIndex);
       });
       it('should create index with cosine metric', async () => {
         await vectorDB.createIndex({
@@ -176,11 +174,7 @@ describe('OpenSearchVector', () => {
     });
 
     afterEach(async () => {
-      try {
-        await vectorDB.deleteIndex(testIndexName);
-      } catch (error) {
-        console.error('Error deleting index:', error);
-      }
+      await vectorDB.deleteIndex(testIndexName);
     });
 
     describe('query', () => {
@@ -394,18 +388,13 @@ describe('OpenSearchVector', () => {
     });
 
     describe('upsert', () => {
+      let testIndexName = 'test_vector_upsert';
       beforeEach(async () => {
-        try {
-          await vectorDB.createIndex({ indexName: testIndexName, dimension: 3 });
-        } catch {}
+        await vectorDB.createIndex({ indexName: testIndexName, dimension: 3 });
       });
 
       afterEach(async () => {
-        try {
-          await vectorDB.deleteIndex(testIndexName);
-        } catch (error) {
-          console.error('Error deleting index:', error);
-        }
+        await vectorDB.deleteIndex(testIndexName);
       });
 
       it('should insert new vectors', async () => {
@@ -457,6 +446,7 @@ describe('OpenSearchVector', () => {
     });
 
     describe('updates', () => {
+      let testIndexName = 'test_vector_updates';
       const testVectors = [
         [1, 2, 3],
         [4, 5, 6],
@@ -464,9 +454,7 @@ describe('OpenSearchVector', () => {
       ];
 
       beforeEach(async () => {
-        try {
-          await vectorDB.createIndex({ indexName: testIndexName, dimension: 3 });
-        } catch {}
+        await vectorDB.createIndex({ indexName: testIndexName, dimension: 3 });
       });
 
       afterEach(async () => {
@@ -556,6 +544,7 @@ describe('OpenSearchVector', () => {
     });
 
     describe('deletes', () => {
+      let testIndexName = 'test_vector_deletes';
       const testVectors = [
         [1, 2, 3],
         [4, 5, 6],
@@ -563,15 +552,11 @@ describe('OpenSearchVector', () => {
       ];
 
       beforeEach(async () => {
-        try {
-          await vectorDB.createIndex({ indexName: testIndexName, dimension: 3 });
-        } catch {}
+        await vectorDB.createIndex({ indexName: testIndexName, dimension: 3 });
       });
 
       afterEach(async () => {
-        try {
-          await vectorDB.deleteIndex(testIndexName);
-        } catch {}
+        await vectorDB.deleteIndex(testIndexName);
       });
 
       it('should delete the vector by id', async () => {
@@ -1074,15 +1059,27 @@ describe('OpenSearchVector', () => {
       });
 
       it('should handle $not in nested fields', async () => {
+        // Create a unique identifier for this test
+        const testId = 'test-' + Date.now();
         await vectorDB.upsert({
           indexName,
           vectors: [[1, 0.1, 0]],
-          metadata: [{ user: { profile: { price: 10 } } }],
+          metadata: [{ user: { profile: { price: 10 } }, testId }],
+        });
+        await vectorDB.upsert({
+          indexName,
+          vectors: [[1, 0.1, 0]],
+          metadata: [{ user: { profile: { price: 50 } }, testId }],
         });
         const results = await vectorDB.query({
           indexName,
           queryVector: [1, 0, 0],
-          filter: { 'user.profile.price': { $not: { $gt: 25 } } },
+          filter: {
+            $and: [
+              { testId }, // Only match our specific test document
+              { 'user.profile.price': { $not: { $gt: 25 } } },
+            ],
+          },
         });
         expect(results.length).toBe(1);
       });
@@ -1219,7 +1216,7 @@ describe('OpenSearchVector', () => {
       });
 
       // Empty Conditions Tests
-      it.only('should handle empty conditions in logical operators', async () => {
+      it('should handle empty conditions in logical operators', async () => {
         const results = await vectorDB.query({
           indexName,
           queryVector: [1, 0, 0],
@@ -1231,7 +1228,7 @@ describe('OpenSearchVector', () => {
         });
       });
 
-      it.only('should handle empty $and conditions', async () => {
+      it('should handle empty $and conditions', async () => {
         const results = await vectorDB.query({
           indexName,
           queryVector: [1, 0, 0],
@@ -1425,7 +1422,7 @@ describe('OpenSearchVector', () => {
         expect(results).toHaveLength(2);
       });
 
-      it('should handle dotall flag', async () => {
+      it.only('should handle dotall flag', async () => {
         await vectorDB.upsert({
           indexName,
           vectors: [[1, 0.1, 0]],

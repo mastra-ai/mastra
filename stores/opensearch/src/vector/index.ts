@@ -182,7 +182,6 @@ export class OpenSearchVector extends MastraVector {
 
     try {
       const translatedFilter = this.transformFilter(filter);
-      console.log('translatedFilter', JSON.stringify(translatedFilter));
 
       const response = await this.client.search({
         index: indexName,

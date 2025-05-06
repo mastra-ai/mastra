@@ -32,17 +32,29 @@ export class OpenSearchFilterTranslator extends BaseFilterTranslator {
 
     const entries = Object.entries(node as Record<string, any>);
 
-    // Handle logical operators at the top level
-    if (entries.length === 1 && entries[0] && this.isLogicalOperator(entries[0][0])) {
-      const [operator, value] = entries[0] as [QueryOperator, any];
+    // Extract logical operators and field conditions
+    const logicalOperators: [string, any][] = [];
+    const fieldConditions: [string, any][] = [];
+
+    entries.forEach(([key, value]) => {
+      if (this.isLogicalOperator(key)) {
+        logicalOperators.push([key, value]);
+      } else {
+        fieldConditions.push([key, value]);
+      }
+    });
+
+    // If we have a single logical operator
+    if (logicalOperators.length === 1 && fieldConditions.length === 0) {
+      const [operator, value] = logicalOperators[0] as [QueryOperator, any];
       if (!Array.isArray(value) && typeof value !== 'object') {
         throw new Error(`Invalid logical operator structure: ${operator} must have an array or object value`);
       }
       return this.translateLogicalOperator(operator, value);
     }
 
-    // Handle field conditions
-    const conditions = entries.map(([key, value]) => {
+    // Process field conditions
+    const fieldConditionQueries = fieldConditions.map(([key, value]) => {
       // Handle nested objects
       if (typeof value === 'object' && value !== null && !Array.isArray(value)) {
         // Check if the object contains operators
@@ -66,22 +78,52 @@ export class OpenSearchFilterTranslator extends BaseFilterTranslator {
       return { term: { [fieldWithKeyword]: value } };
     });
 
-    // If we have multiple conditions, wrap them in a bool must
-    if (conditions.length > 1) {
+    // Handle case with both logical operators and field conditions or multiple logical operators
+    if (logicalOperators.length > 0) {
+      const logicalConditions = logicalOperators.map(([operator, value]) =>
+        this.translateOperator(operator as QueryOperator, value),
+      );
+
       return {
         bool: {
-          must: conditions,
+          must: [...logicalConditions, ...fieldConditionQueries],
         },
       };
     }
 
-    return conditions[0];
+    // If we only have field conditions
+    if (fieldConditionQueries.length > 1) {
+      return {
+        bool: {
+          must: fieldConditionQueries,
+        },
+      };
+    }
+
+    // If we have only one field condition
+    if (fieldConditionQueries.length === 1) {
+      return fieldConditionQueries[0];
+    }
+
+    // If we have no conditions (e.g., only empty $and arrays)
+    return { match_all: {} };
   }
 
   private translateNestedObject(field: string, value: Record<string, any>): any {
     const conditions = Object.entries(value).map(([subField, subValue]) => {
       const fullField = `${field}.${subField}`;
+
+      // Check if this is an operator in a nested field
+      if (this.isOperator(subField)) {
+        return this.translateOperator(subField as QueryOperator, subValue, field);
+      }
+
       if (typeof subValue === 'object' && subValue !== null && !Array.isArray(subValue)) {
+        // Check if the nested object contains operators
+        const hasOperators = Object.keys(subValue).some(k => this.isOperator(k));
+        if (hasOperators) {
+          return this.translateFieldConditions(fullField, subValue);
+        }
         return this.translateNestedObject(fullField, subValue);
       }
       const fieldWithKeyword = this.addKeywordIfNeeded(fullField, subValue);
@@ -266,19 +308,58 @@ export class OpenSearchFilterTranslator extends BaseFilterTranslator {
       throw new Error(`Unsupported operator: ${operator}`);
     }
 
+    // Special case for $not with null or $eq: null
+    if (operator === '$not' && field) {
+      if (value === null) {
+        // For "not null", we need to use exists query
+        return { exists: { field } };
+      }
+
+      if (typeof value === 'object' && value !== null) {
+        // For "not {$eq: null}", we need to use exists query
+        if ('$eq' in value && value.$eq === null) {
+          return { exists: { field } };
+        }
+
+        // For "not {$ne: null}", we need to use must_not exists query
+        if ('$ne' in value && value.$ne === null) {
+          return {
+            bool: {
+              must_not: [{ exists: { field } }],
+            },
+          };
+        }
+      }
+    }
+
     // Handle logical operators
     if (this.isLogicalOperator(operator)) {
       // For $not operator with field context and nested operators, handle specially
       if (operator === '$not' && field && typeof value === 'object' && value !== null && !Array.isArray(value)) {
         const entries = Object.entries(value);
-        if (entries.length === 1 && entries[0] && this.isOperator(entries[0][0])) {
-          const [nestedOp, nestedVal] = entries[0] as [QueryOperator, any];
-          const translatedNested = this.translateFieldOperator(field, nestedOp, nestedVal);
-          return {
-            bool: {
-              must_not: [translatedNested],
-            },
-          };
+
+        // Handle multiple operators in $not
+        if (entries.length > 0) {
+          // If all entries are operators, handle them as a single condition
+          if (entries.every(([op]) => this.isOperator(op))) {
+            const translatedCondition = this.translateFieldConditions(field, value);
+            return {
+              bool: {
+                must_not: [translatedCondition],
+              },
+            };
+          }
+
+          // Handle single nested operator
+          if (entries.length === 1 && entries[0] && this.isOperator(entries[0][0])) {
+            const [nestedOp, nestedVal] = entries[0] as [QueryOperator, any];
+            const translatedNested = this.translateFieldOperator(field, nestedOp, nestedVal);
+            return {
+              bool: {
+                must_not: [translatedNested],
+              },
+            };
+          }
         }
       }
       return this.translateLogicalOperator(operator, value);

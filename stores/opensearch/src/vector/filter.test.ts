@@ -124,6 +124,72 @@ describe('OpenSearchFilterTranslator', () => {
       });
     });
 
+    it('translates $not with $eq operator', () => {
+      const filter = { field: { $not: { $eq: 'value' } } };
+      expect(translator.translate(filter)).toEqual({
+        bool: {
+          must_not: [{ term: { 'metadata.field.keyword': 'value' } }],
+        },
+      });
+    });
+
+    it('translates $not with $ne operator', () => {
+      const filter = { field: { $not: { $ne: 'value' } } };
+      expect(translator.translate(filter)).toEqual({
+        bool: {
+          must_not: [
+            {
+              bool: {
+                must_not: [{ term: { 'metadata.field.keyword': 'value' } }],
+              },
+            },
+          ],
+        },
+      });
+    });
+
+    it('translates $not with $eq null', () => {
+      const filter = { field: { $not: { $eq: null } } };
+      expect(translator.translate(filter)).toEqual({
+        exists: { field: 'metadata.field' },
+      });
+    });
+
+    it('translates $not with $ne null', () => {
+      const filter = { field: { $not: { $ne: null } } };
+      expect(translator.translate(filter)).toEqual({
+        bool: {
+          must_not: [{ exists: { field: 'metadata.field' } }],
+        },
+      });
+    });
+
+    it('translates $not with nested fields', () => {
+      const filter = { 'user.profile.age': { $not: { $gt: 25 } } };
+      expect(translator.translate(filter)).toEqual({
+        bool: {
+          must_not: [
+            {
+              range: { 'metadata.user.profile.age': { gt: 25 } },
+            },
+          ],
+        },
+      });
+    });
+
+    it('translates $not with multiple operators', () => {
+      const filter = { price: { $not: { $gte: 30, $lte: 70 } } };
+      expect(translator.translate(filter)).toEqual({
+        bool: {
+          must_not: [
+            {
+              range: { 'metadata.price': { gte: 30, lte: 70 } },
+            },
+          ],
+        },
+      });
+    });
+
     it('handles empty $and array', () => {
       const filter = {
         $and: [],
