@@ -755,6 +755,15 @@ describe('QdrantVector', () => {
     });
   });
   describe('Error Handling', () => {
+    const testIndexName = 'test_index_error';
+    beforeAll(async () => {
+      await qdrant.createIndex({ indexName: testIndexName, dimension: 3 });
+    });
+
+    afterAll(async () => {
+      await qdrant.deleteIndex(testIndexName);
+    });
+
     it('should handle non-existent index query gracefully', async () => {
       const nonExistentIndex = 'non-existent-index';
       await expect(qdrant.query({ indexName: nonExistentIndex, queryVector: [1, 0, 0] })).rejects.toThrow();
@@ -767,15 +776,43 @@ describe('QdrantVector', () => {
 
     it('should handle mismatched metadata and vectors length', async () => {
       const vectors = [[1, 2, 3]];
-      const metadata = [{}, {}]; // More metadata than vectors
+      const metadata = [{}, {}];
       await expect(qdrant.upsert({ indexName: testCollectionName, vectors, metadata })).rejects.toThrow();
     });
 
-    it('can handle duplicate index creation', async () => {
-      await qdrant.createIndex({ indexName: testCollectionName, dimension: 3 });
-      await expect(qdrant.createIndex({ indexName: testCollectionName, dimension: 3 })).rejects.toThrow(
-        'Index already exists',
+    it('should handle duplicate index creation gracefully', async () => {
+      const duplicateIndexName = `duplicate_test`;
+      const dimension = 768;
+
+      // Create index first time
+      await qdrant.createIndex({
+        indexName: duplicateIndexName,
+        dimension,
+        metric: 'cosine',
+      });
+
+      // Try to create with same dimensions - should not throw
+      await expect(
+        qdrant.createIndex({
+          indexName: duplicateIndexName,
+          dimension,
+          metric: 'cosine',
+        }),
+      ).resolves.not.toThrow();
+
+      // Try to create with different dimensions - should throw
+      await expect(
+        qdrant.createIndex({
+          indexName: duplicateIndexName,
+          dimension: dimension + 1,
+          metric: 'cosine',
+        }),
+      ).rejects.toThrow(
+        `Index "${duplicateIndexName}" already exists with ${dimension} dimensions, but ${dimension + 1} dimensions were requested`,
       );
+
+      // Cleanup
+      await qdrant.deleteIndex(duplicateIndexName);
     });
   });
 

@@ -159,6 +159,15 @@ function waitUntilVectorsIndexed(vectorDB: TurbopufferVector, indexName: string,
   });
 
   describe('Error Handling', () => {
+    const testIndexName = 'test_index_error';
+    beforeAll(async () => {
+      await vectorDB.createIndex({ indexName: testIndexName, dimension: 3 });
+    });
+
+    afterAll(async () => {
+      await vectorDB.deleteIndex(testIndexName);
+    });
+
     it('should handle non-existent index query gracefully', async () => {
       const nonExistentIndex = 'non-existent-index';
       await expect(vectorDB.query({ indexName: nonExistentIndex, queryVector: [1, 0, 0] })).rejects.toThrow(
@@ -173,15 +182,43 @@ function waitUntilVectorsIndexed(vectorDB: TurbopufferVector, indexName: string,
 
     it('should handle mismatched metadata and vectors length', async () => {
       const vectors = [[1, 2, 3]];
-      const metadata = [{}, {}]; // More metadata than vectors
+      const metadata = [{}, {}];
       await expect(vectorDB.upsert({ indexName: testIndexName, vectors, metadata })).rejects.toThrow();
     });
 
-    it('can handle duplicate index creation', async () => {
-      await vectorDB.createIndex({ indexName: testIndexName, dimension: 3 });
-      await expect(vectorDB.createIndex({ indexName: testIndexName, dimension: 3 })).rejects.toThrow(
-        'Index already exists',
+    it('should handle duplicate index creation gracefully', async () => {
+      const duplicateIndexName = `duplicate-test`;
+      const dimension = 768;
+
+      // Create index first time
+      await vectorDB.createIndex({
+        indexName: duplicateIndexName,
+        dimension,
+        metric: 'cosine',
+      });
+
+      // Try to create with same dimensions - should not throw
+      await expect(
+        vectorDB.createIndex({
+          indexName: duplicateIndexName,
+          dimension,
+          metric: 'cosine',
+        }),
+      ).resolves.not.toThrow();
+
+      // Try to create with different dimensions - should throw
+      await expect(
+        vectorDB.createIndex({
+          indexName: duplicateIndexName,
+          dimension: dimension + 1,
+          metric: 'cosine',
+        }),
+      ).rejects.toThrow(
+        `Index "${duplicateIndexName}" already exists with ${dimension} dimensions, but ${dimension + 1} dimensions were requested`,
       );
+
+      // Cleanup
+      await vectorDB.deleteIndex(duplicateIndexName);
     });
   });
 

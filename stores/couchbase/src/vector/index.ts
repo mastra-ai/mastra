@@ -84,81 +84,114 @@ export class CouchbaseVector extends MastraVector {
       throw new Error('Dimension must be a positive integer');
     }
 
-    await this.scope.searchIndexes().upsertIndex({
-      name: indexName,
-      sourceName: this.bucketName,
-      type: 'fulltext-index',
-      params: {
-        doc_config: {
-          docid_prefix_delim: '',
-          docid_regexp: '',
-          mode: 'scope.collection.type_field',
-          type_field: 'type',
-        },
-        mapping: {
-          default_analyzer: 'standard',
-          default_datetime_parser: 'dateTimeOptional',
-          default_field: '_all',
-          default_mapping: {
-            dynamic: true,
-            enabled: false,
+    try {
+      await this.scope.searchIndexes().upsertIndex({
+        name: indexName,
+        sourceName: this.bucketName,
+        type: 'fulltext-index',
+        params: {
+          doc_config: {
+            docid_prefix_delim: '',
+            docid_regexp: '',
+            mode: 'scope.collection.type_field',
+            type_field: 'type',
           },
-          default_type: '_default',
-          docvalues_dynamic: true, // [Doc](https://docs.couchbase.com/server/current/search/search-index-params.html#params) mentions this attribute is required for vector search to return the indexed field
-          index_dynamic: true,
-          store_dynamic: true, // [Doc](https://docs.couchbase.com/server/current/search/search-index-params.html#params) mentions this attribute is required for vector search to return the indexed field
-          type_field: '_type',
-          types: {
-            [`${this.scopeName}.${this.collectionName}`]: {
+          mapping: {
+            default_analyzer: 'standard',
+            default_datetime_parser: 'dateTimeOptional',
+            default_field: '_all',
+            default_mapping: {
               dynamic: true,
-              enabled: true,
-              properties: {
-                embedding: {
-                  enabled: true,
-                  fields: [
-                    {
-                      dims: dimension,
-                      index: true,
-                      name: 'embedding',
-                      similarity: DISTANCE_MAPPING[metric],
-                      type: 'vector',
-                      vector_index_optimized_for: 'recall',
-                      store: true, // CHANGED due to https://docs.couchbase.com/server/current/search/search-index-params.html#fields
-                      docvalues: true, // CHANGED due to https://docs.couchbase.com/server/current/search/search-index-params.html#fields
-                      include_term_vectors: true, // CHANGED due to https://docs.couchbase.com/server/current/search/search-index-params.html#fields
-                    },
-                  ],
-                },
-                content: {
-                  enabled: true,
-                  fields: [
-                    {
-                      index: true,
-                      name: 'content',
-                      store: true,
-                      type: 'text',
-                    },
-                  ],
+              enabled: false,
+            },
+            default_type: '_default',
+            docvalues_dynamic: true, // [Doc](https://docs.couchbase.com/server/current/search/search-index-params.html#params) mentions this attribute is required for vector search to return the indexed field
+            index_dynamic: true,
+            store_dynamic: true, // [Doc](https://docs.couchbase.com/server/current/search/search-index-params.html#params) mentions this attribute is required for vector search to return the indexed field
+            type_field: '_type',
+            types: {
+              [`${this.scopeName}.${this.collectionName}`]: {
+                dynamic: true,
+                enabled: true,
+                properties: {
+                  embedding: {
+                    enabled: true,
+                    fields: [
+                      {
+                        dims: dimension,
+                        index: true,
+                        name: 'embedding',
+                        similarity: DISTANCE_MAPPING[metric],
+                        type: 'vector',
+                        vector_index_optimized_for: 'recall',
+                        store: true, // CHANGED due to https://docs.couchbase.com/server/current/search/search-index-params.html#fields
+                        docvalues: true, // CHANGED due to https://docs.couchbase.com/server/current/search/search-index-params.html#fields
+                        include_term_vectors: true, // CHANGED due to https://docs.couchbase.com/server/current/search/search-index-params.html#fields
+                      },
+                    ],
+                  },
+                  content: {
+                    enabled: true,
+                    fields: [
+                      {
+                        index: true,
+                        name: 'content',
+                        store: true,
+                        type: 'text',
+                      },
+                    ],
+                  },
                 },
               },
             },
           },
+          store: {
+            indexType: 'scorch',
+            segmentVersion: 16,
+          },
         },
-        store: {
-          indexType: 'scorch',
-          segmentVersion: 16,
+        sourceUuid: '',
+        sourceParams: {},
+        sourceType: 'gocbcore',
+        planParams: {
+          maxPartitionsPerPIndex: 64,
+          indexPartitions: 16,
+          numReplicas: 0,
         },
-      },
-      sourceUuid: '',
-      sourceParams: {},
-      sourceType: 'gocbcore',
-      planParams: {
-        maxPartitionsPerPIndex: 64,
-        indexPartitions: 16,
-        numReplicas: 0,
-      },
-    });
-    this.vector_dimension = dimension;
+      });
+      this.vector_dimension = dimension;
+    } catch (error: any) {
+      // Check for 'already exists' error (Couchbase may throw a 400 or 409, or have a message)
+      await this.checkIndexExists(error, indexName, dimension, metric);
+    }
+  }
+
+  private async checkIndexExists(error: any, indexName: string, dimension: number, metric: string) {
+    const message = error?.message || error?.toString();
+    if (message && message.toLowerCase().includes('index exists')) {
+      // Fetch index info and check dimension
+      try {
+        const info = await this.scope.searchIndexes().getIndex(indexName);
+        const existingDim =
+          info?.params?.mapping?.types?.[`${this.scopeName}.${this.collectionName}`]?.properties?.embedding?.fields?.[0]
+            ?.dims;
+        if (existingDim === dimension) {
+          this.logger?.info?.(
+            `Index "${indexName}" already exists with ${dimension} dimensions and metric ${metric}, skipping creation.`,
+          );
+          return;
+        } else {
+          throw new Error(
+            `Index "${indexName}" already exists with ${existingDim} dimensions, but ${dimension} dimensions were requested`,
+          );
+        }
+      } catch (infoError) {
+        throw new Error(
+          `Index "${indexName}" already exists, but failed to fetch index info for dimension check: ${infoError}`,
+        );
+      }
+    }
+    throw error;
   }
 
   async upsert(params: UpsertVectorParams): Promise<string[]> {

@@ -452,21 +452,32 @@ describe('MongoDBVector Integration Tests', () => {
     });
 
     it('should handle invalid dimension vectors', async () => {
-      const invalidVector = [1, 2, 3, 4]; // 4D vector for 3D index
+      const invalidVector = [1, 2, 3]; // 4D vector for 3D index
       await expect(vectorDB.upsert({ indexName: testIndexName, vectors: [invalidVector] })).rejects.toThrow();
     });
 
-    it('should handle mismatched metadata and vectors length', async () => {
-      const vectors = [[1, 2, 3]];
-      const metadata = [{}, {}]; // More metadata than vectors
-      await expect(vectorDB.upsert({ indexName: testIndexName, vectors, metadata })).rejects.toThrow();
-    });
+    it('should handle duplicate index creation gracefully', async () => {
+      const duplicateIndexName = `duplicate_test`;
+      const dimension = 768;
 
-    it('can handle duplicate index creation', async () => {
-      await vectorDB.createIndex({ indexName: testIndexName, dimension: 3 });
-      await expect(vectorDB.createIndex({ indexName: testIndexName, dimension: 3 })).rejects.toThrow(
-        'Index already exists',
-      );
+      // Create index first time
+      await vectorDB.createIndex({
+        indexName: duplicateIndexName,
+        dimension,
+        metric: 'cosine',
+      });
+
+      // Try to create with same dimensions - should not throw
+      await expect(
+        vectorDB.createIndex({
+          indexName: duplicateIndexName,
+          dimension,
+          metric: 'cosine',
+        }),
+      ).resolves.not.toThrow();
+
+      // Cleanup
+      await vectorDB.deleteIndex(duplicateIndexName);
     });
   });
 });

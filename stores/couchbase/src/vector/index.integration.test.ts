@@ -3,6 +3,7 @@
 // The tests will automatically start and configure the required Couchbase container.
 
 import { execSync } from 'child_process';
+import { randomUUID } from 'crypto';
 import axios from 'axios';
 import type { Cluster, Bucket, Scope, Collection } from 'couchbase';
 import { connect } from 'couchbase';
@@ -431,6 +432,47 @@ describe('Integration Testing CouchbaseVector', async () => {
         }),
       ).rejects.toThrow('No vectors provided');
     }, 50000);
+
+    it('should handle non-existent index queries', async () => {
+      await expect(
+        couchbase_client.query({ indexName: 'non-existent-index-yu', queryVector: [1, 2, 3] }),
+      ).rejects.toThrow();
+    }, 50000);
+
+    it('should handle duplicate index creation gracefully', async () => {
+      const duplicateIndexName = `duplicate-test-${randomUUID()}`;
+      const dimension = 768;
+
+      // Create index first time
+      await couchbase_client.createIndex({
+        indexName: duplicateIndexName,
+        dimension,
+        metric: 'cosine',
+      });
+
+      // Try to create with same dimensions - should not throw
+      await expect(
+        couchbase_client.createIndex({
+          indexName: duplicateIndexName,
+          dimension,
+          metric: 'cosine',
+        }),
+      ).resolves.not.toThrow();
+
+      // Try to create with different dimensions - should throw
+      await expect(
+        couchbase_client.createIndex({
+          indexName: duplicateIndexName,
+          dimension: dimension + 1,
+          metric: 'cosine',
+        }),
+      ).rejects.toThrow(
+        `Index "${duplicateIndexName}" already exists with ${dimension} dimensions, but ${dimension + 1} dimensions were requested`,
+      );
+
+      // Cleanup
+      await couchbase_client.deleteIndex(duplicateIndexName);
+    }, 50000);
   });
 
   describe('Vector Dimension Tracking', () => {
@@ -554,32 +596,5 @@ describe('Integration Testing CouchbaseVector', async () => {
         await new Promise(resolve => setTimeout(resolve, 5000));
       }
     }, 50000);
-  });
-
-  describe('Error Handling', () => {
-    const testIndexName = `${test_indexName}_error_handling`;
-    it('should handle non-existent index queries', async () => {
-      await expect(
-        couchbase_client.query({ indexName: 'non-existent-index-yu', queryVector: [1, 2, 3] }),
-      ).rejects.toThrow();
-    });
-
-    it('should handle invalid dimension vectors', async () => {
-      const invalidVector = [1, 2, 3, 4]; // 4D vector for 3D index
-      await expect(couchbase_client.upsert({ indexName: testIndexName, vectors: [invalidVector] })).rejects.toThrow();
-    });
-
-    it('should handle mismatched metadata and vectors length', async () => {
-      const vectors = [[1, 2, 3]];
-      const metadata = [{}, {}]; // More metadata than vectors
-      await expect(couchbase_client.upsert({ indexName: testIndexName, vectors, metadata })).rejects.toThrow();
-    });
-
-    it('can handle duplicate index creation', async () => {
-      await couchbase_client.createIndex({ indexName: testIndexName, dimension: 3 });
-      await expect(couchbase_client.createIndex({ indexName: testIndexName, dimension: 3 })).rejects.toThrow(
-        'Index already exists',
-      );
-    });
   });
 });

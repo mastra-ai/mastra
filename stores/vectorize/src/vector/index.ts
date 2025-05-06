@@ -66,66 +66,57 @@ export class CloudflareVector extends MastraVector {
     return translator.translate(filter);
   }
 
-  private async verifyIndexExists(indexName: string, dimension: number): Promise<boolean> {
+  async createIndex(...args: ParamsToArgs<CreateIndexParams>): Promise<void> {
+    const params = this.normalizeArgs<CreateIndexParams>('createIndex', args);
+    const { indexName, dimension, metric = 'cosine' } = params;
+
     try {
-      const info = await this.client.vectorize.indexes.info(indexName, {
+      await this.client.vectorize.indexes.create({
         account_id: this.accountId,
+        config: {
+          dimensions: dimension,
+          metric: metric === 'dotproduct' ? 'dot-product' : metric,
+        },
+        name: indexName,
       });
-
-      if (!info) {
-        return false; // Index doesn't exist
-      }
-      if (info.dimensions !== dimension) {
-        throw new Error(
-          `Index "${indexName}" already exists with ${info.dimensions} dimensions, but ${dimension} dimensions were requested`,
-        );
-      }
-
-      // Index exists with matching dimensions
-      return true;
     } catch (error: any) {
-      // Check if this is an expected "index doesn't exist" error
-      // This covers all variants of not found/deleted errors by checking:
-      // 1. HTTP status (404/410 both mean the index isn't there)
-      // 2. Error message content (contains common patterns)
-      const message = error?.errors?.[0]?.message || error?.message;
-      if (
-        error.status === 404 ||
-        error.status === 410 ||
-        message?.toLowerCase().includes('not found') ||
-        message?.toLowerCase().includes('deleted')
-      ) {
-        return false;
-      }
-
-      // For any other errors, propagate them up
-      throw error;
+      // Check for 'already exists' error
+      await this.checkIndexExists(error, indexName, dimension, metric);
     }
   }
 
-  async createIndex(...args: ParamsToArgs<CreateIndexParams>): Promise<void> {
-    const params = this.normalizeArgs<CreateIndexParams>('createIndex', args);
-
-    const { indexName, dimension, metric = 'cosine' } = params;
-
-    // Check if index exists with correct dimensions
-    const exists = await this.verifyIndexExists(indexName, dimension);
-    if (exists) {
-      this.logger.info(
-        `Index "${indexName}" already exists with ${dimension} dimensions and metric ${metric}, skipping creation.`,
-      );
-      return;
+  private async checkIndexExists(error: any, indexName: string, dimension: number, metric: string) {
+    const message = error?.errors?.[0]?.message || error?.message;
+    if (
+      error.status === 409 ||
+      (typeof message === 'string' &&
+        (message.toLowerCase().includes('already exists') || message.toLowerCase().includes('duplicate')))
+    ) {
+      // Fetch index info and check dimensions
+      try {
+        const info = await this.client.vectorize.indexes.info(indexName, {
+          account_id: this.accountId,
+        });
+        if (info && info.dimensions === dimension) {
+          this.logger.info(
+            `Index "${indexName}" already exists with ${dimension} dimensions and metric ${metric}, skipping creation.`,
+          );
+          return;
+        } else if (info) {
+          throw new Error(
+            `Index "${indexName}" already exists with ${info.dimensions} dimensions, but ${dimension} dimensions were requested`,
+          );
+        } else {
+          throw new Error(`Index "${indexName}" already exists, but could not retrieve its dimensions for validation.`);
+        }
+      } catch (infoError) {
+        throw new Error(
+          `Index "${indexName}" already exists, but failed to fetch index info for dimension check: ${infoError}`,
+        );
+      }
     }
-
-    // Index doesn't exist, create it
-    await this.client.vectorize.indexes.create({
-      account_id: this.accountId,
-      config: {
-        dimensions: dimension,
-        metric: metric === 'dotproduct' ? 'dot-product' : metric,
-      },
-      name: indexName,
-    });
+    // For any other errors, propagate
+    throw error;
   }
 
   async query(...args: ParamsToArgs<QueryVectorParams>): Promise<QueryResult[]> {

@@ -111,7 +111,6 @@ export class ChromaVector extends MastraVector {
 
   async createIndex(...args: ParamsToArgs<CreateIndexParams>): Promise<void> {
     const params = this.normalizeArgs<CreateIndexParams>('createIndex', args);
-
     const { indexName, dimension, metric = 'cosine' } = params;
 
     if (!Number.isInteger(dimension) || dimension <= 0) {
@@ -121,13 +120,44 @@ export class ChromaVector extends MastraVector {
     if (!['cosine', 'l2', 'ip'].includes(hnswSpace)) {
       throw new Error(`Invalid metric: "${metric}". Must be one of: cosine, euclidean, dotproduct`);
     }
-    await this.client.createCollection({
-      name: indexName,
-      metadata: {
-        dimension,
-        'hnsw:space': this.HnswSpaceMap[metric],
-      },
-    });
+    try {
+      await this.client.createCollection({
+        name: indexName,
+        metadata: {
+          dimension,
+          'hnsw:space': this.HnswSpaceMap[metric],
+        },
+      });
+    } catch (error: any) {
+      // Check for 'already exists' error
+      await this.checkIndexExists(error, indexName, dimension, metric);
+    }
+  }
+
+  private async checkIndexExists(error: any, indexName: string, dimension: number, metric: string) {
+    const message = error?.message || error?.toString();
+    if (message && message.toLowerCase().includes('already exists')) {
+      // Fetch collection info and check dimension
+      try {
+        const info = await this.getCollection(indexName);
+        const existingDim = info?.metadata?.dimension;
+        if (existingDim === dimension) {
+          this.logger?.info?.(
+            `Collection "${indexName}" already exists with ${dimension} dimensions and metric ${metric}, skipping creation.`,
+          );
+          return;
+        } else {
+          throw new Error(
+            `Index "${indexName}" already exists with ${existingDim} dimensions, but ${dimension} dimensions were requested`,
+          );
+        }
+      } catch (infoError) {
+        throw new Error(
+          `Index "${indexName}" already exists, but failed to fetch collection info for dimension check: ${infoError}`,
+        );
+      }
+    }
+    throw error;
   }
 
   transformFilter(filter?: VectorFilter) {

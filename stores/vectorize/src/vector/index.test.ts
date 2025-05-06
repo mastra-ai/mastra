@@ -547,11 +547,11 @@ describe('CloudflareVector', () => {
       await expect(
         vectorDB.createIndex({
           indexName: duplicateIndexName,
-          dimension: dimension + 1,
+          dimension: dimension + 2,
           metric: 'cosine',
         }),
       ).rejects.toThrow(
-        `Index "${duplicateIndexName}" already exists with ${dimension} dimensions, but ${dimension + 1} dimensions were requested`,
+        `Index "${duplicateIndexName}" already exists with ${dimension} dimensions, but ${dimension + 2} dimensions were requested`,
       );
 
       // Cleanup
