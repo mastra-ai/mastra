@@ -95,11 +95,15 @@ If no template is provided, the Memory class uses a default template that includ
 
 An embedding model is required if `semanticRecall` is enabled.
 
-You can use various embedding models but to get started quickly you can use [FastEmbed](https://github.com/Anush008/fastembed-js) which is an on-device/local embedding model that requires no API keys or network requests.
+One option is to use `@mastra/fastembed`, which provides an on-device/local embedding model using [FastEmbed](https://github.com/Anush008/fastembed-js). This model runs locally and does not require API keys or network requests.
+
+To use it, first install the package:
 
 ```bash npm2yarn copy
 pnpm add @mastra/fastembed
 ```
+
+Then, configure it in your `Memory` instance:
 
 ```typescript {2,7}
 import { Memory } from "@mastra/memory";
