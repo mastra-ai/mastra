@@ -97,6 +97,7 @@ export abstract class ToolCompatibility extends MastraBase {
       ),
     );
 
+    // mirrors https://github.com/vercel/ai/blob/main/packages/ui-utils/src/zod-schema.ts#L21 but with a custom target
     const schema = jsonSchema(
       zodToJsonSchema(newSchema, {
         $refStrategy: 'none',

@@ -14,6 +14,8 @@ export class OpenAIReasoningToolCompat extends ToolCompatibility {
   }
 
   isReasoningModel(): boolean {
+    // there isn't a good way to automatically detect reasoning models besides doing this.
+    // in the future when o5 is released this compat wont apply and we'll want to come back and update this class + our tests
     return this.getModel().modelId.includes(`o3`) || this.getModel().modelId.includes(`o4`);
   }
 
@@ -28,9 +30,7 @@ export class OpenAIReasoningToolCompat extends ToolCompatibility {
     return false;
   }
 
-  processZodType<T extends z.AnyZodObject>(
-    value: z.ZodTypeAny
-  ): ShapeValue<T> {
+  processZodType<T extends z.AnyZodObject>(value: z.ZodTypeAny): ShapeValue<T> {
     switch (value._def.typeName) {
       case 'ZodOptional':
         return (value as z.ZodOptional<z.ZodTypeAny>).unwrap().nullable() as ShapeValue<T>;
@@ -69,7 +69,7 @@ export class OpenAIReasoningToolCompat extends ToolCompatibility {
         return this.defaultZodDateHandler(value);
       }
       default:
-        this.defaultUnsupportedZodTypeHandler(value)
+        this.defaultUnsupportedZodTypeHandler(value);
         return value as ShapeValue<T>;
     }
   }
