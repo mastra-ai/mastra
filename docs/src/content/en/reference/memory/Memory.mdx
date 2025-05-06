@@ -93,17 +93,43 @@ If no template is provided, the Memory class uses a default template that includ
 
 ### embedder
 
-By default, Memory uses FastEmbed with the `bge-small-en-v1.5` model, which provides a good balance of performance and model size (~130MB). You only need to specify an embedder if you want to use a different model or provider.
+An embedding model is required if `semanticRecall` is enabled.
 
-For environments where local embedding isn't supported, you can use an API-based embedder:
+One option is to use `@mastra/fastembed`, which provides an on-device/local embedding model using [FastEmbed](https://github.com/Anush008/fastembed-js). This model runs locally and does not require API keys or network requests.
 
-```typescript {6}
+To use it, first install the package:
+
+```bash npm2yarn copy
+pnpm add @mastra/fastembed
+```
+
+Then, configure it in your `Memory` instance:
+
+```typescript {2,7}
 import { Memory } from "@mastra/memory";
-import { openai } from "@ai-sdk/openai";
+import { fastembed } from "@mastra/fastembed";
+import { Agent } from "@mastra/core/agent";
 
 const agent = new Agent({
   memory: new Memory({
-    embedder: openai.embedding("text-embedding-3-small"), // Adds network request
+    embedder: fastembed,
+    // ... other memory config
+  }),
+});
+```
+
+Note that, depending on where you're deploying your project, your project may not deploy due to FastEmbeds large internal dependencies.
+
+Alternatively, you can use an API-based embedder like OpenAI (which doesn't have this problem):
+
+```typescript {2,7}
+import { Memory } from "@mastra/memory";
+import { openai } from "@ai-sdk/openai";
+import { Agent } from "@mastra/core/agent";
+
+const agent = new Agent({
+  memory: new Memory({
+    embedder: openai.embedding("text-embedding-3-small"),
   }),
 });
 ```
