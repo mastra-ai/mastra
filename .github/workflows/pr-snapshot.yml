@@ -93,4 +93,4 @@ jobs:
         run: pnpm changeset version --snapshot ${{ env.FINAL_TAG }}
 
       - name: Publish to npm
-        run: pnpm publish -r --no-git-checks --tag ${{ env.FINAL_TAG }}
+        run: pnpm publish -r --no-git-checks --tag ${{ env.FINAL_TAG }} --access public
