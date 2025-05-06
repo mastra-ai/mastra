@@ -810,7 +810,10 @@ export class NewWorkflow<
     }
     const run = await storage.getWorkflowRunById({ runId, workflowName: this.id });
 
-    return run ?? ({ ...this.#runs.get(runId), workflowName: this.id } as unknown as WorkflowRun);
+    return (
+      run ??
+      (this.#runs.get(runId) ? ({ ...this.#runs.get(runId), workflowName: this.id } as unknown as WorkflowRun) : null)
+    );
   }
 }
 
