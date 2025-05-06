@@ -1,13 +1,13 @@
 ---
 title: "リファレンス: createVectorQueryTool() | RAG | Mastra Tools ドキュメント"
-description: ベクトルストア上でのフィルタリングと再ランキング機能を備えたセマンティック検索を可能にするMastraのベクトルクエリツールのドキュメント。
+description: Mastraのベクタークエリツールに関するドキュメント。フィルタリングと再ランキング機能を備えたベクターストアでのセマンティック検索を容易にします。
 ---
 
 # createVectorQueryTool()
 
-`createVectorQueryTool()` 関数は、ベクターストアに対するセマンティック検索のためのツールを作成します。フィルタリング、再ランキングをサポートし、さまざまなベクターストアのバックエンドと統合します。
+`createVectorQueryTool()` 関数は、ベクトルストアに対するセマンティック検索のためのツールを作成します。フィルタリング、再ランク付け、そして様々なベクトルストアバックエンドとの統合をサポートしています。
 
-## 基本的な使用法
+## 基本的な使用方法
 
 ```typescript
 import { openai } from '@ai-sdk/openai';
@@ -27,7 +27,7 @@ const queryTool = createVectorQueryTool({
     {
       name: "vectorStoreName",
       type: "string",
-      description: "クエリを行うベクトルストアの名前（Mastraで設定されている必要があります）",
+      description: "クエリを実行するベクトルストアの名前（Mastraで設定済みである必要があります）",
       isOptional: false,
     },
     {
@@ -45,19 +45,19 @@ const queryTool = createVectorQueryTool({
     {
       name: "reranker",
       type: "RerankConfig",
-      description: "結果を再ランク付けするためのオプション",
+      description: "結果の再ランク付けのオプション",
       isOptional: true,
     },
     {
       name: "id",
       type: "string",
-      description: "ツールのカスタムID（デフォルトは 'VectorQuery {vectorStoreName} {indexName} Tool'）",
+      description: "ツールのカスタムID（デフォルトは'VectorQuery {vectorStoreName} {indexName} Tool'）",
       isOptional: true,
     },
     {
       name: "description",
       type: "string",
-      description: "ツールのカスタム説明。デフォルトでは: 'ユーザーの質問に答えるために必要な情報を見つけるためにナレッジベースにアクセスします'",
+      description: "ツールのカスタム説明。デフォルトでは：'ユーザーの質問に答えるために必要な情報を見つけるためにナレッジベースにアクセスする'",
       isOptional: true,
     }
   ]}
@@ -84,13 +84,13 @@ const queryTool = createVectorQueryTool({
           parameters: [
             {
               name: "weights",
-              description: "スコアリングコンポーネントの重み（セマンティック: 0.4, ベクトル: 0.4, 位置: 0.2）",
+              description: "スコアリングコンポーネントの重み（semantic: 0.4, vector: 0.4, position: 0.2）",
               isOptional: true,
               type: "WeightConfig",
             },
             {
               name: "topK",
-              description: "返すトップ結果の数",
+              description: "返す上位結果の数",
               isOptional: true,
               type: "number",
               defaultValue: "3"
@@ -104,7 +104,7 @@ const queryTool = createVectorQueryTool({
 
 ## 戻り値
 
-このツールは以下のオブジェクトを返します：
+このツールは以下を含むオブジェクトを返します：
 
 <PropertiesTable
   content={[
@@ -119,13 +119,13 @@ const queryTool = createVectorQueryTool({
 ## デフォルトツールの説明
 
 デフォルトの説明は以下に焦点を当てています：
-- 保存された知識から関連情報を見つけること
-- ユーザーの質問に答えること
-- 事実に基づいたコンテンツを取得すること
+- 保存された知識の中から関連情報を見つける
+- ユーザーの質問に回答する
+- 事実に基づくコンテンツを取得する
 
 ## 結果の処理
 
-このツールは、ユーザーのクエリに基づいて返す結果の数を決定し、デフォルトでは10件の結果を返します。これはクエリの要件に応じて調整可能です。
+このツールは、ユーザーのクエリに基づいて返す結果の数を決定し、デフォルトでは10件の結果を返します。これはクエリの要件に応じて調整することができます。
 
 ## フィルターを使用した例
 
@@ -138,26 +138,26 @@ const queryTool = createVectorQueryTool({
 });
 ```
 
-フィルタリングが有効になっていると、ツールはクエリを処理してメタデータフィルターを構築し、セマンティック検索と組み合わせます。プロセスは次のように機能します：
+フィルタリングを有効にすると、ツールはクエリを処理して、セマンティック検索と組み合わせるメタデータフィルターを構築します。このプロセスは次のように機能します：
 
-1. ユーザーが「'version' フィールドが2.0より大きいコンテンツを見つける」などの特定のフィルター要件でクエリを行います
-2. エージェントがクエリを分析し、適切なフィルターを構築します：
+1. ユーザーが「'version'フィールドが2.0より大きいコンテンツを見つける」などの特定のフィルター要件を含むクエリを行います
+2. エージェントはクエリを分析し、適切なフィルターを構築します：
    ```typescript
    {
       "version": { "$gt": 2.0 }
    }
    ```
 
-このエージェント駆動のアプローチは次のことを行います：
-- 自然言語のクエリをフィルター仕様に処理します
+このエージェント駆動のアプローチは：
+- 自然言語クエリをフィルター仕様に処理します
 - ベクトルストア固有のフィルター構文を実装します
 - クエリ用語をフィルター演算子に変換します
 
-詳細なフィルター構文とストア固有の機能については、[メタデータフィルター](../rag/metadata-filters)のドキュメントを参照してください。
+フィルター構文とストア固有の機能の詳細については、[メタデータフィルター](../rag/metadata-filters)のドキュメントを参照してください。
 
-エージェント駆動のフィルタリングがどのように機能するかの例については、[エージェント駆動のメタデータフィルタリング](../../../examples/rag/usage/filter-rag)の例を参照してください。
+エージェント駆動のフィルタリングがどのように機能するかの例については、[エージェント駆動メタデータフィルタリング](../../../examples/rag/usage/filter-rag)の例を参照してください。
 
-## リランキングを使用した例
+## リランキングの例
 
 ```typescript
 const queryTool = createVectorQueryTool({
@@ -168,9 +168,9 @@ const queryTool = createVectorQueryTool({
     model: openai('gpt-4o-mini'),
     options: {
       weights: {
-        semantic: 0.5,  // セマンティック関連性の重み
-        vector: 0.3,    // ベクトル類似性の重み
-        position: 0.2   // 元の位置の重み
+        semantic: 0.5,  // Semantic relevance weight
+        vector: 0.3,    // Vector similarity weight
+        position: 0.2   // Original position weight
       },
       topK: 5
     }
@@ -178,33 +178,33 @@ const queryTool = createVectorQueryTool({
 });
 ```
 
-リランキングは以下を組み合わせることで結果の質を向上させます：
-- セマンティック関連性: テキスト類似性のLLMベースのスコアリングを使用
-- ベクトル類似性: 元のベクトル距離スコア
-- 位置バイアス: 元の結果の順序を考慮
-- クエリ分析: クエリの特性に基づく調整
+リランキングは以下を組み合わせることで結果の品質を向上させます：
+- 意味的関連性：LLMベースのテキスト類似性スコアリングを使用
+- ベクトル類似性：元のベクトル距離スコア
+- 位置バイアス：元の結果の順序の考慮
+- クエリ分析：クエリの特性に基づく調整
 
-リランカーは初期のベクトル検索結果を処理し、関連性に最適化された再注文リストを返します。
+リランカーは初期ベクトル検索結果を処理し、関連性に最適化された並べ替えられたリストを返します。
 
-## カスタム説明付きの例
+## カスタム説明の例
 
 ```typescript
 const queryTool = createVectorQueryTool({
   vectorStoreName: "pinecone",
   indexName: "docs",
   model: openai.embedding('text-embedding-3-small'),
-  description: "会社の方針や手順に関する質問に答えるために関連情報を見つけるために、文書アーカイブを検索します"
+  description: "Search through document archives to find relevant information for answering questions about company policies and procedures"
 });
 ```
 
-この例は、情報検索の基本目的を維持しながら、特定の使用ケースに合わせてツールの説明をカスタマイズする方法を示しています。
+この例では、情報検索という基本的な目的を維持しながら、特定のユースケースに合わせてツールの説明をカスタマイズする方法を示しています。
 
 ## ツールの詳細
 
-このツールは以下で作成されています:
+このツールは以下の要素で作成されます：
 - **ID**: `VectorQuery {vectorStoreName} {indexName} Tool`
-- **入力スキーマ**: queryText と filter オブジェクトが必要
-- **出力スキーマ**: relevantContext 文字列を返す
+- **入力スキーマ**: queryTextとfilterオブジェクトが必要
+- **出力スキーマ**: relevantContextという文字列を返します
 
 ## 関連
 

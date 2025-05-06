@@ -4,5 +4,4 @@ const meta = {
   netlify: "Netlify",
   vercel: "Vercel",
 };
-
 export default meta;

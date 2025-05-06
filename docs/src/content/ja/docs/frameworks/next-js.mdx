@@ -6,7 +6,7 @@ import { Callout, Steps, Tabs } from "nextra/components";
 
 # Next.jsプロジェクトにMastraを統合する
 
-MastraをNext.jsアプリケーションに統合する主な方法は2つあります。別のバックエンドサービスとして統合するか、Next.jsアプリに直接統合するかです。
+MastraをNext.jsアプリケーションに統合する主な方法は2つあります：別個のバックエンドサービスとして、またはNext.jsアプリに直接統合する方法です。
 
 ## 1. バックエンドの個別統合
 
@@ -117,7 +117,7 @@ export function SimpleWeather() {
 
 ### デプロイメント
 
-デプロイの準備ができたら、プラットフォーム固有のデプロイヤー（Vercel、Netlify、Cloudflare）のいずれかを使用するか、任意のNode.jsホスティングプラットフォームにデプロイできます。詳細な手順については、[デプロイメントガイド](/docs/deployment/deployment)をご確認ください。
+デプロイの準備ができたら、プラットフォーム固有のデプロイヤー（Vercel、Netlify、Cloudflare）を使用するか、任意のNode.jsホスティングプラットフォームにデプロイできます。詳細な手順については、[デプロイメントガイド](/docs/deployment/deployment)をご確認ください。
 </Steps>
 
 ## 2. 直接統合
@@ -236,7 +236,7 @@ export async function POST(req: Request) {
 ## 可観測性
 
 Mastraは、AIオペレーションの監視、デバッグ、最適化に役立つ組み込みの可観測性機能を提供しています。これには以下が含まれます：
-- AIオペレーションとそのパフォーマンスのトレーシング
+- AIオペレーションとそのパフォーマンスのトレース
 - プロンプト、完了、エラーのロギング
 - LangfuseやLangSmithなどの可観測性プラットフォームとの統合
 
