@@ -17,7 +17,9 @@ export * from './ds/components/Table/index';
 export * from './ds/components/Txt/index';
 
 export * from './ds/icons/index';
+export * from './lib/polls';
 export { useTraces } from './hooks/index';
 
 export { TraceContext, TraceProvider } from './domains/traces/context/trace-context';
+export type { TraceContextType } from './domains/traces/context/trace-context';
 export { refineTraces } from './domains/traces/utils';
