@@ -30,7 +30,7 @@ importers:
         specifier: link:../../voice/openai
         version: link:../../voice/openai
       zod:
-        specifier: ^3.24.2
+        specifier: ^3.24.3
         version: 3.24.3
 
 packages:
