@@ -32,7 +32,7 @@
   "dependencies": {
     "@mastra/core": "workspace:^",
     "cloudflare": "^4.2.0",
-    "zod": "^3.24.2"
+    "zod": "^3.24.3"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^4.20250321.0",

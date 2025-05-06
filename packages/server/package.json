@@ -66,6 +66,6 @@
     "tsup": "^8.4.0",
     "typescript": "^5.8.2",
     "vitest": "^2.1.9",
-    "zod-to-json-schema": "^3.24.3"
+    "zod-to-json-schema": "^3.24.5"
   }
 }

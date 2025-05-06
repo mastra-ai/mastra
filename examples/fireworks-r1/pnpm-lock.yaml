@@ -45,7 +45,7 @@ importers:
         specifier: ^1.6.0
         version: 1.6.0
       zod:
-        specifier: ^3.24.2
+        specifier: ^3.24.3
         version: 3.24.3
     devDependencies:
       '@types/node':

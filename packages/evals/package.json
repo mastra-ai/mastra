@@ -69,7 +69,7 @@
     "keyword-extractor": "^0.0.28",
     "sentiment": "^5.0.2",
     "string-similarity": "^4.0.4",
-    "zod": "^3.24.2"
+    "zod": "^3.24.3"
   },
   "peerDependencies": {
     "ai": "^4.0.0"

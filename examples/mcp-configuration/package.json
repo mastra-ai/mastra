@@ -19,8 +19,8 @@
     "@mastra/memory": "latest",
     "@modelcontextprotocol/sdk": "^1.9.0",
     "chalk": "^5.4.1",
-    "zod": "^3.24.2",
-    "zod-to-json-schema": "^3.22.4"
+    "zod": "^3.24.3",
+    "zod-to-json-schema": "^3.24.5"
   },
   "devDependencies": {
     "@jest/globals": "^29.7.0",

@@ -69,8 +69,8 @@
     "swr": "^2.3.3",
     "tcp-port-used": "^1.0.2",
     "yocto-spinner": "^0.1.2",
-    "zod": "^3.24.2",
-    "zod-to-json-schema": "^3.24.3"
+    "zod": "^3.24.3",
+    "zod-to-json-schema": "^3.24.5"
   },
   "devDependencies": {
     "@internal/lint": "workspace:*",

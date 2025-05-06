@@ -33,8 +33,8 @@
     "@mastra/core": "workspace:^",
     "@modelcontextprotocol/sdk": "^1.9.0",
     "uuid": "^11.1.0",
-    "zod": "^3.22.4",
-    "zod-to-json-schema": "^3.22.4"
+    "zod": "^3.24.3",
+    "zod-to-json-schema": "^3.24.5"
   },
   "devDependencies": {
     "@hono/node-server": "^1.13.8",
