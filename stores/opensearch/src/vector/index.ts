@@ -54,7 +54,7 @@ export class OpenSearchVector extends MastraVector {
                 method: {
                   name: 'hnsw',
                   space_type: METRIC_MAPPING[metric],
-                  engine: 'nmslib',
+                  engine: 'faiss',
                   parameters: { ef_construction: 128, m: 16 },
                 },
               },
