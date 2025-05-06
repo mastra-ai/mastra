@@ -432,8 +432,30 @@ export class NewWorkflow<
           }
         | DynamicMapping<TPrevSchema, z.ZodTypeAny>;
     },
-  >(mappingConfig: TMapping) {
+  >(mappingConfig: TMapping | ExecuteFunction<z.infer<TPrevSchema>, any, any, any>) {
     // Create an implicit step that handles the mapping
+    if (typeof mappingConfig === 'function') {
+      // @ts-ignore
+      const mappingStep: any = createStep({
+        id: `mapping_${randomUUID()}`,
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+        execute: mappingConfig,
+      });
+
+      this.stepFlow.push({ type: 'step', step: mappingStep as any });
+      this.serializedStepFlow.push({
+        type: 'step',
+        step: {
+          id: mappingStep.id,
+          description: mappingStep.description,
+          component: (mappingStep as SerializedStep).component,
+          stepFlow: (mappingStep as SerializedStep).stepFlow,
+        },
+      });
+      return this as unknown as NewWorkflow<TSteps, TWorkflowId, TInput, TOutput, any>;
+    }
+
     const mappingStep: any = createStep({
       id: `mapping_${randomUUID()}`,
       inputSchema: z.object({}),

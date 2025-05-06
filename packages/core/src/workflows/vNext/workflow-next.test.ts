@@ -683,6 +683,57 @@ describe('Workflow', () => {
 
         expect(result.steps.step2).toEqual({ status: 'success', output: { result: 'none', second: 0 } });
       });
+
+      it('should resolve fully dynamic input via .map()', async () => {
+        const execute = vi.fn<any>().mockResolvedValue({ result: 'success' });
+        const triggerSchema = z.object({
+          cool: z.string(),
+        });
+
+        const step1 = createStep({
+          id: 'step1',
+          execute,
+          inputSchema: triggerSchema,
+          outputSchema: z.object({ result: z.string() }),
+        });
+
+        const step2 = createStep({
+          id: 'step2',
+          execute: async ({ inputData }) => {
+            return { result: inputData.candidates.map(c => c.name).join(', ') || 'none', second: inputData.iteration };
+          },
+          inputSchema: z.object({ candidates: z.array(z.object({ name: z.string() })), iteration: z.number() }),
+          outputSchema: z.object({ result: z.string(), second: z.number() }),
+        });
+
+        const workflow = createWorkflow({
+          id: 'test-workflow',
+          inputSchema: triggerSchema,
+          outputSchema: z.object({ result: z.string(), second: z.number() }),
+        });
+
+        workflow
+          .then(step1)
+          .map(async ({ inputData }) => {
+            return {
+              candidates: [{ name: inputData.result }, { name: 'hello' }],
+              iteration: 0,
+            };
+          })
+          .then(step2)
+          .commit();
+
+        const run = workflow.createRun();
+        const result = await run.start({ inputData: { cool: 'test-input' } });
+
+        expect(execute).toHaveBeenCalledWith(
+          expect.objectContaining({
+            inputData: { cool: 'test-input' },
+          }),
+        );
+
+        expect(result.steps.step2).toEqual({ status: 'success', output: { result: 'success, hello', second: 0 } });
+      });
     });
 
     describe('Simple Conditions', () => {
