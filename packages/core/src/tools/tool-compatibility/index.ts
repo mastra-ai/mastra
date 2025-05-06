@@ -79,14 +79,11 @@ export abstract class ToolCompatibility extends MastraBase {
   // return undefined to use the default of jsonSchema7
   abstract getSchemaTarget(): Targets | undefined;
 
-  abstract processZodType<T extends z.AnyZodObject>(
-    value: z.ZodTypeAny
-  ): ShapeValue<T>;
+  abstract processZodType<T extends z.AnyZodObject>(value: z.ZodTypeAny): ShapeValue<T>;
 
   private zodToAISDKSchema<OBJECT>(zodSchema: z.AnyZodObject): {
     schema: Schema<OBJECT>;
   } {
-
     const newSchema = z.object(
       Object.entries<z.ZodTypeAny>(zodSchema.shape).reduce(
         (acc, [key, value]) => ({
@@ -116,9 +113,7 @@ export abstract class ToolCompatibility extends MastraBase {
     return { schema };
   }
 
-  public defaultZodObjectHandler<T extends z.AnyZodObject>(
-    value: z.ZodTypeAny
-  ): ShapeValue<T> {
+  public defaultZodObjectHandler<T extends z.AnyZodObject>(value: z.ZodTypeAny): ShapeValue<T> {
     const zodObject = value as z.ZodObject<any, any, any>;
     const processedShape = Object.entries(zodObject.shape || {}).reduce<Record<string, z.ZodTypeAny>>(
       (acc, [key, propValue]) => {
@@ -136,9 +131,17 @@ export abstract class ToolCompatibility extends MastraBase {
     return result as ShapeValue<T>;
   }
 
-  public mergeParameterDescription(description: string | undefined, constraints: NumberConstraints | StringConstraints | ArrayConstraints | DateConstraints | { defaultValue?: unknown }): string | undefined {
+  public mergeParameterDescription(
+    description: string | undefined,
+    constraints:
+      | NumberConstraints
+      | StringConstraints
+      | ArrayConstraints
+      | DateConstraints
+      | { defaultValue?: unknown },
+  ): string | undefined {
     if (Object.keys(constraints).length > 0) {
-      return (description ? description + "\n" : "") + JSON.stringify(constraints)
+      return (description ? description + '\n' : '') + JSON.stringify(constraints);
     } else {
       return description;
     }
@@ -146,7 +149,7 @@ export abstract class ToolCompatibility extends MastraBase {
 
   public defaultUnsupportedZodTypeHandler<T extends z.AnyZodObject>(
     value: z.ZodTypeAny,
-    throwOnTypes: readonly UnsupportedZodType[] = UNSUPPORTED_ZOD_TYPES
+    throwOnTypes: readonly UnsupportedZodType[] = UNSUPPORTED_ZOD_TYPES,
   ): ShapeValue<T> {
     if (throwOnTypes.includes(value._def.typeName as UnsupportedZodType)) {
       throw new Error(`${this.model.modelId} does not support zod type: ${value._def.typeName}`);
@@ -171,9 +174,7 @@ export abstract class ToolCompatibility extends MastraBase {
       constraints.exactLength = zodArray.exactLength.value;
     }
     const processedType =
-      arrayType._def.typeName === 'ZodObject'
-        ? this.processZodType<T>(arrayType as z.ZodTypeAny)
-        : arrayType;
+      arrayType._def.typeName === 'ZodObject' ? this.processZodType<T>(arrayType as z.ZodTypeAny) : arrayType;
     let result = z.array(processedType);
     if (zodArray.minLength?.value !== undefined && !handleChecks.includes('min')) {
       result = result.min(zodArray.minLength.value);
@@ -192,13 +193,9 @@ export abstract class ToolCompatibility extends MastraBase {
     return result as ShapeValue<T>;
   }
 
-  public defaultZodUnionHandler<T extends z.AnyZodObject>(
-    value: z.ZodTypeAny
-  ): ShapeValue<T> {
+  public defaultZodUnionHandler<T extends z.AnyZodObject>(value: z.ZodTypeAny): ShapeValue<T> {
     const zodUnion = value as z.ZodUnion<[z.ZodTypeAny, ...z.ZodTypeAny[]]>;
-    const processedOptions = zodUnion._def.options.map((option: z.ZodTypeAny) =>
-      this.processZodType<T>(option)
-    );
+    const processedOptions = zodUnion._def.options.map((option: z.ZodTypeAny) => this.processZodType<T>(option));
     if (processedOptions.length < 2) throw new Error('Union must have at least 2 options');
     let result = z.union(processedOptions as [z.ZodTypeAny, z.ZodTypeAny, ...z.ZodTypeAny[]]);
     if (value.description) {
@@ -209,7 +206,7 @@ export abstract class ToolCompatibility extends MastraBase {
 
   public defaultZodStringHandler<T extends z.AnyZodObject>(
     value: z.ZodTypeAny,
-    handleChecks: readonly StringCheckType[] = ALL_STRING_CHECKS
+    handleChecks: readonly StringCheckType[] = ALL_STRING_CHECKS,
   ): ShapeValue<T> {
     const zodString = value as z.ZodString;
     const constraints: StringConstraints = {};
@@ -274,7 +271,7 @@ export abstract class ToolCompatibility extends MastraBase {
 
   public defaultZodNumberHandler<T extends z.AnyZodObject>(
     value: z.ZodTypeAny,
-    handleChecks: readonly NumberCheckType[] = ALL_NUMBER_CHECKS
+    handleChecks: readonly NumberCheckType[] = ALL_NUMBER_CHECKS,
   ): ShapeValue<T> {
     const zodNumber = value as z.ZodNumber;
     const constraints: NumberConstraints = {};
@@ -329,9 +326,7 @@ export abstract class ToolCompatibility extends MastraBase {
     return result as ShapeValue<T>;
   }
 
-  public defaultZodDateHandler<T extends z.AnyZodObject>(
-    value: z.ZodTypeAny
-  ): ShapeValue<T> {
+  public defaultZodDateHandler<T extends z.AnyZodObject>(value: z.ZodTypeAny): ShapeValue<T> {
     const zodDate = value as z.ZodDate;
     const constraints: DateConstraints = {};
     const checks = zodDate._def.checks || [];

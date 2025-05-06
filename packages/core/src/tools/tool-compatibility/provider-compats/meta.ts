@@ -17,9 +17,7 @@ export class MetaToolCompat extends ToolCompatibility {
     return this.getModel().modelId.includes('meta');
   }
 
-  processZodType<T extends z.AnyZodObject>(
-    value: z.ZodTypeAny
-  ): ShapeValue<T> {
+  processZodType<T extends z.AnyZodObject>(value: z.ZodTypeAny): ShapeValue<T> {
     switch (value._def.typeName) {
       case 'ZodObject': {
         return this.defaultZodObjectHandler(value);
