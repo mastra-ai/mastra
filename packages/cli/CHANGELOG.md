@@ -1,5 +1,49 @@
 # mastra
 
+## 0.6.1
+
+### Patch Changes
+
+- 144fa1b: lift up the traces fetching and allow to pass them down in the TracesTable. It allows passing down mastra client traces OR clickhouse traces
+- 33b84fd: fix showing sig digits in trace / span duration
+- 4155f47: Add parameters to filter workflow runs
+  Add fromDate and toDate to telemetry parameters
+- 8607972: Introduce Mastra lint cli command
+- 2cf3b8f: dependencies updates:
+  - Updated dependency [`zod@^3.24.3` ↗︎](https://www.npmjs.com/package/zod/v/3.24.3) (from `^3.24.2`, in `dependencies`)
+  - Updated dependency [`zod-to-json-schema@^3.24.5` ↗︎](https://www.npmjs.com/package/zod-to-json-schema/v/3.24.5) (from `^3.24.3`, in `dependencies`)
+- 0097d50: Add serializedStepGraph to vNext workflow
+  Return serializedStepGraph from vNext workflow
+  Use serializedStepGraph in vNext workflow graph
+- 5b43dd0: revamp ui for threads
+- 7eeb2bc: Added explicit storage to memory in create-mastra so new projects don't see breaking change warnings
+- 8ea9d17: Pinned Posthog-node which is broken in the most recent version of that package https://github.com/PostHog/posthog-js-lite/issues/491
+- 2429c74: Add get workflow runs api to client-js
+- fba031f: Show traces for vNext workflow
+- b63e712: refactor: Separate fetching traces from within playground-ui components
+- Updated dependencies [2cf3b8f]
+- Updated dependencies [6052aa6]
+- Updated dependencies [967b41c]
+- Updated dependencies [3d2fb5c]
+- Updated dependencies [26738f4]
+- Updated dependencies [4155f47]
+- Updated dependencies [254f5c3]
+- Updated dependencies [7eeb2bc]
+- Updated dependencies [b804723]
+- Updated dependencies [8607972]
+- Updated dependencies [a798090]
+- Updated dependencies [ccef9f9]
+- Updated dependencies [0097d50]
+- Updated dependencies [7eeb2bc]
+- Updated dependencies [17826a9]
+- Updated dependencies [7d8b7c7]
+- Updated dependencies [fba031f]
+- Updated dependencies [3a5f1e1]
+- Updated dependencies [51e6923]
+- Updated dependencies [8398d89]
+  - @mastra/deployer@0.3.2
+  - @mastra/core@0.9.2
+
 ## 0.6.1-alpha.6
 
 ### Patch Changes

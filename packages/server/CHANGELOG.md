@@ -1,5 +1,34 @@
 # @mastra/deployer
 
+## 2.0.2
+
+### Patch Changes
+
+- 6052aa6: Add getWorkflowRunById to vNext workflow core and server handler
+- 4155f47: Add parameters to filter workflow runs
+  Add fromDate and toDate to telemetry parameters
+- 0097d50: Add serializedStepGraph to vNext workflow
+  Return serializedStepGraph from vNext workflow
+  Use serializedStepGraph in vNext workflow graph
+- Updated dependencies [6052aa6]
+- Updated dependencies [967b41c]
+- Updated dependencies [3d2fb5c]
+- Updated dependencies [26738f4]
+- Updated dependencies [4155f47]
+- Updated dependencies [7eeb2bc]
+- Updated dependencies [b804723]
+- Updated dependencies [8607972]
+- Updated dependencies [ccef9f9]
+- Updated dependencies [0097d50]
+- Updated dependencies [7eeb2bc]
+- Updated dependencies [17826a9]
+- Updated dependencies [7d8b7c7]
+- Updated dependencies [fba031f]
+- Updated dependencies [3a5f1e1]
+- Updated dependencies [51e6923]
+- Updated dependencies [8398d89]
+  - @mastra/core@0.9.2
+
 ## 2.0.2-alpha.6
 
 ### Patch Changes

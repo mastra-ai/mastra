@@ -1,5 +1,44 @@
 # @mastra/playground-ui
 
+## 5.0.2
+
+### Patch Changes
+
+- 2cf3b8f: dependencies updates:
+  - Updated dependency [`zod@^3.24.3` ↗︎](https://www.npmjs.com/package/zod/v/3.24.3) (from `^3.24.2`, in `dependencies`)
+- 144fa1b: lift up the traces fetching and allow to pass them down in the TracesTable. It allows passing down mastra client traces OR clickhouse traces
+- 33b84fd: fix showing sig digits in trace / span duration
+- 26738f4: Switched from a custom MCP tools schema deserializer to json-schema-to-zod - fixes an issue where MCP tool schemas didn't deserialize properly in Mastra playground. Also added support for testing tools with no input arguments in playground
+- 0097d50: Add serializedStepGraph to vNext workflow
+  Return serializedStepGraph from vNext workflow
+  Use serializedStepGraph in vNext workflow graph
+- 5b43dd0: revamp ui for threads
+- fba031f: Show traces for vNext workflow
+- b63e712: refactor: Separate fetching traces from within playground-ui components
+- Updated dependencies [2cf3b8f]
+- Updated dependencies [6052aa6]
+- Updated dependencies [967b41c]
+- Updated dependencies [3d2fb5c]
+- Updated dependencies [26738f4]
+- Updated dependencies [4155f47]
+- Updated dependencies [254f5c3]
+- Updated dependencies [7eeb2bc]
+- Updated dependencies [b804723]
+- Updated dependencies [8607972]
+- Updated dependencies [ccef9f9]
+- Updated dependencies [0097d50]
+- Updated dependencies [7eeb2bc]
+- Updated dependencies [17826a9]
+- Updated dependencies [7d8b7c7]
+- Updated dependencies [2429c74]
+- Updated dependencies [fba031f]
+- Updated dependencies [2e4f8e9]
+- Updated dependencies [3a5f1e1]
+- Updated dependencies [51e6923]
+- Updated dependencies [8398d89]
+  - @mastra/client-js@0.1.20
+  - @mastra/core@0.9.2
+
 ## 5.0.2-alpha.6
 
 ### Patch Changes

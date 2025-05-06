@@ -1,5 +1,34 @@
 # @mastra/mcp-docs-server
 
+## 0.0.12
+
+### Patch Changes
+
+- 2cf3b8f: dependencies updates:
+  - Updated dependency [`zod@^3.24.3` ↗︎](https://www.npmjs.com/package/zod/v/3.24.3) (from `^3.22.4`, in `dependencies`)
+  - Updated dependency [`zod-to-json-schema@^3.24.5` ↗︎](https://www.npmjs.com/package/zod-to-json-schema/v/3.24.5) (from `^3.22.4`, in `dependencies`)
+- 4214ae5: Fixed an issue where we were accessing `import.meta.dirname` which is only supported in newer node versions
+- Updated dependencies [6052aa6]
+- Updated dependencies [967b41c]
+- Updated dependencies [3d2fb5c]
+- Updated dependencies [26738f4]
+- Updated dependencies [4155f47]
+- Updated dependencies [7eeb2bc]
+- Updated dependencies [b804723]
+- Updated dependencies [8bb9b4d]
+- Updated dependencies [8607972]
+- Updated dependencies [ccef9f9]
+- Updated dependencies [0097d50]
+- Updated dependencies [7eeb2bc]
+- Updated dependencies [17826a9]
+- Updated dependencies [7d8b7c7]
+- Updated dependencies [fba031f]
+- Updated dependencies [3a5f1e1]
+- Updated dependencies [51e6923]
+- Updated dependencies [8398d89]
+  - @mastra/core@0.9.2
+  - @mastra/mcp@0.4.2
+
 ## 0.0.12-alpha.6
 
 ### Patch Changes

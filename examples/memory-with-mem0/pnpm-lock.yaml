@@ -22,7 +22,7 @@ importers:
         specifier: link:../../integrations/mem0
         version: link:../../integrations/mem0
       zod:
-        specifier: ^3.24.2
+        specifier: ^3.24.3
         version: 3.24.3
     devDependencies:
       '@types/node':

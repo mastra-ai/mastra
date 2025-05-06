@@ -1,5 +1,31 @@
 # @mastra/core
 
+## 0.9.2
+
+### Patch Changes
+
+- 6052aa6: Add getWorkflowRunById to vNext workflow core and server handler
+- 967b41c: fix: removes new agent getter methods from telemetry
+- 3d2fb5c: Fix commonjs import for vnext workflows
+- 26738f4: Switched from a custom MCP tools schema deserializer to json-schema-to-zod - fixes an issue where MCP tool schemas didn't deserialize properly in Mastra playground. Also added support for testing tools with no input arguments in playground
+- 4155f47: Add parameters to filter workflow runs
+  Add fromDate and toDate to telemetry parameters
+- 7eeb2bc: Add Memory default storage breaking change warning
+- b804723: Fix #3831: keep conversations in tact by keeping empty assistant messages
+- 8607972: Introduce Mastra lint cli command
+- ccef9f9: Fixed a type error when converting tools
+- 0097d50: Add serializedStepGraph to vNext workflow
+  Return serializedStepGraph from vNext workflow
+  Use serializedStepGraph in vNext workflow graph
+- 7eeb2bc: Added explicit storage to memory in create-mastra so new projects don't see breaking change warnings
+- 17826a9: Added a breaking change warning about deprecated working memory "use: 'text-stream'" which is being fully replaced by "use: 'tool-call'"
+- 7d8b7c7: In vnext getworkflowRunById, pick run from this.#runs if it does not exist in storage
+- fba031f: Show traces for vNext workflow
+- 3a5f1e1: Created a new @mastra/fastembed package based on the default embedder in @mastra/core as the default embedder will be removed in a breaking change (May 20th)
+  Added a warning to use the new @mastra/fastembed package instead of the default embedder
+- 51e6923: fix ts errors on default proxy storage
+- 8398d89: vNext: dynamic input mappings
+
 ## 0.9.2-alpha.6
 
 ### Patch Changes
