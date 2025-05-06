@@ -255,6 +255,13 @@ export class OpenSearchFilterTranslator extends BaseFilterTranslator {
       // Convert value to string if it's not already
       const regexValue = typeof value === 'string' ? value : value.toString();
 
+      // Check for problematic patterns (like newlines, etc.)
+      if (regexValue.includes('\n') || regexValue.includes('\r')) {
+        // For patterns with newlines, use a simpler approach
+        // OpenSearch doesn't support dotall flag like JavaScript
+        return { match: { [field]: value } };
+      }
+
       // Process regex pattern to handle anchors properly
       let processedRegex = regexValue;
       const hasStartAnchor = regexValue.startsWith('^');
@@ -283,7 +290,9 @@ export class OpenSearchFilterTranslator extends BaseFilterTranslator {
       }
 
       // Use regexp for other regex patterns
-      return { regexp: { [field]: regexValue } };
+      // Escape any backslashes to prevent OpenSearch from misinterpreting them
+      const escapedRegex = regexValue.replace(/\\/g, '\\\\');
+      return { regexp: { [field]: escapedRegex } };
     }
 
     const fieldWithKeyword = this.addKeywordIfNeeded(field, value);

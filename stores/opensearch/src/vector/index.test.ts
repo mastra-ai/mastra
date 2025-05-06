@@ -1422,7 +1422,7 @@ describe('OpenSearchVector', () => {
         expect(results).toHaveLength(2);
       });
 
-      it.only('should handle dotall flag', async () => {
+      it('should handle dotall flag', async () => {
         await vectorDB.upsert({
           indexName,
           vectors: [[1, 0.1, 0]],
