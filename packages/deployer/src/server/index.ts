@@ -218,6 +218,8 @@ export async function createHonoServer(mastra: Mastra, options: ServerBundleOpti
         app.put(route.path, ...middlewares, route.handler);
       } else if (route.method === 'DELETE') {
         app.delete(route.path, ...middlewares, route.handler);
+      } else if (route.method === 'ALL') {
+        app.all(route.path, ...middlewares, route.handler);
       }
     }
   }
