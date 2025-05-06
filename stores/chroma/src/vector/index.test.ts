@@ -287,6 +287,13 @@ describe('ChromaVector Integration Tests', () => {
       const metadata = [{}, {}]; // More metadata than vectors
       await expect(vectorDB.upsert({ indexName: testIndexName, vectors, metadata })).rejects.toThrow();
     });
+
+    it('can handle duplicate index creation', async () => {
+      await vectorDB.createIndex({ indexName: testIndexName, dimension });
+      await expect(vectorDB.createIndex({ indexName: testIndexName, dimension })).rejects.toThrow(
+        'Index already exists',
+      );
+    });
   });
 
   describe('Filter Validation in Queries', () => {

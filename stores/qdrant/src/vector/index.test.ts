@@ -764,6 +764,19 @@ describe('QdrantVector', () => {
       const wrongDimVector = [[1, 0]]; // 2D vector for 3D index
       await expect(qdrant.upsert({ indexName: testCollectionName, vectors: wrongDimVector })).rejects.toThrow();
     }, 50000);
+
+    it('should handle mismatched metadata and vectors length', async () => {
+      const vectors = [[1, 2, 3]];
+      const metadata = [{}, {}]; // More metadata than vectors
+      await expect(qdrant.upsert({ indexName: testCollectionName, vectors, metadata })).rejects.toThrow();
+    });
+
+    it('can handle duplicate index creation', async () => {
+      await qdrant.createIndex({ indexName: testCollectionName, dimension: 3 });
+      await expect(qdrant.createIndex({ indexName: testCollectionName, dimension: 3 })).rejects.toThrow(
+        'Index already exists',
+      );
+    });
   });
 
   describe('Empty/Undefined Filters', () => {

@@ -24,6 +24,10 @@ export class CloudflareVector extends MastraVector {
     });
   }
 
+  get indexSeparator(): string {
+    return '-';
+  }
+
   async upsert(...args: ParamsToArgs<UpsertVectorParams>): Promise<string[]> {
     const params = this.normalizeArgs<UpsertVectorParams>('upsert', args);
 

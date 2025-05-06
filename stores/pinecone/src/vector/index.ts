@@ -61,6 +61,10 @@ export class PineconeVector extends MastraVector {
       }) ?? baseClient;
   }
 
+  get indexSeparator(): string {
+    return '-';
+  }
+
   async createIndex(...args: ParamsToArgs<CreateIndexParams>): Promise<void> {
     const params = this.normalizeArgs<CreateIndexParams>('createIndex', args);
 

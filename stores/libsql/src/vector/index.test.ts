@@ -1602,6 +1602,30 @@ describe('LibSQLVector', () => {
     // });
   });
 
+  describe('Error Handling', () => {
+    it('should handle non-existent index queries', async () => {
+      await expect(vectorDB.query({ indexName: 'non-existent-index-yu', queryVector: [1, 2, 3] })).rejects.toThrow();
+    });
+
+    it('should handle invalid dimension vectors', async () => {
+      const invalidVector = [1, 2, 3, 4]; // 4D vector for 3D index
+      await expect(vectorDB.upsert({ indexName: testIndexName, vectors: [invalidVector] })).rejects.toThrow();
+    });
+
+    it('should handle mismatched metadata and vectors length', async () => {
+      const vectors = [[1, 2, 3]];
+      const metadata = [{}, {}]; // More metadata than vectors
+      await expect(vectorDB.upsert({ indexName: testIndexName, vectors, metadata })).rejects.toThrow();
+    });
+
+    it('can handle duplicate index creation', async () => {
+      await vectorDB.createIndex({ indexName: testIndexName, dimension: 3 });
+      await expect(vectorDB.createIndex({ indexName: testIndexName, dimension: 3 })).rejects.toThrow(
+        'Index already exists',
+      );
+    });
+  });
+
   describe('Deprecation Warnings', () => {
     const indexName = 'testdeprecationwarnings';
 

@@ -16,6 +16,10 @@ export abstract class MastraVector extends MastraBase {
     super({ name: 'MastraVector', component: 'VECTOR' });
   }
 
+  get indexSeparator(): string {
+    return '_';
+  }
+
   private readonly baseKeys = {
     query: ['queryVector', 'topK', 'filter', 'includeVector'],
     upsert: ['vectors', 'metadata', 'ids'],

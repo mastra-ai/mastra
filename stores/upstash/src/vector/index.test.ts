@@ -267,6 +267,19 @@ describe.skipIf(!process.env.UPSTASH_VECTOR_URL || !process.env.UPSTASH_VECTOR_T
         vectorStore.query({ indexName: testIndexName, queryVector: [1.0, 0.0] }), // Wrong dimensions
       ).rejects.toThrow();
     });
+
+    it('should handle mismatched metadata and vectors length', async () => {
+      const vectors = [[1, 2, 3]];
+      const metadata = [{}, {}]; // More metadata than vectors
+      await expect(vectorStore.upsert({ indexName: testIndexName, vectors, metadata })).rejects.toThrow();
+    });
+
+    it('can handle duplicate index creation', async () => {
+      await vectorStore.createIndex({ indexName: testIndexName, dimension: 3 });
+      await expect(vectorStore.createIndex({ indexName: testIndexName, dimension: 3 })).rejects.toThrow(
+        'Index already exists',
+      );
+    });
   });
 
   describe('Filter Tests', () => {
