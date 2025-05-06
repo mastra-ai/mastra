@@ -766,6 +766,14 @@ describe('Workflow', () => {
           inputSchema: z.object({ status: z.string() }),
           outputSchema: z.object({ result: z.string() }),
         });
+        const step4 = createStep({
+          id: 'step4',
+          execute: async ({ inputData }) => {
+            return { result: inputData.result };
+          },
+          inputSchema: z.object({ result: z.string() }),
+          outputSchema: z.object({ result: z.string() }),
+        });
 
         const workflow = createWorkflow({
           id: 'test-workflow',
@@ -790,6 +798,13 @@ describe('Workflow', () => {
               step3,
             ],
           ])
+          .map({
+            result: {
+              step: [step3, step2],
+              path: 'result',
+            },
+          })
+          .then(step4)
           .commit();
 
         const run = workflow.createRun();
@@ -798,10 +813,11 @@ describe('Workflow', () => {
         expect(step1Action).toHaveBeenCalled();
         expect(step2Action).toHaveBeenCalled();
         expect(step3Action).not.toHaveBeenCalled();
-        expect(result.steps).toEqual({
+        expect(result.steps).toMatchObject({
           input: { status: 'success' },
           step1: { status: 'success', output: { status: 'success' } },
           step2: { status: 'success', output: { result: 'step2' } },
+          step4: { status: 'success', output: { result: 'step2' } },
         });
       });
 

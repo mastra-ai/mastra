@@ -418,7 +418,7 @@ export class NewWorkflow<
     TMapping extends {
       [K in keyof TMapping]:
         | {
-            step: TSteps[number];
+            step: TSteps[number] | TSteps[number][];
             path: PathsToStringProps<ExtractSchemaType<ExtractSchemaFromStep<TSteps[number], 'outputSchema'>>> | '.';
           }
         | { value: any; schema: z.ZodTypeAny }
@@ -482,7 +482,10 @@ export class NewWorkflow<
             continue;
           }
 
-          const stepResult = m.initData ? getInitData() : getStepResult(m.step);
+          const stepResult = m.initData
+            ? getInitData()
+            : getStepResult(Array.isArray(m.step) ? m.step.find((s: any) => getStepResult(s)) : m.step);
+
           if (m.path === '.') {
             result[key] = stepResult;
             continue;
