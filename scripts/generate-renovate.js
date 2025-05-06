@@ -75,6 +75,10 @@ const renovateConfig = {
       enabled: false,
     },
     {
+      matchDatasources: ['npm'],
+      minimumReleaseAge: '3 days',
+    },
+    {
       groupName: 'examples',
       commitMessageTopic: 'examples',
       groupSlug: 'examples-minor',
