@@ -12,31 +12,26 @@ async function getModelCachePath() {
 
 // Shared function to generate embeddings using fastembed
 async function generateEmbeddings(values: string[], modelType: 'BGESmallENV15' | 'BGEBaseENV15') {
-  try {
-    const model = await FlagEmbedding.init({
-      model: EmbeddingModel[modelType],
-      cacheDir: await getModelCachePath(),
-    });
+  const model = await FlagEmbedding.init({
+    model: EmbeddingModel[modelType],
+    cacheDir: await getModelCachePath(),
+  });
 
-    // model.embed() returns an AsyncGenerator that processes texts in batches (default size 256)
-    const embeddings = model.embed(values);
+  // model.embed() returns an AsyncGenerator that processes texts in batches (default size 256)
+  const embeddings = model.embed(values);
 
-    const allResults = [];
-    for await (const result of embeddings) {
-      // result is an array of embeddings, one for each text in the batch
-      // We convert each Float32Array embedding to a regular number array
-      allResults.push(...result.map(embedding => Array.from(embedding)));
-    }
-
-    if (allResults.length === 0) throw new Error('No embeddings generated');
-
-    return {
-      embeddings: allResults,
-    };
-  } catch (error) {
-    console.error('Error generating embeddings:', error);
-    throw error;
+  const allResults = [];
+  for await (const result of embeddings) {
+    // result is an array of embeddings, one for each text in the batch
+    // We convert each Float32Array embedding to a regular number array
+    allResults.push(...result.map(embedding => Array.from(embedding)));
   }
+
+  if (allResults.length === 0) throw new Error('No embeddings generated');
+
+  return {
+    embeddings: allResults,
+  };
 }
 
 const fastEmbedProvider = experimental_customProvider({
