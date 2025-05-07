@@ -1,29 +1,27 @@
 "use client";
 
 import {
-  Combobox,
-  ComboboxInput,
-  ComboboxOption,
-  ComboboxOptions,
+	Combobox,
+	ComboboxInput,
+	ComboboxOption,
+	ComboboxOptions,
 } from "@headlessui/react";
 import cn from "clsx";
+import { Search } from "lucide-react";
 import { addBasePath } from "next/dist/client/add-base-path";
 import NextLink from "next/link";
 import { useRouter } from "next/navigation";
 import type {
-  FC,
-  FocusEventHandler,
-  ReactElement,
-  ReactNode,
-  SyntheticEvent,
+	FC,
+	FocusEventHandler,
+	ReactElement,
+	ReactNode,
+	SyntheticEvent,
 } from "react";
 import { useDeferredValue, useEffect, useRef, useState } from "react";
 import { InformationIcon } from "./svgs/information-icon";
 import { SpinnerIcon } from "./svgs/spinner";
-import { Button } from "./ui/button";
-import { SearchIcon } from "./svgs/Icons";
 import { ScrollArea } from "./ui/scroll-area";
-import { Search } from "lucide-react";
 
 /**
  * Options that can be passed to `pagefind.search()`.
@@ -50,11 +48,11 @@ export type PagefindSearchOptions = {
 
 // Fix React Compiler (BuildHIR::lowerExpression) Handle Import expressions
 export async function importPagefind() {
-  // @ts-ignore
+  // @ts-expect-error - allow
   window.pagefind = await import(
     /* webpackIgnore: true */ addBasePath("/_pagefind/pagefind.js")
   );
-  // @ts-ignore
+  // @ts-expect-error - allow
   await window.pagefind!.options({
     baseUrl: "/",
     // ... more search options
@@ -102,8 +100,6 @@ type SearchProps = {
   isAgentMode?: boolean;
 };
 
-const INPUTS = new Set(["INPUT", "SELECT", "BUTTON", "TEXTAREA"]);
-
 const DEV_SEARCH_NOTICE = (
   <>
     <p>
@@ -133,7 +129,6 @@ export const CustomSearch: FC<SearchProps> = ({
   errorText = "Failed to load search index.",
   loading = "Loading…",
   placeholder = "Search documentation…",
-  isAgentMode,
   searchOptions,
 }) => {
   const [isLoading, setIsLoading] = useState(true);
@@ -152,7 +147,7 @@ export const CustomSearch: FC<SearchProps> = ({
         return;
       }
       setIsLoading(true);
-      // @ts-ignore
+      // @ts-expect-error - allow
       if (!window.pagefind) {
         try {
           await importPagefind();
@@ -169,22 +164,22 @@ export const CustomSearch: FC<SearchProps> = ({
           return;
         }
       }
-      // @ts-ignore
+      // @ts-expect-error - allow
       const response = await window.pagefind!.debouncedSearch<PagefindResult>(
         value,
         searchOptions,
       );
       if (!response) return;
 
-      // @ts-ignore
+      // @ts-expect-error - allow
       const data = await Promise.all(response.results.map((o) => o.data()));
       setIsLoading(false);
       setError("");
       setResults(
-        // @ts-ignore
+        // @ts-expect-error - allow
         data.map((newData) => ({
           ...newData,
-          // @ts-ignore
+          // @ts-expect-error - allow
           sub_results: newData.sub_results.map((r) => {
             const url = r.url.replace(/\.html$/, "").replace(/\.html#/, "#");
 
@@ -228,13 +223,16 @@ export const CustomSearch: FC<SearchProps> = ({
   };
 
   return (
-    <Combobox
-			onChange={handleSelect}
-		>
-      <div className={cn(className, "w-full p-4 py-2 flex items-center gap-[14px]")}>
+    <Combobox onChange={handleSelect}>
+      <div
+        className={cn(
+          className,
+          "w-full p-4 py-2 flex items-center gap-[14px]",
+        )}
+      >
         <span className="relative" onClick={() => inputRef.current.focus()}>
-					<Search className="w-5 h-5 text-icons-3" />
-				</span>
+          <Search className="w-5 h-5 text-icons-3" />
+        </span>
         <ComboboxInput
           ref={inputRef}
           spellCheck={false}
@@ -352,19 +350,19 @@ const Result: FC<{ data: PagefindResult }> = ({ data }) => {
   );
 };
 
-function AgentBadge({ title }: { title: string }) {
-  return (
-    <span
-      className={cn(
-        "x:absolute x:my-1.5 x:select-none x:pointer-events-none x:end-1.5 x:transition-all",
-        "x:h-5 x:rounded x:bg-nextra-bg x:px-1.5 x:font-mono x:text-[11px] x:font-medium x:text-gray-600 x:dark:text-gray-400",
-        "x:border nextra-border",
-        "x:contrast-more:text-current",
-        "x:items-center x:gap-1 x:flex",
-        "x:max-sm:hidden not-prose",
-      )}
-    >
-      {title}
-    </span>
-  );
-}
+// function AgentBadge({ title }: { title: string }) {
+//   return (
+//     <span
+//       className={cn(
+//         "x:absolute x:my-1.5 x:select-none x:pointer-events-none x:end-1.5 x:transition-all",
+//         "x:h-5 x:rounded x:bg-nextra-bg x:px-1.5 x:font-mono x:text-[11px] x:font-medium x:text-gray-600 x:dark:text-gray-400",
+//         "x:border nextra-border",
+//         "x:contrast-more:text-current",
+//         "x:items-center x:gap-1 x:flex",
+//         "x:max-sm:hidden not-prose",
+//       )}
+//     >
+//       {title}
+//     </span>
+//   );
+// }

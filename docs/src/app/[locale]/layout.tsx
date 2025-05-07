@@ -11,7 +11,6 @@ import "../globals.css";
 import { PostHogProvider } from "@/analytics/posthog-provider";
 import { CookieConsent } from "@/components/cookie-consent";
 import { NextraLayout } from "@/components/nextra-layout";
-import DocsChat from "@/chatbot/components/chat-widget";
 import { GTProvider } from "gt-next";
 
 const fetchStars = async () => {

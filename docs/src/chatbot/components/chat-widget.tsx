@@ -1,12 +1,11 @@
 "use client";
 import { CopilotKit, useCopilotChat } from "@copilotkit/react-core";
-import { CopilotChat, Markdown } from "@copilotkit/react-ui";
+import { Markdown } from "@copilotkit/react-ui";
 import { Role, TextMessage } from "@copilotkit/runtime-client-gql";
 
 import { ArrowLeftIcon, PaperIcon } from "@/components/svgs/Icons";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import Spinner from "@/components/ui/spinner";
 import { Textarea } from "@/components/ui/textarea";
 import "@copilotkit/react-ui/styles.css";
 import { ArrowUp } from "lucide-react";
@@ -27,20 +26,6 @@ const DocsChat: React.FC<{
   );
 };
 
-const Chat = () => {
-  return (
-    <div className="flex items-center justify-center w-full h-full">
-      <div className="rounded-lg w-8/10 h-8/10">
-        <CopilotChat
-          icons={{
-            spinnerIcon: <Spinner />,
-          }}
-        />
-      </div>
-    </div>
-  );
-};
-
 export function CustomChatInterface({
   setIsAgentMode,
 }: {
@@ -49,10 +34,6 @@ export function CustomChatInterface({
   const {
     visibleMessages,
     appendMessage,
-    setMessages,
-    deleteMessage,
-    reloadMessages,
-    stopGeneration,
     isLoading,
     reset,
   } = useCopilotChat();
