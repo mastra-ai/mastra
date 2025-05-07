@@ -195,84 +195,62 @@ export class MongoDBStore extends MastraStorage {
     }
   }
 
-  async getMessages<T extends MessageType[]>({ threadId, selectBy }: StorageGetMessagesArg): Promise<T> {
+  async getMessages<T = unknown>({ threadId, selectBy }: StorageGetMessagesArg): Promise<T[]> {
     try {
-      const messages: MessageType[] = [];
-      const limit = typeof selectBy?.last === `number` ? selectBy.last : 40;
+      const limit = typeof selectBy?.last === 'number' ? selectBy.last : 40;
+      const include = selectBy?.include || [];
+      let messages: MessageType[] = [];
+      let allMessages: MessageType[] = [];
 
-      // If we have specific messages to select
-      if (selectBy?.include?.length) {
-        const includeIds = selectBy.include.map(i => i.id);
-        const maxPrev = Math.max(...selectBy.include.map(i => i.withPreviousMessages || 0));
-        const maxNext = Math.max(...selectBy.include.map(i => i.withNextMessages || 0));
+      // Get all messages from the thread ordered by creation date descending
+      allMessages = (
+        await this.db.collection(TABLE_MESSAGES).find({ thread_id: threadId }).sort({ createdAt: -1 }).toArray()
+      ).map((row: any) => this.parseRow(row));
 
-        // Get messages around all specified IDs in one query using row numbers
-        const includeResult = await this.db
-          .collection(TABLE_MESSAGES)
-          .aggregate([
-            { $match: { thread_id: threadId, id: { $in: includeIds } } },
-            {
-              $addFields: {
-                row_num: {
-                  $rank: {
-                    sortBy: { createdAt: 1 },
-                  },
-                },
-              },
-            },
-            {
-              $lookup: {
-                from: TABLE_MESSAGES,
-                let: { target_pos: '$row_num' },
-                pipeline: [
-                  {
-                    $match: {
-                      $expr: {
-                        $and: [
-                          { $gte: ['$row_num', { $subtract: ['$$target_pos', maxPrev] }] },
-                          { $lte: ['$row_num', { $add: ['$$target_pos', maxNext] }] },
-                        ],
-                      },
-                    },
-                  },
-                ],
-                as: 'messages',
-              },
-            },
-            { $unwind: '$messages' },
-            { $sort: { 'messages.createdAt': 1 } },
-          ])
-          .toArray();
+      // If there are messages to include, select the messages around the included IDs
+      if (include.length) {
+        // Map IDs to their position in the ordered array
+        const idToIndex = new Map<string, number>();
+        allMessages.forEach((msg, idx) => {
+          idToIndex.set(msg.id, idx);
+        });
 
-        if (includeResult.length) {
-          messages.push(...includeResult.map((row: any) => this.parseRow(row)));
+        const selectedIndexes = new Set<number>();
+        for (const inc of include) {
+          const idx = idToIndex.get(inc.id);
+          if (idx === undefined) continue;
+          // Previous messages
+          for (let i = 1; i <= (inc.withPreviousMessages || 0); i++) {
+            if (idx + i < allMessages.length) selectedIndexes.add(idx + i);
+          }
+          // Included message
+          selectedIndexes.add(idx);
+          // Next messages
+          for (let i = 1; i <= (inc.withNextMessages || 0); i++) {
+            if (idx - i >= 0) selectedIndexes.add(idx - i);
+          }
+        }
+        // Add the selected messages, filtering out undefined
+        messages.push(
+          ...Array.from(selectedIndexes)
+            .map(i => allMessages[i])
+            .filter((m): m is MessageType => !!m),
+        );
+      }
+
+      // Get the remaining messages, excluding those already selected
+      const excludeIds = new Set(messages.map(m => m.id));
+      for (const msg of allMessages) {
+        if (messages.length >= limit) break;
+        if (!excludeIds.has(msg.id)) {
+          messages.push(msg);
         }
       }
 
-      // Get remaining messages, excluding already fetched IDs
-      const excludeIds = messages.map(m => m.id);
-      const remainingIds = [threadId, ...(excludeIds.length ? excludeIds : [])];
-      const remainingResults = await this.db
-        .collection(TABLE_MESSAGES)
-        .find(
-          {
-            thread_id: { $in: remainingIds },
-          },
-          {
-            limit: limit,
-            sort: { createdAt: 'desc' },
-          },
-        )
-        .toArray();
-
-      if (remainingResults.length) {
-        messages.push(...remainingResults.map((row: any) => this.parseRow(row)));
-      }
-
-      // Sort all messages by creation date
+      // Sort all messages by creation date ascending
       messages.sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
 
-      return messages as T;
+      return messages.slice(0, limit) as T[];
     } catch (error) {
       this.logger.error('Error getting messages:', error as Error);
       throw error;
@@ -289,7 +267,7 @@ export class MongoDBStore extends MastraStorage {
       this.logger.error('Thread ID is required to save messages');
       throw new Error('Thread ID is required');
     }
-
+    console.log('index.ts [276] SaveMessage', messages);
     try {
       // Prepare batch statements for all messages
       const messagesToInsert = messages.map(message => {
@@ -305,6 +283,7 @@ export class MongoDBStore extends MastraStorage {
         };
       });
 
+      console.log('index.ts [294]', messagesToInsert);
       // Execute all inserts in a single batch
       await this.db.collection(TABLE_MESSAGES).insertMany(messagesToInsert);
       return messages;
