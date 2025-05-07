@@ -56,7 +56,7 @@
     "@mastra/core": "workspace:^"
   },
   "devDependencies": {
-    "@ai-sdk/openai": "^1.3.2",
+    "@ai-sdk/openai": "^1.3.21",
     "@internal/lint": "workspace:*",
     "@mastra/core": "workspace:*",
     "@microsoft/api-extractor": "^7.52.5",
