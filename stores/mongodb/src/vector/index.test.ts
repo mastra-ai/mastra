@@ -448,11 +448,11 @@ describe('MongoDBVector Integration Tests', () => {
 
   describe('Error Handling', () => {
     it('should handle non-existent index queries', async () => {
-      await expect(vectorDB.query({ indexName: 'non-existent-index-yu', queryVector: [1, 2, 3] })).rejects.toThrow();
+      await expect(vectorDB.query({ indexName: 'non-existent-index', queryVector: [1, 2, 3] })).rejects.toThrow();
     });
 
     it('should handle invalid dimension vectors', async () => {
-      const invalidVector = [1, 2, 3]; // 4D vector for 3D index
+      const invalidVector = [1, 2, 3]; // 3D vector for 4D index
       await expect(vectorDB.upsert({ indexName: testIndexName, vectors: [invalidVector] })).rejects.toThrow();
     });
 

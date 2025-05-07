@@ -73,6 +73,9 @@ export class PineconeVector extends MastraVector {
     if (!Number.isInteger(dimension) || dimension <= 0) {
       throw new Error('Dimension must be a positive integer');
     }
+    if (metric && !['cosine', 'euclidean', 'dotproduct'].includes(metric)) {
+      throw new Error('Metric must be one of: cosine, euclidean, dotproduct');
+    }
     try {
       await this.client.createIndex({
         name: indexName,

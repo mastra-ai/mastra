@@ -435,7 +435,7 @@ describe('Integration Testing CouchbaseVector', async () => {
 
     it('should handle non-existent index queries', async () => {
       await expect(
-        couchbase_client.query({ indexName: 'non-existent-index-yu', queryVector: [1, 2, 3] }),
+        couchbase_client.query({ indexName: 'non-existent-index', queryVector: [1, 2, 3] }),
       ).rejects.toThrow();
     }, 50000);
 
@@ -443,35 +443,37 @@ describe('Integration Testing CouchbaseVector', async () => {
       const duplicateIndexName = `duplicate-test-${randomUUID()}`;
       const dimension = 768;
 
-      // Create index first time
-      await couchbase_client.createIndex({
-        indexName: duplicateIndexName,
-        dimension,
-        metric: 'cosine',
-      });
-
-      // Try to create with same dimensions - should not throw
-      await expect(
-        couchbase_client.createIndex({
+      try {
+        // Create index first time
+        await couchbase_client.createIndex({
           indexName: duplicateIndexName,
           dimension,
           metric: 'cosine',
-        }),
-      ).resolves.not.toThrow();
+        });
 
-      // Try to create with different dimensions - should throw
-      await expect(
-        couchbase_client.createIndex({
-          indexName: duplicateIndexName,
-          dimension: dimension + 1,
-          metric: 'cosine',
-        }),
-      ).rejects.toThrow(
-        `Index "${duplicateIndexName}" already exists with ${dimension} dimensions, but ${dimension + 1} dimensions were requested`,
-      );
+        // Try to create with same dimensions - should not throw
+        await expect(
+          couchbase_client.createIndex({
+            indexName: duplicateIndexName,
+            dimension,
+            metric: 'cosine',
+          }),
+        ).resolves.not.toThrow();
 
-      // Cleanup
-      await couchbase_client.deleteIndex(duplicateIndexName);
+        // Try to create with different dimensions - should throw
+        await expect(
+          couchbase_client.createIndex({
+            indexName: duplicateIndexName,
+            dimension: dimension + 1,
+            metric: 'cosine',
+          }),
+        ).rejects.toThrow(
+          `Index "${duplicateIndexName}" already exists with ${dimension} dimensions, but ${dimension + 1} dimensions were requested`,
+        );
+      } finally {
+        // Cleanup
+        await couchbase_client.deleteIndex(duplicateIndexName);
+      }
     }, 50000);
   });
 
