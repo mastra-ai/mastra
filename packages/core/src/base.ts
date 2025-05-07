@@ -34,9 +34,7 @@ export class MastraBase {
     this.telemetry = telemetry;
 
     if (this.component !== RegisteredLogger.LLM) {
-      this.logger.debug(
-        `Telemetry updated [component=${this.component}] [tracer=${JSON.stringify(this.telemetry.tracer)}]`,
-      );
+      this.logger.debug(`Telemetry updated [component=${this.component}] [name=${this.telemetry.name}]`);
     }
   }
 
