@@ -91,4 +91,30 @@ export class RuntimeContext<Values extends Record<string, any> | unknown = unkno
   public forEach<T = any>(callbackfn: (value: T, key: string, map: Map<string, any>) => void): void {
     this.registry.forEach(callbackfn as any);
   }
+
+  /**
+   * Merge another RuntimeContext into this one
+   * @param other The RuntimeContext to merge from
+   * @param overwrite If true, values from the other context will overwrite existing values
+   */
+  public merge<OtherValues extends Record<string, any> | unknown>(
+    other: RuntimeContext<OtherValues>,
+    overwrite: boolean = true,
+  ): RuntimeContext<Values & OtherValues> {
+    const merged = new RuntimeContext<Values & OtherValues>();
+
+    // First copy all values from current context
+    this.forEach((value, key) => {
+      merged.set(key as any, value);
+    });
+
+    // Then merge values from other context
+    other.forEach((value, key) => {
+      if (overwrite || !merged.has(key as any)) {
+        merged.set(key as any, value);
+      }
+    });
+
+    return merged;
+  }
 }
