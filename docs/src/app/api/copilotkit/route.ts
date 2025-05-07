@@ -3,22 +3,20 @@ import {
   ExperimentalEmptyAdapter,
   copilotRuntimeNextJSAppRouterEndpoint,
 } from "@copilotkit/runtime";
-
-import { MastraDocsAgent } from "@/chatbot/custom-agents/mastra-agent";
 import { NextRequest } from "next/server";
+import { MastraClient } from "@mastra/client-js";
 
-const docsAgent = new MastraDocsAgent({
-  agentId: "docsAgent",
-});
+const baseUrl = process.env.MASTRA_AGENT_URL || "http://localhost:4111";
 
-const runtime = new CopilotRuntime({
-  agents: {
-    //@ts-expect-error - mismatched typs error
-    docsAgent,
-  },
+const client = new MastraClient({
+  baseUrl,
 });
 
 export const POST = async (req: NextRequest) => {
+  const runtime = new CopilotRuntime({
+    agents: await client.getAGUI({ resourceId: "docsAgent" }),
+  });
+
   const { handleRequest } = copilotRuntimeNextJSAppRouterEndpoint({
     runtime,
     serviceAdapter: new ExperimentalEmptyAdapter(),
