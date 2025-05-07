@@ -3,12 +3,12 @@ import { T } from "gt-next/client";
 import { usePathname } from "next/navigation";
 import { PageMapItem } from "nextra";
 import { Layout } from "nextra-theme-docs";
-import { Search } from "nextra/components";
 import { Footer } from "./footer";
 import { Nav } from "./navbar";
+import { SearchWrapper } from "./search-wrapper";
 import { SubscribeForm } from "./subscribe-form";
 import { TabSwitcher } from "./tab-switcher";
-import { getSearchPlaceholder } from "./search-placeholder";
+
 const footer = <Footer />;
 
 export const NextraLayout = ({
@@ -26,7 +26,7 @@ export const NextraLayout = ({
   const isReference = pathname.includes("/reference");
   return (
     <Layout
-      search={<Search placeholder={getSearchPlaceholder(locale)} />}
+      search={<SearchWrapper locale={locale} />}
       navbar={
         <div className="flex  sticky top-0 z-30 bg-[var(--primary-bg)] flex-col">
           <Nav stars={stars} />

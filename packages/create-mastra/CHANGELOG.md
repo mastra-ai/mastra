@@ -1,5 +1,12 @@
 # create-mastra
 
+## 0.3.2-alpha.0
+
+### Patch Changes
+
+- b5d2de0: In vNext workflow serializedStepGraph, return only serializedStepFlow for steps created from a workflow
+  allow viewing inner nested workflows in a multi-layered nested vnext workflow on the playground
+
 ## 0.3.1
 
 ### Patch Changes

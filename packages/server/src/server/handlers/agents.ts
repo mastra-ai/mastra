@@ -1,5 +1,5 @@
 import type { Agent } from '@mastra/core/agent';
-import type { RuntimeContext } from '@mastra/core/runtime-context';
+import { RuntimeContext } from '@mastra/core/runtime-context';
 import { stringify } from 'superjson';
 import zodToJsonSchema from 'zod-to-json-schema';
 import { HTTPException } from '../http-exception';
@@ -148,6 +148,7 @@ export async function generateHandler({
   body: GetBody<'generate'> & {
     // @deprecated use resourceId
     resourceid?: string;
+    runtimeContext?: Record<string, unknown>;
   };
 }) {
   try {
@@ -157,16 +158,22 @@ export async function generateHandler({
       throw new HTTPException(404, { message: 'Agent not found' });
     }
 
-    const { messages, resourceId, resourceid, ...rest } = body;
+    const { messages, resourceId, resourceid, runtimeContext: agentRuntimeContext, ...rest } = body;
     // Use resourceId if provided, fall back to resourceid (deprecated)
     const finalResourceId = resourceId ?? resourceid;
+
+    const finalRuntimeContext = new RuntimeContext<Record<string, unknown>>([
+      ...Array.from(runtimeContext.entries()),
+      ...Array.from(Object.entries(agentRuntimeContext ?? {})),
+    ]);
+
     validateBody({ messages });
 
     const result = await agent.generate(messages, {
       ...rest,
       // @ts-expect-error TODO fix types
       resourceId: finalResourceId,
-      runtimeContext,
+      runtimeContext: finalRuntimeContext,
     });
 
     return result;
@@ -186,6 +193,7 @@ export async function streamGenerateHandler({
   body: GetBody<'stream'> & {
     // @deprecated use resourceId
     resourceid?: string;
+    runtimeContext?: string;
   };
 }): Promise<Response | undefined> {
   try {
@@ -195,16 +203,22 @@ export async function streamGenerateHandler({
       throw new HTTPException(404, { message: 'Agent not found' });
     }
 
-    const { messages, resourceId, resourceid, ...rest } = body;
+    const { messages, resourceId, resourceid, runtimeContext: agentRuntimeContext, ...rest } = body;
     // Use resourceId if provided, fall back to resourceid (deprecated)
     const finalResourceId = resourceId ?? resourceid;
+
+    const finalRuntimeContext = new RuntimeContext<Record<string, unknown>>([
+      ...Array.from(runtimeContext.entries()),
+      ...Array.from(Object.entries(agentRuntimeContext ?? {})),
+    ]);
+
     validateBody({ messages });
 
     const streamResult = await agent.stream(messages, {
       ...rest,
       // @ts-expect-error TODO fix types
       resourceId: finalResourceId,
-      runtimeContext,
+      runtimeContext: finalRuntimeContext,
     });
 
     const streamResponse = rest.output
