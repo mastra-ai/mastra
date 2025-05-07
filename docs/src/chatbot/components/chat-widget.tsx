@@ -40,8 +40,6 @@ export function CustomChatInterface({
 }) {
   const { visibleMessages, appendMessage, isLoading, reset } = useCopilotChat();
 
-  console.log({visibleMessages})
-
   const [inputValue, setInputValue] = useState("");
   const messagesEndRef = useRef<HTMLDivElement>(null);
 

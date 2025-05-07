@@ -102,6 +102,7 @@ type SearchProps = {
   isAgentMode?: boolean;
   setIsSearching?: (isSearching: boolean) => void;
   onUseAgent: ({ searchQuery }: { searchQuery: string }) => void;
+	closeModal: () => void;
 };
 
 const DEV_SEARCH_NOTICE = (
@@ -136,6 +137,7 @@ export const CustomSearch: FC<SearchProps> = ({
   searchOptions,
   setIsSearching,
   onUseAgent,
+	closeModal,
 }) => {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<ReactElement | string>("");
@@ -309,7 +311,7 @@ export const CustomSearch: FC<SearchProps> = ({
             </>
           ) : results.length ? (
             results.map((searchResult) => (
-              <Result key={searchResult.url} data={searchResult} />
+              <Result key={searchResult.url} data={searchResult} closeModal={closeModal} />
             ))
           ) : (
             deferredSearch && emptyResult
@@ -320,7 +322,7 @@ export const CustomSearch: FC<SearchProps> = ({
   );
 };
 
-const Result: FC<{ data: PagefindResult }> = ({ data }) => {
+const Result: FC<{ data: PagefindResult, closeModal: () => void }> = ({ data, closeModal }) => {
   return (
     <>
       <div
@@ -337,6 +339,9 @@ const Result: FC<{ data: PagefindResult }> = ({ data }) => {
           as={NextLink}
           value={subResult}
           href={subResult.url}
+					onClick={() => {
+						closeModal();
+					}}
           className={({ focus }) =>
             cn(
               "x:mx-2.5 x:break-words x:rounded-md",

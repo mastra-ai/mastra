@@ -104,6 +104,7 @@ export const SearchWrapper = ({ locale }: { locale: string }) => {
                     isAgentMode={isAgentMode}
                     setIsSearching={setIsSearching}
                     onUseAgent={handleUseAgent}
+										closeModal={close}
                   />
                   {!isSearching && (
                     <>
