@@ -184,8 +184,8 @@ describe('QdrantVector', () => {
       // expect(results[0]?.vector).toEqual(newVector);
     });
 
-    it('should throw exception when no updates are given', () => {
-      expect(qdrant.updateIndexById(testCollectionName, 'id', {})).rejects.toThrow('No updates provided');
+    it('should throw exception when no updates are given', async () => {
+      await expect(qdrant.updateIndexById(testCollectionName, 'id', {})).rejects.toThrow('No updates provided');
     });
 
     it('should throw error for non-existent index', async () => {
@@ -755,6 +755,15 @@ describe('QdrantVector', () => {
     });
   });
   describe('Error Handling', () => {
+    const testIndexName = 'test_index_error';
+    beforeAll(async () => {
+      await qdrant.createIndex({ indexName: testIndexName, dimension: 3 });
+    });
+
+    afterAll(async () => {
+      await qdrant.deleteIndex(testIndexName);
+    });
+
     it('should handle non-existent index query gracefully', async () => {
       const nonExistentIndex = 'non-existent-index';
       await expect(qdrant.query({ indexName: nonExistentIndex, queryVector: [1, 0, 0] })).rejects.toThrow();
@@ -764,6 +773,65 @@ describe('QdrantVector', () => {
       const wrongDimVector = [[1, 0]]; // 2D vector for 3D index
       await expect(qdrant.upsert({ indexName: testCollectionName, vectors: wrongDimVector })).rejects.toThrow();
     }, 50000);
+
+    it('should handle mismatched metadata and vectors length', async () => {
+      const vectors = [[1, 2, 3]];
+      const metadata = [{}, {}];
+      await expect(qdrant.upsert({ indexName: testCollectionName, vectors, metadata })).rejects.toThrow();
+    });
+
+    it('should handle duplicate index creation gracefully', async () => {
+      const duplicateIndexName = `duplicate_test`;
+      const dimension = 768;
+      const infoSpy = vi.spyOn(qdrant['logger'], 'info');
+      const warnSpy = vi.spyOn(qdrant['logger'], 'warn');
+      try {
+        // Create index first time
+        await qdrant.createIndex({
+          indexName: duplicateIndexName,
+          dimension,
+          metric: 'cosine',
+        });
+
+        // Try to create with same dimensions - should not throw
+        await expect(
+          qdrant.createIndex({
+            indexName: duplicateIndexName,
+            dimension,
+            metric: 'cosine',
+          }),
+        ).resolves.not.toThrow();
+
+        expect(infoSpy).toHaveBeenCalledWith(expect.stringContaining('already exists with'));
+
+        // Try to create with same dimensions and different metric - should not throw
+        await expect(
+          qdrant.createIndex({
+            indexName: duplicateIndexName,
+            dimension,
+            metric: 'euclidean',
+          }),
+        ).resolves.not.toThrow();
+
+        expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('Attempted to create index with metric'));
+
+        // Try to create with different dimensions - should throw
+        await expect(
+          qdrant.createIndex({
+            indexName: duplicateIndexName,
+            dimension: dimension + 1,
+            metric: 'cosine',
+          }),
+        ).rejects.toThrow(
+          `Index "${duplicateIndexName}" already exists with ${dimension} dimensions, but ${dimension + 1} dimensions were requested`,
+        );
+      } finally {
+        infoSpy.mockRestore();
+        warnSpy.mockRestore();
+        // Cleanup
+        await qdrant.deleteIndex(duplicateIndexName);
+      }
+    });
   });
 
   describe('Empty/Undefined Filters', () => {
