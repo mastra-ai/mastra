@@ -1,5 +1,15 @@
 # @mastra/deployer
 
+## 2.0.3-alpha.0
+
+### Patch Changes
+
+- 526c570: expose agent runtimeContext from clientSDK
+- Updated dependencies [526c570]
+- Updated dependencies [b5d2de0]
+- Updated dependencies [644f8ad]
+  - @mastra/core@0.9.3-alpha.0
+
 ## 2.0.2
 
 ### Patch Changes
