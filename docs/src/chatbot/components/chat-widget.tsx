@@ -6,6 +6,7 @@ import { Role, TextMessage } from "@copilotkit/runtime-client-gql";
 import { ArrowLeftIcon, PaperIcon } from "@/components/svgs/Icons";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import Spinner from "@/components/ui/spinner";
 import { Textarea } from "@/components/ui/textarea";
 import "@copilotkit/react-ui/styles.css";
 import { ArrowUp } from "lucide-react";
@@ -38,6 +39,8 @@ export function CustomChatInterface({
   searchQuery: string;
 }) {
   const { visibleMessages, appendMessage, isLoading, reset } = useCopilotChat();
+
+  console.log({visibleMessages})
 
   const [inputValue, setInputValue] = useState("");
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -128,7 +131,7 @@ export function CustomChatInterface({
             </div>
           );
         })}
-        {/* {isLoading && <Spinner />} */}
+        {/* {isLoading && <ActivityIcon />} */}
         <div ref={messagesEndRef} />
       </ScrollArea>
 
@@ -143,6 +146,17 @@ export function CustomChatInterface({
               id="custom-chat-input"
               value={inputValue}
               onChange={(e) => setInputValue(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                  e.preventDefault();
+                  if (inputValue.trim() !== '') {
+                    // Submit the form on Enter
+                    appendMessage(new TextMessage({ content: inputValue, role: Role.User }));
+                    setInputValue('');
+                  }
+                }
+                // Shift+Enter will create a new line (default behavior)
+              }}
               placeholder="Enter your message..."
               className="border-none shadow-none resize-none text-icons-6 placeholder:text-icons-2 focus-visible:ring-0"
             />
@@ -151,9 +165,9 @@ export function CustomChatInterface({
               variant="ghost"
               size="icon-sm"
               disabled={isLoading || inputValue.trim() === ""}
-              className="self-end p-2 rounded-full cursor-pointer bg-surface-5 ring-borders-2 ring"
+              className="relative self-end p-2 rounded-full cursor-pointer bg-surface-5 ring-borders-2 ring"
             >
-              <ArrowUp className="w-4 h-4 text-accent-green" />
+              {isLoading ? <Spinner /> : <ArrowUp className="w-4 h-4 text-accent-green" />}
             </Button>
           </div>
         </form>
