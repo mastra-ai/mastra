@@ -133,7 +133,8 @@ export class ChromaVector extends MastraVector {
       const message = error?.message || error?.toString();
       if (message && message.toLowerCase().includes('already exists')) {
         // Fetch collection info and check dimension
-        this.validateExistingIndex(indexName, dimension, metric);
+        await this.validateExistingIndex(indexName, dimension, metric);
+        return;
       }
       throw error;
     }

@@ -88,7 +88,8 @@ export class CloudflareVector extends MastraVector {
           (message.toLowerCase().includes('already exists') || message.toLowerCase().includes('duplicate')))
       ) {
         // Fetch index info and check dimensions
-        this.validateExistingIndex(indexName, dimension, metric);
+        await this.validateExistingIndex(indexName, dimension, metric);
+        return;
       }
       // For any other errors, propagate
       throw error;

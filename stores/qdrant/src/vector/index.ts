@@ -90,7 +90,8 @@ export class QdrantVector extends MastraVector {
       // Qdrant typically returns 409 for existing collection
       if (error?.status === 409 || (typeof message === 'string' && message.toLowerCase().includes('exists'))) {
         // Fetch collection info and check dimension
-        this.validateExistingIndex(indexName, dimension, metric);
+        await this.validateExistingIndex(indexName, dimension, metric);
+        return;
       }
     }
   }

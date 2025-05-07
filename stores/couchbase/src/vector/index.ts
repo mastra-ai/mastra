@@ -165,7 +165,8 @@ export class CouchbaseVector extends MastraVector {
       const message = error?.message || error?.toString();
       if (message && message.toLowerCase().includes('index exists')) {
         // Fetch index info and check dimension
-        this.validateExistingIndex(indexName, dimension, metric);
+        await this.validateExistingIndex(indexName, dimension, metric);
+        return;
       }
       throw error;
     }
