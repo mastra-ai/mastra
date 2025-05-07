@@ -471,18 +471,6 @@ export const contructNodesAndEdges = ({
   return { nodes: layoutedNodes, edges: layoutedEdges };
 };
 
-type NewStepType = NewStep<string, any, any, any, any> &
-  (
-    | {
-        component: 'WORKFLOW';
-        stepFlow: StepFlowEntry[];
-      }
-    | {
-        component?: never;
-        stepFlow?: never;
-      }
-  );
-
 const getStepNodeAndEdge = ({
   stepFlow,
   xIndex,
@@ -520,7 +508,7 @@ const getStepNodeAndEdge = ({
   }
 
   if (stepFlow.type === 'step' || stepFlow.type === 'foreach') {
-    const hasGraph = (stepFlow.step as NewStepType).component === 'WORKFLOW';
+    const hasGraph = stepFlow.step.component === 'WORKFLOW';
     const nodeId = allPrevNodeIds?.includes(stepFlow.step.id) ? `${stepFlow.step.id}-${yIndex}` : stepFlow.step.id;
     const nodes = [
       ...(condition
@@ -548,7 +536,7 @@ const getStepNodeAndEdge = ({
           description: stepFlow.step.description,
           withoutTopHandle: condition ? false : !prevNodeIds.length,
           withoutBottomHandle: !nextNodeIds.length,
-          stepGraph: hasGraph ? (stepFlow.step as NewStepType).stepFlow : undefined,
+          stepGraph: hasGraph ? stepFlow.step.serializedStepFlow : undefined,
         },
       },
     ];
@@ -564,9 +552,9 @@ const getStepNodeAndEdge = ({
                 ...defaultEdgeOptions,
               })),
               {
-                id: `e${condition.id}-${stepFlow.step.id}`,
+                id: `e${condition.id}-${nodeId}`,
                 source: condition.id,
-                target: stepFlow.step.id,
+                target: nodeId,
                 ...defaultEdgeOptions,
               },
             ]
@@ -590,7 +578,7 @@ const getStepNodeAndEdge = ({
 
   if (stepFlow.type === 'loop') {
     const { step: _step, serializedCondition, loopType } = stepFlow;
-    const hasGraph = (_step as NewStepType).component === 'WORKFLOW';
+    const hasGraph = _step.component === 'WORKFLOW';
     const nodes = [
       {
         id: _step.id,
@@ -601,7 +589,7 @@ const getStepNodeAndEdge = ({
           description: _step.description,
           withoutTopHandle: !prevNodeIds.length,
           withoutBottomHandle: false,
-          stepGraph: hasGraph ? (_step as NewStepType).stepFlow : undefined,
+          stepGraph: hasGraph ? _step.serializedStepFlow : undefined,
         },
       },
       {
@@ -682,7 +670,11 @@ const getStepNodeAndEdge = ({
       edges.push(..._edges);
     });
 
-    return { nodes, edges, nextPrevNodeIds: nodes.map(node => node.id) };
+    return {
+      nodes,
+      edges,
+      nextPrevNodeIds: nodes.filter(({ type }) => type !== 'condition-node').map(node => node.id),
+    };
   }
 
   return { nodes: [], edges: [], nextPrevNodeIds: [] };
