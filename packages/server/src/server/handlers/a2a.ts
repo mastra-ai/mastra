@@ -1,3 +1,4 @@
+import { Readable } from 'node:stream';
 import type { CoreMessage } from '@mastra/core';
 import { A2AError } from '@mastra/core/a2a';
 import type {
@@ -9,6 +10,7 @@ import type {
   JSONRPCResponse,
   TaskStatus,
   TaskState,
+  Task,
 } from '@mastra/core/a2a';
 import type { Agent } from '@mastra/core/agent';
 import type { RuntimeContext } from '@mastra/core/runtime-context';
@@ -223,7 +225,7 @@ async function handleTaskGet({
   return sendJsonResponse(requestId, task);
 }
 
-async function handleTaskSendSubscribe({
+async function* handleTaskSendSubscribe({
   requestId,
   params,
   agentId,
@@ -236,115 +238,21 @@ async function handleTaskSendSubscribe({
   taskStore: InMemoryTaskStore;
   agent: Agent;
 }) {
-  validateTaskSendParams(params);
+  yield createSuccessResponse(requestId, {
+    state: 'working',
+    message: {
+      role: 'agent',
+      parts: [{ type: 'text', text: 'Generating response...' }],
+    },
+  });
 
-  const { id: taskId, message, sessionId, metadata } = params;
-
-  // Load or create task AND history
-  let currentData = await loadOrCreateTaskAndHistory({
-    taskId,
-    taskStore,
+  yield await handleTaskSend({
+    requestId,
+    params,
     agentId,
-    message,
-    sessionId,
-    metadata,
+    taskStore,
+    agent,
   });
-
-  // Use the new TaskContext definition, passing history
-  const context = createTaskContext({
-    task: currentData.task,
-    userMessage: message,
-    history: currentData.history,
-  });
-
-  try {
-    const result = await agent.stream(message as unknown as CoreMessage[]);
-
-    const stream = new TransformStream({
-      async transform(chunk, controller) {
-        console.log(chunk);
-
-        currentData = applyUpdateToTaskAndHistory(currentData, {
-          state: 'working',
-          message: {
-            role: 'agent',
-            parts: [
-              {
-                type: 'text',
-                text: chunk,
-              },
-            ],
-          },
-        });
-
-        await taskStore.save({ agentId, data: currentData });
-        context.task = currentData.task;
-
-        controller.enqueue(createSuccessResponse(requestId, currentData.task));
-      },
-      async flush(controller) {
-        currentData = applyUpdateToTaskAndHistory(currentData, {
-          state: 'completed',
-          message: {
-            role: 'agent',
-            parts: [
-              {
-                type: 'text',
-                text: '',
-              },
-            ],
-          },
-        });
-
-        await taskStore.save({ agentId, data: currentData });
-        context.task = currentData.task;
-        controller.enqueue(createSuccessResponse(requestId, currentData.task));
-      },
-    });
-
-    return new Response(
-      result
-        .toDataStream({
-          sendUsage: true,
-          sendReasoning: true,
-          getErrorMessage: (error: any) => {
-            return `An error occurred while processing your request. ${error instanceof Error ? error.message : JSON.stringify(error)}`;
-          },
-        })
-        .pipeThrough(stream),
-      {
-        headers: {
-          'Content-Type': 'text/plain; charset=utf-8',
-          'X-Vercel-AI-Data-Stream': 'v1',
-        },
-      },
-    );
-  } catch (handlerError) {
-    // If handler throws, apply 'failed' status, save, and rethrow
-    const failureStatusUpdate: Omit<TaskStatus, 'timestamp'> = {
-      state: 'failed',
-      message: {
-        role: 'agent',
-        parts: [
-          {
-            type: 'text',
-            text: `Handler failed: ${handlerError instanceof Error ? handlerError.message : String(handlerError)}`,
-          },
-        ],
-      },
-    };
-    currentData = applyUpdateToTaskAndHistory(currentData, failureStatusUpdate);
-    try {
-      await taskStore.save({ agentId, data: currentData });
-    } catch (saveError) {
-      console.error(`Failed to save task ${taskId} after handler error:`, saveError);
-      // Still throw the original handler error
-    }
-    throw normalizeError(handlerError, requestId, taskId); // Rethrow original error
-  }
-
-  // The loop finished, send the final task state
-  return sendJsonResponse(requestId, currentData.task);
 }
 
 async function handleTaskCancel({
@@ -413,7 +321,7 @@ export async function getAgentExecutionHandler({
   agentId: string;
   method: 'tasks/send' | 'tasks/sendSubscribe' | 'tasks/get' | 'tasks/cancel';
   params: TaskSendParams | TaskQueryParams | TaskIdParams;
-}) {
+}): Promise<any> {
   const agent = mastra.getAgent(agentId);
   console.log({ agent, runtimeContext, method, params });
 
@@ -437,7 +345,13 @@ export async function getAgentExecutionHandler({
         return result;
       }
       case 'tasks/sendSubscribe':
-        const result = await handleTaskSendSubscribe({ requestId, taskStore: inMemoryTaskStore, agentId, taskId });
+        const result = await handleTaskSendSubscribe({
+          requestId,
+          taskStore: inMemoryTaskStore,
+          agentId,
+          params: params as TaskSendParams,
+          agent,
+        });
         return result;
 
       case 'tasks/get': {

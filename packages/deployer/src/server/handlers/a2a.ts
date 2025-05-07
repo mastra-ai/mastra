@@ -8,6 +8,7 @@ import {
 } from '@mastra/server/handlers/a2a';
 
 import type { Context } from 'hono';
+import { stream } from 'hono/streaming';
 
 export async function getAgentCardByIdHandler(c: Context) {
   const mastra: Mastra = c.get('mastra');
@@ -43,6 +44,30 @@ export async function getAgentExecutionHandler(c: Context) {
     method: body.method as 'tasks/send' | 'tasks/sendSubscribe' | 'tasks/get' | 'tasks/cancel',
     params: body.params as TaskSendParams | TaskQueryParams | TaskIdParams,
   });
+
+  if (body.method === 'tasks/sendSubscribe') {
+    return stream(
+      c,
+      async stream => {
+        try {
+          stream.onAbort(() => {
+            if (!result.locked) {
+              return result.cancel();
+            }
+          });
+
+          for await (const chunk of result) {
+            await stream.write(JSON.stringify(chunk) + '\x1E');
+          }
+        } catch (err) {
+          console.log(err);
+        }
+      },
+      async err => {
+        // logger.error('Error in watch stream: ' + err?.message);
+      },
+    );
+  }
 
   return c.json(result);
 }
