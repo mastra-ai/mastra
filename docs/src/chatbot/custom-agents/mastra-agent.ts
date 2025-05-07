@@ -46,8 +46,8 @@ export class MastraDocsAgent extends AbstractAgent {
     super(config);
     this.resourceId = config.resourceId;
 
-    // const baseUrl = process.env.MASTRA_AGENT_URL || "";
-    const baseUrl = "http://localhost:4111";
+    const baseUrl = process.env.MASTRA_AGENT_URL || "";
+    // const baseUrl = "http://localhost:4111";
 
     this.mastraClient =
       config?.mastraClient ??
