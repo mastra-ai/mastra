@@ -75,12 +75,13 @@ export class QdrantVector extends MastraVector {
     if (!Number.isInteger(dimension) || dimension <= 0) {
       throw new Error('Dimension must be a positive integer');
     }
+    if (!DISTANCE_MAPPING[metric]) {
+      throw new Error(`Invalid metric: "${metric}". Must be one of: cosine, euclidean, dotproduct`);
+    }
     try {
       await this.client.createCollection(indexName, {
         vectors: {
-          // @ts-expect-error
           size: dimension,
-          // @ts-expect-error
           distance: DISTANCE_MAPPING[metric],
         },
       });
@@ -89,24 +90,7 @@ export class QdrantVector extends MastraVector {
       // Qdrant typically returns 409 for existing collection
       if (error?.status === 409 || (typeof message === 'string' && message.toLowerCase().includes('exists'))) {
         // Fetch collection info and check dimension
-        try {
-          const info = await this.client.getCollection(indexName);
-          const existingDim = info?.config?.params?.vectors?.size;
-          if (existingDim === dimension) {
-            this.logger?.info?.(
-              `Index "${indexName}" already exists with ${dimension} dimensions and metric ${metric}, skipping creation.`,
-            );
-            return;
-          } else {
-            throw new Error(
-              `Index "${indexName}" already exists with ${existingDim} dimensions, but ${dimension} dimensions were requested`,
-            );
-          }
-        } catch (infoError) {
-          throw new Error(
-            `Index "${indexName}" already exists, but failed to fetch index info for dimension check: ${infoError}`,
-          );
-        }
+        this.validateExistingIndex(indexName, dimension, metric);
       }
     }
   }

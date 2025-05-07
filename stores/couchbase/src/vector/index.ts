@@ -165,26 +165,7 @@ export class CouchbaseVector extends MastraVector {
       const message = error?.message || error?.toString();
       if (message && message.toLowerCase().includes('index exists')) {
         // Fetch index info and check dimension
-        try {
-          const info = await this.scope.searchIndexes().getIndex(indexName);
-          const existingDim =
-            info?.params?.mapping?.types?.[`${this.scopeName}.${this.collectionName}`]?.properties?.embedding
-              ?.fields?.[0]?.dims;
-          if (existingDim === dimension) {
-            this.logger?.info?.(
-              `Index "${indexName}" already exists with ${dimension} dimensions and metric ${metric}, skipping creation.`,
-            );
-            return;
-          } else {
-            throw new Error(
-              `Index "${indexName}" already exists with ${existingDim} dimensions, but ${dimension} dimensions were requested`,
-            );
-          }
-        } catch (infoError) {
-          throw new Error(
-            `Index "${indexName}" already exists, but failed to fetch index info for dimension check: ${infoError}`,
-          );
-        }
+        this.validateExistingIndex(indexName, dimension, metric);
       }
       throw error;
     }

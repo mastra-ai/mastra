@@ -1347,35 +1347,37 @@ describe.skip('AstraVector Integration Tests', () => {
       const duplicateIndexName = `duplicate_test`;
       const dimension = 768;
 
-      // Create index first time
-      await vectorDB.createIndex({
-        indexName: duplicateIndexName,
-        dimension,
-        metric: 'cosine',
-      });
-
-      // Try to create with same dimensions - should not throw
-      await expect(
-        vectorDB.createIndex({
+      try {
+        // Create index first time
+        await vectorDB.createIndex({
           indexName: duplicateIndexName,
           dimension,
           metric: 'cosine',
-        }),
-      ).resolves.not.toThrow();
+        });
 
-      // Try to create with different dimensions - should throw
-      await expect(
-        vectorDB.createIndex({
-          indexName: duplicateIndexName,
-          dimension: dimension + 1,
-          metric: 'cosine',
-        }),
-      ).rejects.toThrow(
-        `Collection already exists: trying to create Collection ('${duplicateIndexName}') with different settings`,
-      );
+        // Try to create with same dimensions - should not throw
+        await expect(
+          vectorDB.createIndex({
+            indexName: duplicateIndexName,
+            dimension,
+            metric: 'cosine',
+          }),
+        ).resolves.not.toThrow();
 
-      // Cleanup
-      await vectorDB.deleteIndex(duplicateIndexName);
+        // Try to create with different dimensions - should throw
+        await expect(
+          vectorDB.createIndex({
+            indexName: duplicateIndexName,
+            dimension: dimension + 1,
+            metric: 'cosine',
+          }),
+        ).rejects.toThrow(
+          `Collection already exists: trying to create Collection ('${duplicateIndexName}') with different settings`,
+        );
+      } finally {
+        // Cleanup
+        await vectorDB.deleteIndex(duplicateIndexName);
+      }
     });
   });
 });

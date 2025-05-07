@@ -111,6 +111,8 @@ export class MongoDBVector extends MastraVector {
     } catch (error: any) {
       if (error.codeName !== 'IndexAlreadyExists') {
         throw error;
+      } else {
+        this.validateExistingIndex(indexName, dimension, metric);
       }
     }
 

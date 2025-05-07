@@ -459,25 +459,64 @@ describe('MongoDBVector Integration Tests', () => {
     it('should handle duplicate index creation gracefully', async () => {
       const duplicateIndexName = `duplicate_test`;
       const dimension = 768;
+      const infoSpy = vi.spyOn(vectorDB['logger'], 'info');
+      const warnSpy = vi.spyOn(vectorDB['logger'], 'warn');
 
-      // Create index first time
-      await vectorDB.createIndex({
-        indexName: duplicateIndexName,
-        dimension,
-        metric: 'cosine',
-      });
-
-      // Try to create with same dimensions - should not throw
-      await expect(
-        vectorDB.createIndex({
+      try {
+        // Create index first time
+        await vectorDB.createIndex({
           indexName: duplicateIndexName,
           dimension,
           metric: 'cosine',
-        }),
-      ).resolves.not.toThrow();
+        });
 
-      // Cleanup
-      await vectorDB.deleteIndex(duplicateIndexName);
+        // Try to create with same dimensions - should not throw
+        await expect(
+          vectorDB.createIndex({
+            indexName: duplicateIndexName,
+            dimension,
+            metric: 'cosine',
+          }),
+        ).resolves.not.toThrow();
+
+        expect(infoSpy).toHaveBeenCalledWith(expect.stringContaining('already exists with'));
+
+        // Try to create with same dimensions and different metric - should not throw
+        await expect(
+          vectorDB.createIndex({
+            indexName: duplicateIndexName,
+            dimension,
+            metric: 'euclidean',
+          }),
+        ).resolves.not.toThrow();
+
+        expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('Attempted to create index with metric'));
+
+        // Try to create with same dimensions and different metric - should not throw
+        await expect(
+          vectorDB.createIndex({
+            indexName: duplicateIndexName,
+            dimension,
+            metric: 'euclidean',
+          }),
+        ).resolves.not.toThrow();
+
+        // Try to create with different dimensions - should throw
+        await expect(
+          vectorDB.createIndex({
+            indexName: duplicateIndexName,
+            dimension: dimension + 1,
+            metric: 'cosine',
+          }),
+        ).rejects.toThrow(
+          `Index "${duplicateIndexName}" already exists with ${dimension} dimensions, but ${dimension + 1} dimensions were requested`,
+        );
+      } finally {
+        infoSpy.mockRestore();
+        warnSpy.mockRestore();
+        // Cleanup
+        await vectorDB.deleteIndex(duplicateIndexName);
+      }
     });
   });
 });

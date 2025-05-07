@@ -7,7 +7,7 @@ import { randomUUID } from 'crypto';
 import axios from 'axios';
 import type { Cluster, Bucket, Scope, Collection } from 'couchbase';
 import { connect } from 'couchbase';
-import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
 import { CouchbaseVector, DISTANCE_MAPPING } from './index';
 
 const containerName = 'mastra_couchbase_testing';
@@ -442,6 +442,8 @@ describe('Integration Testing CouchbaseVector', async () => {
     it('should handle duplicate index creation gracefully', async () => {
       const duplicateIndexName = `duplicate-test-${randomUUID()}`;
       const dimension = 768;
+      const infoSpy = vi.spyOn(couchbase_client['logger'], 'info');
+      const warnSpy = vi.spyOn(couchbase_client['logger'], 'warn');
 
       try {
         // Create index first time
@@ -460,6 +462,19 @@ describe('Integration Testing CouchbaseVector', async () => {
           }),
         ).resolves.not.toThrow();
 
+        expect(infoSpy).toHaveBeenCalledWith(expect.stringContaining('already exists with'));
+
+        // Try to create with same dimensions and different metric - should not throw
+        await expect(
+          couchbase_client.createIndex({
+            indexName: duplicateIndexName,
+            dimension,
+            metric: 'euclidean',
+          }),
+        ).resolves.not.toThrow();
+
+        expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('Attempted to create index with metric'));
+
         // Try to create with different dimensions - should throw
         await expect(
           couchbase_client.createIndex({
@@ -471,6 +486,8 @@ describe('Integration Testing CouchbaseVector', async () => {
           `Index "${duplicateIndexName}" already exists with ${dimension} dimensions, but ${dimension + 1} dimensions were requested`,
         );
       } finally {
+        infoSpy.mockRestore();
+        warnSpy.mockRestore();
         // Cleanup
         await couchbase_client.deleteIndex(duplicateIndexName);
       }
