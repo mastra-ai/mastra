@@ -18,7 +18,7 @@ const DocsChat: React.FC<{
 }> = ({ setIsAgentMode, searchQuery }) => {
   return (
     <CopilotKit
-      runtimeUrl={process.env.NODE_ENV === "production" ? "/docs/api/copilotkit" : "/api/copilotkit"}
+      runtimeUrl="/api/copilotkit"
       showDevConsole={false}
       // agent lock to the relevant agent
       agent="docsAgent"
