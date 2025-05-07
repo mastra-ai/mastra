@@ -256,6 +256,15 @@ describe.skipIf(!process.env.UPSTASH_VECTOR_URL || !process.env.UPSTASH_VECTOR_T
   });
 
   describe('Error Handling', () => {
+    const testIndexName = 'test_index_error';
+    beforeAll(async () => {
+      await vectorStore.createIndex({ indexName: testIndexName, dimension: 3 });
+    });
+
+    afterAll(async () => {
+      await vectorStore.deleteIndex(testIndexName);
+    });
+
     it('should handle invalid dimension vectors', async () => {
       await expect(
         vectorStore.upsert({ indexName: testIndexName, vectors: [[1.0, 0.0]] }), // Wrong dimensions

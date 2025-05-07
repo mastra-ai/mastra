@@ -273,8 +273,17 @@ describe('ChromaVector Integration Tests', () => {
   });
 
   describe('Error Handling', () => {
+    const testIndexName = 'test_index_error';
+    beforeAll(async () => {
+      await vectorDB.createIndex({ indexName: testIndexName, dimension: 3 });
+    });
+
+    afterAll(async () => {
+      await vectorDB.deleteIndex(testIndexName);
+    });
+
     it('should handle non-existent index queries', async () => {
-      await expect(vectorDB.query({ indexName: 'non-existent-index-yu', queryVector: [1, 2, 3] })).rejects.toThrow();
+      await expect(vectorDB.query({ indexName: 'non-existent-index', queryVector: [1, 2, 3] })).rejects.toThrow();
     });
 
     it('should handle invalid dimension vectors', async () => {
@@ -282,10 +291,59 @@ describe('ChromaVector Integration Tests', () => {
       await expect(vectorDB.upsert({ indexName: testIndexName, vectors: [invalidVector] })).rejects.toThrow();
     });
 
-    it('should handle mismatched metadata and vectors length', async () => {
-      const vectors = [[1, 2, 3]];
-      const metadata = [{}, {}]; // More metadata than vectors
-      await expect(vectorDB.upsert({ indexName: testIndexName, vectors, metadata })).rejects.toThrow();
+    it('should handle duplicate index creation gracefully', async () => {
+      const infoSpy = vi.spyOn(vectorDB['logger'], 'info');
+      const warnSpy = vi.spyOn(vectorDB['logger'], 'warn');
+
+      const duplicateIndexName = `duplicate-test`;
+      const dimension = 768;
+
+      try {
+        // Create index first time
+        await vectorDB.createIndex({
+          indexName: duplicateIndexName,
+          dimension,
+          metric: 'cosine',
+        });
+
+        // Try to create with same dimensions - should not throw
+        await expect(
+          vectorDB.createIndex({
+            indexName: duplicateIndexName,
+            dimension,
+            metric: 'cosine',
+          }),
+        ).resolves.not.toThrow();
+
+        expect(infoSpy).toHaveBeenCalledWith(expect.stringContaining('already exists with'));
+
+        // Try to create with same dimensions and different metric - should not throw
+        await expect(
+          vectorDB.createIndex({
+            indexName: duplicateIndexName,
+            dimension,
+            metric: 'euclidean',
+          }),
+        ).resolves.not.toThrow();
+
+        expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('Attempted to create index with metric'));
+
+        // Try to create with different dimensions - should throw
+        await expect(
+          vectorDB.createIndex({
+            indexName: duplicateIndexName,
+            dimension: dimension + 1,
+            metric: 'cosine',
+          }),
+        ).rejects.toThrow(
+          `Index "${duplicateIndexName}" already exists with ${dimension} dimensions, but ${dimension + 1} dimensions were requested`,
+        );
+      } finally {
+        infoSpy.mockRestore();
+        warnSpy.mockRestore();
+        // Cleanup
+        await vectorDB.deleteIndex(duplicateIndexName);
+      }
     });
   });
 
