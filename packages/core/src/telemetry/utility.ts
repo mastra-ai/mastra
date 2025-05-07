@@ -1,4 +1,5 @@
-import { trace } from '@opentelemetry/api';
+import { propagation, trace } from '@opentelemetry/api';
+import type { Context } from '@opentelemetry/api';
 
 // Helper function to check if telemetry is active
 export function hasActiveTelemetry(tracerName: string = 'default-tracer'): boolean {
@@ -7,4 +8,21 @@ export function hasActiveTelemetry(tracerName: string = 'default-tracer'): boole
   } catch {
     return false;
   }
+}
+
+/**
+ * Get baggage values from context
+ * @param ctx The context to get baggage values from
+ * @returns
+ */
+export function getBaggageValues(ctx: Context) {
+  const currentBaggage = propagation.getBaggage(ctx);
+  const requestId = currentBaggage?.getEntry('http.request_id')?.value;
+  const componentName = currentBaggage?.getEntry('componentName')?.value;
+  const runId = currentBaggage?.getEntry('runId')?.value;
+  return {
+    requestId,
+    componentName,
+    runId,
+  };
 }
