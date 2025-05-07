@@ -202,7 +202,7 @@ export class MastraDocsAgent extends AbstractAgent {
 
               // Send tool result as a complete message
               // TODO: This is a hack (i guess?) to prevent `An assistant message with 'tool_calls' must be followed by tool messages responding to each 'tool_call_id'` errors.
-              //@ts-ignore
+              //@ts-expect-error - allow
               subscriber.next(message);
             },
           });

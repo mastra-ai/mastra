@@ -192,7 +192,7 @@ export const CustomSearch: FC<SearchProps> = ({
   }, [deferredSearch]); // eslint-disable-line react-hooks/exhaustive-deps -- ignore searchOptions
 
   const router = useRouter();
-  const [_, setFocused] = useState(false);
+  const [, setFocused] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null!);
 
   const handleFocus: FocusEventHandler = (event) => {
