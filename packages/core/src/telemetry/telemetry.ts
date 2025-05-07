@@ -171,17 +171,14 @@ export class Telemetry {
           span.setAttributes(context.attributes);
         }
 
-        // @ts-ignore
         if (requestId) {
           span.setAttribute('http.request_id', requestId);
         }
 
         if (context.attributes?.componentName) {
-          // @ts-ignore
           ctx = propagation.setBaggage(
             ctx,
             propagation.createBaggage({
-              // @ts-ignore
               componentName: { value: context.attributes.componentName },
               // @ts-ignore
               runId: { value: context.attributes.runId },
@@ -194,16 +191,13 @@ export class Telemetry {
             span.setAttribute('componentName', componentName);
             // @ts-ignore
             span.setAttribute('runId', runId);
-            // @ts-ignore
           } else if (this && this.name) {
-            // @ts-ignore
             span.setAttribute('componentName', this.name);
             // @ts-ignore
             span.setAttribute('runId', this.runId);
             ctx = propagation.setBaggage(
               ctx,
               propagation.createBaggage({
-                // @ts-ignore
                 componentName: { value: this.name },
                 // @ts-ignore
                 runId: { value: this.runId },
