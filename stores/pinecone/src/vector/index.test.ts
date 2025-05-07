@@ -555,6 +555,14 @@ describe.skip('PineconeVector Integration Tests', () => {
   });
 
   describe('Error Handling', () => {
+    const testIndexName = 'test-index-error';
+    beforeAll(async () => {
+      await vectorDB.createIndex({ indexName: testIndexName, dimension: 3 });
+    });
+
+    afterAll(async () => {
+      await vectorDB.deleteIndex(testIndexName);
+    });
     it('should handle non-existent index query gracefully', async () => {
       const nonExistentIndex = 'non-existent-index';
       await expect(vectorDB.query({ indexName: nonExistentIndex, queryVector: [1, 0, 0] })).rejects.toThrow();

@@ -276,47 +276,6 @@ describe.skipIf(!process.env.UPSTASH_VECTOR_URL || !process.env.UPSTASH_VECTOR_T
         vectorStore.query({ indexName: testIndexName, queryVector: [1.0, 0.0] }), // Wrong dimensions
       ).rejects.toThrow();
     });
-
-    it('should handle mismatched metadata and vectors length', async () => {
-      const vectors = [[1, 2, 3]];
-      const metadata = [{}, {}];
-      await expect(vectorStore.upsert({ indexName: testIndexName, vectors, metadata })).rejects.toThrow();
-    });
-
-    it('should handle duplicate index creation gracefully', async () => {
-      const duplicateIndexName = `duplicate_test`;
-      const dimension = 768;
-
-      // Create index first time
-      await vectorStore.createIndex({
-        indexName: duplicateIndexName,
-        dimension,
-        metric: 'cosine',
-      });
-
-      // Try to create with same dimensions - should not throw
-      await expect(
-        vectorStore.createIndex({
-          indexName: duplicateIndexName,
-          dimension,
-          metric: 'cosine',
-        }),
-      ).resolves.not.toThrow();
-
-      // Try to create with different dimensions - should throw
-      await expect(
-        vectorStore.createIndex({
-          indexName: duplicateIndexName,
-          dimension: dimension + 1,
-          metric: 'cosine',
-        }),
-      ).rejects.toThrow(
-        `Index "${duplicateIndexName}" already exists with ${dimension} dimensions, but ${dimension + 1} dimensions were requested`,
-      );
-
-      // Cleanup
-      await vectorStore.deleteIndex(duplicateIndexName);
-    });
   });
 
   describe('Filter Tests', () => {

@@ -73,17 +73,52 @@ export class PineconeVector extends MastraVector {
     if (!Number.isInteger(dimension) || dimension <= 0) {
       throw new Error('Dimension must be a positive integer');
     }
-    await this.client.createIndex({
-      name: indexName,
-      dimension: dimension,
-      metric: metric,
-      spec: {
-        serverless: {
-          cloud: 'aws',
-          region: 'us-east-1',
+    try {
+      await this.client.createIndex({
+        name: indexName,
+        dimension: dimension,
+        metric: metric,
+        spec: {
+          serverless: {
+            cloud: 'aws',
+            region: 'us-east-1',
+          },
         },
-      },
-    });
+      });
+    } catch (error: any) {
+      // Check for 'already exists' error
+      const message = error?.errors?.[0]?.message || error?.message;
+      if (
+        error.status === 409 ||
+        (typeof message === 'string' &&
+          (message.toLowerCase().includes('already exists') || message.toLowerCase().includes('duplicate')))
+      ) {
+        // Fetch index info and check dimensions
+        try {
+          const info = await this.describeIndex(indexName);
+          if (info && info.dimension === dimension) {
+            this.logger.info(
+              `Index "${indexName}" already exists with ${dimension} dimensions and metric ${metric}, skipping creation.`,
+            );
+            return;
+          } else if (info) {
+            throw new Error(
+              `Index "${indexName}" already exists with ${info.dimension} dimensions, but ${dimension} dimensions were requested`,
+            );
+          } else {
+            throw new Error(
+              `Index "${indexName}" already exists, but could not retrieve its dimensions for validation.`,
+            );
+          }
+        } catch (infoError) {
+          throw new Error(
+            `Index "${indexName}" already exists, but failed to fetch index info for dimension check: ${infoError}`,
+          );
+        }
+      }
+      // For any other errors, propagate
+      throw error;
+    }
   }
 
   async upsert(...args: ParamsToArgs<PineconeUpsertVectorParams> | PineconeUpsertVectorArgs): Promise<string[]> {

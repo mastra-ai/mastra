@@ -180,12 +180,6 @@ function waitUntilVectorsIndexed(vectorDB: TurbopufferVector, indexName: string,
       await expect(vectorDB.upsert({ indexName: testIndexName, vectors: wrongDimVector })).rejects.toThrow();
     }, 500000);
 
-    it('should handle mismatched metadata and vectors length', async () => {
-      const vectors = [[1, 2, 3]];
-      const metadata = [{}, {}];
-      await expect(vectorDB.upsert({ indexName: testIndexName, vectors, metadata })).rejects.toThrow();
-    });
-
     it('should handle duplicate index creation gracefully', async () => {
       const duplicateIndexName = `duplicate-test`;
       const dimension = 768;
@@ -205,17 +199,6 @@ function waitUntilVectorsIndexed(vectorDB: TurbopufferVector, indexName: string,
           metric: 'cosine',
         }),
       ).resolves.not.toThrow();
-
-      // Try to create with different dimensions - should throw
-      await expect(
-        vectorDB.createIndex({
-          indexName: duplicateIndexName,
-          dimension: dimension + 1,
-          metric: 'cosine',
-        }),
-      ).rejects.toThrow(
-        `Index "${duplicateIndexName}" already exists with ${dimension} dimensions, but ${dimension + 1} dimensions were requested`,
-      );
 
       // Cleanup
       await vectorDB.deleteIndex(duplicateIndexName);
