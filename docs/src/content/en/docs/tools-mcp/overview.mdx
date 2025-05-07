@@ -53,3 +53,16 @@ When creating tools, keep tool descriptions simple and focused on **what** the t
 ## Adding Tools to an Agent
 
 To make tools available to an agent, you configure them in the agent's definition. Mentioning available tools and their general purpose in the agent's system prompt can also improve tool usage. For detailed steps and examples, see the guide on [Using Tools and MCP with Agents](/docs/agents/using-tools-and-mcp#add-tools-to-an-agent).
+
+## Compatibility Layer for Tool Schemas
+
+Different models interpret schemas differely. Some error when certain schema properties are passed and some ignore certain schema properties but don't throw an error. Mastra adds a compatibility layer for tool schemas, ensuring tools work consistently across different model providers and that the schema constraints are respected.
+
+Some providers that we include this layer for:
+
+- **Google Gemini & Anthropic:** Remove unsupported schema properties and append relevant constraints to the tool description.
+- **OpenAI (including reasoning models):** Strip or adapt schema fields that are ignored or unsupported, and add instructions to the description for agent guidance.
+- **DeepSeek & Meta:** Apply similar compatibility logic to ensure schema alignment and tool usability.
+
+This approach makes tool usage more reliable and model-agnostic for both custom and MCP tools.
+
