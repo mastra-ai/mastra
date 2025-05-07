@@ -37,7 +37,6 @@ pnpm create mastra
 
 ## Examples
 
-bash:packages/create-mastra/README.md
 Create a new project with default settings
 npx create-mastra@latest --default
 Create a project with specific components and LLM provider

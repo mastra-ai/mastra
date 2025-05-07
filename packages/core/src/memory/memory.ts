@@ -273,6 +273,40 @@ export const agent = new Agent({
       semanticRecallIsEnabled
     ) {
       // add the default embedder
+      // TODO: remove in may 20th breaking change
+      this.deprecationWarnings.push(`
+The default embedder (FastEmbed) is deprecated in Mastra Memory.
+You're using it as an implicit default by not configuring an embedder.
+
+On May 20th there will be a breaking change and the default embedder will be removed from @mastra/core.
+
+To continue using FastEmbed, install the dedicated package:
+pnpm add @mastra/fastembed
+
+Then configure it in your Memory setup:
+
+import { fastembed } from '@mastra/fastembed';
+
+export const agent = new Agent({
+  memory: new Memory({
+    embedder: fastembed, // Configure the embedder
+    // your other config
+  })
+})
+
+Alternatively, you can use a different embedder, like OpenAI:
+import { openai } from '@ai-sdk/openai';
+
+export const agent = new Agent({
+  memory: new Memory({
+    embedder: openai.embedding('text-embedding-3-small'),
+    // your other config
+  })
+})
+
+--> This breaking change will be released on May 20th <--
+`);
+      // TODO: may 20th release, throw an error here if no embedder was configured. Should also update the TS types so if semanticRecall is enabled the types show an embedder must be set.
       this.embedder = defaultEmbedder('bge-small-en-v1.5'); // https://huggingface.co/BAAI/bge-small-en-v1.5#model-list we're using small 1.5 because it's much faster than base 1.5 and only scores slightly worse despite being roughly 100MB smaller - small is ~130MB while base is ~220MB
     }
 

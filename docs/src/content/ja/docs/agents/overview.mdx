@@ -7,7 +7,7 @@ description: Mastraにおけるエージェントの概要、その機能とツ�
 
 Mastraのエージェントは、言語モデルがタスクを実行するために一連のアクションを自律的に決定できるシステムです。エージェントはツール、ワークフロー、同期されたデータにアクセスでき、複雑なタスクを実行し、外部システムと対話することができます。エージェントはカスタム関数を呼び出したり、インテグレーションを通じてサードパーティAPIを利用したり、構築した知識ベースにアクセスしたりすることができます。
 
-エージェントは、進行中のプロジェクトに使用できる従業員のようなものです。彼らには名前、永続的なメモリ、一貫したモデル構成、呼び出し間での一貫した指示、そして有効化されたツールのセットがあります。
+エージェントは、継続的なプロジェクトに使用できる従業員のようなものです。彼らには名前、永続的なメモリ、一貫したモデル構成、呼び出し間での一貫した指示、そして有効化されたツールのセットがあります。
 
 ## 1. エージェントの作成
 
@@ -85,7 +85,7 @@ for await (const chunk of stream.textStream) {
 
 ## 3. 構造化された出力
 
-エージェントはJSONスキーマを提供するか、Zodスキーマを使用して構造化されたデータを返すことができます。
+エージェントはJSONスキーマまたはZodスキーマを提供することで、構造化されたデータを返すことができます。
 
 ### JSONスキーマの使用
 
@@ -131,13 +131,13 @@ npm install zod
 ```ts showLineNumbers filename="src/mastra/index.ts" copy
 import { z } from "zod";
 
-// Zodスキーマを定義する
+// Define the Zod schema
 const schema = z.object({
   summary: z.string(),
   keywords: z.array(z.string()),
 });
 
-// エージェントでスキーマを使用する
+// Use the schema with the agent
 const response = await myAgent.generate(
   [
     {
@@ -173,7 +173,7 @@ const response = await myAgent.generate(
     },
   ],
   {
-    // 構造化された出力とツール呼び出しの両方を有効にするためにexperimental_outputを使用
+    // Use experimental_output to enable both structured output and tool calls
     experimental_output: schema,
   },
 );
@@ -270,8 +270,34 @@ const stream = await myAgent.stream(
 );
 ```
 
+## 5. エージェントの実行
+
+Mastraは、エージェントをAPIの背後で実行するための`mastra dev`というCLIコマンドを提供しています。デフォルトでは、`src/mastra/agents`ディレクトリ内のファイルでエクスポートされたエージェントを探します。
+
+### サーバーの起動
+
+```bash
+mastra dev
+```
+
+これによりサーバーが起動し、エージェントは`http://localhost:4111/api/agents/myAgent/generate`で利用可能になります。
+
+### エージェントとの対話
+
+コマンドラインから`curl`を使用してエージェントと対話できます：
+
+```bash
+curl -X POST http://localhost:4111/api/agents/myAgent/generate \
+  -H "Content-Type: application/json" \
+  -d '{
+    "messages": [
+      { "role": "user", "content": "Hello, how can you assist me today?" }
+    ]
+  }'
+```
+
 ## 次のステップ
 
 - [エージェントメモリ](./agent-memory.mdx)ガイドでエージェントメモリについて学びましょう。
-- [エージェントツール](./adding-tools.mdx)ガイドでエージェントツールについて学びましょう。
+- [エージェントツールとMCP](./using-tools-and-mcp.mdx)ガイドでエージェントツールについて学びましょう。
 - [シェフ・ミシェル](../../guides/guide/chef-michel.mdx)の例でエージェントの例を確認しましょう。

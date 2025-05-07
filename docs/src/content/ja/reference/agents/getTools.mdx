@@ -1,0 +1,148 @@
+---
+title: "リファレンス: Agent.getTools() | エージェント | Mastra ドキュメント"
+description: "Mastraエージェントの`.getTools()`メソッドに関するドキュメント。エージェントが使用できるツールを取得します。"
+---
+
+# Agent.getTools()
+
+`getTools()`メソッドは、エージェントに設定されたツールを取得し、それらが関数である場合は解決します。これらのツールはエージェントの機能を拡張し、特定のアクションを実行したり外部システムにアクセスしたりすることを可能にします。
+
+## 構文
+
+```typescript
+getTools({ runtimeContext = new RuntimeContext() }: { runtimeContext?: RuntimeContext } = {}): ToolsInput | Promise<ToolsInput>
+```
+
+## パラメータ
+
+<br />
+<PropertiesTable
+  content={[
+    {
+      name: "runtimeContext",
+      type: "RuntimeContext",
+      isOptional: true,
+      description: "依存性注入とコンテキスト情報のためのランタイムコンテキスト。",
+    },
+  ]}
+/>
+
+## 戻り値
+
+エージェントのツールを含む`ToolsInput`オブジェクト、または`ToolsInput`オブジェクトに解決されるPromiseを返します。
+
+## 説明
+
+`getTools()`メソッドは、エージェントが使用できるツールにアクセスするために使用されます。これは、オブジェクトとして直接提供されるか、関数から返されるかにかかわらず、ツールを解決します。
+
+ツールはエージェントの能力の重要な構成要素であり、以下のことを可能にします：
+- 特定のアクション（データの取得や計算など）を実行する
+- 外部システムやAPIにアクセスする
+- コードやコマンドを実行する
+- データベースや他のサービスと対話する
+
+## 例
+
+### 基本的な使用法
+
+```typescript
+import { Agent } from "@mastra/core/agent";
+import { createTool } from "@mastra/core/tools";
+import { openai } from '@ai-sdk/openai';
+import { z } from "zod";
+
+// Create tools using createTool
+const addTool = createTool({
+  id: "add",
+  description: "Add two numbers",
+  inputSchema: z.object({
+    a: z.number().describe("First number"),
+    b: z.number().describe("Second number")
+  }),
+  outputSchema: z.number(),
+  execute: async ({ context }) => {
+    return context.a + context.b;
+  },
+});
+
+const multiplyTool = createTool({
+  id: "multiply",
+  description: "Multiply two numbers",
+  inputSchema: z.object({
+    a: z.number().describe("First number"),
+    b: z.number().describe("Second number")
+  }),
+  outputSchema: z.number(),
+  execute: async ({ context }) => {
+    return context.a * context.b;
+  },
+});
+
+// Create an agent with the tools
+const agent = new Agent({
+  name: "calculator",
+  instructions: "You are a calculator assistant that can perform mathematical operations.",
+  model: openai("gpt-4o"),
+  tools: {
+    add: addTool,
+    multiply: multiplyTool,
+  },
+});
+
+// Get the tools
+const tools = await agent.getTools();
+console.log(Object.keys(tools)); // ["add", "multiply"]
+```
+
+### RuntimeContextでの使用
+
+```typescript
+import { Agent } from "@mastra/core/agent";
+import { createTool } from "@mastra/core/tools";
+import { RuntimeContext } from "@mastra/core/runtime-context";
+import { openai } from '@ai-sdk/openai';
+import { z } from "zod";
+
+// Create an agent with dynamic tools
+const agent = new Agent({
+  name: "weather-assistant",
+  instructions: "You are a weather assistant that can provide weather information.",
+  model: openai("gpt-4o"),
+  tools: ({ runtimeContext }) => {
+    // Get API key from runtime context
+    const apiKey = runtimeContext.get("weatherApiKey");
+    
+    // Create a weather tool with the API key from context
+    const weatherTool = createTool({
+      id: "getWeather",
+      description: "Get the current weather for a location",
+      inputSchema: z.object({
+        location: z.string().describe("City name")
+      }),
+      outputSchema: z.object({
+        temperature: z.number(),
+        conditions: z.string(),
+        humidity: z.number(),
+        windSpeed: z.number()
+      }),
+      execute: async ({ context }) => {
+        // Use the API key from runtime context
+        const response = await fetch(`https://api.weather.com/current?location=${context.location}&apiKey=${apiKey}`);
+        return response.json();
+      },
+    });
+    
+    return {
+      getWeather: weatherTool
+    };
+  },
+});
+
+// Create a runtime context with API key
+const context = new RuntimeContext();
+context.set("weatherApiKey", "your-api-key");
+
+// Get the tools using the runtime context
+const tools = await agent.getTools({ runtimeContext: context });
+console.log(Object.keys(tools)); // ["getWeather"]
+```

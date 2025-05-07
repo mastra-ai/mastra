@@ -31,6 +31,7 @@
     "@ai-sdk/react": "^1.2.1",
     "@mastra/client-js": "workspace:*",
     "@mastra/core": "workspace:*",
+    "@mastra/fastembed": "workspace:*",
     "@mastra/memory": "workspace:*",
     "@mastra/pg": "workspace:*",
     "@mastra/upstash": "workspace:*",

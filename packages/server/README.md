@@ -1,159 +1,74 @@
-# @mastra/deployer
+# @mastra/server
 
-Core deployment infrastructure for Mastra applications, handling build, packaging, and deployment processes.
+Typed HTTP handlers and utilities for exposing a `Mastra` instance over HTTP.
+This package powers `mastra dev` and can be added to your own server to provide
+REST and streaming endpoints for agents, workflows, telemetry and more.
 
 ## Installation
 
 ```bash
-npm install @mastra/deployer
+npm install @mastra/server
 ```
-
-## Overview
-
-The `@mastra/deployer` package provides the foundational deployment infrastructure for Mastra applications. It handles:
-
-- Project building and bundling
-- Dependency management
-- Environment configuration
-- Development and production deployments
 
 ## Usage
 
-```typescript
-import { Deployer } from '@mastra/deployer';
+The handlers are framework agnostic functions which accept a `Mastra` instance
+and a request context. They are typically mounted under a URL prefix within your
+web framework of choice:
 
-// Create a deployer instance
-const deployer = new Deployer({
-  dir: '/path/to/project',
-  type: 'Deploy', // or 'Dev' for development mode
+```typescript
+import { Hono } from 'hono';
+import { handlers } from '@mastra/server';
+import { mastra } from './mastra-instance';
+
+const app = new Hono();
+
+app.get('/mastra/agents', ctx =>
+  handlers.agents.getAgentsHandler({ mastra, runtimeContext: ctx }),
+);
+app.post('/mastra/agents/:id/generate', async ctx => {
+  const body = await ctx.req.json();
+  return handlers.agents.generateHandler({
+    mastra,
+    runtimeContext: ctx,
+    agentId: ctx.req.param('id'),
+    body,
+  });
 });
 
-// Install dependencies
-await deployer.install();
-
-// Write package.json
-await deployer.writePackageJson();
-
-// Get Mastra instance
-const { mastra } = await deployer.getMastra();
+// Mount additional handlers as required
 ```
 
-## Configuration
+Running `mastra dev` starts a local development UI at
+`http://localhost:3000` using these handlers.
 
-### Required Parameters
+## Available Handler Groups
 
-- `dir`: Project directory path
-- `type`: Deployment type ('Deploy' or 'Dev')
+- **Agents** - list defined agents, retrieve metadata, and run `generate`
+  or `stream`.
+- **Workflows** - start and inspect workflow runs.
+- **Tools** - discover tools available to the `Mastra` instance.
+- **Memory** - interact with configured memory stores.
+- **Logs** - query runtime logs when a supporting logger transport is used.
+- **Telemetry** - expose metrics produced by the telemetry subsystem.
+- **Networks** - interact with agent networks.
+- **Vector / Voice** - endpoints related to vector stores and voice synthesis.
 
-## Features
+Handlers return JSON serialisable data and throw an `HTTPException` (subclass of
+`Error`) when a failure should result in a non-2xx HTTP status.
 
-### Project Structure Management
+## OpenAPI Spec Generation
 
-- Creates and manages `.mastra` directory
-- Handles package.json generation and updates
-- Manages project dependencies
+The local OpenAPI specification used by the CLI playground and similar tools can
+be refreshed by running:
 
-### Dependency Management
-
-- Automatic dependency installation
-- Workspace dependency resolution
-- Version management for @mastra packages
-
-### Environment Handling
-
-- Support for multiple environment files:
-  - `.env`
-  - `.env.development`
-  - `.env.local`
-- Environment variable validation and processing
-
-### Build Process
-
-- Project bundling
-- Asset management
-- Source code transformation
-
-### Development Support
-
-- Development server configuration
-- Hot reloading capabilities
-- Debug logging
-
-## Project Structure
-
-The deployer creates and manages the following structure:
-
-```
-your-project/
-├── .mastra/
-│   ├── package.json
-│   ├── mastra.mjs
-│   └── index.mjs
-├── .env
-├── .env.development
-├── .env.local
-└── package.json
+```bash
+pnpm run pull:openapispec
 ```
 
-## Package.json Management
+within the `@mastra/server` directory.
 
-The deployer automatically manages dependencies in the `.mastra/package.json`:
+## License
 
-```json
-{
-  "name": "server",
-  "version": "1.0.0",
-  "type": "module",
-  "dependencies": {
-    "@mastra/loggers": "latest",
-    "hono": "4.6.17",
-    "@hono/node-server": "^1.13.7",
-    "superjson": "^2.2.2",
-    "zod-to-json-schema": "^3.24.1"
-  }
-}
-```
-
-## Methods
-
-### `install()`
-
-Installs and updates project dependencies.
-
-### `writePackageJson()`
-
-Generates or updates the package.json in the .mastra directory.
-
-### `getMastra()`
-
-Returns the Mastra instance for the project.
-
-### `getMastraPath()`
-
-Returns the path to the .mastra directory.
-
-## Error Handling
-
-The deployer includes comprehensive error handling for:
-
-- Dependency installation failures
-- File system operations
-- Environment configuration issues
-- Build process errors
-
-## Logging
-
-Built-in logging support through @mastra/core:
-
-- Debug information
-- Installation progress
-- Build status
-- Error reporting
-
-## Related Packages
-
-- `@mastra/core`: Core Mastra functionality
-- `@mastra/loggers`: Logging infrastructure
-- Deployer implementations:
-  - `@mastra/deployer-cloudflare`
-  - Other platform-specific deployers
+Released under the Elastic License 2.0. The full license text is available in
+this repository.

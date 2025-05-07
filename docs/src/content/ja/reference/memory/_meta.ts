@@ -5,5 +5,4 @@ const meta = {
   getThreadById: ".getThreadById()",
   getThreadsByResourceId: ".getThreadsByResourceId()",
 };
-
 export default meta;

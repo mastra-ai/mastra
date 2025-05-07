@@ -19,7 +19,7 @@ importers:
         specifier: link:../../packages/core
         version: link:../../packages/core
       zod:
-        specifier: ^3.24.2
+        specifier: ^3.24.3
         version: 3.24.3
     devDependencies:
       '@jest/globals':
