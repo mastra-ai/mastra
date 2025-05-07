@@ -85,26 +85,26 @@ export abstract class MastraVector extends MastraBase {
       const existingDim = info?.dimension;
       const existingMetric = info?.metric;
       if (existingDim === dimension) {
-        this.logger.info(
+        this.logger?.info(
           `Index "${indexName}" already exists with ${existingDim} dimensions and metric ${existingMetric}, skipping creation.`,
         );
         if (existingMetric !== metric) {
-          this.logger.warn(
+          this.logger?.warn(
             `Attempted to create index with metric "${metric}", but index already exists with metric "${existingMetric}". To use a different metric, delete and recreate the index.`,
           );
         }
       } else if (info) {
         const message = `Index "${indexName}" already exists with ${info.dimension} dimensions, but ${dimension} dimensions were requested`;
-        this.logger.error(message);
+        this.logger?.error(message);
         throw new Error(message);
       } else {
         const message = `Index "${indexName}" already exists, but could not retrieve its dimensions for validation.`;
-        this.logger.error(message);
+        this.logger?.error(message);
         throw new Error(message);
       }
     } catch (infoError) {
       const message = `Index "${indexName}" already exists, but failed to fetch index info for dimension check: ${infoError}`;
-      this.logger.error(message);
+      this.logger?.error(message);
       throw new Error(message);
     }
   }
