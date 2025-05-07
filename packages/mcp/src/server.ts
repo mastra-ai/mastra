@@ -1,29 +1,23 @@
+import { randomUUID } from 'crypto';
 import { isVercelTool, isZodType, resolveSerializedZodOutput } from '@mastra/core';
 import type { ToolsInput } from '@mastra/core/agent';
+import { MastraMCPServer } from '@mastra/core/mcp';
+import type { MCPServerSSEOptions, ConvertedTool } from '@mastra/core/mcp';
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { SSEServerTransport } from '@modelcontextprotocol/sdk/server/sse.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
+import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
+import type { StreamableHTTPServerTransportOptions } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import { CallToolRequestSchema, ListToolsRequestSchema } from '@modelcontextprotocol/sdk/types.js';
 import jsonSchemaToZod from 'json-schema-to-zod';
 import { z } from 'zod';
 import { zodToJsonSchema } from 'zod-to-json-schema';
-import { createLogger } from './logger';
 
-const logger = createLogger();
-
-type ConvertedTool = {
-  name: string;
-  description?: string;
-  inputSchema: any;
-  zodSchema: z.ZodTypeAny;
-  execute: any;
-};
-
-export class MCPServer {
+export class MCPServer extends MastraMCPServer {
   private server: Server;
-  private convertedTools: Record<string, ConvertedTool>;
   private stdioTransport?: StdioServerTransport;
   private sseTransport?: SSEServerTransport;
+  private streamableHTTPTransport?: StreamableHTTPServerTransport;
 
   /**
    * Get the current stdio transport.
@@ -40,10 +34,10 @@ export class MCPServer {
   }
 
   /**
-   * Get a read-only view of the registered tools (for testing/introspection).
+   * Get the current streamable HTTP transport.
    */
-  tools(): Readonly<Record<string, ConvertedTool>> {
-    return this.convertedTools;
+  public getStreamableHTTPTransport(): StreamableHTTPServerTransport | undefined {
+    return this.streamableHTTPTransport;
   }
 
   /**
@@ -53,9 +47,12 @@ export class MCPServer {
    * @param opts.tools - Tool definitions to register
    */
   constructor({ name, version, tools }: { name: string; version: string; tools: ToolsInput }) {
+    super({ name, version, tools });
+
     this.server = new Server({ name, version }, { capabilities: { tools: {}, logging: { enabled: true } } });
     this.convertedTools = this.convertTools(tools);
-    void logger.info(
+
+    this.logger.info(
       `Initialized MCPServer '${name}' v${version} with tools: ${Object.keys(this.convertedTools).join(', ')}`,
     );
 
@@ -68,18 +65,18 @@ export class MCPServer {
    * @param tools Tool definitions
    * @returns Converted tools registry
    */
-  private convertTools(tools: ToolsInput): Record<string, ConvertedTool> {
+  convertTools(tools: ToolsInput): Record<string, ConvertedTool> {
     const convertedTools: Record<string, ConvertedTool> = {};
     for (const toolName of Object.keys(tools)) {
       let inputSchema: any;
       let zodSchema: z.ZodTypeAny;
       const toolInstance = tools[toolName];
       if (!toolInstance) {
-        void logger.warning(`Tool instance for '${toolName}' is undefined. Skipping.`);
+        this.logger.warn(`Tool instance for '${toolName}' is undefined. Skipping.`);
         continue;
       }
       if (typeof toolInstance.execute !== 'function') {
-        void logger.warning(`Tool '${toolName}' does not have a valid execute function. Skipping.`);
+        this.logger.warn(`Tool '${toolName}' does not have a valid execute function. Skipping.`);
         continue;
       }
       // Vercel tools: .parameters is either Zod or JSON schema
@@ -114,9 +111,9 @@ export class MCPServer {
         zodSchema,
         execute,
       };
-      void logger.info(`Registered tool: '${toolName}' [${toolInstance?.description || 'No description'}]`);
+      this.logger.info(`Registered tool: '${toolName}' [${toolInstance?.description || 'No description'}]`);
     }
-    void logger.info(`Total tools registered: ${Object.keys(convertedTools).length}`);
+    this.logger.info(`Total tools registered: ${Object.keys(convertedTools).length}`);
     return convertedTools;
   }
 
@@ -125,7 +122,7 @@ export class MCPServer {
    */
   private registerListToolsHandler() {
     this.server.setRequestHandler(ListToolsRequestSchema, async () => {
-      await logger.debug('Handling ListTools request');
+      this.logger.debug('Handling ListTools request');
       return {
         tools: Object.values(this.convertedTools).map(tool => ({
           name: tool.name,
@@ -145,17 +142,17 @@ export class MCPServer {
       try {
         const tool = this.convertedTools[request.params.name];
         if (!tool) {
-          await logger.warning(`CallTool: Unknown tool '${request.params.name}' requested.`);
+          this.logger.warn(`CallTool: Unknown tool '${request.params.name}' requested.`);
           return {
             content: [{ type: 'text', text: `Unknown tool: ${request.params.name}` }],
             isError: true,
           };
         }
-        await logger.debug(`CallTool: Invoking '${request.params.name}' with arguments:`, request.params.arguments);
+        this.logger.debug(`CallTool: Invoking '${request.params.name}' with arguments:`, request.params.arguments);
         const args = tool.zodSchema.parse(request.params.arguments ?? {});
         const result = await tool.execute(args, request.params);
         const duration = Date.now() - startTime;
-        await logger.info(`Tool '${request.params.name}' executed successfully in ${duration}ms.`);
+        this.logger.info(`Tool '${request.params.name}' executed successfully in ${duration}ms.`);
         return {
           content: [
             {
@@ -168,7 +165,7 @@ export class MCPServer {
       } catch (error) {
         const duration = Date.now() - startTime;
         if (error instanceof z.ZodError) {
-          await logger.warning('Invalid tool arguments', {
+          this.logger.warn('Invalid tool arguments', {
             tool: request.params.name,
             errors: error.errors,
             duration: `${duration}ms`,
@@ -183,7 +180,7 @@ export class MCPServer {
             isError: true,
           };
         }
-        await logger.error(`Tool execution failed: ${request.params.name}`, error);
+        this.logger.error(`Tool execution failed: ${request.params.name}`, { error });
         return {
           content: [{ type: 'text', text: `Error: ${error instanceof Error ? error.message : String(error)}` }],
           isError: true,
@@ -195,10 +192,10 @@ export class MCPServer {
   /**
    * Start the MCP server using stdio transport (for Windsurf integration).
    */
-  async startStdio() {
+  public async startStdio(): Promise<void> {
     this.stdioTransport = new StdioServerTransport();
     await this.server.connect(this.stdioTransport);
-    await logger.info('Started MCP Server (stdio)');
+    this.logger.info('Started MCP Server (stdio)');
   }
 
   /**
@@ -211,33 +208,14 @@ export class MCPServer {
    * @param req Incoming HTTP request
    * @param res HTTP response (must support .write/.end)
    */
-  async startSSE({
-    url,
-    ssePath,
-    messagePath,
-    req,
-    res,
-  }: {
-    url: URL;
-    ssePath: string;
-    messagePath: string;
-    req: any;
-    res: any;
-  }) {
+  public async startSSE({ url, ssePath, messagePath, req, res }: MCPServerSSEOptions): Promise<void> {
     if (url.pathname === ssePath) {
-      await logger.debug('Received SSE connection');
-      this.sseTransport = new SSEServerTransport(messagePath, res);
-      await this.server.connect(this.sseTransport);
-
-      this.server.onclose = async () => {
-        await this.server.close();
-        this.sseTransport = undefined;
-      };
-      res.on('close', () => {
-        this.sseTransport = undefined;
+      await this.connectSSE({
+        messagePath,
+        res,
       });
     } else if (url.pathname === messagePath) {
-      await logger.debug('Received message');
+      this.logger.debug('Received message');
       if (!this.sseTransport) {
         res.writeHead(503);
         res.end('SSE connection not established');
@@ -245,9 +223,114 @@ export class MCPServer {
       }
       await this.sseTransport.handlePostMessage(req, res);
     } else {
-      await logger.debug('Unknown path:', url.pathname);
+      this.logger.debug('Unknown path:', { path: url.pathname });
       res.writeHead(404);
       res.end();
+    }
+  }
+
+  /**
+   * Handles MCP-over-StreamableHTTP protocol for user-provided HTTP servers.
+   * Call this from your HTTP server for the streamable HTTP endpoint.
+   *
+   * @param url Parsed URL of the incoming request
+   * @param httpPath Path for establishing the streamable HTTP connection (e.g. '/mcp')
+   * @param req Incoming HTTP request
+   * @param res HTTP response (must support .write/.end)
+   * @param options Optional options to pass to the transport (e.g. sessionIdGenerator)
+   */
+  async startHTTP({
+    url,
+    httpPath,
+    req,
+    res,
+    options = { sessionIdGenerator: () => randomUUID() },
+  }: {
+    url: URL;
+    httpPath: string;
+    req: any;
+    res: any;
+    options?: StreamableHTTPServerTransportOptions;
+  }) {
+    if (url.pathname === httpPath) {
+      this.streamableHTTPTransport = new StreamableHTTPServerTransport(options);
+      try {
+        await this.server.connect(this.streamableHTTPTransport);
+      } catch (error) {
+        this.logger.error('Error connecting to MCP server', { error });
+        res.writeHead(500);
+        res.end('Error connecting to MCP server');
+        return;
+      }
+
+      try {
+        await this.streamableHTTPTransport.handleRequest(req, res);
+      } catch (error) {
+        this.logger.error('Error handling MCP connection', { error });
+        res.writeHead(500);
+        res.end('Error handling MCP connection');
+        return;
+      }
+
+      this.server.onclose = async () => {
+        await this.server.close();
+        this.streamableHTTPTransport = undefined;
+      };
+
+      res.on('close', () => {
+        this.streamableHTTPTransport = undefined;
+      });
+    } else {
+      res.writeHead(404);
+      res.end();
+    }
+  }
+
+  public async handlePostMessage(req: any, res: any) {
+    if (!this.sseTransport) {
+      res.writeHead(503);
+      res.end('SSE connection not established');
+      return;
+    }
+    await this.sseTransport.handlePostMessage(req, res);
+  }
+
+  public async connectSSE({ messagePath, res }: { messagePath: string; res: any }) {
+    this.logger.debug('Received SSE connection');
+    this.sseTransport = new SSEServerTransport(messagePath, res);
+    await this.server.connect(this.sseTransport);
+
+    this.server.onclose = async () => {
+      await this.server.close();
+      this.sseTransport = undefined;
+    };
+
+    res.on('close', () => {
+      this.sseTransport = undefined;
+    });
+  }
+
+  /**
+   * Close the MCP server and all its connections
+   */
+  async close() {
+    try {
+      if (this.stdioTransport) {
+        await this.stdioTransport.close?.();
+        this.stdioTransport = undefined;
+      }
+      if (this.sseTransport) {
+        await this.sseTransport.close?.();
+        this.sseTransport = undefined;
+      }
+      if (this.streamableHTTPTransport) {
+        await this.streamableHTTPTransport.close?.();
+        this.streamableHTTPTransport = undefined;
+      }
+      await this.server.close();
+      this.logger.info('MCP server closed.');
+    } catch (error) {
+      this.logger.error('Error closing MCP server:', { error });
     }
   }
 }

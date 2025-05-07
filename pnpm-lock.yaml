@@ -1188,6 +1188,9 @@ importers:
       esbuild:
         specifier: ^0.25.1
         version: 0.25.1
+      fetch-to-node:
+        specifier: ^2.1.0
+        version: 2.1.0
       find-workspaces:
         specifier: ^0.3.1
         version: 0.3.1
@@ -1213,7 +1216,7 @@ importers:
         specifier: ^1.5.1
         version: 1.5.1(typescript@5.8.3)
       zod:
-        specifier: ^3.24.3
+        specifier: ^3.24.2
         version: 3.24.3
     devDependencies:
       '@hono/node-server':
@@ -1225,6 +1228,9 @@ importers:
       '@internal/lint':
         specifier: workspace:*
         version: link:../_config
+      '@mastra/mcp':
+        specifier: workspace:^
+        version: link:../mcp
       '@microsoft/api-extractor':
         specifier: ^7.52.5
         version: 7.52.5(@types/node@20.17.32)
@@ -1268,7 +1274,7 @@ importers:
         specifier: ^2.1.9
         version: 2.1.9(@edge-runtime/vm@3.2.0)(@types/node@20.17.32)(jsdom@26.0.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))(lightningcss@1.29.2)(terser@5.39.0)
       zod-to-json-schema:
-        specifier: ^3.24.5
+        specifier: ^3.24.3
         version: 3.24.5(zod@3.24.3)
 
   packages/evals:
@@ -12054,6 +12060,9 @@ packages:
   fetch-h2@3.0.2:
     resolution: {integrity: sha512-Lo6UPdMKKc9Ond7yjG2vq0mnocspOLh1oV6+XZdtfdexacvMSz5xm3WoQhTAdoR2+UqPlyMNqcqfecipoD+l/A==}
     engines: {node: '>=12'}
+
+  fetch-to-node@2.1.0:
+    resolution: {integrity: sha512-Wq05j6LE1GrWpT2t1YbCkyFY6xKRJq3hx/oRJdWEJpZlik3g25MmdJS6RFm49iiMJw6zpZuBOrgihOgy2jGyAA==}
 
   fflate@0.4.8:
     resolution: {integrity: sha512-FJqqoDBR00Mdj9ppamLa/Y7vxm+PRmNWA67N846RvsoYVMKB4q3y/de5PA7gUmRMYK/8CMz2GDZQmCRN1wBcWA==}
@@ -29320,6 +29329,8 @@ snapshots:
       through2: 4.0.2
       to-arraybuffer: 1.0.1
       tough-cookie: 4.1.4
+
+  fetch-to-node@2.1.0: {}
 
   fflate@0.4.8: {}
 

@@ -26,6 +26,7 @@ import {
 import { handleClientsRefresh, handleTriggerClientsRefresh } from './handlers/client';
 import { errorHandler } from './handlers/error';
 import { getLogsByRunIdHandler, getLogsHandler, getLogTransports } from './handlers/logs';
+import { getMcpServerMessageHandler } from './handlers/mcp';
 import {
   createThreadHandler,
   deleteThreadHandler,
@@ -89,28 +90,23 @@ export async function createHonoServer(mastra: Mastra, options: ServerBundleOpti
   const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
   const server = mastra.getServer();
 
-  let tools: Record<string, any> = {};
-  try {
-    const toolsPath = './tools.mjs';
-    const mastraToolsPaths = (await import(toolsPath)).tools;
-    const toolImports = mastraToolsPaths
-      ? await Promise.all(
-          // @ts-ignore
-          mastraToolsPaths.map(async toolPath => {
-            return import(toolPath);
-          }),
-        )
-      : [];
+  const toolsPath = './tools.mjs';
+  const mastraToolsPaths = (await import(toolsPath)).tools;
+  const toolImports = mastraToolsPaths
+    ? await Promise.all(
+        // @ts-ignore
+        mastraToolsPaths.map(async toolPath => {
+          return import(toolPath);
+        }),
+      )
+    : [];
 
-    tools = toolImports.reduce((acc, toolModule) => {
-      Object.entries(toolModule).forEach(([key, tool]) => {
-        acc[key] = tool;
-      });
-      return acc;
-    }, {});
-  } catch {
-    console.error('Failed to import tools');
-  }
+  const tools = toolImports.reduce((acc, toolModule) => {
+    Object.entries(toolModule).forEach(([key, tool]) => {
+      acc[key] = tool;
+    });
+    return acc;
+  }, {});
 
   // Middleware
   app.use('*', async function setTelemetryInfo(c, next) {
@@ -1108,6 +1104,32 @@ export async function createHonoServer(mastra: Mastra, options: ServerBundleOpti
       },
     }),
     executeAgentToolHandler,
+  );
+
+  // MCP server routes
+  app.post(
+    '/api/servers/:serverId/mcp',
+    describeRoute({
+      description: 'Send a message to an MCP server',
+      tags: ['mcp'],
+      parameters: [
+        {
+          name: 'serverId',
+          in: 'path',
+          required: true,
+          schema: { type: 'string' },
+        },
+      ],
+      responses: {
+        200: {
+          description: 'Streamable HTTP connection established',
+        },
+        404: {
+          description: 'MCP server not found',
+        },
+      },
+    }),
+    getMcpServerMessageHandler,
   );
 
   // Memory routes
