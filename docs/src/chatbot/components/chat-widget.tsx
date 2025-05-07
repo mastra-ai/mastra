@@ -37,20 +37,16 @@ export function CustomChatInterface({
   setIsAgentMode: (isAgentMode: boolean) => void;
   searchQuery: string;
 }) {
-  const {
-    visibleMessages,
-    appendMessage,
-    isLoading,
-    reset,
-  } = useCopilotChat();
+  const { visibleMessages, appendMessage, isLoading, reset } = useCopilotChat();
 
-  const [inputValue, setInputValue] = useState(searchQuery);
+  const [inputValue, setInputValue] = useState("");
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    appendMessage(new TextMessage({ content: inputValue, role: Role.User }));
-    setInputValue("");
-  }, []);
+    console.log({searchQuery})
+    if (searchQuery === "") return;
+    appendMessage(new TextMessage({ content: searchQuery, role: Role.User }));
+  }, [searchQuery]);
 
   // Auto-scroll to bottom when messages change
   useEffect(() => {

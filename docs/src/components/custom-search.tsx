@@ -146,7 +146,7 @@ export const CustomSearch: FC<SearchProps> = ({
   const deferredSearch = useDeferredValue(search);
 
   useEffect(() => {
-    if (search) {
+    if (!!search) {
       setIsSearching?.(true);
     } else {
       setIsSearching?.(false);

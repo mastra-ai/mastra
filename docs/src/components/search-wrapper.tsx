@@ -79,6 +79,7 @@ export const SearchWrapper = ({ locale }: { locale: string }) => {
         as="div"
         className="relative z-1000 focus:outline-none"
         onClose={close}
+				unmount={false}
       >
         <DialogBackdrop className="fixed inset-0 delay-[0ms] duration-300 ease-out bg-black/50 backdrop-blur-md" />
         <div className="fixed inset-0 z-10 w-screen overflow-y-auto">
@@ -91,41 +92,40 @@ export const SearchWrapper = ({ locale }: { locale: string }) => {
                 Search
               </DialogTitle>
               <div className="w-full">
-                {isAgentMode ? (
+                <div className={isAgentMode ? 'block' : 'hidden'}>
                   <DocsChat
                     setIsAgentMode={setIsAgentMode}
                     searchQuery={searchQuery}
                   />
-                ) : (
-                  <div className="p-[10px]">
-                    <CustomSearch
-                      placeholder={getSearchPlaceholder(locale)}
-                      isAgentMode={isAgentMode}
-                      setIsSearching={setIsSearching}
-                      onUseAgent={handleUseAgent}
-                    />
-                    {!isSearching && (
-                      <>
-                        <hr className="w-full my-2 text-borders-1" />
-                        <Button
-                          className="w-full flex items-center font-medium justify-between gap-2 cursor-pointer text-base h-10 pl-4 pr-3 bg-surface-5 text-accent-green bg-[url('/bloom-2.png')] bg-cover bg-right"
-                          variant="ghost"
-                          onClick={() => setIsAgentMode(true)}
-                        >
-                          <div className="flex items-center gap-2">
-                            <span className="">
-                              <JarvisIcon className="w-full h-full" />
-                            </span>
-                            <span>Ask Docs Agent</span>
-                          </div>
-                          <span className="flex items-center h-8 px-3 text-sm font-medium rounded-sm bg-tag-green-2 text-accent-green justify-self-end">
-                            experimental
+                </div>
+                <div className={isAgentMode ? 'hidden' : 'block p-[10px]'}>
+                  <CustomSearch
+                    placeholder={getSearchPlaceholder(locale)}
+                    isAgentMode={isAgentMode}
+                    setIsSearching={setIsSearching}
+                    onUseAgent={handleUseAgent}
+                  />
+                  {!isSearching && (
+                    <>
+                      <hr className="w-full my-2 text-borders-1" />
+                      <Button
+                        className="w-full flex items-center font-medium justify-between gap-2 cursor-pointer text-base h-10 pl-4 pr-3 bg-surface-5 text-accent-green bg-[url('/bloom-2.png')] bg-cover bg-right"
+                        variant="ghost"
+                        onClick={() => setIsAgentMode(true)}
+                      >
+                        <div className="flex items-center gap-2">
+                          <span className="">
+                            <JarvisIcon className="w-full h-full" />
                           </span>
-                        </Button>
-                      </>
-                    )}
-                  </div>
-                )}
+                          <span>Ask Docs Agent</span>
+                        </div>
+                        <span className="flex items-center h-8 px-3 text-sm font-medium rounded-sm bg-tag-green-2 text-accent-green justify-self-end">
+                          experimental
+                        </span>
+                      </Button>
+                    </>
+                  )}
+                </div>
               </div>
             </DialogPanel>
           </div>
