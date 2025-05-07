@@ -3,7 +3,6 @@ import type { GenerateReturn } from '@mastra/core';
 import type { JSONSchema7 } from 'json-schema';
 import { ZodSchema } from 'zod';
 import { zodToJsonSchema } from 'zod-to-json-schema';
-import { stringify } from 'superjson';
 
 import type {
   GenerateParams,
@@ -127,7 +126,7 @@ export class Agent extends BaseResource {
         params.experimental_output instanceof ZodSchema
           ? zodToJsonSchema(params.experimental_output)
           : params.experimental_output,
-      runtimeContext: params.runtimeContext ? stringify(Array.from(params.runtimeContext.entries())) : undefined,
+      runtimeContext: params.runtimeContext ? Object.fromEntries(params.runtimeContext.entries()) : undefined,
     };
 
     return this.request(`/api/agents/${this.agentId}/generate`, {
@@ -155,7 +154,7 @@ export class Agent extends BaseResource {
         params.experimental_output instanceof ZodSchema
           ? zodToJsonSchema(params.experimental_output)
           : params.experimental_output,
-      runtimeContext: params.runtimeContext ? stringify(Array.from(params.runtimeContext.entries())) : undefined,
+      runtimeContext: params.runtimeContext ? Object.fromEntries(params.runtimeContext.entries()) : undefined,
     };
 
     const response: Response & {

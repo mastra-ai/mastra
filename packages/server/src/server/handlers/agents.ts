@@ -1,6 +1,6 @@
 import type { Agent } from '@mastra/core/agent';
 import { RuntimeContext } from '@mastra/core/runtime-context';
-import { parse, stringify } from 'superjson';
+import { stringify } from 'superjson';
 import zodToJsonSchema from 'zod-to-json-schema';
 import { HTTPException } from '../http-exception';
 import type { Context } from '../types';
@@ -148,7 +148,7 @@ export async function generateHandler({
   body: GetBody<'generate'> & {
     // @deprecated use resourceId
     resourceid?: string;
-    runtimeContext?: string;
+    runtimeContext?: Record<string, unknown>;
   };
 }) {
   try {
@@ -162,13 +162,9 @@ export async function generateHandler({
     // Use resourceId if provided, fall back to resourceid (deprecated)
     const finalResourceId = resourceId ?? resourceid;
 
-    const finalAgentRuntimeContext = agentRuntimeContext
-      ? new RuntimeContext(parse<Map<string, unknown>>(agentRuntimeContext))
-      : new RuntimeContext();
-
     const finalRuntimeContext = new RuntimeContext<Record<string, unknown>>([
-      ...Array.from(runtimeContext.entries()),
-      ...Array.from(finalAgentRuntimeContext.entries()),
+      ...runtimeContext.entries(),
+      ...Object.entries(agentRuntimeContext ?? {}),
     ]);
 
     validateBody({ messages });
@@ -211,13 +207,9 @@ export async function streamGenerateHandler({
     // Use resourceId if provided, fall back to resourceid (deprecated)
     const finalResourceId = resourceId ?? resourceid;
 
-    const finalAgentRuntimeContext = agentRuntimeContext
-      ? new RuntimeContext(parse<Map<string, unknown>>(agentRuntimeContext))
-      : new RuntimeContext();
-
     const finalRuntimeContext = new RuntimeContext<Record<string, unknown>>([
-      ...Array.from(runtimeContext.entries()),
-      ...Array.from(finalAgentRuntimeContext.entries()),
+      ...runtimeContext.entries(),
+      ...Object.entries(agentRuntimeContext ?? {}),
     ]);
 
     validateBody({ messages });
