@@ -1,6 +1,6 @@
 import type { Agent } from '@mastra/core/agent';
-import type { RuntimeContext } from '@mastra/core/runtime-context';
-import { stringify, parse } from 'superjson';
+import { RuntimeContext } from '@mastra/core/runtime-context';
+import { parse, stringify } from 'superjson';
 import zodToJsonSchema from 'zod-to-json-schema';
 import { HTTPException } from '../http-exception';
 import type { Context } from '../types';
@@ -161,14 +161,17 @@ export async function generateHandler({
     const { messages, resourceId, resourceid, runtimeContext: agentRuntimeContext, ...rest } = body;
     // Use resourceId if provided, fall back to resourceid (deprecated)
     const finalResourceId = resourceId ?? resourceid;
-    const finalAgentRuntimeContext: RuntimeContext | undefined = agentRuntimeContext
-      ? parse(agentRuntimeContext)
-      : undefined;
-    validateBody({ messages });
 
-    const finalRuntimeContext = finalAgentRuntimeContext
-      ? runtimeContext.merge(finalAgentRuntimeContext)
-      : runtimeContext;
+    const finalAgentRuntimeContext = agentRuntimeContext
+      ? new RuntimeContext(parse<Map<string, unknown>>(agentRuntimeContext))
+      : new RuntimeContext();
+
+    const finalRuntimeContext = new RuntimeContext<Record<string, unknown>>([
+      ...Array.from(runtimeContext.entries()),
+      ...Array.from(finalAgentRuntimeContext.entries()),
+    ]);
+
+    validateBody({ messages });
 
     const result = await agent.generate(messages, {
       ...rest,
@@ -207,14 +210,17 @@ export async function streamGenerateHandler({
     const { messages, resourceId, resourceid, runtimeContext: agentRuntimeContext, ...rest } = body;
     // Use resourceId if provided, fall back to resourceid (deprecated)
     const finalResourceId = resourceId ?? resourceid;
-    const finalAgentRuntimeContext: RuntimeContext | undefined = agentRuntimeContext
-      ? parse(agentRuntimeContext)
-      : undefined;
-    validateBody({ messages });
 
-    const finalRuntimeContext = finalAgentRuntimeContext
-      ? runtimeContext.merge(finalAgentRuntimeContext)
-      : runtimeContext;
+    const finalAgentRuntimeContext = agentRuntimeContext
+      ? new RuntimeContext(parse<Map<string, unknown>>(agentRuntimeContext))
+      : new RuntimeContext();
+
+    const finalRuntimeContext = new RuntimeContext<Record<string, unknown>>([
+      ...Array.from(runtimeContext.entries()),
+      ...Array.from(finalAgentRuntimeContext.entries()),
+    ]);
+
+    validateBody({ messages });
 
     const streamResult = await agent.stream(messages, {
       ...rest,
