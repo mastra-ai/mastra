@@ -284,7 +284,7 @@ export const CustomSearch: FC<SearchProps> = ({
             "x:motion-reduce:transition-none",
             // From https://headlessui.com/react/combobox#adding-transitions
             "x:origin-top x:transition x:duration-200 x:ease-out x:data-closed:scale-95 x:data-closed:opacity-0 x:empty:invisible",
-            error || isLoading || !results.length
+            error || isLoading
               ? [
                   "x:md:min-h-28 x:grow x:flex x:justify-center x:text-sm x:gap-2 x:px-8",
                   error
@@ -292,7 +292,7 @@ export const CustomSearch: FC<SearchProps> = ({
                     : "x:text-gray-400 x:items-center",
                 ]
               : // headlessui adds max-height as style, use !important to override
-                "x:md:max-h-[min(calc(100vh-5rem),400px)]!",
+                // "x:md:max-h-[min(calc(100vh-5rem),400px)]!",
             "x:w-full x:md:w-[576px]",
           )}
         >
