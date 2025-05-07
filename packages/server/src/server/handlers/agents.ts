@@ -163,8 +163,8 @@ export async function generateHandler({
     const finalResourceId = resourceId ?? resourceid;
 
     const finalRuntimeContext = new RuntimeContext<Record<string, unknown>>([
-      ...runtimeContext.entries(),
-      ...Object.entries(agentRuntimeContext ?? {}),
+      ...Array.from(runtimeContext.entries()),
+      ...Array.from(Object.entries(agentRuntimeContext ?? {})),
     ]);
 
     validateBody({ messages });
@@ -208,8 +208,8 @@ export async function streamGenerateHandler({
     const finalResourceId = resourceId ?? resourceid;
 
     const finalRuntimeContext = new RuntimeContext<Record<string, unknown>>([
-      ...runtimeContext.entries(),
-      ...Object.entries(agentRuntimeContext ?? {}),
+      ...Array.from(runtimeContext.entries()),
+      ...Array.from(Object.entries(agentRuntimeContext ?? {})),
     ]);
 
     validateBody({ messages });
