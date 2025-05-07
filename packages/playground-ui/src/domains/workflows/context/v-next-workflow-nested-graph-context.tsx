@@ -5,6 +5,7 @@ import { Workflow } from 'lucide-react';
 import { Text } from '@/components/ui/text';
 import { StepFlowEntry } from '@mastra/core/workflows/vNext';
 import { VNextWorkflowNestedGraph } from '../workflow/v-next-workflow-nested-graph';
+import Spinner from '@/components/ui/spinner';
 
 type VNextWorkflowNestedGraphContextType = {
   showNestedGraph: ({ label, stepGraph }: { label: string; stepGraph: StepFlowEntry[] }) => void;
@@ -17,19 +18,45 @@ export const VNextWorkflowNestedGraphContext = createContext<VNextWorkflowNested
 
 export function VNextWorkflowNestedGraphProvider({ children }: { children: React.ReactNode }) {
   const [stepGraph, setStepGraph] = useState<StepFlowEntry[] | null>(null);
+  const [parentStepGraphList, setParentStepGraphList] = useState<{ stepGraph: StepFlowEntry[]; label: string }[]>([]);
   const [openDialog, setOpenDialog] = useState<boolean>(false);
   const [label, setLabel] = useState<string>('');
+  const [switching, setSwitching] = useState(false);
 
   const closeNestedGraph = () => {
-    setOpenDialog(false);
-    setStepGraph(null);
-    setLabel('');
+    if (parentStepGraphList.length) {
+      setSwitching(true);
+      const lastStepGraph = parentStepGraphList[parentStepGraphList.length - 1];
+      setStepGraph(lastStepGraph.stepGraph);
+      setLabel(lastStepGraph.label);
+      setParentStepGraphList(parentStepGraphList.slice(0, -1));
+      setTimeout(() => {
+        setSwitching(false);
+      }, 500);
+    } else {
+      setOpenDialog(false);
+      setStepGraph(null);
+      setLabel('');
+    }
   };
 
-  const showNestedGraph = ({ label, stepGraph }: { label: string; stepGraph: StepFlowEntry[] }) => {
-    setLabel(label);
-    setStepGraph(stepGraph);
+  const showNestedGraph = ({
+    label: newLabel,
+    stepGraph: newStepGraph,
+  }: {
+    label: string;
+    stepGraph: StepFlowEntry[];
+  }) => {
+    if (stepGraph) {
+      setSwitching(true);
+      setParentStepGraphList([...parentStepGraphList, { stepGraph, label }]);
+    }
+    setLabel(newLabel);
+    setStepGraph(newStepGraph);
     setOpenDialog(true);
+    setTimeout(() => {
+      setSwitching(false);
+    }, 500);
   };
 
   return (
@@ -50,9 +77,15 @@ export function VNextWorkflowNestedGraphProvider({ children }: { children: React
                 {label} workflow
               </Text>
             </DialogTitle>
-            <ReactFlowProvider>
-              <VNextWorkflowNestedGraph stepGraph={stepGraph!} open={openDialog} />
-            </ReactFlowProvider>
+            {switching ? (
+              <div className="w-full h-full flex items-center justify-center">
+                <Spinner />
+              </div>
+            ) : (
+              <ReactFlowProvider>
+                <VNextWorkflowNestedGraph stepGraph={stepGraph!} open={openDialog} />
+              </ReactFlowProvider>
+            )}
           </DialogContent>
         </DialogPortal>
       </Dialog>
