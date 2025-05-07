@@ -22,6 +22,8 @@ import { useDeferredValue, useEffect, useRef, useState } from "react";
 import { InformationIcon } from "./svgs/information-icon";
 import { SpinnerIcon } from "./svgs/spinner";
 import { ScrollArea } from "./ui/scroll-area";
+import { JarvisIcon } from "./svgs/Icons";
+import { Button } from "./ui/button";
 
 /**
  * Options that can be passed to `pagefind.search()`.
@@ -98,6 +100,8 @@ type SearchProps = {
   className?: string;
   searchOptions?: PagefindSearchOptions;
   isAgentMode?: boolean;
+  setIsSearching?: (isSearching: boolean) => void;
+  onUseAgent: ({ searchQuery }: { searchQuery: string }) => void;
 };
 
 const DEV_SEARCH_NOTICE = (
@@ -130,6 +134,8 @@ export const CustomSearch: FC<SearchProps> = ({
   loading = "Loading…",
   placeholder = "Search documentation…",
   searchOptions,
+  setIsSearching,
+  onUseAgent,
 }) => {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<ReactElement | string>("");
@@ -138,6 +144,14 @@ export const CustomSearch: FC<SearchProps> = ({
   // https://github.com/shuding/nextra/pull/3514
   // defer pagefind results update for prioritizing user input state
   const deferredSearch = useDeferredValue(search);
+
+  useEffect(() => {
+    if (search) {
+      setIsSearching?.(true);
+    } else {
+      setIsSearching?.(false);
+    }
+  }, [setIsSearching, search]);
 
   useEffect(() => {
     const handleSearch = async (value: string) => {
@@ -251,7 +265,7 @@ export const CustomSearch: FC<SearchProps> = ({
           placeholder={placeholder}
           autoFocus
         />
-        {/* {isAgentMode && <AgentBadge title="Ask Magent" />} */}
+        {!!search && <AgentBadge title="Ask Magent" onClick={() => onUseAgent({ searchQuery: search })} />}
       </div>
       <ScrollArea className="max-h-[500px]">
         <ComboboxOptions
@@ -350,19 +364,18 @@ const Result: FC<{ data: PagefindResult }> = ({ data }) => {
   );
 };
 
-// function AgentBadge({ title }: { title: string }) {
-//   return (
-//     <span
-//       className={cn(
-//         "x:absolute x:my-1.5 x:select-none x:pointer-events-none x:end-1.5 x:transition-all",
-//         "x:h-5 x:rounded x:bg-nextra-bg x:px-1.5 x:font-mono x:text-[11px] x:font-medium x:text-gray-600 x:dark:text-gray-400",
-//         "x:border nextra-border",
-//         "x:contrast-more:text-current",
-//         "x:items-center x:gap-1 x:flex",
-//         "x:max-sm:hidden not-prose",
-//       )}
-//     >
-//       {title}
-//     </span>
-//   );
-// }
+function AgentBadge({ title, onClick }: { title: string, onClick: () => void }) {
+  return (
+    <Button
+      variant="ghost"
+			size="sm"
+      className="flex items-center gap-2 px-2 py-1 text-xs font-medium rounded-sm cursor-pointer bg-surface-5 text-accent-green whitespace-nowrap"
+      onClick={onClick}
+    >
+      <span className="relative w-3 h-3">
+				<JarvisIcon className="w-full h-full" />
+			</span>
+      <span className="">{title}</span>
+    </Button>
+  );
+}

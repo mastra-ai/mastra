@@ -13,7 +13,8 @@ import React, { useEffect, useRef, useState } from "react";
 
 const DocsChat: React.FC<{
   setIsAgentMode: (isAgentMode: boolean) => void;
-}> = ({ setIsAgentMode }) => {
+  searchQuery: string;
+}> = ({ setIsAgentMode, searchQuery }) => {
   return (
     <CopilotKit
       runtimeUrl="/api/copilotkit"
@@ -21,15 +22,20 @@ const DocsChat: React.FC<{
       // agent lock to the relevant agent
       agent="docsAgent"
     >
-      <CustomChatInterface setIsAgentMode={setIsAgentMode} />
+      <CustomChatInterface
+        setIsAgentMode={setIsAgentMode}
+        searchQuery={searchQuery}
+      />
     </CopilotKit>
   );
 };
 
 export function CustomChatInterface({
   setIsAgentMode,
+  searchQuery,
 }: {
   setIsAgentMode: (isAgentMode: boolean) => void;
+  searchQuery: string;
 }) {
   const {
     visibleMessages,
@@ -38,8 +44,13 @@ export function CustomChatInterface({
     reset,
   } = useCopilotChat();
 
-  const [inputValue, setInputValue] = useState("");
+  const [inputValue, setInputValue] = useState(searchQuery);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    appendMessage(new TextMessage({ content: inputValue, role: Role.User }));
+    setInputValue("");
+  }, []);
 
   // Auto-scroll to bottom when messages change
   useEffect(() => {

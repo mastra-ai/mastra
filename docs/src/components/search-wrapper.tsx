@@ -17,6 +17,8 @@ const INPUTS = new Set(["INPUT", "SELECT", "BUTTON", "TEXTAREA"]);
 export const SearchWrapper = ({ locale }: { locale: string }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [isAgentMode, setIsAgentMode] = useState(false);
+  const [isSearching, setIsSearching] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
 
   useEffect(() => {
     function handleKeyDown(event: KeyboardEvent) {
@@ -54,12 +56,22 @@ export const SearchWrapper = ({ locale }: { locale: string }) => {
     setIsOpen(false);
   }
 
+  function handleUseAgent({ searchQuery }: { searchQuery: string }) {
+    setIsAgentMode(true);
+    setSearchQuery(searchQuery);
+  }
+
   return (
     <>
       <div className="flex items-center gap-2">
-        <Button onClick={open} size="sm" variant="ghost" className="flex items-center gap-6 cursor-pointer bg-surface-3 text-icons-6">
+        <Button
+          onClick={open}
+          size="sm"
+          variant="ghost"
+          className="flex items-center gap-6 cursor-pointer bg-surface-3 text-icons-6"
+        >
           <span className="text-sm">Search</span>
-        <Shortcut />
+          <Shortcut />
         </Button>
       </div>
       <Dialog
@@ -68,7 +80,7 @@ export const SearchWrapper = ({ locale }: { locale: string }) => {
         className="relative z-1000 focus:outline-none"
         onClose={close}
       >
-        <DialogBackdrop className="fixed inset-0 delay-[0ms] duration-300 ease-out bg-black/70" />
+        <DialogBackdrop className="fixed inset-0 delay-[0ms] duration-300 ease-out bg-black/50 backdrop-blur-md" />
         <div className="fixed inset-0 z-10 w-screen overflow-y-auto">
           <div className="flex items-start pt-[200px] justify-center min-h-full p-4">
             <DialogPanel
@@ -80,27 +92,38 @@ export const SearchWrapper = ({ locale }: { locale: string }) => {
               </DialogTitle>
               <div className="w-full">
                 {isAgentMode ? (
-                  <DocsChat setIsAgentMode={setIsAgentMode} />
+                  <DocsChat
+                    setIsAgentMode={setIsAgentMode}
+                    searchQuery={searchQuery}
+                  />
                 ) : (
                   <div className="p-[10px]">
                     <CustomSearch
                       placeholder={getSearchPlaceholder(locale)}
                       isAgentMode={isAgentMode}
+                      setIsSearching={setIsSearching}
+                      onUseAgent={handleUseAgent}
                     />
-                    <hr className="w-full my-2 text-borders-1" />
-                    <Button
-                      className="w-full flex items-center font-medium justify-between gap-2 cursor-pointer text-base h-10 pl-4 pr-3 bg-surface-5 text-accent-green bg-[url('/bloom-2.png')] bg-cover bg-right"
-                      variant="ghost"
-                      onClick={() => setIsAgentMode(true)}
-                    >
-                      <div className="flex items-center gap-2">
-                        <span>{JarvisIcon}</span>
-                        <span>Ask Docs Agent</span>
-                      </div>
-                      <span className="flex items-center h-8 px-3 text-sm font-medium rounded-sm bg-tag-green-2 text-accent-green justify-self-end">
-                        experimental
-                      </span>
-                    </Button>
+                    {!isSearching && (
+                      <>
+                        <hr className="w-full my-2 text-borders-1" />
+                        <Button
+                          className="w-full flex items-center font-medium justify-between gap-2 cursor-pointer text-base h-10 pl-4 pr-3 bg-surface-5 text-accent-green bg-[url('/bloom-2.png')] bg-cover bg-right"
+                          variant="ghost"
+                          onClick={() => setIsAgentMode(true)}
+                        >
+                          <div className="flex items-center gap-2">
+                            <span className="">
+                              <JarvisIcon className="w-full h-full" />
+                            </span>
+                            <span>Ask Docs Agent</span>
+                          </div>
+                          <span className="flex items-center h-8 px-3 text-sm font-medium rounded-sm bg-tag-green-2 text-accent-green justify-self-end">
+                            experimental
+                          </span>
+                        </Button>
+                      </>
+                    )}
                   </div>
                 )}
               </div>
